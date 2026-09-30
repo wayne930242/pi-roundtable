@@ -1,0 +1,199 @@
+import { parse } from "@babel/parser";
+
+/** The parts of a syntax node this edit reads; the parser's own types are not needed beyond these. */
+interface Node {
+	type: string;
+	start: number;
+	end: number;
+	[key: string]: unknown;
+}
+
+/** A configuration this edit cannot change, and why; the message says what to do by hand. */
+export class ConfigEditError extends Error {
+	override name = "ConfigEditError";
+}
+
+const WRAPPERS = new Set([
+	"TSSatisfiesExpression",
+	"TSAsExpression",
+	"TSNonNullExpression",
+	"ParenthesizedExpression",
+]);
+
+const child = (node: Node, key: string): Node | undefined => {
+	const value = node[key];
+	return typeof value === "object" && value !== null
+		? (value as Node)
+		: undefined;
+};
+
+/** The expression under `satisfies`, `as`, `!`, and parentheses. */
+function unwrap(node: Node | undefined): Node | undefined {
+	let current = node;
+	while (current && WRAPPERS.has(current.type))
+		current = child(current, "expression");
+	return current;
+}
+
+function parseModule(source: string, file: string): Node[] {
+	try {
+		// SAFETY: every node the parser builds has a type, start, and end, which is all Node states.
+		return parse(source, {
+			sourceType: "module",
+			plugins: ["typescript"],
+		}).program.body as unknown as Node[];
+	} catch (error) {
+		throw new ConfigEditError(
+			`${file} does not parse (${error instanceof Error ? error.message : String(error)}). Fix it, or add the plugin to its list by hand.`,
+		);
+	}
+}
+
+const nameOf = (node: Node | undefined): string | undefined => {
+	if (node?.type === "Identifier") return node.name as string;
+	if (node?.type === "StringLiteral") return node.value as string;
+	return undefined;
+};
+
+/** Every name the module already binds at its top level, so an import cannot shadow one. */
+function boundNames(body: readonly Node[]): Set<string> {
+	const names = new Set<string>();
+	for (const statement of body) {
+		const declaration =
+			statement.type === "ExportNamedDeclaration"
+				? child(statement, "declaration")
+				: statement;
+		if (statement.type === "ImportDeclaration")
+			for (const specifier of statement.specifiers as Node[]) {
+				const local = nameOf(child(specifier, "local"));
+				if (local) names.add(local);
+			}
+		if (declaration?.type === "VariableDeclaration")
+			for (const declarator of declaration.declarations as Node[]) {
+				const id = nameOf(child(declarator, "id"));
+				if (id) names.add(id);
+			}
+		const id = nameOf(declaration ? child(declaration, "id") : undefined);
+		if (id) names.add(id);
+	}
+	return names;
+}
+
+/** The object the config exports: the default export itself, or the top-level constant it names. */
+function exportedObject(body: readonly Node[]): Node | undefined {
+	const exported = body.find(
+		(node) => node.type === "ExportDefaultDeclaration",
+	);
+	const value = unwrap(exported ? child(exported, "declaration") : undefined);
+	if (value?.type === "ObjectExpression") return value;
+	if (value?.type !== "Identifier") return undefined;
+	for (const statement of body) {
+		const declaration =
+			statement.type === "ExportNamedDeclaration"
+				? child(statement, "declaration")
+				: statement;
+		if (declaration?.type !== "VariableDeclaration") continue;
+		for (const declarator of declaration.declarations as Node[]) {
+			if (nameOf(child(declarator, "id")) !== value.name) continue;
+			const init = unwrap(child(declarator, "init"));
+			if (init?.type === "ObjectExpression") return init;
+		}
+	}
+	return undefined;
+}
+
+function pluginList(object: Node): Node | undefined {
+	for (const property of object.properties as Node[]) {
+		if (property.type !== "ObjectProperty") continue;
+		if (nameOf(child(property, "key")) !== "plugins") continue;
+		const list = unwrap(child(property, "value"));
+		if (list?.type === "ArrayExpression") return list;
+	}
+	return undefined;
+}
+
+interface Insertion {
+	at: number;
+	text: string;
+}
+
+/** The text to add so `ident` joins the list, in the list's own layout. */
+function listInsertion(source: string, list: Node, ident: string): Insertion {
+	const elements = (list.elements as (Node | null)[]).filter(
+		(element): element is Node => element !== null,
+	);
+	const last = elements.at(-1);
+	if (!last) return { at: list.start + 1, text: ident };
+	const between = source.slice(last.end, list.end - 1);
+	const comma = between.search(/[^\s]/);
+	const trailing = between[comma] === "," ? last.end + comma + 1 : undefined;
+	const multiline = source.slice(list.start, last.start).includes("\n");
+	const lineStart = source.lastIndexOf("\n", last.start) + 1;
+	const indent = /^[ \t]*/.exec(source.slice(lineStart, last.start))?.[0] ?? "";
+	if (trailing !== undefined)
+		return {
+			at: trailing,
+			text: multiline ? `\n${indent}${ident},` : ` ${ident},`,
+		};
+	return {
+		at: last.end,
+		text: multiline ? `,\n${indent}${ident}` : `, ${ident}`,
+	};
+}
+
+/** Where the new import goes: before the first later-sorting relative import, else after the last import. */
+function importInsertion(
+	body: readonly Node[],
+	specifier: string,
+	line: string,
+): Insertion {
+	const imports = body.filter((node) => node.type === "ImportDeclaration");
+	const later = imports.find((node) => {
+		const from = (child(node, "source")?.value ?? "") as string;
+		return from.startsWith(".") && from > specifier;
+	});
+	if (later) return { at: later.start, text: `${line}\n` };
+	const last = imports.at(-1);
+	return last
+		? { at: last.end, text: `\n${line}` }
+		: { at: 0, text: `${line}\n\n` };
+}
+
+/**
+ * Adds the plugin's import line and lists it in the `plugins` array of the default export, in the
+ * file's own layout. It refuses, changing nothing, a file that does not parse, a default export
+ * with no `plugins` list it can find, and a name already bound.
+ */
+export function addPluginToConfig(
+	source: string,
+	plugin: { name: string; ident: string },
+	file = "roundtable.config.ts",
+): string {
+	const body = parseModule(source, file);
+	const object = exportedObject(body);
+	const list = object ? pluginList(object) : undefined;
+	if (!list)
+		throw new ConfigEditError(
+			`${file}: cannot find the plugin list. Expected \`export default { ..., plugins: [...] }\`; add \`import { ${plugin.ident} } from "./plugins/${plugin.name}.ts"\` and list ${plugin.ident} in plugins by hand.`,
+		);
+	const specifier = `./plugins/${plugin.name}.ts`;
+	if (boundNames(body).has(plugin.ident))
+		throw new ConfigEditError(
+			`${file}: the name ${plugin.ident} is already used. Import the plugin by hand under another name.`,
+		);
+	const edits = [
+		listInsertion(source, list, plugin.ident),
+		importInsertion(
+			body,
+			specifier,
+			// JSON.stringify quotes the specifier; the export script reads import lines in source text, so none may hold a placeholder.
+			`import { ${plugin.ident} } from ${JSON.stringify(specifier)};`,
+		),
+	].sort((a, b) => b.at - a.at);
+	let edited = source;
+	for (const edit of edits)
+		edited = edited.slice(0, edit.at) + edit.text + edited.slice(edit.at);
+	// A result that does not parse is a bug here; never write it.
+	parseModule(edited, file);
+	return edited;
+}

@@ -1,0 +1,13 @@
+import { expect, test } from "bun:test";
+import { testPlugin } from "pi-roundtable/testing";
+import { __IDENT__ } from "./__NAME__.ts";
+
+test("__NAME__ adds a greeting tool for members", async () => {
+	const harness = await testPlugin(__IDENT__);
+	expect(harness.tools).toEqual(["__TOOL___greet"]);
+	expect(harness.tiers.minTier("__TOOL___greet")).toBe("member");
+	expect(await harness.runTool("__TOOL___greet", { who: "Ada" })).toBe(
+		"Hello, Ada!",
+	);
+	await harness.stop();
+});

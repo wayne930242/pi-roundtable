@@ -1,0 +1,143 @@
+import { ConfigError } from "./domain/errors.ts";
+import type { OwnerIdentity } from "./identity.ts";
+
+/** How much a speaker may do: `owner` above `admin` above `member`. */
+export const TIERS = ["member", "admin", "owner"] as const;
+export type Tier = (typeof TIERS)[number];
+
+/** Whether `tier` is `least` or above. */
+export function tierAtLeast(tier: Tier, least: Tier): boolean {
+	return TIERS.indexOf(tier) >= TIERS.indexOf(least);
+}
+
+/** A person whose message starts a turn, and the tier the policy gave them. */
+export interface Speaker {
+	id: string;
+	name: string;
+	tier: Tier;
+}
+
+/**
+ * Who a prompt addresses for this speaker: the owner for an owner-tier speaker, so the owner's
+ * prompts stay as they are, and otherwise the speaker by name, since a name needs no guess at
+ * pronouns.
+ */
+export function addressee(
+	speaker: Speaker | undefined,
+	owner: OwnerIdentity,
+): OwnerIdentity {
+	if (!speaker || speaker.tier === "owner") return owner;
+	return {
+		name: speaker.name,
+		pronouns: {
+			subject: speaker.name,
+			object: speaker.name,
+			possessive: `${speaker.name}'s`,
+		},
+	};
+}
+
+/**
+ * How a tool description names the person it serves in a session that several speakers share:
+ * the description is fixed when the session opens, so it names no one, and the prompt says who
+ * the speaker is.
+ */
+export const THE_SPEAKER: OwnerIdentity = {
+	name: "the speaker",
+	pronouns: {
+		subject: "the speaker",
+		object: "the speaker",
+		possessive: "the speaker's",
+	},
+};
+
+/** The turn's text under the speaker's name, so a conversation several speakers share says who wrote what. */
+export function attributed(speaker: Speaker, text: string): string {
+	if (speaker.tier === "owner") return text;
+	return `(Message from ${speaker.name}, at the ${speaker.tier} tier.)\n\n${text}`;
+}
+
+/** What a surface reports about the author of a message; the policy decides the rest. */
+export interface SpeakerFacts {
+	id: string;
+	name: string;
+	/** The roles the author holds in the server; empty where the surface has none. */
+	roleIds?: readonly string[];
+}
+
+/**
+ * Decides who may talk to the agents. Undefined means the author is nobody: no reply and no
+ * turn. A plugin may replace the configured policy.
+ */
+export interface SpeakerPolicy {
+	resolve(author: SpeakerFacts): Speaker | undefined;
+}
+
+/** Who holds one tier: user ids, role ids, and (for members) everyone. */
+export interface TierMembers {
+	users?: readonly string[];
+	roles?: readonly string[];
+	everyone?: boolean;
+}
+
+export interface SpeakerMap {
+	/** User ids of the owners. */
+	owners: readonly string[];
+	admins?: TierMembers;
+	members?: TierMembers;
+}
+
+/** The policy of an operator's map; the highest tier an author qualifies for wins. */
+export function speakerPolicy(map: SpeakerMap): SpeakerPolicy {
+	const holds = (tier: TierMembers | undefined, author: SpeakerFacts) =>
+		tier !== undefined &&
+		(tier.everyone === true ||
+			tier.users?.includes(author.id) === true ||
+			(author.roleIds ?? []).some((role) => tier.roles?.includes(role)));
+	const tierOf = (author: SpeakerFacts): Tier | undefined => {
+		if (map.owners.includes(author.id)) return "owner";
+		if (holds(map.admins, author)) return "admin";
+		if (holds(map.members, author)) return "member";
+		return undefined;
+	};
+	return {
+		resolve(author) {
+			const tier = tierOf(author);
+			return tier && { id: author.id, name: author.name, tier };
+		},
+	};
+}
+
+/**
+ * Reads a tier's members from text: comma-separated `user:<id>`, `role:<id>`, or `@everyone`;
+ * a bare id is a user. `allowEveryone` is false for tiers that cannot be everyone.
+ */
+export function parseTierMembers(
+	text: string | undefined,
+	name: string,
+	allowEveryone: boolean,
+): TierMembers | undefined {
+	const items = (text ?? "")
+		.split(",")
+		.map((item) => item.trim())
+		.filter((item) => item !== "");
+	if (items.length === 0) return undefined;
+	const users: string[] = [];
+	const roles: string[] = [];
+	let everyone = false;
+	for (const item of items) {
+		if (item === "@everyone") {
+			if (!allowEveryone)
+				throw new ConfigError(`${name} cannot include @everyone`);
+			everyone = true;
+			continue;
+		}
+		const [kind, id] = item.includes(":") ? item.split(":", 2) : ["user", item];
+		if ((kind !== "user" && kind !== "role") || !/^\d{17,20}$/.test(id ?? ""))
+			throw new ConfigError(
+				`${name} must list user:<id>, role:<id>, or @everyone, got ${item}`,
+			);
+		(kind === "role" ? roles : users).push(id as string);
+	}
+	return { users, roles, everyone };
+}

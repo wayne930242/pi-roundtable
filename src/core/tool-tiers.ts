@@ -1,0 +1,127 @@
+import { AGENT_TOOLS } from "./agents/agent-tools.ts";
+import { ConfigError } from "./domain/errors.ts";
+import { PluginError } from "./errors.ts";
+import { SKILL_LIST_TOOL, SKILL_TOOLS } from "./modules/skills/skill-tools.ts";
+import { ASK_USER_TOOL } from "./runtime/extensions/ask-user.ts";
+import { COMPACT_TOOL } from "./runtime/extensions/self-compact-guard.ts";
+import { DELEGATE_TOOL } from "./shared/delegate-tool.ts";
+import { SCHEDULE_TOOLS } from "./shared/schedule-tools.ts";
+import { TIERS, type Tier, tierAtLeast } from "./speakers.ts";
+
+/** The lowest tier that may use each tool; a tool that is not named needs the owner. */
+export interface ToolTiers {
+	minTier(tool: string): Tier;
+	/** Whether a speaker of `tier` may use the tool. */
+	allows(tier: Tier, tool: string): boolean;
+}
+
+const set = (tier: Tier, tools: readonly string[]) =>
+	Object.fromEntries(tools.map((tool) => [tool, tier]));
+
+/**
+ * The core's default tiers. Members talk, read, look things up, and message agents; admins
+ * also create and edit agents, groups, skills, schedules, and delegated work; everything else,
+ * such as the shell, the owner's notes, Discord administration, and every plugin's tools,
+ * stays with the owner until an operator lowers it.
+ */
+export const CORE_TOOL_TIERS: Readonly<Record<string, Tier>> = {
+	...set("admin", [
+		...AGENT_TOOLS,
+		...SKILL_TOOLS,
+		...SCHEDULE_TOOLS,
+		DELEGATE_TOOL,
+	]),
+	...set("member", [
+		"agent_list",
+		"agent_get",
+		"message_agent",
+		"channel_read",
+		"schedule_list",
+		SKILL_LIST_TOOL,
+		"read_attachment",
+		// Each speaker keeps their own; the owner's reaches only the owner's turns.
+		"memory_add",
+		"memory_search",
+		"memory_remove",
+		"web_search",
+		"fetch_content",
+		"get_search_content",
+	]),
+	// The core's own tools serve any turn that can ask or compact.
+	...set("member", [ASK_USER_TOOL, COMPACT_TOOL]),
+};
+
+/**
+ * What each tool needs: the operator's setting first, then the tier its plugin declared, then
+ * the core's default, and the owner for a tool nobody named. Plugins declare theirs when the
+ * host links them, so a reader asks at use time and sees the final table.
+ */
+export class ToolTierTable implements ToolTiers {
+	readonly #operator: ReadonlyMap<string, Tier>;
+	readonly #declared = new Map<string, { plugin: string; tier: Tier }>();
+	readonly #core = new Map(Object.entries(CORE_TOOL_TIERS));
+
+	constructor(operator: Readonly<Record<string, Tier>> = {}) {
+		this.#operator = new Map(Object.entries(operator));
+	}
+
+	/** Records the tiers a plugin's tools need; a tool two plugins declare is a PluginError. */
+	declare(plugin: string, tiers: Readonly<Record<string, Tier>>): void {
+		for (const [tool, tier] of Object.entries(tiers)) {
+			const other = this.#declared.get(tool);
+			if (other)
+				throw new PluginError(
+					`plugin ${plugin}: tool ${tool} is already defined by plugin ${other.plugin}. Rename one of the two tools.`,
+				);
+			this.#declared.set(tool, { plugin, tier });
+		}
+	}
+
+	minTier(tool: string): Tier {
+		return (
+			this.#operator.get(tool) ??
+			this.#declared.get(tool)?.tier ??
+			this.#core.get(tool) ??
+			"owner"
+		);
+	}
+
+	allows(tier: Tier, tool: string): boolean {
+		return tierAtLeast(tier, this.minTier(tool));
+	}
+}
+
+/** The core's tiers with the operator's on top; plugins add theirs through `declare`. */
+export function toolTiers(
+	operator: Readonly<Record<string, Tier>> = {},
+): ToolTierTable {
+	return new ToolTierTable(operator);
+}
+
+/** The tools a tier may use, in order; a turn nobody spoke in has the owner's tier. */
+export function toolsForTier(
+	tools: readonly string[],
+	tier: Tier,
+	tiers: ToolTiers,
+): string[] {
+	return tools.filter((tool) => tiers.allows(tier, tool));
+}
+
+/** Reads `tool=tier` pairs, comma-separated; unset means no changes. */
+export function parseToolTiers(
+	text: string | undefined,
+	name: string,
+): Record<string, Tier> {
+	const result: Record<string, Tier> = {};
+	for (const item of (text ?? "").split(",")) {
+		const pair = item.trim();
+		if (pair === "") continue;
+		const [tool, tier] = pair.split("=").map((part) => part.trim());
+		if (!tool || !tier || !(TIERS as readonly string[]).includes(tier))
+			throw new ConfigError(
+				`${name} must list tool=owner|admin|member pairs, got ${pair}`,
+			);
+		result[tool] = tier as Tier;
+	}
+	return result;
+}

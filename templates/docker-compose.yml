@@ -1,0 +1,16 @@
+---
+# PostgreSQL for local use; `docker compose up -d` matches DATABASE_URL in .env.example.
+services:
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: roundtable
+      POSTGRES_PASSWORD: roundtable
+      POSTGRES_DB: roundtable
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres:/var/lib/postgresql/data
+volumes:
+  postgres:

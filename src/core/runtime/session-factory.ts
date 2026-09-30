@@ -1,0 +1,291 @@
+import { mkdirSync } from "node:fs";
+import { join } from "node:path";
+import {
+	type AgentSession,
+	createAgentSession,
+	DefaultResourceLoader,
+	type ModelRuntime,
+	type SessionManager,
+} from "@earendil-works/pi-coding-agent";
+import { channelSegment } from "../attachments/attachment-dir.ts";
+import type { ChannelKey } from "../domain/conversation.ts";
+import { ConfigError } from "../domain/errors.ts";
+import type { AgentTurnScope } from "../domain/ports.ts";
+import type { LinkedSessions } from "../plugin.ts";
+import {
+	planOrder,
+	type SessionContext,
+	type SessionPlan,
+	type ToolSelection,
+	type TransientTask,
+} from "../sessions.ts";
+import { packageDir } from "../shared/package-dir.ts";
+import { profileToolsExtension } from "../shared/profile-tools.ts";
+import { readAttachmentExtension } from "../shared/read-attachment-tool.ts";
+import { addressee, type Speaker, THE_SPEAKER } from "../speakers.ts";
+import {
+	CompactionTiers,
+	compactionEngine,
+	HARD_COMPACT_TOKENS,
+} from "./compaction-tiers.ts";
+import { ASK_USER_TOOL, askUserExtension } from "./extensions/ask-user.ts";
+import {
+	type ConfirmationGate,
+	confirmationGateExtension,
+} from "./extensions/confirmation-gate.ts";
+import {
+	COMPACT_TOOL,
+	selfCompactGuardExtension,
+} from "./extensions/self-compact-guard.ts";
+import type { PromptSlot } from "./prompt-slot.ts";
+import type {
+	ChannelSession,
+	CompactionEnd,
+	PiAgentRuntimeOptions,
+} from "./runtime-types.ts";
+import {
+	type LoadedSkill,
+	revisionsKey,
+	sessionExtensions,
+	skillsKey,
+} from "./runtime-types.ts";
+
+/** What a session factory asks of the runtime that owns the turns. */
+export interface SessionFactoryDeps {
+	/** The person the conversation's running turn is for. */
+	speaker(channel: ChannelKey): Speaker | undefined;
+	/** Runs a task beside the conversation, under its gate. */
+	runTask(channel: ChannelKey, task: TransientTask): Promise<string>;
+}
+
+/** Builds Pi sessions for the runtime: one resource loader per session, its extensions in order. */
+export class SessionFactory {
+	readonly #options: PiAgentRuntimeOptions;
+	readonly #modelRuntime: ModelRuntime;
+	readonly #deps: SessionFactoryDeps;
+	/** The linked session parts, with each package's directory; resolved on first use. */
+	#linked: (LinkedSessions & { extensionPaths: string[] }) | undefined;
+
+	constructor(options: PiAgentRuntimeOptions, deps: SessionFactoryDeps) {
+		this.#options = options;
+		this.#modelRuntime = options.modelRuntime;
+		this.#deps = deps;
+	}
+
+	link(): LinkedSessions & { extensionPaths: string[] } {
+		if (!this.#linked) {
+			const linked = this.#options.sessions();
+			this.#linked = {
+				...linked,
+				extensionPaths: linked.piPackages.map(packageDir),
+			};
+		}
+		return this.#linked;
+	}
+
+	get plan(): SessionPlan {
+		return this.link().plan;
+	}
+
+	toolsFor(selection: ToolSelection): string[] {
+		const groups = planOrder(this.plan).flatMap(
+			(tool) => tool.snapshot().groups ?? [],
+		);
+		return [
+			...selection.tools,
+			COMPACT_TOOL,
+			ASK_USER_TOOL,
+			...groups
+				.filter((group) => selection.groups.includes(group.name))
+				.flatMap((group) => group.tools),
+		];
+	}
+
+	/** Waits for the tools the session tools register late, such as pi-mcp-adapter's after its eager connection. */
+	async #awaitTools(
+		session: AgentSession,
+		expected: readonly string[],
+	): Promise<void> {
+		const deadline = Date.now() + (this.#options.mcpConnectTimeoutMs ?? 30_000);
+		while (Date.now() < deadline) {
+			const registered = new Set(
+				session.getAllTools().map((tool) => tool.name),
+			);
+			if (expected.every((name) => registered.has(name))) return;
+			await Bun.sleep(250);
+		}
+	}
+
+	workDir(): string {
+		const dir = join(this.#options.dataDir, "work");
+		mkdirSync(dir, { recursive: true });
+		return dir;
+	}
+
+	sessionDir(channel: ChannelKey): string {
+		return join(this.#options.dataDir, "sessions", channelSegment(channel));
+	}
+
+	/** An agent's carried skills; owner sessions carry none. */
+	skillsOf(agent: AgentTurnScope | undefined): readonly LoadedSkill[] {
+		const agents = this.#options.agents;
+		return agent && agents ? agents.skills(agent.name) : [];
+	}
+
+	/** Agents work in their shared workspace; owner sessions in the assistant's own. */
+	cwd(agent: AgentTurnScope | undefined): string {
+		const agents = this.#options.agents;
+		if (!agent || !agents) return this.workDir();
+		mkdirSync(agents.workDir, { recursive: true });
+		return agents.workDir;
+	}
+
+	/**
+	 * Logs who compacted a conversation, the compaction extension or Pi's summary, by how much, and the context size
+	 * that compacts it next, so a move to the hard ceiling shows.
+	 */
+	#logCompaction(
+		channel: ChannelKey,
+		event: CompactionEnd,
+		session: AgentSession,
+	): void {
+		const { logger } = this.#options;
+		const trigger = event.reason === "manual" ? "self" : event.reason;
+		if (!event.result) {
+			logger.warn(
+				{
+					channel,
+					trigger,
+					aborted: event.aborted,
+					error: event.errorMessage,
+				},
+				"compaction failed",
+			);
+			return;
+		}
+		const { model, settingsManager } = session;
+		logger.info(
+			{
+				channel,
+				trigger,
+				engine: compactionEngine(
+					event.result.details,
+					this.plan.compaction?.engine,
+				),
+				tokensBefore: event.result.tokensBefore,
+				tokensAfter: event.result.estimatedTokensAfter,
+				nextCompactionAt:
+					model &&
+					model.contextWindow -
+						settingsManager.getCompactionSettings(model).reserveTokens,
+			},
+			"conversation compacted",
+		);
+	}
+
+	/**
+	 * Each channel gets its own resource loader: Pi binds extension actions such as
+	 * setActiveTools to the loader's shared runtime, so sessions sharing a loader would
+	 * act on whichever session bound last.
+	 */
+	// pi-lens-ignore: long-parameter-list, high-fan-out — the build inputs of one session; its SessionContext is derived here from them
+	async create(
+		channel: ChannelKey,
+		sessionManager: SessionManager,
+		gate: ConfirmationGate,
+		slot: PromptSlot,
+		attachmentDir: string,
+		agent: AgentTurnScope | undefined,
+	): Promise<ChannelSession> {
+		const { agentDir, model, thinking, persona, logger } = this.#options;
+		const skills = this.skillsOf(agent);
+		const state = {
+			tools: [] as readonly string[],
+			revisions: revisionsKey(this.plan),
+			skills: skillsKey(skills),
+		};
+		const awaited = planOrder(this.plan).flatMap(
+			(tool) => tool.snapshot().awaitTools ?? [],
+		);
+		const cwd = this.cwd(agent);
+		const agents = agent ? this.#options.agents : undefined;
+		if (agent && !agents)
+			throw new ConfigError("agent turns need the runtime's agents option");
+		const tiers = new CompactionTiers(
+			sessionManager,
+			(provider, id) =>
+				this.#modelRuntime.getModel(provider, id)?.contextWindow,
+			this.plan.compaction?.engine,
+		);
+		const context: SessionContext = {
+			kind: agent ? "agent" : "owner",
+			homeChannel: channel,
+			turnChannel: agent && agents ? agents.turnChannel(agent) : channel,
+			compaction: {
+				wrap: (compactor) =>
+					tiers.wrapCompactor(compactor, (bypass) =>
+						logger.info(
+							{ channel, ...bypass, ceiling: HARD_COMPACT_TOKENS },
+							"compaction skips the extension for Pi's summary",
+						),
+					),
+			},
+			speaker: () => this.#deps.speaker(channel),
+			runTask: (task) => this.#deps.runTask(channel, task),
+		};
+		if (agent) context.agent = agent;
+		const resourceLoader = new DefaultResourceLoader({
+			cwd,
+			agentDir,
+			noExtensions: true,
+			noSkills: true,
+			additionalSkillPaths: skills.map((skill) => skill.file),
+			noPromptTemplates: true,
+			noThemes: true,
+			noContextFiles: true,
+			additionalExtensionPaths: this.link().extensionPaths,
+			extensionFactories: sessionExtensions(this.plan, context, {
+				readAttachment: readAttachmentExtension(attachmentDir),
+				confirmationGate: confirmationGateExtension(gate, slot),
+				askUser: askUserExtension(
+					slot,
+					agent ? THE_SPEAKER : this.#options.owner,
+					() => addressee(this.#deps.speaker(channel), this.#options.owner),
+				),
+				selfCompactGuard: selfCompactGuardExtension(),
+				profileTools: profileToolsExtension(() => state.tools),
+			}),
+			// An agent's prompt is set before each run by the agent-prompt extension.
+			appendSystemPrompt: agent ? [] : [persona],
+		});
+		await resourceLoader.reload();
+
+		const { session } = await createAgentSession({
+			cwd,
+			agentDir,
+			thinkingLevel: thinking,
+			modelRuntime: this.#modelRuntime,
+			resourceLoader,
+			sessionManager,
+			// Large windows compact through the extension at SOFT_COMPACT_TOKENS, and through pi's summary
+			// past HARD_COMPACT_TOKENS.
+			settingsManager: tiers.settings(),
+		});
+
+		// Extension providers such as claude-bridge exist only after the session loads its extensions.
+		const resolved = this.#modelRuntime.getModel(model.provider, model.id);
+		if (!resolved) {
+			session.dispose();
+			throw new ConfigError(
+				`model ${model.provider}/${model.id} is not available`,
+			);
+		}
+		await session.setModel(resolved);
+		await this.#awaitTools(session, awaited);
+		session.subscribe((event) => {
+			if (event.type === "compaction_end")
+				this.#logCompaction(channel, event, session);
+		});
+		return Object.assign(state, { session });
+	}
+}
