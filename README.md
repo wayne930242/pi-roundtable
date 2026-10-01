@@ -16,7 +16,7 @@ MIT licensed.
 ## What you need
 
 - [Bun](https://bun.sh/docs/installation) 1.3 or newer.
-- A running pi-roundtable host, version 0.4 (`pi-roundtable` is a peer dependency, `^0.4.0`), with its PostgreSQL.
+- A running pi-roundtable host, version 0.4 or 0.5 (`pi-roundtable` is a peer dependency, `>=0.4.0 <0.6.0`), with its PostgreSQL.
 - For `mcpConnectors`: a [ContextForge](#contextforge) gateway that you run yourself.
 - For `remoteMcp`: an HTTPS address that reaches the host's `public` listener, such as a tunnel; this is the host's `http.publicUrl`.
 

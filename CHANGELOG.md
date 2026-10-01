@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-10-01
+
+### Changed
+
+- The peer dependency on `pi-roundtable` is `>=0.4.0 <0.6.0`, so a host on 0.5 does not get a peer warning. The tests now run against pi-roundtable 0.5.0.
+
 ## [0.4.0] - 2026-10-01
 
 ### Added
