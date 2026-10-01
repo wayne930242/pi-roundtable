@@ -32,7 +32,7 @@ const OWNER_HANDLE = spell("way", "ne930242");
 // The lockfile lists a dependency's own registry name, which a transitive dependency spells with one of the names below.
 export const PUBLIC_NAME_ALLOWLIST: NameAllowlist = {
 	LICENSE: [OWNER_HANDLE],
-	"package.json": [OWNER_HANDLE],
+	"package.json": [OWNER_HANDLE, spell("way", "ne")],
 	"site/astro.config.mjs": [OWNER_HANDLE, spell("way", "ne")],
 	"CHANGELOG.md": [spell("way", "ne")],
 	"site/public/CNAME": [spell("way", "ne")],
