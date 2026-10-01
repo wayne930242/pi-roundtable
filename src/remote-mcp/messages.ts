@@ -1,3 +1,14 @@
+/** The names of the two tools `/mcp/personal` offers. */
+export interface RemoteToolNames {
+	dispatch: string;
+	result: string;
+}
+
+export const DEFAULT_TOOL_NAMES: RemoteToolNames = {
+	dispatch: "agent_dispatch",
+	result: "agent_result",
+};
+
 /**
  * The text of the remote MCP plugin: what outside agents read in tool descriptions and errors,
  * and what the owner reads in the Discord commands.
@@ -10,8 +21,10 @@ export interface RemoteMcpMessages {
 	/** Sent for a granted tool call that failed in a way the agent must not retry. */
 	operationUnfinished: string;
 
-	dispatchDescription: string;
-	resultDescription: string;
+	/** The description of the dispatch tool; `tools` holds the names the host chose. */
+	dispatchDescription(tools: RemoteToolNames): string;
+	/** The description of the result tool. */
+	resultDescription(tools: RemoteToolNames): string;
 	sessionIdDescription: string;
 	listChannelsDescription: string;
 	/** Appended to every granted channel tool's description. */
@@ -87,12 +100,12 @@ export const REMOTE_MCP_MESSAGES: RemoteMcpMessages = {
 	operationUnfinished:
 		"The operation did not complete. Check the audit log of the grants on Discord; do not retry automatically.",
 
-	dispatchDescription:
+	dispatchDescription: (tools) =>
 		"Start or continue a conversation turn with the owner's personal agent, on the owner's behalf. " +
-		"Returns { runId, sessionId } at once without waiting for the agent to finish; poll agent_result with the runId. " +
+		`Returns { runId, sessionId } at once without waiting for the agent to finish; poll ${tools.result} with the runId. ` +
 		"Omit sessionId to start a new conversation; pass a returned sessionId to continue it.",
-	resultDescription:
-		"Poll a run started by agent_dispatch. Returns { status: 'working' | 'completed' | 'failed', text?, error? }.",
+	resultDescription: (tools) =>
+		`Poll a run started by ${tools.dispatch}. Returns { status: 'working' | 'completed' | 'failed', text?, error? }.`,
 	sessionIdDescription:
 		"A sessionId returned earlier; omit it to start a new conversation",
 	listChannelsDescription:

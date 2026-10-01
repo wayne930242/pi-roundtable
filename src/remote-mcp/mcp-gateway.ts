@@ -23,14 +23,17 @@ import {
 	hashChannelToken,
 } from "./channel-grants.ts";
 import { runGrantedTool } from "./channel-tools.ts";
-import { REMOTE_MCP_MESSAGES, type RemoteMcpMessages } from "./messages.ts";
+import {
+	DEFAULT_TOOL_NAMES,
+	REMOTE_MCP_MESSAGES,
+	type RemoteMcpMessages,
+	type RemoteToolNames,
+} from "./messages.ts";
 import { type RemoteAgent, RemoteAgentError } from "./remote-agent.ts";
 
 /** Requests may carry uploads; anything larger is refused before it is parsed. */
 const MAX_BODY_BYTES = 12 * 1024 * 1024;
 
-export const DISPATCH_TOOL = "agent_dispatch";
-export const RESULT_TOOL = "agent_result";
 const LIST_CHANNELS_TOOL = "discord_list_authorized_channels";
 
 export interface McpGatewayOptions {
@@ -42,6 +45,8 @@ export interface McpGatewayOptions {
 	executor(): ChannelExecutor | undefined;
 	logger: Logger;
 	messages?: RemoteMcpMessages;
+	/** The names of the dispatch and result tools; `agent_dispatch` and `agent_result` by default. */
+	toolNames?: RemoteToolNames;
 }
 
 interface ToolSpec {
@@ -73,11 +78,13 @@ const ResultInput = Type.Object(
 export class McpGateway {
 	readonly #options: McpGatewayOptions;
 	readonly #text: RemoteMcpMessages;
+	readonly #tools: RemoteToolNames;
 	readonly #dispatchInput: TSchema;
 
 	constructor(options: McpGatewayOptions) {
 		this.#options = options;
 		this.#text = options.messages ?? REMOTE_MCP_MESSAGES;
+		this.#tools = options.toolNames ?? DEFAULT_TOOL_NAMES;
 		this.#dispatchInput = Type.Object(
 			{
 				message: Type.String({ minLength: 1 }),
@@ -172,8 +179,8 @@ export class McpGateway {
 		return [
 			{
 				tool: {
-					name: DISPATCH_TOOL,
-					description: this.#text.dispatchDescription,
+					name: this.#tools.dispatch,
+					description: this.#text.dispatchDescription(this.#tools),
 					inputSchema: jsonSchema(this.#dispatchInput),
 				},
 				call: async (args) => {
@@ -187,8 +194,8 @@ export class McpGateway {
 			},
 			{
 				tool: {
-					name: RESULT_TOOL,
-					description: this.#text.resultDescription,
+					name: this.#tools.result,
+					description: this.#text.resultDescription(this.#tools),
 					inputSchema: jsonSchema(ResultInput),
 					annotations: { readOnlyHint: true, idempotentHint: true },
 				},

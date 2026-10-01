@@ -13,7 +13,10 @@ export type {
 export { CONNECTORS, mcpConnectors } from "./connectors/connectors-plugin.ts";
 export type { UpstreamAuth } from "./connectors/contextforge.ts";
 export type { ConnectorMessages } from "./connectors/messages.ts";
-export type { RemoteMcpMessages } from "./remote-mcp/messages.ts";
+export type {
+	RemoteMcpMessages,
+	RemoteToolNames,
+} from "./remote-mcp/messages.ts";
 export type { RemoteClaimHooks } from "./remote-mcp/remote-claim.ts";
 export type {
 	DefaultConversationOptions,

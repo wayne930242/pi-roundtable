@@ -18,7 +18,12 @@ import {
 } from "./default-conversation.ts";
 import { McpGateway } from "./mcp-gateway.ts";
 import { mcpGrantCommands } from "./mcp-grant-commands.ts";
-import { type RemoteMcpMessages, remoteMcpMessages } from "./messages.ts";
+import {
+	DEFAULT_TOOL_NAMES,
+	type RemoteMcpMessages,
+	type RemoteToolNames,
+	remoteMcpMessages,
+} from "./messages.ts";
 import { RemoteAgent } from "./remote-agent.ts";
 import { type RemoteClaimHooks, remoteClaim } from "./remote-claim.ts";
 import { RemoteSessionStore } from "./remote-session-store.ts";
@@ -37,6 +42,11 @@ interface RemoteMcpBaseOptions {
 	publicUrl: string;
 	/** The Discord text, the relay note, and the tool descriptions in your wording; English by default. */
 	messages?: Partial<RemoteMcpMessages>;
+	/**
+	 * The names of the two tools at `/mcp/personal`, for agents already set up with other names;
+	 * `agent_dispatch` and `agent_result` by default. The default descriptions follow the names.
+	 */
+	toolNames?: Partial<RemoteToolNames>;
 }
 
 /** Remote turns run on the core's runtime: nothing more to give. */
@@ -63,6 +73,21 @@ export interface HostConversationOptions {
 export type RemoteMcpOptions = RemoteMcpBaseOptions &
 	(DefaultConversationOptions | HostConversationOptions);
 
+const TOOL_NAME = /^[A-Za-z0-9_-]{1,64}$/;
+
+/** The tool names with the host's overrides laid over the defaults; refuses names a client cannot use. */
+function toolNamesOf(options: RemoteMcpOptions): RemoteToolNames {
+	const names = { ...DEFAULT_TOOL_NAMES, ...options.toolNames };
+	for (const name of Object.values(names))
+		if (!TOOL_NAME.test(name))
+			throw new ConfigError(
+				`remote-mcp: toolNames: "${name}" is not a tool name (letters, digits, _ and -, up to 64)`,
+			);
+	if (names.dispatch === names.result)
+		throw new ConfigError("remote-mcp: toolNames: the two names must differ");
+	return names;
+}
+
 function checkOptions(options: RemoteMcpOptions): void {
 	if (!options.dispatchToken)
 		throw new ConfigError("remote-mcp: dispatchToken is empty");
@@ -83,6 +108,7 @@ function checkOptions(options: RemoteMcpOptions): void {
 export function remoteMcp(options: RemoteMcpOptions): RoundtablePlugin {
 	checkOptions(options);
 	const text = remoteMcpMessages(options.messages);
+	const toolNames = toolNamesOf(options);
 	return definePlugin({
 		name: "remote-mcp",
 		requires: [DISCORD],
@@ -105,6 +131,7 @@ export function remoteMcp(options: RemoteMcpOptions): RoundtablePlugin {
 				executor: () => discord.connection.channelExecutor(),
 				logger,
 				messages: text,
+				toolNames,
 			});
 			const sweeper = new RemoteSessionSweeper({
 				sessions,

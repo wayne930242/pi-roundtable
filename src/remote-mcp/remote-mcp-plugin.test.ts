@@ -33,6 +33,13 @@ test.each([
 	["an empty dispatch token", { dispatchToken: "" }],
 	["a public URL that is not https", { publicUrl: "http://bot.example.test" }],
 	["a public URL that is not a URL", { publicUrl: "bot" }],
+	["a tool name with a space", { toolNames: { dispatch: "ask agent" } }],
+	["an empty tool name", { toolNames: { result: "" } }],
+	[
+		"a tool name over 64 characters",
+		{ toolNames: { dispatch: "a".repeat(65) } },
+	],
+	["two tools with one name", { toolNames: { dispatch: "agent_result" } }],
 	[
 		"an answer without its claim",
 		{ answer: async () => ({ ok: true as const, text: "" }) },
@@ -149,12 +156,39 @@ describeDb("remoteMcp on a plugin harness", () => {
 		expect(runtime.turns.at(-1)?.confirmed).toBeUndefined();
 	});
 
+	test("the tools take the host's names, and the default descriptions name each other", async () => {
+		const toolNames = {
+			dispatch: "ask_owner_agent",
+			result: "owner_agent_reply",
+		};
+		const { harness } = await boot({ ...base, toolNames });
+		const client = await connect(harness, "/mcp/personal");
+		const tools = (await client.listTools()).tools;
+		expect(tools.map((tool) => tool.name)).toEqual([
+			"ask_owner_agent",
+			"owner_agent_reply",
+		]);
+		expect(tools[0]?.description).toContain("poll owner_agent_reply");
+		expect(tools[1]?.description).toContain("started by ask_owner_agent");
+		const started = jsonOf(
+			await client.callTool({
+				name: "ask_owner_agent",
+				arguments: { message: "hi" },
+			}),
+		);
+		expect(started.runId).toBeString();
+		await client.close();
+	});
+
 	test("the relay note and tool descriptions take the host's wording", async () => {
 		const runtime = recordingRuntime();
 		const { harness } = await boot(
 			{
 				...base,
-				messages: { relayNote: "[relayed]", dispatchDescription: "Ask away." },
+				messages: {
+					relayNote: "[relayed]",
+					dispatchDescription: () => "Ask away.",
+				},
 			},
 			runtime,
 		);

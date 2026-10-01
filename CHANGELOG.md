@@ -5,6 +5,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-01
+
+### Added
+
+- `remoteMcp({ toolNames })`: the names of the two tools at `/mcp/personal`, for agents that are already set up with other names. The default descriptions name each other with the chosen names. A name that is not letters, digits, `_` or `-` (up to 64), or two equal names, is refused when the plugin is created.
+
+### Changed
+
+- `RemoteMcpMessages.dispatchDescription` and `resultDescription` are now functions that receive the tool names, so a description can refer to the other tool by its real name. A host that set either as a string gives `() => "..."` instead.
+
 ## [0.1.0] - 2026-10-01
 
 First release: two plugins for pi-roundtable 0.4, extracted from a private host.

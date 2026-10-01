@@ -153,7 +153,8 @@ The owner manages connectors on Discord with `/<root> connector`, where `<root>`
 | `publicUrl` | `string` | required | The HTTPS address that reaches the host's `public` listener. Granted-channel URLs are built on its origin |
 | `persona` | `string` | a short neutral prompt | The system prompt of the default `remote` conversations |
 | `answer`, `claim` | see [below](#when-the-host-runs-the-conversations-itself) | the core's runtime | Give both, or neither |
-| `messages` | `Partial<RemoteMcpMessages>` | English | The relay note, the tool descriptions, and the Discord text, in your wording |
+| `messages` | `Partial<RemoteMcpMessages>` | English | The relay note, the tool descriptions, and the Discord text, in your wording. `dispatchDescription` and `resultDescription` are functions that receive the tool names |
+| `toolNames` | `{ dispatch?: string; result?: string }` | `agent_dispatch`, `agent_result` | The names of the two tools at `/mcp/personal`, for agents that are already set up with other names. The default descriptions follow them |
 
 The plugin serves two endpoints on the host's `public` listener:
 
