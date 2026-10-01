@@ -1,0 +1,93 @@
+---
+title: pi-roundtable
+description: A team of AI agents in one Discord server, extended with TypeScript plugins.
+template: splash
+hero:
+  tagline: A Discord agent server on Pi. Each agent owns a channel and a conversation, they share tools and memory, and you extend the bot with plugins.
+  actions:
+    - text: Start in five minutes
+      link: /guides/quick-start/
+      icon: right-arrow
+    - text: Write a plugin
+      link: /guides/write-a-plugin/
+      variant: minimal
+---
+
+import { Card, CardGrid, Steps } from "@astrojs/starlight/components";
+import { Image } from "astro:assets";
+import agentStatus from "../../assets/scenes/agent-status.png";
+import toolCall from "../../assets/scenes/tool-call.png";
+import teamHandoff from "../../assets/scenes/team-handoff.png";
+
+## Run it
+
+<Steps>
+
+1. Create a project.
+
+   ```sh
+   npx pi-roundtable init my-bot
+   ```
+
+2. Install, start PostgreSQL, and fill in `.env`.
+
+   ```sh
+   cd my-bot
+   bun install
+   docker compose up -d
+   cp .env.example .env
+   ```
+
+3. Check the setup, then start the bot.
+
+   ```sh
+   bunx roundtable doctor
+   bunx roundtable start
+   ```
+
+</Steps>
+
+The agents in `agents.ts` now have their channels in your server.
+Send `/roundtable help` in Discord to open the control panel.
+
+## What you get
+
+<CardGrid>
+  <Card title="One agent, one channel" icon="comment">
+    Every agent owns a channel and a conversation.
+    Talk to each one where it lives.
+  </Card>
+  <Card title="Shared tools and memory" icon="puzzle">
+    Agents share the tools and memory that plugins add, so the team works from the same facts.
+  </Card>
+  <Card title="Plugins in TypeScript" icon="rocket">
+    A plugin is an object with a name and a `setup` function.
+    Tools, prompts, agents, events, services, and slash commands all come from plugins.
+  </Card>
+  <Card title="Tested without Discord" icon="approve-check">
+    `pi-roundtable/testing` runs a plugin without Discord or PostgreSQL.
+  </Card>
+</CardGrid>
+
+## See it in Discord
+
+These are illustrations of the default behavior, drawn with fictional names.
+
+### A status card that updates itself
+
+<Image src={agentStatus} alt="A Discord embed titled Roundtable agents listing three agents, Guide, Researcher and Editor, with their channels, models and idle or working status." />
+
+### An agent calls a plugin's tool
+
+<Image src={toolCall} alt="In the guide channel, a user asks Guide to say hello to a team. Guide calls the hello_greet tool and answers Hello, Ada's team!" />
+
+### Agents hand work to each other
+
+<Image src={teamHandoff} alt="In the research channel, Researcher answers a request with two bullet points and notes that the result was handed to the editor channel." />
+
+## Good to know
+
+- Built for one owner and one Discord server.
+  Others can be allowed to talk to the agents, but that setup, and its risks, are the operator's.
+- Bun only. The package ships its TypeScript source, so there is no build step.
+- MIT licensed.

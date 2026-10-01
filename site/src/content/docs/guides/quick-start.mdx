@@ -1,0 +1,90 @@
+---
+title: Quick start
+description: Create a project, fill in .env, check it with doctor, and start the bot.
+---
+
+import { Steps } from "@astrojs/starlight/components";
+
+## Before you start
+
+- [Bun](https://bun.sh/docs/installation) 1.3 or newer.
+- PostgreSQL. The project `init` creates has a `docker-compose.yml` that runs one.
+- A Discord bot: an application with a bot user, the Message Content intent turned on, and an invitation to your server.
+- A model login: the API key of the provider of the model you choose (`ANTHROPIC_API_KEY` for `anthropic/...`), or a login made with Pi.
+- An address that reaches the process from the internet, such as a tunnel, because Discord fetches the agents' avatars from it.
+
+## Create and start a project
+
+<Steps>
+
+1. Create the project. `init` writes a working project and asks for no secret.
+   It refuses to write anything when Bun is missing or too old, or when a file it would create already exists.
+
+   ```sh
+   npx pi-roundtable init my-bot    # or: bunx pi-roundtable init my-bot
+   cd my-bot
+   ```
+
+2. Install dependencies and start PostgreSQL.
+
+   ```sh
+   bun install
+   docker compose up -d
+   ```
+
+3. Copy `.env.example` to `.env` and fill it in.
+   Bun loads `.env` by itself, and `.gitignore` keeps it out of Git.
+
+   ```sh
+   cp .env.example .env
+   ```
+
+4. Run `doctor`. A fresh project fails only on the credentials you have not entered yet, and says which.
+
+   ```sh
+   bunx roundtable doctor
+   ```
+
+5. Start the bot.
+
+   ```sh
+   bunx roundtable start
+   ```
+
+</Steps>
+
+## The `.env` file
+
+`.env.example` says where each value comes from.
+
+| Variable | What it is |
+| --- | --- |
+| `DISCORD_TOKEN` | The bot's token, from the application's Bot page |
+| `DISCORD_GUILD_ID`, `DISCORD_ENTRY_CHANNEL_ID` | The server and the channel where the coordinating agent lives (turn on Developer Mode, then right-click to copy ids) |
+| `OWNER_ID`, `OWNER_NAME` | You: the one person who can change everything |
+| `DATABASE_URL` | PostgreSQL; the default matches `docker-compose.yml` |
+| `MODEL` | The agents' model, `<provider>/<id>` |
+| `PUBLIC_URL` | The address that reaches this process from the internet |
+
+## What `doctor` checks
+
+`bunx roundtable doctor` checks in this order, and prints each check as passed or failed with how to fix it:
+
+1. Bun's version.
+2. `.env` has a value for every variable `.env.example` lists.
+3. `roundtable.config.ts` against its schema, naming the failing key.
+4. Every plugin loads, and no two share a name.
+5. Whether a plugin fills the `images` slot. Without one is not a failure: agents get avatars generated from their display names.
+6. PostgreSQL is reachable and migratable.
+7. The Discord token is valid, the bot is in your server, the Message Content intent is on, and the bot has the permissions it needs in the entry channel (including Pin Messages).
+   When the bot is not in the server, the fix is an invitation link that asks for exactly those permissions.
+8. The model login exists.
+9. `PUBLIC_URL` is a well-formed address; with `--reachable` it also has to answer, which is only true while the bot runs.
+
+It exits non-zero on any failure and changes nothing it checked.
+
+## What `start` does
+
+`bunx roundtable start` runs the checks that need no network, stops with the same message `doctor` prints when one fails, and otherwise starts the bot.
+Once it runs, the agents in `agents.ts` have their channels, and `/roundtable help` opens the control panel.
+On `SIGTERM` or `SIGINT` it finishes running work before it stops.

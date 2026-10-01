@@ -1,0 +1,72 @@
+---
+title: Write a plugin
+description: Add a tool to every agent, and test it without Discord or PostgreSQL.
+---
+
+import { Steps } from "@astrojs/starlight/components";
+
+<Steps>
+
+1. Create the plugin. This writes `plugins/<name>.ts` and its test, and lists the plugin in `roundtable.config.ts`.
+
+   ```sh
+   bunx roundtable add plugin hello
+   ```
+
+2. Edit it. A plugin is an object with a name and a `setup` function that returns what it adds.
+   This one gives every agent a tool:
+
+   ```ts
+   import { definePlugin, defineTool } from "pi-roundtable";
+   import { Type } from "typebox";
+
+   export const hello = definePlugin({
+   	name: "hello",
+   	setup: () => ({
+   		tools: [
+   			defineTool({
+   				name: "hello_greet",
+   				description: "Greet someone by name. Call it when asked to say hello.",
+   				parameters: Type.Object({ who: Type.String() }),
+   				minTier: "member",
+   				run: ({ who }) => `Hello, ${who}!`,
+   			}),
+   		],
+   	}),
+   });
+   ```
+
+3. Test it. `testPlugin` runs the plugin without Discord or PostgreSQL.
+
+   ```ts
+   import { expect, test } from "bun:test";
+   import { testPlugin } from "pi-roundtable/testing";
+   import { hello } from "./hello.ts";
+
+   test("hello greets", async () => {
+   	const harness = await testPlugin(hello);
+   	expect(await harness.runTool("hello_greet", { who: "Ada" })).toBe("Hello, Ada!");
+   	await harness.stop();
+   });
+   ```
+
+   ```sh
+   bun test
+   ```
+
+4. Restart the bot. Every agent can now call `hello_greet`.
+
+   ```sh
+   bunx roundtable start
+   ```
+
+</Steps>
+
+## Go further
+
+The [plugin guide](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md) explains every part a plugin can add (tools, prompt sections, agents, events, services, migrations, providers, slash commands, HTTP routes, and more), the order things start and stop in, and every startup error with its fix.
+Its examples live in [`examples/`](https://github.com/wayne930242/pi-roundtable/tree/master/examples), and the test suite runs each of them.
+
+`pi-roundtable/kit` supplies claim, tool and presentation helpers.
+`pi-roundtable/discord` supplies the slash-command registrar, owner-command and panel helpers, and the agent panel.
+Both are versioned like the main entry: before 1.0 a breaking change comes in a minor release and is listed in the [changelog](https://github.com/wayne930242/pi-roundtable/blob/master/CHANGELOG.md).

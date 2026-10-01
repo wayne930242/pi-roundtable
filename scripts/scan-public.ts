@@ -18,10 +18,15 @@ const spell = (...pieces: string[]): string => pieces.join("");
 const OWNER_HANDLE = spell("way", "ne930242");
 
 // Attribution and repository metadata are the only public uses of the owner's GitHub handle.
+// The site names the repository in its links and the owner's domain, which starts with the owner's first name.
 // The lockfile lists a dependency's own registry name, which a transitive dependency spells with one of the names below.
 export const PUBLIC_NAME_ALLOWLIST: NameAllowlist = {
 	LICENSE: [OWNER_HANDLE],
 	"package.json": [OWNER_HANDLE],
+	"site/astro.config.mjs": [OWNER_HANDLE, spell("way", "ne")],
+	"site/public/CNAME": [spell("way", "ne")],
+	"site/src/content/docs/guides/write-a-plugin.mdx": [OWNER_HANDLE],
+	"site/src/content/docs/zh-tw/guides/write-a-plugin.mdx": [OWNER_HANDLE],
 	"bun.lock": [spell("type", "safe")],
 	// The guide names its one private consumer.
 	"docs/plugins.md": [spell("Mer", "lin")],
@@ -61,8 +66,13 @@ const CREDENTIALS = [
 	/\b(?:secret|token|key|password)\w*\s*[:=]\s*["']?[a-fA-F0-9]{40,}["']?/gi,
 ];
 
-/** The Traditional Chinese README, the one file outside the message catalogs that is written in Chinese. */
-const TRANSLATED_README = "README.zh-TW.md";
+/** Where Chinese text is written: the message catalogs, the translated README, and the site's zh-TW pages and their language label. */
+const CJK_DIRECTORIES = [
+	"src/core/i18n/",
+	"src/i18n/",
+	"site/src/content/docs/zh-tw/",
+];
+const CJK_FILES = ["README.zh-TW.md", "site/astro.config.mjs"];
 
 function allowedIp(ip: string): boolean {
 	const octets = ip.split(".").map(Number);
@@ -131,9 +141,8 @@ export function scanTree(
 				)
 					add("name", match[0]);
 			if (
-				!file.startsWith("src/core/i18n/") &&
-				!file.startsWith("src/i18n/") &&
-				file !== TRANSLATED_README
+				!CJK_DIRECTORIES.some((directory) => file.startsWith(directory)) &&
+				!CJK_FILES.includes(file)
 			)
 				for (const match of line.matchAll(/[\u4e00-\u9fff]+/g))
 					if (match[0]) add("cjk", match[0]);

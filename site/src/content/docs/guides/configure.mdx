@@ -1,0 +1,49 @@
+---
+title: Configure
+description: The settings in roundtable.config.ts and the roundtable commands.
+---
+
+## Settings
+
+`roundtable.config.ts` holds the settings and the list of plugins.
+An unknown key is an error that names the closest known one.
+
+The language of what the bot shows in Discord is the `locale` setting: `en` by default, or `zh-TW`.
+The `timeZone` setting is the zone schedules and time stamps use; it defaults to UTC.
+
+```ts
+export default {
+	// ...
+	locale: "zh-TW",
+	timeZone: "Europe/Berlin",
+	plugins: [hello],
+} satisfies RoundtableConfig;
+```
+
+## Agents
+
+`agents.ts` lists the first team.
+An agent that is already stored is never overwritten, so edit agents in Discord afterwards.
+
+```ts
+import type { AgentSeed } from "pi-roundtable";
+
+export const agents: AgentSeed[] = [
+	{
+		name: "guide",
+		displayName: "Guide",
+		prompt:
+			"You are Guide, a friendly assistant. Answer briefly and ask when a request is unclear.",
+		avatarPrompt: "A friendly lighthouse keeper with a warm lantern",
+	},
+];
+```
+
+## Commands
+
+| Command | What it does |
+| --- | --- |
+| `roundtable init [dir]` | Creates a project in `dir` (default: the current directory) |
+| `roundtable doctor [--reachable]` | Checks the setup and says how to fix what is wrong |
+| `roundtable start` | Runs the checks that need no network, then the bot |
+| `roundtable add plugin <name>` | Adds `plugins/<name>.ts` and its test, and lists it in the config |

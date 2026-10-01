@@ -1,0 +1,49 @@
+---
+title: 設定
+description: roundtable.config.ts 的設定，以及 roundtable 指令。
+---
+
+## 設定
+
+`roundtable.config.ts` 放設定和外掛清單。
+未知的鍵會報錯，並指出最接近的已知鍵。
+
+bot 在 Discord 裡顯示的文字語言由 `locale` 設定決定：預設是 `en`，也可以是 `zh-TW`。
+`timeZone` 是排程與時間戳記使用的時區；預設為 UTC。
+
+```ts
+export default {
+	// ...
+	locale: "zh-TW",
+	timeZone: "Europe/Berlin",
+	plugins: [hello],
+} satisfies RoundtableConfig;
+```
+
+## 智慧體
+
+`agents.ts` 列出第一批智慧體。
+已經存在資料庫裡的智慧體不會被覆寫，所以之後請直接在 Discord 裡編輯智慧體。
+
+```ts
+import type { AgentSeed } from "pi-roundtable";
+
+export const agents: AgentSeed[] = [
+	{
+		name: "guide",
+		displayName: "Guide",
+		prompt:
+			"You are Guide, a friendly assistant. Answer briefly and ask when a request is unclear.",
+		avatarPrompt: "A friendly lighthouse keeper with a warm lantern",
+	},
+];
+```
+
+## 指令
+
+| 指令 | 作用 |
+| --- | --- |
+| `roundtable init [dir]` | 在 `dir`（預設為目前目錄）建立專案 |
+| `roundtable doctor [--reachable]` | 檢查設定，並說明如何修正有問題的地方 |
+| `roundtable start` | 先執行不需要網路的檢查，再啟動 bot |
+| `roundtable add plugin <name>` | 新增 `plugins/<name>.ts` 和它的測試，並列進設定 |

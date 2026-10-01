@@ -1,0 +1,93 @@
+---
+title: pi-roundtable
+description: 在一個 Discord 伺服器裡擁有一組 AI 智慧體，並用 TypeScript 外掛擴充。
+template: splash
+hero:
+  tagline: 建立在 Pi 上的 Discord 智慧體（agent）伺服器。每個智慧體擁有一個頻道和一段對話，彼此共用工具與記憶，你用外掛（plugin）擴充這個 bot。
+  actions:
+    - text: 五分鐘上手
+      link: /zh-tw/guides/quick-start/
+      icon: right-arrow
+    - text: 寫一個外掛
+      link: /zh-tw/guides/write-a-plugin/
+      variant: minimal
+---
+
+import { Card, CardGrid, Steps } from "@astrojs/starlight/components";
+import { Image } from "astro:assets";
+import agentStatus from "../../../assets/scenes/agent-status.png";
+import toolCall from "../../../assets/scenes/tool-call.png";
+import teamHandoff from "../../../assets/scenes/team-handoff.png";
+
+## 跑起來
+
+<Steps>
+
+1. 建立專案。
+
+   ```sh
+   npx pi-roundtable init my-bot
+   ```
+
+2. 安裝依賴、啟動 PostgreSQL，並填寫 `.env`。
+
+   ```sh
+   cd my-bot
+   bun install
+   docker compose up -d
+   cp .env.example .env
+   ```
+
+3. 檢查設定，然後啟動 bot。
+
+   ```sh
+   bunx roundtable doctor
+   bunx roundtable start
+   ```
+
+</Steps>
+
+`agents.ts` 裡的智慧體現在都有了自己的頻道。
+在 Discord 輸入 `/roundtable help` 開啟控制面板。
+
+## 你會得到什麼
+
+<CardGrid>
+  <Card title="一個智慧體，一個頻道" icon="comment">
+    每個智慧體擁有一個頻道和一段對話。
+    想找誰，就到它的頻道說話。
+  </Card>
+  <Card title="共用工具與記憶" icon="puzzle">
+    智慧體共用外掛新增的工具與記憶，整個團隊根據同樣的事實工作。
+  </Card>
+  <Card title="用 TypeScript 寫外掛" icon="rocket">
+    外掛是一個有名稱和 `setup` 函式的物件。
+    工具、提示詞、智慧體、事件、服務、斜線指令，都由外掛提供。
+  </Card>
+  <Card title="不需要 Discord 就能測試" icon="approve-check">
+    `pi-roundtable/testing` 能在沒有 Discord 和 PostgreSQL 的情況下執行外掛。
+  </Card>
+</CardGrid>
+
+## 在 Discord 裡的樣子
+
+下面是預設行為的示意圖，畫面裡的名稱都是虛構的，bot 顯示的語言取決於 `locale` 設定。
+
+### 會自己更新的狀態卡
+
+<Image src={agentStatus} alt="標題為 Roundtable agents 的 Discord embed，列出 Guide、Researcher、Editor 三個智慧體的頻道、模型，以及閒置或工作中的狀態。" />
+
+### 智慧體呼叫外掛的工具
+
+<Image src={toolCall} alt="在 guide 頻道，使用者請 Guide 向一個團隊問好。Guide 呼叫 hello_greet 工具，並回覆 Hello, Ada's team!" />
+
+### 智慧體彼此交辦工作
+
+<Image src={teamHandoff} alt="在 research 頻道，Researcher 用兩個重點回覆請求，並註明結果已交給 editor 頻道。" />
+
+## 先知道這些
+
+- 為一位擁有者和一個 Discord 伺服器設計。
+  你可以允許其他人與智慧體對話，但這樣的設定與風險由營運者自行承擔。
+- 只支援 Bun。套件直接發佈 TypeScript 原始碼，不需要建置步驟。
+- MIT 授權。
