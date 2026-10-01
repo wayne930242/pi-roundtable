@@ -27,6 +27,7 @@
 		"!examples/guide.test.ts",
 		"LICENSE",
 		"README.md",
+		"README.zh-TW.md",
 		"CHANGELOG.md"
 	],
 	"repository": {

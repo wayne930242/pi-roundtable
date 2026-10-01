@@ -61,6 +61,9 @@ const CREDENTIALS = [
 	/\b(?:secret|token|key|password)\w*\s*[:=]\s*["']?[a-fA-F0-9]{40,}["']?/gi,
 ];
 
+/** The Traditional Chinese README, the one file outside the message catalogs that is written in Chinese. */
+const TRANSLATED_README = "README.zh-TW.md";
+
 function allowedIp(ip: string): boolean {
 	const octets = ip.split(".").map(Number);
 	const [a, b, c] = octets;
@@ -127,7 +130,11 @@ export function scanTree(
 					)
 				)
 					add("name", match[0]);
-			if (!file.startsWith("src/core/i18n/") && !file.startsWith("src/i18n/"))
+			if (
+				!file.startsWith("src/core/i18n/") &&
+				!file.startsWith("src/i18n/") &&
+				file !== TRANSLATED_README
+			)
 				for (const match of line.matchAll(/[\u4e00-\u9fff]+/g))
 					if (match[0]) add("cjk", match[0]);
 		}
