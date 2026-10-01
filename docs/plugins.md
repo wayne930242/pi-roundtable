@@ -1795,6 +1795,10 @@ The package ships two plugins you can copy into a project and change.
 You can edit the copied files; `add plugin` refuses to overwrite existing ones.
 Both names are reserved for these copies.
 
+A separate package, [pi-roundtable-mcp](https://www.npmjs.com/package/pi-roundtable-mcp), adds two more plugins, `mcpConnectors` and `remoteMcp`.
+The first lets the owner add MCP servers such as Notion or a calendar from Discord and gives your code the list; the second lets an agent outside Discord reach your agent.
+Install it with `bun add pi-roundtable-mcp`.
+
 | Plugin | What it does | What it needs |
 |---|---|---|
 | `codex-images` | Fills the [`images` slot](#providers-replace-a-part-the-core-runs-on), so agents can draw avatars from a prompt and reference pictures | A login to the `openai-codex` provider; setup throws a `PluginError` that says so when the host has none |

@@ -122,6 +122,22 @@ Its examples live in [`examples/`](examples), and the test suite runs each of th
 It is the entry that names discord.js types (`pi-roundtable/testing` names a few, through `testHost`'s composed commands).
 Both follow the main entry's versioning: before 1.0, breaking changes come in minor releases and are listed in the changelog.
 
+## MCP connectors
+
+The separate package [pi-roundtable-mcp](https://www.npmjs.com/package/pi-roundtable-mcp) connects the bot to the MCP ecosystem in both directions, with two plugins:
+
+- `mcpConnectors`: you add an MCP server in Discord with a private form, such as Notion, a calendar, or anything that speaks MCP over HTTP.
+  Your code then gives its tools to the agents you choose.
+  A [ContextForge](https://github.com/IBM/mcp-context-forge) gateway that you run keeps each server and its token.
+- `remoteMcp`: an agent outside Discord sends your agent a message over MCP and reads the answer.
+  It can also use the Discord channels you grant, with only the operations you choose.
+
+```sh
+bun add pi-roundtable-mcp
+```
+
+It works with pi-roundtable 0.4 and 0.5, and its README lists every option.
+
 ## Settings
 
 `roundtable.config.ts` holds the settings and the list of plugins.

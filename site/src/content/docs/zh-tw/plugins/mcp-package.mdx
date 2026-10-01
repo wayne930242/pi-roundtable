@@ -2,7 +2,7 @@
 title: MCP connector 和 remote MCP
 description: pi-roundtable-mcp 套件和它的兩個外掛。一個連接你自己的 MCP server，另一個讓外面的 agent 能找到你的 agent。
 sidebar:
-  order: 8
+  order: 2
 ---
 
 import { Aside } from "@astrojs/starlight/components";
@@ -15,6 +15,8 @@ import { Aside } from "@astrojs/starlight/components";
 | `mcpConnectors` | 你在 Discord 加入一台 MCP server，例如 Notion 或行事曆，你的 agent 就能用它的工具。 |
 | `remoteMcp` | Discord 以外的 agent 能傳訊息給你的 agent，並讀取回答。它也能使用你選擇開放給它的 Discord 頻道。 |
 
+兩個外掛合起來涵蓋兩個方向：你的 agent 能用別台 server 的工具，別處的 agent 也能找到你的 agent。
+
 這個套件有自己的儲存庫：[wayne930242/pi-roundtable-mcp](https://github.com/wayne930242/pi-roundtable-mcp)。
 每個選項和訊息，都列在它的 README。
 這一頁只說明你決定要不要用它時需要知道的事。
@@ -25,7 +27,7 @@ import { Aside } from "@astrojs/starlight/components";
 bun add pi-roundtable-mcp
 ```
 
-它需要 pi-roundtable 0.4 和它的 PostgreSQL。
+它支援 pi-roundtable 0.4 和 0.5，也需要 bot 的 PostgreSQL。
 `mcpConnectors` 還需要一個你自己架的 ContextForge gateway，見下方。
 `remoteMcp` 需要一個能連到 bot 的 HTTPS 位址，例如通道（tunnel）。
 
@@ -107,4 +109,4 @@ README 示範了做法。
 外掛的文字預設是英文，兩個外掛都有 `messages` 選項能改。
 Discord 上的文字、錯誤訊息和工具描述，都在那裡用你自己的語言寫。
 
-{/* Sources: the pi-roundtable-mcp README.md and src/index.ts at v0.4.0 (options, commands, endpoints, security model), package.json (peer dependency and install) */}
+{/* Sources: the pi-roundtable-mcp README.md and src/index.ts at v0.4.1 (options, commands, endpoints, security model), package.json (peer dependency and install) */}

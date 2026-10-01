@@ -2,7 +2,7 @@
 title: 官方外掛
 description: 兩個能複製進專案的現成外掛，codex-images 和 dice：各自需要什麼，以及怎麼修改複製出來的檔案。
 sidebar:
-  order: 7
+  order: 8
 ---
 
 import { Aside } from "@astrojs/starlight/components";
@@ -96,6 +96,7 @@ Codex 拒絕的請求（通常是提示詞的問題）會以 `ImageNotGeneratedE
 
 要移除，就刪掉它的兩個檔案，以及 `roundtable.config.ts` 裡的項目。
 
+獨立的 [pi-roundtable-mcp](/zh-tw/plugins/mcp-package/) 套件提供 MCP connector 和 remote MCP，用 `bun add` 安裝，不用複製。
 外掛在這之外還能新增什麼，見[外掛能新增什麼](/zh-tw/plugins/what-plugins-can-add/)；想寫這樣的測試，見[測試外掛](/zh-tw/plugins/testing/)。
 
 {/* Sources: src/cli/templates.ts:13-25, src/cli/templates.ts:84-102, src/cli/add-plugin.ts:34-75, templates/official/dice/plugin.ts, templates/official/dice/plugin.test.ts.tmpl, templates/official/codex-images/plugin.ts, templates/official/codex-images/plugin.test.ts.tmpl, src/core/plugin.ts:268-276, docs/plugins.md:757-772 (images slot, agent_avatar, doctor), src/cli/checks/images.ts */}

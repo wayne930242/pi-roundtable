@@ -115,6 +115,22 @@ test("hello greets", async () => {
 `pi-roundtable/discord` 提供斜線指令註冊器、擁有者指令與面板的輔助函式，以及智慧體面板；它是會用到 discord.js 型別的入口（`pi-roundtable/testing` 也透過 `testHost` 組合出的指令用到少數幾個）。
 這兩個入口的版本規則與主入口相同：1.0 之前，不相容的變更會放在次版本（minor）發佈，並列在變更記錄中。
 
+## MCP connector
+
+獨立套件 [pi-roundtable-mcp](https://www.npmjs.com/package/pi-roundtable-mcp) 用兩個外掛，把 bot 雙向接上 MCP：
+
+- `mcpConnectors`：你在 Discord 用私人表單加入一台 MCP server，例如 Notion、行事曆，或任何用 HTTP 提供 MCP 的服務。
+  接著由你的程式碼把它的工具交給你選的智慧體。
+  每台 server 和它的 token 由你自己架的 [ContextForge](https://github.com/IBM/mcp-context-forge) gateway 保管。
+- `remoteMcp`：Discord 以外的智慧體透過 MCP 傳訊息給你的智慧體，並讀取回答。
+  它也能使用你授權的 Discord 頻道，而且只限你選的操作。
+
+```sh
+bun add pi-roundtable-mcp
+```
+
+它支援 pi-roundtable 0.4 和 0.5，每個選項都列在它的 README。
+
 ## 設定
 
 `roundtable.config.ts` 放設定和外掛清單。

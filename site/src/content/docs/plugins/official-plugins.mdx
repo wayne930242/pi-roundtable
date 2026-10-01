@@ -2,7 +2,7 @@
 title: Official plugins
 description: Two ready-made plugins you copy into your project, codex-images and dice, with what each needs and how to change the copy.
 sidebar:
-  order: 7
+  order: 8
 ---
 
 import { Aside } from "@astrojs/starlight/components";
@@ -96,6 +96,7 @@ The copy lives in your project, so edit it like any plugin.
 
 To remove one, delete its two files and its entry in `roundtable.config.ts`.
 
+The separate [pi-roundtable-mcp](/plugins/mcp-package/) package adds MCP connectors and remote MCP; you install it with `bun add` instead of copying it.
 See [What plugins can add](/plugins/what-plugins-can-add/) for other plugin features and [Test a plugin](/plugins/testing/) for testing.
 
 {/* Sources: src/cli/templates.ts:13-25, src/cli/templates.ts:84-102, src/cli/add-plugin.ts:34-75, templates/official/dice/plugin.ts, templates/official/dice/plugin.test.ts.tmpl, templates/official/codex-images/plugin.ts, templates/official/codex-images/plugin.test.ts.tmpl, src/core/plugin.ts:268-276, docs/plugins.md:757-772 (images slot, agent_avatar, doctor), src/cli/checks/images.ts */}

@@ -2,7 +2,7 @@
 title: MCP connectors and remote MCP
 description: The pi-roundtable-mcp package, with two plugins. One connects your own MCP servers, the other lets an outside agent reach yours.
 sidebar:
-  order: 8
+  order: 2
 ---
 
 import { Aside } from "@astrojs/starlight/components";
@@ -15,6 +15,8 @@ Both work over MCP, the protocol agents use to call tools on another server.
 | `mcpConnectors` | You add an MCP server in Discord, such as Notion or a calendar. Your agents can then use its tools. |
 | `remoteMcp` | An agent outside Discord can send your agent a message and read the answer. It can also use Discord channels you chose to give it. |
 
+Together they cover both directions: your agents reach tools on other servers, and agents elsewhere reach yours.
+
 The package has its own repository: [wayne930242/pi-roundtable-mcp](https://github.com/wayne930242/pi-roundtable-mcp).
 Its README lists every option and message.
 
@@ -24,7 +26,7 @@ Its README lists every option and message.
 bun add pi-roundtable-mcp
 ```
 
-It needs pi-roundtable 0.4 and its PostgreSQL.
+It works with pi-roundtable 0.4 and 0.5, and needs the bot's PostgreSQL.
 `mcpConnectors` also needs a ContextForge gateway that you run yourself, see below.
 `remoteMcp` needs an HTTPS address that reaches the bot, such as a tunnel.
 
@@ -105,4 +107,4 @@ The README shows how.
 The plugins keep their text in English, and both take a `messages` option to change it.
 Write it in your own language there, for the Discord text, the error messages and the tool descriptions.
 
-{/* Sources: the pi-roundtable-mcp README.md and src/index.ts at v0.4.0 (options, commands, endpoints, security model), package.json (peer dependency and install) */}
+{/* Sources: the pi-roundtable-mcp README.md and src/index.ts at v0.4.1 (options, commands, endpoints, security model), package.json (peer dependency and install) */}
