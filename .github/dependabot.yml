@@ -1,0 +1,19 @@
+---
+version: 2
+updates:
+  - package-ecosystem: bun
+    directory: /
+    schedule:
+      interval: daily
+    groups:
+      # pi-coding-agent and pi-ai release together; one PR keeps their versions aligned.
+      pi-core:
+        patterns:
+          - "@earendil-works/*"
+      pi-extensions:
+        patterns:
+          - "pi-*"
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
