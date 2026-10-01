@@ -41,6 +41,8 @@ function removed(
 			return ascending.slice(0, n);
 		case "dh":
 			return ascending.slice(rolls.length - n);
+		default:
+			return rule satisfies never;
 	}
 }
 
@@ -58,13 +60,20 @@ function rollNumber(term: string): Rolled {
 	return { shown: String(Number(term)), value: Number(term), dice: 0 };
 }
 
+/** How a fate die shows: + for 1, - for -1, and 0. */
+function fateSymbol(face: number): string {
+	if (face > 0) return "+";
+	if (face < 0) return "-";
+	return "0";
+}
+
 /** `count` fate dice, each one of -1, 0, or +1. */
 function rollFate(count: number, random: Random): Rolled {
 	const faces = Array.from(
 		{ length: count },
 		() => Math.floor(random() * 3) - 1,
 	);
-	const symbols = faces.map((face) => (face > 0 ? "+" : face < 0 ? "-" : "0"));
+	const symbols = faces.map(fateSymbol);
 	return {
 		shown: `[${symbols.join(", ")}]`,
 		value: faces.reduce((sum, face) => sum + face, 0),
@@ -104,12 +113,18 @@ function rollPool(
 	};
 }
 
+/** How many dice a term rolls: the count it writes, else 4 for fate dice and 1 for the rest. */
+function diceCount(countText: string | undefined, fate: string | undefined) {
+	if (countText) return Number(countText);
+	return fate ? FATE_DEFAULT : 1;
+}
+
 function rollTerm(term: string, random: Random): Rolled {
 	if (/^\d+$/.test(term)) return rollNumber(term);
 	const match = TERM.exec(term);
 	if (!match) return refuse(`"${term}" is not a dice term.`);
 	const [, countText, fate, sidesText, rule, nText] = match;
-	const count = countText ? Number(countText) : fate ? FATE_DEFAULT : 1;
+	const count = diceCount(countText, fate);
 	if (count < 1) return refuse(`"${term}" rolls no dice.`);
 	if (count > MAX_DICE)
 		return refuse(`"${term}" rolls more than ${MAX_DICE} dice.`);
@@ -149,10 +164,8 @@ export function roll(expression: string, random: Random = Math.random): string {
 		if (dice > MAX_DICE)
 			return refuse(`The expression rolls more than ${MAX_DICE} dice in all.`);
 		total += sign === "-" ? -rolled.value : rolled.value;
-		line +=
-			index === 0
-				? `${sign === "-" ? "-" : ""}${rolled.shown}`
-				: ` ${sign} ${rolled.shown}`;
+		const lead = sign === "-" ? "-" : "";
+		line += index === 0 ? `${lead}${rolled.shown}` : ` ${sign} ${rolled.shown}`;
 	}
 	return `${compact}: ${line} = ${total}`;
 }

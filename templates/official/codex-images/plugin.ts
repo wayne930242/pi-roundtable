@@ -35,7 +35,7 @@ export interface CodexImagesOptions {
 
 /** The ChatGPT account the login token belongs to, from the token's claims. */
 function chatGptAccountId(token: string): string {
-	const payload = token.split(".")[1];
+	const [, payload] = token.split(".");
 	if (!payload) throw new Error("the Codex token is not a JWT");
 	let claims: Record<string, unknown>;
 	try {
@@ -99,8 +99,7 @@ async function* frames(
 function eventOf(frame: string): Record<string, unknown> | undefined {
 	const data = frame
 		.split(/\r?\n/)
-		.filter((line) => line.startsWith("data:"))
-		.map((line) => line.slice(5).trim())
+		.flatMap((line) => (line.startsWith("data:") ? [line.slice(5).trim()] : []))
 		.join("\n");
 	if (!data || data === "[DONE]") return undefined;
 	try {
@@ -137,6 +136,8 @@ async function parseImageStream(response: Response): Promise<Uint8Array> {
 					throw new ImageNotGeneratedError("Codex answered without an image");
 				return image;
 			}
+			default:
+				break;
 		}
 	}
 	throw new Error("the Codex stream ended before completion");
