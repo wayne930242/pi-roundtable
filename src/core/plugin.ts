@@ -282,6 +282,14 @@ export interface RoundtablePlugin {
 	 */
 	provides?: readonly ServiceKey<unknown>[];
 	/**
+	 * The services this plugin's setup reads with `get`, so the host can check them before any
+	 * setup and any migration: a key no registered plugin provides, or one provided by a plugin
+	 * registered after this one, is a PluginError that names both plugins and the fix. A service
+	 * read only after startup, from a callback, is `services.lazy` instead, which does not depend
+	 * on order. Leave out a service read with `find`, since that one may be absent.
+	 */
+	requires?: readonly ServiceKey<unknown>[];
+	/**
 	 * Services this plugin replaces. The host drops the plugin that provides them and sets this one
 	 * up where it stood, so it may read what the plugins before that place provide and nothing
 	 * after. It refuses a key no other plugin provides, a key two plugins replace, a service

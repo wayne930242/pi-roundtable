@@ -77,7 +77,7 @@ export class SessionFactory {
 			const linked = this.#options.sessions();
 			this.#linked = {
 				...linked,
-				extensionPaths: linked.piPackages.map(packageDir),
+				extensionPaths: linked.piPackages.map((name) => packageDir(name)),
 			};
 		}
 		return this.#linked;

@@ -38,6 +38,13 @@ export interface Services {
 	 */
 	find<T>(key: ServiceKey<T>): T | undefined;
 	/**
+	 * A reader for a service whose plugin may be set up after this one: call it from a service's
+	 * `start`, a handler, or any callback that runs after startup, not during setup, where it throws
+	 * a NotLinkedError. The host checks before startup that a registered plugin provides the key and
+	 * refuses to boot with a PluginError naming this plugin when none does.
+	 */
+	lazy<T>(key: ServiceKey<T>): () => T;
+	/**
 	 * Provides a service the plugin declares in `provides`; only while the plugin's setup runs, and
 	 * once per key.
 	 */

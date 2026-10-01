@@ -1,4 +1,4 @@
-// Unstable plugin helpers; see the plugin guide.
+// Plugin helpers, versioned like the main entry; see the plugin guide.
 // Skills and repositories: the names a repository shelf accepts, and the tool that lists skills.
 
 export { checkRepoName } from "../core/modules/skills/repo-name.ts";

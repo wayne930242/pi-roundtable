@@ -1,4 +1,4 @@
-// Unstable plugin helpers; see the plugin guide.
+// Plugin helpers, versioned like the main entry; see the plugin guide.
 // Running a Pi session of your own: MCP servers for it, its work timeout, its held-action cards.
 
 export {

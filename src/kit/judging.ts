@@ -1,4 +1,4 @@
-// Unstable plugin helpers; see the plugin guide.
+// Plugin helpers, versioned like the main entry; see the plugin guide.
 
 export type {
 	EffortBrief,

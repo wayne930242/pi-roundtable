@@ -278,6 +278,7 @@ export class Roundtable {
 		// A plugin that replaces a service takes the place of the one that provided it.
 		this.#active = replaceServices(this.#plugins);
 		this.#services = new ServiceRegistry(this.#active);
+		this.#services.checkRequires();
 		const providers = resolveProviders(this.#active, this.#options.judgeModel);
 		await this.#migrate();
 		this.#registry = await collectContributions(

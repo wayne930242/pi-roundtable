@@ -5,6 +5,25 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-01
+
+Found by running the first consuming host on the published 0.2.1; each item answers one finding of its friction log.
+
+### Added
+
+- `RoundtablePlugin.requires`: the services a plugin reads with `get` in its setup. The host checks the list before any migration or setup and refuses a key no registered plugin provides, one a plugin registered after it provides, and one the plugin provides itself, naming the plugins and the fix.
+- `Services.lazy(KEY)`: a function that returns the service once every plugin is set up, for a plugin that needs a service of one registered after it. Calling it during setup throws a `NotLinkedError`; the host refuses to boot, naming the plugin, when no registered plugin provides the key. A plugin no longer has to keep a shared object that the later plugin fills in. `testPlugin` checks `requires` against the `services` option and answers `lazy` readers after setup.
+- `pi-roundtable/kit`: `packageDir`, the installed package's folder as Pi's `additionalExtensionPaths` takes it (`packageDir(name, import.meta.url)`; the second argument is the file the package is looked up from, so a host finds its own dependencies even when `pi-roundtable` is linked apart from them), and `serveUnix`, an HTTP server on a unix socket without Bun's idle timeout (`serveUnix(socketPath, fetch, { error? })`). They are the core's own, so a worker process of a host no longer copies them.
+- `pi-roundtable/testing`: `partial`, a typed stand-in (`partial<Port>({ ... })`) with only the members the test gives, which names any other member it is asked for; `recordingLogger` with `RecordingLogger` and `RecordedLog`, a logger whose `lines` keep each call's level, fields, and message. Neither needs an `as unknown as` cast.
+- A guide section on developing the core and a host together with `bun link`.
+
+### Changed
+
+- `pi-web-access` is a peer dependency (`>=0.35.0 <0.36.0`) instead of a dependency, and a development dependency at 0.35.0. `bun add pi-roundtable` still installs it; a host that depends on its own build of it now has one copy, with no `overrides` entry. A project without it fails at the `modules` plugin's setup with a `PluginError` that names the command to run.
+- `pi-roundtable/kit` and `pi-roundtable/discord` are versioned like the main entry: before 1.0, a breaking change to an exported name comes in a minor release and is listed in the changelog. The signature report already guarded every name; the "unstable, not covered by semver" label is gone.
+- `Services` has a new member, `lazy`; a hand-written `Services` (only the core's own and tests') needs it.
+- The guide's mention of the first consumer by name is gone.
+
 ## [0.2.1] - 2026-10-01
 
 ### Added

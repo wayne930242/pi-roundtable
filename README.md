@@ -111,7 +111,7 @@ test("hello greets", async () => {
 
 The [plugin guide](docs/plugins.md) explains every part a plugin can add (tools, prompt sections, agents, events, services, migrations, providers, slash commands, HTTP routes, and more), the order things start and stop in, and every startup error with its fix.
 Its examples live in [`examples/`](examples), and the test suite runs each of them.
-`pi-roundtable/kit` supplies claim, tool and presentation helpers and type-only names for the context’s existing services, and `pi-roundtable/discord` supplies the slash-command registrar, owner-command and panel helpers, and the agent panel, and is the entry that names discord.js types (`pi-roundtable/testing` names a few, through `testHost`'s composed commands); both are unstable before 1.0 and not covered by semver.
+`pi-roundtable/kit` supplies claim, tool and presentation helpers and type-only names for the context’s existing services, and `pi-roundtable/discord` supplies the slash-command registrar, owner-command and panel helpers, and the agent panel, and is the entry that names discord.js types (`pi-roundtable/testing` names a few, through `testHost`'s composed commands); both are versioned like the main entry: before 1.0 a breaking change comes in a minor release and is listed in the changelog.
 
 ## Settings
 

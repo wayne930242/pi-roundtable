@@ -2,8 +2,10 @@ import { expect, test } from "bun:test";
 import { definePlugin, PluginError, Roundtable } from "pi-roundtable";
 import { servicePair, silentLogger, testPlugin } from "pi-roundtable/testing";
 import {
+	earlyNoteReader,
 	NOTE_INDEX,
 	type NoteIndex,
+	noteCounter,
 	noteReader,
 	notes,
 	shoutingNotes,
@@ -71,4 +73,30 @@ test("a provider that does not provide what it lists is refused after setup", as
 			setup: () => ({ services: [{ name: "idle" }] }),
 		}),
 	).rejects.toBeInstanceOf(PluginError);
+});
+
+test("a plugin that requires the service is refused when the notes come after it, before any setup", async () => {
+	const roundtable = new Roundtable({ logger: silentLogger() }, [
+		noteCounter(() => undefined),
+		notes(),
+	]);
+	await expect(roundtable.run()).rejects.toThrow(
+		"plugin note-counter: requires service my-notes.index, which plugin my-notes provides after it.",
+	);
+	await roundtable.shutdown("test");
+});
+
+test("a plugin that requires the service counts the notes written before startup", async () => {
+	const counts: number[] = [];
+	await withHost(
+		[notes(), writer, noteCounter((count) => counts.push(count))],
+		() => expect(counts).toEqual([1]),
+	);
+});
+
+test("a plugin registered before the notes reads them lazily, once the host started", async () => {
+	const seen: (readonly string[])[] = [];
+	await withHost([earlyNoteReader((list) => seen.push(list)), notes()], () =>
+		expect(seen).toEqual([[]]),
+	);
 });

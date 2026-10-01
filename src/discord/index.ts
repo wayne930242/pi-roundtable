@@ -1,5 +1,5 @@
 // The Discord entry: everything that names a discord.js type, apart from the main and kit entries.
-// Unstable before 1.0; not covered by semver.
+// Versioned like the main entry: a breaking change comes in a minor release before 1.0 and is listed in the changelog.
 
 export type { DiscordServices } from "../core/builtin/discord.ts";
 export { DISCORD } from "../core/builtin/discord.ts";

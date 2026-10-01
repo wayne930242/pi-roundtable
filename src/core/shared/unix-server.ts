@@ -1,0 +1,26 @@
+import { rmSync } from "node:fs";
+import type { Server } from "bun";
+
+/**
+ * Serves HTTP on a unix socket without Bun's 10-second idle timeout, which would cut long
+ * turns and quiet model streams. Bun 1.4.2 honors `idleTimeout` on unix sockets, but its
+ * types reject the option there, hence the cast. A stale socket file is removed first.
+ * `error` answers a failure raised outside the fetch handler; without it Bun's own page is sent.
+ */
+export function serveUnix(
+	socketPath: string,
+	fetch: (request: Request) => Response | Promise<Response>,
+	options: { error?: (error: Error) => Response | Promise<Response> } = {},
+): Server<undefined> {
+	rmSync(socketPath, { force: true });
+	const serveOptions = {
+		unix: socketPath,
+		idleTimeout: 0,
+		fetch,
+		...(options.error ? { error: options.error } : {}),
+	};
+	// SAFETY: these are Bun's unix-socket options; only `idleTimeout` is missing from its types.
+	return Bun.serve(
+		serveOptions as unknown as Parameters<typeof Bun.serve>[0],
+	) as Server<undefined>;
+}

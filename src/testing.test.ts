@@ -6,6 +6,7 @@ import {
 	AGENTS,
 	type AgentRuntime,
 	type AgentServer,
+	type AgentTeam,
 	BACKGROUND_TURNS,
 	type BackgroundTurns,
 	type ChannelKey,
@@ -27,6 +28,8 @@ import {
 import {
 	describeDb,
 	fakeDiscord,
+	partial,
+	recordingLogger,
 	servicePair,
 	type TestHost,
 	testHost,
@@ -328,6 +331,37 @@ test("a service the test did not give says to pass it, and reads as absent to fi
 	expect(refused).toContain("service roundtable.schedules is not provided.");
 	expect(refused).toContain("give it in the services option");
 	expect(refused).not.toContain("Register a plugin");
+});
+
+test("a plugin under test that requires a service has it given by the test, and is refused without", async () => {
+	const key = serviceKey<{ n: number }>("probe.required");
+	let read = 0;
+	const plugin = definePlugin({
+		name: "needs",
+		requires: [key],
+		setup: ({ services }) => {
+			read = services.get(key).n;
+			return { services: [{ name: "needs" }] };
+		},
+	});
+	await testPlugin(plugin, { services: [servicePair(key, { n: 7 })] });
+	expect(read).toBe(7);
+	await expect(testPlugin(plugin)).rejects.toThrow(
+		"plugin needs: requires service probe.required, which no registered plugin provides.",
+	);
+});
+
+test("a lazy service of a plugin under test answers once setup is over", async () => {
+	const key = serviceKey<{ n: number }>("probe.lazy");
+	let reader: (() => { n: number }) | undefined;
+	await testPlugin(
+		probeServices((services) => {
+			reader = services.lazy(key);
+			expect(() => reader?.()).toThrow(NotLinkedError);
+		}),
+		{ services: [servicePair(key, { n: 3 })] },
+	);
+	expect(reader?.().n).toBe(3);
 });
 
 test("a plugin under test that declares a service must provide it, and may read its own", async () => {
@@ -740,4 +774,36 @@ afterEach(async () => {
 		expect(host.sessionContext(scout).agent).toEqual(scout);
 		expect(host.context.services.find(AGENTS)).toBeDefined();
 	});
+});
+
+test("partial is a typed stand-in with the members the test gives, and names any other it is asked for", async () => {
+	const team = partial<AgentTeam>({
+		announce: async () => undefined,
+		guildId: "g",
+	});
+	expect(team.guildId).toBe("g");
+	await expect(team.announce("hi")).resolves.toBeUndefined();
+	expect(() => team.status).toThrow(
+		'partial() was given no "status". Give it where the stand-in is made: partial({ status: ... }).',
+	);
+	// A promise check and a JSON dump do not trip it.
+	expect((team as unknown as { then?: unknown }).then).toBeUndefined();
+	expect(JSON.stringify(partial<{ a: number }>({ a: 1 }))).toBe('{"a":1}');
+});
+
+test("recordingLogger keeps each line with its level, the fields of its children, and its message", () => {
+	const { logger, lines } = recordingLogger();
+	logger.info("plain");
+	const child = logger.child({ plugin: "p" });
+	child.warn({ id: 3 }, "with fields");
+	child.child({ job: "j" }).error({ err: "x" }, "nested");
+	expect(lines).toEqual([
+		{ level: "info", fields: {}, message: "plain" },
+		{ level: "warn", fields: { plugin: "p", id: 3 }, message: "with fields" },
+		{
+			level: "error",
+			fields: { plugin: "p", job: "j", err: "x" },
+			message: "nested",
+		},
+	]);
 });

@@ -42,6 +42,37 @@ export function noteReader(
 	});
 }
 
+/** A plugin that reads the service in `setup` lists it in `requires`: a wrong order stops the start, naming both plugins. */
+export function noteCounter(onCount: (count: number) => void) {
+	return definePlugin({
+		name: "note-counter",
+		requires: [NOTE_INDEX],
+		setup: ({ services }) => {
+			const index = services.get(NOTE_INDEX);
+			return {
+				services: [
+					{ name: "note-counter", start: () => onCount(index.all().length) },
+				],
+			};
+		},
+	});
+}
+
+/** A plugin registered before the notes reads them with `lazy`, from a callback that runs after startup. */
+export function earlyNoteReader(onNotes: (notes: readonly string[]) => void) {
+	return definePlugin({
+		name: "early-note-reader",
+		setup: ({ services }) => {
+			const index = services.lazy(NOTE_INDEX);
+			return {
+				services: [
+					{ name: "early-note-reader", start: () => onNotes(index().all()) },
+				],
+			};
+		},
+	});
+}
+
 /** A plugin that provides the same key and lists it in `replaces` takes the place of the one before it. */
 export function shoutingNotes() {
 	const stored: string[] = [];

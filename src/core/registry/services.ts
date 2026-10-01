@@ -1,5 +1,5 @@
 import type { ServiceKey, Services } from "../contract/services.ts";
-import { PluginError } from "../errors.ts";
+import { NotLinkedError, PluginError } from "../errors.ts";
 import type { RoundtablePlugin } from "../plugin.ts";
 
 /** The host's words for reading a service no plugin declares; `testPlugin` says how to give one instead. */
@@ -27,6 +27,22 @@ function declaredBy(plugin: RoundtablePlugin): readonly ServiceKey<unknown>[] {
 		seen.add(key.id);
 	}
 	return provides;
+}
+
+/** The services a plugin requires, checked to be a list of keys; empty when it requires none. */
+function requiredBy(plugin: RoundtablePlugin): readonly ServiceKey<unknown>[] {
+	const { requires } = plugin;
+	if (requires === undefined) return [];
+	if (!Array.isArray(requires))
+		throw new PluginError(
+			`plugin ${plugin.name}: requires must be a list of service keys made with serviceKey().`,
+		);
+	for (const key of requires)
+		if (typeof key?.id !== "string" || key.id === "")
+			throw new PluginError(
+				`plugin ${plugin.name}: requires has an entry that is not a service key; make each with serviceKey("<id>").`,
+			);
+	return requires;
 }
 
 /** The services a plugin replaces, checked to be a list of keys; empty when it replaces none. */
@@ -127,10 +143,16 @@ export class ServiceRegistry {
 	#setting: RoundtablePlugin | undefined;
 	/** The plugins that have read a service, such as one that adds its commands through it. */
 	readonly #readers = new Set<RoundtablePlugin>();
+	readonly #plugins: readonly RoundtablePlugin[];
+	/** What each plugin asked `lazy` for, to refuse a key nobody provides once every plugin is set up. */
+	readonly #lazy: { plugin: RoundtablePlugin; key: ServiceKey<unknown> }[] = [];
+	/** Whether every plugin is set up, from which a `lazy` reader returns its service. */
+	#settled = false;
 
 	/** `advice` says how to get a service no plugin declares; the host's is to register one that does. */
 	constructor(plugins: readonly RoundtablePlugin[], advice = HOST_ADVICE) {
 		this.#advice = advice;
+		this.#plugins = plugins;
 		for (const plugin of plugins)
 			for (const key of declaredBy(plugin)) {
 				const other = this.#declaredBy.get(key.id);
@@ -145,6 +167,45 @@ export class ServiceRegistry {
 	/** Provides a service the host or a test holds itself, without a plugin's setup. */
 	preset<T>(key: ServiceKey<T>, value: T): void {
 		this.#values.set(key.id, value);
+	}
+
+	/**
+	 * Refuses a plugin whose `requires` names a service no registered plugin or test provides, or
+	 * one a plugin registered after it provides. It runs before any migration or setup, so a wrong
+	 * order fails at the start with both plugins named.
+	 */
+	checkRequires(): void {
+		this.#plugins.forEach((plugin, index) => {
+			for (const key of requiredBy(plugin)) {
+				if (this.#values.has(key.id)) continue;
+				const provider = this.#declaredBy.get(key.id);
+				if (!provider)
+					throw new PluginError(
+						`plugin ${plugin.name}: requires service ${key.id}, which no registered plugin provides. ${key.absent ?? this.#advice}`,
+					);
+				if (provider === plugin)
+					throw new PluginError(
+						`plugin ${plugin.name}: requires service ${key.id}, which it provides itself. A plugin cannot require what it provides.`,
+					);
+				if (this.#plugins.indexOf(provider) > index)
+					throw new PluginError(
+						`plugin ${plugin.name}: requires service ${key.id}, which plugin ${provider.name} provides after it. Register plugin ${provider.name} before plugin ${plugin.name}, or read the service with services.lazy(KEY) from a callback that runs after startup.`,
+					);
+			}
+		});
+	}
+
+	/**
+	 * Called once every plugin is set up: `lazy` readers start answering, and a key a plugin asked
+	 * for that nobody provides is refused with the plugin named.
+	 */
+	settle(): void {
+		for (const { plugin, key } of this.#lazy)
+			if (!this.#values.has(key.id))
+				throw new PluginError(
+					`plugin ${plugin.name}: services.lazy reads service ${key.id}, which no registered plugin provides. ${key.absent ?? this.#advice}`,
+				);
+		this.#settled = true;
 	}
 
 	/** The service, for the host's own reads; throws like a plugin's `get`. */
@@ -184,6 +245,17 @@ export class ServiceRegistry {
 			find: <T>(key: ServiceKey<T>) => {
 				this.#readers.add(plugin);
 				return this.#read(key, plugin, false);
+			},
+			lazy: <T>(key: ServiceKey<T>) => {
+				this.#readers.add(plugin);
+				this.#lazy.push({ plugin, key });
+				return () => {
+					if (!this.#settled)
+						throw new NotLinkedError(
+							`service ${key.id} is read through lazy() once every plugin is set up. Call it from a service's start or from a handler, not during setup.`,
+						);
+					return this.#values.get(key.id) as T;
+				};
 			},
 			provide: (key, value) => {
 				if (this.#setting !== plugin)

@@ -1,4 +1,4 @@
-// Unstable plugin helpers; see the plugin guide.
+// Plugin helpers, versioned like the main entry; see the plugin guide.
 // Mirror a built-in tool in a worker that cannot reach the host: the specs and the dispatcher.
 
 export type { ScheduleToolContext } from "../core/modules/schedules/schedule-tools.ts";

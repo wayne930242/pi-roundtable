@@ -364,3 +364,123 @@ describe("serviceKey", () => {
 		expect(Object.isFrozen(serviceKey("a.b"))).toBe(true);
 	});
 });
+
+describe("requires", () => {
+	/** A plugin whose setup reads `COUNTER` and declares that it requires it. */
+	function requiring(name: string, log: string[]): RoundtablePlugin {
+		return {
+			name,
+			requires: [COUNTER],
+			setup: ({ services }) => {
+				log.push(`setup ${name}`);
+				services.get(COUNTER);
+				return { services: [{ name }] };
+			},
+		};
+	}
+
+	test("a required service from an earlier plugin passes", async () => {
+		const log: string[] = [];
+		const error = await run([counting("counter", log), requiring("user", log)]);
+		expect(error).toBeUndefined();
+		expect(log).toEqual(["setup counter", "setup user"]);
+	});
+
+	test("a service provided after the plugin is refused before any setup, naming both plugins", async () => {
+		const log: string[] = [];
+		const error = await run([requiring("user", log), counting("counter", log)]);
+		expect(error).toBeInstanceOf(PluginError);
+		expect((error as Error).message).toBe(
+			"plugin user: requires service test.counter, which plugin counter provides after it. Register plugin counter before plugin user, or read the service with services.lazy(KEY) from a callback that runs after startup.",
+		);
+		expect(log).toEqual([]);
+	});
+
+	test("a service nobody provides is refused with the key's own advice", async () => {
+		const error = await run([requiring("user", [])]);
+		expect(error).toBeInstanceOf(PluginError);
+		expect((error as Error).message).toContain(
+			"plugin user: requires service test.counter, which no registered plugin provides.",
+		);
+	});
+
+	test("a plugin that provides what it requires is refused", async () => {
+		const error = await run([
+			{
+				name: "circular",
+				provides: [COUNTER],
+				requires: [COUNTER],
+				setup: ({ services }) => {
+					services.provide(COUNTER, { next: () => 1 });
+					return {};
+				},
+			},
+		]);
+		expect((error as Error).message).toContain(
+			"plugin circular: requires service test.counter, which it provides itself.",
+		);
+	});
+
+	test("requires that is not a list of keys is refused", async () => {
+		const error = await run([
+			{
+				name: "sloppy",
+				requires: COUNTER as never,
+				setup: () => ({ services: [{ name: "sloppy" }] }),
+			},
+		]);
+		expect((error as Error).message).toBe(
+			"plugin sloppy: requires must be a list of service keys made with serviceKey().",
+		);
+	});
+});
+
+describe("services.lazy", () => {
+	test("a plugin reaches a service provided after it, from a service's start", async () => {
+		const seen: number[] = [];
+		const error = await run([
+			{
+				name: "early",
+				setup: ({ services }) => {
+					const counter = services.lazy(COUNTER);
+					return {
+						services: [
+							{ name: "early", start: () => void seen.push(counter().next()) },
+						],
+					};
+				},
+			},
+			counting("counter", []),
+		]);
+		expect(error).toBeUndefined();
+		expect(seen).toEqual([1]);
+	});
+
+	test("calling it during setup throws a NotLinkedError that names the service", async () => {
+		const error = await run([
+			{
+				name: "eager",
+				setup: ({ services }) => {
+					services.lazy(COUNTER)();
+					return {};
+				},
+			},
+			counting("counter", []),
+		]);
+		expect((error as Error).message).toContain(
+			"plugin eager: setup failed: service test.counter is read through lazy() once every plugin is set up.",
+		);
+	});
+
+	test("a key no plugin provides is refused at the end of setup, naming the plugin", async () => {
+		const error = await run([
+			reading("lonely", ({ services }) => {
+				services.lazy(COUNTER);
+			}),
+		]);
+		expect(error).toBeInstanceOf(PluginError);
+		expect((error as Error).message).toContain(
+			"plugin lonely: services.lazy reads service test.counter, which no registered plugin provides.",
+		);
+	});
+});

@@ -385,6 +385,7 @@ export async function collectContributions(
 		registry.prompt.push(...prompt);
 		registry.requiredTools.push(...requiredTools);
 	}
+	services.settle();
 	return registry;
 }
 

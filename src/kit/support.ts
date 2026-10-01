@@ -1,4 +1,4 @@
-// Supporting data types for the unstable service and helper contracts.
+// Supporting data types for the service and helper contracts.
 
 export type {
 	AgentCategory,

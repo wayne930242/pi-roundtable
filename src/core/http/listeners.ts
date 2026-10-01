@@ -1,7 +1,8 @@
-import { chmodSync, rmSync } from "node:fs";
+import { chmodSync } from "node:fs";
 import type { Server } from "bun";
 import { PluginError } from "../errors.ts";
 import type { Logger } from "../log.ts";
+import { serveUnix } from "../shared/unix-server.ts";
 
 /** A handler a plugin attaches to one of the host's configured listeners. */
 export interface HttpRoute {
@@ -96,29 +97,6 @@ export async function routeRequest(
 	}
 }
 
-/**
- * Serves HTTP on a unix socket without Bun's 10-second idle timeout, which would cut long
- * turns and quiet model streams. Bun 1.4.2 honors `idleTimeout` on unix sockets, but its
- * types reject the option there, hence the cast. A stale socket file is removed first.
- * (`shared/unix-server.ts` keeps its own copy for standalone worker images.)
- */
-function serveUnix(
-	socketPath: string,
-	fetch: (request: Request) => Response | Promise<Response>,
-): Server<undefined> {
-	rmSync(socketPath, { force: true });
-	const options = {
-		unix: socketPath,
-		idleTimeout: 0,
-		fetch,
-		error: serverError,
-	};
-	// SAFETY: these are Bun's unix-socket options; only `idleTimeout` is missing from its types.
-	return Bun.serve(
-		options as unknown as Parameters<typeof Bun.serve>[0],
-	) as Server<undefined>;
-}
-
 /** Serves HTTP on a TCP port with the same idle setting as the unix sockets. */
 function serveTcp(
 	port: number,
@@ -164,7 +142,9 @@ export class HttpListeners {
 				const handle = (request: Request) =>
 					routeRequest(routes, request, listener.id, this.#logger);
 				if ("socketPath" in listener) {
-					this.#servers.push(serveUnix(listener.socketPath, handle));
+					this.#servers.push(
+						serveUnix(listener.socketPath, handle, { error: serverError }),
+					);
 					chmodSync(listener.socketPath, listener.mode ?? 0o660);
 				} else {
 					this.#servers.push(

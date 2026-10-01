@@ -33,13 +33,13 @@ Everything a plugin author needs comes from four entries, and nothing else can b
 |---|---|
 | `pi-roundtable` | `definePlugin`, `defineTool`, `defineRoundtable`, `ToolRefusal`, `PluginError`, `NotLinkedError`, `Roundtable`, and the types (`Tier`, `Speaker`, `Contribution`, `PluginContext`, and so on) |
 | `pi-roundtable/testing` | Fixtures for testing plugins, without Discord or a database unless the test explicitly opens one; `testHost` names a few discord.js types (`ComposedCommands`, `CommandGuard`, `InteractionModule`, `RootOption`) so a test can drive the composed slash commands |
-| `pi-roundtable/kit` | Unstable helpers for channel claims, tools, presentation, and naming existing core parts |
-| `pi-roundtable/discord` | Unstable, and the entry built on discord.js types: the `DISCORD` service (slash commands, the owner guard), owner-command and panel helpers, the agent panel, and the channel-operation tables |
+| `pi-roundtable/kit` | Helpers for channel claims, tools, presentation, worker processes, and naming existing core parts |
+| `pi-roundtable/discord` | The entry built on discord.js types: the `DISCORD` service (slash commands, the owner guard), owner-command and panel helpers, the agent panel, and the channel-operation tables |
 
 ### Advanced building blocks
 
 Start with the main entry and the context's built-in services.
-The kit is unstable before 1.0 and is not covered by semver.
+The kit and Discord entries are versioned like the main entry: before 1.0 a breaking change to any exported name comes in a minor release and is listed in the changelog, and a test compares every exported signature with a recorded report.
 Use `pi-roundtable/kit` for channel claims, tool and presentation helpers, and the types of the core's existing parts.
 Use `pi-roundtable/discord` for everything that touches Discord: slash commands, owner-command modules and panels, the agent panel, and the channel-operation tables.
 The main and kit entries name no discord.js type (a test checks their declarations), so a plugin that does not talk to Discord never depends on it.
@@ -127,9 +127,15 @@ A plugin lists the keys it provides in `provides` and provides each from `setup`
 |---|---|
 | `services.get(KEY)` | The service, or a `PluginError` that names the key and the plugin to register first when it is not provided yet |
 | `services.find(KEY)` | The service, or `undefined` when no registered plugin declares it, such as an addon that is off; it throws like `get` when a plugin declares it but has not set up yet, because that is order, not absence |
+| `services.lazy(KEY)` | A function that returns the service once every plugin is set up, for a service whose plugin is registered after this one; call it from a service's `start`, a handler, or another callback that runs after startup, since calling it during setup throws a `NotLinkedError`. The host refuses to boot, naming your plugin, when no registered plugin provides the key |
 | `services.provide(KEY, value)` | Only from setup, only for a key the plugin declares in `provides`, once per key |
 
 A plugin that declares a key and does not provide it is refused when its `setup` returns, and two plugins that declare one key are refused before any setup.
+
+A plugin that reads a service with `get` during its setup lists the key in `requires`, so a wrong order is refused before any migration or setup, with both plugins named, and the plugin states what it needs in one place (`noteCounter` below).
+A key in `requires` must be provided by a plugin registered before this one.
+A service you read with `find` (an addon that may be off) stays out of `requires`.
+When the other plugin has to come after yours, because it reads what yours provides, read its service with `services.lazy` instead of keeping the object in a variable that the later plugin fills in (`earlyNoteReader` below).
 
 The built-in plugins provide these, from the main entry:
 
@@ -147,7 +153,7 @@ Your plugins run after the built-ins, so they can read every key above.
 The Discord connection's key, `DISCORD`, is in the Discord entry, because its port names discord.js types: `DiscordServices` has `connection`, `commands`, `guard`, and `threads` (see [`commands.add`](#slash-commands-commandsadd)).
 
 A plugin of yours shares a service the same way: the key is a constant you export, the port is an interface you export, and plugins registered after yours read it.
-A plugin registered before yours cannot, and says so: `service <id> is not provided yet; plugin <yours> provides it. Register plugin <yours> before plugin <reader>.`
+A plugin registered before yours cannot read it during its setup, and says so (it reads the service with `services.lazy` instead, from a callback that runs after startup): `service <id> is not provided yet; plugin <yours> provides it. Register plugin <yours> before plugin <reader>.`
 
 <!-- example: examples/shared-services.ts -->
 ```ts
@@ -192,6 +198,37 @@ export function noteReader(
 				},
 			],
 		}),
+	});
+}
+
+/** A plugin that reads the service in `setup` lists it in `requires`: a wrong order stops the start, naming both plugins. */
+export function noteCounter(onCount: (count: number) => void) {
+	return definePlugin({
+		name: "note-counter",
+		requires: [NOTE_INDEX],
+		setup: ({ services }) => {
+			const index = services.get(NOTE_INDEX);
+			return {
+				services: [
+					{ name: "note-counter", start: () => onCount(index.all().length) },
+				],
+			};
+		},
+	});
+}
+
+/** A plugin registered before the notes reads them with `lazy`, from a callback that runs after startup. */
+export function earlyNoteReader(onNotes: (notes: readonly string[]) => void) {
+	return definePlugin({
+		name: "early-note-reader",
+		setup: ({ services }) => {
+			const index = services.lazy(NOTE_INDEX);
+			return {
+				services: [
+					{ name: "early-note-reader", start: () => onNotes(index().all()) },
+				],
+			};
+		},
 	});
 }
 
@@ -1184,6 +1221,9 @@ export function alwaysOn(tools: () => string[]) {
 Names of npm packages, installed in your project (`bun add pi-web-access`), whose Pi extensions every conversation session loads.
 Two plugins that name the same package load it once.
 
+`pi-web-access` is also what the built-in delegation worker loads to search and read the web, so `pi-roundtable` lists it as a peer dependency (`>=0.35.0 <0.36.0`): `bun add pi-roundtable` installs it for you, and a project that depends on its own build of it, such as a fork, gets that one copy for both the worker and `piPackages`, with no `overrides` entry.
+A project that has none installed stops at the `modules` plugin's setup with a `PluginError` that names the command to run.
+
 <!-- example: examples/packages.ts -->
 ```ts
 import { definePlugin } from "pi-roundtable";
@@ -1724,6 +1764,9 @@ The harness supplies what the host would, so a claim or a background turn behave
 - Once `AGENTS` is given, its `approvals` is the real confirmation judge over `providers.judge` when you pass a judge, so a held action is approved or declined as the agent server decides.
 - Giving `AGENTS` a `team` puts the agent server's own claim in the router, for the `owner`, so the plugin's claims are tested against the agent channels as on a host; its `owner` background target comes with it.
 
+A plugin under test that lists a key in `requires` is refused unless the `services` option gives it (or the plugin provides it), the way the host refuses a key no plugin provides.
+A `services.lazy` reader answers once `testPlugin` returns, from the services you gave.
+
 A plugin that fills the `runtime` slot needs none of these for its own runtime: the harness builds it from the slot (with a silent logger, a one-owner identity, in-memory held actions, and one stand-in agent setting) and puts it under `AGENTS`'s `runtime`.
 
 A test for the tools example:
@@ -1763,6 +1806,8 @@ Use it only with your own store class in a gated database test and always close 
 `useTestLocale()` resets the process-wide locale to English and time zone to UTC; call it after a test that changes either, not from a running plugin.
 `testPlugin`'s options take `env` (a partial `HostEnv`) for the `context.env` the plugin sees; it defaults to `en` and `UTC`.
 `OWNER_SPEAKER`, `fakeThreads`, and `silentLogger` supply neutral stand-ins for owner turns, dispatch threads, and logging.
+`recordingLogger()` is a logger that keeps what it is asked to write: its `lines` hold each call's `level`, `fields` (those of a `child` included), and `message`, for a test of what the code logs.
+`partial<Port>({ ... })` is a stand-in for a port that your code takes as an argument rather than reads from a service: it has the members you give and nothing else, and reading another member throws an error that names it, so the test needs no `as unknown as Port` cast.
 `fakeDiscord({ ownerId?, rootCommand? })` is the `DISCORD` service for a plugin that adds slash commands: give it as `services: [discord.service]`, read what the plugin added with `discord.added()`, and compose the tree Discord would get with `discord.compose()`.
 Only `commands` and `guard` are given; a plugin that reads another member of `DISCORD` in a test gives its own with `servicePair(DISCORD, { ... })`.
 
@@ -1827,7 +1872,7 @@ On `SIGTERM` or `SIGINT` the bot stops serving new work last:
 4. Services stop in the reverse of the order they started.
 5. The database pool closes.
 
-`shutdown()` returns the exit code, `0` or `1` when a listener, a service, or the pool failed to stop, and every call shares the one shutdown; only `listen()`, which the command line and Merlin call, exits the process with it.
+`shutdown()` returns the exit code, `0` or `1` when a listener, a service, or the pool failed to stop, and every call shares the one shutdown; only `listen()`, which the command line and a host's own entry point call, exits the process with it.
 
 ## Errors and their fixes
 
@@ -1901,6 +1946,10 @@ Your plugins always run after the built-ins, so the built-in keys show this only
 Pass what you need in the harness's `services` option, or test that part elsewhere.
 `find(KEY)` is `undefined` for a service nobody declares, in the host and in the harness.
 
+A key in `requires` is checked before any migration or setup, and a wrong order stops the start with `plugin <yours>: requires service <id>, which plugin <name> provides after it. Register plugin <name> before plugin <yours>, or read the service with services.lazy(KEY) from a callback that runs after startup.`
+Calling the function `services.lazy(KEY)` returned during setup throws `service <id> is read through lazy() once every plugin is set up. Call it from a service's start or from a handler, not during setup.`
+A `lazy` key that no registered plugin provides stops the start once every plugin is set up: `plugin <yours>: services.lazy reads service <id>, which no registered plugin provides.`
+
 ### A setup or a migration that throws
 
 ```text
@@ -1969,6 +2018,22 @@ These are existing compatibility limits, not flags the package overrides in your
 `noUnusedLocals`, `noUnusedParameters`, `noImplicitReturns`, and `noUncheckedSideEffectImports` were also tested enabled and pass.
 With `skipLibCheck: false`, the example consumer instead reports 97 dependency-declaration errors, so keep it enabled for this configuration.
 Discord-facing signatures, which are in `pi-roundtable/discord` and, for the composed slash commands, in `pi-roundtable/testing`, use the package's pinned `discord.js` types; use those compatible types for panel rows and interaction handlers. `discord.js` is a regular dependency of the package, so a project that imports either entry installs it with `pi-roundtable`.
+
+## Developing the core and a host together
+
+A host pins an exact `pi-roundtable` version, so a change to the core reaches it only after a release.
+To try a core change in a host first, link the checkout:
+
+```sh
+# in the pi-roundtable checkout
+bun link
+# in the host
+bun link pi-roundtable
+```
+
+The host then imports the checkout's source, so the core's edits show at once and the host's `bun run typecheck` and `bun test` run against them.
+A linked checkout resolves its own dependencies from its own `node_modules`, so a host's `overrides` do not reach it: a host that depends on its own build of `pi-web-access` has two copies while linked.
+When the change is done, release the core, set the host's `pi-roundtable` to the new exact version, and run `bun install` to replace the link with the published package; the host's checks run once more against what was published.
 
 ## Name-to-entry index
 
@@ -2160,6 +2225,10 @@ The source area files are not package subpaths.
 | `fakeThreads` | `pi-roundtable/testing` | value |
 | `openTestStore` | `pi-roundtable/testing` | value |
 | `servicePair` | `pi-roundtable/testing` | value |
+| `partial` | `pi-roundtable/testing` | value |
+| `recordingLogger` | `pi-roundtable/testing` | value |
+| `RecordingLogger` | `pi-roundtable/testing` | type |
+| `RecordedLog` | `pi-roundtable/testing` | type |
 | `silentLogger` | `pi-roundtable/testing` | value |
 | `testDatabaseUrl` | `pi-roundtable/testing` | value |
 | `testHost` | `pi-roundtable/testing` | value |
@@ -2204,6 +2273,8 @@ The source area files are not package subpaths.
 | `SCHEDULE_TOOLS` | `pi-roundtable/kit` | value |
 | `SHELL_TOOLS` | `pi-roundtable/kit` | value |
 | `SKILL_LIST_TOOL` | `pi-roundtable/kit` | value |
+| `packageDir` | `pi-roundtable/kit` | value |
+| `serveUnix` | `pi-roundtable/kit` | value |
 | `ScheduleToolContext` | `pi-roundtable/kit` | type |
 | `ScheduleToolName` | `pi-roundtable/kit` | type |
 | `ScheduleToolSpec` | `pi-roundtable/kit` | type |

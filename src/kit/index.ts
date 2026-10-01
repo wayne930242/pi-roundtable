@@ -1,4 +1,4 @@
-// Unstable before 1.0; not covered by semver. Helpers for owner commands, claims, and naming existing core parts.
+// Helpers for owner commands, claims, and naming existing core parts; versioned like the main entry.
 
 export type { ChannelQueue } from "./channels.ts";
 export {
@@ -62,6 +62,7 @@ export {
 	thinkingLine,
 	zonedStamp,
 } from "./presentation.ts";
+export { packageDir, serveUnix } from "./process.ts";
 export {
 	SHELL_TOOLS,
 	shellHoldRule,

@@ -1,4 +1,4 @@
-// Unstable plugin helpers; see the plugin guide.
+// Plugin helpers, versioned like the main entry; see the plugin guide.
 // The host-shell tools and the hold rule that keeps risky commands behind the owner's approval.
 
 export {

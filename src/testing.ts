@@ -63,7 +63,6 @@ import { type ToolTierTable, toolTiers } from "./core/tool-tiers.ts";
 // Fixtures for plugin tests.
 
 export { silentLogger } from "./core/log.ts";
-
 export type { TestStore } from "./core/testing/database.ts";
 export {
 	describeDb,
@@ -74,8 +73,13 @@ export {
 export { eagerText, useEagerCatalog } from "./core/testing/eager-catalog.ts";
 export type { TestLocale } from "./core/testing/locale.ts";
 export { useTestLocale } from "./core/testing/locale.ts";
-
 export { OWNER_SPEAKER } from "./core/testing/owner.ts";
+export { partial } from "./core/testing/partial.ts";
+export type {
+	RecordedLog,
+	RecordingLogger,
+} from "./core/testing/recording-logger.ts";
+export { recordingLogger } from "./core/testing/recording-logger.ts";
 export type { TestHost, TestHostOptions } from "./core/testing/test-host.ts";
 export { testHost } from "./core/testing/test-host.ts";
 export type { FakeThreadHost } from "./core/testing/thread-host.ts";
@@ -393,6 +397,7 @@ export async function testPlugin(
 				logger,
 			}),
 		);
+	services.checkRequires();
 	const context: Omit<PluginContext, "services"> = {
 		logger,
 		env,

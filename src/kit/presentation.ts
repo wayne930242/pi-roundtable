@@ -1,4 +1,4 @@
-// Unstable plugin helpers; see the plugin guide.
+// Plugin helpers, versioned like the main entry; see the plugin guide.
 
 export { headline } from "../core/presentation/headline.ts";
 export { quietLinks } from "../core/presentation/quiet-links.ts";
