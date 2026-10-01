@@ -34,6 +34,10 @@
 		"type": "git",
 		"url": "git+https://github.com/wayne930242/pi-roundtable.git"
 	},
+	"homepage": "https://github.com/wayne930242/pi-roundtable#readme",
+	"bugs": {
+		"url": "https://github.com/wayne930242/pi-roundtable/issues"
+	},
 	"publishConfig": {
 		"access": "public",
 		"provenance": true

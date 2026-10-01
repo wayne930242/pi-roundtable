@@ -2,6 +2,8 @@
 
 [English](./README.md) | 繁體中文
 
+原始碼與 issue：<https://github.com/wayne930242/pi-roundtable>
+
 一個建立在 [Pi](https://github.com/earendil-works/pi) 上的 Discord 智慧體（agent）伺服器。
 它在你的 Discord 伺服器裡放一組 AI 智慧體：每個有自己的頻道和對話，共用工具與記憶。想加功能，就用 TypeScript 寫外掛（plugin）。
 
