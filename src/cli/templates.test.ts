@@ -90,6 +90,27 @@ describe("every template rendered into one project", () => {
 	});
 });
 
+test("the generated team's first agent sits in the entry channel, which makes it the coordinator", () => {
+	const printed = Bun.spawnSync(
+		[
+			"bun",
+			"-e",
+			'import { agents } from "./agents.ts"; console.log(JSON.stringify(agents[0]))',
+		],
+		{
+			cwd: dir.path,
+			stdout: "pipe",
+			stderr: "pipe",
+			env: { ...process.env, DISCORD_ENTRY_CHANNEL_ID: "9001" },
+		},
+	);
+	expect(printed.exitCode).toBe(0);
+	expect(JSON.parse(printed.stdout.toString())).toMatchObject({
+		name: "guide",
+		channelId: "9001",
+	});
+});
+
 test("the generated project's pinned tools match this package's own", () => {
 	const project = JSON.parse(
 		readFileSync(join(dir.path, "package.json"), "utf8"),
