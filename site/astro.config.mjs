@@ -7,6 +7,14 @@ const description =
 
 export default defineConfig({
 	site,
+	redirects: {
+		"/guides/quick-start": "/start/quick-start/",
+		"/guides/configure": "/configure/settings/",
+		"/guides/write-a-plugin": "/plugins/first-plugin/",
+		"/zh-tw/guides/quick-start": "/zh-tw/start/quick-start/",
+		"/zh-tw/guides/configure": "/zh-tw/configure/settings/",
+		"/zh-tw/guides/write-a-plugin": "/zh-tw/plugins/first-plugin/",
+	},
 	integrations: [
 		starlight({
 			title: "pi-roundtable",
@@ -74,13 +82,29 @@ export default defineConfig({
 			],
 			sidebar: [
 				{
-					label: "Guides",
-					translations: { "zh-TW": "指南" },
-					items: [
-						{ slug: "guides/quick-start" },
-						{ slug: "guides/write-a-plugin" },
-						{ slug: "guides/configure" },
-					],
+					label: "Get started",
+					translations: { "zh-TW": "開始" },
+					items: [{ autogenerate: { directory: "start" } }],
+				},
+				{
+					label: "Use agents",
+					translations: { "zh-TW": "使用 agent" },
+					items: [{ autogenerate: { directory: "agents" } }],
+				},
+				{
+					label: "Configure",
+					translations: { "zh-TW": "設定" },
+					items: [{ autogenerate: { directory: "configure" } }],
+				},
+				{
+					label: "Write plugins",
+					translations: { "zh-TW": "寫外掛" },
+					items: [{ autogenerate: { directory: "plugins" } }],
+				},
+				{
+					label: "Reference",
+					translations: { "zh-TW": "參考" },
+					items: [{ autogenerate: { directory: "reference" } }],
 				},
 			],
 		}),
