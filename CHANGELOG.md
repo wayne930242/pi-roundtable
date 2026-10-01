@@ -5,6 +5,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-01
+
+### Added
+
+- `Connectors.resolve(serverName)` reads a virtual server by name, and `Connectors.admin` (`gateways()`, `servers()`) shows what ContextForge holds, for a host that manages some servers itself or shows their state.
+- The `REMOTE_MCP` service of `remoteMcp`: the owner's bundles and grants, read only, and `describeGrant(client, grant)`, so a host can show them in its own status view.
+- The types `GatewayState`, `ChannelBundle`, `ChannelGrant`, and `RemoteMcpService`.
+
 ## [0.2.0] - 2026-10-01
 
 ### Added

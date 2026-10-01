@@ -90,6 +90,8 @@ It provides the `CONNECTORS` service (`Connectors`):
 | `servers()` | The virtual servers (name, URL, tool names) of the connectors that could be read |
 | `profileSources()` | One `{ name, description, serverName }` per connector, the shape a host builds a per-agent MCP profile from |
 | `token` | The bearer token that the virtual servers' URLs expect; one per process, valid for a year |
+| `resolve(serverName)` | Reads one virtual server's URL and tools by name, for servers the host manages itself rather than as connectors |
+| `admin` | `gateways()` and `servers()`: what ContextForge holds, upstream gateways with their state and every virtual server with its tool names, for a host's status view |
 
 The plugin does not decide which agent uses which connector.
 The host reads the service, builds its own profiles, and compares `version` with the one it built at.
@@ -176,6 +178,13 @@ The owner grants channels on Discord with `/<root> mcp`:
 | `revoke` | Removes a channel from a bundle |
 | `describe` | Changes the channel name and purpose that the agent sees (Discord's own name and topic stay) |
 | `token` | Replaces a bundle's MCP URL; the old one stops working at once and the channel settings stay |
+
+The plugin provides the `REMOTE_MCP` service (`RemoteMcpService`) for a host that shows the owner what outside agents may reach:
+
+| Member | What it is |
+| --- | --- |
+| `grants` | `bundles()` and `grants(bundleId?)`, read only: every bundle, and the channel grants of one bundle or of all |
+| `describeGrant(client, grant)` | One grant as lines of text for a Discord message: the name the agent sees, where the channel is, its purpose, and the allowed operations, in the plugin's wording |
 
 #### The default conversation
 

@@ -11,8 +11,12 @@ export type {
 	McpConnectorsOptions,
 } from "./connectors/connectors-plugin.ts";
 export { CONNECTORS, mcpConnectors } from "./connectors/connectors-plugin.ts";
-export type { UpstreamAuth } from "./connectors/contextforge.ts";
+export type { GatewayState, UpstreamAuth } from "./connectors/contextforge.ts";
 export type { ConnectorMessages } from "./connectors/messages.ts";
+export type {
+	ChannelBundle,
+	ChannelGrant,
+} from "./remote-mcp/channel-grants.ts";
 export type {
 	RemoteMcpMessages,
 	RemoteToolNames,
@@ -24,3 +28,5 @@ export type {
 	RemoteMcpOptions,
 } from "./remote-mcp/remote-mcp-plugin.ts";
 export { remoteMcp } from "./remote-mcp/remote-mcp-plugin.ts";
+export type { RemoteMcpService } from "./remote-mcp/remote-mcp-service.ts";
+export { REMOTE_MCP } from "./remote-mcp/remote-mcp-service.ts";

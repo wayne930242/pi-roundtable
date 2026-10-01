@@ -8,6 +8,13 @@ test("the routing plugin builds a line per connector from the service", async ()
 	const connectors: Connectors = {
 		version: 3,
 		token: "t",
+		resolve: async () => {
+			throw new Error("not used");
+		},
+		admin: {
+			gateways: async () => [],
+			servers: async () => [],
+		},
 		list: () => [],
 		servers: () => [],
 		profileSources: () => [

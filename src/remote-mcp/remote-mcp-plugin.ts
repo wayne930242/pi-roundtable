@@ -26,6 +26,7 @@ import {
 } from "./messages.ts";
 import { RemoteAgent } from "./remote-agent.ts";
 import { type RemoteClaimHooks, remoteClaim } from "./remote-claim.ts";
+import { REMOTE_MCP, remoteMcpService } from "./remote-mcp-service.ts";
 import { RemoteSessionStore } from "./remote-session-store.ts";
 import { RemoteSessionSweeper } from "./session-sweeper.ts";
 
@@ -104,6 +105,7 @@ function checkOptions(options: RemoteMcpOptions): void {
  * An MCP server over HTTP for outside agents: `/mcp/personal` relays turns to the owner's agent
  * and returns the result when polled, and `/mcp/discord/<token>` offers the Discord channel
  * tools granted to one bundle. Grants are approved on Discord with `/<root> mcp`.
+ * Provides `REMOTE_MCP`.
  */
 export function remoteMcp(options: RemoteMcpOptions): RoundtablePlugin {
 	checkOptions(options);
@@ -112,6 +114,7 @@ export function remoteMcp(options: RemoteMcpOptions): RoundtablePlugin {
 	return definePlugin({
 		name: "remote-mcp",
 		requires: [DISCORD],
+		provides: [REMOTE_MCP],
 		migrations: [ChannelGrantStore.migration, RemoteSessionStore.migration],
 		setup: async (context) => {
 			const { services, logger, conversations, database } = context;
@@ -142,6 +145,7 @@ export function remoteMcp(options: RemoteMcpOptions): RoundtablePlugin {
 			discord.commands.add(
 				mcpGrantCommands(discord.guard, grants, options.publicUrl, text),
 			);
+			services.provide(REMOTE_MCP, remoteMcpService(grants, text));
 			return {
 				services: [
 					{

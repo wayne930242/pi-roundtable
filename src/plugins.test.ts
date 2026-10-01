@@ -12,7 +12,7 @@ import {
 	testDatabaseUrl,
 	testHost,
 } from "pi-roundtable/testing";
-import { CONNECTORS, mcpConnectors, remoteMcp } from "./index.ts";
+import { CONNECTORS, mcpConnectors, REMOTE_MCP, remoteMcp } from "./index.ts";
 import {
 	type RecordingRuntime,
 	recordingRuntime,
@@ -44,18 +44,20 @@ describeDb("both plugins on a host", () => {
 				user: "admin@example.com",
 			},
 		});
-		// Another test file may have left connectors in the table.
-		await migrateDatabase(testDatabaseUrl, [connectors]);
+		const remote = remoteMcp({
+			dispatchToken: DISPATCH_TOKEN,
+			publicUrl: PUBLIC_URL,
+		});
+		// Another test file may have left connectors and grants in the tables.
+		await migrateDatabase(testDatabaseUrl, [connectors, remote]);
 		const sql = new SQL(testDatabaseUrl);
 		await sql`DELETE FROM owner_connectors`;
+		await sql`DELETE FROM discord_mcp_bundles`;
 		await sql.close();
 		host = await testHost({
 			config: { dataDir, http: { publicUrl: PUBLIC_URL, socketPath } },
 			runtime,
-			plugins: [
-				connectors,
-				remoteMcp({ dispatchToken: DISPATCH_TOKEN, publicUrl: PUBLIC_URL }),
-			],
+			plugins: [connectors, remote],
 		});
 	});
 
@@ -92,6 +94,16 @@ describeDb("both plugins on a host", () => {
 		expect(connectors.servers()).toEqual([]);
 		expect(connectors.profileSources()).toEqual([]);
 		expect(connectors.token.split(".")).toHaveLength(3);
+		expect(connectors.resolve).toBeFunction();
+		expect(connectors.admin.gateways).toBeFunction();
+		expect(connectors.admin.servers).toBeFunction();
+	});
+
+	test("provides the grants to other plugins, empty before any is made", async () => {
+		const { grants, describeGrant } = host.context.services.get(REMOTE_MCP);
+		expect(await grants.bundles()).toEqual([]);
+		expect(await grants.grants()).toEqual([]);
+		expect(describeGrant).toBeFunction();
 	});
 
 	/** Polls a run until the host's turn has finished. */

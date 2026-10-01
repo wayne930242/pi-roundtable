@@ -54,6 +54,10 @@ export interface Connectors {
 	profileSources(): ConnectorProfileSource[];
 	/** The bearer token that ContextForge's virtual server URLs expect; one per process. */
 	readonly token: string;
+	/** Reads a virtual server's endpoint and tools by name, for the servers a host manages itself. */
+	resolve(serverName: string): Promise<VirtualServer>;
+	/** What ContextForge holds, upstream gateways and virtual servers, for a host's status view. */
+	readonly admin: Pick<ContextForgeAdmin, "gateways" | "servers">;
 }
 
 export const CONNECTORS = serviceKey<Connectors>(
@@ -89,9 +93,11 @@ export function mcpConnectors(options: McpConnectorsOptions): RoundtablePlugin {
 		setup: async ({ database, services, logger }) => {
 			const { jwtSecret, user } = options.contextForge;
 			const token = contextForgeToken(jwtSecret, user, TOKEN_TTL_SECONDS);
+			const admin = new ContextForgeAdmin(url, token);
+			const resolve = (name: string) => resolveVirtualServer(url, token, name);
 			const registry = await ConnectorRegistry.attach(database(), {
-				admin: new ContextForgeAdmin(url, token),
-				resolve: (name) => resolveVirtualServer(url, token, name),
+				admin,
+				resolve,
 				logger,
 				serverPrefix: options.serverPrefix ?? DEFAULT_SERVER_PREFIX,
 				maxToolName: options.maxToolName ?? DEFAULT_MAX_TOOL_NAME,
@@ -107,6 +113,11 @@ export function mcpConnectors(options: McpConnectorsOptions): RoundtablePlugin {
 				servers: () => registry.servers(),
 				profileSources: () => registry.profileSources(),
 				token,
+				resolve,
+				admin: {
+					gateways: () => admin.gateways(),
+					servers: () => admin.servers(),
+				},
 			});
 			return {};
 		},
