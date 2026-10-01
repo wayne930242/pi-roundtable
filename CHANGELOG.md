@@ -5,6 +5,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-01
+
+### Changed
+
+- `@earendil-works/pi-ai` and `@earendil-works/pi-coding-agent` are no longer pinned to one version: they take `>=0.99.2 <1`, so a host picks up a newer model table with `bun update @earendil-works/pi-ai @earendil-works/pi-coding-agent`, or its own direct dependency, without waiting for a pi-roundtable release. Pinned to 0.87.1 before, the host's model list stopped at the models that version knew. 0.99.2 is the lowest version the tests run against, and the lockfile keeps CI on it, so a host that updates further runs on versions this package was not tested with.
+- `pi-mcp-adapter` is 4.0.0 (was 2.37.0). Version 2.37.0 declared support for pi-ai up to 0.87 only; 4.0.0 declares 0.99. It stays pinned. Checked by connecting a session built the way the core builds one to a local MCP server that requires a bearer token: the tool registered and a call returned its result.
+- A judge or agent model that the newer table lists but the host has no login for fails with the provider's "Provider is not configured" error, where an unlisted model fails with "is not available".
+
+### Fixed
+
+- Agents had no `skill_list` tool, although the `agent_create` description, the built-in `writing-skills` skill and the skill errors all tell them to call it. The `skills` addon now mounts it for agent sessions, at the member tier like its entry in the tool tiers. A host that mounted `skillListExtension` itself for agents (the kit still exports it) now offers the tool twice and should drop its own copy.
+
 ## [0.4.0] - 2026-10-01
 
 ### Added

@@ -289,7 +289,7 @@ They are on by default, so a bot that says nothing about them has all three.
 | Addon | Plugin | Switch in `roundtable.config.ts` | What it adds | When it is off |
 |---|---|---|---|---|
 | Memory | `memory` (provides `MEMORY`) | `memory: false` | The memory table, the `memory_add`, `memory_search` and `memory_remove` tools, and the memory block of every system prompt | No memory tools and no block; the table is left as it is |
-| Skills | `skills` (provides `SKILLS`) | `skills: false` | The skill tables, the skill tools of agent sessions (`skill_link`, `skill_create`, `agent_skills`, and the rest), and the skills every agent carries, `writing-skills` included | No skill tools and no skills in any session; `agent_get` has no skills line; `agent_create` leaves out its `skills` parameter and refuses a call that passes some with `Skills are off on this host`; the tables are left as they are |
+| Skills | `skills` (provides `SKILLS`) | `skills: false` | The skill tables, the skill tools of agent sessions (`skill_list`, `skill_link`, `skill_create`, `agent_skills`, and the rest), and the skills every agent carries, `writing-skills` included | No skill tools and no skills in any session; `agent_get` has no skills line; `agent_create` leaves out its `skills` parameter and refuses a call that passes some with `Skills are off on this host`; the tables are left as they are |
 | Discord administration | `discord-admin` | `discord: { admin: false }` | The `discord_*` tools that read and manage the server, for the owner | No `discord_*` tools; the channel executor that remote MCP uses is the connection's, so it stays |
 
 A switched-off addon's tables and rows are never touched: turning it on again finds them as they were.

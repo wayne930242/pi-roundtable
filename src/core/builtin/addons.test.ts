@@ -23,9 +23,11 @@ describe("the skills addon", () => {
 	test("adds the skill tools to agent sessions only, offers them to every agent turn, and declares their tiers", async () => {
 		const { skills } = await setUpAddons();
 		expect(skills.sessionTools?.map((tool) => tool.name)).toEqual([
+			"skill-list",
 			"skill-tools",
 		]);
 		expect(skills.agentSelection?.().tools).toEqual([
+			"skill_list",
 			"skill_link",
 			"skill_unlink",
 			"skill_create",

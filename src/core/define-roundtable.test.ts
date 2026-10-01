@@ -403,9 +403,13 @@ describe("defineRoundtable", () => {
 	});
 
 	test("the judge answers with a clear error until the model is available", async () => {
-		const { options } = await defineRoundtable(config);
+		// A model no provider's table lists, so the answer does not depend on which models this version of pi knows.
+		const { options } = await defineRoundtable({
+			...config,
+			judge: { model: "anthropic/no-such-model" },
+		});
 		await expect(options.judgeModel?.("system", "question")).rejects.toThrow(
-			"the judge's model anthropic/claude-sonnet-5-5 is not available",
+			"the judge's model anthropic/no-such-model is not available",
 		);
 	});
 });

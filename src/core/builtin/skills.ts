@@ -4,6 +4,7 @@ import { SkillStore } from "../modules/skills/skill-store.ts";
 import {
 	SKILL_LIST_TOOL,
 	SKILL_TOOLS,
+	skillListExtension,
 	skillToolsExtension,
 } from "../modules/skills/skill-tools.ts";
 import type { RoundtablePlugin } from "../plugin.ts";
@@ -57,6 +58,7 @@ export function skillsPlugin(
 			services.provide(SKILLS, built);
 			return {
 				sessionTools: [
+					agentOnly("skill-list", () => skillListExtension(built)),
 					agentOnly("skill-tools", () =>
 						skillToolsExtension(built, (name) => {
 							// The agent server is set up after this plugin and read when a session is built.
@@ -64,7 +66,10 @@ export function skillsPlugin(
 						}),
 					),
 				],
-				agentSelection: () => ({ tools: SKILL_TOOLS, groups: [] }),
+				agentSelection: () => ({
+					tools: [SKILL_LIST_TOOL, ...SKILL_TOOLS],
+					groups: [],
+				}),
 				toolTiers: SKILL_TIERS,
 			};
 		},
