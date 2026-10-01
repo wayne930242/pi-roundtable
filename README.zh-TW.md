@@ -1,6 +1,6 @@
 # pi-roundtable
 
-[English](README.md) | 繁體中文
+[English](./README.md) | 繁體中文
 
 一個建立在 [Pi](https://github.com/earendil-works/pi) 上的 Discord 智慧體（agent）伺服器。
 你會在一個 Discord 伺服器裡得到一組 AI 智慧體：每個智慧體擁有一個頻道和一段對話，彼此共用工具與記憶，你用 TypeScript 寫外掛（plugin）來擴充這個 bot。

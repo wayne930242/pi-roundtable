@@ -34,6 +34,7 @@ export const PUBLIC_NAME_ALLOWLIST: NameAllowlist = {
 	LICENSE: [OWNER_HANDLE],
 	"package.json": [OWNER_HANDLE],
 	"site/astro.config.mjs": [OWNER_HANDLE, spell("way", "ne")],
+	"CHANGELOG.md": [spell("way", "ne")],
 	"site/public/CNAME": [spell("way", "ne")],
 	"site/public/robots.txt": [spell("way", "ne")],
 	// A key ending in "/" covers every file below that directory: documentation pages link to the repository.

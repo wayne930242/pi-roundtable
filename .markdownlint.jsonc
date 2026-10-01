@@ -1,0 +1,4 @@
+{
+	// The code samples use tabs because biome formats the TypeScript they show that way.
+	"MD010": { "code_blocks": false }
+}

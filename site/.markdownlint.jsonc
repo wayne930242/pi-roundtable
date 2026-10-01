@@ -1,0 +1,7 @@
+{
+	// The pages are MDX: Starlight components are inline HTML to markdownlint, and a
+	// `{/* Sources: ... */}` comment reads as emphasis with stray spaces.
+	"MD010": { "code_blocks": false },
+	"MD033": false,
+	"MD037": false
+}
