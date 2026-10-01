@@ -1,5 +1,11 @@
 import { expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import {
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	realpathSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -18,9 +24,12 @@ test("packageDir looks a package up from the file that asks", () => {
 	writeFileSync(join(lib, "package.json"), '{"name":"elsewhere"}');
 	// Only the asking file's own node_modules holds it, not the core's.
 	expect(() => packageDir("elsewhere")).toThrow();
+	// macOS puts temporary directories behind a symlink (/var is /private/var), so compare real paths.
 	expect(
-		packageDir("elsewhere", pathToFileURL(join(root, "host.ts")).href),
-	).toBe(lib);
+		realpathSync(
+			packageDir("elsewhere", pathToFileURL(join(root, "host.ts")).href),
+		),
+	).toBe(realpathSync(lib));
 });
 
 test("serveUnix answers on the socket and replaces a stale socket file", async () => {

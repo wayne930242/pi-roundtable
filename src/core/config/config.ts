@@ -27,7 +27,10 @@ import {
 /** How prompts refer back to the owner. */
 export type Pronouns = "he" | "she" | "they";
 
-/** Who holds a tier besides the owner: user ids, role ids, and for members everyone. */
+/**
+ * Who holds a tier besides the owner: user ids, role ids, or everyone. `everyone` works under any
+ * tier it is written in, so under `admins` it makes every author an admin.
+ */
 export interface TierConfig {
 	users?: readonly string[];
 	roles?: readonly string[];

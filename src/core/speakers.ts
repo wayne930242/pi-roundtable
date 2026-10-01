@@ -75,7 +75,10 @@ export interface SpeakerPolicy {
 	resolve(author: SpeakerFacts): Speaker | undefined;
 }
 
-/** Who holds one tier: user ids, role ids, and (for members) everyone. */
+/**
+ * Who holds one tier: user ids, role ids, or everyone. `everyone` works under any tier it is
+ * written in, so under `admins` it makes every author an admin.
+ */
 export interface TierMembers {
 	users?: readonly string[];
 	roles?: readonly string[];
