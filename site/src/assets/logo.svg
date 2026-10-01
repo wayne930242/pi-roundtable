@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="roundtable">
+<rect width="512" height="512" rx="112" fill="#0F2057"/>
+<g transform="rotate(0 256 256)" fill="#FFFFFF"><rect x="182" y="68" width="148" height="100" rx="32"/><polygon points="234,164 278,164 256,200"/></g>
+<g transform="rotate(90 256 256)" fill="#FFB62E"><rect x="182" y="68" width="148" height="100" rx="32"/><polygon points="234,164 278,164 256,200"/></g>
+<g transform="rotate(180 256 256)" fill="#FFFFFF"><rect x="182" y="68" width="148" height="100" rx="32"/><polygon points="234,164 278,164 256,200"/></g>
+<g transform="rotate(270 256 256)" fill="#FFFFFF"><rect x="182" y="68" width="148" height="100" rx="32"/><polygon points="234,164 278,164 256,200"/></g>
+</svg>

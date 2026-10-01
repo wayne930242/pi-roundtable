@@ -25,6 +25,7 @@ export const PUBLIC_NAME_ALLOWLIST: NameAllowlist = {
 	"package.json": [OWNER_HANDLE],
 	"site/astro.config.mjs": [OWNER_HANDLE, spell("way", "ne")],
 	"site/public/CNAME": [spell("way", "ne")],
+	"site/public/robots.txt": [spell("way", "ne")],
 	"site/src/content/docs/guides/write-a-plugin.mdx": [OWNER_HANDLE],
 	"site/src/content/docs/zh-tw/guides/write-a-plugin.mdx": [OWNER_HANDLE],
 	"bun.lock": [spell("type", "safe")],
