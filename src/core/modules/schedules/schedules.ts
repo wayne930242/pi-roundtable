@@ -1,18 +1,21 @@
 import type { ExtensionFactory } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import { OWNER_TARGET } from "../../agents/agent-claim.ts";
 import type { ChannelKey } from "../../domain/conversation.ts";
 import { ScheduleError } from "../../domain/errors.ts";
+import { activeLocale } from "../../i18n/index.ts";
 import type { OwnerIdentity } from "../../identity.ts";
 import {
 	type ToolInput,
 	textToolsExtension,
 } from "../../runtime/text-tools.ts";
+import type { ScheduleStore } from "../../services.ts";
 import {
 	type ScheduleToolSpec,
 	scheduleToolSpecs,
 } from "../../shared/schedule-tools.ts";
 import type { Speaker } from "../../speakers.ts";
-import type { ScheduleStore } from "./schedule-store.ts";
+import { timeZone } from "../../time.ts";
 import { callScheduleTool } from "./schedule-tools.ts";
 
 export interface OwnerSchedules {
@@ -56,7 +59,10 @@ export function schedulesExtension(
 	speaker: () => Speaker | undefined = () => undefined,
 ): ExtensionFactory {
 	const { store, owner, channelFor } = schedules;
-	const defs = scheduleToolSpecs().map((base) => {
+	const defs = scheduleToolSpecs({
+		locale: activeLocale(),
+		timeZone: timeZone(),
+	}).map((base) => {
 		const spec = agents ? withAgentOption(base) : base;
 		return {
 			...spec,
@@ -70,7 +76,7 @@ export function schedulesExtension(
 					{
 						store,
 						channel: target,
-						mode: "owner",
+						target: OWNER_TARGET,
 						author: speaker() ?? owner,
 						now: new Date(),
 					},

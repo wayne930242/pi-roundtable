@@ -2,6 +2,7 @@ import type { SQL } from "bun";
 import type { Migration } from "../db/migrations.ts";
 import { AgentError } from "../domain/errors.ts";
 import type { ThinkingLevel } from "../models.ts";
+import type { AgentDirectory } from "../services.ts";
 import {
 	type Agent,
 	type AgentGroup,
@@ -51,7 +52,7 @@ export {
  * Agents, groups, and group messages, in the database. Agents and groups are also held
  * in memory, because every inbound message asks and only this process changes them.
  */
-export class AgentStore {
+export class PgAgentStore implements AgentDirectory {
 	readonly #sql: SQL;
 	readonly #agents = new Map<string, Agent>();
 	readonly #groups = new Map<string, AgentGroup>();
@@ -74,8 +75,8 @@ export class AgentStore {
 	}
 
 	/** The store over the host's migrated pool, holding the rows of one guild. */
-	static async attach(sql: SQL, guildId: string): Promise<AgentStore> {
-		const store = new AgentStore(sql, guildId);
+	static async attach(sql: SQL, guildId: string): Promise<PgAgentStore> {
+		const store = new PgAgentStore(sql, guildId);
 		await store.#reload();
 		return store;
 	}
@@ -178,7 +179,8 @@ export class AgentStore {
 		checkAgentName(agent.name);
 		checkDisplayName(agent.displayName);
 		checkPrompt(agent.prompt);
-		checkAvatarPrompt(agent.avatarPrompt);
+		// An agent of a host without an image provider has no avatar prompt.
+		if (agent.avatarPrompt !== "") checkAvatarPrompt(agent.avatarPrompt);
 		this.#checkFree(agent.name);
 		const rows: AgentRow[] = await this.#sql`
 			INSERT INTO agents (guild_id, name, display_name, prompt, avatar_prompt, channel_id)

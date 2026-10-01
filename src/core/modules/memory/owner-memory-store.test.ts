@@ -17,11 +17,11 @@ import {
 } from "../../testing/database.ts";
 import { useTestLocale } from "../../testing/locale.ts";
 import { setTimeZone, zonedDate } from "../../time.ts";
-import { OwnerMemoryStore, searchTerms } from "./owner-memory-store.ts";
+import { PgMemoryStore, searchTerms } from "./owner-memory-store.ts";
 
 // Runs against a real PostgreSQL, only when ROUNDTABLE_TEST_DATABASE_URL is set.
 describeDb("PostgreSQL", () => {
-	let store: TestStore<OwnerMemoryStore>;
+	let store: TestStore<PgMemoryStore>;
 
 	const facts = async () => (await store.list()).map((memory) => memory.fact);
 
@@ -37,14 +37,14 @@ describeDb("PostgreSQL", () => {
 		)`;
 		await admin`INSERT INTO owner_memory (fact) VALUES ('old fact')`;
 		await admin.close();
-		store = await openTestStore(OwnerMemoryStore, OWNER_ID);
+		store = await openTestStore(PgMemoryStore, OWNER_ID);
 	});
 
 	afterAll(async () => {
 		await store.close();
 	});
 
-	describe("OwnerMemoryStore", () => {
+	describe("PgMemoryStore", () => {
 		test("a milestone 1 row becomes a core fact", async () => {
 			expect(await store.list()).toMatchObject([
 				{ kind: "core", fact: "old fact", eventDate: null },
@@ -155,7 +155,7 @@ describeDb("PostgreSQL", () => {
 
 			test("facts survive a new connection", async () => {
 				await store.add("lives in Taipei");
-				const other = await openTestStore(OwnerMemoryStore, OWNER_ID);
+				const other = await openTestStore(PgMemoryStore, OWNER_ID);
 				expect((await other.list()).map((m) => m.fact)).toEqual([
 					"lives in Taipei",
 				]);

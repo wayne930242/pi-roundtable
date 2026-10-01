@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { ConfigError } from "./domain/errors.ts";
-import { parseTierMembers, speakerPolicy, tierAtLeast } from "./speakers.ts";
+import { speakerPolicy, tierAtLeast } from "./speakers.ts";
 
 const OWNER = "100000000000000001";
 const ADMIN = "100000000000000002";
@@ -50,29 +49,4 @@ test("tiers order owner above admin above member", () => {
 	expect(tierAtLeast("owner", "admin")).toBe(true);
 	expect(tierAtLeast("admin", "admin")).toBe(true);
 	expect(tierAtLeast("member", "admin")).toBe(false);
-});
-
-describe("parseTierMembers", () => {
-	test("reads users, roles, and @everyone", () => {
-		expect(
-			parseTierMembers(
-				`user:${ADMIN}, role:${ROLE}, ${MEMBER}, @everyone`,
-				"X",
-				true,
-			),
-		).toEqual({ users: [ADMIN, MEMBER], roles: [ROLE], everyone: true });
-	});
-
-	test("unset or empty means nobody", () => {
-		expect(parseTierMembers(undefined, "X", true)).toBeUndefined();
-		expect(parseTierMembers(" , ", "X", true)).toBeUndefined();
-	});
-
-	test("refuses a malformed entry, and @everyone where it is not allowed", () => {
-		expect(() => parseTierMembers("nope", "X", true)).toThrow(ConfigError);
-		expect(() => parseTierMembers("group:1", "X", true)).toThrow(ConfigError);
-		expect(() => parseTierMembers("@everyone", "X", false)).toThrow(
-			/@everyone/,
-		);
-	});
 });

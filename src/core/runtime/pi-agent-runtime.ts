@@ -7,6 +7,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { ownerAttachmentDir } from "../attachments/attachment-dir.ts";
 import { withAttachmentsBlock } from "../attachments/prompt-block.ts";
+import type { AgentRuntime } from "../contract/runtime.ts";
 import { NO_ATTACHMENTS, type TurnAttachments } from "../domain/attachment.ts";
 import type {
 	ChannelKey,
@@ -15,7 +16,7 @@ import type {
 	TurnResult,
 } from "../domain/conversation.ts";
 import { AgentRunError, ConfigError } from "../domain/errors.ts";
-import type { AgentRuntime, TurnRequest } from "../domain/ports.ts";
+import type { TurnRequest } from "../domain/ports.ts";
 import { assistantName } from "../i18n/index.ts";
 import {
 	AUTO_THINKING,
@@ -99,13 +100,14 @@ export class PiAgentRuntime implements AgentRuntime {
 			new PromptSlot(),
 			join(this.#factory.workDir(), "probe-attachments"),
 			undefined,
+			"owner",
 		);
 		const registered = new Set(
 			probe.session.getAllTools().map((tool) => tool.name),
 		);
 		probe.session.dispose();
 		const expected = [
-			...this.#options.requiredTools,
+			...this.#factory.link().requiredTools,
 			COMPACT_TOOL,
 			ASK_USER_TOOL,
 			...planOrder(this.#factory.plan).flatMap(
@@ -115,7 +117,7 @@ export class PiAgentRuntime implements AgentRuntime {
 		const missing = expected.filter((name) => !registered.has(name));
 		if (missing.length > 0) {
 			throw new ConfigError(
-				`profile tools are not registered: ${missing.join(", ")}`,
+				`required tools are not registered: ${missing.join(", ")}`,
 			);
 		}
 	}
@@ -152,10 +154,10 @@ export class PiAgentRuntime implements AgentRuntime {
 			logger.warn(
 				{
 					channel: request.channel,
-					profile: request.selection.id,
+					selection: request.selection.id,
 					missing,
 				},
-				"profile tools missing; running without them",
+				"selected tools missing; running without them",
 			);
 		}
 		channelSession.tools = wanted.filter((name) => registered.has(name));
@@ -256,7 +258,7 @@ export class PiAgentRuntime implements AgentRuntime {
 			logger.info(
 				{
 					channel: key,
-					profile: request.selection.id,
+					selection: request.selection.id,
 					toolCalls,
 					thinking: session.thinkingLevel,
 					// pi-lens-ignore: no-conditional-empty-object-spread — owner turns keep their log line without a model key
@@ -326,6 +328,7 @@ export class PiAgentRuntime implements AgentRuntime {
 			new PromptSlot(),
 			ownerAttachmentDir(dataDir, channel),
 			undefined,
+			"owner",
 		);
 		const { session } = worker;
 		const toolCalls: string[] = [];

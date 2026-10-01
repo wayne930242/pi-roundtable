@@ -6,9 +6,13 @@ import { openingTaskText } from "./agent-prompt.ts";
 import { modelSetting, thinkingSetting } from "./agent-settings.ts";
 import type { Agent } from "./agent-store.ts";
 import type { AvatarMode } from "./agent-tools.ts";
-import { channelKey } from "./team-keys.ts";
+import { discordKey } from "./team-keys.ts";
 import { groupTopic, teamCategory } from "./team-layout.ts";
 import type { TeamContext } from "./team-options.ts";
+
+/** Said when an avatar is to be redrawn on a host without an image provider. */
+const NO_IMAGE_PROVIDER =
+	"No image provider is configured, so avatars cannot be redrawn; the current picture stays. A plugin fills the images slot to draw them.";
 
 /** Creating and changing agents, their avatars, and groups. */
 export class TeamEditing {
@@ -74,37 +78,62 @@ export class TeamEditing {
 			name: string;
 			displayName: string;
 			prompt: string;
-			avatarPrompt: string;
+			/** Required when an image provider is configured, ignored otherwise. */
+			avatarPrompt?: string;
 			task: string;
 			category?: string;
 			skills?: string[];
 		},
 	): Promise<string> {
+		const { store, studio, channels, queue, skills, logger } =
+			this.#ctx.options;
+		if (input.skills && input.skills.length > 0 && !skills)
+			throw new AgentError(
+				"Skills are off on this host, so an agent cannot carry any. Create it without skills.",
+			);
 		const speaker = this.#ctx.turns.speakerOf(caller);
 		if (!speaker)
 			throw new AgentError(
 				"agent_create can only be used during an agent turn.",
 			);
-		const { store, channels, queue, skills, logger } = this.#ctx.options;
-		const { category, skills: carried = [], ...fields } = input;
+		const drawing = studio.canDraw !== false;
+		const {
+			category,
+			skills: carried = [],
+			avatarPrompt = "",
+			...fields
+		} = input;
+		if (drawing && avatarPrompt.trim() === "")
+			throw new AgentError("Give avatar_prompt: the avatar is drawn from it.");
 		const parent = teamCategory(category, "Agents");
 		store.checkNewName(input.name);
-		skills.checkRegistered(carried);
+		skills?.checkRegistered(carried);
 		const channelId = await channels.createChannel(
 			input.name,
 			input.displayName,
 			parent,
 		);
-		const agent = await store.createAgent({ ...fields, channelId });
-		if (carried.length > 0) await skills.attach(agent.name, carried, []);
+		const agent = await store.createAgent({
+			...fields,
+			avatarPrompt: drawing ? avatarPrompt : "",
+			channelId,
+		});
+		if (skills && carried.length > 0)
+			await skills.attach(agent.name, carried, []);
 		logger.info({ agent: agent.name, by: caller.name }, "agent created");
 		this.#ctx.changed();
-		const avatar = await this.#redraw(agent.name, "redraw").then(
-			() => "its avatar is drawn",
+		const avatar = await (drawing
+			? this.#redraw(agent.name, "redraw")
+			: this.#generate(agent)
+		).then(
+			() =>
+				drawing
+					? "its avatar is drawn"
+					: "its avatar is generated from its display name",
 			(error: unknown) =>
 				`its avatar could not be drawn (${error instanceof Error ? error.message : String(error)}), so it uses ${assistantName()}'s for now`,
 		);
-		const home = channelKey(channelId);
+		const home = discordKey(channelId);
 		const creator = store.agent(caller.name);
 		void queue
 			.run(home, () =>
@@ -138,9 +167,19 @@ export class TeamEditing {
 		return this.#redraw(name, mode, text);
 	}
 
+	/** Gives an agent the picture made from its display name; a host without an image provider has no other. */
+	async #generate(agent: Agent): Promise<Agent> {
+		const { store, studio } = this.#ctx.options;
+		if (!studio.fallback)
+			throw new AgentError("The avatar studio has no generated avatars.");
+		const avatarHash = await studio.fallback(agent.displayName, agent.name);
+		return store.updateAgent(agent.name, { avatarHash });
+	}
+
 	async #redraw(name: string, mode: AvatarMode, text?: string): Promise<Agent> {
 		const { store, studio, logger } = this.#ctx.options;
 		const agent = store.activeAgent(name);
+		if (studio.canDraw === false) throw new AgentError(NO_IMAGE_PROVIDER);
 		if (mode !== "redraw" && !text?.trim())
 			throw new AgentError(
 				mode === "edit"

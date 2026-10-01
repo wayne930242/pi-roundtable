@@ -32,4 +32,6 @@ jobs:
       - run: bun install
       - run: bun run typecheck
       - run: bun run lint
+      - name: Require PostgreSQL-backed tests
+        run: test -n "$ROUNDTABLE_TEST_DATABASE_URL"
       - run: bun test

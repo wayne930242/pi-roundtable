@@ -1,6 +1,7 @@
 import { mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { AgentError } from "../../domain/errors.ts";
+import type { SkillRegistry } from "../../services.ts";
 import { planLinkedSkills } from "./skill-link.ts";
 import { skillCatalog, skillListText } from "./skill-listing.ts";
 import {
@@ -28,8 +29,8 @@ export {
 	type SkillSource,
 } from "./skill-rules.ts";
 
-/** The skill registry and what each agent carries (repos-and-skills spec behaviors 13–22). */
-export class SkillRegistry {
+/** The skill registry and what each agent carries. */
+export class StoredSkillRegistry implements SkillRegistry {
 	readonly #options: SkillRegistryOptions;
 
 	constructor(options: SkillRegistryOptions) {

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type {
 	Admission,
+	BackgroundTarget,
 	ChannelClaim,
 	InboundMessage,
 } from "../contract/channels.ts";
@@ -36,16 +37,18 @@ function claim(
 		guild?: string;
 		admit?: (message: InboundMessage) => Admission | undefined;
 		deletes?: boolean;
+		/** What `stop` answers; absent gives the claim no `stop`. */
+		stops?: boolean;
 	} = {},
 ): ChannelClaim {
 	const { channels = [], guild } = options;
 	return {
 		name,
 		priority,
-		owns: (channel, guildId) =>
+		owns: (channel, space) =>
 			channels.length === 0 ||
 			channels.includes(channel) ||
-			(guild !== undefined && guildId === guild),
+			(guild !== undefined && space === guild),
 		admit:
 			options.admit ??
 			((m) => ({
@@ -61,6 +64,14 @@ function claim(
 			log.push(`${name} fresh ${channel}`);
 			return name;
 		},
+		...(options.stops === undefined
+			? {}
+			: {
+					stop: (channel: ChannelKey) => {
+						log.push(`${name} stop ${channel}`);
+						return options.stops === true;
+					},
+				}),
 		...(options.deletes
 			? {
 					deleteConversation: async (channel: ChannelKey) =>
@@ -70,11 +81,17 @@ function claim(
 	};
 }
 
+/** Two sample targets, so routing tests need no host's own. */
+const TARGETS: readonly BackgroundTarget[] = [
+	{ name: "main", label: () => "Main" },
+	{ name: "open", label: () => "Open" },
+];
+
 function router(claims: ChannelClaim[], queue = new ChannelQueue()) {
 	return new ChannelRouter({
 		claims,
+		targets: (name) => TARGETS.find((target) => target.name === name),
 		queue,
-		stop: () => false,
 		logger: silentLogger(),
 		forwardJoinMs: 10,
 	});
@@ -85,7 +102,7 @@ describe("orderClaims", () => {
 		const log: string[] = [];
 		const ordered = orderClaims([
 			claim("owner", 0, log),
-			claim("party", 20, log),
+			claim("open", 20, log),
 			claim("first", 30, log),
 			claim("second", 30, log),
 			claim("agents", 100, log),
@@ -94,7 +111,7 @@ describe("orderClaims", () => {
 			"agents",
 			"first",
 			"second",
-			"party",
+			"open",
 			"owner",
 		]);
 	});
@@ -102,7 +119,7 @@ describe("orderClaims", () => {
 	test("refuses a claim name used twice", () => {
 		const log: string[] = [];
 		expect(() =>
-			orderClaims([claim("party", 20, log), claim("party", 0, log)]),
+			orderClaims([claim("open", 20, log), claim("open", 0, log)]),
 		).toThrow(PluginError);
 	});
 });
@@ -112,13 +129,13 @@ describe("ChannelRouter", () => {
 		const log: string[] = [];
 		const routing = router([
 			claim("owner", 0, log),
-			claim("party", 20, log, { channels: ["discord:party"] }),
+			claim("open", 20, log, { channels: ["discord:open"] }),
 			claim("agents", 100, log, { channels: ["discord:agent"] }),
 		]);
-		await routing.handle(message({ channel: "discord:party", text: "a" }));
+		await routing.handle(message({ channel: "discord:open", text: "a" }));
 		await routing.handle(message({ channel: "discord:agent", text: "b" }));
 		await routing.handle(message({ channel: "discord:dm", text: "c" }));
-		expect(log).toEqual(["party a", "agents b", "owner c"]);
+		expect(log).toEqual(["open a", "agents b", "owner c"]);
 	});
 
 	test("a message the owning claim refuses is dropped, never passed to a lower claim", async () => {
@@ -131,9 +148,38 @@ describe("ChannelRouter", () => {
 				admit: () => undefined,
 			}),
 		]);
-		await routing.handle(message({ guildId: "agent-guild", text: "notes" }));
-		await routing.handle(message({ guildId: "other", text: "hello" }));
+		await routing.handle(message({ space: "agent-guild", text: "notes" }));
+		await routing.handle(message({ space: "other", text: "hello" }));
 		expect(log).toEqual(["owner hello"]);
+	});
+
+	test("a stop goes to the claim that owns the channel and to no other", async () => {
+		const log: string[] = [];
+		const routing = router([
+			claim("owner", 0, log, { stops: true }),
+			claim("open", 20, log, { channels: ["discord:open"] }),
+			claim("agents", 100, log, { channels: ["discord:agent"], stops: true }),
+			claim("quiet", 50, log, { channels: ["quiet:1"], stops: false }),
+		]);
+		expect(routing.stop("discord:agent")).toBe(true);
+		expect(routing.stop("discord:dm")).toBe(true);
+		// The claim's own answer, false, stands.
+		expect(routing.stop("quiet:1")).toBe(false);
+		expect(log).toEqual([
+			"agents stop discord:agent",
+			"owner stop discord:dm",
+			"quiet stop quiet:1",
+		]);
+	});
+
+	test("a claim without stop stops nothing, and the claims below it are not asked", () => {
+		const log: string[] = [];
+		const routing = router([
+			claim("owner", 0, log, { stops: true }),
+			claim("open", 20, log, { channels: ["discord:open"] }),
+		]);
+		expect(routing.stop("discord:open")).toBe(false);
+		expect(log).toEqual([]);
 	});
 
 	test("an empty message reaches no claim", async () => {
@@ -190,11 +236,11 @@ describe("ChannelRouter", () => {
 	test("a claim without busy handling is never marked", async () => {
 		const log: string[] = [];
 		const queue = new ChannelQueue();
-		const routing = router([claim("party", 0, log)], queue);
+		const routing = router([claim("open", 0, log)], queue);
 		const first = routing.handle(message({ text: "one" }));
 		await routing.handle(message({ text: "two" }));
 		await first;
-		expect(log).toEqual(["party one", "party two"]);
+		expect(log).toEqual(["open one", "open two"]);
 	});
 
 	test("a background admission runs as a background turn and reports when it did not run", async () => {
@@ -206,7 +252,7 @@ describe("ChannelRouter", () => {
 					kind: "background",
 					turn: {
 						channel: m.channel,
-						mode: "owner",
+						target: "main",
 						author: { id: "ci", name: "CI" },
 						turnId: "webhook-1",
 						text: m.text,
@@ -221,16 +267,40 @@ describe("ChannelRouter", () => {
 		expect(log).toEqual(["unanswered skipped"]);
 	});
 
+	test("a turn for a target nobody contributes is skipped and reaches no claim", async () => {
+		const log: string[] = [];
+		const routing = router([claim("main", 0, log), claim("open", 20, log)]);
+		expect(
+			await routing.background({
+				channel: "discord:1",
+				target: "gone",
+				author: { id: "owner", name: "Riley" },
+				turnId: "schedule-2",
+				text: "reminder",
+			}),
+		).toEqual({
+			status: "skipped",
+			reason: 'no plugin contributes the background target "gone"',
+		});
+		expect(log).toEqual([]);
+	});
+
+	test("target reads a contributed target by name, and is undefined for another", () => {
+		const routing = router([]);
+		expect(routing.target("open")?.label("en")).toBe("Open");
+		expect(routing.target("gone")).toBeUndefined();
+	});
+
 	test("background turns and starting over go to the channel's owner when their queued turn starts", async () => {
 		const log: string[] = [];
 		const queue = new ChannelQueue();
-		const party = new Set<string>();
+		const open = new Set<string>();
 		const routing = router(
 			[
 				claim("owner", 0, log),
 				{
-					...claim("party", 20, log),
-					owns: (channel) => party.has(channel),
+					...claim("open", 20, log),
+					owns: (channel) => open.has(channel),
 				},
 			],
 			queue,
@@ -246,19 +316,19 @@ describe("ChannelRouter", () => {
 		await Bun.sleep(1);
 		const turn = routing.background({
 			channel: "discord:1",
-			mode: "party",
+			target: "open",
 			author: { id: "owner", name: "Riley" },
 			turnId: "schedule-1",
 			text: "reminder",
 		});
 		const fresh = routing.startFresh("discord:1");
-		// Party mode turns on while the turn waits in the queue.
-		party.add("discord:1");
+		// Open mode turns on while the turn waits in the queue.
+		open.add("discord:1");
 		release();
 		await blocker;
 		expect(await turn).toEqual({ status: "ran" });
-		expect(await fresh).toBe("party");
-		expect(log).toEqual(["party background reminder", "party fresh discord:1"]);
+		expect(await fresh).toBe("open");
+		expect(log).toEqual(["open background reminder", "open fresh discord:1"]);
 	});
 
 	test("deletes only through a claim that deletes, and never while the channel is busy", async () => {
@@ -267,12 +337,12 @@ describe("ChannelRouter", () => {
 		const routing = router(
 			[
 				claim("owner", 0, log, { deletes: true }),
-				claim("party", 20, log, { channels: ["discord:party"] }),
+				claim("open", 20, log, { channels: ["discord:open"] }),
 			],
 			queue,
 		);
-		await expect(routing.deleteConversation("discord:party")).rejects.toThrow(
-			"discord:party is not an owner conversation",
+		await expect(routing.deleteConversation("discord:open")).rejects.toThrow(
+			"discord:open is not an owner conversation",
 		);
 		let release = () => {};
 		const blocker = queue.run(
@@ -297,11 +367,11 @@ describe("ChannelRouter", () => {
 		const routing = router([
 			claim("owner", 0, log),
 			{
-				...claim("party", 20, log, { channels: ["discord:party"] }),
+				...claim("open", 20, log, { channels: ["discord:open"] }),
 				postsInPlace: true,
 			},
 		]);
-		expect(routing.postsInPlace("discord:party")).toBe(true);
+		expect(routing.postsInPlace("discord:open")).toBe(true);
 		expect(routing.postsInPlace("discord:dm")).toBe(false);
 	});
 

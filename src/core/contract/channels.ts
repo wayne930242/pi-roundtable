@@ -1,3 +1,4 @@
+import type { Locale } from "../i18n/index.ts";
 import type { ChannelKey } from "../sessions.ts";
 import type { Tier } from "../speakers.ts";
 
@@ -19,15 +20,20 @@ export interface InboundMessage {
 	/** How the author appears in the channel, for example a server nickname. */
 	authorName: string;
 	authorIsBot: boolean;
-	/** The roles the author holds in the message's server; absent in direct messages. */
+	/** The roles the author holds in the message's space; absent in direct messages. */
 	authorRoleIds?: readonly string[];
-	/** The webhook that posted the message; its name is `authorName`. */
-	webhookId?: string;
-	/** The webhook is one the assistant posts through itself, such as an agent's voice. */
-	ownWebhook?: boolean;
+	/**
+	 * The server or workspace the channel belongs to, in the surface's own ids; absent in a
+	 * direct conversation.
+	 */
+	space?: string;
 	isDirect: boolean;
-	/** The server the message was posted in; absent in direct messages. */
-	guildId?: string;
+	/**
+	 * Set when an integration posted the message, such as a Discord webhook; its name is
+	 * `authorName`. `own` says the integration is one the assistant posts through itself, such as an
+	 * agent's voice.
+	 */
+	integration?: { id: string; own: boolean };
 	mentionsBot: boolean;
 	/** The message replies to one of the bot's messages. */
 	repliesToBot: boolean;
@@ -44,8 +50,9 @@ export interface InboundMessage {
 	/** The message the author forwarded with this one; its attachments are in `attachments`. */
 	forwarded?: {
 		text: string;
-		/** The source channel, as `<#id>`, and a link to the original message. */
-		channelMention: string;
+		/** The channel the message was forwarded from. */
+		source: ChannelKey;
+		/** A link to the original message. */
 		url: string;
 	};
 }
@@ -60,11 +67,30 @@ export type ScheduledOutcome =
 	| { status: "failed"; error: string }
 	| { status: "skipped"; reason: string };
 
+/**
+ * Whose turn a schedule or a delegated task asks for, contributed by the plugin whose claim
+ * answers it. The target also sets the limits of what may be scheduled or delegated for it, so a
+ * channel open to many people can be held tighter than the owner's own.
+ */
+export interface BackgroundTarget {
+	/** Stored on schedules and delegated jobs; unique across plugins, as a persona's kind is. */
+	name: string;
+	/** How lists such as `/<root> schedule` name it, in the host's locale. */
+	label(locale: Locale): string;
+	/** Limits of the schedules made for it; absent, nothing may be scheduled for it. */
+	schedules?: { perChannel: number; promptChars: number; aheadDays: number };
+	/** Limits of the delegated tasks reporting to it; absent, nothing may be delegated to it. */
+	delegation?: { maxRunning: number };
+}
+
 /** A turn nobody wrote in the channel: a schedule's, or a report of work done elsewhere. */
 export interface BackgroundTurn {
 	channel: ChannelKey;
-	/** Whose turn a schedule asked for; a claim skips a mode it does not serve. */
-	mode: "owner" | "party";
+	/**
+	 * The name of the `BackgroundTarget` the turn is for. The router skips a turn whose target no
+	 * plugin contributes, and a claim skips one it does not serve.
+	 */
+	target: string;
 	author: { id: string; name: string };
 	/**
 	 * The tier the turn runs at, which is its creator's when a person set it up; absent for
@@ -73,9 +99,16 @@ export interface BackgroundTurn {
 	tier?: Tier;
 	turnId: string;
 	text: string;
-	/** It delivers a report the owner is waiting for, so it may ask him on cards. */
+	/** It delivers a report the owner is waiting for, so it may ask them on cards. */
 	report?: boolean;
 }
+
+/**
+ * Whose conversation a channel holds, as the claim that owns it names it when `startFresh` says
+ * whose it was: any string, such as "owner" or "study". The host reads none of them, so a plugin
+ * narrows the kinds of its own claims itself.
+ */
+export type ConversationKind = string;
 
 /** What a claim does with a message in a channel it owns. */
 export type Admission =
@@ -111,14 +144,19 @@ export type Admission =
 export interface ChannelClaim {
 	name: string;
 	priority: number;
-	/** Whether the claim owns the channel; `guildId` is the message's server, when routing one. */
-	owns(channel: ChannelKey, guildId?: string): boolean;
+	/** Whether the claim owns the channel; `space` is the message's space, when routing one. */
+	owns(channel: ChannelKey, space?: string): boolean;
 	/** What to do with a message in an owned channel; undefined drops it. */
 	admit(message: InboundMessage): Admission | undefined;
 	/** A background turn in an owned channel; a claim without one skips them. */
 	background?(turn: BackgroundTurn): Promise<ScheduledOutcome>;
 	/** Starts the channel's conversation over, saying whose it was. */
 	startFresh(channel: ChannelKey): Promise<string>;
+	/**
+	 * Stops the channel's running turn; true when one was running. The router asks only the claim
+	 * that owns the channel, and a claim without `stop` has nothing to stop there.
+	 */
+	stop?(channel: ChannelKey): boolean;
 	/** Removes the channel's conversation for good; a claim without one refuses. */
 	deleteConversation?(channel: ChannelKey): Promise<void>;
 	/** Reports of work started in an owned channel stay in it instead of opening a thread. */
@@ -130,6 +168,8 @@ export interface ConversationPort {
 	/** Never rejects; resolves when the message's turn is done or dropped. */
 	handle(message: InboundMessage): Promise<void>;
 	background(turn: BackgroundTurn): Promise<ScheduledOutcome>;
+	/** A contributed background target, read when used; undefined when no plugin contributes it. */
+	target(name: string): BackgroundTarget | undefined;
 	/** Waits for the channel's running turn, then starts its conversation over; says whose it was. */
 	startFresh(channel: ChannelKey): Promise<string>;
 	/** `busy` while a turn runs or waits in the channel. */

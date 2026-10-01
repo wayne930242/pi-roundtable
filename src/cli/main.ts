@@ -8,6 +8,7 @@ runCli(process.argv.slice(2), processEnvironment()).then(
 	},
 	(error: unknown) => {
 		console.error(error instanceof Error ? error.message : String(error));
-		process.exitCode = 1;
+		// A boot that failed has stopped what it started; nothing may keep the process up.
+		process.exit(1);
 	},
 );

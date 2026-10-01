@@ -1,6 +1,8 @@
+import type { BackgroundTarget } from "../../contract/channels.ts";
 import type { ChannelKey } from "../../domain/conversation.ts";
 import { ScheduleError } from "../../domain/errors.ts";
 import { messages } from "../../i18n/index.ts";
+import type { ScheduleStore } from "../../services.ts";
 import type { ScheduleToolName } from "../../shared/schedule-tools.ts";
 import { type Tier, tierAtLeast } from "../../speakers.ts";
 import { timeZone, zonedStamp } from "../../time.ts";
@@ -11,22 +13,8 @@ import {
 	type Recurrence,
 	type RecurrenceInput,
 } from "./recurrence.ts";
-import type {
-	Schedule,
-	ScheduleMode,
-	ScheduleStore,
-} from "./schedule-store.ts";
+import type { Schedule } from "./schedule-store.ts";
 
-/** Party channels are open to anyone, so their roles get tighter limits than the owner's agent. */
-export const SCHEDULE_LIMITS: Readonly<
-	Record<
-		ScheduleMode,
-		{ perChannel: number; promptChars: number; aheadDays: number }
-	>
-> = {
-	owner: { perChannel: 20, promptChars: 8_000, aheadDays: 366 },
-	party: { perChannel: 5, promptChars: 2_000, aheadDays: 90 },
-};
 const TITLE_CHARS = 80;
 const LIST_PROMPT_PREVIEW = 200;
 const DAY_MS = 86_400_000;
@@ -37,10 +25,23 @@ export interface ScheduleToolContext {
 		"create" | "get" | "forChannel" | "update" | "remove"
 	>;
 	channel: ChannelKey;
-	mode: ScheduleMode;
+	/** Whose schedules these are; its `schedules` limits apply, and without them nothing is scheduled. */
+	target: BackgroundTarget;
 	/** Who asked, recorded on created schedules; a scheduled run speaks for its creator. */
 	author: { id: string; name: string; tier?: Tier };
 	now: Date;
+}
+
+/** The limits of the context's target; a target without them may not schedule. */
+function limitsOf(
+	ctx: ScheduleToolContext,
+): NonNullable<BackgroundTarget["schedules"]> {
+	const { schedules } = ctx.target;
+	if (!schedules)
+		throw new ScheduleError(
+			`schedules are not available for ${ctx.target.name} conversations`,
+		);
+	return schedules;
 }
 
 type Input = Record<string, unknown> & RecurrenceInput;
@@ -82,7 +83,7 @@ function timing(ctx: ScheduleToolContext, input: Input): [Recurrence, Date] {
 		throw new ScheduleError(
 			`that time has already passed; it is ${zonedStamp(ctx.now)} in ${messages().zoneName(timeZone())} now`,
 		);
-	const { aheadDays } = SCHEDULE_LIMITS[ctx.mode];
+	const { aheadDays } = limitsOf(ctx);
 	if (next.getTime() - ctx.now.getTime() > aheadDays * DAY_MS)
 		throw new ScheduleError(`the first run must be within ${aheadDays} days`);
 	return [recurrence, next];
@@ -121,9 +122,10 @@ function changeable(ctx: ScheduleToolContext, schedule: Schedule): Schedule {
 export async function callScheduleTool(
 	ctx: ScheduleToolContext,
 	name: ScheduleToolName,
-	input: Input,
+	rawInput: Record<string, unknown>,
 ): Promise<string> {
-	const limits = SCHEDULE_LIMITS[ctx.mode];
+	const input = rawInput as Input;
+	const limits = limitsOf(ctx);
 	switch (name) {
 		case "schedule_create": {
 			const title = text(input, "title", TITLE_CHARS);
@@ -136,7 +138,7 @@ export async function callScheduleTool(
 				);
 			const created = await ctx.store.create({
 				channel: ctx.channel,
-				mode: ctx.mode,
+				target: ctx.target.name,
 				title,
 				prompt,
 				recurrence,

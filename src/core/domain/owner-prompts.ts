@@ -1,6 +1,6 @@
 import type { Tier } from "../speakers.ts";
 /**
- * The owner answering inside a running turn: a card in the turn's channel that only he may
+ * The owner answering inside a running turn: a card in the turn's channel that only they may
  * answer. Unanswered cards expire; a stopped turn cancels its open cards.
  */
 export type Approval = "approved" | "declined" | "expired" | "cancelled";
@@ -16,19 +16,19 @@ export interface OwnerQuestion {
 	options: readonly AskOption[];
 	/** More than one option may be chosen. */
 	multi: boolean;
-	/** He may write an answer of his own besides the options. */
+	/** They may write an answer of their own besides the options. */
 	allowOther: boolean;
 }
 
 export interface OwnerAnswer {
 	/** The chosen options' labels, in the order they were offered. */
 	choices: string[];
-	/** What he wrote himself, if anything. */
+	/** What they wrote himself, if anything. */
 	text?: string;
 }
 
 export interface OwnerPrompts {
-	/** Asks him to approve an action; `signal` cancels the card when the turn stops. */
+	/** Asks them to approve an action; `signal` cancels the card when the turn stops. */
 	confirm(
 		title: string,
 		message: string,
@@ -36,7 +36,7 @@ export interface OwnerPrompts {
 		/** The lowest tier that may approve; the owner only when absent. */
 		minTier?: Tier,
 	): Promise<Approval>;
-	/** Asks him a question; undefined when it expired or was cancelled. */
+	/** Asks them a question; undefined when it expired or was cancelled. */
 	ask(
 		title: string,
 		question: OwnerQuestion,

@@ -4,16 +4,12 @@ import type {
 	ExtensionFactory,
 	ModelRuntime,
 } from "@earendil-works/pi-coding-agent";
+import type { AgentSessions, LoadedSkill } from "../contract/runtime.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
 import type { OwnerPrompts } from "../domain/owner-prompts.ts";
-import type { AgentTurnScope } from "../domain/ports.ts";
 import type { OwnerIdentity } from "../identity.ts";
 import type { Logger } from "../log.ts";
-import type {
-	ThinkingLevel,
-	ThinkingPicker,
-	ThinkingSetting,
-} from "../models.ts";
+import type { ThinkingLevel, ThinkingPicker } from "../models.ts";
 import type { LinkedSessions } from "../plugin.ts";
 import {
 	planOrder,
@@ -39,7 +35,7 @@ export interface PiAgentRuntimeOptions {
 	/** Who the conversations serve, as prompts and tool results name them. */
 	owner: OwnerIdentity;
 	agentDir: string;
-	/** Shared with the party broker, so logins refresh in one place. */
+	/** Shared by the host's sessions, so logins refresh in one place. */
 	modelRuntime: ModelRuntime;
 	dataDir: string;
 	model: { provider: string; id: string };
@@ -47,7 +43,6 @@ export interface PiAgentRuntimeOptions {
 	thinking: ThinkingLevel;
 	/** Picks the level of the assistant's turns and of agents whose thinking is `auto`. */
 	effort: ThinkingPicker;
-	persona: string;
 	/** Held actions survive a restart here, so a confirmation after one still runs. */
 	confirmations: Pick<PendingConfirmationStore, "load" | "save">;
 	logger: Logger;
@@ -57,13 +52,11 @@ export interface PiAgentRuntimeOptions {
 	 * A changed snapshot revision rebuilds each session on its next turn, keeping its history.
 	 */
 	sessions: () => LinkedSessions;
-	/** Tools startup refuses to run without, besides those the session tools require. */
-	requiredTools: readonly string[];
 	/** The agent server's sessions: their shared workspace, model, and skills. */
 	agents?: AgentSessions;
 	/**
 	 * Cards the owner answers in a channel, for interactive turns; undefined for a channel that
-	 * cannot show them. Without it every held action waits for his next message.
+	 * cannot show them. Without it every held action waits for their next message.
 	 */
 	prompts?: (
 		channel: ChannelKey,
@@ -77,26 +70,7 @@ export interface PiAgentRuntimeOptions {
 	mcpConnectTimeoutMs?: number;
 }
 
-export interface AgentSessions {
-	/** The shell's working directory, shared by every agent; writes outside it are held. */
-	workDir: string;
-	/**
-	 * The skills the agent carries, read at the start of every run; a change rebuilds its
-	 * sessions, keeping their history (repos-and-skills spec behavior 21).
-	 */
-	skills(name: string): readonly LoadedSkill[];
-	/** The agent's model (`<provider>/<id>`) and thinking setting, read at the start of every run. */
-	modelOf(name: string): { model: string; thinking: ThinkingSetting };
-	/** The channel the scope's turns run in: the group's for a seat in one, else the agent's own. */
-	turnChannel(scope: AgentTurnScope): ChannelKey;
-}
-
-/** A skill file a session loads; only its name and description enter the prompt. */
-export interface LoadedSkill {
-	name: string;
-	description: string;
-	file: string;
-}
+export type { AgentSessions, LoadedSkill };
 
 export const skillsKey = (skills: readonly LoadedSkill[]) =>
 	JSON.stringify(skills);
@@ -109,12 +83,12 @@ export interface CoreExtensions {
 	confirmationGate: ExtensionFactory;
 	askUser: ExtensionFactory;
 	selfCompactGuard: ExtensionFactory;
-	profileTools: ExtensionFactory;
+	activeTools: ExtensionFactory;
 }
 
 /**
  * A session's extensions in load order: the tools phase, the core's attachment, gate, ask-user,
- * and compact guard, the compactor, the MCP phase, and profile-tools last, so its
+ * and compact guard, the compactor, the MCP phase, and active-tools last, so its
  * before_agent_start handler runs after every other extension's.
  */
 export function sessionExtensions(
@@ -135,13 +109,13 @@ export function sessionExtensions(
 		{ name: "self-compact-guard", factory: core.selfCompactGuard },
 		...contributed(plan.compaction ? [plan.compaction] : []),
 		...contributed(plan.mcp),
-		{ name: "profile-tools", factory: core.profileTools },
+		{ name: "active-tools", factory: core.activeTools },
 	];
 }
 
 export interface ChannelSession {
 	session: AgentSession;
-	/** Read by the profile-tools extension at the start of every run. */
+	/** Read by the active-tools extension at the start of every run. */
 	tools: readonly string[];
 	/** The session tools' revisions the session was built with, as revisionsKey. */
 	revisions: string;

@@ -46,6 +46,7 @@ describe("doctor", () => {
 			"environment",
 			"configuration",
 			"plugins",
+			"image provider",
 			"PostgreSQL",
 			"Discord token",
 			"Discord guild",
@@ -148,6 +149,7 @@ describe("start", () => {
 			"environment",
 			"configuration",
 			"plugins",
+			"image provider",
 			"model login",
 			"public URL",
 		]);

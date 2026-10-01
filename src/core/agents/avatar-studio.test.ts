@@ -3,7 +3,8 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createCanvas, loadImage } from "canvas";
-import { AvatarStudio, type ImageDrawer } from "./avatar-studio.ts";
+import { ProviderError } from "../errors.ts";
+import { FileAvatarStudio, type ImageDrawer } from "./avatar-studio.ts";
 
 const REFERENCE = join(import.meta.dir, "..", "assets", "neutral.png");
 
@@ -15,18 +16,18 @@ function picture(width: number, height: number, color: string): Uint8Array {
 	return canvas.toBuffer("image/png");
 }
 
-async function studio(draw: ImageDrawer) {
-	const s = new AvatarStudio({
+async function studio(draw?: ImageDrawer) {
+	const s = new FileAvatarStudio({
 		dir: mkdtempSync(join(tmpdir(), "roundtable-avatars-")),
 		publicUrl: "https://example.com",
 		referencePath: REFERENCE,
-		draw,
+		...(draw ? { draw } : {}),
 	});
 	await s.init();
 	return s;
 }
 
-describe("AvatarStudio", () => {
+describe("FileAvatarStudio", () => {
 	test("an agent without a picture gets the assistant's neutral avatar", async () => {
 		const s = await studio(async () => picture(10, 10, "red"));
 		const url = s.url(undefined);
@@ -84,5 +85,36 @@ describe("AvatarStudio", () => {
 		expect((await get(`/avatars/${hash}.png`)).status).toBe(200);
 		const other = await get("/avatars/../secrets.env");
 		expect([other.status, await other.text()]).toEqual([404, "Not found"]);
+	});
+
+	test("with a provider it can draw", async () => {
+		expect((await studio(async () => picture(4, 4, "red"))).canDraw).toBe(true);
+	});
+
+	describe("without an image provider", () => {
+		test("cannot draw or edit, and says why", async () => {
+			const s = await studio();
+			expect(s.canDraw).toBe(false);
+			await expect(s.draw("a fox")).rejects.toBeInstanceOf(ProviderError);
+			await expect(s.edit(undefined, "add a hat")).rejects.toThrow(
+				"no image provider is configured",
+			);
+		});
+
+		test("makes a stable 512 px picture from a display name, served by its hash", async () => {
+			const s = await studio();
+			const hash = await s.fallback("Researcher", "researcher");
+			expect(await s.fallback("Researcher", "researcher")).toBe(hash);
+			expect(await s.fallback("\u738b\u5c0f\u660e", "xiao-ming")).not.toBe(
+				hash,
+			);
+			expect(s.url(hash)).not.toBe(s.url(undefined));
+			const served = s.serve(`/avatars/${hash}.png`);
+			if (!served) throw new Error("not served");
+			expect(served.status).toBe(200);
+			const image = await loadImage(Buffer.from(await served.arrayBuffer()));
+			expect([image.width, image.height]).toEqual([512, 512]);
+			expect(s.url(hash)).toBe(`https://example.com/avatars/${hash}.png`);
+		});
 	});
 });

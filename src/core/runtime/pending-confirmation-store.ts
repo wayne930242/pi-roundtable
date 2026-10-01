@@ -5,10 +5,9 @@ import type {
 	HeldCall,
 	PendingConfirmation,
 } from "../domain/conversation.ts";
-import type { ProfileId } from "../domain/profile.ts";
 
 interface Row {
-	profile: ProfileId;
+	selection_id: string;
 	held_at: Date;
 	calls: string;
 }
@@ -23,12 +22,12 @@ export class PendingConfirmationStore {
 
 	/** The store's tables; the host runs this before any store attaches. */
 	static readonly migration: Migration = {
-		name: "pending-confirmations",
+		name: "held-actions",
 		up: async (sql) => {
 			await sql`
-				CREATE TABLE IF NOT EXISTS pending_confirmations (
+				CREATE TABLE IF NOT EXISTS held_actions (
 					channel_key text PRIMARY KEY,
-					profile text NOT NULL,
+					selection_id text NOT NULL,
 					held_at timestamptz NOT NULL,
 					calls text NOT NULL
 				)`;
@@ -42,12 +41,12 @@ export class PendingConfirmationStore {
 
 	async load(channel: ChannelKey): Promise<PendingConfirmation | undefined> {
 		const rows: Row[] = await this.#sql`
-			SELECT profile, held_at, calls FROM pending_confirmations
+			SELECT selection_id, held_at, calls FROM held_actions
 			WHERE channel_key = ${channel}`;
 		const row = rows[0];
 		return row
 			? {
-					profile: row.profile,
+					selectionId: row.selection_id,
 					heldAt: row.held_at,
 					// pi-lens-ignore: unchecked-throwing-call — this store wrote the JSON; a corrupt row should fail loudly
 					calls: JSON.parse(row.calls) as HeldCall[],
@@ -61,15 +60,14 @@ export class PendingConfirmationStore {
 		pending: PendingConfirmation | undefined,
 	): Promise<void> {
 		if (!pending) {
-			await this
-				.#sql`DELETE FROM pending_confirmations WHERE channel_key = ${channel}`;
+			await this.#sql`DELETE FROM held_actions WHERE channel_key = ${channel}`;
 			return;
 		}
 		await this.#sql`
-			INSERT INTO pending_confirmations (channel_key, profile, held_at, calls)
-			VALUES (${channel}, ${pending.profile}, ${pending.heldAt},
+			INSERT INTO held_actions (channel_key, selection_id, held_at, calls)
+			VALUES (${channel}, ${pending.selectionId}, ${pending.heldAt},
 				${JSON.stringify(pending.calls)})
-			ON CONFLICT (channel_key) DO UPDATE SET profile = EXCLUDED.profile,
+			ON CONFLICT (channel_key) DO UPDATE SET selection_id = EXCLUDED.selection_id,
 				held_at = EXCLUDED.held_at, calls = EXCLUDED.calls`;
 	}
 }

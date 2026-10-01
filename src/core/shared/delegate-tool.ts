@@ -1,9 +1,10 @@
 import { Type } from "typebox";
+import { freeze } from "../freeze.ts";
 
-/** Hands web research to the cheaper worker model; the same for the owner agent and party roles. */
+/** Hands web research to the cheaper worker model; shared by conversation sessions. */
 export const DELEGATE_TOOL = "delegate_task" as const;
 
-export const DELEGATE_TOOL_SPEC = {
+export const DELEGATE_TOOL_SPEC = freeze({
 	name: DELEGATE_TOOL,
 	label: "Delegate task",
 	description:
@@ -12,4 +13,4 @@ export const DELEGATE_TOOL_SPEC = {
 		title: Type.String({ description: "A short name for the task." }),
 		task: Type.String({ description: "The self-contained task." }),
 	}),
-};
+});

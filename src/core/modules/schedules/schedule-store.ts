@@ -1,16 +1,15 @@
 import type { SQL } from "bun";
 import type { Migration } from "../../db/migrations.ts";
 import type { ChannelKey } from "../../domain/conversation.ts";
+import type { ScheduleStore } from "../../services.ts";
 import type { Tier } from "../../speakers.ts";
 import type { Recurrence } from "./recurrence.ts";
-
-/** Owner schedules run the owner agent; party schedules run the channel's party role. */
-export type ScheduleMode = "owner" | "party";
 
 export interface Schedule {
 	id: number;
 	channel: ChannelKey;
-	mode: ScheduleMode;
+	/** The name of the background target whose conversation runs it; stored in the `mode` column. */
+	target: string;
 	title: string;
 	prompt: string;
 	recurrence: Recurrence;
@@ -26,7 +25,7 @@ export interface Schedule {
 
 export interface NewSchedule {
 	channel: ChannelKey;
-	mode: ScheduleMode;
+	target: string;
 	title: string;
 	prompt: string;
 	recurrence: Recurrence;
@@ -46,7 +45,8 @@ export interface ScheduleChange {
 interface Row {
 	id: string | number;
 	channel_key: ChannelKey;
-	mode: ScheduleMode;
+	/** The target's name; the column keeps the name it had before targets existed. */
+	mode: string;
 	title: string;
 	prompt: string;
 	recurrence: string;
@@ -63,7 +63,7 @@ function toSchedule(row: Row): Schedule {
 	return {
 		id: Number(row.id),
 		channel: row.channel_key,
-		mode: row.mode,
+		target: row.mode,
 		title: row.title,
 		prompt: row.prompt,
 		// pi-lens-ignore: unchecked-throwing-call — this store wrote the JSON; a corrupt row should fail loudly
@@ -79,7 +79,7 @@ function toSchedule(row: Row): Schedule {
 }
 
 /** Scheduled turns, in the database. A one-time schedule's row is deleted once it fires. */
-export class ScheduleStore {
+export class PgScheduleStore implements ScheduleStore {
 	readonly #sql: SQL;
 
 	private constructor(sql: SQL) {
@@ -113,15 +113,15 @@ export class ScheduleStore {
 	};
 
 	/** The store over the host's migrated pool. */
-	static async attach(sql: SQL): Promise<ScheduleStore> {
-		return new ScheduleStore(sql);
+	static async attach(sql: SQL): Promise<PgScheduleStore> {
+		return new PgScheduleStore(sql);
 	}
 
 	async create(schedule: NewSchedule): Promise<Schedule> {
 		const rows: Row[] = await this.#sql`
 			INSERT INTO schedules (channel_key, mode, title, prompt, recurrence, next_run,
 				created_by_id, created_by_name, created_tier)
-			VALUES (${schedule.channel}, ${schedule.mode}, ${schedule.title}, ${schedule.prompt},
+			VALUES (${schedule.channel}, ${schedule.target}, ${schedule.title}, ${schedule.prompt},
 				${JSON.stringify(schedule.recurrence)}, ${schedule.nextRun},
 				${schedule.createdById}, ${schedule.createdByName}, ${schedule.createdTier})
 			RETURNING *`;

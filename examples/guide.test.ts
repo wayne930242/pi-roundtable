@@ -45,7 +45,7 @@ test("examples import only the public entries, typebox, bun, and their neighbors
 			expect({ name, specifier }).toEqual({
 				name,
 				specifier: expect.stringMatching(
-					/^(pi-roundtable|pi-roundtable\/testing|typebox|bun|bun:test|\.\/[a-z-]+\.ts)$/,
+					/^(pi-roundtable|pi-roundtable\/testing|pi-roundtable\/discord|typebox|bun|bun:test|\.\/[a-z-]+\.ts)$/,
 				),
 			});
 	}

@@ -1,7 +1,7 @@
 import type { Static, TObject } from "typebox";
 import { PluginError } from "./errors.ts";
 import type { HoldRule } from "./holds.ts";
-import type { RoundtablePlugin } from "./plugin.ts";
+import { type RoundtablePlugin, refuseRemovedFields } from "./plugin.ts";
 import type { AgentTurnScope, ChannelKey, SessionTool } from "./sessions.ts";
 import { toolError, toolText } from "./shared/tool-result.ts";
 import { type Speaker, TIERS, type Tier } from "./speakers.ts";
@@ -150,5 +150,6 @@ export function definePlugin(plugin: RoundtablePlugin): RoundtablePlugin {
 		throw new PluginError(
 			`plugin ${plugin.name}: setup is missing. Give the function that returns what the plugin adds.`,
 		);
+	refuseRemovedFields(plugin);
 	return plugin;
 }

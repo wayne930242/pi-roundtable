@@ -1,40 +1,63 @@
 import type { SQL } from "bun";
 import type { ConversationPort } from "./contract/channels.ts";
-import type { CommandRoot } from "./contract/discord.ts";
-import { migrate, openPool } from "./db/migrations.ts";
+import type { SurfacePort } from "./contract/surface.ts";
+import { openPool, runMigrations } from "./db/migrations.ts";
 import { type DrainOptions, waitUntilIdle } from "./drain.ts";
 import { MigrationError, NotLinkedError, PluginError } from "./errors.ts";
 import { EventBus } from "./events.ts";
 import { HttpListeners, type ListenerConfig } from "./http/listeners.ts";
+import { type Locale, setLocale } from "./i18n/index.ts";
 import type { JudgeModel } from "./judging/model-judge.ts";
 import type { Logger } from "./log.ts";
 import type {
-	AgentServerOutcome,
+	HostEnv,
 	LinkedSessions,
 	RoundtablePlugin,
+	Service,
+	ServiceStartedEvent,
 } from "./plugin.ts";
+import { refuseRemovedFields } from "./plugin.ts";
 import {
 	collectContributions,
 	emptyRegistry,
 	linkSessions,
 	type Registry,
 } from "./registry/contributions.ts";
-import { composeInteractions } from "./registry/interactions.ts";
 import { resolveProviders } from "./registry/providers.ts";
+import { replaceServices, ServiceRegistry } from "./registry/services.ts";
 import { ChannelQueue } from "./routing/channel-queue.ts";
 import { ChannelRouter } from "./routing/channel-router.ts";
-import { CoreRegistry } from "./services.ts";
+import {
+	type ConversationTurns,
+	conversationTurns,
+} from "./routing/conversation-turns.ts";
+import { surfacePort } from "./routing/surface-port.ts";
+import { AGENTS } from "./services.ts";
+import { setTimeZone } from "./time.ts";
 import { type ToolTierTable, toolTiers } from "./tool-tiers.ts";
+
+/**
+ * What differs between hosts: the words and time the process speaks in, and the Pi agent
+ * directory its packages read. `run()` applies them to the process when the host starts, and
+ * plugins read the locale and zone from `PluginContext.env`.
+ */
+export interface HostEnvironment {
+	/** The language of the Discord text; default en. */
+	locale?: Locale;
+	/** An IANA time zone; default UTC. */
+	timeZone?: string;
+	/** The assistant's display name in the text; default Roundtable. */
+	assistant?: string;
+	/** The name of the root slash command in the text, without the slash; default roundtable. */
+	rootCommand?: string;
+	/** Exported as `PI_CODING_AGENT_DIR` for Pi packages such as pi-web-access; unset leaves the process's own. */
+	agentDir?: string;
+}
 
 export interface RoundtableOptions {
 	logger: Logger;
-	/**
-	 * The root command the plugins' subcommands go under; the composed commands go to the plugins'
-	 * `useCommands` before any service starts, since Discord registers them as it connects.
-	 */
-	commands?: {
-		root: CommandRoot;
-	};
+	/** The host's locale, time zone and names. Nothing is applied before `run()`. */
+	environment?: HostEnvironment;
 	/** The HTTP listeners plugins attach routes to. */
 	listeners?: readonly ListenerConfig[];
 	/** How long a bare forward waits for the message it follows. */
@@ -51,8 +74,12 @@ export interface RoundtableOptions {
 	aborted?: (left: string[]) => Promise<void>;
 	/** The drain's limit and clock; tests shorten them. */
 	drain?: Omit<DrainOptions, "busy">;
+	/** What `listen()` calls with the shutdown's exit code; the process's own exit by default. */
 	exit?: (code: number) => void;
 }
+
+/** The host running in this process; the text catalog, time zone and environment are process-wide. */
+let running: Roundtable | undefined;
 
 type Attempt = { ok: true } | { ok: false; error: unknown };
 
@@ -66,31 +93,48 @@ async function attempt(step: () => Promise<void> | void): Promise<Attempt> {
 	}
 }
 
-/** Starts the agent server, then tells every plugin how that went; a failing handler never stops the others. */
-async function startAgentServer(
-	start: () => Promise<void>,
-	handlers: Registry["handlers"],
+/**
+ * Runs every service's background start at once and tells every plugin, as each ends, how it
+ * went; the rest of the process runs either way, and a failing start or handler never stops the
+ * others.
+ */
+async function startInBackground(
+	registry: Registry,
 	logger: Logger,
 ): Promise<void> {
-	const started = await attempt(start);
-	// The rest of the process runs on without the agent server's new channels.
-	if (started.ok) logger.info("agent server ready");
-	else logger.error({ err: started.error }, "agent server did not start");
-	const outcome: AgentServerOutcome = started.ok ? "ready" : "failed";
-	for (const { plugin, events } of handlers) {
-		const handled = await attempt(() => events.agentServer?.(outcome));
-		if (!handled.ok)
-			logger.error(
-				{ plugin, err: handled.error },
-				"agent server handler failed",
-			);
-	}
+	const { services, servicePlugins, handlers } = registry;
+	await Promise.all(
+		services.map(async (service) => {
+			if (!service.startInBackground) return;
+			const plugin = servicePlugins.get(service) ?? "unknown";
+			const started = await attempt(() => service.startInBackground?.());
+			if (started.ok) logger.info({ plugin, service: service.name }, "ready");
+			else
+				logger.error(
+					{ plugin, service: service.name, err: started.error },
+					"service did not start in the background",
+				);
+			const event: ServiceStartedEvent = {
+				plugin,
+				service: service.name,
+				outcome: started.ok ? "ready" : "failed",
+			};
+			for (const { plugin: heard, events } of handlers) {
+				const handled = await attempt(() => events.serviceStarted?.(event));
+				if (!handled.ok)
+					logger.error(
+						{ plugin: heard, err: handled.error },
+						"service started handler failed",
+					);
+			}
+		}),
+	);
 }
 
 /**
  * The process around the plugins: it sets them all up, links what they add (session parts,
- * commands, HTTP routes) and runs the preflight, then starts their services in order and the
- * HTTP listeners last, and starts the agent server. Nothing reaches Discord or a listener unless
+ * HTTP routes) and runs the preflight, then starts their services in order and the
+ * HTTP listeners last, then runs the services' background starts. Nothing reaches Discord or a listener unless
  * every setup, link, and the preflight succeeded. On shutdown it waits until no work runs or
  * waits before closing the listeners and stopping the services in reverse.
  */
@@ -106,12 +150,23 @@ export class Roundtable {
 	readonly #queue = new ChannelQueue();
 	readonly #tiers: ToolTierTable;
 	readonly #events: EventBus;
-	readonly #core = new CoreRegistry();
+	#services: ServiceRegistry | undefined;
+	/** The plugins that run: the registered ones, less those a replacement dropped, in set-up order. */
+	#active: readonly RoundtablePlugin[] = [];
+	/** The services whose start finished, in start order. */
+	#started: Service[] = [];
+	#booting: Promise<void> | undefined;
+	#bootFailed = false;
+	#stopping: Promise<number> | undefined;
 
 	constructor(
 		options: RoundtableOptions,
 		plugins: readonly RoundtablePlugin[],
 	) {
+		if ("commands" in options)
+			throw new PluginError(
+				"RoundtableOptions.commands was removed in 0.2.0; the host composes no commands. The Discord plugin composes them under the root command named by config discord.rootCommand, and a plugin adds its own with context.services.get(DISCORD).commands.add(...), with DISCORD from pi-roundtable/discord.",
+			);
 		this.#options = options;
 		this.#plugins = plugins;
 		this.#tiers = options.toolTiers ?? toolTiers();
@@ -130,6 +185,7 @@ export class Roundtable {
 		return {
 			handle: (message) => router().handle(message),
 			background: (turn) => router().background(turn),
+			target: (name) => router().target(name),
 			startFresh: (channel) => router().startFresh(channel),
 			deleteConversation: (channel) => router().deleteConversation(channel),
 			stop: (channel) => router().stop(channel),
@@ -137,19 +193,98 @@ export class Roundtable {
 		};
 	}
 
+	/** The contributed surfaces by channel prefix; every call before linking throws NotLinkedError. */
+	#surfaces(): SurfacePort {
+		return surfacePort(() => {
+			if (!this.#sessions)
+				throw new NotLinkedError(
+					"chat surfaces are linked once every plugin is set up. Use surfaces from a service's start or from a handler, not during setup.",
+				);
+			return this.#registry.surfaces;
+		});
+	}
+
+	/** Turns over the agent server's runtime and the surfaces; every call before linking is refused with NotLinkedError. */
+	#turns(): ConversationTurns {
+		return conversationTurns({
+			linked: () => {
+				if (!this.#sessions)
+					throw new NotLinkedError(
+						"conversation turns are linked once every plugin is set up. Use turns from a service's start or from a handler, not during setup.",
+					);
+			},
+			runtime: () => {
+				if (!this.#services)
+					throw new NotLinkedError("the host has not started yet.");
+				return this.#services.get(AGENTS).runtime;
+			},
+			surfaces: this.#surfaces(),
+			events: this.#events.sink,
+			selection: () => {
+				if (!this.#sessions)
+					throw new NotLinkedError("session parts are not linked yet.");
+				return this.#sessions.agentSelection();
+			},
+			logger: this.#options.logger,
+		});
+	}
+
 	/**
 	 * Sets up every plugin, links what they add and runs the preflight, refusing any clash before
 	 * anything starts, then starts the services and opens the listeners; the agent server starts
-	 * in the background.
+	 * in the background. One host runs per process: a second `run()` is refused until the first
+	 * host has stopped. A start that fails stops what it started, in reverse, closes the pool,
+	 * and rethrows, so the same host may try again.
 	 */
 	async run(): Promise<void> {
-		const { logger, commands, listeners = [] } = this.#options;
-		const providers = resolveProviders(this.#plugins, this.#options.judgeModel);
+		if (running)
+			throw new PluginError(
+				"a Roundtable host is already running in this process. Stop the first host, or run this one in a separate process.",
+			);
+		running = this;
+		this.#stopping = undefined;
+		this.#bootFailed = false;
+		this.#booting = this.#boot();
+		try {
+			await this.#booting;
+		} catch (error) {
+			this.#bootFailed = true;
+			await this.#teardown();
+			running = undefined;
+			throw error;
+		}
+	}
+
+	/** Applies the host's environment to the process and returns what plugins read of it. */
+	#applyEnvironment(): HostEnv {
+		const {
+			locale = "en",
+			timeZone = "UTC",
+			assistant = "Roundtable",
+			rootCommand = "roundtable",
+			agentDir,
+		} = this.#options.environment ?? {};
+		setLocale(locale, { assistant, root: rootCommand });
+		setTimeZone(timeZone);
+		// Pi packages such as pi-web-access read their config from the Pi agent directory.
+		if (agentDir !== undefined) process.env.PI_CODING_AGENT_DIR = agentDir;
+		return { locale, timeZone, now: () => new Date() };
+	}
+
+	async #boot(): Promise<void> {
+		const { logger, listeners = [] } = this.#options;
+		for (const plugin of this.#plugins) refuseRemovedFields(plugin);
+		const env = this.#applyEnvironment();
+		// A plugin that replaces a service takes the place of the one that provided it.
+		this.#active = replaceServices(this.#plugins);
+		this.#services = new ServiceRegistry(this.#active);
+		const providers = resolveProviders(this.#active, this.#options.judgeModel);
 		await this.#migrate();
 		this.#registry = await collectContributions(
-			this.#plugins,
+			this.#active,
 			{
 				logger,
+				env,
 				sessions: () => {
 					if (!this.#sessions)
 						throw new NotLinkedError(
@@ -161,12 +296,13 @@ export class Roundtable {
 				toolTiers: this.#tiers,
 				events: this.#events.sink,
 				conversations: this.#conversations(),
+				surfaces: this.#surfaces(),
+				turns: this.#turns(),
 				database: () => {
 					if (!this.#pool) throw new PluginError("no database is configured");
 					return this.#pool;
 				},
 				providers,
-				core: this.#core,
 				dashboard: () => {
 					if (!this.#sessions)
 						throw new NotLinkedError(
@@ -176,53 +312,37 @@ export class Roundtable {
 				},
 			},
 			this.#tiers,
+			this.#services,
 		);
-		const { interactions, routes, channels } = this.#registry;
+		const { routes, channels } = this.#registry;
 		this.#sessions = linkSessions(this.#registry);
 		this.#events.link(this.#registry.handlers);
 		this.#router = new ChannelRouter({
 			claims: channels,
+			targets: (name) =>
+				this.#registry.backgroundTargets.find((t) => t.name === name),
 			queue: this.#queue,
-			stop: (channel) =>
-				this.#plugins.some((plugin) => plugin.stopTurn?.(channel) ?? false),
 			logger,
 			...(this.#options.conversations?.forwardJoinMs === undefined
 				? {}
 				: { forwardJoinMs: this.#options.conversations.forwardJoinMs }),
 		});
-		if (interactions.length > 0 && !commands)
-			throw new PluginError("interactions need a configured root command");
-		const composed =
-			commands && interactions.length > 0
-				? composeInteractions(commands.root, interactions)
-				: undefined;
-		const http = new HttpListeners(listeners, routes);
-		for (const plugin of this.#plugins) await plugin.preflight?.();
-		if (composed)
-			for (const plugin of this.#plugins) plugin.useCommands?.(composed);
-		for (const service of this.#registry.services) await service.start?.();
+		const http = new HttpListeners(listeners, routes, logger);
+		for (const plugin of this.#active) await plugin.preflight?.();
+		for (const service of this.#registry.services) {
+			await service.start?.();
+			this.#started.push(service);
+		}
 		// Requests arrive only once everything they may reach is running.
-		http.start();
 		this.#listeners = http;
-		const agentServer = this.#agentServer();
-		if (agentServer)
-			void startAgentServer(agentServer, this.#registry.handlers, logger);
-	}
-
-	/** The one plugin's way to start the agent server; two plugins that start it are refused. */
-	#agentServer(): (() => Promise<void>) | undefined {
-		const starting = this.#plugins.filter((plugin) => plugin.agentServer);
-		const [first, second] = starting;
-		if (second)
-			throw new PluginError(
-				`plugins ${first?.name} and ${second.name} both start the agent server. Keep one.`,
-			);
-		return first?.agentServer?.bind(first);
+		http.start();
+		// After the listeners, so a background start may rely on everything else running.
+		void startInBackground(this.#registry, logger);
 	}
 
 	/** Opens the pool and runs every plugin's migrations; a failure closes it again and stops the boot. */
 	async #migrate(): Promise<void> {
-		const migrations = this.#plugins.flatMap(
+		const migrations = this.#active.flatMap(
 			(plugin) => plugin.migrations ?? [],
 		);
 		const { database } = this.#options;
@@ -233,12 +353,22 @@ export class Roundtable {
 		}
 		const pool = openPool(database.url);
 		try {
-			await migrate(pool, migrations);
+			const report = await runMigrations(pool, this.#active);
+			this.#options.logger.info(
+				{
+					applied: report.applied,
+					skipped: report.skipped.length,
+					everyBoot: report.everyBoot.length,
+				},
+				"migrations",
+			);
 		} catch (error) {
 			await pool.close();
 			if (error instanceof MigrationError) {
-				const owner = this.#plugins.find((plugin) =>
-					plugin.migrations?.some(({ name }) => name === error.migration),
+				const owner = this.#active.find((plugin) =>
+					plugin.migrations?.some(
+						({ name }) => `${plugin.name}/${name}` === error.migration,
+					),
 				);
 				throw new PluginError(
 					`plugin ${owner?.name ?? "unknown"}: migration ${error.migration} failed: ${String(error.cause)}. Fix the migration or restore the database, then start again.`,
@@ -250,20 +380,41 @@ export class Roundtable {
 		this.#pool = pool;
 	}
 
-	/** Shuts down once idle when the process is asked to stop. */
+	/** Shuts down once idle when the process is asked to stop, then exits with the shutdown's code. */
 	listen(): void {
-		process.once("SIGTERM", () => void this.shutdown("SIGTERM"));
-		process.once("SIGINT", () => void this.shutdown("SIGINT"));
+		const { exit = process.exit } = this.#options;
+		let signalled = false;
+		for (const signal of ["SIGTERM", "SIGINT"] as const)
+			process.once(signal, () => {
+				if (signalled) return;
+				signalled = true;
+				void this.shutdown(signal).then(exit);
+			});
 	}
 
-	async shutdown(signal: string): Promise<void> {
-		const { logger, aborted, drain, exit = process.exit } = this.#options;
-		const { services } = this.#registry;
+	/**
+	 * Stops the host once no work runs or waits and returns the exit code: 0, or 1 when the
+	 * boot had failed or a listener, service or the pool did not stop. Every call shares the one
+	 * shutdown.
+	 */
+	shutdown(signal: string): Promise<number> {
+		this.#stopping ??= this.#stop(signal);
+		return this.#stopping;
+	}
+
+	async #stop(signal: string): Promise<number> {
+		const { logger, aborted, drain } = this.#options;
+		// A signal during the boot waits for it to settle; a failed boot has already stopped.
+		await this.#booting?.catch(() => undefined);
+		if (running !== this) return this.#bootFailed ? 1 : 0;
 		// Everything keeps serving until nothing runs or waits, so a deploy never cuts a turn short.
 		logger.info({ signal }, "shutting down once idle");
 		const left = await waitUntilIdle({
 			...drain,
-			busy: () => services.flatMap((service) => service.busy?.() ?? []),
+			busy: () => [
+				...this.#queue.busy(),
+				...this.#started.flatMap((service) => service.busy?.() ?? []),
+			],
 		});
 		if (left.length > 0) {
 			logger.warn(
@@ -276,22 +427,44 @@ export class Roundtable {
 		}
 		await this.#events.deliver("shutdown", left);
 		logger.info({ signal }, "shutting down");
+		const clean = await this.#teardown();
+		running = undefined;
+		return clean ? 0 : 1;
+	}
+
+	/**
+	 * Stops what a start or a run left going, in reverse of how it started: the listeners, then
+	 * the started services, then the pool. Each failure is logged and the rest still stop;
+	 * returns whether all of them did.
+	 */
+	async #teardown(): Promise<boolean> {
+		const { logger } = this.#options;
+		let clean = true;
 		// No request may reach a service that has stopped.
 		const closed = await attempt(() => this.#listeners?.stop());
-		if (!closed.ok)
+		if (!closed.ok) {
+			clean = false;
 			logger.error({ err: closed.error }, "http listeners did not close");
-		for (const service of services.toReversed()) {
+		}
+		for (const service of this.#started.toReversed()) {
 			const stopped = await attempt(() => service.stop?.());
-			if (!stopped.ok)
+			if (!stopped.ok) {
+				clean = false;
 				logger.error(
 					{ service: service.name, err: stopped.error },
 					"service did not stop",
 				);
+			}
 		}
 		// Last, once nothing that queries it runs.
 		const released = await attempt(() => this.#pool?.close());
-		if (!released.ok)
+		if (!released.ok) {
+			clean = false;
 			logger.error({ err: released.error }, "database pool did not close");
-		exit(0);
+		}
+		this.#listeners = undefined;
+		this.#started = [];
+		this.#pool = undefined;
+		return clean;
 	}
 }

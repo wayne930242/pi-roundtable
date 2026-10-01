@@ -1,7 +1,6 @@
-import type { SQL, TransactionSQL } from "bun";
-import type { Migration } from "../../core/db/migrations.ts";
-import { migrate, openPool } from "../../core/db/migrations.ts";
+import { nested, openPool, runMigrations } from "../../core/db/migrations.ts";
 import { MigrationError } from "../../core/errors.ts";
+import type { RoundtablePlugin } from "../../core/plugin.ts";
 import type { Project } from "../project.ts";
 import { fail, ok, type Result, skipped } from "../report.ts";
 
@@ -9,27 +8,13 @@ import { fail, ok, type Result, skipped } from "../report.ts";
 export interface DatabasePort {
 	check(
 		url: string,
-		migrations: readonly Migration[] | undefined,
+		plugins:
+			| readonly Pick<RoundtablePlugin, "name" | "migrations">[]
+			| undefined,
 	): Promise<void>;
 }
 
 class Rollback extends Error {}
-
-/**
- * The transaction as a migration sees the pool: a migration that opens its own transaction
- * with `begin` gets a savepoint of the checking one, which PostgreSQL nests.
- */
-function nested(transaction: TransactionSQL): SQL {
-	return new Proxy(transaction, {
-		get(target, property) {
-			if (property === "begin")
-				return (...args: Parameters<TransactionSQL["savepoint"]>) =>
-					target.savepoint(...args);
-			const value: unknown = Reflect.get(target, property);
-			return typeof value === "function" ? value.bind(target) : value;
-		},
-	});
-}
 
 /**
  * The real port. The migrations run inside a transaction that is always rolled back: DDL in
@@ -37,14 +22,14 @@ function nested(transaction: TransactionSQL): SQL {
  * and the database is left as it was.
  */
 export const postgres: DatabasePort = {
-	async check(url, migrations) {
+	async check(url, plugins) {
 		const pool = openPool(url);
 		try {
 			await pool`select 1`;
-			if (!migrations) return;
+			if (!plugins) return;
 			try {
 				await pool.begin(async (transaction) => {
-					await migrate(nested(transaction), migrations);
+					await runMigrations(nested(transaction), plugins);
 					throw new Rollback();
 				});
 			} catch (error) {
@@ -74,13 +59,9 @@ export async function checkDatabase(
 	const url = await project.text("database", "url");
 	if (!url) return skipped("database.url has no value");
 	const assembled = await project.assembled();
-	const migrations = assembled.ok
-		? assembled.value.defined.plugins.flatMap(
-				(plugin) => plugin.migrations ?? [],
-			)
-		: undefined;
+	const plugins = assembled.ok ? assembled.value.defined.plugins : undefined;
 	try {
-		await port.check(url, migrations);
+		await port.check(url, plugins);
 	} catch (error) {
 		if (error instanceof MigrationError)
 			return fail(
@@ -93,7 +74,7 @@ export async function checkDatabase(
 		);
 	}
 	return ok(
-		migrations
+		plugins
 			? `${where(url)} answers and the migrations run`
 			: `${where(url)} answers; migrations are checked once the configuration is valid`,
 	);

@@ -1,10 +1,11 @@
 import { AgentError } from "../domain/errors.ts";
 import { messages } from "../i18n/index.ts";
+import type { AgentDirectory } from "../services.ts";
 import type { CategoryLayout } from "./agent-ports.ts";
-import type { AgentGroup, AgentStore } from "./agent-store.ts";
+import type { AgentGroup } from "./agent-store.ts";
 
 type TeamStore = Pick<
-	AgentStore,
+	AgentDirectory,
 	"agent" | "group" | "agentByChannel" | "groupByChannel"
 >;
 
@@ -38,7 +39,7 @@ export function teamCategory(
 /** A group channel's topic: who is in it and who hosts. */
 export function groupTopic(
 	group: AgentGroup,
-	store: Pick<AgentStore, "agent">,
+	store: Pick<AgentDirectory, "agent">,
 ): string {
 	const shown = (name: string) => store.agent(name)?.displayName ?? name;
 	return messages().groupTopic(

@@ -7,7 +7,11 @@ import {
 	stringList,
 	textToolsExtension,
 } from "../../runtime/text-tools.ts";
-import { MAX_SKILL_BODY_CHARS, type SkillRegistry } from "./skill-registry.ts";
+import type { SkillRegistry } from "../../services.ts";
+import {
+	MAX_SKILL_BODY_CHARS,
+	type StoredSkillRegistry,
+} from "./skill-registry.ts";
 
 export const SKILL_LIST_TOOL = "skill_list";
 
@@ -43,7 +47,9 @@ const BODY = Type.String({
 });
 
 /** skill_list, for the DM and for agents. */
-export function skillListExtension(registry: SkillRegistry): ExtensionFactory {
+export function skillListExtension(
+	registry: Pick<SkillRegistry, "list">,
+): ExtensionFactory {
 	return textToolsExtension(
 		[
 			{
@@ -75,9 +81,9 @@ export function skillListExtension(registry: SkillRegistry): ExtensionFactory {
 	);
 }
 
-/** The skill tools of an agent session (repos-and-skills spec behaviors 15–19). */
+/** The skill tools of an agent session. */
 export function skillToolsExtension(
-	registry: SkillRegistry,
+	registry: StoredSkillRegistry,
 	/** Throws AgentError unless the name is an active agent. */
 	checkAgent: (name: string) => void,
 ): ExtensionFactory {

@@ -5,7 +5,7 @@ import {
 	PermissionFlagsBits,
 } from "discord.js";
 import { messages } from "../i18n/index.ts";
-import type { OwnerDiscord } from "../modules/discord-admin/discord-admin.ts";
+import type { OwnerOperations } from "../modules/discord-admin/discord-admin.ts";
 import {
 	discordChannelExecutor,
 	fetchOwnerChannel,
@@ -29,7 +29,7 @@ export { outranksMember, outranksRole } from "./owner-discord-access.ts";
  * Discord operations for the owner's agent over the bot's connection. Every call is bounded
  * by what both the owner and the bot may do where it acts, read fresh from Discord.
  */
-export class DiscordOwnerOps implements OwnerDiscord {
+export class DiscordOwnerOps implements OwnerOperations {
 	readonly #client: Client;
 	readonly #ownerId: string;
 	/** The audit-log reason of an action taken without one of its own. */

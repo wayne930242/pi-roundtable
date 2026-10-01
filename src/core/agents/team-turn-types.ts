@@ -13,12 +13,12 @@ import type { AgentTurnScope } from "../domain/ports.ts";
 import type { OwnerIdentity } from "../identity.ts";
 import type { Logger } from "../log.ts";
 import type { EventSink } from "../plugin.ts";
+import type { AvatarStudio } from "../services.ts";
 import type { TurnSelection } from "../sessions.ts";
 import type { Speaker } from "../speakers.ts";
 import type { ToolTiers } from "../tool-tiers.ts";
 import type { AgentChannels, AgentTurnRunner } from "./agent-ports.ts";
-import type { Agent, AgentStore } from "./agent-store.ts";
-import type { AvatarStudio } from "./avatar-studio.ts";
+import type { Agent, PgAgentStore } from "./agent-store.ts";
 import type { RelevanceScorer } from "./group-round.ts";
 
 /** Agent messages without an owner message in between (spec behavior 13). */
@@ -43,7 +43,7 @@ export interface TeamTurnsOptions {
 	entryChannelId: string;
 	/** Who the agents work for, as their prompts and group history name them. */
 	owner: OwnerIdentity;
-	store: AgentStore;
+	store: PgAgentStore;
 	channels: Pick<AgentChannels, "post">;
 	studio: Pick<AvatarStudio, "url">;
 	/** Set once the runtime exists, which itself needs the team's tools. */
@@ -76,7 +76,7 @@ export interface TurnExtra {
 	attachments?: TurnAttachments;
 	confirmed?: boolean;
 	steerable?: boolean;
-	/** The owner started it by writing, or it delivers a report, so it may ask him on cards. */
+	/** The owner started it by writing, or it delivers a report, so it may ask them on cards. */
 	interactive?: boolean;
 }
 

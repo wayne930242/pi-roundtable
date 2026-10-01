@@ -1,9 +1,11 @@
+import { OWNER_TARGET } from "../../agents/agent-claim.ts";
 import type {
 	ConversationPort,
 	ScheduledOutcome,
 } from "../../contract/channels.ts";
 import type { ChannelKey } from "../../domain/conversation.ts";
 import type { Logger } from "../../log.ts";
+import type { BackgroundTurns } from "../../services.ts";
 import { zonedStamp } from "../../time.ts";
 import {
 	type DelegationJob,
@@ -24,7 +26,7 @@ export interface BackgroundTurnsOptions {
  * Turns nobody wrote, each answered in its channel by the claim that owns it: a due schedule's,
  * a delegated task's report, and the process's own logged error.
  */
-export class BackgroundTurns {
+export class ConversationBackgroundTurns implements BackgroundTurns {
 	readonly #options: BackgroundTurnsOptions;
 
 	constructor(options: BackgroundTurnsOptions) {
@@ -35,7 +37,7 @@ export class BackgroundTurns {
 	runScheduled(schedule: Schedule, firedAt: Date): Promise<ScheduledOutcome> {
 		return this.#options.conversations.background({
 			channel: schedule.channel,
-			mode: schedule.mode,
+			target: schedule.target,
 			author: { id: schedule.createdById, name: schedule.createdByName },
 			tier: schedule.createdTier,
 			turnId: `schedule-${schedule.id}-${firedAt.getTime()}`,
@@ -50,7 +52,7 @@ export class BackgroundTurns {
 	): Promise<void> {
 		const outcome = await this.#options.conversations.background({
 			channel: job.channel,
-			mode: job.mode,
+			target: job.target,
 			author: job.author,
 			...(job.author.tier ? { tier: job.author.tier } : {}),
 			turnId: `delegate-${job.id}-${job.startedAt.getTime()}`,
@@ -68,7 +70,7 @@ export class BackgroundTurns {
 	runErrorReport(channel: ChannelKey, text: string): Promise<ScheduledOutcome> {
 		return this.#options.conversations.background({
 			channel,
-			mode: "owner",
+			target: OWNER_TARGET.name,
 			author: this.#options.system,
 			turnId: `error-${Date.now()}`,
 			text,

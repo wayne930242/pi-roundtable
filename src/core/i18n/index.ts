@@ -2,8 +2,6 @@ import { createEn, type Messages } from "./en.ts";
 import type { CatalogContext } from "./types.ts";
 import { createZhTW } from "./zh-tw.ts";
 
-export type { CatalogContext } from "./types.ts";
-
 export type { Messages };
 
 export type Locale = "en" | "zh-TW";
@@ -35,6 +33,17 @@ function build(locale: Locale, settings: LocaleSettings): Messages {
 
 let active: Messages = build("en", DEFAULTS);
 let names: CatalogContext = DEFAULTS;
+let current: Locale = "en";
+
+/** The catalog of a locale, apart from the process's own; for text that names its locale itself. */
+export function catalogFor(locale: Locale): Messages {
+	return build(locale, DEFAULTS);
+}
+
+/** The locale `setLocale` chose. */
+export function activeLocale(): Locale {
+	return current;
+}
 
 /**
  * Chooses the catalog of Discord text for the whole process; the host calls it once at startup,
@@ -44,6 +53,7 @@ let names: CatalogContext = DEFAULTS;
 export function setLocale(locale: Locale, settings: LocaleSettings): void {
 	if (!isLocale(locale)) throw new Error(`Unknown locale: ${String(locale)}`);
 	active = build(locale, settings);
+	current = locale;
 	names = { assistant: settings.assistant, root: settings.root };
 }
 

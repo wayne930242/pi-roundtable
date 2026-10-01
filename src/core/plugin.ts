@@ -1,19 +1,22 @@
 import type { SQL } from "bun";
 import type { AgentSeed } from "./agents/agent-store.ts";
 import type {
+	BackgroundTarget,
 	ChannelClaim,
 	ConversationPort,
 	QueuePort,
 } from "./contract/channels.ts";
-import type { InteractionContribution } from "./contract/discord.ts";
-import type { Providers } from "./contract/providers.ts";
+import type { Providers, ResolvedProviders } from "./contract/providers.ts";
+import type { ServiceKey, Services } from "./contract/services.ts";
+import type { ChatSurface, SurfacePort } from "./contract/surface.ts";
 import type { Migration } from "./db/migrations.ts";
 import type { ToolContribution } from "./define.ts";
+import { PluginError } from "./errors.ts";
 import type { HoldCheck, HoldRule } from "./holds.ts";
 import type { HttpRoute } from "./http/listeners.ts";
+import type { Locale } from "./i18n/index.ts";
 import type { Logger } from "./log.ts";
-import type { ComposedInteractions } from "./registry/interactions.ts";
-import type { CoreAccess, CoreRegistry } from "./services.ts";
+import type { ConversationTurns } from "./routing/conversation-turns.ts";
 import type {
 	AgentTurnScope,
 	ChannelKey,
@@ -21,7 +24,7 @@ import type {
 	SessionTool,
 	ToolSelection,
 } from "./sessions.ts";
-import type { Speaker } from "./speakers.ts";
+import type { Speaker, Tier } from "./speakers.ts";
 import type { ToolTiers } from "./tool-tiers.ts";
 
 /**
@@ -31,17 +34,34 @@ import type { ToolTiers } from "./tool-tiers.ts";
 export interface Service {
 	name: string;
 	start?(): Promise<void> | void;
+	/**
+	 * Starts once every service's `start` and the HTTP listeners are up, without holding up the
+	 * boot: a failure is logged and heard as `serviceStarted` with `failed`, never fatal, and the
+	 * other services' background starts still run. `stop` runs for it like for any started service.
+	 */
+	startInBackground?(): Promise<void>;
 	stop?(): Promise<void> | void;
 	/** Work still running or waiting, one entry each; the shutdown drain waits until every list is empty. */
 	busy?(): string[];
 }
 
-/** How the agent server's startup ended. */
-export type AgentServerOutcome = "ready" | "failed";
+/** How a service's background start ended. */
+export type ServiceStartOutcome = "ready" | "failed";
 
-/** One agent turn, as a handler hears of it. */
+/** A service's `startInBackground` ended, as a handler hears of it. */
+export interface ServiceStartedEvent {
+	/** The plugin that contributed the service. */
+	plugin: string;
+	service: string;
+	outcome: ServiceStartOutcome;
+}
+
+/** One turn, as a handler hears of it: an agent's, or a conversation run through `context.turns`. */
 export interface TurnEvent {
-	agent: string;
+	/** The agent whose turn it is; absent for a conversation of another kind, such as a study room's. */
+	agent?: string;
+	/** The conversation's kind: "agent" for an agent's turn, else the kind the turn ran as, such as "owner" or "study". */
+	kind: string;
 	/** The channel the turn runs in: the agent's own, or a group's. */
 	channel: ChannelKey;
 	/** Who the turn is for. */
@@ -57,11 +77,15 @@ export interface TurnEndEvent extends TurnEvent {
 
 /** What a plugin may react to; a handler that throws is logged and never stops the others. */
 export interface EventHandlers {
-	/** Once the agent server has started, or failed to; the rest of the process runs either way. */
-	agentServer?(outcome: AgentServerOutcome): Promise<void> | void;
-	/** An agent's turn began. */
+	/**
+	 * A service's background start ended, in the order the services were contributed; the rest
+	 * of the process runs either way. The agent server's is the `AGENT_TEAM_SERVICE` service of
+	 * the `AGENT_SERVER_PLUGIN` plugin.
+	 */
+	serviceStarted?(event: ServiceStartedEvent): Promise<void> | void;
+	/** An agent's turn, or a turn run through `context.turns`, began. */
 	turnStarted?(turn: TurnEvent): Promise<void> | void;
-	/** An agent's turn ended, however it ended. */
+	/** A turn that began ended, however it ended. */
 	turnEnded?(turn: TurnEndEvent): Promise<void> | void;
 	/** The team changed: an agent or group was created, edited, arranged, archived, or started over. */
 	changed?(): Promise<void> | void;
@@ -91,12 +115,24 @@ export interface PromptSection {
 	build(turn: PromptTurn): string | undefined;
 }
 
+/**
+ * The system prompt of every non-agent conversation of one kind. A conversation's kind is the
+ * string its claim returns from `startFresh` and passes as `kind` to `context.turns.run`.
+ */
+export interface Persona {
+	/** The conversation kind the prompt is for; "agent" is reserved for the agent server's own. */
+	kind: string;
+	/**
+	 * The prompt text, read when a conversation's session is made, so text from the message catalog
+	 * is in the host's language.
+	 */
+	prompt(): string;
+}
+
 /** What a plugin adds to the process; a plugin that adds nothing is refused. */
 export interface Contribution {
 	services?: Service[];
 	events?: EventHandlers;
-	/** Modules that answer Discord interactions, with their subcommands under the root command. */
-	interactions?: InteractionContribution[];
 	/** Handlers on the host's HTTP listeners. */
 	http?: HttpRoute[];
 	/** Rules deciding which tool calls wait for the owner's approval, asked in contribution order. */
@@ -107,10 +143,39 @@ export interface Contribution {
 	sessionTools?: readonly SessionTool[];
 	/** The channels whose conversations the plugin owns. */
 	channels?: readonly ChannelClaim[];
+	/**
+	 * Chat networks the plugin connects the host to, one per channel-key prefix. Each starts as a
+	 * service named `surface:<prefix>` before the plugin's own services.
+	 */
+	surfaces?: readonly ChatSurface[];
+	/**
+	 * The system prompts of conversation kinds the plugin owns, one per kind. A plugin that owns the
+	 * owner's own conversations contributes the `"owner"` kind's prompt; without one those
+	 * conversations start with an empty system prompt.
+	 */
+	personas?: readonly Persona[];
+	/**
+	 * Tools startup refuses to run without, besides those each session tool requires: the host's
+	 * preflight builds a session and fails when one of these names is not registered. Merged over
+	 * every plugin, each name once.
+	 */
+	requiredTools?: readonly string[];
+	/**
+	 * The background targets the plugin's claims answer, one per name across every plugin: a
+	 * schedule or delegated task names one, and a turn for a target nobody contributes is skipped.
+	 */
+	backgroundTargets?: readonly BackgroundTarget[];
 	/** Lines the agent server's dashboard shows under its title, such as links, in contribution order. */
 	dashboard?: readonly string[];
 	/** Tools the plugin adds, each with the lowest tier that may use it; built with `defineTool`. */
 	tools?: readonly ToolContribution[];
+	/**
+	 * The lowest tier that may use each of the plugin's raw session tools, by tool name: the tools
+	 * its `sessionTools` extensions register. An operator's `toolTiers` still wins; a tool nobody
+	 * names needs the owner. Two plugins naming one tool is a PluginError; use `tools` instead
+	 * when `defineTool` builds the tool.
+	 */
+	toolTiers?: Readonly<Record<string, Tier>>;
 	/** Agents created on the first start; one already stored is never overwritten. */
 	seeds?: readonly AgentSeed[];
 	/** Sections added to every agent turn's system prompt, in contribution order. */
@@ -126,17 +191,21 @@ export interface Contribution {
 export const CONTRIBUTION_KEYS = [
 	"services",
 	"events",
-	"interactions",
 	"http",
 	"holdRules",
 	"piPackages",
 	"sessionTools",
 	"channels",
+	"surfaces",
+	"personas",
+	"backgroundTargets",
 	"dashboard",
 	"tools",
+	"toolTiers",
 	"seeds",
 	"prompt",
 	"agentSelection",
+	"requiredTools",
 ] as const satisfies readonly (keyof Contribution)[];
 
 /** The session parts the host links from every plugin's contributions once all are set up. */
@@ -150,15 +219,30 @@ export interface LinkedSessions {
 	seeds: readonly AgentSeed[];
 	/** Every plugin's prompt sections, in contribution order. */
 	prompt: readonly PromptSection[];
+	/** The prompt of a conversation kind, from the plugin that contributes its persona; undefined when none does. */
+	persona(kind: string): string | undefined;
+	/** Every tool name plugins require at startup, each once. */
+	requiredTools: readonly string[];
 	/** The tools plugins defined for agents, by name. */
 	agentTools: readonly string[];
 	/** Every plugin's agent selection merged, read before each agent turn. */
 	agentSelection(): ToolSelection;
 }
 
+/** The host's own locale and time zone, as its plugins read them. */
+export interface HostEnv {
+	readonly locale: Locale;
+	/** The IANA zone the host was configured with. */
+	readonly timeZone: string;
+	/** The current instant. */
+	now(): Date;
+}
+
 /** What the host gives every plugin. */
 export interface PluginContext {
 	logger: Logger;
+	/** The host's locale and time zone, fixed for the run. */
+	env: HostEnv;
 	/** The linked session parts; throws NotLinkedError when called during setup. */
 	sessions(): LinkedSessions;
 	/** The one channel queue every conversation and channel operation shares. */
@@ -169,12 +253,19 @@ export interface PluginContext {
 	events: EventSink;
 	/** The claimed channels' conversations; calls during setup throw NotLinkedError. */
 	conversations: ConversationPort;
+	/** Every contributed chat surface, chosen by a channel's prefix; calls during setup throw NotLinkedError. */
+	surfaces: SurfacePort;
+	/** Runs conversation turns of any kind over the runtime and the surfaces; calls during setup throw NotLinkedError. */
+	turns: ConversationTurns;
 	/** The host's one connection pool, migrated before any setup; throws PluginError without a database. */
 	database(): SQL;
-	/** What the built-in plugins provide, for the plugins registered after them; throws PluginError until provided. */
-	core: CoreAccess & { provide: CoreRegistry["provide"] };
-	/** Each provider slot, from the plugin that fills it or the core's default. */
-	providers: Providers;
+	/**
+	 * The services plugins provide to each other, read by key: `services.get(SCHEDULES)`. Reading one
+	 * before its plugin has set up throws a PluginError naming the plugin to register first.
+	 */
+	services: Services;
+	/** Each provider slot, from the plugin that fills it or the core's default; `filled` names the slots a plugin fills. */
+	providers: ResolvedProviders;
 	/** Every plugin's dashboard lines, in contribution order; throws NotLinkedError during setup. */
 	dashboard(): readonly string[];
 }
@@ -185,16 +276,129 @@ export interface RoundtablePlugin {
 	migrations?: readonly Migration[];
 	/** The provider slots the plugin fills, resolved before any setup; two plugins cannot fill one slot. */
 	providers?: Partial<Providers>;
+	/**
+	 * The services this plugin's setup provides with `context.services.provide`; the host reads the
+	 * list before any setup, and refuses the plugin when setup returns without providing one.
+	 */
+	provides?: readonly ServiceKey<unknown>[];
+	/**
+	 * Services this plugin replaces. The host drops the plugin that provides them and sets this one
+	 * up where it stood, so it may read what the plugins before that place provide and nothing
+	 * after. It refuses a key no other plugin provides, a key two plugins replace, a service
+	 * replaced but not listed in this plugin's `provides`, and a partial replacement, where the
+	 * dropped plugin provides a service this one does not replace.
+	 */
+	replaces?: readonly ServiceKey<unknown>[];
 	setup(context: PluginContext): Promise<Contribution> | Contribution;
 	/**
-	 * Runs once every plugin is set up and linked, before the commands are handed over or any
-	 * service starts; a failure stops the boot, so a broken setup never reaches Discord.
+	 * Runs once every plugin is set up and linked, before any service starts; a failure stops the
+	 * boot, so a broken setup never reaches Discord. The Discord plugin composes the slash commands
+	 * here, so a plugin adds its own from setup.
 	 */
 	preflight?(): Promise<void> | void;
-	/** Receives the composed slash commands before any service starts, since Discord registers them as it connects. */
-	useCommands?(composed: ComposedInteractions): void;
-	/** Starts the agent server, in the background once every service has started; only one plugin has it. */
-	agentServer?(): Promise<void>;
-	/** Stops a running turn of a channel the plugin's conversations serve; true when one was running. */
-	stopTurn?(channel: ChannelKey): boolean;
+}
+
+/**
+ * The plugin fields of 0.1.0 that are gone, each with what replaces it. The host refuses a
+ * plugin that still has one, so a plugin written for 0.1.0 fails at once instead of being ignored.
+ */
+const REMOVED_PLUGIN_FIELDS = {
+	useCommands:
+		"the composed slash commands go to the Discord plugin's surface, not to a plugin; add the commands from setup with context.services.get(DISCORD).commands.add(...), with DISCORD from pi-roundtable/discord",
+	agentServer:
+		"give the plugin a service with startInBackground, and hear how it ended in a serviceStarted event handler",
+	stopTurn:
+		"put stop(channel) on the channel claim that owns the channel; the router asks only the owning claim",
+} as const;
+
+/** The contribution parts of 0.1.0 that are gone, each with what replaces it. */
+const REMOVED_PARTS = {
+	interactions:
+		"slash commands belong to the Discord plugin now; add them from setup with context.services.get(DISCORD).commands.add({ module, rootOptions }), with DISCORD from pi-roundtable/discord",
+} as const;
+
+/** The chat surface methods of 0.1.0 that are gone, each with what replaces it. */
+const REMOVED_SURFACE_METHODS = {
+	useCommands:
+		"the host no longer composes slash commands or hands them to a surface; the Discord plugin composes them, and a plugin adds its own with context.services.get(DISCORD).commands.add(...) from pi-roundtable/discord",
+} as const;
+
+const REMOVED_EVENT = {
+	agentServer:
+		"hear serviceStarted instead, which names the plugin and service whose background start ended",
+} as const;
+
+/**
+ * The context one plugin's setup gets: the host's parts and that plugin's view of the services.
+ * `context.core` of 0.1.0 is gone; reading it throws a PluginError naming `context.services`, where
+ * a plugin written for 0.1.0 meets it on its first line, instead of getting `undefined`.
+ */
+export function pluginContext(
+	plugin: RoundtablePlugin,
+	base: Omit<PluginContext, "services">,
+	services: Services,
+): PluginContext {
+	// Every line a plugin logs carries its name.
+	const context = {
+		...base,
+		logger: base.logger.child({ plugin: plugin.name }),
+		services,
+	};
+	Object.defineProperty(context, "core", {
+		enumerable: false,
+		get() {
+			throw new PluginError(
+				`plugin ${plugin.name}: context.core was removed in 0.2.0; read a service with context.services.get(KEY), for example services.get(SCHEDULES), and provide one with services.provide(KEY, value) after listing KEY in the plugin's provides.`,
+			);
+		},
+	});
+	return context;
+}
+
+/**
+ * Refuses a plugin that still has a field of 0.1.0 that is gone, naming what replaces it, so it
+ * fails where it is written or when the host links it instead of being ignored.
+ */
+export function refuseRemovedFields(plugin: RoundtablePlugin): void {
+	for (const [field, replacement] of Object.entries(REMOVED_PLUGIN_FIELDS))
+		if (field in plugin)
+			throw new PluginError(
+				`plugin ${plugin.name}: "${field}" was removed in 0.2.0; ${replacement}.`,
+			);
+}
+
+/** Refuses a contribution part of 0.1.0 that is gone, naming what replaces it. */
+export function refuseRemovedParts(
+	plugin: string,
+	contribution: Contribution,
+): void {
+	for (const [part, replacement] of Object.entries(REMOVED_PARTS))
+		if (part in contribution)
+			throw new PluginError(
+				`plugin ${plugin}: the "${part}" part was removed in 0.2.0; ${replacement}.`,
+			);
+}
+
+/** Refuses a chat surface that still has a method of 0.1.0 that is gone, naming what replaces it. */
+export function refuseRemovedSurfaceMethods(
+	plugin: string,
+	surface: ChatSurface,
+): void {
+	for (const [method, replacement] of Object.entries(REMOVED_SURFACE_METHODS))
+		if (method in surface)
+			throw new PluginError(
+				`plugin ${plugin}: surface ${surface.surface} has ${method}, which was removed in 0.2.0; ${replacement}.`,
+			);
+}
+
+/** Refuses an event handler of 0.1.0 that is gone, naming what replaces it. */
+export function refuseRemovedEvents(
+	plugin: string,
+	events: EventHandlers,
+): void {
+	for (const [event, replacement] of Object.entries(REMOVED_EVENT))
+		if (event in events)
+			throw new PluginError(
+				`plugin ${plugin}: the "${event}" event was removed in 0.2.0; ${replacement}.`,
+			);
 }

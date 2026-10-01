@@ -27,13 +27,17 @@ export interface ModelImage {
 
 /** Everything a turn carries besides its text. */
 export interface TurnAttachments {
-	files: StoredAttachment[];
-	images: ModelImage[];
-	failures: AttachmentFailure[];
+	readonly files: readonly StoredAttachment[];
+	readonly images: readonly ModelImage[];
+	readonly failures: readonly AttachmentFailure[];
 }
 
-export const NO_ATTACHMENTS: TurnAttachments = Object.freeze({
-	files: [],
-	images: [],
-	failures: [],
-}) as TurnAttachments;
+export const NO_ATTACHMENTS: Readonly<{
+	files: readonly StoredAttachment[];
+	images: readonly ModelImage[];
+	failures: readonly AttachmentFailure[];
+}> = Object.freeze({
+	files: Object.freeze([]),
+	images: Object.freeze([]),
+	failures: Object.freeze([]),
+});

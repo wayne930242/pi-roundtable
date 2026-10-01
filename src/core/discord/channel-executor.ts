@@ -11,6 +11,7 @@ import {
 	type PermissionResolvable,
 	type TextChannel,
 } from "discord.js";
+import { freeze } from "../freeze.ts";
 import type { ChannelOperation } from "./channel-operations.ts";
 import {
 	type ChannelExecutor,
@@ -18,7 +19,9 @@ import {
 } from "./channel-operations.ts";
 
 /** Discord permissions the bot (and the owner granting it) needs for each operation. */
-export const OPERATION_PERMISSIONS: Record<ChannelOperation, bigint[]> = {
+export const OPERATION_PERMISSIONS: Readonly<
+	Record<ChannelOperation, readonly bigint[]>
+> = freeze({
 	read: [
 		PermissionFlagsBits.ViewChannel,
 		PermissionFlagsBits.ReadMessageHistory,
@@ -47,7 +50,7 @@ export const OPERATION_PERMISSIONS: Record<ChannelOperation, bigint[]> = {
 		PermissionFlagsBits.ViewChannel,
 		PermissionFlagsBits.ManageRoles,
 	],
-};
+});
 
 export type ManagedChannel = TextChannel | NewsChannel;
 /** What the owner's own agent may also reach: threads of those channels. */
@@ -93,7 +96,7 @@ export function operationPermissions(
 					? PermissionFlagsBits.SendMessagesInThreads
 					: flag,
 			)
-		: needed;
+		: [...needed];
 }
 
 interface ChannelFile {

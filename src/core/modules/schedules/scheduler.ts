@@ -1,7 +1,8 @@
 import type { ScheduledOutcome } from "../../contract/channels.ts";
 import type { Logger } from "../../log.ts";
+import type { ScheduleStore } from "../../services.ts";
 import { nextRun } from "./recurrence.ts";
-import type { Schedule, ScheduleStore } from "./schedule-store.ts";
+import type { Schedule } from "./schedule-store.ts";
 
 export type { ScheduledOutcome };
 
@@ -104,7 +105,11 @@ export class Scheduler {
 	async #fire(schedule: Schedule, firedAt: Date): Promise<void> {
 		const { store, runner, logger } = this.#options;
 		logger.info(
-			{ schedule: schedule.id, channel: schedule.channel, mode: schedule.mode },
+			{
+				schedule: schedule.id,
+				channel: schedule.channel,
+				target: schedule.target,
+			},
 			"schedule firing",
 		);
 		const outcome = await runner.runScheduled(schedule, firedAt);

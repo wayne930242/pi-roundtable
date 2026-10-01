@@ -5,11 +5,8 @@ import { AgentError, ScheduleError } from "../domain/errors.ts";
 import type { AgentTurnScope } from "../domain/ports.ts";
 import type { ThinkingSetting } from "../models.ts";
 import { SHELL_TOOLS } from "../modules/host-shell/shell-policy.ts";
-import type { ResolvedSkill } from "../modules/skills/skill-registry.ts";
-import {
-	SKILL_TOOLS,
-	skillToolsExtension,
-} from "../modules/skills/skill-tools.ts";
+import type { ResolvedSkill } from "../modules/skills/skill-rules.ts";
+import type { AgentTeam } from "../services.ts";
 import type { TurnSelection } from "../sessions.ts";
 import { type Speaker, THE_SPEAKER } from "../speakers.ts";
 import { agentSystemPrompt } from "./agent-prompt.ts";
@@ -17,12 +14,13 @@ import type { Agent } from "./agent-store.ts";
 import {
 	AGENT_TOOLS,
 	type AgentOps,
+	AVATAR_TOOL,
 	type AvatarMode,
 	agentToolsExtension,
 	MESSAGE_AGENT_TOOL,
 } from "./agent-tools.ts";
 import { TeamEditing } from "./team-editing.ts";
-import { channelKey, channelOwner } from "./team-keys.ts";
+import { channelOwner, discordKey } from "./team-keys.ts";
 import {
 	layoutText,
 	planArrangement,
@@ -49,7 +47,7 @@ const READ_LIMIT = 50;
  * This team creates, changes, arranges, and archives agents and groups; its TeamTurns runs
  * their turns, group rounds, and messages between agents.
  */
-export class AgentTeam implements AgentOps {
+export class DiscordAgentTeam implements AgentOps, AgentTeam {
 	readonly #options: AgentTeamOptions;
 	readonly #turns: TeamTurns;
 	readonly #listeners: (() => void)[] = [];
@@ -101,7 +99,7 @@ export class AgentTeam implements AgentOps {
 		return channelOwner(this.#options.store, channel);
 	}
 
-	/** The tools every agent turn runs with: the plugins', plus the shell, agent, and skill tools. */
+	/** The tools every agent turn runs with: the plugins', plus the shell and agent tools. */
 	selection(scope?: AgentTurnScope): TurnSelection {
 		const plugged = this.#options.pluginSelection();
 		return {
@@ -112,9 +110,10 @@ export class AgentTeam implements AgentOps {
 					...SHELL_TOOLS,
 					// Group members hand off by mentioning each other, so a group seat has no message_agent.
 					...AGENT_TOOLS.filter(
-						(tool) => !(scope?.group && tool === MESSAGE_AGENT_TOOL),
+						(tool) =>
+							!(scope?.group && tool === MESSAGE_AGENT_TOOL) &&
+							!(tool === AVATAR_TOOL && !this.#avatars()),
 					),
-					...SKILL_TOOLS,
 					...(this.#options.pluginTools?.() ?? []),
 				]),
 			],
@@ -147,6 +146,7 @@ export class AgentTeam implements AgentOps {
 			workDir,
 			owner,
 			shellUser,
+			avatars: this.#avatars(),
 			...(group
 				? {
 						group: {
@@ -190,22 +190,22 @@ export class AgentTeam implements AgentOps {
 		return current ? [current, ...usable.filter((m) => m !== current)] : usable;
 	}
 
-	/** The agent and skill tools of one agent session. */
-	extension(scope: AgentTurnScope): ExtensionFactory {
-		const { skills, store } = this.#options;
-		const agentTools = agentToolsExtension(this, scope, THE_SPEAKER);
-		const skillTools = skillToolsExtension(skills, (name) => {
-			store.activeAgent(name);
-		});
-		return async (pi) => {
-			await agentTools(pi);
-			await skillTools(pi);
-		};
+	/** Whether agents can be offered drawing: an image provider is configured. */
+	#avatars(): boolean {
+		return this.#options.studio.canDraw !== false;
 	}
 
-	/** The skill files an agent's sessions load, built-in ones included. */
+	/** The agent tools of one agent session. */
+	extension(scope: AgentTurnScope): ExtensionFactory {
+		return agentToolsExtension(this, scope, THE_SPEAKER, {
+			avatars: this.#avatars(),
+			skills: this.#options.skills !== undefined,
+		});
+	}
+
+	/** The skill files an agent's sessions load, built-in ones included; none while the skills addon is off. */
 	skillsOf(name: string): ResolvedSkill[] {
-		return this.#options.skills.carried(name).skills;
+		return this.#options.skills?.carried(name).skills ?? [];
 	}
 
 	/** Another active agent's channel, for schedule_list. */
@@ -213,7 +213,7 @@ export class AgentTeam implements AgentOps {
 		try {
 			const agent = this.#options.store.activeAgent(name);
 			if (!agent.channelId) throw new AgentError(`${name} has no channel yet`);
-			return channelKey(agent.channelId);
+			return discordKey(agent.channelId);
 		} catch (error) {
 			throw new ScheduleError(
 				error instanceof Error ? error.message : String(error),
@@ -254,7 +254,7 @@ export class AgentTeam implements AgentOps {
 
 	/**
 	 * The owner's message in an agent's channel; call inside the channel's queue. `text`
-	 * carries the reference, `replyText` is what he typed.
+	 * carries the reference, `replyText` is what they typed.
 	 */
 	answerOwner(
 		channel: ChannelKey,
@@ -380,7 +380,8 @@ export class AgentTeam implements AgentOps {
 		return agentDetails(
 			agent,
 			models.defaults,
-			skills.describeCarried(agent.name),
+			skills?.describeCarried(agent.name),
+			this.#avatars(),
 		);
 	}
 
@@ -408,7 +409,7 @@ export class AgentTeam implements AgentOps {
 			name: string;
 			displayName: string;
 			prompt: string;
-			avatarPrompt: string;
+			avatarPrompt?: string;
 			task: string;
 			category?: string;
 			skills?: string[];

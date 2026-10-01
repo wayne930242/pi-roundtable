@@ -43,7 +43,8 @@ export interface TransientTask {
 
 /** What one Pi session is for, as a session tool's factory sees it. */
 export interface SessionContext {
-	kind: "owner" | "agent";
+	/** "agent" for an agent's session; otherwise the kind of conversation, which the claim that owns the channel names. */
+	kind: string;
 	/** Where the session's schedules and delegated reports belong: the agent's own channel, or the owner's. */
 	homeChannel: ChannelKey;
 	/** Where the session's turns run: a group's channel for an agent's seat in it, else the home channel. */
@@ -94,7 +95,7 @@ const CORE_EXTENSIONS = [
 	"confirmation-gate",
 	"ask-user",
 	"self-compact-guard",
-	"profile-tools",
+	"active-tools",
 ] as const;
 
 /** Session tools grouped by phase, each group in registration order. */

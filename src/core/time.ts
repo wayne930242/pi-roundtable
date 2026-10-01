@@ -16,8 +16,13 @@ export function timeZone(): string {
 
 /** The formatter is constructed when used, not at import time, so configuration is observed. */
 function stamp(at: Date): string {
+	return zonedStampIn(at, zone);
+}
+
+/** `at` as "YYYY-MM-DD HH:MM" in the named IANA time zone, whatever the host chose. */
+export function zonedStampIn(at: Date, timeZone: string): string {
 	return new Intl.DateTimeFormat("sv-SE", {
-		timeZone: zone,
+		timeZone,
 		year: "numeric",
 		month: "2-digit",
 		day: "2-digit",

@@ -1,16 +1,25 @@
 import { describe, expect, test } from "bun:test";
+import type { BackgroundTarget } from "../../contract/channels.ts";
 import type { ChannelKey } from "../../domain/conversation.ts";
+import { DelegationError } from "../../domain/errors.ts";
 import { messages } from "../../i18n/index.ts";
 import { silentLogger } from "../../log.ts";
 import { fakeThreads } from "../../testing/thread-host.ts";
 import {
+	DefaultDelegator,
 	type DelegationJob,
 	type DelegationOutcome,
-	Delegator,
 	delegatedTurnText,
 } from "./delegator.ts";
 
 const OWNER = { id: "1", name: "Riley" };
+
+/** Sample targets: a roomy one, a tight one, and one that may not delegate. */
+const TARGETS: readonly BackgroundTarget[] = [
+	{ name: "main", label: () => "Main", delegation: { maxRunning: 3 } },
+	{ name: "open", label: () => "Open", delegation: { maxRunning: 2 } },
+	{ name: "closed", label: () => "Closed" },
+];
 
 function setup(
 	run: (task: string, signal: AbortSignal) => Promise<string>,
@@ -20,8 +29,9 @@ function setup(
 	const { host, threads } = fakeThreads();
 	/** Threads already archived when each report was delivered. */
 	const archived: string[][] = [];
-	const delegator = new Delegator({
+	const delegator = new DefaultDelegator({
 		worker: { run },
+		targets: (name) => TARGETS.find((target) => target.name === name),
 		deliver: async (job, outcome) => {
 			archived.push([...host.closed]);
 			reports.push([job, outcome]);
@@ -35,13 +45,13 @@ function setup(
 
 const request = (channel: ChannelKey = "discord:1") => ({
 	channel,
-	mode: "party" as const,
+	target: "open",
 	author: OWNER,
 	title: "t",
 	task: "find it",
 });
 
-describe("Delegator", () => {
+describe("DefaultDelegator", () => {
 	test("a report comes back with its job, after start has returned", async () => {
 		const { delegator, reports } = setup(async (task) => `report for ${task}`);
 		const job = delegator.start(request());
@@ -90,7 +100,7 @@ describe("Delegator", () => {
 		const { delegator, reports, host, archived } = setup(async () => "R");
 		delegator.start({
 			...request("discord:dm"),
-			mode: "owner",
+			target: "main",
 			origin: "discord:10",
 			title: "check the Bun version",
 		});
@@ -135,7 +145,7 @@ describe("Delegator", () => {
 		expect(host.closed).toEqual(["900"]);
 	});
 
-	test("a party job, or one whose thread cannot open, reports only in its channel", async () => {
+	test("a job without an origin, or one whose thread cannot open, reports only in its channel", async () => {
 		const { delegator, reports, host } = setup(async () => "R");
 		delegator.start(request());
 		host.failOpen = true;
@@ -144,6 +154,35 @@ describe("Delegator", () => {
 		expect(host.posts).toEqual([]);
 		expect(reports.map(([job]) => job.thread)).toEqual([undefined, undefined]);
 		expect(reports.map(([, outcome]) => outcome.ok)).toEqual([true, true]);
+	});
+
+	test("each target sets its own running limit", async () => {
+		let release = () => {};
+		const gate = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		const { delegator } = setup(async () => {
+			await gate;
+			return "done";
+		});
+		for (let i = 0; i < 3; i++)
+			delegator.start({ ...request(), target: "main" });
+		expect(() => delegator.start({ ...request(), target: "main" })).toThrow(
+			"already has 3",
+		);
+		release();
+		await delegator.idle();
+	});
+
+	test("a target nobody contributes, or one without delegation, is refused", () => {
+		const { delegator } = setup(async () => "x");
+		expect(() => delegator.start({ ...request(), target: "gone" })).toThrow(
+			DelegationError,
+		);
+		expect(() => delegator.start({ ...request(), target: "closed" })).toThrow(
+			"not available for closed conversations",
+		);
+		expect(delegator.runningChannels()).toEqual([]);
 	});
 
 	test("an empty task is refused", () => {

@@ -40,7 +40,7 @@ describe("DispatchThreads", () => {
 		const host = new FakeThreadHost();
 		host.hostless.add("20");
 		const { threads, ledgerPath } = fakeThreads(host);
-		const party = new DispatchThreads({
+		const bare = new DispatchThreads({
 			host,
 			ledgerPath,
 			excluded: (channel) => channel === "discord:30",
@@ -49,7 +49,7 @@ describe("DispatchThreads", () => {
 		expect(await threads.open(undefined, "t")).toBeUndefined();
 		expect(await threads.open("mcp:abc", "t")).toBeUndefined();
 		expect(await threads.open("discord:20", "t")).toBeUndefined();
-		expect(await party.open("discord:30", "t")).toBeUndefined();
+		expect(await bare.open("discord:30", "t")).toBeUndefined();
 		host.failOpen = true;
 		expect(await threads.open("discord:40", "t")).toBeUndefined();
 		expect(host.opened).toEqual([]);

@@ -12,7 +12,7 @@ import {
 	returnedAnswerPost,
 } from "./agent-prompt.ts";
 import type { Agent } from "./agent-store.ts";
-import { channelKey, homeScope } from "./team-keys.ts";
+import { discordKey, homeScope } from "./team-keys.ts";
 import {
 	type Chain,
 	type Exchange,
@@ -47,7 +47,7 @@ export class AgentMessages {
 				chainLimitReason(addressee(chain.speaker, this.#host.options.owner)),
 			);
 		chain.messages += 1;
-		const targetChannel = channelKey(target.channelId);
+		const targetChannel = discordKey(target.channelId);
 		const exchange = this.#openExchange(caller, sender, target, text);
 		void queue
 			.run(targetChannel, async () =>
@@ -121,7 +121,7 @@ export class AgentMessages {
 		exchange: Exchange | undefined,
 	): Promise<void> {
 		const { queue, logger } = this.#host.options;
-		const targetChannel = channelKey(target.channelId ?? "");
+		const targetChannel = discordKey(target.channelId ?? "");
 		await this.#host.post(targetChannel, this.#host.current(sender), {
 			chunks: splitReply(
 				deliveredMessagePost(this.#host.current(target), text),
@@ -143,7 +143,7 @@ export class AgentMessages {
 			await thread.close(messages().agentNoReply(result.error.message));
 		const current = this.#host.options.store.agent(sender.name);
 		if (current?.status !== "active" || !current.channelId) return;
-		const senderChannel = channelKey(current.channelId);
+		const senderChannel = discordKey(current.channelId);
 		// With a thread the answer goes there, leaving the sender's channel its own reply.
 		if (result.ok)
 			await this.#host

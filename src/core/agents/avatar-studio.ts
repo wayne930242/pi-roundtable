@@ -3,7 +3,10 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createCanvas, loadImage } from "canvas";
 import type { ImageDrawer } from "../contract/providers.ts";
+import { ProviderError } from "../errors.ts";
 import type { HttpRoute } from "../http/listeners.ts";
+import type { AvatarStudio } from "../services.ts";
+import { fallbackAvatar } from "./fallback-avatar.ts";
 
 const AVATAR_SIDE = 512;
 const REFERENCE_SIDE = 512;
@@ -18,7 +21,8 @@ export interface AvatarStudioOptions {
 	publicUrl: string;
 	/** The assistant's neutral avatar: the style reference and the picture of an agent without one. */
 	referencePath: string;
-	draw: ImageDrawer;
+	/** Draws the pictures. Without one, the studio only makes each agent a picture from its name. */
+	draw?: ImageDrawer;
 }
 
 /** A centered square crop scaled to at most `side` pixels, as PNG. */
@@ -44,10 +48,11 @@ async function squarePng(bytes: Uint8Array, side: number): Promise<Buffer> {
 }
 
 /**
- * Agent avatars: Codex draws them in the assistant's style, and they are kept and served by content
- * hash, so a new picture has a new URL and Discord shows it at once.
+ * Agent avatars: an image provider draws them in the assistant's style, and without one each agent
+ * gets a picture generated from its display name. They are kept and served by content hash, so a
+ * new picture has a new URL and Discord shows it at once.
  */
-export class AvatarStudio {
+export class FileAvatarStudio implements AvatarStudio {
 	readonly #options: AvatarStudioOptions;
 	#defaultHash: string | undefined;
 
@@ -63,6 +68,11 @@ export class AvatarStudio {
 		);
 	}
 
+	/** Whether an image provider is configured; without one, only `fallback` makes pictures. */
+	get canDraw(): boolean {
+		return this.#options.draw !== undefined;
+	}
+
 	/** The public URL of a picture, or of the default when there is none. */
 	url(hash: string | undefined): string {
 		const chosen = hash ?? this.#defaultHash;
@@ -76,11 +86,12 @@ export class AvatarStudio {
 	 * so agents stay easy to tell apart.
 	 */
 	async draw(avatarPrompt: string): Promise<string> {
+		const draw = this.#drawer();
 		const reference = await squarePng(
 			readFileSync(this.#options.referencePath),
 			REFERENCE_SIDE,
 		);
-		const bytes = await this.#options.draw(
+		const bytes = await draw(
 			`Draw a square Discord avatar of the person in the reference image, redrawn as an anime character: keep their face, short dark hair, and features recognizable as the same person, but in vivid anime cel-shading with a big, exaggerated expression and a dramatic pose that shows the role. Dress them and paint the background exactly in the colours the description names; ignore the reference's green jacket and teal background. Head-and-shoulders framing that still reads at 40 px. No text, no border. The role: ${avatarPrompt}`,
 			[{ data: reference.toString("base64"), mimeType: "image/png" }],
 		);
@@ -89,14 +100,29 @@ export class AvatarStudio {
 
 	/** Edits a stored picture by an instruction; returns the new picture's hash. */
 	async edit(hash: string | undefined, instruction: string): Promise<string> {
+		const draw = this.#drawer();
 		const current = readFileSync(
 			this.#path(hash ?? this.#defaultHashOrThrow()),
 		);
-		const bytes = await this.#options.draw(
+		const bytes = await draw(
 			`Edit this Discord avatar: ${instruction}. Keep everything else, the style, and the square head-and-shoulders framing the same. No text, no border.`,
 			[{ data: current.toString("base64"), mimeType: "image/png" }],
 		);
 		return this.#store(bytes);
+	}
+
+	/**
+	 * A picture made from an agent's display name, its name, and the assistant's icon, for a host without an
+	 * image provider; the same name always gives the same picture. Returns its hash.
+	 */
+	async fallback(displayName: string, name: string): Promise<string> {
+		return this.#store(
+			await fallbackAvatar(
+				displayName,
+				readFileSync(this.#options.referencePath),
+				name,
+			),
+		);
 	}
 
 	/** Avatar pictures, public on the listener that cloudflared forwards the public hostname to. */
@@ -125,6 +151,14 @@ export class AvatarStudio {
 				"Cache-Control": "public, max-age=31536000, immutable",
 			},
 		});
+	}
+
+	#drawer(): ImageDrawer {
+		if (!this.#options.draw)
+			throw new ProviderError(
+				"no image provider is configured, so avatars cannot be drawn",
+			);
+		return this.#options.draw;
 	}
 
 	#defaultHashOrThrow(): string {

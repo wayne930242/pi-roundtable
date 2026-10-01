@@ -18,6 +18,7 @@ import {
 	number,
 	oneOf,
 	optional,
+	orOff,
 	record,
 	shape,
 	text,
@@ -48,6 +49,17 @@ export interface RoundtableConfig {
 		entryChannel: string;
 		/** The root slash command, without the slash; default the lowercase assistant name. */
 		rootCommand?: string;
+		/**
+		 * Whether the owner's conversations have Discord administration tools; default true. `false`
+		 * leaves the `discord-admin` addon out.
+		 */
+		admin?: boolean;
+		/**
+		 * Text appended as it is to the refusal a non-owner gets from the root command, such as a
+		 * pointer to the commands anyone may use; include the space or punctuation your language
+		 * needs before it. Default none.
+		 */
+		refusalHint?: string;
 	};
 	database: { url: string };
 	/** Where the process keeps its files, such as pictures, attachments, and skills. */
@@ -74,19 +86,31 @@ export interface RoundtableConfig {
 	agents?: AgentSeed[];
 	/**
 	 * Where the agents' avatars are served: the public address that reaches it, and the TCP port
-	 * (default 3000) or unix socket the process listens on.
+	 * (default 3000) or unix socket the process listens on. `socketMode` is the socket file's
+	 * permission bits (default `0o660`); widen it only for a proxy that runs as another user.
 	 */
 	http: {
 		publicUrl: string;
 		port?: number;
 		hostname?: string;
 		socketPath?: string;
+		socketMode?: number;
 	};
 	/** A picture of your own for agents without one, and the style reference for drawing them; default a plain bot. */
 	avatar?: string;
 	/** The agents' shared working directory; default `<dataDir>/work`. */
 	workDir?: string;
-	skills?: { builtinDir?: string; reposDir?: string };
+	/**
+	 * Where the skill registry reads built-in skills and keeps linked repositories. `false` leaves
+	 * the `skills` addon out: agents carry no skills, and no skill tools exist. Stored skills stay
+	 * in their tables.
+	 */
+	skills?: false | { builtinDir?: string; reposDir?: string };
+	/**
+	 * Whether each speaker's memory is kept and offered as tools; default true. `false` leaves the
+	 * `memory` addon out: no memory tools, no memory prompt block, and the table stays as it is.
+	 */
+	memory?: boolean;
 	/** The agent that investigates the process's own errors, by name. */
 	ops?: { agent: string };
 	plugins?: RoundtablePlugin[];
@@ -116,6 +140,8 @@ const schema = shape({
 		guild: text,
 		entryChannel: text,
 		rootCommand: optional(text),
+		admin: optional(bool),
+		refusalHint: optional(text),
 	}),
 	database: shape({ url: text }),
 	dataDir: text,
@@ -158,12 +184,14 @@ const schema = shape({
 		port: optional(integer(1, 65535)),
 		hostname: optional(text),
 		socketPath: optional(text),
+		socketMode: optional(integer(0, 0o777)),
 	}),
 	avatar: optional(text),
 	workDir: optional(text),
 	skills: optional(
-		shape({ builtinDir: optional(text), reposDir: optional(text) }),
+		orOff(shape({ builtinDir: optional(text), reposDir: optional(text) })),
 	),
+	memory: optional(bool),
 	ops: optional(shape({ agent: text })),
 	plugins: optional(
 		list(
@@ -187,6 +215,8 @@ export interface ResolvedConfig {
 		guild: string;
 		entryChannel: string;
 		rootCommand: string;
+		admin: boolean;
+		refusalHint?: string;
 	};
 	databaseUrl: string;
 	dataDir: string;
@@ -206,10 +236,13 @@ export interface ResolvedConfig {
 		port: number;
 		hostname?: string;
 		socketPath?: string;
+		socketMode?: number;
 	};
 	avatar?: string;
 	workDir: string;
-	skills: { builtinDir?: string; reposDir?: string };
+	/** `false` when the skills addon is off. */
+	skills: false | { builtinDir?: string; reposDir?: string };
+	memory: boolean;
 	ops?: { agent: string };
 	plugins: RoundtablePlugin[];
 }
@@ -243,6 +276,10 @@ export function resolveConfig(input: unknown): ResolvedConfig {
 			rootCommand:
 				config.discord.rootCommand ??
 				name.toLowerCase().replace(/[^a-z0-9-]+/g, "-"),
+			admin: config.discord.admin ?? true,
+			...(config.discord.refusalHint === undefined
+				? {}
+				: { refusalHint: config.discord.refusalHint }),
 		},
 		databaseUrl: config.database.url,
 		dataDir: config.dataDir,
@@ -275,10 +312,14 @@ export function resolveConfig(input: unknown): ResolvedConfig {
 			port: config.http.port ?? 3000,
 			...(config.http.hostname ? { hostname: config.http.hostname } : {}),
 			...(config.http.socketPath ? { socketPath: config.http.socketPath } : {}),
+			...(config.http.socketMode === undefined
+				? {}
+				: { socketMode: config.http.socketMode }),
 		},
 		...(config.avatar ? { avatar: config.avatar } : {}),
 		workDir: config.workDir ?? `${config.dataDir}/work`,
 		skills: config.skills ?? {},
+		memory: config.memory ?? true,
 		...(config.ops ? { ops: config.ops } : {}),
 		plugins: config.plugins ?? [],
 	};

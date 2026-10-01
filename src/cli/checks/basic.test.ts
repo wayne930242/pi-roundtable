@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import type { RoundtablePlugin } from "../../core/plugin.ts";
 import { Project } from "../project.ts";
 import type { Result } from "../report.ts";
 import {
@@ -10,6 +11,7 @@ import {
 import { checkBun } from "./bun.ts";
 import { checkConfiguration, checkPlugins } from "./configuration.ts";
 import { checkEnvironment } from "./environment.ts";
+import { checkImageProvider } from "./images.ts";
 import { checkModelLogin } from "./model.ts";
 import { checkPublicUrl } from "./public-url.ts";
 
@@ -167,6 +169,65 @@ describe("plugins", () => {
 	});
 	test("is skipped while the configuration is invalid", async () => {
 		const result = await checkPlugins(new Project("/x", fakePorts({})));
+		expect(result.status).toBe("skipped");
+	});
+});
+
+describe("image provider", () => {
+	const project = (plugins: RoundtablePlugin[]) =>
+		new Project(
+			"/x",
+			fakePorts(validConfig, {
+				define: async () => ({
+					options: { logger: {} as never },
+					plugins,
+				}),
+			}),
+		);
+	const detail = (result: Result) =>
+		result.status === "ok" ? (result.detail ?? "") : "";
+	test("passes without a provider and says agents get generated avatars, with the guide to fill the slot", async () => {
+		const result = await checkImageProvider(
+			project([{ name: "database", setup: () => ({}) }]),
+		);
+		expect(result.status).toBe("ok");
+		expect(detail(result)).toContain("generated from their display names");
+		expect(detail(result)).toContain(
+			"docs/plugins.md#providers-replace-a-part-the-core-runs-on",
+		);
+	});
+	test("passes and says so when a plugin fills the images slot", async () => {
+		const result = await checkImageProvider(
+			project([
+				{
+					name: "pictures",
+					providers: { images: async () => new Uint8Array() },
+					setup: () => ({}),
+				},
+			]),
+		);
+		expect(detail(result)).toContain("a plugin fills the images slot");
+	});
+	test("a plugin that fills only the judge does not count", async () => {
+		const result = await checkImageProvider(
+			project([
+				{
+					name: "judging",
+					providers: {
+						judge: {
+							askYesNo: async () => ({}),
+							askChoice: async () => ({ choice: "a", confidence: 1 }),
+							askScore: async () => [],
+						},
+					},
+					setup: () => ({}),
+				},
+			]),
+		);
+		expect(detail(result)).toContain("none");
+	});
+	test("is skipped while the configuration is invalid", async () => {
+		const result = await checkImageProvider(new Project("/x", fakePorts({})));
 		expect(result.status).toBe("skipped");
 	});
 });

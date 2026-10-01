@@ -1,3 +1,4 @@
+import type { BackgroundTarget } from "../../contract/channels.ts";
 import type {
 	DispatchThread,
 	DispatchThreads,
@@ -6,19 +7,19 @@ import type { ChannelKey } from "../../domain/conversation.ts";
 import { DelegationError } from "../../domain/errors.ts";
 import { messages } from "../../i18n/index.ts";
 import type { Logger } from "../../log.ts";
+import type { Delegator } from "../../services.ts";
 import type { Tier } from "../../speakers.ts";
 import { timeZone } from "../../time.ts";
-
-export type DelegationMode = "owner" | "party";
 
 export interface DelegationJob {
 	id: number;
 	/** Where the report comes back as a turn. */
 	channel: ChannelKey;
-	/** The channel of the owner's turn that started it, which hosts its thread; party jobs have none. */
+	/** The channel of the owner's turn that started it, which hosts its thread; absent where no thread opens. */
 	origin?: ChannelKey;
-	mode: DelegationMode;
-	/** Who asked; a party report is answered as this person's turn. */
+	/** The name of the background target the report is answered as. */
+	target: string;
+	/** Who asked; the report is answered as this person's turn. */
 	author: { id: string; name: string; tier?: Tier };
 	title: string;
 	task: string;
@@ -37,6 +38,8 @@ export interface DelegationWorker {
 
 export interface DelegatorOptions {
 	worker: DelegationWorker;
+	/** Resolves a job's target; an unknown one, or one without `delegation`, is refused with a DelegationError. */
+	targets(name: string): BackgroundTarget | undefined;
 	/** Posts the finished job back in its channel; never rejects. */
 	deliver: (job: DelegationJob, outcome: DelegationOutcome) => Promise<void>;
 	/** Each job's thread in its origin; without it every job reports in its channel only. */
@@ -46,17 +49,12 @@ export interface DelegatorOptions {
 }
 
 const MAX_TASK_CHARS = 4_000;
-/** Jobs one channel may have running at once. */
-const RUNNING_LIMIT: Readonly<Record<DelegationMode, number>> = {
-	owner: 3,
-	party: 2,
-};
 
 /**
  * Runs delegated tasks in the background and hands each result back to its channel. Jobs live
  * in memory: a restart drops the running ones, and the channel never hears back from them.
  */
-export class Delegator {
+export class DefaultDelegator implements Delegator {
 	readonly #options: DelegatorOptions;
 	readonly #running = new Map<
 		number,
@@ -83,7 +81,11 @@ export class Delegator {
 		const busy = [...this.#running.values()].filter(
 			({ job }) => job.channel === request.channel,
 		).length;
-		const limit = RUNNING_LIMIT[request.mode];
+		const limit = this.#options.targets(request.target)?.delegation?.maxRunning;
+		if (limit === undefined)
+			throw new DelegationError(
+				`delegated tasks are not available for ${request.target} conversations`,
+			);
 		if (busy >= limit)
 			throw new DelegationError(
 				`this channel already has ${busy} delegated tasks running; wait for one to report back`,
@@ -119,7 +121,7 @@ export class Delegator {
 			timeoutMs = 20 * 60_000,
 		} = this.#options;
 		logger.info(
-			{ job: job.id, channel: job.channel, mode: job.mode },
+			{ job: job.id, channel: job.channel, target: job.target },
 			"delegated task started",
 		);
 		const thread = await threads?.open(

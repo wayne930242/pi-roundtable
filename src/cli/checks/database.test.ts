@@ -21,7 +21,7 @@ const withMigration = (name = "probe") =>
 test("passes when the database answers and the migrations run, without printing the password", async () => {
 	const asked: unknown[] = [];
 	const port: DatabasePort = {
-		check: async (url, migrations) => void asked.push([url, migrations]),
+		check: async (url, plugins) => void asked.push([url, plugins]),
 	};
 	const result = await checkDatabase(withMigration(), port);
 	expect(result.status).toBe("ok");
@@ -29,7 +29,12 @@ test("passes when the database answers and the migrations run, without printing 
 		expect(result.detail).toContain("db.example.test:5432/bot");
 		expect(result.detail).not.toContain("secret");
 	}
-	expect(asked).toEqual([[validConfig.database.url, [migration]]]);
+	expect(asked).toEqual([
+		[
+			validConfig.database.url,
+			[{ name: "probe", setup: expect.any(Function), migrations: [migration] }],
+		],
+	]);
 });
 
 test("fails when the database is unreachable, naming it and saying how to start one", async () => {
@@ -65,7 +70,7 @@ test("fails when a migration fails, naming it", async () => {
 test("still tests reachability from the raw url while the configuration is invalid, and skips without a url", async () => {
 	const asked: unknown[] = [];
 	const port: DatabasePort = {
-		check: async (url, migrations) => void asked.push([url, migrations]),
+		check: async (url, plugins) => void asked.push([url, plugins]),
 	};
 	const invalid = new Project(
 		"/x",
@@ -90,7 +95,9 @@ describeDb("against PostgreSQL", () => {
 				});
 			},
 		};
-		await postgres.check(testDatabaseUrl, [run]);
+		await postgres.check(testDatabaseUrl, [
+			{ name: "doctor", migrations: [run] },
+		]);
 		const pool = new Bun.SQL(testDatabaseUrl, { max: 1 });
 		try {
 			const [found] = await pool`select to_regclass(${table}) as name`;
@@ -108,7 +115,9 @@ describeDb("against PostgreSQL", () => {
 			},
 		};
 		await expect(
-			postgres.check(testDatabaseUrl, [broken]),
+			postgres.check(testDatabaseUrl, [
+				{ name: "doctor", migrations: [broken] },
+			]),
 		).rejects.toBeInstanceOf(MigrationError);
 		await expect(
 			postgres.check("postgres://nobody@127.0.0.1:1/none", undefined),

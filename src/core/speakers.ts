@@ -1,8 +1,8 @@
-import { ConfigError } from "./domain/errors.ts";
+import { freeze } from "./freeze.ts";
 import type { OwnerIdentity } from "./identity.ts";
 
 /** How much a speaker may do: `owner` above `admin` above `member`. */
-export const TIERS = ["member", "admin", "owner"] as const;
+export const TIERS = Object.freeze(["member", "admin", "owner"] as const);
 export type Tier = (typeof TIERS)[number];
 
 /** Whether `tier` is `least` or above. */
@@ -42,14 +42,16 @@ export function addressee(
  * the description is fixed when the session opens, so it names no one, and the prompt says who
  * the speaker is.
  */
-export const THE_SPEAKER: OwnerIdentity = {
+export const THE_SPEAKER: Readonly<Omit<OwnerIdentity, "pronouns">> & {
+	readonly pronouns: Readonly<OwnerIdentity["pronouns"]>;
+} = freeze({
 	name: "the speaker",
 	pronouns: {
 		subject: "the speaker",
 		object: "the speaker",
 		possessive: "the speaker's",
 	},
-};
+});
 
 /** The turn's text under the speaker's name, so a conversation several speakers share says who wrote what. */
 export function attributed(speaker: Speaker, text: string): string {
@@ -106,38 +108,4 @@ export function speakerPolicy(map: SpeakerMap): SpeakerPolicy {
 			return tier && { id: author.id, name: author.name, tier };
 		},
 	};
-}
-
-/**
- * Reads a tier's members from text: comma-separated `user:<id>`, `role:<id>`, or `@everyone`;
- * a bare id is a user. `allowEveryone` is false for tiers that cannot be everyone.
- */
-export function parseTierMembers(
-	text: string | undefined,
-	name: string,
-	allowEveryone: boolean,
-): TierMembers | undefined {
-	const items = (text ?? "")
-		.split(",")
-		.map((item) => item.trim())
-		.filter((item) => item !== "");
-	if (items.length === 0) return undefined;
-	const users: string[] = [];
-	const roles: string[] = [];
-	let everyone = false;
-	for (const item of items) {
-		if (item === "@everyone") {
-			if (!allowEveryone)
-				throw new ConfigError(`${name} cannot include @everyone`);
-			everyone = true;
-			continue;
-		}
-		const [kind, id] = item.includes(":") ? item.split(":", 2) : ["user", item];
-		if ((kind !== "user" && kind !== "role") || !/^\d{17,20}$/.test(id ?? ""))
-			throw new ConfigError(
-				`${name} must list user:<id>, role:<id>, or @everyone, got ${item}`,
-			);
-		(kind === "role" ? roles : users).push(id as string);
-	}
-	return { users, roles, everyone };
 }

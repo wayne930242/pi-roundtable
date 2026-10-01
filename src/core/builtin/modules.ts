@@ -1,31 +1,33 @@
 import { join } from "node:path";
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
+import type { SurfacePort } from "../contract/surface.ts";
 import { scheduleCommands } from "../discord/schedule-commands.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
 import type { OwnerIdentity } from "../identity.ts";
 import type { ModelRef, ThinkingLevel } from "../models.ts";
-import { BackgroundTurns } from "../modules/background/background-turns.ts";
+import { ConversationBackgroundTurns } from "../modules/background/background-turns.ts";
 import { delegateExtension } from "../modules/delegation/delegate.ts";
 import {
+	DefaultDelegator,
 	type DelegationWorker,
-	Delegator,
 } from "../modules/delegation/delegator.ts";
-import { SolWorker } from "../modules/delegation/sol-worker.ts";
-import { discordAdminExtension } from "../modules/discord-admin/discord-admin.ts";
-import { ownerMemoryExtension } from "../modules/memory/owner-memory.ts";
+import { WebResearchWorker } from "../modules/delegation/web-research-worker.ts";
 import { notifyExtension } from "../modules/notify/notify.ts";
 import { Scheduler } from "../modules/schedules/scheduler.ts";
-import {
-	type AgentChannelLookup,
-	schedulesExtension,
-} from "../modules/schedules/schedules.ts";
+import { schedulesExtension } from "../modules/schedules/schedules.ts";
 import type { RoundtablePlugin } from "../plugin.ts";
-import type {
-	SessionContext,
-	SessionTool,
-	SessionToolSnapshot,
-} from "../sessions.ts";
-import { THE_SPEAKER } from "../speakers.ts";
+import {
+	AGENTS,
+	BACKGROUND_TURNS,
+	DELEGATION,
+	SCHEDULES,
+} from "../services.ts";
+import type { SessionContext } from "../sessions.ts";
+import { DELEGATE_TOOL } from "../shared/delegate-tool.ts";
+import { SCHEDULE_TOOLS } from "../shared/schedule-tools.ts";
+import { THE_SPEAKER, type Tier } from "../speakers.ts";
+import { DISCORD } from "./discord.ts";
+import { fixed } from "./session-tool.ts";
 
 export interface ModulesOptions {
 	/** Who the tools serve in the owner's own sessions. */
@@ -42,58 +44,68 @@ export interface ModulesOptions {
 		thinking: ThinkingLevel;
 		worker?: DelegationWorker;
 	};
-	/** Another agent's channel, for reading its schedules; throws ScheduleError when unknown. */
-	agentChannelOf?: AgentChannelLookup;
-}
-
-/** A session tool whose extension never changes. */
-function fixed(
-	name: string,
-	factory: SessionToolSnapshot["factory"],
-): SessionTool {
-	return { name, phase: "tools", snapshot: () => ({ revision: 0, factory }) };
 }
 
 /**
- * The owner's modules: memory, notifications, schedules, delegated tasks, and Discord reading
- * and management, each a session tool, and the turns nobody wrote. The delegator's running jobs
- * join the shutdown drain.
+ * Admins schedule and delegate; every speaker may list schedules and use the web tools the
+ * delegated worker and pi-web-access give. Notifying the owner stays with the owner.
+ */
+const MODULE_TIERS: Readonly<Record<string, Tier>> = {
+	...Object.fromEntries(
+		[...SCHEDULE_TOOLS, DELEGATE_TOOL].map((tool) => [tool, "admin" as const]),
+	),
+	schedule_list: "member",
+	web_search: "member",
+	fetch_content: "member",
+	get_search_content: "member",
+};
+
+/**
+ * The owner's modules: notifications, schedules, and delegated tasks, each a session tool, and
+ * the turns nobody wrote. The delegator's running jobs join the shutdown drain.
  */
 export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
-	const { owner, agentChannelOf } = options;
+	const { owner } = options;
 	// Outside the agent server a conversation has no channel of its own to post a run in.
 	const channelFor = async (
 		channel: ChannelKey,
-		surfaceOwnerChannel: () => Promise<ChannelKey>,
-	) => (channel.startsWith("discord:") ? channel : surfaceOwnerChannel());
+		surfaces: SurfacePort,
+		ownerChannel: () => Promise<ChannelKey>,
+	) => (surfaces.of(channel) ? channel : ownerChannel());
 	return {
 		name: "modules",
-		setup: ({ conversations, core, logger }) => {
-			const { stores, discord } = core;
-			const { surface } = discord;
+		provides: [BACKGROUND_TURNS, DELEGATION],
+		setup: ({ conversations, services, logger, surfaces }) => {
+			const schedules = services.get(SCHEDULES);
+			const discord = services.get(DISCORD);
+			const { connection } = discord;
+			// Another agent's channel, for schedule_list; asked when a tool runs, after the agent server set up.
+			const agentChannelOf = (agent: string) =>
+				services.get(AGENTS).team.channelOf(agent);
 			const ownerChannelFor = (channel: ChannelKey) =>
-				channelFor(channel, () => surface.ownerChannel());
-			const background = new BackgroundTurns({
+				channelFor(channel, surfaces, () => connection.ownerChannel());
+			const background = new ConversationBackgroundTurns({
 				conversations,
 				system: { id: "assistant", name: options.assistant },
 				logger,
 			});
-			const delegator = new Delegator({
+			const delegator = new DefaultDelegator({
 				worker:
 					options.delegation.worker ??
-					new SolWorker({
+					new WebResearchWorker({
 						modelRuntime: options.modelRuntime,
 						agentDir: options.agentDir,
 						workDir: join(options.dataDir, "delegate"),
 						model: options.delegation.model,
 						thinking: options.delegation.thinking,
 					}),
+				targets: (name) => conversations.target(name),
 				deliver: (job, outcome) => background.runDelegated(job, outcome),
 				threads: discord.threads,
 				logger,
 			});
-			core.provide("background", background);
-			core.provide("delegator", delegator);
+			services.provide(BACKGROUND_TURNS, background);
+			services.provide(DELEGATION, delegator);
 			// An agent session serves every speaker, so its tools name none.
 			const served = (session: SessionContext) =>
 				session.agent ? THE_SPEAKER : owner;
@@ -102,19 +114,11 @@ export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 					{ name: "delegator", busy: () => delegator.runningChannels() },
 				],
 				sessionTools: [
-					fixed("owner-memory", (session) =>
-						ownerMemoryExtension(
-							stores.memory,
-							served(session),
-							// The owner's own chats have one speaker; the agent server's have several.
-							session.agent ? session.speaker : undefined,
-						),
-					),
-					fixed("notify", () => notifyExtension(surface, owner)),
+					fixed("notify", () => notifyExtension(connection, owner)),
 					fixed("schedules", (session) =>
 						schedulesExtension(
 							{
-								store: stores.schedules,
+								store: schedules,
 								owner: { id: owner.id, name: owner.name },
 								channelFor: ownerChannelFor,
 							},
@@ -137,10 +141,8 @@ export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 							session.speaker,
 						),
 					),
-					fixed("discord-admin", () =>
-						discordAdminExtension(surface.ownerDiscord(), owner),
-					),
 				],
+				toolTiers: MODULE_TIERS,
 			};
 		},
 	};
@@ -153,12 +155,22 @@ export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 export function schedulerPlugin(): RoundtablePlugin {
 	return {
 		name: "schedules",
-		setup: ({ core, logger }) => {
+		setup: ({ conversations, services, env, logger }) => {
+			const schedules = services.get(SCHEDULES);
 			const scheduler = new Scheduler({
-				store: core.stores.schedules,
-				runner: core.background,
+				store: schedules,
+				runner: services.get(BACKGROUND_TURNS),
 				logger,
 			});
+			// Without Discord there are no schedule commands; the scheduler still fires.
+			const discord = services.find(DISCORD);
+			discord?.commands.add(
+				scheduleCommands(
+					discord.guard,
+					schedules,
+					(target) => conversations.target(target)?.label(env.locale) ?? target,
+				),
+			);
 			return {
 				services: [
 					{
@@ -166,9 +178,6 @@ export function schedulerPlugin(): RoundtablePlugin {
 						start: () => scheduler.start(),
 						stop: () => scheduler.stop(),
 					},
-				],
-				interactions: [
-					scheduleCommands(core.discord.guard, core.stores.schedules),
 				],
 			};
 		},

@@ -20,7 +20,7 @@ import {
 	type TestStore,
 	testDatabaseUrl,
 } from "../../testing/database.ts";
-import { SkillRegistry } from "./skill-registry.ts";
+import { StoredSkillRegistry } from "./skill-registry.ts";
 import { SkillStore } from "./skill-store.ts";
 
 const BUILTIN = join(import.meta.dir, "..", "..", "assets", "skills");
@@ -28,7 +28,7 @@ const BUILTIN = join(import.meta.dir, "..", "..", "assets", "skills");
 // Runs against a real PostgreSQL, only when ROUNDTABLE_TEST_DATABASE_URL is set.
 describeDb("PostgreSQL", () => {
 	let store: TestStore<SkillStore>;
-	let registry: SkillRegistry;
+	let registry: StoredSkillRegistry;
 	let dir: string;
 
 	const skillFile = (name: string, description: string) =>
@@ -50,7 +50,7 @@ describeDb("PostgreSQL", () => {
 
 	const open = async () => {
 		store = await openTestStore(SkillStore, TEST_GUILD);
-		registry = new SkillRegistry({
+		registry = new StoredSkillRegistry({
 			store,
 			reposDir: join(dir, "repos"),
 			writtenDir: join(dir, "skills"),

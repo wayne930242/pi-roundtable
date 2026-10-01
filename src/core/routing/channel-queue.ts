@@ -42,3 +42,8 @@ export class ChannelQueue {
 		return [...this.#sizes.keys()];
 	}
 }
+
+/** A queue of its own, apart from the host's; for work that must not wait behind a running turn. */
+export function channelQueue(): ChannelQueue {
+	return new ChannelQueue();
+}

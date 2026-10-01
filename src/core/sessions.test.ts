@@ -51,7 +51,7 @@ describe("compileSessionPlan", () => {
 			"confirmation-gate",
 			"ask-user",
 			"self-compact-guard",
-			"profile-tools",
+			"active-tools",
 		]) {
 			expect(() => compileSessionPlan([tool(name, "tools")])).toThrow(
 				new PluginError(

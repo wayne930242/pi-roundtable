@@ -1,24 +1,43 @@
 import { attachmentsOf } from "../attachments/turn-attachments.ts";
 import type {
 	Admission,
+	BackgroundTarget,
 	ChannelClaim,
 	InboundMessage,
 } from "../contract/channels.ts";
+import type { AgentRuntime } from "../contract/runtime.ts";
+import type { SurfacePort } from "../contract/surface.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
-import type { AgentRuntime, ChatSurface } from "../domain/ports.ts";
+import { messages } from "../i18n/index.ts";
 import type { OwnerIdentity } from "../identity.ts";
 import type { Logger } from "../log.ts";
 import { withReference } from "../routing/message-text.ts";
 import { outcome } from "../routing/settle-turn.ts";
 import { addressee, attributed, type SpeakerPolicy } from "../speakers.ts";
-import type { AgentTeam } from "./agent-team.ts";
+import type { DiscordAgentTeam } from "./agent-team.ts";
+import { discordIdOf } from "./team-keys.ts";
 
 /**
- * The agent server outranks every other claim, and its guild's other channels stay silent even
- * when party mode or a mention would answer there. It becomes the core's reserved branch once
- * the team moves into the core (pi-roundtable batch 7).
+ * The agent server outranks every other claim on the Discord channels it owns, and its guild's
+ * other channels stay silent even when another plugin's mode or a mention would answer there; a claim of a
+ * plugin must use a higher priority to answer in that guild. It owns no channel of another
+ * surface. It becomes the core's reserved branch once the team moves into the core
+ * (pi-roundtable batch 7).
  */
 export const AGENT_SERVER_PRIORITY = 100;
+
+/**
+ * The host's own background target: the conversations of the owner and of the agent server. The
+ * agent server contributes it, so schedules and delegated tasks made in those conversations carry
+ * its name and limits. Its label is read when a list is shown, never when this module loads,
+ * because the host applies its catalog at startup.
+ */
+export const OWNER_TARGET: BackgroundTarget = {
+	name: "owner",
+	label: () => messages().scheduleModeOwner,
+	schedules: { perChannel: 20, promptChars: 8_000, aheadDays: 366 },
+	delegation: { maxRunning: 3 },
+};
 
 export interface AgentClaimOptions {
 	/** The owner, as forwarded messages name them. */
@@ -26,7 +45,7 @@ export interface AgentClaimOptions {
 	/** Who may talk to the agents, and at which tier. */
 	speakers: SpeakerPolicy;
 	team: Pick<
-		AgentTeam,
+		DiscordAgentTeam,
 		| "guildId"
 		| "owns"
 		| "answerOwner"
@@ -34,8 +53,8 @@ export interface AgentClaimOptions {
 		| "answerBackground"
 		| "startFresh"
 	>;
-	runtime: Pick<AgentRuntime, "steer">;
-	surface: Pick<ChatSurface, "react" | "unreact">;
+	runtime: Pick<AgentRuntime, "steer" | "stop">;
+	surface: Pick<SurfacePort, "react" | "unreact">;
 	/** Where a channel's attachments are saved. */
 	attachmentDir: (channel: ChannelKey) => string;
 	logger: Logger;
@@ -61,7 +80,7 @@ export function agentClaim(options: AgentClaimOptions): ChannelClaim {
 			kind: "background",
 			turn: {
 				channel: message.channel,
-				mode: "owner",
+				target: OWNER_TARGET.name,
 				author: { id: message.authorId, name: message.authorName },
 				turnId: `webhook-${message.messageId}`,
 				text: `Webhook "${message.authorName}" posted in your channel:\n${text}`,
@@ -71,7 +90,7 @@ export function agentClaim(options: AgentClaimOptions): ChannelClaim {
 				logger.warn(
 					{
 						channel: message.channel,
-						webhook: message.webhookId,
+						webhook: message.integration?.id,
 						outcome: result,
 					},
 					"webhook post not answered",
@@ -82,14 +101,16 @@ export function agentClaim(options: AgentClaimOptions): ChannelClaim {
 	return {
 		name: "agent-server",
 		priority: AGENT_SERVER_PRIORITY,
-		owns: (channel, guildId) =>
-			team.owns(channel) !== undefined ||
-			(guildId !== undefined && guildId === team.guildId),
+		// Only Discord keys: another surface's channel is never the agent server's, whatever its id.
+		owns: (channel, space) =>
+			discordIdOf(channel) !== undefined &&
+			(team.owns(channel) !== undefined ||
+				(space !== undefined && space === team.guildId)),
 		admit: (message) => {
 			const owned = team.owns(message.channel);
 			// The agent server's other channels are the owner's notes: nothing there is answered.
 			if (!owned) return undefined;
-			if (owned === "agent" && message.webhookId && !message.ownWebhook)
+			if (owned === "agent" && message.integration && !message.integration.own)
 				return webhookReport(message);
 			if (message.authorIsBot) return undefined;
 			const speaker = speakers.resolve({
@@ -144,8 +165,12 @@ export function agentClaim(options: AgentClaimOptions): ChannelClaim {
 			};
 		},
 		background: async (turn) => {
-			if (turn.mode === "party")
-				return { status: "skipped", reason: "party mode is off" };
+			// Fail closed: a turn for any target but the owner's never reaches the owner's tools.
+			if (turn.target !== OWNER_TARGET.name)
+				return {
+					status: "skipped",
+					reason: `the agent server answers only "${OWNER_TARGET.name}" background turns`,
+				};
 			const owned = team.owns(turn.channel);
 			if (owned === "group")
 				return { status: "skipped", reason: "groups have no schedules" };
@@ -162,6 +187,7 @@ export function agentClaim(options: AgentClaimOptions): ChannelClaim {
 				),
 			);
 		},
+		stop: (channel) => runtime.stop(channel),
 		startFresh: async (channel) => {
 			await team.startFresh(channel);
 			return "agent";

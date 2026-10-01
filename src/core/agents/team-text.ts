@@ -1,10 +1,11 @@
 import { AgentError } from "../domain/errors.ts";
 import { assistantName } from "../i18n/index.ts";
 import type { ThinkingSetting } from "../models.ts";
+import type { AgentDirectory } from "../services.ts";
 import { zonedStamp } from "../time.ts";
 import type { ChannelMessage } from "./agent-ports.ts";
 import { describeThinking } from "./agent-settings.ts";
-import type { Agent, AgentStore } from "./agent-store.ts";
+import type { Agent } from "./agent-store.ts";
 
 /** One message as channel_read shows it: id, local time, author, text, attachments. */
 export function messageLine(message: ChannelMessage): string {
@@ -26,7 +27,7 @@ export function channelIdFromRef(channel: string): string {
 }
 
 /** Every agent and group as agent_list shows them, before the category layout. */
-export function teamListText(store: Pick<AgentStore, "agents" | "groups">) {
+export function teamListText(store: Pick<AgentDirectory, "agents" | "groups">) {
 	const agents = store.agents().map((a) => {
 		const channel = a.channelId ? `<#${a.channelId}>` : "no channel";
 		return `- ${a.name} "${a.displayName}" — ${channel}, ${a.status}`;
@@ -40,11 +41,12 @@ export function teamListText(store: Pick<AgentStore, "agents" | "groups">) {
 	return `Agents:\n${agents.join("\n") || "none"}\n\nGroups:\n${groups.join("\n") || "none"}`;
 }
 
-/** One agent as agent_get shows it; unset settings name the assistant's. */
+/** One agent as agent_get shows it; unset settings name the assistant's, and no skills line while the skills addon is off. */
 export function agentDetails(
 	agent: Agent,
 	defaults: { model: string; thinking: ThinkingSetting },
-	skills: string,
+	skills: string | undefined,
+	avatars = true,
 ): string {
 	return [
 		`Name: ${agent.name}`,
@@ -53,8 +55,8 @@ export function agentDetails(
 		`Channel: ${agent.channelId ? `<#${agent.channelId}>` : "none"}`,
 		`Model: ${agent.model ?? `${assistantName()}'s (${defaults.model})`}`,
 		`Thinking: ${agent.thinking ?? `${assistantName()}'s (${describeThinking(defaults.thinking)})`}`,
-		`Skills: ${skills}`,
-		`Avatar prompt: ${agent.avatarPrompt}`,
+		...(skills === undefined ? [] : [`Skills: ${skills}`]),
+		...(avatars ? [`Avatar prompt: ${agent.avatarPrompt}`] : []),
 		`Prompt:\n${agent.prompt}`,
 	].join("\n");
 }

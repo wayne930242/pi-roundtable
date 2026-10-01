@@ -1,6 +1,6 @@
 import type { ThinkingSetting } from "../models.ts";
 import type { ContextUse } from "./agent-ports.ts";
-import { channelIdOf, channelKey } from "./team-keys.ts";
+import { channelIdOf, discordKey } from "./team-keys.ts";
 import type { TeamContext } from "./team-options.ts";
 
 /** An active agent as the dashboard shows it. */
@@ -44,10 +44,10 @@ export async function teamStatus(ctx: TeamContext): Promise<TeamStatus> {
 	const agents: AgentStatus[] = [];
 	for (const agent of store.agents()) {
 		if (agent.status !== "active") continue;
-		const home = agent.channelId ? channelKey(agent.channelId) : undefined;
+		const home = agent.channelId ? discordKey(agent.channelId) : undefined;
 		const workingIn = turns.workingIn(agent.name);
 		const queued = home ? queue.size(home) : 0;
-		const context = home ? runtime.contextUsage(home) : undefined;
+		const context = home ? runtime.contextUsage?.(home) : undefined;
 		const lastActive = turns.lastActive(agent.name);
 		agents.push({
 			name: agent.name,
@@ -72,7 +72,7 @@ export async function teamStatus(ctx: TeamContext): Promise<TeamStatus> {
 				channelId: group.channelId,
 				members: group.members.map((m) => store.agent(m)?.displayName ?? m),
 				host: store.agent(group.host)?.displayName ?? group.host,
-				busy: queue.size(channelKey(group.channelId)),
+				busy: queue.size(discordKey(group.channelId)),
 				...(lastActive ? { lastActive } : {}),
 			};
 		});

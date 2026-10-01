@@ -1,19 +1,13 @@
-import type {
-	ChannelKey,
-	PendingConfirmation,
-	TurnResult,
-} from "../domain/conversation.ts";
-import type { TurnRequest } from "../domain/ports.ts";
+import type { AgentRuntime, ContextUse } from "../contract/runtime.ts";
 import type { ThinkingSetting } from "../models.ts";
 
-/** The part of the Pi runtime the agent team drives. */
-export interface AgentTurnRunner {
-	runTurn(request: TurnRequest): Promise<TurnResult>;
-	heldActions(session: ChannelKey): Promise<PendingConfirmation | undefined>;
-	startFresh(session: ChannelKey): Promise<void>;
-	/** Undefined until the conversation has run a turn since startup. */
-	contextUsage(session: ChannelKey): ContextUse | undefined;
-}
+export type { ContextUse };
+
+/** The part of the runtime the agent team drives. */
+export type AgentTurnRunner = Pick<
+	AgentRuntime,
+	"runTurn" | "heldActions" | "startFresh" | "contextUsage"
+>;
 
 /** One agent's message in a channel, posted under its name and avatar. */
 export interface AgentPost {
@@ -80,13 +74,6 @@ export interface AgentChannels {
 		channelId: string,
 		options: { limit: number; around?: string },
 	): Promise<ChannelMessage[]>;
-}
-
-/** A conversation's context use after its latest turn, as Pi estimates it. */
-export interface ContextUse {
-	/** Null right after a compaction, until the next model response. */
-	tokens: number | null;
-	contextWindow: number;
 }
 
 /** The dashboard channel's one pinned message, made when missing and edited in place. */

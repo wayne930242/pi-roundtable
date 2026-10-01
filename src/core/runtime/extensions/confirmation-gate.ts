@@ -4,7 +4,6 @@ import type {
 	PendingConfirmation,
 } from "../../domain/conversation.ts";
 import type { OwnerPrompts } from "../../domain/owner-prompts.ts";
-import type { ProfileId } from "../../domain/profile.ts";
 import type { HoldCheck } from "../../holds.ts";
 import { messages } from "../../i18n/index.ts";
 import { type OwnerIdentity, ownerWords } from "../../identity.ts";
@@ -46,15 +45,15 @@ function byCodeUnit(a: string, b: string): number {
 }
 
 /**
- * Per-channel state of held actions. With the owner's prompts bound, a call that needs his
- * confirmation waits for his answer on a card and runs or is refused in the same turn. Otherwise,
+ * Per-channel state of held actions. With the owner's prompts bound, a call that needs their
+ * confirmation waits for their answer on a card and runs or is refused in the same turn. Otherwise,
  * or when the card expires, the call is held: it records its tool and exact input, and the
  * owner's next message either confirms them, which lets each identical call run once in that
  * turn, or drops them.
  */
 // pi-lens-ignore: large-class — one gate per conversation; its state is the held calls and their approvals
 export class ConfirmationGate {
-	#profile: ProfileId = "general";
+	#selectionId: string | undefined;
 	#pending: PendingConfirmation | undefined;
 	#approved: HeldCall[] = [];
 	readonly #holds: HoldCheck;
@@ -94,11 +93,11 @@ export class ConfirmationGate {
 
 	/** `addressee` is who the turn is for; without one, the owner. */
 	beginTurn(
-		profile: ProfileId,
+		selectionId: string,
 		confirmed: boolean,
 		addressee?: OwnerIdentity,
 	): void {
-		this.#profile = profile;
+		this.#selectionId = selectionId;
 		this.#addressee = addressee ?? this.#owner;
 		this.#approved = confirmed ? [...(this.pending()?.calls ?? [])] : [];
 		this.#pending = undefined;
@@ -115,8 +114,8 @@ export class ConfirmationGate {
 	}
 
 	/**
-	 * Like `hold`, but asks the owner on a card first when `prompts` is given: his approval runs
-	 * the call, his refusal blocks it, and only an expired card holds it.
+	 * Like `hold`, but asks the owner on a card first when `prompts` is given: their approval runs
+	 * the call, their refusal blocks it, and only an expired card holds it.
 	 */
 	async review(
 		tool: string,
@@ -175,8 +174,11 @@ export class ConfirmationGate {
 	}
 
 	#record(call: HeldCall): string {
+		const selectionId = this.#selectionId;
+		if (selectionId === undefined)
+			throw new Error("a call was held outside a turn");
 		const pending = this.#pending ?? {
-			profile: this.#profile,
+			selectionId,
 			heldAt: new Date(),
 			calls: [],
 		};

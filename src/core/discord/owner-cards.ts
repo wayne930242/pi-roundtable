@@ -12,6 +12,7 @@ import {
 	TextInputBuilder,
 	TextInputStyle,
 } from "discord.js";
+import { parseChannelKey } from "../contract/surface.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
 import type {
 	Approval,
@@ -56,7 +57,7 @@ export interface CardMessage {
 /** Where a channel's cards are posted. */
 export interface CardChannel {
 	send(payload: CardPayload): Promise<CardMessage>;
-	/** A thread, where the owner is mentioned so he hears of the card; a channel never mentions him. */
+	/** A thread, where the owner is mentioned so they hear of the card; a channel never mentions them. */
 	thread?: boolean;
 }
 
@@ -118,10 +119,9 @@ export class OwnerCards implements InteractionModule {
 		return [];
 	}
 
-	/** The channel's cards; undefined for a conversation outside Discord. */
+	/** The channel's cards; the chat surface port sends only Discord keys here. */
 	prompts(channel: ChannelKey, speaker?: Speaker): OwnerPrompts | undefined {
-		if (!channel.startsWith("discord:")) return undefined;
-		const channelId = channel.slice("discord:".length);
+		const channelId = parseChannelKey(channel).id;
 		return {
 			confirm: (title, message, signal, minTier = "owner") =>
 				this.#post<Approval>(channelId, signal, "expired", "cancelled", {

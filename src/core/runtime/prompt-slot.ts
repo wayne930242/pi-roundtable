@@ -2,10 +2,10 @@ import type { OwnerPrompts, OwnerQuestion } from "../domain/owner-prompts.ts";
 import { assistantName } from "../i18n/index.ts";
 
 /**
- * A run's way to ask the owner while it works. A turn he started or a report turn binds the
+ * A run's way to ask the owner while it works. A turn they started or a report turn binds the
  * cards of its channel, and a coding worker those of its dispatch thread; a schedule's turn, or
- * a session with no Discord channel, leaves the slot empty and held actions wait for his next
- * message instead. The slot also counts how long the run waited on him, which its time limit
+ * a session with no Discord channel, leaves the slot empty and held actions wait for their next
+ * message instead. The slot also counts how long the run waited on them, which its time limit
  * leaves out.
  */
 export class PromptSlot {
@@ -56,6 +56,11 @@ export class PromptSlot {
 			if (--this.#open === 0) this.#waited += Date.now() - this.#openSince;
 		}
 	}
+}
+
+/** A fresh slot, for a run that asks the owner while it works. */
+export function promptSlot(): PromptSlot {
+	return new PromptSlot();
 }
 
 /**

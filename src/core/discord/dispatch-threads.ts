@@ -12,7 +12,7 @@ import type { Logger } from "../log.ts";
 
 const PREFIX = "discord:";
 /** Discord's limit on a thread name. */
-export const THREAD_NAME_LIMIT = 100;
+const THREAD_NAME_LIMIT = 100;
 
 /** The chat side of dispatch threads; the Discord surface implements it. */
 export interface ThreadHost {
@@ -48,7 +48,7 @@ export interface DispatchThreadsOptions {
 	host: ThreadHost;
 	/** Threads still open, so a start after a crash can archive them. */
 	ledgerPath: string;
-	/** Channels that keep posting in place, such as party channels. */
+	/** Channels whose claims keep reports in place rather than opening threads. */
 	excluded?: (channel: ChannelKey) => boolean;
 	logger: Logger;
 }

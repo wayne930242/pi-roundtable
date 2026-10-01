@@ -1,6 +1,24 @@
-import pino, { type Logger } from "pino";
+import pino from "pino";
 
-export type { Logger };
+/** One log method: fields and a message, or a message alone. */
+export interface LogFn {
+	(fields: object, message?: string): void;
+	(message: string): void;
+}
+
+/**
+ * The logger a plugin writes to. pino satisfies it, so a process that already has a pino logger
+ * hands it over as it is.
+ */
+export interface Logger {
+	debug: LogFn;
+	info: LogFn;
+	warn: LogFn;
+	error: LogFn;
+	fatal: LogFn;
+	/** A logger that adds these fields to every line it writes. */
+	child(fields: Record<string, unknown>): Logger;
+}
 
 /** One log line as pino writes it: `level`, `time`, `msg`, `err`, and the logged fields. */
 export type LogEntry = Record<string, unknown>;
@@ -12,7 +30,7 @@ export type LogEntry = Record<string, unknown>;
 export function createLogger(
 	app: string,
 	onError?: (entry: LogEntry) => void,
-): Logger {
+): pino.Logger {
 	const options = {
 		base: { app },
 		level: process.env.LOG_LEVEL ?? "info",

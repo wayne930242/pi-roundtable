@@ -54,7 +54,7 @@ interface ServerTool {
 }
 
 /** Server-level tools only the owner's agent has; channel tools reuse the outside-agent set. */
-export const SERVER_TOOLS: Record<string, ServerTool> = {
+const SERVER_TOOLS: Record<string, ServerTool> = {
 	discord_list_servers: {
 		label: "List Discord servers",
 		describe: (o) =>
@@ -248,19 +248,19 @@ export const SERVER_TOOLS: Record<string, ServerTool> = {
 	},
 };
 
-/** Every Discord tool of the owner's `discord` profile. */
-export const DISCORD_OWNER_TOOLS = [
+/** Every Discord tool the owner's conversations may use: the names the `discord-admin` addon registers. */
+export const DISCORD_ADMIN_TOOLS: readonly string[] = Object.freeze([
 	...Object.keys(CHANNEL_TOOLS),
 	...Object.keys(SERVER_TOOLS),
-];
+]);
 
 /** Runs one Discord tool for the owner; throws ChannelToolError for a refused call. */
-export interface OwnerDiscord {
+export interface OwnerOperations {
 	run(tool: string, args: Record<string, unknown>): Promise<unknown>;
 }
 
 export function discordAdminExtension(
-	discord: OwnerDiscord,
+	discord: OwnerOperations,
 	owner: OwnerIdentity,
 ): ExtensionFactory {
 	const o = ownerWords(owner);

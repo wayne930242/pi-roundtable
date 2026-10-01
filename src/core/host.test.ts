@@ -1,15 +1,33 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { InteractionContextType } from "discord.js";
-import type { ChannelClaim, ConversationPort } from "./contract/channels.ts";
+import pino from "pino";
+import type {
+	ChannelClaim,
+	ConversationPort,
+	InboundMessage,
+} from "./contract/channels.ts";
+import type { ChatSurface } from "./contract/surface.ts";
 import { NotLinkedError, PluginError } from "./errors.ts";
 import type { HoldRule } from "./holds.ts";
 import { Roundtable, type RoundtableOptions } from "./host.ts";
 import { silentLogger } from "./log.ts";
 import type { LinkedSessions, RoundtablePlugin, Service } from "./plugin.ts";
 import type { SessionTool } from "./sessions.ts";
+
+/** A chat surface that connects to nothing; `extra` adds what a test observes. */
+function quietSurface(
+	prefix: string,
+	extra: Partial<ChatSurface> = {},
+): ChatSurface {
+	return {
+		surface: prefix,
+		start: async () => undefined,
+		sendReply: async () => undefined,
+		...extra,
+	};
+}
 
 /** A service that records its start and stop in `log`. */
 function recorded(
@@ -33,32 +51,37 @@ function plugin(name: string, services: Service[]): RoundtablePlugin {
 	return { name, setup: () => ({ services }) };
 }
 
+/** Every host of the test, so one that a test leaves running never blocks the next: one runs per process. */
+const hosts: Roundtable[] = [];
+afterEach(async () => {
+	for (const roundtable of hosts.splice(0)) await roundtable.shutdown("test");
+});
+
 function host(
 	plugins: RoundtablePlugin[],
 	options: Partial<RoundtableOptions> = {},
-): { roundtable: Roundtable; exits: number[] } {
-	const exits: number[] = [];
+): { roundtable: Roundtable } {
 	const roundtable = new Roundtable(
 		{
 			logger: silentLogger(),
 			drain: { intervalMs: 1, limitMs: 50 },
-			exit: (code) => exits.push(code),
 			...options,
 		},
 		plugins,
 	);
-	return { roundtable, exits };
+	hosts.push(roundtable);
+	return { roundtable };
 }
 
 describe("Roundtable", () => {
 	test("starts services in registration order and stops them in reverse", async () => {
 		const log: string[] = [];
-		const { roundtable, exits } = host([
+		const { roundtable } = host([
 			plugin("a", [recorded("a1", log), recorded("a2", log)]),
 			plugin("b", [recorded("b1", log)]),
 		]);
 		await roundtable.run();
-		await roundtable.shutdown("SIGTERM");
+		const code = await roundtable.shutdown("SIGTERM");
 		expect(log).toEqual([
 			"start a1",
 			"start a2",
@@ -67,7 +90,7 @@ describe("Roundtable", () => {
 			"stop a2",
 			"stop a1",
 		]);
-		expect(exits).toEqual([0]);
+		expect(code).toBe(0);
 	});
 
 	test("waits for busy work before stopping anything", async () => {
@@ -87,7 +110,7 @@ describe("Roundtable", () => {
 
 	test("hands aborted work over once the drain limit runs out", async () => {
 		const aborted: string[][] = [];
-		const { roundtable, exits } = host(
+		const { roundtable } = host(
 			[plugin("a", [{ name: "a1", busy: () => ["discord:1", "discord:2"] }])],
 			{
 				aborted: async (left) => {
@@ -96,9 +119,9 @@ describe("Roundtable", () => {
 			},
 		);
 		await roundtable.run();
-		await roundtable.shutdown("SIGTERM");
+		const code = await roundtable.shutdown("SIGTERM");
 		expect(aborted).toEqual([["discord:1", "discord:2"]]);
-		expect(exits).toEqual([0]);
+		expect(code).toBe(0);
 	});
 
 	test("keeps stopping the rest when one service fails to stop", async () => {
@@ -117,42 +140,6 @@ describe("Roundtable", () => {
 		await roundtable.run();
 		await roundtable.shutdown("SIGTERM");
 		expect(log).toEqual(["start a1", "stop a1"]);
-	});
-
-	test("tells every plugin how the agent server started, even after a handler fails", async () => {
-		const outcomes: string[] = [];
-		const run = async (agentServer: () => Promise<void>) => {
-			const { roundtable } = host([
-				{ name: "server", agentServer, setup: () => ({}) },
-				{
-					name: "broken",
-					setup: () => ({
-						events: {
-							agentServer: () => {
-								throw new Error("channel missing");
-							},
-						},
-					}),
-				},
-				{
-					name: "listener",
-					setup: () => ({
-						events: {
-							agentServer: (outcome) => {
-								outcomes.push(outcome);
-							},
-						},
-					}),
-				},
-			]);
-			await roundtable.run();
-			await Bun.sleep(5);
-		};
-		await run(async () => {});
-		await run(async () => {
-			throw new Error("Missing Access");
-		});
-		expect(outcomes).toEqual(["ready", "failed"]);
 	});
 
 	test("tells the plugins what the drain gave up on before any service stops", async () => {
@@ -176,16 +163,6 @@ describe("Roundtable", () => {
 		await roundtable.run();
 		await roundtable.shutdown("SIGTERM");
 		expect(log).toEqual(["start a1", "drained discord:1", "stop a1"]);
-	});
-
-	test("refuses two plugins that both start the agent server", async () => {
-		const { roundtable } = host([
-			{ name: "a", agentServer: async () => {}, setup: () => ({}) },
-			{ name: "b", agentServer: async () => {}, setup: () => ({}) },
-		]);
-		await expect(roundtable.run()).rejects.toThrow(
-			"plugins a and b both start the agent server. Keep one.",
-		);
 	});
 
 	test("a plugin that only hooks the lifecycle adds something; one with no hook and no part adds nothing", async () => {
@@ -213,7 +190,7 @@ describe("Roundtable", () => {
 		expect(log).toEqual([]);
 	});
 
-	test("composes commands before any service starts, and serves HTTP only while every service runs", async () => {
+	test("serves HTTP only while every service runs", async () => {
 		const log: string[] = [];
 		const socketPath = join(mkdtempSync(join(tmpdir(), "host-")), "web.sock");
 		const get = async () => {
@@ -230,9 +207,8 @@ describe("Roundtable", () => {
 			[
 				{
 					name: "a",
-					useCommands: (composed) =>
-						log.push(`commands ${composed.commands.map((c) => c.name)}`),
 					setup: () => ({
+						surfaces: [quietSurface("chat", {})],
 						services: [
 							{
 								name: "a1",
@@ -242,12 +218,6 @@ describe("Roundtable", () => {
 								stop: async () => {
 									log.push(`stop a1: ${await get()}`);
 								},
-							},
-						],
-						interactions: [
-							{
-								module: { commands: () => [], handle: async () => false },
-								rootOptions: [{ type: 1, name: "help", description: "help" }],
 							},
 						],
 						http: [
@@ -261,22 +231,12 @@ describe("Roundtable", () => {
 					}),
 				},
 			],
-			{
-				commands: {
-					root: {
-						name: "roundtable",
-						description: "control",
-						contexts: [InteractionContextType.Guild],
-					},
-				},
-				listeners: [{ id: "web", socketPath }],
-			},
+			{ listeners: [{ id: "web", socketPath }] },
 		);
 		await roundtable.run();
 		log.push(`running: ${await get()}`);
 		await roundtable.shutdown("SIGTERM");
 		expect(log).toEqual([
-			"commands roundtable",
 			"start a1: closed",
 			"running: pong",
 			"stop a1: closed",
@@ -357,7 +317,6 @@ describe("Roundtable", () => {
 		const { roundtable } = host([
 			{
 				name: "owner",
-				stopTurn: (channel) => channel === "discord:1",
 				setup: (context) => {
 					conversations = context.conversations;
 					expect(() => context.conversations.stop("discord:1")).toThrow(
@@ -366,7 +325,7 @@ describe("Roundtable", () => {
 					return { channels: [claim("owner", 0)] };
 				},
 			},
-			{ name: "party", setup: () => ({ channels: [claim("party", 20)] }) },
+			{ name: "open", setup: () => ({ channels: [claim("open", 20)] }) },
 		]);
 		await roundtable.run();
 		await conversations?.handle({
@@ -381,8 +340,70 @@ describe("Roundtable", () => {
 			text: "hi",
 			attachments: [],
 		});
-		expect(log).toEqual(["party hi"]);
+		expect(log).toEqual(["open hi"]);
+		// The open claim owns the channel and has no `stop`, so the owner claim below it is not asked.
+		expect(conversations?.stop("discord:1")).toBe(false);
+	});
+
+	test("stops a channel's turn through the claim that owns it, and only that claim", async () => {
+		const asked: string[] = [];
+		const claim = (
+			name: string,
+			priority: number,
+			owns: (channel: string) => boolean,
+			stop?: ChannelClaim["stop"],
+		): ChannelClaim => ({
+			name,
+			priority,
+			owns,
+			admit: () => undefined,
+			startFresh: async () => name,
+			...(stop ? { stop } : {}),
+		});
+		let conversations: ConversationPort | undefined;
+		const { roundtable } = host([
+			{
+				name: "claims",
+				setup: (context) => {
+					conversations = context.conversations;
+					return {
+						channels: [
+							claim(
+								"agents",
+								30,
+								(c) => c === "discord:1",
+								(c) => {
+									asked.push(`agents ${c}`);
+									return true;
+								},
+							),
+							// Owns its channel but has no `stop`.
+							claim("quiet", 20, (c) => c === "quiet:1"),
+							claim(
+								"owner",
+								0,
+								() => true,
+								(c) => {
+									asked.push(`owner ${c}`);
+									return c === "discord:2";
+								},
+							),
+						],
+					};
+				},
+			},
+		]);
+		await roundtable.run();
 		expect(conversations?.stop("discord:1")).toBe(true);
+		expect(conversations?.stop("discord:2")).toBe(true);
+		expect(conversations?.stop("discord:3")).toBe(false);
+		// A claim without `stop` means false, and a lower claim that has one is not asked instead.
+		expect(conversations?.stop("quiet:1")).toBe(false);
+		expect(asked).toEqual([
+			"agents discord:1",
+			"owner discord:2",
+			"owner discord:3",
+		]);
 	});
 
 	test("gives the dashboard every plugin's lines in order, once linked", async () => {
@@ -434,15 +455,17 @@ describe("Roundtable", () => {
 			const plugins: RoundtablePlugin[] = [
 				{
 					name: "discord",
-					useCommands: () => void log.push("commands"),
-					agentServer: async () => void log.push("agent server"),
 					...(preflight ? { preflight } : {}),
 					setup: () => ({
-						services: [recorded("surface", log)],
-						interactions: [
+						surfaces: [
+							quietSurface("discord", {
+								start: async () => void log.push("start surface"),
+							}),
+						],
+						services: [
 							{
-								module: { commands: () => [], handle: async () => false },
-								rootOptions: [{ type: 1, name: "help", description: "help" }],
+								name: "background",
+								startInBackground: async () => void log.push("background"),
 							},
 						],
 					}),
@@ -450,13 +473,6 @@ describe("Roundtable", () => {
 				...(fail ? [{ name: "web", ...fail }] : []),
 			];
 			const { roundtable } = host(plugins, {
-				commands: {
-					root: {
-						name: "roundtable",
-						description: "control",
-						contexts: [InteractionContextType.Guild],
-					},
-				},
 				listeners: [{ id: "web", socketPath }],
 			});
 			return { roundtable, log, socketPath };
@@ -480,7 +496,7 @@ describe("Roundtable", () => {
 
 		test("when the preflight fails", async () => {
 			const { roundtable, log, socketPath } = failing(undefined, async () => {
-				throw new Error("profile tools are not registered: memory_add");
+				throw new Error("required tools are not registered: memory_add");
 			});
 			expect(
 				await roundtable.run().then(
@@ -492,18 +508,13 @@ describe("Roundtable", () => {
 			expect(existsSync(socketPath)).toBe(false);
 		});
 
-		test("but a good one does, commands first and the listener last", async () => {
+		test("but a good one does, the preflight first and the listener last", async () => {
 			const { roundtable, log, socketPath } = failing(undefined, async () => {
 				log.push("preflight");
 			});
 			await roundtable.run();
 			await Bun.sleep(5);
-			expect(log).toEqual([
-				"preflight",
-				"commands",
-				"start surface",
-				"agent server",
-			]);
+			expect(log).toEqual(["preflight", "start surface", "background"]);
 			expect(existsSync(socketPath)).toBe(true);
 			await roundtable.shutdown("SIGTERM");
 		});
@@ -532,5 +543,64 @@ describe("Roundtable", () => {
 		const error = await roundtable.run().catch((e: unknown) => e);
 		expect(error).toBeInstanceOf(PluginError);
 		expect(log).toEqual([]);
+	});
+
+	test("logs and drops a message a surface delivers under another prefix, and keeps delivering its own", async () => {
+		const lines: string[] = [];
+		const logger = pino(
+			{ level: "error" },
+			{ write: (line) => void lines.push(line) },
+		);
+		let deliver: ((message: InboundMessage) => void) | undefined;
+		const heard: string[] = [];
+		const claim: ChannelClaim = {
+			name: "all",
+			priority: 0,
+			owns: () => true,
+			admit: (message) => ({
+				kind: "turn",
+				run: async () => void heard.push(message.channel),
+				failure: "failed",
+			}),
+			startFresh: async () => "chat",
+		};
+		const { roundtable } = host(
+			[
+				{
+					name: "chat",
+					setup: () => ({
+						channels: [claim],
+						surfaces: [
+							quietSurface("chat", {
+								start: async (delivery) => {
+									deliver = delivery;
+								},
+							}),
+						],
+					}),
+				},
+			],
+			{ logger },
+		);
+		await roundtable.run();
+		const message = (channel: InboundMessage["channel"]): InboundMessage => ({
+			channel,
+			messageId: "m",
+			authorId: "1",
+			authorName: "Ada",
+			authorIsBot: false,
+			isDirect: true,
+			mentionsBot: false,
+			repliesToBot: false,
+			text: "hi",
+			attachments: [],
+		});
+		deliver?.(message("discord:1"));
+		deliver?.(message("chat:1"));
+		await Bun.sleep(10);
+		expect(heard).toEqual(["chat:1"]);
+		expect(lines).toHaveLength(1);
+		expect(lines[0]).toContain("another prefix");
+		expect(lines[0]).toContain("discord:1");
 	});
 });

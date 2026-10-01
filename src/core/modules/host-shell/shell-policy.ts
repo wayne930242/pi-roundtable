@@ -6,7 +6,12 @@ import { assistantName } from "../../i18n/index.ts";
 const MAX_SHOWN_COMMAND = 600;
 
 /** Pi's built-in shell and file tools, which agent sessions activate. */
-export const SHELL_TOOLS = ["bash", "read", "edit", "write"] as const;
+export const SHELL_TOOLS = Object.freeze([
+	"bash",
+	"read",
+	"edit",
+	"write",
+] as const);
 
 /** Programs that are held whatever their arguments. */
 const ALWAYS_HELD = new Set([
@@ -377,10 +382,10 @@ export function shellActionNeedingConfirmation(
 }
 
 /** Shell calls of a session with a workspace; sessions without one have no shell. */
-export const shellHoldRule: HoldRule = {
+export const shellHoldRule: Readonly<HoldRule> = Object.freeze<HoldRule>({
 	name: "shell",
 	describe: (tool, input, { workspace }) =>
 		workspace === undefined
 			? undefined
 			: shellActionNeedingConfirmation(tool, input, workspace),
-};
+});

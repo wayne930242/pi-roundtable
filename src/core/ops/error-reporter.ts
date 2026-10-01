@@ -16,7 +16,7 @@ const FIELD_LIMIT = 200;
 const STACK_FRAMES = 8;
 /** pino's own keys, and the ones the report shows apart from the context. */
 const OWN_KEYS = new Set(["level", "time", "pid", "hostname", "msg", "err"]);
-const HEAD_KEYS = ["app", "module"];
+const HEAD_KEYS = ["app", "plugin", "module"];
 const APP_FRAME = /((?:src|shared|worker)\/[^\s():]+\.ts):(\d+)/;
 
 /** Where the reports go, known once the Discord surface and the agent team are up. */

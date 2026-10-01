@@ -1,3 +1,5 @@
+import type { RuntimeFactory } from "./runtime.ts";
+
 /** A choice among named options; the answer is one option's name. */
 export interface ChoiceQuestion {
 	type: "choice";
@@ -64,4 +66,19 @@ export type ImageDrawer = (
 export interface Providers {
 	judge: Judge;
 	images: ImageDrawer;
+	/**
+	 * Builds the runtime that runs the agent server's conversations and every turn run through
+	 * `context.turns`, in place of the Pi runtime. The default refuses: the agent server builds the
+	 * Pi runtime itself when no plugin fills this slot, so check `filled` before calling it.
+	 */
+	runtime: RuntimeFactory;
+}
+
+/**
+ * Each slot as the host resolved it, and which slots a plugin fills. A slot no plugin fills holds
+ * the core's default, and `filled` is how a caller tells that default from a provider without
+ * calling it.
+ */
+export interface ResolvedProviders extends Providers {
+	readonly filled: ReadonlySet<keyof Providers>;
 }

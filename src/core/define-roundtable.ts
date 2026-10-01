@@ -2,31 +2,24 @@ import { readFileSync } from "node:fs";
 import { userInfo } from "node:os";
 import { join } from "node:path";
 import { ModelRegistry, ModelRuntime } from "@earendil-works/pi-coding-agent";
-import {
-	type AgentServerOptions,
-	agentServerPlugin,
-} from "./builtin/agent-server.ts";
+import { agentServerPlugin } from "./builtin/agent-server.ts";
 import { discordPlugin } from "./builtin/discord.ts";
-import {
-	type ModulesOptions,
-	modulesPlugin,
-	schedulerPlugin,
-} from "./builtin/modules.ts";
+import { discordAdminPlugin } from "./builtin/discord-admin.ts";
+import { modulesPlugin, schedulerPlugin } from "./builtin/modules.ts";
 import { seedsPlugin } from "./builtin/seeds.ts";
-import { storesPlugin } from "./builtin/stores.ts";
+import { skillsPlugin } from "./builtin/skills.ts";
+import { memoryPlugin, scheduleStorePlugin } from "./builtin/stores.ts";
 import { type RoundtableConfig, resolveConfig } from "./config/config.ts";
-import { ownerRootCommand } from "./discord/owner-command.ts";
 import { ConfigError } from "./domain/errors.ts";
 import { JudgeError } from "./errors.ts";
 import type { RoundtableOptions } from "./host.ts";
-import { setLocale } from "./i18n/index.ts";
+import type { ListenerConfig } from "./http/listeners.ts";
 import { type JudgeModel, piJudgeModel } from "./judging/model-judge.ts";
-import { createLogger, type Logger } from "./log.ts";
+import { createLogger, type LogEntry, type Logger } from "./log.ts";
 import { formatModelRef, type ModelRef } from "./models.ts";
 import { ErrorReporter } from "./ops/error-reporter.ts";
 import type { RoundtablePlugin } from "./plugin.ts";
 import { speakerPolicy } from "./speakers.ts";
-import { setTimeZone } from "./time.ts";
 import { toolTiers } from "./tool-tiers.ts";
 
 /** What `defineRoundtable` returns: give both to `new Roundtable(options, plugins)`. */
@@ -39,14 +32,21 @@ export interface DefinedRoundtable {
 export interface DefineOverrides {
 	/** The model login the process shares; by default one is opened in the agent directory. */
 	modelRuntime?: ModelRuntime;
-	/** Your own logger and error reporter, when the process already has them. */
+	/**
+	 * Your own logger, when the process already has one. The host reports errors to `config.ops`'s
+	 * agent and to `errorSink` from the logger it builds, so a logger given here forwards its own
+	 * error lines to them if it should.
+	 */
 	logger?: Logger;
-	errorReporter?: ErrorReporter;
-	/** Host options merged over the built ones, such as more listeners or the record of aborted work. */
-	options?: Partial<RoundtableOptions>;
-	/** What only the plugins after the built-ins can know. */
-	modules?: Pick<ModulesOptions, "agentChannelOf">;
-	agentServer?: Pick<AgentServerOptions, "ownerSessions">;
+	/**
+	 * Also receives every `error` and `fatal` log line of the logger the host builds, after the ops
+	 * agent's report. It must not throw.
+	 */
+	errorSink?: (entry: LogEntry) => void;
+	/** More HTTP listeners than the one `config.http` names, each with its own id. */
+	listeners?: readonly ListenerConfig[];
+	/** Receives the work a shutdown drain gave up on, before any service stops. */
+	aborted?: (left: string[]) => Promise<void>;
 }
 
 const ASSETS = join(import.meta.dir, "assets");
@@ -82,8 +82,9 @@ function judgeThrough(modelRuntime: ModelRuntime, ref: ModelRef): JudgeModel {
 
 /**
  * The host's options and the plugin list of a configured bot: the built-in plugins in their
- * fixed order, then the operator's, then the scheduler, so a due schedule fires only once
- * everything it reaches runs. Configuration mistakes stop here, naming the key and the fix.
+ * fixed order (each service one provides is read by the ones after it), then the operator's, then the scheduler, so a due schedule fires only once
+ * everything it reaches runs. The memory, Discord administration, and skills addons are left out
+ * when the configuration switches them off. Configuration mistakes stop here, naming the key and the fix.
  */
 export async function defineRoundtable(
 	input: RoundtableConfig,
@@ -91,25 +92,27 @@ export async function defineRoundtable(
 ): Promise<DefinedRoundtable> {
 	const config = resolveConfig(input);
 	const { name, owner, discord } = config;
-	setLocale(config.locale, { assistant: name, root: discord.rootCommand });
-	setTimeZone(config.timeZone);
-	// Pi packages such as pi-web-access read their config from the Pi agent directory.
-	process.env.PI_CODING_AGENT_DIR = config.agentDir;
+	// Nothing here touches the process: the host applies the environment when it runs.
 	const modelRuntime =
 		overrides.modelRuntime ??
 		(await ModelRuntime.create({
 			authPath: join(config.agentDir, "auth.json"),
+			modelsPath: join(config.agentDir, "models.json"),
 		}));
-	const errorReporter =
-		overrides.errorReporter ??
-		(config.ops
-			? new ErrorReporter({ opsAgent: config.ops.agent, app: name })
-			: undefined);
+	const errorReporter = config.ops
+		? new ErrorReporter({ opsAgent: config.ops.agent, app: name })
+		: undefined;
+	const { errorSink } = overrides;
 	const logger =
 		overrides.logger ??
 		createLogger(
 			discord.rootCommand,
-			errorReporter ? (entry) => errorReporter.record(entry) : undefined,
+			errorReporter || errorSink
+				? (entry) => {
+						errorReporter?.record(entry);
+						errorSink?.(entry);
+					}
+				: undefined,
 		);
 	const speakers = speakerPolicy({
 		owners: [owner.id],
@@ -125,12 +128,24 @@ export async function defineRoundtable(
 	return {
 		options: {
 			logger,
+			environment: {
+				locale: config.locale,
+				timeZone: config.timeZone,
+				assistant: name,
+				rootCommand: discord.rootCommand,
+				agentDir: config.agentDir,
+			},
 			database: { url: config.databaseUrl },
 			toolTiers: toolTiers(config.toolTiers),
-			commands: { root: ownerRootCommand(discord.rootCommand) },
 			listeners: [
 				config.http.socketPath
-					? { id: "public", socketPath: config.http.socketPath }
+					? {
+							id: "public",
+							socketPath: config.http.socketPath,
+							...(config.http.socketMode === undefined
+								? {}
+								: { mode: config.http.socketMode }),
+						}
 					: {
 							id: "public",
 							port: config.http.port,
@@ -138,12 +153,14 @@ export async function defineRoundtable(
 								? { hostname: config.http.hostname }
 								: {}),
 						},
+				...(overrides.listeners ?? []),
 			],
 			judgeModel: judgeThrough(modelRuntime, config.judge.model),
-			...overrides.options,
+			...(overrides.aborted ? { aborted: overrides.aborted } : {}),
 		},
 		plugins: [
-			storesPlugin({ ownerId: owner.id, guildId: discord.guild }),
+			...(config.memory ? [memoryPlugin({ owner })] : []),
+			scheduleStorePlugin(),
 			discordPlugin({
 				token: discord.token,
 				ownerId: owner.id,
@@ -151,8 +168,9 @@ export async function defineRoundtable(
 				speakers,
 				rootCommand: discord.rootCommand,
 				dataDir: config.dataDir,
-				avatarUrl: config.http.publicUrl,
-				avatarReference: config.avatar ?? join(ASSETS, "neutral.png"),
+				...(discord.refusalHint === undefined
+					? {}
+					: { refusalHint: discord.refusalHint }),
 			}),
 			modulesPlugin({
 				owner,
@@ -161,8 +179,18 @@ export async function defineRoundtable(
 				agentDir: config.agentDir,
 				dataDir: config.dataDir,
 				delegation: config.delegation,
-				...overrides.modules,
 			}),
+			...(discord.admin ? [discordAdminPlugin({ owner })] : []),
+			...(config.skills
+				? [
+						skillsPlugin({
+							guildId: discord.guild,
+							reposDir: config.skills.reposDir ?? join(config.dataDir, "repos"),
+							writtenDir: join(config.dataDir, "skills"),
+							builtinDir: config.skills.builtinDir ?? join(ASSETS, "skills"),
+						}),
+					]
+				: []),
 			agentServerPlugin({
 				guildId: discord.guild,
 				entryChannelId: discord.entryChannel,
@@ -178,14 +206,10 @@ export async function defineRoundtable(
 				workDir: config.workDir,
 				shellUser: userInfo().username,
 				prompts: { shared, guest },
-				skills: {
-					reposDir: config.skills.reposDir ?? join(config.dataDir, "repos"),
-					writtenDir: join(config.dataDir, "skills"),
-					builtinDir: config.skills.builtinDir ?? join(ASSETS, "skills"),
-				},
 				avatarListener: "public",
+				avatarUrl: config.http.publicUrl,
+				avatarReference: config.avatar ?? join(ASSETS, "neutral.png"),
 				...(errorReporter ? { errorReporter } : {}),
-				...overrides.agentServer,
 			}),
 			seedsPlugin(config.agents),
 			...config.plugins,

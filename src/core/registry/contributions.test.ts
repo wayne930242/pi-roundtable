@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { Type } from "typebox";
+import { serviceKey } from "../contract/services.ts";
 import { defineTool } from "../define.ts";
 import { NotLinkedError, PluginError } from "../errors.ts";
-import { silentLogger } from "../log.ts";
+import { type Logger, silentLogger } from "../log.ts";
 import type {
 	Contribution,
 	PluginContext,
@@ -14,6 +15,9 @@ import {
 	linkSessions,
 	nearest,
 } from "./contributions.ts";
+import { ServiceRegistry } from "./services.ts";
+
+const ANSWER = serviceKey<number>("test.answer");
 
 /** A context the plugins under test never read. */
 const context = { logger: silentLogger() } as unknown as PluginContext;
@@ -53,9 +57,58 @@ describe("collectContributions", () => {
 		);
 	});
 
+	test("a plugin that only reads a service in setup is not one that adds nothing", async () => {
+		const services = new ServiceRegistry([]);
+		services.preset(ANSWER, 42);
+		const read: number[] = [];
+		await collectContributions(
+			[
+				{
+					name: "reader",
+					setup: ({ services: given }) => {
+						read.push(given.get(ANSWER));
+						return {};
+					},
+				},
+			],
+			context,
+			toolTiers(),
+			services,
+		);
+		expect(read).toEqual([42]);
+	});
+
 	test("refuses a plugin that adds nothing, and says what to give it", async () => {
 		await expect(collect([plugin("empty", {})])).rejects.toThrow(
 			"plugin empty adds nothing. Give it a part (tools, services, channels, and so on), a migration, or a provider, or remove it.",
+		);
+	});
+
+	test("a plugin's toolTiers are declared for its raw session tools, and alone they count as adding something", async () => {
+		const tiers = toolTiers();
+		await collect(
+			[plugin("feature", { toolTiers: { feature_list: "member" } })],
+			tiers,
+		);
+		expect(tiers.minTier("feature_list")).toBe("member");
+		expect(tiers.minTier("feature_other")).toBe("owner");
+	});
+
+	test("toolTiers refuse a tier that is not one, and a tool two plugins name", async () => {
+		await expect(
+			collect([
+				plugin("p", { toolTiers: { t: "root" } } as unknown as Contribution),
+			]),
+		).rejects.toThrow(
+			'plugin p: toolTiers names tool t at tier "root"; use one of member, admin, owner.',
+		);
+		await expect(
+			collect([
+				plugin("a", { toolTiers: { shared: "member" } }),
+				plugin("b", { toolTiers: { shared: "admin" } }),
+			]),
+		).rejects.toThrow(
+			"plugin b: tool shared is already defined by plugin a. Rename one of the two tools.",
 		);
 	});
 
@@ -196,6 +249,144 @@ describe("collectContributions", () => {
 				await collect([plugin("c", { dashboard: ["a line"] })]),
 			).agentSelection(),
 		).toEqual({ tools: [], groups: [] });
+	});
+
+	test("a persona is found by its conversation kind, and its prompt is read at each lookup", async () => {
+		let prompt = "You are a tutor.";
+		const linked = linkSessions(
+			await collect([
+				plugin("a", { personas: [{ kind: "study", prompt: () => prompt }] }),
+				plugin("b", { personas: [{ kind: "chat", prompt: () => "Chat." }] }),
+			]),
+		);
+		expect(linked.persona("study")).toBe("You are a tutor.");
+		expect(linked.persona("chat")).toBe("Chat.");
+		expect(linked.persona("owner")).toBeUndefined();
+		// Read when a session is made, so text from the message catalog is in the host's language.
+		prompt = "Changed.";
+		expect(linked.persona("study")).toBe("Changed.");
+	});
+
+	test("two personas of one kind are refused, naming both plugins", async () => {
+		const persona = { kind: "study", prompt: () => "p" };
+		await expect(
+			collect([
+				plugin("a", { personas: [persona] }),
+				plugin("b", { personas: [persona] }),
+			]),
+		).rejects.toThrow(
+			'plugin b: persona kind "study" is already registered by plugin a. Keep one persona per kind.',
+		);
+		await expect(
+			collect([plugin("a", { personas: [persona, persona] })]),
+		).rejects.toThrow('persona kind "study" is already registered by plugin a');
+	});
+
+	test("the agent kind is reserved, and a persona needs a kind and a prompt function", async () => {
+		await expect(
+			collect([
+				plugin("a", { personas: [{ kind: "agent", prompt: () => "p" }] }),
+			]),
+		).rejects.toThrow(
+			'plugin a: the persona kind "agent" is reserved for the agent server\'s agents.',
+		);
+		await expect(
+			collect([plugin("a", { personas: [{ kind: "", prompt: () => "p" }] })]),
+		).rejects.toThrow("plugin a: a persona needs a kind");
+		await expect(
+			collect([
+				plugin("a", {
+					personas: [
+						{ kind: "study" } as unknown as { kind: string; prompt(): string },
+					],
+				}),
+			]),
+		).rejects.toThrow('the persona of kind "study" needs a prompt()');
+	});
+
+	test("two background targets of one name are refused, naming both plugins", async () => {
+		const target = { name: "support", label: () => "Support" };
+		await expect(
+			collect([
+				plugin("a", { backgroundTargets: [target] }),
+				plugin("b", { backgroundTargets: [target] }),
+			]),
+		).rejects.toThrow(
+			'plugin b: background target "support" is already registered by plugin a. Keep one target per name.',
+		);
+		await expect(
+			collect([plugin("a", { backgroundTargets: [target, target] })]),
+		).rejects.toThrow('background target "support" is already registered');
+	});
+
+	test("a background target needs a name and a label function", async () => {
+		await expect(
+			collect([
+				plugin("a", { backgroundTargets: [{ name: "", label: () => "x" }] }),
+			]),
+		).rejects.toThrow("plugin a: a background target needs a name");
+		await expect(
+			collect([
+				plugin("a", {
+					backgroundTargets: [
+						{ name: "support" } as unknown as {
+							name: string;
+							label(): string;
+						},
+					],
+				}),
+			]),
+		).rejects.toThrow('the background target "support" needs a label(locale)');
+	});
+
+	test("a plugin that adds only a background target adds something, and it is listed", async () => {
+		const registry = await collect([
+			plugin("a", {
+				backgroundTargets: [{ name: "support", label: () => "Support" }],
+			}),
+		]);
+		expect(registry.backgroundTargets.map((t) => t.name)).toEqual(["support"]);
+	});
+
+	test("a plugin that adds only a persona adds something", async () => {
+		const registry = await collect([
+			plugin("a", { personas: [{ kind: "study", prompt: () => "p" }] }),
+		]);
+		expect(registry.personas.map((p) => p.kind)).toEqual(["study"]);
+	});
+
+	test("the tools plugins require are merged, each name once, and alone they count as adding something", async () => {
+		const registry = await collect([
+			plugin("a", { requiredTools: ["read", "bash"] }),
+			plugin("b", { requiredTools: ["bash", "note_add"] }),
+			plugin("c", { personas: [{ kind: "study", prompt: () => "p" }] }),
+		]);
+		expect(linkSessions(registry).requiredTools).toEqual([
+			"read",
+			"bash",
+			"note_add",
+		]);
+		const alone = await collect([plugin("d", { requiredTools: ["read"] })]);
+		expect(alone.requiredTools).toEqual(["read"]);
+	});
+
+	test("each plugin's setup logs through a child that carries its name", async () => {
+		const bound: Record<string, unknown>[] = [];
+		const parent = {
+			child: (fields: Record<string, unknown>) => {
+				bound.push(fields);
+				return silentLogger();
+			},
+		} as unknown as Logger;
+		await collectContributions(
+			[
+				plugin("first", { dashboard: ["a"] }),
+				plugin("second", { dashboard: ["b"] }),
+			],
+			{ ...context, logger: parent },
+			toolTiers(),
+		);
+		expect(bound).toEqual([{ plugin: "first" }, { plugin: "second" }]);
 	});
 
 	test("every refusal is a PluginError", async () => {

@@ -12,10 +12,10 @@ describe("settleTurn", () => {
 	test("turns a thrown error into a failed result naming what crashed", async () => {
 		const result = await settleTurn(async () => {
 			throw new Error("socket closed");
-		}, "party turn");
+		}, "role turn");
 		expect(result).toEqual({
 			ok: false,
-			error: new AgentRunError("party turn crashed: Error: socket closed"),
+			error: new AgentRunError("role turn crashed: Error: socket closed"),
 		});
 	});
 });

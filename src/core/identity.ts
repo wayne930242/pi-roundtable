@@ -1,7 +1,7 @@
 /** Who the agents work for, as prompts and tool descriptions name them. */
 export interface OwnerIdentity {
 	name: string;
-	/** How prompts refer back to the owner, such as he, him, his. */
+	/** How prompts refer back to the owner, such as they, them, their. */
 	pronouns: { subject: string; object: string; possessive: string };
 }
 

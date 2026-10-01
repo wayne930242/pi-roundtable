@@ -102,6 +102,12 @@ describe("resolveConfig", () => {
 		).toContain(
 			"config http.port: expected an integer from 1 to 65535, got 70000.",
 		);
+		expect(
+			refused({
+				...minimal,
+				http: { publicUrl: "https://x", socketMode: 0o1000 },
+			}),
+		).toContain("config http.socketMode: expected an integer from 0 to 511");
 		expect(refused({ ...minimal, model: "sonnet" })).toBe(
 			'config model: expected <provider>/<id>, got "sonnet". Write it like anthropic/claude-sonnet-5-5.',
 		);
@@ -130,6 +136,39 @@ describe("resolveConfig", () => {
 		]);
 		expect(refused({ ...minimal, agents: [{ name: "x" }] })).toContain(
 			"config agents[0].displayName: required",
+		);
+	});
+});
+
+describe("the addon switches", () => {
+	test("are on unless configured off", () => {
+		const config = resolveConfig(minimal);
+		expect(config.memory).toBe(true);
+		expect(config.discord.admin).toBe(true);
+		expect(config.skills).toEqual({});
+	});
+
+	test("turn each addon off, and keep skills' directories when they are on", () => {
+		const off = resolveConfig({
+			...minimal,
+			memory: false,
+			skills: false,
+			discord: { ...minimal.discord, admin: false },
+		});
+		expect(off.memory).toBe(false);
+		expect(off.skills).toBe(false);
+		expect(off.discord.admin).toBe(false);
+		expect(
+			resolveConfig({ ...minimal, skills: { reposDir: "/repos" } }).skills,
+		).toEqual({ reposDir: "/repos" });
+	});
+
+	test("refuse anything else, naming the key", () => {
+		expect(() => resolveConfig({ ...minimal, skills: true })).toThrow(
+			"config skills",
+		);
+		expect(() => resolveConfig({ ...minimal, memory: "no" })).toThrow(
+			"config memory: expected true or false",
 		);
 	});
 });

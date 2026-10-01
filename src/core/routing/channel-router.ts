@@ -1,4 +1,5 @@
 import {
+	type BackgroundTarget,
 	type BackgroundTurn,
 	type ChannelClaim,
 	type ConversationPort,
@@ -17,8 +18,8 @@ export interface ChannelRouterOptions {
 	/** Claims in registration order; the router orders them by priority. */
 	claims: readonly ChannelClaim[];
 	queue: ChannelQueue;
-	/** Stops the channel's running turn; false when none runs. */
-	stop(channel: ChannelKey): boolean;
+	/** The contributed background target of a name, read at use time. */
+	targets(name: string): BackgroundTarget | undefined;
 	logger: Logger;
 	/** How long a bare forward waits for the text sent with it; FORWARD_JOIN_MS by default. */
 	forwardJoinMs?: number;
@@ -53,8 +54,8 @@ export class ChannelRouter implements ConversationPort {
 		this.#forwards = new ForwardJoin(options.forwardJoinMs);
 	}
 
-	#owner(channel: ChannelKey, guildId?: string): ChannelClaim | undefined {
-		return this.#claims.find((claim) => claim.owns(channel, guildId));
+	#owner(channel: ChannelKey, space?: string): ChannelClaim | undefined {
+		return this.#claims.find((claim) => claim.owns(channel, space));
 	}
 
 	/**
@@ -74,7 +75,7 @@ export class ChannelRouter implements ConversationPort {
 			!message.forwarded?.text.trim()
 		)
 			return;
-		const admission = this.#owner(message.channel, message.guildId)?.admit(
+		const admission = this.#owner(message.channel, message.space)?.admit(
 			message,
 		);
 		if (!admission) return;
@@ -108,8 +109,20 @@ export class ChannelRouter implements ConversationPort {
 			);
 	}
 
-	/** A turn nobody wrote, run by the channel's claim inside its queue; never rejects. */
+	target(name: string): BackgroundTarget | undefined {
+		return this.#options.targets(name);
+	}
+
+	/**
+	 * A turn nobody wrote, run by the channel's claim inside its queue; never rejects. A turn whose
+	 * target no plugin contributes is skipped, never handed to another target's claim.
+	 */
 	async background(turn: BackgroundTurn): Promise<ScheduledOutcome> {
+		if (!this.#options.targets(turn.target))
+			return {
+				status: "skipped",
+				reason: `no plugin contributes the background target "${turn.target}"`,
+			};
 		try {
 			return await this.#options.queue.run(turn.channel, async () => {
 				const claim = this.#owner(turn.channel);
@@ -147,8 +160,9 @@ export class ChannelRouter implements ConversationPort {
 		});
 	}
 
+	/** Asks only the claim that owns the channel; false when none does or it has no `stop`. */
 	stop(channel: ChannelKey): boolean {
-		return this.#options.stop(channel);
+		return this.#owner(channel)?.stop?.(channel) ?? false;
 	}
 
 	postsInPlace(channel: ChannelKey): boolean {

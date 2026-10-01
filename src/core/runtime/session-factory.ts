@@ -19,8 +19,8 @@ import {
 	type ToolSelection,
 	type TransientTask,
 } from "../sessions.ts";
+import { activeToolsExtension } from "../shared/active-tools.ts";
 import { packageDir } from "../shared/package-dir.ts";
-import { profileToolsExtension } from "../shared/profile-tools.ts";
 import { readAttachmentExtension } from "../shared/read-attachment-tool.ts";
 import { addressee, type Speaker, THE_SPEAKER } from "../speakers.ts";
 import {
@@ -81,6 +81,19 @@ export class SessionFactory {
 			};
 		}
 		return this.#linked;
+	}
+
+	/**
+	 * The system prompt of a non-agent conversation of the kind: a plugin's persona, else for
+	 * "owner" none. A kind nobody wrote a persona for is refused, never given the owner's.
+	 */
+	personaOf(kind: string): string {
+		const contributed = this.link().persona(kind);
+		if (contributed !== undefined) return contributed;
+		if (kind === "owner") return "";
+		throw new ConfigError(
+			`no persona is registered for the conversation kind "${kind}". A plugin adds one with \`personas: [{ kind: "${kind}", prompt() { ... } }]\`, or its claim must start conversations of a kind that has one.`,
+		);
 	}
 
 	get plan(): SessionPlan {
@@ -196,8 +209,11 @@ export class SessionFactory {
 		slot: PromptSlot,
 		attachmentDir: string,
 		agent: AgentTurnScope | undefined,
+		kind: string,
 	): Promise<ChannelSession> {
-		const { agentDir, model, thinking, persona, logger } = this.#options;
+		const { agentDir, model, thinking, logger } = this.#options;
+		// An agent's prompt is set before each run; the other kinds are refused here, before a session is built.
+		const persona = agent ? undefined : this.personaOf(kind);
 		const skills = this.skillsOf(agent);
 		const state = {
 			tools: [] as readonly string[],
@@ -218,7 +234,7 @@ export class SessionFactory {
 			this.plan.compaction?.engine,
 		);
 		const context: SessionContext = {
-			kind: agent ? "agent" : "owner",
+			kind: agent ? "agent" : kind,
 			homeChannel: channel,
 			turnChannel: agent && agents ? agents.turnChannel(agent) : channel,
 			compaction: {
@@ -253,10 +269,10 @@ export class SessionFactory {
 					() => addressee(this.#deps.speaker(channel), this.#options.owner),
 				),
 				selfCompactGuard: selfCompactGuardExtension(),
-				profileTools: profileToolsExtension(() => state.tools),
+				activeTools: activeToolsExtension(() => state.tools),
 			}),
 			// An agent's prompt is set before each run by the agent-prompt extension.
-			appendSystemPrompt: agent ? [] : [persona],
+			appendSystemPrompt: persona === undefined ? [] : [persona],
 		});
 		await resourceLoader.reload();
 

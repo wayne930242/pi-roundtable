@@ -1,11 +1,33 @@
 import { join } from "node:path";
-import { AvatarStudio } from "../agents/avatar-studio.ts";
+import { type ServiceKey, serviceKey } from "../contract/services.ts";
+import { CommandCollection } from "../discord/command-collection.ts";
+import type { DiscordConnection } from "../discord/connection.ts";
 import { DiscordSurface } from "../discord/discord-surface.ts";
 import { DispatchThreads } from "../discord/dispatch-threads.ts";
+import type {
+	CommandGuard,
+	CommandRegistrar,
+} from "../discord/interaction-module.ts";
 import { OwnerCards } from "../discord/owner-cards.ts";
-import { OwnerGuard } from "../discord/owner-command.ts";
+import { OwnerGuard, ownerRootCommand } from "../discord/owner-command.ts";
+import { stopButtonModule } from "../discord/stop-button.ts";
 import type { RoundtablePlugin } from "../plugin.ts";
 import type { SpeakerPolicy } from "../speakers.ts";
+
+/** The Discord connection and what stands on it, as plugins use it. Provided by the Discord plugin. */
+export interface DiscordServices {
+	connection: DiscordConnection;
+	/** Adds a plugin's slash commands and components; during setup only. */
+	commands: CommandRegistrar;
+	/** Who may use the owner's commands. */
+	guard: CommandGuard;
+	/** The threads that carry background reports. */
+	threads: DispatchThreads;
+}
+
+/** The Discord connection, provided by the Discord plugin. */
+export const DISCORD: ServiceKey<DiscordServices> =
+	serviceKey<DiscordServices>("roundtable.discord");
 
 export interface DiscordOptions {
 	token: string;
@@ -15,80 +37,83 @@ export interface DiscordOptions {
 	/** Who may answer a card besides the owner. */
 	speakers: SpeakerPolicy;
 	dataDir: string;
-	/** The origin the agents' pictures are served from. */
-	avatarUrl: string;
 	/** The name of the root slash command, without the slash. */
 	rootCommand: string;
-	/** The assistant's neutral avatar: the style reference and the picture of an agent without one. */
-	avatarReference: string;
+	/** Text appended as it is to the refusal a non-owner gets, such as a pointer to the commands anyone may use. */
+	refusalHint?: string;
 }
 
 /**
- * The Discord connection and what stands on it: the avatar studio, the owner's cards, the owner
- * guard, and the threads that carry background reports. It starts the surface, and the channel
- * queue joins the shutdown drain.
+ * The Discord connection and what stands on it: the owner's cards, the command guard, and the
+ * threads that carry background reports. It contributes the Discord surface, collects the
+ * plugins' slash commands while they set up, and composes them under the root command in its
+ * preflight, so a clash fails before any service starts.
  */
 export function discordPlugin(options: DiscordOptions): RoundtablePlugin {
-	let commands: DiscordSurface | undefined;
+	const collection = new CommandCollection();
+	let surface: DiscordSurface | undefined;
 	return {
 		name: "discord",
-		// Discord registers the commands as it connects, so they go to the surface before it starts.
-		useCommands: (composed) => commands?.useInteractions(composed),
-		setup: async ({ queue, conversations, providers, core, logger }) => {
-			const studio = new AvatarStudio({
-				dir: join(options.dataDir, "avatars"),
-				publicUrl: options.avatarUrl,
-				referencePath: options.avatarReference,
-				draw: providers.images,
-			});
-			await studio.init();
+		provides: [DISCORD],
+		preflight: () => {
+			// The host has applied its environment by now, so the description is in its language.
+			surface?.setCommands(
+				collection.compose(ownerRootCommand(options.rootCommand)),
+			);
+		},
+		setup: async ({ conversations, services, logger }) => {
 			// The surface exists by the time a turn posts a card.
 			const cards: OwnerCards = new OwnerCards({
 				ownerId: options.ownerId,
 				speakers: options.speakers,
-				channel: (channelId) => surface.cardChannel(channelId),
+				channel: (channelId) => connected.cardChannel(channelId),
 				logger,
 			});
-			const surface = new DiscordSurface({
+			const connected = new DiscordSurface({
 				token: options.token,
 				ownerId: options.ownerId,
 				ownerName: options.ownerName,
+				prompts: (channel, speaker) => cards.prompts(channel, speaker),
 				logger,
 			});
+			surface = connected;
 			const guard = new OwnerGuard(
 				options.ownerId,
 				logger,
 				options.rootCommand,
+				options.refusalHint,
 			);
-			// A channel whose owner keeps reports in place, such as a party channel, opens no thread.
+			// A channel whose claim keeps reports in place, such as an open channel, opens no thread.
 			const threads = new DispatchThreads({
 				host: {
 					open: (parentId, name, line) =>
-						surface.threadHost().open(parentId, name, line),
-					post: (threadId, text) => surface.threadHost().post(threadId, text),
-					close: (threadId) => surface.threadHost().close(threadId),
+						connected.threadHost().open(parentId, name, line),
+					post: (threadId, text) => connected.threadHost().post(threadId, text),
+					close: (threadId) => connected.threadHost().close(threadId),
 				},
 				ledgerPath: join(options.dataDir, "dispatch-threads.json"),
 				excluded: (channel) => conversations.postsInPlace(channel),
 				logger,
 			});
-			commands = surface;
-			core.provide("discord", { surface, cards, guard, studio, threads });
+			// The cards answer the interactions of held actions, and core posts the stop button, so
+			// core answers both; they come first, as they always have.
+			collection.registrar.add({ module: cards });
+			collection.registrar.add({
+				module: stopButtonModule({ guard, conversations }),
+			});
+			services.provide(DISCORD, {
+				connection: connected,
+				commands: collection.registrar,
+				guard,
+				threads,
+			});
 			return {
+				// The host starts the surface first; it registers the composed commands as it connects.
+				surfaces: [connected],
 				services: [
-					{
-						name: "surface",
-						start: async () => {
-							await surface.start(
-								(message) => void conversations.handle(message),
-							);
-							void threads.sweep();
-						},
-						stop: () => surface.stop(),
-					},
-					{ name: "channel-queue", busy: () => queue.busy() },
+					// The sweep reads threads through the connection, so it follows the surface's start.
+					{ name: "threads", start: () => void threads.sweep() },
 				],
-				interactions: [{ module: cards }],
 			};
 		},
 	};

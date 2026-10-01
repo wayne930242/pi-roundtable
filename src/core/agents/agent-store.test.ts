@@ -8,11 +8,11 @@ import {
 	type TestStore,
 	testDatabaseUrl,
 } from "../testing/database.ts";
-import { AgentStore } from "./agent-store.ts";
+import { PgAgentStore } from "./agent-store.ts";
 
 // Runs against a real PostgreSQL, only when ROUNDTABLE_TEST_DATABASE_URL is set.
 describeDb("PostgreSQL", () => {
-	let store: TestStore<AgentStore>;
+	let store: TestStore<PgAgentStore>;
 
 	const seed = (name: string, channelId?: string) => ({
 		name,
@@ -33,7 +33,7 @@ describeDb("PostgreSQL", () => {
 		])
 			await admin.unsafe(`DROP TABLE IF EXISTS ${table}`);
 		await admin.close();
-		store = await openTestStore(AgentStore, TEST_GUILD);
+		store = await openTestStore(PgAgentStore, TEST_GUILD);
 		await store.seed([
 			seed("coordinator", "100"),
 			seed("infra"),
@@ -51,7 +51,7 @@ describeDb("PostgreSQL", () => {
 			const added = await store.seed([seed("infra"), seed("new-one")]);
 			expect(added).toEqual(["new-one"]);
 			expect(store.agent("infra")?.prompt).toBe("Edited.");
-			const reopened = await openTestStore(AgentStore, TEST_GUILD);
+			const reopened = await openTestStore(PgAgentStore, TEST_GUILD);
 			expect(reopened.agent("infra")?.prompt).toBe("Edited.");
 			await reopened.close();
 		});
@@ -90,7 +90,7 @@ describeDb("PostgreSQL", () => {
 				model: "openai-codex/gpt-6-sol",
 				thinking: "high",
 			});
-			const reopened = await openTestStore(AgentStore, TEST_GUILD);
+			const reopened = await openTestStore(PgAgentStore, TEST_GUILD);
 			expect(reopened.agent("infra")).toMatchObject({
 				model: "openai-codex/gpt-6-sol",
 				thinking: "high",

@@ -4,7 +4,7 @@ import type { AgentTurnScope } from "../domain/ports.ts";
 import type { AgentGroup } from "./agent-store.ts";
 import {
 	channelIdOf,
-	channelKey,
+	discordKey,
 	groupSessionKey,
 	homeScope,
 } from "./team-keys.ts";
@@ -66,6 +66,7 @@ export class TeamLifecycle {
 
 	async #drawMissingAvatars(): Promise<void> {
 		const { store, studio, logger } = this.#ctx.options;
+		if (studio.canDraw === false) return this.#generateMissingAvatars();
 		for (const agent of store.agents()) {
 			if (agent.status !== "active" || agent.avatarHash) continue;
 			try {
@@ -76,6 +77,31 @@ export class TeamLifecycle {
 				logger.warn({ agent: agent.name, err: error }, "avatar not drawn");
 			}
 		}
+	}
+
+	/**
+	 * Without an image provider, gives each active agent that has no picture the one made from
+	 * its display name, and says so once instead of once per agent on every boot.
+	 */
+	async #generateMissingAvatars(): Promise<void> {
+		const { store, studio, logger } = this.#ctx.options;
+		if (!studio.fallback) return;
+		let generated = 0;
+		for (const agent of store.agents()) {
+			if (agent.status !== "active" || agent.avatarHash) continue;
+			try {
+				const avatarHash = await studio.fallback(agent.displayName, agent.name);
+				await store.updateAgent(agent.name, { avatarHash });
+				generated++;
+			} catch (error) {
+				logger.warn({ agent: agent.name, err: error }, "avatar not generated");
+			}
+		}
+		if (generated > 0)
+			logger.info(
+				{ generated },
+				"no image provider is configured; agents without a picture got one generated from their display name",
+			);
 	}
 
 	/** Starts an agent's or every group member's conversation over; call inside the channel's queue. */
@@ -149,7 +175,7 @@ export class TeamLifecycle {
 		const agent = store.agentByChannel(channelId);
 		if (agent) {
 			const left = await store.archiveAgent(agent.name);
-			const home = channelKey(channelId);
+			const home = discordKey(channelId);
 			for (const schedule of await schedules.forChannel(home))
 				await schedules.remove(schedule.id, home);
 			await runtime.startFresh(home);

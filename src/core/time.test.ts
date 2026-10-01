@@ -9,6 +9,7 @@ import {
 	zonedDate,
 	zonedInstant,
 	zonedStamp,
+	zonedStampIn,
 	zonedToday,
 } from "./time.ts";
 
@@ -140,7 +141,9 @@ describe("configured time zone", () => {
 			expect.stringContaining('"HH:MM", Buenos Aires) to repeat'),
 		]);
 		setTimeZone("UTC");
-		expect(scheduleToolSpecs()[0]?.description).toContain("UTC time");
+		expect(
+			scheduleToolSpecs({ locale: "en", timeZone: "UTC" })[0]?.description,
+		).toContain("UTC time");
 	});
 
 	test("relative once scheduling preserves the second occurrence of a fall-back hour", () => {
@@ -150,17 +153,22 @@ describe("configured time zone", () => {
 		expect(nextRun(once, now)?.toISOString()).toBe("2026-11-01T06:30:00.000Z");
 	});
 
-	test("tool descriptions take the zone when built, in the wording of the locale", () => {
-		setTimeZone("Asia/Taipei");
-		expect(scheduleToolSpecs()[0]?.description).toContain(
-			"set Asia/Taipei time",
-		);
-		setLocale("zh-TW", { assistant: "Roundtable", root: "roundtable" });
-		expect(scheduleToolSpecs()[0]?.description).toContain("set Taipei time");
-		setLocale("en", { assistant: "Roundtable", root: "roundtable" });
+	test("tool descriptions take the locale and zone they are given, not the process's", () => {
 		setTimeZone("America/New_York");
-		expect(scheduleToolSpecs()[0]?.description).toContain(
+		setLocale("en", { assistant: "Roundtable", root: "roundtable" });
+		const description = (locale: "en" | "zh-TW", timeZone: string) =>
+			scheduleToolSpecs({ locale, timeZone })[0]?.description;
+		expect(description("en", "Asia/Taipei")).toContain("set Asia/Taipei time");
+		expect(description("zh-TW", "Asia/Taipei")).toContain("set Taipei time");
+		expect(description("en", "America/New_York")).toContain(
 			"America/New_York time",
 		);
+	});
+
+	test("a stamp is written in the zone it is given, apart from the host's", () => {
+		setTimeZone("UTC");
+		const at = new Date("2026-09-29T20:00:00Z");
+		expect(zonedStampIn(at, "Asia/Taipei")).toBe("2026-09-30 04:00");
+		expect(zonedStamp(at)).toBe("2026-09-29 20:00");
 	});
 });

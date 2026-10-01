@@ -9,6 +9,7 @@ test("the handlers record a turn, a team change, and the shutdown", async () => 
 	// The harness does not deliver the core's events: call the handlers with the payload the core sends.
 	const turn = {
 		agent: "guide",
+		kind: "agent",
 		channel: "discord:1",
 		speaker: undefined,
 	} as const;

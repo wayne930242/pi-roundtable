@@ -1,5 +1,5 @@
 /** An assistant message of a Pi session, as far as its final answer needs it. */
-interface AssistantLike {
+export interface AssistantLike {
 	role: "assistant";
 	content: unknown;
 	stopReason?: string;

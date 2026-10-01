@@ -10,7 +10,7 @@ import {
 import { PendingConfirmationStore } from "./pending-confirmation-store.ts";
 
 const held: PendingConfirmation = {
-	profile: "workspace",
+	selectionId: "workspace",
 	heldAt: new Date("2026-09-27T01:00:00Z"),
 	calls: [
 		{
@@ -27,7 +27,7 @@ describeDb("PendingConfirmationStore", () => {
 
 	beforeAll(async () => {
 		const admin = new SQL(testDatabaseUrl);
-		await admin`DROP TABLE IF EXISTS pending_confirmations`;
+		await admin`DROP TABLE IF EXISTS held_actions`;
 		await admin.close();
 		store = await openTestStore(PendingConfirmationStore);
 	});
@@ -48,5 +48,21 @@ describeDb("PendingConfirmationStore", () => {
 
 		await store.save("discord:1", undefined);
 		expect(await store.load("discord:1")).toBeUndefined();
+	});
+
+	test("the selection id is stored as given, in the held_actions table", async () => {
+		await store.save("discord:3", { ...held, selectionId: "tools:web" });
+		const admin = new SQL(testDatabaseUrl);
+		try {
+			const rows = await admin`
+				SELECT selection_id FROM held_actions WHERE channel_key = 'discord:3'`;
+			expect(rows.map((r: { selection_id: string }) => r.selection_id)).toEqual(
+				["tools:web"],
+			);
+		} finally {
+			await admin.close();
+		}
+		expect((await store.load("discord:3"))?.selectionId).toBe("tools:web");
+		await store.save("discord:3", undefined);
 	});
 });

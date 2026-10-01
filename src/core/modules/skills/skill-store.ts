@@ -4,7 +4,7 @@ import type { Migration } from "../../db/migrations.ts";
 import { AgentError } from "../../domain/errors.ts";
 
 /**
- * A registered skill (repos-and-skills spec behavior 13). A linked skill's name and description
+ * A registered skill. A linked skill's name and description
  * live in its repository's file; an agent-written one keeps them here.
  */
 export type SkillEntry =
@@ -17,7 +17,7 @@ export interface SkillGroup {
 	skills: string[];
 }
 
-/** Who lost a removed skill (behavior 17). */
+/** Who lost a removed skill. */
 export interface Detached {
 	agents: string[];
 	groups: string[];
@@ -58,12 +58,6 @@ const toGroup = (row: GroupRow): SkillGroup => ({
 	description: row.description,
 	skills: row.skills.split(",").filter(Boolean),
 });
-
-/**
- * The kind an agent-written skill was stored under before it became 'written': the first
- * consumer's own name, spelled from parts so the public tree names no consumer.
- */
-export const LEGACY_WRITTEN_KIND = ["mer", "lin"].join("");
 
 /**
  * Skills, skill groups, and the skills each agent carries, in the database. All of it is
@@ -127,13 +121,6 @@ export class SkillStore {
 					scopeToGuild(sql, guildId, [
 						{ table: "agent_skills", key: ["agent", "skill"] },
 					]),
-			},
-			{
-				// Skills an agent wrote were stored under the legacy kind; the kind is now 'written'.
-				name: "skills-written-kind",
-				up: async (sql) => {
-					await sql`UPDATE skills SET kind = 'written' WHERE kind = ${LEGACY_WRITTEN_KIND}`;
-				},
 			},
 		];
 	}

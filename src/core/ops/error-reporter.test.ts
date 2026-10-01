@@ -125,6 +125,25 @@ describe("ErrorReporter", () => {
 		expect(text).toEndWith("…");
 	});
 
+	test("the plugin that logged shows in the report head and never changes the fingerprint", () => {
+		const bare = entry("failed", { err: { stack: stack("src/a.ts", 3) } });
+		const tagged = entry("failed", {
+			plugin: "owner",
+			err: { stack: stack("src/a.ts", 3) },
+		});
+		expect(fingerprint(tagged)).toBe(fingerprint(bare));
+		const noStack = entry("plain", { job: 1 });
+		expect(fingerprint({ ...noStack, plugin: "owner" })).toBe(
+			fingerprint(noStack),
+		);
+		const lines = reportText(
+			{ ...bare, app: "robin", plugin: "owner" },
+			"Robin",
+		);
+		expect(lines.split("\n")[1]).toBe("app: robin · plugin: owner");
+		expect(lines).not.toContain("plugin: owner\nplugin");
+	});
+
 	test("the fingerprint ignores times and ids but not where the error was raised", () => {
 		const a = entry("failed", {
 			channel: "discord:1",

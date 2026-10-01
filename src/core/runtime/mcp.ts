@@ -8,7 +8,7 @@ export interface VirtualServer {
 	tools: string[];
 }
 
-/** The owner's MCP gateway virtual servers, reached with the process's admin token. */
+/** MCP endpoints supplied by a session plugin, reached with its bearer token. */
 export function mcpExtension(
 	servers: readonly VirtualServer[],
 	token: string,

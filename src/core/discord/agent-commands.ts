@@ -22,23 +22,26 @@ import {
 } from "discord.js";
 import {
 	type Agent,
-	type AgentStore,
 	MAX_AVATAR_PROMPT_CHARS,
 	MAX_PROMPT_CHARS,
 } from "../agents/agent-store.ts";
-import type { AgentTeam } from "../agents/agent-team.ts";
 import type { AvatarMode } from "../agents/agent-tools.ts";
-import type { AvatarStudio } from "../agents/avatar-studio.ts";
 import { AgentError } from "../domain/errors.ts";
 import { messages } from "../i18n/index.ts";
 import { THINKING_LEVELS, thinkingLabel } from "../models.ts";
 import {
 	BUILTIN_SKILLS,
-	type SkillRegistry,
 	type SkillSet,
 } from "../modules/skills/skill-registry.ts";
+import type {
+	AgentDirectory,
+	AgentTeam,
+	AvatarStudio,
+	SkillRegistry,
+} from "../services.ts";
 import { OwnerFacingError, ownerPanel } from "./owner-panel.ts";
 
+/** The custom-id prefixes of the panel's buttons and forms; posted panels carry them, so they never change. */
 export const AGENT_BUTTON_PREFIX = "roundtable:agent:";
 export const AGENT_MODAL_PREFIX = "roundtable:agent-modal:";
 /** A prompt this long goes out as a file, so the panel stays inside Discord's text limit. */
@@ -75,13 +78,22 @@ const ACTIONS: readonly Action[] = [
 ];
 
 export interface AgentCommandsOptions {
-	store: Pick<AgentStore, "agentByChannel" | "groupByChannel" | "agent">;
+	store: Pick<AgentDirectory, "agentByChannel" | "groupByChannel" | "agent">;
 	team: Pick<
 		AgentTeam,
 		"redrawAvatar" | "update" | "modelOf" | "usableModels" | "defaultModel"
 	>;
-	studio: Pick<AvatarStudio, "url">;
-	skills: Pick<SkillRegistry, "carried">;
+	studio: Pick<AvatarStudio, "url" | "canDraw">;
+	/** The skills an agent carries; without the skills addon the panel lists none. */
+	skills?: Pick<SkillRegistry, "carried">;
+}
+
+/** An agent's panel as a message: one Components V2 container, with the prompt attached as a file when it is long. */
+export interface AgentPanelMessage {
+	components: ContainerBuilder[];
+	flags: MessageFlags.IsComponentsV2;
+	allowedMentions: { parse: never[] };
+	files: AttachmentBuilder[];
 }
 
 /** The skills line of the panel: built-in ones marked, missing ones with their reason. */
@@ -107,7 +119,7 @@ export class AgentCommands {
 	}
 
 	/** The panel for the agent of a channel; an error when the channel has none. */
-	panel(channelId: string, note?: string) {
+	panel(channelId: string, note?: string): AgentPanelMessage {
 		const { store } = this.#options;
 		const agent = store.agentByChannel(channelId);
 		if (!agent)
@@ -119,8 +131,10 @@ export class AgentCommands {
 		return this.#panel(agent, note);
 	}
 
-	#panel(agent: Agent, note?: string) {
+	#panel(agent: Agent, note?: string): AgentPanelMessage {
 		const text = messages();
+		// Without an image provider nothing can be drawn, so the avatar buttons are not offered.
+		const drawing = this.#options.studio.canDraw;
 		const inline = agent.prompt.length <= INLINE_PROMPT_CHARS;
 		const { model, thinking } = this.#options.team.modelOf(agent.name);
 		const follows =
@@ -136,7 +150,12 @@ export class AgentCommands {
 						model,
 						thinking: thinkingLabel(thinking),
 						follows,
-						skills: skillsText(this.#options.skills.carried(agent.name)),
+						skills: skillsText(
+							this.#options.skills?.carried(agent.name) ?? {
+								skills: [],
+								missing: [],
+							},
+						),
 					}),
 				),
 			)
@@ -149,7 +168,9 @@ export class AgentCommands {
 			)
 			.addTextDisplayComponents(
 				new TextDisplayBuilder().setContent(
-					text.agentAvatarPromptText(agent.avatarPrompt),
+					drawing
+						? text.agentAvatarPromptText(agent.avatarPrompt)
+						: text.agentNoImageProvider,
 				),
 				new TextDisplayBuilder().setContent(
 					inline
@@ -177,9 +198,13 @@ export class AgentCommands {
 			.addActionRowComponents(
 				new ActionRowBuilder<ButtonBuilder>().addComponents(
 					button("edit", text.agentEditPromptLabel, ButtonStyle.Primary),
-					button("redraw", text.agentRedrawLabel),
-					button("newprompt", text.agentNewAvatarPromptLabel),
-					button("editavatar", text.agentEditAvatarLabel),
+					...(drawing
+						? [
+								button("redraw", text.agentRedrawLabel),
+								button("newprompt", text.agentNewAvatarPromptLabel),
+								button("editavatar", text.agentEditAvatarLabel),
+							]
+						: []),
 					button("model", text.agentModelLabel),
 				),
 			)

@@ -1,6 +1,7 @@
 import { chmodSync, rmSync } from "node:fs";
 import type { Server } from "bun";
 import { PluginError } from "../errors.ts";
+import type { Logger } from "../log.ts";
 
 /** A handler a plugin attaches to one of the host's configured listeners. */
 export interface HttpRoute {
@@ -15,7 +16,11 @@ export interface HttpRoute {
 
 /** Where a listener serves: a unix socket, reached from outside through a tunnel, or a TCP port. */
 export type ListenerAddress =
-	| { socketPath: string }
+	| {
+			socketPath: string;
+			/** The socket file's permission bits; default `0o660`, so only its owner and group connect. */
+			mode?: number;
+	  }
 	| { port: number; hostname?: string };
 
 /** An address the host serves HTTP on, with the id routes name it by. */
@@ -62,34 +67,52 @@ function validate(
 	});
 }
 
-/** Routes one listener's request; a request no route takes is 404. The URL is never logged, since paths may hold tokens. */
-export function routeRequest(
+const serverError = () =>
+	new Response("Internal Server Error", { status: 500 });
+
+/**
+ * Routes one listener's request; a request no route takes is 404, and a route that throws, or
+ * whose promise rejects, is 500 with a fixed body. The failure is logged with the route's name
+ * and listener, never the URL, since paths may hold tokens.
+ */
+export async function routeRequest(
 	routes: readonly HttpRoute[],
 	request: Request,
-): Response | Promise<Response> {
+	listener: string,
+	logger: Logger,
+): Promise<Response> {
 	// pi-lens-ignore: unchecked-throwing-call -- the server builds request.url, always an absolute URL
 	const path = new URL(request.url).pathname;
 	const route = routes.find(
 		(r) =>
 			matches(r, path) && (!r.methods || r.methods.includes(request.method)),
 	);
-	return route
-		? route.handle(request)
-		: new Response("Not found", { status: 404 });
+	if (!route) return new Response("Not found", { status: 404 });
+	try {
+		return await route.handle(request);
+	} catch (err) {
+		logger.error({ err, route: route.name, listener }, "route failed");
+		return serverError();
+	}
 }
 
 /**
  * Serves HTTP on a unix socket without Bun's 10-second idle timeout, which would cut long
  * turns and quiet model streams. Bun 1.4.2 honors `idleTimeout` on unix sockets, but its
  * types reject the option there, hence the cast. A stale socket file is removed first.
- * (`shared/unix-server.ts` keeps its own copy for the party worker's image.)
+ * (`shared/unix-server.ts` keeps its own copy for standalone worker images.)
  */
 function serveUnix(
 	socketPath: string,
 	fetch: (request: Request) => Response | Promise<Response>,
 ): Server<undefined> {
 	rmSync(socketPath, { force: true });
-	const options = { unix: socketPath, idleTimeout: 0, fetch };
+	const options = {
+		unix: socketPath,
+		idleTimeout: 0,
+		fetch,
+		error: serverError,
+	};
 	// SAFETY: these are Bun's unix-socket options; only `idleTimeout` is missing from its types.
 	return Bun.serve(
 		options as unknown as Parameters<typeof Bun.serve>[0],
@@ -107,6 +130,7 @@ function serveTcp(
 		...(hostname ? { hostname } : {}),
 		idleTimeout: 0,
 		fetch,
+		error: serverError,
 	});
 }
 
@@ -115,31 +139,42 @@ function serveTcp(
 export class HttpListeners {
 	readonly #listeners: readonly ListenerConfig[];
 	readonly #routes: readonly HttpRoute[];
+	readonly #logger: Logger;
 	#servers: Server<undefined>[] = [];
 
 	/** Validates every route before any socket opens. */
 	constructor(
 		listeners: readonly ListenerConfig[],
 		routes: readonly HttpRoute[],
+		logger: Logger,
 	) {
 		validate(listeners, routes);
+		this.#logger = logger;
 		this.#listeners = listeners;
 		this.#routes = routes;
 	}
 
+	/** Opens every listener; when one fails, the ones already open close again before the error is thrown. */
 	start(): void {
-		for (const listener of this.#listeners) {
-			const routes = this.#routes.filter(
-				(route) => route.listener === listener.id,
-			);
-			const handle = (request: Request) => routeRequest(routes, request);
-			if ("socketPath" in listener) {
-				this.#servers.push(serveUnix(listener.socketPath, handle));
-				// cloudflared runs as another user in its container.
-				chmodSync(listener.socketPath, 0o666);
-			} else {
-				this.#servers.push(serveTcp(listener.port, listener.hostname, handle));
+		try {
+			for (const listener of this.#listeners) {
+				const routes = this.#routes.filter(
+					(route) => route.listener === listener.id,
+				);
+				const handle = (request: Request) =>
+					routeRequest(routes, request, listener.id, this.#logger);
+				if ("socketPath" in listener) {
+					this.#servers.push(serveUnix(listener.socketPath, handle));
+					chmodSync(listener.socketPath, listener.mode ?? 0o660);
+				} else {
+					this.#servers.push(
+						serveTcp(listener.port, listener.hostname, handle),
+					);
+				}
 			}
+		} catch (error) {
+			this.stop();
+			throw error;
 		}
 	}
 

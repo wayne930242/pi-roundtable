@@ -8,24 +8,30 @@ import {
 	type Interaction,
 	type Message,
 	MessageFlags,
-	MessageReferenceType,
 	Partials,
 } from "discord.js";
-import type { AttachmentRef } from "../domain/attachment.ts";
+import type { AgentChannels, DashboardBoard } from "../agents/agent-ports.ts";
+import type { ChatSurface } from "../contract/surface.ts";
 import type {
 	ChannelKey,
 	InboundMessage,
 	OutboundReply,
 } from "../domain/conversation.ts";
-import type { ChatSurface, OwnerNotifier } from "../domain/ports.ts";
+import type { OwnerPrompts } from "../domain/owner-prompts.ts";
+import type { OwnerNotifier } from "../domain/ports.ts";
 import { messages } from "../i18n/index.ts";
 import type { Logger } from "../log.ts";
+import type { OwnerOperations } from "../modules/discord-admin/discord-admin.ts";
 import { splitReply } from "../presentation/reply-splitter.ts";
-import type { ComposedInteractions } from "../registry/interactions.ts";
+import type { Speaker } from "../speakers.ts";
 import { DiscordAgentChannels, DiscordDashboard } from "./agent-discord.ts";
 import { discordChannelExecutor } from "./channel-executor.ts";
 import type { ChannelExecutor } from "./channel-operations.ts";
+import type { ComposedCommands } from "./compose-commands.ts";
+import type { ChannelInfo, DiscordConnection } from "./connection.ts";
 import { DiscordThreadHost } from "./dispatch-thread-host.ts";
+import type { ThreadHost } from "./dispatch-threads.ts";
+import { toInbound } from "./inbound-message.ts";
 import type { CardChannel } from "./owner-cards.ts";
 import { DiscordOwnerOps } from "./owner-discord.ts";
 import { stopPanel } from "./stop-button.ts";
@@ -34,9 +40,6 @@ const PREFIX = "discord:";
 /** Discord's error code for a channel that does not exist or cannot be seen. */
 const UNKNOWN_CHANNEL = 10003;
 
-export type ChannelInfo =
-	| { kind: "dm"; name: string }
-	| { kind: "guild"; name: string; guild: string; guildId: string };
 const TYPING_REFRESH_MS = 8_000;
 /** A turn shorter than this shows no stop button, so quick answers do not flicker one. */
 const STOP_PANEL_DELAY_MS = 5_000;
@@ -46,6 +49,8 @@ export interface DiscordSurfaceOptions {
 	ownerId: string;
 	/** How the owner is named in audit-log reasons and refusals. */
 	ownerName: string;
+	/** The owner's cards in a Discord channel; the surface hands them out as its `prompts`. */
+	prompts: (channel: ChannelKey, speaker?: Speaker) => OwnerPrompts | undefined;
 	logger: Logger;
 }
 
@@ -55,7 +60,10 @@ export interface DiscordSurfaceOptions {
  * server's channels answer the owner without a mention; elsewhere the assistant still answers only
  * DMs and messages that mention it.
  */
-export class DiscordSurface implements ChatSurface, OwnerNotifier {
+export class DiscordSurface
+	implements ChatSurface, OwnerNotifier, DiscordConnection
+{
+	readonly surface = "discord";
 	readonly #options: DiscordSurfaceOptions;
 	readonly #client = new Client({
 		intents: [
@@ -68,15 +76,15 @@ export class DiscordSurface implements ChatSurface, OwnerNotifier {
 		allowedMentions: { parse: [] },
 	});
 
-	#interactions: ComposedInteractions = { commands: [], modules: [] };
+	#interactions: ComposedCommands = { commands: [], modules: [] };
 
 	constructor(options: DiscordSurfaceOptions) {
 		this.#options = options;
 	}
 
 	/** Slash commands and the modules that answer them; the commands are registered globally at startup. */
-	useInteractions(interactions: ComposedInteractions): void {
-		this.#interactions = interactions;
+	setCommands(composed: ComposedCommands): void {
+		this.#interactions = composed;
 	}
 
 	/** Channel operations for outside agents; undefined until the connection is ready. */
@@ -87,7 +95,7 @@ export class DiscordSurface implements ChatSurface, OwnerNotifier {
 	}
 
 	/** Discord reading and management for the owner's agent; calls fail until the connection is ready. */
-	ownerDiscord(): DiscordOwnerOps {
+	ownerOperations(): OwnerOperations {
 		return new DiscordOwnerOps(
 			this.#client,
 			this.#options.ownerId,
@@ -96,17 +104,17 @@ export class DiscordSurface implements ChatSurface, OwnerNotifier {
 	}
 
 	/** The agent server's channels and webhooks. */
-	agentChannels(guildId: string): DiscordAgentChannels {
+	agentChannels(guildId: string): AgentChannels {
 		return new DiscordAgentChannels(this.#client, guildId);
 	}
 
 	/** Threads for background dispatches, in the channel that started each. */
-	threadHost(): DiscordThreadHost {
+	threadHost(): ThreadHost {
 		return new DiscordThreadHost(this.#client);
 	}
 
 	/** The agent server's `#dashboard` and its pinned status message. */
-	agentDashboard(guildId: string): DiscordDashboard {
+	agentDashboard(guildId: string): DashboardBoard {
 		return new DiscordDashboard(this.#client, guildId, this.#options.logger);
 	}
 
@@ -145,10 +153,18 @@ export class DiscordSurface implements ChatSurface, OwnerNotifier {
 		this.#client.on(Events.ChannelDelete, (channel) => handler(channel.id));
 	}
 
+	/** The owner's approval and question cards in a Discord channel. */
+	prompts(channel: ChannelKey, speaker?: Speaker): OwnerPrompts | undefined {
+		return this.#options.prompts(channel, speaker);
+	}
+
 	async start(onMessage: (message: InboundMessage) => void): Promise<void> {
 		const { logger, token } = this.#options;
 		this.#client.on(Events.MessageCreate, (message) => {
-			this.#toInbound(message)
+			toInbound(message, {
+				botId: this.#client.user?.id,
+				applicationId: this.#client.application?.id,
+			})
 				.then((inbound) => {
 					if (inbound) onMessage(inbound);
 				})
@@ -317,73 +333,6 @@ export class DiscordSurface implements ChatSurface, OwnerNotifier {
 		await this.#client.destroy();
 	}
 
-	async #toInbound(message: Message): Promise<InboundMessage | undefined> {
-		const botId = this.#client.user?.id;
-		if (!botId || message.author.id === botId) return undefined;
-		const mention = new RegExp(`<@!?${botId}>`, "g");
-		const reference = message.reference;
-		// A forward also has a reference, to a message elsewhere; its copy is the snapshot.
-		const forward =
-			reference?.type === MessageReferenceType.Forward
-				? message.messageSnapshots.first()
-				: undefined;
-		const referenced =
-			reference?.messageId && !forward
-				? await message.fetchReference().catch(() => undefined)
-				: undefined;
-		return {
-			channel: `${PREFIX}${message.channelId}`,
-			messageId: message.id,
-			authorId: message.author.id,
-			authorName:
-				message.member?.displayName ??
-				message.author.globalName ??
-				message.author.username,
-			authorIsBot: message.author.bot,
-			...(message.member
-				? { authorRoleIds: [...message.member.roles.cache.keys()] }
-				: {}),
-			...(message.webhookId
-				? {
-						webhookId: message.webhookId,
-						// Webhooks the assistant created carry its application on every message they post.
-						ownWebhook:
-							message.applicationId !== null &&
-							message.applicationId === (this.#client.application?.id ?? botId),
-					}
-				: {}),
-			isDirect: message.channel.isDMBased(),
-			...(message.guildId ? { guildId: message.guildId } : {}),
-			mentionsBot: message.mentions.users.has(botId),
-			repliesToBot: referenced?.author.id === botId,
-			text: message.content.replace(mention, "").trim(),
-			attachments: [
-				...attachmentRefs(message),
-				...(forward ? attachmentRefs(forward) : []),
-			],
-			...(forward && reference?.channelId
-				? {
-						forwarded: {
-							text: forward.content ?? "",
-							channelMention: `<#${reference.channelId}>`,
-							url: `https://discord.com/channels/${reference.guildId ?? "@me"}/${reference.channelId}/${reference.messageId ?? ""}`,
-						},
-					}
-				: {}),
-			...(referenced
-				? {
-						reference: {
-							text: referenced.content.replace(mention, "").trim(),
-							attachments: attachmentRefs(referenced),
-							...(referenced.webhookId
-								? { webhookName: referenced.author.username }
-								: {}),
-						},
-					}
-				: {}),
-		};
-	}
-
 	async #dispatch(interaction: Interaction): Promise<void> {
 		const { logger } = this.#options;
 		try {
@@ -417,15 +366,4 @@ export class DiscordSurface implements ChatSurface, OwnerNotifier {
 			throw new Error(`channel ${channel} cannot receive messages`);
 		return target;
 	}
-}
-
-function attachmentRefs(
-	message: Pick<Message, "attachments">,
-): AttachmentRef[] {
-	return [...message.attachments.values()].map((attachment) => ({
-		url: attachment.url,
-		name: attachment.name,
-		...(attachment.contentType ? { contentType: attachment.contentType } : {}),
-		size: attachment.size,
-	}));
 }

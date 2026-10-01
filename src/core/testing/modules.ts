@@ -1,13 +1,24 @@
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
+import type { SQL } from "bun";
+import { OWNER_TARGET } from "../agents/agent-claim.ts";
+import { DISCORD, type DiscordServices } from "../builtin/discord.ts";
+import { discordAdminPlugin } from "../builtin/discord-admin.ts";
 import { modulesPlugin } from "../builtin/modules.ts";
+import { skillsPlugin } from "../builtin/skills.ts";
+import { memoryPlugin } from "../builtin/stores.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
 import { silentLogger } from "../log.ts";
-import type { Contribution, PluginContext } from "../plugin.ts";
+import type { SkillStore } from "../modules/skills/skill-store.ts";
 import {
-	type CoreDiscord,
-	CoreRegistry,
-	type CoreStores,
-} from "../services.ts";
+	type Contribution,
+	type PluginContext,
+	pluginContext,
+	type RoundtablePlugin,
+} from "../plugin.ts";
+import { ServiceRegistry } from "../registry/services.ts";
+import { surfacePort } from "../routing/surface-port.ts";
+import type { AgentServer, MemoryStore, ScheduleStore } from "../services.ts";
+import { AGENTS, MEMORY, SCHEDULES } from "../services.ts";
 
 /** What the modules' tools did, for a test to read. */
 export interface ModuleRecord {
@@ -27,41 +38,13 @@ export async function setUpModules(
 ): Promise<{
 	contribution: Contribution;
 	record: ModuleRecord;
-	core: CoreRegistry;
+	services: ServiceRegistry;
 }> {
 	const record: ModuleRecord = {
 		threadOrigins: [],
 		reportChannels: [],
 		ownerChannelAsked: 0,
 	};
-	const core = new CoreRegistry();
-	// SAFETY: the tools under test read no store; each stub is asked for nothing else.
-	core.provide("stores", {
-		memory: {},
-		schedules: {},
-		confirmations: {},
-		agents: {},
-		skills: {},
-	} as unknown as CoreStores);
-	// SAFETY: the tools under test use the surface's owner channel and the threads' open only.
-	core.provide("discord", {
-		surface: {
-			ownerChannel: async () => {
-				record.ownerChannelAsked += 1;
-				return OWNER_CHANNEL;
-			},
-			ownerDiscord: () => ({}),
-		},
-		threads: {
-			open: async (origin: ChannelKey | undefined) => {
-				record.threadOrigins.push(origin);
-				return undefined;
-			},
-		},
-		guard: {},
-		cards: {},
-		studio: {},
-	} as unknown as CoreDiscord);
 	const plugin = modulesPlugin({
 		owner: {
 			id: "1",
@@ -78,20 +61,101 @@ export async function setUpModules(
 			thinking: "low",
 			worker: { run: async () => "found it" },
 		},
-		...(options.agentChannelOf
-			? { agentChannelOf: options.agentChannelOf }
-			: {}),
 	});
-	// SAFETY: setup reads only the logger, the conversations' background, and the core services.
+	const services = new ServiceRegistry([plugin]);
+	// SAFETY: the tools under test read no store; each stub is asked for nothing else.
+	services.preset(MEMORY, {} as MemoryStore);
+	services.preset(SCHEDULES, {} as ScheduleStore);
+	// SAFETY: the schedule tools ask the agent team for a channel and nothing else.
+	if (options.agentChannelOf)
+		services.preset(AGENTS, {
+			team: { channelOf: options.agentChannelOf },
+		} as unknown as AgentServer);
+	// SAFETY: the tools under test use the connection's owner channel and the threads' open only.
+	services.preset(DISCORD, {
+		connection: {
+			ownerChannel: async () => {
+				record.ownerChannelAsked += 1;
+				return OWNER_CHANNEL;
+			},
+			ownerOperations: () => ({}),
+		},
+		threads: {
+			open: async (origin: ChannelKey | undefined) => {
+				record.threadOrigins.push(origin);
+				return undefined;
+			},
+		},
+		guard: {},
+		commands: { add: () => undefined },
+	} as unknown as DiscordServices);
+	// SAFETY: setup reads only the logger, the conversations' background and targets, the surfaces, and the services.
 	const context = {
 		logger: silentLogger(),
 		conversations: {
+			target: (name: string) =>
+				name === OWNER_TARGET.name ? OWNER_TARGET : undefined,
 			background: async (turn: { channel: ChannelKey }) => {
 				record.reportChannels.push(turn.channel);
 				return { status: "ran" };
 			},
 		},
-		core,
-	} as unknown as PluginContext;
-	return { contribution: await plugin.setup(context), record, core };
+		// Only Discord's channels have a surface; any other conversation has none to report in.
+		surfaces: surfacePort(() => [
+			{
+				surface: "discord",
+				start: async () => undefined,
+				sendReply: async () => undefined,
+			},
+		]),
+	} as unknown as Omit<PluginContext, "services">;
+	const contribution = await services.setUp(plugin, () =>
+		plugin.setup(pluginContext(plugin, context, services.forPlugin(plugin))),
+	);
+	return { contribution, record, services };
+}
+
+/** What each addon plugin contributes, set up over stand-ins as far as setup reads them. */
+export async function setUpAddons(): Promise<{
+	memory: Contribution;
+	discordAdmin: Contribution;
+	skills: Contribution;
+}> {
+	const owner = {
+		id: "1",
+		name: "Owner",
+		pronouns: { subject: "they", object: "them", possessive: "their" },
+	} as const;
+	const memory = memoryPlugin({ owner });
+	const admin = discordAdminPlugin({ owner });
+	// SAFETY: the tools under test read the store only when a skill tool runs.
+	const store = { skills: () => [] } as unknown as SkillStore;
+	const skills = skillsPlugin(
+		{
+			guildId: "g1",
+			reposDir: "/tmp/repos",
+			writtenDir: "/tmp/written",
+			builtinDir: "/tmp/builtin",
+		},
+		async () => store,
+	);
+	const services = new ServiceRegistry([memory, admin, skills]);
+	// SAFETY: the admin tools ask the surface for the owner's Discord only when one runs.
+	services.preset(DISCORD, {
+		connection: { ownerOperations: () => ({}) },
+	} as unknown as DiscordServices);
+	// SAFETY: setup reads only the logger, the database handle, and the services.
+	const context = {
+		logger: silentLogger(),
+		database: () => ({}) as SQL,
+	} as unknown as Omit<PluginContext, "services">;
+	const setUp = (plugin: RoundtablePlugin) =>
+		services.setUp(plugin, () =>
+			plugin.setup(pluginContext(plugin, context, services.forPlugin(plugin))),
+		);
+	return {
+		memory: await setUp(memory),
+		discordAdmin: await setUp(admin),
+		skills: await setUp(skills),
+	};
 }

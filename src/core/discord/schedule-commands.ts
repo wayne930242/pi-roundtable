@@ -3,18 +3,15 @@ import type {
 	ChatInputCommandInteraction,
 	SlashCommandSubcommandGroupBuilder,
 } from "discord.js";
-import type { InteractionContribution } from "../contract/discord.ts";
 import { messages } from "../i18n/index.ts";
 import { describeRecurrence } from "../modules/schedules/recurrence.ts";
+import type { Schedule } from "../modules/schedules/schedule-store.ts";
+import type { ScheduleStore } from "../services.ts";
 import type {
-	Schedule,
-	ScheduleStore,
-} from "../modules/schedules/schedule-store.ts";
-import {
-	groupOption,
-	type OwnerGuard,
-	ownerCommandModule,
-} from "./owner-command.ts";
+	CommandGuard,
+	InteractionContribution,
+} from "./interaction-module.ts";
+import { groupOption, ownerCommandModule } from "./owner-command.ts";
 import {
 	OwnerFacingError,
 	ownerPanel,
@@ -52,7 +49,10 @@ function channelMention(schedule: Schedule): string {
 
 const unix = (at: Date) => Math.floor(at.getTime() / 1000);
 
-function section(schedule: Schedule): string {
+/** How a schedule's target reads in a list; the target's name when no plugin contributes it. */
+export type TargetLabel = (target: string) => string;
+
+function section(schedule: Schedule, label: TargetLabel): string {
 	const prompt =
 		schedule.prompt.length > PROMPT_PREVIEW
 			? `${schedule.prompt.slice(0, PROMPT_PREVIEW)}…`
@@ -64,14 +64,12 @@ function section(schedule: Schedule): string {
 				plain(schedule.lastStatus ?? "?"),
 			)
 		: "";
-	const mode =
-		schedule.mode === "owner" ? text.scheduleModeOwner : text.scheduleModeParty;
 	return [
 		text.scheduleHead(
 			schedule.id,
 			plain(schedule.title),
 			channelMention(schedule),
-			mode,
+			plain(label(schedule.target)),
 		),
 		text.scheduleNextRun(
 			describeRecurrence(schedule.recurrence),
@@ -85,9 +83,11 @@ function section(schedule: Schedule): string {
 /** `/<root> schedule`: the owner's view over every channel's schedules. */
 export class ScheduleCommands {
 	readonly #store: ScheduleStore;
+	readonly #label: TargetLabel;
 
-	constructor(store: ScheduleStore) {
+	constructor(store: ScheduleStore, label: TargetLabel) {
 		this.#store = store;
+		this.#label = label;
 	}
 
 	async autocomplete(interaction: AutocompleteInteraction): Promise<void> {
@@ -110,7 +110,9 @@ export class ScheduleCommands {
 		const all = await this.#store.all();
 		await replyWithPanels(interaction, {
 			title: messages().scheduleTitle,
-			sections: all.length ? all.map(section) : [messages().scheduleNone],
+			sections: all.length
+				? all.map((s) => section(s, this.#label))
+				: [messages().scheduleNone],
 			footer: messages().scheduleFooter,
 		});
 	}
@@ -126,7 +128,7 @@ export class ScheduleCommands {
 		await interaction.editReply(
 			ownerPanel({
 				title: messages().scheduleCancelled,
-				sections: [section(removed)],
+				sections: [section(removed, this.#label)],
 			}),
 		);
 	}
@@ -134,10 +136,11 @@ export class ScheduleCommands {
 
 /** `/<root> schedule list|cancel`. */
 export function scheduleCommands(
-	guard: OwnerGuard,
+	guard: CommandGuard,
 	store: ScheduleStore,
+	label: TargetLabel,
 ): InteractionContribution {
-	const commands = new ScheduleCommands(store);
+	const commands = new ScheduleCommands(store, label);
 	return {
 		module: ownerCommandModule(guard, {
 			owns: (group) => group === "schedule",

@@ -100,11 +100,6 @@ function setup(options: Partial<OwnerCardsOptions> = {}) {
 const tick = () => Bun.sleep(1);
 
 describe("OwnerCards", () => {
-	test("a conversation outside Discord has no cards", () => {
-		const { cards } = setup();
-		expect(cards.prompts("mcp:agent")).toBeUndefined();
-	});
-
 	test("a dispatch thread's cards are posted in the thread", async () => {
 		const asked: string[] = [];
 		const fake = fakeChannel();

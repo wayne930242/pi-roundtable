@@ -42,4 +42,33 @@ describe("core boundary", () => {
 		);
 		expect(found).toEqual([]);
 	});
+
+	test("the core names no concept of one consumer", () => {
+		// A word starting with one of these names a concept the core must not know: a consumer's
+		// party channels, profile catalogue, connectors, or its web-research worker.
+		const concept = /(?<![a-z])(party|profile|connector|sol-?worker)/i;
+		// The only allowed lines are the agent panel's `/<root> profile` subcommand: a user-visible
+		// command of the agent server that shows an agent's own profile, not a consumer's catalogue.
+		const allowed: Record<string, string> = {
+			"src/core/discord/agent-commands.ts":
+				"`/<root> profile` opens an agent's panel",
+			"src/core/discord/agent-panel.ts":
+				"the agent panel factory builds `/<root> profile`'s panel",
+			"src/core/i18n/agent-panel.ts":
+				"the agent panel's text names its `/<root> profile` command",
+		};
+		const panelCommand = /`?\/\$\{[^}]+\} profile`?|\/<root> profile/;
+		const found = coreFiles(CORE).flatMap((file) => {
+			const path = relative(ROOT, file);
+			if (path === relative(ROOT, import.meta.path)) return [];
+			return readFileSync(file, "utf8")
+				.split("\n")
+				.flatMap((text, index) => {
+					if (!concept.test(text)) return [];
+					if (path in allowed && panelCommand.test(text)) return [];
+					return [`${path}:${index + 1}: ${text.trim()}`];
+				});
+		});
+		expect(found).toEqual([]);
+	});
 });

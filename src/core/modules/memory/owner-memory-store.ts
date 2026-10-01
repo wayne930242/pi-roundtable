@@ -1,22 +1,24 @@
 import type { SQL } from "bun";
 import type { Migration } from "../../db/migrations.ts";
 import { MemoryError } from "../../domain/errors.ts";
+import type { MemoryStore, SpeakerMemory } from "../../services.ts";
 
-export const OWNER_MEMORY_KINDS = ["core", "note", "event"] as const;
-export type OwnerMemoryKind = (typeof OWNER_MEMORY_KINDS)[number];
+/** The kinds of memory: a core fact shown every turn, a searchable note, a dated event. */
+export const MEMORY_KINDS = Object.freeze(["core", "note", "event"] as const);
+export type MemoryKind = (typeof MEMORY_KINDS)[number];
 
-export interface OwnerMemory {
+export interface Memory {
 	id: number;
-	kind: OwnerMemoryKind;
+	kind: MemoryKind;
 	fact: string;
 	/** YYYY-MM-DD; set for events only. */
 	eventDate: string | null;
 }
 
-/** What every owner turn carries: all core facts, and events that have not passed yet. */
-export interface OwnerPromptMemory {
-	core: OwnerMemory[];
-	events: OwnerMemory[];
+/** What every turn carries: all core facts, and events that have not passed yet. */
+export interface PromptMemory {
+	core: Memory[];
+	events: Memory[];
 }
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -24,12 +26,12 @@ const SEARCH_LIMIT = 20;
 
 interface Row {
 	id: string | number;
-	kind: OwnerMemoryKind;
+	kind: MemoryKind;
 	fact: string;
 	event_date: string | null;
 }
 
-function toMemory(row: Row): OwnerMemory {
+function toMemory(row: Row): Memory {
 	return {
 		id: Number(row.id),
 		kind: row.kind,
@@ -53,12 +55,12 @@ export function searchTerms(query: string): string[] {
 /** The trimmed fact, after the rules every stored memory follows. */
 function checkedFact(
 	fact: string,
-	kind: OwnerMemoryKind,
+	kind: MemoryKind,
 	eventDate: string | undefined,
 ): string {
 	const trimmed = fact.trim();
 	if (!trimmed) throw new MemoryError("a memory fact cannot be empty");
-	if (!(OWNER_MEMORY_KINDS as readonly string[]).includes(kind))
+	if (!(MEMORY_KINDS as readonly string[]).includes(kind))
 		throw new MemoryError(`unknown memory kind: ${kind}`);
 	if (kind === "event" && !(eventDate && DATE.test(eventDate)))
 		throw new MemoryError("an event needs its date as YYYY-MM-DD");
@@ -72,7 +74,7 @@ function checkedFact(
  * dated events. The store is bound to a speaker and never reads or changes another's; every
  * agent shares the memory of whoever is speaking.
  */
-export class OwnerMemoryStore {
+export class PgMemoryStore implements MemoryStore, SpeakerMemory {
 	readonly #sql: SQL;
 	/** Whose memory this is: a Discord user id. */
 	readonly speakerId: string;
@@ -108,7 +110,7 @@ export class OwnerMemoryStore {
 	 */
 	static migrations(ownerId: string): Migration[] {
 		return [
-			OwnerMemoryStore.migration,
+			PgMemoryStore.migration,
 			{
 				name: "owner-memory-speaker",
 				up: async (sql) => {
@@ -125,25 +127,25 @@ export class OwnerMemoryStore {
 	}
 
 	/** The store over the host's migrated pool, holding one speaker's memory. */
-	static attach(sql: SQL, speakerId: string): OwnerMemoryStore {
-		return new OwnerMemoryStore(sql, speakerId);
+	static attach(sql: SQL, speakerId: string): PgMemoryStore {
+		return new PgMemoryStore(sql, speakerId);
 	}
 
 	/** Another speaker's memory in the same database. */
-	forSpeaker(speakerId: string): OwnerMemoryStore {
+	forSpeaker(speakerId: string): PgMemoryStore {
 		return speakerId === this.speakerId
 			? this
-			: new OwnerMemoryStore(this.#sql, speakerId);
+			: new PgMemoryStore(this.#sql, speakerId);
 	}
 
-	async list(): Promise<OwnerMemory[]> {
+	async list(): Promise<Memory[]> {
 		const rows: Row[] = await this.#sql`
 			SELECT id, kind, fact, to_char(event_date, 'YYYY-MM-DD') AS event_date
 			FROM owner_memory WHERE speaker_id = ${this.speakerId} ORDER BY id`;
 		return rows.map(toMemory);
 	}
 
-	async forPrompt(today: string): Promise<OwnerPromptMemory> {
+	async forPrompt(today: string): Promise<PromptMemory> {
 		const rows: Row[] = await this.#sql`
 			SELECT id, kind, fact, to_char(event_date, 'YYYY-MM-DD') AS event_date
 			FROM owner_memory
@@ -159,9 +161,9 @@ export class OwnerMemoryStore {
 
 	async add(
 		fact: string,
-		kind: OwnerMemoryKind = "core",
+		kind: MemoryKind = "core",
 		eventDate?: string,
-	): Promise<OwnerMemory> {
+	): Promise<Memory> {
 		const trimmed = checkedFact(fact, kind, eventDate);
 		const [row]: Row[] = await this.#sql`
 			INSERT INTO owner_memory (speaker_id, fact, kind, event_date)
@@ -175,7 +177,7 @@ export class OwnerMemoryStore {
 	 * Memories containing any query term, case-insensitively, most terms matched first,
 	 * then newest first.
 	 */
-	async search(query: string, limit = SEARCH_LIMIT): Promise<OwnerMemory[]> {
+	async search(query: string, limit = SEARCH_LIMIT): Promise<Memory[]> {
 		const terms = searchTerms(query);
 		if (terms.length === 0) throw new MemoryError("the search query is empty");
 		const rows: (Row & { hits: number })[] = await this.#sql`
@@ -196,8 +198,8 @@ export class OwnerMemoryStore {
 	/** Replaces one memory's text, kind, and date under `add`'s rules; undefined when the id is unknown. */
 	async update(
 		id: number,
-		change: { fact: string; kind: OwnerMemoryKind; eventDate?: string },
-	): Promise<OwnerMemory | undefined> {
+		change: { fact: string; kind: MemoryKind; eventDate?: string },
+	): Promise<Memory | undefined> {
 		const trimmed = checkedFact(change.fact, change.kind, change.eventDate);
 		const [row]: Row[] = await this.#sql`
 			UPDATE owner_memory

@@ -17,8 +17,8 @@ import type { Agent } from "./agent-store.ts";
 import { GroupTurns } from "./group-turns.ts";
 import {
 	channelIdOf,
-	channelKey,
 	channelOwner,
+	discordKey,
 	homeScope,
 } from "./team-keys.ts";
 import {
@@ -83,7 +83,7 @@ export class TeamTurns {
 
 	/**
 	 * The owner's message in an agent's channel; call inside the channel's queue. `text`
-	 * carries the reference, `replyText` is what he typed.
+	 * carries the reference, `replyText` is what they typed.
 	 */
 	async answerOwner(
 		channel: ChannelKey,
@@ -168,6 +168,7 @@ export class TeamTurns {
 		this.#active(agent.name, scope.group);
 		const turn = {
 			agent: agent.name,
+			kind: "agent",
 			channel: postTo,
 			speaker: chain.speaker,
 			...(scope.group ? { group: scope.group } : {}),
@@ -267,7 +268,7 @@ export class TeamTurns {
 
 	/**
 	 * Posts text under the caller's name in the channel of its turn: the group's in a group
-	 * round, otherwise its own, as a change report is (repos-and-skills spec behavior 10).
+	 * round, otherwise its own, as a change report is.
 	 */
 	async postAs(caller: AgentTurnScope, text: string): Promise<void> {
 		const agent = this.#options.store.activeAgent(caller.name);
@@ -281,7 +282,7 @@ export class TeamTurns {
 		const group = scope.group
 			? this.#options.store.group(scope.group)
 			: undefined;
-		return group ? channelKey(group.channelId) : scope.home;
+		return group ? discordKey(group.channelId) : scope.home;
 	}
 
 	/** The assistant's own notice, such as a new release, posted in the coordinator's channel under its name. */
@@ -290,7 +291,7 @@ export class TeamTurns {
 		const coordinator = store.agentByChannel(entryChannelId);
 		if (!coordinator)
 			throw new AgentError("no active agent in the entry channel");
-		await this.#post(channelKey(entryChannelId), coordinator, {
+		await this.#post(discordKey(entryChannelId), coordinator, {
 			chunks: splitReply(text),
 		});
 	}

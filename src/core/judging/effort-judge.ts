@@ -3,8 +3,13 @@ import type { Logger } from "../log.ts";
 import type { ThinkingLevel } from "../models.ts";
 
 /** The levels the judge chooses between, lowest first; criterion i of a brief asks for level i. */
-export const EFFORT_LEVELS = ["low", "medium", "high", "xhigh"] as const;
-export type EffortLevel = (typeof EFFORT_LEVELS)[number];
+export type EffortLevel = "low" | "medium" | "high" | "xhigh";
+const EFFORT_LEVELS: readonly EffortLevel[] = [
+	"low",
+	"medium",
+	"high",
+	"xhigh",
+];
 
 /** What the judge is told about the conversation, and one criterion per effort level. */
 export interface EffortBrief {
@@ -62,8 +67,25 @@ export interface PreviousTurn<Level extends ThinkingLevel> {
 	level?: Level;
 }
 
+/** Picks the thinking level of one turn from a message and what the previous turn left. */
+export interface EffortPicker<Fallback extends ThinkingLevel = ThinkingLevel> {
+	judge(
+		message: string,
+		previous?: PreviousTurn<EffortLevel | Fallback>,
+	): Promise<EffortLevel | Fallback>;
+}
+
+/** The judge of a conversation's turns, reading each message against the brief. */
+export function effortJudge<Fallback extends ThinkingLevel>(
+	options: EffortJudgeOptions<Fallback>,
+): EffortPicker<Fallback> {
+	return new EffortJudge(options);
+}
+
 /** Picks the thinking level of one turn from the judge's reading of its message. */
-export class EffortJudge<Fallback extends ThinkingLevel = ThinkingLevel> {
+export class EffortJudge<Fallback extends ThinkingLevel = ThinkingLevel>
+	implements EffortPicker<Fallback>
+{
 	readonly #options: EffortJudgeOptions<Fallback>;
 
 	constructor(options: EffortJudgeOptions<Fallback>) {

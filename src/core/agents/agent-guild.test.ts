@@ -8,7 +8,7 @@ import {
 	TEST_GUILD,
 	testDatabaseUrl,
 } from "../testing/database.ts";
-import { AgentStore } from "./agent-store.ts";
+import { PgAgentStore } from "./agent-store.ts";
 
 const OTHER_GUILD = "900000000000000002";
 const TABLES = [
@@ -29,7 +29,7 @@ describeDb("guild scoping", () => {
 			await admin.unsafe(`DROP TABLE IF EXISTS ${table}`);
 		await admin.close();
 		// The tables as they were before rows carried a guild, with rows in every one.
-		sql = await migratedPool(AgentStore.migration, SkillStore.migration);
+		sql = await migratedPool(PgAgentStore.migration, SkillStore.migration);
 		await sql`INSERT INTO agents (name, display_name, prompt, avatar_prompt, channel_id)
 			VALUES ('infra', 'Infra', 'p', 'a', '10'), ('doctor', 'Doctor', 'p', 'a', '11')`;
 		await sql`INSERT INTO agent_groups (name, display_name, channel_id, members, host)
@@ -47,7 +47,7 @@ describeDb("guild scoping", () => {
 
 	const upgrade = (guild: string) =>
 		migrate(sql, [
-			...AgentStore.migrations(guild),
+			...PgAgentStore.migrations(guild),
 			...SkillStore.migrations(guild),
 		]);
 
@@ -62,7 +62,7 @@ describeDb("guild scoping", () => {
 				new Set([TEST_GUILD]),
 			);
 		}
-		const store = await AgentStore.attach(sql, TEST_GUILD);
+		const store = await PgAgentStore.attach(sql, TEST_GUILD);
 		expect(store.agents().map((a) => a.name)).toEqual(["infra", "doctor"]);
 		expect(store.group("ops")?.members).toEqual(["infra", "doctor"]);
 		expect(
@@ -82,7 +82,7 @@ describeDb("guild scoping", () => {
 
 	test("a guild sees only its own rows and may reuse a name of another", async () => {
 		await upgrade(TEST_GUILD);
-		const other = await AgentStore.attach(sql, OTHER_GUILD);
+		const other = await PgAgentStore.attach(sql, OTHER_GUILD);
 		expect(other.agents()).toEqual([]);
 		expect(other.groups()).toEqual([]);
 		for (const name of ["infra", "doctor"])
@@ -100,9 +100,9 @@ describeDb("guild scoping", () => {
 			members: ["infra", "doctor"],
 			host: "infra",
 		});
-		const mine = await AgentStore.attach(sql, TEST_GUILD);
+		const mine = await PgAgentStore.attach(sql, TEST_GUILD);
 		expect(mine.agent("infra")?.displayName).toBe("Infra");
-		const reopened = await AgentStore.attach(sql, OTHER_GUILD);
+		const reopened = await PgAgentStore.attach(sql, OTHER_GUILD);
 		expect(reopened.agent("infra")?.displayName).toBe("Other infra");
 		expect(reopened.group("ops")?.displayName).toBe("Other Ops");
 		// Messages and cursors of one guild's group are not the other's.
@@ -118,7 +118,7 @@ describeDb("guild scoping", () => {
 
 	test("a name is still unique inside its guild", async () => {
 		await upgrade(TEST_GUILD);
-		const store = await AgentStore.attach(sql, TEST_GUILD);
+		const store = await PgAgentStore.attach(sql, TEST_GUILD);
 		expect(() => store.checkNewName("infra")).toThrow(/taken/);
 	});
 });

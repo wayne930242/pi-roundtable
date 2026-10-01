@@ -1,13 +1,16 @@
-import type {
-	ExtensionFactory,
-	ModelRuntime,
-} from "@earendil-works/pi-coding-agent";
-import { agentClaim } from "../agents/agent-claim.ts";
+import { join } from "node:path";
+import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
+import type { SQL } from "bun";
+import { agentClaim, OWNER_TARGET } from "../agents/agent-claim.ts";
 import { AgentDashboard } from "../agents/agent-dashboard.ts";
-import { AgentTeam } from "../agents/agent-team.ts";
+import { PgAgentStore } from "../agents/agent-store.ts";
+import { DiscordAgentTeam } from "../agents/agent-team.ts";
+import { AGENT_TOOLS } from "../agents/agent-tools.ts";
+import { FileAvatarStudio } from "../agents/avatar-studio.ts";
 import { RelevanceScorer } from "../agents/group-round.ts";
-import { channelKey } from "../agents/team-keys.ts";
+import { discordKey } from "../agents/team-keys.ts";
 import { ownerAttachmentDir } from "../attachments/attachment-dir.ts";
+import type { AgentRuntime, AgentSessions } from "../contract/runtime.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
 import type { OwnerIdentity } from "../identity.ts";
 import { ConfirmationJudge } from "../judging/confirmation-judge.ts";
@@ -18,14 +21,17 @@ import {
 	type ModelRef,
 	type ThinkingLevel,
 } from "../models.ts";
-import { SkillRegistry } from "../modules/skills/skill-registry.ts";
 import type { ErrorReporter } from "../ops/error-reporter.ts";
-import type { RoundtablePlugin } from "../plugin.ts";
+import type { PluginContext, RoundtablePlugin } from "../plugin.ts";
 import { splitReply } from "../presentation/reply-splitter.ts";
 import { agentPromptExtension } from "../runtime/extensions/agent-prompt.ts";
+import { PendingConfirmationStore } from "../runtime/pending-confirmation-store.ts";
 import { PiAgentRuntime } from "../runtime/pi-agent-runtime.ts";
-import type { AgentTurnScope, SessionTool } from "../sessions.ts";
-import type { SpeakerPolicy } from "../speakers.ts";
+import { AGENTS, BACKGROUND_TURNS, SCHEDULES, SKILLS } from "../services.ts";
+import type { SessionTool } from "../sessions.ts";
+import type { Speaker, SpeakerPolicy, Tier } from "../speakers.ts";
+import { DISCORD } from "./discord.ts";
+import { agentOnly } from "./session-tool.ts";
 
 export interface AgentServerOptions {
 	guildId: string;
@@ -51,37 +57,28 @@ export interface AgentServerOptions {
 	shellUser: string;
 	/** The prompt every agent starts with, and the one for speakers other than the owner. */
 	prompts: { shared: string; guest?: string };
-	/** Where the skill registry reads and writes skills. */
-	skills: { reposDir: string; writtenDir: string; builtinDir: string };
 	/** The listener the avatar pictures are served on. */
 	avatarListener: string;
+	/** The origin the agents' pictures are served from. */
+	avatarUrl: string;
+	/** The assistant's neutral avatar: the style reference and the picture of an agent without one. */
+	avatarReference: string;
 	/** Reports the process's own errors to an agent; without one nothing is reported. */
 	errorReporter?: ErrorReporter;
-	/**
-	 * Conversations outside the agent server, such as the owner's own: their system prompt, and the
-	 * tools startup refuses to run without.
-	 */
-	ownerSessions?: { persona: string; requiredTools: readonly string[] };
 }
 
-/** A session tool whose extension never changes, for agent sessions only. */
-function agentOnly(
-	name: string,
-	factory: (scope: AgentTurnScope) => ExtensionFactory,
-): SessionTool {
-	return {
-		name,
-		phase: "tools",
-		snapshot: () => ({
-			revision: 0,
-			factory: (session) => (session.agent ? factory(session.agent) : null),
-		}),
-	};
-}
+/** The name of the agent server's plugin, as `serviceStarted` events name it. */
+export const AGENT_SERVER_PLUGIN = "agent-server";
+
+/**
+ * The agent server's service that starts the team and the dashboard in the background: once its
+ * `serviceStarted` event says `ready`, the agents' channels and the dashboard are up.
+ */
+export const AGENT_TEAM_SERVICE = "team";
 
 /** The agent tools and the agent's own prompt, which only agent sessions load. */
 export function agentSessionTools(
-	team: Pick<AgentTeam, "extension" | "systemPrompt">,
+	team: Pick<DiscordAgentTeam, "extension" | "systemPrompt">,
 ): SessionTool[] {
 	return [
 		agentOnly("agent-tools", (scope) => team.extension(scope)),
@@ -91,30 +88,78 @@ export function agentSessionTools(
 	];
 }
 
+/** What every speaker may do with agents; admins create and edit them. */
+const AGENT_TIERS: Readonly<Record<string, Tier>> = {
+	...Object.fromEntries(AGENT_TOOLS.map((tool) => [tool, "admin" as const])),
+	agent_list: "member",
+	agent_get: "member",
+	message_agent: "member",
+	channel_read: "member",
+};
+
+/** The tables the agent server keeps: its agents and groups, and the held actions. */
+export interface AgentServerStores {
+	agents: PgAgentStore;
+	/** Held actions, kept across a restart. */
+	confirmations: PendingConfirmationStore;
+}
+
+/** Attaches the agent server's stores over the host's migrated pool. */
+async function attachStores(
+	sql: SQL,
+	guildId: string,
+): Promise<AgentServerStores> {
+	return {
+		agents: await PgAgentStore.attach(sql, guildId),
+		confirmations: await PendingConfirmationStore.attach(sql),
+	};
+}
+
 /**
- * The agent server: the skill registry, the team with its channels and dashboard, and the
- * runtime that runs every agent turn. It claims the agent channels, starts the team in the
+ * The agent server: the team with its channels and dashboard, and the runtime that runs every
+ * agent turn. The skills the agents carry come from the skills addon when it is on. It claims the agent channels, starts the team in the
  * background, and hands what it built to the plugins after it.
  */
 export function agentServerPlugin(
 	options: AgentServerOptions,
+	/** Opens the stores; a test hands stand-ins, so the plugin can be set up without a database. */
+	openStores: (
+		context: Pick<PluginContext, "database">,
+		guildId: string,
+	) => Promise<AgentServerStores> = (context, guildId) =>
+		attachStores(context.database(), guildId),
 ): RoundtablePlugin {
-	let runtime: PiAgentRuntime | undefined;
-	let team: AgentTeam | undefined;
-	let skills: SkillRegistry | undefined;
+	let runtime: AgentRuntime | undefined;
 	return {
-		name: "agent-server",
-		// The skills are read once every plugin is set up, so a plugin may still place some in setup.
+		name: AGENT_SERVER_PLUGIN,
+		// The agent server's own tables; the host runs them before any setup, in this order.
+		migrations: [
+			PendingConfirmationStore.migration,
+			...PgAgentStore.migrations(options.guildId),
+		],
+		provides: [AGENTS],
 		preflight: async () => {
-			skills?.init();
-			await runtime?.preflight();
+			await runtime?.preflight?.();
 		},
-		stopTurn: (channel) => runtime?.stop(channel) ?? false,
-		agentServer: () => team?.start() ?? Promise.resolve(),
-		setup: (context) => {
-			const { stores, discord } = context.core;
-			const { surface } = discord;
-			const { logger, providers } = context;
+		setup: async (context) => {
+			const discord = context.services.get(DISCORD);
+			const schedules = context.services.get(SCHEDULES);
+			const { connection } = discord;
+			const { logger, providers, surfaces } = context;
+			const studio = new FileAvatarStudio({
+				dir: join(options.dataDir, "avatars"),
+				publicUrl: options.avatarUrl,
+				referencePath: options.avatarReference,
+				// Without an image provider the studio makes each agent a picture from its name.
+				...(providers.filled.has("images") ? { draw: providers.images } : {}),
+			});
+			await studio.init();
+			// Absent when the skills addon is off: the agents then carry none.
+			const skills = context.services.find(SKILLS);
+			const { agents: store, confirmations: heldActions } = await openStores(
+				context,
+				options.guildId,
+			);
 			const judge = providers.judge;
 			const confirmations = new ConfirmationJudge({
 				judge,
@@ -122,15 +167,7 @@ export function agentServerPlugin(
 				assistant: options.assistant,
 				logger,
 			});
-			const registry = new SkillRegistry({
-				store: stores.skills,
-				reposDir: options.skills.reposDir,
-				writtenDir: options.skills.writtenDir,
-				builtinDir: options.skills.builtinDir,
-				logger,
-			});
-			skills = registry;
-			const built: AgentTeam = new AgentTeam({
+			const built: DiscordAgentTeam = new DiscordAgentTeam({
 				guildId: options.guildId,
 				entryChannelId: options.entryChannelId,
 				seeds: () => context.sessions().seeds,
@@ -141,9 +178,9 @@ export function agentServerPlugin(
 				owner: options.owner,
 				toolTiers: context.toolTiers,
 				shellUser: options.shellUser,
-				store: stores.agents,
-				channels: surface.agentChannels(options.guildId),
-				studio: discord.studio,
+				store,
+				channels: connection.agentChannels(options.guildId),
+				studio,
 				// The runtime is built next, with this team's tools.
 				runtime: () => {
 					if (!runtime) throw new Error("the runtime is built with the team");
@@ -166,109 +203,138 @@ export function agentServerPlugin(
 						return models.map((model) => `${model.provider}/${model.id}`);
 					},
 				},
-				schedules: stores.schedules,
+				schedules,
 				queue: context.queue,
-				startTyping: (channel) => surface.startTyping(channel),
-				showStop: (channel) => surface.showStop(channel),
+				startTyping: (channel) => surfaces.startTyping(channel),
+				showStop: (channel) => surfaces.showStop(channel),
 				workDir: options.workDir,
 				sharedPrompt: options.prompts.shared,
 				...(options.prompts.guest
 					? { guestPrompt: options.prompts.guest }
 					: {}),
-				skills: registry,
+				...(skills ? { skills } : {}),
 				threads: discord.threads,
 				logger,
 			});
-			team = built;
-			surface.onChannelDeleted((channelId) => {
-				if (!built.owns(channelKey(channelId))) return;
+			connection.onChannelDeleted((channelId) => {
+				if (!built.owns(discordKey(channelId))) return;
 				void context.queue
-					.run(channelKey(channelId), () => built.channelDeleted(channelId))
+					.run(discordKey(channelId), () => built.channelDeleted(channelId))
 					// pi-lens-ignore: no-unknown-parameters
 					.catch((error: unknown) =>
 						logger.error({ channelId, err: error }, "archive failed"),
 					);
 			});
-			const running = new PiAgentRuntime({
-				owner: options.owner,
-				sessions: context.sessions,
-				agentDir: options.agentDir,
-				modelRuntime: options.modelRuntime,
-				dataDir: options.dataDir,
-				model: options.model,
-				thinking: options.thinking,
-				effort: new EffortJudge({
-					judge,
-					brief: AGENT_BRIEF,
-					fallback: options.thinking,
-					threshold: options.judgeThreshold,
-					logger,
-				}),
-				persona: options.ownerSessions?.persona ?? "",
-				confirmations: stores.confirmations,
-				requiredTools: options.ownerSessions?.requiredTools ?? [],
-				toolTiers: context.toolTiers,
-				agents: {
-					workDir: options.workDir,
-					modelOf: (name) => built.modelOf(name),
-					skills: (name) => built.skillsOf(name),
-					turnChannel: (scope) => built.turnChannel(scope),
-				},
-				prompts: (channel, speaker) => discord.cards.prompts(channel, speaker),
-				logger,
-			});
+			const agentSessions: AgentSessions = {
+				workDir: options.workDir,
+				modelOf: (name) => built.modelOf(name),
+				skills: (name) => built.skillsOf(name),
+				turnChannel: (scope) => built.turnChannel(scope),
+			};
+			const prompts = (channel: ChannelKey, speaker?: Speaker) =>
+				context.surfaces.prompts(channel, speaker);
+			// A plugin that fills the runtime slot replaces the whole conversation runtime; without
+			// one the agent server runs Pi, built from the options below.
+			const running: AgentRuntime = providers.filled.has("runtime")
+				? providers.runtime({
+						logger,
+						env: context.env,
+						owner: { id: options.owner.id, name: options.owner.name },
+						sessions: context.sessions,
+						toolTiers: context.toolTiers,
+						prompts,
+						agents: agentSessions,
+						confirmations: heldActions,
+						judge,
+					})
+				: new PiAgentRuntime({
+						owner: options.owner,
+						sessions: context.sessions,
+						agentDir: options.agentDir,
+						modelRuntime: options.modelRuntime,
+						dataDir: options.dataDir,
+						model: options.model,
+						thinking: options.thinking,
+						effort: new EffortJudge({
+							judge,
+							brief: AGENT_BRIEF,
+							fallback: options.thinking,
+							threshold: options.judgeThreshold,
+							logger,
+						}),
+						confirmations: heldActions,
+						toolTiers: context.toolTiers,
+						agents: agentSessions,
+						prompts,
+						logger,
+					});
 			runtime = running;
-			context.core.provide("agents", {
+			context.services.provide(AGENTS, {
 				team: built,
+				directory: store,
 				runtime: running,
-				skills: registry,
-				confirmations,
+				approvals: confirmations,
+				avatars: studio,
 			});
 			const attachmentDir = (channel: ChannelKey) =>
 				ownerAttachmentDir(options.dataDir, channel);
 			const dashboard = new AgentDashboard({
 				status: () => built.status(),
-				board: surface.agentDashboard(options.guildId),
+				board: connection.agentDashboard(options.guildId),
 				lines: () => context.dashboard(),
 				logger,
 			});
 			built.onChange(() => dashboard.changed());
+			const connectErrorReporter = () =>
+				options.errorReporter?.connect({
+					channelOf: (name) => {
+						const agent = store.agent(name);
+						return agent?.status === "active" && agent.channelId
+							? discordKey(agent.channelId)
+							: undefined;
+					},
+					post: (channel, text) =>
+						surfaces.sendReply(channel, { chunks: splitReply(text) }),
+					turn: (channel, text) =>
+						context.services
+							.get(BACKGROUND_TURNS)
+							.runErrorReport(channel, text),
+					logger,
+				});
 			return {
 				services: [
-					{ name: "runtime", stop: () => running.dispose() },
+					{ name: "runtime", stop: () => running.dispose?.() },
 					{ name: "dashboard", stop: () => dashboard.stop() },
+					{
+						name: AGENT_TEAM_SERVICE,
+						// The dashboard shows the team, so it starts once the team has; the error
+						// reporter connects whether or not the team did, since it reports the failure.
+						startInBackground: async () => {
+							try {
+								await built.start();
+								dashboard.start();
+							} finally {
+								connectErrorReporter();
+							}
+						},
+					},
 				],
+				// The schedules and delegated tasks of the owner's and the agents' conversations are its own.
+				backgroundTargets: [OWNER_TARGET],
 				channels: [
 					agentClaim({
 						owner: options.owner,
 						speakers: options.speakers,
 						team: built,
 						runtime: running,
-						surface,
+						surface: context.surfaces,
 						attachmentDir,
 						logger,
 					}),
 				],
-				http: [discord.studio.route(options.avatarListener)],
+				http: [studio.route(options.avatarListener)],
 				sessionTools: agentSessionTools(built),
-				events: {
-					agentServer: (outcome) => {
-						options.errorReporter?.connect({
-							channelOf: (name) => {
-								const agent = stores.agents.agent(name);
-								return agent?.status === "active" && agent.channelId
-									? channelKey(agent.channelId)
-									: undefined;
-							},
-							post: (channel, text) =>
-								surface.sendReply(channel, { chunks: splitReply(text) }),
-							turn: (channel, text) =>
-								context.core.background.runErrorReport(channel, text),
-							logger,
-						});
-						if (outcome === "ready") dashboard.start();
-					},
-				},
+				toolTiers: AGENT_TIERS,
 			};
 		},
 	};

@@ -9,14 +9,14 @@ export type ThinkingLevel =
 	| "high"
 	| "xhigh";
 
-export const THINKING_LEVELS: readonly ThinkingLevel[] = [
+export const THINKING_LEVELS: readonly ThinkingLevel[] = Object.freeze([
 	"off",
 	"minimal",
 	"low",
 	"medium",
 	"high",
 	"xhigh",
-];
+]);
 
 /** An agent's or the assistant's thinking setting: a fixed level, or the judge's choice each turn. */
 export const AUTO_THINKING = "auto";

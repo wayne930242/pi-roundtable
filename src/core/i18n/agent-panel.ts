@@ -21,6 +21,8 @@ export function agentPanelEn(ctx: CatalogContext) {
 		}) =>
 			`### ${v.displayName}\n-# agent name \`${v.name}\`, cannot be changed\n**Model** · \`${v.model}\` · thinking \`${v.thinking}\`${v.follows}\n${v.skills}\n-# To add or remove a skill, ask any agent to use agent_skills.`,
 		agentAvatarPromptText: (prompt: string) => `**Avatar prompt**\n${prompt}`,
+		agentNoImageProvider:
+			"**Avatar** · No image provider is configured, so this avatar is generated from the agent's display name and cannot be redrawn or edited. A plugin that fills the `images` slot adds drawing.",
 		agentPromptInline: (prompt: string) =>
 			`**Prompt**\n\`\`\`\n${prompt}\n\`\`\``,
 		agentPromptFile: (length: number) =>
@@ -69,6 +71,8 @@ export function agentPanelZhTW(
 		}) =>
 			`### ${v.displayName}\n-# agent 名稱 \`${v.name}\`，不能更改\n**模型**　\`${v.model}\`　thinking \`${v.thinking}\`${v.follows}\n${v.skills}\n-# 要增減 skill，請任一個 agent 用 agent_skills。`,
 		agentAvatarPromptText: (prompt: string) => `**頭像提示詞**\n${prompt}`,
+		agentNoImageProvider:
+			"**頭像**　尚未設定圖像提供者，所以這個頭像由 agent 的顯示名自動產生，不能重畫或修改。要能畫頭像，需要一個填入 `images` 槽位的外掛。",
 		agentPromptInline: (prompt: string) =>
 			`**提示詞**\n\`\`\`\n${prompt}\n\`\`\``,
 		agentPromptFile: (length: number) =>

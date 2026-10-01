@@ -9,6 +9,7 @@ import {
 	Discord,
 } from "./checks/discord.ts";
 import { checkEnvironment } from "./checks/environment.ts";
+import { checkImageProvider } from "./checks/images.ts";
 import { checkModelLogin } from "./checks/model.ts";
 import { checkPublicUrl } from "./checks/public-url.ts";
 import type { Http } from "./http.ts";
@@ -51,6 +52,11 @@ export function buildChecks(
 			run: () => checkConfiguration(project),
 		},
 		{ name: "plugins", offline: true, run: () => checkPlugins(project) },
+		{
+			name: "image provider",
+			offline: true,
+			run: () => checkImageProvider(project),
+		},
 		{
 			name: "PostgreSQL",
 			offline: false,

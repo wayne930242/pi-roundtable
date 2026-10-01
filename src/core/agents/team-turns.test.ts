@@ -11,9 +11,10 @@ import { silentLogger } from "../log.ts";
 import { ChannelQueue } from "../routing/channel-queue.ts";
 import { TEST_OWNER as OWNER, OWNER_SPEAKER } from "../testing/owner.ts";
 import { FakeThreadHost, fakeThreads } from "../testing/thread-host.ts";
+import { toolTiers } from "../tool-tiers.ts";
 import type { AgentPost } from "./agent-ports.ts";
-import type { Agent, AgentGroup, AgentStore } from "./agent-store.ts";
-import { channelKey } from "./team-keys.ts";
+import type { Agent, AgentGroup, PgAgentStore } from "./agent-store.ts";
+import { discordKey } from "./team-keys.ts";
 import { TeamTurns } from "./team-turns.ts";
 
 const agent = (name: string, channelId: string): Agent => ({
@@ -46,12 +47,12 @@ const store = {
 	agentByChannel: (id: string) => AGENTS.find((a) => a.channelId === id),
 	group: (name: string) => (name === GROUP.name ? GROUP : undefined),
 	groupByChannel: (id: string) => (id === GROUP.channelId ? GROUP : undefined),
-} as unknown as AgentStore;
+} as unknown as PgAgentStore;
 
 const coordinator: AgentTurnScope = {
 	name: "coordinator",
-	session: channelKey("1000"),
-	home: channelKey("1000"),
+	session: discordKey("1000"),
+	home: discordKey("1000"),
 };
 
 function setup(
@@ -66,8 +67,12 @@ function setup(
 	const judged: string[] = [];
 	const { threads } = fakeThreads(host);
 	const queue = new ChannelQueue();
+	// The agent tools' tiers are the agent server plugin's to declare; this table has the one the tests use.
+	const tiers = toolTiers();
+	tiers.declare("test", { agent_create: "admin" });
 	const team = new TeamTurns({
 		owner: OWNER,
+		toolTiers: tiers,
 		entryChannelId: "1000",
 		store,
 		channels: {
@@ -110,7 +115,7 @@ function setup(
 
 /** Runs a coordinator turn, whose model sends the message, and waits for the chain to settle. */
 async function run(team: TeamTurns): Promise<void> {
-	await team.answerBackground(channelKey("1000"), OWNER_SPEAKER, "go");
+	await team.answerBackground(discordKey("1000"), OWNER_SPEAKER, "go");
 	for (let i = 0; i < 30; i++) await Bun.sleep(2);
 }
 
@@ -147,7 +152,7 @@ describe("message_agent threads", () => {
 		expect(texts("1000")).toEqual(["Coordinator: ok", "Coordinator: ok"]);
 		expect(archivedAtFollowUp).toEqual(["900"]);
 		const followUp = turns.at(-1);
-		expect(followUp?.channel).toBe(channelKey("1000"));
+		expect(followUp?.channel).toBe(discordKey("1000"));
 		expect(followUp?.text).toContain("in the thread <#900>");
 		expect(followUp?.text).toContain("disk 80%"); // Only the answer's follow-up is a report turn, which may ask the owner on cards.
 		expect(turns.map((t) => [t.agent?.name, t.interactive])).toEqual([
@@ -159,9 +164,9 @@ describe("message_agent threads", () => {
 
 	test("a report turn in an agent's channel may ask on cards; a schedule's may not", async () => {
 		const { team, turns } = setup(() => ({ ok: true, text: "ok" }));
-		await team.answerBackground(channelKey("1000"), OWNER_SPEAKER, "scheduled");
+		await team.answerBackground(discordKey("1000"), OWNER_SPEAKER, "scheduled");
 		await team.answerBackground(
-			channelKey("1000"),
+			discordKey("1000"),
 			OWNER_SPEAKER,
 			"report",
 			true,
@@ -208,9 +213,9 @@ describe("message_agent threads", () => {
 	test("a group round's dispatches open their threads in the group channel", () => {
 		const { team } = setup(() => ({ ok: true, text: "" }), undefined, false);
 		expect(team.turnChannel({ ...coordinator, group: "ops" })).toBe(
-			channelKey("3000"),
+			discordKey("3000"),
 		);
-		expect(team.turnChannel(coordinator)).toBe(channelKey("1000"));
+		expect(team.turnChannel(coordinator)).toBe(discordKey("1000"));
 	});
 });
 
@@ -222,7 +227,7 @@ describe("speakers", () => {
 				team.message(coordinator, "infra", "check the disk");
 			return { ok: true, text: "ok" };
 		});
-		await team.answerBackground(channelKey("1000"), admin, "go");
+		await team.answerBackground(discordKey("1000"), admin, "go");
 		for (let i = 0; i < 30; i++) await Bun.sleep(2);
 		expect(turns.map((t) => [t.agent?.name, t.speaker])).toEqual([
 			["coordinator", admin],
@@ -234,7 +239,7 @@ describe("speakers", () => {
 
 describe("approvals", () => {
 	const shell: PendingConfirmation = {
-		profile: "general",
+		selectionId: "general",
 		heldAt: new Date(),
 		calls: [{ tool: "bash", input: "{}", action: "run a command" }],
 	};
@@ -244,7 +249,7 @@ describe("approvals", () => {
 		tier: "owner" | "admin" | "member",
 	): Promise<unknown> =>
 		team.answerOwner(
-			channelKey("1000"),
+			discordKey("1000"),
 			{ id: "2", name: "Ada", tier },
 			"yes, run it",
 			"yes, run it",

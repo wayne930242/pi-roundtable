@@ -2,7 +2,10 @@ import { ScheduleError } from "../../domain/errors.ts";
 import { messages } from "../../i18n/index.ts";
 import { timeZone, zonedDate, zonedInstant, zonedStamp } from "../../time.ts";
 
-export const WEEKDAYS = [
+export type Weekday = "sun" | "mon" | "tue" | "wed" | "thu" | "fri" | "sat";
+
+/** In the order of `Date#getUTCDay`. */
+const WEEKDAYS: readonly Weekday[] = [
 	"sun",
 	"mon",
 	"tue",
@@ -10,8 +13,7 @@ export const WEEKDAYS = [
 	"thu",
 	"fri",
 	"sat",
-] as const;
-export type Weekday = (typeof WEEKDAYS)[number];
+];
 
 /** When a schedule runs, in the configured wall-clock time. */
 export type Recurrence =

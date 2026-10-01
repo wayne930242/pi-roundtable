@@ -1,24 +1,23 @@
 import { type TSchema, Type } from "typebox";
-import { messages } from "../i18n/index.ts";
-import { timeZone } from "../time.ts";
+import { catalogFor, type Locale } from "../i18n/index.ts";
 
 /**
- * Schedule tools, the same for the owner agent and party roles. Each acts on the schedules of
+ * Schedule tools, shared by conversation sessions. Each acts on the schedules of
  * the channel it runs in; the host decides the channel and speaker, never the model.
  */
-export const SCHEDULE_TOOLS = [
+export const SCHEDULE_TOOLS = Object.freeze([
 	"schedule_create",
 	"schedule_list",
 	"schedule_update",
 	"schedule_cancel",
-] as const;
+] as const);
 export type ScheduleToolName = (typeof SCHEDULE_TOOLS)[number];
 
 export function isScheduleTool(value: string): value is ScheduleToolName {
 	return (SCHEDULE_TOOLS as readonly string[]).includes(value);
 }
 
-const timing = () => ({
+const timing = (zone: string) => ({
 	in_minutes: Type.Optional(
 		Type.Integer({
 			minimum: 1,
@@ -28,12 +27,12 @@ const timing = () => ({
 	),
 	at: Type.Optional(
 		Type.String({
-			description: `Run once at this ${messages().zoneTime(timeZone())}, "YYYY-MM-DD HH:MM". Give one of in_minutes, at, or time.`,
+			description: `Run once at this ${zone}, "YYYY-MM-DD HH:MM". Give one of in_minutes, at, or time.`,
 		}),
 	),
 	time: Type.Optional(
 		Type.String({
-			description: `Repeat at this ${messages().zoneTime(timeZone())} of day, "HH:MM".`,
+			description: `Repeat at this ${zone} of day, "HH:MM".`,
 		}),
 	),
 	every_days: Type.Optional(
@@ -70,24 +69,34 @@ export interface ScheduleToolSpec {
 	parameters: TSchema;
 }
 
-export function scheduleToolSpecs(): readonly ScheduleToolSpec[] {
+/** The wording of the tools' descriptions: a locale's catalog, and the zone the times are in. */
+export interface ScheduleToolWording {
+	locale: Locale;
+	/** An IANA time zone, such as `Asia/Taipei`. */
+	timeZone: string;
+}
+
+export function scheduleToolSpecs(
+	wording: ScheduleToolWording,
+): readonly ScheduleToolSpec[] {
+	const zone = catalogFor(wording.locale).zoneTime(wording.timeZone);
 	return [
 		{
 			name: "schedule_create",
 			label: "Create schedule",
-			description: `Schedule a task for yourself in this channel: at the set ${messages().zoneTime(timeZone())} you are woken with the prompt and your answer is posted here. Use it for reminders, follow-ups, and recurring checks someone asks for. Write the prompt as a complete instruction to your future self, including who it is for and what to report; it runs without the current conversation in view.`,
+			description: `Schedule a task for yourself in this channel: at the set ${zone} you are woken with the prompt and your answer is posted here. Use it for reminders, follow-ups, and recurring checks someone asks for. Write the prompt as a complete instruction to your future self, including who it is for and what to report; it runs without the current conversation in view.`,
 			parameters: Type.Object({
 				title: Type.String({ description: "A short name for the schedule." }),
 				prompt: Type.String({
 					description: "What to do when it runs, self-contained.",
 				}),
-				...timing(),
+				...timing(zone),
 			}),
 		},
 		{
 			name: "schedule_list",
 			label: "List schedules",
-			description: `List this channel's schedules with their next run, and the current ${messages().zoneTime(timeZone())}. Give id to read one schedule's full prompt.`,
+			description: `List this channel's schedules with their next run, and the current ${zone}. Give id to read one schedule's full prompt.`,
 			parameters: Type.Object({
 				id: Type.Optional(Type.Integer({ description: "Schedule id." })),
 			}),
@@ -103,7 +112,7 @@ export function scheduleToolSpecs(): readonly ScheduleToolSpec[] {
 				prompt: Type.Optional(
 					Type.String({ description: "The whole new prompt." }),
 				),
-				...timing(),
+				...timing(zone),
 			}),
 		},
 		{

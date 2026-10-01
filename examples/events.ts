@@ -7,10 +7,10 @@ export function turnLog(lines: string[]) {
 		setup: () => ({
 			events: {
 				turnStarted: (turn) => {
-					lines.push(`${turn.agent} started`);
+					lines.push(`${turn.agent ?? turn.kind} started`);
 				},
 				turnEnded: (turn) => {
-					lines.push(`${turn.agent} ${turn.result}`);
+					lines.push(`${turn.agent ?? turn.kind} ${turn.result}`);
 				},
 				changed: () => {
 					lines.push("team changed");

@@ -46,6 +46,7 @@ const coordinator: Agent = {
 /** Every text these modules show a model, built for an owner who is not the test default. */
 function texts(): string[] {
 	const gate = new ConfirmationGate(() => "delete the task", ALICE);
+	gate.beginTurn("general", false);
 	return [
 		agentSystemPrompt({
 			agent,
@@ -72,15 +73,15 @@ function texts(): string[] {
 		answerText({ choices: ["A"], text: "b" }, ALICE),
 		gate.hold("any", {}) ?? "",
 		confirmedTurnText(
-			{ profile: "general", heldAt: new Date(0), calls: [] },
+			{ selectionId: "general", heldAt: new Date(0), calls: [] },
 			"ok",
 			ALICE,
 		),
 		withReference(
 			{
 				text: "look",
-				forwarded: { channelMention: "<#2>", url: "https://x", text: "f" },
-			} as InboundMessage,
+				forwarded: { source: "discord:2", url: "https://x", text: "f" },
+			} as Pick<InboundMessage, "text" | "forwarded"> as InboundMessage,
 			ALICE,
 		),
 	];

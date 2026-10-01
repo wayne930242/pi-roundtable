@@ -91,7 +91,7 @@ export class ConversationSessions {
 	 */
 	session(
 		key: ChannelKey,
-		request?: Pick<TurnRequest, "channel" | "agent">,
+		request?: Pick<TurnRequest, "channel" | "agent" | "kind">,
 	): Promise<ChannelSession> {
 		let pending = this.#sessions.get(key);
 		if (!pending) {
@@ -107,6 +107,7 @@ export class ConversationSessions {
 					this.slot(key),
 					ownerAttachmentDir(this.#options.dataDir, channel),
 					agent,
+					request?.kind ?? "owner",
 				))();
 			pending.catch(() => this.#sessions.delete(key));
 			this.#sessions.set(key, pending);
@@ -114,7 +115,7 @@ export class ConversationSessions {
 		return pending;
 	}
 
-	/** The conversation's session, rebuilt with its history when its connectors or skills changed. */
+	/** The conversation's session, rebuilt with its history when its session tools or skills changed. */
 	async freshSession(
 		key: ChannelKey,
 		request: TurnRequest,
@@ -137,7 +138,7 @@ export class ConversationSessions {
 		request: TurnRequest,
 	): string | undefined {
 		if (channelSession.revisions !== revisionsKey(this.#factory.plan))
-			return "connectors changed";
+			return "session tools changed";
 		if (
 			channelSession.skills !== skillsKey(this.#factory.skillsOf(request.agent))
 		)

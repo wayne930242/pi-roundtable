@@ -115,6 +115,12 @@ export const guarded = <T>(
 	},
 });
 
+/** `false`, or whatever `item` accepts: a feature that is switched off, or configured. */
+export const orOff = <T>(item: Field<T>): Field<T | false> => ({
+	describe: `false, or ${item.describe}`,
+	check: (value, path) => (value === false ? false : item.check(value, path)),
+});
+
 /** A field that may be left out. */
 export type Optional<T> = { optional: Field<T> };
 

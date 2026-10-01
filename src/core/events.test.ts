@@ -5,6 +5,7 @@ import type { EventHandlers } from "./plugin.ts";
 
 const turn = {
 	agent: "infra",
+	kind: "agent",
 	channel: "discord:1" as const,
 	speaker: undefined,
 };

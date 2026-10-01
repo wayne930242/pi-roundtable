@@ -3,14 +3,8 @@ import type { SQL } from "bun";
 import { type Migration, migrate, openPool } from "../db/migrations.ts";
 
 // PostgreSQL-backed tests run only when ROUNDTABLE_TEST_DATABASE_URL points at a test database.
-// CI sets it; without it `bun test` skips those suites instead of failing to connect.
+// Repository CI requires it in the workflow; consumers without it skip these suites.
 const url = process.env.ROUNDTABLE_TEST_DATABASE_URL;
-
-if (process.env.CI && !url) {
-	throw new Error(
-		"ROUNDTABLE_TEST_DATABASE_URL is not set; CI must run the PostgreSQL-backed tests.",
-	);
-}
 
 /** The guild the stores of the tests serve. */
 export const TEST_GUILD = "900000000000000001";

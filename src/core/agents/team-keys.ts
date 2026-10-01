@@ -1,12 +1,24 @@
+import { channelKey, parseChannelKey } from "../contract/surface.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
 import type { AgentTurnScope } from "../domain/ports.ts";
-import type { Agent, AgentGroup, AgentStore } from "./agent-store.ts";
+import type { AgentDirectory } from "../services.ts";
+import type { Agent, AgentGroup } from "./agent-store.ts";
 
-export const channelKey = (channelId: string): ChannelKey =>
-	`discord:${channelId}`;
+/** The surface of the channels the agent server runs on. */
+const DISCORD_SURFACE = "discord";
 
-export const channelIdOf = (channel: ChannelKey) =>
-	channel.slice("discord:".length);
+/** The key of a Discord channel. */
+export const discordKey = (channelId: string): ChannelKey =>
+	channelKey(DISCORD_SURFACE, channelId);
+
+/** The Discord channel id of a key, or undefined when the key belongs to another surface. */
+export function discordIdOf(channel: ChannelKey): string | undefined {
+	const { surface, id } = parseChannelKey(channel);
+	return surface === DISCORD_SURFACE ? id : undefined;
+}
+
+/** The id part of a key the caller already knows is a Discord one, because the agent server owns it. */
+export const channelIdOf = (channel: ChannelKey) => parseChannelKey(channel).id;
 
 /** An agent's conversation inside a group, apart from its own. */
 export const groupSessionKey = (group: AgentGroup, agent: string): ChannelKey =>
@@ -14,7 +26,7 @@ export const groupSessionKey = (group: AgentGroup, agent: string): ChannelKey =>
 
 /** An agent's own conversation. */
 export function homeScope(agent: Agent): AgentTurnScope {
-	const home = channelKey(agent.channelId ?? "");
+	const home = discordKey(agent.channelId ?? "");
 	return { name: agent.name, session: home, home };
 }
 
@@ -23,17 +35,18 @@ export function groupScope(agent: Agent, group: AgentGroup): AgentTurnScope {
 	return {
 		name: agent.name,
 		session: groupSessionKey(group, agent.name),
-		home: channelKey(agent.channelId ?? ""),
+		home: discordKey(agent.channelId ?? ""),
 		group: group.name,
 	};
 }
 
 /** The agent or group that owns a channel of the agent server. */
 export function channelOwner(
-	store: Pick<AgentStore, "agentByChannel" | "groupByChannel">,
+	store: Pick<AgentDirectory, "agentByChannel" | "groupByChannel">,
 	channel: ChannelKey,
 ): "agent" | "group" | undefined {
-	const id = channelIdOf(channel);
+	const id = discordIdOf(channel);
+	if (id === undefined) return undefined;
 	if (store.agentByChannel(id)) return "agent";
 	if (store.groupByChannel(id)) return "group";
 	return undefined;

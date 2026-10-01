@@ -1,7 +1,5 @@
 import type { InboundMessage } from "../contract/channels.ts";
 import type { ChannelKey } from "../sessions.ts";
-import type { AgentRunError } from "./errors.ts";
-import type { ProfileId } from "./profile.ts";
 
 export { QUEUED_MARK, STEERED_MARK } from "../contract/channels.ts";
 export type { ChannelKey, InboundMessage };
@@ -21,14 +19,15 @@ export interface HeldCall {
 }
 
 export interface PendingConfirmation {
-	profile: ProfileId;
+	/** The id of the TurnSelection whose turn held the calls; the caller resolves it on replay. */
+	selectionId: string;
 	heldAt: Date;
 	calls: HeldCall[];
 }
 
 export type TurnResult =
 	| { ok: true; text: string; thinking?: string }
-	| { ok: false; error: AgentRunError; stopped?: true };
+	| { ok: false; error: Error; stopped?: true };
 
 export interface OutboundReply {
 	/** The assistant's thinking for this turn, posted as a quiet line before the card. */

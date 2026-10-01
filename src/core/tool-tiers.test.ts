@@ -1,46 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { ConfigError } from "./domain/errors.ts";
-import {
-	CORE_TOOL_TIERS,
-	parseToolTiers,
-	toolsForTier,
-	toolTiers,
-} from "./tool-tiers.ts";
+import { CORE_TOOL_TIERS, toolsForTier, toolTiers } from "./tool-tiers.ts";
 
 describe("default tiers", () => {
 	const tiers = toolTiers();
 
-	test("members may look, read, and message agents", () => {
-		for (const tool of [
-			"agent_list",
-			"agent_get",
-			"message_agent",
-			"channel_read",
-			"ask_user",
-			"web_search",
-		])
+	test("members may ask the owner, compact, and read an attachment", () => {
+		for (const tool of ["ask_user", "compact_session", "read_attachment"])
 			expect(tiers.minTier(tool)).toBe("member");
-	});
-
-	test("every speaker may keep a memory of their own", () => {
-		for (const tool of ["memory_add", "memory_search", "memory_remove"])
-			expect(tiers.minTier(tool)).toBe("member");
-	});
-
-	test("creating, editing, archiving, and arranging agents and groups need an admin", () => {
-		for (const tool of [
-			"agent_create",
-			"agent_update",
-			"agent_avatar",
-			"group_create",
-			"group_update",
-			"archive",
-			"channel_arrange",
-			"agent_skills",
-			"schedule_create",
-			"delegate_task",
-		])
-			expect(tiers.minTier(tool)).toBe("admin");
 	});
 
 	test("the shell, notifying the owner, Discord administration, and any tool nobody named stay with the owner", () => {
@@ -54,33 +20,34 @@ describe("default tiers", () => {
 			expect(tiers.minTier(tool)).toBe("owner");
 	});
 
-	test("every tool an agent carries from the core is named on purpose", () => {
-		expect(Object.keys(CORE_TOOL_TIERS)).toEqual(
-			expect.arrayContaining(["agent_create", "skill_create", "schedule_list"]),
-		);
+	test("the core names only its own tools; every feature declares its own with its plugin", () => {
+		expect(Object.keys(CORE_TOOL_TIERS).sort()).toEqual([
+			"ask_user",
+			"compact_session",
+			"read_attachment",
+		]);
 	});
 });
 
 describe("toolsForTier", () => {
 	const tiers = toolTiers();
-	const all = ["agent_list", "agent_create", "bash", "some_plugin_tool"];
+	tiers.declare("feature", { tool_list: "member", tool_create: "admin" });
+	const all = ["tool_list", "tool_create", "bash", "some_plugin_tool"];
 
 	test("each tier gets the tools at or below it, in order", () => {
-		expect(toolsForTier(all, "member", tiers)).toEqual(["agent_list"]);
+		expect(toolsForTier(all, "member", tiers)).toEqual(["tool_list"]);
 		expect(toolsForTier(all, "admin", tiers)).toEqual([
-			"agent_list",
-			"agent_create",
+			"tool_list",
+			"tool_create",
 		]);
 		expect(toolsForTier(all, "owner", tiers)).toEqual(all);
 	});
 
 	test("an operator's map lowers or raises a tool", () => {
-		const custom = toolTiers({ bash: "admin", agent_list: "owner" });
+		const custom = toolTiers({ bash: "admin", tool_list: "owner" });
+		custom.declare("feature", { tool_list: "member", tool_create: "admin" });
 		expect(toolsForTier(all, "member", custom)).toEqual([]);
-		expect(toolsForTier(all, "admin", custom)).toEqual([
-			"agent_create",
-			"bash",
-		]);
+		expect(toolsForTier(all, "admin", custom)).toEqual(["tool_create", "bash"]);
 	});
 
 	test("a plugin's declared tier is read at use time; the operator's still wins", () => {
@@ -92,26 +59,18 @@ describe("toolsForTier", () => {
 		expect(table.minTier("plugin_b")).toBe("owner");
 	});
 
+	test("a plugin declaring its own tool again, as on a retried start, replaces it", () => {
+		const table = toolTiers();
+		table.declare("a", { plugin_a: "member" });
+		table.declare("a", { plugin_a: "admin" });
+		expect(table.minTier("plugin_a")).toBe("admin");
+	});
+
 	test("a tool two plugins declare names both plugins and the fix", () => {
 		const table = toolTiers();
 		table.declare("a", { shared_tool: "member" });
 		expect(() => table.declare("b", { shared_tool: "member" })).toThrow(
 			"plugin b: tool shared_tool is already defined by plugin a. Rename one of the two tools.",
 		);
-	});
-});
-
-describe("parseToolTiers", () => {
-	test("reads tool=tier pairs", () => {
-		expect(parseToolTiers("bash=admin, web_search=member", "X")).toEqual({
-			bash: "admin",
-			web_search: "member",
-		});
-		expect(parseToolTiers(undefined, "X")).toEqual({});
-	});
-
-	test("refuses a pair that is not a tier", () => {
-		expect(() => parseToolTiers("bash=root", "X")).toThrow(ConfigError);
-		expect(() => parseToolTiers("bash", "X")).toThrow(ConfigError);
 	});
 });

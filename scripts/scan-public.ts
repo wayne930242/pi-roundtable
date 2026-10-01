@@ -23,6 +23,8 @@ export const PUBLIC_NAME_ALLOWLIST: NameAllowlist = {
 	LICENSE: [OWNER_HANDLE],
 	"package.json": [OWNER_HANDLE],
 	"bun.lock": [spell("type", "safe")],
+	// The guide names its one private consumer.
+	"docs/plugins.md": [spell("Mer", "lin")],
 };
 
 /**

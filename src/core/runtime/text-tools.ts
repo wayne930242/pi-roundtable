@@ -14,15 +14,13 @@ export interface TextToolDef<Name extends string = string> {
 	run(input: ToolInput, signal?: AbortSignal): Promise<string> | string;
 }
 
-type ErrorClass = abstract new (...args: never[]) => Error;
-
 /**
  * Registers text tools. A thrown `refusal` becomes an error result the model reads; any other
  * error fails the call.
  */
 export function textToolsExtension(
 	defs: readonly TextToolDef[],
-	refusal: ErrorClass,
+	refusal: abstract new (...args: never[]) => Error,
 ): ExtensionFactory {
 	return (pi) => {
 		for (const def of defs) {

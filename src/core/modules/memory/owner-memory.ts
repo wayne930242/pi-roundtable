@@ -2,23 +2,20 @@ import type { ExtensionFactory } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { messages } from "../../i18n/index.ts";
 import { type OwnerIdentity, ownerWords } from "../../identity.ts";
+import type { MemoryStore } from "../../services.ts";
 import { toolError, toolText } from "../../shared/tool-result.ts";
 import type { Speaker } from "../../speakers.ts";
 import { timeZone, zonedToday } from "../../time.ts";
-import type {
-	OwnerMemory,
-	OwnerMemoryStore,
-	OwnerPromptMemory,
-} from "./owner-memory-store.ts";
+import type { Memory, PromptMemory } from "./owner-memory-store.ts";
 
-function line(memory: OwnerMemory): string {
+function line(memory: Memory): string {
 	return memory.eventDate
 		? `- ${memory.eventDate}: ${memory.fact}`
 		: `- ${memory.fact}`;
 }
 
 export function ownerMemorySection(
-	memory: OwnerPromptMemory,
+	memory: PromptMemory,
 	today: string,
 	/** Whose memory it is, when not the owner's. */
 	speaker?: Speaker,
@@ -45,7 +42,9 @@ export function ownerMemorySection(
  * replaced system prompt.
  */
 export function ownerMemoryExtension(
-	ownerStore: OwnerMemoryStore,
+	memories: MemoryStore,
+	/** The owner's Discord id: the speaker whose memory a turn reads when no other speaks. */
+	ownerId: string,
 	owner: OwnerIdentity,
 	/**
 	 * The person the running turn is for, in a session that serves several. Their memory, not
@@ -57,12 +56,9 @@ export function ownerMemoryExtension(
 	/** The running turn's other speaker; undefined when the owner's own memory applies. */
 	const other = (): Speaker | undefined => {
 		const current = speaker?.();
-		return current && current.id !== ownerStore.speakerId ? current : undefined;
+		return current && current.id !== ownerId ? current : undefined;
 	};
-	const storeOf = () => {
-		const current = other();
-		return current ? ownerStore.forSpeaker(current.id) : ownerStore;
-	};
+	const storeOf = () => memories.forSpeaker(other()?.id ?? ownerId);
 	const shared = speaker
 		? " Whoever is speaking has a memory of their own, shared by every agent; this reads and changes theirs, not someone else's."
 		: "";

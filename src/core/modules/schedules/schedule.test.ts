@@ -7,6 +7,7 @@ import {
 	test,
 } from "bun:test";
 import { SQL } from "bun";
+import type { BackgroundTarget } from "../../contract/channels.ts";
 import { ScheduleError } from "../../domain/errors.ts";
 import { messages } from "../../i18n/index.ts";
 import { silentLogger } from "../../log.ts";
@@ -19,14 +20,21 @@ import {
 import { useTestLocale } from "../../testing/locale.ts";
 import { setTimeZone, zonedStamp } from "../../time.ts";
 import { describeRecurrence, nextRun, parseRecurrence } from "./recurrence.ts";
-import { type Schedule, ScheduleStore } from "./schedule-store.ts";
+import { PgScheduleStore, type Schedule } from "./schedule-store.ts";
 import {
 	callScheduleTool,
-	SCHEDULE_LIMITS,
 	type ScheduleToolContext,
 	scheduledTurnText,
 } from "./schedule-tools.ts";
 import { type ScheduledOutcome, Scheduler } from "./scheduler.ts";
+
+/** A sample target held tighter than the owner's, as a channel open to many people would be. */
+const OPEN_LIMITS = { perChannel: 5, promptChars: 2_000, aheadDays: 90 };
+const OPEN: BackgroundTarget = {
+	name: "open",
+	label: () => "Open",
+	schedules: OPEN_LIMITS,
+};
 
 const taipei = (stamp: string) =>
 	new Date(`${stamp.replace(" ", "T")}:00+08:00`);
@@ -114,13 +122,13 @@ describe("recurrence", () => {
 
 // Runs against a real PostgreSQL, only when ROUNDTABLE_TEST_DATABASE_URL is set.
 describeDb("PostgreSQL", () => {
-	let store: TestStore<ScheduleStore>;
+	let store: TestStore<PgScheduleStore>;
 
 	beforeAll(async () => {
 		const admin = new SQL(testDatabaseUrl);
 		await admin`DROP TABLE IF EXISTS schedules`;
 		await admin.close();
-		store = await openTestStore(ScheduleStore);
+		store = await openTestStore(PgScheduleStore);
 	});
 
 	afterAll(async () => {
@@ -139,7 +147,7 @@ describeDb("PostgreSQL", () => {
 	): ScheduleToolContext => ({
 		store,
 		channel: "discord:a",
-		mode: "party",
+		target: OPEN,
 		author: { id: "u1", name: "Sam" },
 		now,
 		...over,
@@ -195,7 +203,7 @@ describeDb("PostgreSQL", () => {
 			expect(created).toContain("first run 2026-09-28 09:00");
 			const [schedule] = await store.forChannel("discord:a");
 			expect(schedule?.createdByName).toBe("Sam");
-			expect(schedule?.mode).toBe("party");
+			expect(schedule?.target).toBe("open");
 
 			const id = schedule?.id ?? 0;
 			expect(await callScheduleTool(ctx(), "schedule_list", {})).toContain(
@@ -227,8 +235,8 @@ describeDb("PostgreSQL", () => {
 			expect(await store.forChannel("discord:a")).toEqual([]);
 		});
 
-		test("a party channel is limited in count, prompt size, and distance", async () => {
-			const { perChannel, promptChars } = SCHEDULE_LIMITS.party;
+		test("a target limits count, prompt size, and distance", async () => {
+			const { perChannel, promptChars } = OPEN_LIMITS;
 			for (let i = 0; i < perChannel; i += 1)
 				await callScheduleTool(ctx(), "schedule_create", {
 					title: `t${i}`,
@@ -328,14 +336,14 @@ describeDb("PostgreSQL", () => {
 			const fired: Schedule[] = [];
 			const s = scheduler(clock, fired, {
 				status: "skipped",
-				reason: "party mode is off",
+				reason: "a claim skipped it",
 			});
 			await s.tick();
 			await s.idle();
 			const [after] = await store.forChannel("discord:a");
 			expect(fired).toHaveLength(1);
 			expect(after && zonedStamp(after.nextRun)).toBe("2026-09-28 09:00");
-			expect(after?.lastStatus).toBe("skipped: party mode is off");
+			expect(after?.lastStatus).toBe("skipped: a claim skipped it");
 		});
 
 		test("a run found long after it was due is skipped, not caught up", async () => {

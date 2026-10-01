@@ -1,11 +1,10 @@
 import type { ChannelKey } from "../domain/conversation.ts";
 import type { ThinkingSetting } from "../models.ts";
-import type { SkillRegistry } from "../modules/skills/skill-registry.ts";
 import type { PromptSection } from "../plugin.ts";
+import type { AvatarStudio, SkillRegistry } from "../services.ts";
 import type { ToolSelection } from "../sessions.ts";
 import type { AgentChannels, AgentModels } from "./agent-ports.ts";
 import type { AgentGroup, AgentSeed } from "./agent-store.ts";
-import type { AvatarStudio } from "./avatar-studio.ts";
 import type { TeamTurns, TeamTurnsOptions } from "./team-turns.ts";
 
 export interface AgentTeamOptions
@@ -19,7 +18,12 @@ export interface AgentTeamOptions
 	/** The tools plugins defined for agents, read before each agent turn. */
 	pluginTools?: () => readonly string[];
 	channels: AgentChannels;
-	studio: Pick<AvatarStudio, "url" | "draw" | "edit">;
+	/**
+	 * `canDraw: false` marks a host without an image provider: agents are offered no drawing and
+	 * get `fallback` pictures. A studio that leaves `canDraw` out draws.
+	 */
+	studio: Pick<AvatarStudio, "url" | "draw" | "edit"> &
+		Partial<Pick<AvatarStudio, "canDraw" | "fallback">>;
 	/** The tools and groups the plugins give every agent, read before each agent turn. */
 	pluginSelection: () => ToolSelection;
 	models: AgentModels;
@@ -35,8 +39,8 @@ export interface AgentTeamOptions
 	sharedPrompt: string;
 	/** The shared prompt for speakers other than the owner, when `sharedPrompt` speaks to the owner. */
 	guestPrompt?: string;
-	/** The skill registry: what each agent carries and the skill tools. */
-	skills: SkillRegistry;
+	/** The skill registry: what each agent carries. Absent when the skills addon is off. */
+	skills?: SkillRegistry;
 }
 
 /** What the team's collaborators share: its options, its turns, and its change signal. */

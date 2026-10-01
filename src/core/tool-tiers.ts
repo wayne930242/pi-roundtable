@@ -1,12 +1,7 @@
-import { AGENT_TOOLS } from "./agents/agent-tools.ts";
-import { ConfigError } from "./domain/errors.ts";
 import { PluginError } from "./errors.ts";
-import { SKILL_LIST_TOOL, SKILL_TOOLS } from "./modules/skills/skill-tools.ts";
 import { ASK_USER_TOOL } from "./runtime/extensions/ask-user.ts";
 import { COMPACT_TOOL } from "./runtime/extensions/self-compact-guard.ts";
-import { DELEGATE_TOOL } from "./shared/delegate-tool.ts";
-import { SCHEDULE_TOOLS } from "./shared/schedule-tools.ts";
-import { TIERS, type Tier, tierAtLeast } from "./speakers.ts";
+import { type Tier, tierAtLeast } from "./speakers.ts";
 
 /** The lowest tier that may use each tool; a tool that is not named needs the owner. */
 export interface ToolTiers {
@@ -19,37 +14,18 @@ const set = (tier: Tier, tools: readonly string[]) =>
 	Object.fromEntries(tools.map((tool) => [tool, tier]));
 
 /**
- * The core's default tiers. Members talk, read, look things up, and message agents; admins
- * also create and edit agents, groups, skills, schedules, and delegated work; everything else,
- * such as the shell, the owner's notes, Discord administration, and every plugin's tools,
- * stays with the owner until an operator lowers it.
+ * The core's own tools, which serve any turn that can ask, compact, or read an attachment.
+ * Every other feature declares the tiers of its tools with its plugin (`Contribution.toolTiers`):
+ * members talk, read, look things up, and message agents; admins also create and edit agents,
+ * groups, skills, schedules, and delegated work; everything else, such as the shell, the owner's
+ * notes, Discord administration, and any plugin's tools, stays with the owner until an operator
+ * lowers it.
  */
-export const CORE_TOOL_TIERS: Readonly<Record<string, Tier>> = {
-	...set("admin", [
-		...AGENT_TOOLS,
-		...SKILL_TOOLS,
-		...SCHEDULE_TOOLS,
-		DELEGATE_TOOL,
-	]),
-	...set("member", [
-		"agent_list",
-		"agent_get",
-		"message_agent",
-		"channel_read",
-		"schedule_list",
-		SKILL_LIST_TOOL,
-		"read_attachment",
-		// Each speaker keeps their own; the owner's reaches only the owner's turns.
-		"memory_add",
-		"memory_search",
-		"memory_remove",
-		"web_search",
-		"fetch_content",
-		"get_search_content",
-	]),
-	// The core's own tools serve any turn that can ask or compact.
-	...set("member", [ASK_USER_TOOL, COMPACT_TOOL]),
-};
+export const CORE_TOOL_TIERS: Readonly<Record<string, Tier>> = set("member", [
+	ASK_USER_TOOL,
+	COMPACT_TOOL,
+	"read_attachment",
+]);
 
 /**
  * What each tool needs: the operator's setting first, then the tier its plugin declared, then
@@ -65,11 +41,14 @@ export class ToolTierTable implements ToolTiers {
 		this.#operator = new Map(Object.entries(operator));
 	}
 
-	/** Records the tiers a plugin's tools need; a tool two plugins declare is a PluginError. */
+	/**
+	 * Records the tiers a plugin's tools need; a tool two plugins declare is a PluginError. A
+	 * plugin declaring its own tool again, as when the host retries its start, replaces it.
+	 */
 	declare(plugin: string, tiers: Readonly<Record<string, Tier>>): void {
 		for (const [tool, tier] of Object.entries(tiers)) {
 			const other = this.#declared.get(tool);
-			if (other)
+			if (other && other.plugin !== plugin)
 				throw new PluginError(
 					`plugin ${plugin}: tool ${tool} is already defined by plugin ${other.plugin}. Rename one of the two tools.`,
 				);
@@ -105,23 +84,4 @@ export function toolsForTier(
 	tiers: ToolTiers,
 ): string[] {
 	return tools.filter((tool) => tiers.allows(tier, tool));
-}
-
-/** Reads `tool=tier` pairs, comma-separated; unset means no changes. */
-export function parseToolTiers(
-	text: string | undefined,
-	name: string,
-): Record<string, Tier> {
-	const result: Record<string, Tier> = {};
-	for (const item of (text ?? "").split(",")) {
-		const pair = item.trim();
-		if (pair === "") continue;
-		const [tool, tier] = pair.split("=").map((part) => part.trim());
-		if (!tool || !tier || !(TIERS as readonly string[]).includes(tier))
-			throw new ConfigError(
-				`${name} must list tool=owner|admin|member pairs, got ${pair}`,
-			);
-		result[tool] = tier as Tier;
-	}
-	return result;
 }

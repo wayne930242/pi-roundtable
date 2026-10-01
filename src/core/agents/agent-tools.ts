@@ -23,12 +23,15 @@ import {
 /** The tool that hands a request to another agent; a group seat has none. */
 export const MESSAGE_AGENT_TOOL = "message_agent";
 
+/** The tool that redraws an avatar; a host without an image provider does not offer it. */
+export const AVATAR_TOOL = "agent_avatar";
+
 export const AGENT_TOOLS = [
 	"agent_list",
 	"agent_get",
 	"agent_update",
 	"agent_create",
-	"agent_avatar",
+	AVATAR_TOOL,
 	MESSAGE_AGENT_TOOL,
 	"group_create",
 	"group_update",
@@ -58,7 +61,8 @@ export interface AgentOps {
 			name: string;
 			displayName: string;
 			prompt: string;
-			avatarPrompt: string;
+			/** Absent on a host without an image provider. */
+			avatarPrompt?: string;
 			task: string;
 			category?: string;
 			skills?: string[];
@@ -120,10 +124,19 @@ const MEMBERS = Type.Array(Type.String(), {
 
 type AgentToolDef = TextToolDef<(typeof AGENT_TOOLS)[number]>;
 
+/** What the agent tools offer, by what the host can do. */
+export interface AgentToolOptions {
+	/** Whether an image provider is configured; without one there is no avatar prompt and no agent_avatar. */
+	avatars: boolean;
+	/** Whether the skills addon is on; without it agent_create takes no skills. */
+	skills: boolean;
+}
+
 function toolDefs(
 	ops: AgentOps,
 	scope: AgentTurnScope,
 	owner: OwnerIdentity,
+	{ avatars, skills: skillsOn }: AgentToolOptions,
 ): AgentToolDef[] {
 	const o = ownerWords(owner);
 	const defs: AgentToolDef[] = [
@@ -182,8 +195,7 @@ function toolDefs(
 		{
 			name: "agent_create",
 			label: "Create agent",
-			description:
-				"Create a new agent with its own channel and a drawn avatar; it starts at once on the opening task in its channel. Its name is permanent.",
+			description: `Create a new agent with its own channel and ${avatars ? "a drawn avatar" : "an avatar generated from its display name"}; it starts at once on the opening task in its channel. Its name is permanent.`,
 			parameters: Type.Object({
 				name: Type.String({
 					pattern: "^[a-z0-9-]{1,32}$",
@@ -192,19 +204,23 @@ function toolDefs(
 				}),
 				display_name: DISPLAY,
 				prompt: PROMPT,
-				avatar_prompt: avatarPrompt(),
+				...(avatars ? { avatar_prompt: avatarPrompt() } : {}),
 				task: Type.String({
 					minLength: 1,
 					maxLength: 4000,
 					description: "Its opening task, self-contained.",
 				}),
 				category: Type.Optional(category("Agents")),
-				skills: Type.Optional(
-					Type.Array(Type.String(), {
-						description:
-							"Skills it carries, from skill_list; pick those its role needs. Change them later with agent_skills.",
-					}),
-				),
+				...(skillsOn
+					? {
+							skills: Type.Optional(
+								Type.Array(Type.String(), {
+									description:
+										"Skills it carries, from skill_list; pick those its role needs. Change them later with agent_skills.",
+								}),
+							),
+						}
+					: {}),
 			}),
 			run: (i) => {
 				const category = optionalString(i, "category");
@@ -213,7 +229,9 @@ function toolDefs(
 					name: requiredString(i, "name"),
 					displayName: requiredString(i, "display_name"),
 					prompt: requiredString(i, "prompt"),
-					avatarPrompt: requiredString(i, "avatar_prompt"),
+					...(avatars
+						? { avatarPrompt: requiredString(i, "avatar_prompt") }
+						: {}),
 					task: requiredString(i, "task"),
 					...(category ? { category } : {}),
 					...(skills && skills.length > 0 ? { skills } : {}),
@@ -221,7 +239,7 @@ function toolDefs(
 			},
 		},
 		{
-			name: "agent_avatar",
+			name: AVATAR_TOOL,
 			label: "Redraw avatar",
 			description:
 				"Redraw an agent's avatar: redraw from its stored avatar prompt; new_prompt with a new avatar prompt, which replaces the stored one; or edit the current picture by an instruction.",
@@ -373,7 +391,7 @@ function toolDefs(
 			run: (i) =>
 				ops.message(scope, requiredString(i, "to"), requiredString(i, "text")),
 		});
-	return defs;
+	return avatars ? defs : defs.filter((def) => def.name !== AVATAR_TOOL);
 }
 
 /** Registers the agent tools for one agent session. */
@@ -381,6 +399,7 @@ export function agentToolsExtension(
 	ops: AgentOps,
 	scope: AgentTurnScope,
 	owner: OwnerIdentity,
+	options: AgentToolOptions,
 ): ExtensionFactory {
-	return textToolsExtension(toolDefs(ops, scope, owner), AgentError);
+	return textToolsExtension(toolDefs(ops, scope, owner, options), AgentError);
 }

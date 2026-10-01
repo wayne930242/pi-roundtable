@@ -6,10 +6,14 @@ import {
 	MessageFlags,
 	SlashCommandSubcommandGroupBuilder,
 } from "discord.js";
-import type { CommandRoot, RootOption } from "../contract/discord.ts";
 import { messages } from "../i18n/index.ts";
 import type { Logger } from "../log.ts";
-import type { InteractionModule } from "./interaction-module.ts";
+import type {
+	CommandGuard,
+	CommandRoot,
+	InteractionModule,
+	RootOption,
+} from "./interaction-module.ts";
 import { ephemeralPanel, OwnerFacingError, ownerPanel } from "./owner-panel.ts";
 
 /** The owner's single control command, such as `/roundtable`, every feature adds its subcommands to. */
@@ -29,24 +33,31 @@ export const groupOption = (
 ): RootOption => build(new SlashCommandSubcommandGroupBuilder()).toJSON();
 
 /**
- * Only the owner may use the root command, checked by user ID; every answer is visible only to him,
+ * Only the owner may use the root command, checked by user ID; every answer is visible only to them,
  * and a failure becomes a panel instead of a hanging interaction.
  */
 // pi-lens-ignore: large-class — two methods: the owner check and the failure panel
-export class OwnerGuard {
+export class OwnerGuard implements CommandGuard {
 	readonly #ownerId: string;
 	readonly #logger: Logger;
 	/** The name of the root command the guard serves, without the slash. */
 	readonly root: string;
+	readonly refusalHint: string | undefined;
 
-	constructor(ownerId: string, logger: Logger, root: string) {
+	constructor(
+		ownerId: string,
+		logger: Logger,
+		root: string,
+		refusalHint?: string,
+	) {
 		this.#ownerId = ownerId;
 		this.#logger = logger;
 		this.root = root;
+		this.refusalHint = refusalHint;
 	}
 
-	isOwner(interaction: Interaction): boolean {
-		return interaction.user.id === this.#ownerId;
+	isOwner(actor: { user: { id: string } }): boolean {
+		return actor.user.id === this.#ownerId;
 	}
 
 	/** Runs a handler; failures become a panel instead of a hanging interaction. */
@@ -69,6 +80,28 @@ export class OwnerGuard {
 	}
 }
 
+/** What `commandGuard` needs. */
+export interface CommandGuardOptions {
+	/** The one user who may use the owner's commands. */
+	ownerId: string;
+	/** The name of the root command the guard serves, without the slash. */
+	root: string;
+	/** Where a failing command is logged. */
+	logger: Logger;
+	/** Text appended as it is to the refusal a non-owner gets. */
+	refusalHint?: string;
+}
+
+/** A guard for the owner's commands, such as the one a test hands a module; the Discord plugin makes its own. */
+export function commandGuard(options: CommandGuardOptions): CommandGuard {
+	return new OwnerGuard(
+		options.ownerId,
+		options.logger,
+		options.root,
+		options.refusalHint,
+	);
+}
+
 /** One feature's part of the root command. */
 export interface OwnerCommandHandlers {
 	/** Whether a root subcommand, in its group or null at the top level, is this feature's. */
@@ -82,15 +115,15 @@ export interface OwnerCommandHandlers {
 	component?(interaction: Interaction): Promise<boolean>;
 }
 
-const refusal = () =>
+const refusal = (hint: string | undefined) =>
 	ephemeralPanel({
 		title: messages().ownerRefusalTitle,
-		sections: [messages().ownerRefusalBody],
+		sections: [`${messages().ownerRefusalBody}${hint ?? ""}`],
 	});
 
 /** Answers a feature's root subcommands and components, for the owner only. */
 export function ownerCommandModule(
-	guard: OwnerGuard,
+	guard: CommandGuard,
 	handlers: OwnerCommandHandlers,
 ): InteractionModule {
 	const owned = (
@@ -114,7 +147,7 @@ export function ownerCommandModule(
 			if (!interaction.isChatInputCommand() || !owned(interaction))
 				return false;
 			if (!guard.isOwner(interaction)) {
-				await interaction.reply(refusal());
+				await interaction.reply(refusal(guard.refusalHint));
 				return true;
 			}
 			if (await handlers.open?.(interaction)) return true;

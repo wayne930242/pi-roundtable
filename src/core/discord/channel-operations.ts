@@ -1,9 +1,10 @@
-import { type TObject, Type } from "typebox";
+import { type TSchema, Type } from "typebox";
 import Value from "typebox/value";
+import { freeze } from "../freeze.ts";
 import { type Messages, messages } from "../i18n/index.ts";
 
 /** What a call may do in one channel, with the owner-facing label; grants and permission checks name these. */
-export const CHANNEL_OPERATIONS = [
+export const CHANNEL_OPERATIONS = Object.freeze([
 	"read",
 	"send",
 	"edit",
@@ -11,7 +12,7 @@ export const CHANNEL_OPERATIONS = [
 	"delete",
 	"channel",
 	"permissions",
-] as const;
+] as const);
 export type ChannelOperation = (typeof CHANNEL_OPERATIONS)[number];
 
 export const isChannelOperation = (value: string): value is ChannelOperation =>
@@ -37,7 +38,7 @@ const message = { channelId: id, messageId: id };
 const strict = { additionalProperties: false } as const;
 
 /** One upload may carry at most this much, in all files together. */
-export const CHANNEL_UPLOAD_MAX_BYTES = 8 * 1024 * 1024;
+const CHANNEL_UPLOAD_MAX_BYTES = 8 * 1024 * 1024;
 
 const file = Type.Object(
 	{
@@ -69,14 +70,16 @@ const files = Type.Optional(
 	}),
 );
 
-interface ChannelTool {
-	operation: ChannelOperation;
-	schema: TObject;
-	description: string;
+export interface ChannelTool {
+	readonly operation: ChannelOperation;
+	readonly schema: Readonly<TSchema>;
+	readonly description: string;
 }
 
-/** The Discord tools a bundle can expose, each gated by one operation. */
-export const CHANNEL_TOOLS: Record<string, ChannelTool> = {
+/** Discord tool descriptions and schemas, each gated by one channel operation. */
+export const CHANNEL_TOOLS: Readonly<Record<string, ChannelTool>> = freeze<
+	Record<string, ChannelTool>
+>({
 	discord_get_channel_info: {
 		operation: "read",
 		schema: Type.Object(channel, strict),
@@ -246,7 +249,7 @@ export const CHANNEL_TOOLS: Record<string, ChannelTool> = {
 		description:
 			"Remove a role's or member's permission overwrite in this channel.",
 	},
-};
+});
 
 /** A tool call that cannot be run as asked; the code is safe to show the caller. */
 export class ChannelToolError extends Error {

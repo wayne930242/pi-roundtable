@@ -30,10 +30,13 @@ export function schedulesEn(ctx: CatalogContext) {
 			`Every ${days} days at ${time} (counting from ${startDate})`,
 		scheduleWeekly: (days: readonly string[], time: string) =>
 			`Weekly on ${days.join(", ")} at ${time}`,
-		scheduleHead: (id: number, title: string, channel: string, mode: string) =>
-			`**#${id} ${title}** · ${channel} · ${mode}`,
+		scheduleHead: (
+			id: number,
+			title: string,
+			channel: string,
+			target: string,
+		) => `**#${id} ${title}** · ${channel} · ${target}`,
 		scheduleModeOwner: ctx.assistant,
-		scheduleModeParty: "party role",
 		scheduleFooter: `Schedules are created and edited by the bot in conversation; here you can review and cancel them. \`/${ctx.root} schedule cancel\` cancels one.`,
 		scheduleGroupDescription: "Schedules",
 		scheduleListDescription: "List the schedules of every channel",
@@ -66,10 +69,13 @@ export function schedulesZhTW(
 			`每 ${days} 天 ${time}（從 ${startDate} 起算）`,
 		scheduleWeekly: (days: readonly string[], time: string) =>
 			`每週${days.join("、")} ${time}`,
-		scheduleHead: (id: number, title: string, channel: string, mode: string) =>
-			`**#${id} ${title}**　${channel}　${mode}`,
+		scheduleHead: (
+			id: number,
+			title: string,
+			channel: string,
+			target: string,
+		) => `**#${id} ${title}**　${channel}　${target}`,
 		scheduleModeOwner: ctx.assistant,
-		scheduleModeParty: "party 角色",
 		scheduleFooter: `排程由 bot 在對話中建立與修改；這裡可以總覽與取消。\`/${ctx.root} schedule cancel\` 取消。`,
 		scheduleGroupDescription: "排程",
 		scheduleListDescription: "列出所有頻道的排程",

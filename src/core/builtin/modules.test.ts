@@ -3,6 +3,7 @@ import type {
 	ExtensionAPI,
 	ExtensionFactory,
 } from "@earendil-works/pi-coding-agent";
+import { BACKGROUND_TURNS, DELEGATION } from "../services.ts";
 import {
 	type AgentTurnScope,
 	type ChannelKey,
@@ -13,7 +14,7 @@ import { OWNER_CHANNEL, setUpModules } from "../testing/modules.ts";
 
 const HOME: ChannelKey = "discord:scout";
 const GROUP: ChannelKey = "discord:war-room";
-const OUTSIDE: ChannelKey = "party:table-1";
+const OUTSIDE: ChannelKey = "other:table-1";
 
 const scout: AgentTurnScope = { name: "scout", session: HOME, home: HOME };
 const seat: AgentTurnScope = {
@@ -71,28 +72,41 @@ describe("modulesPlugin", () => {
 		const setup = await setUpModules();
 		const { sessionTools, services } = setup.contribution;
 		expect(sessionTools?.map((tool) => tool.name)).toEqual([
-			"owner-memory",
 			"notify",
 			"schedules",
 			"delegate",
-			"discord-admin",
 		]);
 		expect(sessionTools?.every((tool) => tool.phase === "tools")).toBe(true);
 		expect(services?.map((service) => service.name)).toEqual(["delegator"]);
-		expect(compileSessionPlan(sessionTools ?? []).tools).toHaveLength(5);
+		expect(compileSessionPlan(sessionTools ?? []).tools).toHaveLength(3);
+	});
+
+	test("declares the tiers of the schedule, delegation, and web tools, and leaves notifying the owner alone", async () => {
+		const { toolTiers } = (await setUpModules()).contribution;
+		expect(toolTiers).toMatchObject({
+			schedule_create: "admin",
+			schedule_update: "admin",
+			schedule_cancel: "admin",
+			schedule_list: "member",
+			delegate_task: "admin",
+			web_search: "member",
+			fetch_content: "member",
+			get_search_content: "member",
+		});
+		expect(toolTiers).not.toHaveProperty("notify_owner");
 	});
 
 	test("provides the background turns and the delegator to the plugins after it", async () => {
-		const { core } = await setUpModules();
-		expect(core.background).toBeDefined();
-		expect(core.delegator.runningChannels()).toEqual([]);
+		const { services } = await setUpModules();
+		expect(services.get(BACKGROUND_TURNS)).toBeDefined();
+		expect(services.get(DELEGATION).runningChannels()).toEqual([]);
 	});
 
 	test("delegate_task reports home and opens its thread in the group", async () => {
 		const setup = await setUpModules();
 		const [delegate] = await registered(setup, context(seat), "delegate");
 		await delegate?.execute("1", { title: "t", task: "look it up" });
-		await setup.core.delegator.idle();
+		await setup.services.get(DELEGATION).idle();
 		expect(setup.record.reportChannels).toEqual([HOME]);
 		expect(setup.record.threadOrigins).toEqual([GROUP]);
 		expect(setup.record.ownerChannelAsked).toBe(0);
@@ -106,7 +120,7 @@ describe("modulesPlugin", () => {
 			"delegate",
 		);
 		await delegate?.execute("1", { title: "t", task: "look it up" });
-		await setup.core.delegator.idle();
+		await setup.services.get(DELEGATION).idle();
 		expect(setup.record.reportChannels).toEqual([OWNER_CHANNEL]);
 		expect(setup.record.ownerChannelAsked).toBe(1);
 	});

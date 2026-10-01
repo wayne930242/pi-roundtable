@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { CardCadence, CONVERSATION_GAP_MS } from "./card-cadence.ts";
 import { headline } from "./headline.ts";
 import { quietLinks } from "./quiet-links.ts";
 import { DISCORD_MESSAGE_LIMIT, splitReply } from "./reply-splitter.ts";
@@ -130,37 +129,5 @@ describe("thinkingLine", () => {
 		const line = thinkingLine("é".repeat(THINKING_LIMIT + 50));
 		expect(line?.endsWith("…")).toBe(true);
 		expect(line?.length).toBeLessThanOrEqual(DISCORD_MESSAGE_LIMIT);
-	});
-});
-
-describe("card cadence", () => {
-	const at = (minutes: number) => minutes * 60_000;
-
-	test("a conversation's first reply shows a card; the same tone does not repeat it", () => {
-		const cadence = new CardCadence();
-		expect(cadence.shows("discord:1", "neutral", false, at(0))).toBe(true);
-		expect(cadence.shows("discord:1", "neutral", false, at(1))).toBe(false);
-		expect(cadence.shows("discord:1", "happy", false, at(2))).toBe(true);
-		expect(cadence.shows("discord:1", "happy", false, at(3))).toBe(false);
-		expect(cadence.shows("discord:1", "neutral", false, at(4))).toBe(false);
-		expect(cadence.shows("discord:1", "thinking", false, at(5))).toBe(true);
-	});
-
-	test("a quiet channel opens a new conversation", () => {
-		const cadence = new CardCadence();
-		cadence.shows("discord:1", "neutral", false, 0);
-		expect(
-			cadence.shows("discord:1", "neutral", false, CONVERSATION_GAP_MS - 1),
-		).toBe(false);
-		expect(
-			cadence.shows("discord:1", "neutral", false, 2 * CONVERSATION_GAP_MS - 1),
-		).toBe(true);
-	});
-
-	test("a failure always shows its card; channels are independent", () => {
-		const cadence = new CardCadence();
-		cadence.shows("discord:1", "apologetic", true, at(0));
-		expect(cadence.shows("discord:1", "apologetic", true, at(1))).toBe(true);
-		expect(cadence.shows("discord:2", "neutral", false, at(1))).toBe(true);
 	});
 });
