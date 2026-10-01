@@ -2,6 +2,9 @@
 
 English | [Traditional Chinese](README.zh-TW.md)
 
+Docs: <https://pi-roundtable.wayneh.tw>
+Source and issues: <https://github.com/wayne930242/pi-roundtable>
+
 A Discord agent server on [Pi](https://github.com/earendil-works/pi).
 Each AI agent has its own channel and conversation in your Discord server.
 They share tools and memory.

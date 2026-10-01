@@ -40,9 +40,13 @@ export const PUBLIC_NAME_ALLOWLIST: NameAllowlist = {
 	// A key ending in "/" covers every file below that directory: documentation pages link to the repository,
 	// and the page on pi-roundtable-mcp names the public MCP gateway that package works with.
 	"site/src/content/docs/": [OWNER_HANDLE, spell("context", "forge")],
-	// The READMEs say which gateway the connectors need, and link the package by its npm page.
-	"README.md": [spell("context", "forge")],
-	"README.zh-TW.md": [spell("context", "forge")],
+	// The READMEs say which gateway the connectors need, and link the repository and the site.
+	"README.md": [OWNER_HANDLE, spell("way", "ne"), spell("context", "forge")],
+	"README.zh-TW.md": [
+		OWNER_HANDLE,
+		spell("way", "ne"),
+		spell("context", "forge"),
+	],
 	"bun.lock": [spell("type", "safe")],
 	// The guide names its one private consumer.
 	"docs/plugins.md": [spell("Mer", "lin")],
