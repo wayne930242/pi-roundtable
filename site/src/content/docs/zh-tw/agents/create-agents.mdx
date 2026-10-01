@@ -1,0 +1,99 @@
+---
+title: 建立 agent
+description: 向協調者要一個 agent，了解需要提供什麼、新 agent 會拿到什麼，以及之後怎麼修改。
+sidebar:
+  order: 1
+---
+
+import { Aside } from "@astrojs/starlight/components";
+import { Image } from "astro:assets";
+import agentCreate from "../../../../assets/scenes/agent-create.png";
+
+要建立 agent，在有 agent 回答的頻道裡提出要求就行。
+不用填表單，不用改設定檔，也不用重啟。
+
+<Image src={agentCreate} alt="在 guide 頻道，使用者請 Guide 做一個記讀書筆記的 agent。Guide 回覆已經在新的 notes 頻道做好 Notes，它有提示詞、頭像，還有一個存連結的技能，而且已經開始做第一份工作。" />
+
+## 怎麼說
+
+說明這個 agent 要做什麼。名字、提示詞和其他細節，由回答的 agent 決定。
+
+```text
+幫我做一個叫 Researcher 的 agent，替我的問題找資料來源，用簡短的條列回報。
+```
+
+```text
+新增一個編輯 agent，幫我把草稿改得更精簡，但不要改變我的意思。一開始先問我在寫什麼。
+```
+
+```text
+建一個叫 Notes 的 agent 幫我記讀書筆記，它的頻道放在閱讀專用的類別下。
+```
+
+只有 owner 和 admin 能建立 agent。
+任何 agent 都能回答這個要求：它會用自己的名字建立新的 agent。
+
+## `agent_create` 需要什麼
+
+使用的工具是 `agent_create`。這些欄位由 agent 從你的要求裡填好：
+
+| 欄位 | 內容 |
+| --- | --- |
+| `name` | 永久的名字：1 到 32 個小寫字母、數字和連字號。它同時是頻道名稱。不能包含 `discord` 或 `clyde`，也不能跟任何 agent 或群組同名，已封存的也算。 |
+| `display_name` | 顯示在它訊息上的名字，1 到 32 個字元，任何語言都行。 |
+| `prompt` | 它的角色：工作內容、資料來源、限制，以及怎麼回報。最多 4,000 個字元。 |
+| `avatar_prompt` | 它的圖片描述，最多 1,000 個字元。只有設定了圖片 provider 時才會要求；見[狀態與頭像](/zh-tw/agents/status-and-avatars/)。 |
+| `task` | 它的第一份工作，最多 4,000 個字元，要寫成單獨看也能懂。 |
+| `category` | 選填。它的頻道放哪裡：預設是 `Agents`，也可以是 `Agents-<suffix>`。類別不存在就會建立。 |
+| `skills` | 選填。它要帶的技能名稱，從技能清單裡挑。只有 skills addon 開著時才提供；見[技能與記憶](/zh-tw/agents/skills-and-memory/)。 |
+
+<Aside type="caution" title="名字是永久的">
+`name` 在 agent 建立之後就不能改。顯示名稱、提示詞、模型和 thinking level 都能改。
+取名字要謹慎，個性交給顯示名稱去表現。
+</Aside>
+
+## 新 agent 會拿到什麼
+
+- **一個頻道**，用它的名字，放在你指定的類別下。
+- **一張頭像。** 有圖片 provider 填了 `images` 槽位時，依 avatar prompt 繪製；沒有的話，用顯示名稱產生。
+- **它的提示詞**，接在每個 agent 開頭都有的共用提示詞後面。
+- **第一份工作。** 它馬上在自己的頻道開始做。它會先用一兩句話自我介紹，再開始處理這份工作。
+- **它的技能**，如果你指定了的話。
+
+## 之後再修改
+
+直接用白話說要改什麼：
+
+```text
+讓 Researcher 每次最多用兩句話回答。
+```
+
+```text
+把 Editor 的 thinking level 改成 high。
+```
+
+這件事用的工具是 `agent_update`。它能改四樣東西：
+
+| 欄位 | 作用 |
+| --- | --- |
+| `display_name` | 顯示在它訊息上的名字。這個 agent 所在的群組，頻道主題會跟著更新。 |
+| `prompt` | 整份新的提示詞。它會取代舊的，所以 agent 應該先讀目前的提示詞。 |
+| `model` | 寫成 `<provider>/<model>` 的模型，或 `default` 讓它跟著助理的模型。主機跑不起來的模型會被拒絕，並附上可用的清單。 |
+| `thinking` | `off`、`minimal`、`low`、`medium`、`high`、`xhigh` 或 `default`。預設是 `auto`：judge 依你的訊息，為每一輪挑一個等級。 |
+
+修改從 agent 的下一輪開始生效，它的對話不受影響。
+
+有兩樣東西有自己的工具：
+
+- **頭像：** `agent_avatar` 重畫頭像。只有設定了圖片 provider 才有這個工具。
+- **技能：** `agent_skills` 增減它帶的技能。
+
+用 `agent_list` 看所有 agent 和群組，以及它們的頻道；用 `agent_get` 讀單一 agent 的提示詞、模型、thinking level 和技能。
+
+## 初始 agent
+
+`agents.ts` 裡的 agent 在第一次啟動時建立，做法跟 `agent_create` 一樣。
+之後它們不會再被覆寫，所以請直接在 Discord 裡修改。
+見[設定](/zh-tw/configure/settings/)。
+
+{/* Sources: src/core/agents/agent-tools.ts:96-118, src/core/agents/agent-tools.ts:128-263, src/core/agents/agent-rules.ts:6-8, src/core/agents/agent-rules.ts:57-79, src/core/agents/team-editing.ts:25-215, src/core/agents/agent-prompt.ts:121-128, src/core/agents/agent-prompt.ts:41-47, src/core/agents/agent-prompt.ts:71-80, src/core/builtin/agent-server.ts:98-104, src/core/agents/agent-store.ts:97-110, src/core/agents/team-layout.ts:14-40, src/core/models.ts:12-19 */}

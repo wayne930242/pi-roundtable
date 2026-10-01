@@ -1,51 +1,141 @@
 ---
-title: 設定
-description: roundtable.config.ts 的設定，以及 roundtable 指令。
+title: 設定總覽
+description: roundtable.config.ts 的每個鍵，依用途分組，附上型別、預設值和作用。
 sidebar:
   order: 1
 ---
 
-## 設定
-
 `roundtable.config.ts` 放設定和外掛清單。
-未知的鍵會報錯，並指出最接近的已知鍵。
+它用 `export default { ... } satisfies RoundtableConfig` 匯出一個物件。
+不在這一頁的鍵會報錯，並指出最接近的已知鍵：
 
-bot 在 Discord 裡顯示的文字語言由 `locale` 設定決定：預設是 `en`，也可以是 `zh-TW`。
-`timeZone` 是排程與時間戳記使用的時區；預設為 UTC。
+```text
+config <key>: unknown key. Did you mean "<closest>"? The keys here are ...
+```
+
+缺少必填的鍵，或值的種類不對，`roundtable doctor` 和 `roundtable start` 都會停下來，並指出是哪個鍵。
+下面標了必填的鍵，值都必須是非空字串。
+
+## `init` 寫出的檔案
+
+`roundtable init` 建立的專案，會透過一個小小的 `env` 輔助函式，從 `.env` 讀取憑證和 id，所以這個檔案裡沒有任何機密。
+每個值從哪裡來，見[環境變數](/zh-tw/configure/environment/)。
 
 ```ts
+import type { RoundtableConfig } from "pi-roundtable";
+import { agents } from "./agents.ts";
+import { hello } from "./plugins/hello.ts";
+
+// Credentials and ids come from .env, which Bun loads on its own; nothing secret belongs in this file.
+const env = (name: string): string => process.env[name] ?? "";
+
 export default {
-	// ...
-	locale: "zh-TW",
-	timeZone: "Europe/Berlin",
+	name: "Roundtable",
+	owner: { id: env("OWNER_ID"), name: env("OWNER_NAME") },
+	discord: {
+		token: env("DISCORD_TOKEN"),
+		guild: env("DISCORD_GUILD_ID"),
+		entryChannel: env("DISCORD_ENTRY_CHANNEL_ID"),
+	},
+	database: { url: env("DATABASE_URL") },
+	// Paths are relative to the project directory, where the roundtable command runs.
+	dataDir: "./data",
+	model: env("MODEL"),
+	http: { publicUrl: env("PUBLIC_URL") },
+	prompts: { shared: "./persona/shared.md" },
+	agents,
 	plugins: [hello],
 } satisfies RoundtableConfig;
 ```
 
-## 智慧體
+## 身分
 
-`agents.ts` 列出第一批智慧體。
-已經存在資料庫裡的智慧體不會被覆寫，所以之後請直接在 Discord 裡編輯智慧體。
+| 鍵 | 型別 | 預設值 | 作用 |
+| --- | --- | --- | --- |
+| `name` | string | `"Roundtable"` | bot 所顯示文字裡，助理的顯示名稱。 |
+| `owner.id` | string，必填 | 無 | 唯一一位 owner 的 Discord 使用者 id。 |
+| `owner.name` | string，必填 | 無 | owner 的名字，提示詞和拒絕訊息會用它。 |
+| `owner.pronouns` | `"he"`、`"she"` 或 `"they"` | `"they"` | 提示詞回頭提到 owner 時使用的人稱。 |
 
-```ts
-import type { AgentSeed } from "pi-roundtable";
+## Discord
 
-export const agents: AgentSeed[] = [
-	{
-		name: "guide",
-		displayName: "Guide",
-		prompt:
-			"You are Guide, a friendly assistant. Answer briefly and ask when a request is unclear.",
-		avatarPrompt: "A friendly lighthouse keeper with a warm lantern",
-	},
-];
-```
+| 鍵 | 型別 | 預設值 | 作用 |
+| --- | --- | --- | --- |
+| `discord.token` | string，必填 | 無 | bot token。放在 `.env`。 |
+| `discord.guild` | string，必填 | 無 | agent 伺服器的 guild id。 |
+| `discord.entryChannel` | string，必填 | 無 | 協調者所在頻道的 id。 |
+| `discord.rootCommand` | string | 小寫的 `name`，其中每一段 `a-z`、`0-9`、`-` 以外的字元換成 `-` | 根斜線指令，不含斜線。見[斜線指令](/reference/slash-commands/)。 |
+| `discord.admin` | boolean | `true` | owner 的對話是否有 `discord_*` 管理工具。設成 `false` 會讓 `discord-admin` addon 不載入。 |
+| `discord.refusalHint` | string | 無 | 附加在根指令拒絕非 owner 時的訊息後面的文字，原樣加上。你的語言需要的空格或標點，要自己放進去。 |
 
-## 指令
+## 儲存與檔案
 
-| 指令 | 作用 |
-| --- | --- |
-| `roundtable init [dir]` | 在 `dir`（預設為目前目錄）建立專案 |
-| `roundtable doctor [--reachable]` | 檢查設定，並說明如何修正有問題的地方 |
-| `roundtable start` | 先執行不需要網路的檢查，再啟動 bot |
-| `roundtable add plugin <name>` | 新增 `plugins/<name>.ts` 和它的測試，並列進設定 |
+| 鍵 | 型別 | 預設值 | 作用 |
+| --- | --- | --- | --- |
+| `database.url` | string，必填 | 無 | PostgreSQL 連線 URL。 |
+| `dataDir` | string，必填 | 無 | 行程存放檔案的位置，例如圖片、附件和技能。 |
+| `workDir` | string | `<dataDir>/work` | agent 共用的工作目錄。 |
+| `agentDir` | string | `<dataDir>/pi` | Pi 的 agent 目錄，放模型登入。見[模型](/zh-tw/configure/models/)。 |
+
+## 模型
+
+| 鍵 | 型別 | 預設值 | 作用 |
+| --- | --- | --- | --- |
+| `model` | string，必填 | 無 | agent 使用的模型，寫成 `<provider>/<id>`。 |
+| `thinking` | `"off"`、`"minimal"`、`"low"`、`"medium"`、`"high"` 或 `"xhigh"` | `"medium"` | judge 無法挑出等級時，一輪使用的等級。 |
+| `judge.model` | string | `model` 的值 | 判斷小問題的模型。 |
+| `judge.threshold` | 0 到 1 的數字 | `0.6` | judge 要多有把握，它的答案才會被採用。 |
+| `delegation.model` | string | `model` 的值 | 執行委派任務的模型。 |
+| `delegation.thinking` | 跟 `thinking` 相同的等級 | `"medium"` | 委派任務的 thinking level。 |
+
+每一項的說明見[模型](/zh-tw/configure/models/)。
+
+## 語言與時間
+
+| 鍵 | 型別 | 預設值 | 作用 |
+| --- | --- | --- | --- |
+| `locale` | `"en"` 或 `"zh-TW"` | `"en"` | bot 在 Discord 裡所顯示文字的語言。 |
+| `timeZone` | string | `"UTC"` | 排程和時間戳記使用的 IANA 時區。 |
+
+見[語言與時間](/zh-tw/configure/language-and-time/)。
+
+## 存取
+
+| 鍵 | 型別 | 預設值 | 作用 |
+| --- | --- | --- | --- |
+| `speakers.admins` | `{ users?, roles?, everyone? }` | 無 | 誰擁有 admin 層級。 |
+| `speakers.members` | `{ users?, roles?, everyone? }` | 無 | 誰擁有 member 層級。 |
+| `toolTiers` | 以工具名稱為鍵、值為 `"owner"`、`"admin"` 或 `"member"` 的物件 | `{}` | 每個指定工具最低需要的層級。它會蓋過核心和外掛原本決定的層級。 |
+| `prompts.shared` | string，在 `prompts` 裡必填 | 套件附帶的提示詞 | 檔案路徑，這份檔案是每個 agent 提示詞的開頭。啟動時讀一次。 |
+| `prompts.guest` | string | 套件附帶的 guest prompt | 檔案路徑，對 owner 以外的說話者，這份檔案取代共用提示詞。 |
+
+沒有 `speakers` 設定時，只有 owner 能跟 agent 說話。
+見[存取層級](/zh-tw/configure/access-tiers/)。
+
+## agent 與頭像
+
+| 鍵 | 型別 | 預設值 | 作用 |
+| --- | --- | --- | --- |
+| `agents` | `{ name, displayName, prompt, avatarPrompt, channelId? }` 的清單 | `[]` | 第一批團隊，只建立一次。已經存下來的 agent 不會被覆寫，所以之後請在 Discord 裡修改 agent。 |
+| `avatar` | string | 套件附帶的一張簡單 bot 圖片 | 你自己的圖片：中性頭像，也是繪製頭像時參考風格的圖。 |
+| `http.publicUrl` | string，必填 | 無 | 能從網際網路連到這個行程的位址。Discord 從這裡取頭像。 |
+| `http.port` | 1 到 65535 的整數 | `3000` | 行程監聽的 TCP port。 |
+| `http.hostname` | string | 無 | 監聽綁定的 hostname。 |
+| `http.socketPath` | string | 無 | 監聽用的 unix socket 路徑，取代 TCP port。設定後，`port` 和 `hostname` 就不使用。 |
+| `http.socketMode` | 0 到 `0o777` 的整數 | `0o660` | socket 檔案的權限位元。只有在以其他使用者身分執行的 proxy 需要時才放寬。 |
+
+## Addon 與維運
+
+| 鍵 | 型別 | 預設值 | 作用 |
+| --- | --- | --- | --- |
+| `skills` | `false`，或 `{ builtinDir?, reposDir? }` | 開啟，`builtinDir` 是套件附帶的技能，`reposDir` 是 `<dataDir>/repos` | `false` 會讓 `skills` addon 不載入：agent 不帶技能，也沒有技能工具。已存的技能仍留在資料表裡。 |
+| `memory` | boolean | `true` | `false` 會讓 `memory` addon 不載入：沒有記憶工具，也沒有記憶的提示詞區塊。資料表維持原樣。 |
+| `ops.agent` | string | 無 | 負責調查行程自身錯誤的 agent 名稱。 |
+| `plugins` | 外掛物件的清單 | `[]` | 你的外掛。它們在內建外掛之後，依列出的順序啟動。 |
+
+設了 `ops.agent` 之後，每一筆 `error` 和 `fatal` 的 log 都會回報給那個 agent，成為它頻道裡的一則訊息和一輪回報。
+同一個錯誤一小時內最多回報一次，每小時最多送出五筆回報。
+
+addon 加了什麼、外掛怎麼啟動，見 [Services and addons](/plugins/services-and-addons/)。
+
+{/* Sources: src/core/config/config.ts:20-122, src/core/config/config.ts:124-326, src/core/config/schema.ts:156-200, src/core/define-roundtable.ts:121-217, src/core/discord/owner-command.ts:21-27, src/core/ops/error-reporter.ts:10-60, templates/roundtable.config.ts:1-24, src/cli/checks/environment.ts:1-27 */}

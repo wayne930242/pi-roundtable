@@ -1,0 +1,85 @@
+---
+title: 設定 Discord bot
+description: 建立 Discord 應用程式和 bot，開啟 Message Content intent，邀請 bot 進伺服器，並複製 .env 要用的 id。
+sidebar:
+  order: 2
+---
+
+import { Steps, Aside } from "@astrojs/starlight/components";
+
+這個 bot 就是一個一般的 Discord 應用程式，帶一個 bot 使用者。
+這一頁從空白的 developer portal 開始，帶你拿到 `.env` 要填的值。
+最後跑一次 `bunx roundtable doctor`，它會檢查下面所有項目，並指出缺了什麼。
+
+## 建立應用程式和 bot
+
+<Steps>
+
+1. 開啟 [Discord developer portal](https://discord.com/developers/applications)，建立一個新的應用程式。
+
+2. 開啟 **Bot** 頁面，複製 token。這就是 `.env` 裡的 `DISCORD_TOKEN`。
+   token 被拒絕時，在同一頁重設它，再把新的 token 填進 `.env`。
+
+3. 在同一頁開啟 **Message Content Intent**，然後儲存。
+   沒開的話，agent 讀不到你在頻道裡寫的內容。
+   在它開啟之前，`doctor` 會以「the Message Content intent is off」失敗。
+
+</Steps>
+
+## 邀請 bot 進伺服器
+
+邀請連結要求 `bot` 和 `applications.commands` 這兩個 scope，以及下列權限：
+
+| 權限 | bot 用它做什麼 |
+| --- | --- |
+| View Channels | 看到頻道 |
+| Send Messages | 在頻道裡回答 |
+| Send Messages in Threads | 在 thread 裡回答 |
+| Read Message History | 讀之前說過的話 |
+| Embed Links | 貼出卡片 |
+| Attach Files | 貼出圖片和檔案 |
+| Pin Messages | 釘選狀態訊息 |
+| Create Public Threads | 為背景工作的報告開 thread |
+| Manage Channels | 建立 agent 的頻道 |
+| Manage Webhooks | 讓每個 agent 用自己的名字發言 |
+
+剛好對應這份清單的權限整數是 `2252109588319248`。
+在瀏覽器開啟下面這種格式的網址，然後選你的伺服器；`<bot id>` 是 bot 的使用者 id：
+
+```text
+https://discord.com/oauth2/authorize?client_id=<bot id>&scope=bot+applications.commands&permissions=2252109588319248
+```
+
+這個連結不必自己拼。
+bot 不在你的伺服器裡時，`bunx roundtable doctor` 會把填好的連結印出來，當作修正方式。
+
+<Aside type="note">
+`doctor` 在入口頻道檢查這些權限，算法是先看伺服器的身分組，再套用頻道自己的覆寫。
+頻道覆寫只要拒絕其中一項，就算缺少，即使身分組有給也一樣。
+bot 有 Administrator 權限時，檢查會通過。
+</Aside>
+
+## 複製 id
+
+先在 Discord 開啟開發者模式（Developer Mode），然後按右鍵複製 id。
+
+| `.env` 變數 | 來源 |
+| --- | --- |
+| `DISCORD_GUILD_ID` | 在伺服器上按右鍵，複製它的 id |
+| `DISCORD_ENTRY_CHANNEL_ID` | 在你要跟協調者說話的頻道上按右鍵，複製它的 id |
+| `OWNER_ID` | 在你自己的名字上按右鍵，選 Copy User ID |
+| `OWNER_NAME` | agent 稱呼你的名字 |
+
+頻道必須屬於那個伺服器，bot 也必須看得到它。
+兩者有一個不成立時，`doctor` 會指出要修哪個變數。
+
+## 檢查
+
+```sh
+bunx roundtable doctor
+```
+
+Discord 的檢查依序是：token 被接受、bot 在伺服器裡、Message Content intent 已開啟、bot 在入口頻道有全部的權限。
+接下來看[第一次對話](/zh-tw/start/first-conversation/)。
+
+{/* Sources: src/cli/discord-api.ts:7-27, src/cli/checks/discord.ts:12-13, src/cli/checks/discord.ts:70-79, src/cli/checks/discord.ts:101-176, src/cli/checks/discord.test.ts:57-70, templates/.env.example:3-13, src/core/discord/discord-surface.ts:187 */}

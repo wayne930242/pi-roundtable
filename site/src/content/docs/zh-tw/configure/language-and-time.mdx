@@ -1,0 +1,68 @@
+---
+title: 語言與時間
+description: 用 locale 設定 bot 在 Discord 裡顯示文字的語言，用 timeZone 設定排程和時間戳記的時區。
+sidebar:
+  order: 4
+---
+
+`roundtable.config.ts` 裡有兩個設定，決定 bot 用什麼語言說話，以及它說的時間指的是哪個時區：
+
+```ts
+export default {
+	// ...
+	locale: "zh-TW",
+	timeZone: "Europe/Berlin",
+} satisfies RoundtableConfig;
+```
+
+| 鍵 | 值 | 預設值 |
+| --- | --- | --- |
+| `locale` | `"en"` 或 `"zh-TW"` | `"en"` |
+| `timeZone` | IANA 時區名稱，例如 `Europe/Berlin` 或 `Asia/Taipei` | `"UTC"` |
+
+主機只在啟動時套用這兩個設定一次，之後整個行程都用它們。
+改了之後，要重啟 bot。
+
+## `locale`
+
+`locale` 選擇 bot 在 Discord 裡顯示文字用的訊息目錄（message catalog）。
+兩份目錄的鍵完全相同。
+它涵蓋的內容包括：
+
+- 核准與提問的卡片，連同按鈕和頁尾。
+- 停止按鈕，以及長時間那一輪的提示。
+- `/roundtable` 指令的說明、對非 owner 的拒絕訊息，以及排程面板。
+- 會自己更新的狀態訊息，以及對話貼出的通知，例如回覆失敗或這一輪被停止。
+- 工具說明裡時區的稱呼方式：英文目錄用 IANA 名稱（`Europe/Berlin`），`zh-TW` 目錄用地名（`Berlin`）。
+
+`en` 和 `zh-TW` 以外的值會報錯：
+
+```text
+config locale: expected a locale, en or zh-TW, got "<value>". Fix the value in roundtable.config.ts.
+```
+
+`locale` 不會改動的有：
+
+- Discord 管理工具的 audit log 原因和拒絕訊息，兩種 locale 下都是英文。
+- 核心加進 agent 提示詞的文字是英文。
+- 你的提示詞、你的 agent，以及你的外掛的文字，用什麼語言寫都隨你。
+
+## `timeZone`
+
+`timeZone` 是 bot 處理任何帶有時鐘時間的東西時使用的時區。
+
+- 排程的單次時間（`"YYYY-MM-DD HH:MM"`）和每天重複的時間（`"HH:MM"`）都以這個時區為準，排程工具的說明裡也會這樣註明。
+- 排程訊息和清單裡的時間戳記，以及 `channel_read` 的輸出，都用這個時區。
+- 放進每位 speaker 記憶區塊的「即將到來的事件」，其中的「今天」是這個時區的日期。
+
+名稱是在 bot 啟動時檢查，不是在設定檢查時。
+`roundtable doctor` 接受任何非空字串。
+執行環境不認得的時區，會在檢查都通過之後讓 `roundtable start` 停下來：
+
+```text
+Invalid time zone: <value>
+```
+
+排程實際怎麼用，見[排程與背景工作](/zh-tw/agents/schedules-and-background/)。
+
+{/* Sources: src/core/config/config.ts:71-75, src/core/config/config.ts:140-147, src/core/config/config.ts:228-232, src/core/host.ts:40-60, src/core/host.ts:259-275, src/core/time.ts:1-17, src/core/i18n/index.ts:1-68, src/core/i18n/time-zones.ts:1-27, src/core/i18n/owner.ts:1-41, src/core/i18n/cards.ts:1-40, src/core/i18n/dashboard.ts:1-30, src/core/i18n/conversation.ts:1-30, src/core/i18n/discord.ts:1-23, src/core/agents/agent-prompt.ts:1-60, src/core/modules/schedules/schedule-tools.ts:75-165, src/core/modules/memory/owner-memory.ts:15-40, src/core/agents/agent-tools.ts:356, docs/plugins.md:1983-1987 */}

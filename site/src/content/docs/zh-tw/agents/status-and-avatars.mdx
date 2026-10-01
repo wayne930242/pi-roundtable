@@ -1,0 +1,74 @@
+---
+title: 狀態與頭像
+description: 會自己更新的狀態訊息，顯示誰在工作；以及 agent 的頭像從哪裡來。
+sidebar:
+  order: 6
+---
+
+import { Image } from "astro:assets";
+import agentStatus from "../../../../assets/scenes/agent-status.png";
+
+## 狀態訊息
+
+bot 在伺服器最上方維護一個 `#dashboard` 頻道，不屬於任何類別。
+頻道裡有一則 bot 的訊息，訊息會自己更新。
+
+<Image src={agentStatus} alt="一則 Discord 訊息，列出 Guide、Researcher、Editor 三個 agent 的頻道、模型，以及各自是閒置還是工作中。" />
+
+重啟之後，bot 會找回這則訊息；你把它刪掉的話，bot 會再建一則。
+bot 有 Pin Messages 權限時，會把訊息釘選起來；沒有這個權限，訊息照樣能用，bot 只會在 log 裡警告一次。
+
+### 它顯示什麼
+
+標題底下是「Updated」時間，使用你設定的時區，再來是外掛加進來的各行文字。
+
+每個使用中的 agent 有一個區塊，內容是：
+
+- 它的顯示名稱，以及頻道的連結。
+- 它的模型和 thinking level。
+- 它的狀態：`Idle`，或 `Working` 加上它工作所在的頻道，或排隊中的訊息數量。排隊數量會放在 Working 旁邊，例如「2 queued」。
+- context window 用了多少，例如 `context 12k / 200k (6%)`。context 剛壓縮完時，會直接說明，數字在下一輪恢復顯示。
+- 它有幾個排程，以及最後活動的時間；或是「No activity since startup」。
+
+每個使用中的群組顯示：顯示名稱、頻道連結、成員和主持人、目前閒置還是有回覆進行中，以及最後活動時間。
+
+清單太長、一則 Discord 訊息放不下時，區塊的結尾會標出被省略的項目數量。
+已封存的 agent 和群組不會列出來。
+
+### 什麼時候更新
+
+有東西變動時訊息就會更新，例如一輪開始或結束、建立了 agent。Discord 限制訊息的編輯頻率，所以最多每 10 秒編輯一次。
+它也每 5 分鐘更新一次，讓最後活動時間和 context 數字保持最新。
+
+## 頭像
+
+每個 agent 在 Discord 裡都用自己的名字和圖片發言。
+圖片從哪裡來，取決於有沒有外掛填了 `images` 槽位。
+
+### 有圖片 provider
+
+填了 `images` 槽位的外掛會負責繪製圖片；見[外掛能新增什麼](/plugins/what-plugins-can-add/)。
+這時：
+
+- `agent_create` 會要求一份 `avatar_prompt`，也就是圖片的描述，並依它繪製頭像。
+- 之後可以用 `agent_avatar` 工具更換，有三種模式：`redraw` 依已存的提示詞重畫，`new_prompt` 存下新的提示詞並依它繪製，`edit` 依一句指示修改目前的圖片，例如「給它加一條藍色圍巾」。
+- 新的圖片從 agent 的下一則訊息開始顯示。
+- `roundtable.config.ts` 的 `avatar` 設定，是你自己的圖片，給還沒有頭像的 agent 用，也是繪製時參考風格的圖。預設是 pi-roundtable 附帶的一張簡單 bot 圖片。
+
+建立 agent 時如果繪製失敗，這個 agent 暫時使用助理的中性圖片。
+啟動時，還沒有圖片的 agent 會在背景繪製。
+
+### 沒有圖片 provider
+
+什麼都不會繪製，也不會損失什麼。
+每個 agent 會得到一張依顯示名稱產生的圖片：背景色由名字決定，放上助理的圖示，再加一個寫著 agent 名字第一個字母的徽章。
+同樣的名字一定得到同樣的圖片，所以 agent 之間容易分辨。
+這時 `agent_create` 沒有 `avatar_prompt` 欄位，也沒有 `agent_avatar` 工具。
+`bunx roundtable doctor` 會回報這個槽位有沒有填，沒有 provider 並不算失敗。
+
+### 圖片從哪裡提供
+
+bot 把頭像存在資料目錄裡，並在 `PUBLIC_URL` 的 `/avatars/` 底下提供。
+Discord 從那裡取圖，所以這個位址必須能從網際網路連到這個行程。
+
+{/* Sources: src/core/discord/agent-discord.ts:29, src/core/discord/agent-discord.ts:262-368, src/core/agents/agent-dashboard.ts:8-12, src/core/agents/agent-dashboard.ts:36-170, src/core/i18n/dashboard.ts:5-40, src/core/agents/agent-tools.ts:176-212, src/core/agents/team-editing.ts:105-175, src/core/agents/team-lifecycle.ts:64-100, src/core/agents/fallback-avatar.ts:15-35, src/core/agents/avatar-studio.ts:100-165, src/core/builtin/agent-server.ts:120-130, src/core/define-roundtable.ts:196-214, src/core/config/config.ts:96-99, docs/plugins.md:765-770 */}

@@ -13,7 +13,7 @@ import { Steps } from "@astrojs/starlight/components";
 - PostgreSQL。`init` 建立的專案附有 `docker-compose.yml`，可以直接啟動一個。
 - 一個 Discord bot：一個含 bot 使用者、已開啟 Message Content intent，並已邀請進你的伺服器的應用程式。
 - 模型登入：你選的模型的供應商 API key（`anthropic/...` 用 `ANTHROPIC_API_KEY`），或用 Pi 做過的登入。
-- 一個能從網際網路連到這個行程的位址，例如通道（tunnel），因為 Discord 會從該位址取得智慧體的頭像。
+- 一個能從網際網路連到這個行程的位址，例如通道（tunnel），因為 Discord 會從該位址取得 agent 的頭像。
 
 ## 建立並啟動專案
 
@@ -62,10 +62,10 @@ import { Steps } from "@astrojs/starlight/components";
 | 變數 | 內容 |
 | --- | --- |
 | `DISCORD_TOKEN` | bot 的 token，在應用程式的 Bot 頁面取得 |
-| `DISCORD_GUILD_ID`、`DISCORD_ENTRY_CHANNEL_ID` | 伺服器，以及負責統籌的智慧體所在的頻道（開啟開發者模式後，按右鍵複製 id） |
+| `DISCORD_GUILD_ID`、`DISCORD_ENTRY_CHANNEL_ID` | 伺服器，以及負責統籌的 agent 所在的頻道（開啟開發者模式後，按右鍵複製 id） |
 | `OWNER_ID`、`OWNER_NAME` | 你自己：唯一能改動一切的人 |
 | `DATABASE_URL` | PostgreSQL；預設值與 `docker-compose.yml` 一致 |
-| `MODEL` | 智慧體使用的模型，格式為 `<provider>/<id>` |
+| `MODEL` | agent 使用的模型，格式為 `<provider>/<id>` |
 | `PUBLIC_URL` | 能從網際網路連到這個行程的位址 |
 
 ## `doctor` 檢查什麼
@@ -76,7 +76,7 @@ import { Steps } from "@astrojs/starlight/components";
 2. `.env` 對 `.env.example` 列出的每個變數都有值。
 3. `roundtable.config.ts` 符合其 schema，失敗時指出是哪個鍵。
 4. 每個外掛都能載入，且沒有兩個外掛同名。
-5. 是否有外掛填入 `images` 槽位。沒有並不算失敗：智慧體會用顯示名稱產生頭像。
+5. 是否有外掛填入 `images` 槽位。沒有並不算失敗：agent 會用顯示名稱產生頭像。
 6. PostgreSQL 連得上，且能執行 migration。
 7. Discord token 有效、bot 已在你的伺服器裡、Message Content intent 已開啟，而且 bot 在入口頻道有它需要的權限（包含 Pin Messages）。
    bot 不在伺服器裡時，修正方式是一個邀請連結，連結要求的正是這些權限。
@@ -88,5 +88,6 @@ import { Steps } from "@astrojs/starlight/components";
 ## `start` 做什麼
 
 `bunx roundtable start` 先執行不需要網路的檢查，其中任何一項失敗就停下來，並印出與 `doctor` 相同的訊息；全部通過則啟動 bot。
-啟動後，`agents.ts` 裡的智慧體都有了自己的頻道，`/roundtable schedule list` 可以列出排程。
+啟動後，`agents.ts` 裡的 agent 都有了自己的頻道，`/roundtable schedule list` 可以列出排程。
+想知道第一句話寫在哪裡，看[第一次對話](/zh-tw/start/first-conversation/)。
 收到 `SIGTERM` 或 `SIGINT` 時，它會先讓進行中的工作完成再停止。

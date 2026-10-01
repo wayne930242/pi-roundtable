@@ -1,0 +1,118 @@
+---
+title: 存取層級
+description: 誰能跟 agent 說話、每個層級能用哪些工具，以及怎麼讓其他人使用這個 bot。
+sidebar:
+  order: 3
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+每一則開啟一輪的訊息，都來自一位說話的人（speaker），每位 speaker 都有一個層級。
+層級共有三個，由信任程度高到低是 `owner`、`admin` 和 `member`。
+三個都不屬於的人，就是無關的人：bot 不回答，也不開啟任何一輪。
+
+<Aside type="caution" title="這個設定的責任在你">
+pi-roundtable 是為一位 owner 和一個 Discord 伺服器設計的。
+你可以讓其他人跟 agent 說話，但這樣的設定和它的風險，由架設的人自己承擔。
+加任何人之前，請先讀完這一頁。
+</Aside>
+
+## 預設：只有 owner
+
+沒有 `speakers` 設定時，只有 owner 能跟 agent 說話。
+owner 是 Discord 使用者 id 等於 `owner.id` 的人，而且只有一位。
+其他 bot 的訊息會被忽略。agent 伺服器不擁有的頻道也一樣：只有 agent 和群組的頻道會得到回答。
+
+## 給其他人一個層級
+
+在 `roundtable.config.ts` 的 `speakers` 底下列出人。
+每個層級可以填使用者 id、身分組 id，或所有人：
+
+```ts
+export default {
+	// ...
+	owner: { id: env("OWNER_ID"), name: "Ada" },
+	speakers: {
+		admins: { users: ["<user id>"] },
+		members: { roles: ["<role id>"] },
+	},
+} satisfies RoundtableConfig;
+```
+
+| 欄位 | 型別 | 作用 |
+| --- | --- | --- |
+| `users` | 字串清單 | Discord 使用者 id。 |
+| `roles` | 字串清單 | Discord 身分組 id。在伺服器裡擁有其中一個身分組的人都符合。 |
+| `everyone` | boolean | 設成 `true` 時，每個人都符合。 |
+
+一個人會得到他符合的最高層級：先看 owner，再看 `admins`，最後是 `members`。
+程式碼在 `admins` 和 `members` 底下都接受 `everyone`。
+放在 `admins` 底下，會讓每個在 agent 頻道裡寫字的人都成為 admin，所以最多只放在 `members`。
+
+## 每個層級能做什麼
+
+只有在 speaker 的層級不低於工具的最低層級時，這個工具才會提供給他。
+下表是核心和內建 addon 宣告的層級。
+每個工具和它的層級，完整列在 [agent 工具參考](/reference/agent-tools/)。
+
+| 層級 | 能用 |
+| --- | --- |
+| `member` | 跟 agent 說話，並回答它們提出的問題。讀附件。列出和讀取 agent（`agent_list`、`agent_get`）、讀取頻道（`channel_read`）、傳訊息給 agent（`message_agent`）。使用記憶（`memory_add`、`memory_search`、`memory_remove`），以及列出排程（`schedule_list`）。 |
+| `admin` | member 能做的一切，加上建立與修改 agent 和群組、封存它們、整理頻道、修改技能與 agent 的技能、建立與修改排程，以及委派任務。 |
+| `owner` | 其餘的一切：shell 和檔案工具、`notify_owner`、`discord_*` 管理工具、所有沒有宣告較低層級的外掛工具，以及 `/roundtable` 斜線指令。 |
+
+由此還有幾點：
+
+- 每位 speaker 有自己的記憶，由所有 agent 共用。member 的 `memory_add` 絕不會寫進 owner 的記憶。
+- 執行很久的那一輪會出現停止按鈕，只有 owner 按了有效。
+- 被擱置的動作，例如具破壞性的 shell 指令，會在一張卡片上等待核准。預設只有 owner 能回應。用 `toolTiers` 降低了工具的層級，該層級以上的 speaker 也能核准，卡片上會寫 `Who can approve: <tier> and above`。
+- agent 用 `ask_user` 提出的問題，那一輪的 speaker 和 owner 都可以回答。
+
+## 修改工具的層級
+
+`toolTiers` 用工具名稱，設定能使用該工具的最低層級：
+
+```ts
+export default {
+	// ...
+	toolTiers: {
+		delegate_task: "member",
+		memory_remove: "admin",
+	},
+} satisfies RoundtableConfig;
+```
+
+這個設定的優先權高於其他一切。
+沒有它的時候，工具需要外掛宣告的層級；外掛沒宣告，就用核心的預設；都沒有人指定的工具，則需要 owner。
+每個值必須是 `"owner"`、`"admin"` 或 `"member"`。
+
+<Aside type="caution">
+shell 工具（`bash`、`read`、`edit`、`write`）和 `discord_*` 工具，預設都需要 owner。
+降低其中任何一個的層級，等於把那項能力交給新層級的每一位 speaker。
+</Aside>
+
+## 其他 speaker 看到什麼：guest prompt
+
+owner 以外的每位 speaker，不論是 admin 還是 member，拿到的都是 guest prompt，而不是共用提示詞。
+agent 也會多收到一段文字，寫明這位 speaker 的名字、Discord 使用者 id 和層級，並告訴 agent 要稱呼他、採用他的回答和核准，以及高於他層級的工具在這一輪無法使用。
+他們的訊息送到 agent 時，前面會加上 `(Message from <name>, at the <tier> tier.)`。
+
+guest prompt 用檔案路徑設定，跟共用提示詞並排：
+
+```ts
+export default {
+	// ...
+	prompts: {
+		shared: "./persona/shared.md",
+		guest: "./persona/guest.md",
+	},
+} satisfies RoundtableConfig;
+```
+
+兩個檔案都只在啟動時讀一次。
+檔案讀不到或是空的，啟動就會停下並指出是哪個鍵，例如 `config prompts.guest: <path> is empty. Write the prompt in it.`
+
+沒有設 `prompts.guest` 時，使用套件附帶的 guest prompt。
+它告訴 agent：對方是這個伺服器的訪客，agent 不代表 owner 發言，owner 的私人事實仍屬於 owner，而存進記憶的內容只屬於這位訪客。
+
+{/* Sources: README.md:5-7, docs/plugins.md:305-315, src/core/speakers.ts:5-9, src/core/speakers.ts:67-107, src/core/config/config.ts:20-25, src/core/config/config.ts:76-84, src/core/agents/agent-claim.ts:90-152, src/core/agents/agent-prompt.ts:28-78, src/core/assets/prompts/shared-guest.md:1-11, src/core/define-roundtable.ts:60-73, src/core/define-roundtable.ts:121-127, src/core/tool-tiers.ts:12-57, src/core/builtin/agent-server.ts:89-95, src/core/builtin/modules.ts:48-64, src/core/builtin/stores.ts:15-20, src/core/builtin/skills.ts:23-27, src/core/builtin/discord-admin.ts:33-38, src/core/discord/owner-cards.ts:95-290, src/core/discord/stop-button.ts:34-62, src/core/discord/owner-command.ts:125-150, src/core/agents/agent-prompt.ts:57-61 */}

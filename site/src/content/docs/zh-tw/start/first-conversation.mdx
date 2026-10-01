@@ -1,0 +1,88 @@
+---
+title: 第一次對話
+description: bot 啟動後你會在 Discord 看到什麼、第一句話寫在哪裡，以及斜線指令能做什麼。
+sidebar:
+  order: 3
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+## start 會先準備好什麼
+
+第一次執行 `bunx roundtable start` 時，它會依 `agents.ts` 建立 agent。
+每個 agent 在 `Agents` 類別下有一個頻道，也有一張頭像。
+它還會在伺服器最上面建立一個 `#dashboard` 頻道，裡面放一則狀態訊息；bot 有 Pin Messages 權限時，會把這則訊息釘選起來。
+這則訊息顯示什麼，見[狀態與頭像](/zh-tw/agents/status-and-avatars/)。
+
+bot 不會主動開口。
+你寫了，它才回。
+
+## 在哪裡寫
+
+你在 agent 的頻道裡寫的每一則訊息，都由那個 agent 回答，不必 mention 它。
+伺服器裡的其他頻道，沒有任何東西會回答。
+
+協調者（coordinator）是頻道就是入口頻道的那個 agent，入口頻道就是 `DISCORD_ENTRY_CHANNEL_ID` 指定的頻道。
+一般的需求都往這裡送，專門的工作則由它交給負責的 agent。
+
+`init` 寫出的專案只有一個 agent：Guide。
+它的初始設定把 Guide 放在入口頻道，所以 Guide 就是協調者。
+在那個頻道寫給 Guide 就行。
+Guide 也能建立 agent：你直接交代的團隊工作，例如建立 agent 或群組，每個 agent 都會用自己的名字去做。
+
+`agents.ts` 裡的初始設定用一行指定了這件事：
+
+```ts
+{
+	name: "guide",
+	displayName: "Guide",
+	prompt: "You are Guide, a friendly assistant. Answer briefly and ask when a request is unclear.",
+	avatarPrompt: "A friendly lighthouse keeper with a warm lantern",
+	channelId: env("DISCORD_ENTRY_CHANNEL_ID"),
+},
+```
+
+<Aside type="caution">
+初始設定只在第一次啟動時讀取，資料庫裡已經有的 agent 不會被覆寫。
+已存在的 agent 會保留它原本的頻道，所以要在第一次啟動之前設好 `channelId`。
+</Aside>
+
+## 一輪對話長什麼樣子
+
+agent 的回覆會用它自己的名字和頭像顯示，不是 bot 的。
+它工作的時候，頻道會顯示它正在輸入。
+在 agent 自己的頻道裡，大約五秒後會出現一則短訊息：「Working; press Stop to interrupt.」，附一個 Stop 按鈕。
+只有你能按，這一輪結束後訊息就會消失。
+
+agent 需要你做決定時，會在頻道裡用按鈕問你，你回答之後它才繼續。
+具有破壞性或會改動系統的指令，以及寫到共用工作區以外的操作，都會先擱置，等你確認。
+
+## 要第一個 agent
+
+用你習慣的語言，直接說你要什麼。例如：
+
+```text
+幫我做一個 agent，讀我存下來的文章，整理成簡短的筆記。
+```
+
+回答的 agent 能建立這個 agent，附上它自己的頻道、頭像、提示詞，還有第一份工作。
+要說什麼、新 agent 會拿到什麼，見[建立 agent](/zh-tw/agents/create-agents/)。
+
+## 斜線指令
+
+`/roundtable` 是控制用的指令。只有你能用，回應也只有你看得到。
+指令名稱是助理名稱的小寫；`discord.rootCommand` 有設定的話，以設定為準。
+其他人試著用，會得到「Owner only」的回應。
+
+內建的子指令都跟排程有關：
+
+| 指令 | 作用 |
+| --- | --- |
+| `/roundtable schedule list` | 列出所有頻道的排程 |
+| `/roundtable schedule cancel` | 取消一個排程；從跳出來的清單裡選 |
+
+排程是在對話裡建立的，不是用指令。
+見[排程與背景工作](/zh-tw/agents/schedules-and-background/)。
+外掛也能在同一個指令底下加更多子指令；[寫一個外掛](/zh-tw/plugins/first-plugin/)從這裡開始。
+
+{/* Sources: src/core/agents/team-lifecycle.ts:29-62, src/core/discord/agent-discord.ts:262-345, src/core/agents/agent-claim.ts:89-120, src/core/agents/agent-team.ts:138-143, src/core/agents/agent-prompt.ts:25-30, src/core/agents/agent-prompt.ts:71-80, src/core/agents/agent-store.ts:97-110, src/core/discord/discord-surface.ts:45, src/core/discord/discord-surface.ts:244-275, src/core/discord/stop-button.ts, src/core/discord/schedule-commands.ts:25-45, src/core/discord/owner-command.ts:19-25, src/core/i18n/owner.ts:5-13, src/core/i18n/schedules.ts:44-48, src/core/config/config.ts:41-42, src/core/assets/prompts/shared.md, templates/agents.ts, src/core/agents/agent-team-fixture.ts:202-212 */}

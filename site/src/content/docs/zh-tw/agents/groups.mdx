@@ -1,0 +1,74 @@
+---
+title: 群組
+description: 把兩到六個 agent 放進同一個頻道，了解每則訊息由誰回答，以及怎麼改成員或主持人。
+sidebar:
+  order: 2
+---
+
+群組是一個頻道，好幾個 agent 在裡面跟你說話。
+你寫一則訊息，有話可說的 agent 會依序回答。
+
+## 建立群組
+
+說出要放進去的 agent：
+
+```text
+建一個叫 Review 的群組，成員有 Researcher 和 Editor，Editor 當主持人。
+```
+
+使用的工具是 `group_create`：
+
+| 欄位 | 內容 |
+| --- | --- |
+| `name` | 永久的名字，規則跟 agent 的名字一樣。不能跟任何 agent 或群組同名。 |
+| `display_name` | 群組顯示的名字，1 到 32 個字元。 |
+| `members` | 2 到 6 個不同的 agent，必須存在且未封存。 |
+| `host` | 選填，必須是成員之一。沒指定的話，有叫 `coordinator` 的成員就由它擔任，否則由第一個成員擔任。 |
+| `category` | 選填。預設是 `Groups`，也可以是 `Groups-<suffix>`。類別不存在就會建立。 |
+
+頻道會開在那個類別下，頻道主題列出成員和主持人。
+成員或主持人變動時，主題會跟著更新。
+
+## 誰來回答
+
+你的每一則訊息，judge 會對每位成員問一個問題：這則訊息跟這個 agent 的角色有關嗎？它的看法會補上其他人說不到的東西嗎？
+分數至少 0.5 的 agent 會回答。
+其餘由三條規則決定：
+
+- 你用 `@顯示名稱` 或 `@name` 點名的 agent 一定會回答，你回覆的那則訊息的作者也是。
+- 成員一個接一個回答，不會同時。每個成員都看得到自上次發言以來的所有群組訊息。最相關的 agent 最後發言。
+- 沒有人適合時，由主持人回答。judge 無法評分時，也只由主持人回答。
+
+成員能在回覆裡 mention 另一個名字，例如 `@Editor`，把下一句話交給對方。
+一輪最多 8 則回覆，交棒也算在內，到了就會說明已經停下；想繼續就再寫一則訊息。
+
+群組成員不使用 `message_agent`。
+在群組裡，agent 之間用 mention 互相交談，你看得到整個過程。
+群組以外的地方怎麼用 `message_agent`，見[封存與頻道](/zh-tw/agents/archive-and-channels/)。
+
+## 修改群組
+
+提出你要的修改：
+
+```text
+把 Notes 加進 Review。
+```
+
+```text
+讓 Researcher 當 Review 的主持人，並把群組改名叫 Reading room。
+```
+
+使用的工具是 `group_update`，它能改顯示名稱、成員或主持人。
+
+- 新的成員清單會取代舊的，仍然要是 2 到 6 個不同的 agent。
+- 主持人必須是成員。移除了主持人又沒指定新的，就由第一個成員接任。
+- 群組的 `name` 不能改。
+
+## agent 或群組被封存時
+
+- 封存 agent，會把它從所有所屬的群組移除。剩不到兩個成員的群組會一併封存；被封存的如果是主持人，主持人改由剩下的第一個成員擔任。
+- 封存群組，成員維持原樣。
+
+見[封存與頻道](/zh-tw/agents/archive-and-channels/)。
+
+{/* Sources: src/core/agents/agent-tools.ts:92-96, src/core/agents/agent-tools.ts:218-262, src/core/agents/team-editing.ts:176-209, src/core/agents/agent-store.ts:241-326, src/core/agents/group-round.ts:1-60, src/core/agents/group-round.ts:68-100, src/core/agents/group-turns.ts:25-120, src/core/agents/agent-prompt.ts:41-47, src/core/agents/agent-prompt.ts:53-60, src/core/agents/team-lifecycle.ts:50-62, src/core/agents/team-layout.ts:44-55, src/core/i18n/conversation.ts:15-17 */}

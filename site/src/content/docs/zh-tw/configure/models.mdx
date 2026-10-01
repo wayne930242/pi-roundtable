@@ -1,0 +1,116 @@
+---
+title: 模型
+description: 選擇 agent 的模型和 thinking level、judge、委派任務的模型，並設定模型登入。
+sidebar:
+  order: 5
+---
+
+bot 用 Pi 連得到的模型來執行 agent。
+你在 `roundtable.config.ts` 裡選擇它們：
+
+```ts
+export default {
+	// ...
+	model: env("MODEL"),
+	thinking: "medium",
+	judge: { model: "anthropic/claude-haiku-4-5", threshold: 0.6 },
+	delegation: { model: "anthropic/claude-haiku-4-5", thinking: "medium" },
+	agentDir: "./data/pi",
+} satisfies RoundtableConfig;
+```
+
+只有 `model` 是必填。
+
+## `<provider>/<id>` 格式
+
+每個模型設定都寫成 `<provider>/<id>`，例如 `anthropic/claude-sonnet-5-5`。
+第一個斜線前面是 provider，後面是模型 id。
+寫成別的格式，啟動會停下來，並指出是哪個鍵：
+
+```text
+config model: expected <provider>/<id>, got "<value>". Write it like anthropic/claude-sonnet-5-5.
+```
+
+`judge.model` 和 `delegation.model` 用同樣的檢查，訊息裡是它們自己的名稱。
+
+## `model` 與 `thinking`
+
+`model` 是 agent 的模型。
+agent 沒有自己的模型時，就沿用它。
+
+`thinking` 是 `off`、`minimal`、`low`、`medium`、`high`、`xhigh` 其中之一，預設是 `medium`。
+它是後備值，不是固定的等級。
+預設情況下，agent 的 thinking 設定是 `auto`：每一輪開始前，judge 讀你的訊息，從 `low`、`medium`、`high`、`xhigh` 挑一個；它不確定時，就沿用上一輪的等級。
+`thinking` 則是 judge 無法判斷的第一輪所用的等級。
+
+## `judge`
+
+judge 是一個小模型，替 bot 回答簡短的問題：
+
+- 一輪需要多少 thinking，
+- 你對被擱置動作的回覆，是不是同意放行，以及
+- 群組裡哪些成員該回答這則訊息。
+
+| 鍵 | 預設值 | 作用 |
+| --- | --- | --- |
+| `judge.model` | `model` 的值 | 回答這些問題的模型。 |
+| `judge.threshold` | `0.6` | 0 到 1 的數字。判斷 thinking level 或是否放行時，judge 要多有把握，答案才會被採用。 |
+
+這裡用比較便宜的模型就夠了。
+judge 的模型無法使用時，judge 會失敗，訊息是 `the judge's model <provider>/<id> is not available; log in to its provider or change judge.model`。
+
+## `delegation`
+
+agent 能用 `delegate_task` 把研究交給背景 worker。
+worker 是一個全新的 session，只能搜尋和閱讀網頁，它的報告會回到 agent 的頻道。
+
+| 鍵 | 預設值 | 作用 |
+| --- | --- | --- |
+| `delegation.model` | `model` 的值 | worker 執行時使用的模型。 |
+| `delegation.thinking` | `medium` | worker 的 thinking level。 |
+
+worker 會載入 `pi-web-access`，它是 pi-roundtable 的 peer dependency。
+
+## 每個 agent 各自的模型與 thinking level
+
+只有你設定了，agent 才會有自己的模型和 thinking level。
+請協調者去改，它會用 `agent_update`：
+
+```text
+讓 Researcher 改用 openai-codex/gpt-6-sol，thinking 設成 high。
+```
+
+`agent_update` 的模型寫成 `<provider>/<model>`，或用 `default` 讓它再次跟著助理。
+bot 跑不起來的模型會被拒絕，回應裡附上可用的清單。
+thinking 接受六個等級之一，或 `default`；`default` 就是 `auto`，由 judge 決定。
+固定了等級的 agent，不會再經過 judge。
+修改從 agent 的下一輪開始生效，它的對話不受影響。
+
+見[建立 agent](/zh-tw/agents/create-agents/)。
+
+## 模型登入
+
+bot 需要 `model` 那個 provider 的登入。
+`roundtable doctor` 會檢查有沒有，下面兩種都接受：
+
+- provider 的 API key 放在 `.env`，例如 `anthropic` 用 `ANTHROPIC_API_KEY`，`openai` 用 `OPENAI_API_KEY`。
+- 用 Pi 做過的登入，存在 agent 目錄裡的 `auth.json`。
+
+兩種都沒有，檢查就會失敗：
+
+```text
+✗ model login: no login for anthropic, the provider of anthropic/claude-sonnet-5-5.
+    Set the provider's API key in .env (ANTHROPIC_API_KEY for anthropic, OPENAI_API_KEY for openai), or sign in with Pi so ./data/pi/auth.json holds it.
+```
+
+通過時，它會說明登入的來源，例如 `anthropic login from <source>`。
+`doctor` 只讀取登入，不會建立 agent 目錄或 `auth.json`。
+
+## `agentDir`
+
+`agentDir` 是 Pi 的 agent 目錄，模型登入就放在這裡。
+預設是 `<dataDir>/pi`。
+bot 啟動時，會替它載入的 Pi 套件，把 `PI_CODING_AGENT_DIR` 設成這個目錄。
+你用 Pi 登入的話，要確認登入落在這個目錄；或是把 `agentDir` 指向已經存著登入的目錄。
+
+{/* Sources: src/core/config/config.ts:55-70, src/core/config/config.ts:236-255, src/core/config/config.ts:276-301, src/core/models.ts:1-49, src/core/judging/effort-judge.ts:60-120, src/core/judging/confirmation-judge.ts:1-60, src/core/agents/group-round.ts:1-80, src/core/define-roundtable.ts:76-90, src/core/builtin/agent-server.ts:178-200, src/core/builtin/agent-server.ts:244-262, src/core/runtime/pi-agent-runtime.ts:421-470, src/core/agents/agent-settings.ts:1-50, src/core/agents/agent-tools.ts:160-194, src/core/agents/team-options.ts, src/core/modules/delegation/web-research-worker.ts:1-80, src/core/shared/delegate-tool.ts:1-20, src/cli/checks/model.ts:1-28, src/cli/runtime.ts:1-53, src/core/host.ts:259-275 */}

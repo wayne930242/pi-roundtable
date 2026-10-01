@@ -1,6 +1,6 @@
 ---
 title: 寫一個外掛
-description: 給每個智慧體一個工具，並在沒有 Discord 和 PostgreSQL 的情況下測試。
+description: 給每個agent一個工具，並在沒有 Discord 和 PostgreSQL 的情況下測試。
 sidebar:
   order: 1
 ---
@@ -18,7 +18,7 @@ import toolCall from "../../../../assets/scenes/tool-call.png";
    ```
 
 2. 編輯它。外掛是一個有名稱和 `setup` 函式的物件，`setup` 回傳它要新增的東西。
-   下面這個外掛給每個智慧體一個工具：
+   下面這個外掛給每個agent一個工具：
 
    ```ts
    import { definePlugin, defineTool } from "pi-roundtable";
@@ -58,7 +58,7 @@ import toolCall from "../../../../assets/scenes/tool-call.png";
    bun test
    ```
 
-4. 重新啟動 bot。每個智慧體現在都能呼叫 `hello_greet`。
+4. 重新啟動 bot。每個agent現在都能呼叫 `hello_greet`。
 
    ```sh
    bunx roundtable start
@@ -72,9 +72,9 @@ import toolCall from "../../../../assets/scenes/tool-call.png";
 
 ## 進一步
 
-[外掛指南](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md)（英文）說明外掛能新增的每個部分（工具、提示詞區段、智慧體、事件、服務、migration、provider、斜線指令、HTTP 路由等等）、啟動與停止的順序，以及每一種啟動錯誤和它的修正方式。
+[外掛指南](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md)（英文）說明外掛能新增的每個部分（工具、提示詞區段、agent、事件、服務、migration、provider、斜線指令、HTTP 路由等等）、啟動與停止的順序，以及每一種啟動錯誤和它的修正方式。
 指南裡的範例放在 [`examples/`](https://github.com/wayne930242/pi-roundtable/tree/master/examples)，測試套件會執行每一個範例。
 
 `pi-roundtable/kit` 提供頻道認領（claim）、工具與呈現用的輔助函式。
-`pi-roundtable/discord` 提供斜線指令註冊器、擁有者指令與面板的輔助函式，以及智慧體面板。
+`pi-roundtable/discord` 提供斜線指令註冊器、擁有者指令與面板的輔助函式，以及agent面板。
 這兩個入口的版本規則與主入口相同：1.0 之前，不相容的變更會放在次版本（minor）發佈，並列在[變更記錄](https://github.com/wayne930242/pi-roundtable/blob/master/CHANGELOG.md)（英文）中。

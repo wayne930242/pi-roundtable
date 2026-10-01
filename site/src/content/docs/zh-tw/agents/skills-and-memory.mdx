@@ -1,0 +1,124 @@
+---
+title: 技能與記憶
+description: agent 帶著能自己寫、能共用的技能，也會替每個人記住事情。兩者都是能關掉的 addon。
+sidebar:
+  order: 3
+---
+
+技能和記憶是兩個內建的 addon。
+除非 `roundtable.config.ts` 把它們關掉，否則兩者都是開的；見[關掉 addon](#關掉-addon)。
+
+## 技能
+
+技能是一個 Markdown 檔，叫 `SKILL.md`，有名稱、描述，還有一段本文，說明某一類工作怎麼做。
+描述以「Use when」開頭，只說明這個技能在什麼情況下適用。
+agent 帶著的技能，會以 Pi skill 檔的形式交給它的 session。
+
+技能有三種：
+
+- **內建。** `writing-skills` 隨 pi-roundtable 一起發佈，每個 agent 都帶著。不能從 agent 身上移除。
+- **agent 寫的。** 由 agent 用工具建立，存在資料目錄底下，agent 能更新或刪除。
+- **連結自 repository。** 技能放在主機管理的 repository 裡。在這裡是唯讀的，要改得去它的 repository 改。
+
+### 要一個技能
+
+```text
+寫一個技能，說明我們怎麼整理每週會議的摘要，然後交給 Notes。
+```
+
+```text
+Researcher 帶了哪些技能？
+```
+
+### 技能工具
+
+owner 和 admin 能用下面全部的工具。`skill_list` 則是每位說話的人都能用。
+
+| 工具 | 作用 |
+| --- | --- |
+| `skill_list` | 列出技能，附上種類、描述、群組，以及帶著它的 agent。可以用 `group` 篩選，或在 `query` 放一個關鍵字。 |
+| `skill_create` | 用 `name`、最多 1,024 個字元的 `description`，和最多 12,000 個字元的 `body` 寫一個新技能。名字是永久的：小寫字母、數字和連字號，最多 64 個字元。它不會把技能交給任何人。 |
+| `skill_update` | 取代 agent 所寫技能的描述或本文。帶著它的 agent 從下一輪起讀到新版本。 |
+| `skill_delete` | 刪除 agent 所寫的技能，並從每個 agent 身上拿掉。 |
+| `skill_link` | 登記某個 repository 資料夾裡的技能，或它底下各資料夾中的所有技能。名稱和描述取自每個檔案。 |
+| `skill_unlink` | 把連結的技能從登記處和每個 agent 身上移除。repository 不受影響。 |
+| `skill_group_set` | 建立或取代一個技能群組。 |
+| `skill_group_delete` | 刪除技能群組。裡面的技能還在。 |
+| `agent_skills` | 用 `add` 和 `remove` 清單，增減 agent 帶的技能。 |
+
+### 讓 agent 帶技能
+
+[建立 agent](/zh-tw/agents/create-agents/) 時用 `skills` 欄位交給它，之後則用 `agent_skills`。
+修改從 agent 的下一輪開始生效。
+技能名稱只要有一個不存在，整個呼叫都會被拒絕，所以不會有任何變動。
+
+### 技能群組
+
+技能群組是一份有名字的技能清單，附一段最多 200 個字元的簡短描述。
+它只用來篩選 `skill_list`。
+agent 帶的是技能，不是群組。
+
+### `writing-skills` 技能
+
+每個 agent 都帶著 `writing-skills`，`skill_create` 也會指向它。
+它要求 agent：
+
+1. 先查登記處，擴充已經涵蓋該流程的技能。
+2. 描述只寫這個技能什麼時候該用。
+3. 本文寫成有順序的步驟，每一步都附上確認做完的方法。
+4. 刪掉不會改變 agent 行為的句子。
+5. 用 `skill_create` 或 `skill_update` 存起來，再用 `agent_skills` 交給負責做這件事的 agent。
+
+agent 寫的技能是單一檔案，最多 12,000 個字元。
+
+## 記憶
+
+agent 會替你記住事情，而且所有 agent 共用同一份記憶。
+每位跟 agent 說話的人各有自己的記憶：你說話時，agent 讀寫的是你的記憶；別人說話時，讀寫的是那個人的。
+一個人的記憶不會分享給另一個人。
+
+```text
+記住我喜歡簡短的回答。
+```
+
+```text
+我之前說過柏林那趟旅行的什麼事？
+```
+
+### 記憶工具
+
+| 工具 | 作用 |
+| --- | --- |
+| `memory_add` | 存一則事實。`kind` 是 `core`（關於你的穩定事實）、`note`（專案、人物、參考資料）或 `event`（某個日期的事，格式為 `YYYY-MM-DD`）。 |
+| `memory_search` | 用幾個關鍵字搜尋記住的所有內容，包括筆記和過去的事件。 |
+| `memory_remove` | 忘記所有包含指定文字的事實。 |
+
+這些工具每位說話的人都能用。
+
+### 提示詞裡有什麼
+
+每一輪開頭，system prompt 裡都有一段記憶：設定時區下的今天日期、**核心事實**，以及**即將到來的事件**。
+事件在日期過後就不再顯示。
+筆記不在這一段裡。需求可能用得到筆記時，agent 會用 `memory_search` 去找。
+
+核心事實要少、要短，因為每次對話都會帶著它們。
+
+## 關掉 addon
+
+```ts
+export default {
+	// ...
+	skills: false,
+	memory: false,
+} satisfies RoundtableConfig;
+```
+
+| 設定 | 設成 `false` 時 |
+| --- | --- |
+| `skills: false` | 沒有技能工具，任何 session 裡都沒有技能。`agent_create` 沒有 `skills` 欄位，傳了就會被拒絕。已存的技能仍留在資料表裡。 |
+| `memory: false` | 沒有記憶工具，提示詞裡也沒有記憶那一段。已存的記憶仍留在資料表裡。 |
+
+再把 addon 打開，會找回原來的資料。
+`skills` 開著的時候，也可以傳 `{ builtinDir, reposDir }`，改變內建技能和連結 repository 的位置；見[設定](/zh-tw/configure/settings/)。
+
+{/* Sources: src/core/modules/skills/skill-tools.ts:17-196, src/core/modules/skills/skill-rules.ts:7-11, src/core/modules/skills/skill-listing.ts:60-90, src/core/builtin/skills.ts:20-70, src/core/assets/skills/writing-skills/SKILL.md, src/core/modules/skills/skill-registry.ts:58-65, src/core/modules/skills/skill-registry.ts:124, src/core/define-roundtable.ts:180-195, src/core/config/config.ts:102-119, src/core/modules/memory/owner-memory.ts:12-175, src/core/builtin/stores.ts:14-55, docs/plugins.md:282-294 */}

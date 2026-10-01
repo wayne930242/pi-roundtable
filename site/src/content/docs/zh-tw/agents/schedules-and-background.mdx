@@ -1,0 +1,93 @@
+---
+title: 排程與背景工作
+description: 讓 agent 稍後或定期執行工作，把研究交給背景 worker，並在需要時私訊你。
+sidebar:
+  order: 4
+---
+
+agent 平常是你寫了才回答。
+有三種方式，能讓它在你不在頻道裡的時候做事：排程、委派的任務，和傳給你的私訊。
+
+## 排程
+
+排程會在設定的時間叫醒 agent，用的是它自己寫給自己的提示詞，agent 的回答會貼在建立排程的那個頻道。
+要建立排程，在那個頻道裡說：
+
+```text
+每個工作日早上 9 點，在 notes 頻道貼一段簡短的摘要，說明筆記有哪些變動。
+```
+
+```text
+45 分鐘後提醒我寄發票。
+```
+
+```text
+每週一和週四下午 5 點半，問我完成了什麼。
+```
+
+### 排程工具
+
+| 工具 | 作用 |
+| --- | --- |
+| `schedule_create` | 用 `title`、`prompt` 和一種時間設定，建立排程。 |
+| `schedule_list` | 列出這個頻道的排程和下次執行時間；給 `id` 則完整列出單一排程。agent 能用 `agent` 讀另一個 agent 的排程。 |
+| `schedule_update` | 修改單一排程的標題、提示詞或時間。執行中的那一輪可以用它更新自己的提示詞。 |
+| `schedule_cancel` | 刪除一個排程。 |
+
+owner 和 admin 能建立、修改、取消排程。任何說話的人都能列出排程。
+agent 只能改自己的排程；要改別人的，請那個 agent 去改。
+
+時間設定是下列其中一種：
+
+| 欄位 | 執行時機 |
+| --- | --- |
+| `in_minutes` | 一次，從現在起算幾分鐘後。 |
+| `at` | 一次，在 `YYYY-MM-DD HH:MM`。 |
+| `time` | 每天的 `HH:MM`。加上 `every_days`（1 到 365）可改成每隔幾天，從 `start_date` 起算；加上 `weekdays` 可指定星期幾。 |
+
+### 限制
+
+- 一個頻道最多 20 個排程，提示詞最多 8,000 個字元。
+- 第一次執行必須在 366 天以內。已經過去的時間會被拒絕。
+- 排程器每 30 秒檢查一次有沒有到期的排程。
+- 發現已經晚了超過 12 小時的執行，例如 bot 停機期間錯過的，會直接跳過，不會補跑。
+- 排程用建立者的層級執行，所以層級比較低的人不能改寫它。
+- 封存 agent 會取消它的排程。
+
+### 時區
+
+時間以 `roundtable.config.ts` 的 `timeZone` 為準，沒設定就是 UTC。
+工具會把時區和目前時間告訴 agent，時間已經過去而被拒絕時，回應裡也會寫出這兩項。
+見[設定](/zh-tw/configure/settings/)。
+
+### 自己查看與取消
+
+`/roundtable schedule list` 顯示所有頻道的排程。
+`/roundtable schedule cancel` 取消一個排程，並有自動完成的清單可以選。
+這個指令只有你能用，回應也只有你看得到。
+
+## 委派的工作
+
+agent 能用 `delegate_task` 把一大段研究交給背景 worker。它需要 `title`，以及一份獨立完整的 `task`，最多 4,000 個字元。
+
+- worker 有網路搜尋和網頁閱讀的能力，沒有別的。它只看得到那份任務。
+- agent 繼續跟你工作。worker 回報時，報告會在那個頻道變成新的一輪，agent 再用它回答你。
+- Discord 允許的地方，頻道裡會開一個 thread 放這份任務。thread 以報告結尾；worker 失敗的話，則以錯誤結尾。
+- 一個頻道同時能跑 3 個委派的任務。
+- 跑了 20 分鐘的任務會被停掉，並回報為失敗。
+- 執行中的任務存在記憶體裡。重啟會把它們丟掉，頻道也不會再收到它們的回報。
+
+worker 使用 `delegation` 設定裡的模型。沒設定的話，用 agent 的模型，thinking level 為 `medium`。
+開 thread 需要 bot 有 Create Public Threads 權限；見[設定 Discord bot](/zh-tw/start/discord-bot/)。
+
+## 傳給你的私訊
+
+`notify_owner` 會在 Discord 傳一則私訊給你。
+agent 只在你要求用私訊通知或提醒時才用它，因為平常的回覆本來就會出現在頻道裡。
+只有你自己發起的那一輪能用它。
+
+```text
+每週五下午 4 點檢查還沒完成的工作，把清單用私訊傳給我。
+```
+
+{/* Sources: src/core/shared/schedule-tools.ts:6-120, src/core/modules/schedules/schedule-tools.ts:18-190, src/core/modules/schedules/schedules.ts:28-95, src/core/modules/schedules/scheduler.ts:15-70, src/core/modules/schedules/recurrence.ts:13-60, src/core/agents/agent-claim.ts:31-40, src/core/builtin/modules.ts:43-60, src/core/discord/schedule-commands.ts:25-160, src/core/agents/team-lifecycle.ts:155-162, src/core/modules/delegation/delegator.ts:20-160, src/core/shared/delegate-tool.ts, src/core/modules/delegation/web-research-worker.ts:15-20, src/core/config/config.ts:290-300, src/core/modules/notify/notify.ts, src/core/discord/discord-surface.ts:327-330, src/core/modules/background/background-turns.ts:36-67, docs/plugins.md:305-318 */}

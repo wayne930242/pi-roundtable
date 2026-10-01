@@ -1,0 +1,91 @@
+---
+title: 封存與頻道
+description: 封存 agent 和群組但保留歷史，整理頻道、讀取頻道內容，讓 agent 互相交辦工作。
+sidebar:
+  order: 5
+---
+
+import { Image } from "astro:assets";
+import teamHandoff from "../../../../assets/scenes/team-handoff.png";
+
+## 封存
+
+不再需要某個 agent 或群組時，直接說：
+
+```text
+把 Editor 封存。
+```
+
+封存會保留頻道和歷史紀錄，什麼都不會刪掉。
+使用的工具是 `archive`，它接受 agent 或群組的名字。
+
+對 agent 來說，封存的結果是：
+
+- 它的頻道移到 `Archive` 類別，那裡沒有任何東西會回答。
+- 它的排程被取消。
+- 它離開所屬的所有群組。剩不到兩個成員的群組也會一併封存。
+- 它的名字仍然被佔用，不能再用這個名字建立新的 agent 或群組。
+
+對群組來說：頻道移到 `Archive`，成員維持原樣。
+
+沒有取消封存的工具。
+協調者，也就是入口頻道裡的那個 agent，不能被封存；agent 也不能封存自己，請另一個 agent 來做。
+在 Discord 手動刪掉 agent 或群組的頻道，也會讓該 agent 或群組被封存。
+
+## 整理頻道
+
+```text
+把 Researcher 和 Editor 放進工作用的類別，Editor 排第一個。
+```
+
+使用的工具是 `channel_arrange`。
+它接受一份類別清單，每個類別列出要放進去的 agent 或群組名字，並依順序排列。
+
+- agent 放在 `Agents` 或 `Agents-<suffix>` 底下，群組放在 `Groups` 或 `Groups-<suffix>` 底下。suffix 是 1 到 32 個字元。
+- 不存在的類別會建立。
+- 你列出的類別排在伺服器最前面，順序照你列的。其他類別維持原樣，跟在後面。
+- 在你列出的類別裡，你列出的頻道照你的順序排在最前面，其餘頻道維持原樣，跟在後面。
+- 變空的 `Agents` 或 `Groups` 類別會被刪除。
+- 只要有一個項目寫錯，整個呼叫都會被拒絕，什麼都不會移動。
+
+`agent_list` 會列出所有 agent 和群組、它們的頻道，以及目前的類別，所以 agent 可以先讀過現有的配置。
+
+## 讀取頻道
+
+`channel_read` 讀取 agent 伺服器裡文字頻道或 thread 的訊息，不會改動任何東西。
+你轉貼一則訊息、而 agent 需要看前後文時，它會用到這個工具。
+
+| 欄位 | 內容 |
+| --- | --- |
+| `channel` | 頻道，寫成 `<#id>` 或它的 id。 |
+| `around` | 選填。一個訊息 id：讀它前後的訊息，而不是最新的。 |
+| `limit` | 選填。1 到 50 則訊息，預設 20。 |
+
+訊息由舊到新排列，每則附上 id、時間、作者、文字和附件名稱。
+任何說話的人都能用。
+
+## agent 之間互相交談
+
+<Image src={teamHandoff} alt="在 research 頻道，Researcher 用兩個重點回覆請求，並註明結果已交給 editor 頻道。" />
+
+agent 能用 `message_agent` 把請求交給另一個 agent。
+它需要 `to`，也就是對方 agent 的名字，以及 `text`，一份獨立完整的請求，最多 4,000 個字元。
+
+1. 呼叫立刻回傳，所以發送的 agent 可以繼續做自己的事。
+2. 請求會用發送者的名字出現在對方 agent 的頻道。對方在那裡，以自己的對話處理。
+3. 能開 thread 的地方，這次往來也會出現在發送者頻道的 thread 裡，thread 名稱是 `→` 加上對方的顯示名稱。對方的回答貼在那個 thread，往來結束時 thread 會被封存。
+4. 回答會以新的一輪回到發送者，由發送者把重點告訴你。
+
+沒有你介入的 agent 訊息鏈，最多走到 8 則就會停下。
+這時 agent 會告訴你已經做了什麼，並問你要不要繼續。
+
+這件事你不用特別做什麼。
+要一個需要兩個 agent 才能完成的結果時，跟協調者說就行，它能把工作傳下去：
+
+```text
+請 Researcher 找三個這個主題的資料來源，再請 Editor 把它們寫成一段文字。
+```
+
+在[群組](/zh-tw/agents/groups/)裡，agent 之間是用 mention 傳話，不用 `message_agent`。
+
+{/* Sources: src/core/agents/agent-tools.ts:318-394, src/core/agents/team-lifecycle.ts:131-205, src/core/agents/agent-store.ts:165-170, src/core/agents/agent-store.ts:241-260, src/core/agents/team-layout.ts:14-40, src/core/agents/agent-messages.ts:19-190, src/core/agents/agent-prompt.ts:141-165, src/core/agents/team-turn-types.ts:25, src/core/discord/dispatch-threads.ts:96-124, src/core/i18n/conversation.ts:21-26, src/core/agents/agent-team.ts:318-340, src/core/builtin/agent-server.ts:122-135 */}
