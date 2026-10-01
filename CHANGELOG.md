@@ -5,6 +5,22 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-01
+
+### Added
+
+- `PluginContext.apiKey(provider)`: the credential the host's model login holds for a provider, such as `openai-codex`, or `undefined` when it holds none. It resolves through the same login the agents use, so a plugin that calls a provider's API needs no login of its own. The value is a secret; keep it out of logs and error messages.
+- `testPlugin` and `testHost` take `apiKeys`, the credentials `context.apiKey` returns by provider. Without it every provider reads as having none, whatever login the machine holds.
+- `roundtable add plugin codex-images` and `roundtable add plugin dice` copy an official plugin into the project and list it in `roundtable.config.ts`, the way `add plugin` copies the `hello` template. `codex-images` fills the `images` slot through the owner's ChatGPT login and the Codex backend, which OpenAI does not document for this use, so it can stop working without notice. `dice` adds a `roll_dice` tool for dice expressions such as `4d6k3`.
+- A documentation site at pi-roundtable.wayneh.tw, in English and Traditional Chinese.
+
+### Changed
+
+- `codex-images` and `dice` are reserved names for `add plugin`: it copies the official plugin for them and keeps the `hello` template for every other name.
+- The project `init` writes seeds Guide into the entry channel, so Guide is the coordinator on the first start. Agents that are already stored keep the channel they have.
+- `PluginContext` has a new member, `apiKey`; a hand-written `PluginContext` (only the core's own and tests') needs it.
+- The READMEs no longer say `/roundtable help` opens a control panel. The core registers `/roundtable schedule list` and `/roundtable schedule cancel` only.
+
 ## [0.3.0] - 2026-10-01
 
 Found by running the first consuming host on the published 0.2.1; each item answers one finding of its friction log.
