@@ -7,9 +7,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [0.2.1] - 2026-10-01
 
-### Fixed
+### Added
 
-- The `roundtable` command: 0.2.0 was published without its `bin` entry, because a newer npm drops a `bin` path that starts with `./` when it publishes. `bin` is now `src/cli/roundtable.mjs`, and an export test refuses a path that starts with a dot. Use 0.2.1 or later.
+- A Traditional Chinese README, `README.zh-TW.md`, linked from the English one.
+
+### Changed
+
+- `bin` is `src/cli/roundtable.mjs`, without the leading `./`: the npm that publishes from CI warned that it removed the `./` path, though 0.2.0's registry entry kept the `roundtable` command. An export test refuses a `bin` path that starts with a dot.
 
 ## [0.2.0] - 2026-10-01
 

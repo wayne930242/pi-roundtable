@@ -1,5 +1,7 @@
 # pi-roundtable
 
+English | [Traditional Chinese](README.zh-TW.md)
+
 A Discord agent server on [Pi](https://github.com/earendil-works/pi).
 You get a team of AI agents in one Discord server: each agent owns a channel and a conversation, they share tools and memory, and you extend the bot with plugins written in TypeScript.
 
@@ -36,7 +38,7 @@ It refuses to write anything when Bun is missing or too old, or when a file it w
 Bun loads `.env` by itself, and `.gitignore` keeps it out of Git.
 
 | Variable | What it is |
-|---|---|
+| --- | --- |
 | `DISCORD_TOKEN` | The bot's token, from the application's Bot page |
 | `DISCORD_GUILD_ID`, `DISCORD_ENTRY_CHANNEL_ID` | The server and the channel where the coordinating agent lives (turn on Developer Mode, then right-click to copy ids) |
 | `OWNER_ID`, `OWNER_NAME` | You: the one person who can change everything |
@@ -130,7 +132,7 @@ export default {
 ## Commands
 
 | Command | What it does |
-|---|---|
+| --- | --- |
 | `roundtable init [dir]` | Creates a project in `dir` (default: the current directory) |
 | `roundtable doctor [--reachable]` | Checks the setup and says how to fix what is wrong |
 | `roundtable start` | Runs the checks that need no network, then the bot |
