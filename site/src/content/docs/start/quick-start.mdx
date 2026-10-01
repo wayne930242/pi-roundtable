@@ -88,5 +88,6 @@ It exits non-zero on any failure and changes nothing it checked.
 ## What `start` does
 
 `bunx roundtable start` runs the checks that need no network, stops with the same message `doctor` prints when one fails, and otherwise starts the bot.
-Once it runs, the agents in `agents.ts` have their channels, and `/roundtable help` opens the control panel.
+Once it runs, the agents in `agents.ts` have their channels, and `/roundtable schedule list` shows the schedules of every channel.
+See [Your first conversation](/start/first-conversation/) for where to write first.
 On `SIGTERM` or `SIGINT` it finishes running work before it stops.

@@ -1,0 +1,114 @@
+---
+title: Services and addons
+description: How plugins share services with each other, how to replace a built-in one, and the three addons you can switch off.
+sidebar:
+  order: 3
+---
+
+## Services
+
+A service is something one plugin builds and others read, such as the schedule store or the agent team.
+Each service has a key made with `serviceKey<T>(id)`.
+`T` is an interface, called a port, so any object with the same methods is a service.
+You need no built-in class to provide one, or to fake one in a test.
+
+A plugin lists the keys it provides in `provides`, and provides each one from `setup` with `services.provide(KEY, value)`.
+Give your key's id a prefix of your own, because two keys with one id are one service.
+
+```ts
+export const NOTE_INDEX = serviceKey<NoteIndex>("my-notes.index");
+
+export const notes = definePlugin({
+	name: "my-notes",
+	provides: [NOTE_INDEX],
+	setup: ({ services }) => {
+		services.provide(NOTE_INDEX, { add, all });
+		return { services: [{ name: "notes-ready" }] };
+	},
+});
+```
+
+The full version is [`shared-services.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/shared-services.ts).
+
+### Reading a service
+
+| Call | What it does |
+|---|---|
+| `services.get(KEY)` | Returns the service, or throws a `PluginError` that names the key and the plugin to register first. |
+| `services.find(KEY)` | Returns the service, or `undefined` when no registered plugin declares it. It still throws when a plugin declares the key but has not set up yet, because that is an ordering mistake. |
+| `services.lazy(KEY)` | Returns a function that gives the service once every plugin is set up. Use it when the providing plugin comes after yours, and call it from a service's `start`, a handler, or another callback that runs after startup. Calling it during setup throws `NotLinkedError`. |
+| `services.provide(KEY, value)` | Only from `setup`, only for a key in your `provides`, once per key. |
+
+If you read a service with `get` during `setup`, list its key in `requires`.
+A wrong order is then refused before any migration or setup, with both plugins named.
+The key must be provided by a plugin registered before yours.
+A service you read with `find` stays out of `requires`.
+
+A plugin that declares a key and does not provide it is refused when its `setup` returns.
+Two plugins that declare one key are refused before any setup.
+
+### Built-in services
+
+The built-in plugins provide these keys, all exported from `pi-roundtable`:
+
+| Key | Provided by | What it holds |
+|---|---|---|
+| `AGENTS` | `agent-server` | The agent team, a read-only directory, the runtime every agent turn runs on, approvals, and avatars |
+| `SKILLS` | `skills` (addon) | The skills agents carry, and the registry to list, link and attach them |
+| `SCHEDULES` | `schedule-store` | The stored schedules: create, get, update, remove, due, claim |
+| `MEMORY` | `memory` (addon) | Each speaker's memory: list, add, search, update, remove |
+| `BACKGROUND_TURNS` | `modules` | Turns nobody wrote: scheduled, delegated, and error-report turns |
+| `DELEGATION` | `modules` | Starting a background task, and which channels have one running |
+
+Your plugins run after the built-ins, so they can read every key above.
+The Discord connection's key, `DISCORD`, comes from `pi-roundtable/discord`, because its port names discord.js types.
+
+### Replacing a built-in service
+
+A plugin that lists a key in both `provides` and `replaces` takes over that service.
+The host drops the built-in plugin that provided it and sets yours up where that plugin stood.
+The dropped plugin's migrations and setup do not run.
+Your replacement may read what the plugins before that place provide, and nothing after.
+
+```ts
+definePlugin({
+	name: "my-schedules",
+	provides: [SCHEDULES],
+	replaces: [SCHEDULES],
+	setup: ({ services }) => {
+		services.provide(SCHEDULES, myStore);
+		return {};
+	},
+});
+```
+
+The host refuses a replacement that cannot be made whole.
+For example, `BACKGROUND_TURNS` and `DELEGATION` come from the one `modules` plugin, so you replace them together or not at all.
+The guide lists each refusal message with its fix under [Replacing a built-in service](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#replacing-a-built-in-service).
+
+## Addons
+
+Memory, skills, and Discord administration are built-in plugins that the host adds unless the configuration switches them off.
+All three are on by default.
+
+| Addon | Switch in `roundtable.config.ts` | What it adds | When it is off |
+|---|---|---|---|
+| Memory | `memory: false` | The memory table, the `memory_add`, `memory_search` and `memory_remove` tools, and the memory block of every system prompt | No memory tools and no block |
+| Skills | `skills: false` | The skill tables, the skill tools of agent sessions (`skill_link`, `skill_create`, `agent_skills`, and others), and the skills every agent carries | No skill tools and no skills in any session. `agent_create` leaves out its `skills` parameter and refuses a call that passes some |
+| Discord administration | `discord: { admin: false }` | The `discord_*` tools that read and manage the server, for the owner | No `discord_*` tools |
+
+A switched-off addon's tables and rows are never touched, so turning it on again finds them as they were.
+When it is on, `skills` also takes the two directories `skills: { builtinDir, reposDir }`.
+
+A plugin of yours that can work without an addon reads its service with `find`, which is `undefined` while the addon is off.
+A plugin that cannot work without it uses `get`, which fails with a message that names the switch:
+
+```text
+service roundtable.memory is not provided. The memory addon is switched off (config memory: false). Switch it on, or provide the service from a plugin of your own.
+```
+
+Switching an addon off and adding a plugin of yours that provides the same key is equivalent to `replaces`.
+
+For the full text, see [Services](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#services-what-plugins-provide-to-each-other) and [Addons](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#addons-memory-skills-and-discord-administration) in the plugin guide.
+
+{/* Sources: docs/plugins.md:120-303, examples/shared-services.ts, src/core/define-roundtable.ts:160-215, src/core/config/config.ts:53-113, src/core/config/config.ts:279-322, src/core/services.ts:56-67 */}

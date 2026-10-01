@@ -1,0 +1,93 @@
+---
+title: Schedules and background work
+description: Have an agent run a task later or on a repeat, hand research to a background worker, and get a direct message when it matters.
+sidebar:
+  order: 4
+---
+
+An agent normally answers when you write.
+Three things let it work without you in the channel: a schedule, a delegated task, and a direct message to you.
+
+## Schedules
+
+A schedule wakes an agent at a set time with a prompt it wrote for itself, and the agent posts its answer in the channel where the schedule was made.
+Ask for one in that channel:
+
+```text
+Every weekday at 9:00, post a short summary of what changed in the notes channel.
+```
+
+```text
+Remind me in 45 minutes to send the invoice.
+```
+
+```text
+On Mondays and Thursdays at 17:30, ask me what I got done.
+```
+
+### The schedule tools
+
+| Tool | What it does |
+| --- | --- |
+| `schedule_create` | Makes a schedule from a `title`, a `prompt`, and one kind of timing. |
+| `schedule_list` | Lists the channel's schedules with their next run, or one schedule in full with `id`. An agent can read another agent's schedules with `agent`. |
+| `schedule_update` | Changes the title, the prompt, or the timing of one schedule. A run may use it to keep its own prompt current. |
+| `schedule_cancel` | Deletes one schedule. |
+
+Owners and admins can create, change, and cancel schedules. Any speaker can list them.
+An agent can change only its own schedules; to change another's, ask that agent.
+
+The timing is one of these:
+
+| Fields | Runs |
+| --- | --- |
+| `in_minutes` | Once, that many minutes from now. |
+| `at` | Once, at `YYYY-MM-DD HH:MM`. |
+| `time` | Every day at `HH:MM`. Add `every_days` (1 to 365) for every few days, counted from `start_date`, or `weekdays` for chosen days. |
+
+### Limits
+
+- A channel holds up to 20 schedules, and a prompt is up to 8,000 characters.
+- The first run must be within 366 days. A time that has already passed is refused.
+- The scheduler checks for due schedules every 30 seconds.
+- A run that is found more than 12 hours late, for example after the bot was down, is skipped, not made up.
+- A schedule runs with the tier of the person who made it, so someone of a lower tier cannot rewrite it.
+- Archiving an agent cancels its schedules.
+
+### Time zone
+
+Times are in the `timeZone` setting of `roundtable.config.ts`, which is UTC when you set none.
+The tools tell the agent the zone and the current time, and a refusal for a past time names both.
+See [Configure](/configure/settings/).
+
+### See and cancel them yourself
+
+`/roundtable schedule list` shows every channel's schedules.
+`/roundtable schedule cancel` cancels one, with an autocomplete list to pick from.
+Only you can use the command, and the answer is visible only to you.
+
+## Delegated work
+
+An agent can hand a long piece of research to a background worker with `delegate_task`, which takes a `title` and a self-contained `task` of up to 4,000 characters.
+
+- The worker has web search and page reading, and nothing else. It sees only the task.
+- The agent keeps working with you. When the worker reports back, the report arrives as a new turn in that channel, and the agent answers you with it.
+- Where Discord allows it, a thread opens in the channel with the task. It ends with the report, or with the error when the worker fails.
+- A channel can have 3 delegated tasks running at once.
+- A task that runs for 20 minutes is stopped and reported as failed.
+- Running tasks are kept in memory. A restart drops them, and the channel never hears back from them.
+
+The worker uses the model in the `delegation` setting. Without one it uses the agents' model, with the thinking level `medium`.
+The bot needs Create Public Threads for the thread; see [Set up the Discord bot](/start/discord-bot/).
+
+## Direct messages to you
+
+`notify_owner` sends you a direct message on Discord.
+An agent uses it only when you ask to be notified or reminded by direct message, because its normal reply already reaches you in the channel.
+Only your own turns can use it.
+
+```text
+Every Friday at 16:00, check the open tasks and send me the list by direct message.
+```
+
+{/* Sources: src/core/shared/schedule-tools.ts:6-120, src/core/modules/schedules/schedule-tools.ts:18-190, src/core/modules/schedules/schedules.ts:28-95, src/core/modules/schedules/scheduler.ts:15-70, src/core/modules/schedules/recurrence.ts:13-60, src/core/agents/agent-claim.ts:31-40, src/core/builtin/modules.ts:43-60, src/core/discord/schedule-commands.ts:25-160, src/core/agents/team-lifecycle.ts:155-162, src/core/modules/delegation/delegator.ts:20-160, src/core/shared/delegate-tool.ts, src/core/modules/delegation/web-research-worker.ts:15-20, src/core/config/config.ts:290-300, src/core/modules/notify/notify.ts, src/core/discord/discord-surface.ts:327-330, src/core/modules/background/background-turns.ts:36-67, docs/plugins.md:305-318 */}

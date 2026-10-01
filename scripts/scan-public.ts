@@ -12,6 +12,16 @@ export interface Finding {
 /** Per-file allowed name spellings, limited to the name detector only. */
 export type NameAllowlist = Readonly<Record<string, readonly string[]>>;
 
+const allowedNames = (
+	allow: NameAllowlist,
+	file: string,
+): readonly string[] => [
+	...(allow[file] ?? []),
+	...Object.entries(allow).flatMap(([key, names]) =>
+		key.endsWith("/") && file.startsWith(key) ? names : [],
+	),
+];
+
 /** Detector patterns are written in pieces so this file does not itself contain the names it detects. */
 const spell = (...pieces: string[]): string => pieces.join("");
 
@@ -26,8 +36,8 @@ export const PUBLIC_NAME_ALLOWLIST: NameAllowlist = {
 	"site/astro.config.mjs": [OWNER_HANDLE, spell("way", "ne")],
 	"site/public/CNAME": [spell("way", "ne")],
 	"site/public/robots.txt": [spell("way", "ne")],
-	"site/src/content/docs/guides/write-a-plugin.mdx": [OWNER_HANDLE],
-	"site/src/content/docs/zh-tw/guides/write-a-plugin.mdx": [OWNER_HANDLE],
+	// A key ending in "/" covers every file below that directory: documentation pages link to the repository.
+	"site/src/content/docs/": [OWNER_HANDLE],
 	"bun.lock": [spell("type", "safe")],
 	// The guide names its one private consumer.
 	"docs/plugins.md": [spell("Mer", "lin")],
@@ -136,7 +146,7 @@ export function scanTree(
 			])
 				if (
 					match[0] &&
-					!allowNames[file]?.some(
+					!allowedNames(allowNames, file).some(
 						(allowed) => allowed.toLowerCase() === match[0]?.toLowerCase(),
 					)
 				)

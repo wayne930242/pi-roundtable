@@ -67,7 +67,7 @@ A fresh project fails only on the credentials you have not entered yet, and says
 ### `start`
 
 `bunx roundtable start` runs the checks that need no network, stops with the same message `doctor` prints when one fails, and otherwise starts the bot.
-Once it runs, the agents in `agents.ts` have their channels, and `/roundtable help` opens the control panel.
+Once it runs, the agents in `agents.ts` have their channels, and `/roundtable schedule list` shows their schedules.
 On `SIGTERM` or `SIGINT` it finishes running work before it stops.
 
 ## A plugin

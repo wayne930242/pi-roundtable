@@ -1,0 +1,124 @@
+---
+title: Skills and memory
+description: Agents carry skills they can write and share, and remember facts per person. Both are addons you can switch off.
+sidebar:
+  order: 3
+---
+
+Skills and memory are two built-in addons.
+Both are on unless `roundtable.config.ts` turns them off; see [Switch an addon off](#switch-an-addon-off).
+
+## Skills
+
+A skill is a Markdown file, `SKILL.md`, with a name, a description, and a body that says how to do one kind of job.
+The description starts with "Use when" and says only when the skill applies.
+A skill an agent carries is handed to its session as a Pi skill file.
+
+There are three kinds of skill:
+
+- **Built in.** `writing-skills` ships with pi-roundtable, and every agent carries it. It cannot be removed from an agent.
+- **Written by an agent.** An agent creates it with a tool. It is stored under the data directory, and agents can update or delete it.
+- **Linked from a repository.** The skill lives in a repository the host manages. It is read-only here and changes in its repository.
+
+### Ask for a skill
+
+```text
+Write a skill for how we summarize a weekly meeting, and give it to Notes.
+```
+
+```text
+Which skills does Researcher carry?
+```
+
+### The skill tools
+
+The owner and admins can use all of these. Every speaker can use `skill_list`.
+
+| Tool | What it does |
+| --- | --- |
+| `skill_list` | Lists the skills with their kind, description, groups, and the agents that carry them. Filter by `group` or a word in `query`. |
+| `skill_create` | Writes a new skill from a `name`, a `description` of up to 1,024 characters, and a `body` of up to 12,000. The name is permanent: lowercase letters, digits, and hyphens, up to 64. It does not give the skill to anyone. |
+| `skill_update` | Replaces the description or the body of a skill an agent wrote. The agents that carry it read the new version from their next turn. |
+| `skill_delete` | Deletes a skill an agent wrote, and takes it off every agent. |
+| `skill_link` | Registers the skill in a repository folder, or every skill in the folders under it. Name and description come from each file. |
+| `skill_unlink` | Removes a linked skill from the registry and from every agent. The repository is untouched. |
+| `skill_group_set` | Creates or replaces a skill group. |
+| `skill_group_delete` | Deletes a skill group. Its skills stay. |
+| `agent_skills` | Adds and removes the skills an agent carries, from `add` and `remove` lists. |
+
+### Carry skills on an agent
+
+Give skills when you [create the agent](/agents/create-agents/), with the `skills` field, or later with `agent_skills`.
+A change applies from the agent's next turn.
+An unknown skill name refuses the whole call, so nothing changes.
+
+### Skill groups
+
+A skill group is a named list of skills, with a short description of up to 200 characters.
+It only filters `skill_list`.
+Agents carry skills, not groups.
+
+### The `writing-skills` skill
+
+Every agent carries `writing-skills`, and `skill_create` points to it.
+It asks an agent to:
+
+1. Look in the registry first, and extend the skill that already owns the procedure.
+2. Write a description that says only when to use the skill.
+3. Write the body as ordered steps, each with a way to check it is done.
+4. Cut every sentence that would not change what the agent does.
+5. Save it with `skill_create` or `skill_update`, and give it to the agents that do the work with `agent_skills`.
+
+A skill an agent writes is a single file of at most 12,000 characters.
+
+## Memory
+
+Agents remember facts for you, and every agent shares the same memory.
+Each person who talks to the agents has a memory of their own: your agents read and change yours when you speak, and another speaker's memory when they speak.
+One person's memory is not shared with another.
+
+```text
+Remember that I prefer short answers.
+```
+
+```text
+What did I say about the Berlin trip?
+```
+
+### The memory tools
+
+| Tool | What it does |
+| --- | --- |
+| `memory_add` | Stores one fact. The `kind` is `core` (a stable fact about you), `note` (a project, a person, a reference), or `event` (something on a date, as `YYYY-MM-DD`). |
+| `memory_search` | Searches everything remembered, notes and past events included, by a few keywords. |
+| `memory_remove` | Forgets every remembered fact that contains the given text. |
+
+Every speaker can use these tools.
+
+### What the prompt includes
+
+Each turn starts with a memory block in the system prompt: today's date in the configured time zone, the **core facts**, and the **upcoming events**.
+An event is shown until its date passes.
+Notes are not in the block. The agent looks for them with `memory_search` when a request may depend on them.
+
+Keep core facts few and short, because they are shown in every conversation.
+
+## Switch an addon off
+
+```ts
+export default {
+	// ...
+	skills: false,
+	memory: false,
+} satisfies RoundtableConfig;
+```
+
+| Setting | When it is `false` |
+| --- | --- |
+| `skills: false` | No skill tools, and no skills in any session. `agent_create` takes no `skills` field and refuses a call that passes some. The stored skills stay in their tables. |
+| `memory: false` | No memory tools and no memory block in the prompt. The stored memory stays in its table. |
+
+Turning an addon back on finds its data as it was.
+When `skills` is on, it also accepts `{ builtinDir, reposDir }` to change where built-in skills and linked repositories live; see [Configure](/configure/settings/).
+
+{/* Sources: src/core/modules/skills/skill-tools.ts:17-196, src/core/modules/skills/skill-rules.ts:7-11, src/core/modules/skills/skill-listing.ts:60-90, src/core/builtin/skills.ts:20-70, src/core/assets/skills/writing-skills/SKILL.md, src/core/modules/skills/skill-registry.ts:58-65, src/core/modules/skills/skill-registry.ts:124, src/core/define-roundtable.ts:180-195, src/core/config/config.ts:102-119, src/core/modules/memory/owner-memory.ts:12-175, src/core/builtin/stores.ts:14-55, docs/plugins.md:282-294 */}

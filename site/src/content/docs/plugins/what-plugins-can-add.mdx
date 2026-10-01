@@ -1,0 +1,68 @@
+---
+title: What plugins can add
+description: A map of every part a plugin can add to pi-roundtable, with the example that shows each one and the matching section of the full guide.
+sidebar:
+  order: 2
+---
+
+A plugin is an object with a name and a `setup` function.
+`setup` returns the parts the plugin adds.
+Each key in that return value is one part, and a key the contract does not have stops the start and names the closest one.
+This page lists the parts in four groups, so you can find the one you need and follow its link.
+
+Example files live in [`examples/`](https://github.com/wayne930242/pi-roundtable/tree/master/examples).
+Every example has a test next to it that runs without Discord, and the guide embeds each one.
+All links in the tables point to the section of the [full plugin guide](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md).
+
+## The plugin object and the context
+
+| Piece | What it is for | Example | Guide |
+|---|---|---|---|
+| The plugin object | Holds the `name` (lowercase words joined by dashes, unique across plugins) and `setup`. Optional fields sit on the plugin itself, not in what `setup` returns: `migrations`, `providers`, `provides`, `replaces`, `requires` and `preflight`. A plugin must add something, or the start stops. | [`tools.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/tools.ts) | [The plugin object](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#the-plugin-object) |
+| The context | What `setup` receives: a logger that tags every line with your plugin name, the host environment (locale, time zone), the database, the services, and more. Some fields work only after every plugin is set up. | [`shared-services.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/shared-services.ts) | [The context](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#the-context) |
+
+## Things agents use
+
+| Part | Reach for it when | Example | Guide |
+|---|---|---|---|
+| `tools` | You want agents to be able to call something. Each tool names the lowest tier of speaker whose turns may call it. | [`tools.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/tools.ts) | [tools](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#tools-what-agents-can-call) |
+| `holdRules` and a tool's `hold` | A call should wait until the owner approves it in Discord. | [`holds.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/holds.ts) | [holdRules](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#holdrules-and-a-tools-hold-calls-that-wait-for-the-owner) |
+| `prompt` | You want text added after the core's prompt in every agent turn. | [`prompt.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/prompt.ts) | [prompt](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#prompt-text-added-to-every-agent-turn) |
+| `seeds` | You want agents created on the first start. An agent that is already stored is never overwritten. | [`seeds.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/seeds.ts) | [seeds](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#seeds-agents-created-on-the-first-start) |
+| `agentSelection` | Every agent should carry some tools besides its own. | [`selection.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/selection.ts) | [agentSelection](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#agentselection-tools-every-agent-carries) |
+| `piPackages` | Every session should load the Pi extensions of an npm package you installed. | [`packages.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/packages.ts) | [piPackages](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#pipackages-pi-extensions-every-session-loads) |
+| `sessionTools` | `tools` cannot express what you need, for example a tool set that changes while the process runs. This is the raw Pi extension form. | [`session-tools.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/session-tools.ts) | [sessionTools](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#sessiontools-the-raw-form-of-tools) |
+| `toolTiers` | You use `sessionTools` and need to say which tier may use each raw tool. | none | [toolTiers](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#tooltiers-who-may-use-your-raw-session-tools) |
+
+## Things the bot does
+
+| Part | Reach for it when | Example | Guide |
+|---|---|---|---|
+| `events` | You want to hear what the core does: a service finished starting, a turn started or ended, the team changed, shutdown began. | [`events.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/events.ts) | [events](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#events-hear-what-the-core-does) |
+| `services` | You need something with a lifetime, such as a timer, a queue, or a connection. Services start after setup and stop in reverse order. | [`services.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/services.ts) | [services](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#services-long-lived-parts) |
+| `migrations` | Your plugin needs tables of its own. They run before any `setup`. | [`migrations.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/migrations.ts) | [migrations](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#migrations-and-contextdatabase-tables-of-your-own) |
+| `preflight` | A bad setting should stop the start before Discord connects. | [`preflight.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/preflight.ts) | [preflight](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#preflight-refuse-to-start-with-a-bad-setting) |
+| `backgroundTargets` | A schedule or a delegated task should come back as a turn of a kind you define, with its own limits. | [`support-desk.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/support-desk.ts) | [backgroundTargets](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#backgroundtargets-whose-turn-a-schedule-or-delegated-task-is) |
+| `channels` | Your plugin should own the conversations in some channels, instead of the agent server. Most plugins never need this. | [`channels.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/channels.ts) | [channels](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#channels-conversations-of-your-own) |
+| `personas` and `context.turns` | You own a kind of conversation, give it a system prompt, and run its turns without writing the typing, stop and reply pipeline. | [`study-room.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/study-room.ts) | [personas](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#personas-and-contextturns-conversations-of-a-kind-of-your-own) |
+
+## Things around Discord and HTTP
+
+| Part | Reach for it when | Example | Guide |
+|---|---|---|---|
+| Slash commands (`commands.add`) | You want a subcommand under the root command (`/roundtable` by default). You add it from `setup` through the `DISCORD` service. | [`interactions.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/interactions.ts) | [Slash commands](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#slash-commands-commandsadd) |
+| `http` | You want a route on the bot's listener, such as a health check. Anything on it is reachable from the internet, so check a secret in the handler. | [`http.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/http.ts) | [http](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#http-routes-on-the-bots-listener) |
+| `dashboard` | You want extra lines on the dashboard message that the agent server keeps pinned in Discord. | [`dashboard.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/dashboard.ts) | [dashboard](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#dashboard-lines-on-the-dashboard-message) |
+| `surfaces` | You want to connect a chat network other than Discord. A surface reports what people write and posts what conversations answer. | [`fake-surface.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/fake-surface.ts) | [surfaces](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#surfaces-a-chat-network-of-your-own) |
+
+## Replacing parts of the core
+
+| Part | Reach for it when | Example | Guide |
+|---|---|---|---|
+| `providers` | You want to replace a part the core runs on. There are three slots: `judge`, `images` and `runtime`, and one plugin may fill each. | [`providers.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/providers.ts) | [providers](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#providers-replace-a-part-the-core-runs-on) |
+| The `runtime` slot | You want a runtime other than Pi to run every conversation. | [`echo-runtime.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/echo-runtime.ts) | [The runtime slot](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#the-runtime-slot-replace-pi) |
+| `provides` and `replaces` | You want to take over a built-in service, such as the schedule store. | [`shared-services.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/shared-services.ts) | [Replacing a built-in service](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#replacing-a-built-in-service) |
+
+See [Services and addons](/plugins/services-and-addons/) for `provides`, `requires` and `replaces`, and [Examples](/plugins/examples/) for every example file.
+
+{/* Sources: docs/plugins.md:9-35, docs/plugins.md:66-110, docs/plugins.md:316-1710, examples/*.ts */}

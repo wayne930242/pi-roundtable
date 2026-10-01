@@ -1,0 +1,107 @@
+---
+title: Test a plugin
+description: Use testPlugin to run one plugin without Discord or PostgreSQL, and testHost to boot the built-in plugins and yours over a test database.
+sidebar:
+  order: 4
+---
+
+`pi-roundtable/testing` has two harnesses.
+Pick by what the test needs.
+
+| Harness | What it runs | Needs |
+|---|---|---|
+| `testPlugin(plugin, options?)` | One plugin, set up alone against a fake context, with its services started | Nothing. No Discord, no PostgreSQL unless you pass `{ database }` |
+| `testHost(options?)` | The built-in plugins and yours together, as `defineRoundtable` assembles them, with Discord and the runtime standing in | A test database, set in `ROUNDTABLE_TEST_DATABASE_URL` |
+
+`testPlugin` is the default.
+Reach for `testHost` when the test depends on a built-in plugin, such as the agent server or the stores, or on the order the host sets things up in.
+
+## testPlugin
+
+This is the test from [Write a plugin](/plugins/first-plugin/):
+
+```ts
+import { expect, test } from "bun:test";
+import { testPlugin } from "pi-roundtable/testing";
+import { hello } from "./hello.ts";
+
+test("hello greets", async () => {
+	const harness = await testPlugin(hello);
+	expect(await harness.runTool("hello_greet", { who: "Ada" })).toBe("Hello, Ada!");
+	await harness.stop();
+});
+```
+
+The harness applies the same checks as the host, so a plugin that adds nothing, an unknown part, a clash of names, or a tool with no tier fails your test with the message the start would print.
+
+It returns an object with these fields:
+
+| Field | What it is |
+|---|---|
+| `contribution` | What the plugin added, as the host would collect it |
+| `tools`, `tiers` | The tool names, and the table of what tier each needs |
+| `holds` | The plugin's hold rules chained as the host links them. It returns the description of a call that must be approved first, or `undefined` |
+| `runTool(name, args, { speaker, channel }?)` | Runs a tool the way an agent's turn would, and returns the text the model reads |
+| `events` | The events the plugin reported through `context.events`, and those of `context.turns` |
+| `conversations`, `turns`, `surfaces` | What the plugin sees as those context fields, so a test can drive its claims |
+| `runtime` | The runtime a `runtime` provider built; `undefined` when the plugin fills no such slot |
+| `stop()` | Delivers `shutdown`, stops injected surfaces, and stops the services in reverse |
+
+It does not run migrations, does not deliver the core's events, and does not build a prompt.
+Call the handlers and `build` functions yourself, as the examples [`events.test.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/events.test.ts) and [`prompt.test.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/prompt.test.ts) do.
+
+### Options
+
+| Option | What it gives the plugin |
+|---|---|
+| `env` | A partial host environment for `context.env`. English and UTC by default |
+| `owner` | The owner the runtime's dependencies and the agent server's claim know |
+| `database` | A Bun `SQL` for `context.database()`. Without one it throws `no database is configured` |
+| `providers` | Provider slots filled as if another plugin filled them |
+| `surfaces` | Chat surfaces besides the plugin's own, such as the fake surface in [`fake-surface.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/fake-surface.ts) |
+| `services` | What the plugin reads from `context.services`: one `servicePair(KEY, { ... })` for each service, with the members you give it |
+| `conversations` | Methods that replace the router's, such as `stop` |
+| `turns` | A replacement for the default turn runner |
+| `forwardJoinMs` | How long the router holds a bare forward for the message that follows it |
+
+Reading a member of a service you did not give throws a `PluginError` that names the option to add.
+A plugin under test that lists a key in `requires` is refused unless `services` gives it.
+
+### Fixtures
+
+Importing `pi-roundtable/testing` works with `CI=true` and no database URL.
+A few helpers cover the rest:
+
+- `describeDb` is Bun's `describe` when `ROUNDTABLE_TEST_DATABASE_URL` is set, and `describe.skip` otherwise. Use it to gate a database suite.
+- `OWNER_SPEAKER`, `fakeThreads`, and `silentLogger` are neutral stand-ins for owner turns, dispatch threads, and logging.
+- `recordingLogger()` keeps what it is asked to write, for a test of what your code logs.
+- `partial<Port>({ ... })` stands in for a port your code takes as an argument. Reading a member you did not give throws an error that names it.
+- `fakeDiscord()` is the `DISCORD` service for a plugin that adds slash commands. `discord.added()` lists what the plugin added, and `discord.compose()` returns the tree Discord would get.
+- `useTestLocale()` resets the process-wide locale to English and the time zone to UTC.
+
+The one example whose test needs PostgreSQL is [`migrations.test.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/migrations.test.ts).
+It is skipped unless the variable is set, so point it at a database you can write to and lose:
+
+```sh
+ROUNDTABLE_TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5432/plugin_test bun test
+```
+
+## testHost
+
+`testHost` boots the whole host over the test database with Discord and the runtime standing in.
+Gate the suite with `describeDb`.
+
+| Option | What it gives the host |
+|---|---|
+| `config` | Keys of `RoundtableConfig` laid over a test configuration, such as `skills: false` |
+| `plugins` | Your plugins, placed after the built-in ones |
+| `runtime` | The runtime every turn runs on. By default one that answers an empty string and builds no Pi session |
+| `discord` | What the stand-in Discord hands out: `agentChannels(guildId)` and `ownerChannel()` |
+
+It returns `context` (the context of a probe plugin set up after every other), `conversations`, `commands` (what was added, and the composed slash-command tree), `sessionTools(scope?)`, `sessionContext(scope?)`, and `stop()`.
+Call `stop()` when the test ends.
+
+Run every test with `bun test`, and the types with `bun run typecheck`.
+The full reference is [Testing a plugin](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#testing-a-plugin) in the guide.
+
+{/* Sources: docs/plugins.md:1725-1838, src/testing.ts:65-260, src/core/testing/test-host.ts:35-80, src/core/testing/database.ts:9-14, templates/plugin/plugin.ts, site/src/content/docs/plugins/first-plugin.mdx */}

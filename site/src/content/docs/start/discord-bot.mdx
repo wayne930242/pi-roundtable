@@ -1,0 +1,85 @@
+---
+title: Set up the Discord bot
+description: Create the Discord application and bot, turn on the Message Content intent, invite the bot with the permissions it needs, and copy the ids for .env.
+sidebar:
+  order: 2
+---
+
+import { Steps, Aside } from "@astrojs/starlight/components";
+
+The bot is a normal Discord application with a bot user.
+This page takes you from an empty developer portal to the values `.env` asks for.
+Run `bunx roundtable doctor` at the end; it checks everything below and says what is missing.
+
+## Create the application and the bot
+
+<Steps>
+
+1. Open the [Discord developer portal](https://discord.com/developers/applications) and create a new application.
+
+2. Open the **Bot** page and copy the token. This is `DISCORD_TOKEN` in `.env`.
+   To replace a token that was rejected, reset it on the same page and put the new one in `.env`.
+
+3. On the same page, turn on **Message Content Intent** and save.
+   Without it the agents cannot read what you write in the channels.
+   `doctor` fails with "the Message Content intent is off" until it is on.
+
+</Steps>
+
+## Invite the bot to your server
+
+The invitation asks for the `bot` and `applications.commands` scopes and these permissions:
+
+| Permission | What the bot uses it for |
+| --- | --- |
+| View Channels | See the channel |
+| Send Messages | Answer in it |
+| Send Messages in Threads | Answer in threads |
+| Read Message History | Read what was said before |
+| Embed Links | Post cards |
+| Attach Files | Post pictures and files |
+| Pin Messages | Pin the status message |
+| Create Public Threads | Open threads for background reports |
+| Manage Channels | Create the agents' channels |
+| Manage Webhooks | Let each agent speak under its own name |
+
+The permission integer for exactly this list is `2252109588319248`.
+Open an address of this form in a browser and pick your server; `<bot id>` is the bot's user id:
+
+```text
+https://discord.com/oauth2/authorize?client_id=<bot id>&scope=bot+applications.commands&permissions=2252109588319248
+```
+
+You do not have to build the link by hand.
+When the bot is not in your server, `bunx roundtable doctor` prints this link, filled in, as the fix.
+
+<Aside type="note">
+`doctor` checks these permissions in the entry channel, after the server's roles and the channel's own overrides.
+A channel override that denies one of them counts as missing, even when the role grants it.
+A bot with the Administrator permission passes the check.
+</Aside>
+
+## Copy the ids
+
+Turn on Developer Mode in Discord, then right-click to copy ids.
+
+| `.env` variable | Where it comes from |
+| --- | --- |
+| `DISCORD_GUILD_ID` | Right-click the server and copy its id |
+| `DISCORD_ENTRY_CHANNEL_ID` | Right-click the channel you will talk to the coordinator in and copy its id |
+| `OWNER_ID` | Right-click your own name and choose Copy User ID |
+| `OWNER_NAME` | The name the agents call you |
+
+The channel must belong to that server, and the bot must be able to see it.
+`doctor` names the variable to fix when either is wrong.
+
+## Check it
+
+```sh
+bunx roundtable doctor
+```
+
+The Discord checks run in this order: the token is accepted, the bot is in the server, the Message Content intent is on, and the bot has every permission in the entry channel.
+Continue with [Your first conversation](/start/first-conversation/).
+
+{/* Sources: src/cli/discord-api.ts:7-27, src/cli/checks/discord.ts:12-13, src/cli/checks/discord.ts:70-79, src/cli/checks/discord.ts:101-176, src/cli/checks/discord.test.ts:57-70, templates/.env.example:3-13, src/core/discord/discord-surface.ts:187 */}

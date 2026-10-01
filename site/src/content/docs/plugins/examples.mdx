@@ -1,0 +1,39 @@
+---
+title: Examples
+description: Every example plugin in the repository, with one line on what it shows and a link to the file.
+sidebar:
+  order: 6
+---
+
+The repository keeps small, working plugins in [`examples/`](https://github.com/wayne930242/pi-roundtable/tree/master/examples).
+Each has a test next to it that runs it without Discord or PostgreSQL, except `migrations.ts`, whose test needs a database.
+The [plugin guide](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md) embeds each file, and the repository's test suite fails when a block in the guide differs from its file.
+
+| File | What it shows |
+|---|---|
+| [`tools.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/tools.ts) | A tool agents can call, with a minimum tier and a refusal the model can correct |
+| [`holds.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/holds.ts) | A tool's `hold`, and a hold rule that sees every tool call, so a call waits for the owner's approval |
+| [`prompt.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/prompt.ts) | A prompt section added after the core's prompt in every agent turn |
+| [`seeds.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/seeds.ts) | An agent created on the first start, never overwritten afterwards |
+| [`events.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/events.ts) | Handlers for turn start, turn end, team change, and shutdown |
+| [`services.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/services.ts) | A long-lived timer service with `start`, `stop`, and `busy` |
+| [`shared-services.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/shared-services.ts) | A service one plugin provides and others read with `get`, `find` and `lazy`, and a plugin that replaces it |
+| [`migrations.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/migrations.ts) | Tables of the plugin's own, created by an idempotent migration |
+| [`providers.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/providers.ts) | A plugin that fills the `images` provider slot |
+| [`echo-runtime.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/echo-runtime.ts) | A replacement for the Pi runtime, filling the `runtime` slot |
+| [`preflight.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/preflight.ts) | A check that refuses to start when a setting is empty |
+| [`interactions.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/interactions.ts) | A slash subcommand added with `commands.add` |
+| [`http.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/http.ts) | A route on the public listener |
+| [`dashboard.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/dashboard.ts) | Extra lines on the dashboard message |
+| [`selection.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/selection.ts) | Tools every agent carries besides its own |
+| [`packages.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/packages.ts) | A Pi package whose extensions every session loads |
+| [`session-tools.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/session-tools.ts) | The raw Pi extension form of a tool |
+| [`channels.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/channels.ts) | A channel claim that owns conversations in some channels |
+| [`study-room.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/study-room.ts) | A conversation kind of its own: a persona, a claim, and `context.turns` |
+| [`support-desk.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/support-desk.ts) | A background target that sets what may be scheduled or delegated |
+| [`fake-surface.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/fake-surface.ts) | A chat surface for an in-memory chat, and the plugin that contributes it |
+
+To see what each part is for, start with [What plugins can add](/plugins/what-plugins-can-add/).
+To run tests like the ones beside these files, see [Test a plugin](/plugins/testing/).
+
+{/* Sources: examples/*.ts (non-test files), examples/guide.test.ts, docs/plugins.md:5-7 */}

@@ -1,0 +1,140 @@
+---
+title: Errors and fixes
+description: The startup and doctor failures you are most likely to meet, grouped by cause, with the message as the code prints it and the fix.
+sidebar:
+  order: 4
+---
+
+`roundtable doctor` prints each failed check as a `✗` line with the problem, and the fix on the indented lines under it.
+`roundtable start` stops with the same lines when an offline check fails.
+This page quotes the messages as the code writes them, with `<...>` where your names, ids, or values go.
+Each table pairs a message with what to do about it.
+
+For the commands and the order of the checks, see [CLI](/reference/cli/).
+
+## Command line
+
+| Message | Fix |
+| --- | --- |
+| `unknown command "<name>"`, followed by the usage text | Use `init`, `doctor`, `start`, or `add plugin`. |
+| `init takes at most one directory` | Pass one directory, or none. |
+| `usage: roundtable add plugin <name>` | Give `add` the word `plugin` and exactly one name. |
+| `doctor takes no arguments` or `start takes no arguments` | Drop the argument. Only `doctor` takes a flag, `--reachable`. |
+
+## Bun
+
+| Message | Fix |
+| --- | --- |
+| `Bun is not installed.` | Install Bun from https://bun.sh/docs/installation and run the command again. |
+| `Bun <version> is older than the <range> this package needs.` | Upgrade with `bun upgrade`, then run the command again. |
+
+## `init` and `add plugin` refusals
+
+| Message | Fix |
+| --- | --- |
+| `Files init would create already exist in <dir>:` and a list of paths, ending `Remove them or run init in an empty directory; nothing was written.` | Run `init` in an empty directory. |
+| `"<name>" is not a plugin name. Use lowercase words joined by dashes, such as my-notes.` | Rename the plugin. |
+| ``roundtable.config.ts is not in <dir>. Run this in the project directory, or create the project with `roundtable init`.`` | Change to the project directory. |
+| `<paths> already exists. Choose another name or remove the file.` | Pick another name, or remove the file. |
+| `roundtable.config.ts does not parse (<reason>). Fix it, or add the plugin to its list by hand.` | Fix the syntax error, or edit the config yourself. |
+| ``roundtable.config.ts: cannot find the plugin list. Expected `export default { ..., plugins: [...] }`; add `import { <ident> } from "./plugins/<name>.ts"` and list <ident> in plugins by hand.`` | Add the import and the list entry as the message says. |
+| `roundtable.config.ts: the name <ident> is already used. Import the plugin by hand under another name.` | Import it under another name. |
+
+## Environment
+
+| Message | Fix |
+| --- | --- |
+| `no value for <VARIABLES>.` | Copy `.env.example` to `.env` and fill the variables in. If `.env` exists, the fix says `Fill them in .env`. See [Environment variables](/configure/environment/). |
+
+## Configuration
+
+A configuration failure shows the message below and then the fix `Fix the key in roundtable.config.ts; a value it reads from .env is set there (see .env.example).`
+Later checks that need the configuration are skipped with `the configuration is not valid yet`.
+
+| Message | Fix |
+| --- | --- |
+| `roundtable.config.ts could not be loaded: <reason>` | Fix the error in `roundtable.config.ts`. |
+| ``roundtable.config.ts has no default export. Write `export default { ... } satisfies RoundtableConfig`.`` | Export the settings object by default. |
+| `config <key>: unknown key. Did you mean "<closest>"? The keys here are ...` | Fix the spelling. |
+| `config <key>: required, expected <kind>. Add it to roundtable.config.ts.` | Add the setting, or fill in the variable it reads in `.env`. |
+| `config <key>: expected <kind>, got <value>. Fix the value in roundtable.config.ts.` | Give the value the kind named. A blank variable shows as `got ""`. |
+| `config model: expected <provider>/<id>, got "<value>". Write it like anthropic/claude-sonnet-5-5.` | Write the model as `<provider>/<id>`. The same message exists for `judge.model` and `delegation.model`. See [Models](/configure/models/). |
+| `config locale: expected a locale, en or zh-TW, got "<value>". Fix the value in roundtable.config.ts.` | Use `en` or `zh-TW`. |
+| `config <key>: cannot read <path>: <reason>. Create the file or fix the path.` | Create the prompt file, or fix the path in `prompts`. `<key>` is `prompts.shared` or `prompts.guest`. |
+| `config <key>: <path> is empty. Write the prompt in it.` | Write the prompt in the file. |
+| `Invalid time zone: <value>` | Use an IANA name such as `Europe/Berlin`. `doctor` does not catch this; `start` stops with it. See [Language and time](/configure/language-and-time/). |
+
+## PostgreSQL
+
+| Message | Fix |
+| --- | --- |
+| `cannot use <host:port/database>: <reason>` | Start PostgreSQL (`docker compose up -d` in the project) or correct `DATABASE_URL` in `.env`. The message leaves out the password. |
+| `migration <migration> failed: <reason>` | Fix the migration, or restore the database to the state it expects. |
+
+## Discord
+
+| Message | Fix |
+| --- | --- |
+| `Discord rejected the bot token.` | Reset the token under Bot in the developer portal and put the new one in `.env` as `DISCORD_TOKEN`. |
+| `cannot reach discord.com: <reason>` | Check the network connection and try again. |
+| `Discord answered <status> when asked who the token belongs to.` | Try again in a moment. If it persists, check https://discordstatus.com. |
+| `the bot is not in the guild <id>, or the guild id is wrong.` | Check `DISCORD_GUILD_ID`, then invite the bot with the link the fix line prints. |
+| `the Message Content intent is off.` | Turn on Message Content Intent under Bot in the developer portal, save, and run the check again. |
+| `the bot cannot see a channel <id>.` | Check `DISCORD_ENTRY_CHANNEL_ID`, and that the bot's role may view the channel. |
+| `the channel <id> belongs to another guild.` | Use a channel of the configured guild for `DISCORD_ENTRY_CHANNEL_ID`. |
+| `in the entry channel the bot lacks <permissions>.` | Grant them to the bot's role or in the channel's permissions. The fix line says what each one is for. |
+| `Discord answered <status> when asked for the guild <id>.`, `... for the channel <id>.`, or `... for the application.` | Try again in a moment. |
+
+The bot's setup is walked through in [Set up the Discord bot](/start/discord-bot/).
+The Discord checks are skipped, with `the token check failed`, when the token is wrong.
+
+## Model login
+
+| Message | Fix |
+| --- | --- |
+| `the model "<model>" is not written <provider>/<id>.` | Write it like `anthropic/claude-sonnet-5-5` in `MODEL` in `.env`. |
+| `no login for <provider>, the provider of <model>.` | Set the provider's API key in `.env` (`ANTHROPIC_API_KEY` for `anthropic`, `OPENAI_API_KEY` for `openai`), or sign in with Pi so `<agentDir>/auth.json` holds it. |
+
+When the bot runs, a model that its host cannot run produces `<agent>'s model <model> is not available on this host`.
+Change the agent's model with `agent_update`, or log in to the provider.
+A judge model that is not available produces `the judge's model <provider>/<id> is not available; log in to its provider or change judge.model`.
+
+## Public URL
+
+| Message | Fix |
+| --- | --- |
+| `"<value>" is not a URL.` | Write the full address, such as `https://bot.example.com`, in `PUBLIC_URL` in `.env`. |
+| `<value> does not start with http:// or https://.` | Discord fetches the avatars from this address; use an http(s) URL. |
+| `<value> did not answer: <reason>` | Only `doctor --reachable` prints this. Start the bot (`roundtable start`) and check the tunnel or proxy that publishes the address. |
+
+## Plugins
+
+A mistake in a plugin stops the start, before Discord connects, with a message of the form `plugin <name>: <what>. <fix>.`
+`roundtable doctor` prints the same messages.
+
+| Message | Fix |
+| --- | --- |
+| `two plugins are named <name>.` | Rename yours. The built-in plugins use `stores`, `discord`, `modules`, `agent-server`, `seeds`, and `schedules`. |
+| `plugin "<name>": the name must be lowercase words joined by dashes, such as my-notes. Rename the plugin.` | Rename it in `definePlugin`. |
+| `plugin <name>: setup is missing. Give the function that returns what the plugin adds.` | Add `setup`. |
+| `plugin <name> adds nothing. Give it a part (tools, services, channels, and so on), a migration, or a provider, or remove it.` | Return a part from `setup`, or remove the plugin from `roundtable.config.ts`. |
+| `plugin <name>: setup must return an object of the parts it adds; return {} to add none.` | Return an object, not `undefined`. |
+| `plugin <name>: setup returned an unknown part "<key>". Did you mean "<closest>"? The parts are ...` | Fix the key. |
+| `tool "<name>": the name must be lowercase words joined by underscores, such as note_add. Rename the tool.` | Rename the tool. |
+| `tool <name>: the agents already have a tool of this name. Rename the tool.` | Do not use `bash`, `read`, `edit`, or `write`. |
+| `tool <name>: minTier must be one of member, admin, owner; got <value>. Set the lowest tier that may use it.` | Give `minTier` one of the three tiers. |
+| `plugin <b>: tool <name> is already defined by plugin <a>. Rename one of the two tools.` | Rename one tool. |
+| `plugin <name>: setup failed: <what the error said>. Fix the error, or remove the plugin.` | Fix the error the message quotes. |
+| `plugin <name>: migration <migration> failed: <what the database said>. Fix the migration or restore the database, then start again.` | Fix the migration or restore the database, then start again. |
+| ``the delegation worker loads pi-web-access, which this project does not have installed. It is a peer dependency of pi-roundtable: run `bun add pi-web-access@0.35.0` (or your own build of it, which the worker then uses too).`` | Install `pi-web-access`. The built-in `modules` plugin reports it as `plugin modules: setup failed: ...`. |
+
+The plugin guide lists the rest, such as service clashes and the parts that only work after setup.
+See [Startup and project setup](/plugins/startup-and-project-setup/) and [What plugins can add](/plugins/what-plugins-can-add/).
+
+## When a check itself breaks
+
+| Message | Fix |
+| --- | --- |
+| `the check itself failed: <reason>` | Report it as a bug in `roundtable doctor`. A failing check never hides the ones after it. |
+
+{/* Sources: src/cli/cli.ts:78-166, src/cli/init.ts:50-72, src/cli/add-plugin.ts:30-65, src/cli/config-edit.ts:44-48, src/cli/config-edit.ts:174-185, src/cli/project.ts:30-45, src/cli/project.ts:84-123, src/cli/report.ts:40-55, src/cli/checks/bun.ts, src/cli/checks/environment.ts, src/cli/checks/configuration.ts, src/cli/checks/database.ts, src/cli/checks/discord.ts, src/cli/checks/model.ts, src/cli/checks/public-url.ts, src/core/config/schema.ts:14-20, src/core/config/schema.ts:156-200, src/core/config/config.ts:218-226, src/core/define-roundtable.ts:60-90, src/core/time.ts:3-11, src/core/errors.ts, src/core/define.ts:70-90, src/core/define.ts:140-155, src/core/registry/contributions.ts:112-120, src/core/registry/contributions.ts:268-285, src/core/registry/contributions.ts:325-330, src/core/host.ts:365-380, src/core/tool-tiers.ts:48-56, src/core/modules/delegation/web-research-worker.ts:24-34, src/core/runtime/pi-agent-runtime.ts:455-466, docs/plugins.md:1877-1982 */}

@@ -1,0 +1,68 @@
+---
+title: Language and time
+description: Set the language of the bot's Discord text with locale, and the time zone for schedules and time stamps with timeZone.
+sidebar:
+  order: 4
+---
+
+Two settings in `roundtable.config.ts` decide how the bot speaks and what time it means:
+
+```ts
+export default {
+	// ...
+	locale: "zh-TW",
+	timeZone: "Europe/Berlin",
+} satisfies RoundtableConfig;
+```
+
+| Key | Values | Default |
+| --- | --- | --- |
+| `locale` | `"en"` or `"zh-TW"` | `"en"` |
+| `timeZone` | An IANA time zone name, such as `Europe/Berlin` or `Asia/Taipei` | `"UTC"` |
+
+The host applies both once, when it starts, and they hold for the whole process.
+Change them, then restart the bot.
+
+## `locale`
+
+`locale` chooses the message catalog for the text the bot shows in Discord.
+Both catalogs have the same keys.
+Among other things it covers:
+
+- The approval and question cards, with their buttons and footers.
+- The stop button and the note on a long turn.
+- The `/roundtable` command's description, its refusal for non-owners, and the schedule panel.
+- The self-updating status message and the notices a conversation posts, such as a failed reply or a stopped turn.
+- How a time zone is named in tool descriptions: the English catalog uses the IANA name (`Europe/Berlin`), and the `zh-TW` catalog uses the place name (`Berlin`).
+
+A value other than `en` or `zh-TW` is an error:
+
+```text
+config locale: expected a locale, en or zh-TW, got "<value>". Fix the value in roundtable.config.ts.
+```
+
+What `locale` does not change:
+
+- The audit-log reasons and the refusals of the Discord administration tools read as English in both locales.
+- The text the core adds to the agents' prompts is English.
+- Your prompts, your agents, and your plugins' text are yours to write in any language.
+
+## `timeZone`
+
+`timeZone` is the zone the bot uses for anything with a clock time.
+
+- A schedule's one-off time (`"YYYY-MM-DD HH:MM"`) and its repeating time of day (`"HH:MM"`) are in this zone, and the schedule tools say so in their descriptions.
+- Time stamps in schedule messages and lists, and in the output of `channel_read`, use it.
+- "Today", for the upcoming events that go into each speaker's memory block, is the date in this zone.
+
+The name is checked when the bot starts, not by the configuration check.
+`roundtable doctor` accepts any non-empty string.
+A zone the runtime does not recognise stops `roundtable start` once the checks have passed:
+
+```text
+Invalid time zone: <value>
+```
+
+For schedules in practice, see [Schedules and background work](/agents/schedules-and-background/).
+
+{/* Sources: src/core/config/config.ts:71-75, src/core/config/config.ts:140-147, src/core/config/config.ts:228-232, src/core/host.ts:40-60, src/core/host.ts:259-275, src/core/time.ts:1-17, src/core/i18n/index.ts:1-68, src/core/i18n/time-zones.ts:1-27, src/core/i18n/owner.ts:1-41, src/core/i18n/cards.ts:1-40, src/core/i18n/dashboard.ts:1-30, src/core/i18n/conversation.ts:1-30, src/core/i18n/discord.ts:1-23, src/core/agents/agent-prompt.ts:1-60, src/core/modules/schedules/schedule-tools.ts:75-165, src/core/modules/memory/owner-memory.ts:15-40, src/core/agents/agent-tools.ts:356, docs/plugins.md:1983-1987 */}

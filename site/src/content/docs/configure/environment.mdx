@@ -1,0 +1,77 @@
+---
+title: Environment variables
+description: The variables in .env.example, where each value comes from, which are required, and how Bun loads the file.
+sidebar:
+  order: 2
+---
+
+`roundtable init` writes a `.env.example` next to `roundtable.config.ts`.
+Copy it to `.env`, fill it in, and the config file reads the values from the process environment.
+
+```sh
+cp .env.example .env
+```
+
+Bun loads `.env` by itself, so there is no `dotenv` step.
+Run `roundtable` commands from the project directory, because the config file is looked up there as well.
+The `.gitignore` that `init` writes lists `.env`, so the file stays out of Git.
+
+## The variables
+
+| Variable | Where the value comes from | Feeds |
+| --- | --- | --- |
+| `DISCORD_TOKEN` | The Bot page of your application at the Discord developer portal. | `discord.token` |
+| `DISCORD_GUILD_ID` | Turn on Developer Mode in Discord, then right-click the server and copy its id. | `discord.guild` |
+| `DISCORD_ENTRY_CHANNEL_ID` | The same way: right-click the channel the coordinator should live in and copy its id. | `discord.entryChannel` |
+| `OWNER_ID` | You, the one owner who can change everything: right-click your name and choose Copy User ID. | `owner.id` |
+| `OWNER_NAME` | Your name, as the agents should use it. | `owner.name` |
+| `DATABASE_URL` | PostgreSQL. The default in the file matches the `docker-compose.yml` that `init` writes: `postgres://roundtable:roundtable@localhost:5432/roundtable`. | `database.url` |
+| `MODEL` | The agents' model, written `<provider>/<id>`. The file suggests `anthropic/claude-sonnet-5-5`. | `model` |
+| `PUBLIC_URL` | The address that reaches this process from the internet. It serves the agents' avatars. | `http.publicUrl` |
+| `ANTHROPIC_API_KEY` | The provider's API key. Commented out in the file; see below. | Read by the model login, not by the config file. |
+
+The first eight are set in `roundtable.config.ts` through its `env("NAME")` helper.
+You can read more variables the same way in that file: it is ordinary TypeScript.
+
+For the Discord values step by step, see [Set up the Discord bot](/start/discord-bot/).
+
+## Which ones are required
+
+`roundtable doctor` and `roundtable start` treat every uncommented `NAME=` line in `.env.example` as required.
+A variable whose value is missing or blank fails the environment check:
+
+```text
+✗ environment: no value for DISCORD_TOKEN, DISCORD_GUILD_ID, DISCORD_ENTRY_CHANNEL_ID, OWNER_ID, OWNER_NAME, DATABASE_URL, MODEL, PUBLIC_URL.
+    Copy .env.example to .env and fill them in; .env.example says where each one comes from.
+```
+
+If `.env` already exists, the fix line says `Fill them in .env` instead of the copy step.
+If the project has no `.env.example`, the check is skipped.
+
+`ANTHROPIC_API_KEY` is commented out, so it is optional.
+Leave it out when you log in with Pi instead.
+Both ways are explained under [Models](/configure/models/#model-login).
+
+If you add a variable of your own to `.env.example`, `doctor` starts requiring it too.
+Comment it out with `#` to make it optional.
+
+## What happens with an empty value
+
+The config file turns an unset variable into an empty string, and every required setting must be a non-empty string.
+So a value left blank in `.env` is also caught when the configuration is checked:
+
+```text
+config owner.id: expected a non-empty string, got "". Fix the value in roundtable.config.ts.
+```
+
+## The public address
+
+`PUBLIC_URL` must be an `http://` or `https://` address.
+`doctor` checks that it is well formed.
+With `--reachable` it also requests the address, which only answers while the bot is running.
+See [CLI](/reference/cli/) for the flag, and [Errors](/reference/errors/) for the messages.
+
+The process listens on `http.port`, which is `3000` unless you change it.
+The address in `PUBLIC_URL` has to lead there, for example through a tunnel.
+
+{/* Sources: templates/.env.example:1-22, templates/roundtable.config.ts:1-24, templates/docker-compose.yml:1-16, templates/_gitignore:1-3, src/cli/checks/environment.ts:1-27, src/cli/checks/model.ts:1-28, src/cli/checks/public-url.ts:1-40, src/cli/cli.ts:112-124, src/core/config/schema.ts:24-33, src/core/config/config.ts:227-233, README.md:34-48 */}

@@ -67,7 +67,7 @@ Bun 會自行載入 `.env`，`.gitignore` 也已讓它不進 Git。
 ### `start`
 
 `bunx roundtable start` 先執行不需要網路的檢查，其中任何一項失敗就停下來，並印出與 `doctor` 相同的訊息；全部通過則啟動 bot。
-啟動後，`agents.ts` 裡的智慧體都有了自己的頻道，`/roundtable help` 會開啟控制面板。
+啟動後，`agents.ts` 裡的智慧體都有了自己的頻道，`/roundtable schedule list` 可以列出它們的排程。
 收到 `SIGTERM` 或 `SIGINT` 時，它會先讓進行中的工作完成再停止。
 
 ## 外掛

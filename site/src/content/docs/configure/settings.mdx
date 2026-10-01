@@ -1,51 +1,141 @@
 ---
-title: Configure
-description: The settings in roundtable.config.ts and the roundtable commands.
+title: Settings overview
+description: Every key of roundtable.config.ts grouped by purpose, with its type, its default, and what it does.
 sidebar:
   order: 1
 ---
 
-## Settings
-
 `roundtable.config.ts` holds the settings and the list of plugins.
-An unknown key is an error that names the closest known one.
+It exports one object with `export default { ... } satisfies RoundtableConfig`.
+A key that is not on this page is an error that names the closest known key:
 
-The language of what the bot shows in Discord is the `locale` setting: `en` by default, or `zh-TW`.
-The `timeZone` setting is the zone schedules and time stamps use; it defaults to UTC.
+```text
+config <key>: unknown key. Did you mean "<closest>"? The keys here are ...
+```
+
+A required key that is missing, or a value of the wrong kind, stops `roundtable doctor` and `roundtable start` and names the key.
+Required keys are marked below; each one is a non-empty string.
+
+## The file `init` writes
+
+The project that `roundtable init` creates reads its credentials and ids from `.env` through a small `env` helper, so nothing secret sits in this file.
+See [Environment variables](/configure/environment/) for where each value comes from.
 
 ```ts
+import type { RoundtableConfig } from "pi-roundtable";
+import { agents } from "./agents.ts";
+import { hello } from "./plugins/hello.ts";
+
+// Credentials and ids come from .env, which Bun loads on its own; nothing secret belongs in this file.
+const env = (name: string): string => process.env[name] ?? "";
+
 export default {
-	// ...
-	locale: "zh-TW",
-	timeZone: "Europe/Berlin",
+	name: "Roundtable",
+	owner: { id: env("OWNER_ID"), name: env("OWNER_NAME") },
+	discord: {
+		token: env("DISCORD_TOKEN"),
+		guild: env("DISCORD_GUILD_ID"),
+		entryChannel: env("DISCORD_ENTRY_CHANNEL_ID"),
+	},
+	database: { url: env("DATABASE_URL") },
+	// Paths are relative to the project directory, where the roundtable command runs.
+	dataDir: "./data",
+	model: env("MODEL"),
+	http: { publicUrl: env("PUBLIC_URL") },
+	prompts: { shared: "./persona/shared.md" },
+	agents,
 	plugins: [hello],
 } satisfies RoundtableConfig;
 ```
 
-## Agents
+## Identity
 
-`agents.ts` lists the first team.
-An agent that is already stored is never overwritten, so edit agents in Discord afterwards.
+| Key | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `name` | string | `"Roundtable"` | The assistant's display name in the text the bot shows. |
+| `owner.id` | string, required | none | The Discord user id of the one owner. |
+| `owner.name` | string, required | none | The owner's name, as prompts and refusals use it. |
+| `owner.pronouns` | `"he"`, `"she"`, or `"they"` | `"they"` | How prompts refer back to the owner. |
 
-```ts
-import type { AgentSeed } from "pi-roundtable";
+## Discord
 
-export const agents: AgentSeed[] = [
-	{
-		name: "guide",
-		displayName: "Guide",
-		prompt:
-			"You are Guide, a friendly assistant. Answer briefly and ask when a request is unclear.",
-		avatarPrompt: "A friendly lighthouse keeper with a warm lantern",
-	},
-];
-```
+| Key | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `discord.token` | string, required | none | The bot token. Keep it in `.env`. |
+| `discord.guild` | string, required | none | The id of the agent server's guild. |
+| `discord.entryChannel` | string, required | none | The id of the channel the coordinator lives in. |
+| `discord.rootCommand` | string | the lowercase `name`, with each run of characters other than `a-z`, `0-9`, and `-` replaced by `-` | The root slash command, without the slash. See [Slash commands](/reference/slash-commands/). |
+| `discord.admin` | boolean | `true` | Whether the owner's conversations get the `discord_*` administration tools. `false` leaves the `discord-admin` addon out. |
+| `discord.refusalHint` | string | none | Text added as it is to the refusal a non-owner gets from the root command. Include the space or punctuation your language needs before it. |
 
-## Commands
+## Storage and files
 
-| Command | What it does |
-| --- | --- |
-| `roundtable init [dir]` | Creates a project in `dir` (default: the current directory) |
-| `roundtable doctor [--reachable]` | Checks the setup and says how to fix what is wrong |
-| `roundtable start` | Runs the checks that need no network, then the bot |
-| `roundtable add plugin <name>` | Adds `plugins/<name>.ts` and its test, and lists it in the config |
+| Key | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `database.url` | string, required | none | The PostgreSQL connection URL. |
+| `dataDir` | string, required | none | Where the process keeps its files, such as pictures, attachments, and skills. |
+| `workDir` | string | `<dataDir>/work` | The agents' shared working directory. |
+| `agentDir` | string | `<dataDir>/pi` | Pi's agent directory, which holds the model logins. See [Models](/configure/models/). |
+
+## Models
+
+| Key | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `model` | string, required | none | The agents' model, written `<provider>/<id>`. |
+| `thinking` | `"off"`, `"minimal"`, `"low"`, `"medium"`, `"high"`, or `"xhigh"` | `"medium"` | The level a turn thinks at when its judge cannot pick one. |
+| `judge.model` | string | the value of `model` | The model that judges small questions. |
+| `judge.threshold` | number from 0 to 1 | `0.6` | How sure a judge must be before its answer is used. |
+| `delegation.model` | string | the value of `model` | The model that runs delegated tasks. |
+| `delegation.thinking` | same levels as `thinking` | `"medium"` | The thinking level of delegated tasks. |
+
+The [Models](/configure/models/) page explains each one.
+
+## Language and time
+
+| Key | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `locale` | `"en"` or `"zh-TW"` | `"en"` | The language of the text the bot shows in Discord. |
+| `timeZone` | string | `"UTC"` | The IANA time zone that schedules and time stamps use. |
+
+See [Language and time](/configure/language-and-time/).
+
+## Access
+
+| Key | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `speakers.admins` | `{ users?, roles?, everyone? }` | none | Who holds the admin tier. |
+| `speakers.members` | `{ users?, roles?, everyone? }` | none | Who holds the member tier. |
+| `toolTiers` | object of `"owner"`, `"admin"`, or `"member"` by tool name | `{}` | The lowest tier that may use each named tool. It overrides what the core and plugins chose. |
+| `prompts.shared` | string, required inside `prompts` | the prompt bundled with the package | The path of the file that starts every agent's prompt. Read once at start. |
+| `prompts.guest` | string | a guest prompt bundled with the package | The path of the file that replaces the shared prompt for speakers other than the owner. |
+
+With no `speakers` setting only the owner can talk to the agents.
+See [Access tiers](/configure/access-tiers/).
+
+## Agents and avatars
+
+| Key | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `agents` | list of `{ name, displayName, prompt, avatarPrompt, channelId? }` | `[]` | The first team, created once. An agent that is already stored is never overwritten, so edit agents in Discord afterwards. |
+| `avatar` | string | a plain bot picture bundled with the package | A picture of your own: the neutral avatar and the style reference for drawing avatars. |
+| `http.publicUrl` | string, required | none | The address that reaches this process from the internet. Discord fetches the avatars from it. |
+| `http.port` | integer from 1 to 65535 | `3000` | The TCP port the process listens on. |
+| `http.hostname` | string | none | The hostname the listener binds to. |
+| `http.socketPath` | string | none | A unix socket path to listen on instead of a TCP port. When it is set, `port` and `hostname` are not used. |
+| `http.socketMode` | integer from 0 to `0o777` | `0o660` | The socket file's permission bits. Widen it only for a proxy that runs as another user. |
+
+## Addons and operations
+
+| Key | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `skills` | `false`, or `{ builtinDir?, reposDir? }` | on, with `builtinDir` the skills bundled with the package and `reposDir` set to `<dataDir>/repos` | `false` leaves the `skills` addon out: agents carry no skills and no skill tools exist. Stored skills stay in their tables. |
+| `memory` | boolean | `true` | `false` leaves the `memory` addon out: no memory tools and no memory prompt block. The table stays as it is. |
+| `ops.agent` | string | none | The name of the agent that investigates the process's own errors. |
+| `plugins` | list of plugin objects | `[]` | Your plugins. They start in the order listed, after the built-in ones. |
+
+With `ops.agent` set, each `error` and `fatal` log entry is reported to that agent as a message and a report turn in its channel.
+The same error goes at most once an hour, and at most five reports go out per hour.
+
+For what the addons add and how plugins start, see [Services and addons](/plugins/services-and-addons/).
+
+{/* Sources: src/core/config/config.ts:20-122, src/core/config/config.ts:124-326, src/core/config/schema.ts:156-200, src/core/define-roundtable.ts:121-217, src/core/discord/owner-command.ts:21-27, src/core/ops/error-reporter.ts:10-60, templates/roundtable.config.ts:1-24, src/cli/checks/environment.ts:1-27 */}

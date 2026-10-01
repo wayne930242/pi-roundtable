@@ -1,0 +1,116 @@
+---
+title: Models
+description: Choose the agents' model and thinking level, the judge, and the model for delegated tasks, and set up the model login.
+sidebar:
+  order: 5
+---
+
+The bot runs its agents on models that Pi can reach.
+You choose them in `roundtable.config.ts`:
+
+```ts
+export default {
+	// ...
+	model: env("MODEL"),
+	thinking: "medium",
+	judge: { model: "anthropic/claude-haiku-4-5", threshold: 0.6 },
+	delegation: { model: "anthropic/claude-haiku-4-5", thinking: "medium" },
+	agentDir: "./data/pi",
+} satisfies RoundtableConfig;
+```
+
+Only `model` is required.
+
+## The `<provider>/<id>` format
+
+Every model setting is written `<provider>/<id>`, for example `anthropic/claude-sonnet-5-5`.
+The part before the first slash is the provider, and the rest is the model id.
+Anything else stops the start and names the key:
+
+```text
+config model: expected <provider>/<id>, got "<value>". Write it like anthropic/claude-sonnet-5-5.
+```
+
+The same check applies to `judge.model` and `delegation.model`, under their own names.
+
+## `model` and `thinking`
+
+`model` is the model of the agents.
+An agent follows it unless that agent has a model of its own.
+
+`thinking` is one of `off`, `minimal`, `low`, `medium`, `high`, or `xhigh`, and defaults to `medium`.
+It is a fallback, not a fixed level.
+By default an agent's thinking setting is `auto`: before each turn the judge reads the message and picks `low`, `medium`, `high`, or `xhigh`, and it keeps the previous turn's level while it is unsure.
+`thinking` is the level of a first turn that the judge could not judge.
+
+## `judge`
+
+The judge is a small model that answers short questions for the bot:
+
+- how much thinking a turn needs,
+- whether your reply to a held action is a go-ahead, and
+- which members of a group should answer a message.
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `judge.model` | the value of `model` | The model that answers those questions. |
+| `judge.threshold` | `0.6` | A number from 0 to 1. How sure the judge must be before its answer is used for a thinking level or a go-ahead. |
+
+A cheaper model is enough here.
+If the judge's model is not available, the judge fails with `the judge's model <provider>/<id> is not available; log in to its provider or change judge.model`.
+
+## `delegation`
+
+An agent can hand research to a background worker with `delegate_task`.
+The worker is a fresh session that can only search and read the web, and its report comes back to the agent's channel.
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `delegation.model` | the value of `model` | The model the worker runs on. |
+| `delegation.thinking` | `medium` | The worker's thinking level. |
+
+The worker loads `pi-web-access`, a peer dependency of pi-roundtable.
+
+## A model and thinking level per agent
+
+An agent has its own model and thinking level only when you set them.
+Ask the coordinator, which changes them with `agent_update`:
+
+```text
+Put Researcher on openai-codex/gpt-6-sol and set its thinking to high.
+```
+
+`agent_update` takes a model as `<provider>/<model>`, or `default` to follow the assistant again.
+A model the bot cannot run is refused, and the answer lists the usable ones.
+Thinking takes one of the six levels or `default`; `default` means `auto`, the judge's choice.
+A fixed level skips the judge for that agent.
+The change applies from the agent's next turn, and its conversation stays.
+
+See [Create agents](/agents/create-agents/).
+
+## Model login
+
+The bot needs a login for the provider of `model`.
+`roundtable doctor` checks for one, and accepts either of these:
+
+- The provider's API key in `.env`, such as `ANTHROPIC_API_KEY` for `anthropic` or `OPENAI_API_KEY` for `openai`.
+- A login made with Pi, stored in `auth.json` inside the agent directory.
+
+If neither exists, the check fails:
+
+```text
+✗ model login: no login for anthropic, the provider of anthropic/claude-sonnet-5-5.
+    Set the provider's API key in .env (ANTHROPIC_API_KEY for anthropic, OPENAI_API_KEY for openai), or sign in with Pi so ./data/pi/auth.json holds it.
+```
+
+When it passes, it says where the login comes from, for example `anthropic login from <source>`.
+`doctor` only reads the login: it never creates the agent directory or `auth.json`.
+
+## `agentDir`
+
+`agentDir` is Pi's agent directory, where the model logins live.
+It defaults to `<dataDir>/pi`.
+When the bot starts it sets `PI_CODING_AGENT_DIR` to this directory for the Pi packages it loads.
+If you sign in with Pi, make sure the login lands in this directory, or point `agentDir` at the directory that already holds it.
+
+{/* Sources: src/core/config/config.ts:55-70, src/core/config/config.ts:236-255, src/core/config/config.ts:276-301, src/core/models.ts:1-49, src/core/judging/effort-judge.ts:60-120, src/core/judging/confirmation-judge.ts:1-60, src/core/agents/group-round.ts:1-80, src/core/define-roundtable.ts:76-90, src/core/builtin/agent-server.ts:178-200, src/core/builtin/agent-server.ts:244-262, src/core/runtime/pi-agent-runtime.ts:421-470, src/core/agents/agent-settings.ts:1-50, src/core/agents/agent-tools.ts:160-194, src/core/agents/team-options.ts, src/core/modules/delegation/web-research-worker.ts:1-80, src/core/shared/delegate-tool.ts:1-20, src/cli/checks/model.ts:1-28, src/cli/runtime.ts:1-53, src/core/host.ts:259-275 */}

@@ -1,0 +1,67 @@
+---
+title: Slash commands
+description: The slash commands the bot registers with Discord, their descriptions, and who may use them.
+sidebar:
+  order: 2
+---
+
+The bot registers one root command, `/roundtable` unless you set `discord.rootCommand`.
+Every feature that has commands adds subcommands under that root, so the command list stays in one place.
+The root command works in the server and in a direct message with the bot.
+
+Its description reads `<name> control panel (owner only)` in English, where `<name>` is the `name` setting.
+With `locale: "zh-TW"` the descriptions below are in Traditional Chinese.
+
+## Commands the core registers
+
+The core registers one subcommand group, `schedule`.
+
+| Command | Description | Who may use it |
+| --- | --- | --- |
+| `/roundtable schedule list` | List the schedules of every channel | Owner |
+| `/roundtable schedule cancel id:<schedule>` | Cancel a schedule | Owner |
+
+The group itself is described as `Schedules`, and the `id` option of `cancel` as `The schedule to cancel`.
+The `id` option is required and completes as you type, listing each schedule as `#<id> <title> (<recurrence>)`.
+
+### `schedule list`
+
+`list` shows every schedule in every channel.
+Each entry gives the schedule's id, title, channel, target, how it repeats, when it runs next, who set it, and when it last ran with the outcome.
+When there are none, it says `No schedules right now.`
+The footer points out that schedules are created and edited by the bot in conversation, and that this command is for reviewing and cancelling them.
+
+### `schedule cancel`
+
+`cancel` deletes the chosen schedule and shows it once more under the title `Schedule cancelled`.
+If the value is not a number it answers `Pick a schedule from the list.`
+If no schedule has that id it answers `There is no schedule #<id>.`
+
+To create or change a schedule, ask an agent; see [Schedules and background work](/agents/schedules-and-background/).
+
+## Who may use them
+
+Only the owner can use `/roundtable`, checked by Discord user id.
+Every answer is visible only to the person who ran the command.
+Anyone else gets a panel titled `Owner only` that says `/roundtable` is the control panel of the assistant's owner, followed by whatever you set in `discord.refusalHint`.
+Autocomplete offers a non-owner no choices.
+The core's commands are for the owner alone; admins and members talk to the agents in their channels instead.
+See [Access tiers](/configure/access-tiers/).
+
+## Buttons that are not commands
+
+Two things in Discord answer clicks but are not slash commands:
+
+- The cards for held actions and `ask_user` questions. Their buttons are `Run` and `Cancel`, or the answer options. See [Access tiers](/configure/access-tiers/) for who may answer.
+- The `Stop` button on a long turn. Only the owner can press it. It answers `Stopped.`, or `Nothing is running right now.` when the turn has already ended, or `Only <name>'s owner can stop it.` to anyone else.
+
+## Commands from plugins
+
+A plugin adds its own subcommands under the root, and may add top-level commands of its own, with `commands.add` from `setup`.
+A name used twice, or a plugin that registers the root itself, stops the start with a message that names the command.
+See [What plugins can add](/plugins/what-plugins-can-add/).
+
+The agent panel is not registered by default.
+`pi-roundtable/discord` exports `agentPanel`, which builds the panel of an agent for a plugin that adds a subcommand for it.
+
+{/* Sources: src/core/discord/schedule-commands.ts:21-152, src/core/discord/owner-command.ts:21-27, src/core/discord/owner-command.ts:120-159, src/core/discord/compose-commands.ts:21-55, src/core/discord/command-collection.ts:14-46, src/core/discord/stop-button.ts:1-63, src/core/discord/agent-panel.ts:1-66, src/core/builtin/discord.ts:60-120, src/core/builtin/modules.ts:150-185, src/core/i18n/owner.ts:1-41, src/core/i18n/schedules.ts:34-60, src/core/i18n/cards.ts:1-40, src/core/builtin/discord.test.ts:106-124, docs/plugins.md:1091-1139 */}

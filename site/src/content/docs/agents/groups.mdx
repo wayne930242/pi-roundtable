@@ -1,0 +1,74 @@
+---
+title: Groups
+description: Put two to six agents in one channel, see who answers each message, and change the members or the host.
+sidebar:
+  order: 2
+---
+
+A group is a channel where several agents talk with you.
+You write one message, and the agents that have something to add answer, one after another.
+
+## Create a group
+
+Ask for it by naming the agents:
+
+```text
+Make a group called Review with Researcher and Editor. Editor is the host.
+```
+
+The tool is `group_create`:
+
+| Field | What it is |
+| --- | --- |
+| `name` | The permanent name, with the same rules as an agent's name. No agent or group may share it. |
+| `display_name` | The name shown for the group, 1 to 32 characters. |
+| `members` | 2 to 6 different agents that exist and are not archived. |
+| `host` | Optional. One of the members. Without one, the host is the member named `coordinator` if there is one, and otherwise the first member. |
+| `category` | Optional. `Groups`, which is the default, or `Groups-<suffix>`. A missing category is created. |
+
+The channel opens under that category, and its topic lists the members and the host.
+It is kept up to date when you change either.
+
+## Who answers
+
+For each of your messages, a judge asks of every member: does this message concern this agent's role, or would its view add something the others would not?
+The agents that score at least 0.5 answer.
+Three rules decide the rest:
+
+- An agent you name with `@display name` or `@name` always answers, and so does the agent whose message you reply to.
+- The members answer one at a time, never together. Each one sees every group message since its last turn. The most relevant agent speaks last.
+- When nobody fits, the host answers. The host also answers alone when the judge cannot score.
+
+Members can hand the next word to each other by mentioning a name, such as `@Editor`, in their reply.
+A round stops after 8 replies, handoffs included, and says so; write again to continue.
+
+A group member does not use `message_agent`.
+Inside a group, agents talk to each other by mentioning, where you can see it.
+[Archive and channels](/agents/archive-and-channels/) covers `message_agent` for everywhere else.
+
+## Change a group
+
+Ask for the change:
+
+```text
+Add Notes to Review.
+```
+
+```text
+Make Researcher the host of Review, and rename the group to Reading room.
+```
+
+The tool is `group_update`, and it changes the display name, the members, or the host.
+
+- The new member list replaces the old one. It still has to be 2 to 6 different agents.
+- The host has to be a member. When you remove the host and name no new one, the first member becomes the host.
+- The name of the group does not change.
+
+## When an agent or a group is archived
+
+- Archiving an agent removes it from every group it is in. A group left with fewer than two members is archived with it, and the host passes to the first remaining member when the host was the one archived.
+- Archiving a group leaves its members as they are.
+
+See [Archive and channels](/agents/archive-and-channels/).
+
+{/* Sources: src/core/agents/agent-tools.ts:92-96, src/core/agents/agent-tools.ts:218-262, src/core/agents/team-editing.ts:176-209, src/core/agents/agent-store.ts:241-326, src/core/agents/group-round.ts:1-60, src/core/agents/group-round.ts:68-100, src/core/agents/group-turns.ts:25-120, src/core/agents/agent-prompt.ts:41-47, src/core/agents/agent-prompt.ts:53-60, src/core/agents/team-lifecycle.ts:50-62, src/core/agents/team-layout.ts:44-55, src/core/i18n/conversation.ts:15-17 */}

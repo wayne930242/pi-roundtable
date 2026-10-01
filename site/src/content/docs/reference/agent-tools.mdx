@@ -1,0 +1,144 @@
+---
+title: Agent tools
+description: Every tool the agents carry, what it does, and the lowest access tier that may use it.
+sidebar:
+  order: 3
+---
+
+Agents act through tools.
+A tool is offered in a turn only when the speaker's tier is at least the tool's minimum tier, so a member never sees the tools below that need an admin or the owner.
+The tiers are the defaults.
+`toolTiers` in `roundtable.config.ts` can change them; see [Access tiers](/configure/access-tiers/).
+
+A tool that nobody named needs the owner.
+
+## Agents, groups, and channels
+
+These tools belong to the agent server.
+You rarely call them yourself: you ask an agent, usually the coordinator, and it calls them.
+For how they work in practice, see [Create agents](/agents/create-agents/), [Groups](/agents/groups/), and [Archive and channels](/agents/archive-and-channels/).
+
+| Tool | What it does | Minimum tier |
+| --- | --- | --- |
+| `agent_list` | Lists every agent and group with channel and status, and the Agents and Groups categories in server order. | member |
+| `agent_get` | Reads an agent's display name, status, channel, model, thinking level, skills, prompt, and avatar prompt. | member |
+| `agent_create` | Creates an agent with its own channel and an avatar, and starts it on an opening task. The name is permanent. | admin |
+| `agent_update` | Changes an agent's display name, prompt, model, or thinking level. The change applies from its next turn. | admin |
+| `agent_avatar` | Redraws an agent's avatar: from its stored prompt, from a new prompt, or by an edit instruction. Offered only when a plugin fills the `images` slot. | admin |
+| `message_agent` | Sends a self-contained request to another agent. The answer comes back as a new turn. A seat in a group does not have it. | member |
+| `group_create` | Creates a group channel with 2 to 6 agents and an optional host. | admin |
+| `group_update` | Changes a group's display name, members, or host. | admin |
+| `archive` | Archives an agent or a group. The channel and its history are kept under the Archive category. The coordinator and the calling agent cannot be archived. | admin |
+| `channel_arrange` | Sorts agent and group channels into categories and orders them. A wrong entry refuses the whole call. | admin |
+| `channel_read` | Reads messages of a channel or thread of the agent server, oldest first. Read-only. | member |
+
+## Skills and memory
+
+The skill tools exist while the `skills` addon is on, and the memory tools while the `memory` addon is on.
+See [Skills and memory](/agents/skills-and-memory/).
+
+| Tool | What it does | Minimum tier |
+| --- | --- | --- |
+| `agent_skills` | Adds and removes skills an agent carries. Built-in skills stay. | admin |
+| `skill_create` | Writes a new skill into the registry. | admin |
+| `skill_update` | Replaces an agent-written skill's description or body. | admin |
+| `skill_delete` | Deletes an agent-written skill and detaches it from every agent. | admin |
+| `skill_link` | Registers the skills in a folder of a managed repository. Linked skills are read-only. | admin |
+| `skill_unlink` | Removes a linked skill from the registry. | admin |
+| `skill_group_set` | Creates or replaces a skill group, a named list of skills. Agents carry skills, not groups. | admin |
+| `skill_group_delete` | Deletes a skill group. Its skills are untouched. | admin |
+| `memory_add` | Remembers a fact as `core`, `note`, or `event`. | member |
+| `memory_search` | Searches everything remembered. | member |
+| `memory_remove` | Forgets every remembered fact that contains the given text. | member |
+
+Memory belongs to the speaker.
+A member's memory tools read and change that member's memory, not the owner's.
+
+## Schedules, background work, and notices
+
+Schedule tools act on the schedules of the channel they run in.
+See [Schedules and background work](/agents/schedules-and-background/).
+
+| Tool | What it does | Minimum tier |
+| --- | --- | --- |
+| `schedule_create` | Schedules a task for the agent, once or repeating. | admin |
+| `schedule_list` | Lists the channel's schedules with their next run. | member |
+| `schedule_update` | Changes a schedule's title, prompt, or timing. | admin |
+| `schedule_cancel` | Deletes a schedule. | admin |
+| `delegate_task` | Hands web research to a cheaper worker model in the background. Its report comes back as a new turn. | admin |
+| `notify_owner` | Sends the owner a direct message on Discord. | owner |
+
+## Shell and files
+
+Agent sessions carry Pi's shell and file tools.
+They run as the host account, in the shared workspace (`workDir`).
+
+| Tool | What it does | Minimum tier |
+| --- | --- | --- |
+| `bash` | Runs a shell command. | owner |
+| `read` | Reads a file. | owner |
+| `edit` | Edits a file. | owner |
+| `write` | Writes a file. | owner |
+
+Reading always runs.
+A shell command that is destructive or changes the system, and a write or edit outside the workspace, is held until the owner approves it on a card.
+
+## Discord administration
+
+These tools belong to the `discord-admin` addon, which `discord.admin: false` leaves out.
+They manage the server on the owner's behalf, and a call checks that both the owner and the bot hold the Discord permission involved.
+Every one needs the owner by default.
+
+| Tool | What it does |
+| --- | --- |
+| `discord_list_servers` | Lists the servers the owner and the bot share, with the permissions each holds. |
+| `discord_list_channels` | Lists a server's channels and categories. |
+| `discord_list_roles` | Lists a server's roles, highest first, with their permissions. |
+| `discord_find_members` | Finds members whose username or nickname starts with a query. |
+| `discord_create_channel` | Creates a text, voice, or announcement channel, or a category. |
+| `discord_delete_channel` | Deletes a channel, category, or thread. |
+| `discord_list_threads` | Lists a server's active threads, or a channel's archived ones. |
+| `discord_create_thread` | Starts a thread in a text or announcement channel. |
+| `discord_edit_thread` | Renames, archives, locks, or changes the auto-archive time of a thread. |
+| `discord_create_role` | Creates a role. |
+| `discord_edit_role` | Changes a role's name, color, display, or permissions. |
+| `discord_delete_role` | Deletes a role. |
+| `discord_add_member_role` | Gives a member a role. |
+| `discord_remove_member_role` | Takes a role from a member. |
+| `discord_set_nickname` | Sets or clears a member's nickname. |
+| `discord_timeout_member` | Stops a member from talking for some minutes. `0` lifts it. |
+| `discord_kick_member` | Removes a member from the server. |
+| `discord_ban_member` | Bans a user, optionally deleting their recent messages. |
+| `discord_unban_member` | Lifts a ban. |
+| `discord_get_channel_info` | Reads a channel's server, name, and topic. |
+| `discord_get_messages` | Reads a channel's recent messages. |
+| `discord_search_messages` | Searches a channel's messages. |
+| `discord_get_pinned_messages` | Reads a channel's pinned messages. |
+| `discord_send_message` | Sends a message, optionally with images or files. It triggers no mentions. |
+| `discord_edit_message` | Edits a message the bot itself sent. |
+| `discord_delete_message` | Deletes one message. |
+| `discord_pin_message` | Pins one message. |
+| `discord_unpin_message` | Unpins one message. |
+| `discord_edit_channel` | Changes a channel's name, topic, slowmode, and similar settings. |
+| `discord_set_channel_permissions` | Sets a role's or member's permission overwrite in a channel. |
+| `discord_delete_channel_permissions` | Removes a role's or member's permission overwrite in a channel. |
+
+## Tools of every turn
+
+Three tools come with the runtime and need only the member tier.
+
+| Tool | What it does | Minimum tier |
+| --- | --- | --- |
+| `ask_user` | Asks a question on a card with buttons in the channel and waits for the answer, for up to 30 minutes. | member |
+| `read_attachment` | Reads a text or PDF file someone attached in the channel. | member |
+| `compact_session` | Compacts the session's context. It refuses the `resume` option. | member |
+
+The core also declares the tiers of `web_search`, `fetch_content`, and `get_search_content`, the tools of `pi-web-access`, as member.
+The delegation worker loads those tools.
+
+## Tools from plugins
+
+A plugin's tool carries the `minTier` its author gave it.
+See [What plugins can add](/plugins/what-plugins-can-add/).
+
+{/* Sources: src/core/agents/agent-tools.ts:20-30, src/core/agents/agent-tools.ts:134-395, src/core/builtin/agent-server.ts:89-96, src/core/modules/skills/skill-tools.ts:16-215, src/core/builtin/skills.ts:23-27, src/core/modules/memory/owner-memory.ts:56-140, src/core/builtin/stores.ts:15-20, src/core/shared/schedule-tools.ts:7-125, src/core/shared/delegate-tool.ts, src/core/builtin/modules.ts:48-64, src/core/modules/notify/notify.ts:1-30, src/core/modules/host-shell/shell-policy.ts:8-16, src/core/modules/host-shell/shell-policy.ts:359-381, src/core/agents/agent-team.ts:100-125, src/core/discord/channel-operations.ts:80-250, src/core/modules/discord-admin/discord-admin.ts:60-255, src/core/discord/owner-discord-access.ts:15-35, src/core/builtin/discord-admin.ts:33-38, src/core/tool-tiers.ts:12-30, src/core/runtime/extensions/ask-user.ts, src/core/shared/read-attachment-tool.ts, src/core/runtime/extensions/self-compact-guard.ts, src/core/modules/delegation/web-research-worker.ts:14-25, src/core/tool-set.snapshot.json */}

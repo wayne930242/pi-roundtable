@@ -1,0 +1,124 @@
+---
+title: CLI
+description: The roundtable commands init, doctor, start, and add plugin, with the checks doctor runs, the exit codes, and what each command refuses to do.
+sidebar:
+  order: 1
+---
+
+The package installs one command, `roundtable`.
+It runs on Bun and says where to get Bun when Bun is missing.
+Inside a project, run it with `bunx roundtable <command>`.
+
+| Command | What it does |
+| --- | --- |
+| `roundtable init [dir]` | Creates a project in `dir` (default: the current directory). |
+| `roundtable doctor [--reachable]` | Checks the setup and says how to fix what is wrong. |
+| `roundtable start` | Runs the checks that need no network, then the bot. |
+| `roundtable add plugin <name>` | Adds `plugins/<name>.ts` and its test, and lists the plugin in the config. |
+
+`roundtable help` and `roundtable --help` print this list.
+`roundtable --version` prints the package version.
+
+## `init`
+
+```sh
+npx pi-roundtable init my-bot    # or: bunx pi-roundtable init my-bot
+```
+
+`init` writes a working project and asks for no secret.
+It creates these files in `dir`: `package.json`, `.gitignore`, `roundtable.config.ts`, `biome.json`, `README.md`, `agents.ts`, `docker-compose.yml`, `persona/shared.md`, `.env.example`, `tsconfig.json`, `plugins/hello.ts`, and `plugins/hello.test.ts`.
+The `package.json` pins the exact version of pi-roundtable that ran `init`.
+It then prints three next steps: install and fill `.env`, run `doctor`, run `start`.
+
+Every refusal happens before the first write, so a refusal leaves the directory as it was:
+
+- Bun is missing or older than the range the package needs.
+- A file `init` would create already exists. The message lists the files and ends with `Remove them or run init in an empty directory; nothing was written.`
+
+`init` takes at most one directory; a second argument is a usage error.
+
+## `doctor`
+
+`doctor` runs every check, in the order below, and prints one line for each.
+It changes nothing it looked at, and it exits non-zero if any check failed.
+
+```text
+✓ Bun: Bun 1.4.2
+✗ environment: no value for DISCORD_TOKEN, ...
+    Copy .env.example to .env and fill them in; .env.example says where each one comes from.
+- plugins: skipped, the configuration is not valid yet
+```
+
+A passed check starts with `✓` and may add a detail.
+A failed check starts with `✗`, states the problem, and puts the fix on the indented lines under it.
+A check that cannot run because an earlier one failed starts with `-` and is skipped.
+A skipped check does not fail the run.
+
+| # | Check | What it looks at |
+| --- | --- | --- |
+| 1 | Bun | The running Bun's version against the package's `engines.bun` range. |
+| 2 | environment | Every uncommented variable in `.env.example` has a value. |
+| 3 | configuration | `roundtable.config.ts` loads, passes its schema, and assembles. The failing key is named. |
+| 4 | plugins | No two plugins share a name, the built-in ones included. |
+| 5 | image provider | Whether a plugin fills the `images` slot. Without one is not a failure: agents get avatars generated from their display names. |
+| 6 | PostgreSQL | The database answers, and every plugin's migrations run. They run inside a transaction that is always rolled back, so the database is left as it was. |
+| 7 | Discord token | Discord accepts the bot token. |
+| 8 | Discord guild | The bot is a member of `discord.guild`. |
+| 9 | Discord intents | The Message Content intent is on. |
+| 10 | Discord channel | The entry channel exists in the guild, and the bot holds the permissions below in it. |
+| 11 | model login | A login exists for the provider of `model`. |
+| 12 | public URL | `http.publicUrl` is a well-formed `http://` or `https://` address. |
+
+The permissions that check 10 requires in the entry channel are View Channel, Send Messages, Send Messages in Threads, Read Message History, Embed Links, Attach Files, Pin Messages, Create Public Threads, Manage Channels, and Manage Webhooks.
+When the bot is not in the guild, the fix is an invitation link that asks for exactly these permissions.
+
+### The `--reachable` flag
+
+`doctor --reachable` also requests the public URL, which fails unless the bot is running and the tunnel or proxy that publishes the address works.
+Without the flag, check 12 only confirms that the address is well formed.
+This is the only flag, and only `doctor` takes it; any other argument is a usage error.
+
+## `start`
+
+`start` runs the checks that need no network: Bun, environment, configuration, plugins, image provider, model login, and public URL.
+If one fails, it prints the same lines `doctor` prints, to standard error, and exits with code 1 before anything reaches Discord.
+Otherwise it starts the bot.
+
+PostgreSQL and Discord are not checked up front.
+A wrong database address or a rejected token fails the boot itself, and the process prints the message and exits with code 1.
+Run `doctor` first to find those problems with their fixes.
+
+On `SIGTERM` or `SIGINT` the bot finishes running work before it stops.
+It waits for at most an hour; whatever is still running after that is logged and given up on.
+See [Startup and project setup](/plugins/startup-and-project-setup/) for the order in which things start and stop.
+
+## `add plugin`
+
+```sh
+bunx roundtable add plugin my-notes
+```
+
+`add plugin` creates `plugins/my-notes.ts` and `plugins/my-notes.test.ts` from the `hello` template, imports the plugin in `roundtable.config.ts`, and lists it in `plugins`.
+It checks and renders everything before it writes, so a refusal leaves the project untouched.
+It refuses when:
+
+- The name is not lowercase words joined by dashes, such as `my-notes`.
+- `roundtable.config.ts` is not in the current directory.
+- `plugins/<name>.ts` or its test already exists.
+- The config file does not parse, has no `plugins` list it can find, or already uses the name for something else. The message says what to add by hand.
+
+The command takes exactly one name; anything else prints `usage: roundtable add plugin <name>`.
+
+## Exit codes
+
+| Code | When |
+| --- | --- |
+| `0` | The command succeeded: `init` and `add plugin` wrote their files, every `doctor` check passed or was skipped, `help` and `--version` printed, or the bot stopped cleanly. |
+| `1` | A command refused or failed, a `doctor` check failed, a check made `start` stop, the arguments were wrong, the command is unknown, or no command was given (the usage is printed). |
+
+Usage errors print the message and then the usage text.
+When the bot is stopped by a signal, it exits with `1` if a listener, a service, or the database pool failed to stop, and with `0` otherwise.
+
+For the messages the checks print and what fixes them, see [Errors](/reference/errors/).
+
+{/* Sources: src/cli/cli.ts:25-33, src/cli/cli.ts:68-166, src/cli/main.ts:1-14, src/cli/roundtable.mjs:1-20, src/cli/init.ts:34-82, src/cli/add-plugin.ts:1-75, src/cli/config-edit.ts:40-190, src/cli/templates.ts:60-70, src/cli/doctor.ts:34-98, src/cli/start.ts:1-33, src/cli/report.ts:1-68, src/cli/checks/bun.ts, src/cli/checks/environment.ts, src/cli/checks/configuration.ts, src/cli/checks/images.ts, src/cli/checks/database.ts, src/cli/checks/discord.ts, src/cli/checks/model.ts, src/cli/checks/public-url.ts, src/cli/discord-api.ts:7-33, docs/plugins.md:1861-1876, README.md:50-72 */}
