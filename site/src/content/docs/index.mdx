@@ -1,11 +1,11 @@
 ---
-title: A Discord agent server on Pi
-description: A team of AI agents in one Discord server, extended with TypeScript plugins.
+title: An AI roundtable that creates its own personas and skills
+description: Tell it what you need in Discord. It sets up a new agent with its own channel, personality, and skills.
 template: splash
 hero:
-  tagline: A Discord agent server on Pi. Each agent owns a channel and a conversation, they share tools and memory, and you extend the bot with plugins.
+  tagline: Tell it what you need in Discord. It sets up a new agent with its own channel, its own personality, and its own skills.
   actions:
-    - text: Start in five minutes
+    - text: Get started
       link: /guides/quick-start/
       icon: right-arrow
     - text: Write a plugin
@@ -15,9 +15,49 @@ hero:
 
 import { Card, CardGrid, Steps } from "@astrojs/starlight/components";
 import { Image } from "astro:assets";
-import agentStatus from "../../assets/scenes/agent-status.png";
-import toolCall from "../../assets/scenes/tool-call.png";
+import agentCreate from "../../assets/scenes/agent-create.png";
 import teamHandoff from "../../assets/scenes/team-handoff.png";
+import agentStatus from "../../assets/scenes/agent-status.png";
+
+## Ask, and a new agent shows up
+
+You talk to one agent, the coordinator, in your server's entry channel.
+Say what you want.
+
+<Image src={agentCreate} alt="In the guide channel, a user asks for an agent that keeps reading notes. Guide answers that it made Notes in a new notes channel, with a prompt, an avatar, and a skill for saving links, and that it already started its first job." />
+
+The new agent gets its own channel, an avatar, and a prompt.
+It starts on its first job right away.
+You don't edit a config file or restart anything.
+
+## What it can do
+
+<CardGrid>
+  <Card title="Make agents" icon="rocket">
+    Ask for a researcher, an editor, a tutor. Each one lives in its own channel and keeps its own conversation.
+  </Card>
+  <Card title="Write its own skills" icon="puzzle">
+    An agent can write a skill and link it to other agents.
+    It also remembers things between conversations.
+  </Card>
+  <Card title="Work as a group" icon="comment">
+    Put two to six agents in one group channel.
+    For each message, it picks who answers.
+  </Card>
+  <Card title="Tidy up for you" icon="approve-check">
+    Ask it to archive an agent or rearrange the channels.
+    Nothing is deleted. Archived channels keep their history.
+  </Card>
+</CardGrid>
+
+<Image src={teamHandoff} alt="In the research channel, Researcher answers a request with two bullet points and notes that the result was handed to the editor channel." />
+
+Agents can pass work to each other.
+Here the researcher hands its summary to the editor.
+
+<Image src={agentStatus} alt="A Discord message listing three agents, Guide, Researcher and Editor, with their channels, models and whether each is idle or working." />
+
+A status message in the server keeps itself up to date, so you can see who is doing what.
 
 ## Run it
 
@@ -47,47 +87,20 @@ import teamHandoff from "../../assets/scenes/team-handoff.png";
 
 </Steps>
 
-The agents in `agents.ts` now have their channels in your server.
-Send `/roundtable help` in Discord to open the control panel.
+The first agent now has a channel in your server.
+Say hello, then ask it for a second one.
+Send `/roundtable help` to open the control panel.
 
-## What you get
+## If you write code
 
-<CardGrid>
-  <Card title="One agent, one channel" icon="comment">
-    Every agent owns a channel and a conversation.
-    Talk to each one where it lives.
-  </Card>
-  <Card title="Shared tools and memory" icon="puzzle">
-    Agents share the tools and memory that plugins add, so the team works from the same facts.
-  </Card>
-  <Card title="Plugins in TypeScript" icon="rocket">
-    A plugin is an object with a name and a `setup` function.
-    Tools, prompts, agents, events, services, and slash commands all come from plugins.
-  </Card>
-  <Card title="Tested without Discord" icon="approve-check">
-    `pi-roundtable/testing` runs a plugin without Discord or PostgreSQL.
-  </Card>
-</CardGrid>
-
-## See it in Discord
-
-These are illustrations of the default behavior, drawn with fictional names.
-
-### A status card that updates itself
-
-<Image src={agentStatus} alt="A Discord embed titled Roundtable agents listing three agents, Guide, Researcher and Editor, with their channels, models and idle or working status." />
-
-### An agent calls a plugin's tool
-
-<Image src={toolCall} alt="In the guide channel, a user asks Guide to say hello to a team. Guide calls the hello_greet tool and answers Hello, Ada's team!" />
-
-### Agents hand work to each other
-
-<Image src={teamHandoff} alt="In the research channel, Researcher answers a request with two bullet points and notes that the result was handed to the editor channel." />
+Everything above works without a line of code.
+When you want more, add a plugin in TypeScript: a tool every agent can call, a slash command, an HTTP route, or a part of the bot you want to replace.
+A plugin can be tested without Discord or PostgreSQL.
+See [Write a plugin](/guides/write-a-plugin/).
 
 ## Good to know
 
-- Built for one owner and one Discord server.
-  Others can be allowed to talk to the agents, but that setup, and its risks, are the operator's.
-- Bun only. The package ships its TypeScript source, so there is no build step.
+- It's built for one owner and one Discord server.
+  You can let other people talk to the agents, but the risks of that are yours.
+- It runs on Bun only. The package ships its TypeScript source, so there is no build step.
 - MIT licensed.

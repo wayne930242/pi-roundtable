@@ -1,11 +1,11 @@
 ---
-title: 建立在 Pi 上的 Discord 智慧體伺服器
-description: 在一個 Discord 伺服器裡擁有一組 AI 智慧體，並用 TypeScript 外掛擴充。
+title: 能自己創建人格和技能的 AI 圓桌
+description: 在 Discord 說你要什麼，它就開出一個新的 agent，有自己的頻道、個性和技能。
 template: splash
 hero:
-  tagline: 建立在 Pi 上的 Discord 智慧體（agent）伺服器。每個智慧體擁有一個頻道和一段對話，彼此共用工具與記憶，你用外掛（plugin）擴充這個 bot。
+  tagline: 在 Discord 說你要什麼，它就開出一個新的 agent：有自己的頻道、自己的個性、自己的技能。
   actions:
-    - text: 五分鐘上手
+    - text: 開始使用
       link: /zh-tw/guides/quick-start/
       icon: right-arrow
     - text: 寫一個外掛
@@ -15,9 +15,50 @@ hero:
 
 import { Card, CardGrid, Steps } from "@astrojs/starlight/components";
 import { Image } from "astro:assets";
-import agentStatus from "../../../assets/scenes/agent-status.png";
-import toolCall from "../../../assets/scenes/tool-call.png";
+import agentCreate from "../../../assets/scenes/agent-create.png";
 import teamHandoff from "../../../assets/scenes/team-handoff.png";
+import agentStatus from "../../../assets/scenes/agent-status.png";
+
+## 開口要，新的 agent 就出現
+
+你在伺服器的入口頻道，跟協調者（coordinator）說話。
+想要什麼，直接講。
+
+<Image src={agentCreate} alt="在 guide 頻道，使用者請 Guide 做一個記讀書筆記的 agent。Guide 回覆已經在新的 notes 頻道做好 Notes，它有提示詞、頭像，還有一個存連結的技能，而且已經開始做第一份工作。" />
+
+新的 agent 會有自己的頻道、頭像和提示詞，馬上開始做第一份工作。
+你不用改設定檔，也不用重啟。
+
+圖裡的文字是 bot 的英文介面；把 `locale` 設成 `zh-TW`，bot 在 Discord 裡就會用中文。
+
+## 它能做什麼
+
+<CardGrid>
+  <Card title="開 agent" icon="rocket">
+    要研究員、編輯、家教都行。每一個住在自己的頻道，有自己的對話。
+  </Card>
+  <Card title="自己寫技能" icon="puzzle">
+    agent 可以寫一個技能，連結給其他 agent。
+    它也會在不同對話之間記住事情。
+  </Card>
+  <Card title="組成群組" icon="comment">
+    把兩到六個 agent 放進同一個群組頻道。
+    每則訊息，由它決定誰來回答。
+  </Card>
+  <Card title="幫你整理" icon="approve-check">
+    請它封存某個 agent，或重新排頻道。
+    不會真的刪掉，封存的頻道會保留歷史紀錄。
+  </Card>
+</CardGrid>
+
+<Image src={teamHandoff} alt="在 research 頻道，Researcher 用兩個重點回覆請求，並註明結果已交給 editor 頻道。" />
+
+agent 之間可以互相交辦工作。
+這裡是研究員把整理好的內容交給編輯。
+
+<Image src={agentStatus} alt="一則 Discord 訊息，列出 Guide、Researcher、Editor 三個 agent 的頻道、模型，以及各自是閒置還是工作中。" />
+
+伺服器裡有一則狀態訊息會自己更新，誰在忙什麼一目瞭然。
 
 ## 跑起來
 
@@ -29,7 +70,7 @@ import teamHandoff from "../../../assets/scenes/team-handoff.png";
    npx pi-roundtable init my-bot
    ```
 
-2. 安裝依賴、啟動 PostgreSQL，並填寫 `.env`。
+2. 安裝、啟動 PostgreSQL，然後填寫 `.env`。
 
    ```sh
    cd my-bot
@@ -47,47 +88,20 @@ import teamHandoff from "../../../assets/scenes/team-handoff.png";
 
 </Steps>
 
-`agents.ts` 裡的智慧體現在都有了自己的頻道。
-在 Discord 輸入 `/roundtable help` 開啟控制面板。
+第一個 agent 就會出現在你的伺服器裡。
+跟它打聲招呼，再請它開第二個。
+輸入 `/roundtable help` 可以開啟控制面板。
 
-## 你會得到什麼
+## 如果你會寫程式
 
-<CardGrid>
-  <Card title="一個智慧體，一個頻道" icon="comment">
-    每個智慧體擁有一個頻道和一段對話。
-    想找誰，就到它的頻道說話。
-  </Card>
-  <Card title="共用工具與記憶" icon="puzzle">
-    智慧體共用外掛新增的工具與記憶，整個團隊根據同樣的事實工作。
-  </Card>
-  <Card title="用 TypeScript 寫外掛" icon="rocket">
-    外掛是一個有名稱和 `setup` 函式的物件。
-    工具、提示詞、智慧體、事件、服務、斜線指令，都由外掛提供。
-  </Card>
-  <Card title="不需要 Discord 就能測試" icon="approve-check">
-    `pi-roundtable/testing` 能在沒有 Discord 和 PostgreSQL 的情況下執行外掛。
-  </Card>
-</CardGrid>
-
-## 在 Discord 裡的樣子
-
-下面是預設行為的示意圖，畫面裡的名稱都是虛構的，bot 顯示的語言取決於 `locale` 設定。
-
-### 會自己更新的狀態卡
-
-<Image src={agentStatus} alt="標題為 Roundtable agents 的 Discord embed，列出 Guide、Researcher、Editor 三個智慧體的頻道、模型，以及閒置或工作中的狀態。" />
-
-### 智慧體呼叫外掛的工具
-
-<Image src={toolCall} alt="在 guide 頻道，使用者請 Guide 向一個團隊問好。Guide 呼叫 hello_greet 工具，並回覆 Hello, Ada's team!" />
-
-### 智慧體彼此交辦工作
-
-<Image src={teamHandoff} alt="在 research 頻道，Researcher 用兩個重點回覆請求，並註明結果已交給 editor 頻道。" />
+上面這些都不用寫一行程式。
+想要更多的時候，再用 TypeScript 加外掛：每個 agent 都能呼叫的工具、斜線指令、HTTP 路由，或是你想換掉的某個部分。
+外掛可以在沒有 Discord 和 PostgreSQL 的情況下測試。
+看[寫一個外掛](/zh-tw/guides/write-a-plugin/)。
 
 ## 先知道這些
 
-- 為一位擁有者和一個 Discord 伺服器設計。
-  你可以允許其他人與智慧體對話，但這樣的設定與風險由營運者自行承擔。
-- 只支援 Bun。套件直接發佈 TypeScript 原始碼，不需要建置步驟。
+- 它是為一位擁有者和一個 Discord 伺服器設計的。
+  你可以讓其他人跟 agent 說話，但那樣的風險由你自己承擔。
+- 只支援 Bun。套件直接發佈 TypeScript 原始碼，不需要建置。
 - MIT 授權。

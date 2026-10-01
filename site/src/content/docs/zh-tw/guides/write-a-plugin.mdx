@@ -4,6 +4,8 @@ description: 給每個智慧體一個工具，並在沒有 Discord 和 PostgreSQ
 ---
 
 import { Steps } from "@astrojs/starlight/components";
+import { Image } from "astro:assets";
+import toolCall from "../../../../assets/scenes/tool-call.png";
 
 <Steps>
 
@@ -61,6 +63,10 @@ import { Steps } from "@astrojs/starlight/components";
    ```
 
 </Steps>
+
+請 agent 用它，它就會呼叫這個工具：
+
+<Image src={toolCall} alt="在 guide 頻道，使用者請 Guide 向一個團隊問好。Guide 呼叫 hello_greet 工具，並回覆 Hello, Ada's team!" />
 
 ## 進一步
 

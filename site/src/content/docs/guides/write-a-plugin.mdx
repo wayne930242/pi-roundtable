@@ -4,6 +4,8 @@ description: Add a tool to every agent, and test it without Discord or PostgreSQ
 ---
 
 import { Steps } from "@astrojs/starlight/components";
+import { Image } from "astro:assets";
+import toolCall from "../../../assets/scenes/tool-call.png";
 
 <Steps>
 
@@ -61,6 +63,10 @@ import { Steps } from "@astrojs/starlight/components";
    ```
 
 </Steps>
+
+Ask an agent to use it, and it calls the tool:
+
+<Image src={toolCall} alt="In the guide channel, a user asks Guide to say hello to a team. Guide calls the hello_greet tool and answers Hello, Ada's team!" />
 
 ## Go further
 
