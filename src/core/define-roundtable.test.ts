@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import type { RoundtableConfig } from "./config/config.ts";
 import { migrate, openPool } from "./db/migrations.ts";
 import { defineRoundtable } from "./define-roundtable.ts";
@@ -386,6 +387,19 @@ describe("defineRoundtable", () => {
 		).rejects.toThrow(
 			`config prompts.shared: ${join(dir, "empty.md")} is empty`,
 		);
+	});
+
+	test("the host reads a provider's credential through the shared model login", async () => {
+		const modelRuntime = await ModelRuntime.create({
+			authPath: join(dataDir, "keys-auth.json"),
+			modelsPath: null,
+			allowModelNetwork: false,
+			refreshOnCreate: false,
+		});
+		await modelRuntime.setRuntimeApiKey("anthropic", "key-1");
+		const { options } = await defineRoundtable(config, { modelRuntime });
+		expect(await options.apiKey?.("anthropic")).toBe("key-1");
+		expect(await options.apiKey?.("nobody")).toBeUndefined();
 	});
 
 	test("the judge answers with a clear error until the model is available", async () => {

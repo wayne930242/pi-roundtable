@@ -57,6 +57,7 @@ const check = (label: string) => {
 
 let fresh: ReturnType<typeof check>;
 let grown: ReturnType<typeof check>;
+let official: ReturnType<typeof check>;
 
 beforeAll(() => {
 	const report = init({ cwd: dir.path, bun, version: "0.1.0" });
@@ -66,7 +67,12 @@ beforeAll(() => {
 	const added = addPlugin({ cwd: dir.path, name: "second-plugin" });
 	if (!added.ok) throw new Error(added.problems.join("\n"));
 	grown = check("after add plugin");
-}, 120_000);
+	for (const name of ["codex-images", "dice"]) {
+		const copied = addPlugin({ cwd: dir.path, name });
+		if (!copied.ok) throw new Error(copied.problems.join("\n"));
+	}
+	official = check("after adding the official plugins");
+}, 180_000);
 afterAll(() => dir.done());
 
 describe("every template rendered into one project", () => {
@@ -87,6 +93,14 @@ describe("every template rendered into one project", () => {
 		expect(grown.test.output).toContain("2 pass");
 		expect(grown.lint.output).toContain("No fixes applied");
 		expect(grown.typecheck.ok && grown.test.ok && grown.lint.ok).toBe(true);
+	});
+	test("still typechecks, tests, and lints after the official plugins are added", () => {
+		expect(official.typecheck.output).toBe("");
+		expect(official.test.output).toContain("14 pass");
+		expect(official.lint.output).toContain("No fixes applied");
+		expect(official.typecheck.ok && official.test.ok && official.lint.ok).toBe(
+			true,
+		);
 	});
 });
 

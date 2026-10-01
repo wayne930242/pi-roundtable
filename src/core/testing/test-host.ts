@@ -38,6 +38,11 @@ export interface TestHostOptions {
 	plugins?: readonly RoundtablePlugin[];
 	/** The runtime every turn runs on; by default one that answers "" and builds no Pi session. */
 	runtime?: AgentRuntime;
+	/**
+	 * The credentials `context.apiKey` returns, by provider name; a provider not listed reads as
+	 * having none, whatever login the machine holds.
+	 */
+	apiKeys?: Readonly<Record<string, string>>;
 	/** What the stand-in Discord hands out. */
 	discord?: Partial<Pick<DiscordConnection, "agentChannels" | "ownerChannel">>;
 }
@@ -210,7 +215,15 @@ export async function testHost(
 		],
 	};
 	const defined = await defineRoundtable(config, { logger: silentLogger() });
-	const roundtable = new Roundtable(defined.options, defined.plugins);
+	const apiKeys = options.apiKeys ?? {};
+	const roundtable = new Roundtable(
+		{
+			...defined.options,
+			apiKey: async (provider) =>
+				Object.hasOwn(apiKeys, provider) ? apiKeys[provider] : undefined,
+		},
+		defined.plugins,
+	);
 	await roundtable.run();
 	if (!captured) throw new Error("the probe was not set up");
 	const context = captured;

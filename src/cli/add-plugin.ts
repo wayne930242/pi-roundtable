@@ -31,9 +31,10 @@ const refused = (...problems: string[]): AddPluginReport => ({
 });
 
 /**
- * Creates `plugins/<name>.ts` and its test from the `hello` template and lists the plugin in
- * `roundtable.config.ts`. Everything is checked and rendered before the first write, so a refusal
- * leaves the project untouched.
+ * Creates `plugins/<name>.ts` and its test and lists the plugin in `roundtable.config.ts`: the
+ * copy of an official plugin when `name` is one, else a plugin made from the `hello` template.
+ * Everything is checked and rendered before the first write, so a refusal leaves the project
+ * untouched.
  */
 export function addPlugin(inputs: AddPluginInputs): AddPluginReport {
 	const { cwd, name } = inputs;

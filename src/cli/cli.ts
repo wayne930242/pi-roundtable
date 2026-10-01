@@ -12,6 +12,7 @@ import { loadConfigFile, type Ports } from "./project.ts";
 import { formatOutcomes } from "./report.ts";
 import { assemble, providerLogin } from "./runtime.ts";
 import { start } from "./start.ts";
+import { OFFICIAL_PLUGINS } from "./templates.ts";
 
 /** What the command line reads from its surroundings; tests replace every part. */
 export interface CliEnvironment {
@@ -31,6 +32,8 @@ const USAGE = `roundtable: a Discord agent server on Pi
   roundtable doctor [--reachable]  check the setup and say how to fix what is wrong
   roundtable start              run the checks that need no network, then the bot
   roundtable add plugin <name>  add plugins/<name>.ts and its test, and list it in the config
+                                the names ${OFFICIAL_PLUGINS.join(" and ")} are reserved for the official plugins,
+                                which are copied in ready to run instead of the template
 `;
 
 /** The package's own version and the Bun range it needs, from the package.json beside the source. */

@@ -105,3 +105,71 @@ test("add plugin outside a project says where it looked", () => {
 	expect(report.ok).toBe(false);
 	expect(report.problems.join(" ")).toContain("roundtable.config.ts is not in");
 });
+
+test("add plugin copies the official plugin of that name, with its test, and lists it", () => {
+	const dir = project();
+	for (const [name, ident, marker] of [
+		["codex-images", "codexImages", "ImageNotGeneratedError"],
+		["dice", "dice", "roll_dice"],
+	] as const) {
+		const report = addPlugin({ cwd: dir.path, name });
+		expect(report.ok).toBe(true);
+		expect(report.changed).toEqual([
+			`plugins/${name}.ts`,
+			`plugins/${name}.test.ts`,
+			"roundtable.config.ts",
+		]);
+		expect(read(dir.path, `plugins/${name}.ts`)).toContain(marker);
+		expect(read(dir.path, `plugins/${name}.test.ts`)).toContain(
+			`from "./${name}.ts"`,
+		);
+		expect(read(dir.path, "roundtable.config.ts")).toContain(
+			`import { ${ident} } from "./plugins/${name}.ts";`,
+		);
+	}
+	expect(read(dir.path, "roundtable.config.ts")).toContain(
+		"plugins: [hello, codexImages, dice]",
+	);
+	// The copy is a file of the project's own, not a template with placeholders left in it.
+	expect(read(dir.path, "plugins/dice.ts")).not.toMatch(/__[A-Z]+__/);
+});
+
+test("the codex-images copy begins with the warning that it can stop working without notice", () => {
+	const dir = project();
+	addPlugin({ cwd: dir.path, name: "codex-images" });
+	const head = read(dir.path, "plugins/codex-images.ts").split("\n\n")[0];
+	expect(head).toContain("undocumented");
+	expect(head).toContain("without notice");
+});
+
+test("an official plugin is refused when its file or its test exists, writing nothing", () => {
+	const dir = project();
+	const before = read(dir.path, "roundtable.config.ts");
+	dir.write("plugins/dice.test.ts", "// mine");
+	const report = addPlugin({ cwd: dir.path, name: "dice" });
+	expect(report.ok).toBe(false);
+	expect(report.problems.join(" ")).toContain("plugins/dice.test.ts");
+	expect(report.problems.join(" ")).toContain("already");
+	expect(existsSync(join(dir.path, "plugins/dice.ts"))).toBe(false);
+	expect(read(dir.path, "roundtable.config.ts")).toBe(before);
+});
+
+test("an official plugin is refused when the config's plugin list cannot be edited, writing nothing", () => {
+	const dir = project();
+	dir.write("roundtable.config.ts", "export default buildConfig();\n");
+	const report = addPlugin({ cwd: dir.path, name: "codex-images" });
+	expect(report.ok).toBe(false);
+	expect(report.problems.join(" ")).toContain("cannot find the plugin list");
+	expect(existsSync(join(dir.path, "plugins/codex-images.ts"))).toBe(false);
+	expect(existsSync(join(dir.path, "plugins/codex-images.test.ts"))).toBe(
+		false,
+	);
+});
+
+test("a name that only resembles an official one keeps the template", () => {
+	const dir = project();
+	expect(addPlugin({ cwd: dir.path, name: "dice-roller" }).ok).toBe(true);
+	expect(read(dir.path, "plugins/dice-roller.ts")).toContain(
+		"dice_roller_greet",
+	);
+});

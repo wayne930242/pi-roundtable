@@ -256,6 +256,32 @@ test("the harness says which provider slots are filled, by the plugin or by the 
 	expect(seen).toEqual([[], ["images"], ["images"]]);
 });
 
+test("apiKey reads as no credential by default, and returns the keys the test gives, by provider", async () => {
+	const seen: Record<string, string | undefined> = {};
+	const reader = definePlugin({
+		name: "keys",
+		setup: async ({ apiKey }) => {
+			for (const provider of ["openai-codex", "other", "toString"])
+				seen[provider] = await apiKey(provider);
+			return { events: {} };
+		},
+	});
+	await (await testPlugin(reader)).stop();
+	expect(seen).toEqual({
+		"openai-codex": undefined,
+		other: undefined,
+		toString: undefined,
+	});
+	await (
+		await testPlugin(reader, { apiKeys: { "openai-codex": "key-1" } })
+	).stop();
+	expect(seen).toEqual({
+		"openai-codex": "key-1",
+		other: undefined,
+		toString: undefined,
+	});
+});
+
 const whereAmI = defineTool({
 	name: "where_am_i",
 	description: "Says the channel and speaker of the turn",
@@ -773,6 +799,15 @@ afterEach(async () => {
 		} as const;
 		expect(host.sessionContext(scout).agent).toEqual(scout);
 		expect(host.context.services.find(AGENTS)).toBeDefined();
+	});
+
+	test("apiKey reads as no credential unless the test gives one", async () => {
+		host = await testHost();
+		expect(await host.context.apiKey("openai-codex")).toBeUndefined();
+		await host.stop();
+		host = await testHost({ apiKeys: { "openai-codex": "key-1" } });
+		expect(await host.context.apiKey("openai-codex")).toBe("key-1");
+		expect(await host.context.apiKey("other")).toBeUndefined();
 	});
 });
 

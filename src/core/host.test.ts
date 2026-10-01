@@ -429,6 +429,37 @@ describe("Roundtable", () => {
 		expect(read?.()).toEqual(["web link", "metrics link"]);
 	});
 
+	test("gives a plugin the credential the host's login holds, and none when the host has none", async () => {
+		const read: Record<string, string | undefined> = {};
+		const reader: RoundtablePlugin = {
+			name: "reader",
+			setup: async ({ apiKey }) => {
+				read.known = await apiKey("openai-codex");
+				read.unknown = await apiKey("nobody");
+				return { dashboard: ["keys"] };
+			},
+		};
+		const { roundtable } = host([reader], {
+			apiKey: async (provider) =>
+				provider === "openai-codex" ? "key-1" : undefined,
+		});
+		await roundtable.run();
+		expect(read).toEqual({ known: "key-1", unknown: undefined });
+		await roundtable.shutdown("test");
+		const bare: Record<string, string | undefined> = {};
+		const { roundtable: without } = host([
+			{
+				name: "bare",
+				setup: async ({ apiKey }) => {
+					bare.known = await apiKey("openai-codex");
+					return { dashboard: ["keys"] };
+				},
+			},
+		]);
+		await without.run();
+		expect(bare).toEqual({ known: undefined });
+	});
+
 	test("refuses clashing session parts before any service starts", async () => {
 		const log: string[] = [];
 		const rule: HoldRule = { name: "shell", describe: () => undefined };

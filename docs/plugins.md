@@ -62,6 +62,7 @@ A plugin that runs Pi itself, a coding worker or a container with no network, ta
 
 `roundtable add plugin <name>` creates `plugins/<name>.ts` and its test from a small template and lists it in `roundtable.config.ts`.
 The name is lowercase words joined by dashes, such as `my-notes`.
+Two names are reserved for the [official plugins](#official-plugins): `codex-images` and `dice` copy a ready-made plugin into the project instead of the template.
 
 ## The plugin object
 
@@ -96,6 +97,7 @@ A plugin whose `setup` returns `{}` and that has no migrations, providers, or ho
 | `toolTiers` | What each tool needs; ask it when a tool is used, not during setup |
 | `events` | Where the core reports turns and team changes to every plugin's handlers |
 | `providers` | Each provider slot, from the plugin that fills it or the core's default; `providers.filled` is the set of slots a plugin fills |
+| `apiKey(provider)` | The credential the host's model login holds for a provider such as `openai-codex`, the same login the agents use. It resolves to `undefined` when the host has none for that provider and never throws for that. The value is a secret: keep it out of logs and error messages. Read it when you use it rather than keeping it, since a login may refresh its token |
 | `queue` | The one channel queue that every conversation and channel operation shares |
 | `services` | The services plugins provide to each other, read by key: `services.get(SCHEDULES)`; see [services](#services-what-plugins-provide-to-each-other) |
 | `surfaces` | Every contributed [chat surface](#surfaces-a-chat-network-of-your-own), chosen by the prefix of a channel key: `of`, `sendReply`, `startTyping`, `showStop`, `react`, `unreact`, `prompts` |
@@ -1722,6 +1724,26 @@ A plugin that still has one is refused where it is written (`definePlugin`) or w
 | `RoundtablePlugin.agentServer()` and the `agentServer(outcome)` event | A service with `startInBackground`, and the `serviceStarted` event handler |
 | `RoundtablePlugin.stopTurn(channel)` | `stop(channel)` on the `ChannelClaim` that owns the channel |
 
+## Official plugins
+
+The package ships two plugins you can copy into a project and change.
+`roundtable add plugin codex-images` and `roundtable add plugin dice` write `plugins/<name>.ts` and `plugins/<name>.test.ts`, import the plugin in `roundtable.config.ts`, and list it in `plugins`, the way any `add plugin` does.
+The copy is yours: edit it freely, and `add plugin` refuses to overwrite it when the file already exists.
+Both names are reserved, so `add plugin codex-images` never makes a template plugin of that name.
+
+| Plugin | What it does | What it needs |
+|---|---|---|
+| `codex-images` | Fills the [`images` slot](#providers-replace-a-part-the-core-runs-on), so agents can draw avatars from a prompt and reference pictures | A login to the `openai-codex` provider; setup throws a `PluginError` that says so when the host has none |
+| `dice` | Adds the `roll_dice` tool for members: `2d6+3`, `4d6k3` (keep or drop the highest or lowest dice), several groups, and fate dice `dF`, answered as text such as `2d6+3: [3, 5] + 3 = 11` | Nothing; it takes at most 100 dice in all and 1000 sides per die |
+
+`codex-images` takes the login through [`context.apiKey("openai-codex")`](#the-context).
+It sends the request to ChatGPT's Codex backend, which OpenAI does not document for this use, with the owner's own ChatGPT subscription login.
+It can stop working without notice, and OpenAI's terms for the subscription apply.
+Use it only where you accept that risk; the file begins with the same warning.
+
+Each copy has a test that runs offline: `codex-images` with a fake `fetch`, `dice` with a fake random source.
+Both files export a `create...` function (`createCodexImages`, `createDice`) that takes the part a test replaces, and the plugin you list in the config, built from it.
+
 ## Testing a plugin
 
 Two harnesses, by what the test needs: `testPlugin(plugin, options?)` sets one plugin up alone, against a fake context, and is the default; [`testHost`](#testhost-the-built-in-plugins-and-yours-over-postgresql) boots the built-in plugins and yours together over PostgreSQL, for a test that depends on them or on the order the host sets things up in.
@@ -1756,6 +1778,7 @@ It does not run migrations (see [`migrations`](#migrations-and-contextdatabase-t
 | `services` | What the plugin reads from `context.services`: one `servicePair(KEY, { ... })` for each service, with the members you give it. `servicePair(AGENTS, { runtime })` is the runtime `context.turns` runs on. Reading a member you did not give throws a `PluginError` that names the option to add; a service you did not give reads as absent to `find`, and `get` says to give it, except for the ones below |
 | `conversations` | Methods that replace the router's, such as `stop`, for a plugin that calls them |
 | `turns` | A `ConversationTurns` that replaces the default one |
+| `apiKeys` | The credentials `context.apiKey(provider)` returns, by provider name: `{ "openai-codex": "key" }`. A provider not listed reads as having none, as on a host that is not logged in |
 | `forwardJoinMs` | How long the router holds a bare forward for the message that follows it (the host option `conversations.forwardJoinMs`) |
 
 The harness supplies what the host would, so a claim or a background turn behaves as it does there:
@@ -1820,6 +1843,7 @@ Only `commands` and `guard` are given; a plugin that reads another member of `DI
 | `config` | Over a test configuration (an owner, a guild, a temporary `dataDir`, the test database, one agent): any of the `RoundtableConfig` keys, such as `skills: false` |
 | `plugins` | Your plugins, placed after the built-in ones as `defineRoundtable` places them |
 | `runtime` | The runtime every turn runs on; by default one that answers `""` and builds no Pi session |
+| `apiKeys` | The credentials `context.apiKey(provider)` returns, by provider name; a provider not listed reads as having none, whatever login the machine holds |
 | `discord` | What the stand-in Discord hands out: `agentChannels(guildId)` and `ownerChannel()` |
 
 It returns:

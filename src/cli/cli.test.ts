@@ -33,6 +33,9 @@ test("no command prints the usage and exits non-zero; help and --version exit ze
 	const none = cli();
 	expect(await runCli([], none.io)).toBe(1);
 	expect(none.out.join("\n")).toContain("roundtable init");
+	expect(none.out.join("\n")).toContain(
+		"codex-images and dice are reserved for the official plugins",
+	);
 	const help = cli();
 	expect(await runCli(["--help"], help.io)).toBe(0);
 	const version = cli();
@@ -85,6 +88,21 @@ test("add plugin exits zero after init and non-zero on a bad name", async () => 
 		readFileSync(join(run.dir.path, "roundtable.config.ts"), "utf8"),
 	).toContain("plugins: [hello, notes]");
 	expect(await runCli(["add", "plugin", "Bad_Name"], run.io)).toBe(1);
+});
+
+test("add plugin copies an official plugin by name, and refuses it a second time", async () => {
+	const run = cli();
+	await runCli(["init"], run.io);
+	expect(await runCli(["add", "plugin", "dice"], run.io)).toBe(0);
+	expect(run.out.join("\n")).toContain("plugins/dice.ts");
+	expect(readFileSync(join(run.dir.path, "plugins/dice.ts"), "utf8")).toContain(
+		'name: "roll_dice"',
+	);
+	expect(
+		readFileSync(join(run.dir.path, "roundtable.config.ts"), "utf8"),
+	).toContain("plugins: [hello, dice]");
+	expect(await runCli(["add", "plugin", "dice"], run.io)).toBe(1);
+	expect(run.err.join("\n")).toContain("already exist");
 });
 
 test("doctor exits non-zero when a check fails and zero when none does", async () => {

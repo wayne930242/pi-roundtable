@@ -1,0 +1,105 @@
+import { expect, test } from "bun:test";
+import { testPlugin } from "pi-roundtable/testing";
+import { createDice, dice, type Random, roll } from "./dice.ts";
+
+/** A random source that answers with the faces given, as `[face, sides]` for each die in turn. */
+function dieFaces(...rolled: [face: number, sides: number][]): Random {
+	const queue = rolled.map(([face, sides]) => (face - 1) / sides + 0.0001);
+	return () => {
+		const next = queue.shift();
+		if (next === undefined)
+			throw new Error("the test rolled more dice than it gave");
+		return next;
+	};
+}
+
+/** The faces given, for dice that all have `sides` sides. */
+const faces = (sides: number, ...rolled: number[]): Random =>
+	dieFaces(...rolled.map((face): [number, number] => [face, sides]));
+
+test("a die rolls from 1 to its sides, and a number adds itself", () => {
+	expect(roll("2d6+3", faces(6, 3, 5))).toBe("2d6+3: [3, 5] + 3 = 11");
+	expect(roll("d20", faces(20, 20))).toBe("d20: [20] = 20");
+	expect(roll(" 1D4 ", faces(4, 1))).toBe("1D4: [1] = 1");
+});
+
+test("several groups add and subtract in order", () => {
+	expect(roll("2d6-1d4+2", dieFaces([4, 6], [2, 6], [1, 4]))).toBe(
+		"2d6-1d4+2: [4, 2] - [1] + 2 = 7",
+	);
+	expect(roll("-d6", faces(6, 2))).toBe("-d6: -[2] = -2");
+});
+
+test("keep and drop rules remove dice and show them in parentheses", () => {
+	const six = (...rolled: number[]) => faces(6, ...rolled);
+	expect(roll("4d6k3", six(5, 1, 6, 3))).toBe("4d6k3: [5, (1), 6, 3] = 14");
+	expect(roll("4d6kh3", six(5, 1, 6, 3))).toBe("4d6kh3: [5, (1), 6, 3] = 14");
+	expect(roll("4d6kl1", six(5, 1, 6, 3))).toBe(
+		"4d6kl1: [(5), 1, (6), (3)] = 1",
+	);
+	expect(roll("4d6d1", six(5, 1, 6, 3))).toBe("4d6d1: [5, (1), 6, 3] = 14");
+	expect(roll("4d6dl1", six(5, 1, 6, 3))).toBe("4d6dl1: [5, (1), 6, 3] = 14");
+	expect(roll("4d6dh1", six(5, 1, 6, 3))).toBe("4d6dh1: [5, 1, (6), 3] = 9");
+});
+
+test("fate dice add -1, 0, and +1 and default to four", () => {
+	const random = (() => {
+		const queue = [0.1, 0.5, 0.9, 0.9];
+		return () => queue.shift() ?? 0;
+	})();
+	expect(roll("dF", random)).toBe("dF: [-, 0, +, +] = 1");
+});
+
+test("a bad expression is refused with what to fix", () => {
+	for (const bad of [
+		"",
+		"   ",
+		"abc",
+		"2d",
+		"d1",
+		"0d6",
+		"2d6+",
+		"2d6++1",
+		"2d6 d4",
+		"4d6k4",
+		"4d6k0",
+		"4d6d9",
+		"1d6x",
+	])
+		expect(() => roll(bad, () => 0.5)).toThrow("Write an expression such as");
+});
+
+test("the caps on dice, sides, and length are refused", () => {
+	expect(() => roll("101d6", () => 0.5)).toThrow("more than 100 dice");
+	expect(() => roll("60d6+60d6", () => 0.5)).toThrow(
+		"more than 100 dice in all",
+	);
+	expect(() => roll("1d1001", () => 0.5)).toThrow("between 2 and 1000 sides");
+	expect(() => roll("d6+1000001", () => 0.5)).toThrow("is over 1000000");
+	expect(() => roll(`1+${"1+".repeat(120)}1`, () => 0.5)).toThrow(
+		"over 200 characters",
+	);
+	expect(roll("100d2", () => 0.99)).toContain("= 200");
+	expect(roll("1d1000", () => 0.9999)).toBe("1d1000: [1000] = 1000");
+});
+
+test("the roll_dice tool is for members and answers a bad expression as text", async () => {
+	const harness = await testPlugin(createDice(faces(6, 3, 5)));
+	expect(harness.tools).toEqual(["roll_dice"]);
+	expect(harness.tiers.minTier("roll_dice")).toBe("member");
+	expect(await harness.runTool("roll_dice", { expression: "2d6+3" })).toBe(
+		"2d6+3: [3, 5] + 3 = 11",
+	);
+	expect(await harness.runTool("roll_dice", { expression: "nope" })).toContain(
+		"is not a dice term",
+	);
+	await harness.stop();
+});
+
+test("the ready-made plugin rolls with a real random source", async () => {
+	const harness = await testPlugin(dice);
+	expect(await harness.runTool("roll_dice", { expression: "d6" })).toMatch(
+		/^d6: \[[1-6]\] = [1-6]$/,
+	);
+	await harness.stop();
+});

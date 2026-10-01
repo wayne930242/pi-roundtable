@@ -14,7 +14,7 @@ Inside a project, run it with `bunx roundtable <command>`.
 | `roundtable init [dir]` | Creates a project in `dir` (default: the current directory). |
 | `roundtable doctor [--reachable]` | Checks the setup and says how to fix what is wrong. |
 | `roundtable start` | Runs the checks that need no network, then the bot. |
-| `roundtable add plugin <name>` | Adds `plugins/<name>.ts` and its test, and lists the plugin in the config. |
+| `roundtable add plugin <name>` | Adds `plugins/<name>.ts` and its test, and lists the plugin in the config. `codex-images` and `dice` are reserved for the official plugins. |
 
 `roundtable help` and `roundtable --help` print this list.
 `roundtable --version` prints the package version.
@@ -99,6 +99,17 @@ bunx roundtable add plugin my-notes
 ```
 
 `add plugin` creates `plugins/my-notes.ts` and `plugins/my-notes.test.ts` from the `hello` template, imports the plugin in `roundtable.config.ts`, and lists it in `plugins`.
+
+Two names are reserved for the [official plugins](/plugins/official-plugins/), `codex-images` and `dice`.
+For one of them, `add plugin` copies the ready-made plugin and its test instead of the `hello` template, and registers it the same way:
+
+```sh
+bunx roundtable add plugin dice
+```
+
+Any other valid name keeps the `hello` template, so a name such as `dice-roller` is a template plugin.
+The usage text lists the reserved names.
+
 It checks and renders everything before it writes, so a refusal leaves the project untouched.
 It refuses when:
 
@@ -121,4 +132,4 @@ When the bot is stopped by a signal, it exits with `1` if a listener, a service,
 
 For the messages the checks print and what fixes them, see [Errors](/reference/errors/).
 
-{/* Sources: src/cli/cli.ts:25-33, src/cli/cli.ts:68-166, src/cli/main.ts:1-14, src/cli/roundtable.mjs:1-20, src/cli/init.ts:34-82, src/cli/add-plugin.ts:1-75, src/cli/config-edit.ts:40-190, src/cli/templates.ts:60-70, src/cli/doctor.ts:34-98, src/cli/start.ts:1-33, src/cli/report.ts:1-68, src/cli/checks/bun.ts, src/cli/checks/environment.ts, src/cli/checks/configuration.ts, src/cli/checks/images.ts, src/cli/checks/database.ts, src/cli/checks/discord.ts, src/cli/checks/model.ts, src/cli/checks/public-url.ts, src/cli/discord-api.ts:7-33, docs/plugins.md:1861-1876, README.md:50-72 */}
+{/* Sources: src/cli/templates.ts:13-25, src/cli/templates.ts:84-102, src/cli/cli.ts:30-37, src/cli/cli.ts:25-33, src/cli/cli.ts:68-166, src/cli/main.ts:1-14, src/cli/roundtable.mjs:1-20, src/cli/init.ts:34-82, src/cli/add-plugin.ts:1-75, src/cli/config-edit.ts:40-190, src/cli/templates.ts:60-70, src/cli/doctor.ts:34-98, src/cli/start.ts:1-33, src/cli/report.ts:1-68, src/cli/checks/bun.ts, src/cli/checks/environment.ts, src/cli/checks/configuration.ts, src/cli/checks/images.ts, src/cli/checks/database.ts, src/cli/checks/discord.ts, src/cli/checks/model.ts, src/cli/checks/public-url.ts, src/cli/discord-api.ts:7-33, docs/plugins.md:1861-1876, README.md:50-72 */}

@@ -268,6 +268,12 @@ export interface PluginContext {
 	providers: ResolvedProviders;
 	/** Every plugin's dashboard lines, in contribution order; throws NotLinkedError during setup. */
 	dashboard(): readonly string[];
+	/**
+	 * The credential the host's model login holds for a provider, such as `openai-codex`: the same
+	 * login the agents use. Resolves to `undefined` when the host has none for that provider, and
+	 * never throws for that. The value is a secret: keep it out of logs and error messages.
+	 */
+	apiKey(provider: string): Promise<string | undefined>;
 }
 
 export interface RoundtablePlugin {

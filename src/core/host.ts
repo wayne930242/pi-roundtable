@@ -66,6 +66,11 @@ export interface RoundtableOptions {
 	};
 	/** The model the default judge asks, when no plugin provides a judge. */
 	judgeModel?: JudgeModel;
+	/**
+	 * The credential the model login holds for a provider, or undefined when it holds none; behind
+	 * `PluginContext.apiKey`. Without it every provider reads as having no credential.
+	 */
+	apiKey?: (provider: string) => Promise<string | undefined>;
 	/** What each tool needs: the operator's settings, with the plugins' tools added when the host links. */
 	toolTiers?: ToolTierTable;
 	/** The database the plugins' migrations and stores use; the host owns its one pool. */
@@ -311,6 +316,7 @@ export class Roundtable {
 						);
 					return this.#registry.dashboard;
 				},
+				apiKey: async (provider) => this.#options.apiKey?.(provider),
 			},
 			this.#tiers,
 			this.#services,

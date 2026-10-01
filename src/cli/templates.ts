@@ -13,6 +13,16 @@ export const TEMPLATES_DIR = join(import.meta.dir, "../../templates");
 /** The directory of the plugin template, rendered once for `hello` and again for every `add plugin`. */
 const PLUGIN_DIR = "plugin";
 
+/** The directory of the official plugins, one directory each, named as `add plugin` names them. */
+const OFFICIAL_DIR = "official";
+
+/** The plugins the package ships ready-made: `add plugin <name>` copies these instead of the `hello` template, so the names are reserved. */
+export const OFFICIAL_PLUGINS = ["codex-images", "dice"] as const;
+
+/** Whether `name` is one of the official plugins. */
+export const isOfficialPlugin = (name: string): boolean =>
+	(OFFICIAL_PLUGINS as readonly string[]).includes(name);
+
 /** What a template file may say, replaced when it is rendered. */
 export interface Substitutions {
 	/** The project's package name. */
@@ -71,19 +81,22 @@ function fill(text: string, values: Record<string, string>): string {
 	});
 }
 
-/** The plugin and its test, written for `names`. */
+/** The plugin and its test, written for `names`: the official plugin of that name, or else the `hello` template. */
 export function renderPlugin(
 	names: PluginNames,
 	dir = TEMPLATES_DIR,
 ): Rendered[] {
 	const values = { NAME: names.name, IDENT: names.ident, TOOL: names.tool };
+	const source = isOfficialPlugin(names.name)
+		? join(OFFICIAL_DIR, names.name)
+		: PLUGIN_DIR;
 	return [
 		["plugin.ts", `plugins/${names.name}.ts`],
 		["plugin.test.ts.tmpl", `plugins/${names.name}.test.ts`],
-	].map(([source, path]) => ({
+	].map(([file, path]) => ({
 		path: path as string,
 		content: fill(
-			readFileSync(join(dir, PLUGIN_DIR, source as string), "utf8"),
+			readFileSync(join(dir, source, file as string), "utf8"),
 			values,
 		),
 	}));
@@ -101,7 +114,11 @@ export function renderProject(
 	};
 	const skeleton = filesUnder(dir)
 		.map((file) => relative(dir, file))
-		.filter((path) => !path.startsWith(`${PLUGIN_DIR}/`))
+		.filter(
+			(path) =>
+				!path.startsWith(`${PLUGIN_DIR}/`) &&
+				!path.startsWith(`${OFFICIAL_DIR}/`),
+		)
 		.map((path) => ({
 			path: targetOf(path),
 			content: fill(readFileSync(join(dir, path), "utf8"), values),

@@ -99,6 +99,7 @@ export async function defineRoundtable(
 			authPath: join(config.agentDir, "auth.json"),
 			modelsPath: join(config.agentDir, "models.json"),
 		}));
+	const registry = new ModelRegistry(modelRuntime);
 	const errorReporter = config.ops
 		? new ErrorReporter({ opsAgent: config.ops.agent, app: name })
 		: undefined;
@@ -156,6 +157,7 @@ export async function defineRoundtable(
 				...(overrides.listeners ?? []),
 			],
 			judgeModel: judgeThrough(modelRuntime, config.judge.model),
+			apiKey: (provider) => registry.getApiKeyForProvider(provider),
 			...(overrides.aborted ? { aborted: overrides.aborted } : {}),
 		},
 		plugins: [

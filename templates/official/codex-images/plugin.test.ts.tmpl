@@ -1,0 +1,118 @@
+import { expect, test } from "bun:test";
+import { PluginError } from "pi-roundtable";
+import { testPlugin } from "pi-roundtable/testing";
+import {
+	type CodexFetch,
+	codexImages,
+	createCodexImages,
+	ImageNotGeneratedError,
+} from "./codex-images.ts";
+
+/** A login token shaped like the real one: a JWT whose claims name the ChatGPT account. */
+function token(account: string): string {
+	const claims = {
+		"https://api.openai.com/auth": { chatgpt_account_id: account },
+	};
+	return `header.${Buffer.from(JSON.stringify(claims)).toString("base64url")}.signature`;
+}
+
+const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47]);
+
+/** A server-sent event stream of the given events. */
+function stream(...events: unknown[]): Response {
+	const text = events
+		.map((event) => `data: ${JSON.stringify(event)}\n\n`)
+		.join("");
+	return new Response(text, {
+		headers: { "content-type": "text/event-stream" },
+	});
+}
+
+const drawn = (result: string, status = "completed") => ({
+	type: "response.output_item.done",
+	item: { type: "image_generation_call", status, result },
+});
+
+const completed = { type: "response.completed", response: { output: [] } };
+
+/** The plugin over a fake network that answers every request with `answer`, recording the requests. */
+function over(answer: () => Response) {
+	const requests: { url: string; init: RequestInit }[] = [];
+	const fetch: CodexFetch = async (url, init) => {
+		requests.push({ url, init });
+		return answer();
+	};
+	return { plugin: createCodexImages({ fetch }), requests };
+}
+
+test("codex-images fills the images slot with the image Codex returns", async () => {
+	const secret = token("acct-1");
+	const { plugin, requests } = over(() =>
+		stream(drawn(Buffer.from(PNG).toString("base64")), completed),
+	);
+	const harness = await testPlugin(plugin, {
+		apiKeys: { "openai-codex": secret },
+	});
+	const image = await plugin.providers?.images?.("a fox", [
+		{ data: "AAAA", mimeType: "image/png" },
+	]);
+	expect([...(image ?? [])]).toEqual([...PNG]);
+	const [request] = requests;
+	expect(request?.url).toBe("https://chatgpt.com/backend-api/codex/responses");
+	const headers = request?.init.headers as Record<string, string>;
+	expect(headers.authorization).toBe(`Bearer ${secret}`);
+	expect(headers["chatgpt-account-id"]).toBe("acct-1");
+	const body = JSON.parse(String(request?.init.body));
+	expect(body.tools).toEqual([
+		{ type: "image_generation", output_format: "png" },
+	]);
+	expect(body.input[0].content).toEqual([
+		{ type: "input_text", text: "a fox" },
+		{ type: "input_image", image_url: "data:image/png;base64,AAAA" },
+	]);
+	await harness.stop();
+});
+
+test("codex-images says so when Codex runs the tool and returns no image", async () => {
+	const refused = over(() => stream(drawn("", "failed"), completed));
+	const harness = await testPlugin(refused.plugin, {
+		apiKeys: { "openai-codex": token("acct-1") },
+	});
+	await expect(refused.plugin.providers?.images?.("a fox", [])).rejects.toThrow(
+		ImageNotGeneratedError,
+	);
+	await harness.stop();
+	const silent = over(() => stream(completed));
+	const quiet = await testPlugin(silent.plugin, {
+		apiKeys: { "openai-codex": token("acct-1") },
+	});
+	await expect(silent.plugin.providers?.images?.("a fox", [])).rejects.toThrow(
+		"Codex answered without an image",
+	);
+	await quiet.stop();
+});
+
+test("codex-images reports an HTTP error with its status, and never the token", async () => {
+	const secret = token("acct-1");
+	const { plugin } = over(() => new Response("rate limited", { status: 429 }));
+	const harness = await testPlugin(plugin, {
+		apiKeys: { "openai-codex": secret },
+	});
+	const failure = await plugin.providers?.images?.("a fox", []).then(
+		() => undefined,
+		(error: Error) => error,
+	);
+	expect(failure?.message).toBe("Codex answered 429: rate limited");
+	expect(failure?.message).not.toContain(secret);
+	await harness.stop();
+});
+
+test("codex-images refuses to start without an openai-codex login", async () => {
+	const failure = await testPlugin(codexImages).then(
+		() => undefined,
+		(error: unknown) => error,
+	);
+	expect(failure).toBeInstanceOf(PluginError);
+	expect((failure as PluginError).message).toContain("openai-codex");
+	expect((failure as PluginError).message).toContain("Log in");
+});
