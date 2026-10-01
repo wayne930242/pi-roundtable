@@ -51,49 +51,46 @@ interface Rolled {
 	dice: number;
 }
 
-function rollTerm(term: string, random: Random): Rolled {
-	if (/^\d+$/.test(term)) {
-		if (term.length > 7 || Number(term) > MAX_MODIFIER)
-			return refuse(`The number ${term} is over ${MAX_MODIFIER}.`);
-		return { shown: String(Number(term)), value: Number(term), dice: 0 };
-	}
-	const match = TERM.exec(term);
-	if (!match) return refuse(`"${term}" is not a dice term.`);
-	const [, countText, fate, sidesText, rule, nText] = match;
-	const count = countText ? Number(countText) : fate ? FATE_DEFAULT : 1;
-	if (count < 1) return refuse(`"${term}" rolls no dice.`);
-	if (count > MAX_DICE)
-		return refuse(`"${term}" rolls more than ${MAX_DICE} dice.`);
-	if (fate) {
-		const faces = Array.from(
-			{ length: count },
-			() => Math.floor(random() * 3) - 1,
-		);
-		const symbols = faces.map((face) =>
-			face > 0 ? "+" : face < 0 ? "-" : "0",
-		);
-		return {
-			shown: `[${symbols.join(", ")}]`,
-			value: faces.reduce((sum, face) => sum + face, 0),
-			dice: count,
-		};
-	}
-	const sides = Number(sidesText);
+/** A plain number term. */
+function rollNumber(term: string): Rolled {
+	if (term.length > 7 || Number(term) > MAX_MODIFIER)
+		return refuse(`The number ${term} is over ${MAX_MODIFIER}.`);
+	return { shown: String(Number(term)), value: Number(term), dice: 0 };
+}
+
+/** `count` fate dice, each one of -1, 0, or +1. */
+function rollFate(count: number, random: Random): Rolled {
+	const faces = Array.from(
+		{ length: count },
+		() => Math.floor(random() * 3) - 1,
+	);
+	const symbols = faces.map((face) => (face > 0 ? "+" : face < 0 ? "-" : "0"));
+	return {
+		shown: `[${symbols.join(", ")}]`,
+		value: faces.reduce((sum, face) => sum + face, 0),
+		dice: count,
+	};
+}
+
+/** `count` dice of `sides` sides, with an optional keep or drop rule that removes some of them. */
+function rollPool(
+	term: string,
+	count: number,
+	sides: number,
+	rule: { kind: KeepDrop; n: number } | undefined,
+	random: Random,
+): Rolled {
 	if (sides < 2 || sides > MAX_SIDES)
 		return refuse(`"${term}" needs between 2 and ${MAX_SIDES} sides.`);
 	const rolls = Array.from(
 		{ length: count },
 		() => Math.floor(random() * sides) + 1,
 	);
-	const dropped = new Set<number>();
-	if (rule) {
-		const n = Number(nText);
-		if (n < 1 || n >= count)
-			return refuse(
-				`"${term}" must keep or drop at least 1 and fewer than ${count} dice.`,
-			);
-		for (const index of removed(rolls, rule as KeepDrop, n)) dropped.add(index);
-	}
+	if (rule && (rule.n < 1 || rule.n >= count))
+		return refuse(
+			`"${term}" must keep or drop at least 1 and fewer than ${count} dice.`,
+		);
+	const dropped = new Set(rule ? removed(rolls, rule.kind, rule.n) : []);
 	const shown = rolls.map((value, index) =>
 		dropped.has(index) ? `(${value})` : String(value),
 	);
@@ -105,6 +102,25 @@ function rollTerm(term: string, random: Random): Rolled {
 		),
 		dice: count,
 	};
+}
+
+function rollTerm(term: string, random: Random): Rolled {
+	if (/^\d+$/.test(term)) return rollNumber(term);
+	const match = TERM.exec(term);
+	if (!match) return refuse(`"${term}" is not a dice term.`);
+	const [, countText, fate, sidesText, rule, nText] = match;
+	const count = countText ? Number(countText) : fate ? FATE_DEFAULT : 1;
+	if (count < 1) return refuse(`"${term}" rolls no dice.`);
+	if (count > MAX_DICE)
+		return refuse(`"${term}" rolls more than ${MAX_DICE} dice.`);
+	if (fate) return rollFate(count, random);
+	return rollPool(
+		term,
+		count,
+		Number(sidesText),
+		rule ? { kind: rule as KeepDrop, n: Number(nText) } : undefined,
+		random,
+	);
 }
 
 /**

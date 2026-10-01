@@ -58,43 +58,65 @@ function object(value: unknown): Record<string, unknown> {
 		: {};
 }
 
-/** Reads the server-sent events until the response completes, and returns its one image. */
+/** The one image an `image_generation_call` item carries; anything else is not an image. */
+function imageOf(value: unknown): Uint8Array | undefined {
+	const item = object(value);
+	if (item.type !== "image_generation_call") return undefined;
+	if (
+		item.status !== "completed" ||
+		typeof item.result !== "string" ||
+		!item.result
+	) {
+		const { result: _result, ...detail } = item;
+		throw new ImageNotGeneratedError(
+			`Codex image generation did not complete (status ${String(item.status)}): ${JSON.stringify(detail).slice(0, 300)}`,
+		);
+	}
+	if (item.result.length > MAX_IMAGE_BASE64)
+		throw new Error("the image exceeds 32 MiB");
+	return new Uint8Array(Buffer.from(item.result, "base64"));
+}
+
+/** The frames of a server-sent event stream: the text between blank lines. */
+async function* frames(
+	body: ReadableStream<Uint8Array>,
+): AsyncGenerator<string> {
+	const decoder = new TextDecoder();
+	let buffer = "";
+	for await (const chunk of body) {
+		buffer += decoder.decode(chunk, { stream: true });
+		let match = /\r?\n\r?\n/.exec(buffer);
+		while (match) {
+			yield buffer.slice(0, match.index);
+			buffer = buffer.slice(match.index + match[0].length);
+			match = /\r?\n\r?\n/.exec(buffer);
+		}
+	}
+	if (buffer.trim()) yield buffer;
+}
+
+/** The event a frame carries, or undefined for a frame without data. */
+function eventOf(frame: string): Record<string, unknown> | undefined {
+	const data = frame
+		.split(/\r?\n/)
+		.filter((line) => line.startsWith("data:"))
+		.map((line) => line.slice(5).trim())
+		.join("\n");
+	if (!data || data === "[DONE]") return undefined;
+	try {
+		return object(JSON.parse(data));
+	} catch {
+		throw new Error(`Codex sent a malformed event: ${data.slice(0, 200)}`);
+	}
+}
+
+/** Reads the events until the response completes, and returns its one image. */
 async function parseImageStream(response: Response): Promise<Uint8Array> {
 	if (!response.body) throw new Error("Codex returned no body");
 	let image: Uint8Array | undefined;
-	let completed = false;
-	const take = (value: unknown) => {
-		const item = object(value);
-		if (item.type !== "image_generation_call" || image) return;
-		if (
-			item.status !== "completed" ||
-			typeof item.result !== "string" ||
-			!item.result
-		) {
-			const { result: _result, ...detail } = item;
-			throw new ImageNotGeneratedError(
-				`Codex image generation did not complete (status ${String(item.status)}): ${JSON.stringify(detail).slice(0, 300)}`,
-			);
-		}
-		if (item.result.length > MAX_IMAGE_BASE64)
-			throw new Error("the image exceeds 32 MiB");
-		image = new Uint8Array(Buffer.from(item.result, "base64"));
-	};
-	const handle = (frame: string) => {
-		const data = frame
-			.split(/\r?\n/)
-			.filter((line) => line.startsWith("data:"))
-			.map((line) => line.slice(5).trim())
-			.join("\n");
-		if (!data || data === "[DONE]") return;
-		let parsed: unknown;
-		try {
-			parsed = JSON.parse(data);
-		} catch {
-			throw new Error(`Codex sent a malformed event: ${data.slice(0, 200)}`);
-		}
-		const event = object(parsed);
-		switch (event.type) {
+	for await (const frame of frames(response.body)) {
+		const event = eventOf(frame);
+		switch (event?.type) {
 			case "error":
 			case "response.failed": {
 				const error = object(object(event.response).error ?? event.error);
@@ -105,34 +127,19 @@ async function parseImageStream(response: Response): Promise<Uint8Array> {
 			case "response.incomplete":
 				throw new Error("the Codex response was incomplete");
 			case "response.output_item.done":
-				take(event.item);
+				image ??= imageOf(event.item);
 				break;
 			case "response.completed": {
 				const output = object(event.response).output;
-				if (!image && Array.isArray(output))
-					for (const item of output) take(item);
-				completed = true;
-				break;
+				if (Array.isArray(output))
+					for (const item of output) image ??= imageOf(item);
+				if (!image)
+					throw new ImageNotGeneratedError("Codex answered without an image");
+				return image;
 			}
 		}
-	};
-	const decoder = new TextDecoder();
-	let buffer = "";
-	for await (const chunk of response.body) {
-		buffer += decoder.decode(chunk, { stream: true });
-		let match = /\r?\n\r?\n/.exec(buffer);
-		while (match && !completed) {
-			handle(buffer.slice(0, match.index));
-			buffer = buffer.slice(match.index + match[0].length);
-			match = /\r?\n\r?\n/.exec(buffer);
-		}
-		if (completed) break;
 	}
-	if (!completed && buffer.trim()) handle(buffer);
-	if (!completed) throw new Error("the Codex stream ended before completion");
-	if (!image)
-		throw new ImageNotGeneratedError("Codex answered without an image");
-	return image;
+	throw new Error("the Codex stream ended before completion");
 }
 
 async function generateImage(
