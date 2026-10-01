@@ -6,7 +6,7 @@ sidebar:
 ---
 
 `pi-roundtable/testing` has two harnesses.
-Pick by what the test needs.
+Choose the one your test needs.
 
 | Harness | What it runs | Needs |
 |---|---|---|
@@ -14,7 +14,7 @@ Pick by what the test needs.
 | `testHost(options?)` | The built-in plugins and yours together, as `defineRoundtable` assembles them, with Discord and the runtime standing in | A test database, set in `ROUNDTABLE_TEST_DATABASE_URL` |
 
 `testPlugin` is the default.
-Reach for `testHost` when the test depends on a built-in plugin, such as the agent server or the stores, or on the order the host sets things up in.
+Use `testHost` when your test depends on a built-in plugin, such as the agent server or the stores, or on the host's setup order.
 
 ## testPlugin
 
@@ -32,7 +32,8 @@ test("hello greets", async () => {
 });
 ```
 
-The harness applies the same checks as the host, so a plugin that adds nothing, an unknown part, a clash of names, or a tool with no tier fails your test with the message the start would print.
+The harness applies the host's checks.
+If your plugin adds nothing, returns an unknown part, uses a duplicate name, or has a tool with no tier, the test fails with the same message you would see at startup.
 
 It returns an object with these fields:
 
@@ -65,22 +66,26 @@ Call the handlers and `build` functions yourself, as the examples [`events.test.
 | `forwardJoinMs` | How long the router holds a bare forward for the message that follows it |
 
 Reading a member of a service you did not give throws a `PluginError` that names the option to add.
-A plugin under test that lists a key in `requires` is refused unless `services` gives it.
+The test fails if `services` is missing a key the plugin lists in `requires`.
 
 ### Fixtures
 
 Importing `pi-roundtable/testing` works with `CI=true` and no database URL.
 A few helpers cover the rest:
 
-- `describeDb` is Bun's `describe` when `ROUNDTABLE_TEST_DATABASE_URL` is set, and `describe.skip` otherwise. Use it to gate a database suite.
+- `describeDb` is Bun's `describe` when `ROUNDTABLE_TEST_DATABASE_URL` is set, and `describe.skip` otherwise.
+  Use it to gate a database suite.
 - `OWNER_SPEAKER`, `fakeThreads`, and `silentLogger` are neutral stand-ins for owner turns, dispatch threads, and logging.
 - `recordingLogger()` keeps what it is asked to write, for a test of what your code logs.
-- `partial<Port>({ ... })` stands in for a port your code takes as an argument. Reading a member you did not give throws an error that names it.
-- `fakeDiscord()` is the `DISCORD` service for a plugin that adds slash commands. `discord.added()` lists what the plugin added, and `discord.compose()` returns the tree Discord would get.
+- `partial<Port>({ ... })` stands in for a port your code takes as an argument.
+  Reading a member you did not give throws an error that names it.
+- `fakeDiscord()` is the `DISCORD` service for a plugin that adds slash commands.
+  `discord.added()` lists what the plugin added, and `discord.compose()` returns the tree Discord would get.
 - `useTestLocale()` resets the process-wide locale to English and the time zone to UTC.
 
 The one example whose test needs PostgreSQL is [`migrations.test.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/migrations.test.ts).
-It is skipped unless the variable is set, so point it at a database you can write to and lose:
+It runs only when the variable is set.
+Use a disposable database:
 
 ```sh
 ROUNDTABLE_TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5432/plugin_test bun test

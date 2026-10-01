@@ -10,7 +10,8 @@ import { Steps } from "@astrojs/starlight/components";
 ## Before you start
 
 - [Bun](https://bun.sh/docs/installation) 1.3 or newer.
-- PostgreSQL. The project `init` creates has a `docker-compose.yml` that runs one.
+- PostgreSQL.
+  The project `init` creates has a `docker-compose.yml` that runs one.
 - A Discord bot: an application with a bot user, the Message Content intent turned on, and an invitation to your server.
 - A model login: the API key of the provider of the model you choose (`ANTHROPIC_API_KEY` for `anthropic/...`), or a login made with Pi.
 - An address that reaches the process from the internet, such as a tunnel, because Discord fetches the agents' avatars from it.
@@ -19,7 +20,8 @@ import { Steps } from "@astrojs/starlight/components";
 
 <Steps>
 
-1. Create the project. `init` writes a working project and asks for no secret.
+1. Create the project.
+   `init` writes a working project without asking for secrets.
    It refuses to write anything when Bun is missing or too old, or when a file it would create already exists.
 
    ```sh
@@ -41,7 +43,8 @@ import { Steps } from "@astrojs/starlight/components";
    cp .env.example .env
    ```
 
-4. Run `doctor`. A fresh project fails only on the credentials you have not entered yet, and says which.
+4. Run `doctor`.
+   In a fresh project, only credentials you have not entered yet fail the checks, and `doctor` names them.
 
    ```sh
    bunx roundtable doctor
@@ -76,7 +79,8 @@ import { Steps } from "@astrojs/starlight/components";
 2. `.env` has a value for every variable `.env.example` lists.
 3. `roundtable.config.ts` against its schema, naming the failing key.
 4. Every plugin loads, and no two share a name.
-5. Whether a plugin fills the `images` slot. Without one is not a failure: agents get avatars generated from their display names.
+5. Whether a plugin fills the `images` slot.
+   The check passes with or without one; agents without an image provider get avatars generated from their display names.
 6. PostgreSQL is reachable and migratable.
 7. The Discord token is valid, the bot is in your server, the Message Content intent is on, and the bot has the permissions it needs in the entry channel (including Pin Messages).
    When the bot is not in the server, the fix is an invitation link that asks for exactly those permissions.
@@ -88,6 +92,6 @@ It exits non-zero on any failure and changes nothing it checked.
 ## What `start` does
 
 `bunx roundtable start` runs the checks that need no network, stops with the same message `doctor` prints when one fails, and otherwise starts the bot.
-Once it runs, the agents in `agents.ts` have their channels, and `/roundtable schedule list` shows the schedules of every channel.
+The running bot gives the agents in `agents.ts` their channels, and `/roundtable schedule list` shows the schedules of every channel.
 See [Your first conversation](/start/first-conversation/) for where to write first.
 On `SIGTERM` or `SIGINT` it finishes running work before it stops.

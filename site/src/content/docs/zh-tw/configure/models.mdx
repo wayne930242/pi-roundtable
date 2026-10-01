@@ -39,7 +39,7 @@ config model: expected <provider>/<id>, got "<value>". Write it like anthropic/c
 agent 沒有自己的模型時，就沿用它。
 
 `thinking` 是 `off`、`minimal`、`low`、`medium`、`high`、`xhigh` 其中之一，預設是 `medium`。
-它是後備值，不是固定的等級。
+它只是後備值。
 預設情況下，agent 的 thinking 設定是 `auto`：每一輪開始前，judge 讀你的訊息，從 `low`、`medium`、`high`、`xhigh` 挑一個；它不確定時，就沿用上一輪的等級。
 `thinking` 則是 judge 無法判斷的第一輪所用的等級。
 
@@ -47,8 +47,8 @@ agent 沒有自己的模型時，就沿用它。
 
 judge 是一個小模型，替 bot 回答簡短的問題：
 
-- 一輪需要多少 thinking，
-- 你對被擱置動作的回覆，是不是同意放行，以及
+- 一輪需要多少 thinking。
+- 你對被擱置動作的回覆，是不是同意放行。
 - 群組裡哪些成員該回答這則訊息。
 
 | 鍵 | 預設值 | 作用 |

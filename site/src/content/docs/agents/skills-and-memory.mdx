@@ -12,13 +12,18 @@ Both are on unless `roundtable.config.ts` turns them off; see [Switch an addon o
 
 A skill is a Markdown file, `SKILL.md`, with a name, a description, and a body that says how to do one kind of job.
 The description starts with "Use when" and says only when the skill applies.
-A skill an agent carries is handed to its session as a Pi skill file.
+The bot passes each skill an agent carries to its session as a Pi skill file.
 
 There are three kinds of skill:
 
-- **Built in.** `writing-skills` ships with pi-roundtable, and every agent carries it. It cannot be removed from an agent.
-- **Written by an agent.** An agent creates it with a tool. It is stored under the data directory, and agents can update or delete it.
-- **Linked from a repository.** The skill lives in a repository the host manages. It is read-only here and changes in its repository.
+- **Built in.**
+  `writing-skills` ships with pi-roundtable as a permanent skill on every agent.
+- **Written by an agent.**
+  An agent creates it with a tool.
+  The bot stores it under the data directory, and agents can update or delete it.
+- **Linked from a repository.**
+  The skill lives in a repository the host manages.
+  It is read-only here and changes in its repository.
 
 ### Ask for a skill
 
@@ -32,7 +37,8 @@ Which skills does Researcher carry?
 
 ### The skill tools
 
-The owner and admins can use all of these. Every speaker can use `skill_list`.
+The owner and admins can use all of these tools.
+Every speaker can use `skill_list`.
 
 | Tool | What it does |
 | --- | --- |
@@ -55,8 +61,8 @@ An unknown skill name refuses the whole call, so nothing changes.
 ### Skill groups
 
 A skill group is a named list of skills, with a short description of up to 200 characters.
-It only filters `skill_list`.
-Agents carry skills, not groups.
+Groups only filter `skill_list`.
+Agents carry individual skills.
 
 ### The `writing-skills` skill
 
@@ -75,7 +81,7 @@ A skill an agent writes is a single file of at most 12,000 characters.
 
 Agents remember facts for you, and every agent shares the same memory.
 Each person who talks to the agents has a memory of their own: your agents read and change yours when you speak, and another speaker's memory when they speak.
-One person's memory is not shared with another.
+Each person's memory stays separate.
 
 ```text
 Remember that I prefer short answers.
@@ -99,9 +105,10 @@ Every speaker can use these tools.
 
 Each turn starts with a memory block in the system prompt: today's date in the configured time zone, the **core facts**, and the **upcoming events**.
 An event is shown until its date passes.
-Notes are not in the block. The agent looks for them with `memory_search` when a request may depend on them.
+Notes stay outside this block.
+The agent looks them up with `memory_search` when a request may depend on them.
 
-Keep core facts few and short, because they are shown in every conversation.
+Core facts appear in every conversation, so keep them few and short.
 
 ## Switch an addon off
 

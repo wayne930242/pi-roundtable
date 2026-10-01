@@ -3,9 +3,9 @@
 [English](./README.md) | 繁體中文
 
 一個建立在 [Pi](https://github.com/earendil-works/pi) 上的 Discord 智慧體（agent）伺服器。
-你會在一個 Discord 伺服器裡得到一組 AI 智慧體：每個智慧體擁有一個頻道和一段對話，彼此共用工具與記憶，你用 TypeScript 寫外掛（plugin）來擴充這個 bot。
+它在你的 Discord 伺服器裡放一組 AI 智慧體：每個有自己的頻道和對話，共用工具與記憶。想加功能，就用 TypeScript 寫外掛（plugin）。
 
-- 為一位擁有者和一個 Discord 伺服器設計。你可以允許其他人與智慧體對話，但這樣的設定與風險由營運者自行承擔。
+- 為一位擁有者和一個 Discord 伺服器設計。其他人也能跟智慧體對話，風險由營運者自行承擔。
 - 只支援 Bun。套件直接發佈 TypeScript 原始碼，不需要建置步驟。
 - MIT 授權。
 
@@ -13,9 +13,9 @@
 
 - [Bun](https://bun.sh/docs/installation) 1.3 以上。
 - PostgreSQL。`init` 建立的專案附有 `docker-compose.yml`，可以直接啟動一個。
-- 一個 Discord bot：一個含 bot 使用者、已開啟 Message Content intent，並已邀請進你的伺服器的應用程式。
-- 模型登入：你選的模型的供應商 API key（`anthropic/...` 用 `ANTHROPIC_API_KEY`），或用 Pi 做過的登入。
-- 一個能從網際網路連到這個行程的位址，例如通道（tunnel），因為 Discord 會從該位址取得智慧體的頭像。
+- 一個 Discord bot：有 bot 使用者、開了 Message Content intent，也已經邀請進你的伺服器。
+- 模型登入：你選的模型的供應商 API key（`anthropic/...` 用 `ANTHROPIC_API_KEY`），或之前用 Pi 登入過的帳號。
+- 一個從網際網路連得到這個行程的位址，例如通道（tunnel）。Discord 要從這個位址抓智慧體的頭像。
 
 ## 五分鐘上手
 
@@ -29,13 +29,13 @@ bunx roundtable doctor
 bunx roundtable start
 ```
 
-`init` 會寫出一個可運作的專案，不會向你要任何祕密資訊。
-Bun 不存在或版本太舊，或它要建立的檔案已經存在時，它不會寫入任何東西。
+`init` 會寫出一個能跑的專案，過程不會問你任何祕密資訊。
+Bun 沒裝、版本太舊，或要建立的檔案已經存在時，它什麼都不寫。
 
 ### `.env`
 
 `.env.example` 說明了每個值的來源。
-Bun 會自行載入 `.env`，`.gitignore` 也已讓它不進 Git。
+Bun 會自己讀 `.env`，`.gitignore` 也已經擋掉它。
 
 | 變數 | 內容 |
 | --- | --- |
@@ -54,15 +54,15 @@ Bun 會自行載入 `.env`，`.gitignore` 也已讓它不進 Git。
 2. `.env` 對 `.env.example` 列出的每個變數都有值。
 3. `roundtable.config.ts` 符合其 schema，失敗時指出是哪個鍵。
 4. 每個外掛都能載入，且沒有兩個外掛同名。
-5. 是否有外掛填入 `images` 槽位。沒有並不算失敗：智慧體會用顯示名稱產生頭像。
+5. 有沒有外掛填了 `images` 槽位。沒有也不算失敗，智慧體會用顯示名稱產生頭像。
 6. PostgreSQL 連得上，且能執行 migration。
 7. Discord token 有效、bot 已在你的伺服器裡、Message Content intent 已開啟，而且 bot 在入口頻道有它需要的權限（包含 Pin Messages）。
-   bot 不在伺服器裡時，修正方式是一個邀請連結，連結要求的正是這些權限。
+   bot 還不在伺服器裡的話，它會給你一個邀請連結，連結已經帶好這些權限。
 8. 模型登入存在。
-9. `PUBLIC_URL` 是格式正確的位址；加上 `--reachable` 時它還必須有回應，這只有在 bot 執行中才成立。
+9. `PUBLIC_URL` 的格式正確；加上 `--reachable` 還要求它有回應，所以 bot 得先跑起來。
 
-任何一項失敗，它就以非零狀態結束，並且不更動它檢查過的任何東西。
-全新的專案只會因為你還沒填的憑證而失敗，而且會指出是哪些。
+只要有一項失敗，就以非零狀態結束，檢查過程不會改動任何東西。
+全新的專案只會卡在還沒填的憑證，它會列出是哪幾個。
 
 ### `start`
 
@@ -111,7 +111,9 @@ test("hello greets", async () => {
 
 [外掛指南](docs/plugins.md)（英文）說明外掛能新增的每個部分（工具、提示詞區段、智慧體、事件、服務、migration、provider、斜線指令、HTTP 路由等等）、啟動與停止的順序，以及每一種啟動錯誤和它的修正方式。
 指南裡的範例放在 [`examples/`](examples)，測試套件會執行每一個範例。
-`pi-roundtable/kit` 提供頻道認領（claim）、工具與呈現用的輔助函式，以及 context 現有服務的純型別名稱；`pi-roundtable/discord` 提供斜線指令註冊器、擁有者指令與面板的輔助函式，以及智慧體面板，是會用到 discord.js 型別的入口（`pi-roundtable/testing` 也透過 `testHost` 組合出的指令用到少數幾個）。這兩個入口的版本規則與主入口相同：1.0 之前，不相容的變更會放在次版本（minor）發佈，並列在變更記錄中。
+`pi-roundtable/kit` 提供頻道認領（claim）、工具與呈現用的輔助函式，以及 context 現有服務的純型別名稱。
+`pi-roundtable/discord` 提供斜線指令註冊器、擁有者指令與面板的輔助函式，以及智慧體面板；它是會用到 discord.js 型別的入口（`pi-roundtable/testing` 也透過 `testHost` 組合出的指令用到少數幾個）。
+這兩個入口的版本規則與主入口相同：1.0 之前，不相容的變更會放在次版本（minor）發佈，並列在變更記錄中。
 
 ## 設定
 

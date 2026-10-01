@@ -35,13 +35,12 @@ The same check applies to `judge.model` and `delegation.model`, under their own 
 
 ## `model` and `thinking`
 
-`model` is the model of the agents.
+`model` sets the agents' model.
 An agent follows it unless that agent has a model of its own.
 
 `thinking` is one of `off`, `minimal`, `low`, `medium`, `high`, or `xhigh`, and defaults to `medium`.
-It is a fallback, not a fixed level.
-By default an agent's thinking setting is `auto`: before each turn the judge reads the message and picks `low`, `medium`, `high`, or `xhigh`, and it keeps the previous turn's level while it is unsure.
-`thinking` is the level of a first turn that the judge could not judge.
+By default an agent's thinking setting is `auto`: before each turn the judge reads the message and picks `low`, `medium`, `high`, or `xhigh`.
+If the judge is unsure, the agent keeps the previous turn's level, or uses `thinking` as the fallback for its first turn.
 
 ## `judge`
 
@@ -62,7 +61,8 @@ If the judge's model is not available, the judge fails with `the judge's model <
 ## `delegation`
 
 An agent can hand research to a background worker with `delegate_task`.
-The worker is a fresh session that can only search and read the web, and its report comes back to the agent's channel.
+The worker starts a fresh session with web search and page reading as its only tools.
+Its report comes back to the agent's channel.
 
 | Key | Default | Meaning |
 | --- | --- | --- |
@@ -104,13 +104,13 @@ If neither exists, the check fails:
 ```
 
 When it passes, it says where the login comes from, for example `anthropic login from <source>`.
-`doctor` only reads the login: it never creates the agent directory or `auth.json`.
+`doctor` reads the login without creating the agent directory or `auth.json`.
 
 ## `agentDir`
 
 `agentDir` is Pi's agent directory, where the model logins live.
 It defaults to `<dataDir>/pi`.
 When the bot starts it sets `PI_CODING_AGENT_DIR` to this directory for the Pi packages it loads.
-If you sign in with Pi, make sure the login lands in this directory, or point `agentDir` at the directory that already holds it.
+Sign in with Pi using this directory, or point `agentDir` at the directory that already holds your login.
 
 {/* Sources: src/core/config/config.ts:55-70, src/core/config/config.ts:236-255, src/core/config/config.ts:276-301, src/core/models.ts:1-49, src/core/judging/effort-judge.ts:60-120, src/core/judging/confirmation-judge.ts:1-60, src/core/agents/group-round.ts:1-80, src/core/define-roundtable.ts:76-90, src/core/builtin/agent-server.ts:178-200, src/core/builtin/agent-server.ts:244-262, src/core/runtime/pi-agent-runtime.ts:421-470, src/core/agents/agent-settings.ts:1-50, src/core/agents/agent-tools.ts:160-194, src/core/agents/team-options.ts, src/core/modules/delegation/web-research-worker.ts:1-80, src/core/shared/delegate-tool.ts:1-20, src/cli/checks/model.ts:1-28, src/cli/runtime.ts:1-53, src/core/host.ts:259-275 */}

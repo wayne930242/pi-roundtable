@@ -1,7 +1,6 @@
 # Writing plugins for pi-roundtable
 
-This guide is for someone who has run `npx pi-roundtable init` and wants the bot to do something it does not do yet.
-Read it once, top to bottom, and you can write, test, and run a plugin.
+After running `npx pi-roundtable init`, you can write a plugin to add something the bot doesn't do yet.
 
 Every code block below marked with `example:` is a real file under [`examples/`](../examples), and the test suite fails when a block here differs from its file.
 Each example has a test next to it that runs it without Discord or PostgreSQL, except the one that needs a database, which says so.
@@ -10,11 +9,13 @@ Each example has a test next to it that runs it without Discord or PostgreSQL, e
 
 A plugin is an object with a name and a `setup` function.
 `setup` returns the parts the plugin adds to the bot: tools agents can call, text added to their prompt, agents to create, handlers for events, long-lived services, slash commands, HTTP routes, and so on.
-The bot itself is assembled from plugins too: the core ships built-in plugins for its memory and schedule stores, Discord connection, agent server, notifications, delegation, and schedules, and three [addons](#addons-memory-skills-and-discord-administration) you can switch off (memory, skills, and Discord administration), and yours are added after them.
-The built-ins share what they build through [keyed services](#services-what-plugins-provide-to-each-other), and a plugin of yours can read them or replace them.
+The bot itself is assembled from plugins too.
+The core ships built-in plugins for its memory and schedule stores, Discord connection, agent server, notifications, delegation, and schedules.
+You can switch off three [addons](#addons-memory-skills-and-discord-administration): memory, skills, and Discord administration.
+Your plugins are added after them and can read or replace the built-ins' [keyed services](#services-what-plugins-provide-to-each-other).
 
 You write plugins in TypeScript, list them in `roundtable.config.ts`, and Bun loads them directly.
-There is no build step and no plugin registry: importing a plugin is how you install it.
+Importing a plugin installs it, with no build step or plugin registry.
 
 ```ts
 // roundtable.config.ts
@@ -39,30 +40,32 @@ Everything a plugin author needs comes from four entries, and nothing else can b
 ### Advanced building blocks
 
 Start with the main entry and the context's built-in services.
-The kit and Discord entries are versioned like the main entry: before 1.0 a breaking change to any exported name comes in a minor release and is listed in the changelog, and a test compares every exported signature with a recorded report.
+The kit and Discord entries follow the main entry's versioning: before 1.0, breaking changes to exported names come in minor releases and appear in the changelog.
+A test compares every exported signature with a recorded report.
 Use `pi-roundtable/kit` for channel claims, tool and presentation helpers, and the types of the core's existing parts.
 Use `pi-roundtable/discord` for everything that touches Discord: slash commands, owner-command modules and panels, the agent panel, and the channel-operation tables.
 The main and kit entries name no discord.js type (a test checks their declarations), so a plugin that does not talk to Discord never depends on it.
-Neither exports a class of a built-in service: read the service through its key, or provide your own that keeps to the port.
-Their names are grouped by area in the source, but there is one entry each; directory paths and files under `src/core` are internal.
+These entries expose built-in services through keys and ports, without exporting their classes; you can read a service or provide your own implementation.
+Their exported names are grouped by area in the source, with one entry for each; directory paths and files under `src/core` are internal.
 The [changelog](../CHANGELOG.md) lists every exported name, including type-only contracts.
-Fixtures and fake threads belong to `pi-roundtable/testing`, not production imports.
+Import fixtures and fake threads from `pi-roundtable/testing` for tests.
 
 #### Helpers for a Pi session of your own
 
-A plugin that runs Pi itself, a coding worker or a container with no network, takes its building blocks from the kit instead of rebuilding them:
+Use the kit's building blocks for a plugin that runs Pi itself, such as a coding worker or a container with no network:
 
 - MCP: `mcpExtension` and `VirtualServer` expose MCP servers to a session, and `mcpAdapterExtension` and `readAttachmentExtension` do the same inside an out-of-process worker.
 - Work: `promptSlot` (how a run asks the owner while it works), `workTimeout` (a time limit that does not count the time spent waiting on the owner), `runWorkerTask`, `archiveSessions`, and `approvalCard` and `canonicalJson` for the cards of held actions.
 - Shell: `SHELL_TOOLS` and `shellHoldRule`, the hold rule that keeps risky host-shell commands behind the owner's approval.
 - Tools: `textToolsExtension`, `requiredString`, `stringList` (with `toolText` and `toolError`) for tools that return text.
-- Mirroring a built-in tool in a worker that cannot reach the host: `SCHEDULE_TOOLS`, `scheduleToolSpecs({ locale, timeZone })`, `isScheduleTool`, `callScheduleTool`, `DELEGATE_TOOL` and `DELEGATE_TOOL_SPEC`. The specs take the locale and time zone their descriptions are written in, so the worker needs no process-wide setting.
+- Mirroring a built-in tool in a worker that cannot reach the host: `SCHEDULE_TOOLS`, `scheduleToolSpecs({ locale, timeZone })`, `isScheduleTool`, `callScheduleTool`, `DELEGATE_TOOL` and `DELEGATE_TOOL_SPEC`.
+  The specs take the locale and time zone for their descriptions, so the worker needs no process-wide setting.
 - Effort: `effortJudge` picks a turn's thinking level from a message with your own brief (`EffortBrief`, `JUDGE_WORK`).
 - Presentation and small helpers: `thinkingLine`, `zonedStamp(date, timeZone)`, `channelQueue()` (a queue of your own, so work does not wait behind a running turn), `checkRepoName` and `SKILL_LIST_TOOL` with `skillListExtension` for repositories and skills, and `searchTerms` for memory search.
 
 `roundtable add plugin <name>` creates `plugins/<name>.ts` and its test from a small template and lists it in `roundtable.config.ts`.
 The name is lowercase words joined by dashes, such as `my-notes`.
-Two names are reserved for the [official plugins](#official-plugins): `codex-images` and `dice` copy a ready-made plugin into the project instead of the template.
+Two names are reserved for the [official plugins](#official-plugins): `codex-images` and `dice` copy a ready-made plugin into the project.
 
 ## The plugin object
 
@@ -80,10 +83,10 @@ definePlugin({
 });
 ```
 
-`definePlugin` returns the object it was given, typed, after checking the name and that `setup` is there, so a mistake shows where the plugin is written.
+`definePlugin` checks the name and the presence of `setup`, then returns the typed object you gave it.
+Errors point to the plugin definition.
 
-A plugin must add something.
-A plugin whose `setup` returns `{}` and that has no migrations, providers, or hooks stops the start (see [Errors](#errors-and-their-fixes)).
+A plugin whose `setup` returns `{}` and has no migrations, providers, or hooks stops startup (see [Errors](#errors-and-their-fixes)).
 
 ### The context
 
@@ -104,26 +107,29 @@ A plugin whose `setup` returns `{}` and that has no migrations, providers, or ho
 | `turns` | Runs one turn of a conversation your claim owns, over the runtime and the surfaces: [`turns.run`](#personas-and-contextturns-conversations-of-a-kind-of-your-own) |
 | `sessions()`, `conversations`, `surfaces`, `turns`, `dashboard()` | Linked once every plugin has been set up; calling them during `setup` throws `NotLinkedError` |
 
-Use `sessions()`, `conversations`, `surfaces`, `turns`, and `dashboard()` from a service's `start`, from an event handler, or from a claim's turn, not from `setup`.
+`sessions()`, `conversations`, `surfaces`, `turns`, and `dashboard()` are available from a service's `start`, an event handler, or a claim's turn.
 
-Use main's `QueuePort` for `context.queue`; the kit's `ChannelQueue` is also type-only.
+Use `QueuePort` from the main entry for `context.queue`; the kit's `ChannelQueue` is also type-only.
 
 `context.core` of 0.1.0 is gone: reading it throws a `PluginError` that names `context.services`.
 
 ### Logging and error reports
 
-Every plugin's `context.logger` is a child of the host's logger that adds `plugin: <your plugin's name>` to each line it writes, so a line in the journal says which plugin wrote it.
-`Logger` is a small interface of the five levels and `child(fields)`; a pino logger satisfies it, so a process that already has one passes it as `DefineOverrides.logger`.
+`context.logger` is a child of the host's logger and adds `plugin: <your plugin's name>` to each line in the journal.
+`Logger` has five levels and `child(fields)`; you can pass an existing pino logger as `DefineOverrides.logger`.
 
-With `defineRoundtable`, the logger the host builds hands every `error` and `fatal` line to the ops agent named by `config.ops.agent`, which reports it in its channel, and then to `DefineOverrides.errorSink(entry)` when you give one (a plain function that must not throw).
-A logger you pass yourself is yours: it does not reach the ops agent or `errorSink` unless it forwards its error lines there.
-The report names the plugin next to `app` and `module`; the same error is still reported at most once an hour, whichever plugin wrote it.
+With `defineRoundtable`, the host's logger sends every `error` and `fatal` line to the ops agent named by `config.ops.agent`, which reports it in its channel.
+It then calls `DefineOverrides.errorSink(entry)` if you supply one; this function must not throw.
+A logger you supply reaches the ops agent and `errorSink` only if it forwards its error lines there.
+The report names the plugin next to `app` and `module`; the same error is reported at most once an hour, regardless of which plugin wrote it.
 
 ### Services: what plugins provide to each other
 
 A service is something one plugin builds and others read, such as the schedule store or the agent team.
-Each has a key made with `serviceKey<T>(id)`, and `T` is an interface, a port: an object with the same methods is a service, so you need no built-in class to provide one or to fake one in a test.
-A plugin lists the keys it provides in `provides` and provides each from `setup` with `services.provide(KEY, value)`; the host reads the list before any setup, so it knows who declares what.
+Each has a key made with `serviceKey<T>(id)`, where `T` is the service's interface, or port.
+Any object with those methods can provide the service or stand in for it in a test.
+List the keys in `provides` and provide each from `setup` with `services.provide(KEY, value)`.
+The host reads these lists before setup to find which plugin declares each service.
 
 | Method | What it does |
 |---|---|
@@ -132,12 +138,14 @@ A plugin lists the keys it provides in `provides` and provides each from `setup`
 | `services.lazy(KEY)` | A function that returns the service once every plugin is set up, for a service whose plugin is registered after this one; call it from a service's `start`, a handler, or another callback that runs after startup, since calling it during setup throws a `NotLinkedError`. The host refuses to boot, naming your plugin, when no registered plugin provides the key |
 | `services.provide(KEY, value)` | Only from setup, only for a key the plugin declares in `provides`, once per key |
 
-A plugin that declares a key and does not provide it is refused when its `setup` returns, and two plugins that declare one key are refused before any setup.
+The host refuses a plugin that declares a key without providing it when `setup` returns.
+It refuses duplicate declarations before any setup.
 
-A plugin that reads a service with `get` during its setup lists the key in `requires`, so a wrong order is refused before any migration or setup, with both plugins named, and the plugin states what it needs in one place (`noteCounter` below).
-A key in `requires` must be provided by a plugin registered before this one.
-A service you read with `find` (an addon that may be off) stays out of `requires`.
-When the other plugin has to come after yours, because it reads what yours provides, read its service with `services.lazy` instead of keeping the object in a variable that the later plugin fills in (`earlyNoteReader` below).
+If your plugin reads a service with `get` during setup, list the key in `requires` (`noteCounter` below).
+A wrong order is refused before any migration or setup, with both plugins named.
+A key in `requires` must come from a plugin registered before yours.
+A service you read with `find`, such as an addon that may be off, stays out of `requires`.
+If the other plugin reads your service and has to come after yours, use `services.lazy` to read its service when setup is complete (`earlyNoteReader` below).
 
 The built-in plugins provide these, from the main entry:
 
@@ -154,8 +162,10 @@ The data types the ports use (`Schedule`, `NewSchedule`, `Agent`, `AgentGroup`, 
 Your plugins run after the built-ins, so they can read every key above.
 The Discord connection's key, `DISCORD`, is in the Discord entry, because its port names discord.js types: `DiscordServices` has `connection`, `commands`, `guard`, and `threads` (see [`commands.add`](#slash-commands-commandsadd)).
 
-A plugin of yours shares a service the same way: the key is a constant you export, the port is an interface you export, and plugins registered after yours read it.
-A plugin registered before yours cannot read it during its setup, and says so (it reads the service with `services.lazy` instead, from a callback that runs after startup): `service <id> is not provided yet; plugin <yours> provides it. Register plugin <yours> before plugin <reader>.`
+To share your own service, export its key as a constant and its port as an interface.
+Plugins registered after yours can read it during setup.
+An earlier plugin can read it with `services.lazy` from a callback that runs after startup.
+Reading it during that earlier plugin's setup throws: `service <id> is not provided yet; plugin <yours> provides it. Register plugin <yours> before plugin <reader>.`
 
 <!-- example: examples/shared-services.ts -->
 ```ts
@@ -255,7 +265,9 @@ export function shoutingNotes() {
 
 #### Replacing a built-in service
 
-A plugin that lists a key in both `provides` and `replaces` takes over that service: the host drops the plugin that provides the key and sets the replacement up where it stood, so the replacement may read what the plugins before that place provide and nothing after.
+A plugin that lists a key in both `provides` and `replaces` takes over that service.
+The host drops the original plugin and sets up the replacement in its place.
+During setup, the replacement can read services from plugins before that position.
 The dropped plugin's migrations and setup do not run.
 To replace the schedule store, implement `ScheduleStore`, provide it under `SCHEDULES`, and replace it:
 
@@ -272,7 +284,7 @@ definePlugin({
 });
 ```
 
-The host refuses a replacement that cannot be made whole:
+The host checks replacements before setup:
 
 | Message | Fix |
 |---|---|
@@ -283,8 +295,8 @@ The host refuses a replacement that cannot be made whole:
 
 #### Addons: memory, skills, and Discord administration
 
-Three features are built-in plugins of their own that the host adds unless the configuration switches them off.
-They are on by default, so a bot that says nothing about them has all three.
+The host adds these three built-in plugins by default.
+You can switch them off in the configuration.
 
 | Addon | Plugin | Switch in `roundtable.config.ts` | What it adds | When it is off |
 |---|---|---|---|---|
@@ -292,10 +304,11 @@ They are on by default, so a bot that says nothing about them has all three.
 | Skills | `skills` (provides `SKILLS`) | `skills: false` | The skill tables, the skill tools of agent sessions (`skill_list`, `skill_link`, `skill_create`, `agent_skills`, and the rest), and the skills every agent carries, `writing-skills` included | No skill tools and no skills in any session; `agent_get` has no skills line; `agent_create` leaves out its `skills` parameter and refuses a call that passes some with `Skills are off on this host`; the tables are left as they are |
 | Discord administration | `discord-admin` | `discord: { admin: false }` | The `discord_*` tools that read and manage the server, for the owner | No `discord_*` tools; the channel executor that remote MCP uses is the connection's, so it stays |
 
-A switched-off addon's tables and rows are never touched: turning it on again finds them as they were.
+Switching an addon off leaves its tables and rows unchanged, ready for when you turn it on again.
 `skills` also takes the two directories (`skills: { builtinDir, reposDir }`) when it is on.
 
-A plugin of yours that can work without an addon reads its service with `find`, which is `undefined` while the addon is off; one that cannot uses `get`, which fails with a message naming the switch:
+Use `find` for an optional addon service; it returns `undefined` while the addon is off.
+Use `get` if your plugin needs the addon; it fails with a message naming the switch:
 
 ```text
 service roundtable.memory is not provided. The memory addon is switched off (config memory: false). Switch it on, or provide the service from a plugin of your own.
@@ -306,13 +319,13 @@ Switching an addon off and adding a plugin of yours that provides the same key i
 
 ## Tiers: who may use what
 
-Every turn is for a speaker, and a speaker has a tier: `owner`, `admin`, or `member`, from most to least trusted.
-With nothing configured only the owner speaks.
-An operator who opens the bot to others lists them under `speakers` in `roundtable.config.ts` and owns that setup.
+Every turn has a speaker with a tier: `owner`, `admin`, or `member`, from most to least trusted.
+By default, only the owner speaks.
+The operator can open the bot to others by listing them under `speakers` in `roundtable.config.ts` and is responsible for that setup.
 
-A tool must say which tier may call it.
-The tool is offered only in turns whose speaker is at that tier or above, and the operator's `toolTiers` setting can override what the plugin chose.
-A tool nobody named needs the owner.
+Each tool names the lowest tier that may call it.
+The bot offers the tool in turns whose speaker is at that tier or above; the operator's `toolTiers` setting can override the plugin's choice.
+Tools with no tier assigned require the owner.
 A plugin that adds raw session tools names their tiers with `toolTiers`; the core's own table names only `ask_user`, `compact_session` and `read_attachment`.
 
 ## The parts
@@ -468,7 +481,8 @@ test("the section names the agent, and the speaker when there is one", async () 
 ### `seeds`: agents created on the first start
 
 A seed has a name, a display name, a prompt, and a prompt for drawing its avatar.
-The first start creates the agents that are not stored yet and never overwrites one that is, so agents are edited in Discord afterwards.
+On the first start, the host creates agents that aren't stored yet and leaves existing agents unchanged.
+You can edit them in Discord afterwards.
 `agents` in `roundtable.config.ts` is the same list, for your own team.
 
 <!-- example: examples/seeds.ts -->
@@ -504,7 +518,7 @@ export const library = definePlugin({
 | `changed()` | The team changed: an agent or group was created, edited, arranged, archived, or started over |
 | `shutdown(left)` | The shutdown drain ended, before any service stops; `left` lists the work it gave up on |
 
-A handler that throws is logged and never stops the others.
+The host logs errors thrown by a handler and continues running the others.
 
 <!-- example: examples/events.ts -->
 ```ts
@@ -536,12 +550,16 @@ export function turnLog(lines: string[]) {
 ```
 <!-- /example -->
 
-`serviceStarted` names the plugin and the service, so a plugin hears the agent server's start as `AGENT_SERVER_PLUGIN` and `AGENT_TEAM_SERVICE` (`"agent-server"` and `"team"`) with `outcome === "ready"`: by then the agents' channels and the dashboard are up.
-A plugin that has to act after the team is running, such as posting a notice, waits for that event instead of posting while it starts.
+`serviceStarted` names the plugin and the service.
+When the agent server's channels and dashboard are up, it reports `AGENT_SERVER_PLUGIN` and `AGENT_TEAM_SERVICE` (`"agent-server"` and `"team"`) with `outcome === "ready"`.
+Wait for that event to do something that needs the team running, such as posting a notice.
 
 A turn event has a `kind`: `"agent"` for an agent's turn, else the kind the turn ran as (`"study"` in the example below).
 `agent` is the agent's name and is absent for a turn of another kind.
-A test calls a handler itself with the payload the core sends: a turn is `{ agent, kind, channel, speaker }` (plus `group` for a member's turn in a group), `turnEnded` adds `result`, `changed` takes nothing, and `shutdown` takes the list of unfinished work, which `harness.stop()` delivers as an empty one.
+In a test, call the handler with the payload the core sends.
+A turn is `{ agent, kind, channel, speaker }`, plus `group` for a member's turn in a group.
+`turnEnded` adds `result`, `changed` takes nothing, and `shutdown` takes the list of unfinished work.
+`harness.stop()` delivers an empty list.
 
 <!-- example: examples/events.test.ts -->
 ```ts
@@ -579,13 +597,15 @@ test("the handlers record a turn, a team change, and the shutdown", async () => 
 
 A service has a name and optional `start`, `stop`, and `busy`.
 Services start once everything is set up and stop in reverse order.
-`busy` lists the work still running, one entry each; a shutdown waits until every service's list is empty, so a deploy never cuts work short.
+`busy` lists the work still running, one entry each; a shutdown waits until every service's list is empty, for at most an hour, so a deploy rarely cuts work short.
 The host adds its own channel queue to that wait, so a surface that queues its turns through `context.queue` needs no `busy` for them.
 
 A service may also have `startInBackground`.
-The host runs every service's background start once all the `start`s are done and the HTTP listeners are open, and does not wait for it: the boot has already finished.
-A background start that throws is logged and never fatal, and the other services' background starts still run.
-Either way every plugin hears `serviceStarted` with `ready` or `failed`, after the start has done everything it does, so a service that brings something up in the background can be relied on once its event says `ready`.
+After all the `start`s finish and the HTTP listeners open, the host runs every service's background start without waiting for it.
+Boot is already complete.
+The host logs errors from background starts and keeps running the process and the other background starts.
+When a background start finishes, every plugin hears `serviceStarted` with `ready` or `failed`.
+A `ready` event means the service has finished its background setup.
 
 ```ts
 services: [
@@ -600,8 +620,9 @@ services: [
 ```
 
 Use a service for anything with a lifetime: a timer, a queue, a connection.
-There is no separate part for schedules: agents create schedules with the built-in `schedule_create` tool, the built-in scheduler fires them, and a scheduled turn is an ordinary agent turn that can call your tools.
-A plugin that needs its own timer writes a service like this one.
+Agents create schedules with the built-in `schedule_create` tool, and the built-in scheduler fires them.
+A scheduled turn is an ordinary agent turn that can call your tools, so schedules need no separate plugin part.
+For a timer of your own, write a service like this one.
 
 <!-- example: examples/services.ts -->
 ```ts
@@ -640,32 +661,38 @@ export function heartbeat(everyMs: number, beat: () => Promise<void> | void) {
 
 ### `migrations` and `context.database()`: tables of your own
 
-`migrations` sits on the plugin, not in what `setup` returns.
-Every start runs every plugin's migrations, in plugin order, before any `setup`, so a table is there when `setup` asks for the database.
+Declare `migrations` on the plugin object.
+At each start, the host runs every plugin's migrations in plugin order before any `setup`, so the tables are ready when setup asks for the database.
 A migration is `{ name, runs?, up(sql) }`.
 Table names are shared with the core and with every other plugin, so prefix them with your plugin's name; a migration's own name only has to be unique inside its plugin.
 
-The host keeps a ledger, the table `roundtable_migrations`, which it creates itself.
-A migration is recorded there under the id `<plugin>/<name>`, for example `stores/visit-counter`, and the ids are the ledger's keys: renaming a plugin or a migration makes its migrations run again, so keep both names once a database holds them.
+The host creates `roundtable_migrations` to keep a ledger of migrations.
+Each migration is recorded under the id `<plugin>/<name>`, such as `visit-counter/visit-counter-1-create`.
+Renaming a plugin or migration makes its migrations run again, so keep both names once they are recorded.
 
 - `runs: "once"` (the default) runs the migration one time over a database and records it.
-  It runs in its own transaction under an advisory lock, and the ledger row is written in that same transaction, so a migration that fails leaves nothing behind, and two hosts starting at once apply it once between them.
+  It runs in its own transaction under an advisory lock, with the ledger row written in the same transaction.
+  A failed migration leaves nothing behind; two hosts starting together apply it once between them.
   A `db.begin(...)` inside `up` becomes a savepoint of that transaction.
   Write DDL that PostgreSQL can run in a transaction (no `CREATE INDEX CONCURRENTLY`).
 - `runs: "every-boot"` runs at every start and is never recorded, so `up` must be idempotent (`CREATE TABLE IF NOT EXISTS`, `UPDATE ... WHERE` a condition that stops matching).
   Use it for a migration that converges data another build may write since, such as a move from a table an older version still writes.
 
 A start logs one `migrations` line with the ids applied now, the number skipped, and the number that ran every boot.
-Adding a ledger to a database that already ran the migrations is safe: no id is recorded yet, so each `once` migration runs one more time, as every start did before, and is recorded.
+When you add a ledger to a database that already ran the migrations, each `once` migration runs one more time and is recorded.
+This is safe because it repeats the same work that previously ran at every start.
 `roundtable doctor` runs the same runner inside a transaction it rolls back, so it checks exactly what a start would run.
 
-`migrateDatabase(url, plugins)` (main entry) runs the plugins' migrations over a database with the same ledger and lock, then closes its connection, and returns a `MigrationReport` (`applied`, `skipped`, `everyBoot`, each a list of ids).
+`migrateDatabase(url, plugins)` from the main entry runs the plugins' migrations with the same ledger and lock, then closes its connection.
+It returns a `MigrationReport` with three lists of ids: `applied`, `skipped`, and `everyBoot`.
 Use it in a test or a script that needs the tables before the host runs, and pass the same plugins, with the same names, the host runs.
 
-`testPlugin` gives your plugin the database you pass it but does not run its migrations; run them yourself first, as this example's test does.
-This is the one example whose test needs PostgreSQL: it is skipped unless `ROUNDTABLE_TEST_DATABASE_URL` is set.
-The package exports no client of its own for tests, so the test opens a Bun `SQL` on that URL, runs the migrations twice, passes the client to `testPlugin`, and drops its table in `finally`.
-Point the variable at a database you can write to and lose:
+Run migrations before passing a database to `testPlugin`, as this example's test does.
+The harness gives your plugin that database without running migrations.
+This is the one example whose test needs PostgreSQL; it is skipped unless `ROUNDTABLE_TEST_DATABASE_URL` is set.
+The test opens a Bun `SQL` on that URL, runs the migrations twice, passes the client to `testPlugin`, and drops its table in `finally`.
+The package exports no test database client.
+Use a disposable database you can write to:
 
 ```sh
 ROUNDTABLE_TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5432/plugin_test bun test
@@ -677,8 +704,8 @@ import { definePlugin, defineTool } from "pi-roundtable";
 import { Type } from "typebox";
 
 /**
- * Migrations create the plugin's tables before any setup runs, on every start, so they must be
- * idempotent. Their names and the tables are shared with every other plugin: prefix them.
+ * Migrations create the plugin's tables before any setup runs. Each one runs once and is recorded
+ * in a ledger. Table names are shared with every other plugin: prefix them.
  */
 export const visitCounter = definePlugin({
 	name: "visit-counter",
@@ -737,7 +764,7 @@ test.skipIf(!url)(
 		try {
 			for (const migration of visitCounter.migrations ?? []) {
 				await migration.up(sql);
-				await migration.up(sql); // Idempotent: the host runs it on every start.
+				await migration.up(sql); // Written to be idempotent, so a second run changes nothing.
 			}
 			const harness = await testPlugin(visitCounter, { database: sql });
 			expect(await harness.runTool("visit_count", { place: "lab" })).toBe(
@@ -759,7 +786,8 @@ test.skipIf(!url)(
 ### `providers`: replace a part the core runs on
 
 `providers` also sits on the plugin.
-There are three slots, and one plugin may fill each; a slot that is not one of these, such as a misspelled name, stops the start with an error that names the valid slots.
+There are three slots, each filled by at most one plugin.
+An unknown or misspelled slot stops startup with an error listing the valid names.
 
 | Slot | The core's default | Your replacement |
 |---|---|---|
@@ -767,8 +795,9 @@ There are three slots, and one plugin may fill each; a slot that is not one of t
 | `images` | No drawing; each agent gets an avatar generated from its display name | `async (prompt, references) => bytes` returning PNG bytes |
 | `runtime` | None: the agent server builds the Pi runtime itself | `(deps) => runtime`, an [`AgentRuntime`](#the-runtime-slot-replace-pi) that runs every conversation |
 
-Without an `images` provider, agents are not offered drawing: `agent_create` takes no `avatar_prompt`, there is no `agent_avatar` tool, and the owner's profile panel says no image provider is configured instead of offering to redraw.
-Each agent still gets a picture, generated from its display name and the assistant's icon, so agents stay easy to tell apart.
+When no `images` provider is configured, `agent_create` has no `avatar_prompt` parameter and `agent_avatar` is unavailable.
+The owner's profile panel reports the missing provider and offers no redraw option.
+Each agent gets a picture generated from its display name and the assistant's icon, so you can tell agents apart.
 `bunx roundtable doctor` reports whether the slot is filled.
 
 <!-- example: examples/providers.ts -->
@@ -795,13 +824,19 @@ export const pixelAvatars = definePlugin({
 
 ### The `runtime` slot: replace Pi
 
-The runtime runs the conversations of the agent server, and of every claim that runs turns through `context.turns`: one persistent conversation per channel key, its turns, its held actions, and its history.
-By default the agent server builds the Pi runtime.
-A plugin that fills the `runtime` slot replaces the whole of it: agent turns, the owner's conversations, steering, held actions, and transcripts then run on the plugin's runtime, and Pi is never built.
-The default of the slot is a factory that refuses, so a plugin that calls `providers.runtime` checks `providers.filled.has("runtime")` first; the agent server does this for you.
+The runtime handles the agent server's conversations and those of every claim that runs turns through `context.turns`.
+It keeps one persistent conversation per channel key, with its turns, held actions, and history.
+By default, the agent server builds the Pi runtime.
+Filling the `runtime` slot replaces it for agent turns, the owner's conversations, steering, held actions, and transcripts; the host skips building Pi.
+The slot's default factory refuses calls, so check `providers.filled.has("runtime")` before calling `providers.runtime`.
+The agent server does this for you.
 
 The slot is a `RuntimeFactory`: `(deps: RuntimeDeps) => AgentRuntime`, called once when the agent server sets up.
-`deps` has what a runtime needs from the host: `logger`, `env`, the `owner`, `sessions()` (the linked hold rules, packages, session tools and personas, available from the preflight on, so call it in a turn, not in the factory), `toolTiers`, `prompts(conversation, speaker)` (the owner's approval and question cards on the conversation's surface, or `undefined`), `agents` (the agent server's per-agent settings: `workDir`, `skills(name)`, `modelOf(name)`, `turnChannel(scope)`), `confirmations` (where held actions persist across a restart), and the host's `judge`.
+`deps` provides `logger`, `env`, `owner`, `toolTiers`, and the host's `judge`.
+Its `sessions()` gives you linked hold rules, packages, session tools, and personas from preflight onwards; call it in a turn, when those parts are available.
+`prompts(conversation, speaker)` gives you the owner's approval and question cards on the conversation's surface, or `undefined`.
+`agents` holds the agent server's per-agent settings: `workDir`, `skills(name)`, `modelOf(name)`, and `turnChannel(scope)`.
+`confirmations` stores held actions across restarts.
 
 An `AgentRuntime` has these methods:
 
@@ -817,7 +852,9 @@ An `AgentRuntime` has these methods:
 | `preflight?()` | Runs in the host's preflight, before anything starts; a throw stops the boot |
 | `dispose?()` | Runs when the host stops the agent server's runtime service |
 
-A request has the turn's `channel`, `selection` (its tools), `text`, `attachments`, `speaker`, and flags (`steerable`, `interactive`, `confirmed`); an agent's turn also has `agent`, the agent's scope, whose `session` is the conversation's key; any other turn has a `kind` (`"owner"` when absent) that names the conversation's persona.
+A request has the turn's `channel`, `selection` (its tools), `text`, `attachments`, `speaker`, and flags (`steerable`, `interactive`, `confirmed`).
+An agent's turn also has `agent`, the agent's scope, whose `session` is the conversation's key.
+Other turns use `kind` to name the conversation's persona, defaulting to `"owner"` when absent.
 
 <!-- example: examples/echo-runtime.ts -->
 ```ts
@@ -931,7 +968,8 @@ export const echoRuntime = definePlugin({
 ```
 <!-- /example -->
 
-A test sets the plugin up with `testPlugin`, which builds the runtime from the slot the way the agent server does (`harness.runtime`) and runs `context.turns` over it, with the fake surface and no Discord or Pi:
+`testPlugin` builds the runtime from the slot as the agent server does and exposes it as `harness.runtime`.
+The test runs `context.turns` over that runtime and a fake surface, without Discord or Pi:
 
 <!-- example: examples/echo-runtime.test.ts -->
 ```ts
@@ -1092,17 +1130,24 @@ export function needsKey(
 
 ### Slash commands: `commands.add`
 
-Slash commands belong to the Discord plugin, which composes the commands of every plugin under one root command, `/roundtable` unless `discord.rootCommand` says otherwise, and registers them with Discord as it connects.
-A plugin adds its own from `setup` with `context.services.get(DISCORD).commands.add(...)`, with `DISCORD` from `pi-roundtable/discord`.
-A subcommand goes under the root command; the `module` answers the interactions Discord sends and returns `true` for the ones it handled; `commands()` returns top-level commands of its own, and never the root.
-A plugin that only adds commands returns `{}`: reading a service in `setup` is enough for the host not to treat it as empty.
+The Discord plugin composes every plugin's slash commands under one root command, `/roundtable` by default or the name in `discord.rootCommand`.
+It registers them with Discord as it connects.
+Add commands from `setup` with `context.services.get(DISCORD).commands.add(...)`, importing `DISCORD` from `pi-roundtable/discord`.
+Subcommands go under the root command.
+The `module` answers Discord interactions and returns `true` for those it handled.
+Its `commands()` returns its own top-level commands, excluding the root.
+A plugin that only adds commands can return `{}` because reading a service in `setup` counts as a contribution.
 
-The Discord plugin composes the commands in its `preflight`, which runs before any service starts, so a duplicate command name, a module that registers the root itself, or a subcommand added twice stops the start with a `PluginError` before anything reaches Discord.
-`commands.add` after that preflight throws too (`commands can be added only while plugins set up`), so call it from `setup`, never from a service's `start` or a handler.
-Use `services.find(DISCORD)` when the plugin also works on a host without the Discord plugin; without it there are no commands, and the rest of the plugin still runs.
+The Discord plugin composes commands in its `preflight`, before any service starts.
+Duplicate command names or subcommands, or a module that registers the root itself, stop startup with a `PluginError` before reaching Discord.
+Call `commands.add` from `setup`; after preflight it throws `commands can be added only while plugins set up`.
+Use `services.find(DISCORD)` if your plugin can work without Discord.
+When the service is absent, the rest of your plugin can run without commands.
 
-`pi-roundtable/discord` also has the pieces a command module is built from: `ownerCommandModule(guard, handlers)` for a feature's part of the root command (owner-only, deferred, with a failure panel), `groupOption` for a subcommand group, the panel helpers (`ownerPanel`, `ownerPanels`, `ephemeralPanel`, `replyWithPanels`, `plain`, `OwnerFacingError`), and `agentPanel({ guard, agents })` for the profile panel of an agent.
-`DISCORD.guard` is the `CommandGuard`: `isOwner(actor)` takes an interaction or anything with `user.id`, so a test needs no cast, and `DiscordOptions.refusalHint` (`discord.refusalHint` in the configuration) is text appended as it is to the refusal a non-owner gets.
+Build a feature's part of the root command with `ownerCommandModule(guard, handlers)` from `pi-roundtable/discord`; it is owner-only, defers interactions, and supplies a failure panel.
+That entry also exports `groupOption` for subcommand groups, the panel helpers (`ownerPanel`, `ownerPanels`, `ephemeralPanel`, `replyWithPanels`, `plain`, `OwnerFacingError`), and `agentPanel({ guard, agents })` for an agent's profile panel.
+`DISCORD.guard` is the `CommandGuard`; its `isOwner(actor)` accepts an interaction or anything with `user.id`, so a test needs no cast.
+`DiscordOptions.refusalHint` (`discord.refusalHint` in the configuration) is appended unchanged to the refusal a non-owner gets.
 
 <!-- example: examples/interactions.ts -->
 ```ts
@@ -1141,10 +1186,11 @@ A test gives the plugin `fakeDiscord()` from `pi-roundtable/testing`: `testPlugi
 
 ### `http`: routes on the bot's listener
 
-The configuration's `http` block opens one listener, named `public`, and `http.publicUrl` is the address that reaches it from the internet; the agents' avatars are served from it.
+The configuration's `http` block opens a listener named `public`, which serves the agents' avatars.
+`http.publicUrl` is its internet address.
 A route names the listener, a path (`{ exact }` or `{ prefix }`), optionally the methods, and a handler that gets a `Request` and returns a `Response`.
 Two routes that could take the same request are refused, so a route cannot shadow the avatars.
-Anything on this listener is reachable from the internet: check a secret in the handler before doing anything.
+This listener is reachable from the internet, so check a secret in the handler before taking action.
 A handler that throws, or returns a rejected promise, answers `500 Internal Server Error` with that fixed body, and the listener keeps serving.
 The host logs one error line with the route's `name` and its `listener`; it never logs the request URL, since a path may hold a secret.
 
@@ -1196,7 +1242,7 @@ export const links = definePlugin({
 
 ### `agentSelection`: tools every agent carries
 
-It is a function, read before each turn, so a set that changes while the process runs stays current.
+`agentSelection` runs before each turn, keeping the selection current as the process runs.
 It names tools and tool groups; a tool still has to pass the speaker's tier.
 
 <!-- example: examples/selection.ts -->
@@ -1220,10 +1266,12 @@ export function alwaysOn(tools: () => string[]) {
 
 ### `piPackages`: Pi extensions every session loads
 
-Names of npm packages, installed in your project (`bun add pi-web-access`), whose Pi extensions every conversation session loads.
+List npm packages whose Pi extensions every conversation session should load, and install them in your project (`bun add pi-web-access`).
 Two plugins that name the same package load it once.
 
-`pi-web-access` is also what the built-in delegation worker loads to search and read the web, so `pi-roundtable` lists it as a peer dependency (`>=0.35.0 <0.36.0`): `bun add pi-roundtable` installs it for you, and a project that depends on its own build of it, such as a fork, gets that one copy for both the worker and `piPackages`, with no `overrides` entry.
+The built-in delegation worker also loads `pi-web-access` to search and read the web.
+`pi-roundtable` lists it as a peer dependency (`>=0.35.0 <0.36.0`), so `bun add pi-roundtable` installs it for you.
+If your project depends on its own build, such as a fork, both the worker and `piPackages` use that copy without an `overrides` entry.
 A project that has none installed stops at the `modules` plugin's setup with a `PluginError` that names the command to run.
 
 <!-- example: examples/packages.ts -->
@@ -1244,14 +1292,15 @@ export const webSearch = definePlugin({
 
 `toolTiers` maps the name of each tool a `sessionTools` extension registers to the lowest tier that may use it: `{ toolTiers: { notes_search: "member", notes_edit: "admin" } }`.
 A tool built with `defineTool` already carries its tier; this is the same for the raw form.
-The operator's `toolTiers` setting still wins, a tool nobody names needs the owner, and two plugins naming one tool is a `PluginError` that names both.
+The operator's `toolTiers` setting wins, and tools with no tier assigned require the owner.
+If two plugins name the same tool, the host throws a `PluginError` naming both.
 The built-in addons use it: each declares the tiers of its own tools.
 
 ### `sessionTools`: the raw form of `tools`
 
 A session tool is a Pi extension placed in every conversation session by its phase: `tools`, `compaction`, or `mcp`.
-Reach for it only when `defineTool` cannot express what you need, such as a tool whose set changes while the process runs (bump `revision`) or a tool that depends on the session.
-The extension's name must be unique, and a plugin may not take the name of a core extension (`read-attachment`, `confirmation-gate`, `ask-user`, `self-compact-guard`, `active-tools`).
+Use it for tools that `defineTool` cannot express, such as a set that changes while the process runs (bump `revision`) or a tool that depends on the session.
+Each extension needs a unique name; the core reserves `read-attachment`, `confirmation-gate`, `ask-user`, `self-compact-guard`, and `active-tools`.
 A runtime of your own pins the active tools the way the core does: `activeToolsExtension(() => tools)` from `pi-roundtable/kit` is the extension the core places last, so its handler runs after every other extension's.
 At most one plugin may add a `compaction` extension, and it must name the `engine` its compactions record.
 
@@ -1298,23 +1347,27 @@ export const clock = definePlugin({
 
 A claim makes the plugin the owner of the conversations in some channels.
 The router asks claims by descending `priority`, then plugin order; the first that owns a channel decides everything there, and a message its `admit` returns nothing for is dropped.
-Most plugins never need one: the built-in agent server already owns the agents' channels.
+The built-in agent server already owns the agents' channels, so most plugins need no claim.
 
 A channel key is `<surface>:<id>`: the surface names the chat network (`discord`), and the id is that network's own, which may contain colons.
 `parseChannelKey(key)` splits a key at its first colon into `{ surface, id }` and throws for a key without a surface; `channelKey(surface, id)` builds one.
-A claim's `owns(channel, space)` receives, besides the channel, the `space` of the message being routed: the server or workspace the message was posted in, in its surface's own ids, or nothing when the router asks about a channel alone or the message is a direct one.
+A claim's `owns(channel, space)` receives the channel and the message's server or workspace id as `space`, using the surface's own ids.
+`space` is absent for direct messages or when the router asks about a channel alone.
 The agent server uses it to own every channel of its Discord server.
-Read a key with `parseChannelKey`, never by slicing a prefix off it, and make `owns` check the surface: a claim that owns `mcp:` keys says `parseChannelKey(channel).surface === "mcp"`, and one that answers on Discord checks `"discord"`.
+Use `parseChannelKey` to read a key, and check the surface in `owns`: `parseChannelKey(channel).surface === "mcp"` for `mcp:` keys, or `"discord"` for Discord.
 
-The built-in agent server claims with `AGENT_SERVER_PRIORITY` (100), the highest of any claim, and only on `discord:` keys: the agents' own channels, and, so that nothing else answers there, every other channel of its Discord guild (which it leaves silent; those channels are the owner's notes).
-A claim of yours on Discord channels therefore never hears a message in the agents' channels or the rest of the agent guild, whatever its priority below 100: a claim written with `priority: 10` for `discord:` keys is beaten there.
-Keys of another surface are never the agent server's, so a claim of yours on them, such as the `echo:` keys of the example, needs no priority against it.
+The built-in agent server claims `discord:` keys with `AGENT_SERVER_PRIORITY` (100), the highest claim priority.
+It owns the agents' channels and every other channel in its Discord guild.
+It leaves those other channels silent for the owner's notes, preventing other claims from answering there.
+Your Discord claim won't receive messages from that guild at any priority below 100, including `priority: 10`.
+Claims on other surfaces, such as the example's `echo:` keys, don't compete with the agent server.
 
 A claim may have `stop(channel)`, which stops the channel's running turn and returns whether one was running; the Stop button, `conversations.stop`, and every other stop go through it.
-The router asks only the claim that owns the channel: a claim without `stop` means `false`, and a claim below it is not asked in its place.
+The router calls only the owning claim's `stop`, returning `false` when that method is absent.
 Give `stop` to a claim whose conversations run turns that can be interrupted.
 
-A claim that runs conversations of its own returns the conversation's kind from `startFresh`, and runs its turns with [`context.turns`](#personas-and-contextturns-conversations-of-a-kind-of-your-own) instead of writing the pipeline of typing, stop control, events, and reply.
+For a claim with its own conversations, return the conversation's kind from `startFresh`.
+Run turns with [`context.turns`](#personas-and-contextturns-conversations-of-a-kind-of-your-own), which handles typing, the stop control, events, and replies.
 
 <!-- example: examples/channels.ts -->
 ```ts
@@ -1351,18 +1404,23 @@ export const echo = definePlugin({
 ### `personas` and `context.turns`: conversations of a kind of your own
 
 A conversation has a kind: the string its claim returns from `startFresh`, such as `"owner"` or `"study"`.
-The host reads none of them, so a plugin names the kinds of its own claims.
-A `Persona` is the system prompt of every non-agent conversation of one kind: `{ kind, prompt() }`, where `prompt()` is read when the conversation's session is made, so text from the message catalog is in the host's language.
+Your plugin names its claims' kinds; the host treats them as opaque strings.
+A `Persona` supplies the system prompt for every non-agent conversation of one kind: `{ kind, prompt() }`.
+The runtime reads `prompt()` when it creates the conversation's session, so message catalog text uses the host's language.
 
 - A plugin contributes `personas` with the kinds it owns; `sessions().persona(kind)` is the linked lookup a runtime uses.
 - Two personas of one kind are refused, naming both plugins, and so is the kind `"agent"`, which the agent server keeps for its agents.
-- The kind `"owner"` is the default kind of a conversation whose claim names none: the plugin that owns the owner's conversations contributes its persona. With none, those conversations start with an empty system prompt.
-- A plugin that needs tools to exist contributes `requiredTools` (a list of tool names): startup builds a session and refuses to run when one is not registered. The lists of every plugin are merged, each name once.
-- A turn of a kind that has no persona is refused, naming `personas`, instead of running with the owner's prompt.
+- The kind `"owner"` is the default for a conversation whose claim names none.
+  The plugin that owns the owner's conversations contributes its persona; without one, those conversations start with an empty system prompt.
+- List tools your plugin needs in `requiredTools`; startup builds a session and refuses to run if any listed tool is unregistered.
+  The host merges every plugin's list and keeps each name once.
+- A turn whose kind has no persona is refused with an error naming `personas`.
   The Pi runtime refuses when it makes the session; a runtime of your own does the same, as the example's does.
 
-`context.turns.run(input)` is how a claim runs a turn in a conversation it owns, inside its own queue task, without writing the turn pipeline.
-It shows typing and the stop control on the channel's surface, runs the turn on the runtime, emits `turnStarted` and `turnEnded` (with the turn's `kind`), settles a runtime that throws into a failed result, and posts the answer, or a failure or stopped notice, through the surface, unless you give `reply(result)`.
+Call `context.turns.run(input)` inside your claim's queue task to run a turn in a conversation it owns.
+It shows typing and the stop control on the channel's surface, runs the turn, and emits `turnStarted` and `turnEnded` with the turn's `kind`.
+It catches runtime errors as failed results and posts the answer, failure notice, or stopped notice through the surface.
+Supply `reply(result)` to handle the reply yourself.
 `input` has `channel`, `kind`, `text`, `speaker`, and optionally `attachments`, `selection` (by default the plugins' `agentSelection`), `steerable`, `interactive`, `confirmed`, and `reply`.
 It rejects with `NotLinkedError` during `setup`, and with a `PluginError` on a host whose agent server has not provided a runtime.
 
@@ -1423,7 +1481,7 @@ export const studyRoom = definePlugin({
 ```
 <!-- /example -->
 
-The test runs the plugin over the fake surface and the echo runtime of [the runtime slot](#the-runtime-slot-replace-pi), with nothing else:
+The test uses the fake surface and echo runtime from [the runtime slot](#the-runtime-slot-replace-pi):
 
 <!-- example: examples/study-room.test.ts -->
 ```ts
@@ -1501,16 +1559,19 @@ test("the persona is the plugin's and belongs to the study kind only", async () 
 
 ### `backgroundTargets`: whose turn a schedule or delegated task is
 
-A schedule, and a task an agent delegates, comes back later as a turn nobody wrote in the channel.
+Schedules and delegated tasks return later as turns without a new message in the channel.
 A `BackgroundTarget` says whose turn that is: a `name` that the schedule or job stores, a `label(locale)` that lists such as `/<root> schedule` show, and the limits that apply to it.
 `schedules` (`perChannel`, `promptChars`, `aheadDays`) bounds what `schedule_create` accepts, and `delegation` (`maxRunning`) bounds how many delegated tasks may run in one channel; a target without one of them may not schedule or delegate at all.
 The claim that answers the target serves it in its `background(turn)`, where `turn.target` is the name, and skips every target it does not serve.
-That is what keeps the owner's tools out of a channel open to many people: a channel's claim runs a turn only for its own target.
+A channel's claim runs turns only for its own target, keeping the owner's tools out of channels open to many people.
 
-- A plugin contributes `backgroundTargets` next to the claim that serves them, and `context.conversations.target(name)` reads one when it is used, so call it from a service or a handler, not during setup.
-- Two targets of one name are refused, naming both plugins, the way two personas of one kind are.
-- The agent server contributes `OWNER_TARGET` (name `"owner"`, exported from the main entry) for the owner's and the agents' conversations, and its claim answers only that target: a turn for any other target is skipped, never run with the owner's tools.
-- A turn for a target no plugin contributes is skipped with the reason `no plugin contributes the background target "<name>"`. It never falls back to the owner's, and a recurring schedule of that target is kept, with the reason as its last status, so it runs again once a plugin contributes the target (a one-time schedule is spent when it fires, as any is).
+- Contribute `backgroundTargets` alongside the claim that serves them; read one with `context.conversations.target(name)` from a service or handler.
+- Two targets with the same name are refused, naming both plugins.
+- The agent server contributes `OWNER_TARGET` (name `"owner"`, exported from the main entry) for the owner's and agents' conversations.
+  Its claim answers that target and skips all others, so a turn for another target never runs with the owner's tools.
+- A turn for a target no plugin contributes is skipped with the reason `no plugin contributes the background target "<name>"`.
+  It never falls back to the owner's target; a recurring schedule keeps the reason as its last status and runs again once a plugin contributes the target.
+  A one-time schedule is spent when it fires.
 - A schedule keeps its target's name in its row, so renaming a target orphans the schedules made for it.
 
 <!-- example: examples/support-desk.ts -->
@@ -1562,11 +1623,12 @@ export const supportDesk = definePlugin({
 
 A chat surface connects the host to one chat network: it reports what people write, and it posts what the conversations answer.
 The host ships Discord's; a plugin contributes another with `surfaces`, and its claims answer on it through `context.surfaces`.
-A host with a second surface still has one conversation router: a surface only delivers messages, and the claim that owns the channel decides what happens to them.
+All surfaces share one conversation router.
+The surface delivers messages; the channel's owning claim decides what happens to them.
 
 A surface serves the channels whose key starts with its `surface` prefix: `surface = "fake"` serves `fake:<id>` keys, and only those reach its methods.
 The prefix is one non-empty word without a colon or a space, unique per host: two surfaces with one prefix stop the start, naming both plugins.
-A surface's channels are never the agent server's, which claims `discord:` keys only, so a claim of yours on them needs no priority against it.
+The agent server claims only `discord:` keys, so claims on your surface's channels don't compete with it.
 
 | Method | What the surface does | Without it |
 |---|---|---|
@@ -1579,18 +1641,20 @@ A surface's channels are never the agent server's, which claims `discord:` keys 
 | `react`, `unreact` | Adds or removes the bot's reaction on a message | no marks on queued or steered messages |
 | `prompts(channel, speaker?)` | The owner's way to approve a held action or answer `ask_user` inside a running turn, as `OwnerPrompts`: `confirm` and `ask` | the action is held until the owner's next message |
 
-The host starts each surface as a service named `surface:<prefix>`, before the contributing plugin's own services and in that plugin's place in the order, and stops it in reverse like any service.
-The messages a surface delivers must have its prefix; one with another prefix is logged and dropped, because no claim can tell whose it is.
+The host starts each surface as `surface:<prefix>` at the contributing plugin's place in the order, before that plugin's own services.
+It stops surfaces in reverse order, like other services.
+The host logs and drops messages whose prefix differs from the delivering surface's, since claims can't identify which surface they belong to.
 `context.surfaces` picks the surface by the key's prefix.
 Its `sendReply` rejects with a `PluginError` naming the prefix when no surface serves it.
-`startTyping`, `showStop`, `react`, and `unreact` do nothing for a channel whose surface does not show them or that has no surface, and `prompts` returns `undefined` there, which is what a held action needs to wait for the owner's next message.
+`startTyping`, `showStop`, `react`, and `unreact` do nothing when a channel has no surface or its surface omits those methods.
+If `prompts` is unavailable, it returns `undefined` and held actions wait for the owner's next message.
 `of(channel)` returns the surface, or `undefined`.
 The agent server asks the owner for approvals through `context.surfaces.prompts`, so a surface that gives `prompts` gets them in its own channels.
 
-Slash commands are Discord's: the host composes none and hands none to a surface.
-The Discord plugin collects them (see [slash commands](#slash-commands-commandsadd)), and a surface of another network has no commands.
+The Discord plugin collects [slash commands](#slash-commands-commandsadd); the host doesn't compose them or pass them to surfaces on other networks.
 
-Here is a surface for an in-memory chat that records everything the host asks of it, and the plugin that contributes it with a claim that answers through `context.surfaces`:
+This in-memory chat surface records everything the host asks of it.
+Its plugin adds a claim that answers through `context.surfaces`:
 
 <!-- example: examples/fake-surface.ts -->
 ```ts
@@ -1712,8 +1776,8 @@ A test boots a host with the plugin, writes through the surface, and reads what 
 
 A plugin adds slash commands through the Discord plugin's registrar and never receives the composed commands (see [slash commands](#slash-commands-commandsadd)).
 
-Some fields and parts of 0.1.0 are gone, because only the built-in plugins used them.
-A plugin that still has one is refused where it is written (`definePlugin`) or when the host starts, with an error that names the replacement:
+The following fields and parts from 0.1.0 were removed because only built-in plugins used them.
+`definePlugin` or startup refuses plugins that use them and names the replacement:
 
 | Removed | Use instead |
 |---|---|
@@ -1727,9 +1791,9 @@ A plugin that still has one is refused where it is written (`definePlugin`) or w
 ## Official plugins
 
 The package ships two plugins you can copy into a project and change.
-`roundtable add plugin codex-images` and `roundtable add plugin dice` write `plugins/<name>.ts` and `plugins/<name>.test.ts`, import the plugin in `roundtable.config.ts`, and list it in `plugins`, the way any `add plugin` does.
-The copy is yours: edit it freely, and `add plugin` refuses to overwrite it when the file already exists.
-Both names are reserved, so `add plugin codex-images` never makes a template plugin of that name.
+`roundtable add plugin codex-images` and `roundtable add plugin dice` write `plugins/<name>.ts` and `plugins/<name>.test.ts`, import the plugin in `roundtable.config.ts`, and list it in `plugins`.
+You can edit the copied files; `add plugin` refuses to overwrite existing ones.
+Both names are reserved for these copies.
 
 | Plugin | What it does | What it needs |
 |---|---|---|
@@ -1737,16 +1801,17 @@ Both names are reserved, so `add plugin codex-images` never makes a template plu
 | `dice` | Adds the `roll_dice` tool for members: `2d6+3`, `4d6k3` (keep or drop the highest or lowest dice), several groups, and fate dice `dF`, answered as text such as `2d6+3: [3, 5] + 3 = 11` | Nothing; it takes at most 100 dice in all and 1000 sides per die |
 
 `codex-images` takes the login through [`context.apiKey("openai-codex")`](#the-context).
-It sends the request to ChatGPT's Codex backend, which OpenAI does not document for this use, with the owner's own ChatGPT subscription login.
-It can stop working without notice, and OpenAI's terms for the subscription apply.
-Use it only where you accept that risk; the file begins with the same warning.
+It sends requests to ChatGPT's Codex backend using the owner's ChatGPT subscription login.
+OpenAI doesn't document the backend for this use, so it can stop working without notice; the subscription's terms apply.
+The copied file begins with this warning.
 
 Each copy has a test that runs offline: `codex-images` with a fake `fetch`, `dice` with a fake random source.
 Both files export a `create...` function (`createCodexImages`, `createDice`) that takes the part a test replaces, and the plugin you list in the config, built from it.
 
 ## Testing a plugin
 
-Two harnesses, by what the test needs: `testPlugin(plugin, options?)` sets one plugin up alone, against a fake context, and is the default; [`testHost`](#testhost-the-built-in-plugins-and-yours-over-postgresql) boots the built-in plugins and yours together over PostgreSQL, for a test that depends on them or on the order the host sets things up in.
+Use `testPlugin(plugin, options?)` for most tests; it sets up one plugin against a fake context.
+Use [`testHost`](#testhost-the-built-in-plugins-and-yours-over-postgresql) for tests that depend on built-in plugins or the host's setup order; it boots them alongside yours over PostgreSQL.
 
 `testPlugin` sets one plugin up against a fake context and starts its services, with no Discord and no PostgreSQL unless you pass `{ database }`.
 It returns:
@@ -1763,8 +1828,10 @@ It returns:
 | `stop()` | Delivers `shutdown`, stops the injected surfaces, and stops the services in reverse |
 
 The harness applies the same checks as the host (a plugin that adds nothing, an unknown part, a clash of names, a tool with no tier), so a mistake fails your test with the message the start would print.
-It does not run migrations (see [`migrations`](#migrations-and-contextdatabase-tables-of-your-own) for a test that does), it does not deliver the core's events (call the handlers yourself, as [`events`](#events-hear-what-the-core-does) shows), and it does not build a prompt (call `contribution.prompt`'s `build` yourself, as [`prompt`](#prompt-text-added-to-every-agent-turn) shows).
-`sessions()`, `conversations`, `surfaces`, `turns`, and `dashboard()` throw `NotLinkedError` during `setup`, as they do in the host, and work once the plugin is set up: `conversations` routes to the claims of the plugin under test, `surfaces` has the plugin's surfaces, which start with its services, and `turns` runs over the runtime and the surfaces.
+Run migrations yourself (see the [`migrations`](#migrations-and-contextdatabase-tables-of-your-own) test), call event handlers with their payloads (see [`events`](#events-hear-what-the-core-does)), and call `contribution.prompt`'s `build` to test prompt text (see [`prompt`](#prompt-text-added-to-every-agent-turn)).
+The harness leaves these calls to the test.
+`sessions()`, `conversations`, `surfaces`, `turns`, and `dashboard()` throw `NotLinkedError` during `setup`, as they do in the host.
+After setup, `conversations` routes to the plugin's claims, `surfaces` contains its surfaces, which start with its services, and `turns` runs over the runtime and surfaces.
 
 #### Options
 
@@ -1783,14 +1850,16 @@ It does not run migrations (see [`migrations`](#migrations-and-contextdatabase-t
 
 The harness supplies what the host would, so a claim or a background turn behaves as it does there:
 
-- `BACKGROUND_TURNS` is the real background turns over the harness's router, so a schedule's or a delegated task's turn reaches the plugin's claims. Give your own with `servicePair(BACKGROUND_TURNS, { ... })`.
-- Once `AGENTS` is given, its `approvals` is the real confirmation judge over `providers.judge` when you pass a judge, so a held action is approved or declined as the agent server decides.
+- `BACKGROUND_TURNS` runs real background turns over the harness's router, so scheduled and delegated turns reach the plugin's claims.
+  Supply your own with `servicePair(BACKGROUND_TURNS, { ... })`.
+- When you give `AGENTS` and a `providers.judge`, its `approvals` uses the real confirmation judge to approve or decline held actions as the agent server does.
 - Giving `AGENTS` a `team` puts the agent server's own claim in the router, for the `owner`, so the plugin's claims are tested against the agent channels as on a host; its `owner` background target comes with it.
 
 A plugin under test that lists a key in `requires` is refused unless the `services` option gives it (or the plugin provides it), the way the host refuses a key no plugin provides.
 A `services.lazy` reader answers once `testPlugin` returns, from the services you gave.
 
-A plugin that fills the `runtime` slot needs none of these for its own runtime: the harness builds it from the slot (with a silent logger, a one-owner identity, in-memory held actions, and one stand-in agent setting) and puts it under `AGENTS`'s `runtime`.
+For a plugin that fills the `runtime` slot, the harness builds the runtime and puts it under `AGENTS`'s `runtime`.
+It supplies a silent logger, a one-owner identity, in-memory held actions, and one stand-in agent setting.
 
 A test for the tools example:
 
@@ -1825,18 +1894,22 @@ Importing `pi-roundtable/testing` works with `CI=true` and no database URL.
 `describeDb` is Bun's `describe` when `ROUNDTABLE_TEST_DATABASE_URL` is set, and `describe.skip` otherwise; use it to gate a database suite.
 `testDatabaseUrl` is that URL or an empty string, and `TEST_GUILD` is a synthetic guild identifier.
 `openTestStore(Store, ...args)` runs the store's `migrations(...args)` or its single `migration`, calls `Store.attach`, and returns a `TestStore<T>` whose `close()` closes its own SQL pool.
-Use it only with your own store class in a gated database test and always close the store; it does not attach another instance of the host's stores.
-`useTestLocale()` resets the process-wide locale to English and time zone to UTC; call it after a test that changes either, not from a running plugin.
+Use it with your own store class in a gated database test, and close the store when the test ends.
+It doesn't attach another instance of the host's stores.
+Call `useTestLocale()` after a test changes the process-wide locale or time zone to reset them to English and UTC, not from a running plugin.
 `testPlugin`'s options take `env` (a partial `HostEnv`) for the `context.env` the plugin sees; it defaults to `en` and `UTC`.
 `OWNER_SPEAKER`, `fakeThreads`, and `silentLogger` supply neutral stand-ins for owner turns, dispatch threads, and logging.
 `recordingLogger()` is a logger that keeps what it is asked to write: its `lines` hold each call's `level`, `fields` (those of a `child` included), and `message`, for a test of what the code logs.
-`partial<Port>({ ... })` is a stand-in for a port that your code takes as an argument rather than reads from a service: it has the members you give and nothing else, and reading another member throws an error that names it, so the test needs no `as unknown as Port` cast.
+Use `partial<Port>({ ... })` to stand in for a port your code takes as an argument.
+It provides the members you give it and throws an error naming any missing member you read, so the test needs no `as unknown as Port` cast.
 `fakeDiscord({ ownerId?, rootCommand? })` is the `DISCORD` service for a plugin that adds slash commands: give it as `services: [discord.service]`, read what the plugin added with `discord.added()`, and compose the tree Discord would get with `discord.compose()`.
 Only `commands` and `guard` are given; a plugin that reads another member of `DISCORD` in a test gives its own with `servicePair(DISCORD, { ... })`.
 
 ### `testHost`: the built-in plugins and yours, over PostgreSQL
 
-`testPlugin` has no built-in plugins. When a test needs the agent server, the modules, the stores, or the order the host sets the session tools up in, `testHost(options?)` boots `defineRoundtable` over the test database (`ROUNDTABLE_TEST_DATABASE_URL`, so gate the suite with `describeDb`) with Discord and the runtime standing in:
+`testPlugin` sets up your plugin alone.
+For tests that need the agent server, modules, stores, or the host's session-tool setup order, use `testHost(options?)`.
+It boots `defineRoundtable` over `ROUNDTABLE_TEST_DATABASE_URL`, with stand-ins for Discord and the runtime; gate the suite with `describeDb`:
 
 | Option | What it gives the host |
 |---|---|
@@ -1857,14 +1930,17 @@ It returns:
 | `sessionContext(scope?)` | A `SessionContext` as the runtime builds it, with the real compaction wrapper |
 | `stop()` | Stops the host; call it when the test ends |
 
-`useEagerCatalog()` puts the process under a catalog whose every text carries a mark and a foreign time zone, and `eagerText(value)` lists the marked strings under a value: a test that builds its composition under the catalog proves that nothing was written from it before the host applied its own environment. `useTestLocale()` gives the neutral defaults back.
+`useEagerCatalog()` sets a catalog that marks every text and uses a foreign time zone.
+`eagerText(value)` lists the marked strings under a value, so a test can check that the host applied its own environment before building text from the catalog.
+`useTestLocale()` restores the neutral defaults.
 
 `holdChain(rules)` is in `pi-roundtable/kit`: the chain the host links from every plugin's hold rules, to test a rule set without a harness.
 
 ## What happens when the bot starts and stops
 
-`roundtable start` first runs the checks that need no network (Bun, `.env`, the configuration, the plugins, the model login, the public URL), and stops with the message `roundtable doctor` prints for a failed one.
-Then the host runs `run()`:
+`roundtable start` checks Bun, `.env`, the configuration, the plugins, the model login, and the public URL without using the network.
+A failed check stops startup with the same message as `roundtable doctor`.
+The host's `run()` handles startup:
 
 1. Each plugin's `replaces` is applied: the plugin that provided a replaced service is dropped, and the replacement stands where it stood.
    Providers are then resolved: each slot from the plugin that fills it, or the core's default.
@@ -1880,12 +1956,16 @@ Then the host runs `run()`:
 7. The HTTP listeners open.
 8. Every service's `startInBackground` runs, at once and without holding up the boot, and every plugin hears `serviceStarted` as each ends; the agent server's `team` service starts the agents' channels and the dashboard there.
 
-Nothing reaches Discord or the listener unless steps 1 to 5 succeeded.
+Steps 1 to 5 must succeed before anything reaches Discord or the listeners.
 
-`run()` first applies the host's environment to the process: the locale and time zone, the assistant's name, and `PI_CODING_AGENT_DIR` from `options.environment`; `defineRoundtable` only puts them in the options.
-Text from the message catalog is therefore read after that: a plugin builds its command and tool descriptions in `setup` or later, never at import or in its factory; the Discord plugin builds the root command's description in its preflight, once the environment is in effect.
-One host runs per process, because the message catalog and the time zone are process-wide: a second `run()` while one host is running is refused, so stop the first host or run the second in a separate process.
-If any step fails, the host stops what it had started, listeners first and then services in reverse, closes the pool, and rethrows; the process then exits non-zero.
+`run()` applies the host's environment to the process: the locale and time zone, the assistant's name, and `PI_CODING_AGENT_DIR` from `options.environment`.
+`defineRoundtable` puts these values in the options for `run()` to apply.
+Build command and tool descriptions from the message catalog in `setup` or later, when that environment is in effect.
+The Discord plugin builds the root command's description in its preflight.
+The message catalog and time zone are process-wide, so only one host can run in a process at a time.
+A second `run()` is refused while a host is running; stop that host or use a separate process.
+If a startup step fails, the host stops its listeners, stops services in reverse order, closes the pool, and rethrows.
+The process exits non-zero.
 The same host may call `run()` again after that.
 
 On `SIGTERM` or `SIGINT` the bot stops serving new work last:
@@ -1896,7 +1976,9 @@ On `SIGTERM` or `SIGINT` the bot stops serving new work last:
 4. Services stop in the reverse of the order they started.
 5. The database pool closes.
 
-`shutdown()` returns the exit code, `0` or `1` when a listener, a service, or the pool failed to stop, and every call shares the one shutdown; only `listen()`, which the command line and a host's own entry point call, exits the process with it.
+`shutdown()` returns exit code `0`, or `1` if a listener, service, or pool failed to stop.
+Every call shares the same shutdown.
+`listen()`, called by the command line and a host's own entry point, exits the process with that code.
 
 ## Errors and their fixes
 
@@ -1947,7 +2029,7 @@ These are the messages as the code writes them, with `<...>` where your names go
 | `no persona is registered for the conversation kind "<kind>". A plugin adds one with personas: [...], or its claim must start conversations of a kind that has one.` (a failed turn) | Contribute a persona of that kind, or run the turn with a kind that has one |
 | `no runtime provider is configured: the agent server builds the Pi runtime when no plugin fills the runtime slot` | Only a plugin that calls `providers.runtime` without `providers.filled.has("runtime")` sees it; check `filled` first |
 | `session tool <name> takes a core extension name. Rename it.` | Pick a name other than the core's |
-| `two plugins are named <name>.` (from `roundtable doctor`) | Rename yours; the built-in plugins are `stores`, `discord`, `modules`, `agent-server`, `seeds`, and `schedules` |
+| `two plugins are named <name>.` (from `roundtable doctor`) | Rename yours; the built-in plugins are `memory`, `schedule-store`, `discord`, `modules`, `discord-admin`, `skills`, `agent-server`, `seeds`, and `schedules` |
 | `migration <plugin>/<name> is declared twice` | A plugin declares two migrations with one name: rename one (the same name in two plugins is fine) |
 | `/<root> <name> is added twice`, `/<name> is registered twice` | Give each slash command and subcommand its own name |
 | `route <name> is registered twice`, `routes <a> and <b> overlap on listener <id>` | Give each route its own name and a path no other route can take |
@@ -1962,11 +2044,11 @@ plugin <name>: setup failed: session parts are linked once every plugin is set u
 ```
 
 The same message exists for `conversations` (`Use them from a service's start or from a handler, not during setup.`), for `surfaces` (`chat surfaces are linked once every plugin is set up.`), for `turns` (`conversation turns are linked once every plugin is set up.`), and for `dashboard()`.
-The fix is the one it says: move the call into a service's `start` or into an event handler.
+Move the call into a service's `start` or an event handler.
 
 `context.services.get(KEY)` before the plugin that provides it has run throws `service <id> is not provided yet; plugin <name> provides it. Register plugin <name> before plugin <yours>.`
 When no registered plugin declares the key it says `service <id> is not provided. Register a plugin that provides it, before the plugin that reads it.`
-Your plugins always run after the built-ins, so the built-in keys show this only in `testPlugin`, which has none and says so: `service <id> is not provided. testPlugin has no built-in plugins: give it in the services option, ...`.
+Your plugins run after the built-ins, so built-in keys show this error only in `testPlugin`, which has no built-ins: `service <id> is not provided. testPlugin has no built-in plugins: give it in the services option, ...`.
 Pass what you need in the harness's `services` option, or test that part elsewhere.
 `find(KEY)` is `undefined` for a service nobody declares, in the host and in the harness.
 
@@ -2012,7 +2094,8 @@ Your own plugins' text is yours to write in any language.
 
 ## Consumer TypeScript configuration
 
-The package ships `.ts`, so your compiler checks its source with your project's options; `skipLibCheck` skips dependency declarations, not package source.
+The package ships `.ts`, so your compiler checks its source with your project's options.
+`skipLibCheck` skips dependency declarations; package source is still checked.
 The following configuration was tested against an installed tarball with TypeScript 5.9.3, and the package itself is checked with TypeScript 7.0.2:
 
 ```json
@@ -2038,10 +2121,12 @@ The following configuration was tested against an installed tarball with TypeScr
 
 Install TypeScript and `@types/bun` as development dependencies, as the generated project does.
 Keep `exactOptionalPropertyTypes` and `noPropertyAccessFromIndexSignature` disabled: a main-only consumer produces 3 and 132 package-source errors respectively when either is enabled, even with `skipLibCheck: true`.
-These are existing compatibility limits, not flags the package overrides in your project.
+The package doesn't override these flags; they are existing compatibility limits.
 `noUnusedLocals`, `noUnusedParameters`, `noImplicitReturns`, and `noUncheckedSideEffectImports` were also tested enabled and pass.
-With `skipLibCheck: false`, the example consumer instead reports 97 dependency-declaration errors, so keep it enabled for this configuration.
-Discord-facing signatures, which are in `pi-roundtable/discord` and, for the composed slash commands, in `pi-roundtable/testing`, use the package's pinned `discord.js` types; use those compatible types for panel rows and interaction handlers. `discord.js` is a regular dependency of the package, so a project that imports either entry installs it with `pi-roundtable`.
+Keep `skipLibCheck` enabled for this configuration; setting it to `false` produces 97 dependency-declaration errors in the example consumer.
+Discord-facing signatures in `pi-roundtable/discord` and the composed slash commands in `pi-roundtable/testing` use the package's pinned `discord.js` types.
+Use compatible types for panel rows and interaction handlers.
+`discord.js` is a regular dependency, so it installs with `pi-roundtable` when your project imports either entry.
 
 ## Developing the core and a host together
 
@@ -2055,15 +2140,17 @@ bun link
 bun link pi-roundtable
 ```
 
-The host then imports the checkout's source, so the core's edits show at once and the host's `bun run typecheck` and `bun test` run against them.
-A linked checkout resolves its own dependencies from its own `node_modules`, so a host's `overrides` do not reach it: a host that depends on its own build of `pi-web-access` has two copies while linked.
-When the change is done, release the core, set the host's `pi-roundtable` to the new exact version, and run `bun install` to replace the link with the published package; the host's checks run once more against what was published.
+The host imports the checkout's source, so core edits take effect at once and the host's `bun run typecheck` and `bun test` check them.
+The linked checkout resolves dependencies from its own `node_modules`, outside the host's `overrides`.
+A host that depends on its own build of `pi-web-access` has two copies while linked.
+When the change is ready, release the core, set the host's `pi-roundtable` to the new exact version, and run `bun install` to replace the link with the published package.
+Run the host's checks again against that package.
 
 ## Name-to-entry index
 
 Type-only exports require `import type` when `verbatimModuleSyntax` is enabled.
-Names occur in exactly one entry; a wrong-path import is a TypeScript and runtime error.
-The source area files are not package subpaths.
+Each name is exported from exactly one entry; importing it from another causes a TypeScript and runtime error.
+Import from the entries listed below; source area files are internal.
 
 | Name | Entry | Kind |
 |---|---|---|

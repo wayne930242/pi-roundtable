@@ -7,9 +7,9 @@ sidebar:
 
 import { Steps, Aside } from "@astrojs/starlight/components";
 
-這個 bot 就是一個一般的 Discord 應用程式，帶一個 bot 使用者。
+bot 就是帶一個 bot 使用者的 Discord 應用程式。
 這一頁從空白的 developer portal 開始，帶你拿到 `.env` 要填的值。
-最後跑一次 `bunx roundtable doctor`，它會檢查下面所有項目，並指出缺了什麼。
+最後跑 `bunx roundtable doctor`，它會把下面每一項檢查一遍，缺什麼會告訴你。
 
 ## 建立應用程式和 bot
 
@@ -21,8 +21,7 @@ import { Steps, Aside } from "@astrojs/starlight/components";
    token 被拒絕時，在同一頁重設它，再把新的 token 填進 `.env`。
 
 3. 在同一頁開啟 **Message Content Intent**，然後儲存。
-   沒開的話，agent 讀不到你在頻道裡寫的內容。
-   在它開啟之前，`doctor` 會以「the Message Content intent is off」失敗。
+   沒開的話，agent 讀不到你在頻道裡寫的內容，`doctor` 也會回報「the Message Content intent is off」。
 
 </Steps>
 

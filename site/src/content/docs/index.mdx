@@ -28,13 +28,14 @@ Say what you want.
 
 The new agent gets its own channel, an avatar, and a prompt.
 It starts on its first job right away.
-You don't edit a config file or restart anything.
+You can do this without editing a config file or restarting the bot.
 
 ## What it can do
 
 <CardGrid>
   <Card title="Make agents" icon="rocket">
-    Ask for a researcher, an editor, a tutor. Each one lives in its own channel and keeps its own conversation.
+    Ask for an agent to research, edit, or tutor.
+    Each one lives in its own channel and keeps its own conversation.
   </Card>
   <Card title="Write its own skills" icon="puzzle">
     An agent can write a skill and link it to other agents.
@@ -46,7 +47,8 @@ You don't edit a config file or restart anything.
   </Card>
   <Card title="Tidy up for you" icon="approve-check">
     Ask it to archive an agent or rearrange the channels.
-    Nothing is deleted. Archived channels keep their history.
+    Archiving deletes nothing.
+    The channels keep their history.
   </Card>
 </CardGrid>
 
@@ -87,14 +89,14 @@ A status message in the server keeps itself up to date, so you can see who is do
 
 </Steps>
 
-The first agent now has a channel in your server.
-Say hello, then ask it for a second one.
-Once an agent has a schedule, `/roundtable schedule list` shows it.
+The first agent has a channel in your server.
+Say hello and ask it for a second agent.
+`/roundtable schedule list` shows any schedules the agents have.
 
 ## If you write code
 
-Everything above works without a line of code.
-When you want more, add a plugin in TypeScript: a tool every agent can call, a slash command, an HTTP route, or a part of the bot you want to replace.
+You can use these features without writing code.
+To add a tool every agent can call, a slash command, an HTTP route, or replace part of the bot, write a TypeScript plugin.
 A plugin can be tested without Discord or PostgreSQL.
 See [Write a plugin](/plugins/first-plugin/).
 
@@ -114,5 +116,6 @@ A separate package, [pi-roundtable-mcp](/plugins/mcp-package/), connects your ow
 
 - It's built for one owner and one Discord server.
   You can let other people talk to the agents, but the risks of that are yours.
-- It runs on Bun only. The package ships its TypeScript source, so there is no build step.
+- It runs on Bun only.
+  The package ships its TypeScript source, so there is no build step.
 - MIT licensed.

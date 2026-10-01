@@ -7,8 +7,8 @@ sidebar:
 
 import { Aside } from "@astrojs/starlight/components";
 
-pi-roundtable ships two plugins that you copy into your project instead of installing.
-The copy is an ordinary plugin file of your own, so you can read it, change it, or delete it.
+pi-roundtable ships two plugins as files you copy into your project.
+You can read, change, or delete your copy like any plugin file.
 
 | Plugin | What it does |
 | --- | --- |
@@ -26,10 +26,10 @@ bunx roundtable add plugin codex-images
 
 Each command writes `plugins/<name>.ts` and `plugins/<name>.test.ts`, imports the plugin in `roundtable.config.ts`, and lists it in `plugins`.
 Both names are reserved: `add plugin` copies the official plugin for them and keeps the `hello` template for every other name.
-It refuses, and writes nothing, when either file already exists.
+If either file already exists, the command stops without writing anything.
 See [CLI](/reference/cli/) for everything `add plugin` checks.
 
-Then run the tests in your project:
+Run the tests in your project:
 
 ```sh
 bun test
@@ -59,7 +59,7 @@ The agent calls the tool and reads you the result.
 | `dF`, `3dF` | Fate dice, which add -1, 0, or +1 each. Without a count it rolls 4. |
 
 Dropped dice show in parentheses, as in `4d6k3: [5, (1), 6, 3] = 14`.
-An expression over the limits, or one it cannot read, is refused with a message that says what to fix, and the agent can try again.
+If an expression exceeds the limits or cannot be parsed, the tool says what to fix so the agent can try again.
 The limits are 100 dice in all, 1000 sides on a die, 200 characters, and 1000000 in a plain number.
 
 `dice` needs no login and no setting.
@@ -73,16 +73,16 @@ Without an `images` plugin, each agent gets a generated picture from its display
 
 It needs a login to the `openai-codex` provider, the same login mechanism the agents use for their models.
 When the host has none, the plugin refuses to start and the message says to log in to `openai-codex`.
-The plugin reads the login each time it draws, so a refreshed token is used.
+The plugin reads the login each time it draws, picking up refreshed tokens.
 
 <Aside type="caution" title="It can stop working without notice">
 `codex-images` uses ChatGPT's Codex backend, which OpenAI does not document for this use, signed in with your own ChatGPT subscription.
 OpenAI can change or block it at any time, and OpenAI's terms for the subscription apply.
 The plugin file begins with the same warning.
-Use it only where you accept that risk.
 </Aside>
 
-A request that Codex refuses, usually because of the prompt, fails with `ImageNotGeneratedError`, and asking again with the same prompt fails again.
+When Codex refuses a request, usually because of the prompt, it fails with `ImageNotGeneratedError`.
+Repeating the same prompt fails again.
 A request has a five-minute limit, and an image over 32 MiB is refused.
 
 ## Change the copy
@@ -92,10 +92,10 @@ The copy lives in your project, so edit it like any plugin.
 - In `plugins/dice.ts`, the limits are constants at the top of the file, and the tool's description repeats them to the model, so change both together.
 - In `plugins/codex-images.ts`, the model that routes the request is a constant.
 - Each file exports a function (`createDice`, `createCodexImages`) that takes the part a test replaces, a random source or a `fetch`, and the ready-made plugin built from it (`dice`, `codexImages`) that the config lists.
-- The tests beside them run offline: `dice` with a fake random source, `codex-images` with a fake `fetch`. Keep them passing as you change the plugin.
+- The tests beside them run offline: `dice` with a fake random source, `codex-images` with a fake `fetch`.
 
 To remove one, delete its two files and its entry in `roundtable.config.ts`.
 
-For what a plugin can add beyond this, see [What plugins can add](/plugins/what-plugins-can-add/), and for writing tests like these, see [Test a plugin](/plugins/testing/).
+See [What plugins can add](/plugins/what-plugins-can-add/) for other plugin features and [Test a plugin](/plugins/testing/) for testing.
 
 {/* Sources: src/cli/templates.ts:13-25, src/cli/templates.ts:84-102, src/cli/add-plugin.ts:34-75, templates/official/dice/plugin.ts, templates/official/dice/plugin.test.ts.tmpl, templates/official/codex-images/plugin.ts, templates/official/codex-images/plugin.test.ts.tmpl, src/core/plugin.ts:268-276, docs/plugins.md:757-772 (images slot, agent_avatar, doctor), src/cli/checks/images.ts */}

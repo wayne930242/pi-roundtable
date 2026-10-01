@@ -10,13 +10,14 @@ import { Image } from "astro:assets";
 import agentCreate from "../../../assets/scenes/agent-create.png";
 
 You create an agent by asking for one in a channel where an agent answers.
-There is no form and no config file to edit, and nothing restarts.
+The agent handles the setup without a form, config edit, or restart.
 
 <Image src={agentCreate} alt="In the guide channel, a user asks for an agent that keeps reading notes. Guide answers that it made Notes in a new notes channel, with a prompt, an avatar, and a skill for saving links, and that it already started its first job." />
 
 ## What to say
 
-Describe the job. The agent that answers picks the name, the prompt, and the rest.
+Describe the job.
+The agent that answers picks the name, the prompt, and the other settings.
 
 ```text
 Make me an agent called Researcher. It finds sources for my questions and reports in short bullet points.
@@ -35,7 +36,7 @@ The agent that answers can be any agent: it creates the new one in its own name.
 
 ## What `agent_create` takes
 
-The tool is `agent_create`. The agent fills these in from your request:
+The agent calls `agent_create` with these fields filled in from your request:
 
 | Field | What it is |
 | --- | --- |
@@ -48,16 +49,19 @@ The tool is `agent_create`. The agent fills these in from your request:
 | `skills` | Optional. Names of skills it carries, from the skill list. Only offered while the skills addon is on; see [Skills and memory](/agents/skills-and-memory/). |
 
 <Aside type="caution" title="Names are permanent">
-The `name` cannot change after the agent exists. The display name, the prompt, the model, and the thinking level can.
-Choose the name with care, and let the display name carry the personality.
+The `name` is permanent.
+You can change the display name, prompt, model, and thinking level.
 </Aside>
 
 ## What the new agent gets
 
 - **A channel** with its name, under the category you asked for.
-- **An avatar.** It is drawn from the avatar prompt when an image provider fills the `images` slot, and generated from the display name when none does.
+- **An avatar.**
+  An image provider in the `images` slot draws it from the avatar prompt.
+  Without a provider, the bot generates it from the display name.
 - **Its prompt**, which comes after the shared prompt every agent starts with.
-- **An opening task.** It starts working in its channel at once. It first introduces itself in one or two sentences, then begins the task.
+- **An opening task.**
+  It starts working in its channel at once, introducing itself in one or two sentences before beginning the task.
 - **Its skills,** when you named some.
 
 ## Change an agent later
@@ -72,7 +76,7 @@ Make Researcher answer in two sentences at most.
 Switch Editor to the high thinking level.
 ```
 
-The tool for this is `agent_update`. It changes four things:
+The agent calls `agent_update` to change these four fields:
 
 | Field | What it does |
 | --- | --- |
@@ -85,7 +89,8 @@ A change applies from the agent's next turn, and its conversation stays.
 
 Two things have their own tools:
 
-- **Avatar:** `agent_avatar` redraws it. It exists only with an image provider.
+- **Avatar:** `agent_avatar` redraws it.
+  The tool exists only with an image provider.
 - **Skills:** `agent_skills` adds and removes the skills it carries.
 
 Use `agent_list` to see every agent and group with their channels, and `agent_get` to read one agent's prompt, model, thinking level, and skills.
@@ -93,7 +98,7 @@ Use `agent_list` to see every agent and group with their channels, and `agent_ge
 ## Seed agents
 
 The agents in `agents.ts` are created on the first start, the way `agent_create` would.
-They are never overwritten afterwards, so edit them in Discord.
+Later starts keep the stored agents as they are; edit them in Discord.
 See [Configure](/configure/settings/).
 
 {/* Sources: src/core/agents/agent-tools.ts:96-118, src/core/agents/agent-tools.ts:128-263, src/core/agents/agent-rules.ts:6-8, src/core/agents/agent-rules.ts:57-79, src/core/agents/team-editing.ts:25-215, src/core/agents/agent-prompt.ts:121-128, src/core/agents/agent-prompt.ts:41-47, src/core/agents/agent-prompt.ts:71-80, src/core/builtin/agent-server.ts:98-104, src/core/agents/agent-store.ts:97-110, src/core/agents/team-layout.ts:14-40, src/core/models.ts:12-19 */}

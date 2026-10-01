@@ -62,11 +62,11 @@ bot 有 Pin Messages 權限時，會把訊息釘選起來；沒有這個權限�
 
 ### 沒有圖片 provider
 
-什麼都不會繪製，也不會損失什麼。
+這時不繪製任何圖片。
 每個 agent 會得到一張依顯示名稱產生的圖片：背景色由名字決定，放上助理的圖示，再加一個寫著 agent 名字第一個字母的徽章。
 同樣的名字一定得到同樣的圖片，所以 agent 之間容易分辨。
 這時 `agent_create` 沒有 `avatar_prompt` 欄位，也沒有 `agent_avatar` 工具。
-`bunx roundtable doctor` 會回報這個槽位有沒有填，沒有 provider 並不算失敗。
+`bunx roundtable doctor` 會回報這個槽位有沒有填，沒有 provider 也不算失敗。
 
 ### 圖片從哪裡提供
 

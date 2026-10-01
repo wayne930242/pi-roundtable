@@ -60,7 +60,7 @@ npx pi-roundtable init my-bot    # or: bunx pi-roundtable init my-bot
 | 2 | environment | `.env.example` 裡每個沒有註解掉的變數，在 `.env` 都有值。 |
 | 3 | configuration | `roundtable.config.ts` 能載入、通過 schema，也能組裝。失敗時會指出是哪個 key。 |
 | 4 | plugins | 沒有兩個外掛同名，包括內建的外掛。 |
-| 5 | image provider | 有沒有外掛填入 `images` 槽位。沒有並不算失敗：agent 會用顯示名稱產生頭像。 |
+| 5 | image provider | 有沒有外掛填入 `images` 槽位。沒有也不算失敗，agent 會用顯示名稱產生頭像。 |
 | 6 | PostgreSQL | 資料庫有回應，而且每個外掛的 migration 都能執行。migration 在一個一定會 rollback 的 transaction 裡執行，所以資料庫維持原樣。 |
 | 7 | Discord token | Discord 接受這個 bot token。 |
 | 8 | Discord guild | bot 是 `discord.guild` 的成員。 |
@@ -70,7 +70,7 @@ npx pi-roundtable init my-bot    # or: bunx pi-roundtable init my-bot
 | 12 | public URL | `http.publicUrl` 是格式正確的 `http://` 或 `https://` 位址。 |
 
 檢查 10 要求 bot 在入口頻道擁有的權限是 View Channel、Send Messages、Send Messages in Threads、Read Message History、Embed Links、Attach Files、Pin Messages、Create Public Threads、Manage Channels 和 Manage Webhooks。
-bot 不在 guild 裡時，修正方式是一個邀請連結，它要求的正是這些權限。
+bot 還不在 guild 裡的話，會給你一個邀請連結，連結已經帶好這些權限。
 
 ### `--reachable` 旗標
 
@@ -101,7 +101,7 @@ bunx roundtable add plugin my-notes
 `add plugin` 用 `hello` 範本建立 `plugins/my-notes.ts` 和 `plugins/my-notes.test.ts`，在 `roundtable.config.ts` 裡 import 這個外掛，並把它列進 `plugins`。
 
 有兩個名稱保留給[官方外掛](/zh-tw/plugins/official-plugins/)：`codex-images` 和 `dice`。
-用這兩個名稱時，`add plugin` 複製的是現成的外掛和它的測試，而不是 `hello` 範本，並以同樣的方式註冊：
+用這兩個名稱時，`add plugin` 複製的是現成的外掛和它的測試，不用 `hello` 範本，註冊方式相同：
 
 ```sh
 bunx roundtable add plugin dice

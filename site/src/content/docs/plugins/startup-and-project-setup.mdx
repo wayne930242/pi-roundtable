@@ -9,23 +9,27 @@ import { Steps } from "@astrojs/starlight/components";
 
 ## How the bot starts
 
-`roundtable start` first runs the checks that need no network: Bun, `.env`, the configuration, the plugins, the model login, and the public URL.
-A failed check stops the start with the message `roundtable doctor` prints for it.
-Then the host runs these steps in order:
+`roundtable start` runs the checks that need no network: Bun, `.env`, the configuration, the plugins, the image provider, the model login, and the public URL.
+A failed check stops startup with the same message as `roundtable doctor`.
+The host proceeds in this order:
 
 <Steps>
 
-1. **Replacements and providers.** Each plugin's `replaces` is applied, so the replaced plugin is dropped and the replacement stands where it stood. Then each provider slot is resolved from the plugin that fills it, or the core's default.
+1. **Replacements and providers.** The host applies each plugin's `replaces`, putting the replacement in the original plugin's place.
+   It resolves each provider slot from the plugin that fills it or the core's default.
 
-2. **Database and migrations.** The database is opened and every plugin's migrations run, in plugin order.
+2. **Database and migrations.** The host opens the database and runs every plugin's migrations in plugin order.
 
 3. **Setup.** Every plugin's `setup` runs, in plugin order.
 
-4. **Linking.** Tool tiers, hold rules, the session plan, the channel router, and the events are linked. From here `sessions()`, `conversations`, `surfaces`, `turns` and `dashboard()` work.
+4. **Linking.** The host links tool tiers, hold rules, the session plan, the channel router, and the events.
+   From here `sessions()`, `conversations`, `surfaces`, `turns` and `dashboard()` work.
 
-5. **Preflight.** Every plugin's `preflight` runs. The Discord plugin composes the slash commands here, so a clash stops the start at this step.
+5. **Preflight.** Every plugin's `preflight` runs.
+   The Discord plugin composes the slash commands here, so a clash stops startup at this step.
 
-6. **Services.** Every service starts, plugin by plugin in plugin order. A plugin's chat surfaces start before its own services.
+6. **Services.** Every service starts, plugin by plugin in plugin order.
+   A plugin's chat surfaces start before its own services.
 
 7. **HTTP.** The listeners open.
 
@@ -33,24 +37,24 @@ Then the host runs these steps in order:
 
 </Steps>
 
-Nothing reaches Discord or the listener unless steps 1 to 5 succeeded.
+Discord connects and the listener opens after steps 1 to 5 succeed.
 
 ### Plugin order
 
 Setup order is the built-in plugins first: `memory`, `schedule-store`, `discord`, `modules`, `discord-admin`, `skills`, `agent-server`, `seeds`.
 An addon that is switched off is not in the list.
-Then come your plugins, in the order of `plugins` in `roundtable.config.ts`.
+Your plugins follow in the order of `plugins` in `roundtable.config.ts`.
 The built-in `schedules` plugin comes last, so a due schedule fires only once everything it can reach is running.
 
 ### Text that depends on the language
 
 `run()` applies the host's environment to the process before anything else: the locale, the time zone, and the assistant's name.
-So build a command or tool description in `setup` or later, never at import time.
+Build command and tool descriptions in `setup` or later, when those settings are available.
 One host runs per process, because the message catalog and the time zone are process-wide.
 A second `run()` while one host is running is refused.
 
 If a step fails, the host stops what it had started, closes the database pool, and rethrows.
-The process then exits non-zero.
+The process exits non-zero.
 
 ## How the bot stops
 
@@ -58,7 +62,8 @@ On `SIGTERM` or `SIGINT` the bot stops serving new work last:
 
 <Steps>
 
-1. It keeps serving until the channel queue is empty and no service reports `busy()` work, for at most an hour. Whatever is left is logged and given up on.
+1. It keeps serving until the channel queue is empty and no service reports `busy()` work, for at most an hour.
+   Whatever is left is logged and given up on.
 
 2. Every plugin hears `shutdown(left)`, while every service is still running.
 
@@ -73,13 +78,15 @@ On `SIGTERM` or `SIGINT` the bot stops serving new work last:
 ## TypeScript configuration
 
 The package ships `.ts` source, so your compiler checks it with your project's options.
-The guide gives a full `tsconfig.json` that was tested against an installed tarball.
-These are the points that matter:
+The guide's full `tsconfig.json` was tested against an installed tarball.
+Use these settings:
 
 - Set `moduleResolution` to `bundler`, `module` to `Preserve`, and `types` to `["bun"]`.
 - Turn on `strict`, `verbatimModuleSyntax`, `allowImportingTsExtensions`, and `noEmit`.
-- Keep `skipLibCheck` on. Without it the tested example reports 97 dependency-declaration errors.
-- Keep `exactOptionalPropertyTypes` and `noPropertyAccessFromIndexSignature` off. Turning either on produces package-source errors even with `skipLibCheck`.
+- Keep `skipLibCheck` on.
+  Without it the tested example reports 97 dependency-declaration errors.
+- Keep `exactOptionalPropertyTypes` and `noPropertyAccessFromIndexSignature` off.
+  Turning either on produces package-source errors even with `skipLibCheck`.
 - Install TypeScript and `@types/bun` as development dependencies, as the generated project does.
 
 Type-only exports need `import type` when `verbatimModuleSyntax` is on.
@@ -100,7 +107,7 @@ bun link pi-roundtable
 The host now imports the checkout's source, so edits show at once, and the host's `bun run typecheck` and `bun test` run against them.
 A linked checkout resolves its own dependencies from its own `node_modules`, so a host's `overrides` do not reach it.
 When the change is done, release the core, set the host's `pi-roundtable` to the new exact version, and run `bun install` to replace the link with the published package.
-Then run the host's checks once more against what was published.
+Run the host's checks again against the published package.
 
 For the full text, see [What happens when the bot starts and stops](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#what-happens-when-the-bot-starts-and-stops) and [Developing the core and a host together](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#developing-the-core-and-a-host-together).
 

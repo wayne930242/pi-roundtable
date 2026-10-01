@@ -47,14 +47,14 @@ import agentStatus from "../../../assets/scenes/agent-status.png";
   </Card>
   <Card title="幫你整理" icon="approve-check">
     請它封存某個 agent，或重新排頻道。
-    不會真的刪掉，封存的頻道會保留歷史紀錄。
+    封存不會刪掉任何東西，頻道的歷史紀錄都還在。
   </Card>
 </CardGrid>
 
 <Image src={teamHandoff} alt="在 research 頻道，Researcher 用兩個重點回覆請求，並註明結果已交給 editor 頻道。" />
 
-agent 之間可以互相交辦工作。
-這裡是研究員把整理好的內容交給編輯。
+agent 之間也能互相交辦工作。
+圖裡是研究員把整理好的內容交給編輯。
 
 <Image src={agentStatus} alt="一則 Discord 訊息，列出 Guide、Researcher、Editor 三個 agent 的頻道、模型，以及各自是閒置還是工作中。" />
 
@@ -88,7 +88,7 @@ agent 之間可以互相交辦工作。
 
 </Steps>
 
-第一個 agent 就會出現在你的伺服器裡。
+第一個 agent 會出現在你的伺服器裡。
 跟它打聲招呼，再請它開第二個。
 agent 設了排程之後，`/roundtable schedule list` 可以列出來。
 

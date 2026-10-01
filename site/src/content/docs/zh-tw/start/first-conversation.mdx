@@ -20,9 +20,9 @@ bot 不會主動開口。
 ## 在哪裡寫
 
 你在 agent 的頻道裡寫的每一則訊息，都由那個 agent 回答，不必 mention 它。
-伺服器裡的其他頻道，沒有任何東西會回答。
+其他頻道沒有 agent 會回答。
 
-協調者（coordinator）是頻道就是入口頻道的那個 agent，入口頻道就是 `DISCORD_ENTRY_CHANNEL_ID` 指定的頻道。
+協調者（coordinator）是頻道剛好是入口頻道的那個 agent；入口頻道由 `DISCORD_ENTRY_CHANNEL_ID` 指定。
 一般的需求都往這裡送，專門的工作則由它交給負責的 agent。
 
 `init` 寫出的專案只有一個 agent：Guide。
@@ -30,7 +30,7 @@ bot 不會主動開口。
 在那個頻道寫給 Guide 就行。
 Guide 也能建立 agent：你直接交代的團隊工作，例如建立 agent 或群組，每個 agent 都會用自己的名字去做。
 
-`agents.ts` 裡的初始設定用一行指定了這件事：
+`agents.ts` 的初始設定裡，這件事由 `channelId` 那一行指定：
 
 ```ts
 {
@@ -43,8 +43,8 @@ Guide 也能建立 agent：你直接交代的團隊工作，例如建立 agent �
 ```
 
 <Aside type="caution">
-初始設定只在第一次啟動時讀取，資料庫裡已經有的 agent 不會被覆寫。
-已存在的 agent 會保留它原本的頻道，所以要在第一次啟動之前設好 `channelId`。
+初始設定只在第一次啟動時讀取，資料庫裡已有的 agent 不會被覆寫，頻道也維持原樣。
+所以 `channelId` 要在第一次啟動前設好。
 </Aside>
 
 ## 一輪對話長什麼樣子
@@ -81,7 +81,7 @@ agent 需要你做決定時，會在頻道裡用按鈕問你，你回答之後�
 | `/roundtable schedule list` | 列出所有頻道的排程 |
 | `/roundtable schedule cancel` | 取消一個排程；從跳出來的清單裡選 |
 
-排程是在對話裡建立的，不是用指令。
+排程在對話裡建立。
 見[排程與背景工作](/zh-tw/agents/schedules-and-background/)。
 外掛也能在同一個指令底下加更多子指令；[寫一個外掛](/zh-tw/plugins/first-plugin/)從這裡開始。
 

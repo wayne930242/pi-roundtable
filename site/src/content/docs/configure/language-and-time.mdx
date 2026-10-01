@@ -5,7 +5,7 @@ sidebar:
   order: 4
 ---
 
-Two settings in `roundtable.config.ts` decide how the bot speaks and what time it means:
+Set the language of the bot's Discord text and its time zone in `roundtable.config.ts`:
 
 ```ts
 export default {
@@ -20,14 +20,14 @@ export default {
 | `locale` | `"en"` or `"zh-TW"` | `"en"` |
 | `timeZone` | An IANA time zone name, such as `Europe/Berlin` or `Asia/Taipei` | `"UTC"` |
 
-The host applies both once, when it starts, and they hold for the whole process.
-Change them, then restart the bot.
+The host applies both settings at startup and keeps them for the life of the process.
+Restart the bot after changing them.
 
 ## `locale`
 
 `locale` chooses the message catalog for the text the bot shows in Discord.
 Both catalogs have the same keys.
-Among other things it covers:
+This includes:
 
 - The approval and question cards, with their buttons and footers.
 - The stop button and the note on a long turn.
@@ -41,9 +41,9 @@ A value other than `en` or `zh-TW` is an error:
 config locale: expected a locale, en or zh-TW, got "<value>". Fix the value in roundtable.config.ts.
 ```
 
-What `locale` does not change:
+Some text has its own language:
 
-- The audit-log reasons and the refusals of the Discord administration tools read as English in both locales.
+- Audit-log reasons and Discord administration tool refusals are English in both locales.
 - The text the core adds to the agents' prompts is English.
 - Your prompts, your agents, and your plugins' text are yours to write in any language.
 
@@ -55,8 +55,7 @@ What `locale` does not change:
 - Time stamps in schedule messages and lists, and in the output of `channel_read`, use it.
 - "Today", for the upcoming events that go into each speaker's memory block, is the date in this zone.
 
-The name is checked when the bot starts, not by the configuration check.
-`roundtable doctor` accepts any non-empty string.
+`roundtable doctor` accepts any non-empty string; the bot checks the time zone name at startup.
 A zone the runtime does not recognise stops `roundtable start` once the checks have passed:
 
 ```text

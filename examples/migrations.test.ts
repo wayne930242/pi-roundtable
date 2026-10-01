@@ -13,7 +13,7 @@ test.skipIf(!url)(
 		try {
 			for (const migration of visitCounter.migrations ?? []) {
 				await migration.up(sql);
-				await migration.up(sql); // Idempotent: the host runs it on every start.
+				await migration.up(sql); // Written to be idempotent, so a second run changes nothing.
 			}
 			const harness = await testPlugin(visitCounter, { database: sql });
 			expect(await harness.runTool("visit_count", { place: "lab" })).toBe(

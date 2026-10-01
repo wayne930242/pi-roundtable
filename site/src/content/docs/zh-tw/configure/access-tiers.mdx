@@ -13,8 +13,8 @@ import { Aside } from "@astrojs/starlight/components";
 
 <Aside type="caution" title="這個設定的責任在你">
 pi-roundtable 是為一位 owner 和一個 Discord 伺服器設計的。
-你可以讓其他人跟 agent 說話，但這樣的設定和它的風險，由架設的人自己承擔。
-加任何人之前，請先讀完這一頁。
+你可以讓其他人跟 agent 說話，風險由架設的人自己承擔。
+加人之前，先把這一頁讀完。
 </Aside>
 
 ## 預設：只有 owner
@@ -61,9 +61,9 @@ export default {
 | `admin` | member 能做的一切，加上建立與修改 agent 和群組、封存它們、整理頻道、修改技能與 agent 的技能、建立與修改排程，以及委派任務。 |
 | `owner` | 其餘的一切：shell 和檔案工具、`notify_owner`、`discord_*` 管理工具、所有沒有宣告較低層級的外掛工具，以及 `/roundtable` 斜線指令。 |
 
-由此還有幾點：
+另外有幾點：
 
-- 每位 speaker 有自己的記憶，由所有 agent 共用。member 的 `memory_add` 絕不會寫進 owner 的記憶。
+- 每位 speaker 有自己的記憶，由所有 agent 共用。member 的 `memory_add` 不會寫進 owner 的記憶。
 - 執行很久的那一輪會出現停止按鈕，只有 owner 按了有效。
 - 被擱置的動作，例如具破壞性的 shell 指令，會在一張卡片上等待核准。預設只有 owner 能回應。用 `toolTiers` 降低了工具的層級，該層級以上的 speaker 也能核准，卡片上會寫 `Who can approve: <tier> and above`。
 - agent 用 `ask_user` 提出的問題，那一輪的 speaker 和 owner 都可以回答。
@@ -93,7 +93,7 @@ shell 工具（`bash`、`read`、`edit`、`write`）和 `discord_*` 工具，預
 
 ## 其他 speaker 看到什麼：guest prompt
 
-owner 以外的每位 speaker，不論是 admin 還是 member，拿到的都是 guest prompt，而不是共用提示詞。
+owner 以外的每位 speaker（admin 和 member 都算）拿到的是 guest prompt，不是共用提示詞。
 agent 也會多收到一段文字，寫明這位 speaker 的名字、Discord 使用者 id 和層級，並告訴 agent 要稱呼他、採用他的回答和核准，以及高於他層級的工具在這一輪無法使用。
 他們的訊息送到 agent 時，前面會加上 `(Message from <name>, at the <tier> tier.)`。
 

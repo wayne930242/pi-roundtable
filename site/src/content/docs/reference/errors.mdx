@@ -5,10 +5,9 @@ sidebar:
   order: 4
 ---
 
-`roundtable doctor` prints each failed check as a `✗` line with the problem, and the fix on the indented lines under it.
+`roundtable doctor` prints each failed check as a `✗` line, with the fix indented below it.
 `roundtable start` stops with the same lines when an offline check fails.
 This page quotes the messages as the code writes them, with `<...>` where your names, ids, or values go.
-Each table pairs a message with what to do about it.
 
 For the commands and the order of the checks, see [CLI](/reference/cli/).
 
@@ -85,8 +84,8 @@ Later checks that need the configuration are skipped with `the configuration is 
 | `in the entry channel the bot lacks <permissions>.` | Grant them to the bot's role or in the channel's permissions. The fix line says what each one is for. |
 | `Discord answered <status> when asked for the guild <id>.`, `... for the channel <id>.`, or `... for the application.` | Try again in a moment. |
 
-The bot's setup is walked through in [Set up the Discord bot](/start/discord-bot/).
-The Discord checks are skipped, with `the token check failed`, when the token is wrong.
+Follow [Set up the Discord bot](/start/discord-bot/) to configure the bot.
+When the token is wrong, the remaining Discord checks show `the token check failed` and are skipped.
 
 ## Model login
 
@@ -95,7 +94,7 @@ The Discord checks are skipped, with `the token check failed`, when the token is
 | `the model "<model>" is not written <provider>/<id>.` | Write it like `anthropic/claude-sonnet-5-5` in `MODEL` in `.env`. |
 | `no login for <provider>, the provider of <model>.` | Set the provider's API key in `.env` (`ANTHROPIC_API_KEY` for `anthropic`, `OPENAI_API_KEY` for `openai`), or sign in with Pi so `<agentDir>/auth.json` holds it. |
 
-When the bot runs, a model that its host cannot run produces `<agent>'s model <model> is not available on this host`.
+If an agent's model is unavailable on the host, the bot reports `<agent>'s model <model> is not available on this host`.
 Change the agent's model with `agent_update`, or log in to the provider.
 A judge model that is not available produces `the judge's model <provider>/<id> is not available; log in to its provider or change judge.model`.
 
@@ -109,7 +108,7 @@ A judge model that is not available produces `the judge's model <provider>/<id> 
 
 ## Plugins
 
-A mistake in a plugin stops the start, before Discord connects, with a message of the form `plugin <name>: <what>. <fix>.`
+A plugin error stops startup before Discord connects, with a message of the form `plugin <name>: <what>. <fix>.`
 `roundtable doctor` prints the same messages.
 
 | Message | Fix |
@@ -121,7 +120,7 @@ A mistake in a plugin stops the start, before Discord connects, with a message o
 | `plugin <name>: setup must return an object of the parts it adds; return {} to add none.` | Return an object, not `undefined`. |
 | `plugin <name>: setup returned an unknown part "<key>". Did you mean "<closest>"? The parts are ...` | Fix the key. |
 | `tool "<name>": the name must be lowercase words joined by underscores, such as note_add. Rename the tool.` | Rename the tool. |
-| `tool <name>: the agents already have a tool of this name. Rename the tool.` | Do not use `bash`, `read`, `edit`, or `write`. |
+| `tool <name>: the agents already have a tool of this name. Rename the tool.` | Choose a name other than the built-in `bash`, `read`, `edit`, or `write`. |
 | `tool <name>: minTier must be one of member, admin, owner; got <value>. Set the lowest tier that may use it.` | Give `minTier` one of the three tiers. |
 | `plugin <b>: tool <name> is already defined by plugin <a>. Rename one of the two tools.` | Rename one tool. |
 | `plugin <name>: setup failed: <what the error said>. Fix the error, or remove the plugin.` | Fix the error the message quotes. |
@@ -135,6 +134,6 @@ See [Startup and project setup](/plugins/startup-and-project-setup/) and [What p
 
 | Message | Fix |
 | --- | --- |
-| `the check itself failed: <reason>` | Report it as a bug in `roundtable doctor`. A failing check never hides the ones after it. |
+| `the check itself failed: <reason>` | Report it as a bug in `roundtable doctor`. Later checks still run. |
 
 {/* Sources: src/cli/cli.ts:78-166, src/cli/init.ts:50-72, src/cli/add-plugin.ts:30-65, src/cli/config-edit.ts:44-48, src/cli/config-edit.ts:174-185, src/cli/project.ts:30-45, src/cli/project.ts:84-123, src/cli/report.ts:40-55, src/cli/checks/bun.ts, src/cli/checks/environment.ts, src/cli/checks/configuration.ts, src/cli/checks/database.ts, src/cli/checks/discord.ts, src/cli/checks/model.ts, src/cli/checks/public-url.ts, src/core/config/schema.ts:14-20, src/core/config/schema.ts:156-200, src/core/config/config.ts:218-226, src/core/define-roundtable.ts:60-90, src/core/time.ts:3-11, src/core/errors.ts, src/core/define.ts:70-90, src/core/define.ts:140-155, src/core/registry/contributions.ts:112-120, src/core/registry/contributions.ts:268-285, src/core/registry/contributions.ts:325-330, src/core/host.ts:365-380, src/core/tool-tiers.ts:48-56, src/core/modules/delegation/web-research-worker.ts:24-34, src/core/runtime/pi-agent-runtime.ts:455-466, docs/plugins.md:1877-1982 */}

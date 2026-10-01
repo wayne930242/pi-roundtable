@@ -1,6 +1,6 @@
 ---
 title: CLI
-description: The roundtable commands init, doctor, start, and add plugin, with the checks doctor runs, the exit codes, and what each command refuses to do.
+description: The roundtable commands init, doctor, start, and add plugin, with setup checks, exit codes, and reasons a command can fail.
 sidebar:
   order: 1
 ---
@@ -25,22 +25,23 @@ Inside a project, run it with `bunx roundtable <command>`.
 npx pi-roundtable init my-bot    # or: bunx pi-roundtable init my-bot
 ```
 
-`init` writes a working project and asks for no secret.
+`init` writes a working project without asking for secrets.
 It creates these files in `dir`: `package.json`, `.gitignore`, `roundtable.config.ts`, `biome.json`, `README.md`, `agents.ts`, `docker-compose.yml`, `persona/shared.md`, `.env.example`, `tsconfig.json`, `plugins/hello.ts`, and `plugins/hello.test.ts`.
 The `package.json` pins the exact version of pi-roundtable that ran `init`.
-It then prints three next steps: install and fill `.env`, run `doctor`, run `start`.
+It prints three steps: install and fill `.env`, run `doctor`, run `start`.
 
-Every refusal happens before the first write, so a refusal leaves the directory as it was:
+`init` leaves the directory unchanged if either check fails:
 
 - Bun is missing or older than the range the package needs.
-- A file `init` would create already exists. The message lists the files and ends with `Remove them or run init in an empty directory; nothing was written.`
+- A file `init` would create already exists.
+  The message lists the files and ends with `Remove them or run init in an empty directory; nothing was written.`
 
 `init` takes at most one directory; a second argument is a usage error.
 
 ## `doctor`
 
 `doctor` runs every check, in the order below, and prints one line for each.
-It changes nothing it looked at, and it exits non-zero if any check failed.
+It leaves the setup unchanged and exits non-zero if any check fails.
 
 ```text
 ✓ Bun: Bun 1.4.2
@@ -76,7 +77,8 @@ When the bot is not in the guild, the fix is an invitation link that asks for ex
 
 `doctor --reachable` also requests the public URL, which fails unless the bot is running and the tunnel or proxy that publishes the address works.
 Without the flag, check 12 only confirms that the address is well formed.
-This is the only flag, and only `doctor` takes it; any other argument is a usage error.
+`--reachable` is the only flag, and only `doctor` accepts it.
+Any other argument is a usage error.
 
 ## `start`
 
@@ -84,8 +86,8 @@ This is the only flag, and only `doctor` takes it; any other argument is a usage
 If one fails, it prints the same lines `doctor` prints, to standard error, and exits with code 1 before anything reaches Discord.
 Otherwise it starts the bot.
 
-PostgreSQL and Discord are not checked up front.
-A wrong database address or a rejected token fails the boot itself, and the process prints the message and exits with code 1.
+The bot connects to PostgreSQL and Discord during boot.
+A wrong database address or a rejected token stops the process with a message and exit code 1.
 Run `doctor` first to find those problems with their fixes.
 
 On `SIGTERM` or `SIGINT` the bot finishes running work before it stops.
@@ -101,7 +103,7 @@ bunx roundtable add plugin my-notes
 `add plugin` creates `plugins/my-notes.ts` and `plugins/my-notes.test.ts` from the `hello` template, imports the plugin in `roundtable.config.ts`, and lists it in `plugins`.
 
 Two names are reserved for the [official plugins](/plugins/official-plugins/), `codex-images` and `dice`.
-For one of them, `add plugin` copies the ready-made plugin and its test instead of the `hello` template, and registers it the same way:
+For either name, `add plugin` copies the ready-made plugin and its test and registers it the same way:
 
 ```sh
 bunx roundtable add plugin dice
@@ -110,13 +112,14 @@ bunx roundtable add plugin dice
 Any other valid name keeps the `hello` template, so a name such as `dice-roller` is a template plugin.
 The usage text lists the reserved names.
 
-It checks and renders everything before it writes, so a refusal leaves the project untouched.
-It refuses when:
+The command checks and renders everything before writing.
+It leaves the project untouched if:
 
 - The name is not lowercase words joined by dashes, such as `my-notes`.
 - `roundtable.config.ts` is not in the current directory.
 - `plugins/<name>.ts` or its test already exists.
-- The config file does not parse, has no `plugins` list it can find, or already uses the name for something else. The message says what to add by hand.
+- The config file does not parse, has no `plugins` list it can find, or already uses the name for something else.
+  The message says what to add by hand.
 
 The command takes exactly one name; anything else prints `usage: roundtable add plugin <name>`.
 

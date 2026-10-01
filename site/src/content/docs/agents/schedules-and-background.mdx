@@ -6,7 +6,7 @@ sidebar:
 ---
 
 An agent normally answers when you write.
-Three things let it work without you in the channel: a schedule, a delegated task, and a direct message to you.
+It can also run schedules, delegate tasks to background workers, and send you direct messages.
 
 ## Schedules
 
@@ -34,7 +34,8 @@ On Mondays and Thursdays at 17:30, ask me what I got done.
 | `schedule_update` | Changes the title, the prompt, or the timing of one schedule. A run may use it to keep its own prompt current. |
 | `schedule_cancel` | Deletes one schedule. |
 
-Owners and admins can create, change, and cancel schedules. Any speaker can list them.
+Owners and admins can create, change, and cancel schedules.
+Any speaker can list them.
 An agent can change only its own schedules; to change another's, ask that agent.
 
 The timing is one of these:
@@ -48,9 +49,10 @@ The timing is one of these:
 ### Limits
 
 - A channel holds up to 20 schedules, and a prompt is up to 8,000 characters.
-- The first run must be within 366 days. A time that has already passed is refused.
+- The first run must be within 366 days.
+  A time that has already passed is refused.
 - The scheduler checks for due schedules every 30 seconds.
-- A run that is found more than 12 hours late, for example after the bot was down, is skipped, not made up.
+- The scheduler skips a run it finds more than 12 hours late, for example after the bot was down.
 - A schedule runs with the tier of the person who made it, so someone of a lower tier cannot rewrite it.
 - Archiving an agent cancels its schedules.
 
@@ -70,14 +72,19 @@ Only you can use the command, and the answer is visible only to you.
 
 An agent can hand a long piece of research to a background worker with `delegate_task`, which takes a `title` and a self-contained `task` of up to 4,000 characters.
 
-- The worker has web search and page reading, and nothing else. It sees only the task.
-- The agent keeps working with you. When the worker reports back, the report arrives as a new turn in that channel, and the agent answers you with it.
-- Where Discord allows it, a thread opens in the channel with the task. It ends with the report, or with the error when the worker fails.
+- The worker's only tools are web search and page reading.
+  It sees only the task.
+- The agent keeps working with you.
+  The worker's report arrives as a new turn in that channel, and the agent answers you with it.
+- Where Discord allows it, a thread opens in the channel with the task.
+  It ends with the report, or with the error when the worker fails.
 - A channel can have 3 delegated tasks running at once.
 - A task that runs for 20 minutes is stopped and reported as failed.
-- Running tasks are kept in memory. A restart drops them, and the channel never hears back from them.
+- Running tasks are kept in memory.
+  A restart drops them without sending a report to the channel.
 
-The worker uses the model in the `delegation` setting. Without one it uses the agents' model, with the thinking level `medium`.
+The worker uses the model in the `delegation` setting.
+Without one it uses the agents' model, with the thinking level `medium`.
 The bot needs Create Public Threads for the thread; see [Set up the Discord bot](/start/discord-bot/).
 
 ## Direct messages to you

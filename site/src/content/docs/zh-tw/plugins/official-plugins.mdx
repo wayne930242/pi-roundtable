@@ -7,8 +7,8 @@ sidebar:
 
 import { Aside } from "@astrojs/starlight/components";
 
-pi-roundtable 附了兩個外掛，是複製進你的專案，不是安裝。
-複製出來的是你自己的一般外掛檔案，可以讀、可以改，也可以刪。
+pi-roundtable 附了兩個外掛，用複製的方式放進你的專案，不用安裝。
+複製出來的就是你自己的一般外掛檔案，可以讀、可以改，也可以刪。
 
 | 外掛 | 作用 |
 | --- | --- |
@@ -75,14 +75,14 @@ agent 會呼叫這個工具，再把結果回報給你。
 host 沒有登入時，外掛會拒絕啟動，訊息會說要登入 `openai-codex`。
 外掛每次畫圖都會重新讀取登入資料，所以更新過的 token 會被用到。
 
-<Aside type="caution" title="它可能在沒有通知的情況下失效">
+<Aside type="caution" title="它可能隨時失效，不會另行通知">
 `codex-images` 用的是 ChatGPT 的 Codex 後端，OpenAI 並沒有為這種用途提供文件，而且是用你自己的 ChatGPT 訂閱登入。
 OpenAI 隨時可能更改或封鎖它，並適用 OpenAI 對這個訂閱的條款。
 外掛檔案的開頭有同樣的警告。
-只在你能接受這個風險的地方使用它。
+能接受這個風險再用。
 </Aside>
 
-Codex 拒絕的請求，通常是因為提示詞，會以 `ImageNotGeneratedError` 失敗，用同一個提示詞再問一次，還是會失敗。
+Codex 拒絕的請求（通常是提示詞的問題）會以 `ImageNotGeneratedError` 失敗，同一個提示詞再問一次還是一樣。
 一個請求有五分鐘的時間限制，超過 32 MiB 的圖片會被拒絕。
 
 ## 修改複製出來的檔案

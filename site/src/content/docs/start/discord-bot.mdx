@@ -8,7 +8,7 @@ sidebar:
 import { Steps, Aside } from "@astrojs/starlight/components";
 
 The bot is a normal Discord application with a bot user.
-This page takes you from an empty developer portal to the values `.env` asks for.
+Create it in the developer portal and copy its values into `.env`.
 Run `bunx roundtable doctor` at the end; it checks everything below and says what is missing.
 
 ## Create the application and the bot
@@ -17,7 +17,8 @@ Run `bunx roundtable doctor` at the end; it checks everything below and says wha
 
 1. Open the [Discord developer portal](https://discord.com/developers/applications) and create a new application.
 
-2. Open the **Bot** page and copy the token. This is `DISCORD_TOKEN` in `.env`.
+2. Open the **Bot** page and copy the token.
+   Put it in `.env` as `DISCORD_TOKEN`.
    To replace a token that was rejected, reset it on the same page and put the new one in `.env`.
 
 3. On the same page, turn on **Message Content Intent** and save.
@@ -50,8 +51,7 @@ Open an address of this form in a browser and pick your server; `<bot id>` is th
 https://discord.com/oauth2/authorize?client_id=<bot id>&scope=bot+applications.commands&permissions=2252109588319248
 ```
 
-You do not have to build the link by hand.
-When the bot is not in your server, `bunx roundtable doctor` prints this link, filled in, as the fix.
+If the bot is not in your server, `bunx roundtable doctor` prints the filled-in invitation link.
 
 <Aside type="note">
 `doctor` checks these permissions in the entry channel, after the server's roles and the channel's own overrides.

@@ -6,16 +6,16 @@ sidebar:
 ---
 
 Agents act through tools.
-A tool is offered in a turn only when the speaker's tier is at least the tool's minimum tier, so a member never sees the tools below that need an admin or the owner.
+An agent's turn offers only tools whose minimum tier the speaker meets.
 The tiers are the defaults.
 `toolTiers` in `roundtable.config.ts` can change them; see [Access tiers](/configure/access-tiers/).
 
-A tool that nobody named needs the owner.
+A tool with no declared tier needs the owner.
 
 ## Agents, groups, and channels
 
 These tools belong to the agent server.
-You rarely call them yourself: you ask an agent, usually the coordinator, and it calls them.
+Ask an agent, usually the coordinator, and it calls them for you.
 For how they work in practice, see [Create agents](/agents/create-agents/), [Groups](/agents/groups/), and [Archive and channels](/agents/archive-and-channels/).
 
 | Tool | What it does | Minimum tier |
@@ -53,7 +53,7 @@ See [Skills and memory](/agents/skills-and-memory/).
 | `memory_remove` | Forgets every remembered fact that contains the given text. | member |
 
 Memory belongs to the speaker.
-A member's memory tools read and change that member's memory, not the owner's.
+A member's memory tools read and change their own memory.
 
 ## Schedules, background work, and notices
 
@@ -88,7 +88,7 @@ A shell command that is destructive or changes the system, and a write or edit o
 
 These tools belong to the `discord-admin` addon, which `discord.admin: false` leaves out.
 They manage the server on the owner's behalf, and a call checks that both the owner and the bot hold the Discord permission involved.
-Every one needs the owner by default.
+All these tools need the owner by default.
 
 | Tool | What it does |
 | --- | --- |

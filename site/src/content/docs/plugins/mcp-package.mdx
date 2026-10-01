@@ -17,7 +17,6 @@ Both work over MCP, the protocol agents use to call tools on another server.
 
 The package has its own repository: [wayne930242/pi-roundtable-mcp](https://github.com/wayne930242/pi-roundtable-mcp).
 Its README lists every option and message.
-This page covers what you need to decide whether to use it.
 
 ## Install
 
@@ -57,8 +56,7 @@ export default {
 } satisfies RoundtableConfig;
 ```
 
-You can use either plugin alone.
-They are not tied to each other.
+You can use either plugin on its own.
 
 ## Connectors
 
@@ -67,11 +65,10 @@ They are not tied to each other.
 Only the owner can use these commands.
 
 [ContextForge](https://github.com/IBM/mcp-context-forge) keeps each upstream server and its token.
-It is IBM's open-source MCP gateway, and the package does not run it for you.
-Run it next to the bot and give both the same JWT secret.
+Run IBM's open-source MCP gateway next to the bot and give both the same JWT secret.
 
-The plugin does not decide which agent uses which connector.
-It gives your code the list, and you build each agent's tools from it.
+The plugin gives your code the connector list.
+Your code chooses connectors for each agent and builds its tools from that list.
 The package README has an example.
 
 ## Remote MCP
@@ -93,9 +90,9 @@ Whoever holds a bundle address can use every channel in the bundle.
 Serve the endpoints only over HTTPS and keep both secrets out of Git.
 </Aside>
 
-Every call is checked again when it arrives.
-A revoked grant or a replaced address stops a call that is already running, and each call is written to an audit table.
-A grant can never be more than both you and the bot could do in that channel.
+The plugin checks every call when it arrives and writes it to an audit table.
+Revoking a grant or replacing an address stops calls already running.
+Grants are limited to operations both you and the bot can perform in that channel.
 
 ## If your bot already runs its own conversations
 

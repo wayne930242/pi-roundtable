@@ -7,8 +7,8 @@ sidebar:
 
 A plugin is an object with a name and a `setup` function.
 `setup` returns the parts the plugin adds.
-Each key in that return value is one part, and a key the contract does not have stops the start and names the closest one.
-This page lists the parts in five groups, so you can find the one you need and follow its link.
+Each key in that return value is one part.
+An unknown key stops startup with a message naming the closest match.
 
 Example files live in [`examples/`](https://github.com/wayne930242/pi-roundtable/tree/master/examples).
 Every example has a test next to it that runs without Discord, and the guide embeds each one.
@@ -18,7 +18,7 @@ All links in the tables point to the section of the [full plugin guide](https://
 
 | Piece | What it is for | Example | Guide |
 |---|---|---|---|
-| The plugin object | Holds the `name` (lowercase words joined by dashes, unique across plugins) and `setup`. Optional fields sit on the plugin itself, not in what `setup` returns: `migrations`, `providers`, `provides`, `replaces`, `requires` and `preflight`. A plugin must add something, or the start stops. | [`tools.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/tools.ts) | [The plugin object](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#the-plugin-object) |
+| The plugin object | Holds the `name` (lowercase words joined by dashes, unique across plugins) and `setup`. The plugin itself holds the optional fields: `migrations`, `providers`, `provides`, `replaces`, `requires` and `preflight`. A plugin must add something, or the start stops. | [`tools.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/tools.ts) | [The plugin object](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#the-plugin-object) |
 | The context | What `setup` receives: a logger that tags every line with your plugin name, the host environment (locale, time zone), the database, the services, and more. Some fields work only after every plugin is set up. | [`shared-services.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/shared-services.ts) | [The context](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#the-context) |
 
 ## Things agents use
@@ -28,7 +28,7 @@ All links in the tables point to the section of the [full plugin guide](https://
 | `tools` | You want agents to be able to call something. Each tool names the lowest tier of speaker whose turns may call it. | [`tools.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/tools.ts) | [tools](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#tools-what-agents-can-call) |
 | `holdRules` and a tool's `hold` | A call should wait until the owner approves it in Discord. | [`holds.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/holds.ts) | [holdRules](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#holdrules-and-a-tools-hold-calls-that-wait-for-the-owner) |
 | `prompt` | You want text added after the core's prompt in every agent turn. | [`prompt.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/prompt.ts) | [prompt](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#prompt-text-added-to-every-agent-turn) |
-| `seeds` | You want agents created on the first start. An agent that is already stored is never overwritten. | [`seeds.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/seeds.ts) | [seeds](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#seeds-agents-created-on-the-first-start) |
+| `seeds` | You want agents created on the first start. Stored agents keep their existing data. | [`seeds.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/seeds.ts) | [seeds](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#seeds-agents-created-on-the-first-start) |
 | `agentSelection` | Every agent should carry some tools besides its own. | [`selection.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/selection.ts) | [agentSelection](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#agentselection-tools-every-agent-carries) |
 | `piPackages` | Every session should load the Pi extensions of an npm package you installed. | [`packages.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/packages.ts) | [piPackages](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#pipackages-pi-extensions-every-session-loads) |
 | `sessionTools` | `tools` cannot express what you need, for example a tool set that changes while the process runs. This is the raw Pi extension form. | [`session-tools.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/session-tools.ts) | [sessionTools](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#sessiontools-the-raw-form-of-tools) |
@@ -43,7 +43,7 @@ All links in the tables point to the section of the [full plugin guide](https://
 | `migrations` | Your plugin needs tables of its own. They run before any `setup`. | [`migrations.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/migrations.ts) | [migrations](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#migrations-and-contextdatabase-tables-of-your-own) |
 | `preflight` | A bad setting should stop the start before Discord connects. | [`preflight.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/preflight.ts) | [preflight](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#preflight-refuse-to-start-with-a-bad-setting) |
 | `backgroundTargets` | A schedule or a delegated task should come back as a turn of a kind you define, with its own limits. | [`support-desk.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/support-desk.ts) | [backgroundTargets](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#backgroundtargets-whose-turn-a-schedule-or-delegated-task-is) |
-| `channels` | Your plugin should own the conversations in some channels, instead of the agent server. Most plugins never need this. | [`channels.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/channels.ts) | [channels](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#channels-conversations-of-your-own) |
+| `channels` | Your plugin needs to take over conversations in some channels from the agent server. | [`channels.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/channels.ts) | [channels](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#channels-conversations-of-your-own) |
 | `personas` and `context.turns` | You own a kind of conversation, give it a system prompt, and run its turns without writing the typing, stop and reply pipeline. | [`study-room.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/study-room.ts) | [personas](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#personas-and-contextturns-conversations-of-a-kind-of-your-own) |
 
 ## Things around Discord and HTTP

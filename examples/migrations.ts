@@ -2,8 +2,8 @@ import { definePlugin, defineTool } from "pi-roundtable";
 import { Type } from "typebox";
 
 /**
- * Migrations create the plugin's tables before any setup runs, on every start, so they must be
- * idempotent. Their names and the tables are shared with every other plugin: prefix them.
+ * Migrations create the plugin's tables before any setup runs. Each one runs once and is recorded
+ * in a ledger. Table names are shared with every other plugin: prefix them.
  */
 export const visitCounter = definePlugin({
 	name: "visit-counter",

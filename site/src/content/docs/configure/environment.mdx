@@ -12,8 +12,8 @@ Copy it to `.env`, fill it in, and the config file reads the values from the pro
 cp .env.example .env
 ```
 
-Bun loads `.env` by itself, so there is no `dotenv` step.
-Run `roundtable` commands from the project directory, because the config file is looked up there as well.
+Bun loads `.env` automatically.
+Run `roundtable` commands from the project directory, where they look for the config file.
 The `.gitignore` that `init` writes lists `.env`, so the file stays out of Git.
 
 ## The variables
@@ -28,10 +28,10 @@ The `.gitignore` that `init` writes lists `.env`, so the file stays out of Git.
 | `DATABASE_URL` | PostgreSQL. The default in the file matches the `docker-compose.yml` that `init` writes: `postgres://roundtable:roundtable@localhost:5432/roundtable`. | `database.url` |
 | `MODEL` | The agents' model, written `<provider>/<id>`. The file suggests `anthropic/claude-sonnet-5-5`. | `model` |
 | `PUBLIC_URL` | The address that reaches this process from the internet. It serves the agents' avatars. | `http.publicUrl` |
-| `ANTHROPIC_API_KEY` | The provider's API key. Commented out in the file; see below. | Read by the model login, not by the config file. |
+| `ANTHROPIC_API_KEY` | The provider's API key. Commented out in the file; see below. | The model login reads it directly. |
 
-The first eight are set in `roundtable.config.ts` through its `env("NAME")` helper.
-You can read more variables the same way in that file: it is ordinary TypeScript.
+`roundtable.config.ts` reads the first eight through its `env("NAME")` helper.
+It's ordinary TypeScript, so you can read more variables the same way.
 
 For the Discord values step by step, see [Set up the Discord bot](/start/discord-bot/).
 
@@ -49,7 +49,7 @@ If `.env` already exists, the fix line says `Fill them in .env` instead of the c
 If the project has no `.env.example`, the check is skipped.
 
 `ANTHROPIC_API_KEY` is commented out, so it is optional.
-Leave it out when you log in with Pi instead.
+You can also log in with Pi.
 Both ways are explained under [Models](/configure/models/#model-login).
 
 If you add a variable of your own to `.env.example`, `doctor` starts requiring it too.
@@ -58,7 +58,7 @@ Comment it out with `#` to make it optional.
 ## What happens with an empty value
 
 The config file turns an unset variable into an empty string, and every required setting must be a non-empty string.
-So a value left blank in `.env` is also caught when the configuration is checked:
+The configuration check also catches blank values in `.env`:
 
 ```text
 config owner.id: expected a non-empty string, got "". Fix the value in roundtable.config.ts.

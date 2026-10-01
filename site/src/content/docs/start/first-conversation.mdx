@@ -14,20 +14,20 @@ Each agent gets a channel under an `Agents` category, and a picture.
 It also creates a `#dashboard` channel at the top of the server with one status message, which it pins when it has the Pin Messages permission.
 [Status and avatars](/agents/status-and-avatars/) says what that message shows.
 
-The bot does not start a conversation.
-It answers when you write.
+The bot waits for you to write before it answers.
 
 ## Where to write
 
-Every message you write in an agent's channel is answered by that agent. You do not have to mention it.
-In any other channel of the server, nothing answers.
+An agent answers every message you write in its channel, without a mention.
+The bot stays silent in other server channels.
 
 The coordinator is the agent whose channel is the entry channel, the one in `DISCORD_ENTRY_CHANNEL_ID`.
-It is where your general requests go, and it hands specialist work to the agent that owns it.
+Send your general requests there; the coordinator hands specialist work to the agent that owns it.
 
 The project `init` writes has one agent, Guide, and its seed puts Guide in the entry channel, so Guide is the coordinator.
 Write to Guide there.
-Guide can create agents too: an agent does team work you ask of it directly, such as creating agents or groups, in its own name.
+Guide can also create agents.
+Any agent handles team work you ask of it directly, such as creating agents or groups, in its own name.
 
 The seed in `agents.ts` does this with one line:
 
@@ -48,7 +48,7 @@ An agent that exists keeps the channel it has, so set `channelId` before the fir
 
 ## What a turn looks like
 
-An agent's reply appears under its own name and avatar, not the bot's.
+An agent replies under its own name and avatar.
 While it works, the channel shows that it is typing.
 In an agent's own channel, after about five seconds, a short message appears: "Working; press Stop to interrupt." with a Stop button.
 Only you can press it, and the message goes away when the turn ends.
@@ -58,7 +58,7 @@ Commands that are destructive or change the system, and writes outside the share
 
 ## Ask for the first agent
 
-Say what you want, in the language you like. For example:
+Say what you want in the language you like:
 
 ```text
 Make me an agent that reads articles I save and keeps short notes.
@@ -69,7 +69,8 @@ The agent that answers can create the agent, with its own channel, picture, prom
 
 ## The slash command
 
-`/roundtable` is the control command. Only you can use it, and its answers are visible only to you.
+Use `/roundtable` to control the bot.
+Only you can use it, and its answers are visible only to you.
 The name is the lowercase name of the assistant unless `discord.rootCommand` says otherwise.
 Anyone else who tries it gets an "Owner only" answer.
 
@@ -80,7 +81,7 @@ The built-in subcommands are about schedules:
 | `/roundtable schedule list` | Lists the schedules of every channel |
 | `/roundtable schedule cancel` | Cancels one schedule; pick it from the list that appears |
 
-Schedules are created in conversation, not with a command.
+Ask an agent in conversation to create a schedule.
 See [Schedules and background work](/agents/schedules-and-background/).
 Plugins can add more subcommands under the same command; [Write a plugin](/plugins/first-plugin/) starts there.
 

@@ -9,19 +9,18 @@ import { Aside } from "@astrojs/starlight/components";
 
 Every message that starts a turn comes from a speaker, and every speaker has a tier.
 There are three tiers, from most to least trusted: `owner`, `admin`, and `member`.
-A person who holds none of them is nobody: the bot does not answer and starts no turn.
+The bot ignores messages from people without a tier.
 
 <Aside type="caution" title="You are responsible for this setup">
 pi-roundtable is built for one owner and one Discord server.
-Others can be allowed to talk to the agents, but that setup, and its risks, belong to the operator.
-Read this page before you add anyone.
+You can allow others to talk to the agents by giving them a tier, but that setup and its risks are yours.
 </Aside>
 
 ## The default: only the owner
 
 With no `speakers` setting, only the owner can talk to the agents.
 The owner is the person whose Discord user id is `owner.id`, and there is exactly one.
-Bots are ignored, and so is every channel the agent server does not own: only the agents' and groups' channels get answers.
+The bot ignores other bots and answers only in agents' and groups' channels.
 
 ## Giving other people a tier
 
@@ -61,11 +60,12 @@ The [agent tools reference](/reference/agent-tools/) lists every tool with its t
 | `admin` | Everything a member can, plus create and edit agents and groups, archive them, arrange channels, change skills and agent skills, create and change schedules, and delegate tasks. |
 | `owner` | Everything else: the shell and file tools, `notify_owner`, the `discord_*` administration tools, every plugin tool that does not declare a lower tier, and the `/roundtable` slash command. |
 
-A few points follow from this:
-
-- Each speaker has a memory of their own, shared by all agents. A member's `memory_add` never writes to the owner's memory.
+- Each speaker has a memory of their own, shared by all agents.
+  A member's `memory_add` writes to that member's memory.
 - The stop button on a long turn answers only the owner.
-- A held action, such as a destructive shell command, waits for approval on a card. By default only the owner can answer it. If you lower the tool's tier with `toolTiers`, speakers at that tier or above can approve it as well, and the card says `Who can approve: <tier> and above`.
+- A held action, such as a destructive shell command, waits for approval on a card.
+  By default only the owner can answer it.
+  If you lower the tool's tier with `toolTiers`, speakers at that tier or above can approve it as well, and the card says `Who can approve: <tier> and above`.
 - A question an agent asks with `ask_user` can be answered by the speaker whose turn asks it, and by the owner.
 
 ## Changing a tool's tier
@@ -93,7 +93,7 @@ Lowering one hands that power to every speaker at the new tier.
 
 ## What other speakers see: the guest prompt
 
-Every speaker other than the owner, whether an admin or a member, gets the guest prompt instead of the shared prompt.
+Admins and members get the guest prompt in place of the shared prompt.
 The agent also receives a section that names the speaker, their Discord user id, and their tier, and tells it to address them, to take their answers and approvals, and that tools above their tier are not available this turn.
 Their messages reach the agent prefixed with `(Message from <name>, at the <tier> tier.)`.
 
@@ -112,7 +112,7 @@ export default {
 Both files are read once, at start.
 An unreadable or empty file stops the start and names the key, for example `config prompts.guest: <path> is empty. Write the prompt in it.`
 
-Without `prompts.guest`, a guest prompt bundled with the package is used.
+Without `prompts.guest`, the bot uses the guest prompt bundled with the package.
 It tells the agent that the person is a guest of the server, that it does not speak for the owner, that the owner's private facts stay the owner's, and that what it stores in memory is the guest's alone.
 
 {/* Sources: README.md:5-7, docs/plugins.md:305-315, src/core/speakers.ts:5-9, src/core/speakers.ts:67-107, src/core/config/config.ts:20-25, src/core/config/config.ts:76-84, src/core/agents/agent-claim.ts:90-152, src/core/agents/agent-prompt.ts:28-78, src/core/assets/prompts/shared-guest.md:1-11, src/core/define-roundtable.ts:60-73, src/core/define-roundtable.ts:121-127, src/core/tool-tiers.ts:12-57, src/core/builtin/agent-server.ts:89-95, src/core/builtin/modules.ts:48-64, src/core/builtin/stores.ts:15-20, src/core/builtin/skills.ts:23-27, src/core/builtin/discord-admin.ts:33-38, src/core/discord/owner-cards.ts:95-290, src/core/discord/stop-button.ts:34-62, src/core/discord/owner-command.ts:125-150, src/core/agents/agent-prompt.ts:57-61 */}

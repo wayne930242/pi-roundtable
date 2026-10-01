@@ -9,8 +9,8 @@ sidebar:
 
 A service is something one plugin builds and others read, such as the schedule store or the agent team.
 Each service has a key made with `serviceKey<T>(id)`.
-`T` is an interface, called a port, so any object with the same methods is a service.
-You need no built-in class to provide one, or to fake one in a test.
+`T` is an interface, called a port.
+Any object with the same methods can provide the service or stand in for it in a test.
 
 A plugin lists the keys it provides in `provides`, and provides each one from `setup` with `services.provide(KEY, value)`.
 Give your key's id a prefix of your own, because two keys with one id are one service.
@@ -40,12 +40,12 @@ The full version is [`shared-services.ts`](https://github.com/wayne930242/pi-rou
 | `services.provide(KEY, value)` | Only from `setup`, only for a key in your `provides`, once per key. |
 
 If you read a service with `get` during `setup`, list its key in `requires`.
-A wrong order is then refused before any migration or setup, with both plugins named.
+The host rejects a wrong order before any migration or setup, naming both plugins.
 The key must be provided by a plugin registered before yours.
 A service you read with `find` stays out of `requires`.
 
-A plugin that declares a key and does not provide it is refused when its `setup` returns.
-Two plugins that declare one key are refused before any setup.
+When `setup` returns, the host rejects the plugin if it hasn't provided every key it declared.
+It rejects two plugins declaring the same key before any setup.
 
 ### Built-in services
 
@@ -68,7 +68,7 @@ The Discord connection's key, `DISCORD`, comes from `pi-roundtable/discord`, bec
 A plugin that lists a key in both `provides` and `replaces` takes over that service.
 The host drops the built-in plugin that provided it and sets yours up where that plugin stood.
 The dropped plugin's migrations and setup do not run.
-Your replacement may read what the plugins before that place provide, and nothing after.
+Your replacement can read services provided by plugins before it.
 
 ```ts
 definePlugin({
@@ -82,8 +82,8 @@ definePlugin({
 });
 ```
 
-The host refuses a replacement that cannot be made whole.
-For example, `BACKGROUND_TURNS` and `DELEGATION` come from the one `modules` plugin, so you replace them together or not at all.
+A replacement must provide all the services of the built-in plugin it replaces.
+For example, `BACKGROUND_TURNS` and `DELEGATION` come from the same `modules` plugin, so you replace them together.
 The guide lists each refusal message with its fix under [Replacing a built-in service](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#replacing-a-built-in-service).
 
 ## Addons
@@ -97,7 +97,8 @@ All three are on by default.
 | Skills | `skills: false` | The skill tables, the skill tools of agent sessions (`skill_link`, `skill_create`, `agent_skills`, and others), and the skills every agent carries | No skill tools and no skills in any session. `agent_create` leaves out its `skills` parameter and refuses a call that passes some |
 | Discord administration | `discord: { admin: false }` | The `discord_*` tools that read and manage the server, for the owner | No `discord_*` tools |
 
-A switched-off addon's tables and rows are never touched, so turning it on again finds them as they were.
+Switching an addon off leaves its tables and rows untouched.
+Turning it on again finds them as they were.
 When it is on, `skills` also takes the two directories `skills: { builtinDir, reposDir }`.
 
 A plugin of yours that can work without an addon reads its service with `find`, which is `undefined` while the addon is off.

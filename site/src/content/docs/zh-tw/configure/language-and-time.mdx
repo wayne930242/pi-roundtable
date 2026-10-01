@@ -20,8 +20,7 @@ export default {
 | `locale` | `"en"` 或 `"zh-TW"` | `"en"` |
 | `timeZone` | IANA 時區名稱，例如 `Europe/Berlin` 或 `Asia/Taipei` | `"UTC"` |
 
-主機只在啟動時套用這兩個設定一次，之後整個行程都用它們。
-改了之後，要重啟 bot。
+這兩個設定只在啟動時套用一次，改了要重啟 bot。
 
 ## `locale`
 
@@ -55,7 +54,7 @@ config locale: expected a locale, en or zh-TW, got "<value>". Fix the value in r
 - 排程訊息和清單裡的時間戳記，以及 `channel_read` 的輸出，都用這個時區。
 - 放進每位 speaker 記憶區塊的「即將到來的事件」，其中的「今天」是這個時區的日期。
 
-名稱是在 bot 啟動時檢查，不是在設定檢查時。
+名稱要到 bot 啟動時才檢查。
 `roundtable doctor` 接受任何非空字串。
 執行環境不認得的時區，會在檢查都通過之後讓 `roundtable start` 停下來：
 
