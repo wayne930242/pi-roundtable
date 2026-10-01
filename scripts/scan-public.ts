@@ -70,6 +70,7 @@ const NAMES = new RegExp(
 		spell("context", "forge"),
 		spell("no", "ul"),
 		spell("aaa", "av"),
+		// The name is split across two pieces so this file does not contain it.
 		spell("\\bmel", "ody\\b"),
 	].join("|"),
 	"gi",
@@ -94,6 +95,7 @@ const CJK_DIRECTORIES = [
 ];
 const CJK_FILES = ["README.zh-TW.md", "site/astro.config.mjs"];
 
+// pi-lens-ignore: high-complexity — one flat list of the documentation and private address ranges a public tree may name
 function allowedIp(ip: string): boolean {
 	const octets = ip.split(".").map(Number);
 	const [a, b, c] = octets;
@@ -118,6 +120,7 @@ function tree(dir: string): string[] {
 }
 
 /** Inspect exported text; credential matches are truncated so reporting does not leak them. */
+// pi-lens-ignore: high-complexity, high-fan-out — one pass that runs every detector over each line, so the findings come out in file and line order
 export function scanTree(
 	dir: string,
 	allowNames: NameAllowlist = PUBLIC_NAME_ALLOWLIST,
