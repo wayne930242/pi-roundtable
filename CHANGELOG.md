@@ -5,6 +5,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-01
+
+### Added
+
+- `ChannelGrantStore` is exported, with its `migration`, `attach(sql)`, `ensureBundle`, `save` and the rest, for host-side imports and tools. The plugin still owns the tables.
+- `ConnectorMessages`: the ContextForge errors are messages now (`upstreamUrlUnreadable`, `contextForgeNoGatewayId`, `contextForgeNoServerId`, `contextForgeRefused`, `contextForgeNotJson`, `virtualServerRequestFailed`, `virtualServerMissing`, `virtualServerNoTools`), and so are the description of a new connector's virtual server (`serverDescription`) and the separator after a connector's name in the list (`labelSeparator`). The values they receive are masked as before.
+- `RemoteMcpMessages`: the human part of a granted tool's error (`operationFailed`, `outcomeUnrecorded`, and `codeDetail`, which joins it to the fixed code), the label and list separators of the grants list (`labelSeparator`, `listSeparator`), and the wording of an audit entry's status (`auditStatus`).
+- `RemoteMcpMessages.describeAgentNameOption` and `revokeNotInBundle`: the `name` option of `describe` and the refusal of `revoke` have their own wording. They default to the text of `agentNameOption` and `notInBundle`.
+
+### Changed
+
+- `agentNameOption` now words only the `name` option of `authorize`, and `notInBundle` only what `describe` says when the channel is not in the bundle. The English defaults are unchanged, so a host that overrides `messages` keeps working; it sets the new keys where it wants a different wording.
+- `runGrantedTool` takes the messages as its last argument. It is internal and not exported from the package.
+
 ## [0.3.0] - 2026-10-01
 
 ### Added

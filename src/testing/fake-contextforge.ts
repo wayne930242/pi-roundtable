@@ -4,7 +4,10 @@ export interface FakeContextForge {
 	/** What an upstream URL offers, by tool name; a gateway added for the URL brings these tools. */
 	upstream: Record<string, string[]>;
 	gateways: Map<string, { name: string; url: string; authType?: string }>;
-	servers: Map<string, { name: string; toolIds: string[] }>;
+	servers: Map<
+		string,
+		{ name: string; description: string; toolIds: string[] }
+	>;
 	/** Forgets every gateway, server, and tool. */
 	reset(): void;
 	stop(): void;
@@ -56,11 +59,13 @@ export function fakeContextForge(): FakeContextForge {
 			if (pathname === "/servers" && request.method === "POST") {
 				const spec = body.server as {
 					name: string;
+					description: string;
 					associated_tools: string[];
 				};
 				const id = `sv${++next}`;
 				state.servers.set(id, {
 					name: spec.name,
+					description: spec.description,
 					toolIds: spec.associated_tools,
 				});
 				return json({ id });

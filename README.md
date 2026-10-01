@@ -186,6 +186,12 @@ The plugin provides the `REMOTE_MCP` service (`RemoteMcpService`) for a host tha
 | `grants` | `bundles()` and `grants(bundleId?)`, read only: every bundle, and the channel grants of one bundle or of all |
 | `describeGrant(client, grant)` | One grant as lines of text for a Discord message: the name the agent sees, where the channel is, its purpose, and the allowed operations, in the plugin's wording |
 
+#### `ChannelGrantStore`
+
+The package also exports the `ChannelGrantStore` class, for host-side imports and tools; the plugin owns the tables.
+`ChannelGrantStore.migration` creates them, `ChannelGrantStore.attach(sql)` opens the store over a migrated pool, and `ensureBundle`, `save` and the other methods read and write bundles and grants, so an offline script can move an existing set of grants into the database.
+The tables belong to the plugin: change them through the plugin on Discord, or through this class, not by hand.
+
 #### The default conversation
 
 Without `answer` and `claim`, a relayed turn runs on the core: `context.turns.run` of kind `remote`, for an owner-tier speaker, in the channel `mcp:<session>`, through the agent server's runtime.
@@ -252,9 +258,11 @@ The host's agents then reach a connector through the connector's virtual server 
 
 pi-roundtable's message catalog is closed to plugins, so these plugins keep their text in English and take a `messages` option of their own: a partial object laid over the defaults.
 Entries that take values are functions.
-The types `ConnectorMessages` and `RemoteMcpMessages` are exported and list every key.
+The types `ConnectorMessages` and `RemoteMcpMessages` are exported and list every key, each with a comment that says where it is read.
+Every sentence a Discord user or an outside agent reads is a key, including the errors of the ContextForge client, the description of a connector's virtual server (`serverDescription`), the human part of a granted tool's error (`operationFailed`, `outcomeUnrecorded`, joined to the fixed error code by `codeDetail`), and the separators (`labelSeparator`, `listSeparator`).
+The machine error codes (`CHANNEL_NOT_AUTHORIZED`, `DISCORD_OPERATION_FAILED`, ...) stay fixed, since outside agents match on them.
+`contextForgeRefused` and `contextForgeNotJson` receive ContextForge's answer with the request's token and any credential in the upstream URL already masked, so a wording of your own cannot leak them.
 Operation labels (`read`, `send`, ...) come from pi-roundtable and follow the host's language.
-The errors of the ContextForge client (a refused request) are English only.
 
 ## Database
 

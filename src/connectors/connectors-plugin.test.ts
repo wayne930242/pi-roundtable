@@ -185,4 +185,23 @@ describeDb("mcpConnectors on a host", () => {
 			host.context.services.get(CONNECTORS).profileSources()[0]?.serverName,
 		).toBe("acme-notion");
 	});
+
+	test("the virtual server's description and the list's label separator take the host's wording", async () => {
+		const host = await boot({
+			messages: {
+				serverDescription: (name, description) =>
+					`Mine ${name} / ${description}`,
+				labelSeparator: " ~ ",
+			},
+		});
+		await handle(host, addNotion().interaction as never);
+		expect([...cf.servers.values()][0]?.description).toBe(
+			"Mine notion / Pages in the owner's Notion",
+		);
+		const list = fakeInteraction({ group: "connector", sub: "list" });
+		await handle(host, list.interaction as never);
+		expect(list.replies.text()).toContain(
+			"**notion** ~ https://mcp.example.test/…",
+		);
+	});
 });

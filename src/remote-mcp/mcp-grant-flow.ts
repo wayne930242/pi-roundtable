@@ -114,7 +114,7 @@ export class McpGrantFlow {
 				sections: [
 					removed
 						? text.revoked(plain(bundle.name))
-						: text.notInBundle(plain(bundle.name)),
+						: text.revokeNotInBundle(plain(bundle.name)),
 				],
 			}),
 		);
@@ -285,7 +285,7 @@ export class McpGrantFlow {
 					text.granted(
 						plain(channel.name),
 						plain(bundle.name),
-						opLabels(pending.operations),
+						opLabels(pending.operations, text),
 					),
 					created ? text.urlSection(endpoint.url) : text.existingUrl,
 				],
@@ -318,7 +318,7 @@ export class McpGrantFlow {
 					`${text.recentAudit}\n${audit
 						.map(
 							(a) =>
-								`<t:${Math.floor(a.createdAt.getTime() / 1000)}:f> \`${a.tool}\` ${a.status}`,
+								`<t:${Math.floor(a.createdAt.getTime() / 1000)}:f> \`${a.tool}\` ${text.auditStatus(a.status)}`,
 						)
 						.join("\n")}`,
 				);

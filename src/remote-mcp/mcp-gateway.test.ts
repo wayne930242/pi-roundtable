@@ -12,6 +12,7 @@ import {
 } from "pi-roundtable/testing";
 import { ChannelGrantStore, newChannelEndpoint } from "./channel-grants.ts";
 import { McpGateway } from "./mcp-gateway.ts";
+import { remoteMcpMessages } from "./messages.ts";
 import { RemoteAgent } from "./remote-agent.ts";
 
 const DISPATCH_TOKEN = "dispatch-token-for-tests";
@@ -69,13 +70,14 @@ describeDb("PostgreSQL", () => {
 	async function connect(
 		endpoint: string,
 		headers: Record<string, string> = {},
+		through: McpGateway = gateway,
 	) {
 		const client = new Client({ name: "test", version: "1.0.0" });
 		await client.connect(
 			new StreamableHTTPClientTransport(new URL(endpoint), {
 				requestInit: { headers },
 				fetch: async (input, init) =>
-					gateway.handle(new Request(String(input), init as RequestInit)),
+					through.handle(new Request(String(input), init as RequestInit)),
 			}),
 		);
 		return client;
@@ -185,6 +187,57 @@ describeDb("PostgreSQL", () => {
 				new Request(endpoint.url, { method: "POST", body: "{}" }),
 			);
 			expect(stale.status).toBe(401);
+		});
+
+		test("a failed granted call reaches the agent in the host's wording, with its fixed code", async () => {
+			const endpoint = newChannelEndpoint(BASE);
+			const { bundle } = await grants.ensureBundle(
+				"words",
+				endpoint.tokenHash,
+				["read"],
+			);
+			await grants.save({
+				bundleId: bundle.id,
+				channelId: "111",
+				guildId: "900",
+				operations: ["read"],
+				displayName: "Lobby",
+				description: "",
+				guildName: "Example Server",
+				channelName: "lobby-2",
+				authorizedBy: "100000000000000001",
+				authorizedAt: new Date(),
+			});
+			const worded = new McpGateway({
+				dispatchToken: DISPATCH_TOKEN,
+				agent: {
+					dispatch: async () => ({ runId: "r", sessionId: "s" }),
+					result: () => ({ status: "working" }),
+				},
+				grants,
+				executor: () => ({
+					...executor,
+					execute: async () => {
+						throw new Error("discord down");
+					},
+				}),
+				logger: silentLogger(),
+				messages: remoteMcpMessages({
+					codeDetail: (code, detail) => `${code}：${detail}`,
+					operationFailed: (audit) => `紀錄 ${audit}`,
+				}),
+			});
+			const client = await connect(endpoint.url, {}, worded);
+			const failed = parse(
+				await client.callTool({
+					name: "discord_get_messages",
+					arguments: { channelId: "111" },
+				}),
+			);
+			expect(failed.error).toMatch(
+				/^DISCORD_OPERATION_FAILED：紀錄 [0-9a-f-]{36}$/,
+			);
+			await client.close();
 		});
 	});
 });

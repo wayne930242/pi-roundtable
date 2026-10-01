@@ -171,7 +171,7 @@ function section(connector: Connector, text: ConnectorMessages): string {
 		.map((t) => `\`${t}\``)
 		.join(" ");
 	return [
-		`**${connector.name}**  ${plain(displayUrl(connector.url, text.urlUnreadable))}`,
+		`**${connector.name}**${text.labelSeparator}${plain(displayUrl(connector.url, text.urlUnreadable))}`,
 		plain(connector.description),
 		connector.server
 			? text.toolCount(

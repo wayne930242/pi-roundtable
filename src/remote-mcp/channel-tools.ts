@@ -4,6 +4,7 @@ import {
 	ChannelToolError,
 } from "pi-roundtable/discord";
 import type { ChannelBundle, ChannelGrantStore } from "./channel-grants.ts";
+import type { RemoteMcpMessages } from "./messages.ts";
 
 /**
  * Runs one tool call for a bundle. The grant and the bundle's token are read after Discord
@@ -15,6 +16,10 @@ export async function runGrantedTool(
 	args: Record<string, unknown>,
 	store: ChannelGrantStore,
 	executor: ChannelExecutor,
+	text: Pick<
+		RemoteMcpMessages,
+		"codeDetail" | "operationFailed" | "outcomeUnrecorded"
+	>,
 ): Promise<unknown> {
 	const spec = CHANNEL_TOOLS[tool];
 	const channelId = args.channelId;
@@ -39,14 +44,20 @@ export async function runGrantedTool(
 	} catch {
 		await store.finishCall(receipt, "failed");
 		throw new ChannelToolError(
-			`DISCORD_OPERATION_FAILED: audit entry ${receipt}`,
+			text.codeDetail(
+				"DISCORD_OPERATION_FAILED",
+				text.operationFailed(receipt),
+			),
 		);
 	}
 	try {
 		await store.finishCall(receipt, "succeeded");
 	} catch {
 		throw new ChannelToolError(
-			`DISCORD_OUTCOME_UNRECORDED: the operation may have completed, so do not retry automatically. Audit entry ${receipt}`,
+			text.codeDetail(
+				"DISCORD_OUTCOME_UNRECORDED",
+				text.outcomeUnrecorded(receipt),
+			),
 		);
 	}
 	return result;

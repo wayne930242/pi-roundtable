@@ -258,7 +258,7 @@ export class ConnectorRegistry {
 		const serverId = await this.#contextForge(() =>
 			admin.createServer(
 				this.serverName(name),
-				`Connector ${name}: ${input.description}`,
+				this.#text.serverDescription(name, input.description),
 				usable.map((tool) => tool.id),
 			),
 		);

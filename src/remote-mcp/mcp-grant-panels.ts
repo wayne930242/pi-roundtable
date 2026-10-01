@@ -43,8 +43,8 @@ export interface Pending {
 }
 
 export const PENDING_MS = 5 * 60_000;
-export const opLabels = (ops: ChannelOperation[]) =>
-	ops.map(operationLabel).join(", ");
+export const opLabels = (ops: ChannelOperation[], text: RemoteMcpMessages) =>
+	ops.map(operationLabel).join(text.listSeparator);
 
 export function authorizePanel(
 	id: string,
@@ -52,7 +52,7 @@ export function authorizePanel(
 	source: "existing" | "defaults" | "chosen",
 	text: RemoteMcpMessages,
 ) {
-	const labels = opLabels(pending.operations);
+	const labels = opLabels(pending.operations, text);
 	const intro = pending.operations.length
 		? {
 				existing: text.keepExisting,
@@ -133,9 +133,9 @@ export async function describeGrant(
 		where += text.invisibleChannel;
 	}
 	return [
-		`- **${plain(grant.displayName)}**  ${where}`,
+		`- **${plain(grant.displayName)}**${text.labelSeparator}${where}`,
 		text.purposeLine(plain(grant.description) || text.notSet),
-		text.allowedLine(opLabels(grant.operations), grant.channelId),
+		text.allowedLine(opLabels(grant.operations, text), grant.channelId),
 	].join("\n");
 }
 

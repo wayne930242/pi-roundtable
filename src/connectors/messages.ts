@@ -46,6 +46,31 @@ export interface ConnectorMessages {
 	addedTitle: string;
 	addedFooter: string;
 	skippedTools(names: string): string;
+
+	/** Between a connector's name and its address in the list; the English default is two spaces. */
+	labelSeparator: string;
+	/** The description ContextForge shows on a new connector's virtual server. */
+	serverDescription(name: string, description: string): string;
+	/** Refuses an upstream URL that cannot be parsed; `url` is the address as the owner gave it. */
+	upstreamUrlUnreadable(url: string): string;
+	/** ContextForge accepted a new upstream server but returned no gateway ID. */
+	contextForgeNoGatewayId: string;
+	/** ContextForge accepted a new virtual server but returned no ID. */
+	contextForgeNoServerId: string;
+	/** ContextForge refused an admin request; `detail` is its reason, with credentials masked. */
+	contextForgeRefused(status: number, detail: string): string;
+	/** ContextForge answered an admin request with something other than JSON; `detail` is masked. */
+	contextForgeNotJson(detail: string): string;
+	/** Reading a virtual server's endpoint and tools failed with `status`; raised at startup. */
+	virtualServerRequestFailed(
+		url: string,
+		status: number,
+		detail: string,
+	): string;
+	/** ContextForge has no virtual server of this name; raised at startup. */
+	virtualServerMissing(name: string): string;
+	/** The virtual server exists but serves no tools; raised at startup. */
+	virtualServerNoTools(name: string): string;
 }
 
 export const CONNECTOR_MESSAGES: ConnectorMessages = {
@@ -109,6 +134,21 @@ export const CONNECTOR_MESSAGES: ConnectorMessages = {
 		"From the next message on, questions that need it go to this connector's tools.",
 	skippedTools: (names) =>
 		`**Skipped tools**  Their names are too long for the model: ${names}`,
+
+	labelSeparator: "  ",
+	serverDescription: (name, description) => `Connector ${name}: ${description}`,
+	upstreamUrlUnreadable: (url) => `Cannot parse the upstream URL: ${url}`,
+	contextForgeNoGatewayId: "ContextForge did not return the gateway ID.",
+	contextForgeNoServerId: "ContextForge did not return the virtual server ID.",
+	contextForgeRefused: (status, detail) =>
+		`ContextForge answered ${status}: ${detail}`,
+	contextForgeNotJson: (detail) =>
+		`ContextForge did not answer with JSON: ${detail}`,
+	virtualServerRequestFailed: (url, status, detail) =>
+		`ContextForge ${url} answered ${status}: ${detail}`,
+	virtualServerMissing: (name) =>
+		`ContextForge has no virtual server named ${name}`,
+	virtualServerNoTools: (name) => `virtual server ${name} serves no tools`,
 };
 
 /** The English text with the host's own wording laid over it. */

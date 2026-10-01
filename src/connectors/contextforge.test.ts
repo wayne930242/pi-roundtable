@@ -3,9 +3,11 @@ import { createHmac } from "node:crypto";
 import { ConfigError } from "pi-roundtable";
 import {
 	ContextForgeAdmin,
+	ContextForgeError,
 	contextForgeToken,
 	resolveVirtualServer,
 } from "./contextforge.ts";
+import { connectorMessages } from "./messages.ts";
 
 const decode = (part: string) =>
 	JSON.parse(Buffer.from(part, "base64url").toString("utf8"));
@@ -129,5 +131,90 @@ describe("ContextForgeAdmin reads", () => {
 		expect(await admin.servers()).toEqual([
 			{ name: "workspace", tools: ["google-a", "google-b"] },
 		]);
+	});
+});
+
+describe("ContextForge errors in the host's wording", () => {
+	const words = connectorMessages({
+		upstreamUrlUnreadable: (url) => `U:${url}`,
+		contextForgeNoGatewayId: "G:none",
+		contextForgeNoServerId: "S:none",
+		contextForgeRefused: (status, detail) => `R:${status}:${detail}`,
+		contextForgeNotJson: (detail) => `J:${detail}`,
+		virtualServerRequestFailed: (url, status, detail) =>
+			`V:${new URL(url).pathname}:${status}:${detail}`,
+		virtualServerMissing: (name) => `M:${name}`,
+		virtualServerNoTools: (name) => `T:${name}`,
+	});
+	const answering = (status: number, body: string) =>
+		(async () => new Response(body, { status })) as unknown as typeof fetch;
+	const gateway = {
+		name: "x",
+		url: "https://x.test/mcp",
+		description: "x",
+		auth: { type: "bearer", token: "tok-secret-9" } as const,
+	};
+
+	test("a refusal and a non-JSON answer use the host's wording, and still mask the token", async () => {
+		const refused = new ContextForgeAdmin(
+			"http://cf",
+			"t",
+			answering(422, JSON.stringify({ detail: "bad tok-secret-9" })),
+			words,
+		);
+		const refusal = await refused.createGateway(gateway).catch((e) => e);
+		expect(refusal).toBeInstanceOf(ContextForgeError);
+		expect(refusal.message).toBe("R:422:bad ***");
+
+		const html = new ContextForgeAdmin(
+			"http://cf",
+			"t",
+			answering(200, "<html>tok-secret-9</html>"),
+			words,
+		);
+		const notJson = await html.createGateway(gateway).catch((e) => e);
+		expect(notJson.message).toBe("J:<html>***</html>");
+	});
+
+	test("a missing ID and an unreadable URL use the host's wording", async () => {
+		const empty = new ContextForgeAdmin(
+			"http://cf",
+			"t",
+			answering(200, "{}"),
+			words,
+		);
+		expect((await empty.createGateway(gateway).catch((e) => e)).message).toBe(
+			"G:none",
+		);
+		expect(
+			(await empty.createServer("s", "d", []).catch((e) => e)).message,
+		).toBe("S:none");
+		expect(
+			(
+				await empty
+					.createGateway({ ...gateway, url: "not a url" })
+					.catch((e) => e)
+			).message,
+		).toBe("U:not a url");
+	});
+
+	test("resolving a virtual server refuses in the host's wording", async () => {
+		const routes = (table: Record<string, unknown>) =>
+			(async (url: string) => {
+				const path = new URL(url).pathname;
+				return path in table
+					? new Response(JSON.stringify(table[path]))
+					: new Response("nope", { status: 500 });
+			}) as unknown as typeof fetch;
+		const resolve = (table: Record<string, unknown>) =>
+			resolveVirtualServer("http://cf", "t", "ws", routes(table), words).catch(
+				(e) => e,
+			);
+		expect((await resolve({})).message).toBe("V:/servers:500:nope");
+		expect((await resolve({ "/servers": [] })).message).toBe("M:ws");
+		const found = { "/servers": [{ id: "a", name: "ws" }] };
+		expect((await resolve({ ...found, "/servers/a/tools": [] })).message).toBe(
+			"T:ws",
+		);
 	});
 });

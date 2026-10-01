@@ -243,6 +243,7 @@ export class McpGateway {
 							parseChannelTool(name, args),
 							grants,
 							executor(),
+							this.#text,
 						),
 					),
 			});

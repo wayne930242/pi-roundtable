@@ -18,6 +18,7 @@ import {
 	newChannelEndpoint,
 } from "./channel-grants.ts";
 import { runGrantedTool } from "./channel-tools.ts";
+import { REMOTE_MCP_MESSAGES, remoteMcpMessages } from "./messages.ts";
 
 describe("newChannelEndpoint", () => {
 	test("puts a 43-character token in the URL and returns only its hash", () => {
@@ -127,12 +128,61 @@ describeDb("PostgreSQL", () => {
 				args,
 				store,
 				executor,
+				REMOTE_MCP_MESSAGES,
 			);
 			expect(calls).toEqual(["discord_get_messages"]);
 			expect((await store.recentAudit("222"))[0]).toMatchObject({
 				tool: "discord_get_messages",
 				status: "succeeded",
 			});
+		});
+
+		test("the human part of a failed or unrecorded call is the host's wording, the code stays", async () => {
+			const { bundle } = await store.ensureBundle("words", "hash-w", ["read"]);
+			await store.save(grantFor(bundle.id, "555"));
+			const text = remoteMcpMessages({
+				codeDetail: (code, detail) => `${code}：${detail}`,
+				operationFailed: (audit) => `紀錄 ${audit}`,
+				outcomeUnrecorded: (audit) => `可能已完成，請勿重試。紀錄 ${audit}`,
+			});
+			const args = parseChannelTool("discord_get_messages", {
+				channelId: "555",
+			});
+			const failing = fakeExecutor();
+			failing.executor.execute = async () => {
+				throw new Error("discord down");
+			};
+			const failed = await runGrantedTool(
+				bundle,
+				"discord_get_messages",
+				args,
+				store,
+				failing.executor,
+				text,
+			).catch((error: unknown) => error);
+			expect(failed).toBeInstanceOf(ChannelToolError);
+			expect((failed as ChannelToolError).code).toMatch(
+				/^DISCORD_OPERATION_FAILED：紀錄 [0-9a-f-]{36}$/,
+			);
+			const finish = store.finishCall;
+			store.finishCall = async () => {
+				throw new Error("db down");
+			};
+			const unrecorded = await runGrantedTool(
+				bundle,
+				"discord_get_messages",
+				args,
+				store,
+				fakeExecutor().executor,
+				text,
+			)
+				.catch((error: unknown) => error)
+				.finally(() => {
+					store.finishCall = finish;
+				});
+			expect((unrecorded as ChannelToolError).code).toMatch(
+				/^DISCORD_OUTCOME_UNRECORDED：可能已完成，請勿重試。紀錄 [0-9a-f-]{36}$/,
+			);
 		});
 
 		test("refuses an operation, channel, guild, or token outside the grant", async () => {
@@ -147,6 +197,7 @@ describeDb("PostgreSQL", () => {
 						parseChannelTool(tool, args),
 						store,
 						run,
+						REMOTE_MCP_MESSAGES,
 					),
 				).rejects.toBeInstanceOf(ChannelToolError);
 			await refused("discord_pin_message", {

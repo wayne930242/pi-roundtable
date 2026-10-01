@@ -17,7 +17,7 @@ import {
 	recordingRuntime,
 } from "../testing/recording-runtime.ts";
 import { ChannelGrantStore } from "./channel-grants.ts";
-import { REMOTE_MCP_MESSAGES } from "./messages.ts";
+import { REMOTE_MCP_MESSAGES, type RemoteMcpMessages } from "./messages.ts";
 import { remoteMcp } from "./remote-mcp-plugin.ts";
 
 const TOKEN = "dispatch-token-for-tests";
@@ -306,8 +306,8 @@ describeDb("remoteMcp on a plugin harness", () => {
 	});
 
 	/** The plugin's grant command module and a runner for interactions against it. */
-	async function grantCommands() {
-		const { discord } = await boot(base);
+	async function grantCommands(messages?: Partial<RemoteMcpMessages>) {
+		const { discord } = await boot({ ...base, messages });
 		const [added] = discord.added().slice(-1);
 		if (!added) throw new Error("the plugin added no command");
 		return async (options: Parameters<typeof fakeInteraction>[0]) => {
@@ -409,5 +409,75 @@ describeDb("remoteMcp on a plugin harness", () => {
 		const cancelled = await run({ group: "mcp", sub: "", button: cancel });
 		expect(cancelled.text()).toContain(REMOTE_MCP_MESSAGES.cancelledTitle);
 		expect((await grants.bundleByTokenHash("hash-keep"))?.id).toBe(bundle.id);
+	});
+
+	test("the two not-in-bundle refusals and the two name options have their own wording", async () => {
+		const messages = {
+			notInBundle: () => "DESCRIBE-MISSING",
+			revokeNotInBundle: () => "REVOKE-MISSING",
+			agentNameOption: "AUTHORIZE-NAME",
+			describeAgentNameOption: "DESCRIBE-NAME",
+		};
+		const { discord } = await boot({ ...base, messages });
+		const group = discord
+			.compose()
+			.commands.find((command) => command.name === "roundtable")
+			?.options?.find((option) => option.name === "mcp") as unknown as {
+			options: {
+				name: string;
+				options: { name: string; description: string }[];
+			}[];
+		};
+		const nameOf = (sub: string) =>
+			group.options
+				.find((option) => option.name === sub)
+				?.options.find((option) => option.name === "name")?.description;
+		expect(nameOf("authorize")).toBe("AUTHORIZE-NAME");
+		expect(nameOf("describe")).toBe("DESCRIBE-NAME");
+
+		const run = await grantCommands(messages);
+		await seedBundle("words", "hash-words");
+		const strings = { bundle: "words", channel_id: "222", description: "x" };
+		const described = await run({
+			group: "mcp",
+			sub: "describe",
+			guild: true,
+			strings,
+		});
+		expect(described.text()).toContain("DESCRIBE-MISSING");
+		const revoked = await run({
+			group: "mcp",
+			sub: "revoke",
+			guild: true,
+			strings,
+		});
+		expect(revoked.text()).toContain("REVOKE-MISSING");
+	});
+
+	test("the grants list takes the host's label separator, list separator and audit status", async () => {
+		const run = await grantCommands({
+			labelSeparator: " | ",
+			listSeparator: " + ",
+			auditStatus: (status) => `<${status}>`,
+		});
+		const { grants, bundle } = await seedBundle("labels", "hash-labels");
+		await grants.save({
+			bundleId: bundle.id,
+			channelId: "111",
+			guildId: "900",
+			operations: ["read", "send"],
+			displayName: "Lobby",
+			description: "",
+			guildName: "Example Server",
+			channelName: "lobby",
+			authorizedBy: "100000000000000001",
+			authorizedAt: new Date(),
+		});
+		const text = (
+			await run({ group: "mcp", sub: "grants", guild: true })
+		).text();
+		expect(text).toContain("- **Lobby** | Example Server › #lobby");
+		expect(text).toMatch(/Allowed: .+ \+ .+ \(ID 111\)/);
+		expect(text).toContain("`authorize` <succeeded>");
 	});
 });

@@ -21,11 +21,9 @@ function mcpGroup(text: RemoteMcpMessages) {
 			.setMaxLength(80)
 			.setAutocomplete(true)
 			.setRequired(true);
-	const agentName = (option: SlashCommandStringOption) =>
-		option
-			.setName("name")
-			.setDescription(text.agentNameOption)
-			.setMaxLength(100);
+	const agentName =
+		(description: string) => (option: SlashCommandStringOption) =>
+			option.setName("name").setDescription(description).setMaxLength(100);
 	const purpose = (option: SlashCommandStringOption) =>
 		option
 			.setName("description")
@@ -42,7 +40,7 @@ function mcpGroup(text: RemoteMcpMessages) {
 					.setName("authorize")
 					.setDescription(text.authorizeDescription)
 					.addStringOption(bundle)
-					.addStringOption(agentName)
+					.addStringOption(agentName(text.agentNameOption))
 					.addStringOption(purpose),
 			)
 			.addSubcommand((sub) =>
@@ -60,7 +58,7 @@ function mcpGroup(text: RemoteMcpMessages) {
 					.setName("describe")
 					.setDescription(text.describeDescription)
 					.addStringOption(bundle)
-					.addStringOption(agentName)
+					.addStringOption(agentName(text.describeAgentNameOption))
 					.addStringOption(purpose)
 					.addStringOption(channelId),
 			)

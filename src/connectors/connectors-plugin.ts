@@ -93,8 +93,9 @@ export function mcpConnectors(options: McpConnectorsOptions): RoundtablePlugin {
 		setup: async ({ database, services, logger }) => {
 			const { jwtSecret, user } = options.contextForge;
 			const token = contextForgeToken(jwtSecret, user, TOKEN_TTL_SECONDS);
-			const admin = new ContextForgeAdmin(url, token);
-			const resolve = (name: string) => resolveVirtualServer(url, token, name);
+			const admin = new ContextForgeAdmin(url, token, fetch, text);
+			const resolve = (name: string) =>
+				resolveVirtualServer(url, token, name, fetch, text);
 			const registry = await ConnectorRegistry.attach(database(), {
 				admin,
 				resolve,

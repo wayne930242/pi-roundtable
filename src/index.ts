@@ -17,6 +17,7 @@ export type {
 	ChannelBundle,
 	ChannelGrant,
 } from "./remote-mcp/channel-grants.ts";
+export { ChannelGrantStore } from "./remote-mcp/channel-grants.ts";
 export type {
 	RemoteMcpMessages,
 	RemoteToolNames,

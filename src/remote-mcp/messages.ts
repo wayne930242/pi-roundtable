@@ -20,6 +20,15 @@ export interface RemoteMcpMessages {
 	runFailed: string;
 	/** Sent for a granted tool call that failed in a way the agent must not retry. */
 	operationUnfinished: string;
+	/**
+	 * A granted tool's error as the outside agent reads it: the fixed machine `code` it matches
+	 * on, then the human `detail`. Keep the code in the text; the default joins them with `: `.
+	 */
+	codeDetail(code: string, detail: string): string;
+	/** The detail after `DISCORD_OPERATION_FAILED`: the call failed, and where to look it up. */
+	operationFailed(audit: string): string;
+	/** The detail after `DISCORD_OUTCOME_UNRECORDED`: the call may have completed but was not recorded. */
+	outcomeUnrecorded(audit: string): string;
 
 	/** The description of the dispatch tool; `tools` holds the names the host chose. */
 	dispatchDescription(tools: RemoteToolNames): string;
@@ -33,7 +42,10 @@ export interface RemoteMcpMessages {
 	groupDescription: string;
 	bundleOption: string;
 	authorizeDescription: string;
+	/** The `name` option of `authorize`. */
 	agentNameOption: string;
+	/** The `name` option of `describe`, which changes a name that already exists. */
+	describeAgentNameOption: string;
 	purposeOption: string;
 	grantsDescription: string;
 	revokeDescription: string;
@@ -48,7 +60,10 @@ export interface RemoteMcpMessages {
 	nameOrDescription: string;
 	describeTitle: string;
 	described: string;
+	/** Said by `describe` when the channel is not in the bundle. */
 	notInBundle(bundle: string): string;
+	/** Said by `revoke` when the channel was not in the bundle to begin with. */
+	revokeNotInBundle(bundle: string): string;
 	revokedTitle: string;
 	revoked(bundle: string): string;
 	expiredTitle: string;
@@ -91,6 +106,13 @@ export interface RemoteMcpMessages {
 	needManageChannels: string;
 	youLackPermission(operation: string): string;
 	botLacksPermission(operation: string): string;
+
+	/** Between a grant's name and where its channel is, in the grants list; two spaces by default. */
+	labelSeparator: string;
+	/** Between the operations of a grant; `, ` by default. */
+	listSeparator: string;
+	/** How an audit entry's status reads in the grants list; `started`, `succeeded` or `failed`. */
+	auditStatus(status: string): string;
 }
 
 export const REMOTE_MCP_MESSAGES: RemoteMcpMessages = {
@@ -99,6 +121,10 @@ export const REMOTE_MCP_MESSAGES: RemoteMcpMessages = {
 	runFailed: "This run did not complete. Try again later.",
 	operationUnfinished:
 		"The operation did not complete. Check the audit log of the grants on Discord; do not retry automatically.",
+	codeDetail: (code, detail) => `${code}: ${detail}`,
+	operationFailed: (audit) => `audit entry ${audit}`,
+	outcomeUnrecorded: (audit) =>
+		`the operation may have completed, so do not retry automatically. Audit entry ${audit}`,
 
 	dispatchDescription: (tools) =>
 		"Start or continue a conversation turn with the owner's personal agent, on the owner's behalf. " +
@@ -119,6 +145,8 @@ export const REMOTE_MCP_MESSAGES: RemoteMcpMessages = {
 		"Add this channel to a bundle and choose the allowed operations",
 	agentNameOption:
 		"The channel name the agent sees; Discord's name is unchanged",
+	describeAgentNameOption:
+		"The channel name the agent sees; Discord's name is unchanged",
 	purposeOption: "What this channel is for",
 	grantsDescription: "List every grant and this channel's audit log",
 	revokeDescription: "Remove a channel from a bundle",
@@ -138,6 +166,7 @@ export const REMOTE_MCP_MESSAGES: RemoteMcpMessages = {
 	described:
 		"Updated the name and purpose the agent sees; the name and topic on Discord are unchanged.",
 	notInBundle: (bundle) => `This channel is not in bundle **${bundle}**.`,
+	revokeNotInBundle: (bundle) => `This channel is not in bundle **${bundle}**.`,
 	revokedTitle: "Channel removed",
 	revoked: (bundle) =>
 		`Removed the channel from bundle **${bundle}**; its other channels and its URL keep working. Operations already sent are not undone.`,
@@ -198,6 +227,10 @@ export const REMOTE_MCP_MESSAGES: RemoteMcpMessages = {
 		`You lack the Discord permission behind "${operation}".`,
 	botLacksPermission: (operation) =>
 		`The bot lacks the Discord permission behind "${operation}"; grant it in the server settings first.`,
+
+	labelSeparator: "  ",
+	listSeparator: ", ",
+	auditStatus: (status) => status,
 };
 
 /** The English text with the host's own wording laid over it. */

@@ -1,6 +1,7 @@
 import { createHmac, randomUUID } from "node:crypto";
 import { ConfigError } from "pi-roundtable";
 import type { VirtualServer } from "pi-roundtable/kit";
+import { CONNECTOR_MESSAGES, type ConnectorMessages } from "./messages.ts";
 
 function base64url(value: string | Buffer): string {
 	return Buffer.from(value).toString("base64url");
@@ -50,6 +51,7 @@ async function getJson(
 	url: string,
 	token: string,
 	fetchImpl: typeof fetch,
+	text: ConnectorMessages,
 ): Promise<unknown> {
 	const response = await fetchImpl(url, {
 		headers: { authorization: `Bearer ${token}` },
@@ -57,7 +59,11 @@ async function getJson(
 	});
 	if (!response.ok) {
 		throw new ConfigError(
-			`ContextForge ${url} answered ${response.status}: ${(await response.text()).slice(0, 200)}`,
+			text.virtualServerRequestFailed(
+				url,
+				response.status,
+				(await response.text()).slice(0, 200),
+			),
 		);
 	}
 	return response.json();
@@ -69,22 +75,25 @@ export async function resolveVirtualServer(
 	token: string,
 	name: string,
 	fetchImpl: typeof fetch = fetch,
+	text: ConnectorMessages = CONNECTOR_MESSAGES,
 ): Promise<VirtualServer> {
 	const servers = await getJson(
 		`${baseUrl}/servers?include_pagination=false`,
 		token,
 		fetchImpl,
+		text,
 	);
 	const server = Array.isArray(servers)
 		? servers.find((entry) => isRecord(entry) && entry.name === name)
 		: undefined;
 	if (!isRecord(server) || typeof server.id !== "string") {
-		throw new ConfigError(`ContextForge has no virtual server named ${name}`);
+		throw new ConfigError(text.virtualServerMissing(name));
 	}
 	const tools = await getJson(
 		`${baseUrl}/servers/${server.id}/tools?include_pagination=false`,
 		token,
 		fetchImpl,
+		text,
 	);
 	const names = Array.isArray(tools)
 		? tools.flatMap((tool) =>
@@ -92,7 +101,7 @@ export async function resolveVirtualServer(
 			)
 		: [];
 	if (names.length === 0)
-		throw new ConfigError(`virtual server ${name} serves no tools`);
+		throw new ConfigError(text.virtualServerNoTools(name));
 	return { name, url: `${baseUrl}/servers/${server.id}/mcp`, tools: names };
 }
 
@@ -143,11 +152,18 @@ export class ContextForgeAdmin {
 	readonly #baseUrl: string;
 	readonly #token: string;
 	readonly #fetch: typeof fetch;
+	readonly #text: ConnectorMessages;
 
-	constructor(baseUrl: string, token: string, fetchImpl: typeof fetch = fetch) {
+	constructor(
+		baseUrl: string,
+		token: string,
+		fetchImpl: typeof fetch = fetch,
+		text: ConnectorMessages = CONNECTOR_MESSAGES,
+	) {
 		this.#baseUrl = baseUrl;
 		this.#token = token;
 		this.#fetch = fetchImpl;
+		this.#text = text;
 	}
 
 	/** Registers an upstream server; ContextForge connects and lists its tools before answering. */
@@ -161,7 +177,7 @@ export class ContextForgeAdmin {
 		const upstream = URL.parse(gateway.url);
 		if (!upstream)
 			throw new ContextForgeError(
-				`Cannot parse the upstream URL: ${gateway.url}`,
+				this.#text.upstreamUrlUnreadable(gateway.url),
 			);
 		const body = {
 			name: gateway.name,
@@ -179,9 +195,7 @@ export class ContextForgeAdmin {
 			secrets,
 		);
 		if (!isRecord(created) || typeof created.id !== "string")
-			throw new ContextForgeError(
-				"ContextForge did not return the gateway ID.",
-			);
+			throw new ContextForgeError(this.#text.contextForgeNoGatewayId);
 		return {
 			id: created.id,
 			slug: typeof created.slug === "string" ? created.slug : gateway.name,
@@ -276,9 +290,7 @@ export class ContextForgeAdmin {
 			server: { name, description, associated_tools: toolIds },
 		});
 		if (!isRecord(created) || typeof created.id !== "string")
-			throw new ContextForgeError(
-				"ContextForge did not return the virtual server ID.",
-			);
+			throw new ContextForgeError(this.#text.contextForgeNoServerId);
 		return created.id;
 	}
 
@@ -310,14 +322,17 @@ export class ContextForgeAdmin {
 		const text = await response.text();
 		if (!response.ok)
 			throw new ContextForgeError(
-				`ContextForge answered ${response.status}: ${detailOf(masked(text, secrets))}`,
+				this.#text.contextForgeRefused(
+					response.status,
+					detailOf(masked(text, secrets)),
+				),
 			);
 		if (!text) return undefined;
 		try {
 			return JSON.parse(text);
 		} catch {
 			throw new ContextForgeError(
-				`ContextForge did not answer with JSON: ${detailOf(masked(text, secrets))}`,
+				this.#text.contextForgeNotJson(detailOf(masked(text, secrets))),
 			);
 		}
 	}
