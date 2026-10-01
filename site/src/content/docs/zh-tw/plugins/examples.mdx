@@ -1,0 +1,39 @@
+---
+title: 範例
+description: 儲存庫裡的每個範例外掛，各用一行說明它示範什麼，並附上檔案連結。
+sidebar:
+  order: 6
+---
+
+儲存庫在 [`examples/`](https://github.com/wayne930242/pi-roundtable/tree/master/examples) 放了一些小而能運作的外掛。
+每一個旁邊都有測試，能在沒有 Discord 和 PostgreSQL 的情況下執行；只有 `migrations.ts` 例外，它的測試需要資料庫。
+[外掛指南](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md)（英文）把每個檔案嵌進去，指南裡的程式碼區塊只要和檔案不同，儲存庫的測試就會失敗。
+
+| 檔案 | 示範什麼 |
+|---|---|
+| [`tools.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/tools.ts) | agent 能呼叫的工具，附最低層級，以及模型能據以修正的拒絕訊息 |
+| [`holds.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/holds.ts) | 工具的 `hold`，以及一條能看到每次工具呼叫的 hold rule，讓呼叫等 owner 核准 |
+| [`prompt.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/prompt.ts) | 在每一輪 agent 的核心提示詞後面加上的提示詞區段 |
+| [`seeds.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/seeds.ts) | 第一次啟動時建立的 agent，之後不會被覆蓋 |
+| [`events.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/events.ts) | 一輪開始、一輪結束、團隊變動和關機的 handler |
+| [`services.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/services.ts) | 一個長期執行的計時器服務，有 `start`、`stop` 和 `busy` |
+| [`shared-services.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/shared-services.ts) | 由一個外掛提供、其他外掛用 `get`、`find` 和 `lazy` 讀取的服務，以及取代它的外掛 |
+| [`migrations.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/migrations.ts) | 外掛自己的資料表，由可重複執行的 migration 建立 |
+| [`providers.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/providers.ts) | 填入 `images` provider 槽位的外掛 |
+| [`echo-runtime.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/echo-runtime.ts) | 取代 Pi runtime，填入 `runtime` 槽位 |
+| [`preflight.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/preflight.ts) | 某個設定是空的就拒絕啟動的檢查 |
+| [`interactions.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/interactions.ts) | 用 `commands.add` 新增的斜線子指令 |
+| [`http.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/http.ts) | 公開 listener 上的一條路由 |
+| [`dashboard.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/dashboard.ts) | dashboard 訊息上多出來的幾行 |
+| [`selection.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/selection.ts) | 每個 agent 除了自己的工具，還帶著的共同工具 |
+| [`packages.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/packages.ts) | 一個 Pi 套件，每個 session 都載入它的擴充 |
+| [`session-tools.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/session-tools.ts) | 工具的 Pi 擴充原始形式 |
+| [`channels.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/channels.ts) | 負責某些頻道裡對話的頻道 claim |
+| [`study-room.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/study-room.ts) | 自己的一種對話：persona、claim 和 `context.turns` |
+| [`support-desk.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/support-desk.ts) | 一個 background target，決定哪些能被排程或委派 |
+| [`fake-surface.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/fake-surface.ts) | 給記憶體內聊天用的聊天 surface，以及提供它的外掛 |
+
+想知道每個部分的用途，先看[外掛能新增什麼](/zh-tw/plugins/what-plugins-can-add/)。
+想跑像這些檔案旁邊那樣的測試，見[測試外掛](/zh-tw/plugins/testing/)。
+
+{/* Sources: examples/*.ts (non-test files), examples/guide.test.ts, docs/plugins.md:5-7 */}

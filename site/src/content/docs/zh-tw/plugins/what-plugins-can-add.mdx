@@ -1,0 +1,68 @@
+---
+title: 外掛能新增什麼
+description: 外掛能加進 pi-roundtable 的每個部分，附上示範它的範例，以及完整指南中對應的章節。
+sidebar:
+  order: 2
+---
+
+外掛是一個有名稱和 `setup` 函式的物件。
+`setup` 回傳這個外掛要新增的部分。
+回傳值裡每個 key 就是一個部分；契約裡沒有的 key 會讓啟動停下來，並指出最接近的那一個。
+這一頁把這些部分分成五組，你可以找到需要的那一個，再點連結往下看。
+
+範例檔放在 [`examples/`](https://github.com/wayne930242/pi-roundtable/tree/master/examples)。
+每個範例旁邊都有一個不需要 Discord 就能跑的測試，指南也把每個範例嵌進去。
+表格裡的連結都指向[外掛完整指南](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md)（英文）的章節。
+
+## 外掛物件與 context
+
+| 項目 | 用途 | 範例 | 指南 |
+|---|---|---|---|
+| 外掛物件 | 放 `name`（小寫單字用連字號連起來，各外掛之間不能重複）和 `setup`。選填的欄位放在外掛本身，不放在 `setup` 的回傳值裡：`migrations`、`providers`、`provides`、`replaces`、`requires` 和 `preflight`。外掛必須新增某樣東西，否則啟動會停下來。 | [`tools.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/tools.ts) | [外掛物件](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#the-plugin-object) |
+| context | `setup` 收到的東西：一個會在每一行加上外掛名稱的 logger、主機環境（locale、時區）、資料庫、服務等等。有些欄位要等所有外掛都 setup 完才能用。 | [`shared-services.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/shared-services.ts) | [context](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#the-context) |
+
+## agent 會用到的部分
+
+| 部分 | 適用時機 | 範例 | 指南 |
+|---|---|---|---|
+| `tools` | 你想讓 agent 能呼叫某個東西。每個工具都標明能呼叫它的 speaker 最低要達到哪個層級。 | [`tools.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/tools.ts) | [tools](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#tools-what-agents-can-call) |
+| `holdRules` 和工具的 `hold` | 某個呼叫要等 owner 在 Discord 核准才執行。 | [`holds.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/holds.ts) | [holdRules](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#holdrules-and-a-tools-hold-calls-that-wait-for-the-owner) |
+| `prompt` | 你想在每一輪 agent 的核心提示詞後面再加一段文字。 | [`prompt.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/prompt.ts) | [prompt](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#prompt-text-added-to-every-agent-turn) |
+| `seeds` | 你想在第一次啟動時建立 agent。已經存在資料庫裡的 agent 不會被覆蓋。 | [`seeds.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/seeds.ts) | [seeds](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#seeds-agents-created-on-the-first-start) |
+| `agentSelection` | 每個 agent 除了自己的工具，還要帶一些共同的工具。 | [`selection.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/selection.ts) | [agentSelection](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#agentselection-tools-every-agent-carries) |
+| `piPackages` | 每個 session 都要載入你安裝的某個 npm 套件裡的 Pi 擴充。 | [`packages.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/packages.ts) | [piPackages](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#pipackages-pi-extensions-every-session-loads) |
+| `sessionTools` | `tools` 表達不了你要的，例如工具組合會在行程執行期間改變。這是 Pi 擴充的原始形式。 | [`session-tools.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/session-tools.ts) | [sessionTools](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#sessiontools-the-raw-form-of-tools) |
+| `toolTiers` | 你用了 `sessionTools`，需要指定每個原始工具要哪個層級才能用。 | 無 | [toolTiers](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#tooltiers-who-may-use-your-raw-session-tools) |
+
+## bot 自己做的事
+
+| 部分 | 適用時機 | 範例 | 指南 |
+|---|---|---|---|
+| `events` | 你想知道核心做了什麼：服務啟動完成、一輪開始或結束、團隊有變動、開始關機。 | [`events.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/events.ts) | [events](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#events-hear-what-the-core-does) |
+| `services` | 你需要有生命週期的東西，例如計時器、佇列或連線。服務在 setup 之後啟動，以相反的順序停止。 | [`services.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/services.ts) | [services](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#services-long-lived-parts) |
+| `migrations` | 外掛需要自己的資料表。它們在所有 `setup` 之前執行。 | [`migrations.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/migrations.ts) | [migrations](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#migrations-and-contextdatabase-tables-of-your-own) |
+| `preflight` | 設定有誤時，要在 Discord 連線之前就讓啟動停下來。 | [`preflight.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/preflight.ts) | [preflight](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#preflight-refuse-to-start-with-a-bad-setting) |
+| `backgroundTargets` | 排程或委派的任務要以你定義的那種一輪回來，並有自己的限制。 | [`support-desk.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/support-desk.ts) | [backgroundTargets](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#backgroundtargets-whose-turn-a-schedule-or-delegated-task-is) |
+| `channels` | 你的外掛要自己負責某些頻道裡的對話，而不是交給 agent server。多數外掛用不到。 | [`channels.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/channels.ts) | [channels](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#channels-conversations-of-your-own) |
+| `personas` 和 `context.turns` | 你擁有某一種對話，替它寫 system prompt，並執行它的每一輪，不必自己寫輸入中、停止和回覆的流程。 | [`study-room.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/study-room.ts) | [personas](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#personas-and-contextturns-conversations-of-a-kind-of-your-own) |
+
+## Discord 和 HTTP 周邊
+
+| 部分 | 適用時機 | 範例 | 指南 |
+|---|---|---|---|
+| 斜線指令（`commands.add`） | 你想在根指令（預設是 `/roundtable`）底下加一個子指令。從 `setup` 透過 `DISCORD` 服務加入。 | [`interactions.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/interactions.ts) | [斜線指令](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#slash-commands-commandsadd) |
+| `http` | 你想在 bot 的 listener 上加一條路由，例如健康檢查。放在上面的東西，網際網路上都能連到，所以要在 handler 裡檢查一個祕密值。 | [`http.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/http.ts) | [http](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#http-routes-on-the-bots-listener) |
+| `dashboard` | 你想在 agent server 釘在 Discord 的 dashboard 訊息上多加幾行。 | [`dashboard.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/dashboard.ts) | [dashboard](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#dashboard-lines-on-the-dashboard-message) |
+| `surfaces` | 你想接上 Discord 以外的聊天網路。surface 負責回報人們寫了什麼，並貼出對話的回答。 | [`fake-surface.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/fake-surface.ts) | [surfaces](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#surfaces-a-chat-network-of-your-own) |
+
+## 換掉核心的部分
+
+| 部分 | 適用時機 | 範例 | 指南 |
+|---|---|---|---|
+| `providers` | 你想換掉核心運作所依靠的某個部分。共有三個槽位：`judge`、`images` 和 `runtime`，每個槽位只能由一個外掛填入。 | [`providers.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/providers.ts) | [providers](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#providers-replace-a-part-the-core-runs-on) |
+| `runtime` 槽位 | 你想用 Pi 以外的 runtime 來跑每一場對話。 | [`echo-runtime.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/echo-runtime.ts) | [runtime 槽位](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#the-runtime-slot-replace-pi) |
+| `provides` 和 `replaces` | 你想接手一個內建服務，例如排程的儲存。 | [`shared-services.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/shared-services.ts) | [取代內建服務](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#replacing-a-built-in-service) |
+
+`provides`、`requires` 和 `replaces` 見[服務與 addon](/zh-tw/plugins/services-and-addons/)，所有範例檔見[範例](/zh-tw/plugins/examples/)。
+
+{/* Sources: docs/plugins.md:9-35, docs/plugins.md:66-110, docs/plugins.md:316-1710, examples/*.ts */}

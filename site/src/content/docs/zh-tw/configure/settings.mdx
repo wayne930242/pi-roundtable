@@ -64,7 +64,7 @@ export default {
 | `discord.token` | string，必填 | 無 | bot token。放在 `.env`。 |
 | `discord.guild` | string，必填 | 無 | agent 伺服器的 guild id。 |
 | `discord.entryChannel` | string，必填 | 無 | 協調者所在頻道的 id。 |
-| `discord.rootCommand` | string | 小寫的 `name`，其中每一段 `a-z`、`0-9`、`-` 以外的字元換成 `-` | 根斜線指令，不含斜線。見[斜線指令](/reference/slash-commands/)。 |
+| `discord.rootCommand` | string | 小寫的 `name`，其中每一段 `a-z`、`0-9`、`-` 以外的字元換成 `-` | 根斜線指令，不含斜線。見[斜線指令](/zh-tw/reference/slash-commands/)。 |
 | `discord.admin` | boolean | `true` | owner 的對話是否有 `discord_*` 管理工具。設成 `false` 會讓 `discord-admin` addon 不載入。 |
 | `discord.refusalHint` | string | 無 | 附加在根指令拒絕非 owner 時的訊息後面的文字，原樣加上。你的語言需要的空格或標點，要自己放進去。 |
 
@@ -136,6 +136,6 @@ export default {
 設了 `ops.agent` 之後，每一筆 `error` 和 `fatal` 的 log 都會回報給那個 agent，成為它頻道裡的一則訊息和一輪回報。
 同一個錯誤一小時內最多回報一次，每小時最多送出五筆回報。
 
-addon 加了什麼、外掛怎麼啟動，見 [Services and addons](/plugins/services-and-addons/)。
+addon 加了什麼、外掛怎麼啟動，見 [Services and addons](/zh-tw/plugins/services-and-addons/)。
 
 {/* Sources: src/core/config/config.ts:20-122, src/core/config/config.ts:124-326, src/core/config/schema.ts:156-200, src/core/define-roundtable.ts:121-217, src/core/discord/owner-command.ts:21-27, src/core/ops/error-reporter.ts:10-60, templates/roundtable.config.ts:1-24, src/cli/checks/environment.ts:1-27 */}

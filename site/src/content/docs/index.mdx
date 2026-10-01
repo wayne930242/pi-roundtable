@@ -13,7 +13,7 @@ hero:
       variant: minimal
 ---
 
-import { Card, CardGrid, Steps } from "@astrojs/starlight/components";
+import { Card, CardGrid, LinkCard, Steps } from "@astrojs/starlight/components";
 import { Image } from "astro:assets";
 import agentCreate from "../../assets/scenes/agent-create.png";
 import teamHandoff from "../../assets/scenes/team-handoff.png";
@@ -97,6 +97,18 @@ Everything above works without a line of code.
 When you want more, add a plugin in TypeScript: a tool every agent can call, a slash command, an HTTP route, or a part of the bot you want to replace.
 A plugin can be tested without Discord or PostgreSQL.
 See [Write a plugin](/plugins/first-plugin/).
+
+Two plugins are ready to copy into your project: [dice and codex-images](/plugins/official-plugins/).
+A separate package, [pi-roundtable-mcp](/plugins/mcp-package/), connects your own MCP servers and lets an agent outside Discord reach yours.
+
+## Where to go next
+
+<CardGrid>
+  <LinkCard title="Set up the Discord bot" description="Create the application, copy the ids, invite it." href="/start/discord-bot/" />
+  <LinkCard title="Create agents" description="What to say, and what each new agent gets." href="/agents/create-agents/" />
+  <LinkCard title="Settings overview" description="Every key in roundtable.config.ts." href="/configure/settings/" />
+  <LinkCard title="Write a plugin" description="From an empty file to a tested tool." href="/plugins/first-plugin/" />
+</CardGrid>
 
 ## Good to know
 

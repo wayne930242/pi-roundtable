@@ -21,6 +21,8 @@ bot 有 Pin Messages 權限時，會把訊息釘選起來；沒有這個權限�
 ### 它顯示什麼
 
 標題底下是「Updated」時間，使用你設定的時區，再來是外掛加進來的各行文字。
+訊息上的字樣跟著 `locale` 走。
+這一頁引用的是英文版；`locale` 設成 `zh-TW` 時，bot 會寫成中文，例如 `Idle` 是「閒置」，`Working` 是「工作中」，「2 queued」是「排隊 2」。
 
 每個使用中的 agent 有一個區塊，內容是：
 
@@ -47,7 +49,7 @@ bot 有 Pin Messages 權限時，會把訊息釘選起來；沒有這個權限�
 
 ### 有圖片 provider
 
-填了 `images` 槽位的外掛會負責繪製圖片；見[外掛能新增什麼](/plugins/what-plugins-can-add/)。
+填了 `images` 槽位的外掛會負責繪製圖片；見[外掛能新增什麼](/zh-tw/plugins/what-plugins-can-add/)。
 這時：
 
 - `agent_create` 會要求一份 `avatar_prompt`，也就是圖片的描述，並依它繪製頭像。

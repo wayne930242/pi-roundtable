@@ -13,7 +13,7 @@ hero:
       variant: minimal
 ---
 
-import { Card, CardGrid, Steps } from "@astrojs/starlight/components";
+import { Card, CardGrid, LinkCard, Steps } from "@astrojs/starlight/components";
 import { Image } from "astro:assets";
 import agentCreate from "../../../assets/scenes/agent-create.png";
 import teamHandoff from "../../../assets/scenes/team-handoff.png";
@@ -98,6 +98,18 @@ agent 設了排程之後，`/roundtable schedule list` 可以列出來。
 想要更多的時候，再用 TypeScript 加外掛：每個 agent 都能呼叫的工具、斜線指令、HTTP 路由，或是你想換掉的某個部分。
 外掛可以在沒有 Discord 和 PostgreSQL 的情況下測試。
 看[寫一個外掛](/zh-tw/plugins/first-plugin/)。
+
+有兩個現成的外掛可以直接複製進你的專案：[dice 和 codex-images](/zh-tw/plugins/official-plugins/)。
+另一個獨立的套件 [pi-roundtable-mcp](/zh-tw/plugins/mcp-package/)，能接上你自己的 MCP server，也能讓 Discord 以外的 agent 找你的 agent。
+
+## 接下來看哪裡
+
+<CardGrid>
+  <LinkCard title="設定 Discord bot" description="建立應用程式、複製 id、邀請它進伺服器。" href="/zh-tw/start/discord-bot/" />
+  <LinkCard title="建立 agent" description="要怎麼說，新的 agent 會拿到什麼。" href="/zh-tw/agents/create-agents/" />
+  <LinkCard title="設定總覽" description="roundtable.config.ts 的每一個 key。" href="/zh-tw/configure/settings/" />
+  <LinkCard title="寫一個外掛" description="從空白檔案到有測試的工具。" href="/zh-tw/plugins/first-plugin/" />
+</CardGrid>
 
 ## 先知道這些
 

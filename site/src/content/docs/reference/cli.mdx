@@ -60,7 +60,7 @@ A skipped check does not fail the run.
 | 2 | environment | Every uncommented variable in `.env.example` has a value. |
 | 3 | configuration | `roundtable.config.ts` loads, passes its schema, and assembles. The failing key is named. |
 | 4 | plugins | No two plugins share a name, the built-in ones included. |
-| 5 | image provider | Whether a plugin fills the `images` slot. Without one is not a failure: agents get avatars generated from their display names. |
+| 5 | image provider | Whether a plugin fills the `images` slot. Having none is not a failure: agents get avatars generated from their display names. |
 | 6 | PostgreSQL | The database answers, and every plugin's migrations run. They run inside a transaction that is always rolled back, so the database is left as it was. |
 | 7 | Discord token | Discord accepts the bot token. |
 | 8 | Discord guild | The bot is a member of `discord.guild`. |

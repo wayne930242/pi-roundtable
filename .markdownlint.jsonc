@@ -1,4 +1,10 @@
 {
 	// The code samples use tabs because biome formats the TypeScript they show that way.
-	"MD010": { "code_blocks": false }
+	"MD010": { "code_blocks": false },
+	// One sentence per line in the changelog and the docs.
+	"MD013": false,
+	// Tables are written as plain `| a | b |` rows, without padding to align the pipes.
+	"MD060": false,
+	// The changelog repeats "Added" and "Changed" under each version.
+	"MD024": { "siblings_only": true }
 }

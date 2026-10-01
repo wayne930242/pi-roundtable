@@ -2,6 +2,10 @@
 	// The pages are MDX: Starlight components are inline HTML to markdownlint, and a
 	// `{/* Sources: ... */}` comment reads as emphasis with stray spaces.
 	"MD010": { "code_blocks": false },
+	// One sentence per line, so a paragraph's lines are as long as its sentences.
+	"MD013": false,
+	// Tables are written as plain `| a | b |` rows, without padding to align the pipes.
+	"MD060": false,
 	"MD033": false,
 	"MD037": false
 }

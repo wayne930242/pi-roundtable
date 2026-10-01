@@ -1,0 +1,101 @@
+---
+title: 官方外掛
+description: 兩個能複製進專案的現成外掛，codex-images 和 dice：各自需要什麼，以及怎麼修改複製出來的檔案。
+sidebar:
+  order: 7
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+pi-roundtable 附了兩個外掛，是複製進你的專案，不是安裝。
+複製出來的是你自己的一般外掛檔案，可以讀、可以改，也可以刪。
+
+| 外掛 | 作用 |
+| --- | --- |
+| `codex-images` | 用提示詞和參考圖，透過你的 ChatGPT 訂閱登入，畫出 agent 的頭像。 |
+| `dice` | 給 agent 一個 `roll_dice` 工具。 |
+
+## 加入一個
+
+在你的專案裡，用外掛的名稱執行 `add plugin`：
+
+```sh
+bunx roundtable add plugin dice
+bunx roundtable add plugin codex-images
+```
+
+每個指令都會寫出 `plugins/<name>.ts` 和 `plugins/<name>.test.ts`，在 `roundtable.config.ts` 裡 import 這個外掛，並把它列進 `plugins`。
+這兩個名稱是保留的：用它們時，`add plugin` 複製的是官方外掛；其他名稱則維持使用 `hello` 範本。
+任何一個檔案已經存在時，它會拒絕，而且什麼都不寫。
+`add plugin` 檢查的所有項目，見 [CLI](/zh-tw/reference/cli/)。
+
+然後在你的專案裡跑測試：
+
+```sh
+bun test
+```
+
+## `dice`
+
+`dice` 新增一個工具 `roll_dice`，member 以上的人都能呼叫。
+它接受一個算式，用純文字回答：
+
+```text
+2d6+3: [3, 5] + 3 = 11
+```
+
+你可以在傳給 agent 的訊息裡要它擲骰，例如「擲 4d6，去掉最小的。」
+agent 會呼叫這個工具，再把結果回報給你。
+
+| 寫法 | 意思 |
+| --- | --- |
+| `2d6`、`d20` | 擲指定顆數、指定面數的骰子。 |
+| `+3`、`-1` | 加或減一個數字。 |
+| `2d6+1d4-1` | 一個算式裡有好幾組。 |
+| `4d6k3`、`4d6kh3` | 保留最大的 3 顆。 |
+| `4d6kl1` | 保留最小的 1 顆。 |
+| `4d6d1`、`4d6dl1` | 去掉最小的 1 顆。 |
+| `4d6dh1` | 去掉最大的 1 顆。 |
+| `dF`、`3dF` | Fate 骰，每顆是 -1、0 或 +1。沒寫顆數時擲 4 顆。 |
+
+被去掉的骰子顯示在括號裡，例如 `4d6k3: [5, (1), 6, 3] = 14`。
+超出上限或讀不懂的算式會被拒絕，訊息會說明要修正什麼，agent 可以再試一次。
+上限是：全部 100 顆骰子、一顆骰子 1000 面、算式 200 個字元，單一數字 1000000。
+
+`dice` 不需要登入，也不需要任何設定。
+
+## `codex-images`
+
+`codex-images` 填入 `images` 槽位，也就是核心用來畫圖的那個部分。
+有了它，`agent_create` 能接受頭像提示詞，agent 會有一個 `agent_avatar` 工具，owner 的個人檔案面板也能提供重畫。
+沒有 `images` 外掛時，每個 agent 的頭像，是用它的顯示名稱產生的圖片。
+`roundtable doctor` 會回報有沒有外掛填入這個槽位。
+
+它需要登入 `openai-codex` provider，登入機制和 agent 登入模型時用的相同。
+host 沒有登入時，外掛會拒絕啟動，訊息會說要登入 `openai-codex`。
+外掛每次畫圖都會重新讀取登入資料，所以更新過的 token 會被用到。
+
+<Aside type="caution" title="它可能在沒有通知的情況下失效">
+`codex-images` 用的是 ChatGPT 的 Codex 後端，OpenAI 並沒有為這種用途提供文件，而且是用你自己的 ChatGPT 訂閱登入。
+OpenAI 隨時可能更改或封鎖它，並適用 OpenAI 對這個訂閱的條款。
+外掛檔案的開頭有同樣的警告。
+只在你能接受這個風險的地方使用它。
+</Aside>
+
+Codex 拒絕的請求，通常是因為提示詞，會以 `ImageNotGeneratedError` 失敗，用同一個提示詞再問一次，還是會失敗。
+一個請求有五分鐘的時間限制，超過 32 MiB 的圖片會被拒絕。
+
+## 修改複製出來的檔案
+
+複製出來的檔案在你的專案裡，所以和任何外掛一樣直接改。
+
+- `plugins/dice.ts` 的上限是檔案開頭的常數，工具的描述也把這些上限告訴模型，所以兩處要一起改。
+- `plugins/codex-images.ts` 裡，負責轉送請求的模型是一個常數。
+- 每個檔案匯出一個函式（`createDice`、`createCodexImages`），它接受測試要替換的部分：亂數來源或 `fetch`；另外還匯出用它建好的現成外掛（`dice`、`codexImages`），設定檔列的就是這一個。
+- 旁邊的測試離線執行：`dice` 用假的亂數來源，`codex-images` 用假的 `fetch`。修改外掛時，要讓它們維持通過。
+
+要移除，就刪掉它的兩個檔案，以及 `roundtable.config.ts` 裡的項目。
+
+外掛在這之外還能新增什麼，見[外掛能新增什麼](/zh-tw/plugins/what-plugins-can-add/)；想寫這樣的測試，見[測試外掛](/zh-tw/plugins/testing/)。
+
+{/* Sources: src/cli/templates.ts:13-25, src/cli/templates.ts:84-102, src/cli/add-plugin.ts:34-75, templates/official/dice/plugin.ts, templates/official/dice/plugin.test.ts.tmpl, templates/official/codex-images/plugin.ts, templates/official/codex-images/plugin.test.ts.tmpl, src/core/plugin.ts:268-276, docs/plugins.md:757-772 (images slot, agent_avatar, doctor), src/cli/checks/images.ts */}

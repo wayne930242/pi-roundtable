@@ -1,0 +1,145 @@
+---
+title: Agent 工具
+description: agent 帶的每個工具、它的作用，以及能使用它的最低存取層級。
+sidebar:
+  order: 3
+---
+
+agent 透過工具行動。
+只有 speaker 的層級不低於工具的最低層級時，這一輪才會提供這個工具，所以 member 看不到下面那些需要 admin 或 owner 的工具。
+這裡列的是預設層級。
+可以用 `roundtable.config.ts` 的 `toolTiers` 修改；見[存取層級](/zh-tw/configure/access-tiers/)。
+
+沒有人指定層級的工具，需要 owner。
+
+## Agent、群組和頻道
+
+這些工具屬於 agent server。
+你很少自己呼叫它們：你對 agent 說，通常是協調者，由它去呼叫。
+實際怎麼運作，見[建立 agent](/zh-tw/agents/create-agents/)、[群組](/zh-tw/agents/groups/)和[封存與頻道](/zh-tw/agents/archive-and-channels/)。
+
+| 工具 | 作用 | 最低層級 |
+| --- | --- | --- |
+| `agent_list` | 列出每個 agent 和群組的頻道與狀態，以及依伺服器順序排列的 `Agents` 和 `Groups` 類別。 | `member` |
+| `agent_get` | 讀取 agent 的顯示名稱、狀態、頻道、模型、thinking level、技能、提示詞和頭像提示詞。 | `member` |
+| `agent_create` | 建立一個有自己頻道和頭像的 agent，並讓它從一個開場任務開始。名稱建立後不能改。 | `admin` |
+| `agent_update` | 修改 agent 的顯示名稱、提示詞、模型或 thinking level。修改從它的下一輪起生效。 | `admin` |
+| `agent_avatar` | 重畫 agent 的頭像：用已存的提示詞、用新的提示詞，或用修改指示。只有在外掛填入 `images` 槽位時才提供。 | `admin` |
+| `message_agent` | 傳一個自成一體的請求給另一個 agent。回答會以新的一輪回來。群組裡的席位沒有這個工具。 | `member` |
+| `group_create` | 建立一個有 2 到 6 個 agent、可以指定主持人的群組頻道。 | `admin` |
+| `group_update` | 修改群組的顯示名稱、成員或主持人。 | `admin` |
+| `archive` | 封存 agent 或群組。頻道和歷史紀錄保留在 `Archive` 類別底下。協調者和發出呼叫的 agent 不能被封存。 | `admin` |
+| `channel_arrange` | 把 agent 和群組的頻道分到各個類別並排序。只要有一筆錯誤，整個呼叫就會被拒絕。 | `admin` |
+| `channel_read` | 由舊到新讀取 agent server 的頻道或 thread 裡的訊息。唯讀。 | `member` |
+
+## 技能與記憶
+
+`skills` addon 開著時才有技能工具，`memory` addon 開著時才有記憶工具。
+見[技能與記憶](/zh-tw/agents/skills-and-memory/)。
+
+| 工具 | 作用 | 最低層級 |
+| --- | --- | --- |
+| `skill_list` | 列出技能，附上種類、描述、群組，以及帶著它的 agent。 | `member` |
+| `agent_skills` | 增減 agent 帶的技能。內建技能不會被移除。 | `admin` |
+| `skill_create` | 把新技能寫進 registry。 | `admin` |
+| `skill_update` | 取代 agent 自己寫的技能的描述或內容。 | `admin` |
+| `skill_delete` | 刪除 agent 自己寫的技能，並從每個 agent 身上卸下。 | `admin` |
+| `skill_link` | 註冊受管理的儲存庫某個資料夾裡的技能。連結進來的技能是唯讀的。 | `admin` |
+| `skill_unlink` | 把連結進來的技能從 registry 移除。 | `admin` |
+| `skill_group_set` | 建立或取代技能群組，也就是一份有名稱的技能清單。agent 帶的是技能，不是群組。 | `admin` |
+| `skill_group_delete` | 刪除技能群組。裡面的技能不受影響。 | `admin` |
+| `memory_add` | 把一項事實記成 `core`、`note` 或 `event`。 | `member` |
+| `memory_search` | 搜尋所有記住的內容。 | `member` |
+| `memory_remove` | 忘掉每一項包含指定文字的事實。 | `member` |
+
+記憶屬於 speaker。
+member 的記憶工具讀寫的是那位 member 的記憶，不是 owner 的。
+
+## 排程、背景工作和通知
+
+排程工具作用在它所在頻道的排程上。
+見[排程與背景工作](/zh-tw/agents/schedules-and-background/)。
+
+| 工具 | 作用 | 最低層級 |
+| --- | --- | --- |
+| `schedule_create` | 為 agent 排一個工作，一次或重複都行。 | `admin` |
+| `schedule_list` | 列出這個頻道的排程和下次執行時間。 | `member` |
+| `schedule_update` | 修改排程的標題、提示詞或時間。 | `admin` |
+| `schedule_cancel` | 刪除排程。 | `admin` |
+| `delegate_task` | 把網路研究在背景交給比較便宜的 worker 模型。報告會以新的一輪回來。 | `admin` |
+| `notify_owner` | 在 Discord 私訊 owner。 | `owner` |
+
+## Shell 和檔案
+
+agent session 帶有 Pi 的 shell 和檔案工具。
+它們以 host 的帳號身分，在共用的工作區（`workDir`）裡執行。
+
+| 工具 | 作用 | 最低層級 |
+| --- | --- | --- |
+| `bash` | 執行 shell 指令。 | `owner` |
+| `read` | 讀取檔案。 | `owner` |
+| `edit` | 編輯檔案。 | `owner` |
+| `write` | 寫入檔案。 | `owner` |
+
+讀取一律直接執行。
+具破壞性或會改變系統的 shell 指令，以及工作區之外的寫入或編輯，會被擱置，等 owner 在卡片上核准。
+
+## Discord 管理
+
+這些工具屬於 `discord-admin` addon；設了 `discord.admin: false` 就不會載入它。
+它們代 owner 管理伺服器，每次呼叫都會檢查 owner 和 bot 是否都有相關的 Discord 權限。
+每一個預設都需要 owner。
+
+| 工具 | 作用 |
+| --- | --- |
+| `discord_list_servers` | 列出 owner 和 bot 共同所在的伺服器，以及各自擁有的權限。 |
+| `discord_list_channels` | 列出伺服器的頻道和類別。 |
+| `discord_list_roles` | 由高到低列出伺服器的身分組和它們的權限。 |
+| `discord_find_members` | 找出使用者名稱或暱稱以查詢文字開頭的成員。 |
+| `discord_create_channel` | 建立文字、語音或公告頻道，或建立類別。 |
+| `discord_delete_channel` | 刪除頻道、類別或 thread。 |
+| `discord_list_threads` | 列出伺服器目前活躍的 thread，或某個頻道已封存的 thread。 |
+| `discord_create_thread` | 在文字或公告頻道開一個 thread。 |
+| `discord_edit_thread` | 重新命名、封存、鎖定 thread，或修改它的自動封存時間。 |
+| `discord_create_role` | 建立身分組。 |
+| `discord_edit_role` | 修改身分組的名稱、顏色、顯示方式或權限。 |
+| `discord_delete_role` | 刪除身分組。 |
+| `discord_add_member_role` | 給成員一個身分組。 |
+| `discord_remove_member_role` | 拿掉成員的一個身分組。 |
+| `discord_set_nickname` | 設定或清除成員的暱稱。 |
+| `discord_timeout_member` | 讓成員在指定的分鐘數內不能發言。`0` 表示解除。 |
+| `discord_kick_member` | 把成員移出伺服器。 |
+| `discord_ban_member` | 封鎖使用者，也能一併刪除他最近的訊息。 |
+| `discord_unban_member` | 解除封鎖。 |
+| `discord_get_channel_info` | 讀取頻道所屬的伺服器、名稱和主題。 |
+| `discord_get_messages` | 讀取頻道最近的訊息。 |
+| `discord_search_messages` | 搜尋頻道的訊息。 |
+| `discord_get_pinned_messages` | 讀取頻道的釘選訊息。 |
+| `discord_send_message` | 傳送訊息，也能附上圖片或檔案。它不會觸發任何提及。 |
+| `discord_edit_message` | 編輯 bot 自己傳送的訊息。 |
+| `discord_delete_message` | 刪除一則訊息。 |
+| `discord_pin_message` | 釘選一則訊息。 |
+| `discord_unpin_message` | 取消釘選一則訊息。 |
+| `discord_edit_channel` | 修改頻道的名稱、主題、慢速模式等類似設定。 |
+| `discord_set_channel_permissions` | 設定頻道裡某個身分組或成員的權限覆寫。 |
+| `discord_delete_channel_permissions` | 移除頻道裡某個身分組或成員的權限覆寫。 |
+
+## 每一輪都有的工具
+
+有三個工具隨 runtime 一起來，只需要 member 層級。
+
+| 工具 | 作用 | 最低層級 |
+| --- | --- | --- |
+| `ask_user` | 在頻道裡用附按鈕的卡片提問，並等待回答，最久 30 分鐘。 | `member` |
+| `read_attachment` | 讀取有人附在頻道裡的文字檔或 PDF。 | `member` |
+| `compact_session` | 壓縮 session 的 context。它會拒絕 `resume` 選項。 | `member` |
+
+核心也宣告了 `web_search`、`fetch_content` 和 `get_search_content` 的層級為 `member`，這三個是 `pi-web-access` 的工具。
+委派的 worker 會載入這些工具。
+
+## 外掛的工具
+
+外掛的工具，帶著它的作者給的 `minTier`。
+見[外掛能新增什麼](/zh-tw/plugins/what-plugins-can-add/)。
+
+{/* Sources: src/core/agents/agent-tools.ts:20-30, src/core/agents/agent-tools.ts:134-395, src/core/builtin/agent-server.ts:89-96, src/core/modules/skills/skill-tools.ts:16-215, src/core/builtin/skills.ts:23-27, src/core/modules/memory/owner-memory.ts:56-140, src/core/builtin/stores.ts:15-20, src/core/shared/schedule-tools.ts:7-125, src/core/shared/delegate-tool.ts, src/core/builtin/modules.ts:48-64, src/core/modules/notify/notify.ts:1-30, src/core/modules/host-shell/shell-policy.ts:8-16, src/core/modules/host-shell/shell-policy.ts:359-381, src/core/agents/agent-team.ts:100-125, src/core/discord/channel-operations.ts:80-250, src/core/modules/discord-admin/discord-admin.ts:60-255, src/core/discord/owner-discord-access.ts:15-35, src/core/builtin/discord-admin.ts:33-38, src/core/tool-tiers.ts:12-30, src/core/runtime/extensions/ask-user.ts, src/core/shared/read-attachment-tool.ts, src/core/runtime/extensions/self-compact-guard.ts, src/core/modules/delegation/web-research-worker.ts:14-25, src/core/tool-set.snapshot.json */}

@@ -1,0 +1,110 @@
+---
+title: MCP connector 和 remote MCP
+description: pi-roundtable-mcp 套件和它的兩個外掛。一個連接你自己的 MCP server，另一個讓外面的 agent 能找到你的 agent。
+sidebar:
+  order: 8
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+`pi-roundtable-mcp` 是獨立的 npm 套件，裡面有兩個外掛。
+兩個都透過 MCP 運作；MCP 是 agent 呼叫另一台 server 上工具的協定。
+
+| 外掛 | 作用 |
+| --- | --- |
+| `mcpConnectors` | 你在 Discord 加入一台 MCP server，例如 Notion 或行事曆，你的 agent 就能用它的工具。 |
+| `remoteMcp` | Discord 以外的 agent 能傳訊息給你的 agent，並讀取回答。它也能使用你選擇開放給它的 Discord 頻道。 |
+
+這個套件有自己的儲存庫：[wayne930242/pi-roundtable-mcp](https://github.com/wayne930242/pi-roundtable-mcp)。
+每個選項和訊息，都列在它的 README。
+這一頁只說明你決定要不要用它時需要知道的事。
+
+## 安裝
+
+```sh
+bun add pi-roundtable-mcp
+```
+
+它需要 pi-roundtable 0.4 和它的 PostgreSQL。
+`mcpConnectors` 還需要一個你自己架的 ContextForge gateway，見下方。
+`remoteMcp` 需要一個能連到 bot 的 HTTPS 位址，例如通道（tunnel）。
+
+## 啟用
+
+把外掛列在 `roundtable.config.ts`：
+
+```ts
+import type { RoundtableConfig } from "pi-roundtable";
+import { mcpConnectors, remoteMcp } from "pi-roundtable-mcp";
+
+const env = (name: string): string => process.env[name] ?? "";
+
+export default {
+	// ... the rest of your config
+	plugins: [
+		mcpConnectors({
+			contextForge: {
+				url: env("CONTEXTFORGE_URL"),
+				jwtSecret: env("CONTEXTFORGE_JWT_SECRET"),
+				user: env("CONTEXTFORGE_USER"),
+			},
+		}),
+		remoteMcp({
+			dispatchToken: env("MCP_DISPATCH_TOKEN"),
+			publicUrl: env("PUBLIC_URL"),
+		}),
+	],
+} satisfies RoundtableConfig;
+```
+
+兩個外掛可以只用其中一個，它們彼此沒有綁在一起。
+
+## Connectors
+
+`/roundtable connector add` 會開一個私人表單，讓你填 server 的位址和 token。
+`list`、`describe` 和 `remove` 用來管理你加過的 connector。
+只有 owner 能用這些指令。
+
+[ContextForge](https://github.com/IBM/mcp-context-forge) 保管每一台上游 server 和它的 token。
+它是 IBM 的開源 MCP gateway，這個套件不會替你執行它。
+把它跑在 bot 旁邊，並讓兩邊用同一個 JWT secret。
+
+外掛不決定哪個 agent 用哪個 connector。
+它把清單交給你的程式碼，由你根據清單建出每個 agent 的工具。
+套件的 README 有範例。
+
+## Remote MCP
+
+這個外掛在 bot 的 `public` listener 上提供兩個 endpoint。
+
+| Endpoint | 誰能呼叫 | 它提供什麼 |
+| --- | --- | --- |
+| `/mcp/personal` | 帶著你的 dispatch token 的 agent | 兩個工具。一個開始或繼續與你的 agent 的對話，並立即回傳；另一個在回答準備好時讀取它。 |
+| `/mcp/discord/<token>` | 持有 bundle 位址的 agent | 你授權的頻道所用的 Discord 工具，而且只限你授權的操作。 |
+
+授權頻道要在 Discord 裡，在你想分享的那個頻道用 `/roundtable mcp authorize`。
+bot 會問你要開放哪些操作。
+`grants` 列出已授權的項目，`revoke` 移除一個頻道，`token` 替換 bundle 的位址。
+
+<Aside type="caution" title="兩個祕密值都要當成密碼看待">
+拿到 dispatch token 的人，能以你的身分，用 owner 層級對你的 agent 寫訊息。
+拿到 bundle 位址的人，能使用 bundle 裡的每個頻道。
+只用 HTTPS 提供 endpoint，兩個祕密值都不要放進 Git。
+</Aside>
+
+每個呼叫到達時都會再檢查一次。
+授權被撤銷或位址被替換，會讓正在執行的呼叫停下來，每個呼叫也都會寫進稽核資料表。
+授權的範圍，絕不會超過你和 bot 兩邊在那個頻道裡各自能做的事。
+
+## 如果你的 bot 已經有自己的對話
+
+預設情況下，`remoteMcp` 在核心上，把轉送進來的訊息當成 owner 的對話來執行。
+host 如果有自己的 owner 對話，可以改傳 `answer` 和 `claim`，讓同一份程式碼來回答。
+README 示範了做法。
+
+## 訊息文字
+
+外掛的文字預設是英文，兩個外掛都有 `messages` 選項能改。
+Discord 上的文字、錯誤訊息和工具描述，都在那裡用你自己的語言寫。
+
+{/* Sources: the pi-roundtable-mcp README.md and src/index.ts at v0.4.0 (options, commands, endpoints, security model), package.json (peer dependency and install) */}

@@ -1,0 +1,135 @@
+---
+title: CLI
+description: roundtable 的 init、doctor、start 和 add plugin 指令、doctor 的檢查項目、結束碼，以及每個指令會拒絕做什麼。
+sidebar:
+  order: 1
+---
+
+這個套件安裝一個指令：`roundtable`。
+它在 Bun 上執行，沒有 Bun 的時候，會告訴你去哪裡取得。
+在專案裡，用 `bunx roundtable <command>` 執行。
+
+| 指令 | 作用 |
+| --- | --- |
+| `roundtable init [dir]` | 在 `dir` 建立專案（預設是目前的目錄）。 |
+| `roundtable doctor [--reachable]` | 檢查設定，並說明有問題的地方該怎麼修。 |
+| `roundtable start` | 先跑不需要網路的檢查，再啟動 bot。 |
+| `roundtable add plugin <name>` | 加入 `plugins/<name>.ts` 和它的測試，並把外掛列進設定。`codex-images` 和 `dice` 保留給官方外掛。 |
+
+`roundtable help` 和 `roundtable --help` 會印出這份清單。
+`roundtable --version` 會印出套件版本。
+
+## `init`
+
+```sh
+npx pi-roundtable init my-bot    # or: bunx pi-roundtable init my-bot
+```
+
+`init` 寫出一個能運作的專案，不會要你提供任何祕密資訊。
+它在 `dir` 裡建立這些檔案：`package.json`、`.gitignore`、`roundtable.config.ts`、`biome.json`、`README.md`、`agents.ts`、`docker-compose.yml`、`persona/shared.md`、`.env.example`、`tsconfig.json`、`plugins/hello.ts` 和 `plugins/hello.test.ts`。
+`package.json` 會固定在執行 `init` 的那個 pi-roundtable 的精確版本。
+接著印出三個下一步：安裝並填寫 `.env`、執行 `doctor`、執行 `start`。
+
+所有的拒絕都發生在第一次寫入之前，所以被拒絕之後，目錄維持原樣：
+
+- 沒有 Bun，或 Bun 比套件需要的範圍還舊。
+- `init` 要建立的某個檔案已經存在。訊息會列出這些檔案，並以 `Remove them or run init in an empty directory; nothing was written.` 結尾。
+
+`init` 最多接受一個目錄；多給一個引數會是用法錯誤。
+
+## `doctor`
+
+`doctor` 依下表的順序執行每一項檢查，每一項印出一行。
+它不會更動它檢查過的任何東西，只要有任何一項失敗，就以非零狀態結束。
+
+```text
+✓ Bun: Bun 1.4.2
+✗ environment: no value for DISCORD_TOKEN, ...
+    Copy .env.example to .env and fill them in; .env.example says where each one comes from.
+- plugins: skipped, the configuration is not valid yet
+```
+
+通過的檢查以 `✓` 開頭，可能會附上細節。
+失敗的檢查以 `✗` 開頭，寫出問題，修正方式則放在它底下縮排的幾行。
+因為前面某一項失敗而無法執行的檢查，以 `-` 開頭並被跳過。
+被跳過的檢查不會讓整次執行失敗。
+
+| # | 檢查 | 看什麼 |
+| --- | --- | --- |
+| 1 | Bun | 執行中的 Bun 版本，是否符合套件的 `engines.bun` 範圍。 |
+| 2 | environment | `.env.example` 裡每個沒有註解掉的變數，在 `.env` 都有值。 |
+| 3 | configuration | `roundtable.config.ts` 能載入、通過 schema，也能組裝。失敗時會指出是哪個 key。 |
+| 4 | plugins | 沒有兩個外掛同名，包括內建的外掛。 |
+| 5 | image provider | 有沒有外掛填入 `images` 槽位。沒有並不算失敗：agent 會用顯示名稱產生頭像。 |
+| 6 | PostgreSQL | 資料庫有回應，而且每個外掛的 migration 都能執行。migration 在一個一定會 rollback 的 transaction 裡執行，所以資料庫維持原樣。 |
+| 7 | Discord token | Discord 接受這個 bot token。 |
+| 8 | Discord guild | bot 是 `discord.guild` 的成員。 |
+| 9 | Discord intents | Message Content intent 已開啟。 |
+| 10 | Discord channel | 入口頻道存在於這個 guild，而且 bot 在裡面擁有下列權限。 |
+| 11 | model login | `model` 的 provider 有登入資料。 |
+| 12 | public URL | `http.publicUrl` 是格式正確的 `http://` 或 `https://` 位址。 |
+
+檢查 10 要求 bot 在入口頻道擁有的權限是 View Channel、Send Messages、Send Messages in Threads、Read Message History、Embed Links、Attach Files、Pin Messages、Create Public Threads、Manage Channels 和 Manage Webhooks。
+bot 不在 guild 裡時，修正方式是一個邀請連結，它要求的正是這些權限。
+
+### `--reachable` 旗標
+
+`doctor --reachable` 會再向 public URL 發出請求。除非 bot 正在執行，而且發佈這個位址的通道或 proxy 正常，否則這個請求會失敗。
+沒有這個旗標時，檢查 12 只確認位址的格式正確。
+這是唯一的旗標，也只有 `doctor` 接受它；任何其他引數都是用法錯誤。
+
+## `start`
+
+`start` 執行不需要網路的檢查：Bun、environment、configuration、plugins、image provider、model login 和 public URL。
+其中一項失敗時，它把和 `doctor` 一樣的行印到標準錯誤輸出，並在任何東西連到 Discord 之前，以代碼 1 結束。
+否則就啟動 bot。
+
+PostgreSQL 和 Discord 不會事先檢查。
+資料庫位址錯誤或 token 被拒絕，會讓開機本身失敗，行程印出訊息並以代碼 1 結束。
+先跑 `doctor`，就能連同修正方式一起找出這些問題。
+
+收到 `SIGTERM` 或 `SIGINT` 時，bot 會先讓執行中的工作做完才停止。
+它最多等一小時；那之後仍在執行的，會寫進 log 並放棄。
+啟動和停止的順序，見[啟動流程與專案設定](/zh-tw/plugins/startup-and-project-setup/)。
+
+## `add plugin`
+
+```sh
+bunx roundtable add plugin my-notes
+```
+
+`add plugin` 用 `hello` 範本建立 `plugins/my-notes.ts` 和 `plugins/my-notes.test.ts`，在 `roundtable.config.ts` 裡 import 這個外掛，並把它列進 `plugins`。
+
+有兩個名稱保留給[官方外掛](/zh-tw/plugins/official-plugins/)：`codex-images` 和 `dice`。
+用這兩個名稱時，`add plugin` 複製的是現成的外掛和它的測試，而不是 `hello` 範本，並以同樣的方式註冊：
+
+```sh
+bunx roundtable add plugin dice
+```
+
+其他任何合法的名稱，都維持使用 `hello` 範本，所以像 `dice-roller` 這樣的名稱，建出來的是範本外掛。
+用法說明裡列出了保留的名稱。
+
+它先檢查並產生好所有內容，才會寫入，所以被拒絕之後，專案維持原樣。
+下列情況它會拒絕：
+
+- 名稱不是用連字號連起來的小寫單字，例如 `my-notes`。
+- 目前的目錄裡沒有 `roundtable.config.ts`。
+- `plugins/<name>.ts` 或它的測試已經存在。
+- 設定檔無法解析、找不到它能用的 `plugins` 清單，或這個名稱已經被拿去做別的用途。訊息會說明要手動加入什麼。
+
+這個指令剛好接受一個名稱；其他情況會印出 `usage: roundtable add plugin <name>`。
+
+## 結束碼
+
+| 代碼 | 時機 |
+| --- | --- |
+| `0` | 指令成功：`init` 和 `add plugin` 寫出了檔案、`doctor` 的每項檢查都通過或被跳過、`help` 和 `--version` 印出了內容，或 bot 正常停止。 |
+| `1` | 指令被拒絕或失敗、`doctor` 有檢查失敗、有檢查讓 `start` 停下來、引數錯誤、指令不存在，或沒有給指令（會印出用法說明）。 |
+
+用法錯誤會先印出訊息，再印出用法說明。
+bot 被信號停止時，如果有 listener、服務或資料庫連線池沒能停下來，結束碼是 `1`，否則是 `0`。
+
+檢查印出的訊息和修正方式，見[錯誤與修正](/zh-tw/reference/errors/)。
+
+{/* Sources: src/cli/templates.ts:13-25, src/cli/templates.ts:84-102, src/cli/cli.ts:30-37, src/cli/cli.ts:25-33, src/cli/cli.ts:68-166, src/cli/main.ts:1-14, src/cli/roundtable.mjs:1-20, src/cli/init.ts:34-82, src/cli/add-plugin.ts:1-75, src/cli/config-edit.ts:40-190, src/cli/templates.ts:60-70, src/cli/doctor.ts:34-98, src/cli/start.ts:1-33, src/cli/report.ts:1-68, src/cli/checks/bun.ts, src/cli/checks/environment.ts, src/cli/checks/configuration.ts, src/cli/checks/images.ts, src/cli/checks/database.ts, src/cli/checks/discord.ts, src/cli/checks/model.ts, src/cli/checks/public-url.ts, src/cli/discord-api.ts:7-33, docs/plugins.md:1861-1876, README.md:50-72 */}

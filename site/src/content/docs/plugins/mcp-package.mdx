@@ -1,0 +1,111 @@
+---
+title: MCP connectors and remote MCP
+description: The pi-roundtable-mcp package, with two plugins. One connects your own MCP servers, the other lets an outside agent reach yours.
+sidebar:
+  order: 8
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+`pi-roundtable-mcp` is a separate npm package with two plugins.
+Both work over MCP, the protocol agents use to call tools on another server.
+
+| Plugin | What it does |
+| --- | --- |
+| `mcpConnectors` | You add an MCP server in Discord, such as Notion or a calendar. Your agents can then use its tools. |
+| `remoteMcp` | An agent outside Discord can send your agent a message and read the answer. It can also use Discord channels you chose to give it. |
+
+The package has its own repository: [wayne930242/pi-roundtable-mcp](https://github.com/wayne930242/pi-roundtable-mcp).
+Its README lists every option and message.
+This page covers what you need to decide whether to use it.
+
+## Install
+
+```sh
+bun add pi-roundtable-mcp
+```
+
+It needs pi-roundtable 0.4 and its PostgreSQL.
+`mcpConnectors` also needs a ContextForge gateway that you run yourself, see below.
+`remoteMcp` needs an HTTPS address that reaches the bot, such as a tunnel.
+
+## Turn them on
+
+List the plugins in `roundtable.config.ts`:
+
+```ts
+import type { RoundtableConfig } from "pi-roundtable";
+import { mcpConnectors, remoteMcp } from "pi-roundtable-mcp";
+
+const env = (name: string): string => process.env[name] ?? "";
+
+export default {
+	// ... the rest of your config
+	plugins: [
+		mcpConnectors({
+			contextForge: {
+				url: env("CONTEXTFORGE_URL"),
+				jwtSecret: env("CONTEXTFORGE_JWT_SECRET"),
+				user: env("CONTEXTFORGE_USER"),
+			},
+		}),
+		remoteMcp({
+			dispatchToken: env("MCP_DISPATCH_TOKEN"),
+			publicUrl: env("PUBLIC_URL"),
+		}),
+	],
+} satisfies RoundtableConfig;
+```
+
+You can use either plugin alone.
+They are not tied to each other.
+
+## Connectors
+
+`/roundtable connector add` opens a private form for the server's address and token.
+`list`, `describe` and `remove` manage what you added.
+Only the owner can use these commands.
+
+[ContextForge](https://github.com/IBM/mcp-context-forge) keeps each upstream server and its token.
+It is IBM's open-source MCP gateway, and the package does not run it for you.
+Run it next to the bot and give both the same JWT secret.
+
+The plugin does not decide which agent uses which connector.
+It gives your code the list, and you build each agent's tools from it.
+The package README has an example.
+
+## Remote MCP
+
+The plugin serves two endpoints on the bot's `public` listener.
+
+| Endpoint | Who can call it | What it gives |
+| --- | --- | --- |
+| `/mcp/personal` | An agent that sends your dispatch token | Two tools. One starts or continues a conversation with your agent and returns at once. The other reads the answer when it is ready. |
+| `/mcp/discord/<token>` | An agent that holds a bundle's address | Discord tools for the channels you granted, and only for the operations you granted. |
+
+You grant channels in Discord with `/roundtable mcp authorize`, in the channel you want to share.
+The bot asks which operations to allow.
+`grants` lists them, `revoke` removes a channel, and `token` replaces a bundle's address.
+
+<Aside type="caution" title="Treat both secrets like passwords">
+Whoever holds the dispatch token can write to your agent as you, at the owner tier.
+Whoever holds a bundle address can use every channel in the bundle.
+Serve the endpoints only over HTTPS and keep both secrets out of Git.
+</Aside>
+
+Every call is checked again when it arrives.
+A revoked grant or a replaced address stops a call that is already running, and each call is written to an audit table.
+A grant can never be more than both you and the bot could do in that channel.
+
+## If your bot already runs its own conversations
+
+By default `remoteMcp` runs the relayed message as an owner conversation on the core.
+A host that has its own owner conversations can pass `answer` and `claim` instead, so the same code answers.
+The README shows how.
+
+## Wording
+
+The plugins keep their text in English, and both take a `messages` option to change it.
+Write it in your own language there, for the Discord text, the error messages and the tool descriptions.
+
+{/* Sources: the pi-roundtable-mcp README.md and src/index.ts at v0.4.0 (options, commands, endpoints, security model), package.json (peer dependency and install) */}

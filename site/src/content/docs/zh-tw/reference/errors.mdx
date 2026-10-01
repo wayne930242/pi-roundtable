@@ -1,0 +1,140 @@
+---
+title: 錯誤與修正
+description: 啟動和 doctor 最常遇到的失敗，依原因分組，列出程式印出的原文訊息和修正方式。
+sidebar:
+  order: 4
+---
+
+`roundtable doctor` 把每一項失敗的檢查印成一行 `✗`，寫出問題，修正方式放在它底下縮排的幾行。
+離線檢查失敗時，`roundtable start` 會以同樣的幾行停下來。
+這一頁引用的訊息，和程式寫的一樣是英文原文；你的名稱、id 或值出現的地方，寫成 `<...>`。
+每個表格把一則訊息對上該怎麼處理。
+
+指令和檢查的順序，見 [CLI](/zh-tw/reference/cli/)。
+
+## 命令列
+
+| 訊息 | 修正 |
+| --- | --- |
+| `unknown command "<name>"`，後面接著用法說明 | 用 `init`、`doctor`、`start` 或 `add plugin`。 |
+| `init takes at most one directory` | 給一個目錄，或不給。 |
+| `usage: roundtable add plugin <name>` | `add` 後面要接 `plugin` 這個字，再接剛好一個名稱。 |
+| `doctor takes no arguments` 或 `start takes no arguments` | 拿掉那個引數。只有 `doctor` 接受旗標 `--reachable`。 |
+
+## Bun
+
+| 訊息 | 修正 |
+| --- | --- |
+| `Bun is not installed.` | 從 https://bun.sh/docs/installation 安裝 Bun，再執行一次指令。 |
+| `Bun <version> is older than the <range> this package needs.` | 用 `bun upgrade` 升級，再執行一次指令。 |
+
+## `init` 和 `add plugin` 的拒絕
+
+| 訊息 | 修正 |
+| --- | --- |
+| `Files init would create already exist in <dir>:`，後面是一串路徑，最後是 `Remove them or run init in an empty directory; nothing was written.` | 在空的目錄裡執行 `init`。 |
+| `"<name>" is not a plugin name. Use lowercase words joined by dashes, such as my-notes.` | 替外掛改名。 |
+| ``roundtable.config.ts is not in <dir>. Run this in the project directory, or create the project with `roundtable init`.`` | 切換到專案目錄。 |
+| `<paths> already exists. Choose another name or remove the file.` | 換一個名稱，或刪掉那個檔案。 |
+| `roundtable.config.ts does not parse (<reason>). Fix it, or add the plugin to its list by hand.` | 修正語法錯誤，或自己編輯設定檔。 |
+| ``roundtable.config.ts: cannot find the plugin list. Expected `export default { ..., plugins: [...] }`; add `import { <ident> } from "./plugins/<name>.ts"` and list <ident> in plugins by hand.`` | 照訊息說的，自己加上 import 和清單項目。 |
+| `roundtable.config.ts: the name <ident> is already used. Import the plugin by hand under another name.` | 自己用另一個名稱 import 它。 |
+
+## 環境變數
+
+| 訊息 | 修正 |
+| --- | --- |
+| `no value for <VARIABLES>.` | 把 `.env.example` 複製成 `.env`，再填入這些變數。`.env` 已經存在時，修正訊息會寫 `Fill them in .env`。見[環境變數](/zh-tw/configure/environment/)。 |
+
+## 設定
+
+設定失敗時，會先顯示下面的訊息，接著是修正訊息 `Fix the key in roundtable.config.ts; a value it reads from .env is set there (see .env.example).`
+之後需要設定的檢查，會以 `the configuration is not valid yet` 被跳過。
+
+| 訊息 | 修正 |
+| --- | --- |
+| `roundtable.config.ts could not be loaded: <reason>` | 修正 `roundtable.config.ts` 裡的錯誤。 |
+| ``roundtable.config.ts has no default export. Write `export default { ... } satisfies RoundtableConfig`.`` | 用 default export 匯出設定物件。 |
+| `config <key>: unknown key. Did you mean "<closest>"? The keys here are ...` | 修正拼字。 |
+| `config <key>: required, expected <kind>. Add it to roundtable.config.ts.` | 加上這個設定，或在 `.env` 填入它讀取的變數。 |
+| `config <key>: expected <kind>, got <value>. Fix the value in roundtable.config.ts.` | 給訊息指出的那種型別的值。變數留空時會顯示成 `got ""`。 |
+| `config model: expected <provider>/<id>, got "<value>". Write it like anthropic/claude-sonnet-5-5.` | 把模型寫成 `<provider>/<id>`。`judge.model` 和 `delegation.model` 也有同樣的訊息。見[模型](/zh-tw/configure/models/)。 |
+| `config locale: expected a locale, en or zh-TW, got "<value>". Fix the value in roundtable.config.ts.` | 用 `en` 或 `zh-TW`。 |
+| `config <key>: cannot read <path>: <reason>. Create the file or fix the path.` | 建立提示詞檔案，或修正 `prompts` 裡的路徑。`<key>` 是 `prompts.shared` 或 `prompts.guest`。 |
+| `config <key>: <path> is empty. Write the prompt in it.` | 把提示詞寫進檔案。 |
+| `Invalid time zone: <value>` | 用 IANA 名稱，例如 `Europe/Berlin`。`doctor` 查不出這一項，要到 `start` 才會停下來。見[語言與時間](/zh-tw/configure/language-and-time/)。 |
+
+## PostgreSQL
+
+| 訊息 | 修正 |
+| --- | --- |
+| `cannot use <host:port/database>: <reason>` | 啟動 PostgreSQL（在專案裡執行 `docker compose up -d`），或修正 `.env` 裡的 `DATABASE_URL`。訊息裡不會出現密碼。 |
+| `migration <migration> failed: <reason>` | 修正 migration，或把資料庫還原成它預期的狀態。 |
+
+## Discord
+
+| 訊息 | 修正 |
+| --- | --- |
+| `Discord rejected the bot token.` | 在 developer portal 的 Bot 底下重設 token，再把新的 token 以 `DISCORD_TOKEN` 放進 `.env`。 |
+| `cannot reach discord.com: <reason>` | 檢查網路連線，再試一次。 |
+| `Discord answered <status> when asked who the token belongs to.` | 稍等一下再試。如果一直這樣，到 https://discordstatus.com 查看。 |
+| `the bot is not in the guild <id>, or the guild id is wrong.` | 檢查 `DISCORD_GUILD_ID`，再用修正行印出的連結邀請 bot。 |
+| `the Message Content intent is off.` | 在 developer portal 的 Bot 底下開啟 Message Content Intent，儲存後再跑一次檢查。 |
+| `the bot cannot see a channel <id>.` | 檢查 `DISCORD_ENTRY_CHANNEL_ID`，並確認 bot 的身分組能檢視那個頻道。 |
+| `the channel <id> belongs to another guild.` | `DISCORD_ENTRY_CHANNEL_ID` 要用設定的那個 guild 的頻道。 |
+| `in the entry channel the bot lacks <permissions>.` | 在 bot 的身分組，或在頻道的權限裡授予它們。修正行會說明每一項的用途。 |
+| `Discord answered <status> when asked for the guild <id>.`、`... for the channel <id>.` 或 `... for the application.` | 稍等一下再試。 |
+
+bot 的設定步驟，在[設定 Discord bot](/zh-tw/start/discord-bot/)裡一步一步走過。
+token 有誤時，Discord 的檢查會以 `the token check failed` 被跳過。
+
+## 模型登入
+
+| 訊息 | 修正 |
+| --- | --- |
+| `the model "<model>" is not written <provider>/<id>.` | 在 `.env` 的 `MODEL` 寫成像 `anthropic/claude-sonnet-5-5` 的形式。 |
+| `no login for <provider>, the provider of <model>.` | 在 `.env` 設定 provider 的 API key（`anthropic` 用 `ANTHROPIC_API_KEY`，`openai` 用 `OPENAI_API_KEY`），或用 Pi 登入，讓 `<agentDir>/auth.json` 存有登入資料。 |
+
+bot 執行時，如果 agent 的模型在這台 host 上跑不了，會出現 `<agent>'s model <model> is not available on this host`。
+用 `agent_update` 改 agent 的模型，或登入那個 provider。
+judge 的模型不可用時，會出現 `the judge's model <provider>/<id> is not available; log in to its provider or change judge.model`。
+
+## Public URL
+
+| 訊息 | 修正 |
+| --- | --- |
+| `"<value>" is not a URL.` | 在 `.env` 的 `PUBLIC_URL` 寫完整的位址，例如 `https://bot.example.com`。 |
+| `<value> does not start with http:// or https://.` | Discord 從這個位址取得頭像；請用 http(s) 位址。 |
+| `<value> did not answer: <reason>` | 只有 `doctor --reachable` 會印這一則。啟動 bot（`roundtable start`），並檢查發佈這個位址的通道或 proxy。 |
+
+## 外掛
+
+外掛的錯誤會讓啟動在 Discord 連線之前停下來，訊息的形式是 `plugin <name>: <what>. <fix>.`
+`roundtable doctor` 會印出同樣的訊息。
+
+| 訊息 | 修正 |
+| --- | --- |
+| `two plugins are named <name>.` | 替你的外掛改名。內建外掛用的名稱是 `memory`、`schedule-store`、`discord`、`modules`、`discord-admin`、`skills`、`agent-server`、`seeds` 和 `schedules`。 |
+| `plugin "<name>": the name must be lowercase words joined by dashes, such as my-notes. Rename the plugin.` | 在 `definePlugin` 裡改名。 |
+| `plugin <name>: setup is missing. Give the function that returns what the plugin adds.` | 加上 `setup`。 |
+| `plugin <name> adds nothing. Give it a part (tools, services, channels, and so on), a migration, or a provider, or remove it.` | 讓 `setup` 回傳某個部分，或把外掛從 `roundtable.config.ts` 移除。 |
+| `plugin <name>: setup must return an object of the parts it adds; return {} to add none.` | 回傳一個物件，不要回傳 `undefined`。 |
+| `plugin <name>: setup returned an unknown part "<key>". Did you mean "<closest>"? The parts are ...` | 修正 key。 |
+| `tool "<name>": the name must be lowercase words joined by underscores, such as note_add. Rename the tool.` | 替工具改名。 |
+| `tool <name>: the agents already have a tool of this name. Rename the tool.` | 不要用 `bash`、`read`、`edit` 或 `write`。 |
+| `tool <name>: minTier must be one of member, admin, owner; got <value>. Set the lowest tier that may use it.` | 讓 `minTier` 是這三個層級之一。 |
+| `plugin <b>: tool <name> is already defined by plugin <a>. Rename one of the two tools.` | 替其中一個工具改名。 |
+| `plugin <name>: setup failed: <what the error said>. Fix the error, or remove the plugin.` | 修正訊息引用的那個錯誤。 |
+| `plugin <name>: migration <migration> failed: <what the database said>. Fix the migration or restore the database, then start again.` | 修正 migration 或還原資料庫，再啟動一次。 |
+| ``the delegation worker loads pi-web-access, which this project does not have installed. It is a peer dependency of pi-roundtable: run `bun add pi-web-access@0.35.0` (or your own build of it, which the worker then uses too).`` | 安裝 `pi-web-access`。內建的 `modules` 外掛會把它回報成 `plugin modules: setup failed: ...`。 |
+
+外掛指南（英文）列了其餘的錯誤，例如服務衝突，以及只有 setup 之後才能用的部分。
+見[啟動流程與專案設定](/zh-tw/plugins/startup-and-project-setup/)和[外掛能新增什麼](/zh-tw/plugins/what-plugins-can-add/)。
+
+## 檢查本身出錯時
+
+| 訊息 | 修正 |
+| --- | --- |
+| `the check itself failed: <reason>` | 把它當成 `roundtable doctor` 的 bug 回報。某項檢查失敗，不會讓後面的檢查跟著消失。 |
+
+{/* Sources: src/cli/cli.ts:78-166, src/cli/init.ts:50-72, src/cli/add-plugin.ts:30-65, src/cli/config-edit.ts:44-48, src/cli/config-edit.ts:174-185, src/cli/project.ts:30-45, src/cli/project.ts:84-123, src/cli/report.ts:40-55, src/cli/checks/bun.ts, src/cli/checks/environment.ts, src/cli/checks/configuration.ts, src/cli/checks/database.ts, src/cli/checks/discord.ts, src/cli/checks/model.ts, src/cli/checks/public-url.ts, src/core/config/schema.ts:14-20, src/core/config/schema.ts:156-200, src/core/config/config.ts:218-226, src/core/define-roundtable.ts:60-90, src/core/time.ts:3-11, src/core/errors.ts, src/core/define.ts:70-90, src/core/define.ts:140-155, src/core/registry/contributions.ts:112-120, src/core/registry/contributions.ts:268-285, src/core/registry/contributions.ts:325-330, src/core/host.ts:365-380, src/core/tool-tiers.ts:48-56, src/core/modules/delegation/web-research-worker.ts:24-34, src/core/runtime/pi-agent-runtime.ts:455-466, docs/plugins.md:1877-1982 */}

@@ -1,0 +1,114 @@
+---
+title: 服務與 addon
+description: 外掛之間怎麼共用服務、怎麼取代內建服務，以及三個能關掉的 addon。
+sidebar:
+  order: 3
+---
+
+## 服務
+
+服務是某個外掛建出來、其他外掛來讀取的東西，例如排程的儲存，或 agent 團隊。
+每個服務有一個用 `serviceKey<T>(id)` 做出來的 key。
+`T` 是一個介面，稱為 port，所以只要方法相同，任何物件都能當這個服務。
+要提供它，或在測試裡做一個假的，都不需要內建的 class。
+
+外掛把自己提供的 key 列在 `provides`，再從 `setup` 用 `services.provide(KEY, value)` 逐一提供。
+key 的 id 要加上你自己的前綴，因為 id 相同的兩個 key 就是同一個服務。
+
+```ts
+export const NOTE_INDEX = serviceKey<NoteIndex>("my-notes.index");
+
+export const notes = definePlugin({
+	name: "my-notes",
+	provides: [NOTE_INDEX],
+	setup: ({ services }) => {
+		services.provide(NOTE_INDEX, { add, all });
+		return { services: [{ name: "notes-ready" }] };
+	},
+});
+```
+
+完整版是 [`shared-services.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/shared-services.ts)。
+
+### 讀取服務
+
+| 呼叫 | 作用 |
+|---|---|
+| `services.get(KEY)` | 回傳服務；找不到時丟出 `PluginError`，訊息會指出 key，以及該先註冊哪個外掛。 |
+| `services.find(KEY)` | 回傳服務；沒有任何已註冊的外掛宣告它時，回傳 `undefined`。如果有外掛宣告了這個 key 卻還沒 setup，它仍然會丟出錯誤，因為那是順序上的失誤。 |
+| `services.lazy(KEY)` | 回傳一個函式，等所有外掛都 setup 完之後，用它取得服務。提供服務的外掛排在你後面時用它，並且要在啟動之後才執行的地方呼叫，例如服務的 `start`、handler 或其他 callback。在 setup 期間呼叫會丟出 `NotLinkedError`。 |
+| `services.provide(KEY, value)` | 只能在 `setup` 裡呼叫，只能用在你的 `provides` 裡列出的 key，每個 key 只能一次。 |
+
+如果你在 `setup` 期間用 `get` 讀服務，要把它的 key 列進 `requires`。
+這樣順序錯了，會在任何 migration 或 setup 之前就被拒絕，訊息裡會寫出兩個外掛的名稱。
+這個 key 必須由註冊在你前面的外掛提供。
+用 `find` 讀的服務，不必列進 `requires`。
+
+外掛宣告了某個 key 卻沒有提供，會在它的 `setup` 回傳時被拒絕。
+兩個外掛宣告同一個 key，會在任何 setup 之前被拒絕。
+
+### 內建服務
+
+內建外掛提供下列 key，全部從 `pi-roundtable` 匯出：
+
+| Key | 由誰提供 | 內容 |
+|---|---|---|
+| `AGENTS` | `agent-server` | agent 團隊、唯讀的目錄、每一輪 agent 所跑的 runtime、核准，以及頭像 |
+| `SKILLS` | `skills`（addon） | agent 帶的技能，以及用來列出、連結和掛上技能的 registry |
+| `SCHEDULES` | `schedule-store` | 儲存的排程：create、get、update、remove、due、claim |
+| `MEMORY` | `memory`（addon） | 每位 speaker 的記憶：list、add、search、update、remove |
+| `BACKGROUND_TURNS` | `modules` | 沒有人寫訊息觸發的輪次：排程、委派，以及錯誤回報 |
+| `DELEGATION` | `modules` | 啟動背景任務，以及哪些頻道有任務正在執行 |
+
+你的外掛在內建外掛之後執行，所以上面每個 key 都讀得到。
+Discord 連線的 key `DISCORD` 來自 `pi-roundtable/discord`，因為它的 port 用到 discord.js 的型別。
+
+### 取代內建服務
+
+外掛同時把某個 key 列在 `provides` 和 `replaces`，就接手了那個服務。
+host 會丟掉原本提供它的內建外掛，把你的外掛放在那個外掛原來的位置 setup。
+被丟掉的外掛，它的 migration 和 setup 都不會執行。
+你的替代外掛能讀到排在那個位置之前的外掛所提供的服務，之後的讀不到。
+
+```ts
+definePlugin({
+	name: "my-schedules",
+	provides: [SCHEDULES],
+	replaces: [SCHEDULES],
+	setup: ({ services }) => {
+		services.provide(SCHEDULES, myStore);
+		return {};
+	},
+});
+```
+
+host 會拒絕無法補齊的替換。
+例如 `BACKGROUND_TURNS` 和 `DELEGATION` 都來自同一個 `modules` 外掛，所以要一起換，不然就都不換。
+每一則拒絕訊息和它的修正方式，列在指南的[取代內建服務](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#replacing-a-built-in-service)（英文）。
+
+## Addon
+
+記憶、技能和 Discord 管理是內建外掛；設定沒有把它們關掉，host 就會加進來。
+三個預設都是開的。
+
+| Addon | 在 `roundtable.config.ts` 的開關 | 它新增什麼 | 關掉時 |
+|---|---|---|---|
+| 記憶 | `memory: false` | 記憶資料表、`memory_add`、`memory_search` 和 `memory_remove` 工具，以及每個 system prompt 裡的記憶區塊 | 沒有記憶工具，也沒有那個區塊 |
+| 技能 | `skills: false` | 技能資料表、agent session 的技能工具（`skill_link`、`skill_create`、`agent_skills` 等），以及每個 agent 都帶的技能 | 沒有技能工具，任何 session 都沒有技能。`agent_create` 少了 `skills` 參數，傳了這個參數的呼叫會被拒絕 |
+| Discord 管理 | `discord: { admin: false }` | 讀取和管理伺服器、給 owner 用的 `discord_*` 工具 | 沒有 `discord_*` 工具 |
+
+關掉的 addon，它的資料表和資料列都不會被動到，所以再打開時會看到原樣。
+`skills` 開著的時候，還接受 `skills: { builtinDir, reposDir }` 這兩個目錄。
+
+你的外掛如果沒有某個 addon 也能運作，就用 `find` 讀它的服務；addon 關著時會得到 `undefined`。
+沒有它就不能運作的外掛用 `get`，失敗時的訊息會指出是哪個開關：
+
+```text
+service roundtable.memory is not provided. The memory addon is switched off (config memory: false). Switch it on, or provide the service from a plugin of your own.
+```
+
+關掉某個 addon，再加一個你自己的外掛來提供同一個 key，效果與 `replaces` 相同。
+
+完整內容見外掛指南的[服務](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#services-what-plugins-provide-to-each-other)和 [Addon](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#addons-memory-skills-and-discord-administration)（英文）。
+
+{/* Sources: docs/plugins.md:120-303, examples/shared-services.ts, src/core/define-roundtable.ts:160-215, src/core/config/config.ts:53-113, src/core/config/config.ts:279-322, src/core/services.ts:56-67 */}

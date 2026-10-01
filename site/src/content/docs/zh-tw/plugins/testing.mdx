@@ -1,0 +1,108 @@
+---
+title: 測試外掛
+description: 用 testPlugin 在沒有 Discord 和 PostgreSQL 的情況下跑單一外掛，用 testHost 在測試資料庫上啟動內建外掛和你的外掛。
+sidebar:
+  order: 4
+---
+
+`pi-roundtable/testing` 有兩種測試工具（harness）。
+依照測試需要什麼來選。
+
+| Harness | 它執行什麼 | 需要 |
+|---|---|---|
+| `testPlugin(plugin, options?)` | 單獨一個外掛，對著假的 context 做 setup，並啟動它的服務 | 什麼都不需要。沒有 Discord，除非傳入 `{ database }`，也不需要 PostgreSQL |
+| `testHost(options?)` | 內建外掛和你的外掛一起，照 `defineRoundtable` 的組裝方式執行，由替身代替 Discord 和 runtime | 一個測試資料庫，設在 `ROUNDTABLE_TEST_DATABASE_URL` |
+
+預設用 `testPlugin`。
+測試要依賴內建外掛（例如 agent server 或各個 store），或依賴 host 的 setup 順序時，才改用 `testHost`。
+
+## testPlugin
+
+這是[寫一個外掛](/zh-tw/plugins/first-plugin/)裡的測試：
+
+```ts
+import { expect, test } from "bun:test";
+import { testPlugin } from "pi-roundtable/testing";
+import { hello } from "./hello.ts";
+
+test("hello greets", async () => {
+	const harness = await testPlugin(hello);
+	expect(await harness.runTool("hello_greet", { who: "Ada" })).toBe("Hello, Ada!");
+	await harness.stop();
+});
+```
+
+harness 套用的檢查和 host 一樣。
+所以外掛什麼都沒新增、有不認得的部分、名稱衝突，或工具沒有層級，你的測試都會失敗，訊息和啟動時印出的一樣。
+
+它回傳一個物件，欄位如下：
+
+| 欄位 | 內容 |
+|---|---|
+| `contribution` | 外掛新增的東西，以 host 收集的形式呈現 |
+| `tools`、`tiers` | 工具名稱，以及每個工具需要哪個層級的對照表 |
+| `holds` | 外掛的 hold rule，照 host 連結的方式串起來。它回傳必須先核准的呼叫的描述，或 `undefined` |
+| `runTool(name, args, { speaker, channel }?)` | 照 agent 一輪裡的做法執行工具，回傳模型會讀到的文字 |
+| `events` | 外掛透過 `context.events` 回報的事件，以及 `context.turns` 的事件 |
+| `conversations`、`turns`、`surfaces` | 外掛在這幾個 context 欄位看到的內容，讓測試能驅動它的 claim |
+| `runtime` | `runtime` provider 建出來的 runtime；外掛沒有填這個槽位時是 `undefined` |
+| `stop()` | 送出 `shutdown`，停止注入的 surface，並以相反的順序停止服務 |
+
+它不會執行 migration、不會送出核心的事件，也不會組出提示詞。
+handler 和 `build` 函式要自己呼叫，範例 [`events.test.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/events.test.ts) 和 [`prompt.test.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/prompt.test.ts) 就是這樣做的。
+
+### 選項
+
+| 選項 | 它給外掛什麼 |
+|---|---|
+| `env` | 給 `context.env` 用的部分 host 環境。預設是英文和 UTC |
+| `owner` | runtime 的相依項目和 agent server 的 claim 所認得的 owner |
+| `database` | 給 `context.database()` 用的 Bun `SQL`。沒有傳的話，呼叫它會丟出 `no database is configured` |
+| `providers` | 填入的 provider 槽位，效果如同由另一個外掛填入 |
+| `surfaces` | 外掛自己以外的聊天 surface，例如 [`fake-surface.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/fake-surface.ts) 裡的假 surface |
+| `services` | 外掛從 `context.services` 讀到的東西：每個服務用一個 `servicePair(KEY, { ... })`，成員由你提供 |
+| `conversations` | 取代 router 方法的方法，例如 `stop` |
+| `turns` | 取代預設的一輪執行器 |
+| `forwardJoinMs` | router 把單獨的轉發訊息，留著等後面那則訊息的時間 |
+
+讀取你沒有提供的服務成員，會丟出 `PluginError`，訊息會指出該加哪個選項。
+被測試的外掛如果在 `requires` 列了某個 key，除非 `services` 有給它，否則會被拒絕。
+
+### Fixtures
+
+匯入 `pi-roundtable/testing`，即使 `CI=true` 又沒有資料庫 URL，也能正常運作。
+另外還有幾個輔助函式：
+
+- `describeDb`：設了 `ROUNDTABLE_TEST_DATABASE_URL` 時是 Bun 的 `describe`，否則是 `describe.skip`。用它來控管需要資料庫的測試組。
+- `OWNER_SPEAKER`、`fakeThreads` 和 `silentLogger`：中性的替身，分別代替 owner 的輪次、派工的 thread 和 logging。
+- `recordingLogger()`：把收到的內容記下來，用來測試你的程式碼記了什麼 log。
+- `partial<Port>({ ... })`：代替你的程式碼當作參數收到的 port。讀取你沒給的成員時，會丟出指出它的錯誤。
+- `fakeDiscord()`：給新增斜線指令的外掛用的 `DISCORD` 服務。`discord.added()` 列出外掛新增的東西，`discord.compose()` 回傳 Discord 會收到的指令樹。
+- `useTestLocale()`：把整個行程的 locale 重設為英文，時區重設為 UTC。
+
+唯一需要 PostgreSQL 的範例測試是 [`migrations.test.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/migrations.test.ts)。
+沒設那個變數時會跳過它，所以請指向一個你能寫入、而且弄丟也無妨的資料庫：
+
+```sh
+ROUNDTABLE_TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5432/plugin_test bun test
+```
+
+## testHost
+
+`testHost` 在測試資料庫上啟動整個 host，由替身代替 Discord 和 runtime。
+用 `describeDb` 控管這組測試。
+
+| 選項 | 它給 host 什麼 |
+|---|---|
+| `config` | 疊在測試設定上的 `RoundtableConfig` key，例如 `skills: false` |
+| `plugins` | 你的外掛，放在內建外掛之後 |
+| `runtime` | 每一輪所用的 runtime。預設是一個回答空字串、不建立 Pi session 的 runtime |
+| `discord` | 替身 Discord 提供的東西：`agentChannels(guildId)` 和 `ownerChannel()` |
+
+它回傳 `context`（一個探測用外掛的 context，排在其他所有外掛之後 setup）、`conversations`、`commands`（新增了什麼，以及組好的斜線指令樹）、`sessionTools(scope?)`、`sessionContext(scope?)` 和 `stop()`。
+測試結束時要呼叫 `stop()`。
+
+用 `bun test` 跑所有測試，用 `bun run typecheck` 檢查型別。
+完整的參考是指南裡的[測試外掛](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#testing-a-plugin)（英文）。
+
+{/* Sources: docs/plugins.md:1725-1838, src/testing.ts:65-260, src/core/testing/test-host.ts:35-80, src/core/testing/database.ts:9-14, templates/plugin/plugin.ts, site/src/content/docs/plugins/first-plugin.mdx */}

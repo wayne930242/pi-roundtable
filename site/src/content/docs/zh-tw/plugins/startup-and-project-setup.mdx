@@ -1,0 +1,107 @@
+---
+title: 啟動流程與專案設定
+description: bot 啟動和停止的順序、外掛專案需要的 TypeScript 選項，以及怎麼在自己的 host 裡試用核心的修改。
+sidebar:
+  order: 5
+---
+
+import { Steps } from "@astrojs/starlight/components";
+
+## bot 怎麼啟動
+
+`roundtable start` 先跑不需要網路的檢查：Bun、`.env`、設定、外掛、模型登入和 public URL。
+檢查失敗時，啟動會停下來，並印出 `roundtable doctor` 對那一項印的訊息。
+接著 host 依序執行下列步驟：
+
+<Steps>
+
+1. **Replacements 和 providers。** 套用每個外掛的 `replaces`，被取代的外掛會被丟掉，替代的外掛站在它原來的位置。然後每個 provider 槽位，由填入它的外掛決定；沒有外掛填入，就用核心的預設值。
+
+2. **資料庫和 migration。** 開啟資料庫，依外掛順序執行每個外掛的 migration。
+
+3. **Setup。** 依外掛順序執行每個外掛的 `setup`。
+
+4. **Linking。** 連結工具層級、hold rule、session plan、頻道 router 和事件。從這一步起，`sessions()`、`conversations`、`surfaces`、`turns` 和 `dashboard()` 才能用。
+
+5. **Preflight。** 執行每個外掛的 `preflight`。Discord 外掛在這裡組出斜線指令，所以名稱衝突會在這一步讓啟動停下來。
+
+6. **服務。** 啟動每個服務，依外掛順序一個外掛接一個外掛啟動。外掛的聊天 surface 會比它自己的服務先啟動。
+
+7. **HTTP。** 開啟 listener。
+
+8. **背景啟動。** 執行每個服務的 `startInBackground`，不會拖慢開機；每一個結束時，每個外掛都會收到 `serviceStarted`。
+
+</Steps>
+
+步驟 1 到 5 沒有全部成功的話，不會有任何東西連到 Discord 或 listener。
+
+### 外掛順序
+
+setup 的順序是先內建外掛：`memory`、`schedule-store`、`discord`、`modules`、`discord-admin`、`skills`、`agent-server`、`seeds`。
+關掉的 addon 不在名單裡。
+接著是你的外掛，順序依 `roundtable.config.ts` 裡 `plugins` 的排列。
+內建的 `schedules` 外掛排在最後，所以到期的排程要等它能用到的東西都跑起來之後，才會觸發。
+
+### 隨語言而變的文字
+
+`run()` 在做任何事之前，先把 host 的環境套用到行程上：locale、時區和 assistant 的名稱。
+所以指令或工具的描述，要在 `setup` 或之後才組出來，不要在 import 時就組。
+每個行程只跑一個 host，因為訊息目錄（message catalog，所有顯示文字的語言版本）和時區都是整個行程共用的。
+已經有一個 host 在跑的時候，再呼叫第二次 `run()` 會被拒絕。
+
+任何一步失敗，host 會停掉已經啟動的東西、關閉資料庫連線池，然後重新丟出錯誤。
+行程隨後以非零狀態結束。
+
+## bot 怎麼停止
+
+收到 `SIGTERM` 或 `SIGINT` 時，bot 最後才停止接受新的工作：
+
+<Steps>
+
+1. 它繼續服務，直到頻道佇列清空，而且沒有任何服務回報 `busy()` 的工作，最久一小時。剩下的會寫進 log，然後放棄。
+
+2. 每個外掛收到 `shutdown(left)`，此時每個服務都還在執行。
+
+3. 關閉 HTTP listener，這樣就不會有請求送到已經停止的服務。
+
+4. 服務以啟動順序的相反順序停止。
+
+5. 關閉資料庫連線池。
+
+</Steps>
+
+## TypeScript 設定
+
+套件發佈的是 `.ts` 原始碼，所以由你的編譯器用你專案的選項來檢查它。
+指南附了一份完整的 `tsconfig.json`，已經對著安裝好的 tarball 測試過。
+要注意的有這幾點：
+
+- 把 `moduleResolution` 設成 `bundler`，`module` 設成 `Preserve`，`types` 設成 `["bun"]`。
+- 開啟 `strict`、`verbatimModuleSyntax`、`allowImportingTsExtensions` 和 `noEmit`。
+- `skipLibCheck` 要保持開啟。關掉的話，測過的那個範例會回報 97 個相依套件宣告檔的錯誤。
+- `exactOptionalPropertyTypes` 和 `noPropertyAccessFromIndexSignature` 要保持關閉。這兩個不管開哪一個，即使有 `skipLibCheck`，也會出現套件原始碼的錯誤。
+- 像產生出來的專案那樣，把 TypeScript 和 `@types/bun` 裝成開發相依套件。
+
+`verbatimModuleSyntax` 開著時，只有型別的匯出要用 `import type`。
+完整檔案請從[使用端的 TypeScript 設定](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#consumer-typescript-configuration)（英文）複製。
+
+## 同時開發核心和 host
+
+host 會固定在某個精確的 `pi-roundtable` 版本，所以核心的修改要等發佈之後才會到 host。
+想先試修改，可以把你的 checkout 連結進來：
+
+```sh
+# in the pi-roundtable checkout
+bun link
+# in the host
+bun link pi-roundtable
+```
+
+這時 host 匯入的是 checkout 裡的原始碼，所以改了馬上看得到，host 的 `bun run typecheck` 和 `bun test` 也是對著它執行。
+被連結的 checkout 會從它自己的 `node_modules` 解析相依套件，所以 host 的 `overrides` 影響不到它。
+修改完成後，發佈核心，把 host 的 `pi-roundtable` 設成新的精確版本，再執行 `bun install`，把連結換成發佈出去的套件。
+然後對著發佈出去的版本，再跑一次 host 的檢查。
+
+完整內容見[bot 啟動和停止時發生什麼](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#what-happens-when-the-bot-starts-and-stops)和[同時開發核心和 host](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#developing-the-core-and-a-host-together)（皆為英文）。
+
+{/* Sources: docs/plugins.md:1840-1880, docs/plugins.md:1989-2036, src/core/define-roundtable.ts:160-215 */}

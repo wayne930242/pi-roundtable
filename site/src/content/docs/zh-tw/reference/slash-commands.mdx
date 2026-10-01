@@ -1,0 +1,67 @@
+---
+title: 斜線指令
+description: bot 向 Discord 註冊的斜線指令、它們的描述，以及誰能使用。
+sidebar:
+  order: 2
+---
+
+bot 註冊一個根指令，除非你設了 `discord.rootCommand`，否則就是 `/roundtable`。
+所有有指令的功能，都把子指令加在這個根指令底下，所以指令清單集中在一處。
+根指令在伺服器裡，以及與 bot 的私訊裡都能用。
+
+它的描述，英文是 `<name> control panel (owner only)`，其中 `<name>` 是設定裡的 `name`。
+`locale: "zh-TW"` 時，下面的描述是繁體中文。
+
+## 核心註冊的指令
+
+核心註冊一個子指令群組：`schedule`。
+
+| 指令 | 描述 | 誰能用 |
+| --- | --- | --- |
+| `/roundtable schedule list` | List the schedules of every channel | owner |
+| `/roundtable schedule cancel id:<schedule>` | Cancel a schedule | owner |
+
+群組本身的描述是 `Schedules`，`cancel` 的 `id` 選項的描述是 `The schedule to cancel`。
+`id` 選項是必填，輸入時會自動補全，每個排程列成 `#<id> <title> (<recurrence>)`。
+
+### `schedule list`
+
+`list` 顯示每個頻道的所有排程。
+每一筆會列出排程的 id、標題、頻道、目標、重複的方式、下次執行的時間、設定的人，以及上次執行的時間和結果。
+沒有排程時，它回答 `No schedules right now.`
+頁尾說明，排程是由 bot 在對話裡建立和修改的，這個指令是用來檢視和取消排程。
+
+### `schedule cancel`
+
+`cancel` 刪除選到的排程，並在標題 `Schedule cancelled` 底下再顯示它一次。
+如果值不是數字，它回答 `Pick a schedule from the list.`
+如果沒有任何排程有那個 id，它回答 `There is no schedule #<id>.`
+
+要建立或修改排程，請對 agent 說；見[排程與背景工作](/zh-tw/agents/schedules-and-background/)。
+
+## 誰能用
+
+只有 owner 能用 `/roundtable`，以 Discord 使用者 id 檢查。
+每個回應都只有執行指令的那個人看得到。
+其他人會得到一個標題為 `Owner only` 的面板，內容說 `/roundtable` 是 assistant 的 owner 的控制面板，後面接著你在 `discord.refusalHint` 設定的文字。
+自動補全不會給非 owner 任何選項。
+核心的指令只給 owner 用；admin 和 member 是在各自的頻道裡跟 agent 說話。
+見[存取層級](/zh-tw/configure/access-tiers/)。
+
+## 不是指令的按鈕
+
+Discord 裡有兩種東西會回應點擊，但不是斜線指令：
+
+- 被擱置的動作和 `ask_user` 問題的卡片。它們的按鈕是 `Run` 和 `Cancel`，或是回答的選項。誰能回應，見[存取層級](/zh-tw/configure/access-tiers/)。
+- 長時間的一輪上的 `Stop` 按鈕。只有 owner 能按。它回答 `Stopped.`；那一輪已經結束時回答 `Nothing is running right now.`；對其他人則回答 `Only <name>'s owner can stop it.`
+
+## 外掛的指令
+
+外掛用 `setup` 裡的 `commands.add`，在根指令底下加自己的子指令，也可以另外加自己的最上層指令。
+名稱重複，或外掛自己註冊根指令，會讓啟動停下來，訊息會指出那個指令。
+見[外掛能新增什麼](/zh-tw/plugins/what-plugins-can-add/)。
+
+agent 面板預設不會註冊。
+`pi-roundtable/discord` 匯出 `agentPanel`，它建出一個 agent 的面板，給想為它加子指令的外掛使用。
+
+{/* Sources: src/core/discord/schedule-commands.ts:21-152, src/core/discord/owner-command.ts:21-27, src/core/discord/owner-command.ts:120-159, src/core/discord/compose-commands.ts:21-55, src/core/discord/command-collection.ts:14-46, src/core/discord/stop-button.ts:1-63, src/core/discord/agent-panel.ts:1-66, src/core/builtin/discord.ts:60-120, src/core/builtin/modules.ts:150-185, src/core/i18n/owner.ts:1-41, src/core/i18n/schedules.ts:34-60, src/core/i18n/cards.ts:1-40, src/core/builtin/discord.test.ts:106-124, docs/plugins.md:1091-1139 */}

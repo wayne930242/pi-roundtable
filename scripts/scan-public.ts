@@ -37,8 +37,9 @@ export const PUBLIC_NAME_ALLOWLIST: NameAllowlist = {
 	"CHANGELOG.md": [spell("way", "ne")],
 	"site/public/CNAME": [spell("way", "ne")],
 	"site/public/robots.txt": [spell("way", "ne")],
-	// A key ending in "/" covers every file below that directory: documentation pages link to the repository.
-	"site/src/content/docs/": [OWNER_HANDLE],
+	// A key ending in "/" covers every file below that directory: documentation pages link to the repository,
+	// and the page on pi-roundtable-mcp names the public MCP gateway that package works with.
+	"site/src/content/docs/": [OWNER_HANDLE, spell("context", "forge")],
 	"bun.lock": [spell("type", "safe")],
 	// The guide names its one private consumer.
 	"docs/plugins.md": [spell("Mer", "lin")],

@@ -114,7 +114,7 @@ A mistake in a plugin stops the start, before Discord connects, with a message o
 
 | Message | Fix |
 | --- | --- |
-| `two plugins are named <name>.` | Rename yours. The built-in plugins use `stores`, `discord`, `modules`, `agent-server`, `seeds`, and `schedules`. |
+| `two plugins are named <name>.` | Rename yours. The built-in plugins use `memory`, `schedule-store`, `discord`, `modules`, `discord-admin`, `skills`, `agent-server`, `seeds`, and `schedules`. |
 | `plugin "<name>": the name must be lowercase words joined by dashes, such as my-notes. Rename the plugin.` | Rename it in `definePlugin`. |
 | `plugin <name>: setup is missing. Give the function that returns what the plugin adds.` | Add `setup`. |
 | `plugin <name> adds nothing. Give it a part (tools, services, channels, and so on), a migration, or a provider, or remove it.` | Return a part from `setup`, or remove the plugin from `roundtable.config.ts`. |
