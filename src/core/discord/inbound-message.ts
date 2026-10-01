@@ -22,6 +22,16 @@ function attachmentRefs(
 	}));
 }
 
+function referenceOf(referenced: Message, mention: RegExp) {
+	return {
+		text: referenced.content.replace(mention, "").trim(),
+		attachments: attachmentRefs(referenced),
+		...(referenced.webhookId
+			? { webhookName: referenced.author.username }
+			: {}),
+	};
+}
+
 /**
  * The facts of one Discord message, as the neutral `InboundMessage`; undefined for the bot's own
  * messages and before the client is ready. A forward reports the channel it came from as a
@@ -32,6 +42,8 @@ export async function toInbound(
 	{ botId, applicationId }: BotIdentity,
 ): Promise<InboundMessage | undefined> {
 	if (!botId || message.author.id === botId) return undefined;
+	// botId is the bot's own Discord user id from the client, a snowflake, not message text.
+	// nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp
 	const mention = new RegExp(`<@!?${botId}>`, "g");
 	const reference = message.reference;
 	// A forward also has a reference, to a message elsewhere; its copy is the snapshot.
@@ -84,16 +96,6 @@ export async function toInbound(
 					},
 				}
 			: {}),
-		...(referenced
-			? {
-					reference: {
-						text: referenced.content.replace(mention, "").trim(),
-						attachments: attachmentRefs(referenced),
-						...(referenced.webhookId
-							? { webhookName: referenced.author.username }
-							: {}),
-					},
-				}
-			: {}),
+		...(referenced ? { reference: referenceOf(referenced, mention) } : {}),
 	};
 }

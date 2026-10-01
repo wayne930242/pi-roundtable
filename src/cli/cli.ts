@@ -79,7 +79,9 @@ export function processEnvironment(): CliEnvironment {
 			roundtable.listen();
 			await roundtable.run();
 		},
+		// pi-lens-ignore: no-console-except-error — the command line's printed output is its product
 		out: (line) => console.log(line),
+		// pi-lens-ignore: no-console-except-error — the command line's printed output is its product
 		err: (line) => console.error(line),
 	};
 }

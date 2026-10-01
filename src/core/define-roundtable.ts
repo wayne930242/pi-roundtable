@@ -76,7 +76,24 @@ function judgeThrough(modelRuntime: ModelRuntime, ref: ModelRef): JudgeModel {
 			throw new JudgeError(
 				`the judge's model ${formatModelRef(ref)} is not available; log in to its provider or change judge.model`,
 			);
-		return await piJudgeModel(modelRuntime, model)(system, prompt);
+		return piJudgeModel(modelRuntime, model)(system, prompt);
+	};
+}
+
+/** The listener `config.http` names: its unix socket when it has one, else its TCP port. */
+function publicListener(
+	http: ReturnType<typeof resolveConfig>["http"],
+): ListenerConfig {
+	if (http.socketPath)
+		return {
+			id: "public",
+			socketPath: http.socketPath,
+			...(http.socketMode === undefined ? {} : { mode: http.socketMode }),
+		};
+	return {
+		id: "public",
+		port: http.port,
+		...(http.hostname ? { hostname: http.hostname } : {}),
 	};
 }
 
@@ -138,24 +155,7 @@ export async function defineRoundtable(
 			},
 			database: { url: config.databaseUrl },
 			toolTiers: toolTiers(config.toolTiers),
-			listeners: [
-				config.http.socketPath
-					? {
-							id: "public",
-							socketPath: config.http.socketPath,
-							...(config.http.socketMode === undefined
-								? {}
-								: { mode: config.http.socketMode }),
-						}
-					: {
-							id: "public",
-							port: config.http.port,
-							...(config.http.hostname
-								? { hostname: config.http.hostname }
-								: {}),
-						},
-				...(overrides.listeners ?? []),
-			],
+			listeners: [publicListener(config.http), ...(overrides.listeners ?? [])],
 			judgeModel: judgeThrough(modelRuntime, config.judge.model),
 			apiKey: (provider) => registry.getApiKeyForProvider(provider),
 			...(overrides.aborted ? { aborted: overrides.aborted } : {}),

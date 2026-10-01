@@ -11,11 +11,11 @@ export function textOf(content: unknown): string {
 	if (typeof content === "string") return content;
 	if (!Array.isArray(content)) return "";
 	return content
-		.filter(
-			(part): part is { type: "text"; text: string } =>
-				part?.type === "text" && typeof part.text === "string",
+		.flatMap((part) =>
+			part?.type === "text" && typeof part.text === "string"
+				? [part.text as string]
+				: [],
 		)
-		.map((part) => part.text)
 		.join("\n");
 }
 

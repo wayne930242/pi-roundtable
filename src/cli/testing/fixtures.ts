@@ -7,6 +7,7 @@ import type { Http, HttpResponse } from "../http.ts";
 import type { Ports } from "../project.ts";
 
 /** A configuration the schema accepts. */
+// pi-lens-ignore: hardcoded-url — a test fixture; bot.example.test is a reserved name no request is sent to
 export const validConfig: RoundtableConfig = {
 	owner: { id: "100000000000000001", name: "Ada" },
 	discord: {

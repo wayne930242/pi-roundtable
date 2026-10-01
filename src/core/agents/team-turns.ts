@@ -9,7 +9,7 @@ import type { AgentTurnScope } from "../domain/ports.ts";
 import { messages } from "../i18n/index.ts";
 import { splitReply } from "../presentation/reply-splitter.ts";
 import { thinkingLine } from "../presentation/thinking-line.ts";
-import { settleTurn } from "../routing/settle-turn.ts";
+import { endOf, settleTurn } from "../routing/settle-turn.ts";
 import type { Speaker } from "../speakers.ts";
 import { toolTiers } from "../tool-tiers.ts";
 import { AgentMessages } from "./agent-messages.ts";
@@ -30,6 +30,11 @@ import {
 } from "./team-turn-types.ts";
 
 export { MAX_CHAIN_MESSAGES, type TeamTurnsOptions };
+
+/** What a failed turn posts: the stopped notice for a stop, the failure notice otherwise. */
+function noticeOf(result: { stopped?: true }): string {
+	return result.stopped ? messages().stoppedNotice : messages().failureNotice;
+}
 
 /**
  * The agent team's turns: owner messages, background turns, group rounds, and messages between
@@ -199,7 +204,7 @@ export class TeamTurns {
 		}
 		this.#options.events?.turnEnded({
 			...turn,
-			result: result.ok ? "ok" : result.stopped ? "stopped" : "failed",
+			result: endOf(result),
 		});
 		try {
 			if (!result.ok && !result.stopped) {
@@ -214,13 +219,7 @@ export class TeamTurns {
 					: undefined;
 			await this.#post(postTo, this.#current(agent), {
 				...(thinking ? { thinking } : {}),
-				chunks: result.ok
-					? splitReply(result.text)
-					: [
-							result.stopped
-								? messages().stoppedNotice
-								: messages().failureNotice,
-						],
+				chunks: result.ok ? splitReply(result.text) : [noticeOf(result)],
 			});
 		} catch (error) {
 			logger.error({ agent: agent.name, err: error }, "agent reply not posted");

@@ -155,8 +155,7 @@ export class PgAgentStore implements AgentDirectory {
 	#activeNames(): string {
 		return (
 			this.agents()
-				.filter((a) => a.status === "active")
-				.map((a) => a.name)
+				.flatMap((a) => (a.status === "active" ? [a.name] : []))
 				.join(", ") || "none"
 		);
 	}

@@ -12,7 +12,12 @@ import {
 	RECENT_FOR_SCORING,
 } from "./group-round.ts";
 import { channelIdOf, groupScope, groupSessionKey } from "./team-keys.ts";
-import { BACKLOG_LIMIT, type Chain, type TurnHost } from "./team-turn-types.ts";
+import {
+	BACKLOG_LIMIT,
+	type Chain,
+	type TurnExtra,
+	type TurnHost,
+} from "./team-turn-types.ts";
 
 /** A group channel's rounds: scoring, then the chosen members answer one at a time. */
 export class GroupTurns {
@@ -99,19 +104,19 @@ export class GroupTurns {
 			// Delivered once the session has the text, so a message never comes twice.
 			if (backlog.lastId !== undefined)
 				await store.advanceCursor(group.name, name, backlog.lastId);
+			// Attachments and a confirmation belong to a member's first turn of the round only.
+			const extra: TurnExtra = { interactive: true };
+			if (first) {
+				extra.attachments = attachments;
+				if (approvals.get(name)) extra.confirmed = true;
+			}
 			const result = await this.#host.turn(
 				member,
 				groupScope(member, group),
 				channel,
 				groupTurnText(group, member, backlog),
 				chain,
-				first
-					? {
-							attachments,
-							interactive: true,
-							...(approvals.get(name) ? { confirmed: true } : {}),
-						}
-					: { interactive: true },
+				extra,
 			);
 			replies += 1;
 			last = member;

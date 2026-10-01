@@ -54,17 +54,16 @@ export function layoutText(
 	layout: readonly CategoryLayout[],
 	store: TeamStore,
 ): string {
-	const lines = layout
-		.filter((c) => categoryKind(c.name))
-		.map((c) => {
-			const shown = c.channelIds.map(
-				(id) =>
-					store.agentByChannel(id)?.name ??
-					store.groupByChannel(id)?.name ??
-					`<#${id}>`,
-			);
-			return `- ${c.name}: ${shown.join(", ") || "empty"}`;
-		});
+	const lines = layout.flatMap((c) => {
+		if (!categoryKind(c.name)) return [];
+		const shown = c.channelIds.map(
+			(id) =>
+				store.agentByChannel(id)?.name ??
+				store.groupByChannel(id)?.name ??
+				`<#${id}>`,
+		);
+		return [`- ${c.name}: ${shown.join(", ") || "empty"}`];
+	});
 	return `Categories, in server order:\n${lines.join("\n") || "none"}`;
 }
 
@@ -122,9 +121,9 @@ export function planArrangement(
 			channelIds: [...channelIds, ...(existing ? stay(existing) : [])],
 		};
 	});
-	const rest = current
-		.filter((c) => !ahead.some((a) => a.id === c.id))
-		.map((c) => ({ ...c, channelIds: stay(c) }));
+	const rest = current.flatMap((c) =>
+		ahead.some((a) => a.id === c.id) ? [] : [{ ...c, channelIds: stay(c) }],
+	);
 	const layout = [...ahead, ...rest];
 	const remove = layout.flatMap((c) =>
 		c.id && c.channelIds.length === 0 && categoryKind(c.name) ? [c.id] : [],

@@ -89,6 +89,8 @@ export class Project {
 		let value: unknown = raw.value;
 		for (const key of path) {
 			if (typeof value !== "object" || value === null) return undefined;
+			// A read only: nothing is assigned by key, and every caller passes literal keys.
+			// nosemgrep: javascript.lang.security.audit.prototype-pollution.prototype-pollution-loop.prototype-pollution-loop
 			value = (value as Record<string, unknown>)[key];
 		}
 		return typeof value === "string" && value.trim() !== "" ? value : undefined;

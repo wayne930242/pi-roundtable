@@ -153,9 +153,9 @@ export class DiscordOwnerOps implements OwnerOperations {
 					displayName: m.displayName,
 					nickname: m.nickname,
 					bot: m.user.bot,
-					roles: m.roles.cache
-						.filter((r) => r.id !== guild.id)
-						.map((r) => r.name),
+					roles: [...m.roles.cache.values()].flatMap((r) =>
+						r.id === guild.id ? [] : [r.name],
+					),
 				}));
 			}
 			case "discord_create_role": {
@@ -233,8 +233,9 @@ export class DiscordOwnerOps implements OwnerOperations {
 				await guild.members.unban(userId, reason);
 				return { userId, banned: false };
 			}
+			default:
+				throw refuse("INVALID_TOOL", tool);
 		}
-		throw refuse("INVALID_TOOL", tool);
 	}
 
 	/** Servers the owner and the assistant share, with what each of them may do there. */

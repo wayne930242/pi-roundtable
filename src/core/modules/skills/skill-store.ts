@@ -177,9 +177,9 @@ export class SkillStore {
 
 	/** The agents carrying a skill. */
 	carriers(skill: string): string[] {
+		// pi-lens-ignore: no-sort-without-comparator — agent names sort by code unit, the same order on every machine
 		return [...this.#carried]
-			.filter(([, skills]) => skills.includes(skill))
-			.map(([agent]) => agent)
+			.flatMap(([agent, skills]) => (skills.includes(skill) ? [agent] : []))
 			.sort();
 	}
 
@@ -260,6 +260,7 @@ export class SkillStore {
 
 	/** Replaces the registered skills an agent carries. */
 	async setCarried(agent: string, skills: readonly string[]): Promise<void> {
+		// pi-lens-ignore: no-sort-without-comparator — skill names sort by code unit, the same order on every machine
 		const sorted = [...new Set(skills)].sort();
 		await this.#sql.begin(async (tx) => {
 			await tx`DELETE FROM agent_skills WHERE guild_id = ${this.#guild} AND agent = ${agent}`;

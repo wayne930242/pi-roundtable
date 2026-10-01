@@ -34,15 +34,13 @@ export function thinkingOf(messages: readonly Message[]): string {
 				? (message.content as (MessagePart | undefined)[])
 				: [],
 		)
-		.filter(
-			(
-				part,
-			): part is { type: "thinking"; thinking: string; redacted?: boolean } =>
-				part?.type === "thinking" &&
-				typeof part.thinking === "string" &&
-				part.redacted !== true,
+		.flatMap((part) =>
+			part?.type === "thinking" &&
+			typeof part.thinking === "string" &&
+			part.redacted !== true
+				? [part.thinking.trim()]
+				: [],
 		)
-		.map((part) => part.thinking.trim())
 		.filter(Boolean)
 		.join("\n\n");
 }
@@ -60,11 +58,11 @@ export function turnAnswer(
 	const text = (
 		steered
 			? messages
-					.filter(
-						(message): message is Assistant =>
-							isAssistant(message) && message.stopReason === "stop",
+					.flatMap((message) =>
+						isAssistant(message) && message.stopReason === "stop"
+							? [textOf(message.content).trim()]
+							: [],
 					)
-					.map((message) => textOf(message.content).trim())
 					.filter(Boolean)
 					.join("\n\n")
 			: textOf(last.message.content)

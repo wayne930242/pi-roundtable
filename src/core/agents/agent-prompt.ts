@@ -39,8 +39,7 @@ export function agentSystemPrompt(input: {
 	];
 	if (group) {
 		const others = group.members
-			.filter((m) => m.name !== agent.name)
-			.map((m) => `"${m.displayName}"`)
+			.flatMap((m) => (m.name === agent.name ? [] : [`"${m.displayName}"`]))
 			.join(", ");
 		parts.push(
 			`You are now speaking in the group chat "${group.group.displayName}" with ${w.name} and ${others}. Each of your turns shows the group messages since your last turn. Speak only for yourself and add what your role brings; do not repeat what others said. To hand the next word to a member, mention them as @display name.`,

@@ -64,18 +64,22 @@ export class OwnerThreads {
 					permissions.has(PermissionFlagsBits.ManageThreads))
 			);
 		};
-		return threads
-			.filter((t) => sees(owner, t) && sees(bot, t))
-			.map((t) => ({
-				id: t.id,
-				name: t.name,
-				parentId: t.parentId,
-				private: t.type === ChannelType.PrivateThread,
-				archived: t.archived,
-				locked: t.locked,
-				messageCount: t.messageCount,
-				createdAt: t.createdAt?.toISOString() ?? null,
-			}));
+		return threads.flatMap((t) =>
+			sees(owner, t) && sees(bot, t)
+				? [
+						{
+							id: t.id,
+							name: t.name,
+							parentId: t.parentId,
+							private: t.type === ChannelType.PrivateThread,
+							archived: t.archived,
+							locked: t.locked,
+							messageCount: t.messageCount,
+							createdAt: t.createdAt?.toISOString() ?? null,
+						},
+					]
+				: [],
+		);
 	}
 
 	async create(args: Record<string, unknown>) {

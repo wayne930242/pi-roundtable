@@ -90,13 +90,12 @@ export function operationPermissions(
 	channel: OwnerChannel,
 ): bigint[] {
 	const needed = OPERATION_PERMISSIONS[operation];
-	return channel.isThread()
-		? needed.map((flag) =>
-				flag === PermissionFlagsBits.SendMessages
-					? PermissionFlagsBits.SendMessagesInThreads
-					: flag,
-			)
-		: [...needed];
+	if (!channel.isThread()) return [...needed];
+	return needed.map((flag) =>
+		flag === PermissionFlagsBits.SendMessages
+			? PermissionFlagsBits.SendMessagesInThreads
+			: flag,
+	);
 }
 
 interface ChannelFile {
@@ -127,6 +126,16 @@ function serializeMessage(message: Message) {
 	};
 }
 
+function uploadOf(upload: ChannelFile) {
+	return {
+		attachment: Buffer.from(upload.dataBase64, "base64"),
+		name: upload.filename,
+		...(upload.description === undefined
+			? {}
+			: { description: upload.description }),
+	};
+}
+
 function messagePayload(
 	args: Record<string, unknown>,
 ): Pick<MessageCreateOptions, "content" | "allowedMentions" | "files"> {
@@ -134,17 +143,7 @@ function messagePayload(
 	return {
 		...(args.content !== undefined ? { content: String(args.content) } : {}),
 		allowedMentions: { parse: [] },
-		...(uploads
-			? {
-					files: uploads.map((upload) => ({
-						attachment: Buffer.from(upload.dataBase64, "base64"),
-						name: upload.filename,
-						...(upload.description === undefined
-							? {}
-							: { description: upload.description }),
-					})),
-				}
-			: {}),
+		...(uploads ? { files: uploads.map(uploadOf) } : {}),
 	};
 }
 
@@ -393,6 +392,9 @@ export function discordChannelExecutor(
 							"INVALID_CHANNEL: a thread takes its parent channel's permissions",
 						);
 					return editPermissions(channel, tool, args);
+				default:
+					// A message operation, handled below.
+					break;
 			}
 			const message = await channel.messages.fetch(String(args.messageId));
 			if (tool === "discord_edit_message")

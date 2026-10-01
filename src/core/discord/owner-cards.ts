@@ -362,9 +362,9 @@ export class OwnerCards implements InteractionModule {
 		}
 		if (interaction.isStringSelectMenu() && action === "pick") {
 			const values = interaction.values;
-			const choices = question.options
-				.filter((_option, i) => values.includes(String(i)))
-				.map((option) => option.label);
+			const choices = question.options.flatMap((option, i) =>
+				values.includes(String(i)) ? [option.label] : [],
+			);
 			if (values.includes(OTHER)) {
 				card.picked = choices;
 				await interaction.showModal(answerModal(id));

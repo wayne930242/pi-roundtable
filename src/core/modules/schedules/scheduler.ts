@@ -31,6 +31,8 @@ function statusText(outcome: ScheduledOutcome): string {
 			return `failed: ${outcome.error}`.slice(0, 300);
 		case "skipped":
 			return `skipped: ${outcome.reason}`;
+		default:
+			return outcome satisfies never;
 	}
 }
 
@@ -99,6 +101,7 @@ export class Scheduler {
 
 	/** Resolves once every started run has finished. */
 	async idle(): Promise<void> {
+		// pi-lens-ignore: no-single-promise-in-promise-methods — the spread holds every run in flight, none to many; it is not one promise
 		await Promise.all([...this.#running]);
 	}
 

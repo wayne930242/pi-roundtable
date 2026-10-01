@@ -10,6 +10,7 @@ const BADGE = { x: 396, y: 396, radius: 64 };
 const hsl = (h: number, s: number, l: number): string =>
 	`hsl(${Math.round(h) % 360},${s}%,${l}%)`;
 
+// pi-lens-ignore: hardcoded-url — the SVG XML namespace, a fixed identifier rather than an address that is fetched
 const layer = (body: string): Buffer =>
 	Buffer.from(
 		`<svg xmlns="http://www.w3.org/2000/svg" width="${SIDE}" height="${SIDE}" viewBox="0 0 ${SIDE} ${SIDE}">${body}</svg>`,

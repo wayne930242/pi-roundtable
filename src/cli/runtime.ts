@@ -26,7 +26,7 @@ export async function openModelRuntime(
 ): Promise<ModelRuntime> {
 	process.env.PI_CODING_AGENT_DIR = agentDir;
 	const authPath = join(agentDir, "auth.json");
-	return await ModelRuntime.create(
+	return ModelRuntime.create(
 		existsSync(authPath)
 			? { authPath, refreshOnCreate: false }
 			: { credentials: emptyCredentials, refreshOnCreate: false },
@@ -47,7 +47,7 @@ export async function assemble(
 	config: Parameters<typeof defineRoundtable>[0],
 	agentDir: string,
 ): Promise<DefinedRoundtable> {
-	return await defineRoundtable(config, {
+	return defineRoundtable(config, {
 		modelRuntime: await openModelRuntime(agentDir),
 	});
 }

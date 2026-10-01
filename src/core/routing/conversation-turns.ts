@@ -9,7 +9,7 @@ import { splitReply } from "../presentation/reply-splitter.ts";
 import { thinkingLine } from "../presentation/thinking-line.ts";
 import type { ChannelKey, ToolSelection, TurnSelection } from "../sessions.ts";
 import type { Speaker } from "../speakers.ts";
-import { settleTurn } from "./settle-turn.ts";
+import { endOf, settleTurn } from "./settle-turn.ts";
 
 /** One turn of a conversation, as a claim asks for it. */
 export interface ConversationTurnInput {
@@ -106,7 +106,7 @@ export function conversationTurns(
 			}
 			events.turnEnded({
 				...turn,
-				result: result.ok ? "ok" : result.stopped ? "stopped" : "failed",
+				result: endOf(result),
 			});
 			try {
 				if (!result.ok && !result.stopped)

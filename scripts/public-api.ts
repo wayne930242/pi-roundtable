@@ -91,6 +91,7 @@ export function entryNames(source: string): {
 			).push(declaration.id.name);
 		}
 	}
+	// pi-lens-ignore: no-sort-without-comparator — export names sort by code unit, so the report reads the same on every machine
 	return { values: values.sort(), types: types.sort() };
 }
 
@@ -188,14 +189,13 @@ export function inspectDeclarations(root: string): ApiReport {
 			const declaration =
 				node.type === "ExportNamedDeclaration" ? node.declaration : node;
 			if (!declaration) continue;
-			const names =
-				declaration.type === "VariableDeclaration"
-					? declaration.declarations.flatMap((item) =>
-							item.id.type === "Identifier" ? [item.id.name] : [],
-						)
-					: "id" in declaration && declaration.id?.type === "Identifier"
-						? [declaration.id.name]
-						: [];
+			let names: string[] = [];
+			if (declaration.type === "VariableDeclaration")
+				names = declaration.declarations.flatMap((item) =>
+					item.id.type === "Identifier" ? [item.id.name] : [],
+				);
+			else if ("id" in declaration && declaration.id?.type === "Identifier")
+				names = [declaration.id.name];
 			for (const name of names) {
 				const text = source
 					.slice(declaration.start ?? 0, declaration.end ?? 0)
@@ -232,6 +232,7 @@ export function inspectDeclarations(root: string): ApiReport {
 	for (const [entry, path] of Object.entries(PUBLIC_ENTRIES)) {
 		const file = join(root, path.replace(/\.ts$/, ".d.ts"));
 		entries[entry] = {};
+		// pi-lens-ignore: no-sort-without-comparator — export names sort by code unit, so the report reads the same on every machine
 		for (const name of [...load(file).exports.keys()].sort()) {
 			const binding = origin({ file, name });
 			if (!binding) continue; // External dependency types are not package-private types.
@@ -333,10 +334,12 @@ export function inspectDeclarations(root: string): ApiReport {
 		),
 		leaks: [...leaks]
 			.sort(([a], [b]) => a.localeCompare(b))
+			// pi-lens-ignore: no-sort-without-comparator — type names sort by code unit, so the report reads the same on every machine
 			.map(([id, labels]) => ({ id, references: [...labels].sort() })),
 		discordTypes: Object.fromEntries(
 			Object.entries(discordTypes).map(([entry, used]) => [
 				entry,
+				// pi-lens-ignore: no-sort-without-comparator — type names sort by code unit, so the report reads the same on every machine
 				[...used].sort(),
 			]),
 		),

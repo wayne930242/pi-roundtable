@@ -2,6 +2,7 @@ import pino from "pino";
 
 /** One log method: fields and a message, or a message alone. */
 export interface LogFn {
+	// pi-lens-ignore: no-bare-object-param — LogFn is public API and pino's own call signature takes any object; a narrower type would refuse loggers that pass an interface-typed value
 	(fields: object, message?: string): void;
 	(message: string): void;
 }

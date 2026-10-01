@@ -4,6 +4,18 @@ import { AgentError } from "../../domain/errors.ts";
 import { checkRepoName } from "./repo-name.ts";
 import { checkSkillName, readSkillFile } from "./skill-rules.ts";
 
+/** The child folders of `dir` that hold a SKILL.md, as paths from the repository root. */
+function skillFoldersUnder(dir: string, relative: string): string[] {
+	const prefix = relative ? `${relative}/` : "";
+	const folders = readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
+		entry.isDirectory() && existsSync(join(dir, entry.name, "SKILL.md"))
+			? [`${prefix}${entry.name}`]
+			: [],
+	);
+	// pi-lens-ignore: no-sort-without-comparator — folder paths sort by code unit, the same order on every machine
+	return folders.sort();
+}
+
 /**
  * The skills a link would register: the one at a repository path, or every child folder with a
  * SKILL.md (behavior 15). Throws one error listing every problem, so nothing is half linked.
@@ -28,14 +40,7 @@ export function planLinkedSkills(
 		throw new AgentError(`${repo} has no folder ${relative || "."}.`);
 	const folders = existsSync(join(dir, "SKILL.md"))
 		? [relative]
-		: readdirSync(dir, { withFileTypes: true })
-				.filter(
-					(entry) =>
-						entry.isDirectory() &&
-						existsSync(join(dir, entry.name, "SKILL.md")),
-				)
-				.map((entry) => (relative ? `${relative}/${entry.name}` : entry.name))
-				.sort();
+		: skillFoldersUnder(dir, relative);
 	if (folders.length === 0)
 		throw new AgentError(
 			`${repo}:${relative || "."} has no SKILL.md, nor any folder with one.`,

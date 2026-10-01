@@ -42,8 +42,7 @@ export function skillCatalog(
 				: { description: one.description, file: one.file }),
 			groups: store
 				.groups()
-				.filter((g) => g.skills.includes(name))
-				.map((g) => g.name),
+				.flatMap((g) => (g.skills.includes(name) ? [g.name] : [])),
 			carriers: store.carriers(name),
 		};
 	});
@@ -93,8 +92,7 @@ export function skillListText(
 			continue;
 		const groups = store
 			.groups()
-			.filter((g) => g.skills.includes(name))
-			.map((g) => g.name);
+			.flatMap((g) => (g.skills.includes(name) ? [g.name] : []));
 		const carriers = store.carriers(name);
 		const missing = "reason" in one ? ` — missing: ${one.reason}` : "";
 		rows.push(

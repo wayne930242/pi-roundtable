@@ -109,6 +109,7 @@ async function startInBackground(
 ): Promise<void> {
 	const { services, servicePlugins, handlers } = registry;
 	await Promise.all(
+		// pi-lens-ignore: array-callback-return — an async callback returns its promise on every path; map only starts the tasks for Promise.all, and the early return skips a service with no background start
 		services.map(async (service) => {
 			if (!service.startInBackground) return;
 			const plugin = servicePlugins.get(service) ?? "unknown";

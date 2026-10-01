@@ -262,6 +262,12 @@ const DISCORD_EPOCH = 1420070400000;
 const BASE64 =
 	/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
 
+/** The `=` padding a base64 string ends with, which carries no bytes. */
+function paddingOf(data: string): number {
+	if (data.endsWith("==")) return 2;
+	return data.endsWith("=") ? 1 : 0;
+}
+
 /** Checks and fills defaults into a tool's arguments; throws ChannelToolError otherwise. */
 export function parseChannelTool(
 	tool: string,
@@ -307,9 +313,7 @@ export function parseChannelTool(
 			if (!BASE64.test(upload.dataBase64))
 				throw new ChannelToolError("INVALID_CHANNEL_BASE64");
 			const data = upload.dataBase64;
-			bytes +=
-				(data.length / 4) * 3 -
-				(data.endsWith("==") ? 2 : data.endsWith("=") ? 1 : 0);
+			bytes += (data.length / 4) * 3 - paddingOf(data);
 			if (bytes > CHANNEL_UPLOAD_MAX_BYTES)
 				throw new ChannelToolError("INVALID_CHANNEL_UPLOAD_SIZE");
 		}

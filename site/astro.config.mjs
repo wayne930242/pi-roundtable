@@ -1,6 +1,7 @@
 import starlight from "@astrojs/starlight";
 import { defineConfig } from "astro/config";
 
+// pi-lens-ignore: hardcoded-url-js — the site's own address, in the config that sets it
 const site = "https://pi-roundtable.wayneh.tw";
 const description =
 	"An AI roundtable that creates its own personas and skills: a Discord agent server on Pi, extended with TypeScript plugins.";

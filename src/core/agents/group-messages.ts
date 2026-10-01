@@ -43,7 +43,7 @@ export class GroupMessages {
 		const rows: MessageRow[] = await this.#sql`
 			SELECT id, author, author_name, text, created_at FROM agent_group_messages
 			WHERE guild_id = ${this.#guild} AND group_name = ${group} ORDER BY id DESC LIMIT ${limit}`;
-		return rows.reverse().map(toMessage);
+		return rows.toReversed().map(toMessage);
 	}
 
 	/** Group messages the member has not received yet, its own excluded; the newest `limit` are carried. */

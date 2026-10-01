@@ -80,8 +80,9 @@ export class StoredSkillRegistry implements SkillRegistry {
 	linkedFrom(repo: string): string[] {
 		return this.#options.store
 			.skills()
-			.filter((entry) => entry.kind === "linked" && entry.repo === repo)
-			.map((entry) => entry.name);
+			.flatMap((entry) =>
+				entry.kind === "linked" && entry.repo === repo ? [entry.name] : [],
+			);
 	}
 
 	/** The registered skills an agent carries, as the dashboard lists them. */

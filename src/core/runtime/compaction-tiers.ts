@@ -182,19 +182,18 @@ export class CompactionTiers {
 				event: string,
 				handler: Handler,
 			) => () => void;
-			const on = ((event: string, handler: Handler) =>
-				register(
-					event,
-					event === "session_before_compact"
-						? (compaction, ctx) =>
-								gate(compaction as SessionBeforeCompactEvent)
-									? handler(compaction, ctx)
-									: undefined
-						: handler,
-				)) as ExtensionAPI["on"];
+			const on = ((event: string, handler: Handler) => {
+				if (event !== "session_before_compact") return register(event, handler);
+				return register(event, (compaction, ctx) =>
+					gate(compaction as SessionBeforeCompactEvent)
+						? handler(compaction, ctx)
+						: undefined,
+				);
+			}) as ExtensionAPI["on"];
 			return compactor(
 				new Proxy(pi, {
 					get: (target, prop, receiver) =>
+						// pi-lens-ignore: no-reflect-get — a Proxy get trap: the receiver keeps a getter's `this` on the proxy, which target[prop] would not
 						prop === "on" ? on : Reflect.get(target, prop, receiver),
 				}),
 			);

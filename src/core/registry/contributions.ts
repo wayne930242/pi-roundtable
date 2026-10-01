@@ -403,7 +403,7 @@ export function linkSessions(registry: Registry): LinkedSessions {
 		prompt: registry.prompt,
 		persona: (kind) => personas.get(kind)?.prompt(),
 		requiredTools: [...new Set(registry.requiredTools)],
-		agentTools: registry.tools.filter((t) => t.agent).map((t) => t.name),
+		agentTools: registry.tools.flatMap((t) => (t.agent ? [t.name] : [])),
 		agentSelection: () => mergeSelections(registry.agentSelections),
 	};
 }

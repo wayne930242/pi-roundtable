@@ -114,15 +114,16 @@ export function renderProject(
 	};
 	const skeleton = filesUnder(dir)
 		.map((file) => relative(dir, file))
-		.filter(
-			(path) =>
-				!path.startsWith(`${PLUGIN_DIR}/`) &&
-				!path.startsWith(`${OFFICIAL_DIR}/`),
-		)
-		.map((path) => ({
-			path: targetOf(path),
-			content: fill(readFileSync(join(dir, path), "utf8"), values),
-		}));
+		.flatMap((path) =>
+			path.startsWith(`${PLUGIN_DIR}/`) || path.startsWith(`${OFFICIAL_DIR}/`)
+				? []
+				: [
+						{
+							path: targetOf(path),
+							content: fill(readFileSync(join(dir, path), "utf8"), values),
+						},
+					],
+		);
 	return [...skeleton, ...renderPlugin(pluginNames("hello"), dir)];
 }
 

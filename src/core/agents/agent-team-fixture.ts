@@ -115,9 +115,11 @@ export class FakeChannels implements AgentChannels {
 		this.webhooksRemoved.push(channelId);
 	}
 	texts(channelId: string) {
-		return this.posts
-			.filter((p) => p.channelId === channelId)
-			.map((p) => `${p.post.name}: ${p.post.chunks.join("")}`);
+		return this.posts.flatMap((p) =>
+			p.channelId === channelId
+				? [`${p.post.name}: ${p.post.chunks.join("")}`]
+				: [],
+		);
 	}
 }
 

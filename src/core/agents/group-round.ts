@@ -15,20 +15,21 @@ const PROMPT_CHARS_FOR_SCORING = 1_200;
 const escapeRegExp = (value: string) =>
 	value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
+const mentions = (text: string, label: string) =>
+	// The label is an agent's name, escaped so every character of it matches literally.
+	// nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp
+	new RegExp(`@${escapeRegExp(label)}(?![\\p{L}\\p{N}_-])`, "iu").test(text);
+
 /** Members a text names with `@display name` or `@name`, in group order. */
 export function mentionedMembers(
 	text: string,
 	members: readonly Agent[],
 ): string[] {
-	return members
-		.filter((member) =>
-			[member.displayName, member.name].some((label) =>
-				new RegExp(`@${escapeRegExp(label)}(?![\\p{L}\\p{N}_-])`, "iu").test(
-					text,
-				),
-			),
-		)
-		.map((member) => member.name);
+	return members.flatMap((member) =>
+		[member.displayName, member.name].some((label) => mentions(text, label))
+			? [member.name]
+			: [],
+	);
 }
 
 /**

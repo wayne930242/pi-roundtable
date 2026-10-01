@@ -61,12 +61,11 @@ export async function teamStatus(ctx: TeamContext): Promise<TeamStatus> {
 			schedules: home ? (await schedules.forChannel(home)).length : 0,
 		});
 	}
-	const groups: GroupStatus[] = store
-		.groups()
-		.filter((group) => group.status === "active")
-		.map((group) => {
-			const lastActive = turns.lastGroupActive(group.name);
-			return {
+	const groups: GroupStatus[] = store.groups().flatMap((group) => {
+		if (group.status !== "active") return [];
+		const lastActive = turns.lastGroupActive(group.name);
+		return [
+			{
 				name: group.name,
 				displayName: group.displayName,
 				channelId: group.channelId,
@@ -74,7 +73,8 @@ export async function teamStatus(ctx: TeamContext): Promise<TeamStatus> {
 				host: store.agent(group.host)?.displayName ?? group.host,
 				busy: queue.size(discordKey(group.channelId)),
 				...(lastActive ? { lastActive } : {}),
-			};
-		});
+			},
+		];
+	});
 	return { agents, groups };
 }

@@ -120,20 +120,20 @@ export function defineTool<Schema extends TObject>(
 		}),
 	};
 	const hold = spec.hold;
-	return {
+	const contribution = {
 		name,
 		minTier: spec.minTier,
 		agent: spec.agent ?? true,
 		session,
-		...(hold
-			? {
-					hold: {
-						name: `tool:${name}`,
-						describe: (tool, input) =>
-							tool === name ? hold(input as Static<Schema>) : undefined,
-					},
-				}
-			: {}),
+	};
+	if (!hold) return contribution;
+	return {
+		...contribution,
+		hold: {
+			name: `tool:${name}`,
+			describe: (tool, input) =>
+				tool === name ? hold(input as Static<Schema>) : undefined,
+		},
 	};
 }
 
