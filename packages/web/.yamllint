@@ -1,0 +1,8 @@
+---
+extends: default
+rules:
+  # Actions are pinned by commit SHA with the release in a trailing comment, which runs past 80.
+  line-length:
+    max: 120
+  comments:
+    min-spaces-from-content: 1
