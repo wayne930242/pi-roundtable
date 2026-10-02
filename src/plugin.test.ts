@@ -594,6 +594,7 @@ describe("draw_cards", () => {
 	) => {
 		const { harness, surface } = await open({ deckDir });
 		expect(await harness.runTool("draw_cards", args)).toMatch(expected);
+		expect(harness.files).toHaveLength(0);
 		expect(surface.replies).toHaveLength(0);
 		await harness.stop();
 	};
