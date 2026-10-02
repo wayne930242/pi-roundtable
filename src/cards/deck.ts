@@ -5,7 +5,8 @@ import {
 	realpathSync,
 	statSync,
 } from "node:fs";
-import { extname, isAbsolute, join, relative, resolve } from "node:path";
+import { extname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { Image } from "canvas";
 import { Type } from "typebox";
 import Value from "typebox/value";
 
@@ -14,6 +15,10 @@ export const FACE_EXTENSIONS = [".png", ".jpg", ".jpeg", ".gif"] as const;
 
 /** A deck's id is its directory name; it is what the model passes as `deck`. */
 const DECK_ID = /^[a-z0-9][a-z0-9_-]*$/;
+
+/** The card heights, as a multiple of the width, that a spread can draw. */
+export const MIN_ASPECT = 0.25;
+export const MAX_ASPECT = 4;
 
 const CardEntry = Type.Object(
 	{
@@ -29,7 +34,9 @@ const Manifest = Type.Object(
 	{
 		name: Type.String({ minLength: 1 }),
 		reversals: Type.Optional(Type.Boolean()),
-		aspect: Type.Optional(Type.Number({ exclusiveMinimum: 0 })),
+		aspect: Type.Optional(
+			Type.Number({ minimum: MIN_ASPECT, maximum: MAX_ASPECT }),
+		),
 		cards: Type.Array(CardEntry, { minItems: 1 }),
 	},
 	{ additionalProperties: false },
@@ -85,10 +92,33 @@ function readManifest(id: string, dir: string) {
 	return json;
 }
 
+/** Decodes the face once, so a file that is not an image stops the start rather than the first draw. */
+function checkImage(id: string, card: string, file: string, path: string) {
+	let problem: string | undefined;
+	const image = new Image();
+	image.onerror = (error) => {
+		problem = error.message;
+	};
+	image.src = readFileSync(path);
+	if (problem !== undefined || !image.complete || image.width === 0)
+		fail(
+			id,
+			`card ${card}: file ${file} cannot be read as an image${problem ? ` (${problem})` : ""}.`,
+		);
+	const aspect = image.height / image.width;
+	if (aspect < MIN_ASPECT || aspect > MAX_ASPECT)
+		fail(
+			id,
+			`card ${card}: file ${file} is ${image.width} by ${image.height} px, a height of ${aspect.toFixed(2)} times the width; cards must be between ${MIN_ASPECT} and ${MAX_ASPECT}.`,
+		);
+}
+
 /** Whether `path` is `dir` or below it. */
 function within(dir: string, path: string): boolean {
 	const inside = relative(dir, path);
-	return !inside.startsWith("..") && !isAbsolute(inside);
+	return (
+		inside !== ".." && !inside.startsWith(`..${sep}`) && !isAbsolute(inside)
+	);
 }
 
 function faceFile(id: string, dir: string, card: string, file: string) {
@@ -112,6 +142,7 @@ function faceFile(id: string, dir: string, card: string, file: string) {
 		);
 	// A link may not lead out of the deck directory either.
 	if (!within(realpathSync(dir), realpathSync(path))) outside();
+	checkImage(id, card, file, path);
 	return path;
 }
 

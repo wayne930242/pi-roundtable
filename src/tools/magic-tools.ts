@@ -12,6 +12,7 @@ import {
 	type ImageToolEnv,
 	imageTool,
 	literals,
+	strictObject,
 } from "./image-tool.ts";
 
 const SIZES = { small: 512, medium: 1024, large: 2048 } as const;
@@ -22,7 +23,7 @@ export function magicCircleTool(env: ImageToolEnv) {
 			name: "magic_circle_generate",
 			description:
 				"Draw a magic circle: a pentagram, hexagram, or Tree of Life, with optional elemental symbols at the quarters and text around the rim, and post it to the channel as an image.",
-			parameters: Type.Object({
+			parameters: strictObject({
 				type: literals(CIRCLE_TYPES, "custom draws a pentagram."),
 				style: Type.Optional(
 					literals(["traditional", "modern", "geometric"], "Line weight."),
@@ -70,7 +71,7 @@ export function sigilTool(env: ImageToolEnv) {
 			name: "sigil_generate",
 			description:
 				"Draw a sigil from an intention, by the chaos (letter elimination), rose cross, planetary, or geometric method, and post it to the channel as an image.",
-			parameters: Type.Object({
+			parameters: strictObject({
 				intention: Type.String({ minLength: 1, maxLength: 200 }),
 				method: literals(["chaos", "rose_cross", "planetary", "geometric"]),
 				complexity: Type.Optional(literals(["simple", "elaborate"])),
@@ -98,8 +99,8 @@ export function sacredGeometryTool(env: ImageToolEnv) {
 		{
 			name: "sacred_geometry_generate",
 			description:
-				"Draw sacred geometry: the Flower of Life, Metatron's Cube, the Sri Yantra, or the Vesica Piscis, and post it to the channel as an image.",
-			parameters: Type.Object({
+				"Draw sacred geometry: the Flower of Life, Metatron's Cube, a simplified Sri Yantra (nested triangles around a point, in a circle), or the Vesica Piscis, and post it to the channel as an image. More layers add rings of circles, nested shapes, or, for Metatron's Cube, the outer ring (two or more layers).",
+			parameters: strictObject({
 				pattern: literals([
 					"flower_of_life",
 					"metatron",

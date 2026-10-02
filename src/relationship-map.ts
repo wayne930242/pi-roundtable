@@ -30,6 +30,9 @@ export type EdgeType = (typeof EDGE_TYPES)[number];
 
 export const MAX_NODES = 40;
 export const MAX_EDGES = 80;
+/** Longest title, node id, node label, and edge label, in characters. */
+export const MAX_TITLE = 80;
+export const MAX_TEXT = 60;
 
 export interface MapNode {
 	id: string;
@@ -98,6 +101,11 @@ const EDGE_STYLES: Record<
 const CANVAS_PADDING = 80;
 const NODE_RADIUS = { pc: 40, npc: 30 } as const;
 const FACTION_SIZE = { w: 80, h: 36 } as const;
+/** Room between a node's text and the edge of its shape. */
+const TEXT_PAD = 10;
+const LABEL_PAD = 3;
+/** The picture stays within what canvas can allocate. */
+const MAX_SIDE = 16384;
 const LAYOUT_SIZE = 1200;
 
 interface SimNode extends SimulationNodeDatum {
@@ -106,6 +114,9 @@ interface SimNode extends SimulationNodeDatum {
 	y: number;
 	type: NodeType;
 	label?: string;
+	/** Half the width and height of the shape, grown to hold the node's text. */
+	halfW: number;
+	halfH: number;
 }
 
 interface SimLink extends SimulationLinkDatum<SimNode> {
@@ -149,15 +160,45 @@ function validate(input: MapInput): void {
 	}
 }
 
+/** The text of a node, as it is drawn: the id, then the label under it. */
+function nodeFonts(type: NodeType) {
+	return {
+		id: font(type === "pc" ? 16 : 14),
+		label: font(type === "pc" ? 12 : 11),
+	};
+}
+
+function shapeOf(
+	measure: CanvasRenderingContext2D,
+	n: MapNode,
+): { halfW: number; halfH: number } {
+	const fonts = nodeFonts(n.type);
+	measure.font = fonts.id;
+	let width = measure.measureText(n.id).width;
+	if (n.label) {
+		measure.font = fonts.label;
+		width = Math.max(width, measure.measureText(n.label).width);
+	}
+	if (n.type === "faction")
+		return {
+			halfW: Math.max(FACTION_SIZE.w, width + TEXT_PAD * 2) / 2,
+			halfH: FACTION_SIZE.h / 2,
+		};
+	const radius = NODE_RADIUS[n.type];
+	return { halfW: Math.max(radius, width / 2 + TEXT_PAD), halfH: radius };
+}
+
 function computeLayout(
 	input: MapInput,
 	random: Random,
+	measure: CanvasRenderingContext2D,
 ): { nodes: SimNode[]; links: SimLink[] } {
 	const nodes: SimNode[] = input.nodes.map((n) => ({
 		id: n.id,
 		x: LAYOUT_SIZE / 2 + (random() - 0.5) * 200,
 		y: LAYOUT_SIZE / 2 + (random() - 0.5) * 200,
 		type: n.type,
+		...shapeOf(measure, n),
 		...(n.label ? { label: n.label } : {}),
 	}));
 	const links: SimLink[] = input.edges.map((e) => ({
@@ -172,20 +213,35 @@ function computeLayout(
 			"link",
 			forceLink<SimNode, SimLink>(links)
 				.id((d) => d.id)
-				.distance(160),
+				.distance((link) => {
+					const [a, b] = [link.source, link.target].map((end) =>
+						typeof end === "object" ? (end as SimNode).halfW : 0,
+					);
+					return Math.max(160, (a ?? 0) + (b ?? 0) + 40);
+				}),
 		)
 		.force("charge", forceManyBody().strength(-400))
 		.force("center", forceCenter(LAYOUT_SIZE / 2, LAYOUT_SIZE / 2))
-		.force("collide", forceCollide(60))
+		.force(
+			"collide",
+			forceCollide<SimNode>((n) => Math.max(60, n.halfW + 10)),
+		)
 		.stop();
 	for (let i = 0; i < 300; i++) simulation.tick();
 	return { nodes, links };
 }
 
-function nodeRadius(node: SimNode): number {
-	return node.type === "faction"
-		? Math.max(FACTION_SIZE.w, FACTION_SIZE.h) / 2
-		: NODE_RADIUS[node.type];
+/** How far the edge of a node's shape is from its centre along the unit direction (ux, uy). */
+function reach(node: SimNode, ux: number, uy: number): number {
+	if (node.type === "faction")
+		return Math.min(
+			ux === 0 ? Infinity : node.halfW / Math.abs(ux),
+			uy === 0 ? Infinity : node.halfH / Math.abs(uy),
+		);
+	// The shape is an ellipse.
+	return (
+		(node.halfW * node.halfH) / Math.hypot(node.halfH * ux, node.halfW * uy)
+	);
 }
 
 function drawArrowHead(
@@ -229,7 +285,27 @@ function drawEdge(
 	const tgt = endOf(link.target, byId);
 	if (!src || !tgt) return;
 	const style = EDGE_STYLES[link.type];
-	rc.line(src.x, src.y, tgt.x, tgt.y, {
+	const dx = tgt.x - src.x;
+	const dy = tgt.y - src.y;
+	const dist = Math.hypot(dx, dy);
+	// The line runs between the edges of the two shapes, not through them.
+	let [from, to] = [
+		{ x: src.x, y: src.y },
+		{ x: tgt.x, y: tgt.y },
+	];
+	if (dist > 0) {
+		const ux = dx / dist;
+		const uy = dy / dist;
+		const [out, into] = [reach(src, ux, uy) + 4, reach(tgt, -ux, -uy) + 4];
+		if (dist > out + into + 8) {
+			from = { x: src.x + ux * out, y: src.y + uy * out };
+			to = { x: tgt.x - ux * into, y: tgt.y - uy * into };
+		}
+		if (style.arrow === "target" || style.arrow === "both")
+			drawArrowHead(ctx, from, to, style.stroke);
+		if (style.arrow === "both") drawArrowHead(ctx, to, from, style.stroke);
+	}
+	rc.line(from.x, from.y, to.x, to.y, {
 		stroke: style.stroke,
 		strokeWidth: style.strokeWidth,
 		roughness: style.roughness,
@@ -239,39 +315,13 @@ function drawEdge(
 			: {}),
 	});
 
-	const dx = tgt.x - src.x;
-	const dy = tgt.y - src.y;
-	const dist = Math.hypot(dx, dy);
-	if (dist > 0) {
-		const ux = dx / dist;
-		const uy = dy / dist;
-		if (style.arrow === "target" || style.arrow === "both") {
-			const r = nodeRadius(tgt) + 4;
-			drawArrowHead(
-				ctx,
-				src,
-				{ x: tgt.x - ux * r, y: tgt.y - uy * r },
-				style.stroke,
-			);
-		}
-		if (style.arrow === "both") {
-			const r = nodeRadius(src) + 4;
-			drawArrowHead(
-				ctx,
-				tgt,
-				{ x: src.x + ux * r, y: src.y + uy * r },
-				style.stroke,
-			);
-		}
-	}
-
 	if (link.label) {
 		const mx = (src.x + tgt.x) / 2;
 		const my = (src.y + tgt.y) / 2;
 		ctx.save();
 		ctx.font = font(11);
 		const width = ctx.measureText(link.label).width;
-		const pad = 3;
+		const pad = LABEL_PAD;
 		ctx.fillStyle = "rgba(255,255,255,0.85)";
 		ctx.fillRect(
 			mx - width / 2 - pad,
@@ -295,33 +345,27 @@ function drawNode(
 ): void {
 	const colors = COLORS[node.type];
 	const seed = roughSeed(random);
+	const fill = {
+		fill: colors.fill,
+		fillStyle: "hachure",
+		fillWeight: 0.5,
+		stroke: colors.stroke,
+		seed,
+	};
 	if (node.type === "faction") {
 		rc.rectangle(
-			node.x - FACTION_SIZE.w / 2,
-			node.y - FACTION_SIZE.h / 2,
-			FACTION_SIZE.w,
-			FACTION_SIZE.h,
-			{
-				fill: colors.fill,
-				fillStyle: "hachure",
-				fillWeight: 0.5,
-				stroke: colors.stroke,
-				strokeWidth: 1.5,
-				roughness: 1.2,
-				hachureGap: 6,
-				seed,
-			},
+			node.x - node.halfW,
+			node.y - node.halfH,
+			node.halfW * 2,
+			node.halfH * 2,
+			{ ...fill, strokeWidth: 1.5, roughness: 1.2, hachureGap: 6 },
 		);
 	} else {
-		rc.circle(node.x, node.y, NODE_RADIUS[node.type] * 2, {
-			fill: colors.fill,
-			fillStyle: "hachure",
-			fillWeight: 0.5,
-			stroke: colors.stroke,
+		rc.ellipse(node.x, node.y, node.halfW * 2, node.halfH * 2, {
+			...fill,
 			strokeWidth: 2,
 			roughness: 1.5,
 			hachureGap: 5,
-			seed,
 		});
 	}
 
@@ -349,25 +393,50 @@ export function renderRelationshipMap(
 ): Uint8Array {
 	validate(input);
 	ensureFont();
-	const { nodes, links } = computeLayout(input, random);
+	// The shapes grow to hold their text, so the text is measured before the layout.
+	const measure = createCanvas(1, 1).getContext("2d");
+	const { nodes, links } = computeLayout(input, random, measure);
 
 	let minX = Infinity;
 	let minY = Infinity;
 	let maxX = -Infinity;
 	let maxY = -Infinity;
-	for (const n of nodes) {
-		const r = n.type === "faction" ? FACTION_SIZE.w / 2 : NODE_RADIUS[n.type];
-		minX = Math.min(minX, n.x - r);
-		minY = Math.min(minY, n.y - r);
-		maxX = Math.max(maxX, n.x + r);
-		maxY = Math.max(maxY, n.y + r);
+	const include = (x0: number, y0: number, x1: number, y1: number) => {
+		minX = Math.min(minX, x0);
+		minY = Math.min(minY, y0);
+		maxX = Math.max(maxX, x1);
+		maxY = Math.max(maxY, y1);
+	};
+	for (const n of nodes)
+		include(n.x - n.halfW, n.y - n.halfH, n.x + n.halfW, n.y + n.halfH);
+	const byId = new Map(nodes.map((n) => [n.id, n]));
+	measure.font = font(11);
+	for (const link of links) {
+		const src = endOf(link.source, byId);
+		const tgt = endOf(link.target, byId);
+		if (!link.label || !src || !tgt) continue;
+		const half = measure.measureText(link.label).width / 2 + LABEL_PAD;
+		const [mx, my] = [(src.x + tgt.x) / 2, (src.y + tgt.y) / 2];
+		include(mx - half, my - 8 - LABEL_PAD, mx + half, my + 8 + LABEL_PAD);
+	}
+	let titleWidth = 0;
+	if (input.title) {
+		measure.font = font(20);
+		titleWidth = measure.measureText(input.title).width;
 	}
 	const titleOffset = input.title ? 40 : 0;
-	const width = Math.ceil(Math.max(400, maxX - minX + CANVAS_PADDING * 2));
+	const width = Math.ceil(
+		Math.max(400, maxX - minX + CANVAS_PADDING * 2, titleWidth + 40),
+	);
 	const height = Math.ceil(
 		Math.max(300, maxY - minY + CANVAS_PADDING * 2 + titleOffset),
 	);
-	const offsetX = CANVAS_PADDING - minX;
+	if (width > MAX_SIDE || height > MAX_SIDE)
+		throw new DrawingError(
+			`The map would be ${width} by ${height} px, which is too large to draw. Use shorter names or fewer nodes.`,
+		);
+	// The graph is centred; the title sits above it.
+	const offsetX = (width - (maxX - minX)) / 2 - minX;
 	const offsetY = CANVAS_PADDING + titleOffset - minY;
 	for (const n of nodes) {
 		n.x += offsetX;
@@ -391,7 +460,6 @@ export function renderRelationshipMap(
 	const rc = rough.canvas(
 		canvas as unknown as Parameters<typeof rough.canvas>[0],
 	);
-	const byId = new Map(nodes.map((n) => [n.id, n]));
 	for (const link of links) drawEdge(rc, ctx, link, byId, random);
 	for (const node of nodes) drawNode(rc, ctx, node, random);
 	return new Uint8Array(canvas.toBuffer("image/png"));

@@ -11,7 +11,7 @@ import { join } from "node:path";
 import { PluginError } from "pi-roundtable";
 import { testPlugin } from "pi-roundtable/testing";
 import { drawing } from "../plugin.ts";
-import { writeTestDecks } from "../testing/test-deck.ts";
+import { facePng, writeTestDecks } from "../testing/test-deck.ts";
 import { loadDecks } from "./deck.ts";
 
 let root = "";
@@ -24,7 +24,7 @@ afterAll(() => rmSync(root, { recursive: true, force: true }));
 function deckDirWith(
 	id: string,
 	manifest: unknown,
-	files: Record<string, string> = {},
+	files: Record<string, string | Buffer> = {},
 ): string {
 	const dir = mkdtempSync(join(root, "deckdir-"));
 	const deck = join(dir, id);
@@ -49,14 +49,18 @@ const card = (id: string, extra: Record<string, unknown> = {}) => ({
 describe("loadDecks", () => {
 	test("reads every deck under the directory, sorted by id", () => {
 		const decks = loadDecks(writeTestDecks());
-		expect(decks.map((deck) => deck.id)).toEqual(["test-poker", "test-tarot"]);
-		const tarot = decks[1];
+		expect(decks.map((deck) => deck.id)).toEqual([
+			"test-large",
+			"test-poker",
+			"test-tarot",
+		]);
+		const tarot = decks[2];
 		expect(tarot?.name).toBe("Test Tarot");
 		expect(tarot?.reversals).toBe(true);
 		expect(tarot?.cards).toHaveLength(10);
 		expect(tarot?.cards[0]?.face).toEndWith("/test-tarot/faces/major-0.png");
-		expect(decks[0]?.reversals).toBe(false);
-		expect(decks[0]?.cards[0]?.face).toBeUndefined();
+		expect(decks[1]?.reversals).toBe(false);
+		expect(decks[1]?.cards[0]?.face).toBeUndefined();
 	});
 
 	test("skips a subdirectory with no deck.json", () => {
@@ -150,6 +154,44 @@ describe("loadDecks", () => {
 			),
 			/deck bad: card x: file x\.tiff must be one of \.png, \.jpg, \.jpeg, \.gif\./,
 		));
+
+	test("a file that is not an image, whatever its name", () =>
+		refuses(
+			deckDirWith(
+				"bad",
+				{ name: "Bad", cards: [card("x", { file: "x.png" })] },
+				{ "x.png": "this is text" },
+			),
+			/deck bad: card x: file x\.png cannot be read as an image/,
+		));
+
+	test("a face too tall or too wide to be a card", () => {
+		refuses(
+			deckDirWith(
+				"bad",
+				{ name: "Bad", cards: [card("x", { file: "x.png" })] },
+				{ "x.png": facePng("x", 0, 20, 200) },
+			),
+			/deck bad: card x: file x\.png is 20 by 200 px/,
+		);
+	});
+
+	test("an aspect no card can have", () => {
+		for (const aspect of [0, 0.01, 200])
+			refuses(
+				deckDirWith("bad", { name: "Bad", aspect, cards: [card("x")] }),
+				/deck bad: deck\.json is not a valid manifest at \/aspect/,
+			);
+	});
+
+	test("a file name that only starts with two dots is inside the deck", () => {
+		const dir = deckDirWith(
+			"ok",
+			{ name: "Ok", cards: [card("x", { file: "..faces/x.png" })] },
+			{ "..faces/x.png": facePng("x", 0) },
+		);
+		expect(loadDecks(dir)[0]?.cards[0]?.face).toEndWith("/ok/..faces/x.png");
+	});
 
 	test("a face that is a link out of the deck directory", () => {
 		const dir = deckDirWith("bad", {

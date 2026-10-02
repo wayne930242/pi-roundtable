@@ -5,7 +5,12 @@ import { createCanvas } from "canvas";
 import { ensureFont, font } from "../style.ts";
 
 /** A generated card face: a coloured portrait with the card's number, as a PNG. */
-function face(label: string, hue: number, width = 140, height = 240): Buffer {
+export function facePng(
+	label: string,
+	hue: number,
+	width = 140,
+	height = 240,
+): Buffer {
 	ensureFont();
 	const canvas = createCanvas(width, height);
 	const ctx = canvas.getContext("2d");
@@ -23,9 +28,9 @@ function face(label: string, hue: number, width = 140, height = 240): Buffer {
 }
 
 /**
- * Writes two placeholder decks and returns their directory. `test-tarot` has generated faces
- * and two groups; `test-poker` has no faces at all and is upright by default. Nothing here
- * is a real deck.
+ * Writes placeholder decks and returns their directory. `test-tarot` has generated faces and
+ * two groups; `test-poker` has no faces and is upright by default; `test-large` has 100 cards
+ * with no faces. Nothing here is a real deck.
  */
 export function writeTestDecks(): string {
 	const root = mkdtempSync(join(tmpdir(), "drawing-decks-"));
@@ -35,7 +40,10 @@ export function writeTestDecks(): string {
 	const cards = Array.from({ length: 10 }, (_, i) => {
 		const major = i < 6;
 		const id = major ? `major-${i}` : `minor-${i - 6}`;
-		writeFileSync(join(tarot, "faces", `${id}.png`), face(String(i), i * 36));
+		writeFileSync(
+			join(tarot, "faces", `${id}.png`),
+			facePng(String(i), i * 36),
+		);
 		return {
 			id,
 			name: major ? `Major Card ${i}` : `Minor Card ${i - 6}`,
@@ -63,6 +71,19 @@ export function writeTestDecks(): string {
 			name: "Test Playing Cards",
 			reversals: false,
 			cards: pokerCards,
+		}),
+	);
+
+	const large = join(root, "test-large");
+	mkdirSync(large);
+	writeFileSync(
+		join(large, "deck.json"),
+		JSON.stringify({
+			name: "Test Large Deck",
+			cards: Array.from({ length: 100 }, (_, i) => ({
+				id: `c${i}`,
+				name: `Card ${i}`,
+			})),
 		}),
 	);
 	return root;

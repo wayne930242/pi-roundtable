@@ -53,6 +53,14 @@ function path(
 ): void {
 	const [first, ...rest] = points;
 	if (!first) return;
+	if (rest.length === 0) {
+		// A path of one point, such as an intention of one letter, would draw nothing; mark the point.
+		ctx.beginPath();
+		ctx.arc(first[0], first[1], Math.max(4, ctx.lineWidth * 2), 0, Math.PI * 2);
+		ctx.fillStyle = ctx.strokeStyle;
+		ctx.fill();
+		return;
+	}
 	ctx.beginPath();
 	ctx.moveTo(first[0], first[1]);
 	for (const [x, y] of rest) ctx.lineTo(x, y);
@@ -341,7 +349,7 @@ export function renderSigil(options: SigilOptions): Uint8Array {
 	} else if (options.method === "planetary") {
 		if (elaborate) {
 			thin();
-			for (let i = 1; i < 8; i++) circle(ctx, c, c, (size / 8) * i);
+			for (let i = 1; i <= 7; i++) circle(ctx, c, c, (reach * i) / 7);
 		}
 		thick();
 		const radii = letters(options.intention).map(planetaryRadius);
@@ -437,35 +445,32 @@ export function renderSacredGeometry(options: GeometryOptions): Uint8Array {
 	const turn = (options.rotation * Math.PI) / 180;
 	ctx.lineWidth = 2;
 
+	// Every figure is scaled to fit inside the frame with a margin, so each layer shows.
+	const reach = c - 20;
+
 	if (options.pattern === "metatron") {
-		// Thirteen equal circles: the centre, a touching inner ring, and an outer ring twice as far.
-		const r = size * 0.19;
+		// Thirteen equal circles: the centre, a touching inner ring, and an outer ring twice as far,
+		// with a line between every pair of centres. One layer is the inner seven circles; two or more, all thirteen.
+		const r = reach / 2.5;
 		const centers: Point[] = [[c, c]];
 		for (const distance of [r, r * 2]) {
 			for (let i = 0; i < 6; i++)
 				centers.push(polar(c, c, distance, (2 * Math.PI * i) / 6 + turn));
 		}
-		centers.slice(0, options.layers >= 2 ? 13 : 7).forEach(([x, y], i) => {
+		const shown = centers.slice(0, options.layers >= 2 ? 13 : 7);
+		shown.forEach(([x, y], i) => {
 			ctx.strokeStyle = color(i);
 			circle(ctx, x, y, r / 2);
 		});
-		const links: [number, number][] = [];
-		for (let i = 1; i <= 6; i++) links.push([0, i], [i, (i % 6) + 1]);
-		if (options.layers >= 2) {
-			for (let i = 1; i <= 6; i++) links.push([i, i + 6], [i + 6, (i % 6) + 7]);
-		}
 		ctx.strokeStyle = colors[0] ?? s.line;
 		ctx.lineWidth = 1;
-		for (const [a, b] of links) {
-			const from = centers[a];
-			const to = centers[b];
-			if (from && to) path(ctx, [from, to]);
-		}
+		for (const [i, from] of shown.entries())
+			for (const to of shown.slice(i + 1)) path(ctx, [from, to]);
 	} else if (options.pattern === "sri_yantra") {
+		// A simplified yantra: upward and downward triangles in nested pairs around a point, inside a circle.
 		const base = size / 3;
 		for (let layer = 0; layer < options.layers; layer++) {
 			const t = base - (layer * base) / (options.layers + 1);
-			if (t <= 10) break;
 			ctx.strokeStyle = color(layer);
 			const up: Point[] = [
 				[c, c - t],
@@ -482,11 +487,12 @@ export function renderSacredGeometry(options: GeometryOptions): Uint8Array {
 		}
 		ctx.strokeStyle = colors[0] ?? s.line;
 		circle(ctx, c, c, base + 20);
+		path(ctx, [[c, c]]);
 	} else if (options.pattern === "vesica_pisces") {
-		const base = size / 4;
+		// Pairs of overlapping circles, each centred half a radius from the middle; the largest pair fills the frame.
+		const outer = reach / 1.5;
 		for (let layer = 0; layer < options.layers; layer++) {
-			const r = base + (layer * base) / 3;
-			if (r >= size / 2) break;
+			const r = (outer * (layer + 1)) / options.layers;
 			const dx = r * 0.5 * Math.cos(turn);
 			const dy = r * 0.5 * Math.sin(turn);
 			ctx.strokeStyle = color(layer);
@@ -494,23 +500,25 @@ export function renderSacredGeometry(options: GeometryOptions): Uint8Array {
 			circle(ctx, c + dx, c + dy, r);
 		}
 	} else {
-		// Flower of life: rings of six-fold packed circles around a centre circle.
-		const r = size / 6;
+		// Flower of life: circles of one radius on a six-fold lattice whose spacing is that radius, ring after ring around the centre.
+		const r = reach / (options.layers + 1);
 		ctx.strokeStyle = colors[0] ?? s.line;
 		circle(ctx, c, c, r);
-		for (let layer = 1; layer <= options.layers; layer++) {
-			const count = 6 * layer;
-			ctx.strokeStyle = color(layer);
-			for (let i = 0; i < count; i++) {
-				const [x, y] = polar(
-					c,
-					c,
-					layer * r * 1.1,
-					(2 * Math.PI * i) / count + turn,
-				);
-				if (x - r < 0 || x + r > size || y - r < 0 || y + r > size) continue;
-				circle(ctx, x, y, r);
-			}
+		for (let ring = 1; ring <= options.layers; ring++) {
+			ctx.strokeStyle = color(ring);
+			const corners = Array.from({ length: 6 }, (_, j) =>
+				polar(c, c, ring * r, (Math.PI * j) / 3 + turn),
+			);
+			corners.forEach((from, j) => {
+				const to = corners[(j + 1) % 6] ?? from;
+				for (let step = 0; step < ring; step++)
+					circle(
+						ctx,
+						from[0] + ((to[0] - from[0]) * step) / ring,
+						from[1] + ((to[1] - from[1]) * step) / ring,
+						r,
+					);
+			});
 		}
 	}
 	return s.png();

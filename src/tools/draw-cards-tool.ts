@@ -4,13 +4,19 @@ import { groupsOf } from "../cards/deck.ts";
 import { drawCards } from "../cards/draw.ts";
 import {
 	autoLayout,
+	checkSpread,
 	MAX_GRID,
 	renderSpread,
 	type SpreadPosition,
 } from "../cards/spread.ts";
 import { DrawingError } from "../errors.ts";
 import type { Random } from "../random.ts";
-import { type ImageToolEnv, imageTool, literals } from "./image-tool.ts";
+import {
+	type ImageToolEnv,
+	imageTool,
+	literals,
+	strictObject,
+} from "./image-tool.ts";
 
 const MAX_DRAW = 100;
 
@@ -33,7 +39,7 @@ export function drawCardsTool(
 		{
 			name: "draw_cards",
 			description: `Draw cards from a full, freshly shuffled deck and post a picture of the spread to the channel. Each draw is independent; pass exclude to leave cards out. Read the returned cards, not your own guess. Decks: ${decks.map(describeDeck).join("; ")}.`,
-			parameters: Type.Object({
+			parameters: strictObject({
 				deck: literals(
 					[first, ...rest].map((deck) => deck.id),
 					"The deck to draw from.",
@@ -58,7 +64,7 @@ export function drawCardsTool(
 				),
 				spread: Type.Optional(
 					Type.Array(
-						Type.Object({
+						strictObject({
 							row: Type.Integer({ minimum: 0, maximum: MAX_GRID }),
 							col: Type.Integer({ minimum: 0, maximum: MAX_GRID }),
 							label: Type.String({
@@ -83,11 +89,8 @@ export function drawCardsTool(
 					);
 				const positions: SpreadPosition[] =
 					args.spread ?? autoLayout(args.count);
-				// Checked before the draw, so a bad spread costs nothing.
-				if (positions.length !== args.count)
-					throw new DrawingError(
-						`The spread has ${positions.length} positions for ${args.count} cards. Give one position for each card.`,
-					);
+				// Checked before the draw, so a refused spread leaves the random source where it was.
+				checkSpread(positions, args.count);
 				const cards = drawCards({
 					deck,
 					count: args.count,

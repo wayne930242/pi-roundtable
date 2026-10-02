@@ -1,7 +1,7 @@
 import { type CanvasRenderingContext2D, createCanvas, loadImage } from "canvas";
 import { DrawingError } from "../errors.ts";
 import { ensureFont, font, PALETTE } from "../style.ts";
-import type { Deck } from "./deck.ts";
+import { type Deck, MAX_ASPECT, MIN_ASPECT } from "./deck.ts";
 import type { DrawnCard } from "./draw.ts";
 
 export interface SpreadPosition {
@@ -10,6 +10,7 @@ export interface SpreadPosition {
 	label: string;
 }
 
+/** The most rows or columns a spread of your own may use; the schema holds the model to it. */
 export const MAX_GRID = 10;
 
 const PADDING = 32;
@@ -18,6 +19,9 @@ const GAP = 20;
 const LABEL = 26;
 const NAME = 30;
 const DEFAULT_ASPECT = 1.5;
+/** The picture stays within what canvas can allocate. */
+const MAX_SIDE = 16384;
+const MAX_PIXELS = 40_000_000;
 
 function cardWidth(count: number): number {
 	if (count <= 5) return 200;
@@ -46,11 +50,9 @@ export function checkSpread(
 		);
 	const cells = new Set<string>();
 	for (const { row, col } of positions) {
-		if (
-			![row, col].every((n) => Number.isInteger(n) && n >= 0 && n <= MAX_GRID)
-		)
+		if (![row, col].every((n) => Number.isInteger(n) && n >= 0))
 			throw new DrawingError(
-				`Spread positions need a row and a column from 0 to ${MAX_GRID}; got row ${row}, column ${col}.`,
+				`Spread positions need a row and a column that are whole numbers from 0; got row ${row}, column ${col}.`,
 			);
 		const cell = `${row}:${col}`;
 		if (cells.has(cell))
@@ -114,12 +116,25 @@ export async function renderSpread(
 	checkSpread(positions, cards.length);
 	ensureFont();
 	const faces = await Promise.all(
-		cards.map((card) => (card.face ? loadImage(card.face) : undefined)),
+		cards.map(async (card) => {
+			if (!card.face) return undefined;
+			try {
+				return await loadImage(card.face);
+			} catch (error) {
+				throw new DrawingError(
+					`The face of card ${card.id} in deck ${deck.id} cannot be read as an image (${error instanceof Error ? error.message : String(error)}). Fix ${card.face}.`,
+				);
+			}
+		}),
 	);
 	const firstFace = faces.find((face) => face !== undefined);
 	const aspect =
 		deck.aspect ??
 		(firstFace ? firstFace.height / firstFace.width : DEFAULT_ASPECT);
+	if (aspect < MIN_ASPECT || aspect > MAX_ASPECT)
+		throw new DrawingError(
+			`Deck ${deck.id} draws cards ${aspect.toFixed(2)} times as tall as wide; set aspect in its deck.json to a value from ${MIN_ASPECT} to ${MAX_ASPECT}.`,
+		);
 	const width = cardWidth(cards.length);
 	const height = Math.round(width * aspect);
 	const hasLabels = positions.some((p) => p.label);
@@ -132,6 +147,14 @@ export async function renderSpread(
 	// A narrow spread is centred on the minimum width the heading needs.
 	const left = (canvasW - gridW) / 2;
 	const canvasH = PADDING * 2 + HEADING + rows * cellH - GAP;
+	if (
+		canvasW > MAX_SIDE ||
+		canvasH > MAX_SIDE ||
+		canvasW * canvasH > MAX_PIXELS
+	)
+		throw new DrawingError(
+			`The spread would be ${canvasW} by ${canvasH} px, which is too large to draw. Draw fewer cards or use a smaller grid.`,
+		);
 
 	const canvas = createCanvas(canvasW, canvasH);
 	const ctx = canvas.getContext("2d");
@@ -171,33 +194,34 @@ export async function renderSpread(
 		}
 
 		const face = faces[i];
+		// A reversed card turns upside down whole, face or tile; its name stays upright below.
+		ctx.save();
+		if (card.reversed) {
+			ctx.translate(x + width, y + height);
+			ctx.rotate(Math.PI);
+		} else {
+			ctx.translate(x, y);
+		}
 		if (face) {
-			ctx.save();
-			if (card.reversed) {
-				ctx.translate(x + width, y + height);
-				ctx.rotate(Math.PI);
-				ctx.drawImage(face, 0, 0, width, height);
-			} else {
-				ctx.drawImage(face, x, y, width, height);
-			}
-			ctx.restore();
+			ctx.drawImage(face, 0, 0, width, height);
 		} else {
 			ctx.fillStyle = PALETTE.surface;
-			ctx.fillRect(x, y, width, height);
+			ctx.fillRect(0, 0, width, height);
 			ctx.strokeStyle = PALETTE.accent;
 			ctx.lineWidth = 2;
-			ctx.strokeRect(x + 1, y + 1, width - 2, height - 2);
+			ctx.strokeRect(1, 1, width - 2, height - 2);
 			ctx.fillStyle = PALETTE.text;
 			ctx.font = font(width < 150 ? 14 : 18);
 			ctx.textBaseline = "middle";
 			const lines = wrapText(ctx, card.name, width - 16).slice(0, 6);
 			const lineHeight = width < 150 ? 18 : 24;
-			const first = y + height / 2 - ((lines.length - 1) * lineHeight) / 2;
+			const first = height / 2 - ((lines.length - 1) * lineHeight) / 2;
 			lines.forEach((line, n) => {
-				ctx.fillText(line, x + width / 2, first + n * lineHeight);
+				ctx.fillText(line, width / 2, first + n * lineHeight);
 			});
-			ctx.textBaseline = "top";
 		}
+		ctx.restore();
+		ctx.textBaseline = "top";
 
 		ctx.fillStyle = card.reversed ? PALETTE.accentLight : PALETTE.text;
 		ctx.font = font(width < 150 ? 12 : 15);

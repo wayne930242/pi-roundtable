@@ -6,7 +6,7 @@ import {
 	ToolRefusal,
 	type ToolTurn,
 } from "pi-roundtable";
-import { type Static, type TObject, Type } from "typebox";
+import { type Static, type TObject, type TProperties, Type } from "typebox";
 import Value from "typebox/value";
 import { DrawingError } from "../errors.ts";
 
@@ -25,6 +25,11 @@ export const literals = <T extends string>(
 		values.map((value) => Type.Literal(value)),
 		description ? { description } : {},
 	);
+
+/** An argument object that refuses a name it does not know, so a misspelled argument is a refusal rather than a default. */
+export const strictObject = <Properties extends TProperties>(
+	properties: Properties,
+) => Type.Object(properties, { additionalProperties: false });
 
 export const BACKGROUNDS = ["dark", "white", "transparent"] as const;
 
