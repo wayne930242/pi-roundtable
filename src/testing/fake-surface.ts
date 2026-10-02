@@ -1,19 +1,19 @@
 import type { ChannelKey, ChatSurface, OutboundReply } from "pi-roundtable";
 
-/** A chat surface for the prefix `test`, which keeps every reply the plugin posts. */
+/**
+ * A chat surface for the prefix `test` that accepts files and keeps every reply sent through it.
+ * The plugin attaches its images to the agent's reply, so a test that finds anything here has
+ * found a tool posting on its own.
+ */
 export class RecordingSurface implements ChatSurface {
 	readonly surface = "test";
+	readonly supportsFiles = true;
 	readonly replies: { channel: ChannelKey; reply: OutboundReply }[] = [];
 
 	async start(): Promise<void> {}
 
 	async sendReply(channel: ChannelKey, reply: OutboundReply): Promise<void> {
 		this.replies.push({ channel, reply });
-	}
-
-	/** The files posted so far, in order. */
-	get files(): { name: string; data: Uint8Array }[] {
-		return this.replies.flatMap(({ reply }) => reply.files ?? []);
 	}
 }
 

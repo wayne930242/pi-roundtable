@@ -1,6 +1,6 @@
 import {
-	type ChannelKey,
 	defineTool,
+	REPLY_FILE_LIMITS,
 	type Tier,
 	type ToolContribution,
 	ToolRefusal,
@@ -9,12 +9,6 @@ import {
 import { type Static, type TObject, type TProperties, Type } from "typebox";
 import Value from "typebox/value";
 import { DrawingError } from "../errors.ts";
-
-/** Posts a drawn image to the channel of the turn that asked for it. */
-export type SendImage = (
-	channel: ChannelKey,
-	file: { name: string; data: Uint8Array },
-) => Promise<void>;
 
 /** A string that is one of `values`, which the model reads as an enum. */
 export const literals = <T extends string>(
@@ -35,7 +29,7 @@ export const BACKGROUNDS = ["dark", "white", "transparent"] as const;
 
 export const BACKGROUND = Type.Optional(literals(BACKGROUNDS, "Default dark."));
 
-/** What a drawing tool produced: the picture, the name it is posted under, and what the model reads back. */
+/** What a drawing tool produced: the picture, the name it is attached under, and what the model reads back. */
 export interface Drawn {
 	/** The file name without its extension; the tool adds `.png`. */
 	stem: string;
@@ -52,7 +46,6 @@ export interface ImageToolSpec<Schema extends TObject> {
 
 export interface ImageToolEnv {
 	minTier: Tier;
-	send: SendImage;
 }
 
 /** The pi session checks a call against its schema; this check also covers a tool run without a session. */
@@ -70,7 +63,7 @@ function checkArguments<Schema extends TObject>(
 }
 
 /**
- * A tool that draws one image and posts it to the channel as a file. A request the renderer
+ * A tool that draws one image and attaches it to the agent's reply as a file. A request the renderer
  * cannot honour comes back to the model as a refusal it can correct.
  */
 export function imageTool<Schema extends TObject>(
@@ -92,7 +85,12 @@ export function imageTool<Schema extends TObject>(
 				throw error;
 			}
 			const name = `${drawn.stem}.png`;
-			await env.send(turn.channel, { name, data: drawn.image });
+			// The host refuses a larger file too, but only with its own wording, and a model can act on this one.
+			if (drawn.image.byteLength > REPLY_FILE_LIMITS.maxFileBytes)
+				throw new ToolRefusal(
+					`The picture is ${(drawn.image.byteLength / 2 ** 20).toFixed(1)} MiB, over the ${REPLY_FILE_LIMITS.maxFileBytes / 2 ** 20} MiB a reply may carry. Ask for a smaller picture, such as fewer cards or a smaller size.`,
+				);
+			turn.attachFile({ name, data: drawn.image });
 			return drawn.text.replace("{file}", name);
 		},
 	});

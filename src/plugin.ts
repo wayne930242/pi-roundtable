@@ -34,20 +34,18 @@ function readDecks(deckDir: string): Deck[] {
 }
 
 /**
- * Tools that draw images locally with node-canvas and post them to the channel: relationship
+ * Tools that draw images locally with node-canvas and attach them to the agent's reply: relationship
  * maps, magic circles, sigils, sacred geometry, and, with a `deckDir`, card draws.
  */
 export function drawing(options: DrawingOptions = {}) {
 	const random = options.random ?? Math.random;
 	return definePlugin({
 		name: "drawing",
-		setup: ({ surfaces }) => {
+		setup: () => {
 			// Read at setup, so a wrong deck directory stops the start with a message that names this plugin.
 			const decks = options.deckDir ? readDecks(options.deckDir) : [];
 			const env: ImageToolEnv = {
 				minTier: options.minTier ?? "member",
-				send: (channel, file) =>
-					surfaces.sendReply(channel, { chunks: [], files: [file] }),
 			};
 			return {
 				tools: [

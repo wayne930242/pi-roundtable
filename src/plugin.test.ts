@@ -1,12 +1,18 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { rmSync } from "node:fs";
-import { PluginError } from "pi-roundtable";
+import {
+	definePlugin,
+	REPLY_FILE_LIMITS,
+	type ReplyFile,
+	ReplyFileError,
+} from "pi-roundtable";
 import { testPlugin } from "pi-roundtable/testing";
 import { drawing } from "./plugin.ts";
 import { seededRandom } from "./random.ts";
 import { pngSize, RecordingSurface } from "./testing/fake-surface.ts";
 import { borderInk, countInk, inkOf } from "./testing/ink.ts";
 import { writeTestDecks } from "./testing/test-deck.ts";
+import { imageTool, strictObject } from "./tools/image-tool.ts";
 
 let deckDir = "";
 beforeAll(() => {
@@ -20,6 +26,10 @@ async function open(options: Parameters<typeof drawing>[0] = {}) {
 	const harness = await testPlugin(drawing(options), { surfaces: [surface] });
 	return { harness, surface };
 }
+
+/** The files the tools attached to the reply, in order. */
+const filesOf = (harness: { files: { file: ReplyFile }[] }) =>
+	harness.files.map(({ file }) => file);
 
 const MAP = {
 	title: "The Harbour",
@@ -59,32 +69,34 @@ describe("tools", () => {
 });
 
 describe("images", () => {
-	test("relationship_map posts a PNG to the channel of the turn", async () => {
+	test("relationship_map attaches a PNG to the reply of the turn and sends nothing itself", async () => {
 		const { harness, surface } = await open({ random: seededRandom(1) });
 		const text = await harness.runTool("relationship_map", MAP, {
 			channel: "test:42",
 		});
 		expect(text).toBe(
-			"The relationship map is posted to the channel as relationship-map.png.",
+			"The relationship map is attached to your reply as relationship-map.png.",
 		);
-		expect(surface.replies).toHaveLength(1);
-		expect(surface.replies[0]?.channel).toBe("test:42");
-		const [file] = surface.files;
+		expect(harness.files).toHaveLength(1);
+		expect(harness.files[0]?.channel).toBe("test:42");
+		const [file] = filesOf(harness);
 		expect(file?.name).toBe("relationship-map.png");
 		const size = pngSize(file?.data ?? new Uint8Array());
 		expect(size).toBeDefined();
 		// The picture is as big as its content, with a floor of 400 by 300.
 		expect(size?.width).toBeGreaterThanOrEqual(400);
 		expect(size?.height).toBeGreaterThanOrEqual(300);
+		// The agent's reply carries the file; the tool does not post on its own.
+		expect(surface.replies).toHaveLength(0);
 		await harness.stop();
 	});
 
 	test("the same seed draws the same map and another seed draws another", async () => {
 		const draw = async (seed: number) => {
-			const { harness, surface } = await open({ random: seededRandom(seed) });
+			const { harness } = await open({ random: seededRandom(seed) });
 			await harness.runTool("relationship_map", MAP);
 			await harness.stop();
-			return Buffer.from(surface.files[0]?.data ?? []);
+			return Buffer.from(filesOf(harness)[0]?.data ?? []);
 		};
 		const [a, b, c] = [await draw(5), await draw(5), await draw(6)];
 		expect(a.length).toBeGreaterThan(1000);
@@ -93,7 +105,7 @@ describe("images", () => {
 	});
 
 	test("a map takes names in any script", async () => {
-		const { harness, surface } = await open({ random: seededRandom(2) });
+		const { harness } = await open({ random: seededRandom(2) });
 		await harness.runTool("relationship_map", {
 			nodes: [
 				{ id: "\u963f\u8c6a", type: "pc" },
@@ -101,7 +113,9 @@ describe("images", () => {
 			],
 			edges: [{ from: "\u963f\u8c6a", to: "\u5c0f\u7f8e", type: "bond" }],
 		});
-		expect(pngSize(surface.files[0]?.data ?? new Uint8Array())).toBeDefined();
+		expect(
+			pngSize(filesOf(harness)[0]?.data ?? new Uint8Array()),
+		).toBeDefined();
 		await harness.stop();
 	});
 
@@ -110,7 +124,7 @@ describe("images", () => {
 		["medium", 1024],
 		["large", 2048],
 	])("magic_circle_generate draws a %s circle of %d px", async (size, px) => {
-		const { harness, surface } = await open();
+		const { harness } = await open();
 		const text = await harness.runTool("magic_circle_generate", {
 			type: "pentagram",
 			size,
@@ -118,9 +132,9 @@ describe("images", () => {
 			text: "Ad astra",
 		});
 		expect(text).toBe(
-			"The magic circle is posted to the channel as magic-circle.png.",
+			"The magic circle is attached to your reply as magic-circle.png.",
 		);
-		expect(pngSize(surface.files[0]?.data ?? new Uint8Array())).toEqual({
+		expect(pngSize(filesOf(harness)[0]?.data ?? new Uint8Array())).toEqual({
 			width: px,
 			height: px,
 		});
@@ -128,7 +142,7 @@ describe("images", () => {
 	});
 
 	test("every circle type, background, and style draws, and drawing is deterministic", async () => {
-		const { harness, surface } = await open();
+		const { harness } = await open();
 		for (const type of ["pentagram", "hexagram", "tree_of_life", "custom"])
 			for (const background of ["dark", "white", "transparent"])
 				await harness.runTool("magic_circle_generate", {
@@ -137,12 +151,12 @@ describe("images", () => {
 					style: "modern",
 					size: "small",
 				});
-		expect(surface.files).toHaveLength(12);
-		for (const file of surface.files)
+		expect(filesOf(harness)).toHaveLength(12);
+		for (const file of filesOf(harness))
 			expect(pngSize(file.data)).toEqual({ width: 512, height: 512 });
 		await harness.runTool("magic_circle_generate", { type: "hexagram" });
 		await harness.runTool("magic_circle_generate", { type: "hexagram" });
-		const [a, b] = surface.files.slice(-2);
+		const [a, b] = filesOf(harness).slice(-2);
 		expect(Buffer.from(a?.data ?? []).equals(Buffer.from(b?.data ?? []))).toBe(
 			true,
 		);
@@ -152,13 +166,13 @@ describe("images", () => {
 	test.each(["chaos", "rose_cross", "planetary", "geometric"])(
 		"sigil_generate draws by the %s method",
 		async (method) => {
-			const { harness, surface } = await open();
+			const { harness } = await open();
 			const text = await harness.runTool("sigil_generate", {
 				intention: "find the way home",
 				method,
 			});
-			expect(text).toBe("The sigil is posted to the channel as sigil.png.");
-			expect(pngSize(surface.files[0]?.data ?? new Uint8Array())).toEqual({
+			expect(text).toBe("The sigil is attached to your reply as sigil.png.");
+			expect(pngSize(filesOf(harness)[0]?.data ?? new Uint8Array())).toEqual({
 				width: 512,
 				height: 512,
 			});
@@ -169,7 +183,7 @@ describe("images", () => {
 	test.each(["flower_of_life", "metatron", "sri_yantra", "vesica_pisces"])(
 		"sacred_geometry_generate draws the %s pattern",
 		async (pattern) => {
-			const { harness, surface } = await open();
+			const { harness } = await open();
 			const text = await harness.runTool("sacred_geometry_generate", {
 				pattern,
 				layers: 4,
@@ -177,9 +191,9 @@ describe("images", () => {
 				colors: ["gold", "#5fc4b8"],
 			});
 			expect(text).toBe(
-				"The sacred geometry is posted to the channel as sacred-geometry.png.",
+				"The sacred geometry is attached to your reply as sacred-geometry.png.",
 			);
-			expect(pngSize(surface.files[0]?.data ?? new Uint8Array())).toEqual({
+			expect(pngSize(filesOf(harness)[0]?.data ?? new Uint8Array())).toEqual({
 				width: 1024,
 				height: 1024,
 			});
@@ -197,8 +211,9 @@ describe("refusals", () => {
 		const { harness, surface } = await open();
 		const text = await harness.runTool(tool, args);
 		expect(text).toMatch(expected);
-		// A refused call posts nothing.
+		// A refused call attaches nothing.
 		expect(surface.replies).toHaveLength(0);
+		expect(harness.files).toHaveLength(0);
 		await harness.stop();
 	};
 
@@ -310,14 +325,140 @@ describe("refusals", () => {
 					channel: "nowhere:1",
 				},
 			),
-		).rejects.toBeInstanceOf(PluginError);
+		).rejects.toBeInstanceOf(ReplyFileError);
+		expect(harness.files).toHaveLength(0);
+		await harness.stop();
+	});
+
+	test("a surface that cannot carry files fails the call instead of dropping the picture", async () => {
+		const surface = new RecordingSurface();
+		const harness = await testPlugin(drawing(), {
+			surfaces: [Object.assign(surface, { supportsFiles: false })],
+		});
+		await expect(
+			harness.runTool("sigil_generate", { intention: "home", method: "chaos" }),
+		).rejects.toThrow(/does not support reply files/);
+		expect(harness.files).toHaveLength(0);
+		expect(surface.replies).toHaveLength(0);
+		await harness.stop();
+	});
+});
+
+describe("reply file limits", () => {
+	test("a picture over the file limit is refused with advice, not attached", async () => {
+		const surface = new RecordingSurface();
+		const harness = await testPlugin(
+			definePlugin({
+				name: "oversize",
+				setup: () => ({
+					tools: [
+						imageTool(
+							{
+								name: "oversize_picture",
+								description: "Draws a picture that is too large.",
+								parameters: strictObject({}),
+								draw: () => ({
+									stem: "big",
+									image: new Uint8Array(REPLY_FILE_LIMITS.maxFileBytes + 1),
+									text: "never read",
+								}),
+							},
+							{ minTier: "member" },
+						),
+					],
+				}),
+			}),
+			{ surfaces: [surface] },
+		);
+		const text = await harness.runTool("oversize_picture", {});
+		expect(text).toMatch(
+			/The picture is 10\.0 MiB, over the 10 MiB a reply may carry/,
+		);
+		expect(text).toMatch(/fewer cards or a smaller size/);
+		expect(harness.files).toHaveLength(0);
+		expect(surface.replies).toHaveLength(0);
+		await harness.stop();
+	});
+
+	test("a picture exactly at the file limit is attached", async () => {
+		const surface = new RecordingSurface();
+		const harness = await testPlugin(
+			definePlugin({
+				name: "exact",
+				setup: () => ({
+					tools: [
+						imageTool(
+							{
+								name: "exact_picture",
+								description: "Draws a picture at the limit.",
+								parameters: strictObject({}),
+								draw: () => ({
+									stem: "exact",
+									image: new Uint8Array(REPLY_FILE_LIMITS.maxFileBytes).fill(1),
+									text: "Attached {file}.",
+								}),
+							},
+							{ minTier: "member" },
+						),
+					],
+				}),
+			}),
+			{ surfaces: [surface] },
+		);
+		expect(await harness.runTool("exact_picture", {})).toBe(
+			"Attached exact.png.",
+		);
+		expect(harness.files[0]?.file.data.byteLength).toBe(
+			REPLY_FILE_LIMITS.maxFileBytes,
+		);
+		await harness.stop();
+	});
+
+	test("the turn's file count limit fails the call with the host's message and attaches nothing", async () => {
+		const surface = new RecordingSurface();
+		const harness = await testPlugin(
+			definePlugin({
+				name: "crowded",
+				setup: () => ({
+					tools: [
+						imageTool(
+							{
+								name: "crowded_picture",
+								description:
+									"Draws after the turn already holds the most files.",
+								parameters: strictObject({}),
+								draw: (_args, turn) => {
+									for (let i = 0; i < REPLY_FILE_LIMITS.maxFiles; i++)
+										turn.attachFile({
+											name: `earlier-${i}.png`,
+											data: new Uint8Array([1]),
+										});
+									return {
+										stem: "one-too-many",
+										image: new Uint8Array([1]),
+										text: "never read",
+									};
+								},
+							},
+							{ minTier: "member" },
+						),
+					],
+				}),
+			}),
+			{ surfaces: [surface] },
+		);
+		await expect(harness.runTool("crowded_picture", {})).rejects.toThrow(
+			/at most 10 reply files/,
+		);
+		expect(harness.files).toHaveLength(0);
+		expect(surface.replies).toHaveLength(0);
 		await harness.stop();
 	});
 });
 
 describe("draw_cards", () => {
-	test("draws against a generated deck and posts the spread", async () => {
-		const { harness, surface } = await open({
+	test("draws against a generated deck and attaches the spread", async () => {
+		const { harness } = await open({
 			deckDir,
 			random: seededRandom(11),
 		});
@@ -327,7 +468,7 @@ describe("draw_cards", () => {
 			question: "What now?",
 		});
 		expect(text).toStartWith(
-			"Drew 3 from test-tarot; the spread picture is posted to the channel as cards.png.\n",
+			"Drew 3 from test-tarot; the spread picture is attached to your reply as cards.png.\n",
 		);
 		const lines = text.split("\n").slice(1);
 		expect(lines).toHaveLength(3);
@@ -338,7 +479,7 @@ describe("draw_cards", () => {
 				),
 			);
 		// Three cards of 200 px with 20 px gaps, between 32 px margins.
-		expect(pngSize(surface.files[0]?.data ?? new Uint8Array())).toEqual({
+		expect(pngSize(filesOf(harness)[0]?.data ?? new Uint8Array())).toEqual({
 			width: 32 * 2 + 3 * 220 - 20,
 			height: 32 * 2 + 64 + Math.round(200 * (240 / 140)) + 30,
 		});
@@ -347,7 +488,7 @@ describe("draw_cards", () => {
 
 	test("the same seed draws the same cards", async () => {
 		const draw = async () => {
-			const { harness, surface } = await open({
+			const { harness } = await open({
 				deckDir,
 				random: seededRandom(3),
 			});
@@ -356,7 +497,7 @@ describe("draw_cards", () => {
 				count: 5,
 			});
 			await harness.stop();
-			return { text, image: Buffer.from(surface.files[0]?.data ?? []) };
+			return { text, image: Buffer.from(filesOf(harness)[0]?.data ?? []) };
 		};
 		const [a, b] = [await draw(), await draw()];
 		expect(a.text).toBe(b.text);
@@ -400,7 +541,7 @@ describe("draw_cards", () => {
 	});
 
 	test("a named spread labels its positions", async () => {
-		const { harness, surface } = await open({ deckDir });
+		const { harness } = await open({ deckDir });
 		const text = await harness.runTool("draw_cards", {
 			deck: "test-poker",
 			count: 3,
@@ -411,7 +552,7 @@ describe("draw_cards", () => {
 			],
 		});
 		expect(text).toMatch(/1\. Past: .*\n2\. Present: .*\n3\. Future: /);
-		const size = pngSize(surface.files[0]?.data ?? new Uint8Array());
+		const size = pngSize(filesOf(harness)[0]?.data ?? new Uint8Array());
 		expect(size?.width).toBe(520);
 		// Two rows of 26 + 300 + 30 + 20 px cells, less the last gap.
 		expect(size?.height).toBe(32 * 2 + 64 + 2 * (26 + 300 + 30 + 20) - 20);
@@ -419,9 +560,9 @@ describe("draw_cards", () => {
 	});
 
 	test("a draw of 20 cards uses narrower cards in rows of seven", async () => {
-		const { harness, surface } = await open({ deckDir });
+		const { harness } = await open({ deckDir });
 		await harness.runTool("draw_cards", { deck: "test-poker", count: 20 });
-		const size = pngSize(surface.files[0]?.data ?? new Uint8Array());
+		const size = pngSize(filesOf(harness)[0]?.data ?? new Uint8Array());
 		// Twenty cards in rows of seven, 150 px wide with 20 px gaps.
 		expect(size?.width).toBe(32 * 2 + 7 * 170 - 20);
 		await harness.stop();
@@ -517,11 +658,11 @@ describe("what the review found", () => {
 		args: Record<string, unknown>,
 		options: Parameters<typeof drawing>[0] = {},
 	) => {
-		const { harness, surface } = await open(options);
+		const { harness } = await open(options);
 		await harness.runTool(tool, args);
 		await harness.stop();
-		const data = surface.files[0]?.data;
-		if (!data) throw new Error(`${tool} posted nothing`);
+		const data = filesOf(harness)[0]?.data;
+		if (!data) throw new Error(`${tool} attached nothing`);
 		return data;
 	};
 
@@ -655,13 +796,13 @@ describe("what the review found", () => {
 	test.each([77, 78, 100])(
 		"a draw of %d cards lays out its own rows",
 		async (count) => {
-			const { harness, surface } = await open({ deckDir });
+			const { harness } = await open({ deckDir });
 			const text = await harness.runTool("draw_cards", {
 				deck: "test-large",
 				count,
 			});
 			expect(text).toStartWith(`Drew ${count} from test-large`);
-			const size = pngSize(surface.files[0]?.data ?? new Uint8Array());
+			const size = pngSize(filesOf(harness)[0]?.data ?? new Uint8Array());
 			// Cards of 110 px in rows of seven.
 			expect(size?.width).toBe(32 * 2 + 7 * 130 - 20);
 			const rows = Math.ceil(count / 7);

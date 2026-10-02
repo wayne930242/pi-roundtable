@@ -21,7 +21,7 @@ export function relationshipMapTool(env: ImageToolEnv, random: Random) {
 		{
 			name: "relationship_map",
 			description:
-				"Draw a hand-drawn relationship map of characters (pc, npc) and factions, with typed relationships between them, and post it to the channel as an image.",
+				"Draw a hand-drawn relationship map of characters (pc, npc) and factions, with typed relationships between them, and attach it to your reply as an image.",
 			parameters: strictObject({
 				title: Type.Optional(Type.String({ maxLength: MAX_TITLE })),
 				nodes: Type.Array(
@@ -57,7 +57,7 @@ export function relationshipMapTool(env: ImageToolEnv, random: Random) {
 			draw: (args) => ({
 				stem: "relationship-map",
 				image: renderRelationshipMap(args, random),
-				text: "The relationship map is posted to the channel as {file}.",
+				text: "The relationship map is attached to your reply as {file}.",
 			}),
 		},
 		env,

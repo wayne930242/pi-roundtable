@@ -27,7 +27,7 @@ function describeDeck(deck: Deck): string {
 	}${deck.reversals ? "" : ", upright by default"}`;
 }
 
-/** `draw_cards`: draws from one of the operator's decks and posts a picture of the spread. */
+/** `draw_cards`: draws from one of the operator's decks and attaches a picture of the spread to the reply. */
 export function drawCardsTool(
 	decks: readonly Deck[],
 	env: ImageToolEnv,
@@ -38,7 +38,7 @@ export function drawCardsTool(
 	return imageTool(
 		{
 			name: "draw_cards",
-			description: `Draw cards from a full, freshly shuffled deck and post a picture of the spread to the channel. Each draw is independent; pass exclude to leave cards out. Read the returned cards, not your own guess. Decks: ${decks.map(describeDeck).join("; ")}.`,
+			description: `Draw cards from a full, freshly shuffled deck and attach a picture of the spread to your reply. Each draw is independent; pass exclude to leave cards out. Read the returned cards, not your own guess. Decks: ${decks.map(describeDeck).join("; ")}.`,
 			parameters: strictObject({
 				deck: literals(
 					[first, ...rest].map((deck) => deck.id),
@@ -112,7 +112,7 @@ export function drawCardsTool(
 				return {
 					stem: "cards",
 					image,
-					text: `Drew ${cards.length} from ${deck.id}; the spread picture is posted to the channel as {file}.\n${lines.join("\n")}`,
+					text: `Drew ${cards.length} from ${deck.id}; the spread picture is attached to your reply as {file}.\n${lines.join("\n")}`,
 				};
 			},
 		},

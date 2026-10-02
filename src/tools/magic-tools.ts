@@ -22,7 +22,7 @@ export function magicCircleTool(env: ImageToolEnv) {
 		{
 			name: "magic_circle_generate",
 			description:
-				"Draw a magic circle: a pentagram, hexagram, or Tree of Life, with optional elemental symbols at the quarters and text around the rim, and post it to the channel as an image.",
+				"Draw a magic circle: a pentagram, hexagram, or Tree of Life, with optional elemental symbols at the quarters and text around the rim, and attach it to your reply as an image.",
 			parameters: strictObject({
 				type: literals(CIRCLE_TYPES, "custom draws a pentagram."),
 				style: Type.Optional(
@@ -58,7 +58,7 @@ export function magicCircleTool(env: ImageToolEnv) {
 					...(args.elements ? { elements: args.elements } : {}),
 					...(args.text ? { text: args.text } : {}),
 				}),
-				text: "The magic circle is posted to the channel as {file}.",
+				text: "The magic circle is attached to your reply as {file}.",
 			}),
 		},
 		env,
@@ -70,7 +70,7 @@ export function sigilTool(env: ImageToolEnv) {
 		{
 			name: "sigil_generate",
 			description:
-				"Draw a sigil from an intention, by the chaos (letter elimination), rose cross, planetary, or geometric method, and post it to the channel as an image.",
+				"Draw a sigil from an intention, by the chaos (letter elimination), rose cross, planetary, or geometric method, and attach it to your reply as an image.",
 			parameters: strictObject({
 				intention: Type.String({ minLength: 1, maxLength: 200 }),
 				method: literals(["chaos", "rose_cross", "planetary", "geometric"]),
@@ -87,7 +87,7 @@ export function sigilTool(env: ImageToolEnv) {
 					style: args.style ?? "traditional",
 					background: args.background ?? "dark",
 				}),
-				text: "The sigil is posted to the channel as {file}.",
+				text: "The sigil is attached to your reply as {file}.",
 			}),
 		},
 		env,
@@ -99,7 +99,7 @@ export function sacredGeometryTool(env: ImageToolEnv) {
 		{
 			name: "sacred_geometry_generate",
 			description:
-				"Draw sacred geometry: the Flower of Life, Metatron's Cube, a simplified Sri Yantra (nested triangles around a point, in a circle), or the Vesica Piscis, and post it to the channel as an image. More layers add rings of circles, nested shapes, or, for Metatron's Cube, the outer ring (two or more layers).",
+				"Draw sacred geometry: the Flower of Life, Metatron's Cube, a simplified Sri Yantra (nested triangles around a point, in a circle), or the Vesica Piscis, and attach it to your reply as an image. More layers add rings of circles, nested shapes, or, for Metatron's Cube, the outer ring (two or more layers).",
 			parameters: strictObject({
 				pattern: literals([
 					"flower_of_life",
@@ -132,7 +132,7 @@ export function sacredGeometryTool(env: ImageToolEnv) {
 					colors: args.colors ?? [],
 					background: args.background ?? "dark",
 				}),
-				text: "The sacred geometry is posted to the channel as {file}.",
+				text: "The sacred geometry is attached to your reply as {file}.",
 			}),
 		},
 		env,

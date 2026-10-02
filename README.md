@@ -14,7 +14,7 @@ MIT licensed.
 ## What you need
 
 - [Bun](https://bun.sh/docs/installation) 1.3 or newer.
-- A running pi-roundtable host, version 0.6.1 or newer in the 0.6 line (`pi-roundtable` is a peer dependency, `>=0.6.1 <0.7.0`).
+- A running pi-roundtable host, version 0.7.0 or newer in the 0.7 line (`pi-roundtable` is a peer dependency, `>=0.7.0 <0.8.0`). Earlier versions cannot attach files to an agent's reply, which these tools rely on.
 - The native [canvas](#the-native-canvas-dependency) package, which comes with this one.
 - For `draw_cards`, a deck directory of your own; see [the deck directory](#the-deck-directory).
 
@@ -87,12 +87,17 @@ The plugin is named `drawing`.
 
 ## The tools
 
-Each tool draws one PNG and posts it to the channel of the turn as a file, through the host's chat surface.
+Each tool draws one PNG and attaches it to the agent's reply with `turn.attachFile`.
 The model reads a short text back (the file name, and for card draws the cards), and a request it can fix comes back as a refusal with a plain message, such as `An edge references the unknown node "Ghost". Add it to nodes or fix the edge.`
-Nothing is posted for a refused call.
+Nothing is attached for a refused call.
 
-The picture is posted when the tool runs, so in a turn it appears before the agent's own reply text.
-On Discord the host posts it as the bot, not under the agent's own name.
+The tool does not send a message of its own: the host delivers the picture with the reply of the turn, after the agent's text, under the same name and avatar as the text.
+On Discord each picture goes out as one file in its own message.
+
+The host limits what one turn may attach (`REPLY_FILE_LIMITS`: 10 files, 10 MiB for a file, 50 MiB in all), and a chat surface may be stricter.
+A picture over 10 MiB is refused with a message that suggests a smaller one, such as fewer cards or a smaller `size`.
+A turn that already holds 10 files, or a surface that cannot carry files, fails the call with the host's message; the picture is never dropped silently.
+Each tool call attaches one picture, so one reply can carry up to ten of them.
 
 | Tool | What it draws | Arguments |
 | --- | --- | --- |
@@ -190,21 +195,22 @@ The package itself is MIT licensed.
 ## Testing a plugin that uses it
 
 `testPlugin` from `pi-roundtable/testing` runs the plugin offline.
-Pass a chat surface for the prefix of the channel the test uses (the default channel is `test:1`), and read the files it was asked to post:
+Pass a chat surface for the prefix of the channel the test uses (the default channel is `test:1`) that declares `supportsFiles: true`, since a surface that does not makes the call fail, and read the files from `harness.files`, each with the channel of the turn it was attached to:
 
 ```ts
 import { testPlugin } from "pi-roundtable/testing";
 import { drawing, seededRandom } from "pi-roundtable-drawing";
 
-const files: { name: string; data: Uint8Array }[] = [];
 const harness = await testPlugin(drawing({ random: seededRandom(1) }), {
 	surfaces: [
 		{
 			surface: "test",
+			supportsFiles: true,
 			start: async () => {},
-			sendReply: async (_channel, reply) => void files.push(...(reply.files ?? [])),
+			sendReply: async () => {},
 		},
 	],
 });
 await harness.runTool("sigil_generate", { intention: "home", method: "chaos" });
+const { channel, file } = harness.files[0]; // "test:1", sigil.png
 ```
