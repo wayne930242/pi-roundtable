@@ -36,6 +36,17 @@ test("coding and core share the same Pi instances, including in the canary", () 
 		).toBe(realpathSync(Bun.resolveSync(name, root)));
 });
 
+test("drawing ships the declarations required to compile its published source", () => {
+	const manifest = JSON.parse(
+		readFileSync(resolve(root, "packages/drawing/package.json"), "utf8"),
+	) as {
+		dependencies: Record<string, string>;
+		devDependencies: Record<string, string>;
+	};
+	expect(manifest.dependencies["@types/d3-force"]).toBeDefined();
+	expect(manifest.devDependencies["@types/d3-force"]).toBeUndefined();
+});
+
 test("public scan covers all workspaces and allows only explicit public metadata", () => {
 	const findings = scanTree(root).filter((finding) =>
 		finding.file.startsWith("packages/"),

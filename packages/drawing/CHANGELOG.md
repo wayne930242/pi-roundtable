@@ -19,6 +19,7 @@ The earlier `0.1.0` was local-only and was never published on npm.
 - A picture over the 10 MiB file limit of `REPLY_FILE_LIMITS` is refused with advice to ask for a smaller one.
   A turn that already holds the most files, or a surface that cannot carry files, fails the call with the host's message instead of dropping the picture.
 - The tool results now say the picture is attached to the reply, not posted to the channel.
+- Ship `@types/d3-force` as a dependency, since consuming hosts compile the published TypeScript source and need its declarations.
 
 ### Added
 

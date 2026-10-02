@@ -36,6 +36,7 @@
 		"test": "bun test"
 	},
 	"dependencies": {
+		"@types/d3-force": "3.0.10",
 		"canvas": "3.2.3",
 		"d3-force": "3.0.0",
 		"roughjs": "4.6.6",
@@ -47,7 +48,6 @@
 	"devDependencies": {
 		"@biomejs/biome": "2.5.15",
 		"@types/bun": "1.4.2",
-		"@types/d3-force": "3.0.10",
 		"pi-roundtable": "0.7.0",
 		"typescript": "7.0.2"
 	}

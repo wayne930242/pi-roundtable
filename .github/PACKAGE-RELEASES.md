@@ -9,7 +9,9 @@ The root's `files` allowlist does not include `packages/`.
 
 Run `bun install --frozen-lockfile` at the repository root.
 After changing workspace manifests, remove root and workspace `node_modules` before installing: Bun 1.4.2's incremental relinking can leave child-local core links pointing at the child itself.
-The workspace linkage regression test fails on such stale links; a clean install and repeated frozen install preserve the correct root link.
+The workspace linkage regression test fails on such stale links.
+If they persist after a clean install, rebuild `bun.lock` from scratch with Bun 1.4.2 and review the newly resolved dependencies: its older lockfile format can retain invalid nested root entries.
+The committed lockfile uses the current format; clean installation and repeated frozen installation both pass the linkage regression.
 Bun does not treat the root package as a child workspace; the root-only `pi-roundtable: link:.` override and hoisted linker give every workspace a live symlink to the core.
 Workspace manifests use ordinary semver for both the core development dependency and its peer range.
 No workspace or local-path dependency specifier is shipped in a workspace manifest.
