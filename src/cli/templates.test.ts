@@ -82,7 +82,7 @@ beforeAll(async () => {
 	const added = addPlugin({ cwd: dir.path, name: "second-plugin" });
 	if (!added.ok) throw new Error(added.problems.join("\n"));
 	grown = check("after add plugin");
-	for (const name of ["codex-images", "dice"]) {
+	for (const name of ["codex-images", "dice", "release-notice"]) {
 		const copied = addPlugin({ cwd: dir.path, name });
 		if (!copied.ok) throw new Error(copied.problems.join("\n"));
 	}
@@ -123,7 +123,7 @@ describe("every template rendered into one project", () => {
 	});
 	test("still typechecks, tests, and lints after the official plugins are added", () => {
 		expect(official.typecheck.output).toBe("");
-		expect(official.test.output).toContain("14 pass");
+		expect(official.test.output).toContain("25 pass");
 		expect(official.lint.output).toContain("No fixes applied");
 		expect(official.typecheck.ok && official.test.ok && official.lint.ok).toBe(
 			true,
@@ -131,7 +131,7 @@ describe("every template rendered into one project", () => {
 	});
 	test("still typechecks, tests, and lints after `add package`", () => {
 		expect(packaged.typecheck.output).toBe("");
-		expect(packaged.test.output).toContain("17 pass");
+		expect(packaged.test.output).toContain("28 pass");
 		expect(packaged.lint.output).toContain("No fixes applied");
 		expect(packaged.typecheck.ok && packaged.test.ok && packaged.lint.ok).toBe(
 			true,

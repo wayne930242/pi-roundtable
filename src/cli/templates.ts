@@ -20,7 +20,11 @@ const OFFICIAL_DIR = "official";
 const PACKAGE_DIR = "package";
 
 /** The plugins the package ships ready-made: `add plugin <name>` copies these instead of the `hello` template, so the names are reserved. */
-export const OFFICIAL_PLUGINS = ["codex-images", "dice"] as const;
+export const OFFICIAL_PLUGINS = [
+	"codex-images",
+	"dice",
+	"release-notice",
+] as const;
 
 /** Whether `name` is one of the official plugins. */
 export const isOfficialPlugin = (name: string): boolean =>

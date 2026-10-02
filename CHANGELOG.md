@@ -5,6 +5,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `roundtable add plugin release-notice` copies a third official plugin. After the agent server is up it posts once in the coordinator's channel when the running release differs from the one last announced, with the commits the release added since the release last announced, read from a `release.json` that the deploy writes (`{ "sha": "...", "commits": ["subject", ...] }`); it also names the channels whose work the previous shutdown cut short, recorded from the `shutdown` event. It remembers the announced `sha` only after the post succeeds. `createReleaseNotice` takes `releaseFile`, `dataDir`, and `announce` to change where the release is read, where the state is kept, and where the post goes.
+
+### Changed
+
+- `release-notice` joins `codex-images` and `dice` as a reserved name for `add plugin`, and the usage text lists all three.
+
 ## [0.6.1] - 2026-10-02
 
 ### Fixed

@@ -1,19 +1,20 @@
 ---
 title: Official plugins
-description: Two ready-made plugins you copy into your project, codex-images and dice, with what each needs and how to change the copy.
+description: Three ready-made plugins you copy into your project, codex-images, dice, and release-notice, with what each needs and how to change the copy.
 sidebar:
   order: 8
 ---
 
 import { Aside } from "@astrojs/starlight/components";
 
-pi-roundtable ships two plugins as files you copy into your project.
+pi-roundtable ships three plugins as files you copy into your project.
 You can read, change, or delete your copy like any plugin file.
 
 | Plugin | What it does |
 | --- | --- |
 | `codex-images` | Draws agents' avatars from a prompt and reference pictures, through your ChatGPT subscription login. |
 | `dice` | Gives agents a `roll_dice` tool. |
+| `release-notice` | After a deploy, posts once which commits the new release added, and which channels the last shutdown cut short. |
 
 ## Add one
 
@@ -22,11 +23,12 @@ Run `add plugin` with the plugin's name inside your project:
 ```sh
 bunx roundtable add plugin dice
 bunx roundtable add plugin codex-images
+bunx roundtable add plugin release-notice
 ```
 
 Each command writes `plugins/<name>.ts` and `plugins/<name>.test.ts`, imports the plugin in `roundtable.config.ts`, and lists it in `plugins`.
-Both names are reserved: `add plugin` copies the official plugin for them and keeps the `hello` template for every other name.
-If either file already exists, the command stops without writing anything.
+The three names are reserved: `add plugin` copies the official plugin for them and keeps the `hello` template for every other name.
+If either file of a plugin already exists, the command stops without writing anything.
 See [CLI](/reference/cli/) for everything `add plugin` checks.
 
 Run the tests in your project:
@@ -85,18 +87,52 @@ When Codex refuses a request, usually because of the prompt, it fails with `Imag
 Repeating the same prompt fails again.
 A request has a five-minute limit, and an image over 32 MiB is refused.
 
+## `release-notice`
+
+`release-notice` announces a deploy.
+It posts in the coordinator's channel, once, after the agent server's channels are up:
+
+- When the running release is not the one last announced, it posts the new `sha` and the commits the release added.
+- When the previous shutdown cut work short, it also names those channels. A shutdown waits an hour for running work before it gives up on it.
+- A restart of the same release with nothing cut short posts nothing, and so does a start with no `release.json`.
+
+It needs your deploy to write `release.json` into the directory the bot runs in, before the bot starts.
+The file holds the commit the release was built from and the subjects of the commits it added since the release last announced, newest first, so a release whose announcement failed or never ran is not skipped over:
+
+```json
+{ "sha": "abc1234", "commits": ["fix: handle an empty reply", "feat: add a notes tool"] }
+```
+
+The plugin keeps the sha it last announced in `data/announced-release`, so a deploy script on the same host can read the range's start from there.
+This script stops the deploy when `git log` or `jq` fails, and the first deploy, with nothing announced yet, gets an empty `commits` list:
+
+```sh
+set -euo pipefail
+previous=$(cat data/announced-release 2>/dev/null || true)
+commits='[]'
+if [ -n "$previous" ]; then
+  commits=$(git log --format=%s "$previous..HEAD" | jq -R . | jq -s .)
+fi
+printf '{"sha":"%s","commits":%s}\n' "$(git rev-parse --short HEAD)" "$commits" > release.json
+```
+
+The plugin remembers what it announced in `announced-release`, and the channels a shutdown cut short in `aborted-on-shutdown.json`, both in `./data`.
+It records an announcement only after the post succeeds, so a failed post is tried again at the next start.
+A `release.json` that is not valid, such as one with an empty `sha`, fails with its path in the log and posts nothing.
+
 ## Change the copy
 
 The copy lives in your project, so edit it like any plugin.
 
 - In `plugins/dice.ts`, the limits are constants at the top of the file, and the tool's description repeats them to the model, so change both together.
 - In `plugins/codex-images.ts`, the model that routes the request is a constant.
-- Each file exports a function (`createDice`, `createCodexImages`) that takes the part a test replaces, a random source or a `fetch`, and the ready-made plugin built from it (`dice`, `codexImages`) that the config lists.
-- The tests beside them run offline: `dice` with a fake random source, `codex-images` with a fake `fetch`.
+- `plugins/release-notice.ts` exports `createReleaseNotice({ releaseFile, dataDir, announce })`. Give it `dataDir` when your config's `dataDir` is not `./data`, `releaseFile` when your deploy writes the file elsewhere, and `announce` to post somewhere other than the coordinator's channel; the config then lists the result of that call in place of `releaseNotice`. The announcement text is the `noticeText` function.
+- Each file exports a function (`createDice`, `createCodexImages`, `createReleaseNotice`) that takes the part a test replaces, a random source, a `fetch`, or the places `release-notice` reads and posts to, and the ready-made plugin built from it (`dice`, `codexImages`, `releaseNotice`) that the config lists.
+- The tests beside them run offline: `dice` with a fake random source, `codex-images` with a fake `fetch`, `release-notice` with temporary directories and its own `announce`.
 
 To remove one, delete its two files and its entry in `roundtable.config.ts`.
 
 The separate [pi-roundtable-mcp](/plugins/mcp-package/) package adds MCP connectors and remote MCP; you install it with `bun add` instead of copying it.
 See [What plugins can add](/plugins/what-plugins-can-add/) for other plugin features and [Test a plugin](/plugins/testing/) for testing.
 
-{/* Sources: src/cli/templates.ts:13-25, src/cli/templates.ts:84-102, src/cli/add-plugin.ts:34-75, templates/official/dice/plugin.ts, templates/official/dice/plugin.test.ts.tmpl, templates/official/codex-images/plugin.ts, templates/official/codex-images/plugin.test.ts.tmpl, src/core/plugin.ts:268-276, docs/plugins.md:757-772 (images slot, agent_avatar, doctor), src/cli/checks/images.ts */}
+{/* Sources: src/cli/templates.ts:13-25, src/cli/templates.ts:84-102, src/cli/add-plugin.ts:34-75, templates/official/dice/plugin.ts, templates/official/dice/plugin.test.ts.tmpl, templates/official/codex-images/plugin.ts, templates/official/codex-images/plugin.test.ts.tmpl, templates/official/release-notice/plugin.ts, templates/official/release-notice/plugin.test.ts.tmpl, src/core/plugin.ts:268-276, docs/plugins.md:757-772 (images slot, agent_avatar, doctor), src/cli/checks/images.ts */}

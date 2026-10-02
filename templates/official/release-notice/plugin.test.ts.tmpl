@@ -1,0 +1,248 @@
+import { afterEach, beforeEach, expect, test } from "bun:test";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+	AGENT_SERVER_PLUGIN,
+	AGENT_TEAM_SERVICE,
+	AGENTS,
+	type AgentTeam,
+} from "pi-roundtable";
+import { partial, servicePair, testPlugin } from "pi-roundtable/testing";
+import { createReleaseNotice, noticeText } from "./release-notice.ts";
+
+let dir: string;
+let posted: string[];
+
+beforeEach(async () => {
+	dir = await mkdtemp(join(tmpdir(), "release-notice-"));
+	posted = [];
+});
+afterEach(() => rm(dir, { recursive: true, force: true }));
+
+const releaseFile = () => join(dir, "release.json");
+const dataDir = () => join(dir, "data");
+const writeRelease = (sha: string, commits: string[]) =>
+	writeFile(releaseFile(), JSON.stringify({ sha, commits }));
+
+/** The plugin over the temporary directory, posting into `posted`; `fail` makes the post throw. */
+async function started(fail = false) {
+	const harness = await testPlugin(
+		createReleaseNotice({
+			releaseFile: releaseFile(),
+			dataDir: dataDir(),
+			announce: async (text) => {
+				if (fail) throw new Error("the channel is gone");
+				posted.push(text);
+			},
+		}),
+	);
+	const events = harness.contribution.events;
+	return {
+		harness,
+		/** What the host delivers when the agent server's channels are up. */
+		ready: () =>
+			events?.serviceStarted?.({
+				plugin: AGENT_SERVER_PLUGIN,
+				service: AGENT_TEAM_SERVICE,
+				outcome: "ready",
+			}),
+		/** What the host delivers when the shutdown drain ends. */
+		shutdown: (left: string[]) => events?.shutdown?.(left),
+	};
+}
+
+test("a start with no release.json announces nothing", async () => {
+	const run = await started();
+	await run.ready();
+	expect(posted).toEqual([]);
+	await run.harness.stop();
+});
+
+test("a new release is announced once, with its commits", async () => {
+	await writeRelease("abc1234", ["fix: b", "feat: a"]);
+	const first = await started();
+	await first.ready();
+	expect(posted).toEqual(["🔄 Updated to `abc1234`\n- fix: b\n- feat: a"]);
+	await first.harness.stop();
+	// The next start of the same release says nothing.
+	const second = await started();
+	await second.ready();
+	expect(posted).toHaveLength(1);
+	await second.harness.stop();
+	// A different release is announced again.
+	await writeRelease("def5678", ["feat: c"]);
+	const third = await started();
+	await third.ready();
+	expect(posted[1]).toBe("🔄 Updated to `def5678`\n- feat: c");
+	await third.harness.stop();
+});
+
+test("only the agent server's ready event announces", async () => {
+	await writeRelease("abc1234", ["fix: b"]);
+	const harness = await testPlugin(
+		createReleaseNotice({
+			releaseFile: releaseFile(),
+			dataDir: dataDir(),
+			announce: async (text) => {
+				posted.push(text);
+			},
+		}),
+	);
+	const serviceStarted = harness.contribution.events?.serviceStarted;
+	await serviceStarted?.({
+		plugin: AGENT_SERVER_PLUGIN,
+		service: AGENT_TEAM_SERVICE,
+		outcome: "failed",
+	});
+	await serviceStarted?.({
+		plugin: "other",
+		service: AGENT_TEAM_SERVICE,
+		outcome: "ready",
+	});
+	await serviceStarted?.({
+		plugin: AGENT_SERVER_PLUGIN,
+		service: "other",
+		outcome: "ready",
+	});
+	expect(posted).toEqual([]);
+	await harness.stop();
+});
+
+test("work a shutdown cut short is reported once, after a restart of the same release", async () => {
+	await writeRelease("abc1234", ["fix: b"]);
+	const first = await started();
+	await first.ready();
+	await first.shutdown(["discord:111", "agentgroup:222.infra", "discord:111"]);
+	const second = await started();
+	await second.ready();
+	expect(posted[1]).toBe(
+		"🔄 Restarted (`abc1234`)\n-# Cut short by the restart, still running when the shutdown wait ended: <#111>, <#222>",
+	);
+	await second.harness.stop();
+	const third = await started();
+	await third.ready();
+	expect(posted).toHaveLength(2);
+	await third.harness.stop();
+});
+
+test("a shutdown that left nothing records nothing", async () => {
+	await writeRelease("abc1234", []);
+	const first = await started();
+	await first.ready();
+	await first.shutdown([]);
+	await first.harness.stop();
+	const second = await started();
+	await second.ready();
+	expect(posted).toHaveLength(1);
+	await second.harness.stop();
+});
+
+test("a post that fails leaves the release unannounced, so the next start tries again", async () => {
+	await writeRelease("abc1234", ["fix: b"]);
+	const failing = await started(true);
+	await expect(failing.ready()).rejects.toThrow("the channel is gone");
+	await failing.harness.stop();
+	expect(await Bun.file(join(dataDir(), "announced-release")).exists()).toBe(
+		false,
+	);
+	const next = await started();
+	await next.ready();
+	expect(posted).toEqual(["🔄 Updated to `abc1234`\n- fix: b"]);
+	await next.harness.stop();
+});
+
+test("a release.json that is not a valid description fails with its path and announces nothing", async () => {
+	for (const bad of [
+		"",
+		"{ not json",
+		"null",
+		"[]",
+		"{}",
+		'{"sha":"","commits":[]}',
+		'{"sha":"abc1234"}',
+		'{"sha":"abc1234","commits":"fix: b"}',
+		'{"sha":"abc1234","commits":["fix: b",null,{}]}',
+	]) {
+		await writeFile(releaseFile(), bad);
+		const run = await started();
+		await expect(run.ready()).rejects.toThrow(
+			`${releaseFile()} is not a valid release description`,
+		);
+		await run.harness.stop();
+	}
+	expect(posted).toEqual([]);
+});
+
+test("a recorded list that is not a list of strings fails with its path", async () => {
+	await writeRelease("abc1234", []);
+	await mkdir(dataDir(), { recursive: true });
+	await writeFile(join(dataDir(), "aborted-on-shutdown.json"), '["a", 1]');
+	const run = await started();
+	await expect(run.ready()).rejects.toThrow("is not a list of strings");
+	await run.harness.stop();
+});
+
+test("a shutdown during the post is not lost, and one that ends before the next start adds to the unannounced", async () => {
+	await writeRelease("abc1234", ["fix: b"]);
+	let finish = () => {};
+	const harness = await testPlugin(
+		createReleaseNotice({
+			releaseFile: releaseFile(),
+			dataDir: dataDir(),
+			announce: (text) =>
+				new Promise<void>((resolve) => {
+					posted.push(text);
+					finish = resolve;
+				}),
+		}),
+	);
+	const events = harness.contribution.events;
+	const announcing = events?.serviceStarted?.({
+		plugin: AGENT_SERVER_PLUGIN,
+		service: AGENT_TEAM_SERVICE,
+		outcome: "ready",
+	});
+	// The host shuts down while the notice is still being posted.
+	while (posted.length === 0) await Bun.sleep(1);
+	await events?.shutdown?.(["discord:111"]);
+	finish();
+	await announcing;
+	await events?.shutdown?.(["discord:333"]);
+	await harness.stop();
+	const next = await started();
+	await next.ready();
+	expect(posted[1]).toContain("<#111>, <#333>");
+	await next.harness.stop();
+});
+
+test("without an announce option the notice goes to the agent team", async () => {
+	await writeRelease("abc1234", ["fix: b"]);
+	const harness = await testPlugin(
+		createReleaseNotice({ releaseFile: releaseFile(), dataDir: dataDir() }),
+		{
+			services: [
+				servicePair(AGENTS, {
+					team: partial<AgentTeam>({
+						announce: async (text) => {
+							posted.push(text);
+						},
+					}),
+				}),
+			],
+		},
+	);
+	await harness.contribution.events?.serviceStarted?.({
+		plugin: AGENT_SERVER_PLUGIN,
+		service: AGENT_TEAM_SERVICE,
+		outcome: "ready",
+	});
+	expect(posted).toEqual(["🔄 Updated to `abc1234`\n- fix: b"]);
+	await harness.stop();
+});
+
+test("a channel key that is not Discord's is named as it is", () => {
+	expect(noticeText({ sha: "a", commits: [] }, false, ["slack:C1"])).toContain(
+		"slack:C1",
+	);
+});

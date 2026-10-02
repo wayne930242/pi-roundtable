@@ -65,7 +65,7 @@ Use the kit's building blocks for a plugin that runs Pi itself, such as a coding
 
 `roundtable add plugin <name>` creates `plugins/<name>.ts` and its test from a small template and lists it in `roundtable.config.ts`.
 The name is lowercase words joined by dashes, such as `my-notes`.
-Two names are reserved for the [official plugins](#official-plugins): `codex-images` and `dice` copy a ready-made plugin into the project.
+Three names are reserved for the [official plugins](#official-plugins): `codex-images`, `dice`, and `release-notice` copy a ready-made plugin into the project.
 
 `roundtable add package <spec>` adds a Pi package from npm: it runs `bun add <spec>`, loads the package's extensions to find the tools they register, and writes `plugins/<name>.ts` and its test, named after the package without its scope, as [`piPackages`](#pipackages-pi-extensions-every-session-loads) describes.
 
@@ -1811,10 +1811,10 @@ The following fields and parts from 0.1.0 were removed because only built-in plu
 
 ## Official plugins
 
-The package ships two plugins you can copy into a project and change.
-`roundtable add plugin codex-images` and `roundtable add plugin dice` write `plugins/<name>.ts` and `plugins/<name>.test.ts`, import the plugin in `roundtable.config.ts`, and list it in `plugins`.
+The package ships three plugins you can copy into a project and change.
+`roundtable add plugin codex-images`, `roundtable add plugin dice`, and `roundtable add plugin release-notice` write `plugins/<name>.ts` and `plugins/<name>.test.ts`, import the plugin in `roundtable.config.ts`, and list it in `plugins`.
 You can edit the copied files; `add plugin` refuses to overwrite existing ones.
-Both names are reserved for these copies.
+The three names are reserved for these copies.
 
 A separate package, [pi-roundtable-mcp](https://www.npmjs.com/package/pi-roundtable-mcp), adds two more plugins, `mcpConnectors` and `remoteMcp`.
 The first lets the owner add MCP servers such as Notion or a calendar from Discord and gives your code the list; the second lets an agent outside Discord reach your agent.
@@ -1824,14 +1824,44 @@ Install it with `bun add pi-roundtable-mcp`.
 |---|---|---|
 | `codex-images` | Fills the [`images` slot](#providers-replace-a-part-the-core-runs-on), so agents can draw avatars from a prompt and reference pictures | A login to the `openai-codex` provider; setup throws a `PluginError` that says so when the host has none |
 | `dice` | Adds the `roll_dice` tool for members: `2d6+3`, `4d6k3` (keep or drop the highest or lowest dice), several groups, and fate dice `dF`, answered as text such as `2d6+3: [3, 5] + 3 = 11` | Nothing; it takes at most 100 dice in all and 1000 sides per die |
+| `release-notice` | After a deploy, posts once in the coordinator's channel which commits the running release added since the release last announced, and says which channels the previous shutdown cut short | A `release.json` that your deploy writes (see below); without the file it posts nothing |
 
 `codex-images` takes the login through [`context.apiKey("openai-codex")`](#the-context).
 It sends requests to ChatGPT's Codex backend using the owner's ChatGPT subscription login.
 OpenAI doesn't document the backend for this use, so it can stop working without notice; the subscription's terms apply.
 The copied file begins with this warning.
 
-Each copy has a test that runs offline: `codex-images` with a fake `fetch`, `dice` with a fake random source.
-Both files export a `create...` function (`createCodexImages`, `createDice`) that takes the part a test replaces, and the plugin you list in the config, built from it.
+`release-notice` listens to two [events](#events-hear-what-the-core-does).
+When the agent server's team service reports `ready`, it reads the release file and posts if the release's `sha` differs from the one it last announced (`announced-release` in the data directory), or if the previous shutdown cut work short.
+It records the announced `sha` only after the post succeeds, so a failed post is tried again at the next start, and a `release.json` that is not valid (not JSON, an empty `sha`, or `commits` that is not a list of strings) fails the handler with its path in the log.
+At `shutdown(left)` it adds the channels in `left`, the work the drain gave up on after an hour, to `aborted-on-shutdown.json` in the data directory; the next start's announcement names them as cut short (a Discord channel key as a `<#id>` mention), and once it is posted they are removed from the file. A shutdown that arrives while a post is still in flight keeps its channels for the next announcement.
+A plain restart of the same release with nothing cut short posts nothing.
+
+The deploy writes `release.json` into the release directory, where the bot runs, before it starts the bot.
+The file holds the commit the release was built from and the subjects of the commits it added over the release last announced, newest first, so that a release whose announcement failed or never ran is not skipped over:
+
+```json
+{ "sha": "abc1234", "commits": ["fix: handle an empty reply", "feat: add a notes tool"] }
+```
+
+The plugin keeps the sha it last announced in `announced-release` in its data directory, so a deploy script on the same host can read the range's start from there.
+This script writes the file from the checkout, and stops the deploy when `git log` or `jq` fails; the first deploy, with nothing announced yet, gets an empty `commits` list:
+
+```sh
+set -euo pipefail
+previous=$(cat data/announced-release 2>/dev/null || true)
+commits='[]'
+if [ -n "$previous" ]; then
+  commits=$(git log --format=%s "$previous..HEAD" | jq -R . | jq -s .)
+fi
+printf '{"sha":"%s","commits":%s}\n' "$(git rev-parse --short HEAD)" "$commits" > release.json
+```
+
+`createReleaseNotice(options)` takes `releaseFile` (default `release.json` in the working directory), `dataDir` (default `./data`, where a new project's config keeps its data, so set it when the config's `dataDir` differs), and `announce` (default: the agent team's `announce`, which posts in the coordinator's channel and splits a long text).
+The plugin you list in the config, `releaseNotice`, uses the defaults.
+
+Each copy has a test that runs offline: `codex-images` with a fake `fetch`, `dice` with a fake random source, `release-notice` with temporary directories and its own `announce`.
+Each file exports a `create...` function (`createCodexImages`, `createDice`, `createReleaseNotice`) that takes the part a test replaces, and the plugin you list in the config, built from it.
 
 ## Testing a plugin
 

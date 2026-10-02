@@ -14,7 +14,7 @@ Inside a project, run it with `bunx roundtable <command>`.
 | `roundtable init [dir]` | Creates a project in `dir` (default: the current directory). |
 | `roundtable doctor [--reachable]` | Checks the setup and says how to fix what is wrong. |
 | `roundtable start` | Runs the checks that need no network, then the bot. |
-| `roundtable add plugin <name>` | Adds `plugins/<name>.ts` and its test, and lists the plugin in the config. `codex-images` and `dice` are reserved for the official plugins. |
+| `roundtable add plugin <name>` | Adds `plugins/<name>.ts` and its test, and lists the plugin in the config. `codex-images`, `dice`, and `release-notice` are reserved for the official plugins. |
 | `roundtable add package <spec>` | Installs a Pi package with `bun add`, and adds a plugin that loads it and gives its tools to every agent turn. |
 
 `roundtable help` and `roundtable --help` print this list.
@@ -103,8 +103,8 @@ bunx roundtable add plugin my-notes
 
 `add plugin` creates `plugins/my-notes.ts` and `plugins/my-notes.test.ts` from the `hello` template, imports the plugin in `roundtable.config.ts`, and lists it in `plugins`.
 
-Two names are reserved for the [official plugins](/plugins/official-plugins/), `codex-images` and `dice`.
-For either name, `add plugin` copies the ready-made plugin and its test and registers it the same way:
+Three names are reserved for the [official plugins](/plugins/official-plugins/), `codex-images`, `dice`, and `release-notice`.
+For any of them, `add plugin` copies the ready-made plugin and its test and registers it the same way:
 
 ```sh
 bunx roundtable add plugin dice

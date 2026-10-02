@@ -36,7 +36,7 @@ const USAGE = `roundtable: a Discord agent server on Pi
   roundtable doctor [--reachable]  check the setup and say how to fix what is wrong
   roundtable start              run the checks that need no network, then the bot
   roundtable add plugin <name>  add plugins/<name>.ts and its test, and list it in the config
-                                the names ${OFFICIAL_PLUGINS.join(" and ")} are reserved for the official plugins,
+                                the names ${new Intl.ListFormat("en").format(OFFICIAL_PLUGINS)} are reserved for the official plugins,
                                 which are copied in ready to run instead of the template
   roundtable add package <spec> install a Pi package with bun add, and add plugins/<name>.ts that
                                 loads it and gives its tools to every agent turn

@@ -38,7 +38,7 @@ test("no command prints the usage and exits non-zero; help and --version exit ze
 	expect(await runCli([], none.io)).toBe(1);
 	expect(none.out.join("\n")).toContain("roundtable init");
 	expect(none.out.join("\n")).toContain(
-		"codex-images and dice are reserved for the official plugins",
+		"codex-images, dice, and release-notice are reserved for the official plugins",
 	);
 	const help = cli();
 	expect(await runCli(["--help"], help.io)).toBe(0);

@@ -111,6 +111,7 @@ test("add plugin copies the official plugin of that name, with its test, and lis
 	for (const [name, ident, marker] of [
 		["codex-images", "codexImages", "ImageNotGeneratedError"],
 		["dice", "dice", "roll_dice"],
+		["release-notice", "releaseNotice", "aborted-on-shutdown.json"],
 	] as const) {
 		const report = addPlugin({ cwd: dir.path, name });
 		expect(report.ok).toBe(true);
@@ -128,7 +129,7 @@ test("add plugin copies the official plugin of that name, with its test, and lis
 		);
 	}
 	expect(read(dir.path, "roundtable.config.ts")).toContain(
-		"plugins: [hello, codexImages, dice]",
+		"plugins: [hello, codexImages, dice, releaseNotice]",
 	);
 	// The copy is a file of the project's own, not a template with placeholders left in it.
 	expect(read(dir.path, "plugins/dice.ts")).not.toMatch(/__[A-Z]+__/);
