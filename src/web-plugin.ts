@@ -1,0 +1,88 @@
+import {
+	AGENTS,
+	definePlugin,
+	MEMORY,
+	type RoundtablePlugin,
+} from "pi-roundtable";
+import { DISCORD } from "pi-roundtable/discord";
+import { loadAssets } from "./assets.ts";
+import { ConsoleApi } from "./console-api.ts";
+import { ConsoleServer } from "./console-server.ts";
+import {
+	type ResolvedOptions,
+	resolveOptions,
+	type WebConsoleOptions,
+} from "./options.ts";
+
+/**
+ * The owner-only web console: conversations, transcripts, memory notes, and the agent team,
+ * served on a route of the host's listener and updated live. The options are checked here, so
+ * a missing verifier or a bad setting throws when the config is loaded.
+ */
+export function webConsole(options: WebConsoleOptions): RoundtablePlugin {
+	const settings = resolveOptions(options);
+	return definePlugin({
+		name: "web-console",
+		requires: [
+			...(settings.panes.includes("overview") ? [AGENTS] : []),
+			...(settings.panes.includes("notes") ? [MEMORY] : []),
+		],
+		setup: (context) => build(settings, context),
+	});
+}
+
+type Context = Parameters<RoundtablePlugin["setup"]>[0];
+
+function build(settings: ResolvedOptions, context: Context) {
+	const { services, queue, logger, env } = context;
+	const team = services.find(AGENTS)?.team;
+	const connection = services.find(DISCORD)?.connection;
+	const listeners: (() => void)[] = [];
+	const changed = () => {
+		for (const listener of listeners) listener();
+	};
+	// A broken page stops startup here, before anything connects.
+	const assets = loadAssets(settings.assetDir);
+	const api = new ConsoleApi({
+		title: settings.title,
+		timeZone: env.timeZone,
+		panes: settings.panes,
+		sessionsDir: settings.sessionsDir,
+		...(team ? { team } : {}),
+		queue,
+		...(connection
+			? { channelName: (id: string) => connection.channelInfo(id) }
+			: {}),
+		...(settings.ownerId && settings.panes.includes("notes")
+			? { memory: services.get(MEMORY).forSpeaker(settings.ownerId) }
+			: {}),
+		...(settings.exclude ? { exclude: settings.exclude } : {}),
+		relayNotes: settings.relayNotes,
+		changed,
+		logger,
+	});
+	const server = new ConsoleServer({
+		mount: settings.mount,
+		assets,
+		verifier: settings.verifier,
+		origin: settings.origin,
+		api,
+		subscribe: (listener) => {
+			listeners.push(listener);
+			queue.onChange(listener);
+			team?.onChange(listener);
+		},
+		logger,
+	});
+	return {
+		services: [
+			{
+				name: "web-console",
+				start: () => server.start(),
+				stop: () => server.stop(),
+			},
+		],
+		http: server.routes(settings.listener),
+		dashboard: [`Web console: ${settings.origin}${settings.mount}/`],
+	};
+}

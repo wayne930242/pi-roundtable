@@ -1,0 +1,8 @@
+{
+	// The code samples use tabs because biome formats the TypeScript they show that way.
+	"MD010": { "code_blocks": false },
+	// One sentence per line keeps diffs clean, so lines are as long as their sentences.
+	"MD013": false,
+	// The changelog repeats "Added" and "Changed" under each version.
+	"MD024": { "siblings_only": true }
+}
