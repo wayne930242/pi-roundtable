@@ -1,0 +1,56 @@
+---
+title: Drawing 套件
+description: 在本機繪製關係圖、符號、幾何圖形和牌陣，再附在 agent 的回覆裡。
+sidebar:
+  order: 9
+---
+
+`pi-roundtable-drawing` 會在 host 上用 `node-canvas` 畫 PNG，並把圖片附在 agent 的回覆裡。
+它能畫人物關係圖、魔法陣、符印、神聖幾何圖形；如果你提供牌組，也能抽牌排陣。
+它不呼叫圖片服務，也不需要 API key。
+
+## 安裝與需求
+
+```sh
+bun add pi-roundtable-drawing
+```
+
+需要 Bun 1.3 以上，以及 `>=0.7.0 <0.8.0` 的 pi-roundtable peer dependency。
+`0.7.0` 是最低版本，因為這個套件會用到回覆附件。
+`canvas` 是原生相依套件；支援的平台會下載預先編譯的 binary，其他平台則需要 Cairo、Pango、JPEG、GIF、SVG 開發函式庫和編譯器。
+各平台的安裝指令見[套件 README](https://github.com/wayne930242/pi-roundtable/blob/master/packages/drawing/README.md#the-native-canvas-dependency)（英文）。
+
+```ts
+import { drawing } from "pi-roundtable-drawing";
+
+export default {
+  // ...其他 roundtable 設定...
+  plugins: [drawing({ deckDir: "./decks" })],
+};
+```
+
+## 設定
+
+| 選項 | 預設值 | 用途 |
+| --- | --- | --- |
+| `deckDir` | 無 | 每個牌組各放一個子目錄。不設定時不會註冊 `draw_cards` 工具。 |
+| `random` | `Math.random` | 關係圖版面與抽牌使用的亂數來源。套件匯出 `seededRandom(seed)`，可重現結果。 |
+| `minTier` | `member` | 可使用工具的最低 speaker tier；host 的 `toolTiers` 可以覆寫。 |
+
+套件不讀取環境變數，也不需要資料庫。
+抽牌要自行準備 `deck.json` 和牌面圖；套件沒有附牌面。
+牌組目錄不存在或內容無效時，host 會在啟動時停止。
+manifest 只接受文件列出的欄位，圖片路徑也必須留在牌組目錄內。
+
+## 工具與附件限制
+
+工具有 `relationship_map`、`magic_circle_generate`、`sigil_generate`、`sacred_geometry_generate`，以及選擇性加入的 `draw_cards`。
+每次呼叫會附上一張圖片。
+每輪最多附 10 個檔案，每個最多 10 MiB，合計最多 50 MiB；surface 也可能設更嚴格的限制。
+被拒絕的呼叫不會附檔。
+host 會在 agent 文字回覆後送出圖片，並使用相同的 speaker 身分。
+核心附件規則見[回覆附件](/zh-tw/plugins/first-plugin/#reply-attachments)。
+
+完整工具參數、限制、牌組 manifest、原生相依套件安裝方式和測試範例，見[pi-roundtable-drawing README](https://github.com/wayne930242/pi-roundtable/blob/master/packages/drawing/README.md)（英文）。
+
+{/* Sources: packages/drawing/README.md:1-24, packages/drawing/README.md:26-72, packages/drawing/src/plugin.ts:14-49 */}

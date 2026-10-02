@@ -63,6 +63,21 @@ All links in the tables point to the section of the [full plugin guide](https://
 | The `runtime` slot | You want a runtime other than Pi to run every conversation. | [`echo-runtime.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/echo-runtime.ts) | [The runtime slot](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#the-runtime-slot-replace-pi) |
 | `provides` and `replaces` | You want to take over a built-in service, such as the schedule store. | [`shared-services.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/shared-services.ts) | [Replacing a built-in service](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#replacing-a-built-in-service) |
 
+## Complete implementations
+
+The examples above isolate one plugin capability at a time.
+These packages show complete implementations of related APIs:
+
+- Owner-approved `repo_push` and an out-of-process Pi worker: [coding guide](/plugins/coding-package/) and [source](https://github.com/wayne930242/pi-roundtable/tree/master/packages/coding).
+- A tool-using guest agent in a no-network container with a host-side credential broker: [sandbox guide](/plugins/sandbox-package/) and [source](https://github.com/wayne930242/pi-roundtable/tree/master/packages/sandbox).
+- An authenticated `http` console: [web guide](/plugins/web-package/) and [source](https://github.com/wayne930242/pi-roundtable/tree/master/packages/web).
+- A tool that draws images and attaches them to the reply: [drawing guide](/plugins/drawing-package/) and [source](https://github.com/wayne930242/pi-roundtable/tree/master/packages/drawing).
+- An owner-provided `images` implementation: the [`codex-images` copy-in plugin](/plugins/official-plugins/#codex-images) and its [source template](https://github.com/wayne930242/pi-roundtable/blob/master/templates/official/codex-images/plugin.ts).
+- MCP connectors and remote MCP endpoints: [MCP guide](/plugins/mcp-package/) and [source](https://github.com/wayne930242/pi-roundtable/tree/master/packages/mcp).
+
+See the [official plugin guide](/plugins/official-plugins/) for the `dice` and `release-notice` copy-in sources.
 See [Services and addons](/plugins/services-and-addons/) for `provides`, `requires` and `replaces`, and [Examples](/plugins/examples/) for every example file.
+
+{/* Sources: packages/coding/src/coding-plugin.ts, packages/sandbox/src/plugin.ts, packages/web/src/web-plugin.ts, packages/drawing/src/plugin.ts, packages/mcp/src/connectors/connectors-plugin.ts, packages/mcp/src/remote-mcp/remote-mcp-plugin.ts, templates/official/codex-images/plugin.ts */}
 
 {/* Sources: docs/plugins.md:9-35, docs/plugins.md:66-110, docs/plugins.md:316-1710, examples/*.ts */}

@@ -1,8 +1,8 @@
 ---
 title: MCP connector 和 remote MCP
-description: pi-roundtable-mcp 套件和它的兩個外掛。一個連接你自己的 MCP server，另一個讓外面的 agent 能找到你的 agent。
+description: pi-roundtable-mcp 提供兩個外掛，能連接你的 MCP server，也能讓外部 agent 存取你的 agent。
 sidebar:
-  order: 2
+  order: 13
 ---
 
 import { Aside } from "@astrojs/starlight/components";
@@ -17,19 +17,18 @@ import { Aside } from "@astrojs/starlight/components";
 
 兩個外掛合起來涵蓋兩個方向：你的 agent 能用別台 server 的工具，別處的 agent 也能找到你的 agent。
 
-這個套件有自己的儲存庫：[wayne930242/pi-roundtable-mcp](https://github.com/wayne930242/pi-roundtable-mcp)。
-每個選項和訊息，都列在它的 README。
-這一頁只說明你決定要不要用它時需要知道的事。
+套件目前位於 pi-roundtable workspace 的 `packages/mcp`；完整選項和訊息文字見[套件 README](https://github.com/wayne930242/pi-roundtable/blob/master/packages/mcp/README.md)（英文）。
 
 ## 安裝
 
 ```sh
-bun add pi-roundtable-mcp
+bun add pi-roundtable-mcp pi-roundtable
 ```
 
-它支援 pi-roundtable 0.4 和 0.5，也需要 bot 的 PostgreSQL。
-`mcpConnectors` 還需要一個你自己架的 ContextForge gateway，見下方。
-`remoteMcp` 需要一個能連到 bot 的 HTTPS 位址，例如通道（tunnel）。
+需要 Bun 1.3 以上、`>=0.7.0 <0.8.0` 的 pi-roundtable，以及 bot 使用的 PostgreSQL。
+`mcpConnectors` 還需要一個自行執行的 ContextForge gateway，見下方。
+`remoteMcp` 需要能連到 host public listener 的 HTTPS 位址，例如 tunnel。
+遷移後的套件會隨下一個相符的 lockstep 版本發佈；目前 npm 上獨立發佈的版本不相容於 core 0.7.x。
 
 ## 啟用
 
@@ -61,52 +60,55 @@ export default {
 
 兩個外掛可以只用其中一個。
 
+`mcpConnectors` 必須設定 `contextForge.url`、`contextForge.jwtSecret` 和 `contextForge.user`；`serverPrefix` 預設為 `roundtable-conn-`，`maxToolName` 預設為 `45`，`messages` 可修改預設英文訊息。
+`remoteMcp` 必須設定 `dispatchToken` 和 `publicUrl`；`persona` 可修改預設對話提示詞，host 自行管理對話時 `answer` 和 `claim` 必須一起提供，`messages` 可修改訊息，`toolNames` 預設為 `agent_dispatch` 和 `agent_result`。
+
 ## Connectors
 
-`/roundtable connector add` 會開一個私人表單，讓你填 server 的位址和 token。
-`list`、`describe` 和 `remove` 用來管理你加過的 connector。
+`/roundtable connector add` 會開一個私人表單，讓你填 server 位址和 token。
+`list`、`describe` 和 `remove` 用來管理已加入的 connector。
 只有 owner 能用這些指令。
 
-[ContextForge](https://github.com/IBM/mcp-context-forge) 保管每一台上游 server 和它的 token。
-它是 IBM 的開源 MCP gateway，這個套件不會替你執行它。
-把它跑在 bot 旁邊，並讓兩邊用同一個 JWT secret。
+[ContextForge](https://github.com/IBM/mcp-context-forge) 保管每台上游 server 和它的 token。
+它是 IBM 的開源 MCP gateway；這個套件不會替你執行它。
+把 gateway 跑在 host 旁邊，並讓兩邊使用相同的 JWT secret。
 
-外掛不決定哪個 agent 用哪個 connector。
-它把清單交給你的程式碼，由你根據清單建出每個 agent 的工具。
-套件的 README 有範例。
+外掛會把 connector 清單交給你的程式碼。
+你的程式碼再依清單選擇 connector，替每個 agent 建立工具。
+套件 README 有範例。
 
 ## Remote MCP
 
-這個外掛在 bot 的 `public` listener 上提供兩個 endpoint。
+這個外掛在 host 的 `public` listener 上提供兩個 endpoint。
 
-| Endpoint | 誰能呼叫 | 它提供什麼 |
+| Endpoint | 誰能呼叫 | 提供什麼 |
 | --- | --- | --- |
-| `/mcp/personal` | 帶著你的 dispatch token 的 agent | 兩個工具。一個開始或繼續與你的 agent 的對話，並立即回傳；另一個在回答準備好時讀取它。 |
-| `/mcp/discord/<token>` | 持有 bundle 位址的 agent | 你授權的頻道所用的 Discord 工具，而且只限你授權的操作。 |
+| `/mcp/personal` | 帶著 dispatch token 的 agent | 兩個工具。一個開始或繼續與你的 agent 對話，並立即回傳；另一個在回答準備好時讀取結果。 |
+| `/mcp/discord/<token>` | 持有 bundle 位址的 agent | 使用已授權頻道的 Discord 工具，而且只限你允許的操作。 |
 
-授權頻道要在 Discord 裡，在你想分享的那個頻道用 `/roundtable mcp authorize`。
-bot 會問你要開放哪些操作。
-`grants` 列出已授權的項目，`revoke` 移除一個頻道，`token` 替換 bundle 的位址。
+在想分享的頻道執行 `/roundtable mcp authorize`，即可授權頻道。
+bot 會詢問你要開放哪些操作。
+`grants` 列出授權，`revoke` 移除頻道，`token` 則更換 bundle 位址。
 
-<Aside type="caution" title="兩個祕密值都要當成密碼看待">
-拿到 dispatch token 的人，能以你的身分，用 owner 層級對你的 agent 寫訊息。
+<Aside type="caution" title="兩個秘密都要當成密碼保管">
+拿到 dispatch token 的人，能以你的身分，用 owner tier 對你的 agent 傳訊息。
 拿到 bundle 位址的人，能使用 bundle 裡的每個頻道。
-只用 HTTPS 提供 endpoint，兩個祕密值都不要放進 Git。
+只透過 HTTPS 提供 endpoint，兩個秘密都不要放進 Git。
 </Aside>
 
-每個呼叫到達時都會再檢查一次。
-授權被撤銷或位址被替換，會讓正在執行的呼叫停下來，每個呼叫也都會寫進稽核資料表。
-授權的範圍不會超過你和 bot 在那個頻道裡各自能做的事。
+每個呼叫都會在執行時重新檢查，並寫入 audit table。
+撤銷授權或更換位址會停止正在執行的呼叫。
+授權範圍不會超過你和 bot 在該頻道都能執行的操作。
 
 ## 如果你的 bot 已經有自己的對話
 
-預設情況下，`remoteMcp` 在核心上，把轉送進來的訊息當成 owner 的對話來執行。
-host 如果有自己的 owner 對話，可以改傳 `answer` 和 `claim`，讓同一份程式碼來回答。
-README 示範了做法。
+預設情況下，`remoteMcp` 會在 core 上把轉送訊息當成 owner conversation 執行。
+host 若已有自己的 owner conversation，可以改傳 `answer` 和 `claim`，由 host 自己處理這些對話。
+做法見 README。
 
 ## 訊息文字
 
-外掛的文字預設是英文，兩個外掛都有 `messages` 選項能改。
-Discord 上的文字、錯誤訊息和工具描述，都在那裡用你自己的語言寫。
+兩個外掛的預設文字都是英文，也都能用 `messages` 選項修改。
+Discord 訊息、錯誤訊息和工具說明都可以改成你使用的語言。
 
-{/* Sources: the pi-roundtable-mcp README.md and src/index.ts at v0.4.1 (options, commands, endpoints, security model), package.json (peer dependency and install) */}
+{/* Sources: packages/mcp/README.md:1-25, packages/mcp/README.md:27-92, packages/mcp/README.md:95-160, packages/mcp/src/connectors/connectors-plugin.ts:27-46, packages/mcp/src/remote-mcp/remote-mcp-plugin.ts:30-79 */}

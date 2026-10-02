@@ -1,6 +1,6 @@
 ---
-title: Official plugins
-description: Three ready-made plugins you copy into your project, codex-images, dice, and release-notice, with what each needs and how to change the copy.
+title: Official plugins and packages
+description: "Three copy-in plugins and guides for five official packages, with their requirements and configuration."
 sidebar:
   order: 8
 ---
@@ -65,6 +65,7 @@ If an expression exceeds the limits or cannot be parsed, the tool says what to f
 The limits are 100 dice in all, 1000 sides on a die, 200 characters, and 1000000 in a plain number.
 
 `dice` needs no login and no setting.
+Its [copy-in source template](https://github.com/wayne930242/pi-roundtable/blob/master/templates/official/dice/plugin.ts) implements the tool.
 
 ## `codex-images`
 
@@ -72,6 +73,7 @@ The limits are 100 dice in all, 1000 sides on a die, 200 characters, and 1000000
 With it, `agent_create` accepts an avatar prompt, agents get an `agent_avatar` tool, and the owner's profile panel offers to redraw.
 Without an `images` plugin, each agent gets a generated picture from its display name instead.
 `roundtable doctor` reports whether a plugin fills the slot.
+Its [copy-in source template](https://github.com/wayne930242/pi-roundtable/blob/master/templates/official/codex-images/plugin.ts) is a complete `images` provider implementation.
 
 It needs a login to the `openai-codex` provider, the same login mechanism the agents use for their models.
 When the host has none, the plugin refuses to start and the message says to log in to `openai-codex`.
@@ -90,10 +92,12 @@ A request has a five-minute limit, and an image over 32 MiB is refused.
 ## `release-notice`
 
 `release-notice` announces a deploy.
+Its [copy-in source template](https://github.com/wayne930242/pi-roundtable/blob/master/templates/official/release-notice/plugin.ts) implements the announcement and shutdown tracking.
 It posts in the coordinator's channel, once, after the agent server's channels are up:
 
 - When the running release is not the one last announced, it posts the new `sha` and the commits the release added.
-- When the previous shutdown cut work short, it also names those channels. A shutdown waits an hour for running work before it gives up on it.
+- When the previous shutdown cut work short, it also names those channels.
+  A shutdown waits an hour for running work before it gives up on it.
 - A restart of the same release with nothing cut short posts nothing, and so does a start with no `release.json`.
 
 It needs your deploy to write `release.json` into the directory the bot runs in, before the bot starts.
@@ -126,13 +130,29 @@ The copy lives in your project, so edit it like any plugin.
 
 - In `plugins/dice.ts`, the limits are constants at the top of the file, and the tool's description repeats them to the model, so change both together.
 - In `plugins/codex-images.ts`, the model that routes the request is a constant.
-- `plugins/release-notice.ts` exports `createReleaseNotice({ releaseFile, dataDir, announce })`. Give it `dataDir` when your config's `dataDir` is not `./data`, `releaseFile` when your deploy writes the file elsewhere, and `announce` to post somewhere other than the coordinator's channel; the config then lists the result of that call in place of `releaseNotice`. The announcement text is the `noticeText` function.
+- `plugins/release-notice.ts` exports `createReleaseNotice({ releaseFile, dataDir, announce })`.
+  Give it `dataDir` when your config's `dataDir` is not `./data`, `releaseFile` when your deploy writes the file elsewhere, and `announce` to post somewhere other than the coordinator's channel; the config then lists the result of that call in place of `releaseNotice`.
+  The announcement text is the `noticeText` function.
 - Each file exports a function (`createDice`, `createCodexImages`, `createReleaseNotice`) that takes the part a test replaces, a random source, a `fetch`, or the places `release-notice` reads and posts to, and the ready-made plugin built from it (`dice`, `codexImages`, `releaseNotice`) that the config lists.
 - The tests beside them run offline: `dice` with a fake random source, `codex-images` with a fake `fetch`, `release-notice` with temporary directories and its own `announce`.
 
 To remove one, delete its two files and its entry in `roundtable.config.ts`.
 
-The separate [pi-roundtable-mcp](/plugins/mcp-package/) package adds MCP connectors and remote MCP; you install it with `bun add` instead of copying it.
+## Official packages
+
+The drawing, coding, web, and sandbox packages install with `bun add` at their matching lockstep versions.
+Each requires the matching pi-roundtable minor version.
+The migrated MCP package will be available in the next lockstep release.
+The currently published standalone `pi-roundtable-mcp` 0.4.1 is not compatible with core 0.7.x.
+
+| Package | What it adds |
+| --- | --- |
+| [pi-roundtable-drawing](/plugins/drawing-package/) | Local image tools for relationship maps, symbols, geometry, and card spreads. |
+| [pi-roundtable-coding](/plugins/coding-package/) | Repository tools backed by an out-of-process Pi coding worker. |
+| [pi-roundtable-web](/plugins/web-package/) | An authenticated owner console for conversations, team status, and memory notes. |
+| [pi-roundtable-sandbox](/plugins/sandbox-package/) | Guest-only Discord channels isolated in Docker on Linux. |
+| [pi-roundtable-mcp](/plugins/mcp-package/) | Owner-managed MCP connectors and remote MCP access. |
+
 See [What plugins can add](/plugins/what-plugins-can-add/) for other plugin features and [Test a plugin](/plugins/testing/) for testing.
 
 {/* Sources: src/cli/templates.ts:13-25, src/cli/templates.ts:84-102, src/cli/add-plugin.ts:34-75, templates/official/dice/plugin.ts, templates/official/dice/plugin.test.ts.tmpl, templates/official/codex-images/plugin.ts, templates/official/codex-images/plugin.test.ts.tmpl, templates/official/release-notice/plugin.ts, templates/official/release-notice/plugin.test.ts.tmpl, src/core/plugin.ts:268-276, docs/plugins.md:757-772 (images slot, agent_avatar, doctor), src/cli/checks/images.ts */}

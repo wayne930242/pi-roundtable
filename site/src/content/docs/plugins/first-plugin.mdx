@@ -92,13 +92,14 @@ Raw session tools and Pi package tools can import `attachReplyFile` and call it 
 A Pi package should share the host's `pi-roundtable` peer dependency rather than bundle its own copy.
 Calls outside a conversation turn, after its end, or inside a transient `runTask` fail with `ReplyFileError`.
 The limits are 10 files per turn, 10 MiB (10,485,760 bytes) per file, and 50 MiB (52,428,800 bytes) total across all tools.
-Empty data, invalid names (paths, control characters, or over 255 characters), and exceeding calls are refused instead of dropped.
+Empty data, non-`Uint8Array` data, invalid names (empty, `.`, `..`, paths, control characters, or over 255 characters), and calls exceeding limits are refused instead of dropped.
 
 A custom `ChatSurface` opts in with `supportsFiles: true` and must deliver every `OutboundReply.files` entry with the reply's identity or reject; absent or false makes attachment calls fail clearly.
 Network limits may be stricter; delivery failures are logged, may leave a partial message group, and are not retried.
 A custom `ConversationTurnInput.reply` callback receives successful `TurnResult.files` and owns their delivery.
 The runnable [reply-files example](https://github.com/wayne930242/pi-roundtable/blob/master/examples/reply-files.ts) and its test show the full plugin and `testPlugin`'s `harness.files` fixture.
 See the [attachment contract](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#attach-files-to-the-agents-reply) for replacement runtime behavior and every edge case.
+For a complete local image tool that attaches its output, see the [drawing package guide](/plugins/drawing-package/) and [source directory](https://github.com/wayne930242/pi-roundtable/tree/master/packages/drawing).
 
 ## Go further
 

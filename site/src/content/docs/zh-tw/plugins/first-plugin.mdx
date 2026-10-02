@@ -11,13 +11,15 @@ import toolCall from "../../../../assets/scenes/tool-call.png";
 
 <Steps>
 
-1. 建立外掛。這會寫出 `plugins/<name>.ts` 和它的測試，並把外掛列進 `roundtable.config.ts`。
+1. 建立外掛。
+   這會寫出 `plugins/<name>.ts` 和它的測試，並把外掛列進 `roundtable.config.ts`。
 
    ```sh
    bunx roundtable add plugin hello
    ```
 
-2. 編輯它。外掛是一個有名稱和 `setup` 函式的物件，`setup` 回傳它要新增的東西。
+2. 編輯它。
+   外掛是一個有名稱和 `setup` 函式的物件，`setup` 回傳它要新增的東西。
    下面這個外掛給每個 agent 一個工具：
 
    ```ts
@@ -40,7 +42,8 @@ import toolCall from "../../../../assets/scenes/tool-call.png";
    });
    ```
 
-3. 測試它。`testPlugin` 執行外掛時不需要 Discord 或 PostgreSQL。
+3. 測試它。
+   `testPlugin` 執行外掛時不需要 Discord 或 PostgreSQL。
 
    ```ts
    import { expect, test } from "bun:test";
@@ -58,7 +61,8 @@ import toolCall from "../../../../assets/scenes/tool-call.png";
    bun test
    ```
 
-4. 重新啟動 bot。每個 agent 現在都能呼叫 `hello_greet`。
+4. 重新啟動 bot。
+   每個 agent 現在都能呼叫 `hello_greet`。
 
    ```sh
    bunx roundtable start
@@ -70,6 +74,46 @@ import toolCall from "../../../../assets/scenes/tool-call.png";
 
 <Image src={toolCall} alt="在 guide 頻道，使用者請 Guide 向一個團隊問好。Guide 呼叫 hello_greet 工具，並回覆 Hello, Ada's team!" />
 
+<span id="reply-attachments"></span>
+
+## 把檔案附在 agent 回覆裡
+
+工具仍要回傳模型會讀到的文字，也可以呼叫 `turn.attachFile({ name, data })`，把圖片或其他檔案附在 agent 最後的回覆。
+`data` 是非空的 `Uint8Array` 原始位元組，不是檔案路徑或 base64。
+核心會立即複製資料。
+
+```ts
+turn.attachFile({ name: "drawing.png", data: pngBytes });
+return "圖片會附在這輪回覆裡。";
+```
+
+不要在工具裡呼叫 `context.surfaces.sendReply` 來送檔案，否則檔案會先於 agent 回覆送出，而且可能使用 bot 身分。
+成功完成的一輪會一起送出文字和附件。
+Discord 會用相同的 agent webhook 名稱和頭像，在文字後逐個送出檔案。
+成功但沒有文字時仍可送檔。
+停止、逾時或失敗的一輪會丟棄附件。
+工具失敗後若模型成功完成該輪，先前接受的附件仍會保留。
+
+`pi-roundtable` 主入口匯出 `ReplyFile`、`attachReplyFile(file)`、`ReplyFileError` 和凍結的 `REPLY_FILE_LIMITS`。
+Raw session tool 和 Pi package tool 可在工具執行期間（await 完成前）呼叫 `attachReplyFile`。
+Pi package 應使用 host 的 `pi-roundtable` peer dependency，不能另外包一份。
+對話輪次以外、輪次結束後，或 transient `runTask` 內呼叫都會失敗。
+
+每輪最多 10 個檔案、每個最多 10 MiB（10,485,760 bytes），所有工具合計最多 50 MiB（52,428,800 bytes）。
+空資料、非 `Uint8Array` 資料、空檔名、`.` 或 `..`、含路徑或控制字元的檔名、超過 255 字元的檔名，以及超過上限的附件都會以 `ReplyFileError` 拒絕，不會靜默丟棄。
+自訂 `ChatSurface` 必須設 `supportsFiles: true`，並用回覆者身分送出每個 `OutboundReply.files`，或以錯誤拒絕送出。
+未設定或設為 `false` 時，附件呼叫會失敗。
+傳輸端仍可能設更嚴格的限制。
+
+surface 拒絕送出時，reply path 會寫入 log。
+訊息群組可能只送出一部分，而且不會重試。
+自訂 `ConversationTurnInput.reply` 會收到成功結果中的 `TurnResult.files`，並由該 callback 負責送出。
+
+測試附件工具時，注入 `supportsFiles: true` 的 surface，再檢查 `testPlugin` 的 `harness.files`。
+範例見 [reply-files example](https://github.com/wayne930242/pi-roundtable/blob/master/examples/reply-files.ts)，測試方法見[測試外掛](/zh-tw/plugins/testing/)。
+完整附件契約見[外掛指南](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#attach-files-to-the-agents-reply)（英文）。
+要看一個完整的本機繪圖工具如何附上產出，見[drawing 套件指南](/zh-tw/plugins/drawing-package/)和[套件原始碼](https://github.com/wayne930242/pi-roundtable/tree/master/packages/drawing)。
+
 ## 進一步
 
 [外掛指南](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md)（英文）說明外掛能新增的每個部分（工具、提示詞區段、agent、事件、服務、migration、provider、斜線指令、HTTP 路由等等）、啟動與停止的順序，以及每一種啟動錯誤和它的修正方式。
@@ -78,3 +122,5 @@ import toolCall from "../../../../assets/scenes/tool-call.png";
 `pi-roundtable/kit` 提供頻道認領（claim）、工具與呈現用的輔助函式。
 `pi-roundtable/discord` 提供斜線指令註冊器、擁有者指令與面板的輔助函式，以及 agent 面板。
 這兩個入口的版本規則與主入口相同：1.0 之前，不相容的變更會放在次版本（minor）發佈，並列在[變更記錄](https://github.com/wayne930242/pi-roundtable/blob/master/CHANGELOG.md)（英文）中。
+
+{/* Sources: site/src/content/docs/plugins/first-plugin.mdx:73-114, docs/plugins.md:380-438, packages/drawing/src/plugin.ts */}

@@ -14,7 +14,7 @@ sidebar:
 | `roundtable init [dir]` | 在 `dir` 建立專案（預設是目前的目錄）。 |
 | `roundtable doctor [--reachable]` | 檢查設定，並說明有問題的地方該怎麼修。 |
 | `roundtable start` | 先跑不需要網路的檢查，再啟動 bot。 |
-| `roundtable add plugin <name>` | 加入 `plugins/<name>.ts` 和它的測試，並把外掛列進設定。`codex-images` 和 `dice` 保留給官方外掛。 |
+| `roundtable add plugin <name>` | 加入 `plugins/<name>.ts` 和它的測試，並把外掛列進設定。`codex-images`、`dice` 和 `release-notice` 保留給官方外掛。 |
 | `roundtable add package <spec>` | 用 `bun add` 安裝 Pi package，並加入一個載入它、把它的工具交給每一輪 agent 的外掛。 |
 
 `roundtable help` 和 `roundtable --help` 會印出這份清單。
@@ -101,11 +101,12 @@ bunx roundtable add plugin my-notes
 
 `add plugin` 用 `hello` 範本建立 `plugins/my-notes.ts` 和 `plugins/my-notes.test.ts`，在 `roundtable.config.ts` 裡 import 這個外掛，並把它列進 `plugins`。
 
-有兩個名稱保留給[官方外掛](/zh-tw/plugins/official-plugins/)：`codex-images` 和 `dice`。
-用這兩個名稱時，`add plugin` 複製的是現成的外掛和它的測試，不用 `hello` 範本，註冊方式相同：
+有三個名稱保留給[官方外掛](/zh-tw/plugins/official-plugins/)：`codex-images`、`dice` 和 `release-notice`。
+用這三個名稱時，`add plugin` 複製的是現成的外掛和它的測試，不用 `hello` 範本，註冊方式相同：
 
 ```sh
 bunx roundtable add plugin dice
+bunx roundtable add plugin release-notice
 ```
 
 其他任何合法的名稱，都維持使用 `hello` 範本，所以像 `dice-roller` 這樣的名稱，建出來的是範本外掛。

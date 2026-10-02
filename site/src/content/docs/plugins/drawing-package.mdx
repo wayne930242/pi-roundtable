@@ -1,0 +1,56 @@
+---
+title: Drawing package
+description: Draw maps, symbols, geometry, and card spreads locally, then attach them to agent replies.
+sidebar:
+  order: 9
+---
+
+`pi-roundtable-drawing` adds tools that draw PNGs on the host with `node-canvas` and attach them to the agent's reply.
+It makes relationship maps, magic circles, sigils, and sacred geometry, plus card spreads when you provide a deck.
+It does not call an image service or need an API key.
+
+## Install and requirements
+
+```sh
+bun add pi-roundtable-drawing
+```
+
+Use Bun 1.3 or newer and the pi-roundtable peer range `>=0.7.0 <0.8.0`.
+Reply attachments require the `0.7.0` lower bound.
+`canvas` is a native dependency; supported platforms use a prebuilt binary, while other platforms need the Cairo, Pango, JPEG, GIF, and SVG development libraries and a compiler.
+See the [package README](https://github.com/wayne930242/pi-roundtable/blob/master/packages/drawing/README.md#the-native-canvas-dependency) for platform commands.
+
+```ts
+import { drawing } from "pi-roundtable-drawing";
+
+export default {
+  // ...your roundtable settings...
+  plugins: [drawing({ deckDir: "./decks" })],
+};
+```
+
+## Configuration
+
+| Option | Default | Purpose |
+| --- | --- | --- |
+| `deckDir` | none | Directory containing one subdirectory per deck. Without it, no `draw_cards` tool is registered. |
+| `random` | `Math.random` | Random source for map layout and card draws. `seededRandom(seed)` is exported for repeatable results. |
+| `minTier` | `member` | Lowest speaker tier allowed to use the tools; host `toolTiers` can override it. |
+
+The package reads nothing from the environment and needs no database.
+For card draws, provide your own `deck.json` manifests and card art; the package includes no card faces.
+A missing or invalid deck stops startup.
+The manifest accepts only its documented fields, and image paths must stay inside the deck directory.
+
+## Tools and file limits
+
+The tools are `relationship_map`, `magic_circle_generate`, `sigil_generate`, `sacred_geometry_generate`, and optionally `draw_cards`.
+Each call attaches one image.
+A reply can carry at most 10 files, each at most 10 MiB, and 50 MiB total; a stricter surface limit may also apply.
+A refused call attaches nothing.
+The host delivers each image after the agent's text, using the same speaker identity.
+See [reply attachments](/plugins/first-plugin/#attach-files-to-the-agents-reply) for the core contract.
+
+For the full tool arguments, limits, deck manifest, native dependency instructions, and testing example, see the [pi-roundtable-drawing README](https://github.com/wayne930242/pi-roundtable/blob/master/packages/drawing/README.md).
+
+{/* Sources: packages/drawing/README.md:1-24, packages/drawing/README.md:26-72, packages/drawing/src/plugin.ts:14-49 */}

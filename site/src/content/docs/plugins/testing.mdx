@@ -32,6 +32,8 @@ test("hello greets", async () => {
 });
 ```
 
+For a package-level test of image tools and reply attachments, see the [drawing package test](https://github.com/wayne930242/pi-roundtable/blob/master/packages/drawing/src/plugin.test.ts) and [guide](/plugins/drawing-package/).
+
 The harness applies the host's checks.
 If your plugin adds nothing, returns an unknown part, uses a duplicate name, or has a tool with no tier, the test fails with the same message you would see at startup.
 
@@ -110,4 +112,4 @@ Call `stop()` when the test ends.
 Run every test with `bun test`, and the types with `bun run typecheck`.
 The full reference is [Testing a plugin](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#testing-a-plugin) in the guide.
 
-{/* Sources: docs/plugins.md:1725-1838, src/testing.ts:65-260, src/core/testing/test-host.ts:35-80, src/core/testing/database.ts:9-14, templates/plugin/plugin.ts, site/src/content/docs/plugins/first-plugin.mdx */}
+{/* Sources: docs/plugins.md:1725-1838, src/testing.ts:65-260, src/core/testing/test-host.ts:35-80, src/core/testing/database.ts:9-14, templates/plugin/plugin.ts, site/src/content/docs/plugins/first-plugin.mdx, packages/drawing/src/plugin.test.ts */}

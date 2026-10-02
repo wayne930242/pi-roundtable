@@ -1,0 +1,78 @@
+---
+title: Sandbox 套件
+description: 讓指定 Discord 頻道使用隔離的 Docker guest，透過 host broker 呼叫明確允許的工具。
+sidebar:
+  order: 12
+---
+
+`pi-roundtable-sandbox` 能把指定的 guild 頻道設成 guest-only。
+每則提及 bot 或回覆 bot 的訊息，都會在新的 Docker container 裡執行工具型 agent；頻道記憶和近期對話會保存在該頻道專用的 workspace。
+沒有對 bot 發話的訊息會直接丟棄，不會交給 host agent。
+
+## 安裝與需求
+
+```sh
+bun add pi-roundtable-sandbox pi-roundtable
+```
+
+需要 Bun 1.4.2 以上、`>=0.7.0 <0.8.0` 的 pi-roundtable、原生 Linux host，以及本機 Docker daemon。
+服務帳號必須能使用 Docker，guest 不可用 root 執行。
+macOS 可用於開發、測試和建置 image；實際執行 sandbox 需要 Linux，因為 Docker Desktop 不會把 host Unix socket 分享進 Linux VM。
+還要有可信任的 OpenAI-compatible Chat Completions endpoint，支援 non-streaming、function tools 和 `max_tokens`。
+
+啟動 host 前，從安裝好的套件建置 worker image：
+
+```sh
+docker build -f node_modules/pi-roundtable-sandbox/worker/Dockerfile -t pi-roundtable-sandbox:local node_modules/pi-roundtable-sandbox
+```
+
+```ts
+import { sandbox } from "pi-roundtable-sandbox";
+
+export default {
+  // ...其他 roundtable 設定...
+  plugins: [sandbox({
+    image: "pi-roundtable-sandbox:local",
+    runRoot: "/tmp/roundtable-sandbox-run",
+    workspaceRoot: "/srv/roundtable-sandbox/workspaces",
+    stateFile: "/srv/roundtable-sandbox/state/channels.json",
+    provider: "openai",
+    model: "operator-selected-model",
+    modelUrl: "https://api.openai.com/v1/chat/completions",
+  })],
+};
+```
+
+這些目錄必須由服務帳號擁有，供此套件專用，並使用私人權限。
+`stateFile` 必須是絕對路徑，且不能放在兩個 mount root 之內。
+`runRoot` 路徑要夠短，才能容納 Unix socket。
+同一組目錄只能由一個 host process 使用。
+
+## 設定與工具
+
+必要的 runtime 選項包括 `image`、`runRoot`、`workspaceRoot`、`model` 和 `modelUrl`；plugin 也要求 `stateFile`。
+`provider` 預設為 `openai`，只有沒有設定 `apiKey` 時，host 才用它查找模型登入資料。
+`apiKey` 可提供 credential getter；否則 host 會在每次 request 讀取登入資料。
+`initialChannels` 只會用來初始化新的 routing state file。
+選擇性設定 `prompt` 來指定 guest system prompt；時區使用 host 的 `env.timeZone`。
+選填的 `uid` 和 `gid` 必須與非 root host 帳號相同。
+設定 `tools` 和 `mcp` 可明確授權 host callback 與特定 MCP tool。
+資源和期限可用 `limits`（`memoryMb`、`cpus`、`pids`）和 `turnTimeoutMs`（1 到 600 秒）設定。
+不要授權通用 shell、任意路徑或任意 URL。
+Schema 是給模型看的提示，host 不會用它驗證輸入。
+
+重啟後，owner 可在 guild 頻道執行 `/roundtable sandbox on`、`status` 或 `off`。
+關閉模式會保留 workspace 記憶；等排隊工作結束後，訊息會恢復一般 routing。
+
+## 威脅模型
+
+把 prompt、模型輸出和 container 內的程式碼都視為不可信任。
+Docker 提供 process isolation，不等同 VM 隔離。
+container 沒有網路、host credential、Docker socket 或 host 環境變數；只有 broker 能連到設定好的 model 和明確授權的工具。
+惡意 guest 仍能消耗允許使用的 model 額度，並使用已授予的所有能力。
+host、Docker daemon、Linux kernel、image、callback 和上游服務都在信任範圍內。
+風險較高時，使用已修補的專用機器，並為 provider 設定費用上限、入口流量限制、檔案系統 quota 和 host 資源控管。
+
+完整隔離措施、持久化限制、部署條件和 Docker integration test 見[pi-roundtable-sandbox README](https://github.com/wayne930242/pi-roundtable/blob/master/packages/sandbox/README.md)（英文）。
+
+{/* Sources: packages/sandbox/README.md:1-27, packages/sandbox/README.md:29-74, packages/sandbox/README.md:76-106, packages/sandbox/src/plugin.ts:12-28 */}

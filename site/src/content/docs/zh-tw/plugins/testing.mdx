@@ -32,6 +32,8 @@ test("hello greets", async () => {
 });
 ```
 
+要看一個會產生圖片並附檔的套件測試，見[drawing 套件測試](https://github.com/wayne930242/pi-roundtable/blob/master/packages/drawing/src/plugin.test.ts)和[指南](/zh-tw/plugins/drawing-package/)。
+
 harness 套用的檢查和 host 一樣。
 所以外掛什麼都沒新增、有不認得的部分、名稱衝突，或工具沒有層級，你的測試都會失敗，訊息和啟動時印出的一樣。
 
@@ -43,6 +45,7 @@ harness 套用的檢查和 host 一樣。
 | `tools`、`tiers` | 工具名稱，以及每個工具需要哪個層級的對照表 |
 | `holds` | 外掛的 hold rule，照 host 連結的方式串起來。它回傳必須先核准的呼叫的描述，或 `undefined` |
 | `runTool(name, args, { speaker, channel }?)` | 照 agent 一輪裡的做法執行工具，回傳模型會讀到的文字 |
+| `files` | `runTool` 附加的檔案，格式為 `{ channel, file }`；測試附件工具時，注入 `supportsFiles: true` 的 surface，並使用該 surface 的 channel |
 | `events` | 外掛透過 `context.events` 回報的事件，以及 `context.turns` 的事件 |
 | `conversations`、`turns`、`surfaces` | 外掛在這幾個 context 欄位看到的內容，讓測試能驅動它的 claim |
 | `runtime` | `runtime` provider 建出來的 runtime；外掛沒有填這個槽位時是 `undefined` |
@@ -105,4 +108,4 @@ ROUNDTABLE_TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5432/plugin_
 用 `bun test` 跑所有測試，用 `bun run typecheck` 檢查型別。
 完整的參考是指南裡的[測試外掛](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#testing-a-plugin)（英文）。
 
-{/* Sources: docs/plugins.md:1725-1838, src/testing.ts:65-260, src/core/testing/test-host.ts:35-80, src/core/testing/database.ts:9-14, templates/plugin/plugin.ts, site/src/content/docs/plugins/first-plugin.mdx */}
+{/* Sources: docs/plugins.md:1725-1838, src/testing.ts:65-260, src/core/testing/test-host.ts:35-80, src/core/testing/database.ts:9-14, templates/plugin/plugin.ts, site/src/content/docs/plugins/first-plugin.mdx, packages/drawing/src/plugin.test.ts */}

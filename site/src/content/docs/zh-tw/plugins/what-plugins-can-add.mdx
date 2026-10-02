@@ -63,6 +63,21 @@ sidebar:
 | `runtime` 槽位 | 你想用 Pi 以外的 runtime 來跑每一場對話。 | [`echo-runtime.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/echo-runtime.ts) | [runtime 槽位](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#the-runtime-slot-replace-pi) |
 | `provides` 和 `replaces` | 你想接手一個內建服務，例如排程的儲存。 | [`shared-services.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/shared-services.ts) | [取代內建服務](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#replacing-a-built-in-service) |
 
+## 完整實作
+
+上面的範例一次聚焦一個外掛能力。
+下列套件展示相關 API 的完整實作：
+
+- 需要 owner 核准的 `repo_push` 和獨立 Pi worker：[coding 指南](/zh-tw/plugins/coding-package/)及[原始碼](https://github.com/wayne930242/pi-roundtable/tree/master/packages/coding)。
+- 在沒有網路的 container 執行工具型 guest agent，由 host broker 提供 credential：[sandbox 指南](/zh-tw/plugins/sandbox-package/)及[原始碼](https://github.com/wayne930242/pi-roundtable/tree/master/packages/sandbox)。
+- 必須通過驗證的 `http` console：[web 指南](/zh-tw/plugins/web-package/)及[原始碼](https://github.com/wayne930242/pi-roundtable/tree/master/packages/web)。
+- 繪製圖片並附在回覆裡的工具：[drawing 指南](/zh-tw/plugins/drawing-package/)及[原始碼](https://github.com/wayne930242/pi-roundtable/tree/master/packages/drawing)。
+- 由 owner 登入提供的 `images` 實作：[`codex-images` 複製式外掛](/zh-tw/plugins/official-plugins/#codex-images)及[範本原始碼](https://github.com/wayne930242/pi-roundtable/blob/master/templates/official/codex-images/plugin.ts)。
+- MCP connector 和 remote MCP endpoint：[MCP 指南](/zh-tw/plugins/mcp-package/)及[原始碼](https://github.com/wayne930242/pi-roundtable/tree/master/packages/mcp)。
+
+`dice` 和 `release-notice` 的複製式來源見[官方外掛指南](/zh-tw/plugins/official-plugins/)。
 `provides`、`requires` 和 `replaces` 見[服務與 addon](/zh-tw/plugins/services-and-addons/)，所有範例檔見[範例](/zh-tw/plugins/examples/)。
+
+{/* Sources: packages/coding/src/coding-plugin.ts, packages/sandbox/src/plugin.ts, packages/web/src/web-plugin.ts, packages/drawing/src/plugin.ts, packages/mcp/src/connectors/connectors-plugin.ts, packages/mcp/src/remote-mcp/remote-mcp-plugin.ts, templates/official/codex-images/plugin.ts */}
 
 {/* Sources: docs/plugins.md:9-35, docs/plugins.md:66-110, docs/plugins.md:316-1710, examples/*.ts */}

@@ -12,6 +12,7 @@ sidebar:
 | 檔案 | 示範什麼 |
 |---|---|
 | [`tools.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/tools.ts) | agent 能呼叫的工具，附最低層級，以及模型能據以修正的拒絕訊息 |
+| [`reply-files.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/reply-files.ts) | 把原始圖片位元組附在 agent 回覆，並用 `harness.files` 測試的工具 |
 | [`holds.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/holds.ts) | 工具的 `hold`，以及一條能看到每次工具呼叫的 hold rule，讓呼叫等 owner 核准 |
 | [`prompt.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/prompt.ts) | 在每一輪 agent 的核心提示詞後面加上的提示詞區段 |
 | [`seeds.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/seeds.ts) | 第一次啟動時建立的 agent，之後不會被覆蓋 |
@@ -33,7 +34,20 @@ sidebar:
 | [`support-desk.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/support-desk.ts) | 一個 background target，決定哪些能被排程或委派 |
 | [`fake-surface.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/fake-surface.ts) | 給記憶體內聊天用的聊天 surface，以及提供它的外掛 |
 
+## 完整實作
+
+上面的範例一次聚焦一個外掛能力。
+想看完整套件的實作，可以從這些指南和原始碼開始：
+
+- 用工具產生圖片並附在回覆裡：[drawing 套件指南](/zh-tw/plugins/drawing-package/)和[套件原始碼](https://github.com/wayne930242/pi-roundtable/tree/master/packages/drawing)。
+- 經過驗證的 HTTP console：[web 套件指南](/zh-tw/plugins/web-package/)和[套件原始碼](https://github.com/wayne930242/pi-roundtable/tree/master/packages/web)。
+- 有 owner 核准 hold 的 `repo_push` 和獨立 Pi coding worker：[coding 套件指南](/zh-tw/plugins/coding-package/)和[套件原始碼](https://github.com/wayne930242/pi-roundtable/tree/master/packages/coding)。
+- 透過 host broker 使用明確授權工具的隔離頻道：[sandbox 套件指南](/zh-tw/plugins/sandbox-package/)和[套件原始碼](https://github.com/wayne930242/pi-roundtable/tree/master/packages/sandbox)。
+- MCP connector 和 remote MCP endpoint：[MCP 套件指南](/zh-tw/plugins/mcp-package/)和[套件原始碼](https://github.com/wayne930242/pi-roundtable/tree/master/packages/mcp)。
+- 官方 [`codex-images` 複製式外掛](/zh-tw/plugins/official-plugins/#codex-images)填入 `images` provider 槽位；它的[範本原始碼](https://github.com/wayne930242/pi-roundtable/blob/master/templates/official/codex-images/plugin.ts)是可運作的 provider 實作。
+- [官方外掛指南](/zh-tw/plugins/official-plugins/)也連到 `dice` 和 `release-notice` 的複製式來源。
+
 想知道每個部分的用途，先看[外掛能新增什麼](/zh-tw/plugins/what-plugins-can-add/)。
 想跑像這些檔案旁邊那樣的測試，見[測試外掛](/zh-tw/plugins/testing/)。
 
-{/* Sources: examples/*.ts (non-test files), examples/guide.test.ts, docs/plugins.md:5-7 */}
+{/* Sources: examples/*.ts (non-test files), examples/guide.test.ts, docs/plugins.md:5-7, packages/coding, packages/sandbox, packages/web, packages/drawing, packages/mcp, templates/official/codex-images/plugin.ts */}

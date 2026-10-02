@@ -12,6 +12,7 @@ The [plugin guide](https://github.com/wayne930242/pi-roundtable/blob/master/docs
 | File | What it shows |
 |---|---|
 | [`tools.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/tools.ts) | A tool agents can call, with a minimum tier and a refusal the model can correct |
+| [`reply-files.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/reply-files.ts) | A tool that attaches raw image bytes to the agent's reply and tests them with `harness.files` |
 | [`holds.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/holds.ts) | A tool's `hold`, and a hold rule that sees every tool call, so a call waits for the owner's approval |
 | [`prompt.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/prompt.ts) | A prompt section added after the core's prompt in every agent turn |
 | [`seeds.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/seeds.ts) | An agent created on the first start, never overwritten afterwards |
@@ -33,7 +34,20 @@ The [plugin guide](https://github.com/wayne930242/pi-roundtable/blob/master/docs
 | [`support-desk.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/support-desk.ts) | A background target that sets what may be scheduled or delegated |
 | [`fake-surface.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/fake-surface.ts) | A chat surface for an in-memory chat, and the plugin that contributes it |
 
+## Full implementations
+
+The examples above isolate one plugin contribution at a time.
+For complete package implementations, follow the matching guides and source:
+
+- Image tools that attach their output: [drawing guide](/plugins/drawing-package/) and [package source](https://github.com/wayne930242/pi-roundtable/tree/master/packages/drawing).
+- An authenticated HTTP console: [web guide](/plugins/web-package/) and [package source](https://github.com/wayne930242/pi-roundtable/tree/master/packages/web).
+- A held `repo_push` and an out-of-process Pi coding worker: [coding guide](/plugins/coding-package/) and [package source](https://github.com/wayne930242/pi-roundtable/tree/master/packages/coding).
+- Isolated guest channels with a host-side credential broker: [sandbox guide](/plugins/sandbox-package/) and [package source](https://github.com/wayne930242/pi-roundtable/tree/master/packages/sandbox).
+- MCP connectors and remote MCP endpoints: [MCP guide](/plugins/mcp-package/) and [package source](https://github.com/wayne930242/pi-roundtable/tree/master/packages/mcp).
+- The official [`codex-images` copy-in plugin](/plugins/official-plugins/#codex-images) fills the `images` provider slot; its [template source](https://github.com/wayne930242/pi-roundtable/blob/master/templates/official/codex-images/plugin.ts) is a working provider implementation.
+- The [official plugin guide](/plugins/official-plugins/) also links to the `dice` and `release-notice` copy-in sources.
+
 To see what each part is for, start with [What plugins can add](/plugins/what-plugins-can-add/).
 To run tests like the ones beside these files, see [Test a plugin](/plugins/testing/).
 
-{/* Sources: examples/*.ts (non-test files), examples/guide.test.ts, docs/plugins.md:5-7 */}
+{/* Sources: examples/*.ts (non-test files), examples/guide.test.ts, docs/plugins.md:5-7, packages/coding, packages/sandbox, packages/web, packages/drawing, packages/mcp, templates/official/codex-images/plugin.ts */}

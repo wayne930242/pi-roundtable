@@ -1,0 +1,69 @@
+---
+title: Web 套件
+description: 提供經過驗證、僅供 owner 使用的 console，查看對話、團隊狀態和記憶筆記。
+sidebar:
+  order: 11
+---
+
+`pi-roundtable-web` 會在 host 的 HTTP listener 提供 web console。
+owner 能瀏覽對話和 transcript、查看 agent team 的即時狀態，也能讀寫 memory note。
+它讀取 host 已有的資料，不會新增資料庫、cookie 或帳號系統。
+
+## 安裝與需求
+
+```sh
+bun add pi-roundtable-web pi-roundtable
+```
+
+需要 Bun 1.3 以上、`>=0.7.0 <0.8.0` 的 pi-roundtable，而且 host 必須在資料目錄所在的機器上執行。
+Notes pane 需要 memory addon 和 `ownerId`；Overview pane 需要 agent server。
+每個 request 都必須通過驗證：使用 Cloudflare Access，或為負責驗證身分的 proxy 提供自己的 verifier。
+
+```ts
+import { cloudflareAccess, webConsole } from "pi-roundtable-web";
+
+export default {
+  // ...其他 roundtable 設定...
+  plugins: [webConsole({
+    verifier: cloudflareAccess({
+      teamDomain: "example.cloudflareaccess.com",
+      audience: process.env.CONSOLE_ACCESS_AUD ?? "",
+      email: "owner@example.com",
+    }),
+    origin: "https://console.example.com",
+    ownerId: "<the owner's Discord user id>",
+  })],
+};
+```
+
+## 設定
+
+| 選項 | 預設值 | 用途 |
+| --- | --- | --- |
+| `verifier` | 必填 | 驗證每個 request；使用 `cloudflareAccess(...)` 或自訂函式。 |
+| `origin` | 必填 | 瀏覽器看到的 scheme 和 host。寫入操作必須帶上完全相同的 `Origin`。 |
+| `ownerId` | 無 | owner memory 的 id；提供 Notes pane 時必填。 |
+| `dataDir` | `./data` | host 資料目錄，其中包含 `sessions/`。 |
+| `mountPath` | `/console` | console 的 route prefix。 |
+| `listener` | `public` | 提供 console 的 HTTP listener。 |
+| `panes` | 全部 | 依指定順序顯示 `overview`、`conversations`、`notes`。 |
+| `title` | `Roundtable` | 頁面標題。 |
+| `relayNotes` | remote MCP relay note | 顯示訊息前要移除的 relay 前綴。 |
+| `exclude` | 無 | 指定哪些 conversation key 不得列出或讀取的 predicate。 |
+| `assetDir` | 套件的 `dist/` | 已建置頁面的目錄；只應在測試時設定。 |
+
+內建的 `cloudflareAccess` verifier 會驗證 Access 簽署的 token、team、audience 和允許的 email。
+若自訂 verifier 信任 proxy header，只有在 client 無法直接連上 listener，而且 proxy 會移除 client 自帶的同名 header 時才安全。
+
+## 安全模型
+
+每個 request 都會先驗證，再讀取資料。
+console 沒有角色或個別使用者檢視權限，只適用於一位 owner。
+寫入操作還要通過完全相符的 `Origin` 檢查，頁面不會送出 CORS header。
+Transcript 會顯示 tool arguments 和結果，工具處理過的 secret 可能出現在裡面；可以用 `panes` 或 `exclude` 限縮資料。
+console 不會限制驗證失敗的請求頻率。
+請放在可信任的 authentication proxy 後面，並在 proxy 終止 TLS。
+
+Cloudflare 設定、自訂 verifier 範例、完整威脅模型和選項驗證方式，見[pi-roundtable-web README](https://github.com/wayne930242/pi-roundtable/blob/master/packages/web/README.md)（英文）。
+
+{/* Sources: packages/web/README.md:1-17, packages/web/README.md:37-105, packages/web/README.md:140-190, packages/web/src/options.ts:14-44 */}

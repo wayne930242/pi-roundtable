@@ -1,0 +1,65 @@
+---
+title: Coding 套件
+description: 在 owner 和 agent session 提供 repository 工具，由獨立的 Pi coding worker 執行工作。
+sidebar:
+  order: 10
+---
+
+`pi-roundtable-coding` 提供管理 repository 的 shelf，以及獨立執行的 Pi coding worker。
+worker 能修改 clone、建立 commit，再回報分支和變更。
+送出變更是另一個步驟：`repo_push` 只會在 host 的 hold gate 放行後，把先前回報過的完整 SHA 推到 default branch，不會 force push。
+
+## 安裝與需求
+
+```sh
+bun add pi-roundtable-coding pi-roundtable
+```
+
+需要 Linux 或 macOS 上的 Bun 1.4.2 以上、`>=0.7.0 <0.8.0` 的 pi-roundtable，以及 `>=1.0.0 <2` 的 Pi。
+若 host 仍使用 Pi 0.99.x，加入這個套件前要先升級 Pi 相依套件。
+預設 clone 方式需要 Git 和 GitHub CLI（`gh`）。
+host 也要有能讀取 repository 的 Git credential；只有確實需要推送的 repository 才給寫入權限，並準備 Pi model credential。
+預設 clone 會執行 `gh repo clone`；之後 fetch 和 push 需要設定 Git credential helper。
+
+```ts
+import { coding } from "pi-roundtable-coding";
+
+export default {
+  // ...其他 roundtable 設定...
+  plugins: [coding({
+    shelfDir: "/srv/roundtable/repos",
+    model: "provider/model-id",
+  })],
+};
+```
+
+## 設定
+
+| 選項 | 預設值 | 用途 |
+| --- | --- | --- |
+| `shelfDir` | 必填 | 管理 clone 的目錄。 |
+| `model` | 必填 | worker 使用的 Pi model，格式為 `provider/model-id`。 |
+| `thinking` | `medium` | worker 的 thinking level。 |
+| `ownerRepos` | `[]` | 完整的 `owner/repo` 名稱；這些 repository 不會觸發套件本身的 push hold。 |
+| `workerPackages` | `[]` | worker 載入的已安裝 Pi extension 絕對路徑。 |
+| `agentDir` | Pi host 目錄 | Pi 登入與 model 設定所在目錄。 |
+| `timeoutMs` | `3600000` | 工作時間上限；等待 owner 核准的時間不計入。 |
+| `holds` | 無 | 額外的 worker hold check。 |
+| `clone` | `ghClone` | 替代的 Git host clone 實作。 |
+| `worker` | `PiCodingWorker` | 可信任的 worker runner 替代實作。 |
+| `onResult` | 回覆目前 surface | 自訂結果傳送方式。 |
+
+## 安全模型
+
+這是 host 上的 coding desk，不是 sandbox。
+worker 會繼承 host 環境，能讀取 host 使用者可存取的檔案、執行 shell command、使用網路並建立 commit。
+hold rule 只會用 heuristic 偵測特定高風險 shell 操作，不是作業系統隔離。
+只對可信任的 repository 和程式碼使用，最好讓它在權限較低的專用 host 帳號下執行。
+如果不能接受它存取 host，請改用 container 或 VM。
+token 不要放進 URL，並使用最低必要權限；套件不會記錄 credential 或 subprocess 診斷內容。
+
+使用 `repo_change_report` 和 `repo_push` 前，先檢查 worker 的變更與驗證結果。
+`ownerRepos` 只略過這個套件的 push hold，不會略過 shell hold 或其他 host 規則。
+完整流程、工具介面和限制見[pi-roundtable-coding README](https://github.com/wayne930242/pi-roundtable/blob/master/packages/coding/README.md)（英文）。
+
+{/* Sources: packages/coding/README.md:1-24, packages/coding/README.md:26-58, packages/coding/README.md:92-130, packages/coding/src/coding-plugin.ts:33-59 */}

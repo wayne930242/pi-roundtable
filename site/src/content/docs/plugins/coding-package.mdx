@@ -1,0 +1,65 @@
+---
+title: Coding package
+description: Give owner and agent sessions repository tools backed by an out-of-process Pi coding worker.
+sidebar:
+  order: 10
+---
+
+`pi-roundtable-coding` adds a managed repository shelf and a separate Pi coding worker.
+The worker can edit and commit a clone, then report its branch and changes.
+Shipping is separate: `repo_push` pushes only a previously reported full SHA to the default branch, without force, after the host's hold gate permits it.
+
+## Install and requirements
+
+```sh
+bun add pi-roundtable-coding pi-roundtable
+```
+
+Use Bun 1.4.2 or newer on Linux or macOS, pi-roundtable `>=0.7.0 <0.8.0`, and Pi `>=1.0.0 <2`.
+A host on Pi 0.99.x must update its Pi dependencies before adding this package.
+Install Git and GitHub CLI (`gh`) for the default clone implementation.
+The host also needs a Git credential with repository read access and write access only where required, plus Pi model credentials.
+The default clone uses `gh repo clone`; later fetch and push operations need a configured Git credential helper.
+
+```ts
+import { coding } from "pi-roundtable-coding";
+
+export default {
+  // ...your roundtable settings...
+  plugins: [coding({
+    shelfDir: "/srv/roundtable/repos",
+    model: "provider/model-id",
+  })],
+};
+```
+
+## Configuration
+
+| Option | Default | Purpose |
+| --- | --- | --- |
+| `shelfDir` | required | Directory for managed clones. |
+| `model` | required | Worker Pi model as `provider/model-id`. |
+| `thinking` | `medium` | Worker thinking level. |
+| `ownerRepos` | `[]` | Exact `owner/repo` names exempt from the plugin's push hold. |
+| `workerPackages` | `[]` | Absolute paths to installed Pi extension packages loaded by workers. |
+| `agentDir` | Pi host directory | Pi login and model configuration directory. |
+| `timeoutMs` | `3600000` | Work-time limit; time waiting for owner approval is excluded. |
+| `holds` | none | Additional worker hold check. |
+| `clone` | `ghClone` | Alternative Git-host clone implementation. |
+| `worker` | `PiCodingWorker` | Trusted worker runner replacement. |
+| `onResult` | surface reply | Custom report delivery. |
+
+## Security model
+
+This is a host coding desk, not a sandbox.
+The worker inherits the host environment and can read files accessible to the host user, run shell commands, use the network, and commit changes.
+The hold rule detects recognized risky shell actions, but it is a heuristic, not an OS isolation boundary.
+Run it only with trusted repositories and code, preferably under a dedicated low-privilege host account.
+Use a container or VM if host access is unacceptable.
+Keep tokens out of URLs and use least-privilege credentials; the package avoids logging credentials and subprocess diagnostics.
+
+Review worker changes and verification before using `repo_change_report` and `repo_push`.
+`ownerRepos` bypasses only this package's push hold; it does not bypass shell holds or other host rules.
+See the [pi-roundtable-coding README](https://github.com/wayne930242/pi-roundtable/blob/master/packages/coding/README.md) for the full workflow, tool contracts, and limits.
+
+{/* Sources: packages/coding/README.md:1-24, packages/coding/README.md:26-58, packages/coding/README.md:92-130, packages/coding/src/coding-plugin.ts:33-59 */}

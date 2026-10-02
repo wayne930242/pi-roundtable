@@ -1,8 +1,8 @@
 ---
 title: MCP connectors and remote MCP
-description: The pi-roundtable-mcp package, with two plugins. One connects your own MCP servers, the other lets an outside agent reach yours.
+description: The pi-roundtable-mcp package provides two plugins to connect your MCP servers and let outside agents reach yours.
 sidebar:
-  order: 2
+  order: 13
 ---
 
 import { Aside } from "@astrojs/starlight/components";
@@ -17,18 +17,18 @@ Both work over MCP, the protocol agents use to call tools on another server.
 
 Together they cover both directions: your agents reach tools on other servers, and agents elsewhere reach yours.
 
-The package has its own repository: [wayne930242/pi-roundtable-mcp](https://github.com/wayne930242/pi-roundtable-mcp).
-Its README lists every option and message.
+The package now lives in the pi-roundtable workspace as `packages/mcp`; see its [README](https://github.com/wayne930242/pi-roundtable/blob/master/packages/mcp/README.md) for every option and message.
 
 ## Install
 
 ```sh
-bun add pi-roundtable-mcp
+bun add pi-roundtable-mcp pi-roundtable
 ```
 
-It works with pi-roundtable 0.4 and 0.5, and needs the bot's PostgreSQL.
+Use Bun 1.3 or newer and pi-roundtable `>=0.7.0 <0.8.0`; the package needs the host's PostgreSQL.
 `mcpConnectors` also needs a ContextForge gateway that you run yourself, see below.
-`remoteMcp` needs an HTTPS address that reaches the bot, such as a tunnel.
+`remoteMcp` needs an HTTPS address that reaches the host's public listener, such as a tunnel.
+The migrated package's next release is the matching lockstep version; the currently published standalone release is not compatible with core 0.7.x.
 
 ## Turn them on
 
@@ -60,6 +60,9 @@ export default {
 
 You can use either plugin on its own.
 
+`mcpConnectors` requires `contextForge.url`, `contextForge.jwtSecret`, and `contextForge.user`; `serverPrefix` defaults to `roundtable-conn-`, `maxToolName` to `45`, and `messages` overrides its English text.
+`remoteMcp` requires `dispatchToken` and `publicUrl`; `persona` changes the default conversation prompt, `answer` and `claim` must be supplied together for host-managed conversations, `messages` customizes its text, and `toolNames` defaults to `agent_dispatch` and `agent_result`.
+
 ## Connectors
 
 `/roundtable connector add` opens a private form for the server's address and token.
@@ -67,7 +70,7 @@ You can use either plugin on its own.
 Only the owner can use these commands.
 
 [ContextForge](https://github.com/IBM/mcp-context-forge) keeps each upstream server and its token.
-Run IBM's open-source MCP gateway next to the bot and give both the same JWT secret.
+Run IBM's open-source MCP gateway next to the host and give both the same JWT secret.
 
 The plugin gives your code the connector list.
 Your code chooses connectors for each agent and builds its tools from that list.
@@ -75,7 +78,7 @@ The package README has an example.
 
 ## Remote MCP
 
-The plugin serves two endpoints on the bot's `public` listener.
+The plugin serves two endpoints on the host's `public` listener.
 
 | Endpoint | Who can call it | What it gives |
 | --- | --- | --- |
@@ -107,4 +110,4 @@ The README shows how.
 The plugins keep their text in English, and both take a `messages` option to change it.
 Write it in your own language there, for the Discord text, the error messages and the tool descriptions.
 
-{/* Sources: the pi-roundtable-mcp README.md and src/index.ts at v0.4.1 (options, commands, endpoints, security model), package.json (peer dependency and install) */}
+{/* Sources: packages/mcp/README.md:1-25, packages/mcp/README.md:27-92, packages/mcp/README.md:95-160, packages/mcp/src/connectors/connectors-plugin.ts:27-46, packages/mcp/src/remote-mcp/remote-mcp-plugin.ts:30-79 */}

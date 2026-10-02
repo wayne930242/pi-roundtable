@@ -1,19 +1,20 @@
 ---
-title: 官方外掛
-description: 兩個能複製進專案的現成外掛，codex-images 和 dice：各自需要什麼，以及怎麼修改複製出來的檔案。
+title: 官方外掛與套件
+description: 說明三個可複製進專案的官方外掛，以及五個以 bun add 安裝的官方套件。
 sidebar:
   order: 8
 ---
 
 import { Aside } from "@astrojs/starlight/components";
 
-pi-roundtable 附了兩個外掛，用複製的方式放進你的專案，不用安裝。
+pi-roundtable 附了三個外掛，用複製的方式放進你的專案，不用安裝。
 複製出來的就是你自己的一般外掛檔案，可以讀、可以改，也可以刪。
 
 | 外掛 | 作用 |
 | --- | --- |
 | `codex-images` | 用提示詞和參考圖，透過你的 ChatGPT 訂閱登入，畫出 agent 的頭像。 |
 | `dice` | 給 agent 一個 `roll_dice` 工具。 |
+| `release-notice` | 部署後公告新版本包含的 commit，以及上次關機時被中斷工作的頻道。 |
 
 ## 加入一個
 
@@ -22,10 +23,11 @@ pi-roundtable 附了兩個外掛，用複製的方式放進你的專案，不用
 ```sh
 bunx roundtable add plugin dice
 bunx roundtable add plugin codex-images
+bunx roundtable add plugin release-notice
 ```
 
 每個指令都會寫出 `plugins/<name>.ts` 和 `plugins/<name>.test.ts`，在 `roundtable.config.ts` 裡 import 這個外掛，並把它列進 `plugins`。
-這兩個名稱是保留的：用它們時，`add plugin` 複製的是官方外掛；其他名稱則維持使用 `hello` 範本。
+這三個名稱是保留的：用它們時，`add plugin` 複製的是官方外掛；其他名稱則維持使用 `hello` 範本。
 任何一個檔案已經存在時，它會拒絕，而且什麼都不寫。
 `add plugin` 檢查的所有項目，見 [CLI](/zh-tw/reference/cli/)。
 
@@ -63,6 +65,7 @@ agent 會呼叫這個工具，再把結果回報給你。
 上限是：全部 100 顆骰子、一顆骰子 1000 面、算式 200 個字元，單一數字 1000000。
 
 `dice` 不需要登入，也不需要任何設定。
+它的[複製式來源範本](https://github.com/wayne930242/pi-roundtable/blob/master/templates/official/dice/plugin.ts)實作了這個工具。
 
 ## `codex-images`
 
@@ -70,6 +73,7 @@ agent 會呼叫這個工具，再把結果回報給你。
 有了它，`agent_create` 能接受頭像提示詞，agent 會有一個 `agent_avatar` 工具，owner 的個人檔案面板也能提供重畫。
 沒有 `images` 外掛時，每個 agent 的頭像，是用它的顯示名稱產生的圖片。
 `roundtable doctor` 會回報有沒有外掛填入這個槽位。
+它的[複製式來源範本](https://github.com/wayne930242/pi-roundtable/blob/master/templates/official/codex-images/plugin.ts)是完整的 `images` provider 實作。
 
 它需要登入 `openai-codex` provider，登入機制和 agent 登入模型時用的相同。
 host 沒有登入時，外掛會拒絕啟動，訊息會說要登入 `openai-codex`。
@@ -85,18 +89,77 @@ OpenAI 隨時可能更改或封鎖它，並適用 OpenAI 對這個訂閱的條�
 Codex 拒絕的請求（通常是提示詞的問題）會以 `ImageNotGeneratedError` 失敗，同一個提示詞再問一次還是一樣。
 一個請求有五分鐘的時間限制，超過 32 MiB 的圖片會被拒絕。
 
+## `release-notice`
+
+`release-notice` 會在部署後公告版本資訊。
+它的[複製式來源範本](https://github.com/wayne930242/pi-roundtable/blob/master/templates/official/release-notice/plugin.ts)實作公告和關機追蹤。
+agent server 的頻道都啟動後，它最多公告一次，訊息會發在 coordinator 頻道：
+
+- 執行中的版本和上次公告的版本不同時，它會列出新的 `sha` 和這次 release 包含的 commit。
+- 上次關機若中斷了工作，訊息也會列出受影響的頻道。
+  關機最多等一小時讓工作完成，之後才放棄。
+- 同一個版本重新啟動、沒有中斷工作時不會公告。
+  沒有 `release.json` 時也不會公告。
+
+啟動 bot 前，deploy 必須先在 bot 執行目錄寫入 `release.json`。
+檔案記錄 release 的 commit，以及從上次公告版本到這次新增的 commit subject，依新到舊排列。
+這樣即使上次公告失敗或根本沒執行，也不會跳過未公告的版本：
+
+```json
+{ "sha": "abc1234", "commits": ["fix: handle an empty reply", "feat: add a notes tool"] }
+```
+
+外掛會把上次公告的 sha 存在 `data/announced-release`，同一台 host 上的 deploy script 可用它作為比較起點。
+下列 script 遇到 `git log` 或 `jq` 失敗時會停止 deploy。
+第一次部署還沒有公告紀錄，`commits` 會是空陣列：
+
+```sh
+set -euo pipefail
+previous=$(cat data/announced-release 2>/dev/null || true)
+commits='[]'
+if [ -n "$previous" ]; then
+  commits=$(git log --format=%s "$previous..HEAD" | jq -R . | jq -s .)
+fi
+printf '{"sha":"%s","commits":%s}\n' "$(git rev-parse --short HEAD)" "$commits" > release.json
+```
+
+外掛會在 `./data` 記錄已公告的版本（`announced-release`），以及上次關機時中斷工作的頻道（`aborted-on-shutdown.json`）。
+只有成功發出公告後才會記錄版本。
+發送失敗時，下次啟動會再試一次。
+如果 `release.json` 格式錯誤，例如 `sha` 是空值，log 會指出檔案路徑，但不會發公告。
+
 ## 修改複製出來的檔案
 
 複製出來的檔案在你的專案裡，所以和任何外掛一樣直接改。
 
 - `plugins/dice.ts` 的上限是檔案開頭的常數，工具的描述也把這些上限告訴模型，所以兩處要一起改。
 - `plugins/codex-images.ts` 裡，負責轉送請求的模型是一個常數。
-- 每個檔案匯出一個函式（`createDice`、`createCodexImages`），它接受測試要替換的部分：亂數來源或 `fetch`；另外還匯出用它建好的現成外掛（`dice`、`codexImages`），設定檔列的就是這一個。
-- 旁邊的測試離線執行：`dice` 用假的亂數來源，`codex-images` 用假的 `fetch`。修改外掛時，要讓它們維持通過。
+- `plugins/release-notice.ts` 匯出 `createReleaseNotice({ releaseFile, dataDir, announce })`。
+  設定中的 `dataDir` 不是 `./data` 時，傳入 `dataDir`；deploy 把檔案寫到其他位置時，傳入 `releaseFile`；要公告到 coordinator 頻道以外的位置，傳入 `announce`。
+  設定檔要列出這個函式的回傳值，取代 `releaseNotice`。
+  公告文字由 `noticeText` 函式產生。
+- 每個檔案都匯出建立函式（`createDice`、`createCodexImages`、`createReleaseNotice`），以及設定檔直接使用的現成外掛（`dice`、`codexImages`、`releaseNotice`）。
+  建立函式可注入測試替換的亂數來源、`fetch`，或 `release-notice` 讀取與發送通知的位置。
+- 測試都能離線執行：`dice` 使用假的亂數來源，`codex-images` 使用假的 `fetch`，`release-notice` 使用暫存目錄和自己的 `announce`。
+  修改外掛後，讓這些測試繼續通過。
 
 要移除，就刪掉它的兩個檔案，以及 `roundtable.config.ts` 裡的項目。
 
-獨立的 [pi-roundtable-mcp](/zh-tw/plugins/mcp-package/) 套件提供 MCP connector 和 remote MCP，用 `bun add` 安裝，不用複製。
+## 官方套件
+
+Drawing、coding、web 和 sandbox 套件可用 `bun add` 安裝，並與 core 使用相同的 lockstep 版本。
+每個套件都需要相同 minor 版本的 pi-roundtable。
+遷移後的 MCP 套件會在下一個 lockstep release 發佈。
+目前 npm 上獨立發佈的 `pi-roundtable-mcp` 0.4.1 不相容於 core 0.7.x。
+
+| 套件 | 功能 |
+| --- | --- |
+| [pi-roundtable-drawing](/zh-tw/plugins/drawing-package/) | 在本機繪製人物關係圖、符號、幾何圖形和牌陣。 |
+| [pi-roundtable-coding](/zh-tw/plugins/coding-package/) | 透過獨立的 Pi coding worker 提供 repository 工具。 |
+| [pi-roundtable-web](/zh-tw/plugins/web-package/) | 查看對話、團隊狀態和 memory note 的 owner console。 |
+| [pi-roundtable-sandbox](/zh-tw/plugins/sandbox-package/) | 在 Linux Docker 隔離環境中執行 guest-only Discord 頻道。 |
+| [pi-roundtable-mcp](/zh-tw/plugins/mcp-package/) | 管理 MCP connector，並提供 remote MCP 存取。 |
+
 外掛在這之外還能新增什麼，見[外掛能新增什麼](/zh-tw/plugins/what-plugins-can-add/)；想寫這樣的測試，見[測試外掛](/zh-tw/plugins/testing/)。
 
-{/* Sources: src/cli/templates.ts:13-25, src/cli/templates.ts:84-102, src/cli/add-plugin.ts:34-75, templates/official/dice/plugin.ts, templates/official/dice/plugin.test.ts.tmpl, templates/official/codex-images/plugin.ts, templates/official/codex-images/plugin.test.ts.tmpl, src/core/plugin.ts:268-276, docs/plugins.md:757-772 (images slot, agent_avatar, doctor), src/cli/checks/images.ts */}
+{/* Sources: src/cli/templates.ts:13-25, src/cli/templates.ts:84-102, src/cli/add-plugin.ts:34-75, templates/official/dice/plugin.ts, templates/official/dice/plugin.test.ts.tmpl, templates/official/codex-images/plugin.ts, templates/official/codex-images/plugin.test.ts.tmpl, templates/official/release-notice/plugin.ts, templates/official/release-notice/plugin.test.ts.tmpl, src/core/plugin.ts:268-276, docs/plugins.md:757-772 (images slot, agent_avatar, doctor), src/cli/checks/images.ts */}

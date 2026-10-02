@@ -5,6 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Docs
+
+- Document five official packages on the site and link their guides from `docs/plugins.md`, including installation, configuration, platform requirements, and security models.
+  Add a Traditional Chinese `release-notice` guide and reply-attachment guide.
+
 ### Changed
 
 - Official drawing, coding, web, sandbox, and MCP plugins now live under `packages/` as Bun workspaces with their original Git history.

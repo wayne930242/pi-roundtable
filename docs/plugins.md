@@ -52,7 +52,7 @@ Import fixtures and fake threads from `pi-roundtable/testing` for tests.
 
 #### Helpers for a Pi session of your own
 
-Use the kit's building blocks for a plugin that runs Pi itself, such as a coding worker or a container with no network:
+Use the kit's building blocks for a plugin that runs Pi itself, such as a coding worker:
 
 - MCP: `mcpExtension` and `VirtualServer` expose MCP servers to a session, and `mcpAdapterExtension` and `readAttachmentExtension` do the same inside an out-of-process worker.
 - Work: `promptSlot` (how a run asks the owner while it works), `workTimeout` (a time limit that does not count the time spent waiting on the owner), `runWorkerTask`, `archiveSessions`, and `approvalCard` and `canonicalJson` for the cards of held actions.
@@ -62,6 +62,9 @@ Use the kit's building blocks for a plugin that runs Pi itself, such as a coding
   The specs take the locale and time zone for their descriptions, so the worker needs no process-wide setting.
 - Effort: `effortJudge` picks a turn's thinking level from a message with your own brief (`EffortBrief`, `JUDGE_WORK`).
 - Presentation and small helpers: `thinkingLine`, `zonedStamp(date, timeZone)`, `channelQueue()` (a queue of your own, so work does not wait behind a running turn), `checkRepoName` and `SKILL_LIST_TOOL` with `skillListExtension` for repositories and skills, and `searchTerms` for memory search.
+
+The [coding package source][coding-source] shows these helpers in an out-of-process Pi worker.
+The [MCP package source][mcp-source] is a full example of connectors and remote MCP endpoints.
 
 `roundtable add plugin <name>` creates `plugins/<name>.ts` and its test from a small template and lists it in `roundtable.config.ts`.
 The name is lowercase words joined by dashes, such as `my-notes`.
@@ -385,6 +388,7 @@ The core copies the bytes when the call succeeds, so the tool may reuse its buff
 The tool does not send a message itself; the successful turn returns `TurnResult.files` and the reply path hands them to the surface as `OutboundReply.files`.
 On Discord, files follow the text as one file per message to avoid image grids, all through the same agent webhook name and avatar as the text.
 Other surfaces may send the text and files in one message or a message group.
+The [drawing package source][drawing-source] uses `turn.attachFile` to deliver images produced by its tools.
 
 <!-- example: examples/reply-files.ts -->
 ```ts
@@ -448,6 +452,7 @@ Test an attachment tool with an injected file-capable surface and inspect `harne
 A held call is described to the owner, who approves or refuses it in Discord before the call runs.
 A tool's `hold` returns the description for its own calls, and `holdRules` are rules over every tool call, asked in order until one describes the call.
 Each rule needs a name, unique across plugins.
+The [coding package source][coding-source] uses an owner hold for `repo_push`.
 
 <!-- example: examples/holds.ts -->
 ```ts
@@ -867,6 +872,7 @@ When no `images` provider is configured, `agent_create` has no `avatar_prompt` p
 The owner's profile panel reports the missing provider and offers no redraw option.
 Each agent gets a picture generated from its display name and the assistant's icon, so you can tell agents apart.
 `bunx roundtable doctor` reports whether the slot is filled.
+The copy-in [`codex-images` provider template][codex-images-template] is a complete implementation of the `images` slot.
 
 <!-- example: examples/providers.ts -->
 ```ts
@@ -1259,6 +1265,7 @@ The configuration's `http` block opens a listener named `public`, which serves t
 A route names the listener, a path (`{ exact }` or `{ prefix }`), optionally the methods, and a handler that gets a `Request` and returns a `Response`.
 Two routes that could take the same request are refused, so a route cannot shadow the avatars.
 This listener is reachable from the internet, so check a secret in the handler before taking action.
+The [web package source][web-source] is a complete owner-console implementation built on these HTTP routes.
 A handler that throws, or returns a rejected promise, answers `500 Internal Server Error` with that fixed body, and the listener keeps serving.
 The host logs one error line with the route's `name` and its `listener`; it never logs the request URL, since a path may hold a secret.
 
@@ -1455,6 +1462,8 @@ Give `stop` to a claim whose conversations run turns that can be interrupted.
 
 For a claim with its own conversations, return the conversation's kind from `startFresh`.
 Run turns with [`context.turns`](#personas-and-contextturns-conversations-of-a-kind-of-your-own), which handles typing, the stop control, events, and replies.
+The [sandbox package source][sandbox-source] is a complete guest-only channel claim backed by a no-network Docker agent and a host-side broker.
+Its container runs a minimal Chat Completions loop rather than a Pi session.
 
 <!-- example: examples/channels.ts -->
 ```ts
@@ -1881,25 +1890,41 @@ The package ships three plugins you can copy into a project and change.
 `roundtable add plugin codex-images`, `roundtable add plugin dice`, and `roundtable add plugin release-notice` write `plugins/<name>.ts` and `plugins/<name>.test.ts`, import the plugin in `roundtable.config.ts`, and list it in `plugins`.
 You can edit the copied files; `add plugin` refuses to overwrite existing ones.
 The three names are reserved for these copies.
+Inspect the ready-made implementations in the [codex-images][codex-images-template], [dice][dice-template], and [release-notice][release-notice-template] templates.
 
 The [pi-roundtable-mcp][mcp-package] workspace, published separately on npm, adds two more plugins, `mcpConnectors` and `remoteMcp`.
 The first lets the owner add MCP servers such as Notion or a calendar from Discord and gives your code the list; the second lets an agent outside Discord reach your agent.
 Install it with `bun add pi-roundtable-mcp` after the next lockstep release publishes the migrated package.
 Until then, npm's MCP 0.4.1 requires core below 0.6.0 and is not compatible with core 0.7.x.
 
-Five official packages live in this repository as Bun workspaces and publish as separate npm packages, versioned in lockstep with the core:
+Five official packages live in this repository as Bun workspaces and publish as separate npm packages, versioned in lockstep with the core.
+The [site guide source files][package-guides] describe installation, requirements, configuration, and security considerations:
 
-- [pi-roundtable-drawing][drawing-package]: local relationship maps, magic circles, sigils, sacred geometry, and card spreads.
-- [pi-roundtable-coding][coding-package]: repository shelves and owner-approved Pi coding workers.
-- [pi-roundtable-web][web-package]: an owner-only console for conversations, transcripts, and memory notes with live updates.
-- [pi-roundtable-sandbox][sandbox-package]: sealed guest channels on native Linux Docker with a host-only credential broker and allow-listed tools.
-- [pi-roundtable-mcp][mcp-package]: MCP connectors through a gateway and remote MCP endpoints for agent turns and owner-granted Discord channel tools.
+- [pi-roundtable-drawing][drawing-package]: [site guide source][drawing-guide] · local relationship maps, magic circles, sigils, sacred geometry, and card spreads.
+- [pi-roundtable-coding][coding-package]: [site guide source][coding-guide] · repository shelves and owner-approved Pi coding workers.
+- [pi-roundtable-web][web-package]: [site guide source][web-guide] · an owner-only console for conversations, transcripts, and memory notes with live updates.
+- [pi-roundtable-sandbox][sandbox-package]: [site guide source][sandbox-guide] · sealed guest channels on native Linux Docker with a host-only credential broker and allow-listed tools.
+- [pi-roundtable-mcp][mcp-package]: [site guide source][mcp-guide] · MCP connectors through a gateway and remote MCP endpoints for agent turns and owner-granted Discord channel tools.
 
 [drawing-package]: https://github.com/wayne930242/pi-roundtable/blob/master/packages/drawing/README.md
 [coding-package]: https://github.com/wayne930242/pi-roundtable/blob/master/packages/coding/README.md
 [web-package]: https://github.com/wayne930242/pi-roundtable/blob/master/packages/web/README.md
 [sandbox-package]: https://github.com/wayne930242/pi-roundtable/blob/master/packages/sandbox/README.md
 [mcp-package]: https://github.com/wayne930242/pi-roundtable/blob/master/packages/mcp/README.md
+[package-guides]: https://github.com/wayne930242/pi-roundtable/tree/master/site/src/content/docs/plugins/
+[drawing-guide]: https://github.com/wayne930242/pi-roundtable/blob/master/site/src/content/docs/plugins/drawing-package.mdx
+[coding-guide]: https://github.com/wayne930242/pi-roundtable/blob/master/site/src/content/docs/plugins/coding-package.mdx
+[web-guide]: https://github.com/wayne930242/pi-roundtable/blob/master/site/src/content/docs/plugins/web-package.mdx
+[sandbox-guide]: https://github.com/wayne930242/pi-roundtable/blob/master/site/src/content/docs/plugins/sandbox-package.mdx
+[mcp-guide]: https://github.com/wayne930242/pi-roundtable/blob/master/site/src/content/docs/plugins/mcp-package.mdx
+[coding-source]: https://github.com/wayne930242/pi-roundtable/tree/master/packages/coding
+[sandbox-source]: https://github.com/wayne930242/pi-roundtable/tree/master/packages/sandbox
+[web-source]: https://github.com/wayne930242/pi-roundtable/tree/master/packages/web
+[drawing-source]: https://github.com/wayne930242/pi-roundtable/tree/master/packages/drawing
+[mcp-source]: https://github.com/wayne930242/pi-roundtable/tree/master/packages/mcp
+[codex-images-template]: https://github.com/wayne930242/pi-roundtable/blob/master/templates/official/codex-images/plugin.ts
+[dice-template]: https://github.com/wayne930242/pi-roundtable/blob/master/templates/official/dice/plugin.ts
+[release-notice-template]: https://github.com/wayne930242/pi-roundtable/blob/master/templates/official/release-notice/plugin.ts
 
 Install only the packages your host uses; the core does not depend on these workspaces.
 

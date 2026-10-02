@@ -1,0 +1,78 @@
+---
+title: Sandbox package
+description: Route selected Discord channels to isolated Docker guests with a host-side credential broker.
+sidebar:
+  order: 12
+---
+
+`pi-roundtable-sandbox` makes selected guild channels guest-only.
+Each message that mentions or replies to the bot runs a tool-using agent in a new Docker container; channel memory and recent conversation text persist in that channel's workspace.
+Messages not directed to the bot are dropped rather than routed to a host agent.
+
+## Install and requirements
+
+```sh
+bun add pi-roundtable-sandbox pi-roundtable
+```
+
+Use Bun 1.4.2 or newer, pi-roundtable `>=0.7.0 <0.8.0`, a native Linux host, and a local Docker daemon.
+The service account must be allowed to use Docker and must not run the guest as root.
+macOS supports development and image builds, but not sandbox execution because Docker Desktop does not share host Unix sockets into its Linux VM.
+You also need a trusted OpenAI-compatible, non-streaming Chat Completions endpoint with function tools and `max_tokens`.
+
+Build the worker image from the installed package before starting the host:
+
+```sh
+docker build -f node_modules/pi-roundtable-sandbox/worker/Dockerfile -t pi-roundtable-sandbox:local node_modules/pi-roundtable-sandbox
+```
+
+```ts
+import { sandbox } from "pi-roundtable-sandbox";
+
+export default {
+  // ...your roundtable settings...
+  plugins: [sandbox({
+    image: "pi-roundtable-sandbox:local",
+    runRoot: "/tmp/roundtable-sandbox-run",
+    workspaceRoot: "/srv/roundtable-sandbox/workspaces",
+    stateFile: "/srv/roundtable-sandbox/state/channels.json",
+    provider: "openai",
+    model: "operator-selected-model",
+    modelUrl: "https://api.openai.com/v1/chat/completions",
+  })],
+};
+```
+
+The directories must be dedicated to this package, owned by the service account, and have private permissions.
+`stateFile` must be absolute and outside both mounted roots.
+Keep `runRoot` short enough for Unix socket paths.
+Only one host process may own these directories.
+
+## Configuration and tools
+
+Required runtime options include `image`, `runRoot`, `workspaceRoot`, `model`, and `modelUrl`; `stateFile` is also required by the plugin.
+`provider` defaults to `openai` and is used to look up the host's model login when `apiKey` is not supplied.
+`apiKey` may provide a credential getter; otherwise the host reads the provider login on each request.
+`initialChannels` seeds only a new routing-state file.
+Optional `prompt` sets the guest system prompt; the time zone comes from the host's `env.timeZone`.
+Optional `uid` and `gid` must match the non-root host account.
+Optional `tools` and `mcp` explicitly grant host callbacks and selected MCP tools.
+Resource and deadline controls include `limits` (`memoryMb`, `cpus`, `pids`) and `turnTimeoutMs` (1–600 seconds).
+Do not grant generic shell, arbitrary paths, or arbitrary URLs.
+Callback schemas guide the model but do not validate inputs on the host.
+
+After restart, the owner can run `/roundtable sandbox on`, `/roundtable sandbox status`, or `/roundtable sandbox off` in a guild channel.
+Turning the mode off retains workspace memory and restores normal routing after queued work completes.
+
+## Threat model
+
+Treat prompts, model output, and container code as untrusted.
+Docker provides process isolation, not a VM boundary.
+The container has no network, host credentials, Docker socket, or host environment; only the broker can reach the configured model and explicitly allowed tools.
+A malicious guest can still spend through the allowed model endpoint and use every granted capability.
+The host, Docker daemon, Linux kernel, image, callbacks, and upstream services remain trusted.
+Use a patched, dedicated machine for higher-risk workloads, and apply provider spend limits, ingress limits, filesystem quotas, and host capacity controls.
+
+See the [pi-roundtable-sandbox README](https://github.com/wayne930242/pi-roundtable/blob/master/packages/sandbox/README.md) for every isolation control, persistence limit, deployment constraint, and Docker integration test.
+
+{/* Sources: packages/sandbox/README.md:1-27, packages/sandbox/README.md:29-74, packages/sandbox/README.md:76-106, packages/sandbox/src/plugin.ts:12-28 */}
