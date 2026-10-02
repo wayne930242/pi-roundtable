@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-02
+
 ### Added
 
 - `roundtable add package <spec>` installs a Pi package with `bun add`, loads its extensions to find the tools they register, and writes `plugins/<name>.ts` and its test: the plugin lists the package in `piPackages`, selects its tools for every agent turn with `agentSelection`, and requires them with `requiredTools`. It gives no tool a tier, so a tool no other plugin tiers stays the owner's until the operator's `toolTiers` lowers it. It refuses before installing when the plugin file exists or the config cannot take the plugin, and after installing when the package declares no Pi extensions or they fail to load, naming the `bun remove` command.
