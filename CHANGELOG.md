@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-10-02
+
+### Changed
+
+- `pi-mcp-adapter` is 5.0.0 (was 4.0.0). The core supplies its servers through `createMcpAdapter()`, which 5.0.0 keeps isolated: it reads no `mcp.json` and leaves the host's Pi settings alone. Checked on pi 0.99.2 and 1.0.0 by connecting a session built the way the core builds one to a local MCP server that requires a bearer token: the tool registered, a call returned its result, and the agent directory got no `settings.json`. 5.0.0 declares pi-ai peer support up to 0.99; the checks above ran it on 1.0.0.
+
 ## [0.5.1] - 2026-10-02
 
 ### Changed
