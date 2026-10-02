@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-02
+
 ### Added
 
 - Turn reply attachments: `ToolTurn.attachFile(file)` queues raw bytes with the agent's reply instead of posting as the bot ahead of it.
