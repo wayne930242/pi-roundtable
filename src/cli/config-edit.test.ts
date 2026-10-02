@@ -63,6 +63,23 @@ export default {
 		expect(edit(noComma)).toContain("\t\ta,\n\t\tmyNotes\n\t],");
 	});
 
+	test("puts a one-line list one element a line once the line would pass 80 columns, as the formatter does", () => {
+		// `\tplugins: [<name>, myNotes],` is the name's length plus 23 columns, a tab counting as 2.
+		const config = (name: string) => `export default {
+	plugins: [${name}],
+};
+`;
+		const fits = "a".repeat(57);
+		expect(edit(config(fits))).toContain(`\tplugins: [${fits}, myNotes],\n`);
+		const over = "a".repeat(58);
+		expect(edit(config(over))).toContain(
+			`\tplugins: [\n\t\t${over},\n\t\tmyNotes,\n\t],\n`,
+		);
+		// A list holding a comment keeps its line; the formatter's verdict on it is left to the owner.
+		const commented = config(`${over} /* keep */`);
+		expect(edit(commented)).toContain(`${over}, myNotes /* keep */],`);
+	});
+
 	test("fills an empty list and adds the import to a file without imports", () => {
 		const edited = edit("export default { plugins: [] };\n");
 		expect(edited).toBe(

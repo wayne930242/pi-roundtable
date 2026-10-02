@@ -115,6 +115,50 @@ function pluginList(object: Node): Node | undefined {
 interface Insertion {
 	at: number;
 	text: string;
+	/** How many characters from `at` the text replaces; none when it only inserts. */
+	replaces?: number;
+}
+
+/** The width the formatter gives a line: a tab counts as its default indent width of 2. */
+const LINE_WIDTH = 80;
+const width = (line: string): number => line.replaceAll("\t", "  ").length;
+
+/**
+ * The one-line list with `ident` added, put one element a line when the line it sits on would
+ * pass the formatter's width, as the project's formatter would; undefined when the list already
+ * spans lines, holds anything besides its elements and commas, or still fits.
+ */
+function expandedList(
+	source: string,
+	list: Node,
+	elements: readonly Node[],
+	ident: string,
+): Insertion | undefined {
+	const inner = source.slice(list.start + 1, list.end - 1);
+	if (inner.includes("\n")) return undefined;
+	const items = elements.map((element) =>
+		source.slice(element.start, element.end),
+	);
+	// The text around and between the elements, which must be only commas and spaces.
+	const edges = [
+		list.start + 1,
+		...elements.flatMap((element) => [element.start, element.end]),
+		list.end - 1,
+	];
+	let gaps = "";
+	for (let index = 0; index < edges.length; index += 2)
+		gaps += source.slice(edges[index], edges[index + 1]);
+	if (!/^[\s,]*$/.test(gaps)) return undefined;
+	const lineStart = source.lastIndexOf("\n", list.start) + 1;
+	const lineEnd = source.indexOf("\n", list.end);
+	const line = `${source.slice(lineStart, list.start)}[${[...items, ident].join(", ")}]${source.slice(list.end, lineEnd === -1 ? undefined : lineEnd)}`;
+	if (width(line) <= LINE_WIDTH) return undefined;
+	const indent = /^[ \t]*/.exec(source.slice(lineStart, list.start))?.[0] ?? "";
+	return {
+		at: list.start,
+		replaces: list.end - list.start,
+		text: `[\n${[...items, ident].map((item) => `${indent}\t${item},\n`).join("")}${indent}]`,
+	};
 }
 
 /** The text to add so `ident` joins the list, in the list's own layout. */
@@ -122,6 +166,8 @@ function listInsertion(source: string, list: Node, ident: string): Insertion {
 	const elements = (list.elements as (Node | null)[]).filter(
 		(element): element is Node => element !== null,
 	);
+	const expanded = expandedList(source, list, elements, ident);
+	if (expanded) return expanded;
 	const last = elements.at(-1);
 	if (!last) return { at: list.start + 1, text: ident };
 	const between = source.slice(last.end, list.end - 1);
@@ -161,8 +207,9 @@ function importInsertion(
 
 /**
  * Adds the plugin's import line and lists it in the `plugins` array of the default export, in the
- * file's own layout. It refuses, changing nothing, a file that does not parse, a default export
- * with no `plugins` list it can find, and a name already bound.
+ * file's own layout; a one-line list that would pass 80 columns is put one element a line. It
+ * refuses, changing nothing, a file that does not parse, a default export with no `plugins` list
+ * it can find, and a name already bound.
  */
 export function addPluginToConfig(
 	source: string,
@@ -192,7 +239,10 @@ export function addPluginToConfig(
 	].sort((a, b) => b.at - a.at);
 	let edited = source;
 	for (const edit of edits)
-		edited = edited.slice(0, edit.at) + edit.text + edited.slice(edit.at);
+		edited =
+			edited.slice(0, edit.at) +
+			edit.text +
+			edited.slice(edit.at + (edit.replaces ?? 0));
 	// A result that does not parse is a bug here; never write it.
 	parseModule(edited, file);
 	return edited;

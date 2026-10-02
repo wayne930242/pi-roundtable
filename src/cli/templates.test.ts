@@ -48,13 +48,11 @@ function link(project: string): void {
 }
 
 const dir = tempDir("roundtable-template-");
-/** A second project, so the plugins `add package` writes join a config list that still fits on one line. */
-const packages = tempDir("roundtable-packages-");
 const bun = { version: Bun.version, required: ">=1.3.0" };
-const check = (label: string, cwd = dir.path) => {
-	const typecheck = run(cwd, [TSC, "--noEmit"]);
-	const test = run(cwd, ["bun", "test"]);
-	const lint = run(cwd, [BIOME, "check", "."]);
+const check = (label: string) => {
+	const typecheck = run(dir.path, [TSC, "--noEmit"]);
+	const test = run(dir.path, ["bun", "test"]);
+	const lint = run(dir.path, [BIOME, "check", "."]);
 	return { label, typecheck, test, lint };
 };
 
@@ -63,7 +61,7 @@ let grown: ReturnType<typeof check>;
 let official: ReturnType<typeof check>;
 let packaged: ReturnType<typeof check>;
 
-/** Three Pi packages: tools too many for one line, one short line, and none. */
+/** Three Pi packages: tools too many for one line, one short line, and none; the config's plugin list then passes one line. */
 const PACKAGES: Record<string, string[]> = {
 	"pi-web-access": [
 		"web_search",
@@ -89,12 +87,9 @@ beforeAll(async () => {
 		if (!copied.ok) throw new Error(copied.problems.join("\n"));
 	}
 	official = check("after adding the official plugins");
-	const second = init({ cwd: packages.path, bun, version: "0.1.0" });
-	if (!second.ok) throw new Error(second.problems.join("\n"));
-	link(packages.path);
 	for (const spec of Object.keys(PACKAGES)) {
 		const added = await addPackage({
-			cwd: packages.path,
+			cwd: dir.path,
 			spec,
 			ports: {
 				install: async () => ({ ok: true, output: "" }),
@@ -103,12 +98,9 @@ beforeAll(async () => {
 		});
 		if (!added.ok) throw new Error(added.problems.join("\n"));
 	}
-	packaged = check("after adding Pi packages", packages.path);
+	packaged = check("after adding Pi packages");
 }, 240_000);
-afterAll(() => {
-	dir.done();
-	packages.done();
-});
+afterAll(() => dir.done());
 
 describe("every template rendered into one project", () => {
 	test("typechecks with no edits", () => {
@@ -139,7 +131,7 @@ describe("every template rendered into one project", () => {
 	});
 	test("still typechecks, tests, and lints after `add package`", () => {
 		expect(packaged.typecheck.output).toBe("");
-		expect(packaged.test.output).toContain("4 pass");
+		expect(packaged.test.output).toContain("17 pass");
 		expect(packaged.lint.output).toContain("No fixes applied");
 		expect(packaged.typecheck.ok && packaged.test.ok && packaged.lint.ok).toBe(
 			true,
