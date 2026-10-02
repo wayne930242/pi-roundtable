@@ -7,7 +7,9 @@ This package is a reference for the plugin guide's [Helpers for a Pi session of 
 ## Requirements
 
 - Bun 1.4.2 or newer on a POSIX host (Linux or macOS).
-- pi-roundtable `>=0.6.1 <0.8.0` as a peer dependency; this package uses only its public main, kit and testing entries.
+- pi-roundtable `>=0.7.0 <0.8.0` as a peer dependency; this package uses only its public main, kit and testing entries.
+- Pi `>=1.0.0 <2`, shared with the host's core dependencies.
+  A core-only host still pinned to Pi 0.99.x must update its Pi dependencies before adding coding, so cross-package extension and session types resolve to one Pi version.
 - Git, plus GitHub CLI (`gh`) for the default clone implementation.
 - A Git host token with read access to repositories being cloned and write access to those being pushed, or a host login holding that token.
 - Pi model credentials available through the host's Pi login or the provider's environment variables.
@@ -164,18 +166,21 @@ No database or Discord-specific types are required.
 
 ## Development and publishing
 
+This package lives in `packages/coding` in the pi-roundtable workspace.
+Run these commands from the repository root:
+
 ```sh
 bun install --frozen-lockfile
-bun test
-bun run typecheck
-bun run lint
+bun run --cwd packages/coding test
+bun run --cwd packages/coding typecheck
+bun run --cwd packages/coding lint
 ```
 
 Tests use temporary bare Git origins, `testPlugin`, fake workers and a real child Pi session with an offline faux provider.
 They cover cloning/listing, reports, push holds and approved pushes, owner exceptions, work-time exclusion, bad names, closed approval paths and child-process exit.
 CI runs those checks.
-The publish workflow repeats them, checks the version tag, then uses npm trusted publishing with provenance.
-Before the first release, the owner creates the public repository, sets package repository metadata, performs the initial npm publication and configures trusted publishing; none is done by this package's local setup.
+The shared `publish.yml` workflow repeats them, checks that every workspace version and core peer range match the single `v*` tag, then uses npm trusted publishing with provenance.
+The owner performs the initial npm publication and configures this package's trust against `publish.yml`; no separate repository or package-specific tag is needed.
 
 ## License
 

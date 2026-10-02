@@ -5,9 +5,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-## [0.1.0] - 2026-10-02
+## [0.7.0] - Unreleased
 
-First release: an owner-only web console for pi-roundtable 0.6, extracted from a private host.
+Prepared for the first npm publication.
+The earlier `0.1.0` was local-only and was never published on npm.
+
+### Changed
+
+- Move into the pi-roundtable workspace with preserved Git history and lockstep version `0.7.0`.
+  The core peer range is `>=0.7.0 <0.8.0`, and the shared `publish.yml` releases all packages from one `v*` tag.
 
 ### Added
 

@@ -214,3 +214,18 @@ const harness = await testPlugin(drawing({ random: seededRandom(1) }), {
 await harness.runTool("sigil_generate", { intention: "home", method: "chaos" });
 const { channel, file } = harness.files[0]; // "test:1", sigil.png
 ```
+
+## Development and publishing
+
+This package lives in `packages/drawing` in the pi-roundtable workspace.
+Run these commands from the repository root:
+
+```sh
+bun install --frozen-lockfile
+bun run --cwd packages/drawing typecheck
+bun run --cwd packages/drawing lint
+bun run --cwd packages/drawing test
+```
+
+The package shares the core's version and single `v*` release tag.
+The shared `publish.yml` checks all workspaces and publishes each npm package separately with provenance.

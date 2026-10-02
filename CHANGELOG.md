@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- Official drawing, coding, and web plugins now live under `packages/` as Bun workspaces with their original Git history.
+  They remain separate npm packages, checked alongside the core in CI and released in lockstep from one `v*` tag through `publish.yml`.
+  The core's npm file list and release tags are unchanged.
+
 ## [0.7.0] - 2026-10-02
 
 ### Added

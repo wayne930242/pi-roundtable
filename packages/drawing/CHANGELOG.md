@@ -5,15 +5,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.0] - Unreleased
+
+Prepared for the first npm publication.
+The earlier `0.1.0` was local-only and was never published on npm.
+
 ### Changed
 
+- Move into the pi-roundtable workspace with preserved Git history and lockstep version `0.7.0`.
+  The shared `publish.yml` releases the core and all packages from one `v*` tag.
 - The tools attach each picture to the agent's own reply with `turn.attachFile` instead of posting it as a separate message from the bot, so on Discord the picture arrives under the agent's name and avatar, after its text.
   This needs pi-roundtable 0.7.0 or newer; the peer dependency is now `>=0.7.0 <0.8.0`.
 - A picture over the 10 MiB file limit of `REPLY_FILE_LIMITS` is refused with advice to ask for a smaller one.
   A turn that already holds the most files, or a surface that cannot carry files, fails the call with the host's message instead of dropping the picture.
 - The tool results now say the picture is attached to the reply, not posted to the channel.
-
-## [0.1.0] - 2026-10-02
 
 ### Added
 

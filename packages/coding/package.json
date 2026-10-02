@@ -1,12 +1,13 @@
 {
 	"name": "pi-roundtable-coding",
-	"version": "0.1.0",
+	"version": "0.7.0",
 	"description": "Repository shelves and owner-approved Pi coding workers for pi-roundtable",
 	"type": "module",
 	"license": "MIT",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/wayne930242/pi-roundtable-coding.git"
+		"url": "git+https://github.com/wayne930242/pi-roundtable.git",
+		"directory": "packages/coding"
 	},
 	"engines": {
 		"bun": ">=1.4.2"
@@ -33,17 +34,17 @@
 		"lint": "biome check ."
 	},
 	"dependencies": {
-		"@earendil-works/pi-coding-agent": "1.0.0",
+		"@earendil-works/pi-coding-agent": ">=1.0.0 <2",
 		"typebox": "1.3.34"
 	},
 	"peerDependencies": {
-		"pi-roundtable": ">=0.6.1 <0.8.0"
+		"pi-roundtable": ">=0.7.0 <0.8.0"
 	},
 	"devDependencies": {
-		"@earendil-works/pi-ai": "1.0.0",
+		"@earendil-works/pi-ai": ">=1.0.0 <2",
 		"@biomejs/biome": "2.5.15",
 		"@types/bun": "1.4.2",
-		"pi-roundtable": "0.6.1",
+		"pi-roundtable": "0.7.0",
 		"typescript": "7.0.2"
 	}
 }

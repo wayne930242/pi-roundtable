@@ -33,7 +33,7 @@ It does not start conversations over, delete them, or change agent settings; the
 
 ## Requirements
 
-- Bun 1.3 or later, and pi-roundtable `>=0.6.1 <0.8.0` as a peer dependency.
+- Bun 1.3 or later, and pi-roundtable `>=0.7.0 <0.8.0` as a peer dependency.
 - The host must run on the machine that holds its data directory: the console reads `<dataDir>/sessions` from disk.
 - The `memory` addon for the Notes pane (it is on by default; switch the pane off with `panes` when you run without memory).
 - A way to authenticate the owner in front of the listener, such as Cloudflare Access, or a verifier of your own (see [Authentication](#authentication)).
@@ -201,13 +201,16 @@ The console is for one owner on one host.
 
 ## Development
 
+This package lives in `packages/web` in the pi-roundtable workspace.
+Install at the repository root, then run the package scripts:
+
 ```sh
-bun install
-bun run build       # builds the page into dist/
-bun run typecheck   # the server and the page
-bun run lint
-bun test
-bun run fixture     # a local host with fixture data, for trying the page in a browser
+bun install --frozen-lockfile
+bun run --cwd packages/web build       # builds the page into dist/
+bun run --cwd packages/web typecheck   # the server and the page
+bun run --cwd packages/web lint
+bun run --cwd packages/web test
+bun run --cwd packages/web fixture     # a local host with fixture data
 ```
 
 `bun run fixture` starts the plugin on pi-roundtable's test harness over fixture conversations on port 4173, behind a stand-in for the authenticating proxy that signs a test Access token, and the same listener without it on port 4174, which must answer 403.
@@ -216,7 +219,8 @@ bun run fixture     # a local host with fixture data, for trying the page in a b
 The page is React, bundled with Bun's bundler into relative URLs, so it works under any `mountPath`.
 Pages are addressed by the URL fragment (`#/notes`, `#/conversations/<key>`), which keeps every page at the console's root path.
 
-The release process tags `v*`, and the publish workflow builds the page, runs the checks, and publishes with provenance.
+The package shares the core's version and single `v*` release tag.
+The shared `publish.yml` checks every workspace, then publishes each separately with provenance; this package's `prepack` builds the page.
 
 [roundtable]: https://www.npmjs.com/package/pi-roundtable
 [mcp]: https://www.npmjs.com/package/pi-roundtable-mcp

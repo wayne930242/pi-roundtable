@@ -1,1 +1,5 @@
+# The core stays at the repository root; its development override must be a live symlink.
+[install]
+linker = "hoisted"
+
 [test]

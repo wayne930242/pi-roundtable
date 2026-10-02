@@ -1,6 +1,6 @@
 {
 	"name": "pi-roundtable-drawing",
-	"version": "0.1.0",
+	"version": "0.7.0",
 	"description": "Relationship maps, magic circles, sigils, sacred geometry, and card spreads drawn locally for pi-roundtable",
 	"type": "module",
 	"license": "MIT",
@@ -23,7 +23,8 @@
 	],
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/wayne930242/pi-roundtable-drawing.git"
+		"url": "git+https://github.com/wayne930242/pi-roundtable.git",
+		"directory": "packages/drawing"
 	},
 	"publishConfig": {
 		"access": "public",

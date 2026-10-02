@@ -1,4 +1,6 @@
 node_modules/
+scratch/
+.metadata_cache/
 *.tgz
 .env
 /Plans/

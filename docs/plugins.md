@@ -1886,6 +1886,18 @@ A separate package, [pi-roundtable-mcp](https://www.npmjs.com/package/pi-roundta
 The first lets the owner add MCP servers such as Notion or a calendar from Discord and gives your code the list; the second lets an agent outside Discord reach your agent.
 Install it with `bun add pi-roundtable-mcp`.
 
+Three more official packages live in this repository as Bun workspaces and publish as separate npm packages, versioned in lockstep with the core:
+
+- [pi-roundtable-drawing][drawing-package]: local relationship maps, magic circles, sigils, sacred geometry, and card spreads.
+- [pi-roundtable-coding][coding-package]: repository shelves and owner-approved Pi coding workers.
+- [pi-roundtable-web][web-package]: an owner-only console for conversations, transcripts, and memory notes with live updates.
+
+[drawing-package]: https://github.com/wayne930242/pi-roundtable/blob/master/packages/drawing/README.md
+[coding-package]: https://github.com/wayne930242/pi-roundtable/blob/master/packages/coding/README.md
+[web-package]: https://github.com/wayne930242/pi-roundtable/blob/master/packages/web/README.md
+
+Install only the packages your host uses; the core does not depend on these workspaces.
+
 | Plugin | What it does | What it needs |
 |---|---|---|
 | `codex-images` | Fills the [`images` slot](#providers-replace-a-part-the-core-runs-on), so agents can draw avatars from a prompt and reference pictures | A login to the `openai-codex` provider; setup throws a `PluginError` that says so when the host has none |

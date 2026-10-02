@@ -48,8 +48,18 @@ export const PUBLIC_NAME_ALLOWLIST: NameAllowlist = {
 		spell("context", "forge"),
 	],
 	"bun.lock": [spell("type", "safe")],
-	// The guide names its one private consumer.
-	"docs/plugins.md": [spell("Mer", "lin")],
+	".github/PACKAGE-RELEASES.md": [OWNER_HANDLE],
+	// Workspace metadata keeps the same public attribution as the root package.
+	...Object.fromEntries(
+		["drawing", "coding", "web"].flatMap((name) =>
+			["LICENSE", "README.md", "package.json"].map((file) => [
+				`packages/${name}/${file}`,
+				[OWNER_HANDLE],
+			]),
+		),
+	),
+	// The guide names its one private consumer and links public workspace READMEs.
+	"docs/plugins.md": [spell("Mer", "lin"), OWNER_HANDLE],
 };
 
 /**
