@@ -21,6 +21,10 @@ function cli(overrides: Partial<CliEnvironment> = {}) {
 		bun: () => ({ version: "1.3.10", required: ">=1.3.0" }),
 		version: () => "1.2.3",
 		ports: fakePorts(),
+		packages: {
+			install: async () => ({ ok: true, output: "" }),
+			tools: async () => ["web_search", "fetch_content"],
+		},
 		launch: async (defined) => void launched.push(defined),
 		out: (line) => out.push(line),
 		err: (line) => err.push(line),
@@ -50,6 +54,8 @@ test("an unknown command or a wrong argument list prints the problem and exits n
 		["add", "plugin"],
 		["add", "thing", "x"],
 		["add", "plugin", "a", "b"],
+		["add", "package"],
+		["add", "package", "a", "b"],
 		["init", "a", "b"],
 		["doctor", "extra"],
 		["start", "--reachable"],
@@ -103,6 +109,21 @@ test("add plugin copies an official plugin by name, and refuses it a second time
 	).toContain("plugins: [hello, dice]");
 	expect(await runCli(["add", "plugin", "dice"], run.io)).toBe(1);
 	expect(run.err.join("\n")).toContain("already exist");
+});
+
+test("add package prints the files and the tools it found, and exits non-zero outside a project", async () => {
+	const outside = cli();
+	expect(await runCli(["add", "package", "pi-web-access"], outside.io)).toBe(1);
+	expect(outside.err.join("\n")).toContain("roundtable.config.ts is not in");
+	const run = cli();
+	await runCli(["init"], run.io);
+	expect(await runCli(["add", "package", "pi-web-access"], run.io)).toBe(0);
+	const printed = run.out.join("\n");
+	expect(printed).toContain("plugins/pi-web-access.ts");
+	expect(printed).toContain("web_search, fetch_content");
+	expect(
+		readFileSync(join(run.dir.path, "roundtable.config.ts"), "utf8"),
+	).toContain("plugins: [hello, piWebAccess]");
 });
 
 test("doctor exits non-zero when a check fails and zero when none does", async () => {

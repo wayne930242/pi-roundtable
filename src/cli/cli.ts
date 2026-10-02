@@ -2,12 +2,14 @@ import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { DefinedRoundtable } from "../core/define-roundtable.ts";
 import { Roundtable } from "../core/host.ts";
+import { addPackage } from "./add-package.ts";
 import { addPlugin } from "./add-plugin.ts";
 import type { BunFacts } from "./checks/bun.ts";
 import { postgres } from "./checks/database.ts";
 import { doctor } from "./doctor.ts";
 import { fetchHttp } from "./http.ts";
 import { init } from "./init.ts";
+import { type PackagePorts, piPackagePorts } from "./pi-packages.ts";
 import { loadConfigFile, type Ports } from "./project.ts";
 import { formatOutcomes } from "./report.ts";
 import { assemble, providerLogin } from "./runtime.ts";
@@ -21,6 +23,8 @@ export interface CliEnvironment {
 	bun: () => BunFacts;
 	version: () => string;
 	ports: Ports;
+	/** Installs Pi packages and reads the tools they register, for `add package`. */
+	packages: PackagePorts;
 	launch(defined: DefinedRoundtable): Promise<void>;
 	out(line: string): void;
 	err(line: string): void;
@@ -34,6 +38,8 @@ const USAGE = `roundtable: a Discord agent server on Pi
   roundtable add plugin <name>  add plugins/<name>.ts and its test, and list it in the config
                                 the names ${OFFICIAL_PLUGINS.join(" and ")} are reserved for the official plugins,
                                 which are copied in ready to run instead of the template
+  roundtable add package <spec> install a Pi package with bun add, and add plugins/<name>.ts that
+                                loads it and gives its tools to every agent turn
 `;
 
 /** The package's own version and the Bun range it needs, from the package.json beside the source. */
@@ -74,6 +80,7 @@ export function processEnvironment(): CliEnvironment {
 			define: assemble,
 			login: providerLogin,
 		},
+		packages: piPackagePorts,
 		launch: async (defined) => {
 			const roundtable = new Roundtable(defined.options, defined.plugins);
 			roundtable.listen();
@@ -122,8 +129,30 @@ export async function runCli(
 	}
 	if (command === "add") {
 		const [what, name, ...extra] = rest;
+		if (what === "package" && name !== undefined && extra.length === 0) {
+			const report = await addPackage({
+				cwd: io.cwd,
+				spec: name,
+				ports: io.packages,
+			});
+			if (!report.ok) {
+				for (const line of report.problems) io.err(line);
+				return 1;
+			}
+			io.out(`Added the Pi package ${name}:`);
+			for (const path of report.changed) io.out(`  ${path}`);
+			io.out(
+				report.tools.length > 0
+					? `Its tools: ${report.tools.join(", ")}. One no plugin gives a tier is the owner's alone; lower it with toolTiers in roundtable.config.ts.`
+					: "It registers no tools when it loads; the plugin still loads it in every session.",
+			);
+			return 0;
+		}
 		if (what !== "plugin" || name === undefined || extra.length > 0)
-			return usage(io, "usage: roundtable add plugin <name>");
+			return usage(
+				io,
+				"usage: roundtable add plugin <name>, or roundtable add package <spec>",
+			);
 		const report = addPlugin({ cwd: io.cwd, name });
 		if (!report.ok) {
 			for (const line of report.problems) io.err(line);

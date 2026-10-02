@@ -76,6 +76,7 @@ Bun 會自己讀 `.env`，`.gitignore` 也已經擋掉它。
 ## 外掛
 
 `roundtable add plugin <name>` 會建立 `plugins/<name>.ts` 和它的測試，並把它列進 `roundtable.config.ts`。
+`roundtable add package <spec>` 對 npm 上的 Pi package 做同樣的事：安裝套件，並寫好一個載入它的擴充、選用它的工具的外掛。
 外掛是一個有名稱和 `setup` 函式的物件，`setup` 回傳它要新增的東西；下面這個外掛給每個智慧體一個工具：
 
 ```ts
@@ -158,6 +159,7 @@ export default {
 | `roundtable doctor [--reachable]` | 檢查設定，並說明如何修正有問題的地方 |
 | `roundtable start` | 先執行不需要網路的檢查，再啟動 bot |
 | `roundtable add plugin <name>` | 新增 `plugins/<name>.ts` 和它的測試，並列進設定 |
+| `roundtable add package <spec>` | 用 `bun add` 安裝 Pi package，並新增一個載入它、把它的工具交給每一輪 agent 的外掛 |
 
 ## 變更與授權
 

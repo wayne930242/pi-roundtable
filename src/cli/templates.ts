@@ -16,6 +16,9 @@ const PLUGIN_DIR = "plugin";
 /** The directory of the official plugins, one directory each, named as `add plugin` names them. */
 const OFFICIAL_DIR = "official";
 
+/** The directory of the plugin `add package` writes around a Pi package. */
+const PACKAGE_DIR = "package";
+
 /** The plugins the package ships ready-made: `add plugin <name>` copies these instead of the `hello` template, so the names are reserved. */
 export const OFFICIAL_PLUGINS = ["codex-images", "dice"] as const;
 
@@ -102,6 +105,40 @@ export function renderPlugin(
 	}));
 }
 
+/** The `TOOLS` constant as the project's formatter writes it: on one line when it fits in 80 columns. */
+function toolsConstant(tools: readonly string[]): string {
+	const items = tools.map((tool) => JSON.stringify(tool));
+	const line = `const TOOLS: string[] = [${items.join(", ")}];`;
+	return line.length <= 80
+		? line
+		: `const TOOLS: string[] = [\n${items.map((item) => `\t${item},\n`).join("")}];`;
+}
+
+/** The plugin `add package` writes around the Pi package `pkg`, and its test, with the tools the package registers. */
+export function renderPackagePlugin(
+	names: PluginNames,
+	pkg: string,
+	tools: readonly string[],
+	dir = TEMPLATES_DIR,
+): Rendered[] {
+	const values = {
+		NAME: names.name,
+		IDENT: names.ident,
+		PACKAGE: pkg,
+		TOOLS: toolsConstant(tools),
+	};
+	return [
+		["plugin.ts.tmpl", `plugins/${names.name}.ts`],
+		["plugin.test.ts.tmpl", `plugins/${names.name}.test.ts`],
+	].map(([file, path]) => ({
+		path: path as string,
+		content: fill(
+			readFileSync(join(dir, PACKAGE_DIR, file as string), "utf8"),
+			values,
+		),
+	}));
+}
+
 /** Every file of a new project: the skeleton and the `hello` plugin, paths relative to the project. */
 export function renderProject(
 	substitutions: Substitutions,
@@ -115,7 +152,9 @@ export function renderProject(
 	const skeleton = filesUnder(dir)
 		.map((file) => relative(dir, file))
 		.flatMap((path) =>
-			path.startsWith(`${PLUGIN_DIR}/`) || path.startsWith(`${OFFICIAL_DIR}/`)
+			[PLUGIN_DIR, OFFICIAL_DIR, PACKAGE_DIR].some((sub) =>
+				path.startsWith(`${sub}/`),
+			)
 				? []
 				: [
 						{

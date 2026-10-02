@@ -1,6 +1,6 @@
 ---
 title: CLI
-description: The roundtable commands init, doctor, start, and add plugin, with setup checks, exit codes, and reasons a command can fail.
+description: The roundtable commands init, doctor, start, add plugin, and add package, with setup checks, exit codes, and reasons a command can fail.
 sidebar:
   order: 1
 ---
@@ -15,6 +15,7 @@ Inside a project, run it with `bunx roundtable <command>`.
 | `roundtable doctor [--reachable]` | Checks the setup and says how to fix what is wrong. |
 | `roundtable start` | Runs the checks that need no network, then the bot. |
 | `roundtable add plugin <name>` | Adds `plugins/<name>.ts` and its test, and lists the plugin in the config. `codex-images` and `dice` are reserved for the official plugins. |
+| `roundtable add package <spec>` | Installs a Pi package with `bun add`, and adds a plugin that loads it and gives its tools to every agent turn. |
 
 `roundtable help` and `roundtable --help` print this list.
 `roundtable --version` prints the package version.
@@ -121,13 +122,40 @@ It leaves the project untouched if:
 - The config file does not parse, has no `plugins` list it can find, or already uses the name for something else.
   The message says what to add by hand.
 
-The command takes exactly one name; anything else prints `usage: roundtable add plugin <name>`.
+The command takes exactly one name; anything else prints `usage: roundtable add plugin <name>, or roundtable add package <spec>`.
+
+## `add package`
+
+```sh
+bunx roundtable add package pi-web-access
+```
+
+`add package` installs a Pi package from npm and writes the plugin that uses it.
+It runs `bun add <spec>`, loads the package's extensions to find the tools they register, and writes `plugins/<name>.ts` and `plugins/<name>.test.ts`, named after the package without its scope (`@scope/pi-notes` becomes `plugins/pi-notes.ts`).
+It then imports the plugin in `roundtable.config.ts` and lists it in `plugins`, as `add plugin` does.
+
+The plugin lists the package in `piPackages`, so every conversation session loads it.
+It lists the tools in `agentSelection`, because a turn uses only the tools it selects, and in `requiredTools`, so startup fails when a newer version of the package drops one.
+It gives no tool a tier: a tool no other plugin gives a tier is the owner's alone until you lower it with `toolTiers` in `roundtable.config.ts`.
+The command prints the tools it found.
+
+The spec is a registry name, optionally scoped and with a version or tag: `pi-web-access`, `pi-web-access@0.35.0`, `@scope/name`.
+It refuses before installing, leaving the project untouched, if:
+
+- The spec is not a registry name, such as a git URL or a local path, or the name without its scope is not lowercase words joined by dashes.
+- `roundtable.config.ts` is not in the current directory.
+- `plugins/<name>.ts` or its test already exists.
+- The config file does not parse, has no `plugins` list it can find, or already uses the plugin's name for something else.
+
+Every refusal says how to do it by hand: install with `bun add` and list the package in a plugin's `piPackages`.
+After installing, it writes no plugin and names the `bun remove` command when `bun add` fails, when the package's `package.json` lists no extensions under `pi` and the package has no `extensions` folder, or when an extension fails to load.
+It finds only the tools an extension registers as it loads; a tool registered later, such as after a connection, has to be added to the list by hand.
 
 ## Exit codes
 
 | Code | When |
 | --- | --- |
-| `0` | The command succeeded: `init` and `add plugin` wrote their files, every `doctor` check passed or was skipped, `help` and `--version` printed, or the bot stopped cleanly. |
+| `0` | The command succeeded: `init`, `add plugin`, and `add package` wrote their files, every `doctor` check passed or was skipped, `help` and `--version` printed, or the bot stopped cleanly. |
 | `1` | A command refused or failed, a `doctor` check failed, a check made `start` stop, the arguments were wrong, the command is unknown, or no command was given (the usage is printed). |
 
 Usage errors print the message and then the usage text.
@@ -135,4 +163,4 @@ When the bot is stopped by a signal, it exits with `1` if a listener, a service,
 
 For the messages the checks print and what fixes them, see [Errors](/reference/errors/).
 
-{/* Sources: src/cli/templates.ts:13-25, src/cli/templates.ts:84-102, src/cli/cli.ts:30-37, src/cli/cli.ts:25-33, src/cli/cli.ts:68-166, src/cli/main.ts:1-14, src/cli/roundtable.mjs:1-20, src/cli/init.ts:34-82, src/cli/add-plugin.ts:1-75, src/cli/config-edit.ts:40-190, src/cli/templates.ts:60-70, src/cli/doctor.ts:34-98, src/cli/start.ts:1-33, src/cli/report.ts:1-68, src/cli/checks/bun.ts, src/cli/checks/environment.ts, src/cli/checks/configuration.ts, src/cli/checks/images.ts, src/cli/checks/database.ts, src/cli/checks/discord.ts, src/cli/checks/model.ts, src/cli/checks/public-url.ts, src/cli/discord-api.ts:7-33, docs/plugins.md:1861-1876, README.md:50-72 */}
+{/* Sources: src/cli/templates.ts:13-25, src/cli/templates.ts:84-102, src/cli/cli.ts:30-37, src/cli/cli.ts:25-33, src/cli/cli.ts:68-166, src/cli/main.ts:1-14, src/cli/roundtable.mjs:1-20, src/cli/init.ts:34-82, src/cli/add-plugin.ts:1-75, src/cli/add-package.ts, src/cli/pi-packages.ts, src/cli/config-edit.ts:40-190, src/cli/templates.ts:60-70, src/cli/doctor.ts:34-98, src/cli/start.ts:1-33, src/cli/report.ts:1-68, src/cli/checks/bun.ts, src/cli/checks/environment.ts, src/cli/checks/configuration.ts, src/cli/checks/images.ts, src/cli/checks/database.ts, src/cli/checks/discord.ts, src/cli/checks/model.ts, src/cli/checks/public-url.ts, src/cli/discord-api.ts:7-33, docs/plugins.md:1861-1876, README.md:50-72 */}

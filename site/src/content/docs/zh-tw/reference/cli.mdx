@@ -1,6 +1,6 @@
 ---
 title: CLI
-description: roundtable 的 init、doctor、start 和 add plugin 指令、doctor 的檢查項目、結束碼，以及每個指令會拒絕做什麼。
+description: roundtable 的 init、doctor、start、add plugin 和 add package 指令、doctor 的檢查項目、結束碼，以及每個指令會拒絕做什麼。
 sidebar:
   order: 1
 ---
@@ -15,6 +15,7 @@ sidebar:
 | `roundtable doctor [--reachable]` | 檢查設定，並說明有問題的地方該怎麼修。 |
 | `roundtable start` | 先跑不需要網路的檢查，再啟動 bot。 |
 | `roundtable add plugin <name>` | 加入 `plugins/<name>.ts` 和它的測試，並把外掛列進設定。`codex-images` 和 `dice` 保留給官方外掛。 |
+| `roundtable add package <spec>` | 用 `bun add` 安裝 Pi package，並加入一個載入它、把它的工具交給每一輪 agent 的外掛。 |
 
 `roundtable help` 和 `roundtable --help` 會印出這份清單。
 `roundtable --version` 會印出套件版本。
@@ -118,13 +119,40 @@ bunx roundtable add plugin dice
 - `plugins/<name>.ts` 或它的測試已經存在。
 - 設定檔無法解析、找不到它能用的 `plugins` 清單，或這個名稱已經被拿去做別的用途。訊息會說明要手動加入什麼。
 
-這個指令剛好接受一個名稱；其他情況會印出 `usage: roundtable add plugin <name>`。
+這個指令剛好接受一個名稱；其他情況會印出 `usage: roundtable add plugin <name>, or roundtable add package <spec>`。
+
+## `add package`
+
+```sh
+bunx roundtable add package pi-web-access
+```
+
+`add package` 從 npm 安裝一個 Pi package，並寫好使用它的外掛。
+它會執行 `bun add <spec>`，載入套件的擴充，找出它們註冊的工具，再寫出 `plugins/<name>.ts` 和 `plugins/<name>.test.ts`。檔名取套件名稱去掉 scope 的部分，所以 `@scope/pi-notes` 會變成 `plugins/pi-notes.ts`。
+接著和 `add plugin` 一樣，在 `roundtable.config.ts` 裡 import 這個外掛，並把它列進 `plugins`。
+
+外掛把套件列在 `piPackages`，所以每個對話 session 都會載入它。
+工具列在 `agentSelection`，因為每一輪只會用到被選用的工具；也列在 `requiredTools`，套件改版拿掉某個工具時，啟動就會失敗。
+它不替任何工具指定 tier：沒有其他外掛指定 tier 的工具只有 owner 能用，要開放就在 `roundtable.config.ts` 的 `toolTiers` 調低。
+指令會印出它找到的工具。
+
+spec 是 registry 上的名稱，可以帶 scope，也可以帶版本或 tag：`pi-web-access`、`pi-web-access@0.35.0`、`@scope/name`。
+下列情況它會在安裝之前拒絕，專案維持原樣：
+
+- spec 不是 registry 名稱，例如 git URL 或本機路徑；或是名稱去掉 scope 之後，不是用連字號連起來的小寫單字。
+- 目前的目錄裡沒有 `roundtable.config.ts`。
+- `plugins/<name>.ts` 或它的測試已經存在。
+- 設定檔無法解析、找不到它能用的 `plugins` 清單，或外掛的名稱已經被拿去做別的用途。
+
+每個拒絕訊息都會說明怎麼手動做：用 `bun add` 安裝，再把套件列進某個外掛的 `piPackages`。
+安裝之後，如果 `bun add` 失敗、套件的 `package.json` 沒有在 `pi` 底下列出擴充又沒有 `extensions` 資料夾，或有擴充載入失敗，它不會寫出外掛，並告訴你要執行的 `bun remove` 指令。
+它只找得到擴充在載入時註冊的工具；晚一點才註冊的工具，例如連線之後才出現的，要手動加進清單。
 
 ## 結束碼
 
 | 代碼 | 時機 |
 | --- | --- |
-| `0` | 指令成功：`init` 和 `add plugin` 寫出了檔案、`doctor` 的每項檢查都通過或被跳過、`help` 和 `--version` 印出了內容，或 bot 正常停止。 |
+| `0` | 指令成功：`init`、`add plugin` 和 `add package` 寫出了檔案、`doctor` 的每項檢查都通過或被跳過、`help` 和 `--version` 印出了內容，或 bot 正常停止。 |
 | `1` | 指令被拒絕或失敗、`doctor` 有檢查失敗、有檢查讓 `start` 停下來、引數錯誤、指令不存在，或沒有給指令（會印出用法說明）。 |
 
 用法錯誤會先印出訊息，再印出用法說明。
@@ -132,4 +160,4 @@ bot 被信號停止時，如果有 listener、服務或資料庫連線池沒能�
 
 檢查印出的訊息和修正方式，見[錯誤與修正](/zh-tw/reference/errors/)。
 
-{/* Sources: src/cli/templates.ts:13-25, src/cli/templates.ts:84-102, src/cli/cli.ts:30-37, src/cli/cli.ts:25-33, src/cli/cli.ts:68-166, src/cli/main.ts:1-14, src/cli/roundtable.mjs:1-20, src/cli/init.ts:34-82, src/cli/add-plugin.ts:1-75, src/cli/config-edit.ts:40-190, src/cli/templates.ts:60-70, src/cli/doctor.ts:34-98, src/cli/start.ts:1-33, src/cli/report.ts:1-68, src/cli/checks/bun.ts, src/cli/checks/environment.ts, src/cli/checks/configuration.ts, src/cli/checks/images.ts, src/cli/checks/database.ts, src/cli/checks/discord.ts, src/cli/checks/model.ts, src/cli/checks/public-url.ts, src/cli/discord-api.ts:7-33, docs/plugins.md:1861-1876, README.md:50-72 */}
+{/* Sources: src/cli/templates.ts:13-25, src/cli/templates.ts:84-102, src/cli/cli.ts:30-37, src/cli/cli.ts:25-33, src/cli/cli.ts:68-166, src/cli/main.ts:1-14, src/cli/roundtable.mjs:1-20, src/cli/init.ts:34-82, src/cli/add-plugin.ts:1-75, src/cli/add-package.ts, src/cli/pi-packages.ts, src/cli/config-edit.ts:40-190, src/cli/templates.ts:60-70, src/cli/doctor.ts:34-98, src/cli/start.ts:1-33, src/cli/report.ts:1-68, src/cli/checks/bun.ts, src/cli/checks/environment.ts, src/cli/checks/configuration.ts, src/cli/checks/images.ts, src/cli/checks/database.ts, src/cli/checks/discord.ts, src/cli/checks/model.ts, src/cli/checks/public-url.ts, src/cli/discord-api.ts:7-33, docs/plugins.md:1861-1876, README.md:50-72 */}

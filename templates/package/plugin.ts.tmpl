@@ -1,0 +1,18 @@
+import { definePlugin } from "pi-roundtable";
+
+/** The tools __PACKAGE__ registered when `roundtable add package` installed it. */
+__TOOLS__
+
+/**
+ * Loads the Pi package __PACKAGE__ in every conversation session and gives every agent turn its
+ * tools. A tool no plugin gives a tier is the owner's alone; lower one with `toolTiers` in
+ * roundtable.config.ts, such as `toolTiers: { web_search: "member" }`.
+ */
+export const __IDENT__ = definePlugin({
+	name: "__NAME__",
+	setup: () => ({
+		piPackages: ["__PACKAGE__"],
+		agentSelection: () => ({ tools: [...TOOLS], groups: [] }),
+		requiredTools: TOOLS,
+	}),
+});

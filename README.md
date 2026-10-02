@@ -82,6 +82,7 @@ On `SIGTERM` or `SIGINT` it finishes running work before it stops.
 ## A plugin
 
 `roundtable add plugin <name>` creates `plugins/<name>.ts` and its test and lists it in `roundtable.config.ts`.
+`roundtable add package <spec>` does the same for a Pi package from npm: it installs the package and writes a plugin that loads its extensions and selects its tools.
 A plugin is an object with a name and a `setup` function that returns what it adds; this one gives every agent a tool:
 
 ```ts
@@ -165,6 +166,7 @@ export default {
 | `roundtable doctor [--reachable]` | Checks the setup and says how to fix what is wrong |
 | `roundtable start` | Runs the checks that need no network, then the bot |
 | `roundtable add plugin <name>` | Adds `plugins/<name>.ts` and its test, and lists it in the config |
+| `roundtable add package <spec>` | Installs a Pi package with `bun add` and adds a plugin that loads it and gives its tools to every agent turn |
 
 ## Changes and license
 

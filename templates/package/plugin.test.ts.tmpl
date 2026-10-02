@@ -1,0 +1,11 @@
+import { expect, test } from "bun:test";
+import { testPlugin } from "pi-roundtable/testing";
+import { __IDENT__ } from "./__NAME__.ts";
+
+test("__NAME__ loads __PACKAGE__ and gives every agent turn its tools", async () => {
+	const harness = await testPlugin(__IDENT__);
+	const { piPackages, agentSelection, requiredTools } = harness.contribution;
+	expect(piPackages).toEqual(["__PACKAGE__"]);
+	expect(agentSelection?.().tools).toEqual([...(requiredTools ?? [])]);
+	await harness.stop();
+});

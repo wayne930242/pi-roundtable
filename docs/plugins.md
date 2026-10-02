@@ -67,6 +67,8 @@ Use the kit's building blocks for a plugin that runs Pi itself, such as a coding
 The name is lowercase words joined by dashes, such as `my-notes`.
 Two names are reserved for the [official plugins](#official-plugins): `codex-images` and `dice` copy a ready-made plugin into the project.
 
+`roundtable add package <spec>` adds a Pi package from npm: it runs `bun add <spec>`, loads the package's extensions to find the tools they register, and writes `plugins/<name>.ts` and its test, named after the package without its scope, as [`piPackages`](#pipackages-pi-extensions-every-session-loads) describes.
+
 ## The plugin object
 
 ```ts
@@ -1268,6 +1270,17 @@ export function alwaysOn(tools: () => string[]) {
 
 List npm packages whose Pi extensions every conversation session should load, and install them in your project (`bun add pi-web-access`).
 Two plugins that name the same package load it once.
+Sessions load only these packages: the Pi packages in the host's own Pi settings, and its extension folders, stay out.
+
+Loading a package registers its tools, but a turn uses only the tools it selects, so list them in [`agentSelection`](#agentselection-tools-every-agent-carries) too, and in `requiredTools` so startup fails when a package version drops one.
+A tool no plugin gives a tier is the owner's alone; the operator lowers it with `toolTiers` in `roundtable.config.ts`.
+Give a package's tools a tier in the plugin only when no other plugin does: the built-in `modules` plugin already gives `web_search`, `fetch_content`, and `get_search_content` the member tier, and a second plugin naming them is a `PluginError`.
+
+`roundtable add package <spec>` writes such a plugin for you.
+It accepts a registry name, optionally scoped and versioned (`pi-web-access`, `@scope/name@1.2.3`), and refuses before installing when the config cannot take the plugin or `plugins/<name>.ts` exists.
+After `bun add`, it refuses a package whose `package.json` lists no extensions under `pi` and that has no `extensions` folder, and a package whose extensions fail to load; the package stays installed, and the message names the `bun remove` command.
+The plugin it writes lists every tool the package registers when it loads, gives none a tier, and its test checks that every listed tool is selected.
+A tool a package registers later, such as after a connection, is not found; add it to the list by hand.
 
 The built-in delegation worker also loads `pi-web-access` to search and read the web.
 `pi-roundtable` lists it as a peer dependency (`>=0.35.0 <0.36.0`), so `bun add pi-roundtable` installs it for you.
@@ -1278,11 +1291,19 @@ A project that has none installed stops at the `modules` plugin's setup with a `
 ```ts
 import { definePlugin } from "pi-roundtable";
 
-/** Pi packages are npm packages whose Pi extensions every session loads; install each one in your project first. */
+/**
+ * Pi packages are npm packages whose Pi extensions every session loads; install each one in your
+ * project first. Loading a package registers its tools, and a turn uses only the tools it
+ * selects, so the plugin selects them too. `roundtable add package <name>` writes this for you.
+ */
+const WEB_TOOLS = ["web_search", "fetch_content", "get_search_content"];
+
 export const webSearch = definePlugin({
 	name: "web-search",
 	setup: () => ({
 		piPackages: ["pi-web-access"],
+		agentSelection: () => ({ tools: WEB_TOOLS, groups: [] }),
+		requiredTools: WEB_TOOLS,
 	}),
 });
 ```
