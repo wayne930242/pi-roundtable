@@ -1,0 +1,8 @@
+node_modules/
+scratch/
+Plans/
+MEMORY/
+docs/agent-system/
+.env
+.env.*
+coverage/
