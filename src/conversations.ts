@@ -16,6 +16,8 @@ import type { TranscriptEntry } from "./api-types.ts";
 const FIRST_MESSAGE_CHARS = 80;
 /** The most a transcript request reads from disk, newest files first. */
 const MAX_TRANSCRIPT_BYTES = 8 * 1024 * 1024;
+/** How much of a conversation's first file the list reads to find its first message. */
+const OPENING_BYTES = 256 * 1024;
 /** The most entries a transcript returns; the oldest are dropped. */
 const MAX_ENTRIES = 1000;
 const MAX_TEXT_CHARS = 20_000;
@@ -25,7 +27,9 @@ const MAX_PREVIEW_CHARS = 200;
 const DISCORD_DIR = /^discord_(\d{17,20})$/;
 const MCP_DIR =
 	/^mcp_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
+const GROUP_DIR = /^agentgroup_(\d{17,20})_([A-Za-z0-9_-]+)$/;
 const DISCORD_KEY = /^discord:(\d{17,20})$/;
+const GROUP_KEY = /^agentgroup:(\d{17,20})\.([A-Za-z0-9_-]+)$/;
 const MCP_KEY =
 	/^mcp:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
 
@@ -37,12 +41,17 @@ export interface ConversationFiles {
 	lastActive?: string;
 }
 
-/** An owner, agent, or outside-agent conversation found on disk. */
+/** The kinds of session directory the console reads. */
+export type StoredKind = "discord" | "group" | "mcp";
+
+/** An owner, agent, group-member, or outside-agent conversation found on disk. */
 export interface StoredConversation extends ConversationFiles {
 	key: ChannelKey;
-	kind: "discord" | "mcp";
+	kind: StoredKind;
 	/** The Discord channel id, or the outside agent's session id. */
 	id: string;
+	/** Group conversations only: the agent whose conversation inside the group this is. */
+	member?: string;
 	/** Outside-agent conversations only. */
 	firstMessage?: string;
 	startedAt?: string;
@@ -51,12 +60,20 @@ export interface StoredConversation extends ConversationFiles {
 /** The session directory a channel key names, or undefined when the key is not one the console reads. */
 export function parseKey(
 	key: string,
-): { dir: string; kind: "discord" | "mcp"; id: string } | undefined {
+): { dir: string; kind: StoredKind; id: string; member?: string } | undefined {
 	const discord = DISCORD_KEY.exec(key)?.[1];
 	if (discord)
 		return { dir: `discord_${discord}`, kind: "discord", id: discord };
 	const mcp = MCP_KEY.exec(key)?.[1];
 	if (mcp) return { dir: `mcp_${mcp}`, kind: "mcp", id: mcp };
+	const group = GROUP_KEY.exec(key);
+	if (group?.[1] && group[2])
+		return {
+			dir: `agentgroup_${group[1]}_${group[2]}`,
+			kind: "group",
+			id: group[1],
+			member: group[2],
+		};
 	return undefined;
 }
 
@@ -121,6 +138,21 @@ function sessionFiles(dir: string): string[] {
 		.sort();
 }
 
+/** The whole lines in the first `limit` bytes of a file; a line the limit cuts is left out. */
+function readHead(path: string, limit: number): string[] {
+	const fd = openSync(path, "r");
+	try {
+		const { size } = fstatSync(fd);
+		const buffer = Buffer.alloc(Math.min(size, limit));
+		readSync(fd, buffer, 0, buffer.length, 0);
+		const lines = buffer.toString("utf8").split("\n");
+		if (size > limit) lines.pop();
+		return lines;
+	} finally {
+		closeSync(fd);
+	}
+}
+
 /**
  * When the conversation started and its first user message, relay notes removed: from the
  * live conversation, or from the oldest archive once it has been started over.
@@ -142,7 +174,7 @@ function opening(
 		}
 	if (!file) return {};
 	const result: { firstMessage?: string; startedAt?: string } = {};
-	for (const line of readFileSync(file, "utf8").split("\n")) {
+	for (const line of readHead(file, OPENING_BYTES)) {
 		if (!line.trim()) continue;
 		let entry: SessionLine;
 		try {
@@ -164,9 +196,30 @@ function opening(
 	return result;
 }
 
+/** Who a session directory's name says it belongs to; undefined for any other directory. */
+function parseDirectory(
+	name: string,
+): Pick<StoredConversation, "key" | "kind" | "id" | "member"> | undefined {
+	const discord = DISCORD_DIR.exec(name)?.[1];
+	if (discord)
+		return { key: `discord:${discord}`, kind: "discord", id: discord };
+	const mcp = MCP_DIR.exec(name)?.[1];
+	if (mcp) return { key: `mcp:${mcp}`, kind: "mcp", id: mcp };
+	const group = GROUP_DIR.exec(name);
+	if (group?.[1] && group[2])
+		return {
+			key: `agentgroup:${group[1]}.${group[2]}`,
+			kind: "group",
+			id: group[1],
+			member: group[2],
+		};
+	return undefined;
+}
+
 /**
- * Agent, owner, and outside-agent conversations (`discord_<channel>`, `mcp_<session>`) under
- * the host's `sessions/` directory, minus the channels `excluded` claims.
+ * Agent, owner, group-member, and outside-agent conversations (`discord_<channel>`,
+ * `agentgroup_<channel>_<agent>`, `mcp_<session>`) under the host's `sessions/` directory, minus
+ * the channels `excluded` claims.
  */
 export function storedConversations(
 	sessionsDir: string,
@@ -179,21 +232,15 @@ export function storedConversations(
 	const found: StoredConversation[] = [];
 	for (const entry of readdirSync(sessionsDir, { withFileTypes: true })) {
 		if (!entry.isDirectory()) continue;
-		const discord = DISCORD_DIR.exec(entry.name)?.[1];
-		const mcp = MCP_DIR.exec(entry.name)?.[1];
-		const id = discord ?? mcp;
-		if (!id) continue;
-		const key: ChannelKey = discord ? `discord:${id}` : `mcp:${id}`;
-		if (options.excluded(key)) continue;
+		const identity = parseDirectory(entry.name);
+		if (!identity || options.excluded(identity.key)) continue;
 		const dir = join(sessionsDir, entry.name);
 		const files = conversationFiles(dir);
 		if (!files) continue;
 		found.push({
-			key,
-			kind: discord ? "discord" : "mcp",
-			id,
+			...identity,
 			...files,
-			...(mcp ? opening(dir, options.relayNotes) : {}),
+			...(identity.kind === "mcp" ? opening(dir, options.relayNotes) : {}),
 		});
 	}
 	return found.sort((a, b) =>
@@ -212,16 +259,23 @@ export function archiveNames(dir: string): string[] {
 		.reverse();
 }
 
-/** The last `limit` bytes of a file as text, from the first whole line when the file is longer. */
-function readTail(path: string, limit: number): { text: string; cut: boolean } {
+/**
+ * The last `limit` bytes of a file as text, from the first whole line when the file is longer,
+ * and how many bytes were read from disk, which is what the caller's budget pays for.
+ */
+function readTail(
+	path: string,
+	limit: number,
+): { text: string; cut: boolean; read: number } {
 	const fd = openSync(path, "r");
 	try {
 		const { size } = fstatSync(fd);
-		if (size <= limit) return { text: readFileSync(fd, "utf8"), cut: false };
+		if (size <= limit)
+			return { text: readFileSync(fd, "utf8"), cut: false, read: size };
 		const buffer = Buffer.alloc(limit);
 		readSync(fd, buffer, 0, limit, size - limit);
 		const text = buffer.toString("utf8");
-		return { text: text.slice(text.indexOf("\n") + 1), cut: true };
+		return { text: text.slice(text.indexOf("\n") + 1), cut: true, read: limit };
 	} finally {
 		closeSync(fd);
 	}
@@ -305,8 +359,8 @@ export function readTranscript(
 			truncated = true;
 			break;
 		}
-		const { text, cut } = readTail(join(folder, file), budget);
-		budget -= Buffer.byteLength(text);
+		const { text, cut, read } = readTail(join(folder, file), budget);
+		budget -= read;
 		if (cut) truncated = true;
 		const entries: TranscriptEntry[] = [];
 		for (const raw of text.split("\n")) {

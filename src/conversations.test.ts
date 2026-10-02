@@ -25,7 +25,7 @@ test("lists owner and outside conversations, newest first, and ignores other dir
 		`mcp:${OUTSIDE_SESSION}`,
 		"discord:900000000000000002",
 		`discord:${OWNER_CHANNEL}`,
-		"discord:900000000000000003",
+		"agentgroup:900000000000000003.scout",
 		"discord:900000000000000004",
 	]);
 	const owner = found.find((c) => c.key === `discord:${OWNER_CHANNEL}`);
@@ -66,6 +66,21 @@ test("a conversation with only archives is listed with no live bytes, dated by i
 	expect(archived?.lastActive).toBeDefined();
 });
 
+test("a group member's conversation is listed under the core's group key, with the member", () => {
+	const sessions = join(fixtureSessions(), "sessions");
+	const found = storedConversations(sessions, { excluded: none, relayNotes });
+	const member = found.find((c) => c.kind === "group");
+	expect(member).toMatchObject({
+		key: "agentgroup:900000000000000003.scout",
+		id: "900000000000000003",
+		member: "scout",
+	});
+	const dir = join(sessions, "agentgroup_900000000000000003_scout");
+	expect(
+		readTranscript(dir, undefined, relayNotes).entries.map((e) => e.text),
+	).toEqual(["Group topic"]);
+});
+
 test("a missing sessions directory lists nothing", () => {
 	expect(
 		storedConversations("/nonexistent-sessions", {
@@ -80,10 +95,19 @@ test("parseKey accepts only the two key shapes", () => {
 		`discord_${OWNER_CHANNEL}`,
 	);
 	expect(parseKey(`mcp:${OUTSIDE_SESSION}`)?.kind).toBe("mcp");
+	expect(parseKey("agentgroup:900000000000000003.scout")).toEqual({
+		dir: "agentgroup_900000000000000003_scout",
+		kind: "group",
+		id: "900000000000000003",
+		member: "scout",
+	});
 	for (const key of [
 		"discord:12",
 		"discord:../../etc",
 		"mcp:../x",
+		"agentgroup:900000000000000003.../x",
+		"agentgroup:900000000000000003.a/b",
+		"agentgroup:12.scout",
 		`discord:${OWNER_CHANNEL}/x`,
 		"other:1",
 		"",
@@ -185,4 +209,56 @@ test("long text is clipped", () => {
 	const last = entries.at(-1);
 	expect(last?.text.length).toBe(20_000);
 	expect(last?.text.endsWith("…")).toBe(true);
+});
+
+test("the byte budget is spent on what was read, even when the tail holds no whole line", () => {
+	const dir = join(fixtureSessions(), "sessions", `discord_${OWNER_CHANNEL}`);
+	// The newest file is one line longer than the budget: its tail read finds no whole line and
+	// yields no entry, but 8 MB were read, so the older files must not be read at all.
+	const line = JSON.stringify({
+		type: "message",
+		message: {
+			role: "user",
+			content: [{ type: "text", text: "z".repeat(9 * 1024 * 1024) }],
+		},
+	});
+	writeFileSync(join(dir, "2026-09-06T00-00-00-000Z_huge.jsonl"), `${line}\n`);
+	const { entries, truncated } = readTranscript(dir, undefined, relayNotes);
+	expect(truncated).toBe(true);
+	expect(entries).toEqual([]);
+});
+
+test("the list reads only the first 256 KB of an outside conversation's file to find its first message", () => {
+	const sessions = join(fixtureSessions(), "sessions");
+	const write = (session: string, filler: number) => {
+		const dir = join(sessions, `mcp_${session}`);
+		mkdirSync(dir, { recursive: true });
+		writeFileSync(
+			join(dir, "a.jsonl"),
+			[
+				sessionFile([]),
+				// A system prompt before the first message, as a real session has.
+				JSON.stringify({
+					type: "message",
+					message: { role: "system", content: "s".repeat(filler) },
+				}),
+				sessionFile([
+					{
+						role: "user",
+						content: [{ type: "text", text: "Opening question" }],
+					},
+				]),
+				'{"type":"mess',
+			].join("\n"),
+		);
+	};
+	const near = "0a0a0a0a-0a0a-4a0a-8a0a-0a0a0a0a0a0a";
+	const far = "0b0b0b0b-0b0b-4b0b-8b0b-0b0b0b0b0b0b";
+	write(near, 100 * 1024);
+	write(far, 300 * 1024);
+	const found = storedConversations(sessions, { excluded: none, relayNotes });
+	expect(found.find((c) => c.id === near)?.firstMessage).toBe(
+		"Opening question",
+	);
+	expect(found.find((c) => c.id === far)?.firstMessage).toBeUndefined();
 });

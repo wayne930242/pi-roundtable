@@ -8,7 +8,8 @@ import { hrefFor } from "../lib/router.ts";
 import { useFetched } from "../lib/use-fetched.ts";
 
 export function OverviewPage() {
-	const { timeZone } = useConfig();
+	const { timeZone, panes } = useConfig();
+	const transcripts = panes.includes("conversations");
 	const { now } = useLive();
 	const { data: view, error } = useFetched(() => api.overview(), "overview");
 
@@ -24,6 +25,7 @@ export function OverviewPage() {
 						key={agent.name}
 						agent={agent}
 						guildId={view.guildId}
+						transcripts={transcripts}
 						now={now}
 						timeZone={timeZone}
 					/>
@@ -50,19 +52,26 @@ function Where({
 	channelId,
 	guildId,
 	label,
+	transcriptKey,
 }: {
 	channelId: string | undefined;
 	guildId: string;
 	label: string;
+	/** The conversation to link, when the console serves transcripts and the row has one. */
+	transcriptKey?: string;
 }) {
 	if (!channelId) return <>{label}</>;
 	return (
 		<>
 			<a href={discordUrl(channelId, guildId)} target="_blank" rel="noreferrer">
 				{label}
-			</a>{" "}
-			·{" "}
-			<a href={hrefFor("conversations", `discord:${channelId}`)}>transcript</a>
+			</a>
+			{transcriptKey ? (
+				<>
+					{" "}
+					· <a href={hrefFor("conversations", transcriptKey)}>transcript</a>
+				</>
+			) : null}
 		</>
 	);
 }
@@ -70,6 +79,7 @@ function Where({
 function AgentRow(props: {
 	agent: AgentView;
 	guildId: string;
+	transcripts: boolean;
 	now: number;
 	timeZone: string;
 }) {
@@ -82,6 +92,9 @@ function AgentRow(props: {
 						channelId={agent.channelId}
 						guildId={props.guildId}
 						label={agent.displayName}
+						{...(props.transcripts && agent.channelId
+							? { transcriptKey: `discord:${agent.channelId}` }
+							: {})}
 					/>
 				</strong>
 				{agent.workingIn ? (

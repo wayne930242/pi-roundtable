@@ -59,12 +59,14 @@ export interface OverviewView {
 export type ConversationKind = "agent" | "group" | "owner" | "outside";
 
 export interface ConversationView {
-	/** The channel key, `discord:<id>` or `mcp:<session>`. */
+	/** The channel key: `discord:<id>`, `agentgroup:<channel>.<agent>`, or `mcp:<session>`. */
 	key: string;
 	kind: ConversationKind;
 	/** The Discord channel id, or the outside agent's session id. */
 	id: string;
-	/** Discord conversations only. */
+	/** Group conversations only: the agent whose conversation inside the group this is. */
+	member?: string;
+	/** Discord conversations, group ones included. */
 	channel?: ChannelName;
 	/** Bytes of the live conversation; 0 when only archives are left. */
 	liveBytes: number;

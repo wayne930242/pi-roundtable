@@ -345,7 +345,7 @@ dialog::backdrop {
 }
 
 .entry-user {
-	border-left: 4px solid var(--accent);
+	background: color-mix(in srgb, var(--accent) 10%, var(--surface));
 }
 
 .entry-compaction {

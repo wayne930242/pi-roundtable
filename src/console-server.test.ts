@@ -16,7 +16,7 @@ const assets: AssetBundle = new Map([
 	],
 ]);
 
-function setup(verifier: RequestVerifier = () => admit()) {
+function setup(verifier: RequestVerifier = () => admit(), coalesceMs?: number) {
 	const listeners: (() => void)[] = [];
 	const apiPaths: string[] = [];
 	const recorder = recordingLogger();
@@ -33,6 +33,7 @@ function setup(verifier: RequestVerifier = () => admit()) {
 		},
 		subscribe: (listener) => listeners.push(listener),
 		logger: recorder.logger,
+		...(coalesceMs === undefined ? {} : { coalesceMs }),
 	});
 	return { server, listeners, apiPaths, recorder };
 }
@@ -205,6 +206,36 @@ describe("ConsoleServer", () => {
 		]);
 		expect(raced).toBe("quiet");
 		server.stop();
+	});
+
+	test("a client that stops reading is cut off after a backlog of events, and a reading one is not", async () => {
+		const { server, listeners } = setup(() => admit(), 1);
+		const slow = (await get(server, "/console/api/events")).body?.getReader();
+		const keen = (await get(server, "/console/api/events")).body?.getReader();
+		if (!slow || !keen) throw new Error("no stream");
+		let keenEvents = 0;
+		const draining = (async () => {
+			for (;;) {
+				const { done } = await keen.read();
+				if (done) return;
+				keenEvents++;
+			}
+		})();
+		for (let i = 0; i < 40; i++) {
+			for (const listener of listeners) listener();
+			await new Promise((resolve) => setTimeout(resolve, 8));
+		}
+		// The slow client got its retry line and at most the backlog, and then its stream ended.
+		let slowChunks = 0;
+		for (;;) {
+			const { done } = await slow.read();
+			if (done) break;
+			slowChunks++;
+		}
+		expect(slowChunks).toBeLessThanOrEqual(16);
+		expect(keenEvents).toBeGreaterThan(20);
+		server.stop();
+		await draining;
 	});
 
 	test("refuses a thirty-third stream", async () => {

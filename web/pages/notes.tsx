@@ -175,7 +175,10 @@ export function NotesPage() {
 						save={async (input) => {
 							if (editing.note) await api.updateNote(editing.note.id, input);
 							else await api.addNote(input);
-							setEditing(undefined);
+							// Close only the editor this save came from, not one opened since.
+							setEditing((current) =>
+								current === editing ? undefined : current,
+							);
 							await load(query);
 						}}
 						cancel={() => setEditing(undefined)}
@@ -192,7 +195,9 @@ export function NotesPage() {
 						text={deleting.fact}
 						run={async () => {
 							await api.deleteNote(deleting.id);
-							setDeleting(undefined);
+							setDeleting((current) =>
+								current === deleting ? undefined : current,
+							);
 							await load(query);
 						}}
 						cancel={() => setDeleting(undefined)}

@@ -72,7 +72,7 @@ function put(dir: string, name: string, contents: string, mtime?: Date) {
 
 /**
  * A sessions directory with one conversation of each kind: an owner channel with an archive, an
- * agent channel, a group channel, a hidden channel, an outside-agent conversation whose first
+ * agent channel, a group member's conversation, a hidden channel, an outside-agent conversation whose first
  * message carries the relay note, and a directory the console must ignore.
  */
 export function fixtureSessions(): string {
@@ -126,8 +126,9 @@ export function fixtureSessions(): string {
 		sessionFile([{ role: "user", content: text("Agent task") }]),
 		new Date("2026-09-03T10:00:00.000Z"),
 	);
+	// The core keeps a group member's conversation under `agentgroup:<channel>.<agent>`.
 	put(
-		join(sessions, `discord_${GROUP_CHANNEL}`),
+		join(sessions, `agentgroup_${GROUP_CHANNEL}_scout`),
 		"g.jsonl",
 		sessionFile([{ role: "user", content: text("Group topic") }]),
 		new Date("2026-09-01T10:00:00.000Z"),

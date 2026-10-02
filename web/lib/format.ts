@@ -1,4 +1,4 @@
-import type { ChannelName } from "../../src/api-types.ts";
+import type { ChannelName, ConversationView } from "../../src/api-types.ts";
 
 /** `just now`, `12 min ago`, `3 h ago`, `2 d ago`, or the date for anything older than a week. */
 export function ago(
@@ -70,4 +70,14 @@ export function discordUrl(
 /** Today in the host's zone as `YYYY-MM-DD`, which decides whether an event has passed. */
 export function today(timeZone: string): string {
 	return new Intl.DateTimeFormat("en-CA", { timeZone }).format(new Date());
+}
+
+/** What a conversation is called in lists and headings. */
+export function conversationTitle(conversation: ConversationView): string {
+	if (conversation.kind === "outside")
+		return (
+			conversation.firstMessage || `Session ${conversation.id.slice(0, 8)}`
+		);
+	const { title } = channelTitle(conversation.channel, conversation.id);
+	return conversation.member ? `${title} · ${conversation.member}` : title;
 }

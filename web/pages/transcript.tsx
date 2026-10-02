@@ -3,7 +3,7 @@ import type { TranscriptEntry } from "../../src/api-types.ts";
 import { Badge, Empty, Failure, Loading } from "../components/states.tsx";
 import { api } from "../lib/api.ts";
 import { useConfig } from "../lib/config.ts";
-import { channelTitle, when } from "../lib/format.ts";
+import { conversationTitle, when } from "../lib/format.ts";
 import { hrefFor } from "../lib/router.ts";
 import { useFetched } from "../lib/use-fetched.ts";
 
@@ -43,7 +43,7 @@ export function TranscriptPage({
 	const title =
 		conversation.kind === "outside"
 			? `Outside agent · ${conversation.id.slice(0, 8)}`
-			: channelTitle(conversation.channel, conversation.id).title;
+			: conversationTitle(conversation);
 	return (
 		<>
 			{back}

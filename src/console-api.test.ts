@@ -142,7 +142,7 @@ describe("conversations", () => {
 			[
 				`discord:${OWNER_CHANNEL}`,
 				`discord:${AGENT_CHANNEL}`,
-				`discord:${GROUP_CHANNEL}`,
+				`agentgroup:${GROUP_CHANNEL}.scout`,
 				`mcp:${OUTSIDE_SESSION}`,
 			].sort(),
 		);
@@ -153,7 +153,11 @@ describe("conversations", () => {
 			channel: { kind: "guild", name: "general" },
 		});
 		expect(byKey[`discord:${AGENT_CHANNEL}`]?.kind).toBe("agent");
-		expect(byKey[`discord:${GROUP_CHANNEL}`]?.kind).toBe("group");
+		expect(byKey[`agentgroup:${GROUP_CHANNEL}.scout`]).toMatchObject({
+			kind: "group",
+			member: "scout",
+			channel: { kind: "gone" },
+		});
 		expect(byKey[`mcp:${OUTSIDE_SESSION}`]).toMatchObject({
 			kind: "outside",
 			firstMessage: "Please summarise the report",

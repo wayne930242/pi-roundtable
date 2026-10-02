@@ -5,7 +5,13 @@ import type {
 import { Badge, Empty, Failure, Loading } from "../components/states.tsx";
 import { api } from "../lib/api.ts";
 import { useConfig } from "../lib/config.ts";
-import { ago, channelTitle, size, when } from "../lib/format.ts";
+import {
+	ago,
+	channelTitle,
+	conversationTitle,
+	size,
+	when,
+} from "../lib/format.ts";
 import { useLive } from "../lib/live.ts";
 import { hrefFor } from "../lib/router.ts";
 import { useFetched } from "../lib/use-fetched.ts";
@@ -66,10 +72,7 @@ export function ConversationsPage() {
 function Row(props: { item: ConversationView; now: number; timeZone: string }) {
 	const { item } = props;
 	const named = channelTitle(item.channel, item.id);
-	const title =
-		item.kind === "outside"
-			? item.firstMessage || `Session ${item.id.slice(0, 8)}`
-			: named.title;
+	const title = conversationTitle(item);
 	return (
 		<a className="card card-link" href={hrefFor("conversations", item.key)}>
 			<div className="card-head">

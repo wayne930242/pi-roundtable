@@ -6,6 +6,8 @@ import type { RequestVerifier } from "./verifier.ts";
 const encoder = new TextEncoder();
 /** Changes closer together than this reach the page as one event. */
 const COALESCE_MS = 250;
+/** Events a stream may hold unread before its client is cut off; it reconnects and refetches. */
+const STREAM_BACKLOG = 16;
 /** Keeps the stream open through proxies that close streams idle for about a minute or two. */
 const PING_MS = 30_000;
 /** Open event streams; one more is refused, so a client cannot hold every connection. */
@@ -35,6 +37,8 @@ export interface ConsoleServerOptions {
 	/** Registers the listener with every source whose change the console shows. */
 	subscribe(listener: () => void): void;
 	logger: Logger;
+	/** How long changes are gathered into one event; default 250 ms. Tests set it lower. */
+	coalesceMs?: number;
 }
 
 /**
@@ -161,16 +165,19 @@ export class ConsoleServer {
 		if (this.#streams.size >= MAX_STREAMS)
 			return new Response("Too many event streams", { status: 503 });
 		let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
-		const body = new ReadableStream<Uint8Array>({
-			start: (c) => {
-				controller = c;
-				this.#streams.add(c);
-				c.enqueue(encoder.encode("retry: 3000\n\n"));
+		const body = new ReadableStream<Uint8Array>(
+			{
+				start: (c) => {
+					controller = c;
+					this.#streams.add(c);
+					c.enqueue(encoder.encode("retry: 3000\n\n"));
+				},
+				cancel: () => {
+					if (controller) this.#streams.delete(controller);
+				},
 			},
-			cancel: () => {
-				if (controller) this.#streams.delete(controller);
-			},
-		});
+			new CountQueuingStrategy({ highWaterMark: STREAM_BACKLOG }),
+		);
 		return new Response(body, {
 			headers: {
 				"content-type": "text/event-stream",
@@ -185,14 +192,19 @@ export class ConsoleServer {
 		this.#pending = setTimeout(() => {
 			this.#pending = undefined;
 			this.#send("event: changed\ndata: {}\n\n");
-		}, COALESCE_MS);
+		}, this.#options.coalesceMs ?? COALESCE_MS);
 	}
 
 	#send(text: string): void {
 		const chunk = encoder.encode(text);
 		for (const stream of this.#streams) {
 			try {
-				stream.enqueue(chunk);
+				// An event only says "refetch", so a client that has not read its backlog is not worth
+				// buffering for: it is closed, and its page reconnects after the retry delay.
+				if ((stream.desiredSize ?? 0) <= 0) {
+					this.#streams.delete(stream);
+					stream.close();
+				} else stream.enqueue(chunk);
 			} catch {
 				// The page went away; its stream is closed.
 				this.#streams.delete(stream);

@@ -223,6 +223,7 @@ export class ConsoleApi {
 				key: key as ChannelKey,
 				kind: parsed.kind,
 				id: parsed.id,
+				...(parsed.member ? { member: parsed.member } : {}),
 				...files,
 			}),
 			archives,
@@ -234,22 +235,29 @@ export class ConsoleApi {
 
 	async #view(stored: StoredConversation): Promise<ConversationView> {
 		const { team, queue } = this.#ports;
-		const owner = team?.owns(stored.key);
 		const kind: ConversationKind =
-			stored.kind === "mcp" ? "outside" : (owner ?? "owner");
+			stored.kind === "mcp"
+				? "outside"
+				: stored.kind === "group"
+					? "group"
+					: (team?.owns(stored.key) ?? "owner");
 		return {
 			key: stored.key,
 			kind,
 			id: stored.id,
-			...(stored.kind === "discord"
-				? { channel: await this.#name(stored.id) }
-				: {}),
+			...(stored.member ? { member: stored.member } : {}),
+			...(stored.kind === "mcp"
+				? {}
+				: { channel: await this.#name(stored.id) }),
 			liveBytes: stored.liveBytes,
 			archives: stored.archives,
 			...(stored.lastActive ? { lastActive: stored.lastActive } : {}),
 			...(stored.firstMessage ? { firstMessage: stored.firstMessage } : {}),
 			...(stored.startedAt ? { startedAt: stored.startedAt } : {}),
-			busy: queue.size(stored.key),
+			// A group's turns queue under the group channel, not under each member's conversation.
+			busy: queue.size(
+				stored.kind === "group" ? `discord:${stored.id}` : stored.key,
+			),
 		};
 	}
 

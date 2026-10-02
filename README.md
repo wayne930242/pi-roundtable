@@ -14,8 +14,8 @@ The `panes` option chooses which ones a host serves.
 
 | Pane | What it shows |
 |---|---|
-| Overview | Every active agent with its model, thinking level, state (working where, waiting, or idle), context use, schedule count, and last activity; every group with its members, host, and busy count. Each links to its Discord channel and its transcript. |
-| Conversations | Every conversation stored on disk, in four sections: owner channels (direct messages and channels where the owner talks to the assistant), agent channels, group channels, and outside-agent conversations opened over MCP. Each row shows the channel's name (when the host has a Discord connection), when it was last active, its size, and how many archives it has. An outside-agent conversation shows its first message and when it began. |
+| Overview | Every active agent with its model, thinking level, state (working where, waiting, or idle), context use, schedule count, and last activity; every group with its members, host, and busy count. An agent links to its Discord channel and its transcript, and a group to its Discord channel. |
+| Conversations | Every conversation stored on disk, in four sections: owner channels (direct messages and channels where the owner talks to the assistant), agent channels, group conversations (each member's conversation inside a group), and outside-agent conversations opened over MCP. Each row shows the channel's name (when the host has a Discord connection), when it was last active, its size, and how many archives it has. An outside-agent conversation shows its first message, when it appears in the first 256 KB of the file, and when it began. |
 | Notes | The owner's memory in three tabs, core, notes, and events, with search. The owner can add a note, edit its text, kind, and date, and delete it after a confirmation. The memory addon's own validation applies, so a refusal shows its reason and saves nothing. |
 
 Opening a conversation shows its **transcript**: the user's and the assistant's messages, the tools the assistant called with a short preview of their arguments, and each tool's result (collapsed).
@@ -179,14 +179,16 @@ Every response carries `X-Content-Type-Options: nosniff` and `Referrer-Policy: s
 Transcript text, notes, and channel names are rendered as plain text; the page never interprets them as HTML or Markdown, and it opens no link taken from a transcript.
 Links to Discord are built by the page from channel ids, not taken from stored text.
 
-**Errors reveal nothing.**
+**Errors reveal nothing to the client.**
 Every API error is a fixed message.
-It never repeats the request URL, a header, or a token, and the host's log line for a failure does not hold them either.
-A refusal answers `403 Forbidden` with that single word.
+It never repeats the request URL, a header, or a token, and a refusal answers `403 Forbidden` with that single word.
+The console logs a failure with the error that was thrown and nothing from the request: no URL, no headers.
+The text of an error that your own code throws, such as a memory store's, is logged as it is.
 
 **Path handling and resource limits.**
-A conversation is named by a channel key that must match `discord:<id>` or `mcp:<uuid>` exactly, and an archive is chosen from the folder's own listing, so no request can name a path.
-A request body is limited to 64 KB, a transcript to 8 MB read and 1000 entries, an entry's text to 20 000 characters, and at most 32 event streams stay open at once.
+A conversation is named by a channel key that must match `discord:<id>`, `agentgroup:<id>.<agent>`, or `mcp:<uuid>` exactly, and an archive is chosen from the folder's own listing, so no request can name a path.
+A request body is limited to 64 KB, a transcript to 8 MB read and 1000 entries, an entry's text to 20 000 characters, and the list of an outside agent's first message to the first 256 KB of its file.
+At most 32 event streams stay open at once, and a stream whose client falls 16 events behind is closed, after which the page reconnects and refetches.
 
 **What the transcript can reveal.**
 A transcript shows the arguments of the assistant's tool calls (the first 200 characters) and the first 2000 characters of each result.
