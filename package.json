@@ -1,0 +1,53 @@
+{
+	"name": "pi-roundtable-drawing",
+	"version": "0.1.0",
+	"description": "Relationship maps, magic circles, sigils, sacred geometry, and card spreads drawn locally for pi-roundtable",
+	"type": "module",
+	"license": "MIT",
+	"engines": {
+		"bun": ">=1.3.0"
+	},
+	"exports": {
+		".": "./src/index.ts"
+	},
+	"files": [
+		"src",
+		"!src/**/*.test.ts",
+		"!src/testing",
+		"fonts",
+		"examples",
+		"!examples/**/*.test.ts",
+		"LICENSE",
+		"README.md",
+		"CHANGELOG.md"
+	],
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/wayne930242/pi-roundtable-drawing.git"
+	},
+	"publishConfig": {
+		"access": "public",
+		"provenance": true
+	},
+	"scripts": {
+		"typecheck": "tsc --noEmit",
+		"lint": "biome check .",
+		"test": "bun test"
+	},
+	"dependencies": {
+		"canvas": "3.2.3",
+		"d3-force": "3.0.0",
+		"roughjs": "4.6.6",
+		"typebox": "1.3.34"
+	},
+	"peerDependencies": {
+		"pi-roundtable": ">=0.6.1 <0.7.0"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "2.5.15",
+		"@types/bun": "1.4.2",
+		"@types/d3-force": "3.0.10",
+		"pi-roundtable": "0.6.1",
+		"typescript": "7.0.2"
+	}
+}

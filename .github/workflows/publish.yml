@@ -1,0 +1,35 @@
+# The owner performs the FIRST publish manually with browser/security-key authentication.
+# Configure npm trusted publishing after that first release.
+---
+name: Publish
+"on":
+  push:
+    tags: ["v*"]
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.2
+          no-cache: true
+      # v4.4.0 caches only when `cache:` is set, and `package-manager-cache` does not exist yet.
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # zizmor: ignore[cache-poisoning]
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+      - run: bun install
+      # Trusted publishing needs a newer npm than the runner's.
+      - run: npm install --global npm@latest # zizmor: ignore[adhoc-packages]
+      - run: bun run typecheck
+      - run: bun run lint
+      - run: bun test
+      - name: Check release version
+        run: test "v$(node -p 'require("./package.json").version')" = "$GITHUB_REF_NAME"
+      - run: npm publish --provenance --access public

@@ -1,0 +1,274 @@
+{
+	"name": "Playing cards",
+	"reversals": false,
+	"cards": [
+		{
+			"id": "AS",
+			"name": "A of Spades",
+			"group": "spades"
+		},
+		{
+			"id": "2S",
+			"name": "2 of Spades",
+			"group": "spades"
+		},
+		{
+			"id": "3S",
+			"name": "3 of Spades",
+			"group": "spades"
+		},
+		{
+			"id": "4S",
+			"name": "4 of Spades",
+			"group": "spades"
+		},
+		{
+			"id": "5S",
+			"name": "5 of Spades",
+			"group": "spades"
+		},
+		{
+			"id": "6S",
+			"name": "6 of Spades",
+			"group": "spades"
+		},
+		{
+			"id": "7S",
+			"name": "7 of Spades",
+			"group": "spades"
+		},
+		{
+			"id": "8S",
+			"name": "8 of Spades",
+			"group": "spades"
+		},
+		{
+			"id": "9S",
+			"name": "9 of Spades",
+			"group": "spades"
+		},
+		{
+			"id": "10S",
+			"name": "10 of Spades",
+			"group": "spades"
+		},
+		{
+			"id": "JS",
+			"name": "J of Spades",
+			"group": "spades"
+		},
+		{
+			"id": "QS",
+			"name": "Q of Spades",
+			"group": "spades"
+		},
+		{
+			"id": "KS",
+			"name": "K of Spades",
+			"group": "spades"
+		},
+		{
+			"id": "AH",
+			"name": "A of Hearts",
+			"group": "hearts"
+		},
+		{
+			"id": "2H",
+			"name": "2 of Hearts",
+			"group": "hearts"
+		},
+		{
+			"id": "3H",
+			"name": "3 of Hearts",
+			"group": "hearts"
+		},
+		{
+			"id": "4H",
+			"name": "4 of Hearts",
+			"group": "hearts"
+		},
+		{
+			"id": "5H",
+			"name": "5 of Hearts",
+			"group": "hearts"
+		},
+		{
+			"id": "6H",
+			"name": "6 of Hearts",
+			"group": "hearts"
+		},
+		{
+			"id": "7H",
+			"name": "7 of Hearts",
+			"group": "hearts"
+		},
+		{
+			"id": "8H",
+			"name": "8 of Hearts",
+			"group": "hearts"
+		},
+		{
+			"id": "9H",
+			"name": "9 of Hearts",
+			"group": "hearts"
+		},
+		{
+			"id": "10H",
+			"name": "10 of Hearts",
+			"group": "hearts"
+		},
+		{
+			"id": "JH",
+			"name": "J of Hearts",
+			"group": "hearts"
+		},
+		{
+			"id": "QH",
+			"name": "Q of Hearts",
+			"group": "hearts"
+		},
+		{
+			"id": "KH",
+			"name": "K of Hearts",
+			"group": "hearts"
+		},
+		{
+			"id": "AD",
+			"name": "A of Diamonds",
+			"group": "diamonds"
+		},
+		{
+			"id": "2D",
+			"name": "2 of Diamonds",
+			"group": "diamonds"
+		},
+		{
+			"id": "3D",
+			"name": "3 of Diamonds",
+			"group": "diamonds"
+		},
+		{
+			"id": "4D",
+			"name": "4 of Diamonds",
+			"group": "diamonds"
+		},
+		{
+			"id": "5D",
+			"name": "5 of Diamonds",
+			"group": "diamonds"
+		},
+		{
+			"id": "6D",
+			"name": "6 of Diamonds",
+			"group": "diamonds"
+		},
+		{
+			"id": "7D",
+			"name": "7 of Diamonds",
+			"group": "diamonds"
+		},
+		{
+			"id": "8D",
+			"name": "8 of Diamonds",
+			"group": "diamonds"
+		},
+		{
+			"id": "9D",
+			"name": "9 of Diamonds",
+			"group": "diamonds"
+		},
+		{
+			"id": "10D",
+			"name": "10 of Diamonds",
+			"group": "diamonds"
+		},
+		{
+			"id": "JD",
+			"name": "J of Diamonds",
+			"group": "diamonds"
+		},
+		{
+			"id": "QD",
+			"name": "Q of Diamonds",
+			"group": "diamonds"
+		},
+		{
+			"id": "KD",
+			"name": "K of Diamonds",
+			"group": "diamonds"
+		},
+		{
+			"id": "AC",
+			"name": "A of Clubs",
+			"group": "clubs"
+		},
+		{
+			"id": "2C",
+			"name": "2 of Clubs",
+			"group": "clubs"
+		},
+		{
+			"id": "3C",
+			"name": "3 of Clubs",
+			"group": "clubs"
+		},
+		{
+			"id": "4C",
+			"name": "4 of Clubs",
+			"group": "clubs"
+		},
+		{
+			"id": "5C",
+			"name": "5 of Clubs",
+			"group": "clubs"
+		},
+		{
+			"id": "6C",
+			"name": "6 of Clubs",
+			"group": "clubs"
+		},
+		{
+			"id": "7C",
+			"name": "7 of Clubs",
+			"group": "clubs"
+		},
+		{
+			"id": "8C",
+			"name": "8 of Clubs",
+			"group": "clubs"
+		},
+		{
+			"id": "9C",
+			"name": "9 of Clubs",
+			"group": "clubs"
+		},
+		{
+			"id": "10C",
+			"name": "10 of Clubs",
+			"group": "clubs"
+		},
+		{
+			"id": "JC",
+			"name": "J of Clubs",
+			"group": "clubs"
+		},
+		{
+			"id": "QC",
+			"name": "Q of Clubs",
+			"group": "clubs"
+		},
+		{
+			"id": "KC",
+			"name": "K of Clubs",
+			"group": "clubs"
+		},
+		{
+			"id": "JOKER_B",
+			"name": "Black Joker"
+		},
+		{
+			"id": "JOKER_R",
+			"name": "Red Joker"
+		}
+	]
+}
