@@ -7,7 +7,7 @@ This package is a reference for the plugin guide's [Helpers for a Pi session of 
 ## Requirements
 
 - Bun 1.4.2 or newer on a POSIX host (Linux or macOS).
-- pi-roundtable 0.6.1; this package uses only its public main, kit and testing entries.
+- pi-roundtable `>=0.6.1 <0.8.0` as a peer dependency; this package uses only its public main, kit and testing entries.
 - Git, plus GitHub CLI (`gh`) for the default clone implementation.
 - A Git host token with read access to repositories being cloned and write access to those being pushed, or a host login holding that token.
 - Pi model credentials available through the host's Pi login or the provider's environment variables.
@@ -23,7 +23,7 @@ No network calls are needed by the offline test suite.
 ## Setup
 
 ```sh
-bun add pi-roundtable-coding pi-roundtable@0.6.1
+bun add pi-roundtable-coding pi-roundtable
 ```
 
 ```ts
