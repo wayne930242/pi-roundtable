@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-10-02
+
 ### Fixed
 
 - `add plugin` and `add package` kept a one-line `plugins` list on one line however long it grew, so a project's `biome check` failed once the line passed 80 columns. A list that would pass 80 columns is now put one element a line, as the formatter writes it; a list already over several lines keeps its layout, and one holding a comment stays as it was.
