@@ -51,12 +51,39 @@ export const PUBLIC_NAME_ALLOWLIST: NameAllowlist = {
 	".github/PACKAGE-RELEASES.md": [OWNER_HANDLE],
 	// Workspace metadata keeps the same public attribution as the root package.
 	...Object.fromEntries(
-		["drawing", "coding", "web"].flatMap((name) =>
+		["drawing", "coding", "web", "sandbox", "mcp"].flatMap((name) =>
 			["LICENSE", "README.md", "package.json"].map((file) => [
 				`packages/${name}/${file}`,
 				[OWNER_HANDLE],
 			]),
 		),
+	),
+	// The imported MCP API publicly integrates with IBM's gateway. Only these files
+	// name it; no owner/persona names, credentials, or other detectors are exempted.
+	...Object.fromEntries(
+		[
+			"CHANGELOG.md",
+			"README.md",
+			"package.json",
+			"examples/roundtable.config.ts",
+			"src/index.ts",
+			"src/plugins.test.ts",
+			`src/testing/fake-${spell("context", "forge")}.ts`,
+			"src/connectors/connector-commands.ts",
+			"src/connectors/connector-registry.ts",
+			"src/connectors/connector-registry.test.ts",
+			"src/connectors/connectors-plugin.ts",
+			"src/connectors/connectors-plugin.test.ts",
+			`src/connectors/${spell("context", "forge")}.ts`,
+			`src/connectors/${spell("context", "forge")}.test.ts`,
+			"src/connectors/messages.ts",
+		].map((file) => [
+			`packages/mcp/${file}`,
+			[
+				spell("context", "forge"),
+				...(["README.md", "package.json"].includes(file) ? [OWNER_HANDLE] : []),
+			],
+		]),
 	),
 	// The guide names its one private consumer and links public workspace READMEs.
 	"docs/plugins.md": [spell("Mer", "lin"), OWNER_HANDLE],

@@ -36,7 +36,16 @@ export function checkPack(
 	)
 		throw new ReleaseContractError(`Packed identity differs for ${pkg.name}`);
 	const paths = new Set(report.files.map((file) => file.path));
-	const required = ["package.json", "README.md", "LICENSE"];
+	const required = ["package.json", "README.md", "LICENSE", "src/index.ts"];
+	if (pkg.name === "pi-roundtable-sandbox")
+		required.push(
+			"src/protocol.ts",
+			"worker/Dockerfile",
+			"worker/main.ts",
+			"worker/agent.ts",
+			"worker/memory.ts",
+			"worker/transport.ts",
+		);
 	if (pkg.name === "pi-roundtable-web") required.push("dist/index.html");
 	if (pkg.name === "pi-roundtable-drawing")
 		required.push("fonts/NotoSansTC-Bold.otf", "fonts/OFL.txt");

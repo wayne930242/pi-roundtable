@@ -223,8 +223,8 @@ describeDb("PostgreSQL", () => {
 				}),
 				logger: silentLogger(),
 				messages: remoteMcpMessages({
-					codeDetail: (code, detail) => `${code}：${detail}`,
-					operationFailed: (audit) => `紀錄 ${audit}`,
+					codeDetail: (code, detail) => `${code} | ${detail}`,
+					operationFailed: (audit) => `Audit entry ${audit}`,
 				}),
 			});
 			const client = await connect(endpoint.url, {}, worded);
@@ -235,7 +235,7 @@ describeDb("PostgreSQL", () => {
 				}),
 			);
 			expect(failed.error).toMatch(
-				/^DISCORD_OPERATION_FAILED：紀錄 [0-9a-f-]{36}$/,
+				/^DISCORD_OPERATION_FAILED \| Audit entry [0-9a-f-]{36}$/,
 			);
 			await client.close();
 		});

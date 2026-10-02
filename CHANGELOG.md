@@ -7,9 +7,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- Official drawing, coding, and web plugins now live under `packages/` as Bun workspaces with their original Git history.
+- Official drawing, coding, web, sandbox, and MCP plugins now live under `packages/` as Bun workspaces with their original Git history.
   They remain separate npm packages, checked alongside the core in CI and released in lockstep from one `v*` tag through `publish.yml`.
   The core's npm file list and release tags are unchanged.
+- `pi-roundtable-mcp` moves from its standalone repository to `packages/mcp` and jumps from 0.4.1 to lockstep 0.7.0, retaining its public API.
+  Both MCP and sandbox now peer on `>=0.7.0 <0.8.0` and test against the live core 0.7.0.
+  Shared CI runs MCP's PostgreSQL tests and explicitly opts into sandbox's native Linux Docker integration.
 
 ## [0.7.0] - 2026-10-02
 

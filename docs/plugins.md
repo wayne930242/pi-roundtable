@@ -1882,19 +1882,24 @@ The package ships three plugins you can copy into a project and change.
 You can edit the copied files; `add plugin` refuses to overwrite existing ones.
 The three names are reserved for these copies.
 
-A separate package, [pi-roundtable-mcp](https://www.npmjs.com/package/pi-roundtable-mcp), adds two more plugins, `mcpConnectors` and `remoteMcp`.
+The [pi-roundtable-mcp][mcp-package] workspace, published separately on npm, adds two more plugins, `mcpConnectors` and `remoteMcp`.
 The first lets the owner add MCP servers such as Notion or a calendar from Discord and gives your code the list; the second lets an agent outside Discord reach your agent.
-Install it with `bun add pi-roundtable-mcp`.
+Install it with `bun add pi-roundtable-mcp` after the next lockstep release publishes the migrated package.
+Until then, npm's MCP 0.4.1 requires core below 0.6.0 and is not compatible with core 0.7.x.
 
-Three more official packages live in this repository as Bun workspaces and publish as separate npm packages, versioned in lockstep with the core:
+Five official packages live in this repository as Bun workspaces and publish as separate npm packages, versioned in lockstep with the core:
 
 - [pi-roundtable-drawing][drawing-package]: local relationship maps, magic circles, sigils, sacred geometry, and card spreads.
 - [pi-roundtable-coding][coding-package]: repository shelves and owner-approved Pi coding workers.
 - [pi-roundtable-web][web-package]: an owner-only console for conversations, transcripts, and memory notes with live updates.
+- [pi-roundtable-sandbox][sandbox-package]: sealed guest channels on native Linux Docker with a host-only credential broker and allow-listed tools.
+- [pi-roundtable-mcp][mcp-package]: MCP connectors through a gateway and remote MCP endpoints for agent turns and owner-granted Discord channel tools.
 
 [drawing-package]: https://github.com/wayne930242/pi-roundtable/blob/master/packages/drawing/README.md
 [coding-package]: https://github.com/wayne930242/pi-roundtable/blob/master/packages/coding/README.md
 [web-package]: https://github.com/wayne930242/pi-roundtable/blob/master/packages/web/README.md
+[sandbox-package]: https://github.com/wayne930242/pi-roundtable/blob/master/packages/sandbox/README.md
+[mcp-package]: https://github.com/wayne930242/pi-roundtable/blob/master/packages/mcp/README.md
 
 Install only the packages your host uses; the core does not depend on these workspaces.
 

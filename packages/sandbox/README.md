@@ -1,13 +1,16 @@
 # pi-roundtable-sandbox
 
-Sealed guest channels for pi-roundtable 0.6.1.
+Sealed guest channels for pi-roundtable 0.7.
+Source lives in [`packages/sandbox`][source] in the pi-roundtable repository and releases in lockstep with the core.
 Each addressed message runs a small tool-using agent in a new Docker container with no network and no real credentials.
 A host-side Unix-socket broker is its only way out.
 Channel memory and recent conversation text persist in the channel's dedicated workspace between containers.
 
+[source]: https://github.com/wayne930242/pi-roundtable/tree/master/packages/sandbox
+
 ## Requirements
 
-- Bun 1.4.2 or later and pi-roundtable `>=0.6.1 <0.7.0`.
+- Bun 1.4.2 or later and pi-roundtable `>=0.7.0 <0.8.0`.
 - A native Linux host with a local Docker daemon and a non-root service account permitted to run Docker.
 - The worker UID/GID match that account; root workers are refused.
 - A trusted OpenAI-compatible, non-streaming Chat Completions endpoint supporting function tools and `max_tokens`.
@@ -198,24 +201,28 @@ It does not load skills or extensions and has no shell, schedules, delegation, i
 
 ## Development and verification
 
+From the pi-roundtable repository root:
+
 ```sh
 bun install --frozen-lockfile
-bun test
-bun run typecheck
-bun run lint
+bun run --cwd packages/sandbox test
+bun run --cwd packages/sandbox typecheck
+bun run --cwd packages/sandbox lint
 ```
 
 Offline tests cover credential swapping and reflection, route/header/media refusals, host-bound identity, host-tool and MCP allow-lists, real Unix transport, generated Docker arguments, routing precedence, cancellation/cleanup, persistence and memory scopes.
 The Docker integration test is skipped by default and requires a native Linux non-root host with local Docker:
 
 ```sh
+cd packages/sandbox
 SANDBOX_DOCKER_TEST=1 bun test src/docker.integration.test.ts
 ```
 
 It builds the image and runs a turn against a fake model endpoint on the host, checking that only the broker receives the real test credential.
 It also runs a hostile PID 1 that ignores SIGTERM and verifies that the turn deadline removes that container.
 No live provider, Discord connection or database is needed.
-CI runs offline checks and that Linux Docker test.
-The publish workflow repeats local checks and requires a version-matching `v*` tag.
-Before publishing, configure npm trusted publishing after the first owner-authenticated release.
-This repository's initial version is local-only until the operator creates a remote and publishes it.
+Shared CI runs offline checks and explicitly enables that Linux Docker test on its Ubuntu runner.
+The shared publish workflow repeats local checks and requires a version-matching `v*` tag for the core and all official packages.
+The owner performs the first sandbox publication and configures trusted publishing as described in [workspace releases][releases].
+
+[releases]: https://github.com/wayne930242/pi-roundtable/blob/master/.github/PACKAGE-RELEASES.md

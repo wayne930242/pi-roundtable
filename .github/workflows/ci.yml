@@ -44,6 +44,15 @@ jobs:
         run: test -n "$ROUNDTABLE_TEST_DATABASE_URL"
       - run: bun run test
       - run: bun run --workspaces test
+      - name: Run the opt-in sandbox Docker integration on native Linux
+        working-directory: packages/sandbox
+        env:
+          SANDBOX_DOCKER_TEST: "1"
+        run: |
+          [[ "$SANDBOX_DOCKER_TEST" == 1 ]]
+          [[ "$(uname -s)" == Linux ]]
+          [[ "$(id -u)" != 0 ]]
+          bun test src/docker.integration.test.ts
       - name: Pack every workspace without requiring unpublished packages on npm
         run: bun scripts/preflight-release.ts "v$(node -p 'require("./package.json").version')" --local
       - name: Scan the built bundles too

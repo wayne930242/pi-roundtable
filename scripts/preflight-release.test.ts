@@ -7,6 +7,7 @@ const paths = [
 	"package.json",
 	"README.md",
 	"LICENSE",
+	"src/index.ts",
 	"dist/index.html",
 	"dist/page.js",
 	"dist/page.css",
@@ -45,6 +46,7 @@ test("drawing must pack its font and font license", () => {
 		"package.json",
 		"README.md",
 		"LICENSE",
+		"src/index.ts",
 		"fonts/NotoSansTC-Bold.otf",
 		"fonts/OFL.txt",
 	];
@@ -55,3 +57,33 @@ test("drawing must pack its font and font license", () => {
 		checkPack(report(files.slice(0, -1), drawing.name), drawing, "0.8.0"),
 	).toThrow("fonts/OFL.txt");
 });
+
+for (const name of ["mcp", "sandbox"]) {
+	test(`${name} must pack its entry and sandbox must pack its complete worker`, () => {
+		const pkg = { name: `pi-roundtable-${name}`, path: `packages/${name}` };
+		const files = ["package.json", "README.md", "LICENSE", "src/index.ts"];
+		if (name === "sandbox")
+			files.push(
+				"src/protocol.ts",
+				"worker/Dockerfile",
+				"worker/main.ts",
+				"worker/agent.ts",
+				"worker/memory.ts",
+				"worker/transport.ts",
+			);
+		expect(() =>
+			checkPack(report(files, pkg.name), pkg, "0.8.0"),
+		).not.toThrow();
+		for (const missing of files.slice(3))
+			expect(() =>
+				checkPack(
+					report(
+						files.filter((file) => file !== missing),
+						pkg.name,
+					),
+					pkg,
+					"0.8.0",
+				),
+			).toThrow(missing);
+	});
+}

@@ -1,6 +1,6 @@
 {
 	"name": "pi-roundtable-sandbox",
-	"version": "0.1.0",
+	"version": "0.7.0",
 	"description": "Sealed guest channels and an allow-listed credential broker for pi-roundtable",
 	"type": "module",
 	"license": "MIT",
@@ -20,6 +20,11 @@
 		"README.md",
 		"CHANGELOG.md"
 	],
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/wayne930242/pi-roundtable.git",
+		"directory": "packages/sandbox"
+	},
 	"publishConfig": {
 		"access": "public",
 		"provenance": true
@@ -30,13 +35,13 @@
 		"lint": "biome check ."
 	},
 	"peerDependencies": {
-		"pi-roundtable": ">=0.6.1 <0.7.0"
+		"pi-roundtable": ">=0.7.0 <0.8.0"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.5.15",
 		"@types/bun": "1.4.2",
 		"discord.js": "14.27.0",
-		"pi-roundtable": "0.6.1",
+		"pi-roundtable": "0.7.0",
 		"typescript": "7.0.2"
 	}
 }

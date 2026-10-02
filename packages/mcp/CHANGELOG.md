@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- Move into the pi-roundtable monorepo at `packages/mcp`, preserving Git history and the public API.
+- Jump from 0.4.1 to lockstep 0.7.0, peer on `>=0.7.0 <0.8.0`, and test against core 0.7.0.
+- Use the shared PostgreSQL CI and single-tag publication workflow.
+
 ## [0.4.1] - 2026-10-01
 
 ### Changed

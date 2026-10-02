@@ -141,9 +141,10 @@ describeDb("PostgreSQL", () => {
 			const { bundle } = await store.ensureBundle("words", "hash-w", ["read"]);
 			await store.save(grantFor(bundle.id, "555"));
 			const text = remoteMcpMessages({
-				codeDetail: (code, detail) => `${code}：${detail}`,
-				operationFailed: (audit) => `紀錄 ${audit}`,
-				outcomeUnrecorded: (audit) => `可能已完成，請勿重試。紀錄 ${audit}`,
+				codeDetail: (code, detail) => `${code} | ${detail}`,
+				operationFailed: (audit) => `Audit entry ${audit}`,
+				outcomeUnrecorded: (audit) =>
+					`May have completed; do not retry. Audit entry ${audit}`,
 			});
 			const args = parseChannelTool("discord_get_messages", {
 				channelId: "555",
@@ -162,7 +163,7 @@ describeDb("PostgreSQL", () => {
 			).catch((error: unknown) => error);
 			expect(failed).toBeInstanceOf(ChannelToolError);
 			expect((failed as ChannelToolError).code).toMatch(
-				/^DISCORD_OPERATION_FAILED：紀錄 [0-9a-f-]{36}$/,
+				/^DISCORD_OPERATION_FAILED \| Audit entry [0-9a-f-]{36}$/,
 			);
 			const finish = store.finishCall;
 			store.finishCall = async () => {
@@ -181,7 +182,7 @@ describeDb("PostgreSQL", () => {
 					store.finishCall = finish;
 				});
 			expect((unrecorded as ChannelToolError).code).toMatch(
-				/^DISCORD_OUTCOME_UNRECORDED：可能已完成，請勿重試。紀錄 [0-9a-f-]{36}$/,
+				/^DISCORD_OUTCOME_UNRECORDED \| May have completed; do not retry\. Audit entry [0-9a-f-]{36}$/,
 			);
 		});
 

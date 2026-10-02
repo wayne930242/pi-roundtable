@@ -12,15 +12,23 @@ Two plugins for [pi-roundtable](https://github.com/wayne930242/pi-roundtable), t
 Bun only, like pi-roundtable.
 The package ships its TypeScript source, so there is no build step.
 MIT licensed.
+Source lives in [`packages/mcp`][source] in the pi-roundtable repository and releases in lockstep with the core.
+The package name and public API are unchanged from the standalone repository.
+
+[source]: https://github.com/wayne930242/pi-roundtable/tree/master/packages/mcp
 
 ## What you need
 
 - [Bun](https://bun.sh/docs/installation) 1.3 or newer.
-- A running pi-roundtable host, version 0.4 or 0.5 (`pi-roundtable` is a peer dependency, `>=0.4.0 <0.6.0`), with its PostgreSQL.
+- A running pi-roundtable host, version 0.7 (`pi-roundtable` is a peer dependency, `>=0.7.0 <0.8.0`), with its PostgreSQL.
 - For `mcpConnectors`: a [ContextForge](#contextforge) gateway that you run yourself.
 - For `remoteMcp`: an HTTPS address that reaches the host's `public` listener, such as a tunnel; this is the host's `http.publicUrl`.
 
 ## Install
+
+The migrated package is published by the next new lockstep tag, not by this repository import.
+Until then, npm's latest MCP 0.4.1 requires core below 0.6.0 and is not compatible with core 0.7.x.
+After the lockstep release:
 
 ```sh
 bun add pi-roundtable-mcp
@@ -271,20 +279,26 @@ Tables: `owner_connectors`; `discord_mcp_bundles`, `discord_channel_grants`, `di
 
 ## Development
 
+From the pi-roundtable repository root:
+
 ```sh
-bun install
-bun run typecheck
-bun run lint
-bun test
+bun install --frozen-lockfile
+bun run --cwd packages/mcp typecheck
+bun run --cwd packages/mcp lint
+bun run --cwd packages/mcp test
 ```
 
 Tests that need PostgreSQL are skipped unless `ROUNDTABLE_TEST_DATABASE_URL` points at a throwaway test database:
 
 ```sh
-ROUNDTABLE_TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5432/roundtable_test bun test
+ROUNDTABLE_TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5432/roundtable_test bun run --cwd packages/mcp test
 ```
 
-CI runs them against a PostgreSQL service.
+Shared CI runs them against a PostgreSQL service.
+Before the next lockstep release, the owner moves the existing npm trusted publisher to this repository's `publish.yml`; no manual MCP publication is needed.
+See [workspace releases][releases].
+
+[releases]: https://github.com/wayne930242/pi-roundtable/blob/master/.github/PACKAGE-RELEASES.md
 
 ## License
 
