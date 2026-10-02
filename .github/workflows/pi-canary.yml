@@ -1,5 +1,5 @@
 ---
-# The package accepts any pi release below 1.0, so a new pi can break it before anyone bumps the lockfile.
+# The package accepts any pi release from 0.99.2 below 2.0, so a new pi can break it before anyone bumps the lockfile.
 # This job installs the newest allowed pi every day and runs the full checks against it.
 name: Pi canary
 "on":

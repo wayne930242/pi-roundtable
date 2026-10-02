@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-10-02
+
+### Changed
+
+- `@earendil-works/pi-ai` and `@earendil-works/pi-coding-agent` take `>=0.99.2 <2`, so hosts can run pi 1.0. The typecheck, lint and full test suite pass on pi 1.0.0, and a session built the way the core builds one still connects `pi-mcp-adapter` 4.0.0 to a bearer-protected MCP server and calls its tool. The lockfile stays on 0.99.2, the lowest tested version, and the daily canary now runs the newest 1.x.
+
 ## [0.5.0] - 2026-10-01
 
 ### Changed
