@@ -1,0 +1,36 @@
+# Publish initially by hand, then configure npm trusted publishing.
+---
+name: Publish
+"on":
+  push:
+    tags: ["v*"]
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # v2.2.0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: 1.4.2
+          no-cache: true
+      # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+      - run: bun install --frozen-lockfile
+      - run: npm install --global npm@latest
+      - run: bun run typecheck
+      - run: bun run lint
+      - run: bun test
+      - name: Check release version
+        run: >-
+          test "v$(node -p 'require("./package.json").version')"
+          = "$GITHUB_REF_NAME"
+      - run: npm publish --provenance --access public
