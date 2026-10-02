@@ -2,6 +2,7 @@ import type { TurnAttachments } from "../domain/attachment.ts";
 import type {
 	ChannelKey,
 	PendingConfirmation,
+	ReplyFile,
 	TurnResult,
 } from "../domain/conversation.ts";
 import { AgentError } from "../domain/errors.ts";
@@ -9,6 +10,7 @@ import type { AgentTurnScope } from "../domain/ports.ts";
 import { messages } from "../i18n/index.ts";
 import { splitReply } from "../presentation/reply-splitter.ts";
 import { thinkingLine } from "../presentation/thinking-line.ts";
+import { withReplyFiles } from "../reply-files.ts";
 import { endOf, settleTurn } from "../routing/settle-turn.ts";
 import type { Speaker } from "../speakers.ts";
 import { toolTiers } from "../tool-tiers.ts";
@@ -183,17 +185,19 @@ export class TeamTurns {
 		try {
 			result = await settleTurn(
 				() =>
-					this.#options.runtime().runTurn({
-						channel: postTo,
-						selection: this.#options.selection(scope),
-						text,
-						...(extra.attachments ? { attachments: extra.attachments } : {}),
-						...(extra.confirmed ? { confirmed: true } : {}),
-						...(extra.steerable ? { steerable: true } : {}),
-						...(extra.interactive ? { interactive: true } : {}),
-						agent: scope,
-						speaker: chain.speaker,
-					}),
+					withReplyFiles(true, () =>
+						this.#options.runtime().runTurn({
+							channel: postTo,
+							selection: this.#options.selection(scope),
+							text,
+							...(extra.attachments ? { attachments: extra.attachments } : {}),
+							...(extra.confirmed ? { confirmed: true } : {}),
+							...(extra.steerable ? { steerable: true } : {}),
+							...(extra.interactive ? { interactive: true } : {}),
+							agent: scope,
+							speaker: chain.speaker,
+						}),
+					),
 				"agent turn",
 			);
 		} finally {
@@ -220,6 +224,7 @@ export class TeamTurns {
 			await this.#post(postTo, this.#current(agent), {
 				...(thinking ? { thinking } : {}),
 				chunks: result.ok ? splitReply(result.text) : [noticeOf(result)],
+				...(result.ok && result.files?.length ? { files: result.files } : {}),
 			});
 		} catch (error) {
 			logger.error({ agent: agent.name, err: error }, "agent reply not posted");
@@ -248,7 +253,12 @@ export class TeamTurns {
 	async #post(
 		channel: ChannelKey,
 		as: Agent,
-		body: { thinking?: string; chunks: string[]; threadId?: string },
+		body: {
+			thinking?: string;
+			chunks: string[];
+			files?: ReplyFile[];
+			threadId?: string;
+		},
 	): Promise<void> {
 		const { store, channels, studio, logger } = this.#options;
 		if (!channelOwner(store, channel)) {

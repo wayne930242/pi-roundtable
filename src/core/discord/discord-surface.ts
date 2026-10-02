@@ -64,6 +64,7 @@ export class DiscordSurface
 	implements ChatSurface, OwnerNotifier, DiscordConnection
 {
 	readonly surface = "discord";
+	readonly supportsFiles = true;
 	readonly #options: DiscordSurfaceOptions;
 	readonly #client = new Client({
 		intents: [

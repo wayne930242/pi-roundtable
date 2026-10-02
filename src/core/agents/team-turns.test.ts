@@ -8,6 +8,7 @@ import { AgentRunError } from "../domain/errors.ts";
 import type { AgentTurnScope, TurnRequest } from "../domain/ports.ts";
 import { messages } from "../i18n/index.ts";
 import { silentLogger } from "../log.ts";
+import { attachReplyFile } from "../reply-files.ts";
 import { ChannelQueue } from "../routing/channel-queue.ts";
 import { TEST_OWNER as OWNER, OWNER_SPEAKER } from "../testing/owner.ts";
 import { FakeThreadHost, fakeThreads } from "../testing/thread-host.ts";
@@ -118,6 +119,45 @@ async function run(team: TeamTurns): Promise<void> {
 	await team.answerBackground(discordKey("1000"), OWNER_SPEAKER, "go");
 	for (let i = 0; i < 30; i++) await Bun.sleep(2);
 }
+
+describe("agent reply files", () => {
+	test("turn attachments use the agent post and its identity, including files-only replies", async () => {
+		const file = { name: "drawing.png", data: new Uint8Array([1, 2]) };
+		for (const text of ["Here is the drawing.", ""]) {
+			const { team, posts } = setup(() => {
+				attachReplyFile(file);
+				return { ok: true, text };
+			});
+			await team.answerBackground(discordKey("1000"), OWNER_SPEAKER, "draw");
+			expect(posts).toEqual([
+				{
+					channelId: "1000",
+					post: {
+						name: "Coordinator",
+						avatarUrl: "https://x/a.png",
+						chunks: text ? [text] : [],
+						files: [file],
+					},
+				},
+			]);
+		}
+	});
+
+	test("failed and stopped agent turns post no attachments", async () => {
+		for (const stopped of [false, true]) {
+			const { team, posts } = setup(() => {
+				attachReplyFile({ name: "drawing.png", data: new Uint8Array([1]) });
+				return {
+					ok: false,
+					error: new Error("failed"),
+					...(stopped ? { stopped: true as const } : {}),
+				};
+			});
+			await team.answerBackground(discordKey("1000"), OWNER_SPEAKER, "draw");
+			expect(posts[0]?.post.files).toBeUndefined();
+		}
+	});
+});
 
 describe("message_agent threads", () => {
 	test("the exchange goes in a thread of the sender's channel, archived before the sender's follow-up", async () => {

@@ -24,8 +24,14 @@ export function surfacePort(linked: () => readonly ChatSurface[]): SurfacePort {
 	};
 	return {
 		of,
-		sendReply: async (channel, reply) =>
-			served(channel).sendReply(channel, reply),
+		sendReply: async (channel, reply) => {
+			const surface = served(channel);
+			if (reply.files?.length && surface.supportsFiles !== true)
+				throw new PluginError(
+					`surface ${surface.surface} does not support reply files; declare supportsFiles: true and deliver every file in sendReply.`,
+				);
+			await surface.sendReply(channel, reply);
+		},
 		startTyping: (channel) =>
 			of(channel)?.startTyping?.(channel) ?? (() => undefined),
 		showStop: (channel) =>

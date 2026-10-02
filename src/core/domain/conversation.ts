@@ -25,8 +25,14 @@ export interface PendingConfirmation {
 	calls: HeldCall[];
 }
 
+/** A file produced for a reply; data is raw bytes, not a path or base64. */
+export interface ReplyFile {
+	name: string;
+	data: Uint8Array;
+}
+
 export type TurnResult =
-	| { ok: true; text: string; thinking?: string }
+	| { ok: true; text: string; thinking?: string; files?: ReplyFile[] }
 	| { ok: false; error: Error; stopped?: true };
 
 export interface OutboundReply {
@@ -37,5 +43,5 @@ export interface OutboundReply {
 	/** Message texts in posting order; the card is posted before them. */
 	chunks: string[];
 	/** Files the run produced, posted after the text. */
-	files?: { name: string; data: Uint8Array }[];
+	files?: ReplyFile[];
 }

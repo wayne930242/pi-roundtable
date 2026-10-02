@@ -338,7 +338,7 @@ A key the contract does not have stops the start and names the closest one.
 ### `tools`: what agents can call
 
 `defineTool` takes a name (lowercase words joined by underscores), a description the model reads to decide when to call it, a Typebox parameter schema, the lowest tier that may call it, and the function.
-`run` receives the arguments, already typed, and the turn: the speaker, the channel, the agent, and an abort signal.
+`run` receives the arguments, already typed, and the turn: the speaker, the channel, the agent, an abort signal, and `attachFile`.
 It returns the text the model reads.
 Throw `ToolRefusal` for a call the model should correct; any other error fails the call.
 
@@ -376,6 +376,72 @@ export const notes = definePlugin({
 <!-- /example -->
 
 The tool names `bash`, `read`, `edit`, and `write` belong to the agents already.
+
+#### Attach files to the agent's reply
+
+Call `turn.attachFile(file)` from a tool's `run` to queue a file for the turn's reply, and still return the text the model reads.
+A `ReplyFile` is `{ name: string; data: Uint8Array }`: raw bytes, including images, not a path or base64 string.
+The core copies the bytes when the call succeeds, so the tool may reuse its buffer afterwards.
+The tool does not send a message itself; the successful turn returns `TurnResult.files` and the reply path hands them to the surface as `OutboundReply.files`.
+On Discord, files follow the text as one file per message to avoid image grids, all through the same agent webhook name and avatar as the text.
+Other surfaces may send the text and files in one message or a message group.
+
+<!-- example: examples/reply-files.ts -->
+```ts
+import { definePlugin, defineTool } from "pi-roundtable";
+import { Type } from "typebox";
+
+/** A small PNG keeps this example runnable without an image provider. */
+export const imageReply = definePlugin({
+	name: "image-reply",
+	setup: () => ({
+		tools: [
+			defineTool({
+				name: "reply_image",
+				description: "Attach a sample image to your reply.",
+				parameters: Type.Object({}),
+				minTier: "member",
+				run: (_args, turn) => {
+					turn.attachFile({
+						name: "sample.png",
+						data: Buffer.from(
+							"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aD1sAAAAASUVORK5CYII=",
+							"base64",
+						),
+					});
+					return "The sample image is attached to this turn's reply.";
+				},
+			}),
+		],
+	}),
+});
+```
+<!-- /example -->
+
+`attachReplyFile(file): void`, `ReplyFile`, `ReplyFileError`, and the frozen `REPLY_FILE_LIMITS` are exported from `pi-roundtable`.
+Raw `sessionTools` and Pi package tools may import and call `attachReplyFile` during their awaited tool execution; it is the same function as `turn.attachFile`.
+It uses the current asynchronous turn, not a global channel queue, so simultaneous turns and nested conversation turns keep separate files.
+A Pi package should use the host's peer dependency on `pi-roundtable`, not bundle another copy of it.
+Transient `SessionContext.runTask` tasks return only text and cannot attach to their parent's reply.
+Calling the helper outside `context.turns.run` or an agent-team turn, or after that turn finishes, throws `ReplyFileError`; direct standalone runtime calls have no reply collector.
+Await work that produces files before returning from the tool.
+
+| Case | Behavior |
+|---|---|
+| Successful final answer with no text | Files are posted without a placeholder text; a final answer with neither text nor files still fails in the Pi runtime |
+| Stopped, timed-out, or failed turn | Accepted files are discarded; only the usual stopped or failure notice is posted |
+| A tool fails but the model recovers and completes the turn | Files already accepted remain queued for the successful reply; a tool failure does not roll back earlier attachment calls |
+| Unsupported surface | `ChatSurface.supportsFiles` must be `true`; absent or false makes attachment calls throw `ReplyFileError`, which Pi reports to the model as a tool error |
+| Too many or too large files | At most 10 files per turn, 10 MiB (10,485,760 bytes) per file, and 50 MiB (52,428,800 bytes) in total across all tools; the exceeding call throws `ReplyFileError` without queuing that file |
+| Invalid file | Empty bytes, non-`Uint8Array` data, empty filenames, names over 255 characters, paths, `.`/`..`, or control characters throw `ReplyFileError` |
+| A surface rejects delivery | The reply path logs `reply not posted` or `agent reply not posted`; delivery may be partial, is not retried, and does not change the completed runtime result |
+
+A surface declaring `supportsFiles: true` must deliver every `OutboundReply.files` entry with the reply's speaker identity, or reject with an error; its transport may impose stricter limits.
+`SurfacePort.sendReply` also refuses direct file sends to a surface without that declaration instead of silently dropping files.
+A replacement runtime may return `files` in its successful `TurnResult`; the turn path applies the same limits and capability check before posting.
+Use either the helper or the result for each file: returning an already attached file queues a second copy, counted against the same limits.
+A custom `ConversationTurnInput.reply(result)` receives `result.files` and owns their delivery instead of the default surface reply.
+Test an attachment tool with an injected file-capable surface and inspect `harness.files` (see [`reply-files.test.ts`](../examples/reply-files.test.ts)); `runTool` itself posts nothing.
 
 ### `holdRules`, and a tool's `hold`: calls that wait for the owner
 
@@ -1877,6 +1943,7 @@ It returns:
 | `tools`, `tiers` | The tool names, and the table that says what tier each needs |
 | `holds` | The plugin's `holdRules` chained as the host links them (`holdChain`): `holds(tool, input, { workspace? })` returns the description of a call that must be approved first, or `undefined` |
 | `runTool(name, args, { speaker, channel }?)` | Runs a tool the way an agent's turn would, in the channel (default `test:1`) for the speaker, and returns the text the model reads |
+| `files` | Accepted files from `runTool`, recorded as `{ channel, file: ReplyFile }`; inject a surface with `supportsFiles: true` and pass its channel to test attachment tools |
 | `events` | The events the plugin itself reported through `context.events`, and those of `context.turns` |
 | `conversations`, `turns`, `surfaces` | What the plugin sees as `context.conversations`, `context.turns`, and `context.surfaces`, for a test to drive its claims |
 | `runtime` | The runtime the plugin's `runtime` provider built, given stand-in dependencies; `undefined` when it fills no such slot |
@@ -2313,6 +2380,9 @@ Import from the entries listed below; source area files are internal.
 | `ResolvedProviders` | `pi-roundtable` | type |
 | `ResolvedSkill` | `pi-roundtable` | type |
 | `Roundtable` | `pi-roundtable` | value |
+| `ReplyFile` | `pi-roundtable` | type |
+| `ReplyFileError` | `pi-roundtable` | value |
+| `REPLY_FILE_LIMITS` | `pi-roundtable` | value |
 | `RoundtableConfig` | `pi-roundtable` | type |
 | `RoundtableOptions` | `pi-roundtable` | type |
 | `RoundtablePlugin` | `pi-roundtable` | type |
@@ -2366,6 +2436,7 @@ Import from the entries listed below; source area files are internal.
 | `TurnResult` | `pi-roundtable` | type |
 | `TurnSelection` | `pi-roundtable` | type |
 | `Weekday` | `pi-roundtable` | type |
+| `attachReplyFile` | `pi-roundtable` | value |
 | `channelKey` | `pi-roundtable` | value |
 | `definePlugin` | `pi-roundtable` | value |
 | `defineRoundtable` | `pi-roundtable` | value |

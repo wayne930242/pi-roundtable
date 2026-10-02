@@ -43,6 +43,7 @@ It returns an object with these fields:
 | `tools`, `tiers` | The tool names, and the table of what tier each needs |
 | `holds` | The plugin's hold rules chained as the host links them. It returns the description of a call that must be approved first, or `undefined` |
 | `runTool(name, args, { speaker, channel }?)` | Runs a tool the way an agent's turn would, and returns the text the model reads |
+| `files` | Files attached by `runTool`, as `{ channel, file }`; inject a surface with `supportsFiles: true` and pass its channel to test attachment tools |
 | `events` | The events the plugin reported through `context.events`, and those of `context.turns` |
 | `conversations`, `turns`, `surfaces` | What the plugin sees as those context fields, so a test can drive its claims |
 | `runtime` | The runtime a `runtime` provider built; `undefined` when the plugin fills no such slot |

@@ -39,6 +39,8 @@ export function channelKey(surface: string, id: string): ChannelKey {
 export interface ChatSurface {
 	/** The key prefix of this surface's channels, such as "discord"; unique per host. */
 	readonly surface: string;
+	/** Explicit opt-in to delivering OutboundReply.files; absent or false refuses turn attachments. */
+	readonly supportsFiles?: boolean;
 	/**
 	 * Connects and delivers every incoming message; the host passes its conversation router. A
 	 * message whose channel key has another prefix is logged and dropped.

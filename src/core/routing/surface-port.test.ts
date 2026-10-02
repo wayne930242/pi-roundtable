@@ -92,6 +92,30 @@ test("a surface that lacks an optional method is skipped, not failed", async () 
 	expect(port.prompts("a:1")).toBeUndefined();
 });
 
+test("file sends require explicit capability and transport errors propagate", async () => {
+	const file = { name: "image.png", data: new Uint8Array([1]) };
+	const log: string[] = [];
+	const unsupported = recording("a", log);
+	const supported = { ...recording("b", log), supportsFiles: true };
+	const broken = {
+		...recording("c", log),
+		supportsFiles: true,
+		sendReply: async () => {
+			throw new Error("upload rejected");
+		},
+	};
+	const port = surfacePort(() => [unsupported, supported, broken]);
+	await expect(
+		port.sendReply("a:1", { chunks: [], files: [file] }),
+	).rejects.toThrow("does not support reply files");
+	expect(log).toEqual([]);
+	await port.sendReply("b:1", { chunks: [], files: [file] });
+	expect(log).toEqual(["b reply b:1"]);
+	await expect(
+		port.sendReply("c:1", { chunks: [], files: [file] }),
+	).rejects.toThrow("upload rejected");
+});
+
 test("the surfaces are read when a call is made, so a port linked later still answers", async () => {
 	let linked: ChatSurface[] | undefined;
 	const port = surfacePort(() => {

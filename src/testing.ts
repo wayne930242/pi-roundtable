@@ -25,7 +25,10 @@ import type {
 	InteractionContribution,
 } from "./core/discord/interaction-module.ts";
 import { OwnerGuard, ownerRootCommand } from "./core/discord/owner-command.ts";
-import type { PendingConfirmation } from "./core/domain/conversation.ts";
+import type {
+	PendingConfirmation,
+	ReplyFile,
+} from "./core/domain/conversation.ts";
 import { NotLinkedError, PluginError } from "./core/errors.ts";
 import { EventBus } from "./core/events.ts";
 import type { HoldCheck } from "./core/holds.ts";
@@ -48,6 +51,11 @@ import {
 } from "./core/registry/contributions.ts";
 import { resolveProviders } from "./core/registry/providers.ts";
 import { ServiceRegistry } from "./core/registry/services.ts";
+import {
+	attachReplyFile,
+	hasReplyFileScope,
+	withReplyFiles,
+} from "./core/reply-files.ts";
 import { ChannelQueue } from "./core/routing/channel-queue.ts";
 import { ChannelRouter } from "./core/routing/channel-router.ts";
 import {
@@ -203,6 +211,8 @@ export interface TestPluginResult {
 	tools: readonly string[];
 	tiers: ToolTierTable;
 	events: RecordedEvent[];
+	/** Files accepted by successful runTool calls, copied and recorded with their channel. */
+	files: { channel: ChannelKey; file: ReplyFile }[];
 	runTool(
 		name: string,
 		args: Record<string, unknown>,
@@ -233,7 +243,10 @@ function unlinked(part: keyof typeof NOT_LINKED): never {
 const PROBED = new Set(["then", "toJSON", "asymmetricMatch"]);
 
 /** A service the test gave only some members of: reading another names the option that adds it. */
-function partialService(key: ServiceKey<unknown>, given: object): object {
+function partialService<T extends object>(
+	key: ServiceKey<unknown>,
+	given: T,
+): T {
 	return new Proxy(given, {
 		get(target, member, receiver) {
 			if (member in target || typeof member === "symbol" || PROBED.has(member))
@@ -495,6 +508,7 @@ export async function testPlugin(
 	for (const surface of options.surfaces ?? []) await surface.start(deliver);
 	await runtime?.preflight?.();
 	let stopped = false;
+	const files: { channel: ChannelKey; file: ReplyFile }[] = [];
 	return {
 		contribution,
 		holds: linked.holds,
@@ -505,6 +519,7 @@ export async function testPlugin(
 		tools: registry.tools.map((tool) => tool.name),
 		tiers,
 		events,
+		files,
 		async runTool(name, args, runOptions) {
 			const tool = registry.tools.find((item) => item.name === name);
 			if (!tool) throw new PluginError(`tool ${name} is not registered`);
@@ -539,8 +554,23 @@ export async function testPlugin(
 			const execute = registered[0]?.execute;
 			if (!execute)
 				throw new PluginError(`tool ${name} did not register in the session`);
-			const result = await execute("test-call", args);
-			return result.content.map((item) => item.text ?? "").join("\n");
+			const result = await withReplyFiles(
+				surfaces.of(channel)?.supportsFiles === true,
+				async () => {
+					const output = await execute("test-call", args);
+					return {
+						ok: true,
+						text: output.content.map((item) => item.text ?? "").join("\n"),
+					};
+				},
+			);
+			if (!result.ok) throw result.error;
+			for (const file of result.files ?? []) {
+				files.push({ channel, file });
+				// When runTool is used by a fake runtime, forward into the enclosing real turn.
+				if (hasReplyFileScope()) attachReplyFile(file);
+			}
+			return result.text;
 		},
 		async stop() {
 			if (stopped) return;

@@ -1,5 +1,6 @@
 import type { TurnResult } from "../domain/conversation.ts";
 import { AgentRunError } from "../domain/errors.ts";
+import { hasReplyFiles } from "../reply-files.ts";
 import { lastAssistant, textOf } from "../shared/session-messages.ts";
 
 interface MessagePart {
@@ -67,7 +68,7 @@ export function turnAnswer(
 					.join("\n\n")
 			: textOf(last.message.content)
 	).trim();
-	if (!text)
+	if (!text && !hasReplyFiles())
 		return {
 			ok: false,
 			error: new AgentRunError("the final assistant message has no text"),

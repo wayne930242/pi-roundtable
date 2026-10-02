@@ -1,7 +1,9 @@
 import type { Static, TObject } from "typebox";
+import type { ReplyFile } from "./domain/conversation.ts";
 import { PluginError } from "./errors.ts";
 import type { HoldRule } from "./holds.ts";
 import { type RoundtablePlugin, refuseRemovedFields } from "./plugin.ts";
+import { attachReplyFile } from "./reply-files.ts";
 import type { AgentTurnScope, ChannelKey, SessionTool } from "./sessions.ts";
 import { toolError, toolText } from "./shared/tool-result.ts";
 import { type Speaker, TIERS, type Tier } from "./speakers.ts";
@@ -22,6 +24,8 @@ export interface ToolTurn {
 	/** The agent whose turn it is. */
 	agent: AgentTurnScope | undefined;
 	signal: AbortSignal | undefined;
+	/** Queues a file for this turn's successful reply; throws ReplyFileError when refused. */
+	attachFile(file: ReplyFile): void;
 }
 
 /**
@@ -108,6 +112,7 @@ export function defineTool<Schema extends TObject>(
 									channel: context.turnChannel,
 									agent: context.agent,
 									signal,
+									attachFile: attachReplyFile,
 								}),
 							);
 						} catch (error) {

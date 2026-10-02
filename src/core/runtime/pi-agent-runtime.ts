@@ -24,6 +24,7 @@ import {
 	type ThinkingLevel,
 	type ThinkingSetting,
 } from "../models.ts";
+import { withoutReplyFiles } from "../reply-files.ts";
 import { planOrder, type TransientTask } from "../sessions.ts";
 import { textOf } from "../shared/session-messages.ts";
 import { addressee, type Speaker, type Tier } from "../speakers.ts";
@@ -352,7 +353,7 @@ export class PiAgentRuntime implements AgentRuntime {
 						this.#tiers.allows(tier, name),
 				);
 			session.setActiveToolsByName([...worker.tools]);
-			await session.prompt(task.text);
+			await withoutReplyFiles(() => session.prompt(task.text));
 			return workerReport(
 				session.messages,
 				"the worker stopped before it reported",

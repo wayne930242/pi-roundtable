@@ -7,6 +7,7 @@ import type { Logger } from "../log.ts";
 import type { EventSink } from "../plugin.ts";
 import { splitReply } from "../presentation/reply-splitter.ts";
 import { thinkingLine } from "../presentation/thinking-line.ts";
+import { withReplyFiles } from "../reply-files.ts";
 import type { ChannelKey, ToolSelection, TurnSelection } from "../sessions.ts";
 import type { Speaker } from "../speakers.ts";
 import { endOf, settleTurn } from "./settle-turn.ts";
@@ -85,20 +86,24 @@ export function conversationTurns(
 			try {
 				result = await settleTurn(
 					() =>
-						runtime.runTurn({
-							channel,
-							kind,
-							selection: input.selection ?? {
-								id: DEFAULT_SELECTION,
-								...options.selection(),
-							},
-							text: input.text,
-							speaker,
-							...(input.attachments ? { attachments: input.attachments } : {}),
-							...(input.confirmed ? { confirmed: true } : {}),
-							...(input.steerable ? { steerable: true } : {}),
-							...(input.interactive ? { interactive: true } : {}),
-						}),
+						withReplyFiles(surfaces.of(channel)?.supportsFiles === true, () =>
+							runtime.runTurn({
+								channel,
+								kind,
+								selection: input.selection ?? {
+									id: DEFAULT_SELECTION,
+									...options.selection(),
+								},
+								text: input.text,
+								speaker,
+								...(input.attachments
+									? { attachments: input.attachments }
+									: {}),
+								...(input.confirmed ? { confirmed: true } : {}),
+								...(input.steerable ? { steerable: true } : {}),
+								...(input.interactive ? { interactive: true } : {}),
+							}),
+						),
 					"conversation turn",
 				);
 			} finally {
@@ -135,5 +140,6 @@ function replyOf(result: TurnResult) {
 	return {
 		...(thinking ? { thinking } : {}),
 		chunks: splitReply(result.text),
+		...(result.files?.length ? { files: result.files } : {}),
 	};
 }

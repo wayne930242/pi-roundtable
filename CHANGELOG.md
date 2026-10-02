@@ -7,10 +7,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Turn reply attachments: `ToolTurn.attachFile(file)` queues raw bytes with the agent's reply instead of posting as the bot ahead of it. The main entry exports `ReplyFile` (`{ name, data: Uint8Array }`), `attachReplyFile` (`(file): void`) for raw session and Pi package tools, `ReplyFileError`, and frozen `REPLY_FILE_LIMITS` (10 files, 10 MiB each, 50 MiB total per turn). Successful `TurnResult` may carry `files`; a successful textless Pi answer with files is posted, while stopped or failed turns discard them. Discord sends files through the same agent webhook identity as the text. Transient tasks and calls outside a conversation turn refuse attachments.
+- `testPlugin` records files attached by `runTool` as `files: { channel, file }[]`; inject a file-capable surface for attachment tests. The guide includes the tested `examples/reply-files.ts` plugin.
 - `roundtable add plugin release-notice` copies a third official plugin. After the agent server is up it posts once in the coordinator's channel when the running release differs from the one last announced, with the commits the release added since the release last announced, read from a `release.json` that the deploy writes (`{ "sha": "...", "commits": ["subject", ...] }`); it also names the channels whose work the previous shutdown cut short, recorded from the `shutdown` event. It remembers the announced `sha` only after the post succeeds. `createReleaseNotice` takes `releaseFile`, `dataDir`, and `announce` to change where the release is read, where the state is kept, and where the post goes.
 
 ### Changed
 
+- Chat surfaces explicitly opt in with `ChatSurface.supportsFiles: true` and must deliver every reply file or reject. Existing custom surfaces that handle files must add this flag; absent or false refuses attachment calls and direct `SurfacePort.sendReply` file sends instead of silently losing them. Replacement-runtime result files pass the same capability and size checks; custom turn reply callbacks receive the files and own delivery.
 - `release-notice` joins `codex-images` and `dice` as a reserved name for `add plugin`, and the usage text lists all three.
 
 ## [0.6.1] - 2026-10-02

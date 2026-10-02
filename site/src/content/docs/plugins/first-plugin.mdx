@@ -70,6 +70,36 @@ Ask an agent to use it, and it calls the tool:
 
 <Image src={toolCall} alt="In the guide channel, a user asks Guide to say hello to a team. Guide calls the hello_greet tool and answers Hello, Ada's team!" />
 
+## Attach files to the agent's reply
+
+A tool still returns text for the model, but may also call `turn.attachFile({ name, data })` to attach an image or another file to the agent's final reply.
+`data` is a non-empty `Uint8Array` of raw bytes; the core copies it immediately.
+For example, inside an image tool's `run`:
+
+```ts
+turn.attachFile({ name: "drawing.png", data: pngBytes });
+return "The drawing is attached to this turn's reply.";
+```
+
+Do not call `context.surfaces.sendReply` from the tool just to send its output: that posts ahead of the agent and may use the bot's identity.
+The core delivers accepted files with the successful reply; Discord posts them after the text, one per message, using the same agent webhook name and avatar.
+A successful final answer with files needs no text.
+Stopped, timed-out, and failed turns discard their files.
+If a tool fails but the model recovers and completes the turn, files already accepted remain queued.
+
+The main entry exports `ReplyFile`, `attachReplyFile(file): void`, `ReplyFileError`, and `REPLY_FILE_LIMITS`.
+Raw session tools and Pi package tools can import `attachReplyFile` and call it in their awaited tool execution.
+A Pi package should share the host's `pi-roundtable` peer dependency rather than bundle its own copy.
+Calls outside a conversation turn, after its end, or inside a transient `runTask` fail with `ReplyFileError`.
+The limits are 10 files per turn, 10 MiB (10,485,760 bytes) per file, and 50 MiB (52,428,800 bytes) total across all tools.
+Empty data, invalid names (paths, control characters, or over 255 characters), and exceeding calls are refused instead of dropped.
+
+A custom `ChatSurface` opts in with `supportsFiles: true` and must deliver every `OutboundReply.files` entry with the reply's identity or reject; absent or false makes attachment calls fail clearly.
+Network limits may be stricter; delivery failures are logged, may leave a partial message group, and are not retried.
+A custom `ConversationTurnInput.reply` callback receives successful `TurnResult.files` and owns their delivery.
+The runnable [reply-files example](https://github.com/wayne930242/pi-roundtable/blob/master/examples/reply-files.ts) and its test show the full plugin and `testPlugin`'s `harness.files` fixture.
+See the [attachment contract](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#attach-files-to-the-agents-reply) for replacement runtime behavior and every edge case.
+
 ## Go further
 
 The [plugin guide](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md) explains every part a plugin can add (tools, prompt sections, agents, events, services, migrations, providers, slash commands, HTTP routes, and more), the order things start and stop in, and every startup error with its fix.

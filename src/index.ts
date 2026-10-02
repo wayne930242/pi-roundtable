@@ -77,6 +77,7 @@ export type {
 	HeldCall,
 	OutboundReply,
 	PendingConfirmation,
+	ReplyFile,
 	TranscriptEntry,
 	TurnResult,
 } from "./core/domain/conversation.ts";
@@ -157,6 +158,11 @@ export type {
 	TurnEndEvent,
 	TurnEvent,
 } from "./core/plugin.ts";
+export {
+	attachReplyFile,
+	REPLY_FILE_LIMITS,
+	ReplyFileError,
+} from "./core/reply-files.ts";
 export type {
 	ConversationTurnInput,
 	ConversationTurns,
