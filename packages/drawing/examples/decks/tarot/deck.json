@@ -1,0 +1,395 @@
+{
+	"name": "Tarot (replace with your deck's name)",
+	"cards": [
+		{
+			"id": "The Fool",
+			"name": "The Fool",
+			"group": "major"
+		},
+		{
+			"id": "The Magician",
+			"name": "The Magician",
+			"group": "major"
+		},
+		{
+			"id": "The High Priestess",
+			"name": "The High Priestess",
+			"group": "major"
+		},
+		{
+			"id": "The Empress",
+			"name": "The Empress",
+			"group": "major"
+		},
+		{
+			"id": "The Emperor",
+			"name": "The Emperor",
+			"group": "major"
+		},
+		{
+			"id": "The Hierophant",
+			"name": "The Hierophant",
+			"group": "major"
+		},
+		{
+			"id": "The Lovers",
+			"name": "The Lovers",
+			"group": "major"
+		},
+		{
+			"id": "The Chariot",
+			"name": "The Chariot",
+			"group": "major"
+		},
+		{
+			"id": "Strength",
+			"name": "Strength",
+			"group": "major"
+		},
+		{
+			"id": "The Hermit",
+			"name": "The Hermit",
+			"group": "major"
+		},
+		{
+			"id": "Wheel of Fortune",
+			"name": "Wheel of Fortune",
+			"group": "major"
+		},
+		{
+			"id": "Justice",
+			"name": "Justice",
+			"group": "major"
+		},
+		{
+			"id": "The Hanged Man",
+			"name": "The Hanged Man",
+			"group": "major"
+		},
+		{
+			"id": "Death",
+			"name": "Death",
+			"group": "major"
+		},
+		{
+			"id": "Temperance",
+			"name": "Temperance",
+			"group": "major"
+		},
+		{
+			"id": "The Devil",
+			"name": "The Devil",
+			"group": "major"
+		},
+		{
+			"id": "The Tower",
+			"name": "The Tower",
+			"group": "major"
+		},
+		{
+			"id": "The Star",
+			"name": "The Star",
+			"group": "major"
+		},
+		{
+			"id": "The Moon",
+			"name": "The Moon",
+			"group": "major"
+		},
+		{
+			"id": "The Sun",
+			"name": "The Sun",
+			"group": "major"
+		},
+		{
+			"id": "Judgement",
+			"name": "Judgement",
+			"group": "major"
+		},
+		{
+			"id": "The World",
+			"name": "The World",
+			"group": "major"
+		},
+		{
+			"id": "Ace of Wands",
+			"name": "Ace of Wands",
+			"group": "wands"
+		},
+		{
+			"id": "Two of Wands",
+			"name": "Two of Wands",
+			"group": "wands"
+		},
+		{
+			"id": "Three of Wands",
+			"name": "Three of Wands",
+			"group": "wands"
+		},
+		{
+			"id": "Four of Wands",
+			"name": "Four of Wands",
+			"group": "wands"
+		},
+		{
+			"id": "Five of Wands",
+			"name": "Five of Wands",
+			"group": "wands"
+		},
+		{
+			"id": "Six of Wands",
+			"name": "Six of Wands",
+			"group": "wands"
+		},
+		{
+			"id": "Seven of Wands",
+			"name": "Seven of Wands",
+			"group": "wands"
+		},
+		{
+			"id": "Eight of Wands",
+			"name": "Eight of Wands",
+			"group": "wands"
+		},
+		{
+			"id": "Nine of Wands",
+			"name": "Nine of Wands",
+			"group": "wands"
+		},
+		{
+			"id": "Ten of Wands",
+			"name": "Ten of Wands",
+			"group": "wands"
+		},
+		{
+			"id": "Page of Wands",
+			"name": "Page of Wands",
+			"group": "wands"
+		},
+		{
+			"id": "Knight of Wands",
+			"name": "Knight of Wands",
+			"group": "wands"
+		},
+		{
+			"id": "Queen of Wands",
+			"name": "Queen of Wands",
+			"group": "wands"
+		},
+		{
+			"id": "King of Wands",
+			"name": "King of Wands",
+			"group": "wands"
+		},
+		{
+			"id": "Ace of Cups",
+			"name": "Ace of Cups",
+			"group": "cups"
+		},
+		{
+			"id": "Two of Cups",
+			"name": "Two of Cups",
+			"group": "cups"
+		},
+		{
+			"id": "Three of Cups",
+			"name": "Three of Cups",
+			"group": "cups"
+		},
+		{
+			"id": "Four of Cups",
+			"name": "Four of Cups",
+			"group": "cups"
+		},
+		{
+			"id": "Five of Cups",
+			"name": "Five of Cups",
+			"group": "cups"
+		},
+		{
+			"id": "Six of Cups",
+			"name": "Six of Cups",
+			"group": "cups"
+		},
+		{
+			"id": "Seven of Cups",
+			"name": "Seven of Cups",
+			"group": "cups"
+		},
+		{
+			"id": "Eight of Cups",
+			"name": "Eight of Cups",
+			"group": "cups"
+		},
+		{
+			"id": "Nine of Cups",
+			"name": "Nine of Cups",
+			"group": "cups"
+		},
+		{
+			"id": "Ten of Cups",
+			"name": "Ten of Cups",
+			"group": "cups"
+		},
+		{
+			"id": "Page of Cups",
+			"name": "Page of Cups",
+			"group": "cups"
+		},
+		{
+			"id": "Knight of Cups",
+			"name": "Knight of Cups",
+			"group": "cups"
+		},
+		{
+			"id": "Queen of Cups",
+			"name": "Queen of Cups",
+			"group": "cups"
+		},
+		{
+			"id": "King of Cups",
+			"name": "King of Cups",
+			"group": "cups"
+		},
+		{
+			"id": "Ace of Swords",
+			"name": "Ace of Swords",
+			"group": "swords"
+		},
+		{
+			"id": "Two of Swords",
+			"name": "Two of Swords",
+			"group": "swords"
+		},
+		{
+			"id": "Three of Swords",
+			"name": "Three of Swords",
+			"group": "swords"
+		},
+		{
+			"id": "Four of Swords",
+			"name": "Four of Swords",
+			"group": "swords"
+		},
+		{
+			"id": "Five of Swords",
+			"name": "Five of Swords",
+			"group": "swords"
+		},
+		{
+			"id": "Six of Swords",
+			"name": "Six of Swords",
+			"group": "swords"
+		},
+		{
+			"id": "Seven of Swords",
+			"name": "Seven of Swords",
+			"group": "swords"
+		},
+		{
+			"id": "Eight of Swords",
+			"name": "Eight of Swords",
+			"group": "swords"
+		},
+		{
+			"id": "Nine of Swords",
+			"name": "Nine of Swords",
+			"group": "swords"
+		},
+		{
+			"id": "Ten of Swords",
+			"name": "Ten of Swords",
+			"group": "swords"
+		},
+		{
+			"id": "Page of Swords",
+			"name": "Page of Swords",
+			"group": "swords"
+		},
+		{
+			"id": "Knight of Swords",
+			"name": "Knight of Swords",
+			"group": "swords"
+		},
+		{
+			"id": "Queen of Swords",
+			"name": "Queen of Swords",
+			"group": "swords"
+		},
+		{
+			"id": "King of Swords",
+			"name": "King of Swords",
+			"group": "swords"
+		},
+		{
+			"id": "Ace of Pentacles",
+			"name": "Ace of Pentacles",
+			"group": "pentacles"
+		},
+		{
+			"id": "Two of Pentacles",
+			"name": "Two of Pentacles",
+			"group": "pentacles"
+		},
+		{
+			"id": "Three of Pentacles",
+			"name": "Three of Pentacles",
+			"group": "pentacles"
+		},
+		{
+			"id": "Four of Pentacles",
+			"name": "Four of Pentacles",
+			"group": "pentacles"
+		},
+		{
+			"id": "Five of Pentacles",
+			"name": "Five of Pentacles",
+			"group": "pentacles"
+		},
+		{
+			"id": "Six of Pentacles",
+			"name": "Six of Pentacles",
+			"group": "pentacles"
+		},
+		{
+			"id": "Seven of Pentacles",
+			"name": "Seven of Pentacles",
+			"group": "pentacles"
+		},
+		{
+			"id": "Eight of Pentacles",
+			"name": "Eight of Pentacles",
+			"group": "pentacles"
+		},
+		{
+			"id": "Nine of Pentacles",
+			"name": "Nine of Pentacles",
+			"group": "pentacles"
+		},
+		{
+			"id": "Ten of Pentacles",
+			"name": "Ten of Pentacles",
+			"group": "pentacles"
+		},
+		{
+			"id": "Page of Pentacles",
+			"name": "Page of Pentacles",
+			"group": "pentacles"
+		},
+		{
+			"id": "Knight of Pentacles",
+			"name": "Knight of Pentacles",
+			"group": "pentacles"
+		},
+		{
+			"id": "Queen of Pentacles",
+			"name": "Queen of Pentacles",
+			"group": "pentacles"
+		},
+		{
+			"id": "King of Pentacles",
+			"name": "King of Pentacles",
+			"group": "pentacles"
+		}
+	]
+}
