@@ -5,9 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-## [0.7.1] - 2026-10-02
+## [0.7.2] - 2026-10-02
 
 First release published by the lockstep workflow; no changes to the package.
+The `v0.7.1` tag published nothing.
 
 ## [0.7.0] - 2026-10-02
 

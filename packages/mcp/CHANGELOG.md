@@ -5,9 +5,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-## [0.7.1] - 2026-10-02
+## [0.7.2] - 2026-10-02
 
-The first release from pi-roundtable; 0.7.0 was not published for this package.
+The first release from pi-roundtable; 0.7.0 and 0.7.1 were not published for this package.
 
 ### Changed
 

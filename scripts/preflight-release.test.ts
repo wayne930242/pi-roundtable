@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { ReleaseContractError } from "./check-release.ts";
-import { checkPack } from "./preflight-release.ts";
+import { checkPack, registryName } from "./preflight-release.ts";
 
 const pkg = { name: "pi-roundtable-web", path: "packages/web" };
 const paths = [
@@ -25,6 +25,31 @@ test("accepts npm JSON even when web prepack writes build output first", () => {
 	expect(() =>
 		checkPack(`dist/page.js\ndist/index.html\n${report()}`, pkg, "0.8.0"),
 	).not.toThrow();
+});
+
+test("accepts npm 12's report keyed by package name, after prepack output", () => {
+	const keyed = JSON.stringify(
+		{
+			[pkg.name]: {
+				name: pkg.name,
+				version: "0.8.0",
+				files: paths.map((path) => ({ path })),
+			},
+		},
+		null,
+		2,
+	);
+	expect(() =>
+		checkPack(`dist/page.js\ndist/index.html\n${keyed}`, pkg, "0.8.0"),
+	).not.toThrow();
+	expect(() => checkPack(keyed, pkg, "0.9.0")).toThrow(ReleaseContractError);
+});
+
+test("reads the registry name from npm 11's string and npm 12's one-element array", () => {
+	expect(registryName(`"${pkg.name}"`, pkg)).toBe(pkg.name);
+	expect(registryName(`[\n  "${pkg.name}"\n]`, pkg)).toBe(pkg.name);
+	expect(registryName(`["a", "b"]`, pkg)).not.toBe(pkg.name);
+	expect(() => registryName("not-json", pkg)).toThrow(ReleaseContractError);
 });
 
 test("refuses a web tarball missing the page or either bundle", () => {

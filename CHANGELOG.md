@@ -5,7 +5,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-10-02
+
+### Fixed
+
+- The release preflight reads npm 12's `npm pack --json` report (an object keyed by package name) and `npm view --json` name (a one-element array) as well as npm 11's, so the `v0.7.1` tag stopped before publishing anything.
+
 ## [0.7.1] - 2026-10-02
+
+Tagged but not published: the release preflight failed under npm 12 before any package was published. Its changes ship in 0.7.2.
 
 ### Docs
 

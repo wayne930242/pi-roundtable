@@ -11,17 +11,23 @@ interface PackReport {
 	files: { path: string }[];
 }
 
-/** npm's prepack scripts may print before the final JSON report. */
+/**
+ * npm's prepack scripts may print before the final JSON report, which starts on the last line
+ * that opens a value at column 0. npm 11 reports an array; npm 12 an object keyed by package name.
+ */
 export function checkPack(
 	output: string,
 	pkg: ReleasePackage,
 	version: string,
 ): void {
-	const start = output.lastIndexOf("\n[");
+	const start = Math.max(output.lastIndexOf("\n["), output.lastIndexOf("\n{"));
 	let reports: PackReport[];
 	try {
-		reports = JSON.parse(
+		const parsed: unknown = JSON.parse(
 			start < 0 ? output : output.slice(start + 1),
+		);
+		reports = (
+			Array.isArray(parsed) ? parsed : Object.values(parsed as object)
 		) as PackReport[];
 	} catch (cause) {
 		throw new ReleaseContractError(`Invalid npm pack report for ${pkg.name}`, {
@@ -67,6 +73,28 @@ export function checkPack(
 		);
 }
 
+/**
+ * The name in `npm view <pkg> name --json`: a string from npm 11, a one-element array from
+ * npm 12; undefined when the metadata names no single package.
+ */
+export function registryName(
+	output: string,
+	pkg: ReleasePackage,
+): string | undefined {
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(output);
+	} catch (cause) {
+		throw new ReleaseContractError(
+			`Invalid npm registry metadata for ${pkg.name}`,
+			{ cause },
+		);
+	}
+	const name =
+		Array.isArray(parsed) && parsed.length === 1 ? parsed[0] : parsed;
+	return typeof name === "string" ? name : undefined;
+}
+
 function npm(root: string, args: string[]): string {
 	const result = Bun.spawnSync(["npm", ...args], {
 		cwd: root,
@@ -104,16 +132,7 @@ if (import.meta.main) {
 		);
 		if (!local) {
 			const output = npm(root, ["view", pkg.name, "name", "--json"]);
-			let name: unknown;
-			try {
-				name = JSON.parse(output);
-			} catch (cause) {
-				throw new ReleaseContractError(
-					`Invalid npm registry metadata for ${pkg.name}`,
-					{ cause },
-				);
-			}
-			if (name !== pkg.name)
+			if (registryName(output, pkg) !== pkg.name)
 				throw new ReleaseContractError(
 					`${pkg.name} needs its manual first publication before a lockstep tag`,
 				);

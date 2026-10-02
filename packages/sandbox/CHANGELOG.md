@@ -1,8 +1,8 @@
 # Changelog
 
-## 0.7.1
+## 0.7.2
 
-- First release published by the lockstep workflow; no changes to the package.
+- First release published by the lockstep workflow; no changes to the package. The `v0.7.1` tag published nothing.
 
 ## 0.7.0
 
