@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { NoteInput, NoteKind, NoteView } from "../../src/api-types.ts";
 import { Dialog } from "../components/dialog.tsx";
 import { Badge, Empty, Failure, Loading } from "../components/states.tsx";
@@ -42,12 +42,17 @@ export function NotesPage() {
 	const [editing, setEditing] = useState<Editing>();
 	const [deleting, setDeleting] = useState<NoteView>();
 
+	// Only the newest request may set the list, so a slow answer for an earlier search never replaces it.
+	const latest = useRef(0);
 	const load = useCallback(async (search: string) => {
+		const request = ++latest.current;
 		try {
-			setNotes(await api.notes(search.trim()));
+			const loaded = await api.notes(search.trim());
+			if (request !== latest.current) return;
+			setNotes(loaded);
 			setError(undefined);
 		} catch (failure) {
-			setError(messageOf(failure));
+			if (request === latest.current) setError(messageOf(failure));
 		}
 	}, []);
 

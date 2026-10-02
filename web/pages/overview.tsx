@@ -1,32 +1,16 @@
-import { useEffect, useState } from "react";
-import type {
-	AgentView,
-	GroupView,
-	OverviewView,
-} from "../../src/api-types.ts";
+import type { AgentView, GroupView } from "../../src/api-types.ts";
 import { Badge, Empty, Failure, Loading } from "../components/states.tsx";
-import { api, messageOf } from "../lib/api.ts";
+import { api } from "../lib/api.ts";
 import { useConfig } from "../lib/config.ts";
 import { ago, discordUrl, kilo } from "../lib/format.ts";
 import { useLive } from "../lib/live.ts";
 import { hrefFor } from "../lib/router.ts";
+import { useFetched } from "../lib/use-fetched.ts";
 
 export function OverviewPage() {
 	const { timeZone } = useConfig();
-	const { version, now } = useLive();
-	const [view, setView] = useState<OverviewView>();
-	const [error, setError] = useState<string>();
-
-	// biome-ignore lint/correctness/useExhaustiveDependencies: the version moves whenever the server reports a change
-	useEffect(() => {
-		api
-			.overview()
-			.then((loaded) => {
-				setView(loaded);
-				setError(undefined);
-			})
-			.catch((failure) => setError(messageOf(failure)));
-	}, [version]);
+	const { now } = useLive();
+	const { data: view, error } = useFetched(() => api.overview(), "overview");
 
 	if (!view) return error ? <Failure message={error} /> : <Loading />;
 	return (

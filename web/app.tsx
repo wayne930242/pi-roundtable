@@ -75,7 +75,7 @@ function Console({ config }: { config: ConfigView }) {
 					{pane === "overview" && <OverviewPage />}
 					{pane === "conversations" &&
 						(route.key ? (
-							<TranscriptPage conversationKey={route.key} />
+							<TranscriptPage key={route.key} conversationKey={route.key} />
 						) : (
 							<ConversationsPage />
 						))}

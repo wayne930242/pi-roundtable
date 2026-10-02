@@ -305,15 +305,21 @@ export class ConsoleApi {
 	}
 }
 
+/** The JSON body, read in chunks so a body past the limit is refused without being held whole. */
 async function readBody(request: Request): Promise<unknown> {
-	const declared = Number(request.headers.get("content-length") ?? 0);
-	if (declared > MAX_BODY_BYTES)
-		throw new HttpError(413, "The request is too large.");
-	const text = await request.text();
-	if (Buffer.byteLength(text) > MAX_BODY_BYTES)
-		throw new HttpError(413, "The request is too large.");
+	const tooLarge = () => new HttpError(413, "The request is too large.");
+	if (Number(request.headers.get("content-length") ?? 0) > MAX_BODY_BYTES)
+		throw tooLarge();
+	const chunks: Uint8Array[] = [];
+	let size = 0;
+	if (request.body)
+		for await (const chunk of request.body) {
+			size += chunk.byteLength;
+			if (size > MAX_BODY_BYTES) throw tooLarge();
+			chunks.push(chunk);
+		}
 	try {
-		return JSON.parse(text);
+		return JSON.parse(Buffer.concat(chunks).toString("utf8"));
 	} catch {
 		return undefined;
 	}

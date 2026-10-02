@@ -1,14 +1,14 @@
-import { useEffect, useState } from "react";
 import type {
 	ConversationKind,
 	ConversationView,
 } from "../../src/api-types.ts";
 import { Badge, Empty, Failure, Loading } from "../components/states.tsx";
-import { api, messageOf } from "../lib/api.ts";
+import { api } from "../lib/api.ts";
 import { useConfig } from "../lib/config.ts";
 import { ago, channelTitle, size, when } from "../lib/format.ts";
 import { useLive } from "../lib/live.ts";
 import { hrefFor } from "../lib/router.ts";
+import { useFetched } from "../lib/use-fetched.ts";
 
 const SECTIONS: { kind: ConversationKind; title: string; note: string }[] = [
 	{
@@ -35,20 +35,12 @@ const SECTIONS: { kind: ConversationKind; title: string; note: string }[] = [
 
 export function ConversationsPage() {
 	const { timeZone } = useConfig();
-	const { version, now } = useLive();
-	const [items, setItems] = useState<ConversationView[]>();
-	const [error, setError] = useState<string>();
-
-	// biome-ignore lint/correctness/useExhaustiveDependencies: the version moves whenever the server reports a change
-	useEffect(() => {
-		api
-			.conversations()
-			.then((loaded) => {
-				setItems(loaded.conversations);
-				setError(undefined);
-			})
-			.catch((failure) => setError(messageOf(failure)));
-	}, [version]);
+	const { now } = useLive();
+	const { data, error } = useFetched(
+		() => api.conversations(),
+		"conversations",
+	);
+	const items = data?.conversations;
 
 	if (!items) return error ? <Failure message={error} /> : <Loading />;
 	return (

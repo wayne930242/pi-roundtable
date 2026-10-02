@@ -1,33 +1,23 @@
 import { useEffect, useRef, useState } from "react";
-import type { TranscriptEntry, TranscriptView } from "../../src/api-types.ts";
+import type { TranscriptEntry } from "../../src/api-types.ts";
 import { Badge, Empty, Failure, Loading } from "../components/states.tsx";
-import { api, messageOf } from "../lib/api.ts";
+import { api } from "../lib/api.ts";
 import { useConfig } from "../lib/config.ts";
 import { channelTitle, when } from "../lib/format.ts";
-import { useLive } from "../lib/live.ts";
 import { hrefFor } from "../lib/router.ts";
+import { useFetched } from "../lib/use-fetched.ts";
 
 export function TranscriptPage({
 	conversationKey,
 }: {
 	conversationKey: string;
 }) {
-	const { version } = useLive();
 	const [archive, setArchive] = useState<string>();
-	const [view, setView] = useState<TranscriptView>();
-	const [error, setError] = useState<string>();
 	const scrolled = useRef(false);
-
-	// biome-ignore lint/correctness/useExhaustiveDependencies: the version moves whenever the server reports a change
-	useEffect(() => {
-		api
-			.transcript(conversationKey, archive)
-			.then((loaded) => {
-				setView(loaded);
-				setError(undefined);
-			})
-			.catch((failure) => setError(messageOf(failure)));
-	}, [conversationKey, archive, version]);
+	const { data: view, error } = useFetched(
+		() => api.transcript(conversationKey, archive),
+		`${conversationKey}|${archive ?? ""}`,
+	);
 
 	// The first load of a conversation shows its end; later refreshes leave the reader where they are.
 	useEffect(() => {

@@ -315,6 +315,25 @@ describe("notes", () => {
 	});
 });
 
+describe("body limit", () => {
+	test("refuses a body that streams past 64 KB without declaring its length", async () => {
+		const chunk = new TextEncoder().encode("x".repeat(16 * 1024));
+		const body = new ReadableStream<Uint8Array>({
+			start(controller) {
+				for (let i = 0; i < 6; i++) controller.enqueue(chunk);
+				controller.close();
+			},
+		});
+		const request = new Request("http://console/console/api/notes", {
+			method: "POST",
+			body,
+			duplex: "half",
+		});
+		const response = await api().api.handle(request, "notes");
+		expect(response.status).toBe(413);
+	});
+});
+
 describe("panes and errors", () => {
 	test("a pane that is not served answers 404", async () => {
 		const { api: instance } = api({ panes: ["conversations"] });
