@@ -5,7 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-## [0.7.0] - Unreleased
+## [0.7.1] - 2026-10-02
+
+First release published by the lockstep workflow; no changes to the package.
+
+## [0.7.0] - 2026-10-02
 
 Prepared for the first npm publication.
 The earlier `0.1.0` was local-only and was never published on npm.

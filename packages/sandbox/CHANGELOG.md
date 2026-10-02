@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.1
+
+- First release published by the lockstep workflow; no changes to the package.
+
 ## 0.7.0
 
 - Move into the pi-roundtable monorepo at `packages/sandbox`, preserving Git history.
