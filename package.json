@@ -39,7 +39,7 @@
 		"jose": "6.2.12"
 	},
 	"peerDependencies": {
-		"pi-roundtable": ">=0.6.1 <0.7.0"
+		"pi-roundtable": ">=0.6.1 <0.8.0"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.5.15",
