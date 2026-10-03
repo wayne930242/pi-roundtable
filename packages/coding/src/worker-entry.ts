@@ -112,7 +112,7 @@ async function run({
 		model: job.model,
 		task: job.task,
 		signal: new AbortController().signal,
-		aborted: "The worker was stopped.",
+		aborted: "the worker was stopped",
 	});
 }
 if (process.send) {
@@ -136,7 +136,14 @@ if (process.send) {
 				(report) => {
 					process.send?.({ type: "report", report }, () => process.exit(0));
 				},
-				() => process.exit(1),
+				(error: unknown) =>
+					process.send?.(
+						{
+							type: "failure",
+							message: error instanceof Error ? error.message : String(error),
+						},
+						() => process.exit(1),
+					),
 			);
 		}
 	});

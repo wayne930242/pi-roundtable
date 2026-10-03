@@ -82,12 +82,14 @@ export default {
 | `deckDir` | `string` | none | A directory with one subdirectory for each deck; see [the deck directory](#the-deck-directory). Without it the plugin has no `draw_cards` tool. A directory that does not exist, holds no deck, or holds an invalid manifest stops the start with a message that names the deck and what to fix |
 | `random` | `() => number` | `Math.random` | The random source of the map layouts and the card draws, returning a number from 0 up to, not including, 1. A seeded source makes a run reproducible: a new `seededRandom(seed)` given the same calls draws the same pictures. `seededRandom(seed)` is exported for that |
 | `minTier` | `"owner" \| "admin" \| "member"` | `member` | The lowest tier that may use the tools. The operator's `toolTiers` setting still wins |
-| `cardPresentation` | `CardPresentation` | package captions | Trusted operator-local headings and reversal suffixes |
+| `cardPresentation` | `CardPresentation` | package captions | Trusted operator-local headings, reversal suffixes and result text |
+| `mapLimits` | `{ title?, text? }` | 80 and 60 | Longest relationship-map title, and node id, node label or edge label, in characters, for a host whose callers already draw longer text; the renderer's size limit still applies |
 
 The plugin is named `drawing`.
 `cardPresentation.heading(draw, turn)` returns `{ title, subtitle }`; `draw` holds the selected `deck`, `count`, and optional `question`, and `turn` carries the host-bound speaker/channel.
 `cardPresentation.reversedSuffix` replaces the default `" (reversed)"` on pictured reversed card names.
-These hooks change only presentation, not card selection, model-visible arguments, tool result text, or attachment limits.
+`cardPresentation.result({ deck, cards, positions })` replaces the text the model reads back after a draw; `{file}` stands for the attached file's name.
+These hooks change only presentation, not card selection, model-visible arguments, or attachment limits.
 They are trusted configuration callbacks, never guest-supplied code.
 
 ## The tools

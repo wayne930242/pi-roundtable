@@ -101,6 +101,10 @@ test("worker configuration failures return a credential-free exit category", asy
 		expect(failure.category).toBe("exit");
 		expect(failure.exitCode).toBe(1);
 		expect(failure.message).not.toContain("auth.json");
+		// The worker's own reason reaches the report, not the generic exit text.
+		expect(failure.message).toBe(
+			"model faux/missing is not available on this host",
+		);
 	}
 	const pid = Number(readFileSync(join(repoDir, "worker.pid"), "utf8"));
 	expect(running(pid)).toBe(false);

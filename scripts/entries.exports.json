@@ -249,6 +249,7 @@
 			"requiredString",
 			"runWorkerTask",
 			"scheduleToolSpecs",
+			"scrubDiagnostic",
 			"searchTerms",
 			"serveUnix",
 			"settleTurn",

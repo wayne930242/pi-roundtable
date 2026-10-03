@@ -32,6 +32,7 @@ import {
 	type ChangeReport,
 	type CloneCommand,
 	RepoShelf,
+	type RepoSummary,
 	reportPost,
 } from "./repo-shelf.ts";
 
@@ -46,7 +47,24 @@ export interface CodingRun {
 	channel: ChannelKey;
 	origin?: ChannelKey;
 }
+export type RepoToolName =
+	| "repo_list"
+	| "repo_add"
+	| "repo_change_report"
+	| "repo_push"
+	| "repo_task";
+/** Trusted wording of one repository tool, as the model reads it; unset fields keep the defaults. */
+export interface CodingToolText {
+	description?: string;
+	/** Argument descriptions by argument name. */
+	parameters?: Record<string, string>;
+}
 export interface CodingPresentation {
+	/** The repo_list result; unset: the managed clones as JSON. */
+	list?(
+		repos: (RepoSummary & { skills: string[] })[],
+		context: { shelfDir: string; fetched: boolean },
+	): string;
 	/** Separate the owner's posted record from the model's shipping instructions. */
 	changeReport?(
 		report: ChangeReport,
@@ -73,6 +91,8 @@ export interface CodingOptions {
 	/** Post change reports in the caller's identity/channel rather than the default surface. */
 	postChangeReport?: (turn: ToolTurn, text: string) => Promise<void>;
 	presentation?: CodingPresentation;
+	/** Trusted wording of the repository tools' descriptions and arguments. */
+	toolText?: Partial<Record<RepoToolName, CodingToolText>>;
 	threads?: Pick<DispatchThreads, "open">;
 	threadText?: CodingThreadText;
 	workerWorkspace?: string;
@@ -170,14 +190,21 @@ export function coding(options: CodingOptions) {
 				}
 			}
 			context.services.provide(CODING, { shelf, desk });
-			const repoSchema = Type.String({
-				description: "A managed repository, owner/repo.",
-			});
+			const textOf = (tool: RepoToolName) => options.toolText?.[tool];
+			const describe = (tool: RepoToolName, fallback: string) =>
+				textOf(tool)?.description ?? fallback;
+			const about = (tool: RepoToolName, name: string, fallback?: string) => {
+				const description = textOf(tool)?.parameters?.[name] ?? fallback;
+				return description ? { description } : {};
+			};
+			const repoSchema = (tool: RepoToolName) =>
+				Type.String(about(tool, "repo", "A managed repository, owner/repo."));
 			return {
 				services: [
 					{
 						name: "coding-desk",
-						busy: () => desk.busy(),
+						// The host names the channels whose work a shutdown waits for or aborts.
+						busy: () => desk.runningChannels(),
 						stop: () => desk.stop(),
 					},
 				],
@@ -200,30 +227,39 @@ export function coding(options: CodingOptions) {
 					defineTool({
 						name: "repo_list",
 						minTier: "owner",
-						description:
+						description: describe(
+							"repo_list",
 							"List managed clones, branch, upstream counts, dirty files, last commit, summary, CI hints and linked skills. Fetch first only when requested.",
-						parameters: Type.Object({ fetch: Type.Optional(Type.Boolean()) }),
+						),
+						parameters: Type.Object({
+							fetch: Type.Optional(Type.Boolean(about("repo_list", "fetch"))),
+						}),
 						run: ({ fetch }) =>
 							refusal(async () => {
-								const repos = await shelf.list(fetch === true);
+								const repos = (await shelf.list(fetch === true)).map(
+									(repo) => ({
+										...repo,
+										skills: skills?.linkedFrom(repo.repo) ?? [],
+									}),
+								);
+								if (options.presentation?.list)
+									return options.presentation.list(repos, {
+										shelfDir: shelf.dir,
+										fetched: fetch === true,
+									});
 								return repos.length
-									? JSON.stringify(
-											repos.map((repo) => ({
-												...repo,
-												skills: skills?.linkedFrom(repo.repo) ?? [],
-											})),
-											null,
-											2,
-										)
+									? JSON.stringify(repos, null, 2)
 									: `No managed repositories in ${shelf.dir}; use repo_add.`;
 							}),
 					}),
 					defineTool({
 						name: "repo_add",
 						minTier: "owner",
-						description:
+						description: describe(
+							"repo_add",
 							"Clone owner/repo into the shelf using the host's Git login (GitHub CLI by default).",
-						parameters: Type.Object({ repo: repoSchema }),
+						),
+						parameters: Type.Object({ repo: repoSchema("repo_add") }),
 						run: ({ repo }) =>
 							refusal(
 								async () => `Cloned ${repo} into ${await shelf.add(repo)}.`,
@@ -232,9 +268,13 @@ export function coding(options: CodingOptions) {
 					defineTool({
 						name: "repo_change_report",
 						minTier: "owner",
-						description:
+						description: describe(
+							"repo_change_report",
 							"Fetch and report commits and changed files for the default branch. Requires a clean, ahead-only clone. Review checks before requesting this report.",
-						parameters: Type.Object({ repo: repoSchema }),
+						),
+						parameters: Type.Object({
+							repo: repoSchema("repo_change_report"),
+						}),
 						run: ({ repo }, turn) =>
 							refusal(() =>
 								ship(repo, async () => {
@@ -260,11 +300,16 @@ export function coding(options: CodingOptions) {
 					defineTool({
 						name: "repo_push",
 						minTier: "owner",
-						description:
-							"Push the exact full SHA from the latest change report to its default branch, without force. Held for owner approval unless the trusted host policy explicitly marks the clone owner-owned.",
+						description: describe(
+							"repo_push",
+							"Push the SHA from the latest change report to its default branch, without force. Held for owner approval unless the trusted host policy explicitly marks the clone owner-owned.",
+						),
 						parameters: Type.Object({
-							repo: repoSchema,
-							sha: Type.String({ pattern: "^[0-9a-f]{40}$" }),
+							repo: repoSchema("repo_push"),
+							sha: Type.String({
+								pattern: "^[0-9a-f]{7,40}$",
+								...about("repo_push", "sha"),
+							}),
 						}),
 						hold: ({ repo, sha }) =>
 							ownerOwned(repo)
@@ -283,15 +328,20 @@ export function coding(options: CodingOptions) {
 					defineTool({
 						name: "repo_task",
 						minTier: "owner",
-						description:
+						description: describe(
+							"repo_task",
 							"Start one background Pi coding worker in a clone. The worker reads repository instructions, edits, checks and commits; shipping uses a separate report and approval. Report returns to this channel.",
+						),
 						parameters: Type.Object({
-							repo: repoSchema,
+							repo: repoSchema("repo_task"),
 							task: Type.String({
 								minLength: 1,
 								maxLength: MAX_CODING_TASK_CHARS,
+								...about("repo_task", "task"),
 							}),
-							skills: Type.Optional(Type.Array(Type.String())),
+							skills: Type.Optional(
+								Type.Array(Type.String(), about("repo_task", "skills")),
+							),
 						}),
 						run: ({ repo, task, skills: names }, turn) =>
 							refusal(async () => {

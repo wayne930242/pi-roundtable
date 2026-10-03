@@ -23,6 +23,7 @@ interface WorkerMessage {
 	tool?: string;
 	input?: Record<string, unknown>;
 	report?: string;
+	message?: string;
 }
 function isMessage(value: unknown): value is WorkerMessage {
 	return (
@@ -46,9 +47,10 @@ export class PiCodingWorker implements CodingWorker {
 	): Promise<string> {
 		if (process.platform === "win32")
 			throw new AgentError("Coding workers require a POSIX host.");
-		if (signal.aborted) throw new AgentError("The worker was stopped.");
+		if (signal.aborted) throw new AgentError("the worker was stopped");
 		const prompt = this.#options.prompt?.(job.dir);
 		let report: string | undefined;
+		let failure: string | undefined;
 		const child = Bun.spawn(
 			[
 				process.execPath,
@@ -76,6 +78,11 @@ export class PiCodingWorker implements CodingWorker {
 						typeof value.report === "string"
 					) {
 						report = value.report;
+					} else if (
+						value.type === "failure" &&
+						typeof value.message === "string"
+					) {
+						failure = value.message.slice(0, 2_000);
 					} else if (
 						value.type === "call" &&
 						Number.isSafeInteger(value.id) &&
@@ -124,7 +131,7 @@ export class PiCodingWorker implements CodingWorker {
 			if (signal.aborted) kill();
 			const code = await child.exited;
 			if (signal.aborted) throw new CodingWorkerFailure("stopped");
-			if (code !== 0) throw new CodingWorkerFailure("exit", code);
+			if (code !== 0) throw new CodingWorkerFailure("exit", code, failure);
 			if (!report?.trim()) throw new CodingWorkerFailure("missing-report");
 			return report;
 		} finally {

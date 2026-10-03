@@ -12,6 +12,8 @@ export type {
 	CodingPresentation,
 	CodingRun,
 	CodingService,
+	CodingToolText,
+	RepoToolName,
 } from "./coding-plugin.ts";
 export { CODING, coding } from "./coding-plugin.ts";
 export type { PiCodingWorkerOptions } from "./pi-coding-worker.ts";

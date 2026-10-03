@@ -2490,6 +2490,7 @@ Import from the entries listed below; source area files are internal.
 | `withReplyFiles` | `pi-roundtable` | value |
 | `prepareImageBytes` | `pi-roundtable/kit` | value |
 | `ImagePreparationError` | `pi-roundtable/kit` | value |
+| `scrubDiagnostic` | `pi-roundtable/kit` | value |
 | `channelKey` | `pi-roundtable` | value |
 | `definePlugin` | `pi-roundtable` | value |
 | `defineRoundtable` | `pi-roundtable` | value |

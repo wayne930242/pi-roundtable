@@ -121,18 +121,26 @@ export class CodingDesk {
 	): Promise<CodingJob> {
 		if (this.#stopped) throw new AgentError("The coding desk is stopped.");
 		const task = request.task.trim();
-		if (!task || task.length > MAX_CODING_TASK_CHARS)
+		if (!task) throw new AgentError("The task is required.");
+		if (task.length > MAX_CODING_TASK_CHARS)
 			throw new AgentError(
-				`The task must contain 1–${MAX_CODING_TASK_CHARS} characters.`,
+				`The task is ${task.length} characters; keep it within ${MAX_CODING_TASK_CHARS}.`,
 			);
 		const dir = this.#options.shelf.dirOf(request.repo);
-		this.checkIdle(request.repo);
-		if (
-			[...this.#running.values()].filter(
-				({ job }) => job.channel === request.channel,
-			).length >= 3
-		)
-			throw new AgentError("This channel already has three coding workers.");
+		const busy = [...this.#running.values()].find(
+			({ job }) => job.repo === request.repo,
+		);
+		if (busy)
+			throw new AgentError(
+				`Coding task #${busy.job.id} is still working in ${request.repo}; one worker runs per repository.`,
+			);
+		const inChannel = [...this.#running.values()].filter(
+			({ job }) => job.channel === request.channel,
+		).length;
+		if (inChannel >= 3)
+			throw new AgentError(
+				`This channel already has ${inChannel} coding workers running; wait for one to report back.`,
+			);
 		const job: CodingJob = {
 			...request,
 			task,
@@ -180,7 +188,7 @@ export class CodingDesk {
 		try {
 			job.startHead = (await shelf.state(job.repo)).head;
 			if (controller.signal.aborted)
-				throw new AgentError("The worker was stopped.");
+				throw new AgentError("the worker was stopped");
 			if (threads) {
 				try {
 					const thread = await threads.open(
@@ -197,7 +205,7 @@ export class CodingDesk {
 				}
 			}
 			if (controller.signal.aborted)
-				throw new AgentError("The worker was stopped.");
+				throw new AgentError("the worker was stopped");
 			slot.bind(
 				threads
 					? job.thread && prompts?.(job.thread.channel)
@@ -222,10 +230,11 @@ export class CodingDesk {
 				} catch {
 					/* A failed card never authorizes the call. */
 				}
-				if (answer !== "approved") {
+				// A call the owner declined is settled, not held for the report.
+				if (answer === "held") {
 					if (held.length < MAX_HELD_ENTRIES) {
 						const entry = bounded(
-							`${answer}: ${call.action}: ${call.tool} ${call.input}`,
+							`${call.action}: ${call.tool} ${call.input}`,
 							MAX_HELD_CHARS,
 						);
 						held.push(entry);
@@ -246,22 +255,22 @@ export class CodingDesk {
 				review,
 			);
 			if (controller.signal.aborted)
-				throw new AgentError("The worker was stopped.");
+				throw new AgentError("the worker was stopped");
 			outcome = { ok: true, report: bounded(report, MAX_REPORT_CHARS) };
 		} catch (error) {
-			// Only structured, fixed diagnostics can cross the worker boundary.
+			// The host's own refusals and the worker's scrubbed, bounded error text reach the report.
 			let message =
 				"The worker failed; inspect the clone and worker configuration on the host.";
+			if (error instanceof AgentError) message = error.message;
 			if (error instanceof CodingWorkerFailure) {
-				message = error.message;
 				this.#options.logger.warn(
 					{ job: job.id, category: error.category, exitCode: error.exitCode },
 					"Coding worker failed.",
 				);
 			}
-			if (controller.signal.aborted) message = "The worker was stopped.";
+			if (controller.signal.aborted) message = "the worker was stopped";
 			if (timedOut)
-				message = `Work timeout after ${timeoutMs} ms (owner wait excluded).`;
+				message = `the worker ran out of time (${Math.round(timeoutMs / 60_000)} minutes)`;
 			outcome = { ok: false, error: message };
 		} finally {
 			cancel();

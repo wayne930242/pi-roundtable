@@ -312,14 +312,19 @@ Allowed ranges are 1 millisecond–120 seconds, 0–10 redirects and 1 byte–32
 `assertPublicUrl(url)` refuses a URL that is not credential-free HTTP(S) or does not resolve only to public addresses. Use it before handing a model-supplied URL to a third-party reader; it does not pin a later connection, so host-side fetches of that URL should still use `safeFetch`.
 
 `ScopedSandboxDelegator` fixes one declared target, channel-local report destination and host-bound author, with no owner/agent dispatcher or origin thread.
-Its default limit is two jobs per channel, 4,000 task characters, 200 title characters, 80,000 report characters and ten minutes.
+Its default limit is two jobs per channel, 4,000 task characters, 80,000 report characters and ten minutes.
+A refusal reads "title and task are required", "the task is N characters; keep it within 4000" or "this channel already has N delegated tasks running; wait for one to report back".
+A failed job reports its error message scrubbed of credentials and bounded with `scrubDiagnostic`, or "the worker ran out of time" after the deadline.
 Configure `maxRunning` (1–10) and `timeoutMs` (1–1,200 seconds) explicitly when preserving an application's existing limits.
 `run(task, context)` receives only bound channel/author/signal, and `deliver(job, result)` posts through the application's background-report adapter.
 `runningChannels`, `idle` and `dispose` support host lifecycle handling; jobs are process-local and are cancelled on disposal.
 `SandboxResearchWorker` is an optional host subscription adapter with explicit `modelRuntime`, `agentDir`, `workDir`, `model`, `thinking`, `search`, and `extractFetched` options.
 It creates an unsaved Pi session with only `web_search` and controlled `fetch_content`, no shell, host memory, skills/context discovery or owner tools.
 `extractFetched` receives already bounded, pinned-fetch bytes and must not re-fetch their URL.
-Alternatively `fetchContent(url, signal)` replaces the built-in fetch plus `extractFetched` with a host-owned fetch-and-extract; the host is then responsible for refusing unsafe and private addresses and for bounding time and size. One of the two is required.
+Alternatively `fetchContent(url, signal)` replaces the built-in fetch plus `extractFetched` with a host-owned fetch-and-extract; the host is then responsible for refusing unsafe and private addresses and for bounding time and size.
+Or `tools` replaces both built-in tools with the host's own: `extensionPaths` (installed Pi extension packages, such as `pi-web-access`), `extensionFactories` (for example a guard that vets each call before it runs), the `toolNames` that stay active, and an optional `prompt`; `search`, `fetchContent` and `extractFetched` are then unused.
+`scope(run)` wraps the whole session so a host can bind a fetch guard to this run, and `aborted` words a deadline stop (default "the worker ran out of time").
+One of `search` with a fetch option, or `tools`, is required.
 Host search/model credentials stay in the trusted host process, and report delivery must remain in the declared guest channel.
 These hooks broaden the sealed threat model: review every adapter, apply provider spend limits and host quotas, and never substitute an unrestricted default delegation worker.
 

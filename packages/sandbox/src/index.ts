@@ -86,6 +86,7 @@ export {
 } from "./plugin.ts";
 export type { SandboxReply, SandboxTurn, ToolSpec } from "./protocol.ts";
 export {
+	type ResearchTools,
 	type SandboxResearchOptions,
 	SandboxResearchWorker,
 } from "./research-worker.ts";

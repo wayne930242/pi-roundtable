@@ -5,6 +5,9 @@ import type {
 	Logger,
 } from "pi-roundtable";
 import { DelegationError } from "pi-roundtable";
+import { scrubDiagnostic } from "pi-roundtable/kit";
+
+const MAX_TASK_CHARS = 4_000;
 
 export interface ScopedDelegatorOptions {
 	target: string;
@@ -53,25 +56,27 @@ export class ScopedSandboxDelegator {
 			request.author.tier
 		)
 			throw new DelegationError("Delegation scope refused");
-		if (
-			!request.title.trim() ||
-			request.title.length > 200 ||
-			!request.task.trim() ||
-			request.task.length > 4000
-		)
-			throw new DelegationError("Invalid delegation title/task");
-		if (
-			[...this.#jobs.values()].filter((job) => job.channel === request.channel)
-				.length >= (this.#options.maxRunning ?? 2)
-		)
-			throw new DelegationError("This channel has too many running tasks");
+		const task = request.task.trim();
+		if (!request.title.trim() || !task)
+			throw new DelegationError("title and task are required");
+		if (task.length > MAX_TASK_CHARS)
+			throw new DelegationError(
+				`the task is ${task.length} characters; keep it within ${MAX_TASK_CHARS}`,
+			);
+		const busy = [...this.#jobs.values()].filter(
+			(job) => job.channel === request.channel,
+		).length;
+		if (busy >= (this.#options.maxRunning ?? 2))
+			throw new DelegationError(
+				`this channel already has ${busy} delegated tasks running; wait for one to report back`,
+			);
 		const job: DelegationJob = {
 			id: this.#next++,
 			channel: request.channel,
 			target: this.#options.target,
 			author: { id: request.author.id, name: request.author.name },
 			title: request.title.trim(),
-			task: request.task.trim(),
+			task,
 			startedAt: new Date(),
 		};
 		const controller = new AbortController();
@@ -91,8 +96,14 @@ export class ScopedSandboxDelegator {
 				if (typeof report !== "string" || report.length > 80_000)
 					throw new Error("Research report too large");
 				result = { ok: true, report };
-			} catch {
-				result = { ok: false, error: "Sandbox task failed" };
+			} catch (error) {
+				// The worker's own reason reaches the asking agent, scrubbed of credentials and bounded.
+				const reason = signal.aborted
+					? "the worker ran out of time"
+					: scrubDiagnostic(
+							error instanceof Error ? error.message : String(error),
+						);
+				result = { ok: false, error: reason || "the task failed" };
 			}
 			await this.#options.deliver(job, result);
 		})()

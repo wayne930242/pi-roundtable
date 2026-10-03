@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [0.7.4] - 2026-10-03
+
+- Add `toolText` and `presentation.list`, accept a 7–40 character sha prefix in `repo_push`, name git and gh stderr (scrubbed) in failures, carry a worker's own error text into the report, restore the earlier timeout, stop and refusal wording, stop listing declined calls as held, and report the channels the service works for.
+
 ## [0.7.3] - 2026-10-03
 
 - Hook caller model/thinking/origin/channel, owner policy, clone adoption, threaded approvals and report formatting through options, and add `pushHoldText` for the held `repo_push` card.

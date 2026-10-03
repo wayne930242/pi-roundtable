@@ -5,6 +5,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.4] - 2026-10-03
+
+### Added
+
+- Export `scrubDiagnostic` from the kit: mask credentials in subprocess or worker text (URL userinfo, bearer values, well-known token shapes, secret-named assignments), drop control characters and bound the length, so a host can show a failure's reason without its secrets.
+- Coding: `toolText` for the repository tools' descriptions and argument descriptions, `presentation.list` for the `repo_list` result, and `repo_push` takes a 7–40 character sha prefix of the reported commit.
+- Sandbox: `SandboxResearchWorker` accepts the host's own `tools` (extension packages and factories, active tool names, prompt), a `scope` around the session and the `aborted` wording.
+- Drawing: `cardPresentation.result` words the card draw result, and `mapLimits` lets a host accept longer relationship-map text.
+- Web: a channel Discord cannot name shows the `channel name unavailable` text.
+
+### Changed
+
+- Coding: git and gh failures name their scrubbed stderr again, a worker's own error reaches the report (scrubbed and bounded), the timeout and stop texts read as before ("the worker ran out of time (N minutes)", "the worker was stopped"), the refusals for a busy repository, a missing or over-long task and a full channel say what is wrong, a declined call is no longer listed as held, and the service reports the channels it works for so a shutdown can name them.
+- Sandbox: `ScopedSandboxDelegator` refuses with the reasons the core delegator gave ("title and task are required", the task length, the channel's running count), no longer limits the title, and reports a failed job's scrubbed error message or "the worker ran out of time" instead of "Sandbox task failed".
+
 ## [0.7.3] - 2026-10-03
 
 ### Fixed

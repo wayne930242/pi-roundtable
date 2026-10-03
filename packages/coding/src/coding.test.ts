@@ -302,7 +302,7 @@ test("work timeout excludes owner waiting, then aborts and reports state", async
 	await desk.idle();
 	expect(result.outcome).toMatchObject({
 		ok: false,
-		error: expect.stringContaining("Work timeout"),
+		error: expect.stringContaining("the worker ran out of time"),
 	});
 	expect(result.state?.branch).toBe("main");
 	expect(desk.busy()).toEqual([]);
@@ -332,10 +332,13 @@ test("missing, declined and failed cards fail closed, and jobs reserve before aw
 			},
 		});
 		await desk.start(request());
-		await expect(desk.start(request())).rejects.toThrow("still using");
+		await expect(desk.start(request())).rejects.toThrow(
+			"Coding task #1 is still working in sample/project; one worker runs per repository.",
+		);
 		const result = await delivered.promise;
 		await desk.idle();
-		expect(result.held).toHaveLength(1);
+		// A declined call is settled; only an unanswered one is held for the report.
+		expect(result.held).toHaveLength(mode === "declined" ? 0 : 1);
 		expect(result.outcome).toMatchObject({
 			ok: true,
 			report: mode === "declined" ? "declined" : "held",
@@ -882,4 +885,163 @@ test("unavailable implicit skills require explicit host opt-in and are disclosed
 			await harness.stop();
 		}
 	}
+});
+
+function definitions(harness: Awaited<ReturnType<typeof testPlugin>>) {
+	const found: Record<
+		string,
+		{
+			description: string;
+			parameters: {
+				properties: Record<string, { description?: string; pattern?: string }>;
+			};
+		}
+	> = {};
+	for (const tool of harness.contribution.tools ?? []) {
+		const factory = tool.session.snapshot().factory({
+			kind: "agent",
+			homeChannel: "test:1",
+			turnChannel: "test:1",
+			compaction: { wrap: (item: unknown) => item },
+			speaker: () => undefined,
+			runTask: async () => "",
+		} as never);
+		factory?.({
+			registerTool: (definition: {
+				name: string;
+				description: string;
+				parameters: never;
+			}) => {
+				found[definition.name] = definition;
+			},
+		} as never);
+	}
+	return found;
+}
+
+test("a trusted host words the tools, their arguments and the repo_list result, and push takes a short sha", async () => {
+	const { shelf, origin } = await fixture();
+	const chat = surface();
+	const harness = await testPlugin(
+		coding({
+			shelfDir: shelf.dir,
+			model: "faux/worker",
+			clone: async (_repo, path) => {
+				await git(shelf.dir, "clone", origin, path);
+				await identity(path);
+			},
+			toolText: {
+				repo_task: {
+					description: "Hand a coding task over.",
+					parameters: { repo: "As repo_list shows it.", task: "The contract." },
+				},
+				repo_push: { parameters: { sha: "From repo_change_report." } },
+			},
+			presentation: {
+				list: (repos, { shelfDir, fetched }) =>
+					`${repos.length} in ${shelfDir}${fetched ? " (fetched)" : ""}`,
+			},
+			ownerRepos: ["sample/project"],
+		}),
+		{ surfaces: [chat] },
+	);
+	stops.push(() => harness.stop());
+	const tools = definitions(harness);
+	expect(tools.repo_task?.description).toBe("Hand a coding task over.");
+	expect(tools.repo_task?.parameters.properties.repo?.description).toBe(
+		"As repo_list shows it.",
+	);
+	expect(tools.repo_task?.parameters.properties.task?.description).toBe(
+		"The contract.",
+	);
+	expect(tools.repo_push?.parameters.properties.sha).toMatchObject({
+		pattern: "^[0-9a-f]{7,40}$",
+		description: "From repo_change_report.",
+	});
+	// Unworded tools keep the package defaults.
+	expect(tools.repo_list?.description).toContain("List managed clones");
+	await harness.runTool("repo_add", { repo: "sample/project" });
+	expect(await harness.runTool("repo_list", { fetch: true })).toBe(
+		`1 in ${shelf.dir} (fetched)`,
+	);
+	await change(shelf.dirOf("sample/project"));
+	await harness.runTool("repo_change_report", { repo: "sample/project" });
+	const sha = await git(shelf.dirOf("sample/project"), "rev-parse", "HEAD");
+	expect(
+		harness.holds(
+			"repo_push",
+			{ repo: "samples/x", sha: sha.slice(0, 12) },
+			{},
+		),
+	).toContain(sha.slice(0, 12));
+	const pushed = await harness.runTool("repo_push", {
+		repo: "sample/project",
+		sha: sha.slice(0, 12),
+	});
+	expect(pushed).toContain("Pushed");
+	expect(
+		await harness.runTool("repo_push", { repo: "sample/project", sha: "abc" }),
+	).toContain("is not HEAD");
+});
+
+test("git and gh failures carry their scrubbed stderr, not a login hint", async () => {
+	const { shelf } = await fixture();
+	const failing = new RepoShelf(shelf.dir, async () => {
+		throw new Error("unused");
+	});
+	await expect(failing.report("sample/nothing")).rejects.toThrow(
+		"not a managed repository",
+	);
+	const clone = await shelf.add("sample/project");
+	await git(
+		clone,
+		"remote",
+		"set-url",
+		"origin",
+		"https://fixture:hunter2@example.invalid/none.git",
+	);
+	await git(
+		clone,
+		"remote",
+		"set-url",
+		"--push",
+		"origin",
+		"https://example.invalid/none.git",
+	);
+	let message = "";
+	try {
+		await shelf.report("sample/project");
+	} catch (error) {
+		message = error instanceof Error ? error.message : String(error);
+	}
+	expect(message).toMatch(/^git fetch failed in .+: .+/);
+	expect(message).not.toContain("hunter2");
+	expect(message).not.toContain("check the clone and the host's Git login");
+});
+
+test("the coding service reports the channels it is working for, so a shutdown can name them", async () => {
+	const { shelf } = await fixture();
+	await shelf.add("sample/project");
+	const release = gate<string>();
+	const chat = surface();
+	const harness = await testPlugin(
+		coding({
+			shelfDir: shelf.dir,
+			model: "faux/worker",
+			worker: { run: () => release.promise },
+			onResult: async () => {},
+		}),
+		{ surfaces: [chat] },
+	);
+	stops.push(() => harness.stop());
+	await harness.runTool(
+		"repo_task",
+		{ repo: "sample/project", task: "Do it" },
+		{ channel: "test:room" },
+	);
+	const service = harness.contribution.services?.find(
+		(item) => item.name === "coding-desk",
+	);
+	expect(service?.busy?.()).toEqual(["test:room"]);
+	release.resolve("done");
 });

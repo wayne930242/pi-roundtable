@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.4] - 2026-10-03
+
+- Add `cardPresentation.result` for the card draw result text and `mapLimits` for longer relationship-map text.
+
 ## [0.7.3] - 2026-10-03
 
 - Add `DrawingOptions.cardPresentation` for trusted operator card headings and reversal suffixes.

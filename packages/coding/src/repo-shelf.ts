@@ -12,7 +12,7 @@ import {
 	renameSync,
 } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
-import { AgentError, checkRepoName } from "pi-roundtable/kit";
+import { AgentError, checkRepoName, scrubDiagnostic } from "pi-roundtable/kit";
 
 /** What a clone would push to its default branch (repos-and-skills spec behavior 10). */
 export interface ChangeReport {
@@ -92,7 +92,7 @@ export const ghClone: CloneCommand = async (repo, dir) => {
 	checkRepoName(repo);
 	if (repo.startsWith("-"))
 		throw new AgentError("Repository owner cannot start with a dash.");
-	const { code } = await run([
+	const { err, code } = await run([
 		"gh",
 		"repo",
 		"clone",
@@ -103,7 +103,7 @@ export const ghClone: CloneCommand = async (repo, dir) => {
 	]);
 	if (code !== 0)
 		throw new AgentError(
-			`Cloning ${repo} failed (exit ${code}); check the host's Git login.`,
+			`Cloning ${repo} failed: ${scrubDiagnostic(err) || `exit ${code}`}`,
 		);
 };
 
@@ -328,7 +328,7 @@ export class RepoShelf {
 	/** A synchronous hold description from the latest report, safe to show on an owner card. */
 	pushDescription(repo: string, sha: string): string {
 		const report = this.#reports.get(repo);
-		if (!report || report.sha !== sha)
+		if (!report || !/^[0-9a-f]{7,40}$/.test(sha) || !report.sha.startsWith(sha))
 			return `Push ${repo} commit ${sha}; request a fresh change report first`;
 		return `Push ${repo} commit ${sha} to ${report.target}, branch ${report.branch}`;
 	}
@@ -338,7 +338,11 @@ export class RepoShelf {
 		const dir = this.dirOf(repo);
 		const head = await this.#git(dir, "rev-parse", "HEAD");
 		const report = this.#reports.get(repo);
-		if (!report || report.sha !== sha || head !== sha)
+		if (
+			!/^[0-9a-f]{7,40}$/.test(sha) ||
+			!report?.sha.startsWith(sha) ||
+			head !== report.sha
+		)
 			throw new AgentError(
 				`${sha} is not HEAD of ${repo} (HEAD is ${head.slice(0, 12)}); report again with repo_change_report.`,
 			);
@@ -476,10 +480,10 @@ export class RepoShelf {
 	}
 
 	async #git(dir: string, ...args: string[]): Promise<string> {
-		const { out, code } = await run(["git", "-C", dir, ...args]);
+		const { out, err, code } = await run(["git", "-C", dir, ...args]);
 		if (code !== 0)
 			throw new AgentError(
-				`git ${args[0]} failed (exit ${code}); check the clone and the host's Git login.`,
+				`git ${args[0]} failed in ${dir}: ${scrubDiagnostic(err) || `exit ${code}`}`,
 			);
 		return out;
 	}

@@ -1,4 +1,5 @@
 import { Type } from "typebox";
+import type { RelationshipMapLimits } from "../plugin.ts";
 import type { Random } from "../random.ts";
 import {
 	EDGE_TYPES,
@@ -16,25 +17,31 @@ import {
 	strictObject,
 } from "./image-tool.ts";
 
-export function relationshipMapTool(env: ImageToolEnv, random: Random) {
+export function relationshipMapTool(
+	env: ImageToolEnv,
+	random: Random,
+	limits: RelationshipMapLimits = {},
+) {
+	const maxTitle = limits.title ?? MAX_TITLE;
+	const maxText = limits.text ?? MAX_TEXT;
 	return imageTool(
 		{
 			name: "relationship_map",
 			description:
 				"Draw a hand-drawn relationship map of characters (pc, npc) and factions, with typed relationships between them, and attach it to your reply as an image.",
 			parameters: strictObject({
-				title: Type.Optional(Type.String({ maxLength: MAX_TITLE })),
+				title: Type.Optional(Type.String({ maxLength: maxTitle })),
 				nodes: Type.Array(
 					strictObject({
 						id: Type.String({
 							minLength: 1,
-							maxLength: MAX_TEXT,
+							maxLength: maxText,
 							description: "Character or faction name.",
 						}),
 						type: literals(NODE_TYPES),
 						label: Type.Optional(
 							Type.String({
-								maxLength: MAX_TEXT,
+								maxLength: maxText,
 								description: "A sub-label such as a role.",
 							}),
 						),
@@ -49,7 +56,7 @@ export function relationshipMapTool(env: ImageToolEnv, random: Random) {
 							EDGE_TYPES,
 							"romantic: arrow; entanglement: dashed arrow; bond: plain line; faction: dashed arrow; hostile: arrows both ways.",
 						),
-						label: Type.Optional(Type.String({ maxLength: MAX_TEXT })),
+						label: Type.Optional(Type.String({ maxLength: maxText })),
 					}),
 					{ maxItems: MAX_EDGES },
 				),

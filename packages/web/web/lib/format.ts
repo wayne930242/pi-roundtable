@@ -55,6 +55,8 @@ export function channelTitle(
 			return { title: `#${channel.name}`, detail: channel.guild };
 		case "gone":
 			return { title: id, detail: t("channel no longer exists") };
+		case "unknown":
+			return { title: id, detail: t("channel name unavailable") };
 		default:
 			return { title: id };
 	}

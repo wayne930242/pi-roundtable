@@ -14,6 +14,7 @@ export {
 	withAttachmentsBlock,
 	withReference,
 } from "./channels.ts";
+export { scrubDiagnostic } from "./diagnostics.ts";
 export type {
 	ChoiceAnswer,
 	ChoiceQuestion,

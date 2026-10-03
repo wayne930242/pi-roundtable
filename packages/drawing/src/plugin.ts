@@ -23,6 +23,22 @@ export interface CardPresentation {
 	) => { title: string; subtitle: string };
 	/** Appended to reversed card names on the picture; default " (reversed)". */
 	reversedSuffix?: string;
+	/**
+	 * The text the model reads back after a draw; `{file}` stands for the attached file's name.
+	 * Default: the deck id, then one numbered line per card with its position label and id.
+	 */
+	result?: (draw: {
+		deck: Deck;
+		cards: { id: string; name: string; reversed: boolean }[];
+		positions: { row: number; col: number; label?: string | undefined }[];
+	}) => string;
+}
+
+/** Longest map text a host accepts, in characters; the defaults suit a picture that stays readable. */
+export interface RelationshipMapLimits {
+	title?: number;
+	/** Node ids, node labels and edge labels. */
+	text?: number;
 }
 
 export interface DrawingOptions {
@@ -38,6 +54,8 @@ export interface DrawingOptions {
 	minTier?: Tier;
 	/** Operator-local captions and reversal wording; default package presentation. */
 	cardPresentation?: CardPresentation;
+	/** Longer map text than the defaults, for a host whose callers already draw longer labels. */
+	mapLimits?: RelationshipMapLimits;
 }
 
 function readDecks(deckDir: string): Deck[] {
@@ -66,7 +84,7 @@ export function drawing(options: DrawingOptions = {}) {
 			};
 			return {
 				tools: [
-					relationshipMapTool(env, random),
+					relationshipMapTool(env, random, options.mapLimits),
 					magicCircleTool(env),
 					sigilTool(env),
 					sacredGeometryTool(env),

@@ -166,7 +166,8 @@ The `CODING` service exposes `shelf: RepoShelf` and `desk: CodingDesk` for trust
 | `adoptClones` | `[]` | Startup `{ from, repo }` moves of standalone clones; existing shelf destinations are never replaced. |
 | `resolveRun` | configured model/thinking, caller channel | Per-caller model, thinking, report channel and optional thread origin. |
 | `postChangeReport` | caller surface reply | Post the record using the calling identity and channel. |
-| `presentation` | English package text | Separate change-report post/result text and task-start/omitted-skill wording. |
+| `presentation` | English package text | Separate change-report post/result text, task-start/omitted-skill wording, and the `repo_list` result (`list(repos, { shelfDir, fetched })`). |
+| `toolText` | package wording | Trusted description and argument descriptions for each repository tool, as `{ repo_task: { description, parameters: { task: "…" } } }`; it never changes a tool's arguments or approval rules. |
 | `threads` | none | Public `DispatchThreads`-compatible progress and approval thread port. |
 | `threadText` | English package text | Thread introduction, held-action notice, approval title and final report. |
 | `workerWorkspace` | individual clone | Trusted shell-policy write boundary; not an OS sandbox. |

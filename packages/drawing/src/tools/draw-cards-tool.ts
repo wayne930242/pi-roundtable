@@ -124,7 +124,9 @@ export function drawCardsTool(
 				return {
 					stem: "cards",
 					image,
-					text: `Drew ${cards.length} from ${deck.id}; the spread picture is attached to your reply as {file}.\n${lines.join("\n")}`,
+					text:
+						presentation.result?.({ deck, cards, positions }) ??
+						`Drew ${cards.length} from ${deck.id}; the spread picture is attached to your reply as {file}.\n${lines.join("\n")}`,
 				};
 			},
 		},

@@ -51,3 +51,49 @@ test("trusted card presentation receives the host turn and changes the attached 
 		rmSync(deckDir, { recursive: true, force: true });
 	}
 });
+
+test("a host words the card result and lifts the map text limits", async () => {
+	const deckDir = writeTestDecks();
+	const harness = await testPlugin(
+		drawing({
+			deckDir,
+			random: seededRandom(7),
+			cardPresentation: {
+				result: ({ deck, cards, positions }) =>
+					`Drew ${cards.length} from ${deck.id}|${positions.map((p) => p.label ?? "-").join(",")}|{file}`,
+			},
+			mapLimits: { title: 200, text: 120 },
+		}),
+		{ surfaces: [new RecordingSurface()] },
+	);
+	try {
+		expect(
+			await harness.runTool(
+				"draw_cards",
+				{
+					deck: "test-poker",
+					count: 1,
+					spread: [{ row: 0, col: 0, label: "Past" }],
+				},
+				{ channel: "test:42" },
+			),
+		).toBe("Drew 1 from test-poker|Past|cards.png");
+		const long = "a".repeat(100);
+		const map = await harness.runTool(
+			"relationship_map",
+			{
+				title: "t".repeat(150),
+				nodes: [
+					{ id: long, type: "pc" },
+					{ id: "b", type: "npc" },
+				],
+				edges: [{ from: long, to: "b", type: "bond", label: long }],
+			},
+			{ channel: "test:42" },
+		);
+		expect(map).toContain("relationship map is attached");
+	} finally {
+		await harness.stop();
+		rmSync(deckDir, { recursive: true, force: true });
+	}
+});
