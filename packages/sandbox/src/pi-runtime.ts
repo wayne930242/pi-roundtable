@@ -14,9 +14,14 @@ import {
 } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import { AgentRunError, type ChannelKey, type Logger } from "pi-roundtable";
-import { channelSegment } from "pi-roundtable/kit";
+import { channelSegment, scrubDiagnostic } from "pi-roundtable/kit";
 import { ownDirectory } from "./directory-file.ts";
-import { type PiBrokerOptions, PiSandboxBroker } from "./pi-broker.ts";
+import {
+	errorText,
+	PI_COMPACT_LIMITS,
+	type PiBrokerOptions,
+	PiSandboxBroker,
+} from "./pi-broker.ts";
 import {
 	type PiContainerDriver,
 	type PiContainerStatus,
@@ -129,17 +134,31 @@ export class PiSandboxRuntime {
 			)
 		)
 			throw new Error("Invalid container prefix");
-		for (const timeout of [
-			options.turnTimeoutMs ?? 600_000,
-			options.startTimeoutMs ?? 90_000,
-		])
+		const turnTimeoutMs = options.turnTimeoutMs ?? 600_000;
+		for (const timeout of [turnTimeoutMs, options.startTimeoutMs ?? 90_000])
 			if (!Number.isSafeInteger(timeout) || timeout < 1000 || timeout > 600_000)
 				throw new Error("Invalid runtime deadline");
+		// A compactor that runs out of time still leaves Pi's summary half the turn.
+		const compaction = options.compaction && {
+			...options.compaction,
+			timeoutMs:
+				options.compaction.timeoutMs ??
+				Math.max(
+					1000,
+					Math.min(PI_COMPACT_LIMITS.timeoutMs, Math.floor(turnTimeoutMs / 3)),
+				),
+		};
+		if (compaction && compaction.timeoutMs > turnTimeoutMs / 2)
+			throw new Error("The compactor's timeout must leave half the turn");
 		mkdirSync(options.partyDir, { recursive: true, mode: 0o700 });
 		const info = statSync(options.partyDir);
 		if (info.uid !== process.getuid?.() || (info.mode & 0o077) !== 0)
 			throw new Error("State directory must be private and host-owned");
-		this.#options = { ...options, partyDir: realpathSync(options.partyDir) };
+		this.#options = {
+			...options,
+			partyDir: realpathSync(options.partyDir),
+			...(compaction ? { compaction } : {}),
+		};
 		this.#driver =
 			options.driver ??
 			new PiDockerContainerDriver(undefined, options.labelProfile);
@@ -311,6 +330,22 @@ export class PiSandboxRuntime {
 		await Promise.all([...this.#brokers.values()].map((entry) => entry.stop()));
 		this.#brokers.clear();
 	}
+	/** The worker's last log lines, read before its container is removed, so they are not lost with it. */
+	async #logWorker(channel: ChannelKey, turnId: string): Promise<void> {
+		if (!this.#driver.logs) return;
+		try {
+			const lines = await this.#driver.logs(this.#name(channel), 200);
+			this.#options.logger.warn(
+				{ channel, turnId, lines: scrubDiagnostic(lines, 200_000) },
+				"sandbox worker log before removal",
+			);
+		} catch (error) {
+			this.#options.logger.warn(
+				{ channel, turnId, error: scrubDiagnostic(errorText(error)) },
+				"sandbox worker log unavailable",
+			);
+		}
+	}
 	async runTurn(turn: PiSandboxTurn): Promise<PiSandboxTurnResult> {
 		if (this.#active.has(turn.channel))
 			return { ok: false, error: new AgentRunError("Channel is busy") };
@@ -322,6 +357,10 @@ export class PiSandboxRuntime {
 			AbortSignal.timeout(this.#options.turnTimeoutMs ?? 600_000),
 		]);
 		signal.addEventListener("abort", () => controller.abort(), { once: true });
+		const timedOut = () =>
+			signal.aborted &&
+			signal.reason instanceof DOMException &&
+			signal.reason.name === "TimeoutError";
 		let release: (() => void) | undefined;
 		try {
 			signal.throwIfAborted();
@@ -372,20 +411,38 @@ export class PiSandboxRuntime {
 			});
 			const body = await entry.broker.execute(request, signal);
 			signal.throwIfAborted();
-			if (!body.ok) throw new Error("Worker turn failed");
+			if (!body.ok) throw new Error(`Worker turn failed: ${body.error}`);
 			validateReplyFiles(body.files);
 			const files = body.files.map((file) => ({
 				name: file.name,
 				data: Buffer.from(file.data, "base64"),
 			}));
 			return { ok: true, text: body.text, files };
-		} catch {
+		} catch (error) {
+			const failure = {
+				message: scrubDiagnostic(errorText(error), 4000),
+				timedOut: timedOut(),
+				cancelled: signal.aborted && !timedOut(),
+			};
+			this.#options.logger.error(
+				{ channel: turn.channel, turnId: turn.turnId, ...failure },
+				"sandbox turn failed",
+			);
 			// A timed-out Pi session must not keep consuming broker tools or corrupt the next turn.
 			if (signal.aborted) {
 				await this.#starts.get(turn.channel)?.catch(() => {});
+				await this.#logWorker(turn.channel, turn.turnId);
 				await this.#driver.remove(this.#name(turn.channel));
 			}
-			return { ok: false, error: new AgentRunError("Sandbox turn failed") };
+			return {
+				ok: false,
+				error: new AgentRunError(
+					failure.timedOut
+						? "Sandbox turn timed out"
+						: `Sandbox turn failed: ${failure.message}`,
+					{ cause: error },
+				),
+			};
 		} finally {
 			controller.abort();
 			release?.();

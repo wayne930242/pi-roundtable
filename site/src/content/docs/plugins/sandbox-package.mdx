@@ -83,6 +83,7 @@ Its Anthropic broker supports streamed messages, token counting, custom tools an
 | `timeZone`, `containerPrefix`, `labelChannel`, `labelProfile` | Operator time zone (UTC default) and existing-container compatibility names. |
 | `driver`, `logger` | Trusted local Docker/offline adapter and host logger. |
 | `startTimeoutMs`, `turnTimeoutMs` | 1–600 seconds, default 90/600. |
+| `compaction` | Optional host compactor: `engine`, `compact(request, { channel, signal })`, `timeoutMs` (default the smaller of 120 seconds and a third of the turn, at most half) and `maxRequestBytes` (default 32 MiB). |
 | `maxCalls`, `maxOutputTokens` | Default 128 calls/128,000 output tokens; configurable 1–1,000 calls and 1,025–200,000 tokens. |
 
 `runTurn({channel,profile,turnId,author,text,images,signal?})` returns text and bounded byte-backed files.
@@ -120,7 +121,9 @@ Current text, memory context and final text each allow 100,000 characters; speak
 Core reply-file limits apply: ten files, 10 MiB each and 50 MiB total.
 Persisted files/sessions have no automatic retention or disk quota; provision filesystem quotas.
 
-Pi containers have network none, read-only root, no capabilities, no-new-privileges, 1.5 GiB RAM/no extra swap, one CPU, 256 PIDs, 512 MiB `/tmp`, and two 10 MiB local log files.
+Pi containers have network none, read-only root, no capabilities, no-new-privileges, 1.5 GiB RAM/no extra swap, one CPU, 256 PIDs, 512 MiB `/tmp`, and journald logs tagged `sandbox/<channel>` that outlive the container (another Docker log driver through `PiDockerContainerDriver`'s `log` option).
+Worker sessions compact with the core's tiers: at 300,000 tokens through the host compactor when one is set, past 500,000 through Pi's own summary over the broker; any compactor failure, timeout or oversized request falls back to Pi's summary, and the host logs each compaction and fallback per channel.
+A failed turn keeps its cause, upstream failures are logged with status, latency and the error body, and a timed-out worker's last 200 log lines are logged before its container is removed.
 Only the writable channel workspace and read-only host broker directory are mounted.
 Worker-initiated `/worker/ready`, `/worker/next` and `/worker/result` carry turns and base64 reply bytes; the host never connects to guest-created sockets or reopens guest reply paths.
 Cancellation removes the exact container, and workers re-announce readiness after host restart.

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.10
+
+- Compact Pi worker sessions with the core's tiers (300,000 tokens through a host compactor, Pi's summary past 500,000), through the new `compaction` option (`PiCompactor`: `engine`, `compact(request, { channel, signal })`, `timeoutMs`, `maxRequestBytes`) and the protocol types `PiCompactRequest`, `PiCompaction`, `PiCompactResponse`, `PiCompactionReport`, `PiCompactMessage` and `PiWorkerConfig`; the host logs every compaction and fallback per channel.
+- A failed `runTurn` keeps its cause (`AgentRunError` message and `cause`, whether it timed out) and logs it; the broker logs upstream failures with channel, status, latency and the error body; a timed-out worker's last 200 log lines are logged before its container is removed (`PiContainerDriver.logs`).
+- Behavior change: Pi containers log to journald tagged `sandbox/<channel>` by default, instead of two 10 MiB `local` files, so the Docker daemon must run with journald (pass `PiDockerContainerDriver` a `log` option for another driver) (`PiContainerSpec.log`, `PiDockerContainerDriver` option `log`, `defaultContainerLog`), and the worker logs model, broker, tool and compaction failures.
+
 ## 0.7.5
 
 - `ScopedSandboxDelegator` limits a title to 200 characters by default again, and accepts `maxTitleChars`, `maxReportChars` and `diagnosticChars`.

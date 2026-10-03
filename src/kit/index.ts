@@ -14,6 +14,18 @@ export {
 	withAttachmentsBlock,
 	withReference,
 } from "./channels.ts";
+export type {
+	CompactionEngine,
+	CompactionHistory,
+	LatestCompaction,
+} from "./compaction.ts";
+export {
+	COMPACT_HEADROOM_TOKENS,
+	CompactionTiers,
+	compactionEngine,
+	HARD_COMPACT_TOKENS,
+	SOFT_COMPACT_TOKENS,
+} from "./compaction.ts";
 export { scrubDiagnostic } from "./diagnostics.ts";
 export type {
 	ChoiceAnswer,

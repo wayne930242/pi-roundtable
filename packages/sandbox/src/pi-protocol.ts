@@ -78,6 +78,124 @@ export interface PiTurnContext {
 export interface PiMcpDiscovery {
 	servers: { name: string; tools: string[] }[];
 }
+/** What the worker learns from the host at startup; `compaction` is absent when the host has no compactor. */
+export interface PiWorkerConfig {
+	compaction?: { engine: string };
+}
+/** The JSON of one Pi `AgentMessage` from the worker's session. */
+export type PiCompactMessage = { role: string } & Record<string, unknown>;
+/** The worker's compaction preparation, sent to the host's compactor. */
+export interface PiCompactRequest {
+	/** What triggered the compaction: a manual compact, the context threshold, or an overflow. */
+	reason: "manual" | "threshold" | "overflow";
+	tokensBefore: number;
+	/** The first session entry the compaction keeps; a compaction must keep the same one. */
+	firstKeptEntryId: string;
+	/** Whether the cut falls inside a turn, so `turnPrefixMessages` holds that turn's start. */
+	isSplitTurn: boolean;
+	messagesToSummarize: PiCompactMessage[];
+	turnPrefixMessages: PiCompactMessage[];
+	/** The messages from `firstKeptEntryId` on, which stay in the context. */
+	keptMessages: PiCompactMessage[];
+	previousSummary?: string;
+	customInstructions?: string;
+	/** Files only read, and files written or edited, in the summarized messages. */
+	readFiles: string[];
+	modifiedFiles: string[];
+}
+/** A compaction the host's compactor wrote, shaped as Pi's `CompactionResult`. */
+export interface PiCompaction {
+	summary: string;
+	firstKeptEntryId: string;
+	tokensBefore: number;
+	estimatedTokensAfter?: number;
+	details?: unknown;
+}
+/** The host's answer: a compaction, or a fallback to Pi's own summary with its reason. */
+export type PiCompactResponse =
+	| { ok: true; compaction: PiCompaction }
+	| { ok: false; fallback: string };
+/** What the worker tells the host about its compactions, so the host logs them per channel. */
+export type PiCompactionReport =
+	| {
+			type: "bypass";
+			/** Why the hard ceiling skipped the host's compactor for Pi's summary. */
+			reason: string;
+			tokensBefore: number;
+	  }
+	| {
+			type: "end";
+			reason: PiCompactRequest["reason"];
+			aborted: boolean;
+			willRetry: boolean;
+			/** Absent when the compaction failed. */
+			engine?: "extension" | "pi";
+			tokensBefore?: number;
+			tokensAfter?: number;
+			nextCompactionAt?: number;
+			error?: string;
+	  };
+const COMPACT_REASONS = ["manual", "threshold", "overflow"];
+function isMessageList(value: unknown): value is PiCompactMessage[] {
+	return (
+		Array.isArray(value) &&
+		value.every((item) => isRecord(item) && typeof item.role === "string")
+	);
+}
+function isStringList(value: unknown): value is string[] {
+	return (
+		Array.isArray(value) && value.every((item) => typeof item === "string")
+	);
+}
+function isTokenCount(value: unknown): value is number {
+	return Number.isSafeInteger(value) && (value as number) >= 0;
+}
+export function validateCompactRequest(
+	value: unknown,
+): asserts value is PiCompactRequest {
+	if (
+		!isRecord(value) ||
+		!COMPACT_REASONS.includes(value.reason as string) ||
+		!isTokenCount(value.tokensBefore) ||
+		typeof value.firstKeptEntryId !== "string" ||
+		value.firstKeptEntryId.length === 0 ||
+		value.firstKeptEntryId.length > 256 ||
+		typeof value.isSplitTurn !== "boolean" ||
+		!isMessageList(value.messagesToSummarize) ||
+		!isMessageList(value.turnPrefixMessages) ||
+		!isMessageList(value.keptMessages) ||
+		(value.previousSummary !== undefined &&
+			typeof value.previousSummary !== "string") ||
+		(value.customInstructions !== undefined &&
+			typeof value.customInstructions !== "string") ||
+		!isStringList(value.readFiles) ||
+		!isStringList(value.modifiedFiles)
+	)
+		throw new Error("Invalid compact request");
+}
+export function validateCompactionReport(
+	value: unknown,
+): asserts value is PiCompactionReport {
+	const valid =
+		isRecord(value) &&
+		(value.type === "bypass"
+			? typeof value.reason === "string" &&
+				value.reason.length <= 1000 &&
+				isTokenCount(value.tokensBefore)
+			: value.type === "end" &&
+				COMPACT_REASONS.includes(value.reason as string) &&
+				typeof value.aborted === "boolean" &&
+				typeof value.willRetry === "boolean" &&
+				(value.engine === undefined ||
+					value.engine === "extension" ||
+					value.engine === "pi") &&
+				[value.tokensBefore, value.tokensAfter, value.nextCompactionAt].every(
+					(count) => count === undefined || isTokenCount(count),
+				) &&
+				(value.error === undefined ||
+					(typeof value.error === "string" && value.error.length <= 10_000)));
+	if (!valid) throw new Error("Invalid compaction report");
+}
 export function isPiThinkingLevel(value: unknown): value is PiThinkingLevel {
 	return (
 		typeof value === "string" &&

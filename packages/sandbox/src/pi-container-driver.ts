@@ -14,6 +14,14 @@ export interface PiContainerSpec {
 	/** The host user that owns the mounted directories. */
 	uid: number;
 	gid: number;
+	/** Docker's log driver for the container; journald tagged `sandbox/<channel>` by default. */
+	log?: PiContainerLog;
+}
+
+/** A Docker log driver and its options, as `docker run --log-driver/--log-opt` takes them. */
+export interface PiContainerLog {
+	driver: string;
+	options?: Readonly<Record<string, string>>;
 }
 
 export type PiContainerState = "missing" | "running" | "stopped";
@@ -30,6 +38,16 @@ export interface PiContainerDriver {
 	ensureRunning(spec: PiContainerSpec): Promise<void>;
 	remove(name: string): Promise<void>;
 	status(name: string): Promise<PiContainerStatus>;
+	/** The container's last log lines, read before it is removed; empty when it is gone. */
+	logs?(name: string, lines: number): Promise<string>;
+}
+
+/** journald keeps a removed container's lines; the tag names the channel they came from. */
+export function defaultContainerLog(channel: string): PiContainerLog {
+	return {
+		driver: "journald",
+		options: { tag: `sandbox/${channel.replace(/[^\w.:/-]/g, "_")}` },
+	};
 }
 
 export const PI_LABEL_CHANNEL = "roundtable.sandbox.channel";
@@ -59,6 +77,17 @@ export function piContainerCreateBody(spec: PiContainerSpec): object {
 		if (!dir.startsWith("/") || dir === "/" || /[:,\r\n]/.test(dir))
 			throw new Error("Invalid mount path");
 	new Intl.DateTimeFormat("en-US", { timeZone: spec.timeZone ?? "UTC" });
+	const log = spec.log ?? defaultContainerLog(spec.channel);
+	if (
+		!/^[a-z0-9][a-z0-9_.-]{0,63}$/.test(log.driver) ||
+		Object.entries(log.options ?? {}).some(
+			([key, value]) =>
+				!/^[a-z0-9][a-z0-9_.-]{0,63}$/.test(key) ||
+				typeof value !== "string" ||
+				/[\r\n]/.test(value),
+		)
+	)
+		throw new Error("Invalid container log driver");
 	return {
 		Image: spec.image,
 		User: `${spec.uid}:${spec.gid}`,
@@ -96,11 +125,32 @@ export function piContainerCreateBody(spec: PiContainerSpec): object {
 			],
 			RestartPolicy: { Name: "unless-stopped" },
 			LogConfig: {
-				Type: "local",
-				Config: { "max-size": "10m", "max-file": "2" },
+				Type: log.driver,
+				Config: { ...log.options },
 			},
 		},
 	};
+}
+
+/**
+ * A container without a TTY sends its log as frames: one byte naming the stream, three zero bytes,
+ * a big-endian length, then that many bytes. Text that is not framed is returned as it came.
+ */
+export function demuxDockerLog(data: Uint8Array): string {
+	const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+	const parts: Uint8Array[] = [];
+	let at = 0;
+	while (at + 8 <= data.length) {
+		const stream = data[at] ?? 255;
+		if (stream > 2 || data[at + 1] || data[at + 2] || data[at + 3])
+			return new TextDecoder().decode(data);
+		const size = view.getUint32(at + 4);
+		parts.push(data.subarray(at + 8, at + 8 + size));
+		at += 8 + size;
+	}
+	if (at !== data.length && parts.length === 0)
+		return new TextDecoder().decode(data);
+	return parts.map((part) => new TextDecoder().decode(part)).join("");
 }
 
 interface InspectBody {
@@ -112,11 +162,19 @@ interface InspectBody {
 export class PiDockerContainerDriver implements PiContainerDriver {
 	readonly #socket: string;
 
+	readonly #log: ((channel: string) => PiContainerLog) | undefined;
+
 	constructor(
 		socket = "/var/run/docker.sock",
 		readonly labelProfile = PI_LABEL_PROFILE,
+		/** The log driver every container gets; journald tagged `sandbox/<channel>` by default. */
+		options: {
+			log?: PiContainerLog | ((channel: string) => PiContainerLog);
+		} = {},
 	) {
 		this.#socket = socket;
+		const { log } = options;
+		this.#log = typeof log === "function" ? log : log && (() => log);
 	}
 
 	async ensureRunning(spec: PiContainerSpec): Promise<void> {
@@ -132,7 +190,9 @@ export class PiDockerContainerDriver implements PiContainerDriver {
 		await this.#call(
 			"POST",
 			`/containers/create?name=${encodeURIComponent(spec.name)}`,
-			piContainerCreateBody(spec),
+			piContainerCreateBody(
+				this.#log ? { ...spec, log: this.#log(spec.channel) } : spec,
+			),
 		);
 		await this.#call(
 			"POST",
@@ -147,6 +207,17 @@ export class PiDockerContainerDriver implements PiContainerDriver {
 			undefined,
 			[404],
 		);
+	}
+
+	async logs(name: string, lines: number): Promise<string> {
+		const response = await this.#call(
+			"GET",
+			`/containers/${encodeURIComponent(name)}/logs?stdout=1&stderr=1&tail=${Math.max(1, Math.floor(lines))}`,
+			undefined,
+			[404],
+		);
+		if (response.status === 404) return "";
+		return demuxDockerLog(new Uint8Array(await response.arrayBuffer()));
 	}
 
 	async status(name: string): Promise<PiContainerStatus> {

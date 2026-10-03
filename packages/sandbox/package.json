@@ -1,6 +1,6 @@
 {
 	"name": "pi-roundtable-sandbox",
-	"version": "0.7.9",
+	"version": "0.7.10",
 	"description": "Sealed guest channels and an allow-listed credential broker for pi-roundtable",
 	"type": "module",
 	"license": "MIT",
@@ -52,7 +52,7 @@
 		"@biomejs/biome": "2.5.15",
 		"@types/bun": "1.4.2",
 		"discord.js": "14.27.0",
-		"pi-roundtable": "0.7.9",
+		"pi-roundtable": "0.7.10",
 		"typebox": "1.3.34",
 		"typescript": "7.0.2"
 	}

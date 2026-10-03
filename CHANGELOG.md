@@ -5,6 +5,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.10] - 2026-10-03
+
+### Added
+
+- Kit: the core's compaction tiers for a host that builds its own Pi session, such as a sandbox worker: `CompactionTiers`, `compactionEngine`, `SOFT_COMPACT_TOKENS`, `HARD_COMPACT_TOKENS`, `COMPACT_HEADROOM_TOKENS`, and the types `CompactionEngine`, `CompactionHistory` and `LatestCompaction`.
+- Sandbox: Pi worker sessions compact with those tiers, through an optional host compactor (`compaction` on `PiSandboxRuntime`) at 300,000 tokens and Pi's summary past 500,000, and the host logs each compaction and fallback per channel.
+
+### Changed
+
+- Sandbox: a failed Pi turn keeps its cause and is logged, the broker logs upstream failures, a timed-out worker's last log lines are logged before its container is removed, and Pi containers log to journald tagged `sandbox/<channel>` by default instead of local files (the Docker daemon must have journald).
+
 ## [0.7.9] - 2026-10-03
 
 ### Added

@@ -67,6 +67,7 @@ Use the kit's building blocks for a plugin that runs Pi itself, such as a coding
 - Tools: `textToolsExtension`, `requiredString`, `stringList` (with `toolText` and `toolError`) for tools that return text.
 - Mirroring a built-in tool in a worker that cannot reach the host: `SCHEDULE_TOOLS`, `scheduleToolSpecs({ locale, timeZone })`, `isScheduleTool`, `callScheduleTool`, `DELEGATE_TOOL` and `DELEGATE_TOOL_SPEC`.
   The specs take the locale and time zone for their descriptions, so the worker needs no process-wide setting.
+- Compaction: `CompactionTiers` gives a session the core's compaction tiers (`settings()` for Pi's `SettingsManager`, `wrapCompactor(factory, onBypass)` to hold a compaction extension back past the ceiling, `latest()`), with `SOFT_COMPACT_TOKENS` (300,000), `HARD_COMPACT_TOKENS` (500,000), `COMPACT_HEADROOM_TOKENS` (50,000), `compactionEngine(details, engine)` and the types `CompactionEngine`, `CompactionHistory` and `LatestCompaction`.
 - Effort: `effortJudge` picks a turn's thinking level from a message with your own brief (`EffortBrief`, `JUDGE_WORK`).
 - Presentation and small helpers: `thinkingLine`, `zonedStamp(date, timeZone)`, `channelQueue()` (a queue of your own, so work does not wait behind a running turn), `checkRepoName` and `SKILL_LIST_TOOL` with `skillListExtension` for repositories and skills, and `searchTerms` for memory search.
 
@@ -2665,6 +2666,14 @@ Import from the entries listed below; source area files are internal.
 | `formatModelRef` | `pi-roundtable/kit` | value |
 | `headline` | `pi-roundtable/kit` | value |
 | `holdChain` | `pi-roundtable/kit` | value |
+| `COMPACT_HEADROOM_TOKENS` | `pi-roundtable/kit` | value |
+| `CompactionTiers` | `pi-roundtable/kit` | value |
+| `compactionEngine` | `pi-roundtable/kit` | value |
+| `HARD_COMPACT_TOKENS` | `pi-roundtable/kit` | value |
+| `SOFT_COMPACT_TOKENS` | `pi-roundtable/kit` | value |
+| `CompactionEngine` | `pi-roundtable/kit` | type |
+| `CompactionHistory` | `pi-roundtable/kit` | type |
+| `LatestCompaction` | `pi-roundtable/kit` | type |
 | `isScheduleTool` | `pi-roundtable/kit` | value |
 | `lastAssistant` | `pi-roundtable/kit` | value |
 | `mcpAdapterExtension` | `pi-roundtable/kit` | value |

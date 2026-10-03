@@ -226,7 +226,8 @@ Other model transports are not implicitly proxied by this broker.
 | `timeZone` | Explicit worker time zone; default UTC. |
 | `containerPrefix`, `labelChannel`, `labelProfile` | Operator compatibility names for existing containers, not guest data. |
 | `driver` | Trusted local Docker driver or offline fixture; no remote bind mounts. |
-| `logger` | Host logger; package failures avoid credentials and upstream payloads. |
+| `logger` | Host logger: failed turns with their cause, upstream failures (channel, status, latency, error body cut to 2,000 characters with credentials masked), a timed-out worker's last 200 log lines, and every compaction. |
+| `compaction` | Optional host compactor (`PiCompactor`), see [Compaction](#compaction). |
 | `startTimeoutMs`, `turnTimeoutMs` | 1–600 seconds; defaults 90 and 600 seconds. |
 | `maxCalls`, `maxOutputTokens` | Default 128 credential-bearing calls and 128,000 output tokens per model call; configurable 1–1,000 calls and 1,025–200,000 tokens. |
 
@@ -237,6 +238,37 @@ Guest `author`, `channel`, `target`, and credential fields cannot replace host t
 Callbacks must still validate input and enforce per-person quotas, memory authorization and cancellation.
 Optional person/notes/moments tools can use an existing PostgreSQL store without copying the connection, schema, migration ledger or owner memory into the image.
 Schedules can be host tools with a declared channel-local background target and host-bound author; no scheduler is enabled automatically.
+
+### Compaction
+
+Worker sessions compact with the core's tiers, as the host's own sessions do: a model whose window leaves more than 300,000 tokens compacts at 300,000 through the host compactor, and past 500,000 through Pi's own summary, whose model calls go through the broker like any other.
+A compaction that left the context within 50,000 tokens of its threshold moves the next one to the hard ceiling, so it does not repeat on the next request.
+
+The host compactor runs on the host, where the worker cannot reach (a remote compaction service, say):
+
+```ts
+new PiSandboxRuntime({
+  // ...
+  compaction: {
+    engine: "my-compaction", // recorded as details.engine of its compactions
+    compact: async (request, { channel, signal }) => {
+      // request: PiCompactRequest; return a PiCompaction, or undefined for Pi's summary
+    },
+    timeoutMs: 120_000, // optional; default the smaller of 120 s and a third of turnTimeoutMs
+    maxRequestBytes: 32 * 1024 * 1024, // optional; default 32 MiB
+  },
+});
+```
+
+`PiCompactRequest` carries Pi's preparation: `reason`, `tokensBefore`, `firstKeptEntryId`, `isSplitTurn`, `messagesToSummarize`, `turnPrefixMessages`, `keptMessages` (the messages from `firstKeptEntryId` on), `previousSummary?`, `customInstructions?`, `readFiles` and `modifiedFiles`.
+A `PiCompaction` is Pi's `CompactionResult`: `summary`, `firstKeptEntryId` (the request's), `tokensBefore`, `estimatedTokensAfter?` and `details?` (an object; the broker sets its `engine`).
+A compactor that returns `undefined`, throws, answers out of shape, outlasts `timeoutMs` (its `signal` aborts), or gets a request over `maxRequestBytes` falls back to Pi's summary, and the host logs the reason.
+The timeout may be at most half of `turnTimeoutMs`, so Pi's summary keeps time to run.
+A turn may ask the host for three compactions and send sixteen compaction reports; later compactions fall back to Pi's summary, and while a compactor that ignored its signal still runs, a new request falls back too.
+Without `compaction` the worker registers no compaction handler; the tiers and Pi's summary still apply.
+Compactions are written to the session file in the channel workspace, so they survive container removal and restarts.
+
+The host logs, per channel: `conversation compacted` (`trigger`, `engine` `extension` or `pi`, `tokensBefore`, `tokensAfter`, `nextCompactionAt`), `compaction failed`, `compaction skips the extension for Pi's summary` past the ceiling, and `compaction falls back to Pi's summary` with its `fallback` reason.
 
 ### Worker content and files
 
@@ -268,7 +300,10 @@ Never include real auth files or host source in those content directories.
 ### Pi isolation and continuity
 
 Pi containers remain network-none, non-root, read-only-root, capability-free and `no-new-privileges`.
-They have 1.5 GiB RAM with no additional swap, one CPU, 256 PIDs, a 512 MiB temporary filesystem, and bounded Docker logs (two 10 MiB local log files).
+They have 1.5 GiB RAM with no additional swap, one CPU, 256 PIDs, and a 512 MiB temporary filesystem.
+Their logs go to journald tagged `sandbox/<channel>`, so they outlive the container; the Docker daemon must then run under systemd with journald, or containers fail to start.
+journald bounds the lines through its own rate limit and `SystemMaxUse`, not per container; `PiDockerContainerDriver`'s third argument, `{ log: { driver, options } }` (or a function of the channel), names another Docker log driver.
+The worker logs model errors, broker call failures, tool failures and compactions to stdout as JSON lines.
 Only the channel workspace (writable) and host-created broker directory (read-only) are mounted.
 Worker-initiated `/worker/ready`, `/worker/next` and `/worker/result` requests transport turns and byte-backed replies; the host never connects to a guest-created socket or reads guest reply paths.
 Only one idle long poll, one admitted turn and one incoming reply packet per channel are allowed.

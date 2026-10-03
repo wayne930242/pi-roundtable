@@ -1,12 +1,20 @@
-import type { ChannelKey } from "pi-roundtable";
+import type { ChannelKey, Logger } from "pi-roundtable";
+import { HARD_COMPACT_TOKENS, scrubDiagnostic } from "pi-roundtable/kit";
 import { type BrokerListener, listenBroker } from "./broker.ts";
 import { piModelInput } from "./pi-model-input.ts";
 import {
 	PI_MEDIA_LIMITS,
+	type PiCompaction,
+	type PiCompactionReport,
+	type PiCompactRequest,
+	type PiCompactResponse,
 	type PiThinkingLevel,
 	type PiToolResponse,
 	type PiTurnRequest,
 	type PiTurnResponse,
+	type PiWorkerConfig,
+	validateCompactionReport,
+	validateCompactRequest,
 	validateImages,
 	validateReplyFiles,
 } from "./pi-protocol.ts";
@@ -24,6 +32,31 @@ export interface PiMcpServer {
 	name: string;
 	url: string;
 	tools: readonly string[];
+}
+/** Defaults for a host compactor's limits. */
+export const PI_COMPACT_LIMITS = {
+	/** A larger compact request falls back to Pi's summary unread. */
+	requestBytes: 32 * 1024 * 1024,
+	/** A compactor still running after this falls back to Pi's summary. */
+	timeoutMs: 120_000,
+	/** Compact requests one turn may make; the rest fall back to Pi's summary. */
+	compactsPerTurn: 3,
+	/** Compaction reports one turn may send. */
+	reportsPerTurn: 16,
+} as const;
+/** Compacts a sandbox session on the host, with what the worker cannot reach (a remote service, say). */
+export interface PiCompactor {
+	/** The `engine` this compactor's compactions record in their details; the broker stamps it. */
+	engine: string;
+	/** A compaction, or undefined to leave it to Pi's own summary. A throw also falls back. */
+	compact(
+		request: PiCompactRequest,
+		context: { channel: ChannelKey; signal: AbortSignal },
+	): Promise<PiCompaction | undefined>;
+	/** Longest a compaction may take before Pi's summary runs instead (default 120 seconds). */
+	timeoutMs?: number;
+	/** Largest request accepted, in bytes (default 32 MiB); a larger one falls back to Pi's summary. */
+	maxRequestBytes?: number;
 }
 export interface PiBrokerOptions {
 	model: string;
@@ -47,6 +80,10 @@ export interface PiBrokerOptions {
 	maxOutputTokens?: number;
 	/** Trusted endpoints can use HTTP only for explicitly configured local MCP. */
 	allowHttpMcp?: boolean;
+	/** Host-side compaction; without it the worker compacts with Pi's summary alone. */
+	compaction?: PiCompactor;
+	/** Receives upstream failures and the worker's compactions, per channel. */
+	logger?: Logger;
 }
 const MODEL_PATHS = new Set([
 	"/anthropic/v1/messages",
@@ -69,6 +106,14 @@ function passthroughHeader(name: string): boolean {
 		RESPONSE_HEADERS.includes(name)
 	);
 }
+/** An error's name, message and cause chain, for a log line. */
+export function errorText(error: unknown): string {
+	if (!(error instanceof Error)) return String(error);
+	const text = `${error.name}: ${error.message}`;
+	return error.cause === undefined
+		? text
+		: `${text} (cause: ${errorText(error.cause)})`;
+}
 function endpoint(raw: string, allowHttp = false): URL {
 	// pi-lens-ignore: unchecked-throwing-call -- invalid trusted endpoint configuration must fail startup.
 	const url = new URL(raw);
@@ -87,6 +132,7 @@ function streamBounded(
 	signal: AbortSignal,
 	maxBytes: number,
 	secret: string,
+	onFailure: (error: unknown) => void,
 ): ReadableStream<Uint8Array> {
 	const reader = response.body?.getReader();
 	let total = 0;
@@ -119,12 +165,64 @@ function streamBounded(
 				const cut = Math.max(0, data.length - tail);
 				if (cut) controller.enqueue(data.subarray(0, cut));
 				carry = data.subarray(cut);
-			} catch {
+			} catch (error) {
+				onFailure(error);
 				await reader?.cancel().catch(() => {});
 				controller.error(new Error("Broker response failed"));
 			}
 		},
 		cancel: () => reader?.cancel(),
+	});
+}
+
+/** At most `limit` bytes of a body as text; the rest is cancelled, never read. */
+async function bodyHead(
+	body: ReadableStream<Uint8Array>,
+	limit: number,
+): Promise<string> {
+	const reader = body.getReader();
+	const chunks: Uint8Array[] = [];
+	let size = 0;
+	try {
+		while (size < limit) {
+			const { done, value } = await reader.read();
+			if (done) break;
+			chunks.push(value);
+			size += value.byteLength;
+		}
+	} catch {
+		// The worker's branch reports a broken stream; the log keeps what arrived.
+	} finally {
+		await reader.cancel().catch(() => {});
+	}
+	return Buffer.concat(chunks).subarray(0, limit).toString("utf8");
+}
+/** A credential as it may appear in text: raw, URL-encoded, base64 and hex. */
+function secretForms(secret: string): string[] {
+	if (!secret) return [];
+	return [
+		secret,
+		encodeURIComponent(secret),
+		Buffer.from(secret).toString("base64"),
+		Buffer.from(secret).toString("base64url"),
+		Buffer.from(secret).toString("hex"),
+	];
+}
+/** A compactor's answer, or a rejection once the signal aborts, even if the compactor ignores it. */
+function abortableCompact<T>(
+	promise: Promise<T>,
+	signal: AbortSignal,
+): Promise<T> {
+	return new Promise((resolve, reject) => {
+		const abort = () => reject(signal.reason);
+		if (signal.aborted) {
+			abort();
+			return;
+		}
+		signal.addEventListener("abort", abort, { once: true });
+		promise
+			.then(resolve, reject)
+			.finally(() => signal.removeEventListener("abort", abort));
 	});
 }
 
@@ -180,6 +278,12 @@ export class PiSandboxBroker {
 			this.#ready = true;
 			this.#rearmStartup();
 			return new Response("Ready");
+		}
+		if (path === "/worker/config" && request.method === "GET") {
+			const compaction = this.#options.compaction;
+			return Response.json({
+				...(compaction ? { compaction: { engine: compaction.engine } } : {}),
+			} satisfies PiWorkerConfig);
 		}
 		if (path === "/worker/next" && request.method === "GET") {
 			if (this.#next) return new Response("Already waiting", { status: 429 });
@@ -306,6 +410,23 @@ export class PiSandboxBroker {
 			(options.maxCalls ?? 128) > 1000
 		)
 			throw new Error("Invalid broker budget");
+		const compaction = options.compaction;
+		if (
+			compaction &&
+			(!/^[a-zA-Z0-9@/._-]{1,100}$/.test(compaction.engine) ||
+				!Number.isSafeInteger(
+					compaction.timeoutMs ?? PI_COMPACT_LIMITS.timeoutMs,
+				) ||
+				(compaction.timeoutMs ?? PI_COMPACT_LIMITS.timeoutMs) < 1000 ||
+				(compaction.timeoutMs ?? PI_COMPACT_LIMITS.timeoutMs) > 600_000 ||
+				!Number.isSafeInteger(
+					compaction.maxRequestBytes ?? PI_COMPACT_LIMITS.requestBytes,
+				) ||
+				(compaction.maxRequestBytes ?? PI_COMPACT_LIMITS.requestBytes) < 1 ||
+				(compaction.maxRequestBytes ?? PI_COMPACT_LIMITS.requestBytes) >
+					96 * 1024 * 1024)
+		)
+			throw new Error("Invalid compactor");
 		if (
 			!Number.isSafeInteger(options.maxOutputTokens ?? 128_000) ||
 			(options.maxOutputTokens ?? 128_000) < 1025 ||
@@ -354,6 +475,12 @@ export class PiSandboxBroker {
 				})),
 			});
 		}
+		if (
+			(url.pathname === "/compaction/compact" ||
+				url.pathname === "/compaction/report") &&
+			!url.search
+		)
+			return this.#compaction(request, url.pathname);
 		const startup = !this.#turn;
 		const turn = this.#turn ?? this.#startup;
 		if (!turn || turn.context.signal.aborted)
@@ -378,6 +505,11 @@ export class PiSandboxBroker {
 		turn.active++;
 		// The turn signal carries the deadline: a long generation or image call must not be cut shorter.
 		const signal = AbortSignal.any([turn.context.signal, request.signal]);
+		const failed = this.#failureLog(
+			turn.context.channel,
+			toolName ? `tool:${toolName}` : server ? `mcp:${server.name}` : "model",
+		);
+		let secret = "";
 		try {
 			const input: unknown = JSON.parse(
 				await boundedText(request.body, 96 * 1024 * 1024),
@@ -405,7 +537,6 @@ export class PiSandboxBroker {
 				return Response.json(result);
 			}
 			let target: string;
-			let secret: string;
 			let body: Record<string, unknown>;
 			const headers = new Headers({
 				"content-type": "application/json",
@@ -478,23 +609,239 @@ export class PiSandboxBroker {
 				if (id && !id.includes(secret) && id.length <= 256)
 					outgoing.set("mcp-session-id", id);
 			}
-			if (upstream.status < 200 || upstream.status > 599)
+			if (upstream.status < 200 || upstream.status > 599) {
+				failed(secret, { status: upstream.status });
 				return new Response("Upstream refused", { status: 502 });
+			}
+			let answer = upstream;
+			if (upstream.status >= 400 && upstream.body) {
+				// The log reads the error body's head from one branch; the worker gets all of it from the other.
+				const [logged, sent] = upstream.body.tee();
+				void bodyHead(logged, 64 * 1024).then((body) =>
+					failed(secret, { status: upstream.status, body }),
+				);
+				answer = new Response(sent, { status: upstream.status });
+			} else if (upstream.status >= 400)
+				failed(secret, { status: upstream.status });
 			return new Response(
 				upstream.status === 204 || upstream.status === 205
 					? null
 					: streamBounded(
-							upstream,
+							answer,
 							signal,
 							PI_MEDIA_LIMITS.totalFileBytes,
 							secret,
+							(error) => failed(secret, { status: upstream.status, error }),
 						),
 				{ headers: outgoing, status: upstream.status },
 			);
-		} catch {
+		} catch (error) {
+			failed(secret, { error });
 			return new Response("Broker call failed", { status: 502 });
 		} finally {
 			turn.active--;
 		}
+	}
+	/** Logs a failed upstream call with its latency; the body and error lose any credential. */
+	#failureLog(channel: ChannelKey, upstream: string) {
+		const started = Date.now();
+		return (
+			secret: string,
+			failure: { status?: number; body?: string; error?: unknown },
+		): void => {
+			const clean = (text: string) =>
+				scrubDiagnostic(
+					secretForms(secret).reduce(
+						(masked, form) => masked.replaceAll(form, "[redacted]"),
+						text,
+					),
+					2000,
+				);
+			this.#options.logger?.warn(
+				{
+					channel,
+					upstream,
+					...(failure.status === undefined ? {} : { status: failure.status }),
+					latencyMs: Date.now() - started,
+					...(failure.body === undefined ? {} : { body: clean(failure.body) }),
+					...(failure.error === undefined
+						? {}
+						: { error: clean(errorText(failure.error)) }),
+				},
+				"sandbox upstream call failed",
+			);
+		};
+	}
+	/** Settles when the running compactor really ends, even after its request fell back. */
+	#compacting: Promise<unknown> | undefined;
+	readonly #compactionUse = new WeakMap<
+		object,
+		{ compacts: number; reports: number }
+	>();
+	/** The worker's compactions, only inside an admitted turn: a host compaction, or a report to log. */
+	async #compaction(request: Request, path: string): Promise<Response> {
+		const turn = this.#turn;
+		if (request.method !== "POST")
+			return new Response("Not found", { status: 404 });
+		if (!turn || turn.context.signal.aborted)
+			return new Response("Turn ended", { status: 410 });
+		const { channel } = turn.context;
+		const logger = this.#options.logger;
+		const use = this.#compactionUse.get(turn) ?? { compacts: 0, reports: 0 };
+		this.#compactionUse.set(turn, use);
+		if (path === "/compaction/report") {
+			// A turn compacts a few times at most; more reports only fill the host's log.
+			if (++use.reports > PI_COMPACT_LIMITS.reportsPerTurn)
+				return new Response("Report budget exhausted", { status: 429 });
+			try {
+				const report: unknown = JSON.parse(
+					await boundedText(request.body, 64 * 1024, turn.context.signal),
+				);
+				validateCompactionReport(report);
+				this.#logReport(channel, report);
+				return new Response("Accepted");
+			} catch {
+				return new Response("Invalid report", { status: 400 });
+			}
+		}
+		const compactor = this.#options.compaction;
+		const fallback = (reason: string): Response => {
+			logger?.warn(
+				{ channel, engine: compactor?.engine, fallback: reason },
+				"compaction falls back to Pi's summary",
+			);
+			return Response.json({
+				ok: false,
+				fallback: reason,
+			} satisfies PiCompactResponse);
+		};
+		if (!compactor) return fallback("the host has no compactor");
+		if (this.#compacting) return fallback("a compaction is already running");
+		if (++use.compacts > PI_COMPACT_LIMITS.compactsPerTurn)
+			return fallback(
+				`the turn already asked for ${PI_COMPACT_LIMITS.compactsPerTurn} compactions`,
+			);
+		const maxBytes =
+			compactor.maxRequestBytes ?? PI_COMPACT_LIMITS.requestBytes;
+		if (Number(request.headers.get("content-length") ?? 0) > maxBytes)
+			return fallback(`the request is over ${maxBytes} bytes`);
+		let running: Promise<unknown> = Promise.resolve();
+		this.#compacting = running;
+		const timeout = AbortSignal.timeout(
+			compactor.timeoutMs ?? PI_COMPACT_LIMITS.timeoutMs,
+		);
+		const signal = AbortSignal.any([
+			turn.context.signal,
+			request.signal,
+			timeout,
+		]);
+		const started = Date.now();
+		try {
+			let compactRequest: unknown;
+			try {
+				compactRequest = JSON.parse(
+					await boundedText(request.body, maxBytes, signal),
+				);
+				validateCompactRequest(compactRequest);
+			} catch (error) {
+				if (signal.aborted) throw error;
+				return fallback(
+					error instanceof Error && error.message === "body too large"
+						? `the request is over ${maxBytes} bytes`
+						: "the request is invalid",
+				);
+			}
+			const compacting = compactor.compact(compactRequest, { channel, signal });
+			running = compacting.catch(() => {});
+			this.#compacting = running;
+			const result = await abortableCompact(compacting, signal);
+			if (!result) return fallback("the compactor declined");
+			const details =
+				result.details === undefined
+					? { engine: compactor.engine }
+					: isRecord(result.details)
+						? { ...result.details, engine: compactor.engine }
+						: undefined;
+			if (
+				!details ||
+				typeof result.summary !== "string" ||
+				result.summary.length === 0 ||
+				result.firstKeptEntryId !== compactRequest.firstKeptEntryId ||
+				!Number.isSafeInteger(result.tokensBefore) ||
+				(result.estimatedTokensAfter !== undefined &&
+					!Number.isSafeInteger(result.estimatedTokensAfter))
+			)
+				return fallback("the compactor's result is invalid");
+			logger?.info(
+				{
+					channel,
+					engine: compactor.engine,
+					tokensBefore: result.tokensBefore,
+					tokensAfter: result.estimatedTokensAfter,
+					latencyMs: Date.now() - started,
+				},
+				"host compactor answered",
+			);
+			return Response.json({
+				ok: true,
+				compaction: {
+					summary: result.summary,
+					firstKeptEntryId: result.firstKeptEntryId,
+					tokensBefore: result.tokensBefore,
+					...(result.estimatedTokensAfter === undefined
+						? {}
+						: { estimatedTokensAfter: result.estimatedTokensAfter }),
+					details,
+				},
+			} satisfies PiCompactResponse);
+		} catch (error) {
+			return fallback(
+				timeout.aborted
+					? `the compactor took over ${compactor.timeoutMs ?? PI_COMPACT_LIMITS.timeoutMs} ms`
+					: signal.aborted
+						? "the compaction was aborted"
+						: `the compactor failed: ${scrubDiagnostic(errorText(error), 2000)}`,
+			);
+		} finally {
+			// A compactor that ignored its signal still holds the slot until it really ends.
+			void running.then(() => {
+				if (this.#compacting === running) this.#compacting = undefined;
+			});
+		}
+	}
+	/** Logs a worker compaction the way the host logs its own sessions' compactions. */
+	#logReport(channel: ChannelKey, report: PiCompactionReport): void {
+		const logger = this.#options.logger;
+		if (report.type === "bypass") {
+			logger?.info(
+				{
+					channel,
+					reason: report.reason,
+					tokensBefore: report.tokensBefore,
+					ceiling: HARD_COMPACT_TOKENS,
+				},
+				"compaction skips the extension for Pi's summary",
+			);
+			return;
+		}
+		const trigger = report.reason === "manual" ? "self" : report.reason;
+		if (!report.engine) {
+			logger?.warn(
+				{ channel, trigger, aborted: report.aborted, error: report.error },
+				"compaction failed",
+			);
+			return;
+		}
+		logger?.info(
+			{
+				channel,
+				trigger,
+				engine: report.engine,
+				tokensBefore: report.tokensBefore,
+				tokensAfter: report.tokensAfter,
+				nextCompactionAt: report.nextCompactionAt,
+			},
+			"conversation compacted",
+		);
 	}
 }

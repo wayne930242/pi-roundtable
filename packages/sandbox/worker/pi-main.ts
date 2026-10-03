@@ -9,7 +9,6 @@ import {
 	DefaultResourceLoader,
 	ModelRuntime,
 	SessionManager,
-	SettingsManager,
 } from "@earendil-works/pi-coding-agent";
 import {
 	activeToolsExtension,
@@ -29,6 +28,7 @@ import {
 	type PiTurnRequest as PartyTurnRequest,
 	type PiTurnResponse as PartyTurnResponse,
 	PI_MEDIA_LIMITS,
+	type PiWorkerConfig,
 	safeFileName,
 	type PiTurnContext as TurnContext,
 	validatePiTurn,
@@ -36,6 +36,7 @@ import {
 	PI_OUTBOX as WORKSPACE_OUTBOX,
 } from "../src/pi-protocol.ts";
 import { boundedText } from "../src/protocol.ts";
+import { WorkerCompaction } from "./pi-compaction.ts";
 import type { PiWorkerContent } from "./pi-content.ts";
 import { speakerMemoryExtension } from "./pi-memory.ts";
 import {
@@ -46,6 +47,8 @@ import {
 import { boundedFile, brokerToolsExtension } from "./pi-tools.ts";
 
 let content: PiWorkerContent;
+/** The session's compaction, whose reports must reach the host before the turn's result. */
+let workerCompaction: WorkerCompaction | undefined;
 let baseTools: string[] = [];
 const THINKING = "low";
 const MCP_CONNECT_TIMEOUT_MS = 45_000;
@@ -94,6 +97,7 @@ function startForwarder(): void {
 			// pi-lens-ignore: unchecked-throwing-call -- the server builds request.url, always an absolute URL
 			const url = new URL(request.url);
 			const hasBody = request.method !== "GET" && request.method !== "HEAD";
+			const started = Date.now();
 			const response = await fetch(
 				`http://broker${url.pathname}${url.search}`,
 				{
@@ -105,7 +109,20 @@ function startForwarder(): void {
 						: undefined,
 					signal: request.signal,
 				},
-			);
+			).catch((error: unknown) => {
+				log("broker call failed", {
+					path: url.pathname,
+					latencyMs: Date.now() - started,
+					error: String(error),
+				});
+				throw error;
+			});
+			if (response.status >= 400)
+				log("broker call failed", {
+					path: url.pathname,
+					status: response.status,
+					latencyMs: Date.now() - started,
+				});
 			return new Response(response.body, {
 				status: response.status,
 				statusText: response.statusText,
@@ -127,6 +144,22 @@ async function mcpServers(): Promise<McpToolsResponse["servers"]> {
 	return ((await response.json()) as McpToolsResponse).servers;
 }
 
+/** Whether the host compacts for this worker; an older broker without the route has no compactor. */
+async function workerConfig(): Promise<PiWorkerConfig> {
+	// Local Unix-socket transport; no TCP connection or DNS lookup is made.
+	// nosemgrep: typescript.react.security.react-insecure-request.react-insecure-request
+	const response = await fetch("http://broker/worker/config", {
+		unix: join(CONTAINER_RUN_DIR, BROKER_SOCKET),
+	});
+	if (response.status === 404) {
+		await response.body?.cancel();
+		return {};
+	}
+	if (!response.ok)
+		throw new Error(`the broker answered ${response.status} for worker/config`);
+	return (await response.json()) as PiWorkerConfig;
+}
+
 /** pi-mcp-adapter registers tools only after its eager connection completes. */
 async function waitForTools(
 	session: AgentSession,
@@ -142,6 +175,7 @@ async function waitForTools(
 
 async function createSession(
 	servers: McpToolsResponse["servers"],
+	config: PiWorkerConfig,
 ): Promise<AgentSession> {
 	const SKILLS = content.skillsDir ? loadSkillIndex(content.skillsDir) : [];
 	const agentDir = process.env.PI_CODING_AGENT_DIR ?? "/tmp/pi-agent";
@@ -151,6 +185,19 @@ async function createSession(
 	const modelRuntime = await ModelRuntime.create({
 		authPath: join(agentDir, "auth.json"),
 	});
+	const sessionManager = SessionManager.continueRecent(
+		CONTAINER_WORKSPACE,
+		sessionDir,
+	);
+	const compaction = new WorkerCompaction({
+		history: sessionManager,
+		contextWindow: (provider, id) =>
+			modelRuntime.getModel(provider, id)?.contextWindow,
+		config,
+		socket: join(CONTAINER_RUN_DIR, BROKER_SOCKET),
+		log,
+	});
+	workerCompaction = compaction;
 	const resourceLoader = new DefaultResourceLoader({
 		cwd: CONTAINER_WORKSPACE,
 		agentDir,
@@ -189,6 +236,7 @@ async function createSession(
 				factory: speakerMemoryExtension(() => turnContext),
 			},
 			...(content.extensions?.(() => turnContext) ?? []),
+			...compaction.extensions(),
 			...(servers.length > 0
 				? [
 						{
@@ -218,11 +266,10 @@ async function createSession(
 		thinkingLevel: THINKING,
 		modelRuntime,
 		resourceLoader,
-		sessionManager: SessionManager.continueRecent(
-			CONTAINER_WORKSPACE,
-			sessionDir,
-		),
-		settingsManager: SettingsManager.inMemory({}),
+		sessionManager,
+		// Large windows compact at the soft threshold through the host's compactor, and through Pi's
+		// summary past the hard ceiling, as the host's own sessions do.
+		settingsManager: compaction.settings(),
 		noTools: "builtin",
 	});
 	const model = modelRuntime.getModel(content.model.provider, content.model.id);
@@ -240,6 +287,17 @@ async function createSession(
 	);
 	if (missing.length > 0)
 		throw new Error(`tools are not registered: ${missing.join(", ")}`);
+	session.subscribe((event) => {
+		if (event.type === "compaction_end") void compaction.ended(event, session);
+		else if (event.type === "auto_retry_start")
+			log("model call retried", {
+				attempt: event.attempt,
+				error: event.errorMessage,
+			});
+	});
+	log("compaction ready", {
+		hostCompactor: config.compaction?.engine ?? null,
+	});
 	return session;
 }
 
@@ -262,6 +320,21 @@ async function runTurn(
 	const toolCalls: string[] = [];
 	const unsubscribe = session.subscribe((event) => {
 		if (event.type === "tool_execution_start") toolCalls.push(event.toolName);
+		else if (event.type === "tool_execution_end" && event.isError)
+			log("tool failed", {
+				turnId: turn.turnId,
+				tool: event.toolName,
+				error: textOf(event.result?.content ?? []).slice(0, 2000),
+			});
+		else if (
+			event.type === "message_end" &&
+			event.message.role === "assistant" &&
+			event.message.stopReason === "error"
+		)
+			log("model call failed", {
+				turnId: turn.turnId,
+				error: event.message.errorMessage,
+			});
 	});
 	try {
 		await session.prompt(
@@ -276,6 +349,7 @@ async function runTurn(
 				: undefined,
 		);
 	} catch (error) {
+		log("prompt failed", { turnId: turn.turnId, error: String(error) });
 		return { ok: false, error: `prompt failed: ${String(error)}` };
 	} finally {
 		clearTimeout(timer);
@@ -327,10 +401,12 @@ async function main(): Promise<void> {
 
 	startForwarder();
 	const servers = await mcpServers();
-	const session = await createSession(servers);
+	const session = await createSession(servers, await workerConfig());
 
 	const brokerSocket = join(CONTAINER_RUN_DIR, BROKER_SOCKET);
 	log("sandbox worker ready", { profile, tools: activeTools.length });
+	// A broker that stays unreachable is logged once, not every quarter second.
+	let pollFailing = false;
 	for (;;) {
 		try {
 			// Local Unix-socket transport; no TCP connection or DNS lookup is made.
@@ -356,10 +432,15 @@ async function main(): Promise<void> {
 				await boundedText(next.body, 96 * 1024 * 1024),
 			);
 			validatePiTurn(turn);
-			const result = await runTurn(session, turn).catch(() => ({
-				ok: false as const,
-				error: "Worker output failed",
-			}));
+			pollFailing = false;
+			const result = await runTurn(session, turn).catch((error: unknown) => {
+				log("turn output failed", {
+					turnId: turn.turnId,
+					error: String(error),
+				});
+				return { ok: false as const, error: "Worker output failed" };
+			});
+			await workerCompaction?.settled();
 			// Local Unix-socket transport; no TCP connection or DNS lookup is made.
 			// nosemgrep: typescript.react.security.react-insecure-request.react-insecure-request
 			const sent = await fetch("http://broker/worker/result", {
@@ -370,7 +451,9 @@ async function main(): Promise<void> {
 				signal: AbortSignal.timeout(60_000),
 			});
 			await sent.body?.cancel();
-		} catch {
+		} catch (error) {
+			if (!pollFailing) log("broker poll failed", { error: String(error) });
+			pollFailing = true;
 			await Bun.sleep(250);
 		}
 	}

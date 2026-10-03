@@ -84,6 +84,7 @@ Anthropic broker 支援串流 messages、token counting、custom tools 和 host 
 | `timeZone`、`containerPrefix`、`labelChannel`、`labelProfile` | worker 時區（預設 UTC）和既有 container 名稱／label 的相容設定。 |
 | `driver`、`logger` | 可信任本機 Docker／離線 adapter 和 host logger。 |
 | `startTimeoutMs`、`turnTimeoutMs` | 1–600 秒，預設 90／600 秒。 |
+| `compaction` | 選用的 host compactor：`engine`、`compact(request, { channel, signal })`、`timeoutMs`（預設取 120 秒與回合三分之一的較小者，最多半個回合）和 `maxRequestBytes`（預設 32 MiB）。 |
 | `maxCalls`、`maxOutputTokens` | 預設 128 次 credential-bearing call／128,000 output tokens；可設 1–1,000 次／1,025–200,000 tokens。 |
 
 `runTurn({channel,profile,turnId,author,text,images,signal?})` 回傳文字和已驗證的檔案 bytes。
@@ -121,7 +122,9 @@ rich turn 接受最多八張 PNG／JPEG／WebP／GIF，每張 20 MiB、decoded �
 回覆遵循 core 限制：十檔、每檔 10 MiB、合計 50 MiB。
 持久附件／session 沒有自動 retention 或磁碟 quota，部署時須補 filesystem quota。
 
-Pi container 維持 network none、read-only root、無 capabilities、no-new-privileges；資源為 1.5 GiB RAM／不額外使用 swap、一 CPU、256 PIDs、512 MiB `/tmp`，以及兩個 10 MiB local log files。
+Pi container 維持 network none、read-only root、無 capabilities、no-new-privileges；資源為 1.5 GiB RAM／不額外使用 swap、一 CPU、256 PIDs、512 MiB `/tmp`；log 寫進 journald，tag 為 `sandbox/<channel>`，container 移除後仍在（`PiDockerContainerDriver` 的 `log` 選項可改用其他 Docker log driver）。
+Worker session 依 core 的分層門檻壓縮：有設 host compactor 時，300,000 tokens 由它壓縮；超過 500,000 改用 Pi 自己的摘要，模型呼叫照樣經過 broker。compactor 失敗、逾時或 request 過大時都退回 Pi 的摘要，host 會依頻道記下每次壓縮與退回原因。
+回合失敗時保留原因；upstream 失敗會記下 status、延遲和錯誤內容；回合逾時、移除 container 前，會先記下 worker 最後 200 行 log。
 只 mount 可寫的頻道 workspace 和唯讀的 host broker directory。
 worker 主動呼叫 `/worker/ready`、`/worker/next`、`/worker/result` 傳遞 turn 和 base64 reply bytes；host 不連 guest 建立的 socket，也不重新開啟 guest reply path。
 取消會移除精確對應的 container；host 重啟後 worker 重新宣告 ready。

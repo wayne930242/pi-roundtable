@@ -38,13 +38,18 @@ export {
 	type PiAttachmentOptions,
 } from "./pi-attachments.ts";
 export {
+	PI_COMPACT_LIMITS,
 	type PiBrokerOptions,
+	type PiCompactor,
 	type PiHostContext,
 	type PiMcpServer,
 	PiSandboxBroker,
 } from "./pi-broker.ts";
 export {
+	defaultContainerLog,
+	demuxDockerLog,
 	type PiContainerDriver,
+	type PiContainerLog,
 	type PiContainerSpec,
 	type PiContainerStatus,
 	PiDockerContainerDriver,
@@ -60,6 +65,11 @@ export {
 	PI_RUN_DIR,
 	PI_THINKING_LEVELS,
 	PI_WORKSPACE,
+	type PiCompaction,
+	type PiCompactionReport,
+	type PiCompactMessage,
+	type PiCompactRequest,
+	type PiCompactResponse,
 	type PiMcpDiscovery,
 	type PiReplyFile,
 	type PiThinkingLevel,
@@ -67,7 +77,10 @@ export {
 	type PiTurnContext,
 	type PiTurnRequest,
 	type PiTurnResponse,
+	type PiWorkerConfig,
 	safeFileName,
+	validateCompactionReport,
+	validateCompactRequest,
 	validateImages,
 	validateReplyFiles,
 } from "./pi-protocol.ts";
