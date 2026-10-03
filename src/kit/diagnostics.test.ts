@@ -130,8 +130,11 @@ test("a value an earlier rule masked is not masked twice", () => {
 });
 
 test("a JWT is still masked after a space, an equals sign, a quote or a dot", () => {
-	const jwt =
-		"eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abcdefghij12345";
+	const jwt = [
+		"eyJhbGciOiJIUzI1NiJ9",
+		"eyJzdWIiOiIxMjM0NTY3ODkwIn0",
+		"abcdefghij12345",
+	].join(".");
 	for (const before of [" ", "=", '"', ".", ":"])
 		expect(scrubDiagnostic(`x${before}${jwt}`)).not.toContain("eyJzdWIi");
 });
