@@ -10,7 +10,7 @@ Each example has a test next to it that runs it without Discord or PostgreSQL, e
 A plugin is an object with a name and a `setup` function.
 `setup` returns the parts the plugin adds to the bot: tools agents can call, text added to their prompt, agents to create, handlers for events, long-lived services, slash commands, HTTP routes, and so on.
 The bot itself is assembled from plugins too.
-The core ships built-in plugins for its memory and schedule stores, Discord connection, agent server, notifications, delegation, and schedules.
+The core ships built-in plugins for its memory and schedule stores, schedule prechecks, Discord connection, agent server, notifications, delegation, and schedules.
 You can switch off three [addons](#addons-memory-skills-and-discord-administration): memory, skills, and Discord administration.
 Your plugins are added after them and can read or replace the built-ins' [keyed services](#services-what-plugins-provide-to-each-other).
 
@@ -166,6 +166,7 @@ The built-in plugins provide these, from the main entry:
 | `AGENTS` | `AgentServer` | `agent-server` | The `team` (`AgentTeam`), the read-only `directory` (`AgentDirectory`), the `runtime` every agent turn runs on, `approvals` (whether the owner's reply approves held actions), and `avatars` (`AvatarStudio`) |
 | `SKILLS` | `SkillRegistry` | `skills` (an addon) | What agents carry: `carried`, `carriedNames`, `describeCarried`, `catalog`, `list`, `linkedFrom`, `checkRegistered`, `link`, `attach` |
 | `SCHEDULES` | `ScheduleStore` | `schedule-store` | The stored schedules: `create`, `get`, `forChannel`, `all`, `update`, `remove`, `due`, `claim`, `recordStatus` |
+| `PRECHECKS` | `PrecheckRegistry` | `prechecks` | The host's named [prechecks](#prechecks-wake-a-schedule-only-when-it-has-work): `register`, `get`, `list` |
 | `MEMORY` | `MemoryStore` | `memory` (an addon) | `forSpeaker(id)` gives that speaker's `SpeakerMemory`: `list`, `forPrompt`, `add`, `search`, `update`, `removeById`, `remove`; `MEMORY_KINDS` is `core`, `note`, `event` |
 | `BACKGROUND_TURNS` | `BackgroundTurns` | `modules` | Turns nobody wrote: `runScheduled`, `runDelegated`, `runErrorReport` |
 | `DELEGATION` | `Delegator` | `modules` | `start(request)` a background task, `runningChannels()`, `idle()` |
@@ -737,6 +738,62 @@ export function heartbeat(everyMs: number, beat: () => Promise<void> | void) {
 				},
 			],
 		}),
+	});
+}
+```
+<!-- /example -->
+
+#### Prechecks: wake a schedule only when it has work
+
+A schedule whose answer is "all normal" on most days still costs a model turn each time it fires.
+A precheck is host code that runs first and decides whether the turn runs at all.
+Register it with `services.get(PRECHECKS).register({ name, description, timeoutMs?, run })` during setup; the agent attaches it to a schedule by name with the `precheck` parameter of `schedule_create` or `schedule_update` (`null` removes it), and `schedule_list` shows the registered names with their descriptions.
+The model only picks a name: it never supplies code or a command, so attaching a precheck grants nothing beyond what the schedule already has, and the same tier rules apply.
+
+When a schedule with a precheck falls due, the scheduler takes it first (moves it to its next run, or deletes a one-time schedule) exactly as before, so a slow precheck never fires it twice, and then calls `run({ schedule, firedAt, signal })`:
+
+- `{ wake: false, note? }` skips the turn. A `note` is posted in the schedule's channel as the bot's own small message, which starts no turn. The last status reads `skipped by precheck (note)`.
+- `{ wake: true, context }` runs the turn; its text carries `context` under a `### Precheck found (<name>):` heading after the prompt. The last status reads `woken by precheck; ran`.
+- A throw, a wrong answer, a name no longer registered, or running past `timeoutMs` (default `PRECHECK_TIMEOUT_MS`, 60 seconds; `signal` is aborted then) runs the turn with the error under `### Precheck failed: <name>`, so the agent can look into it. The error is logged, and the last status reads `precheck failed (…), woke; ran`.
+
+A name is lower-case letters, digits, `.`, `_`, and `-`; registering one twice throws a `PluginError`.
+A `BackgroundTurns` of your own receives what the precheck found as `runScheduled`'s third argument, a `PrecheckFinding`.
+
+<!-- example: examples/prechecks.ts -->
+```ts
+import { definePlugin, PRECHECKS } from "pi-roundtable";
+
+/** Last night's reading and its usual level, from wherever the host keeps them. */
+export interface RecoveryReading {
+	hrv: number;
+	baseline: number;
+}
+
+/**
+ * A precheck a daily schedule can name: the host reads the numbers first and wakes the agent
+ * only when they are off, so an ordinary morning costs no model turn.
+ */
+export function recoveryPrecheck(read: () => Promise<RecoveryReading>) {
+	return definePlugin({
+		name: "recovery-precheck",
+		setup: ({ services }) => {
+			services.get(PRECHECKS).register({
+				name: "health.recovery",
+				description:
+					"Reads last night's HRV; wakes you when it is a fifth or more under its baseline.",
+				timeoutMs: 15_000,
+				run: async () => {
+					const { hrv, baseline } = await read();
+					if (hrv >= baseline * 0.8)
+						return { wake: false, note: `HRV ${hrv} ms, as usual.` };
+					return {
+						wake: true,
+						context: `HRV ${hrv} ms against a baseline of ${baseline} ms.`,
+					};
+				},
+			});
+			return {};
+		},
 	});
 }
 ```
@@ -2076,6 +2133,7 @@ Call `useTestLocale()` after a test changes the process-wide locale or time zone
 `recordingLogger()` is a logger that keeps what it is asked to write: its `lines` hold each call's `level`, `fields` (those of a `child` included), and `message`, for a test of what the code logs.
 Use `partial<Port>({ ... })` to stand in for a port your code takes as an argument.
 It provides the members you give it and throws an error naming any missing member you read, so the test needs no `as unknown as Port` cast.
+`fakePrecheck(name, answer, { description?, timeoutMs? })` is a precheck that answers `answer` (a `PrecheckResult`, an `Error` it throws, or a function of its context) and records each context in `calls`; `fakePrechecks(...prechecks)` is a real in-memory `PrecheckRegistry` with them registered, which a test gives a plugin as `servicePair(PRECHECKS, registry)` and reads back with `registry.get(name)`.
 `fakeDiscord({ ownerId?, rootCommand? })` is the `DISCORD` service for a plugin that adds slash commands: give it as `services: [discord.service]`, read what the plugin added with `discord.added()`, and compose the tree Discord would get with `discord.compose()`.
 Only `commands` and `guard` are given; a plugin that reads another member of `DISCORD` in a test gives its own with `servicePair(DISCORD, { ... })`.
 
@@ -2441,6 +2499,13 @@ Import from the entries listed below; source area files are internal.
 | `RuntimeDeps` | `pi-roundtable` | type |
 | `RuntimeFactory` | `pi-roundtable` | type |
 | `SCHEDULES` | `pi-roundtable` | value |
+| `PRECHECKS` | `pi-roundtable` | value |
+| `PRECHECK_TIMEOUT_MS` | `pi-roundtable` | value |
+| `Precheck` | `pi-roundtable` | type |
+| `PrecheckContext` | `pi-roundtable` | type |
+| `PrecheckFinding` | `pi-roundtable` | type |
+| `PrecheckRegistry` | `pi-roundtable` | type |
+| `PrecheckResult` | `pi-roundtable` | type |
 | `SKILLS` | `pi-roundtable` | value |
 | `Schedule` | `pi-roundtable` | type |
 | `ScheduleChange` | `pi-roundtable` | type |
@@ -2515,6 +2580,10 @@ Import from the entries listed below; source area files are internal.
 | `describeDb` | `pi-roundtable/testing` | value |
 | `eagerText` | `pi-roundtable/testing` | value |
 | `fakeDiscord` | `pi-roundtable/testing` | value |
+| `fakePrecheck` | `pi-roundtable/testing` | value |
+| `fakePrechecks` | `pi-roundtable/testing` | value |
+| `FakePrecheck` | `pi-roundtable/testing` | type |
+| `FakePrecheckAnswer` | `pi-roundtable/testing` | type |
 | `fakeThreads` | `pi-roundtable/testing` | value |
 | `openTestStore` | `pi-roundtable/testing` | value |
 | `servicePair` | `pi-roundtable/testing` | value |

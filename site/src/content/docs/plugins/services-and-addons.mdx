@@ -56,12 +56,43 @@ The built-in plugins provide these keys, all exported from `pi-roundtable`:
 | `AGENTS` | `agent-server` | The agent team, a read-only directory, the runtime every agent turn runs on, approvals, and avatars |
 | `SKILLS` | `skills` (addon) | The skills agents carry, and the registry to list, link and attach them |
 | `SCHEDULES` | `schedule-store` | The stored schedules: create, get, update, remove, due, claim |
+| `PRECHECKS` | `prechecks` | The host's named [prechecks](#prechecks): register, get, list |
 | `MEMORY` | `memory` (addon) | Each speaker's memory: list, add, search, update, remove |
 | `BACKGROUND_TURNS` | `modules` | Turns nobody wrote: scheduled, delegated, and error-report turns |
 | `DELEGATION` | `modules` | Starting a background task, and which channels have one running |
 
 Your plugins run after the built-ins, so they can read every key above.
 The Discord connection's key, `DISCORD`, comes from `pi-roundtable/discord`, because its port names discord.js types.
+
+### Prechecks
+
+A precheck decides, before a schedule's turn, whether the agent is woken at all.
+Register one during setup; the agent attaches it to a schedule by name.
+
+```ts
+definePlugin({
+	name: "recovery-precheck",
+	setup: ({ services }) => {
+		services.get(PRECHECKS).register({
+			name: "health.recovery",
+			description: "Reads last night's HRV; wakes you when it is a fifth or more under its baseline.",
+			timeoutMs: 15_000,
+			run: async ({ schedule, firedAt, signal }) => {
+				const { hrv, baseline } = await readRecovery(signal);
+				return hrv >= baseline * 0.8
+					? { wake: false, note: `HRV ${hrv} ms, as usual.` }
+					: { wake: true, context: `HRV ${hrv} ms against ${baseline} ms.` };
+			},
+		});
+		return {};
+	},
+});
+```
+
+`{ wake: false, note? }` skips the turn and posts the note as the bot's own small message, which starts no turn.
+`{ wake: true, context }` runs the turn with `context` under a "Precheck found" heading.
+A throw or a timeout (60 seconds unless `timeoutMs` says otherwise) runs the turn with the error.
+Test it with `fakePrechecks()` from `pi-roundtable/testing`, given as `servicePair(PRECHECKS, registry)`.
 
 ### Replacing a built-in service
 

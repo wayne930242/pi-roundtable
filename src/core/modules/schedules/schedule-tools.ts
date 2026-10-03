@@ -6,6 +6,7 @@ import type { ScheduleStore } from "../../services.ts";
 import type { ScheduleToolName } from "../../shared/schedule-tools.ts";
 import { type Tier, tierAtLeast } from "../../speakers.ts";
 import { timeZone, zonedStamp } from "../../time.ts";
+import type { PrecheckFinding, PrecheckRegistry } from "./prechecks.ts";
 import {
 	describeRecurrence,
 	nextRun,
@@ -30,6 +31,8 @@ export interface ScheduleToolContext {
 	/** Who asked, recorded on created schedules; a scheduled run speaks for its creator. */
 	author: { id: string; name: string; tier?: Tier };
 	now: Date;
+	/** The host's prechecks a schedule may name; without them, none can be attached. */
+	prechecks?: Pick<PrecheckRegistry, "get" | "list">;
 }
 
 /** The limits of the context's target; a target without them may not schedule. */
@@ -64,6 +67,30 @@ function id(input: Input): number {
 	return value;
 }
 
+/** A registered precheck's name; an unknown one is refused with the names there are. */
+function precheckName(ctx: ScheduleToolContext, value: unknown): string {
+	const names = (ctx.prechecks?.list() ?? []).map((p) => p.name);
+	if (typeof value !== "string" || !value.trim())
+		throw new ScheduleError(
+			`precheck must be the name of a registered precheck${names.length ? `: ${names.join(", ")}` : "; this host registers none"}`,
+		);
+	const name = value.trim();
+	if (!ctx.prechecks?.get(name))
+		throw new ScheduleError(
+			names.length
+				? `there is no precheck "${name}"; the registered ones are ${names.join(", ")}`
+				: `there is no precheck "${name}"; this host registers none`,
+		);
+	return name;
+}
+
+/** The prechecks a schedule may name, for schedule_list; empty when the host registers none. */
+function precheckCatalog(ctx: ScheduleToolContext): string {
+	const all = ctx.prechecks?.list() ?? [];
+	if (all.length === 0) return "";
+	return `\n\nPrechecks you can attach with precheck on schedule_create or schedule_update; the host runs one before each turn and wakes you only when it finds something:\n${all.map((p) => `- ${p.name}: ${p.description.replace(/\n/g, " ")}`).join("\n")}`;
+}
+
 function hasTiming(input: Input): boolean {
 	return [
 		"in_minutes",
@@ -94,10 +121,11 @@ function line(schedule: Schedule): string {
 		schedule.prompt.length > LIST_PROMPT_PREVIEW
 			? `${schedule.prompt.slice(0, LIST_PROMPT_PREVIEW)}…`
 			: schedule.prompt;
+	const precheck = schedule.precheck ? `; precheck ${schedule.precheck}` : "";
 	const last = schedule.lastRun
 		? `; last run ${zonedStamp(schedule.lastRun)} (${schedule.lastStatus ?? "?"})`
 		: "";
-	return `- #${schedule.id} ${schedule.title}: ${describeRecurrence(schedule.recurrence)}, next ${zonedStamp(schedule.nextRun)}; set by ${schedule.createdByName}${last}\n  ${prompt.replace(/\n/g, " ")}`;
+	return `- #${schedule.id} ${schedule.title}: ${describeRecurrence(schedule.recurrence)}, next ${zonedStamp(schedule.nextRun)}; set by ${schedule.createdByName}${precheck}${last}\n  ${prompt.replace(/\n/g, " ")}`;
 }
 
 async function own(ctx: ScheduleToolContext, input: Input): Promise<Schedule> {
@@ -131,6 +159,10 @@ export async function callScheduleTool(
 			const title = text(input, "title", TITLE_CHARS);
 			const prompt = text(input, "prompt", limits.promptChars);
 			const [recurrence, next] = timing(ctx, input);
+			const precheck =
+				input.precheck === undefined || input.precheck === null
+					? undefined
+					: precheckName(ctx, input.precheck);
 			const existing = await ctx.store.forChannel(ctx.channel);
 			if (existing.length >= limits.perChannel)
 				throw new ScheduleError(
@@ -146,8 +178,10 @@ export async function callScheduleTool(
 				createdById: ctx.author.id,
 				createdByName: ctx.author.name,
 				createdTier: ctx.author.tier ?? "owner",
+				...(precheck ? { precheck } : {}),
 			});
-			return `Scheduled #${created.id} "${title}": ${describeRecurrence(recurrence)}, first run ${zonedStamp(next)} ${messages().zoneTime(timeZone())}.`;
+			const checked = precheck ? `; precheck ${precheck} runs first` : "";
+			return `Scheduled #${created.id} "${title}": ${describeRecurrence(recurrence)}, first run ${zonedStamp(next)} ${messages().zoneTime(timeZone())}${checked}.`;
 		}
 		case "schedule_list": {
 			if (input.id !== undefined) {
@@ -155,9 +189,11 @@ export async function callScheduleTool(
 				return `${line(schedule).split("\n")[0]}\n\nPrompt:\n${schedule.prompt}`;
 			}
 			const all = await ctx.store.forChannel(ctx.channel);
-			return all.length === 0
-				? "This channel has no schedules."
-				: `It is ${zonedStamp(ctx.now)} in ${messages().zoneName(timeZone())}.\n${all.map(line).join("\n")}`;
+			const listed =
+				all.length === 0
+					? "This channel has no schedules."
+					: `It is ${zonedStamp(ctx.now)} in ${messages().zoneName(timeZone())}.\n${all.map(line).join("\n")}`;
+			return `${listed}${precheckCatalog(ctx)}`;
 		}
 		case "schedule_update": {
 			const schedule = changeable(ctx, await own(ctx, input));
@@ -171,11 +207,20 @@ export async function callScheduleTool(
 				change.recurrence = recurrence;
 				change.nextRun = next;
 			}
+			// null removes the precheck; a name must be registered.
+			if (input.precheck !== undefined)
+				change.precheck =
+					input.precheck === null ? null : precheckName(ctx, input.precheck);
 			if (Object.keys(change).length === 0)
-				throw new ScheduleError("give a title, prompt, or timing to change");
+				throw new ScheduleError(
+					"give a title, prompt, timing, or precheck to change",
+				);
 			const updated = await ctx.store.update(ctx.channel, schedule.id, change);
 			if (!updated) throw new ScheduleError(`schedule #${schedule.id} is gone`);
-			return `Updated #${updated.id} "${updated.title}": ${describeRecurrence(updated.recurrence)}, next run ${zonedStamp(updated.nextRun)}.`;
+			const checked = updated.precheck
+				? `; precheck ${updated.precheck} runs first`
+				: "";
+			return `Updated #${updated.id} "${updated.title}": ${describeRecurrence(updated.recurrence)}, next run ${zonedStamp(updated.nextRun)}${checked}.`;
 		}
 		case "schedule_cancel": {
 			const schedule = changeable(ctx, await own(ctx, input));
@@ -187,12 +232,28 @@ export async function callScheduleTool(
 	}
 }
 
-/** What a scheduled run receives as its message. */
-export function scheduledTurnText(schedule: Schedule, firedAt: Date): string {
+/** What the schedule's precheck found, or how it failed, under its own heading after the task. */
+function findingText(finding: PrecheckFinding): string[] {
+	return "error" in finding
+		? [
+				"",
+				`### Precheck failed: ${finding.precheck}`,
+				`The precheck that decides whether this task needs you failed, so you were woken anyway: ${finding.error}. Check what it watches yourself, and say so if it needs fixing.`,
+			]
+		: ["", `### Precheck found (${finding.precheck}):`, finding.context];
+}
+
+/** What a scheduled run receives as its message, with what its precheck found when it has one. */
+export function scheduledTurnText(
+	schedule: Schedule,
+	firedAt: Date,
+	finding?: PrecheckFinding,
+): string {
 	return [
 		`## Scheduled task #${schedule.id}: ${schedule.title}`,
 		`${schedule.createdByName} set this schedule (${describeRecurrence(schedule.recurrence)}). It is due now, ${zonedStamp(firedAt)} ${messages().zoneTime(timeZone())}. Nobody wrote a new message: carry out the task below and write what you would post in this channel. If the task keeps a record for later runs, update it with schedule_update on #${schedule.id}.`,
 		"",
 		schedule.prompt,
+		...(finding ? findingText(finding) : []),
 	].join("\n");
 }

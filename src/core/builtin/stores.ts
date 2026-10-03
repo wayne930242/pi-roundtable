@@ -1,9 +1,10 @@
 import type { OwnerIdentity } from "../identity.ts";
 import { ownerMemoryExtension } from "../modules/memory/owner-memory.ts";
 import { PgMemoryStore } from "../modules/memory/owner-memory-store.ts";
+import { memoryPrecheckRegistry } from "../modules/schedules/prechecks.ts";
 import { PgScheduleStore } from "../modules/schedules/schedule-store.ts";
 import type { RoundtablePlugin } from "../plugin.ts";
-import { MEMORY, SCHEDULES } from "../services.ts";
+import { MEMORY, PRECHECKS, SCHEDULES } from "../services.ts";
 import { THE_SPEAKER, type Tier } from "../speakers.ts";
 import { fixed } from "./session-tool.ts";
 
@@ -56,10 +57,25 @@ export function memoryPlugin(options: MemoryOptions): RoundtablePlugin {
 export function scheduleStorePlugin(): RoundtablePlugin {
 	return {
 		name: "schedule-store",
-		migrations: [PgScheduleStore.migration],
+		migrations: PgScheduleStore.migrations(),
 		provides: [SCHEDULES],
 		setup: async ({ database, services }) => {
 			services.provide(SCHEDULES, await PgScheduleStore.attach(database()));
+			return {};
+		},
+	};
+}
+
+/**
+ * The registry of the host's prechecks, provided as `PRECHECKS`; the plugins after it register
+ * theirs during setup. Apart from the store, so a plugin that replaces the store need not provide it.
+ */
+export function precheckPlugin(): RoundtablePlugin {
+	return {
+		name: "prechecks",
+		provides: [PRECHECKS],
+		setup: ({ services }) => {
+			services.provide(PRECHECKS, memoryPrecheckRegistry());
 			return {};
 		},
 	};

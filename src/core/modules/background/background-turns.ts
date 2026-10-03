@@ -12,6 +12,7 @@ import {
 	type DelegationOutcome,
 	delegatedTurnText,
 } from "../delegation/delegator.ts";
+import type { PrecheckFinding } from "../schedules/prechecks.ts";
 import type { Schedule } from "../schedules/schedule-store.ts";
 import { scheduledTurnText } from "../schedules/schedule-tools.ts";
 
@@ -33,15 +34,19 @@ export class ConversationBackgroundTurns implements BackgroundTurns {
 		this.#options = options;
 	}
 
-	/** A due schedule's turn, run as its creator's. */
-	runScheduled(schedule: Schedule, firedAt: Date): Promise<ScheduledOutcome> {
+	/** A due schedule's turn, run as its creator's; with what its precheck found, when it has one. */
+	runScheduled(
+		schedule: Schedule,
+		firedAt: Date,
+		finding?: PrecheckFinding,
+	): Promise<ScheduledOutcome> {
 		return this.#options.conversations.background({
 			channel: schedule.channel,
 			target: schedule.target,
 			author: { id: schedule.createdById, name: schedule.createdByName },
 			tier: schedule.createdTier,
 			turnId: `schedule-${schedule.id}-${firedAt.getTime()}`,
-			text: scheduledTurnText(schedule, firedAt),
+			text: scheduledTurnText(schedule, firedAt, finding),
 		});
 	}
 

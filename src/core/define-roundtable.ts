@@ -8,7 +8,11 @@ import { discordAdminPlugin } from "./builtin/discord-admin.ts";
 import { modulesPlugin, schedulerPlugin } from "./builtin/modules.ts";
 import { seedsPlugin } from "./builtin/seeds.ts";
 import { skillsPlugin } from "./builtin/skills.ts";
-import { memoryPlugin, scheduleStorePlugin } from "./builtin/stores.ts";
+import {
+	memoryPlugin,
+	precheckPlugin,
+	scheduleStorePlugin,
+} from "./builtin/stores.ts";
 import { type RoundtableConfig, resolveConfig } from "./config/config.ts";
 import { ConfigError } from "./domain/errors.ts";
 import { JudgeError } from "./errors.ts";
@@ -163,6 +167,7 @@ export async function defineRoundtable(
 		plugins: [
 			...(config.memory ? [memoryPlugin({ owner })] : []),
 			scheduleStorePlugin(),
+			precheckPlugin(),
 			discordPlugin({
 				token: discord.token,
 				ownerId: owner.id,

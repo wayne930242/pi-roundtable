@@ -19,6 +19,8 @@ export interface Schedule {
 	/** The creator's tier when it was set; the schedule runs at it and lower tiers may not change it. */
 	createdTier: Tier;
 	createdAt: Date;
+	/** The name of the precheck the host runs before its turn; absent, the turn always runs. */
+	precheck?: string;
 	lastRun?: Date;
 	lastStatus?: string;
 }
@@ -33,6 +35,8 @@ export interface NewSchedule {
 	createdById: string;
 	createdByName: string;
 	createdTier: Tier;
+	/** A registered precheck's name, run before each turn. */
+	precheck?: string;
 }
 
 export interface ScheduleChange {
@@ -40,6 +44,8 @@ export interface ScheduleChange {
 	prompt?: string;
 	recurrence?: Recurrence;
 	nextRun?: Date;
+	/** A registered precheck's name to run before each turn; null removes the schedule's precheck. */
+	precheck?: string | null;
 }
 
 interface Row {
@@ -55,6 +61,7 @@ interface Row {
 	created_by_name: string;
 	created_tier: Tier;
 	created_at: Date;
+	precheck: string | null;
 	last_run: Date | null;
 	last_status: string | null;
 }
@@ -73,6 +80,7 @@ function toSchedule(row: Row): Schedule {
 		createdByName: row.created_by_name,
 		createdTier: row.created_tier,
 		createdAt: row.created_at,
+		...(row.precheck ? { precheck: row.precheck } : {}),
 		...(row.last_run ? { lastRun: row.last_run } : {}),
 		...(row.last_status ? { lastStatus: row.last_status } : {}),
 	};
@@ -112,6 +120,19 @@ export class PgScheduleStore implements ScheduleStore {
 		},
 	};
 
+	/** The table, then the precheck each schedule may name; schedules made before prechecks have none. */
+	static migrations(): Migration[] {
+		return [
+			PgScheduleStore.migration,
+			{
+				name: "schedules-precheck",
+				up: async (sql) => {
+					await sql`ALTER TABLE schedules ADD COLUMN IF NOT EXISTS precheck text`;
+				},
+			},
+		];
+	}
+
 	/** The store over the host's migrated pool. */
 	static async attach(sql: SQL): Promise<PgScheduleStore> {
 		return new PgScheduleStore(sql);
@@ -120,10 +141,11 @@ export class PgScheduleStore implements ScheduleStore {
 	async create(schedule: NewSchedule): Promise<Schedule> {
 		const rows: Row[] = await this.#sql`
 			INSERT INTO schedules (channel_key, mode, title, prompt, recurrence, next_run,
-				created_by_id, created_by_name, created_tier)
+				created_by_id, created_by_name, created_tier, precheck)
 			VALUES (${schedule.channel}, ${schedule.target}, ${schedule.title}, ${schedule.prompt},
 				${JSON.stringify(schedule.recurrence)}, ${schedule.nextRun},
-				${schedule.createdById}, ${schedule.createdByName}, ${schedule.createdTier})
+				${schedule.createdById}, ${schedule.createdByName}, ${schedule.createdTier},
+				${schedule.precheck ?? null})
 			RETURNING *`;
 		const [row] = rows;
 		if (!row) throw new Error("the schedule insert returned no row");
@@ -161,7 +183,8 @@ export class PgScheduleStore implements ScheduleStore {
 				title = ${change.title ?? current.title},
 				prompt = ${change.prompt ?? current.prompt},
 				recurrence = ${JSON.stringify(change.recurrence ?? current.recurrence)},
-				next_run = ${change.nextRun ?? current.nextRun}
+				next_run = ${change.nextRun ?? current.nextRun},
+				precheck = ${change.precheck === undefined ? (current.precheck ?? null) : change.precheck}
 			WHERE id = ${id}
 			RETURNING *`;
 		return rows[0] ? toSchedule(rows[0]) : undefined;

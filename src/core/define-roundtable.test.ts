@@ -75,6 +75,7 @@ describe("defineRoundtable", () => {
 		expect(plugins.map((plugin) => plugin.name)).toEqual([
 			"memory",
 			"schedule-store",
+			"prechecks",
 			"discord",
 			"modules",
 			"discord-admin",
@@ -95,6 +96,7 @@ describe("defineRoundtable", () => {
 		});
 		expect(plugins.map((plugin) => plugin.name)).toEqual([
 			"schedule-store",
+			"prechecks",
 			"discord",
 			"modules",
 			"agent-server",
@@ -116,6 +118,7 @@ describe("defineRoundtable", () => {
 		expect(providers).toEqual({
 			"roundtable.memory": "memory",
 			"roundtable.schedules": "schedule-store",
+			"roundtable.prechecks": "prechecks",
 			"roundtable.discord": "discord",
 			"roundtable.background-turns": "modules",
 			"roundtable.delegation": "modules",
@@ -136,6 +139,7 @@ describe("defineRoundtable", () => {
 		).toEqual([
 			"memory",
 			"my-schedules",
+			"prechecks",
 			"discord",
 			"modules",
 			"discord-admin",
@@ -161,6 +165,7 @@ describe("defineRoundtable", () => {
 			"owner-memory",
 			"owner-memory-speaker",
 			"schedules",
+			"schedules-precheck",
 			"skills",
 			"skills-guild",
 			"held-actions",

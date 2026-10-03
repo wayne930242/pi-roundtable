@@ -17,6 +17,10 @@ import type {
 	PromptMemory,
 } from "./modules/memory/owner-memory-store.ts";
 import type {
+	PrecheckFinding,
+	PrecheckRegistry,
+} from "./modules/schedules/prechecks.ts";
+import type {
 	NewSchedule,
 	Schedule,
 	ScheduleChange,
@@ -38,6 +42,13 @@ export const AGENTS: ServiceKey<AgentServer> =
 export const SCHEDULES: ServiceKey<ScheduleStore> = serviceKey<ScheduleStore>(
 	"roundtable.schedules",
 );
+/**
+ * The host's named prechecks, which a schedule may run before its turn to decide whether the
+ * agent is woken at all. Provided by the `prechecks` plugin; register yours during setup:
+ * `services.get(PRECHECKS).register({ name, description, run })`.
+ */
+export const PRECHECKS: ServiceKey<PrecheckRegistry> =
+	serviceKey<PrecheckRegistry>("roundtable.prechecks");
 /** Turns nobody wrote: a due schedule's, a delegated task's report, a logged error's. Provided by the modules plugin. */
 export const BACKGROUND_TURNS: ServiceKey<BackgroundTurns> =
 	serviceKey<BackgroundTurns>("roundtable.background-turns");
@@ -177,8 +188,12 @@ export interface ScheduleStore {
 
 /** Turns nobody wrote, each answered in its channel by the claim that owns it. */
 export interface BackgroundTurns {
-	/** A due schedule's turn, run as its creator's. */
-	runScheduled(schedule: Schedule, firedAt: Date): Promise<ScheduledOutcome>;
+	/** A due schedule's turn, run as its creator's; with what its precheck found, when it has one. */
+	runScheduled(
+		schedule: Schedule,
+		firedAt: Date,
+		finding?: PrecheckFinding,
+	): Promise<ScheduledOutcome>;
 	/** A delegated task's report, answered in its channel under the same rules as a schedule. */
 	runDelegated(job: DelegationJob, result: DelegationOutcome): Promise<void>;
 	/** The process's own logged error, reported to an agent in its channel as a report turn. */

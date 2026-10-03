@@ -48,6 +48,9 @@ export function schedulesEn(ctx: CatalogContext) {
 			`${recurrence}; next run <t:${unix}:f>`,
 		scheduleSetBy: (name: string, lastRun: string) =>
 			`Set by ${name}${lastRun}`,
+		schedulePrecheck: (name: string) => `Checked first by precheck ${name}`,
+		schedulePrecheckNote: (id: number, title: string, note: string) =>
+			`-# Schedule #${id} ${title}, skipped by its precheck: ${note.replace(/\n+/g, "\n-# ")}`,
 		scheduleChoice: (id: number, title: string, recurrence: string) =>
 			`#${id} ${title} (${recurrence})`,
 		scheduleTitle: "Schedules",
@@ -87,6 +90,9 @@ export function schedulesZhTW(
 			`${recurrence}；下次 <t:${unix}:f>`,
 		scheduleSetBy: (name: string, lastRun: string) =>
 			`由 ${name} 設定${lastRun}`,
+		schedulePrecheck: (name: string) => `先由預檢 ${name} 判斷`,
+		schedulePrecheckNote: (id: number, title: string, note: string) =>
+			`-# 排程 #${id} ${title} 經預檢略過：${note.replace(/\n+/g, "\n-# ")}`,
 		scheduleChoice: (id: number, title: string, recurrence: string) =>
 			`#${id} ${title}（${recurrence}）`,
 		scheduleTitle: "排程",

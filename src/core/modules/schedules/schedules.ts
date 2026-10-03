@@ -16,6 +16,7 @@ import {
 } from "../../shared/schedule-tools.ts";
 import type { Speaker } from "../../speakers.ts";
 import { timeZone } from "../../time.ts";
+import type { PrecheckRegistry } from "./prechecks.ts";
 import { callScheduleTool } from "./schedule-tools.ts";
 
 export interface OwnerSchedules {
@@ -26,6 +27,8 @@ export interface OwnerSchedules {
 	 * messages for a conversation no chat surface carries, where a run could not be posted.
 	 */
 	channelFor: (channel: ChannelKey) => Promise<ChannelKey>;
+	/** The host's prechecks a schedule may name; without them, none can be attached. */
+	prechecks?: Pick<PrecheckRegistry, "get" | "list">;
 }
 
 /** Finds another agent's channel, for reading its schedules; throws ScheduleError when there is none. */
@@ -58,7 +61,7 @@ export function schedulesExtension(
 	/** The person the running turn is for; their schedules run at their tier. */
 	speaker: () => Speaker | undefined = () => undefined,
 ): ExtensionFactory {
-	const { store, owner, channelFor } = schedules;
+	const { store, owner, channelFor, prechecks } = schedules;
 	const defs = scheduleToolSpecs({
 		locale: activeLocale(),
 		timeZone: timeZone(),
@@ -79,6 +82,7 @@ export function schedulesExtension(
 						target: OWNER_TARGET,
 						author: speaker() ?? owner,
 						now: new Date(),
+						...(prechecks ? { prechecks } : {}),
 					},
 					spec.name,
 					input,

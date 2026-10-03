@@ -91,12 +91,18 @@ export function scheduleToolSpecs(
 					description: "What to do when it runs, self-contained.",
 				}),
 				...timing(zone),
+				precheck: Type.Optional(
+					Type.String({
+						description:
+							"The name of a precheck the host runs first, from schedule_list; you are woken only when it finds something.",
+					}),
+				),
 			}),
 		},
 		{
 			name: "schedule_list",
 			label: "List schedules",
-			description: `List this channel's schedules with their next run, and the current ${zone}. Give id to read one schedule's full prompt.`,
+			description: `List this channel's schedules with their next run, and the current ${zone}, and the prechecks a schedule may attach. Give id to read one schedule's full prompt.`,
 			parameters: Type.Object({
 				id: Type.Optional(Type.Integer({ description: "Schedule id." })),
 			}),
@@ -105,7 +111,7 @@ export function scheduleToolSpecs(
 			name: "schedule_update",
 			label: "Update schedule",
 			description:
-				"Change one of this channel's schedules: its title, its prompt, or its timing (timing fields replace the old timing). A run can use this to keep its own prompt current, such as adding what it already reported.",
+				"Change one of this channel's schedules: its title, its prompt, its timing (timing fields replace the old timing), or its precheck. A run can use this to keep its own prompt current, such as adding what it already reported.",
 			parameters: Type.Object({
 				id: Type.Integer({ description: "Schedule id." }),
 				title: Type.Optional(Type.String()),
@@ -113,6 +119,12 @@ export function scheduleToolSpecs(
 					Type.String({ description: "The whole new prompt." }),
 				),
 				...timing(zone),
+				precheck: Type.Optional(
+					Type.Union([Type.String(), Type.Null()], {
+						description:
+							"A precheck's name from schedule_list to run first, or null to remove the schedule's precheck.",
+					}),
+				),
 			}),
 		},
 		{

@@ -127,6 +127,14 @@ export type {
 } from "./core/modules/memory/owner-memory-store.ts";
 export { MEMORY_KINDS } from "./core/modules/memory/owner-memory-store.ts";
 export type {
+	Precheck,
+	PrecheckContext,
+	PrecheckFinding,
+	PrecheckRegistry,
+	PrecheckResult,
+} from "./core/modules/schedules/prechecks.ts";
+export { PRECHECK_TIMEOUT_MS } from "./core/modules/schedules/prechecks.ts";
+export type {
 	Recurrence,
 	Weekday,
 } from "./core/modules/schedules/recurrence.ts";
@@ -187,6 +195,7 @@ export {
 	BACKGROUND_TURNS,
 	DELEGATION,
 	MEMORY,
+	PRECHECKS,
 	SCHEDULES,
 	SKILLS,
 } from "./core/services.ts";

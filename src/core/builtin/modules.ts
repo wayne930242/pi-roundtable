@@ -3,6 +3,7 @@ import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import type { SurfacePort } from "../contract/surface.ts";
 import { scheduleCommands } from "../discord/schedule-commands.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
+import { messages } from "../i18n/index.ts";
 import type { OwnerIdentity } from "../identity.ts";
 import type { ModelRef, ThinkingLevel } from "../models.ts";
 import { ConversationBackgroundTurns } from "../modules/background/background-turns.ts";
@@ -20,6 +21,7 @@ import {
 	AGENTS,
 	BACKGROUND_TURNS,
 	DELEGATION,
+	PRECHECKS,
 	SCHEDULES,
 } from "../services.ts";
 import type { SessionContext } from "../sessions.ts";
@@ -77,6 +79,8 @@ export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 		provides: [BACKGROUND_TURNS, DELEGATION],
 		setup: ({ conversations, services, logger, surfaces }) => {
 			const schedules = services.get(SCHEDULES);
+			// Absent when a plugin list leaves the prechecks plugin out: then none can be attached.
+			const prechecks = services.find(PRECHECKS);
 			const discord = services.get(DISCORD);
 			const { connection } = discord;
 			// Another agent's channel, for schedule_list; asked when a tool runs, after the agent server set up.
@@ -121,6 +125,7 @@ export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 								store: schedules,
 								owner: { id: owner.id, name: owner.name },
 								channelFor: ownerChannelFor,
+								...(prechecks ? { prechecks } : {}),
 							},
 							session.homeChannel,
 							served(session),
@@ -155,11 +160,24 @@ export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 export function schedulerPlugin(): RoundtablePlugin {
 	return {
 		name: "schedules",
-		setup: ({ conversations, services, env, logger }) => {
+		setup: ({ conversations, services, env, logger, surfaces }) => {
 			const schedules = services.get(SCHEDULES);
+			const prechecks = services.find(PRECHECKS);
 			const scheduler = new Scheduler({
 				store: schedules,
 				runner: services.get(BACKGROUND_TURNS),
+				...(prechecks ? { prechecks } : {}),
+				// The bot's own message: the surface drops it, so it starts no turn.
+				notify: (schedule, note) =>
+					surfaces.sendReply(schedule.channel, {
+						chunks: [
+							messages().schedulePrecheckNote(
+								schedule.id,
+								schedule.title,
+								note,
+							),
+						],
+					}),
 				logger,
 			});
 			// Without Discord there are no schedule commands; the scheduler still fires.

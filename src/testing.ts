@@ -84,6 +84,11 @@ export { useTestLocale } from "./core/testing/locale.ts";
 export { OWNER_SPEAKER } from "./core/testing/owner.ts";
 export { partial } from "./core/testing/partial.ts";
 export type {
+	FakePrecheck,
+	FakePrecheckAnswer,
+} from "./core/testing/prechecks.ts";
+export { fakePrecheck, fakePrechecks } from "./core/testing/prechecks.ts";
+export type {
 	RecordedLog,
 	RecordingLogger,
 } from "./core/testing/recording-logger.ts";

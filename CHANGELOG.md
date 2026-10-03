@@ -5,6 +5,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.9] - 2026-10-03
+
+### Added
+
+- Schedule prechecks: host code registers a named check with `PRECHECKS` (`register`, as `register({ name, description, timeoutMs?, run })`, provided by the new built-in `prechecks` plugin), and a schedule may name one in the new `precheck` parameter of `schedule_create` and `schedule_update` (`null` removes it). When the schedule falls due, the scheduler takes it as before and then runs the check: `{ wake: false, note? }` skips the turn and posts the note as the bot's own small message, `{ wake: true, context }` runs the turn with the context under a "Precheck found" heading, and a throw or a timeout (`PRECHECK_TIMEOUT_MS`, 60 seconds by default) runs it with the error. `schedule_list` and `/<root> schedule list` show a schedule's precheck and the last outcome, and `schedule_list` names the registered prechecks with their descriptions. New types: `Precheck`, `PrecheckContext`, `PrecheckResult`, `PrecheckRegistry`, `PrecheckFinding`. `Schedule`, `NewSchedule`, and `ScheduleChange` gain an optional `precheck`; `BackgroundTurns.runScheduled` takes the `PrecheckFinding` as an optional third argument. The `schedules` table gains a nullable `precheck` column through the new `schedules-precheck` migration.
+- `pi-roundtable/testing`: `fakePrecheck` (`fakePrecheck(name, answer, options?)`, a precheck that answers as the test says and records its calls) and `fakePrechecks` (a real in-memory registry with the given prechecks registered), with the types `FakePrecheck` and `FakePrecheckAnswer`.
+
 ## [0.7.8] - 2026-10-03
 
 ### Fixed

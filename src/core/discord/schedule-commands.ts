@@ -76,6 +76,9 @@ function section(schedule: Schedule, label: TargetLabel): string {
 			unix(schedule.nextRun),
 		),
 		text.scheduleSetBy(plain(schedule.createdByName), last),
+		...(schedule.precheck
+			? [text.schedulePrecheck(plain(schedule.precheck))]
+			: []),
 		`-# ${plain(prompt)}`,
 	].join("\n");
 }

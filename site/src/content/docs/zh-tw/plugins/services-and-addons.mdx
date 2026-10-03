@@ -56,12 +56,43 @@ export const notes = definePlugin({
 | `AGENTS` | `agent-server` | agent 團隊、唯讀的目錄、每一輪 agent 所跑的 runtime、核准，以及頭像 |
 | `SKILLS` | `skills`（addon） | agent 帶的技能，以及用來列出、連結和掛上技能的 registry |
 | `SCHEDULES` | `schedule-store` | 儲存的排程：create、get、update、remove、due、claim |
+| `PRECHECKS` | `prechecks` | host 以名稱註冊的[預檢](#預檢)：register、get、list |
 | `MEMORY` | `memory`（addon） | 每位 speaker 的記憶：list、add、search、update、remove |
 | `BACKGROUND_TURNS` | `modules` | 沒有人寫訊息觸發的輪次：排程、委派，以及錯誤回報 |
 | `DELEGATION` | `modules` | 啟動背景任務，以及哪些頻道有任務正在執行 |
 
 你的外掛在內建外掛之後執行，所以上面每個 key 都讀得到。
 Discord 連線的 key `DISCORD` 來自 `pi-roundtable/discord`，因為它的 port 用到 discord.js 的型別。
+
+### 預檢
+
+預檢在排程那一輪開始前，決定要不要叫醒 agent。
+在 setup 裡註冊，agent 再用名稱把它掛到排程上。
+
+```ts
+definePlugin({
+	name: "recovery-precheck",
+	setup: ({ services }) => {
+		services.get(PRECHECKS).register({
+			name: "health.recovery",
+			description: "Reads last night's HRV; wakes you when it is a fifth or more under its baseline.",
+			timeoutMs: 15_000,
+			run: async ({ schedule, firedAt, signal }) => {
+				const { hrv, baseline } = await readRecovery(signal);
+				return hrv >= baseline * 0.8
+					? { wake: false, note: `HRV ${hrv} ms, as usual.` }
+					: { wake: true, context: `HRV ${hrv} ms against ${baseline} ms.` };
+			},
+		});
+		return {};
+	},
+});
+```
+
+`{ wake: false, note? }` 會略過這一輪，並把 note 以 bot 自己的小字訊息貼出；bot 的訊息不會觸發新的一輪。
+`{ wake: true, context }` 會照常執行這一輪，`context` 放在「Precheck found」標題下。
+拋出例外或逾時（預設 60 秒，可用 `timeoutMs` 調整）時，這一輪會帶著錯誤照常執行。
+測試時用 `pi-roundtable/testing` 的 `fakePrechecks()`，以 `servicePair(PRECHECKS, registry)` 交給 plugin。
 
 ### 取代內建服務
 

@@ -29,9 +29,9 @@ agent 平常是你寫了才回答。
 
 | 工具 | 作用 |
 | --- | --- |
-| `schedule_create` | 用 `title`、`prompt` 和一種時間設定，建立排程。 |
-| `schedule_list` | 列出這個頻道的排程和下次執行時間；給 `id` 則完整列出單一排程。agent 能用 `agent` 讀另一個 agent 的排程。 |
-| `schedule_update` | 修改單一排程的標題、提示詞或時間。執行中的那一輪可以用它更新自己的提示詞。 |
+| `schedule_create` | 用 `title`、`prompt` 和一種時間設定建立排程，可另外指定 `precheck`。 |
+| `schedule_list` | 列出這個頻道的排程、下次執行時間，以及 host 提供的預檢；給 `id` 則完整列出單一排程。agent 能用 `agent` 讀另一個 agent 的排程。 |
+| `schedule_update` | 修改單一排程的標題、提示詞、時間或預檢（`precheck: null` 會拿掉預檢）。執行中的那一輪可以用它更新自己的提示詞。 |
 | `schedule_cancel` | 刪除一個排程。 |
 
 owner 和 admin 能建立、修改、取消排程。任何說話的人都能列出排程。
@@ -53,6 +53,19 @@ agent 只能改自己的排程；要改別人的，請那個 agent 去改。
 - 發現已經晚了超過 12 小時的執行，例如 bot 停機期間錯過的，會直接跳過，不會補跑。
 - 排程用建立者的層級執行，所以層級比較低的人不能改寫它。
 - 封存 agent 會取消它的排程。
+
+### 預檢
+
+預檢（precheck）是 host 在排程那一輪開始前先跑的便宜檢查。像每天的例行檢查，大多數日子的答案都是「一切正常」，有了預檢，這些日子就不必花一輪模型呼叫。
+預檢由 host 的 plugin 以名稱註冊；`schedule_list` 會列出名稱和說明，agent 用 `precheck` 把它掛到排程上。
+
+- 預檢沒發現問題時，這一輪不會執行，可以改在頻道貼一則小字備註。
+- 發現問題時，這一輪照常執行，並把發現的內容接在提示詞後面。
+- 預檢失敗或逾時（預設 60 秒，預檢可以自訂）時，這一輪仍會執行，並帶上錯誤，讓 agent 去查。
+
+`schedule_list` 和 `/roundtable schedule list` 的上次執行會顯示是哪一種情況，例如 `skipped by precheck (HRV 52 ms, as usual.)`。
+掛上預檢的層級規則和修改排程相同。
+註冊方式請看[服務與 addon](/zh-tw/plugins/services-and-addons/#預檢)。
 
 ### 時區
 

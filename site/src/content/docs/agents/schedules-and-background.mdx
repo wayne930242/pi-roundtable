@@ -29,9 +29,9 @@ On Mondays and Thursdays at 17:30, ask me what I got done.
 
 | Tool | What it does |
 | --- | --- |
-| `schedule_create` | Makes a schedule from a `title`, a `prompt`, and one kind of timing. |
-| `schedule_list` | Lists the channel's schedules with their next run, or one schedule in full with `id`. An agent can read another agent's schedules with `agent`. |
-| `schedule_update` | Changes the title, the prompt, or the timing of one schedule. A run may use it to keep its own prompt current. |
+| `schedule_create` | Makes a schedule from a `title`, a `prompt`, and one kind of timing, and optionally a `precheck`. |
+| `schedule_list` | Lists the channel's schedules with their next run and the prechecks the host offers, or one schedule in full with `id`. An agent can read another agent's schedules with `agent`. |
+| `schedule_update` | Changes the title, the prompt, the timing, or the precheck of one schedule (`precheck: null` removes it). A run may use it to keep its own prompt current. |
 | `schedule_cancel` | Deletes one schedule. |
 
 Owners and admins can create, change, and cancel schedules.
@@ -55,6 +55,19 @@ The timing is one of these:
 - The scheduler skips a run it finds more than 12 hours late, for example after the bot was down.
 - A schedule runs with the tier of the person who made it, so someone of a lower tier cannot rewrite it.
 - Archiving an agent cancels its schedules.
+
+### Prechecks
+
+A precheck is a cheap check the host runs before a schedule's turn, so a daily check whose answer is "all normal" on most days costs no model turn on those days.
+The host's plugins register prechecks by name; `schedule_list` shows them with their descriptions, and an agent attaches one with `precheck`.
+
+- When the precheck finds nothing, the turn does not run. It may post a short note in the channel instead, in small text.
+- When it finds something, the turn runs with what it found added after the prompt.
+- When it fails or takes too long (60 seconds unless it sets its own limit), the turn runs anyway with the error, so the agent can look into it.
+
+The last run in `schedule_list` and `/roundtable schedule list` shows which of these happened, such as `skipped by precheck (HRV 52 ms, as usual.)`.
+Attaching a precheck follows the same tier rules as changing the schedule.
+See [Services and addons](/plugins/services-and-addons/#prechecks) for registering one.
 
 ### Time zone
 
