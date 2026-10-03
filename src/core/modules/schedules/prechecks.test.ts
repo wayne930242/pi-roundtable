@@ -454,7 +454,7 @@ describeDb("PostgreSQL", () => {
 });
 
 describeDb("the precheck migration", () => {
-	test("adds the precheck column to an existing schedules table, its rows without one", async () => {
+	test("adds the precheck and precheck script columns to an existing schedules table, its rows without either", async () => {
 		const sql = new SQL(testDatabaseUrl);
 		try {
 			await sql`DROP TABLE IF EXISTS schedules`;
@@ -474,7 +474,15 @@ describeDb("the precheck migration", () => {
 			const [old] = await store.forChannel("discord:a");
 			expect(old?.title).toBe("old");
 			expect(old?.precheck).toBeUndefined();
+			expect(old?.precheckScript).toBeUndefined();
 			if (!old) throw new Error("missing row");
+			await store.update("discord:a", old.id, {
+				precheckScript: "export default () => ({ wake: true, context: 'x' })",
+			});
+			expect((await store.get(old.id))?.precheckScript).toContain(
+				"export default",
+			);
+			await store.update("discord:a", old.id, { precheckScript: null });
 			await store.update("discord:a", old.id, { precheck: "health.recovery" });
 			expect((await store.get(old.id))?.precheck).toBe("health.recovery");
 			// Running it again changes nothing.

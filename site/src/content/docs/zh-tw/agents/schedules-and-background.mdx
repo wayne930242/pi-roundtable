@@ -65,6 +65,10 @@ agent 只能改自己的排程；要改別人的，請那個 agent 去改。
 
 `schedule_list` 和 `/roundtable schedule list` 的上次執行會顯示是哪一種情況，例如 `skipped by precheck (HRV 52 ms, as usual.)`。
 掛上預檢的層級規則和修改排程相同。
+
+如果 host 有啟用 pi-roundtable-sandbox 的預檢執行器，agent 也可以用 `precheck_script` 自己寫排程的預檢：一小段 JavaScript，透過 host 為這個排程開放的 MCP tools 讀取需要的資料，再回傳要不要叫醒。
+腳本在沒有網路、碰不到 host 檔案的隔離容器裡執行，不會在 bot 自己的行程裡跑。
+`schedule_list` 會說明怎麼寫、能呼叫哪些 tools；沒有執行器時，工具不會提供腳本這個選項。
 註冊方式請看[服務與 addon](/zh-tw/plugins/services-and-addons/#預檢)。
 
 ### 時區

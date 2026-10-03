@@ -1,11 +1,14 @@
 import type { ScheduledOutcome } from "../../contract/channels.ts";
 import type { Logger } from "../../log.ts";
 import type { ScheduleStore } from "../../services.ts";
+import { timeZone, zonedStamp } from "../../time.ts";
 import {
+	type Precheck,
 	type PrecheckFinding,
 	type PrecheckOutcome,
 	type PrecheckRegistry,
 	runPrecheck,
+	SCRIPT_PRECHECK,
 } from "./prechecks.ts";
 import { nextRun } from "./recurrence.ts";
 import type { Schedule } from "./schedule-store.ts";
@@ -21,14 +24,18 @@ export interface ScheduledRunner {
 	): Promise<ScheduledOutcome>;
 }
 
+/** How long stop waits for running prechecks to clean up after aborting them. */
+export const PRECHECK_STOP_MS = 15_000;
+
 /** A run found this late, for example after the service was down, is skipped instead of run. */
 export const LATE_LIMIT_MS = 12 * 3_600_000;
 
 export interface SchedulerOptions {
 	store: Pick<ScheduleStore, "due" | "claim" | "recordStatus">;
 	runner: ScheduledRunner;
-	/** The host's prechecks; without them, a schedule that names one runs with that as its error. */
-	prechecks?: Pick<PrecheckRegistry, "get">;
+	/** The host's prechecks and script runner; without them, a schedule that has one runs with that as its error. */
+	prechecks?: Pick<PrecheckRegistry, "get"> &
+		Partial<Pick<PrecheckRegistry, "scriptRunner">>;
 	/** Posts a skipping precheck's note in the schedule's channel as the bot's own message, which starts no turn. */
 	notify?: (schedule: Schedule, note: string) => Promise<void>;
 	logger: Logger;
@@ -67,6 +74,9 @@ function precheckPrefix(finding: PrecheckFinding | undefined): string {
 export class Scheduler {
 	readonly #options: SchedulerOptions;
 	readonly #running = new Set<Promise<void>>();
+	/** Prechecks in flight, including their cleanup after a timeout, which stop waits for. */
+	readonly #prechecks = new Set<Promise<unknown>>();
+	readonly #stopping = new AbortController();
 	#timer: ReturnType<typeof setInterval> | undefined;
 	#ticking = false;
 
@@ -82,13 +92,33 @@ export class Scheduler {
 		void this.tick();
 	}
 
-	stop(): void {
+	/**
+	 * Stops checking, aborts running prechecks, and waits up to PRECHECK_STOP_MS for them to clean
+	 * up, so a sandboxed script never outlives the host. A turn already running is left to the
+	 * host's drain; no precheck that ends now starts one.
+	 */
+	async stop(): Promise<void> {
 		clearInterval(this.#timer);
+		this.#stopping.abort();
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		const limit = new Promise<"late">((resolve) => {
+			timer = setTimeout(() => resolve("late"), PRECHECK_STOP_MS);
+		});
+		const settled = Promise.allSettled([...this.#prechecks]);
+		try {
+			if ((await Promise.race([settled, limit])) === "late")
+				this.#options.logger.warn(
+					{ prechecks: this.#prechecks.size },
+					"prechecks still cleaning up when the scheduler stopped",
+				);
+		} finally {
+			clearTimeout(timer);
+		}
 	}
 
 	/** Claims every due schedule and starts its run; runs continue after tick resolves. */
 	async tick(): Promise<void> {
-		if (this.#ticking) return;
+		if (this.#ticking || this.#stopping.signal.aborted) return;
 		this.#ticking = true;
 		const { store, logger } = this.#options;
 		try {
@@ -132,20 +162,26 @@ export class Scheduler {
 	async #fire(schedule: Schedule, firedAt: Date): Promise<void> {
 		const { runner, logger } = this.#options;
 		let finding: PrecheckFinding | undefined;
-		if (schedule.precheck) {
-			const decision = await this.#precheck(
-				schedule,
-				schedule.precheck,
-				firedAt,
-			);
+		const name =
+			schedule.precheck ??
+			(schedule.precheckScript ? SCRIPT_PRECHECK : undefined);
+		if (name) {
+			const decision = await this.#precheck(schedule, name, firedAt);
+			if (this.#stopping.signal.aborted) {
+				await this.#record(
+					schedule,
+					"skipped: the host stopped during its precheck",
+				);
+				return;
+			}
 			if (decision.kind === "skip") {
 				await this.#skip(schedule, decision.note);
 				return;
 			}
 			finding =
 				decision.kind === "wake"
-					? { precheck: schedule.precheck, context: decision.context }
-					: { precheck: schedule.precheck, error: decision.error };
+					? { precheck: name, context: decision.context }
+					: { precheck: name, error: decision.error };
 		}
 		logger.info(
 			{
@@ -163,19 +199,63 @@ export class Scheduler {
 		);
 	}
 
+	/**
+	 * The schedule's precheck: a registered one by name, or its script through the host's runner.
+	 * A script never runs in this process; without a runner it fails, and the turn still runs.
+	 */
+	#resolve(schedule: Schedule, firedAt: Date): Precheck | string {
+		const { prechecks } = this.#options;
+		if (schedule.precheck)
+			return (
+				prechecks?.get(schedule.precheck) ??
+				"no precheck of that name is registered"
+			);
+		const script = schedule.precheckScript ?? "";
+		const runner = prechecks?.scriptRunner?.();
+		if (!runner)
+			return "this host has no precheck script runner, so the script did not run";
+		const zone = timeZone();
+		return {
+			name: SCRIPT_PRECHECK,
+			description: "the schedule's own precheck script",
+			...(runner.timeoutMs === undefined
+				? {}
+				: { timeoutMs: runner.timeoutMs }),
+			run: (context) =>
+				runner.run(script, {
+					...context,
+					timeZone: zone,
+					today: zonedStamp(firedAt).slice(0, 10),
+				}),
+		};
+	}
+
 	/** Runs the schedule's precheck; a missing one fails like a throw, so the turn still runs. */
 	async #precheck(
 		schedule: Schedule,
 		name: string,
 		firedAt: Date,
 	): Promise<PrecheckOutcome> {
-		const { prechecks, logger } = this.#options;
+		const { logger } = this.#options;
 		let decision: PrecheckOutcome;
 		try {
-			const precheck = prechecks?.get(name);
-			decision = precheck
-				? await runPrecheck(precheck, { schedule, firedAt })
-				: { kind: "failed", error: "no precheck of that name is registered" };
+			const precheck = this.#resolve(schedule, firedAt);
+			decision =
+				typeof precheck === "string"
+					? { kind: "failed", error: precheck }
+					: await runPrecheck(
+							precheck,
+							{ schedule, firedAt },
+							{
+								signal: this.#stopping.signal,
+								settled: (run) => {
+									const tracked = run
+										.catch(() => undefined)
+										.finally(() => this.#prechecks.delete(tracked));
+									this.#prechecks.add(tracked);
+								},
+							},
+						);
 		} catch (error) {
 			decision = {
 				kind: "failed",

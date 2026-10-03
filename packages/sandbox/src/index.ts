@@ -97,6 +97,15 @@ export {
 	type SandboxService,
 	sandbox,
 } from "./plugin.ts";
+export {
+	PRECHECK_ENTRYPOINT,
+	type PrecheckContainerDriver,
+	type PrecheckMcpServer,
+	type PrecheckScriptRunnerOptions,
+	type PrecheckWorkerInput,
+	precheckBroker,
+	precheckScriptRunner,
+} from "./precheck-runner.ts";
 export type { SandboxReply, SandboxTurn, ToolSpec } from "./protocol.ts";
 export {
 	type ResearchTools,

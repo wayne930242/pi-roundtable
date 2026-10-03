@@ -166,6 +166,7 @@ describe("defineRoundtable", () => {
 			"owner-memory-speaker",
 			"schedules",
 			"schedules-precheck",
+			"schedules-precheck-script",
 			"skills",
 			"skills-guild",
 			"held-actions",

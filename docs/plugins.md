@@ -167,7 +167,7 @@ The built-in plugins provide these, from the main entry:
 | `AGENTS` | `AgentServer` | `agent-server` | The `team` (`AgentTeam`), the read-only `directory` (`AgentDirectory`), the `runtime` every agent turn runs on, `approvals` (whether the owner's reply approves held actions), and `avatars` (`AvatarStudio`) |
 | `SKILLS` | `SkillRegistry` | `skills` (an addon) | What agents carry: `carried`, `carriedNames`, `describeCarried`, `catalog`, `list`, `linkedFrom`, `checkRegistered`, `link`, `attach` |
 | `SCHEDULES` | `ScheduleStore` | `schedule-store` | The stored schedules: `create`, `get`, `forChannel`, `all`, `update`, `remove`, `due`, `claim`, `recordStatus` |
-| `PRECHECKS` | `PrecheckRegistry` | `prechecks` | The host's named [prechecks](#prechecks-wake-a-schedule-only-when-it-has-work): `register`, `get`, `list` |
+| `PRECHECKS` | `PrecheckRegistry` | `prechecks` | The host's named [prechecks](#prechecks-wake-a-schedule-only-when-it-has-work): `register`, `get`, `list`; and the runner of agents' precheck scripts: `useScriptRunner`, `scriptRunner` |
 | `MEMORY` | `MemoryStore` | `memory` (an addon) | `forSpeaker(id)` gives that speaker's `SpeakerMemory`: `list`, `forPrompt`, `add`, `search`, `update`, `removeById`, `remove`; `MEMORY_KINDS` is `core`, `note`, `event` |
 | `BACKGROUND_TURNS` | `BackgroundTurns` | `modules` | Turns nobody wrote: `runScheduled`, `runDelegated`, `runErrorReport` |
 | `DELEGATION` | `Delegator` | `modules` | `start(request)` a background task, `runningChannels()`, `idle()` |
@@ -799,6 +799,19 @@ export function recoveryPrecheck(read: () => Promise<RecoveryReading>) {
 }
 ```
 <!-- /example -->
+
+##### Precheck scripts: prechecks the agent writes
+
+A host can also let agents write a schedule's precheck themselves, so a new check needs no change to the host.
+The core stores the script with the schedule and decides with it exactly as with a named precheck, but it never runs a script itself: a `PrecheckScriptRunner` does, registered once with `services.get(PRECHECKS).useScriptRunner(runner)`.
+pi-roundtable-sandbox's `precheckScriptRunner` runs each script in a sealed container whose only way out is the MCP tools the host grants for that schedule; see its README.
+
+- `schedule_create` and `schedule_update` take `precheck_script`, a JavaScript module of at most `PRECHECK_SCRIPT_CHARS` (8,000) characters with a default export; it is parsed, never run, when it is set. A schedule has a `precheck` or a `precheck_script`; setting one removes the other, and `null` removes either.
+- The runner's `run(script, context)` gets the `PrecheckScriptContext`: the schedule, `firedAt`, `signal`, the host's `timeZone`, and `today`, the date there. Its answer is checked like a named precheck's, and its finding is named `script`.
+- `describe({ channel, target, tier })` (a `PrecheckScope`) tells the model how to write one and what it may call there; `schedule_list` shows it, waiting at most 10 seconds. `tier` is the asker's there and the script's creator's when it runs, so a runner may grant lower tiers less.
+- When the host stops, the scheduler aborts running scripts and waits up to 15 seconds for the runner to clean up; a precheck that ends then starts no turn.
+- Without a runner, the tools neither take nor mention `precheck_script`, a script is refused with the registered names, and a schedule that already has one wakes with `### Precheck failed: script`, never a silent skip.
+
 
 ### `migrations` and `context.database()`: tables of your own
 
@@ -2135,6 +2148,7 @@ Call `useTestLocale()` after a test changes the process-wide locale or time zone
 Use `partial<Port>({ ... })` to stand in for a port your code takes as an argument.
 It provides the members you give it and throws an error naming any missing member you read, so the test needs no `as unknown as Port` cast.
 `fakePrecheck(name, answer, { description?, timeoutMs? })` is a precheck that answers `answer` (a `PrecheckResult`, an `Error` it throws, or a function of its context) and records each context in `calls`; `fakePrechecks(...prechecks)` is a real in-memory `PrecheckRegistry` with them registered, which a test gives a plugin as `servicePair(PRECHECKS, registry)` and reads back with `registry.get(name)`.
+`fakeScriptRunner(answer, { describe?, timeoutMs? })` is a `PrecheckScriptRunner` that runs nothing and answers `answer` (a result, an `Error` it throws, or a function of the script and its context), recording each call in `calls`; give it to `registry.useScriptRunner`.
 `fakeDiscord({ ownerId?, rootCommand? })` is the `DISCORD` service for a plugin that adds slash commands: give it as `services: [discord.service]`, read what the plugin added with `discord.added()`, and compose the tree Discord would get with `discord.compose()`.
 Only `commands` and `guard` are given; a plugin that reads another member of `DISCORD` in a test gives its own with `servicePair(DISCORD, { ... })`.
 
@@ -2507,6 +2521,10 @@ Import from the entries listed below; source area files are internal.
 | `PrecheckFinding` | `pi-roundtable` | type |
 | `PrecheckRegistry` | `pi-roundtable` | type |
 | `PrecheckResult` | `pi-roundtable` | type |
+| `PrecheckScope` | `pi-roundtable` | type |
+| `PrecheckScriptContext` | `pi-roundtable` | type |
+| `PrecheckScriptRunner` | `pi-roundtable` | type |
+| `PRECHECK_SCRIPT_CHARS` | `pi-roundtable` | value |
 | `SKILLS` | `pi-roundtable` | value |
 | `Schedule` | `pi-roundtable` | type |
 | `ScheduleChange` | `pi-roundtable` | type |
@@ -2585,6 +2603,9 @@ Import from the entries listed below; source area files are internal.
 | `fakePrechecks` | `pi-roundtable/testing` | value |
 | `FakePrecheck` | `pi-roundtable/testing` | type |
 | `FakePrecheckAnswer` | `pi-roundtable/testing` | type |
+| `fakeScriptRunner` | `pi-roundtable/testing` | value |
+| `FakeScriptAnswer` | `pi-roundtable/testing` | type |
+| `FakeScriptRunner` | `pi-roundtable/testing` | type |
 | `fakeThreads` | `pi-roundtable/testing` | value |
 | `openTestStore` | `pi-roundtable/testing` | value |
 | `servicePair` | `pi-roundtable/testing` | value |

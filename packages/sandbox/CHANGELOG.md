@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.11
+
+- `precheckScriptRunner` runs agents' precheck scripts (pi-roundtable 0.7.11) in a sealed container per run: no network, a read-only root, no capabilities, a non-root user, an empty workspace, and a per-run broker (`precheckBroker`) that forwards only single `tools/call` requests of the tools `grant(scope)` allows, with the host's credential (`PrecheckMcpServer`). The container runs `worker/precheck-main.ts` (`PRECHECK_ENTRYPOINT`, `PrecheckWorkerInput`), which gives the script `mcp.call`, `mcp.json`, `firedAt`, `timeZone`, `today`, and `schedule`.
+- A script's workspace is mounted read-only (`ContainerSpec.workspaceReadOnly`), so it writes only to the container's bounded `/tmp`. The broker refuses an answer that carries the credential plainly, escaped, inside JSON text, base64-encoded, or as a key; joins an SSE event's `data:` lines; and refuses a second call while one is pending (409) without spending the budget. The script's console output goes to stderr and never into its answer, and `grant` receives the creator's `tier`.
+- `ContainerSpec` takes `entrypoint`, and `DockerContainerDriver.exec` runs a sealed container with any input and a bounded output (`PrecheckContainerDriver`); `worker/Dockerfile` includes the precheck worker.
+
 ## 0.7.10
 
 - Compact Pi worker sessions with the core's tiers (300,000 tokens through a host compactor, Pi's summary past 500,000), through the new `compaction` option (`PiCompactor`: `engine`, `compact(request, { channel, signal })`, `timeoutMs`, `maxRequestBytes`) and the protocol types `PiCompactRequest`, `PiCompaction`, `PiCompactResponse`, `PiCompactionReport`, `PiCompactMessage` and `PiWorkerConfig`; the host logs every compaction and fallback per channel.

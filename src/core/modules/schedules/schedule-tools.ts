@@ -6,7 +6,12 @@ import type { ScheduleStore } from "../../services.ts";
 import type { ScheduleToolName } from "../../shared/schedule-tools.ts";
 import { type Tier, tierAtLeast } from "../../speakers.ts";
 import { timeZone, zonedStamp } from "../../time.ts";
-import type { PrecheckFinding, PrecheckRegistry } from "./prechecks.ts";
+import {
+	checkPrecheckScript,
+	PRECHECK_SCRIPT_CHARS,
+	type PrecheckFinding,
+	type PrecheckRegistry,
+} from "./prechecks.ts";
 import {
 	describeRecurrence,
 	nextRun,
@@ -18,6 +23,8 @@ import type { Schedule } from "./schedule-store.ts";
 
 const TITLE_CHARS = 80;
 const LIST_PROMPT_PREVIEW = 200;
+/** How long schedule_list waits for the script runner to say what a script may call. */
+const DESCRIBE_TIMEOUT_MS = 10_000;
 const DAY_MS = 86_400_000;
 
 export interface ScheduleToolContext {
@@ -31,8 +38,12 @@ export interface ScheduleToolContext {
 	/** Who asked, recorded on created schedules; a scheduled run speaks for its creator. */
 	author: { id: string; name: string; tier?: Tier };
 	now: Date;
-	/** The host's prechecks a schedule may name; without them, none can be attached. */
-	prechecks?: Pick<PrecheckRegistry, "get" | "list">;
+	/**
+	 * The host's prechecks a schedule may name, and the runner of the scripts it may carry instead;
+	 * without them, none can be attached.
+	 */
+	prechecks?: Pick<PrecheckRegistry, "get" | "list"> &
+		Partial<Pick<PrecheckRegistry, "scriptRunner">>;
 }
 
 /** The limits of the context's target; a target without them may not schedule. */
@@ -84,11 +95,57 @@ function precheckName(ctx: ScheduleToolContext, value: unknown): string {
 	return name;
 }
 
-/** The prechecks a schedule may name, for schedule_list; empty when the host registers none. */
-function precheckCatalog(ctx: ScheduleToolContext): string {
+/** A precheck script the host's sandbox runs; refused when the host has no runner for scripts. */
+function precheckScript(ctx: ScheduleToolContext, value: unknown): string {
+	if (!ctx.prechecks?.scriptRunner?.()) {
+		const names = (ctx.prechecks?.list() ?? []).map((p) => p.name);
+		throw new ScheduleError(
+			`this host runs no precheck scripts; ${names.length ? `attach a registered precheck instead: ${names.join(", ")}` : "it registers no prechecks either"}`,
+		);
+	}
+	return checkPrecheckScript(value);
+}
+
+/** The prechecks a schedule may name or write, for schedule_list; empty when the host offers neither. */
+async function precheckCatalog(ctx: ScheduleToolContext): Promise<string> {
 	const all = ctx.prechecks?.list() ?? [];
-	if (all.length === 0) return "";
-	return `\n\nPrechecks you can attach with precheck on schedule_create or schedule_update; the host runs one before each turn and wakes you only when it finds something:\n${all.map((p) => `- ${p.name}: ${p.description.replace(/\n/g, " ")}`).join("\n")}`;
+	const runner = ctx.prechecks?.scriptRunner?.();
+	const named =
+		all.length === 0
+			? ""
+			: `\n\nPrechecks you can attach with precheck on schedule_create or schedule_update; the host runs one before each turn and wakes you only when it finds something:\n${all.map((p) => `- ${p.name}: ${p.description.replace(/\n/g, " ")}`).join("\n")}`;
+	if (!runner) return named;
+	// The list still answers when the host cannot say, or is slow to say, what a script may reach here.
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	const late = new Promise<string>((resolve) => {
+		timer = setTimeout(
+			() => resolve("it did not answer in time"),
+			DESCRIBE_TIMEOUT_MS,
+		);
+	});
+	const described = Promise.resolve()
+		.then(() =>
+			runner.describe({
+				channel: ctx.channel,
+				target: ctx.target.name,
+				...(ctx.author.tier ? { tier: ctx.author.tier } : {}),
+			}),
+		)
+		.then(
+			(text) => ({ text }),
+			(error: unknown) => ({
+				error: error instanceof Error ? error.message : String(error),
+			}),
+		);
+	const answer = await Promise.race([
+		described,
+		late.then((error) => ({ error })),
+	]).finally(() => clearTimeout(timer));
+	const guide =
+		"text" in answer
+			? answer.text
+			: `The host could not say what a script may call here (${answer.error}); a script set now may fail when it runs.`;
+	return `${named}\n\nYou can write a precheck of your own instead, with precheck_script on schedule_create or schedule_update (null removes it): a JavaScript module, at most ${PRECHECK_SCRIPT_CHARS} characters, that the host runs in a sandbox before each turn. A schedule has a precheck or a precheck_script, not both.\n${guide}`;
 }
 
 function hasTiming(input: Input): boolean {
@@ -121,7 +178,11 @@ function line(schedule: Schedule): string {
 		schedule.prompt.length > LIST_PROMPT_PREVIEW
 			? `${schedule.prompt.slice(0, LIST_PROMPT_PREVIEW)}…`
 			: schedule.prompt;
-	const precheck = schedule.precheck ? `; precheck ${schedule.precheck}` : "";
+	const precheck = schedule.precheck
+		? `; precheck ${schedule.precheck}`
+		: schedule.precheckScript
+			? `; precheck script (${schedule.precheckScript.length} characters)`
+			: "";
 	const last = schedule.lastRun
 		? `; last run ${zonedStamp(schedule.lastRun)} (${schedule.lastStatus ?? "?"})`
 		: "";
@@ -159,10 +220,16 @@ export async function callScheduleTool(
 			const title = text(input, "title", TITLE_CHARS);
 			const prompt = text(input, "prompt", limits.promptChars);
 			const [recurrence, next] = timing(ctx, input);
-			const precheck =
-				input.precheck === undefined || input.precheck === null
-					? undefined
-					: precheckName(ctx, input.precheck);
+			const given = (name: string) =>
+				input[name] !== undefined && input[name] !== null;
+			if (given("precheck") && given("precheck_script"))
+				throw new ScheduleError("give precheck or precheck_script, not both");
+			const precheck = given("precheck")
+				? precheckName(ctx, input.precheck)
+				: undefined;
+			const script = given("precheck_script")
+				? precheckScript(ctx, input.precheck_script)
+				: undefined;
 			const existing = await ctx.store.forChannel(ctx.channel);
 			if (existing.length >= limits.perChannel)
 				throw new ScheduleError(
@@ -179,21 +246,29 @@ export async function callScheduleTool(
 				createdByName: ctx.author.name,
 				createdTier: ctx.author.tier ?? "owner",
 				...(precheck ? { precheck } : {}),
+				...(script ? { precheckScript: script } : {}),
 			});
-			const checked = precheck ? `; precheck ${precheck} runs first` : "";
+			const checked = precheck
+				? `; precheck ${precheck} runs first`
+				: script
+					? "; its precheck script runs first"
+					: "";
 			return `Scheduled #${created.id} "${title}": ${describeRecurrence(recurrence)}, first run ${zonedStamp(next)} ${messages().zoneTime(timeZone())}${checked}.`;
 		}
 		case "schedule_list": {
 			if (input.id !== undefined) {
 				const schedule = await own(ctx, input);
-				return `${line(schedule).split("\n")[0]}\n\nPrompt:\n${schedule.prompt}`;
+				const script = schedule.precheckScript
+					? `\n\nPrecheck script:\n${schedule.precheckScript}`
+					: "";
+				return `${line(schedule).split("\n")[0]}\n\nPrompt:\n${schedule.prompt}${script}`;
 			}
 			const all = await ctx.store.forChannel(ctx.channel);
 			const listed =
 				all.length === 0
 					? "This channel has no schedules."
 					: `It is ${zonedStamp(ctx.now)} in ${messages().zoneName(timeZone())}.\n${all.map(line).join("\n")}`;
-			return `${listed}${precheckCatalog(ctx)}`;
+			return `${listed}${await precheckCatalog(ctx)}`;
 		}
 		case "schedule_update": {
 			const schedule = changeable(ctx, await own(ctx, input));
@@ -207,19 +282,35 @@ export async function callScheduleTool(
 				change.recurrence = recurrence;
 				change.nextRun = next;
 			}
-			// null removes the precheck; a name must be registered.
+			// null removes one; a name must be registered, and a script replaces a name and back.
+			if (
+				input.precheck !== undefined &&
+				input.precheck !== null &&
+				input.precheck_script !== undefined &&
+				input.precheck_script !== null
+			)
+				throw new ScheduleError("give precheck or precheck_script, not both");
 			if (input.precheck !== undefined)
 				change.precheck =
 					input.precheck === null ? null : precheckName(ctx, input.precheck);
+			if (input.precheck_script !== undefined)
+				change.precheckScript =
+					input.precheck_script === null
+						? null
+						: precheckScript(ctx, input.precheck_script);
+			if (change.precheck) change.precheckScript = null;
+			if (change.precheckScript) change.precheck = null;
 			if (Object.keys(change).length === 0)
 				throw new ScheduleError(
-					"give a title, prompt, timing, or precheck to change",
+					"give a title, prompt, timing, precheck, or precheck_script to change",
 				);
 			const updated = await ctx.store.update(ctx.channel, schedule.id, change);
 			if (!updated) throw new ScheduleError(`schedule #${schedule.id} is gone`);
 			const checked = updated.precheck
 				? `; precheck ${updated.precheck} runs first`
-				: "";
+				: updated.precheckScript
+					? "; its precheck script runs first"
+					: "";
 			return `Updated #${updated.id} "${updated.title}": ${describeRecurrence(updated.recurrence)}, next run ${zonedStamp(updated.nextRun)}${checked}.`;
 		}
 		case "schedule_cancel": {

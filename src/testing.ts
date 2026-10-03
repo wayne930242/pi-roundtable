@@ -86,8 +86,14 @@ export { partial } from "./core/testing/partial.ts";
 export type {
 	FakePrecheck,
 	FakePrecheckAnswer,
+	FakeScriptAnswer,
+	FakeScriptRunner,
 } from "./core/testing/prechecks.ts";
-export { fakePrecheck, fakePrechecks } from "./core/testing/prechecks.ts";
+export {
+	fakePrecheck,
+	fakePrechecks,
+	fakeScriptRunner,
+} from "./core/testing/prechecks.ts";
 export type {
 	RecordedLog,
 	RecordingLogger,

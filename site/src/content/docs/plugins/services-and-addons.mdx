@@ -94,6 +94,9 @@ definePlugin({
 A throw or a timeout (60 seconds unless `timeoutMs` says otherwise) runs the turn with the error.
 Test it with `fakePrechecks()` from `pi-roundtable/testing`, given as `servicePair(PRECHECKS, registry)`.
 
+To let agents write their own prechecks, register a script runner once: `services.get(PRECHECKS).useScriptRunner(precheckScriptRunner({ image, runRoot, uid, gid, grant }))` from pi-roundtable-sandbox.
+`grant({ channel, target })` returns the MCP servers and tools a script for that schedule may call, never more than its agent has; the script runs in a sealed container and reaches only those.
+
 ### Replacing a built-in service
 
 A plugin that lists a key in both `provides` and `replaces` takes over that service.

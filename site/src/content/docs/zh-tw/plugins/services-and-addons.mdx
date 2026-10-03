@@ -94,6 +94,9 @@ definePlugin({
 拋出例外或逾時（預設 60 秒，可用 `timeoutMs` 調整）時，這一輪會帶著錯誤照常執行。
 測試時用 `pi-roundtable/testing` 的 `fakePrechecks()`，以 `servicePair(PRECHECKS, registry)` 交給 plugin。
 
+若要讓 agent 自己寫預檢，註冊一次腳本執行器：從 pi-roundtable-sandbox 呼叫 `services.get(PRECHECKS).useScriptRunner(precheckScriptRunner({ image, runRoot, uid, gid, grant }))`。
+`grant({ channel, target })` 回傳這個排程的腳本能呼叫的 MCP server 與 tools，不能超過該 agent 原本的權限；腳本在隔離容器裡執行，只碰得到這些。
+
 ### 取代內建服務
 
 外掛同時把某個 key 列在 `provides` 和 `replaces`，就接手了那個服務。

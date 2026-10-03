@@ -74,12 +74,33 @@ export interface ScheduleToolWording {
 	locale: Locale;
 	/** An IANA time zone, such as `Asia/Taipei`. */
 	timeZone: string;
+	/**
+	 * Whether the host runs agents' precheck scripts, so schedule_create and schedule_update take
+	 * `precheck_script`; without it they neither take nor mention one.
+	 */
+	precheckScripts?: boolean;
 }
 
 export function scheduleToolSpecs(
 	wording: ScheduleToolWording,
 ): readonly ScheduleToolSpec[] {
 	const zone = catalogFor(wording.locale).zoneTime(wording.timeZone);
+	const script = (cleared: boolean): Record<string, TSchema> =>
+		wording.precheckScripts
+			? {
+					precheck_script: Type.Optional(
+						cleared
+							? Type.Union([Type.String(), Type.Null()], {
+									description:
+										"A JavaScript module the host runs in a sandbox before each turn, as schedule_list explains; it replaces precheck. null removes it.",
+								})
+							: Type.String({
+									description:
+										"A JavaScript module the host runs in a sandbox before each turn, as schedule_list explains; instead of precheck.",
+								}),
+					),
+				}
+			: {};
 	return [
 		{
 			name: "schedule_create",
@@ -97,6 +118,7 @@ export function scheduleToolSpecs(
 							"The name of a precheck the host runs first, from schedule_list; you are woken only when it finds something.",
 					}),
 				),
+				...script(false),
 			}),
 		},
 		{
@@ -125,6 +147,7 @@ export function scheduleToolSpecs(
 							"A precheck's name from schedule_list to run first, or null to remove the schedule's precheck.",
 					}),
 				),
+				...script(true),
 			}),
 		},
 		{

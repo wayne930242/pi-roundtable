@@ -78,7 +78,9 @@ function section(schedule: Schedule, label: TargetLabel): string {
 		text.scheduleSetBy(plain(schedule.createdByName), last),
 		...(schedule.precheck
 			? [text.schedulePrecheck(plain(schedule.precheck))]
-			: []),
+			: schedule.precheckScript
+				? [text.schedulePrecheckScript(schedule.precheckScript.length)]
+				: []),
 		`-# ${plain(prompt)}`,
 	].join("\n");
 }

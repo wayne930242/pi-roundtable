@@ -5,6 +5,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.11] - 2026-10-03
+
+### Added
+
+- Precheck scripts: agents may write a schedule's precheck themselves. `schedule_create` and `schedule_update` take `precheck_script`, a JavaScript module of at most `PRECHECK_SCRIPT_CHARS` (8,000) characters with a default export, parsed but never run when it is set; a schedule has a `precheck` or a `precheck_script`, and setting one removes the other. The core never runs a script: a `PrecheckScriptRunner` registered with `PRECHECKS.useScriptRunner` (`scriptRunner` reads it) runs it with a `PrecheckScriptContext` (the schedule, `firedAt`, `signal`, the host's `timeZone`, and `today`), and its `describe` (given a `PrecheckScope`) tells the model what a script may call; `schedule_list` shows it and a schedule's script. Without a runner, the tools neither take nor mention scripts, and a stored script wakes the turn with `### Precheck failed: script`. `Schedule`, `NewSchedule`, and `ScheduleChange` gain `precheckScript`; the `schedules` table gains a nullable `precheck_script` column through the new `schedules-precheck-script` migration. `scheduleToolSpecs` takes `precheckScripts`.
+- `pi-roundtable/testing`: `fakeScriptRunner` (`fakeScriptRunner(answer, options?)`), with the types `FakeScriptAnswer` and `FakeScriptRunner`.
+- `PrecheckScope` carries `tier`: the script's creator's tier when it runs, the asker's when `schedule_list` describes it, so a runner may grant lower tiers less. A script may export its default as `export { check as default }`. The store itself keeps a schedule's `precheck` and `precheckScript` apart. `schedule_list` waits at most 10 seconds for the runner's `describe`.
+
+### Changed
+
+- Stopping the scheduler aborts running prechecks (their `signal` fires) and waits up to 15 seconds for them to settle, so a sandboxed script's container is removed before the host exits; a precheck that ends after the stop starts no turn and records `skipped: the host stopped during its precheck`.
+- Behavior change: `PrecheckRegistry` gains `useScriptRunner` and `scriptRunner`, so a host that provides `PRECHECKS` with a registry of its own must add them.
+- pi-roundtable-sandbox: `precheckScriptRunner` runs each script in a sealed container; see its changelog.
+
 ## [0.7.10] - 2026-10-03
 
 ### Added

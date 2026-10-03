@@ -1,7 +1,14 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+	mkdirSync,
+	mkdtempSync,
+	readdirSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { precheckScriptRunner } from "./precheck-runner.ts";
 import { isRecord } from "./protocol.ts";
 import { SandboxRuntime } from "./runtime.ts";
 
@@ -112,6 +119,111 @@ test.skipIf(
 			await endpoint.stop(true);
 			rmSync(root, { recursive: true, force: true });
 			await Bun.spawn(["docker", "image", "rm", hostileImage, image], {
+				stdout: "ignore",
+				stderr: "ignore",
+			}).exited;
+		}
+	},
+	300_000,
+);
+
+/** A precheck script runs sealed: no network of its own, only the broker's granted MCP tools. */
+test.skipIf(
+	process.env.SANDBOX_DOCKER_TEST !== "1" || process.platform !== "linux",
+)(
+	"Docker runs a precheck script that reaches its granted MCP tool only through the broker",
+	async () => {
+		const root = mkdtempSync(join(tmpdir(), "sb-precheck-"));
+		const image = "pi-roundtable-sandbox:precheck-test";
+		let mcpCalls = 0;
+		const mcp = Bun.serve({
+			hostname: "127.0.0.1",
+			port: 0,
+			fetch: async (request) => {
+				mcpCalls++;
+				expect(request.headers.get("authorization")).toBe(
+					"Bearer integration-mcp-token",
+				);
+				const body: unknown = await request.json();
+				if (!isRecord(body) || !isRecord(body.params))
+					throw new Error("invalid test request");
+				expect(body.params.name).toBe("get-hrv");
+				return Response.json({
+					jsonrpc: "2.0",
+					id: 1,
+					result: {
+						content: [
+							{ type: "text", text: JSON.stringify({ lastNightAvg: 22 }) },
+						],
+					},
+				});
+			},
+		});
+		try {
+			const build = Bun.spawn(
+				["docker", "build", "-f", "worker/Dockerfile", "-t", image, "."],
+				{ stdout: "inherit", stderr: "inherit" },
+			);
+			expect(await build.exited).toBe(0);
+			const runRoot = join(root, "run");
+			mkdirSync(runRoot, { mode: 0o700 });
+			const runner = precheckScriptRunner({
+				image,
+				runRoot,
+				uid: process.getuid?.() ?? 0,
+				gid: process.getgid?.() ?? 0,
+				entrypoint: ["bun", "/app/worker/precheck-main.ts"],
+				allowHttpMcp: true,
+				grant: () => [
+					{
+						name: "health",
+						url: `http://127.0.0.1:${mcp.port}/mcp`,
+						tools: ["get-hrv"],
+						token: () => "integration-mcp-token",
+					},
+				],
+			});
+			const script = `export default async ({ mcp, today }) => {
+				let direct = "reached";
+				try {
+					await fetch("http://127.0.0.1:${mcp.port}/mcp", { signal: AbortSignal.timeout(3000) });
+				} catch {
+					direct = "blocked";
+				}
+				const hrv = await mcp.json("health", "get-hrv", { date: today });
+				return { wake: true, context: direct + " " + today + " " + hrv.lastNightAvg };
+			};`;
+			const result = await runner.run(script, {
+				schedule: {
+					id: 1,
+					title: "recovery",
+					channel: "fake:owner",
+					target: "owner",
+					prompt: "p",
+					recurrence: {
+						kind: "every",
+						time: "09:30",
+						everyDays: 1,
+						startDate: "2026-10-01",
+					},
+					nextRun: new Date(),
+					createdById: "owner",
+					createdByName: "Owner",
+					createdTier: "owner",
+					createdAt: new Date(),
+				},
+				firedAt: new Date("2026-10-04T01:30:00Z"),
+				timeZone: "Asia/Taipei",
+				today: "2026-10-04",
+				signal: AbortSignal.timeout(60_000),
+			});
+			expect(result).toEqual({ wake: true, context: "blocked 2026-10-04 22" });
+			expect(mcpCalls).toBe(1);
+			expect(readdirSync(runRoot)).toEqual([]);
+		} finally {
+			await mcp.stop(true);
+			rmSync(root, { recursive: true, force: true });
+			await Bun.spawn(["docker", "image", "rm", image], {
 				stdout: "ignore",
 				stderr: "ignore",
 			}).exited;

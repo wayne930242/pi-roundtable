@@ -49,6 +49,8 @@ export function schedulesEn(ctx: CatalogContext) {
 		scheduleSetBy: (name: string, lastRun: string) =>
 			`Set by ${name}${lastRun}`,
 		schedulePrecheck: (name: string) => `Checked first by precheck ${name}`,
+		schedulePrecheckScript: (chars: number) =>
+			`Checked first by its own precheck script (${chars} characters)`,
 		schedulePrecheckNote: (id: number, title: string, note: string) =>
 			`-# Schedule #${id} ${title}, skipped by its precheck: ${note.replace(/\n+/g, "\n-# ")}`,
 		scheduleChoice: (id: number, title: string, recurrence: string) =>
@@ -91,6 +93,8 @@ export function schedulesZhTW(
 		scheduleSetBy: (name: string, lastRun: string) =>
 			`由 ${name} 設定${lastRun}`,
 		schedulePrecheck: (name: string) => `先由預檢 ${name} 判斷`,
+		schedulePrecheckScript: (chars: number) =>
+			`先由自訂的預檢腳本判斷（${chars} 字元）`,
 		schedulePrecheckNote: (id: number, title: string, note: string) =>
 			`-# 排程 #${id} ${title} 經預檢略過：${note.replace(/\n+/g, "\n-# ")}`,
 		scheduleChoice: (id: number, title: string, recurrence: string) =>

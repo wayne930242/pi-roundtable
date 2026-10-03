@@ -27,8 +27,9 @@ export interface OwnerSchedules {
 	 * messages for a conversation no chat surface carries, where a run could not be posted.
 	 */
 	channelFor: (channel: ChannelKey) => Promise<ChannelKey>;
-	/** The host's prechecks a schedule may name; without them, none can be attached. */
-	prechecks?: Pick<PrecheckRegistry, "get" | "list">;
+	/** The host's prechecks a schedule may name, and the runner of scripts it may carry; without them, none can be attached. */
+	prechecks?: Pick<PrecheckRegistry, "get" | "list"> &
+		Partial<Pick<PrecheckRegistry, "scriptRunner">>;
 }
 
 /** Finds another agent's channel, for reading its schedules; throws ScheduleError when there is none. */
@@ -65,6 +66,7 @@ export function schedulesExtension(
 	const defs = scheduleToolSpecs({
 		locale: activeLocale(),
 		timeZone: timeZone(),
+		precheckScripts: prechecks?.scriptRunner?.() !== undefined,
 	}).map((base) => {
 		const spec = agents ? withAgentOption(base) : base;
 		return {

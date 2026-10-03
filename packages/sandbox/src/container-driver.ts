@@ -17,6 +17,10 @@ export interface ContainerSpec {
 	memoryMb?: number;
 	cpus?: number;
 	pids?: number;
+	/** Runs this command instead of the image's own, such as a precheck script's runner. */
+	entrypoint?: readonly string[];
+	/** Mounts the workspace read-only, for a run that may write nothing to the host. */
+	workspaceReadOnly?: boolean;
 }
 export interface ContainerDriver {
 	run(
@@ -64,6 +68,15 @@ export function containerRunArgs(spec: ContainerSpec): string[] {
 		pids < 8
 	)
 		throw new Error("invalid resource limits");
+	const [command, ...args] = spec.entrypoint ?? [];
+	if (
+		spec.entrypoint &&
+		(!command ||
+			spec.entrypoint.some(
+				(part) => !part || part.startsWith("-") || /[\0\r\n]/.test(part),
+			))
+	)
+		throw new Error("invalid entrypoint");
 	return [
 		"run",
 		"--rm",
@@ -99,10 +112,12 @@ export function containerRunArgs(spec: ContainerSpec): string[] {
 		"--mount",
 		`type=bind,src=${spec.runDir},dst=/broker,readonly,bind-propagation=rprivate`,
 		"--mount",
-		`type=bind,src=${spec.workspaceDir},dst=/workspace,bind-propagation=rprivate`,
+		`type=bind,src=${spec.workspaceDir},dst=/workspace,${spec.workspaceReadOnly ? "readonly," : ""}bind-propagation=rprivate`,
 		"--env",
 		"HOME=/tmp/home",
+		...(command ? ["--entrypoint", command] : []),
 		spec.image,
+		...args,
 	];
 }
 
@@ -117,6 +132,30 @@ export class DockerContainerDriver implements ContainerDriver {
 		turn: SandboxTurn,
 		signal: AbortSignal,
 	): Promise<SandboxReply> {
+		const output = await this.exec(spec, JSON.stringify(turn), signal, {
+			stdoutBytes: 2 * 1024 * 1024,
+		});
+		const reply: unknown = JSON.parse(output);
+		if (
+			!isRecord(reply) ||
+			typeof reply.ok !== "boolean" ||
+			typeof reply.text !== "string" ||
+			reply.text.length > 100_000
+		)
+			throw new Error("invalid sandbox reply");
+		return { ok: reply.ok, text: reply.text };
+	}
+
+	/**
+	 * Runs one sealed container with `input` on its stdin and returns its stdout, bounded; a
+	 * nonzero exit or an abort throws, and the container is force-removed either way.
+	 */
+	async exec(
+		spec: ContainerSpec,
+		input: string,
+		signal: AbortSignal,
+		limits: { stdoutBytes: number },
+	): Promise<string> {
 		// Canonical paths prevent symlinks in operator configuration selecting a different mount.
 		const args = containerRunArgs({
 			...spec,
@@ -133,24 +172,16 @@ export class DockerContainerDriver implements ContainerDriver {
 		const abort = () => child.kill("SIGKILL");
 		signal.addEventListener("abort", abort, { once: true });
 		try {
-			child.stdin.write(JSON.stringify(turn));
+			child.stdin.write(input);
 			child.stdin.end();
 			const [output, , code] = await Promise.all([
-				boundedText(child.stdout, 2 * 1024 * 1024),
+				boundedText(child.stdout, limits.stdoutBytes),
 				boundedText(child.stderr, 128 * 1024),
 				child.exited,
 			]);
 			signal.throwIfAborted();
 			if (code !== 0) throw new Error("sandbox worker failed");
-			const reply: unknown = JSON.parse(output);
-			if (
-				!isRecord(reply) ||
-				typeof reply.ok !== "boolean" ||
-				typeof reply.text !== "string" ||
-				reply.text.length > 100_000
-			)
-				throw new Error("invalid sandbox reply");
-			return { ok: reply.ok, text: reply.text };
+			return output;
 		} finally {
 			signal.removeEventListener("abort", abort);
 			child.kill("SIGKILL");

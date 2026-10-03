@@ -364,6 +364,53 @@ One of `search` with a fetch option, or `tools`, is required.
 Host search/model credentials stay in the trusted host process, and report delivery must remain in the declared guest channel.
 These hooks broaden the sealed threat model: review every adapter, apply provider spend limits and host quotas, and never substitute an unrestricted default delegation worker.
 
+## Precheck scripts
+
+`precheckScriptRunner` lets agents write a schedule's precheck themselves (pi-roundtable 0.7.11 or later): a short JavaScript module that decides, before the scheduled turn, whether the agent is woken at all.
+The core stores and parses the script but never runs it; this runner runs it in a sealed container, one per run.
+Register it from a trusted plugin of your own:
+
+```ts
+import { PRECHECKS, definePlugin } from "pi-roundtable";
+import { precheckScriptRunner } from "pi-roundtable-sandbox";
+
+export const precheckScripts = definePlugin({
+  name: "precheck-scripts",
+  setup: ({ services }) => {
+    services.get(PRECHECKS).useScriptRunner(precheckScriptRunner({
+      image: "pi-roundtable-sandbox:pi",
+      runRoot: "/tmp/roundtable-precheck",
+      // The host's non-root user, who owns runRoot; root is refused.
+      uid: 1000,
+      gid: 1000,
+      // Never more than the schedule's agent may call itself; [] leaves the script no way out.
+      grant: ({ channel, target }) => grantsFor(channel, target),
+    }));
+    return {};
+  },
+});
+```
+
+`grant({ channel, target })` returns the `PrecheckMcpServer`s a script for that schedule may call: `{ name, url, tools, token? }`.
+The script calls a server by `name`, only the listed `tools`, and only with single `tools/call` requests; every other server, tool, method, query, and extra credential is refused, and refused calls count against the run's budget (`maxCalls`, default 16).
+`url` is a fixed HTTPS Streamable HTTP endpoint answering with JSON or one SSE event; `token` is read on the host for each call and inserted by the broker. An answer that carries it, plainly, inside JSON text, or base64-encoded, is refused; this catches an echo, not an upstream set on leaking it, so grant only upstreams you trust.
+Calls run one at a time; a second call while one is pending is refused.
+Neither the endpoint nor the credential reaches the container.
+
+Each run gets:
+
+- The same sealed `docker run` as a guest turn: `--network none`, a read-only root, all capabilities dropped, `no-new-privileges`, the host's non-root user, 256 MiB, one CPU, and 32 processes by default (`limits`).
+- A fresh broker socket and an empty workspace under `runRoot`, both removed afterwards; the workspace is mounted read-only, so a script writes only to the container's 64 MiB `/tmp`.
+- When the host stops, the scheduler aborts running scripts and waits for their containers to be removed.
+- The worker `worker/precheck-main.ts` as its entrypoint (`PRECHECK_ENTRYPOINT`, the Pi image's layout; pass `entrypoint` for another image, such as `["bun", "/app/worker/precheck-main.ts"]` for `worker/Dockerfile`'s).
+- At most `timeoutMs` (default 60 seconds); on timeout the container is killed and the turn wakes with the error.
+
+The script is `export default async ({ mcp, firedAt, timeZone, today, schedule }) => result`, where `result` is `{ wake: false, note? }` or `{ wake: true, context }`.
+`today` is the date in the host's time zone, so a script never reads a UTC date by mistake.
+`mcp.call(server, tool, args)` returns the MCP tool result and `mcp.json(server, tool, args)` its structured content or its first text content parsed as JSON; a tool error throws.
+A throw, a wrong answer, or a timeout wakes the turn with the error.
+The runner's `describe` tells the model this contract and what it may call, through `schedule_list`.
+
 ## Development and verification
 
 From the pi-roundtable repository root:

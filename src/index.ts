@@ -132,8 +132,14 @@ export type {
 	PrecheckFinding,
 	PrecheckRegistry,
 	PrecheckResult,
+	PrecheckScope,
+	PrecheckScriptContext,
+	PrecheckScriptRunner,
 } from "./core/modules/schedules/prechecks.ts";
-export { PRECHECK_TIMEOUT_MS } from "./core/modules/schedules/prechecks.ts";
+export {
+	PRECHECK_SCRIPT_CHARS,
+	PRECHECK_TIMEOUT_MS,
+} from "./core/modules/schedules/prechecks.ts";
 export type {
 	Recurrence,
 	Weekday,
