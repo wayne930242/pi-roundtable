@@ -3,6 +3,7 @@ import { mkdtempSync } from "node:fs";
 import { request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { recordingLogger } from "pi-roundtable/testing";
 import { listenBroker } from "./broker.ts";
 import { PiSandboxBroker } from "./pi-broker.ts";
 import { piModelInput } from "./pi-model-input.ts";
@@ -658,4 +659,104 @@ test("a restarted worker gets the metadata-only startup window again, in the ord
 	} finally {
 		Date.now = now;
 	}
+});
+
+const compactRequest = {
+	reason: "threshold",
+	tokensBefore: 310_000,
+	firstKeptEntryId: "kept",
+	isSplitTurn: false,
+	messagesToSummarize: [],
+	turnPrefixMessages: [],
+	keptMessages: [],
+	readFiles: [],
+	modifiedFiles: [],
+};
+
+test("a host compactor gets at most half the turn's time left, so Pi's summary still fits", async () => {
+	const recorder = recordingLogger();
+	const signals: AbortSignal[] = [];
+	const broker = new PiSandboxBroker({
+		model: "host-model",
+		oauthToken: () => "host-secret",
+		logger: recorder.logger,
+		compaction: {
+			engine: "host-compactor",
+			timeoutMs: 120_000,
+			compact: (_request, { signal }) => {
+				signals.push(signal);
+				return new Promise(() => {});
+			},
+		},
+	});
+	const turn = new AbortController();
+	const bind = (deadline: number) =>
+		broker.bind({
+			channel: "discord:channel",
+			profile: "profile",
+			speaker: { id: "guest", name: "Guest" },
+			thinking: "low",
+			signal: turn.signal,
+			deadline,
+		});
+	// Under two seconds left: no time for the compactor at all.
+	let release = bind(Date.now() + 1500);
+	const late = await broker.handle(post("/compaction/compact", compactRequest));
+	expect(await late.json()).toEqual({
+		ok: false,
+		fallback: "the turn has too little time left for the host compactor",
+	});
+	expect(signals).toHaveLength(0);
+	release();
+	// Four seconds left: the compactor gets two, not its own 120.
+	release = bind(Date.now() + 4000);
+	const started = Date.now();
+	const cut = (await (
+		await broker.handle(post("/compaction/compact", compactRequest))
+	).json()) as { ok: boolean; fallback: string };
+	expect(cut.ok).toBe(false);
+	expect(cut.fallback).toMatch(/^the compactor took over (19\d\d|2000) ms$/);
+	expect(Date.now() - started).toBeLessThan(3000);
+	expect(signals[0]?.aborted).toBe(true);
+	release();
+}, 10_000);
+
+test("an error event in the middle of a 200 stream is logged, and the worker still gets the stream", async () => {
+	const recorder = recordingLogger();
+	const stream =
+		'event: message_start\ndata: {"type":"message_start"}\n\n' +
+		'event: error\ndata: {"type":"error","error":{"type":"overloaded_error","message":"Overloaded host-secret"}}\n\n';
+	const broker = new PiSandboxBroker({
+		model: "host-model",
+		oauthToken: () => "host-secret",
+		logger: recorder.logger,
+		fetchImpl: async () =>
+			new Response(
+				// Split mid-event, as a network would.
+				new ReadableStream({
+					start(controller) {
+						const bytes = new TextEncoder().encode(
+							stream.replace(" host-secret", ""),
+						);
+						controller.enqueue(bytes.subarray(0, 70));
+						controller.enqueue(bytes.subarray(70));
+						controller.close();
+					},
+				}),
+				{ status: 200, headers: { "content-type": "text/event-stream" } },
+			),
+	});
+	const { release } = bound(broker);
+	const response = await broker.handle(post("/anthropic/v1/messages", message));
+	expect(response.status).toBe(200);
+	expect(await response.text()).toContain("overloaded_error");
+	const failures = recorder.lines.filter(
+		(line) => line.message === "sandbox upstream call failed",
+	);
+	expect(failures).toHaveLength(1);
+	expect(failures[0]?.fields).toMatchObject({ status: 200 });
+	expect(String(failures[0]?.fields.body)).toContain(
+		'stream error event: {"type":"error","error":{"type":"overloaded_error"',
+	);
+	release();
 });

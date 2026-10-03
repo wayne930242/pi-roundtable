@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.12
+
+- A host compactor gets at most half the time the turn has left (the runtime passes the broker its `deadline`, `PiHostContext.deadline`), so Pi's own summary still fits after it runs out; with under two seconds left the broker falls back to Pi's summary at once.
+- The broker logs the first `error` event of a server-sent event stream that started with a 200 (`sandbox upstream call failed`, with the event's data, credentials removed), which the status alone never showed; the worker still receives the whole stream.
+
 ## 0.7.11
 
 - `precheckScriptRunner` runs agents' precheck scripts (pi-roundtable 0.7.11) in a sealed container per run: no network, a read-only root, no capabilities, a non-root user, an empty workspace, and a per-run broker (`precheckBroker`) that forwards only single `tools/call` requests of the tools `grant(scope)` allows, with the host's credential (`PrecheckMcpServer`). The container runs `worker/precheck-main.ts` (`PRECHECK_ENTRYPOINT`, `PrecheckWorkerInput`), which gives the script `mcp.call`, `mcp.json`, `firedAt`, `timeZone`, `today`, and `schedule`.

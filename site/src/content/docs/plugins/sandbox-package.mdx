@@ -83,7 +83,7 @@ Its Anthropic broker supports streamed messages, token counting, custom tools an
 | `timeZone`, `containerPrefix`, `labelChannel`, `labelProfile` | Operator time zone (UTC default) and existing-container compatibility names. |
 | `driver`, `logger` | Trusted local Docker/offline adapter and host logger. |
 | `startTimeoutMs`, `turnTimeoutMs` | 1–600 seconds, default 90/600. |
-| `compaction` | Optional host compactor: `engine`, `compact(request, { channel, signal })`, `timeoutMs` (default the smaller of 120 seconds and a third of the turn, at most half) and `maxRequestBytes` (default 32 MiB). |
+| `compaction` | Optional host compactor: `engine`, `compact(request, { channel, signal })`, `timeoutMs` (default the smaller of 120 seconds and a third of the turn, at most half; each compaction also gets at most half the time the turn has left) and `maxRequestBytes` (default 32 MiB). |
 | `maxCalls`, `maxOutputTokens` | Default 128 calls/128,000 output tokens; configurable 1–1,000 calls and 1,025–200,000 tokens. |
 
 `runTurn({channel,profile,turnId,author,text,images,signal?})` returns text and bounded byte-backed files.

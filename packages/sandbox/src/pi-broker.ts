@@ -27,6 +27,8 @@ export interface PiHostContext {
 	/** The host-judged level for this turn; the worker can request less but never more. */
 	thinking: PiThinkingLevel;
 	signal: AbortSignal;
+	/** When the turn must end, in epoch milliseconds; a host compactor gets at most half the time left. */
+	deadline?: number;
 }
 export interface PiMcpServer {
 	name: string;
@@ -127,12 +129,55 @@ function endpoint(raw: string, allowHttp = false): URL {
 		throw new Error("Invalid trusted endpoint");
 	return url;
 }
+/**
+ * Watches a server-sent event stream as it passes and reports its first `error` event: an
+ * upstream can fail mid-answer after a 200, which the status alone never shows.
+ */
+function sseErrorWatcher(
+	onError: (data: string) => void,
+): (chunk: Uint8Array, done: boolean) => void {
+	const decoder = new TextDecoder();
+	let pending = "";
+	let reported = false;
+	const scan = (event: string) => {
+		const lines = event.split(/\r?\n/);
+		const type = lines
+			.find((line) => line.startsWith("event:"))
+			?.slice(6)
+			.trim();
+		const data = lines
+			.filter((line) => line.startsWith("data:"))
+			.map((line) => line.slice(5).replace(/^ /, ""))
+			.join("\n");
+		let typed: unknown;
+		try {
+			typed = JSON.parse(data);
+		} catch {
+			typed = undefined;
+		}
+		if (type === "error" || (isRecord(typed) && typed.type === "error")) {
+			reported = true;
+			onError(data);
+		}
+	};
+	return (chunk, done) => {
+		if (reported) return;
+		pending += decoder.decode(chunk, { stream: !done });
+		const events = pending.split(/\r?\n\r?\n/);
+		pending = done ? "" : (events.pop() ?? "");
+		// An event this long is no error report; keep scanning without holding it.
+		if (pending.length > 64 * 1024) pending = "";
+		for (const event of events) if (!reported) scan(event);
+	};
+}
+
 function streamBounded(
 	response: Response,
 	signal: AbortSignal,
 	maxBytes: number,
 	secret: string,
 	onFailure: (error: unknown) => void,
+	watch?: (chunk: Uint8Array, done: boolean) => void,
 ): ReadableStream<Uint8Array> {
 	const reader = response.body?.getReader();
 	let total = 0;
@@ -157,6 +202,7 @@ function streamBounded(
 					throw new Error("Credential reflected");
 				total += result?.value?.byteLength ?? 0;
 				if (total > maxBytes) throw new Error("Response too large");
+				watch?.(result?.value ?? new Uint8Array(), !result || result.done);
 				if (!result || result.done) {
 					if (data.length) controller.enqueue(data);
 					controller.close();
@@ -632,6 +678,17 @@ export class PiSandboxBroker {
 							PI_MEDIA_LIMITS.totalFileBytes,
 							secret,
 							(error) => failed(secret, { status: upstream.status, error }),
+							upstream.status < 400 &&
+								(upstream.headers.get("content-type") ?? "").includes(
+									"text/event-stream",
+								)
+								? sseErrorWatcher((body) =>
+										failed(secret, {
+											status: upstream.status,
+											body: `stream error event: ${body}`,
+										}),
+									)
+								: undefined,
 						),
 				{ headers: outgoing, status: upstream.status },
 			);
@@ -725,11 +782,22 @@ export class PiSandboxBroker {
 			compactor.maxRequestBytes ?? PI_COMPACT_LIMITS.requestBytes;
 		if (Number(request.headers.get("content-length") ?? 0) > maxBytes)
 			return fallback(`the request is over ${maxBytes} bytes`);
+		// Pi's own summary must still fit after a compactor that runs out of time.
+		const left =
+			turn.context.deadline === undefined
+				? Number.POSITIVE_INFINITY
+				: turn.context.deadline - Date.now();
+		const timeoutMs = Math.min(
+			compactor.timeoutMs ?? PI_COMPACT_LIMITS.timeoutMs,
+			Math.floor(left / 2),
+		);
+		if (timeoutMs < 1000)
+			return fallback(
+				"the turn has too little time left for the host compactor",
+			);
 		let running: Promise<unknown> = Promise.resolve();
 		this.#compacting = running;
-		const timeout = AbortSignal.timeout(
-			compactor.timeoutMs ?? PI_COMPACT_LIMITS.timeoutMs,
-		);
+		const timeout = AbortSignal.timeout(timeoutMs);
 		const signal = AbortSignal.any([
 			turn.context.signal,
 			request.signal,
@@ -797,7 +865,7 @@ export class PiSandboxBroker {
 		} catch (error) {
 			return fallback(
 				timeout.aborted
-					? `the compactor took over ${compactor.timeoutMs ?? PI_COMPACT_LIMITS.timeoutMs} ms`
+					? `the compactor took over ${timeoutMs} ms`
 					: signal.aborted
 						? "the compaction was aborted"
 						: `the compactor failed: ${scrubDiagnostic(errorText(error), 2000)}`,

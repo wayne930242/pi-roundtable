@@ -262,7 +262,7 @@ new PiSandboxRuntime({
 
 `PiCompactRequest` carries Pi's preparation: `reason`, `tokensBefore`, `firstKeptEntryId`, `isSplitTurn`, `messagesToSummarize`, `turnPrefixMessages`, `keptMessages` (the messages from `firstKeptEntryId` on), `previousSummary?`, `customInstructions?`, `readFiles` and `modifiedFiles`.
 A `PiCompaction` is Pi's `CompactionResult`: `summary`, `firstKeptEntryId` (the request's), `tokensBefore`, `estimatedTokensAfter?` and `details?` (an object; the broker sets its `engine`).
-A compactor that returns `undefined`, throws, answers out of shape, outlasts `timeoutMs` (its `signal` aborts), or gets a request over `maxRequestBytes` falls back to Pi's summary, and the host logs the reason.
+A compactor that returns `undefined`, throws, answers out of shape, outlasts `timeoutMs` or half the time the turn has left, whichever is shorter (its `signal` aborts), or gets a request over `maxRequestBytes` falls back to Pi's summary, and the host logs the reason.
 The timeout may be at most half of `turnTimeoutMs`, so Pi's summary keeps time to run.
 A turn may ask the host for three compactions and send sixteen compaction reports; later compactions fall back to Pi's summary, and while a compactor that ignored its signal still runs, a new request falls back too.
 Without `compaction` the worker registers no compaction handler; the tiers and Pi's summary still apply.

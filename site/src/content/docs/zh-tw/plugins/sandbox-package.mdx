@@ -84,7 +84,7 @@ Anthropic broker 支援串流 messages、token counting、custom tools 和 host 
 | `timeZone`、`containerPrefix`、`labelChannel`、`labelProfile` | worker 時區（預設 UTC）和既有 container 名稱／label 的相容設定。 |
 | `driver`、`logger` | 可信任本機 Docker／離線 adapter 和 host logger。 |
 | `startTimeoutMs`、`turnTimeoutMs` | 1–600 秒，預設 90／600 秒。 |
-| `compaction` | 選用的 host compactor：`engine`、`compact(request, { channel, signal })`、`timeoutMs`（預設取 120 秒與回合三分之一的較小者，最多半個回合）和 `maxRequestBytes`（預設 32 MiB）。 |
+| `compaction` | 選用的 host compactor：`engine`、`compact(request, { channel, signal })`、`timeoutMs`（預設取 120 秒與回合三分之一的較小者，最多半個回合；每次 compaction 也最多只用回合剩餘時間的一半）和 `maxRequestBytes`（預設 32 MiB）。 |
 | `maxCalls`、`maxOutputTokens` | 預設 128 次 credential-bearing call／128,000 output tokens；可設 1–1,000 次／1,025–200,000 tokens。 |
 
 `runTurn({channel,profile,turnId,author,text,images,signal?})` 回傳文字和已驗證的檔案 bytes。

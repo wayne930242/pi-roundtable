@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.12] - 2026-10-03
+
+### Fixed
+
+- pi-roundtable-sandbox: a host compactor's time shrinks with the turn's, and an error event in the middle of a successful model stream is logged; see its changelog.
+
 ## [0.7.11] - 2026-10-03
 
 ### Added

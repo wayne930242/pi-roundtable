@@ -351,10 +351,12 @@ export class PiSandboxRuntime {
 			return { ok: false, error: new AgentRunError("Channel is busy") };
 		const controller = new AbortController();
 		this.#active.set(turn.channel, controller);
+		const turnTimeoutMs = this.#options.turnTimeoutMs ?? 600_000;
+		const deadline = Date.now() + turnTimeoutMs;
 		const signal = AbortSignal.any([
 			controller.signal,
 			...(turn.signal ? [turn.signal] : []),
-			AbortSignal.timeout(this.#options.turnTimeoutMs ?? 600_000),
+			AbortSignal.timeout(turnTimeoutMs),
 		]);
 		signal.addEventListener("abort", () => controller.abort(), { once: true });
 		const timedOut = () =>
@@ -408,6 +410,7 @@ export class PiSandboxRuntime {
 				speaker: turn.author,
 				thinking,
 				signal,
+				deadline,
 			});
 			const body = await entry.broker.execute(request, signal);
 			signal.throwIfAborted();
