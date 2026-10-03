@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.14
+
+- A model request the broker refuses (an unknown role, a native tool, remote media, a remote schema) is answered with a 400 in the Anthropic API's error shape (`invalid_request_error`) instead of a 502, and logged as `sandbox upstream call failed`. Claude Code 2.1.284 (agent SDK 0.3.284) sends a mid-conversation `role: "system"` message when MCP tools arrive late; the broker refused it with a 502, which Claude Code retried about ten times over several minutes before the turn failed. The refusal of a role now reads `messages.N: Unexpected role "system": the input message role must be "user" or "assistant"`, which Claude Code recognizes: it resends without system messages for the rest of that conversation. The broker still never forwards a system message.
+
 ## 0.7.13
 
 - `precheckScriptRunner` forwards only the tools approved with the script (pi-roundtable 0.7.13's `PrecheckScriptContext.tools`) among those `grant` allows, and takes `toolName(server, tool)`, the name the host's hold rules know a tool by (default the tool's own name).

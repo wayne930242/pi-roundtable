@@ -106,12 +106,14 @@ export function piModelInput(
 		throw new Error("Invalid messages");
 	const body: Record<string, unknown> = {
 		model,
-		messages: input.messages.map((message: unknown) => {
-			if (
-				!isRecord(message) ||
-				!["user", "assistant"].includes(String(message.role))
-			)
-				throw new Error("Invalid role");
+		messages: input.messages.map((message: unknown, index) => {
+			if (!isRecord(message)) throw new Error("Invalid message");
+			// Worded as the Anthropic API words it, so a client that sends a mid-conversation
+			// `role: "system"` message (Claude Code does) recognizes the refusal and resends without it.
+			if (!["user", "assistant"].includes(String(message.role)))
+				throw new Error(
+					`messages.${index}: Unexpected role ${JSON.stringify(String(message.role))}: the input message role must be "user" or "assistant"`,
+				);
 			return { role: message.role, content: blocks(message.content) };
 		}),
 	};

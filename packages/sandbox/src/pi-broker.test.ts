@@ -265,6 +265,58 @@ test("model payload refuses remote schemas, URLs and native provider tools while
 	])
 		expect(() => piModelInput(input, "host", false)).toThrow();
 });
+test("a refused model request is a 400 in the API's error shape, worded so Claude Code resends it without its system messages", async () => {
+	let called = false;
+	const logger = recordingLogger();
+	const broker = new PiSandboxBroker({
+		model: "host-model",
+		oauthToken: () => "host-secret",
+		logger: logger.logger,
+		fetchImpl: async () => {
+			called = true;
+			return Response.json({ content: "ok" });
+		},
+	});
+	const { release } = bound(broker);
+	// Claude Code's mid-conversation system message declaring a late MCP tool.
+	const response = await broker.handle(
+		post("/anthropic/v1/messages", {
+			...message,
+			messages: [
+				{ role: "user", content: "Hello" },
+				{
+					role: "system",
+					content: [{ type: "tool_addition", tool: { name: "late_tool" } }],
+				},
+			],
+		}),
+	);
+	expect(response.status).toBe(400);
+	const body = (await response.json()) as { error: { message: string } };
+	expect(body).toMatchObject({
+		type: "error",
+		error: { type: "invalid_request_error" },
+	});
+	// The two phrases Claude Code looks for before falling back to a body without system turns.
+	expect(body.error.message).toContain("Unexpected role");
+	expect(body.error.message).toContain("input message role");
+	expect(body.error.message).toStartWith("messages.1:");
+	expect(called).toBe(false);
+	// Any other refused shape is a 400 too, never a 502 the client would retry unchanged.
+	const native = await broker.handle(
+		post("/anthropic/v1/messages", {
+			...message,
+			tool_choice: { type: "web_search" },
+		}),
+	);
+	expect(native.status).toBe(400);
+	expect(called).toBe(false);
+	expect(
+		logger.lines.filter((l) => l.message === "sandbox upstream call failed")
+			.length,
+	).toBe(2);
+	release();
+});
 test("worker long polling carries host turns and bounded replies without any host connection to guest sockets or paths", async () => {
 	const broker = new PiSandboxBroker({
 		model: "model",

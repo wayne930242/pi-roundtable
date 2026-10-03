@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.14] - 2026-10-03
+
+### Fixed
+
+- pi-roundtable-sandbox: a model request the broker refuses is a 400, worded so Claude Code resends it without its mid-conversation system messages, instead of a 502 it retried for minutes; see its changelog.
+
 ## [0.7.13] - 2026-10-03
 
 ### Changed

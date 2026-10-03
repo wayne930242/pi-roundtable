@@ -616,13 +616,29 @@ export class PiSandboxBroker {
 					if (value && value.length <= 256) headers.set(name, value);
 				}
 			} else {
-				body = piModelInput(
-					input,
-					this.#options.model,
-					url.pathname.endsWith("/count_tokens"),
-					this.#options.maxOutputTokens ?? 128_000,
-					turn.context.thinking,
-				);
+				try {
+					body = piModelInput(
+						input,
+						this.#options.model,
+						url.pathname.endsWith("/count_tokens"),
+						this.#options.maxOutputTokens ?? 128_000,
+						turn.context.thinking,
+					);
+				} catch (error) {
+					// The request itself is refused: a 400 the client does not retry unchanged, in the
+					// API's error shape so it can resend without what was refused. A 502 would be retried.
+					failed(secret, { status: 400, error });
+					return Response.json(
+						{
+							type: "error",
+							error: {
+								type: "invalid_request_error",
+								message: error instanceof Error ? error.message : String(error),
+							},
+						},
+						{ status: 400 },
+					);
+				}
 				target = `${this.#options.upstream ?? "https://api.anthropic.com"}${url.pathname.slice("/anthropic".length)}${url.search}`;
 				secret = await this.#options.oauthToken();
 				for (const name of HEADERS) {
