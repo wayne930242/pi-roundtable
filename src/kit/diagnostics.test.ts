@@ -129,6 +129,23 @@ test("a value an earlier rule masked is not masked twice", () => {
 	);
 });
 
+test("a value an earlier rule masked only the head of is masked to its end", () => {
+	const gh = `ghp_${"0123456789abcdefghijABCDEFGHIJ0123"}`;
+	const sk = "sk-abcdefghijklmnop";
+	const cases: [string, string][] = [
+		[`{"password":"${gh} with space"}`, '{"password":"[redacted]"}'],
+		[`{"password":"${sk}!@#tail"}`, '{"password":"[redacted]"}'],
+		[`password=${sk}!tail`, "password=[redacted]"],
+		[`GITHUB_TOKEN=${gh}!tail`, "GITHUB_TOKEN=[redacted]"],
+		["password=https://u:pw@host/x", "password=[redacted]"],
+		[`secret=${sk}!tail and more`, "secret=[redacted] and more"],
+	];
+	for (const [input, expected] of cases)
+		expect(scrubDiagnostic(input)).toBe(expected);
+	for (const input of cases.map(([i]) => i))
+		expect(scrubDiagnostic(input)).not.toContain("]]");
+});
+
 test("a JWT is still masked after a space, an equals sign, a quote or a dot", () => {
 	const jwt = [
 		"eyJhbGciOiJIUzI1NiJ9",
@@ -165,6 +182,8 @@ const HOSTILE: [string, string][] = [
 	["spaces", `a${" ".repeat(500_000)}b`],
 	["secret names", "token-secret-password=".repeat(50_000)],
 	["jwt starts", "eyJ-".repeat(100_000)],
+	["redacted units", "password=[redacted]".repeat(60_000)],
+	["redacted then tail", "token=[redacted][redacted]x ".repeat(40_000)],
 	["jwt starts glued", `${"eyJaaaaaaaaa-".repeat(30_000)}`],
 	["unclosed quotes", 'password="x'.repeat(40_000)],
 	["quoted tokens", "token=\"1 token='2 ".repeat(30_000)],

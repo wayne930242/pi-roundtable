@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.8] - 2026-10-03
+
+### Fixed
+
+- `scrubDiagnostic` masks a value to its end when an earlier rule had masked only its head (`password=sk-…!tail`, `GITHUB_TOKEN=ghp_…!tail`, a quoted value that continues after a token shape). A `[redacted]` an earlier rule wrote is read as part of an unquoted value, so `password=https://user:pw@host/x` ends as `password=[redacted]` with no `]]`.
+
 ## [0.7.7] - 2026-10-03
 
 ### Changed

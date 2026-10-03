@@ -61,8 +61,11 @@ function secretKind(name: string): "secret" | "token" | undefined {
 
 /** The name and separator of an assignment, query parameter or JSON field; the value is read separately. */
 const ASSIGNMENT = /(?<![a-z0-9_-])([a-z0-9_-]+)(["']?\s*[:=]\s*["']?)/gi;
-/** An unquoted value ends at a blank, a quote, a separator or a closing bracket. */
-const UNQUOTED = /[^\s"',&;}\]]+/y;
+/**
+ * An unquoted value ends at a blank, a quote, a separator or a closing bracket, except that a
+ * `[redacted]` an earlier rule wrote is part of the value, so what follows it is read too.
+ */
+const UNQUOTED = /(?:\[redacted\]|[^\s"',&;}\]])+/y;
 /** A quoted value runs to its closing quote, whatever it holds. */
 const DOUBLE_QUOTED = /[^"]+/y;
 const SINGLE_QUOTED = /[^']+/y;
@@ -94,8 +97,8 @@ function maskAssignments(text: string): string {
 		const kind = secretKind(match[1] ?? "");
 		if (!kind) continue;
 		const value = valueAt(text, end, match[2] ?? "");
-		// An earlier rule already masked this value.
-		if (value === undefined || value.startsWith("[redacted")) continue;
+		// An earlier rule already masked this whole value; if it masked only the head, the rest goes too.
+		if (value === undefined || value === "[redacted]") continue;
 		if (kind === "token" && /^[0-9]+$/.test(value)) continue;
 		out += `${text.slice(cursor, end)}[redacted]`;
 		cursor = end + value.length;
