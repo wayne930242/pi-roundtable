@@ -5,6 +5,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.7] - 2026-10-03
+
+### Changed
+
+- `scrubDiagnostic` takes linear time on a long run of `eyJ-` too: the JWT pattern now starts at the beginning of a run (a JWT glued directly after `-` is no longer masked by that pattern, only as the value of a secret-named field).
+- `scrubDiagnostic` reads a quoted value up to its closing quote, so a secret holding `}`, `]`, blanks, `&`, `,` or `;` is masked whole; `}` and `]` end only an unquoted value. A value an earlier rule already masked is not masked again (no `[redacted]]`).
+
 ## [0.7.6] - 2026-10-03
 
 ### Changed

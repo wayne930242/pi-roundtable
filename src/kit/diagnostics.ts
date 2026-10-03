@@ -1,7 +1,9 @@
 /*
- * Every pattern here either starts with a literal or starts at the beginning of a run of its own
- * character class (a lookbehind, never a leading `\b` before a repeatable class), so scrubbing
- * takes time linear in the text at any length.
+ * A pattern whose first characters can recur inside the run it then scans (a leading `\b` before a
+ * repeatable class, or a literal such as `eyJ` that may appear again after a `-`) restarts at every
+ * repeat and takes quadratic time. Those patterns start at the beginning of a run of their own
+ * character class through a lookbehind; the others begin with a literal that cannot recur inside
+ * what they scan. Scrubbing then takes time linear in the text at any length.
  */
 
 /** Tool text that may name a credential: userinfo in URLs, bearer values, and well-known token shapes. */
@@ -24,7 +26,10 @@ const CREDENTIALS: [RegExp, string | ((...match: string[]) => string)][] = [
 		/\b(cookie|set-cookie|x-api-key|x-auth-token|x-access-token)\s*:\s*[^\r\n]+/gi,
 		"$1: [redacted]",
 	],
-	[/\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]*/g, "[redacted]"],
+	[
+		/(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]*/g,
+		"[redacted]",
+	],
 	[
 		/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)/g,
 		"[redacted]",
@@ -56,7 +61,26 @@ function secretKind(name: string): "secret" | "token" | undefined {
 
 /** The name and separator of an assignment, query parameter or JSON field; the value is read separately. */
 const ASSIGNMENT = /(?<![a-z0-9_-])([a-z0-9_-]+)(["']?\s*[:=]\s*["']?)/gi;
-const VALUE = /[^\s"',&;}\]]+/y;
+/** An unquoted value ends at a blank, a quote, a separator or a closing bracket. */
+const UNQUOTED = /[^\s"',&;}\]]+/y;
+/** A quoted value runs to its closing quote, whatever it holds. */
+const DOUBLE_QUOTED = /[^"]+/y;
+const SINGLE_QUOTED = /[^']+/y;
+
+/** The value that follows a separator ending in `end`, or undefined when there is none. */
+function valueAt(
+	text: string,
+	end: number,
+	separator: string,
+): string | undefined {
+	const quote = separator.endsWith('"')
+		? DOUBLE_QUOTED
+		: separator.endsWith("'")
+			? SINGLE_QUOTED
+			: UNQUOTED;
+	quote.lastIndex = end;
+	return quote.exec(text)?.[0];
+}
 
 /** Masks the value of every assignment whose name says it is a secret, in any case. */
 function maskAssignments(text: string): string {
@@ -69,10 +93,10 @@ function maskAssignments(text: string): string {
 		// The value is read only for a secret name, so ordinary text costs nothing more to pass.
 		const kind = secretKind(match[1] ?? "");
 		if (!kind) continue;
-		VALUE.lastIndex = end;
-		const value = VALUE.exec(text)?.[0];
-		if (value === undefined || (kind === "token" && /^[0-9]+$/.test(value)))
-			continue;
+		const value = valueAt(text, end, match[2] ?? "");
+		// An earlier rule already masked this value.
+		if (value === undefined || value.startsWith("[redacted")) continue;
+		if (kind === "token" && /^[0-9]+$/.test(value)) continue;
 		out += `${text.slice(cursor, end)}[redacted]`;
 		cursor = end + value.length;
 	}

@@ -103,6 +103,39 @@ test("still masks a credential that follows a setting, in any value position", (
 	expect(clean).toContain('"input_tokens":5');
 });
 
+test("a value that holds brackets, blanks or separators is masked whole when it is quoted", () => {
+	const clean = scrubDiagnostic(
+		[
+			'{"password":"Xy7}k9#Q"}',
+			'{"client_secret":"a]b[c"}',
+			"password='hunter 2'",
+			'api_key="one,two&three;four"',
+		].join("\n"),
+	);
+	expect(clean).toBe(
+		[
+			'{"password":"[redacted]"}',
+			'{"client_secret":"[redacted]"}',
+			"password='[redacted]'",
+			'api_key="[redacted]"',
+		].join("\n"),
+	);
+});
+
+test("a value an earlier rule masked is not masked twice", () => {
+	const gh = `ghp_${"0123456789abcdefghijABCDEFGHIJ0123"}`;
+	expect(scrubDiagnostic(`GITHUB_TOKEN=${gh} and x-api-key: abcdef`)).toBe(
+		"GITHUB_TOKEN=[redacted] and x-api-key: [redacted]",
+	);
+});
+
+test("a JWT is still masked after a space, an equals sign, a quote or a dot", () => {
+	const jwt =
+		"eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abcdefghij12345";
+	for (const before of [" ", "=", '"', ".", ":"])
+		expect(scrubDiagnostic(`x${before}${jwt}`)).not.toContain("eyJzdWIi");
+});
+
 function base64url(length: number): string {
 	const alphabet =
 		"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
@@ -128,6 +161,10 @@ const HOSTILE: [string, string][] = [
 	["assignments", "a=".repeat(300_000)],
 	["spaces", `a${" ".repeat(500_000)}b`],
 	["secret names", "token-secret-password=".repeat(50_000)],
+	["jwt starts", "eyJ-".repeat(100_000)],
+	["jwt starts glued", `${"eyJaaaaaaaaa-".repeat(30_000)}`],
+	["unclosed quotes", 'password="x'.repeat(40_000)],
+	["quoted tokens", "token=\"1 token='2 ".repeat(30_000)],
 ];
 
 for (const max of [600, 100_000, Number.POSITIVE_INFINITY])
