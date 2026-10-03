@@ -10,7 +10,6 @@ import {
 	renameSync,
 	rmSync,
 	statSync,
-	unlinkSync,
 	writeSync,
 } from "node:fs";
 import { isAbsolute, join } from "node:path";
