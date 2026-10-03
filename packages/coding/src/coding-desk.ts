@@ -8,6 +8,8 @@ import type {
 import {
 	AgentError,
 	approvalCard,
+	type DispatchThread,
+	type DispatchThreads,
 	promptSlot,
 	workTimeout,
 } from "pi-roundtable/kit";
@@ -20,6 +22,12 @@ export interface CodingJob {
 	repo: string;
 	task: string;
 	channel: ChannelKey;
+	/** The calling turn's channel, where a progress thread opens. */
+	origin?: ChannelKey;
+	/** Host-resolved names of the skills carried to this run. */
+	skillNames?: string[];
+	/** Progress thread, when the surface supports one. */
+	thread?: DispatchThread;
 	model: string;
 	thinking: ThinkingLevel;
 	skillFiles: string[];
@@ -40,10 +48,19 @@ export interface CodingResult {
 	state?: RepoState;
 	commits: string[];
 }
+export interface CodingThreadText {
+	initial?(job: CodingJob): string;
+	held?(entry: string, job: CodingJob): string;
+	approvalTitle?(job: CodingJob): string;
+	report?(result: CodingResult): string;
+}
 export interface CodingDeskOptions {
 	shelf: Pick<RepoShelf, "dirOf" | "state" | "commitsSince">;
 	worker: CodingWorker;
-	prompts(channel: ChannelKey): OwnerPrompts | undefined;
+	prompts?(channel: ChannelKey): OwnerPrompts | undefined;
+	/** When configured, approval cards stay in the job's thread; no thread means held. */
+	threads?: Pick<DispatchThreads, "open">;
+	threadText?: CodingThreadText;
 	deliver(result: CodingResult): Promise<void>;
 	logger: Logger;
 	timeoutMs?: number;
@@ -79,6 +96,9 @@ export class CodingDesk {
 			);
 		this.#options = options;
 	}
+	runningChannels(): ChannelKey[] {
+		return [...this.#running.values()].map(({ job }) => job.channel);
+	}
 	busy(): string[] {
 		return [...this.#running.values()].map(
 			({ job }) => `Coding #${job.id} in ${job.repo}`,
@@ -97,7 +117,7 @@ export class CodingDesk {
 		await this.idle();
 	}
 	async start(
-		request: Omit<CodingJob, "id" | "startedAt" | "startHead">,
+		request: Omit<CodingJob, "id" | "startedAt" | "startHead" | "thread">,
 	): Promise<CodingJob> {
 		if (this.#stopped) throw new AgentError("The coding desk is stopped.");
 		const task = request.task.trim();
@@ -146,6 +166,8 @@ export class CodingDesk {
 			shelf,
 			worker,
 			prompts,
+			threads,
+			threadText,
 			deliver,
 			timeoutMs = 3_600_000,
 		} = this.#options;
@@ -159,7 +181,29 @@ export class CodingDesk {
 			job.startHead = (await shelf.state(job.repo)).head;
 			if (controller.signal.aborted)
 				throw new AgentError("The worker was stopped.");
-			slot.bind(prompts(job.channel), `Coding worker #${job.id}`);
+			if (threads) {
+				try {
+					const thread = await threads.open(
+						job.origin,
+						`${job.repo} #${job.id}`,
+						threadText?.initial?.(job) ?? `Task:\n${job.task}`,
+					);
+					if (thread) job.thread = thread;
+				} catch {
+					this.#options.logger.warn(
+						{ job: job.id },
+						"Coding thread unavailable.",
+					);
+				}
+			}
+			if (controller.signal.aborted)
+				throw new AgentError("The worker was stopped.");
+			slot.bind(
+				threads
+					? job.thread && prompts?.(job.thread.channel)
+					: prompts?.(job.channel),
+				`Coding worker #${job.id}`,
+			);
 			cancel = workTimeout(timeoutMs, slot, () => {
 				timedOut = true;
 				controller.abort();
@@ -168,7 +212,8 @@ export class CodingDesk {
 				let answer: HeldCallAnswer = "held";
 				try {
 					const decision = await slot.prompts?.confirm(
-						`${slot.asker} requests approval`,
+						threadText?.approvalTitle?.(job) ??
+							`${slot.asker} requests approval`,
 						approvalCard(call),
 						controller.signal,
 					);
@@ -178,14 +223,20 @@ export class CodingDesk {
 					/* A failed card never authorizes the call. */
 				}
 				if (answer !== "approved") {
-					if (held.length < MAX_HELD_ENTRIES)
-						held.push(
-							bounded(
-								`${answer}: ${call.action}: ${call.tool} ${call.input}`,
-								MAX_HELD_CHARS,
-							),
+					if (held.length < MAX_HELD_ENTRIES) {
+						const entry = bounded(
+							`${answer}: ${call.action}: ${call.tool} ${call.input}`,
+							MAX_HELD_CHARS,
 						);
-					else omittedHeld++;
+						held.push(entry);
+						try {
+							await job.thread?.post(
+								threadText?.held?.(entry, job) ?? `Held: ${entry}`,
+							);
+						} catch {
+							/* A failed progress post does not discard the held action. */
+						}
+					} else omittedHeld++;
 				}
 				return answer;
 			};
@@ -230,7 +281,25 @@ export class CodingDesk {
 		}
 		if (omittedHeld)
 			held.push(`[${omittedHeld} more unapproved actions omitted]`);
-		await deliver({ job, outcome, held, ...(state ? { state } : {}), commits });
+		const result: CodingResult = {
+			job,
+			outcome,
+			held,
+			...(state ? { state } : {}),
+			commits,
+		};
+		try {
+			await job.thread?.close(
+				bounded(
+					threadText?.report?.(result) ??
+						codingReport(result, job.startedAt.toISOString()),
+					MAX_REPORT_CHARS,
+				),
+			);
+		} catch {
+			this.#options.logger.warn({ job: job.id }, "Coding thread close failed.");
+		}
+		await deliver(result);
 	}
 }
 

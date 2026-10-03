@@ -13,6 +13,7 @@ import {
 	when,
 } from "../lib/format.ts";
 import { useLive } from "../lib/live.ts";
+import { translate as t } from "../lib/messages.ts";
 import { hrefFor } from "../lib/router.ts";
 import { useFetched } from "../lib/use-fetched.ts";
 
@@ -56,9 +57,9 @@ export function ConversationsPage() {
 				const rows = items.filter((item) => item.kind === section.kind);
 				return (
 					<section key={section.kind} className="stack">
-						<h2>{section.title}</h2>
-						<p className="hint">{section.note}</p>
-						{rows.length === 0 ? <Empty>None stored.</Empty> : null}
+						<h2>{t(section.title)}</h2>
+						<p className="hint">{t(section.note)}</p>
+						{rows.length === 0 ? <Empty>{t("None stored.")}</Empty> : null}
 						{rows.map((item) => (
 							<Row key={item.key} item={item} now={now} timeZone={timeZone} />
 						))}
@@ -77,17 +78,18 @@ function Row(props: { item: ConversationView; now: number; timeZone: string }) {
 		<a className="card card-link" href={hrefFor("conversations", item.key)}>
 			<div className="card-head">
 				<strong>{title}</strong>
-				{item.busy > 0 ? <Badge tone="busy">running</Badge> : null}
-				{item.liveBytes === 0 ? <Badge>archived only</Badge> : null}
+				{item.busy > 0 ? <Badge tone="busy">{t("running")}</Badge> : null}
+				{item.liveBytes === 0 ? <Badge>{t("archived only")}</Badge> : null}
 			</div>
 			<p className="meta">
 				{item.kind === "outside" && item.startedAt
-					? `Started ${when(item.startedAt, props.timeZone)} · `
+					? `${t("Started")} ${when(item.startedAt, props.timeZone)} · `
 					: named.detail
 						? `${named.detail} · `
 						: ""}
-				Last active {ago(item.lastActive, props.now, props.timeZone)} ·{" "}
-				{size(item.liveBytes)} · {item.archives} archived
+				{t("Last active")} {ago(item.lastActive, props.now, props.timeZone)} ·{" "}
+				{size(item.liveBytes)} ·{" "}
+				{t("{count} archived", { count: item.archives })}
 			</p>
 		</a>
 	);

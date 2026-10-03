@@ -168,7 +168,8 @@
 			"defineTool": "src/core/define.d.ts#defineTool",
 			"migrateDatabase": "src/core/db/migrations.d.ts#migrateDatabase",
 			"parseChannelKey": "src/core/contract/surface.d.ts#parseChannelKey",
-			"serviceKey": "src/core/contract/services.d.ts#serviceKey"
+			"serviceKey": "src/core/contract/services.d.ts#serviceKey",
+			"withReplyFiles": "src/core/reply-files.d.ts#withReplyFiles"
 		},
 		"testing": {
 			"FakeDiscord": "src/testing.d.ts#FakeDiscord",
@@ -229,6 +230,7 @@
 			"EffortLevel": "src/core/judging/effort-judge.d.ts#EffortLevel",
 			"EffortPicker": "src/core/judging/effort-judge.d.ts#EffortPicker",
 			"GroupMessage": "src/core/agents/agent-rules.d.ts#GroupMessage",
+			"ImagePreparationError": "src/core/attachments/image-preparation-error.d.ts#ImagePreparationError",
 			"JUDGE_WORK": "src/core/judging/effort-judge.d.ts#JUDGE_WORK",
 			"McpEndpoint": "src/core/shared/mcp-adapter.d.ts#McpEndpoint",
 			"ModelRef": "src/core/models.d.ts#ModelRef",
@@ -275,6 +277,7 @@
 			"ownerAttachmentDir": "src/core/attachments/attachment-dir.d.ts#ownerAttachmentDir",
 			"packageDir": "src/core/shared/package-dir.d.ts#packageDir",
 			"parseModelRef": "src/core/models.d.ts#parseModelRef",
+			"prepareImageBytes": "src/core/attachments/image-prep.d.ts#prepareImageBytes",
 			"promptSlot": "src/core/runtime/prompt-slot.d.ts#promptSlot",
 			"quietLinks": "src/core/presentation/quiet-links.d.ts#quietLinks",
 			"readAttachmentExtension": "src/core/shared/read-attachment-tool.d.ts#readAttachmentExtension",
@@ -370,6 +373,8 @@
 		"src/core/agents/team-status.d.ts#TeamStatus": "interface TeamStatus {\n    agents: AgentStatus[];\n    groups: GroupStatus[];\n}",
 		"src/core/attachments/attachment-dir.d.ts#channelSegment": "declare function channelSegment(channel: ChannelKey): string;",
 		"src/core/attachments/attachment-dir.d.ts#ownerAttachmentDir": "declare function ownerAttachmentDir(dataDir: string, channel: ChannelKey): string;",
+		"src/core/attachments/image-prep.d.ts#prepareImageBytes": "declare function prepareImageBytes(data: Uint8Array, contentType: string): Promise<ModelImage>;",
+		"src/core/attachments/image-preparation-error.d.ts#ImagePreparationError": "declare class ImagePreparationError extends Error {\n    readonly reason: \"byte-limit\" | \"pixel-limit\" | \"invalid-image\";\n    readonly name = \"ImagePreparationError\";\n    constructor(reason: \"byte-limit\" | \"pixel-limit\" | \"invalid-image\");\n}",
 		"src/core/attachments/prompt-block.d.ts#withAttachmentsBlock": "declare function withAttachmentsBlock(text: string, attachments: TurnAttachments): string;",
 		"src/core/attachments/turn-attachments.d.ts#attachmentsOf": "declare function attachmentsOf(message: InboundMessage, dir: string, logger: Logger, fetchImpl?: typeof fetch): Promise<TurnAttachments>;",
 		"src/core/builtin/agent-server.d.ts#AGENT_SERVER_PLUGIN": "declare const AGENT_SERVER_PLUGIN = \"agent-server\";",
@@ -579,6 +584,7 @@
 		"src/core/reply-files.d.ts#attachReplyFile": "declare function attachReplyFile(file: ReplyFile): void;",
 		"src/core/reply-files.d.ts#REPLY_FILE_LIMITS": "declare const REPLY_FILE_LIMITS: Readonly<{\n    maxFiles: 10;\n    maxFileBytes: number;\n    maxTotalBytes: number;\n}>;",
 		"src/core/reply-files.d.ts#ReplyFileError": "declare class ReplyFileError extends Error {\n    name: string;\n}",
+		"src/core/reply-files.d.ts#withReplyFiles": "declare function withReplyFiles(supported: boolean, run: () => Promise<TurnResult>): Promise<TurnResult>;",
 		"src/core/routing/channel-queue.d.ts#channelQueue": "declare function channelQueue(): ChannelQueue;",
 		"src/core/routing/channel-queue.d.ts#ChannelQueue": "declare class ChannelQueue {\n    #private;\n    \n    onChange(listener: (channel: ChannelKey) => void): void;\n    run<T>(channel: ChannelKey, task: () => Promise<T>): Promise<T>;\n    \n    size(channel: ChannelKey): number;\n    \n    busy(): ChannelKey[];\n}",
 		"src/core/routing/conversation-turns.d.ts#ConversationTurnInput": "interface ConversationTurnInput {\n    \n    channel: ChannelKey;\n    \n    kind: string;\n    text: string;\n    \n    speaker: Speaker;\n    \n    attachments?: TurnAttachments;\n    \n    selection?: TurnSelection;\n    \n    steerable?: boolean;\n    \n    interactive?: boolean;\n    \n    confirmed?: boolean;\n    \n    reply?(result: TurnResult): Promise<void>;\n}",

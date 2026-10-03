@@ -16,6 +16,7 @@ import type {
 	ConversationKind,
 	ConversationsView,
 	ConversationView,
+	DashboardView,
 	NoteInput,
 	NoteView,
 	OverviewView,
@@ -30,6 +31,13 @@ import {
 	type StoredConversation,
 	storedConversations,
 } from "./conversations.ts";
+
+import {
+	type ConsoleFeatures,
+	type ConsolePresentation,
+	message,
+	safeAdminUrl,
+} from "./features.ts";
 
 const NOTE_SEARCH_LIMIT = 500;
 /** The largest note body the console reads. */
@@ -58,22 +66,15 @@ export interface ConsolePorts {
 	/** Called after a note is written, so every open page refreshes. */
 	changed(): void;
 	logger: Logger;
+	features?: ConsoleFeatures;
+	presentation?: ConsolePresentation;
+	mountPath?: string;
 }
 
-class HttpError extends Error {
-	constructor(
-		readonly status: number,
-		message: string,
-	) {
-		super(message);
-	}
-}
-
-const json = (body: unknown, status = 200) =>
-	Response.json(body, {
-		status,
-		headers: { "cache-control": "no-store" },
-	});
+import { cleanupConversation } from "./cleanup-api.ts";
+import { connectorsView } from "./connectors-api.ts";
+import { ConsoleHttpError as HttpError, json } from "./http.ts";
+import { skillCatalog, skillDetail } from "./skills-api.ts";
 
 /** Memory refusals as the Notes pane shows them. */
 const MEMORY_REASONS: Record<string, string> = {
@@ -105,14 +106,27 @@ export class ConsoleApi {
 			return await this.#route(request, path);
 		} catch (error) {
 			if (error instanceof HttpError)
-				return json({ error: error.message } satisfies ApiError, error.status);
+				return json(
+					{
+						error: message(this.#ports.presentation, error.message),
+					} satisfies ApiError,
+					error.status,
+				);
 			if (error instanceof MemoryError)
-				return json({ error: memoryReason(error) } satisfies ApiError, 400);
+				return json(
+					{
+						error: message(this.#ports.presentation, memoryReason(error)),
+					} satisfies ApiError,
+					400,
+				);
 			// The URL stays out of the log: a path may hold something private.
 			this.#ports.logger.error({ err: error }, "console api failed");
 			return json(
 				{
-					error: "The console could not complete the request.",
+					error: message(
+						this.#ports.presentation,
+						"The console could not complete the request.",
+					),
 				} satisfies ApiError,
 				500,
 			);
@@ -135,15 +149,54 @@ export class ConsoleApi {
 		const [head, id] = parts;
 		if (method === "GET" && head === "config" && !id)
 			return json(this.config());
-		if (method === "GET" && head === "overview" && !id) {
+		if (
+			method === "GET" &&
+			(head === "overview" || head === "dashboard") &&
+			!id
+		) {
 			this.#pane("overview");
-			return json(await this.overview());
+			const view = await this.overview();
+			if (head === "overview") return json(view);
+			return json({
+				agentGuildId: view.guildId,
+				agents: view.agents.map((agent) => ({
+					...agent,
+					key: agent.channelId ? `discord:${agent.channelId}` : "",
+				})),
+				groups: view.groups.map((group) => ({
+					...group,
+					key: `discord:${group.channelId}`,
+				})),
+				workspaces: (view.workspaces ?? []).map((c) => ({
+					...c,
+					channelId: c.id,
+				})),
+				outside: (view.outside ?? []).map((c) => ({ ...c, sessionId: c.id })),
+				party: view.party ?? [],
+			} satisfies DashboardView);
 		}
 		if (method === "GET" && head === "conversations" && parts.length <= 2) {
 			this.#pane("conversations");
 			if (!id) return json(await this.conversations());
 			const archive = new URL(request.url).searchParams.get("archive");
 			return json(await this.transcript(id, archive ?? undefined));
+		}
+		if (method === "POST" && head === "channels" && id && parts.length === 3) {
+			this.#pane("overview");
+			if (parts[2] === "start-over" || parts[2] === "delete")
+				return cleanupConversation(this.#ports, id, parts[2]);
+		}
+		if (method === "GET" && head === "skills" && parts.length <= 2) {
+			this.#pane("skills");
+			const skills = this.#ports.features?.skills;
+			if (!skills) throw new HttpError(404, "This pane is not served.");
+			return json(id ? await skillDetail(skills, id) : skillCatalog(skills));
+		}
+		if (method === "GET" && head === "connectors" && parts.length === 1) {
+			this.#pane("connectors");
+			const connectors = this.#ports.features?.connectors;
+			if (!connectors) throw new HttpError(404, "This pane is not served.");
+			return json(await connectorsView(connectors));
 		}
 		if (head === "notes" && parts.length <= 2) {
 			this.#pane("notes");
@@ -154,7 +207,18 @@ export class ConsoleApi {
 
 	config(): ConfigView {
 		const { title, panes, timeZone } = this.#ports;
-		return { title, panes: [...panes], timeZone };
+		const { presentation, features } = this.#ports;
+		const connectorAdminUrl = safeAdminUrl(features?.connectors?.adminUrl);
+		return {
+			title,
+			panes: [...panes],
+			timeZone,
+			...(presentation?.locale ? { locale: presentation.locale } : {}),
+			...(presentation?.messages ? { messages: presentation.messages } : {}),
+			...(features?.cleanup ? { cleanup: true } : {}),
+			...(connectorAdminUrl ? { connectorAdminUrl } : {}),
+			...(this.#ports.mountPath ? { mountPath: this.#ports.mountPath } : {}),
+		};
 	}
 
 	// ── Overview ───────────────────────────────────────────────────────────
@@ -163,7 +227,23 @@ export class ConsoleApi {
 		const { team } = this.#ports;
 		if (!team) throw new HttpError(404, "This pane is not served.");
 		const status = await team.status();
+		const { features } = this.#ports;
+		const stored = (await this.conversations()).conversations.filter(
+			(c) => c.kind === "owner" || c.kind === "outside",
+		);
+		const workspaces = await Promise.all(
+			stored
+				.filter((c) => c.kind === "owner")
+				.map(async (c) => ({
+					...c,
+					schedules:
+						(await features?.schedules?.count(c.key as ChannelKey)) ?? 0,
+				})),
+		);
 		return {
+			workspaces,
+			outside: stored.filter((c) => c.kind === "outside"),
+			party: (await features?.party?.list()) ?? [],
 			guildId: team.guildId,
 			agents: status.agents.map((agent) => ({
 				name: agent.name,
@@ -194,7 +274,9 @@ export class ConsoleApi {
 	async conversations(): Promise<ConversationsView> {
 		const { sessionsDir, relayNotes, exclude } = this.#ports;
 		const stored = storedConversations(sessionsDir, {
-			excluded: (key) => exclude?.(key) ?? false,
+			excluded: (key) =>
+				(exclude?.(key) ?? false) ||
+				(this.#ports.features?.party?.contains(key) ?? false),
 			relayNotes,
 		});
 		return {
@@ -208,7 +290,11 @@ export class ConsoleApi {
 	): Promise<TranscriptView> {
 		const { sessionsDir, relayNotes, exclude } = this.#ports;
 		const parsed = parseKey(key);
-		if (!parsed || exclude?.(key as ChannelKey))
+		if (
+			!parsed ||
+			exclude?.(key as ChannelKey) ||
+			this.#ports.features?.party?.contains(key as ChannelKey)
+		)
 			throw new HttpError(404, "There is no such conversation.");
 		const dir = join(sessionsDir, parsed.dir);
 		const files = conversationFiles(dir);

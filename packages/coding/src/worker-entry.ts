@@ -19,6 +19,7 @@ interface StartMessage {
 	job: CodingJob & { dir: string };
 	packages: string[];
 	agentDir: string;
+	prompt?: string;
 }
 export function codingWorkerPrompt(dir: string): string {
 	return [
@@ -33,7 +34,12 @@ export function codingWorkerPrompt(dir: string): string {
 const answers = new Map<number, (answer: HeldCallAnswer) => void>();
 let nextId = 1;
 let started = false;
-async function run({ job, agentDir, packages }: StartMessage): Promise<string> {
+async function run({
+	job,
+	agentDir,
+	packages,
+	prompt,
+}: StartMessage): Promise<string> {
 	const modelRuntime = await ModelRuntime.create({
 		authPath: join(agentDir, "auth.json"),
 		modelsPath: join(agentDir, "models.json"),
@@ -89,7 +95,7 @@ async function run({ job, agentDir, packages }: StartMessage): Promise<string> {
 				},
 			},
 		],
-		appendSystemPrompt: [codingWorkerPrompt(job.dir)],
+		appendSystemPrompt: [prompt ?? codingWorkerPrompt(job.dir)],
 	});
 	await loader.reload();
 	const { session } = await createAgentSession({

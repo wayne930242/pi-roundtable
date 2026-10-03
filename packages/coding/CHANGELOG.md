@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [0.7.3] - 2026-10-03
+
+- Hook caller model/thinking/origin/channel, owner policy, clone adoption, threaded approvals and report formatting through options, and add `pushHoldText` for the held `repo_push` card.
+
 ## [0.7.2] - 2026-10-02
 
 First release published by the lockstep workflow; no changes to the package.

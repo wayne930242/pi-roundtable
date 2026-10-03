@@ -195,9 +195,133 @@ Never put confidential data in a guest workspace.
 `startFresh` resets history on the next successful turn and preserves memory; a pending reset is process-local and does not survive host restart.
 Turning mode off does not erase workspace files.
 
-This first version is text-only and uses a minimal Chat Completions agent loop rather than loading a full Pi session inside the container.
+The default sealed mode is text-only and uses a minimal Chat Completions agent loop rather than loading a full Pi session inside the container.
 Attachments are not downloaded; the agent is told they are unsupported.
 It does not load skills or extensions and has no shell, schedules, delegation, image tools, personas, or access to the host runtime.
+
+## Explicit Pi/subscription mode
+
+`PiSandboxRuntime` is a separate, explicit opt-in API; `sandbox()` and its sealed defaults do not change.
+Use it behind your own channel claim/store when you need existing Pi JSONL sessions, personas, subscription auth, media, or host-scoped tools.
+There is no automatic access to the owner's agent or global tool registry.
+This mode supports a Pi `claude-bridge` model through a host Anthropic OAuth broker, including streamed messages, token counting, custom tools and per-turn thinking.
+Install compatible `@earendil-works/pi-coding-agent`, `typebox`, and `pi-claude-bridge` (including its bundled Claude Agent SDK runtime) in the worker dependency image.
+MCP profiles additionally require `pi-mcp-adapter`.
+The host requires the core's SDK dependencies; the bridge is loaded only by the opt-in worker, never by host setup.
+Other model transports are not implicitly proxied by this broker.
+
+### Host options and hooks
+
+| Option | Meaning and scope |
+| --- | --- |
+| `partyDir`, `image` | Dedicated private, host-owned directory and operator-built Pi image. |
+| `profiles` | Host allow-list mapping profile names to fixed Anthropic `model` and optional MCP server names. |
+| `oauthToken()` | Host-only credential getter called for each model request; supports refresh without container credentials. |
+| `memory.promptBlock(channel, id, name)` | Current admitted speaker's context, at most 100,000 characters; database implementations remain host adapters. |
+| `effort.judge(text, { level })` | Host-selected `low`, `medium`, `high`, or `xhigh`; the previous channel choice is retained for the next judgment. |
+| `tools.names`, `tools.call` | Explicit host tool allow-list and callback receiving fixed channel/profile/speaker plus cancellation signal. |
+| `mcp.servers`, `mcp.token()` | Fixed server URLs and tool-name allow-lists; host credential getter. |
+| `upstream`, `fetchImpl` | Trusted Anthropic endpoint and test transport override, not guest inputs. |
+| `allowHttpMcp` | Opt-in cleartext trusted MCP endpoints; avoid it unless your deployment protects that network. |
+| `timeZone` | Explicit worker time zone; default UTC. |
+| `containerPrefix`, `labelChannel`, `labelProfile` | Operator compatibility names for existing containers, not guest data. |
+| `driver` | Trusted local Docker driver or offline fixture; no remote bind mounts. |
+| `logger` | Host logger; package failures avoid credentials and upstream payloads. |
+| `startTimeoutMs`, `turnTimeoutMs` | 1–600 seconds; defaults 90 and 600 seconds. |
+| `maxCalls`, `maxOutputTokens` | Default 128 credential-bearing calls and 128,000 output tokens per model call; configurable 1–1,000 calls and 1,025–200,000 tokens. |
+
+`runTurn({ channel, profile, turnId, author, text, images, signal? })` returns text and bounded byte-backed reply files.
+`start`, `stop`, `status`, `startFresh`, `sessionsDir`, `attachmentDir`, and `stopBrokers` support trusted channel lifecycle adapters.
+The host binds identity immediately before enqueueing a turn and revokes it when the turn settles.
+Guest `author`, `channel`, `target`, and credential fields cannot replace host tool identity.
+Callbacks must still validate input and enforce per-person quotas, memory authorization and cancellation.
+Optional person/notes/moments tools can use an existing PostgreSQL store without copying the connection, schema, migration ledger or owner memory into the image.
+Schedules can be host tools with a declared channel-local background target and host-bound author; no scheduler is enabled automatically.
+
+### Worker content and files
+
+The trusted image exports `workerContent(profile): PiWorkerContent` from `/app/worker/content.ts`.
+Its `model: { provider, id }` selects the installed Pi model; align it with the host profile's Anthropic model.
+Optional `prompt` supplies persona/profile text, `skillsDir` loads a skill index and bounded `read_skill`, `brokerTools` supplies tool descriptions/schemas, and `toolNames` plus `extensions(turn)` declares local operator extensions.
+Skill tool gates remain active until the corresponding skill is read; reads are confined to the baked-in skills tree, at most 256 KiB per file and 40,000 returned characters.
+Automatic extensions, context files, prompt-template discovery and built-in shell/read/write/edit tools are disabled.
+App dice/TRPG tools belong in `extensions`, not in a sandbox fork.
+`contributionExtension` wraps public core `ToolContribution`s, collects their `ToolTurn.attachFile` output through `withReplyFiles`, and writes bounded worker outbox files.
+Use official drawing contributions this way instead of copied renderers; content and assets stay operator-owned.
+
+`collectPiAttachments` downloads at most ten attachments, 25 MiB each and 50 MiB total, using controlled fetch.
+It creates files exclusively through a no-follow directory descriptor and prepares up to four images from downloaded bytes, never by reopening guest paths.
+Its `prepareImage` hook can use core `prepareImageBytes`; native decoders remain a trusted host boundary, and compressed image dimensions can require additional resource controls.
+Its `fetchImpl` override is for trusted offline fixtures only.
+Optional `describeFailure(error)` supplies application-owned wording, never raw host exception details.
+Rich turns accept at most eight PNG/JPEG/WebP/GIF images, 20 MiB each and 64 MiB decoded total.
+Current text, speaker-memory context and final text each have a 100,000-character limit; speaker identifiers/names have 256-character limits.
+Reply files use the core limits: ten files, 10 MiB each and 50 MiB total, credential-free base64 on the broker wire.
+No arbitrary host file path is attached or reopened.
+Apply a channel filesystem quota: persisted attachments, outbox files and Pi sessions have no automatic retention policy or total disk quota.
+
+Build the dependency image with `worker/Dockerfile.deps.pi` and the installed `node_modules` directory as context.
+Build the runtime image with `worker/Dockerfile.pi`, `--build-arg DEPS_IMAGE=<your-dependency-image>`, and an application release tree containing trusted `assets`, `persona`, `shared`, and `worker` content.
+The runtime entry is the installed package's `worker/pi-main.ts`; no application runtime copy is needed.
+Never include real auth files or host source in those content directories.
+
+### Pi isolation and continuity
+
+Pi containers remain network-none, non-root, read-only-root, capability-free and `no-new-privileges`.
+They have 1.5 GiB RAM with no additional swap, one CPU, 256 PIDs, a 512 MiB temporary filesystem, and bounded Docker logs (two 10 MiB local log files).
+Only the channel workspace (writable) and host-created broker directory (read-only) are mounted.
+Worker-initiated `/worker/ready`, `/worker/next` and `/worker/result` requests transport turns and byte-backed replies; the host never connects to a guest-created socket or reads guest reply paths.
+Only one idle long poll, one admitted turn and one incoming reply packet per channel are allowed.
+Reply packets are refused before body reading outside that turn and are cancelled with it.
+The worker re-announces readiness after host restart; cancellation force-removes the exact channel container.
+The broker has 16 connections and a ten-second header deadline.
+The rich listener streams responses with backpressure, so server-sent events reach the worker as they are produced; it limits silence (120 seconds with no request-body read or response chunk), not total time.
+The turn deadline (default 600 seconds) is the hard bound for every model, MCP and host-tool call.
+Credential-bearing calls have four in-flight slots, 96 MiB input bodies and 50 MiB upstream-response limits.
+Worker replies have a 72 MiB encoded packet limit.
+Budgets are not streaming memory or billing quotas.
+
+Only `POST /anthropic/v1/messages` and `/anthropic/v1/messages/count_tokens` (optionally `?beta=true`) use the model credential.
+The broker rebuilds model traffic as ordinary text/base64-image/custom-tool blocks, fixes the model and output limit, preserves supported thinking/effort but never above the host-judged level (the worker may ask for less, not more; adaptive thinking without an effort is capped below the model default for `low` and `medium`), and refuses native server tools, remote media, remote schema references and unrelated account routes.
+MCP initialization, initialized notification, ping, tool listing and explicitly listed tool calls are supported; other RPC methods and batches are refused.
+Before the first admitted turn, a 90-second, 32-call metadata-only startup scope permits eager MCP initialization/listing but never tool calls or model calls.
+That scope is revoked on the first bind.
+Upstream redirects are refused, headers are rebuilt, and bounded response streams reject obvious credential reflections across chunk boundaries.
+Trusted model/MCP services must not deliberately encode credentials; reflection filtering is defense in depth, not a guarantee against arbitrary encodings.
+
+Sessions keep `partyDir/channelSegment(channel)/workspace/sessions`, with `/workspace` as Pi's session cwd.
+The same JSONL files are continued by `SessionManager.continueRecent`; no database migrations or workspace renames are performed.
+A host-only `.channel-key` record beside the workspace prevents legacy `channelSegment` collisions across every lifecycle/session/attachment operation; include it in backups.
+Keep the complete broker socket path within 100 characters.
+`startFresh` archives top-level plain `.jsonl` session files after the container is removed, replacing any symlink the guest planted at `sessions`, `sessions/archive` or `attachments` instead of following it; database memory stays intact.
+Profiles, database tables, migration receipts, quotas and ingress routing remain the application's trusted adapters.
+All guests in a channel share that channel's session/workspace; speaker hooks prevent tool identity spoofing, not confidentiality against compromised code in the same channel.
+
+### Controlled fetch and scoped delegation
+
+`safeFetch(url, { signal?, timeoutMs?, maxBytes?, maxRedirects? })` allows credential-free HTTP(S) only.
+Every hop resolves all addresses and refuses private, loopback, link-local, metadata, multicast, reserved and transition/documentation ranges, including encoded IPv4 and IPv4-mapped IPv6.
+The actual socket lookup is pinned to a vetted address while HTTPS verifies the original hostname; environment proxies and a second DNS resolution are not used.
+Connection failures may fall back only within that already-vetted list, with a three-second TCP/TLS connection deadline per address and the same whole-request deadline.
+Every redirect is checked again, including redirects to the same hostname after DNS rebinding.
+Defaults are 60 seconds, five redirects, and 5 MiB for both wire and decoded body; gzip, deflate and Brotli decoding are bounded too.
+Allowed ranges are 1 millisecond–120 seconds, 0–10 redirects and 1 byte–32 MiB bodies.
+`resolve` and `transport` overrides are trusted test seams, never guest inputs.
+`SafeFetchResult` supplies bytes and the final URL; adapt those bytes to your HTML/PDF parser instead of handing an unchecked URL to a library that fetches again.
+`followRedirects: false` returns a redirect response instead of following it, so a host that drives a library's own redirect handling can send each hop back through `safeFetch` and keep every hop vetted and pinned; `headers` sets trusted host request headers (never guest input; `accept-encoding` stays fixed).
+`assertPublicUrl(url)` refuses a URL that is not credential-free HTTP(S) or does not resolve only to public addresses. Use it before handing a model-supplied URL to a third-party reader; it does not pin a later connection, so host-side fetches of that URL should still use `safeFetch`.
+
+`ScopedSandboxDelegator` fixes one declared target, channel-local report destination and host-bound author, with no owner/agent dispatcher or origin thread.
+Its default limit is two jobs per channel, 4,000 task characters, 200 title characters, 80,000 report characters and ten minutes.
+Configure `maxRunning` (1–10) and `timeoutMs` (1–1,200 seconds) explicitly when preserving an application's existing limits.
+`run(task, context)` receives only bound channel/author/signal, and `deliver(job, result)` posts through the application's background-report adapter.
+`runningChannels`, `idle` and `dispose` support host lifecycle handling; jobs are process-local and are cancelled on disposal.
+`SandboxResearchWorker` is an optional host subscription adapter with explicit `modelRuntime`, `agentDir`, `workDir`, `model`, `thinking`, `search`, and `extractFetched` options.
+It creates an unsaved Pi session with only `web_search` and controlled `fetch_content`, no shell, host memory, skills/context discovery or owner tools.
+`extractFetched` receives already bounded, pinned-fetch bytes and must not re-fetch their URL.
+Alternatively `fetchContent(url, signal)` replaces the built-in fetch plus `extractFetched` with a host-owned fetch-and-extract; the host is then responsible for refusing unsafe and private addresses and for bounding time and size. One of the two is required.
+Host search/model credentials stay in the trusted host process, and report delivery must remain in the declared guest channel.
+These hooks broaden the sealed threat model: review every adapter, apply provider spend limits and host quotas, and never substitute an unrestricted default delegation worker.
 
 ## Development and verification
 

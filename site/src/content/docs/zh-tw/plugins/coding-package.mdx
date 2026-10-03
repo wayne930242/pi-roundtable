@@ -41,6 +41,15 @@ export default {
 | `model` | 必填 | worker 使用的 Pi model，格式為 `provider/model-id`。 |
 | `thinking` | `medium` | worker 的 thinking level。 |
 | `ownerRepos` | `[]` | 完整的 `owner/repo` 名稱；這些 repository 不會觸發套件本身的 push hold。 |
+| `isOwnerRepo` | 無 | host 明確提供的 push 免核准政策，可涵蓋未來的 clone；只有回傳 true 才免核准。 |
+| `pushHoldText` | repo、sha、目標與分支 | host 明確提供的 `repo_push` 核准卡片文字；只改文字，不改變誰需要核准。 |
+| `adoptClones` | `[]` | 啟動時移入既有獨立 clone，保留內容，不覆蓋 shelf 上的目錄。 |
+| `resolveRun` | 設定的 worker、呼叫者 channel | 依呼叫者選擇 model、thinking、回報 channel 和 thread origin。 |
+| `postChangeReport` | 目前 surface | 用呼叫者身分，在指定 channel 張貼修改紀錄。 |
+| `presentation` | 套件英文文字 | 修改報告的張貼／工具結果，以及啟動通知與略過 skill 的說明。 |
+| `threads` / `threadText` | 無／英文 | 進度與核准 thread 介面，以及 host 自訂文字。 |
+| `workerWorkspace` / `workerPrompt` | clone／通用指示 | 可信任的 shell 寫入政策邊界與常駐 prompt。 |
+| `skipUnavailableCarriedSkills` | `false` | 明確開啟後，略過並告知載入失敗的 implicit skill；指定 skill 仍會拒絕。 |
 | `workerPackages` | `[]` | worker 載入的已安裝 Pi extension 絕對路徑。 |
 | `agentDir` | Pi host 目錄 | Pi 登入與 model 設定所在目錄。 |
 | `timeoutMs` | `3600000` | 工作時間上限；等待 owner 核准的時間不計入。 |
@@ -48,6 +57,11 @@ export default {
 | `clone` | `ghClone` | 替代的 Git host clone 實作。 |
 | `worker` | `PiCodingWorker` | 可信任的 worker runner 替代實作。 |
 | `onResult` | 回覆目前 surface | 自訂結果傳送方式。 |
+
+`resolveRun(turn)` 回傳 `{ model, thinking, channel, origin? }`；carried skills 仍依呼叫者決定。
+`onResult` 的 job 包含載入成功的 `skillNames` 和可選的 `thread`，host 可以將結果排入新對話 turn，並保留自己的語言與格式。
+設定 thread 後，核准卡只出現在該 thread，封存後才傳送結果；無法開 thread 時，高風險動作會保留，不會改向其他 channel 索取核准。
+clone 路徑仍是 `shelfDir/owner/repo`，不需要資料庫遷移。
 
 ## 安全模型
 
@@ -59,7 +73,9 @@ hold rule 只會用 heuristic 偵測特定高風險 shell 操作，不是作業�
 token 不要放進 URL，並使用最低必要權限；套件不會記錄 credential 或 subprocess 診斷內容。
 
 使用 `repo_change_report` 和 `repo_push` 前，先檢查 worker 的變更與驗證結果。
-`ownerRepos` 只略過這個套件的 push hold，不會略過 shell hold 或其他 host 規則。
+`ownerRepos` 和 host 明確提供的 `isOwnerRepo` 政策，只略過這個套件的 push hold，不會略過 shell hold 或其他 host 規則。
+免核准政策不可來自 model 輸入或 repository 檔案。
+自訂 prompt 與文字不會略過完整 SHA 的報告紀錄、non-force push、取消或 process group 清理。
 完整流程、工具介面和限制見[pi-roundtable-coding README](https://github.com/wayne930242/pi-roundtable/blob/master/packages/coding/README.md)（英文）。
 
 {/* Sources: packages/coding/README.md:1-24, packages/coding/README.md:26-58, packages/coding/README.md:92-130, packages/coding/src/coding-plugin.ts:33-59 */}

@@ -46,7 +46,10 @@ export default {
 | `dataDir` | `./data` | host 資料目錄，其中包含 `sessions/`。 |
 | `mountPath` | `/console` | console 的 route prefix。 |
 | `listener` | `public` | 提供 console 的 HTTP listener。 |
-| `panes` | 全部 | 依指定順序顯示 `overview`、`conversations`、`notes`。 |
+| `panes` | `overview`、`conversations`、`notes` | 可再選 `skills`、`connectors` 並指定順序；這兩個 pane 需要 feature port。 |
+| `routing` | `hash` | `path` 保留 mount 下的頁面路徑與 history 導航。 |
+| `features` | 無 | 物件或接收公開 setup context 的 factory，提供 party 狀態、排程數、對話清理、skills 與 connectors。 |
+| `presentation` | 英文 | `{ locale, messages }` 設定文件語言、日期格式，以及 UI／API 的在地化文字；dictionary key 是英文原文。 |
 | `title` | `Roundtable` | 頁面標題。 |
 | `relayNotes` | remote MCP relay note | 顯示訊息前要移除的 relay 前綴。 |
 | `exclude` | 無 | 指定哪些 conversation key 不得列出或讀取的 predicate。 |
@@ -55,9 +58,35 @@ export default {
 內建的 `cloudflareAccess` verifier 會驗證 Access 簽署的 token、team、audience 和允許的 email。
 若自訂 verifier 信任 proxy header，只有在 client 無法直接連上 listener，而且 proxy 會移除 client 自帶的同名 header 時才安全。
 
+## Host 整合
+
+Overview 也會列出既有的 owner 工作區與外部 agent 對話。
+`features.party` 用 `contains(key)` 和回傳 `PartyView[]` 的 `list()` 提供分開儲存的 party 頻道狀態。
+`features.schedules.count(key)` 補上工作區排程數。
+`features.cleanup` 提供 `startFresh(key)` 和回傳 `deleted`／`busy` 的 `deleteConversation(key)`。
+套件先驗證 key 格式、歸屬、排除條件及既有檔案，再呼叫清理 hook；頁面會先確認，忙碌時的刪除回 409。
+沒有 cleanup hook 時，對話仍是唯讀。
+`api/dashboard` 保留既有 client 的相容格式，包含 channel key 及 guild／channel／session ID 別名。
+
+`features.skills.catalog()` 提供來源、描述、群組、使用者與檔案遺失狀態。
+`read(name)` 只能讀 catalog 選出的項目，回傳 `{ frontmatter, body }`，不能接受 request 指定的檔案路徑。
+host 應限制讀檔大小；API 限制 body 為 1 MB、frontmatter 為 64 KB，保留 metadata 順序並安全呈現 Markdown。
+`features.connectors` 提供 `gateways()`、`servers()`、`usedBy(server)` 和選用的安全 `adminUrl`。
+頁面保留 gateway 連線與啟用狀態、工具數、virtual server 工具清單及使用者。
+啟用 Skills／Connectors 卻沒有對應 hook 時，啟動會失敗。
+
+Feature factory 接收公開 plugin setup context，可直接綁定既有 stores，不改 table、grant 或 session 路徑。
+額外的 service 依賴應列在 host wrapper 的 `requires`。
+`sessionSummary(directory)` 只摘要可信任的 party session 目錄，不讀 transcript 內容。
+應用程式專屬名稱與文字放在 `presentation`，不需複製 server 或 React 頁面。
+已驗證的 HTML 帶有跳脫過的 inert presentation metadata，首次 API 失敗也能顯示在地化文字，不需 inline script。
+
 ## 安全模型
 
-每個 request 都會先驗證，再讀取資料。
+API、SSE、頁面、靜態資源與 mount redirect 都先驗證，再讀取資料。
+Path routing 保留相同的驗證與完全相符的 write-Origin 檢查。
+Skill Markdown 不執行 raw HTML、不抓取圖片，只開啟 HTTP(S) 連結。
+console 忽略 session symlink，note body 限制為 64 KB，而且不顯示模型私有推理。
 console 沒有角色或個別使用者檢視權限，只適用於一位 owner。
 寫入操作還要通過完全相符的 `Origin` 檢查，頁面不會送出 CORS header。
 Transcript 會顯示 tool arguments 和結果，工具處理過的 secret 可能出現在裡面；可以用 `panes` 或 `exclude` 限縮資料。

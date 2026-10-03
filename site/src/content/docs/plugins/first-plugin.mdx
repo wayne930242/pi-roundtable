@@ -91,6 +91,11 @@ The main entry exports `ReplyFile`, `attachReplyFile(file): void`, `ReplyFileErr
 Raw session tools and Pi package tools can import `attachReplyFile` and call it in their awaited tool execution.
 A Pi package should share the host's `pi-roundtable` peer dependency rather than bundle its own copy.
 Calls outside a conversation turn, after its end, or inside a transient `runTask` fail with `ReplyFileError`.
+A standalone worker can collect files with the public `withReplyFiles(supported, run)` around its entire awaited turn; `run` returns `Promise<TurnResult>` and the caller delivers the returned files.
+For admitted raster bytes, `/kit` exports `prepareImageBytes` without reopening a guest-writable path.
+It checks the 25 MiB encoded-byte and 64 MP decoded-header/aggregate-frame budgets before native decoding, rejecting with `ImagePreparationError` for a refused image.
+Ordinary 48 MP images remain accepted; thin 9000×1 images still downscale to a 2,000 px long side.
+The collector applies the same validation and discards attachments on failure or throw; do not create a separate collector per tool to bypass turn-wide limits.
 The limits are 10 files per turn, 10 MiB (10,485,760 bytes) per file, and 50 MiB (52,428,800 bytes) total across all tools.
 Empty data, non-`Uint8Array` data, invalid names (empty, `.`, `..`, paths, control characters, or over 255 characters), and calls exceeding limits are refused instead of dropped.
 

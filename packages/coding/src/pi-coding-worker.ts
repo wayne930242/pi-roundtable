@@ -12,6 +12,10 @@ export interface PiCodingWorkerOptions {
 	agentDir?: string;
 	/** Additional host rules, consulted in the parent process. */
 	holds?: HoldCheck;
+	/** Trusted host policy boundary for writes; defaults to the individual clone. */
+	workspace?: string;
+	/** Trusted host standing prompt, replacing the generic worker instructions. */
+	prompt?: (dir: string) => string;
 }
 interface WorkerMessage {
 	type: string;
@@ -43,6 +47,7 @@ export class PiCodingWorker implements CodingWorker {
 		if (process.platform === "win32")
 			throw new AgentError("Coding workers require a POSIX host.");
 		if (signal.aborted) throw new AgentError("The worker was stopped.");
+		const prompt = this.#options.prompt?.(job.dir);
 		let report: string | undefined;
 		const child = Bun.spawn(
 			[
@@ -60,9 +65,11 @@ export class PiCodingWorker implements CodingWorker {
 					if (value.type === "ready") {
 						proc.send({
 							type: "start",
-							job,
+							// Thread handles and their host callbacks never cross IPC.
+							job: { ...job, thread: undefined },
 							packages: this.#options.packages ?? [],
 							agentDir: this.#options.agentDir ?? getAgentDir(),
+							prompt,
 						});
 					} else if (
 						value.type === "report" &&
@@ -80,7 +87,9 @@ export class PiCodingWorker implements CodingWorker {
 						void (async () => {
 							let answer: HeldCallAnswer = "held";
 							try {
-								const context = { workspace: job.dir };
+								const context = {
+									workspace: this.#options.workspace ?? job.dir,
+								};
 								const action =
 									shellHoldRule.describe(tool, input, context) ??
 									this.#options.holds?.(tool, input, context);

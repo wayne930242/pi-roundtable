@@ -3,6 +3,7 @@ import {
 	mkdirSync,
 	mkdtempSync,
 	readFileSync,
+	realpathSync,
 	rmSync,
 	symlinkSync,
 	writeFileSync,
@@ -44,7 +45,7 @@ function fixture() {
 		startHead: "",
 		dir: repoDir,
 	};
-	return { worker, job, repoDir };
+	return { worker, job, repoDir, agentDir };
 }
 function running(pid: number): boolean {
 	try {
@@ -126,4 +127,51 @@ test("worker standing context includes regular repo instructions, not parent or 
 	);
 	expect(second).toContain("externalContext=false");
 	expect(second).toContain("repoContext=true");
+});
+
+test("trusted host prompt and workspace carry into the process without bypassing private hold policy", async () => {
+	const { job, repoDir, agentDir } = fixture();
+	const workspace = realpathSync(join(repoDir, ".."));
+	const seen: string[] = [];
+	let reviewed = 0;
+	const worker = new PiCodingWorker({
+		agentDir,
+		workspace,
+		prompt: () => "HOST_PROMPT_CANARY: carry the host's approved contract.",
+		packages: [
+			fileURLToPath(new URL("./testing/faux-provider.ts", import.meta.url)),
+		],
+		holds: (tool, _input, scope) => {
+			seen.push(`${tool}: ${scope.workspace}`);
+			return "Host private action";
+		},
+	});
+	const report = await worker.run(
+		{
+			...job,
+			thread: {
+				id: "progress",
+				channel: "test:thread",
+				mention: "#progress",
+				post: async () => {
+					throw new Error("Host thread handles must stay in the parent");
+				},
+				close: async () => {
+					throw new Error("Host thread handles must stay in the parent");
+				},
+			},
+		},
+		AbortSignal.timeout(10_000),
+		async (call) => {
+			reviewed++;
+			expect(call.action).toBe("Host private action");
+			return "held";
+		},
+	);
+	expect(seen).toEqual([`write: ${workspace}`]);
+	expect(reviewed).toBe(1);
+	expect(report).toContain("hostPrompt=true");
+	expect(report).toContain("Do not retry");
+	const pid = Number(readFileSync(join(repoDir, "worker.pid"), "utf8"));
+	expect(running(pid)).toBe(false);
 });

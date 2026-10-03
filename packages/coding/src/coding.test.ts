@@ -11,7 +11,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ChatSurface, OwnerPrompts } from "pi-roundtable";
-import { OWNER_SPEAKER, silentLogger, testPlugin } from "pi-roundtable/testing";
+import { SKILLS } from "pi-roundtable";
+import {
+	fakeThreads,
+	OWNER_SPEAKER,
+	servicePair,
+	silentLogger,
+	testPlugin,
+} from "pi-roundtable/testing";
 import {
 	CodingDesk,
 	type CodingJob,
@@ -564,4 +571,315 @@ test("rejects timer overflow and bounds injected worker reports and held inputs"
 	if (delivered.outcome.ok)
 		expect(delivered.outcome.report.length).toBeLessThan(20_020);
 	await desk.stop();
+});
+
+test("trusted host hooks preserve caller identity, carried skills, queued delivery and separate report wording", async () => {
+	const { shelf } = await fixture();
+	const dir = await shelf.add("sample/project");
+	await change(dir);
+	const delivered = gate<CodingResult>();
+	const posts: string[] = [];
+	const chat = surface();
+	const harness = await testPlugin(
+		coding({
+			shelfDir: shelf.dir,
+			model: "faux/default",
+			resolveRun: (turn) => {
+				expect(turn.channel).toBe("test:origin");
+				return {
+					model: "faux/caller",
+					thinking: "high",
+					channel: "test:home",
+					origin: turn.channel,
+				};
+			},
+			worker: {
+				run: async (job) => {
+					expect(job).toMatchObject({
+						model: "faux/caller",
+						thinking: "high",
+						channel: "test:home",
+						origin: "test:origin",
+						skillNames: ["base", "loaded"],
+						skillFiles: ["/skills/base", "/skills/loaded"],
+					});
+					return "Verified.";
+				},
+			},
+			onResult: async (result) => delivered.resolve(result),
+			postChangeReport: async (turn, text) => {
+				expect(turn.channel).toBe("test:origin");
+				posts.push(text);
+			},
+			presentation: {
+				taskStarted: (job, skipped) =>
+					`Queued ${job.model}; skipped ${skipped.join(",")}`,
+				changeReport: (report) => ({
+					post: `Record ${report.sha}`,
+					result: `Ship ${report.sha}`,
+				}),
+			},
+		}),
+		{
+			surfaces: [chat],
+			services: [
+				servicePair(SKILLS, {
+					checkRegistered: () => {},
+					resolve: (names) => ({
+						skills: ["base", ...names.filter((name) => name !== "missing")].map(
+							(name) => ({
+								name,
+								description: "Fixture",
+								file: `/skills/${name}`,
+							}),
+						),
+						missing: names
+							.filter((name) => name === "missing")
+							.map((name) => ({ name, reason: "unavailable" })),
+					}),
+				}),
+			],
+		},
+	);
+	stops.push(() => harness.stop());
+	expect(
+		await harness.runTool(
+			"repo_change_report",
+			{ repo: "sample/project" },
+			{ channel: "test:origin" },
+		),
+	).toStartWith("Ship ");
+	expect(posts[0]).toStartWith("Record ");
+	expect(chat.posts).toEqual([]);
+	// Explicit missing skills refuse before any run.
+	expect(
+		await harness.runTool(
+			"repo_task",
+			{ repo: "sample/project", task: "Work", skills: ["missing"] },
+			{ channel: "test:origin" },
+		),
+	).toContain("cannot load");
+	expect(
+		await harness.runTool(
+			"repo_task",
+			{ repo: "sample/project", task: "Work", skills: ["loaded"] },
+			{ channel: "test:origin" },
+		),
+	).toBe("Queued faux/caller; skipped ");
+	expect((await delivered.promise).job.channel).toBe("test:home");
+	expect(chat.posts).toEqual([]);
+});
+
+test("owner policy is host-owned, validates names, and does not bypass linked hold rules", async () => {
+	const seen: string[] = [];
+	const plugin = coding({
+		shelfDir: temp(),
+		model: "faux/worker",
+		isOwnerRepo: (repo) => {
+			seen.push(repo);
+			return repo.startsWith("sample/");
+		},
+	});
+	const harness = await testPlugin({
+		...plugin,
+		setup: async (context) => ({
+			...(await plugin.setup(context)),
+			holdRules: [
+				{
+					name: "host-policy",
+					describe: (tool) =>
+						tool === "repo_push" ? "Host requires approval" : undefined,
+				},
+			],
+		}),
+	});
+	stops.push(() => harness.stop());
+	const sha = "a".repeat(40);
+	expect(harness.holds("repo_push", { repo: "sample/future", sha }, {})).toBe(
+		"Host requires approval",
+	);
+	expect(
+		harness.holds("repo_push", { repo: "samples/future", sha }, {}),
+	).toContain("Push");
+	expect(() =>
+		harness.holds("repo_push", { repo: "sample/../escape", sha }, {}),
+	).toThrow();
+	expect(seen).not.toContain("sample/../escape");
+});
+
+test("a trusted host can word the held push card without changing who is held", async () => {
+	const harness = await testPlugin(
+		coding({
+			shelfDir: temp(),
+			model: "faux/worker",
+			isOwnerRepo: (repo) => repo.startsWith("sample/"),
+			pushHoldText: (repo, sha) => `ship ${sha} of ${repo}`,
+		}),
+	);
+	stops.push(() => harness.stop());
+	const sha = "b".repeat(40);
+	expect(harness.holds("repo_push", { repo: "samples/app", sha }, {})).toBe(
+		`ship ${sha} of samples/app`,
+	);
+	expect(
+		harness.holds("repo_push", { repo: "sample/app", sha }, {}),
+	).toBeUndefined();
+});
+
+test("adoption preserves a legacy clone once and refuses symlink escapes before moving it", async () => {
+	const { shelf, dir, seed } = await fixture();
+	const from = join(dir, "legacy");
+	await git(dir, "clone", seed, from);
+	const harness = await testPlugin(
+		coding({
+			shelfDir: shelf.dir,
+			model: "faux/worker",
+			adoptClones: [{ from, repo: "sample/project" }],
+		}),
+	);
+	stops.push(() => harness.stop());
+	expect(existsSync(from)).toBe(false);
+	expect(shelf.repos()).toEqual(["sample/project"]);
+	expect(shelf.adopt(from, "sample/project")).toBe(false);
+	const another = join(dir, "another");
+	await git(dir, "clone", seed, another);
+	expect(shelf.adopt(another, "sample/project")).toBe(false);
+	expect(existsSync(another)).toBe(true);
+	symlinkSync(dir, join(shelf.dir, "escape"));
+	expect(() => shelf.adopt(another, "escape/project")).toThrow("escapes");
+	expect(existsSync(another)).toBe(true);
+	const link = join(dir, "linked");
+	symlinkSync(another, link);
+	expect(() => shelf.adopt(link, "sample/linked")).toThrow("standalone");
+});
+
+test("threads own approval cards, archive before result delivery, and never fall back when absent", async () => {
+	const { shelf } = await fixture();
+	await shelf.add("sample/project");
+	for (const origin of ["discord:origin", undefined] as const) {
+		const { host, threads } = fakeThreads();
+		const asked: string[] = [];
+		const results: CodingResult[] = [];
+		const desk = new CodingDesk({
+			shelf,
+			threads,
+			logger: silentLogger(),
+			threadText: {
+				initial: (job) => `Start ${job.task}`,
+				held: () => "Awaiting approval",
+				approvalTitle: () => "Host approval",
+				report: () => "Host report",
+			},
+			prompts: (channel) => ({
+				confirm: async (title) => {
+					asked.push(`${channel}: ${title}`);
+					return "expired";
+				},
+				ask: async () => undefined,
+			}),
+			worker: {
+				run: async (_job, _signal, review) =>
+					`${await review({ tool: "bash", input: "{}", action: "push" })}`,
+			},
+			deliver: async (result) => {
+				if (origin) expect(host.closed).toEqual(["900"]);
+				results.push(result);
+			},
+		});
+		await desk.start({ ...request(), origin });
+		await desk.idle();
+		if (origin) {
+			expect(host.opened[0]?.parentId).toBe("origin");
+			expect(asked).toEqual(["discord:900: Host approval"]);
+			expect(host.textsIn("900")).toEqual([
+				"Start Implement the contract",
+				"Awaiting approval",
+				"Host report",
+			]);
+		} else expect(asked).toEqual([]);
+		expect(results[0]?.outcome).toEqual({ ok: true, report: "held" });
+		await desk.stop();
+	}
+});
+
+test("thread failures cannot discard the worker result", async () => {
+	const { shelf } = await fixture();
+	await shelf.add("sample/project");
+	const delivered: CodingResult[] = [];
+	const desk = new CodingDesk({
+		shelf,
+		logger: silentLogger(),
+		threads: {
+			open: async () => ({
+				id: "1",
+				channel: "test:thread",
+				mention: "#1",
+				post: async () => {
+					throw new Error("offline");
+				},
+				close: async () => {
+					throw new Error("offline");
+				},
+			}),
+		},
+		worker: {
+			run: async (_job, _signal, review) =>
+				`${await review({ tool: "bash", input: "{}", action: "push" })}`,
+		},
+		deliver: async (result) => {
+			delivered.push(result);
+		},
+	});
+	await desk.start(request());
+	await desk.idle();
+	expect(delivered[0]?.outcome).toEqual({ ok: true, report: "held" });
+	expect(delivered[0]?.held).toHaveLength(1);
+	await desk.stop();
+});
+
+test("unavailable implicit skills require explicit host opt-in and are disclosed; explicit requests always refuse", async () => {
+	const { shelf } = await fixture();
+	await shelf.add("sample/project");
+	for (const skipUnavailableCarriedSkills of [false, true]) {
+		const harness = await testPlugin(
+			coding({
+				shelfDir: shelf.dir,
+				model: "faux/worker",
+				skipUnavailableCarriedSkills,
+				worker: { run: async () => "Checked." },
+				onResult: async () => {},
+			}),
+			{
+				services: [
+					servicePair(SKILLS, {
+						checkRegistered: () => {},
+						resolve: () => ({
+							skills: [],
+							missing: [{ name: "unavailable", reason: "missing file" }],
+						}),
+					}),
+				],
+			},
+		);
+		try {
+			expect(
+				await harness.runTool("repo_task", {
+					repo: "sample/project",
+					task: "Work",
+					skills: ["unavailable"],
+				}),
+			).toContain("cannot load");
+			const text = await harness.runTool("repo_task", {
+				repo: "sample/project",
+				task: "Work",
+			});
+			expect(text).toContain(
+				skipUnavailableCarriedSkills
+					? "Unavailable implicit skills skipped: unavailable."
+					: "cannot load",
+			);
+		} finally {
+			await harness.stop();
+		}
+	}
 });

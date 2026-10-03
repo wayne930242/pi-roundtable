@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.3
+
+- Add the opt-in Pi subscription mode (`PiSandboxRuntime`, `PiSandboxBroker`, `PiDockerContainerDriver`), worker-initiated transport, controlled `safeFetch`, bounded media in and reply files out, scoped delegation and a research worker, with the sealed default unchanged.
+- Add `assertPublicUrl`, `safeFetch` `followRedirects` and `headers`, and a research-worker `fetchContent` hook for hosts that keep a library's own extractors.
+- Keep upstream error status, body and back-off headers through the rich broker, re-arm the metadata-only startup window for a restarted worker, and refuse compressed Teredo addresses.
+- Stream rich broker responses without fixed total caps (the turn deadline is the bound), bind the host-judged thinking level so the worker can only ask for less, and replace guest-planted symlinks on start and start-fresh instead of following them.
+
 ## 0.7.2
 
 - First release published by the lockstep workflow; no changes to the package. The `v0.7.1` tag published nothing.

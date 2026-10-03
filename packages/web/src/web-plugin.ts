@@ -33,8 +33,16 @@ export function webConsole(options: WebConsoleOptions): RoundtablePlugin {
 
 type Context = Parameters<RoundtablePlugin["setup"]>[0];
 
-function build(settings: ResolvedOptions, context: Context) {
+async function build(settings: ResolvedOptions, context: Context) {
 	const { services, queue, logger, env } = context;
+	const features =
+		typeof settings.features === "function"
+			? await settings.features(context)
+			: settings.features;
+	for (const pane of ["skills", "connectors"] as const) {
+		if (settings.panes.includes(pane) && !features?.[pane])
+			throw new Error(`web-console: the ${pane} pane needs its feature port`);
+	}
 	const team = services.find(AGENTS)?.team;
 	const connection = services.find(DISCORD)?.connection;
 	const listeners: (() => void)[] = [];
@@ -60,12 +68,17 @@ function build(settings: ResolvedOptions, context: Context) {
 		relayNotes: settings.relayNotes,
 		changed,
 		logger,
+		...(features ? { features } : {}),
+		...(settings.routing === "path" ? { mountPath: settings.mount } : {}),
+		...(settings.presentation ? { presentation: settings.presentation } : {}),
 	});
 	const server = new ConsoleServer({
 		mount: settings.mount,
 		assets,
 		verifier: settings.verifier,
 		origin: settings.origin,
+		pathRouting: settings.routing === "path",
+		...(settings.presentation ? { presentation: settings.presentation } : {}),
 		api,
 		subscribe: (listener) => {
 			listeners.push(listener);

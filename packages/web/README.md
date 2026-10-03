@@ -9,7 +9,7 @@ Every request must pass an authentication check that you configure, and the plug
 
 ## What the console shows
 
-The console has up to three panes.
+The console has five optional panes; the original three remain the default.
 The `panes` option chooses which ones a host serves.
 
 | Pane | What it shows |
@@ -17,6 +17,8 @@ The `panes` option chooses which ones a host serves.
 | Overview | Every active agent with its model, thinking level, state (working where, waiting, or idle), context use, schedule count, and last activity; every group with its members, host, and busy count. An agent links to its Discord channel and its transcript, and a group to its Discord channel. |
 | Conversations | Every conversation stored on disk, in four sections: owner channels (direct messages and channels where the owner talks to the assistant), agent channels, group conversations (each member's conversation inside a group), and outside-agent conversations opened over MCP. Each row shows the channel's name (when the host has a Discord connection), when it was last active, its size, and how many archives it has. An outside-agent conversation shows its first message, when it appears in the first 256 KB of the file, and when it began. |
 | Notes | The owner's memory in three tabs, core, notes, and events, with search. The owner can add a note, edit its text, kind, and date, and delete it after a confirmation. The memory addon's own validation applies, so a refusal shows its reason and saves nothing. |
+| Skills | The full host catalog, source, groups and carriers; each available skill opens its ordered frontmatter and Markdown body. |
+| Connectors | Upstream gateway enabled/reachable/tool status, virtual-server tool lists, and the agents or profiles that use them; an optional administration link. |
 
 Opening a conversation shows its **transcript**: the user's and the assistant's messages, the tools the assistant called with a short preview of their arguments, and each tool's result (collapsed).
 A conversation that was started over keeps its archives, and the page can show any of them.
@@ -28,8 +30,12 @@ A turn starting or ending, a queued message, a change in the agent team, or a no
 Relative times refresh every 30 seconds.
 Times and event dates use the host's time zone (`env.timeZone`).
 
-The console is read-only for conversations.
-It does not start conversations over, delete them, or change agent settings; the only thing it writes is the owner's notes.
+Conversation cleanup is opt-in through `features.cleanup`.
+Overview includes stored owner workspaces and outside conversations, and can include separately stored party channels through `features.party`.
+Start-over archives a conversation through the host's hook; deletion is restricted to stored owner/outside conversations and a busy refusal becomes HTTP 409.
+Confirmation dialogs explain that memory and schedules remain.
+Without the cleanup hook, conversations remain read-only.
+`GET api/dashboard` is a compatibility view of Overview with channel keys and `agentGuildId`, `channelId`, and `sessionId` aliases for existing clients.
 
 ## Requirements
 
@@ -83,7 +89,10 @@ The plugin adds the route `/console` (a redirect to `/console/`) and `/console/â
 | `dataDir` | `./data` | The host's data directory; the console reads `<dataDir>/sessions`. Set it to the `dataDir` of your configuration. |
 | `mountPath` | `/console` | The path the console is served under: one or more segments of letters, digits, `.`, `_`, `~`, and `-`. |
 | `listener` | `public` | The id of the listener whose address serves the console. |
-| `panes` | all three | Which panes to serve and in what order: any of `"overview"`, `"conversations"`, `"notes"`. A pane that is not served answers 404 and is not in the page. |
+| `panes` | `overview`, `conversations`, `notes` | Ordered subset of those panes plus `skills` and `connectors`. Disabled panes answer 404. Skills/connectors require their feature ports at setup. |
+| `routing` | `hash` | `path` retains links such as `/console/skills`, with history navigation and an authenticated page fallback. |
+| `features` | none | Trusted host integrations, or a factory receiving public plugin setup context; see below. |
+| `presentation` | English | `{ locale, messages }`: locale controls dates and document language; English source strings are dictionary keys for labels, descriptions, confirmations, and API errors. |
 | `title` | `Roundtable` | The page's heading and title. |
 | `relayNotes` | the remote MCP note | Text that an outside agent's relayed message begins with, taken off before the owner's words are shown. Set it to the same value as the `relayNote` of [pi-roundtable-mcp][mcp] when you changed that one. |
 | `exclude` | none | A function from a channel key to `true` for conversations the console must neither list nor read, such as the channels of another plugin that keeps its own sessions in the same directory. |
@@ -92,6 +101,44 @@ The options are checked when the plugin is created, so a bad setting stops the h
 
 The console also needs the agent server for the Overview pane and the memory addon for the Notes pane.
 The host refuses to start with a message naming the missing service when one of them is absent for a pane you serve.
+
+## Host feature ports
+
+`features` may be an object or a synchronous/asynchronous factory `(context) => features`.
+Use the setup context to bind existing services; no database tables or session paths are renamed.
+The host wrapper must declare any additional required service keys in its plugin's `requires`.
+
+| Port | Contract |
+|---|---|
+| `party` | `contains(key)` separates party channels from owner transcripts; `list()` returns `PartyView[]` with channel, profile, enabler, enabled time, container state, busy count and optional last activity. |
+| `schedules` | `count(key)` returns the workspace schedule count. |
+| `cleanup` | `startFresh(key)` archives/waits for active turns and returns its kind; `deleteConversation(key)` returns `deleted` or `busy`. The package validates key shape, ownership, existence and exclusions before calling either hook. |
+| `skills` | `catalog()` supplies public `SkillView[]`; `read(name)` reads only that catalog entry and returns `{ frontmatter, body }`. The host bounds disk reads; the API caps body at 1 MB and frontmatter at 64 KB and flattens metadata in source order. |
+| `connectors` | `gateways()`, `servers()`, `usedBy(server)` provide status/tools/usage. Optional `adminUrl` accepts HTTP(S) or an absolute local path, never script URLs. |
+
+`sessionSummary(directory)` is a public helper for a trusted host to summarize separately stored party session files.
+It reports live bytes, archive count and last activity without revealing message contents.
+Generic source and defaults are English; keep application names and localized wording in the host's presentation dictionary.
+Authenticated HTML carries inert, escaped presentation metadata so the first API failure is localized too, without inline scripts.
+The page ships prebuilt, so application adapters do not need their own React build or a second server implementation.
+
+```ts
+webConsole({
+  // ...verifier, origin, ownerId...
+  mountPath: "/console",
+  routing: "path",
+  panes: ["overview", "notes"],
+  presentation: { locale: "fr", messages: { "Start over": "Recommencer" } },
+  features: (context) => ({
+    cleanup: {
+      startFresh: (key) => context.conversations.startFresh(key),
+      deleteConversation: (key) => context.conversations.deleteConversation(key),
+    },
+  }),
+});
+```
+
+When serving Skills and Connectors, provide those hooks as well; a missing port fails startup rather than silently dropping a pane.
 
 ## Authentication
 
@@ -175,8 +222,10 @@ A page on another site that makes the owner's browser send a request therefore c
 
 **Cross-site scripting and framing.**
 The page is a prebuilt bundle served from the same origin.
-Every response carries `X-Content-Type-Options: nosniff` and `Referrer-Policy: same-origin`, and the page carries a Content-Security-Policy of `default-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'self'; frame-ancestors 'none'`, so it loads only its own script and style, cannot be framed, and cannot be pointed at another base.
-Transcript text, notes, and channel names are rendered as plain text; the page never interprets them as HTML or Markdown, and it opens no link taken from a transcript.
+Every response carries `X-Content-Type-Options: nosniff` and `Referrer-Policy: same-origin`, and the page carries a Content-Security-Policy of `default-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'self'; frame-ancestors 'none'`, so it loads only its own script and style and cannot be framed.
+Path routing uses `base-uri 'self'` for the package-inserted, validated mount base.
+Transcript text, notes, and channel names are rendered as plain text, and no link is taken from a transcript.
+Skill documents render Markdown with raw HTML escaped, no fetched images, and only HTTP(S) links; relative links remain non-navigating text.
 Links to Discord are built by the page from channel ids, not taken from stored text.
 
 **Errors reveal nothing to the client.**
@@ -187,7 +236,8 @@ The text of an error that your own code throws, such as a memory store's, is log
 
 **Path handling and resource limits.**
 A conversation is named by a channel key that must match `discord:<id>`, `agentgroup:<id>.<agent>`, or `mcp:<uuid>` exactly, and an archive is chosen from the folder's own listing, so no request can name a path.
-A request body is limited to 64 KB, a transcript to 8 MB read and 1000 entries, an entry's text to 20 000 characters, and the list of an outside agent's first message to the first 256 KB of its file.
+A note request body is limited to 64 KB, a transcript to 8 MB read and 1000 entries, an entry's text to 20 000 characters, and the list of an outside agent's first message to the first 256 KB of its file.
+Session directory, file and archive symlinks are not followed by the console.
 At most 32 event streams stay open at once, and a stream whose client falls 16 events behind is closed, after which the page reconnects and refetches.
 
 **What the transcript can reveal.**
@@ -217,7 +267,7 @@ bun run --cwd packages/web fixture     # a local host with fixture data
 `/fixture/message` appends a message to the owner's conversation and `/fixture/work` toggles the agent between working and idle, so the live updates can be watched.
 
 The page is React, bundled with Bun's bundler into relative URLs, so it works under any `mountPath`.
-Pages are addressed by the URL fragment (`#/notes`, `#/conversations/<key>`), which keeps every page at the console's root path.
+Pages use URL fragments by default (`#/notes`, `#/conversations/<key>`); `routing: "path"` uses mount-relative page paths instead.
 
 The package shares the core's version and single `v*` release tag.
 The shared `publish.yml` checks every workspace, then publishes each separately with provenance; this package's `prepack` builds the page.

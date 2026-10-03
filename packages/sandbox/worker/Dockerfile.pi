@@ -1,0 +1,12 @@
+# Build with the application's release directory as context.
+# DEPS_IMAGE must contain /app/node_modules, including the optional Pi SDK and bridge.
+ARG DEPS_IMAGE
+FROM ${DEPS_IMAGE}
+WORKDIR /app
+# Trusted content and explicit app worker extensions, not host source or credentials.
+COPY --chown=0:0 assets /app/assets
+COPY --chown=0:0 persona /app/persona
+COPY --chown=0:0 shared /app/shared
+COPY --chown=0:0 worker /app/worker
+# Generic runtime comes from the installed official package in the dependency layer.
+CMD ["bun", "/app/node_modules/pi-roundtable-sandbox/worker/pi-main.ts"]

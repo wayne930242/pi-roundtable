@@ -28,7 +28,7 @@ export default function fauxProvider(pi: ExtensionAPI) {
 		),
 		(context) =>
 			fauxAssistantMessage(
-				`Worker pid=${process.pid}. externalContext=${JSON.stringify(context.messages).includes("EXTERNAL_CONTEXT_CANARY")}, repoContext=${JSON.stringify(context.messages).includes("REPO_CONTEXT_CANARY")}. ${JSON.stringify(context.messages.filter((message) => message.role === "toolResult"))}`,
+				`Worker pid=${process.pid}. externalContext=${JSON.stringify(context.messages).includes("EXTERNAL_CONTEXT_CANARY")}, repoContext=${JSON.stringify(context.messages).includes("REPO_CONTEXT_CANARY")}, hostPrompt=${JSON.stringify(context.messages).includes("HOST_PROMPT_CANARY")}. ${JSON.stringify(context.messages.filter((message) => message.role === "toolResult"))}`,
 			),
 	]);
 	pi.registerProvider("faux", {

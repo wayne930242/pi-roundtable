@@ -1,4 +1,9 @@
-import { definePlugin, PluginError, type Tier } from "pi-roundtable";
+import {
+	definePlugin,
+	PluginError,
+	type Tier,
+	type ToolTurn,
+} from "pi-roundtable";
 import { type Deck, DeckError, loadDecks } from "./cards/deck.ts";
 import type { Random } from "./random.ts";
 import { drawCardsTool } from "./tools/draw-cards-tool.ts";
@@ -9,6 +14,16 @@ import {
 	sigilTool,
 } from "./tools/magic-tools.ts";
 import { relationshipMapTool } from "./tools/relationship-map-tool.ts";
+
+export interface CardPresentation {
+	/** Trusted host presentation; never part of the model's tool arguments. */
+	heading?: (
+		draw: { deck: Deck; count: number; question?: string },
+		turn: ToolTurn,
+	) => { title: string; subtitle: string };
+	/** Appended to reversed card names on the picture; default " (reversed)". */
+	reversedSuffix?: string;
+}
 
 export interface DrawingOptions {
 	/**
@@ -21,6 +36,8 @@ export interface DrawingOptions {
 	random?: Random;
 	/** The lowest tier that may use the tools; default `member`. */
 	minTier?: Tier;
+	/** Operator-local captions and reversal wording; default package presentation. */
+	cardPresentation?: CardPresentation;
 }
 
 function readDecks(deckDir: string): Deck[] {
@@ -53,7 +70,9 @@ export function drawing(options: DrawingOptions = {}) {
 					magicCircleTool(env),
 					sigilTool(env),
 					sacredGeometryTool(env),
-					...(decks.length > 0 ? [drawCardsTool(decks, env, random)] : []),
+					...(decks.length > 0
+						? [drawCardsTool(decks, env, random, options.cardPresentation)]
+						: []),
 				],
 			};
 		},

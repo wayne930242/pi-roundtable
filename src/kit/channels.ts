@@ -6,6 +6,8 @@ export {
 	channelSegment,
 	ownerAttachmentDir,
 } from "../core/attachments/attachment-dir.ts";
+export { prepareImageBytes } from "../core/attachments/image-prep.ts";
+export { ImagePreparationError } from "../core/attachments/image-preparation-error.ts";
 export { withAttachmentsBlock } from "../core/attachments/prompt-block.ts";
 export { attachmentsOf } from "../core/attachments/turn-attachments.ts";
 export type { ChannelQueue } from "../core/routing/channel-queue.ts";

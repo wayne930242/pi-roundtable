@@ -79,14 +79,21 @@ export function validCallId(id: unknown): id is string {
 export async function boundedText(
 	stream: ReadableStream<Uint8Array> | null,
 	limit: number,
+	signal?: AbortSignal,
 ): Promise<string> {
+	signal?.throwIfAborted();
 	if (!stream) return "";
 	const reader = stream.getReader();
+	const abort = () => {
+		void reader.cancel().catch(() => {});
+	};
+	signal?.addEventListener("abort", abort, { once: true });
 	const chunks: Uint8Array[] = [];
 	let size = 0;
 	try {
 		for (;;) {
 			const { done, value } = await reader.read();
+			signal?.throwIfAborted();
 			if (done) break;
 			size += value.byteLength;
 			if (size > limit) {
@@ -96,6 +103,7 @@ export async function boundedText(
 			chunks.push(value);
 		}
 	} finally {
+		signal?.removeEventListener("abort", abort);
 		reader.releaseLock();
 	}
 	const data = new Uint8Array(size);

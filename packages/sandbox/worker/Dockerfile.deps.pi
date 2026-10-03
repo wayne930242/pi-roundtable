@@ -1,0 +1,4 @@
+# Build context is the installed node_modules directory (no host credentials).
+FROM oven/bun:1.4.2
+WORKDIR /app
+COPY --chown=0:0 . /app/node_modules

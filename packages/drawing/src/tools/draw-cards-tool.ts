@@ -10,6 +10,7 @@ import {
 	type SpreadPosition,
 } from "../cards/spread.ts";
 import { DrawingError } from "../errors.ts";
+import type { CardPresentation } from "../plugin.ts";
 import type { Random } from "../random.ts";
 import {
 	type ImageToolEnv,
@@ -32,6 +33,7 @@ export function drawCardsTool(
 	decks: readonly Deck[],
 	env: ImageToolEnv,
 	random: Random,
+	presentation: CardPresentation = {},
 ) {
 	const [first, ...rest] = decks;
 	if (!first) throw new DrawingError("draw_cards needs at least one deck.");
@@ -81,7 +83,7 @@ export function drawCardsTool(
 					Type.String({ description: "The question, shown on the picture." }),
 				),
 			}),
-			draw: async (args) => {
+			draw: async (args, turn) => {
 				const deck = decks.find((candidate) => candidate.id === args.deck);
 				if (!deck)
 					throw new DrawingError(
@@ -99,12 +101,22 @@ export function drawCardsTool(
 					allowReversed: args.allow_reversed,
 					random,
 				});
-				const image = await renderSpread(deck, cards, positions, {
+				const heading = presentation.heading?.(
+					{ deck, count: cards.length, question: args.question },
+					turn,
+				) ?? {
 					title: deck.name,
 					subtitle:
 						args.question ??
 						`${cards.length} card${cards.length === 1 ? "" : "s"}`,
-				});
+				};
+				const image = await renderSpread(
+					deck,
+					cards,
+					positions,
+					heading,
+					presentation.reversedSuffix,
+				);
 				const lines = cards.map((card, i) => {
 					const label = positions[i]?.label ? `${positions[i]?.label}: ` : "";
 					return `${i + 1}. ${label}${card.name}${card.reversed ? " (reversed)" : ""} [id: ${card.id}]`;

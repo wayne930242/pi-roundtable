@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.3] - 2026-10-03
+
+- Add feature ports (notes, skills, connectors, cleanup), page presentation and routing options, and the matching console pages.
+
 ## [0.7.2] - 2026-10-02
 
 First release published by the lockstep workflow; no changes to the package.

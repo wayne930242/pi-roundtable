@@ -4,6 +4,7 @@ import { Badge, Empty, Failure, Loading } from "../components/states.tsx";
 import { api } from "../lib/api.ts";
 import { useConfig } from "../lib/config.ts";
 import { conversationTitle, when } from "../lib/format.ts";
+import { translate as t } from "../lib/messages.ts";
 import { hrefFor } from "../lib/router.ts";
 import { useFetched } from "../lib/use-fetched.ts";
 
@@ -29,7 +30,7 @@ export function TranscriptPage({
 
 	const back = (
 		<a className="back" href={hrefFor("conversations")}>
-			← Conversations
+			← {t("Conversations")}
 		</a>
 	);
 	if (!view)
@@ -42,7 +43,7 @@ export function TranscriptPage({
 	const { conversation } = view;
 	const title =
 		conversation.kind === "outside"
-			? `Outside agent · ${conversation.id.slice(0, 8)}`
+			? t("Outside agent · {id}", { id: conversation.id.slice(0, 8) })
 			: conversationTitle(conversation);
 	return (
 		<>
@@ -50,11 +51,13 @@ export function TranscriptPage({
 			<section className="stack">
 				<div className="card-head">
 					<h2>{title}</h2>
-					{conversation.busy > 0 ? <Badge tone="busy">running</Badge> : null}
+					{conversation.busy > 0 ? (
+						<Badge tone="busy">{t("running")}</Badge>
+					) : null}
 				</div>
 				{view.archives.length > 0 ? (
 					<label className="inline">
-						Showing{" "}
+						{t("Showing")}{" "}
 						<select
 							value={archive ?? ""}
 							onChange={(event) => {
@@ -62,10 +65,10 @@ export function TranscriptPage({
 								setArchive(event.target.value || undefined);
 							}}
 						>
-							<option value="">Current conversation</option>
+							<option value="">{t("Current conversation")}</option>
 							{view.archives.map((name) => (
 								<option key={name} value={name}>
-									Archived {name}
+									{t("Archived {name}", { name })}
 								</option>
 							))}
 						</select>
@@ -74,11 +77,14 @@ export function TranscriptPage({
 				{error ? <Failure message={error} /> : null}
 				{view.truncated ? (
 					<p className="hint">
-						This conversation is longer than the console reads; the oldest
-						entries are not shown.
+						{t(
+							"This conversation is longer than the console reads; the oldest entries are not shown.",
+						)}
 					</p>
 				) : null}
-				{view.entries.length === 0 ? <Empty>Nothing to show.</Empty> : null}
+				{view.entries.length === 0 ? (
+					<Empty>{t("Nothing to show.")}</Empty>
+				) : null}
 				<ol className="transcript">
 					{view.entries.map((entry, index) => (
 						// The entries have no ids; their order is the transcript.
@@ -99,17 +105,17 @@ function Entry({ entry }: { entry: TranscriptEntry }) {
 			<li className="entry entry-tool">
 				<details>
 					<summary>
-						{entry.failed ? "Tool failed" : "Tool result"}
+						{entry.failed ? t("Tool failed") : t("Tool result")}
 						{entry.tool ? ` · ${entry.tool}` : ""}
 					</summary>
-					<pre>{entry.text || "(empty)"}</pre>
+					<pre>{entry.text || t("(empty)")}</pre>
 				</details>
 			</li>
 		);
 	return (
 		<li className={`entry entry-${entry.role}`}>
 			<div className="entry-head">
-				<span className="role">{LABELS[entry.role]}</span>
+				<span className="role">{t(LABELS[entry.role])}</span>
 				<span className="meta">{stamp}</span>
 			</div>
 			{entry.text ? <p className="text">{entry.text}</p> : null}

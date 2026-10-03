@@ -1,7 +1,8 @@
 import { join } from "node:path";
-import type { ChannelKey } from "pi-roundtable";
+import type { ChannelKey, RoundtablePlugin } from "pi-roundtable";
 import { PluginError } from "pi-roundtable";
 import { PANES, type PaneName } from "./api-types.ts";
+import type { ConsoleFeatures, ConsolePresentation } from "./features.ts";
 import type { RequestVerifier } from "./verifier.ts";
 
 /**
@@ -17,6 +18,14 @@ export interface WebConsoleOptions {
 	 * built-in one. Without it the plugin refuses to start rather than serve without authentication.
 	 */
 	verifier: RequestVerifier;
+	/** Host-specific data and actions, resolved against public plugin setup context. */
+	features?:
+		| ConsoleFeatures
+		| ((
+				context: Parameters<RoundtablePlugin["setup"]>[0],
+		  ) => ConsoleFeatures | Promise<ConsoleFeatures>);
+	/** Localized labels and error text; English source strings are dictionary keys. */
+	presentation?: ConsolePresentation;
 	/**
 	 * The console's own origin, such as `https://console.example.com`: requests that change data
 	 * must carry it as their `Origin`, and the dashboard line links to it.
@@ -30,6 +39,8 @@ export interface WebConsoleOptions {
 	mountPath?: string;
 	/** The listener whose address serves it; default `public`. */
 	listener?: string;
+	/** Hash routes by default; path routes retain links such as /console/skills. */
+	routing?: "hash" | "path";
 	/** The panes to serve, in the order the page lists them; default all of `overview`, `conversations`, `notes`. */
 	panes?: readonly PaneName[];
 	/** The page's title and heading; default `Roundtable`. */
@@ -50,11 +61,14 @@ export interface ResolvedOptions {
 	sessionsDir: string;
 	mount: string;
 	listener: string;
+	routing: "hash" | "path";
 	panes: PaneName[];
 	title: string;
 	relayNotes: readonly string[];
 	exclude: ((key: ChannelKey) => boolean) | undefined;
 	assetDir: string | undefined;
+	features: WebConsoleOptions["features"];
+	presentation: ConsolePresentation | undefined;
 }
 
 const SEGMENT = /^[A-Za-z0-9._~-]+$/;
@@ -99,7 +113,7 @@ function checkOrigin(origin: string): string {
 }
 
 function checkPanes(panes: readonly PaneName[] | undefined): PaneName[] {
-	if (panes === undefined) return [...PANES];
+	if (panes === undefined) return ["overview", "conversations", "notes"];
 	if (panes.length === 0) fail("panes is empty; serve at least one pane");
 	for (const pane of panes)
 		if (!PANES.includes(pane))
@@ -116,6 +130,19 @@ export function resolveOptions(options: WebConsoleOptions): ResolvedOptions {
 		fail(
 			"no verifier. The console serves the owner's conversations and notes, so it will not start without one that authenticates every request; pass `verifier: cloudflareAccess({...})` or your own",
 		);
+	if (
+		options.routing !== undefined &&
+		options.routing !== "path" &&
+		options.routing !== "hash"
+	)
+		fail("routing must be hash or path");
+	if (options.presentation?.locale !== undefined) {
+		try {
+			new Intl.DateTimeFormat(options.presentation.locale);
+		} catch {
+			fail("presentation.locale is not a valid locale");
+		}
+	}
 	const panes = checkPanes(options.panes);
 	const ownerId = options.ownerId?.trim();
 	if (panes.includes("notes") && !ownerId)
@@ -131,10 +158,13 @@ export function resolveOptions(options: WebConsoleOptions): ResolvedOptions {
 		sessionsDir: join(options.dataDir ?? "data", "sessions"),
 		mount: checkMount(options.mountPath ?? "/console"),
 		listener: options.listener ?? "public",
+		routing: options.routing ?? "hash",
 		panes,
 		title,
 		relayNotes: options.relayNotes ?? [DEFAULT_RELAY_NOTE],
 		exclude: options.exclude,
 		assetDir: options.assetDir,
+		features: options.features,
+		presentation: options.presentation,
 	};
 }

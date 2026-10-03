@@ -2,11 +2,17 @@ export type {
 	CodingDeskOptions,
 	CodingJob,
 	CodingResult,
+	CodingThreadText,
 	CodingWorker,
 	HeldCallAnswer,
 } from "./coding-desk.ts";
 export { CodingDesk, codingReport } from "./coding-desk.ts";
-export type { CodingOptions, CodingService } from "./coding-plugin.ts";
+export type {
+	CodingOptions,
+	CodingPresentation,
+	CodingRun,
+	CodingService,
+} from "./coding-plugin.ts";
 export { CODING, coding } from "./coding-plugin.ts";
 export type { PiCodingWorkerOptions } from "./pi-coding-worker.ts";
 export { PiCodingWorker } from "./pi-coding-worker.ts";

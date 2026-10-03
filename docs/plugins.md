@@ -55,6 +55,11 @@ Import fixtures and fake threads from `pi-roundtable/testing` for tests.
 Use the kit's building blocks for a plugin that runs Pi itself, such as a coding worker:
 
 - MCP: `mcpExtension` and `VirtualServer` expose MCP servers to a session, and `mcpAdapterExtension` and `readAttachmentExtension` do the same inside an out-of-process worker.
+- Admitted media: `prepareImageBytes(data, contentType)` prepares raster bytes without reopening a guest-writable path; supported small images remain unchanged, and larger sides/encoded images are downsized to JPEG at a 2,000 px long side.
+  Before any native decoder, it refuses more than 25 MiB of encoded bytes or 64 million decoded pixels, including aggregate GIF/WebP frame dimensions.
+  `ImagePreparationError.reason` is `byte-limit`, `pixel-limit`, or `invalid-image`; hosts can localize refusals without parsing native decoder errors.
+  Ordinary 48 MP images and thin 9000×1 images remain admitted.
+  This helper is not a downloader or filesystem validator.
 - Work: `promptSlot` (how a run asks the owner while it works), `workTimeout` (a time limit that does not count the time spent waiting on the owner), `runWorkerTask`, `archiveSessions`, and `approvalCard` and `canonicalJson` for the cards of held actions.
 - Shell: `SHELL_TOOLS` and `shellHoldRule`, the hold rule that keeps risky host-shell commands behind the owner's approval.
 - Tools: `textToolsExtension`, `requiredString`, `stringList` (with `toolText` and `toolError`) for tools that return text.
@@ -429,6 +434,9 @@ A Pi package should use the host's peer dependency on `pi-roundtable`, not bundl
 Transient `SessionContext.runTask` tasks return only text and cannot attach to their parent's reply.
 Calling the helper outside `context.turns.run` or an agent-team turn, or after that turn finishes, throws `ReplyFileError`; direct standalone runtime calls have no reply collector.
 Await work that produces files before returning from the tool.
+A standalone isolated worker may wrap its complete awaited turn in `withReplyFiles(supported, run)` from the main entry.
+`run` returns `Promise<TurnResult>`; the collector validates any returned files, includes accepted attachments only on success, and deactivates on success, failure, or throw.
+The caller must deliver the returned `files` and must not open a fresh collector per tool to evade turn-wide limits.
 
 | Case | Behavior |
 |---|---|
@@ -2479,6 +2487,9 @@ Import from the entries listed below; source area files are internal.
 | `TurnSelection` | `pi-roundtable` | type |
 | `Weekday` | `pi-roundtable` | type |
 | `attachReplyFile` | `pi-roundtable` | value |
+| `withReplyFiles` | `pi-roundtable` | value |
+| `prepareImageBytes` | `pi-roundtable/kit` | value |
+| `ImagePreparationError` | `pi-roundtable/kit` | value |
 | `channelKey` | `pi-roundtable` | value |
 | `definePlugin` | `pi-roundtable` | value |
 | `defineRoundtable` | `pi-roundtable` | value |

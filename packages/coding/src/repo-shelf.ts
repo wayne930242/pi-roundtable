@@ -9,6 +9,7 @@ import {
 	readdirSync,
 	readSync,
 	realpathSync,
+	renameSync,
 } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { AgentError, checkRepoName } from "pi-roundtable/kit";
@@ -177,6 +178,29 @@ export class RepoShelf {
 	constructor(dir: string, clone: CloneCommand = ghClone) {
 		this.dir = resolve(dir);
 		this.#clone = clone;
+	}
+
+	/** Adopt an existing standalone clone at startup; an existing destination is never replaced. */
+	adopt(from: string, repo: string): boolean {
+		checkRepoName(repo);
+		const to = join(this.dir, repo);
+		if (
+			!existsSync(join(from, ".git")) ||
+			lstatSync(to, { throwIfNoEntry: false })
+		)
+			return false;
+		if (
+			!lstatSync(from).isDirectory() ||
+			!lstatSync(join(from, ".git")).isDirectory()
+		)
+			throw new AgentError("Only standalone local clones can be adopted.");
+		mkdirSync(dirname(to), { recursive: true });
+		const rel = relative(realpathSync(this.dir), realpathSync(dirname(to)));
+		if (rel.startsWith("..") || isAbsolute(rel))
+			throw new AgentError("Repository owner directory escapes the shelf.");
+		renameSync(from, to);
+		this.dirOf(repo);
+		return true;
 	}
 
 	/** Every clone as `<owner>/<repo>`, sorted. */

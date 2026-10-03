@@ -98,6 +98,11 @@ Discord 會用相同的 agent webhook 名稱和頭像，在文字後逐個送出
 Raw session tool 和 Pi package tool 可在工具執行期間（await 完成前）呼叫 `attachReplyFile`。
 Pi package 應使用 host 的 `pi-roundtable` peer dependency，不能另外包一份。
 對話輪次以外、輪次結束後，或 transient `runTask` 內呼叫都會失敗。
+獨立 worker 可用主入口的 `withReplyFiles(supported, run)` 包住整個 await 輪次；`run` 回傳 `Promise<TurnResult>`，呼叫者負責送出回傳的附件。
+`/kit` 的 `prepareImageBytes` 處理圖片位元組，不重新開啟 guest 可改寫的路徑。
+它會在 native decode 前檢查 25 MiB 編碼大小與 64 MP 解碼像素上限（包含所有影格合計），超過上限時會拋出 `ImagePreparationError`。
+一般 48 MP 圖片仍可使用，9000×1 長條圖片仍會縮至長邊 2,000 px。
+此 collector 使用相同驗證，失敗或拋出錯誤時會丟棄附件；不能為每個工具另開 collector 來繞過每輪上限。
 
 每輪最多 10 個檔案、每個最多 10 MiB（10,485,760 bytes），所有工具合計最多 50 MiB（52,428,800 bytes）。
 空資料、非 `Uint8Array` 資料、空檔名、`.` 或 `..`、含路徑或控制字元的檔名、超過 255 字元的檔名，以及超過上限的附件都會以 `ReplyFileError` 拒絕，不會靜默丟棄。

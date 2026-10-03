@@ -41,6 +41,15 @@ export default {
 | `model` | required | Worker Pi model as `provider/model-id`. |
 | `thinking` | `medium` | Worker thinking level. |
 | `ownerRepos` | `[]` | Exact `owner/repo` names exempt from the plugin's push hold. |
+| `isOwnerRepo` | none | Trusted host push-exemption policy, including future clones; only literal true grants one. |
+| `pushHoldText` | repository, sha, target and branch | Trusted wording for the approval card of a held `repo_push`; it never changes who is held. |
+| `adoptClones` | `[]` | Startup moves of existing standalone clones, preserving contents and never replacing a shelf destination. |
+| `resolveRun` | configured worker, caller channel | Per-caller model, thinking, report channel, and optional thread origin. |
+| `postChangeReport` | caller surface | Post the change record in the calling identity/channel. |
+| `presentation` | English package text | Change-report post/result and task-start wording, including omitted implicit skills. |
+| `threads` / `threadText` | none / English | Progress and approval thread port, with host-owned wording. |
+| `workerWorkspace` / `workerPrompt` | clone / generic instructions | Trusted shell-policy write boundary and standing prompt replacement. |
+| `skipUnavailableCarriedSkills` | `false` | Opt in to skipping/disclosing unavailable implicit skills; explicit requests still refuse them. |
 | `workerPackages` | `[]` | Absolute paths to installed Pi extension packages loaded by workers. |
 | `agentDir` | Pi host directory | Pi login and model configuration directory. |
 | `timeoutMs` | `3600000` | Work-time limit; time waiting for owner approval is excluded. |
@@ -48,6 +57,11 @@ export default {
 | `clone` | `ghClone` | Alternative Git-host clone implementation. |
 | `worker` | `PiCodingWorker` | Trusted worker runner replacement. |
 | `onResult` | surface reply | Custom report delivery. |
+
+`resolveRun(turn)` returns `{ model, thinking, channel, origin? }`; carried skills still follow the caller.
+`onResult` receives the loaded `skillNames` and optional `thread` in the job, allowing localized queued conversation turns rather than raw surface replies.
+Configured threads host approval cards and archive before result delivery; a missing thread leaves risky calls held.
+The clone layout stays `shelfDir/owner/repo`, with no database migration.
 
 ## Security model
 
@@ -59,7 +73,9 @@ Use a container or VM if host access is unacceptable.
 Keep tokens out of URLs and use least-privilege credentials; the package avoids logging credentials and subprocess diagnostics.
 
 Review worker changes and verification before using `repo_change_report` and `repo_push`.
-`ownerRepos` bypasses only this package's push hold; it does not bypass shell holds or other host rules.
+`ownerRepos` and the trusted `isOwnerRepo` policy bypass only this package's push hold; they do not bypass shell holds or other host rules.
+Never derive the policy from model input or repository files.
+Custom prompts and presentation hooks do not bypass exact-SHA report receipts, non-force pushes, cancellation or process-group cleanup.
 See the [pi-roundtable-coding README](https://github.com/wayne930242/pi-roundtable/blob/master/packages/coding/README.md) for the full workflow, tool contracts, and limits.
 
 {/* Sources: packages/coding/README.md:1-24, packages/coding/README.md:26-58, packages/coding/README.md:92-130, packages/coding/src/coding-plugin.ts:33-59 */}

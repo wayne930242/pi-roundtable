@@ -1,7 +1,13 @@
 // The console's API shapes, shared by the server (`src/`) and the page (`web/`). Times are ISO strings.
 
 /** The panes the console can show; the options choose which ones a host serves. */
-export const PANES = ["overview", "conversations", "notes"] as const;
+export const PANES = [
+	"overview",
+	"conversations",
+	"notes",
+	"skills",
+	"connectors",
+] as const;
 export type PaneName = (typeof PANES)[number];
 
 /** What the page needs before it can draw anything. */
@@ -10,6 +16,12 @@ export interface ConfigView {
 	panes: PaneName[];
 	/** The IANA zone the page formats times and event dates in: the host's `env.timeZone`. */
 	timeZone: string;
+	locale?: string;
+	messages?: Readonly<Record<string, string>>;
+	cleanup?: boolean;
+	connectorAdminUrl?: string;
+	/** Only supplied for path-based routing; also the base for page/API URLs. */
+	mountPath?: string;
 }
 
 export type ChannelName =
@@ -53,6 +65,19 @@ export interface OverviewView {
 	guildId: string;
 	agents: AgentView[];
 	groups: GroupView[];
+	workspaces?: (ConversationView & { schedules: number })[];
+	outside?: ConversationView[];
+	party?: PartyView[];
+}
+
+/** Compatibility dashboard shape for hosts migrating an existing console endpoint. */
+export interface DashboardView {
+	agentGuildId: string;
+	agents: (AgentView & { key: string })[];
+	groups: (GroupView & { key: string })[];
+	workspaces: (ConversationView & { channelId: string; schedules: number })[];
+	outside: (ConversationView & { sessionId: string })[];
+	party: PartyView[];
 }
 
 /** Who a stored conversation belongs to. */
@@ -120,6 +145,46 @@ export interface NoteInput {
 	fact: string;
 	kind: NoteKind;
 	eventDate?: string;
+}
+
+export interface PartyView {
+	key: string;
+	channelId: string;
+	channel: ChannelName;
+	profile: string;
+	enabledBy: string;
+	enabledAt: string;
+	container: "missing" | "running" | "stopped" | "unknown";
+	busy: number;
+	lastActive?: string;
+}
+
+export interface SkillView {
+	name: string;
+	source:
+		| { kind: "builtin" }
+		| { kind: "linked"; repo: string; path: string }
+		| { kind: "written" };
+	description?: string;
+	missing?: string;
+	groups: string[];
+	carriers: string[];
+}
+
+export interface SkillDetailView {
+	name: string;
+	metadata: { key: string; value: string }[];
+	body: string;
+}
+
+export interface ConnectorsView {
+	gateways: {
+		name: string;
+		enabled: boolean;
+		reachable: boolean;
+		tools: number;
+	}[];
+	servers: { name: string; tools: string[]; usedBy: string[] }[];
 }
 
 /** Every error body the API returns. */

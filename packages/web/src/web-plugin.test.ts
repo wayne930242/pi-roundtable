@@ -134,7 +134,7 @@ describe("refuses to start", () => {
 		["a mount path with a dot segment", { mountPath: "/a/../b" }, "mountPath"],
 		["a mount path with a space", { mountPath: "/my console" }, "mountPath"],
 		["no panes", { panes: [] }, "panes"],
-		["an unknown pane", { panes: ["skills"] }, "unknown pane"],
+		["an unknown pane", { panes: ["unknown"] }, "unknown pane"],
 		["a repeated pane", { panes: ["notes", "notes"] }, "twice"],
 		["notes with no owner id", { ownerId: " " }, "ownerId"],
 		["an empty title", { title: " " }, "title"],
@@ -262,7 +262,7 @@ describe("webConsole on a plugin harness", () => {
 		const overview = (await (
 			await call("/console/api/overview", {}, jwt)
 		).json()) as OverviewView;
-		expect(overview).toEqual({
+		expect(overview).toMatchObject({
 			guildId: "900000000000000099",
 			agents: [],
 			groups: [],
@@ -321,6 +321,51 @@ describe("webConsole on a plugin harness", () => {
 		expect(await next()).toBe("event: changed\ndata: {}\n\n");
 		await harness.stop();
 		harnesses.length = 0;
+	});
+
+	test("feature panes fail startup without hooks, and asynchronous factories receive public context", async () => {
+		await expect(boot({ panes: ["skills"] })).rejects.toThrow(
+			"skills pane needs",
+		);
+		await expect(boot({ panes: ["connectors"] })).rejects.toThrow(
+			"connectors pane needs",
+		);
+		const { call } = await boot({
+			panes: ["skills", "connectors"],
+			routing: "path",
+			presentation: { locale: "fr", messages: { Skills: "Translated skills" } },
+			features: async (context) => {
+				expect(context.services.find(AGENTS)).toBeDefined();
+				return {
+					skills: {
+						catalog: () => [],
+						read: async () => ({ frontmatter: {}, body: "" }),
+					},
+					connectors: {
+						gateways: async () => [],
+						servers: async () => [],
+						usedBy: () => [],
+					},
+				};
+			},
+		});
+		const jwt = await sign();
+		expect(await (await call("/console/api/skills", {}, jwt)).json()).toEqual(
+			[],
+		);
+		expect(
+			await (await call("/console/api/connectors", {}, jwt)).json(),
+		).toEqual({ gateways: [], servers: [] });
+		expect(
+			await (await call("/console/api/config", {}, jwt)).json(),
+		).toMatchObject({
+			locale: "fr",
+			mountPath: "/console",
+			messages: { Skills: "Translated skills" },
+		});
+		expect((await call("/console/skills", {}, jwt)).status).toBe(200);
+		expect((await call("/console/unknown.path", {}, jwt)).status).toBe(200);
+		expect((await call("/console/skills")).status).toBe(403);
 	});
 
 	test("leaves the notes pane unserved when memory is not asked for", async () => {

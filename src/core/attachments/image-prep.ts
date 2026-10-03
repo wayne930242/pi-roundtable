@@ -1,5 +1,8 @@
 import { createCanvas, loadImage } from "canvas";
 import type { ModelImage, StoredAttachment } from "../domain/attachment.ts";
+import { MAX_ATTACHMENT_BYTES } from "./attachment-fetcher.ts";
+import { assertImagePixelBudget } from "./image-budget.ts";
+import { ImagePreparationError } from "./image-preparation-error.ts";
 
 /** Images the model accepts as images; other files stay files. */
 const IMAGE_TYPES = new Set([
@@ -29,15 +32,41 @@ export function isModelImage(
 export async function prepareImage(
 	file: Pick<StoredAttachment, "path" | "contentType">,
 ): Promise<ModelImage> {
-	const bytes = Buffer.from(await Bun.file(file.path).arrayBuffer());
-	const mimeType = file.contentType.split(";")[0]?.trim().toLowerCase() ?? "";
-	if (bytes.byteLength <= MAX_RAW_BYTES) {
-		const image = await loadImage(bytes);
-		if (Math.max(image.width, image.height) <= MAX_SIDE) {
-			return { data: bytes.toString("base64"), mimeType };
+	const reader = Bun.file(file.path).stream().getReader();
+	const chunks: Uint8Array[] = [];
+	let size = 0;
+	try {
+		for (;;) {
+			const { value, done } = await reader.read();
+			if (done) break;
+			size += value.byteLength;
+			if (size > MAX_ATTACHMENT_BYTES)
+				throw new ImagePreparationError("byte-limit");
+			chunks.push(value);
 		}
+	} finally {
+		await reader.cancel();
 	}
+	return prepareImageBytes(Buffer.concat(chunks, size), file.contentType);
+}
+
+/** Prepare bounded raster bytes without reopening a guest-writable filesystem path.
+ * Headers and all GIF/WebP frames must fit 64 MP; encoded bytes must fit 25 MiB. */
+export async function prepareImageBytes(
+	data: Uint8Array,
+	contentType: string,
+): Promise<ModelImage> {
+	if (data.byteLength > MAX_ATTACHMENT_BYTES)
+		throw new ImagePreparationError("byte-limit");
+	const bytes = Buffer.from(data);
+	assertImagePixelBudget(bytes, MAX_SIDE * MAX_SIDE);
+	const mimeType = contentType.split(";")[0]?.trim().toLowerCase() ?? "";
 	const image = await loadImage(bytes);
+	if (
+		bytes.byteLength <= MAX_RAW_BYTES &&
+		Math.max(image.width, image.height) <= MAX_SIDE
+	)
+		return { data: bytes.toString("base64"), mimeType };
 	const scale = DOWNSCALED_SIDE / Math.max(image.width, image.height);
 	const width = Math.max(1, Math.round(image.width * Math.min(1, scale)));
 	const height = Math.max(1, Math.round(image.height * Math.min(1, scale)));

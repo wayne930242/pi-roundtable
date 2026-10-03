@@ -2,9 +2,9 @@ import {
 	closeSync,
 	existsSync,
 	fstatSync,
+	lstatSync,
 	openSync,
 	readdirSync,
-	readFileSync,
 	readSync,
 	statSync,
 } from "node:fs";
@@ -82,21 +82,22 @@ export function parseKey(
  * folders, as `archiveSessions` leaves them. Undefined when the directory does not exist.
  */
 export function conversationFiles(dir: string): ConversationFiles | undefined {
-	if (!existsSync(dir)) return undefined;
+	if (!existsSync(dir) || !lstatSync(dir).isDirectory()) return undefined;
 	let liveBytes = 0;
 	let newest = 0;
-	for (const file of readdirSync(dir)) {
-		if (!file.endsWith(".jsonl")) continue;
-		const stat = statSync(join(dir, file));
+	for (const file of readdirSync(dir, { withFileTypes: true })) {
+		if (!file.isFile() || !file.name.endsWith(".jsonl")) continue;
+		const stat = statSync(join(dir, file.name));
 		liveBytes += stat.size;
 		newest = Math.max(newest, stat.mtimeMs);
 	}
 	const archiveDir = join(dir, "archive");
-	const archives = existsSync(archiveDir)
-		? readdirSync(archiveDir, { withFileTypes: true }).filter((entry) =>
-				entry.isDirectory(),
-			)
-		: [];
+	const archives =
+		existsSync(archiveDir) && lstatSync(archiveDir).isDirectory()
+			? readdirSync(archiveDir, { withFileTypes: true }).filter((entry) =>
+					entry.isDirectory(),
+				)
+			: [];
 	if (newest === 0)
 		for (const archive of archives)
 			newest = Math.max(
@@ -133,8 +134,9 @@ function withoutRelayNote(text: string, notes: readonly string[]): string {
 
 /** The `.jsonl` file names directly in a directory, oldest first; names start with their creation time. */
 function sessionFiles(dir: string): string[] {
-	return readdirSync(dir)
-		.filter((file) => file.endsWith(".jsonl"))
+	return readdirSync(dir, { withFileTypes: true })
+		.filter((file) => file.isFile() && file.name.endsWith(".jsonl"))
+		.map((file) => file.name)
 		.sort();
 }
 
@@ -164,8 +166,11 @@ function opening(
 	const archiveDir = join(dir, "archive");
 	const first = sessionFiles(dir)[0];
 	let file = first ? join(dir, first) : undefined;
-	if (!file && existsSync(archiveDir))
-		for (const archive of readdirSync(archiveDir).sort()) {
+	if (!file && existsSync(archiveDir) && lstatSync(archiveDir).isDirectory())
+		for (const archive of readdirSync(archiveDir, { withFileTypes: true })
+			.filter((entry) => entry.isDirectory())
+			.map((entry) => entry.name)
+			.sort()) {
 			const name = sessionFiles(join(archiveDir, archive))[0];
 			if (name) {
 				file = join(archiveDir, archive, name);
@@ -251,7 +256,8 @@ export function storedConversations(
 /** The archive folders of a conversation, newest first. */
 export function archiveNames(dir: string): string[] {
 	const archiveDir = join(dir, "archive");
-	if (!existsSync(archiveDir)) return [];
+	if (!existsSync(archiveDir) || !lstatSync(archiveDir).isDirectory())
+		return [];
 	return readdirSync(archiveDir, { withFileTypes: true })
 		.filter((entry) => entry.isDirectory())
 		.map((entry) => entry.name)
@@ -270,12 +276,12 @@ function readTail(
 	const fd = openSync(path, "r");
 	try {
 		const { size } = fstatSync(fd);
-		if (size <= limit)
-			return { text: readFileSync(fd, "utf8"), cut: false, read: size };
-		const buffer = Buffer.alloc(limit);
-		readSync(fd, buffer, 0, limit, size - limit);
-		const text = buffer.toString("utf8");
-		return { text: text.slice(text.indexOf("\n") + 1), cut: true, read: limit };
+		const length = Math.min(size, limit);
+		const buffer = Buffer.alloc(length);
+		const read = readSync(fd, buffer, 0, length, Math.max(0, size - limit));
+		const text = buffer.subarray(0, read).toString("utf8");
+		const cut = size > limit;
+		return { text: cut ? text.slice(text.indexOf("\n") + 1) : text, cut, read };
 	} finally {
 		closeSync(fd);
 	}

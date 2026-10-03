@@ -1,4 +1,5 @@
 import {
+	type ChannelKey,
 	definePlugin,
 	defineTool,
 	type HoldCheck,
@@ -7,29 +8,52 @@ import {
 	serviceKey,
 	type ThinkingLevel,
 	ToolRefusal,
+	type ToolTurn,
 } from "pi-roundtable";
 import {
 	AgentError,
 	checkRepoName,
+	type DispatchThreads,
 	skillListExtension,
 	zonedStamp,
 } from "pi-roundtable/kit";
 import { Type } from "typebox";
 import {
 	CodingDesk,
+	type CodingJob,
 	type CodingResult,
+	type CodingThreadText,
 	type CodingWorker,
 	codingReport,
 	MAX_CODING_TASK_CHARS,
 } from "./coding-desk.ts";
 import { PiCodingWorker } from "./pi-coding-worker.ts";
-import { type CloneCommand, RepoShelf, reportPost } from "./repo-shelf.ts";
+import {
+	type ChangeReport,
+	type CloneCommand,
+	RepoShelf,
+	reportPost,
+} from "./repo-shelf.ts";
 
 export interface CodingService {
 	readonly shelf: RepoShelf;
 	readonly desk: CodingDesk;
 }
 export const CODING = serviceKey<CodingService>("coding.workbench");
+export interface CodingRun {
+	model: string;
+	thinking: ThinkingLevel;
+	channel: ChannelKey;
+	origin?: ChannelKey;
+}
+export interface CodingPresentation {
+	/** Separate the owner's posted record from the model's shipping instructions. */
+	changeReport?(
+		report: ChangeReport,
+		direct: boolean,
+	): { post: string; result: string };
+	taskStarted?(job: CodingJob, skippedSkills: string[]): string;
+}
 export interface CodingOptions {
 	shelfDir: string;
 	/** Provider/model-id, resolved with the worker's Pi host login. */
@@ -37,6 +61,24 @@ export interface CodingOptions {
 	thinking?: ThinkingLevel;
 	/** Exact owner/repo names allowed to use repo_push without a hold. Default: none. */
 	ownerRepos?: string[];
+	/** Trusted host policy for additional owner-owned repositories, including future clones.
+	 * Only literal true grants an exemption. This never bypasses linked host hold rules. */
+	isOwnerRepo?: (repo: string) => boolean;
+	/** Trusted wording for the approval card of a held `repo_push`. Default: names the repository, sha, target and branch. */
+	pushHoldText?: (repo: string, sha: string) => string;
+	/** Moves legacy standalone clones before the host reads shelf-linked skills. */
+	adoptClones?: { from: string; repo: string }[];
+	/** Resolve the calling agent/owner's run identity, independently of report posting. */
+	resolveRun?: (turn: ToolTurn) => CodingRun | Promise<CodingRun>;
+	/** Post change reports in the caller's identity/channel rather than the default surface. */
+	postChangeReport?: (turn: ToolTurn, text: string) => Promise<void>;
+	presentation?: CodingPresentation;
+	threads?: Pick<DispatchThreads, "open">;
+	threadText?: CodingThreadText;
+	workerWorkspace?: string;
+	workerPrompt?: (dir: string) => string;
+	/** Opt in to skipping unavailable implicit skills; explicit requests always fail closed. */
+	skipUnavailableCarriedSkills?: boolean;
 	/** Absolute installed extension package paths. Default: none. */
 	workerPackages?: string[];
 	agentDir?: string;
@@ -66,17 +108,25 @@ export function coding(options: CodingOptions) {
 		throw new PluginError("model must be provider/model-id.");
 	const ownerRepos = new Set(options.ownerRepos ?? []);
 	for (const repo of ownerRepos) checkRepoName(repo);
+	const ownerOwned = (repo: string): boolean => {
+		checkRepoName(repo);
+		return ownerRepos.has(repo) || options.isOwnerRepo?.(repo) === true;
+	};
 	return definePlugin({
 		name: "coding",
 		provides: [CODING],
 		setup(context) {
 			const shelf = new RepoShelf(options.shelfDir, options.clone);
+			for (const adoption of options.adoptClones ?? [])
+				shelf.adopt(adoption.from, adoption.repo);
 			const skills = context.services.find(SKILLS);
 			const worker =
 				options.worker ??
 				new PiCodingWorker({
 					packages: options.workerPackages,
 					agentDir: options.agentDir,
+					workspace: options.workerWorkspace,
+					prompt: options.workerPrompt,
 					holds: (tool, input, scope) =>
 						options.holds?.(tool, input, scope) ??
 						context.sessions().holds(tool, input, scope),
@@ -86,6 +136,8 @@ export function coding(options: CodingOptions) {
 				worker,
 				timeoutMs: options.timeoutMs,
 				logger: context.logger,
+				threads: options.threads,
+				threadText: options.threadText,
 				prompts: (channel) => context.surfaces.prompts(channel),
 				deliver:
 					options.onResult ??
@@ -187,11 +239,21 @@ export function coding(options: CodingOptions) {
 							refusal(() =>
 								ship(repo, async () => {
 									const report = await shelf.report(repo);
-									const text = reportPost(report, ownerRepos.has(repo));
-									await context.surfaces.sendReply(turn.channel, {
-										chunks: [text],
-									});
-									return text;
+									const direct = ownerOwned(repo);
+									const text = options.presentation?.changeReport?.(
+										report,
+										direct,
+									) ?? {
+										post: reportPost(report, direct),
+										result: reportPost(report, direct),
+									};
+									if (options.postChangeReport)
+										await options.postChangeReport(turn, text.post);
+									else
+										await context.surfaces.sendReply(turn.channel, {
+											chunks: [text.post],
+										});
+									return text.result;
 								}),
 							),
 					}),
@@ -199,15 +261,16 @@ export function coding(options: CodingOptions) {
 						name: "repo_push",
 						minTier: "owner",
 						description:
-							"Push the exact full SHA from the latest change report to its default branch, without force. Held for owner approval unless ownerRepos explicitly lists the clone.",
+							"Push the exact full SHA from the latest change report to its default branch, without force. Held for owner approval unless the trusted host policy explicitly marks the clone owner-owned.",
 						parameters: Type.Object({
 							repo: repoSchema,
 							sha: Type.String({ pattern: "^[0-9a-f]{40}$" }),
 						}),
 						hold: ({ repo, sha }) =>
-							ownerRepos.has(repo)
+							ownerOwned(repo)
 								? undefined
-								: shelf.pushDescription(repo, sha),
+								: (options.pushHoldText?.(repo, sha) ??
+									shelf.pushDescription(repo, sha)),
 						run: ({ repo, sha }) =>
 							refusal(() =>
 								ship(
@@ -242,21 +305,39 @@ export function coding(options: CodingOptions) {
 									names ??
 									(turn.agent ? skills?.carriedNames(turn.agent.name) : []) ??
 									[];
-								skills?.checkRegistered(carried);
+								if (names || !options.skipUnavailableCarriedSkills)
+									skills?.checkRegistered(carried);
 								const set = skills?.resolve(carried);
-								if (set?.missing.length)
+								if (
+									set?.missing.length &&
+									(names || !options.skipUnavailableCarriedSkills)
+								)
 									throw new AgentError(
-										"Some carried skills cannot load; inspect skill_list.",
+										`These skills cannot load: ${set.missing.map((item) => `${item.name} (${item.reason})`).join(", ")}`,
 									);
-								const job = await desk.start({
-									repo,
-									task,
+								const run = (await options.resolveRun?.(turn)) ?? {
 									channel: turn.channel,
 									model: options.model,
 									thinking: options.thinking ?? "medium",
+								};
+								if (shipping.has(repo))
+									throw new AgentError(
+										"A report or push is in progress for this repository.",
+									);
+								const job = await desk.start({
+									...run,
+									repo,
+									task,
 									skillFiles: set?.skills.map((skill) => skill.file) ?? [],
+									skillNames: set?.skills.map((skill) => skill.name) ?? [],
 								});
-								return `Started coding task #${job.id} in ${repo} on ${job.model}; its report returns to this channel.`;
+								return (
+									options.presentation?.taskStarted?.(
+										job,
+										set?.missing.map((item) => item.name) ?? [],
+									) ??
+									`Started coding task #${job.id} in ${repo} on ${job.model}; its report returns to ${job.channel}.${set?.missing.length ? ` Unavailable implicit skills skipped: ${set.missing.map((item) => item.name).join(", ")}.` : ""}`
+								);
 							}),
 					}),
 				],

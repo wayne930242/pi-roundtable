@@ -36,6 +36,7 @@ export default {
 | `deckDir` | none | Directory containing one subdirectory per deck. Without it, no `draw_cards` tool is registered. |
 | `random` | `Math.random` | Random source for map layout and card draws. `seededRandom(seed)` is exported for repeatable results. |
 | `minTier` | `member` | Lowest speaker tier allowed to use the tools; host `toolTiers` can override it. |
+| `cardPresentation` | package captions | Trusted `heading(draw, turn)` returns `{title, subtitle}` using deck/count/question and host speaker/channel; `reversedSuffix` localizes the default `" (reversed)"` on the picture. |
 
 The package reads nothing from the environment and needs no database.
 For card draws, provide your own `deck.json` manifests and card art; the package includes no card faces.

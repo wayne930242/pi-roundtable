@@ -36,6 +36,7 @@ export default {
 | `deckDir` | 無 | 每個牌組各放一個子目錄。不設定時不會註冊 `draw_cards` 工具。 |
 | `random` | `Math.random` | 關係圖版面與抽牌使用的亂數來源。套件匯出 `seededRandom(seed)`，可重現結果。 |
 | `minTier` | `member` | 可使用工具的最低 speaker tier；host 的 `toolTiers` 可以覆寫。 |
+| `cardPresentation` | 套件預設文字 | 可信任的 `heading(draw, turn)` 依牌組、張數、問題及 host 的 speaker／channel 回傳 `{title, subtitle}`；`reversedSuffix` 可替換圖片上預設的 `" (reversed)"`。 |
 
 套件不讀取環境變數，也不需要資料庫。
 抽牌要自行準備 `deck.json` 和牌面圖；套件沒有附牌面。

@@ -64,6 +64,95 @@ Schema 是給模型看的提示，host 不會用它驗證輸入。
 重啟後，owner 可在 guild 頻道執行 `/roundtable sandbox on`、`status` 或 `off`。
 關閉模式會保留 workspace 記憶；等排隊工作結束後，訊息會恢復一般 routing。
 
+## 明確啟用 Pi／subscription 模式
+
+`sandbox()` 的 sealed、純文字預設不變。
+需要完整 Pi JSONL session、subscription 登入、媒體、persona、skills 或 host 狀態時，在自己的 channel claim／store 中明確使用 `PiSandboxRuntime`。
+worker dependency image 須安裝相容的 Pi SDK、Typebox、`pi-claude-bridge`（含 bundled Claude Agent SDK runtime）；MCP profile 另須 `pi-mcp-adapter`。
+host setup 不會載入 bridge。
+Anthropic broker 支援串流 messages、token counting、custom tools 和 host 選定的 thinking，不代理任意 provider endpoint。
+
+| Host 選項 | 能力與邊界 |
+| --- | --- |
+| `partyDir`、`image`、`profiles` | 私人 state root、可信任 image，以及 profile 對應的固定 Anthropic model／MCP 清單。 |
+| `oauthToken()` | 每次 request 取得可更新的 host credential；container 只有 dummy。 |
+| `memory.promptBlock(channel,id,name)` | 目前發話者的 host context；PostgreSQL person／notes／moments、schema 和 migration ledger 留在 adapter。 |
+| `effort.judge(text,{level})` | host 選 low／medium／high／xhigh，並取得頻道上次的判斷。 |
+| `tools.names`、`tools.call` | 明確的能力清單；callback 收到固定 channel／profile／speaker／signal，須自行驗證輸入。 |
+| `mcp.servers`、`mcp.token()` | 固定 endpoint、tool name 清單和 host credential getter。 |
+| `upstream`、`fetchImpl`、`allowHttpMcp` | 可信任 endpoint／測試 transport，以及可信任內網的 HTTP 例外；不可來自 guest。 |
+| `timeZone`、`containerPrefix`、`labelChannel`、`labelProfile` | worker 時區（預設 UTC）和既有 container 名稱／label 的相容設定。 |
+| `driver`、`logger` | 可信任本機 Docker／離線 adapter 和 host logger。 |
+| `startTimeoutMs`、`turnTimeoutMs` | 1–600 秒，預設 90／600 秒。 |
+| `maxCalls`、`maxOutputTokens` | 預設 128 次 credential-bearing call／128,000 output tokens；可設 1–1,000 次／1,025–200,000 tokens。 |
+
+`runTurn({channel,profile,turnId,author,text,images,signal?})` 回傳文字和已驗證的檔案 bytes。
+`start`、`stop`、`status`、`startFresh`、`sessionsDir`、`attachmentDir`、`stopBrokers` 供可信任 lifecycle adapter 使用。
+記憶、image quota、schedules 和 presentation 可透過有範圍的 host callback 提供；schedule 必須使用明確的 channel-local target 和 host 綁定的發話者。
+guest body 不能改掉 channel／speaker／credential，也不會得到 owner shell、記憶、agent dispatcher、registry 或 auth file。
+
+### Worker 內容與資料延續
+
+可信任的 `/app/worker/content.ts` 匯出 `workerContent(profile): PiWorkerContent`。
+欄位為 `model:{provider,id}`，以及選填的 `prompt`、`skillsDir`、`brokerTools`、`toolNames`、`extensions(turn)`。
+Pi model 必須與 host profile 固定的 Anthropic model 一致。
+`skillsDir` 提供索引、`read_skill` 和先讀 skill 才能使用的 tool gate；每檔上限 256 KiB，回傳上限 40,000 字元，拒絕 symlink 越界。
+built-in shell／read／write／edit 和自動 extension／skill／context discovery 維持關閉。
+dice／TRPG 等 app 工具放在明確的 extension seam。
+`contributionExtension` 包裝 public core tool contributions，透過 `withReplyFiles`／`ToolTurn.attachFile` 收集檔案；drawing 請用官方 contributions，不要保留 renderer 副本。
+先用套件的 `worker/Dockerfile.deps.pi` 和已安裝的 `node_modules` 建 dependency image，再以 `DEPS_IMAGE` 和可信任 release content（`assets`、`persona`、`shared`、`worker`）建 `worker/Dockerfile.pi`。
+入口是安裝好的 `worker/pi-main.ts`，不是 app 複製的 runtime。
+
+保留 `partyDir/channelSegment(channel)/workspace/sessions`、`/workspace` cwd 和 `SessionManager.continueRecent` 的既有 JSONL。
+`startFresh` 在 container 移除後才封存頂層一般 session 檔（guest 放的 symlink 一律取代、不跟隨），但不刪 DB 記憶；套件不遷移 table、ledger、profile 或 workspace。
+workspace 旁新增 host-only `.channel-key`，讓所有 lifecycle／session／attachment 操作都拒絕既有 path／container name 的頻道鍵碰撞；備份時一併保留。
+完整 broker socket 路徑不可超過 100 字元。
+admission／routing、channel profile、table schema、MCP grant、image quota 和內容仍由 app adapter 負責。
+同頻道 guest 共用 workspace／history；speaker 範圍不是對同頻道受入侵程式的保密保證。
+
+### 媒體、資源與傳輸
+
+`collectPiAttachments` 最多下載十個附件，每檔 25 MiB、合計 50 MiB；透過可信任 `prepareImage`（如 core `prepareImageBytes`）從 bytes 準備最多四張圖片。
+下載走 controlled fetch，寫入使用 exclusive、no-follow directory descriptor，不追隨 guest symlink。
+`fetchImpl` 僅供可信任 fixture 使用；選填的 `describeFailure(error)` 可提供 app 的失敗說明，但不要曝露原始 host exception。
+native image decoder 仍是 host 的信任／資源邊界；壓縮圖片的解碼尺寸可能需要額外隔離。
+rich turn 接受最多八張 PNG／JPEG／WebP／GIF，每張 20 MiB、decoded 合計 64 MiB。
+目前訊息、memory context、最終文字各限 100,000 字元；speaker ID／name 各限 256 字元。
+回覆遵循 core 限制：十檔、每檔 10 MiB、合計 50 MiB。
+持久附件／session 沒有自動 retention 或磁碟 quota，部署時須補 filesystem quota。
+
+Pi container 維持 network none、read-only root、無 capabilities、no-new-privileges；資源為 1.5 GiB RAM／不額外使用 swap、一 CPU、256 PIDs、512 MiB `/tmp`，以及兩個 10 MiB local log files。
+只 mount 可寫的頻道 workspace 和唯讀的 host broker directory。
+worker 主動呼叫 `/worker/ready`、`/worker/next`、`/worker/result` 傳遞 turn 和 base64 reply bytes；host 不連 guest 建立的 socket，也不重新開啟 guest reply path。
+取消會移除精確對應的 container；host 重啟後 worker 重新宣告 ready。
+broker 每頻道只容許一個 pending long poll／turn／reply packet，inactive 或重複 packet 在讀 body 前就拒絕；最多 16 connections；header deadline 十秒、串流回應只限制靜默 120 秒而非總時間（turn deadline 為每個呼叫的硬上限）、四個 credential-bearing in-flight calls、request 96 MiB、upstream response 50 MiB、encoded worker reply 72 MiB。
+listener 會暫存有上限的回覆；這些上限不取代 host 容量和費用控管。
+
+只有 Anthropic messages／count_tokens（可帶 `?beta=true`）、明確 host tools 和允許的 MCP method／tool 能使用 credential。
+model payload 重建為 text／base64-image／custom-tool；拒絕 native server tool、remote media／schema、其他 account route 和 upstream redirect。
+MCP 支援 initialize、initialized notification、ping、list 和 allow-listed call；不支援 batch／resources／prompts／sampling。
+第一個 turn 前有 90 秒／32 次 metadata-only scope，供 eager MCP handshake；第一次 host bind 後就撤銷。
+headers 重新建立，bounded response stream 會拒絕跨 chunk 的明顯 credential reflection；仍須信任上游不刻意編碼外洩 secret。
+
+### Controlled fetch 與 channel-local delegation
+
+`safeFetch(url,{signal?,timeoutMs?,maxBytes?,maxRedirects?})` 只接受不含 credential 的 HTTP(S)。
+每個 redirect 都重新解析所有地址，拒絕 private／loopback／link-local／metadata／reserved／transition 範圍，包括 encoded IPv4 和 mapped IPv6；實際 socket 綁到已驗證的地址。
+HTTPS 仍驗證原 hostname，不用 proxy environment，也不再次 DNS lookup。
+連線失敗只能改試同一批已驗證地址；每個 TCP／TLS 連線期限三秒，仍受整體 request deadline 限制。
+預設 60 秒、五次 redirect、wire 和 decoded body 各 5 MiB；gzip／deflate／Brotli 解壓縮也有上限。
+可設定 1 毫秒–120 秒、0–10 次 redirect、1 byte–32 MiB。
+`resolve`／`transport` 只供可信任測試使用。
+直接解析 `SafeFetchResult` bytes；或先用 `assertPublicUrl` 檢查 URL，再交給其他 extractor，並把該 extractor 自己的頁面下載送回 `safeFetch`（`followRedirects:false` 一次只走一跳、每跳都檢查並釘住位址；`headers` 設定 host 信任的標頭）。
+
+`ScopedSandboxDelegator` 固定 target、host author 和 channel-local report，不接受任意 target／origin／tier。
+選項是 `target`、`maxRunning`（1–10，預設每頻道二個）、`timeoutMs`（1–1,200 秒，預設十分鐘）、`run(task,context)`、`deliver(job,result)`、`logger`。
+task 最多 4,000 字元、title 200 字元、report 80,000 字元；`runningChannels`、`idle`、`dispose` 支援 lifecycle，dispose 取消 process-local jobs。
+選用 `SandboxResearchWorker` 時，明確提供 `modelRuntime`、`agentDir`、`workDir`、`model`、`thinking`、`search`、`extractFetched`（或由 host 自備的 `fetchContent(url, signal)`，此時位址檢查與上限由 host 負責）。
+它用未儲存的 host subscription session，只提供 web search 和 controlled fetch，沒有 shell／owner data／discovery；extractor 收到已下載 bytes，不可再次 fetch。
+明確保留 app 的 model／thinking 和 report adapter，不轉交沒有同等範圍限制的 owner／default worker。
+所有 opt-in hook 都要審查，並設定 provider spend、ingress、filesystem 和 host 容量限制。
+
 ## 威脅模型
 
 把 prompt、模型輸出和 container 內的程式碼都視為不可信任。

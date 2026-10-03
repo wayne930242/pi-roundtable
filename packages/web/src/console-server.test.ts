@@ -52,9 +52,11 @@ describe("ConsoleServer", () => {
 		]);
 	});
 
-	test("the mount redirects to its slash without asking the verifier", async () => {
-		const { server } = setup(() => refuse("no"));
-		const response = await get(server, "/console");
+	test("the mount authenticates before redirecting to its slash", async () => {
+		expect(
+			(await get(setup(() => refuse("no")).server, "/console")).status,
+		).toBe(403);
+		const response = await get(setup().server, "/console");
 		expect(response.status).toBe(302);
 		expect(response.headers.get("location")).toBe("/console/");
 	});

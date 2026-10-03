@@ -78,7 +78,9 @@ All five tools have `minTier: "owner"` and are contributed through `defineTool` 
 The operator remains responsible for any tool-tier overrides.
 A custom owner claim with a restricted `ToolSelection` must include the exported `REPO_TOOLS` names; include `skill_list` separately when the host skills addon is enabled.
 The host's skills addon resolves explicit skills, or the calling agent's carried skills when omitted; an owner call carries none unless it names them.
-Missing or unknown skills refuse the task; requesting skills while the addon is off also refuses it.
+Missing or unknown skills refuse the task by default; requesting skills while the addon is off also refuses it.
+`skipUnavailableCarriedSkills: true` opts into skipping unavailable implicit skills and disclosing them in the task-start text or through `presentation.taskStarted`.
+Explicit skill requests still refuse missing or unknown skills.
 Sessions with kind `owner` get the public `skillListExtension`; agent sessions keep the core's existing `skill_list` instead of registering it twice.
 
 A worker reads the repository's instructions, edits and checks the work, and commits using repository conventions.
@@ -99,7 +101,10 @@ Shipping is separate from coding:
 
 `ownerRepos` is an exact list of `owner/repo` names, not a prefix or wildcard; its default is empty.
 Listed repositories skip the plugin's `repo_push` hold, though other host hold rules can still hold the call.
-They do not exempt shell pushes or risky worker actions.
+A trusted `isOwnerRepo(repo)` host policy can grant additional exemptions, including repositories created after startup; only literal `true` grants one.
+The package validates the repository name before consulting it.
+Never derive this policy from model input, clone files, or remote repository instructions.
+Neither exemption bypasses shell pushes, risky worker actions, or other linked host rules.
 The report and approval card name the full SHA, current default branch and credential-free push destination.
 The clone must have exactly one push destination; HTTP remote URLs with user information, query strings or fragments are refused before fetching.
 A changed HEAD, dirty clone, changed remote default branch, changed push destination, missing report or non-fast-forward remote causes refusal.
@@ -109,6 +114,9 @@ Report receipts live in memory, so request a fresh report after restarting the h
 
 Every worker tool call crosses a private Bun IPC channel to the parent process before execution.
 The parent consults `shellHoldRule`, additional `holds`, and the host's linked hold rules; a recognized risky action asks the owner's surface prompts using `approvalCard`.
+When `threads` is configured, progress and cards stay in a thread opened under the resolved run's `origin`; if no thread can open, calls remain held rather than falling back to another channel's approval cards.
+Without `threads`, the resolved report channel's prompts are used.
+`threadText` controls the initial post, held-action post, approval title and final report; the thread is archived before `onResult` is called, and a failed thread post/close does not discard result delivery.
 `promptSlot` tracks these cards and `workTimeout` excludes their waiting time from the worker's budget (one hour by default).
 `timeoutMs` must be positive and finite, and at most 2,147,483,647 ms to fit the host timer.
 An approved call runs; a declined, expired, missing or failed card blocks it and instructs the worker not to retry or work around the refusal.
@@ -129,7 +137,7 @@ This is a host coding desk, **not a sandbox**.
 The worker can run local checks, read the host's accessible files, use the network and commit changes.
 Its standing instructions delegate shipping to the calling agent; repository tools and extra package tools are not activated inside the worker.
 `repo_push` is the supported shipping route and always uses a previously reported full SHA and a non-force push.
-The public shell rule holds recognized shell pushes, destructive commands, privileged commands and recognized writes outside the clone, even for `ownerRepos`.
+The public shell rule holds recognized shell pushes, destructive commands, privileged commands and recognized writes outside the configured worker workspace (the clone by default), even for owner-owned repositories.
 It is a heuristic guard: scripts, interpreters, symlinks, Git hooks, package extensions and detached grandchildren are not an OS isolation boundary.
 A trusted package or arbitrary shell program can bypass heuristic detection; only run code and repositories you trust, under a dedicated low-privilege host user.
 Use an isolated container or VM when host access is unacceptable.
@@ -153,6 +161,17 @@ The `CODING` service exposes `shelf: RepoShelf` and `desk: CodingDesk` for trust
 | `model` | required | Worker provider/model ID. |
 | `thinking` | `medium` | Pi thinking level. |
 | `ownerRepos` | `[]` | Exact push-hold exemptions. |
+| `isOwnerRepo` | none | Trusted host policy for additional push-hold exemptions; must return literal true. |
+| `pushHoldText` | repository, sha, target and branch | Trusted wording for the approval card of a held `repo_push`; it never changes who is held. |
+| `adoptClones` | `[]` | Startup `{ from, repo }` moves of standalone clones; existing shelf destinations are never replaced. |
+| `resolveRun` | configured model/thinking, caller channel | Per-caller model, thinking, report channel and optional thread origin. |
+| `postChangeReport` | caller surface reply | Post the record using the calling identity and channel. |
+| `presentation` | English package text | Separate change-report post/result text and task-start/omitted-skill wording. |
+| `threads` | none | Public `DispatchThreads`-compatible progress and approval thread port. |
+| `threadText` | English package text | Thread introduction, held-action notice, approval title and final report. |
+| `workerWorkspace` | individual clone | Trusted shell-policy write boundary; not an OS sandbox. |
+| `workerPrompt` | generic worker instructions | Trusted standing prompt replacement; it cannot bypass approval or cleanup. |
+| `skipUnavailableCarriedSkills` | `false` | Skip and disclose unavailable implicit skills; explicit skill requests still refuse them. |
 | `workerPackages` | `[]` | Absolute installed extension paths. |
 | `agentDir` | Pi host directory | Pi credentials and model configuration. |
 | `timeoutMs` | `3600000` | Work-time limit in ms, excluding owner wait; 0 < value <= 2147483647. |
@@ -162,6 +181,10 @@ The `CODING` service exposes `shelf: RepoShelf` and `desk: CodingDesk` for trust
 | `onResult` | surface reply | Report delivery integration. |
 
 `RepoShelf`, `CodingDesk`, `PiCodingWorker`, `CodingWorkerFailure`, `REPO_TOOLS`, `codingReport`, `reportPost` and their option/result types are exported for testing and host integrations.
+`resolveRun(turn)` receives the public `ToolTurn`, including the calling agent scope and channel.
+It returns `{ model, thinking, channel, origin? }`; skill selection still follows the caller, not the resolved report destination.
+`onResult` receives those fields plus loaded `skillNames` and the optional progress `thread` in `result.job`, so a host can enqueue its own localized conversation turn.
+`adoptClones` and `RepoShelf.adopt` keep existing clone contents and path layout without database migrations.
 No database or Discord-specific types are required.
 
 ## Development and publishing

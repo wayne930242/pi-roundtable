@@ -5,6 +5,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.3] - 2026-10-03
+
+### Fixed
+
+- The sandbox's rich broker streams model responses instead of buffering them and no longer cuts calls at 60 or 120 seconds; the turn deadline is the bound. The worker can no longer raise effort or thinking budget above the host-judged level. `startFresh` and start replace guest-planted symlinks instead of following them, and only the two reserved blocks of the 192.0 range are refused, not all of it.
+
+### Added
+
+- Sandbox `assertPublicUrl`, `safeFetch` options `followRedirects` and `headers`, and a research-worker `fetchContent` hook, so a host can keep a library's own extractors while its fetches of a model-supplied URL stay pinned and vetted per hop. Broker upstream errors keep their status, body and back-off headers.
+- Coding accepts `pushHoldText` for trusted wording of the held `repo_push` approval card.
+- Export `withReplyFiles` for standalone workers to collect reply attachments with the same turn-wide limits, success/failure semantics, and asynchronous scope as host conversation turns.
+- Export `prepareImageBytes` and `ImagePreparationError` from the kit for raster bytes without reopening guest-writable paths; reject encoded images over 25 MiB or headers/aggregate frames over 64 MP before native decode, while preserving ordinary 48 MP images and 9000×1 downscaling. File-based preparation is byte-bounded too and decodes once instead of twice.
+- Drawing accepts `CardPresentation` through `DrawingOptions.cardPresentation` for trusted operator headings and reversal suffixes without changing tool arguments or default captions.
+
 ## [0.7.2] - 2026-10-02
 
 ### Fixed

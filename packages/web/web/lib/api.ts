@@ -1,12 +1,17 @@
 import type {
 	ApiError,
 	ConfigView,
+	ConnectorsView,
 	ConversationsView,
 	NoteInput,
 	NoteView,
 	OverviewView,
+	SkillDetailView,
+	SkillView,
 	TranscriptView,
 } from "../../src/api-types.ts";
+
+import { translate as t } from "./messages.ts";
 
 // The page is served at `<mount>/`, so these relative URLs reach `<mount>/api/`.
 const API = "api/";
@@ -24,24 +29,37 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 	} catch {
 		// An expired proxy session may redirect to a login page, which fetch cannot follow.
 		throw new Error(
-			"The console is unreachable. Reload the page to sign in again.",
+			t("The console is unreachable. Reload the page to sign in again."),
 		);
 	}
 	if (response.status === 403)
 		throw new Error(
-			"The request was refused. Reload the page to sign in again.",
+			t("The request was refused. Reload the page to sign in again."),
 		);
 	const body: unknown = await response.json().catch(() => undefined);
 	if (!response.ok)
 		throw new Error(
 			(body as ApiError | undefined)?.error ??
-				`The console answered ${response.status}.`,
+				t("The console answered {status}.", { status: response.status }),
 		);
 	return body as T;
 }
 
 export const api = {
 	config: () => request<ConfigView>("config"),
+	skills: () => request<SkillView[]>("skills"),
+	skill: (name: string) =>
+		request<SkillDetailView>(`skills/${encodeURIComponent(name)}`),
+	connectors: () => request<ConnectorsView>("connectors"),
+	startOver: (key: string) =>
+		request<{ kind: string }>(
+			`channels/${encodeURIComponent(key)}/start-over`,
+			{ method: "POST" },
+		),
+	deleteConversation: (key: string) =>
+		request<{ result: string }>(`channels/${encodeURIComponent(key)}/delete`, {
+			method: "POST",
+		}),
 	overview: () => request<OverviewView>("overview"),
 	conversations: () => request<ConversationsView>("conversations"),
 	transcript: (key: string, archive?: string) =>

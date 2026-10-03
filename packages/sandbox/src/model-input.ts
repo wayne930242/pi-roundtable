@@ -9,7 +9,7 @@ interface ModelInput {
 	tools?: Record<string, unknown>[];
 }
 
-function localSchema(value: unknown): boolean {
+export function localSchema(value: unknown): boolean {
 	if (typeof value === "boolean") return true;
 	if (!isRecord(value)) return false;
 	for (const key of [

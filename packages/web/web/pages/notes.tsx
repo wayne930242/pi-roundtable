@@ -6,12 +6,13 @@ import { api, messageOf } from "../lib/api.ts";
 import { useConfig } from "../lib/config.ts";
 import { today } from "../lib/format.ts";
 import { useLive } from "../lib/live.ts";
+import { translate as t } from "../lib/messages.ts";
 
 const KINDS: { kind: NoteKind; label: string; hint: string }[] = [
 	{ kind: "core", label: "Core", hint: "Carried into every turn." },
 	{
 		kind: "note",
-		label: "Notes",
+		label: "Note",
 		hint: "Searched when the assistant needs them.",
 	},
 	{
@@ -75,9 +76,11 @@ export function NotesPage() {
 		<section className="stack">
 			<div className="card-head">
 				<div>
-					<h2>Notes</h2>
+					<h2>{t("Notes")}</h2>
 					<p className="hint">
-						What the assistant remembers. A change applies from the next turn.
+						{t(
+							"What the assistant remembers. A change applies from the next turn.",
+						)}
 					</p>
 				</div>
 				<button
@@ -86,7 +89,7 @@ export function NotesPage() {
 						setEditing({ draft: { kind, fact: "", eventDate: "" } })
 					}
 				>
-					Add
+					{t("Add")}
 				</button>
 			</div>
 			<div className="toolbar">
@@ -99,7 +102,7 @@ export function NotesPage() {
 							aria-selected={kind === entry.kind}
 							onClick={() => setKind(entry.kind)}
 						>
-							{entry.label}
+							{t(entry.label)}
 							{notes
 								? ` ${notes.filter((n) => n.kind === entry.kind).length}`
 								: ""}
@@ -108,19 +111,21 @@ export function NotesPage() {
 				</div>
 				<input
 					type="search"
-					placeholder="Search (words separated by spaces)"
-					aria-label="Search notes"
+					placeholder={t("Search (words separated by spaces)")}
+					aria-label={t("Search notes")}
 					value={query}
 					onChange={(event) => setQuery(event.target.value)}
 				/>
 			</div>
-			<p className="hint">{KINDS.find((entry) => entry.kind === kind)?.hint}</p>
+			<p className="hint">
+				{t(KINDS.find((entry) => entry.kind === kind)?.hint ?? "")}
+			</p>
 			{error ? <Failure message={error} /> : null}
 			{!notes ? (
 				<Loading />
 			) : shown.length === 0 ? (
 				<Empty>
-					{query ? "No matching notes." : "Nothing of this kind yet."}
+					{query ? t("No matching notes.") : t("Nothing of this kind yet.")}
 				</Empty>
 			) : (
 				shown.map((note) => (
@@ -130,7 +135,9 @@ export function NotesPage() {
 								{note.eventDate ? (
 									<p className="meta">
 										{note.eventDate}{" "}
-										{note.eventDate < todayDate ? <Badge>past</Badge> : null}
+										{note.eventDate < todayDate ? (
+											<Badge>{t("past")}</Badge>
+										) : null}
 									</p>
 								) : null}
 								<p className="text">{note.fact}</p>
@@ -150,14 +157,14 @@ export function NotesPage() {
 										})
 									}
 								>
-									Edit
+									{t("Edit")}
 								</button>
 								<button
 									type="button"
 									className="danger"
 									onClick={() => setDeleting(note)}
 								>
-									Delete
+									{t("Delete")}
 								</button>
 							</div>
 						</div>
@@ -166,7 +173,7 @@ export function NotesPage() {
 			)}
 			<Dialog
 				open={editing !== undefined}
-				title={editing?.note ? "Edit note" : "Add note"}
+				title={editing?.note ? t("Edit note") : t("Add note")}
 				onClose={() => setEditing(undefined)}
 			>
 				{editing ? (
@@ -187,7 +194,7 @@ export function NotesPage() {
 			</Dialog>
 			<Dialog
 				open={deleting !== undefined}
-				title="Delete this note?"
+				title={t("Delete this note?")}
 				onClose={() => setDeleting(undefined)}
 			>
 				{deleting ? (
@@ -243,7 +250,7 @@ function NoteEditor(props: {
 			}}
 		>
 			<fieldset>
-				<legend>Kind</legend>
+				<legend>{t("Kind")}</legend>
 				<div className="tabs">
 					{KINDS.map((entry) => (
 						<button
@@ -252,14 +259,14 @@ function NoteEditor(props: {
 							aria-pressed={draft.kind === entry.kind}
 							onClick={() => setDraft({ ...draft, kind: entry.kind })}
 						>
-							{entry.label}
+							{t(entry.label)}
 						</button>
 					))}
 				</div>
 			</fieldset>
 			{draft.kind === "event" ? (
 				<label>
-					Date
+					{t("Date")}
 					<input
 						type="date"
 						value={draft.eventDate}
@@ -270,7 +277,7 @@ function NoteEditor(props: {
 				</label>
 			) : null}
 			<label>
-				Text
+				{t("Text")}
 				<textarea
 					rows={4}
 					value={draft.fact}
@@ -280,10 +287,10 @@ function NoteEditor(props: {
 			{error ? <Failure message={error} /> : null}
 			<div className="actions">
 				<button type="button" className="secondary" onClick={props.cancel}>
-					Cancel
+					{t("Cancel")}
 				</button>
 				<button type="submit" disabled={saving}>
-					{saving ? "Saving…" : "Save"}
+					{saving ? t("Saving…") : t("Save")}
 				</button>
 			</div>
 		</form>
@@ -303,7 +310,7 @@ function Confirm(props: {
 			{error ? <Failure message={error} /> : null}
 			<div className="actions">
 				<button type="button" className="secondary" onClick={props.cancel}>
-					Cancel
+					{t("Cancel")}
 				</button>
 				<button
 					type="button"
@@ -317,7 +324,7 @@ function Confirm(props: {
 						});
 					}}
 				>
-					{running ? "Deleting…" : "Delete"}
+					{running ? t("Deleting…") : t("Delete")}
 				</button>
 			</div>
 		</div>

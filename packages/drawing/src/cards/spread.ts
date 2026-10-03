@@ -112,6 +112,7 @@ export async function renderSpread(
 	cards: readonly DrawnCard[],
 	positions: readonly SpreadPosition[],
 	heading: { title: string; subtitle: string },
+	reversedSuffix = " (reversed)",
 ): Promise<Uint8Array> {
 	checkSpread(positions, cards.length);
 	ensureFont();
@@ -225,7 +226,7 @@ export async function renderSpread(
 
 		ctx.fillStyle = card.reversed ? PALETTE.accentLight : PALETTE.text;
 		ctx.font = font(width < 150 ? 12 : 15);
-		const name = card.reversed ? `${card.name} (reversed)` : card.name;
+		const name = card.reversed ? `${card.name}${reversedSuffix}` : card.name;
 		ctx.fillText(fitText(ctx, name, width), x + width / 2, y + height + 8);
 	}
 	return new Uint8Array(canvas.toBuffer("image/png"));

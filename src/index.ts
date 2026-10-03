@@ -162,6 +162,7 @@ export {
 	attachReplyFile,
 	REPLY_FILE_LIMITS,
 	ReplyFileError,
+	withReplyFiles,
 } from "./core/reply-files.ts";
 export type {
 	ConversationTurnInput,

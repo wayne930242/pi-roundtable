@@ -36,7 +36,8 @@
 			"defineTool",
 			"migrateDatabase",
 			"parseChannelKey",
-			"serviceKey"
+			"serviceKey",
+			"withReplyFiles"
 		],
 		"types": [
 			"Admission",
@@ -213,6 +214,7 @@
 			"AgentError",
 			"DELEGATE_TOOL",
 			"DELEGATE_TOOL_SPEC",
+			"ImagePreparationError",
 			"JUDGE_WORK",
 			"SCHEDULE_TOOLS",
 			"SHELL_TOOLS",
@@ -240,6 +242,7 @@
 			"ownerAttachmentDir",
 			"packageDir",
 			"parseModelRef",
+			"prepareImageBytes",
 			"promptSlot",
 			"quietLinks",
 			"readAttachmentExtension",

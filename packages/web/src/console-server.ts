@@ -1,6 +1,8 @@
 import type { HttpRoute, Logger } from "pi-roundtable";
 import type { AssetBundle } from "./assets.ts";
 import type { ConsoleApi } from "./console-api.ts";
+import type { ConsolePresentation } from "./features.ts";
+import { presentPage } from "./page-presentation.ts";
 import type { RequestVerifier } from "./verifier.ts";
 
 const encoder = new TextEncoder();
@@ -39,6 +41,9 @@ export interface ConsoleServerOptions {
 	logger: Logger;
 	/** How long changes are gathered into one event; default 250 ms. Tests set it lower. */
 	coalesceMs?: number;
+	/** Serve client page paths as the same authenticated document. */
+	pathRouting?: boolean;
+	presentation?: ConsolePresentation;
 }
 
 /**
@@ -106,12 +111,7 @@ export class ConsoleServer {
 	async #respond(request: Request): Promise<Response> {
 		// pi-lens-ignore: unchecked-throwing-call -- the server builds request.url, always an absolute URL
 		const path = new URL(request.url).pathname;
-		if (path === this.#options.mount)
-			return new Response(null, {
-				status: 302,
-				headers: { location: this.#base },
-			});
-		if (!path.startsWith(this.#base))
+		if (path !== this.#options.mount && !path.startsWith(this.#base))
 			return new Response("Not found", { status: 404 });
 		const refusal = await this.#refusal(request);
 		if (refusal !== undefined) {
@@ -121,6 +121,11 @@ export class ConsoleServer {
 				headers: { "cache-control": "no-store" },
 			});
 		}
+		if (path === this.#options.mount)
+			return new Response(null, {
+				status: 302,
+				headers: { location: this.#base },
+			});
 		const rest = path.slice(this.#base.length);
 		if (rest === "api/events" && request.method === "GET")
 			return this.#events();
@@ -128,18 +133,37 @@ export class ConsoleServer {
 			return this.#options.api.handle(request, rest.slice("api/".length));
 		if (!READ_METHODS.has(request.method))
 			return new Response("Method not allowed", { status: 405 });
-		if (rest === "" || rest === "index.html") {
-			const page = this.#options.assets.get("index.html");
-			if (page) return new Response(page.body, { headers: PAGE_HEADERS });
-		}
 		const asset = this.#options.assets.get(rest);
 		if (asset && rest !== "index.html")
-			return new Response(asset.body, {
+			return new Response(new Uint8Array(asset.body), {
 				headers: {
 					"content-type": asset.type,
 					"cache-control": "private, max-age=31536000, immutable",
 				},
 			});
+		if (rest === "" || rest === "index.html" || this.#options.pathRouting) {
+			const page = this.#options.assets.get("index.html");
+			if (page)
+				return new Response(
+					presentPage(
+						page.body,
+						this.#options.pathRouting ? this.#options.mount : undefined,
+						this.#options.presentation,
+					),
+					{
+						headers: {
+							...PAGE_HEADERS,
+							...(this.#options.pathRouting
+								? {
+										"content-security-policy": PAGE_HEADERS[
+											"content-security-policy"
+										].replace("base-uri 'none'", "base-uri 'self'"),
+									}
+								: {}),
+						},
+					},
+				);
+		}
 		return new Response("Not found", { status: 404 });
 	}
 

@@ -47,7 +47,10 @@ export default {
 | `dataDir` | `./data` | Host data directory containing `sessions/`. |
 | `mountPath` | `/console` | Console route prefix. |
 | `listener` | `public` | HTTP listener that serves the console. |
-| `panes` | all | Ordered subset of `overview`, `conversations`, and `notes`. |
+| `panes` | `overview`, `conversations`, `notes` | Ordered subset of the default panes plus `skills` and `connectors`; those two require feature ports. |
+| `routing` | `hash` | `path` preserves mount-relative page links and history navigation. |
+| `features` | none | Object or public setup-context factory for party status, schedule counts, cleanup, skills and connectors. |
+| `presentation` | English | `{ locale, messages }` controls language, date formatting and localized UI/API wording; English source strings are dictionary keys. |
 | `title` | `Roundtable` | Page heading and title. |
 | `relayNotes` | remote MCP relay note | Prefixes removed from relayed messages before display. |
 | `exclude` | none | Predicate for conversation keys the console must not list or read. |
@@ -56,9 +59,35 @@ export default {
 The built-in `cloudflareAccess` verifier checks the signed Access token, team, audience, and allowed email.
 A custom verifier that trusts a proxy header is only safe if clients cannot reach the listener directly and the proxy strips client-supplied copies of that header.
 
+## Host integrations
+
+Overview also lists stored owner workspaces and outside-agent conversations.
+`features.party` supplies separately stored party channel status through `contains(key)` and `list()` returning `PartyView[]`.
+`features.schedules.count(key)` adds workspace schedule counts.
+`features.cleanup` supplies `startFresh(key)` and `deleteConversation(key)`; the latter returns `deleted` or `busy`.
+The package validates key shape, ownership, exclusions and stored existence before invoking cleanup, shows confirmation dialogs, and returns 409 for a busy delete.
+Without the cleanup hook, conversation data remains read-only.
+`api/dashboard` preserves a compatibility shape with channel keys and guild/channel/session ID aliases for existing clients.
+
+`features.skills.catalog()` supplies source, description, groups, carriers and missing-file status.
+`read(name)` returns the selected catalog entry's `{ frontmatter, body }`, never a request-selected path.
+The host bounds its read; the API caps the body at 1 MB and frontmatter at 64 KB, preserving metadata order and rendering the body as safe Markdown.
+`features.connectors` supplies `gateways()`, `servers()`, `usedBy(server)` and an optional safe `adminUrl`.
+The page shows gateway health, enabled state, tool counts, virtual-server tools and usage.
+Skills and Connectors fail startup when enabled without their hooks.
+
+A feature factory receives public plugin setup context so the host can bind existing stores without renaming tables, grants or session paths.
+Declare any extra service dependencies on the host wrapper's `requires`.
+`sessionSummary(directory)` summarizes trusted host party-session directories without reading transcript content.
+Application-specific wording belongs in `presentation`, not a cloned server or React page.
+Escaped, inert presentation metadata in the authenticated HTML localizes the first API failure without inline scripts.
+
 ## Security model
 
-Every request is checked before data is read.
+Every API, SSE, page, static asset and mount redirect is authenticated before data is read.
+Path routing retains the same authentication and exact write-Origin checks.
+Skill Markdown escapes raw HTML, does not fetch images, and only opens HTTP(S) links.
+Session symlinks are ignored, note bodies are bounded to 64 KB, and private model reasoning is never shown.
 The console has no roles or per-user views; it is for one owner.
 Writes also require an exact matching `Origin`, and the page sends no CORS headers.
 Transcripts contain tool arguments and results, so secrets handled by tools may appear there; use `panes` or `exclude` to narrow what is exposed.

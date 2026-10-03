@@ -4,16 +4,21 @@ import { Failure, Loading } from "./components/states.tsx";
 import { api, messageOf } from "./lib/api.ts";
 import { ConfigContext } from "./lib/config.ts";
 import { LiveContext, useLiveSource } from "./lib/live.ts";
-import { hrefFor, useRoute } from "./lib/router.ts";
+import { setPresentation, translate as t } from "./lib/messages.ts";
+import { hrefFor, setRouting, useRoute } from "./lib/router.ts";
+import { ConnectorsPage } from "./pages/connectors.tsx";
 import { ConversationsPage } from "./pages/conversations.tsx";
 import { NotesPage } from "./pages/notes.tsx";
 import { OverviewPage } from "./pages/overview.tsx";
+import { SkillsPage } from "./pages/skills.tsx";
 import { TranscriptPage } from "./pages/transcript.tsx";
 
 const LABELS: Record<PaneName, string> = {
 	overview: "Overview",
 	conversations: "Conversations",
 	notes: "Notes",
+	skills: "Skills",
+	connectors: "Connectors",
 };
 
 export function App() {
@@ -23,6 +28,9 @@ export function App() {
 		api
 			.config()
 			.then((loaded) => {
+				setPresentation(loaded);
+				setRouting(loaded.mountPath);
+				document.documentElement.lang = loaded.locale ?? "en";
 				setConfig(loaded);
 				document.title = loaded.title;
 			})
@@ -52,23 +60,25 @@ function Console({ config }: { config: ConfigView }) {
 				<header className="bar">
 					<div className="bar-start">
 						<h1>{config.title}</h1>
-						<nav aria-label="Panes">
+						<nav aria-label={t("Panes")}>
 							{config.panes.map((name) => (
 								<a
 									key={name}
 									href={hrefFor(name)}
 									aria-current={name === pane ? "page" : undefined}
 								>
-									{LABELS[name]}
+									{t(LABELS[name])}
 								</a>
 							))}
 						</nav>
 					</div>
 					<span
 						className={live.connected ? "live live-on" : "live"}
-						title={live.connected ? "Receiving live updates" : "Reconnecting"}
+						title={
+							live.connected ? t("Receiving live updates") : t("Reconnecting")
+						}
 					>
-						{live.connected ? "Live" : "Reconnecting…"}
+						{live.connected ? t("Live") : t("Reconnecting…")}
 					</span>
 				</header>
 				<main>
@@ -80,6 +90,8 @@ function Console({ config }: { config: ConfigView }) {
 							<ConversationsPage />
 						))}
 					{pane === "notes" && <NotesPage />}
+					{pane === "skills" && <SkillsPage />}
+					{pane === "connectors" && <ConnectorsPage />}
 				</main>
 			</div>
 		</LiveContext.Provider>
