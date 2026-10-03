@@ -61,6 +61,8 @@ Use the kit's building blocks for a plugin that runs Pi itself, such as a coding
   Ordinary 48 MP images and thin 9000×1 images remain admitted.
   This helper is not a downloader or filesystem validator.
 - Work: `promptSlot` (how a run asks the owner while it works), `workTimeout` (a time limit that does not count the time spent waiting on the owner), `runWorkerTask`, `archiveSessions`, and `approvalCard` and `canonicalJson` for the cards of held actions.
+- Diagnostics: `scrubDiagnostic(text, max = 600)` masks credentials (URL userinfo, token shapes, secret-named assignments and JSON fields, `Authorization`/`Cookie`/`x-api-key` headers, JWTs, PEM blocks), turns control characters other than tab and newline into spaces, and cuts the result at `max` characters.
+  It scans only the first `max * 4` characters (at least 4,096), in linear time, so pass it git, gh or provider error text before showing that text to a user.
 - Shell: `SHELL_TOOLS` and `shellHoldRule`, the hold rule that keeps risky host-shell commands behind the owner's approval.
 - Tools: `textToolsExtension`, `requiredString`, `stringList` (with `toolText` and `toolError`) for tools that return text.
 - Mirroring a built-in tool in a worker that cannot reach the host: `SCHEDULE_TOOLS`, `scheduleToolSpecs({ locale, timeZone })`, `isScheduleTool`, `callScheduleTool`, `DELEGATE_TOOL` and `DELEGATE_TOOL_SPEC`.
