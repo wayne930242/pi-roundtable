@@ -47,8 +47,12 @@ export default {
 | `resolveRun` | configured worker, caller channel | Per-caller model, thinking, report channel, and optional thread origin. |
 | `postChangeReport` | caller surface | Post the change record in the calling identity/channel. |
 | `presentation` | English package text | Change-report post/result and task-start wording, including omitted implicit skills. |
+| `toolText` | package wording | Trusted description and argument descriptions for each repository tool as `{ repo_task: { description, parameters: { task: "…" } } }`; does not change tool arguments or approval rules. |
 | `threads` / `threadText` | none / English | Progress and approval thread port, with host-owned wording. |
 | `workerWorkspace` / `workerPrompt` | clone / generic instructions | Trusted shell-policy write boundary and standing prompt replacement. |
+| `workerBlockText` | "The owner declined / has not approved this call. Do not retry it or work around it; list it under Held in your report." | Trusted wording of what the worker reads when a call is declined or held; never changes who is held. |
+| `limits` | 20,000 report characters, 10 held entries of 1,000 characters | `{ reportChars?, heldEntries?, heldChars? }`: bounds of what a report keeps of a long run; each is a whole number of at least 1, or `Infinity`. |
+| `diagnosticChars` | `600` | Longest git, gh and worker error text kept in a failure; a whole number of at least 1, or `Infinity`. |
 | `skipUnavailableCarriedSkills` | `false` | Opt in to skipping/disclosing unavailable implicit skills; explicit requests still refuse them. |
 | `workerPackages` | `[]` | Absolute paths to installed Pi extension packages loaded by workers. |
 | `agentDir` | Pi host directory | Pi login and model configuration directory. |

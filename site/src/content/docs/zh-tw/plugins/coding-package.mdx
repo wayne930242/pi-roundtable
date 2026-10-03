@@ -47,8 +47,12 @@ export default {
 | `resolveRun` | 設定的 worker、呼叫者 channel | 依呼叫者選擇 model、thinking、回報 channel 和 thread origin。 |
 | `postChangeReport` | 目前 surface | 用呼叫者身分，在指定 channel 張貼修改紀錄。 |
 | `presentation` | 套件英文文字 | 修改報告的張貼／工具結果，以及啟動通知與略過 skill 的說明。 |
+| `toolText` | 套件文字 | 各 repository 工具的說明與參數描述，例如 `{ repo_task: { description, parameters: { task: "…" } } }`；不改變工具的引數或核准規則。 |
 | `threads` / `threadText` | 無／英文 | 進度與核准 thread 介面，以及 host 自訂文字。 |
 | `workerWorkspace` / `workerPrompt` | clone／通用指示 | 可信任的 shell 寫入政策邊界與常駐 prompt。 |
+| `workerBlockText` | 預設拒絕訊息 | worker 被拒絕或未核准時讀到的文字；不改變誰需要核准。 |
+| `limits` | 20,000 報告字數、10 個 hold 項目各 1,000 字 | `{ reportChars?, heldEntries?, heldChars? }`：報告保留的內容上限；各欄位都是整數（至少 1）或 `Infinity`。 |
+| `diagnosticChars` | `600` | failure 中保留的 git、gh 和 worker 錯誤文字長度；整數（至少 1）或 `Infinity`。 |
 | `skipUnavailableCarriedSkills` | `false` | 明確開啟後，略過並告知載入失敗的 implicit skill；指定 skill 仍會拒絕。 |
 | `workerPackages` | `[]` | worker 載入的已安裝 Pi extension 絕對路徑。 |
 | `agentDir` | Pi host 目錄 | Pi 登入與 model 設定所在目錄。 |

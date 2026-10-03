@@ -37,6 +37,8 @@ export default {
 | `random` | `Math.random` | Random source for map layout and card draws. `seededRandom(seed)` is exported for repeatable results. |
 | `minTier` | `member` | Lowest speaker tier allowed to use the tools; host `toolTiers` can override it. |
 | `cardPresentation` | package captions | Trusted `heading(draw, turn)` returns `{title, subtitle}` using deck/count/question and host speaker/channel; `reversedSuffix` localizes the default `" (reversed)"` on the picture. |
+| `mapLimits` | 80 and 60 | `{ title?, text? }`: longest relationship-map title and node/edge label in characters; each is a whole number of at least 1. |
+| `permissive` | `false` | Accept invalid requests that a looser host already sends: exclude a card not in the deck, share spread positions, repeat or leave empty map nodes, or use unparseable colors; by default each is refused with a correctable message. |
 
 The package reads nothing from the environment and needs no database.
 For card draws, provide your own `deck.json` manifests and card art; the package includes no card faces.

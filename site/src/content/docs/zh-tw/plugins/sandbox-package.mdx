@@ -146,8 +146,9 @@ HTTPS 仍驗證原 hostname，不用 proxy environment，也不再次 DNS lookup
 直接解析 `SafeFetchResult` bytes；或先用 `assertPublicUrl` 檢查 URL，再交給其他 extractor，並把該 extractor 自己的頁面下載送回 `safeFetch`（`followRedirects:false` 一次只走一跳、每跳都檢查並釘住位址；`headers` 設定 host 信任的標頭）。
 
 `ScopedSandboxDelegator` 固定 target、host author 和 channel-local report，不接受任意 target／origin／tier。
-選項是 `target`、`maxRunning`（1–10，預設每頻道二個）、`timeoutMs`（1–1,200 秒，預設十分鐘）、`run(task,context)`、`deliver(job,result)`、`logger`。
-task 最多 4,000 字元、title 200 字元、report 80,000 字元；`runningChannels`、`idle`、`dispose` 支援 lifecycle，dispose 取消 process-local jobs。
+選項是 `target`、`maxRunning`（1–10，預設每頻道二個）、`timeoutMs`（1–1,200 秒，預設十分鐘）、`maxTitleChars`（預設 200）、`maxReportChars`（預設 80,000）、`diagnosticChars`（預設 600）、`run(task,context)`、`deliver(job,result)`、`logger`。
+task 最多 4,000 字元；title、report 和 diagnostic text 的長度限制可設定，各為至少 1 的整數或 `Infinity`。
+`runningChannels`、`idle`、`dispose` 支援 lifecycle，dispose 取消 process-local jobs。
 選用 `SandboxResearchWorker` 時，明確提供 `modelRuntime`、`agentDir`、`workDir`、`model`、`thinking`、`search`、`extractFetched`（或由 host 自備的 `fetchContent(url, signal)`，此時位址檢查與上限由 host 負責）。
 它用未儲存的 host subscription session，只提供 web search 和 controlled fetch，沒有 shell／owner data／discovery；extractor 收到已下載 bytes，不可再次 fetch。
 明確保留 app 的 model／thinking 和 report adapter，不轉交沒有同等範圍限制的 owner／default worker。

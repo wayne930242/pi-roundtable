@@ -37,6 +37,8 @@ export default {
 | `random` | `Math.random` | 關係圖版面與抽牌使用的亂數來源。套件匯出 `seededRandom(seed)`，可重現結果。 |
 | `minTier` | `member` | 可使用工具的最低 speaker tier；host 的 `toolTiers` 可以覆寫。 |
 | `cardPresentation` | 套件預設文字 | 可信任的 `heading(draw, turn)` 依牌組、張數、問題及 host 的 speaker／channel 回傳 `{title, subtitle}`；`reversedSuffix` 可替換圖片上預設的 `" (reversed)"`。 |
+| `mapLimits` | 80 和 60 | `{ title?, text? }`：關係圖標題與節點／邊線標籤的最長字數；各欄位都是整數（至少 1）。 |
+| `permissive` | `false` | 接受較寬鬆 host 已傳來的無效請求：排除不存在的牌、共用牌陣位置、關係圖節點重複／留空或自我連結、使用無法解析的顏色；預設都會拒絕並回傳可修正的訊息。 |
 
 套件不讀取環境變數，也不需要資料庫。
 抽牌要自行準備 `deck.json` 和牌面圖；套件沒有附牌面。

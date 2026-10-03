@@ -71,6 +71,7 @@ Overview 也會列出既有的 owner 工作區與外部 agent 對話。
 `features.skills.catalog()` 提供來源、描述、群組、使用者與檔案遺失狀態。
 `read(name)` 只能讀 catalog 選出的項目，回傳 `{ frontmatter, body }`，不能接受 request 指定的檔案路徑。
 host 應限制讀檔大小；API 限制 body 為 1 MB、frontmatter 為 64 KB，保留 metadata 順序並安全呈現 Markdown。
+設 `errorDetail: true` 時，API 會在回應中列出 missing 文字或讀取錯誤（最多 300 字符）；不設時則只回傳固定訊息。
 `features.connectors` 提供 `gateways()`、`servers()`、`usedBy(server)` 和選用的安全 `adminUrl`。
 頁面保留 gateway 連線與啟用狀態、工具數、virtual server 工具清單及使用者。
 啟用 Skills／Connectors 卻沒有對應 hook 時，啟動會失敗。

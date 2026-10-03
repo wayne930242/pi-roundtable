@@ -72,6 +72,7 @@ Without the cleanup hook, conversation data remains read-only.
 `features.skills.catalog()` supplies source, description, groups, carriers and missing-file status.
 `read(name)` returns the selected catalog entry's `{ frontmatter, body }`, never a request-selected path.
 The host bounds its read; the API caps the body at 1 MB and frontmatter at 64 KB, preserving metadata order and rendering the body as safe Markdown.
+Set `errorDetail: true` to show the missing-file text or read error in the API response (cut at 300 characters) when the host's reasons are safe to show; by default errors are fixed messages.
 `features.connectors` supplies `gateways()`, `servers()`, `usedBy(server)` and an optional safe `adminUrl`.
 The page shows gateway health, enabled state, tool counts, virtual-server tools and usage.
 Skills and Connectors fail startup when enabled without their hooks.

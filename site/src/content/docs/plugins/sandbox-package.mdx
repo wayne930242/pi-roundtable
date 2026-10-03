@@ -144,8 +144,9 @@ Configuration ranges are 1 millisecond–120 seconds, 0–10 redirects and 1 byt
 Parse `SafeFetchResult` bytes directly, or check the URL with `assertPublicUrl` before passing it to another network extractor and send that extractor's own page fetches back through `safeFetch` (`followRedirects:false` gives one vetted, pinned hop at a time; `headers` sets trusted host headers).
 
 `ScopedSandboxDelegator` fixes the target, host author and channel-local report, refusing arbitrary target/origin/tier selection.
-Options are `target`, `maxRunning` (1–10, default two per channel), `timeoutMs` (1–1,200 seconds, default ten minutes), `run(task,context)`, `deliver(job,result)` and `logger`.
-Tasks allow 4,000 characters, titles 200 and reports 80,000; `runningChannels`, `idle` and `dispose` support shutdown, cancelling process-local jobs.
+Options are `target`, `maxRunning` (1–10, default two per channel), `timeoutMs` (1–1,200 seconds, default ten minutes), `maxTitleChars` (default 200), `maxReportChars` (default 80,000), `diagnosticChars` (default 600), `run(task,context)`, `deliver(job,result)` and `logger`.
+Tasks allow 4,000 characters; title, report and diagnostic-text bounds are configurable whole numbers of at least 1, or `Infinity`.
+`runningChannels`, `idle` and `dispose` support shutdown, cancelling process-local jobs.
 Optional `SandboxResearchWorker` takes `modelRuntime`, `agentDir`, `workDir`, `model`, `thinking`, `search` and `extractFetched` (or a host-owned `fetchContent(url, signal)`, which then owns address checks and bounds).
 It uses a fresh unsaved host subscription session with only web search and controlled fetch, no shell/owner data/discovery; extraction receives fetched bytes and must not fetch again.
 Preserve app model/thinking and report adapters explicitly instead of forwarding to an unrestricted owner/default worker.
