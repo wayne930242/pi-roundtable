@@ -84,6 +84,28 @@ function blocks(raw: unknown, nested = false): unknown[] | string {
 		throw new Error("Native tools or remote media refused");
 	});
 }
+/**
+ * A mid-conversation system message's content: text only. The guest already writes the top-level
+ * system prompt and every user turn, so its text here carries no more authority. Its tool changes
+ * are refused in the API's wording, so Claude Code resends the tools whole instead.
+ */
+function systemContent(raw: unknown, index: number): unknown[] | string {
+	if (typeof raw === "string") return raw;
+	if (!Array.isArray(raw) || raw.length > 256)
+		throw new Error("Invalid content");
+	return raw.map((value: unknown, block) => {
+		if (
+			isRecord(value) &&
+			value.type === "text" &&
+			typeof value.text === "string"
+		)
+			return { type: "text", text: value.text, ...cache(value) };
+		const type = isRecord(value) ? String(value.type) : typeof value;
+		throw new Error(
+			`messages.${index}.content.${block}: Input tag '${type}' found using 'type' does not match any of the expected tags: 'text'`,
+		);
+	});
+}
 const EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
 /** Highest effort and extended-thinking budget the host-judged level allows. */
 const CEILINGS: Record<PiThinkingLevel, { effort: number; budget: number }> = {
@@ -104,15 +126,37 @@ export function piModelInput(
 ): Record<string, unknown> {
 	if (!Array.isArray(input.messages) || input.messages.length > 2000)
 		throw new Error("Invalid messages");
+	const ceiling = CEILINGS[thinking];
+	/** An effort the guest asks for, at most the host-judged level allows; -1 when none. */
+	const cappedEffort = (config: unknown): number => {
+		const asked = isRecord(config)
+			? EFFORTS.indexOf(config.effort as (typeof EFFORTS)[number])
+			: -1;
+		return asked >= 0 ? Math.min(asked, ceiling.effort) : -1;
+	};
 	const body: Record<string, unknown> = {
 		model,
 		messages: input.messages.map((message: unknown, index) => {
 			if (!isRecord(message)) throw new Error("Invalid message");
-			// Worded as the Anthropic API words it, so a client that sends a mid-conversation
-			// `role: "system"` message (Claude Code does) recognizes the refusal and resends without it.
+			// Claude Code sends each turn's environment as a mid-conversation system message.
+			if (message.role === "system") {
+				const effort = cappedEffort(message.output_config);
+				return {
+					role: "system",
+					content: systemContent(message.content, index),
+					...(message.clear_at === "next_user_message" ||
+					message.clear_at === "never"
+						? { clear_at: message.clear_at }
+						: {}),
+					...(effort >= 0
+						? { output_config: { effort: EFFORTS[effort] } }
+						: {}),
+				};
+			}
+			// Worded as the Anthropic API words it, so a client recognizes the refusal.
 			if (!["user", "assistant"].includes(String(message.role)))
 				throw new Error(
-					`messages.${index}: Unexpected role ${JSON.stringify(String(message.role))}: the input message role must be "user" or "assistant"`,
+					`messages.${index}: Unexpected role ${JSON.stringify(String(message.role))}: the input message role must be "user", "assistant" or "system"`,
 				);
 			return { role: message.role, content: blocks(message.content) };
 		}),
@@ -155,7 +199,6 @@ export function piModelInput(
 				: {}),
 		};
 	}
-	const ceiling = CEILINGS[thinking];
 	if (isRecord(input.thinking)) {
 		if (
 			input.thinking.type === "adaptive" ||
@@ -177,13 +220,11 @@ export function piModelInput(
 			};
 		else throw new Error("Invalid thinking");
 	}
-	const asked = isRecord(input.output_config)
-		? EFFORTS.indexOf(input.output_config.effort as (typeof EFFORTS)[number])
-		: -1;
+	const asked = cappedEffort(input.output_config);
 	// Adaptive thinking without an explicit effort runs at the model's default, so the host caps it too.
 	const effort =
 		asked >= 0
-			? Math.min(asked, ceiling.effort)
+			? asked
 			: isRecord(body.thinking) &&
 					body.thinking.type === "adaptive" &&
 					ceiling.effort < 2

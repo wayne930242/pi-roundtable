@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.15] - 2026-10-03
+
+### Changed
+
+- pi-roundtable-sandbox: the model broker forwards Claude Code's mid-conversation system messages, rebuilt and with their effort capped, instead of refusing them; see its changelog.
+
 ## [0.7.14] - 2026-10-03
 
 ### Fixed

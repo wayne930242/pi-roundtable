@@ -265,7 +265,61 @@ test("model payload refuses remote schemas, URLs and native provider tools while
 	])
 		expect(() => piModelInput(input, "host", false)).toThrow();
 });
-test("a refused model request is a 400 in the API's error shape, worded so Claude Code resends it without its system messages", async () => {
+test("Claude Code's mid-conversation system messages are rebuilt and forwarded, their effort capped", async () => {
+	let sent: Record<string, unknown> | undefined;
+	const broker = new PiSandboxBroker({
+		model: "host-model",
+		oauthToken: () => "host-secret",
+		fetchImpl: async (_url, init) => {
+			sent = JSON.parse(String(init?.body));
+			return Response.json({ content: "ok" });
+		},
+	});
+	const { release } = bound(broker, "low");
+	// The shape Claude Code 2.1.284 sends, recorded: the turn's environment after the prompt.
+	const response = await broker.handle(
+		post("/anthropic/v1/messages", {
+			...message,
+			messages: [
+				{ role: "user", content: "roll" },
+				{
+					role: "system",
+					content: [
+						{
+							type: "text",
+							text: "# Environment\nToday's date is 2026-10-03.",
+							cache_control: { type: "ephemeral" },
+						},
+					],
+					output_config: { effort: "max" },
+					clear_at: "next_user_message",
+					smuggled: "dropped",
+				},
+				{ role: "system", content: "a reminder" },
+			],
+		}),
+	);
+	expect(response.status).toBe(200);
+	expect(sent?.messages).toEqual([
+		{ role: "user", content: "roll" },
+		{
+			role: "system",
+			content: [
+				{
+					type: "text",
+					text: "# Environment\nToday's date is 2026-10-03.",
+					cache_control: { type: "ephemeral" },
+				},
+			],
+			clear_at: "next_user_message",
+			// The host judged this turn low; the guest cannot raise it here either.
+			output_config: { effort: "low" },
+		},
+		{ role: "system", content: "a reminder" },
+	]);
+	release();
+});
+test("a refused model request is a 400 in the API's error shape, worded so Claude Code can resend without what was refused", async () => {
 	let called = false;
 	const logger = recordingLogger();
 	const broker = new PiSandboxBroker({
@@ -278,30 +332,34 @@ test("a refused model request is a 400 in the API's error shape, worded so Claud
 		},
 	});
 	const { release } = bound(broker);
-	// Claude Code's mid-conversation system message declaring a late MCP tool.
-	const response = await broker.handle(
-		post("/anthropic/v1/messages", {
-			...message,
-			messages: [
-				{ role: "user", content: "Hello" },
-				{
-					role: "system",
-					content: [{ type: "tool_addition", tool: { name: "late_tool" } }],
-				},
-			],
-		}),
-	);
-	expect(response.status).toBe(400);
-	const body = (await response.json()) as { error: { message: string } };
-	expect(body).toMatchObject({
-		type: "error",
-		error: { type: "invalid_request_error" },
-	});
-	// The two phrases Claude Code looks for before falling back to a body without system turns.
-	expect(body.error.message).toContain("Unexpected role");
-	expect(body.error.message).toContain("input message role");
-	expect(body.error.message).toStartWith("messages.1:");
-	expect(called).toBe(false);
+	const refuse = async (messages: unknown[]) => {
+		const response = await broker.handle(
+			post("/anthropic/v1/messages", { ...message, messages }),
+		);
+		expect(response.status).toBe(400);
+		const body = (await response.json()) as {
+			type: string;
+			error: { type: string; message: string };
+		};
+		expect(body.type).toBe("error");
+		expect(body.error.type).toBe("invalid_request_error");
+		return body.error.message;
+	};
+	// A tool change in a system message: Claude Code matches "Input tag 'tool_addition'" and
+	// resends with its tools declared whole.
+	expect(
+		await refuse([
+			{ role: "user", content: "Hello" },
+			{
+				role: "system",
+				content: [{ type: "tool_addition", tool: { name: "late_tool" } }],
+			},
+		]),
+	).toStartWith("messages.1.content.0: Input tag 'tool_addition'");
+	// Any other role: Claude Code matches "Unexpected role" and "input message role".
+	const role = await refuse([{ role: "developer", content: "x" }]);
+	expect(role).toContain("Unexpected role");
+	expect(role).toContain("input message role");
 	// Any other refused shape is a 400 too, never a 502 the client would retry unchanged.
 	const native = await broker.handle(
 		post("/anthropic/v1/messages", {
@@ -314,7 +372,7 @@ test("a refused model request is a 400 in the API's error shape, worded so Claud
 	expect(
 		logger.lines.filter((l) => l.message === "sandbox upstream call failed")
 			.length,
-	).toBe(2);
+	).toBe(3);
 	release();
 });
 test("worker long polling carries host turns and bounded replies without any host connection to guest sockets or paths", async () => {

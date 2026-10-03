@@ -1,6 +1,6 @@
 {
 	"name": "pi-roundtable-coding",
-	"version": "0.7.14",
+	"version": "0.7.15",
 	"description": "Repository shelves and owner-approved Pi coding workers for pi-roundtable",
 	"type": "module",
 	"license": "MIT",
@@ -44,7 +44,7 @@
 		"@earendil-works/pi-ai": ">=1.0.0 <2",
 		"@biomejs/biome": "2.5.15",
 		"@types/bun": "1.4.2",
-		"pi-roundtable": "0.7.14",
+		"pi-roundtable": "0.7.15",
 		"typescript": "7.0.2"
 	}
 }
