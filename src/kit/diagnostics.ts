@@ -1,19 +1,24 @@
+/*
+ * Every pattern here either starts with a literal or starts at the beginning of a run of its own
+ * character class (a lookbehind, never a leading `\b` before a repeatable class), so scrubbing
+ * takes time linear in the text at any length.
+ */
+
 /** Tool text that may name a credential: userinfo in URLs, bearer values, and well-known token shapes. */
-const CREDENTIALS: [RegExp, string][] = [
-	[/\b([a-z][a-z0-9+.-]*:\/\/)[^\s/@]+@/gi, "$1[redacted]@"],
+const CREDENTIALS: [RegExp, string | ((...match: string[]) => string)][] = [
+	[/(?<![a-z0-9+.-])([a-z][a-z0-9+.-]*:\/\/)[^\s/@]+@/gi, "$1[redacted]@"],
 	[
 		/\b(authorization|proxy-authorization)\s*[:=]\s*[^\r\n]+/gi,
 		"$1: [redacted]",
 	],
-	[/\b(bearer|basic|token)\s+[A-Za-z0-9._~+/=-]{8,}/gi, "$1 [redacted]"],
+	[
+		/\b(bearer|basic|token)(\s+)([A-Za-z0-9._~+/=-]{8,})/gi,
+		(match, scheme = "", _space = "", value = "") =>
+			looksLikeCredential(value) ? `${scheme} [redacted]` : match,
+	],
 	[
 		/\b(gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|glpat-[A-Za-z0-9_-]{16,}|sk-[A-Za-z0-9_-]{16,}|xox[abprs]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{30,})\b/g,
 		"[redacted]",
-	],
-	// Assignments, query parameters and JSON fields whose name says it is a secret, in any case.
-	[
-		/\b([a-z0-9_-]*(?:token|secret|password|passwd|api[_-]?key|credential)[a-z0-9_-]*)(["']?\s*[:=]\s*["']?)[^\s"',&;]+/gi,
-		"$1$2[redacted]",
 	],
 	[
 		/\b(cookie|set-cookie|x-api-key|x-auth-token|x-access-token)\s*:\s*[^\r\n]+/gi,
@@ -26,15 +31,64 @@ const CREDENTIALS: [RegExp, string][] = [
 	],
 ];
 
+/** A bare word such as "authentication" is not a credential; a value with digits, symbols or inner capitals, or a very long one, may be. */
+function looksLikeCredential(value: string): boolean {
+	return (
+		/[0-9+/=_~]/.test(value) || /[a-z][A-Z]/.test(value) || value.length >= 32
+	);
+}
+
+/** Names that say the value is a secret. A plural `tokens` counts tokens, and is not one. */
+const SECRET_NAME =
+	/token(?!s(?![a-z]))|secret|password|passwd|api[_-]?key|credential/i;
+/** What a name may continue with after the keyword and still hold a setting, not a secret. */
+const SETTING_SUFFIX =
+	/^[_-]?(?:policy|policies|rules?|length|count|limit|max|min|type|format|expir\w*|ttl|lifetime|required|enabled|strategy|file|path|url|name|field|prompt|hint|window|budget|usage)(?![a-z])/i;
+
+/** Whether the name says its value is a secret; a count is not a token, so a token name needs a non-numeric value. */
+function secretKind(name: string): "secret" | "token" | undefined {
+	const keyword = SECRET_NAME.exec(name);
+	if (!keyword) return undefined;
+	const rest = name.slice(keyword.index + keyword[0].length);
+	if (SETTING_SUFFIX.test(rest)) return undefined;
+	return /^token/i.test(keyword[0]) ? "token" : "secret";
+}
+
+/** The name and separator of an assignment, query parameter or JSON field; the value is read separately. */
+const ASSIGNMENT = /(?<![a-z0-9_-])([a-z0-9_-]+)(["']?\s*[:=]\s*["']?)/gi;
+const VALUE = /[^\s"',&;}\]]+/y;
+
+/** Masks the value of every assignment whose name says it is a secret, in any case. */
+function maskAssignments(text: string): string {
+	let out = "";
+	let cursor = 0;
+	for (const match of text.matchAll(ASSIGNMENT)) {
+		const start = match.index ?? 0;
+		const end = start + match[0].length;
+		if (start < cursor) continue;
+		// The value is read only for a secret name, so ordinary text costs nothing more to pass.
+		const kind = secretKind(match[1] ?? "");
+		if (!kind) continue;
+		VALUE.lastIndex = end;
+		const value = VALUE.exec(text)?.[0];
+		if (value === undefined || (kind === "token" && /^[0-9]+$/.test(value)))
+			continue;
+		out += `${text.slice(cursor, end)}[redacted]`;
+		cursor = end + value.length;
+	}
+	return out + text.slice(cursor);
+}
+
 /**
  * Text from a failed subprocess or worker, safe to show a model or the owner: credentials are
  * masked, control characters are removed, and the length is bounded. Empty input returns "".
  */
 export function scrubDiagnostic(text: string, max = 600): string {
-	// The patterns run on a bounded prefix, so hostile input cannot make them slow.
+	// Only what could survive the final cut is scrubbed, so the work follows the bound asked for.
 	let clean = text.slice(0, Math.max(max * 4, 4096));
 	for (const [pattern, replacement] of CREDENTIALS)
-		clean = clean.replace(pattern, replacement);
+		clean = clean.replace(pattern, replacement as string);
+	clean = maskAssignments(clean);
 	clean = Array.from(clean, (char) => {
 		const code = char.charCodeAt(0);
 		// Keep tab and newline; every other control character becomes a space.

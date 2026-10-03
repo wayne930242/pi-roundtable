@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.6] - 2026-10-03
+
+- `permissive` also accepts an empty node id, a sigil intention with no letters or only blanks, and an unknown sacred-geometry color.
+
 ## [0.7.5] - 2026-10-03
 
 ### Added

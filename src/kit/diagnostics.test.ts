@@ -63,9 +63,79 @@ test("masks the other common credential shapes", () => {
 	expect(clean).toContain('"id":7');
 });
 
-test("hostile input stays fast", () => {
-	const started = performance.now();
-	scrubDiagnostic("a.".repeat(200_000), 600);
-	scrubDiagnostic("x://".repeat(100_000), 600);
-	expect(performance.now() - started).toBeLessThan(200);
+test("leaves ordinary text alone, token counts and settings included", () => {
+	for (const text of [
+		'{"type":"error","message":"max_tokens: 64000 > 32000, which is the maximum allowed number of output tokens for this model"}',
+		'{"usage":{"input_tokens":1200,"output_tokens":30}}',
+		"context_window_tokens=200000 exceeded",
+		"password_policy=strict failed",
+		"Basic authentication is not supported",
+		"Bearer authentication is not supported here",
+		"prompt is too long: 210000 tokens > 200000 maximum",
+		"remote: Invalid username or password.",
+		"fatal: Authentication failed for 'https://github.com/o/r.git/'",
+		"token_count=12 limit=40",
+	])
+		expect(scrubDiagnostic(text, 100_000)).toBe(text);
 });
+
+test("still masks a credential that follows a setting, in any value position", () => {
+	const clean = scrubDiagnostic(
+		[
+			"x=1?token=abc999def",
+			"Basic dXNlcjpwYXNzd29yZA==",
+			"Bearer abc123def456ghi",
+			"aws_secret_access_key=wJalrXUtnFEMI123",
+			'{"usage":{"input_tokens":5},"api_key":"zzz111yyy"}',
+			"passwords=hunter2x",
+		].join("\n"),
+		100_000,
+	);
+	for (const secret of [
+		"abc999def",
+		"dXNlcjpwYXNzd29yZA",
+		"abc123def456ghi",
+		"wJalrXUtnFEMI123",
+		"zzz111yyy",
+		"hunter2x",
+	])
+		expect(clean).not.toContain(secret);
+	expect(clean).toContain('"input_tokens":5');
+});
+
+function base64url(length: number): string {
+	const alphabet =
+		"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+	let state = 12345;
+	let out = "";
+	for (let i = 0; i < length; i++) {
+		state = (state * 1103515245 + 12345) & 0x7fffffff;
+		out += alphabet[state % alphabet.length];
+	}
+	return out;
+}
+
+const HOSTILE: [string, string][] = [
+	["dashes", "a-".repeat(500_000)],
+	["dots", "a.".repeat(500_000)],
+	["token", "token".repeat(200_000)],
+	["base64url", base64url(400_000)],
+	[
+		"dashed uuids",
+		Array.from({ length: 11_000 }, () => crypto.randomUUID()).join("-"),
+	],
+	["schemes", "x://".repeat(100_000)],
+	["assignments", "a=".repeat(300_000)],
+	["spaces", `a${" ".repeat(500_000)}b`],
+	["secret names", "token-secret-password=".repeat(50_000)],
+];
+
+for (const max of [600, 100_000, Number.POSITIVE_INFINITY])
+	test(`hostile input stays fast at a bound of ${max}`, () => {
+		for (const [name, text] of HOSTILE) {
+			const started = performance.now();
+			scrubDiagnostic(text, max);
+			const took = performance.now() - started;
+			if (took > 2000) throw new Error(`${name} took ${Math.round(took)} ms`);
+		}
+	});

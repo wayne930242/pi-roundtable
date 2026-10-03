@@ -257,6 +257,8 @@ export interface SigilOptions {
 	complexity: "simple" | "elaborate";
 	style: "traditional" | "modern";
 	background: Background;
+	/** Draw what a looser caller sends: an intention with no letters, a blank one, or an unknown color. */
+	permissive?: boolean;
 }
 
 const SIGIL_SIZE = 512;
@@ -283,9 +285,13 @@ function planetaryRadius(char: string): number {
 }
 
 export function renderSigil(options: SigilOptions): Uint8Array {
-	if (options.intention.trim() === "")
+	if (options.intention.trim() === "" && !options.permissive)
 		throw new DrawingError("The intention is empty. Give a short phrase.");
-	if (options.method !== "geometric" && letters(options.intention).length === 0)
+	if (
+		options.method !== "geometric" &&
+		letters(options.intention).length === 0 &&
+		!options.permissive
+	)
 		throw new DrawingError(
 			`The ${options.method} method draws from letters, and the intention has none. Write it in words, or use the geometric method.`,
 		);
@@ -403,6 +409,8 @@ export interface GeometryOptions {
 	/** CSS colors cycled per layer; the palette's line color when empty. */
 	colors: readonly string[];
 	background: Background;
+	/** Ignore a color canvas cannot parse, as it would, instead of refusing it. */
+	permissive?: boolean;
 }
 
 const GEOMETRY_SIZE = 1024;
@@ -433,7 +441,7 @@ export function renderSacredGeometry(options: GeometryOptions): Uint8Array {
 			`At most ${MAX_LAYERS} colors are used, one for each layer. Give fewer.`,
 		);
 	for (const color of options.colors)
-		if (!isCssColor(color))
+		if (!options.permissive && !isCssColor(color))
 			throw new DrawingError(
 				`${JSON.stringify(color)} is not a CSS color. Use a name such as gold or a code such as #c0a060.`,
 			);

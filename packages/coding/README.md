@@ -122,7 +122,7 @@ Without `threads`, the resolved report channel's prompts are used.
 An approved call runs; a declined, expired, missing or failed card blocks it and instructs the worker not to retry or work around the refusal.
 Unapproved actions appear in the report rather than running later automatically.
 By default worker answers are capped at 20,000 characters and the Held list keeps ten entries of at most 1,000 characters each, with explicit truncation and omission notices; `limits` changes each bound.
-Worker failures expose only a structured exit category and numeric code, never stderr or provider diagnostics.
+A worker failure carries its exit category and numeric code; git and gh stderr and the worker's own error text reach the report only after `scrubDiagnostic` masks credentials, and are cut at `diagnosticChars`.
 Card expiration is determined by the host's surface implementation, not this package.
 
 The worker runs in a fresh Bun child process with an unsaved Pi session and uses the public `runWorkerTask` helper.

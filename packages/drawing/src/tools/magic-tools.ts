@@ -65,7 +65,7 @@ export function magicCircleTool(env: ImageToolEnv) {
 	);
 }
 
-export function sigilTool(env: ImageToolEnv) {
+export function sigilTool(env: ImageToolEnv, permissive = false) {
 	return imageTool(
 		{
 			name: "sigil_generate",
@@ -86,6 +86,7 @@ export function sigilTool(env: ImageToolEnv) {
 					complexity: args.complexity ?? "elaborate",
 					style: args.style ?? "traditional",
 					background: args.background ?? "dark",
+					permissive,
 				}),
 				text: "The sigil is attached to your reply as {file}.",
 			}),
@@ -94,7 +95,7 @@ export function sigilTool(env: ImageToolEnv) {
 	);
 }
 
-export function sacredGeometryTool(env: ImageToolEnv) {
+export function sacredGeometryTool(env: ImageToolEnv, permissive = false) {
 	return imageTool(
 		{
 			name: "sacred_geometry_generate",
@@ -131,6 +132,7 @@ export function sacredGeometryTool(env: ImageToolEnv) {
 					rotation: args.rotation ?? 0,
 					colors: args.colors ?? [],
 					background: args.background ?? "dark",
+					permissive,
 				}),
 				text: "The sacred geometry is attached to your reply as {file}.",
 			}),

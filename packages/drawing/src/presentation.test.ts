@@ -158,3 +158,47 @@ test("map limits that are not whole numbers of at least 1 stop the start", async
 			}),
 		).rejects.toThrow("mapLimits.text");
 });
+
+test("a permissive host also draws an empty node id, a letterless sigil and an unknown color, and the default refuses each", async () => {
+	const make = (permissive: boolean) =>
+		testPlugin(drawing({ permissive }), { surfaces: [new RecordingSurface()] });
+	const strict = await make(false);
+	const lenient = await make(true);
+	const empty = {
+		nodes: [
+			{ id: "", type: "pc" },
+			{ id: "b", type: "npc" },
+		],
+		edges: [{ from: "", to: "b", type: "bond" }],
+	};
+	const turn = { channel: "test:1" } as const;
+	try {
+		expect(await strict.runTool("relationship_map", empty, turn)).toContain(
+			"not valid",
+		);
+		expect(await lenient.runTool("relationship_map", empty, turn)).toContain(
+			"attached",
+		);
+		for (const method of ["chaos", "rose_cross", "planetary"]) {
+			for (const intention of ["2026", "🔥✨", "   "]) {
+				const args = { intention, method };
+				expect(await strict.runTool("sigil_generate", args, turn)).toMatch(
+					/draws from letters|intention is empty/,
+				);
+				expect(await lenient.runTool("sigil_generate", args, turn)).toContain(
+					"attached",
+				);
+			}
+		}
+		const colors = { pattern: "flower_of_life", colors: ["notacolor", "gold"] };
+		expect(
+			await strict.runTool("sacred_geometry_generate", colors, turn),
+		).toContain("not a CSS color");
+		expect(
+			await lenient.runTool("sacred_geometry_generate", colors, turn),
+		).toContain("attached");
+	} finally {
+		await strict.stop();
+		await lenient.stop();
+	}
+});

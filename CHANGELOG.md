@@ -5,6 +5,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.6] - 2026-10-03
+
+### Changed
+
+- `scrubDiagnostic` takes time linear in the text at any bound (`diagnosticChars: Infinity` included): every pattern starts at the beginning of a run through a lookbehind, and a value is read only for a secret-named field.
+- `scrubDiagnostic` no longer masks what is not a secret: plural `tokens` counters (`max_tokens`, `input_tokens`), a numeric value of a token name, setting names such as `password_policy` or `token_limit`, and the word after `Basic`, `Bearer` or `token` unless it has a credential shape. A value ends at `}` and `]`.
+- Drawing: `permissive` also accepts an empty relationship-map node id (the argument schema allows it), draws a sigil whose intention has no letters or is blank, and ignores a sacred-geometry color canvas cannot parse.
+
 ## [0.7.5] - 2026-10-03
 
 ### Added

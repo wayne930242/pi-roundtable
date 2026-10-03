@@ -103,8 +103,8 @@ export function drawing(options: DrawingOptions = {}) {
 						options.permissive,
 					),
 					magicCircleTool(env),
-					sigilTool(env),
-					sacredGeometryTool(env),
+					sigilTool(env, options.permissive),
+					sacredGeometryTool(env, options.permissive),
 					...(decks.length > 0
 						? [
 								drawCardsTool(

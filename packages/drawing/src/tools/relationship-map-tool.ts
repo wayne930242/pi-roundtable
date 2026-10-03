@@ -35,7 +35,7 @@ export function relationshipMapTool(
 				nodes: Type.Array(
 					strictObject({
 						id: Type.String({
-							minLength: 1,
+							minLength: permissive ? 0 : 1,
 							maxLength: maxText,
 							description: "Character or faction name.",
 						}),
