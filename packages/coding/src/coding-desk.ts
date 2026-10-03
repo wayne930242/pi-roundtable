@@ -64,6 +64,26 @@ export interface CodingDeskOptions {
 	deliver(result: CodingResult): Promise<void>;
 	logger: Logger;
 	timeoutMs?: number;
+	limits?: CodingLimits;
+}
+/** What a coding report keeps of a long run; each is a count of characters or entries, or `Infinity` for no bound. */
+export interface CodingLimits {
+	/** Longest worker report, and longest thread report; default 20,000 characters. */
+	reportChars?: number;
+	/** Held actions listed in the report, the rest counted; default 10. */
+	heldEntries?: number;
+	/** Longest held-action entry; default 1,000 characters. */
+	heldChars?: number;
+}
+export function checkLimit(name: string, value: number | undefined): void {
+	if (
+		value !== undefined &&
+		value !== Number.POSITIVE_INFINITY &&
+		(!Number.isSafeInteger(value) || value < 1)
+	)
+		throw new Error(
+			`${name} must be a whole number of at least 1, or Infinity; got ${value}.`,
+		);
 }
 export const MAX_CODING_TASK_CHARS = 8_000;
 const MAX_REPORT_CHARS = 20_000;
@@ -182,6 +202,10 @@ export class CodingDesk {
 		const slot = promptSlot();
 		const held: string[] = [];
 		let omittedHeld = 0;
+		const maxReport = this.#options.limits?.reportChars ?? MAX_REPORT_CHARS;
+		const maxHeldEntries =
+			this.#options.limits?.heldEntries ?? MAX_HELD_ENTRIES;
+		const maxHeldChars = this.#options.limits?.heldChars ?? MAX_HELD_CHARS;
 		let cancel = () => {};
 		let timedOut = false;
 		let outcome: CodingResult["outcome"];
@@ -232,10 +256,10 @@ export class CodingDesk {
 				}
 				// A call the owner declined is settled, not held for the report.
 				if (answer === "held") {
-					if (held.length < MAX_HELD_ENTRIES) {
+					if (held.length < maxHeldEntries) {
 						const entry = bounded(
 							`${call.action}: ${call.tool} ${call.input}`,
-							MAX_HELD_CHARS,
+							maxHeldChars,
 						);
 						held.push(entry);
 						try {
@@ -256,7 +280,7 @@ export class CodingDesk {
 			);
 			if (controller.signal.aborted)
 				throw new AgentError("the worker was stopped");
-			outcome = { ok: true, report: bounded(report, MAX_REPORT_CHARS) };
+			outcome = { ok: true, report: bounded(report, maxReport) };
 		} catch (error) {
 			// The host's own refusals and the worker's scrubbed, bounded error text reach the report.
 			let message =
@@ -302,7 +326,7 @@ export class CodingDesk {
 				bounded(
 					threadText?.report?.(result) ??
 						codingReport(result, job.startedAt.toISOString()),
-					MAX_REPORT_CHARS,
+					maxReport,
 				),
 			);
 		} catch {

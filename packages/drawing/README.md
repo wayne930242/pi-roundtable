@@ -83,7 +83,8 @@ export default {
 | `random` | `() => number` | `Math.random` | The random source of the map layouts and the card draws, returning a number from 0 up to, not including, 1. A seeded source makes a run reproducible: a new `seededRandom(seed)` given the same calls draws the same pictures. `seededRandom(seed)` is exported for that |
 | `minTier` | `"owner" \| "admin" \| "member"` | `member` | The lowest tier that may use the tools. The operator's `toolTiers` setting still wins |
 | `cardPresentation` | `CardPresentation` | package captions | Trusted operator-local headings, reversal suffixes and result text |
-| `mapLimits` | `{ title?, text? }` | 80 and 60 | Longest relationship-map title, and node id, node label or edge label, in characters, for a host whose callers already draw longer text; the renderer's size limit still applies |
+| `mapLimits` | `{ title?, text? }` | 80 and 60 | Longest relationship-map title, and node id, node label or edge label, in characters, for a host whose callers already draw longer text; each is a whole number of at least 1 (anything else stops the start), and the renderer's size limit still applies |
+| `permissive` | `boolean` | `false` | Accept what a looser host's callers already send: a card exclusion that is not a card of the deck is ignored, spread positions may share a cell, and a relationship map may repeat or leave empty a node id and may draw an edge from a node to itself. By default each is refused with a message the model can correct |
 
 The plugin is named `drawing`.
 `cardPresentation.heading(draw, turn)` returns `{ title, subtitle }`; `draw` holds the selected `deck`, `count`, and optional `question`, and `turn` carries the host-bound speaker/channel.

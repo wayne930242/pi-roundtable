@@ -16,6 +16,13 @@ export interface PiCodingWorkerOptions {
 	workspace?: string;
 	/** Trusted host standing prompt, replacing the generic worker instructions. */
 	prompt?: (dir: string) => string;
+	/**
+	 * Trusted wording of what the worker reads when a call is not approved, given what the call
+	 * would do. Default: the owner declined or has not approved it; list it under Held in the report.
+	 */
+	blockText?: (answer: "declined" | "held", action: string) => string;
+	/** Longest worker error text kept for the report, in characters; default 600. */
+	diagnosticChars?: number;
 }
 interface WorkerMessage {
 	type: string;
@@ -82,7 +89,12 @@ export class PiCodingWorker implements CodingWorker {
 						value.type === "failure" &&
 						typeof value.message === "string"
 					) {
-						failure = value.message.slice(0, 2_000);
+						failure = value.message.slice(
+							0,
+							this.#options.diagnosticChars === undefined
+								? 2_000
+								: this.#options.diagnosticChars * 4,
+						);
 					} else if (
 						value.type === "call" &&
 						Number.isSafeInteger(value.id) &&
@@ -93,6 +105,7 @@ export class PiCodingWorker implements CodingWorker {
 						const { id, tool, input } = value;
 						void (async () => {
 							let answer: HeldCallAnswer = "held";
+							let reason: string | undefined;
 							try {
 								const context = {
 									workspace: this.#options.workspace ?? job.dir,
@@ -108,12 +121,19 @@ export class PiCodingWorker implements CodingWorker {
 												action,
 											})
 										: "approved";
+									if (action && answer !== "approved")
+										reason = this.#options.blockText?.(answer, action);
 								}
 							} catch {
 								/* Fail closed. */
 							}
 							if (!signal.aborted && child.exitCode === null)
-								proc.send({ type: "answer", id, answer });
+								proc.send({
+									type: "answer",
+									id,
+									answer,
+									...(reason ? { reason } : {}),
+								});
 						})();
 					}
 				},
@@ -131,7 +151,13 @@ export class PiCodingWorker implements CodingWorker {
 			if (signal.aborted) kill();
 			const code = await child.exited;
 			if (signal.aborted) throw new CodingWorkerFailure("stopped");
-			if (code !== 0) throw new CodingWorkerFailure("exit", code, failure);
+			if (code !== 0)
+				throw new CodingWorkerFailure(
+					"exit",
+					code,
+					failure,
+					this.#options.diagnosticChars,
+				);
 			if (!report?.trim()) throw new CodingWorkerFailure("missing-report");
 			return report;
 		} finally {

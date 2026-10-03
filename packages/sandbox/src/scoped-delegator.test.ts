@@ -73,6 +73,9 @@ test("channel job limits, task bounds and shutdown cancellation are enforced", a
 	expect(() => scoped.start({ ...request, title: " " })).toThrow(
 		"title and task are required",
 	);
+	expect(() => scoped.start({ ...request, title: "t".repeat(201) })).toThrow(
+		"the title is 201 characters; keep it within 200",
+	);
 	scoped.start(request);
 	expect(() => scoped.start(request)).toThrow(
 		"this channel already has 1 delegated tasks running; wait for one to report back",
@@ -126,4 +129,72 @@ test("a failed run reports its scrubbed reason, and a deadline reads as running 
 		ok: false,
 		error: "the worker ran out of time",
 	});
+});
+
+test("a host can lift the title limit, and a bad limit stops the start", () => {
+	const base = {
+		target: "guest",
+		run: async () => "",
+		deliver: async () => {},
+		logger: silentLogger(),
+	};
+	const request = {
+		channel: "discord:channel" as const,
+		target: "guest",
+		author: { id: "speaker", name: "Guest" },
+		title: "t".repeat(500),
+		task: "Check a public source",
+	};
+	expect(() =>
+		new ScopedSandboxDelegator({ ...base, maxTitleChars: 1000 }).start(request),
+	).not.toThrow();
+	expect(() =>
+		new ScopedSandboxDelegator({
+			...base,
+			maxTitleChars: Number.POSITIVE_INFINITY,
+		}).start(request),
+	).not.toThrow();
+	for (const maxTitleChars of [0, 1.5, Number.NaN])
+		expect(
+			() => new ScopedSandboxDelegator({ ...base, maxTitleChars }),
+		).toThrow("Invalid delegation title limit");
+});
+
+test("a host can lift the report and failure-reason bounds", async () => {
+	const delivered: DelegationOutcome[] = [];
+	const make = (
+		limits: { maxReportChars?: number; diagnosticChars?: number },
+		run: () => Promise<string>,
+	) =>
+		new ScopedSandboxDelegator({
+			target: "guest",
+			run,
+			deliver: async (_job, result) => {
+				delivered.push(result);
+			},
+			logger: silentLogger(),
+			...limits,
+		});
+	const request = {
+		channel: "discord:channel" as const,
+		target: "guest",
+		author: { id: "speaker", name: "Guest" },
+		title: "Research",
+		task: "Check a public source",
+	};
+	const big = make({ maxReportChars: Number.POSITIVE_INFINITY }, async () =>
+		"r".repeat(100_000),
+	);
+	big.start(request);
+	await big.idle();
+	expect(delivered.at(-1)).toMatchObject({ ok: true });
+	const long = make({ diagnosticChars: Number.POSITIVE_INFINITY }, async () => {
+		throw new Error("e".repeat(2000));
+	});
+	long.start(request);
+	await long.idle();
+	expect((delivered.at(-1) as { error: string }).error).toHaveLength(2000);
+	expect(() => make({ maxReportChars: 0 }, async () => "")).toThrow(
+		"Invalid delegation maxReportChars",
+	);
 });

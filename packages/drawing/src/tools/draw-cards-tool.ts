@@ -34,6 +34,7 @@ export function drawCardsTool(
 	env: ImageToolEnv,
 	random: Random,
 	presentation: CardPresentation = {},
+	permissive = false,
 ) {
 	const [first, ...rest] = decks;
 	if (!first) throw new DrawingError("draw_cards needs at least one deck.");
@@ -92,7 +93,7 @@ export function drawCardsTool(
 				const positions: SpreadPosition[] =
 					args.spread ?? autoLayout(args.count);
 				// Checked before the draw, so a refused spread leaves the random source where it was.
-				checkSpread(positions, args.count);
+				checkSpread(positions, args.count, permissive);
 				const cards = drawCards({
 					deck,
 					count: args.count,
@@ -100,6 +101,7 @@ export function drawCardsTool(
 					exclude: args.exclude,
 					allowReversed: args.allow_reversed,
 					random,
+					ignoreUnknownExclusions: permissive,
 				});
 				const heading = presentation.heading?.(
 					{ deck, count: cards.length, question: args.question },
@@ -116,6 +118,7 @@ export function drawCardsTool(
 					positions,
 					heading,
 					presentation.reversedSuffix,
+					permissive,
 				);
 				const lines = cards.map((card, i) => {
 					const label = positions[i]?.label ? `${positions[i]?.label}: ` : "";

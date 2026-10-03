@@ -212,21 +212,54 @@ describe("host feature ports", () => {
 		expect(detail.body).toContain("# Skill");
 		expect((await call("skills/%2e%2e%2fsecret")).status).toBe(404);
 	});
-	test("missing/malformed/oversized skills fail with fixed bounded errors, not paths", async () => {
-		for (const read of [
-			async () => {
-				throw new Error("/private/secret.yml token");
+	test("malformed skills fail with a fixed message, not paths, unless the host opts in", async () => {
+		const read = async () => {
+			throw new Error("/private/secret.yml token");
+		};
+		const catalog = fixture().features.skills?.catalog;
+		if (!catalog) throw new Error("fixture");
+		const result = await fixture({ skills: { catalog, read } }).call(
+			"skills/example",
+		);
+		expect(result.status).toBe(422);
+		expect(JSON.stringify(result.body)).not.toContain("secret");
+	});
+	test("a skill of any size is shown, and a host that opts in sees why one cannot be read", async () => {
+		const catalog = fixture().features.skills?.catalog;
+		if (!catalog) throw new Error("fixture");
+		const big = await fixture({
+			skills: {
+				catalog,
+				read: async () => ({
+					frontmatter: {},
+					body: "x".repeat(2 * 1024 * 1024),
+				}),
 			},
-			async () => ({ frontmatter: {}, body: "x".repeat(1024 * 1024 + 1) }),
-		]) {
-			const catalog = fixture().features.skills?.catalog;
-			if (!catalog) throw new Error("fixture");
-			const result = await fixture({ skills: { catalog, read } }).call(
-				"skills/example",
-			);
-			expect([422, 413]).toContain(result.status);
-			expect(JSON.stringify(result.body)).not.toContain("secret");
-		}
+		}).call("skills/example");
+		expect(big.status).toBe(200);
+		expect((big.body as SkillDetailView).body.length).toBe(2 * 1024 * 1024);
+		const read = async () => {
+			throw new Error("bad indentation at line 3");
+		};
+		const shown = await fixture({
+			skills: { catalog, read, errorDetail: true },
+		}).call("skills/example");
+		expect(shown.status).toBe(422);
+		expect(shown.body).toEqual({
+			error:
+				"The skill frontmatter could not be read: bad indentation at line 3",
+		});
+		const missing = await fixture({
+			skills: {
+				catalog: () =>
+					catalog().map((s) => ({ ...s, missing: "no such file" })),
+				read,
+				errorDetail: true,
+			},
+		}).call("skills/example");
+		expect(missing.body).toEqual({
+			error: "The skill file is missing: no such file",
+		});
 	});
 	test("connector gateway status/tool names and carrier usage are preserved", async () => {
 		const view = (await fixture().call("connectors")).body as ConnectorsView;

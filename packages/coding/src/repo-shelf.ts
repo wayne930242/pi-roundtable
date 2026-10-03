@@ -87,25 +87,28 @@ async function run(
 	return { out: out.trimEnd(), err: err.trim(), code };
 }
 
-/** Clones with gh, which authenticates with the host's GH_TOKEN. */
-export const ghClone: CloneCommand = async (repo, dir) => {
-	checkRepoName(repo);
-	if (repo.startsWith("-"))
-		throw new AgentError("Repository owner cannot start with a dash.");
-	const { err, code } = await run([
-		"gh",
-		"repo",
-		"clone",
-		repo,
-		dir,
-		"--",
-		"--quiet",
-	]);
-	if (code !== 0)
-		throw new AgentError(
-			`Cloning ${repo} failed: ${scrubDiagnostic(err) || `exit ${code}`}`,
-		);
-};
+/** Clones with gh, which authenticates with the host's GH_TOKEN; a failure's stderr is cut at `diagnosticChars`. */
+const ghCloneWith =
+	(diagnosticChars?: number): CloneCommand =>
+	async (repo, dir) => {
+		checkRepoName(repo);
+		if (repo.startsWith("-"))
+			throw new AgentError("Repository owner cannot start with a dash.");
+		const { err, code } = await run([
+			"gh",
+			"repo",
+			"clone",
+			repo,
+			dir,
+			"--",
+			"--quiet",
+		]);
+		if (code !== 0)
+			throw new AgentError(
+				`Cloning ${repo} failed: ${scrubDiagnostic(err, diagnosticChars) || `exit ${code}`}`,
+			);
+	};
+export const ghClone: CloneCommand = ghCloneWith();
 
 const MAX_METADATA_BYTES = 65_536;
 
@@ -175,9 +178,16 @@ export class RepoShelf {
 	readonly #reports = new Map<string, ChangeReport>();
 	readonly #adding = new Set<string>();
 
-	constructor(dir: string, clone: CloneCommand = ghClone) {
+	readonly #diagnosticChars: number | undefined;
+
+	constructor(
+		dir: string,
+		clone?: CloneCommand,
+		options: { diagnosticChars?: number | undefined } = {},
+	) {
 		this.dir = resolve(dir);
-		this.#clone = clone;
+		this.#diagnosticChars = options.diagnosticChars;
+		this.#clone = clone ?? ghCloneWith(options.diagnosticChars);
 	}
 
 	/** Adopt an existing standalone clone at startup; an existing destination is never replaced. */
@@ -483,7 +493,7 @@ export class RepoShelf {
 		const { out, err, code } = await run(["git", "-C", dir, ...args]);
 		if (code !== 0)
 			throw new AgentError(
-				`git ${args[0]} failed in ${dir}: ${scrubDiagnostic(err) || `exit ${code}`}`,
+				`git ${args[0]} failed in ${dir}: ${scrubDiagnostic(err, this.#diagnosticChars) || `exit ${code}`}`,
 			);
 		return out;
 	}

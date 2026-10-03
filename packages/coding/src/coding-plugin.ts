@@ -21,9 +21,11 @@ import { Type } from "typebox";
 import {
 	CodingDesk,
 	type CodingJob,
+	type CodingLimits,
 	type CodingResult,
 	type CodingThreadText,
 	type CodingWorker,
+	checkLimit,
 	codingReport,
 	MAX_CODING_TASK_CHARS,
 } from "./coding-desk.ts";
@@ -97,6 +99,12 @@ export interface CodingOptions {
 	threadText?: CodingThreadText;
 	workerWorkspace?: string;
 	workerPrompt?: (dir: string) => string;
+	/** How much of a long run a report keeps; see `CodingLimits`. */
+	limits?: CodingLimits;
+	/** Longest git, gh and worker error text kept in a failure, in characters; default 600. */
+	diagnosticChars?: number;
+	/** Trusted wording of what the worker reads when a call is declined or held; see `PiCodingWorkerOptions.blockText`. */
+	workerBlockText?: (answer: "declined" | "held", action: string) => string;
 	/** Opt in to skipping unavailable implicit skills; explicit requests always fail closed. */
 	skipUnavailableCarriedSkills?: boolean;
 	/** Absolute installed extension package paths. Default: none. */
@@ -126,6 +134,16 @@ export function coding(options: CodingOptions) {
 	if (!options.shelfDir.trim()) throw new PluginError("shelfDir is required.");
 	if (!/^[^/\s]+\/\S+$/.test(options.model))
 		throw new PluginError("model must be provider/model-id.");
+	try {
+		checkLimit("limits.reportChars", options.limits?.reportChars);
+		checkLimit("limits.heldEntries", options.limits?.heldEntries);
+		checkLimit("limits.heldChars", options.limits?.heldChars);
+		checkLimit("diagnosticChars", options.diagnosticChars);
+	} catch (error) {
+		throw new PluginError(
+			error instanceof Error ? error.message : String(error),
+		);
+	}
 	const ownerRepos = new Set(options.ownerRepos ?? []);
 	for (const repo of ownerRepos) checkRepoName(repo);
 	const ownerOwned = (repo: string): boolean => {
@@ -136,7 +154,9 @@ export function coding(options: CodingOptions) {
 		name: "coding",
 		provides: [CODING],
 		setup(context) {
-			const shelf = new RepoShelf(options.shelfDir, options.clone);
+			const shelf = new RepoShelf(options.shelfDir, options.clone, {
+				diagnosticChars: options.diagnosticChars,
+			});
 			for (const adoption of options.adoptClones ?? [])
 				shelf.adopt(adoption.from, adoption.repo);
 			const skills = context.services.find(SKILLS);
@@ -147,6 +167,8 @@ export function coding(options: CodingOptions) {
 					agentDir: options.agentDir,
 					workspace: options.workerWorkspace,
 					prompt: options.workerPrompt,
+					blockText: options.workerBlockText,
+					diagnosticChars: options.diagnosticChars,
 					holds: (tool, input, scope) =>
 						options.holds?.(tool, input, scope) ??
 						context.sessions().holds(tool, input, scope),
@@ -155,6 +177,7 @@ export function coding(options: CodingOptions) {
 				shelf,
 				worker,
 				timeoutMs: options.timeoutMs,
+				limits: options.limits,
 				logger: context.logger,
 				threads: options.threads,
 				threadText: options.threadText,

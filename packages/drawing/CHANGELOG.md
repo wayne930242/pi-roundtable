@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.5] - 2026-10-03
+
+### Added
+
+- `permissive` accepts what a looser host sends; `mapLimits` values must be whole numbers of at least 1.
+
 ## [0.7.4] - 2026-10-03
 
 - Add `cardPresentation.result` for the card draw result text and `mapLimits` for longer relationship-map text.

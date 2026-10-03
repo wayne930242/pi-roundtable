@@ -21,6 +21,12 @@ export interface ConsoleFeatures {
 		read(
 			name: string,
 		): Promise<{ frontmatter: Record<string, unknown>; body: string }>;
+		/**
+		 * Show why a skill could not be read (the catalog's `missing` text, or the read error's
+		 * message, cut at 300 characters) after the fixed message. Off by default: the reason may
+		 * name a path.
+		 */
+		errorDetail?: boolean;
 	};
 	connectors?: {
 		gateways(): Promise<ConnectorsView["gateways"]>;

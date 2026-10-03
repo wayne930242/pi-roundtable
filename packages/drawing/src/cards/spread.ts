@@ -43,6 +43,7 @@ export function autoLayout(count: number): SpreadPosition[] {
 export function checkSpread(
 	positions: readonly SpreadPosition[],
 	count: number,
+	allowSharedCells = false,
 ): void {
 	if (positions.length !== count)
 		throw new DrawingError(
@@ -55,7 +56,7 @@ export function checkSpread(
 				`Spread positions need a row and a column that are whole numbers from 0; got row ${row}, column ${col}.`,
 			);
 		const cell = `${row}:${col}`;
-		if (cells.has(cell))
+		if (cells.has(cell) && !allowSharedCells)
 			throw new DrawingError(
 				`Two cards share row ${row}, column ${col}. Give each card its own position.`,
 			);
@@ -113,8 +114,9 @@ export async function renderSpread(
 	positions: readonly SpreadPosition[],
 	heading: { title: string; subtitle: string },
 	reversedSuffix = " (reversed)",
+	allowSharedCells = false,
 ): Promise<Uint8Array> {
-	checkSpread(positions, cards.length);
+	checkSpread(positions, cards.length, allowSharedCells);
 	ensureFont();
 	const faces = await Promise.all(
 		cards.map(async (card) => {

@@ -21,6 +21,7 @@ export function relationshipMapTool(
 	env: ImageToolEnv,
 	random: Random,
 	limits: RelationshipMapLimits = {},
+	permissive = false,
 ) {
 	const maxTitle = limits.title ?? MAX_TITLE;
 	const maxText = limits.text ?? MAX_TEXT;
@@ -63,7 +64,7 @@ export function relationshipMapTool(
 			}),
 			draw: (args) => ({
 				stem: "relationship-map",
-				image: renderRelationshipMap(args, random),
+				image: renderRelationshipMap(args, random, permissive),
 				text: "The relationship map is attached to your reply as {file}.",
 			}),
 		},

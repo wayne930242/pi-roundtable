@@ -108,7 +108,7 @@ export class ConsoleApi {
 			if (error instanceof HttpError)
 				return json(
 					{
-						error: message(this.#ports.presentation, error.message),
+						error: `${message(this.#ports.presentation, error.message)}${error.detail ?? ""}`,
 					} satisfies ApiError,
 					error.status,
 				);

@@ -121,7 +121,7 @@ Without `threads`, the resolved report channel's prompts are used.
 `timeoutMs` must be positive and finite, and at most 2,147,483,647 ms to fit the host timer.
 An approved call runs; a declined, expired, missing or failed card blocks it and instructs the worker not to retry or work around the refusal.
 Unapproved actions appear in the report rather than running later automatically.
-Worker answers are capped at 20,000 characters; the Held list keeps ten entries of at most 1,000 characters each, with explicit truncation and omission notices.
+By default worker answers are capped at 20,000 characters and the Held list keeps ten entries of at most 1,000 characters each, with explicit truncation and omission notices; `limits` changes each bound.
 Worker failures expose only a structured exit category and numeric code, never stderr or provider diagnostics.
 Card expiration is determined by the host's surface implementation, not this package.
 
@@ -172,6 +172,9 @@ The `CODING` service exposes `shelf: RepoShelf` and `desk: CodingDesk` for trust
 | `threadText` | English package text | Thread introduction, held-action notice, approval title and final report. |
 | `workerWorkspace` | individual clone | Trusted shell-policy write boundary; not an OS sandbox. |
 | `workerPrompt` | generic worker instructions | Trusted standing prompt replacement; it cannot bypass approval or cleanup. |
+| `workerBlockText` | "The owner declined / has not approved this call. Do not retry it or work around it; list it under Held in your report." | Trusted wording of what the worker reads when a call is declined or held, from `(answer, action)`; it never changes who is held, and the desk lists only unanswered calls as held. |
+| `limits` | 20,000 report characters, 10 held entries of 1,000 characters | `{ reportChars?, heldEntries?, heldChars? }`: what a report keeps of a long run; each is a whole number of at least 1, or `Infinity` for no bound. |
+| `diagnosticChars` | `600` | Longest git, gh and worker error text kept in a failure; a whole number of at least 1, or `Infinity`. |
 | `skipUnavailableCarriedSkills` | `false` | Skip and disclose unavailable implicit skills; explicit skill requests still refuse them. |
 | `workerPackages` | `[]` | Absolute installed extension paths. |
 | `agentDir` | Pi host directory | Pi credentials and model configuration. |

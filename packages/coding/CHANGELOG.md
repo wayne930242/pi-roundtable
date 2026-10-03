@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [0.7.5] - 2026-10-03
+
+- Add `workerBlockText`, `limits` and `diagnosticChars`; git, gh and worker error text and the report and held-action bounds can be raised or lifted by the host.
+
 ## [0.7.4] - 2026-10-03
 
 - Add `toolText` and `presentation.list`, accept a 7–40 character sha prefix in `repo_push`, name git and gh stderr (scrubbed) in failures, carry a worker's own error text into the report, restore the earlier timeout, stop and refusal wording, stop listing declined calls as held, and report the channels the service works for.

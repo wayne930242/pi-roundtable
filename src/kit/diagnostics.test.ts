@@ -30,3 +30,42 @@ test("keeps ordinary text, drops control characters and bounds the length", () =
 	expect(scrubDiagnostic("x".repeat(2000), 100)).toHaveLength(100);
 	expect(scrubDiagnostic("")).toBe("");
 });
+
+test("masks the other common credential shapes", () => {
+	const jwt = [
+		"eyJhbGciOiJIUzI1NiJ9",
+		"eyJzdWIiOiIxMjM0NTY3ODkwIn0",
+		"SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c",
+	].join(".");
+	const text = [
+		"GET /v1?access_token=aaa111bbb&page=2",
+		'{"refresh_token":"ccc222ddd","id":7}',
+		"password=eee333",
+		"x-api-key: fff444",
+		"Cookie: session=ggg555; theme=dark",
+		"token: hhh666",
+		"client_secret: iii777",
+		jwt,
+	].join("\n");
+	const clean = scrubDiagnostic(text);
+	for (const secret of [
+		"aaa111bbb",
+		"ccc222ddd",
+		"eee333",
+		"fff444",
+		"ggg555",
+		"hhh666",
+		"iii777",
+		"SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c",
+	])
+		expect(clean).not.toContain(secret);
+	expect(clean).toContain("page=2");
+	expect(clean).toContain('"id":7');
+});
+
+test("hostile input stays fast", () => {
+	const started = performance.now();
+	scrubDiagnostic("a.".repeat(200_000), 600);
+	scrubDiagnostic("x://".repeat(100_000), 600);
+	expect(performance.now() - started).toBeLessThan(200);
+});

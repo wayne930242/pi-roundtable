@@ -6,8 +6,9 @@ export class CodingWorkerFailure extends AgentError {
 		readonly category: "stopped" | "exit" | "missing-report",
 		readonly exitCode?: number,
 		detail?: string,
+		diagnosticChars?: number,
 	) {
-		const reason = detail ? scrubDiagnostic(detail) : "";
+		const reason = detail ? scrubDiagnostic(detail, diagnosticChars) : "";
 		let message = "the worker was stopped";
 		if (category === "exit")
 			message =

@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.5] - 2026-10-03
+
+- Show a skill of any size, and add `skills.errorDetail` to show why one cannot be read.
+
 ## [0.7.4] - 2026-10-03
 
 - Show a `channel name unavailable` detail for a channel Discord cannot name.

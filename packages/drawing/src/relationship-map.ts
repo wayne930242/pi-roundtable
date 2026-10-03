@@ -126,7 +126,7 @@ interface SimLink extends SimulationLinkDatum<SimNode> {
 
 type RoughCanvas = ReturnType<typeof rough.canvas>;
 
-function validate(input: MapInput): void {
+function validate(input: MapInput, permissive: boolean): void {
 	if (input.nodes.length === 0)
 		throw new DrawingError("nodes cannot be empty. Give at least one node.");
 	if (input.nodes.length > MAX_NODES)
@@ -139,9 +139,9 @@ function validate(input: MapInput): void {
 		);
 	const ids = new Set<string>();
 	for (const node of input.nodes) {
-		if (node.id.trim() === "")
+		if (node.id.trim() === "" && !permissive)
 			throw new DrawingError("A node has an empty id. Give every node a name.");
-		if (ids.has(node.id))
+		if (ids.has(node.id) && !permissive)
 			throw new DrawingError(
 				`Two nodes share the id ${JSON.stringify(node.id)}. Node ids must be unique.`,
 			);
@@ -153,7 +153,7 @@ function validate(input: MapInput): void {
 				throw new DrawingError(
 					`An edge references the unknown node ${JSON.stringify(end)}. Add it to nodes or fix the edge.`,
 				);
-		if (edge.from === edge.to)
+		if (edge.from === edge.to && !permissive)
 			throw new DrawingError(
 				`An edge from ${JSON.stringify(edge.from)} to itself cannot be drawn. Connect two different nodes.`,
 			);
@@ -390,8 +390,10 @@ function drawNode(
 export function renderRelationshipMap(
 	input: MapInput,
 	random: Random = Math.random,
+	/** Draw maps with repeated or empty node ids and edges from a node to itself instead of refusing them. */
+	permissive = false,
 ): Uint8Array {
-	validate(input);
+	validate(input, permissive);
 	ensureFont();
 	// The shapes grow to hold their text, so the text is measured before the layout.
 	const measure = createCanvas(1, 1).getContext("2d");

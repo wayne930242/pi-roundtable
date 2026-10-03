@@ -316,6 +316,7 @@ Its default limit is two jobs per channel, 4,000 task characters, 80,000 report 
 A refusal reads "title and task are required", "the task is N characters; keep it within 4000" or "this channel already has N delegated tasks running; wait for one to report back".
 A failed job reports its error message scrubbed of credentials and bounded with `scrubDiagnostic`, or "the worker ran out of time" after the deadline.
 Configure `maxRunning` (1–10) and `timeoutMs` (1–1,200 seconds) explicitly when preserving an application's existing limits.
+A title is limited to 200 characters; `maxTitleChars` changes that, `maxReportChars` replaces the 80,000-character report bound and `diagnosticChars` the 600-character failure reason (each a whole number of at least 1, or `Infinity`).
 `run(task, context)` receives only bound channel/author/signal, and `deliver(job, result)` posts through the application's background-report adapter.
 `runningChannels`, `idle` and `dispose` support host lifecycle handling; jobs are process-local and are cancelled on disposal.
 `SandboxResearchWorker` is an optional host subscription adapter with explicit `modelRuntime`, `agentDir`, `workDir`, `model`, `thinking`, `search`, and `extractFetched` options.

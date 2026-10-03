@@ -8,11 +8,18 @@ import { DelegationError } from "pi-roundtable";
 import { scrubDiagnostic } from "pi-roundtable/kit";
 
 const MAX_TASK_CHARS = 4_000;
+const MAX_TITLE_CHARS = 200;
 
 export interface ScopedDelegatorOptions {
 	target: string;
 	maxRunning?: number;
 	timeoutMs?: number;
+	/** Longest title, in characters; default 200. A host whose callers already send longer ones raises it. */
+	maxTitleChars?: number;
+	/** Longest research report, in characters, or `Infinity`; default 80,000. */
+	maxReportChars?: number;
+	/** Longest failure reason kept, in characters, or `Infinity`; default 600. */
+	diagnosticChars?: number;
 	run(
 		task: string,
 		context: {
@@ -44,6 +51,24 @@ export class ScopedSandboxDelegator {
 			(options.timeoutMs ?? 600_000) > 1_200_000
 		)
 			throw new Error("Invalid delegation target/budget");
+		if (
+			options.maxTitleChars !== undefined &&
+			!Number.isSafeInteger(options.maxTitleChars) &&
+			options.maxTitleChars !== Number.POSITIVE_INFINITY
+		)
+			throw new Error("Invalid delegation title limit");
+		if (options.maxTitleChars !== undefined && options.maxTitleChars < 1)
+			throw new Error("Invalid delegation title limit");
+		for (const [name, value] of [
+			["maxReportChars", options.maxReportChars],
+			["diagnosticChars", options.diagnosticChars],
+		] as const)
+			if (
+				value !== undefined &&
+				value !== Number.POSITIVE_INFINITY &&
+				(!Number.isSafeInteger(value) || value < 1)
+			)
+				throw new Error(`Invalid delegation ${name}`);
 		this.#options = options;
 	}
 	start(
@@ -59,6 +84,11 @@ export class ScopedSandboxDelegator {
 		const task = request.task.trim();
 		if (!request.title.trim() || !task)
 			throw new DelegationError("title and task are required");
+		const maxTitle = this.#options.maxTitleChars ?? MAX_TITLE_CHARS;
+		if (request.title.length > maxTitle)
+			throw new DelegationError(
+				`the title is ${request.title.length} characters; keep it within ${maxTitle}`,
+			);
 		if (task.length > MAX_TASK_CHARS)
 			throw new DelegationError(
 				`the task is ${task.length} characters; keep it within ${MAX_TASK_CHARS}`,
@@ -93,7 +123,10 @@ export class ScopedSandboxDelegator {
 					signal,
 				});
 				signal.throwIfAborted();
-				if (typeof report !== "string" || report.length > 80_000)
+				if (
+					typeof report !== "string" ||
+					report.length > (this.#options.maxReportChars ?? 80_000)
+				)
 					throw new Error("Research report too large");
 				result = { ok: true, report };
 			} catch (error) {
@@ -102,6 +135,7 @@ export class ScopedSandboxDelegator {
 					? "the worker ran out of time"
 					: scrubDiagnostic(
 							error instanceof Error ? error.message : String(error),
+							this.#options.diagnosticChars,
 						);
 				result = { ok: false, error: reason || "the task failed" };
 			}

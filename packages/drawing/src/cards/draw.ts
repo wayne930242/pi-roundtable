@@ -15,11 +15,21 @@ export interface DrawParams {
 	/** Whether cards may come up reversed; the deck's own default when absent. */
 	allowReversed?: boolean | undefined;
 	random: Random;
+	/** Ignore exclusions that are not cards of the deck, instead of refusing them. */
+	ignoreUnknownExclusions?: boolean | undefined;
 }
 
 /** Draws from the whole deck minus the exclusions; there is no persistent deck between draws. */
 export function drawCards(params: DrawParams): DrawnCard[] {
-	const { deck, count, group, exclude, allowReversed, random } = params;
+	const {
+		deck,
+		count,
+		group,
+		exclude,
+		allowReversed,
+		random,
+		ignoreUnknownExclusions,
+	} = params;
 	if (!Number.isInteger(count) || count < 1)
 		throw new DrawingError(
 			`count must be a whole number of at least 1; got ${count}.`,
@@ -35,7 +45,7 @@ export function drawCards(params: DrawParams): DrawnCard[] {
 	const known = new Set(deck.cards.map((card) => card.id));
 	const excluded = new Set(exclude ?? []);
 	for (const id of excluded)
-		if (!known.has(id))
+		if (!known.has(id) && !ignoreUnknownExclusions)
 			throw new DrawingError(
 				`exclude names ${JSON.stringify(id)}, which is not a card of deck ${deck.id}. Use the card ids the deck lists.`,
 			);

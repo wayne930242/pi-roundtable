@@ -19,6 +19,7 @@ import {
 	silentLogger,
 	testPlugin,
 } from "pi-roundtable/testing";
+import type { CodingLimits } from "./coding-desk.ts";
 import {
 	CodingDesk,
 	type CodingJob,
@@ -346,6 +347,52 @@ test("missing, declined and failed cards fail closed, and jobs reserve before aw
 		await desk.stop();
 	}
 });
+test("a host lifts the report and held-action bounds, and a bad bound stops the start", async () => {
+	const { shelf } = await fixture();
+	await shelf.add("sample/project");
+	const long = "r".repeat(30_000);
+	const run = async (limits?: CodingLimits) => {
+		const delivered = gate<CodingResult>();
+		const desk = new CodingDesk({
+			shelf,
+			logger: silentLogger(),
+			prompts: () => undefined,
+			limits,
+			deliver: async (result) => delivered.resolve(result),
+			worker: {
+				run: async (_job, _signal, review) => {
+					for (let i = 0; i < 12; i++)
+						await review({ tool: "bash", input: "{}", action: `act ${i}` });
+					return long;
+				},
+			},
+		});
+		await desk.start(request());
+		const result = await delivered.promise;
+		await desk.idle();
+		return result;
+	};
+	const bounded = await run();
+	expect(bounded.held).toHaveLength(11);
+	expect(bounded.held.at(-1)).toBe("[2 more unapproved actions omitted]");
+	expect(bounded.outcome.ok && bounded.outcome.report.length).toBeLessThan(
+		long.length,
+	);
+	const open = await run({
+		reportChars: Number.POSITIVE_INFINITY,
+		heldEntries: Number.POSITIVE_INFINITY,
+	});
+	expect(open.held).toHaveLength(12);
+	expect(open.outcome.ok && open.outcome.report).toBe(long);
+	for (const limits of [
+		{ reportChars: 0 },
+		{ heldEntries: 1.5 },
+		{ heldChars: Number.NaN },
+	])
+		expect(() =>
+			coding({ shelfDir: shelf.dir, model: "faux/worker", limits }),
+		).toThrow("whole number of at least 1");
+});
 test("plugin task uses supplied worker, validates bad repo names, and delivers an English report", async () => {
 	const { shelf } = await fixture();
 	await shelf.add("sample/project");
@@ -416,6 +463,37 @@ test("real out-of-process Pi worker requests host approval and cannot execute a 
 		expect(pid).not.toBe(process.pid);
 		expect(() => process.kill(pid, 0)).toThrow();
 		if (answer !== "approved") expect(report).toContain("Do not retry");
+	}
+});
+
+test("a host words what the worker reads when a call is declined or held", async () => {
+	const { shelf, dir } = await fixture();
+	const repoDir = await shelf.add("sample/project");
+	const agentDir = join(dir, "login");
+	mkdirSync(agentDir);
+	const extension = fileURLToPath(
+		new URL("./testing/faux-provider.ts", import.meta.url),
+	);
+	for (const answer of ["declined", "held"] as const) {
+		const worker = new PiCodingWorker({
+			agentDir,
+			packages: [extension],
+			blockText: (kind, action) =>
+				`Host wording for ${kind}: it would ${action}.`,
+		});
+		const report = await worker.run(
+			{
+				...request(),
+				id: 1,
+				startedAt: new Date(),
+				startHead: "",
+				dir: repoDir,
+			},
+			AbortSignal.timeout(10_000),
+			async () => answer,
+		);
+		expect(report).toContain(`Host wording for ${answer}: it would write`);
+		expect(report).not.toContain("Do not retry");
 	}
 });
 

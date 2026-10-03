@@ -56,6 +56,13 @@ export interface DrawingOptions {
 	cardPresentation?: CardPresentation;
 	/** Longer map text than the defaults, for a host whose callers already draw longer labels. */
 	mapLimits?: RelationshipMapLimits;
+	/**
+	 * Accept what a looser host's callers already send: a card exclusion that is not a card of the
+	 * deck is ignored, spread positions may share a cell, and a relationship map may repeat or leave
+	 * empty a node id and may draw an edge from a node to itself. Off by default, where each is
+	 * refused with a message the model can correct.
+	 */
+	permissive?: boolean;
 }
 
 function readDecks(deckDir: string): Deck[] {
@@ -77,6 +84,11 @@ export function drawing(options: DrawingOptions = {}) {
 	return definePlugin({
 		name: "drawing",
 		setup: () => {
+			for (const [name, limit] of Object.entries(options.mapLimits ?? {}))
+				if (!Number.isSafeInteger(limit) || limit < 1)
+					throw new PluginError(
+						`plugin drawing: mapLimits.${name} must be a whole number of at least 1; got ${limit}.`,
+					);
 			// Read at setup, so a wrong deck directory stops the start with a message that names this plugin.
 			const decks = options.deckDir ? readDecks(options.deckDir) : [];
 			const env: ImageToolEnv = {
@@ -84,12 +96,25 @@ export function drawing(options: DrawingOptions = {}) {
 			};
 			return {
 				tools: [
-					relationshipMapTool(env, random, options.mapLimits),
+					relationshipMapTool(
+						env,
+						random,
+						options.mapLimits,
+						options.permissive,
+					),
 					magicCircleTool(env),
 					sigilTool(env),
 					sacredGeometryTool(env),
 					...(decks.length > 0
-						? [drawCardsTool(decks, env, random, options.cardPresentation)]
+						? [
+								drawCardsTool(
+									decks,
+									env,
+									random,
+									options.cardPresentation,
+									options.permissive,
+								),
+							]
 						: []),
 				],
 			};

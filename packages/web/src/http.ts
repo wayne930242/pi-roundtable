@@ -3,6 +3,8 @@ export class ConsoleHttpError extends Error {
 	constructor(
 		readonly status: number,
 		message: string,
+		/** A reason a host opted into showing; appended after the translated message. */
+		readonly detail?: string,
 	) {
 		super(message);
 	}

@@ -5,6 +5,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.5] - 2026-10-03
+
+### Added
+
+- Coding: `workerBlockText` (what the worker reads for a declined or held call), `limits` (`reportChars`, `heldEntries`, `heldChars`) and `diagnosticChars`.
+- Drawing: `permissive` accepts what a looser host's callers send (unknown card exclusions, shared spread cells, repeated or empty node ids, self-edges), and `mapLimits` values are checked.
+- Sandbox: `ScopedSandboxDelegator` accepts `maxTitleChars`, `maxReportChars` and `diagnosticChars`.
+- Web: `skills.errorDetail` shows why a skill could not be read.
+
+### Changed
+
+- `scrubDiagnostic` also masks token, secret, password and API-key assignments in any case (query strings and JSON fields included), Cookie and API-key headers and JWTs, and works on a bounded prefix so hostile input stays fast.
+- Sandbox: `ScopedSandboxDelegator` limits a title to 200 characters again by default.
+- Web: the skill detail no longer refuses a body over 1 MiB or frontmatter over 64 KiB.
+
 ## [0.7.4] - 2026-10-03
 
 ### Added

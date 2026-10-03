@@ -31,7 +31,10 @@ export function codingWorkerPrompt(dir: string): string {
 		"Report changes and reasons, commits, checks and outcomes, held actions, and remaining work.",
 	].join("\n\n");
 }
-const answers = new Map<number, (answer: HeldCallAnswer) => void>();
+const answers = new Map<
+	number,
+	(answer: HeldCallAnswer, reason?: string) => void
+>();
 let nextId = 1;
 let started = false;
 async function run({
@@ -76,8 +79,11 @@ async function run({
 				factory: (pi) => {
 					pi.on("tool_call", async (event) => {
 						const id = nextId++;
-						const answer = await new Promise<HeldCallAnswer>((resolve) => {
-							answers.set(id, resolve);
+						const { answer, reason } = await new Promise<{
+							answer: HeldCallAnswer;
+							reason?: string | undefined;
+						}>((resolve) => {
+							answers.set(id, (answer, reason) => resolve({ answer, reason }));
 							process.send?.({
 								type: "call",
 								id,
@@ -88,7 +94,9 @@ async function run({
 						if (answer !== "approved")
 							return {
 								block: true,
-								reason: `The owner ${answer === "declined" ? "declined" : "has not approved"} this call. Do not retry it or work around it; list it under Held in your report.`,
+								reason:
+									reason ??
+									`The owner ${answer === "declined" ? "declined" : "has not approved"} this call. Do not retry it or work around it; list it under Held in your report.`,
 							};
 						return undefined;
 					});
@@ -128,7 +136,12 @@ if (process.send) {
 				message.answer === "declined" ||
 				message.answer === "held")
 		) {
-			answers.get(message.id)?.(message.answer);
+			answers.get(message.id)?.(
+				message.answer,
+				"reason" in message && typeof message.reason === "string"
+					? message.reason
+					: undefined,
+			);
 			answers.delete(message.id);
 		} else if (message.type === "start" && !started) {
 			started = true;

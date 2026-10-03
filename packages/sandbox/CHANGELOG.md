@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.5
+
+- `ScopedSandboxDelegator` limits a title to 200 characters by default again, and accepts `maxTitleChars`, `maxReportChars` and `diagnosticChars`.
+
 ## 0.7.4
 
 - Let `SandboxResearchWorker` run the host's own web tools (`tools`, `scope`, `aborted`), and make `ScopedSandboxDelegator` refuse and fail with readable reasons (scrubbed) instead of generic text, with no title limit.

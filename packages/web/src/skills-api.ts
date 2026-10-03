@@ -25,14 +25,13 @@ export async function skillDetail(
 ): Promise<SkillDetailView> {
 	const entry = skills.catalog().find((s) => s.name === name);
 	if (!entry) throw new HttpError(404, "There is no such skill.");
-	if (entry.missing) throw new HttpError(404, "The skill file is missing.");
+	if (entry.missing)
+		throw skills.errorDetail
+			? new HttpError(404, "The skill file is missing: ", entry.missing)
+			: new HttpError(404, "The skill file is missing.");
 	try {
+		// The host's `read` enforces any size limit; the console shows what it returns.
 		const parsed = await skills.read(name);
-		if (
-			Buffer.byteLength(parsed.body) > 1024 * 1024 ||
-			Buffer.byteLength(JSON.stringify(parsed.frontmatter)) > 64 * 1024
-		)
-			throw new HttpError(413, "The skill file is too large.");
 		return {
 			name,
 			body: parsed.body,
@@ -40,7 +39,16 @@ export async function skillDetail(
 		};
 	} catch (error) {
 		if (error instanceof HttpError) throw error;
-		throw new HttpError(422, "The skill frontmatter could not be read.");
+		throw skills.errorDetail
+			? new HttpError(
+					422,
+					"The skill frontmatter could not be read: ",
+					(error instanceof Error ? error.message : String(error)).slice(
+						0,
+						300,
+					),
+				)
+			: new HttpError(422, "The skill frontmatter could not be read.");
 	}
 }
 

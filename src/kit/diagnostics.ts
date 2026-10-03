@@ -10,10 +10,16 @@ const CREDENTIALS: [RegExp, string][] = [
 		/\b(gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|glpat-[A-Za-z0-9_-]{16,}|sk-[A-Za-z0-9_-]{16,}|xox[abprs]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{30,})\b/g,
 		"[redacted]",
 	],
+	// Assignments, query parameters and JSON fields whose name says it is a secret, in any case.
 	[
-		/\b([A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|PASSWD|API_?KEY|CREDENTIAL)[A-Z0-9_]*)\s*=\s*\S+/g,
-		"$1=[redacted]",
+		/\b([a-z0-9_-]*(?:token|secret|password|passwd|api[_-]?key|credential)[a-z0-9_-]*)(["']?\s*[:=]\s*["']?)[^\s"',&;]+/gi,
+		"$1$2[redacted]",
 	],
+	[
+		/\b(cookie|set-cookie|x-api-key|x-auth-token|x-access-token)\s*:\s*[^\r\n]+/gi,
+		"$1: [redacted]",
+	],
+	[/\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]*/g, "[redacted]"],
 	[
 		/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)/g,
 		"[redacted]",
@@ -25,7 +31,8 @@ const CREDENTIALS: [RegExp, string][] = [
  * masked, control characters are removed, and the length is bounded. Empty input returns "".
  */
 export function scrubDiagnostic(text: string, max = 600): string {
-	let clean = text;
+	// The patterns run on a bounded prefix, so hostile input cannot make them slow.
+	let clean = text.slice(0, Math.max(max * 4, 4096));
 	for (const [pattern, replacement] of CREDENTIALS)
 		clean = clean.replace(pattern, replacement);
 	clean = Array.from(clean, (char) => {

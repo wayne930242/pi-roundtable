@@ -97,3 +97,64 @@ test("a host words the card result and lifts the map text limits", async () => {
 		rmSync(deckDir, { recursive: true, force: true });
 	}
 });
+
+test("a permissive host takes what a looser caller sent, and the default refuses each", async () => {
+	const deckDir = writeTestDecks();
+	const make = (permissive: boolean) =>
+		testPlugin(drawing({ deckDir, random: seededRandom(3), permissive }), {
+			surfaces: [new RecordingSurface()],
+		});
+	const strict = await make(false);
+	const lenient = await make(true);
+	const draw = {
+		deck: "test-poker",
+		count: 2,
+		exclude: ["not-a-card"],
+		spread: [
+			{ row: 0, col: 0, label: "A" },
+			{ row: 0, col: 0, label: "B" },
+		],
+	};
+	const map = {
+		nodes: [
+			{ id: "a", type: "pc" },
+			{ id: "a", type: "npc" },
+			{ id: " ", type: "faction" },
+		],
+		edges: [{ from: "a", to: "a", type: "bond" }],
+	};
+	try {
+		expect(
+			await strict.runTool("draw_cards", draw, { channel: "test:1" }),
+		).toContain("Two cards share");
+		expect(
+			await strict.runTool(
+				"draw_cards",
+				{ deck: "test-poker", count: 1, exclude: ["not-a-card"] },
+				{ channel: "test:1" },
+			),
+		).toContain("exclude names");
+		expect(
+			await strict.runTool("relationship_map", map, { channel: "test:1" }),
+		).toContain("share the id");
+		expect(
+			await lenient.runTool("draw_cards", draw, { channel: "test:1" }),
+		).toContain("Drew 2");
+		expect(
+			await lenient.runTool("relationship_map", map, { channel: "test:1" }),
+		).toContain("attached");
+	} finally {
+		await strict.stop();
+		await lenient.stop();
+		rmSync(deckDir, { recursive: true, force: true });
+	}
+});
+
+test("map limits that are not whole numbers of at least 1 stop the start", async () => {
+	for (const text of [0, 1.5, Number.POSITIVE_INFINITY, Number.NaN])
+		await expect(
+			testPlugin(drawing({ mapLimits: { text } }), {
+				surfaces: [new RecordingSurface()],
+			}),
+		).rejects.toThrow("mapLimits.text");
+});
