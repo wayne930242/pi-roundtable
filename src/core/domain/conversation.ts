@@ -1,5 +1,6 @@
 import type { InboundMessage } from "../contract/channels.ts";
 import type { ChannelKey } from "../sessions.ts";
+import type { Tier } from "../speakers.ts";
 
 export { QUEUED_MARK, STEERED_MARK } from "../contract/channels.ts";
 export type { ChannelKey, InboundMessage };
@@ -16,6 +17,8 @@ export interface HeldCall {
 	input: string;
 	/** What the call would do, in plain words. */
 	action: string;
+	/** The lowest tier that may approve it, when higher than its tool's own; see `HoldRule.approvalTier`. */
+	minTier?: Tier;
 }
 
 export interface PendingConfirmation {

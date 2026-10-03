@@ -1,6 +1,4 @@
-import { parse } from "@babel/parser";
 import type { ChannelKey } from "../../domain/conversation.ts";
-import { ScheduleError } from "../../domain/errors.ts";
 import { PluginError } from "../../errors.ts";
 import type { Tier } from "../../speakers.ts";
 import type { Schedule } from "./schedule-store.ts";
@@ -8,8 +6,10 @@ import type { Schedule } from "./schedule-store.ts";
 /** How long a precheck may run before it counts as failed, unless it sets its own `timeoutMs`. */
 export const PRECHECK_TIMEOUT_MS = 60_000;
 
-/** The longest precheck script a schedule may carry, in characters. */
-export const PRECHECK_SCRIPT_CHARS = 8_000;
+export {
+	checkPrecheckScript,
+	PRECHECK_SCRIPT_CHARS,
+} from "./precheck-tools.ts";
 
 /** What a finding names a schedule's own script by, in its heading and status. */
 export const SCRIPT_PRECHECK = "script";
@@ -69,6 +69,8 @@ export interface PrecheckScope {
 
 /** What a schedule's precheck script runs with when its schedule falls due. */
 export interface PrecheckScriptContext extends PrecheckContext {
+	/** The MCP tools the script may call, as approved when it was saved; the runner must refuse every other call. */
+	tools: readonly { server: string; tool: string }[];
 	/** The host's IANA time zone, such as `Asia/Taipei`. */
 	timeZone: string;
 	/** The date in that zone when it fired, `YYYY-MM-DD`, so a script never reads a UTC date by mistake. */
@@ -88,6 +90,12 @@ export interface PrecheckScriptRunner {
 	): PrecheckResult | Promise<PrecheckResult>;
 	/** How long a script may run; default 60 seconds. A timeout counts as a throw. */
 	timeoutMs?: number;
+	/**
+	 * The name the host's hold rules know a script's `mcp.call(server, tool)` by: the name its own
+	 * agent calls that tool by. A script that calls a tool its rules hold needs the owner's approval
+	 * to be saved.
+	 */
+	toolName(server: string, tool: string): string;
 	/**
 	 * How to write a script for a schedule in this scope, and what it may call there, shown to the
 	 * model by schedule_list.
@@ -134,10 +142,11 @@ export function memoryPrecheckRegistry(): PrecheckRegistry {
 				);
 			if (
 				typeof given?.run !== "function" ||
-				typeof given.describe !== "function"
+				typeof given.describe !== "function" ||
+				typeof given.toolName !== "function"
 			)
 				throw new PluginError(
-					"a precheck script runner needs run and describe functions.",
+					"a precheck script runner needs run, describe, and toolName functions.",
 				);
 			if (
 				given.timeoutMs !== undefined &&
@@ -178,47 +187,6 @@ export function memoryPrecheckRegistry(): PrecheckRegistry {
 		list: () =>
 			[...prechecks.values()].sort((a, b) => a.name.localeCompare(b.name)),
 	};
-}
-
-/**
- * Checks a precheck script without running it: a JavaScript module within the size limit whose
- * default export is what the runner calls. Throws ScheduleError with what to fix.
- */
-export function checkPrecheckScript(script: unknown): string {
-	if (typeof script !== "string" || !script.trim())
-		throw new ScheduleError(
-			"precheck_script must be a JavaScript module with a default export",
-		);
-	if (script.length > PRECHECK_SCRIPT_CHARS)
-		throw new ScheduleError(
-			`precheck_script is ${script.length} characters; keep it within ${PRECHECK_SCRIPT_CHARS}`,
-		);
-	let program: ReturnType<typeof parse>["program"];
-	try {
-		program = parse(script, {
-			sourceType: "module",
-			errorRecovery: false,
-		}).program;
-	} catch (error) {
-		throw new ScheduleError(
-			`precheck_script does not parse as a JavaScript module: ${errorText(error)}`,
-		);
-	}
-	const exportsDefault = program.body.some(
-		(node) =>
-			node.type === "ExportDefaultDeclaration" ||
-			(node.type === "ExportNamedDeclaration" &&
-				node.specifiers.some((specifier) =>
-					specifier.exported.type === "Identifier"
-						? specifier.exported.name === "default"
-						: specifier.exported.value === "default",
-				)),
-	);
-	if (!exportsDefault)
-		throw new ScheduleError(
-			"precheck_script needs a default export: export default async (context) => ({ wake: false, note }) or ({ wake: true, context })",
-		);
-	return script;
 }
 
 function errorText(error: unknown): string {

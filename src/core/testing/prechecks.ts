@@ -69,6 +69,8 @@ export function fakeScriptRunner(
 	answer: FakeScriptAnswer,
 	options: {
 		describe?: (scope: PrecheckScope) => string;
+		/** The name hold rules know a script's call by; default `${server}-${tool}`. */
+		toolName?: (server: string, tool: string) => string;
 		timeoutMs?: number;
 	} = {},
 ): FakeScriptRunner {
@@ -79,6 +81,7 @@ export function fakeScriptRunner(
 			? {}
 			: { timeoutMs: options.timeoutMs }),
 		describe: options.describe ?? (() => "A test script runner."),
+		toolName: options.toolName ?? ((server, tool) => `${server}-${tool}`),
 		run: async (script, context) => {
 			calls.push({ script, context });
 			if (answer instanceof Error) throw answer;

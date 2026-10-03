@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.13
+
+- `precheckScriptRunner` forwards only the tools approved with the script (pi-roundtable 0.7.13's `PrecheckScriptContext.tools`) among those `grant` allows, and takes `toolName(server, tool)`, the name the host's hold rules know a tool by (default the tool's own name).
+
 ## 0.7.12
 
 - A host compactor gets at most half the time the turn has left (the runtime passes the broker its `deadline`, `PiHostContext.deadline`), so Pi's own summary still fits after it runs out; with under two seconds left the broker falls back to Pi's summary at once.

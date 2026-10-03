@@ -215,6 +215,7 @@ test.skipIf(
 				firedAt: new Date("2026-10-04T01:30:00Z"),
 				timeZone: "Asia/Taipei",
 				today: "2026-10-04",
+				tools: [{ server: "health", tool: "get-hrv" }],
 				signal: AbortSignal.timeout(60_000),
 			});
 			expect(result).toEqual({ wake: true, context: "blocked 2026-10-04 22" });

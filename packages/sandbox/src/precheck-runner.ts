@@ -51,6 +51,12 @@ export interface PrecheckScriptRunnerOptions {
 	grant(
 		scope: PrecheckScope,
 	): readonly PrecheckMcpServer[] | Promise<readonly PrecheckMcpServer[]>;
+	/**
+	 * The name the host's hold rules know `mcp.call(server, tool)` by, which is the name its own
+	 * agent calls that tool by; default `tool` itself. A script calling a tool the rules hold needs
+	 * the owner's approval to be saved.
+	 */
+	toolName?: (server: string, tool: string) => string;
 	/** The container's command; default the package's worker in the Pi image's layout. */
 	entrypoint?: readonly string[];
 	/** How long a script may run; default 60 seconds. */
@@ -286,6 +292,7 @@ function guide(servers: readonly PrecheckMcpServer[]): string {
 		"`result` is `{ wake: false, note? }` to skip the turn (the note, if any, is posted in small text) or `{ wake: true, context }` to wake you with `context`. Anything else, a throw, or running too long wakes you with the error.",
 		"`today` is the date in the host's time zone (YYYY-MM-DD); pass it to tools instead of computing dates in UTC. `firedAt` is a Date and `timeZone` an IANA zone.",
 		"Await each call before making the next; calls do not run in parallel. console output is discarded; only the returned result counts.",
+		'Write each call as mcp.call("server", "tool", args) or mcp.json(...), with server and tool as strings: the host reads them when the script is saved, and each run may call only those. A script that calls a tool needing the owner\'s approval waits for it when saved, once.',
 		"`await mcp.call(server, tool, args)` returns the MCP tool result; `await mcp.json(server, tool, args)` returns its structured content, or its first text content parsed as JSON. A tool error throws.",
 		"The script runs in a container with no network, no files of the host, and no credentials; it reaches only the tools below.",
 		reach,
@@ -315,6 +322,7 @@ export function precheckScriptRunner(
 			? {}
 			: { timeoutMs: options.timeoutMs }),
 		describe: async (scope) => guide(await grant(scope)),
+		toolName: options.toolName ?? ((_server, tool) => tool),
 		run: async (script, context) => runOne(script, context),
 	};
 
@@ -323,10 +331,21 @@ export function precheckScriptRunner(
 		context: PrecheckScriptContext,
 	): Promise<PrecheckResult> {
 		const { schedule, signal } = context;
-		const servers = await grant({
-			channel: schedule.channel,
-			target: schedule.target,
-			tier: schedule.createdTier,
+		// Only what the grant allows and the owner approved with the script: the broker refuses the rest.
+		const approved = new Set(
+			context.tools.map(({ server, tool }) => `${server}\u0000${tool}`),
+		);
+		const servers = (
+			await grant({
+				channel: schedule.channel,
+				target: schedule.target,
+				tier: schedule.createdTier,
+			})
+		).flatMap((server) => {
+			const tools = server.tools.filter((tool) =>
+				approved.has(`${server.name}\u0000${tool}`),
+			);
+			return tools.length > 0 ? [{ ...server, tools }] : [];
 		});
 		const dirs: string[] = [];
 		let listener: Awaited<ReturnType<typeof listenBroker>> | undefined;

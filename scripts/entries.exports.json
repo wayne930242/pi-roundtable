@@ -125,6 +125,7 @@
 			"PrecheckScope",
 			"PrecheckScriptContext",
 			"PrecheckScriptRunner",
+			"PrecheckTool",
 			"PromptMemory",
 			"PromptSection",
 			"PromptTurn",

@@ -4,7 +4,7 @@ import type {
 	PendingConfirmation,
 } from "../../domain/conversation.ts";
 import type { OwnerPrompts } from "../../domain/owner-prompts.ts";
-import type { HoldCheck } from "../../holds.ts";
+import { type HoldCheck, higherTier } from "../../holds.ts";
 import { messages } from "../../i18n/index.ts";
 import { type OwnerIdentity, ownerWords } from "../../identity.ts";
 import type { ToolTiers } from "../../tool-tiers.ts";
@@ -141,7 +141,7 @@ export class ConfirmationGate {
 			messages().confirmTitle(ask.asker),
 			approvalCard(call),
 			ask.signal,
-			this.#tiers?.minTier(call.tool),
+			higherTier(this.#tiers?.minTier(call.tool), call.minTier),
 		);
 		if (answer === "approved") return { approvedOnCard: true };
 		if (answer === "declined") {
@@ -156,13 +156,17 @@ export class ConfirmationGate {
 
 	/** The call when it needs the owner's confirmation and no approval releases it. */
 	#needing(tool: string, input: Record<string, unknown>): HeldCall | undefined {
-		const action = this.#holds(
-			tool,
-			input,
-			this.#workspace === undefined ? {} : { workspace: this.#workspace },
-		);
+		const context =
+			this.#workspace === undefined ? {} : { workspace: this.#workspace };
+		const action = this.#holds(tool, input, context);
 		if (!action) return undefined;
-		const call: HeldCall = { tool, input: canonicalJson(input), action };
+		const minTier = this.#holds.approvalTier?.(tool, input, context);
+		const call: HeldCall = {
+			tool,
+			input: canonicalJson(input),
+			action,
+			...(minTier ? { minTier } : {}),
+		};
 		const approved = this.#approved.findIndex(
 			(c) => c.tool === call.tool && c.input === call.input,
 		);

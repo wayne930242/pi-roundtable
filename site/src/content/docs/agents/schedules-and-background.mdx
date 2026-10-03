@@ -71,6 +71,7 @@ Attaching a precheck follows the same tier rules as changing the schedule.
 When the host runs pi-roundtable-sandbox's precheck runner, an agent can also write a schedule's precheck itself with `precheck_script`: a short JavaScript module that reads what it needs through the MCP tools the host grants for that schedule and returns whether to wake.
 It runs in a sealed container with no network and no host files, never in the bot's own process.
 `schedule_list` explains how to write one and what it may call; without the runner, the tools do not offer scripts.
+A script's tool calls follow the same holds as the agent's own: saving a script that calls a held tool, such as sending mail, waits for the owner's approval once, and each run may call only the tools saved with it.
 See [Services and addons](/plugins/services-and-addons/#prechecks) for registering one.
 
 ### Time zone

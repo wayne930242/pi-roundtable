@@ -320,4 +320,24 @@ describe("approvals", () => {
 		await reply(team, "admin");
 		expect(turns[0]?.confirmed).toBe(true);
 	});
+
+	test("a held call that needs a higher tier than its tool's, such as saving a script that sends mail, waits for that tier", async () => {
+		const held: PendingConfirmation = {
+			...shell,
+			calls: [
+				{
+					tool: "agent_create",
+					input: "{}",
+					action: "save a script that sends mail",
+					minTier: "owner",
+				},
+			],
+		};
+		const admin = setup(answer, undefined, true, held);
+		await reply(admin.team, "admin");
+		expect(admin.judged).toEqual([]);
+		const owner = setup(answer, undefined, true, held);
+		await reply(owner.team, "owner");
+		expect(owner.turns[0]?.confirmed).toBe(true);
+	});
 });

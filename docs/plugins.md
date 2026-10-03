@@ -501,6 +501,10 @@ export const cleanup = definePlugin({
 ```
 <!-- /example -->
 
+A rule whose verdict depends on the input, such as one that holds only a `delete` action, can also answer `mayHold(tool)`: whether it may hold some call of that tool.
+It is asked when the input is not known yet, as for a [precheck script](#precheck-scripts-prechecks-the-agent-writes)'s call whose arguments are computed when it runs; a rule without it is judged by `describe` with an empty input.
+A rule whose held call stands for others can answer `approvalTier(tool, input, context)`: the lowest tier that may approve it when higher than the tool's own. The held call keeps it as `minTier`, and both its card and a confirming message require it.
+
 ### `prompt`: text added to every agent turn
 
 Each section's `build` gets the agent, the speaker (undefined between turns), and the turn's scope.
@@ -811,6 +815,13 @@ pi-roundtable-sandbox's `precheckScriptRunner` runs each script in a sealed cont
 - `describe({ channel, target, tier })` (a `PrecheckScope`) tells the model how to write one and what it may call there; `schedule_list` shows it, waiting at most 10 seconds. `tier` is the asker's there and the script's creator's when it runs, so a runner may grant lower tiers less.
 - When the host stops, the scheduler aborts running scripts and waits up to 15 seconds for the runner to clean up; a precheck that ends then starts no turn.
 - Without a runner, the tools neither take nor mention `precheck_script`, a script is refused with the registered names, and a schedule that already has one wakes with `### Precheck failed: script`, never a silent skip.
+
+A script's MCP calls follow the hold rules as the agent's own calls do.
+When a script is saved, the core reads its `mcp.call(server, tool, args)` and `mcp.json(...)` calls; server and tool must be written as strings, and `mcp` may be used for nothing else.
+The runner's `toolName(server, tool)` gives the name the hold rules know each tool by, and each call is judged by its arguments when they are written out, or otherwise by `describe` with an empty input and the rules' `mayHold`.
+If any call is held, saving the script is itself a held action, approved or refused through the confirmation gate like any other, so it is approved once, by someone who may approve each of those calls, and the scheduled runs do not ask again.
+The schedule keeps the tools it may call as `precheckTools` (`PrecheckTool`, its held ones marked), the runner gets them as the context's `tools` and must refuse every other call, and `schedule_list` shows them.
+A script saved before 0.7.13 has no recorded tools: its first run reads them, runs it if none is held, and otherwise wakes the agent to save it again for approval.
 
 
 ### `migrations` and `context.database()`: tables of your own
@@ -2524,6 +2535,7 @@ Import from the entries listed below; source area files are internal.
 | `PrecheckScope` | `pi-roundtable` | type |
 | `PrecheckScriptContext` | `pi-roundtable` | type |
 | `PrecheckScriptRunner` | `pi-roundtable` | type |
+| `PrecheckTool` | `pi-roundtable` | type |
 | `PRECHECK_SCRIPT_CHARS` | `pi-roundtable` | value |
 | `SKILLS` | `pi-roundtable` | value |
 | `Schedule` | `pi-roundtable` | type |

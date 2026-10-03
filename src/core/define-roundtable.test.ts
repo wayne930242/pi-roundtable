@@ -167,6 +167,7 @@ describe("defineRoundtable", () => {
 			"schedules",
 			"schedules-precheck",
 			"schedules-precheck-script",
+			"schedules-precheck-tools",
 			"skills",
 			"skills-guild",
 			"held-actions",

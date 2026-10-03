@@ -357,7 +357,9 @@ describeDb("precheck scripts over PostgreSQL", () => {
 		);
 		const schedule = await scripted(prechecks);
 		const listed = await callScheduleTool(ctx(prechecks), "schedule_list", {});
-		expect(listed).toContain(`precheck script (${SCRIPT.length} characters)`);
+		expect(listed).toContain(
+			`precheck script (${SCRIPT.length} characters; tools: health/garmin-get-hrv)`,
+		);
 		expect(listed).toContain("You can write a precheck of your own instead");
 		expect(listed).toContain(
 			"Scripts here may call health: garmin-get-hrv (discord:health, open).",
@@ -437,7 +439,14 @@ describeDb("precheck scripts over PostgreSQL", () => {
 				precheckScript: SCRIPT,
 			}),
 		).rejects.toThrow("not both");
-		const created = await store.create({ ...base, precheckScript: SCRIPT });
+		await expect(
+			store.create({ ...base, precheckScript: SCRIPT }),
+		).rejects.toThrow("saved with the tools it may call");
+		const created = await store.create({
+			...base,
+			precheckScript: SCRIPT,
+			precheckTools: [{ server: "health", tool: "garmin-get-hrv" }],
+		});
 		const named = await store.update("discord:health", created.id, {
 			precheck: "health.recovery",
 		});
@@ -447,6 +456,7 @@ describeDb("precheck scripts over PostgreSQL", () => {
 		]);
 		const scripted = await store.update("discord:health", created.id, {
 			precheckScript: SCRIPT,
+			precheckTools: [{ server: "health", tool: "garmin-get-hrv" }],
 		});
 		expect([scripted?.precheck, scripted?.precheckScript]).toEqual([
 			undefined,

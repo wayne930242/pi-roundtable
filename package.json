@@ -1,6 +1,6 @@
 {
 	"name": "pi-roundtable",
-	"version": "0.7.12",
+	"version": "0.7.13",
 	"description": "A plugin-driven Pi agent server for Discord",
 	"type": "module",
 	"license": "MIT",
@@ -56,6 +56,7 @@
 	},
 	"dependencies": {
 		"@babel/parser": "7.29.9",
+		"@babel/types": "7.29.8",
 		"@earendil-works/pi-ai": ">=0.99.2 <2",
 		"@earendil-works/pi-coding-agent": ">=0.99.2 <2",
 		"canvas": "3.2.3",

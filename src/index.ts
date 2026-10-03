@@ -126,6 +126,7 @@ export type {
 	PromptMemory,
 } from "./core/modules/memory/owner-memory-store.ts";
 export { MEMORY_KINDS } from "./core/modules/memory/owner-memory-store.ts";
+export type { PrecheckTool } from "./core/modules/schedules/precheck-tools.ts";
 export type {
 	Precheck,
 	PrecheckContext,

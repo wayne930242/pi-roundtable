@@ -1,7 +1,9 @@
 import type { ScheduledOutcome } from "../../contract/channels.ts";
+import type { HoldCheck } from "../../holds.ts";
 import type { Logger } from "../../log.ts";
 import type { ScheduleStore } from "../../services.ts";
 import { timeZone, zonedStamp } from "../../time.ts";
+import { type PrecheckTool, precheckScriptTools } from "./precheck-tools.ts";
 import {
 	type Precheck,
 	type PrecheckFinding,
@@ -36,6 +38,11 @@ export interface SchedulerOptions {
 	/** The host's prechecks and script runner; without them, a schedule that has one runs with that as its error. */
 	prechecks?: Pick<PrecheckRegistry, "get"> &
 		Partial<Pick<PrecheckRegistry, "scriptRunner">>;
+	/**
+	 * The host's hold rules, read when a script saved before its tools were recorded runs: it runs
+	 * only if it calls no held tool. Without them, such a script does not run.
+	 */
+	holds?: () => HoldCheck;
 	/** Posts a skipping precheck's note in the schedule's channel as the bot's own message, which starts no turn. */
 	notify?: (schedule: Schedule, note: string) => Promise<void>;
 	logger: Logger;
@@ -214,6 +221,8 @@ export class Scheduler {
 		const runner = prechecks?.scriptRunner?.();
 		if (!runner)
 			return "this host has no precheck script runner, so the script did not run";
+		const tools = this.#tools(schedule, script, runner.toolName.bind(runner));
+		if (typeof tools === "string") return tools;
 		const zone = timeZone();
 		return {
 			name: SCRIPT_PRECHECK,
@@ -226,8 +235,38 @@ export class Scheduler {
 					...context,
 					timeZone: zone,
 					today: zonedStamp(firedAt).slice(0, 10),
+					tools: tools.map(({ server, tool }) => ({ server, tool })),
 				}),
 		};
+	}
+
+	/**
+	 * The tools a script may call: those approved when it was saved, or, for a script saved before
+	 * they were recorded, those it calls when none of them is held. Otherwise why it cannot run.
+	 */
+	#tools(
+		schedule: Schedule,
+		script: string,
+		toolName: (server: string, tool: string) => string,
+	): PrecheckTool[] | string {
+		if (schedule.precheckTools) return schedule.precheckTools;
+		const save =
+			"save it again with schedule_update, so the owner can approve the tools it calls";
+		const holds = this.#options.holds?.();
+		if (!holds)
+			return `this script was saved before its tools were recorded, and this host cannot check them; ${save}`;
+		let tools: PrecheckTool[];
+		try {
+			tools = precheckScriptTools(script, { toolName, holds });
+		} catch (error) {
+			return `this script was saved before its tools were recorded and cannot be checked now (${error instanceof Error ? error.message : String(error)}); fix it and ${save}`;
+		}
+		const held = tools.flatMap((t) =>
+			t.held ? [`${t.server}/${t.tool}`] : [],
+		);
+		if (held.length > 0)
+			return `this script was saved before its tools were recorded and calls tools that need the owner's approval (${held.join(", ")}), so it did not run; ${save}`;
+		return tools;
 	}
 
 	/** Runs the schedule's precheck; a missing one fails like a throw, so the turn still runs. */

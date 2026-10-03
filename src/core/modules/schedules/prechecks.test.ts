@@ -478,7 +478,9 @@ describeDb("the precheck migration", () => {
 			if (!old) throw new Error("missing row");
 			await store.update("discord:a", old.id, {
 				precheckScript: "export default () => ({ wake: true, context: 'x' })",
+				precheckTools: [],
 			});
+			expect((await store.get(old.id))?.precheckTools).toEqual([]);
 			expect((await store.get(old.id))?.precheckScript).toContain(
 				"export default",
 			);
@@ -488,6 +490,45 @@ describeDb("the precheck migration", () => {
 			// Running it again changes nothing.
 			await migrate(sql, PgScheduleStore.migrations());
 			expect((await store.get(old.id))?.precheck).toBe("health.recovery");
+		} finally {
+			// Leave the table as a migrated host has it: the ledger of the host tests records it as made.
+			await sql`DROP TABLE IF EXISTS schedules`;
+			await migrate(sql, PgScheduleStore.migrations());
+			await sql.close();
+		}
+	});
+
+	test("adds the precheck tools column to a database with scripts, which keep theirs without tools", async () => {
+		const sql = new SQL(testDatabaseUrl);
+		try {
+			await sql`DROP TABLE IF EXISTS schedules`;
+			// The table as 0.7.11 left it: scripts, but no record of their tools.
+			const migrations = PgScheduleStore.migrations();
+			await migrate(
+				sql,
+				migrations.filter((m) => m.name !== "schedules-precheck-tools"),
+			);
+			await sql`
+				INSERT INTO schedules (channel_key, mode, title, prompt, recurrence, next_run,
+					created_by_id, created_by_name, precheck_script)
+				VALUES ('discord:a', 'owner', 'old', 'p', ${JSON.stringify({ kind: "every", time: "09:30", everyDays: 1, startDate: "2026-09-01" })},
+					now(), 'u1', 'Sam', 'export default () => ({ wake: false })')`;
+			await migrate(sql, migrations);
+			const store = await PgScheduleStore.attach(sql);
+			const [old] = await store.forChannel("discord:a");
+			if (!old) throw new Error("missing row");
+			expect(old.precheckScript).toBe("export default () => ({ wake: false })");
+			expect(old.precheckTools).toBeUndefined();
+			// A change that keeps the script keeps it without tools; saving it again records them.
+			await store.update("discord:a", old.id, { title: "renamed" });
+			expect((await store.get(old.id))?.precheckTools).toBeUndefined();
+			await store.update("discord:a", old.id, {
+				precheckScript: "export default () => ({ wake: false })",
+				precheckTools: [{ server: "health", tool: "garmin-get-hrv" }],
+			});
+			expect((await store.get(old.id))?.precheckTools).toEqual([
+				{ server: "health", tool: "garmin-get-hrv" },
+			]);
 		} finally {
 			// Leave the table as a migrated host has it: the ledger of the host tests records it as made.
 			await sql`DROP TABLE IF EXISTS schedules`;

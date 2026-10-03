@@ -391,7 +391,8 @@ export const precheckScripts = definePlugin({
 });
 ```
 
-`grant({ channel, target })` returns the `PrecheckMcpServer`s a script for that schedule may call: `{ name, url, tools, token? }`.
+`grant({ channel, target, tier })` returns the `PrecheckMcpServer`s a script for that schedule may call: `{ name, url, tools, token? }`.
+Each run reaches only the granted tools that were approved with the script: the core reads a script's calls when it is saved, and saving one that calls a tool the host's hold rules hold waits for the owner's approval. `toolName(server, tool)` gives the name those rules know a tool by, the name the host's own agent calls it by; the default is the tool's own name, so pass it when your agent sees MCP tools under another name, such as `${server}_${tool}`.
 The script calls a server by `name`, only the listed `tools`, and only with single `tools/call` requests; every other server, tool, method, query, and extra credential is refused, and refused calls count against the run's budget (`maxCalls`, default 16).
 `url` is a fixed HTTPS Streamable HTTP endpoint answering with JSON or one SSE event; `token` is read on the host for each call and inserted by the broker. An answer that carries it, plainly, inside JSON text, or base64-encoded, is refused; this catches an echo, not an upstream set on leaking it, so grant only upstreams you trust.
 Calls run one at a time; a second call while one is pending is refused.

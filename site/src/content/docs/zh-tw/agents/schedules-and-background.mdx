@@ -69,6 +69,7 @@ agent 只能改自己的排程；要改別人的，請那個 agent 去改。
 如果 host 有啟用 pi-roundtable-sandbox 的預檢執行器，agent 也可以用 `precheck_script` 自己寫排程的預檢：一小段 JavaScript，透過 host 為這個排程開放的 MCP tools 讀取需要的資料，再回傳要不要叫醒。
 腳本在沒有網路、碰不到 host 檔案的隔離容器裡執行，不會在 bot 自己的行程裡跑。
 `schedule_list` 會說明怎麼寫、能呼叫哪些 tools；沒有執行器時，工具不會提供腳本這個選項。
+腳本呼叫 tools 時，和 agent 自己呼叫一樣要遵守 hold 規則：腳本若會呼叫需要確認的 tool（例如寄信），存檔時要先經 owner 核准一次；之後每次執行，都只能呼叫存檔時記下的那些 tools。
 註冊方式請看[服務與 addon](/zh-tw/plugins/services-and-addons/#預檢)。
 
 ### 時區

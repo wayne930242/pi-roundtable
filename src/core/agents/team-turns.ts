@@ -12,7 +12,7 @@ import { splitReply } from "../presentation/reply-splitter.ts";
 import { thinkingLine } from "../presentation/thinking-line.ts";
 import { withReplyFiles } from "../reply-files.ts";
 import { endOf, settleTurn } from "../routing/settle-turn.ts";
-import type { Speaker } from "../speakers.ts";
+import { type Speaker, tierAtLeast } from "../speakers.ts";
 import { toolTiers } from "../tool-tiers.ts";
 import { AgentMessages } from "./agent-messages.ts";
 import type { Agent } from "./agent-store.ts";
@@ -145,7 +145,11 @@ export class TeamTurns {
 	/** Whether the speaker's tier holds every tool of the held actions. */
 	#mayApprove(speaker: Speaker, pending: PendingConfirmation): boolean {
 		const tiers = this.#options.toolTiers ?? toolTiers();
-		return pending.calls.every((call) => tiers.allows(speaker.tier, call.tool));
+		return pending.calls.every(
+			(call) =>
+				tiers.allows(speaker.tier, call.tool) &&
+				(!call.minTier || tierAtLeast(speaker.tier, call.minTier)),
+		);
 	}
 
 	#agentOf(channel: ChannelKey): Agent {

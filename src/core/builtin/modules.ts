@@ -14,6 +14,7 @@ import {
 } from "../modules/delegation/delegator.ts";
 import { WebResearchWorker } from "../modules/delegation/web-research-worker.ts";
 import { notifyExtension } from "../modules/notify/notify.ts";
+import { precheckScriptHoldRule } from "../modules/schedules/precheck-tools.ts";
 import { Scheduler } from "../modules/schedules/scheduler.ts";
 import { schedulesExtension } from "../modules/schedules/schedules.ts";
 import type { RoundtablePlugin } from "../plugin.ts";
@@ -77,7 +78,14 @@ export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 	return {
 		name: "modules",
 		provides: [BACKGROUND_TURNS, DELEGATION],
-		setup: ({ conversations, services, logger, surfaces }) => {
+		setup: ({
+			conversations,
+			services,
+			logger,
+			surfaces,
+			sessions,
+			toolTiers,
+		}) => {
 			const schedules = services.get(SCHEDULES);
 			// Absent when a plugin list leaves the prechecks plugin out: then none can be attached.
 			const prechecks = services.find(PRECHECKS);
@@ -117,6 +125,14 @@ export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 				services: [
 					{ name: "delegator", busy: () => delegator.runningChannels() },
 				],
+				// Saving a precheck script that calls a held tool waits for the owner, as the call would.
+				holdRules: [
+					precheckScriptHoldRule({
+						prechecks: () => prechecks,
+						holds: () => sessions().holds,
+						tiers: () => toolTiers,
+					}),
+				],
 				sessionTools: [
 					fixed("notify", () => notifyExtension(connection, owner)),
 					fixed("schedules", (session) =>
@@ -126,6 +142,7 @@ export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 								owner: { id: owner.id, name: owner.name },
 								channelFor: ownerChannelFor,
 								...(prechecks ? { prechecks } : {}),
+								holds: () => sessions().holds,
 							},
 							session.homeChannel,
 							served(session),
@@ -160,13 +177,14 @@ export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 export function schedulerPlugin(): RoundtablePlugin {
 	return {
 		name: "schedules",
-		setup: ({ conversations, services, env, logger, surfaces }) => {
+		setup: ({ conversations, services, env, logger, surfaces, sessions }) => {
 			const schedules = services.get(SCHEDULES);
 			const prechecks = services.find(PRECHECKS);
 			const scheduler = new Scheduler({
 				store: schedules,
 				runner: services.get(BACKGROUND_TURNS),
 				...(prechecks ? { prechecks } : {}),
+				holds: () => sessions().holds,
 				// The bot's own message: the surface drops it, so it starts no turn.
 				notify: (schedule, note) =>
 					surfaces.sendReply(schedule.channel, {

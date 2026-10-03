@@ -1,13 +1,14 @@
 import type { BackgroundTarget } from "../../contract/channels.ts";
 import type { ChannelKey } from "../../domain/conversation.ts";
 import { ScheduleError } from "../../domain/errors.ts";
+import type { HoldCheck } from "../../holds.ts";
 import { messages } from "../../i18n/index.ts";
 import type { ScheduleStore } from "../../services.ts";
 import type { ScheduleToolName } from "../../shared/schedule-tools.ts";
 import { type Tier, tierAtLeast } from "../../speakers.ts";
 import { timeZone, zonedStamp } from "../../time.ts";
+import { type PrecheckTool, precheckScriptTools } from "./precheck-tools.ts";
 import {
-	checkPrecheckScript,
 	PRECHECK_SCRIPT_CHARS,
 	type PrecheckFinding,
 	type PrecheckRegistry,
@@ -44,6 +45,11 @@ export interface ScheduleToolContext {
 	 */
 	prechecks?: Pick<PrecheckRegistry, "get" | "list"> &
 		Partial<Pick<PrecheckRegistry, "scriptRunner">>;
+	/**
+	 * The host's hold rules, which mark the tools a saved script calls that the owner approved.
+	 * The approval itself is the confirmation gate's, over this very call.
+	 */
+	holds?: () => HoldCheck;
 }
 
 /** The limits of the context's target; a target without them may not schedule. */
@@ -95,15 +101,41 @@ function precheckName(ctx: ScheduleToolContext, value: unknown): string {
 	return name;
 }
 
-/** A precheck script the host's sandbox runs; refused when the host has no runner for scripts. */
-function precheckScript(ctx: ScheduleToolContext, value: unknown): string {
-	if (!ctx.prechecks?.scriptRunner?.()) {
+/**
+ * A precheck script the host's sandbox runs, with the tools it calls: those the hold rules hold
+ * were approved by the owner through the confirmation gate before this call ran. Refused when the
+ * host has no runner for scripts.
+ */
+function precheckScript(
+	ctx: ScheduleToolContext,
+	value: unknown,
+): { script: string; tools: PrecheckTool[] } {
+	const runner = ctx.prechecks?.scriptRunner?.();
+	if (!runner) {
 		const names = (ctx.prechecks?.list() ?? []).map((p) => p.name);
 		throw new ScheduleError(
 			`this host runs no precheck scripts; ${names.length ? `attach a registered precheck instead: ${names.join(", ")}` : "it registers no prechecks either"}`,
 		);
 	}
-	return checkPrecheckScript(value);
+	const script = typeof value === "string" ? value : "";
+	const tools = precheckScriptTools(value, {
+		toolName: (server, tool) => runner.toolName(server, tool),
+		holds: ctx.holds?.() ?? (() => undefined),
+	});
+	return { script, tools };
+}
+
+/** The tools a script may call, the owner's approvals marked. */
+function toolsText(tools: readonly PrecheckTool[] | undefined): string {
+	if (!tools)
+		return "not recorded; saved before tools were, so it must be saved again if it calls a held tool";
+	if (tools.length === 0) return "none";
+	return tools
+		.map(
+			(t) =>
+				`${t.server}/${t.tool}${t.held ? ` (approved by the owner: ${t.held})` : ""}`,
+		)
+		.join(", ");
 }
 
 /** The prechecks a schedule may name or write, for schedule_list; empty when the host offers neither. */
@@ -181,7 +213,7 @@ function line(schedule: Schedule): string {
 	const precheck = schedule.precheck
 		? `; precheck ${schedule.precheck}`
 		: schedule.precheckScript
-			? `; precheck script (${schedule.precheckScript.length} characters)`
+			? `; precheck script (${schedule.precheckScript.length} characters; tools: ${toolsText(schedule.precheckTools)})`
 			: "";
 	const last = schedule.lastRun
 		? `; last run ${zonedStamp(schedule.lastRun)} (${schedule.lastStatus ?? "?"})`
@@ -246,7 +278,9 @@ export async function callScheduleTool(
 				createdByName: ctx.author.name,
 				createdTier: ctx.author.tier ?? "owner",
 				...(precheck ? { precheck } : {}),
-				...(script ? { precheckScript: script } : {}),
+				...(script
+					? { precheckScript: script.script, precheckTools: script.tools }
+					: {}),
 			});
 			const checked = precheck
 				? `; precheck ${precheck} runs first`
@@ -293,11 +327,12 @@ export async function callScheduleTool(
 			if (input.precheck !== undefined)
 				change.precheck =
 					input.precheck === null ? null : precheckName(ctx, input.precheck);
-			if (input.precheck_script !== undefined)
-				change.precheckScript =
-					input.precheck_script === null
-						? null
-						: precheckScript(ctx, input.precheck_script);
+			if (input.precheck_script === null) change.precheckScript = null;
+			else if (input.precheck_script !== undefined) {
+				const script = precheckScript(ctx, input.precheck_script);
+				change.precheckScript = script.script;
+				change.precheckTools = script.tools;
+			}
 			if (change.precheck) change.precheckScript = null;
 			if (change.precheckScript) change.precheck = null;
 			if (Object.keys(change).length === 0)

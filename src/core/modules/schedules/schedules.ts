@@ -3,6 +3,7 @@ import { Type } from "typebox";
 import { OWNER_TARGET } from "../../agents/agent-claim.ts";
 import type { ChannelKey } from "../../domain/conversation.ts";
 import { ScheduleError } from "../../domain/errors.ts";
+import type { HoldCheck } from "../../holds.ts";
 import { activeLocale } from "../../i18n/index.ts";
 import type { OwnerIdentity } from "../../identity.ts";
 import {
@@ -30,6 +31,8 @@ export interface OwnerSchedules {
 	/** The host's prechecks a schedule may name, and the runner of scripts it may carry; without them, none can be attached. */
 	prechecks?: Pick<PrecheckRegistry, "get" | "list"> &
 		Partial<Pick<PrecheckRegistry, "scriptRunner">>;
+	/** The host's hold rules, which mark a saved script's approved tools. */
+	holds?: () => HoldCheck;
 }
 
 /** Finds another agent's channel, for reading its schedules; throws ScheduleError when there is none. */
@@ -62,7 +65,7 @@ export function schedulesExtension(
 	/** The person the running turn is for; their schedules run at their tier. */
 	speaker: () => Speaker | undefined = () => undefined,
 ): ExtensionFactory {
-	const { store, owner, channelFor, prechecks } = schedules;
+	const { store, owner, channelFor, prechecks, holds } = schedules;
 	const defs = scheduleToolSpecs({
 		locale: activeLocale(),
 		timeZone: timeZone(),
@@ -85,6 +88,7 @@ export function schedulesExtension(
 						author: speaker() ?? owner,
 						now: new Date(),
 						...(prechecks ? { prechecks } : {}),
+						...(holds ? { holds } : {}),
 					},
 					spec.name,
 					input,

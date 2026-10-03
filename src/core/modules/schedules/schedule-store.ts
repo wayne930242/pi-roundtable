@@ -4,6 +4,7 @@ import type { ChannelKey } from "../../domain/conversation.ts";
 import { ScheduleError } from "../../domain/errors.ts";
 import type { ScheduleStore } from "../../services.ts";
 import type { Tier } from "../../speakers.ts";
+import type { PrecheckTool } from "./precheck-tools.ts";
 import type { Recurrence } from "./recurrence.ts";
 
 export interface Schedule {
@@ -24,6 +25,11 @@ export interface Schedule {
 	precheck?: string;
 	/** The precheck script an agent wrote for it, run in the host's sandbox; a schedule has a name or a script, not both. */
 	precheckScript?: string;
+	/**
+	 * The MCP tools its script may call, with those the owner approved as held when it was saved;
+	 * absent for a script saved before tools were recorded, which must be saved again if it calls a held tool.
+	 */
+	precheckTools?: PrecheckTool[];
 	lastRun?: Date;
 	lastStatus?: string;
 }
@@ -42,6 +48,8 @@ export interface NewSchedule {
 	precheck?: string;
 	/** A precheck script, run in the host's sandbox before each turn; not with `precheck`. */
 	precheckScript?: string;
+	/** The tools the script may call, as approved; required with `precheckScript`. */
+	precheckTools?: PrecheckTool[];
 }
 
 export interface ScheduleChange {
@@ -53,6 +61,8 @@ export interface ScheduleChange {
 	precheck?: string | null;
 	/** A precheck script to run before each turn; null removes it. */
 	precheckScript?: string | null;
+	/** The tools a new script may call, as approved; required with a new `precheckScript`. */
+	precheckTools?: PrecheckTool[];
 }
 
 interface Row {
@@ -70,6 +80,7 @@ interface Row {
 	created_at: Date;
 	precheck: string | null;
 	precheck_script: string | null;
+	precheck_tools: string | null;
 	last_run: Date | null;
 	last_status: string | null;
 }
@@ -90,6 +101,10 @@ function toSchedule(row: Row): Schedule {
 		createdAt: row.created_at,
 		...(row.precheck ? { precheck: row.precheck } : {}),
 		...(row.precheck_script ? { precheckScript: row.precheck_script } : {}),
+		...(row.precheck_script && row.precheck_tools
+			? // pi-lens-ignore: unchecked-throwing-call — this store wrote the JSON; a corrupt row should fail loudly
+				{ precheckTools: JSON.parse(row.precheck_tools) as PrecheckTool[] }
+			: {}),
 		...(row.last_run ? { lastRun: row.last_run } : {}),
 		...(row.last_status ? { lastStatus: row.last_status } : {}),
 	};
@@ -145,6 +160,13 @@ export class PgScheduleStore implements ScheduleStore {
 					await sql`ALTER TABLE schedules ADD COLUMN IF NOT EXISTS precheck_script text`;
 				},
 			},
+			{
+				// Scripts saved before have none, and their tools are checked when they next run.
+				name: "schedules-precheck-tools",
+				up: async (sql) => {
+					await sql`ALTER TABLE schedules ADD COLUMN IF NOT EXISTS precheck_tools text`;
+				},
+			},
 		];
 	}
 
@@ -158,13 +180,18 @@ export class PgScheduleStore implements ScheduleStore {
 			throw new ScheduleError(
 				"a schedule has a precheck or a precheck script, not both",
 			);
+		if (schedule.precheckScript && !schedule.precheckTools)
+			throw new ScheduleError(
+				"a precheck script is saved with the tools it may call",
+			);
 		const rows: Row[] = await this.#sql`
 			INSERT INTO schedules (channel_key, mode, title, prompt, recurrence, next_run,
-				created_by_id, created_by_name, created_tier, precheck, precheck_script)
+				created_by_id, created_by_name, created_tier, precheck, precheck_script, precheck_tools)
 			VALUES (${schedule.channel}, ${schedule.target}, ${schedule.title}, ${schedule.prompt},
 				${JSON.stringify(schedule.recurrence)}, ${schedule.nextRun},
 				${schedule.createdById}, ${schedule.createdByName}, ${schedule.createdTier},
-				${schedule.precheck ?? null}, ${schedule.precheckScript ?? null})
+				${schedule.precheck ?? null}, ${schedule.precheckScript ?? null},
+				${schedule.precheckScript ? JSON.stringify(schedule.precheckTools) : null})
 			RETURNING *`;
 		const [row] = rows;
 		if (!row) throw new Error("the schedule insert returned no row");
@@ -212,6 +239,18 @@ export class PgScheduleStore implements ScheduleStore {
 			: change.precheckScript === undefined
 				? (current.precheckScript ?? null)
 				: change.precheckScript;
+		if (change.precheckScript && !change.precheckTools)
+			throw new ScheduleError(
+				"a precheck script is saved with the tools it may call",
+			);
+		// A new script brings its own tools; one kept keeps its tools; no script, no tools.
+		const precheckTools = !precheckScript
+			? null
+			: change.precheckScript
+				? JSON.stringify(change.precheckTools)
+				: current.precheckTools
+					? JSON.stringify(current.precheckTools)
+					: null;
 		const rows: Row[] = await this.#sql`
 			UPDATE schedules SET
 				title = ${change.title ?? current.title},
@@ -219,7 +258,8 @@ export class PgScheduleStore implements ScheduleStore {
 				recurrence = ${JSON.stringify(change.recurrence ?? current.recurrence)},
 				next_run = ${change.nextRun ?? current.nextRun},
 				precheck = ${precheck},
-				precheck_script = ${precheckScript}
+				precheck_script = ${precheckScript},
+				precheck_tools = ${precheckTools}
 			WHERE id = ${id}
 			RETURNING *`;
 		return rows[0] ? toSchedule(rows[0]) : undefined;

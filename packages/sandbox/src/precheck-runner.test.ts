@@ -332,18 +332,79 @@ const schedule: Schedule = {
 };
 
 function scriptContext(
-	signal = new AbortController().signal,
+	tools: PrecheckScriptContext["tools"] = HEALTH.tools.map((tool) => ({
+		server: "health",
+		tool,
+	})),
 ): PrecheckScriptContext {
 	return {
 		schedule,
 		firedAt: new Date("2026-10-04T01:30:00Z"),
 		timeZone: "Asia/Taipei",
 		today: "2026-10-04",
-		signal,
+		tools,
+		signal: new AbortController().signal,
 	};
 }
 
 describe("the precheck script runner", () => {
+	test("hands the worker, and lets the broker forward, only the tools approved with the script", async () => {
+		const inputs: PrecheckWorkerInput[] = [];
+		const runner = precheckScriptRunner({
+			image: "sandbox:pi",
+			runRoot: root(),
+			uid: 1000,
+			gid: 1000,
+			grant: () => [
+				HEALTH,
+				{ ...HEALTH, name: "google", tools: ["send-gmail-message"] },
+			],
+			driver: {
+				exec: async (spec, input) => {
+					inputs.push(JSON.parse(input));
+					// The broker of this run refuses a granted tool that was not approved.
+					const refused = await fetch("http://broker/mcp/health", {
+						unix: join(spec.runDir, "broker.sock"),
+						method: "POST",
+						body: JSON.stringify(toolCall("garmin-login")),
+					});
+					expect(refused.status).toBe(403);
+					const unknown = await fetch("http://broker/mcp/google", {
+						unix: join(spec.runDir, "broker.sock"),
+						method: "POST",
+						body: JSON.stringify(toolCall("send-gmail-message")),
+					});
+					expect(unknown.status).toBe(404);
+					return JSON.stringify({ ok: true, result: { wake: false } });
+				},
+			},
+		});
+		await runner.run(
+			"export default () => ({ wake: false })",
+			scriptContext([
+				{ server: "health", tool: "garmin-get-hrv" },
+				// Approved but no longer granted: still refused.
+				{ server: "other", tool: "x" },
+			]),
+		);
+		expect(inputs[0]?.servers).toEqual([
+			{ name: "health", tools: ["garmin-get-hrv"] },
+		]);
+		expect(runner.toolName("google", "send-gmail-message")).toBe(
+			"send-gmail-message",
+		);
+		expect(
+			precheckScriptRunner({
+				image: "sandbox:pi",
+				runRoot: root(),
+				uid: 1000,
+				gid: 1000,
+				grant: () => [],
+				toolName: (server, tool) => `${server}-${tool}`,
+			}).toolName("google", "send-gmail-message"),
+		).toBe("google-send-gmail-message");
+	});
+
 	test("hands the worker the script, the date, and the granted names only, and returns its answer", async () => {
 		const runRoot = root();
 		const runs: { spec: ContainerSpec; input: PrecheckWorkerInput }[] = [];

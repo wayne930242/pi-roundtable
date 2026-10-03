@@ -5,6 +5,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.13] - 2026-10-03
+
+### Changed
+
+- Behavior change: a precheck script's MCP calls follow the hold rules. Saving a script reads its `mcp.call` and `mcp.json` calls (server and tool written as strings, `mcp` used for nothing else, or the script is refused) and judges each with the host's hold rules; if any is held, the `schedule_create` or `schedule_update` call is itself held for the owner through the confirmation gate, once, and the scheduled runs do not ask again. The schedule keeps the tools its script may call (`Schedule.precheckTools`, `NewSchedule.precheckTools`, `ScheduleChange.precheckTools`, the type `PrecheckTool`) in a nullable `precheck_tools` column (the new `schedules-precheck-tools` migration); the runner gets them as `PrecheckScriptContext.tools` and must refuse every other call; `schedule_list` shows them, marking those the owner approved. A script saved before has no recorded tools: its first run reads them, runs it if none is held, and otherwise wakes the agent to save it again.
+- Behavior change: `PrecheckScriptRunner` needs `toolName(server, tool)`, the name the hold rules know a script's call by.
+- `HoldRule` takes an optional `mayHold(tool)`, for a rule whose verdict depends on the input, and an optional `approvalTier(tool, input, context)`, the lowest tier that may approve a call it holds when higher than the tool's own; `HoldCheck` (and `holdChain`'s) gains `mayHold` and `approvalTier`. A held call keeps that tier (`HeldCall.minTier`), and both its approval card and a confirming message require it, so saving a script whose runs send mail needs whoever may approve sending mail, not only whoever may schedule. `ScheduleToolContext` takes `holds`.
+
 ## [0.7.12] - 2026-10-03
 
 ### Fixed

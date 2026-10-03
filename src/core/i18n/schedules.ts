@@ -53,6 +53,13 @@ export function schedulesEn(ctx: CatalogContext) {
 			`Checked first by its own precheck script (${chars} characters)`,
 		schedulePrecheckNote: (id: number, title: string, note: string) =>
 			`-# Schedule #${id} ${title}, skipped by its precheck: ${note.replace(/\n+/g, "\n-# ")}`,
+		precheckScriptHeld: (
+			schedule: { title?: string; id?: number },
+			held: readonly string[],
+		) =>
+			`save schedule ${schedule.title ? `"${schedule.title}" ` : schedule.id === undefined ? "" : `#${schedule.id} `}with a precheck script that, each time it runs, may: ${held.join("; ")}`,
+		precheckToolMayHold: (tool: string, rule: string) =>
+			`call ${tool}, which the ${rule} rule may hold depending on its input`,
 		scheduleChoice: (id: number, title: string, recurrence: string) =>
 			`#${id} ${title} (${recurrence})`,
 		scheduleTitle: "Schedules",
@@ -97,6 +104,13 @@ export function schedulesZhTW(
 			`先由自訂的預檢腳本判斷（${chars} 字元）`,
 		schedulePrecheckNote: (id: number, title: string, note: string) =>
 			`-# 排程 #${id} ${title} 經預檢略過：${note.replace(/\n+/g, "\n-# ")}`,
+		precheckScriptHeld: (
+			schedule: { title?: string; id?: number },
+			held: readonly string[],
+		) =>
+			`儲存排程${schedule.title ? `「${schedule.title}」` : schedule.id === undefined ? "" : ` #${schedule.id} `}，它的預檢腳本每次執行都可能：${held.join("；")}`,
+		precheckToolMayHold: (tool: string, rule: string) =>
+			`呼叫 ${tool}（規則 ${rule} 會依輸入決定是否需要確認）`,
 		scheduleChoice: (id: number, title: string, recurrence: string) =>
 			`#${id} ${title}（${recurrence}）`,
 		scheduleTitle: "排程",
