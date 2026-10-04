@@ -24,6 +24,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - A relative write target or `rm` operand resolves from the line's last `cd`, not always from the workspace.
   - Value: `shellHoldRuleFor`; type: `PushPolicy`.
 
+### Fixed
+
+- pi-roundtable-coding frees a finished job's repository before delivering its report, so the turn that receives the report can ship it or start the next worker there instead of being refused with "still using".
+
 ## [0.7.15] - 2026-10-03
 
 ### Changed

@@ -5,6 +5,7 @@
 ## [0.7.16] - 2026-10-04
 
 - The worker's shell calls follow pi-roundtable 0.7.16's `shellHoldRule`: an `rm` whose operands all resolve inside the job's workspace, without being it, runs without a hold. Every `git push` stays held.
+- A finished job frees its repository before its report is delivered, so the report turn can run `repo_change_report`, `repo_push` or the next `repo_task` there; `idle()` still waits for the delivery.
 
 ## [0.7.5] - 2026-10-03
 

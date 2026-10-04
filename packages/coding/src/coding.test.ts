@@ -256,6 +256,50 @@ test("owner-repo exception is exact and defaults to no exception", async () => {
 			harness.holds("repo_push", { repo, sha: "a".repeat(40) }, {}),
 		).toContain("Push");
 });
+test("the repository is free while its report is delivered, and idle waits for the delivery", async () => {
+	const { shelf } = await fixture();
+	await shelf.add("sample/project");
+	const finish = gate<void>();
+	const inDelivery = gate<{
+		busy: string[];
+		idleError?: unknown;
+		next?: number;
+	}>();
+	let desk!: CodingDesk;
+	let delivered = false;
+	desk = new CodingDesk({
+		shelf,
+		logger: silentLogger(),
+		deliver: async (result) => {
+			if (result.job.id !== 1) return;
+			let idleError: unknown;
+			try {
+				desk.checkIdle("sample/project");
+			} catch (error) {
+				idleError = error;
+			}
+			const next = (await desk.start(request())).id;
+			inDelivery.resolve({ busy: desk.busy(), idleError, next });
+			await finish.promise;
+			delivered = true;
+		},
+		worker: { run: async () => "done" },
+	});
+	stops.push(() => desk.stop());
+	await desk.start(request());
+	const seen = await inDelivery.promise;
+	expect(seen.idleError).toBeUndefined();
+	expect(seen.next).toBe(2);
+	expect(seen.busy.every((entry) => !entry.startsWith("Coding #1 "))).toBe(
+		true,
+	);
+	const idle = desk.idle();
+	await Bun.sleep(20);
+	expect(delivered).toBe(false);
+	finish.resolve();
+	await idle;
+	expect(delivered).toBe(true);
+});
 test("work timeout excludes owner waiting, then aborts and reports state", async () => {
 	const { shelf } = await fixture();
 	await shelf.add("sample/project");

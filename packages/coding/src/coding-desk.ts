@@ -99,6 +99,8 @@ function bounded(text: string, max: number): string {
 /** One worker per repository, at most three per channel; results and jobs are in memory. */
 export class CodingDesk {
 	readonly #options: CodingDeskOptions;
+	/** Every run until its report is delivered, for idle(). */
+	readonly #pending = new Set<Promise<void>>();
 	readonly #running = new Map<
 		number,
 		{ job: CodingJob; controller: AbortController; done?: Promise<void> }
@@ -129,7 +131,7 @@ export class CodingDesk {
 			throw new AgentError(`A coding worker is still using ${repo}.`);
 	}
 	async idle(): Promise<void> {
-		await Promise.all([...this.#running.values()].map((run) => run.done));
+		await Promise.all(this.#pending);
 	}
 	async stop(): Promise<void> {
 		this.#stopped = true;
@@ -183,6 +185,9 @@ export class CodingDesk {
 				);
 			})
 			.finally(() => this.#running.delete(job.id));
+		const done = run.done;
+		this.#pending.add(done);
+		void done.finally(() => this.#pending.delete(done));
 		return job;
 	}
 	async #run(
@@ -332,6 +337,8 @@ export class CodingDesk {
 		} catch {
 			this.#options.logger.warn({ job: job.id }, "Coding thread close failed.");
 		}
+		// The work is over: free the repository before the report turn, so that turn can ship it.
+		this.#running.delete(job.id);
 		await deliver(result);
 	}
 }
