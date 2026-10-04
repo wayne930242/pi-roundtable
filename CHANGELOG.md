@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.17] - 2026-10-04
+
 ### Added
 
 - A turn posts the text it writes before its final answer as it goes, so a proposal written before `ask_user` shows above its card instead of never reaching the channel. Primary text (400 characters or more, or with a Markdown heading, list, table or code fence) of a tool-calling assistant message is posted as ordinary messages when the message ends; shorter narration and the tools called (`-# bash ×3 · read`, names only) share one small-text progress message per run of tool calls, edited at most every 1.5 s, bounded to 2000 characters by dropping its oldest lines. Before any card the pending text is posted first. The final reply, its thinking line, and steered runs are unchanged; a failed interim post is logged and never fails the turn. See [interim text](docs/plugins.md#interim-text-what-a-turn-writes-before-its-final-answer).
