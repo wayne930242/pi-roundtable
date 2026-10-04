@@ -211,6 +211,7 @@ export async function defineRoundtable(
 				thinking: config.thinking,
 				judgeThreshold: config.judge.threshold,
 				workDir: config.workDir,
+				scratchDir: config.scratchDir,
 				shellUser: userInfo().username,
 				prompts: { shared, guest },
 				avatarListener: "public",

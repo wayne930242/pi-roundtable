@@ -4,7 +4,7 @@ import type {
 	PendingConfirmation,
 } from "../../domain/conversation.ts";
 import type { OwnerPrompts } from "../../domain/owner-prompts.ts";
-import { type HoldCheck, higherTier } from "../../holds.ts";
+import { type HoldCheck, type HoldContext, higherTier } from "../../holds.ts";
 import { messages } from "../../i18n/index.ts";
 import { type OwnerIdentity, ownerWords } from "../../identity.ts";
 import type { ToolTiers } from "../../tool-tiers.ts";
@@ -60,18 +60,18 @@ export class ConfirmationGate {
 	readonly #owner: OwnerIdentity;
 	/** Whom the running turn's held actions and refusals speak of: the turn's speaker. */
 	#addressee: OwnerIdentity;
-	readonly #workspace: string | undefined;
+	readonly #context: HoldContext;
 	readonly #tiers: ToolTiers | undefined;
 
 	/**
 	 * `holds` decides which calls wait for the owner. With a workspace, the session has a shell,
-	 * and its writes outside the workspace are held too.
+	 * and its writes outside the workspace and the context's scratch dir are held too.
 	 */
 	constructor(
 		holds: HoldCheck,
 		owner: OwnerIdentity,
 		pending?: PendingConfirmation,
-		workspace?: string,
+		context: HoldContext = {},
 		tiers?: ToolTiers,
 	) {
 		this.#tiers = tiers;
@@ -79,7 +79,7 @@ export class ConfirmationGate {
 		this.#owner = owner;
 		this.#addressee = owner;
 		this.#pending = pending;
-		this.#workspace = workspace;
+		this.#context = context;
 	}
 
 	/** Held actions awaiting the owner's answer; expired ones count as none. */
@@ -156,8 +156,7 @@ export class ConfirmationGate {
 
 	/** The call when it needs the owner's confirmation and no approval releases it. */
 	#needing(tool: string, input: Record<string, unknown>): HeldCall | undefined {
-		const context =
-			this.#workspace === undefined ? {} : { workspace: this.#workspace };
+		const context = this.#context;
 		const action = this.#holds(tool, input, context);
 		if (!action) return undefined;
 		const minTier = this.#holds.approvalTier?.(tool, input, context);

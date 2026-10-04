@@ -97,8 +97,10 @@ export {
 } from "./presentation.ts";
 export { packageDir, serveUnix } from "./process.ts";
 export {
+	type PushPolicy,
 	SHELL_TOOLS,
 	shellHoldRule,
+	shellHoldRuleFor,
 } from "./shell.ts";
 export {
 	checkRepoName,

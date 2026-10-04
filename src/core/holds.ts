@@ -5,6 +5,8 @@ import { type Tier, tierAtLeast } from "./speakers.ts";
 export interface HoldContext {
 	/** The shared workspace of a session with a shell; calls reaching outside it may be held. */
 	workspace?: string;
+	/** The session's scratch dir, where its shell's TMPDIR points; writes and removals inside it run. */
+	scratchDir?: string;
 }
 
 /**

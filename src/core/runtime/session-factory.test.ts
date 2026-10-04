@@ -1,8 +1,18 @@
 import { describe, expect, test } from "bun:test";
+import {
+	mkdtempSync,
+	realpathSync,
+	rmSync,
+	statSync,
+	symlinkSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { ensureScratchDir } from "../builtin/agent-server.ts";
 import { ConfigError } from "../domain/errors.ts";
 import type { LinkedSessions } from "../plugin.ts";
 import type { PiAgentRuntimeOptions } from "./runtime-types.ts";
-import { SessionFactory } from "./session-factory.ts";
+import { SessionFactory, scratchBash } from "./session-factory.ts";
 
 /** A factory over the part `personaOf` reads: the plugins' personas. */
 function factory(personas: Record<string, string>): SessionFactory {
@@ -48,5 +58,42 @@ describe("the persona of a conversation kind", () => {
 			'no persona is registered for the conversation kind "quiz"',
 		);
 		expect((error as Error).message).toContain("personas");
+	});
+});
+
+describe("the agents' scratch dir", () => {
+	test("the agents' bash runs with TMPDIR at the scratch dir", async () => {
+		const root = realpathSync(mkdtempSync(join(tmpdir(), "scratch-bash-")));
+		try {
+			const scratch = ensureScratchDir(join(root, "roundtable-scratch"));
+			expect(statSync(scratch).mode & 0o777).toBe(0o700);
+			const bash = scratchBash(root, scratch);
+			expect(bash.name).toBe("bash");
+			// SAFETY: the bash tool reads no context.
+			const result = await bash.execute(
+				"call",
+				{ command: "echo $TMPDIR; mktemp" },
+				undefined,
+				undefined,
+				undefined as never,
+			);
+			const text = result.content
+				.map((part) => ("text" in part ? part.text : ""))
+				.join("");
+			expect(text.split("\n")[0]).toBe(scratch);
+			expect(text.split("\n")[1]).toStartWith(`${scratch}/`);
+		} finally {
+			rmSync(root, { recursive: true, force: true });
+		}
+	});
+
+	test("a symlink in the scratch dir's place is refused", () => {
+		const root = mkdtempSync(join(tmpdir(), "scratch-link-"));
+		try {
+			symlinkSync(root, join(root, "link"));
+			expect(() => ensureScratchDir(join(root, "link"))).toThrow(ConfigError);
+		} finally {
+			rmSync(root, { recursive: true, force: true });
+		}
 	});
 });

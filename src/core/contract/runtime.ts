@@ -83,6 +83,11 @@ export interface AgentSessions {
 	/** The shell's working directory, shared by every agent; writes outside it are held. */
 	workDir: string;
 	/**
+	 * The host's scratch dir: the agents' shell runs with TMPDIR pointing to it, and writes and
+	 * removals inside it run without a hold, like the workspace's.
+	 */
+	scratchDir?: string;
+	/**
 	 * The skills the agent carries, read at the start of every run; a change rebuilds its
 	 * sessions, keeping their history.
 	 */

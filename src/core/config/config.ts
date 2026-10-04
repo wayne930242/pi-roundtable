@@ -1,3 +1,5 @@
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { AgentSeed } from "../agents/agent-rules.ts";
 import { ConfigError } from "../domain/errors.ts";
 import { isLocale, type Locale } from "../i18n/index.ts";
@@ -104,6 +106,11 @@ export interface RoundtableConfig {
 	/** The agents' shared working directory; default `<dataDir>/work`. */
 	workDir?: string;
 	/**
+	 * The agents' scratch dir: their shell runs with TMPDIR pointing to it, and writes and removals
+	 * inside it run without a hold. Default `<os temp dir>/<discord.rootCommand>-scratch`.
+	 */
+	scratchDir?: string;
+	/**
 	 * Where the skill registry reads built-in skills and keeps linked repositories. `false` leaves
 	 * the `skills` addon out: agents carry no skills, and no skill tools exist. Stored skills stay
 	 * in their tables.
@@ -191,6 +198,7 @@ const schema = shape({
 	}),
 	avatar: optional(text),
 	workDir: optional(text),
+	scratchDir: optional(text),
 	skills: optional(
 		orOff(shape({ builtinDir: optional(text), reposDir: optional(text) })),
 	),
@@ -243,6 +251,7 @@ export interface ResolvedConfig {
 	};
 	avatar?: string;
 	workDir: string;
+	scratchDir: string;
 	/** `false` when the skills addon is off. */
 	skills: false | { builtinDir?: string; reposDir?: string };
 	memory: boolean;
@@ -265,6 +274,9 @@ export function resolveConfig(input: unknown): ResolvedConfig {
 	const name = config.name ?? "Roundtable";
 	const model = modelOf(config.model, "model");
 	const thinking = config.thinking ?? "medium";
+	const rootCommand =
+		config.discord.rootCommand ??
+		name.toLowerCase().replace(/[^a-z0-9-]+/g, "-");
 	return {
 		name,
 		owner: {
@@ -276,9 +288,7 @@ export function resolveConfig(input: unknown): ResolvedConfig {
 			token: config.discord.token,
 			guild: config.discord.guild,
 			entryChannel: config.discord.entryChannel,
-			rootCommand:
-				config.discord.rootCommand ??
-				name.toLowerCase().replace(/[^a-z0-9-]+/g, "-"),
+			rootCommand,
 			admin: config.discord.admin ?? true,
 			...(config.discord.refusalHint === undefined
 				? {}
@@ -321,6 +331,7 @@ export function resolveConfig(input: unknown): ResolvedConfig {
 		},
 		...(config.avatar ? { avatar: config.avatar } : {}),
 		workDir: config.workDir ?? `${config.dataDir}/work`,
+		scratchDir: config.scratchDir ?? join(tmpdir(), `${rootCommand}-scratch`),
 		skills: config.skills ?? {},
 		memory: config.memory ?? true,
 		...(config.ops ? { ops: config.ops } : {}),

@@ -1,3 +1,4 @@
+import { chmodSync, lstatSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import type { SQL } from "bun";
@@ -12,6 +13,7 @@ import { discordKey } from "../agents/team-keys.ts";
 import { ownerAttachmentDir } from "../attachments/attachment-dir.ts";
 import type { AgentRuntime, AgentSessions } from "../contract/runtime.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
+import { ConfigError } from "../domain/errors.ts";
 import type { OwnerIdentity } from "../identity.ts";
 import { ConfirmationJudge } from "../judging/confirmation-judge.ts";
 import { AGENT_BRIEF, EffortJudge } from "../judging/effort-judge.ts";
@@ -53,6 +55,11 @@ export interface AgentServerOptions {
 	judgeThreshold: number;
 	/** The shell's shared working directory. */
 	workDir: string;
+	/**
+	 * The agents' scratch dir, created with mode 0700 when the agent server starts: their shell's
+	 * TMPDIR, where writes and removals run without a hold.
+	 */
+	scratchDir?: string;
 	/** The host account the agents' shell and file tools run as. */
 	shellUser: string;
 	/** The prompt every agent starts with, and the one for speakers other than the owner. */
@@ -178,6 +185,7 @@ export function agentServerPlugin(
 				owner: options.owner,
 				toolTiers: context.toolTiers,
 				shellUser: options.shellUser,
+				...(options.scratchDir ? { scratchDir: options.scratchDir } : {}),
 				store,
 				channels: connection.agentChannels(options.guildId),
 				studio,
@@ -227,6 +235,9 @@ export function agentServerPlugin(
 			});
 			const agentSessions: AgentSessions = {
 				workDir: options.workDir,
+				...(options.scratchDir
+					? { scratchDir: ensureScratchDir(options.scratchDir) }
+					: {}),
 				modelOf: (name) => built.modelOf(name),
 				skills: (name) => built.skillsOf(name),
 				turnChannel: (scope) => built.turnChannel(scope),
@@ -338,4 +349,19 @@ export function agentServerPlugin(
 			};
 		},
 	};
+}
+
+/**
+ * Creates the scratch dir for the service user alone. A shared temp dir lets anyone create the
+ * path first, so a symlink or a dir the service user does not own is refused.
+ */
+export function ensureScratchDir(dir: string): string {
+	mkdirSync(dir, { recursive: true, mode: 0o700 });
+	const stat = lstatSync(dir);
+	if (!stat.isDirectory() || stat.uid !== process.getuid?.())
+		throw new ConfigError(
+			`the scratch dir ${dir} is not a directory of this service's user. Remove it or set scratchDir to another path.`,
+		);
+	chmodSync(dir, 0o700);
+	return dir;
 }

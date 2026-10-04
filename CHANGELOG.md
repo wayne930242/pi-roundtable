@@ -13,6 +13,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - A previous summary over 60,000 tokens (`previousSummaryLimitTokens`) skips Jev, so Pi's summary condenses the chain.
   - Jev judges with a goal (`JEV_GOAL`, option `goal`) that keeps the tool results that set rules still in force, which it dropped without one, and the summary ends with the rule loads it summarized (skills, notebook system prompts, reads of SKILL.md, AGENTS.md and `.agents/skills/`; option `ruleLoad`, default `isRuleLoad`) for the agent to load again.
 
+### Changed
+
+- The shell hold rule lets more of the agents' own work run.
+  - The agents get a scratch dir, the config's new `scratchDir` (default `<os temp dir>/<discord.rootCommand>-scratch`, created with mode 0700 at startup; a symlink or another user's dir is refused), and their `bash` runs with `TMPDIR` pointing to it. Redirects, `tee`, and `write` and `edit` inside it run as inside the workspace; the rest of `/tmp` stays held. `AgentSessions.scratchDir` and `HoldContext.scratchDir` carry it, and the agents' prompt names it.
+  - `rm` is no longer always held: it runs when every operand resolves, after the line's literal variable assignments, `cd`, `..` and symlinks, inside the workspace or the scratch dir without being one of them. A command substitution, an unknown variable, a root itself, `/`, or no operand keeps it held.
+  - `git push` stays held by `shellHoldRule`; the new `shellHoldRuleFor({ ownPushOwners, heldPushRepos })` (type `PushPolicy`) lets a plain push to a GitHub repository of a listed owner run, unless it forces, deletes, pushes tags or a mirror, or the repository is in `heldPushRepos` or its remote cannot be read.
+  - A relative write target or `rm` operand resolves from the line's last `cd`, not always from the workspace.
+  - Value: `shellHoldRuleFor`; type: `PushPolicy`.
+
 ## [0.7.15] - 2026-10-03
 
 ### Changed

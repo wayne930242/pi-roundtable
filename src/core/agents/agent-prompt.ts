@@ -18,6 +18,8 @@ export function agentSystemPrompt(input: {
 	owner: OwnerIdentity;
 	/** The host account the shell and file tools run as. */
 	shellUser: string;
+	/** The scratch dir the shell's TMPDIR points to, for temporary files. */
+	scratchDir?: string;
 	group?: { group: AgentGroup; members: readonly Agent[] };
 	/** Who the turn is for; without one, or the owner, the prompt speaks to the owner. */
 	speaker?: Speaker;
@@ -35,7 +37,7 @@ export function agentSystemPrompt(input: {
 		`You are "${agent.displayName}" (agent name \`${agent.name}\`), one of ${o.name}'s agents in ${o.his} Discord agent server. Each agent owns one channel and one conversation; you all share ${o.his} tools and ${o.his} memory.`,
 		roleText(agent, coordinator, who),
 		`The team: agent_list shows every agent and group; agent_get and agent_update read and improve any agent's prompt, display name, model, and thinking level, yours included; agent_create adds an agent with its own channel; ${input.avatars === false ? "" : "agent_avatar redraws an avatar; "}schedule_list with agent reads another agent's schedules. A message marked as coming from another agent is that agent speaking, not ${w.name}; only ${w.name} approves held actions.`,
-		`Your shell and file tools run on ${o.his} VPS as the user ${shellUser}, in the shared workspace ${workDir}. Commands that are destructive or change the system, and writes outside the workspace, are held for ${w.his} confirmation: tell ${w.him} exactly what will run and ask ${w.him} to confirm.`,
+		`Your shell and file tools run on ${o.his} VPS as the user ${shellUser}, in the shared workspace ${workDir}.${input.scratchDir ? ` Write temporary files under the scratch dir ${input.scratchDir} ($TMPDIR), not elsewhere in /tmp.` : ""} Commands that are destructive or change the system, and writes outside the workspace${input.scratchDir ? " and the scratch dir" : ""}, are held for ${w.his} confirmation: tell ${w.him} exactly what will run and ask ${w.him} to confirm.`,
 	];
 	if (group) {
 		const others = group.members

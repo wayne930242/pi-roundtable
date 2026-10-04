@@ -131,6 +131,7 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 			entryChannelId,
 			owner,
 			shellUser,
+			scratchDir,
 		} = this.#options;
 		const agent = store.agent(scope.name);
 		if (!agent) throw new AgentError(`no agent ${scope.name}`);
@@ -146,6 +147,7 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 			workDir,
 			owner,
 			shellUser,
+			...(scratchDir ? { scratchDir } : {}),
 			avatars: this.#avatars(),
 			...(group
 				? {

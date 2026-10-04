@@ -130,7 +130,9 @@ describe("ConfirmationGate with a workspace", () => {
 	const WORKSPACE = "/srv/agents/work";
 
 	test("holds a destructive command and releases it once approved", () => {
-		const gate = new ConfirmationGate(holds, OWNER, undefined, WORKSPACE);
+		const gate = new ConfirmationGate(holds, OWNER, undefined, {
+			workspace: WORKSPACE,
+		});
 		gate.beginTurn("agent", false);
 		expect(gate.hold("bash", { command: "docker restart x" })).toBeString();
 		expect(gate.hold("bash", { command: "docker ps" })).toBeUndefined();

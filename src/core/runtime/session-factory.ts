@@ -3,9 +3,11 @@ import { join } from "node:path";
 import {
 	type AgentSession,
 	createAgentSession,
+	createBashToolDefinition,
 	DefaultResourceLoader,
 	type ModelRuntime,
 	type SessionManager,
+	type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import { channelSegment } from "../attachments/attachment-dir.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
@@ -279,6 +281,10 @@ export class SessionFactory {
 		const { session } = await createAgentSession({
 			cwd,
 			agentDir,
+			// Pi's bash under its own name, run with TMPDIR at the agents' scratch dir.
+			...(agents?.scratchDir
+				? { customTools: [scratchBash(cwd, agents.scratchDir)] }
+				: {}),
 			thinkingLevel: thinking,
 			modelRuntime: this.#modelRuntime,
 			resourceLoader,
@@ -304,4 +310,14 @@ export class SessionFactory {
 		});
 		return Object.assign(state, { session });
 	}
+}
+
+/** Pi's bash tool with TMPDIR set to `scratchDir`, so `mktemp` and tools write there. */
+export function scratchBash(cwd: string, scratchDir: string): ToolDefinition {
+	return createBashToolDefinition(cwd, {
+		spawnHook: (context) => ({
+			...context,
+			env: { ...context.env, TMPDIR: scratchDir },
+		}),
+	}) as unknown as ToolDefinition;
 }

@@ -63,7 +63,7 @@ Use the kit's building blocks for a plugin that runs Pi itself, such as a coding
 - Work: `promptSlot` (how a run asks the owner while it works), `workTimeout` (a time limit that does not count the time spent waiting on the owner), `runWorkerTask`, `archiveSessions`, and `approvalCard` and `canonicalJson` for the cards of held actions.
 - Diagnostics: `scrubDiagnostic(text, max = 600)` masks credentials (URL userinfo, token shapes, secret-named assignments and JSON fields, `Authorization`/`Cookie`/`x-api-key` headers, JWTs, PEM blocks), turns control characters other than tab and newline into spaces, and cuts the result at `max` characters.
   It scans only the first `max * 4` characters (at least 4,096), in linear time, so pass it git, gh or provider error text before showing that text to a user.
-- Shell: `SHELL_TOOLS` and `shellHoldRule`, the hold rule that keeps risky host-shell commands behind the owner's approval.
+- Shell: `SHELL_TOOLS`, and `shellHoldRule` and `shellHoldRuleFor(policy)`, the hold rule that keeps risky host-shell commands behind the owner's approval; see [the shell rule](#the-shell-rule).
 - Tools: `textToolsExtension`, `requiredString`, `stringList` (with `toolText` and `toolError`) for tools that return text.
 - Mirroring a built-in tool in a worker that cannot reach the host: `SCHEDULE_TOOLS`, `scheduleToolSpecs({ locale, timeZone })`, `isScheduleTool`, `callScheduleTool`, `DELEGATE_TOOL` and `DELEGATE_TOOL_SPEC`.
   The specs take the locale and time zone for their descriptions, so the worker needs no process-wide setting.
@@ -512,6 +512,36 @@ export const cleanup = definePlugin({
 A rule whose verdict depends on the input, such as one that holds only a `delete` action, can also answer `mayHold(tool)`: whether it may hold some call of that tool.
 It is asked when the input is not known yet, as for a [precheck script](#precheck-scripts-prechecks-the-agent-writes)'s call whose arguments are computed when it runs; a rule without it is judged by `describe` with an empty input.
 A rule whose held call stands for others can answer `approvalTier(tool, input, context)`: the lowest tier that may approve it when higher than the tool's own. The held call keeps it as `minTier`, and both its card and a confirming message require it.
+
+#### The shell rule
+
+`shellHoldRule` in `pi-roundtable/kit` judges the agents' `bash`, `write` and `edit` calls; the agent server links it, and a session without a workspace has no shell.
+Its scratch roots are the shared workspace (`HoldContext.workspace`) and the scratch dir (`HoldContext.scratchDir`).
+The scratch dir is the config's `scratchDir`, by default `<os temp dir>/<discord.rootCommand>-scratch` (such as `/tmp/roundtable-scratch`); the agent server creates it with mode 0700 at startup and refuses one that is a symlink or another user's, and the agents' `bash` runs with `TMPDIR` pointing to it, so `mktemp` and tools write there.
+`AgentSessions.scratchDir` carries it to a runtime, and the agents' prompt tells them to write temporary files there.
+
+- A `>`, `>>` or `tee` target, and a `write` or `edit` path, inside a scratch root run; anything else, the rest of `/tmp` included, is held.
+- An `rm` runs when every operand resolves inside a scratch root and none is a root itself or `/`. Operands resolve after the variables assigned earlier in the same command line (`NAME=value` and `export NAME=value` with literal values; `$TMPDIR` is the scratch dir and `$HOME` the service user's home), from the directory of the last `cd`, through `..` and, for paths that exist, symlinks, so a link out of a root is held. A glob is judged by its directory part. A command substitution, an unknown variable, `~user`, an `rm` without operands, and `xargs rm` are held.
+- `sudo`, `kill`, `dd`, `mkfs` and the other programs held whatever their arguments stay held, as do service, container, firewall and package changes, `git reset --hard`, and `gh` writes.
+- `git push` is held, `force-pushes` for a force push and otherwise as a push to GitHub.
+
+`shellHoldRuleFor({ ownPushOwners?, heldPushRepos? })` (its options are the type `PushPolicy`) is the same rule with plain pushes to the owner's own repositories let through; `shellHoldRule` is `shellHoldRuleFor()`, which holds every push.
+A push runs without a hold when all of these hold:
+
+- it does not force (`-f`, `--force*`, a `+` refspec), delete (`--delete`, `-d`, a `:ref` refspec), or push tags or more than its refs (`--tags`, `--follow-tags`, `--mirror`, `--all`, `--prune`), takes no other option than `-u`, `-q`, `-v`, `-n`, `--no-verify`, `--atomic`, `--porcelain`, `--progress` and `-o`, and names no `refs/tags/…` ref or local tag;
+- the repository directory is known: `git -C <dir>`, else the last `cd` in the command line, else the workspace; a line with a subshell or `||` does not follow its `cd`;
+- every push URL of the remote (the named one, default `origin`, read with `git remote get-url --push --all` with a short timeout and no shell; or a URL given in its place) is a GitHub repository, https or ssh, whose owner is in `ownPushOwners` and whose `owner/repo` is not in `heldPushRepos`.
+
+Git's `-c`, `--git-dir` and `--work-tree`, a `GIT_*` variable before `git`, and any failure to read the remote keep the push held.
+
+```ts
+import { shellHoldRuleFor } from "pi-roundtable/kit";
+
+const shell = shellHoldRuleFor({
+	ownPushOwners: ["octocat"],
+	heldPushRepos: ["octocat/deployed-app"],
+});
+```
 
 ### `prompt`: text added to every agent turn
 
@@ -1009,7 +1039,7 @@ The slot is a `RuntimeFactory`: `(deps: RuntimeDeps) => AgentRuntime`, called on
 `deps` provides `logger`, `env`, `owner`, `toolTiers`, and the host's `judge`.
 Its `sessions()` gives you linked hold rules, packages, session tools, and personas from preflight onwards; call it in a turn, when those parts are available.
 `prompts(conversation, speaker)` gives you the owner's approval and question cards on the conversation's surface, or `undefined`.
-`agents` holds the agent server's per-agent settings: `workDir`, `skills(name)`, `modelOf(name)`, and `turnChannel(scope)`.
+`agents` holds the agent server's per-agent settings: `workDir`, `scratchDir` (the agents' shell's `TMPDIR`), `skills(name)`, `modelOf(name)`, and `turnChannel(scope)`.
 `confirmations` stores held actions across restarts.
 
 An `AgentRuntime` has these methods:
@@ -2099,7 +2129,7 @@ It returns:
 |---|---|
 | `contribution` | What the plugin added, as the host would collect it: `tools`, `prompt`, `seeds`, `events`, `services`, `http`, and the rest |
 | `tools`, `tiers` | The tool names, and the table that says what tier each needs |
-| `holds` | The plugin's `holdRules` chained as the host links them (`holdChain`): `holds(tool, input, { workspace? })` returns the description of a call that must be approved first, or `undefined` |
+| `holds` | The plugin's `holdRules` chained as the host links them (`holdChain`): `holds(tool, input, { workspace?, scratchDir? })` returns the description of a call that must be approved first, or `undefined` |
 | `runTool(name, args, { speaker, channel }?)` | Runs a tool the way an agent's turn would, in the channel (default `test:1`) for the speaker, and returns the text the model reads |
 | `files` | Accepted files from `runTool`, recorded as `{ channel, file: ReplyFile }`; inject a surface with `supportsFiles: true` and pass its channel to test attachment tools |
 | `events` | The events the plugin itself reported through `context.events`, and those of `context.turns` |
@@ -2690,6 +2720,7 @@ Import from the entries listed below; source area files are internal.
 | `OwnerNotifier` | `pi-roundtable/kit` | type |
 | `PreviousTurn` | `pi-roundtable/kit` | type |
 | `PromptSlot` | `pi-roundtable/kit` | type |
+| `PushPolicy` | `pi-roundtable/kit` | type |
 | `SCHEDULE_TOOLS` | `pi-roundtable/kit` | value |
 | `SHELL_TOOLS` | `pi-roundtable/kit` | value |
 | `SKILL_LIST_TOOL` | `pi-roundtable/kit` | value |
@@ -2761,6 +2792,7 @@ Import from the entries listed below; source area files are internal.
 | `searchTerms` | `pi-roundtable/kit` | value |
 | `settleTurn` | `pi-roundtable/kit` | value |
 | `shellHoldRule` | `pi-roundtable/kit` | value |
+| `shellHoldRuleFor` | `pi-roundtable/kit` | value |
 | `skillListExtension` | `pi-roundtable/kit` | value |
 | `splitReply` | `pi-roundtable/kit` | value |
 | `stringList` | `pi-roundtable/kit` | value |

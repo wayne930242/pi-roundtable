@@ -35,6 +35,8 @@ export interface AgentTeamOptions
 	workDir: string;
 	/** The host account the agents' shell and file tools run as. */
 	shellUser: string;
+	/** The scratch dir the agents' shell writes temporary files to. */
+	scratchDir?: string;
 	/** The prompt every persona shares, the assistant's included; each agent's starts with it. */
 	sharedPrompt: string;
 	/** The shared prompt for speakers other than the owner, when `sharedPrompt` speaks to the owner. */

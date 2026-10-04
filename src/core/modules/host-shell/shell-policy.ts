@@ -1,7 +1,17 @@
-import { homedir } from "node:os";
-import { basename, isAbsolute, relative, resolve } from "node:path";
-import type { HoldRule } from "../../holds.ts";
+import { basename } from "node:path";
+import type { HoldContext, HoldRule } from "../../holds.ts";
 import { assistantName } from "../../i18n/index.ts";
+import { ownPush, type PushPolicy } from "./git-push.ts";
+import {
+	follow,
+	insideRoots,
+	type LineState,
+	lineState,
+	resolvePath,
+	rmHeld,
+} from "./shell-paths.ts";
+
+export type { PushPolicy } from "./git-push.ts";
 
 const MAX_SHOWN_COMMAND = 600;
 
@@ -18,7 +28,6 @@ const ALWAYS_HELD = new Set([
 	"sudo",
 	"su",
 	"doas",
-	"rm",
 	"dd",
 	"shutdown",
 	"reboot",
@@ -76,15 +85,17 @@ const WRAPPERS = new Set([
 	"xargs",
 ]);
 
-/** A path is inside the workspace when it resolves under it; `~` means the service user's home. */
-function insideWorkspace(path: string, workspace: string): boolean {
-	const expanded =
-		path === "~" || path.startsWith("~/")
-			? `${homedir()}${path.slice(1)}`
-			: path;
-	const target = resolve(workspace, expanded);
-	const rel = relative(resolve(workspace), target);
-	return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
+/**
+ * Whether a write to the word stays inside a scratch root. A word the line cannot resolve is read
+ * as written from the workspace, as before variables were followed.
+ */
+function writable(word: string, state: LineState): boolean {
+	if (word === "/dev/null") return true;
+	const path =
+		resolvePath(word, state) ??
+		resolvePath(word, { ...state, vars: new Map(), cwd: state.workspace }) ??
+		word;
+	return insideRoots(path, state);
 }
 
 /** Splits a command line into simple commands of words; quotes are removed, operators separate. */
@@ -123,8 +134,11 @@ export function simpleCommands(command: string): string[][] {
 			if (ch === "\n") endCommand();
 			else endWord();
 		} else if (";&|()`{}".includes(ch)) {
+			// A word cut by a command substitution keeps its mark, so its value counts as unknown.
+			if (ch === "`" && inWord) word += ch;
 			endCommand();
 		} else if (ch === "$" && command[i + 1] === "(") {
+			if (inWord) word += "$(";
 			endCommand();
 			i++;
 		} else if (ch === ">" || ch === "<") {
@@ -147,17 +161,22 @@ export function simpleCommands(command: string): string[][] {
 	return commands;
 }
 
-/** Drops leading variable assignments, wrappers, and their options, leaving the real program. */
-function program(words: string[]): string[] {
+/**
+ * Drops leading variable assignments, wrappers, and their options, leaving the real program;
+ * `prefix` collects what was dropped.
+ */
+function program(words: string[], prefix: string[] = []): string[] {
 	let rest = words;
 	for (;;) {
 		const [first] = rest;
 		if (first === undefined) return rest;
 		if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(first)) {
+			prefix.push(first);
 			rest = rest.slice(1);
 			continue;
 		}
 		if (WRAPPERS.has(basename(first))) {
+			prefix.push(basename(first));
 			rest = rest.slice(1);
 			// Wrapper options and the timeout's duration.
 			while (
@@ -173,33 +192,37 @@ function program(words: string[]): string[] {
 	}
 }
 
-/** Why one simple command is held, or undefined. */
-function heldReason(words: string[], workspace: string): string | undefined {
+/** Why one simple command is held, or undefined; reads the line's state as it is before it. */
+function heldReason(
+	words: string[],
+	state: LineState,
+	policy: PushPolicy,
+): string | undefined {
 	for (let i = 0; i < words.length; i++) {
 		const op = words[i];
 		if (op === ">" || op === ">>") {
 			const target = words[i + 1];
-			if (
-				target &&
-				target !== "/dev/null" &&
-				!insideWorkspace(target, workspace)
-			)
-				return `writes to ${target}`;
+			if (target && !writable(target, state)) return `writes to ${target}`;
 		}
 	}
+	const prefix: string[] = [];
 	const argv = program(
 		words.filter(
 			(w, i) =>
 				!["<", ">", ">>", "dup"].includes(w) &&
 				!["<", ">", ">>"].includes(words[i - 1] ?? ""),
 		),
+		prefix,
 	);
 	const [head, ...args] = argv;
 	if (!head) return undefined;
 	const name = basename(head);
 	if (ALWAYS_HELD.has(name) || /^mkfs(\..+)?$/.test(name)) return name;
+	if (name === "rm")
+		// xargs adds operands nobody can see here.
+		return prefix.includes("xargs") ? "rm" : rmHeld(args, state);
 	if ((name === "bash" || name === "sh" || name === "zsh") && args[0] === "-c")
-		return commandHeld(args[1] ?? "", workspace);
+		return commandHeld(args[1] ?? "", state, policy);
 	const verbs = args.filter((a) => !a.startsWith("-"));
 	switch (name) {
 		case "systemctl":
@@ -255,11 +278,14 @@ function heldReason(words: string[], workspace: string): string | undefined {
 				? "installs or removes packages"
 				: undefined;
 		case "git": {
-			const [verb, ...rest] = gitCommand(args);
-			if (verb === "push")
+			const [globals, [verb, ...rest]] = gitCommand(args);
+			if (verb === "push") {
+				const plain = !prefix.some((w) => w.startsWith("GIT_"));
+				if (plain && ownPush(globals, rest, state, policy)) return undefined;
 				return rest.some((a) => a === "-f" || a.startsWith("--force"))
 					? "force-pushes"
 					: `pushes to GitHub, which deploys ${assistantName()} when the branch is main`;
+			}
 			if (verb === "reset" && rest.includes("--hard"))
 				return "git reset --hard";
 			return undefined;
@@ -270,11 +296,9 @@ function heldReason(words: string[], workspace: string): string | undefined {
 			return args.includes("-r") ? "removes a crontab" : undefined;
 		case "tee": {
 			const target = args.find(
-				(a) => !a.startsWith("-") && !insideWorkspace(a, workspace),
+				(a) => !a.startsWith("-") && !writable(a, state),
 			);
-			return target && target !== "/dev/null"
-				? `writes to ${target}`
-				: undefined;
+			return target ? `writes to ${target}` : undefined;
 		}
 		default:
 			return undefined;
@@ -290,12 +314,12 @@ const GIT_VALUE_OPTIONS = new Set([
 	"--namespace",
 ]);
 
-/** The git subcommand and its arguments, past global options such as `-C <dir>`. */
-function gitCommand(args: string[]): string[] {
+/** Git's global options, such as `-C <dir>`, and the subcommand with its arguments. */
+function gitCommand(args: string[]): [string[], string[]] {
 	let i = 0;
 	while (i < args.length && (args[i] as string).startsWith("-"))
 		i += GIT_VALUE_OPTIONS.has(args[i] as string) ? 2 : 1;
-	return args.slice(i);
+	return [args.slice(0, i), args.slice(i)];
 }
 
 const GH_BODY_FLAGS = ["-f", "-F", "--field", "--raw-field", "--input"];
@@ -348,44 +372,83 @@ function ghHeld(args: string[]): string | undefined {
 	}
 }
 
-function commandHeld(command: string, workspace: string): string | undefined {
+/** Why a command line is held; a `bash -c` inside one starts from the outer line's state. */
+function commandHeld(
+	command: string,
+	outer: LineState,
+	policy: PushPolicy,
+): string | undefined {
+	const state: LineState = {
+		...lineState(command, outer.workspace, undefined),
+		roots: outer.roots,
+		vars: new Map(outer.vars),
+		cwd: outer.cwd,
+	};
 	for (const words of simpleCommands(command)) {
-		const reason = heldReason(words, workspace);
+		const reason = heldReason(words, state, policy);
 		if (reason) return reason;
+		follow(program(words), state);
+		// `export` and `cd` are kept by program(); bare assignments are dropped by it.
+		if (words.every((w) => /^[A-Za-z_][A-Za-z0-9_]*=/.test(w)))
+			follow(words, state);
 	}
 	return undefined;
 }
 
 /**
- * Pi's shell and file tools: a bash command that is destructive or reaches outside the shared
- * workspace, and a write or edit outside it, wait for the owner. Reading always runs.
+ * Pi's shell and file tools: a bash command that is destructive or reaches outside the scratch
+ * roots (the shared workspace and the scratch dir), and a write or edit outside them, wait for the
+ * owner. Reading always runs.
  */
 export function shellActionNeedingConfirmation(
 	toolName: string,
 	input: Record<string, unknown>,
-	workspace: string,
+	context: HoldContext & { workspace: string },
+	policy: PushPolicy = {},
 ): string | undefined {
+	const state = lineState(
+		typeof input.command === "string" ? input.command : "",
+		context.workspace,
+		context.scratchDir,
+	);
 	if (toolName === "bash") {
 		const command = typeof input.command === "string" ? input.command : "";
-		const reason = commandHeld(command, workspace);
+		const reason = commandHeld(command, state, policy);
 		return reason
 			? `run the shell command \`${command.slice(0, MAX_SHOWN_COMMAND)}\` on the host (${reason})`
 			: undefined;
 	}
 	if (toolName === "write" || toolName === "edit") {
 		const path = typeof input.path === "string" ? input.path : "";
-		return insideWorkspace(path.replace(/^@/, ""), workspace)
+		return writable(path.replace(/^@/, ""), state)
 			? undefined
 			: `${toolName} the file ${path} on the host`;
 	}
 	return undefined;
 }
 
-/** Shell calls of a session with a workspace; sessions without one have no shell. */
-export const shellHoldRule: Readonly<HoldRule> = Object.freeze<HoldRule>({
-	name: "shell",
-	describe: (tool, input, { workspace }) =>
-		workspace === undefined
-			? undefined
-			: shellActionNeedingConfirmation(tool, input, workspace),
-});
+/**
+ * The shell rule with a push policy: a plain push to a repository of `ownPushOwners`, other than
+ * `heldPushRepos`, runs without a hold. Shell calls of a session without a workspace have no shell.
+ */
+export function shellHoldRuleFor(policy: PushPolicy = {}): Readonly<HoldRule> {
+	const frozen: PushPolicy = {
+		ownPushOwners: [...(policy.ownPushOwners ?? [])],
+		heldPushRepos: [...(policy.heldPushRepos ?? [])],
+	};
+	return Object.freeze<HoldRule>({
+		name: "shell",
+		describe: (tool, input, context) =>
+			context.workspace === undefined
+				? undefined
+				: shellActionNeedingConfirmation(
+						tool,
+						input,
+						{ ...context, workspace: context.workspace },
+						frozen,
+					),
+	});
+}
+
+/** The strict shell rule: every push is held. */
+export const shellHoldRule: Readonly<HoldRule> = shellHoldRuleFor();

@@ -63,12 +63,17 @@ export class ConversationSessions {
 	async gate(key: ChannelKey, agent: boolean): Promise<ConfirmationGate> {
 		let gate = this.#gates.get(key);
 		if (!gate) {
-			const workspace = agent ? this.#options.agents?.workDir : undefined;
+			const agents = agent ? this.#options.agents : undefined;
 			gate = new ConfirmationGate(
 				this.#factory.link().holds,
 				this.#options.owner,
 				await this.#options.confirmations.load(key),
-				workspace,
+				agents
+					? {
+							workspace: agents.workDir,
+							...(agents.scratchDir ? { scratchDir: agents.scratchDir } : {}),
+						}
+					: {},
 				this.#tiers,
 			);
 			this.#gates.set(key, gate);
