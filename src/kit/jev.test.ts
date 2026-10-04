@@ -270,7 +270,11 @@ describe("jevCompactionExtension", () => {
 });
 
 /** No key and no asker, as on a host without Jev; the tests run without a Jev key in the environment. */
-const keyless: JevCompactOptions = { config: { apiKey: "" } };
+/** No key, and a service address only these tests use, so their fetch counter sees no other test's calls. */
+const JEV_TEST_URL = "https://jev.invalid";
+const keyless: JevCompactOptions = {
+	config: { apiKey: "", baseUrl: JEV_TEST_URL },
+};
 
 const NO_KEY_LINE = {
 	level: "info" as const,
@@ -278,12 +282,19 @@ const NO_KEY_LINE = {
 	message: "Jev is not configured, so compaction uses Pi's summary",
 };
 
-/** Runs `body` with fetch counting its calls, so a test sees that Jev's service was not asked. */
+/** Runs `body` with fetch counting calls to Jev's service, so a test sees that it was not asked. */
 async function withoutJevCalls(body: () => Promise<void>): Promise<void> {
 	const original = globalThis.fetch;
 	let calls = 0;
 	globalThis.fetch = Object.assign(
-		async () => {
+		async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+			const url =
+				typeof input === "string"
+					? input
+					: input instanceof URL
+						? input.href
+						: input.url;
+			if (!url.startsWith(JEV_TEST_URL)) return original(input, init);
 			calls++;
 			throw new Error("Jev must not be asked");
 		},
