@@ -1,6 +1,6 @@
 {
 	"name": "pi-roundtable-drawing",
-	"version": "0.7.15",
+	"version": "0.7.16",
 	"description": "Relationship maps, magic circles, sigils, sacred geometry, and card spreads drawn locally for pi-roundtable",
 	"type": "module",
 	"license": "MIT",
@@ -48,7 +48,7 @@
 	"devDependencies": {
 		"@biomejs/biome": "2.5.15",
 		"@types/bun": "1.4.2",
-		"pi-roundtable": "0.7.15",
+		"pi-roundtable": "0.7.16",
 		"typescript": "7.0.2"
 	}
 }

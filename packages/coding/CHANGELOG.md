@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [0.7.16] - 2026-10-04
+
+- The worker's shell calls follow pi-roundtable 0.7.16's `shellHoldRule`: an `rm` whose operands all resolve inside the job's workspace, without being it, runs without a hold. Every `git push` stays held.
+
 ## [0.7.5] - 2026-10-03
 
 - Add `workerBlockText`, `limits` and `diagnosticChars`; git, gh and worker error text and the report and held-action bounds can be raised or lifted by the host.

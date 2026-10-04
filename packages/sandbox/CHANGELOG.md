@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.16
+
+- `jevCompactor({ logger })` from pi-roundtable 0.7.16's `pi-roundtable/kit` is a `PiCompactor` as it is: `compaction: jevCompactor({ logger })` compacts a sandbox session through Jev with the core's summary rules (the previous summary once, a rule-keeping goal, a reload list) and logs each fallback to Pi's summary with its channel, reason and `tokensBefore`. Without a Jev API key it logs that once and compacts through Pi's summary.
+
 ## 0.7.15
 
 - The model broker forwards a mid-conversation `role: "system"` message, which Claude Code 2.1.284 sends with each turn's environment, instead of refusing it. Like every other part of the request it is rebuilt, not passed on: its content may be only text (a string, or `text` blocks with `cache_control`), it keeps `clear_at`, and its per-message `output_config.effort` is capped at the host-judged level as the top-level effort is. The guest already writes the top-level system prompt and every user turn, so this text gives it no more reach. A tool change inside one (`tool_addition`, `tool_removal`, `tool_definition`) is still refused, with a 400 worded as the API words it, so Claude Code resends its tools whole.
