@@ -14,6 +14,7 @@ import { ownerAttachmentDir } from "../attachments/attachment-dir.ts";
 import type { AgentRuntime, AgentSessions } from "../contract/runtime.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
 import { ConfigError } from "../domain/errors.ts";
+import type { InterimTextMode } from "../domain/interim.ts";
 import type { OwnerIdentity } from "../identity.ts";
 import { ConfirmationJudge } from "../judging/confirmation-judge.ts";
 import { AGENT_BRIEF, EffortJudge } from "../judging/effort-judge.ts";
@@ -72,6 +73,10 @@ export interface AgentServerOptions {
 	avatarReference: string;
 	/** Reports the process's own errors to an agent; without one nothing is reported. */
 	errorReporter?: ErrorReporter;
+	/** Whether turns post the text they write before their final answer as they go; default "on". */
+	interimText?: InterimTextMode;
+	/** An intermediate text this long or longer is posted as an ordinary message; default 400. */
+	interimPrimaryChars?: number;
 }
 
 /** The name of the agent server's plugin, as `serviceStarted` events name it. */
@@ -278,6 +283,12 @@ export function agentServerPlugin(
 						agents: agentSessions,
 						prompts,
 						logger,
+						...(options.interimText
+							? { interimText: options.interimText }
+							: {}),
+						...(options.interimPrimaryChars
+							? { interimPrimaryChars: options.interimPrimaryChars }
+							: {}),
 					});
 			runtime = running;
 			context.services.provide(AGENTS, {

@@ -89,6 +89,11 @@ export {
 	ScheduleError,
 } from "./core/domain/errors.ts";
 export type {
+	InterimMessage,
+	InterimPosts,
+	InterimTextMode,
+} from "./core/domain/interim.ts";
+export type {
 	Approval,
 	AskOption,
 	OwnerAnswer,

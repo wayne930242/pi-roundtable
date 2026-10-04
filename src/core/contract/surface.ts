@@ -1,4 +1,5 @@
 import type { OutboundReply } from "../domain/conversation.ts";
+import type { InterimPosts } from "../domain/interim.ts";
 import type { OwnerPrompts } from "../domain/owner-prompts.ts";
 import { PluginError } from "../errors.ts";
 import type { ChannelKey } from "../sessions.ts";
@@ -68,6 +69,11 @@ export interface ChatSurface {
 	 * absent, = the action is held until the owner's next message.
 	 */
 	prompts?(channel: ChannelKey, speaker?: Speaker): OwnerPrompts | undefined;
+	/**
+	 * Where a running turn posts the text it writes before its final answer: ordinary messages it
+	 * may edit in place. Absent, or undefined, = only the final reply is posted.
+	 */
+	interim?(channel: ChannelKey): InterimPosts | undefined;
 }
 
 /**
@@ -87,4 +93,6 @@ export interface SurfacePort {
 	unreact(channel: ChannelKey, messageId: string, emoji: string): Promise<void>;
 	/** The owner's prompts in the channel; undefined when its surface has none. */
 	prompts(channel: ChannelKey, speaker?: Speaker): OwnerPrompts | undefined;
+	/** The channel's interim posts; undefined when its surface has none. */
+	interim(channel: ChannelKey): InterimPosts | undefined;
 }

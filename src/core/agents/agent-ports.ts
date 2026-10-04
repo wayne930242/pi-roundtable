@@ -1,4 +1,5 @@
 import type { AgentRuntime, ContextUse } from "../contract/runtime.ts";
+import type { InterimPosts } from "../domain/interim.ts";
 import type { ThinkingSetting } from "../models.ts";
 
 export type { ContextUse };
@@ -47,6 +48,14 @@ export interface ChannelMessage {
 /** The agent server's channels as the agent team needs them. */
 export interface AgentChannels {
 	post(channelId: string, post: AgentPost): Promise<void>;
+	/**
+	 * Where a running turn posts the text it writes before its final answer, under the same name
+	 * and avatar as `post`; absent = only the final reply is posted.
+	 */
+	interim?(
+		channelId: string,
+		as: Omit<AgentPost, "thinking" | "chunks" | "files">,
+	): InterimPosts;
 	/** Creates a text channel under the category, made when missing; returns its id. */
 	createChannel(
 		name: string,

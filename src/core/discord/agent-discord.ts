@@ -23,6 +23,7 @@ import type {
 	DashboardBoard,
 } from "../agents/agent-ports.ts";
 import { AgentError } from "../domain/errors.ts";
+import type { InterimPosts } from "../domain/interim.ts";
 import { messages } from "../i18n/index.ts";
 import type { Logger } from "../log.ts";
 
@@ -67,6 +68,38 @@ export class DiscordAgentChannels implements AgentChannels {
 			this.#webhooks.delete(channelId);
 			throw error;
 		}
+	}
+
+	interim(
+		channelId: string,
+		as: Omit<AgentPost, "thinking" | "chunks" | "files">,
+	): InterimPosts {
+		const threadId = as.threadId ? { threadId: as.threadId } : {};
+		return {
+			post: async (text) => {
+				const webhook = await this.#webhook(channelId);
+				try {
+					const message = await webhook.send({
+						username: as.name,
+						avatarURL: as.avatarUrl,
+						allowedMentions: { parse: ["users"] },
+						...threadId,
+						content: text,
+					});
+					return {
+						edit: async (change) => {
+							await webhook.editMessage(message, {
+								content: change,
+								...threadId,
+							});
+						},
+					};
+				} catch (error) {
+					this.#webhooks.delete(channelId);
+					throw error;
+				}
+			},
+		};
 	}
 
 	async createChannel(

@@ -6,6 +6,7 @@ import type {
 	TurnResult,
 } from "../domain/conversation.ts";
 import { AgentError } from "../domain/errors.ts";
+import type { InterimPosts } from "../domain/interim.ts";
 import type { AgentTurnScope } from "../domain/ports.ts";
 import { messages } from "../i18n/index.ts";
 import { splitReply } from "../presentation/reply-splitter.ts";
@@ -185,6 +186,7 @@ export class TeamTurns {
 			...(scope.group ? { group: scope.group } : {}),
 		};
 		this.#options.events?.turnStarted(turn);
+		const interim = this.#interim(postTo, agent);
 		let result: TurnResult;
 		try {
 			result = await settleTurn(
@@ -200,6 +202,7 @@ export class TeamTurns {
 							...(extra.interactive ? { interactive: true } : {}),
 							agent: scope,
 							speaker: chain.speaker,
+							...(interim ? { interim } : {}),
 						}),
 					),
 				"agent turn",
@@ -248,6 +251,27 @@ export class TeamTurns {
 	/** The agent's latest row, so a display name or avatar changed during the turn shows. */
 	#current(agent: Agent): Agent {
 		return this.#options.store.agent(agent.name) ?? agent;
+	}
+
+	/**
+	 * The turn's interim posts under the agent's name, read as each goes out so a name changed
+	 * during the turn shows; none in a channel no agent or group owns any more.
+	 */
+	#interim(channel: ChannelKey, agent: Agent): InterimPosts | undefined {
+		const { store, channels, studio } = this.#options;
+		if (!channels.interim) return undefined;
+		const interim = channels.interim.bind(channels);
+		return {
+			post: async (text) => {
+				if (!channelOwner(store, channel))
+					throw new AgentError(`${channel} is archived`);
+				const as = this.#current(agent);
+				return interim(channelIdOf(channel), {
+					name: as.displayName,
+					avatarUrl: studio.url(as.avatarHash),
+				}).post(text);
+			},
+		};
 	}
 
 	/**

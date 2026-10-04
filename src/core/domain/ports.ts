@@ -2,6 +2,7 @@ import type { AgentTurnScope, TurnSelection } from "../sessions.ts";
 import type { Speaker } from "../speakers.ts";
 import type { TurnAttachments } from "./attachment.ts";
 import type { ChannelKey } from "./conversation.ts";
+import type { InterimPosts } from "./interim.ts";
 
 export type { AgentTurnScope };
 
@@ -32,6 +33,11 @@ export interface TurnRequest {
 	 * schedule's turn is not.
 	 */
 	interactive?: boolean;
+	/**
+	 * Where the turn posts the text it writes before its final answer, as it goes; the caller
+	 * hands the channel its reply goes to. Absent = only the final reply is posted.
+	 */
+	interim?: InterimPosts;
 }
 
 /** The judge's question and answer shapes. */

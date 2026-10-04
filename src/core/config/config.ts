@@ -2,6 +2,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentSeed } from "../agents/agent-rules.ts";
 import { ConfigError } from "../domain/errors.ts";
+import type { InterimTextMode } from "../domain/interim.ts";
 import { isLocale, type Locale } from "../i18n/index.ts";
 import type { OwnerIdentity } from "../identity.ts";
 import {
@@ -11,6 +12,7 @@ import {
 	type ThinkingLevel,
 } from "../models.ts";
 import type { RoundtablePlugin } from "../plugin.ts";
+import { PRIMARY_CHARS } from "../runtime/interim-text.ts";
 import type { Tier, TierMembers } from "../speakers.ts";
 import {
 	bool,
@@ -123,6 +125,14 @@ export interface RoundtableConfig {
 	memory?: boolean;
 	/** The agent that investigates the process's own errors, by name. */
 	ops?: { agent: string };
+	/**
+	 * Whether a turn posts the text it writes before its final answer as it goes: long or
+	 * structured text as ordinary messages, short narration and the tools called in one small
+	 * progress message. Default "on"; "off" posts only the final reply.
+	 */
+	interimText?: InterimTextMode;
+	/** An intermediate text this long or longer is posted as an ordinary message; default 400. */
+	interimPrimaryChars?: number;
 	plugins?: RoundtablePlugin[];
 }
 
@@ -204,6 +214,8 @@ const schema = shape({
 	),
 	memory: optional(bool),
 	ops: optional(shape({ agent: text })),
+	interimText: optional(oneOf<InterimTextMode>("on", "off")),
+	interimPrimaryChars: optional(integer(1, 100_000)),
 	plugins: optional(
 		list(
 			guarded("a plugin, an object with a name and a setup function", isPlugin),
@@ -256,6 +268,8 @@ export interface ResolvedConfig {
 	skills: false | { builtinDir?: string; reposDir?: string };
 	memory: boolean;
 	ops?: { agent: string };
+	interimText: InterimTextMode;
+	interimPrimaryChars: number;
 	plugins: RoundtablePlugin[];
 }
 
@@ -335,6 +349,8 @@ export function resolveConfig(input: unknown): ResolvedConfig {
 		skills: config.skills ?? {},
 		memory: config.memory ?? true,
 		...(config.ops ? { ops: config.ops } : {}),
+		interimText: config.interimText ?? "on",
+		interimPrimaryChars: config.interimPrimaryChars ?? PRIMARY_CHARS,
 		plugins: config.plugins ?? [],
 	};
 }

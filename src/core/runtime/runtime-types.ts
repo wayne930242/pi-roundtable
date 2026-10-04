@@ -6,6 +6,7 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 import type { AgentSessions, LoadedSkill } from "../contract/runtime.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
+import type { InterimTextMode } from "../domain/interim.ts";
 import type { OwnerPrompts } from "../domain/owner-prompts.ts";
 import type { OwnerIdentity } from "../identity.ts";
 import type { Logger } from "../log.ts";
@@ -66,6 +67,13 @@ export interface PiAgentRuntimeOptions {
 	toolTiers?: ToolTiers;
 	/** A run that takes longer, not counting time spent waiting on the owner's cards, is aborted and reported as failed. */
 	turnTimeoutMs?: number;
+	/**
+	 * Whether a turn given a place for interim posts shows the text it writes before its final
+	 * answer as it goes; default "on". "off" posts only the final reply.
+	 */
+	interimText?: InterimTextMode;
+	/** An intermediate text this long or longer is posted as an ordinary message; default 400. */
+	interimPrimaryChars?: number;
 	/** How long a new session waits for its MCP tools to register. */
 	mcpConnectTimeoutMs?: number;
 }

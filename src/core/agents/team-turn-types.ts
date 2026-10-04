@@ -44,7 +44,7 @@ export interface TeamTurnsOptions {
 	/** Who the agents work for, as their prompts and group history name them. */
 	owner: OwnerIdentity;
 	store: PgAgentStore;
-	channels: Pick<AgentChannels, "post">;
+	channels: Pick<AgentChannels, "post" | "interim">;
 	studio: Pick<AvatarStudio, "url">;
 	/** Set once the runtime exists, which itself needs the team's tools. */
 	runtime: () => AgentTurnRunner;

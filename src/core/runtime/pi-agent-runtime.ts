@@ -36,6 +36,7 @@ import {
 	confirmedTurnText,
 } from "./extensions/confirmation-gate.ts";
 import { COMPACT_TOOL } from "./extensions/self-compact-guard.ts";
+import { interimPoster } from "./interim-text.ts";
 import { PromptSlot, workTimeout } from "./prompt-slot.ts";
 import {
 	type PiAgentRuntimeOptions,
@@ -181,9 +182,17 @@ export class PiAgentRuntime implements AgentRuntime {
 		// Collected as they end: a compaction during the turn shortens session.messages.
 		const turnMessages: TurnMessage[] = [];
 		const toolCalls: string[] = [];
+		// Text written before the final answer is posted as the turn goes; the final reply stays the caller's.
+		const interim = interimPoster(request, this.#options);
 		const unsubscribe = session.subscribe((event) => {
-			if (event.type === "tool_execution_start") toolCalls.push(event.toolName);
-			if (event.type === "message_end") turnMessages.push(event.message);
+			if (event.type === "tool_execution_start") {
+				toolCalls.push(event.toolName);
+				interim?.toolStart(event.toolName);
+			}
+			if (event.type === "message_end") {
+				turnMessages.push(event.message);
+				interim?.messageEnd(event.message);
+			}
 		});
 		const slot = this.#sessions.slot(key);
 		slot.bind(
@@ -191,6 +200,7 @@ export class PiAgentRuntime implements AgentRuntime {
 				? this.#options.prompts?.(request.channel, request.speaker)
 				: undefined,
 			request.agent?.name ?? assistantName(),
+			interim ? () => interim.flush() : undefined,
 		);
 		// Time spent waiting on the owner's cards does not count towards the timeout.
 		const cancelTimeout = workTimeout(turnTimeoutMs, slot, () => {
@@ -237,6 +247,7 @@ export class PiAgentRuntime implements AgentRuntime {
 			cancelTimeout();
 			slot.unbind();
 			unsubscribe();
+			await interim?.flush();
 			gate.endTurn();
 			const usage = session.getContextUsage();
 			if (usage)

@@ -10,14 +10,23 @@ import { assistantName } from "../i18n/index.ts";
  */
 export class PromptSlot {
 	#prompts: OwnerPrompts | undefined;
+	#beforeCard: (() => Promise<void>) | undefined;
 	#asker = assistantName();
 	#open = 0;
 	#openSince = 0;
 	#waited = 0;
 
-	/** Binds the turn's prompts; `asker` names who asks, the assistant or an agent. */
-	bind(prompts: OwnerPrompts | undefined, asker: string): void {
+	/**
+	 * Binds the turn's prompts; `asker` names who asks, the assistant or an agent. `beforeCard`
+	 * runs before each card opens, such as posting the text the turn wrote before it.
+	 */
+	bind(
+		prompts: OwnerPrompts | undefined,
+		asker: string,
+		beforeCard?: () => Promise<void>,
+	): void {
 		this.#prompts = prompts;
+		this.#beforeCard = beforeCard;
 		this.#asker = asker;
 		this.#open = 0;
 		this.#waited = 0;
@@ -25,6 +34,7 @@ export class PromptSlot {
 
 	unbind(): void {
 		this.#prompts = undefined;
+		this.#beforeCard = undefined;
 	}
 
 	get asker(): string {
@@ -49,6 +59,7 @@ export class PromptSlot {
 	}
 
 	async #waiting<T>(ask: () => Promise<T>): Promise<T> {
+		await this.#beforeCard?.();
 		if (this.#open++ === 0) this.#openSince = Date.now();
 		try {
 			return await ask();

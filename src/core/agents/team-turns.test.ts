@@ -57,12 +57,14 @@ const coordinator: AgentTurnScope = {
 };
 
 function setup(
-	answer: (request: TurnRequest) => TurnResult,
+	answer: (request: TurnRequest) => TurnResult | Promise<TurnResult>,
 	host = new FakeThreadHost(),
 	withThreads = true,
 	held?: PendingConfirmation,
 ) {
 	const posts: { channelId: string; post: AgentPost }[] = [];
+	/** Interim posts as `channelId name: text`, edits included. */
+	const interims: string[] = [];
 	const turns: TurnRequest[] = [];
 	/** The replies the judge was asked to read as approvals. */
 	const judged: string[] = [];
@@ -80,6 +82,15 @@ function setup(
 			post: async (channelId, post) => {
 				posts.push({ channelId, post });
 			},
+			interim: (channelId, as) => ({
+				post: async (text) => {
+					interims.push(`${channelId} ${as.name}: ${text}`);
+					return {
+						edit: async (change) =>
+							void interims.push(`${channelId} ${as.name}: edit ${change}`),
+					};
+				},
+			}),
 		},
 		studio: { url: () => "https://x/a.png" },
 		runtime: () => ({
@@ -111,7 +122,7 @@ function setup(
 		posts
 			.filter((p) => p.channelId === channelId && p.post.threadId === threadId)
 			.map((p) => `${p.post.name}: ${p.post.chunks.join("")}`);
-	return { team, host, posts, turns, texts, judged };
+	return { team, host, posts, interims, turns, texts, judged };
 }
 
 /** Runs a coordinator turn, whose model sends the message, and waits for the chain to settle. */
@@ -156,6 +167,23 @@ describe("agent reply files", () => {
 			await team.answerBackground(discordKey("1000"), OWNER_SPEAKER, "draw");
 			expect(posts[0]?.post.files).toBeUndefined();
 		}
+	});
+});
+
+describe("interim posts", () => {
+	test("an agent turn's interim posts go out under its name before its reply", async () => {
+		const { team, posts, interims } = setup(async (request) => {
+			const message = await request.interim?.post("a proposal");
+			await message?.edit("-# bash");
+			expect(posts).toEqual([]);
+			return { ok: true, text: "done" };
+		});
+		await team.answerBackground(discordKey("1000"), OWNER_SPEAKER, "go");
+		expect(interims).toEqual([
+			"1000 Coordinator: a proposal",
+			"1000 Coordinator: edit -# bash",
+		]);
+		expect(posts.map((p) => p.post.chunks)).toEqual([["done"]]);
 	});
 });
 

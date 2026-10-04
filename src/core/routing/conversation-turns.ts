@@ -82,6 +82,8 @@ export function conversationTurns(
 			const hideStop = surfaces.showStop(channel);
 			const turn = { kind, channel, speaker };
 			events.turnStarted(turn);
+			// A claim that posts its own reply formats its own text, so only the default reply posts as it goes.
+			const interim = input.reply ? undefined : surfaces.interim(channel);
 			let result: TurnResult;
 			try {
 				result = await settleTurn(
@@ -102,6 +104,7 @@ export function conversationTurns(
 								...(input.confirmed ? { confirmed: true } : {}),
 								...(input.steerable ? { steerable: true } : {}),
 								...(input.interactive ? { interactive: true } : {}),
+								...(interim ? { interim } : {}),
 							}),
 						),
 					"conversation turn",

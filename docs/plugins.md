@@ -1056,7 +1056,7 @@ An `AgentRuntime` has these methods:
 | `preflight?()` | Runs in the host's preflight, before anything starts; a throw stops the boot |
 | `dispose?()` | Runs when the host stops the agent server's runtime service |
 
-A request has the turn's `channel`, `selection` (its tools), `text`, `attachments`, `speaker`, and flags (`steerable`, `interactive`, `confirmed`).
+A request has the turn's `channel`, `selection` (its tools), `text`, `attachments`, `speaker`, flags (`steerable`, `interactive`, `confirmed`), and `interim`, where the turn may post the text it writes before its final answer ([interim text](#interim-text-what-a-turn-writes-before-its-final-answer)).
 An agent's turn also has `agent`, the agent's scope, whose `session` is the conversation's key.
 Other turns use `kind` to name the conversation's persona, defaulting to `"owner"` when absent.
 
@@ -1882,6 +1882,7 @@ The agent server claims only `discord:` keys, so claims on your surface's channe
 | `showStop(channel)` | Shows the owner a stop control until the returned function is called; using it calls `conversations.stop(channel)` | none is shown |
 | `react`, `unreact` | Adds or removes the bot's reaction on a message | no marks on queued or steered messages |
 | `prompts(channel, speaker?)` | The owner's way to approve a held action or answer `ask_user` inside a running turn, as `OwnerPrompts`: `confirm` and `ask` | the action is held until the owner's next message |
+| `interim(channel)` | Where a running turn posts the text it writes before its final answer, as `InterimPosts`: `post(text)` sends one message of at most 2000 characters and resolves to an `InterimMessage` whose `edit(text)` changes it in place | only the final reply is posted |
 
 The host starts each surface as `surface:<prefix>` at the contributing plugin's place in the order, before that plugin's own services.
 It stops surfaces in reverse order, like other services.
@@ -1892,6 +1893,22 @@ Its `sendReply` rejects with a `PluginError` naming the prefix when no surface s
 If `prompts` is unavailable, it returns `undefined` and held actions wait for the owner's next message.
 `of(channel)` returns the surface, or `undefined`.
 The agent server asks the owner for approvals through `context.surfaces.prompts`, so a surface that gives `prompts` gets them in its own channels.
+
+#### Interim text: what a turn writes before its final answer
+
+A model often writes text in an assistant message that then calls tools, such as a proposal before it asks `ask_user` "go with this version?".
+On a surface that gives `interim`, and in the agent server's channels through the agents' webhooks, the host posts that text as the turn goes, sorted in two:
+
+- **Primary** text is posted as ordinary messages as soon as its assistant message ends: text of 400 characters or more, or written with a Markdown heading, list, table or code fence.
+- **Secondary** text, short narration between tool calls, goes to one progress message per run of tool-calling messages, in Discord's small text (`-# ` per line): each text as a line, then the tools called in the run, such as `-# bash ×3 · read · web_search` (names only). It is edited in place at most every 1.5 seconds, its last state always lands, and it stays inside 2000 characters by dropping its oldest lines behind `-# …`. A primary post or a card starts a new progress message.
+
+Before any card, an `ask_user` question or an approval, the host posts the pending text and brings the progress message up to date, so what the model wrote before the card shows above it.
+The final reply is posted at the end as before, with its thinking line; an intermediate message is never the final one, so nothing is posted twice, and a steered run keeps its final text.
+A failed interim post or edit is logged and never fails the turn.
+Turns with nowhere to post, such as transient tasks, coding workers, and turns of a claim that passes its own `reply` to `context.turns.run`, post only their final reply.
+A runtime that fills [the `runtime` slot](#the-runtime-slot-replace-pi) receives the place to post as `TurnRequest.interim` and may use it or not.
+
+The config's `interimText: "off"` posts only the final reply (default `"on"`), and `interimPrimaryChars` sets the length of primary text (default 400).
 
 The Discord plugin collects [slash commands](#slash-commands-commandsadd); the host doesn't compose them or pass them to surfaces on other networks.
 
@@ -2525,6 +2542,9 @@ Import from the entries listed below; source area files are internal.
 | `HttpRoute` | `pi-roundtable` | type |
 | `ImageDrawer` | `pi-roundtable` | type |
 | `InboundMessage` | `pi-roundtable` | type |
+| `InterimMessage` | `pi-roundtable` | type |
+| `InterimPosts` | `pi-roundtable` | type |
+| `InterimTextMode` | `pi-roundtable` | type |
 | `Judge` | `pi-roundtable` | type |
 | `JudgeError` | `pi-roundtable` | value |
 | `JudgeModel` | `pi-roundtable` | type |

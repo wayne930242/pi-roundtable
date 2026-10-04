@@ -37,7 +37,7 @@ export function askUserExtension(
 		pi.registerTool({
 			name: ASK_USER_TOOL,
 			label: `Ask ${o.name}`,
-			description: `Ask ${o.name} a question on a card with buttons in this channel and wait for ${o.his} answer, within this turn. Use it when you need ${o.his} decision to continue, instead of ending your turn with a question. Offer options when the choices are known; set multi when several may apply and allow_other to let ${o.him} write ${o.his} own answer. ${o.He} has 30 minutes; after that the result says there was no answer.`,
+			description: `Ask ${o.name} a question on a card with buttons in this channel and wait for ${o.his} answer, within this turn. Use it when you need ${o.his} decision to continue, instead of ending your turn with a question. The card should read on its own, so put the context ${o.he} needs in the question too. Offer options when the choices are known; set multi when several may apply and allow_other to let ${o.him} write ${o.his} own answer. ${o.He} has 30 minutes; after that the result says there was no answer.`,
 			parameters: Type.Object(
 				{
 					question: Type.String({ minLength: 1, maxLength: 1500 }),

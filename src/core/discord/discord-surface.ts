@@ -17,6 +17,7 @@ import type {
 	InboundMessage,
 	OutboundReply,
 } from "../domain/conversation.ts";
+import type { InterimPosts } from "../domain/interim.ts";
 import type { OwnerPrompts } from "../domain/owner-prompts.ts";
 import type { OwnerNotifier } from "../domain/ports.ts";
 import { messages } from "../i18n/index.ts";
@@ -157,6 +158,25 @@ export class DiscordSurface
 	/** The owner's approval and question cards in a Discord channel. */
 	prompts(channel: ChannelKey, speaker?: Speaker): OwnerPrompts | undefined {
 		return this.#options.prompts(channel, speaker);
+	}
+
+	/** The channel's interim posts: ordinary messages, edited in place for the progress line. */
+	interim(channel: ChannelKey): InterimPosts | undefined {
+		if (!channel.startsWith(PREFIX)) return undefined;
+		return {
+			post: async (text) => {
+				const target = await this.#sendable(channel);
+				const message = await target.send({
+					content: text,
+					allowedMentions: { parse: ["users"] },
+				});
+				return {
+					edit: async (change) => {
+						await message.edit({ content: change });
+					},
+				};
+			},
+		};
 	}
 
 	async start(onMessage: (message: InboundMessage) => void): Promise<void> {

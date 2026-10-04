@@ -217,6 +217,8 @@ export async function defineRoundtable(
 				avatarListener: "public",
 				avatarUrl: config.http.publicUrl,
 				avatarReference: config.avatar ?? join(ASSETS, "neutral.png"),
+				interimText: config.interimText,
+				interimPrimaryChars: config.interimPrimaryChars,
 				...(errorReporter ? { errorReporter } : {}),
 			}),
 			seedsPlugin(config.agents),

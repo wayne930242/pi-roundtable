@@ -30,6 +30,7 @@ function recordingSurface(log: string[]): SurfacePort {
 		react: async () => undefined,
 		unreact: async () => undefined,
 		prompts: () => undefined,
+		interim: () => undefined,
 	};
 }
 
