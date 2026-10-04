@@ -1,4 +1,7 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import * as os from "node:os";
+import { join } from "node:path";
 import type {
 	ExtensionAPI,
 	ExtensionFactory,
@@ -269,8 +272,7 @@ describe("jevCompactionExtension", () => {
 	});
 });
 
-/** No key and no asker, as on a host without Jev; the tests run without a Jev key in the environment. */
-/** No key, and a service address only these tests use, so their fetch counter sees no other test's calls. */
+/** A service address only these tests use, so their fetch counter sees no other test's calls. */
 const JEV_TEST_URL = "https://jev.invalid";
 const keyless: JevCompactOptions = {
 	config: { apiKey: "", baseUrl: JEV_TEST_URL },
@@ -282,9 +284,16 @@ const NO_KEY_LINE = {
 	message: "Jev is not configured, so compaction uses Pi's summary",
 };
 
-/** Runs `body` with fetch counting calls to Jev's service, so a test sees that it was not asked. */
+/** Isolates Jev's environment/file fallback and counts service calls during a keyless test. */
 async function withoutJevCalls(body: () => Promise<void>): Promise<void> {
 	const original = globalThis.fetch;
+	const home = mkdtempSync(join(os.tmpdir(), "roundtable-keyless-"));
+	// Bun caches homedir at startup; changing HOME in-process does not isolate it.
+	const homedir = spyOn(os, "homedir").mockReturnValue(home);
+	const originalKey = process.env.TYPESAFE_API_KEY;
+	const originalConfigHome = process.env.XDG_CONFIG_HOME;
+	delete process.env.TYPESAFE_API_KEY;
+	process.env.XDG_CONFIG_HOME = join(home, ".config");
 	let calls = 0;
 	globalThis.fetch = Object.assign(
 		async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
@@ -304,6 +313,12 @@ async function withoutJevCalls(body: () => Promise<void>): Promise<void> {
 		await body();
 	} finally {
 		globalThis.fetch = original;
+		homedir.mockRestore();
+		if (originalKey === undefined) delete process.env.TYPESAFE_API_KEY;
+		else process.env.TYPESAFE_API_KEY = originalKey;
+		if (originalConfigHome === undefined) delete process.env.XDG_CONFIG_HOME;
+		else process.env.XDG_CONFIG_HOME = originalConfigHome;
+		rmSync(home, { recursive: true, force: true });
 	}
 	expect(calls).toBe(0);
 }

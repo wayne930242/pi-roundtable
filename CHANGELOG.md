@@ -5,6 +5,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.18] - 2026-10-05
+
+### Fixed
+
+- Stop reading attachments as soon as they exceed the 25 MiB limit and cancel HTTP error bodies instead of leaving them open.
+- Stop claiming or starting schedules when shutdown occurs during a database query or claim; already running turns still finish normally.
+- Isolate keyless Jev tests from the developer's home, XDG configuration and environment.
+
+### Changed
+
+- Extract schedule precheck resolution, execution and cleanup tracking from the scheduler without changing its public contract.
+- Release all five official packages in lockstep; MCP and sandbox include lifecycle fixes described in their changelogs.
+
 ## [0.7.17] - 2026-10-04
 
 ### Added

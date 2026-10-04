@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [0.7.18] - 2026-10-05
+
+- Release in lockstep with pi-roundtable 0.7.18; no package-specific behavior changes.
+
 ## [0.7.16] - 2026-10-04
 
 - The worker's shell calls follow pi-roundtable 0.7.16's `shellHoldRule`: an `rm` whose operands all resolve inside the job's workspace, without being it, runs without a hold. Every `git push` stays held.

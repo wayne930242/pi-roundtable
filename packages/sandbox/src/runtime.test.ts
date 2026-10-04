@@ -55,6 +55,66 @@ test("runtime fixes identity, creates disjoint channel mounts and removes broker
 	}
 });
 
+test.each([false, true])(
+	"startFresh during an active turn survives its completion (already fresh: %s)",
+	async (alreadyFresh) => {
+		const root = mkdtempSync("/tmp/sb-runtime-");
+		const resets: boolean[] = [];
+		const runtime = new SandboxRuntime({
+			...options(root),
+			driver: {
+				run: async (_spec, turn) => {
+					resets.push(turn.reset === true);
+					if (turn.text === "active") runtime.startFresh("fake:a");
+					return { ok: true, text: "done" };
+				},
+			},
+		});
+		try {
+			if (alreadyFresh) runtime.startFresh("fake:a");
+			await runtime.runTurn("fake:a", { id: "guest", name: "Guest" }, "active");
+			await runtime.runTurn("fake:a", { id: "guest", name: "Guest" }, "next");
+			await runtime.runTurn(
+				"fake:a",
+				{ id: "guest", name: "Guest" },
+				"settled",
+			);
+			expect(resets).toEqual([alreadyFresh, true, false]);
+		} finally {
+			await runtime.dispose();
+			rmSync(root, { recursive: true, force: true });
+		}
+	},
+);
+
+test("startFresh during broker startup is reserved for the next turn", async () => {
+	const root = mkdtempSync("/tmp/sb-runtime-");
+	const resets: boolean[] = [];
+	const runtime = new SandboxRuntime({
+		...options(root),
+		driver: {
+			run: async (_spec, turn) => {
+				resets.push(turn.reset === true);
+				return { ok: true, text: "done" };
+			},
+		},
+	});
+	try {
+		const active = runtime.runTurn(
+			"fake:a",
+			{ id: "guest", name: "Guest" },
+			"active",
+		);
+		runtime.startFresh("fake:a");
+		await active;
+		await runtime.runTurn("fake:a", { id: "guest", name: "Guest" }, "next");
+		expect(resets).toEqual([false, true]);
+	} finally {
+		await runtime.dispose();
+		rmSync(root, { recursive: true, force: true });
+	}
+});
+
 test("stop and disposal abort only running turns and cleanup their broker directories", async () => {
 	const root = mkdtempSync("/tmp/sb-runtime-");
 	let started: (() => void) | undefined;

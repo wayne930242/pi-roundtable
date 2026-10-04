@@ -5,6 +5,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.18] - 2026-10-05
+
+### Fixed
+
+- Reserve a remote session atomically so simultaneous dispatches cannot overlap.
+- Keep a timed-out session busy until its underlying answer settles, and release it after synchronous or asynchronous answer failures.
+
+### Changed
+
+- Track active executions by session instead of scanning historical runs to decide whether a session is busy.
+
 ## [0.7.2] - 2026-10-02
 
 The first release from pi-roundtable; 0.7.0 and 0.7.1 were not published for this package.

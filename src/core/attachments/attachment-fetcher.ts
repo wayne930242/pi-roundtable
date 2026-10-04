@@ -53,12 +53,13 @@ export async function fetchAttachments(
 		try {
 			const response = await fetchImpl(ref.url);
 			if (!response.ok) {
+				await response.body?.cancel();
 				fail(`download failed with HTTP ${response.status}`);
 				continue;
 			}
-			const data = new Uint8Array(await response.arrayBuffer());
-			if (data.byteLength > MAX_ATTACHMENT_BYTES) {
-				fail(`larger than 25 MB (${data.byteLength} bytes)`);
+			const data = await readAttachmentBody(response);
+			if (typeof data === "number") {
+				fail(`larger than 25 MB (${data} bytes)`);
 				continue;
 			}
 			const file = `${prefix}-${index}-${safeFileName(ref.name)}`;
@@ -80,4 +81,35 @@ export async function fetchAttachments(
 		}
 	}
 	return { files, failures };
+}
+
+/** Returns the bytes, or the observed size once the stream exceeds the limit. */
+async function readAttachmentBody(
+	response: Response,
+): Promise<Uint8Array | number> {
+	if (!response.body) return new Uint8Array();
+	const reader = response.body.getReader();
+	const chunks: Uint8Array[] = [];
+	let size = 0;
+	try {
+		for (;;) {
+			const { done, value } = await reader.read();
+			if (done) break;
+			size += value.byteLength;
+			if (size > MAX_ATTACHMENT_BYTES) {
+				await reader.cancel();
+				return size;
+			}
+			chunks.push(value);
+		}
+	} finally {
+		reader.releaseLock();
+	}
+	const data = new Uint8Array(size);
+	let offset = 0;
+	for (const chunk of chunks) {
+		data.set(chunk, offset);
+		offset += chunk.byteLength;
+	}
+	return data;
 }

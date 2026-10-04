@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.18
+
+- Preserve a reset requested during broker startup or an active turn for the following turn; a successful turn consumes only the reset generation it started with.
+- Separate runtime configuration and per-turn broker/driver resource management from channel admission, cancellation and reset state, keeping the public API and cleanup order unchanged.
+- Add regression coverage for failure cleanup, reset retries, independent channels and admitted speaker identity.
+
 ## 0.7.16
 
 - `jevCompactor({ logger })` from pi-roundtable 0.7.16's `pi-roundtable/kit` is a `PiCompactor` as it is: `compaction: jevCompactor({ logger })` compacts a sandbox session through Jev with the core's summary rules (the previous summary once, a rule-keeping goal, a reload list) and logs each fallback to Pi's summary with its channel, reason and `tokensBefore`. Without a Jev API key it logs that once and compacts through Pi's summary.

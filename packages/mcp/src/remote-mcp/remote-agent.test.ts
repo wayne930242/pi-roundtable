@@ -109,4 +109,78 @@ describe("RemoteAgent", () => {
 		await Bun.sleep(20);
 		expect(agent.result(runId).status).toBe("failed");
 	});
+
+	test.each([false, true])(
+		"releases a session after an unexpected answer error (async: %s)",
+		async (asyncFailure) => {
+			const agent = new RemoteAgent({
+				sessions: fakeSessions(),
+				answer: () => {
+					if (asyncFailure) return Promise.reject(new Error("unexpected"));
+					throw new Error("unexpected");
+				},
+				logger,
+			});
+			const first = await agent.dispatch("first");
+			await Bun.sleep(0);
+			expect(agent.result(first.runId).status).toBe("failed");
+			const next = await agent.dispatch("next", first.sessionId);
+			await Bun.sleep(0);
+			expect(agent.result(next.runId).status).toBe("failed");
+		},
+	);
+
+	test("reserves a session atomically for simultaneous dispatches", async () => {
+		const sessions = fakeSessions();
+		const sessionId = await sessions.create();
+		const releases: ((result: TurnResult) => void)[] = [];
+		const agent = new RemoteAgent({
+			sessions,
+			answer: () =>
+				new Promise<TurnResult>((resolve) => releases.push(resolve)),
+			logger,
+		});
+		try {
+			const results = await Promise.allSettled([
+				agent.dispatch("first", sessionId),
+				agent.dispatch("second", sessionId),
+			]);
+			expect(
+				results.filter((result) => result.status === "fulfilled"),
+			).toHaveLength(1);
+			expect(
+				results.find((result) => result.status === "rejected"),
+			).toMatchObject({
+				status: "rejected",
+				reason: new RemoteAgentError("RUN_IN_PROGRESS"),
+			});
+		} finally {
+			for (const release of releases) release({ ok: true, text: "done" });
+			await Bun.sleep(0);
+		}
+	});
+
+	test("keeps a timed-out session busy until the underlying answer settles", async () => {
+		const held = heldAnswer();
+		const agent = new RemoteAgent({
+			sessions: fakeSessions(),
+			answer: held.answer,
+			logger,
+			timeoutMs: 5,
+			keepMs: 0,
+		});
+		const { runId, sessionId } = await agent.dispatch("slow");
+		await Bun.sleep(20);
+		expect(agent.result(runId).status).toBe("failed");
+		await expect(agent.dispatch("overlap", sessionId)).rejects.toEqual(
+			new RemoteAgentError("RUN_IN_PROGRESS"),
+		);
+		held.release({ ok: true, text: "late" });
+		await Bun.sleep(0);
+		expect(agent.result(runId).status).toBe("failed");
+		const next = await agent.dispatch("next", sessionId);
+		expect(next.sessionId).toBe(sessionId);
+		held.release({ ok: true, text: "done" });
+		await Bun.sleep(0);
+	});
 });

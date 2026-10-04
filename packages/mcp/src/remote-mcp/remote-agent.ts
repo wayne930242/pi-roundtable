@@ -50,6 +50,8 @@ export class RemoteAgent {
 	readonly #options: RemoteAgentOptions;
 	readonly #text: Pick<RemoteMcpMessages, "relayNote" | "runFailed">;
 	readonly #runs = new Map<string, Run>();
+	/** Actual executions, including calls still settling after a reported timeout. */
+	readonly #active = new Map<string, Run>();
 
 	constructor(options: RemoteAgentOptions) {
 		this.#options = options;
@@ -62,8 +64,16 @@ export class RemoteAgent {
 	): Promise<{ runId: string; sessionId: string }> {
 		this.#prune();
 		const session = await this.#session(sessionId);
+		// Check and reserve without an await between them: concurrent dispatches may
+		// both have finished looking up the same idle session.
+		if (this.#active.has(session))
+			throw new RemoteAgentError("RUN_IN_PROGRESS");
 		const runId = randomUUID();
-		const run: Run = { sessionId: session, state: { status: "working" } };
+		const run: Run = {
+			sessionId: session,
+			state: { status: "working" },
+		};
+		this.#active.set(session, run);
 		this.#runs.set(runId, run);
 		void this.#run(run, runId, message);
 		return { runId, sessionId: session };
@@ -75,16 +85,12 @@ export class RemoteAgent {
 		return run.state;
 	}
 
-	/** A new session, or the named one when it exists and has no run working. */
+	/** A new session, or the named one when it exists. Dispatch reserves it after lookup. */
 	async #session(sessionId: string | undefined): Promise<string> {
 		const { sessions } = this.#options;
 		if (sessionId === undefined) return sessions.create();
 		if (!SESSION_ID.test(sessionId) || !(await sessions.touch(sessionId)))
 			throw new RemoteAgentError("SESSION_NOT_FOUND");
-		const working = [...this.#runs.values()].some(
-			(run) => run.sessionId === sessionId && run.state.status === "working",
-		);
-		if (working) throw new RemoteAgentError("RUN_IN_PROGRESS");
 		return sessionId;
 	}
 
@@ -97,30 +103,47 @@ export class RemoteAgent {
 				timeoutMs,
 			);
 		});
-		const result = await Promise.race([
-			answer(
-				remoteChannel(run.sessionId),
-				`${this.#text.relayNote}\n${message}`,
-			),
-			timedOut,
-		]);
-		clearTimeout(timer);
-		if (result.ok) {
-			run.state = { status: "completed", text: result.text };
-		} else {
+		const answerResult = Promise.resolve()
+			.then(() =>
+				answer(
+					remoteChannel(run.sessionId),
+					`${this.#text.relayNote}\n${message}`,
+				),
+			)
+			.catch((error: unknown): TurnResult => {
+				return {
+					ok: false,
+					error: error instanceof Error ? error : new Error(String(error)),
+				};
+			});
+		try {
+			const result = await Promise.race([answerResult, timedOut]);
+			if (result.ok) {
+				run.state = { status: "completed", text: result.text };
+				run.finishedAt = Date.now();
+				return;
+			}
 			logger.error(
 				{ runId, sessionId: run.sessionId, err: result.error },
 				"remote run failed",
 			);
 			run.state = { status: "failed", error: this.#text.runFailed };
+			run.finishedAt = Date.now();
+			await answerResult;
+		} finally {
+			clearTimeout(timer);
+			this.#active.delete(run.sessionId);
 		}
-		run.finishedAt = Date.now();
 	}
 
 	#prune(): void {
 		const keepMs = this.#options.keepMs ?? 60 * 60_000;
 		for (const [id, run] of this.#runs) {
-			if (run.finishedAt !== undefined && Date.now() - run.finishedAt > keepMs)
+			if (
+				this.#active.get(run.sessionId) !== run &&
+				run.finishedAt !== undefined &&
+				Date.now() - run.finishedAt > keepMs
+			)
 				this.#runs.delete(id);
 		}
 	}
