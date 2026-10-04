@@ -269,6 +269,48 @@ describe("jevCompactionExtension", () => {
 	});
 });
 
+/** No key and no asker, as on a host without Jev; the tests run without a Jev key in the environment. */
+const keyless: JevCompactOptions = { config: { apiKey: "" } };
+
+const NO_KEY_LINE = {
+	level: "info" as const,
+	fields: { reason: "no_key" },
+	message: "Jev is not configured, so compaction uses Pi's summary",
+};
+
+/** Runs `body` with fetch counting its calls, so a test sees that Jev's service was not asked. */
+async function withoutJevCalls(body: () => Promise<void>): Promise<void> {
+	const original = globalThis.fetch;
+	let calls = 0;
+	globalThis.fetch = Object.assign(
+		async () => {
+			calls++;
+			throw new Error("Jev must not be asked");
+		},
+		{ preconnect: original.preconnect },
+	) as typeof fetch;
+	try {
+		await body();
+	} finally {
+		globalThis.fetch = original;
+	}
+	expect(calls).toBe(0);
+}
+
+describe("jevCompactionExtension without a key", () => {
+	test("logs once and leaves every compaction to Pi's summary", async () => {
+		await withoutJevCalls(async () => {
+			const { logger, lines } = recordingLogger();
+			const handlers = load(jevCompactionExtension({ logger, ...keyless }));
+			for (let i = 0; i < 2; i++)
+				expect(
+					await handlers.get("session_before_compact")?.(compactEvent()),
+				).toBeUndefined();
+			expect(lines).toEqual([NO_KEY_LINE]);
+		});
+	});
+});
+
 describe("jevCompactor", () => {
 	const request = (previousSummary?: string) => ({
 		reason: "threshold" as const,
@@ -325,5 +367,36 @@ describe("jevCompactor", () => {
 				message: "Jev leaves the compaction to Pi's summary",
 			},
 		]);
+	});
+});
+
+describe("jevCompactor without a key", () => {
+	test("logs once and leaves every compaction to Pi's summary", async () => {
+		await withoutJevCalls(async () => {
+			const { logger, lines } = recordingLogger();
+			const compactor = jevCompactor({ logger, ...keyless });
+			const context = {
+				channel: "discord:1:2" as ChannelKey,
+				signal: new AbortController().signal,
+			};
+			const request = {
+				reason: "threshold",
+				tokensBefore: 310_000,
+				firstKeptEntryId: "kept",
+				messagesToSummarize: messages,
+				turnPrefixMessages: [],
+				keptMessages: [],
+				readFiles: [],
+				modifiedFiles: [],
+			};
+			for (let i = 0; i < 2; i++)
+				expect(await compactor.compact(request, context)).toBeUndefined();
+			expect(lines).toEqual([
+				{
+					...NO_KEY_LINE,
+					fields: { channel: "discord:1:2", reason: "no_key" },
+				},
+			]);
+		});
 	});
 });

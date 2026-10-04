@@ -228,7 +228,7 @@ function reloadSection(lines: readonly string[]): string {
 }
 
 export interface JevExtensionOptions extends JevCompactOptions {
-	/** Receives each skip, with its reason and the tokens before. */
+	/** Receives each skip, with its reason and the tokens before; a missing key is logged once. */
 	logger: Logger;
 }
 
@@ -239,6 +239,7 @@ export interface JevExtensionOptions extends JevCompactOptions {
 export function jevCompactionExtension(
 	options: JevExtensionOptions,
 ): ExtensionFactory {
+	const logSkip = skipLogger();
 	return (pi) => {
 		pi.on(
 			"session_before_compact",
@@ -304,6 +305,7 @@ export interface JevCompactor {
 
 /** A sandbox compactor: `new PiSandboxRuntime({ ..., compaction: jevCompactor({ logger }) })`. */
 export function jevCompactor(options: JevExtensionOptions): JevCompactor {
+	const logSkip = skipLogger();
 	return {
 		engine: JEV_COMPACTION_ENGINE,
 		async compact(request, { channel, signal }) {
@@ -330,13 +332,26 @@ export function jevCompactor(options: JevExtensionOptions): JevCompactor {
 	};
 }
 
-function logSkip(
-	logger: Logger,
-	outcome: { skipped: JevSkipReason; detail?: string },
-	tokensBefore: number,
-): void {
-	logger.info(
-		{ reason: outcome.skipped, detail: outcome.detail, tokensBefore },
-		"Jev leaves the compaction to Pi's summary",
-	);
+/** Logs each skip; a missing key only the first time, as Pi's summary is then the setup, not a fallback. */
+function skipLogger() {
+	let toldNoKey = false;
+	return (
+		logger: Logger,
+		outcome: { skipped: JevSkipReason; detail?: string },
+		tokensBefore: number,
+	): void => {
+		if (outcome.skipped === "no_key") {
+			if (toldNoKey) return;
+			toldNoKey = true;
+			logger.info(
+				{ reason: outcome.skipped },
+				"Jev is not configured, so compaction uses Pi's summary",
+			);
+			return;
+		}
+		logger.info(
+			{ reason: outcome.skipped, detail: outcome.detail, tokensBefore },
+			"Jev leaves the compaction to Pi's summary",
+		);
+	};
 }
