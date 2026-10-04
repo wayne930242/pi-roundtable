@@ -105,6 +105,8 @@ export const PUBLIC_NAME_ALLOWLIST: NameAllowlist = {
 	[`src/kit/${spell("j", "ev")}.test.ts`]: [
 		spell("j", "ev"),
 		spell("no", "ul"),
+		// Its public compaction package names this service in its environment key.
+		spell("type", "safe"),
 	],
 };
 
