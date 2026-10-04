@@ -32,9 +32,9 @@ const OWNER_HANDLE = spell("way", "ne930242");
 // The lockfile lists a dependency's own registry name, which a transitive dependency spells with one of the names below.
 export const PUBLIC_NAME_ALLOWLIST: NameAllowlist = {
 	LICENSE: [OWNER_HANDLE],
-	"package.json": [OWNER_HANDLE, spell("way", "ne")],
+	"package.json": [OWNER_HANDLE, spell("way", "ne"), spell("j", "ev")],
 	"site/astro.config.mjs": [OWNER_HANDLE, spell("way", "ne")],
-	"CHANGELOG.md": [spell("way", "ne")],
+	"CHANGELOG.md": [spell("way", "ne"), spell("j", "ev")],
 	"site/public/CNAME": [spell("way", "ne")],
 	"site/public/robots.txt": [spell("way", "ne")],
 	// A key ending in "/" covers every file below that directory: documentation pages link to the repository,
@@ -47,14 +47,17 @@ export const PUBLIC_NAME_ALLOWLIST: NameAllowlist = {
 		spell("way", "ne"),
 		spell("context", "forge"),
 	],
-	"bun.lock": [spell("type", "safe")],
+	"bun.lock": [spell("type", "safe"), spell("j", "ev")],
 	".github/PACKAGE-RELEASES.md": [OWNER_HANDLE],
 	// Workspace metadata keeps the same public attribution as the root package.
 	...Object.fromEntries(
 		["drawing", "coding", "web", "sandbox", "mcp"].flatMap((name) =>
 			["LICENSE", "README.md", "package.json"].map((file) => [
 				`packages/${name}/${file}`,
-				[OWNER_HANDLE],
+				// The sandbox README points to the kit's compactor for the judging service.
+				name === "sandbox" && file === "README.md"
+					? [OWNER_HANDLE, spell("j", "ev")]
+					: [OWNER_HANDLE],
 			]),
 		),
 	),
@@ -85,8 +88,24 @@ export const PUBLIC_NAME_ALLOWLIST: NameAllowlist = {
 			],
 		]),
 	),
-	// The guide names its one private consumer and links public workspace READMEs.
-	"docs/plugins.md": [spell("Mer", "lin"), OWNER_HANDLE],
+	// The guide names its one private consumer, links public workspace READMEs, and documents the judging service's compactor.
+	"docs/plugins.md": [spell("Mer", "lin"), OWNER_HANDLE, spell("j", "ev")],
+	// The kit's compactor for the judging service depends on that service's public npm compaction package and is named after it;
+	// only these files, the root package.json, bun.lock and CHANGELOG.md name it, and its test answers in the package's own answer type.
+	...Object.fromEntries(
+		[
+			"src/kit/index.ts",
+			`src/kit/${spell("j", "ev")}.ts`,
+			"scripts/entries.exports.json",
+			"scripts/public-api.report.json",
+			"packages/sandbox/CHANGELOG.md",
+			`packages/sandbox/src/${spell("j", "ev")}-compactor.test.ts`,
+		].map((file) => [file, [spell("j", "ev")]]),
+	),
+	[`src/kit/${spell("j", "ev")}.test.ts`]: [
+		spell("j", "ev"),
+		spell("no", "ul"),
+	],
 };
 
 /**

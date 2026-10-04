@@ -266,6 +266,7 @@ A compactor that returns `undefined`, throws, answers out of shape, outlasts `ti
 The timeout may be at most half of `turnTimeoutMs`, so Pi's summary keeps time to run.
 A turn may ask the host for three compactions and send sixteen compaction reports; later compactions fall back to Pi's summary, and while a compactor that ignored its signal still runs, a new request falls back too.
 Without `compaction` the worker registers no compaction handler; the tiers and Pi's summary still apply.
+`jevCompactor({ logger })` from `pi-roundtable/kit` is a ready compactor through Jev, the one the core's hosts use: `compaction: jevCompactor({ logger })`.
 Compactions are written to the session file in the channel workspace, so they survive container removal and restarts.
 
 The host logs, per channel: `conversation compacted` (`trigger`, `engine` `extension` or `pi`, `tokensBefore`, `tokensAfter`, `nextCompactionAt`), `compaction failed`, `compaction skips the extension for Pi's summary` past the ceiling, and `compaction falls back to Pi's summary` with its `fallback` reason.

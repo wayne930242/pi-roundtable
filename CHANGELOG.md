@@ -5,6 +5,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `pi-roundtable/kit` owns a Jev compaction engine on pi-jev-compaction 1.0.0 (now a dependency, pinned exactly): `jevCompact(input, options)` and two adapters, `jevCompactionExtension({ logger })` for the `compaction` session tool (placed through `session.compaction.wrap`, engine `JEV_COMPACTION_ENGINE`, `pi-jev-compaction`) and `jevCompactor({ logger })` for pi-roundtable-sandbox's `compaction` option. Both log each fallback to Pi's summary with its reason and `tokensBefore`.
+  - Values: `jevCompact`, `jevCompactionExtension`, `jevCompactor`, `isRuleLoad`, `JEV_COMPACTION_ENGINE`, `JEV_GOAL`, `JEV_PREVIOUS_SUMMARY_LIMIT_TOKENS`; types: `JevCompactInput`, `JevCompactOptions`, `JevCompactOutcome`, `JevCompactor`, `JevCompactRequest`, `JevExtensionOptions`, `JevSkipReason`.
+  - Unlike pi-jev-compaction's own `compactPiSession`, a summary carries the previous summary once, not twice, so a chain of compactions no longer doubles (one session's grew from 8k to 303k characters over five compactions).
+  - A previous summary over 60,000 tokens (`previousSummaryLimitTokens`) skips Jev, so Pi's summary condenses the chain.
+  - Jev judges with a goal (`JEV_GOAL`, option `goal`) that keeps the tool results that set rules still in force, which it dropped without one, and the summary ends with the rule loads it summarized (skills, notebook system prompts, reads of SKILL.md, AGENTS.md and `.agents/skills/`; option `ruleLoad`, default `isRuleLoad`) for the agent to load again.
+
 ## [0.7.15] - 2026-10-03
 
 ### Changed

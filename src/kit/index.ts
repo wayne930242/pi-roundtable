@@ -45,6 +45,24 @@ export {
 } from "./domain.ts";
 export { holdChain } from "./holds.ts";
 export type {
+	JevCompactInput,
+	JevCompactOptions,
+	JevCompactOutcome,
+	JevCompactor,
+	JevCompactRequest,
+	JevExtensionOptions,
+	JevSkipReason,
+} from "./jev.ts";
+export {
+	isRuleLoad,
+	JEV_COMPACTION_ENGINE,
+	JEV_GOAL,
+	JEV_PREVIOUS_SUMMARY_LIMIT_TOKENS,
+	jevCompact,
+	jevCompactionExtension,
+	jevCompactor,
+} from "./jev.ts";
+export type {
 	EffortBrief,
 	EffortJudgeOptions,
 	EffortLevel,

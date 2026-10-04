@@ -68,6 +68,12 @@ Use the kit's building blocks for a plugin that runs Pi itself, such as a coding
 - Mirroring a built-in tool in a worker that cannot reach the host: `SCHEDULE_TOOLS`, `scheduleToolSpecs({ locale, timeZone })`, `isScheduleTool`, `callScheduleTool`, `DELEGATE_TOOL` and `DELEGATE_TOOL_SPEC`.
   The specs take the locale and time zone for their descriptions, so the worker needs no process-wide setting.
 - Compaction: `CompactionTiers` gives a session the core's compaction tiers (`settings()` for Pi's `SettingsManager`, `wrapCompactor(factory, onBypass)` to hold a compaction extension back past the ceiling, `latest()`), with `SOFT_COMPACT_TOKENS` (300,000), `HARD_COMPACT_TOKENS` (500,000), `COMPACT_HEADROOM_TOKENS` (50,000), `compactionEngine(details, engine)` and the types `CompactionEngine`, `CompactionHistory` and `LatestCompaction`.
+- Jev compaction: `jevCompact(input, options)` compacts through Jev (pi-jev-compaction 1.0.0) and returns `{ compaction }` or `{ skipped, detail? }` (a `JevSkipReason`: pi-jev-compaction's fallbacks `no_key`, `aborted`, `nothing_to_compact`, `no_candidates`, `cannot_fit`, `jev_error`, `reduction_too_small`, or `previous_summary_too_large`), for Pi's own summary to run instead.
+  Its summary carries the previous summary once, as the transcript's `[previous compaction]` message, with `estimatedTokensAfter` measured on the final text; a previous summary over `previousSummaryLimitTokens` (default `JEV_PREVIOUS_SUMMARY_LIMIT_TOKENS`, 60,000) skips without calling Jev, so Pi's summary condenses the chain.
+  Jev judges with `goal` (default `JEV_GOAL`: keep the tool results that set rules still in force, drop stale lookups, listings and finished edits), and the summary ends with a `## Rules loaded before this compaction` section naming each rule load among the summarized messages (tool name and JSON arguments cut at 200 characters) for the agent to load again; `ruleLoad(tool, args)` picks them (default `isRuleLoad`: tools ending in `invoke-skill` or `get-system-prompt`, and tools ending in `read` whose `path` is a `SKILL.md`, an `AGENTS.md` or under `.agents/skills/`).
+  `config` passes pi-jev-compaction's settings (`apiKey`, `model`, thresholds) over its config file and environment; `asker` replaces Jev's service, for tests.
+  Two adapters log each skip as `Jev leaves the compaction to Pi's summary` with `reason`, `detail` and `tokensBefore` through the `logger` they take: `jevCompactionExtension({ logger, ...options })`, the `compaction` session tool's extension, placed as `session.compaction.wrap(jevCompactionExtension({ logger }))` under the engine `JEV_COMPACTION_ENGINE` (`pi-jev-compaction`), and `jevCompactor({ logger, ...options })`, a `JevCompactor` for pi-roundtable-sandbox's `compaction` option that returns the compaction or `undefined` and logs with the `channel`.
+  The types are `JevCompactInput`, `JevCompactOptions`, `JevCompactOutcome`, `JevCompactor`, `JevCompactRequest`, `JevExtensionOptions` and `JevSkipReason`.
 - Effort: `effortJudge` picks a turn's thinking level from a message with your own brief (`EffortBrief`, `JUDGE_WORK`).
 - Presentation and small helpers: `thinkingLine`, `zonedStamp(date, timeZone)`, `channelQueue()` (a queue of your own, so work does not wait behind a running turn), `checkRepoName` and `SKILL_LIST_TOOL` with `skillListExtension` for repositories and skills, and `searchTerms` for memory search.
 
@@ -1489,6 +1495,22 @@ Use it for tools that `defineTool` cannot express, such as a set that changes wh
 Each extension needs a unique name; the core reserves `read-attachment`, `confirmation-gate`, `ask-user`, `self-compact-guard`, and `active-tools`.
 A runtime of your own pins the active tools the way the core does: `activeToolsExtension(() => tools)` from `pi-roundtable/kit` is the extension the core places last, so its handler runs after every other extension's.
 At most one plugin may add a `compaction` extension, and it must name the `engine` its compactions record.
+The core's Jev compactor is one such extension:
+
+```ts
+sessionTools: [
+	{
+		name: "jev-compaction",
+		phase: "compaction",
+		engine: JEV_COMPACTION_ENGINE,
+		snapshot: () => ({
+			revision: 0,
+			factory: (session) =>
+				session.compaction.wrap(jevCompactionExtension({ logger })),
+		}),
+	},
+],
+```
 
 <!-- example: examples/session-tools.ts -->
 ```ts
@@ -2707,6 +2729,20 @@ Import from the entries listed below; source area files are internal.
 | `CompactionEngine` | `pi-roundtable/kit` | type |
 | `CompactionHistory` | `pi-roundtable/kit` | type |
 | `LatestCompaction` | `pi-roundtable/kit` | type |
+| `isRuleLoad` | `pi-roundtable/kit` | value |
+| `JEV_COMPACTION_ENGINE` | `pi-roundtable/kit` | value |
+| `JEV_GOAL` | `pi-roundtable/kit` | value |
+| `JEV_PREVIOUS_SUMMARY_LIMIT_TOKENS` | `pi-roundtable/kit` | value |
+| `jevCompact` | `pi-roundtable/kit` | value |
+| `jevCompactionExtension` | `pi-roundtable/kit` | value |
+| `jevCompactor` | `pi-roundtable/kit` | value |
+| `JevCompactInput` | `pi-roundtable/kit` | type |
+| `JevCompactOptions` | `pi-roundtable/kit` | type |
+| `JevCompactOutcome` | `pi-roundtable/kit` | type |
+| `JevCompactor` | `pi-roundtable/kit` | type |
+| `JevCompactRequest` | `pi-roundtable/kit` | type |
+| `JevExtensionOptions` | `pi-roundtable/kit` | type |
+| `JevSkipReason` | `pi-roundtable/kit` | type |
 | `isScheduleTool` | `pi-roundtable/kit` | value |
 | `lastAssistant` | `pi-roundtable/kit` | value |
 | `mcpAdapterExtension` | `pi-roundtable/kit` | value |
