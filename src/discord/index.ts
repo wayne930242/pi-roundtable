@@ -3,6 +3,7 @@
 
 export type { DiscordServices } from "../core/builtin/discord.ts";
 export { DISCORD } from "../core/builtin/discord.ts";
+export type { DiscordAdapterConfig } from "../core/config/config.ts";
 export type { AgentPanelMessage } from "../core/discord/agent-commands.ts";
 export type {
 	AgentPanel,
@@ -33,6 +34,7 @@ export type {
 	ChannelInfo,
 	DiscordConnection,
 } from "../core/discord/connection.ts";
+export { discord } from "../core/discord/discord-adapter.ts";
 export type {
 	CommandGuard,
 	CommandRegistrar,

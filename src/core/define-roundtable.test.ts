@@ -6,6 +6,7 @@ import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import type { RoundtableConfig } from "./config/config.ts";
 import { migrate, openPool } from "./db/migrations.ts";
 import { defineRoundtable } from "./define-roundtable.ts";
+import { discord as discordAdapter } from "./discord/discord-adapter.ts";
 import { ownerRootCommand } from "./discord/owner-command.ts";
 import { ConfigError } from "./domain/errors.ts";
 import { Roundtable } from "./host.ts";
@@ -137,6 +138,20 @@ describe("defineRoundtable", () => {
 		expect(
 			plugins.flatMap((plugin) => (plugin.provides ?? []).map((key) => key.id)),
 		).not.toContain("roundtable.memory");
+	});
+
+	test("a Discord adapter in adapters assembles the same plugins, in the same order, as the top-level discord", async () => {
+		const { discord: given, ...rest } = config;
+		const names = (defined: { plugins: readonly RoundtablePlugin[] }) =>
+			defined.plugins.map((plugin) => plugin.name);
+		expect(
+			names(
+				await defineRoundtable({
+					...rest,
+					adapters: [discordAdapter(given ?? discord)],
+				}),
+			),
+		).toEqual(names(await defineRoundtable(config)));
 	});
 
 	test("each built-in service is provided by one plugin, and a plugin may replace a store in its place", async () => {

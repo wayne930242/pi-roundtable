@@ -249,3 +249,44 @@ describe("a host without Discord", () => {
 		);
 	});
 });
+
+describe("the adapters key", () => {
+	const { discord: _discord, ...rest } = minimal;
+	const adapter = { adapter: "discord", discord } as const;
+
+	test("a Discord adapter resolves as the top-level discord does", () => {
+		expect(resolveConfig({ ...rest, adapters: [adapter] })).toEqual(
+			resolveConfig(minimal),
+		);
+		expect(resolveConfig({ ...rest, adapters: [] }).discord).toBeUndefined();
+	});
+
+	test("Discord is configured once: at the top level or in adapters", () => {
+		expect(refused({ ...minimal, adapters: [adapter] })).toContain(
+			"config adapters[0]: Discord is configured twice",
+		);
+		expect(refused({ ...rest, adapters: [adapter, adapter] })).toContain(
+			"config adapters[1]: Discord is configured twice",
+		);
+	});
+
+	test("an adapter is one the host knows, with options it can read, named by its place", () => {
+		expect(refused({ ...rest, adapters: [{ adapter: "slack" }] })).toContain(
+			'config adapters[0]: unknown adapter "slack"',
+		);
+		expect(refused({ ...rest, adapters: ["discord"] })).toContain(
+			"config adapters[0]: expected an adapter",
+		);
+		expect(refused({ ...rest, adapters: adapter })).toContain(
+			"config adapters: expected a list of adapters",
+		);
+		expect(
+			refused({
+				...rest,
+				adapters: [{ adapter: "discord", discord: { ...discord, token: "" } }],
+			}),
+		).toContain(
+			"config adapters[0].discord.token: expected a non-empty string",
+		);
+	});
+});

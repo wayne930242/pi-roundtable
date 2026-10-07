@@ -45,6 +45,7 @@
 			"withReplyFiles"
 		],
 		"types": [
+			"AdapterConfig",
 			"Admission",
 			"Agent",
 			"AgentChange",
@@ -85,6 +86,7 @@
 			"DelegationOutcome",
 			"DelegationRequest",
 			"Delegator",
+			"DiscordConfig",
 			"DrainOptions",
 			"EventHandlers",
 			"EventSink",
@@ -389,6 +391,7 @@
 			"agentPanel",
 			"commandGuard",
 			"composeCommands",
+			"discord",
 			"ephemeralPanel",
 			"fetchManagedChannel",
 			"groupOption",
@@ -415,6 +418,7 @@
 			"CommandRegistrar",
 			"CommandRoot",
 			"ComposedCommands",
+			"DiscordAdapterConfig",
 			"DiscordConnection",
 			"DiscordServices",
 			"InteractionContribution",

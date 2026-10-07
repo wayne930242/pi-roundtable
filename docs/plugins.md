@@ -2097,6 +2097,48 @@ export function fakeChat(surface: FakeSurface) {
 
 A test boots a host with the plugin, writes through the surface, and reads what came out (`examples/fake-surface.test.ts` does this with `Roundtable` and `silentLogger`, and also covers the refusals above).
 
+### `adapters`: the chat networks the host talks through
+
+`adapters` lists the chat networks the host talks through, each made by its adapter's factory.
+In 0.8 the one adapter is Discord: `discord()` from `pi-roundtable/discord` takes the same settings as the top-level `discord`, and a host configured either way assembles the same plugins in the same order.
+The top-level `discord` stays the form `roundtable init` writes; configure Discord once, in one place or the other.
+A chat network that comes as a plugin, such as pi-roundtable-webchat's `webChat()`, stays in `plugins`.
+
+<!-- example: examples/discord-adapter.ts -->
+```ts
+import type { RoundtableConfig } from "pi-roundtable";
+import { discord } from "pi-roundtable/discord";
+
+/**
+ * Discord as an adapter: `discord()` takes the same settings as the top-level `discord`, and the
+ * host assembles the same plugins in the same order. Configure Discord in one place, not both.
+ */
+export function withDiscordAdapter(
+	env: (name: string) => string,
+	dataDir: string,
+): RoundtableConfig {
+	return {
+		owner: { id: env("OWNER_ID"), name: env("OWNER_NAME") },
+		adapters: [
+			discord({
+				token: env("DISCORD_TOKEN"),
+				guild: env("DISCORD_GUILD_ID"),
+				entryChannel: env("DISCORD_ENTRY_CHANNEL_ID"),
+			}),
+		],
+		database: { url: env("DATABASE_URL") },
+		dataDir,
+		model: env("MODEL"),
+		http: { publicUrl: env("PUBLIC_URL") },
+	};
+}
+```
+<!-- /example -->
+
+`examples/discord-adapter.test.ts` checks that both forms assemble the same plugins.
+`roundtable doctor` reads a Discord adapter's settings as it reads the top-level `discord`.
+The types are `AdapterConfig` and `DiscordConfig` from `pi-roundtable`, and `DiscordAdapterConfig` from `pi-roundtable/discord`.
+
 ### A host without Discord
 
 Leave `discord` out of `roundtable.config.ts` and the host runs without it: no Discord plugin, no agent server, no agents, and no skills.
@@ -2532,6 +2574,9 @@ Migrations are idempotent, so start again once the cause is fixed.
 | `config model: expected <provider>/<id>, got "<value>". Write it like anthropic/claude-sonnet-5-5.` | Write the model as `<provider>/<id>` |
 | `config locale: expected a locale, en or zh-TW, got "<value>". Fix the value in roundtable.config.ts.` | Use `en` or `zh-TW` |
 | `config <key>: cannot read <path>: <reason>. Create the file or fix the path.` | Create the prompt file, or fix the path in `prompts` |
+| `config adapters[<n>]: unknown adapter "<name>". The adapters are discord; …` | Use `discord()` from `pi-roundtable/discord`; a chat network that comes as a plugin, such as `webChat()`, belongs in `plugins` |
+| `config adapters[<n>]: Discord is configured twice, …` | Keep the top-level `discord` or the Discord adapter, not both |
+| `required tools are not registered: compact_session. compact_session comes from the Pi package pi-self-compact: …` | `bun add pi-self-compact`, and load it from a plugin with `piPackages: ["pi-self-compact"]`, as a project `roundtable init` creates does in `plugins/self-compact.ts` |
 
 ### Missing settings
 
@@ -2615,6 +2660,7 @@ Import from the entries listed below; source area files are internal.
 | `AGENT_SERVER_PLUGIN` | `pi-roundtable` | value |
 | `AGENT_SERVER_PRIORITY` | `pi-roundtable` | value |
 | `AGENT_TEAM_SERVICE` | `pi-roundtable` | value |
+| `AdapterConfig` | `pi-roundtable` | type |
 | `Admission` | `pi-roundtable` | type |
 | `Agent` | `pi-roundtable` | type |
 | `AgentChange` | `pi-roundtable` | type |
@@ -2661,6 +2707,7 @@ Import from the entries listed below; source area files are internal.
 | `DelegationOutcome` | `pi-roundtable` | type |
 | `DelegationRequest` | `pi-roundtable` | type |
 | `Delegator` | `pi-roundtable` | type |
+| `DiscordConfig` | `pi-roundtable` | type |
 | `DrainOptions` | `pi-roundtable` | type |
 | `EventHandlers` | `pi-roundtable` | type |
 | `EventSink` | `pi-roundtable` | type |
@@ -2988,6 +3035,7 @@ Import from the entries listed below; source area files are internal.
 | `ComposedCommands` | `pi-roundtable/discord` | type |
 | `DISCORD` | `pi-roundtable/discord` | value |
 | `DISCORD_ADMIN_TOOLS` | `pi-roundtable/discord` | value |
+| `DiscordAdapterConfig` | `pi-roundtable/discord` | type |
 | `DiscordConnection` | `pi-roundtable/discord` | type |
 | `DiscordServices` | `pi-roundtable/discord` | type |
 | `InteractionContribution` | `pi-roundtable/discord` | type |
@@ -3002,6 +3050,7 @@ Import from the entries listed below; source area files are internal.
 | `agentPanel` | `pi-roundtable/discord` | value |
 | `commandGuard` | `pi-roundtable/discord` | value |
 | `composeCommands` | `pi-roundtable/discord` | value |
+| `discord` | `pi-roundtable/discord` | value |
 | `ephemeralPanel` | `pi-roundtable/discord` | value |
 | `fetchManagedChannel` | `pi-roundtable/discord` | value |
 | `groupOption` | `pi-roundtable/discord` | value |

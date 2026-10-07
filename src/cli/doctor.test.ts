@@ -121,6 +121,31 @@ describe("doctor", () => {
 		expect(report.ok).toBe(true);
 	});
 
+	test("a project with a Discord adapter in adapters asks Discord as one with the top-level discord does", async () => {
+		const { discord, ...rest } = validConfig;
+		const report = await doctor(
+			inputs({
+				ports: fakePorts({
+					...rest,
+					adapters: [{ adapter: "discord", discord }],
+				}),
+			}),
+		);
+		const byName = Object.fromEntries(
+			report.outcomes.map(({ name, result }) => [name, result.status]),
+		);
+		for (const name of [
+			"configuration",
+			"Discord token",
+			"Discord guild",
+			"Discord intents",
+			"Discord channel",
+			"public URL",
+		])
+			expect({ name, status: byName[name] }).toEqual({ name, status: "ok" });
+		expect(report.ok).toBe(true);
+	});
+
 	test("a check that throws is reported as failed without hiding the ones after it", async () => {
 		const checks: Check[] = [
 			{

@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { liftAdapters } from "../core/config/adapters.ts";
 import {
 	type ResolvedConfig,
 	type RoundtableConfig,
@@ -51,6 +52,16 @@ export interface Assembled {
 const message = (error: unknown): string =>
 	error instanceof Error ? error.message : String(error);
 
+/** The configuration with its adapters lifted, or as written when they cannot be. */
+// pi-lens-ignore: no-unknown-returns — the configuration as written is untyped until the schema checks it
+function lifted(value: unknown): unknown {
+	try {
+		return liftAdapters(value);
+	} catch {
+		return value;
+	}
+}
+
 /**
  * The project's configuration, loaded and resolved at most once and shared by every check, so a
  * mistake in it is reported by the configuration check and the checks that need it say so
@@ -67,10 +78,14 @@ export class Project {
 		this.#ports = ports;
 	}
 
-	/** The exported value as written, before the schema looks at it. */
+	/**
+	 * The exported value as written, before the schema looks at it, with its adapters' settings in
+	 * the places the host reads them, such as a Discord adapter's as `discord`. Adapters it cannot
+	 * read stay as written; the configuration check reports them.
+	 */
 	raw(): Promise<Loaded<unknown>> {
 		this.#raw ??= this.#ports.loadConfig(this.#cwd).then(
-			(value): Loaded<unknown> => ({ ok: true, value }),
+			(value): Loaded<unknown> => ({ ok: true, value: lifted(value) }),
 			(error: unknown): Loaded<unknown> => ({
 				ok: false,
 				failure: fail(

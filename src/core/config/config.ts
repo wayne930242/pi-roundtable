@@ -15,6 +15,7 @@ import type { RoundtablePlugin } from "../plugin.ts";
 import { PRIMARY_CHARS } from "../runtime/interim-text.ts";
 import type { ChannelKey } from "../sessions.ts";
 import type { Tier, TierMembers } from "../speakers.ts";
+import { discordShape, liftAdapters } from "./adapters.ts";
 import {
 	bool,
 	guarded,
@@ -42,6 +43,40 @@ export interface TierConfig {
 	everyone?: boolean;
 }
 
+/** The Discord bot and its guild, as the top-level `discord` or `discord()` from `pi-roundtable/discord` gives them. */
+export interface DiscordConfig {
+	/** The bot token; keep it in `.env`, not in this file. */
+	token: string;
+	/** The agent server's guild id. */
+	guild: string;
+	/** The channel the coordinator lives in. */
+	entryChannel: string;
+	/** The root slash command, without the slash; default the lowercase assistant name. */
+	rootCommand?: string;
+	/**
+	 * Whether the owner's conversations have Discord administration tools; default true. `false`
+	 * leaves the `discord-admin` addon out.
+	 */
+	admin?: boolean;
+	/**
+	 * Text appended as it is to the refusal a non-owner gets from the root command, such as a
+	 * pointer to the commands anyone may use; include the space or punctuation your language
+	 * needs before it. Default none.
+	 */
+	refusalHint?: string;
+}
+
+/** A chat network the host talks through, as its adapter's factory makes it; `adapter` names the network. */
+export interface AdapterConfig {
+	readonly adapter: string;
+}
+
+/** What `discord()` from `pi-roundtable/discord` makes: the Discord settings under the adapter's name. */
+export interface DiscordAdapterConfig extends AdapterConfig {
+	readonly adapter: "discord";
+	readonly discord: DiscordConfig;
+}
+
 /** What `roundtable.config.ts` gives `defineRoundtable`. */
 export interface RoundtableConfig {
 	/** The assistant's display name; default "Roundtable". */
@@ -51,29 +86,17 @@ export interface RoundtableConfig {
 	/**
 	 * The Discord bot, its guild, and the agent server that lives there. Leave it out for a host
 	 * without Discord: no Discord plugins, no agent server or agents, no skills, and no tool that
-	 * messages the owner on Discord; conversations come through the plugins' own surfaces.
+	 * messages the owner on Discord; conversations come through the plugins' own surfaces. The same
+	 * settings may come as `adapters: [discord({...})]` instead, never both.
 	 */
-	discord?: {
-		/** The bot token; keep it in `.env`, not in this file. */
-		token: string;
-		/** The agent server's guild id. */
-		guild: string;
-		/** The channel the coordinator lives in. */
-		entryChannel: string;
-		/** The root slash command, without the slash; default the lowercase assistant name. */
-		rootCommand?: string;
-		/**
-		 * Whether the owner's conversations have Discord administration tools; default true. `false`
-		 * leaves the `discord-admin` addon out.
-		 */
-		admin?: boolean;
-		/**
-		 * Text appended as it is to the refusal a non-owner gets from the root command, such as a
-		 * pointer to the commands anyone may use; include the space or punctuation your language
-		 * needs before it. Default none.
-		 */
-		refusalHint?: string;
-	};
+	discord?: DiscordConfig;
+	/**
+	 * The chat networks the host talks through, each made by its adapter's factory, such as
+	 * `discord()` from `pi-roundtable/discord`. A Discord adapter is the same as the top-level
+	 * `discord`; a chat network that comes as a plugin, such as pi-roundtable-webchat, stays in
+	 * `plugins`.
+	 */
+	adapters?: readonly AdapterConfig[];
 	database: { url: string };
 	/** Where the process keeps its files, such as pictures, attachments, and skills. */
 	dataDir: string;
@@ -168,16 +191,7 @@ const schema = shape({
 		name: text,
 		pronouns: optional(oneOf<Pronouns>("he", "she", "they")),
 	}),
-	discord: optional(
-		shape({
-			token: text,
-			guild: text,
-			entryChannel: text,
-			rootCommand: optional(text),
-			admin: optional(bool),
-			refusalHint: optional(text),
-		}),
-	),
+	discord: optional(discordShape),
 	database: shape({ url: text }),
 	dataDir: text,
 	agentDir: optional(text),
@@ -350,7 +364,7 @@ function refuseAgentServerKeys(config: RoundtableConfig): void {
 
 /** The configuration checked against its schema, defaults filled; throws a ConfigError naming the key and the fix. */
 export function resolveConfig(input: unknown): ResolvedConfig {
-	const config = schema.check(input, "") as RoundtableConfig;
+	const config = schema.check(liftAdapters(input), "") as RoundtableConfig;
 	const name = config.name ?? "Roundtable";
 	const model = modelOf(config.model, "model");
 	const thinking = config.thinking ?? "medium";

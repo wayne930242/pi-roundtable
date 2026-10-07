@@ -21,6 +21,8 @@ export {
 	AGENT_TEAM_SERVICE,
 } from "./core/builtin/agent-server.ts";
 export type {
+	AdapterConfig,
+	DiscordConfig,
 	Pronouns,
 	RoundtableConfig,
 	TierConfig,
