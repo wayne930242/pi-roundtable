@@ -57,6 +57,33 @@ The package must exist on npm before trusted publishing can be configured:
 npm trust github pi-roundtable-sandbox --file publish.yml --repo wayne930242/pi-roundtable --allow-publish
 ```
 
+### Webchat's first publication
+
+pi-roundtable-webchat is new in 0.8 and does not exist on npm yet (`npm view pi-roundtable-webchat` answers E404), so the `v0.8.0` tag's preflight stops before the core publishes until the owner publishes it once by hand.
+The tag must still publish webchat `0.8.0` itself, with provenance, so the hand publication uses a prerelease version that the tag never publishes.
+Do it from the `0.8.0` release commit after its CI passes, before pushing the tag:
+
+```sh
+cd packages/webchat
+# Temporarily, and never committed: a prerelease placeholder that only creates the package.
+npm pkg set version=0.8.0-0
+npm publish --access public --provenance=false --tag first-publish
+git checkout package.json
+npm trust github pi-roundtable-webchat --file publish.yml --repo wayne930242/pi-roundtable --allow-publish
+npm trust list pi-roundtable-webchat
+```
+
+Then run `bun scripts/preflight-release.ts v0.8.0` without `--local`: it now finds the package.
+Push the tag; `publish.yml` publishes webchat `0.8.0` through OIDC as `latest`.
+Afterwards remove the placeholder's tag and mark it unusable:
+
+```sh
+npm dist-tag rm pi-roundtable-webchat first-publish
+npm deprecate pi-roundtable-webchat@0.8.0-0 "placeholder for the first publication; use 0.8.0 or later"
+```
+
+Do not publish webchat `0.8.0` by hand: the tag's webchat job would then fail on the existing version, and the release would have no provenance.
+
 ### MCP's trust migration
 
 MCP already exists on npm at `0.4.1`, so it needs no manual publication.
@@ -89,6 +116,7 @@ Update changelogs, regenerate `bun.lock`, and run the clean-install checks and p
 Run `bun scripts/check-release.ts v0.8.0` before committing: it refuses mismatched versions, core peer ranges, development pins, and repository directories.
 Run `bun scripts/preflight-release.ts v0.8.0`: it packs every workspace, checks required files (including the web HTML/JS/CSS, drawing fonts, and sandbox worker sources), and requires each package to exist on npm before the core can publish.
 Use `--local` only for CI or pre-first-publish checks, where a new package need not yet exist on npm.
+For `v0.8.0`, pi-roundtable-webchat needs [its first publication](#webchats-first-publication) first.
 Verify every workspace's trusted publisher is configured against this repository's `publish.yml` before pushing a release tag; package existence alone does not prove OIDC authorization.
 Commit and push, wait for CI for that exact commit, then have the owner push the single `v0.8.0` tag.
 `publish.yml` checks all versions before any publication and publishes all packages with provenance through npm OIDC.

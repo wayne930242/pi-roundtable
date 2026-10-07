@@ -95,6 +95,17 @@ export function registryName(
 	return typeof name === "string" ? name : undefined;
 }
 
+/** A workspace not yet on npm: trusted publishing needs the package to exist, so the owner publishes it first. */
+export function firstPublicationNeeded(name: string): ReleaseContractError {
+	const section =
+		name === "pi-roundtable-webchat"
+			? "webchats-first-publication"
+			: "first-publication-and-trust";
+	return new ReleaseContractError(
+		`${name} needs its manual first publication before a lockstep tag; see .github/PACKAGE-RELEASES.md#${section}`,
+	);
+}
+
 function npm(root: string, args: string[]): string {
 	const result = Bun.spawnSync(["npm", ...args], {
 		cwd: root,
@@ -106,9 +117,7 @@ function npm(root: string, args: string[]): string {
 		args[0] === "view" &&
 		result.stderr.toString().includes("E404")
 	)
-		throw new ReleaseContractError(
-			`${args[1]} needs its manual first publication before a lockstep tag`,
-		);
+		throw firstPublicationNeeded(String(args[1]));
 	if (result.exitCode !== 0)
 		throw new ReleaseContractError(
 			`npm ${args[0]} failed in ${root}: ${result.stderr.toString()}`,
@@ -133,9 +142,7 @@ if (import.meta.main) {
 		if (!local) {
 			const output = npm(root, ["view", pkg.name, "name", "--json"]);
 			if (registryName(output, pkg) !== pkg.name)
-				throw new ReleaseContractError(
-					`${pkg.name} needs its manual first publication before a lockstep tag`,
-				);
+				throw firstPublicationNeeded(pkg.name);
 		}
 		console.log(
 			`${pkg.name}: pack verified${local ? "" : ", npm package exists"}`,

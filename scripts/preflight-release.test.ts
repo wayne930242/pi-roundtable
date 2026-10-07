@@ -1,6 +1,10 @@
 import { expect, test } from "bun:test";
 import { ReleaseContractError } from "./check-release.ts";
-import { checkPack, registryName } from "./preflight-release.ts";
+import {
+	checkPack,
+	firstPublicationNeeded,
+	registryName,
+} from "./preflight-release.ts";
 
 const pkg = { name: "pi-roundtable-web", path: "packages/web" };
 const paths = [
@@ -112,3 +116,14 @@ for (const name of ["mcp", "sandbox"]) {
 			).toThrow(missing);
 	});
 }
+
+test("a package missing from npm is refused with the steps of its manual first publication", () => {
+	const error = firstPublicationNeeded("pi-roundtable-webchat");
+	expect(error).toBeInstanceOf(ReleaseContractError);
+	expect(error.message).toContain(
+		"pi-roundtable-webchat needs its manual first publication before a lockstep tag",
+	);
+	expect(error.message).toContain(
+		".github/PACKAGE-RELEASES.md#webchats-first-publication",
+	);
+});
