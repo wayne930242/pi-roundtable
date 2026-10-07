@@ -10,7 +10,7 @@ import type {
 } from "pi-roundtable";
 import { partial, silentLogger } from "pi-roundtable/testing";
 import { webAccess } from "../access.ts";
-import { WebChat, type WebChatDeps } from "../chat.ts";
+import { WebChat, type WebChatDeps, type WebChatLimits } from "../chat.ts";
 import type { Connection } from "../connections.ts";
 import type { WebIdentity } from "../oidc.ts";
 import type { ServerFrame } from "../protocol.ts";
@@ -81,6 +81,17 @@ export function identity(id: string, roles: string[] = []): WebIdentity {
 	};
 }
 
+/** Small limits, so tests reach them quickly. */
+export const TEST_LIMITS: WebChatLimits = {
+	connectionsPerPrincipal: 2,
+	unusedConversationsPerPrincipal: 3,
+	newConversationsPerHour: 100,
+	turnsPerPrincipal: 10,
+	messageChars: 1000,
+	promptTimeoutMs: 60_000,
+	reauthLeadMs: 1_000,
+};
+
 /** A web chat over an in-memory registry, with a `helper` persona for members and an `ops` one for admins. */
 export function testChat(overrides: Partial<WebChatDeps> = {}) {
 	const registry = memoryRegistry();
@@ -99,13 +110,7 @@ export function testChat(overrides: Partial<WebChatDeps> = {}) {
 			{ kind: "helper", label: "Helper", prompt: () => "Help." },
 			{ kind: "ops", minTier: "admin" },
 		],
-		limits: {
-			connectionsPerPrincipal: 2,
-			unusedConversationsPerPrincipal: 3,
-			messageChars: 1000,
-			promptTimeoutMs: 60_000,
-			reauthLeadMs: 1_000,
-		},
+		limits: TEST_LIMITS,
 		logger: silentLogger(),
 		registry: () => registry,
 		conversations: () =>

@@ -172,7 +172,7 @@ The TypeScript types are `ClientFrame` and `ServerFrame`.
 | `{ type: "reauth", expiresAt }` | Your token expires soon: send `auth` with a fresh one. |
 | `{ type: "error", code, ref? }` | A frame was refused. `ref` is the `send` id or prompt id it was about. |
 
-Error codes: `bad_frame` (it does not parse, its text is blank or too long, or an answer the question does not allow), `unknown_conversation`, `forbidden` (someone else's conversation or prompt, or an approval above your tier), `unknown_persona` (none of that kind you may open), `unknown_prompt`, and `too_many_conversations`.
+Error codes: `bad_frame` (it does not parse, its text is blank or too long, or an answer the question does not allow), `unknown_conversation`, `forbidden` (someone else's conversation or prompt, or an approval above your tier), `unknown_persona` (none of that kind you may open), `unknown_prompt`, `too_many_conversations` (you hold `unusedConversationsPerPrincipal` conversations you have not written in, or opened `newConversationsPerHour` in the last hour), and `busy` (you have `turnsPerPrincipal` turns running or queued, or the conversation already has a turn queued behind its running one; the message was not taken, so send it again once a turn ends).
 
 Close codes: `4401` when the token expired without a fresh `auth`, or a fresh one was refused; `4403` when the person is no longer admitted, or a fresh token names someone else.
 The host's own limits close with `1008` (too many frames), `1009` (a frame too big), and `1006` (a client that stopped reading).
@@ -186,7 +186,7 @@ A request from a browser origin not in `origins` gets 403; an allowed origin get
 |---|---|
 | `POST <path>/tickets` | 201 `{ ticket, expiresAt }`. |
 | `GET <path>/conversations` | `{ conversations: [{ conversation, persona, title?, createdAt, lastActiveAt }] }`: your own, the most recently active first. |
-| `POST <path>/conversations` with `{ persona, title? }` | 201 `{ conversation, persona }`: a new conversation to write in. |
+| `POST <path>/conversations` with `{ persona, title? }` | 201 `{ conversation, persona }`: a new conversation to write in. 429 `too_many_conversations` past either conversation limit. |
 | `GET <path>/conversations/<conversation>/messages?limit=50` | `{ messages: [{ role, text }] }`: its last messages, at most 500. Someone else's conversation is 403. |
 
 ## Security model
@@ -198,6 +198,8 @@ A request from a browser origin not in `origins` gets 403; an allowed origin get
   A socket is closed when its token expires.
 - **Origins.** `origins` is required and checked on every upgrade and every browser request, so another site cannot open a socket or call the API with a browser's credentials.
 - **Limits.** Each person holds at most `connectionsPerPrincipal` sockets, and the route at most `maxConnections`; frames are limited in size and rate.
+  Each person has at most `turnsPerPrincipal` turns running or queued at once, however many conversations or sockets they use, and a conversation at most its running turn and one queued behind it, so one account cannot spend a shared model subscription on many turns at once; a message over either limit is refused with `busy` and never queued.
+  Each person opens at most `newConversationsPerHour` conversations an hour, over the socket or the REST API alike.
 - **Approvals.** A held call's card goes to the conversation's person only, and needs the tier the call needs.
   A card whose tier the person lacks is never shown, so the call stays held.
 - **Owner.** Nobody becomes the owner through a token's claims; list owners by speaker id.
@@ -209,6 +211,8 @@ A request from a browser origin not in `origins` gets 403; an allowed origin get
 |---|---|
 | `connectionsPerPrincipal` | 5 sockets per person |
 | `unusedConversationsPerPrincipal` | 20 conversations opened but not written in |
+| `newConversationsPerHour` | 60 conversations opened per person in any hour |
+| `turnsPerPrincipal` | 2 turns running or queued per person, across conversations; a conversation holds its running turn and one queued |
 | `messageChars` | 32 000 characters per message |
 | `promptTimeoutMs` | 30 minutes before a prompt expires |
 | `reauthLeadMs` | `reauth` 60 seconds before the token expires |

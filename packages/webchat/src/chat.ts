@@ -17,6 +17,7 @@ import {
 	type TurnResult,
 } from "pi-roundtable";
 import type { WebAccess } from "./access.ts";
+import { RateWindow, TurnBudget } from "./budget.ts";
 import { type Connection, Connections } from "./connections.ts";
 import { TokenRefused, type TokenVerifier, type WebIdentity } from "./oidc.ts";
 import { PromptDesk } from "./prompts.ts";
@@ -54,6 +55,13 @@ export interface WebChatLimits {
 	connectionsPerPrincipal: number;
 	/** New conversations one person may hold before writing in them; default 20. */
 	unusedConversationsPerPrincipal: number;
+	/** New conversations one person may open in any hour, written in or not; default 60. */
+	newConversationsPerHour: number;
+	/**
+	 * Turns one person may have running or queued at once, across their conversations; default 2.
+	 * A conversation also holds at most its running turn and one queued behind it.
+	 */
+	turnsPerPrincipal: number;
 	/** The longest message text in characters; default 32 000. */
 	messageChars: number;
 	/** How long an approval or question waits for an answer; default 30 minutes. */
@@ -74,6 +82,8 @@ export interface WebChatDeps {
 	conversations(): ConversationPort;
 	turns(): ConversationTurns;
 	runtime(): AgentRuntime;
+	/** The clock, in milliseconds; default `Date.now`. */
+	now?(): number;
 }
 
 /** A person, verified and admitted. */
@@ -94,6 +104,8 @@ interface Pending {
 	title: string;
 	/** Whether the conversation was new when the message was accepted. */
 	fresh: boolean;
+	/** Frees the message's place in the person's turn budget; called once its turn ends or never runs. */
+	release(): void;
 }
 
 /** Why a conversation or persona was refused. */
@@ -108,6 +120,7 @@ export class Refusal extends Error {
 }
 
 const TITLE_CHARS = 80;
+const HOUR_MS = 60 * 60_000;
 /** The longest delay a timer keeps; a longer one fires at once. */
 const MAX_TIMER_MS = 2 ** 31 - 1;
 const RESERVED_KINDS = new Set(["owner", "agent"]);
@@ -160,10 +173,20 @@ export class WebChat {
 	readonly #owners = new Map<string, string>();
 	/** Accepted messages waiting for the claim, by message id. */
 	readonly #pending = new Map<string, Pending>();
+	/** Each person's turns, running or queued. */
+	readonly #turns: TurnBudget;
+	/** Each person's newly opened conversations. */
+	readonly #opened: RateWindow;
 
 	constructor(deps: WebChatDeps) {
 		this.#deps = deps;
 		this.#personas = checkPersonas(deps.personas);
+		this.#turns = new TurnBudget(deps.limits.turnsPerPrincipal);
+		this.#opened = new RateWindow(
+			deps.limits.newConversationsPerHour,
+			HOUR_MS,
+			deps.now ?? Date.now,
+		);
 		this.connections = new Connections({
 			perPrincipal: deps.limits.connectionsPerPrincipal,
 			logger: deps.logger,
@@ -228,6 +251,8 @@ export class WebChat {
 			(minted) => minted.principal === speaker.id,
 		).length;
 		if (unused >= this.#deps.limits.unusedConversationsPerPrincipal)
+			throw new Refusal("too_many_conversations");
+		if (!this.#opened.take(speaker.id))
 			throw new Refusal("too_many_conversations");
 		const id = crypto.randomUUID();
 		const cut = title === undefined ? undefined : titleOf(title);
@@ -452,34 +477,50 @@ export class WebChat {
 		const text = frame.text;
 		if (!text.trim() || text.length > this.#deps.limits.messageChars)
 			throw new Refusal("bad_frame");
+		// Checked before a conversation is opened for it, so a refused message opens none.
+		if (!this.#turns.allows(speaker.id, frame.conversation))
+			throw new Refusal("busy");
 		const conversation =
 			frame.conversation ?? this.open(speaker, frame.persona as string);
 		const { persona, record, minted } = await this.own(speaker, conversation);
+		const release = this.#turns.take(speaker.id, conversation);
+		if (!release) {
+			// Another message took the last place meanwhile.
+			if (!frame.conversation) this.#minted.delete(conversation);
+			throw new Refusal("busy");
+		}
 		const messageId = crypto.randomUUID();
 		this.#pending.set(messageId, {
 			speaker,
 			persona,
 			title: minted?.title ?? titleOf(text),
 			fresh: record === undefined,
+			release,
 		});
 		this.connections.send(connection, {
 			type: "accepted",
 			id: frame.id,
 			conversation,
 		});
-		this.surface.deliver({
-			channel: channelKey(this.#deps.surface, conversation),
-			messageId,
-			authorId: speaker.id,
-			authorName: speaker.name,
-			authorIsBot: false,
-			authorRoleIds: connection.identity.roles,
-			isDirect: true,
-			mentionsBot: false,
-			repliesToBot: false,
-			text,
-			attachments: [],
-		});
+		try {
+			this.surface.deliver({
+				channel: channelKey(this.#deps.surface, conversation),
+				messageId,
+				authorId: speaker.id,
+				authorName: speaker.name,
+				authorIsBot: false,
+				authorRoleIds: connection.identity.roles,
+				isDirect: true,
+				mentionsBot: false,
+				repliesToBot: false,
+				text,
+				attachments: [],
+			});
+		} catch (error) {
+			this.#pending.delete(messageId);
+			release();
+			throw error;
+		}
 	}
 
 	// The claim.
@@ -494,11 +535,19 @@ export class WebChat {
 			admit: (message) => {
 				const pending = this.#pending.get(message.messageId);
 				this.#pending.delete(message.messageId);
-				if (!pending || pending.speaker.id !== message.authorId)
+				if (!pending || pending.speaker.id !== message.authorId) {
+					pending?.release();
 					return undefined;
+				}
 				return {
 					kind: "turn",
-					run: () => this.#turn(message.channel, message.text, pending),
+					run: async () => {
+						try {
+							await this.#turn(message.channel, message.text, pending);
+						} finally {
+							pending.release();
+						}
+					},
 					failure: "a web chat turn failed",
 				};
 			},

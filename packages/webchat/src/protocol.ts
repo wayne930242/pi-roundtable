@@ -63,7 +63,8 @@ export type ErrorCode =
 	| "forbidden"
 	| "unknown_persona"
 	| "unknown_prompt"
-	| "too_many_conversations";
+	| "too_many_conversations"
+	| "busy";
 
 /** What a client sends: one JSON object per WebSocket text message. */
 export type ClientFrame =

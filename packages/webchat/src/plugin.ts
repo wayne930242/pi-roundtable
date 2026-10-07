@@ -63,6 +63,8 @@ export interface WebChatOptions {
 const DEFAULT_LIMITS: WebChatLimits & WebChatRouteLimits = {
 	connectionsPerPrincipal: 5,
 	unusedConversationsPerPrincipal: 20,
+	newConversationsPerHour: 60,
+	turnsPerPrincipal: 2,
 	messageChars: 32_000,
 	promptTimeoutMs: 30 * 60_000,
 	reauthLeadMs: 60_000,

@@ -4,8 +4,16 @@ import type {
 	ConversationTurns,
 	InboundMessage,
 } from "pi-roundtable";
+import type { WebChatLimits } from "./chat.ts";
 import { CLOSE_CODES } from "./protocol.ts";
-import { fakeSocket, identity, speakerOf, testChat } from "./testing/fakes.ts";
+import {
+	type FakeSocket,
+	fakeSocket,
+	identity,
+	speakerOf,
+	TEST_LIMITS,
+	testChat,
+} from "./testing/fakes.ts";
 
 /** A chat whose turns are recorded and answered at once, with its claim and surface linked. */
 async function linked(answer = "done") {
@@ -304,4 +312,194 @@ test("a fresh token renews the connection; one for someone else, or none in time
 	expect(socket.frames.some((f) => f.type === "reauth")).toBe(true);
 	expect(socket.closed?.code).toBe(CLOSE_CODES.tokenExpired);
 	chat.closed(socket);
+});
+
+/** A chat whose turns wait until `finish()`, so they stay running; `fail` makes each turn throw. */
+async function gated(
+	limits: Partial<WebChatLimits> = {},
+	options: { fail?: boolean; start?: boolean } = {},
+) {
+	const turns: ConversationTurnInput[] = [];
+	let open = Promise.withResolvers<void>();
+	const runner: ConversationTurns = {
+		run: async (input) => {
+			turns.push(input);
+			await harness.registry.register({
+				key: input.channel,
+				kind: input.kind,
+				visibility: "private",
+				principalId: input.speaker.id,
+			});
+			await open.promise;
+			if (options.fail) throw new Error("the model is down");
+			return { ok: true as const, text: "done" };
+		},
+	};
+	let clock = 0;
+	const harness = testChat({
+		turns: () => runner,
+		limits: { ...TEST_LIMITS, ...limits },
+		now: () => clock,
+	});
+	const claim = harness.chat.claim();
+	const runs: Promise<void>[] = [];
+	const start = () =>
+		harness.chat.surface.start((message: InboundMessage) => {
+			const admission = claim.admit(message);
+			if (admission?.kind === "turn")
+				runs.push(admission.run().catch(() => undefined));
+		});
+	if (options.start !== false) await start();
+	/** Lets every waiting turn end, and waits for them. */
+	const finish = async () => {
+		open.resolve();
+		await Promise.all(runs.splice(0));
+		open = Promise.withResolvers<void>();
+	};
+	const errors = (socket: FakeSocket) =>
+		socket.frames.filter((f) => f.type === "error");
+	const accepted = (socket: FakeSocket) =>
+		socket.frames.flatMap((f) => (f.type === "accepted" ? [f] : []));
+	return {
+		...harness,
+		turns,
+		finish,
+		start,
+		errors,
+		accepted,
+		advance: (ms: number) => {
+			clock += ms;
+		},
+	};
+}
+
+test("a person runs at most turnsPerPrincipal turns at once across conversations; one more is refused busy", async () => {
+	const { connect, say, turns, finish, errors, accepted, chat } = await gated({
+		turnsPerPrincipal: 2,
+		unusedConversationsPerPrincipal: 4,
+	});
+	const ada = connect("ada");
+	await say(ada, { type: "send", id: "1", persona: "helper", text: "one" });
+	await say(ada, { type: "send", id: "2", persona: "helper", text: "two" });
+	const opened = chat.open(speakerOf("ada"), "helper");
+	await say(ada, { type: "send", id: "3", persona: "helper", text: "three" });
+	await say(ada, {
+		type: "send",
+		id: "4",
+		conversation: opened,
+		text: "four",
+	});
+	expect(errors(ada)).toEqual([
+		{ type: "error", code: "busy", ref: "3" },
+		{ type: "error", code: "busy", ref: "4" },
+	]);
+	expect(accepted(ada)).toHaveLength(2);
+	expect(turns).toHaveLength(2);
+	// A refused message to a persona opens no conversation: room is left for a fourth.
+	chat.open(speakerOf("ada"), "helper");
+	expect(() => chat.open(speakerOf("ada"), "helper")).toThrow(
+		"too_many_conversations",
+	);
+	// Someone else is not held back by ada's turns.
+	const eve = connect("eve");
+	await say(eve, { type: "send", id: "e", persona: "helper", text: "hi" });
+	expect(errors(eve)).toEqual([]);
+	await finish();
+	await say(ada, {
+		type: "send",
+		id: "5",
+		conversation: opened,
+		text: "five",
+	});
+	expect(errors(ada)).toHaveLength(2);
+	expect(turns).toHaveLength(4);
+	await finish();
+});
+
+test("a conversation holds one running turn and at most one queued behind it", async () => {
+	const { connect, say, turns, finish, errors, accepted } = await gated({
+		turnsPerPrincipal: 5,
+	});
+	const ada = connect("ada");
+	await say(ada, { type: "send", id: "1", persona: "helper", text: "one" });
+	const [first] = accepted(ada);
+	const conversation = first?.conversation ?? "";
+	await say(ada, { type: "send", id: "2", conversation, text: "two" });
+	await say(ada, { type: "send", id: "3", conversation, text: "three" });
+	expect(errors(ada)).toEqual([{ type: "error", code: "busy", ref: "3" }]);
+	expect(turns).toHaveLength(2);
+	await finish();
+	await say(ada, { type: "send", id: "4", conversation, text: "four" });
+	expect(errors(ada)).toHaveLength(1);
+	await finish();
+});
+
+test("a failed turn, a dropped message, and a refused delivery free their place", async () => {
+	const failing = await gated({ turnsPerPrincipal: 1 }, { fail: true });
+	const ada = failing.connect("ada");
+	await failing.say(ada, {
+		type: "send",
+		id: "1",
+		persona: "helper",
+		text: "a",
+	});
+	await failing.finish();
+	await failing.say(ada, {
+		type: "send",
+		id: "2",
+		persona: "helper",
+		text: "b",
+	});
+	expect(failing.errors(ada)).toEqual([]);
+	await failing.finish();
+
+	const unstarted = await gated({ turnsPerPrincipal: 1 }, { start: false });
+	const eve = unstarted.connect("eve");
+	await expect(
+		unstarted.say(eve, { type: "send", id: "1", persona: "helper", text: "a" }),
+	).rejects.toThrow("has not started");
+	await unstarted.start();
+	await unstarted.say(eve, {
+		type: "send",
+		id: "2",
+		persona: "helper",
+		text: "b",
+	});
+	expect(unstarted.errors(eve)).toEqual([]);
+	await unstarted.finish();
+
+	const dropping = await gated({ turnsPerPrincipal: 1 }, { start: false });
+	const claim = dropping.chat.claim();
+	await dropping.chat.surface.start((message) => {
+		// Another author's message: the claim drops it.
+		claim.admit({ ...message, authorId: "someone-else" });
+	});
+	const bob = dropping.connect("bob");
+	await dropping.say(bob, {
+		type: "send",
+		id: "1",
+		persona: "helper",
+		text: "a",
+	});
+	await dropping.say(bob, {
+		type: "send",
+		id: "2",
+		persona: "helper",
+		text: "b",
+	});
+	expect(dropping.errors(bob)).toEqual([]);
+});
+
+test("a person opens at most newConversationsPerHour conversations an hour", async () => {
+	const { chat, advance } = await gated({
+		unusedConversationsPerPrincipal: 100,
+		newConversationsPerHour: 3,
+	});
+	for (let i = 0; i < 3; i++) chat.open(speakerOf("ada"), "helper");
+	expect(() => chat.open(speakerOf("ada"), "helper")).toThrow(
+		"too_many_conversations",
+	);
+	chat.open(speakerOf("eve"), "helper");
+	advance(60 * 60_000);
+	chat.open(speakerOf("ada"), "helper");
 });
