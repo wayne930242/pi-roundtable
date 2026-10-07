@@ -10,7 +10,7 @@ Channel memory and recent conversation text persist in the channel's dedicated w
 
 ## Requirements
 
-- Bun 1.4.2 or later and pi-roundtable `>=0.7.0 <0.8.0`.
+- Bun 1.4.2 or later and pi-roundtable `>=0.8.0 <0.9.0`.
 - A native Linux host with a local Docker daemon and a non-root service account permitted to run Docker.
 - The worker UID/GID match that account; root workers are refused.
 - A trusted OpenAI-compatible, non-streaming Chat Completions endpoint supporting function tools and `max_tokens`.

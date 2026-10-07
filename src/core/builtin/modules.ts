@@ -176,7 +176,8 @@ export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 					: undefined;
 			if (reporter && "conversation" in reporter.destination) {
 				const channel = reporter.destination.conversation;
-				// A report that no surface can post, or that no conversation owns, would only be logged.
+				// A report that no surface can post, or that no conversation owns, would only be logged;
+				// its report turn is the owner's background turn, which runs only where a claim takes one.
 				reportsReach = () => {
 					if (!surfaces.of(channel))
 						throw new ConfigError(
@@ -185,6 +186,14 @@ export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 					if (!conversations.owns(channel))
 						throw new ConfigError(
 							`config ops.conversation: no plugin's conversations own ${JSON.stringify(channel)}, so nothing answers its error reports. Name a conversation a plugin's claim owns, or leave ops out.`,
+						);
+					if (!ownerTurns())
+						throw new ConfigError(
+							`config ops.conversation: no plugin contributes the "${OWNER_TARGET.name}" background target, so the report turns of ${JSON.stringify(channel)} could never run. Configure discord, whose agent server contributes it, add a plugin that contributes it, or leave ops out.`,
+						);
+					if (!conversations.takesBackground(channel))
+						throw new ConfigError(
+							`config ops.conversation: the claim that owns ${JSON.stringify(channel)} takes no background turns, so nothing answers its error reports. Name a conversation whose claim takes background turns, or leave ops out.`,
 						);
 				};
 			}

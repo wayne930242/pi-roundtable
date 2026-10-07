@@ -140,7 +140,7 @@ The web chat needs it.
 | `skills` | `false`, or `{ builtinDir?, reposDir? }` | on, with `builtinDir` the skills bundled with the package and `reposDir` set to `<dataDir>/repos` | `false` leaves the `skills` addon out: agents carry no skills and no skill tools exist. Stored skills stay in their tables. |
 | `memory` | boolean | `true` | `false` leaves the `memory` addon out: no memory tools and no memory prompt block. The table stays as it is. |
 | `ops.agent` | string | none | The name of the agent that investigates the process's own errors. Needs Discord. |
-| `ops.conversation` | string | none | Instead of an agent, the key `<surface>:<id>` of a conversation the errors are reported to. A chat surface must serve it and a plugin's claim must own it, or the host does not start; the web chat takes no error reports. Set one of `ops.agent` and `ops.conversation`. |
+| `ops.conversation` | string | none | Instead of an agent, the key `<surface>:<id>` of a conversation the errors are reported to. A chat surface must serve it, a plugin's claim that takes background turns must own it, and a plugin must contribute the `owner` background target (the agent server does, with Discord), or the host does not start; the web chat takes no error reports. Set one of `ops.agent` and `ops.conversation`. |
 | `plugins` | list of plugin objects | `[]` | Your plugins. They start in the order listed, after the built-in ones. |
 
 With `ops.agent` set, each `error` and `fatal` log entry is reported to that agent as a message and a report turn in its channel; with `ops.conversation`, to that conversation, whose claim answers the report turn.

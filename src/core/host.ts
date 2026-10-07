@@ -197,6 +197,7 @@ export class Roundtable {
 			stop: (channel) => router().stop(channel),
 			postsInPlace: (channel) => router().postsInPlace(channel),
 			owns: (channel) => router().owns(channel),
+			takesBackground: (channel) => router().takesBackground(channel),
 		};
 	}
 

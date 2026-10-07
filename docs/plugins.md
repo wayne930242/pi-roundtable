@@ -140,8 +140,9 @@ Use `QueuePort` from the main entry for `context.queue`; the kit's `ChannelQueue
 `Logger` has five levels and `child(fields)`; you can pass an existing pino logger as `DefineOverrides.logger`.
 
 With `defineRoundtable`, the host's logger sends every `error` and `fatal` line to the ops agent named by `config.ops.agent`, which reports it in its channel, or, with `config.ops.conversation`, to that conversation as a visible message and a report turn its claim answers.
-The host does not start when no chat surface serves the `ops.conversation` key or no plugin's claim owns it, so a report never goes nowhere silently.
-The web chat takes no error reports in 0.8: it posts only to a conversation a signed-in person opened, and its claim takes no background turns, so name a conversation of another surface, or an agent with Discord.
+The report turn is a background turn of the `owner` target, so the host does not start, with a `ConfigError` naming `config ops.conversation` and the reason, when no chat surface serves the key, no plugin's claim owns it, no plugin contributes the `owner` background target, or the claim that owns it takes no background turns (has no `background`); a report is then never only logged.
+On a host without Discord no plugin contributes `owner` unless one of yours does, so `ops.conversation` needs such a plugin there.
+The web chat takes no error reports in 0.8: it posts only to a conversation a signed-in person opened, and its claim takes no background turns, so `web:<id>` fails at startup; name a conversation of another surface, or an agent with Discord.
 It then calls `DefineOverrides.errorSink(entry)` if you supply one; this function must not throw.
 A logger you supply reaches the ops agent and `errorSink` only if it forwards its error lines there.
 The report names the plugin next to `app` and `module`; the same error is reported at most once an hour, regardless of which plugin wrote it.
@@ -2149,7 +2150,7 @@ The runtime plugin still builds the runtime, so every claim that runs turns thro
 
 What needs Discord is refused or left out rather than failing later:
 
-- `agents`, `skills` (anything but `false`), and `ops.agent` are configuration errors; report errors to a conversation with `ops: { conversation: "<surface>:<id>" }`, which a chat surface must serve and a plugin's claim must own, or the host does not start. The web chat takes no error reports in 0.8.
+- `agents`, `skills` (anything but `false`), and `ops.agent` are configuration errors. `ops: { conversation: "<surface>:<id>" }` needs a chat surface that serves it, a claim that owns it and takes background turns, and a plugin that contributes the `owner` background target, or the host does not start; without Discord nothing contributes `owner` unless a plugin of yours does. The web chat takes no error reports in 0.8.
 - `notify_owner` is not registered, since there are no owner's messages to send to.
 - `schedule_*` and `delegate_task` are not registered: their runs are turns of the [background target](#backgroundtargets-whose-turn-a-schedule-or-delegated-task-is) named `owner`, which the agent server contributes, so without it none could start.
   A plugin that contributes `owner`, and a claim that takes its background turns, bring them back; they then work in a conversation a chat surface carries, posting their runs there, and refuse elsewhere.

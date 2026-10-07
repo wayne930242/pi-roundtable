@@ -64,7 +64,8 @@ sidebar:
 | `config <key>: <path> is empty. Write the prompt in it.` | 把提示詞寫進檔案。 |
 | `config adapters[<n>]: unknown adapter "<name>". The adapters are discord; ...` | 用 `pi-roundtable/discord` 的 `discord()`。以外掛形式提供的聊天管道（例如網頁聊天的 `webChat()`）放在 `plugins`。 |
 | `config adapters[<n>]: Discord is configured twice, ...` | 最上層的 `discord` 和 Discord adapter 只留一個。 |
-| `config agents: the agents live in Discord, which is not configured. ...` | 設定 Discord，或拿掉 `agents`。`skills` 和 `ops.agent` 也一樣；錯誤改用 `ops.conversation` 回報到對話。 |
+| `config agents: the agents live in Discord, which is not configured. ...` | 設定 Discord，或拿掉 `agents`。`skills` 和 `ops.agent` 也一樣；沒有 Discord 時，只有外掛提供 `owner` 背景目標，`ops.conversation` 才能用。 |
+| `config ops.conversation: <why>. ...` | 這段對話要有 chat surface 服務、要由接收背景回合的 claim 擁有，還要有外掛提供 `owner` 背景目標（有 Discord 時由 agent server 提供）。改指向這樣的對話，或拿掉 `ops`。網頁聊天的 `web:<id>` 一律不行。`doctor` 查不出這一項，要到 `start` 才會停下來。 |
 | `Invalid time zone: <value>` | 用 IANA 名稱，例如 `Europe/Berlin`。`doctor` 查不出這一項，要到 `start` 才會停下來。見[語言與時間](/zh-tw/configure/language-and-time/)。 |
 
 ## PostgreSQL

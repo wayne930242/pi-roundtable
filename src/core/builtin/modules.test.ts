@@ -263,4 +263,56 @@ describe("the error reporter's conversation", () => {
 			'config ops.conversation: no plugin\'s conversations own "discord:scout"',
 		);
 	});
+
+	test("the preflight refuses a reporter's conversation when no plugin contributes the owner's background target", async () => {
+		const reporter = new ErrorReporter({
+			destination: { conversation: HOME },
+			app: "Roundtable",
+		});
+		const { plugin } = await setUpModules({
+			discord: false,
+			ownerTarget: false,
+			errorReporter: reporter,
+		});
+		expect(async () => plugin.preflight?.()).toThrow(
+			'config ops.conversation: no plugin contributes the "owner" background target',
+		);
+	});
+
+	test("the preflight refuses a reporter's conversation whose claim takes no background turns", async () => {
+		const reporter = new ErrorReporter({
+			destination: { conversation: HOME },
+			app: "Roundtable",
+		});
+		const { plugin } = await setUpModules({
+			discord: false,
+			errorReporter: reporter,
+			takesBackground: () => false,
+		});
+		expect(async () => plugin.preflight?.()).toThrow(
+			'config ops.conversation: the claim that owns "discord:scout" takes no background turns',
+		);
+	});
+
+	test("the preflight passes for a Discord conversation with Discord there", async () => {
+		const reporter = new ErrorReporter({
+			destination: { conversation: HOME },
+			app: "Roundtable",
+		});
+		const { plugin } = await setUpModules({ errorReporter: reporter });
+		await plugin.preflight?.();
+	});
+
+	test("the preflight passes for an ops agent, whatever serves conversations", async () => {
+		const reporter = new ErrorReporter({
+			destination: { agent: "ops" },
+			app: "Roundtable",
+		});
+		const { plugin } = await setUpModules({
+			errorReporter: reporter,
+			ownerTarget: false,
+			takesBackground: () => false,
+		});
+		await plugin.preflight?.();
+	});
 });

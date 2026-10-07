@@ -15,7 +15,7 @@ sidebar:
 bun add pi-roundtable-sandbox pi-roundtable
 ```
 
-需要 Bun 1.4.2 以上、`>=0.7.0 <0.8.0` 的 pi-roundtable、原生 Linux host，以及本機 Docker daemon。
+需要 Bun 1.4.2 以上、`>=0.8.0 <0.9.0` 的 pi-roundtable、原生 Linux host，以及本機 Docker daemon。
 服務帳號必須能使用 Docker，guest 不可用 root 執行。
 macOS 可用於開發、測試和建置 image；實際執行 sandbox 需要 Linux，因為 Docker Desktop 不會把 host Unix socket 分享進 Linux VM。
 還要有可信任的 OpenAI-compatible Chat Completions endpoint，支援 non-streaming、function tools 和 `max_tokens`。

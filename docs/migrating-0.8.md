@@ -117,7 +117,7 @@ Before anyone signs in, read the web chat README's [provider settings](../packag
 Remove `discord` and the host runs without it: no Discord plugin, no agent server, no agents, and no skills.
 Every claim that runs turns through `context.turns` still works, over the chat surfaces your plugins bring.
 
-- `agents`, `skills` (anything but `false`), and `ops.agent` are configuration errors; report errors to a conversation with `ops: { conversation: "<surface>:<id>" }`, which a chat surface must serve and a plugin's claim must own, or the host does not start. The web chat cannot take error reports in 0.8, so `web:<id>` is no destination; use a surface of your own, or leave `ops` out.
+- `agents`, `skills` (anything but `false`), and `ops.agent` are configuration errors. `ops: { conversation: "<surface>:<id>" }` needs a chat surface that serves it, a claim that owns it and takes background turns, and a plugin that contributes the `owner` background target, or the host does not start; without Discord nothing contributes `owner` unless a plugin of yours does, so leave `ops` out unless you have one. The web chat cannot take error reports in 0.8, so `web:<id>` fails at startup.
 - `http` is optional; without it no listener opens.
 - `notify_owner` is not registered.
 - `schedule_*` and `delegate_task` are not registered, since their runs are turns of the `owner` background target, which the agent server contributes; a plugin that contributes it brings them back. The web chat takes no background turns yet, so leave them out of a web persona's `selection` on a host that keeps Discord.

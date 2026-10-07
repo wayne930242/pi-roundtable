@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.8.0
+
 - `apiKey` and `oauthToken` receive `{ channel, speaker }` (`SandboxCredentialScope`, a new export) before every model call, so a host can pick a key or a subscription per channel or speaker, such as `apiKey: ({ channel }) => keys.get(channel)`. A zero-argument function keeps working. A turn keeps the scope it started with while its requests are in flight, and a getter that returns `undefined` or an empty string fails the call: no other credential is used. The worker still sees only the placeholder key.
 
 ## 0.7.18

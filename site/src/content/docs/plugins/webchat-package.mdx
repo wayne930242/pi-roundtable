@@ -97,7 +97,7 @@ The [security](/configure/security/) page covers what the rest of the host trust
 - Attachments: messages carry text only.
 - Schedules and delegated reports: a web conversation takes no background turns, so leave `schedule_*` and `delegate_task` out of a persona's `selection`.
 - Web tools: leave `web_search` and `fetch_content` out unless people may make the host fetch any address, internal ones included.
-- Error reports: `ops.conversation` cannot name a web conversation, which only its signed-in person opens; report to another surface's conversation, or to an agent with Discord.
+- Error reports: `ops.conversation` cannot name a web conversation, which only its signed-in person opens; the host does not start with one. Report to another surface's conversation, or to an agent with Discord.
 - Agent teams have no web rooms.
 - A person on two providers, or on Discord and the web, has two speaker ids and two memories.
 

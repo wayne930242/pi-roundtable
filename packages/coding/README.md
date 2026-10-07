@@ -7,7 +7,7 @@ This package is a reference for the plugin guide's [Helpers for a Pi session of 
 ## Requirements
 
 - Bun 1.4.2 or newer on a POSIX host (Linux or macOS).
-- pi-roundtable `>=0.7.0 <0.8.0` as a peer dependency; this package uses only its public main, kit and testing entries.
+- pi-roundtable `>=0.8.0 <0.9.0` as a peer dependency; this package uses only its public main, kit and testing entries.
 - Pi `>=1.0.0 <2`, shared with the host's core dependencies.
   A core-only host still pinned to Pi 0.99.x must update its Pi dependencies before adding coding, so cross-package extension and session types resolve to one Pi version.
 - Git, plus GitHub CLI (`gh`) for the default clone implementation.

@@ -180,6 +180,8 @@ export interface ConversationPort {
 	postsInPlace(channel: ChannelKey): boolean;
 	/** Whether a claim owns the channel, so its messages and background turns reach a conversation. */
 	owns(channel: ChannelKey): boolean;
+	/** Whether the claim that owns the channel runs background turns there; false when none owns it. */
+	takesBackground(channel: ChannelKey): boolean;
 }
 
 /** The host's channel queue, as plugins use it. */

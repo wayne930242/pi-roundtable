@@ -60,29 +60,23 @@ npm trust github pi-roundtable-sandbox --file publish.yml --repo wayne930242/pi-
 ### Webchat's first publication
 
 pi-roundtable-webchat is new in 0.8 and does not exist on npm yet (`npm view pi-roundtable-webchat` answers E404), so the `v0.8.0` tag's preflight stops before the core publishes until the owner publishes it once by hand.
-The tag must still publish webchat `0.8.0` itself, with provenance, so the hand publication uses a prerelease version that the tag never publishes.
-Do it from the `0.8.0` release commit after its CI passes, before pushing the tag:
+The owner publishes webchat `0.8.0` itself by hand, from the `0.8.0` release commit after its CI passes, and then pushes the tag.
+From the repository root, on that commit, with the checks above passing:
 
 ```sh
-cd packages/webchat
-# Temporarily, and never committed: a prerelease placeholder that only creates the package.
-npm pkg set version=0.8.0-0
-npm publish --access public --provenance=false --tag first-publish
-git checkout package.json
+(cd packages/webchat && npm publish --access public --provenance=false)
 npm trust github pi-roundtable-webchat --file publish.yml --repo wayne930242/pi-roundtable --allow-publish
 npm trust list pi-roundtable-webchat
 ```
 
-Then run `bun scripts/preflight-release.ts v0.8.0` without `--local`: it now finds the package.
-Push the tag; `publish.yml` publishes webchat `0.8.0` through OIDC as `latest`.
-Afterwards remove the placeholder's tag and mark it unusable:
+Verify the list names this repository and `publish.yml`.
+Then `bun scripts/preflight-release.ts v0.8.0` without `--local` finds the package and passes; push the `v0.8.0` tag.
 
-```sh
-npm dist-tag rm pi-roundtable-webchat first-publish
-npm deprecate pi-roundtable-webchat@0.8.0-0 "placeholder for the first publication; use 0.8.0 or later"
-```
+What follows, and is expected:
 
-Do not publish webchat `0.8.0` by hand: the tag's webchat job would then fail on the existing version, and the release would have no provenance.
+- Webchat `0.8.0` on npm is the hand publication and has no provenance; from `0.8.1` on, the tag publishes webchat with provenance like every other package.
+- The tag's Publish run publishes the core and every other workspace as usual, but its `Publish pi-roundtable-webchat` matrix job fails at `npm publish`: the version already exists, which npm reports as EPUBLISHCONFLICT ("cannot publish over the previously published versions"). `fail-fast: false` keeps the other matrix jobs running, so only that job fails and the run is red.
+- Check that job's log: a failure for any other reason, or a failure of another job, is a real failure and is handled as below. Do not rerun the webchat job; it can only fail the same way.
 
 ### MCP's trust migration
 
@@ -119,7 +113,7 @@ Use `--local` only for CI or pre-first-publish checks, where a new package need 
 For `v0.8.0`, pi-roundtable-webchat needs [its first publication](#webchats-first-publication) first.
 Verify every workspace's trusted publisher is configured against this repository's `publish.yml` before pushing a release tag; package existence alone does not prove OIDC authorization.
 Commit and push, wait for CI for that exact commit, then have the owner push the single `v0.8.0` tag.
-`publish.yml` checks all versions before any publication and publishes all packages with provenance through npm OIDC.
+`publish.yml` checks all versions before any publication and publishes all packages with provenance through npm OIDC; for `v0.8.0` only, webchat is the exception described in [its first publication](#webchats-first-publication).
 If a package job fails after other packages publish, rerun only the failed jobs rather than republishing the successful core or packages.
 Do not use Re-run all jobs: npm refuses to overwrite the already-published core version, stopping the downstream matrix.
 Publication across multiple npm packages is not atomic; pack/existence preflight cannot guarantee registry availability or OIDC authorization.

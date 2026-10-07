@@ -63,7 +63,8 @@ Later checks that need the configuration are skipped with `the configuration is 
 | `config <key>: <path> is empty. Write the prompt in it.` | Write the prompt in the file. |
 | `config adapters[<n>]: unknown adapter "<name>". The adapters are discord; ...` | Use `discord()` from `pi-roundtable/discord`. A chat network that comes as a plugin, such as the web chat's `webChat()`, belongs in `plugins`. |
 | `config adapters[<n>]: Discord is configured twice, ...` | Keep the top-level `discord` or the Discord adapter, not both. |
-| `config agents: the agents live in Discord, which is not configured. ...` | Configure Discord, or remove `agents`. The same holds for `skills` and `ops.agent`; report errors to a conversation with `ops.conversation` instead. |
+| `config agents: the agents live in Discord, which is not configured. ...` | Configure Discord, or remove `agents`. The same holds for `skills` and `ops.agent`; `ops.conversation` works without Discord only when a plugin contributes the `owner` background target. |
+| `config ops.conversation: <why>. ...` | The conversation must be served by a chat surface, owned by a claim that takes background turns, and a plugin must contribute the `owner` background target (the agent server does, with Discord). Name such a conversation, or remove `ops`. The web chat's `web:<id>` is never one. `doctor` does not catch this; `start` stops with it. |
 | `Invalid time zone: <value>` | Use an IANA name such as `Europe/Berlin`. `doctor` does not catch this; `start` stops with it. See [Language and time](/configure/language-and-time/). |
 
 ## PostgreSQL

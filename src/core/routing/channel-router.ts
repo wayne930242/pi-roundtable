@@ -172,4 +172,8 @@ export class ChannelRouter implements ConversationPort {
 	owns(channel: ChannelKey): boolean {
 		return this.#owner(channel) !== undefined;
 	}
+
+	takesBackground(channel: ChannelKey): boolean {
+		return this.#owner(channel)?.background !== undefined;
+	}
 }

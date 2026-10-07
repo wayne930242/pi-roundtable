@@ -15,7 +15,7 @@ Messages not directed to the bot are dropped rather than routed to a host agent.
 bun add pi-roundtable-sandbox pi-roundtable
 ```
 
-Use Bun 1.4.2 or newer, pi-roundtable `>=0.7.0 <0.8.0`, a native Linux host, and a local Docker daemon.
+Use Bun 1.4.2 or newer, pi-roundtable `>=0.8.0 <0.9.0`, a native Linux host, and a local Docker daemon.
 The service account must be allowed to use Docker and must not run the guest as root.
 macOS supports development and image builds, but not sandbox execution because Docker Desktop does not share host Unix sockets into its Linux VM.
 You also need a trusted OpenAI-compatible, non-streaming Chat Completions endpoint with function tools and `max_tokens`.

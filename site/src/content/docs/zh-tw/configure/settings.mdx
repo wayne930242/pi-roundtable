@@ -140,7 +140,7 @@ export default {
 | `skills` | `false`，或 `{ builtinDir?, reposDir? }` | 開啟，`builtinDir` 是套件附帶的技能，`reposDir` 是 `<dataDir>/repos` | `false` 會讓 `skills` addon 不載入：agent 不帶技能，也沒有技能工具。已存的技能仍留在資料表裡。 |
 | `memory` | boolean | `true` | `false` 會讓 `memory` addon 不載入：沒有記憶工具，也沒有記憶的提示詞區塊。資料表維持原樣。 |
 | `ops.agent` | string | 無 | 負責調查行程自身錯誤的 agent 名稱。需要 Discord。 |
-| `ops.conversation` | string | 無 | 不交給 agent，而是回報到一段對話，寫它的 key `<surface>:<id>`。這段對話要有 chat surface 服務、也要有外掛的 claim 擁有，否則 host 不會啟動；網頁聊天不接收錯誤回報。`ops.agent` 和 `ops.conversation` 擇一設定。 |
+| `ops.conversation` | string | 無 | 不交給 agent，而是回報到一段對話，寫它的 key `<surface>:<id>`。這段對話要有 chat surface 服務、要由一個接收背景回合的外掛 claim 擁有，還要有外掛提供 `owner` 背景目標（有 Discord 時由 agent server 提供），否則 host 不會啟動；網頁聊天不接收錯誤回報。`ops.agent` 和 `ops.conversation` 擇一設定。 |
 | `plugins` | 外掛物件的清單 | `[]` | 你的外掛。它們在內建外掛之後，依列出的順序啟動。 |
 
 設了 `ops.agent` 之後，每一筆 `error` 和 `fatal` 的 log 都會回報給那個 agent，成為它頻道裡的一則訊息和一輪回報；設了 `ops.conversation` 則回報到那段對話，由認領它的 claim 執行回報那一輪。

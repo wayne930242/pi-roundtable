@@ -44,6 +44,8 @@ export async function setUpModules(
 		ownerTarget?: boolean;
 		/** Whether a claim owns a channel; by default the Discord channels are owned and no other. */
 		owns?: (channel: ChannelKey) => boolean;
+		/** Whether the claim owning a channel takes background turns; by default every owned channel's does. */
+		takesBackground?: (channel: ChannelKey) => boolean;
 		errorReporter?: ModulesOptions["errorReporter"];
 	} = {},
 ): Promise<{
@@ -104,6 +106,8 @@ export async function setUpModules(
 			guard: {},
 			commands: { add: () => undefined },
 		} as unknown as DiscordServices);
+	const owns =
+		options.owns ?? ((channel: ChannelKey) => channel.startsWith("discord:"));
 	// SAFETY: setup and the preflight read only the logger, the conversations' background, targets and owners, the surfaces, and the services.
 	const context = {
 		logger: silentLogger(),
@@ -112,9 +116,8 @@ export async function setUpModules(
 				options.ownerTarget !== false && name === OWNER_TARGET.name
 					? OWNER_TARGET
 					: undefined,
-			owns:
-				options.owns ??
-				((channel: ChannelKey) => channel.startsWith("discord:")),
+			owns,
+			takesBackground: options.takesBackground ?? owns,
 			background: async (turn: { channel: ChannelKey }) => {
 				record.reportChannels.push(turn.channel);
 				return { status: "ran" };

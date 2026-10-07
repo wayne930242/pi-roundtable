@@ -97,7 +97,7 @@ host 其他部分信任哪些東西，見[安全性](/zh-tw/configure/security/)
 - 附件：訊息只有文字。
 - 排程與委派回報：網頁對話不接受背景回合，所以 persona 的 `selection` 不要放 `schedule_*` 和 `delegate_task`。
 - 網路工具：除非允許使用者讓 host 抓取任何位址（包含內部位址），否則不要放 `web_search` 和 `fetch_content`。
-- 錯誤回報：`ops.conversation` 不能指向網頁對話，因為網頁對話只有登入的本人能開；請回報到其他 surface 的對話，或在有 Discord 時交給 agent。
+- 錯誤回報：`ops.conversation` 不能指向網頁對話，因為網頁對話只有登入的本人能開；指向網頁對話時 host 不會啟動。請回報到其他 surface 的對話，或在有 Discord 時交給 agent。
 - agent team 沒有網頁版的房間。
 - 同一個人用兩個供應商登入，或同時用 Discord 和網頁，會有兩個 speaker id、兩份記憶。
 

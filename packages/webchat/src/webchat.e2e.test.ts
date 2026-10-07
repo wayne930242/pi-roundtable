@@ -445,3 +445,59 @@ describeDb("a host whose only surface is the web chat", () => {
 		).toBe(404);
 	});
 });
+
+describeDb(
+	"a web chat host told to report its errors to a web conversation",
+	() => {
+		test("does not start, naming ops.conversation: the web chat takes no report turns", async () => {
+			const issuer = await testIssuer();
+			const dir = mkdtempSync(join(tmpdir(), "webchat-ops-"));
+			try {
+				const { options, plugins } = await defineRoundtable(
+					{
+						name: "Helpdesk",
+						owner: { id: "operator", name: "Operator" },
+						database: { url: testDatabaseUrl },
+						dataDir: dir,
+						model: "faux/faux-1",
+						judge: { model: "faux/judge" },
+						memory: false,
+						ops: { conversation: "web:ops" },
+						plugins: [
+							notes,
+							webChat({
+								verifier: oidcJwtVerifier({
+									jwksUrl: issuer.jwksUrl,
+									issuers: [issuer.issuer],
+									audiences: [issuer.audience],
+								}),
+								access: { members: { roles: ["Chat.User"] } },
+								origins: [ORIGIN],
+								personas: [
+									{
+										kind: "helpdesk",
+										label: "Helpdesk",
+										prompt: () => "You help with notes.",
+									},
+								],
+							}),
+						],
+					},
+					{
+						logger: silentLogger(),
+						modelRuntime: await fauxModel(dir),
+						listeners: [
+							{ id: "public", port: freePort(), hostname: "127.0.0.1" },
+						],
+					},
+				);
+				const host = new Roundtable(options, plugins);
+				await expect(host.run()).rejects.toThrow("config ops.conversation:");
+				await host.shutdown("test");
+			} finally {
+				await issuer.close();
+				rmSync(dir, { recursive: true, force: true });
+			}
+		});
+	},
+);
