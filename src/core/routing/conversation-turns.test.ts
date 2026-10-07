@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import type { AgentRuntime } from "../contract/runtime.ts";
 import type { SurfacePort } from "../contract/surface.ts";
+import type {
+	ConversationRegistration,
+	ConversationRegistry,
+} from "../conversations/conversation-registry.ts";
 import type { TurnResult } from "../domain/conversation.ts";
 import type { TurnRequest } from "../domain/ports.ts";
 import { NotLinkedError, PluginError } from "../errors.ts";
@@ -36,7 +40,10 @@ function recordingSurface(log: string[]): SurfacePort {
 	};
 }
 
-function setup(run: (request: TurnRequest) => Promise<TurnResult>) {
+function setup(
+	run: (request: TurnRequest) => Promise<TurnResult>,
+	registry?: Pick<ConversationRegistry, "register">,
+) {
 	const log: string[] = [];
 	const requests: TurnRequest[] = [];
 	const events: (TurnEvent | TurnEndEvent)[] = [];
@@ -65,6 +72,7 @@ function setup(run: (request: TurnRequest) => Promise<TurnResult>) {
 			changed: () => undefined,
 		},
 		selection: () => ({ tools: ["note_add"], groups: ["mail"] }),
+		...(registry ? { registry: () => registry } : {}),
 		logger: silentLogger(),
 	});
 	return { turns, log, requests, events, progress };
@@ -162,6 +170,63 @@ describe("conversation turns", () => {
 				progress: { type: "tool_end", id: "c1", tool: "probe", ok: true },
 			},
 		]);
+	});
+
+	test("each turn records its conversation before it runs: shared by default, private to the speaker when asked", async () => {
+		const registered: ConversationRegistration[] = [];
+		const registry = {
+			register: async (entry: ConversationRegistration) => {
+				registered.push(entry);
+				return {
+					...entry,
+					surface: "fake",
+					createdAt: new Date(),
+					lastActiveAt: new Date(),
+				};
+			},
+		};
+		const { turns, log } = setup(async () => ({ ok: true, text: "hi" }), {
+			register: async (entry) => {
+				log.push("registered");
+				return registry.register(entry);
+			},
+		});
+		await turns.run(input);
+		await turns.run({
+			...input,
+			channel: "fake:mine",
+			conversation: { visibility: "private", title: "Algebra" },
+		});
+		expect(registered).toEqual([
+			{ key: "fake:room", kind: "study", visibility: "shared" },
+			{
+				key: "fake:mine",
+				kind: "study",
+				visibility: "private",
+				principalId: OWNER_SPEAKER.id,
+				title: "Algebra",
+			},
+		]);
+		expect(log.indexOf("registered")).toBeLessThan(log.indexOf("run"));
+	});
+
+	test("a private conversation needs the speaker it belongs to, and a failed record runs no turn", async () => {
+		const { turns, log } = setup(async () => ({ ok: true, text: "hi" }), {
+			register: async () => {
+				throw new Error("database down");
+			},
+		});
+		await expect(
+			turns.run({
+				channel: "fake:mine",
+				kind: "study",
+				text: "hello",
+				speaker: undefined as never,
+				conversation: { visibility: "private" },
+			}),
+		).rejects.toThrow("a private conversation needs the speaker");
+		await expect(turns.run(input)).rejects.toThrow("database down");
+		expect(log).not.toContain("run");
 	});
 
 	test("the turn's options reach the runtime, and a selection of its own replaces the default", async () => {

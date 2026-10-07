@@ -18,6 +18,7 @@ import {
 	type RoundtableConfig,
 	resolveConfig,
 } from "./config/config.ts";
+import { conversationsPlugin } from "./conversations/conversations-plugin.ts";
 import { ConfigError } from "./domain/errors.ts";
 import { JudgeError } from "./errors.ts";
 import type { RoundtableOptions } from "./host.ts";
@@ -277,6 +278,7 @@ export async function defineRoundtable(
 			}),
 			...(assembly?.admin ?? []),
 			...(assembly?.skills ?? []),
+			conversationsPlugin(),
 			runtimePlugin({
 				owner,
 				modelRuntime,

@@ -82,6 +82,12 @@ export function conversationTitle(conversation: ConversationView): string {
 			conversation.firstMessage ||
 			t("Session {id}", { id: conversation.id.slice(0, 8) })
 		);
+	if (conversation.kind === "plugin")
+		return (
+			conversation.title ||
+			conversation.firstMessage ||
+			t("Conversation {key}", { key: conversation.key })
+		);
 	const { title } = channelTitle(conversation.channel, conversation.id);
 	return conversation.member ? `${title} · ${conversation.member}` : title;
 }

@@ -9,8 +9,12 @@ import {
 	statSync,
 } from "node:fs";
 import { join } from "node:path";
-import type { ChannelKey } from "pi-roundtable";
-import { textOf } from "pi-roundtable/kit";
+import {
+	type ChannelKey,
+	type ConversationRecord,
+	parseChannelKey,
+} from "pi-roundtable";
+import { channelSegment, textOf } from "pi-roundtable/kit";
 import type { TranscriptEntry } from "./api-types.ts";
 
 const FIRST_MESSAGE_CHARS = 80;
@@ -41,8 +45,11 @@ export interface ConversationFiles {
 	lastActive?: string;
 }
 
-/** The kinds of session directory the console reads. */
-export type StoredKind = "discord" | "group" | "mcp";
+/**
+ * The kinds of session directory the console reads: the three it recognises by name, and any
+ * other conversation the host's registry records.
+ */
+export type StoredKind = "discord" | "group" | "mcp" | "registered";
 
 /** An owner, agent, group-member, or outside-agent conversation found on disk. */
 export interface StoredConversation extends ConversationFiles {
@@ -52,9 +59,11 @@ export interface StoredConversation extends ConversationFiles {
 	id: string;
 	/** Group conversations only: the agent whose conversation inside the group this is. */
 	member?: string;
-	/** Outside-agent conversations only. */
+	/** Outside-agent and registered conversations only. */
 	firstMessage?: string;
 	startedAt?: string;
+	/** Registered conversations only: the name the registry gives it. */
+	title?: string;
 }
 
 /** The session directory a channel key names, or undefined when the key is not one the console reads. */
@@ -251,6 +260,41 @@ export function storedConversations(
 	return found.sort((a, b) =>
 		(b.lastActive ?? "").localeCompare(a.lastActive ?? ""),
 	);
+}
+
+/** The session directory of a conversation the registry records, by its key. */
+export function registeredDir(key: ChannelKey): string {
+	return channelSegment(key);
+}
+
+/**
+ * The conversations the host's registry records and the directory scan does not recognise, with
+ * their files; one whose first turn left no session file has nothing to read and is left out.
+ */
+export function registeredConversations(
+	sessionsDir: string,
+	records: readonly ConversationRecord[],
+	options: {
+		excluded: (key: ChannelKey) => boolean;
+		relayNotes: readonly string[];
+	},
+): StoredConversation[] {
+	const found: StoredConversation[] = [];
+	for (const record of records) {
+		if (parseKey(record.key) || options.excluded(record.key)) continue;
+		const dir = join(sessionsDir, registeredDir(record.key));
+		const files = conversationFiles(dir);
+		if (!files) continue;
+		found.push({
+			key: record.key,
+			kind: "registered",
+			id: parseChannelKey(record.key).id,
+			...files,
+			...opening(dir, options.relayNotes),
+			...(record.title === undefined ? {} : { title: record.title }),
+		});
+	}
+	return found;
 }
 
 /** The archive folders of a conversation, newest first. */

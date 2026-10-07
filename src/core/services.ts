@@ -4,6 +4,7 @@ import type { TeamStatus } from "./agents/team-status.ts";
 import type { ScheduledOutcome } from "./contract/channels.ts";
 import type { AgentRuntime } from "./contract/runtime.ts";
 import { type ServiceKey, serviceKey } from "./contract/services.ts";
+import type { ConversationRegistry } from "./conversations/conversation-registry.ts";
 import type { PendingConfirmation } from "./domain/conversation.ts";
 import type { HttpRoute } from "./http/listeners.ts";
 import type { ThinkingSetting } from "./models.ts";
@@ -42,6 +43,12 @@ import type { AgentTurnScope, ChannelKey } from "./sessions.ts";
  */
 export const RUNTIME: ServiceKey<AgentRuntime> =
 	serviceKey<AgentRuntime>("roundtable.runtime");
+/**
+ * The conversations run through `context.turns`: who each belongs to, its kind and visibility,
+ * and when it was last active, recorded at its first turn. Provided by the `conversations` plugin.
+ */
+export const CONVERSATIONS: ServiceKey<ConversationRegistry> =
+	serviceKey<ConversationRegistry>("roundtable.conversations");
 /** The agent server: its team, its directory, the runtime that runs every agent turn. Provided by the agent-server plugin. */
 export const AGENTS: ServiceKey<AgentServer> =
 	serviceKey<AgentServer>("roundtable.agents");

@@ -38,6 +38,11 @@ const SECTIONS: { kind: ConversationKind; title: string; note: string }[] = [
 		title: "Outside agents",
 		note: "Conversations an agent outside Discord holds over MCP.",
 	},
+	{
+		kind: "plugin",
+		title: "Plugin conversations",
+		note: "Conversations a plugin runs, such as a web chat, as the host recorded them.",
+	},
 ];
 
 export function ConversationsPage() {
@@ -82,7 +87,7 @@ function Row(props: { item: ConversationView; now: number; timeZone: string }) {
 				{item.liveBytes === 0 ? <Badge>{t("archived only")}</Badge> : null}
 			</div>
 			<p className="meta">
-				{item.kind === "outside" && item.startedAt
+				{(item.kind === "outside" || item.kind === "plugin") && item.startedAt
 					? `${t("Started")} ${when(item.startedAt, props.timeZone)} · `
 					: named.detail
 						? `${named.detail} · `

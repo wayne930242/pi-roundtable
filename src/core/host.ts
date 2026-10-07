@@ -32,7 +32,7 @@ import {
 	conversationTurns,
 } from "./routing/conversation-turns.ts";
 import { surfacePort } from "./routing/surface-port.ts";
-import { RUNTIME } from "./services.ts";
+import { CONVERSATIONS, RUNTIME } from "./services.ts";
 import { setTimeZone } from "./time.ts";
 import { type ToolTierTable, toolTiers } from "./tool-tiers.ts";
 
@@ -224,6 +224,7 @@ export class Roundtable {
 					throw new NotLinkedError("the host has not started yet.");
 				return this.#services.get(RUNTIME);
 			},
+			registry: () => this.#services?.find(CONVERSATIONS),
 			surfaces: this.#surfaces(),
 			events: this.#events.sink,
 			selection: () => {

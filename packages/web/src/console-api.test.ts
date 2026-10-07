@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import type { AgentTeam } from "pi-roundtable";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import type { AgentTeam, ConversationRecord } from "pi-roundtable";
 import { partial, recordingLogger, silentLogger } from "pi-roundtable/testing";
 import type {
 	ConfigView,
@@ -18,6 +20,7 @@ import {
 	HIDDEN_CHANNEL,
 	OUTSIDE_SESSION,
 	OWNER_CHANNEL,
+	sessionFile,
 } from "./testing/fixtures.ts";
 
 const team = partial<Pick<AgentTeam, "status" | "owns" | "guildId">>({
@@ -231,6 +234,103 @@ describe("conversations", () => {
 		const bad = await read(`discord:${OWNER_CHANNEL}`, "?archive=../..");
 		expect(bad.status).toBe(404);
 		expect(bad.body.error).toBe("There is no such archive.");
+	});
+});
+
+describe("registered conversations", () => {
+	const record = (
+		key: string,
+		change: Partial<ConversationRecord> = {},
+	): ConversationRecord => ({
+		key: key as ConversationRecord["key"],
+		surface: key.slice(0, key.indexOf(":")),
+		kind: "study",
+		visibility: "private",
+		principalId: "oidc:aXNz:ada",
+		createdAt: new Date("2026-09-05T09:00:00.000Z"),
+		lastActiveAt: new Date("2026-09-05T09:30:00.000Z"),
+		...change,
+	});
+	/** The fixture's sessions, a web chat's among them, and a registry that knows the web chats. */
+	function registered() {
+		const dataDir = fixtureSessions();
+		const dir = join(dataDir, "sessions", "web_chat-1");
+		mkdirSync(dir, { recursive: true });
+		writeFileSync(
+			join(dir, "w.jsonl"),
+			sessionFile([
+				{ role: "user", content: [{ type: "text", text: "What is a group?" }] },
+				{
+					role: "assistant",
+					content: [{ type: "text", text: "A set with an operation." }],
+				},
+			]),
+		);
+		const records = [
+			record("web:chat-1", { title: "Algebra" }),
+			// Recorded, but its first turn left no session file: nothing to read.
+			record("web:chat-2"),
+			// A legacy key a plugin also recorded keeps its own kind.
+			record(`discord:${OWNER_CHANNEL}`, { visibility: "shared" }),
+		];
+		return api({
+			sessionsDir: join(dataDir, "sessions"),
+			registry: {
+				list: async () => records,
+				get: async (key) => records.find((r) => r.key === key),
+			},
+		}).api;
+	}
+
+	test("the registry's conversations are listed beside the ones found on disk, with their title", async () => {
+		const { body } = await call<ConversationsView>(
+			registered(),
+			"conversations",
+		);
+		const byKey = Object.fromEntries(body.conversations.map((c) => [c.key, c]));
+		expect(Object.keys(byKey).sort()).toEqual(
+			[
+				`discord:${OWNER_CHANNEL}`,
+				`discord:${AGENT_CHANNEL}`,
+				`agentgroup:${GROUP_CHANNEL}.scout`,
+				`mcp:${OUTSIDE_SESSION}`,
+				"web:chat-1",
+			].sort(),
+		);
+		expect(byKey["web:chat-1"]).toMatchObject({
+			kind: "plugin",
+			id: "chat-1",
+			title: "Algebra",
+			firstMessage: "What is a group?",
+			archives: 0,
+			busy: 0,
+		});
+		expect(byKey["web:chat-1"]?.channel).toBeUndefined();
+		expect(byKey[`discord:${OWNER_CHANNEL}`]?.kind).toBe("owner");
+	});
+
+	test("a registered conversation's transcript is read from its own directory; an unregistered key is not", async () => {
+		const instance = registered();
+		const live = await call<TranscriptView>(
+			instance,
+			`conversations/${encodeURIComponent("web:chat-1")}`,
+		);
+		expect(live.status).toBe(200);
+		expect(live.body.conversation.kind).toBe("plugin");
+		expect(live.body.entries.map((e) => e.text)).toEqual([
+			"What is a group?",
+			"A set with an operation.",
+		]);
+		const unknown = await call<{ error: string }>(
+			instance,
+			`conversations/${encodeURIComponent("web:chat-9")}`,
+		);
+		expect(unknown.status).toBe(404);
+		const unread = await call<{ error: string }>(
+			instance,
+			`conversations/${encodeURIComponent("web:chat-2")}`,
+		);
+		expect(unread.status).toBe(404);
 	});
 });
 

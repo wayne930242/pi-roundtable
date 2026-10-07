@@ -11,7 +11,7 @@ import { Roundtable } from "./host.ts";
 import { silentLogger } from "./log.ts";
 import type { PluginContext, RoundtablePlugin } from "./plugin.ts";
 import { PiAgentRuntime } from "./runtime/pi-agent-runtime.ts";
-import { AGENTS, RUNTIME } from "./services.ts";
+import { AGENTS, CONVERSATIONS, RUNTIME } from "./services.ts";
 import { describeDb, testDatabaseUrl } from "./testing/database.ts";
 import { hasWebAccess, type TestHost, testHost } from "./testing/test-host.ts";
 
@@ -68,6 +68,13 @@ function recordingSurface(replies: string[]): RoundtablePlugin {
 		});
 		expect(result).toEqual({ ok: true, text: "echo hello" });
 		expect(replies).toEqual(["echo hello"]);
+		// The turn recorded its conversation in the host's registry.
+		expect(await services.get(CONVERSATIONS).get("test:room")).toMatchObject({
+			key: "test:room",
+			surface: "test",
+			kind: "study",
+			visibility: "shared",
+		});
 	});
 
 	test("its sessions have no Discord tools, no shell, and no tool that messages the owner on Discord", async () => {

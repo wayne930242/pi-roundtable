@@ -1,8 +1,13 @@
 import type { AgentRuntime } from "../contract/runtime.ts";
 import type { SurfacePort } from "../contract/surface.ts";
+import type {
+	ConversationRegistry,
+	ConversationVisibility,
+} from "../conversations/conversation-registry.ts";
 import type { TurnAttachments } from "../domain/attachment.ts";
 import type { TurnResult } from "../domain/conversation.ts";
 import type { TurnProgress } from "../domain/progress.ts";
+import { PluginError } from "../errors.ts";
 import { messages } from "../i18n/index.ts";
 import type { Logger } from "../log.ts";
 import type { EventSink } from "../plugin.ts";
@@ -37,6 +42,11 @@ export interface ConversationTurnInput {
 	 * notice); the claim formats its own. A throw is logged, never rethrown.
 	 */
 	reply?(result: TurnResult): Promise<void>;
+	/**
+	 * How the conversation is recorded at its first turn: `private` to the speaker, or `shared`
+	 * (the default). Later turns keep what the first recorded, and give a title only then.
+	 */
+	conversation?: { visibility: ConversationVisibility; title?: string };
 }
 
 /**
@@ -59,6 +69,8 @@ export interface ConversationTurnsOptions {
 	linked: () => void;
 	/** The runtime that runs the turn; throws PluginError when the host has none yet. */
 	runtime: () => AgentRuntime;
+	/** Where each turn records its conversation; absent, or undefined, records none. */
+	registry?: () => Pick<ConversationRegistry, "register"> | undefined;
 	surfaces: SurfacePort;
 	events: EventSink;
 	/** The plugins' agent selection, read at each turn that gives none of its own. */
@@ -68,6 +80,27 @@ export interface ConversationTurnsOptions {
 
 /** The selection of a turn that gives none: the plugins' `agentSelection`. */
 const DEFAULT_SELECTION = "turns";
+
+/** Records the conversation of a turn: private to the speaker when asked, else shared. */
+async function record(
+	registry: Pick<ConversationRegistry, "register"> | undefined,
+	input: ConversationTurnInput,
+): Promise<void> {
+	if (!registry) return;
+	const visibility = input.conversation?.visibility ?? "shared";
+	if (visibility === "private" && !input.speaker)
+		throw new PluginError(
+			`a private conversation needs the speaker it belongs to; ${input.channel} was run without one.`,
+		);
+	const title = input.conversation?.title;
+	await registry.register({
+		key: input.channel,
+		kind: input.kind,
+		visibility,
+		...(visibility === "private" ? { principalId: input.speaker.id } : {}),
+		...(title === undefined ? {} : { title }),
+	});
+}
 
 export function conversationTurns(
 	options: ConversationTurnsOptions,
@@ -79,6 +112,8 @@ export function conversationTurns(
 			options.linked();
 			// A host without a runtime is a setup mistake, so it is refused before anything is shown.
 			const runtime = options.runtime();
+			// A conversation that cannot be recorded runs no turn: who it belongs to would be lost.
+			await record(options.registry?.(), input);
 			const stopTyping = surfaces.startTyping(channel);
 			const hideStop = surfaces.showStop(channel);
 			const turn = { kind, channel, speaker };

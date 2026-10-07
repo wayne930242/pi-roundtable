@@ -57,6 +57,12 @@ export type { ServiceKey, Services } from "./core/contract/services.ts";
 export { serviceKey } from "./core/contract/services.ts";
 export type { ChatSurface, SurfacePort } from "./core/contract/surface.ts";
 export { channelKey, parseChannelKey } from "./core/contract/surface.ts";
+export type {
+	ConversationRecord,
+	ConversationRegistration,
+	ConversationRegistry,
+	ConversationVisibility,
+} from "./core/conversations/conversation-registry.ts";
 export type { Migration, MigrationReport } from "./core/db/migrations.ts";
 export { migrateDatabase } from "./core/db/migrations.ts";
 export type { ToolContribution, ToolSpec, ToolTurn } from "./core/define.ts";
@@ -207,6 +213,7 @@ export type {
 export {
 	AGENTS,
 	BACKGROUND_TURNS,
+	CONVERSATIONS,
 	DELEGATION,
 	MEMORY,
 	PRECHECKS,

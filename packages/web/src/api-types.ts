@@ -80,8 +80,16 @@ export interface DashboardView {
 	party: PartyView[];
 }
 
-/** Who a stored conversation belongs to. */
-export type ConversationKind = "agent" | "group" | "owner" | "outside";
+/**
+ * Who a stored conversation belongs to; `plugin` is one a plugin runs through `context.turns`,
+ * such as a web chat, as the host's registry records it.
+ */
+export type ConversationKind =
+	| "agent"
+	| "group"
+	| "owner"
+	| "outside"
+	| "plugin";
 
 export interface ConversationView {
 	/** The channel key: `discord:<id>`, `agentgroup:<channel>.<agent>`, or `mcp:<session>`. */
@@ -97,9 +105,11 @@ export interface ConversationView {
 	liveBytes: number;
 	archives: number;
 	lastActive?: string;
-	/** Outside-agent conversations only: up to 80 characters of the first message. */
+	/** Outside-agent and plugin conversations only: up to 80 characters of the first message. */
 	firstMessage?: string;
 	startedAt?: string;
+	/** Plugin conversations only: the name the registry gives it. */
+	title?: string;
 	/** Turns running or waiting in the channel. */
 	busy: number;
 }

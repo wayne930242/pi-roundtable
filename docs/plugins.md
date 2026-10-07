@@ -172,6 +172,7 @@ The built-in plugins provide these, from the main entry:
 
 | Key | Port | Provided by | What it is |
 |---|---|---|---|
+| `CONVERSATIONS` | `ConversationRegistry` | `conversations` | The conversations run through `context.turns`: `register`, `get(key)`, `list({ principal }?)`, `setTitle(key, title)`; each a `ConversationRecord` of `key`, `surface`, `kind`, `visibility` (`"private"` or `"shared"`), `principalId?`, `title?`, `createdAt`, `lastActiveAt` |
 | `RUNTIME` | `AgentRuntime` | `runtime` | The runtime every conversation turn runs on, the agent server's and `context.turns`': the `runtime` slot's when a plugin fills it, Pi's otherwise |
 | `AGENTS` | `AgentServer` | `agent-server` | The `team` (`AgentTeam`), the read-only `directory` (`AgentDirectory`), the `runtime` every agent turn runs on (the same one `RUNTIME` provides), `approvals` (whether the owner's reply approves held actions), and `avatars` (`AvatarStudio`) |
 | `SKILLS` | `SkillRegistry` | `skills` (an addon) | What agents carry: `carried`, `carriedNames`, `describeCarried`, `catalog`, `list`, `linkedFrom`, `checkRegistered`, `link`, `attach` |
@@ -1666,8 +1667,16 @@ Call `context.turns.run(input)` inside your claim's queue task to run a turn in 
 It shows typing and the stop control on the channel's surface, runs the turn, and emits `turnStarted` and `turnEnded` with the turn's `kind`.
 It catches runtime errors as failed results and posts the answer, failure notice, or stopped notice through the surface.
 Supply `reply(result)` to handle the reply yourself.
-`input` has `channel`, `kind`, `text`, `speaker`, and optionally `attachments`, `selection` (by default the plugins' `agentSelection`), `steerable`, `interactive`, `confirmed`, and `reply`.
-It rejects with `NotLinkedError` during `setup`, and with a `PluginError` on a host whose agent server has not provided a runtime.
+`input` has `channel`, `kind`, `text`, `speaker`, and optionally `attachments`, `selection` (by default the plugins' `agentSelection`), `steerable`, `interactive`, `confirmed`, `reply`, and `conversation`.
+It rejects with `NotLinkedError` during `setup`, and with a `PluginError` on a host whose runtime plugin has not provided a runtime.
+
+Before each turn runs, `context.turns.run` records its conversation in the host's registry, `CONVERSATIONS`: at the first turn its key, surface, kind, visibility, owner, and title, and at every later turn only that it was active.
+`conversation: { visibility: "private" }` records it as the speaker's own (`principalId` is `speaker.id`); without it the conversation is `shared`.
+`conversation.title` names it at its first turn; `setTitle(key, title)` renames it later.
+A turn whose conversation cannot be recorded does not run, and the call rejects.
+The registry records and never refuses: who may speak in a conversation stays your claim's decision, which may read `get(key)` to check the owner.
+`list({ principal })` gives one principal's conversations and `list()` every one, the most recently active first; the web console lists them too.
+No session file moves, and a conversation from before the registry is recorded at its next turn.
 
 <!-- example: examples/study-room.ts -->
 ```ts
@@ -2333,7 +2342,7 @@ The host's `run()` handles startup:
    The runtime plugin builds the runtime later, in its own setup: from the `runtime` slot when a plugin fills it, else the Pi runtime.
 2. The database is opened and every plugin's migrations run, in plugin order.
 3. Every plugin's `setup` runs, in plugin order.
-   The order is the built-ins (`memory`, `schedule-store`, `prechecks`, `discord`, `modules`, `discord-admin`, `skills`, `runtime`, `agent-server`, `seeds`; an addon that is switched off is not there, and without Discord neither are `discord`, `discord-admin`, `skills`, `agent-server`, or `seeds`), then yours in the order of `plugins` in `roundtable.config.ts`, then the built-in `schedules`, so a due schedule fires only once everything it can reach is running.
+   The order is the built-ins (`memory`, `schedule-store`, `prechecks`, `discord`, `modules`, `discord-admin`, `skills`, `conversations`, `runtime`, `agent-server`, `seeds`; an addon that is switched off is not there, and without Discord neither are `discord`, `discord-admin`, `skills`, `agent-server`, or `seeds`), then yours in the order of `plugins` in `roundtable.config.ts`, then the built-in `schedules`, so a due schedule fires only once everything it can reach is running.
 4. The contributions are linked: tool tiers, hold rules, the session plan, the channel router, and the events.
    From here `sessions()`, `conversations`, `surfaces`, `turns`, and `dashboard()` work.
 5. Every plugin's `preflight` runs, in plugin order.
@@ -2415,7 +2424,7 @@ These are the messages as the code writes them, with `<...>` where your names go
 | `no persona is registered for the conversation kind "<kind>". A plugin adds one with personas: [...], or its claim must start conversations of a kind that has one.` (a failed turn) | Contribute a persona of that kind, or run the turn with a kind that has one |
 | `no runtime provider is configured: the runtime plugin builds the Pi runtime when no plugin fills the runtime slot; read the running one from services.get(RUNTIME)` | Only a plugin that calls `providers.runtime` without `providers.filled.has("runtime")` sees it; read `services.get(RUNTIME)` instead |
 | `session tool <name> takes a core extension name. Rename it.` | Pick a name other than the core's |
-| `two plugins are named <name>.` (from `roundtable doctor`) | Rename yours; the built-in plugins are `memory`, `schedule-store`, `prechecks`, `discord`, `modules`, `discord-admin`, `skills`, `runtime`, `agent-server`, `seeds`, and `schedules` |
+| `two plugins are named <name>.` (from `roundtable doctor`) | Rename yours; the built-in plugins are `memory`, `schedule-store`, `prechecks`, `discord`, `modules`, `discord-admin`, `skills`, `conversations`, `runtime`, `agent-server`, `seeds`, and `schedules` |
 | `migration <plugin>/<name> is declared twice` | A plugin declares two migrations with one name: rename one (the same name in two plugins is fine) |
 | `/<root> <name> is added twice`, `/<name> is registered twice` | Give each slash command and subcommand its own name |
 | `route <name> is registered twice`, `routes <a> and <b> overlap on listener <id>` | Give each route its own name and a path no other route can take |
@@ -2564,6 +2573,7 @@ Import from the entries listed below; source area files are internal.
 | `AvatarMode` | `pi-roundtable` | type |
 | `AvatarStudio` | `pi-roundtable` | type |
 | `BACKGROUND_TURNS` | `pi-roundtable` | value |
+| `CONVERSATIONS` | `pi-roundtable` | value |
 | `BackgroundTarget` | `pi-roundtable` | type |
 | `BackgroundTurn` | `pi-roundtable` | type |
 | `BackgroundTurns` | `pi-roundtable` | type |
@@ -2575,6 +2585,10 @@ Import from the entries listed below; source area files are internal.
 | `Contribution` | `pi-roundtable` | type |
 | `ConversationKind` | `pi-roundtable` | type |
 | `ConversationPort` | `pi-roundtable` | type |
+| `ConversationRecord` | `pi-roundtable` | type |
+| `ConversationRegistration` | `pi-roundtable` | type |
+| `ConversationRegistry` | `pi-roundtable` | type |
+| `ConversationVisibility` | `pi-roundtable` | type |
 | `ConversationTurnInput` | `pi-roundtable` | type |
 | `ConversationTurns` | `pi-roundtable` | type |
 | `DELEGATION` | `pi-roundtable` | value |

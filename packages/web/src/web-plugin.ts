@@ -1,5 +1,6 @@
 import {
 	AGENTS,
+	CONVERSATIONS,
 	definePlugin,
 	MEMORY,
 	type RoundtablePlugin,
@@ -45,6 +46,8 @@ async function build(settings: ResolvedOptions, context: Context) {
 	}
 	const team = services.find(AGENTS)?.team;
 	const connection = services.find(DISCORD)?.connection;
+	// Absent on a host without the registry: the console then lists conversations found by name only.
+	const registry = services.find(CONVERSATIONS);
 	const listeners: (() => void)[] = [];
 	const changed = () => {
 		for (const listener of listeners) listener();
@@ -65,6 +68,7 @@ async function build(settings: ResolvedOptions, context: Context) {
 			? { memory: services.get(MEMORY).forSpeaker(settings.ownerId) }
 			: {}),
 		...(settings.exclude ? { exclude: settings.exclude } : {}),
+		...(registry ? { registry } : {}),
 		relayNotes: settings.relayNotes,
 		changed,
 		logger,

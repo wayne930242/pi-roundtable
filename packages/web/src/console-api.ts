@@ -2,12 +2,13 @@ import { join } from "node:path";
 import type {
 	AgentTeam,
 	ChannelKey,
+	ConversationRegistry,
 	Logger,
 	MemoryKind,
 	QueuePort,
 	SpeakerMemory,
 } from "pi-roundtable";
-import { MemoryError } from "pi-roundtable";
+import { MemoryError, parseChannelKey } from "pi-roundtable";
 import { thinkingLabel } from "pi-roundtable/kit";
 import type {
 	ApiError,
@@ -28,10 +29,12 @@ import {
 	conversationFiles,
 	parseKey,
 	readTranscript,
+	registeredConversations,
+	registeredDir,
 	type StoredConversation,
+	type StoredKind,
 	storedConversations,
 } from "./conversations.ts";
-
 import {
 	type ConsoleFeatures,
 	type ConsolePresentation,
@@ -61,6 +64,8 @@ export interface ConsolePorts {
 	>;
 	/** Conversations the console must not list or read. */
 	exclude?: (key: ChannelKey) => boolean;
+	/** The host's conversation registry; without it only the conversations found by name are listed. */
+	registry?: Pick<ConversationRegistry, "list" | "get">;
 	/** Text a relayed message begins with, which is not the owner's words. */
 	relayNotes: readonly string[];
 	/** Called after a note is written, so every open page refreshes. */
@@ -272,29 +277,56 @@ export class ConsoleApi {
 	// ── Conversations ──────────────────────────────────────────────────────
 
 	async conversations(): Promise<ConversationsView> {
-		const { sessionsDir, relayNotes, exclude } = this.#ports;
-		const stored = storedConversations(sessionsDir, {
-			excluded: (key) =>
-				(exclude?.(key) ?? false) ||
-				(this.#ports.features?.party?.contains(key) ?? false),
+		const { sessionsDir, relayNotes, registry } = this.#ports;
+		const filter = {
+			excluded: (key: ChannelKey) => this.#hidden(key),
 			relayNotes,
-		});
+		};
+		// The registry first; the directory scan reads the conversations from before it, by name.
+		const recorded = registry
+			? registeredConversations(sessionsDir, await registry.list(), filter)
+			: [];
+		const stored = [
+			...recorded,
+			...storedConversations(sessionsDir, filter),
+		].sort((a, b) => (b.lastActive ?? "").localeCompare(a.lastActive ?? ""));
 		return {
 			conversations: await Promise.all(stored.map((c) => this.#view(c))),
 		};
+	}
+
+	#hidden(key: ChannelKey): boolean {
+		return (
+			(this.#ports.exclude?.(key) ?? false) ||
+			(this.#ports.features?.party?.contains(key) ?? false)
+		);
+	}
+
+	/** The session directory and identity of a conversation the console may read, or undefined. */
+	async #located(
+		key: string,
+	): Promise<
+		{ dir: string; kind: StoredKind; id: string; member?: string } | undefined
+	> {
+		const parsed = parseKey(key);
+		if (parsed) return parsed;
+		const record = await this.#ports.registry?.get(key as ChannelKey);
+		return record
+			? {
+					dir: registeredDir(record.key),
+					kind: "registered",
+					id: parseChannelKey(record.key).id,
+				}
+			: undefined;
 	}
 
 	async transcript(
 		key: string,
 		archive: string | undefined,
 	): Promise<TranscriptView> {
-		const { sessionsDir, relayNotes, exclude } = this.#ports;
-		const parsed = parseKey(key);
-		if (
-			!parsed ||
-			exclude?.(key as ChannelKey) ||
-			this.#ports.features?.party?.contains(key as ChannelKey)
-		)
+		const { sessionsDir, relayNotes } = this.#ports;
+		const parsed = await this.#located(key);
+		if (!parsed || this.#hidden(key as ChannelKey))
 			throw new HttpError(404, "There is no such conversation.");
 		const dir = join(sessionsDir, parsed.dir);
 		const files = conversationFiles(dir);
@@ -324,17 +356,20 @@ export class ConsoleApi {
 		const kind: ConversationKind =
 			stored.kind === "mcp"
 				? "outside"
-				: stored.kind === "group"
-					? "group"
-					: (team?.owns(stored.key) ?? "owner");
+				: stored.kind === "registered"
+					? "plugin"
+					: stored.kind === "group"
+						? "group"
+						: (team?.owns(stored.key) ?? "owner");
 		return {
 			key: stored.key,
 			kind,
 			id: stored.id,
 			...(stored.member ? { member: stored.member } : {}),
-			...(stored.kind === "mcp"
+			...(stored.kind === "mcp" || stored.kind === "registered"
 				? {}
 				: { channel: await this.#name(stored.id) }),
+			...(stored.title === undefined ? {} : { title: stored.title }),
 			liveBytes: stored.liveBytes,
 			archives: stored.archives,
 			...(stored.lastActive ? { lastActive: stored.lastActive } : {}),

@@ -68,6 +68,7 @@ import {
 	AGENTS,
 	type AgentServer,
 	BACKGROUND_TURNS,
+	CONVERSATIONS,
 	RUNTIME,
 } from "./core/services.ts";
 import type { ChannelKey, SessionContext } from "./core/sessions.ts";
@@ -366,6 +367,8 @@ export async function testPlugin(
 				const server = services.find(AGENTS);
 				return server ? server.runtime : services.get(RUNTIME);
 			},
+			// A test that gives `CONVERSATIONS` sees each turn record its conversation.
+			registry: () => services.find(CONVERSATIONS),
 			surfaces,
 			events: sink,
 			selection: () => (linked ?? unlinked("sessions")).agentSelection(),
