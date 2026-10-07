@@ -48,6 +48,26 @@ test("serveUnix answers on the socket and replaces a stale socket file", async (
 	}
 });
 
+test("serveUnix lets fetch answer nothing only when it serves WebSockets", () => {
+	const socket = join(
+		mkdtempSync(join(tmpdir(), "roundtable-unix-")),
+		"w.sock",
+	);
+	// Without a handler nothing was upgraded, so a missing answer would leave the client hanging.
+	// @ts-expect-error fetch may return undefined only beside a websocket handler
+	serveUnix(socket, () => undefined).stop(true);
+	serveUnix(
+		socket,
+		(request, server) =>
+			server.upgrade(request, { data: undefined })
+				? undefined
+				: new Response("plain"),
+		{
+			websocket: { message: () => undefined },
+		},
+	).stop(true);
+});
+
 test("serveUnix gives a failure outside the handler to the error option", async () => {
 	const socket = join(
 		mkdtempSync(join(tmpdir(), "roundtable-unix-")),

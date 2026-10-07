@@ -128,6 +128,7 @@ export type {
 	RouteSocket,
 	WebSocketAccept,
 	WebSocketRoute,
+	WebSocketSendResult,
 } from "./core/http/websocket.ts";
 export type { Locale } from "./core/i18n/index.ts";
 export type { JudgeModel } from "./core/judging/model-judge.ts";

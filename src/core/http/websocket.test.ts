@@ -1,12 +1,17 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
+import { connect as connectTcp } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PluginError } from "../errors.ts";
 import { silentLogger } from "../log.ts";
 import { recordingLogger } from "../testing/recording-logger.ts";
 import { HttpListeners, type HttpRoute } from "./listeners.ts";
-import type { RouteSocket, WebSocketRoute } from "./websocket.ts";
+import type {
+	RouteSocket,
+	WebSocketRoute,
+	WebSocketSendResult,
+} from "./websocket.ts";
 
 const ORIGIN = "https://chat.example.com";
 const SECRET = "tok-9f3a";
@@ -27,8 +32,9 @@ function chatRoute(
 			if (token !== "good") return new Response("Forbidden", { status: 403 });
 			return { data: { user: "ana" } };
 		},
-		message: (socket, message) =>
-			socket.send(`${socket.data.user}: ${message}`),
+		message: (socket, message) => {
+			socket.send(`${socket.data.user}: ${message}`);
+		},
 		...overrides,
 	};
 	return {
@@ -36,8 +42,17 @@ function chatRoute(
 		listener: "public",
 		path: { exact: "/ws" },
 		handle: () => new Response("page"),
-		websocket: websocket as WebSocketRoute,
+		websocket,
 	};
+}
+
+function refused(build: () => unknown): unknown {
+	try {
+		build();
+		return undefined;
+	} catch (error) {
+		return error;
+	}
 }
 
 let running: HttpListeners | undefined;
@@ -94,22 +109,52 @@ function connect(
 	return { socket, opened, closed, received, next };
 }
 
+const UPGRADE_HEADERS = {
+	connection: "Upgrade",
+	upgrade: "websocket",
+	"sec-websocket-version": "13",
+	"sec-websocket-key": "dGhlIHNhbXBsZSBub25jZQ==",
+};
+
 /** The status the server answers an upgrade request with, read as plain HTTP. */
 async function handshake(
 	port: number,
 	query: string,
 	origin: string | null = ORIGIN,
+	init: { method?: string; headers?: Record<string, string> } = {},
 ): Promise<[number, string]> {
 	const response = await fetch(`http://127.0.0.1:${port}/ws${query}`, {
+		method: init.method ?? "GET",
 		headers: {
-			connection: "Upgrade",
-			upgrade: "websocket",
-			"sec-websocket-version": "13",
-			"sec-websocket-key": "dGhlIHNhbXBsZSBub25jZQ==",
+			...(init.headers ?? UPGRADE_HEADERS),
 			...(origin ? { origin } : {}),
 		},
 	});
 	return [response.status, await response.text()];
+}
+
+/**
+ * A raw client that completes the handshake and then stops reading, so whatever the server
+ * sends piles up. `ended` resolves with the bytes it held once the server cut the connection.
+ */
+function stalledClient(port: number) {
+	const socket = connectTcp(port, "127.0.0.1");
+	const chunks: Buffer[] = [];
+	socket.on("connect", () => {
+		socket.write(
+			`GET /ws?token=good HTTP/1.1\r\nHost: 127.0.0.1\r\nOrigin: ${ORIGIN}\r\n${Object.entries(
+				UPGRADE_HEADERS,
+			)
+				.map(([name, value]) => `${name}: ${value}\r\n`)
+				.join("")}\r\n`,
+		);
+		socket.pause();
+	});
+	socket.on("data", (chunk: Buffer) => chunks.push(chunk));
+	const ended = new Promise<Buffer>((resolve) => {
+		socket.on("close", () => resolve(Buffer.concat(chunks)));
+	});
+	return { resume: () => socket.resume(), ended };
 }
 
 describe("a WebSocket route", () => {
@@ -151,6 +196,95 @@ describe("a WebSocket route", () => {
 				silentLogger(),
 			);
 		expect(build).toThrow(PluginError);
+	});
+
+	test("must list each origin as scheme://host[:port], exactly as a browser sends it", () => {
+		for (const origin of [
+			"https://chat.example.com/",
+			"chat.example.com",
+			"https://chat.example.com/app",
+			"HTTPS://chat.example.com",
+			"null",
+		]) {
+			const error = refused(
+				() =>
+					new HttpListeners(
+						[{ id: "public", port: 0 }],
+						[chatRoute({ origins: [ORIGIN, origin] })],
+						silentLogger(),
+					),
+			);
+			expect(error).toBeInstanceOf(PluginError);
+			expect(String(error)).toContain(JSON.stringify(origin));
+		}
+		expect(
+			new HttpListeners(
+				[{ id: "public", port: 0 }],
+				[chatRoute({ origins: [ORIGIN, "http://localhost:5173"] })],
+				silentLogger(),
+			),
+		).toBeInstanceOf(HttpListeners);
+	});
+
+	test("routes a request that is no complete WebSocket handshake to handle, never accept", async () => {
+		let asked = 0;
+		const port = serve([
+			chatRoute({
+				accept: () => {
+					asked += 1;
+					return { data: { user: "ana" } };
+				},
+			}),
+		]);
+		// Not a GET: an ordinary request for the route's handler.
+		expect(
+			await handshake(port, "?token=good", ORIGIN, { method: "POST" }),
+		).toEqual([200, "page"]);
+		// A GET asking for a WebSocket without a key or with another version is malformed.
+		const { "sec-websocket-key": _, ...keyless } = UPGRADE_HEADERS;
+		expect(
+			await handshake(port, "?token=good", ORIGIN, { headers: keyless }),
+		).toEqual([400, "Bad Request"]);
+		expect(
+			await handshake(port, "?token=good", ORIGIN, {
+				headers: { ...UPGRADE_HEADERS, "sec-websocket-version": "8" },
+			}),
+		).toEqual([400, "Bad Request"]);
+		expect(asked).toBe(0);
+	});
+
+	test("refuses upgrades past maxConnections with 503 before accept", async () => {
+		let asked = 0;
+		const port = serve([
+			chatRoute({
+				maxConnections: 2,
+				accept: () => {
+					asked += 1;
+					return { data: { user: "ana" } };
+				},
+			}),
+		]);
+		const first = connect(port);
+		const second = connect(port);
+		expect([await first.opened, await second.opened]).toEqual([true, true]);
+		expect(asked).toBe(2);
+		expect(await handshake(port, "?token=good")).toEqual([
+			503,
+			"Service Unavailable",
+		]);
+		expect(await connect(port).opened).toBe(false);
+		expect(asked).toBe(2);
+		first.socket.close();
+		await first.closed;
+		// A closed socket frees its place.
+		let third = connect(port);
+		while (!(await third.opened)) {
+			await Bun.sleep(5);
+			third = connect(port);
+		}
+		expect(asked).toBe(3);
+		second.socket.close();
+		third.socket.close();
 	});
 
 	test("refuses before the upgrade with the response accept returned", async () => {
@@ -198,7 +332,7 @@ describe("a WebSocket route", () => {
 		// Multibyte text counts in bytes: three characters, nine bytes.
 		const wide = connect(port);
 		expect(await wide.opened).toBe(true);
-		wide.socket.send("你好嗎");
+		wide.socket.send("\u4f60\u597d\u55ce");
 		expect(await wide.closed).toBe(1009);
 		// Far over the limit, the server drops the connection before reading the message.
 		const huge = connect(port);
@@ -210,6 +344,65 @@ describe("a WebSocket route", () => {
 		fine.socket.send("12345678");
 		expect(await fine.next(1)).toEqual(["ana: 12345678"]);
 		fine.socket.close();
+	});
+
+	test("cuts a client that stops reading once maxBufferedBytes wait, and says so to the route", async () => {
+		const results: WebSocketSendResult[] = [];
+		let closedWith: number | undefined;
+		let afterClose: WebSocketSendResult | undefined;
+		const port = serve([
+			chatRoute({
+				maxBufferedBytes: 64 * 1024,
+				open: (socket) => {
+					const chunk = "x".repeat(16 * 1024);
+					for (let n = 0; n < 100_000; n += 1) {
+						const result = socket.send(chunk);
+						results.push(result);
+						if (result === "dropped") break;
+					}
+				},
+				close: (socket, code) => {
+					closedWith = code;
+					afterClose = socket.send("late");
+				},
+			}),
+		]);
+		const client = stalledClient(port);
+		while (closedWith === undefined) await Bun.sleep(5);
+		expect(results.at(-1)).toBe("dropped");
+		expect(results.filter((result) => result === "dropped")).toHaveLength(1);
+		expect(results).toContain("sent");
+		expect(results).toContain("queued");
+		// The socket is cut without a close frame: 1006 on both sides.
+		expect(closedWith).toBe(1006);
+		expect(afterClose).toBe("dropped");
+		client.resume();
+		const held = await client.ended;
+		// A close frame would start with 0x88; the stream ends with message bytes instead.
+		expect(held.length).toBeGreaterThan(0);
+		expect(held.at(-1)).toBe("x".charCodeAt(0));
+	});
+
+	test("send reports a message to a closed socket as dropped", async () => {
+		let kept: RouteSocket<Session> | undefined;
+		let closed = false;
+		const port = serve([
+			chatRoute({
+				open: (socket) => {
+					kept = socket;
+				},
+				close: () => {
+					closed = true;
+				},
+			}),
+		]);
+		const client = connect(port);
+		expect(await client.opened).toBe(true);
+		expect(kept?.send("hello")).toBe("sent");
+		expect(await client.next(1)).toEqual(["hello"]);
+		client.socket.close();
+		while (!closed) await Bun.sleep(5);
+		expect(kept?.send("gone")).toBe("dropped");
 	});
 
 	test("closes a socket that sends faster than its rate", async () => {

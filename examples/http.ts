@@ -18,9 +18,11 @@ export const health = definePlugin({
 
 /**
  * A route with `websocket` also takes upgrades. The Origin check and `accept` run before any
- * socket opens, so a browser on another site, or a client without the ticket, never connects.
+ * socket opens, so a browser on another site, or a client without a ticket, never connects.
+ * A ticket opens one socket: `accept` spends it, so one that leaks from a log or the browser's
+ * history opens nothing. Whoever issues the tickets should also let them expire within seconds.
  */
-export const echo = (ticket: string) =>
+export const echo = (tickets: Set<string>) =>
 	definePlugin({
 		name: "echo",
 		setup: () => ({
@@ -33,13 +35,20 @@ export const echo = (ticket: string) =>
 					handle: () => new Response("Upgrade Required", { status: 426 }),
 					websocket: {
 						origins: ["https://chat.example.com"],
-						accept: (request) =>
-							URL.parse(request.url)?.searchParams.get("ticket") === ticket
+						accept: (request) => {
+							const ticket = URL.parse(request.url)?.searchParams.get("ticket");
+							return ticket && tickets.delete(ticket)
 								? { data: { since: Date.now() } }
-								: new Response("Unauthorized", { status: 401 }),
+								: new Response("Unauthorized", { status: 401 });
+						},
 						maxMessageBytes: 4096,
 						rate: { messages: 20, perMs: 10_000 },
-						message: (socket, message) => socket.send(message),
+						maxBufferedBytes: 64 * 1024,
+						maxConnections: 50,
+						message: (socket, message) => {
+							// "dropped" means the client stopped reading and the host cut it; an echo has nothing to resend.
+							socket.send(message);
+						},
 					},
 				},
 			],

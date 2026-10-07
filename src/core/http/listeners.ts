@@ -5,10 +5,10 @@ import type { Logger } from "../log.ts";
 import { serveUnix } from "../shared/unix-server.ts";
 import {
 	type Connection,
+	DEFAULT_MAX_BUFFERED_BYTES,
 	DEFAULT_MAX_MESSAGE_BYTES,
 	isUpgrade,
 	SocketSet,
-	upgrade,
 	type WebSocketRoute,
 } from "./websocket.ts";
 
@@ -70,6 +70,13 @@ function validate(
 			throw new PluginError(
 				`route ${route.name} takes WebSockets, so its methods must include GET`,
 			);
+		const { origins } = route.websocket ?? {};
+		if (origins && origins !== "any")
+			for (const origin of origins)
+				if (URL.parse(origin)?.origin !== origin)
+					throw new PluginError(
+						`route ${route.name} lists origin ${JSON.stringify(origin)}, which is not a scheme://host[:port] origin`,
+					);
 		if (!ids.has(route.listener))
 			throw new PluginError(
 				`route ${route.name} needs listener ${route.listener}, which is not configured`,
@@ -119,6 +126,13 @@ export async function routeRequest(
 	}
 }
 
+/** What every request on one listener is served with. */
+interface ListenerContext {
+	listener: string;
+	logger: Logger;
+	sockets: SocketSet;
+}
+
 /**
  * Routes one listener's request like `routeRequest`, except that a WebSocket upgrade for a route
  * that takes them goes to its `websocket`; a failing `accept` answers and logs like a failing
@@ -128,14 +142,13 @@ async function serveRequest(
 	routes: readonly HttpRoute[],
 	request: Request,
 	server: Server<Connection>,
-	listener: string,
-	logger: Logger,
+	{ listener, logger, sockets }: ListenerContext,
 ): Promise<Response | undefined> {
 	const route = routeFor(routes, request);
 	if (!route?.websocket || !isUpgrade(request))
 		return routeRequest(routes, request, listener, logger);
 	try {
-		return await upgrade(route.name, route.websocket, request, server);
+		return await sockets.upgrade(route.name, route.websocket, request, server);
 	} catch (err) {
 		logger.error({ err, route: route.name, listener }, "route failed");
 		return serverError();
@@ -179,7 +192,7 @@ export class HttpListeners {
 	readonly #logger: Logger;
 	readonly #sockets: SocketSet;
 	readonly #closeTimeoutMs: number;
-	#servers: Server<Connection>[] = [];
+	#servers: Pick<Server<unknown>, "stop">[] = [];
 
 	/** Validates every route before any socket opens; `closeTimeoutMs` bounds how long a stop waits on WebSocket handlers. */
 	constructor(
@@ -204,14 +217,25 @@ export class HttpListeners {
 					(route) => route.listener === listener.id,
 				);
 				const handle: Fetch = (request, server) =>
-					serveRequest(routes, request, server, listener.id, this.#logger);
+					serveRequest(routes, request, server, {
+						listener: listener.id,
+						logger: this.#logger,
+						sockets: this.#sockets,
+					});
 				const websocket = this.#websocketHandler(listener.id, routes);
 				if ("socketPath" in listener) {
 					this.#servers.push(
-						serveUnix(listener.socketPath, handle, {
-							error: serverError,
-							...(websocket ? { websocket } : {}),
-						}),
+						websocket
+							? serveUnix(listener.socketPath, handle, {
+									error: serverError,
+									websocket,
+								})
+							: serveUnix(
+									listener.socketPath,
+									(request) =>
+										routeRequest(routes, request, listener.id, this.#logger),
+									{ error: serverError },
+								),
 					);
 					chmodSync(listener.socketPath, listener.mode ?? 0o660);
 				} else {
@@ -226,18 +250,27 @@ export class HttpListeners {
 		}
 	}
 
-	/** The listener's WebSocket handler, sized for its largest route limit; none without WebSocket routes. */
+	/** The listener's WebSocket handler, sized for its largest route limits; none without WebSocket routes. */
 	#websocketHandler(
 		listener: string,
 		routes: readonly HttpRoute[],
 	): WebSocketHandler<Connection> | undefined {
-		const limits = routes.flatMap((route) =>
-			route.websocket
-				? [route.websocket.maxMessageBytes ?? DEFAULT_MAX_MESSAGE_BYTES]
-				: [],
+		const websockets = routes.flatMap((route) =>
+			route.websocket ? [route.websocket] : [],
 		);
-		if (limits.length === 0) return undefined;
-		return this.#sockets.handler(listener, Math.max(...limits));
+		if (websockets.length === 0) return undefined;
+		return this.#sockets.handler(listener, {
+			maxMessageBytes: Math.max(
+				...websockets.map(
+					(w) => w.maxMessageBytes ?? DEFAULT_MAX_MESSAGE_BYTES,
+				),
+			),
+			maxBufferedBytes: Math.max(
+				...websockets.map(
+					(w) => w.maxBufferedBytes ?? DEFAULT_MAX_BUFFERED_BYTES,
+				),
+			),
+		});
 	}
 
 	/**
