@@ -358,6 +358,15 @@ export function upgradeSource(source: string, file = CONFIG_FILE): Upgraded {
 				.filter(
 					(comment) => comment.end <= value.start || comment.start >= value.end,
 				);
+			// A line comment put before a key that shares its line would swallow the rest of that line.
+			if (
+				rewrite.indentOf(adapters) === undefined &&
+				comments.some((comment) => comment.type === "CommentLine")
+			)
+				throw rewrite.at(
+					adapters,
+					"adapters shares a line with other keys, so the upgrade cannot put the comments of discord above it; put adapters on its own line",
+				);
 			rewrite.moved.push(...comments);
 			rewrite.edits.push({ ...removal, text: "" });
 			if (comments.length > 0)

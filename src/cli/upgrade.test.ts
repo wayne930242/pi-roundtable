@@ -215,6 +215,10 @@ export default {
 			'const discord = { token: "t", guild: "g", entryChannel: "c" };\nexport default { discord };\n',
 			"the name discord is already used",
 		],
+		"a commented discord moved into adapters that shares its line": [
+			'export default {\n\tdataDir: ".", adapters: [],\n\t// The Discord bot.\n\tdiscord: { token: "t", guild: "g", entryChannel: "c" },\n};\n',
+			"roundtable.config.ts:2:16: adapters shares a line with other keys, so the upgrade cannot put the comments of discord above it; put adapters on its own line",
+		],
 		"no exported object": [
 			"export default makeConfig();\n",
 			"cannot find the configuration object",
