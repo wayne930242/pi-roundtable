@@ -2,7 +2,7 @@ import type { RoundtablePlugin } from "../plugin.ts";
 import { IDENTITY } from "../services.ts";
 import type { AccessRules } from "./access-policy.ts";
 import { type BackfillSummary, identityMigrations } from "./identity-schema.ts";
-import { PgIdentityService } from "./identity-service.ts";
+import { identityView, PgIdentityService } from "./identity-service.ts";
 import { PgPrincipalStore } from "./principal-store.ts";
 
 /** The name of the identity plugin, as the migration ledger names it. */
@@ -24,7 +24,7 @@ export function backfillLine(summary: BackfillSummary): string {
 /**
  * The principals, their identity links, and their roles: the tables, the backfill that makes a
  * principal of every person 0.8 stored, and the identity service over them provided as
- * `IDENTITY`, its configured owners synced at setup. It runs first, so every later plugin may
+ * `IDENTITY`, read-only, its configured owners synced at setup. It runs first, so every later plugin may
  * read it.
  */
 export function identityPlugin(options: IdentityOptions): RoundtablePlugin {
@@ -44,7 +44,7 @@ export function identityPlugin(options: IdentityOptions): RoundtablePlugin {
 				{ logger },
 			);
 			await identity.syncConfig();
-			services.provide(IDENTITY, identity);
+			services.provide(IDENTITY, identityView(identity));
 			return {};
 		},
 	};

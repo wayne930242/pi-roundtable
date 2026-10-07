@@ -23,40 +23,70 @@ import {
 } from "./principal-store.ts";
 import { isPrincipalId } from "./ulid.ts";
 
-/** Who the host serves: its principals, their identities, and their roles. Provided as `IDENTITY` by the `identity` plugin. */
+/**
+ * Who the host serves: its principals, their identities, and their roles, read-only. Provided as
+ * `IDENTITY` by the `identity` plugin; the principals are written by the host's own configuration
+ * and the `roundtable principal` CLI, never through it. A change another process makes is seen
+ * within half a minute.
+ */
 export interface IdentityService {
-	/** The stored principals, identity links, and lasting roles. A change made here is seen at once; one another process makes, within half a minute. */
-	readonly principals: PrincipalStore;
 	/**
 	 * The speaker behind these facts, or undefined when the access rules serve no one by them: a
 	 * linked identity is its principal's; an unlinked one first claims the principal of its 0.8
 	 * id (`legacyId`) when the backfill made it and no identity was ever linked to it, unless it
 	 * holds the owner role, and is otherwise admitted as a new principal when the rules give it a
 	 * tier. Both happen only when `provisioning` is `admitted`; under `linked` only identities
-	 * already linked are served.
-	 * A disabled principal is no one. The tier is the higher of the principal's lasting roles and
-	 * what the rules give the facts on this contact.
+	 * already linked are served. A disabled principal is no one. The tier is the higher of the
+	 * principal's lasting roles and what the rules give the facts on this contact.
 	 */
 	resolve(
 		facts: ActorFacts,
 		scope?: { conversation?: ChannelKey },
 	): Promise<Speaker | undefined>;
 	principal(id: string): Promise<Principal | undefined>;
-	/** The principal's tier: their lasting roles, and with `facts` what the rules give those too; undefined when disabled or unknown. */
-	tierOf(
-		principalId: string,
-		scope?: { conversation?: ChannelKey; facts?: ActorFacts },
-	): Promise<Tier | undefined>;
+	/** Every principal, the oldest first. */
+	list(): Promise<readonly Principal[]>;
+	/** The identities linked to the principal. */
+	identities(principalId: string): Promise<readonly IdentityLink[]>;
+	/** The principal's lasting roles, granted by the configuration or the CLI. */
+	roles(principalId: string): Promise<readonly RoleGrant[]>;
+	/** The tier of the principal's lasting roles; undefined when they hold none, are disabled, or are unknown. */
+	tierOf(principalId: string): Promise<Tier | undefined>;
 	/**
 	 * A speaker for a turn started on a principal's behalf, at `tier` or their own, whichever is
 	 * lower. Their own is their lasting roles' tier, or, when their tier comes only from the rules
 	 * on contact, the tier they were last seen at, refused once `access.backgroundStaleDays` pass
-	 * unseen or once a contact of theirs is refused. The system principal speaks only at the tier given. Throws IdentityError for a
-	 * principal that is unknown, disabled, or holds no tier.
+	 * unseen or once a contact of theirs is refused. Throws IdentityError for a principal that is
+	 * unknown, disabled, or holds no tier, and for the system principal, whose turns only the core
+	 * starts.
 	 */
 	speakerFor(principalId: string, tier?: Tier): Promise<Speaker>;
 	/** The principals holding the owner role, the configured owners first in their order. */
 	owners(): Promise<readonly Principal[]>;
+}
+
+/** The system principal's speaker for a turn the core itself starts, such as an ops report, at the tier its starter gives. Core-internal: no plugin reaches it. */
+export function systemSpeaker(tier: Tier): Speaker {
+	return {
+		id: SYSTEM_PRINCIPAL,
+		name: SYSTEM_PRINCIPAL,
+		tier,
+		principalId: SYSTEM_PRINCIPAL,
+	};
+}
+
+/** The service as plugins get it: only its reads, frozen, with no way to its store. */
+export function identityView(service: IdentityService): IdentityService {
+	return Object.freeze({
+		resolve: service.resolve.bind(service),
+		principal: service.principal.bind(service),
+		list: service.list.bind(service),
+		identities: service.identities.bind(service),
+		roles: service.roles.bind(service),
+		tierOf: service.tierOf.bind(service),
+		speakerFor: service.speakerFor.bind(service),
+		owners: service.owners.bind(service),
+	});
 }
 
 /** How long a read of the store is reused; a change another process makes is seen after it. */
@@ -190,7 +220,8 @@ export interface IdentityServiceOptions {
 
 /** The identity service over the principal store and the configured access rules. */
 export class PgIdentityService implements IdentityService {
-	readonly principals: PrincipalStore;
+	/** The stored principals, written through it seen at once by this process. Core-internal: plugins get `identityView`. */
+	readonly store: PrincipalStore;
 	readonly #rules: AccessRules;
 	readonly #logger: Logger;
 	readonly #now: () => number;
@@ -205,7 +236,7 @@ export class PgIdentityService implements IdentityService {
 		options: IdentityServiceOptions,
 	) {
 		this.#now = options.now ?? Date.now;
-		this.principals = new CachingPrincipalStore(store, this.#now);
+		this.store = new CachingPrincipalStore(store, this.#now);
 		this.#rules = checkAccessRules(rules);
 		this.#logger = options.logger;
 	}
@@ -217,7 +248,7 @@ export class PgIdentityService implements IdentityService {
 	 * An identity of an owner that is linked to another principal stops the boot.
 	 */
 	async syncConfig(): Promise<void> {
-		const store = this.principals;
+		const store = this.store;
 		const owners: string[] = [];
 		const identities = new Set<string>();
 		for (const [n, owner] of this.#rules.owners.entries()) {
@@ -281,11 +312,11 @@ export class PgIdentityService implements IdentityService {
 		scope: { conversation?: ChannelKey } = {},
 	): Promise<Speaker | undefined> {
 		const link =
-			(await this.principals.identity(facts.provider, facts.subject)) ??
+			(await this.store.identity(facts.provider, facts.subject)) ??
 			(await this.#claim(facts)) ??
 			(await this.#admit(facts, scope.conversation));
 		if (!link) return undefined;
-		const principal = await this.principals.get(link.principalId);
+		const principal = await this.store.get(link.principalId);
 		if (!principal || principal.disabled) return undefined;
 		const tier = await this.#tier(principal.id, facts, scope.conversation);
 		// Refused now, so seen at no tier: their background turns stop with it.
@@ -300,33 +331,34 @@ export class PgIdentityService implements IdentityService {
 	}
 
 	async principal(id: string): Promise<Principal | undefined> {
-		const record = await this.principals.get(id);
+		const record = await this.store.get(id);
 		return record && publicOf(record);
 	}
 
-	async tierOf(
-		principalId: string,
-		scope: { conversation?: ChannelKey; facts?: ActorFacts } = {},
-	): Promise<Tier | undefined> {
-		const principal = await this.principals.get(principalId);
+	async list(): Promise<readonly Principal[]> {
+		return (await this.store.list()).map(publicOf);
+	}
+
+	identities(principalId: string): Promise<readonly IdentityLink[]> {
+		return this.store.identitiesOf(principalId);
+	}
+
+	roles(principalId: string): Promise<readonly RoleGrant[]> {
+		return this.store.rolesOf(principalId);
+	}
+
+	async tierOf(principalId: string): Promise<Tier | undefined> {
+		const principal = await this.store.get(principalId);
 		if (!principal || principal.disabled) return undefined;
-		return this.#tier(principalId, scope.facts, scope.conversation);
+		return this.#lastingTier(principalId);
 	}
 
 	async speakerFor(principalId: string, tier?: Tier): Promise<Speaker> {
-		if (principalId === SYSTEM_PRINCIPAL) {
-			if (!tier)
-				throw new IdentityError(
-					`the system principal speaks only at a tier its caller gives`,
-				);
-			return {
-				id: SYSTEM_PRINCIPAL,
-				name: SYSTEM_PRINCIPAL,
-				tier,
-				principalId: SYSTEM_PRINCIPAL,
-			};
-		}
-		const principal = await this.principals.get(principalId);
+		if (principalId === SYSTEM_PRINCIPAL)
+			throw new IdentityError(
+				`only the host itself speaks as the system principal "${SYSTEM_PRINCIPAL}"`,
+			);
+		const principal = await this.store.get(principalId);
 		if (!principal)
 			throw new IdentityError(`there is no principal ${principalId}`);
 		if (principal.disabled)
@@ -342,7 +374,7 @@ export class PgIdentityService implements IdentityService {
 	}
 
 	async owners(): Promise<readonly Principal[]> {
-		const holders = (await this.principals.holders("owner")).map(
+		const holders = (await this.store.holders("owner")).map(
 			(holder) => holder.principalId,
 		);
 		const order = (id: string) => {
@@ -360,7 +392,7 @@ export class PgIdentityService implements IdentityService {
 
 	/** The tier of the principal's lasting roles, if any. */
 	async #lastingTier(principalId: string): Promise<Tier | undefined> {
-		const roles: RoleGrant[] = await this.principals.rolesOf(principalId);
+		const roles: RoleGrant[] = await this.store.rolesOf(principalId);
 		return highest(roles.map((grant) => grant.role));
 	}
 
@@ -379,12 +411,12 @@ export class PgIdentityService implements IdentityService {
 
 	async #tier(
 		principalId: string,
-		facts: ActorFacts | undefined,
+		facts: ActorFacts,
 		conversation: ChannelKey | undefined,
 	): Promise<Tier | undefined> {
 		return highest([
 			await this.#lastingTier(principalId),
-			facts ? factsTier(this.#rules, facts, conversation) : undefined,
+			factsTier(this.#rules, facts, conversation),
 		]);
 	}
 
@@ -397,8 +429,8 @@ export class PgIdentityService implements IdentityService {
 		if (this.#rules.provisioning !== "admitted") return undefined;
 		if (id === undefined || id === SYSTEM_PRINCIPAL || isPrincipalId(id))
 			return undefined;
-		if (!(await this.principals.get(id))?.claimable) return undefined;
-		return this.principals.claim(id, {
+		if (!(await this.store.get(id))?.claimable) return undefined;
+		return this.store.claim(id, {
 			provider: facts.provider,
 			subject: facts.subject,
 		});
@@ -411,7 +443,7 @@ export class PgIdentityService implements IdentityService {
 	): Promise<IdentityLink | undefined> {
 		if (this.#rules.provisioning !== "admitted") return undefined;
 		if (!factsTier(this.#rules, facts, conversation)) return undefined;
-		return this.principals.admit(
+		return this.store.admit(
 			{ provider: facts.provider, subject: facts.subject },
 			facts.name,
 		);
@@ -431,7 +463,7 @@ export class PgIdentityService implements IdentityService {
 			return;
 		this.#seen.set(principalId, { at: now, tier });
 		try {
-			await this.principals.touch(principalId, tier, new Date(now));
+			await this.store.touch(principalId, tier, new Date(now));
 		} catch (error) {
 			this.#seen.delete(principalId);
 			this.#logger.warn(

@@ -10,7 +10,7 @@ import {
 import type { AccessRules } from "./access-policy.ts";
 import type { ActorFacts } from "./actor-facts.ts";
 import { identityMigrations } from "./identity-schema.ts";
-import { PgIdentityService } from "./identity-service.ts";
+import { PgIdentityService, systemSpeaker } from "./identity-service.ts";
 import { PgPrincipalStore, SYSTEM_PRINCIPAL } from "./principal-store.ts";
 
 const ADA = "966666600000000001";
@@ -135,7 +135,7 @@ describeDb("the identity service", () => {
 		expect(
 			(await identity.resolve(discordFacts(KAI, "Kai")))?.principalId,
 		).toBe(KAI);
-		await identity.principals.unlink("discord", KAI);
+		await identity.store.unlink("discord", KAI);
 		const again = await identity.resolve(discordFacts(KAI, "Kai"));
 		expect(again?.principalId).toMatch(/^p_/);
 		expect((await store.identity("discord", KAI))?.source).toBe("jit");
@@ -298,8 +298,8 @@ describeDb("the identity service", () => {
 		expect(await store.identity("discord", KAI)).toBeUndefined();
 		expect((await store.get(KAI))?.claimable).toBe(true);
 		// Linked through the service, as a plugin of this process would: seen at once.
-		const linked = await identity.principals.create({ displayName: "Linked" });
-		await identity.principals.link(
+		const linked = await identity.store.create({ displayName: "Linked" });
+		await identity.store.link(
 			linked.id,
 			{ provider: "oidc:aHR0cHM6Ly9pZHAuZXhhbXBsZS5jb20", subject: "user-8" },
 			"cli",
@@ -357,14 +357,43 @@ describeDb("the identity service", () => {
 				)
 			)?.tier,
 		).toBe("admin");
+		// tierOf is the lasting tier: what a contact's facts gave is not theirs to keep.
 		expect(await identity.tierOf(KAI)).toBe("member");
-		const admin = await store.create({ displayName: "Admin" });
-		await store.grant(admin.id, "admin", "cli");
 		expect(
-			await identity.tierOf(admin.id, {
-				facts: discordFacts("966666600000000042", "Admin"),
+			// @ts-expect-error tierOf takes no facts: they could be someone else's.
+			await identity.tierOf(KAI, {
+				facts: discordFacts("966666600000000042", "Admin", [
+					"discord:role:966666600000000077",
+				]),
 			}),
-		).toBe("admin");
+		).toBe("member");
+	});
+
+	test("the reads: principals, their identities, and their roles", async () => {
+		const identity = await service();
+		await carriedOver(KAI, "Kai");
+		await identity.resolve(discordFacts(KAI, "Kai"));
+		await identity.store.grant(KAI, "admin", "cli");
+		expect((await identity.list()).map((principal) => principal.id)).toEqual([
+			ADA,
+			KAI,
+		]);
+		expect(await identity.list()).toContainEqual({
+			id: KAI,
+			displayName: "Kai",
+			disabled: false,
+		});
+		expect(await identity.identities(KAI)).toEqual([
+			expect.objectContaining({
+				provider: "discord",
+				subject: KAI,
+				principalId: KAI,
+				source: "legacy",
+			}),
+		]);
+		expect((await identity.roles(KAI)).map((grant) => grant.role)).toEqual([
+			"admin",
+		]);
 	});
 
 	test("a disabled principal resolves to no one, has no tier, and no turn can be started for them", async () => {
@@ -399,7 +428,7 @@ describeDb("the identity service", () => {
 		expect(service()).rejects.toThrow(ConfigError);
 	});
 
-	test("speakerFor speaks for a principal at their lasting tier, or lower when asked; the system principal only at the tier given", async () => {
+	test("speakerFor speaks for a principal at their lasting tier, or lower when asked, never for the system principal; the core's systemSpeaker speaks at the tier given", async () => {
 		const identity = await service();
 		expect(await identity.speakerFor(ADA)).toEqual({
 			id: ADA,
@@ -408,15 +437,18 @@ describeDb("the identity service", () => {
 			principalId: ADA,
 		});
 		expect((await identity.speakerFor(ADA, "member")).tier).toBe("member");
-		expect(await identity.speakerFor(SYSTEM_PRINCIPAL, "owner")).toEqual({
+		expect(identity.speakerFor(SYSTEM_PRINCIPAL, "owner")).rejects.toThrow(
+			IdentityError,
+		);
+		expect(identity.speakerFor(SYSTEM_PRINCIPAL)).rejects.toThrow(
+			IdentityError,
+		);
+		expect(systemSpeaker("owner")).toEqual({
 			id: SYSTEM_PRINCIPAL,
 			name: SYSTEM_PRINCIPAL,
 			tier: "owner",
 			principalId: SYSTEM_PRINCIPAL,
 		});
-		expect(identity.speakerFor(SYSTEM_PRINCIPAL)).rejects.toThrow(
-			IdentityError,
-		);
 		expect(identity.speakerFor("nobody")).rejects.toThrow(IdentityError);
 	});
 

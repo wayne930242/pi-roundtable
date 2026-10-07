@@ -285,6 +285,21 @@ describeDb("the identity plugin", () => {
 			},
 		]);
 		const identity = provided.get(IDENTITY.id) as IdentityService;
+		// Plugins read through it; the principals are written by the core and the CLI only.
+		expect(Object.keys(identity).sort()).toEqual(
+			[
+				"identities",
+				"list",
+				"owners",
+				"principal",
+				"resolve",
+				"roles",
+				"speakerFor",
+				"tierOf",
+			].sort(),
+		);
+		expect(Object.isFrozen(identity)).toBe(true);
+		expect("store" in identity).toBe(false);
 		expect(await identity.principal(OWNER)).toMatchObject({
 			id: OWNER,
 			displayName: "Ada",

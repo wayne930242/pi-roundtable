@@ -150,12 +150,8 @@ export type {
 	IdentityLink,
 	IdentityRef,
 	LinkSource,
-	NewPrincipal,
 	Principal,
-	PrincipalRecord,
-	PrincipalStore,
 	RoleGrant,
-	RoleHolder,
 	RoleSource,
 } from "./core/identity/principal-store.ts";
 export { SYSTEM_PRINCIPAL } from "./core/identity/principal-store.ts";

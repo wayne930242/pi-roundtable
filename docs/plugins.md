@@ -175,7 +175,7 @@ The built-in plugins provide these, from the main entry:
 
 | Key | Port | Provided by | What it is |
 |---|---|---|---|
-| `IDENTITY` | `IdentityService` | `identity` | Who the host serves: `resolve(facts, { conversation }?)` gives the `Speaker` with its `principalId` behind a surface's `ActorFacts`, or undefined; `principal(id)`, `tierOf(principalId, { conversation, facts }?)`, `speakerFor(principalId, tier?)`, `owners()`, and `principals`, the `PrincipalStore` of principals, identity links, and lasting roles. `SYSTEM_PRINCIPAL` is the host's own |
+| `IDENTITY` | `IdentityService` | `identity` | Who the host serves, read-only: `resolve(facts, { conversation }?)` gives the `Speaker` with its `principalId` behind a surface's `ActorFacts`, or undefined; `principal(id)`, `list()`, `identities(principalId)`, `roles(principalId)`, `tierOf(principalId)` (the lasting roles' tier), `speakerFor(principalId, tier?)` for a turn on someone's behalf, and `owners()`. Principals are written only by the configuration and `roundtable principal`. `SYSTEM_PRINCIPAL` is the host's own, which no plugin speaks as |
 | `CONVERSATIONS` | `ConversationRegistry` | `conversations` | The conversations run through `context.turns`: `register`, `get(key)`, `list({ principal }?)`, `setTitle(key, title)`; each a `ConversationRecord` of `key`, `surface`, `kind`, `visibility` (`"private"` or `"shared"`), `principalId?`, `title?`, `createdAt`, `lastActiveAt` |
 | `RUNTIME` | `AgentRuntime` | `runtime` | The runtime every conversation turn runs on, the agent server's and `context.turns`': the `runtime` slot's when a plugin fills it, Pi's otherwise |
 | `AGENTS` | `AgentServer` | `agent-server` | The `team` (`AgentTeam`), the read-only `directory` (`AgentDirectory`), the `runtime` every agent turn runs on (the same one `RUNTIME` provides), `approvals` (whether the owner's reply approves held actions), and `avatars` (`AvatarStudio`) |
@@ -2811,7 +2811,6 @@ Import from the entries listed below; source area files are internal.
 | `MigrationError` | `pi-roundtable` | value |
 | `MigrationReport` | `pi-roundtable` | type |
 | `ModelImage` | `pi-roundtable` | type |
-| `NewPrincipal` | `pi-roundtable` | type |
 | `NO_ATTACHMENTS` | `pi-roundtable` | value |
 | `NewSchedule` | `pi-roundtable` | type |
 | `NotLinkedError` | `pi-roundtable` | value |
@@ -2825,8 +2824,6 @@ Import from the entries listed below; source area files are internal.
 | `PluginContext` | `pi-roundtable` | type |
 | `PluginError` | `pi-roundtable` | value |
 | `Principal` | `pi-roundtable` | type |
-| `PrincipalRecord` | `pi-roundtable` | type |
-| `PrincipalStore` | `pi-roundtable` | type |
 | `PromptMemory` | `pi-roundtable` | type |
 | `PromptSection` | `pi-roundtable` | type |
 | `PromptTurn` | `pi-roundtable` | type |
@@ -2839,7 +2836,6 @@ Import from the entries listed below; source area files are internal.
 | `ResolvedProviders` | `pi-roundtable` | type |
 | `ResolvedSkill` | `pi-roundtable` | type |
 | `RoleGrant` | `pi-roundtable` | type |
-| `RoleHolder` | `pi-roundtable` | type |
 | `RoleSource` | `pi-roundtable` | type |
 | `Roundtable` | `pi-roundtable` | value |
 | `ReplyFile` | `pi-roundtable` | type |
