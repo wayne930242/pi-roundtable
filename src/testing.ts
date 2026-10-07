@@ -106,6 +106,15 @@ export type {
 	RecordingLogger,
 } from "./core/testing/recording-logger.ts";
 export { recordingLogger } from "./core/testing/recording-logger.ts";
+export type {
+	SurfaceContractFailure,
+	SurfaceContractSubject,
+	SurfaceObservation,
+} from "./core/testing/surface-contract.ts";
+export {
+	checkSurfaceContract,
+	describeSurfaceContract,
+} from "./core/testing/surface-contract.ts";
 export type { TestHost, TestHostOptions } from "./core/testing/test-host.ts";
 export { testHost } from "./core/testing/test-host.ts";
 export type { FakeThreadHost } from "./core/testing/thread-host.ts";

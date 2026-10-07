@@ -2384,6 +2384,15 @@ It returns:
 
 `holdChain(rules)` is in `pi-roundtable/kit`: the chain the host links from every plugin's hold rules, to test a rule set without a harness.
 
+### `describeSurfaceContract`: what every chat surface keeps
+
+A plugin that contributes a `ChatSurface` can test it against the contract every surface keeps.
+`describeSurfaceContract(name, make)` registers one test per check, each on a fresh `SurfaceContractSubject` from `make`: the `surface`, a `channel` of it, and one person on its network, who can `write(text)`, whose `observations()` list what they have seen (`SurfaceObservation`: a reply's text and file names, typing and stop controls going on and off, progress, and prompts opening and closing), and who may `answer(prompt, approved)` an approval; `speaker` is who they are to `surface.prompts`, an owner by default.
+The contract starts the surface, calls the subject's `join()`, and stops the surface after the subject's `close()`.
+It checks that the surface names a prefix and owns its channel, delivers what the person writes, and shows every chunk of a reply; and, for the parts the surface offers, that it delivers files when `supportsFiles` is set, ends typing and stop controls idempotently, shows progress, and resolves an approval as the person approves or declines it, or `cancelled` when the turn stops.
+A check for a part the surface does not offer passes.
+`checkSurfaceContract(make)` runs the same checks and returns the ones that failed, as `SurfaceContractFailure`s.
+
 ## What happens when the bot starts and stops
 
 `roundtable start` checks Bun, `.env`, the configuration, the plugins, the model login, and the public URL without using the network.
@@ -2814,6 +2823,11 @@ Import from the entries listed below; source area files are internal.
 | `TestPluginResult` | `pi-roundtable/testing` | type |
 | `TestStore` | `pi-roundtable/testing` | type |
 | `describeDb` | `pi-roundtable/testing` | value |
+| `describeSurfaceContract` | `pi-roundtable/testing` | value |
+| `checkSurfaceContract` | `pi-roundtable/testing` | value |
+| `SurfaceContractFailure` | `pi-roundtable/testing` | type |
+| `SurfaceContractSubject` | `pi-roundtable/testing` | type |
+| `SurfaceObservation` | `pi-roundtable/testing` | type |
 | `eagerText` | `pi-roundtable/testing` | value |
 | `fakeDiscord` | `pi-roundtable/testing` | value |
 | `fakePrecheck` | `pi-roundtable/testing` | value |
