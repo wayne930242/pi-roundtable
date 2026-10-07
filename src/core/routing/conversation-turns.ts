@@ -131,8 +131,8 @@ export function conversationTurns(
 				events.turnProgress?.({ ...turn, progress: event });
 				// pi-lens-ignore: no-unknown-parameters — a rejection reason is unknown; it only reaches the logger
 				surfaces
-					.progress(channel, event)
-					.catch((error: unknown) =>
+					.progress?.(channel, event)
+					?.catch((error: unknown) =>
 						logger.warn({ channel, kind, err: error }, "progress not shown"),
 					);
 			};

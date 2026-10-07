@@ -43,6 +43,7 @@ function recordingSurface(log: string[]): SurfacePort {
 function setup(
 	run: (request: TurnRequest) => Promise<TurnResult>,
 	registry?: Pick<ConversationRegistry, "register">,
+	surfaces: (log: string[]) => SurfacePort = recordingSurface,
 ) {
 	const log: string[] = [];
 	const requests: TurnRequest[] = [];
@@ -58,7 +59,7 @@ function setup(
 	const turns = conversationTurns({
 		linked: () => undefined,
 		runtime: () => runtime,
-		surfaces: recordingSurface(log),
+		surfaces: surfaces(log),
 		events: {
 			turnStarted: (turn) => {
 				log.push("started");
@@ -169,6 +170,25 @@ describe("conversation turns", () => {
 				speaker: OWNER_SPEAKER,
 				progress: { type: "tool_end", id: "c1", tool: "probe", ok: true },
 			},
+		]);
+	});
+
+	test("a surface port written before progress existed still runs the turn, and the handlers still hear its progress", async () => {
+		const { turns, log, progress } = setup(
+			async (request) => {
+				request.progress?.({ type: "text", delta: "Looking" });
+				return { ok: true, text: "done" };
+			},
+			undefined,
+			(log) => {
+				const { progress: _progress, ...older } = recordingSurface(log);
+				return older;
+			},
+		);
+		expect(await turns.run(input)).toEqual({ ok: true, text: "done" });
+		expect(log).toContain("ended ok");
+		expect(progress.map((event) => event.progress)).toEqual([
+			{ type: "text", delta: "Looking" },
 		]);
 	});
 

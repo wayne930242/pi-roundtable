@@ -102,6 +102,10 @@ export interface SurfacePort {
 	prompts(channel: ChannelKey, speaker?: Speaker): OwnerPrompts | undefined;
 	/** The channel's interim posts; undefined when its surface has none. */
 	interim(channel: ChannelKey): InterimPosts | undefined;
-	/** Shows a running turn's progress; a no-op when no surface serves the channel or its surface shows none. */
-	progress(channel: ChannelKey, event: TurnProgress): Promise<void>;
+	/**
+	 * Shows a running turn's progress; a no-op when no surface serves the channel or its surface
+	 * shows none. The host's port always has it; it is optional so a port written before 0.8 still
+	 * type-checks, and a turn run over one without it shows no progress.
+	 */
+	progress?(channel: ChannelKey, event: TurnProgress): Promise<void>;
 }
