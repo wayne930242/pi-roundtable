@@ -138,8 +138,10 @@ async function idsIn(
  * Makes a principal of the same id for every person 0.8 stored: the configured owners, and each
  * id in `owner_memory`, `schedules`, `conversations`, and `held_actions`, skipping a table or a
  * column the database does not have yet, and a held action that names its principal in
- * `principal_id`, whose `speaker_id` is an actor id this version stored. Each is claimable once,
- * by the person of that id at their first contact (IdentityService.resolve). One that created
+ * `principal_id`, whose `speaker_id` is an actor id this version stored. Each but a configured
+ * owner is claimable once, by the person of that id at their first contact
+ * (IdentityService.resolve); a configured owner never is, even once the configuration names
+ * another owner. One that created
  * schedules, other than a configured owner, is recorded as seen now at the highest tier it
  * scheduled at, capped at the most the rules could give it, so its schedules keep running until
  * `backgroundStaleDays` pass unseen. It only inserts, so it changes no row, and a second run
@@ -190,14 +192,20 @@ export async function backfillPrincipals(
 	const upgraded = new Date();
 	let created = 0;
 	for (const [id, displayName] of missing) {
-		const seen = configured.has(id) ? null : seenTier(rules, id, scheduled);
+		const owner = configured.has(id);
+		const seen = owner ? null : seenTier(rules, id, scheduled);
 		const rows = await sql`
 			INSERT INTO principals (id, display_name, claimable, last_tier, last_seen_at)
-			VALUES (${id}, ${displayName ?? id}, true, ${seen}, ${seen ? upgraded : null})
+			VALUES (${id}, ${displayName ?? id}, ${!owner}, ${seen}, ${seen ? upgraded : null})
 			ON CONFLICT (id) DO NOTHING
 			RETURNING id`;
 		created += rows.length;
 	}
+	// An owner is one by the configuration, never by a claim, even after it names someone else.
+	if (configured.size > 0)
+		await sql`
+			UPDATE principals SET claimable = false
+			WHERE claimable AND id IN ${sql([...configured])}`;
 	return { created, sources };
 }
 

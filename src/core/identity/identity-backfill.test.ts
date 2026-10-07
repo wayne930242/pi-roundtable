@@ -94,12 +94,12 @@ describeDb("the principal backfill", () => {
 		const ids = (await principals(db.sql)).map((row) => row.id);
 		expect(ids).toEqual([OWNER, ...MEMBERS, WEB, "remote-mcp"].sort());
 		expect(await personRows(db.sql)).toEqual(before);
-		// Each may be claimed once by the person of its id.
+		// Each may be claimed once by the person of its id, except the configured owner.
 		expect(
 			(await db.sql`SELECT id FROM principals WHERE claimable ORDER BY id`).map(
 				(row: { id: string }) => row.id,
 			),
-		).toEqual(ids);
+		).toEqual(ids.filter((id) => id !== OWNER));
 		// The owner is named as the configuration names them; a schedule's author by the schedule.
 		const names = Object.fromEntries(
 			(await principals(db.sql)).map((row) => [row.id, row.display_name]),
@@ -154,6 +154,46 @@ describeDb("the principal backfill", () => {
 		// The row the earlier build made is not claimable; the ones this backfill makes are.
 		expect(claimable[OWNER]).toBe(false);
 		expect(claimable[MEMBERS[0] ?? ""]).toBe(true);
+	});
+
+	test("a configured owner is never claimable, so one with no identity linked is not claimed once someone else is the owner", async () => {
+		db = await scratchDatabase("0.8.0");
+		// The web template's owner, and the shape of a 0.8 owner on a host without Discord.
+		const operator = {
+			owners: [{ name: "Operator", principal: "operator", identities: [] }],
+			members: { everyone: true },
+			provisioning: "admitted" as const,
+			backgroundStaleDays: 30,
+		};
+		await runMigrations(db.sql, [identityPlugin({ rules: operator })]);
+		const sql = db.sql;
+		const claimable = async () =>
+			(await sql`SELECT claimable FROM principals WHERE id = 'operator'`)[0]
+				?.claimable;
+		expect(await claimable()).toBe(false);
+		// As an earlier build left it: the next boot takes the claim back.
+		await db.sql`UPDATE principals SET claimable = true WHERE id = 'operator'`;
+		await runMigrations(db.sql, [identityPlugin({ rules: operator })]);
+		expect(await claimable()).toBe(false);
+		// Another owner later: the old one's id claims nothing for whoever reports it.
+		const identity = new PgIdentityService(
+			await PgPrincipalStore.attach(db.sql),
+			{
+				...operator,
+				owners: [
+					{ name: "Ada", principal: OWNER, identities: [`discord:${OWNER}`] },
+				],
+			},
+			{ logger: silentLogger() },
+		);
+		await identity.syncConfig();
+		const speaker = await identity.resolve({
+			provider: "token",
+			subject: "operator",
+			name: "Operator",
+			legacyId: "operator",
+		});
+		expect(speaker?.principalId).not.toBe("operator");
 	});
 
 	test("a row an older build writes after the upgrade gets its principal at the next boot", async () => {
