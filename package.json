@@ -1,7 +1,7 @@
 {
 	"name": "pi-roundtable",
 	"version": "0.7.19",
-	"description": "A plugin-driven Pi agent server for Discord",
+	"description": "A plugin-driven Pi agent server for one owner, reached through Discord or the web",
 	"type": "module",
 	"license": "MIT",
 	"workspaces": [
