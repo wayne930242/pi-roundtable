@@ -159,6 +159,23 @@ describe("the access configuration", () => {
 		expect(config.primaryOwner.discordId).toBeUndefined();
 	});
 
+	test("the 0.8 owner of a host without Discord gets no Discord identity", () => {
+		const config = resolveConfig({
+			...base,
+			discord: undefined,
+			http: undefined,
+			owner: { id: "operator", name: "Ops" },
+		});
+		expect(config.access.owners).toEqual([
+			{ name: "Ops", principal: "operator", identities: [] },
+		]);
+		expect(config.primaryOwner.discordId).toBeUndefined();
+		// With Discord the same owner keeps their Discord identity, as before.
+		expect(resolveConfig(legacy).access.owners[0]?.identities).toEqual([
+			`discord:${OWNER}`,
+		]);
+	});
+
 	test("access together with owner or speakers, neither, a primary owner without a principal, or Discord without the primary owner's Discord identity is refused", () => {
 		const refused = (input: unknown) => {
 			try {

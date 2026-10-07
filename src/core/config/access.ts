@@ -129,12 +129,14 @@ export function rulesOfAccess(config: AccessConfig): AccessRules {
 
 /**
  * The rules the 0.8 `owner` and `speakers` mean: the owner as the primary owner, their principal
- * and Discord identity both the old `owner.id`, and the tiers by Discord user and role ids, with
- * `everyone` meaning everyone on Discord, the one surface it reached in 0.8.
+ * the old `owner.id`, which is also their Discord identity on a host with Discord, and the tiers
+ * by Discord user and role ids, with `everyone` meaning everyone on Discord, the one surface it
+ * reached in 0.8.
  */
 export function rulesOfLegacy(
 	owner: { id: string; name: string; pronouns?: Pronouns },
 	speakers: { admins?: TierMembers; members?: TierMembers } = {},
+	withDiscord = true,
 ): AccessRules {
 	const map = rulesOfSpeakerMap({
 		owners: [owner.id],
@@ -148,7 +150,7 @@ export function rulesOfLegacy(
 				name: owner.name,
 				...(owner.pronouns ? { pronouns: owner.pronouns } : {}),
 				principal: owner.id,
-				identities: [`discord:${owner.id}`],
+				identities: withDiscord ? [`discord:${owner.id}`] : [],
 			},
 		],
 		provisioning: "admitted",
@@ -211,6 +213,7 @@ export function accessOf(
 				// The schema checked that one of the two is here.
 				owner as NonNullable<typeof owner>,
 				speakers,
+				withDiscord,
 			);
 	const [primary] = rules.owners;
 	if (primary?.principal === undefined)
