@@ -48,7 +48,7 @@ export interface AccessConfig {
 	owners: readonly AccessOwnerConfig[];
 	admins?: AccessTierConfig;
 	members?: AccessTierConfig;
-	/** `admitted` (default): someone the rules admit gets a principal at first contact; `linked`: only identities linked with the CLI are served. */
+	/** `admitted` (default): someone the rules admit gets a principal at first contact, and a 0.8 speaker claims theirs; `linked`: only identities linked with the CLI, or the owners' configured ones, are served, and no one claims a 0.8 principal. */
 	provisioning?: "admitted" | "linked";
 	/** How many days someone whose tier comes only from the rules may go unseen before their background turns are refused; default 30. */
 	backgroundStaleDays?: number;

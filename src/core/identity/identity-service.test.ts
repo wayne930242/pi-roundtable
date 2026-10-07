@@ -262,6 +262,11 @@ describeDb("the identity service", () => {
 			await identity.resolve(webFacts("user-8", ["web:role:App.User"])),
 		).toBeUndefined();
 		expect((await store.list()).map((row) => row.id)).toEqual([ADA]);
+		// Nor does a 0.8 speaker claim their old principal: the CLI links them.
+		await carriedOver(KAI);
+		expect(await identity.resolve(discordFacts(KAI, "Kai"))).toBeUndefined();
+		expect(await store.identity("discord", KAI)).toBeUndefined();
+		expect((await store.get(KAI))?.claimable).toBe(true);
 		// Linked through the service, as a plugin of this process would: seen at once.
 		const linked = await identity.principals.create({ displayName: "Linked" });
 		await identity.principals.link(

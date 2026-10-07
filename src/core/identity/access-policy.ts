@@ -43,7 +43,7 @@ export interface AccessRules {
 	owners: readonly AccessOwner[];
 	admins?: AccessTier;
 	members?: AccessTier;
-	/** `admitted`: someone the rules admit gets a principal at first contact; `linked`: only identities the CLI linked are served. Owners are never admitted. */
+	/** `admitted`: someone the rules admit gets a principal at first contact, and a 0.8 speaker claims theirs; `linked`: only identities already linked, such as by the CLI or the configuration, are served. Owners are never admitted. */
 	provisioning: "admitted" | "linked";
 	/** How many days a principal whose tier came only from the rules on contact may go unseen before their background turns are refused. */
 	backgroundStaleDays: number;

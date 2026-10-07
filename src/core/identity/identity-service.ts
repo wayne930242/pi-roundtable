@@ -31,8 +31,9 @@ export interface IdentityService {
 	 * The speaker behind these facts, or undefined when the access rules serve no one by them: a
 	 * linked identity is its principal's; an unlinked one first claims the principal of its 0.8
 	 * id (`legacyId`) when the backfill made it and no identity was ever linked to it, unless it
-	 * holds the owner role, and is otherwise
-	 * admitted as a new principal when `provisioning` is `admitted` and the rules give it a tier.
+	 * holds the owner role, and is otherwise admitted as a new principal when the rules give it a
+	 * tier. Both happen only when `provisioning` is `admitted`; under `linked` only identities
+	 * already linked are served.
 	 * A disabled principal is no one. The tier is the higher of the principal's lasting roles and
 	 * what the rules give the facts on this contact.
 	 */
@@ -389,6 +390,7 @@ export class PgIdentityService implements IdentityService {
 	 */
 	async #claim(facts: ActorFacts): Promise<IdentityLink | undefined> {
 		const id = facts.legacyId;
+		if (this.#rules.provisioning !== "admitted") return undefined;
 		if (id === undefined || id === SYSTEM_PRINCIPAL || isPrincipalId(id))
 			return undefined;
 		if (!(await this.principals.get(id))?.claimable) return undefined;
