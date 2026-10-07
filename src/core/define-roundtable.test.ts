@@ -218,6 +218,7 @@ describe("defineRoundtable", () => {
 			plugins.flatMap((plugin) => (plugin.migrations ?? []).map((m) => m.name)),
 		).toEqual([
 			"principals",
+			"principals-claimable",
 			"backfill",
 			"owner-memory",
 			"owner-memory-speaker",

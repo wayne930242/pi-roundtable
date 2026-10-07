@@ -196,8 +196,7 @@ export const PRINCIPAL_TABLES = async (sql: SQL): Promise<void> => {
 			created_at timestamptz NOT NULL DEFAULT now(),
 			disabled_at timestamptz,
 			last_seen_at timestamptz,
-			last_tier text CHECK (last_tier IN ('member', 'admin', 'owner')),
-			claimable boolean NOT NULL DEFAULT false
+			last_tier text CHECK (last_tier IN ('member', 'admin', 'owner'))
 		)`;
 	await sql`
 		CREATE TABLE IF NOT EXISTS principal_identities (
@@ -219,6 +218,14 @@ export const PRINCIPAL_TABLES = async (sql: SQL): Promise<void> => {
 			granted_at timestamptz NOT NULL DEFAULT now(),
 			PRIMARY KEY (principal_id, role)
 		)`;
+};
+
+/**
+ * Whether the person of a carried-over principal's 0.8 id may still claim it: its own migration,
+ * so a database whose principals table an earlier build made gets the column too.
+ */
+export const PRINCIPALS_CLAIMABLE = async (sql: SQL): Promise<void> => {
+	await sql`ALTER TABLE principals ADD COLUMN IF NOT EXISTS claimable boolean NOT NULL DEFAULT false`;
 };
 
 /** The principal store over the `principals`, `principal_identities`, and `principal_roles` tables. */

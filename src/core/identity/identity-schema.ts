@@ -3,7 +3,11 @@ import type { Migration } from "../db/migrations.ts";
 import { type Tier, tierAtLeast } from "../speakers.ts";
 import type { AccessRules, AccessTier } from "./access-policy.ts";
 import { parseIdentity } from "./actor-facts.ts";
-import { PRINCIPAL_TABLES, SYSTEM_PRINCIPAL } from "./principal-store.ts";
+import {
+	PRINCIPAL_TABLES,
+	PRINCIPALS_CLAIMABLE,
+	SYSTEM_PRINCIPAL,
+} from "./principal-store.ts";
 
 /** Where the backfill finds the ids of people 0.8 stored: the configured owners, then four tables. */
 export type BackfillSource =
@@ -198,7 +202,8 @@ export async function backfillPrincipals(
 }
 
 /**
- * The identity plugin's migrations: its tables once, then the backfill at every boot, which
+ * The identity plugin's migrations: its tables once, the claimable column once (apart, so a
+ * database an earlier build made the tables on gets it too), then the backfill at every boot, which
  * hands its summary to `report`.
  */
 export function identityMigrations(
@@ -207,6 +212,7 @@ export function identityMigrations(
 ): Migration[] {
 	return [
 		{ name: "principals", up: PRINCIPAL_TABLES },
+		{ name: "principals-claimable", up: PRINCIPALS_CLAIMABLE },
 		{
 			name: "backfill",
 			runs: "every-boot",

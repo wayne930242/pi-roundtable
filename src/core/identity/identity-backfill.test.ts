@@ -112,6 +112,50 @@ describeDb("the principal backfill", () => {
 		expect((await principals(db.sql)).map((row) => row.id)).toEqual(ids);
 	});
 
+	test("a database an earlier build made the principals table on, without the claimable column, still boots and gets it", async () => {
+		db = await scratchDatabase("0.8.0");
+		// identity/principals as the build before the claimable column (927d38a) recorded it.
+		await runMigrations(db.sql, [
+			{
+				name: "identity",
+				migrations: [
+					{
+						name: "principals",
+						up: async (sql) => {
+							await sql`
+								CREATE TABLE principals (
+									id text PRIMARY KEY,
+									display_name text NOT NULL,
+									pronouns text CHECK (pronouns IN ('he', 'she', 'they')),
+									locale text,
+									time_zone text,
+									created_at timestamptz NOT NULL DEFAULT now(),
+									disabled_at timestamptz,
+									last_seen_at timestamptz,
+									last_tier text CHECK (last_tier IN ('member', 'admin', 'owner'))
+								)`;
+							await sql`INSERT INTO principals (id, display_name) VALUES (${OWNER}, 'Ada')`;
+						},
+					},
+				],
+			},
+		]);
+		const report = await runMigrations(db.sql, await hostPlugins(db.url));
+		expect(report.skipped).toContain("identity/principals");
+		expect(report.applied).toContain("identity/principals-claimable");
+		const claimable = Object.fromEntries(
+			(
+				(await db.sql`SELECT id, claimable FROM principals`) as {
+					id: string;
+					claimable: boolean;
+				}[]
+			).map((row) => [row.id, row.claimable]),
+		);
+		// The row the earlier build made is not claimable; the ones this backfill makes are.
+		expect(claimable[OWNER]).toBe(false);
+		expect(claimable[MEMBERS[0] ?? ""]).toBe(true);
+	});
+
 	test("a row an older build writes after the upgrade gets its principal at the next boot", async () => {
 		db = await scratchDatabase("0.8.0");
 		const plugins = await hostPlugins(db.url);
