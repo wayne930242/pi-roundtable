@@ -4,6 +4,7 @@ import { PgIdentityService } from "../core/identity/identity-service.ts";
 import {
 	PgPrincipalStore,
 	PRINCIPAL_TABLES,
+	PRINCIPALS_CLAIMABLE,
 } from "../core/identity/principal-store.ts";
 import { silentLogger } from "../core/log.ts";
 import { describeDb } from "../core/testing/database.ts";
@@ -95,6 +96,7 @@ describeDb("roundtable principal", () => {
 		db = await scratchDatabase();
 		await migrate(db.sql, [
 			{ name: "identity/principals", up: PRINCIPAL_TABLES },
+			{ name: "identity/principals-claimable", up: PRINCIPALS_CLAIMABLE },
 		]);
 		const host = await freshHost();
 		await host.syncConfig();
