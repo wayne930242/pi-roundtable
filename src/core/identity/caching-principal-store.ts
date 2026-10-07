@@ -83,8 +83,8 @@ export class CachingPrincipalStore implements PrincipalStore {
 	claim(principalId: string, identity: IdentityRef) {
 		return this.#write(this.#store.claim(principalId, identity));
 	}
-	admit(identity: IdentityRef, displayName: string) {
-		return this.#write(this.#store.admit(identity, displayName));
+	admit(identity: IdentityRef, displayName: string, id?: string) {
+		return this.#write(this.#store.admit(identity, displayName, id));
 	}
 	unlink(provider: string, subject: string) {
 		return this.#write(this.#store.unlink(provider, subject));

@@ -1,5 +1,4 @@
 import { ConfigError, IdentityError } from "../domain/errors.ts";
-import { freeze } from "../freeze.ts";
 import type { Logger } from "../log.ts";
 import type { ChannelKey } from "../sessions.ts";
 import { type Speaker, type Tier, tierAtLeast } from "../speakers.ts";
@@ -8,8 +7,14 @@ import {
 	checkAccessRules,
 	factsTier,
 } from "./access-policy.ts";
-import { type ActorFacts, identityOf, parseIdentity } from "./actor-facts.ts";
+import {
+	type ActorFacts,
+	identityOf,
+	parseIdentity,
+	surfaceOf,
+} from "./actor-facts.ts";
 import { CachingPrincipalStore } from "./caching-principal-store.ts";
+import type { Contact, ContactAssessor } from "./contact.ts";
 import {
 	type IdentityLink,
 	LEGACY_PROVIDER,
@@ -19,7 +24,7 @@ import {
 	type RoleGrant,
 	SYSTEM_PRINCIPAL,
 } from "./principal-store.ts";
-import { isPrincipalId } from "./ulid.ts";
+import { isPrincipalId, newPrincipalId } from "./ulid.ts";
 
 /**
  * Who the host serves: its principals, their identities, and their roles, read-only. Provided as
@@ -73,36 +78,23 @@ export function systemSpeaker(tier: Tier): Speaker {
 	};
 }
 
-/** A copy of what the service read, frozen all the way down, so no caller can change what the service holds. */
-function frozenCopy<T>(value: T): T {
-	return value === undefined
-		? value
-		: (freeze(structuredClone(value) as object) as T);
-}
-
-/**
- * The service as plugins get it: only its reads, frozen, with no way to its store. Each returns a
- * frozen copy, so a plugin that sorts or changes what it got changes no one's tier.
- */
-export function identityView(service: IdentityService): IdentityService {
-	return Object.freeze({
-		resolve: async (facts, scope) =>
-			frozenCopy(await service.resolve(facts, scope)),
-		principal: async (id) => frozenCopy(await service.principal(id)),
-		list: async () => frozenCopy(await service.list()),
-		identities: async (principalId) =>
-			frozenCopy(await service.identities(principalId)),
-		roles: async (principalId) => frozenCopy(await service.roles(principalId)),
-		tierOf: (principalId) => service.tierOf(principalId),
-		speakerFor: async (principalId, tier) =>
-			frozenCopy(await service.speakerFor(principalId, tier)),
-		owners: async () => frozenCopy(await service.owners()),
-	} satisfies IdentityService);
-}
-
 /** How often being seen is written for one principal, unless the tier changes. */
 const TOUCH_MS = 5 * 60_000;
 const DAY_MS = 24 * 60 * 60_000;
+/** How many people assessed at a first contact but not yet taken are remembered. */
+const PROVISIONAL_MAX = 1_000;
+
+/** The speaker of a contact: the id the surface knows them by, their 0.8 id where they have one. */
+const speakerOf = (
+	facts: ActorFacts,
+	principalId: string,
+	tier: Tier,
+): Speaker => ({
+	id: facts.legacyId ?? identityOf(facts),
+	name: facts.name,
+	tier,
+	principalId,
+});
 
 const highest = (tiers: readonly (Tier | undefined)[]): Tier | undefined =>
 	tiers.reduce<Tier | undefined>(
@@ -129,7 +121,7 @@ export interface IdentityServiceOptions {
 }
 
 /** The identity service over the principal store and the configured access rules. */
-export class PgIdentityService implements IdentityService {
+export class PgIdentityService implements IdentityService, ContactAssessor {
 	/** The stored principals, written through it seen at once by this process. Core-internal: plugins get `identityView`. */
 	readonly store: PrincipalStore;
 	readonly #rules: AccessRules;
@@ -137,6 +129,8 @@ export class PgIdentityService implements IdentityService {
 	readonly #now: () => number;
 	/** When each principal was last written as seen, and at which tier, null for none. */
 	readonly #seen = new Map<string, { at: number; tier: Tier | null }>();
+	/** The new principal id each person assessed at a first contact would get, until it is taken. */
+	readonly #provisional = new Map<string, string>();
 	/** The configured owners' principal ids, in the configuration's order, once synced. */
 	#configOwners: string[] = [];
 
@@ -221,24 +215,41 @@ export class PgIdentityService implements IdentityService {
 		facts: ActorFacts,
 		scope: { conversation?: ChannelKey } = {},
 	): Promise<Speaker | undefined> {
+		return (await this.assess(facts, scope))?.take();
+	}
+
+	/**
+	 * The contact of these facts, read only: a linked identity's principal, else at a first contact
+	 * the principal they would claim or be admitted as, the same new id for the same person until
+	 * it is taken; undefined when the rules serve no one by them. A linked person refused here is
+	 * recorded as seen at no tier, when the facts carry what the rules decide by.
+	 */
+	async assess(
+		facts: ActorFacts,
+		scope: { conversation?: ChannelKey } = {},
+	): Promise<Contact | undefined> {
 		// A 0.8 id standing for another principal is no surface's identity.
 		if (facts.provider === LEGACY_PROVIDER) return undefined;
-		const link =
-			(await this.store.identity(facts.provider, facts.subject)) ??
-			(await this.#claim(facts)) ??
-			(await this.#admit(facts, scope.conversation));
-		if (!link) return undefined;
-		const principal = await this.store.get(link.principalId);
-		if (!principal || principal.disabled) return undefined;
-		const tier = await this.#tier(principal.id, facts, scope.conversation);
-		// Refused now, so seen at no tier: their background turns stop with it.
-		await this.#touch(principal, tier ?? null);
-		if (!tier) return undefined;
+		const { conversation } = scope;
+		const link = await this.store.identity(facts.provider, facts.subject);
+		let assessed: { principalId: string; tier: Tier } | undefined;
+		if (link) {
+			const principal = await this.store.get(link.principalId);
+			if (!principal || principal.disabled) return undefined;
+			const tier = await this.#tier(principal.id, facts, conversation);
+			if (!tier) {
+				// Refused now, so seen at no tier: their background turns stop with it.
+				if (this.#knowsRoles(facts, conversation))
+					await this.#touch(principal, null);
+				return undefined;
+			}
+			assessed = { principalId: principal.id, tier };
+		} else assessed = await this.#firstContact(facts, conversation);
+		if (!assessed) return undefined;
+		const speaker = speakerOf(facts, assessed.principalId, assessed.tier);
 		return {
-			id: facts.legacyId ?? identityOf(facts),
-			name: facts.name,
-			tier,
-			principalId: principal.id,
+			speaker,
+			take: () => this.#take(facts, conversation, assessed.principalId),
 		};
 	}
 
@@ -343,33 +354,99 @@ export class PgIdentityService implements IdentityService {
 		]);
 	}
 
-	/**
-	 * The principal of the facts' 0.8 id, linked to them, while the backfill's claim on it is
-	 * unspent: no identity was ever linked to it, and it holds no owner role.
-	 */
-	async #claim(facts: ActorFacts): Promise<IdentityLink | undefined> {
-		const id = facts.legacyId;
-		if (this.#rules.provisioning !== "admitted") return undefined;
-		if (id === undefined || id === SYSTEM_PRINCIPAL || isPrincipalId(id))
-			return undefined;
-		if (!(await this.store.get(id))?.claimable) return undefined;
-		return this.store.claim(id, {
-			provider: facts.provider,
-			subject: facts.subject,
-		});
-	}
-
-	/** A new principal for someone the rules admit, when the host admits people at first contact. */
-	async #admit(
+	/** Whether the facts carry what the rules decide by: the roles, when the rules name a role of their surface. */
+	#knowsRoles(
 		facts: ActorFacts,
 		conversation: ChannelKey | undefined,
-	): Promise<IdentityLink | undefined> {
-		if (this.#rules.provisioning !== "admitted") return undefined;
-		if (!factsTier(this.#rules, facts, conversation)) return undefined;
-		return this.store.admit(
-			{ provider: facts.provider, subject: facts.subject },
-			facts.name,
+	): boolean {
+		if (facts.roles !== undefined) return true;
+		const prefix = `${surfaceOf(facts, conversation)}:role:`;
+		return ![this.#rules.admins, this.#rules.members].some((tier) =>
+			tier?.roles?.some((role) => role.startsWith(prefix)),
 		);
+	}
+
+	/** The principal of the facts' 0.8 id while it may be claimed: made by the backfill, no identity ever linked to it, and no owner. */
+	async #claimable(facts: ActorFacts): Promise<PrincipalRecord | undefined> {
+		const id = facts.legacyId;
+		if (id === undefined || id === SYSTEM_PRINCIPAL || isPrincipalId(id))
+			return undefined;
+		const principal = await this.store.get(id);
+		if (!principal?.claimable) return undefined;
+		if ((await this.#lastingTier(id)) === "owner") return undefined;
+		return principal;
+	}
+
+	/** Who an unlinked person would be: the principal of their 0.8 id, or a new one the rules admit, when the host admits people at first contact. */
+	async #firstContact(
+		facts: ActorFacts,
+		conversation: ChannelKey | undefined,
+	): Promise<{ principalId: string; tier: Tier } | undefined> {
+		if (this.#rules.provisioning !== "admitted") return undefined;
+		const claimable = await this.#claimable(facts);
+		if (claimable) {
+			// Disabled before they came back: no one, and no new principal either.
+			if (claimable.disabled) return undefined;
+			const tier = await this.#tier(claimable.id, facts, conversation);
+			return tier && { principalId: claimable.id, tier };
+		}
+		const tier = factsTier(this.#rules, facts, conversation);
+		if (!tier) return undefined;
+		const key = `${facts.provider}\0${facts.subject}`;
+		let id = this.#provisional.get(key);
+		if (!id) {
+			id = newPrincipalId();
+			this.#provisional.set(key, id);
+			// Those never taken, such as people writing where no claim answers, are forgotten oldest first.
+			if (this.#provisional.size > PROVISIONAL_MAX)
+				for (const old of this.#provisional.keys()) {
+					this.#provisional.delete(old);
+					break;
+				}
+		}
+		return { principalId: id, tier };
+	}
+
+	/**
+	 * Records a contact a claim took: links an unlinked person by claiming the principal of their
+	 * 0.8 id, or else admitting them as the assessed new principal, then records them as seen.
+	 */
+	async #take(
+		facts: ActorFacts,
+		conversation: ChannelKey | undefined,
+		assessed: string,
+	): Promise<Speaker | undefined> {
+		const ref = { provider: facts.provider, subject: facts.subject };
+		let link = await this.store.identity(ref.provider, ref.subject);
+		if (!link && this.#rules.provisioning === "admitted") {
+			if (assessed === facts.legacyId)
+				link = await this.store.claim(assessed, ref);
+			if (!link && factsTier(this.#rules, facts, conversation)) {
+				link = await this.store.admit(
+					ref,
+					facts.name,
+					isPrincipalId(assessed) ? assessed : undefined,
+				);
+				this.#provisional.delete(`${ref.provider}\0${ref.subject}`);
+			}
+		}
+		if (!link) return undefined;
+		const principal = await this.store.get(link.principalId);
+		if (!principal || principal.disabled) return undefined;
+		const tier = await this.#tier(principal.id, facts, conversation);
+		if (!tier) {
+			if (this.#knowsRoles(facts, conversation))
+				await this.#touch(principal, null);
+			return undefined;
+		}
+		// Facts without the roles the rules decide by may show less than the person holds: they lower nothing.
+		if (
+			this.#knowsRoles(facts, conversation) ||
+			!principal.lastTier ||
+			tierAtLeast(tier, principal.lastTier)
+		)
+			await this.#touch(principal, tier);
+		return speakerOf(facts, principal.id, tier);
 	}
 
 	/**

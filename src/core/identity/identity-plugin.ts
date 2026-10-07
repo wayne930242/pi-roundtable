@@ -2,7 +2,8 @@ import type { RoundtablePlugin } from "../plugin.ts";
 import { IDENTITY } from "../services.ts";
 import type { AccessRules } from "./access-policy.ts";
 import { type BackfillSummary, identityMigrations } from "./identity-schema.ts";
-import { identityView, PgIdentityService } from "./identity-service.ts";
+import { PgIdentityService } from "./identity-service.ts";
+import { identityView } from "./identity-view.ts";
 import { PgPrincipalStore } from "./principal-store.ts";
 
 /** The name of the identity plugin, as the migration ledger names it. */

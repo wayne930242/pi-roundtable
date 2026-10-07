@@ -2,7 +2,7 @@ import type { SQL } from "bun";
 import type { Pronouns } from "../config/config.ts";
 import { IdentityError } from "../domain/errors.ts";
 import type { Tier } from "../speakers.ts";
-import { newPrincipalId } from "./ulid.ts";
+import { isPrincipalId, newPrincipalId } from "./ulid.ts";
 
 /** The principal the host's own turns run as: an ops report, a webhook's. It has no identity, cannot sign in, and keeps no memory. */
 export const SYSTEM_PRINCIPAL = "system";
@@ -107,10 +107,14 @@ export interface PrincipalStore {
 		identity: IdentityRef,
 	): Promise<IdentityLink | undefined>;
 	/**
-	 * The identity's link, making a new `p_` principal for it when it is still unlinked; however
-	 * many contacts admit it at once, one principal is made.
+	 * The identity's link, making a new `p_` principal for it, of `id` when given, when it is still
+	 * unlinked; however many contacts admit it at once, one principal is made.
 	 */
-	admit(identity: IdentityRef, displayName: string): Promise<IdentityLink>;
+	admit(
+		identity: IdentityRef,
+		displayName: string,
+		id?: string,
+	): Promise<IdentityLink>;
 	/** Whether there was a link to remove. */
 	unlink(provider: string, subject: string): Promise<boolean>;
 	identity(
@@ -362,6 +366,7 @@ export class PgPrincipalStore implements PrincipalStore {
 	async admit(
 		identity: IdentityRef,
 		displayName: string,
+		id = newPrincipalId(),
 	): Promise<IdentityLink> {
 		const { provider, subject } = identity;
 		return this.#sql.begin(async (tx) => {
@@ -369,7 +374,8 @@ export class PgPrincipalStore implements PrincipalStore {
 			const linked: IdentityRow[] = await tx`
 				SELECT * FROM principal_identities WHERE provider = ${provider} AND subject = ${subject}`;
 			if (linked[0]) return linkOf(linked[0]);
-			const id = newPrincipalId();
+			if (!isPrincipalId(id))
+				throw new IdentityError(`a new principal's id is p_<ulid>, not ${id}`);
 			await tx`INSERT INTO principals (id, display_name) VALUES (${id}, ${displayName})`;
 			const made: IdentityRow[] = await tx`
 				INSERT INTO principal_identities (provider, subject, principal_id, source)

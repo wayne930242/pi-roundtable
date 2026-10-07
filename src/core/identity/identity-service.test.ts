@@ -11,11 +11,8 @@ import {
 import type { AccessRules } from "./access-policy.ts";
 import type { ActorFacts } from "./actor-facts.ts";
 import { identityMigrations } from "./identity-schema.ts";
-import {
-	identityView,
-	PgIdentityService,
-	systemSpeaker,
-} from "./identity-service.ts";
+import { PgIdentityService, systemSpeaker } from "./identity-service.ts";
+import { identityView } from "./identity-view.ts";
 import {
 	type IdentityLink,
 	PgPrincipalStore,
@@ -532,6 +529,113 @@ describeDb("the identity service", () => {
 		// Served again, the tier comes back.
 		await identity.resolve(webFacts("user-8", ["web:role:App.User"]));
 		expect((await identity.speakerFor(id)).tier).toBe("member");
+	});
+
+	test("assessing a contact writes nothing: a first contact is claimed or admitted, and anyone recorded as seen, only once it is taken", async () => {
+		const identity = await service();
+		await carriedOver(KAI, "Kai");
+		const rows = async () => ({
+			principals: await db.sql`SELECT * FROM principals ORDER BY id`,
+			links:
+				await db.sql`SELECT * FROM principal_identities ORDER BY provider, subject`,
+		});
+		const before = await rows();
+		const kai = await identity.assess(discordFacts(KAI, "Kai"));
+		const web = await identity.assess(
+			webFacts("user-8", ["web:role:App.User"]),
+		);
+		const ada = await identity.assess(discordFacts(ADA, "Ada"));
+		expect(await rows()).toEqual(before);
+		// Who they would be, before anything is written.
+		expect(kai?.speaker).toEqual({
+			id: KAI,
+			name: "Kai",
+			tier: "member",
+			principalId: KAI,
+		});
+		expect(web?.speaker.principalId).toMatch(/^p_/);
+		expect(ada?.speaker).toMatchObject({ tier: "owner", principalId: ADA });
+		// The same person assessed again before being taken would be the same new principal.
+		expect(
+			(await identity.assess(webFacts("user-8", ["web:role:App.User"])))
+				?.speaker.principalId,
+		).toBe(web?.speaker.principalId);
+		expect(await kai?.take()).toEqual(kai?.speaker);
+		expect(await web?.take()).toEqual(web?.speaker);
+		expect(await ada?.take()).toEqual(ada?.speaker);
+		expect(await store.identity("discord", KAI)).toMatchObject({
+			principalId: KAI,
+			source: "legacy",
+		});
+		expect(
+			await store.identity("oidc:aHR0cHM6Ly9pZHAuZXhhbXBsZS5jb20", "user-8"),
+		).toMatchObject({ principalId: web?.speaker.principalId, source: "jit" });
+		expect((await store.get(ADA))?.lastSeenAt).toEqual(new Date(clock));
+		// Someone the rules do not serve is no contact at all, and nothing of them is claimed.
+		await carriedOver("966666600000000023");
+		expect(await identity.assess(webFacts("user-9"))).toBeUndefined();
+		expect(
+			await identity.assess({
+				...discordFacts("966666600000000023", "Mo"),
+				surface: "web",
+			}),
+		).toBeUndefined();
+		expect((await store.get("966666600000000023"))?.claimable).toBe(true);
+	});
+
+	test("a contact taken after another process linked the person elsewhere is the principal it was linked to", async () => {
+		const identity = await service();
+		const contact = await identity.assess(
+			webFacts("user-8", ["web:role:App.User"]),
+		);
+		const other = await store.create({ displayName: "Elsewhere" });
+		await store.link(
+			other.id,
+			{ provider: "oidc:aHR0cHM6Ly9pZHAuZXhhbXBsZS5jb20", subject: "user-8" },
+			"cli",
+		);
+		expect((await contact?.take())?.principalId).toBe(other.id);
+	});
+
+	test("facts without the roles the rules decide by neither refuse nor lower anyone, so a DM records nothing", async () => {
+		const role = "discord:role:966666600000000088";
+		const identity = await service({
+			admins: { roles: ["discord:role:966666600000000077"] },
+			members: { roles: [role], everyone: ["web"] },
+		});
+		await carriedOver(KAI, "Kai");
+		const guild = { ...discordFacts(KAI, "Kai", [role]) };
+		const { roles: _, ...dm } = guild;
+		expect((await identity.resolve(guild))?.tier).toBe("member");
+		const seen = await store.get(KAI);
+		// A DM reports no roles: refused, as 0.8 refused, but not recorded as a refusal.
+		for (let i = 0; i < 10; i++) {
+			clock += 1_000;
+			expect(await identity.resolve(dm)).toBeUndefined();
+			expect((await identity.resolve(guild))?.tier).toBe("member");
+		}
+		expect(await store.get(KAI)).toEqual(seen);
+		expect((await identity.speakerFor(KAI)).tier).toBe("member");
+		// An admin by role is not lowered by a DM that admits them by other rules.
+		const admin = discordFacts(KAI, "Kai", ["discord:role:966666600000000077"]);
+		const everyone = await service({
+			admins: { roles: ["discord:role:966666600000000077"] },
+			members: { everyone: ["discord"] },
+		});
+		clock += 6 * 60_000;
+		expect((await everyone.resolve(admin))?.tier).toBe("admin");
+		const asAdmin = await store.get(KAI);
+		const { roles: __, ...adminDm } = admin;
+		for (let i = 0; i < 10; i++) {
+			clock += 1_000;
+			expect((await everyone.resolve(adminDm))?.tier).toBe("member");
+			expect((await everyone.resolve(admin))?.tier).toBe("admin");
+		}
+		expect(await store.get(KAI)).toEqual(asAdmin);
+		// With roles reported, a refusal is recorded as before.
+		clock += 1_000;
+		expect(await identity.resolve({ ...guild, roles: [] })).toBeUndefined();
+		expect((await store.get(KAI))?.lastTier).toBeUndefined();
 	});
 
 	test("being seen is recorded at most every five minutes, or when the tier changes", async () => {
