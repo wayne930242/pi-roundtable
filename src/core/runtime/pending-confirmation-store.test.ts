@@ -58,6 +58,26 @@ describeDb("PendingConfirmationStore", () => {
 		await store.save("discord:4", undefined);
 	});
 
+	test("a speaker does not carry over to actions 0.7, which keeps the column as it was, held over theirs", async () => {
+		await store.save("discord:5", { ...held, speakerId: "7" });
+		const admin = new SQL(testDatabaseUrl);
+		const later = { ...held, heldAt: new Date("2026-09-28T01:00:00Z") };
+		try {
+			// 0.7.19's save, which knows no speaker and leaves speaker_id as it was.
+			await admin`
+				INSERT INTO held_actions (channel_key, selection_id, held_at, calls)
+				VALUES ('discord:5', ${later.selectionId}, ${later.heldAt},
+					${JSON.stringify(later.calls)})
+				ON CONFLICT (channel_key) DO UPDATE SET selection_id = EXCLUDED.selection_id,
+					held_at = EXCLUDED.held_at, calls = EXCLUDED.calls`;
+		} finally {
+			await admin.close();
+		}
+		// Only the owner may approve them.
+		expect(await store.load("discord:5")).toEqual(later);
+		await store.save("discord:5", undefined);
+	});
+
 	test("the selection id is stored as given, in the held_actions table", async () => {
 		await store.save("discord:3", { ...held, selectionId: "tools:web" });
 		const admin = new SQL(testDatabaseUrl);

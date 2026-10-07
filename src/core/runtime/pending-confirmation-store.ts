@@ -43,11 +43,24 @@ export class PendingConfirmationStore {
 		},
 	};
 
+	/**
+	 * The hold the speaker belongs to, by its `held_at`. 0.7 replaces a row's held actions and
+	 * leaves `speaker_id` as it was, so after a rollback and an upgrade a speaker counts only while
+	 * the row still holds the actions it was written with.
+	 */
+	static readonly speakerHoldMigration: Migration = {
+		name: "held-actions-speaker-hold",
+		up: async (sql) => {
+			await sql`ALTER TABLE held_actions ADD COLUMN IF NOT EXISTS speaker_held_at timestamptz`;
+		},
+	};
+
 	/** The store's migrations in order. */
 	static migrations(): Migration[] {
 		return [
 			PendingConfirmationStore.migration,
 			PendingConfirmationStore.speakerMigration,
+			PendingConfirmationStore.speakerHoldMigration,
 		];
 	}
 
@@ -57,8 +70,11 @@ export class PendingConfirmationStore {
 	}
 
 	async load(channel: ChannelKey): Promise<PendingConfirmation | undefined> {
+		// A speaker written with other held actions than the row's, or without its hold, is none.
 		const rows: Row[] = await this.#sql`
-			SELECT selection_id, held_at, calls, speaker_id FROM held_actions
+			SELECT selection_id, held_at, calls,
+				CASE WHEN speaker_held_at = held_at THEN speaker_id END AS speaker_id
+			FROM held_actions
 			WHERE channel_key = ${channel}`;
 		const row = rows[0];
 		return row
@@ -81,12 +97,15 @@ export class PendingConfirmationStore {
 			await this.#sql`DELETE FROM held_actions WHERE channel_key = ${channel}`;
 			return;
 		}
+		const speaker = pending.speakerId ?? null;
 		await this.#sql`
-			INSERT INTO held_actions (channel_key, selection_id, held_at, calls, speaker_id)
+			INSERT INTO held_actions
+				(channel_key, selection_id, held_at, calls, speaker_id, speaker_held_at)
 			VALUES (${channel}, ${pending.selectionId}, ${pending.heldAt},
-				${JSON.stringify(pending.calls)}, ${pending.speakerId ?? null})
+				${JSON.stringify(pending.calls)}, ${speaker},
+				${speaker === null ? null : pending.heldAt})
 			ON CONFLICT (channel_key) DO UPDATE SET selection_id = EXCLUDED.selection_id,
 				held_at = EXCLUDED.held_at, calls = EXCLUDED.calls,
-				speaker_id = EXCLUDED.speaker_id`;
+				speaker_id = EXCLUDED.speaker_id, speaker_held_at = EXCLUDED.speaker_held_at`;
 	}
 }

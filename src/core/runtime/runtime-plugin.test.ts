@@ -116,6 +116,7 @@ describe("the runtime plugin", () => {
 		expect(plugin.migrations?.map((m) => m.name)).toEqual([
 			"held-actions",
 			"held-actions-speaker",
+			"held-actions-speaker-hold",
 		]);
 		expect(plugin.provides?.map((key) => key.id)).toEqual([
 			"roundtable.runtime",

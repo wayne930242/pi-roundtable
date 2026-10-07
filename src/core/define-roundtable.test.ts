@@ -223,6 +223,7 @@ describe("defineRoundtable", () => {
 			"conversations",
 			"held-actions",
 			"held-actions-speaker",
+			"held-actions-speaker-hold",
 			"agents",
 			"agents-guild",
 		]);

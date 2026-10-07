@@ -36,7 +36,8 @@ The [changelog](../CHANGELOG.md) lists every change; this guide covers what to d
    Its migrations only add:
    - the table `conversations` (ledger id `conversations/conversations`), the conversation registry;
    - `runtime/held-actions`, the held actions' migration recorded under its new plugin; the table exists already, so nothing changes;
-   - `runtime/held-actions-speaker`, a nullable column `speaker_id` on `held_actions`.
+   - `runtime/held-actions-speaker`, a nullable column `speaker_id` on `held_actions`;
+   - `runtime/held-actions-speaker-hold`, a nullable column `speaker_held_at` on `held_actions`, the hold the speaker belongs to.
 
 Nothing else is required.
 `bunx roundtable doctor` runs the same checks as before.
@@ -127,4 +128,5 @@ See [a host without Discord](plugins.md#a-host-without-discord) and [the web cha
 ## Rolling back to 0.7
 
 Every 0.8 migration adds a table or a nullable column, so 0.7.19 starts on a database 0.8 has used.
-It ignores the `conversations` table and the `speaker_id` column, and approvals follow 0.7's rules again.
+It ignores the `conversations` table and the `speaker_id` and `speaker_held_at` columns, and approvals follow 0.7's rules again.
+Upgrading once more is safe too: 0.7 replaces a channel's held actions without touching `speaker_id`, so 0.8 counts a speaker only while the row's `held_at` still matches the `speaker_held_at` it wrote, and held actions 0.7 wrote are the owner's to approve.
