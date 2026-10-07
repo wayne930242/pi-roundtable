@@ -35,7 +35,7 @@ function setup(options: { agent?: OpsAgent; turn?: () => Promise<void> } = {}) {
 	let now = 1_000_000;
 	const timers: { run: () => void; at: number }[] = [];
 	const reporter = new ErrorReporter({
-		opsAgent: "infra",
+		destination: { agent: "infra" },
 		app: "Roundtable",
 		now: () => now,
 		setTimer: (run, ms) => timers.push({ run, at: now + ms }),

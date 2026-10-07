@@ -13,6 +13,7 @@ import {
 } from "../models.ts";
 import type { RoundtablePlugin } from "../plugin.ts";
 import { PRIMARY_CHARS } from "../runtime/interim-text.ts";
+import type { ChannelKey } from "../sessions.ts";
 import type { Tier, TierMembers } from "../speakers.ts";
 import {
 	bool,
@@ -47,7 +48,12 @@ export interface RoundtableConfig {
 	name?: string;
 	/** The one owner: the only person who can change everything. */
 	owner: { id: string; name: string; pronouns?: Pronouns };
-	discord: {
+	/**
+	 * The Discord bot, its guild, and the agent server that lives there. Leave it out for a host
+	 * without Discord: no Discord plugins, no agent server or agents, no skills, and no tool that
+	 * messages the owner on Discord; conversations come through the plugins' own surfaces.
+	 */
+	discord?: {
 		/** The bot token; keep it in `.env`, not in this file. */
 		token: string;
 		/** The agent server's guild id. */
@@ -89,15 +95,17 @@ export interface RoundtableConfig {
 	toolTiers?: Record<string, Tier>;
 	/** Prompt files, read once at start; `shared` starts every agent's prompt. */
 	prompts?: { shared: string; guest?: string };
-	/** The first team, created once; an agent already stored is never overwritten. */
+	/** The first team, created once; an agent already stored is never overwritten. Needs `discord`. */
 	agents?: AgentSeed[];
 	/**
-	 * Where the agents' avatars are served: the public address that reaches it, and the TCP port
-	 * (default 3000) or unix socket the process listens on. `socketMode` is the socket file's
-	 * permission bits (default `0o660`); widen it only for a proxy that runs as another user.
+	 * The `public` listener: the public address that reaches it, and the TCP port (default 3000) or
+	 * unix socket the process listens on. `socketMode` is the socket file's permission bits
+	 * (default `0o660`); widen it only for a proxy that runs as another user. With `discord` it is
+	 * required, with `publicUrl`, the address the agents' avatars are served from; without
+	 * `discord` leave it out when no plugin serves HTTP, and the host opens no listener.
 	 */
-	http: {
-		publicUrl: string;
+	http?: {
+		publicUrl?: string;
 		port?: number;
 		hostname?: string;
 		socketPath?: string;
@@ -109,13 +117,14 @@ export interface RoundtableConfig {
 	workDir?: string;
 	/**
 	 * The agents' scratch dir: their shell runs with TMPDIR pointing to it, and writes and removals
-	 * inside it run without a hold. Default `<os temp dir>/<discord.rootCommand>-scratch`.
+	 * inside it run without a hold. Default `<os temp dir>/<slug>-scratch`, where the slug is
+	 * `discord.rootCommand`, or the lowercase assistant name without Discord.
 	 */
 	scratchDir?: string;
 	/**
 	 * Where the skill registry reads built-in skills and keeps linked repositories. `false` leaves
 	 * the `skills` addon out: agents carry no skills, and no skill tools exist. Stored skills stay
-	 * in their tables.
+	 * in their tables. Without `discord` there are no agents, so the addon is off.
 	 */
 	skills?: false | { builtinDir?: string; reposDir?: string };
 	/**
@@ -123,8 +132,12 @@ export interface RoundtableConfig {
 	 * `memory` addon out: no memory tools, no memory prompt block, and the table stays as it is.
 	 */
 	memory?: boolean;
-	/** The agent that investigates the process's own errors, by name. */
-	ops?: { agent: string };
+	/**
+	 * Where the process's own errors are reported: to an agent, by name, in its channel (needs
+	 * `discord`), or to a conversation, by its key such as `"web:ops"`, as a visible message and a
+	 * report turn its claim answers.
+	 */
+	ops?: { agent: string } | { conversation: string };
 	/**
 	 * Whether a turn posts the text it writes before its final answer as it goes: long or
 	 * structured text as ordinary messages, short narration and the tools called in one small
@@ -155,14 +168,16 @@ const schema = shape({
 		name: text,
 		pronouns: optional(oneOf<Pronouns>("he", "she", "they")),
 	}),
-	discord: shape({
-		token: text,
-		guild: text,
-		entryChannel: text,
-		rootCommand: optional(text),
-		admin: optional(bool),
-		refusalHint: optional(text),
-	}),
+	discord: optional(
+		shape({
+			token: text,
+			guild: text,
+			entryChannel: text,
+			rootCommand: optional(text),
+			admin: optional(bool),
+			refusalHint: optional(text),
+		}),
+	),
 	database: shape({ url: text }),
 	dataDir: text,
 	agentDir: optional(text),
@@ -199,13 +214,15 @@ const schema = shape({
 			}),
 		),
 	),
-	http: shape({
-		publicUrl: text,
-		port: optional(integer(1, 65535)),
-		hostname: optional(text),
-		socketPath: optional(text),
-		socketMode: optional(integer(0, 0o777)),
-	}),
+	http: optional(
+		shape({
+			publicUrl: optional(text),
+			port: optional(integer(1, 65535)),
+			hostname: optional(text),
+			socketPath: optional(text),
+			socketMode: optional(integer(0, 0o777)),
+		}),
+	),
 	avatar: optional(text),
 	workDir: optional(text),
 	scratchDir: optional(text),
@@ -213,7 +230,7 @@ const schema = shape({
 		orOff(shape({ builtinDir: optional(text), reposDir: optional(text) })),
 	),
 	memory: optional(bool),
-	ops: optional(shape({ agent: text })),
+	ops: optional(shape({ agent: optional(text), conversation: optional(text) })),
 	interimText: optional(oneOf<InterimTextMode>("on", "off")),
 	interimPrimaryChars: optional(integer(1, 100_000)),
 	plugins: optional(
@@ -232,8 +249,14 @@ const PRONOUNS: Record<Pronouns, OwnerIdentity["pronouns"]> = {
 /** The configuration with every default filled in. */
 export interface ResolvedConfig {
 	name: string;
+	/**
+	 * The process's short name: the logger's and the scratch dir's, and the root slash command's
+	 * with Discord. `discord.rootCommand` when Discord is on, else the lowercase assistant name.
+	 */
+	slug: string;
 	owner: OwnerIdentity & { id: string };
-	discord: {
+	/** Undefined on a host without Discord. */
+	discord?: {
 		token: string;
 		guild: string;
 		entryChannel: string;
@@ -254,8 +277,10 @@ export interface ResolvedConfig {
 	toolTiers: Record<string, Tier>;
 	prompts: { shared?: string; guest?: string };
 	agents: AgentSeed[];
-	http: {
-		publicUrl: string;
+	/** Undefined when no `http` is configured, and the host opens no `public` listener. */
+	http?: {
+		/** Always set with Discord. */
+		publicUrl?: string;
 		port: number;
 		hostname?: string;
 		socketPath?: string;
@@ -267,7 +292,7 @@ export interface ResolvedConfig {
 	/** `false` when the skills addon is off. */
 	skills: false | { builtinDir?: string; reposDir?: string };
 	memory: boolean;
-	ops?: { agent: string };
+	ops?: { agent: string } | { conversation: ChannelKey };
 	interimText: InterimTextMode;
 	interimPrimaryChars: number;
 	plugins: RoundtablePlugin[];
@@ -282,32 +307,84 @@ function modelOf(value: string, path: string): ModelRef {
 	return parsed;
 }
 
+/** Where the errors go: one of an agent or a conversation; an agent only where the agents live. */
+function opsOf(
+	ops: { agent?: string; conversation?: string } | undefined,
+	withDiscord: boolean,
+): ResolvedConfig["ops"] {
+	if (!ops) return undefined;
+	const { agent, conversation } = ops;
+	if (agent !== undefined && conversation !== undefined)
+		throw new ConfigError(
+			"config ops: name an agent or a conversation, not both. Keep the one the reports go to.",
+		);
+	if (agent !== undefined) {
+		if (!withDiscord)
+			throw new ConfigError(
+				'config ops.agent: the agents live in Discord, which is not configured. Report to a conversation instead, such as ops: { conversation: "web:ops" }.',
+			);
+		return { agent };
+	}
+	if (conversation === undefined)
+		throw new ConfigError(
+			'config ops: name an agent or a conversation, such as ops: { agent: "infra" } or ops: { conversation: "web:ops" }.',
+		);
+	if (!/^[^:]+:.+$/.test(conversation))
+		throw new ConfigError(
+			`config ops.conversation: expected a conversation key such as "web:ops", got ${JSON.stringify(conversation)}. Write <surface>:<id>.`,
+		);
+	return { conversation: conversation as ChannelKey };
+}
+
+/** Refuses what only the agent server serves on a host without Discord, naming the key. */
+function refuseAgentServerKeys(config: RoundtableConfig): void {
+	if (config.agents && config.agents.length > 0)
+		throw new ConfigError(
+			"config agents: the agents live in Discord, which is not configured. Configure discord, or remove agents.",
+		);
+	if (config.skills)
+		throw new ConfigError(
+			"config skills: the skills are the agents', and the agents live in Discord, which is not configured. Configure discord, or remove skills.",
+		);
+}
+
 /** The configuration checked against its schema, defaults filled; throws a ConfigError naming the key and the fix. */
 export function resolveConfig(input: unknown): ResolvedConfig {
 	const config = schema.check(input, "") as RoundtableConfig;
 	const name = config.name ?? "Roundtable";
 	const model = modelOf(config.model, "model");
 	const thinking = config.thinking ?? "medium";
-	const rootCommand =
-		config.discord.rootCommand ??
-		name.toLowerCase().replace(/[^a-z0-9-]+/g, "-");
+	const { discord, http } = config;
+	if (discord && !http?.publicUrl)
+		throw new ConfigError(
+			"config http.publicUrl: required with discord, expected the public address that reaches the bot; Discord fetches the agents' avatars from it. Add it to roundtable.config.ts.",
+		);
+	if (!discord) refuseAgentServerKeys(config);
+	const slug =
+		discord?.rootCommand ?? name.toLowerCase().replace(/[^a-z0-9-]+/g, "-");
+	const ops = opsOf(config.ops, discord !== undefined);
 	return {
 		name,
+		slug,
 		owner: {
 			id: config.owner.id,
 			name: config.owner.name,
 			pronouns: PRONOUNS[config.owner.pronouns ?? "they"],
 		},
-		discord: {
-			token: config.discord.token,
-			guild: config.discord.guild,
-			entryChannel: config.discord.entryChannel,
-			rootCommand,
-			admin: config.discord.admin ?? true,
-			...(config.discord.refusalHint === undefined
-				? {}
-				: { refusalHint: config.discord.refusalHint }),
-		},
+		...(discord
+			? {
+					discord: {
+						token: discord.token,
+						guild: discord.guild,
+						entryChannel: discord.entryChannel,
+						rootCommand: slug,
+						admin: discord.admin ?? true,
+						...(discord.refusalHint === undefined
+							? {}
+							: { refusalHint: discord.refusalHint }),
+					},
+				}
+			: {}),
 		databaseUrl: config.database.url,
 		dataDir: config.dataDir,
 		agentDir: config.agentDir ?? `${config.dataDir}/pi`,
@@ -334,21 +411,26 @@ export function resolveConfig(input: unknown): ResolvedConfig {
 		toolTiers: config.toolTiers ?? {},
 		prompts: config.prompts ?? {},
 		agents: config.agents ?? [],
-		http: {
-			publicUrl: config.http.publicUrl,
-			port: config.http.port ?? 3000,
-			...(config.http.hostname ? { hostname: config.http.hostname } : {}),
-			...(config.http.socketPath ? { socketPath: config.http.socketPath } : {}),
-			...(config.http.socketMode === undefined
-				? {}
-				: { socketMode: config.http.socketMode }),
-		},
+		...(http
+			? {
+					http: {
+						...(http.publicUrl ? { publicUrl: http.publicUrl } : {}),
+						port: http.port ?? 3000,
+						...(http.hostname ? { hostname: http.hostname } : {}),
+						...(http.socketPath ? { socketPath: http.socketPath } : {}),
+						...(http.socketMode === undefined
+							? {}
+							: { socketMode: http.socketMode }),
+					},
+				}
+			: {}),
 		...(config.avatar ? { avatar: config.avatar } : {}),
 		workDir: config.workDir ?? `${config.dataDir}/work`,
-		scratchDir: config.scratchDir ?? join(tmpdir(), `${rootCommand}-scratch`),
-		skills: config.skills ?? {},
+		scratchDir: config.scratchDir ?? join(tmpdir(), `${slug}-scratch`),
+		// Without Discord there are no agents to carry skills, so the addon is off.
+		skills: config.skills ?? (discord ? {} : false),
 		memory: config.memory ?? true,
-		...(config.ops ? { ops: config.ops } : {}),
+		...(ops ? { ops } : {}),
 		interimText: config.interimText ?? "on",
 		interimPrimaryChars: config.interimPrimaryChars ?? PRIMARY_CHARS,
 		plugins: config.plugins ?? [],

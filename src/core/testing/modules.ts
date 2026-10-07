@@ -3,7 +3,7 @@ import type { SQL } from "bun";
 import { OWNER_TARGET } from "../agents/agent-claim.ts";
 import { DISCORD, type DiscordServices } from "../builtin/discord.ts";
 import { discordAdminPlugin } from "../builtin/discord-admin.ts";
-import { modulesPlugin } from "../builtin/modules.ts";
+import { type ModulesOptions, modulesPlugin } from "../builtin/modules.ts";
 import { skillsPlugin } from "../builtin/skills.ts";
 import { memoryPlugin } from "../builtin/stores.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
@@ -28,13 +28,20 @@ export interface ModuleRecord {
 	reportChannels: ChannelKey[];
 	/** How often a conversation without a chat channel fell back to the owner's messages. */
 	ownerChannelAsked: number;
+	/** What was posted on the surface, by channel. */
+	posted: { channel: ChannelKey; text: string }[];
 }
 
 export const OWNER_CHANNEL: ChannelKey = "discord:owner-dm";
 
 /** The modules plugin set up over stand-in stores and surface; returns its contribution and the record. */
 export async function setUpModules(
-	options: { agentChannelOf?: (name: string) => ChannelKey } = {},
+	options: {
+		agentChannelOf?: (name: string) => ChannelKey;
+		/** Whether Discord is there; default true. A host without it has no owner's messages. */
+		discord?: boolean;
+		errorReporter?: ModulesOptions["errorReporter"];
+	} = {},
 ): Promise<{
 	contribution: Contribution;
 	record: ModuleRecord;
@@ -44,6 +51,7 @@ export async function setUpModules(
 		threadOrigins: [],
 		reportChannels: [],
 		ownerChannelAsked: 0,
+		posted: [],
 	};
 	const plugin = modulesPlugin({
 		owner: {
@@ -61,6 +69,7 @@ export async function setUpModules(
 			thinking: "low",
 			worker: { run: async () => "found it" },
 		},
+		...(options.errorReporter ? { errorReporter: options.errorReporter } : {}),
 	});
 	const services = new ServiceRegistry([plugin]);
 	// SAFETY: the tools under test read no store; each stub is asked for nothing else.
@@ -71,24 +80,25 @@ export async function setUpModules(
 		services.preset(AGENTS, {
 			team: { channelOf: options.agentChannelOf },
 		} as unknown as AgentServer);
-	// SAFETY: the tools under test use the connection's owner channel and the threads' open only.
-	services.preset(DISCORD, {
-		connection: {
-			ownerChannel: async () => {
-				record.ownerChannelAsked += 1;
-				return OWNER_CHANNEL;
+	if (options.discord !== false)
+		// SAFETY: the tools under test use the connection's owner channel and the threads' open only.
+		services.preset(DISCORD, {
+			connection: {
+				ownerChannel: async () => {
+					record.ownerChannelAsked += 1;
+					return OWNER_CHANNEL;
+				},
+				ownerOperations: () => ({}),
 			},
-			ownerOperations: () => ({}),
-		},
-		threads: {
-			open: async (origin: ChannelKey | undefined) => {
-				record.threadOrigins.push(origin);
-				return undefined;
+			threads: {
+				open: async (origin: ChannelKey | undefined) => {
+					record.threadOrigins.push(origin);
+					return undefined;
+				},
 			},
-		},
-		guard: {},
-		commands: { add: () => undefined },
-	} as unknown as DiscordServices);
+			guard: {},
+			commands: { add: () => undefined },
+		} as unknown as DiscordServices);
 	// SAFETY: setup reads only the logger, the conversations' background and targets, the surfaces, and the services.
 	const context = {
 		logger: silentLogger(),
@@ -105,7 +115,8 @@ export async function setUpModules(
 			{
 				surface: "discord",
 				start: async () => undefined,
-				sendReply: async () => undefined,
+				sendReply: async (channel, reply) =>
+					void record.posted.push({ channel, text: reply.chunks.join("") }),
 			},
 		]),
 	} as unknown as Omit<PluginContext, "services">;

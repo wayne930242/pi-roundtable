@@ -43,8 +43,13 @@ export interface TestHostOptions {
 	 * having none, whatever login the machine holds.
 	 */
 	apiKeys?: Readonly<Record<string, string>>;
-	/** What the stand-in Discord hands out. */
-	discord?: Partial<Pick<DiscordConnection, "agentChannels" | "ownerChannel">>;
+	/**
+	 * What the stand-in Discord hands out. `false` boots a host without Discord: no `discord`,
+	 * `http`, or `agents` in the configuration, so no Discord plugin and no agent server.
+	 */
+	discord?:
+		| false
+		| Partial<Pick<DiscordConnection, "agentChannels" | "ownerChannel">>;
 }
 
 export interface TestHost {
@@ -68,8 +73,15 @@ export interface TestHost {
 	stop(): Promise<void>;
 }
 
-function defaultConfig(): RoundtableConfig {
+function defaultConfig(withDiscord: boolean): RoundtableConfig {
 	const dataDir = mkdtempSync(join(tmpdir(), "roundtable-test-host-"));
+	if (!withDiscord)
+		return {
+			owner: { id: "100000000000000001", name: "Ada" },
+			database: { url: testDatabaseUrl },
+			dataDir,
+			model: "anthropic/claude-sonnet-5-5",
+		};
 	return {
 		owner: { id: "100000000000000001", name: "Ada" },
 		discord: {
@@ -197,14 +209,19 @@ export async function testHost(
 			return { services: [{ name: "probe" }] };
 		},
 	};
-	const base: RoundtableConfig = { ...defaultConfig(), ...options.config };
+	const withDiscord = options.discord !== false;
+	const given = options.discord === false ? undefined : options.discord;
+	const base: RoundtableConfig = {
+		...defaultConfig(withDiscord),
+		...options.config,
+	};
 	const resolved = resolveConfig(base);
-	const { rootCommand } = resolved.discord;
+	const rootCommand = resolved.slug;
 	const guard = new OwnerGuard(resolved.owner.id, silentLogger(), rootCommand);
 	const config: RoundtableConfig = {
 		...base,
 		plugins: [
-			standInDiscord(commands, guard, options.discord),
+			...(withDiscord ? [standInDiscord(commands, guard, given)] : []),
 			{
 				name: "test-runtime",
 				providers: { runtime: () => runtime },
@@ -227,9 +244,10 @@ export async function testHost(
 	await roundtable.run();
 	if (!captured) throw new Error("the probe was not set up");
 	const context = captured;
-	const ownerChannel = await (
-		options.discord?.ownerChannel ?? (async () => "discord:owner-dm" as const)
-	)();
+	// Without Discord the owner's session is a conversation of a plugin's surface.
+	const ownerChannel = withDiscord
+		? await (given?.ownerChannel ?? (async () => "discord:owner-dm" as const))()
+		: ("test:owner" as const);
 	/** A group seat's turns run in the group's channel; an agent's in its own. */
 	const turnChannelOf = (scope?: AgentTurnScope) =>
 		scope?.group ? scope.session : scope?.home;

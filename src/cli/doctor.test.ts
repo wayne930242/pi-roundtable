@@ -98,6 +98,29 @@ describe("doctor", () => {
 		expect(report.ok).toBe(false);
 	});
 
+	test("a project without Discord skips the Discord checks without asking Discord anything", async () => {
+		const { discord: _discord, http: _http, ...headless } = validConfig;
+		const http = fakeHttp({});
+		const report = await doctor(inputs({ ports: fakePorts(headless), http }));
+		const byName = Object.fromEntries(
+			report.outcomes.map(({ name, result }) => [name, result]),
+		);
+		for (const name of [
+			"Discord token",
+			"Discord guild",
+			"Discord intents",
+			"Discord channel",
+		])
+			expect(byName[name]).toEqual({
+				status: "skipped",
+				reason: "no Discord is configured",
+			});
+		expect(byName["public URL"]?.status).toBe("skipped");
+		expect(byName.configuration?.status).toBe("ok");
+		expect(http.requests).toEqual([]);
+		expect(report.ok).toBe(true);
+	});
+
 	test("a check that throws is reported as failed without hiding the ones after it", async () => {
 		const checks: Check[] = [
 			{

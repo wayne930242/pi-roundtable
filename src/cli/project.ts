@@ -96,6 +96,17 @@ export class Project {
 		return typeof value === "string" && value.trim() !== "" ? value : undefined;
 	}
 
+	/** Whether the configuration, loaded, leaves the top-level key out; false when it could not be loaded. */
+	async leavesOut(key: string): Promise<boolean> {
+		const raw = await this.raw();
+		return (
+			raw.ok &&
+			typeof raw.value === "object" &&
+			raw.value !== null &&
+			(raw.value as Record<string, unknown>)[key] === undefined
+		);
+	}
+
 	/** The configuration checked against its schema and assembled, or the failure that says why not. */
 	assembled(): Promise<Loaded<Assembled>> {
 		this.#assembled ??= this.#assemble();

@@ -8,7 +8,7 @@ import type { Ports } from "../project.ts";
 
 /** A configuration the schema accepts. */
 // pi-lens-ignore: hardcoded-url — a test fixture; bot.example.test is a reserved name no request is sent to
-export const validConfig: RoundtableConfig = {
+export const validConfig = {
 	owner: { id: "100000000000000001", name: "Ada" },
 	discord: {
 		token: "bot-token",
@@ -19,7 +19,7 @@ export const validConfig: RoundtableConfig = {
 	dataDir: "/data",
 	model: "anthropic/claude-sonnet-5-5",
 	http: { publicUrl: "https://bot.example.test" },
-};
+} satisfies RoundtableConfig;
 
 /** A directory that is removed when the test ends; call `done` in `afterEach`. */
 export function tempDir(prefix = "roundtable-cli-"): {

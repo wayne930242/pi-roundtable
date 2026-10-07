@@ -14,7 +14,14 @@ import { checkModelLogin } from "./checks/model.ts";
 import { checkPublicUrl } from "./checks/public-url.ts";
 import type { Http } from "./http.ts";
 import { type Ports, Project } from "./project.ts";
-import { type Check, failed, type Outcome, runChecks } from "./report.ts";
+import {
+	type Check,
+	failed,
+	type Outcome,
+	type Result,
+	runChecks,
+	skipped,
+} from "./report.ts";
 
 export interface DoctorInputs {
 	cwd: string;
@@ -39,6 +46,11 @@ export function buildChecks(
 ): Check[] {
 	const { cwd, env, bun, ports, database, http, reachable } = inputs;
 	const discord = new Discord(project, http);
+	// A project without Discord asks Discord nothing.
+	const ifDiscord = (run: () => Promise<Result>) => async (): Promise<Result> =>
+		(await project.leavesOut("discord"))
+			? skipped("no Discord is configured")
+			: run();
 	return [
 		{ name: "Bun", offline: true, run: async () => checkBun(bun) },
 		{
@@ -62,21 +74,25 @@ export function buildChecks(
 			offline: false,
 			run: () => checkDatabase(project, database),
 		},
-		{ name: "Discord token", offline: false, run: () => checkToken(discord) },
+		{
+			name: "Discord token",
+			offline: false,
+			run: ifDiscord(() => checkToken(discord)),
+		},
 		{
 			name: "Discord guild",
 			offline: false,
-			run: () => checkGuild(project, discord),
+			run: ifDiscord(() => checkGuild(project, discord)),
 		},
 		{
 			name: "Discord intents",
 			offline: false,
-			run: () => checkIntents(discord),
+			run: ifDiscord(() => checkIntents(discord)),
 		},
 		{
 			name: "Discord channel",
 			offline: false,
-			run: () => checkChannel(project, discord),
+			run: ifDiscord(() => checkChannel(project, discord)),
 		},
 		{
 			name: "model login",

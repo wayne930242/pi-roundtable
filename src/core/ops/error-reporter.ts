@@ -19,20 +19,28 @@ const OWN_KEYS = new Set(["level", "time", "pid", "hostname", "msg", "err"]);
 const HEAD_KEYS = ["app", "plugin", "module"];
 const APP_FRAME = /((?:src|shared|worker)\/[^\s():]+\.ts):(\d+)/;
 
-/** Where the reports go, known once the Discord surface and the agent team are up. */
+/** Who investigates the errors: an agent, in its channel, or the claim of one conversation. */
+export type ErrorReportDestination =
+	| { agent: string }
+	| { conversation: ChannelKey };
+
+/** How the reports are delivered, known once the surfaces, and for an agent the team, are up. */
 export interface ErrorReportDelivery {
-	/** The agent's channel while it is active; undefined for an archived or unknown agent. */
-	channelOf(agent: string): ChannelKey | undefined;
-	/** The visible message in the agent's channel. */
+	/**
+	 * The agent's channel while it is active; undefined for an archived or unknown agent. Asked
+	 * only for an agent's reports.
+	 */
+	channelOf?(agent: string): ChannelKey | undefined;
+	/** The visible message in the channel. */
 	post(channel: ChannelKey, text: string): Promise<void>;
-	/** The agent's report turn; resolves when it has run. */
+	/** The report turn; resolves when it has run. */
 	turn(channel: ChannelKey, text: string): Promise<ScheduledOutcome>;
 	logger: Logger;
 }
 
 export interface ErrorReporterOptions {
-	/** The agent that investigates the errors, reported in its channel. */
-	opsAgent: string;
+	/** Who investigates the errors. */
+	destination: ErrorReportDestination;
 	/** The name the reports give the process, such as "Roundtable". */
 	app: string;
 	ignored?: readonly RegExp[];
@@ -43,14 +51,14 @@ export interface ErrorReporterOptions {
 }
 
 /**
- * The process's own `error` and `fatal` log entries, each reported to the ops agent as a visible
- * message and a report turn in its channel. The same error goes at most once an hour, and at
+ * The process's own `error` and `fatal` log entries, each reported to the ops agent or the ops
+ * conversation as a visible message and a report turn in its channel. The same error goes at most once an hour, and at
  * most five reports an hour overall; the rest are counted and summed up in one report when the
  * hour allows. Errors from the reporting itself are only logged; errors logged elsewhere while
  * an error-report turn runs are counted and summed up once it ends.
  */
 export class ErrorReporter {
-	readonly #opsAgent: string;
+	readonly destination: ErrorReportDestination;
 	readonly #app: string;
 	readonly #ignored: readonly RegExp[];
 	readonly #now: () => number;
@@ -68,7 +76,7 @@ export class ErrorReporter {
 	#summaryDue = false;
 
 	constructor(options: ErrorReporterOptions) {
-		this.#opsAgent = options.opsAgent;
+		this.destination = options.destination;
 		this.#app = options.app;
 		this.#ignored = options.ignored ?? IGNORED_ERRORS;
 		this.#now = options.now ?? Date.now;
@@ -177,7 +185,11 @@ export class ErrorReporter {
 		const delivery = this.#delivery;
 		if (!delivery) return Promise.resolve();
 		return this.#reporting.run(true, async () => {
-			const channel = delivery.channelOf(this.#opsAgent);
+			const { destination } = this;
+			const channel =
+				"conversation" in destination
+					? destination.conversation
+					: delivery.channelOf?.(destination.agent);
 			if (!channel) return;
 			try {
 				await delivery.post(channel, text);

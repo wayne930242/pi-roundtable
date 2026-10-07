@@ -27,13 +27,15 @@ import { setTimeZone, timeZone, zonedStamp } from "./time.ts";
 
 const dataDir = mkdtempSync(join(tmpdir(), "roundtable-define-"));
 
+const discord = {
+	token: "token",
+	guild: "900000000000000001",
+	entryChannel: "900000000000000002",
+};
+
 const config: RoundtableConfig = {
 	owner: { id: "100000000000000001", name: "Ada" },
-	discord: {
-		token: "token",
-		guild: "900000000000000001",
-		entryChannel: "900000000000000002",
-	},
+	discord,
 	database: { url: "postgres://localhost/roundtable" },
 	dataDir,
 	model: "anthropic/claude-sonnet-5-5",
@@ -88,12 +90,36 @@ describe("defineRoundtable", () => {
 		]);
 	});
 
+	test("without Discord, the Discord plugins, the agent server, and its seeds are left out, and the runtime stays", async () => {
+		const { discord: _discord, http: _http, ...headless } = config;
+		const { plugins, options } = await defineRoundtable({
+			...headless,
+			plugins: [mine],
+		});
+		expect(plugins.map((plugin) => plugin.name)).toEqual([
+			"memory",
+			"schedule-store",
+			"prechecks",
+			"modules",
+			"runtime",
+			"mine",
+			"schedules",
+		]);
+		expect(options.listeners).toEqual([]);
+		expect(options.environment?.rootCommand).toBe("roundtable");
+		const withHttp = await defineRoundtable({
+			...headless,
+			http: { port: 8080 },
+		});
+		expect(withHttp.options.listeners).toEqual([{ id: "public", port: 8080 }]);
+	});
+
 	test("an addon is left out when its switch is off, and its services with it", async () => {
 		const { plugins } = await defineRoundtable({
 			...config,
 			skills: false,
 			memory: false,
-			discord: { ...config.discord, admin: false },
+			discord: { ...discord, admin: false },
 		});
 		expect(plugins.map((plugin) => plugin.name)).toEqual([
 			"schedule-store",
@@ -365,7 +391,7 @@ describe("defineRoundtable", () => {
 		await expect(
 			defineRoundtable({
 				...config,
-				discord: { ...config.discord, guilld: "1" },
+				discord: { ...discord, guilld: "1" },
 			} as RoundtableConfig),
 		).rejects.toThrow(
 			'config discord.guilld: unknown key. Did you mean "guild"?',

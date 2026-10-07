@@ -3,6 +3,7 @@ import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import type { SurfacePort } from "../contract/surface.ts";
 import { scheduleCommands } from "../discord/schedule-commands.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
+import { DelegationError, ScheduleError } from "../domain/errors.ts";
 import { messages } from "../i18n/index.ts";
 import type { OwnerIdentity } from "../identity.ts";
 import type { ModelRef, ThinkingLevel } from "../models.ts";
@@ -17,7 +18,9 @@ import { notifyExtension } from "../modules/notify/notify.ts";
 import { precheckScriptHoldRule } from "../modules/schedules/precheck-tools.ts";
 import { Scheduler } from "../modules/schedules/scheduler.ts";
 import { schedulesExtension } from "../modules/schedules/schedules.ts";
+import type { ErrorReporter } from "../ops/error-reporter.ts";
 import type { RoundtablePlugin } from "../plugin.ts";
+import { splitReply } from "../presentation/reply-splitter.ts";
 import {
 	AGENTS,
 	BACKGROUND_TURNS,
@@ -33,6 +36,11 @@ import { DISCORD } from "./discord.ts";
 import { fixed } from "./session-tool.ts";
 
 export interface ModulesOptions {
+	/**
+	 * Reports the process's own errors to a conversation, connected when the modules start; one
+	 * that reports to an agent is the agent server's to connect.
+	 */
+	errorReporter?: ErrorReporter;
 	/** Who the tools serve in the owner's own sessions. */
 	owner: OwnerIdentity & { id: string };
 	/** The name a turn the process itself starts is written by. */
@@ -65,16 +73,25 @@ const MODULE_TIERS: Readonly<Record<string, Tier>> = {
 
 /**
  * The owner's modules: notifications, schedules, and delegated tasks, each a session tool, and
- * the turns nobody wrote. The delegator's running jobs join the shutdown drain.
+ * the turns nobody wrote. The delegator's running jobs join the shutdown drain. Without Discord
+ * there are no owner's messages: no `notify_owner`, and a conversation no chat surface carries
+ * can neither schedule nor delegate.
  */
 export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 	const { owner } = options;
-	// Outside the agent server a conversation has no channel of its own to post a run in.
+	// A conversation no chat surface carries posts its runs in the owner's messages, when there are any.
 	const channelFor = async (
 		channel: ChannelKey,
 		surfaces: SurfacePort,
-		ownerChannel: () => Promise<ChannelKey>,
-	) => (surfaces.of(channel) ? channel : ownerChannel());
+		ownerChannel: (() => Promise<ChannelKey>) | undefined,
+		refused: (message: string) => Error,
+	) => {
+		if (surfaces.of(channel)) return channel;
+		if (ownerChannel) return ownerChannel();
+		throw refused(
+			"this conversation has no chat surface to post a run in, and the host has no owner's messages to post it in instead",
+		);
+	};
 	return {
 		name: "modules",
 		provides: [BACKGROUND_TURNS, DELEGATION],
@@ -89,13 +106,29 @@ export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 			const schedules = services.get(SCHEDULES);
 			// Absent when a plugin list leaves the prechecks plugin out: then none can be attached.
 			const prechecks = services.find(PRECHECKS);
-			const discord = services.get(DISCORD);
-			const { connection } = discord;
+			// Absent on a host without Discord: then there are no owner's messages and no threads.
+			const discord = services.find(DISCORD);
+			const connection = discord?.connection;
+			const ownerChannel = connection
+				? () => connection.ownerChannel()
+				: undefined;
 			// Another agent's channel, for schedule_list; asked when a tool runs, after the agent server set up.
 			const agentChannelOf = (agent: string) =>
 				services.get(AGENTS).team.channelOf(agent);
-			const ownerChannelFor = (channel: ChannelKey) =>
-				channelFor(channel, surfaces, () => connection.ownerChannel());
+			const scheduleChannelFor = (channel: ChannelKey) =>
+				channelFor(
+					channel,
+					surfaces,
+					ownerChannel,
+					(message) => new ScheduleError(message),
+				);
+			const delegateChannelFor = (channel: ChannelKey) =>
+				channelFor(
+					channel,
+					surfaces,
+					ownerChannel,
+					(message) => new DelegationError(message),
+				);
 			const background = new ConversationBackgroundTurns({
 				conversations,
 				system: { id: "assistant", name: options.assistant },
@@ -113,7 +146,7 @@ export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 					}),
 				targets: (name) => conversations.target(name),
 				deliver: (job, outcome) => background.runDelegated(job, outcome),
-				threads: discord.threads,
+				...(discord ? { threads: discord.threads } : {}),
 				logger,
 			});
 			services.provide(BACKGROUND_TURNS, background);
@@ -121,9 +154,32 @@ export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 			// An agent session serves every speaker, so its tools name none.
 			const served = (session: SessionContext) =>
 				session.agent ? THE_SPEAKER : owner;
+			// A reporter for an ops agent is the agent server's to connect.
+			const reporter =
+				options.errorReporter &&
+				"conversation" in options.errorReporter.destination
+					? options.errorReporter
+					: undefined;
 			return {
 				services: [
 					{ name: "delegator", busy: () => delegator.runningChannels() },
+					...(reporter
+						? [
+								{
+									name: "error-reports",
+									start: () =>
+										reporter.connect({
+											post: (channel, text) =>
+												surfaces.sendReply(channel, {
+													chunks: splitReply(text),
+												}),
+											turn: (channel, text) =>
+												background.runErrorReport(channel, text),
+											logger,
+										}),
+								},
+							]
+						: []),
 				],
 				// Saving a precheck script that calls a held tool waits for the owner, as the call would.
 				holdRules: [
@@ -134,13 +190,15 @@ export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 					}),
 				],
 				sessionTools: [
-					fixed("notify", () => notifyExtension(connection, owner)),
+					...(connection
+						? [fixed("notify", () => notifyExtension(connection, owner))]
+						: []),
 					fixed("schedules", (session) =>
 						schedulesExtension(
 							{
 								store: schedules,
 								owner: { id: owner.id, name: owner.name },
-								channelFor: ownerChannelFor,
+								channelFor: scheduleChannelFor,
 								...(prechecks ? { prechecks } : {}),
 								holds: () => sessions().holds,
 							},
@@ -155,7 +213,7 @@ export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 							{
 								delegator,
 								owner: { id: owner.id, name: owner.name },
-								channelFor: ownerChannelFor,
+								channelFor: delegateChannelFor,
 							},
 							session.homeChannel,
 							served(session),

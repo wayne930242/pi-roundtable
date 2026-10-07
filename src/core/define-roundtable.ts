@@ -13,7 +13,11 @@ import {
 	precheckPlugin,
 	scheduleStorePlugin,
 } from "./builtin/stores.ts";
-import { type RoundtableConfig, resolveConfig } from "./config/config.ts";
+import {
+	type ResolvedConfig,
+	type RoundtableConfig,
+	resolveConfig,
+} from "./config/config.ts";
 import { ConfigError } from "./domain/errors.ts";
 import { JudgeError } from "./errors.ts";
 import type { RoundtableOptions } from "./host.ts";
@@ -23,7 +27,11 @@ import { createLogger, type LogEntry, type Logger } from "./log.ts";
 import { formatModelRef, type ModelRef } from "./models.ts";
 import { ErrorReporter } from "./ops/error-reporter.ts";
 import type { RoundtablePlugin } from "./plugin.ts";
-import { agentSessionsSlot, runtimePlugin } from "./runtime/runtime-plugin.ts";
+import {
+	type AgentSessionsSlot,
+	agentSessionsSlot,
+	runtimePlugin,
+} from "./runtime/runtime-plugin.ts";
 import { speakerPolicy } from "./speakers.ts";
 import { toolTiers } from "./tool-tiers.ts";
 
@@ -87,7 +95,7 @@ function judgeThrough(modelRuntime: ModelRuntime, ref: ModelRef): JudgeModel {
 
 /** The listener `config.http` names: its unix socket when it has one, else its TCP port. */
 function publicListener(
-	http: ReturnType<typeof resolveConfig>["http"],
+	http: NonNullable<ResolvedConfig["http"]>,
 ): ListenerConfig {
 	if (http.socketPath)
 		return {
@@ -102,11 +110,95 @@ function publicListener(
 	};
 }
 
+/** The Discord bot and the agent server that lives there, each in its place in the plugin list. */
+interface DiscordAssembly {
+	discord: RoundtablePlugin;
+	admin: RoundtablePlugin[];
+	skills: RoundtablePlugin[];
+	agentServer: RoundtablePlugin;
+	seeds: RoundtablePlugin;
+}
+
+function discordAssembly(
+	config: ResolvedConfig,
+	discord: NonNullable<ResolvedConfig["discord"]>,
+	shared: {
+		modelRuntime: ModelRuntime;
+		agentSessions: AgentSessionsSlot;
+		errorReporter: ErrorReporter | undefined;
+	},
+): DiscordAssembly {
+	const { name, owner } = config;
+	const speakers = speakerPolicy({
+		owners: [owner.id],
+		...(config.speakers.admins ? { admins: config.speakers.admins } : {}),
+		...(config.speakers.members ? { members: config.speakers.members } : {}),
+	});
+	const sharedPrompt = config.prompts.shared
+		? readPrompt(config.prompts.shared, "prompts.shared")
+		: readPrompt(join(ASSETS, "prompts", "shared.md"), "prompts.shared");
+	const guest = config.prompts.guest
+		? readPrompt(config.prompts.guest, "prompts.guest")
+		: readPrompt(join(ASSETS, "prompts", "shared-guest.md"), "prompts.guest");
+	const { errorReporter } = shared;
+	return {
+		discord: discordPlugin({
+			token: discord.token,
+			ownerId: owner.id,
+			ownerName: owner.name,
+			speakers,
+			rootCommand: discord.rootCommand,
+			dataDir: config.dataDir,
+			...(discord.refusalHint === undefined
+				? {}
+				: { refusalHint: discord.refusalHint }),
+		}),
+		admin: discord.admin ? [discordAdminPlugin({ owner })] : [],
+		skills: config.skills
+			? [
+					skillsPlugin({
+						guildId: discord.guild,
+						reposDir: config.skills.reposDir ?? join(config.dataDir, "repos"),
+						writtenDir: join(config.dataDir, "skills"),
+						builtinDir: config.skills.builtinDir ?? join(ASSETS, "skills"),
+					}),
+				]
+			: [],
+		agentServer: agentServerPlugin({
+			guildId: discord.guild,
+			entryChannelId: discord.entryChannel,
+			owner,
+			assistant: name,
+			speakers,
+			modelRuntime: shared.modelRuntime,
+			dataDir: config.dataDir,
+			model: config.model,
+			judgeThreshold: config.judge.threshold,
+			agents: shared.agentSessions,
+			workDir: config.workDir,
+			scratchDir: config.scratchDir,
+			shellUser: userInfo().username,
+			prompts: { shared: sharedPrompt, guest },
+			avatarListener: "public",
+			// resolveConfig refuses Discord without a public address.
+			avatarUrl: config.http?.publicUrl ?? "",
+			avatarReference: config.avatar ?? join(ASSETS, "neutral.png"),
+			// An ops agent's reports are the agent server's to deliver.
+			...(errorReporter && "agent" in errorReporter.destination
+				? { errorReporter }
+				: {}),
+		}),
+		seeds: seedsPlugin(config.agents),
+	};
+}
+
 /**
  * The host's options and the plugin list of a configured bot: the built-in plugins in their
  * fixed order (each service one provides is read by the ones after it), then the operator's, then the scheduler, so a due schedule fires only once
  * everything it reaches runs. The memory, Discord administration, and skills addons are left out
- * when the configuration switches them off. Configuration mistakes stop here, naming the key and the fix.
+ * when the configuration switches them off. Without `discord` the Discord plugins, the skills,
+ * the agent server and its seeds are left out, and the runtime still runs every turn of
+ * `context.turns`. Configuration mistakes stop here, naming the key and the fix.
  */
 export async function defineRoundtable(
 	input: RoundtableConfig,
@@ -123,13 +215,13 @@ export async function defineRoundtable(
 		}));
 	const registry = new ModelRegistry(modelRuntime);
 	const errorReporter = config.ops
-		? new ErrorReporter({ opsAgent: config.ops.agent, app: name })
+		? new ErrorReporter({ destination: config.ops, app: name })
 		: undefined;
 	const { errorSink } = overrides;
 	const logger =
 		overrides.logger ??
 		createLogger(
-			discord.rootCommand,
+			config.slug,
 			errorReporter || errorSink
 				? (entry) => {
 						errorReporter?.record(entry);
@@ -137,19 +229,15 @@ export async function defineRoundtable(
 					}
 				: undefined,
 		);
-	const speakers = speakerPolicy({
-		owners: [owner.id],
-		...(config.speakers.admins ? { admins: config.speakers.admins } : {}),
-		...(config.speakers.members ? { members: config.speakers.members } : {}),
-	});
-	const shared = config.prompts.shared
-		? readPrompt(config.prompts.shared, "prompts.shared")
-		: readPrompt(join(ASSETS, "prompts", "shared.md"), "prompts.shared");
-	const guest = config.prompts.guest
-		? readPrompt(config.prompts.guest, "prompts.guest")
-		: readPrompt(join(ASSETS, "prompts", "shared-guest.md"), "prompts.guest");
 	// The agent server hands the runtime its per-agent settings once it sets up.
 	const agentSessions = agentSessionsSlot();
+	const assembly = discord
+		? discordAssembly(config, discord, {
+				modelRuntime,
+				agentSessions,
+				errorReporter,
+			})
+		: undefined;
 	return {
 		options: {
 			logger,
@@ -157,12 +245,15 @@ export async function defineRoundtable(
 				locale: config.locale,
 				timeZone: config.timeZone,
 				assistant: name,
-				rootCommand: discord.rootCommand,
+				rootCommand: config.slug,
 				agentDir: config.agentDir,
 			},
 			database: { url: config.databaseUrl },
 			toolTiers: toolTiers(config.toolTiers),
-			listeners: [publicListener(config.http), ...(overrides.listeners ?? [])],
+			listeners: [
+				...(config.http ? [publicListener(config.http)] : []),
+				...(overrides.listeners ?? []),
+			],
 			judgeModel: judgeThrough(modelRuntime, config.judge.model),
 			apiKey: (provider) => registry.getApiKeyForProvider(provider),
 			...(overrides.aborted ? { aborted: overrides.aborted } : {}),
@@ -171,17 +262,7 @@ export async function defineRoundtable(
 			...(config.memory ? [memoryPlugin({ owner })] : []),
 			scheduleStorePlugin(),
 			precheckPlugin(),
-			discordPlugin({
-				token: discord.token,
-				ownerId: owner.id,
-				ownerName: owner.name,
-				speakers,
-				rootCommand: discord.rootCommand,
-				dataDir: config.dataDir,
-				...(discord.refusalHint === undefined
-					? {}
-					: { refusalHint: discord.refusalHint }),
-			}),
+			...(assembly ? [assembly.discord] : []),
 			modulesPlugin({
 				owner,
 				assistant: name,
@@ -189,18 +270,13 @@ export async function defineRoundtable(
 				agentDir: config.agentDir,
 				dataDir: config.dataDir,
 				delegation: config.delegation,
+				// A conversation's reports are the modules' to deliver.
+				...(errorReporter && "conversation" in errorReporter.destination
+					? { errorReporter }
+					: {}),
 			}),
-			...(discord.admin ? [discordAdminPlugin({ owner })] : []),
-			...(config.skills
-				? [
-						skillsPlugin({
-							guildId: discord.guild,
-							reposDir: config.skills.reposDir ?? join(config.dataDir, "repos"),
-							writtenDir: join(config.dataDir, "skills"),
-							builtinDir: config.skills.builtinDir ?? join(ASSETS, "skills"),
-						}),
-					]
-				: []),
+			...(assembly?.admin ?? []),
+			...(assembly?.skills ?? []),
 			runtimePlugin({
 				owner,
 				modelRuntime,
@@ -213,27 +289,7 @@ export async function defineRoundtable(
 				interimText: config.interimText,
 				interimPrimaryChars: config.interimPrimaryChars,
 			}),
-			agentServerPlugin({
-				guildId: discord.guild,
-				entryChannelId: discord.entryChannel,
-				owner,
-				assistant: name,
-				speakers,
-				modelRuntime,
-				dataDir: config.dataDir,
-				model: config.model,
-				judgeThreshold: config.judge.threshold,
-				agents: agentSessions,
-				workDir: config.workDir,
-				scratchDir: config.scratchDir,
-				shellUser: userInfo().username,
-				prompts: { shared, guest },
-				avatarListener: "public",
-				avatarUrl: config.http.publicUrl,
-				avatarReference: config.avatar ?? join(ASSETS, "neutral.png"),
-				...(errorReporter ? { errorReporter } : {}),
-			}),
-			seedsPlugin(config.agents),
+			...(assembly ? [assembly.agentServer, assembly.seeds] : []),
 			...config.plugins,
 			schedulerPlugin(),
 		],

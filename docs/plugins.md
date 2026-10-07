@@ -139,7 +139,7 @@ Use `QueuePort` from the main entry for `context.queue`; the kit's `ChannelQueue
 `context.logger` is a child of the host's logger and adds `plugin: <your plugin's name>` to each line in the journal.
 `Logger` has five levels and `child(fields)`; you can pass an existing pino logger as `DefineOverrides.logger`.
 
-With `defineRoundtable`, the host's logger sends every `error` and `fatal` line to the ops agent named by `config.ops.agent`, which reports it in its channel.
+With `defineRoundtable`, the host's logger sends every `error` and `fatal` line to the ops agent named by `config.ops.agent`, which reports it in its channel, or, with `config.ops.conversation`, to that conversation as a visible message and a report turn its claim answers.
 It then calls `DefineOverrides.errorSink(entry)` if you supply one; this function must not throw.
 A logger you supply reaches the ops agent and `errorSink` only if it forwards its error lines there.
 The report names the plugin next to `app` and `module`; the same error is reported at most once an hour, regardless of which plugin wrote it.
@@ -1392,7 +1392,7 @@ A test gives the plugin `fakeDiscord()` from `pi-roundtable/testing`: `testPlugi
 ### `http`: routes on the bot's listener
 
 The configuration's `http` block opens a listener named `public`, which serves the agents' avatars.
-`http.publicUrl` is its internet address.
+`http.publicUrl` is its internet address, required with Discord; a host without Discord may leave `http` out and opens no listener.
 A route names the listener, a path (`{ exact }` or `{ prefix }`), optionally the methods, and a handler that gets a `Request` and returns a `Response`.
 Two routes that could take the same request are refused, so a route cannot shadow the avatars.
 This listener is reachable from the internet, so check a secret in the handler before taking action.
@@ -2033,6 +2033,59 @@ export function fakeChat(surface: FakeSurface) {
 
 A test boots a host with the plugin, writes through the surface, and reads what came out (`examples/fake-surface.test.ts` does this with `Roundtable` and `silentLogger`, and also covers the refusals above).
 
+### A host without Discord
+
+Leave `discord` out of `roundtable.config.ts` and the host runs without it: no Discord plugin, no agent server, no agents, and no skills.
+The runtime plugin still builds the runtime, so every claim that runs turns through `context.turns` works, over the surfaces your plugins bring.
+`http` is optional too; without it the host opens no listener, and a route then names a listener that is not configured.
+
+What needs Discord is refused or left out rather than failing later:
+
+- `agents`, `skills` (anything but `false`), and `ops.agent` are configuration errors; report errors to a conversation with `ops: { conversation: "<surface>:<id>" }`.
+- `notify_owner` is not registered, since there are no owner's messages to send to.
+- `schedule_*` and `delegate_task` work in a conversation a chat surface carries, posting their runs there; elsewhere they refuse.
+  Their background turns, and an `ops.conversation` report's, go to the [background target](#backgroundtargets-whose-turn-a-schedule-or-delegated-task-is) named `owner`, which the agent server contributes; without it they are skipped until a plugin contributes that target.
+- `roundtable doctor` skips the Discord checks.
+
+<!-- example: examples/headless.ts -->
+```ts
+import { definePlugin, type RoundtableConfig } from "pi-roundtable";
+import type { FakeSurface } from "./fake-surface.ts";
+import { studyRoom } from "./study-room.ts";
+
+/** A plugin that brings a chat network and nothing else; the study room's claim answers its rooms. */
+export function chatNetwork(surface: FakeSurface) {
+	return definePlugin({
+		name: "chat-network",
+		setup: () => ({ surfaces: [surface] }),
+	});
+}
+
+/**
+ * A host without Discord: no `discord` key, so no Discord plugin, no agent server, no agents and
+ * no skills; and no `http`, so no listener opens until a plugin needs one. Conversations come
+ * through the plugins' own chat surfaces, and `context.turns` runs them on the host's runtime,
+ * Pi's unless a plugin fills the `runtime` slot.
+ */
+export function studyHall(
+	surface: FakeSurface,
+	where: { databaseUrl: string; dataDir: string },
+): RoundtableConfig {
+	return {
+		name: "Study Hall",
+		owner: { id: "owner", name: "Ada" },
+		database: { url: where.databaseUrl },
+		dataDir: where.dataDir,
+		model: "anthropic/claude-sonnet-5-5",
+		plugins: [chatNetwork(surface), studyRoom],
+	};
+}
+```
+<!-- /example -->
+
+`examples/headless.test.ts` boots this configuration over PostgreSQL with the echo runtime in place of Pi, and a study room answers through the fake surface.
+`testHost({ discord: false })` boots the same kind of host for a plugin's tests.
+
 ### What plugins do not extend
 
 A plugin adds slash commands through the Discord plugin's registrar and never receives the composed commands (see [slash commands](#slash-commands-commandsadd)).
@@ -2240,7 +2293,7 @@ Only `commands` and `guard` are given; a plugin that reads another member of `DI
 
 `testPlugin` sets up your plugin alone.
 For tests that need the agent server, modules, stores, or the host's session-tool setup order, use `testHost(options?)`.
-It boots `defineRoundtable` over `ROUNDTABLE_TEST_DATABASE_URL`, with stand-ins for Discord and the runtime; gate the suite with `describeDb`:
+It boots `defineRoundtable` over `ROUNDTABLE_TEST_DATABASE_URL`, with stand-ins for Discord and the runtime, or without Discord; gate the suite with `describeDb`:
 
 | Option | What it gives the host |
 |---|---|
@@ -2248,7 +2301,7 @@ It boots `defineRoundtable` over `ROUNDTABLE_TEST_DATABASE_URL`, with stand-ins 
 | `plugins` | Your plugins, placed after the built-in ones as `defineRoundtable` places them |
 | `runtime` | The runtime every turn runs on; by default one that answers `""` and builds no Pi session |
 | `apiKeys` | The credentials `context.apiKey(provider)` returns, by provider name; a provider not listed reads as having none, whatever login the machine holds |
-| `discord` | What the stand-in Discord hands out: `agentChannels(guildId)` and `ownerChannel()` |
+| `discord` | What the stand-in Discord hands out: `agentChannels(guildId)` and `ownerChannel()`; `false` boots a [host without Discord](#a-host-without-discord), with no `discord`, `http`, or `agents` in the test configuration |
 
 It returns:
 
@@ -2275,10 +2328,10 @@ The host's `run()` handles startup:
 
 1. Each plugin's `replaces` is applied: the plugin that provided a replaced service is dropped, and the replacement stands where it stood.
    Providers are then resolved: each slot from the plugin that fills it, or the core's default.
-   The agent server builds its runtime later, in its own setup: from the `runtime` slot when a plugin fills it, else the Pi runtime.
+   The runtime plugin builds the runtime later, in its own setup: from the `runtime` slot when a plugin fills it, else the Pi runtime.
 2. The database is opened and every plugin's migrations run, in plugin order.
 3. Every plugin's `setup` runs, in plugin order.
-   The order is the built-ins (`memory`, `schedule-store`, `discord`, `modules`, `discord-admin`, `skills`, `agent-server`, `seeds`; an addon that is switched off is not there), then yours in the order of `plugins` in `roundtable.config.ts`, then the built-in `schedules`, so a due schedule fires only once everything it can reach is running.
+   The order is the built-ins (`memory`, `schedule-store`, `prechecks`, `discord`, `modules`, `discord-admin`, `skills`, `runtime`, `agent-server`, `seeds`; an addon that is switched off is not there, and without Discord neither are `discord`, `discord-admin`, `skills`, `agent-server`, or `seeds`), then yours in the order of `plugins` in `roundtable.config.ts`, then the built-in `schedules`, so a due schedule fires only once everything it can reach is running.
 4. The contributions are linked: tool tiers, hold rules, the session plan, the channel router, and the events.
    From here `sessions()`, `conversations`, `surfaces`, `turns`, and `dashboard()` work.
 5. Every plugin's `preflight` runs, in plugin order.
@@ -2360,7 +2413,7 @@ These are the messages as the code writes them, with `<...>` where your names go
 | `no persona is registered for the conversation kind "<kind>". A plugin adds one with personas: [...], or its claim must start conversations of a kind that has one.` (a failed turn) | Contribute a persona of that kind, or run the turn with a kind that has one |
 | `no runtime provider is configured: the runtime plugin builds the Pi runtime when no plugin fills the runtime slot; read the running one from services.get(RUNTIME)` | Only a plugin that calls `providers.runtime` without `providers.filled.has("runtime")` sees it; read `services.get(RUNTIME)` instead |
 | `session tool <name> takes a core extension name. Rename it.` | Pick a name other than the core's |
-| `two plugins are named <name>.` (from `roundtable doctor`) | Rename yours; the built-in plugins are `memory`, `schedule-store`, `discord`, `modules`, `discord-admin`, `skills`, `agent-server`, `seeds`, and `schedules` |
+| `two plugins are named <name>.` (from `roundtable doctor`) | Rename yours; the built-in plugins are `memory`, `schedule-store`, `prechecks`, `discord`, `modules`, `discord-admin`, `skills`, `runtime`, `agent-server`, `seeds`, and `schedules` |
 | `migration <plugin>/<name> is declared twice` | A plugin declares two migrations with one name: rename one (the same name in two plugins is fine) |
 | `/<root> <name> is added twice`, `/<name> is registered twice` | Give each slash command and subcommand its own name |
 | `route <name> is registered twice`, `routes <a> and <b> overlap on listener <id>` | Give each route its own name and a path no other route can take |

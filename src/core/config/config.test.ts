@@ -2,13 +2,15 @@ import { describe, expect, test } from "bun:test";
 import { ConfigError } from "../domain/errors.ts";
 import { type RoundtableConfig, resolveConfig } from "./config.ts";
 
+const discord = {
+	token: "token",
+	guild: "900000000000000001",
+	entryChannel: "900000000000000002",
+};
+
 const minimal: RoundtableConfig = {
 	owner: { id: "100000000000000001", name: "Ada" },
-	discord: {
-		token: "token",
-		guild: "900000000000000001",
-		entryChannel: "900000000000000002",
-	},
+	discord,
 	database: { url: "postgres://localhost/roundtable" },
 	dataDir: "/data",
 	model: "anthropic/claude-sonnet-5-5",
@@ -34,7 +36,7 @@ describe("resolveConfig", () => {
 			name: "Ada",
 			pronouns: { subject: "they", object: "them", possessive: "their" },
 		});
-		expect(config.discord.rootCommand).toBe("roundtable");
+		expect(config.discord?.rootCommand).toBe("roundtable");
 		expect(config.agentDir).toBe("/data/pi");
 		expect(config.model).toEqual({
 			provider: "anthropic",
@@ -48,20 +50,20 @@ describe("resolveConfig", () => {
 		});
 		expect(config.locale).toBe("en");
 		expect(config.timeZone).toBe("UTC");
-		expect(config.http.port).toBe(3000);
+		expect(config.http?.port).toBe(3000);
 		expect(config.agents).toEqual([]);
 		expect(config.plugins).toEqual([]);
 	});
 
 	test("the root command follows the assistant's name unless one is given", () => {
 		expect(
-			resolveConfig({ ...minimal, name: "Robin Hood" }).discord.rootCommand,
+			resolveConfig({ ...minimal, name: "Robin Hood" }).discord?.rootCommand,
 		).toBe("robin-hood");
 		expect(
 			resolveConfig({
 				...minimal,
-				discord: { ...minimal.discord, rootCommand: "rh" },
-			}).discord.rootCommand,
+				discord: { ...discord, rootCommand: "rh" },
+			}).discord?.rootCommand,
 		).toBe("rh");
 	});
 
@@ -79,7 +81,7 @@ describe("resolveConfig", () => {
 			'config discrod: unknown key. Did you mean "discord"? The keys here are name, owner, discord,',
 		);
 		expect(
-			refused({ ...minimal, discord: { ...minimal.discord, tokn: "x" } }),
+			refused({ ...minimal, discord: { ...discord, tokn: "x" } }),
 		).toContain('config discord.tokn: unknown key. Did you mean "token"?');
 	});
 
@@ -144,7 +146,7 @@ describe("the addon switches", () => {
 	test("are on unless configured off", () => {
 		const config = resolveConfig(minimal);
 		expect(config.memory).toBe(true);
-		expect(config.discord.admin).toBe(true);
+		expect(config.discord?.admin).toBe(true);
 		expect(config.skills).toEqual({});
 	});
 
@@ -153,11 +155,11 @@ describe("the addon switches", () => {
 			...minimal,
 			memory: false,
 			skills: false,
-			discord: { ...minimal.discord, admin: false },
+			discord: { ...discord, admin: false },
 		});
 		expect(off.memory).toBe(false);
 		expect(off.skills).toBe(false);
-		expect(off.discord.admin).toBe(false);
+		expect(off.discord?.admin).toBe(false);
 		expect(
 			resolveConfig({ ...minimal, skills: { reposDir: "/repos" } }).skills,
 		).toEqual({ reposDir: "/repos" });
@@ -169,6 +171,81 @@ describe("the addon switches", () => {
 		);
 		expect(() => resolveConfig({ ...minimal, memory: "no" })).toThrow(
 			"config memory: expected true or false",
+		);
+	});
+});
+
+describe("a host without Discord", () => {
+	const { discord: _discord, http: _http, ...headless } = minimal;
+
+	test("resolves with no Discord, no listener, and the skills addon off", () => {
+		const config = resolveConfig(headless);
+		expect(config.discord).toBeUndefined();
+		expect(config.http).toBeUndefined();
+		expect(config.skills).toBe(false);
+		expect(config.slug).toBe("roundtable");
+		expect(config.scratchDir).toEndWith("roundtable-scratch");
+		expect(resolveConfig({ ...headless, name: "Robin Hood" }).slug).toBe(
+			"robin-hood",
+		);
+		expect(resolveConfig({ ...headless, http: { port: 8080 } }).http).toEqual({
+			port: 8080,
+		});
+	});
+
+	test("Discord's slug is its root command, so an existing host keeps its logger and scratch dir", () => {
+		const config = resolveConfig({
+			...minimal,
+			discord: { ...discord, rootCommand: "rh" },
+		});
+		expect(config.slug).toBe("rh");
+		expect(config.discord?.rootCommand).toBe("rh");
+		expect(config.http?.publicUrl).toBe("https://bot.example.com");
+	});
+
+	test("Discord still needs the public address its agents' avatars are served from", () => {
+		expect(refused({ ...minimal, http: undefined })).toContain(
+			"config http.publicUrl: required with discord",
+		);
+		expect(refused({ ...minimal, http: { port: 8080 } })).toContain(
+			"config http.publicUrl: required with discord",
+		);
+	});
+
+	test("what only the agent server serves is refused without Discord, naming the key", () => {
+		expect(
+			refused({
+				...headless,
+				agents: [
+					{ name: "a", displayName: "A", prompt: "p", avatarPrompt: "q" },
+				],
+			}),
+		).toContain("config agents: the agents live in Discord");
+		expect(refused({ ...headless, skills: {} })).toContain(
+			"config skills: the skills are the agents'",
+		);
+		expect(refused({ ...headless, ops: { agent: "infra" } })).toContain(
+			"config ops.agent: the agents live in Discord",
+		);
+		expect(resolveConfig({ ...headless, skills: false }).skills).toBe(false);
+		expect(resolveConfig({ ...headless, agents: [] }).agents).toEqual([]);
+	});
+
+	test("the ops reports go to an agent or to a conversation, one of them", () => {
+		expect(resolveConfig({ ...minimal, ops: { agent: "infra" } }).ops).toEqual({
+			agent: "infra",
+		});
+		expect(
+			resolveConfig({ ...headless, ops: { conversation: "web:ops" } }).ops,
+		).toEqual({ conversation: "web:ops" });
+		expect(
+			refused({ ...minimal, ops: { agent: "infra", conversation: "web:ops" } }),
+		).toContain("config ops: name an agent or a conversation, not both");
+		expect(refused({ ...minimal, ops: {} })).toContain(
+			"config ops: name an agent or a conversation",
+		);
+		expect(refused({ ...headless, ops: { conversation: "ops" } })).toContain(
+			'config ops.conversation: expected a conversation key such as "web:ops"',
 		);
 	});
 });

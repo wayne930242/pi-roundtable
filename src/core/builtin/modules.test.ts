@@ -3,6 +3,7 @@ import type {
 	ExtensionAPI,
 	ExtensionFactory,
 } from "@earendil-works/pi-coding-agent";
+import { ErrorReporter } from "../ops/error-reporter.ts";
 import { BACKGROUND_TURNS, DELEGATION } from "../services.ts";
 import {
 	type AgentTurnScope,
@@ -137,5 +138,74 @@ describe("modulesPlugin", () => {
 		expect(
 			Object.keys((await list(context()))?.parameters.properties ?? {}),
 		).not.toContain("agent");
+	});
+});
+
+describe("modulesPlugin without Discord", () => {
+	test("leaves notifying the owner out, since there are no owner's messages to send to", async () => {
+		const setup = await setUpModules({ discord: false });
+		expect(setup.contribution.sessionTools?.map((tool) => tool.name)).toEqual([
+			"schedules",
+			"delegate",
+		]);
+	});
+
+	test("a conversation on a chat surface still schedules and delegates in place, without a thread", async () => {
+		const setup = await setUpModules({ discord: false });
+		const [delegate] = await registered(
+			setup,
+			context(undefined, HOME),
+			"delegate",
+		);
+		const answer = await delegate?.execute("1", {
+			title: "t",
+			task: "look it up",
+		});
+		expect(answer?.isError).toBeFalsy();
+		await setup.services.get(DELEGATION).idle();
+		expect(setup.record.reportChannels).toEqual([HOME]);
+		expect(setup.record.threadOrigins).toEqual([]);
+	});
+
+	test("a conversation no chat surface carries is refused, not sent to the owner's messages", async () => {
+		const setup = await setUpModules({ discord: false });
+		const outside = context(undefined, OUTSIDE);
+		const [delegate] = await registered(setup, outside, "delegate");
+		const delegated = await delegate?.execute("1", {
+			title: "t",
+			task: "look it up",
+		});
+		expect(delegated?.isError).toBe(true);
+		expect(delegated?.content[0]?.text).toContain("no chat surface");
+		const list = (await registered(setup, outside, "schedules")).find(
+			(tool) => tool.name === "schedule_list",
+		);
+		const listed = await list?.execute("1", {});
+		expect(listed?.isError).toBe(true);
+		expect(listed?.content[0]?.text).toContain("no chat surface");
+		expect(setup.record.reportChannels).toEqual([]);
+	});
+});
+
+describe("the error reporter's conversation", () => {
+	test("a reporter that names a conversation reports there once the modules start", async () => {
+		const reporter = new ErrorReporter({
+			destination: { conversation: HOME },
+			app: "Roundtable",
+		});
+		reporter.record({ level: 50, msg: "it broke" });
+		const setup = await setUpModules({
+			discord: false,
+			errorReporter: reporter,
+		});
+		const service = setup.contribution.services?.find(
+			(candidate) => candidate.name === "error-reports",
+		);
+		expect(setup.record.posted).toEqual([]);
+		await service?.start?.();
+		await Bun.sleep(0);
+		expect(setup.record.posted.map((post) => post.channel)).toEqual([HOME]);
+		expect(setup.record.posted[0]?.text).toContain("it broke");
+		expect(setup.record.reportChannels).toEqual([HOME]);
 	});
 });

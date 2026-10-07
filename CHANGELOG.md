@@ -7,11 +7,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- A host without Discord: leave `discord` out of the configuration and the host runs no Discord plugin, no agent server, no agents, and no skills, while the runtime plugin still runs every turn of `context.turns` over the plugins' own surfaces. `http` becomes optional (`http.publicUrl` stays required with Discord), and without it no listener opens. `agents`, `skills`, and `ops.agent` without Discord are configuration errors; `notify_owner` is not registered; `schedule_*` and `delegate_task` work in a conversation a chat surface carries and refuse elsewhere. `roundtable doctor` skips the Discord checks, and `testHost({ discord: false })` boots such a host. See [a host without Discord](docs/plugins.md#a-host-without-discord) and `examples/headless.ts`.
+- `ops: { conversation: "<surface>:<id>" }` reports the process's own errors to a conversation instead of an agent.
 - `RUNTIME`, the runtime every conversation turn runs on, provided by the new built-in `runtime` plugin that every host registers just before the agent server. It is the `runtime` slot's runtime when a plugin fills the slot, and Pi's otherwise; `AGENTS.runtime` is the same instance, and `context.turns` now reads `RUNTIME`, so turns no longer need the agent server. `testPlugin` takes `servicePair(RUNTIME, runtime)`, given whole; `servicePair(AGENTS, { runtime })` keeps working.
 
 ### Changed
 
 - The Pi runtime and the held actions' table move from the agent server to the `runtime` plugin. The `held-actions` migration is recorded once more under `runtime/held-actions`; it creates the table only when it is missing, so an existing database is unchanged.
+- `RoundtableConfig.discord` and `RoundtableConfig.http` (and `http.publicUrl`) are optional in the type; code that reads them from a config object now checks for them.
 - `RuntimeDeps.agents` is optional and read when a turn runs: the runtime is built before the agent server sets up, and it is `undefined` on a host without the agent server.
 
 ## [0.7.19] - 2026-10-07

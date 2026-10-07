@@ -21,7 +21,7 @@ import { describeDb, testDatabaseUrl } from "./testing/database.ts";
 
 const dataDir = mkdtempSync(join(tmpdir(), "roundtable-host-"));
 
-const config: RoundtableConfig = {
+const config = {
 	owner: { id: "100000000000000001", name: "Ada" },
 	discord: {
 		token: "token",
@@ -43,7 +43,7 @@ const config: RoundtableConfig = {
 			avatarPrompt: "A calm librarian",
 		},
 	],
-};
+} satisfies RoundtableConfig;
 
 /** A Discord that connects to nothing, standing in for the built-in plugin that does. */
 function quietDiscord(): RoundtablePlugin {
