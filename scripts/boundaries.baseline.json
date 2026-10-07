@@ -1,0 +1,27 @@
+[
+	{
+		"rule": "discord-area",
+		"file": "src/core/agents/team-turn-types.ts",
+		"specifier": "../discord/dispatch-threads.ts"
+	},
+	{
+		"rule": "discord-area",
+		"file": "src/core/builtin/modules.ts",
+		"specifier": "../discord/schedule-commands.ts"
+	},
+	{
+		"rule": "discord-area",
+		"file": "src/core/modules/delegation/delegator.ts",
+		"specifier": "../../discord/dispatch-threads.ts"
+	},
+	{
+		"rule": "discord-area",
+		"file": "src/kit/support.ts",
+		"specifier": "../core/discord/dispatch-threads.ts"
+	},
+	{
+		"rule": "discord-area",
+		"file": "src/kit/threads.ts",
+		"specifier": "../core/discord/dispatch-threads.ts"
+	}
+]
