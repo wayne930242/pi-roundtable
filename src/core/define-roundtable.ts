@@ -14,6 +14,7 @@ import {
 	scheduleStorePlugin,
 } from "./builtin/stores.ts";
 import {
+	type Pronouns,
 	type ResolvedConfig,
 	type RoundtableConfig,
 	resolveConfig,
@@ -23,6 +24,10 @@ import { ConfigError } from "./domain/errors.ts";
 import { JudgeError } from "./errors.ts";
 import type { RoundtableOptions } from "./host.ts";
 import type { ListenerConfig } from "./http/listeners.ts";
+import {
+	type AccessRules,
+	rulesOfSpeakerMap,
+} from "./identity/access-policy.ts";
 import { identityPlugin } from "./identity/identity-plugin.ts";
 import { type JudgeModel, piJudgeModel } from "./judging/model-judge.ts";
 import { createLogger, type LogEntry, type Logger } from "./log.ts";
@@ -109,6 +114,29 @@ function publicListener(
 		id: "public",
 		port: http.port,
 		...(http.hostname ? { hostname: http.hostname } : {}),
+	};
+}
+
+/** The access rules of the 0.8 owner and speakers: the owner by id on Discord, the tiers by Discord user and role ids. */
+function legacyRules(config: ResolvedConfig): AccessRules {
+	const { owner, speakers } = config;
+	const map = rulesOfSpeakerMap({
+		owners: [owner.id],
+		...(speakers.admins ? { admins: speakers.admins } : {}),
+		...(speakers.members ? { members: speakers.members } : {}),
+	});
+	return {
+		...map,
+		owners: [
+			{
+				name: owner.name,
+				pronouns: owner.pronouns.subject as Pronouns,
+				principal: owner.id,
+				identities: [`discord:${owner.id}`],
+			},
+		],
+		provisioning: "admitted",
+		backgroundStaleDays: 30,
 	};
 }
 
@@ -261,7 +289,7 @@ export async function defineRoundtable(
 			...(overrides.aborted ? { aborted: overrides.aborted } : {}),
 		},
 		plugins: [
-			identityPlugin({ owners: [{ id: owner.id, name: owner.name }] }),
+			identityPlugin({ rules: legacyRules(config) }),
 			...(config.memory ? [memoryPlugin({ owner })] : []),
 			scheduleStorePlugin(),
 			precheckPlugin(),

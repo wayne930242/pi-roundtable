@@ -1,4 +1,8 @@
 import { freeze } from "./freeze.ts";
+import {
+	rulesOfSpeakerMap,
+	speakerPolicyOf,
+} from "./identity/access-policy.ts";
 import type { OwnerIdentity } from "./identity.ts";
 
 /** How much a speaker may do: `owner` above `admin` above `member`. */
@@ -12,9 +16,15 @@ export function tierAtLeast(tier: Tier, least: Tier): boolean {
 
 /** A person whose message starts a turn, and the tier the policy gave them. */
 export interface Speaker {
+	/** The id the surface knows them by: a Discord user id, a web chat's `oidc:<issuer>:<subject>`. */
 	id: string;
 	name: string;
 	tier: Tier;
+	/**
+	 * The principal they are, whose memory, schedules, and conversations are theirs on every
+	 * surface. For a person carried over from 0.8 it equals `id`. The identity service sets it.
+	 */
+	principalId?: string;
 }
 
 /**
@@ -59,7 +69,10 @@ export function attributed(speaker: Speaker, text: string): string {
 	return `(Message from ${speaker.name}, at the ${speaker.tier} tier.)\n\n${text}`;
 }
 
-/** What a surface reports about the author of a message; the policy decides the rest. */
+/**
+ * What a surface reports about the author of a message; the policy decides the rest. The 0.8
+ * form of `ActorFacts` from the identity service, with the surface's own ids and role ids.
+ */
 export interface SpeakerFacts {
 	id: string;
 	name: string;
@@ -92,23 +105,11 @@ export interface SpeakerMap {
 	members?: TierMembers;
 }
 
-/** The policy of an operator's map; the highest tier an author qualifies for wins. */
+/**
+ * The policy of an operator's map; the highest tier an author qualifies for wins. It evaluates
+ * the access rules the map means on one surface, so it decides as the identity service's rules
+ * do; its speakers carry no principal.
+ */
 export function speakerPolicy(map: SpeakerMap): SpeakerPolicy {
-	const holds = (tier: TierMembers | undefined, author: SpeakerFacts) =>
-		tier !== undefined &&
-		(tier.everyone === true ||
-			tier.users?.includes(author.id) === true ||
-			(author.roleIds ?? []).some((role) => tier.roles?.includes(role)));
-	const tierOf = (author: SpeakerFacts): Tier | undefined => {
-		if (map.owners.includes(author.id)) return "owner";
-		if (holds(map.admins, author)) return "admin";
-		if (holds(map.members, author)) return "member";
-		return undefined;
-	};
-	return {
-		resolve(author) {
-			const tier = tierOf(author);
-			return tier && { id: author.id, name: author.name, tier };
-		},
-	};
+	return speakerPolicyOf(rulesOfSpeakerMap(map));
 }

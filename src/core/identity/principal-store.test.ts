@@ -97,6 +97,9 @@ describeDb("PgPrincipalStore", () => {
 				(link) => `${link.provider}:${link.subject}`,
 			),
 		).toEqual(["discord:966666600000000031", "token:remote-mcp"]);
+		expect(
+			(await store.linksFrom("config")).map((link) => link.subject),
+		).toContain("remote-mcp");
 		expect(await store.unlink("discord", "966666600000000031")).toBe(true);
 		expect(await store.unlink("discord", "966666600000000031")).toBe(false);
 		await store.link(
@@ -131,8 +134,15 @@ describeDb("PgPrincipalStore", () => {
 		expect((await store.rolesOf(p.id)).map((grant) => grant.role)).toEqual([
 			"admin",
 		]);
+		expect(await store.holders("admin")).toContainEqual({
+			principalId: p.id,
+			source: "cli",
+		});
 		await store.revoke(p.id, "admin");
 		expect(await store.rolesOf(p.id)).toEqual([]);
+		expect(
+			(await store.holders("admin")).map((holder) => holder.principalId),
+		).not.toContain(p.id);
 	});
 
 	test("disable and enable switch a principal off and on; touch records when it was seen and at which tier", async () => {
@@ -146,6 +156,12 @@ describeDb("PgPrincipalStore", () => {
 		const seen = await store.get(p.id);
 		expect(seen?.lastTier).toBe("member");
 		expect(seen?.lastSeenAt).toBeInstanceOf(Date);
+		const at = new Date("2026-09-01T09:00:00Z");
+		await store.touch(p.id, "admin", at);
+		expect(await store.get(p.id)).toMatchObject({
+			lastTier: "admin",
+			lastSeenAt: at,
+		});
 	});
 
 	test("update changes the name and pronouns, and list returns every principal", async () => {

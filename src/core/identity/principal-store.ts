@@ -1,4 +1,5 @@
 import type { SQL } from "bun";
+import type { Pronouns } from "../config/config.ts";
 import { IdentityError } from "../domain/errors.ts";
 import type { Tier } from "../speakers.ts";
 import { newPrincipalId } from "./ulid.ts";
@@ -6,7 +7,7 @@ import { newPrincipalId } from "./ulid.ts";
 /** The principal the host's own turns run as: an ops report, a webhook's. It has no identity, cannot sign in, and keeps no memory. */
 export const SYSTEM_PRINCIPAL = "system";
 
-export type Pronouns = "he" | "she" | "they";
+export type { Pronouns };
 
 /** A person the host serves, whichever surface they reach it through. */
 export interface Principal {
@@ -51,6 +52,12 @@ export interface RoleGrant {
 	grantedAt: Date;
 }
 
+/** A principal holding a role, and where the role came from. */
+export interface RoleHolder {
+	principalId: string;
+	source: RoleSource;
+}
+
 export interface NewPrincipal {
 	/** The id to keep, for a principal carried over from 0.8; otherwise a new `p_` id is made. */
 	id?: string;
@@ -82,6 +89,8 @@ export interface PrincipalStore {
 		subject: string,
 	): Promise<IdentityLink | undefined>;
 	identitiesOf(principalId: string): Promise<IdentityLink[]>;
+	/** Every link made by `source`, such as the configuration's. */
+	linksFrom(source: LinkSource): Promise<IdentityLink[]>;
 	/** Grants a lasting role. A CLI grant is kept as the CLI's even when the configuration grants the same role. */
 	grant(principalId: string, role: Tier, source: RoleSource): Promise<void>;
 	/** Revokes the role, or only the grant from `source`; whether there was one to revoke. */
@@ -91,10 +100,12 @@ export interface PrincipalStore {
 		source?: RoleSource,
 	): Promise<boolean>;
 	rolesOf(principalId: string): Promise<RoleGrant[]>;
+	/** Every principal holding the role. */
+	holders(role: Tier): Promise<RoleHolder[]>;
 	disable(id: string): Promise<void>;
 	enable(id: string): Promise<void>;
-	/** Records that the principal was seen now, at this tier. */
-	touch(id: string, tier: Tier): Promise<void>;
+	/** Records that the principal was seen at `at` (default now), at this tier. */
+	touch(id: string, tier: Tier, at?: Date): Promise<void>;
 }
 
 interface PrincipalRow {
@@ -291,6 +302,13 @@ export class PgPrincipalStore implements PrincipalStore {
 		return rows.map(linkOf);
 	}
 
+	async linksFrom(source: LinkSource): Promise<IdentityLink[]> {
+		const rows: IdentityRow[] = await this.#sql`
+			SELECT * FROM principal_identities WHERE source = ${source}
+			ORDER BY provider, subject`;
+		return rows.map(linkOf);
+	}
+
 	async grant(
 		principalId: string,
 		role: Tier,
@@ -334,6 +352,17 @@ export class PgPrincipalStore implements PrincipalStore {
 		}));
 	}
 
+	async holders(role: Tier): Promise<RoleHolder[]> {
+		const rows: { principal_id: string; source: RoleSource }[] = await this
+			.#sql`
+			SELECT principal_id, source FROM principal_roles WHERE role = ${role}
+			ORDER BY principal_id`;
+		return rows.map((row) => ({
+			principalId: row.principal_id,
+			source: row.source,
+		}));
+	}
+
 	async disable(id: string): Promise<void> {
 		await this.#sql`
 			UPDATE principals SET disabled_at = COALESCE(disabled_at, now()) WHERE id = ${id}`;
@@ -343,8 +372,8 @@ export class PgPrincipalStore implements PrincipalStore {
 		await this.#sql`UPDATE principals SET disabled_at = NULL WHERE id = ${id}`;
 	}
 
-	async touch(id: string, tier: Tier): Promise<void> {
+	async touch(id: string, tier: Tier, at = new Date()): Promise<void> {
 		await this.#sql`
-			UPDATE principals SET last_seen_at = now(), last_tier = ${tier} WHERE id = ${id}`;
+			UPDATE principals SET last_seen_at = ${at}, last_tier = ${tier} WHERE id = ${id}`;
 	}
 }

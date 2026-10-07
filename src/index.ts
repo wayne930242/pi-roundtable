@@ -93,6 +93,7 @@ export {
 	AgentRunError,
 	ConfigError,
 	DelegationError,
+	IdentityError,
 	MemoryError,
 	ScheduleError,
 } from "./core/domain/errors.ts";
@@ -133,6 +134,26 @@ export type {
 	WebSocketSendResult,
 } from "./core/http/websocket.ts";
 export type { Locale } from "./core/i18n/index.ts";
+export type {
+	AccessOwner,
+	AccessRules,
+	AccessTier,
+} from "./core/identity/access-policy.ts";
+export type { ActorFacts } from "./core/identity/actor-facts.ts";
+export type { IdentityService } from "./core/identity/identity-service.ts";
+export type {
+	IdentityLink,
+	IdentityRef,
+	LinkSource,
+	NewPrincipal,
+	Principal,
+	PrincipalRecord,
+	PrincipalStore,
+	RoleGrant,
+	RoleHolder,
+	RoleSource,
+} from "./core/identity/principal-store.ts";
+export { SYSTEM_PRINCIPAL } from "./core/identity/principal-store.ts";
 export type { JudgeModel } from "./core/judging/model-judge.ts";
 export type { LogEntry, LogFn, Logger } from "./core/log.ts";
 export type { ThinkingLevel, ThinkingSetting } from "./core/models.ts";
@@ -223,6 +244,7 @@ export {
 	BACKGROUND_TURNS,
 	CONVERSATIONS,
 	DELEGATION,
+	IDENTITY,
 	MEMORY,
 	PRECHECKS,
 	RUNTIME,

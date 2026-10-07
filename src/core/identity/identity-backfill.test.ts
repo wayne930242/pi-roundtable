@@ -17,6 +17,7 @@ import {
 import { recordingLogger } from "../testing/recording-logger.ts";
 import { identityPlugin } from "./identity-plugin.ts";
 import { backfillPrincipals } from "./identity-schema.ts";
+import type { IdentityService } from "./identity-service.ts";
 
 /** The people of the 0.8.0 fixture (scripts/fixture-db.ts). */
 const OWNER = "966666600000000001";
@@ -163,7 +164,15 @@ describeDb("the principal backfill", () => {
 describeDb("the identity plugin", () => {
 	test("logs the boot's backfill in one line at setup, and provides the principals as IDENTITY", async () => {
 		db = await scratchDatabase("0.8.0");
-		const plugin = identityPlugin({ owners: [{ id: OWNER, name: "Ada" }] });
+		const plugin = identityPlugin({
+			rules: {
+				owners: [
+					{ name: "Ada", principal: OWNER, identities: [`discord:${OWNER}`] },
+				],
+				provisioning: "admitted",
+				backgroundStaleDays: 30,
+			},
+		});
 		await runMigrations(db.sql, [plugin]);
 		const { logger, lines } = recordingLogger();
 		const provided = new Map<string, unknown>();
@@ -184,13 +193,12 @@ describeDb("the identity plugin", () => {
 					"principal backfill: 5 created; ids found: config 1, owner_memory 3, schedules 3, conversations 1, held_actions 1",
 			},
 		]);
-		const identity = provided.get(IDENTITY.id) as {
-			principals: { get(id: string): Promise<unknown> };
-		};
-		expect(await identity.principals.get(OWNER)).toMatchObject({
+		const identity = provided.get(IDENTITY.id) as IdentityService;
+		expect(await identity.principal(OWNER)).toMatchObject({
 			id: OWNER,
 			displayName: "Ada",
 		});
+		expect((await identity.owners()).map((owner) => owner.id)).toEqual([OWNER]);
 	});
 });
 
