@@ -22,12 +22,17 @@ export interface BackfillSummary {
 	sources: Record<BackfillSource, number>;
 }
 
-/** The column each table keeps a person's id in, and the column naming them, where there is one. */
+/**
+ * The column each table keeps a person's id in, and the column naming them, where there is one.
+ * `principal` is a column a newer build fills with the principal beside an actor id: a row with
+ * it filled is not 0.8's, so its id makes no principal.
+ */
 const TABLES: readonly {
 	table: Exclude<BackfillSource, "config">;
 	column: string;
 	name?: string;
 	order?: string;
+	principal?: string;
 }[] = [
 	{ table: "owner_memory", column: "speaker_id" },
 	{
@@ -37,7 +42,7 @@ const TABLES: readonly {
 		order: "created_at DESC",
 	},
 	{ table: "conversations", column: "principal_id" },
-	{ table: "held_actions", column: "speaker_id" },
+	{ table: "held_actions", column: "speaker_id", principal: "principal_id" },
 ];
 
 async function hasColumn(
@@ -60,9 +65,13 @@ async function idsIn(
 	// The identifiers are this module's constants, never input.
 	const name = source.name ?? "NULL::text";
 	const order = source.order ? `, ${source.order}` : "";
+	const legacy =
+		source.principal && (await hasColumn(sql, source.table, source.principal))
+			? ` AND ${source.principal} IS NULL`
+			: "";
 	return (await sql.unsafe(
 		`SELECT DISTINCT ON (${source.column}) ${source.column} AS id, ${name} AS name
-		FROM ${source.table} WHERE ${source.column} IS NOT NULL AND ${source.column} <> ''
+		FROM ${source.table} WHERE ${source.column} IS NOT NULL AND ${source.column} <> ''${legacy}
 		ORDER BY ${source.column}${order}`,
 	)) as { id: string; name: string | null }[];
 }
@@ -70,7 +79,8 @@ async function idsIn(
 /**
  * Makes a principal of the same id for every person 0.8 stored: the configured owners, and each
  * id in `owner_memory`, `schedules`, `conversations`, and `held_actions`, skipping a table or a
- * column the database does not have yet. Each is claimable once, by the person of that id at
+ * column the database does not have yet, and a held action that names its principal in
+ * `principal_id`, whose `speaker_id` is an actor id this version stored. Each is claimable once, by the person of that id at
  * their first contact (IdentityService.resolve). It only inserts, so it changes no row, and a second run
  * makes nothing; an id an older build wrote since gets its principal at the next run. The owners
  * are named as configured, a schedule's author as the schedule names them, anyone else by their

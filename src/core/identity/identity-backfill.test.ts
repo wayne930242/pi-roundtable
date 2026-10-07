@@ -114,6 +114,26 @@ describeDb("the principal backfill", () => {
 		);
 	});
 
+	test("a held action that names its principal is not a 0.8 speaker: its actor id makes no principal", async () => {
+		db = await scratchDatabase("0.8.0");
+		const plugins = await hostPlugins(db.url);
+		await runMigrations(db.sql, plugins);
+		// As this version stores one: the actor id beside the principal it resolved to.
+		await db.sql`ALTER TABLE held_actions ADD COLUMN IF NOT EXISTS principal_id text`;
+		const calls = JSON.stringify([]);
+		await db.sql`
+			INSERT INTO held_actions (channel_key, selection_id, held_at, calls, speaker_id, speaker_held_at, principal_id)
+			VALUES ('discord:966666600000000014', 'agent', now(), ${calls}, '966666600000000009', now(), 'p_01K0000000000000000000000A')`;
+		// As 0.8 writes one after a downgrade: no principal named.
+		await db.sql`
+			INSERT INTO held_actions (channel_key, selection_id, held_at, calls, speaker_id, speaker_held_at)
+			VALUES ('discord:966666600000000015', 'agent', now(), ${calls}, '966666600000000008', now())`;
+		await runMigrations(db.sql, plugins);
+		const ids = (await principals(db.sql)).map((row) => row.id);
+		expect(ids).toContain("966666600000000008");
+		expect(ids).not.toContain("966666600000000009");
+	});
+
 	test("an empty database boots, with the configured owner as the only principal", async () => {
 		db = await scratchDatabase();
 		await runMigrations(db.sql, await hostPlugins(db.url));
