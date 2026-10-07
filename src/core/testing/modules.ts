@@ -40,6 +40,8 @@ export async function setUpModules(
 		agentChannelOf?: (name: string) => ChannelKey;
 		/** Whether Discord is there; default true. A host without it has no owner's messages. */
 		discord?: boolean;
+		/** Whether a plugin contributes the owner's background target, as the agent server does; default true. */
+		ownerTarget?: boolean;
 		errorReporter?: ModulesOptions["errorReporter"];
 	} = {},
 ): Promise<{
@@ -75,8 +77,8 @@ export async function setUpModules(
 	// SAFETY: the tools under test read no store; each stub is asked for nothing else.
 	services.preset(MEMORY, {} as MemoryStore);
 	services.preset(SCHEDULES, {} as ScheduleStore);
-	// SAFETY: the schedule tools ask the agent team for a channel and nothing else.
 	if (options.agentChannelOf)
+		// SAFETY: the schedule tools ask the agent team for a channel and nothing else.
 		services.preset(AGENTS, {
 			team: { channelOf: options.agentChannelOf },
 		} as unknown as AgentServer);
@@ -104,7 +106,9 @@ export async function setUpModules(
 		logger: silentLogger(),
 		conversations: {
 			target: (name: string) =>
-				name === OWNER_TARGET.name ? OWNER_TARGET : undefined,
+				options.ownerTarget !== false && name === OWNER_TARGET.name
+					? OWNER_TARGET
+					: undefined,
 			background: async (turn: { channel: ChannelKey }) => {
 				record.reportChannels.push(turn.channel);
 				return { status: "ran" };

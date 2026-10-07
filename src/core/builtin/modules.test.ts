@@ -185,6 +185,19 @@ describe("modulesPlugin without Discord", () => {
 		expect(listed?.content[0]?.text).toContain("no chat surface");
 		expect(setup.record.reportChannels).toEqual([]);
 	});
+
+	test("without the owner's background target no session gets the schedule or delegation tools, since their runs could never start", async () => {
+		const setup = await setUpModules({ discord: false, ownerTarget: false });
+		const factoryOf = (name: string, session: SessionContext) =>
+			setup.contribution.sessionTools
+				?.find((tool) => tool.name === name)
+				?.snapshot()
+				.factory(session);
+		for (const session of [context(undefined, HOME), context(scout)]) {
+			expect(factoryOf("schedules", session)).toBeNull();
+			expect(factoryOf("delegate", session)).toBeNull();
+		}
+	});
 });
 
 describe("the error reporter's conversation", () => {

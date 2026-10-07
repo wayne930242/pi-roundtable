@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
+import { OWNER_TARGET } from "../agents/agent-claim.ts";
 import type { SurfacePort } from "../contract/surface.ts";
 import { scheduleCommands } from "../discord/schedule-commands.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
@@ -75,7 +76,8 @@ const MODULE_TIERS: Readonly<Record<string, Tier>> = {
  * The owner's modules: notifications, schedules, and delegated tasks, each a session tool, and
  * the turns nobody wrote. The delegator's running jobs join the shutdown drain. Without Discord
  * there are no owner's messages: no `notify_owner`, and a conversation no chat surface carries
- * can neither schedule nor delegate.
+ * can neither schedule nor delegate. Without the owner's background target no session gets the
+ * schedule or delegation tools.
  */
 export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 	const { owner } = options;
@@ -154,6 +156,11 @@ export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 			// An agent session serves every speaker, so its tools name none.
 			const served = (session: SessionContext) =>
 				session.agent ? THE_SPEAKER : owner;
+			// Schedules and delegated reports run as the owner's background turns; without a plugin
+			// contributing that target, as on a host without the agent server, none could ever start,
+			// so no session gets the tools. Read when a session is made, after every plugin set up.
+			const ownerTurns = () =>
+				conversations.target(OWNER_TARGET.name) !== undefined;
 			// A reporter for an ops agent is the agent server's to connect.
 			const reporter =
 				options.errorReporter &&
@@ -194,32 +201,36 @@ export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 						? [fixed("notify", () => notifyExtension(connection, owner))]
 						: []),
 					fixed("schedules", (session) =>
-						schedulesExtension(
-							{
-								store: schedules,
-								owner: { id: owner.id, name: owner.name },
-								channelFor: scheduleChannelFor,
-								...(prechecks ? { prechecks } : {}),
-								holds: () => sessions().holds,
-							},
-							session.homeChannel,
-							served(session),
-							session.agent ? agentChannelOf : undefined,
-							session.speaker,
-						),
+						ownerTurns()
+							? schedulesExtension(
+									{
+										store: schedules,
+										owner: { id: owner.id, name: owner.name },
+										channelFor: scheduleChannelFor,
+										...(prechecks ? { prechecks } : {}),
+										holds: () => sessions().holds,
+									},
+									session.homeChannel,
+									served(session),
+									session.agent ? agentChannelOf : undefined,
+									session.speaker,
+								)
+							: null,
 					),
 					fixed("delegate", (session) =>
-						delegateExtension(
-							{
-								delegator,
-								owner: { id: owner.id, name: owner.name },
-								channelFor: delegateChannelFor,
-							},
-							session.homeChannel,
-							served(session),
-							session.turnChannel,
-							session.speaker,
-						),
+						ownerTurns()
+							? delegateExtension(
+									{
+										delegator,
+										owner: { id: owner.id, name: owner.name },
+										channelFor: delegateChannelFor,
+									},
+									session.homeChannel,
+									served(session),
+									session.turnChannel,
+									session.speaker,
+								)
+							: null,
 					),
 				],
 				toolTiers: MODULE_TIERS,

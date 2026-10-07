@@ -119,7 +119,7 @@ Every claim that runs turns through `context.turns` still works, over the chat s
 - `agents`, `skills` (anything but `false`), and `ops.agent` are configuration errors; report errors to a conversation with `ops: { conversation: "<surface>:<id>" }`.
 - `http` is optional; without it no listener opens.
 - `notify_owner` is not registered.
-- `schedule_*` and `delegate_task` work only in a conversation a chat surface carries; the web chat takes no background turns yet, so leave them out of a web persona's `selection`.
+- `schedule_*` and `delegate_task` are not registered, since their runs are turns of the `owner` background target, which the agent server contributes; a plugin that contributes it brings them back. The web chat takes no background turns yet, so leave them out of a web persona's `selection` on a host that keeps Discord.
 - `roundtable doctor` skips the Discord checks.
 
 See [a host without Discord](plugins.md#a-host-without-discord) and [the web chat](plugins.md#web-chat-pi-roundtable-webchat) in the plugin guide, and the README's [threat model](../README.md#threat-model) before you let several people in.

@@ -2149,8 +2149,8 @@ What needs Discord is refused or left out rather than failing later:
 
 - `agents`, `skills` (anything but `false`), and `ops.agent` are configuration errors; report errors to a conversation with `ops: { conversation: "<surface>:<id>" }`.
 - `notify_owner` is not registered, since there are no owner's messages to send to.
-- `schedule_*` and `delegate_task` work in a conversation a chat surface carries, posting their runs there; elsewhere they refuse.
-  Their background turns, and an `ops.conversation` report's, go to the [background target](#backgroundtargets-whose-turn-a-schedule-or-delegated-task-is) named `owner`, which the agent server contributes; without it they are skipped until a plugin contributes that target.
+- `schedule_*` and `delegate_task` are not registered: their runs are turns of the [background target](#backgroundtargets-whose-turn-a-schedule-or-delegated-task-is) named `owner`, which the agent server contributes, so without it none could start.
+  A plugin that contributes `owner`, and a claim that takes its background turns, bring them back; they then work in a conversation a chat surface carries, posting their runs there, and refuse elsewhere.
 - `roundtable doctor` skips the Discord checks.
 
 Pi's runtime still needs the `compact_session` tool in every session, from the Pi package pi-self-compact: load it from a plugin with `piPackages: ["pi-self-compact"]`, as the `plugins/self-compact.ts` of a project `roundtable init` creates does, or the preflight stops the start and says so.

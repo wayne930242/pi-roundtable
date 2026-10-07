@@ -77,14 +77,23 @@ function recordingSurface(replies: string[]): RoundtablePlugin {
 		});
 	});
 
-	test("its sessions have no Discord tools, no shell, and no tool that messages the owner on Discord", async () => {
+	test("its sessions have no Discord tools, no shell, no schedule or delegation tools, and no tool that messages the owner on Discord", async () => {
 		const host = await testHost({ discord: false });
 		hosts.push(host);
 		const tools = (await host.sessionTools()).flatMap((entry) => entry.tools);
-		expect(tools).toContain("schedule_create");
 		expect(tools).toContain("memory_add");
 		expect(tools.filter((tool) => tool.startsWith("discord_"))).toEqual([]);
-		for (const absent of ["notify_owner", "bash", "read", "edit", "write"])
+		// No plugin contributes the owner's background target, so no schedule or delegated run could start.
+		for (const absent of [
+			"schedule_create",
+			"schedule_list",
+			"delegate_task",
+			"notify_owner",
+			"bash",
+			"read",
+			"edit",
+			"write",
+		])
 			expect(tools).not.toContain(absent);
 	});
 
