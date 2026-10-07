@@ -375,6 +375,12 @@ describe("ChannelRouter", () => {
 		expect(routing.postsInPlace("discord:dm")).toBe(false);
 	});
 
+	test("says whether a claim owns a channel", () => {
+		const routing = router([claim("room", 0, [], { channels: ["test:room"] })]);
+		expect(routing.owns("test:room")).toBe(true);
+		expect(routing.owns("test:hall")).toBe(false);
+	});
+
 	test("a turn that throws is logged and the next still runs", async () => {
 		const log: string[] = [];
 		const routing = router([

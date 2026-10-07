@@ -254,6 +254,7 @@ A request from a browser origin not in `origins` gets 403; an allowed origin get
 
 - Attachments: messages carry text only.
 - Schedules and delegated reports: the claim takes no background turns, so a schedule or a report aimed at a web conversation is skipped. Leave the `schedule_*` and `delegate_task` tools out of a web persona's `selection`.
+- Error reports: `ops: { conversation: "web:<id>" }` reaches no one, since the surface posts only to a conversation a signed-in person opened and the claim takes no background turns. Report errors to another surface's conversation, or to an agent with Discord.
 - Agent teams: the web chat has no agent rooms.
 - A person signed in on two providers, or on Discord and the web, has two speaker ids, and so two memories, until principals arrive in pi-roundtable 0.9.
 

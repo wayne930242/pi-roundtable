@@ -196,6 +196,7 @@ export class Roundtable {
 			deleteConversation: (channel) => router().deleteConversation(channel),
 			stop: (channel) => router().stop(channel),
 			postsInPlace: (channel) => router().postsInPlace(channel),
+			owns: (channel) => router().owns(channel),
 		};
 	}
 

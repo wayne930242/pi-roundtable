@@ -221,4 +221,46 @@ describe("the error reporter's conversation", () => {
 		expect(setup.record.posted[0]?.text).toContain("it broke");
 		expect(setup.record.reportChannels).toEqual([HOME]);
 	});
+
+	test("the preflight passes when a chat surface and a claim serve the reporter's conversation", async () => {
+		const reporter = new ErrorReporter({
+			destination: { conversation: HOME },
+			app: "Roundtable",
+		});
+		const { plugin } = await setUpModules({
+			discord: false,
+			errorReporter: reporter,
+		});
+		await plugin.preflight?.();
+	});
+
+	test("the preflight refuses a reporter's conversation no chat surface serves, naming ops.conversation", async () => {
+		const reporter = new ErrorReporter({
+			destination: { conversation: OUTSIDE },
+			app: "Roundtable",
+		});
+		const { plugin } = await setUpModules({
+			discord: false,
+			errorReporter: reporter,
+			owns: () => true,
+		});
+		expect(async () => plugin.preflight?.()).toThrow(
+			'config ops.conversation: no chat surface serves "other:table-1"',
+		);
+	});
+
+	test("the preflight refuses a reporter's conversation no claim owns", async () => {
+		const reporter = new ErrorReporter({
+			destination: { conversation: HOME },
+			app: "Roundtable",
+		});
+		const { plugin } = await setUpModules({
+			discord: false,
+			errorReporter: reporter,
+			owns: () => false,
+		});
+		expect(async () => plugin.preflight?.()).toThrow(
+			'config ops.conversation: no plugin\'s conversations own "discord:scout"',
+		);
+	});
 });

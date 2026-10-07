@@ -168,4 +168,8 @@ export class ChannelRouter implements ConversationPort {
 	postsInPlace(channel: ChannelKey): boolean {
 		return this.#owner(channel)?.postsInPlace === true;
 	}
+
+	owns(channel: ChannelKey): boolean {
+		return this.#owner(channel) !== undefined;
+	}
 }

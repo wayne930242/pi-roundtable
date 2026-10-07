@@ -178,6 +178,8 @@ export interface ConversationPort {
 	stop(channel: ChannelKey): boolean;
 	/** Whether reports of work started in the channel stay in it, by its owner's policy. */
 	postsInPlace(channel: ChannelKey): boolean;
+	/** Whether a claim owns the channel, so its messages and background turns reach a conversation. */
+	owns(channel: ChannelKey): boolean;
 }
 
 /** The host's channel queue, as plugins use it. */

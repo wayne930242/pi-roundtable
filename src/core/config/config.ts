@@ -157,8 +157,9 @@ export interface RoundtableConfig {
 	memory?: boolean;
 	/**
 	 * Where the process's own errors are reported: to an agent, by name, in its channel (needs
-	 * `discord`), or to a conversation, by its key such as `"web:ops"`, as a visible message and a
-	 * report turn its claim answers.
+	 * `discord`), or to a conversation, by its key `<surface>:<id>`, as a visible message and a
+	 * report turn its claim answers. The host does not start when no chat surface serves the
+	 * conversation or no plugin's claim owns it; the web chat takes no error reports.
 	 */
 	ops?: { agent: string } | { conversation: string };
 	/**
@@ -335,17 +336,17 @@ function opsOf(
 	if (agent !== undefined) {
 		if (!withDiscord)
 			throw new ConfigError(
-				'config ops.agent: the agents live in Discord, which is not configured. Report to a conversation instead, such as ops: { conversation: "web:ops" }.',
+				'config ops.agent: the agents live in Discord, which is not configured. Report to a conversation a plugin\'s chat surface serves instead, with ops: { conversation: "<surface>:<id>" }; the web chat takes no error reports.',
 			);
 		return { agent };
 	}
 	if (conversation === undefined)
 		throw new ConfigError(
-			'config ops: name an agent or a conversation, such as ops: { agent: "infra" } or ops: { conversation: "web:ops" }.',
+			'config ops: name an agent or a conversation, such as ops: { agent: "infra" } or ops: { conversation: "<surface>:<id>" }.',
 		);
 	if (!/^[^:]+:.+$/.test(conversation))
 		throw new ConfigError(
-			`config ops.conversation: expected a conversation key such as "web:ops", got ${JSON.stringify(conversation)}. Write <surface>:<id>.`,
+			`config ops.conversation: expected a conversation key <surface>:<id>, got ${JSON.stringify(conversation)}. Write the surface's prefix, a colon, and the conversation's id.`,
 		);
 	return { conversation: conversation as ChannelKey };
 }

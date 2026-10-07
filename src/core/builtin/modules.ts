@@ -4,7 +4,11 @@ import { OWNER_TARGET } from "../agents/agent-claim.ts";
 import type { SurfacePort } from "../contract/surface.ts";
 import { scheduleCommands } from "../discord/schedule-commands.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
-import { DelegationError, ScheduleError } from "../domain/errors.ts";
+import {
+	ConfigError,
+	DelegationError,
+	ScheduleError,
+} from "../domain/errors.ts";
 import { messages } from "../i18n/index.ts";
 import type { OwnerIdentity } from "../identity.ts";
 import type { ModelRef, ThinkingLevel } from "../models.ts";
@@ -94,9 +98,12 @@ export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 			"this conversation has no chat surface to post a run in, and the host has no owner's messages to post it in instead",
 		);
 	};
+	// Set up once the modules set up; the preflight reads it after every plugin linked.
+	let reportsReach: (() => void) | undefined;
 	return {
 		name: "modules",
 		provides: [BACKGROUND_TURNS, DELEGATION],
+		preflight: () => reportsReach?.(),
 		setup: ({
 			conversations,
 			services,
@@ -167,6 +174,20 @@ export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 				"conversation" in options.errorReporter.destination
 					? options.errorReporter
 					: undefined;
+			if (reporter && "conversation" in reporter.destination) {
+				const channel = reporter.destination.conversation;
+				// A report that no surface can post, or that no conversation owns, would only be logged.
+				reportsReach = () => {
+					if (!surfaces.of(channel))
+						throw new ConfigError(
+							`config ops.conversation: no chat surface serves ${JSON.stringify(channel)}, so its error reports could never be posted. Name a conversation of a surface a plugin brings, or leave ops out.`,
+						);
+					if (!conversations.owns(channel))
+						throw new ConfigError(
+							`config ops.conversation: no plugin's conversations own ${JSON.stringify(channel)}, so nothing answers its error reports. Name a conversation a plugin's claim owns, or leave ops out.`,
+						);
+				};
+			}
 			return {
 				services: [
 					{ name: "delegator", busy: () => delegator.runningChannels() },

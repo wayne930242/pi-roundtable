@@ -42,9 +42,12 @@ export async function setUpModules(
 		discord?: boolean;
 		/** Whether a plugin contributes the owner's background target, as the agent server does; default true. */
 		ownerTarget?: boolean;
+		/** Whether a claim owns a channel; by default the Discord channels are owned and no other. */
+		owns?: (channel: ChannelKey) => boolean;
 		errorReporter?: ModulesOptions["errorReporter"];
 	} = {},
 ): Promise<{
+	plugin: RoundtablePlugin;
 	contribution: Contribution;
 	record: ModuleRecord;
 	services: ServiceRegistry;
@@ -101,7 +104,7 @@ export async function setUpModules(
 			guard: {},
 			commands: { add: () => undefined },
 		} as unknown as DiscordServices);
-	// SAFETY: setup reads only the logger, the conversations' background and targets, the surfaces, and the services.
+	// SAFETY: setup and the preflight read only the logger, the conversations' background, targets and owners, the surfaces, and the services.
 	const context = {
 		logger: silentLogger(),
 		conversations: {
@@ -109,6 +112,9 @@ export async function setUpModules(
 				options.ownerTarget !== false && name === OWNER_TARGET.name
 					? OWNER_TARGET
 					: undefined,
+			owns:
+				options.owns ??
+				((channel: ChannelKey) => channel.startsWith("discord:")),
 			background: async (turn: { channel: ChannelKey }) => {
 				record.reportChannels.push(turn.channel);
 				return { status: "ran" };
@@ -127,7 +133,7 @@ export async function setUpModules(
 	const contribution = await services.setUp(plugin, () =>
 		plugin.setup(pluginContext(plugin, context, services.forPlugin(plugin))),
 	);
-	return { contribution, record, services };
+	return { plugin, contribution, record, services };
 }
 
 /** What each addon plugin contributes, set up over stand-ins as far as setup reads them. */

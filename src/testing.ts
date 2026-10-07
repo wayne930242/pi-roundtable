@@ -341,6 +341,7 @@ export async function testPlugin(
 		stop: (channel) => (router ?? unlinked("conversations")).stop(channel),
 		postsInPlace: (channel) =>
 			(router ?? unlinked("conversations")).postsInPlace(channel),
+		owns: (channel) => (router ?? unlinked("conversations")).owns(channel),
 		...options.conversations,
 	};
 	const surfaces = surfacePort(() =>

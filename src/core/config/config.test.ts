@@ -236,16 +236,19 @@ describe("a host without Discord", () => {
 			agent: "infra",
 		});
 		expect(
-			resolveConfig({ ...headless, ops: { conversation: "web:ops" } }).ops,
-		).toEqual({ conversation: "web:ops" });
+			resolveConfig({ ...headless, ops: { conversation: "room:ops" } }).ops,
+		).toEqual({ conversation: "room:ops" });
 		expect(
-			refused({ ...minimal, ops: { agent: "infra", conversation: "web:ops" } }),
+			refused({
+				...minimal,
+				ops: { agent: "infra", conversation: "room:ops" },
+			}),
 		).toContain("config ops: name an agent or a conversation, not both");
 		expect(refused({ ...minimal, ops: {} })).toContain(
 			"config ops: name an agent or a conversation",
 		);
 		expect(refused({ ...headless, ops: { conversation: "ops" } })).toContain(
-			'config ops.conversation: expected a conversation key such as "web:ops"',
+			"config ops.conversation: expected a conversation key <surface>:<id>",
 		);
 	});
 });
