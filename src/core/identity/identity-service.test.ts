@@ -2,6 +2,7 @@ import { afterAll, beforeAll, beforeEach, expect, test } from "bun:test";
 import { runMigrations } from "../db/migrations.ts";
 import { ConfigError, IdentityError } from "../domain/errors.ts";
 import { silentLogger } from "../log.ts";
+import type { Speaker } from "../speakers.ts";
 import { describeDb } from "../testing/database.ts";
 import {
 	type ScratchDatabase,
@@ -10,8 +11,18 @@ import {
 import type { AccessRules } from "./access-policy.ts";
 import type { ActorFacts } from "./actor-facts.ts";
 import { identityMigrations } from "./identity-schema.ts";
-import { PgIdentityService, systemSpeaker } from "./identity-service.ts";
-import { PgPrincipalStore, SYSTEM_PRINCIPAL } from "./principal-store.ts";
+import {
+	identityView,
+	PgIdentityService,
+	systemSpeaker,
+} from "./identity-service.ts";
+import {
+	type IdentityLink,
+	PgPrincipalStore,
+	type Principal,
+	type RoleGrant,
+	SYSTEM_PRINCIPAL,
+} from "./principal-store.ts";
 
 const ADA = "966666600000000001";
 const KAI = "966666600000000003";
@@ -394,6 +405,46 @@ describeDb("the identity service", () => {
 		expect((await identity.roles(KAI)).map((grant) => grant.role)).toEqual([
 			"admin",
 		]);
+	});
+
+	test("what the view returns is a frozen copy: changing it changes no one's tier", async () => {
+		const core = await service();
+		const identity = identityView(core);
+		await carriedOver(KAI, "Kai");
+		await identity.resolve(discordFacts(KAI, "Kai"));
+		await core.store.grant(KAI, "member", "cli");
+		const roles = (await identity.roles(KAI)) as RoleGrant[];
+		expect(() =>
+			roles.push({ ...(roles[0] as RoleGrant), role: "owner" }),
+		).toThrow(TypeError);
+		expect(() => {
+			(roles[0] as RoleGrant).role = "owner";
+		}).toThrow(TypeError);
+		const links = (await identity.identities(KAI)) as IdentityLink[];
+		expect(() => {
+			(links[0] as IdentityLink).principalId = ADA;
+		}).toThrow(TypeError);
+		const kai = (await identity.principal(KAI)) as Principal;
+		expect(() => {
+			kai.disabled = true;
+		}).toThrow(TypeError);
+		for (const list of [await identity.list(), await identity.owners()])
+			expect(Object.isFrozen(list) && list.every(Object.isFrozen)).toBe(true);
+		const speaker = (await identity.resolve(
+			discordFacts(KAI, "Kai"),
+		)) as Speaker;
+		expect(() => {
+			speaker.tier = "owner";
+		}).toThrow(TypeError);
+		// The service's own reads still see what the store holds.
+		expect(await identity.tierOf(KAI)).toBe("member");
+		expect((await core.roles(KAI)).map((grant) => grant.role)).toEqual([
+			"member",
+		]);
+		expect((await identity.speakerFor(KAI, "owner")).tier).toBe("member");
+		expect((await identity.resolve(discordFacts(KAI, "Kai")))?.tier).toBe(
+			"member",
+		);
 	});
 
 	test("a disabled principal resolves to no one, has no tier, and no turn can be started for them", async () => {
