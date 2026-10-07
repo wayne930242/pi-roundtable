@@ -11,10 +11,9 @@ export function cardsEn(ctx: CatalogContext) {
 		cardStopped: "⏹️ This round was stopped.",
 		cardExpired: "⌛ Timed out with no answer.",
 		cardOwnerOnly: `Only ${ctx.assistant}'s owner can answer this card.`,
-		cardApproversNote: (minTier: string) =>
-			`-# Who can approve: ${minTier} and above`,
-		cardApproversRefusal: (minTier: string) =>
-			`This card needs ${minTier} or above to answer.`,
+		cardApproversNote: (userId: string) => `-# Who can approve: <@${userId}>`,
+		cardApproversRefusal:
+			"This approval is for the speaker whose turn asked for it.",
 		cardAskerNote: (userId: string) => `-# Who can answer: <@${userId}>`,
 		cardAskerRefusal: "This question is for another speaker.",
 		cardInactive: `This card is no longer active (it timed out, or ${ctx.assistant} restarted); reply in text if you need to.`,
@@ -42,9 +41,8 @@ export function cardsZhTW(ctx: CatalogContext): ReturnType<typeof cardsEn> {
 		cardStopped: "⏹️ 這一輪已停止。",
 		cardExpired: "⌛ 已逾時，沒有回答。",
 		cardOwnerOnly: `只有 ${ctx.assistant} 的擁有者能回答這張卡片。`,
-		cardApproversNote: (minTier: string) => `-# 可以核准的人：${minTier} 以上`,
-		cardApproversRefusal: (minTier: string) =>
-			`這張卡片要 ${minTier} 以上才能回答。`,
+		cardApproversNote: (userId: string) => `-# 可以核准的人：<@${userId}>`,
+		cardApproversRefusal: "這張核准卡是給提出這一輪的發話者的。",
 		cardAskerNote: (userId: string) => `-# 可以回答的人：<@${userId}>`,
 		cardAskerRefusal: "這張問題是問另一位發話者的。",
 		cardInactive: `這張卡片已經失效（逾時，或 ${ctx.assistant} 重新啟動過）；需要的話直接打字回覆。`,

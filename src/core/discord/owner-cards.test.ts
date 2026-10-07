@@ -354,7 +354,7 @@ describe("cards for lower tiers", () => {
 	test("an approval for admin tools shows who may approve and takes an admin's press", async () => {
 		const { fake, cards, answer } = askAdminApproval();
 		await tick();
-		expect(json(fake.sent[0])).toContain(messages().cardApproversNote("admin"));
+		expect(json(fake.sent[0])).toContain(messages().cardApproversNote(ADMIN));
 		const admin = press("button", `${CARD_PREFIX}${fake.cardId()}:yes`, {
 			user: ADMIN,
 		});
@@ -371,12 +371,99 @@ describe("cards for lower tiers", () => {
 			roles: [ROLE],
 		});
 		await cards.handle(member.interaction);
-		expect(member.replies).toEqual([messages().cardApproversRefusal("admin")]);
+		expect(member.replies).toEqual([messages().cardApproversRefusal]);
 		const owner = press("button", `${CARD_PREFIX}${fake.cardId()}:no`, {
 			user: OWNER,
 		});
 		await cards.handle(owner.interaction);
 		expect(await answer).toBe("declined");
+	});
+
+	/** A member-tier call held in `speaker`'s turn, where two members share the channel. */
+	const askMemberApproval = (speaker: {
+		id: string;
+		name: string;
+		tier: "owner" | "member";
+	}) => {
+		const fake = fakeChannel();
+		const cards = new OwnerCards({
+			ownerId: OWNER,
+			speakers,
+			channel: fake.channel,
+			logger: silentLogger(),
+		});
+		const answer = cards
+			.prompts("discord:555", speaker)
+			?.confirm("t", "**search the web**", undefined, "member");
+		return { fake, cards, answer };
+	};
+	const OTHER_MEMBER = "100000000000000005";
+
+	test("another member may not approve a member's held call; the speaker may", async () => {
+		const { fake, cards, answer } = askMemberApproval({
+			id: MEMBER,
+			name: "Mo",
+			tier: "member",
+		});
+		await tick();
+		const other = press("button", `${CARD_PREFIX}${fake.cardId()}:yes`, {
+			user: OTHER_MEMBER,
+			roles: [ROLE],
+		});
+		await cards.handle(other.interaction);
+		expect(other.replies).toEqual([messages().cardApproversRefusal]);
+		const own = press("button", `${CARD_PREFIX}${fake.cardId()}:yes`, {
+			user: MEMBER,
+			roles: [ROLE],
+		});
+		await cards.handle(own.interaction);
+		expect(await answer).toBe("approved");
+	});
+
+	test("in the owner's turn, a member may not approve a member-tier call", async () => {
+		const { fake, cards, answer } = askMemberApproval({
+			id: OWNER,
+			name: "Owner",
+			tier: "owner",
+		});
+		await tick();
+		const member = press("button", `${CARD_PREFIX}${fake.cardId()}:yes`, {
+			user: MEMBER,
+			roles: [ROLE],
+		});
+		await cards.handle(member.interaction);
+		expect(member.replies).toEqual([messages().cardOwnerOnly]);
+		const owner = press("button", `${CARD_PREFIX}${fake.cardId()}:no`, {
+			user: OWNER,
+		});
+		await cards.handle(owner.interaction);
+		expect(await answer).toBe("declined");
+	});
+
+	test("a speaker below the call's tier leaves the approval to the owner", async () => {
+		const fake = fakeChannel();
+		const cards = new OwnerCards({
+			ownerId: OWNER,
+			speakers,
+			channel: fake.channel,
+			logger: silentLogger(),
+		});
+		const speaker = { id: MEMBER, name: "Mo", tier: "member" } as const;
+		void cards
+			.prompts("discord:555", speaker)
+			?.confirm("t", "**create an agent**", undefined, "admin");
+		await tick();
+		for (const [user, roles] of [
+			[MEMBER, [ROLE]],
+			[ADMIN, []],
+		] as const) {
+			const pressed = press("button", `${CARD_PREFIX}${fake.cardId()}:yes`, {
+				user,
+				roles: [...roles],
+			});
+			await cards.handle(pressed.interaction);
+			expect(pressed.replies).toEqual([messages().cardOwnerOnly]);
+		}
 	});
 
 	test("a shell approval stays the owner's even when the speaker is an admin", async () => {

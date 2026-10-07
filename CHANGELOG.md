@@ -25,7 +25,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
-- An approval card now gets the lowest tier that may approve its call (`OwnerPrompts.confirm`'s `minTier`, the higher of the tool's tier and the hold rule's `approvalTier`). The runtime dropped it on the way to the surface, so every card was the owner's alone; on Discord, a held call of a member- or admin-tier tool may now be approved by a speaker of that tier, as `HeldCall.minTier` describes.
+- An approval card now gets the lowest tier that may approve its call (`OwnerPrompts.confirm`'s `minTier`, the higher of the tool's tier and the hold rule's `approvalTier`). The runtime dropped it on the way to the surface, so every card was the owner's alone. On Discord, a held call of a member- or admin-tier tool may now be approved by the speaker whose turn held it, when their tier is at least `minTier` (checked again when they press), and by the owner; nobody else in the channel may approve it, whatever their tier, and in the owner's own turn the card stays the owner's. A speaker below `minTier` leaves the card to the owner. The chat surface contract gains a check that another person cannot answer the person's approval, through the optional `SurfaceContractSubject.stranger`, and its approvals now ask for exactly the speaker's tier.
 
 ## [0.7.19] - 2026-10-07
 

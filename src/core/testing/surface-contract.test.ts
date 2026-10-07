@@ -11,10 +11,20 @@ import {
 
 /** An in-memory chat that keeps the contract: what the host asks of it is what its person sees. */
 function memoryChat(
-	options: { files?: boolean; brokenPrompts?: boolean } = {},
+	options: {
+		files?: boolean;
+		brokenPrompts?: boolean;
+		/** Lets anyone answer a prompt, not only the person it is for. */
+		openPrompts?: boolean;
+	} = {},
 ): SurfaceContractSubject {
 	const seen: SurfaceObservation[] = [];
 	const open = new Map<string, (answer: Approval) => void>();
+	/** Answers prompt `id` as `who`; only the person, author "1", may unless prompts are open. */
+	const answerAs = (who: string, id: string, approved: boolean) => {
+		if (who !== "1" && !options.openPrompts) return;
+		open.get(id)?.(approved ? "approved" : "declined");
+	};
 	let deliver: ((message: InboundMessage) => void) | undefined;
 	let next = 0;
 	const surface: ChatSurface = {
@@ -73,8 +83,8 @@ function memoryChat(
 				attachments: [],
 			}),
 		observations: () => seen,
-		answer: async (id, approved) =>
-			open.get(id)?.(approved ? "approved" : "declined"),
+		answer: async (id, approved) => answerAs("1", id, approved),
+		stranger: { answer: async (id, approved) => answerAs("2", id, approved) },
 	};
 }
 
@@ -89,6 +99,15 @@ test("the contract catches a surface whose cancelled card does not say cancelled
 	);
 	expect(failures.map((failure) => failure.name)).toEqual([
 		"a stopped turn's approval resolves cancelled and closes",
+	]);
+});
+
+test("the contract catches a surface that lets another person answer an approval", async () => {
+	const failures = await checkSurfaceContract(async () =>
+		memoryChat({ openPrompts: true }),
+	);
+	expect(failures.map((failure) => failure.name)).toEqual([
+		"another person cannot answer the person's approval",
 	]);
 });
 

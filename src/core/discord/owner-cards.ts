@@ -103,7 +103,8 @@ interface Audience {
 
 /**
  * The owner's cards in the assistant's channels: approvals of held actions and ask_user questions,
- * answered with buttons, a menu, or a form. Only the owner may answer; an unanswered card
+ * answered with buttons, a menu, or a form. The owner may answer, and so may the speaker whose
+ * turn asks, when the card allows (a question always; an approval at its tier); an unanswered card
  * expires after 30 minutes and a stopped turn cancels it. Open cards live in memory, so a
  * restart abandons them; pressing one then says it no longer works.
  */
@@ -262,12 +263,19 @@ export class OwnerCards implements InteractionModule {
 		};
 	}
 
-	/** An approval is for the speakers whose tier holds the tool, the owner alone by default. */
+	/**
+	 * An approval is for the speaker whose turn held the call, when their tier holds it, and for
+	 * the owner; the owner's alone by default. Nobody else in the channel may approve it.
+	 */
 	#approvers(minTier: Tier, speaker: Speaker | undefined): Audience {
 		const { ownerId, speakers } = this.#options;
-		const mentionId =
-			speaker && tierAtLeast(speaker.tier, minTier) ? speaker.id : ownerId;
-		if (minTier === "owner" || !speakers)
+		if (
+			minTier === "owner" ||
+			!speakers ||
+			!speaker ||
+			speaker.id === ownerId ||
+			!tierAtLeast(speaker.tier, minTier)
+		)
 			return {
 				allows: (user) => user.id === ownerId,
 				mentionId: ownerId,
@@ -276,12 +284,15 @@ export class OwnerCards implements InteractionModule {
 			};
 		return {
 			allows: (user) => {
+				if (user.id === ownerId) return true;
+				if (user.id !== speaker.id) return false;
+				// Their tier when they press, in case it was lowered during the turn.
 				const who = speakers.resolve({ ...user, name: "" });
 				return who !== undefined && tierAtLeast(who.tier, minTier);
 			},
-			mentionId,
-			note: messages().cardApproversNote(minTier),
-			refusal: messages().cardApproversRefusal(minTier),
+			mentionId: speaker.id,
+			note: messages().cardApproversNote(speaker.id),
+			refusal: messages().cardApproversRefusal,
 		};
 	}
 

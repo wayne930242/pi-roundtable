@@ -33,7 +33,7 @@ export interface OwnerPrompts {
 		title: string,
 		message: string,
 		signal?: AbortSignal,
-		/** The lowest tier that may approve; the owner only when absent. */
+		/** The tier the turn's speaker needs to approve it themselves; the owner may always approve, and only the owner when absent. */
 		minTier?: Tier,
 	): Promise<Approval>;
 	/** Asks them a question; undefined when it expired or was cancelled. */

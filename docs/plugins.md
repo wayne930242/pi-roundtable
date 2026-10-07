@@ -513,7 +513,7 @@ export const cleanup = definePlugin({
 
 A rule whose verdict depends on the input, such as one that holds only a `delete` action, can also answer `mayHold(tool)`: whether it may hold some call of that tool.
 It is asked when the input is not known yet, as for a [precheck script](#precheck-scripts-prechecks-the-agent-writes)'s call whose arguments are computed when it runs; a rule without it is judged by `describe` with an empty input.
-A rule whose held call stands for others can answer `approvalTier(tool, input, context)`: the lowest tier that may approve it when higher than the tool's own. The held call keeps it as `minTier`, and both its card and a confirming message require it.
+A rule whose held call stands for others can answer `approvalTier(tool, input, context)`: the lowest tier that may approve it when higher than the tool's own. The held call keeps it as `minTier`, and both its card and a confirming message require it. A card is answered by the speaker whose turn held the call, when their tier is at least `minTier`, and by the owner; nobody else in the channel may approve it.
 
 #### The shell rule
 
@@ -2387,9 +2387,9 @@ It returns:
 ### `describeSurfaceContract`: what every chat surface keeps
 
 A plugin that contributes a `ChatSurface` can test it against the contract every surface keeps.
-`describeSurfaceContract(name, make)` registers one test per check, each on a fresh `SurfaceContractSubject` from `make`: the `surface`, a `channel` of it, and one person on its network, who can `write(text)`, whose `observations()` list what they have seen (`SurfaceObservation`: a reply's text and file names, typing and stop controls going on and off, progress, and prompts opening and closing), and who may `answer(prompt, approved)` an approval; `speaker` is who they are to `surface.prompts`, an owner by default.
+`describeSurfaceContract(name, make)` registers one test per check, each on a fresh `SurfaceContractSubject` from `make`: the `surface`, a `channel` of it, and one person on its network, who can `write(text)`, whose `observations()` list what they have seen (`SurfaceObservation`: a reply's text and file names, typing and stop controls going on and off, progress, and prompts opening and closing), and who may `answer(prompt, approved)` an approval; `speaker` is who they are to `surface.prompts`, an owner by default, and every approval the contract asks for needs exactly their tier. `stranger`, when given, is someone else on the network, not the owner, who knows the id of the person's open approval and may `join()` and `answer(prompt, approved)` it.
 The contract starts the surface, calls the subject's `join()`, and stops the surface after the subject's `close()`.
-It checks that the surface names a prefix and owns its channel, delivers what the person writes, and shows every chunk of a reply; and, for the parts the surface offers, that it delivers files when `supportsFiles` is set, ends typing and stop controls idempotently, shows progress, and resolves an approval as the person approves or declines it, or `cancelled` when the turn stops.
+It checks that the surface names a prefix and owns its channel, delivers what the person writes, and shows every chunk of a reply; and, for the parts the surface offers, that it delivers files when `supportsFiles` is set, ends typing and stop controls idempotently, shows progress, and resolves an approval as the person approves or declines it, or `cancelled` when the turn stops, and, with a `stranger`, that the stranger's answer leaves the person's approval open.
 A check for a part the surface does not offer passes.
 `checkSurfaceContract(make)` runs the same checks and returns the ones that failed, as `SurfaceContractFailure`s.
 
