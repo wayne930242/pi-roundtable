@@ -12,6 +12,7 @@ import { type ActorFacts, identityOf, parseIdentity } from "./actor-facts.ts";
 import { CachingPrincipalStore } from "./caching-principal-store.ts";
 import {
 	type IdentityLink,
+	LEGACY_PROVIDER,
 	type Principal,
 	type PrincipalRecord,
 	type PrincipalStore,
@@ -220,6 +221,8 @@ export class PgIdentityService implements IdentityService {
 		facts: ActorFacts,
 		scope: { conversation?: ChannelKey } = {},
 	): Promise<Speaker | undefined> {
+		// A 0.8 id standing for another principal is no surface's identity.
+		if (facts.provider === LEGACY_PROVIDER) return undefined;
 		const link =
 			(await this.store.identity(facts.provider, facts.subject)) ??
 			(await this.#claim(facts)) ??
@@ -237,6 +240,17 @@ export class PgIdentityService implements IdentityService {
 			tier,
 			principalId: principal.id,
 		};
+	}
+
+	/**
+	 * The principal a person id a 0.8 row names stands for, such as a schedule's author: the
+	 * principal it was attributed to at the upgrade (the primary owner for `remote-mcp`), or else
+	 * the principal of that id; undefined for none. Core-internal.
+	 */
+	async principalOfLegacyId(id: string): Promise<string | undefined> {
+		const alias = await this.store.identity(LEGACY_PROVIDER, id);
+		if (alias) return alias.principalId;
+		return (await this.store.get(id))?.id;
 	}
 
 	async principal(id: string): Promise<Principal | undefined> {

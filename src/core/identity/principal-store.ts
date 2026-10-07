@@ -7,6 +7,15 @@ import { newPrincipalId } from "./ulid.ts";
 /** The principal the host's own turns run as: an ops report, a webhook's. It has no identity, cannot sign in, and keeps no memory. */
 export const SYSTEM_PRINCIPAL = "system";
 
+/**
+ * The provider of a 0.8 speaker id that stands for a principal of another id, linked at the
+ * upgrade; no surface reports it, so no one resolves through it.
+ */
+export const LEGACY_PROVIDER = "legacy";
+
+/** 0.8's speaker id for the owner writing through an outside agent over MCP: the primary owner. */
+export const LEGACY_REMOTE_SPEAKER = "remote-mcp";
+
 export type { Pronouns };
 
 /** A person the host serves, whichever surface they reach it through. */

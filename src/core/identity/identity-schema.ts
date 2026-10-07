@@ -4,6 +4,8 @@ import { type Tier, tierAtLeast } from "../speakers.ts";
 import type { AccessRules, AccessTier } from "./access-policy.ts";
 import { parseIdentity } from "./actor-facts.ts";
 import {
+	LEGACY_PROVIDER,
+	LEGACY_REMOTE_SPEAKER,
 	PRINCIPAL_TABLES,
 	PRINCIPALS_CLAIMABLE,
 	SYSTEM_PRINCIPAL,
@@ -141,7 +143,8 @@ async function idsIn(
  * `principal_id`, whose `speaker_id` is an actor id this version stored. Each but a configured
  * owner is claimable once, by the person of that id at their first contact
  * (IdentityService.resolve); a configured owner never is, even once the configuration names
- * another owner. One that created
+ * another owner. 0.8's `remote-mcp` speaker, the owner writing over MCP, gets no principal: it is
+ * linked as `legacy:remote-mcp` to the primary owner's, so what it created stays the owner's. One that created
  * schedules, other than a configured owner, is recorded as seen now at the highest tier it
  * scheduled at, capped at the most the rules could give it, so its schedules keep running until
  * `backgroundStaleDays` pass unseen. It only inserts, so it changes no row, and a second run
@@ -167,9 +170,16 @@ export async function backfillPrincipals(
 		conversations: 0,
 		held_actions: 0,
 	} satisfies Record<BackfillSource, number>;
+	// 0.8's remote-mcp speaker was the owner over MCP: it stands for the primary owner.
+	const primary = owners[0]?.id;
+	let remote = false;
 	const add = (source: BackfillSource, id: string, name: string | null) => {
 		if (id === SYSTEM_PRINCIPAL) return;
 		sources[source]++;
+		if (primary !== undefined && id === LEGACY_REMOTE_SPEAKER) {
+			remote = true;
+			return;
+		}
 		if (!names.get(id)) names.set(id, name?.trim() || undefined);
 	};
 	for (const owner of owners) add("config", owner.id, owner.name);
@@ -201,6 +211,11 @@ export async function backfillPrincipals(
 			RETURNING id`;
 		created += rows.length;
 	}
+	if (remote && primary !== undefined)
+		await sql`
+			INSERT INTO principal_identities (provider, subject, principal_id, source)
+			VALUES (${LEGACY_PROVIDER}, ${LEGACY_REMOTE_SPEAKER}, ${primary}, 'legacy')
+			ON CONFLICT (provider, subject) DO NOTHING`;
 	// An owner is one by the configuration, never by a claim, even after it names someone else.
 	if (configured.size > 0)
 		await sql`

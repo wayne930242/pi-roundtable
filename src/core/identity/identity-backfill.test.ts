@@ -19,7 +19,7 @@ import { recordingLogger } from "../testing/recording-logger.ts";
 import { identityPlugin } from "./identity-plugin.ts";
 import { backfillPrincipals } from "./identity-schema.ts";
 import { type IdentityService, PgIdentityService } from "./identity-service.ts";
-import { PgPrincipalStore } from "./principal-store.ts";
+import { PgPrincipalStore, PRINCIPAL_TABLES } from "./principal-store.ts";
 
 /** The people of the 0.8.0 fixture (scripts/fixture-db.ts). */
 const OWNER = "966666600000000001";
@@ -92,7 +92,8 @@ describeDb("the principal backfill", () => {
 		expect(first.applied).toContain("identity/principals");
 		expect(first.everyBoot).toContain("identity/backfill");
 		const ids = (await principals(db.sql)).map((row) => row.id);
-		expect(ids).toEqual([OWNER, ...MEMBERS, WEB, "remote-mcp"].sort());
+		// 0.8's remote-mcp speaker was the owner over MCP: it is the primary owner, not a principal.
+		expect(ids).toEqual([OWNER, ...MEMBERS, WEB].sort());
 		expect(await personRows(db.sql)).toEqual(before);
 		// Each may be claimed once by the person of its id, except the configured owner.
 		expect(
@@ -105,7 +106,6 @@ describeDb("the principal backfill", () => {
 			(await principals(db.sql)).map((row) => [row.id, row.display_name]),
 		);
 		expect(names[OWNER]).toBe("Ada");
-		expect(names["remote-mcp"]).toBe("Remote");
 		expect(names[MEMBERS[0] ?? ""]).toBe("Kai");
 
 		await runMigrations(db.sql, plugins);
@@ -134,6 +134,8 @@ describeDb("the principal backfill", () => {
 									last_seen_at timestamptz,
 									last_tier text CHECK (last_tier IN ('member', 'admin', 'owner'))
 								)`;
+							// Its other tables are as they are now.
+							await PRINCIPAL_TABLES(sql);
 							await sql`INSERT INTO principals (id, display_name) VALUES (${OWNER}, 'Ada')`;
 						},
 					},
@@ -196,6 +198,59 @@ describeDb("the principal backfill", () => {
 		expect(speaker?.principalId).not.toBe("operator");
 	});
 
+	test("0.8's remote-mcp speaker is the primary owner: its schedules run at the owner tier through the owner's principal", async () => {
+		db = await scratchDatabase("0.8.0");
+		// Everyone on Discord a member, as OD-15 would cap an author without a role.
+		await runMigrations(
+			db.sql,
+			await hostPlugins(db.url, { members: { everyone: true } }),
+		);
+		expect(
+			(await db.sql`SELECT id FROM principals WHERE id = 'remote-mcp'`).length,
+		).toBe(0);
+		const identity = new PgIdentityService(
+			await PgPrincipalStore.attach(db.sql),
+			{
+				owners: [
+					{ name: "Ada", principal: OWNER, identities: [`discord:${OWNER}`] },
+				],
+				members: { everyone: ["discord"] },
+				provisioning: "admitted",
+				backgroundStaleDays: 30,
+			},
+			{ logger: silentLogger() },
+		);
+		await identity.syncConfig();
+		// The author a 0.8 schedule names, as its runs will find them.
+		const [schedule] = (await db.sql`
+			SELECT created_by_id, created_tier FROM schedules WHERE created_by_id = 'remote-mcp'`) as {
+			created_by_id: string;
+			created_tier: "owner";
+		}[];
+		const author = await identity.principalOfLegacyId(
+			schedule?.created_by_id ?? "",
+		);
+		expect(author).toBe(OWNER);
+		expect(
+			await identity.speakerFor(author ?? "", schedule?.created_tier),
+		).toMatchObject({ principalId: OWNER, tier: "owner" });
+		// The owner keeps it at the next boot, and no other speaker of a surface becomes it.
+		await runMigrations(db.sql, await hostPlugins(db.url));
+		expect(await identity.principalOfLegacyId("remote-mcp")).toBe(OWNER);
+		expect(
+			await identity.resolve({
+				provider: "legacy",
+				subject: "remote-mcp",
+				name: "Remote",
+			}),
+		).toBeUndefined();
+		// Any other carried-over id stands for its own principal; an unknown one for none.
+		expect(await identity.principalOfLegacyId(MEMBERS[0] ?? "")).toBe(
+			MEMBERS[0],
+		);
+		expect(await identity.principalOfLegacyId("nobody")).toBeUndefined();
+	});
+
 	test("a row an older build writes after the upgrade gets its principal at the next boot", async () => {
 		db = await scratchDatabase("0.8.0");
 		const plugins = await hostPlugins(db.url);
@@ -246,9 +301,9 @@ describeDb("the principal backfill", () => {
 			).map((row) => [row.id, row]),
 		);
 		const [kai, noa] = MEMBERS;
-		// Kai scheduled as a member; remote-mcp as owner, capped to member.
+		// Kai scheduled as a member; remote-mcp, as owner, is the owner and no principal of its own.
 		expect(seen[kai ?? ""]?.last_tier).toBe("member");
-		expect(seen["remote-mcp"]?.last_tier).toBe("member");
+		expect(seen["remote-mcp"]).toBeUndefined();
 		expect(seen[kai ?? ""]?.last_seen_at?.getTime()).toBeGreaterThanOrEqual(
 			upgraded.getTime() - 1000,
 		);
@@ -317,7 +372,7 @@ describeDb("the principal backfill", () => {
 			dryRun: true,
 		});
 		expect(planned).toEqual({
-			created: 5,
+			created: 4,
 			sources: {
 				config: 1,
 				owner_memory: 3,
@@ -365,7 +420,7 @@ describeDb("the identity plugin", () => {
 				level: "info",
 				fields: {},
 				message:
-					"principal backfill: 5 created; ids found: config 1, owner_memory 3, schedules 3, conversations 1, held_actions 1",
+					"principal backfill: 4 created; ids found: config 1, owner_memory 3, schedules 3, conversations 1, held_actions 1",
 			},
 		]);
 		const identity = provided.get(IDENTITY.id) as IdentityService;
