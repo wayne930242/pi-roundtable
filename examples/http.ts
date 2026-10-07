@@ -15,3 +15,33 @@ export const health = definePlugin({
 		],
 	}),
 });
+
+/**
+ * A route with `websocket` also takes upgrades. The Origin check and `accept` run before any
+ * socket opens, so a browser on another site, or a client without the ticket, never connects.
+ */
+export const echo = (ticket: string) =>
+	definePlugin({
+		name: "echo",
+		setup: () => ({
+			http: [
+				{
+					name: "echo",
+					listener: "public",
+					path: { exact: "/echo" },
+					methods: ["GET"],
+					handle: () => new Response("Upgrade Required", { status: 426 }),
+					websocket: {
+						origins: ["https://chat.example.com"],
+						accept: (request) =>
+							URL.parse(request.url)?.searchParams.get("ticket") === ticket
+								? { data: { since: Date.now() } }
+								: new Response("Unauthorized", { status: 401 }),
+						maxMessageBytes: 4096,
+						rate: { messages: 20, perMs: 10_000 },
+						message: (socket, message) => socket.send(message),
+					},
+				},
+			],
+		}),
+	});

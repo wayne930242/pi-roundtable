@@ -1407,6 +1407,14 @@ The socket file's permission bits are `http.socketMode`, `0o660` by default: onl
 Widen it (`0o666`) only when the proxy runs as a user outside that group.
 More listeners than `public` come from `defineRoundtable`'s `listeners` override, each `{ id, socketPath, mode? }` or `{ id, port, hostname? }`, and a route attaches to one by its `id`.
 
+A route that also declares `websocket` takes WebSocket upgrades on its path; every other request still reaches `handle`, and its `methods`, when listed, must include `GET`.
+An upgrade request first passes the Origin check: `origins` lists the `scheme://host[:port]` values a browser may connect from, and a request with another Origin, or none, gets `403` without reaching the route. `"any"` skips the check, for clients that are not browsers.
+Then `accept` authenticates and authorizes the request before any socket opens: it returns `{ data }`, which every handler reads as `socket.data`, or a `Response` such as `401` or `403` that refuses the upgrade. An `accept` that throws answers `500` like a failing `handle`.
+Browsers cannot set headers on a WebSocket, so a browser client usually proves itself with a cookie or a short-lived ticket in the query.
+Each message reaches `message` as it arrives. A message over `maxMessageBytes` (64 KiB by default) closes the socket with `1009`, and more than `rate.messages` in `rate.perMs` (120 a minute by default) closes it with `1008`.
+A handler that throws or rejects closes only its own socket, with `1011`, and logs the route and listener like a failing `handle`.
+When the host shuts down, every open socket is closed with `1001`, and the shutdown waits up to five seconds for the routes' `close` handlers before it stops the services.
+
 <!-- example: examples/http.ts -->
 ```ts
 import { definePlugin } from "pi-roundtable";
@@ -1426,6 +1434,36 @@ export const health = definePlugin({
 		],
 	}),
 });
+
+/**
+ * A route with `websocket` also takes upgrades. The Origin check and `accept` run before any
+ * socket opens, so a browser on another site, or a client without the ticket, never connects.
+ */
+export const echo = (ticket: string) =>
+	definePlugin({
+		name: "echo",
+		setup: () => ({
+			http: [
+				{
+					name: "echo",
+					listener: "public",
+					path: { exact: "/echo" },
+					methods: ["GET"],
+					handle: () => new Response("Upgrade Required", { status: 426 }),
+					websocket: {
+						origins: ["https://chat.example.com"],
+						accept: (request) =>
+							URL.parse(request.url)?.searchParams.get("ticket") === ticket
+								? { data: { since: Date.now() } }
+								: new Response("Unauthorized", { status: 401 }),
+						maxMessageBytes: 4096,
+						rate: { messages: 20, perMs: 10_000 },
+						message: (socket, message) => socket.send(message),
+					},
+				},
+			],
+		}),
+	});
 ```
 <!-- /example -->
 
@@ -2667,6 +2705,7 @@ Import from the entries listed below; source area files are internal.
 | `RoundtableConfig` | `pi-roundtable` | type |
 | `RoundtableOptions` | `pi-roundtable` | type |
 | `RoundtablePlugin` | `pi-roundtable` | type |
+| `RouteSocket` | `pi-roundtable` | type |
 | `RuntimeDeps` | `pi-roundtable` | type |
 | `RuntimeFactory` | `pi-roundtable` | type |
 | `SCHEDULES` | `pi-roundtable` | value |
@@ -2731,6 +2770,8 @@ Import from the entries listed below; source area files are internal.
 | `TurnRequest` | `pi-roundtable` | type |
 | `TurnResult` | `pi-roundtable` | type |
 | `TurnSelection` | `pi-roundtable` | type |
+| `WebSocketAccept` | `pi-roundtable` | type |
+| `WebSocketRoute` | `pi-roundtable` | type |
 | `Weekday` | `pi-roundtable` | type |
 | `attachReplyFile` | `pi-roundtable` | value |
 | `withReplyFiles` | `pi-roundtable` | value |

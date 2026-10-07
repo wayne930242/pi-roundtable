@@ -51,7 +51,7 @@ sidebar:
 | 部分 | 適用時機 | 範例 | 指南 |
 |---|---|---|---|
 | 斜線指令（`commands.add`） | 你想在根指令（預設是 `/roundtable`）底下加一個子指令。從 `setup` 透過 `DISCORD` 服務加入。 | [`interactions.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/interactions.ts) | [斜線指令](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#slash-commands-commandsadd) |
-| `http` | 你想在 bot 的 listener 上加一條路由，例如健康檢查。放在上面的東西，網際網路上都能連到，所以要在 handler 裡檢查一個祕密值。 | [`http.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/http.ts) | [http](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#http-routes-on-the-bots-listener) |
+| `http` | 你想在 bot 的 listener 上加一條路由，例如健康檢查或 WebSocket 端點。放在上面的東西，網際網路上都能連到，所以要在 handler 裡，或在 WebSocket 開啟前的 `accept` 裡，檢查一個祕密值。 | [`http.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/http.ts) | [http](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#http-routes-on-the-bots-listener) |
 | `dashboard` | 你想在 agent server 釘在 Discord 的 dashboard 訊息上多加幾行。 | [`dashboard.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/dashboard.ts) | [dashboard](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#dashboard-lines-on-the-dashboard-message) |
 | `surfaces` | 你想接上 Discord 以外的聊天網路。surface 負責回報人們寫了什麼，並貼出對話的回答。 | [`fake-surface.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/fake-surface.ts) | [surfaces](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#surfaces-a-chat-network-of-your-own) |
 

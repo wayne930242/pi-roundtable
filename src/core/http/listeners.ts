@@ -1,8 +1,16 @@
 import { chmodSync } from "node:fs";
-import type { Server } from "bun";
+import type { Server, WebSocketHandler } from "bun";
 import { PluginError } from "../errors.ts";
 import type { Logger } from "../log.ts";
 import { serveUnix } from "../shared/unix-server.ts";
+import {
+	type Connection,
+	DEFAULT_MAX_MESSAGE_BYTES,
+	isUpgrade,
+	SocketSet,
+	upgrade,
+	type WebSocketRoute,
+} from "./websocket.ts";
 
 /** A handler a plugin attaches to one of the host's configured listeners. */
 export interface HttpRoute {
@@ -13,6 +21,11 @@ export interface HttpRoute {
 	/** Omitted: every method, for a handler that answers the rest itself. */
 	methods?: readonly string[];
 	handle(request: Request): Response | Promise<Response>;
+	/**
+	 * Takes the route's WebSocket upgrade requests (GET with `Upgrade: websocket`); every other
+	 * request still reaches `handle`.
+	 */
+	websocket?: WebSocketRoute;
 }
 
 /** Where a listener serves: a unix socket, reached from outside through a tunnel, or a TCP port. */
@@ -53,6 +66,10 @@ function validate(
 	if (ids.size !== listeners.length)
 		throw new PluginError("a listener is configured twice");
 	routes.forEach((route, index) => {
+		if (route.websocket && route.methods && !route.methods.includes("GET"))
+			throw new PluginError(
+				`route ${route.name} takes WebSockets, so its methods must include GET`,
+			);
 		if (!ids.has(route.listener))
 			throw new PluginError(
 				`route ${route.name} needs listener ${route.listener}, which is not configured`,
@@ -71,6 +88,16 @@ function validate(
 const serverError = () =>
 	new Response("Internal Server Error", { status: 500 });
 
+/** The route that takes a request, when one does. */
+const routeFor = (routes: readonly HttpRoute[], request: Request) => {
+	// pi-lens-ignore: unchecked-throwing-call -- the server builds request.url, always an absolute URL
+	const path = new URL(request.url).pathname;
+	return routes.find(
+		(r) =>
+			matches(r, path) && (!r.methods || r.methods.includes(request.method)),
+	);
+};
+
 /**
  * Routes one listener's request; a request no route takes is 404, and a route that throws, or
  * whose promise rejects, is 500 with a fixed body. The failure is logged with the route's name
@@ -82,12 +109,7 @@ export async function routeRequest(
 	listener: string,
 	logger: Logger,
 ): Promise<Response> {
-	// pi-lens-ignore: unchecked-throwing-call -- the server builds request.url, always an absolute URL
-	const path = new URL(request.url).pathname;
-	const route = routes.find(
-		(r) =>
-			matches(r, path) && (!r.methods || r.methods.includes(request.method)),
-	);
+	const route = routeFor(routes, request);
 	if (!route) return new Response("Not found", { status: 404 });
 	try {
 		return await route.handle(request);
@@ -97,39 +119,81 @@ export async function routeRequest(
 	}
 }
 
+/**
+ * Routes one listener's request like `routeRequest`, except that a WebSocket upgrade for a route
+ * that takes them goes to its `websocket`; a failing `accept` answers and logs like a failing
+ * `handle`. Answers nothing once the socket is upgraded.
+ */
+async function serveRequest(
+	routes: readonly HttpRoute[],
+	request: Request,
+	server: Server<Connection>,
+	listener: string,
+	logger: Logger,
+): Promise<Response | undefined> {
+	const route = routeFor(routes, request);
+	if (!route?.websocket || !isUpgrade(request))
+		return routeRequest(routes, request, listener, logger);
+	try {
+		return await upgrade(route.name, route.websocket, request, server);
+	} catch (err) {
+		logger.error({ err, route: route.name, listener }, "route failed");
+		return serverError();
+	}
+}
+
+type Fetch = (
+	request: Request,
+	server: Server<Connection>,
+) => Promise<Response | undefined>;
+
 /** Serves HTTP on a TCP port with the same idle setting as the unix sockets. */
 function serveTcp(
 	port: number,
 	hostname: string | undefined,
-	fetch: (request: Request) => Response | Promise<Response>,
-): Server<undefined> {
-	return Bun.serve({
+	fetch: Fetch,
+	websocket: WebSocketHandler<Connection> | undefined,
+): Server<Connection> {
+	const options = {
 		port,
 		...(hostname ? { hostname } : {}),
 		idleTimeout: 0,
 		fetch,
 		error: serverError,
-	});
+		...(websocket ? { websocket } : {}),
+	};
+	// SAFETY: a listener without WebSocket routes passes no handler and never upgrades.
+	return Bun.serve(
+		options as Parameters<typeof Bun.serve<Connection>>[0],
+	) as Server<Connection>;
 }
 
+/** How long a stop waits for WebSocket routes' handlers to settle before it returns anyway. */
+const CLOSE_TIMEOUT_MS = 5_000;
+
 /** The host's HTTP listeners, each serving only the routes attached to it. */
-// pi-lens-ignore: large-class — three members: validation in the constructor, start, and stop
+// pi-lens-ignore: large-class — four members: validation in the constructor, start, the WebSocket handler, and stop
 export class HttpListeners {
 	readonly #listeners: readonly ListenerConfig[];
 	readonly #routes: readonly HttpRoute[];
 	readonly #logger: Logger;
-	#servers: Server<undefined>[] = [];
+	readonly #sockets: SocketSet;
+	readonly #closeTimeoutMs: number;
+	#servers: Server<Connection>[] = [];
 
-	/** Validates every route before any socket opens. */
+	/** Validates every route before any socket opens; `closeTimeoutMs` bounds how long a stop waits on WebSocket handlers. */
 	constructor(
 		listeners: readonly ListenerConfig[],
 		routes: readonly HttpRoute[],
 		logger: Logger,
+		options: { closeTimeoutMs?: number } = {},
 	) {
 		validate(listeners, routes);
 		this.#logger = logger;
 		this.#listeners = listeners;
 		this.#routes = routes;
+		this.#sockets = new SocketSet(logger);
+		this.#closeTimeoutMs = options.closeTimeoutMs ?? CLOSE_TIMEOUT_MS;
 	}
 
 	/** Opens every listener; when one fails, the ones already open close again before the error is thrown. */
@@ -139,28 +203,52 @@ export class HttpListeners {
 				const routes = this.#routes.filter(
 					(route) => route.listener === listener.id,
 				);
-				const handle = (request: Request) =>
-					routeRequest(routes, request, listener.id, this.#logger);
+				const handle: Fetch = (request, server) =>
+					serveRequest(routes, request, server, listener.id, this.#logger);
+				const websocket = this.#websocketHandler(listener.id, routes);
 				if ("socketPath" in listener) {
 					this.#servers.push(
-						serveUnix(listener.socketPath, handle, { error: serverError }),
+						serveUnix(listener.socketPath, handle, {
+							error: serverError,
+							...(websocket ? { websocket } : {}),
+						}),
 					);
 					chmodSync(listener.socketPath, listener.mode ?? 0o660);
 				} else {
 					this.#servers.push(
-						serveTcp(listener.port, listener.hostname, handle),
+						serveTcp(listener.port, listener.hostname, handle, websocket),
 					);
 				}
 			}
 		} catch (error) {
-			this.stop();
+			void this.stop();
 			throw error;
 		}
 	}
 
-	/** Stops accepting at once and cuts open connections, such as event streams, without waiting on them. */
-	stop(): void {
+	/** The listener's WebSocket handler, sized for its largest route limit; none without WebSocket routes. */
+	#websocketHandler(
+		listener: string,
+		routes: readonly HttpRoute[],
+	): WebSocketHandler<Connection> | undefined {
+		const limits = routes.flatMap((route) =>
+			route.websocket
+				? [route.websocket.maxMessageBytes ?? DEFAULT_MAX_MESSAGE_BYTES]
+				: [],
+		);
+		if (limits.length === 0) return undefined;
+		return this.#sockets.handler(listener, Math.max(...limits));
+	}
+
+	/**
+	 * Stops accepting at once and cuts open connections, such as event streams, without waiting on
+	 * them. Open WebSockets get close code 1001 first, and the stop resolves once their routes'
+	 * handlers have settled, or after the close timeout.
+	 */
+	async stop(): Promise<void> {
+		this.#sockets.closeAll();
 		for (const server of this.#servers) void server.stop(true);
 		this.#servers = [];
+		await this.#sockets.drain(this.#closeTimeoutMs);
 	}
 }

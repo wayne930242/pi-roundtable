@@ -124,6 +124,11 @@ export type {
 	ListenerAddress,
 	ListenerConfig,
 } from "./core/http/listeners.ts";
+export type {
+	RouteSocket,
+	WebSocketAccept,
+	WebSocketRoute,
+} from "./core/http/websocket.ts";
 export type { Locale } from "./core/i18n/index.ts";
 export type { JudgeModel } from "./core/judging/model-judge.ts";
 export type { LogEntry, LogFn, Logger } from "./core/log.ts";

@@ -149,6 +149,7 @@
 			"RoundtableConfig",
 			"RoundtableOptions",
 			"RoundtablePlugin",
+			"RouteSocket",
 			"RuntimeDeps",
 			"RuntimeFactory",
 			"Schedule",
@@ -194,6 +195,8 @@
 			"TurnRequest",
 			"TurnResult",
 			"TurnSelection",
+			"WebSocketAccept",
+			"WebSocketRoute",
 			"Weekday"
 		]
 	},

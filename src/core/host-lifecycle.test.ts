@@ -262,6 +262,51 @@ describe("a failed start", () => {
 });
 
 describe("shutdown", () => {
+	test("closes open WebSockets with 1001 and waits for their routes before services stop", async () => {
+		const socketPath = join(
+			mkdtempSync(join(tmpdir(), "host-lifecycle-")),
+			"web.sock",
+		);
+		const log: string[] = [];
+		const roundtable = host(
+			[
+				{
+					name: "chat",
+					setup: () => ({
+						services: [service("store", log, { start: undefined })],
+						http: [
+							{
+								name: "chat",
+								listener: "web",
+								path: { exact: "/ws" },
+								handle: () => new Response("page"),
+								websocket: {
+									origins: "any",
+									accept: () => ({ data: undefined }),
+									message: () => undefined,
+									close: async (_socket, code) => {
+										await Bun.sleep(20);
+										log.push(`closed ${code}`);
+									},
+								},
+							},
+						],
+					}),
+				},
+			],
+			{ listeners: [{ id: "web", socketPath }] },
+		);
+		await roundtable.run();
+		const client = new WebSocket(`ws+unix://${socketPath}:/ws`);
+		await new Promise((resolve) => client.addEventListener("open", resolve));
+		const code = new Promise<number>((resolve) => {
+			client.addEventListener("close", (event) => resolve(event.code));
+		});
+		expect(await roundtable.shutdown("SIGTERM")).toBe(0);
+		expect(log).toEqual(["closed 1001", "stop store"]);
+		expect(await code).toBe(1001);
+	});
+
 	test("drains the host's own channel queue, whatever surface the plugins run", async () => {
 		const taken: { queue?: QueuePort } = {};
 		let finished = false;
