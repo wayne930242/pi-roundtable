@@ -594,26 +594,42 @@ export class WebChat {
 			});
 			return;
 		}
-		await this.#deps.turns().run({
-			channel,
-			kind: persona.kind,
-			text,
-			speaker,
-			interactive: true,
-			...(persona.selection
-				? {
-						selection: {
-							id: `webchat:${persona.kind}`,
-							...persona.selection,
-						},
-					}
-				: {}),
-			conversation: {
-				visibility: "private",
-				...(pending.fresh && pending.title ? { title: pending.title } : {}),
-			},
-			reply: async (result) => this.#reply(speaker.id, conversation, result),
-		});
+		let answered = false;
+		try {
+			await this.#deps.turns().run({
+				channel,
+				kind: persona.kind,
+				text,
+				speaker,
+				interactive: true,
+				...(persona.selection
+					? {
+							selection: {
+								id: `webchat:${persona.kind}`,
+								...persona.selection,
+							},
+						}
+					: {}),
+				conversation: {
+					visibility: "private",
+					...(pending.fresh && pending.title ? { title: pending.title } : {}),
+				},
+				reply: async (result) => {
+					answered = true;
+					this.#reply(speaker.id, conversation, result);
+				},
+			});
+		} catch (error) {
+			// A turn the host refused before it ran, such as one whose conversation could not be
+			// recorded, has no reply: the person is told it failed, and the router logs the cause.
+			if (!answered)
+				this.connections.sendTo(speaker.id, {
+					type: "failed",
+					conversation,
+					stopped: false,
+				});
+			throw error;
+		}
 		// The registry now records it, so the opened-but-unused entry is spent.
 		this.#minted.delete(conversation);
 	}

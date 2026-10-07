@@ -115,7 +115,7 @@ export type ServerFrame =
 			thinking?: string;
 			files?: readonly ReplyFileFrame[];
 	  }
-	/** The turn ended without an answer: it failed, or it was stopped. The cause stays in the server's log. */
+	/** The turn ended without an answer: it failed, the host refused it before it ran, or it was stopped. The cause stays in the server's log. */
 	| { type: "failed"; conversation: string; stopped: boolean }
 	/** The turn asks the person; answer with `approval` or `answer`. */
 	| { type: "prompt"; conversation: string; prompt: PromptFrame }

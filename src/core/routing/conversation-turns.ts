@@ -59,7 +59,11 @@ export interface ConversationTurns {
 	 * task. It shows typing and the stop control on the channel's surface, emits `turnStarted` and
 	 * `turnEnded` with the turn's `kind`, settles a runtime that throws into a failed result, and
 	 * posts the reply, or a failure or stopped notice, through the surface unless `reply` is given.
-	 * It rejects during setup (NotLinkedError) and when the host has no runtime to run the turn on.
+	 * It rejects during setup (NotLinkedError), when the host has no runtime to run the turn on,
+	 * and when the conversation cannot be recorded in the host's registry (a database error, or a
+	 * `private` conversation without a speaker). Each of these rejects before the turn starts:
+	 * nothing is shown, no event is emitted, and `reply` is not called, so a claim that answers
+	 * its person tells them itself.
 	 */
 	run(input: ConversationTurnInput): Promise<TurnResult>;
 }

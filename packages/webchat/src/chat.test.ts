@@ -85,6 +85,35 @@ test("a person opens a conversation by writing to a persona, and gets the turn's
 	expect(registry.records.get(`web:${conversation}`)?.principalId).toBe("ada");
 });
 
+test("a turn the host refuses before it runs, such as one whose conversation cannot be recorded, tells its person it failed", async () => {
+	const refused = new Error("the conversation registry is unreachable");
+	const runner: ConversationTurns = {
+		run: async () => {
+			throw refused;
+		},
+	};
+	const { chat, connect, say } = testChat({ turns: () => runner });
+	const claim = chat.claim();
+	const runs: Promise<void>[] = [];
+	await chat.surface.start((message: InboundMessage) => {
+		const admission = claim.admit(message);
+		if (admission?.kind === "turn") runs.push(admission.run());
+	});
+	const ada = connect("ada");
+	await say(ada, { type: "send", id: "c1", persona: "helper", text: "hi" });
+	// The rejection still reaches the router, which logs it.
+	const [outcome] = await Promise.allSettled(runs);
+	expect(outcome).toEqual({ status: "rejected", reason: refused });
+	const accepted = ada.frames.find((f) => f.type === "accepted") as {
+		conversation: string;
+	};
+	expect(ada.frames.at(-1)).toEqual({
+		type: "failed",
+		conversation: accepted.conversation,
+		stopped: false,
+	});
+});
+
 test("nobody else may write in, stop, or read a person's conversation", async () => {
 	const { chat, connect, say, turns, settled, stopped } = await linked();
 	const ada = connect("ada");

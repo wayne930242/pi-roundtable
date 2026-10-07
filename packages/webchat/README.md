@@ -193,7 +193,7 @@ The TypeScript types are `ClientFrame` and `ServerFrame`.
 | `{ type: "stoppable", conversation, on }` | A stop applies, or no longer applies. |
 | `{ type: "progress", conversation, event }` | What the running turn writes and which tools it runs: `{ type: "text", delta }`, `{ type: "tool_start", id, tool, preview? }`, or `{ type: "tool_end", id, tool, ok }`. Never the thinking, never a tool's full arguments. |
 | `{ type: "reply", conversation, text, thinking?, files? }` | The turn's answer in full markdown, with its files inline as `{ name, data }` (base64). |
-| `{ type: "failed", conversation, stopped }` | The turn ended without an answer: it failed, or it was stopped. The cause stays in the host's log. |
+| `{ type: "failed", conversation, stopped }` | The turn ended without an answer: it failed, the host refused it before it ran (for example when its conversation could not be recorded), or it was stopped. The cause stays in the host's log. |
 | `{ type: "prompt", conversation, prompt }` | The turn asks you: `{ id, kind: "approval", title, message }`, or `{ id, kind: "ask", title, question, options, multi, allowOther }`. |
 | `{ type: "prompt_closed", conversation, prompt, outcome }` | The prompt closed: `approved`, `declined`, `answered`, `expired`, or `cancelled` (the turn stopped). |
 | `{ type: "reauth", expiresAt }` | Your token expires soon: send `auth` with a fresh one. |
