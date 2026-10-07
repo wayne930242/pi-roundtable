@@ -115,6 +115,48 @@ describe("upgradeSource", () => {
 		expect(upgraded.source).toContain("\t// The owner runs the host.\n");
 	});
 
+	test("keeps the comments of a top-level discord moved into a list of adapters, and counts them truly", async () => {
+		const tail = `\tdatabase: { url: "postgres://roundtable@localhost:5432/roundtable" },
+\tdataDir: "./data",
+\tmodel: "anthropic/claude-sonnet-5-5",
+\thttp: { publicUrl: "https://bot.example.test" },
+};
+`;
+		const discordKey = `\t// The Discord bot.
+\tdiscord: {
+\t\ttoken: "bot-token",
+\t\tguild: "900000000000000001",
+\t\tentryChannel: "900000000000000002",
+\t}, // from the developer portal
+`;
+		for (const owner of [
+			'\t// Who runs it.\n\towner: { id: "900000000000000003", name: "Ada" },\n',
+			"",
+		]) {
+			const legacy = `export default {\n${owner}\tadapters: [],\n${discordKey}${tail}`;
+			const upgraded = upgradeSource(legacy);
+			const comments = owner
+				? [
+						"// Who runs it.",
+						"// The Discord bot.",
+						"// from the developer portal",
+					]
+				: ["// The Discord bot.", "// from the developer portal"];
+			for (const comment of comments)
+				expect(upgraded.source).toContain(comment);
+			expect(upgraded.notes).toEqual([
+				// The owner's comment above its key stays where it was.
+				expect.stringContaining("moved 2 comments"),
+			]);
+			// Discord's comments lead the list that now holds it.
+			expect(upgraded.source).toContain(
+				"\t// The Discord bot.\n\t// from the developer portal\n\tadapters: [",
+			);
+			if (owner)
+				expect(await meaning(upgraded.source)).toEqual(await meaning(legacy));
+		}
+	});
+
 	test("an everyone written as a conditional still means everyone on Discord only when it held", async () => {
 		for (const open of [true, false]) {
 			const legacy = `const open = ${open};

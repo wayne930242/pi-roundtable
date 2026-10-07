@@ -406,16 +406,17 @@ export function upgradeSource(source: string, file = CONFIG_FILE): Upgraded {
 			spans.push(removal);
 			rewrite.edits.push({ ...removal, text: "" });
 		}
-		rewrite.moved.push(
-			...spans.flatMap((span) => rewrite.commentsIn(span.start, span.end)),
+		const comments = spans.flatMap((span) =>
+			rewrite.commentsIn(span.start, span.end),
 		);
+		rewrite.moved.push(...comments);
 		// The host gives the 0.8 owner a Discord identity only with Discord configured.
 		const withDiscord = Boolean(discord) || importsFrom(body, DISCORD_ENTRY);
 		const text = accessText(rewrite, owner, speakers, withDiscord, indent);
 		rewrite.edits.push({
 			start: owner.start,
 			end: owner.end,
-			text: `${rewrite.commentLines(rewrite.moved, indent)}${text}`,
+			text: `${rewrite.commentLines(comments, indent)}${text}`,
 		});
 		const ownerChange = withDiscord
 			? "the owner's principal is their old id and their identity discord:<id>"
@@ -450,8 +451,20 @@ export function upgradeSource(source: string, file = CONFIG_FILE): Upgraded {
 					"adapters is not a list written here, so the upgrade cannot add Discord to it; add discord({ ... }) to it by hand",
 				);
 			const removal = rewrite.removal(discord);
-			rewrite.moved.push(...rewrite.commentsIn(removal.start, removal.end));
+			// Those inside the settings go with them into discord(...); the rest lead the list.
+			const comments = rewrite
+				.commentsIn(removal.start, removal.end)
+				.filter(
+					(comment) => comment.end <= value.start || comment.start >= value.end,
+				);
+			rewrite.moved.push(...comments);
 			rewrite.edits.push({ ...removal, text: "" });
+			if (comments.length > 0)
+				rewrite.edits.push({
+					start: adapters.start,
+					end: adapters.start,
+					text: rewrite.commentLines(comments, rewrite.indentOf(adapters)),
+				});
 			const added = listInsertion(rewrite.source, list, call);
 			rewrite.edits.push({
 				start: added.at,
@@ -501,7 +514,7 @@ export function upgradeSource(source: string, file = CONFIG_FILE): Upgraded {
 		rewrite.moved.length === 0
 			? []
 			: [
-					`moved ${rewrite.moved.length} ${rewrite.moved.length === 1 ? "comment" : "comments"} from the rewritten keys to above the key that replaced them; check they still read right`,
+					`moved ${rewrite.moved.length} ${rewrite.moved.length === 1 ? "comment" : "comments"} from the rewritten keys to above the key that now holds what they were about; check they still read right`,
 				];
 	return { source: upgraded, changes, notes };
 }
