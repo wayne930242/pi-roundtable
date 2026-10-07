@@ -1,6 +1,7 @@
 import type { SQL } from "bun";
 import { openPool } from "../core/db/migrations.ts";
 import { IdentityError } from "../core/domain/errors.ts";
+import type { AccessOwner } from "../core/identity/access-policy.ts";
 import { identityOf, parseIdentity } from "../core/identity/actor-facts.ts";
 import {
 	type IdentityLink,
@@ -10,6 +11,7 @@ import {
 	type RoleGrant,
 } from "../core/identity/principal-store.ts";
 import type { Tier } from "../core/speakers.ts";
+import { CONFIG_FILE } from "./project.ts";
 
 export const PRINCIPAL_USAGE = `  roundtable principal list    every principal, with its roles and its identities written as
                                 access in roundtable.config.ts takes them
@@ -34,6 +36,9 @@ export interface PrincipalIo {
 	out(line: string): void;
 	err(line: string): void;
 }
+
+/** The owners the project's configuration names, or undefined when it does not load. */
+export type ConfiguredOwners = readonly AccessOwner[] | undefined;
 
 /** A refusal: the message is the whole answer, printed as it is. */
 class Refusal extends Error {}
@@ -160,10 +165,37 @@ const ARITY: Record<string, number> = {
 	enable: 1,
 };
 
+/**
+ * Where the configuration lists an identity it linked: under the owner of the principal it is
+ * linked to (or an owner found by their identities), under another owner, nowhere any more, or
+ * unknown when the configuration does not load.
+ */
+function listedUnder(
+	owners: ConfiguredOwners,
+	link: IdentityLink,
+): "this principal" | "another owner" | "nowhere" | "unknown" {
+	if (owners === undefined) return "unknown";
+	const text = identityOf(link);
+	const holders = owners.filter((owner) =>
+		owner.identities.some((written) => {
+			const ref = parseIdentity(written);
+			return ref !== undefined && identityOf(ref) === text;
+		}),
+	);
+	if (holders.length === 0) return "nowhere";
+	return holders.some(
+		(owner) =>
+			owner.principal === undefined || owner.principal === link.principalId,
+	)
+		? "this principal"
+		: "another owner";
+}
+
 async function run(
 	store: PgPrincipalStore,
 	args: readonly string[],
 	io: PrincipalIo,
+	owners: ConfiguredOwners,
 ): Promise<void> {
 	const [command, ...rest] = args;
 	if (command === "create") {
@@ -205,6 +237,13 @@ async function run(
 	if (command === "unlink") {
 		const identity = identityArgument(rest[0]);
 		const link = await store.identity(identity.provider, identity.subject);
+		const listed =
+			link?.source === "config" ? listedUnder(owners, link) : "nowhere";
+		// Unlinked here, a running host would admit it as someone new, and the next start would fail on it.
+		if (listed === "this principal" || listed === "unknown")
+			throw new Refusal(
+				`${identityOf(identity)} is linked to principal ${link?.principalId} by the configuration, ${listed === "unknown" ? `and ${CONFIG_FILE} does not load here to say whether it still lists it; fix it, or` : "which lists it under an owner;"} remove it from access.owners[*].identities in ${CONFIG_FILE} instead, and the next start unlinks it`,
+			);
 		if (!link || !(await store.unlink(identity.provider, identity.subject)))
 			throw new Refusal(
 				`${identityOf(identity)} is not linked to any principal`,
@@ -212,9 +251,9 @@ async function run(
 		io.out(
 			`Unlinked ${identityOf(identity)} from principal ${link.principalId}.`,
 		);
-		if (link.source === "config")
+		if (listed === "another owner")
 			io.out(
-				"The configuration lists it under an owner, so the next start links it again to the owner it names; remove it from access.owners to keep it unlinked.",
+				"The configuration lists it under another owner; the next start links it to them.",
 			);
 		io.out(HOST_DELAY);
 		return;
@@ -291,6 +330,7 @@ export async function principalCommand(
 	url: string,
 	args: readonly string[],
 	io: PrincipalIo,
+	owners: ConfiguredOwners,
 ): Promise<number> {
 	const sql = openPool(url);
 	try {
@@ -300,7 +340,7 @@ export async function principalCommand(
 			);
 			return 1;
 		}
-		await run(await PgPrincipalStore.attach(sql), args, io);
+		await run(await PgPrincipalStore.attach(sql), args, io, owners);
 		return 0;
 	} catch (error) {
 		if (error instanceof Refusal || error instanceof IdentityError) {

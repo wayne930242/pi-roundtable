@@ -240,7 +240,13 @@ export async function runCli(
 			);
 			return 1;
 		}
-		return principalCommand(url, rest, io);
+		const assembled = await project.assembled();
+		return principalCommand(
+			url,
+			rest,
+			io,
+			assembled.ok ? assembled.value.config.access.owners : undefined,
+		);
 	}
 	return usage(io, `unknown command ${JSON.stringify(command)}`);
 }

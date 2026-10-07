@@ -26,6 +26,17 @@ afterEach(async () => {
 	db = undefined;
 });
 
+/** The owner the project's configuration names, as the host of `freshHost` reads it. */
+const OWNERS = [
+	{ name: "Ada", principal: OWNER, identities: [`discord:${OWNER}`] },
+];
+
+/** The project's configuration: the test's database, and `access` owners as given. */
+let access: unknown;
+beforeEach(() => {
+	access = { owners: OWNERS };
+});
+
 /** Runs `roundtable principal ...` against the scratch database, as the project's configuration names it. */
 async function principal(...args: string[]) {
 	const dir = tempDir();
@@ -38,7 +49,8 @@ async function principal(...args: string[]) {
 		bun: () => ({ version: "1.3.10", required: ">=1.3.0" }),
 		version: () => "1.2.3",
 		ports: fakePorts({
-			...validConfig,
+			...(({ owner: _, ...rest }) => rest)(validConfig),
+			access,
 			database: { url: db?.url ?? "postgres://nowhere.example.test/x" },
 		}),
 		packages: {
@@ -62,13 +74,7 @@ function freshHost(): Promise<PgIdentityService> {
 			new PgIdentityService(
 				store,
 				{
-					owners: [
-						{
-							name: "Ada",
-							principal: OWNER,
-							identities: [`discord:${OWNER}`],
-						},
-					],
+					owners: OWNERS,
 					provisioning: "linked",
 					backgroundStaleDays: 30,
 				},
@@ -233,11 +239,63 @@ describeDb("roundtable principal", () => {
 		);
 	});
 
-	test("unlink removes a link and says when the configuration links it again", async () => {
-		const unlinked = await principal("unlink", `discord:${OWNER}`);
+	test("unlink removes a link the CLI made, and refuses one the configuration makes", async () => {
+		const refused = await principal("unlink", `discord:${OWNER}`);
+		expect(refused.code).toBe(1);
+		expect(refused.err).toContain(
+			`discord:${OWNER} is linked to principal ${OWNER} by the configuration`,
+		);
+		expect(refused.err).toContain(
+			"remove it from access.owners[*].identities in roundtable.config.ts instead",
+		);
+		expect(refused.err).not.toContain("links it again");
+		expect((await principal("show", OWNER)).out).toContain(
+			`    discord:${OWNER}  (config,`,
+		);
+
+		expect(
+			(await principal("link", OWNER, "discord:966666600000000010")).code,
+		).toBe(0);
+		const unlinked = await principal("unlink", "discord:966666600000000010");
 		expect(unlinked.code).toBe(0);
-		expect(unlinked.out).toContain("The configuration lists it");
-		expect((await principal("show", OWNER)).out).toContain("identities: none");
+		expect(unlinked.out).toContain(
+			`Unlinked discord:966666600000000010 from principal ${OWNER}.`,
+		);
+		expect((await principal("show", OWNER)).out).not.toContain(
+			"discord:966666600000000010",
+		);
+	});
+
+	test("unlink takes a configuration link the configuration no longer backs, as a start that fails on it asks", async () => {
+		// The configuration moved the identity to another owner: the start stops on it until it is unlinked.
+		access = {
+			owners: [
+				{
+					name: "Bea",
+					principal: "966666600000000020",
+					identities: [`discord:${OWNER}`],
+				},
+			],
+		};
+		const moved = await principal("unlink", `discord:${OWNER}`);
+		expect(moved.code).toBe(0);
+		expect(moved.out).toContain(
+			`Unlinked discord:${OWNER} from principal ${OWNER}.`,
+		);
+		expect(moved.out).toContain(
+			"The configuration lists it under another owner; the next start links it to them.",
+		);
+	});
+
+	test("unlink refuses a configuration link when the configuration does not load", async () => {
+		access = { owners: [{ name: "Ada", identities: ["not-an-identity"] }] };
+		const refused = await principal("unlink", `discord:${OWNER}`);
+		expect(refused.code).toBe(1);
+		expect(refused.err).toContain("by the configuration");
+		expect(refused.err).toContain("does not load");
+		expect((await principal("show", OWNER)).out).toContain(
+			`    discord:${OWNER}  (config,`,
+		);
 	});
 
 	test("refuses what it cannot do, saying why, and changes nothing", async () => {
