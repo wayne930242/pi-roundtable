@@ -1,0 +1,141 @@
+import type {
+	ChannelKey,
+	ConversationPort,
+	ConversationRecord,
+	ConversationRegistry,
+	RouteSocket,
+	Speaker,
+	Tier,
+	WebSocketSendResult,
+} from "pi-roundtable";
+import { partial, silentLogger } from "pi-roundtable/testing";
+import { webAccess } from "../access.ts";
+import { WebChat, type WebChatDeps } from "../chat.ts";
+import type { Connection } from "../connections.ts";
+import type { WebIdentity } from "../oidc.ts";
+import type { ServerFrame } from "../protocol.ts";
+
+/** The registry's behavior in memory: first registration fixes the record, later ones touch it. */
+export function memoryRegistry(): ConversationRegistry & {
+	records: Map<ChannelKey, ConversationRecord>;
+} {
+	const records = new Map<ChannelKey, ConversationRecord>();
+	return {
+		records,
+		register: async (entry) => {
+			const now = new Date();
+			const known = records.get(entry.key);
+			const record: ConversationRecord = known
+				? { ...known, lastActiveAt: now }
+				: {
+						...entry,
+						surface: entry.key.slice(0, entry.key.indexOf(":")),
+						createdAt: now,
+						lastActiveAt: now,
+					};
+			records.set(entry.key, record);
+			return record;
+		},
+		get: async (key) => records.get(key),
+		list: async (filter) =>
+			[...records.values()].filter(
+				(record) =>
+					filter?.principal === undefined ||
+					record.principalId === filter.principal,
+			),
+		setTitle: async () => undefined,
+	};
+}
+
+/** A socket that records the frames sent to it, as the person's browser would receive them. */
+export interface FakeSocket extends RouteSocket<Connection> {
+	frames: ServerFrame[];
+	closed?: { code?: number; reason?: string };
+}
+
+export function fakeSocket(connection: Connection): FakeSocket {
+	const frames: ServerFrame[] = [];
+	const socket: FakeSocket = {
+		data: connection,
+		frames,
+		send: (message): WebSocketSendResult => {
+			frames.push(JSON.parse(String(message)) as ServerFrame);
+			return "sent";
+		},
+		close: (code, reason) => {
+			socket.closed = {
+				...(code === undefined ? {} : { code }),
+				...(reason === undefined ? {} : { reason }),
+			};
+		},
+	};
+	return socket;
+}
+
+export function identity(id: string, roles: string[] = []): WebIdentity {
+	return {
+		id,
+		name: id,
+		roles,
+		expiresAt: new Date(Date.now() + 3_600_000),
+	};
+}
+
+/** A web chat over an in-memory registry, with a `helper` persona for members and an `ops` one for admins. */
+export function testChat(overrides: Partial<WebChatDeps> = {}) {
+	const registry = memoryRegistry();
+	const stopped: ChannelKey[] = [];
+	const chat = new WebChat({
+		surface: "web",
+		verifier: async () => {
+			throw new Error("no tokens in this test");
+		},
+		access: webAccess({
+			owners: ["boss"],
+			admins: { roles: ["Admin"] },
+			members: { roles: ["User"] },
+		}),
+		personas: [
+			{ kind: "helper", label: "Helper", prompt: () => "Help." },
+			{ kind: "ops", minTier: "admin" },
+		],
+		limits: {
+			connectionsPerPrincipal: 2,
+			unusedConversationsPerPrincipal: 3,
+			messageChars: 1000,
+			promptTimeoutMs: 60_000,
+			reauthLeadMs: 1_000,
+		},
+		logger: silentLogger(),
+		registry: () => registry,
+		conversations: () =>
+			partial<ConversationPort>({
+				stop: (channel) => {
+					stopped.push(channel);
+					return true;
+				},
+			}),
+		turns: () => partial({}),
+		runtime: () => partial({}),
+		...overrides,
+	});
+	/** Connects a person: an authenticated socket, opened and greeted. */
+	const connect = (id: string, roles: string[] = ["User"]) => {
+		const admitted = chat.admitIdentity(identity(id, roles));
+		const connection: Connection = { ...admitted, timers: [] };
+		if (!chat.connections.reserve(connection))
+			throw new Error(`${id} holds every connection`);
+		const socket = fakeSocket(connection);
+		chat.opened(socket);
+		return socket;
+	};
+	const say = (socket: FakeSocket, frame: Record<string, unknown>) =>
+		chat.message(socket, JSON.stringify(frame));
+	return { chat, registry, stopped, connect, say };
+}
+
+export const speakerOf = (id: string, tier: Tier = "member"): Speaker => ({
+	id,
+	name: id,
+	tier,
+});

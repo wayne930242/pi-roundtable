@@ -51,7 +51,7 @@ export const PUBLIC_NAME_ALLOWLIST: NameAllowlist = {
 	".github/PACKAGE-RELEASES.md": [OWNER_HANDLE],
 	// Workspace metadata keeps the same public attribution as the root package.
 	...Object.fromEntries(
-		["drawing", "coding", "web", "sandbox", "mcp"].flatMap((name) =>
+		["drawing", "coding", "web", "webchat", "sandbox", "mcp"].flatMap((name) =>
 			["LICENSE", "README.md", "package.json"].map((file) => [
 				`packages/${name}/${file}`,
 				// The sandbox README points to the kit's compactor for the judging service.
