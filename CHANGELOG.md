@@ -20,6 +20,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `RoundtableConfig.discord` and `RoundtableConfig.http` (and `http.publicUrl`) are optional in the type; code that reads them from a config object now checks for them.
 - `RuntimeDeps.agents` is optional and read when a turn runs: the runtime is built before the agent server sets up, and it is `undefined` on a host without the agent server.
 
+### Fixed
+
+- An approval card now gets the lowest tier that may approve its call (`OwnerPrompts.confirm`'s `minTier`, the higher of the tool's tier and the hold rule's `approvalTier`). The runtime dropped it on the way to the surface, so every card was the owner's alone; on Discord, a held call of a member- or admin-tier tool may now be approved by a speaker of that tier, as `HeldCall.minTier` describes.
+
 ## [0.7.19] - 2026-10-07
 
 ### Fixed

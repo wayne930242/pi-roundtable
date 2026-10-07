@@ -160,6 +160,32 @@ describe("in-turn approval", () => {
 		expect(gate.pending()?.calls).toHaveLength(1);
 	});
 
+	test("the card says the lowest tier that may approve the call, from its tool and its rule", async () => {
+		const asked: (string | undefined)[] = [];
+		const prompts: OwnerPrompts = {
+			confirm: async (_title, _message, _signal, minTier) => {
+				asked.push(minTier);
+				return "approved";
+			},
+			ask: async () => undefined,
+		};
+		const gate = new ConfirmationGate(
+			holds,
+			OWNER,
+			undefined,
+			{},
+			{
+				minTier: () => "member",
+				allows: () => true,
+			},
+		);
+		const slot = promptSlot();
+		slot.bind(prompts, "Assistant");
+		gate.beginTurn("workspace", false);
+		await gateHandler(gate, slot)(MAIL, send);
+		expect(asked).toEqual(["member"]);
+	});
+
 	test("a stopped turn neither runs nor holds the call", async () => {
 		const gate = new ConfirmationGate(holds, OWNER);
 		const slot = promptSlot();
