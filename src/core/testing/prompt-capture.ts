@@ -245,12 +245,31 @@ interface CaptureHost {
 }
 
 /** Boots `defineRoundtable` on the faux model, with or without the stand-in Discord. */
-async function captureHost(withDiscord: boolean): Promise<CaptureHost> {
+/** How the capture hosts write their owner: the 0.8 `owner`, or the same person in `access`. */
+export type CaptureForm = "owner" | "access";
+
+async function captureHost(
+	withDiscord: boolean,
+	form: CaptureForm,
+): Promise<CaptureHost> {
 	const dataDir = mkdtempSync(join(tmpdir(), "roundtable-prompt-capture-"));
 	const { modelRuntime, capture } = await fauxModel(dataDir);
 	let probed: PluginContext | undefined;
 	const base: RoundtableConfig = {
-		owner: CAPTURE_OWNER,
+		...(form === "owner"
+			? { owner: CAPTURE_OWNER }
+			: {
+					access: {
+						owners: [
+							{
+								name: CAPTURE_OWNER.name,
+								pronouns: CAPTURE_OWNER.pronouns,
+								principal: CAPTURE_OWNER.id,
+								identities: [`discord:${CAPTURE_OWNER.id}`],
+							},
+						],
+					},
+				}),
 		database: { url: testDatabaseUrl },
 		dataDir,
 		workDir: dataDir,
@@ -363,12 +382,12 @@ async function remember(context: PluginContext): Promise<void> {
 	}
 }
 
-/** The prompt and tools of every session the M2 work must keep, normalized, by scenario. */
-export async function capturePrompts(): Promise<
-	Record<string, CapturedPrompt>
-> {
+/** The prompt and tools of every session the M2 work must keep, normalized, by scenario, with the owner written in `form`. */
+export async function capturePrompts(
+	form: CaptureForm = "owner",
+): Promise<Record<string, CapturedPrompt>> {
 	const out: Record<string, CapturedPrompt> = {};
-	const discord = await captureHost(true);
+	const discord = await captureHost(true, form);
 	try {
 		const { context } = discord;
 		await remember(context);
@@ -437,7 +456,7 @@ export async function capturePrompts(): Promise<
 	} finally {
 		await discord.stop();
 	}
-	const headless = await captureHost(false);
+	const headless = await captureHost(false, form);
 	try {
 		const { context } = headless;
 		await remember(context);

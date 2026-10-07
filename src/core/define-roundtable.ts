@@ -13,8 +13,8 @@ import {
 	precheckPlugin,
 	scheduleStorePlugin,
 } from "./builtin/stores.ts";
+import { warnDeprecations } from "./config/access.ts";
 import {
-	type Pronouns,
 	type ResolvedConfig,
 	type RoundtableConfig,
 	resolveConfig,
@@ -24,10 +24,7 @@ import { ConfigError } from "./domain/errors.ts";
 import { JudgeError } from "./errors.ts";
 import type { RoundtableOptions } from "./host.ts";
 import type { ListenerConfig } from "./http/listeners.ts";
-import {
-	type AccessRules,
-	rulesOfSpeakerMap,
-} from "./identity/access-policy.ts";
+import { speakerPolicyOf } from "./identity/access-policy.ts";
 import { identityPlugin } from "./identity/identity-plugin.ts";
 import { type JudgeModel, piJudgeModel } from "./judging/model-judge.ts";
 import { createLogger, type LogEntry, type Logger } from "./log.ts";
@@ -39,7 +36,6 @@ import {
 	agentSessionsSlot,
 	runtimePlugin,
 } from "./runtime/runtime-plugin.ts";
-import { speakerPolicy } from "./speakers.ts";
 import { toolTiers } from "./tool-tiers.ts";
 
 /** What `defineRoundtable` returns: give both to `new Roundtable(options, plugins)`. */
@@ -117,26 +113,16 @@ function publicListener(
 	};
 }
 
-/** The access rules of the 0.8 owner and speakers: the owner by id on Discord, the tiers by Discord user and role ids. */
-function legacyRules(config: ResolvedConfig): AccessRules {
-	const { owner, speakers } = config;
-	const map = rulesOfSpeakerMap({
-		owners: [owner.id],
-		...(speakers.admins ? { admins: speakers.admins } : {}),
-		...(speakers.members ? { members: speakers.members } : {}),
-	});
+/**
+ * The owner the Discord parts act for: the primary owner, by the Discord user id among their
+ * identities, until those parts follow each turn's principal.
+ */
+export function discordOwnerOf(
+	config: ResolvedConfig,
+): ResolvedConfig["owner"] {
 	return {
-		...map,
-		owners: [
-			{
-				name: owner.name,
-				pronouns: owner.pronouns.subject as Pronouns,
-				principal: owner.id,
-				identities: [`discord:${owner.id}`],
-			},
-		],
-		provisioning: "admitted",
-		backgroundStaleDays: 30,
+		...config.owner,
+		id: config.primaryOwner.discordId ?? config.owner.id,
 	};
 }
 
@@ -158,12 +144,9 @@ function discordAssembly(
 		errorReporter: ErrorReporter | undefined;
 	},
 ): DiscordAssembly {
-	const { name, owner } = config;
-	const speakers = speakerPolicy({
-		owners: [owner.id],
-		...(config.speakers.admins ? { admins: config.speakers.admins } : {}),
-		...(config.speakers.members ? { members: config.speakers.members } : {}),
-	});
+	const { name } = config;
+	const owner = discordOwnerOf(config);
+	const speakers = speakerPolicyOf(config.access, "discord");
 	const sharedPrompt = config.prompts.shared
 		? readPrompt(config.prompts.shared, "prompts.shared")
 		: readPrompt(join(ASSETS, "prompts", "shared.md"), "prompts.shared");
@@ -259,6 +242,7 @@ export async function defineRoundtable(
 					}
 				: undefined,
 		);
+	warnDeprecations(logger, config.deprecations);
 	// The agent server hands the runtime its per-agent settings once it sets up.
 	const agentSessions = agentSessionsSlot();
 	const assembly = discord
@@ -289,7 +273,7 @@ export async function defineRoundtable(
 			...(overrides.aborted ? { aborted: overrides.aborted } : {}),
 		},
 		plugins: [
-			identityPlugin({ rules: legacyRules(config) }),
+			identityPlugin({ rules: config.access }),
 			...(config.memory ? [memoryPlugin({ owner })] : []),
 			scheduleStorePlugin(),
 			precheckPlugin(),

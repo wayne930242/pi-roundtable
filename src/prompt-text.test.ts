@@ -25,5 +25,11 @@ const SNAPSHOT = join(import.meta.dir, "prompt-text.snapshot.json");
 				);
 			expect(actual).toEqual(JSON.parse(readFileSync(SNAPSHOT, "utf8")));
 		}, 60_000);
+
+		test("the same owner written in access sends the model the same text", async () => {
+			expect(await capturePrompts("access")).toEqual(
+				JSON.parse(readFileSync(SNAPSHOT, "utf8")),
+			);
+		}, 60_000);
 	},
 );

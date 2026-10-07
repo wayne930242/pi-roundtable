@@ -48,9 +48,12 @@
 			"withReplyFiles"
 		],
 		"types": [
+			"AccessConfig",
 			"AccessOwner",
+			"AccessOwnerConfig",
 			"AccessRules",
 			"AccessTier",
+			"AccessTierConfig",
 			"ActorFacts",
 			"AdapterConfig",
 			"Admission",

@@ -2708,9 +2708,12 @@ Import from the entries listed below; source area files are internal.
 
 | Name | Entry | Kind |
 |---|---|---|
+| `AccessConfig` | `pi-roundtable` | type |
 | `AccessOwner` | `pi-roundtable` | type |
+| `AccessOwnerConfig` | `pi-roundtable` | type |
 | `AccessRules` | `pi-roundtable` | type |
 | `AccessTier` | `pi-roundtable` | type |
+| `AccessTierConfig` | `pi-roundtable` | type |
 | `ActorFacts` | `pi-roundtable` | type |
 | `AGENTS` | `pi-roundtable` | value |
 | `AGENT_SERVER_PLUGIN` | `pi-roundtable` | value |

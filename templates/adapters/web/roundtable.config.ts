@@ -14,8 +14,9 @@ const list = (name: string): string[] =>
 
 export default {
 	name: "Roundtable",
-	// The operator who runs this host. People sign in through your OpenID Connect provider instead.
-	owner: { id: "operator", name: env("OWNER_NAME") },
+	// The operator who runs this host, as the host's owner. People sign in through your OpenID
+	// Connect provider instead, and the web chat's access below decides their tier.
+	access: { owners: [{ name: env("OWNER_NAME"), principal: "operator" }] },
 	database: { url: env("DATABASE_URL") },
 	// Paths are relative to the project directory, where the roundtable command runs.
 	dataDir: "./data",

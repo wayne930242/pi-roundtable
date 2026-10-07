@@ -8,7 +8,18 @@ const env = (name: string): string => process.env[name] ?? "";
 
 export default {
 	name: "Roundtable",
-	owner: { id: env("OWNER_ID"), name: env("OWNER_NAME") },
+	// Who the host serves. You are the owner: your principal and your Discord identity are your
+	// Discord user id. Add admins and members by Discord user or role, such as
+	// members: { roles: ["discord:role:<role id>"] }.
+	access: {
+		owners: [
+			{
+				name: env("OWNER_NAME"),
+				principal: env("OWNER_ID"),
+				identities: [`discord:${env("OWNER_ID")}`],
+			},
+		],
+	},
 	discord: {
 		token: env("DISCORD_TOKEN"),
 		guild: env("DISCORD_GUILD_ID"),

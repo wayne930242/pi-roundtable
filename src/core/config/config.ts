@@ -4,6 +4,7 @@ import type { AgentSeed } from "../agents/agent-rules.ts";
 import { ConfigError } from "../domain/errors.ts";
 import type { InterimTextMode } from "../domain/interim.ts";
 import { isLocale, type Locale } from "../i18n/index.ts";
+import type { AccessRules } from "../identity/access-policy.ts";
 import type { OwnerIdentity } from "../identity.ts";
 import {
 	type ModelRef,
@@ -15,6 +16,7 @@ import type { RoundtablePlugin } from "../plugin.ts";
 import { PRIMARY_CHARS } from "../runtime/interim-text.ts";
 import type { ChannelKey } from "../sessions.ts";
 import type { Tier, TierMembers } from "../speakers.ts";
+import { type AccessConfig, accessOf, accessShape } from "./access.ts";
 import { discordShape, liftAdapters } from "./adapters.ts";
 import {
 	bool,
@@ -81,8 +83,12 @@ export interface DiscordAdapterConfig extends AdapterConfig {
 export interface RoundtableConfig {
 	/** The assistant's display name; default "Roundtable". */
 	name?: string;
-	/** The one owner: the only person who can change everything. */
-	owner: { id: string; name: string; pronouns?: Pronouns };
+	/**
+	 * The one owner, as 0.8 wrote it: their id, which is both their principal and their Discord
+	 * user id, their name, and pronouns. Deprecated, going away in 0.10: write `access` instead,
+	 * never both; `roundtable upgrade` rewrites it.
+	 */
+	owner?: { id: string; name: string; pronouns?: Pronouns };
 	/**
 	 * The Discord bot, its guild, and the agent server that lives there. Leave it out for a host
 	 * without Discord: no Discord plugins, no agent server or agents, no skills, and no tool that
@@ -113,8 +119,14 @@ export interface RoundtableConfig {
 	locale?: Locale;
 	/** The IANA time zone schedules and stamps use; default "UTC". */
 	timeZone?: string;
-	/** Who may talk to the agents besides the owner, and what each tier may use. */
+	/** Who may talk to the agents besides the owner, by Discord user and role ids, as 0.8 wrote it. Deprecated with `owner`: write `access` instead. */
 	speakers?: { admins?: TierConfig; members?: TierConfig };
+	/**
+	 * Who the host serves: the owners, the first the primary one, and the admins and members by
+	 * identity (`<provider>:<subject>`), role (`<surface>:role:<name>`), or everyone. Required
+	 * unless the deprecated `owner` is given, and never with it.
+	 */
+	access?: AccessConfig;
 	toolTiers?: Record<string, Tier>;
 	/** Prompt files, read once at start; `shared` starts every agent's prompt. */
 	prompts?: { shared: string; guest?: string };
@@ -187,11 +199,13 @@ const isPlugin = (value: unknown): value is RoundtablePlugin =>
 
 const schema = shape({
 	name: optional(text),
-	owner: shape({
-		id: text,
-		name: text,
-		pronouns: optional(oneOf<Pronouns>("he", "she", "they")),
-	}),
+	owner: optional(
+		shape({
+			id: text,
+			name: text,
+			pronouns: optional(oneOf<Pronouns>("he", "she", "they")),
+		}),
+	),
 	discord: optional(discordShape),
 	database: shape({ url: text }),
 	dataDir: text,
@@ -216,6 +230,7 @@ const schema = shape({
 	speakers: optional(
 		shape({ admins: optional(tierMembers), members: optional(tierMembers) }),
 	),
+	access: optional(accessShape),
 	toolTiers: optional(record(oneOf<Tier>("owner", "admin", "member"))),
 	prompts: optional(shape({ shared: text, guest: optional(text) })),
 	agents: optional(
@@ -255,12 +270,6 @@ const schema = shape({
 	),
 });
 
-const PRONOUNS: Record<Pronouns, OwnerIdentity["pronouns"]> = {
-	he: { subject: "he", object: "him", possessive: "his" },
-	she: { subject: "she", object: "her", possessive: "her" },
-	they: { subject: "they", object: "them", possessive: "their" },
-};
-
 /** The configuration with every default filled in. */
 export interface ResolvedConfig {
 	name: string;
@@ -269,7 +278,17 @@ export interface ResolvedConfig {
 	 * with Discord. `discord.rootCommand` when Discord is on, else the lowercase assistant name.
 	 */
 	slug: string;
+	/**
+	 * The primary owner, `access.owners[0]` (or the 0.8 `owner`): their principal id, name, and
+	 * pronouns, and the Discord user id the Discord parts act for until 0.10.
+	 */
+	primaryOwner: OwnerIdentity & { id: string; discordId?: string };
+	/** The primary owner as 0.8 knew them, `id` their principal id. Deprecated: read `primaryOwner`. */
 	owner: OwnerIdentity & { id: string };
+	/** Who the host serves, the 0.8 `owner` and `speakers` converted when they are what the configuration gives. */
+	access: AccessRules;
+	/** What the configuration wrote in a deprecated form, which the host logs once. */
+	deprecations: string[];
 	/** Undefined on a host without Discord. */
 	discord?: {
 		token: string;
@@ -288,6 +307,7 @@ export interface ResolvedConfig {
 	delegation: { model: ModelRef; thinking: ThinkingLevel };
 	locale: Locale;
 	timeZone: string;
+	/** The 0.8 `speakers`; empty when the configuration writes `access`. Deprecated: read `access`. */
 	speakers: { admins?: TierMembers; members?: TierMembers };
 	toolTiers: Record<string, Tier>;
 	prompts: { shared?: string; guest?: string };
@@ -378,13 +398,16 @@ export function resolveConfig(input: unknown): ResolvedConfig {
 	const slug =
 		discord?.rootCommand ?? name.toLowerCase().replace(/[^a-z0-9-]+/g, "-");
 	const ops = opsOf(config.ops, discord !== undefined);
+	const access = accessOf(config, discord !== undefined);
+	const { primaryOwner } = access;
 	return {
 		name,
 		slug,
+		...access,
 		owner: {
-			id: config.owner.id,
-			name: config.owner.name,
-			pronouns: PRONOUNS[config.owner.pronouns ?? "they"],
+			id: primaryOwner.id,
+			name: primaryOwner.name,
+			pronouns: primaryOwner.pronouns,
 		},
 		...(discord
 			? {

@@ -11,7 +11,7 @@ import { type RoundtableConfig, resolveConfig } from "../config/config.ts";
 import type { ConversationPort } from "../contract/channels.ts";
 import type { AgentRuntime } from "../contract/runtime.ts";
 import type { ChatSurface } from "../contract/surface.ts";
-import { defineRoundtable } from "../define-roundtable.ts";
+import { defineRoundtable, discordOwnerOf } from "../define-roundtable.ts";
 import { CommandCollection } from "../discord/command-collection.ts";
 import type { ComposedCommands } from "../discord/compose-commands.ts";
 import type { DiscordConnection } from "../discord/connection.ts";
@@ -30,8 +30,9 @@ import { testDatabaseUrl } from "./database.ts";
 
 export interface TestHostOptions {
 	/**
-	 * Over a test configuration: an owner, a guild, a temporary `dataDir`, and the test database
-	 * (`ROUNDTABLE_TEST_DATABASE_URL`).
+	 * Over a test configuration: the owner Ada in `access`, a guild, a temporary `dataDir`, and
+	 * the test database (`ROUNDTABLE_TEST_DATABASE_URL`). Giving the 0.8 `owner` or `speakers`
+	 * replaces the default `access`.
 	 */
 	config?: Partial<RoundtableConfig>;
 	/** The app's plugins, after the built-in ones, as `defineRoundtable` places them. */
@@ -73,17 +74,28 @@ export interface TestHost {
 	stop(): Promise<void>;
 }
 
+/** The test host's owner, Ada, as `access` writes her: her principal is her Discord user id. */
+const TEST_ACCESS: NonNullable<RoundtableConfig["access"]> = {
+	owners: [
+		{
+			name: "Ada",
+			principal: "100000000000000001",
+			identities: ["discord:100000000000000001"],
+		},
+	],
+};
+
 function defaultConfig(withDiscord: boolean): RoundtableConfig {
 	const dataDir = mkdtempSync(join(tmpdir(), "roundtable-test-host-"));
 	if (!withDiscord)
 		return {
-			owner: { id: "100000000000000001", name: "Ada" },
+			access: TEST_ACCESS,
 			database: { url: testDatabaseUrl },
 			dataDir,
 			model: "anthropic/claude-sonnet-5-5",
 		};
 	return {
-		owner: { id: "100000000000000001", name: "Ada" },
+		access: TEST_ACCESS,
 		discord: {
 			token: "token",
 			guild: "900000000000000001",
@@ -211,13 +223,17 @@ export async function testHost(
 	};
 	const withDiscord = options.discord !== false;
 	const given = options.discord === false ? undefined : options.discord;
-	const base: RoundtableConfig = {
-		...defaultConfig(withDiscord),
-		...options.config,
-	};
+	const defaults = defaultConfig(withDiscord);
+	// A test that writes the 0.8 owner or speakers gets them in place of the default access.
+	if (options.config?.owner || options.config?.speakers) delete defaults.access;
+	const base: RoundtableConfig = { ...defaults, ...options.config };
 	const resolved = resolveConfig(base);
 	const rootCommand = resolved.slug;
-	const guard = new OwnerGuard(resolved.owner.id, silentLogger(), rootCommand);
+	const guard = new OwnerGuard(
+		discordOwnerOf(resolved).id,
+		silentLogger(),
+		rootCommand,
+	);
 	const config: RoundtableConfig = {
 		...base,
 		plugins: [
