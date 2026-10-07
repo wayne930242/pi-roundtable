@@ -1,8 +1,11 @@
 import {
+	chmodSync,
 	existsSync,
 	readFileSync,
+	realpathSync,
 	renameSync,
 	rmSync,
+	statSync,
 	writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
@@ -94,6 +97,30 @@ async function compare(
 }
 
 /**
+ * Replaces the file at `path` with `text`, written beside it and renamed over it so it is never
+ * half written. A symlink is written through to the file it names, which keeps its mode; the
+ * staged file is removed when the rename fails.
+ */
+export function writeAtomically(
+	path: string,
+	text: string,
+	rename: (from: string, to: string) => void = renameSync,
+): void {
+	const target = realpathSync(path);
+	const mode = statSync(target).mode & 0o7777;
+	const staged = `${target}.upgrade-${crypto.randomUUID()}`;
+	try {
+		writeFileSync(staged, text, { mode });
+		// The mode given to writeFileSync passes through the umask; set it as the file had it.
+		chmodSync(staged, mode);
+		rename(staged, target);
+	} catch (error) {
+		rmSync(staged, { force: true });
+		throw error;
+	}
+}
+
+/**
  * Rewrites the project's roundtable.config.ts in the 0.9 form, after showing it. Before it writes,
  * it loads the rewrite beside the original and refuses it unless the host would serve the same
  * people, with the same owners and Discord settings. When the original does not load, such as
@@ -137,12 +164,7 @@ export async function upgrade(inputs: UpgradeInputs): Promise<UpgradeReport> {
 				`${verified.skipped}; it was not written. Set the environment the host runs with and retry; to write it without the check, run roundtable upgrade --write --unchecked.`,
 			],
 		};
-	if (inputs.write) {
-		// Written beside it and renamed over it, so the file is never half written.
-		const staged = `${path}.upgrade-${crypto.randomUUID()}`;
-		writeFileSync(staged, upgraded.source);
-		renameSync(staged, path);
-	}
+	if (inputs.write) writeAtomically(path, upgraded.source);
 	return {
 		ok: true,
 		diff: lineDiff(source, upgraded.source, CONFIG_FILE),

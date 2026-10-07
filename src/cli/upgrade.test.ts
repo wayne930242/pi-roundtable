@@ -1,9 +1,14 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import {
+	chmodSync,
+	lstatSync,
+	mkdirSync,
 	mkdtempSync,
 	readdirSync,
 	readFileSync,
 	rmSync,
+	statSync,
+	symlinkSync,
 	writeFileSync,
 } from "node:fs";
 import { join, resolve } from "node:path";
@@ -17,7 +22,7 @@ import { lineDiff } from "./line-diff.ts";
 import { CONFIG_FILE } from "./project.ts";
 import { linkCheckout, tempDir, validConfig } from "./testing/fixtures.ts";
 import { LEGACY_CONFIGS, TEMPLATE_0_8 } from "./testing/legacy-configs.ts";
-import { upgrade } from "./upgrade.ts";
+import { upgrade, writeAtomically } from "./upgrade.ts";
 import { upgradeSource } from "./upgrade-source.ts";
 
 const ROOT = resolve(import.meta.dir, "../..");
@@ -567,6 +572,44 @@ describe("roundtable upgrade on a 0.8 project", () => {
 			);
 		} finally {
 			other.done();
+		}
+	});
+});
+
+describe("writeAtomically", () => {
+	test("writes through a symlink to its target, keeps the link, and keeps the file's mode", () => {
+		const dir = tempDir("roundtable-upgrade-write-");
+		try {
+			mkdirSync(join(dir.path, "real"));
+			const target = join(dir.path, "real", CONFIG_FILE);
+			writeFileSync(target, "before");
+			chmodSync(target, 0o640);
+			const link = join(dir.path, CONFIG_FILE);
+			symlinkSync(join("real", CONFIG_FILE), link);
+			writeAtomically(link, "after");
+			expect(lstatSync(link).isSymbolicLink()).toBe(true);
+			expect(readFileSync(target, "utf8")).toBe("after");
+			expect(statSync(target).mode & 0o777).toBe(0o640);
+			expect(readdirSync(join(dir.path, "real"))).toEqual([CONFIG_FILE]);
+		} finally {
+			dir.done();
+		}
+	});
+
+	test("removes the staged file when the rename fails, leaving the file as it was", () => {
+		const dir = tempDir("roundtable-upgrade-write-");
+		try {
+			const path = join(dir.path, CONFIG_FILE);
+			writeFileSync(path, "before");
+			expect(() =>
+				writeAtomically(path, "after", () => {
+					throw new Error("EXDEV: cross-device link not permitted");
+				}),
+			).toThrow("EXDEV");
+			expect(readFileSync(path, "utf8")).toBe("before");
+			expect(readdirSync(dir.path)).toEqual([CONFIG_FILE]);
+		} finally {
+			dir.done();
 		}
 	});
 });
