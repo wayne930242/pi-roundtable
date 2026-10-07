@@ -1,6 +1,12 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+	mkdirSync,
+	mkdtempSync,
+	rmSync,
+	symlinkSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import type { RoundtableConfig } from "../../core/config/config.ts";
 import type { DefinedRoundtable } from "../../core/define-roundtable.ts";
 import type { Http, HttpResponse } from "../http.ts";
@@ -104,4 +110,34 @@ export function healthyDiscord(
 			body: { id: channel, guild_id: guild, permission_overwrites: [] },
 		},
 	};
+}
+
+const CHECKOUT = resolve(import.meta.dir, "../../..");
+
+/**
+ * The generated project with `pi-roundtable`, `typebox`, and the types linked from this
+ * checkout, so it typechecks and tests against the source under test without the network.
+ */
+export function linkCheckout(project: string): void {
+	const modules = join(project, "node_modules");
+	mkdirSync(join(modules, "pi-roundtable"), { recursive: true });
+	mkdirSync(join(modules, "@types"), { recursive: true });
+	writeFileSync(
+		join(modules, "pi-roundtable/package.json"),
+		JSON.stringify({
+			name: "pi-roundtable",
+			type: "module",
+			exports: {
+				".": "./src/index.ts",
+				"./testing": "./src/testing.ts",
+				"./discord": "./src/discord/index.ts",
+			},
+		}),
+	);
+	symlinkSync(join(CHECKOUT, "src"), join(modules, "pi-roundtable/src"));
+	symlinkSync(join(CHECKOUT, "node_modules/typebox"), join(modules, "typebox"));
+	symlinkSync(
+		join(CHECKOUT, "node_modules/@types/bun"),
+		join(modules, "@types/bun"),
+	);
 }

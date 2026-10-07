@@ -10,11 +10,19 @@ import { doctor } from "./doctor.ts";
 import { fetchHttp } from "./http.ts";
 import { init } from "./init.ts";
 import { type PackagePorts, piPackagePorts } from "./pi-packages.ts";
-import { loadConfigFile, type Ports } from "./project.ts";
+import { PRINCIPAL_USAGE, principalCommand } from "./principal.ts";
+import {
+	CONFIG_FILE,
+	loadConfigFile,
+	loadDefault,
+	type Ports,
+	Project,
+} from "./project.ts";
 import { formatOutcomes } from "./report.ts";
 import { assemble, providerLogin } from "./runtime.ts";
 import { start } from "./start.ts";
 import { ADAPTERS, isAdapter, OFFICIAL_PLUGINS } from "./templates.ts";
+import { upgrade } from "./upgrade.ts";
 
 /** What the command line reads from its surroundings; tests replace every part. */
 export interface CliEnvironment {
@@ -42,6 +50,9 @@ const USAGE = `roundtable: a Discord agent server on Pi
                                 which are copied in ready to run instead of the template
   roundtable add package <spec> install a Pi package with bun add, and add plugins/<name>.ts that
                                 loads it and gives its tools to every agent turn
+  roundtable upgrade [--write]  show roundtable.config.ts rewritten in the 0.9 form (owner and
+                                speakers as access, discord as an adapter); --write writes it
+${PRINCIPAL_USAGE}
 `;
 
 /** The package's own version and the Bun range it needs, from the package.json beside the source. */
@@ -201,7 +212,68 @@ export async function runCli(
 		}
 		return 0;
 	}
+	if (command === "upgrade") {
+		const write = rest.includes("--write");
+		if (rest.some((arg) => arg !== "--write"))
+			return usage(io, "upgrade takes only --write");
+		return runUpgrade(io, write);
+	}
+	if (command === "principal") {
+		const project = new Project(resolve(io.cwd), io.ports);
+		const raw = await project.raw();
+		if (!raw.ok) {
+			for (const line of formatOutcomes([
+				{ name: "configuration", result: raw.failure },
+			]))
+				io.err(line);
+			return 1;
+		}
+		const url = await project.text("database", "url");
+		if (!url) {
+			io.err(
+				`database.url has no value in ${CONFIG_FILE}; the principals live in the host's database. Set DATABASE_URL in .env.`,
+			);
+			return 1;
+		}
+		return principalCommand(url, rest, io);
+	}
 	return usage(io, `unknown command ${JSON.stringify(command)}`);
+}
+
+async function runUpgrade(io: CliEnvironment, write: boolean): Promise<number> {
+	const report = await upgrade({
+		cwd: resolve(io.cwd),
+		write,
+		load: loadDefault,
+	});
+	if (!report.ok) {
+		for (const line of report.problems) io.err(line);
+		io.err(`${CONFIG_FILE} was not changed.`);
+		return 1;
+	}
+	if (report.changes.length === 0) {
+		io.out(
+			`${CONFIG_FILE} is already in the 0.9 form; there is nothing to change.`,
+		);
+		return 0;
+	}
+	io.out(`${CONFIG_FILE} in the 0.9 form:`);
+	for (const change of report.changes) io.out(`  - ${change}`);
+	io.out("");
+	for (const line of report.diff) io.out(line);
+	io.out("");
+	for (const note of report.notes) io.out(`Note: ${note}.`);
+	io.out(
+		"same" in report.verified
+			? "Checked: the rewrite serves the same owners, admins, and members, with the same Discord settings."
+			: `Not checked: ${report.verified.skipped}.`,
+	);
+	io.out(
+		report.written
+			? `Wrote ${CONFIG_FILE}; no other file was changed.`
+			: `Nothing was written. Run roundtable upgrade --write to write it.`,
+	);
+	return 0;
 }
 
 function usage(io: CliEnvironment, message: string): number {

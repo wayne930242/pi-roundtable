@@ -66,15 +66,17 @@ A web chat project asks for `OWNER_NAME`, `DATABASE_URL`, and `MODEL`, and for t
 2. `.env` has a value for every variable `.env.example` lists.
 3. `roundtable.config.ts` against its schema, naming the failing key.
 4. Every plugin loads, and no two share a name.
-5. Whether a plugin fills the `images` slot.
+5. Whom `access` serves: the owners, and a warning when `everyone: true` admits everyone on every surface of a host with more than one.
+6. Whether a plugin fills the `images` slot.
    The check passes with or without one; agents without an image provider get avatars generated from their display names.
-6. PostgreSQL is reachable and migratable.
-7. With Discord configured: the Discord token is valid, the bot is in your server, the Message Content intent is on, and the bot has the permissions it needs in the entry channel (including Pin Messages).
+7. PostgreSQL is reachable and migratable.
+8. The principals: a dry run of what the next start makes from the people the database already knows, printed as the start logs it; a configured owner's identity linked to someone else, which stops the start; and a disabled owner.
+9. With Discord configured: the Discord token is valid, the bot is in your server, the Message Content intent is on, and the bot has the permissions it needs in the entry channel (including Pin Messages).
    When the bot is not in the server, the fix is an invitation link that asks for exactly those permissions.
-8. The model login exists.
-9. With Discord configured: `PUBLIC_URL` is a well-formed address; with `--reachable` it also has to answer, which is only true while the bot runs.
+10. The model login exists.
+11. With Discord configured: `PUBLIC_URL` is a well-formed address; with `--reachable` it also has to answer, which is only true while the bot runs.
 
-It exits non-zero on any failure and changes nothing it checked.
+It exits non-zero on any failure, not on a warning, and changes nothing it checked.
 A fresh project fails only on the credentials you have not entered yet, and says which.
 
 ### `start`
@@ -200,6 +202,8 @@ It does not yet isolate the people it talks to from each other the way a multi-u
 | `roundtable start` | Runs the checks that need no network, then the bot |
 | `roundtable add plugin <name>` | Adds `plugins/<name>.ts` and its test, and lists it in the config |
 | `roundtable add package <spec>` | Installs a Pi package with `bun add` and adds a plugin that loads it and gives its tools to every agent turn |
+| `roundtable upgrade [--write]` | Shows `roundtable.config.ts` rewritten in the 0.9 form (`owner` and `speakers` as `access`, `discord` as an adapter) as a diff; `--write` writes it after checking it serves the same people |
+| `roundtable principal list\|show\|create\|link\|unlink\|grant\|revoke\|disable\|enable` | Lists and changes the principals, their identities, and their roles in the database; a running host sees a change within 30 seconds |
 
 ## Changes and license
 

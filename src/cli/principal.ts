@@ -1,0 +1,286 @@
+import type { SQL } from "bun";
+import { openPool } from "../core/db/migrations.ts";
+import { IdentityError } from "../core/domain/errors.ts";
+import { identityOf, parseIdentity } from "../core/identity/actor-facts.ts";
+import {
+	type IdentityLink,
+	PgPrincipalStore,
+	type PrincipalRecord,
+	type Pronouns,
+} from "../core/identity/principal-store.ts";
+import type { Tier } from "../core/speakers.ts";
+
+export const PRINCIPAL_USAGE = `  roundtable principal list    every principal, with its roles and its identities written as
+                                access in roundtable.config.ts takes them
+  roundtable principal show <principal>
+  roundtable principal create --name <name> [--pronouns he|she|they]
+  roundtable principal link <principal> <provider>:<subject>
+  roundtable principal unlink <provider>:<subject>
+  roundtable principal grant <principal> member|admin|owner
+  roundtable principal revoke <principal> member|admin|owner
+  roundtable principal disable <principal>
+  roundtable principal enable <principal>
+                                <principal> is a principal id, or an identity linked to it`;
+
+/** What every change prints: a running host reads its own copy for up to 30 seconds. */
+export const HOST_DELAY =
+	"A running host sees this within 30 seconds; a host that starts sees it at once.";
+
+const TIERS: readonly Tier[] = ["member", "admin", "owner"];
+const PRONOUNS: readonly Pronouns[] = ["he", "she", "they"];
+
+export interface PrincipalIo {
+	out(line: string): void;
+	err(line: string): void;
+}
+
+/** A refusal: the message is the whole answer, printed as it is. */
+class Refusal extends Error {}
+
+const describe = (principal: PrincipalRecord): string =>
+	`${principal.displayName}${principal.pronouns ? ` (${principal.pronouns})` : ""}`;
+
+const named = (principal: PrincipalRecord): string =>
+	`principal ${principal.id} (${principal.displayName})`;
+
+const stamp = (date: Date): string => date.toISOString();
+
+/** The principal a reference names: its id, else the principal an identity is linked to. */
+async function find(
+	store: PgPrincipalStore,
+	reference: string | undefined,
+): Promise<PrincipalRecord> {
+	if (reference === undefined) throw new Refusal("name a principal");
+	const byId = await store.get(reference);
+	if (byId) return byId;
+	const identity = parseIdentity(reference);
+	const link =
+		identity && (await store.identity(identity.provider, identity.subject));
+	const linked = link ? await store.get(link.principalId) : undefined;
+	if (linked) return linked;
+	throw new Refusal(
+		`there is no principal ${reference}, and no identity ${reference} is linked; roundtable principal list shows them`,
+	);
+}
+
+function identityArgument(text: string | undefined) {
+	const identity = text === undefined ? undefined : parseIdentity(text);
+	if (!identity)
+		throw new Refusal(
+			`expected an identity written <provider>:<subject>, such as discord:<user id>, got ${JSON.stringify(text ?? "")}`,
+		);
+	return identity;
+}
+
+function tierArgument(text: string | undefined): Tier {
+	if (!TIERS.includes(text as Tier))
+		throw new Refusal(
+			`expected a role, one of member, admin, or owner, got ${JSON.stringify(text ?? "")}`,
+		);
+	return text as Tier;
+}
+
+const linkLine = (link: IdentityLink): string =>
+	`    ${identityOf(link)}  (${link.source})`;
+
+async function rolesText(store: PgPrincipalStore, id: string): Promise<string> {
+	const roles = await store.rolesOf(id);
+	return roles.length === 0
+		? "none"
+		: roles.map((grant) => `${grant.role} (${grant.source})`).join(", ");
+}
+
+async function list(store: PgPrincipalStore, io: PrincipalIo): Promise<void> {
+	const principals = await store.list();
+	for (const principal of principals) {
+		io.out(
+			`${principal.id}  ${describe(principal)}${principal.disabled ? "  disabled" : ""}  roles: ${await rolesText(store, principal.id)}`,
+		);
+		for (const link of await store.identitiesOf(principal.id))
+			io.out(linkLine(link));
+	}
+	io.out(
+		`${principals.length} ${principals.length === 1 ? "principal" : "principals"}. Each identity is written <provider>:<subject>, as access in roundtable.config.ts and roundtable principal link take it.`,
+	);
+}
+
+async function show(
+	store: PgPrincipalStore,
+	principal: PrincipalRecord,
+	io: PrincipalIo,
+): Promise<void> {
+	io.out(`principal ${principal.id}`);
+	io.out(`  name: ${describe(principal)}`);
+	io.out(`  status: ${principal.disabled ? "disabled" : "enabled"}`);
+	io.out(`  created: ${stamp(principal.createdAt)}`);
+	io.out(
+		`  last seen: ${principal.lastSeenAt ? `${stamp(principal.lastSeenAt)} as ${principal.lastTier ?? "unknown"}` : "never"}`,
+	);
+	io.out(`  roles: ${await rolesText(store, principal.id)}`);
+	const links = await store.identitiesOf(principal.id);
+	io.out(`  identities: ${links.length === 0 ? "none" : ""}`.trimEnd());
+	for (const link of links)
+		io.out(
+			`    ${identityOf(link)}  (${link.source}, linked ${stamp(link.linkedAt)})`,
+		);
+}
+
+/** The value after `flag`, and the arguments without both. */
+function option(
+	args: readonly string[],
+	flag: string,
+): { value: string | undefined; rest: string[] } {
+	const at = args.indexOf(flag);
+	if (at === -1) return { value: undefined, rest: [...args] };
+	return { value: args[at + 1], rest: args.toSpliced(at, 2) };
+}
+
+/** Each subcommand and how many arguments it takes. */
+const ARITY: Record<string, number> = {
+	list: 0,
+	show: 1,
+	link: 2,
+	unlink: 1,
+	grant: 2,
+	revoke: 2,
+	disable: 1,
+	enable: 1,
+};
+
+async function run(
+	store: PgPrincipalStore,
+	args: readonly string[],
+	io: PrincipalIo,
+): Promise<void> {
+	const [command, ...rest] = args;
+	if (command === "create") {
+		const name = option(rest, "--name");
+		const pronouns = option(name.rest, "--pronouns");
+		if (!name.value?.trim() || name.value.startsWith("--"))
+			throw new Refusal(
+				"create takes --name <name>, the name to address them by",
+			);
+		if (pronouns.rest.length > 0)
+			throw new Refusal(
+				`create takes --name and --pronouns, not ${pronouns.rest.join(" ")}`,
+			);
+		if (
+			pronouns.value !== undefined &&
+			!PRONOUNS.includes(pronouns.value as Pronouns)
+		)
+			throw new Refusal(
+				`--pronouns takes he, she, or they, not ${JSON.stringify(pronouns.value)}`,
+			);
+		const made = await store.create({
+			displayName: name.value.trim(),
+			...(pronouns.value ? { pronouns: pronouns.value as Pronouns } : {}),
+		});
+		io.out(
+			`Created principal ${made.id} (${describe(made)}). Link an identity to it with roundtable principal link ${made.id} <provider>:<subject>.`,
+		);
+		io.out(HOST_DELAY);
+		return;
+	}
+	const arity = command === undefined ? undefined : ARITY[command];
+	if (arity === undefined)
+		throw new Refusal(`unknown principal command. Usage:\n${PRINCIPAL_USAGE}`);
+	if (arity !== rest.length)
+		throw new Refusal(
+			`${command} takes ${arity} ${arity === 1 ? "argument" : "arguments"}. Usage:\n${PRINCIPAL_USAGE}`,
+		);
+	if (command === "list") return list(store, io);
+	if (command === "unlink") {
+		const identity = identityArgument(rest[0]);
+		const link = await store.identity(identity.provider, identity.subject);
+		if (!link || !(await store.unlink(identity.provider, identity.subject)))
+			throw new Refusal(
+				`${identityOf(identity)} is not linked to any principal`,
+			);
+		io.out(
+			`Unlinked ${identityOf(identity)} from principal ${link.principalId}.`,
+		);
+		if (link.source === "config")
+			io.out(
+				"The configuration lists it under an owner, so the next start links it again to the owner it names; remove it from access.owners to keep it unlinked.",
+			);
+		io.out(HOST_DELAY);
+		return;
+	}
+	const principal = await find(store, rest[0]);
+	if (command === "show") return show(store, principal, io);
+	if (command === "link") {
+		const identity = identityArgument(rest[1]);
+		await store.link(principal.id, identity, "cli");
+		io.out(`Linked ${identityOf(identity)} to ${named(principal)}.`);
+	} else if (command === "grant") {
+		const role = tierArgument(rest[1]);
+		await store.grant(principal.id, role, "cli");
+		io.out(`Granted ${role} to ${named(principal)}.`);
+		if (role === "owner")
+			io.out(
+				"The owner role is granted only here and in the configuration; no role a surface reports makes an owner.",
+			);
+	} else if (command === "revoke") {
+		const role = tierArgument(rest[1]);
+		const grant = (await store.rolesOf(principal.id)).find(
+			(held) => held.role === role,
+		);
+		if (!grant)
+			throw new Refusal(`principal ${principal.id} does not hold ${role}`);
+		if (grant.source === "config")
+			throw new Refusal(
+				`principal ${principal.id} holds ${role} from the configuration, which grants it again at every start; remove them from access.owners in roundtable.config.ts instead`,
+			);
+		await store.revoke(principal.id, role, "cli");
+		io.out(`Revoked ${role} from ${named(principal)}.`);
+	} else if (command === "disable") {
+		await store.disable(principal.id);
+		io.out(
+			`Disabled ${named(principal)}: no surface serves them, and their background turns are skipped.`,
+		);
+	} else {
+		await store.enable(principal.id);
+		io.out(`Enabled ${named(principal)}.`);
+	}
+	io.out(HOST_DELAY);
+}
+
+/** Whether the host has made the principal tables, which its first start on 0.9 does. */
+async function hasTables(sql: SQL): Promise<boolean> {
+	const [row] = await sql`
+		SELECT to_regclass('principals') IS NOT NULL
+			AND to_regclass('principal_identities') IS NOT NULL
+			AND to_regclass('principal_roles') IS NOT NULL AS made`;
+	return row?.made === true;
+}
+
+/**
+ * Runs one `roundtable principal` command on the database at `url`, beside a host that may be
+ * running, and returns the exit code. It changes the database directly; a running host's cache
+ * catches up within 30 seconds, which every change says.
+ */
+export async function principalCommand(
+	url: string,
+	args: readonly string[],
+	io: PrincipalIo,
+): Promise<number> {
+	const sql = openPool(url);
+	try {
+		if (!(await hasTables(sql))) {
+			io.err(
+				"This database has no principals yet: start the host on pi-roundtable 0.9 once, and its migrations make them from the people it already knows.",
+			);
+			return 1;
+		}
+		await run(await PgPrincipalStore.attach(sql), args, io);
+		return 0;
+	} catch (error) {
+		if (error instanceof Refusal || error instanceof IdentityError) {
+			io.err(error.message);
+			return 1;
+		}
+		throw error;
+	} finally {
+		await sql.close();
+	}
+}

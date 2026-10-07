@@ -1,10 +1,10 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { addPackage } from "./add-package.ts";
 import { addPlugin } from "./add-plugin.ts";
 import { init } from "./init.ts";
-import { tempDir } from "./testing/fixtures.ts";
+import { linkCheckout, tempDir } from "./testing/fixtures.ts";
 
 const ROOT = resolve(import.meta.dir, "../..");
 const TSC = join(ROOT, "node_modules/.bin/tsc");
@@ -21,30 +21,6 @@ function run(cwd: string, cmd: string[]): { ok: boolean; output: string } {
 		ok: result.exitCode === 0,
 		output: `${result.stdout.toString()}${result.stderr.toString()}`,
 	};
-}
-
-/**
- * The generated project with `pi-roundtable`, `typebox`, and the types linked from this
- * checkout, so it typechecks and tests against the source under test without the network.
- */
-function link(project: string): void {
-	const modules = join(project, "node_modules");
-	mkdirSync(join(modules, "pi-roundtable"), { recursive: true });
-	mkdirSync(join(modules, "@types"), { recursive: true });
-	writeFileSync(
-		join(modules, "pi-roundtable/package.json"),
-		JSON.stringify({
-			name: "pi-roundtable",
-			type: "module",
-			exports: { ".": "./src/index.ts", "./testing": "./src/testing.ts" },
-		}),
-	);
-	symlinkSync(join(ROOT, "src"), join(modules, "pi-roundtable/src"));
-	symlinkSync(join(ROOT, "node_modules/typebox"), join(modules, "typebox"));
-	symlinkSync(
-		join(ROOT, "node_modules/@types/bun"),
-		join(modules, "@types/bun"),
-	);
 }
 
 const dir = tempDir("roundtable-template-");
@@ -77,7 +53,7 @@ const PACKAGES: Record<string, string[]> = {
 beforeAll(async () => {
 	const report = init({ cwd: dir.path, bun, version: "0.1.0" });
 	if (!report.ok) throw new Error(report.problems.join("\n"));
-	link(dir.path);
+	linkCheckout(dir.path);
 	fresh = check("fresh");
 	const added = addPlugin({ cwd: dir.path, name: "second-plugin" });
 	if (!added.ok) throw new Error(added.problems.join("\n"));

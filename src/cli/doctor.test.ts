@@ -18,7 +18,12 @@ afterEach(() => {
 	for (const dir of dirs.splice(0)) dir.done();
 });
 
-const workingDatabase: DatabasePort = { check: async () => {} };
+const workingDatabase: DatabasePort = {
+	check: async () => {},
+	read: async () => {
+		throw new Error("no database in these tests");
+	},
+};
 const bun = { version: "1.3.10", required: ">=1.3.0" };
 
 function inputs(overrides: Partial<DoctorInputs> = {}): DoctorInputs {
@@ -46,8 +51,10 @@ describe("doctor", () => {
 			"environment",
 			"configuration",
 			"plugins",
+			"access",
 			"image provider",
 			"PostgreSQL",
+			"principals",
 			"Discord token",
 			"Discord guild",
 			"Discord intents",
@@ -197,6 +204,7 @@ describe("start", () => {
 			"environment",
 			"configuration",
 			"plugins",
+			"access",
 			"image provider",
 			"model login",
 			"public URL",

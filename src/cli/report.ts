@@ -1,6 +1,10 @@
-/** How one check ended: passed, failed with what to do, or not run because it needs something an earlier check reports. */
+/**
+ * How one check ended: passed, passed with a warning and what to do about it, failed with what to
+ * do, or not run because it needs something an earlier check reports. A warning fails nothing.
+ */
 export type Result =
 	| { status: "ok"; detail?: string }
+	| { status: "warn"; problem: string; fix: string }
 	| { status: "fail"; problem: string; fix: string }
 	| { status: "skipped"; reason: string };
 
@@ -20,6 +24,11 @@ export const ok = (detail?: string): Result =>
 	detail === undefined ? { status: "ok" } : { status: "ok", detail };
 export const fail = (problem: string, fix: string): Result => ({
 	status: "fail",
+	problem,
+	fix,
+});
+export const warn = (problem: string, fix: string): Result => ({
+	status: "warn",
 	problem,
 	fix,
 });
@@ -53,7 +62,7 @@ export async function runChecks(checks: readonly Check[]): Promise<Outcome[]> {
 export const failed = (outcomes: readonly Outcome[]): Outcome[] =>
 	outcomes.filter(({ result }) => result.status === "fail");
 
-/** One line per check, and for a failure its problem and fix underneath. */
+/** One line per check, and for a warning or a failure its problem and fix underneath. */
 export function formatOutcomes(outcomes: readonly Outcome[]): string[] {
 	return outcomes.flatMap(({ name, result }) => {
 		if (result.status === "ok")
@@ -61,7 +70,7 @@ export function formatOutcomes(outcomes: readonly Outcome[]): string[] {
 		if (result.status === "skipped")
 			return [`- ${name}: skipped, ${result.reason}`];
 		return [
-			`✗ ${name}: ${result.problem}`,
+			`${result.status === "warn" ? "!" : "✗"} ${name}: ${result.problem}`,
 			...result.fix.split("\n").map((line) => `    ${line}`),
 		];
 	});

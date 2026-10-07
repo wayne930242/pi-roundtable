@@ -1,3 +1,4 @@
+import type { SQL } from "bun";
 import { nested, openPool, runMigrations } from "../../core/db/migrations.ts";
 import { MigrationError } from "../../core/errors.ts";
 import type { RoundtablePlugin } from "../../core/plugin.ts";
@@ -12,6 +13,8 @@ export interface DatabasePort {
 			| readonly Pick<RoundtablePlugin, "name" | "migrations">[]
 			| undefined,
 	): Promise<void>;
+	/** Runs `use` on a pool of the database at `url`, closed after; `use` only reads. */
+	read<T>(url: string, use: (sql: SQL) => Promise<T>): Promise<T>;
 }
 
 class Rollback extends Error {}
@@ -35,6 +38,14 @@ export const postgres: DatabasePort = {
 			} catch (error) {
 				if (!(error instanceof Rollback)) throw error;
 			}
+		} finally {
+			await pool.close();
+		}
+	},
+	async read(url, use) {
+		const pool = openPool(url);
+		try {
+			return await use(pool);
 		} finally {
 			await pool.close();
 		}

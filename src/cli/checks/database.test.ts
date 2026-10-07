@@ -6,6 +6,10 @@ import { Project } from "../project.ts";
 import { fakePorts, validConfig } from "../testing/fixtures.ts";
 import { checkDatabase, type DatabasePort, postgres } from "./database.ts";
 
+const notRead = async (): Promise<never> => {
+	throw new Error("the database check reads nothing");
+};
+
 const migration: Migration = { name: "doctor-probe", up: async () => {} };
 const withMigration = (name = "probe") =>
 	new Project(
@@ -22,6 +26,7 @@ test("passes when the database answers and the migrations run, without printing 
 	const asked: unknown[] = [];
 	const port: DatabasePort = {
 		check: async (url, plugins) => void asked.push([url, plugins]),
+		read: notRead,
 	};
 	const result = await checkDatabase(withMigration(), port);
 	expect(result.status).toBe("ok");
@@ -39,6 +44,7 @@ test("passes when the database answers and the migrations run, without printing 
 
 test("fails when the database is unreachable, naming it and saying how to start one", async () => {
 	const port: DatabasePort = {
+		read: notRead,
 		check: async () => {
 			throw new Error("connection refused");
 		},
@@ -55,6 +61,7 @@ test("fails when the database is unreachable, naming it and saying how to start 
 
 test("fails when a migration fails, naming it", async () => {
 	const port: DatabasePort = {
+		read: notRead,
 		check: async () => {
 			throw new MigrationError("owner-memory", new Error("permission denied"));
 		},
@@ -71,6 +78,7 @@ test("still tests reachability from the raw url while the configuration is inval
 	const asked: unknown[] = [];
 	const port: DatabasePort = {
 		check: async (url, plugins) => void asked.push([url, plugins]),
+		read: notRead,
 	};
 	const invalid = new Project(
 		"/x",

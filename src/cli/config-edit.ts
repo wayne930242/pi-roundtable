@@ -1,7 +1,7 @@
 import { parse } from "@babel/parser";
 
 /** The parts of a syntax node this edit reads; the parser's own types are not needed beyond these. */
-interface Node {
+export interface Node {
 	type: string;
 	start: number;
 	end: number;
@@ -20,7 +20,7 @@ const WRAPPERS = new Set([
 	"ParenthesizedExpression",
 ]);
 
-const child = (node: Node, key: string): Node | undefined => {
+export const child = (node: Node, key: string): Node | undefined => {
 	const value = node[key];
 	return typeof value === "object" && value !== null
 		? (value as Node)
@@ -28,35 +28,53 @@ const child = (node: Node, key: string): Node | undefined => {
 };
 
 /** The expression under `satisfies`, `as`, `!`, and parentheses. */
-function unwrap(node: Node | undefined): Node | undefined {
+export function unwrap(node: Node | undefined): Node | undefined {
 	let current = node;
 	while (current && WRAPPERS.has(current.type))
 		current = child(current, "expression");
 	return current;
 }
 
-function parseModule(source: string, file: string): Node[] {
+/** A parsed module: its top-level statements, and every comment in it. */
+export interface ParsedModule {
+	body: Node[];
+	comments: Node[];
+}
+
+/** The module parsed, or a ConfigEditError saying it does not parse and what to do by hand, `instead`. */
+export function parseConfig(
+	source: string,
+	file: string,
+	instead: string,
+): ParsedModule {
 	try {
-		// SAFETY: every node the parser builds has a type, start, and end, which is all Node states.
-		return parse(source, {
+		const parsed = parse(source, {
 			sourceType: "module",
 			plugins: ["typescript"],
-		}).program.body as unknown as Node[];
+		});
+		// SAFETY: every node the parser builds has a type, start, and end, which is all Node states.
+		return {
+			body: parsed.program.body as unknown as Node[],
+			comments: (parsed.comments ?? []) as unknown as Node[],
+		};
 	} catch (error) {
 		throw new ConfigEditError(
-			`${file} does not parse (${error instanceof Error ? error.message : String(error)}). Fix it, or add the plugin to its list by hand.`,
+			`${file} does not parse (${error instanceof Error ? error.message : String(error)}). Fix it, or ${instead}.`,
 		);
 	}
 }
 
-const nameOf = (node: Node | undefined): string | undefined => {
+const parseModule = (source: string, file: string): Node[] =>
+	parseConfig(source, file, "add the plugin to its list by hand").body;
+
+export const nameOf = (node: Node | undefined): string | undefined => {
 	if (node?.type === "Identifier") return node.name as string;
 	if (node?.type === "StringLiteral") return node.value as string;
 	return undefined;
 };
 
 /** Every name the module already binds at its top level, so an import cannot shadow one. */
-function boundNames(body: readonly Node[]): Set<string> {
+export function boundNames(body: readonly Node[]): Set<string> {
 	const names = new Set<string>();
 	for (const statement of body) {
 		const declaration =
@@ -80,7 +98,7 @@ function boundNames(body: readonly Node[]): Set<string> {
 }
 
 /** The object the config exports: the default export itself, or the top-level constant it names. */
-function exportedObject(body: readonly Node[]): Node | undefined {
+export function exportedObject(body: readonly Node[]): Node | undefined {
 	const exported = body.find(
 		(node) => node.type === "ExportDefaultDeclaration",
 	);
@@ -112,7 +130,7 @@ function pluginList(object: Node): Node | undefined {
 	return undefined;
 }
 
-interface Insertion {
+export interface Insertion {
 	at: number;
 	text: string;
 	/** How many characters from `at` the text replaces; none when it only inserts. */
@@ -162,7 +180,11 @@ function expandedList(
 }
 
 /** The text to add so `ident` joins the list, in the list's own layout. */
-function listInsertion(source: string, list: Node, ident: string): Insertion {
+export function listInsertion(
+	source: string,
+	list: Node,
+	ident: string,
+): Insertion {
 	const elements = (list.elements as (Node | null)[]).filter(
 		(element): element is Node => element !== null,
 	);
@@ -203,6 +225,43 @@ function importInsertion(
 	return last
 		? { at: last.end, text: `\n${line}` }
 		: { at: 0, text: `${line}\n\n` };
+}
+
+/** Where an import of a package goes: after the package imports that sort before it, else first. */
+export function packageImport(
+	body: readonly Node[],
+	specifier: string,
+	line: string,
+): Insertion {
+	const imports = body.filter((node) => node.type === "ImportDeclaration");
+	const from = (node: Node) => String(child(node, "source")?.value ?? "");
+	const before = imports
+		.filter((node) => !from(node).startsWith(".") && from(node) < specifier)
+		.at(-1);
+	if (before) return { at: before.end, text: `\n${line}` };
+	const first = imports[0];
+	return first
+		? { at: first.start, text: `${line}\n` }
+		: { at: 0, text: `${line}\n\n` };
+}
+
+/** Whether the module imports `name` from `specifier` under that same name. */
+export function importsName(
+	body: readonly Node[],
+	specifier: string,
+	name: string,
+): boolean {
+	return body.some(
+		(node) =>
+			node.type === "ImportDeclaration" &&
+			child(node, "source")?.value === specifier &&
+			(node.specifiers as Node[]).some(
+				(imported) =>
+					imported.type === "ImportSpecifier" &&
+					nameOf(child(imported, "imported")) === name &&
+					nameOf(child(imported, "local")) === name,
+			),
+	);
 }
 
 /**

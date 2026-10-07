@@ -32,6 +32,11 @@ export async function loadConfigFile(cwd: string): Promise<unknown> {
 		throw new Error(
 			`${CONFIG_FILE} is not in ${cwd}. Run this in the project directory, or create a project with \`roundtable init\`.`,
 		);
+	return loadDefault(path);
+}
+
+/** The value a configuration file exports by default, imported with Bun. */
+export async function loadDefault(path: string): Promise<unknown> {
 	const module = (await import(pathToFileURL(path).href)) as {
 		default?: unknown;
 	};

@@ -58,6 +58,7 @@ test("an unknown command or a wrong argument list prints the problem and exits n
 		["add", "package", "a", "b"],
 		["init", "a", "b"],
 		["doctor", "extra"],
+		["upgrade", "--force"],
 		["start", "--reachable"],
 	]) {
 		const run = cli();
