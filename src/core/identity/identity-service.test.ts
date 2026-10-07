@@ -402,6 +402,25 @@ describeDb("the identity service", () => {
 		expect(identity.speakerFor(id)).rejects.toThrow(/backgroundStaleDays/);
 	});
 
+	test("a linked person the rules no longer serve is seen at no tier at once, so their background turns stop", async () => {
+		const identity = await service();
+		const member = await identity.resolve(
+			webFacts("user-8", ["web:role:App.User"]),
+		);
+		const id = member?.principalId ?? "";
+		expect((await identity.speakerFor(id)).tier).toBe("member");
+		// A minute later the IdP no longer gives the role: refused, and recorded despite the throttle.
+		clock += 60_000;
+		expect(await identity.resolve(webFacts("user-8"))).toBeUndefined();
+		const seen = await store.get(id);
+		expect(seen?.lastTier).toBeUndefined();
+		expect(seen?.lastSeenAt).toEqual(new Date(clock));
+		expect(identity.speakerFor(id)).rejects.toThrow(/holds no tier/);
+		// Served again, the tier comes back.
+		await identity.resolve(webFacts("user-8", ["web:role:App.User"]));
+		expect((await identity.speakerFor(id)).tier).toBe("member");
+	});
+
 	test("being seen is recorded at most every five minutes, or when the tier changes", async () => {
 		const identity = await service();
 		await carriedOver(KAI, "Kai");

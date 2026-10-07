@@ -51,7 +51,7 @@ export interface IdentityService {
 	 * A speaker for a turn started on a principal's behalf, at `tier` or their own, whichever is
 	 * lower. Their own is their lasting roles' tier, or, when their tier comes only from the rules
 	 * on contact, the tier they were last seen at, refused once `access.backgroundStaleDays` pass
-	 * unseen. The system principal speaks only at the tier given. Throws IdentityError for a
+	 * unseen or once a contact of theirs is refused. The system principal speaks only at the tier given. Throws IdentityError for a
 	 * principal that is unknown, disabled, or holds no tier.
 	 */
 	speakerFor(principalId: string, tier?: Tier): Promise<Speaker>;
@@ -170,7 +170,7 @@ class CachingPrincipalStore implements PrincipalStore {
 	enable(id: string) {
 		return this.#write(this.#store.enable(id));
 	}
-	async touch(id: string, tier: Tier, at?: Date) {
+	async touch(id: string, tier: Tier | null, at?: Date) {
 		try {
 			await this.#store.touch(id, tier, at);
 		} finally {
@@ -191,8 +191,8 @@ export class PgIdentityService implements IdentityService {
 	readonly #rules: AccessRules;
 	readonly #logger: Logger;
 	readonly #now: () => number;
-	/** When each principal was last written as seen, and at which tier. */
-	readonly #seen = new Map<string, { at: number; tier: Tier }>();
+	/** When each principal was last written as seen, and at which tier, null for none. */
+	readonly #seen = new Map<string, { at: number; tier: Tier | null }>();
 	/** The configured owners' principal ids, in the configuration's order, once synced. */
 	#configOwners: string[] = [];
 
@@ -285,8 +285,9 @@ export class PgIdentityService implements IdentityService {
 		const principal = await this.principals.get(link.principalId);
 		if (!principal || principal.disabled) return undefined;
 		const tier = await this.#tier(principal.id, facts, scope.conversation);
+		// Refused now, so seen at no tier: their background turns stop with it.
+		await this.#touch(principal, tier ?? null);
 		if (!tier) return undefined;
-		await this.#touch(principal.id, tier);
 		return {
 			id: facts.legacyId ?? identityOf(facts),
 			name: facts.name,
@@ -426,11 +427,18 @@ export class PgIdentityService implements IdentityService {
 		}
 	}
 
-	/** Records the principal as seen, at most every `TOUCH_MS` unless the tier changed; a failure is logged, not thrown. */
-	async #touch(principalId: string, tier: Tier): Promise<void> {
+	/**
+	 * Records the principal as seen at the tier, null when refused, at most every `TOUCH_MS`
+	 * unless the tier changed; a refusal is written whenever the store still holds a tier for them.
+	 * A failure is logged, not thrown.
+	 */
+	async #touch(principal: PrincipalRecord, tier: Tier | null): Promise<void> {
+		const principalId = principal.id;
 		const now = this.#now();
 		const last = this.#seen.get(principalId);
-		if (last && last.tier === tier && now - last.at < TOUCH_MS) return;
+		const stored = tier !== null || principal.lastTier === undefined;
+		if (last && last.tier === tier && now - last.at < TOUCH_MS && stored)
+			return;
 		this.#seen.set(principalId, { at: now, tier });
 		try {
 			await this.principals.touch(principalId, tier, new Date(now));

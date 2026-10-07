@@ -119,8 +119,8 @@ export interface PrincipalStore {
 	holders(role: Tier): Promise<RoleHolder[]>;
 	disable(id: string): Promise<void>;
 	enable(id: string): Promise<void>;
-	/** Records that the principal was seen at `at` (default now), at this tier. */
-	touch(id: string, tier: Tier, at?: Date): Promise<void>;
+	/** Records that the principal was seen at `at` (default now), at this tier, or null when refused. */
+	touch(id: string, tier: Tier | null, at?: Date): Promise<void>;
 }
 
 interface PrincipalRow {
@@ -425,7 +425,7 @@ export class PgPrincipalStore implements PrincipalStore {
 		await this.#sql`UPDATE principals SET disabled_at = NULL WHERE id = ${id}`;
 	}
 
-	async touch(id: string, tier: Tier, at = new Date()): Promise<void> {
+	async touch(id: string, tier: Tier | null, at = new Date()): Promise<void> {
 		await this.#sql`
 			UPDATE principals SET last_seen_at = ${at}, last_tier = ${tier} WHERE id = ${id}`;
 	}
