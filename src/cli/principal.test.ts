@@ -103,6 +103,11 @@ describeDb("roundtable principal", () => {
 		expect(lines).toContain(`${WEB}  Kai (he)  roles: none`);
 		expect(lines).toContain(`    ${WEB}  (legacy)`);
 		expect(out).toContain("2 principals");
+		const bare = await principal("create", "--name", "Lu");
+		expect(bare.out).toContain("(Lu).");
+		expect((await principal("list")).out).toContain(
+			"    no identity linked yet; one carried over from 0.8 links its own at its first contact",
+		);
 	});
 
 	test("create, link, grant: the next host resolves the identity to the principal at the granted tier", async () => {

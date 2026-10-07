@@ -96,8 +96,12 @@ async function list(store: PgPrincipalStore, io: PrincipalIo): Promise<void> {
 		io.out(
 			`${principal.id}  ${describe(principal)}${principal.disabled ? "  disabled" : ""}  roles: ${await rolesText(store, principal.id)}`,
 		);
-		for (const link of await store.identitiesOf(principal.id))
-			io.out(linkLine(link));
+		const links = await store.identitiesOf(principal.id);
+		for (const link of links) io.out(linkLine(link));
+		if (links.length === 0)
+			io.out(
+				"    no identity linked yet; one carried over from 0.8 links its own at its first contact",
+			);
 	}
 	io.out(
 		`${principals.length} ${principals.length === 1 ? "principal" : "principals"}. Each identity is written <provider>:<subject>, as access in roundtable.config.ts and roundtable principal link take it.`,
@@ -176,7 +180,7 @@ async function run(
 			...(pronouns.value ? { pronouns: pronouns.value as Pronouns } : {}),
 		});
 		io.out(
-			`Created principal ${made.id} (${describe(made)}). Link an identity to it with roundtable principal link ${made.id} <provider>:<subject>.`,
+			`Created ${named(made)}. Link an identity to it with roundtable principal link ${made.id} <provider>:<subject>.`,
 		);
 		io.out(HOST_DELAY);
 		return;
