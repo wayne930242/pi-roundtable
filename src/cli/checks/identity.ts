@@ -83,12 +83,7 @@ export async function principalFindings(
 	sql: SQL,
 	rules: AccessRules,
 ): Promise<PrincipalFindings> {
-	const owners = rules.owners.flatMap((owner) =>
-		owner.principal === undefined
-			? []
-			: [{ id: owner.principal, name: owner.name }],
-	);
-	const summary = await backfillPrincipals(sql, owners, { dryRun: true });
+	const summary = await backfillPrincipals(sql, rules, { dryRun: true });
 	const [tables] = await sql`
 		SELECT to_regclass('principal_identities') IS NOT NULL
 			AND to_regclass('principal_roles') IS NOT NULL AS made`;

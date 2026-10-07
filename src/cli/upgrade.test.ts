@@ -64,6 +64,17 @@ describe("upgradeSource", () => {
 			expect(again.source).toBe(upgraded.source);
 		});
 
+	test("an owner on a host without Discord gets no Discord identity, as the host reads them", () => {
+		const upgraded = upgradeSource(LEGACY_CONFIGS["no Discord at all"] ?? "");
+		expect(upgraded.source).not.toContain("identities");
+		expect(upgraded.source).not.toContain("discord:operator");
+		expect(upgraded.changes[0]).toContain("with no identity");
+		const adapter = upgradeSource(
+			LEGACY_CONFIGS["Discord already an adapter"] ?? "",
+		);
+		expect(adapter.source).toContain('identities: ["discord:');
+	});
+
 	test("writes the 0.8 template's owner as the 0.9 template writes access, word for word", () => {
 		const upgraded = upgradeSource(TEMPLATE_0_8).source;
 		const template = readFileSync(

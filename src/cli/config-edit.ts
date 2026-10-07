@@ -264,6 +264,17 @@ export function importsName(
 	);
 }
 
+/** Whether the file imports anything from `specifier`. */
+export const importsFrom = (
+	body: readonly Node[],
+	specifier: string,
+): boolean =>
+	body.some(
+		(node) =>
+			node.type === "ImportDeclaration" &&
+			child(node, "source")?.value === specifier,
+	);
+
 /**
  * Adds the plugin's import line and lists it in the `plugins` array of the default export, in the
  * file's own layout; a one-line list that would pass 80 columns is put one element a line. It

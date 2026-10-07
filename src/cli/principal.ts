@@ -7,6 +7,7 @@ import {
 	PgPrincipalStore,
 	type PrincipalRecord,
 	type Pronouns,
+	type RoleGrant,
 } from "../core/identity/principal-store.ts";
 import type { Tier } from "../core/speakers.ts";
 
@@ -83,24 +84,32 @@ function tierArgument(text: string | undefined): Tier {
 const linkLine = (link: IdentityLink): string =>
 	`    ${identityOf(link)}  (${link.source})`;
 
-async function rolesText(store: PgPrincipalStore, id: string): Promise<string> {
-	const roles = await store.rolesOf(id);
-	return roles.length === 0
+const rolesText = (roles: readonly RoleGrant[]): string =>
+	roles.length === 0
 		? "none"
 		: roles.map((grant) => `${grant.role} (${grant.source})`).join(", ");
-}
+
+/** Whether the person of its 0.8 id still links their own identity at first contact, as the identity service claims it. */
+const claimable = (
+	principal: PrincipalRecord,
+	roles: readonly RoleGrant[],
+): boolean =>
+	principal.claimable && !roles.some((grant) => grant.role === "owner");
 
 async function list(store: PgPrincipalStore, io: PrincipalIo): Promise<void> {
 	const principals = await store.list();
 	for (const principal of principals) {
+		const roles = await store.rolesOf(principal.id);
 		io.out(
-			`${principal.id}  ${describe(principal)}${principal.disabled ? "  disabled" : ""}  roles: ${await rolesText(store, principal.id)}`,
+			`${principal.id}  ${describe(principal)}${principal.disabled ? "  disabled" : ""}  roles: ${rolesText(roles)}`,
 		);
 		const links = await store.identitiesOf(principal.id);
 		for (const link of links) io.out(linkLine(link));
 		if (links.length === 0)
 			io.out(
-				"    no identity linked yet; one carried over from 0.8 links its own at its first contact",
+				claimable(principal, roles)
+					? `    no identity linked yet; carried over from 0.8, so ${principal.id} links its own at its first contact`
+					: `    no identity linked yet; link one with roundtable principal link ${principal.id} <provider>:<subject>`,
 			);
 	}
 	io.out(
@@ -120,7 +129,7 @@ async function show(
 	io.out(
 		`  last seen: ${principal.lastSeenAt ? `${stamp(principal.lastSeenAt)} as ${principal.lastTier ?? "unknown"}` : "never"}`,
 	);
-	io.out(`  roles: ${await rolesText(store, principal.id)}`);
+	io.out(`  roles: ${rolesText(await store.rolesOf(principal.id))}`);
 	const links = await store.identitiesOf(principal.id);
 	io.out(`  identities: ${links.length === 0 ? "none" : ""}`.trimEnd());
 	for (const link of links)
@@ -214,8 +223,13 @@ async function run(
 	if (command === "show") return show(store, principal, io);
 	if (command === "link") {
 		const identity = identityArgument(rest[1]);
+		const spends = claimable(principal, await store.rolesOf(principal.id));
 		await store.link(principal.id, identity, "cli");
 		io.out(`Linked ${identityOf(identity)} to ${named(principal)}.`);
+		if (spends)
+			io.out(
+				`This uses up the 0.8 claim of principal ${principal.id}: its 0.8 id no longer links its own identity at first contact, even once this one is unlinked. Link each of their other identities here.`,
+			);
 	} else if (command === "grant") {
 		const role = tierArgument(rest[1]);
 		await store.grant(principal.id, role, "cli");

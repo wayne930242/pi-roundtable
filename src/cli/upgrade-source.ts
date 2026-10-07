@@ -3,6 +3,7 @@ import {
 	ConfigEditError,
 	child,
 	exportedObject,
+	importsFrom,
 	importsName,
 	listInsertion,
 	type Node,
@@ -281,7 +282,8 @@ function accessText(
 	rewrite: Rewrite,
 	owner: Node,
 	speakers: Node | undefined,
-	indent: string,
+	withDiscord: boolean,
+	indent = "",
 ): string {
 	const fields = propertiesOf(
 		rewrite,
@@ -305,7 +307,9 @@ function accessText(
 		["name", rewrite.text(name)],
 		...(pronouns ? [["pronouns", rewrite.text(pronouns)] as Field] : []),
 		["principal", rewrite.text(id)],
-		["identities", [prefixed(rewrite, "discord:", id)]],
+		...(withDiscord
+			? [["identities", [prefixed(rewrite, "discord:", id)]] as Field]
+			: []),
 	];
 	const tiers: Field[] = [];
 	if (speakers) {
@@ -338,7 +342,7 @@ function indented(text: string): string {
 
 /**
  * The configuration in the 0.9 form: `owner` and `speakers` as the `access` they mean (the owner's
- * principal their old id, their identity `discord:<id>`, roles `discord:role:<id>`, `everyone`
+ * principal their old id, their identity `discord:<id>` on a host with Discord, roles `discord:role:<id>`, `everyone`
  * as everyone on Discord), and the top-level `discord` as `adapters: [discord({...})]` with its
  * import. It keeps every comment, and notes the ones it moved. A configuration already in the
  * 0.9 form comes back as it is. Throws a ConfigEditError, changing nothing, for what it cannot
@@ -398,16 +402,21 @@ export function upgradeSource(source: string, file = CONFIG_FILE): Upgraded {
 		rewrite.moved.push(
 			...spans.flatMap((span) => rewrite.commentsIn(span.start, span.end)),
 		);
-		const text = accessText(rewrite, owner, speakers, indent ?? "");
+		// The host gives the 0.8 owner a Discord identity only with Discord configured.
+		const withDiscord = Boolean(discord) || importsFrom(body, DISCORD_ENTRY);
+		const text = accessText(rewrite, owner, speakers, withDiscord, indent);
 		rewrite.edits.push({
 			start: owner.start,
 			end: owner.end,
 			text: `${rewrite.commentLines(rewrite.moved, indent)}${text}`,
 		});
+		const ownerChange = withDiscord
+			? "the owner's principal is their old id and their identity discord:<id>"
+			: "the owner's principal is their old id, with no identity, as a host without Discord has none";
 		changes.push(
 			speakers
-				? "owner and speakers → access: the owner's principal is their old id and their identity discord:<id>; users are discord:<id>, roles discord:role:<id>, and everyone means everyone on Discord"
-				: "owner → access: the owner's principal is their old id and their identity discord:<id>",
+				? `owner and speakers → access: ${ownerChange}; users are discord:<id>, roles discord:role:<id>, and everyone means everyone on Discord`
+				: `owner → access: ${ownerChange}`,
 		);
 	}
 	if (discord) {

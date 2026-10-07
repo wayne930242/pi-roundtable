@@ -105,9 +105,45 @@ describeDb("roundtable principal", () => {
 		expect(out).toContain("2 principals");
 		const bare = await principal("create", "--name", "Lu");
 		expect(bare.out).toContain("(Lu).");
-		expect((await principal("list")).out).toContain(
-			"    no identity linked yet; one carried over from 0.8 links its own at its first contact",
+		const id = /principal (p_[0-9A-Z]+)/.exec(bare.out)?.[1] ?? "";
+		const listed = (await principal("list")).out;
+		expect(listed).toContain(
+			`    no identity linked yet; link one with roundtable principal link ${id} <provider>:<subject>`,
 		);
+		expect(listed).not.toContain("carried over from 0.8");
+	});
+
+	test("list says a principal carried over from 0.8 links its own identity only while it is claimable, and link says it uses that up", async () => {
+		const sql = db?.sql;
+		if (!sql) throw new Error("no database");
+		const store = await PgPrincipalStore.attach(sql);
+		await store.create({ id: "966666600000000007", displayName: "Kai" });
+		await sql`UPDATE principals SET claimable = true WHERE id = '966666600000000007'`;
+		expect((await principal("list")).out).toContain(
+			"    no identity linked yet; carried over from 0.8, so 966666600000000007 links its own at its first contact",
+		);
+
+		const linked = await principal(
+			"link",
+			"966666600000000007",
+			"token:remote-mcp",
+		);
+		expect(linked.code).toBe(0);
+		expect(linked.out).toContain(
+			"This uses up the 0.8 claim of principal 966666600000000007: its 0.8 id no longer links its own identity at first contact, even once this one is unlinked. Link each of their other identities here.",
+		);
+		expect((await store.get("966666600000000007"))?.claimable).toBe(false);
+		expect((await principal("unlink", "token:remote-mcp")).code).toBe(0);
+		const listed = (await principal("list")).out;
+		expect(listed).not.toContain("carried over from 0.8");
+
+		// A principal that was never claimable is linked without the warning.
+		const again = await principal(
+			"link",
+			"966666600000000007",
+			"token:remote-mcp",
+		);
+		expect(again.out).not.toContain("0.8 claim");
 	});
 
 	test("create, link, grant: the next host resolves the identity to the principal at the granted tier", async () => {
