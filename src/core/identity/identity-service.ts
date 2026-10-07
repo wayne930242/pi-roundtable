@@ -155,6 +155,9 @@ class CachingPrincipalStore implements PrincipalStore {
 	claim(principalId: string, identity: IdentityRef) {
 		return this.#write(this.#store.claim(principalId, identity));
 	}
+	admit(identity: IdentityRef, displayName: string) {
+		return this.#write(this.#store.admit(identity, displayName));
+	}
 	unlink(provider: string, subject: string) {
 		return this.#write(this.#store.unlink(provider, subject));
 	}
@@ -408,23 +411,10 @@ export class PgIdentityService implements IdentityService {
 	): Promise<IdentityLink | undefined> {
 		if (this.#rules.provisioning !== "admitted") return undefined;
 		if (!factsTier(this.#rules, facts, conversation)) return undefined;
-		const principal = await this.principals.create({ displayName: facts.name });
-		return this.#link(principal.id, facts, "jit");
-	}
-
-	/** Links the facts' identity; when another contact linked it first, theirs is the link. */
-	async #link(
-		principalId: string,
-		facts: ActorFacts,
-		source: LinkSource,
-	): Promise<IdentityLink | undefined> {
-		const ref = { provider: facts.provider, subject: facts.subject };
-		try {
-			return await this.principals.link(principalId, ref, source);
-		} catch (error) {
-			if (!(error instanceof IdentityError)) throw error;
-			return this.principals.identity(ref.provider, ref.subject);
-		}
+		return this.principals.admit(
+			{ provider: facts.provider, subject: facts.subject },
+			facts.name,
+		);
 	}
 
 	/**

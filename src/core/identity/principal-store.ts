@@ -97,6 +97,11 @@ export interface PrincipalStore {
 		principalId: string,
 		identity: IdentityRef,
 	): Promise<IdentityLink | undefined>;
+	/**
+	 * The identity's link, making a new `p_` principal for it when it is still unlinked; however
+	 * many contacts admit it at once, one principal is made.
+	 */
+	admit(identity: IdentityRef, displayName: string): Promise<IdentityLink>;
 	/** Whether there was a link to remove. */
 	unlink(provider: string, subject: string): Promise<boolean>;
 	identity(
@@ -328,6 +333,29 @@ export class PgPrincipalStore implements PrincipalStore {
 				VALUES (${provider}, ${subject}, ${principalId}, 'legacy')
 				RETURNING *`;
 			return made[0] && linkOf(made[0]);
+		});
+	}
+
+	async admit(
+		identity: IdentityRef,
+		displayName: string,
+	): Promise<IdentityLink> {
+		const { provider, subject } = identity;
+		return this.#sql.begin(async (tx) => {
+			await tx`SELECT pg_advisory_xact_lock(hashtextextended(${identityLock(identity)}, 0))`;
+			const linked: IdentityRow[] = await tx`
+				SELECT * FROM principal_identities WHERE provider = ${provider} AND subject = ${subject}`;
+			if (linked[0]) return linkOf(linked[0]);
+			const id = newPrincipalId();
+			await tx`INSERT INTO principals (id, display_name) VALUES (${id}, ${displayName})`;
+			const made: IdentityRow[] = await tx`
+				INSERT INTO principal_identities (provider, subject, principal_id, source)
+				VALUES (${provider}, ${subject}, ${id}, 'jit')
+				RETURNING *`;
+			const [link] = made;
+			if (!link)
+				throw new IdentityError(`could not link ${provider}:${subject}`);
+			return linkOf(link);
 		});
 	}
 

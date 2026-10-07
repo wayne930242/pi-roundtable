@@ -256,6 +256,36 @@ describeDb("the identity service", () => {
 		expect((await store.list()).length).toBe(before);
 	});
 
+	test("several first contacts at once make one principal and one link, and leave no other principal behind", async () => {
+		const identity = await service();
+		const at = (count: number, facts: ActorFacts) =>
+			Promise.all(
+				Array.from({ length: count }, () =>
+					// Each from its own process: no cached read shared between them.
+					PgPrincipalStore.attach(db.sql).then((own) =>
+						new PgIdentityService(own, RULES, {
+							logger: silentLogger(),
+							now: () => clock,
+						}).resolve(facts),
+					),
+				),
+			);
+		const admitted = await at(6, webFacts("user-8", ["web:role:App.User"]));
+		expect(new Set(admitted.map((speaker) => speaker?.principalId)).size).toBe(
+			1,
+		);
+		await carriedOver(KAI);
+		const claimed = await at(6, discordFacts(KAI, "Kai"));
+		expect(claimed.map((speaker) => speaker?.principalId)).toEqual(
+			Array(6).fill(KAI),
+		);
+		const ids = (await store.list()).map((row) => row.id);
+		expect(ids.sort()).toEqual(
+			[ADA, KAI, admitted[0]?.principalId ?? ""].sort(),
+		);
+		expect(await identity.owners()).toHaveLength(1);
+	});
+
 	test('provisioning "linked" serves only identities already linked', async () => {
 		const identity = await service({ provisioning: "linked" });
 		expect(
