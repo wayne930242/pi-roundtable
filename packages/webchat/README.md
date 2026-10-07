@@ -221,6 +221,7 @@ A request from a browser origin not in `origins` gets 403; an allowed origin get
 - **Private conversations.** A conversation belongs to the person who opened it.
   The host's conversation registry records its person at its first turn, and the claim checks that record inside the conversation's queue before every turn; only that person may list it, read it, write in it, stop it, or answer its prompts.
   Conversation ids are random UUIDs, and the claim runs only messages this plugin accepted from a verified socket.
+  The owner can still read every conversation through the owner console, pi-roundtable-web, and the operator through the database and the data directory.
 - **Tokens.** Tokens are checked on every REST call, every upgrade, and every `auth` frame, and never read from a URL.
   By default only a person's access token passes: one without a scope or app roles, or an app-only one, is refused.
   A socket is closed when its token expires.

@@ -81,7 +81,7 @@ The [package README](https://github.com/wayne930242/pi-roundtable/blob/master/pa
 
 ## Security model
 
-- **Private conversations.** A conversation belongs to the person who opened it. The host's conversation registry records that person at the first turn, and the claim checks it before every turn: only that person may list, read, write in, stop, or answer it.
+- **Private conversations.** A conversation belongs to the person who opened it. The host's conversation registry records that person at the first turn, and the claim checks it before every turn: only that person may list, read, write in, stop, or answer it in the web chat. The owner can still read it through the [owner console](/plugins/web-package/), and the operator through the database and the data directory.
 - **Tokens.** Tokens are checked on every REST call, every upgrade, and every `auth` frame. By default only a person's access token passes; a token without a scope or app roles, or an app-only token, is refused. A socket closes when its token expires.
 - **Origins.** `origins` is required and checked on every upgrade and every browser request.
 - **Limits.** Each person has bounded sockets, tickets, conversations opened per hour, and turns running or queued at once.
