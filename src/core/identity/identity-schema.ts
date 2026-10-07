@@ -70,7 +70,8 @@ async function idsIn(
 /**
  * Makes a principal of the same id for every person 0.8 stored: the configured owners, and each
  * id in `owner_memory`, `schedules`, `conversations`, and `held_actions`, skipping a table or a
- * column the database does not have yet. It only inserts, so it changes no row, and a second run
+ * column the database does not have yet. Each is claimable once, by the person of that id at
+ * their first contact (IdentityService.resolve). It only inserts, so it changes no row, and a second run
  * makes nothing; an id an older build wrote since gets its principal at the next run. The owners
  * are named as configured, a schedule's author as the schedule names them, anyone else by their
  * id. `dryRun` counts and writes nothing. The system principal is never made.
@@ -111,7 +112,7 @@ export async function backfillPrincipals(
 	let created = 0;
 	for (const [id, displayName] of missing) {
 		const rows = await sql`
-			INSERT INTO principals (id, display_name) VALUES (${id}, ${displayName ?? id})
+			INSERT INTO principals (id, display_name, claimable) VALUES (${id}, ${displayName ?? id}, true)
 			ON CONFLICT (id) DO NOTHING
 			RETURNING id`;
 		created += rows.length;

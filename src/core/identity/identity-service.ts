@@ -30,7 +30,8 @@ export interface IdentityService {
 	/**
 	 * The speaker behind these facts, or undefined when the access rules serve no one by them: a
 	 * linked identity is its principal's; an unlinked one first claims the principal of its 0.8
-	 * id (`legacyId`) when that principal has no identity of this provider yet, and is otherwise
+	 * id (`legacyId`) when the backfill made it and no identity was ever linked to it, unless it
+	 * holds the owner role, and is otherwise
 	 * admitted as a new principal when `provisioning` is `admitted` and the rules give it a tier.
 	 * A disabled principal is no one. The tier is the higher of the principal's lasting roles and
 	 * what the rules give the facts on this contact.
@@ -149,6 +150,9 @@ class CachingPrincipalStore implements PrincipalStore {
 	}
 	link(principalId: string, identity: IdentityRef, source: LinkSource) {
 		return this.#write(this.#store.link(principalId, identity, source));
+	}
+	claim(principalId: string, identity: IdentityRef) {
+		return this.#write(this.#store.claim(principalId, identity));
 	}
 	unlink(provider: string, subject: string) {
 		return this.#write(this.#store.unlink(provider, subject));
@@ -379,16 +383,19 @@ export class PgIdentityService implements IdentityService {
 		]);
 	}
 
-	/** The principal of the facts' 0.8 id, linked to them, when it has no identity of their provider yet. */
+	/**
+	 * The principal of the facts' 0.8 id, linked to them, while the backfill's claim on it is
+	 * unspent: no identity was ever linked to it, and it holds no owner role.
+	 */
 	async #claim(facts: ActorFacts): Promise<IdentityLink | undefined> {
 		const id = facts.legacyId;
 		if (id === undefined || id === SYSTEM_PRINCIPAL || isPrincipalId(id))
 			return undefined;
-		if (!(await this.principals.get(id))) return undefined;
-		const links = await this.principals.identitiesOf(id);
-		if (links.some((link) => link.provider === facts.provider))
-			return undefined;
-		return this.#link(id, facts, "legacy");
+		if (!(await this.principals.get(id))?.claimable) return undefined;
+		return this.principals.claim(id, {
+			provider: facts.provider,
+			subject: facts.subject,
+		});
 	}
 
 	/** A new principal for someone the rules admit, when the host admits people at first contact. */

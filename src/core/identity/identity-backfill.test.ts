@@ -84,6 +84,12 @@ describeDb("the principal backfill", () => {
 		const ids = (await principals(db.sql)).map((row) => row.id);
 		expect(ids).toEqual([OWNER, ...MEMBERS, WEB, "remote-mcp"].sort());
 		expect(await personRows(db.sql)).toEqual(before);
+		// Each may be claimed once by the person of its id.
+		expect(
+			(await db.sql`SELECT id FROM principals WHERE claimable ORDER BY id`).map(
+				(row: { id: string }) => row.id,
+			),
+		).toEqual(ids);
 		// The owner is named as the configuration names them; a schedule's author by the schedule.
 		const names = Object.fromEntries(
 			(await principals(db.sql)).map((row) => [row.id, row.display_name]),

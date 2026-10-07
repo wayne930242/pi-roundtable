@@ -26,6 +26,8 @@ export interface PrincipalRecord extends Principal {
 	lastSeenAt?: Date;
 	/** The tier it was last seen at; it only ever lowers what a background turn may do, never grants. */
 	lastTier?: Tier;
+	/** Whether the person of its 0.8 speaker id may still claim it: only one the backfill made, until any identity is linked to it. */
+	claimable: boolean;
 }
 
 /** An identity on one provider: `discord` and a user id, `oidc:<issuer>` and a subject, `token` and a name. */
@@ -76,12 +78,25 @@ export interface PrincipalStore {
 		id: string,
 		change: { displayName?: string; pronouns?: Pronouns | null },
 	): Promise<PrincipalRecord | undefined>;
-	/** Links the identity to the principal; linking it again to the same one changes nothing, to another one is refused. */
+	/**
+	 * Links the identity to the principal; linking it again to the same one changes nothing, to
+	 * another one is refused. A principal with any identity linked is no longer claimable, even
+	 * after the identity is unlinked.
+	 */
 	link(
 		principalId: string,
 		identity: IdentityRef,
 		source: LinkSource,
 	): Promise<IdentityLink>;
+	/**
+	 * The identity's link, claiming the principal for it when the identity is still unlinked and
+	 * the principal claimable and not an owner; undefined when it may not be claimed. A principal
+	 * is claimed at most once.
+	 */
+	claim(
+		principalId: string,
+		identity: IdentityRef,
+	): Promise<IdentityLink | undefined>;
 	/** Whether there was a link to remove. */
 	unlink(provider: string, subject: string): Promise<boolean>;
 	identity(
@@ -118,6 +133,7 @@ interface PrincipalRow {
 	disabled_at: Date | null;
 	last_seen_at: Date | null;
 	last_tier: Tier | null;
+	claimable: boolean;
 }
 
 interface IdentityRow {
@@ -145,6 +161,7 @@ function principalOf(row: PrincipalRow): PrincipalRecord {
 		createdAt: row.created_at,
 		...(row.last_seen_at === null ? {} : { lastSeenAt: row.last_seen_at }),
 		...(row.last_tier === null ? {} : { lastTier: row.last_tier }),
+		claimable: row.claimable,
 	};
 }
 
@@ -158,6 +175,10 @@ function linkOf(row: IdentityRow): IdentityLink {
 	};
 }
 
+/** The advisory lock a first contact of this identity holds, so two contacts at once make one link. */
+const identityLock = (identity: IdentityRef) =>
+	`pi-roundtable:identity:${identity.provider}\n${identity.subject}`;
+
 /** The tables of principals, their identities, and their roles. */
 export const PRINCIPAL_TABLES = async (sql: SQL): Promise<void> => {
 	await sql`
@@ -170,7 +191,8 @@ export const PRINCIPAL_TABLES = async (sql: SQL): Promise<void> => {
 			created_at timestamptz NOT NULL DEFAULT now(),
 			disabled_at timestamptz,
 			last_seen_at timestamptz,
-			last_tier text CHECK (last_tier IN ('member', 'admin', 'owner'))
+			last_tier text CHECK (last_tier IN ('member', 'admin', 'owner')),
+			claimable boolean NOT NULL DEFAULT false
 		)`;
 	await sql`
 		CREATE TABLE IF NOT EXISTS principal_identities (
@@ -262,10 +284,16 @@ export class PgPrincipalStore implements PrincipalStore {
 			);
 		const { provider, subject } = identity;
 		const rows: IdentityRow[] = await this.#sql`
-			INSERT INTO principal_identities (provider, subject, principal_id, source)
-			SELECT ${provider}, ${subject}, id, ${source} FROM principals WHERE id = ${principalId}
-			ON CONFLICT (provider, subject) DO NOTHING
-			RETURNING *`;
+			WITH made AS (
+				INSERT INTO principal_identities (provider, subject, principal_id, source)
+				SELECT ${provider}, ${subject}, id, ${source} FROM principals WHERE id = ${principalId}
+				ON CONFLICT (provider, subject) DO NOTHING
+				RETURNING *
+			), spent AS (
+				UPDATE principals SET claimable = false
+				WHERE id = ${principalId} AND claimable AND EXISTS (SELECT 1 FROM made)
+			)
+			SELECT * FROM made`;
 		const [made] = rows;
 		if (made) return linkOf(made);
 		const existing = await this.identity(provider, subject);
@@ -276,6 +304,31 @@ export class PgPrincipalStore implements PrincipalStore {
 				`${provider}:${subject} is already linked to principal ${existing.principalId}; unlink it first`,
 			);
 		return existing;
+	}
+
+	async claim(
+		principalId: string,
+		identity: IdentityRef,
+	): Promise<IdentityLink | undefined> {
+		const { provider, subject } = identity;
+		return this.#sql.begin(async (tx) => {
+			await tx`SELECT pg_advisory_xact_lock(hashtextextended(${identityLock(identity)}, 0))`;
+			const linked: IdentityRow[] = await tx`
+				SELECT * FROM principal_identities WHERE provider = ${provider} AND subject = ${subject}`;
+			if (linked[0]) return linkOf(linked[0]);
+			const taken = await tx`
+				UPDATE principals SET claimable = false
+				WHERE id = ${principalId} AND claimable AND NOT EXISTS (
+					SELECT 1 FROM principal_roles WHERE principal_id = ${principalId} AND role = 'owner'
+				)
+				RETURNING id`;
+			if (taken.length === 0) return undefined;
+			const made: IdentityRow[] = await tx`
+				INSERT INTO principal_identities (provider, subject, principal_id, source)
+				VALUES (${provider}, ${subject}, ${principalId}, 'legacy')
+				RETURNING *`;
+			return made[0] && linkOf(made[0]);
+		});
 	}
 
 	async unlink(provider: string, subject: string): Promise<boolean> {

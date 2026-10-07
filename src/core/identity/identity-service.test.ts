@@ -54,6 +54,11 @@ let db: ScratchDatabase;
 let store: PgPrincipalStore;
 let clock: number;
 
+/** A principal as the backfill makes one of a 0.8 speaker id: claimable once by that id. */
+async function carriedOver(id: string, name = id): Promise<void> {
+	await db.sql`INSERT INTO principals (id, display_name, claimable) VALUES (${id}, ${name}, true)`;
+}
+
 /** A service over the scratch database, its configuration synced, on the test's clock. */
 async function service(
 	rules: Partial<AccessRules> = {},
@@ -105,7 +110,7 @@ describeDb("the identity service", () => {
 	});
 
 	test("a 0.8 speaker claims the principal of their old id at first contact, by a legacy link", async () => {
-		await store.create({ id: KAI, displayName: KAI });
+		await carriedOver(KAI);
 		const identity = await service();
 		expect(await identity.resolve(discordFacts(KAI, "Kai"))).toEqual({
 			id: KAI,
@@ -119,8 +124,83 @@ describeDb("the identity service", () => {
 		});
 		// The M1 web chat's people claim theirs the same way.
 		const web = webFacts("user-7", ["web:role:App.User"]);
-		await store.create({ id: web.legacyId, displayName: "W" });
+		await carriedOver(web.legacyId, "W");
 		expect((await identity.resolve(web))?.principalId).toBe(web.legacyId);
+	});
+
+	test("a principal is claimed at most once: an identity unlinked from it, by the CLI or the configuration, never claims it back", async () => {
+		const identity = await service();
+		// Claimed, then unlinked by the CLI.
+		await carriedOver(KAI);
+		expect(
+			(await identity.resolve(discordFacts(KAI, "Kai")))?.principalId,
+		).toBe(KAI);
+		await identity.principals.unlink("discord", KAI);
+		const again = await identity.resolve(discordFacts(KAI, "Kai"));
+		expect(again?.principalId).toMatch(/^p_/);
+		expect((await store.identity("discord", KAI))?.source).toBe("jit");
+
+		// Linked by the CLI before any contact, then unlinked: the link spent the claim.
+		const NOA = "966666600000000005";
+		await carriedOver(NOA);
+		await store.link(NOA, { provider: "discord", subject: NOA }, "cli");
+		await store.unlink("discord", NOA);
+		expect(
+			(await identity.resolve(discordFacts(NOA, "Noa")))?.principalId,
+		).not.toBe(NOA);
+	});
+
+	test("an owner's identity the configuration drops does not claim the owner back", async () => {
+		const BO = "966666600000000002";
+		await carriedOver(BO);
+		const bo = {
+			name: "Bo",
+			principal: BO,
+			identities: [`discord:${BO}`],
+		};
+		await service({ owners: [...RULES.owners, bo] });
+		// Bo's identities now name only a web sign-in; the Discord link goes at boot.
+		const moved = await service({
+			owners: [
+				...RULES.owners,
+				{ ...bo, identities: ["oidc:aHR0cHM6Ly9pZHAuZXhhbXBsZS5jb20:bo"] },
+			],
+		});
+		expect(await store.identity("discord", BO)).toBeUndefined();
+		const speaker = await moved.resolve(discordFacts(BO, "Bo"));
+		expect(speaker?.tier).toBe("member");
+		expect(speaker?.principalId).not.toBe(BO);
+
+		// Bo removed from the owners altogether: the Discord identity stays someone else.
+		await store.unlink("discord", BO);
+		const removed = await service();
+		const later = await removed.resolve(discordFacts(BO, "Bo"));
+		expect(later?.principalId).not.toBe(BO);
+	});
+
+	test("a principal holding the owner role is never claimed, whatever provider reports its id", async () => {
+		const identity = await service({
+			owners: [
+				...RULES.owners,
+				{ name: "Operator", principal: "operator", identities: [] },
+			],
+		});
+		// The backfill made the configured owner's principal, claimable like any other.
+		await db.sql`UPDATE principals SET claimable = true WHERE id = 'operator'`;
+		const token = {
+			provider: "token",
+			subject: "remote-mcp",
+			name: "Remote",
+			legacyId: "operator",
+		} satisfies ActorFacts;
+		expect(await identity.resolve(token)).toBeUndefined();
+		expect(await store.identity("token", "remote-mcp")).toBeUndefined();
+		const admitted = await identity.resolve({
+			...discordFacts("966666600000000023", "Eve"),
+			legacyId: "operator",
+		});
+		expect(admitted?.tier).toBe("member");
+		expect(admitted?.principalId).not.toBe("operator");
 	});
 
 	test("no claim when the principal already has an identity of that provider, nor of a new or the system id", async () => {
@@ -254,7 +334,7 @@ describeDb("the identity service", () => {
 
 	test("a disabled principal resolves to no one, has no tier, and no turn can be started for them", async () => {
 		const identity = await service();
-		await store.create({ id: KAI, displayName: "Kai" });
+		await carriedOver(KAI, "Kai");
 		await store.grant(KAI, "member", "cli");
 		await store.disable(KAI);
 		expect(await identity.resolve(discordFacts(KAI, "Kai"))).toBeUndefined();
@@ -319,7 +399,7 @@ describeDb("the identity service", () => {
 
 	test("being seen is recorded at most every five minutes, or when the tier changes", async () => {
 		const identity = await service();
-		await store.create({ id: KAI, displayName: "Kai" });
+		await carriedOver(KAI, "Kai");
 		await identity.resolve(discordFacts(KAI, "Kai"));
 		const first = (await store.get(KAI))?.lastSeenAt;
 		expect(first).toBeInstanceOf(Date);
@@ -340,7 +420,7 @@ describeDb("the identity service", () => {
 
 	test("a change another process makes, such as the CLI disabling someone, is seen within the cache's lifetime", async () => {
 		const identity = await service();
-		await store.create({ id: KAI, displayName: "Kai" });
+		await carriedOver(KAI, "Kai");
 		expect(await identity.resolve(discordFacts(KAI, "Kai"))).toBeDefined();
 		const cli = await PgPrincipalStore.attach(db.sql);
 		await cli.disable(KAI);
