@@ -202,7 +202,7 @@ It does not yet isolate the people it talks to from each other the way a multi-u
 | `roundtable start` | Runs the checks that need no network, then the bot |
 | `roundtable add plugin <name>` | Adds `plugins/<name>.ts` and its test, and lists it in the config |
 | `roundtable add package <spec>` | Installs a Pi package with `bun add` and adds a plugin that loads it and gives its tools to every agent turn |
-| `roundtable upgrade [--write]` | Shows `roundtable.config.ts` rewritten in the 0.9 form (`owner` and `speakers` as `access`, `discord` as an adapter) as a diff; `--write` writes it after checking it serves the same people |
+| `roundtable upgrade [--write [--unchecked]]` | Shows `roundtable.config.ts` rewritten in the 0.9 form (`owner` and `speakers` as `access`, `discord` as an adapter) as a diff; `--write` writes it after checking it serves the same people, which needs the environment the host runs with, and refuses when it cannot check; `--unchecked` writes it unchecked, with a warning |
 | `roundtable principal list\|show\|create\|link\|unlink\|grant\|revoke\|disable\|enable` | Lists and changes the principals, their identities, and their roles in the database; a running host sees a change within 30 seconds |
 
 ## Changes and license

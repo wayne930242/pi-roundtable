@@ -18,6 +18,11 @@ export interface UpgradeInputs {
 	cwd: string;
 	/** Write the rewrite; without it the upgrade only shows it. */
 	write: boolean;
+	/**
+	 * Write the rewrite even when the file as it is does not load, so the rewrite could not be
+	 * checked to serve the same people; without it such a write is refused.
+	 */
+	unchecked: boolean;
 	/** The value a configuration file exports by default, loaded as the host loads it. */
 	load(path: string): Promise<unknown>;
 }
@@ -91,8 +96,9 @@ async function compare(
 /**
  * Rewrites the project's roundtable.config.ts in the 0.9 form, after showing it. Before it writes,
  * it loads the rewrite beside the original and refuses it unless the host would serve the same
- * people, with the same owners and Discord settings; when the original does not load, such as
- * without its `.env`, it says the check was skipped. It touches no other file.
+ * people, with the same owners and Discord settings. When the original does not load, such as
+ * without the environment the host runs with, the check is skipped: the preview says so, and a
+ * write is refused unless `unchecked` asks for it. It touches no other file.
  */
 export async function upgrade(inputs: UpgradeInputs): Promise<UpgradeReport> {
 	const path = join(inputs.cwd, CONFIG_FILE);
@@ -124,6 +130,13 @@ export async function upgrade(inputs: UpgradeInputs): Promise<UpgradeReport> {
 		};
 	const verified = await compare(inputs, path, upgraded.source);
 	if ("problem" in verified) return { ok: false, problems: [verified.problem] };
+	if (inputs.write && "skipped" in verified && !inputs.unchecked)
+		return {
+			ok: false,
+			problems: [
+				`${verified.skipped}; it was not written. Set the environment the host runs with and retry; to write it without the check, run roundtable upgrade --write --unchecked.`,
+			],
+		};
 	if (inputs.write) {
 		// Written beside it and renamed over it, so the file is never half written.
 		const staged = `${path}.upgrade-${crypto.randomUUID()}`;

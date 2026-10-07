@@ -403,6 +403,100 @@ describe("roundtable upgrade on a 0.8 project", () => {
 		expect(typecheck.ok && lint.ok).toBe(true);
 	}, 120_000);
 
+	test("without the environment the host runs with, --write refuses, and --unchecked writes with a warning", () => {
+		const bare = tempDir("roundtable-upgrade-bare-");
+		try {
+			const made = init({
+				cwd: bare.path,
+				bun: { version: Bun.version, required: ">=1.3.0" },
+				version: "0.8.0",
+			});
+			expect(made.ok).toBe(true);
+			linkCheckout(bare.path);
+			// No .env: the 0.8 template reads an empty owner id, which the host refuses to load.
+			writeFileSync(join(bare.path, CONFIG_FILE), TEMPLATE_0_8);
+			const run = (...args: string[]) => {
+				const ran = Bun.spawnSync(
+					["bun", join(ROOT, "src/cli/main.ts"), "upgrade", ...args],
+					{
+						cwd: bare.path,
+						stdout: "pipe",
+						stderr: "pipe",
+						env: { PATH: process.env.PATH ?? "", HOME: process.env.HOME ?? "" },
+					},
+				);
+				return {
+					code: ran.exitCode,
+					out: ran.stdout.toString(),
+					err: ran.stderr.toString(),
+				};
+			};
+			const preview = run();
+			expect(preview.code).toBe(0);
+			expect(preview.out).toContain("Not checked:");
+
+			const refused = run("--write");
+			expect(refused.code).toBe(1);
+			expect(refused.err).toContain(
+				"Set the environment the host runs with and retry",
+			);
+			expect(refused.err).toContain("--unchecked");
+			expect(refused.err).toContain("roundtable.config.ts was not changed.");
+			expect(readFileSync(join(bare.path, CONFIG_FILE), "utf8")).toBe(
+				TEMPLATE_0_8,
+			);
+
+			expect(run("--unchecked").code).toBe(1);
+
+			const unchecked = run("--write", "--unchecked");
+			expect(unchecked.code).toBe(0);
+			expect(unchecked.err).toContain("Warning: written without the check");
+			expect(unchecked.out).toContain("Wrote roundtable.config.ts");
+			expect(readFileSync(join(bare.path, CONFIG_FILE), "utf8")).not.toBe(
+				TEMPLATE_0_8,
+			);
+		} finally {
+			bare.done();
+		}
+	}, 60_000);
+
+	test("upgrade() writes an unchecked rewrite only when told to", async () => {
+		const other = tempDir("roundtable-upgrade-unchecked-");
+		try {
+			other.write(CONFIG_FILE, TEMPLATE_0_8);
+			const failing = async () => {
+				throw new Error("DISCORD_TOKEN is not set");
+			};
+			const refused = await upgrade({
+				cwd: other.path,
+				write: true,
+				unchecked: false,
+				load: failing,
+			});
+			expect(refused.ok).toBe(false);
+			if (!refused.ok)
+				expect(refused.problems.join("\n")).toContain(
+					"DISCORD_TOKEN is not set",
+				);
+			expect(readFileSync(join(other.path, CONFIG_FILE), "utf8")).toBe(
+				TEMPLATE_0_8,
+			);
+			const written = await upgrade({
+				cwd: other.path,
+				write: true,
+				unchecked: true,
+				load: failing,
+			});
+			expect(written.ok && written.written).toBe(true);
+			expect(written.ok && "skipped" in written.verified).toBe(true);
+			expect(readFileSync(join(other.path, CONFIG_FILE), "utf8")).not.toBe(
+				TEMPLATE_0_8,
+			);
+		} finally {
+			other.done();
+		}
+	});
+
 	test("refuses to write a rewrite that would change whom the host serves", async () => {
 		const other = tempDir("roundtable-upgrade-guard-");
 		try {
@@ -412,6 +506,7 @@ describe("roundtable upgrade on a 0.8 project", () => {
 			const report = await upgrade({
 				cwd: other.path,
 				write: true,
+				unchecked: false,
 				load: async () =>
 					calls++ === 0
 						? validConfig

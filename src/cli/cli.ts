@@ -50,8 +50,11 @@ const USAGE = `roundtable: a Discord agent server on Pi
                                 which are copied in ready to run instead of the template
   roundtable add package <spec> install a Pi package with bun add, and add plugins/<name>.ts that
                                 loads it and gives its tools to every agent turn
-  roundtable upgrade [--write]  show roundtable.config.ts rewritten in the 0.9 form (owner and
-                                speakers as access, discord as an adapter); --write writes it
+  roundtable upgrade [--write [--unchecked]]
+                                show roundtable.config.ts rewritten in the 0.9 form (owner and
+                                speakers as access, discord as an adapter); --write writes it once
+                                it is checked to serve the same people, which needs the
+                                environment the host runs with; --unchecked writes it unchecked
 ${PRINCIPAL_USAGE}
 `;
 
@@ -214,9 +217,11 @@ export async function runCli(
 	}
 	if (command === "upgrade") {
 		const write = rest.includes("--write");
-		if (rest.some((arg) => arg !== "--write"))
-			return usage(io, "upgrade takes only --write");
-		return runUpgrade(io, write);
+		const unchecked = rest.includes("--unchecked");
+		if (rest.some((arg) => arg !== "--write" && arg !== "--unchecked"))
+			return usage(io, "upgrade takes only --write and --unchecked");
+		if (unchecked && !write) return usage(io, "--unchecked goes with --write");
+		return runUpgrade(io, write, unchecked);
 	}
 	if (command === "principal") {
 		const project = new Project(resolve(io.cwd), io.ports);
@@ -240,10 +245,15 @@ export async function runCli(
 	return usage(io, `unknown command ${JSON.stringify(command)}`);
 }
 
-async function runUpgrade(io: CliEnvironment, write: boolean): Promise<number> {
+async function runUpgrade(
+	io: CliEnvironment,
+	write: boolean,
+	unchecked: boolean,
+): Promise<number> {
 	const report = await upgrade({
 		cwd: resolve(io.cwd),
 		write,
+		unchecked,
 		load: loadDefault,
 	});
 	if (!report.ok) {
@@ -268,6 +278,10 @@ async function runUpgrade(io: CliEnvironment, write: boolean): Promise<number> {
 			? "Checked: the rewrite serves the same owners, admins, and members, with the same Discord settings."
 			: `Not checked: ${report.verified.skipped}.`,
 	);
+	if (report.written && "skipped" in report.verified)
+		io.err(
+			`Warning: written without the check, as --unchecked asked. Nothing confirmed that the host serves the same owners, admins, and members as before; read the diff above, and run roundtable doctor with the environment the host runs with.`,
+		);
 	io.out(
 		report.written
 			? `Wrote ${CONFIG_FILE}; no other file was changed.`
