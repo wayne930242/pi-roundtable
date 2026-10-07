@@ -35,7 +35,7 @@ function defaults(judgeModel: JudgeModel | undefined): Providers {
 		},
 		runtime: () => {
 			throw new ProviderError(
-				"no runtime provider is configured: the agent server builds the Pi runtime when no plugin fills the runtime slot",
+				"no runtime provider is configured: the runtime plugin builds the Pi runtime when no plugin fills the runtime slot; read the running one from services.get(RUNTIME)",
 			);
 		},
 	};

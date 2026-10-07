@@ -32,7 +32,7 @@ import {
 	conversationTurns,
 } from "./routing/conversation-turns.ts";
 import { surfacePort } from "./routing/surface-port.ts";
-import { AGENTS } from "./services.ts";
+import { RUNTIME } from "./services.ts";
 import { setTimeZone } from "./time.ts";
 import { type ToolTierTable, toolTiers } from "./tool-tiers.ts";
 
@@ -210,7 +210,7 @@ export class Roundtable {
 		});
 	}
 
-	/** Turns over the agent server's runtime and the surfaces; every call before linking is refused with NotLinkedError. */
+	/** Turns over the runtime plugin's runtime and the surfaces; every call before linking is refused with NotLinkedError. */
 	#turns(): ConversationTurns {
 		return conversationTurns({
 			linked: () => {
@@ -222,7 +222,7 @@ export class Roundtable {
 			runtime: () => {
 				if (!this.#services)
 					throw new NotLinkedError("the host has not started yet.");
-				return this.#services.get(AGENTS).runtime;
+				return this.#services.get(RUNTIME);
 			},
 			surfaces: this.#surfaces(),
 			events: this.#events.sink,

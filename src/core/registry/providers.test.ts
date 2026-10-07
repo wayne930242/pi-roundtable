@@ -86,7 +86,7 @@ describe("resolveProviders", () => {
 		const { runtime, filled } = resolveProviders([]);
 		expect(() => runtime({} as never)).toThrow(ProviderError);
 		expect(() => runtime({} as never)).toThrow(
-			"the agent server builds the Pi runtime when no plugin fills the runtime slot",
+			"the runtime plugin builds the Pi runtime when no plugin fills the runtime slot",
 		);
 		expect(filled.has("runtime")).toBe(false);
 		const factory = () => {

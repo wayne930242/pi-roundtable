@@ -109,7 +109,7 @@ export interface HeldActionStore {
 	): Promise<void>;
 }
 
-/** What the agent server hands a runtime provider when it builds the runtime. */
+/** What the host's runtime plugin hands a runtime provider when it builds the runtime. */
 export interface RuntimeDeps {
 	logger: Logger;
 	/** The host's locale and time zone. */
@@ -131,13 +131,17 @@ export interface RuntimeDeps {
 		conversation: ChannelKey,
 		speaker?: Speaker,
 	): OwnerPrompts | undefined;
-	/** The agent server's per-agent settings, for agent turns. */
-	agents: AgentSessions;
+	/**
+	 * The agent server's per-agent settings, for agent turns. The runtime is built before the agent
+	 * server, so read this when a turn runs, not in the factory; it stays undefined on a host without
+	 * the agent server, where no agent turn runs.
+	 */
+	readonly agents?: AgentSessions;
 	/** Where held actions persist across restarts. */
 	confirmations: HeldActionStore;
 	/** The host's judge, resolved from the `judge` slot. */
 	judge: Judge;
 }
 
-/** Builds the runtime, once, when the agent server sets up. */
+/** Builds the runtime, once, when the host's runtime plugin sets up. */
 export type RuntimeFactory = (deps: RuntimeDeps) => AgentRuntime;

@@ -23,6 +23,7 @@ import { createLogger, type LogEntry, type Logger } from "./log.ts";
 import { formatModelRef, type ModelRef } from "./models.ts";
 import { ErrorReporter } from "./ops/error-reporter.ts";
 import type { RoundtablePlugin } from "./plugin.ts";
+import { agentSessionsSlot, runtimePlugin } from "./runtime/runtime-plugin.ts";
 import { speakerPolicy } from "./speakers.ts";
 import { toolTiers } from "./tool-tiers.ts";
 
@@ -147,6 +148,8 @@ export async function defineRoundtable(
 	const guest = config.prompts.guest
 		? readPrompt(config.prompts.guest, "prompts.guest")
 		: readPrompt(join(ASSETS, "prompts", "shared-guest.md"), "prompts.guest");
+	// The agent server hands the runtime its per-agent settings once it sets up.
+	const agentSessions = agentSessionsSlot();
 	return {
 		options: {
 			logger,
@@ -198,6 +201,18 @@ export async function defineRoundtable(
 						}),
 					]
 				: []),
+			runtimePlugin({
+				owner,
+				modelRuntime,
+				agentDir: config.agentDir,
+				dataDir: config.dataDir,
+				model: config.model,
+				thinking: config.thinking,
+				judgeThreshold: config.judge.threshold,
+				agents: agentSessions,
+				interimText: config.interimText,
+				interimPrimaryChars: config.interimPrimaryChars,
+			}),
 			agentServerPlugin({
 				guildId: discord.guild,
 				entryChannelId: discord.entryChannel,
@@ -205,11 +220,10 @@ export async function defineRoundtable(
 				assistant: name,
 				speakers,
 				modelRuntime,
-				agentDir: config.agentDir,
 				dataDir: config.dataDir,
 				model: config.model,
-				thinking: config.thinking,
 				judgeThreshold: config.judge.threshold,
+				agents: agentSessions,
 				workDir: config.workDir,
 				scratchDir: config.scratchDir,
 				shellUser: userInfo().username,
@@ -217,8 +231,6 @@ export async function defineRoundtable(
 				avatarListener: "public",
 				avatarUrl: config.http.publicUrl,
 				avatarReference: config.avatar ?? join(ASSETS, "neutral.png"),
-				interimText: config.interimText,
-				interimPrimaryChars: config.interimPrimaryChars,
 				...(errorReporter ? { errorReporter } : {}),
 			}),
 			seedsPlugin(config.agents),

@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
-import type { AgentRuntime, RuntimeDeps } from "../contract/runtime.ts";
+import type { AgentRuntime } from "../contract/runtime.ts";
 import { PluginError } from "../errors.ts";
 import { silentLogger } from "../log.ts";
 import type {
@@ -17,11 +17,12 @@ import {
 } from "../registry/contributions.ts";
 import { resolveProviders } from "../registry/providers.ts";
 import { ServiceRegistry } from "../registry/services.ts";
-import { PiAgentRuntime } from "../runtime/pi-agent-runtime.ts";
+import { agentSessionsSlot } from "../runtime/runtime-plugin.ts";
 import {
 	AGENTS,
 	BACKGROUND_TURNS,
 	type BackgroundTurns,
+	RUNTIME,
 	SCHEDULES,
 	type ScheduleStore,
 } from "../services.ts";
@@ -55,10 +56,8 @@ function options(extra: Partial<AgentServerOptions> = {}): AgentServerOptions {
 		speakers: speakerPolicy({ owners: ["1"] }),
 		// SAFETY: building the runtime reads nothing of the model runtime; a turn would.
 		modelRuntime: {} as ModelRuntime,
-		agentDir: join(dir, "agent"),
 		dataDir: join(dir, "data"),
 		model: { provider: "test", id: "model" },
-		thinking: "low",
 		judgeThreshold: 0.6,
 		workDir: join(dir, "work"),
 		shellUser: "tester",
@@ -70,15 +69,11 @@ function options(extra: Partial<AgentServerOptions> = {}): AgentServerOptions {
 	};
 }
 
-const held = { loads: [] as string[] };
-// SAFETY: setup hands the stores to the team and registry, which read them only when a turn or a command runs.
-const stores = {
-	agents: {},
-	confirmations: {
-		load: async (key: string) => void held.loads.push(key),
-		save: async () => undefined,
-	},
-} as unknown as AgentServerStores;
+// SAFETY: setup hands the store to the team and registry, which read it only when a turn or a command runs.
+const stores = { agents: {} } as unknown as AgentServerStores;
+
+/** The runtime plugin's runtime, as the agent server reads it. */
+const runtime = { name: "runtime" } as unknown as AgentRuntime;
 
 /** The agent server set up over stand-in stores and Discord, as far as setup reads them. */
 async function setUp(
@@ -92,6 +87,7 @@ async function setUp(
 	// SAFETY: setup hands them to the team and registry, which read them only when a turn or a command runs.
 	services.preset(SCHEDULES, {} as ScheduleStore);
 	services.preset(BACKGROUND_TURNS, {} as BackgroundTurns);
+	services.preset(RUNTIME, runtime);
 	// SAFETY: as above.
 	services.preset(DISCORD, {
 		connection: {
@@ -104,7 +100,6 @@ async function setUp(
 		guard: {},
 	} as unknown as DiscordServices);
 	let linked: LinkedSessions | undefined;
-	const seen: { deps?: RuntimeDeps } = {};
 	const context = {
 		logger: silentLogger(),
 		env: { locale: "en", timeZone: "UTC", now: () => new Date() },
@@ -140,92 +135,28 @@ async function setUp(
 		services,
 	);
 	linked = linkSessions(registry);
-	return { services, registry, context, linked, seen };
+	return { services, registry, context, linked };
 }
 
 describe("the agent server's runtime", () => {
-	test("is the Pi runtime when no plugin fills the runtime slot", async () => {
+	test("is the runtime plugin's, and the server hands it the agents' settings", async () => {
+		const slot = agentSessionsSlot();
 		const { services } = await setUp(
-			agentServerPlugin(options(), async () => stores),
-		);
-		expect(services.get(AGENTS).runtime).toBeInstanceOf(PiAgentRuntime);
-	});
-
-	test("is the runtime of the plugin that fills the slot, built once from the deps the server hands it", async () => {
-		let built = 0;
-		let deps: RuntimeDeps | undefined;
-		const runtime = { name: "echo" } as unknown as AgentRuntime;
-		const echo: RoundtablePlugin = {
-			name: "echo",
-			providers: {
-				runtime: (given) => {
-					built += 1;
-					deps = given;
-					return runtime;
-				},
-			},
-			setup: () => ({}),
-		};
-		const { services } = await setUp(
-			agentServerPlugin(options(), async () => stores),
-			[echo],
+			agentServerPlugin(options({ agents: slot }), async () => stores),
 		);
 		expect(services.get(AGENTS).runtime).toBe(runtime);
-		expect(built).toBe(1);
-		const given = deps;
-		if (!given) throw new Error("the factory was not called");
-		expect(given.owner).toEqual({ id: "1", name: "Owner" });
-		expect(given.env.timeZone).toBe("UTC");
-		expect(given.agents.workDir).toContain("work");
-		expect(typeof given.sessions).toBe("function");
-		expect(typeof given.prompts).toBe("function");
-		expect(typeof given.judge.askYesNo).toBe("function");
-		expect(given.toolTiers).toBeDefined();
-		// Held actions go to the host's store, and the speaker's conversation key is passed through.
-		expect(await given.confirmations.load("discord:1")).toBeUndefined();
+		expect(slot.current()?.workDir).toContain("work");
 	});
 
-	test("the server's preflight and its runtime service call the provider's preflight and dispose", async () => {
-		const calls: string[] = [];
-		const runtime: AgentRuntime = {
-			runTurn: async () => ({ ok: true, text: "" }),
-			steer: async () => false,
-			stop: () => false,
-			startFresh: async () => undefined,
-			deleteConversation: async () => undefined,
-			pendingConfirmation: () => undefined,
-			heldActions: async () => undefined,
-			recentTranscript: async () => [],
-			preflight: async () => void calls.push("preflight"),
-			dispose: () => void calls.push("dispose"),
-		};
-		const echo: RoundtablePlugin = {
-			name: "echo",
-			providers: { runtime: () => runtime },
-			setup: () => ({}),
-		};
-		const server = agentServerPlugin(options(), async () => stores);
-		const { registry } = await setUp(server, [echo]);
-		await server.preflight?.();
-		const service = registry.services.find((s) => s.name === "runtime");
-		await service?.stop?.();
-		expect(calls).toEqual(["preflight", "dispose"]);
-	});
-
-	test("a runtime without preflight or dispose is left alone by them", async () => {
-		const runtime = {
-			stop: () => false,
-		} as unknown as AgentRuntime;
-		const echo: RoundtablePlugin = {
-			name: "echo",
-			providers: { runtime: () => runtime },
-			setup: () => ({}),
-		};
-		const server = agentServerPlugin(options(), async () => stores);
-		const { registry } = await setUp(server, [echo]);
-		await server.preflight?.();
-		const service = registry.services.find((s) => s.name === "runtime");
-		await service?.stop?.();
+	test("the server needs the runtime plugin, and leaves the held actions' table to it", () => {
+		const plugin = agentServerPlugin(options(), async () => stores);
+		expect(plugin.requires?.map((key) => key.id)).toEqual([
+			"roundtable.runtime",
+		]);
+		expect(plugin.migrations?.map((m) => m.name)).toEqual([
+			"agents",
+			"agents-guild",
+		]);
 	});
 });
 

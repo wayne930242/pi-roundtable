@@ -20,6 +20,7 @@ import {
 	OWNER_TARGET,
 	type PendingConfirmation,
 	PluginError,
+	RUNTIME,
 	SCHEDULES,
 	type Services,
 	serviceKey,
@@ -338,6 +339,61 @@ test("services gives the plugin the members the test names, and refuses the othe
 	expect(String(refused)).toContain(
 		'testPlugin gave service roundtable.agents no "team". Give it in the services option: testPlugin(plugin, { services: [servicePair(KEY, { team: ... })] })',
 	);
+});
+
+test("a runtime given under RUNTIME is the one context.turns runs on, kept whole", async () => {
+	class Answering {
+		readonly #text = "from RUNTIME";
+		async runTurn() {
+			return { ok: true as const, text: this.#text };
+		}
+	}
+	const runtime = new Answering() as unknown as AgentRuntime;
+	let read: unknown;
+	const replies: string[] = [];
+	const harness = await testPlugin(
+		probeServices((services) => {
+			read = services.get(RUNTIME);
+		}),
+		{
+			services: [servicePair(RUNTIME, runtime)],
+			surfaces: [
+				{
+					surface: "fake",
+					start: async () => undefined,
+					sendReply: async (_channel, reply) =>
+						void replies.push(reply.chunks.join()),
+				},
+			],
+		},
+	);
+	expect(read).toBe(runtime);
+	const result = await harness.turns.run({
+		channel: "fake:room",
+		kind: "study",
+		text: "hello",
+		speaker: { id: "1", name: "Ada", tier: "member" },
+	});
+	expect(result).toEqual({ ok: true, text: "from RUNTIME" });
+	expect(replies).toEqual(["from RUNTIME"]);
+	await harness.stop();
+});
+
+test("a plugin that fills the runtime slot reads its runtime under RUNTIME", async () => {
+	const runtime = { stop: () => false } as unknown as AgentRuntime;
+	let read: unknown;
+	const harness = await testPlugin(
+		definePlugin({
+			name: "fills-and-reads",
+			providers: { runtime: () => runtime },
+			setup: ({ services }) => {
+				read = services.get(RUNTIME);
+				return {};
+			},
+		}),
+	);
+	expect(read).toBe(runtime);
+	await harness.stop();
 });
 
 test("a service the test did not give says to pass it, and reads as absent to find", async () => {

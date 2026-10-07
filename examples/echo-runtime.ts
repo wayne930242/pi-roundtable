@@ -98,7 +98,7 @@ export const createEchoRuntime: RuntimeFactory = (deps) => {
 
 /**
  * A plugin fills the `runtime` slot to replace the whole conversation runtime; without one the
- * agent server builds the Pi runtime. One plugin may fill it.
+ * runtime plugin builds the Pi runtime. One plugin may fill it.
  */
 export const echoRuntime = definePlugin({
 	name: "echo-runtime",

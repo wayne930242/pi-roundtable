@@ -208,6 +208,7 @@ export {
 	DELEGATION,
 	MEMORY,
 	PRECHECKS,
+	RUNTIME,
 	SCHEDULES,
 	SKILLS,
 } from "./core/services.ts";

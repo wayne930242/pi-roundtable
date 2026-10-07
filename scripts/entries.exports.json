@@ -24,6 +24,7 @@
 			"PluginError",
 			"ProviderError",
 			"REPLY_FILE_LIMITS",
+			"RUNTIME",
 			"ReplyFileError",
 			"Roundtable",
 			"SCHEDULES",

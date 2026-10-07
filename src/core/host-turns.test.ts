@@ -6,7 +6,7 @@ import { Roundtable, type RoundtableOptions } from "./host.ts";
 import { silentLogger } from "./log.ts";
 import type { RoundtablePlugin } from "./plugin.ts";
 import type { ConversationTurns } from "./routing/conversation-turns.ts";
-import { AGENTS, type AgentServer } from "./services.ts";
+import { RUNTIME } from "./services.ts";
 import { OWNER_SPEAKER as OWNER } from "./testing/owner.ts";
 
 /** A chat surface that connects to nothing; `extra` adds what a test observes. */
@@ -58,14 +58,11 @@ describe("Roundtable conversation turns", () => {
 		let early: unknown;
 		const { roundtable } = host([
 			{
-				// Stands in for the agent server, which provides the runtime the turns run on.
-				name: "agent-server",
-				provides: [AGENTS],
+				// Stands in for the runtime plugin; no agent server is registered.
+				name: "runtime",
+				provides: [RUNTIME],
 				setup: (context) => {
-					// SAFETY: the turns read only the runtime of the agents service.
-					context.services.provide(AGENTS, {
-						runtime,
-					} as unknown as AgentServer);
+					context.services.provide(RUNTIME, runtime);
 					return { services: [{ name: "runtime" }] };
 				},
 			},
@@ -109,7 +106,7 @@ describe("Roundtable conversation turns", () => {
 		expect(replies).toEqual(["answer to hello"]);
 	});
 
-	test("turns on a host without the agent server's runtime are refused, naming the missing service", async () => {
+	test("turns on a host without a runtime are refused, naming the missing service", async () => {
 		let turns: ConversationTurns | undefined;
 		const { roundtable } = host([
 			{
@@ -128,6 +125,6 @@ describe("Roundtable conversation turns", () => {
 				text: "hello",
 				speaker: OWNER,
 			}),
-		).rejects.toThrow("service roundtable.agents is not provided");
+		).rejects.toThrow("service roundtable.runtime is not provided");
 	});
 });

@@ -68,8 +68,9 @@ export interface Providers {
 	images: ImageDrawer;
 	/**
 	 * Builds the runtime that runs the agent server's conversations and every turn run through
-	 * `context.turns`, in place of the Pi runtime. The default refuses: the agent server builds the
-	 * Pi runtime itself when no plugin fills this slot, so check `filled` before calling it.
+	 * `context.turns`, in place of the Pi runtime. The default refuses: the host's runtime plugin
+	 * builds the Pi runtime itself when no plugin fills this slot. Read the running runtime from
+	 * `services.get(RUNTIME)` rather than calling this.
 	 */
 	runtime: RuntimeFactory;
 }

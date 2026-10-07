@@ -172,7 +172,8 @@ The built-in plugins provide these, from the main entry:
 
 | Key | Port | Provided by | What it is |
 |---|---|---|---|
-| `AGENTS` | `AgentServer` | `agent-server` | The `team` (`AgentTeam`), the read-only `directory` (`AgentDirectory`), the `runtime` every agent turn runs on, `approvals` (whether the owner's reply approves held actions), and `avatars` (`AvatarStudio`) |
+| `RUNTIME` | `AgentRuntime` | `runtime` | The runtime every conversation turn runs on, the agent server's and `context.turns`': the `runtime` slot's when a plugin fills it, Pi's otherwise |
+| `AGENTS` | `AgentServer` | `agent-server` | The `team` (`AgentTeam`), the read-only `directory` (`AgentDirectory`), the `runtime` every agent turn runs on (the same one `RUNTIME` provides), `approvals` (whether the owner's reply approves held actions), and `avatars` (`AvatarStudio`) |
 | `SKILLS` | `SkillRegistry` | `skills` (an addon) | What agents carry: `carried`, `carriedNames`, `describeCarried`, `catalog`, `list`, `linkedFrom`, `checkRegistered`, `link`, `attach` |
 | `SCHEDULES` | `ScheduleStore` | `schedule-store` | The stored schedules: `create`, `get`, `forChannel`, `all`, `update`, `remove`, `due`, `claim`, `recordStatus` |
 | `PRECHECKS` | `PrecheckRegistry` | `prechecks` | The host's named [prechecks](#prechecks-wake-a-schedule-only-when-it-has-work): `register`, `get`, `list`; and the runner of agents' precheck scripts: `useScriptRunner`, `scriptRunner` |
@@ -996,7 +997,7 @@ An unknown or misspelled slot stops startup with an error listing the valid name
 |---|---|---|
 | `judge` | Asks the configured model small questions: does this reply approve the held actions, how hard is this turn, which agents does this group message concern | An object with `askYesNo`, `askChoice`, and `askScore` |
 | `images` | No drawing; each agent gets an avatar generated from its display name | `async (prompt, references) => bytes` returning PNG bytes |
-| `runtime` | None: the agent server builds the Pi runtime itself | `(deps) => runtime`, an [`AgentRuntime`](#the-runtime-slot-replace-pi) that runs every conversation |
+| `runtime` | None: the runtime plugin builds the Pi runtime itself | `(deps) => runtime`, an [`AgentRuntime`](#the-runtime-slot-replace-pi) that runs every conversation |
 
 When no `images` provider is configured, `agent_create` has no `avatar_prompt` parameter and `agent_avatar` is unavailable.
 The owner's profile panel reports the missing provider and offers no redraw option.
@@ -1030,16 +1031,16 @@ export const pixelAvatars = definePlugin({
 
 The runtime handles the agent server's conversations and those of every claim that runs turns through `context.turns`.
 It keeps one persistent conversation per channel key, with its turns, held actions, and history.
-By default, the agent server builds the Pi runtime.
+By default, the host's `runtime` plugin builds the Pi runtime and provides it as `RUNTIME`; the agent server and `context.turns` both run on it, and a host without the agent server has it too.
 Filling the `runtime` slot replaces it for agent turns, the owner's conversations, steering, held actions, and transcripts; the host skips building Pi.
-The slot's default factory refuses calls, so check `providers.filled.has("runtime")` before calling `providers.runtime`.
-The agent server does this for you.
+The slot's default factory refuses calls: read the running runtime with `services.get(RUNTIME)` instead of calling `providers.runtime`.
 
-The slot is a `RuntimeFactory`: `(deps: RuntimeDeps) => AgentRuntime`, called once when the agent server sets up.
+The slot is a `RuntimeFactory`: `(deps: RuntimeDeps) => AgentRuntime`, called once when the runtime plugin sets up, before the agent server.
 `deps` provides `logger`, `env`, `owner`, `toolTiers`, and the host's `judge`.
 Its `sessions()` gives you linked hold rules, packages, session tools, and personas from preflight onwards; call it in a turn, when those parts are available.
 `prompts(conversation, speaker)` gives you the owner's approval and question cards on the conversation's surface, or `undefined`.
 `agents` holds the agent server's per-agent settings: `workDir`, `scratchDir` (the agents' shell's `TMPDIR`), `skills(name)`, `modelOf(name)`, and `turnChannel(scope)`.
+The agent server sets up after the runtime is built, so read `agents` when a turn runs; it is `undefined` on a host without the agent server, where no agent turn runs.
 `confirmations` stores held actions across restarts.
 
 An `AgentRuntime` has these methods:
@@ -1054,7 +1055,7 @@ An `AgentRuntime` has these methods:
 | `recentTranscript(conversation, limit)` | The latest messages, for the owner's and the dashboard's views of a conversation |
 | `contextUsage?(conversation)` | How full the conversation's context is, `{ tokens, contextWindow }`; leave it out and the team status shows no context bar |
 | `preflight?()` | Runs in the host's preflight, before anything starts; a throw stops the boot |
-| `dispose?()` | Runs when the host stops the agent server's runtime service |
+| `dispose?()` | Runs when the host stops the runtime plugin's `runtime` service |
 
 A request has the turn's `channel`, `selection` (its tools), `text`, `attachments`, `speaker`, flags (`steerable`, `interactive`, `confirmed`), and `interim`, where the turn may post the text it writes before its final answer ([interim text](#interim-text-what-a-turn-writes-before-its-final-answer)).
 An agent's turn also has `agent`, the agent's scope, whose `session` is the conversation's key.
@@ -1162,7 +1163,7 @@ export const createEchoRuntime: RuntimeFactory = (deps) => {
 
 /**
  * A plugin fills the `runtime` slot to replace the whole conversation runtime; without one the
- * agent server builds the Pi runtime. One plugin may fill it.
+ * runtime plugin builds the Pi runtime. One plugin may fill it.
  */
 export const echoRuntime = definePlugin({
 	name: "echo-runtime",
@@ -2170,7 +2171,7 @@ After setup, `conversations` routes to the plugin's claims, `surfaces` contains 
 | `database` | A Bun `SQL` for `context.database()`; without one it throws `no database is configured` |
 | `providers` | Provider slots filled as if another plugin filled them |
 | `surfaces` | Chat surfaces besides the plugin's own, such as the fake surface of `examples/fake-surface.ts`: they are in `context.surfaces`, start after the plugin's services with the harness routing their messages to `conversations`, and stop with `stop()` |
-| `services` | What the plugin reads from `context.services`: one `servicePair(KEY, { ... })` for each service, with the members you give it. `servicePair(AGENTS, { runtime })` is the runtime `context.turns` runs on. Reading a member you did not give throws a `PluginError` that names the option to add; a service you did not give reads as absent to `find`, and `get` says to give it, except for the ones below |
+| `services` | What the plugin reads from `context.services`: one `servicePair(KEY, { ... })` for each service, with the members you give it. `servicePair(RUNTIME, runtime)` is the runtime `context.turns` runs on, given whole; `servicePair(AGENTS, { runtime })` also works when no `RUNTIME` is given. Reading a member you did not give throws a `PluginError` that names the option to add; a service you did not give reads as absent to `find`, and `get` says to give it, except for the ones below |
 | `conversations` | Methods that replace the router's, such as `stop`, for a plugin that calls them |
 | `turns` | A `ConversationTurns` that replaces the default one |
 | `apiKeys` | The credentials `context.apiKey(provider)` returns, by provider name: `{ "openai-codex": "key" }`. A provider not listed reads as having none, as on a host that is not logged in |
@@ -2357,7 +2358,7 @@ These are the messages as the code writes them, with `<...>` where your names go
 | `plugin <b>: background target "<name>" is already registered by plugin <a>. Keep one target per name.` | Give each background target one plugin, or rename one of them |
 | `no plugin contributes the background target "<name>"` (a schedule's last status, or a skipped turn) | Contribute the target from the plugin whose claim serves it, or cancel the schedule |
 | `no persona is registered for the conversation kind "<kind>". A plugin adds one with personas: [...], or its claim must start conversations of a kind that has one.` (a failed turn) | Contribute a persona of that kind, or run the turn with a kind that has one |
-| `no runtime provider is configured: the agent server builds the Pi runtime when no plugin fills the runtime slot` | Only a plugin that calls `providers.runtime` without `providers.filled.has("runtime")` sees it; check `filled` first |
+| `no runtime provider is configured: the runtime plugin builds the Pi runtime when no plugin fills the runtime slot; read the running one from services.get(RUNTIME)` | Only a plugin that calls `providers.runtime` without `providers.filled.has("runtime")` sees it; read `services.get(RUNTIME)` instead |
 | `session tool <name> takes a core extension name. Rename it.` | Pick a name other than the core's |
 | `two plugins are named <name>.` (from `roundtable doctor`) | Rename yours; the built-in plugins are `memory`, `schedule-store`, `discord`, `modules`, `discord-admin`, `skills`, `agent-server`, `seeds`, and `schedules` |
 | `migration <plugin>/<name> is declared twice` | A plugin declares two migrations with one name: rename one (the same name in two plugins is fine) |
@@ -2601,6 +2602,7 @@ Import from the entries listed below; source area files are internal.
 | `RuntimeFactory` | `pi-roundtable` | type |
 | `SCHEDULES` | `pi-roundtable` | value |
 | `PRECHECKS` | `pi-roundtable` | value |
+| `RUNTIME` | `pi-roundtable` | value |
 | `PRECHECK_TIMEOUT_MS` | `pi-roundtable` | value |
 | `Precheck` | `pi-roundtable` | type |
 | `PrecheckContext` | `pi-roundtable` | type |

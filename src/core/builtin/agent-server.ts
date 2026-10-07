@@ -11,28 +11,26 @@ import { FileAvatarStudio } from "../agents/avatar-studio.ts";
 import { RelevanceScorer } from "../agents/group-round.ts";
 import { discordKey } from "../agents/team-keys.ts";
 import { ownerAttachmentDir } from "../attachments/attachment-dir.ts";
-import type { AgentRuntime, AgentSessions } from "../contract/runtime.ts";
+import type { AgentSessions } from "../contract/runtime.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
 import { ConfigError } from "../domain/errors.ts";
-import type { InterimTextMode } from "../domain/interim.ts";
 import type { OwnerIdentity } from "../identity.ts";
 import { ConfirmationJudge } from "../judging/confirmation-judge.ts";
-import { AGENT_BRIEF, EffortJudge } from "../judging/effort-judge.ts";
-import {
-	AUTO_THINKING,
-	formatModelRef,
-	type ModelRef,
-	type ThinkingLevel,
-} from "../models.ts";
+import { AUTO_THINKING, formatModelRef, type ModelRef } from "../models.ts";
 import type { ErrorReporter } from "../ops/error-reporter.ts";
 import type { PluginContext, RoundtablePlugin } from "../plugin.ts";
 import { splitReply } from "../presentation/reply-splitter.ts";
 import { agentPromptExtension } from "../runtime/extensions/agent-prompt.ts";
-import { PendingConfirmationStore } from "../runtime/pending-confirmation-store.ts";
-import { PiAgentRuntime } from "../runtime/pi-agent-runtime.ts";
-import { AGENTS, BACKGROUND_TURNS, SCHEDULES, SKILLS } from "../services.ts";
+import type { AgentSessionsSlot } from "../runtime/runtime-plugin.ts";
+import {
+	AGENTS,
+	BACKGROUND_TURNS,
+	RUNTIME,
+	SCHEDULES,
+	SKILLS,
+} from "../services.ts";
 import type { SessionTool } from "../sessions.ts";
-import type { Speaker, SpeakerPolicy, Tier } from "../speakers.ts";
+import type { SpeakerPolicy, Tier } from "../speakers.ts";
 import { DISCORD } from "./discord.ts";
 import { agentOnly } from "./session-tool.ts";
 
@@ -45,15 +43,15 @@ export interface AgentServerOptions {
 	assistant: string;
 	/** Who may talk to the agents, and at which tier. */
 	speakers: SpeakerPolicy;
-	/** Shared with the rest of the host, so logins refresh in one place. */
+	/** Shared with the rest of the host, so logins refresh in one place; lists the models an agent may run. */
 	modelRuntime: ModelRuntime;
-	agentDir: string;
 	dataDir: string;
-	/** The model of agents and of the assistant, and the thinking level a judge falls back to. */
+	/** The model of agents and of the assistant. */
 	model: ModelRef;
-	thinking: ThinkingLevel;
-	/** How sure the judges must be before their answer is used. */
+	/** How sure the confirmation judge must be before its answer is used. */
 	judgeThreshold: number;
+	/** Where the agent server hands the runtime plugin its per-agent settings. */
+	agents?: AgentSessionsSlot;
 	/** The shell's shared working directory. */
 	workDir: string;
 	/**
@@ -73,10 +71,6 @@ export interface AgentServerOptions {
 	avatarReference: string;
 	/** Reports the process's own errors to an agent; without one nothing is reported. */
 	errorReporter?: ErrorReporter;
-	/** Whether turns post the text they write before their final answer as they go; default "on". */
-	interimText?: InterimTextMode;
-	/** An intermediate text this long or longer is posted as an ordinary message; default 400. */
-	interimPrimaryChars?: number;
 }
 
 /** The name of the agent server's plugin, as `serviceStarted` events name it. */
@@ -109,11 +103,9 @@ const AGENT_TIERS: Readonly<Record<string, Tier>> = {
 	channel_read: "member",
 };
 
-/** The tables the agent server keeps: its agents and groups, and the held actions. */
+/** The tables the agent server keeps: its agents and groups. */
 export interface AgentServerStores {
 	agents: PgAgentStore;
-	/** Held actions, kept across a restart. */
-	confirmations: PendingConfirmationStore;
 }
 
 /** Attaches the agent server's stores over the host's migrated pool. */
@@ -121,16 +113,14 @@ async function attachStores(
 	sql: SQL,
 	guildId: string,
 ): Promise<AgentServerStores> {
-	return {
-		agents: await PgAgentStore.attach(sql, guildId),
-		confirmations: await PendingConfirmationStore.attach(sql),
-	};
+	return { agents: await PgAgentStore.attach(sql, guildId) };
 }
 
 /**
- * The agent server: the team with its channels and dashboard, and the runtime that runs every
- * agent turn. The skills the agents carry come from the skills addon when it is on. It claims the agent channels, starts the team in the
- * background, and hands what it built to the plugins after it.
+ * The agent server: the team with its channels and dashboard, run on the runtime plugin's runtime,
+ * which it hands its per-agent settings. The skills the agents carry come from the skills addon
+ * when it is on. It claims the agent channels, starts the team in the background, and hands what
+ * it built to the plugins after it.
  */
 export function agentServerPlugin(
 	options: AgentServerOptions,
@@ -141,18 +131,13 @@ export function agentServerPlugin(
 	) => Promise<AgentServerStores> = (context, guildId) =>
 		attachStores(context.database(), guildId),
 ): RoundtablePlugin {
-	let runtime: AgentRuntime | undefined;
 	return {
 		name: AGENT_SERVER_PLUGIN,
-		// The agent server's own tables; the host runs them before any setup, in this order.
-		migrations: [
-			PendingConfirmationStore.migration,
-			...PgAgentStore.migrations(options.guildId),
-		],
+		// The agent server's own tables; the host runs them before any setup, in this order. The
+		// held actions' table is the runtime plugin's.
+		migrations: PgAgentStore.migrations(options.guildId),
 		provides: [AGENTS],
-		preflight: async () => {
-			await runtime?.preflight?.();
-		},
+		requires: [RUNTIME],
 		setup: async (context) => {
 			const discord = context.services.get(DISCORD);
 			const schedules = context.services.get(SCHEDULES);
@@ -168,10 +153,8 @@ export function agentServerPlugin(
 			await studio.init();
 			// Absent when the skills addon is off: the agents then carry none.
 			const skills = context.services.find(SKILLS);
-			const { agents: store, confirmations: heldActions } = await openStores(
-				context,
-				options.guildId,
-			);
+			const { agents: store } = await openStores(context, options.guildId);
+			const running = context.services.get(RUNTIME);
 			const judge = providers.judge;
 			const confirmations = new ConfirmationJudge({
 				judge,
@@ -194,11 +177,7 @@ export function agentServerPlugin(
 				store,
 				channels: connection.agentChannels(options.guildId),
 				studio,
-				// The runtime is built next, with this team's tools.
-				runtime: () => {
-					if (!runtime) throw new Error("the runtime is built with the team");
-					return runtime;
-				},
+				runtime: () => running,
 				confirmations,
 				scorer: new RelevanceScorer(judge, logger, options.owner),
 				models: {
@@ -247,50 +226,7 @@ export function agentServerPlugin(
 				skills: (name) => built.skillsOf(name),
 				turnChannel: (scope) => built.turnChannel(scope),
 			};
-			const prompts = (channel: ChannelKey, speaker?: Speaker) =>
-				context.surfaces.prompts(channel, speaker);
-			// A plugin that fills the runtime slot replaces the whole conversation runtime; without
-			// one the agent server runs Pi, built from the options below.
-			const running: AgentRuntime = providers.filled.has("runtime")
-				? providers.runtime({
-						logger,
-						env: context.env,
-						owner: { id: options.owner.id, name: options.owner.name },
-						sessions: context.sessions,
-						toolTiers: context.toolTiers,
-						prompts,
-						agents: agentSessions,
-						confirmations: heldActions,
-						judge,
-					})
-				: new PiAgentRuntime({
-						owner: options.owner,
-						sessions: context.sessions,
-						agentDir: options.agentDir,
-						modelRuntime: options.modelRuntime,
-						dataDir: options.dataDir,
-						model: options.model,
-						thinking: options.thinking,
-						effort: new EffortJudge({
-							judge,
-							brief: AGENT_BRIEF,
-							fallback: options.thinking,
-							threshold: options.judgeThreshold,
-							logger,
-						}),
-						confirmations: heldActions,
-						toolTiers: context.toolTiers,
-						agents: agentSessions,
-						prompts,
-						logger,
-						...(options.interimText
-							? { interimText: options.interimText }
-							: {}),
-						...(options.interimPrimaryChars
-							? { interimPrimaryChars: options.interimPrimaryChars }
-							: {}),
-					});
-			runtime = running;
+			options.agents?.bind(agentSessions);
 			context.services.provide(AGENTS, {
 				team: built,
 				directory: store,
@@ -325,7 +261,6 @@ export function agentServerPlugin(
 				});
 			return {
 				services: [
-					{ name: "runtime", stop: () => running.dispose?.() },
 					{ name: "dashboard", stop: () => dashboard.stop() },
 					{
 						name: AGENT_TEAM_SERVICE,

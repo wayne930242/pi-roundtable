@@ -5,6 +5,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `RUNTIME`, the runtime every conversation turn runs on, provided by the new built-in `runtime` plugin that every host registers just before the agent server. It is the `runtime` slot's runtime when a plugin fills the slot, and Pi's otherwise; `AGENTS.runtime` is the same instance, and `context.turns` now reads `RUNTIME`, so turns no longer need the agent server. `testPlugin` takes `servicePair(RUNTIME, runtime)`, given whole; `servicePair(AGENTS, { runtime })` keeps working.
+
+### Changed
+
+- The Pi runtime and the held actions' table move from the agent server to the `runtime` plugin. The `held-actions` migration is recorded once more under `runtime/held-actions`; it creates the table only when it is missing, so an existing database is unchanged.
+- `RuntimeDeps.agents` is optional and read when a turn runs: the runtime is built before the agent server sets up, and it is `undefined` on a host without the agent server.
+
 ## [0.7.19] - 2026-10-07
 
 ### Fixed

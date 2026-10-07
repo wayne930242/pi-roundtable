@@ -35,6 +35,13 @@ import type { AgentTurnScope, ChannelKey } from "./sessions.ts";
 // interface, so an object with the same methods satisfies it without being one of the built-in
 // classes; a plugin replaces a built-in by providing its own under the same key.
 
+/**
+ * The runtime every conversation turn runs on: the agent server's, and each turn run through
+ * `context.turns`. The `runtime` provider slot's when a plugin fills it, Pi's otherwise. Provided
+ * by the `runtime` plugin, which every host registers, with or without the agent server.
+ */
+export const RUNTIME: ServiceKey<AgentRuntime> =
+	serviceKey<AgentRuntime>("roundtable.runtime");
 /** The agent server: its team, its directory, the runtime that runs every agent turn. Provided by the agent-server plugin. */
 export const AGENTS: ServiceKey<AgentServer> =
 	serviceKey<AgentServer>("roundtable.agents");
@@ -84,7 +91,7 @@ export interface AgentServer {
 	team: AgentTeam;
 	/** Read-only lookups of agents and groups; edits go through the team. */
 	directory: AgentDirectory;
-	/** The runtime every agent-server turn runs on: the `runtime` provider's, or Pi's when no plugin fills the slot. */
+	/** The runtime every agent-server turn runs on: the same one `RUNTIME` provides. */
 	runtime: AgentRuntime;
 	/** Decides whether the owner's reply approves the actions the assistant held for them. */
 	approvals: {

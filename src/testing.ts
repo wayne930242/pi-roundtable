@@ -63,7 +63,12 @@ import {
 	conversationTurns,
 } from "./core/routing/conversation-turns.ts";
 import { surfacePort } from "./core/routing/surface-port.ts";
-import { AGENTS, type AgentServer, BACKGROUND_TURNS } from "./core/services.ts";
+import {
+	AGENTS,
+	type AgentServer,
+	BACKGROUND_TURNS,
+	RUNTIME,
+} from "./core/services.ts";
 import type { ChannelKey, SessionContext } from "./core/sessions.ts";
 import { type Speaker, speakerPolicy } from "./core/speakers.ts";
 import { type ToolTierTable, toolTiers } from "./core/tool-tiers.ts";
@@ -177,8 +182,10 @@ export interface TestPluginOptions {
 	surfaces?: readonly ChatSurface[];
 	/**
 	 * What the plugin reads from `context.services`, one `servicePair(KEY, { ... })` per service.
-	 * `servicePair(AGENTS, { runtime })` is the runtime that `context.turns` runs turns on; without
-	 * it, a plugin that fills the `runtime` slot gets the runtime its provider builds. A service
+	 * `servicePair(RUNTIME, runtime)` is the runtime that `context.turns` runs turns on, given
+	 * whole rather than member by member; `servicePair(AGENTS, { runtime })` still works when no
+	 * `RUNTIME` is given. Without either, a plugin that fills the `runtime` slot gets the runtime its
+	 * provider builds, under both keys. A service
 	 * not given here reads as absent to `find`, and `get` names this option, except for what the
 	 * host supplies anyway: `BACKGROUND_TURNS`, the real background turns over the test's router,
 	 * and, once `AGENTS` is given, its `approvals` (the real confirmation judge over
@@ -350,7 +357,12 @@ export async function testPlugin(
 			linked: () => {
 				if (!linked) unlinked("turns");
 			},
-			runtime: () => services.get(AGENTS).runtime,
+			runtime: () => {
+				const given = services.find(RUNTIME);
+				if (given) return given;
+				const server = services.find(AGENTS);
+				return server ? server.runtime : services.get(RUNTIME);
+			},
 			surfaces,
 			events: sink,
 			selection: () => (linked ?? unlinked("sessions")).agentSelection(),
@@ -391,6 +403,8 @@ export async function testPlugin(
 		};
 		runtime = providers.runtime(deps);
 		// The provider's runtime serves `context.turns` unless the test gave another.
+		if (!given.has(RUNTIME.id))
+			given.set(RUNTIME.id, { key: RUNTIME, given: runtime });
 		if (!agents || !("runtime" in agents.given))
 			given.set(AGENTS.id, {
 				key: AGENTS,
@@ -411,8 +425,12 @@ export async function testPlugin(
 				}),
 			} satisfies Partial<AgentServer>,
 		});
+	// A runtime is given whole: a class's private members do not survive the partial service's proxy.
 	for (const { key, given: members } of given.values())
-		services.preset(key, partialService(key, members));
+		services.preset(
+			key,
+			key.id === RUNTIME.id ? members : partialService(key, members),
+		);
 	// The turns nobody wrote run through the same router, unless the test gave others or the plugin provides them.
 	if (
 		!given.has(BACKGROUND_TURNS.id) &&
