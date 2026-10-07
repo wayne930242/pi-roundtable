@@ -72,6 +72,8 @@ test("init --adapter web writes a project without Discord, around the web chat",
 	expect(config).toContain("webChat(");
 	expect(config).toContain("oidcJwtVerifier(");
 	expect(config).not.toMatch(/discord/i);
+	// The persona names its tools, so tools a plugin adds later, such as pi-web-access's, stay out.
+	expect(config).toContain('selection: { tools: ["hello_greet"], groups: [] }');
 	const example = readFileSync(join(root, ".env.example"), "utf8");
 	expect(example).not.toMatch(/DISCORD|PUBLIC_URL|OWNER_ID/);
 	for (const name of ["OIDC_ISSUER", "OIDC_AUDIENCE", "OIDC_JWKS_URL"])

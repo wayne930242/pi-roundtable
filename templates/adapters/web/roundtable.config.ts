@@ -24,6 +24,8 @@ export default {
 	plugins: [
 		hello,
 		webChat({
+			// Accepts only a person's access token. Pin your tenant and pick a stable subject claim
+			// with subjectClaim and check: see "Provider settings" in the pi-roundtable-webchat README.
 			verifier: oidcJwtVerifier({
 				jwksUrl: env("OIDC_JWKS_URL"),
 				issuers: [env("OIDC_ISSUER")],
@@ -40,6 +42,10 @@ export default {
 					kind: "assistant",
 					label: "Assistant",
 					prompt: () => readFileSync("./persona/assistant.md", "utf8"),
+					// The tools of its turns, by name. Leave out schedule_* and delegate_task, which a web
+					// conversation cannot hear back from, and web_search and fetch_content unless people
+					// may make this server fetch any address, internal ones included.
+					selection: { tools: ["hello_greet"], groups: [] },
 				},
 			],
 		}),
