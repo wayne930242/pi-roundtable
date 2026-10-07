@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { SQL } from "bun";
 import { runMigrations } from "../db/migrations.ts";
 import { IdentityError } from "../domain/errors.ts";
 import { describeDb } from "../testing/database.ts";
@@ -174,3 +175,75 @@ describeDb("PgPrincipalStore", () => {
 		expect((await store.list()).map((row) => row.id)).toContain(p.id);
 	});
 });
+
+describeDb(
+	"PgPrincipalStore under concurrent first contact and linking",
+	() => {
+		let db: ScratchDatabase;
+		beforeAll(async () => {
+			db = await scratchDatabase();
+			await runMigrations(db.sql, [
+				{ name: "identity", migrations: identityMigrations({ owners: [] }) },
+			]);
+		});
+		afterAll(async () => {
+			await db.drop();
+		});
+
+		/** The sessions of the database now waiting on a lock. */
+		const waiting = async (sql: SQL) =>
+			Number(
+				(
+					await sql`
+					SELECT count(*) AS n FROM pg_stat_activity
+					WHERE datname = current_database() AND wait_event_type = 'Lock'`
+				)[0]?.n,
+			);
+
+		test("a claim and a link of the same identity at once do not deadlock: one waits for the other", async () => {
+			const id = "966666600000000031";
+			await db.sql`INSERT INTO principals (id, display_name, claimable) VALUES (${id}, 'Kai', true)`;
+			const store = await PgPrincipalStore.attach(db.sql);
+			const holder = new SQL(db.url, { max: 1 });
+			const watcher = new SQL(db.url, { max: 1 });
+			try {
+				// Another session holds the principal's row, so both writers queue behind it in an order
+				// that deadlocked when the link took no lock: the claim on the row, the link on the claim.
+				let release = () => {};
+				const released = new Promise<void>((resolve) => {
+					release = resolve;
+				});
+				let held = () => {};
+				const holding = new Promise<void>((resolve) => {
+					held = resolve;
+				});
+				const hold = holder.begin(async (tx) => {
+					await tx`SELECT 1 FROM principals WHERE id = ${id} FOR NO KEY UPDATE`;
+					held();
+					await released;
+				});
+				await holding;
+				const ref = { provider: "discord", subject: id };
+				const claim = store.claim(id, ref);
+				while ((await waiting(watcher)) < 1) await Bun.sleep(10);
+				const link = store.link(id, ref, "cli");
+				// Let the link go as far as it can before the row is released.
+				await Bun.sleep(200);
+				release();
+				await hold;
+				const [claimed, linked] = await Promise.allSettled([claim, link]);
+				expect(claimed).toMatchObject({
+					status: "fulfilled",
+					value: { principalId: id, source: "legacy" },
+				});
+				expect(linked).toMatchObject({
+					status: "fulfilled",
+					value: { principalId: id },
+				});
+			} finally {
+				await holder.close();
+				await watcher.close();
+			}
+		});
+	},
+);

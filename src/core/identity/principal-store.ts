@@ -295,27 +295,34 @@ export class PgPrincipalStore implements PrincipalStore {
 				`the host's own principal "${SYSTEM_PRINCIPAL}" has no identities`,
 			);
 		const { provider, subject } = identity;
-		const rows: IdentityRow[] = await this.#sql`
-			WITH made AS (
+		// The same lock, and the same order of writes, as a first contact's claim of this identity,
+		// so the two at once queue instead of deadlocking.
+		return this.#sql.begin(async (tx) => {
+			await tx`SELECT pg_advisory_xact_lock(hashtextextended(${identityLock(identity)}, 0))`;
+			const linked: IdentityRow[] = await tx`
+				SELECT * FROM principal_identities WHERE provider = ${provider} AND subject = ${subject}`;
+			const [existing] = linked;
+			if (existing) {
+				if (existing.principal_id !== principalId)
+					throw new IdentityError(
+						`${provider}:${subject} is already linked to principal ${existing.principal_id}; unlink it first`,
+					);
+				return linkOf(existing);
+			}
+			const spent = await tx`
+				UPDATE principals SET claimable = false WHERE id = ${principalId}
+				RETURNING id`;
+			if (spent.length === 0)
+				throw new IdentityError(`there is no principal ${principalId}`);
+			const made: IdentityRow[] = await tx`
 				INSERT INTO principal_identities (provider, subject, principal_id, source)
-				SELECT ${provider}, ${subject}, id, ${source} FROM principals WHERE id = ${principalId}
-				ON CONFLICT (provider, subject) DO NOTHING
-				RETURNING *
-			), spent AS (
-				UPDATE principals SET claimable = false
-				WHERE id = ${principalId} AND claimable AND EXISTS (SELECT 1 FROM made)
-			)
-			SELECT * FROM made`;
-		const [made] = rows;
-		if (made) return linkOf(made);
-		const existing = await this.identity(provider, subject);
-		if (!existing)
-			throw new IdentityError(`there is no principal ${principalId}`);
-		if (existing.principalId !== principalId)
-			throw new IdentityError(
-				`${provider}:${subject} is already linked to principal ${existing.principalId}; unlink it first`,
-			);
-		return existing;
+				VALUES (${provider}, ${subject}, ${principalId}, ${source})
+				RETURNING *`;
+			const [link] = made;
+			if (!link)
+				throw new IdentityError(`could not link ${provider}:${subject}`);
+			return linkOf(link);
+		});
 	}
 
 	async claim(
