@@ -51,19 +51,27 @@ const named = (principal: PrincipalRecord): string =>
 
 const stamp = (date: Date): string => date.toISOString();
 
-/** The principal a reference names: its id, else the principal an identity is linked to. */
+/**
+ * The principal a reference names: its id, or the principal an identity is linked to. A 0.8 id
+ * can be both, such as a web user's `oidc:…` id once that identity is linked to someone else;
+ * then it is refused rather than guessed.
+ */
 async function find(
 	store: PgPrincipalStore,
 	reference: string | undefined,
 ): Promise<PrincipalRecord> {
 	if (reference === undefined) throw new Refusal("name a principal");
 	const byId = await store.get(reference);
-	if (byId) return byId;
 	const identity = parseIdentity(reference);
 	const link =
 		identity && (await store.identity(identity.provider, identity.subject));
 	const linked = link ? await store.get(link.principalId) : undefined;
-	if (linked) return linked;
+	if (byId && linked && byId.id !== linked.id)
+		throw new Refusal(
+			`${reference} names two principals: ${named(byId)} by its id, and ${named(linked)} by the identity linked to it. Name ${linked.id} by its id; to reach ${byId.id}, unlink ${reference} first, then link it to ${linked.id} again`,
+		);
+	const found = byId ?? linked;
+	if (found) return found;
 	throw new Refusal(
 		`there is no principal ${reference}, and no identity ${reference} is linked; roundtable principal list shows them`,
 	);

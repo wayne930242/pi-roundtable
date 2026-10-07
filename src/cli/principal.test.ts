@@ -298,6 +298,29 @@ describeDb("roundtable principal", () => {
 		);
 	});
 
+	test("a reference that is a principal's id and an identity linked to another principal is refused as ambiguous", async () => {
+		const store = await PgPrincipalStore.attach(db?.sql as never);
+		const web = {
+			provider: "oidc:aHR0cHM6Ly9pZHAuZXhhbXBsZS5jb20",
+			subject: "user-7",
+		};
+		await store.create({ id: WEB, displayName: "Kai-old" });
+		const kai = await store.create({ displayName: "Kai" });
+		await store.link(kai.id, web, "cli");
+		const refused = await principal("grant", WEB, "admin");
+		expect(refused.code).toBe(1);
+		expect(refused.err).toContain(
+			`${WEB} names two principals: principal ${WEB} (Kai-old) by its id, and principal ${kai.id} (Kai) by the identity linked to it`,
+		);
+		expect(await store.rolesOf(WEB)).toEqual([]);
+		expect(await store.rolesOf(kai.id)).toEqual([]);
+		expect((await principal("grant", kai.id, "admin")).code).toBe(0);
+		// The same identity linked to the principal of that id is no ambiguity.
+		await store.unlink(web.provider, web.subject);
+		await store.link(WEB, web, "cli");
+		expect((await principal("show", WEB)).out).toContain("name: Kai-old");
+	});
+
 	test("refuses what it cannot do, saying why, and changes nothing", async () => {
 		const cases: [string[], string][] = [
 			[["show", "nobody"], "no principal nobody"],
