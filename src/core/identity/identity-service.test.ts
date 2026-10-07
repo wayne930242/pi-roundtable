@@ -76,7 +76,7 @@ describeDb("the identity service", () => {
 	beforeAll(async () => {
 		db = await scratchDatabase();
 		await runMigrations(db.sql, [
-			{ name: "identity", migrations: identityMigrations([]) },
+			{ name: "identity", migrations: identityMigrations({ owners: [] }) },
 		]);
 		store = await PgPrincipalStore.attach(db.sql);
 	});

@@ -9,7 +9,7 @@ import { PgPrincipalStore } from "./principal-store.ts";
 export const IDENTITY_PLUGIN = "identity";
 
 export interface IdentityOptions {
-	/** Who the host serves; the backfill makes the owners with a principal id first, by their names. */
+	/** Who the host serves; the backfill makes the owners with a principal id first, by their names, and caps what a carried-over author of schedules is seen at by the tiers. */
 	rules: AccessRules;
 }
 
@@ -29,15 +29,10 @@ export function backfillLine(summary: BackfillSummary): string {
  */
 export function identityPlugin(options: IdentityOptions): RoundtablePlugin {
 	const { rules } = options;
-	const owners = rules.owners.flatMap((owner) =>
-		owner.principal === undefined
-			? []
-			: [{ id: owner.principal, name: owner.name }],
-	);
 	let summary: BackfillSummary | undefined;
 	return {
 		name: IDENTITY_PLUGIN,
-		migrations: identityMigrations(owners, (made) => {
+		migrations: identityMigrations(rules, (made) => {
 			summary = made;
 		}),
 		provides: [IDENTITY],

@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import type { SQL } from "bun";
+import type { RoundtableConfig } from "../config/config.ts";
 import { runMigrations } from "../db/migrations.ts";
 import { defineRoundtable } from "../define-roundtable.ts";
 import { silentLogger } from "../log.ts";
@@ -17,15 +18,23 @@ import {
 import { recordingLogger } from "../testing/recording-logger.ts";
 import { identityPlugin } from "./identity-plugin.ts";
 import { backfillPrincipals } from "./identity-schema.ts";
-import type { IdentityService } from "./identity-service.ts";
+import { type IdentityService, PgIdentityService } from "./identity-service.ts";
+import { PgPrincipalStore } from "./principal-store.ts";
 
 /** The people of the 0.8.0 fixture (scripts/fixture-db.ts). */
 const OWNER = "966666600000000001";
 const MEMBERS = ["966666600000000003", "966666600000000005"];
 const WEB = "oidc:aHR0cHM6Ly9pZHAuZXhhbXBsZS5jb20:user-7";
+/** The rules of the fixture's host: its owner, and no one else. */
+const ADA_ONLY = {
+	owners: [{ name: "Ada", principal: OWNER, identities: [`discord:${OWNER}`] }],
+};
 
 /** The plugins, with their migrations, of a single-owner Discord host of this version. */
-async function hostPlugins(url: string) {
+async function hostPlugins(
+	url: string,
+	speakers?: RoundtableConfig["speakers"],
+) {
 	const dir = mkdtempSync(join(tmpdir(), "roundtable-backfill-"));
 	const modelRuntime = await ModelRuntime.create({
 		authPath: join(dir, "auth.json"),
@@ -36,6 +45,7 @@ async function hostPlugins(url: string) {
 	const defined = await defineRoundtable(
 		{
 			owner: { id: OWNER, name: "Ada" },
+			...(speakers ? { speakers } : {}),
 			discord: {
 				token: "token",
 				guild: "966666600000000002",
@@ -134,6 +144,60 @@ describeDb("the principal backfill", () => {
 		expect(ids).not.toContain("966666600000000009");
 	});
 
+	test("a 0.8 author of schedules is seen at upgrade at the highest tier they scheduled at, capped by what the rules could give them", async () => {
+		db = await scratchDatabase("0.8.0");
+		const upgraded = new Date();
+		// Everyone on Discord is a member: the most the rules give anyone besides the owner.
+		await runMigrations(
+			db.sql,
+			await hostPlugins(db.url, { members: { everyone: true } }),
+		);
+		const seen = Object.fromEntries(
+			(
+				(await db.sql`SELECT id, last_tier, last_seen_at FROM principals`) as {
+					id: string;
+					last_tier: string | null;
+					last_seen_at: Date | null;
+				}[]
+			).map((row) => [row.id, row]),
+		);
+		const [kai, noa] = MEMBERS;
+		// Kai scheduled as a member; remote-mcp as owner, capped to member.
+		expect(seen[kai ?? ""]?.last_tier).toBe("member");
+		expect(seen["remote-mcp"]?.last_tier).toBe("member");
+		expect(seen[kai ?? ""]?.last_seen_at?.getTime()).toBeGreaterThanOrEqual(
+			upgraded.getTime() - 1000,
+		);
+		// No schedule, or the configured owner: not seen.
+		for (const id of [noa ?? "", WEB, OWNER])
+			expect(seen[id]).toMatchObject({ last_tier: null, last_seen_at: null });
+
+		// Their schedules keep running at that tier, as OD-4 allows for 30 days.
+		const identity = new PgIdentityService(
+			await PgPrincipalStore.attach(db.sql),
+			{
+				owners: [
+					{ name: "Ada", principal: OWNER, identities: [`discord:${OWNER}`] },
+				],
+				members: { everyone: ["discord"] },
+				provisioning: "admitted",
+				backgroundStaleDays: 30,
+			},
+			{ logger: silentLogger() },
+		);
+		expect((await identity.speakerFor(kai ?? "", "owner")).tier).toBe("member");
+	});
+
+	test("rules that give no one besides the owners a tier leave a 0.8 author of schedules unseen", async () => {
+		db = await scratchDatabase("0.8.0");
+		await runMigrations(db.sql, await hostPlugins(db.url));
+		const rows = (await db.sql`
+			SELECT id FROM principals WHERE last_tier IS NOT NULL OR last_seen_at IS NOT NULL`) as {
+			id: string;
+		}[];
+		expect(rows).toEqual([]);
+	});
+
 	test("an empty database boots, with the configured owner as the only principal", async () => {
 		db = await scratchDatabase();
 		await runMigrations(db.sql, await hostPlugins(db.url));
@@ -148,7 +212,7 @@ describeDb("the principal backfill", () => {
 		await db.sql`CREATE TABLE held_actions (channel_key text PRIMARY KEY, calls text)`;
 		await db.sql`CREATE TABLE owner_memory (id bigserial PRIMARY KEY, fact text NOT NULL)`;
 		expect(
-			await backfillPrincipals(db.sql, [{ id: OWNER, name: "Ada" }], {
+			await backfillPrincipals(db.sql, ADA_ONLY, {
 				dryRun: true,
 			}),
 		).toEqual({
@@ -165,8 +229,9 @@ describeDb("the principal backfill", () => {
 
 	test("the summary counts the ids of each table, and a dry run writes nothing", async () => {
 		db = await scratchDatabase("0.8.0");
-		const owners = [{ id: OWNER, name: "Ada" }];
-		const planned = await backfillPrincipals(db.sql, owners, { dryRun: true });
+		const planned = await backfillPrincipals(db.sql, ADA_ONLY, {
+			dryRun: true,
+		});
 		expect(planned).toEqual({
 			created: 5,
 			sources: {
@@ -182,7 +247,7 @@ describeDb("the principal backfill", () => {
 		).toBeNull();
 		await runMigrations(db.sql, await hostPlugins(db.url));
 		expect(
-			(await backfillPrincipals(db.sql, owners, { dryRun: true })).created,
+			(await backfillPrincipals(db.sql, ADA_ONLY, { dryRun: true })).created,
 		).toBe(0);
 	});
 });
@@ -235,7 +300,7 @@ describeDb("the system principal", () => {
 		await db.sql`INSERT INTO conversations (key, surface, kind, principal_id, visibility) VALUES ('web:c-9', 'web', 'chat', 'system', 'private')`;
 		const summary = await backfillPrincipals(
 			db.sql,
-			[{ id: "system", name: "System" }],
+			{ owners: [{ name: "System", principal: "system", identities: [] }] },
 			{ dryRun: true },
 		);
 		expect(summary.sources).toMatchObject({
