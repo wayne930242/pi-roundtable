@@ -13,6 +13,7 @@ import {
 } from "../core/testing/fixture-database.ts";
 import { type CliEnvironment, runCli } from "./cli.ts";
 import { HOST_DELAY } from "./principal.ts";
+import type { Ports } from "./project.ts";
 import { fakePorts, tempDir, validConfig } from "./testing/fixtures.ts";
 
 const OWNER = "966666600000000001";
@@ -33,8 +34,11 @@ const OWNERS = [
 
 /** The project's configuration: the test's database, and `access` owners as given. */
 let access: unknown;
+/** What the project's ports do beyond loading it, such as a plugin that fails to assemble. */
+let overrides: Partial<Ports>;
 beforeEach(() => {
 	access = { owners: OWNERS };
+	overrides = {};
 });
 
 /** Runs `roundtable principal ...` against the scratch database, as the project's configuration names it. */
@@ -48,11 +52,14 @@ async function principal(...args: string[]) {
 		env: {},
 		bun: () => ({ version: "1.3.10", required: ">=1.3.0" }),
 		version: () => "1.2.3",
-		ports: fakePorts({
-			...(({ owner: _, ...rest }) => rest)(validConfig),
-			access,
-			database: { url: db?.url ?? "postgres://nowhere.example.test/x" },
-		}),
+		ports: fakePorts(
+			{
+				...(({ owner: _, ...rest }) => rest)(validConfig),
+				access,
+				database: { url: db?.url ?? "postgres://nowhere.example.test/x" },
+			},
+			overrides,
+		),
 		packages: {
 			install: async () => ({ ok: true, output: "" }),
 			tools: async () => [],
@@ -243,7 +250,7 @@ describeDb("roundtable principal", () => {
 		const refused = await principal("unlink", `discord:${OWNER}`);
 		expect(refused.code).toBe(1);
 		expect(refused.err).toContain(
-			`discord:${OWNER} is linked to principal ${OWNER} by the configuration`,
+			`discord:${OWNER} is linked to principal ${OWNER}, which the configuration lists under an owner;`,
 		);
 		expect(refused.err).toContain(
 			"remove it from access.owners[*].identities in roundtable.config.ts instead",
@@ -287,11 +294,40 @@ describeDb("roundtable principal", () => {
 		);
 	});
 
+	test("unlink refuses an identity the configuration lists under an owner, whoever linked it", async () => {
+		const store = await PgPrincipalStore.attach(db?.sql as never);
+		for (const source of ["jit", "cli", "legacy"] as const) {
+			const subject = `96666660000000003${["jit", "cli", "legacy"].indexOf(source)}`;
+			const member = await store.create({ displayName: `Mel-${source}` });
+			await store.link(member.id, { provider: "discord", subject }, source);
+			// A member promoted to owner by their identity, as written before the next start.
+			access = {
+				owners: [
+					...OWNERS,
+					{ name: `Mel-${source}`, identities: [`discord:${subject}`] },
+				],
+			};
+			const refused = await principal("unlink", `discord:${subject}`);
+			expect(refused.code).toBe(1);
+			expect(refused.err).toContain(
+				`discord:${subject} is linked to principal ${member.id}, which the configuration lists under an owner;`,
+			);
+			expect(refused.err).toContain(
+				"remove it from access.owners[*].identities in roundtable.config.ts instead",
+			);
+			expect((await principal("show", member.id)).out).toContain(
+				`    discord:${subject}  (${source},`,
+			);
+		}
+	});
+
 	test("unlink refuses a configuration link when the configuration does not load", async () => {
 		access = { owners: [{ name: "Ada", identities: ["not-an-identity"] }] };
 		const refused = await principal("unlink", `discord:${OWNER}`);
 		expect(refused.code).toBe(1);
-		expect(refused.err).toContain("by the configuration");
+		expect(refused.err).toContain(
+			`discord:${OWNER} is linked to principal ${OWNER}, and`,
+		);
 		expect(refused.err).toContain("does not load");
 		expect((await principal("show", OWNER)).out).toContain(
 			`    discord:${OWNER}  (config,`,

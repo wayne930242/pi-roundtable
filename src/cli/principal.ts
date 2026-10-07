@@ -245,12 +245,13 @@ async function run(
 	if (command === "unlink") {
 		const identity = identityArgument(rest[0]);
 		const link = await store.identity(identity.provider, identity.subject);
-		const listed =
-			link?.source === "config" ? listedUnder(owners, link) : "nowhere";
-		// Unlinked here, a running host would admit it as someone new, and the next start would fail on it.
-		if (listed === "this principal" || listed === "unknown")
+		// Whoever linked it (the configuration, a first contact, the CLI, or a 0.8 claim), an identity
+		// an owner is listed by would be admitted by a running host as someone new once unlinked here,
+		// and the next start would fail on it.
+		const listed = link ? listedUnder(owners, link) : "nowhere";
+		if (link && (listed === "this principal" || listed === "unknown"))
 			throw new Refusal(
-				`${identityOf(identity)} is linked to principal ${link?.principalId} by the configuration, ${listed === "unknown" ? `and ${CONFIG_FILE} does not load here to say whether it still lists it; fix it, or` : "which lists it under an owner;"} remove it from access.owners[*].identities in ${CONFIG_FILE} instead, and the next start unlinks it`,
+				`${identityOf(identity)} is linked to principal ${link.principalId}, ${listed === "unknown" ? `and ${CONFIG_FILE} does not load here to say whether it lists it under an owner; fix it, or` : "which the configuration lists under an owner;"} remove it from access.owners[*].identities in ${CONFIG_FILE} instead, ${link.source === "config" ? "and the next start unlinks it" : "then unlink it here once the host has started with that configuration"}`,
 			);
 		if (!link || !(await store.unlink(identity.provider, identity.subject)))
 			throw new Refusal(
