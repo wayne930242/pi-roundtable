@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { resolveConfig } from "../core/config/config.ts";
 import type { DefinedRoundtable } from "../core/define-roundtable.ts";
 import { Roundtable } from "../core/host.ts";
 import { addPackage } from "./add-package.ts";
@@ -10,7 +11,11 @@ import { doctor } from "./doctor.ts";
 import { fetchHttp } from "./http.ts";
 import { init } from "./init.ts";
 import { type PackagePorts, piPackagePorts } from "./pi-packages.ts";
-import { PRINCIPAL_USAGE, principalCommand } from "./principal.ts";
+import {
+	type ConfiguredOwners,
+	PRINCIPAL_USAGE,
+	principalCommand,
+} from "./principal.ts";
 import {
 	CONFIG_FILE,
 	loadConfigFile,
@@ -240,15 +245,21 @@ export async function runCli(
 			);
 			return 1;
 		}
-		const assembled = await project.assembled();
-		return principalCommand(
-			url,
-			rest,
-			io,
-			assembled.ok ? assembled.value.config.access.owners : undefined,
-		);
+		return principalCommand(url, rest, io, configuredOwners(raw.value));
 	}
 	return usage(io, `unknown command ${JSON.stringify(command)}`);
+}
+
+/**
+ * The owners the configuration lists, read by its schema alone: its plugins and model runtime
+ * are not assembled, so their failures do not pass for a configuration that does not load.
+ */
+function configuredOwners(value: unknown): ConfiguredOwners {
+	try {
+		return resolveConfig(value).access.owners;
+	} catch {
+		return undefined;
+	}
 }
 
 async function runUpgrade(

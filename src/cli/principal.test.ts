@@ -322,6 +322,33 @@ describeDb("roundtable principal", () => {
 		}
 	});
 
+	test("unlink reads the owners even when a plugin of the configuration fails to assemble", async () => {
+		overrides = {
+			define: async () => {
+				throw new Error("plugin exploded");
+			},
+		};
+		access = {
+			owners: [
+				{
+					name: "Bea",
+					principal: "966666600000000020",
+					identities: [`discord:${OWNER}`],
+				},
+			],
+		};
+		const moved = await principal("unlink", `discord:${OWNER}`);
+		expect(moved.err).not.toContain("does not load");
+		expect(moved.code).toBe(0);
+		access = { owners: OWNERS };
+		expect((await principal("link", OWNER, `discord:${OWNER}`)).code).toBe(0);
+		const refused = await principal("unlink", `discord:${OWNER}`);
+		expect(refused.code).toBe(1);
+		expect(refused.err).toContain(
+			"which the configuration lists under an owner",
+		);
+	});
+
 	test("unlink refuses a configuration link when the configuration does not load", async () => {
 		access = { owners: [{ name: "Ada", identities: ["not-an-identity"] }] };
 		const refused = await principal("unlink", `discord:${OWNER}`);
