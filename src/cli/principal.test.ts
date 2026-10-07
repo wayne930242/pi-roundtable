@@ -215,6 +215,24 @@ describeDb("roundtable principal", () => {
 		);
 	});
 
+	test("grant of a role the configuration already gives changes nothing, so grant then revoke cannot take it away", async () => {
+		const granted = await principal("grant", OWNER, "owner");
+		expect(granted.code).toBe(0);
+		expect(granted.out).toContain(
+			`principal ${OWNER} (Ada) already holds owner, granted by the configuration; nothing changed.`,
+		);
+		expect(granted.out).not.toContain(HOST_DELAY);
+		expect((await principal("show", OWNER)).out).toContain(
+			"roles: owner (config)",
+		);
+		const refused = await principal("revoke", OWNER, "owner");
+		expect(refused.code).toBe(1);
+		expect(refused.err).toContain("access.owners");
+		expect((await principal("show", OWNER)).out).toContain(
+			"roles: owner (config)",
+		);
+	});
+
 	test("unlink removes a link and says when the configuration links it again", async () => {
 		const unlinked = await principal("unlink", `discord:${OWNER}`);
 		expect(unlinked.code).toBe(0);

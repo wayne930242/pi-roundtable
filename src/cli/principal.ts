@@ -232,6 +232,16 @@ async function run(
 			);
 	} else if (command === "grant") {
 		const role = tierArgument(rest[1]);
+		// Granting it again would make it the CLI's, outliving its removal from the configuration.
+		const held = (await store.rolesOf(principal.id)).find(
+			(grant) => grant.role === role,
+		);
+		if (held?.source === "config") {
+			io.out(
+				`${named(principal)} already holds ${role}, granted by the configuration; nothing changed.`,
+			);
+			return;
+		}
 		await store.grant(principal.id, role, "cli");
 		io.out(`Granted ${role} to ${named(principal)}.`);
 		if (role === "owner")
