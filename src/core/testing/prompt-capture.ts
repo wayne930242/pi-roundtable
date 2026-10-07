@@ -181,10 +181,20 @@ const personas = (
 /** The checkout this module runs from, whose paths the prompt names for Pi's docs and the built-in skills. */
 const CHECKOUT = resolve(import.meta.dir, "../../..");
 
-/** Every date and time the prompt states, the host's temporary paths, the checkout, and the shell's user, made stable. */
-export function normalize<T>(value: T, dirs: readonly string[]): T {
+/**
+ * Every date and time the prompt states, the host's temporary paths, the checkout, and the shell's user, made stable.
+ * Each of `dirs` is a unique temporary directory, replaced wherever it appears; each of `roots` is a shared parent
+ * such as `tmpdir()`, replaced only where it starts a longer path, because on Linux it is `/tmp`, which the prompt's
+ * prose names too.
+ */
+export function normalize<T>(
+	value: T,
+	dirs: readonly string[],
+	roots: readonly string[] = [],
+): T {
 	let text = JSON.stringify(value);
 	for (const dir of dirs) text = text.split(dir).join("<tmp>");
+	for (const root of roots) text = text.split(`${root}/`).join("<tmp>/");
 	text = text.split(CHECKOUT).join("<checkout>");
 	text = text.split(userInfo().username).join("<user>");
 	text = text
@@ -454,5 +464,5 @@ export async function capturePrompts(): Promise<
 	} finally {
 		await headless.stop();
 	}
-	return normalize(out, [...discord.dirs, ...headless.dirs, tmpdir()]);
+	return normalize(out, [...discord.dirs, ...headless.dirs], [tmpdir()]);
 }
