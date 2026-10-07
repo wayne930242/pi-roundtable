@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- The built-in `identity` plugin, registered first in every host: the tables `principals`, `principal_identities`, and `principal_roles` (ledger id `identity/principals`), and a backfill that runs at every boot (`identity/backfill`) and makes a principal of the same id for the configured owner and every person id stored in `owner_memory`, `schedules`, `conversations`, and `held_actions`. It only inserts, so no existing row changes, and it logs one line with what it made. A test that lists the host's plugins or migrations now finds `identity` and its two migrations first.
+
 ## [0.8.0] - 2026-10-07
 
 A Discord project from 0.7 upgrades without changing its configuration; [Migrating to 0.8](docs/migrating-0.8.md) covers what to check and how to start a host without Discord.

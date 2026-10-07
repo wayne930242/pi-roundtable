@@ -29,3 +29,8 @@ export class DelegationError extends Error {
 export class AgentError extends Error {
 	override name = "AgentError";
 }
+
+/** A principal, identity link, or role change that cannot be made; its message names what to fix. */
+export class IdentityError extends Error {
+	override name = "IdentityError";
+}

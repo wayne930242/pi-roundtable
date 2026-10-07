@@ -6,6 +6,7 @@ import type { AgentRuntime } from "./contract/runtime.ts";
 import { type ServiceKey, serviceKey } from "./contract/services.ts";
 import type { ConversationRegistry } from "./conversations/conversation-registry.ts";
 import type { PendingConfirmation } from "./domain/conversation.ts";
+import type { IdentityService } from "./identity/identity-service.ts";
 import type { HttpRoute } from "./http/listeners.ts";
 import type { ThinkingSetting } from "./models.ts";
 import type {
@@ -36,6 +37,12 @@ import type { AgentTurnScope, ChannelKey } from "./sessions.ts";
 // interface, so an object with the same methods satisfies it without being one of the built-in
 // classes; a plugin replaces a built-in by providing its own under the same key.
 
+/**
+ * Who the host serves: its principals, the identities linked to each, and their lasting roles.
+ * Provided by the `identity` plugin, which every host registers first, so every plugin may read it.
+ */
+export const IDENTITY: ServiceKey<IdentityService> =
+	serviceKey<IdentityService>("roundtable.identity");
 /**
  * The runtime every conversation turn runs on: the agent server's, and each turn run through
  * `context.turns`. The `runtime` provider slot's when a plugin fills it, Pi's otherwise. Provided

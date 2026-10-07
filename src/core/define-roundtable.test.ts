@@ -76,6 +76,7 @@ describe("defineRoundtable", () => {
 	test("returns the built-in plugins in their fixed order, the operator's, then the scheduler", async () => {
 		const { plugins } = await defineRoundtable({ ...config, plugins: [mine] });
 		expect(plugins.map((plugin) => plugin.name)).toEqual([
+			"identity",
 			"memory",
 			"schedule-store",
 			"prechecks",
@@ -99,6 +100,7 @@ describe("defineRoundtable", () => {
 			plugins: [mine],
 		});
 		expect(plugins.map((plugin) => plugin.name)).toEqual([
+			"identity",
 			"memory",
 			"schedule-store",
 			"prechecks",
@@ -125,6 +127,7 @@ describe("defineRoundtable", () => {
 			discord: { ...discord, admin: false },
 		});
 		expect(plugins.map((plugin) => plugin.name)).toEqual([
+			"identity",
 			"schedule-store",
 			"prechecks",
 			"discord",
@@ -162,6 +165,7 @@ describe("defineRoundtable", () => {
 			),
 		);
 		expect(providers).toEqual({
+			"roundtable.identity": "identity",
 			"roundtable.memory": "memory",
 			"roundtable.schedules": "schedule-store",
 			"roundtable.prechecks": "prechecks",
@@ -185,6 +189,7 @@ describe("defineRoundtable", () => {
 		expect(
 			replaceServices([...plugins, mine]).map((plugin) => plugin.name),
 		).toEqual([
+			"identity",
 			"memory",
 			"my-schedules",
 			"prechecks",
@@ -212,6 +217,8 @@ describe("defineRoundtable", () => {
 		expect(
 			plugins.flatMap((plugin) => (plugin.migrations ?? []).map((m) => m.name)),
 		).toEqual([
+			"principals",
+			"backfill",
 			"owner-memory",
 			"owner-memory-speaker",
 			"schedules",
