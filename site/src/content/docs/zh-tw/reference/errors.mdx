@@ -62,6 +62,9 @@ sidebar:
 | `config locale: expected a locale, en or zh-TW, got "<value>". Fix the value in roundtable.config.ts.` | 用 `en` 或 `zh-TW`。 |
 | `config <key>: cannot read <path>: <reason>. Create the file or fix the path.` | 建立提示詞檔案，或修正 `prompts` 裡的路徑。`<key>` 是 `prompts.shared` 或 `prompts.guest`。 |
 | `config <key>: <path> is empty. Write the prompt in it.` | 把提示詞寫進檔案。 |
+| `config adapters[<n>]: unknown adapter "<name>". The adapters are discord; ...` | 用 `pi-roundtable/discord` 的 `discord()`。以外掛形式提供的聊天管道（例如網頁聊天的 `webChat()`）放在 `plugins`。 |
+| `config adapters[<n>]: Discord is configured twice, ...` | 最上層的 `discord` 和 Discord adapter 只留一個。 |
+| `config agents: the agents live in Discord, which is not configured. ...` | 設定 Discord，或拿掉 `agents`。`skills` 和 `ops.agent` 也一樣；錯誤改用 `ops.conversation` 回報到對話。 |
 | `Invalid time zone: <value>` | 用 IANA 名稱，例如 `Europe/Berlin`。`doctor` 查不出這一項，要到 `start` 才會停下來。見[語言與時間](/zh-tw/configure/language-and-time/)。 |
 
 ## PostgreSQL
@@ -114,7 +117,7 @@ judge 的模型不可用時，會出現 `the judge's model <provider>/<id> is no
 
 | 訊息 | 修正 |
 | --- | --- |
-| `two plugins are named <name>.` | 替你的外掛改名。內建外掛用的名稱是 `memory`、`schedule-store`、`discord`、`modules`、`discord-admin`、`skills`、`agent-server`、`seeds` 和 `schedules`。 |
+| `two plugins are named <name>.` | 替你的外掛改名。內建外掛用的名稱是 `memory`、`schedule-store`、`prechecks`、`discord`、`modules`、`discord-admin`、`skills`、`conversations`、`runtime`、`agent-server`、`seeds` 和 `schedules`。 |
 | `plugin "<name>": the name must be lowercase words joined by dashes, such as my-notes. Rename the plugin.` | 在 `definePlugin` 裡改名。 |
 | `plugin <name>: setup is missing. Give the function that returns what the plugin adds.` | 加上 `setup`。 |
 | `plugin <name> adds nothing. Give it a part (tools, services, channels, and so on), a migration, or a provider, or remove it.` | 讓 `setup` 回傳某個部分，或把外掛從 `roundtable.config.ts` 移除。 |
@@ -127,6 +130,7 @@ judge 的模型不可用時，會出現 `the judge's model <provider>/<id> is no
 | `plugin <name>: setup failed: <what the error said>. Fix the error, or remove the plugin.` | 修正訊息引用的那個錯誤。 |
 | `plugin <name>: migration <migration> failed: <what the database said>. Fix the migration or restore the database, then start again.` | 修正 migration 或還原資料庫，再啟動一次。 |
 | ``the delegation worker loads pi-web-access, which this project does not have installed. It is a peer dependency of pi-roundtable: run `bun add pi-web-access@0.35.0` (or your own build of it, which the worker then uses too).`` | 安裝 `pi-web-access`。內建的 `modules` 外掛會把它回報成 `plugin modules: setup failed: ...`。 |
+| `required tools are not registered: compact_session. compact_session comes from the Pi package pi-self-compact: ...` | 執行 `bun add pi-self-compact`，並用一個外掛以 `piPackages: ["pi-self-compact"]` 載入它，就像 `roundtable init` 建立的專案裡的 `plugins/self-compact.ts`。`doctor` 查不出這一項，要到 `start` 才會停下來。 |
 
 外掛指南（英文）列了其餘的錯誤，例如服務衝突，以及只有 setup 之後才能用的部分。
 見[啟動流程與專案設定](/zh-tw/plugins/startup-and-project-setup/)和[外掛能新增什麼](/zh-tw/plugins/what-plugins-can-add/)。

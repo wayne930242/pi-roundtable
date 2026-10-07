@@ -2153,6 +2153,10 @@ What needs Discord is refused or left out rather than failing later:
   Their background turns, and an `ops.conversation` report's, go to the [background target](#backgroundtargets-whose-turn-a-schedule-or-delegated-task-is) named `owner`, which the agent server contributes; without it they are skipped until a plugin contributes that target.
 - `roundtable doctor` skips the Discord checks.
 
+Pi's runtime still needs the `compact_session` tool in every session, from the Pi package pi-self-compact: load it from a plugin with `piPackages: ["pi-self-compact"]`, as the `plugins/self-compact.ts` of a project `roundtable init` creates does, or the preflight stops the start and says so.
+`roundtable init --adapter web` creates a host without Discord around the [web chat](#web-chat-pi-roundtable-webchat).
+A host that keeps Discord may write it as an adapter instead, as [`adapters`](#adapters-the-chat-networks-the-host-talks-through) describes.
+
 <!-- example: examples/headless.ts -->
 ```ts
 import { definePlugin, type RoundtableConfig } from "pi-roundtable";
@@ -2192,6 +2196,49 @@ export function studyHall(
 `examples/headless.test.ts` boots this configuration over PostgreSQL with the echo runtime in place of Pi, and a study room answers through the fake surface.
 `testHost({ discord: false })` boots the same kind of host for a plugin's tests.
 
+### Web chat: pi-roundtable-webchat
+
+[pi-roundtable-webchat][webchat-package] is a chat network that comes as a plugin.
+`webChat({ verifier, access, personas, origins })` adds a chat surface whose conversations have keys `web:<conversation>`, the claim that runs each message as a turn of its conversation's persona through `context.turns`, and a REST API and a WebSocket under `/chat` on the host's `public` listener.
+People an OpenID Connect provider signs in open private conversations, see each turn's text and tools as it runs, and answer its approval cards.
+It needs no Discord: a host whose configuration has no `discord` and lists `webChat(...)` in `plugins` is a web-only assistant.
+
+#### `roundtable init --adapter web`
+
+`roundtable init --adapter web` writes a project without Discord around it: no `agents.ts` and no shared persona, a `roundtable.config.ts` that lists `webChat(...)` with an `oidcJwtVerifier`, an access map whose members and admins come from the token's roles, and one persona, `assistant`, whose prompt is `persona/assistant.md`.
+The persona's `selection` names its tools (the hello plugin's), so tools a later plugin adds, such as pi-web-access's, stay out until you add them by name.
+`package.json` pins pi-roundtable-webchat at the core's version and pi-self-compact, and `.env.example` asks for `OWNER_NAME`, `DATABASE_URL`, `MODEL`, `OIDC_ISSUER`, `OIDC_AUDIENCE`, `OIDC_JWKS_URL`, `CHAT_MEMBER_ROLES`, and `CHAT_ORIGINS`, with no Discord variable.
+The host listens on `127.0.0.1:3000`; serve it over HTTPS through a reverse proxy.
+`--adapter discord` is the default and writes the Discord project.
+
+#### Protocol
+
+A browser asks for a one-time ticket with `POST /chat/tickets` and `Authorization: Bearer <token>`, then opens `/chat/socket` offering the subprotocols `roundtable.webchat.v1` and `ticket.<ticket>`; another client sends the bearer token on the upgrade.
+The token never travels in a URL.
+Each WebSocket message is one JSON object with a `type`: the client sends `send`, `stop`, `approval`, `answer`, and `auth`; the server answers with `ready`, `accepted`, `typing`, `stoppable`, `progress`, `reply`, `failed`, `prompt`, `prompt_closed`, `reauth`, and `error`.
+`progress` carries the turn's [`TurnProgress`](#surfaces-a-chat-network-of-your-own) events, never the thinking and never a tool's full arguments; `reply` carries the answer in full markdown.
+The REST API lists a person's conversations, opens one, and reads its messages.
+The package README documents every frame, error code, close code, and limit.
+
+#### Security model
+
+- A conversation belongs to the person who opened it: the claim checks the [conversation registry](#services-what-plugins-provide-to-each-other) inside the conversation's queue before every turn, and only that person may list, read, write in, stop, or answer it.
+- Tokens are checked on every REST call, every upgrade, and every `auth` frame. By default only a person's access token passes: a token without a scope or app roles, or an app-only token, is refused. A socket closes when its token expires.
+- `origins` is required, and checked on every upgrade and every browser request.
+- Each person has bounded sockets, tickets, conversations opened per hour, and turns running or queued at once; frames are bounded in size and rate.
+- An approval card goes to the conversation's person only, at the tier the held call needs.
+- No token claim makes anyone the owner; owners are listed by speaker id, `oidc:<base64url(issuer)>:<subject>`.
+
+#### Provider settings
+
+The verifier is generic; what makes it safe is how it is pointed at your provider.
+The README's [provider settings][webchat-provider-settings] explain, with Microsoft Entra ID as the example, why to name people by a claim that stays the same across app registrations (`subjectClaim`), pin the tenant in `check`, accept access tokens only, refuse app-only tokens, merge issuers of one tenant only (`speakerIssuer`), and mind the guests `everyone` admits.
+
+The web chat takes no attachments and no background turns yet: leave `schedule_*` and `delegate_task` out of a web persona's `selection`, and `web_search` and `fetch_content` unless people may make the host fetch any address, internal ones included.
+
+[webchat-package]: https://github.com/wayne930242/pi-roundtable/blob/master/packages/webchat/README.md
+[webchat-provider-settings]: https://github.com/wayne930242/pi-roundtable/blob/master/packages/webchat/README.md#provider-settings
+
 ### What plugins do not extend
 
 A plugin adds slash commands through the Discord plugin's registrar and never receives the composed commands (see [slash commands](#slash-commands-commandsadd)).
@@ -2218,10 +2265,9 @@ Inspect the ready-made implementations in the [codex-images][codex-images-templa
 
 The [pi-roundtable-mcp][mcp-package] workspace, published separately on npm, adds two more plugins, `mcpConnectors` and `remoteMcp`.
 The first lets the owner add MCP servers such as Notion or a calendar from Discord and gives your code the list; the second lets an agent outside Discord reach your agent.
-Install it with `bun add pi-roundtable-mcp` after the next lockstep release publishes the migrated package.
-Until then, npm's MCP 0.4.1 requires core below 0.6.0 and is not compatible with core 0.7.x.
+Install it with `bun add pi-roundtable-mcp`.
 
-Five official packages live in this repository as Bun workspaces and publish as separate npm packages, versioned in lockstep with the core.
+Six official packages live in this repository as Bun workspaces and publish as separate npm packages, versioned in lockstep with the core.
 The [site guide source files][package-guides] describe installation, requirements, configuration, and security considerations:
 
 - [pi-roundtable-drawing][drawing-package]: [site guide source][drawing-guide] · local relationship maps, magic circles, sigils, sacred geometry, and card spreads.
@@ -2229,6 +2275,7 @@ The [site guide source files][package-guides] describe installation, requirement
 - [pi-roundtable-web][web-package]: [site guide source][web-guide] · an owner-only console for conversations, transcripts, and memory notes with live updates.
 - [pi-roundtable-sandbox][sandbox-package]: [site guide source][sandbox-guide] · sealed guest channels on native Linux Docker with a host-only credential broker and allow-listed tools.
 - [pi-roundtable-mcp][mcp-package]: [site guide source][mcp-guide] · MCP connectors through a gateway and remote MCP endpoints for agent turns and owner-granted Discord channel tools.
+- [pi-roundtable-webchat][webchat-package]: [site guide source][webchat-guide] · a WebSocket chat for people an OpenID Connect provider signs in, with private conversations, live progress, and approval cards; see [web chat](#web-chat-pi-roundtable-webchat).
 
 [drawing-package]: https://github.com/wayne930242/pi-roundtable/blob/master/packages/drawing/README.md
 [coding-package]: https://github.com/wayne930242/pi-roundtable/blob/master/packages/coding/README.md
@@ -2241,6 +2288,7 @@ The [site guide source files][package-guides] describe installation, requirement
 [web-guide]: https://github.com/wayne930242/pi-roundtable/blob/master/site/src/content/docs/plugins/web-package.mdx
 [sandbox-guide]: https://github.com/wayne930242/pi-roundtable/blob/master/site/src/content/docs/plugins/sandbox-package.mdx
 [mcp-guide]: https://github.com/wayne930242/pi-roundtable/blob/master/site/src/content/docs/plugins/mcp-package.mdx
+[webchat-guide]: https://github.com/wayne930242/pi-roundtable/blob/master/site/src/content/docs/plugins/webchat-package.mdx
 [coding-source]: https://github.com/wayne930242/pi-roundtable/tree/master/packages/coding
 [sandbox-source]: https://github.com/wayne930242/pi-roundtable/tree/master/packages/sandbox
 [web-source]: https://github.com/wayne930242/pi-roundtable/tree/master/packages/web

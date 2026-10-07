@@ -99,6 +99,11 @@ Add any MCP server from Discord with a private form, such as Notion or a calenda
 The same package lets an agent outside Discord send your agent a message and read the answer, and use the Discord channels you chose to share.
 See [MCP connectors and remote MCP](/plugins/mcp-package/).
 
+## Chat from the web, too
+
+The [web chat package](/plugins/webchat-package/) lets people your OpenID Connect provider signs in chat with the assistant in private conversations from a web page.
+A host can run it beside Discord, or without Discord at all: `npx pi-roundtable init my-desk --adapter web` creates a web-only project.
+
 ## If you write code
 
 You can use these features without writing code.
@@ -106,7 +111,7 @@ To add a tool every agent can call, a slash command, an HTTP route, or replace p
 A plugin can be tested without Discord or PostgreSQL.
 See [Write a plugin](/plugins/first-plugin/).
 
-See [official plugins and packages](/plugins/official-plugins/) for the three copy-in plugins and guides to all five official packages.
+See [official plugins and packages](/plugins/official-plugins/) for the three copy-in plugins and guides to all six official packages.
 
 ## Where to go next
 
@@ -119,8 +124,8 @@ See [official plugins and packages](/plugins/official-plugins/) for the three co
 
 ## Good to know
 
-- It's built for one owner and one Discord server.
-  You can let other people talk to the agents, but the risks of that are yours.
+- It's built for one owner.
+  Discord and the web chat both work, and you can let other people talk to the assistant, but running it for several people is at your risk: see [Security](/configure/security/).
 - It runs on Bun only.
   The package ships its TypeScript source, so there is no build step.
 - MIT licensed.

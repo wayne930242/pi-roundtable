@@ -98,6 +98,11 @@ agent 設了排程之後，`/roundtable schedule list` 可以列出來。
 同一個套件也讓 Discord 以外的 agent 傳訊息給你的 agent、讀取回答，並使用你選擇分享的 Discord 頻道。
 見 [MCP connector 和 remote MCP](/zh-tw/plugins/mcp-package/)。
 
+## 也能從網頁聊天
+
+[網頁聊天套件](/zh-tw/plugins/webchat-package/)讓經 OpenID Connect 供應商登入的人，在網頁上的私人對話裡跟助理聊天。
+host 可以同時跑 Discord 和它，也可以完全不用 Discord：`npx pi-roundtable init my-desk --adapter web` 會建立只有網頁的專案。
+
 ## 如果你會寫程式
 
 上面這些都不用寫一行程式。
@@ -105,7 +110,7 @@ agent 設了排程之後，`/roundtable schedule list` 可以列出來。
 外掛可以在沒有 Discord 和 PostgreSQL 的情況下測試。
 看[寫一個外掛](/zh-tw/plugins/first-plugin/)。
 
-三個可複製的官方外掛，以及五個官方套件的指南，見[官方外掛與套件](/zh-tw/plugins/official-plugins/)。
+三個可複製的官方外掛，以及六個官方套件的指南，見[官方外掛與套件](/zh-tw/plugins/official-plugins/)。
 
 ## 接下來看哪裡
 
@@ -118,7 +123,7 @@ agent 設了排程之後，`/roundtable schedule list` 可以列出來。
 
 ## 先知道這些
 
-- 它是為一位擁有者和一個 Discord 伺服器設計的。
-  你可以讓其他人跟 agent 說話，但那樣的風險由你自己承擔。
+- 它是為一位擁有者設計的。
+  Discord 和網頁聊天都能用，也可以讓其他人跟助理說話，但開放給多人使用的風險由你自己承擔：見[安全性](/zh-tw/configure/security/)。
 - 只支援 Bun。套件直接發佈 TypeScript 原始碼，不需要建置。
 - MIT 授權。

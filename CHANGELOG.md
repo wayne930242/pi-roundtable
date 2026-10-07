@@ -5,7 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+A Discord project from 0.7 upgrades without changing its configuration; [Migrating to 0.8](docs/migrating-0.8.md) covers what to check and how to start a host without Discord.
+The behavior changes are who may approve a held call (Fixed), two built-in plugins before `agent-server` and `context.turns` on `RUNTIME` (Changed), and the start of a project `roundtable init` creates (Fixed).
+
 ### Added
+
+- [Migrating to 0.8](docs/migrating-0.8.md), the upgrade guide. The README describes pi-roundtable as an agent server reached through Discord or the web chat, built for one owner, with a threat model; running it for several people is at the operator's risk.
 
 - The `adapters` configuration key and `discord()` from `pi-roundtable/discord`: `adapters: [discord({ token, guild, entryChannel, ... })]` takes the same settings as the top-level `discord` and assembles the same plugins in the same order; `roundtable doctor` reads it the same way. The top-level `discord` stays the default form and what `roundtable init` writes. Configuring Discord in both places, a second Discord adapter, an unknown adapter, or an entry that is not an adapter is a configuration error naming `adapters[<n>]`; a chat network that comes as a plugin, such as `webChat()`, stays in `plugins`. Types: `AdapterConfig` and `DiscordConfig` from `pi-roundtable`, `DiscordAdapterConfig` from `pi-roundtable/discord`; value: `discord`.
 - `roundtable init --adapter web` creates a project without Discord around the new pi-roundtable-webchat package: an OpenID Connect verifier, an access map from the token's roles, a persona in `persona/assistant.md` whose `selection` names its tools (the hello plugin's, and no `schedule_*`, `delegate_task`, or web tools), and a `.env.example` without Discord; `--adapter discord` is the default and unchanged.
@@ -20,6 +25,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- Two built-in plugins join every host, just before `agent-server`: `conversations`, which provides `CONVERSATIONS`, and `runtime`, which provides `RUNTIME`. The order of the other plugins and of their migrations is unchanged; a plugin that matches built-in plugins by name, or reads `serviceStarted` events, sees the two new names.
+- `context.turns` runs every turn on `RUNTIME` instead of the agent server's runtime, so it works on a host without the agent server. `AGENTS.runtime` is the same instance, and a plugin that fills the `runtime` provider slot keeps replacing it.
+- `PendingConfirmation` gains `speakerId`, the speaker whose turn held the calls. A runtime with its own `HeldActionStore` keeps it across a restart; a restored held call without one is the owner's to approve.
+- `HttpRoute` gains the optional `websocket`, and `pi-roundtable/kit`'s `serveUnix` passes the server to `fetch` as its second argument, with an overload that takes a `websocket` handler; see WebSocket routes under Added.
+- The official packages release in lockstep at this version: pi-roundtable-webchat is new; pi-roundtable-web lists the conversations the registry records; pi-roundtable-sandbox's `apiKey` and `oauthToken` receive the turn's `{ channel, speaker }`. See their changelogs.
 - The Pi runtime and the held actions' table move from the agent server to the `runtime` plugin. The `held-actions` migration is recorded once more under `runtime/held-actions`; it creates the table only when it is missing, so an existing database is unchanged.
 - `RoundtableConfig.discord` and `RoundtableConfig.http` (and `http.publicUrl`) are optional in the type; code that reads them from a config object now checks for them.
 - `RuntimeDeps.agents` is optional and read when a turn runs: the runtime is built before the agent server sets up, and it is `undefined` on a host without the agent server.

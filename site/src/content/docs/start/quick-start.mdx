@@ -16,6 +16,10 @@ import { Steps } from "@astrojs/starlight/components";
 - A model login: the API key of the provider of the model you choose (`ANTHROPIC_API_KEY` for `anthropic/...`), or a login made with Pi.
 - An address that reaches the process from the internet, such as a tunnel, because Discord fetches the agents' avatars from it.
 
+This page sets up a Discord project.
+For a project without Discord, where people your OpenID Connect provider signs in chat on the web, run `npx pi-roundtable init my-desk --adapter web` and follow the [web chat package](/plugins/webchat-package/) instead.
+Upgrading from 0.7? See [Migrating to 0.8](https://github.com/wayne930242/pi-roundtable/blob/master/docs/migrating-0.8.md).
+
 ## Create and start a project
 
 <Steps>

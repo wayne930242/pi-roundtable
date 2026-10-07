@@ -1,0 +1,103 @@
+---
+title: 網頁聊天套件
+description: 讓經 OpenID Connect 供應商登入的人，在各自的私人網頁對話裡跟助理聊天，即時看到進度，也能回答核准卡。
+sidebar:
+  order: 14
+---
+
+`pi-roundtable-webchat` 是以外掛形式提供的聊天管道。
+經 OpenID Connect 供應商登入的人，可以從網頁或瀏覽器擴充功能跟助理聊天，每個人有自己的私人對話。
+一輪執行時，它寫的文字和用的工具會即時顯示；暫緩的工具呼叫會用核准卡詢問對話的主人。
+它不需要 Discord：設定裡沒有 `discord`、外掛清單列了 `webChat({ ... })` 的 host，就是只有網頁的助理。
+
+## 建立網頁聊天專案
+
+```sh
+npx pi-roundtable init my-desk --adapter web
+cd my-desk
+bun install
+docker compose up -d
+cp .env.example .env    # 然後填入內容
+bunx roundtable doctor
+bunx roundtable start
+```
+
+這個專案在 `plugins` 列出 `webChat({ ... })`：一個 OpenID Connect verifier、一份由 token 角色決定 member 與 admin 的存取對照表，以及一個 persona `assistant`，提示詞是 `persona/assistant.md`。
+這個 persona 在 `selection` 寫明它的工具，所以之後加入的外掛帶來的工具，要寫進名稱才會出現。
+host 監聽 `127.0.0.1:3000`；請透過反向代理用 HTTPS 對外提供服務，並把 `CHAT_ORIGINS` 設成會開啟聊天的網頁。
+它寫出的每個檔案，見 [`init --adapter web`](/zh-tw/reference/cli/#--adapter-web)。
+
+## 加進既有的 host
+
+```sh
+bun add pi-roundtable-webchat
+```
+
+```ts
+import { readFileSync } from "node:fs";
+import { oidcJwtVerifier, webChat } from "pi-roundtable-webchat";
+
+export default {
+  // ...你的 roundtable 設定，含 http: { port: 3000, hostname: "127.0.0.1" }...
+  plugins: [
+    webChat({
+      verifier: oidcJwtVerifier({
+        jwksUrl: "https://login.example.com/keys",
+        issuers: ["https://login.example.com/"],
+        audiences: ["api://helpdesk"],
+      }),
+      access: {
+        admins: { roles: ["Helpdesk.Admin"] },
+        members: { roles: ["Helpdesk.User"] },
+      },
+      origins: ["https://chat.example.com"],
+      personas: [
+        {
+          kind: "helpdesk",
+          label: "Helpdesk",
+          prompt: () => readFileSync("./persona/helpdesk.md", "utf8"),
+          selection: { tools: [], groups: [] },
+        },
+      ],
+    }),
+  ],
+};
+```
+
+它與 pi-roundtable 同步發版，需要一個 HTTP listener（設定裡的 `http`）。
+這些選項寫錯時，設定載入就會丟出錯誤，所以 `roundtable doctor` 會在 host 啟動前指出問題。
+
+## 怎麼連線
+
+瀏覽器先帶著 `Authorization: Bearer <token>` 呼叫 `POST /chat/tickets` 取得一次性 ticket，再開啟 `/chat/socket`，提出 `roundtable.webchat.v1` 和 `ticket.<ticket>` 兩個 subprotocol。
+其他用戶端則在 upgrade 時直接帶 bearer token。
+token 從不出現在 URL 裡。
+
+每則 WebSocket 訊息是一個帶 `type` 的 JSON 物件。
+用戶端送出 `send`、`stop`、`approval`、`answer` 和 `auth`；伺服器回應 `ready`、`accepted`、`typing`、`stoppable`、`progress`、`reply`、`failed`、`prompt`、`prompt_closed`、`reauth` 和 `error`。
+`progress` 顯示這一輪寫的文字和執行的工具，不含思考過程，也不含工具的完整參數；`reply` 是完整 markdown 的回答。
+REST API 可以列出一個人的對話、開新對話、讀取對話訊息。
+每種 frame、錯誤碼、關閉碼和上限，見[套件 README](https://github.com/wayne930242/pi-roundtable/blob/master/packages/webchat/README.md)（英文）。
+
+## 安全模型
+
+- **私人對話。** 對話屬於開啟它的人。host 的對話登錄在第一輪記下這個人，claim 在每一輪之前檢查：只有這個人能列出、讀取、發言、停止或回答它。
+- **token。** 每次 REST 呼叫、每次 upgrade、每個 `auth` frame 都會檢查 token。預設只接受個人的 access token；沒有 scope 或 app role 的 token、只代表應用程式的 token 都會被拒絕。token 到期時 socket 會關閉。
+- **來源。** `origins` 必填，每次 upgrade 和每個瀏覽器請求都會檢查。
+- **上限。** 每個人的 socket、ticket、每小時新開的對話，以及同時執行或排隊的回合數都有上限。
+- **核准。** 暫緩呼叫的核准卡只送給對話的主人，而且要有這個呼叫需要的 tier。
+- **owner。** 沒有任何 token claim 能讓人成為 owner：owner 要用 speaker id 列出，格式是 `oidc:<base64url(issuer)>:<subject>`。
+
+verifier 本身是通用的；安不安全，取決於你怎麼把它指向自己的供應商。
+有人登入之前，請先讀 README 的[供應商設定](https://github.com/wayne930242/pi-roundtable/blob/master/packages/webchat/README.md#provider-settings)：用跨 app 註冊都不變的 claim 識別人、固定租戶、只接受 access token，而且只合併同一個租戶的 issuer。
+host 其他部分信任哪些東西，見[安全性](/zh-tw/configure/security/)。
+
+## 目前還不支援
+
+- 附件：訊息只有文字。
+- 排程與委派回報：網頁對話不接受背景回合，所以 persona 的 `selection` 不要放 `schedule_*` 和 `delegate_task`。
+- 網路工具：除非允許使用者讓 host 抓取任何位址（包含內部位址），否則不要放 `web_search` 和 `fetch_content`。
+- agent team 沒有網頁版的房間。
+- 同一個人用兩個供應商登入，或同時用 Discord 和網頁，會有兩個 speaker id、兩份記憶。
+
+{/* Sources: packages/webchat/README.md, packages/webchat/src/plugin.ts, templates/adapters/web/roundtable.config.ts, src/cli/templates.ts */}

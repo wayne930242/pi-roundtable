@@ -11,7 +11,7 @@ sidebar:
 
 | 指令 | 作用 |
 | --- | --- |
-| `roundtable init [dir]` | 在 `dir` 建立專案（預設是目前的目錄）。 |
+| `roundtable init [dir] [--adapter discord\|web]` | 在 `dir` 建立專案（預設是目前的目錄），透過 Discord（預設）或網頁聊天對話。 |
 | `roundtable doctor [--reachable]` | 檢查設定，並說明有問題的地方該怎麼修。 |
 | `roundtable start` | 先跑不需要網路的檢查，再啟動 bot。 |
 | `roundtable add plugin <name>` | 加入 `plugins/<name>.ts` 和它的測試，並把外掛列進設定。`codex-images`、`dice` 和 `release-notice` 保留給官方外掛。 |
@@ -38,6 +38,18 @@ npx pi-roundtable init my-bot    # or: bunx pi-roundtable init my-bot
 - `init` 要建立的某個檔案已經存在。訊息會列出這些檔案，並以 `Remove them or run init in an empty directory; nothing was written.` 結尾。
 
 `init` 最多接受一個目錄；多給一個引數會是用法錯誤。
+
+### `--adapter web`
+
+```sh
+npx pi-roundtable init my-desk --adapter web
+```
+
+`--adapter web` 會以 [pi-roundtable-webchat](/zh-tw/plugins/webchat-package/) 為中心，寫出一個沒有 Discord 的專案。
+它不寫 `agents.ts` 和 `persona/shared.md`，改寫 `persona/assistant.md`。
+它的 `roundtable.config.ts` 沒有 `discord`，監聽 `127.0.0.1:3000`，並列出 `webChat({ ... })`：一個 OpenID Connect verifier、一份由 token 角色決定 member 與 admin 的存取對照表，以及一個在 `selection` 寫明工具的 persona。
+它的 `package.json` 另外把 pi-roundtable-webchat 固定在與 core 相同的版本，`.env.example` 要求的是 `OWNER_NAME`、`DATABASE_URL`、`MODEL`、`OIDC_ISSUER`、`OIDC_AUDIENCE`、`OIDC_JWKS_URL`、`CHAT_MEMBER_ROLES` 和 `CHAT_ORIGINS`。
+預設是 `--adapter discord`；其他值都是用法錯誤，錯誤訊息會列出 `discord, web`，而且什麼都不寫。
 
 ## `doctor`
 
@@ -70,6 +82,8 @@ npx pi-roundtable init my-bot    # or: bunx pi-roundtable init my-bot
 | 10 | Discord channel | 入口頻道存在於這個 guild，而且 bot 在裡面擁有下列權限。 |
 | 11 | model login | `model` 的 provider 有登入資料。 |
 | 12 | public URL | `http.publicUrl` 是格式正確的 `http://` 或 `https://` 位址。 |
+
+沒有 Discord 的專案會略過檢查 7 到 10，理由是 `no Discord is configured`；`http.publicUrl` 沒有值時也會略過檢查 12。寫在 `adapters` 裡的 Discord adapter，檢查方式與最上層的 `discord` 相同。
 
 檢查 10 要求 bot 在入口頻道擁有的權限是 View Channel、Send Messages、Send Messages in Threads、Read Message History、Embed Links、Attach Files、Pin Messages、Create Public Threads、Manage Channels 和 Manage Webhooks。
 bot 還不在 guild 裡的話，會給你一個邀請連結，連結已經帶好這些權限。

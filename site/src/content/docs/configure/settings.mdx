@@ -54,20 +54,25 @@ export default {
 | Key | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `name` | string | `"Roundtable"` | The assistant's display name in the text the bot shows. |
-| `owner.id` | string, required | none | The Discord user id of the one owner. |
+| `owner.id` | string, required | none | The id of the one owner: their Discord user id with Discord. |
 | `owner.name` | string, required | none | The owner's name, as prompts and refusals use it. |
 | `owner.pronouns` | `"he"`, `"she"`, or `"they"` | `"they"` | How prompts refer back to the owner. |
 
 ## Discord
 
+Leave `discord` out for a host without Discord: no Discord plugin, no agent server, no agents, and no skills, while every conversation a plugin runs through `context.turns` still works.
+`roundtable init --adapter web` creates such a project around the [web chat](/plugins/webchat-package/).
+The same settings may also come as an adapter, `adapters: [discord({ ... })]` with `discord` from `pi-roundtable/discord`; configure Discord in one place, not both.
+
 | Key | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `discord.token` | string, required | none | The bot token. Keep it in `.env`. |
-| `discord.guild` | string, required | none | The id of the agent server's guild. |
-| `discord.entryChannel` | string, required | none | The id of the channel the coordinator lives in. |
+| `discord.token` | string, required with Discord | none | The bot token. Keep it in `.env`. |
+| `discord.guild` | string, required with Discord | none | The id of the agent server's guild. |
+| `discord.entryChannel` | string, required with Discord | none | The id of the channel the coordinator lives in. |
 | `discord.rootCommand` | string | the lowercase `name`, with each run of characters other than `a-z`, `0-9`, and `-` replaced by `-` | The root slash command, without the slash. See [Slash commands](/reference/slash-commands/). |
 | `discord.admin` | boolean | `true` | Whether the owner's conversations get the `discord_*` administration tools. `false` leaves the `discord-admin` addon out. |
 | `discord.refusalHint` | string | none | Text added as it is to the refusal a non-owner gets from the root command. Include the space or punctuation your language needs before it. |
+| `adapters` | list of adapters | none | The chat networks the host talks through, each made by its factory. A Discord adapter takes the `discord` settings above. A chat network that comes as a plugin, such as the web chat, stays in `plugins`. |
 
 ## Storage and files
 
@@ -119,11 +124,14 @@ See [Access tiers](/configure/access-tiers/).
 | --- | --- | --- | --- |
 | `agents` | list of `{ name, displayName, prompt, avatarPrompt, channelId? }` | `[]` | The first team, created once. An agent that is already stored is never overwritten, so edit agents in Discord afterwards. |
 | `avatar` | string | a plain bot picture bundled with the package | A picture of your own: the neutral avatar and the style reference for drawing avatars. |
-| `http.publicUrl` | string, required | none | The address that reaches this process from the internet. Discord fetches the avatars from it. |
+| `http.publicUrl` | string, required with Discord | none | The address that reaches this process from the internet. Discord fetches the avatars from it. |
 | `http.port` | integer from 1 to 65535 | `3000` | The TCP port the process listens on. |
 | `http.hostname` | string | none | The hostname the listener binds to. |
 | `http.socketPath` | string | none | A unix socket path to listen on instead of a TCP port. When it is set, `port` and `hostname` are not used. |
 | `http.socketMode` | integer from 0 to `0o777` | `0o660` | The socket file's permission bits. Widen it only for a proxy that runs as another user. |
+
+Without Discord, `http` is optional: leave it out when no plugin serves HTTP, and the host opens no listener.
+The web chat needs it.
 
 ## Addons and operations
 
@@ -131,10 +139,11 @@ See [Access tiers](/configure/access-tiers/).
 | --- | --- | --- | --- |
 | `skills` | `false`, or `{ builtinDir?, reposDir? }` | on, with `builtinDir` the skills bundled with the package and `reposDir` set to `<dataDir>/repos` | `false` leaves the `skills` addon out: agents carry no skills and no skill tools exist. Stored skills stay in their tables. |
 | `memory` | boolean | `true` | `false` leaves the `memory` addon out: no memory tools and no memory prompt block. The table stays as it is. |
-| `ops.agent` | string | none | The name of the agent that investigates the process's own errors. |
+| `ops.agent` | string | none | The name of the agent that investigates the process's own errors. Needs Discord. |
+| `ops.conversation` | string | none | Instead of an agent, a conversation key such as `"web:ops"` the errors are reported to. Set one of `ops.agent` and `ops.conversation`. |
 | `plugins` | list of plugin objects | `[]` | Your plugins. They start in the order listed, after the built-in ones. |
 
-With `ops.agent` set, each `error` and `fatal` log entry is reported to that agent as a message and a report turn in its channel.
+With `ops.agent` set, each `error` and `fatal` log entry is reported to that agent as a message and a report turn in its channel; with `ops.conversation`, to that conversation, whose claim answers the report turn.
 The same error goes at most once an hour, and at most five reports go out per hour.
 
 For what the addons add and how plugins start, see [Services and addons](/plugins/services-and-addons/).

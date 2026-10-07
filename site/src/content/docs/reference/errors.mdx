@@ -61,6 +61,9 @@ Later checks that need the configuration are skipped with `the configuration is 
 | `config locale: expected a locale, en or zh-TW, got "<value>". Fix the value in roundtable.config.ts.` | Use `en` or `zh-TW`. |
 | `config <key>: cannot read <path>: <reason>. Create the file or fix the path.` | Create the prompt file, or fix the path in `prompts`. `<key>` is `prompts.shared` or `prompts.guest`. |
 | `config <key>: <path> is empty. Write the prompt in it.` | Write the prompt in the file. |
+| `config adapters[<n>]: unknown adapter "<name>". The adapters are discord; ...` | Use `discord()` from `pi-roundtable/discord`. A chat network that comes as a plugin, such as the web chat's `webChat()`, belongs in `plugins`. |
+| `config adapters[<n>]: Discord is configured twice, ...` | Keep the top-level `discord` or the Discord adapter, not both. |
+| `config agents: the agents live in Discord, which is not configured. ...` | Configure Discord, or remove `agents`. The same holds for `skills` and `ops.agent`; report errors to a conversation with `ops.conversation` instead. |
 | `Invalid time zone: <value>` | Use an IANA name such as `Europe/Berlin`. `doctor` does not catch this; `start` stops with it. See [Language and time](/configure/language-and-time/). |
 
 ## PostgreSQL
@@ -113,7 +116,7 @@ A plugin error stops startup before Discord connects, with a message of the form
 
 | Message | Fix |
 | --- | --- |
-| `two plugins are named <name>.` | Rename yours. The built-in plugins use `memory`, `schedule-store`, `discord`, `modules`, `discord-admin`, `skills`, `agent-server`, `seeds`, and `schedules`. |
+| `two plugins are named <name>.` | Rename yours. The built-in plugins use `memory`, `schedule-store`, `prechecks`, `discord`, `modules`, `discord-admin`, `skills`, `conversations`, `runtime`, `agent-server`, `seeds`, and `schedules`. |
 | `plugin "<name>": the name must be lowercase words joined by dashes, such as my-notes. Rename the plugin.` | Rename it in `definePlugin`. |
 | `plugin <name>: setup is missing. Give the function that returns what the plugin adds.` | Add `setup`. |
 | `plugin <name> adds nothing. Give it a part (tools, services, channels, and so on), a migration, or a provider, or remove it.` | Return a part from `setup`, or remove the plugin from `roundtable.config.ts`. |
@@ -126,6 +129,7 @@ A plugin error stops startup before Discord connects, with a message of the form
 | `plugin <name>: setup failed: <what the error said>. Fix the error, or remove the plugin.` | Fix the error the message quotes. |
 | `plugin <name>: migration <migration> failed: <what the database said>. Fix the migration or restore the database, then start again.` | Fix the migration or restore the database, then start again. |
 | ``the delegation worker loads pi-web-access, which this project does not have installed. It is a peer dependency of pi-roundtable: run `bun add pi-web-access@0.35.0` (or your own build of it, which the worker then uses too).`` | Install `pi-web-access`. The built-in `modules` plugin reports it as `plugin modules: setup failed: ...`. |
+| `required tools are not registered: compact_session. compact_session comes from the Pi package pi-self-compact: ...` | `bun add pi-self-compact`, and load it from a plugin with `piPackages: ["pi-self-compact"]`, as the `plugins/self-compact.ts` of a project `roundtable init` creates does. `doctor` does not catch this; `start` stops with it. |
 
 The plugin guide lists the rest, such as service clashes and the parts that only work after setup.
 See [Startup and project setup](/plugins/startup-and-project-setup/) and [What plugins can add](/plugins/what-plugins-can-add/).

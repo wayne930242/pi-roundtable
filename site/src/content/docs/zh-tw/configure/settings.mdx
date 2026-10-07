@@ -54,20 +54,25 @@ export default {
 | 鍵 | 型別 | 預設值 | 作用 |
 | --- | --- | --- | --- |
 | `name` | string | `"Roundtable"` | bot 所顯示文字裡，助理的顯示名稱。 |
-| `owner.id` | string，必填 | 無 | 唯一一位 owner 的 Discord 使用者 id。 |
+| `owner.id` | string，必填 | 無 | 唯一一位 owner 的 id；使用 Discord 時是 owner 的 Discord 使用者 id。 |
 | `owner.name` | string，必填 | 無 | owner 的名字，提示詞和拒絕訊息會用它。 |
 | `owner.pronouns` | `"he"`、`"she"` 或 `"they"` | `"they"` | 提示詞回頭提到 owner 時使用的人稱。 |
 
 ## Discord
 
+不設 `discord`，host 就在沒有 Discord 的情況下執行：沒有 Discord 外掛、agent server、agent 和技能，但外掛透過 `context.turns` 執行的對話照常運作。
+`roundtable init --adapter web` 會以[網頁聊天](/zh-tw/plugins/webchat-package/)為中心建立這種專案。
+同樣的設定也可以寫成 adapter：`adapters: [discord({ ... })]`，其中 `discord` 來自 `pi-roundtable/discord`。Discord 只能在其中一處設定，不能兩處都設。
+
 | 鍵 | 型別 | 預設值 | 作用 |
 | --- | --- | --- | --- |
-| `discord.token` | string，必填 | 無 | bot token。放在 `.env`。 |
-| `discord.guild` | string，必填 | 無 | agent 伺服器的 guild id。 |
-| `discord.entryChannel` | string，必填 | 無 | 協調者所在頻道的 id。 |
+| `discord.token` | string，使用 Discord 時必填 | 無 | bot token。放在 `.env`。 |
+| `discord.guild` | string，使用 Discord 時必填 | 無 | agent 伺服器的 guild id。 |
+| `discord.entryChannel` | string，使用 Discord 時必填 | 無 | 協調者所在頻道的 id。 |
 | `discord.rootCommand` | string | 小寫的 `name`，其中每一段 `a-z`、`0-9`、`-` 以外的字元換成 `-` | 根斜線指令，不含斜線。見[斜線指令](/zh-tw/reference/slash-commands/)。 |
 | `discord.admin` | boolean | `true` | owner 的對話是否有 `discord_*` 管理工具。設成 `false` 會讓 `discord-admin` addon 不載入。 |
 | `discord.refusalHint` | string | 無 | 附加在根指令拒絕非 owner 時的訊息後面的文字，原樣加上。你的語言需要的空格或標點，要自己放進去。 |
+| `adapters` | adapter 的清單 | 無 | host 使用的聊天管道，各由自己的工廠函式產生。Discord adapter 接受上面這些 `discord` 設定。以外掛形式提供的聊天管道（例如網頁聊天）仍放在 `plugins`。 |
 
 ## 儲存與檔案
 
@@ -119,11 +124,14 @@ export default {
 | --- | --- | --- | --- |
 | `agents` | `{ name, displayName, prompt, avatarPrompt, channelId? }` 的清單 | `[]` | 第一批團隊，只建立一次。已經存下來的 agent 不會被覆寫，所以之後請在 Discord 裡修改 agent。 |
 | `avatar` | string | 套件附帶的一張簡單 bot 圖片 | 你自己的圖片：中性頭像，也是繪製頭像時參考風格的圖。 |
-| `http.publicUrl` | string，必填 | 無 | 能從網際網路連到這個行程的位址。Discord 從這裡取頭像。 |
+| `http.publicUrl` | string，使用 Discord 時必填 | 無 | 能從網際網路連到這個行程的位址。Discord 從這裡取頭像。 |
 | `http.port` | 1 到 65535 的整數 | `3000` | 行程監聽的 TCP port。 |
 | `http.hostname` | string | 無 | 監聽綁定的 hostname。 |
 | `http.socketPath` | string | 無 | 監聽用的 unix socket 路徑，取代 TCP port。設定後，`port` 和 `hostname` 就不使用。 |
 | `http.socketMode` | 0 到 `0o777` 的整數 | `0o660` | socket 檔案的權限位元。只有在以其他使用者身分執行的 proxy 需要時才放寬。 |
+
+沒有 Discord 時，`http` 可以不設：沒有外掛提供 HTTP 時就省略，host 不會開 listener。
+網頁聊天需要它。
 
 ## Addon 與維運
 
@@ -131,10 +139,11 @@ export default {
 | --- | --- | --- | --- |
 | `skills` | `false`，或 `{ builtinDir?, reposDir? }` | 開啟，`builtinDir` 是套件附帶的技能，`reposDir` 是 `<dataDir>/repos` | `false` 會讓 `skills` addon 不載入：agent 不帶技能，也沒有技能工具。已存的技能仍留在資料表裡。 |
 | `memory` | boolean | `true` | `false` 會讓 `memory` addon 不載入：沒有記憶工具，也沒有記憶的提示詞區塊。資料表維持原樣。 |
-| `ops.agent` | string | 無 | 負責調查行程自身錯誤的 agent 名稱。 |
+| `ops.agent` | string | 無 | 負責調查行程自身錯誤的 agent 名稱。需要 Discord。 |
+| `ops.conversation` | string | 無 | 不交給 agent，而是回報到一段對話，寫它的 key，例如 `"web:ops"`。`ops.agent` 和 `ops.conversation` 擇一設定。 |
 | `plugins` | 外掛物件的清單 | `[]` | 你的外掛。它們在內建外掛之後，依列出的順序啟動。 |
 
-設了 `ops.agent` 之後，每一筆 `error` 和 `fatal` 的 log 都會回報給那個 agent，成為它頻道裡的一則訊息和一輪回報。
+設了 `ops.agent` 之後，每一筆 `error` 和 `fatal` 的 log 都會回報給那個 agent，成為它頻道裡的一則訊息和一輪回報；設了 `ops.conversation` 則回報到那段對話，由認領它的 claim 執行回報那一輪。
 同一個錯誤一小時內最多回報一次，每小時最多送出五筆回報。
 
 addon 加了什麼、外掛怎麼啟動，見 [Services and addons](/zh-tw/plugins/services-and-addons/)。

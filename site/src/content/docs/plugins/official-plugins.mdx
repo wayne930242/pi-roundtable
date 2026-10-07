@@ -1,6 +1,6 @@
 ---
 title: Official plugins and packages
-description: "Three copy-in plugins and guides for five official packages, with their requirements and configuration."
+description: "Three copy-in plugins and guides for six official packages, with their requirements and configuration."
 sidebar:
   order: 8
 ---
@@ -140,10 +140,8 @@ To remove one, delete its two files and its entry in `roundtable.config.ts`.
 
 ## Official packages
 
-The drawing, coding, web, and sandbox packages install with `bun add` at their matching lockstep versions.
+The official packages install with `bun add` at their matching lockstep versions.
 Each requires the matching pi-roundtable minor version.
-The migrated MCP package will be available in the next lockstep release.
-The currently published standalone `pi-roundtable-mcp` 0.4.1 is not compatible with core 0.7.x.
 
 | Package | What it adds |
 | --- | --- |
@@ -152,6 +150,7 @@ The currently published standalone `pi-roundtable-mcp` 0.4.1 is not compatible w
 | [pi-roundtable-web](/plugins/web-package/) | An authenticated owner console for conversations, team status, and memory notes. |
 | [pi-roundtable-sandbox](/plugins/sandbox-package/) | Guest-only Discord channels isolated in Docker on Linux. |
 | [pi-roundtable-mcp](/plugins/mcp-package/) | Owner-managed MCP connectors and remote MCP access. |
+| [pi-roundtable-webchat](/plugins/webchat-package/) | A web chat for people an OpenID Connect provider signs in, with private conversations, live progress, and approval cards. |
 
 See [What plugins can add](/plugins/what-plugins-can-add/) for other plugin features and [Test a plugin](/plugins/testing/) for testing.
 

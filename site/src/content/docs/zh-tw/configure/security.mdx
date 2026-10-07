@@ -1,0 +1,45 @@
+---
+title: 安全性
+description: host 信任誰、一輪能做什麼，以及有多人跟它對話時，它還沒有隔開的部分。
+sidebar:
+  order: 6
+---
+
+pi-roundtable 為一位 owner 執行一個助理。
+Discord 和[網頁聊天](/zh-tw/plugins/webchat-package/)都能用，也可以讓其他人跟助理對話。
+它還沒有像多使用者服務那樣把這些人彼此隔開；開放給別人使用的人要自己承擔這部分。
+
+## 信任誰
+
+- 營運者掌控 host、設定和憑證。
+- owner（`owner.id`）可以使用每一個工具。
+- 其他人以某個 tier（`member` 或 `admin`）進來：Discord 依 `speakers` 裡的使用者與角色 id，網頁依存取對照表和 token 的角色。見[存取層級](/zh-tw/configure/access-tiers/)。
+- 沒有任何 token claim 能讓人成為 owner。
+
+## 一輪能做什麼
+
+- 一輪只拿得到發言者的 tier 允許的工具；沒有外掛給 tier 的工具只有 owner 能用。
+- 工具在 host 的行程裡執行，用的是 host 的檔案和網路。`web_search` 和 `fetch_content` 連得到內部位址，所以網頁 persona 要在 `selection` 裡寫明它的工具。
+- 外掛也在同一個行程裡執行，權限一樣。
+
+## 核准
+
+暫緩的呼叫只能由讓它暫緩的那一輪的發言者核准，而且發言者的 tier 仍要足以執行這個呼叫；owner 也可以核准。
+核准卡和確認訊息都適用這條規則。
+需要比發言者更高層級的人核准的呼叫，要給它更高的 `minTier`，或在 hold rule 設 `approvalTier`。
+
+## 對話與記憶
+
+- Discord 裡 agent 的頻道和群組房間是共用的：在那裡發言的每個人，都會寫進 agent 讀取的同一段對話。
+- 網頁聊天的對話屬於開啟它的人，只有開啟者本人能讀、能發言、能回答它的提問。
+- 每位發言者的記憶各自分開。同一個人從 Discord 和網頁發言，會有兩個身分、兩份記憶。
+
+## 還沒有隔開的部分
+
+- **模型憑證。** 每一輪不論誰發言，都用 host 的模型登入執行、由它計費。
+- **身分。** 同一個人在兩個管道上就是兩位發言者。
+- **資料。** 對話、記憶和排程以未加密的形式存在 PostgreSQL 和資料目錄裡。
+
+之後的版本會讓每個人跨管道只有一個身分，並支援每個人自己的模型憑證。
+
+{/* Sources: README.md (Threat model), src/core/agents/team-turns.ts, src/core/discord/owner-cards.ts, src/core/builtin/stores.ts, packages/webchat/README.md */}

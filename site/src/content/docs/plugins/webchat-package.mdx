@@ -1,0 +1,103 @@
+---
+title: Web chat package
+description: Let people your OpenID Connect provider signs in chat with the assistant in private web conversations, with live progress and approval cards.
+sidebar:
+  order: 14
+---
+
+`pi-roundtable-webchat` is a chat network that comes as a plugin.
+People an OpenID Connect provider signs in chat with the assistant from a web page or a browser extension, each in private conversations of their own.
+A turn's text and tools show as it runs, and a held tool call asks the person on an approval card.
+It needs no Discord: a host whose configuration has no `discord` and lists `webChat({ ... })` is a web-only assistant.
+
+## Start a web chat project
+
+```sh
+npx pi-roundtable init my-desk --adapter web
+cd my-desk
+bun install
+docker compose up -d
+cp .env.example .env    # then fill it in
+bunx roundtable doctor
+bunx roundtable start
+```
+
+The project lists `webChat({ ... })` in `plugins` with an OpenID Connect verifier, an access map whose members and admins come from the token's roles, and one persona, `assistant`, whose prompt is `persona/assistant.md`.
+The persona's `selection` names its tools, so tools a later plugin adds stay out until you name them.
+The host listens on `127.0.0.1:3000`; serve it over HTTPS through a reverse proxy, and set `CHAT_ORIGINS` to the pages that open the chat.
+See [`init --adapter web`](/reference/cli/#--adapter-web) for every file it writes.
+
+## Add it to a host
+
+```sh
+bun add pi-roundtable-webchat
+```
+
+```ts
+import { readFileSync } from "node:fs";
+import { oidcJwtVerifier, webChat } from "pi-roundtable-webchat";
+
+export default {
+  // ...your roundtable settings, with http: { port: 3000, hostname: "127.0.0.1" }...
+  plugins: [
+    webChat({
+      verifier: oidcJwtVerifier({
+        jwksUrl: "https://login.example.com/keys",
+        issuers: ["https://login.example.com/"],
+        audiences: ["api://helpdesk"],
+      }),
+      access: {
+        admins: { roles: ["Helpdesk.Admin"] },
+        members: { roles: ["Helpdesk.User"] },
+      },
+      origins: ["https://chat.example.com"],
+      personas: [
+        {
+          kind: "helpdesk",
+          label: "Helpdesk",
+          prompt: () => readFileSync("./persona/helpdesk.md", "utf8"),
+          selection: { tools: [], groups: [] },
+        },
+      ],
+    }),
+  ],
+};
+```
+
+It releases in lockstep with pi-roundtable and needs an HTTP listener (`http` in the configuration).
+Every mistake in these options throws when the configuration loads, so `roundtable doctor` names it before the host starts.
+
+## How people connect
+
+A browser asks for a one-time ticket with `POST /chat/tickets` and `Authorization: Bearer <token>`, then opens `/chat/socket` offering the subprotocols `roundtable.webchat.v1` and `ticket.<ticket>`.
+Another client sends the bearer token on the upgrade.
+The token never travels in a URL.
+
+Each WebSocket message is one JSON object with a `type`.
+The client sends `send`, `stop`, `approval`, `answer`, and `auth`; the server answers with `ready`, `accepted`, `typing`, `stoppable`, `progress`, `reply`, `failed`, `prompt`, `prompt_closed`, `reauth`, and `error`.
+`progress` shows the turn's text and the tools it runs, never its thinking and never a tool's full arguments; `reply` carries the answer in full markdown.
+A REST API lists a person's conversations, opens one, and reads its messages.
+The [package README](https://github.com/wayne930242/pi-roundtable/blob/master/packages/webchat/README.md) documents every frame, error code, close code, and limit.
+
+## Security model
+
+- **Private conversations.** A conversation belongs to the person who opened it. The host's conversation registry records that person at the first turn, and the claim checks it before every turn: only that person may list, read, write in, stop, or answer it.
+- **Tokens.** Tokens are checked on every REST call, every upgrade, and every `auth` frame. By default only a person's access token passes; a token without a scope or app roles, or an app-only token, is refused. A socket closes when its token expires.
+- **Origins.** `origins` is required and checked on every upgrade and every browser request.
+- **Limits.** Each person has bounded sockets, tickets, conversations opened per hour, and turns running or queued at once.
+- **Approvals.** A held call's card goes to the conversation's person only, at the tier the call needs.
+- **Owner.** No token claim makes anyone the owner: list owners by speaker id, `oidc:<base64url(issuer)>:<subject>`.
+
+The verifier is generic; what makes it safe is how you point it at your provider.
+Read the README's [provider settings](https://github.com/wayne930242/pi-roundtable/blob/master/packages/webchat/README.md#provider-settings) before anyone signs in: name people by a claim that stays the same across app registrations, pin your tenant, accept access tokens only, and merge issuers of one tenant only.
+The [security](/configure/security/) page covers what the rest of the host trusts.
+
+## What it does not do yet
+
+- Attachments: messages carry text only.
+- Schedules and delegated reports: a web conversation takes no background turns, so leave `schedule_*` and `delegate_task` out of a persona's `selection`.
+- Web tools: leave `web_search` and `fetch_content` out unless people may make the host fetch any address, internal ones included.
+- Agent teams have no web rooms.
+- A person on two providers, or on Discord and the web, has two speaker ids and two memories.
+
+{/* Sources: packages/webchat/README.md, packages/webchat/src/plugin.ts, templates/adapters/web/roundtable.config.ts, src/cli/templates.ts */}

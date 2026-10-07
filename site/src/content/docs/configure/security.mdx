@@ -1,0 +1,45 @@
+---
+title: Security
+description: What the host trusts, what a turn may do, and what it does not yet isolate when several people talk to it.
+sidebar:
+  order: 6
+---
+
+pi-roundtable runs one assistant for one owner.
+Discord and the [web chat](/plugins/webchat-package/) both work, and you can let other people talk to the assistant.
+It does not yet isolate those people from each other the way a multi-user service must; whoever lets them in takes that on.
+
+## Who is trusted
+
+- The operator controls the host, its configuration, and its credentials.
+- The owner (`owner.id`) may use every tool.
+- Everyone else is admitted at a tier, `member` or `admin`: in Discord from the user and role ids in `speakers`, on the web from the access map over the token's roles. See [Access tiers](/configure/access-tiers/).
+- No token claim makes anyone the owner.
+
+## What a turn may do
+
+- A turn gets only the tools its speaker's tier holds, and a tool no plugin gives a tier is the owner's alone.
+- Tools run in the host process, with its files and its network. `web_search` and `fetch_content` can reach internal addresses, so name the tools of a web persona in its `selection`.
+- Plugins run in the same process, with the same access.
+
+## Approvals
+
+A held call is approved only by the speaker whose turn held it, at a tier that still holds the call, or by the owner.
+That holds for the approval card and for a confirming message.
+A call that someone above the speaker should approve needs a higher `minTier`, or a hold rule's `approvalTier`.
+
+## Conversations and memory
+
+- In Discord an agent's channel and a group room are shared: everyone who writes there adds to one conversation the agent reads.
+- A web chat conversation belongs to the person who opened it; only they may read it, write in it, or answer its prompts.
+- Each speaker's memory is their own. One person who writes from Discord and from the web has two identities and two memories.
+
+## What it does not isolate yet
+
+- **Model credentials.** Every turn, whoever speaks, runs on the host's model login and is billed to it.
+- **Identity.** One person on two networks is two speakers.
+- **Data.** Conversations, memory, and schedules sit unencrypted in PostgreSQL and the data directory.
+
+Later releases add one identity per person across networks, and per-person model credentials.
+
+{/* Sources: README.md (Threat model), src/core/agents/team-turns.ts, src/core/discord/owner-cards.ts, src/core/builtin/stores.ts, packages/webchat/README.md */}

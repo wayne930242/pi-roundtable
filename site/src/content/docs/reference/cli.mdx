@@ -11,7 +11,7 @@ Inside a project, run it with `bunx roundtable <command>`.
 
 | Command | What it does |
 | --- | --- |
-| `roundtable init [dir]` | Creates a project in `dir` (default: the current directory). |
+| `roundtable init [dir] [--adapter discord\|web]` | Creates a project in `dir` (default: the current directory) that talks through Discord (the default) or through the web chat. |
 | `roundtable doctor [--reachable]` | Checks the setup and says how to fix what is wrong. |
 | `roundtable start` | Runs the checks that need no network, then the bot. |
 | `roundtable add plugin <name>` | Adds `plugins/<name>.ts` and its test, and lists the plugin in the config. `codex-images`, `dice`, and `release-notice` are reserved for the official plugins. |
@@ -39,6 +39,18 @@ It prints three steps: install and fill `.env`, run `doctor`, run `start`.
   The message lists the files and ends with `Remove them or run init in an empty directory; nothing was written.`
 
 `init` takes at most one directory; a second argument is a usage error.
+
+### `--adapter web`
+
+```sh
+npx pi-roundtable init my-desk --adapter web
+```
+
+`--adapter web` writes a project without Discord around [pi-roundtable-webchat](/plugins/webchat-package/).
+It leaves out `agents.ts` and `persona/shared.md`, and writes `persona/assistant.md` instead.
+Its `roundtable.config.ts` has no `discord`, listens on `127.0.0.1:3000`, and lists `webChat({ ... })` with an OpenID Connect verifier, an access map whose members and admins come from the token's roles, and one persona whose `selection` names its tools.
+Its `package.json` also pins pi-roundtable-webchat at the core's version, and its `.env.example` asks for `OWNER_NAME`, `DATABASE_URL`, `MODEL`, `OIDC_ISSUER`, `OIDC_AUDIENCE`, `OIDC_JWKS_URL`, `CHAT_MEMBER_ROLES`, and `CHAT_ORIGINS`.
+`--adapter discord` is the default; any other value is a usage error that lists `discord, web` and writes nothing.
 
 ## `doctor`
 
@@ -71,6 +83,8 @@ A skipped check does not fail the run.
 | 10 | Discord channel | The entry channel exists in the guild, and the bot holds the permissions below in it. |
 | 11 | model login | A login exists for the provider of `model`. |
 | 12 | public URL | `http.publicUrl` is a well-formed `http://` or `https://` address. |
+
+A project without Discord skips checks 7 to 10, with the reason `no Discord is configured`, and check 12 when `http.publicUrl` has no value; a Discord adapter in `adapters` is checked as the top-level `discord` is.
 
 The permissions that check 10 requires in the entry channel are View Channel, Send Messages, Send Messages in Threads, Read Message History, Embed Links, Attach Files, Pin Messages, Create Public Threads, Manage Channels, and Manage Webhooks.
 When the bot is not in the guild, the fix is an invitation link that asks for exactly these permissions.

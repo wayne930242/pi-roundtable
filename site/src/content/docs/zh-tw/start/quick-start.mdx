@@ -15,6 +15,10 @@ import { Steps } from "@astrojs/starlight/components";
 - 模型登入：你選的模型的供應商 API key（`anthropic/...` 用 `ANTHROPIC_API_KEY`），或之前用 Pi 登入過的帳號。
 - 一個從網際網路連得到這個行程的位址，例如通道（tunnel）。Discord 要從這個位址抓 agent 的頭像。
 
+這一頁建立的是 Discord 專案。
+想建立沒有 Discord、讓經 OpenID Connect 供應商登入的人用網頁聊天的專案，請執行 `npx pi-roundtable init my-desk --adapter web`，改看[網頁聊天套件](/zh-tw/plugins/webchat-package/)。
+從 0.7 升級的話，見 [Migrating to 0.8](https://github.com/wayne930242/pi-roundtable/blob/master/docs/migrating-0.8.md)（英文）。
+
 ## 建立並啟動專案
 
 <Steps>
