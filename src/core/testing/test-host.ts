@@ -122,7 +122,7 @@ function quietRuntime(): AgentRuntime {
 }
 
 /** A Discord that connects to nothing, recording the commands added to it, standing in for the built-in plugin that does. */
-function standInDiscord(
+export function standInDiscord(
 	commands: CommandCollection,
 	guard: CommandGuard,
 	given: TestHostOptions["discord"],
@@ -168,8 +168,8 @@ function ignored(): Ignored {
 /** The tools a factory registers, by name; every other registration (handlers, commands, events) is accepted and ignored. */
 async function registeredBy(factory: ExtensionFactory): Promise<string[]> {
 	const names: string[] = [];
-	// SAFETY: a session factory only registers tools, handlers and commands; the fake records the tool names and ignores the rest.
 	const registerTool = (tool: { name: string }) => names.push(tool.name);
+	// SAFETY: a session factory only registers tools, handlers and commands; the fake records the tool names and ignores the rest.
 	const api = new Proxy(
 		{},
 		{

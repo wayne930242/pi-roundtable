@@ -8,7 +8,12 @@
 	},
 	"files": {
 		"ignoreUnknown": false,
-		"includes": ["**", "!!scratch", "!!.metadata_cache"]
+		"includes": [
+			"**",
+			"!!scratch",
+			"!!.metadata_cache",
+			"!src/prompt-text.snapshot.json"
+		]
 	},
 	"formatter": {
 		"enabled": true,
