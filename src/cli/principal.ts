@@ -262,7 +262,7 @@ async function run(
 		);
 		if (listed === "another owner")
 			io.out(
-				"The configuration lists it under another owner; the next start links it to them.",
+				"The configuration lists it under another owner, which a running host does not read: stop the host, then start it with this configuration. If a new p_… principal appears with this identity before then, unlink it again.",
 			);
 		io.out(HOST_DELAY);
 		return;

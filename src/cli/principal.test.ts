@@ -290,8 +290,9 @@ describeDb("roundtable principal", () => {
 			`Unlinked discord:${OWNER} from principal ${OWNER}.`,
 		);
 		expect(moved.out).toContain(
-			"The configuration lists it under another owner; the next start links it to them.",
+			"The configuration lists it under another owner, which a running host does not read: stop the host, then start it with this configuration. If a new p_… principal appears with this identity before then, unlink it again.",
 		);
+		expect(moved.out).not.toContain("the next start links it to them");
 	});
 
 	test("unlink refuses an identity the configuration lists under an owner, whoever linked it", async () => {
