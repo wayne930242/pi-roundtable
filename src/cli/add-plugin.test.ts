@@ -40,7 +40,7 @@ test("add plugin renders the plugin and its test from the hello template and lis
 	);
 	const config = read(dir.path, "roundtable.config.ts");
 	expect(config).toContain('import { myNotes } from "./plugins/my-notes.ts";');
-	expect(config).toContain("plugins: [hello, myNotes]");
+	expect(config).toContain("plugins: [selfCompact, hello, myNotes]");
 });
 
 test("a second plugin joins the first", () => {
@@ -48,7 +48,7 @@ test("a second plugin joins the first", () => {
 	addPlugin({ cwd: dir.path, name: "alpha" });
 	addPlugin({ cwd: dir.path, name: "beta" });
 	expect(read(dir.path, "roundtable.config.ts")).toContain(
-		"plugins: [hello, alpha, beta]",
+		"plugins: [selfCompact, hello, alpha, beta]",
 	);
 });
 
@@ -129,7 +129,7 @@ test("add plugin copies the official plugin of that name, with its test, and lis
 		);
 	}
 	expect(read(dir.path, "roundtable.config.ts")).toContain(
-		"plugins: [hello, codexImages, dice, releaseNotice]",
+		"plugins: [selfCompact, hello, codexImages, dice, releaseNotice]",
 	);
 	// The copy is a file of the project's own, not a template with placeholders left in it.
 	expect(read(dir.path, "plugins/dice.ts")).not.toMatch(/__[A-Z]+__/);

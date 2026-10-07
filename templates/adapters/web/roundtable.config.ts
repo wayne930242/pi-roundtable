@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import type { RoundtableConfig } from "pi-roundtable";
 import { oidcJwtVerifier, webChat } from "pi-roundtable-webchat";
 import { hello } from "./plugins/hello.ts";
+import { selfCompact } from "./plugins/self-compact.ts";
 
 // Credentials and ids come from .env, which Bun loads on its own; nothing secret belongs in this file.
 const env = (name: string): string => process.env[name] ?? "";
@@ -22,6 +23,7 @@ export default {
 	// Serve behind a reverse proxy that terminates TLS; the web chat lives under /chat.
 	http: { port: 3000, hostname: "127.0.0.1" },
 	plugins: [
+		selfCompact,
 		hello,
 		webChat({
 			// Accepts only a person's access token. Pin your tenant and pick a stable subject claim

@@ -27,7 +27,8 @@ npx pi-roundtable init my-bot    # or: bunx pi-roundtable init my-bot
 ```
 
 `init` writes a working project without asking for secrets.
-It creates these files in `dir`: `package.json`, `.gitignore`, `roundtable.config.ts`, `biome.json`, `README.md`, `agents.ts`, `docker-compose.yml`, `persona/shared.md`, `.env.example`, `tsconfig.json`, `plugins/hello.ts`, and `plugins/hello.test.ts`.
+It creates these files in `dir`: `package.json`, `.gitignore`, `roundtable.config.ts`, `biome.json`, `README.md`, `agents.ts`, `docker-compose.yml`, `persona/shared.md`, `.env.example`, `tsconfig.json`, `plugins/hello.ts`, `plugins/hello.test.ts`, and `plugins/self-compact.ts`.
+`plugins/self-compact.ts` loads the Pi package pi-self-compact, which `package.json` pins: every session needs its `compact_session` tool, and `start` stops without it.
 The `package.json` pins the exact version of pi-roundtable that ran `init`.
 It prints three steps: install and fill `.env`, run `doctor`, run `start`.
 

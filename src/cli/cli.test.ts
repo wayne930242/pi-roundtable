@@ -92,7 +92,7 @@ test("add plugin exits zero after init and non-zero on a bad name", async () => 
 	expect(await runCli(["add", "plugin", "notes"], run.io)).toBe(0);
 	expect(
 		readFileSync(join(run.dir.path, "roundtable.config.ts"), "utf8"),
-	).toContain("plugins: [hello, notes]");
+	).toContain("plugins: [selfCompact, hello, notes]");
 	expect(await runCli(["add", "plugin", "Bad_Name"], run.io)).toBe(1);
 });
 
@@ -106,7 +106,7 @@ test("add plugin copies an official plugin by name, and refuses it a second time
 	);
 	expect(
 		readFileSync(join(run.dir.path, "roundtable.config.ts"), "utf8"),
-	).toContain("plugins: [hello, dice]");
+	).toContain("plugins: [selfCompact, hello, dice]");
 	expect(await runCli(["add", "plugin", "dice"], run.io)).toBe(1);
 	expect(run.err.join("\n")).toContain("already exist");
 });
@@ -123,7 +123,7 @@ test("add package prints the files and the tools it found, and exits non-zero ou
 	expect(printed).toContain("web_search, fetch_content");
 	expect(
 		readFileSync(join(run.dir.path, "roundtable.config.ts"), "utf8"),
-	).toContain("plugins: [hello, piWebAccess]");
+	).toContain("plugins: [selfCompact, hello, piWebAccess]");
 });
 
 test("doctor exits non-zero when a check fails and zero when none does", async () => {

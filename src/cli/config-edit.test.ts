@@ -20,7 +20,7 @@ import { hello } from "./plugins/hello.ts";
 
 export default {
 	name: "Bot",
-	plugins: [hello],
+	plugins: [selfCompact, hello],
 } satisfies Config;
 `;
 		expect(edit(source)).toBe(`import type { Config } from "node:fs";
@@ -29,7 +29,7 @@ import { myNotes } from "./plugins/my-notes.ts";
 
 export default {
 	name: "Bot",
-	plugins: [hello, myNotes],
+	plugins: [selfCompact, hello, myNotes],
 } satisfies Config;
 `);
 	});
@@ -39,7 +39,7 @@ export default {
 import { hello } from "./plugins/hello.ts";
 import { zed } from "./plugins/zed.ts";
 
-export default { plugins: [hello, zed] };
+export default { plugins: [selfCompact, hello, zed] };
 `;
 		const lines = edit(source).split("\n");
 		expect(lines.slice(0, 4)).toEqual([

@@ -88,13 +88,14 @@ function recordingSurface(replies: string[]): RoundtablePlugin {
 			expect(tools).not.toContain(absent);
 	});
 
-	test("without a runtime provider the runtime plugin builds Pi, reading no Discord", async () => {
+	/** A host on Pi's runtime, with no Discord, the probe, and `plugins`; the probe keeps its context. */
+	async function piHost(plugins: RoundtablePlugin[] = []) {
 		const dataDir = mkdtempSync(join(tmpdir(), "roundtable-headless-"));
-		let context: PluginContext | undefined;
+		const seen: { context?: PluginContext } = {};
 		const probe: RoundtablePlugin = {
 			name: "probe",
 			setup: (given) => {
-				context = given;
+				seen.context = given;
 				return { services: [{ name: "probe" }] };
 			},
 		};
@@ -104,25 +105,49 @@ function recordingSurface(replies: string[]): RoundtablePlugin {
 		});
 		// The preflight builds a session, which needs a key; no request is made with it.
 		await modelRuntime.setRuntimeApiKey("anthropic", "test-key");
-		const { options, plugins } = await defineRoundtable(
+		const defined = await defineRoundtable(
 			{
 				owner: { id: "100000000000000001", name: "Ada" },
 				database: { url: testDatabaseUrl },
 				dataDir,
 				model: "anthropic/claude-sonnet-5-5",
-				plugins: [probe],
+				plugins: [probe, ...plugins],
 			},
 			{ logger: silentLogger(), modelRuntime },
 		);
-		expect(plugins.map((plugin) => plugin.name)).not.toContain("discord");
-		roundtable = new Roundtable(options, plugins);
-		// Every plugin is set up before the preflight, which then refuses: a fresh agent dir has no
-		// package that registers the compaction tool Pi's runtime requires.
-		await expect(roundtable.run()).rejects.toThrow(
+		expect(defined.plugins.map((plugin) => plugin.name)).not.toContain(
+			"discord",
+		);
+		roundtable = new Roundtable(defined.options, defined.plugins);
+		return { roundtable, seen };
+	}
+
+	test("without a runtime provider the runtime plugin builds Pi, reading no Discord", async () => {
+		const host = await piHost();
+		// Every plugin is set up before the preflight, which then refuses: no plugin loads the
+		// package that registers the compaction tool Pi's runtime requires, and it says which.
+		const boot = host.roundtable.run();
+		await expect(boot).rejects.toThrow(
 			"required tools are not registered: compact_session",
 		);
+		await expect(boot).rejects.toThrow('piPackages: ["pi-self-compact"]');
 		roundtable = undefined;
-		expect(context?.services.get(RUNTIME)).toBeInstanceOf(PiAgentRuntime);
-		expect(context?.services.find(DISCORD)).toBeUndefined();
+		expect(host.seen.context?.services.get(RUNTIME)).toBeInstanceOf(
+			PiAgentRuntime,
+		);
+		expect(host.seen.context?.services.find(DISCORD)).toBeUndefined();
+	});
+
+	test("with pi-self-compact loaded, as a fresh project loads it, Pi's runtime passes the preflight and the host starts", async () => {
+		const host = await piHost([
+			{
+				name: "self-compact",
+				setup: () => ({ piPackages: ["pi-self-compact"] }),
+			},
+		]);
+		await host.roundtable.run();
+		expect(host.seen.context?.services.get(RUNTIME)).toBeInstanceOf(
+			PiAgentRuntime,
+		);
 	});
 });

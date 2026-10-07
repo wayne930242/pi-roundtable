@@ -80,7 +80,7 @@ test("add package installs the spec, writes a plugin that loads it and selects i
 		'import { piWebAccess } from "./pi-web-access.ts"',
 	);
 	expect(read(dir.path, "roundtable.config.ts")).toContain(
-		"plugins: [hello, piWebAccess]",
+		"plugins: [selfCompact, hello, piWebAccess]",
 	);
 });
 

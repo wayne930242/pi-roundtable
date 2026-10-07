@@ -35,7 +35,10 @@ import {
 	ConfirmationGate,
 	confirmedTurnText,
 } from "./extensions/confirmation-gate.ts";
-import { COMPACT_TOOL } from "./extensions/self-compact-guard.ts";
+import {
+	COMPACT_TOOL,
+	missingToolsError,
+} from "./extensions/self-compact-guard.ts";
 import { interimPoster } from "./interim-text.ts";
 import { PromptSlot, workTimeout } from "./prompt-slot.ts";
 import {
@@ -118,11 +121,7 @@ export class PiAgentRuntime implements AgentRuntime {
 			),
 		];
 		const missing = expected.filter((name) => !registered.has(name));
-		if (missing.length > 0) {
-			throw new ConfigError(
-				`required tools are not registered: ${missing.join(", ")}`,
-			);
-		}
+		if (missing.length > 0) throw missingToolsError(missing);
 	}
 
 	// pi-lens-ignore: high-complexity, high-fan-out, mixed-async-styles — one turn's lifecycle end to end; batch 4 splits it with the channel router

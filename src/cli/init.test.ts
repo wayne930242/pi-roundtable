@@ -39,6 +39,7 @@ test("init writes the skeleton and the hello plugin, pins the version, and print
 			"persona/shared.md",
 			"plugins/hello.test.ts",
 			"plugins/hello.ts",
+			"plugins/self-compact.ts",
 			"roundtable.config.ts",
 			"tsconfig.json",
 		].sort(),

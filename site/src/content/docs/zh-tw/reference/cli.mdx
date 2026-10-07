@@ -27,7 +27,8 @@ npx pi-roundtable init my-bot    # or: bunx pi-roundtable init my-bot
 ```
 
 `init` 寫出一個能運作的專案，不會要你提供任何祕密資訊。
-它在 `dir` 裡建立這些檔案：`package.json`、`.gitignore`、`roundtable.config.ts`、`biome.json`、`README.md`、`agents.ts`、`docker-compose.yml`、`persona/shared.md`、`.env.example`、`tsconfig.json`、`plugins/hello.ts` 和 `plugins/hello.test.ts`。
+它在 `dir` 裡建立這些檔案：`package.json`、`.gitignore`、`roundtable.config.ts`、`biome.json`、`README.md`、`agents.ts`、`docker-compose.yml`、`persona/shared.md`、`.env.example`、`tsconfig.json`、`plugins/hello.ts`、`plugins/hello.test.ts` 和 `plugins/self-compact.ts`。
+`plugins/self-compact.ts` 載入 Pi 套件 pi-self-compact，`package.json` 釘住它的版本：每個 session 都需要它的 `compact_session` 工具，沒有它 `start` 會停下來。
 `package.json` 會固定在執行 `init` 的那個 pi-roundtable 的精確版本。
 接著印出三個下一步：安裝並填寫 `.env`、執行 `doctor`、執行 `start`。
 
