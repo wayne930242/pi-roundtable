@@ -906,3 +906,84 @@ test("subscription token is resolved per model call from the bound channel and s
 		{ channel: "discord:beta", speaker: { id: "guest-b", name: "guest-b" } },
 	]);
 });
+
+test("a request in flight keeps its own turn's token after the next turn binds", async () => {
+	let sendBody!: () => void;
+	const body = new ReadableStream<Uint8Array>({
+		start(controller) {
+			sendBody = () => {
+				controller.enqueue(new TextEncoder().encode(JSON.stringify(message)));
+				controller.close();
+			};
+		},
+	});
+	const scopes: string[] = [];
+	const seen: (string | null)[] = [];
+	const broker = new PiSandboxBroker({
+		model: "host-model",
+		oauthToken: (scope) => {
+			scopes.push(scope.channel);
+			return scope.channel === "discord:alpha" ? "alpha-secret" : "beta-secret";
+		},
+		fetchImpl: async (_url, init) => {
+			seen.push(new Headers(init.headers).get("authorization"));
+			return Response.json({ content: "ok" });
+		},
+	});
+	const turn = (channel: "discord:alpha" | "discord:beta", id: string) =>
+		broker.bind({
+			channel,
+			profile: "profile",
+			speaker: { id, name: id },
+			thinking: "high",
+			signal: new AbortController().signal,
+		});
+	const releaseA = turn("discord:alpha", "guest-a");
+	// The body arrives only after turn A ends and turn B binds, so the token is resolved while B is bound.
+	const inFlight = broker.handle(
+		new Request("http://broker/anthropic/v1/messages", {
+			method: "POST",
+			headers: { authorization: "Bearer guest-token" },
+			body,
+			duplex: "half",
+		} as RequestInit),
+	);
+	await Bun.sleep(0);
+	releaseA();
+	const releaseB = turn("discord:beta", "guest-b");
+	sendBody();
+	expect((await inFlight).status).toBe(200);
+	expect(
+		(await broker.handle(post("/anthropic/v1/messages", message))).status,
+	).toBe(200);
+	releaseB();
+	expect(scopes).toEqual(["discord:alpha", "discord:beta"]);
+	expect(seen).toEqual(["Bearer alpha-secret", "Bearer beta-secret"]);
+});
+
+for (const missing of [undefined, ""]) {
+	test(`a subscription getter returning ${JSON.stringify(missing)} fails the call without reaching upstream`, async () => {
+		let fetched = 0;
+		const broker = new PiSandboxBroker({
+			model: "host-model",
+			oauthToken: () => missing,
+			fetchImpl: async () => {
+				fetched += 1;
+				return Response.json({ content: "ok" });
+			},
+		});
+		const release = broker.bind({
+			channel: "discord:alpha",
+			profile: "profile",
+			speaker: { id: "guest-a", name: "guest-a" },
+			thinking: "high",
+			signal: new AbortController().signal,
+		});
+		const response = await broker.handle(
+			post("/anthropic/v1/messages", message),
+		);
+		release();
+		expect(response.status).toBe(502);
+		expect(fetched).toBe(0);
+	});
+}

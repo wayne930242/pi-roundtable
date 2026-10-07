@@ -218,7 +218,7 @@ Other model transports are not implicitly proxied by this broker.
 | --- | --- |
 | `partyDir`, `image` | Dedicated private, host-owned directory and operator-built Pi image. |
 | `profiles` | Host allow-list mapping profile names to fixed Anthropic `model` and optional MCP server names. |
-| `oauthToken({ channel, speaker })` | Host-only credential getter called before each model request with the bound turn's channel and speaker, so a host can use a different subscription per channel or speaker; supports refresh without container credentials. A zero-argument getter still works. |
+| `oauthToken({ channel, speaker })` | Host-only credential getter called before each model request with the bound turn's channel and speaker, so a host can use a different subscription per channel or speaker; supports refresh without container credentials. A zero-argument getter still works. Returning `undefined` or an empty string fails the call; no other credential is used. |
 | `memory.promptBlock(channel, id, name)` | Current admitted speaker's context, at most 100,000 characters; database implementations remain host adapters. |
 | `effort.judge(text, { level })` | Host-selected `low`, `medium`, `high`, or `xhigh`; the previous channel choice is retained for the next judgment. |
 | `tools.names`, `tools.call` | Explicit host tool allow-list and callback receiving fixed channel/profile/speaker plus cancellation signal. |

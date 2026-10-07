@@ -66,8 +66,10 @@ export interface PiCompactor {
 }
 export interface PiBrokerOptions {
 	model: string;
-	/** Host-only, read before each model call for its channel and speaker; a zero-argument function still works. Never sent to the worker. */
-	oauthToken: (scope: SandboxCredentialScope) => string | Promise<string>;
+	/** Host-only, read before each model call for its channel and speaker; a zero-argument function still works. Return `undefined` or an empty string when the scope has no token: the call fails rather than using another credential. Never sent to the worker. */
+	oauthToken: (
+		scope: SandboxCredentialScope,
+	) => string | undefined | Promise<string | undefined>;
 	tools?: {
 		names: readonly string[];
 		call(
@@ -645,10 +647,11 @@ export class PiSandboxBroker {
 				}
 				target = `${this.#options.upstream ?? "https://api.anthropic.com"}${url.pathname.slice("/anthropic".length)}${url.search}`;
 				const { channel, speaker } = turn.context;
-				secret = await this.#options.oauthToken({
-					channel,
-					speaker: { id: speaker.id, name: speaker.name },
-				});
+				secret =
+					(await this.#options.oauthToken({
+						channel,
+						speaker: { id: speaker.id, name: speaker.name },
+					})) ?? "";
 				for (const name of HEADERS) {
 					const value = request.headers.get(name);
 					if (value && value.length <= 4096) headers.set(name, value);
