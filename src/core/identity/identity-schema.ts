@@ -140,7 +140,10 @@ async function idsIn(
  * Makes a principal of the same id for every person 0.8 stored: the configured owners, and each
  * id in `owner_memory`, `schedules`, `conversations`, and `held_actions`, skipping a table or a
  * column the database does not have yet, and a held action that names its principal in
- * `principal_id`, whose `speaker_id` is an actor id this version stored. Each but a configured
+ * `principal_id`, whose `speaker_id` is an actor id this version stored, and any id a surface
+ * knows a linked identity by (its subject, or `<provider>:<subject>`, as `ActorFacts.legacyId`
+ * names it): that person has a principal already, and this version wrote the row, so the boot
+ * after someone is admitted makes no second principal of their actor id. Each but a configured
  * owner is claimable once, by the person of that id at their first contact
  * (IdentityService.resolve); a configured owner never is, even once the configuration names
  * another owner. 0.8's `remote-mcp` speaker, the owner writing over MCP, gets no principal: it is
@@ -195,7 +198,20 @@ export async function backfillPrincipals(
 				)
 			: [],
 	);
-	const missing = [...names].filter(([id]) => !existing.has(id));
+	// The id a surface knows a linked person by is no 0.8 speaker's: this version wrote it.
+	const linked = new Set<string>(
+		table?.made
+			? (
+					(await sql`SELECT provider, subject FROM principal_identities`) as {
+						provider: string;
+						subject: string;
+					}[]
+				).flatMap((row) => [row.subject, `${row.provider}:${row.subject}`])
+			: [],
+	);
+	const missing = [...names].filter(
+		([id]) => !existing.has(id) && !linked.has(id),
+	);
 	if (options.dryRun) return { created: missing.length, sources };
 	const scheduled = await scheduledTiers(sql);
 	const configured = new Set(owners.map((owner) => owner.id));

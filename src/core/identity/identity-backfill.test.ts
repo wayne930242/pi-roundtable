@@ -251,6 +251,58 @@ describeDb("the principal backfill", () => {
 		expect(await identity.principalOfLegacyId("nobody")).toBeUndefined();
 	});
 
+	test("the actor id of someone this version admitted, in the rows it writes, makes no principal at the next boot", async () => {
+		db = await scratchDatabase("0.8.0");
+		const plugins = await hostPlugins(db.url, { members: { everyone: true } });
+		await runMigrations(db.sql, plugins);
+		const identity = new PgIdentityService(
+			await PgPrincipalStore.attach(db.sql),
+			{
+				...ADA_ONLY,
+				members: { everyone: ["discord", "web"] },
+				provisioning: "admitted",
+				backgroundStaleDays: 30,
+			},
+			{ logger: silentLogger() },
+		);
+		await identity.syncConfig();
+		const mo = "966666600000000041";
+		const discord = await identity.resolve({
+			provider: "discord",
+			subject: mo,
+			name: "Mo",
+			roles: [],
+			legacyId: mo,
+		});
+		const sub = "oidc:aHR0cHM6Ly9pZHAuZXhhbXBsZS5jb20:user-41";
+		const web = await identity.resolve({
+			provider: "oidc:aHR0cHM6Ly9pZHAuZXhhbXBsZS5jb20",
+			subject: "user-41",
+			name: "Wen",
+			surface: "web",
+			legacyId: sub,
+		});
+		expect(discord?.principalId).toMatch(/^p_/);
+		expect(web?.principalId).toMatch(/^p_/);
+		const before = (await principals(db.sql)).map((row) => row.id);
+		// As this version writes them until they name principals: the speaker's actor id.
+		for (const [actor, channel] of [
+			[mo, "discord:966666600000000042"],
+			[sub, "web:c-41"],
+		] as const) {
+			await db.sql`INSERT INTO owner_memory (fact, kind, speaker_id) VALUES ('a fact', 'core', ${actor})`;
+			await db.sql`
+				INSERT INTO schedules (id, channel_key, mode, title, prompt, recurrence, next_run, created_by_id, created_by_name, created_tier)
+				SELECT nextval('schedules_id_seq'), ${channel}, mode, title, prompt, recurrence, next_run, ${actor}, 'Mo', 'member'
+				FROM schedules LIMIT 1`;
+			await db.sql`
+				INSERT INTO held_actions (channel_key, selection_id, held_at, calls, speaker_id, speaker_held_at)
+				VALUES (${channel}, 'agent', now(), '[]', ${actor}, now())`;
+		}
+		await runMigrations(db.sql, plugins);
+		expect((await principals(db.sql)).map((row) => row.id)).toEqual(before);
+	});
+
 	test("a row an older build writes after the upgrade gets its principal at the next boot", async () => {
 		db = await scratchDatabase("0.8.0");
 		const plugins = await hostPlugins(db.url);
