@@ -3,6 +3,7 @@ import type { Speaker } from "../speakers.ts";
 import type { TurnAttachments } from "./attachment.ts";
 import type { ChannelKey } from "./conversation.ts";
 import type { InterimPosts } from "./interim.ts";
+import type { TurnProgress } from "./progress.ts";
 
 export type { AgentTurnScope };
 
@@ -38,6 +39,11 @@ export interface TurnRequest {
 	 * hands the channel its reply goes to. Absent = only the final reply is posted.
 	 */
 	interim?: InterimPosts;
+	/**
+	 * Hears what the turn writes and which tools it runs, as it goes, until the turn ends. A runtime
+	 * without live progress never calls it.
+	 */
+	progress?: (event: TurnProgress) => void;
 }
 
 /** The judge's question and answer shapes. */

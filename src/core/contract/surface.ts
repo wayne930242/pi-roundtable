@@ -1,6 +1,7 @@
 import type { OutboundReply } from "../domain/conversation.ts";
 import type { InterimPosts } from "../domain/interim.ts";
 import type { OwnerPrompts } from "../domain/owner-prompts.ts";
+import type { TurnProgress } from "../domain/progress.ts";
 import { PluginError } from "../errors.ts";
 import type { ChannelKey } from "../sessions.ts";
 import type { Speaker } from "../speakers.ts";
@@ -74,6 +75,12 @@ export interface ChatSurface {
 	 * may edit in place. Absent, or undefined, = only the final reply is posted.
 	 */
 	interim?(channel: ChannelKey): InterimPosts | undefined;
+	/**
+	 * Shows what a running turn writes and which tools it runs, as it goes, such as a live preview
+	 * in a web chat. Called between the turn's start and its reply; a rejection is logged and the
+	 * turn goes on. Absent = the surface shows only the final reply.
+	 */
+	progress?(channel: ChannelKey, event: TurnProgress): Promise<void> | void;
 }
 
 /**
@@ -95,4 +102,6 @@ export interface SurfacePort {
 	prompts(channel: ChannelKey, speaker?: Speaker): OwnerPrompts | undefined;
 	/** The channel's interim posts; undefined when its surface has none. */
 	interim(channel: ChannelKey): InterimPosts | undefined;
+	/** Shows a running turn's progress; a no-op when no surface serves the channel or its surface shows none. */
+	progress(channel: ChannelKey, event: TurnProgress): Promise<void>;
 }

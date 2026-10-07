@@ -42,5 +42,8 @@ export function surfacePort(linked: () => readonly ChatSurface[]): SurfacePort {
 			of(channel)?.unreact?.(channel, messageId, emoji),
 		prompts: (channel, speaker) => of(channel)?.prompts?.(channel, speaker),
 		interim: (channel) => of(channel)?.interim?.(channel),
+		progress: async (channel, event) => {
+			await of(channel)?.progress?.(channel, event);
+		},
 	};
 }

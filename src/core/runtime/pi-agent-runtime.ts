@@ -47,6 +47,7 @@ import { archiveSessions } from "./session-archive.ts";
 import { SessionFactory } from "./session-factory.ts";
 import { type PromptImages, SteerableRun } from "./steerable-run.ts";
 import { lastReply, turnAnswer } from "./turn-answer.ts";
+import { progressReporter } from "./turn-progress.ts";
 import { workerReport } from "./worker-task.ts";
 
 export {
@@ -184,7 +185,12 @@ export class PiAgentRuntime implements AgentRuntime {
 		const toolCalls: string[] = [];
 		// Text written before the final answer is posted as the turn goes; the final reply stays the caller's.
 		const interim = interimPoster(request, this.#options);
+		// The caller's live view: the text as it streams and each tool, never the thinking.
+		const progress = request.progress
+			? progressReporter(request.progress)
+			: undefined;
 		const unsubscribe = session.subscribe((event) => {
+			progress?.observe(event);
 			if (event.type === "tool_execution_start") {
 				toolCalls.push(event.toolName);
 				interim?.toolStart(event.toolName);
@@ -247,6 +253,7 @@ export class PiAgentRuntime implements AgentRuntime {
 			cancelTimeout();
 			slot.unbind();
 			unsubscribe();
+			progress?.close();
 			await interim?.flush();
 			gate.endTurn();
 			const usage = session.getContextUsage();

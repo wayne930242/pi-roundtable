@@ -11,6 +11,7 @@ import type { ServiceKey, Services } from "./contract/services.ts";
 import type { ChatSurface, SurfacePort } from "./contract/surface.ts";
 import type { Migration } from "./db/migrations.ts";
 import type { ToolContribution } from "./define.ts";
+import type { TurnProgress } from "./domain/progress.ts";
 import { PluginError } from "./errors.ts";
 import type { HoldCheck, HoldRule } from "./holds.ts";
 import type { HttpRoute } from "./http/listeners.ts";
@@ -75,6 +76,11 @@ export interface TurnEndEvent extends TurnEvent {
 	result: "ok" | "failed" | "stopped";
 }
 
+/** What a running turn wrote or ran, as a handler hears of it, between its start and its end. */
+export interface TurnProgressEvent extends TurnEvent {
+	progress: TurnProgress;
+}
+
 /** What a plugin may react to; a handler that throws is logged and never stops the others. */
 export interface EventHandlers {
 	/**
@@ -87,6 +93,12 @@ export interface EventHandlers {
 	turnStarted?(turn: TurnEvent): Promise<void> | void;
 	/** A turn that began ended, however it ended. */
 	turnEnded?(turn: TurnEndEvent): Promise<void> | void;
+	/**
+	 * A turn run through `context.turns` wrote text or ran a tool, as it goes: text joined over a
+	 * short interval, and each tool's name with a short preview of its arguments. Turns on a runtime
+	 * without live progress report none.
+	 */
+	turnProgress?(event: TurnProgressEvent): Promise<void> | void;
 	/** The team changed: an agent or group was created, edited, arranged, archived, or started over. */
 	changed?(): Promise<void> | void;
 	/** The shutdown drain ended, before any service stops; `left` is the work it gave up on. */
@@ -97,6 +109,8 @@ export interface EventHandlers {
 export interface EventSink {
 	turnStarted(turn: TurnEvent): void;
 	turnEnded(turn: TurnEndEvent): void;
+	/** Optional, so a sink of your own written before it still fits. */
+	turnProgress?(event: TurnProgressEvent): void;
 	changed(): void;
 }
 

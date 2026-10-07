@@ -2,6 +2,7 @@ import type { AgentRuntime } from "../contract/runtime.ts";
 import type { SurfacePort } from "../contract/surface.ts";
 import type { TurnAttachments } from "../domain/attachment.ts";
 import type { TurnResult } from "../domain/conversation.ts";
+import type { TurnProgress } from "../domain/progress.ts";
 import { messages } from "../i18n/index.ts";
 import type { Logger } from "../log.ts";
 import type { EventSink } from "../plugin.ts";
@@ -84,6 +85,18 @@ export function conversationTurns(
 			events.turnStarted(turn);
 			// A claim that posts its own reply formats its own text, so only the default reply posts as it goes.
 			const interim = input.reply ? undefined : surfaces.interim(channel);
+			// What the runtime reports as it goes reaches the surface and the handlers until the turn ends.
+			let live = true;
+			const progress = (event: TurnProgress) => {
+				if (!live) return;
+				events.turnProgress?.({ ...turn, progress: event });
+				// pi-lens-ignore: no-unknown-parameters — a rejection reason is unknown; it only reaches the logger
+				surfaces
+					.progress(channel, event)
+					.catch((error: unknown) =>
+						logger.warn({ channel, kind, err: error }, "progress not shown"),
+					);
+			};
 			let result: TurnResult;
 			try {
 				result = await settleTurn(
@@ -105,11 +118,13 @@ export function conversationTurns(
 								...(input.steerable ? { steerable: true } : {}),
 								...(input.interactive ? { interactive: true } : {}),
 								...(interim ? { interim } : {}),
+								progress,
 							}),
 						),
 					"conversation turn",
 				);
 			} finally {
+				live = false;
 				hideStop();
 			}
 			events.turnEnded({

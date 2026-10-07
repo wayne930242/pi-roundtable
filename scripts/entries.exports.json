@@ -184,6 +184,8 @@
 			"TurnAttachments",
 			"TurnEndEvent",
 			"TurnEvent",
+			"TurnProgress",
+			"TurnProgressEvent",
 			"TurnRequest",
 			"TurnResult",
 			"TurnSelection",

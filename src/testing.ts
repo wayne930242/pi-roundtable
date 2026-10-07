@@ -44,6 +44,7 @@ import type {
 	RoundtablePlugin,
 	TurnEndEvent,
 	TurnEvent,
+	TurnProgressEvent,
 } from "./core/plugin.ts";
 import {
 	collectContributions,
@@ -346,6 +347,8 @@ export async function testPlugin(
 			events.push({ name: "turnEnded", turn });
 			bus.sink.turnEnded(turn);
 		},
+		// Delivered to the plugin's handlers, not recorded: a turn reports many.
+		turnProgress: (event: TurnProgressEvent) => bus.sink.turnProgress?.(event),
 		changed: () => {
 			events.push({ name: "changed" });
 			bus.sink.changed();

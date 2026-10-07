@@ -101,6 +101,7 @@ export type {
 	OwnerQuestion,
 } from "./core/domain/owner-prompts.ts";
 export type { TurnRequest } from "./core/domain/ports.ts";
+export type { TurnProgress } from "./core/domain/progress.ts";
 export type { DrainOptions } from "./core/drain.ts";
 export {
 	JudgeError,
@@ -177,6 +178,7 @@ export type {
 	ServiceStartOutcome,
 	TurnEndEvent,
 	TurnEvent,
+	TurnProgressEvent,
 } from "./core/plugin.ts";
 export {
 	attachReplyFile,

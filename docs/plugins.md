@@ -643,6 +643,7 @@ export const library = definePlugin({
 | `serviceStarted(event)` | A service's `startInBackground` ended: `event` is `{ plugin, service, outcome }`, and `outcome` is `"ready"` or `"failed"`; the rest of the process runs either way |
 | `turnStarted(turn)` | An agent's turn began, or a turn run through `context.turns` |
 | `turnEnded(turn)` | The turn ended; `turn.result` is `"ok"`, `"failed"`, or `"stopped"` |
+| `turnProgress(event)` | A turn run through `context.turns` wrote text or ran a tool, between its start and its end: `event` is the turn's fields and `progress`, a `TurnProgress` (see the surface's `progress` below); a runtime without live progress reports none |
 | `changed()` | The team changed: an agent or group was created, edited, arranged, archived, or started over |
 | `shutdown(left)` | The shutdown drain ended, before any service stops; `left` lists the work it gave up on |
 
@@ -1885,6 +1886,7 @@ The agent server claims only `discord:` keys, so claims on your surface's channe
 | `react`, `unreact` | Adds or removes the bot's reaction on a message | no marks on queued or steered messages |
 | `prompts(channel, speaker?)` | The owner's way to approve a held action or answer `ask_user` inside a running turn, as `OwnerPrompts`: `confirm` and `ask` | the action is held until the owner's next message |
 | `interim(channel)` | Where a running turn posts the text it writes before its final answer, as `InterimPosts`: `post(text)` sends one message of at most 2000 characters and resolves to an `InterimMessage` whose `edit(text)` changes it in place | only the final reply is posted |
+| `progress(channel, event)` | Shows a turn run through `context.turns` as it goes, such as a live preview in a web chat. `event` is a `TurnProgress`: `{ type: "text", delta }` (the reply's text, joined over 250 ms and always sent before a tool event, never the thinking), `{ type: "tool_start", id, tool, preview? }` (a one-line preview of the arguments, at most 80 characters, never their full text), or `{ type: "tool_end", id, tool, ok }`. The final reply still comes through `sendReply`; a rejection is logged and the turn goes on | only the final reply is shown |
 
 The host starts each surface as `surface:<prefix>` at the contributing plugin's place in the order, before that plugin's own services.
 It stops surfaces in reverse order, like other services.
@@ -2709,6 +2711,8 @@ Import from the entries listed below; source area files are internal.
 | `TransientTask` | `pi-roundtable` | type |
 | `TurnAttachments` | `pi-roundtable` | type |
 | `TurnEndEvent` | `pi-roundtable` | type |
+| `TurnProgress` | `pi-roundtable` | type |
+| `TurnProgressEvent` | `pi-roundtable` | type |
 | `TurnEvent` | `pi-roundtable` | type |
 | `TurnRequest` | `pi-roundtable` | type |
 | `TurnResult` | `pi-roundtable` | type |

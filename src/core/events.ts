@@ -50,6 +50,7 @@ export class EventBus {
 	readonly sink: EventSink = {
 		turnStarted: (turn) => void this.deliver("turnStarted", turn),
 		turnEnded: (turn) => void this.deliver("turnEnded", turn),
+		turnProgress: (event) => void this.deliver("turnProgress", event),
 		changed: () => void this.deliver("changed"),
 	};
 }

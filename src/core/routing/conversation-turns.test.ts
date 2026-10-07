@@ -5,7 +5,7 @@ import type { TurnResult } from "../domain/conversation.ts";
 import type { TurnRequest } from "../domain/ports.ts";
 import { NotLinkedError, PluginError } from "../errors.ts";
 import { silentLogger } from "../log.ts";
-import type { TurnEndEvent, TurnEvent } from "../plugin.ts";
+import type { TurnEndEvent, TurnEvent, TurnProgressEvent } from "../plugin.ts";
 import { useTestLocale } from "../testing/locale.ts";
 import { OWNER_SPEAKER } from "../testing/owner.ts";
 import { conversationTurns } from "./conversation-turns.ts";
@@ -31,6 +31,8 @@ function recordingSurface(log: string[]): SurfacePort {
 		unreact: async () => undefined,
 		prompts: () => undefined,
 		interim: () => undefined,
+		progress: async (channel, event) =>
+			void log.push(`progress ${channel} ${JSON.stringify(event)}`),
 	};
 }
 
@@ -38,6 +40,7 @@ function setup(run: (request: TurnRequest) => Promise<TurnResult>) {
 	const log: string[] = [];
 	const requests: TurnRequest[] = [];
 	const events: (TurnEvent | TurnEndEvent)[] = [];
+	const progress: TurnProgressEvent[] = [];
 	const runtime = {
 		runTurn: async (request: TurnRequest) => {
 			requests.push(request);
@@ -58,12 +61,13 @@ function setup(run: (request: TurnRequest) => Promise<TurnResult>) {
 				log.push(`ended ${turn.result}`);
 				events.push(turn);
 			},
+			turnProgress: (event) => void progress.push(event),
 			changed: () => undefined,
 		},
 		selection: () => ({ tools: ["note_add"], groups: ["mail"] }),
 		logger: silentLogger(),
 	});
-	return { turns, log, requests, events };
+	return { turns, log, requests, events, progress };
 }
 
 const input = {
@@ -89,6 +93,7 @@ describe("conversation turns", () => {
 				selection: { id: "turns", tools: ["note_add"], groups: ["mail"] },
 				text: "hello",
 				speaker: OWNER_SPEAKER,
+				progress: expect.any(Function),
 			},
 		]);
 		expect(log).toEqual([
@@ -100,6 +105,62 @@ describe("conversation turns", () => {
 			"ended ok",
 			`reply fake:room ${JSON.stringify({ chunks: ["Hi there"] })}`,
 			"typing done fake:room",
+		]);
+	});
+
+	test("what the runtime reports as the turn goes reaches the surface and the plugins' handlers, until the turn ends", async () => {
+		let late: TurnRequest["progress"];
+		const { turns, log, progress } = setup(async (request) => {
+			request.progress?.({ type: "text", delta: "Looking" });
+			request.progress?.({
+				type: "tool_start",
+				id: "c1",
+				tool: "probe",
+				preview: "{}",
+			});
+			request.progress?.({
+				type: "tool_end",
+				id: "c1",
+				tool: "probe",
+				ok: true,
+			});
+			late = request.progress;
+			return { ok: true, text: "done" };
+		});
+		await turns.run(input);
+		late?.({ type: "text", delta: "after the end" });
+		expect(log.filter((line) => line.startsWith("progress"))).toEqual([
+			'progress fake:room {"type":"text","delta":"Looking"}',
+			'progress fake:room {"type":"tool_start","id":"c1","tool":"probe","preview":"{}"}',
+			'progress fake:room {"type":"tool_end","id":"c1","tool":"probe","ok":true}',
+		]);
+		expect(log.indexOf("started")).toBeLessThan(
+			log.findIndex((line) => line.startsWith("progress")),
+		);
+		expect(progress).toEqual([
+			{
+				kind: "study",
+				channel: "fake:room",
+				speaker: OWNER_SPEAKER,
+				progress: { type: "text", delta: "Looking" },
+			},
+			{
+				kind: "study",
+				channel: "fake:room",
+				speaker: OWNER_SPEAKER,
+				progress: {
+					type: "tool_start",
+					id: "c1",
+					tool: "probe",
+					preview: "{}",
+				},
+			},
+			{
+				kind: "study",
+				channel: "fake:room",
+				speaker: OWNER_SPEAKER,
+				progress: { type: "tool_end", id: "c1", tool: "probe", ok: true },
+			},
 		]);
 	});
 
@@ -115,6 +176,7 @@ describe("conversation turns", () => {
 			confirmed: true,
 		});
 		expect(requests[0]).toEqual({
+			progress: expect.any(Function),
 			channel: "fake:room",
 			kind: "study",
 			selection: { id: "mine", tools: [], groups: [] },
