@@ -77,12 +77,19 @@ export interface PrincipalStore {
 	): Promise<IdentityLink>;
 	/** Whether there was a link to remove. */
 	unlink(provider: string, subject: string): Promise<boolean>;
-	identity(provider: string, subject: string): Promise<IdentityLink | undefined>;
+	identity(
+		provider: string,
+		subject: string,
+	): Promise<IdentityLink | undefined>;
 	identitiesOf(principalId: string): Promise<IdentityLink[]>;
 	/** Grants a lasting role. A CLI grant is kept as the CLI's even when the configuration grants the same role. */
 	grant(principalId: string, role: Tier, source: RoleSource): Promise<void>;
 	/** Revokes the role, or only the grant from `source`; whether there was one to revoke. */
-	revoke(principalId: string, role: Tier, source?: RoleSource): Promise<boolean>;
+	revoke(
+		principalId: string,
+		role: Tier,
+		source?: RoleSource,
+	): Promise<boolean>;
 	rolesOf(principalId: string): Promise<RoleGrant[]>;
 	disable(id: string): Promise<void>;
 	enable(id: string): Promise<void>;

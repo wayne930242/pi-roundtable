@@ -21,9 +21,9 @@ import {
 import { conversationsPlugin } from "./conversations/conversations-plugin.ts";
 import { ConfigError } from "./domain/errors.ts";
 import { JudgeError } from "./errors.ts";
-import { identityPlugin } from "./identity/identity-plugin.ts";
 import type { RoundtableOptions } from "./host.ts";
 import type { ListenerConfig } from "./http/listeners.ts";
+import { identityPlugin } from "./identity/identity-plugin.ts";
 import { type JudgeModel, piJudgeModel } from "./judging/model-judge.ts";
 import { createLogger, type LogEntry, type Logger } from "./log.ts";
 import { formatModelRef, type ModelRef } from "./models.ts";

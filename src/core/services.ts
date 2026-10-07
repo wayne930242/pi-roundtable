@@ -6,8 +6,8 @@ import type { AgentRuntime } from "./contract/runtime.ts";
 import { type ServiceKey, serviceKey } from "./contract/services.ts";
 import type { ConversationRegistry } from "./conversations/conversation-registry.ts";
 import type { PendingConfirmation } from "./domain/conversation.ts";
-import type { IdentityService } from "./identity/identity-service.ts";
 import type { HttpRoute } from "./http/listeners.ts";
+import type { IdentityService } from "./identity/identity-service.ts";
 import type { ThinkingSetting } from "./models.ts";
 import type {
 	DelegationJob,

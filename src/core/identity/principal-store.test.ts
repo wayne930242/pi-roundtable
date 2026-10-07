@@ -66,27 +66,53 @@ describeDb("PgPrincipalStore", () => {
 	test("an identity links to one principal; linking it to another is refused, unlinking frees it", async () => {
 		const a = await store.create({ displayName: "A" });
 		const b = await store.create({ displayName: "B" });
-		await store.link(a.id, { provider: "discord", subject: "966666600000000031" }, "cli");
+		await store.link(
+			a.id,
+			{ provider: "discord", subject: "966666600000000031" },
+			"cli",
+		);
 		// Linking again to the same principal is a no-op.
-		await store.link(a.id, { provider: "discord", subject: "966666600000000031" }, "cli");
+		await store.link(
+			a.id,
+			{ provider: "discord", subject: "966666600000000031" },
+			"cli",
+		);
+		expect(await store.identity("discord", "966666600000000031")).toMatchObject(
+			{ principalId: a.id, source: "cli" },
+		);
 		expect(
-			await store.identity("discord", "966666600000000031"),
-		).toMatchObject({ principalId: a.id, source: "cli" });
-		expect(
-			store.link(b.id, { provider: "discord", subject: "966666600000000031" }, "cli"),
+			store.link(
+				b.id,
+				{ provider: "discord", subject: "966666600000000031" },
+				"cli",
+			),
 		).rejects.toThrow(IdentityError);
-		await store.link(a.id, { provider: "token", subject: "remote-mcp" }, "config");
+		await store.link(
+			a.id,
+			{ provider: "token", subject: "remote-mcp" },
+			"config",
+		);
 		expect(
-			(await store.identitiesOf(a.id)).map((link) => `${link.provider}:${link.subject}`),
+			(await store.identitiesOf(a.id)).map(
+				(link) => `${link.provider}:${link.subject}`,
+			),
 		).toEqual(["discord:966666600000000031", "token:remote-mcp"]);
 		expect(await store.unlink("discord", "966666600000000031")).toBe(true);
 		expect(await store.unlink("discord", "966666600000000031")).toBe(false);
-		await store.link(b.id, { provider: "discord", subject: "966666600000000031" }, "cli");
+		await store.link(
+			b.id,
+			{ provider: "discord", subject: "966666600000000031" },
+			"cli",
+		);
 		expect(
 			(await store.identity("discord", "966666600000000031"))?.principalId,
 		).toBe(b.id);
 		expect(
-			store.link("nobody", { provider: "discord", subject: "966666600000000032" }, "cli"),
+			store.link(
+				"nobody",
+				{ provider: "discord", subject: "966666600000000032" },
+				"cli",
+			),
 		).rejects.toThrow(IdentityError);
 	});
 
@@ -96,7 +122,9 @@ describeDb("PgPrincipalStore", () => {
 		await store.grant(p.id, "admin", "config");
 		await store.grant(p.id, "admin", "cli");
 		expect(
-			(await store.rolesOf(p.id)).map((grant) => `${grant.role}/${grant.source}`),
+			(await store.rolesOf(p.id)).map(
+				(grant) => `${grant.role}/${grant.source}`,
+			),
 		).toEqual(["admin/cli", "owner/config"]);
 		await store.revoke(p.id, "owner", "config");
 		await store.revoke(p.id, "admin", "config");

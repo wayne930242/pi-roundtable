@@ -34,7 +34,10 @@ export async function scratchDatabase(
 	const sql = new SQL(url.href, { max: 4 });
 	if (fixture)
 		await sql.unsafe(
-			readFileSync(join(import.meta.dir, "fixtures", `db-${fixture}.sql`), "utf8"),
+			readFileSync(
+				join(import.meta.dir, "fixtures", `db-${fixture}.sql`),
+				"utf8",
+			),
 		);
 	return {
 		url: url.href,
