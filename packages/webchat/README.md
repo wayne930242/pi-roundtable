@@ -121,6 +121,7 @@ The token is never read from a URL.
 
 - **A browser** asks for a one-time ticket with `POST <path>/tickets` and `Authorization: Bearer <token>`, then opens `<path>/socket` offering two subprotocols: `roundtable.webchat.v1` and `ticket.<ticket>`.
   A ticket is spent by the first upgrade, lasts 30 seconds, and never outlives its token.
+  A person holds at most `connectionsPerPrincipal` unspent tickets; asking for one more drops their own oldest, never anyone else's.
 - **Another client**, such as a service, sends `Authorization: Bearer <token>` on the upgrade and offers `roundtable.webchat.v1`.
 
 The server echoes `roundtable.webchat.v1`.

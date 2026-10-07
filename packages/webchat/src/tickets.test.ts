@@ -39,3 +39,19 @@ test("holds at most `max` tickets, dropping the oldest first", () => {
 	expect(book.redeem(second.ticket)).toEqual(ada);
 	expect(book.redeem(third.ticket)).toEqual(ada);
 });
+
+test("one person holds at most `perPrincipal` tickets; more drop only their own oldest", () => {
+	const book = new TicketBook({ ttlMs: 30_000, perPrincipal: 2 });
+	const victim = book.issue(ada);
+	const eve = { ...ada, id: "oidc:op:eve", name: "Eve" };
+	const issued = Array.from({ length: 10_000 }, () => book.issue(eve));
+	expect(book.redeem(victim.ticket)).toEqual(ada);
+	expect(book.redeem(issued[0]?.ticket ?? "")).toBeUndefined();
+	expect(book.redeem(issued.at(-2)?.ticket ?? "")).toEqual(eve);
+	expect(book.redeem(issued.at(-1)?.ticket ?? "")).toEqual(eve);
+	// A spent ticket frees its place.
+	const again = book.issue(eve);
+	const more = book.issue(eve);
+	expect(book.redeem(again.ticket)).toEqual(eve);
+	expect(book.redeem(more.ticket)).toEqual(eve);
+});

@@ -140,7 +140,11 @@ export function webChat(options: WebChatOptions): RoundtablePlugin {
 				turns: () => context.turns,
 				runtime: () => context.services.get(RUNTIME),
 			});
-			const tickets = new TicketBook({ ttlMs: limits.ticketTtlMs });
+			// A person needs no more tickets waiting than the sockets they may open.
+			const tickets = new TicketBook({
+				ttlMs: limits.ticketTtlMs,
+				perPrincipal: limits.connectionsPerPrincipal,
+			});
 			const rest = restHandler({
 				chat,
 				tickets,
