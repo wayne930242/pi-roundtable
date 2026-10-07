@@ -162,7 +162,7 @@ export default {
 
 | Command | What it does |
 | --- | --- |
-| `roundtable init [dir]` | Creates a project in `dir` (default: the current directory) |
+| `roundtable init [dir] [--adapter discord\|web]` | Creates a project in `dir` (default: the current directory) that talks through Discord (the default) or through pi-roundtable-webchat |
 | `roundtable doctor [--reachable]` | Checks the setup and says how to fix what is wrong |
 | `roundtable start` | Runs the checks that need no network, then the bot |
 | `roundtable add plugin <name>` | Adds `plugins/<name>.ts` and its test, and lists it in the config |

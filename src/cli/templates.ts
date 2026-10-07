@@ -19,6 +19,23 @@ const OFFICIAL_DIR = "official";
 /** The directory of the plugin `add package` writes around a Pi package. */
 const PACKAGE_DIR = "package";
 
+/** The directory of each chat network's files that replace or add to the skeleton's, one directory per adapter. */
+const ADAPTERS_DIR = "adapters";
+
+/** The chat networks `init` can set a project up for; Discord's files are the skeleton itself. */
+export const ADAPTERS = ["discord", "web"] as const;
+export type Adapter = (typeof ADAPTERS)[number];
+
+/** Whether `name` is an adapter `init` knows. */
+export const isAdapter = (name: string): name is Adapter =>
+	(ADAPTERS as readonly string[]).includes(name);
+
+/** Skeleton files a project for the adapter leaves out: a web project has no agents and no shared persona. */
+const LEFT_OUT: Readonly<Record<Adapter, readonly string[]>> = {
+	discord: [],
+	web: ["agents.ts", "persona/shared.md"],
+};
+
 /** The plugins the package ships ready-made: `add plugin <name>` copies these instead of the `hello` template, so the names are reserved. */
 export const OFFICIAL_PLUGINS = [
 	"codex-images",
@@ -143,31 +160,46 @@ export function renderPackagePlugin(
 	}));
 }
 
-/** Every file of a new project: the skeleton and the `hello` plugin, paths relative to the project. */
+/**
+ * Every file of a new project for `adapter` (default Discord): the skeleton, without the files the
+ * adapter leaves out and with its own files in place of the skeleton's, and the `hello` plugin;
+ * paths relative to the project.
+ */
 export function renderProject(
 	substitutions: Substitutions,
 	dir = TEMPLATES_DIR,
+	adapter: Adapter = "discord",
 ): Rendered[] {
 	if (!existsSync(dir)) throw new Error(`templates are missing: ${dir}`);
 	const values = {
 		PROJECT: substitutions.project,
 		VERSION: substitutions.version,
 	};
+	const render = (base: string, path: string): Rendered => ({
+		path: targetOf(path),
+		content: fill(readFileSync(join(base, path), "utf8"), values),
+	});
+	const overlayDir = join(dir, ADAPTERS_DIR, adapter);
+	const overlay = existsSync(overlayDir)
+		? filesUnder(overlayDir).map((file) =>
+				render(overlayDir, relative(overlayDir, file)),
+			)
+		: [];
+	const replaced = new Set([
+		...LEFT_OUT[adapter],
+		...overlay.map((file) => file.path),
+	]);
 	const skeleton = filesUnder(dir)
 		.map((file) => relative(dir, file))
-		.flatMap((path) =>
-			[PLUGIN_DIR, OFFICIAL_DIR, PACKAGE_DIR].some((sub) =>
-				path.startsWith(`${sub}/`),
-			)
-				? []
-				: [
-						{
-							path: targetOf(path),
-							content: fill(readFileSync(join(dir, path), "utf8"), values),
-						},
-					],
-		);
-	return [...skeleton, ...renderPlugin(pluginNames("hello"), dir)];
+		.filter(
+			(path) =>
+				![PLUGIN_DIR, OFFICIAL_DIR, PACKAGE_DIR, ADAPTERS_DIR].some((sub) =>
+					path.startsWith(`${sub}/`),
+				),
+		)
+		.map((path) => render(dir, path))
+		.filter((file) => !replaced.has(file.path));
+	return [...skeleton, ...overlay, ...renderPlugin(pluginNames("hello"), dir)];
 }
 
 /** Writes rendered files under `root`, creating directories; the caller has checked that none exists. */

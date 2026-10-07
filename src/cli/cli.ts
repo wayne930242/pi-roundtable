@@ -14,7 +14,7 @@ import { loadConfigFile, type Ports } from "./project.ts";
 import { formatOutcomes } from "./report.ts";
 import { assemble, providerLogin } from "./runtime.ts";
 import { start } from "./start.ts";
-import { OFFICIAL_PLUGINS } from "./templates.ts";
+import { ADAPTERS, isAdapter, OFFICIAL_PLUGINS } from "./templates.ts";
 
 /** What the command line reads from its surroundings; tests replace every part. */
 export interface CliEnvironment {
@@ -32,7 +32,9 @@ export interface CliEnvironment {
 
 const USAGE = `roundtable: a Discord agent server on Pi
 
-  roundtable init [dir]         create a project (default: the current directory)
+  roundtable init [dir] [--adapter discord|web]
+                                create a project (default: the current directory) that talks
+                                through Discord (the default) or through the web chat
   roundtable doctor [--reachable]  check the setup and say how to fix what is wrong
   roundtable start              run the checks that need no network, then the bot
   roundtable add plugin <name>  add plugins/<name>.ts and its test, and list it in the config
@@ -108,13 +110,22 @@ export async function runCli(
 		return 0;
 	}
 	if (command === "init") {
-		const [dir, ...extra] = rest;
-		if (extra.length > 0) return usage(io, "init takes at most one directory");
+		const at = rest.indexOf("--adapter");
+		const adapter = at === -1 ? "discord" : rest[at + 1];
+		if (adapter === undefined || !isAdapter(adapter))
+			return usage(
+				io,
+				`--adapter takes one of ${ADAPTERS.join(", ")}, not ${JSON.stringify(adapter ?? "")}`,
+			);
+		const [dir, ...extra] = at === -1 ? rest : rest.toSpliced(at, 2);
+		if (extra.length > 0 || dir?.startsWith("-"))
+			return usage(io, "init takes at most one directory");
 		const report = init({
 			cwd: io.cwd,
 			...(dir === undefined ? {} : { dir }),
 			bun: io.bun(),
 			version: io.version(),
+			adapter,
 		});
 		if (!report.ok) {
 			for (const line of report.problems) io.err(line);

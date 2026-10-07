@@ -155,7 +155,7 @@ export default {
 
 | 指令 | 作用 |
 | --- | --- |
-| `roundtable init [dir]` | 在 `dir`（預設為目前目錄）建立專案 |
+| `roundtable init [dir] [--adapter discord\|web]` | 在 `dir`（預設為目前目錄）建立專案，透過 Discord（預設）或 pi-roundtable-webchat 對話 |
 | `roundtable doctor [--reachable]` | 檢查設定，並說明如何修正有問題的地方 |
 | `roundtable start` | 先執行不需要網路的檢查，再啟動 bot |
 | `roundtable add plugin <name>` | 新增 `plugins/<name>.ts` 和它的測試，並列進設定 |

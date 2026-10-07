@@ -1,7 +1,12 @@
 import { existsSync } from "node:fs";
 import { basename, join, relative, resolve } from "node:path";
 import { type BunFacts, checkBun } from "./checks/bun.ts";
-import { type Rendered, renderProject, writeRendered } from "./templates.ts";
+import {
+	type Adapter,
+	type Rendered,
+	renderProject,
+	writeRendered,
+} from "./templates.ts";
 
 export interface InitInputs {
 	cwd: string;
@@ -12,6 +17,8 @@ export interface InitInputs {
 	version: string;
 	/** Where the templates are; default the package's own. */
 	templates?: string;
+	/** The chat network the project talks through; default Discord. */
+	adapter?: Adapter;
 }
 
 export interface InitReport {
@@ -61,6 +68,7 @@ export function init(inputs: InitInputs): InitReport {
 	const files: Rendered[] = renderProject(
 		{ project: projectName(root), version: inputs.version },
 		inputs.templates,
+		inputs.adapter,
 	);
 	const existing = files
 		.map((file) => file.path)
