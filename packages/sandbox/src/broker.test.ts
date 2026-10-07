@@ -406,3 +406,47 @@ test("the real Unix listener accepts worker transport and keeps socket private",
 		rmSync(dir, { recursive: true, force: true });
 	}
 });
+
+test("resolves the model credential per call from the bound channel and speaker", async () => {
+	const scopes: unknown[] = [];
+	const tokens = new Map([
+		["fake:alpha", "alpha-key"],
+		["fake:beta", "beta-key"],
+	]);
+	let calls = 0;
+	const seen: (string | null)[] = [];
+	const broker = (channel: "fake:alpha" | "fake:beta", speaker: string) =>
+		new SandboxBroker(
+			options({
+				context: {
+					...context,
+					channel,
+					speaker: { id: speaker, name: speaker },
+				},
+				apiKey: (scope) => {
+					scopes.push(scope);
+					calls += 1;
+					return `${tokens.get(scope.channel)}-${calls}`;
+				},
+				maxCalls: 4,
+				fetchImpl: async (_url, init) => {
+					seen.push(new Headers(init?.headers).get("authorization"));
+					return Response.json({ choices: [] });
+				},
+			}),
+		);
+	const alpha = broker("fake:alpha", "guest-a");
+	const beta = broker("fake:beta", "guest-b");
+	for (const target of [alpha, beta, alpha])
+		expect((await target.handle(request())).status).toBe(200);
+	expect(seen).toEqual([
+		"Bearer alpha-key-1",
+		"Bearer beta-key-2",
+		"Bearer alpha-key-3",
+	]);
+	expect(scopes).toEqual([
+		{ channel: "fake:alpha", speaker: { id: "guest-a", name: "guest-a" } },
+		{ channel: "fake:beta", speaker: { id: "guest-b", name: "guest-b" } },
+		{ channel: "fake:alpha", speaker: { id: "guest-a", name: "guest-a" } },
+	]);
+});

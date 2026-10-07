@@ -870,3 +870,39 @@ test("an error event in the middle of a 200 stream is logged, and the worker sti
 	);
 	release();
 });
+test("subscription token is resolved per model call from the bound channel and speaker", async () => {
+	const scopes: unknown[] = [];
+	const seen: (string | null)[] = [];
+	const broker = new PiSandboxBroker({
+		model: "host-model",
+		oauthToken: (scope) => {
+			scopes.push(scope);
+			return scope.channel === "discord:alpha" ? "alpha-secret" : "beta-secret";
+		},
+		fetchImpl: async (_url, init) => {
+			seen.push(new Headers(init.headers).get("authorization"));
+			return Response.json({ content: "ok" });
+		},
+	});
+	for (const [channel, id] of [
+		["discord:alpha", "guest-a"],
+		["discord:beta", "guest-b"],
+	] as const) {
+		const release = broker.bind({
+			channel,
+			profile: "profile",
+			speaker: { id, name: id },
+			thinking: "high",
+			signal: new AbortController().signal,
+		});
+		expect(
+			(await broker.handle(post("/anthropic/v1/messages", message))).status,
+		).toBe(200);
+		release();
+	}
+	expect(seen).toEqual(["Bearer alpha-secret", "Bearer beta-secret"]);
+	expect(scopes).toEqual([
+		{ channel: "discord:alpha", speaker: { id: "guest-a", name: "guest-a" } },
+		{ channel: "discord:beta", speaker: { id: "guest-b", name: "guest-b" } },
+	]);
+});

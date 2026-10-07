@@ -1,6 +1,10 @@
 import type { ChannelKey, Logger } from "pi-roundtable";
 import { HARD_COMPACT_TOKENS, scrubDiagnostic } from "pi-roundtable/kit";
-import { type BrokerListener, listenBroker } from "./broker.ts";
+import {
+	type BrokerListener,
+	listenBroker,
+	type SandboxCredentialScope,
+} from "./broker.ts";
 import { piModelInput } from "./pi-model-input.ts";
 import {
 	PI_MEDIA_LIMITS,
@@ -62,8 +66,8 @@ export interface PiCompactor {
 }
 export interface PiBrokerOptions {
 	model: string;
-	/** Host-only, read at each call. Never sent to the worker. */
-	oauthToken: () => string | Promise<string>;
+	/** Host-only, read before each model call for its channel and speaker; a zero-argument function still works. Never sent to the worker. */
+	oauthToken: (scope: SandboxCredentialScope) => string | Promise<string>;
 	tools?: {
 		names: readonly string[];
 		call(
@@ -640,7 +644,11 @@ export class PiSandboxBroker {
 					);
 				}
 				target = `${this.#options.upstream ?? "https://api.anthropic.com"}${url.pathname.slice("/anthropic".length)}${url.search}`;
-				secret = await this.#options.oauthToken();
+				const { channel, speaker } = turn.context;
+				secret = await this.#options.oauthToken({
+					channel,
+					speaker: { id: speaker.id, name: speaker.name },
+				});
 				for (const name of HEADERS) {
 					const value = request.headers.get(name);
 					if (value && value.length <= 4096) headers.set(name, value);

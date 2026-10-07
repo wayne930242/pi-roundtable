@@ -15,6 +15,7 @@ export interface SandboxOptions
 	initialChannels?: readonly ChannelKey[];
 	/** Host login provider used for each model call, unless apiKey is supplied. */
 	provider?: string;
+	/** Read before each model call with its channel and speaker; never falls back to the host login. */
 	apiKey?: SandboxRuntimeOptions["apiKey"];
 }
 export interface SandboxService {

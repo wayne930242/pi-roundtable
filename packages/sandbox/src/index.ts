@@ -19,6 +19,7 @@ export {
 	type HostToolContext,
 	type McpServer,
 	SandboxBroker,
+	type SandboxCredentialScope,
 } from "./broker.ts";
 export { SandboxChannelStore } from "./channel-store.ts";
 export {

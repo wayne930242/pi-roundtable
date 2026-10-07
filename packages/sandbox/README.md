@@ -59,6 +59,8 @@ export const guestPlugins = [sandbox({
 Choose a model available to your endpoint and sign the host into its provider.
 By default, `context.apiKey(provider)` is read on every request, allowing login refresh without copying credentials into the worker.
 Alternatively supply `apiKey: () => process.env.MODEL_API_KEY` when the endpoint uses a separate key.
+`apiKey` receives `{ channel, speaker }` (`SandboxCredentialScope`) before every model call, so a host can pick a different key per channel or speaker, for example `apiKey: ({ channel }) => keys.get(channel)`; a zero-argument function keeps working.
+When the hook has no key it should return `undefined` (the call fails closed) rather than fall back to the host's own login.
 Keep secrets in the service's protected environment, not configuration source or the worker image.
 All directories must be dedicated to this package and owned by the service account.
 Existing roots and the state directory must have no group/other permissions; insecure permissions are refused at startup.
@@ -216,7 +218,7 @@ Other model transports are not implicitly proxied by this broker.
 | --- | --- |
 | `partyDir`, `image` | Dedicated private, host-owned directory and operator-built Pi image. |
 | `profiles` | Host allow-list mapping profile names to fixed Anthropic `model` and optional MCP server names. |
-| `oauthToken()` | Host-only credential getter called for each model request; supports refresh without container credentials. |
+| `oauthToken({ channel, speaker })` | Host-only credential getter called before each model request with the bound turn's channel and speaker, so a host can use a different subscription per channel or speaker; supports refresh without container credentials. A zero-argument getter still works. |
 | `memory.promptBlock(channel, id, name)` | Current admitted speaker's context, at most 100,000 characters; database implementations remain host adapters. |
 | `effort.judge(text, { level })` | Host-selected `low`, `medium`, `high`, or `xhigh`; the previous channel choice is retained for the next judgment. |
 | `tools.names`, `tools.call` | Explicit host tool allow-list and callback receiving fixed channel/profile/speaker plus cancellation signal. |

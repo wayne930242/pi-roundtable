@@ -21,6 +21,11 @@ export interface HostToolContext {
 	speaker: { id: string; name: string };
 	signal: AbortSignal;
 }
+/** Who a model call is made for; a credential hook can pick a token per channel or speaker. */
+export interface SandboxCredentialScope {
+	channel: ChannelKey;
+	speaker: { id: string; name: string };
+}
 export interface HostTool extends ToolSpec {
 	run(
 		input: Record<string, unknown>,
@@ -39,7 +44,10 @@ export interface BrokerOptions {
 	model: string;
 	/** Fixed complete URL, not a guest-selected base URL. */
 	modelUrl: string;
-	apiKey: () => Promise<string | undefined> | string | undefined;
+	/** Host-only, read before each model call; a zero-argument function still works. */
+	apiKey: (
+		scope: SandboxCredentialScope,
+	) => Promise<string | undefined> | string | undefined;
 	tools?: readonly HostTool[];
 	mcp?: readonly McpServer[];
 	/** Allow cleartext endpoints only for local testing. */
@@ -219,7 +227,11 @@ export class SandboxBroker {
 				return new Response("text/function model payload required", {
 					status: 400,
 				});
-			const key = await this.#options.apiKey();
+			const { channel, speaker } = this.#options.context;
+			const key = await this.#options.apiKey({
+				channel,
+				speaker: { id: speaker.id, name: speaker.name },
+			});
 			if (!key) throw new Error("model credential unavailable");
 			return await this.#forward(
 				this.#options.modelUrl,

@@ -24,9 +24,13 @@ import {
 	type PiSandboxRuntimeOptions,
 } from "./pi-runtime.ts";
 
-function fixture(cancel = false) {
+function fixture(
+	cancel = false,
+	overrides: Partial<PiSandboxRuntimeOptions> = {},
+) {
 	const root = realpathSync(mkdtempSync("/tmp/pi-sbx-"));
 	const workerTurns: unknown[] = [];
+	const modelStatuses: number[] = [];
 	const removed: string[] = [];
 	let tasks: Promise<void>[] = [];
 	let signal: AbortController | undefined;
@@ -60,6 +64,18 @@ function fixture(cancel = false) {
 						};
 						workerTurns.push(turn);
 						if (cancel) return;
+						if (overrides.fetchImpl) {
+							const model = await fetch("http://broker/anthropic/v1/messages", {
+								unix,
+								method: "POST",
+								headers: { authorization: "Bearer guest-token" },
+								body: JSON.stringify({
+									messages: [{ role: "user", content: "Hello" }],
+								}),
+							});
+							modelStatuses.push(model.status);
+							await model.body?.cancel();
+						}
 						const sent = await fetch("http://broker/worker/result", {
 							unix,
 							method: "POST",
@@ -88,6 +104,7 @@ function fixture(cancel = false) {
 		effort: { judge: async (_text, previous) => previous.level ?? "high" },
 		logger: silentLogger(),
 		turnTimeoutMs: 1000,
+		...overrides,
 	};
 	const runtime = new PiSandboxRuntime(options);
 	return {
@@ -95,6 +112,7 @@ function fixture(cancel = false) {
 		runtime,
 		options,
 		workerTurns,
+		modelStatuses,
 		removed,
 		close: async () => {
 			signal?.abort();
@@ -253,4 +271,40 @@ test("Pi image isolates mounts, network and credentials, retaining only explicit
 	});
 	expect(body.Env.join("\n")).not.toContain("host-secret");
 	expect(body.Env).toContain("CLAUDE_CODE_OAUTH_TOKEN=sandbox-dummy-token");
+});
+test("each turn's model call resolves the subscription token for its own speaker", async () => {
+	const scopes: unknown[] = [];
+	const seen: (string | null)[] = [];
+	const f = fixture(false, {
+		oauthToken: (scope) => {
+			scopes.push(scope);
+			return `token-${scope.speaker.id}`;
+		},
+		fetchImpl: async (_url, init) => {
+			seen.push(new Headers(init.headers).get("authorization"));
+			return Response.json({ content: "ok" });
+		},
+	});
+	try {
+		for (const id of ["a", "b"])
+			expect(
+				await f.runtime.runTurn({
+					channel: "discord:123",
+					profile: "profile",
+					turnId: id,
+					author: { id, name: `Guest ${id}` },
+					text: "hello",
+					images: [],
+				}),
+			).toMatchObject({ ok: true });
+		expect(f.modelStatuses).toEqual([200, 200]);
+		expect(seen).toEqual(["Bearer token-a", "Bearer token-b"]);
+		expect(scopes).toEqual([
+			{ channel: "discord:123", speaker: { id: "a", name: "Guest a" } },
+			{ channel: "discord:123", speaker: { id: "b", name: "Guest b" } },
+		]);
+		expect(JSON.stringify(f.workerTurns)).not.toContain("token-");
+	} finally {
+		await f.close();
+	}
 });
