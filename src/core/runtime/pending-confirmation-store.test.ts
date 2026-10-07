@@ -50,6 +50,14 @@ describeDb("PendingConfirmationStore", () => {
 		expect(await store.load("discord:1")).toBeUndefined();
 	});
 
+	test("the speaker whose turn held the actions comes back with them", async () => {
+		await store.save("discord:4", { ...held, speakerId: "7" });
+		expect(await store.load("discord:4")).toEqual({ ...held, speakerId: "7" });
+		await store.save("discord:4", held);
+		expect(await store.load("discord:4")).toEqual(held);
+		await store.save("discord:4", undefined);
+	});
+
 	test("the selection id is stored as given, in the held_actions table", async () => {
 		await store.save("discord:3", { ...held, selectionId: "tools:web" });
 		const admin = new SQL(testDatabaseUrl);

@@ -113,7 +113,10 @@ describe("the runtime plugin", () => {
 		const plugin = runtimePlugin(options());
 		expect(plugin.name).toBe(RUNTIME_PLUGIN);
 		expect(RUNTIME_PLUGIN).toBe("runtime");
-		expect(plugin.migrations?.map((m) => m.name)).toEqual(["held-actions"]);
+		expect(plugin.migrations?.map((m) => m.name)).toEqual([
+			"held-actions",
+			"held-actions-speaker",
+		]);
 		expect(plugin.provides?.map((key) => key.id)).toEqual([
 			"roundtable.runtime",
 		]);

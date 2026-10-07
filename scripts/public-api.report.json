@@ -547,7 +547,7 @@
 		"src/core/domain/attachment.d.ts#TurnAttachments": "interface TurnAttachments {\n    readonly files: readonly StoredAttachment[];\n    readonly images: readonly ModelImage[];\n    readonly failures: readonly AttachmentFailure[];\n}",
 		"src/core/domain/conversation.d.ts#HeldCall": "interface HeldCall {\n    tool: string;\n    \n    input: string;\n    \n    action: string;\n    \n    minTier?: Tier;\n}",
 		"src/core/domain/conversation.d.ts#OutboundReply": "interface OutboundReply {\n    \n    thinking?: string;\n    \n    card?: Uint8Array;\n    \n    chunks: string[];\n    \n    files?: ReplyFile[];\n}",
-		"src/core/domain/conversation.d.ts#PendingConfirmation": "interface PendingConfirmation {\n    \n    selectionId: string;\n    heldAt: Date;\n    calls: HeldCall[];\n}",
+		"src/core/domain/conversation.d.ts#PendingConfirmation": "interface PendingConfirmation {\n    \n    selectionId: string;\n    heldAt: Date;\n    calls: HeldCall[];\n    \n    speakerId?: string;\n}",
 		"src/core/domain/conversation.d.ts#ReplyFile": "interface ReplyFile {\n    name: string;\n    data: Uint8Array;\n}",
 		"src/core/domain/conversation.d.ts#TranscriptEntry": "interface TranscriptEntry {\n    role: \"user\" | \"assistant\";\n    text: string;\n}",
 		"src/core/domain/conversation.d.ts#TurnResult": "type TurnResult = {\n    ok: true;\n    text: string;\n    thinking?: string;\n    files?: ReplyFile[];\n} | {\n    ok: false;\n    error: Error;\n    stopped?: true;\n};",

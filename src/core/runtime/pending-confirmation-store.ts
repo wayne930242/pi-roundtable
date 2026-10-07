@@ -10,6 +10,7 @@ interface Row {
 	selection_id: string;
 	held_at: Date;
 	calls: string;
+	speaker_id: string | null;
 }
 
 /** Each owner channel's held actions, in the database, so a restart keeps them. */
@@ -34,6 +35,22 @@ export class PendingConfirmationStore {
 		},
 	};
 
+	/** Who spoke the turn that held the actions, so only they and the owner approve them. */
+	static readonly speakerMigration: Migration = {
+		name: "held-actions-speaker",
+		up: async (sql) => {
+			await sql`ALTER TABLE held_actions ADD COLUMN IF NOT EXISTS speaker_id text`;
+		},
+	};
+
+	/** The store's migrations in order. */
+	static migrations(): Migration[] {
+		return [
+			PendingConfirmationStore.migration,
+			PendingConfirmationStore.speakerMigration,
+		];
+	}
+
 	/** The store over the host's migrated pool. */
 	static async attach(sql: SQL): Promise<PendingConfirmationStore> {
 		return new PendingConfirmationStore(sql);
@@ -41,7 +58,7 @@ export class PendingConfirmationStore {
 
 	async load(channel: ChannelKey): Promise<PendingConfirmation | undefined> {
 		const rows: Row[] = await this.#sql`
-			SELECT selection_id, held_at, calls FROM held_actions
+			SELECT selection_id, held_at, calls, speaker_id FROM held_actions
 			WHERE channel_key = ${channel}`;
 		const row = rows[0];
 		return row
@@ -50,6 +67,7 @@ export class PendingConfirmationStore {
 					heldAt: row.held_at,
 					// pi-lens-ignore: unchecked-throwing-call — this store wrote the JSON; a corrupt row should fail loudly
 					calls: JSON.parse(row.calls) as HeldCall[],
+					...(row.speaker_id === null ? {} : { speakerId: row.speaker_id }),
 				}
 			: undefined;
 	}
@@ -64,10 +82,11 @@ export class PendingConfirmationStore {
 			return;
 		}
 		await this.#sql`
-			INSERT INTO held_actions (channel_key, selection_id, held_at, calls)
+			INSERT INTO held_actions (channel_key, selection_id, held_at, calls, speaker_id)
 			VALUES (${channel}, ${pending.selectionId}, ${pending.heldAt},
-				${JSON.stringify(pending.calls)})
+				${JSON.stringify(pending.calls)}, ${pending.speakerId ?? null})
 			ON CONFLICT (channel_key) DO UPDATE SET selection_id = EXCLUDED.selection_id,
-				held_at = EXCLUDED.held_at, calls = EXCLUDED.calls`;
+				held_at = EXCLUDED.held_at, calls = EXCLUDED.calls,
+				speaker_id = EXCLUDED.speaker_id`;
 	}
 }

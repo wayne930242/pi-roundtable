@@ -513,7 +513,7 @@ export const cleanup = definePlugin({
 
 A rule whose verdict depends on the input, such as one that holds only a `delete` action, can also answer `mayHold(tool)`: whether it may hold some call of that tool.
 It is asked when the input is not known yet, as for a [precheck script](#precheck-scripts-prechecks-the-agent-writes)'s call whose arguments are computed when it runs; a rule without it is judged by `describe` with an empty input.
-A rule whose held call stands for others can answer `approvalTier(tool, input, context)`: the lowest tier that may approve it when higher than the tool's own. The held call keeps it as `minTier`, and both its card and a confirming message require it. A card is answered by the speaker whose turn held the call, when their tier is at least `minTier`, and by the owner; nobody else in the channel may approve it.
+A rule whose held call stands for others can answer `approvalTier(tool, input, context)`: the lowest tier that may approve it when higher than the tool's own. The held call keeps it as `minTier`, and both its card and a confirming message require it. A card is answered, and a confirming message accepted, from the speaker whose turn held the call, when their tier is at least `minTier`, and from the owner; nobody else in the channel may approve it. The held call records that speaker as `PendingConfirmation.speakerId`; a call held without one is the owner's to approve.
 
 #### The shell rule
 

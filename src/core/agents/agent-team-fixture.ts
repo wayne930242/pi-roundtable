@@ -25,6 +25,7 @@ import {
 } from "../testing/database.ts";
 import { useTestLocale } from "../testing/locale.ts";
 import { OWNER_SPEAKER, TEST_OWNER } from "../testing/owner.ts";
+import { toolTiers } from "../tool-tiers.ts";
 import type {
 	AgentCategory,
 	AgentChannels,
@@ -176,6 +177,10 @@ export interface TeamFixture {
 	skills: SkillRegistry;
 }
 
+/** The tool tiers the team reads; `deploy` is an admin's tool, so an admin may approve it. */
+const FIXTURE_TIERS = toolTiers();
+FIXTURE_TIERS.declare("test", { deploy: "admin" });
+
 /** The fixture of the running test; set by `useTeamFixture` before each test. */
 export const fx = {} as TeamFixture;
 
@@ -297,6 +302,7 @@ export function useTeamFixture(): void {
 		eventLog.length = 0;
 		team = new AgentTeam({
 			owner: TEST_OWNER,
+			toolTiers: FIXTURE_TIERS,
 			shellUser: "mcops",
 			guildId: "1",
 			entryChannelId: ENTRY,

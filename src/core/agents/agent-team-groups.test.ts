@@ -144,6 +144,32 @@ describeDb("PostgreSQL", () => {
 			expect(speakers()).toEqual(["infra"]);
 			expect(fx.runtime.turns[0]?.confirmed).toBe(true);
 		});
+
+		test("only the speaker whose round held a member's actions, or the owner, approves them", async () => {
+			script.scores = { coordinator: 0.1, infra: 0.1, doctor: 0.1 };
+			const held = {
+				selectionId: "agent",
+				heldAt: new Date(),
+				calls: [{ tool: "deploy", input: "{}", action: "deploy the site" }],
+				speakerId: "7",
+			};
+			fx.runtime.held.set(groupSessionKey(opsGroup(), "infra"), held);
+			const say = (id: string) =>
+				fx.team.answerGroup(
+					group,
+					{ id, name: `admin ${id}`, tier: "admin" },
+					"yes, do it",
+					"yes, do it",
+					NO_ATTACHMENTS,
+					undefined,
+				);
+			await say("8");
+			expect(fx.runtime.turns.map((t) => t.confirmed)).toEqual([undefined]);
+			fx.runtime.turns = [];
+			await say("7");
+			expect(speakers()).toEqual(["infra"]);
+			expect(fx.runtime.turns[0]?.confirmed).toBe(true);
+		});
 	});
 
 	describe("archive", () => {

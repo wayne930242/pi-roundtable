@@ -143,8 +143,13 @@ export class TeamTurns {
 		);
 	}
 
-	/** Whether the speaker's tier holds every tool of the held actions. */
+	/**
+	 * Whether the speaker may approve the held actions: the owner, or the speaker whose turn held
+	 * them, when their tier now holds every tool. Nobody else in the channel may.
+	 */
 	#mayApprove(speaker: Speaker, pending: PendingConfirmation): boolean {
+		if (speaker.tier !== "owner" && speaker.id !== pending.speakerId)
+			return false;
 		const tiers = this.#options.toolTiers ?? toolTiers();
 		return pending.calls.every(
 			(call) =>

@@ -169,6 +169,7 @@ export class PiAgentRuntime implements AgentRuntime {
 			request.selection.id,
 			request.confirmed === true,
 			addressee(request.speaker, this.#options.owner),
+			request.speaker?.id,
 		);
 		if (request.confirmed && pending) {
 			logger.info(

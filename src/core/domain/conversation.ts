@@ -26,6 +26,11 @@ export interface PendingConfirmation {
 	selectionId: string;
 	heldAt: Date;
 	calls: HeldCall[];
+	/**
+	 * The speaker whose turn held the calls. Besides the owner, only they may approve them, at a
+	 * tier that holds them; without one, the owner alone may.
+	 */
+	speakerId?: string;
 }
 
 /** A file produced for a reply; data is raw bytes, not a path or base64. */

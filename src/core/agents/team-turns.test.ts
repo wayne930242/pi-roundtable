@@ -339,14 +339,51 @@ describe("approvals", () => {
 		expect(turns.map((t) => t.confirmed)).toEqual([undefined, undefined]);
 	});
 
-	test("an admin approves what an admin may use", async () => {
+	test("an admin approves what an admin may use in their own turn", async () => {
 		const held: PendingConfirmation = {
 			...shell,
+			speakerId: "2",
 			calls: [{ tool: "agent_create", input: "{}", action: "create an agent" }],
 		};
 		const { team, turns } = setup(answer, undefined, true, held);
 		await reply(team, "admin");
 		expect(turns[0]?.confirmed).toBe(true);
+	});
+
+	test("another admin cannot approve what an admin's turn held", async () => {
+		const held: PendingConfirmation = {
+			...shell,
+			speakerId: "3",
+			calls: [{ tool: "agent_create", input: "{}", action: "create an agent" }],
+		};
+		const { team, turns, judged } = setup(answer, undefined, true, held);
+		await reply(team, "admin");
+		expect(judged).toEqual([]);
+		expect(turns[0]?.confirmed).toBeUndefined();
+	});
+
+	test("what nobody's or the owner's turn held is the owner's to approve", async () => {
+		const held: PendingConfirmation = {
+			...shell,
+			calls: [{ tool: "agent_create", input: "{}", action: "create an agent" }],
+		};
+		const admin = setup(answer, undefined, true, held);
+		await reply(admin.team, "admin");
+		expect(admin.judged).toEqual([]);
+		const owner = setup(answer, undefined, true, { ...held, speakerId: "3" });
+		await reply(owner.team, "owner");
+		expect(owner.turns[0]?.confirmed).toBe(true);
+	});
+
+	test("the turn's speaker whose tier was lowered since cannot approve", async () => {
+		const held: PendingConfirmation = {
+			...shell,
+			speakerId: "2",
+			calls: [{ tool: "agent_create", input: "{}", action: "create an agent" }],
+		};
+		const { team, judged } = setup(answer, undefined, true, held);
+		await reply(team, "member");
+		expect(judged).toEqual([]);
 	});
 
 	test("a held call that needs a higher tier than its tool's, such as saving a script that sends mail, waits for that tier", async () => {

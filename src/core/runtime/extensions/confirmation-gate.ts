@@ -54,6 +54,8 @@ function byCodeUnit(a: string, b: string): number {
 // pi-lens-ignore: large-class — one gate per conversation; its state is the held calls and their approvals
 export class ConfirmationGate {
 	#selectionId: string | undefined;
+	/** The running turn's speaker, whom the actions it holds belong to. */
+	#speakerId: string | undefined;
 	#pending: PendingConfirmation | undefined;
 	#approved: HeldCall[] = [];
 	readonly #holds: HoldCheck;
@@ -91,13 +93,18 @@ export class ConfirmationGate {
 			: pending;
 	}
 
-	/** `addressee` is who the turn is for; without one, the owner. */
+	/**
+	 * `addressee` is who the turn is for; without one, the owner. `speakerId` is who spoke the turn,
+	 * recorded with what it holds; without one, only the owner may approve them.
+	 */
 	beginTurn(
 		selectionId: string,
 		confirmed: boolean,
 		addressee?: OwnerIdentity,
+		speakerId?: string,
 	): void {
 		this.#selectionId = selectionId;
+		this.#speakerId = speakerId;
 		this.#addressee = addressee ?? this.#owner;
 		this.#approved = confirmed ? [...(this.pending()?.calls ?? [])] : [];
 		this.#pending = undefined;
@@ -180,10 +187,11 @@ export class ConfirmationGate {
 		const selectionId = this.#selectionId;
 		if (selectionId === undefined)
 			throw new Error("a call was held outside a turn");
-		const pending = this.#pending ?? {
+		const pending: PendingConfirmation = this.#pending ?? {
 			selectionId,
 			heldAt: new Date(),
 			calls: [],
+			...(this.#speakerId === undefined ? {} : { speakerId: this.#speakerId }),
 		};
 		if (
 			!pending.calls.some((c) => c.tool === call.tool && c.input === call.input)

@@ -81,7 +81,7 @@ export function runtimePlugin(
 	let runtime: AgentRuntime | undefined;
 	return {
 		name: RUNTIME_PLUGIN,
-		migrations: [PendingConfirmationStore.migration],
+		migrations: PendingConfirmationStore.migrations(),
 		provides: [RUNTIME],
 		preflight: async () => {
 			await runtime?.preflight?.();

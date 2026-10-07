@@ -39,6 +39,17 @@ describe("ConfirmationGate", () => {
 		expect(gate.pending()?.selectionId).toBe("research");
 	});
 
+	test("a held call carries the speaker of the turn that held it, or none", () => {
+		const gate = new ConfirmationGate(holds, OWNER);
+		gate.beginTurn("notes", false, undefined, "7");
+		gate.hold(MAIL, send);
+		gate.endTurn();
+		expect(gate.pending()?.speakerId).toBe("7");
+		gate.beginTurn("notes", false);
+		gate.hold(MAIL, send);
+		expect(gate.pending()).not.toHaveProperty("speakerId");
+	});
+
 	test("a call held outside a turn throws instead of taking a default selection", () => {
 		const gate = new ConfirmationGate(holds, OWNER);
 		expect(() => gate.hold(MAIL, send)).toThrow(
