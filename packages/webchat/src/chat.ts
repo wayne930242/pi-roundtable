@@ -136,12 +136,24 @@ function titleOf(text: string): string {
 		: line;
 }
 
-/** The personas by kind; throws on a reserved or repeated kind, or an empty list. */
+/**
+ * The personas by kind; throws on a kind that is not a word, a reserved or repeated kind, a
+ * `minTier` that is not a tier, or an empty list. A JavaScript configuration is not type-checked,
+ * and an unknown `minTier` would let every tier open the persona.
+ */
 export function checkPersonas(
 	personas: readonly WebPersona[],
 ): Map<string, WebPersona> {
 	const byKind = new Map<string, WebPersona>();
 	for (const persona of personas) {
+		if (typeof persona.kind !== "string" || persona.kind === "")
+			throw new Error(
+				`webChat: a persona's kind must be a non-empty string; got ${JSON.stringify(persona.kind)}`,
+			);
+		if (persona.minTier !== undefined && !TIERS.includes(persona.minTier))
+			throw new Error(
+				`webChat: persona "${persona.kind}" minTier must be one of ${TIERS.join(", ")}; got ${JSON.stringify(persona.minTier)}`,
+			);
 		if (RESERVED_KINDS.has(persona.kind))
 			throw new Error(
 				`webChat: persona kind "${persona.kind}" belongs to the host; name yours another kind`,

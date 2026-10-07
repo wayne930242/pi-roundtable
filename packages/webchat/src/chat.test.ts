@@ -4,7 +4,7 @@ import type {
 	ConversationTurns,
 	InboundMessage,
 } from "pi-roundtable";
-import type { WebChatLimits } from "./chat.ts";
+import { checkPersonas, type WebChatLimits } from "./chat.ts";
 import { CLOSE_CODES } from "./protocol.ts";
 import {
 	type FakeSocket,
@@ -502,4 +502,24 @@ test("a person opens at most newConversationsPerHour conversations an hour", asy
 	chat.open(speakerOf("eve"), "helper");
 	advance(60 * 60_000);
 	chat.open(speakerOf("ada"), "helper");
+});
+
+test("a persona list with a mistake throws before the host starts, as a JavaScript config could write", () => {
+	expect(() => checkPersonas([])).toThrow("personas is empty");
+	expect(() => checkPersonas([{ kind: "owner" }])).toThrow(
+		"belongs to the host",
+	);
+	expect(() => checkPersonas([{ kind: "a" }, { kind: "a" }])).toThrow(
+		"listed twice",
+	);
+	for (const persona of [
+		{ kind: "helper", minTier: "members" },
+		{ kind: "helper", minTier: "Admin" },
+		{ kind: "helper", minTier: null },
+		{ kind: "" },
+		{ kind: 7 },
+	])
+		expect(() => checkPersonas([persona as never])).toThrow("webChat:");
+	// Given and valid, or left out, is fine.
+	checkPersonas([{ kind: "helper" }, { kind: "ops", minTier: "admin" }]);
 });

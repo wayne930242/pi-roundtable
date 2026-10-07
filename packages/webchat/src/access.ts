@@ -25,6 +25,35 @@ export interface WebAccess {
 	tierOf(identity: WebIdentity): Tier | undefined;
 }
 
+const isStrings = (value: unknown): value is readonly string[] =>
+	Array.isArray(value) && value.every((item) => typeof item === "string");
+
+/**
+ * Throws unless `tier` is a `WebTierMembers` whose `users` and `roles` are lists of strings and
+ * whose `everyone` is a boolean: a JavaScript configuration is not type-checked, and a string
+ * where a list belongs would match its substrings.
+ */
+function checkTier(name: string, tier: unknown): void {
+	if (tier === undefined) return;
+	if (typeof tier !== "object" || tier === null || Array.isArray(tier))
+		throw new Error(
+			`webAccess: ${name} is { users?, roles?, everyone? }; got ${JSON.stringify(tier)}`,
+		);
+	const { users, roles, everyone } = tier as Record<string, unknown>;
+	for (const [field, value] of [
+		["users", users],
+		["roles", roles],
+	] as const)
+		if (value !== undefined && !isStrings(value))
+			throw new Error(
+				`webAccess: ${name}.${field} must be a list of strings; got ${JSON.stringify(value)}`,
+			);
+	if (everyone !== undefined && typeof everyone !== "boolean")
+		throw new Error(
+			`webAccess: ${name}.everyone must be true or false; got ${JSON.stringify(everyone)}`,
+		);
+}
+
 function admitsSomeone(tier: WebTierMembers | undefined): boolean {
 	return (
 		tier !== undefined &&
@@ -39,10 +68,12 @@ function admitsSomeone(tier: WebTierMembers | undefined): boolean {
  * no one is a configuration mistake and throws.
  */
 export function webAccess(map: WebAccessMap): WebAccess {
-	if (map.owners !== undefined && !Array.isArray(map.owners))
+	if (map.owners !== undefined && !isStrings(map.owners))
 		throw new Error(
 			"webAccess: owners is a list of speaker ids; a provider's roles cannot name an owner",
 		);
+	checkTier("admins", map.admins);
+	checkTier("members", map.members);
 	const owners = new Set(map.owners ?? []);
 	if (
 		owners.size === 0 &&

@@ -37,3 +37,15 @@ test("owner comes only from a configured id, never from a token's roles", () => 
 test("refuses an access map that admits no one", () => {
 	expect(() => webAccess({})).toThrow("admits no one");
 });
+
+test("refuses a map whose users or roles are not lists of strings, as a JavaScript config could write", () => {
+	for (const map of [
+		{ admins: { roles: "Chat.Admin" } },
+		{ admins: { users: "oidc:op:ada" }, members: { everyone: true } },
+		{ members: { roles: ["Chat.User", 7] } },
+		{ owners: ["oidc:op:boss", null] },
+		{ members: { everyone: "yes" } },
+		{ admins: "Chat.Admin", members: { everyone: true } },
+	])
+		expect(() => webAccess(map as never)).toThrow("webAccess:");
+});
