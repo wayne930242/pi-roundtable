@@ -1658,6 +1658,7 @@ The runtime reads `prompt()` when it creates the conversation's session, so mess
   The host merges every plugin's list and keeps each name once.
 - A turn whose kind has no persona is refused with an error naming `personas`.
   The Pi runtime refuses when it makes the session; a runtime of your own does the same, as the example's does.
+- With the memory addon on, a turn's `speaker` decides whose memory the system prompt carries and the memory tools change: a member's or an admin's own, and the owner's for a speaker of the owner tier.
 
 Call `context.turns.run(input)` inside your claim's queue task to run a turn in a conversation it owns.
 It shows typing and the stop control on the channel's surface, runs the turn, and emits `turnStarted` and `turnEnded` with the turn's `kind`.

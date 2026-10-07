@@ -47,10 +47,12 @@ export function ownerMemoryExtension(
 	ownerId: string,
 	owner: OwnerIdentity,
 	/**
-	 * The person the running turn is for, in a session that serves several. Their memory, not
-	 * the owner's, is what the turn reads and changes; without it every turn is the owner's.
+	 * The person the running turn is for, when it may be someone other than the owner. Their
+	 * memory, not the owner's, is what the turn reads and changes; without it every turn is the owner's.
 	 */
 	speaker?: () => Speaker | undefined,
+	/** Whether the tools tell the model that each speaker has a memory of their own. */
+	describesSpeakers = speaker !== undefined,
 ): ExtensionFactory {
 	const o = ownerWords(owner);
 	/** The running turn's other speaker; undefined when the owner's own memory applies. */
@@ -59,7 +61,7 @@ export function ownerMemoryExtension(
 		return current && current.id !== ownerId ? current : undefined;
 	};
 	const storeOf = () => memories.forSpeaker(other()?.id ?? ownerId);
-	const shared = speaker
+	const shared = describesSpeakers
 		? " Whoever is speaking has a memory of their own, shared by every agent; this reads and changes theirs, not someone else's."
 		: "";
 	return (pi) => {

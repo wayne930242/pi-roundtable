@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.19] - 2026-10-07
+
+### Fixed
+
+- Behavior change: in a conversation outside the agent server, such as a plugin's persona conversation run through `context.turns`, a member or admin speaker now reads and changes their own memory. Before, every such turn carried the owner's core facts and upcoming events in its system prompt, whoever spoke, and `memory_add`, `memory_search`, and `memory_remove` (member-tier tools, when a turn's selection offered them) read and changed the owner's memory. The prompt section of such a turn is headed `Memory of <name>` and lists only that speaker's facts. A speaker of the owner tier, the owner or remote MCP's speaker, keeps the owner's memory, and the owner's own conversations, agent conversations, and every tool description read as before. No data moves: facts a member stored before this release sit in the owner's memory, and the owner may remove them with `memory_remove`.
+
 ## [0.7.18] - 2026-10-05
 
 ### Fixed
