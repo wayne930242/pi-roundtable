@@ -388,8 +388,13 @@ describeDb("a host whose only surface is the web chat", () => {
 		const otherAudience = await idp.sign({
 			claims: { sub: "ada", aud: "api://other" },
 		});
-		const noRole = await idp.sign({ claims: { sub: "ada", roles: [] } });
-		for (const bad of [expired, otherAudience])
+		// A person's access token, but no role the access map knows: verified, then not admitted.
+		const noRole = await idp.sign({
+			claims: { sub: "ada", roles: [], scp: "Chat.Access" },
+		});
+		// No scope and no roles, as an ID token: not an access token at all.
+		const idToken = await idp.sign({ claims: { sub: "ada" }, omit: ["roles"] });
+		for (const bad of [expired, otherAudience, idToken])
 			expect(
 				await handshake({ origin: ORIGIN, authorization: `Bearer ${bad}` }),
 			).toBe(401);

@@ -83,6 +83,18 @@ export interface OidcJwtVerifierOptions {
 	clockSkewSeconds?: number;
 	/** A further check on the verified claims, such as a tenant claim; false refuses the token. */
 	check?(claims: Readonly<JWTPayload & Record<string, unknown>>): boolean;
+	/**
+	 * Refuses a token without a scope (`scp` or `scope`) or app roles (`roles`), the marks of an
+	 * access token; default true. An ID token carries no scope, so one whose `aud` happens to be
+	 * this API's client id cannot pass for an access token. Set false only for a provider whose
+	 * access tokens carry neither.
+	 */
+	requireScopeOrRoles?: boolean;
+	/**
+	 * Refuses an app-only token, one a service got for itself with no person behind it
+	 * (`idtyp: "app"`, as Microsoft Entra ID writes it); default true.
+	 */
+	rejectAppOnly?: boolean;
 	/** Replaces the JWKS fetch, for a test or a host that already holds the keys. */
 	keys?: JWTVerifyGetKey;
 	/** How long the fetched key set is reused before it is fetched again; default 10 minutes. */
@@ -150,10 +162,16 @@ function speakerIssuerOf(options: OidcJwtVerifierOptions): string | undefined {
 const text = (value: unknown): string | undefined =>
 	typeof value === "string" && value.trim() !== "" ? value : undefined;
 
+/** A claim with something in it: non-blank text, or a list with a non-blank text. */
+const filled = (value: unknown): boolean =>
+	text(value) !== undefined ||
+	(Array.isArray(value) && value.some((item) => text(item) !== undefined));
+
 /**
- * Verifies OpenID Connect access or ID tokens against a provider's published keys: the signature
+ * Verifies OpenID Connect access tokens against a provider's published keys: the signature
  * with an allowed asymmetric algorithm, `iss`, `aud`, `exp` (required), and `nbf`, within the
- * clock skew; then `sub` (or `subjectClaim`) and the optional `check`. The key set is fetched when
+ * clock skew; by default a scope or app roles (`requireScopeOrRoles`) and no app-only token
+ * (`rejectAppOnly`); then `sub` (or `subjectClaim`) and the optional `check`. The key set is fetched when
  * first needed, cached, and fetched again for a key id it does not hold, at most every `refetchCooldownMs`.
  * Configuration mistakes throw at construction, so a host with a broken verifier does not start.
  */
@@ -186,6 +204,17 @@ export function oidcJwtVerifier(
 				error instanceof Error ? error.message : "invalid token",
 			);
 		}
+		if (
+			options.requireScopeOrRoles !== false &&
+			!filled(claims.scp) &&
+			!filled(claims.scope) &&
+			!filled(claims.roles)
+		)
+			throw new TokenRefused(
+				"the token carries no scope or roles, so it is not an access token for this API",
+			);
+		if (options.rejectAppOnly !== false && claims.idtyp === "app")
+			throw new TokenRefused("an app-only token names no person");
 		const subject = text(claims[subjectClaim]);
 		if (!subject)
 			throw new TokenRefused(`the "${subjectClaim}" claim is missing`);

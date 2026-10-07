@@ -84,13 +84,14 @@ Every mistake in these options throws when the configuration loads, so `roundtab
 A `WebPersona` is `{ kind, label?, prompt?, minTier?, selection? }`.
 `prompt()` is the system prompt of its conversations, contributed by this plugin; leave it out when another plugin contributes the persona of that kind.
 `minTier` (default `member`) is the lowest tier that may see and open it; a person whose tier falls below it later can no longer write in its conversations.
-`selection` (`{ tools, groups }`) names the tools its turns get; without it a turn gets the plugins' `agentSelection`.
+`selection` (`{ tools, groups }`) names the tools its turns get; without it a turn gets the plugins' `agentSelection`, which grows with every plugin you add, so name the tools.
+Leave out `schedule_*` and `delegate_task` (see [what it does not do yet](#what-it-does-not-do-yet)), and `web_search` and `fetch_content` unless people may make the server fetch any address, internal ones included: they are member-tier tools, and a plugin that loads pi-web-access, such as one `roundtable add package pi-web-access` writes, adds them to `agentSelection`.
 The kinds `owner` and `agent` belong to the host and are refused.
 
 ### Access
 
 A `WebAccessMap` is `{ owners?, admins?, members? }`.
-`admins` and `members` name people by `users` (speaker ids), by `roles` (the names in the token's roles claim), or `everyone` the verifier accepts; the highest tier a person qualifies for wins.
+`admins` and `members` name people by `users` (speaker ids), by `roles` (the names in the token's roles claim), or `everyone` the verifier accepts, guest accounts included; the highest tier a person qualifies for wins.
 `owners` is a list of speaker ids only: no claim a provider issues can make anyone the owner.
 A person the map gives no tier is not admitted: no ticket, no socket, no conversation, no turn.
 A map that admits no one throws.
@@ -103,17 +104,42 @@ A map that admits no one throws.
 | `issuers` | The accepted `iss` values. |
 | `audiences` | The accepted `aud` values. |
 | `speakerIssuer` | The issuer speaker ids are made from; required when `issuers` lists several issuers of one provider, so one person keeps one id. |
-| `subjectClaim` | The claim naming the person; default `sub`. A provider's stable object id claim may suit better. |
+| `subjectClaim` | The claim naming the person; default `sub`. Use a claim that stays the same across your app registrations, such as Entra's `oid`; see [provider settings](#provider-settings). |
 | `nameClaim` | The claim to show them by; default `name`, then `preferred_username`, then the subject. |
 | `rolesClaim` | The claim holding their roles or groups, an array of strings; default `roles`. |
 | `algorithms` | Accepted signature algorithms; default `RS256` and `ES256`. Symmetric algorithms and `none` are refused. |
 | `clockSkewSeconds` | How far `exp` and `nbf` may be off the local clock; default 60. |
 | `check` | A further check on the verified claims, such as a tenant claim; `false` refuses the token. |
+| `requireScopeOrRoles` | Refuse a token without a scope (`scp` or `scope`) or app roles (`roles`), the marks of an access token; default `true`, so an ID token cannot pass for an access token. Set `false` only for a provider whose access tokens carry neither. |
+| `rejectAppOnly` | Refuse an app-only token, which names a service rather than a person (`idtyp: "app"`); default `true`. |
 
-It checks the signature, `iss`, `aud`, `exp` (required), and `nbf`, then the subject claim and `check`.
+It checks the signature, `iss`, `aud`, `exp` (required), and `nbf`, then a scope or roles and no app-only token, then the subject claim and `check`.
 A refused token throws `TokenRefused`, whose `reason` goes to the host's log and never to the client.
 The speaker id of a person is `oidc:<base64url(issuer)>:<subject>`: `oidcSpeakerId(issuer, subject)` makes it, and `parseOidcSpeakerId(id)` turns it back into the pair.
 Use it to name owners in the access map.
+
+### Provider settings
+
+The verifier is generic; what makes it safe is how you point it at your provider.
+Microsoft Entra ID is the example below, and the same questions apply to any provider.
+
+- **Name people by a claim that is stable across app registrations.** Many providers make `sub` pairwise: it differs for each application, so a web page and a browser extension registered as two apps would give one person two speaker ids, and two memories. Entra's `oid` is the same for a person in every app of the tenant: set `subjectClaim: "oid"`.
+- **Pin the tenant in `check`.** An object id is unique only within its tenant, and a multi-tenant app takes tokens from every tenant. With Entra, check `claims.tid` against your tenant id.
+- **Accept access tokens only.** `requireScopeOrRoles` refuses a token with no scope or app roles, as an ID token is. An Entra ID token may still carry `roles` when you assign app roles, so also require the delegated scope in `check` (`typeof claims.scp === "string"`); where you can, register the API apart from the web page's sign-in app, so a page's ID token never has the API's audience.
+- **Refuse app-only tokens.** `rejectAppOnly` refuses `idtyp: "app"`. Entra writes `idtyp` only when the app asks for that optional claim; requiring `scp` refuses app-only tokens either way, since they carry roles and no scope.
+- **Merge issuers of one tenant only.** `speakerIssuer` makes one person's id the same whichever listed issuer signed the token, such as Entra's v1 `https://sts.windows.net/<tenant>/` and v2 `https://login.microsoftonline.com/<tenant>/v2.0`. Never list issuers of different tenants or providers together: their subjects are separate namespaces, and two people could get one id.
+- **Mind who `everyone` admits.** `everyone: true` admits every person the verifier accepts, guest accounts of your tenant included. Prefer roles assigned to the users and groups who should chat; with Entra, the optional `acct` claim (`0` for a member of the tenant, `1` for a guest) lets `check` refuse guests.
+
+```ts
+const tenant = process.env.ENTRA_TENANT_ID ?? "";
+const verifier = oidcJwtVerifier({
+	jwksUrl: `https://login.microsoftonline.com/${tenant}/discovery/v2.0/keys`,
+	issuers: [`https://login.microsoftonline.com/${tenant}/v2.0`],
+	audiences: [process.env.ENTRA_API_CLIENT_ID ?? ""],
+	subjectClaim: "oid",
+	check: (claims) => claims.tid === tenant && typeof claims.scp === "string",
+});
+```
 
 ## Connecting
 
@@ -196,6 +222,7 @@ A request from a browser origin not in `origins` gets 403; an allowed origin get
   The host's conversation registry records its person at its first turn, and the claim checks that record inside the conversation's queue before every turn; only that person may list it, read it, write in it, stop it, or answer its prompts.
   Conversation ids are random UUIDs, and the claim runs only messages this plugin accepted from a verified socket.
 - **Tokens.** Tokens are checked on every REST call, every upgrade, and every `auth` frame, and never read from a URL.
+  By default only a person's access token passes: one without a scope or app roles, or an app-only one, is refused.
   A socket is closed when its token expires.
 - **Origins.** `origins` is required and checked on every upgrade and every browser request, so another site cannot open a socket or call the API with a browser's credentials.
 - **Limits.** Each person holds at most `connectionsPerPrincipal` sockets, and the route at most `maxConnections`; frames are limited in size and rate.

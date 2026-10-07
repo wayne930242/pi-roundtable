@@ -191,3 +191,35 @@ test("a rotated key set is fetched again for a token signed by the new key, once
 	await verify(await idp.sign());
 	expect(idp.fetches).toBe(2);
 });
+
+test("by default refuses a token with no scope or roles, as an ID token for this API's client id would be", async () => {
+	const verify = verifier();
+	const bare = await idp.sign({ omit: ["roles"] });
+	expect(await refusal(verify(bare))).toContain("no scope or roles");
+	for (const claims of [
+		{ scp: "Chat.Access" },
+		{ scope: "openid chat" },
+		{ scp: ["Chat.Access"] },
+	]) {
+		const token = await idp.sign({ omit: ["roles"], claims });
+		expect((await verify(token)).id).toBe(
+			oidcSpeakerId(idp.issuer, "subject-1"),
+		);
+	}
+	for (const claims of [{ scp: "" }, { scope: "  " }, { roles: [] }]) {
+		const token = await idp.sign({ omit: ["roles"], claims });
+		expect(await refusal(verify(token))).toContain("no scope or roles");
+	}
+	// Allowed for a provider whose access tokens carry neither.
+	expect((await verifier({ requireScopeOrRoles: false })(bare)).roles).toEqual(
+		[],
+	);
+});
+
+test("by default refuses an app-only token, one with no person behind it", async () => {
+	const app = await idp.sign({ claims: { idtyp: "app" } });
+	expect(await refusal(verifier()(app))).toContain("app-only");
+	const user = await idp.sign({ claims: { idtyp: "user" } });
+	expect((await verifier()(user)).name).toBe("Ada");
+	expect((await verifier({ rejectAppOnly: false })(app)).name).toBe("Ada");
+});
