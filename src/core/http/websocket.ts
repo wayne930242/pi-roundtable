@@ -27,7 +27,8 @@ export type WebSocketAccept<Data = unknown> =
  */
 export interface WebSocketRoute<Data = unknown> {
 	/**
-	 * The `Origin` values a browser may connect from, each as `scheme://host[:port]`; a request
+	 * The `Origin` values a browser may connect from, each as `scheme://host[:port]` exactly as the
+	 * browser sends it, such as `https://chat.example.com` or `chrome-extension://<id>`; a request
 	 * with another Origin, or none, is refused with 403 before `accept`. `"any"` skips the check,
 	 * for clients that are not browsers.
 	 */
@@ -45,24 +46,27 @@ export interface WebSocketRoute<Data = unknown> {
 	rate?: { messages: number; perMs: number };
 	/**
 	 * The most bytes one socket may have waiting for a client that reads slower than the route
-	 * sends. A `send` that finds this many waiting returns `"dropped"` and cuts the socket without
-	 * a close frame, so the client and the route's `close` both see 1006. Default 1 MiB.
+	 * sends. It is checked before each `send`: a `send` that finds this many waiting returns
+	 * `"dropped"` and cuts the socket without a close frame, so the client and the route's `close`
+	 * both see 1006; one that finds fewer is sent whole, so the bytes waiting can reach this limit
+	 * plus one message. Default 1 MiB.
 	 */
 	maxBufferedBytes?: number;
 	/** The most sockets the route holds open at once; another upgrade gets 503 before `accept`. Default 256. */
 	maxConnections?: number;
-	open?(socket: RouteSocket<Data>): void | Promise<void>;
+	/** What a handler returns is ignored; a promise is awaited. */
+	open?(socket: RouteSocket<Data>): unknown | Promise<unknown>;
 	/** Called per message as it arrives, without waiting for the previous call to settle. */
 	message(
 		socket: RouteSocket<Data>,
 		message: string | Uint8Array,
-	): void | Promise<void>;
+	): unknown | Promise<unknown>;
 	/** Called once the socket closed, also when the listener stops (code 1001); stop waits for it. */
 	close?(
 		socket: RouteSocket<Data>,
 		code: number,
 		reason: string,
-	): void | Promise<void>;
+	): unknown | Promise<unknown>;
 }
 
 export const DEFAULT_MAX_MESSAGE_BYTES = 64 * 1024;
@@ -106,6 +110,7 @@ const byteLength = (message: string | Uint8Array) =>
 /**
  * Sends one message unless the route's `maxBufferedBytes` already wait; then, or when Bun drops
  * the message, the socket is cut (1006) rather than left open with a gap in what it was sent.
+ * Bun answers 0 for an empty message it did send, and for a message it dropped.
  */
 function send(
 	ws: ServerWebSocket<Connection>,
@@ -116,7 +121,9 @@ function send(
 		ws.data.websocket.maxBufferedBytes ?? DEFAULT_MAX_BUFFERED_BYTES;
 	if (ws.getBufferedAmount() < limit) {
 		const status = ws.send(message);
-		if (status > 0) return "sent";
+		if (ws.readyState !== WebSocket.OPEN) return "dropped";
+		if (status > 0 || (status === 0 && byteLength(message) === 0))
+			return "sent";
 		if (status === -1) return "queued";
 	}
 	ws.terminate();
@@ -205,7 +212,8 @@ export class SocketSet {
 	/**
 	 * The Bun handler for one listener's sockets, given its largest route limits. Bun drops a frame
 	 * over twice the message limit unread; up to there each route's own limit closes with 1009.
-	 * Bun cuts a socket with the largest buffered limit waiting; each route's `send` cuts at its own.
+	 * Bun drops a message only when the largest buffered limit already waits, which each route's
+	 * `send` checks first at its own limit, so a single message larger than any limit still goes out.
 	 */
 	handler(
 		listener: string,
@@ -214,7 +222,6 @@ export class SocketSet {
 		return {
 			maxPayloadLength: limits.maxMessageBytes * 2,
 			backpressureLimit: limits.maxBufferedBytes,
-			closeOnBackpressureLimit: true,
 			open: (ws) => {
 				this.#open.add(ws);
 				const connection = ws.data;
@@ -261,7 +268,7 @@ export class SocketSet {
 	#run(
 		ws: ServerWebSocket<Connection>,
 		listener: string,
-		call: (socket: RouteSocket) => void | Promise<void>,
+		call: (socket: RouteSocket) => unknown | Promise<unknown>,
 	): Promise<void> {
 		const connection = ws.data;
 		const running = (async () => {

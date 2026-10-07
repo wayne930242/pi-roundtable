@@ -226,6 +226,77 @@ describe("a WebSocket route", () => {
 		).toBeInstanceOf(HttpListeners);
 	});
 
+	test("takes origins of non-special schemes, such as browser extensions and app shells, written exactly", () => {
+		const build = (origin: string) => () =>
+			new HttpListeners(
+				[{ id: "public", port: 0 }],
+				[chatRoute({ origins: [origin] })],
+				silentLogger(),
+			);
+		for (const origin of [
+			"chrome-extension://abcdefghijklmnop",
+			"app://x",
+			"tauri://localhost",
+			"moz-extension://4b1c-77",
+			"app://x:8080",
+		])
+			expect(build(origin)()).toBeInstanceOf(HttpListeners);
+		for (const origin of [
+			"chrome-extension://abcdefghijklmnop/",
+			"Chrome-extension://abcdefghijklmnop",
+			"app://x/index.html",
+			"app://x?y=1",
+			"app://x#top",
+			"app://user@x",
+			"app://",
+			"app:x",
+		]) {
+			const error = refused(build(origin));
+			expect(error).toBeInstanceOf(PluginError);
+			expect(String(error)).toContain(JSON.stringify(origin));
+		}
+	});
+
+	test("matches a non-special origin exactly against the Origin header", async () => {
+		const port = serve([chatRoute({ origins: ["chrome-extension://abc"] })]);
+		expect(
+			await connect(port, "?token=good", "chrome-extension://abc").opened,
+		).toBe(true);
+		expect(
+			await handshake(port, "?token=good", "chrome-extension://abd"),
+		).toEqual([403, "Forbidden"]);
+		expect(await handshake(port, "?token=good", "null")).toEqual([
+			403,
+			"Forbidden",
+		]);
+	});
+
+	test("must give each limit as a positive integer, named in the error", () => {
+		const cases: [Partial<WebSocketRoute<Session>>, string][] = [
+			[{ maxConnections: 0 }, "maxConnections"],
+			[{ maxConnections: 1.5 }, "maxConnections"],
+			[{ maxBufferedBytes: -1 }, "maxBufferedBytes"],
+			[{ maxBufferedBytes: Number.NaN }, "maxBufferedBytes"],
+			[{ maxMessageBytes: 0 }, "maxMessageBytes"],
+			[{ maxMessageBytes: Number.POSITIVE_INFINITY }, "maxMessageBytes"],
+			[{ rate: { messages: 0, perMs: 1_000 } }, "rate.messages"],
+			[{ rate: { messages: 10, perMs: 0.5 } }, "rate.perMs"],
+		];
+		for (const [limits, field] of cases) {
+			const error = refused(
+				() =>
+					new HttpListeners(
+						[{ id: "public", port: 0 }],
+						[chatRoute(limits)],
+						silentLogger(),
+					),
+			);
+			expect(error).toBeInstanceOf(PluginError);
+			expect(String(error)).toContain("route chat");
+			expect(String(error)).toContain(field);
+		}
+	});
+
 	test("routes a request that is no complete WebSocket handshake to handle, never accept", async () => {
 		let asked = 0;
 		const port = serve([
@@ -381,6 +452,69 @@ describe("a WebSocket route", () => {
 		// A close frame would start with 0x88; the stream ends with message bytes instead.
 		expect(held.length).toBeGreaterThan(0);
 		expect(held.at(-1)).toBe("x".charCodeAt(0));
+	});
+
+	test("delivers an empty message and keeps the socket open", async () => {
+		const results: WebSocketSendResult[] = [];
+		const port = serve([
+			chatRoute({
+				open: (socket) => {
+					results.push(socket.send(""), socket.send(new Uint8Array(0)));
+					results.push(socket.send("after"));
+				},
+			}),
+		]);
+		const client = connect(port);
+		expect(await client.opened).toBe(true);
+		expect(await client.next(3)).toEqual(["", "", "after"]);
+		expect(results).toEqual(["sent", "sent", "sent"]);
+		client.socket.close();
+		expect(await client.closed).toBe(1000);
+	});
+
+	test("delivers one message larger than maxBufferedBytes to a client that reads", async () => {
+		const big = "x".repeat(4 * 1024 * 1024);
+		let result: WebSocketSendResult | undefined;
+		const port = serve([
+			chatRoute({
+				maxBufferedBytes: 1024 * 1024,
+				open: (socket) => {
+					result = socket.send(big);
+				},
+				// A handler may return what send answered.
+				message: (socket, message) => socket.send(message),
+			}),
+		]);
+		const client = connect(port);
+		expect(await client.opened).toBe(true);
+		const [received] = await client.next(1);
+		expect(received?.length).toBe(big.length);
+		expect(["sent", "queued"]).toContain(result ?? "dropped");
+		client.socket.send("still open");
+		expect(await client.next(2)).toEqual([big, "still open"]);
+		client.socket.close();
+		expect(await client.closed).toBe(1000);
+	});
+
+	test("queues one oversized message for a client that stops reading, then drops the next send", async () => {
+		const results: WebSocketSendResult[] = [];
+		let closedWith: number | undefined;
+		const port = serve([
+			chatRoute({
+				maxBufferedBytes: 64 * 1024,
+				open: (socket) => {
+					results.push(socket.send("x".repeat(4 * 1024 * 1024)));
+					results.push(socket.send("next"));
+				},
+				close: (_socket, code) => {
+					closedWith = code;
+				},
+			}),
+		]);
+		stalledClient(port);
+		while (closedWith === undefined) await Bun.sleep(5);
+		expect(results).toEqual(["queued", "dropped"]);
+		expect(closedWith).toBe(1006);
 	});
 
 	test("send reports a message to a closed socket as dropped", async () => {

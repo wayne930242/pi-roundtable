@@ -57,6 +57,37 @@ function overlaps(a: HttpRoute, b: HttpRoute): boolean {
 	return matches(a, pathOf(b)) || matches(b, pathOf(a));
 }
 
+/** A non-special scheme's origin, such as `chrome-extension://<id>`, which URL reports as "null". */
+const OPAQUE_ORIGIN = /^[a-z][a-z0-9+.-]*:\/\/[^/?#@:\s]+(?::\d+)?$/;
+
+/**
+ * Whether `origin` is `scheme://host[:port]` exactly as a browser sends it: a special scheme's
+ * origin, or a non-special one in lowercase without path, query, fragment, or user.
+ */
+const isOrigin = (origin: string) => {
+	const url = URL.parse(origin);
+	if (!url) return false;
+	return url.origin === "null"
+		? OPAQUE_ORIGIN.test(origin)
+		: url.origin === origin;
+};
+
+/** Refuses a WebSocket limit that is not a positive integer, naming the route and field. */
+function validateLimits(name: string, websocket: WebSocketRoute): void {
+	const limits: [string, number | undefined][] = [
+		["maxMessageBytes", websocket.maxMessageBytes],
+		["maxBufferedBytes", websocket.maxBufferedBytes],
+		["maxConnections", websocket.maxConnections],
+		["rate.messages", websocket.rate?.messages],
+		["rate.perMs", websocket.rate?.perMs],
+	];
+	for (const [field, value] of limits)
+		if (value !== undefined && !(Number.isSafeInteger(value) && value > 0))
+			throw new PluginError(
+				`route ${name} sets websocket ${field} to ${value}, which is not a positive integer`,
+			);
+}
+
 /** Refuses routes on unknown listeners, reused names, and any request two routes could both take. */
 function validate(
 	listeners: readonly ListenerConfig[],
@@ -70,10 +101,11 @@ function validate(
 			throw new PluginError(
 				`route ${route.name} takes WebSockets, so its methods must include GET`,
 			);
+		if (route.websocket) validateLimits(route.name, route.websocket);
 		const { origins } = route.websocket ?? {};
 		if (origins && origins !== "any")
 			for (const origin of origins)
-				if (URL.parse(origin)?.origin !== origin)
+				if (!isOrigin(origin))
 					throw new PluginError(
 						`route ${route.name} lists origin ${JSON.stringify(origin)}, which is not a scheme://host[:port] origin`,
 					);
