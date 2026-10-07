@@ -229,10 +229,17 @@ function objectText(fields: readonly Field[], indent: string): string {
 	return `{\n${lines.join("")}${indent}}`;
 }
 
-/** 0.8's `everyone`, which reached Discord alone, as everyone on Discord. */
+/**
+ * 0.8's `everyone`, which reached Discord alone, as everyone on Discord. An expression is the
+ * condition of a new conditional, in parentheses unless it is one operand already, so a
+ * conditional or `||` written there keeps its meaning.
+ */
 function everyoneText(rewrite: Rewrite, value: Node): string {
-	if (value.type !== "BooleanLiteral")
-		return `${rewrite.text(value)} ? ["discord"] : false`;
+	if (value.type !== "BooleanLiteral") {
+		const text = rewrite.text(value);
+		const condition = CALLABLE.has(value.type) ? text : `(${text})`;
+		return `${condition} ? ["discord"] : false`;
+	}
 	return value.value === true ? '["discord"]' : "false";
 }
 

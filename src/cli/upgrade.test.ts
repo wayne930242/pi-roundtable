@@ -115,6 +115,30 @@ describe("upgradeSource", () => {
 		expect(upgraded.source).toContain("\t// The owner runs the host.\n");
 	});
 
+	test("an everyone written as a conditional still means everyone on Discord only when it held", async () => {
+		for (const open of [true, false]) {
+			const legacy = `const open = ${open};
+export default {
+	owner: { id: "900000000000000003", name: "Ada" },
+	speakers: {
+		admins: { everyone: open ? true : false },
+		members: { everyone: open ? true : false },
+	},
+	discord: { token: "t", guild: "900000000000000001", entryChannel: "900000000000000002" },
+	database: { url: "postgres://roundtable@localhost:5432/roundtable" },
+	dataDir: "./data",
+	model: "anthropic/claude-sonnet-5-5",
+	http: { publicUrl: "https://bot.example.test" },
+};
+`;
+			const upgraded = upgradeSource(legacy).source;
+			expect(upgraded).toContain(
+				'everyone: (open ? true : false) ? ["discord"] : false',
+			);
+			expect(await meaning(upgraded)).toEqual(await meaning(legacy));
+		}
+	});
+
 	const refused: Record<string, [string, string]> = {
 		"an owner it cannot see into": [
 			'const owner = { id: "1", name: "Ada" };\nexport default { owner, dataDir: "." };\n',
