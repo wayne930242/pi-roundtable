@@ -1,6 +1,7 @@
 import {
 	AGENTS,
 	type ChannelKey,
+	CONVERSATIONS,
 	ConfigError,
 	type Contribution,
 	definePlugin,
@@ -139,7 +140,7 @@ export function remoteMcp(options: RemoteMcpOptions): RoundtablePlugin {
 	const identity = tokenIdentity(options);
 	return definePlugin({
 		name: "remote-mcp",
-		requires: [DISCORD, IDENTITY],
+		requires: [DISCORD, IDENTITY, CONVERSATIONS],
 		provides: [REMOTE_MCP],
 		identities: [
 			{
@@ -161,9 +162,14 @@ export function remoteMcp(options: RemoteMcpOptions): RoundtablePlugin {
 			const conversation = conversationOf(options, context);
 			const grants = await ChannelGrantStore.attach(database());
 			const sessions = await RemoteSessionStore.attach(database());
-			// 0.8's sessions were the owner's.
+			// 0.8's sessions were the owner's, and their conversations, recorded shared, become theirs.
 			const [primary] = await identities.owners();
-			if (primary) await sessions.adopt(primary.id);
+			if (primary) {
+				const registry = services.get(CONVERSATIONS);
+				await sessions.adopt(primary.id, async (id) => {
+					await registry.adopt(`mcp:${id}`, primary.id);
+				});
+			}
 			const gateway = new McpGateway({
 				dispatchToken: options.dispatchToken,
 				agent: new RemoteAgent({

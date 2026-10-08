@@ -150,6 +150,7 @@ describeDb("remoteMcp on a plugin harness", () => {
 					`token:${options.toolNames?.dispatch ?? "remote-mcp"}`,
 				),
 				servicePair(CONVERSATIONS, {
+					adopt: async () => undefined,
 					register: async (registration) => {
 						registered.push(registration);
 						const at = new Date();

@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { SQL } from "bun";
-import { CONVERSATIONS, IDENTITY } from "pi-roundtable";
+import { type ChannelKey, CONVERSATIONS, IDENTITY } from "pi-roundtable";
 import {
 	describeDb,
 	type TestHost,
@@ -188,25 +188,35 @@ describeDb("remote MCP bound to a principal on a host", () => {
 		await back.stop();
 	});
 
-	test("a conversation 0.8 recorded shared becomes private to the primary owner at their next turn, and no one else's turn reaches it", async () => {
+	test("a session 0.8 opened is handed to the primary owner at the start, its conversation adopted as theirs, and no one else's turn reaches it", async () => {
 		// As 0.8 left it: the session of no principal, its conversation shared and no one's.
 		const id = crypto.randomUUID();
 		await sql`INSERT INTO remote_agent_sessions (id) VALUES (${id})`;
 		await sql`
 			INSERT INTO conversations (key, surface, kind, visibility)
 			VALUES (${`mcp:${id}`}, 'mcp', 'remote', 'shared')`;
+		// A shared conversation of no principal that is no 0.8 session stays as it is.
+		const room: ChannelKey = `fake:room-${id}`;
+		await sql`
+			INSERT INTO conversations (key, surface, kind, visibility)
+			VALUES (${room}, 'fake', 'study', 'shared')`;
 		await sql`DELETE FROM principal_identities WHERE principal_id = ${KAI}`;
 		await sql`DELETE FROM principals WHERE id = ${KAI}`;
 		await sql`INSERT INTO principals (id, display_name) VALUES (${KAI}, 'Kai')`;
 		await sql`INSERT INTO principal_roles (principal_id, role, source) VALUES (${KAI}, 'member', 'cli')`;
 
 		const member = await boot(KAI);
-		expect(await relay(member.socketPath, "mine?", id)).toEqual({
-			error: "SESSION_NOT_FOUND",
-		});
 		const registry = member.host.context.services.get(CONVERSATIONS);
 		expect(await registry.get(`mcp:${id}`)).toMatchObject({
+			visibility: "private",
+			principalId: ADA,
+		});
+		expect(await registry.get(room)).toMatchObject({
 			visibility: "shared",
+		});
+		expect((await registry.get(room))?.principalId).toBeUndefined();
+		expect(await relay(member.socketPath, "mine?", id)).toEqual({
+			error: "SESSION_NOT_FOUND",
 		});
 		await member.stop();
 

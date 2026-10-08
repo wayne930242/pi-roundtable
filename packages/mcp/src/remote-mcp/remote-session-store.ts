@@ -47,10 +47,23 @@ export class RemoteSessionStore {
 		return new RemoteSessionStore(sql);
 	}
 
-	/** Gives the sessions of no principal, which 0.8 opened for the owner, to the primary owner. */
-	async adopt(principalId: string): Promise<void> {
-		await this.#sql`
-			UPDATE remote_agent_sessions SET principal_id = ${principalId} WHERE principal_id IS NULL`;
+	/**
+	 * Gives the sessions of no principal, which 0.8 opened for the owner, to the primary owner,
+	 * calling `handOver` with each one's id before it commits: a `handOver` that throws leaves them
+	 * all unowned for the next start to hand over again. Resolves the ids handed over.
+	 */
+	async adopt(
+		principalId: string,
+		handOver: (id: string) => Promise<void>,
+	): Promise<string[]> {
+		return this.#sql.begin(async (tx) => {
+			// The row locks make a start racing this one wait, then find none left to hand over.
+			const rows: { id: string }[] = await tx`
+				UPDATE remote_agent_sessions SET principal_id = ${principalId}
+				WHERE principal_id IS NULL RETURNING id`;
+			for (const { id } of rows) await handOver(id);
+			return rows.map((row) => row.id);
+		});
 	}
 
 	async create(principalId: string): Promise<string> {

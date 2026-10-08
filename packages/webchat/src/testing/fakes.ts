@@ -15,7 +15,10 @@ import type { Connection } from "../connections.ts";
 import type { WebIdentity } from "../oidc.ts";
 import type { ServerFrame } from "../protocol.ts";
 
-/** The registry's behavior in memory: first registration fixes the record, later ones touch it. */
+/**
+ * The registry's behavior in memory: first registration fixes the record, later ones touch it, and
+ * `adopt` makes only a shared record of no principal private.
+ */
 export function memoryRegistry(): ConversationRegistry & {
 	records: Map<ChannelKey, ConversationRecord>;
 } {
@@ -43,6 +46,18 @@ export function memoryRegistry(): ConversationRegistry & {
 					filter?.principal === undefined ||
 					record.principalId === filter.principal,
 			),
+		adopt: async (key, principalId) => {
+			const known = records.get(key);
+			if (known?.visibility !== "shared" || known.principalId !== undefined)
+				return known;
+			const adopted: ConversationRecord = {
+				...known,
+				visibility: "private",
+				principalId,
+			};
+			records.set(key, adopted);
+			return adopted;
+		},
 		setTitle: async () => undefined,
 	};
 }

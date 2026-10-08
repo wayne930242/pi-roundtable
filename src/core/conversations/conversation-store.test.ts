@@ -73,65 +73,78 @@ describeDb("PgConversationRegistry", () => {
 		expect(await registry.get("web:none")).toBeUndefined();
 	});
 
-	test("a conversation recorded shared with no principal, as 0.8 recorded a turn run without one, becomes private to the first turn that asks for it", async () => {
+	test("a shared conversation stays shared after a private turn on the same key: the first registration fixes it", async () => {
+		await registry.register({
+			key: "discord:study-room-1",
+			kind: "study",
+			visibility: "shared",
+		});
+		const again = await registry.register({
+			key: "discord:study-room-1",
+			kind: "study",
+			visibility: "private",
+			principalId: "eve",
+		});
+		expect(again.visibility).toBe("shared");
+		expect(again.principalId).toBeUndefined();
+		expect(await registry.list({ principal: "eve" })).toEqual([]);
+	});
+
+	test("adopt makes a conversation recorded shared with no principal, as before 0.9, private to the principal, once", async () => {
 		const first = await registry.register({
 			key: "mcp:0-8-session",
 			kind: "remote",
 			visibility: "shared",
 		});
-		const adopted = await registry.register({
-			key: "mcp:0-8-session",
-			kind: "remote",
-			visibility: "private",
-			principalId: "ada",
-		});
+		const adopted = await registry.adopt("mcp:0-8-session", "ada");
 		expect(adopted).toMatchObject({
 			kind: "remote",
 			visibility: "private",
 			principalId: "ada",
 		});
-		expect(adopted.createdAt).toEqual(first.createdAt);
-		// Then it is Ada's: no later turn, private or shared, takes it from her.
-		for (const visibility of ["private", "shared"] as const)
-			expect(
-				await registry.register({
-					key: "mcp:0-8-session",
-					kind: "remote",
-					visibility,
-					principalId: "bo",
-				}),
-			).toMatchObject({ visibility: "private", principalId: "ada" });
-		// A shared turn leaves a shared conversation shared.
-		await registry.register({
-			key: "fake:room",
-			kind: "study",
-			visibility: "shared",
-		});
-		expect(
-			await registry.register({
-				key: "fake:room",
-				kind: "study",
-				visibility: "shared",
-			}),
-		).toMatchObject({ visibility: "shared" });
-		expect((await registry.get("fake:room"))?.principalId).toBeUndefined();
+		expect(adopted?.createdAt).toEqual(first.createdAt);
+		expect(adopted?.lastActiveAt).toEqual(first.lastActiveAt);
+		// Then it is Ada's: adopting it again, or for another, changes nothing.
+		expect(await registry.adopt("mcp:0-8-session", "ada")).toEqual(adopted);
+		expect(await registry.adopt("mcp:0-8-session", "bo")).toEqual(adopted);
+		expect(await registry.adopt("mcp:unknown", "ada")).toBeUndefined();
 	});
 
-	test("a shared conversation that names a principal is never made private to another", async () => {
-		await registry.register({
+	test("adopt never touches a private conversation or one that names a principal", async () => {
+		const mine = await registry.register({
+			key: "web:mine",
+			kind: "study",
+			visibility: "private",
+			principalId: "ada",
+		});
+		const named = await registry.register({
 			key: "fake:named",
 			kind: "study",
 			visibility: "shared",
 			principalId: "ada",
 		});
-		expect(
-			await registry.register({
-				key: "fake:named",
-				kind: "study",
-				visibility: "private",
-				principalId: "bo",
-			}),
-		).toMatchObject({ visibility: "shared", principalId: "ada" });
+		expect(await registry.adopt("web:mine", "bo")).toEqual(mine);
+		expect(await registry.adopt("fake:named", "bo")).toEqual(named);
+	});
+
+	test("adopts racing for one conversation give it to exactly one principal, and each sees that one", async () => {
+		await registry.register({
+			key: "mcp:raced",
+			kind: "remote",
+			visibility: "shared",
+		});
+		const results = await Promise.all(
+			["ada", "bo", "kai", "eve"].map((principal) =>
+				registry.adopt("mcp:raced", principal),
+			),
+		);
+		const owners = new Set(results.map((record) => record?.principalId));
+		expect(owners.size).toBe(1);
+		const [winner] = owners;
+		expect(await registry.get("mcp:raced")).toMatchObject({
+			visibility: "private",
+			principalId: winner,
+		});
 	});
 
 	test("list gives a principal's conversations, or every one, the most recently active first", async () => {

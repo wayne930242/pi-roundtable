@@ -73,16 +73,7 @@ export class PgConversationRegistry implements ConversationRegistry {
 			INSERT INTO conversations (key, surface, kind, principal_id, visibility, title)
 			VALUES (${entry.key}, ${surface}, ${entry.kind}, ${entry.principalId ?? null},
 				${entry.visibility}, ${entry.title ?? null})
-			ON CONFLICT (key) DO UPDATE SET
-				last_active_at = now(),
-				-- Shared and no one's, as 0.8 recorded a turn run without a visibility: the first private
-				-- turn makes it its speaker's. One with a principal never changes hands.
-				visibility = CASE WHEN conversations.visibility = 'shared' AND conversations.principal_id IS NULL
-					AND EXCLUDED.visibility = 'private' AND EXCLUDED.principal_id IS NOT NULL
-					THEN 'private' ELSE conversations.visibility END,
-				principal_id = CASE WHEN conversations.visibility = 'shared' AND conversations.principal_id IS NULL
-					AND EXCLUDED.visibility = 'private' AND EXCLUDED.principal_id IS NOT NULL
-					THEN EXCLUDED.principal_id ELSE conversations.principal_id END
+			ON CONFLICT (key) DO UPDATE SET last_active_at = now()
 			RETURNING *`;
 		const [row] = rows;
 		if (!row) throw new Error(`conversation ${entry.key} was not recorded`);
@@ -107,6 +98,19 @@ export class PgConversationRegistry implements ConversationRegistry {
 					SELECT * FROM conversations WHERE principal_id = ${filter.principal}
 					ORDER BY last_active_at DESC, key`;
 		return rows.map(recordOf);
+	}
+
+	async adopt(
+		key: ChannelKey,
+		principalId: string,
+	): Promise<ConversationRecord | undefined> {
+		// The row lock makes a racing adopt wait and then find the conversation no longer no one's.
+		const rows: Row[] = await this.#sql`
+			UPDATE conversations SET visibility = 'private', principal_id = ${principalId}
+			WHERE key = ${key} AND visibility = 'shared' AND principal_id IS NULL
+			RETURNING *`;
+		const [row] = rows;
+		return row ? recordOf(row) : this.get(key);
 	}
 
 	async setTitle(
