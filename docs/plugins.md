@@ -2018,6 +2018,7 @@ The Discord plugin contributes one named `discord`: it finds a principal's Disco
 The `notify` tool, 0.8's `notify_owner`, sends such a notice. A session has it only when a provider is contributed, and a private conversation only when a provider knows its person; the channel itself is reached when a notice is sent.
 It notifies the conversation's person in a private conversation and the turn's speaker in a shared one, and refuses when no provider reaches them or when the speaker is not the private conversation's person; the host's own turns, such as a report's, notify the conversation's person in a private conversation and the primary owner elsewhere, as `notify_owner` did.
 Its description names the channels that can reach the person, so a host with only Discord reads `Send Ada a direct message on Discord. …` as 0.8 did.
+In a shared conversation it names the primary owner while only they can receive a notice (the host has no other owner, and only owners may use it), and "the speaker" otherwise; this is checked again before each turn, so an open session follows an owner granted or revoked meanwhile.
 Until 1.0 the name `notify_owner` still selects it in a selection or a profile and names it in a task's `exclude` and a plugin's `requiredTools`, and an operator's or a plugin's `toolTiers` entry for `notify_owner` applies to `notify` unless `notify` has its own.
 Using the old name logs a deprecation warning once per logger, whether in a selection or in `toolTiers`.
 

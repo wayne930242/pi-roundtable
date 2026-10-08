@@ -90,15 +90,20 @@ export function sessionNotify(
 					return;
 				}
 			}
+			// A shared conversation names the primary owner while only they can be notified, which
+			// an owner granted or revoked while the session is open changes before its next turn.
+			const describe = async () =>
+				own === undefined && (await onlyOwner(session))
+					? owner
+					: session.addressee;
 			await notifyExtension(
 				{
 					notifier: directChannels,
 					recipient: async () => recipientOf(session, own),
 					channels: labels(reaching),
 				},
-				own === undefined && (await onlyOwner(session))
-					? owner
-					: session.addressee,
+				await describe(),
+				own === undefined ? describe : undefined,
 			)(pi);
 		};
 	};

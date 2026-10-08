@@ -26,17 +26,22 @@ export function notifyExtension(
 	notify: SessionNotify,
 	/** Whom the description names: the private conversation's person, or the speaker. */
 	addressee: OwnerIdentity,
+	/**
+	 * Whom it names at each turn, when that may change while the session is open, such as when the
+	 * host gains or loses an owner; the tool is described anew before a turn whose words differ.
+	 */
+	current?: () => Promise<OwnerIdentity>,
 ): ExtensionFactory {
-	const o = addresseeWords(addressee);
-	return (pi) => {
-		pi.registerTool({
+	const tool = (who: OwnerIdentity) => {
+		const o = addresseeWords(who);
+		return {
 			name: "notify",
 			label: "Notify",
 			description: `Send ${o.name} ${notify.channels}. Use only when ${o.he} asks to be notified or reminded by DM; your normal reply already reaches ${o.him}.`,
 			parameters: Type.Object({
 				text: Type.String({ description: "The message to send." }),
 			}),
-			execute: async (_toolCallId, params) => {
+			execute: async (_toolCallId: string, params: { text: string }) => {
 				const recipient = await notify.recipient();
 				if ("refused" in recipient) return toolError(recipient.refused);
 				if (!(await notify.notifier.notify(recipient.principalId, params.text)))
@@ -45,6 +50,17 @@ export function notifyExtension(
 					);
 				return toolText("Sent.");
 			},
+		};
+	};
+	return (pi) => {
+		let described = tool(addressee);
+		pi.registerTool(described);
+		if (!current) return;
+		pi.on("before_agent_start", async () => {
+			const now = tool(await current());
+			if (now.description === described.description) return;
+			described = now;
+			pi.registerTool(now);
 		});
 	};
 }

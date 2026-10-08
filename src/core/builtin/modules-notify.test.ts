@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import {
 	type Principal,
 	SYSTEM_PRINCIPAL,
@@ -10,9 +11,11 @@ import {
 	ANN,
 	context,
 	contextOf,
+	factoryOf,
 	HOME,
 	notifyIn,
 	privateTo,
+	type Registered,
 	registered,
 } from "../testing/module-sessions.ts";
 import {
@@ -155,5 +158,33 @@ describe("notify", () => {
 		expect(setup.record.notified).toEqual([
 			{ principalId: "1", text: "the job failed" },
 		]);
+	});
+
+	test("an open session's description follows the host gaining a second owner, and losing them again", async () => {
+		const owners: Principal[] = [OWNER_PRINCIPAL];
+		const setup = await setUpModules({
+			direct: { "1": OWNER_CHANNEL, p_ann: "discord:ann-dm" },
+			owners,
+		});
+		const factory = factoryOf(setup, "notify", contextOf(ANN, HOME));
+		if (!factory) throw new Error("no notify extension");
+		const tools: Registered[] = [];
+		const starts: ((event: unknown) => Promise<unknown>)[] = [];
+		// One session: its extension loads once, and its handlers run before each turn.
+		await factory({
+			registerTool: (definition: Registered) => tools.push(definition),
+			on: (event: string, handler: (event: unknown) => Promise<unknown>) => {
+				if (event === "before_agent_start") starts.push(handler);
+			},
+		} as unknown as ExtensionAPI);
+		const turn = async () => {
+			for (const start of starts) await start({});
+			return (tools.at(-1) as unknown as { description: string }).description;
+		};
+		expect(await turn()).toContain("Send Owner");
+		owners.push({ id: "p_bo", displayName: "Bo", disabled: false });
+		expect(await turn()).toContain("Send the speaker");
+		owners.pop();
+		expect(await turn()).toContain("Send Owner");
 	});
 });
