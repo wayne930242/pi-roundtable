@@ -20,6 +20,8 @@ export const REMOTE_SPEAKER: Speaker = {
 	id: "remote-mcp",
 	name: "Remote agent",
 	tier: "owner",
+	// The principal 0.8 keyed this speaker's rows by; the token is bound to a principal later.
+	principalId: "remote-mcp",
 };
 
 /** How the plugin runs a remote turn and a remote conversation's claim operations. */

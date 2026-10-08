@@ -21,13 +21,9 @@ import type {
 	OwnerQuestion,
 } from "../domain/owner-prompts.ts";
 import { messages } from "../i18n/index.ts";
+import type { IdentityService } from "../identity/identity-service.ts";
 import type { Logger } from "../log.ts";
-import {
-	type Speaker,
-	type SpeakerPolicy,
-	type Tier,
-	tierAtLeast,
-} from "../speakers.ts";
+import { type Speaker, type Tier, tierAtLeast } from "../speakers.ts";
 import type { InteractionModule } from "./interaction-module.ts";
 import { ownerPanel, type PanelContent, plain } from "./owner-panel.ts";
 
@@ -63,8 +59,8 @@ export interface CardChannel {
 
 export interface OwnerCardsOptions {
 	ownerId: string;
-	/** Decides who holds a tier, for cards that lower tiers may answer; without it only the owner answers. */
-	speakers?: SpeakerPolicy;
+	/** Who holds a tier now, for cards that lower tiers may answer; without it only the owner answers. */
+	identity?: Pick<IdentityService, "resolve">;
 	/** The Discord channel by id; throws when it cannot take messages. */
 	channel(channelId: string): Promise<CardChannel>;
 	logger: Logger;
@@ -93,7 +89,12 @@ interface OpenCard {
 
 /** The people a card is for. */
 interface Audience {
-	allows(user: { id: string; roleIds: readonly string[] }): boolean;
+	/** Whether this user may answer; their roles are unknown where the press carries no member. */
+	allows(user: {
+		id: string;
+		name: string;
+		roleIds?: readonly string[];
+	}): boolean | Promise<boolean>;
 	/** The user the card mentions in a thread. */
 	mentionId: string;
 	/** Shown on the card. */
@@ -265,13 +266,14 @@ export class OwnerCards implements InteractionModule {
 
 	/**
 	 * An approval is for the speaker whose turn held the call, when their tier holds it, and for
-	 * the owner; the owner's alone by default. Nobody else in the channel may approve it.
+	 * the owner; the owner's alone by default. A call only the owner tier may make is so for
+	 * another owner's turn too, such as one the CLI granted. Nobody else in the channel may
+	 * approve it.
 	 */
 	#approvers(minTier: Tier, speaker: Speaker | undefined): Audience {
-		const { ownerId, speakers } = this.#options;
+		const { ownerId, identity } = this.#options;
 		if (
-			minTier === "owner" ||
-			!speakers ||
+			!identity ||
 			!speaker ||
 			speaker.id === ownerId ||
 			!tierAtLeast(speaker.tier, minTier)
@@ -283,11 +285,20 @@ export class OwnerCards implements InteractionModule {
 				refusal: messages().cardOwnerOnly,
 			};
 		return {
-			allows: (user) => {
+			allows: async (user) => {
 				if (user.id === ownerId) return true;
 				if (user.id !== speaker.id) return false;
 				// Their tier when they press, in case it was lowered during the turn.
-				const who = speakers.resolve({ ...user, name: "" });
+				const who = await identity.resolve({
+					provider: "discord",
+					subject: user.id,
+					name: user.name,
+					surface: "discord",
+					...(user.roleIds
+						? { roles: user.roleIds.map((role) => `discord:role:${role}`) }
+						: {}),
+					legacyId: user.id,
+				});
 				return who !== undefined && tierAtLeast(who.tier, minTier);
 			},
 			mentionId: speaker.id,
@@ -337,8 +348,15 @@ export class OwnerCards implements InteractionModule {
 		}
 		const { member } = interaction;
 		const roleIds =
-			member && "cache" in member.roles ? [...member.roles.cache.keys()] : [];
-		if (!card.audience.allows({ id: interaction.user.id, roleIds })) {
+			member && "cache" in member.roles
+				? [...member.roles.cache.keys()]
+				: undefined;
+		const user = {
+			id: interaction.user.id,
+			name: interaction.user.globalName ?? interaction.user.username,
+			...(roleIds ? { roleIds } : {}),
+		};
+		if (!(await card.audience.allows(user))) {
 			await interaction.reply({
 				content: card.audience.refusal,
 				flags: MessageFlags.Ephemeral,

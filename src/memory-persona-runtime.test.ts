@@ -27,12 +27,23 @@ const OWNER = {
 	name: "Riley",
 	pronouns: { subject: "he", object: "him", possessive: "his" },
 } as const;
-const MEMBER: Speaker = { id: "member-7", name: "Ada", tier: "member" };
-const ADMIN: Speaker = { id: "admin-3", name: "Kai", tier: "admin" };
+const MEMBER: Speaker = {
+	id: "member-7",
+	name: "Ada",
+	tier: "member",
+	principalId: "member-7",
+};
+const ADMIN: Speaker = {
+	id: "admin-3",
+	name: "Kai",
+	tier: "admin",
+	principalId: "admin-3",
+};
 const OWNER_SPEAKER: Speaker = {
 	id: OWNER.id,
 	name: OWNER.name,
 	tier: "owner",
+	principalId: OWNER.id,
 };
 
 /** Every speaker's facts in memory, keyed by speaker id, with the reads and writes each took. */
@@ -305,6 +316,7 @@ describe("memory in a persona conversation", () => {
 				id: "remote-mcp",
 				name: "Remote",
 				tier: "owner",
+				principalId: "remote-mcp",
 			};
 			expect((await room.run(remote)).ok).toBe(true);
 			expect(prompt).toContain("## Owner memory");

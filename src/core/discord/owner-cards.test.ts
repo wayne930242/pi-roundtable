@@ -3,7 +3,7 @@ import type { Interaction } from "discord.js";
 import type { OwnerQuestion } from "../domain/owner-prompts.ts";
 import { messages } from "../i18n/index.ts";
 import { silentLogger } from "../log.ts";
-import { speakerPolicy } from "../speakers.ts";
+import { mapIdentity } from "../testing/map-identity.ts";
 import {
 	CARD_PREFIX,
 	type CardPayload,
@@ -331,7 +331,7 @@ describe("cards for lower tiers", () => {
 	const ADMIN = "100000000000000002";
 	const MEMBER = "100000000000000003";
 	const ROLE = "100000000000000004";
-	const speakers = speakerPolicy({
+	const identity = mapIdentity({
 		owners: [OWNER],
 		admins: { users: [ADMIN] },
 		members: { roles: [ROLE] },
@@ -340,11 +340,16 @@ describe("cards for lower tiers", () => {
 		const fake = fakeChannel();
 		const cards = new OwnerCards({
 			ownerId: OWNER,
-			speakers,
+			identity,
 			channel: fake.channel,
 			logger: silentLogger(),
 		});
-		const speaker = { id: ADMIN, name: "Ada", tier: "admin" } as const;
+		const speaker = {
+			id: ADMIN,
+			name: "Ada",
+			tier: "admin",
+			principalId: ADMIN,
+		} as const;
 		const answer = cards
 			.prompts("discord:555", speaker)
 			?.confirm("t", "**create an agent**", undefined, "admin");
@@ -388,12 +393,12 @@ describe("cards for lower tiers", () => {
 		const fake = fakeChannel();
 		const cards = new OwnerCards({
 			ownerId: OWNER,
-			speakers,
+			identity,
 			channel: fake.channel,
 			logger: silentLogger(),
 		});
 		const answer = cards
-			.prompts("discord:555", speaker)
+			.prompts("discord:555", { ...speaker, principalId: speaker.id })
 			?.confirm("t", "**search the web**", undefined, "member");
 		return { fake, cards, answer };
 	};
@@ -444,11 +449,16 @@ describe("cards for lower tiers", () => {
 		const fake = fakeChannel();
 		const cards = new OwnerCards({
 			ownerId: OWNER,
-			speakers,
+			identity,
 			channel: fake.channel,
 			logger: silentLogger(),
 		});
-		const speaker = { id: MEMBER, name: "Mo", tier: "member" } as const;
+		const speaker = {
+			id: MEMBER,
+			name: "Mo",
+			tier: "member",
+			principalId: MEMBER,
+		} as const;
 		void cards
 			.prompts("discord:555", speaker)
 			?.confirm("t", "**create an agent**", undefined, "admin");
@@ -466,15 +476,66 @@ describe("cards for lower tiers", () => {
 		}
 	});
 
+	test("another owner, such as one the CLI granted, may approve their own owner-tier call; the primary owner too", async () => {
+		const SECOND_OWNER = "100000000000000006";
+		const ask = () => {
+			const fake = fakeChannel();
+			const cards = new OwnerCards({
+				ownerId: OWNER,
+				// The identity service holds the second owner, whom no 0.8 map lists.
+				identity: mapIdentity({ owners: [OWNER, SECOND_OWNER] }),
+				channel: fake.channel,
+				logger: silentLogger(),
+			});
+			const speaker = {
+				id: SECOND_OWNER,
+				name: "Sam",
+				tier: "owner",
+				principalId: "p_second",
+			} as const;
+			const answer = cards
+				.prompts("discord:555", speaker)
+				?.confirm("t", "**rm**");
+			return { fake, cards, answer };
+		};
+		const own = ask();
+		await tick();
+		expect(json(own.fake.sent[0])).toContain(
+			messages().cardApproversNote(SECOND_OWNER),
+		);
+		const admin = press("button", `${CARD_PREFIX}${own.fake.cardId()}:yes`, {
+			user: ADMIN,
+		});
+		await own.cards.handle(admin.interaction);
+		expect(admin.replies).toEqual([messages().cardApproversRefusal]);
+		const second = press("button", `${CARD_PREFIX}${own.fake.cardId()}:yes`, {
+			user: SECOND_OWNER,
+		});
+		await own.cards.handle(second.interaction);
+		expect(await own.answer).toBe("approved");
+		const primary = ask();
+		await tick();
+		const owner = press("button", `${CARD_PREFIX}${primary.fake.cardId()}:no`, {
+			user: OWNER,
+		});
+		await primary.cards.handle(owner.interaction);
+		expect(await primary.answer).toBe("declined");
+	});
+
 	test("a shell approval stays the owner's even when the speaker is an admin", async () => {
 		const fake = fakeChannel();
 		const cards = new OwnerCards({
 			ownerId: OWNER,
-			speakers,
+			identity,
 			channel: fake.channel,
 			logger: silentLogger(),
 		});
-		const speaker = { id: ADMIN, name: "Ada", tier: "admin" } as const;
+		const speaker = {
+			id: ADMIN,
+			name: "Ada",
+			tier: "admin",
+			principalId: ADMIN,
+		} as const;
 		void cards.prompts("discord:555", speaker)?.confirm("t", "**rm**");
 		await tick();
 		const admin = press("button", `${CARD_PREFIX}${fake.cardId()}:yes`, {
@@ -488,11 +549,16 @@ describe("cards for lower tiers", () => {
 		const fake = fakeChannel();
 		const cards = new OwnerCards({
 			ownerId: OWNER,
-			speakers,
+			identity,
 			channel: fake.channel,
 			logger: silentLogger(),
 		});
-		const speaker = { id: ADMIN, name: "Ada", tier: "admin" } as const;
+		const speaker = {
+			id: ADMIN,
+			name: "Ada",
+			tier: "admin",
+			principalId: ADMIN,
+		} as const;
 		const question = {
 			question: "Which one?",
 			options: [{ label: "First" }, { label: "Second" }],

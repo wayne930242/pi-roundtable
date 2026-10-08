@@ -143,4 +143,5 @@ export const speakerOf = (id: string, tier: Tier = "member"): Speaker => ({
 	id,
 	name: id,
 	tier,
+	principalId: id,
 });

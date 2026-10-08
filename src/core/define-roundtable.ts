@@ -24,7 +24,6 @@ import { ConfigError } from "./domain/errors.ts";
 import { JudgeError } from "./errors.ts";
 import type { RoundtableOptions } from "./host.ts";
 import type { ListenerConfig } from "./http/listeners.ts";
-import { speakerPolicyOf } from "./identity/access-policy.ts";
 import { identityPlugin } from "./identity/identity-plugin.ts";
 import { type JudgeModel, piJudgeModel } from "./judging/model-judge.ts";
 import { createLogger, type LogEntry, type Logger } from "./log.ts";
@@ -146,7 +145,6 @@ function discordAssembly(
 ): DiscordAssembly {
 	const { name } = config;
 	const owner = discordOwnerOf(config);
-	const speakers = speakerPolicyOf(config.access, "discord");
 	const sharedPrompt = config.prompts.shared
 		? readPrompt(config.prompts.shared, "prompts.shared")
 		: readPrompt(join(ASSETS, "prompts", "shared.md"), "prompts.shared");
@@ -159,7 +157,6 @@ function discordAssembly(
 			token: discord.token,
 			ownerId: owner.id,
 			ownerName: owner.name,
-			speakers,
 			rootCommand: discord.rootCommand,
 			dataDir: config.dataDir,
 			...(discord.refusalHint === undefined
@@ -182,7 +179,6 @@ function discordAssembly(
 			entryChannelId: discord.entryChannel,
 			owner,
 			assistant: name,
-			speakers,
 			modelRuntime: shared.modelRuntime,
 			dataDir: config.dataDir,
 			model: config.model,

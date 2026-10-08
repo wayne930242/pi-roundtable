@@ -30,7 +30,7 @@ import {
 	SKILLS,
 } from "../services.ts";
 import type { SessionTool } from "../sessions.ts";
-import type { SpeakerPolicy, Tier } from "../speakers.ts";
+import type { Tier } from "../speakers.ts";
 import { DISCORD } from "./discord.ts";
 import { agentOnly } from "./session-tool.ts";
 
@@ -41,8 +41,6 @@ export interface AgentServerOptions {
 	owner: OwnerIdentity & { id: string };
 	/** The assistant's display name, as the confirmation judge names it. */
 	assistant: string;
-	/** Who may talk to the agents, and at which tier. */
-	speakers: SpeakerPolicy;
 	/** Shared with the rest of the host, so logins refresh in one place; lists the models an agent may run. */
 	modelRuntime: ModelRuntime;
 	dataDir: string;
@@ -281,7 +279,6 @@ export function agentServerPlugin(
 				channels: [
 					agentClaim({
 						owner: options.owner,
-						speakers: options.speakers,
 						team: built,
 						runtime: running,
 						surface: context.surfaces,

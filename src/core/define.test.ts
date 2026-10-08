@@ -6,7 +6,12 @@ import { PluginError } from "./errors.ts";
 import type { SessionContext } from "./sessions.ts";
 import type { Speaker } from "./speakers.ts";
 
-const speaker: Speaker = { id: "1", name: "Ann", tier: "admin" };
+const speaker: Speaker = {
+	id: "1",
+	name: "Ann",
+	tier: "admin",
+	principalId: "1",
+};
 
 const note = {
 	name: "note_add",

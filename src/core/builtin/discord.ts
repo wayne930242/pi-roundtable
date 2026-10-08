@@ -12,7 +12,7 @@ import { OwnerCards } from "../discord/owner-cards.ts";
 import { OwnerGuard, ownerRootCommand } from "../discord/owner-command.ts";
 import { stopButtonModule } from "../discord/stop-button.ts";
 import type { RoundtablePlugin } from "../plugin.ts";
-import type { SpeakerPolicy } from "../speakers.ts";
+import { IDENTITY } from "../services.ts";
 
 /** The Discord connection and what stands on it, as plugins use it. Provided by the Discord plugin. */
 export interface DiscordServices {
@@ -34,8 +34,6 @@ export interface DiscordOptions {
 	ownerId: string;
 	/** How the owner is named in audit-log reasons and refusals. */
 	ownerName: string;
-	/** Who may answer a card besides the owner. */
-	speakers: SpeakerPolicy;
 	dataDir: string;
 	/** The name of the root slash command, without the slash. */
 	rootCommand: string;
@@ -62,10 +60,12 @@ export function discordPlugin(options: DiscordOptions): RoundtablePlugin {
 			);
 		},
 		setup: async ({ conversations, services, logger }) => {
+			const identity = services.find(IDENTITY);
 			// The surface exists by the time a turn posts a card.
 			const cards: OwnerCards = new OwnerCards({
 				ownerId: options.ownerId,
-				speakers: options.speakers,
+				// Who may answer a card besides the owner, by the identity service.
+				...(identity ? { identity } : {}),
 				channel: (channelId) => connected.cardChannel(channelId),
 				logger,
 			});

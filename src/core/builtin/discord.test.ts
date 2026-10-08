@@ -53,6 +53,7 @@ async function setUp(
 			provide: (key: { id: string }, value: DiscordServices) => {
 				if (key.id === DISCORD.id) provided = value;
 			},
+			find: () => undefined,
 		},
 	} as unknown as PluginContext);
 	if (!provided) throw new Error("the discord plugin provided no DISCORD");

@@ -93,7 +93,12 @@ const seen = (running: Running, kind: SurfaceObservation["kind"]) =>
 	running.subject.observations().filter((o) => o.kind === kind);
 
 const speakerOf = (subject: SurfaceContractSubject): Speaker =>
-	subject.speaker ?? { id: "contract-speaker", name: "Ada", tier: "owner" };
+	subject.speaker ?? {
+		id: "contract-speaker",
+		name: "Ada",
+		tier: "owner",
+		principalId: "contract-speaker",
+	};
 
 /** The newest prompt the person has seen, once one more than `before` is open. */
 async function nextPrompt(running: Running, before: number): Promise<string> {

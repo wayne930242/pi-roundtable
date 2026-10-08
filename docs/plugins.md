@@ -602,7 +602,7 @@ test("the section names the agent, and the speaker when there is one", async () 
 	expect(
 		section?.build({
 			agent,
-			speaker: { id: "1", name: "Ada", tier: "member" },
+			speaker: { id: "1", name: "Ada", tier: "member", principalId: "1" },
 			scope,
 		}),
 	).toContain("You are talking with Ada.");
@@ -1662,6 +1662,11 @@ It leaves those other channels silent for the owner's notes, preventing other cl
 Your Discord claim won't receive messages from that guild at any priority below 100, including `priority: 10`.
 Claims on other surfaces, such as the example's `echo:` keys, don't compete with the agent server.
 
+Before a claim's `admit` sees a message, the router resolves its author through `IDENTITY` and sets `message.speaker`: their `id` on the surface, `name`, `tier`, and `principalId`, the principal whose memory, schedules, and conversations are theirs.
+It is undefined when the access rules serve no one by them, and for bots and integrations, which are not resolved; a `speaker` the surface set is dropped.
+A claim that serves only the people the host serves answers only when `speaker` is set.
+The router records the author, such as linking them at their first contact, only once a claim admits the message, so messages no claim takes write nothing.
+
 A claim may have `stop(channel)`, which stops the channel's running turn and returns whether one was running; the Stop button, `conversations.stop`, and every other stop go through it.
 The router calls only the owning claim's `stop`, returning `false` when that method is absent.
 Give `stop` to a claim whose conversations run turns that can be interrupted.
@@ -1728,7 +1733,7 @@ Supply `reply(result)` to handle the reply yourself.
 It rejects with `NotLinkedError` during `setup`, and with a `PluginError` on a host whose runtime plugin has not provided a runtime.
 
 Before each turn runs, `context.turns.run` records its conversation in the host's registry, `CONVERSATIONS`: at the first turn its key, surface, kind, visibility, owner, and title, and at every later turn only that it was active.
-`conversation: { visibility: "private" }` records it as the speaker's own (`principalId` is `speaker.id`); without it the conversation is `shared`.
+`conversation: { visibility: "private" }` records it as the speaker's own (its `principalId` is `speaker.principalId`); without it the conversation is `shared`.
 `conversation.title` names it at its first turn; `setTitle(key, title)` renames it later.
 A turn whose conversation cannot be recorded does not run, and the call rejects.
 The registry records and never refuses: who may speak in a conversation stays your claim's decision, which may read `get(key)` to check the owner.
@@ -1778,6 +1783,7 @@ export const studyRoom = definePlugin({
 											id: message.authorId,
 											name: message.authorName,
 											tier: "member",
+											principalId: message.authorId,
 										},
 									});
 								},
@@ -1953,6 +1959,9 @@ The agent server claims only `discord:` keys, so claims on your surface's channe
 | `prompts(channel, speaker?)` | The owner's way to approve a held action or answer `ask_user` inside a running turn, as `OwnerPrompts`: `confirm` and `ask` | the action is held until the owner's next message |
 | `interim(channel)` | Where a running turn posts the text it writes before its final answer, as `InterimPosts`: `post(text)` sends one message of at most 2000 characters and resolves to an `InterimMessage` whose `edit(text)` changes it in place | only the final reply is posted |
 | `progress(channel, event)` | Shows a turn run through `context.turns` as it goes, such as a live preview in a web chat. `event` is a `TurnProgress`: `{ type: "text", delta }` (the reply's text, joined over 250 ms and always sent before a tool event, never the thinking), `{ type: "tool_start", id, tool, preview? }` (a one-line preview of the arguments, at most 80 characters, never their full text), or `{ type: "tool_end", id, tool, ok }`. The final reply still comes through `sendReply`; a rejection is logged and the turn goes on | only the final reply is shown |
+
+Each message a surface delivers says who wrote it in `actor`, the `ActorFacts` the identity service resolves: `provider` and `subject`, such as `discord` and the user id, `name`, `roles` written `<surface>:role:<name>` (left out where the surface does not know them, such as a Discord DM, which is not the same as none), and `legacyId`, the speaker id 0.8 gave the person, so someone carried over keeps their principal.
+A surface that leaves `actor` out has it read from `authorId`, `authorName`, and `authorRoleIds` with its prefix as the provider, and the host warns once that this goes away in 1.0.
 
 The host starts each surface as `surface:<prefix>` at the contributing plugin's place in the order, before that plugin's own services.
 It stops surfaces in reverse order, like other services.
@@ -2412,7 +2421,12 @@ import { notes } from "./tools.ts";
 
 test("note_add saves a note for the speaker and refuses an empty one", async () => {
 	const harness = await testPlugin(notes);
-	const ada: Speaker = { id: "1", name: "Ada", tier: "member" };
+	const ada: Speaker = {
+		id: "1",
+		name: "Ada",
+		tier: "member",
+		principalId: "1",
+	};
 	expect(harness.tools).toEqual(["note_add"]);
 	expect(harness.tiers.minTier("note_add")).toBe("member");
 	expect(

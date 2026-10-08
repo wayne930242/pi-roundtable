@@ -195,8 +195,8 @@ export function rulesOfSpeakerMap(
 /**
  * The 0.8 policy over these rules on one surface, for the code that still resolves a speaker
  * from a surface's facts by itself: an author is an owner when one of the owners lists their
- * identity there, and otherwise holds the tier the rules give them. Its speakers carry no
- * principal; the identity service gives those.
+ * identity there, and otherwise holds the tier the rules give them. Each speaker's principal is
+ * their own id, as for a person carried over from 0.8; the identity service knows the others.
  */
 export function speakerPolicyOf(
 	rules: Pick<AccessRules, "owners" | "admins" | "members">,
@@ -214,7 +214,14 @@ export function speakerPolicyOf(
 			const tier: Tier | undefined = ownerOfFacts(rules, facts)
 				? "owner"
 				: factsTier(rules, facts);
-			return tier && { id: author.id, name: author.name, tier };
+			return (
+				tier && {
+					id: author.id,
+					name: author.name,
+					tier,
+					principalId: author.id,
+				}
+			);
 		},
 	};
 }

@@ -13,7 +13,7 @@ import type { OwnerIdentity } from "../identity.ts";
 import type { Logger } from "../log.ts";
 import { withReference } from "../routing/message-text.ts";
 import { outcome } from "../routing/settle-turn.ts";
-import { addressee, attributed, type SpeakerPolicy } from "../speakers.ts";
+import { addressee, attributed } from "../speakers.ts";
 import type { DiscordAgentTeam } from "./agent-team.ts";
 import { discordIdOf } from "./team-keys.ts";
 
@@ -42,8 +42,6 @@ export const OWNER_TARGET: BackgroundTarget = {
 export interface AgentClaimOptions {
 	/** The owner, as forwarded messages name them. */
 	owner: OwnerIdentity;
-	/** Who may talk to the agents, and at which tier. */
-	speakers: SpeakerPolicy;
 	team: Pick<
 		DiscordAgentTeam,
 		| "guildId"
@@ -68,8 +66,7 @@ export interface AgentClaimOptions {
  * failure notice, is a labelled report turn for the agent.
  */
 export function agentClaim(options: AgentClaimOptions): ChannelClaim {
-	const { speakers, team, runtime, surface, attachmentDir, logger, fetchImpl } =
-		options;
+	const { team, runtime, surface, attachmentDir, logger, fetchImpl } = options;
 	const attachments = (message: InboundMessage) =>
 		attachmentsOf(message, attachmentDir(message.channel), logger, fetchImpl);
 
@@ -112,13 +109,9 @@ export function agentClaim(options: AgentClaimOptions): ChannelClaim {
 			if (!owned) return undefined;
 			if (owned === "agent" && message.integration && !message.integration.own)
 				return webhookReport(message);
-			if (message.authorIsBot) return undefined;
-			const speaker = speakers.resolve({
-				id: message.authorId,
-				name: message.authorName,
-				...(message.authorRoleIds ? { roleIds: message.authorRoleIds } : {}),
-			});
-			if (!speaker) return undefined;
+			// Who may talk to the agents, and at which tier, the router resolved through the identity service.
+			const { speaker } = message;
+			if (message.authorIsBot || !speaker) return undefined;
 			const { channel, messageId } = message;
 			const forwarder = addressee(speaker, options.owner);
 			return {
@@ -181,6 +174,8 @@ export function agentClaim(options: AgentClaimOptions): ChannelClaim {
 						id: turn.author.id,
 						name: turn.author.name,
 						tier: turn.tier ?? "owner",
+						// A background turn's author is a person id the turn was stored with, their principal's.
+						principalId: turn.author.id,
 					},
 					turn.text,
 					turn.report === true,

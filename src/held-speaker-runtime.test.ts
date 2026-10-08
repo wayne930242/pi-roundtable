@@ -16,7 +16,12 @@ import { PiAgentRuntime } from "./core/runtime/pi-agent-runtime.ts";
 import type { Speaker } from "./core/speakers.ts";
 import { testPlugin } from "./testing.ts";
 
-const MEMBER: Speaker = { id: "7", name: "Sam", tier: "member" };
+const MEMBER: Speaker = {
+	id: "7",
+	name: "Sam",
+	tier: "member",
+	principalId: "7",
+};
 
 test("a Pi turn's held calls carry the speaker whose turn held them, so only they and the owner approve them", async () => {
 	const dir = mkdtempSync(join(tmpdir(), "roundtable-held-"));

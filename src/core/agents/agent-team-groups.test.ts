@@ -157,7 +157,7 @@ describeDb("PostgreSQL", () => {
 			const say = (id: string) =>
 				fx.team.answerGroup(
 					group,
-					{ id, name: `admin ${id}`, tier: "admin" },
+					{ id, name: `admin ${id}`, tier: "admin", principalId: id },
 					"yes, do it",
 					"yes, do it",
 					NO_ATTACHMENTS,

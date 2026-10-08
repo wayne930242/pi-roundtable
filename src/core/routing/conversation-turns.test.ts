@@ -230,6 +230,28 @@ describe("conversation turns", () => {
 		expect(log.indexOf("registered")).toBeLessThan(log.indexOf("run"));
 	});
 
+	test("a private conversation is its speaker's principal's, not their surface id's", async () => {
+		const registered: ConversationRegistration[] = [];
+		const { turns } = setup(async () => ({ ok: true, text: "hi" }), {
+			register: async (entry) => {
+				registered.push(entry);
+				return {
+					...entry,
+					surface: "fake",
+					createdAt: new Date(),
+					lastActiveAt: new Date(),
+				};
+			},
+		});
+		await turns.run({
+			...input,
+			channel: "fake:mine",
+			speaker: { ...OWNER_SPEAKER, id: "surface-id", principalId: "p_owner" },
+			conversation: { visibility: "private" },
+		});
+		expect(registered.map((entry) => entry.principalId)).toEqual(["p_owner"]);
+	});
+
 	test("a private conversation needs the speaker it belongs to, and a failed record runs no turn", async () => {
 		const { turns, log } = setup(async () => ({ ok: true, text: "hi" }), {
 			register: async () => {

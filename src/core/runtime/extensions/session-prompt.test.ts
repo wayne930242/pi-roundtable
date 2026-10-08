@@ -101,7 +101,12 @@ function storeOf(facts: Record<string, string>): MemoryStore {
 describe("appended system prompt", () => {
 	test("a speaker other than the owner gets their own memory, not the owner's", async () => {
 		const owner = storeOf({ "1": "Drinks oolong tea", "2": "Prefers coffee" });
-		const speaker = () => ({ id: "2", name: "Ada", tier: "admin" as const });
+		const speaker = () => ({
+			id: "2",
+			name: "Ada",
+			tier: "admin" as const,
+			principalId: "2",
+		});
 		const prompt = await appendedPrompt(
 			[
 				{
@@ -123,6 +128,7 @@ describe("appended system prompt", () => {
 			id: "1",
 			name: "Riley",
 			tier: "owner" as const,
+			principalId: "1",
 		});
 		const prompt = await appendedPrompt(
 			[

@@ -55,18 +55,32 @@ export async function toInbound(
 		reference?.messageId && !forward
 			? await message.fetchReference().catch(() => undefined)
 			: undefined;
+	const authorName =
+		message.member?.displayName ??
+		message.author.globalName ??
+		message.author.username;
+	const roleIds = message.member
+		? [...message.member.roles.cache.keys()]
+		: undefined;
 	return {
 		channel: channelKey("discord", message.channelId),
 		messageId: message.id,
+		// A DM has no member, so its author's roles are unknown, not none.
+		actor: {
+			provider: "discord",
+			subject: message.author.id,
+			name: authorName,
+			surface: "discord",
+			...(roleIds
+				? { roles: roleIds.map((role) => `discord:role:${role}`) }
+				: {}),
+			...(message.guildId ? { space: message.guildId } : {}),
+			legacyId: message.author.id,
+		},
 		authorId: message.author.id,
-		authorName:
-			message.member?.displayName ??
-			message.author.globalName ??
-			message.author.username,
+		authorName,
 		authorIsBot: message.author.bot,
-		...(message.member
-			? { authorRoleIds: [...message.member.roles.cache.keys()] }
-			: {}),
+		...(roleIds ? { authorRoleIds: roleIds } : {}),
 		...(message.webhookId
 			? {
 					integration: {

@@ -7,6 +7,7 @@ import { MigrationError, NotLinkedError, PluginError } from "./errors.ts";
 import { EventBus } from "./events.ts";
 import { HttpListeners, type ListenerConfig } from "./http/listeners.ts";
 import { type Locale, setLocale } from "./i18n/index.ts";
+import { contactsOf } from "./identity/identity-view.ts";
 import type { JudgeModel } from "./judging/model-judge.ts";
 import type { Logger } from "./log.ts";
 import type {
@@ -32,7 +33,7 @@ import {
 	conversationTurns,
 } from "./routing/conversation-turns.ts";
 import { surfacePort } from "./routing/surface-port.ts";
-import { CONVERSATIONS, RUNTIME } from "./services.ts";
+import { CONVERSATIONS, IDENTITY, RUNTIME } from "./services.ts";
 import { setTimeZone } from "./time.ts";
 import { type ToolTierTable, toolTiers } from "./tool-tiers.ts";
 
@@ -328,8 +329,10 @@ export class Roundtable {
 		const { routes, channels } = this.#registry;
 		this.#sessions = linkSessions(this.#registry);
 		this.#events.link(this.#registry.handlers);
+		const identity = this.#services.find(IDENTITY);
 		this.#router = new ChannelRouter({
 			claims: channels,
+			...(identity ? { contacts: contactsOf(identity) } : {}),
 			targets: (name) =>
 				this.#registry.backgroundTargets.find((t) => t.name === name),
 			queue: this.#queue,

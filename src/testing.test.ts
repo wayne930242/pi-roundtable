@@ -96,7 +96,7 @@ test("the harness registers tools through their session factories and records ti
 		await harness.runTool(
 			"note_add",
 			{ text: "hello" },
-			{ speaker: { id: "1", name: "Alice", tier: "owner" } },
+			{ speaker: { id: "1", name: "Alice", tier: "owner", principalId: "1" } },
 		),
 	).toBe("Alice: hello");
 	expect(await harness.runTool("note_add", { text: "" })).toBe("empty note");
@@ -302,7 +302,7 @@ test("runTool runs in the channel and for the speaker it is given, test:1 by def
 			{},
 			{
 				channel: "fake:room",
-				speaker: { id: "1", name: "Ada", tier: "member" },
+				speaker: { id: "1", name: "Ada", tier: "member", principalId: "1" },
 			},
 		),
 	).toBe("fake:room Ada");
@@ -372,7 +372,7 @@ test("a runtime given under RUNTIME is the one context.turns runs on, kept whole
 		channel: "fake:room",
 		kind: "study",
 		text: "hello",
-		speaker: { id: "1", name: "Ada", tier: "member" },
+		speaker: { id: "1", name: "Ada", tier: "member", principalId: "1" },
 	});
 	expect(result).toEqual({ ok: true, text: "from RUNTIME" });
 	expect(replies).toEqual(["from RUNTIME"]);
@@ -564,7 +564,7 @@ test("turns refused during setup reject with NotLinkedError", async () => {
 						channel: "x:1",
 						kind: "k",
 						text: "t",
-						speaker: { id: "1", name: "A", tier: "owner" },
+						speaker: { id: "1", name: "A", tier: "owner", principalId: "1" },
 					})
 					.catch((error: unknown) => error);
 				return { events: {} };

@@ -26,7 +26,6 @@ import {
 	SCHEDULES,
 	type ScheduleStore,
 } from "../services.ts";
-import { speakerPolicy } from "../speakers.ts";
 import { toolTiers } from "../tool-tiers.ts";
 import {
 	type AgentServerOptions,
@@ -53,7 +52,6 @@ function options(extra: Partial<AgentServerOptions> = {}): AgentServerOptions {
 			pronouns: { subject: "they", object: "them", possessive: "their" },
 		},
 		assistant: "Assistant",
-		speakers: speakerPolicy({ owners: ["1"] }),
 		// SAFETY: building the runtime reads nothing of the model runtime; a turn would.
 		modelRuntime: {} as ModelRuntime,
 		dataDir: join(dir, "data"),

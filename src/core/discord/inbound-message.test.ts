@@ -42,6 +42,15 @@ test("a guild message reports its space, channel key, roles and mention, with th
 	expect(await toInbound(discordMessage(), identity)).toEqual({
 		channel: "discord:77",
 		messageId: "m1",
+		actor: {
+			provider: "discord",
+			subject: "1",
+			name: "Ada N",
+			surface: "discord",
+			roles: ["discord:role:r1"],
+			space: "g1",
+			legacyId: "1",
+		},
 		authorId: "1",
 		authorName: "Ada N",
 		authorIsBot: false,
@@ -67,6 +76,14 @@ test("a direct message has no space, and the bot's own or an unready client's me
 	expect(direct?.isDirect).toBe(true);
 	expect(direct).not.toHaveProperty("space");
 	expect(direct).not.toHaveProperty("authorRoleIds");
+	// A DM has no member: the author's roles are unknown, not none.
+	expect(direct?.actor).toEqual({
+		provider: "discord",
+		subject: "1",
+		name: "Ada",
+		surface: "discord",
+		legacyId: "1",
+	});
 	expect(
 		await toInbound(
 			discordMessage({ author: { id: BOT, bot: true, username: "b" } }),

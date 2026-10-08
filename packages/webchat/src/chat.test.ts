@@ -5,6 +5,7 @@ import type {
 	InboundMessage,
 } from "pi-roundtable";
 import { checkPersonas, type WebChatLimits } from "./chat.ts";
+import { oidcSpeakerId } from "./oidc.ts";
 import { CLOSE_CODES } from "./protocol.ts";
 import {
 	type FakeSocket,
@@ -197,6 +198,44 @@ test("a message only this chat accepted runs: the claim drops one delivered any 
 			attachments: [],
 		}),
 	).toBeUndefined();
+});
+
+test("a message it delivers says who wrote it as the host's identity service reads them: an OpenID subject under its issuer", async () => {
+	const harness = testChat();
+	const delivered: InboundMessage[] = [];
+	await harness.chat.surface.start((message) => void delivered.push(message));
+	const web = oidcSpeakerId("https://idp.example.com", "user-7");
+	const socket = harness.connect(web, ["User"]);
+	await harness.say(socket, {
+		type: "send",
+		id: "1",
+		persona: "helper",
+		text: "hi",
+	});
+	await harness.say(harness.connect("ada"), {
+		type: "send",
+		id: "2",
+		persona: "helper",
+		text: "hi",
+	});
+	expect(delivered.map((message) => message.actor)).toEqual([
+		{
+			provider: "oidc:aHR0cHM6Ly9pZHAuZXhhbXBsZS5jb20",
+			subject: "user-7",
+			name: web,
+			surface: "web",
+			roles: ["web:role:User"],
+			legacyId: web,
+		},
+		{
+			provider: "web",
+			subject: "ada",
+			name: "ada",
+			surface: "web",
+			roles: ["web:role:User"],
+			legacyId: "ada",
+		},
+	]);
 });
 
 test("frames that do not parse or break a limit are refused, and opened conversations are bounded", async () => {

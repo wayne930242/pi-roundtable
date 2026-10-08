@@ -64,7 +64,7 @@ function recordingSurface(replies: string[]): RoundtablePlugin {
 			channel: "test:room",
 			kind: "study",
 			text: "hello",
-			speaker: { id: "2", name: "Bo", tier: "member" },
+			speaker: { id: "2", name: "Bo", tier: "member", principalId: "2" },
 		});
 		expect(result).toEqual({ ok: true, text: "echo hello" });
 		expect(replies).toEqual(["echo hello"]);

@@ -32,6 +32,7 @@ import type {
 import { NotLinkedError, PluginError } from "./core/errors.ts";
 import { EventBus } from "./core/events.ts";
 import type { HoldCheck } from "./core/holds.ts";
+import { contactsOf } from "./core/identity/identity-view.ts";
 import type { OwnerIdentity } from "./core/identity.ts";
 import { ConfirmationJudge } from "./core/judging/confirmation-judge.ts";
 import { silentLogger } from "./core/log.ts";
@@ -69,10 +70,12 @@ import {
 	type AgentServer,
 	BACKGROUND_TURNS,
 	CONVERSATIONS,
+	IDENTITY,
 	RUNTIME,
 } from "./core/services.ts";
 import type { ChannelKey, SessionContext } from "./core/sessions.ts";
-import { type Speaker, speakerPolicy } from "./core/speakers.ts";
+import type { Speaker } from "./core/speakers.ts";
+import { mapIdentity } from "./core/testing/map-identity.ts";
 import { type ToolTierTable, toolTiers } from "./core/tool-tiers.ts";
 
 // Fixtures for plugin tests.
@@ -201,7 +204,9 @@ export interface TestPluginOptions {
 	 * host supplies anyway: `BACKGROUND_TURNS`, the real background turns over the test's router,
 	 * and, once `AGENTS` is given, its `approvals` (the real confirmation judge over
 	 * `providers.judge`, when the test gives a judge). Giving `AGENTS` a `team` adds the agent
-	 * server's own claim to the router, answering as the host's would for the `owner`.
+	 * server's own claim to the router, answering as the host's would for the `owner`. The router
+	 * resolves who wrote each message through a given `IDENTITY`; without one only the `owner` is
+	 * anyone, at the owner tier, their principal their id.
 	 */
 	services?: readonly ServicePair[];
 	/**
@@ -496,13 +501,17 @@ export async function testPlugin(
 	const team = given.get(AGENTS.id)?.given;
 	const agentServer = team && "team" in team ? services.get(AGENTS) : undefined;
 	const attachmentDir = mkdtempSync(join(tmpdir(), "roundtable-test-plugin-"));
+	const identity = services.find(IDENTITY);
 	router = new ChannelRouter({
+		// Who wrote a message: by the given IDENTITY, else the owner alone, at the owner tier.
+		contacts: identity
+			? contactsOf(identity)
+			: mapIdentity({ owners: [owner.id] }),
 		claims: [
 			...(agentServer
 				? [
 						agentClaim({
 							owner,
-							speakers: speakerPolicy({ owners: [owner.id] }),
 							// SAFETY: the claim reads the concrete team's members (guildId, owns, answerOwner, answerGroup, answerBackground, startFresh), which a test that gives a team for it supplies.
 							team: agentServer.team as unknown as Parameters<
 								typeof agentClaim

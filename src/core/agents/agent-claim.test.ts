@@ -38,13 +38,13 @@ function setup() {
 		},
 		startFresh: async () => {},
 	};
-	const claim = agentClaim({
+	const policy = speakerPolicy({
+		owners: [OWNER],
+		admins: { users: [ADMIN] },
+		members: { roles: [ROLE] },
+	});
+	const bare = agentClaim({
 		owner: TEST_OWNER,
-		speakers: speakerPolicy({
-			owners: [OWNER],
-			admins: { users: [ADMIN] },
-			members: { roles: [ROLE] },
-		}),
 		// biome-ignore lint/suspicious/noExplicitAny: a recording stand-in for the team
 		team: team as any,
 		runtime: {
@@ -58,7 +58,22 @@ function setup() {
 		attachmentDir: () => "/tmp",
 		logger: silentLogger(),
 	});
-	return { claim, answered, stopped };
+	// The router resolves who wrote a message before a claim admits it; the 0.8 map stands in for the identity service.
+	const claim: ChannelClaim = {
+		...bare,
+		admit: (m) => {
+			const speaker =
+				m.authorIsBot || m.integration
+					? undefined
+					: policy.resolve({
+							id: m.authorId,
+							name: m.authorName,
+							roleIds: m.authorRoleIds ?? [],
+						});
+			return bare.admit(speaker ? { ...m, speaker } : m);
+		},
+	};
+	return { claim, bare, answered, stopped };
 }
 
 const message = (
@@ -102,6 +117,7 @@ test("the owner, an admin, and a member by role are each answered as themselves"
 		id: ADMIN,
 		name: "name-2",
 		tier: "admin",
+		principalId: ADMIN,
 	});
 });
 
@@ -174,6 +190,23 @@ test("the agent server answers only the owner target, and skips any other", asyn
 			status: "skipped",
 			reason: 'the agent server answers only "owner" background turns',
 		});
+	expect(answered).toEqual([]);
+});
+
+test("only the speaker the router resolved is answered: a message from the owner's id without one is no one's", () => {
+	const { bare, answered } = setup();
+	expect(bare.admit(message(OWNER, "discord:10"))).toBeUndefined();
+	const admission = bare.admit(
+		message(STRANGER, "discord:10", {
+			speaker: {
+				id: STRANGER,
+				name: "Sam",
+				tier: "owner",
+				principalId: "p_owner2",
+			},
+		}),
+	);
+	expect(admission?.kind).toBe("turn");
 	expect(answered).toEqual([]);
 });
 

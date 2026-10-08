@@ -39,6 +39,7 @@ export const studyRoom = definePlugin({
 											id: message.authorId,
 											name: message.authorName,
 											tier: "member",
+											principalId: message.authorId,
 										},
 									});
 								},

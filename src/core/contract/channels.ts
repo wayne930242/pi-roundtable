@@ -1,6 +1,7 @@
 import type { Locale } from "../i18n/index.ts";
+import type { ActorFacts } from "../identity/actor-facts.ts";
 import type { ChannelKey } from "../sessions.ts";
-import type { Tier } from "../speakers.ts";
+import type { Speaker, Tier } from "../speakers.ts";
 
 /** A file attached to a chat message, as the surface reports it; nothing is downloaded yet. */
 export interface AttachmentRef {
@@ -16,6 +17,21 @@ export interface InboundMessage {
 	channel: ChannelKey;
 	/** Unique per surface; keeps the files of different messages apart. */
 	messageId: string;
+	/**
+	 * Who wrote it, as the surface reports them: the router resolves them to `speaker` through the
+	 * identity service. A surface that leaves it out has it read from `authorId`, `authorName`, and
+	 * `authorRoleIds` under its own name as the provider, with a `deprecated` warning; that goes
+	 * away in 1.0.
+	 */
+	actor?: ActorFacts;
+	/**
+	 * Who the author is, with their principal and tier, as the router resolved them before any
+	 * claim admits the message: undefined when the access rules serve no one by them, and for a bot
+	 * or an integration, which are not resolved. Only the router sets it; a surface's own value is
+	 * dropped. A claim that serves only people the host serves answers only when it is set.
+	 */
+	speaker?: Speaker;
+	/** The id the surface knows the author by; who they are to the host is `speaker`. */
 	authorId: string;
 	/** How the author appears in the channel, for example a server nickname. */
 	authorName: string;

@@ -96,7 +96,12 @@ test("prompts name the configured owner and shell user, never the default's", ()
 	expect(all).toContain("alice-bot");
 });
 
-const BOB: Speaker = { id: "100000000000000007", name: "Bob", tier: "member" };
+const BOB: Speaker = {
+	id: "100000000000000007",
+	name: "Bob",
+	tier: "member",
+	principalId: "100000000000000007",
+};
 const promptFor = (speaker?: Speaker) =>
 	agentSystemPrompt({
 		agent,
@@ -109,7 +114,12 @@ const promptFor = (speaker?: Speaker) =>
 	});
 
 test("an owner-tier speaker gets the owner's prompts unchanged", () => {
-	const owner: Speaker = { id: "1", name: "Alice", tier: "owner" };
+	const owner: Speaker = {
+		id: "1",
+		name: "Alice",
+		tier: "owner",
+		principalId: "1",
+	};
 	expect(promptFor(owner)).toBe(promptFor());
 	expect(openingTaskText(undefined, "t", addressee(owner, ALICE))).toBe(
 		openingTaskText(undefined, "t", ALICE),
@@ -167,7 +177,9 @@ test("a speaker who is not the owner gets the guest's shared prompt, the owner t
 			...(speaker ? { speaker } : {}),
 		});
 	expect(prompt().startsWith("For the owner.")).toBe(true);
-	expect(prompt({ id: "1", name: "Alice", tier: "owner" })).toBe(prompt());
+	expect(
+		prompt({ id: "1", name: "Alice", tier: "owner", principalId: "1" }),
+	).toBe(prompt());
 	expect(prompt(BOB).startsWith("For guests.")).toBe(true);
 	expect(prompt(BOB)).not.toContain("For the owner.");
 });

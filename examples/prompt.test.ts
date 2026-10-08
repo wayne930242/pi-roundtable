@@ -17,7 +17,7 @@ test("the section names the agent, and the speaker when there is one", async () 
 	expect(
 		section?.build({
 			agent,
-			speaker: { id: "1", name: "Ada", tier: "member" },
+			speaker: { id: "1", name: "Ada", tier: "member", principalId: "1" },
 			scope,
 		}),
 	).toContain("You are talking with Ada.");

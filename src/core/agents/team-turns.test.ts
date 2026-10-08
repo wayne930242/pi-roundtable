@@ -289,7 +289,12 @@ describe("message_agent threads", () => {
 
 describe("speakers", () => {
 	test("a message chain keeps the speaker who started it through every hop", async () => {
-		const admin = { id: "2", name: "Ada", tier: "admin" } as const;
+		const admin = {
+			id: "2",
+			name: "Ada",
+			tier: "admin",
+			principalId: "2",
+		} as const;
 		const { team, turns } = setup((request) => {
 			if (request.agent?.name === "coordinator" && turns.length === 1)
 				team.message(coordinator, "infra", "check the disk");
@@ -318,7 +323,7 @@ describe("approvals", () => {
 	): Promise<unknown> =>
 		team.answerOwner(
 			discordKey("1000"),
-			{ id: "2", name: "Ada", tier },
+			{ id: "2", name: "Ada", tier, principalId: "2" },
 			"yes, run it",
 			"yes, run it",
 			NO_ATTACHMENTS,

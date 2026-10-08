@@ -1,4 +1,5 @@
 import {
+	type Admission,
 	type BackgroundTarget,
 	type BackgroundTurn,
 	type ChannelClaim,
@@ -8,7 +9,10 @@ import {
 	type ScheduledOutcome,
 	STEERED_MARK,
 } from "../contract/channels.ts";
+import { parseChannelKey } from "../contract/surface.ts";
 import { PluginError } from "../errors.ts";
+import type { ActorFacts } from "../identity/actor-facts.ts";
+import type { Contact, ContactAssessor } from "../identity/contact.ts";
 import type { Logger } from "../log.ts";
 import type { ChannelKey } from "../sessions.ts";
 import type { ChannelQueue } from "./channel-queue.ts";
@@ -21,6 +25,8 @@ export interface ChannelRouterOptions {
 	/** The contributed background target of a name, read at use time. */
 	targets(name: string): BackgroundTarget | undefined;
 	logger: Logger;
+	/** Who the authors of messages are; without it, no message carries a speaker. */
+	contacts?: ContactAssessor;
 	/** How long a bare forward waits for the text sent with it; FORWARD_JOIN_MS by default. */
 	forwardJoinMs?: number;
 }
@@ -47,6 +53,10 @@ export class ChannelRouter implements ConversationPort {
 	readonly #options: ChannelRouterOptions;
 	readonly #claims: readonly ChannelClaim[];
 	readonly #forwards: ForwardJoin;
+	/** Each channel's messages being admitted, so they reach their claim and the queue in the order they came. */
+	readonly #admitting = new Map<ChannelKey, Promise<unknown>>();
+	/** The surfaces already warned that their messages carry no actor. */
+	readonly #warned = new Set<string>();
 
 	constructor(options: ChannelRouterOptions) {
 		this.#options = options;
@@ -68,34 +78,141 @@ export class ChannelRouter implements ConversationPort {
 	}
 
 	async #route(message: InboundMessage): Promise<void> {
-		const { queue, logger } = this.#options;
 		if (
 			!message.text.trim() &&
 			message.attachments.length === 0 &&
 			!message.forwarded?.text.trim()
 		)
 			return;
-		const admission = this.#owner(message.channel, message.space)?.admit(
-			message,
+		const claim = this.#owner(message.channel, message.space);
+		if (!claim) return;
+		const started = await this.#inOrder(message.channel, async () => {
+			const admission = await this.#admit(claim, message);
+			return admission && (await this.#start(message, admission));
+		});
+		await started?.done;
+	}
+
+	/** Runs the channel's admissions one at a time, in the order its messages came. */
+	#inOrder<T>(channel: ChannelKey, task: () => Promise<T>): Promise<T> {
+		const before = this.#admitting.get(channel) ?? Promise.resolve();
+		const run = before.then(task);
+		const after = run.catch(() => undefined);
+		this.#admitting.set(channel, after);
+		void after.then(() => {
+			if (this.#admitting.get(channel) === after)
+				this.#admitting.delete(channel);
+		});
+		return run;
+	}
+
+	/**
+	 * The claim's admission of the message, which carries the speaker its author resolves to; one
+	 * who cannot be resolved, such as while the database is down, reaches the claim as no one. The
+	 * author's contact is recorded, such as their first contact linked, only once the claim takes
+	 * the message, so a message nobody serves writes nothing. The admission stands even when that
+	 * record fails or finds them linked elsewhere meanwhile: the claim decided on who they were a
+	 * moment before, as a change another process makes is seen within the identity service's cache
+	 * anyway, and it may hold state for what it admitted.
+	 */
+	async #admit(
+		claim: ChannelClaim,
+		message: InboundMessage,
+	): Promise<Admission | undefined> {
+		const { logger, contacts } = this.#options;
+		const { speaker: _given, ...facts } = message;
+		const actor = this.#actorOf(message);
+		let contact: Contact | undefined;
+		if (actor && contacts)
+			try {
+				contact = await contacts.assess(actor, {
+					conversation: message.channel,
+				});
+			} catch (error) {
+				logger.error(
+					{ channel: message.channel, err: error },
+					"could not resolve who wrote a message; it reaches its claim as no one",
+				);
+			}
+		const admission = claim.admit(
+			contact
+				? { ...facts, speaker: Object.freeze({ ...contact.speaker }) }
+				: facts,
 		);
-		if (!admission) return;
+		if (!admission || !contact) return admission;
+		try {
+			const taken = await contact.take();
+			if (taken?.principalId !== contact.speaker.principalId)
+				logger.warn(
+					{ channel: message.channel },
+					"the author of a message was linked elsewhere, or refused, while it was admitted; it runs as who they were",
+				);
+		} catch (error) {
+			logger.error(
+				{ channel: message.channel, err: error },
+				"could not record who wrote a message; it runs as who they were",
+			);
+		}
+		return admission;
+	}
+
+	/**
+	 * Who wrote the message, as its surface reports them; a surface that reports no `actor` has it
+	 * read from the author fields under its own name, once warned. None for a bot or an
+	 * integration.
+	 */
+	#actorOf(message: InboundMessage): ActorFacts | undefined {
+		if (message.authorIsBot || message.integration) return undefined;
+		if (message.actor) return message.actor;
+		const { surface } = parseChannelKey(message.channel);
+		if (!this.#warned.has(surface)) {
+			this.#warned.add(surface);
+			this.#options.logger.warn(
+				{ surface },
+				`deprecated: the ${surface} surface reports no InboundMessage.actor, so its authors are read from authorId, authorName, and authorRoleIds as ${surface} identities; set actor, as this goes away in 1.0`,
+			);
+		}
+		return {
+			provider: surface,
+			subject: message.authorId,
+			name: message.authorName,
+			surface,
+			...(message.authorRoleIds
+				? {
+						roles: message.authorRoleIds.map(
+							(role) => `${surface}:role:${role}`,
+						),
+					}
+				: {}),
+			...(message.space ? { space: message.space } : {}),
+			legacyId: message.authorId,
+		};
+	}
+
+	/**
+	 * Starts what the claim admitted, in the channel's queue, and returns while it runs: a message
+	 * during a turn is first offered to it, then marked as waiting.
+	 */
+	async #start(
+		message: InboundMessage,
+		admission: Admission,
+	): Promise<{ done: Promise<void> }> {
+		const { queue, logger } = this.#options;
 		if (admission.kind === "background") {
-			const outcome = await this.background(admission.turn);
-			if (outcome.status !== "ran") admission.unanswered(outcome);
-			return;
+			const done = this.background(admission.turn).then((outcome) => {
+				if (outcome.status !== "ran") admission.unanswered(outcome);
+			});
+			return { done };
 		}
 		const { busy } = admission;
 		let queued = false;
 		// A message during a turn is added to it when the turn takes it, otherwise marked as waiting.
 		if (busy && queue.size(message.channel) > 0) {
-			if (await busy.steer?.()) {
-				await busy.react(STEERED_MARK);
-				return;
-			}
+			if (await busy.steer?.()) return { done: busy.react(STEERED_MARK) };
 			await busy.react(QUEUED_MARK);
 			queued = true;
 		}
-		await queue
+		const done = queue
 			.run(message.channel, () => {
 				if (queued) void busy?.unreact(QUEUED_MARK);
 				return admission.run();
@@ -107,6 +224,7 @@ export class ChannelRouter implements ConversationPort {
 					admission.failure,
 				),
 			);
+		return { done };
 	}
 
 	target(name: string): BackgroundTarget | undefined {

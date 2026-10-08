@@ -1,4 +1,5 @@
 import {
+	type ActorFacts,
 	type AgentRuntime,
 	type ChannelClaim,
 	type ChannelKey,
@@ -19,7 +20,12 @@ import {
 import type { WebAccess } from "./access.ts";
 import { RateWindow, TurnBudget } from "./budget.ts";
 import { type Connection, Connections } from "./connections.ts";
-import { TokenRefused, type TokenVerifier, type WebIdentity } from "./oidc.ts";
+import {
+	parseOidcSpeakerId,
+	TokenRefused,
+	type TokenVerifier,
+	type WebIdentity,
+} from "./oidc.ts";
 import { PromptDesk } from "./prompts.ts";
 import {
 	CLOSE_CODES,
@@ -124,6 +130,24 @@ const HOUR_MS = 60 * 60_000;
 /** The longest delay a timer keeps; a longer one fires at once. */
 const MAX_TIMER_MS = 2 ** 31 - 1;
 const RESERVED_KINDS = new Set(["owner", "agent"]);
+
+/**
+ * Who a person is, as the host's identity service reads them: an OpenID subject under its
+ * issuer, or else the verifier's id under the surface; their speaker id is their 0.8 id.
+ */
+function actorOf(identity: WebIdentity, surface: string): ActorFacts {
+	const oidc = parseOidcSpeakerId(identity.id);
+	return {
+		provider: oidc
+			? identity.id.slice(0, identity.id.length - oidc.subject.length - 1)
+			: surface,
+		subject: oidc ? oidc.subject : identity.id,
+		name: identity.name,
+		surface,
+		roles: identity.roles.map((role) => `${surface}:role:${role}`),
+		legacyId: identity.id,
+	};
+}
 
 const atLeast = (tier: Tier, least: Tier) =>
 	TIERS.indexOf(tier) >= TIERS.indexOf(least);
@@ -235,7 +259,13 @@ export class WebChat {
 		if (!tier) throw new Refusal("forbidden");
 		return {
 			identity,
-			speaker: { id: identity.id, name: identity.name, tier },
+			// Their principal is their speaker id, as in 0.8, until the web chat resolves people through IDENTITY.
+			speaker: {
+				id: identity.id,
+				name: identity.name,
+				tier,
+				principalId: identity.id,
+			},
 		};
 	}
 
@@ -518,6 +548,7 @@ export class WebChat {
 			this.surface.deliver({
 				channel: channelKey(this.#deps.surface, conversation),
 				messageId,
+				actor: actorOf(connection.identity, this.#deps.surface),
 				authorId: speaker.id,
 				authorName: speaker.name,
 				authorIsBot: false,

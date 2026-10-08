@@ -22,9 +22,10 @@ export interface Speaker {
 	tier: Tier;
 	/**
 	 * The principal they are, whose memory, schedules, and conversations are theirs on every
-	 * surface. For a person carried over from 0.8 it equals `id`. The identity service sets it.
+	 * surface. For a person carried over from 0.8 it equals `id`. The identity service sets it;
+	 * whoever starts a turn for someone else takes it from `IDENTITY.speakerFor`.
 	 */
-	principalId?: string;
+	principalId: string;
 }
 
 /**
@@ -108,7 +109,7 @@ export interface SpeakerMap {
 /**
  * The policy of an operator's map; the highest tier an author qualifies for wins. It evaluates
  * the access rules the map means on one surface, so it decides as the identity service's rules
- * do; its speakers carry no principal.
+ * do; each speaker's principal is their own id, as for a person carried over from 0.8.
  */
 export function speakerPolicy(map: SpeakerMap): SpeakerPolicy {
 	return speakerPolicyOf(rulesOfSpeakerMap(map));

@@ -101,7 +101,9 @@ async function record(
 		key: input.channel,
 		kind: input.kind,
 		visibility,
-		...(visibility === "private" ? { principalId: input.speaker.id } : {}),
+		...(visibility === "private"
+			? { principalId: input.speaker.principalId }
+			: {}),
 		...(title === undefined ? {} : { title }),
 	});
 }

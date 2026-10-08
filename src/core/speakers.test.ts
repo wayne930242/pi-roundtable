@@ -41,6 +41,7 @@ describe("speakerPolicy", () => {
 			id: STRANGER,
 			name: "u9",
 			tier: "member",
+			principalId: STRANGER,
 		});
 	});
 });

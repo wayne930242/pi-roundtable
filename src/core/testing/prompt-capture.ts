@@ -56,12 +56,14 @@ export const CAPTURE_MEMBER: Speaker = {
 	id: "966666600000000003",
 	name: "Kai",
 	tier: "member",
+	principalId: "966666600000000003",
 };
 /** A web user as M1's webchat names them. */
 export const CAPTURE_WEB_MEMBER: Speaker = {
 	id: "oidc:aHR0cHM6Ly9pZHAuZXhhbXBsZS5jb20:user-7",
 	name: "Noa",
 	tier: "member",
+	principalId: "oidc:aHR0cHM6Ly9pZHAuZXhhbXBsZS5jb20:user-7",
 };
 
 /** Channels with ids of their own, which no other test's rows hold. */
@@ -366,6 +368,7 @@ export const CAPTURE_OWNER_SPEAKER: Speaker = {
 	id: CAPTURE_OWNER.id,
 	name: CAPTURE_OWNER.name,
 	tier: "owner",
+	principalId: CAPTURE_OWNER.id,
 };
 
 /** Puts one fact in each person's memory, so a prompt shows whose memory it carries. */

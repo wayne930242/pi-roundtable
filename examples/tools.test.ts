@@ -5,7 +5,12 @@ import { notes } from "./tools.ts";
 
 test("note_add saves a note for the speaker and refuses an empty one", async () => {
 	const harness = await testPlugin(notes);
-	const ada: Speaker = { id: "1", name: "Ada", tier: "member" };
+	const ada: Speaker = {
+		id: "1",
+		name: "Ada",
+		tier: "member",
+		principalId: "1",
+	};
 	expect(harness.tools).toEqual(["note_add"]);
 	expect(harness.tiers.minTier("note_add")).toBe("member");
 	expect(
