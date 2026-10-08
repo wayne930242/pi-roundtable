@@ -58,6 +58,7 @@ test("an agent's turn carries its scope, and its conversation is the scope's ses
 		channel: "fake:agent-room",
 		selection: { id: "agent", tools: [], groups: [] },
 		text: "status?",
+		speaker: OWNER_SPEAKER,
 		agent: {
 			name: "infra",
 			session: "fake:agent-room",

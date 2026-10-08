@@ -21,6 +21,16 @@ const isAssistant = (message: Message): message is Assistant =>
 	message.role === "assistant";
 
 /** The session's last answer, which tells the judge what a short follow-up continues. */
+/** The answer to a turn sent without a speaker: refused, never run as the owner's by default. */
+export function unspokenTurn(): TurnResult {
+	return {
+		ok: false,
+		error: new AgentRunError(
+			"a turn needs a speaker: pass TurnRequest.speaker, the person the turn is for; for a turn started on someone's behalf, get theirs from IDENTITY.speakerFor",
+		),
+	};
+}
+
 export function lastReply(messages: readonly Message[]): string | undefined {
 	const last = messages.findLast(isAssistant);
 	return last ? textOf(last.content).trim() || undefined : undefined;

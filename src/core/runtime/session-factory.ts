@@ -235,6 +235,8 @@ export class SessionFactory {
 				this.#modelRuntime.getModel(provider, id)?.contextWindow,
 			this.plan.compaction?.engine,
 		);
+		// The running turn is the conversation's: an agent's seat in a group, or its own channel.
+		const turnKey = agent?.session ?? channel;
 		const context: SessionContext = {
 			kind: agent ? "agent" : kind,
 			homeChannel: channel,
@@ -248,8 +250,8 @@ export class SessionFactory {
 						),
 					),
 			},
-			speaker: () => this.#deps.speaker(channel),
-			runTask: (task) => this.#deps.runTask(channel, task),
+			speaker: () => this.#deps.speaker(turnKey),
+			runTask: (task) => this.#deps.runTask(turnKey, task),
 		};
 		if (agent) context.agent = agent;
 		const resourceLoader = new DefaultResourceLoader({
@@ -268,7 +270,7 @@ export class SessionFactory {
 				askUser: askUserExtension(
 					slot,
 					agent ? THE_SPEAKER : this.#options.owner,
-					() => addressee(this.#deps.speaker(channel), this.#options.owner),
+					() => addressee(this.#deps.speaker(turnKey), this.#options.owner),
 				),
 				selfCompactGuard: selfCompactGuardExtension(),
 				activeTools: activeToolsExtension(() => state.tools),

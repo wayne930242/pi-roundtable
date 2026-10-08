@@ -38,8 +38,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Every owner uses the owner's slash commands, their autocomplete, the stop button, the agent panel, and the connector form, not only the primary owner; a member and a stranger get the same refusal as before, and a single owner's commands answer exactly as in 0.8. `ownerCommandModule`, `agentPanel`, and the stop button ask `CommandGuard.allows`; `CommandGuard.isOwner`, the primary owner by user id, is deprecated until 1.0, so a component handler of yours that still asks it refuses the other owners. A `CommandGuard` of your own needs `allows`.
 - The Discord administration tools check what the primary owner may do on the server, whichever owner's turn calls them, and a private thread they create adds the primary owner, as before; background report threads still add no one. `DiscordConnection.ownerChannel()` and `notifyOwner(text)` are deprecated until 1.0 and reach the primary owner alone.
 
+- `TurnRequest.speaker` is required, and the Pi runtime refuses a turn without one: `runTurn` answers `{ ok: false, error }` with an `AgentRunError` that names `TurnRequest.speaker` and `IDENTITY.speakerFor`, before the model is asked, where 0.8 ran it as the owner's at the owner tier. A host of your own that calls `runtime.runTurn` for its owner passes the owner's speaker, from `IDENTITY.speakerFor(<owner's principal>)`. A task a session tool runs with `session.runTask` takes the tier of the turn running in its conversation and is refused when none is, where 0.8 gave it the owner's.
+
 ### Fixed
 
+- A session tool in an agent's seat in a group round read the turn of the agent's own channel, not the seat's: `session.speaker()` was undefined there (or another turn's speaker), so a schedule made in a group round was set by the owner at the owner tier, and a `session.runTask` beside it ran at the owner tier. Both now follow the seat's turn.
 - A question card in a background report turn, such as the ops reporter's or a Discord webhook report's, mentioned the reporter's id in a thread instead of the owner, as 0.8 did, so the owner was not told of it; it now goes to the owners, as such a turn's approval cards do.
 
 ## [0.8.0] - 2026-10-07

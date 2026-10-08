@@ -1075,7 +1075,7 @@ An `AgentRuntime` has these methods:
 | `preflight?()` | Runs in the host's preflight, before anything starts; a throw stops the boot |
 | `dispose?()` | Runs when the host stops the runtime plugin's `runtime` service |
 
-A request has the turn's `channel`, `selection` (its tools), `text`, `attachments`, `speaker`, `conversation` (`TurnConversation`: `private` to a `principalId`, or `shared`, as `context.turns` records it; shared when absent), flags (`steerable`, `interactive`, `confirmed`), and `interim`, where the turn may post the text it writes before its final answer ([interim text](#interim-text-what-a-turn-writes-before-its-final-answer)).
+A request has the turn's `channel`, `selection` (its tools), `text`, `attachments`, `speaker` (required: the person the turn is for, at whose tier it runs; the built-in runtime refuses a request without one with an `AgentRunError` before asking the model, and a plugin that starts a turn on someone's behalf gets theirs from `IDENTITY.speakerFor`), `conversation` (`TurnConversation`: `private` to a `principalId`, or `shared`, as `context.turns` records it; shared when absent), flags (`steerable`, `interactive`, `confirmed`), and `interim`, where the turn may post the text it writes before its final answer ([interim text](#interim-text-what-a-turn-writes-before-its-final-answer)).
 An agent's turn also has `agent`, the agent's scope, whose `session` is the conversation's key.
 Other turns use `kind` to name the conversation's persona, defaulting to `"owner"` when absent.
 
@@ -1256,6 +1256,7 @@ test("an agent's turn carries its scope, and its conversation is the scope's ses
 		channel: "fake:agent-room",
 		selection: { id: "agent", tools: [], groups: [] },
 		text: "status?",
+		speaker: OWNER_SPEAKER,
 		agent: {
 			name: "infra",
 			session: "fake:agent-room",

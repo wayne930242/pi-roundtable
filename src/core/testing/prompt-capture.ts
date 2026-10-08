@@ -18,6 +18,7 @@ import { CommandCollection } from "../discord/command-collection.ts";
 import { commandGuard } from "../discord/owner-command.ts";
 import { NO_ATTACHMENTS } from "../domain/attachment.ts";
 import type { ChannelKey, TurnResult } from "../domain/conversation.ts";
+import type { TurnRequest } from "../domain/ports.ts";
 import { JudgeError } from "../errors.ts";
 import { Roundtable } from "../host.ts";
 import { silentLogger } from "../log.ts";
@@ -36,6 +37,11 @@ export interface CapturedTool {
 }
 
 /** What the model received at the first request of a turn: the prompt and the tools. */
+/** A turn the runtime refused before asking the model, by its error's message. */
+export interface CapturedRefusal {
+	refused: string;
+}
+
 export interface CapturedPrompt {
 	/** Each system message's text and named sections, in order. */
 	system: { content: unknown; sections?: Record<string, string | null> }[];
@@ -392,8 +398,8 @@ async function remember(context: PluginContext): Promise<void> {
 /** The prompt and tools of every session the M2 work must keep, normalized, by scenario, with the owner written in `form`. */
 export async function capturePrompts(
 	form: CaptureForm = "owner",
-): Promise<Record<string, CapturedPrompt>> {
-	const out: Record<string, CapturedPrompt> = {};
+): Promise<Record<string, CapturedPrompt | CapturedRefusal>> {
+	const out: Record<string, CapturedPrompt | CapturedRefusal> = {};
 	const discord = await captureHost(true, form);
 	try {
 		const { context } = discord;
@@ -451,15 +457,15 @@ export async function capturePrompts(
 			CAPTURE_MEMBER,
 		);
 		const runtime = context.services.get(RUNTIME);
-		out["e owner turn without a speaker"] = await discord.capture(async () =>
-			ok(
-				await runtime.runTurn({
-					channel: "fake:owner-direct",
-					selection: { id: "owner", ...context.sessions().agentSelection() },
-					text: "Hello.",
-				}),
-			),
-		);
+		// SAFETY: it lacks only `speaker`, as 0.8's callers sent it; 0.9 refuses it, and keeps that.
+		const unspoken = await runtime.runTurn({
+			channel: "fake:owner-direct",
+			selection: { id: "owner", ...context.sessions().agentSelection() },
+			text: "Hello.",
+		} as unknown as TurnRequest);
+		out["e owner turn without a speaker"] = {
+			refused: unspoken.ok ? "it ran" : unspoken.error.message,
+		};
 	} finally {
 		await discord.stop();
 	}

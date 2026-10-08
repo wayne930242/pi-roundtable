@@ -49,8 +49,8 @@ import {
 } from "./runtime-types.ts";
 import { archiveSessions } from "./session-archive.ts";
 import { SessionFactory } from "./session-factory.ts";
-import { type PromptImages, SteerableRun } from "./steerable-run.ts";
-import { lastReply, turnAnswer } from "./turn-answer.ts";
+import { promptImages, SteerableRun } from "./steerable-run.ts";
+import { lastReply, turnAnswer, unspokenTurn } from "./turn-answer.ts";
 import { progressReporter } from "./turn-progress.ts";
 import { workerReport } from "./worker-task.ts";
 
@@ -72,10 +72,7 @@ export class PiAgentRuntime implements AgentRuntime {
 	readonly #factory: SessionFactory;
 	readonly #sessions: ConversationSessions;
 	/** The tier and speaker of each conversation's running turn. */
-	readonly #turns = new Map<
-		ChannelKey,
-		{ tier: Tier; speaker: Speaker | undefined }
-	>();
+	readonly #turns = new Map<ChannelKey, { tier: Tier; speaker: Speaker }>();
 	/** Each conversation's turn in progress, which the owner may steer or stop. */
 	readonly #running = new Map<ChannelKey, SteerableRun>();
 
@@ -128,6 +125,7 @@ export class PiAgentRuntime implements AgentRuntime {
 	// pi-lens-ignore: high-complexity, high-fan-out, mixed-async-styles — one turn's lifecycle end to end; batch 4 splits it with the channel router
 	async runTurn(request: TurnRequest): Promise<TurnResult> {
 		const { logger, turnTimeoutMs = 10 * 60_000 } = this.#options;
+		if (!request.speaker) return unspokenTurn();
 		const key = request.agent?.session ?? request.channel;
 		const channelSession = await this.#sessions.freshSession(key, request);
 		const { session } = channelSession;
@@ -136,8 +134,8 @@ export class PiAgentRuntime implements AgentRuntime {
 		const gate = await this.#sessions.gate(key, request.agent !== undefined);
 		const pending = gate.pending();
 		const registered = new Set(session.getAllTools().map((tool) => tool.name));
-		// The speaker's tier limits the tools; a turn nobody spoke in, such as the owner's own chat, is the owner's.
-		const tier = request.speaker?.tier ?? "owner";
+		// The speaker's tier limits the tools.
+		const { tier } = request.speaker;
 		// An approving turn also has the held calls' tools, which a dispatched worker may have used.
 		const wanted = toolsForTier(
 			[
@@ -340,6 +338,12 @@ export class PiAgentRuntime implements AgentRuntime {
 	async #runTask(channel: ChannelKey, task: TransientTask): Promise<string> {
 		const { dataDir } = this.#options;
 		const { signal } = task;
+		// A task works at the tier of the turn that started it; without one there is no tier to take.
+		const turn = this.#turns.get(channel);
+		if (!turn)
+			throw new AgentRunError(
+				`a task runs beside a turn of its conversation, at that turn's tier, and ${channel} has no turn running`,
+			);
 		// A worker asks nothing: its held actions wait for the owner's next message.
 		const worker = await this.#factory.create(
 			channel,
@@ -361,8 +365,7 @@ export class PiAgentRuntime implements AgentRuntime {
 		try {
 			const registered = new Set(session.getAllTools().map((t) => t.name));
 			const excluded = new Set([...task.exclude, ASK_USER_TOOL]);
-			// A task works at the tier of the turn that started it.
-			const tier = this.#turns.get(channel)?.tier ?? "owner";
+			const { tier } = turn;
 			worker.tools = this.#factory
 				.toolsFor(task.selection)
 				.filter(
@@ -490,11 +493,4 @@ export class PiAgentRuntime implements AgentRuntime {
 	dispose(): void {
 		this.#sessions.dispose();
 	}
-}
-
-function promptImages(attachments: TurnAttachments): PromptImages {
-	return attachments.images.map((image) => ({
-		type: "image" as const,
-		...image,
-	}));
 }

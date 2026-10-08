@@ -24,8 +24,12 @@ export interface TurnRequest {
 	confirmed?: boolean;
 	/** Set for a turn of an agent-server agent. */
 	agent?: AgentTurnScope;
-	/** The person the turn is for: who wrote the message, or who set up the work. */
-	speaker?: Speaker;
+	/**
+	 * The person the turn is for: who wrote the message, or who set up the work; the turn runs at
+	 * their tier. Required: a turn without one is refused, never run as the owner's. A plugin that
+	 * starts a turn on someone's behalf gets theirs from `IDENTITY.speakerFor`.
+	 */
+	speaker: Speaker;
 	/**
 	 * Who the conversation belongs to, as the host records it: `private` to one principal, or
 	 * `shared` by whoever its claim admits, which it is taken to be when absent. A private

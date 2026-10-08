@@ -1,6 +1,15 @@
 import type { AgentSession } from "@earendil-works/pi-coding-agent";
+import type { TurnAttachments } from "../domain/attachment.ts";
 
 export type PromptImages = NonNullable<Parameters<AgentSession["steer"]>[1]>;
+
+/** A turn's images as Pi takes them with a prompt or a steer. */
+export function promptImages(attachments: TurnAttachments): PromptImages {
+	return attachments.images.map((image) => ({
+		type: "image" as const,
+		...image,
+	}));
+}
 
 /** The part of a Pi session a steerable run drives. */
 export type SteeringSession = Pick<
