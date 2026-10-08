@@ -23,12 +23,39 @@ const noticeOf = (row: Row): Notice => ({
 	readAt: row.read_at?.toISOString() ?? null,
 });
 
+export interface NoticeLimits {
+	messageChars?: number;
+	maxBufferedBytes?: number;
+}
+
+/** Fixed retention and text caps bound storage and REST response sizes. */
+export const MAX_NOTICES = 100;
+const MAX_NOTICE_CHARS = 4096;
+// ASCII UUID and timestamps plus JSON field names fit within this reserve.
+const FRAME_OVERHEAD = 256;
+
 /** Notices scoped by principal in every query, including marking one read. */
 export class PgNotices {
 	readonly #sql: SQL;
+	readonly #textChars: number;
 
-	constructor(sql: SQL) {
+	constructor(sql: SQL, limits: NoticeLimits = {}) {
 		this.#sql = sql;
+		const bytes = limits.maxBufferedBytes ?? 4 * 1024 * 1024;
+		const chars = limits.messageChars ?? 32_000;
+		if (!Number.isSafeInteger(bytes) || bytes < FRAME_OVERHEAD + 6)
+			throw new Error(
+				"webChat: maxBufferedBytes must be an integer of at least 262 bytes to carry a notice frame",
+			);
+		if (!Number.isSafeInteger(chars) || chars < 1)
+			throw new Error("webChat: messageChars must be a positive integer");
+		// One UTF-16 unit costs at most six bytes after JSON escaping, including
+		// control characters and lone surrogates. Reserve space for the envelope.
+		this.#textChars = Math.min(
+			chars,
+			MAX_NOTICE_CHARS,
+			Math.floor((bytes - FRAME_OVERHEAD) / 6),
+		);
 	}
 
 	static readonly migration: Migration = {
@@ -44,11 +71,23 @@ export class PgNotices {
 	};
 
 	async add(principalId: string, text: string): Promise<Notice> {
-		const rows: Row[] = await this
-			.#sql`INSERT INTO webchat_notices (principal_id, id, text)
-			VALUES (${principalId}, ${crypto.randomUUID()}, ${text}) RETURNING *`;
-		if (!rows[0]) throw new Error("webchat notice insert returned no row");
-		return noticeOf(rows[0]);
+		const bounded =
+			text.length > this.#textChars
+				? `${text.slice(0, this.#textChars - 1)}…`
+				: text;
+		return this.#sql.begin(async (sql) => {
+			// Serialize insert/prune for one inbox even across pools/processes.
+			await sql`SELECT pg_advisory_xact_lock(hashtextextended(${`webchat-notices:${principalId}`}, 0))`;
+			const rows: Row[] =
+				await sql`INSERT INTO webchat_notices (principal_id, id, text, created_at)
+				VALUES (${principalId}, ${crypto.randomUUID()}, ${bounded}, clock_timestamp()) RETURNING *`;
+			if (!rows[0]) throw new Error("webchat notice insert returned no row");
+			await sql`DELETE FROM webchat_notices WHERE principal_id = ${principalId} AND id IN (
+				SELECT id FROM webchat_notices WHERE principal_id = ${principalId}
+				ORDER BY created_at DESC, id DESC OFFSET ${MAX_NOTICES}
+			)`;
+			return noticeOf(rows[0]);
+		});
 	}
 
 	/** Latest entries, with a bounded page; before is the last id of the previous page. */
@@ -57,6 +96,9 @@ export class PgNotices {
 		limit = 50,
 		before?: string,
 	): Promise<Notice[]> {
+		limit = Number.isInteger(limit)
+			? Math.min(Math.max(limit, 1), MAX_NOTICES)
+			: 50;
 		const rows: Row[] = before
 			? await this
 					.#sql`SELECT id, text, created_at, read_at FROM webchat_notices

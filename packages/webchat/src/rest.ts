@@ -1,6 +1,6 @@
 import type { ConversationRecord, Logger } from "pi-roundtable";
 import { type Admitted, Refusal, type WebChat } from "./chat.ts";
-import type { PgNotices } from "./notices.ts";
+import { MAX_NOTICES, type PgNotices } from "./notices.ts";
 import { TokenRefused } from "./oidc.ts";
 import type { TicketBook } from "./tickets.ts";
 
@@ -100,7 +100,7 @@ export function restHandler(options: RestOptions) {
 				throw new Refusal("bad_frame");
 			const asked = Number(url.searchParams.get("limit") ?? DEFAULT_LIMIT);
 			const limit = Number.isInteger(asked)
-				? Math.min(Math.max(asked, 1), MAX_LIMIT)
+				? Math.min(Math.max(asked, 1), MAX_NOTICES)
 				: DEFAULT_LIMIT;
 			return json(
 				{ notices: await notices.list(speaker.principalId, limit, before) },

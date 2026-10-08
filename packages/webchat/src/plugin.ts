@@ -144,7 +144,7 @@ export function webChat(options: WebChatOptions): RoundtablePlugin {
 				ttlMs: limits.ticketTtlMs,
 				perPrincipal: limits.connectionsPerPrincipal,
 			});
-			const notices = new PgNotices(context.database());
+			const notices = new PgNotices(context.database(), limits);
 			const rest = restHandler({
 				chat,
 				notices,
