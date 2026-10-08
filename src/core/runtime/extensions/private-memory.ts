@@ -133,7 +133,7 @@ function unpairedCalls(messages: Messages, before: number): Set<string> {
  * The request's messages as the view allows, or undefined when they need no change. A memory
  * exchange of someone else's reads as a placeholder, the call's arguments as well as its result,
  * so what the model wrote into the call from that memory goes too; in a shared conversation, so
- * does a memory exchange that does not say whose it is, the answers of the turns before the
+ * does a memory exchange that does not say whose it is, a failed one too, the answers of the turns before the
  * running one read without their reasoning, and the prompt states its history recorded collapse
  * into one leading message of the current prompt, so no earlier turn's memory section remains.
  */
@@ -175,7 +175,8 @@ function hiddenResult(
 	const whose = privateTo(result.details);
 	if (whose !== undefined)
 		return whose === view.reader ? undefined : HIDDEN_MEMORY;
-	return view.shared && MEMORY.has(result.toolName) && !result.isError
+	// A failed exchange too: its call's arguments are what the model wrote from someone's memory.
+	return view.shared && MEMORY.has(result.toolName)
 		? HIDDEN_UNRECORDED_MEMORY
 		: undefined;
 }

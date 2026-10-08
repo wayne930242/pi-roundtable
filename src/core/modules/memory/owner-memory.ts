@@ -64,6 +64,25 @@ function privateText(text: string, principalId: string) {
 	return { ...toolText(text), details };
 }
 
+/**
+ * The call's answer, or, when it fails, such as with the store unreachable, its error recording
+ * whose memory the call was for: its arguments are what the model wrote from that memory.
+ */
+async function ownAnswer<T>(
+	principalId: string,
+	answer: () => Promise<T>,
+): Promise<T | (ReturnType<typeof toolError> & { details: PrivateMemory })> {
+	try {
+		return await answer();
+	} catch (error) {
+		const details: PrivateMemory = { privateTo: principalId };
+		return {
+			...toolError(error instanceof Error ? error.message : String(error)),
+			details,
+		};
+	}
+}
+
 /** What the memory tools answer in a turn that reads no one's memory, such as the host's own report. */
 const NO_ONE =
 	"This turn reads no one's memory, so there is nothing to remember, search, or forget in it.";
@@ -130,11 +149,17 @@ export function ownerMemoryExtension(
 			execute: async (_toolCallId, params) => {
 				const of = storeOf();
 				if (!of) return toolError(NO_ONE);
-				const saved = await of.store.add(params.fact, params.kind, params.date);
-				return privateText(
-					`Remembered as ${saved.kind}: ${line(saved).slice(2)}`,
-					of.whose,
-				);
+				return ownAnswer(of.whose, async () => {
+					const saved = await of.store.add(
+						params.fact,
+						params.kind,
+						params.date,
+					);
+					return privateText(
+						`Remembered as ${saved.kind}: ${line(saved).slice(2)}`,
+						of.whose,
+					);
+				});
 			},
 		});
 
@@ -148,15 +173,19 @@ export function ownerMemoryExtension(
 			execute: async (_toolCallId, params) => {
 				const of = storeOf();
 				if (!of) return toolError(NO_ONE);
-				const found = await of.store.search(params.query);
-				return privateText(
-					found.length === 0
-						? `Nothing remembered matches "${params.query}".`
-						: found
-								.map((memory) => `- [${memory.kind}] ${line(memory).slice(2)}`)
-								.join("\n"),
-					of.whose,
-				);
+				return ownAnswer(of.whose, async () => {
+					const found = await of.store.search(params.query);
+					return privateText(
+						found.length === 0
+							? `Nothing remembered matches "${params.query}".`
+							: found
+									.map(
+										(memory) => `- [${memory.kind}] ${line(memory).slice(2)}`,
+									)
+									.join("\n"),
+						of.whose,
+					);
+				});
 			},
 		});
 
@@ -172,21 +201,23 @@ export function ownerMemoryExtension(
 			execute: async (_toolCallId, params) => {
 				const of = storeOf();
 				if (!of) return toolError(NO_ONE);
-				const removed = await of.store.remove(params.text);
-				// The refusal repeats the text, which may be the person's memory, so it records whose too.
-				if (removed.length === 0) {
-					const details: PrivateMemory = { privateTo: of.whose };
-					return {
-						...toolError(
-							`No remembered fact contains "${params.text}". Nothing was forgotten.`,
-						),
-						details,
-					};
-				}
-				return privateText(
-					`Forgot:\n${removed.map((fact) => `- ${fact}`).join("\n")}`,
-					of.whose,
-				);
+				return ownAnswer(of.whose, async () => {
+					const removed = await of.store.remove(params.text);
+					// The refusal repeats the text, which may be the person's memory, so it records whose too.
+					if (removed.length === 0) {
+						const details: PrivateMemory = { privateTo: of.whose };
+						return {
+							...toolError(
+								`No remembered fact contains "${params.text}". Nothing was forgotten.`,
+							),
+							details,
+						};
+					}
+					return privateText(
+						`Forgot:\n${removed.map((fact) => `- ${fact}`).join("\n")}`,
+						of.whose,
+					);
+				});
 			},
 		});
 	};

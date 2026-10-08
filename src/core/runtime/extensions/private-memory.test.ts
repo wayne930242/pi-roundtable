@@ -64,8 +64,9 @@ describe("the memory a request may carry", () => {
 		expect(text).not.toContain("an old result");
 		expect(text).toContain(HIDDEN_MEMORY);
 		expect(text).toContain(HIDDEN_UNRECORDED_MEMORY);
-		// An error says nothing of anyone's memory; another tool's result is not memory.
-		expect(text).toContain("No remembered fact contains");
+		// A failed memory exchange that says no one's may still carry what its call wrote from
+		// someone's memory; another tool's result is not memory.
+		expect(text).not.toContain("No remembered fact contains");
 		expect(text).toContain("a file");
 		expect(projected?.filter((m) => m.role === "system")).toHaveLength(1);
 		expect(projected?.[0]?.role).toBe("system");
