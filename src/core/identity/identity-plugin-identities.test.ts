@@ -112,6 +112,21 @@ test.each([
 		"legacy:remote-mcp",
 	],
 	[
+		"a Discord identity, which would make that account the primary owner's",
+		[plugin("remote-mcp", [{ identity: `discord:${BOB}` }])],
+		`plugin remote-mcp: identities[0]: discord:${BOB} is not a token: identity. A plugin declares only the credentials it serves itself, written token:<name>; a person's own discord identity is linked by access.owners or roundtable principal link.`,
+	],
+	[
+		"a member's Discord identity bound to that member",
+		[plugin("remote-mcp", [{ identity: `discord:${KAI}`, principal: KAI }])],
+		`discord:${KAI} is not a token: identity`,
+	],
+	[
+		"an OpenID Connect identity",
+		[plugin("hooks", [{ identity: "oidc:aXNzdWVy:user-1" }])],
+		"plugin hooks: identities[0]: oidc:aXNzdWVy:user-1 is not a token: identity",
+	],
+	[
 		"the system principal",
 		[plugin("remote-mcp", [{ identity: TOKEN, principal: "system" }])],
 		'the host\'s own principal "system"',

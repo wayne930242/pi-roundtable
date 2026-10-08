@@ -2,11 +2,10 @@ import { ConfigError } from "../domain/errors.ts";
 import type { Logger } from "../log.ts";
 import type { PluginIdentity, RoundtablePlugin } from "../plugin.ts";
 import { identityOf, parseIdentity } from "./actor-facts.ts";
-import {
-	LEGACY_PROVIDER,
-	type PrincipalStore,
-	SYSTEM_PRINCIPAL,
-} from "./principal-store.ts";
+import { type PrincipalStore, SYSTEM_PRINCIPAL } from "./principal-store.ts";
+
+/** The only provider a plugin declares identities of: credentials of its own, which no surface reports. */
+const PLUGIN_PROVIDER = "token";
 
 /** An identity a plugin declares, with the plugin that declares it. */
 export interface DeclaredIdentity extends PluginIdentity {
@@ -15,8 +14,7 @@ export interface DeclaredIdentity extends PluginIdentity {
 
 /**
  * Every identity the plugins declare, in their order, checked before anything is written: each
- * written `<provider>:<subject>`, none a 0.8 id's alias or bound to the system principal, and none
- * declared twice.
+ * written `token:<subject>`, none bound to the system principal, and none declared twice.
  */
 export function declaredIdentities(
 	plugins: readonly RoundtablePlugin[],
@@ -33,9 +31,11 @@ export function declaredIdentities(
 				throw new ConfigError(
 					`${path}: ${JSON.stringify(identity)} is not an identity written <provider>:<subject>`,
 				);
-			if (ref.provider === LEGACY_PROVIDER)
+			// No surface reports a token: identity, so linking it, which spends no claim, admits no one
+			// as someone new, and goes when the plugin stops declaring it, touches no person's own account.
+			if (ref.provider !== PLUGIN_PROVIDER)
 				throw new ConfigError(
-					`${path}: ${identity} names a 0.8 id's alias, which no surface reports; declare the identity the plugin's credential stands for`,
+					`${path}: ${identity} is not a ${PLUGIN_PROVIDER}: identity. A plugin declares only the credentials it serves itself, written ${PLUGIN_PROVIDER}:<name>; a person's own ${ref.provider} identity is linked by access.owners or roundtable principal link.`,
 				);
 			if (principal === SYSTEM_PRINCIPAL)
 				throw new ConfigError(

@@ -295,7 +295,11 @@ export interface PluginContext {
  * serves, and the principal it speaks as.
  */
 export interface PluginIdentity {
-	/** Written `<provider>:<subject>`, such as `token:remote-mcp`. */
+	/**
+	 * Written `token:<subject>`, such as `token:remote-mcp`. Only the `token` provider is accepted:
+	 * a surface's identity, such as `discord:` or `oidc:`, is a person's own account, linked by
+	 * `access.owners` or the CLI, and any other provider stops the boot with a ConfigError.
+	 */
 	identity: string;
 	/** The id of the principal it stands for; the primary owner, the first of `access.owners`, when absent. */
 	principal?: string;
@@ -309,8 +313,9 @@ export interface RoundtablePlugin {
 	 * Identities the plugin's own credentials stand for, read before any setup. At every boot the
 	 * identity plugin links each to its principal as the plugin's (`roundtable principal list` shows
 	 * them as `plugin`), moves one bound to another principal than at the last boot, and unlinks one
-	 * no plugin declares any more. An identity linked to someone else, another plugin's, a principal
-	 * that does not exist, or the system principal stops the boot with a ConfigError. A declared
+	 * no plugin declares any more. An identity of a provider other than `token`, one linked to
+	 * someone else, another plugin's, a principal that does not exist, or the system principal stops
+	 * the boot with a ConfigError. A declared
 	 * identity is never admitted or claimed at a first contact, and `IDENTITY.principalOf` reads
 	 * whom it stands for.
 	 */
