@@ -3,6 +3,7 @@ import { join, resolve } from "node:path";
 import { resolveConfig } from "../core/config/config.ts";
 import type { DefinedRoundtable } from "../core/define-roundtable.ts";
 import { Roundtable } from "../core/host.ts";
+import { declaredIdentities } from "../core/identity/plugin-identities.ts";
 import { addPackage } from "./add-package.ts";
 import { addPlugin } from "./add-plugin.ts";
 import type { BunFacts } from "./checks/bun.ts";
@@ -12,7 +13,8 @@ import { fetchHttp } from "./http.ts";
 import { init } from "./init.ts";
 import { type PackagePorts, piPackagePorts } from "./pi-packages.ts";
 import {
-	type ConfiguredOwners,
+	type Configured,
+	type ConfiguredIdentities,
 	PRINCIPAL_USAGE,
 	principalCommand,
 } from "./principal.ts";
@@ -245,21 +247,30 @@ export async function runCli(
 			);
 			return 1;
 		}
-		return principalCommand(url, rest, io, configuredOwners(raw.value));
+		return principalCommand(url, rest, io, configured(raw.value));
 	}
 	return usage(io, `unknown command ${JSON.stringify(command)}`);
 }
 
 /**
- * The owners the configuration lists, read by its schema alone: its plugins and model runtime
- * are not assembled, so their failures do not pass for a configuration that does not load.
+ * The owners the configuration lists and the identities its plugins declare, read by its schema
+ * alone: its plugins and model runtime are not assembled, so their failures do not pass for a
+ * configuration that does not load. Identities the start would refuse are unknown.
  */
-function configuredOwners(value: unknown): ConfiguredOwners {
+function configured(value: unknown): Configured {
+	let config: ReturnType<typeof resolveConfig>;
 	try {
-		return resolveConfig(value).access.owners;
+		config = resolveConfig(value);
 	} catch {
-		return undefined;
+		return { owners: undefined, identities: undefined };
 	}
+	let identities: ConfiguredIdentities;
+	try {
+		identities = declaredIdentities(config.plugins);
+	} catch {
+		identities = undefined;
+	}
+	return { owners: config.access.owners, identities };
 }
 
 async function runUpgrade(

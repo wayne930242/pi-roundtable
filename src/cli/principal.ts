@@ -3,6 +3,7 @@ import { openPool } from "../core/db/migrations.ts";
 import { IdentityError } from "../core/domain/errors.ts";
 import type { AccessOwner } from "../core/identity/access-policy.ts";
 import { identityOf, parseIdentity } from "../core/identity/actor-facts.ts";
+import type { DeclaredIdentity } from "../core/identity/plugin-identities.ts";
 import {
 	type IdentityLink,
 	PgPrincipalStore,
@@ -38,7 +39,16 @@ export interface PrincipalIo {
 }
 
 /** The owners the project's configuration names, or undefined when it does not load. */
-export type ConfiguredOwners = readonly AccessOwner[] | undefined;
+type ConfiguredOwners = readonly AccessOwner[] | undefined;
+
+/** The identities the project's plugins declare, or undefined when the configuration does not load. */
+export type ConfiguredIdentities = readonly DeclaredIdentity[] | undefined;
+
+/** What the project's configuration says, read by its schema alone. */
+export interface Configured {
+	owners: ConfiguredOwners;
+	identities: ConfiguredIdentities;
+}
 
 /** A refusal: the message is the whole answer, printed as it is. */
 class Refusal extends Error {}
@@ -94,8 +104,28 @@ function tierArgument(text: string | undefined): Tier {
 	return text as Tier;
 }
 
-const linkLine = (link: IdentityLink): string =>
-	`    ${identityOf(link)}  (${link.source})`;
+/** The plugin of the configuration that declares the identity; undefined when none does, unknown when the configuration does not load. */
+function declarer(
+	identities: ConfiguredIdentities,
+	link: IdentityLink,
+): string | undefined | "unknown" {
+	if (identities === undefined) return "unknown";
+	const text = identityOf(link);
+	return identities.find((declared) => declared.identity === text)?.plugin;
+}
+
+/** Where a link came from, and for a plugin's, which plugin declares it. */
+function sourceText(link: IdentityLink, configured: Configured): string {
+	if (link.source !== "plugin") return link.source;
+	const plugin = declarer(configured.identities, link);
+	if (plugin === "unknown") return "plugin";
+	return plugin === undefined
+		? "plugin, which no plugin declares any more: the next start unlinks it"
+		: `plugin ${plugin}`;
+}
+
+const linkLine = (link: IdentityLink, configured: Configured): string =>
+	`    ${identityOf(link)}  (${sourceText(link, configured)})`;
 
 const rolesText = (roles: readonly RoleGrant[]): string =>
 	roles.length === 0
@@ -109,7 +139,11 @@ const claimable = (
 ): boolean =>
 	principal.claimable && !roles.some((grant) => grant.role === "owner");
 
-async function list(store: PgPrincipalStore, io: PrincipalIo): Promise<void> {
+async function list(
+	store: PgPrincipalStore,
+	io: PrincipalIo,
+	configured: Configured,
+): Promise<void> {
 	const principals = await store.list();
 	for (const principal of principals) {
 		const roles = await store.rolesOf(principal.id);
@@ -117,7 +151,7 @@ async function list(store: PgPrincipalStore, io: PrincipalIo): Promise<void> {
 			`${principal.id}  ${describe(principal)}${principal.disabled ? "  disabled" : ""}  roles: ${rolesText(roles)}`,
 		);
 		const links = await store.identitiesOf(principal.id);
-		for (const link of links) io.out(linkLine(link));
+		for (const link of links) io.out(linkLine(link, configured));
 		if (links.length === 0)
 			io.out(
 				claimable(principal, roles)
@@ -134,6 +168,7 @@ async function show(
 	store: PgPrincipalStore,
 	principal: PrincipalRecord,
 	io: PrincipalIo,
+	configured: Configured,
 ): Promise<void> {
 	io.out(`principal ${principal.id}`);
 	io.out(`  name: ${describe(principal)}`);
@@ -147,7 +182,7 @@ async function show(
 	io.out(`  identities: ${links.length === 0 ? "none" : ""}`.trimEnd());
 	for (const link of links)
 		io.out(
-			`    ${identityOf(link)}  (${link.source}, linked ${stamp(link.linkedAt)})`,
+			`    ${identityOf(link)}  (${sourceText(link, configured)}, linked ${stamp(link.linkedAt)})`,
 		);
 }
 
@@ -203,8 +238,9 @@ async function run(
 	store: PgPrincipalStore,
 	args: readonly string[],
 	io: PrincipalIo,
-	owners: ConfiguredOwners,
+	configured: Configured,
 ): Promise<void> {
+	const { owners } = configured;
 	const [command, ...rest] = args;
 	if (command === "create") {
 		const name = option(rest, "--name");
@@ -241,10 +277,23 @@ async function run(
 		throw new Refusal(
 			`${command} takes ${arity} ${arity === 1 ? "argument" : "arguments"}. Usage:\n${PRINCIPAL_USAGE}`,
 		);
-	if (command === "list") return list(store, io);
+	if (command === "list") return list(store, io, configured);
 	if (command === "unlink") {
 		const identity = identityArgument(rest[0]);
 		const link = await store.identity(identity.provider, identity.subject);
+		// A plugin's identity is linked again by the next start while the plugin declares it.
+		const plugin =
+			link?.source === "plugin"
+				? declarer(configured.identities, link)
+				: undefined;
+		if (link && plugin === "unknown")
+			throw new Refusal(
+				`${identityOf(identity)} is linked to principal ${link.principalId} as an identity a plugin declares, and ${CONFIG_FILE} does not load here to say whether a plugin still declares it; fix it, then try again`,
+			);
+		if (link && plugin !== undefined)
+			throw new Refusal(
+				`${identityOf(identity)} is linked to principal ${link.principalId} as an identity plugin ${plugin} declares; change that plugin's options in ${CONFIG_FILE} instead, and the next start moves or unlinks it`,
+			);
 		// Whoever linked it (the configuration, a first contact, the CLI, or a 0.8 claim), an identity
 		// an owner is listed by would be admitted by a running host as someone new once unlinked here,
 		// and the next start would fail on it.
@@ -268,7 +317,7 @@ async function run(
 		return;
 	}
 	const principal = await find(store, rest[0]);
-	if (command === "show") return show(store, principal, io);
+	if (command === "show") return show(store, principal, io, configured);
 	if (command === "link") {
 		const identity = identityArgument(rest[1]);
 		const spends = claimable(principal, await store.rolesOf(principal.id));
@@ -339,7 +388,7 @@ export async function principalCommand(
 	url: string,
 	args: readonly string[],
 	io: PrincipalIo,
-	owners: ConfiguredOwners,
+	configured: Configured,
 ): Promise<number> {
 	const sql = openPool(url);
 	try {
@@ -349,7 +398,7 @@ export async function principalCommand(
 			);
 			return 1;
 		}
-		await run(await PgPrincipalStore.attach(sql), args, io, owners);
+		await run(await PgPrincipalStore.attach(sql), args, io, configured);
 		return 0;
 	} catch (error) {
 		if (error instanceof Refusal || error instanceof IdentityError) {

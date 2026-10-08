@@ -269,7 +269,7 @@ export async function defineRoundtable(
 			...(overrides.aborted ? { aborted: overrides.aborted } : {}),
 		},
 		plugins: [
-			identityPlugin({ rules: config.access }),
+			identityPlugin({ rules: config.access, plugins: config.plugins }),
 			...(config.memory ? [memoryPlugin({ owner })] : []),
 			scheduleStorePlugin(),
 			precheckPlugin(),

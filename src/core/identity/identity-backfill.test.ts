@@ -19,7 +19,8 @@ import { recordingLogger } from "../testing/recording-logger.ts";
 import { identityPlugin } from "./identity-plugin.ts";
 import { backfillPrincipals } from "./identity-schema.ts";
 import { type IdentityService, PgIdentityService } from "./identity-service.ts";
-import { PgPrincipalStore, PRINCIPAL_TABLES } from "./principal-store.ts";
+import { PgPrincipalStore } from "./principal-store.ts";
+import { PRINCIPAL_TABLES } from "./principal-tables.ts";
 
 /** The people of the 0.8.0 fixture (scripts/fixture-db.ts). */
 const OWNER = "966666600000000001";
@@ -470,7 +471,7 @@ describeDb("the principal backfill", () => {
 });
 
 describeDb("the identity plugin", () => {
-	test("logs the boot's backfill in one line at setup, and provides the principals as IDENTITY", async () => {
+	test("logs the boot's backfill in one line at setup, links the plugins' identities, and provides the principals as IDENTITY", async () => {
 		db = await scratchDatabase("0.8.0");
 		const plugin = identityPlugin({
 			rules: {
@@ -480,6 +481,13 @@ describeDb("the identity plugin", () => {
 				provisioning: "admitted",
 				backgroundStaleDays: 30,
 			},
+			plugins: [
+				{
+					name: "remote-mcp",
+					identities: [{ identity: "token:remote-mcp" }],
+					setup: () => ({}),
+				},
+			],
 		});
 		await runMigrations(db.sql, [plugin]);
 		const { logger, lines } = recordingLogger();
@@ -509,6 +517,7 @@ describeDb("the identity plugin", () => {
 				"list",
 				"owners",
 				"principal",
+				"principalOf",
 				"resolve",
 				"roles",
 				"speakerFor",
@@ -522,6 +531,7 @@ describeDb("the identity plugin", () => {
 			displayName: "Ada",
 		});
 		expect((await identity.owners()).map((owner) => owner.id)).toEqual([OWNER]);
+		expect(await identity.principalOf("token:remote-mcp")).toBe(OWNER);
 	});
 });
 

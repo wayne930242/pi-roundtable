@@ -209,6 +209,7 @@ export type {
 	LinkedSessions,
 	Persona,
 	PluginContext,
+	PluginIdentity,
 	PromptSection,
 	PromptTurn,
 	RoundtablePlugin,

@@ -6,10 +6,13 @@ import { parseIdentity } from "./actor-facts.ts";
 import {
 	LEGACY_PROVIDER,
 	LEGACY_REMOTE_SPEAKER,
-	PRINCIPAL_TABLES,
-	PRINCIPALS_CLAIMABLE,
 	SYSTEM_PRINCIPAL,
 } from "./principal-store.ts";
+import {
+	PRINCIPAL_PLUGIN_LINKS,
+	PRINCIPAL_TABLES,
+	PRINCIPALS_CLAIMABLE,
+} from "./principal-tables.ts";
 
 /** Where the backfill finds the ids of people 0.8 stored: the configured owners, then four tables. */
 export type BackfillSource =
@@ -255,9 +258,9 @@ export async function backfillPrincipals(
 }
 
 /**
- * The identity plugin's migrations: its tables once, the claimable column once (apart, so a
- * database an earlier build made the tables on gets it too), then the backfill at every boot, which
- * hands its summary to `report`.
+ * The identity plugin's migrations: its tables once, the claimable column and the plugins' link
+ * source once each (apart, so a database an earlier build made the tables on gets them too), then
+ * the backfill at every boot, which hands its summary to `report`.
  */
 export function identityMigrations(
 	rules: BackfillRules,
@@ -266,6 +269,7 @@ export function identityMigrations(
 	return [
 		{ name: "principals", up: PRINCIPAL_TABLES },
 		{ name: "principals-claimable", up: PRINCIPALS_CLAIMABLE },
+		{ name: "principals-plugin-links", up: PRINCIPAL_PLUGIN_LINKS },
 		{
 			name: "backfill",
 			runs: "every-boot",

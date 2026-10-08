@@ -45,8 +45,20 @@ export interface IdentityRef {
 	subject: string;
 }
 
-/** How an identity came to be linked: by the configuration, the CLI, admission on first contact, or a 0.8 speaker id claimed. */
-export type LinkSource = "config" | "cli" | "jit" | "legacy";
+/**
+ * How an identity came to be linked: by the configuration, a plugin declaring it
+ * (`RoundtablePlugin.identities`), the CLI, admission on first contact, or a 0.8 speaker id claimed.
+ */
+export type LinkSource = "config" | "plugin" | "cli" | "jit" | "legacy";
+
+/** Which source a link made again by another becomes: the configuration's over all, a plugin's over the rest. */
+const LINK_RANK: Readonly<Record<LinkSource, number>> = {
+	config: 2,
+	plugin: 1,
+	cli: 0,
+	jit: 0,
+	legacy: 0,
+};
 
 export interface IdentityLink extends IdentityRef {
 	principalId: string;
@@ -89,9 +101,11 @@ export interface PrincipalStore {
 	): Promise<PrincipalRecord | undefined>;
 	/**
 	 * Links the identity to the principal; linking it again to the same one changes nothing, but
-	 * that the configuration linking it makes the link the configuration's, and to another one is
-	 * refused. A principal with any identity linked is no longer claimable, even after the identity
-	 * is unlinked.
+	 * that the configuration linking it makes the link the configuration's, and a plugin linking it
+	 * makes one the CLI, a first contact, or a claim made the plugin's; to another one is refused. A
+	 * principal with any identity linked is no longer claimable, even after the identity is
+	 * unlinked, except by a plugin's link: a plugin's credential is not the person's own identity,
+	 * so it leaves their 0.8 claim to them.
 	 */
 	link(
 		principalId: string,
@@ -198,50 +212,6 @@ function linkOf(row: IdentityRow): IdentityLink {
 const identityLock = (identity: IdentityRef) =>
 	`pi-roundtable:identity:${identity.provider}\n${identity.subject}`;
 
-/** The tables of principals, their identities, and their roles. */
-export const PRINCIPAL_TABLES = async (sql: SQL): Promise<void> => {
-	await sql`
-		CREATE TABLE IF NOT EXISTS principals (
-			id text PRIMARY KEY,
-			display_name text NOT NULL,
-			pronouns text CHECK (pronouns IN ('he', 'she', 'they')),
-			locale text,
-			time_zone text,
-			created_at timestamptz NOT NULL DEFAULT now(),
-			disabled_at timestamptz,
-			last_seen_at timestamptz,
-			last_tier text CHECK (last_tier IN ('member', 'admin', 'owner'))
-		)`;
-	await sql`
-		CREATE TABLE IF NOT EXISTS principal_identities (
-			provider text NOT NULL,
-			subject text NOT NULL,
-			principal_id text NOT NULL REFERENCES principals (id) ON DELETE CASCADE,
-			linked_at timestamptz NOT NULL DEFAULT now(),
-			source text NOT NULL CHECK (source IN ('config', 'cli', 'jit', 'legacy')),
-			PRIMARY KEY (provider, subject)
-		)`;
-	await sql`
-		CREATE INDEX IF NOT EXISTS principal_identities_principal
-		ON principal_identities (principal_id)`;
-	await sql`
-		CREATE TABLE IF NOT EXISTS principal_roles (
-			principal_id text NOT NULL REFERENCES principals (id) ON DELETE CASCADE,
-			role text NOT NULL CHECK (role IN ('member', 'admin', 'owner')),
-			source text NOT NULL CHECK (source IN ('config', 'cli')),
-			granted_at timestamptz NOT NULL DEFAULT now(),
-			PRIMARY KEY (principal_id, role)
-		)`;
-};
-
-/**
- * Whether the person of a carried-over principal's 0.8 id may still claim it: its own migration,
- * so a database whose principals table an earlier build made gets the column too.
- */
-export const PRINCIPALS_CLAIMABLE = async (sql: SQL): Promise<void> => {
-	await sql`ALTER TABLE principals ADD COLUMN IF NOT EXISTS claimable boolean NOT NULL DEFAULT false`;
-};
-
 /** The principal store over the `principals`, `principal_identities`, and `principal_roles` tables. */
 export class PgPrincipalStore implements PrincipalStore {
 	readonly #sql: SQL;
@@ -321,18 +291,21 @@ export class PgPrincipalStore implements PrincipalStore {
 					throw new IdentityError(
 						`${provider}:${subject} is already linked to principal ${existing.principal_id}; unlink it first`,
 					);
-				if (source !== "config" || existing.source === "config")
+				if (LINK_RANK[source] <= LINK_RANK[existing.source])
 					return linkOf(existing);
-				// The configuration names it now, so it is the configuration's to unlink.
+				// The configuration or a plugin names it now, so it is theirs to unlink.
 				const owned: IdentityRow[] = await tx`
-					UPDATE principal_identities SET source = 'config'
+					UPDATE principal_identities SET source = ${source}
 					WHERE provider = ${provider} AND subject = ${subject}
 					RETURNING *`;
 				return linkOf(owned[0] ?? existing);
 			}
-			const spent = await tx`
-				UPDATE principals SET claimable = false WHERE id = ${principalId}
-				RETURNING id`;
+			const spent =
+				source === "plugin"
+					? await tx`SELECT id FROM principals WHERE id = ${principalId}`
+					: await tx`
+						UPDATE principals SET claimable = false WHERE id = ${principalId}
+						RETURNING id`;
 			if (spent.length === 0)
 				throw new IdentityError(`there is no principal ${principalId}`);
 			const made: IdentityRow[] = await tx`

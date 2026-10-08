@@ -1,11 +1,13 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { migrate } from "../core/db/migrations.ts";
 import { PgIdentityService } from "../core/identity/identity-service.ts";
+import type { DeclaredIdentity } from "../core/identity/plugin-identities.ts";
+import { PgPrincipalStore } from "../core/identity/principal-store.ts";
 import {
-	PgPrincipalStore,
+	PRINCIPAL_PLUGIN_LINKS,
 	PRINCIPAL_TABLES,
 	PRINCIPALS_CLAIMABLE,
-} from "../core/identity/principal-store.ts";
+} from "../core/identity/principal-tables.ts";
 import { silentLogger } from "../core/log.ts";
 import { describeDb } from "../core/testing/database.ts";
 import {
@@ -35,11 +37,23 @@ const OWNERS = [
 
 /** The project's configuration: the test's database, and `access` owners as given. */
 let access: unknown;
+/** The project's plugins, when the test gives any. */
+let plugins: unknown;
 /** What the project's ports do beyond loading it, such as a plugin that fails to assemble. */
 let overrides: Partial<Ports>;
 beforeEach(() => {
 	access = { owners: OWNERS };
+	plugins = undefined;
 	overrides = {};
+});
+
+/** A plugin of the project's configuration that declares the dispatch token of remote MCP. */
+const remotePlugin = (principal?: string) => ({
+	name: "remote-mcp",
+	identities: [
+		{ identity: "token:remote-mcp", ...(principal ? { principal } : {}) },
+	],
+	setup: () => ({}),
 });
 
 /** Runs `roundtable principal ...` against the scratch database, as the project's configuration names it. */
@@ -57,6 +71,7 @@ async function principal(...args: string[]) {
 			{
 				...(({ owner: _, ...rest }) => rest)(validConfig),
 				access,
+				...(plugins === undefined ? {} : { plugins }),
 				database: { url: db?.url ?? "postgres://nowhere.example.test/x" },
 			},
 			overrides,
@@ -73,8 +88,10 @@ async function principal(...args: string[]) {
 	return { code, out: out.join("\n"), err: err.join("\n") };
 }
 
-/** The identity service a host starting now would run, over the same database. */
-function freshHost(): Promise<PgIdentityService> {
+/** The identity service a host starting now would run, over the same database, with the plugins' identities. */
+function freshHost(
+	identities: readonly DeclaredIdentity[] = [],
+): Promise<PgIdentityService> {
 	const sql = db?.sql;
 	if (!sql) throw new Error("no database");
 	return PgPrincipalStore.attach(sql).then(
@@ -86,7 +103,7 @@ function freshHost(): Promise<PgIdentityService> {
 					provisioning: "linked",
 					backgroundStaleDays: 30,
 				},
-				{ logger: silentLogger() },
+				{ logger: silentLogger(), identities },
 			),
 	);
 }
@@ -97,6 +114,7 @@ describeDb("roundtable principal", () => {
 		await migrate(db.sql, [
 			{ name: "identity/principals", up: PRINCIPAL_TABLES },
 			{ name: "identity/principals-claimable", up: PRINCIPALS_CLAIMABLE },
+			{ name: "identity/principals-plugin-links", up: PRINCIPAL_PLUGIN_LINKS },
 		]);
 		const host = await freshHost();
 		await host.syncConfig();
@@ -272,6 +290,52 @@ describeDb("roundtable principal", () => {
 		);
 		expect((await principal("show", OWNER)).out).not.toContain(
 			"discord:966666600000000010",
+		);
+	});
+
+	test("list and show name the plugin that declares an identity linked as a plugin's, and one no plugin declares any more", async () => {
+		await (
+			await freshHost([{ plugin: "remote-mcp", identity: "token:remote-mcp" }])
+		).syncConfig();
+		plugins = [remotePlugin()];
+		expect((await principal("list")).out.split("\n")).toContain(
+			"    token:remote-mcp  (plugin remote-mcp)",
+		);
+		expect((await principal("show", OWNER)).out).toContain(
+			"    token:remote-mcp  (plugin remote-mcp, linked ",
+		);
+		plugins = [];
+		expect((await principal("list")).out.split("\n")).toContain(
+			"    token:remote-mcp  (plugin, which no plugin declares any more: the next start unlinks it)",
+		);
+		access = { owners: [{ name: "Ada", identities: ["not-an-identity"] }] };
+		expect((await principal("list")).out.split("\n")).toContain(
+			"    token:remote-mcp  (plugin)",
+		);
+	});
+
+	test("unlink refuses an identity a plugin declares, and takes one no plugin declares any more", async () => {
+		await (
+			await freshHost([{ plugin: "remote-mcp", identity: "token:remote-mcp" }])
+		).syncConfig();
+		plugins = [remotePlugin()];
+		const refused = await principal("unlink", "token:remote-mcp");
+		expect(refused.code).toBe(1);
+		expect(refused.err).toBe(
+			`token:remote-mcp is linked to principal ${OWNER} as an identity plugin remote-mcp declares; change that plugin's options in roundtable.config.ts instead, and the next start moves or unlinks it`,
+		);
+		access = { owners: [{ name: "Ada", identities: ["not-an-identity"] }] };
+		const unknown = await principal("unlink", "token:remote-mcp");
+		expect(unknown.code).toBe(1);
+		expect(unknown.err).toContain(
+			"roundtable.config.ts does not load here to say whether a plugin still declares it",
+		);
+		access = { owners: OWNERS };
+		plugins = [];
+		const taken = await principal("unlink", "token:remote-mcp");
+		expect(taken.code).toBe(0);
+		expect(taken.out).toContain(
+			`Unlinked token:remote-mcp from principal ${OWNER}.`,
 		);
 	});
 

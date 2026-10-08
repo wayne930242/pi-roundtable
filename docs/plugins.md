@@ -97,6 +97,7 @@ definePlugin({
 	providers: {},             // optional: replaces a part the core runs on
 	provides: [],              // optional: keys of the services setup provides to other plugins
 	replaces: [],              // optional: keys of built-in services this plugin takes over
+	identities: [],            // optional: identities the plugin's own credentials stand for
 	preflight() {},            // optional: a check that runs before anything starts
 	setup(context) {           // required: returns the parts the plugin adds
 		return { /* parts */ };
@@ -108,6 +109,14 @@ definePlugin({
 Errors point to the plugin definition.
 
 A plugin whose `setup` returns `{}` and has no migrations, providers, or hooks stops startup (see [Errors](#errors-and-their-fixes)).
+
+`identities` is for a plugin that serves a credential of its own, such as the bearer token of an endpoint, and runs turns for whoever holds it.
+Each entry is a `PluginIdentity`, `{ identity, principal? }`: the identity written `<provider>:<subject>`, such as `token:remote-mcp`, and the id of the principal it stands for, by default the primary owner (the first of `access.owners`).
+At every start the `identity` plugin links each one to its principal as the plugin's (`roundtable principal list` shows `plugin <name>`), moves one whose principal changed since the last start, and unlinks one no plugin declares any more.
+The start stops with a `ConfigError` for an identity that does not parse, one two plugins declare, the system principal, a principal that does not exist, and an identity linked to someone else by the configuration, the CLI, or a first contact; the message names what to change.
+A declared identity is never admitted or claimed as someone new, and linking it leaves the principal's 0.8 claim alone: a plugin's credential is not the person's own identity.
+Read whom it stands for with `IDENTITY.principalOf(identity)`, and start the turn with `IDENTITY.speakerFor(principalId)`.
+A plugin that replaces `IDENTITY` replaces this too: the declarations are the built-in `identity` plugin's to link.
 
 ### The context
 
@@ -175,7 +184,7 @@ The built-in plugins provide these, from the main entry:
 
 | Key | Port | Provided by | What it is |
 |---|---|---|---|
-| `IDENTITY` | `IdentityService` | `identity` | Who the host serves, read-only: `resolve(facts, { conversation }?)` gives the `Speaker` with its `principalId` behind a surface's `ActorFacts`, or undefined; `principal(id)`, `list()`, `identities(principalId)`, `roles(principalId)`, `tierOf(principalId)` (the lasting roles' tier), `speakerFor(principalId, tier?)` for a turn on someone's behalf, and `owners()`. Principals are written only by the configuration and `roundtable principal`. `SYSTEM_PRINCIPAL` is the host's own, which no plugin speaks as |
+| `IDENTITY` | `IdentityService` | `identity` | Who the host serves, read-only: `resolve(facts, { conversation }?)` gives the `Speaker` with its `principalId` behind a surface's `ActorFacts`, or undefined; `principal(id)`, `list()`, `identities(principalId)`, `roles(principalId)`, `tierOf(principalId)` (the lasting roles' tier), `speakerFor(principalId, tier?)` for a turn on someone's behalf, `owners()`, and `principalOf(identity)`, the principal an identity written `<provider>:<subject>` is linked to, such as one a plugin declares in `identities`. Principals are written only by the configuration and `roundtable principal`. `SYSTEM_PRINCIPAL` is the host's own, which no plugin speaks as |
 | `CONVERSATIONS` | `ConversationRegistry` | `conversations` | The conversations run through `context.turns`: `register`, `get(key)`, `list({ principal }?)`, `setTitle(key, title)`; each a `ConversationRecord` of `key`, `surface`, `kind`, `visibility` (`"private"` or `"shared"`), `principalId?`, `title?`, `createdAt`, `lastActiveAt` |
 | `RUNTIME` | `AgentRuntime` | `runtime` | The runtime every conversation turn runs on, the agent server's and `context.turns`': the `runtime` slot's when a plugin fills it, Pi's otherwise |
 | `AGENTS` | `AgentServer` | `agent-server` | The `team` (`AgentTeam`), the read-only `directory` (`AgentDirectory`), the `runtime` every agent turn runs on (the same one `RUNTIME` provides), `approvals` (whether the owner's reply approves held actions), and `avatars` (`AvatarStudio`) |
@@ -2924,6 +2933,7 @@ Import from the entries listed below; source area files are internal.
 | `PendingConfirmation` | `pi-roundtable` | type |
 | `Persona` | `pi-roundtable` | type |
 | `PluginContext` | `pi-roundtable` | type |
+| `PluginIdentity` | `pi-roundtable` | type |
 | `PluginError` | `pi-roundtable` | value |
 | `Principal` | `pi-roundtable` | type |
 | `PromptMemory` | `pi-roundtable` | type |

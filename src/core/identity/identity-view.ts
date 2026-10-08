@@ -31,6 +31,7 @@ export function identityView(
 		speakerFor: async (principalId, tier) =>
 			frozenCopy(await service.speakerFor(principalId, tier)),
 		owners: async () => frozenCopy(await service.owners()),
+		principalOf: (identity) => service.principalOf(identity),
 	} satisfies IdentityService);
 	assessors.set(view, service);
 	return view;

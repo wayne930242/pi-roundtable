@@ -219,6 +219,7 @@ describe("defineRoundtable", () => {
 		).toEqual([
 			"principals",
 			"principals-claimable",
+			"principals-plugin-links",
 			"backfill",
 			"owner-memory",
 			"owner-memory-speaker",

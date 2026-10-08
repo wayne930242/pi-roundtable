@@ -16,6 +16,11 @@ import {
 import { CachingPrincipalStore } from "./caching-principal-store.ts";
 import type { Contact, ContactAssessor } from "./contact.ts";
 import {
+	type DeclaredIdentity,
+	syncDeclaredIdentities,
+} from "./plugin-identities.ts";
+import { highest, lowest, publicOf, speakerOf } from "./principal-reads.ts";
+import {
 	type IdentityLink,
 	LEGACY_PROVIDER,
 	type Principal,
@@ -67,6 +72,12 @@ export interface IdentityService {
 	speakerFor(principalId: string, tier?: Tier): Promise<Speaker>;
 	/** The principals holding the owner role, the configured owners first in their order. */
 	owners(): Promise<readonly Principal[]>;
+	/**
+	 * The id of the principal an identity, written `<provider>:<subject>`, is linked to, such as the
+	 * one a plugin's declared identity stands for; undefined when it is linked to no one. Throws
+	 * IdentityError for text that is no identity.
+	 */
+	principalOf(identity: string): Promise<string | undefined>;
 }
 
 /** The system principal's speaker for a turn the core itself starts, such as an ops report, at the tier its starter gives. Core-internal: no plugin reaches it. */
@@ -83,38 +94,10 @@ const DAY_MS = 24 * 60 * 60_000;
 /** How many people assessed at a first contact but not yet taken are remembered. */
 const PROVISIONAL_MAX = 1_000;
 
-/** The speaker of a contact: the id the surface knows them by, their 0.8 id where they have one. */
-const speakerOf = (
-	facts: ActorFacts,
-	principalId: string,
-	tier: Tier,
-): Speaker => ({
-	id: facts.legacyId ?? identityOf(facts),
-	name: facts.name,
-	tier,
-	principalId,
-});
-
-const highest = (tiers: readonly (Tier | undefined)[]): Tier | undefined =>
-	tiers.reduce<Tier | undefined>(
-		(best, tier) =>
-			tier !== undefined && (best === undefined || tierAtLeast(tier, best))
-				? tier
-				: best,
-		undefined,
-	);
-
-const lowest = (a: Tier, b: Tier): Tier => (tierAtLeast(a, b) ? b : a);
-
-const publicOf = (record: PrincipalRecord): Principal => ({
-	id: record.id,
-	displayName: record.displayName,
-	...(record.pronouns ? { pronouns: record.pronouns } : {}),
-	disabled: record.disabled,
-});
-
 export interface IdentityServiceOptions {
 	logger: Logger;
+	/** The identities the plugins declare, checked by `declaredIdentities`; `syncConfig` links them. */
+	identities?: readonly DeclaredIdentity[];
 	/** The clock, in milliseconds; a test gives its own. */
 	now?: () => number;
 }
@@ -130,8 +113,13 @@ export class PgIdentityService implements IdentityService, ContactAssessor {
 	readonly #seen = new SeenThrottle();
 	/** The new principal id each person assessed at a first contact would get, until it is taken. */
 	readonly #provisional = new Map<string, string>();
-	/** The identities the configuration lists under an owner, as `<provider>:<subject>`. */
-	readonly #ownerIdentities: ReadonlySet<string>;
+	/** The identities the plugins declare. */
+	readonly #declared: readonly DeclaredIdentity[];
+	/**
+	 * The identities linked only at boot, as `<provider>:<subject>`: those the configuration lists
+	 * under an owner and those the plugins declare.
+	 */
+	readonly #bootIdentities: ReadonlySet<string>;
 	/** The configured owners' principal ids, in the configuration's order, once synced. */
 	#configOwners: string[] = [];
 
@@ -143,9 +131,11 @@ export class PgIdentityService implements IdentityService, ContactAssessor {
 		this.#now = options.now ?? Date.now;
 		this.store = new CachingPrincipalStore(store, this.#now);
 		this.#rules = checkAccessRules(rules);
-		this.#ownerIdentities = new Set(
-			this.#rules.owners.flatMap((owner) => owner.identities),
-		);
+		this.#declared = options.identities ?? [];
+		this.#bootIdentities = new Set([
+			...this.#rules.owners.flatMap((owner) => owner.identities),
+			...this.#declared.map((declared) => declared.identity),
+		]);
 		this.#logger = options.logger;
 	}
 
@@ -153,7 +143,8 @@ export class PgIdentityService implements IdentityService, ContactAssessor {
 	 * Makes the stored owners match the configuration: each configured owner's principal made or
 	 * renamed, their identities linked, and the owner role granted, all as the configuration's;
 	 * the configuration's owner roles and links it no longer names are removed, the CLI's kept.
-	 * An identity of an owner that is linked to another principal stops the boot.
+	 * An identity of an owner that is linked to another principal stops the boot. Then the plugins'
+	 * declared identities are linked, as `syncDeclaredIdentities` says.
 	 */
 	async syncConfig(): Promise<void> {
 		const store = this.store;
@@ -213,6 +204,12 @@ export class PgIdentityService implements IdentityService, ContactAssessor {
 				);
 			}
 		this.#configOwners = owners;
+		await syncDeclaredIdentities(
+			store,
+			this.#declared,
+			owners[0],
+			this.#logger,
+		);
 	}
 
 	async resolve(
@@ -311,6 +308,15 @@ export class PgIdentityService implements IdentityService, ContactAssessor {
 		};
 	}
 
+	async principalOf(identity: string): Promise<string | undefined> {
+		const ref = parseIdentity(identity);
+		if (!ref)
+			throw new IdentityError(
+				`${JSON.stringify(identity)} is not an identity written <provider>:<subject>`,
+			);
+		return (await this.store.identity(ref.provider, ref.subject))?.principalId;
+	}
+
 	async owners(): Promise<readonly Principal[]> {
 		const holders = (await this.store.holders("owner")).map(
 			(holder) => holder.principalId,
@@ -387,8 +393,9 @@ export class PgIdentityService implements IdentityService, ContactAssessor {
 		conversation: ChannelKey | undefined,
 	): Promise<{ principalId: string; tier: Tier } | undefined> {
 		if (this.#rules.provisioning !== "admitted") return undefined;
-		// An owner's identity is theirs alone, linked at boot: unlinked meanwhile, it is no one until then.
-		if (this.#ownerIdentities.has(identityOf(facts))) return undefined;
+		// An owner's identity, or a plugin's, is its principal's alone, linked at boot: unlinked
+		// meanwhile, it is no one until then.
+		if (this.#bootIdentities.has(identityOf(facts))) return undefined;
 		const claimable = await this.#claimable(facts);
 		if (claimable) {
 			// Disabled before they came back: no one, and no new principal either.
@@ -427,7 +434,7 @@ export class PgIdentityService implements IdentityService, ContactAssessor {
 		if (
 			!link &&
 			this.#rules.provisioning === "admitted" &&
-			!this.#ownerIdentities.has(identityOf(ref))
+			!this.#bootIdentities.has(identityOf(ref))
 		) {
 			if (assessed === facts.legacyId)
 				link = await this.store.claim(assessed, ref);

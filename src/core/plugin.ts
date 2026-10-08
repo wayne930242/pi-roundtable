@@ -290,10 +290,31 @@ export interface PluginContext {
 	apiKey(provider: string): Promise<string | undefined>;
 }
 
+/**
+ * An identity a plugin's own credential stands for, such as the bearer token of an endpoint it
+ * serves, and the principal it speaks as.
+ */
+export interface PluginIdentity {
+	/** Written `<provider>:<subject>`, such as `token:remote-mcp`. */
+	identity: string;
+	/** The id of the principal it stands for; the primary owner, the first of `access.owners`, when absent. */
+	principal?: string;
+}
+
 export interface RoundtablePlugin {
 	name: string;
 	/** The plugin's tables; the host runs every plugin's, in registration order, before any setup. */
 	migrations?: readonly Migration[];
+	/**
+	 * Identities the plugin's own credentials stand for, read before any setup. At every boot the
+	 * identity plugin links each to its principal as the plugin's (`roundtable principal list` shows
+	 * them as `plugin`), moves one bound to another principal than at the last boot, and unlinks one
+	 * no plugin declares any more. An identity linked to someone else, another plugin's, a principal
+	 * that does not exist, or the system principal stops the boot with a ConfigError. A declared
+	 * identity is never admitted or claimed at a first contact, and `IDENTITY.principalOf` reads
+	 * whom it stands for.
+	 */
+	identities?: readonly PluginIdentity[];
 	/** The provider slots the plugin fills, resolved before any setup; two plugins cannot fill one slot. */
 	providers?: Partial<Providers>;
 	/**
