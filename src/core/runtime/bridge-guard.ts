@@ -18,18 +18,29 @@ export function onClaudeBridge(model: { provider: string }): boolean {
 	return model.provider === CLAUDE_BRIDGE;
 }
 
-const admits = (tier: AccessTier | undefined): boolean => {
+/**
+ * Whether the tier admits someone besides the owners: everyone, a role, which anyone may hold, or
+ * an identity that is not already an owner's, since an owner listed again is still one person.
+ */
+const admits = (
+	tier: AccessTier | undefined,
+	owners: ReadonlySet<string>,
+): boolean => {
 	if (!tier) return false;
 	const { everyone } = tier;
 	if (everyone === true || (Array.isArray(everyone) && everyone.length > 0))
 		return true;
-	return (tier.identities?.length ?? 0) > 0 || (tier.roles?.length ?? 0) > 0;
+	return (
+		(tier.identities ?? []).some((identity) => !owners.has(identity)) ||
+		(tier.roles?.length ?? 0) > 0
+	);
 };
 
 /**
  * Why, by the configuration, a shared conversation of the host may have more than one person
  * speaking in it; undefined when the one owner alone does. More than one owner, rules that admit
- * admins or members, or a plugin's identity bound to a principal other than the primary owner's.
+ * admins or members besides the owner's own identities, or a plugin's identity bound to a
+ * principal other than the primary owner's.
  */
 export function configuredCrowd(
 	rules: Pick<AccessRules, "owners" | "admins" | "members">,
@@ -37,8 +48,9 @@ export function configuredCrowd(
 ): string | undefined {
 	if (rules.owners.length > 1)
 		return `access.owners names ${rules.owners.length} owners`;
+	const owners = new Set(rules.owners.flatMap((owner) => owner.identities));
 	for (const tier of ["admins", "members"] as const)
-		if (admits(rules[tier]))
+		if (admits(rules[tier], owners))
 			return `access.${tier} admits people besides the owner`;
 	const primary = rules.owners[0]?.principal;
 	for (const plugin of plugins)

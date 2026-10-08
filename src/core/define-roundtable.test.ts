@@ -561,6 +561,37 @@ describe("claude-bridge in a host whose shared conversations several people spea
 		).rejects.toThrow(/plugin kiosk/);
 	});
 
+	test("does not count the owner's own identity listed again under admins or members, but counts anyone listed beside it", async () => {
+		const owner = {
+			name: "Ann",
+			principal: "ann",
+			identities: ["discord:ann"],
+		};
+		await expect(
+			defineRoundtable({
+				...config,
+				owner: undefined,
+				access: {
+					owners: [owner],
+					admins: { identities: ["discord:ann"] },
+					members: { identities: ["discord:ann"] },
+				},
+				model: BRIDGE,
+			}),
+		).resolves.toBeDefined();
+		await expect(
+			defineRoundtable({
+				...config,
+				owner: undefined,
+				access: {
+					owners: [owner],
+					members: { identities: ["discord:ann", "discord:bo"] },
+				},
+				model: BRIDGE,
+			}),
+		).rejects.toThrow(/access\.members/);
+	});
+
 	test("a single owner's host on claude-bridge still boots, and so does a crowd without memory or on another provider", async () => {
 		await expect(
 			defineRoundtable({ ...config, model: BRIDGE, plugins: [remote] }),
