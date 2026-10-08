@@ -49,35 +49,84 @@ const MESSAGE_SIGNED = new Set([
 ]);
 
 /**
+ * Whether the answer's replayed items were paired with reasoning it replays: OpenAI's Responses
+ * pairs the ids of a response's message and calls with its reasoning item, and refuses a replay
+ * that carries the ids without that item.
+ */
+function pairsReplay(message: Assistant): boolean {
+	return (
+		MESSAGE_SIGNED.has(message.api) &&
+		message.content.some((part) => part.type === "thinking")
+	);
+}
+
+/** A call's id without the item id OpenAI's Responses paired with its reasoning: `call|fc_…` reads `call`. */
+const unpairedCallId = (id: string): string => id.split("|")[0] ?? id;
+
+/** A message's signature without its item id, keeping its phase; undefined when it had none. */
+function unpairedSignature(signature: string): string | undefined {
+	try {
+		const parsed: unknown = JSON.parse(signature);
+		const phase =
+			typeof parsed === "object" && parsed !== null && "phase" in parsed
+				? parsed.phase
+				: undefined;
+		return typeof phase === "string"
+			? JSON.stringify({ v: 1, id: "", phase })
+			: undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+/**
  * An earlier answer without its reasoning, or undefined when it gave none: its thinking, encrypted
  * or not, the thought signatures of its tool calls, and those its provider signed its text with,
- * which may carry a person's memory as the turn read it.
+ * which may carry a person's memory as the turn read it. Where OpenAI's Responses paired the
+ * answer's message and call ids with that reasoning, they go with it; each call keeps the id its
+ * result answers, and each message its phase.
  */
 function withoutReasoning(message: Assistant): Assistant | undefined {
 	const signsReasoning = !MESSAGE_SIGNED.has(message.api);
+	const unpair = pairsReplay(message);
 	let changed = false;
 	const content = message.content.flatMap((part): Assistant["content"] => {
 		if (part.type === "thinking") {
 			changed = true;
 			return [];
 		}
-		if (part.type === "toolCall" && part.thoughtSignature !== undefined) {
+		if (part.type === "toolCall") {
+			const { thoughtSignature, ...call } = part;
+			const id = unpair ? unpairedCallId(part.id) : part.id;
+			if (thoughtSignature === undefined && id === part.id) return [part];
 			changed = true;
-			const { thoughtSignature: _, ...call } = part;
-			return [call];
+			return [{ ...call, id }];
 		}
 		if (
 			part.type === "text" &&
-			signsReasoning &&
-			part.textSignature !== undefined
+			part.textSignature !== undefined &&
+			(signsReasoning || unpair)
 		) {
 			changed = true;
-			const { textSignature: _, ...text } = part;
-			return [text];
+			const { textSignature, ...text } = part;
+			const kept = signsReasoning
+				? undefined
+				: unpairedSignature(textSignature);
+			return [kept === undefined ? text : { ...text, textSignature: kept }];
 		}
 		return [part];
 	});
 	return changed ? { ...message, content } : undefined;
+}
+
+/** The ids of the earlier answers' calls whose reasoning goes, and their pairing with it. */
+function unpairedCalls(messages: Messages, before: number): Set<string> {
+	const ids = new Set<string>();
+	for (const message of messages.slice(0, Math.max(before, 0)))
+		if (message.role === "assistant" && pairsReplay(message))
+			for (const part of message.content)
+				if (part.type === "toolCall") ids.add(part.id);
+	return ids;
 }
 
 /**
@@ -97,9 +146,14 @@ export function memoryProjection(
 		? messages.findLastIndex((message) => message.role === "user")
 		: -1;
 	const hidden = hiddenExchanges(messages, view);
+	const unpaired = unpairedCalls(messages, running);
 	let changed = false;
 	const shown = messages.map((message, index) => {
-		const projected = projectedMessage(message, hidden, index < running);
+		const projected = projectedMessage(message, {
+			hidden,
+			unpaired,
+			earlier: index < running,
+		});
 		if (!projected) return message;
 		changed = true;
 		return projected;
@@ -177,20 +231,38 @@ function withHiddenCalls(
 	return changed ? { ...message, content } : undefined;
 }
 
-/** One message as the hidden exchanges allow, or undefined when it needs no change. */
+/** What a message's projection hides, and whether it is of a turn before the running one. */
+interface Projection {
+	/** The hidden exchanges' placeholders, by their call's original id. */
+	hidden: ReadonlyMap<string, string>;
+	/** The calls whose replay pairing goes with their answer's reasoning, by their original id. */
+	unpaired: ReadonlySet<string>;
+	earlier: boolean;
+}
+
+/** One message as the projection allows, or undefined when it needs no change. */
 function projectedMessage(
 	message: Messages[number],
-	hidden: ReadonlyMap<string, string>,
-	earlier: boolean,
+	{ hidden, unpaired, earlier }: Projection,
 ): Messages[number] | undefined {
 	if (message.role === "assistant") {
-		const reasoned = earlier ? withoutReasoning(message) : undefined;
-		return withHiddenCalls(reasoned ?? message, hidden) ?? reasoned;
+		const shown = withHiddenCalls(message, hidden);
+		const reasoned = earlier ? withoutReasoning(shown ?? message) : undefined;
+		return reasoned ?? shown;
 	}
 	if (message.role !== "toolResult") return undefined;
 	const text = hidden.get(message.toolCallId);
-	if (text === undefined) return undefined;
-	return { ...message, content: [{ type: "text" as const, text }] };
+	const id = unpaired.has(message.toolCallId)
+		? unpairedCallId(message.toolCallId)
+		: message.toolCallId;
+	if (text === undefined && id === message.toolCallId) return undefined;
+	return {
+		...message,
+		toolCallId: id,
+		...(text === undefined
+			? {}
+			: { content: [{ type: "text" as const, text }] }),
+	};
 }
 
 /**
@@ -202,11 +274,15 @@ function projectedMessage(
 export function summaryProjection(
 	messages: ContextWithSystemEvent["messages"],
 ): ContextWithSystemEvent["messages"] {
-	const hidden = hiddenExchanges(messages, { shared: true, reader: undefined });
+	const projection: Projection = {
+		hidden: hiddenExchanges(messages, { shared: true, reader: undefined }),
+		unpaired: unpairedCalls(messages, messages.length),
+		earlier: true,
+	};
 	return messages.flatMap((message) =>
 		message.role === "system"
 			? []
-			: [projectedMessage(message, hidden, true) ?? message],
+			: [projectedMessage(message, projection) ?? message],
 	);
 }
 

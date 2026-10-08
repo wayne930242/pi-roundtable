@@ -351,3 +351,128 @@ describe("the reasoning a provider signs onto an earlier answer's text", () => {
 		}
 	});
 });
+
+describe("the replay ids an earlier answer's removed reasoning was paired with", () => {
+	const USAGE = {
+		input: 0,
+		output: 0,
+		cacheRead: 0,
+		cacheWrite: 0,
+		totalTokens: 0,
+		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+	};
+	const gpt = {
+		id: "gpt-6.1-sol",
+		name: "gpt-6.1-sol",
+		api: "openai-responses",
+		provider: "openai",
+		baseUrl: "http://provider.invalid",
+		reasoning: true,
+		input: ["text"],
+		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+		contextWindow: 100_000,
+		maxTokens: 1_000,
+	} as Model<"openai-responses">;
+	/** One response of the model: its encrypted reasoning, then a message and a call it paired with it. */
+	const response = (
+		who: string,
+		parts: AssistantMessage["content"],
+	): AssistantMessage => ({
+		role: "assistant",
+		content: [
+			{
+				type: "thinking",
+				thinking: "",
+				thinkingSignature: JSON.stringify({
+					type: "reasoning",
+					id: `rs_${who}`,
+					encrypted_content: `${who.toUpperCase()}_ENCRYPTED`,
+					summary: [],
+				}),
+			},
+			...parts,
+		],
+		api: gpt.api,
+		provider: gpt.provider,
+		model: gpt.id,
+		usage: USAGE,
+		stopReason: parts.some((part) => part.type === "toolCall")
+			? "toolUse"
+			: "stop",
+		timestamp: 2,
+	});
+	const said = (id: string, phase: string) =>
+		JSON.stringify({ v: 1, id, phase });
+	const answered = (toolCallId: string) => ({
+		...result("read_attachment", "a file", {}),
+		toolCallId,
+	});
+	const history: Messages = [
+		{ role: "user", content: "Hello.", timestamp: 1 },
+		response("ann", [
+			{
+				type: "text",
+				text: "Looking.",
+				textSignature: said("msg_ann", "commentary"),
+			},
+			{
+				type: "toolCall",
+				id: "call_ann|fc_ann",
+				name: "read_attachment",
+				arguments: {},
+			},
+		]),
+		answered("call_ann|fc_ann"),
+		response("ann2", [
+			{
+				type: "text",
+				text: "Done.",
+				textSignature: said("msg_ann2", "final_answer"),
+			},
+		]),
+		{ role: "user", content: "Hi.", timestamp: 3 },
+		response("bo", [
+			{
+				type: "toolCall",
+				id: "call_bo|fc_bo",
+				name: "read_attachment",
+				arguments: {},
+			},
+		]),
+		answered("call_bo|fc_bo"),
+	];
+
+	test("go with it from the next request, which keeps each call with its result and each message's phase", () => {
+		const sent = memoryProjection(history, { shared: true, reader: "bo" });
+		const items = responsesRequest(
+			gpt,
+			normalizeContext({ messages: (sent ?? history) as Message[] }),
+			new Set(["openai"]),
+		);
+		const text = JSON.stringify(items);
+		for (const paired of ["rs_ann", "ANN_ENCRYPTED", "fc_ann", "msg_ann"])
+			expect(text).not.toContain(paired);
+		expect(items).toContainEqual(
+			expect.objectContaining({ type: "function_call", call_id: "call_ann" }),
+		);
+		expect(items).toContainEqual(
+			expect.objectContaining({
+				type: "function_call_output",
+				call_id: "call_ann",
+			}),
+		);
+		for (const phase of ["commentary", "final_answer"])
+			expect(items).toContainEqual(
+				expect.objectContaining({ type: "message", phase }),
+			);
+		// The running turn replays its own reasoning, paired as it was.
+		expect(text).toContain("rs_bo");
+		expect(items).toContainEqual(
+			expect.objectContaining({
+				type: "function_call",
+				id: "fc_bo",
+				call_id: "call_bo",
+			}),
+		);
+	});
+});
