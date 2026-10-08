@@ -151,7 +151,7 @@ Use `QueuePort` from the main entry for `context.queue`; the kit's `ChannelQueue
 `Logger` has five levels and `child(fields)`; you can pass an existing pino logger as `DefineOverrides.logger`.
 
 With `defineRoundtable`, the host's logger sends every `error` and `fatal` line to the ops agent named by `config.ops.agent`, which reports it in its channel, or, with `config.ops.conversation`, to that conversation as a visible message and a report turn its claim answers.
-The report turn is a background turn of the `owner` target, so the host does not start, with a `ConfigError` naming `config ops.conversation` and the reason, when no chat surface serves the key, no plugin's claim owns it, no plugin contributes the `owner` background target, or the claim that owns it takes no background turns (has no `background`); a report is then never only logged.
+The report turn is the host's own background turn of the `owner` target: it runs as the system principal (`SYSTEM_PRINCIPAL`) at the owner tier, as in 0.8, and so does the report turn of an outside Discord webhook's post in an agent's channel, whose text is untrusted input; neither can set up a schedule or delegate a task. The host does not start, with a `ConfigError` naming `config ops.conversation` and the reason, when no chat surface serves the key, no plugin's claim owns it, no plugin contributes the `owner` background target, or the claim that owns it takes no background turns (has no `background`); a report is then never only logged.
 On a host without Discord no plugin contributes `owner` unless one of yours does, so `ops.conversation` needs such a plugin there.
 The web chat takes no error reports in 0.8: it posts only to a conversation a signed-in person opened, and its claim takes no background turns, so `web:<id>` fails at startup; name a conversation of another surface, or an agent with Discord.
 It then calls `DefineOverrides.errorSink(entry)` if you supply one; this function must not throw.
@@ -1901,6 +1901,13 @@ A `BackgroundTarget` says whose turn that is: a `name` that the schedule or job 
 `schedules` (`perChannel`, `promptChars`, `aheadDays`) bounds what `schedule_create` accepts, and `delegation` (`maxRunning`) bounds how many delegated tasks may run in one channel; a target without one of them may not schedule or delegate at all.
 The claim that answers the target serves it in its `background(turn)`, where `turn.target` is the name, and skips every target it does not serve.
 A channel's claim runs turns only for its own target, keeping the owner's tools out of channels open to many people.
+
+A turn is someone's: `turn.author.principalId` is the principal who set up the work, `turn.author.id` and `name` how they are shown, and `turn.tier` the tier it asks for, all required.
+The router checks the author as the turn starts, in its place in the channel's queue, and hands the claim `turn.speaker`, the speaker to run it as: the principal at the lower of `turn.tier` and their tier now.
+It skips the turn, with the reason, when the principal does not exist, is disabled, holds no tier, or holds one only from what a surface reports and was last seen more than `access.backgroundStaleDays` ago, and when the turn names no principal or tier; it never runs one as the owner's by default.
+A turn naming the system principal (`SYSTEM_PRINCIPAL`) runs only when the host itself started it.
+A schedule stores its creator's principal as `createdById` and runs as them; a delegated task's report runs as the person whose turn delegated it.
+In a turn nobody is named for, the schedule and delegation tools refuse.
 
 - Contribute `backgroundTargets` alongside the claim that serves them; read one with `context.conversations.target(name)` from a service or handler.
 - Two targets with the same name are refused, naming both plugins.

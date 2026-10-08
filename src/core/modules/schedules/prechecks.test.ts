@@ -138,7 +138,7 @@ describeDb("PostgreSQL", () => {
 		store,
 		channel: "discord:a",
 		target: OPEN,
-		author: { id: "u1", name: "Sam" },
+		author: { principalId: "u1", id: "u1", name: "Sam", tier: "owner" },
 		now,
 		...(prechecks ? { prechecks } : {}),
 		...over,
@@ -420,14 +420,18 @@ describeDb("PostgreSQL", () => {
 			fakePrecheck("health.recovery", { wake: false }),
 		);
 		await callScheduleTool(
-			ctx(prechecks, { author: { id: "u2", name: "Ada", tier: "admin" } }),
+			ctx(prechecks, {
+				author: { principalId: "u2", id: "u2", name: "Ada", tier: "admin" },
+			}),
 			"schedule_create",
 			{ title: "patrol", prompt: "p", time: "09:30" },
 		);
 		const [schedule] = await store.forChannel("discord:a");
 		await expect(
 			callScheduleTool(
-				ctx(prechecks, { author: { id: "u3", name: "Max", tier: "member" } }),
+				ctx(prechecks, {
+					author: { principalId: "u3", id: "u3", name: "Max", tier: "member" },
+				}),
 				"schedule_update",
 				{ id: schedule?.id, precheck: "health.recovery" },
 			),

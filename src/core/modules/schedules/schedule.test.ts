@@ -148,15 +148,25 @@ describeDb("PostgreSQL", () => {
 		store,
 		channel: "discord:a",
 		target: OPEN,
-		author: { id: "u1", name: "Sam" },
+		author: { principalId: "u1", id: "u1", name: "Sam", tier: "owner" },
 		now,
 		...over,
 	});
 
 	describe("schedule tools", () => {
 		test("a schedule keeps its creator's tier, and a lower tier cannot change it", async () => {
-			const admin = { id: "u2", name: "Ada", tier: "admin" } as const;
-			const member = { id: "u3", name: "Max", tier: "member" } as const;
+			const admin = {
+				principalId: "u2",
+				id: "u2",
+				name: "Ada",
+				tier: "admin",
+			} as const;
+			const member = {
+				principalId: "u3",
+				id: "u3",
+				name: "Max",
+				tier: "member",
+			} as const;
 			await callScheduleTool(ctx({ author: admin }), "schedule_create", {
 				title: "patrol",
 				prompt: "check the disk",

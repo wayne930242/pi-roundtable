@@ -12,7 +12,12 @@ import {
 	delegatedTurnText,
 } from "./delegator.ts";
 
-const OWNER = { id: "1", name: "Riley" };
+const OWNER = {
+	principalId: "1",
+	id: "1",
+	name: "Riley",
+	tier: "owner" as const,
+};
 
 /** Sample targets: a roomy one, a tight one, and one that may not delegate. */
 const TARGETS: readonly BackgroundTarget[] = [

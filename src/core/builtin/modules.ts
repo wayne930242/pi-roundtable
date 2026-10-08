@@ -10,6 +10,7 @@ import {
 	ScheduleError,
 } from "../domain/errors.ts";
 import { messages } from "../i18n/index.ts";
+import { legacyPrincipalsOf } from "../identity/identity-view.ts";
 import type { OwnerIdentity } from "../identity.ts";
 import type { ModelRef, ThinkingLevel } from "../models.ts";
 import { ConversationBackgroundTurns } from "../modules/background/background-turns.ts";
@@ -30,6 +31,7 @@ import {
 	AGENTS,
 	BACKGROUND_TURNS,
 	DELEGATION,
+	IDENTITY,
 	PRECHECKS,
 	SCHEDULES,
 } from "../services.ts";
@@ -138,9 +140,11 @@ export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 					ownerChannel,
 					(message) => new DelegationError(message),
 				);
+			const identity = services.find(IDENTITY);
 			const background = new ConversationBackgroundTurns({
 				conversations,
 				system: { id: "assistant", name: options.assistant },
+				...(identity ? { principalOf: legacyPrincipalsOf(identity) } : {}),
 				logger,
 			});
 			const delegator = new DefaultDelegator({
@@ -235,7 +239,6 @@ export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 							? schedulesExtension(
 									{
 										store: schedules,
-										owner: { id: owner.id, name: owner.name },
 										channelFor: scheduleChannelFor,
 										...(prechecks ? { prechecks } : {}),
 										holds: () => sessions().holds,
@@ -252,7 +255,6 @@ export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 							? delegateExtension(
 									{
 										delegator,
-										owner: { id: owner.id, name: owner.name },
 										channelFor: delegateChannelFor,
 									},
 									session.homeChannel,

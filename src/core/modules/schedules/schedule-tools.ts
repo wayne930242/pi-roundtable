@@ -3,6 +3,7 @@ import type { ChannelKey } from "../../domain/conversation.ts";
 import { ScheduleError } from "../../domain/errors.ts";
 import type { HoldCheck } from "../../holds.ts";
 import { messages } from "../../i18n/index.ts";
+import { SYSTEM_PRINCIPAL } from "../../identity/principal-store.ts";
 import type { ScheduleStore } from "../../services.ts";
 import type { ScheduleToolName } from "../../shared/schedule-tools.ts";
 import { type Tier, tierAtLeast } from "../../speakers.ts";
@@ -36,8 +37,12 @@ export interface ScheduleToolContext {
 	channel: ChannelKey;
 	/** Whose schedules these are; its `schedules` limits apply, and without them nothing is scheduled. */
 	target: BackgroundTarget;
-	/** Who asked, recorded on created schedules; a scheduled run speaks for its creator. */
-	author: { id: string; name: string; tier?: Tier };
+	/**
+	 * Who asked: their principal, recorded as a created schedule's creator, the name it lists, and
+	 * the tier its runs ask for; a scheduled run speaks for its creator. The host's own turns,
+	 * whose principal is the system's, create none.
+	 */
+	author: { principalId: string; id: string; name: string; tier: Tier };
 	now: Date;
 	/**
 	 * The host's prechecks a schedule may name, and the runner of the scripts it may carry instead;
@@ -160,7 +165,7 @@ async function precheckCatalog(ctx: ScheduleToolContext): Promise<string> {
 			runner.describe({
 				channel: ctx.channel,
 				target: ctx.target.name,
-				...(ctx.author.tier ? { tier: ctx.author.tier } : {}),
+				tier: ctx.author.tier,
 			}),
 		)
 		.then(
@@ -232,7 +237,7 @@ async function own(ctx: ScheduleToolContext, input: Input): Promise<Schedule> {
 
 /** A schedule runs at its creator's tier, so someone of a lower tier may not rewrite it. */
 function changeable(ctx: ScheduleToolContext, schedule: Schedule): Schedule {
-	if (ctx.author.tier && !tierAtLeast(ctx.author.tier, schedule.createdTier))
+	if (!tierAtLeast(ctx.author.tier, schedule.createdTier))
 		throw new ScheduleError(
 			`schedule #${schedule.id} was set by a higher tier; only that tier or above can change it`,
 		);
@@ -249,6 +254,10 @@ export async function callScheduleTool(
 	const limits = limitsOf(ctx);
 	switch (name) {
 		case "schedule_create": {
+			if (ctx.author.principalId === SYSTEM_PRINCIPAL)
+				throw new ScheduleError(
+					"the host's own turns, such as a report's, set up no schedules; ask the owner to set it up",
+				);
 			const title = text(input, "title", TITLE_CHARS);
 			const prompt = text(input, "prompt", limits.promptChars);
 			const [recurrence, next] = timing(ctx, input);
@@ -274,9 +283,9 @@ export async function callScheduleTool(
 				prompt,
 				recurrence,
 				nextRun: next,
-				createdById: ctx.author.id,
+				createdById: ctx.author.principalId,
 				createdByName: ctx.author.name,
-				createdTier: ctx.author.tier ?? "owner",
+				createdTier: ctx.author.tier,
 				...(precheck ? { precheck } : {}),
 				...(script
 					? { precheckScript: script.script, precheckTools: script.tools }

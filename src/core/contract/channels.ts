@@ -107,16 +107,26 @@ export interface BackgroundTurn {
 	 * plugin contributes, and a claim skips one it does not serve.
 	 */
 	target: string;
-	author: { id: string; name: string };
 	/**
-	 * The tier the turn runs at, which is its creator's when a person set it up; absent for
-	 * the operator's own automation, which runs at the owner's.
+	 * Whom the turn is for: the principal who set up the work, and the id and name they are shown
+	 * by, such as the identity they spoke as. The system principal is the host's alone.
 	 */
-	tier?: Tier;
+	author: { principalId: string; id: string; name: string };
+	/**
+	 * The tier the turn asks to run at, its creator's when they set it up. It runs at that tier or
+	 * the principal's own now, whichever is lower.
+	 */
+	tier: Tier;
 	turnId: string;
 	text: string;
 	/** It delivers a report the owner is waiting for, so it may ask them on cards. */
 	report?: boolean;
+	/**
+	 * Who the turn runs as, set by the router alone once it checked the author: their principal
+	 * exists and is not disabled, and the tier is capped at theirs. A claim runs the turn as this
+	 * speaker; one the caller sets is replaced.
+	 */
+	speaker?: Speaker;
 }
 
 /**
@@ -183,6 +193,12 @@ export interface ChannelClaim {
 export interface ConversationPort {
 	/** Never rejects; resolves when the message's turn is done or dropped. */
 	handle(message: InboundMessage): Promise<void>;
+	/**
+	 * Runs a turn nobody wrote, as its author's principal at the lower of its tier and theirs; it
+	 * is skipped, with the reason, when the principal is unknown, disabled, holds no tier, or was
+	 * last seen too long ago (`access.backgroundStaleDays`), or when the turn names no principal or
+	 * tier. Never rejects.
+	 */
 	background(turn: BackgroundTurn): Promise<ScheduledOutcome>;
 	/** A contributed background target, read when used; undefined when no plugin contributes it. */
 	target(name: string): BackgroundTarget | undefined;

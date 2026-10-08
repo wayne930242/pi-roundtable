@@ -506,11 +506,11 @@ export async function testPlugin(
 	const agentServer = team && "team" in team ? services.get(AGENTS) : undefined;
 	const attachmentDir = mkdtempSync(join(tmpdir(), "roundtable-test-plugin-"));
 	const identity = services.find(IDENTITY);
+	// Who wrote a message, and whom a background turn runs as: by the given IDENTITY, else the owner alone, at the owner tier.
+	const people = mapIdentity({ owners: [owner.id] });
 	router = new ChannelRouter({
-		// Who wrote a message: by the given IDENTITY, else the owner alone, at the owner tier.
-		contacts: identity
-			? contactsOf(identity)
-			: mapIdentity({ owners: [owner.id] }),
+		contacts: identity ? contactsOf(identity) : people,
+		principals: identity ?? people,
 		claims: [
 			...(agentServer
 				? [

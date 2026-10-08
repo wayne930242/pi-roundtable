@@ -342,7 +342,7 @@ describeDb("precheck script tools over PostgreSQL", () => {
 			store,
 			channel: "discord:health",
 			target: OPEN,
-			author: { id: "u1", name: "Sam" },
+			author: { principalId: "u1", id: "u1", name: "Sam", tier: "owner" },
 			now: taipei("2026-09-26 23:30"),
 			prechecks: registry,
 			holds: () => holds,

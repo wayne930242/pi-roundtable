@@ -5,6 +5,7 @@ import type {
 } from "../../contract/channels.ts";
 import type { ChannelKey } from "../../domain/conversation.ts";
 import type { Logger } from "../../log.ts";
+import { systemTurn } from "../../routing/system-turns.ts";
 import type { BackgroundTurns } from "../../services.ts";
 import { zonedStamp } from "../../time.ts";
 import {
@@ -20,6 +21,11 @@ export interface BackgroundTurnsOptions {
 	conversations: Pick<ConversationPort, "background">;
 	/** Who a turn the process itself starts, such as a logged error's report, is written by. */
 	system: { id: string; name: string };
+	/**
+	 * The principal a schedule's creator id stands for, such as the primary owner for 0.8's
+	 * `remote-mcp`; without it, or when it knows none, the id is taken as the principal's.
+	 */
+	principalOf?: (id: string) => Promise<string | undefined>;
 	logger: Logger;
 }
 
@@ -35,15 +41,18 @@ export class ConversationBackgroundTurns implements BackgroundTurns {
 	}
 
 	/** A due schedule's turn, run as its creator's; with what its precheck found, when it has one. */
-	runScheduled(
+	async runScheduled(
 		schedule: Schedule,
 		firedAt: Date,
 		finding?: PrecheckFinding,
 	): Promise<ScheduledOutcome> {
+		const { createdById } = schedule;
+		const principalId =
+			(await this.#options.principalOf?.(createdById)) ?? createdById;
 		return this.#options.conversations.background({
 			channel: schedule.channel,
 			target: schedule.target,
-			author: { id: schedule.createdById, name: schedule.createdByName },
+			author: { principalId, id: createdById, name: schedule.createdByName },
 			tier: schedule.createdTier,
 			turnId: `schedule-${schedule.id}-${firedAt.getTime()}`,
 			text: scheduledTurnText(schedule, firedAt, finding),
@@ -58,8 +67,12 @@ export class ConversationBackgroundTurns implements BackgroundTurns {
 		const outcome = await this.#options.conversations.background({
 			channel: job.channel,
 			target: job.target,
-			author: job.author,
-			...(job.author.tier ? { tier: job.author.tier } : {}),
+			author: {
+				principalId: job.author.principalId,
+				id: job.author.id,
+				name: job.author.name,
+			},
+			tier: job.author.tier,
 			turnId: `delegate-${job.id}-${job.startedAt.getTime()}`,
 			text: delegatedTurnText(job, result, zonedStamp(job.startedAt)),
 			report: true,
@@ -71,15 +84,21 @@ export class ConversationBackgroundTurns implements BackgroundTurns {
 			);
 	}
 
-	/** The process's own logged error, reported to an agent in its channel as a report turn. */
+	/**
+	 * The process's own logged error, reported to an agent in its channel as a report turn: the
+	 * host's own, at the owner tier, as in 0.8.
+	 */
 	runErrorReport(channel: ChannelKey, text: string): Promise<ScheduledOutcome> {
-		return this.#options.conversations.background({
-			channel,
-			target: OWNER_TARGET.name,
-			author: this.#options.system,
-			turnId: `error-${Date.now()}`,
-			text,
-			report: true,
-		});
+		return this.#options.conversations.background(
+			systemTurn({
+				channel,
+				target: OWNER_TARGET.name,
+				author: this.#options.system,
+				tier: "owner",
+				turnId: `error-${Date.now()}`,
+				text,
+				report: true,
+			}),
+		);
 	}
 }

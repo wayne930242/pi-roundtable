@@ -74,11 +74,13 @@ export class ScopedSandboxDelegator {
 	start(
 		request: Omit<DelegationJob, "id" | "startedAt" | "thread">,
 	): DelegationJob {
+		// A guest's report runs at the member tier, as the principal the host bound them to.
 		if (
 			this.#closed ||
 			request.target !== this.#options.target ||
 			request.origin ||
-			request.author.tier
+			request.author.tier !== "member" ||
+			!request.author.principalId
 		)
 			throw new DelegationError("Delegation scope refused");
 		const task = request.task.trim();
@@ -104,7 +106,12 @@ export class ScopedSandboxDelegator {
 			id: this.#next++,
 			channel: request.channel,
 			target: this.#options.target,
-			author: { id: request.author.id, name: request.author.name },
+			author: {
+				principalId: request.author.principalId,
+				id: request.author.id,
+				name: request.author.name,
+				tier: "member",
+			},
 			title: request.title.trim(),
 			task,
 			startedAt: new Date(),
@@ -119,7 +126,7 @@ export class ScopedSandboxDelegator {
 			try {
 				const report = await this.#options.run(job.task, {
 					channel: job.channel,
-					author: job.author,
+					author: { id: job.author.id, name: job.author.name },
 					signal,
 				});
 				signal.throwIfAborted();

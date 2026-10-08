@@ -380,6 +380,30 @@ describe("approvals", () => {
 		expect(owner.turns[0]?.confirmed).toBe(true);
 	});
 
+	test("a member admitted at first contact approves, by message from their Discord identity, what their scheduled turn held", async () => {
+		// The schedule's turn ran as their principal, whose id is not their Discord id.
+		const held: PendingConfirmation = {
+			...shell,
+			speakerId: "p_01JKAI",
+			principalId: "p_01JKAI",
+			calls: [{ tool: "agent_create", input: "{}", action: "create an agent" }],
+		};
+		const { team, turns } = setup(answer, undefined, true, held);
+		await team.answerOwner(
+			discordKey("1000"),
+			{
+				id: "966666600000000003",
+				name: "Kai",
+				tier: "admin",
+				principalId: "p_01JKAI",
+			},
+			"yes, run it",
+			"yes, run it",
+			NO_ATTACHMENTS,
+		);
+		expect(turns[0]?.confirmed).toBe(true);
+	});
+
 	test("the turn's speaker whose tier was lowered since cannot approve", async () => {
 		const held: PendingConfirmation = {
 			...shell,

@@ -159,7 +159,7 @@ describeDb("precheck scripts over PostgreSQL", () => {
 		store,
 		channel: "discord:health",
 		target: OPEN,
-		author: { id: "u1", name: "Sam" },
+		author: { principalId: "u1", id: "u1", name: "Sam", tier: "owner" },
 		now: taipei("2026-09-26 23:30"),
 		prechecks,
 		...over,
@@ -406,7 +406,9 @@ describeDb("precheck scripts over PostgreSQL", () => {
 			},
 		});
 		await callScheduleTool(
-			ctx(prechecks, { author: { id: "u2", name: "Kim", tier: "member" } }),
+			ctx(prechecks, {
+				author: { principalId: "u2", id: "u2", name: "Kim", tier: "member" },
+			}),
 			"schedule_list",
 			{},
 		);
@@ -501,14 +503,18 @@ describeDb("precheck scripts over PostgreSQL", () => {
 	test("a lower tier cannot attach a script to a higher tier's schedule", async () => {
 		const prechecks = withRunner(fakeScriptRunner({ wake: false }));
 		await callScheduleTool(
-			ctx(prechecks, { author: { id: "u2", name: "Ada", tier: "admin" } }),
+			ctx(prechecks, {
+				author: { principalId: "u2", id: "u2", name: "Ada", tier: "admin" },
+			}),
 			"schedule_create",
 			{ title: "patrol", prompt: "p", time: "09:30" },
 		);
 		const [schedule] = await store.forChannel("discord:health");
 		await expect(
 			callScheduleTool(
-				ctx(prechecks, { author: { id: "u3", name: "Max", tier: "member" } }),
+				ctx(prechecks, {
+					author: { principalId: "u3", id: "u3", name: "Max", tier: "member" },
+				}),
 				"schedule_update",
 				{ id: schedule?.id, precheck_script: SCRIPT },
 			),

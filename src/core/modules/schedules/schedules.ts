@@ -22,7 +22,6 @@ import { callScheduleTool } from "./schedule-tools.ts";
 
 export interface OwnerSchedules {
 	store: ScheduleStore;
-	owner: { id: string; name: string };
 	/**
 	 * The chat channel a conversation's schedules belong to: itself, or the owner's direct
 	 * messages for a conversation no chat surface carries, where a run could not be posted.
@@ -54,8 +53,9 @@ function withAgentOption(spec: ScheduleToolSpec): ScheduleToolSpec {
 }
 
 /**
- * Registers the schedule tools for one owner conversation; its runs speak for the owner. With
- * `agents`, schedule_list can also read another agent's schedules.
+ * Registers the schedule tools for one conversation; a schedule's runs speak for the person whose
+ * turn set it up, and in a turn nobody is named for the tools refuse. With `agents`,
+ * schedule_list can also read another agent's schedules.
  */
 export function schedulesExtension(
 	schedules: OwnerSchedules,
@@ -65,7 +65,7 @@ export function schedulesExtension(
 	/** The person the running turn is for; their schedules run at their tier. */
 	speaker: () => Speaker | undefined = () => undefined,
 ): ExtensionFactory {
-	const { store, owner, channelFor, prechecks, holds } = schedules;
+	const { store, channelFor, prechecks, holds } = schedules;
 	const defs = scheduleToolSpecs({
 		locale: activeLocale(),
 		timeZone: timeZone(),
@@ -75,6 +75,11 @@ export function schedulesExtension(
 		return {
 			...spec,
 			run: async (input: ToolInput) => {
+				const author = speaker();
+				if (!author)
+					throw new ScheduleError(
+						"schedules are kept only in a turn someone is named for, whose schedules they are",
+					);
 				const peer =
 					agents && typeof input.agent === "string" && input.agent
 						? agents(input.agent)
@@ -85,7 +90,12 @@ export function schedulesExtension(
 						store,
 						channel: target,
 						target: OWNER_TARGET,
-						author: speaker() ?? owner,
+						author: {
+							principalId: author.principalId,
+							id: author.id,
+							name: author.name,
+							tier: author.tier,
+						},
 						now: new Date(),
 						...(prechecks ? { prechecks } : {}),
 						...(holds ? { holds } : {}),

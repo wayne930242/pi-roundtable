@@ -13,6 +13,7 @@ import type { OwnerIdentity } from "../identity.ts";
 import type { Logger } from "../log.ts";
 import { withReference } from "../routing/message-text.ts";
 import { outcome } from "../routing/settle-turn.ts";
+import { systemTurn } from "../routing/system-turns.ts";
 import { addressee, attributed } from "../speakers.ts";
 import type { DiscordAgentTeam } from "./agent-team.ts";
 import { discordIdOf } from "./team-keys.ts";
@@ -75,14 +76,16 @@ export function agentClaim(options: AgentClaimOptions): ChannelClaim {
 		if (!text) return undefined;
 		return {
 			kind: "background",
-			turn: {
+			// The host's own turn, at the owner tier as in 0.8; what the webhook posted is untrusted input.
+			turn: systemTurn({
 				channel: message.channel,
 				target: OWNER_TARGET.name,
 				author: { id: message.authorId, name: message.authorName },
+				tier: "owner",
 				turnId: `webhook-${message.messageId}`,
 				text: `Webhook "${message.authorName}" posted in your channel:\n${text}`,
 				report: true,
-			},
+			}),
 			unanswered: (result) =>
 				logger.warn(
 					{
@@ -167,16 +170,18 @@ export function agentClaim(options: AgentClaimOptions): ChannelClaim {
 			const owned = team.owns(turn.channel);
 			if (owned === "group")
 				return { status: "skipped", reason: "groups have no schedules" };
+			// Who the turn runs as, checked by the router: its author's principal, at a tier they hold.
+			const { speaker } = turn;
+			if (!speaker)
+				return {
+					status: "skipped",
+					reason:
+						"a background turn reaches the agent server through the router, which says whom it runs as",
+				};
 			return outcome(
 				await team.answerBackground(
 					turn.channel,
-					{
-						id: turn.author.id,
-						name: turn.author.name,
-						tier: turn.tier ?? "owner",
-						// A background turn's author is a person id the turn was stored with, their principal's.
-						principalId: turn.author.id,
-					},
+					speaker,
 					turn.text,
 					turn.report === true,
 				),

@@ -18,6 +18,7 @@ import {
 	testDatabaseUrl,
 } from "../../testing/database.ts";
 import { useTestLocale } from "../../testing/locale.ts";
+import { mapIdentity } from "../../testing/map-identity.ts";
 import { setTimeZone } from "../../time.ts";
 import { ConversationBackgroundTurns } from "../background/background-turns.ts";
 import { PgScheduleStore } from "./schedule-store.ts";
@@ -110,7 +111,7 @@ describeDb("background targets on stored schedules", () => {
 		store,
 		channel: "discord:support1",
 		target: SUPPORT,
-		author: { id: "u1", name: "Sam" },
+		author: { principalId: "u1", id: "u1", name: "Sam", tier: "owner" },
 		now: taipei("2026-09-26 23:30"),
 		...over,
 	});
@@ -121,6 +122,8 @@ describeDb("background targets on stored schedules", () => {
 			targets: (name) => TARGETS.find((t) => t.name === name),
 			queue: new ChannelQueue(),
 			logger: silentLogger(),
+			// The schedules' creator, u1, is the owner.
+			principals: mapIdentity({ owners: ["u1"] }),
 		});
 		return new Scheduler({
 			store,

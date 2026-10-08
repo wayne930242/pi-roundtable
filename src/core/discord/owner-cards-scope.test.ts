@@ -4,6 +4,8 @@ import type { ActorFacts } from "../identity/actor-facts.ts";
 import type { IdentityLink } from "../identity/principal-store.ts";
 import { type PromptScope, promptScope } from "../interactions/prompts.ts";
 import { silentLogger } from "../log.ts";
+import { ChannelQueue } from "../routing/channel-queue.ts";
+import { ChannelRouter } from "../routing/channel-router.ts";
 import type { Speaker } from "../speakers.ts";
 import { mapIdentity } from "../testing/map-identity.ts";
 import { CARD_PREFIX, OwnerCards } from "./owner-cards.ts";
@@ -246,6 +248,50 @@ describe("cards by the prompt scope", () => {
 			json(fake.sent[0]).replace(/[0-9a-f]{8}-[0-9a-f-]{27}/g, "<id>");
 		expect(card(theirs.fake)).toBe(card(owners.fake));
 		expect(theirs.fake.sent[0]?.allowedMentions).toEqual({ users: [OWNER] });
+	});
+
+	test("a member's background turn asked for above their tier runs at theirs, so its admin-tier card goes to the owners, never mentioning a member who cannot press it", async () => {
+		// 0.8 stored a member's schedule at the owner tier when it gave none.
+		const asked: Speaker[] = [];
+		const router = new ChannelRouter({
+			claims: [
+				{
+					name: "desk",
+					priority: 0,
+					owns: () => true,
+					admit: () => undefined,
+					background: async (turn) => {
+						if (turn.speaker) asked.push(turn.speaker);
+						return { status: "ran" };
+					},
+					startFresh: async () => "desk",
+				},
+			],
+			targets: (name) => ({ name, label: () => name }),
+			queue: new ChannelQueue(),
+			logger: silentLogger(),
+			principals: identity,
+		});
+		await router.background({
+			channel: "discord:555",
+			target: "owner",
+			author: { principalId: MEMBER, id: MEMBER, name: "Mo" },
+			tier: "owner",
+			turnId: "schedule-1",
+			text: "reminder",
+		});
+		const [speaker] = asked;
+		expect(speaker?.tier).toBe("member");
+		if (!speaker) return;
+		const { fake, approval, pressAs } = cardsInThread();
+		const answer = approval(promptScope(speaker), "admin");
+		await tick();
+		const sent = json(fake.sent[0]);
+		expect(sent).toContain(`<@${OWNER}> <@${SECOND_OWNER}>`);
+		expect(sent).not.toContain(`<@${MEMBER}>`);
+		expect(await pressAs(MEMBER)).toEqual([messages().cardOwnerOnly]);
+		expect(await pressAs(OWNER)).toEqual([]);
+		expect(await answer).toBe("approved");
 	});
 
 	describe("a principal with two Discord identities", () => {

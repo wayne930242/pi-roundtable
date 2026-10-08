@@ -19,8 +19,11 @@ export interface DelegationJob {
 	origin?: ChannelKey;
 	/** The name of the background target the report is answered as. */
 	target: string;
-	/** Who asked; the report is answered as this person's turn. */
-	author: { id: string; name: string; tier?: Tier };
+	/**
+	 * Who asked: their principal, the id and name they spoke as, and their tier; the report is
+	 * answered as this person's turn, at that tier or theirs then, whichever is lower.
+	 */
+	author: { principalId: string; id: string; name: string; tier: Tier };
 	title: string;
 	task: string;
 	startedAt: Date;

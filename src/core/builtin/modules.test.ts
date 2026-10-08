@@ -12,6 +12,7 @@ import {
 	type SessionContext,
 } from "../sessions.ts";
 import { OWNER_CHANNEL, setUpModules } from "../testing/modules.ts";
+import { OWNER_SPEAKER } from "../testing/owner.ts";
 
 const HOME: ChannelKey = "discord:scout";
 const GROUP: ChannelKey = "discord:war-room";
@@ -31,7 +32,8 @@ function context(agent?: AgentTurnScope, home?: ChannelKey): SessionContext {
 		homeChannel: home ?? agent?.home ?? OWNER_CHANNEL,
 		turnChannel: agent?.session ?? home ?? OWNER_CHANNEL,
 		compaction: { wrap: (compactor) => compactor },
-		speaker: () => undefined,
+		// A turn of the owner's runs, as every tool call is part of one.
+		speaker: () => OWNER_SPEAKER,
 		runTask: async () => "report",
 	};
 	if (agent) session.agent = agent;

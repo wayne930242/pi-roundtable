@@ -343,7 +343,9 @@ export class Roundtable {
 		const identity = this.#services.find(IDENTITY);
 		this.#router = new ChannelRouter({
 			claims: channels,
-			...(identity ? { contacts: contactsOf(identity) } : {}),
+			...(identity
+				? { contacts: contactsOf(identity), principals: identity }
+				: {}),
 			targets: (name) =>
 				this.#registry.backgroundTargets.find((t) => t.name === name),
 			queue: this.#queue,

@@ -1,9 +1,11 @@
 import { afterAll, expect, test } from "bun:test";
 import type { ChannelClaim, InboundMessage } from "../contract/channels.ts";
 import { setLocale } from "../i18n/index.ts";
+import { SYSTEM_PRINCIPAL } from "../identity/principal-store.ts";
 import { silentLogger } from "../log.ts";
 import { ChannelQueue } from "../routing/channel-queue.ts";
 import { ChannelRouter } from "../routing/channel-router.ts";
+import { isSystemTurn } from "../routing/system-turns.ts";
 import { type Speaker, speakerPolicy } from "../speakers.ts";
 import { useTestLocale } from "../testing/locale.ts";
 import { TEST_OWNER } from "../testing/owner.ts";
@@ -154,18 +156,28 @@ test("a group message carries its speaker", async () => {
 	});
 });
 
-test("a background turn runs at its creator's tier, the owner's when a person set none", async () => {
+test("a background turn runs as the speaker the router checked, the principal who set it up, never as the author's surface id", async () => {
 	const { claim, answered } = setup();
+	// A member admitted at first contact: their principal is not their Discord id.
+	const speaker: Speaker = {
+		id: ADMIN,
+		name: "n",
+		tier: "admin",
+		principalId: "p_01JADMIN",
+	};
 	const turn = {
 		channel: "discord:10" as const,
 		target: "owner",
-		author: { id: ADMIN, name: "n" },
+		author: { principalId: "p_01JADMIN", id: ADMIN, name: "n" },
+		tier: "owner" as const,
 		turnId: "t",
 		text: "go",
 	};
-	await claim.background?.({ ...turn, tier: "admin" });
-	await claim.background?.(turn);
-	expect(answered.map((a) => a.speaker.tier)).toEqual(["admin", "owner"]);
+	await claim.background?.({ ...turn, speaker });
+	expect(answered.map((a) => a.speaker)).toEqual([speaker]);
+	// Handed one without the router's speaker, it runs nothing, rather than as anyone at any tier.
+	expect(await claim.background?.(turn)).toMatchObject({ status: "skipped" });
+	expect(answered).toHaveLength(1);
 });
 
 afterAll(useTestLocale);
@@ -181,7 +193,14 @@ test("the agent server answers only the owner target, and skips any other", asyn
 	const { claim, answered } = setup();
 	const turn = {
 		channel: "discord:10" as const,
-		author: { id: ADMIN, name: "n" },
+		author: { principalId: ADMIN, id: ADMIN, name: "n" },
+		tier: "admin" as const,
+		speaker: {
+			id: ADMIN,
+			name: "n",
+			tier: "admin" as const,
+			principalId: ADMIN,
+		},
 		turnId: "t",
 		text: "go",
 	};
@@ -219,8 +238,17 @@ test("a webhook post in an agent's channel is a report turn for the owner target
 	});
 	expect(admission).toMatchObject({
 		kind: "background",
-		turn: { target: "owner", report: true },
+		turn: {
+			target: "owner",
+			report: true,
+			author: { principalId: SYSTEM_PRINCIPAL, id: "webhook" },
+			tier: "owner",
+		},
 	});
+	// The host's own turn, which the router runs as the system principal; a copy of it would not run.
+	expect(admission?.kind === "background" && isSystemTurn(admission.turn)).toBe(
+		true,
+	);
 });
 
 test("the agent server owns only Discord channels: a key of another surface is never taken, even with its id or guild", () => {

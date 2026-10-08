@@ -3,7 +3,7 @@ import type { DelegationJob, DelegationOutcome } from "pi-roundtable";
 import { silentLogger } from "pi-roundtable/testing";
 import { ScopedSandboxDelegator } from "./scoped-delegator.ts";
 
-test("delegation fixes target, channel and speaker/report while refusing owner dispatch fields", async () => {
+test("delegation fixes target, channel and speaker/report, at the member tier, while refusing owner dispatch fields", async () => {
 	const reports: DelegationJob[] = [];
 	const contexts: unknown[] = [];
 	const scoped = new ScopedSandboxDelegator({
@@ -20,7 +20,12 @@ test("delegation fixes target, channel and speaker/report while refusing owner d
 	const request = {
 		channel: "discord:channel" as const,
 		target: "guest",
-		author: { id: "speaker", name: "Guest" },
+		author: {
+			principalId: "p_guest",
+			id: "speaker",
+			name: "Guest",
+			tier: "member" as const,
+		},
 		title: "Research",
 		task: "Check a public source",
 	};
@@ -28,11 +33,15 @@ test("delegation fixes target, channel and speaker/report while refusing owner d
 		{ ...request, target: "owner" },
 		{ ...request, origin: "discord:owner" as const },
 		{ ...request, author: { ...request.author, tier: "owner" as const } },
+		{ ...request, author: { ...request.author, tier: "admin" as const } },
+		{ ...request, author: { ...request.author, principalId: "" } },
 	])
 		expect(() => scoped.start(invalid)).toThrow("scope");
 	const job = scoped.start(request);
 	await scoped.idle();
 	expect(reports).toEqual([job]);
+	expect(job.author).toEqual(request.author);
+	// The worker hears who asked, not their principal or tier.
 	expect(contexts).toEqual([
 		expect.objectContaining({
 			channel: "discord:channel",
@@ -63,7 +72,12 @@ test("channel job limits, task bounds and shutdown cancellation are enforced", a
 	const request = {
 		channel: "discord:channel" as const,
 		target: "guest",
-		author: { id: "speaker", name: "Guest" },
+		author: {
+			principalId: "p_guest",
+			id: "speaker",
+			name: "Guest",
+			tier: "member" as const,
+		},
 		title: "Research",
 		task: "Check a public source",
 	};
@@ -110,7 +124,12 @@ test("a failed run reports its scrubbed reason, and a deadline reads as running 
 	const request = {
 		channel: "discord:channel" as const,
 		target: "guest",
-		author: { id: "speaker", name: "Guest" },
+		author: {
+			principalId: "p_guest",
+			id: "speaker",
+			name: "Guest",
+			tier: "member" as const,
+		},
 		title: "Research",
 		task: "Check a public source",
 	};
@@ -141,7 +160,12 @@ test("a host can lift the title limit, and a bad limit stops the start", () => {
 	const request = {
 		channel: "discord:channel" as const,
 		target: "guest",
-		author: { id: "speaker", name: "Guest" },
+		author: {
+			principalId: "p_guest",
+			id: "speaker",
+			name: "Guest",
+			tier: "member" as const,
+		},
 		title: "t".repeat(500),
 		task: "Check a public source",
 	};
@@ -178,7 +202,12 @@ test("a host can lift the report and failure-reason bounds", async () => {
 	const request = {
 		channel: "discord:channel" as const,
 		target: "guest",
-		author: { id: "speaker", name: "Guest" },
+		author: {
+			principalId: "p_guest",
+			id: "speaker",
+			name: "Guest",
+			tier: "member" as const,
+		},
 		title: "Research",
 		task: "Check a public source",
 	};

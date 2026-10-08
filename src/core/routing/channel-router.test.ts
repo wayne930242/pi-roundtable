@@ -8,6 +8,7 @@ import type {
 import { PluginError } from "../errors.ts";
 import { silentLogger } from "../log.ts";
 import type { ChannelKey } from "../sessions.ts";
+import { mapIdentity } from "../testing/map-identity.ts";
 import { ChannelQueue } from "./channel-queue.ts";
 import { ChannelRouter, orderClaims } from "./channel-router.ts";
 
@@ -87,12 +88,19 @@ const TARGETS: readonly BackgroundTarget[] = [
 	{ name: "open", label: () => "Open" },
 ];
 
+/** Background turns run as the principals of this map: "owner", the owner, and "ci", a member. */
+const PRINCIPALS = mapIdentity({
+	owners: ["owner"],
+	members: { users: ["ci"] },
+});
+
 function router(claims: ChannelClaim[], queue = new ChannelQueue()) {
 	return new ChannelRouter({
 		claims,
 		targets: (name) => TARGETS.find((target) => target.name === name),
 		queue,
 		logger: silentLogger(),
+		principals: PRINCIPALS,
 		forwardJoinMs: 10,
 	});
 }
@@ -253,7 +261,8 @@ describe("ChannelRouter", () => {
 					turn: {
 						channel: m.channel,
 						target: "main",
-						author: { id: "ci", name: "CI" },
+						author: { principalId: "ci", id: "ci", name: "CI" },
+						tier: "member",
 						turnId: "webhook-1",
 						text: m.text,
 						report: true,
@@ -274,7 +283,8 @@ describe("ChannelRouter", () => {
 			await routing.background({
 				channel: "discord:1",
 				target: "gone",
-				author: { id: "owner", name: "Riley" },
+				author: { principalId: "owner", id: "owner", name: "Riley" },
+				tier: "owner",
 				turnId: "schedule-2",
 				text: "reminder",
 			}),
@@ -317,7 +327,8 @@ describe("ChannelRouter", () => {
 		const turn = routing.background({
 			channel: "discord:1",
 			target: "open",
-			author: { id: "owner", name: "Riley" },
+			author: { principalId: "owner", id: "owner", name: "Riley" },
+			tier: "owner",
 			turnId: "schedule-1",
 			text: "reminder",
 		});

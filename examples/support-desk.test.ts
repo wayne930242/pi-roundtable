@@ -2,10 +2,12 @@ import { expect, test } from "bun:test";
 import { testPlugin } from "pi-roundtable/testing";
 import { supportDesk } from "./support-desk.ts";
 
+// A turn runs as its author's principal: here the harness's owner, the one person it knows.
 const turn = (target: string) => ({
 	channel: "support:1" as const,
 	target,
-	author: { id: "u1", name: "Sam" },
+	author: { principalId: "owner", id: "owner", name: "Owner" },
+	tier: "member" as const,
 	turnId: "t1",
 	text: "check the queue",
 });

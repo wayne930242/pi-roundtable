@@ -10,13 +10,21 @@ import {
 	STEERED_MARK,
 } from "../contract/channels.ts";
 import { parseChannelKey } from "../contract/surface.ts";
+import { IdentityError } from "../domain/errors.ts";
 import { PluginError } from "../errors.ts";
 import type { ActorFacts } from "../identity/actor-facts.ts";
 import type { Contact, ContactAssessor } from "../identity/contact.ts";
+import {
+	type IdentityService,
+	systemSpeaker,
+} from "../identity/identity-service.ts";
+import { SYSTEM_PRINCIPAL } from "../identity/principal-store.ts";
 import type { Logger } from "../log.ts";
 import type { ChannelKey } from "../sessions.ts";
+import type { Speaker } from "../speakers.ts";
 import type { ChannelQueue } from "./channel-queue.ts";
 import { ForwardJoin } from "./forward-join.ts";
+import { isSystemTurn } from "./system-turns.ts";
 
 export interface ChannelRouterOptions {
 	/** Claims in registration order; the router orders them by priority. */
@@ -27,6 +35,8 @@ export interface ChannelRouterOptions {
 	logger: Logger;
 	/** Who the authors of messages are; without it, no message carries a speaker. */
 	contacts?: ContactAssessor;
+	/** Whom a background turn runs as; without it, only the host's own turns run. */
+	principals?: Pick<IdentityService, "speakerFor">;
 	/** How long a bare forward waits for the text sent with it; FORWARD_JOIN_MS by default. */
 	forwardJoinMs?: number;
 }
@@ -234,8 +244,9 @@ export class ChannelRouter implements ConversationPort {
 	}
 
 	/**
-	 * A turn nobody wrote, run by the channel's claim inside its queue; never rejects. A turn whose
-	 * target no plugin contributes is skipped, never handed to another target's claim.
+	 * A turn nobody wrote, run by the channel's claim inside its queue, as the speaker its author
+	 * is checked to be; never rejects. A turn whose target no plugin contributes is skipped, never
+	 * handed to another target's claim, and so is one whose author may not run it now.
 	 */
 	async background(turn: BackgroundTurn): Promise<ScheduledOutcome> {
 		if (!this.#options.targets(turn.target))
@@ -251,10 +262,56 @@ export class ChannelRouter implements ConversationPort {
 						status: "skipped",
 						reason: "no conversation takes background turns here",
 					};
-				return claim.background(turn);
+				// Checked as the turn starts, in its place in the queue, so a change meanwhile counts.
+				const runs = await this.#runsAs(turn);
+				if ("skipped" in runs)
+					return { status: "skipped", reason: runs.skipped };
+				return claim.background({ ...turn, speaker: runs.speaker });
 			});
 		} catch (error) {
 			return { status: "failed", error: String(error) };
+		}
+	}
+
+	/**
+	 * Who a background turn runs as: the system principal for the host's own turn, at its tier;
+	 * otherwise its author's principal, which must exist, be enabled, and hold a tier now, at the
+	 * lower of the turn's tier and theirs. Why not, when it may not run; throws when the identity
+	 * service cannot tell.
+	 */
+	async #runsAs(
+		turn: BackgroundTurn,
+	): Promise<{ speaker: Speaker } | { skipped: string }> {
+		const { author, tier } = turn;
+		if (!author?.principalId || !tier)
+			return {
+				skipped:
+					"a background turn names its author's principal (author.principalId) and the tier it runs at (tier); this one does not",
+			};
+		if (author.principalId === SYSTEM_PRINCIPAL)
+			return isSystemTurn(turn)
+				? { speaker: { ...systemSpeaker(tier), name: author.name } }
+				: {
+						skipped: `only the host itself starts a turn as the system principal "${SYSTEM_PRINCIPAL}"`,
+					};
+		const { principals } = this.#options;
+		if (!principals)
+			return {
+				skipped: "the host has no identity service to check whom it runs as",
+			};
+		try {
+			const checked = await principals.speakerFor(author.principalId, tier);
+			return {
+				speaker: {
+					id: author.id,
+					name: author.name,
+					tier: checked.tier,
+					principalId: checked.principalId,
+				},
+			};
+		} catch (error) {
+			if (!(error instanceof IdentityError)) throw error;
+			return { skipped: error.message };
 		}
 	}
 
