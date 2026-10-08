@@ -580,6 +580,23 @@ test("a failed turn, a dropped message, and a refused delivery free their place"
 	expect(routed.errors(cy)).toEqual([]);
 });
 
+test("a message the router drops after it was accepted tells its person it failed", async () => {
+	const routed = await gated({}, { start: false });
+	const claim = routed.chat.claim();
+	await routed.chat.surface.start((message) => {
+		const admission = claim.admit(message);
+		if (admission?.kind === "turn") admission.dropped?.();
+	});
+	const cy = routed.connect("cy");
+	await routed.say(cy, { type: "send", id: "1", persona: "helper", text: "a" });
+	const [accepted] = routed.accepted(cy);
+	if (!accepted) throw new Error("the message was not accepted");
+	expect(cy.frames.filter((f) => f.type === "failed")).toEqual([
+		{ type: "failed", conversation: accepted.conversation, stopped: false },
+	]);
+	expect(routed.turns).toEqual([]);
+});
+
 test("a person opens at most newConversationsPerHour conversations an hour", async () => {
 	const { chat, advance } = await gated({
 		unusedConversationsPerPrincipal: 100,

@@ -591,8 +591,16 @@ export class WebChat {
 							pending.release();
 						}
 					},
-					// Dropped by the router after all: the message never runs, so its place is free.
-					dropped: () => pending.release(),
+					// Dropped by the router after all: the message never runs, so its place is free, and its
+					// person, told it was accepted, is told it failed, as for a turn the host refused.
+					dropped: () => {
+						pending.release();
+						this.connections.sendTo(pending.speaker.id, {
+							type: "failed",
+							conversation: this.surface.conversationOf(message.channel),
+							stopped: false,
+						});
+					},
 					failure: "a web chat turn failed",
 				};
 			},
