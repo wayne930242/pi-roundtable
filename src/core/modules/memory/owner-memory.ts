@@ -173,10 +173,15 @@ export function ownerMemoryExtension(
 				const of = storeOf();
 				if (!of) return toolError(NO_ONE);
 				const removed = await of.store.remove(params.text);
+				// The refusal repeats the text, which may be the person's memory, so it records whose too.
 				if (removed.length === 0) {
-					return toolError(
-						`No remembered fact contains "${params.text}". Nothing was forgotten.`,
-					);
+					const details: PrivateMemory = { privateTo: of.whose };
+					return {
+						...toolError(
+							`No remembered fact contains "${params.text}". Nothing was forgotten.`,
+						),
+						details,
+					};
 				}
 				return privateText(
 					`Forgot:\n${removed.map((fact) => `- ${fact}`).join("\n")}`,

@@ -911,3 +911,97 @@ describe("a shared conversation's compaction", () => {
 		}
 	});
 });
+
+describe("what the model writes into a memory exchange's call", () => {
+	/** The placeholder a hidden call's arguments read as. */
+	const HIDDEN_CALL = { hidden: HIDDEN };
+
+	test("reaches no one else's request, a worker's call that loaded the reader's memory included, while Ann's own next turn still reads it", async () => {
+		const seen: TranscriptContext[] = [];
+		const look: FauxResponseStep = (context) => {
+			seen.push(context);
+			return fauxAssistantMessage("OK.");
+		};
+		const host = await isolationHost(STORE(), [
+			// Ann only says hello; the model copies her memory into the calls it makes.
+			call("memory_add", { fact: "ANN_CORE_SECRET again", kind: "note" }),
+			call("memory_remove", { text: "ANN_NOTE_SECRET is gone" }),
+			call("probe_task", { topic: "ANN_CORE_SECRET lookup" }),
+			call("memory_search", { query: "doctor" }),
+			fauxAssistantMessage("Found it."),
+			fauxAssistantMessage("Noted."),
+			look,
+			look,
+			look,
+		]);
+		try {
+			expect((await host.run(ANN, "fake:room")).ok).toBe(true);
+			expect((await host.run(BO, "fake:room")).ok).toBe(true);
+			expect((await host.run(SYSTEM, "fake:room")).ok).toBe(true);
+			expect((await host.run(ANN, "fake:room")).ok).toBe(true);
+			const [bo, system, again] = seen;
+			if (!bo || !system || !again) throw new Error("a turn asked nothing");
+			for (const request of [bo, system]) {
+				for (const sent of asSent(request))
+					for (const secret of SECRETS) expect(sent).not.toContain(secret);
+				// Each call stays a call the provider accepts, its arguments a placeholder.
+				const calls = request.messages.flatMap((message) =>
+					message.role === "assistant"
+						? message.content.filter((part) => part.type === "toolCall")
+						: [],
+				);
+				expect(calls.map((part) => part.name)).toEqual([
+					"memory_add",
+					"memory_remove",
+					"probe_task",
+				]);
+				for (const part of calls) expect(part.arguments).toEqual(HIDDEN_CALL);
+			}
+			for (const sent of asSent(again)) {
+				expect(sent).toContain("ANN_CORE_SECRET again");
+				expect(sent).toContain("ANN_NOTE_SECRET is gone");
+				expect(sent).toContain("ANN_CORE_SECRET lookup");
+			}
+		} finally {
+			await host.stop();
+		}
+	});
+
+	test("reaches no compaction's summary", async () => {
+		const LONG = `${"Bo reads a long text. ".repeat(16_000)}`;
+		const turns = (): FauxResponseStep[] => [
+			call("memory_add", { fact: "ANN_CORE_SECRET again", kind: "note" }),
+			fauxAssistantMessage("Noted."),
+			fauxAssistantMessage("Read it."),
+		];
+		let summarized: string | undefined;
+		const own = await isolationHost(STORE(), [
+			...turns(),
+			(context) => {
+				summarized = JSON.stringify(context.messages);
+				return fauxAssistantMessage("A summary.");
+			},
+		]);
+		let wrapped: string | undefined;
+		const placed = await isolationHost(STORE(), turns(), {
+			compactor: (text) => {
+				wrapped = text;
+			},
+		});
+		try {
+			for (const host of [own, placed]) {
+				expect((await host.run(ANN, "fake:room")).ok).toBe(true);
+				expect((await host.run(BO, "fake:room", { text: LONG })).ok).toBe(true);
+			}
+			for (const text of [summarized, wrapped]) {
+				if (!text) throw new Error("the history was not compacted");
+				expect(text).toContain("Noted.");
+				expect(text).toContain("memory_add");
+				expect(text).not.toContain("ANN_CORE_SECRET");
+			}
+		} finally {
+			await own.stop();
+			await placed.stop();
+		}
+	});
+});

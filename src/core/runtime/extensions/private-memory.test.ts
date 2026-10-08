@@ -113,6 +113,70 @@ describe("the memory a request may carry", () => {
 	});
 });
 
+describe("the calls of the memory exchanges a request hides", () => {
+	const answer = (calls: { id: string; name: string; fact: string }[]) => ({
+		role: "assistant" as const,
+		content: calls.map(({ id, name, fact }) => ({
+			type: "toolCall" as const,
+			id,
+			name,
+			arguments: { fact },
+		})),
+		api: "faux",
+		provider: "faux",
+		model: "faux-1",
+		usage: {
+			input: 0,
+			output: 0,
+			cacheRead: 0,
+			cacheWrite: 0,
+			totalTokens: 0,
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+		},
+		stopReason: "toolUse" as const,
+		timestamp: 2,
+	});
+	const answered = (id: string, toolName: string, details: unknown) => ({
+		...result(toolName, "Done.", details),
+		toolCallId: id,
+	});
+	const history: Messages = [
+		{ role: "user", content: "Hello.", timestamp: 1 },
+		answer([
+			{ id: "c1", name: "memory_add", fact: "Ann's doctor" },
+			{ id: "c2", name: "read_attachment", fact: "a public file" },
+			{ id: "c3", name: "memory_add", fact: "Ann's locker" },
+		]),
+		answered("c1", "memory_add", { privateTo: "ann" }),
+		answered("c2", "read_attachment", {}),
+		// c3 has no result: its turn stopped before the call ran.
+		{ role: "user", content: "Hi.", timestamp: 3 },
+	];
+
+	test("read with placeholder arguments beside their hidden results, another tool's call as it was", () => {
+		const text = textOf(
+			memoryProjection(history, { shared: true, reader: "bo" }),
+		);
+		expect(text).not.toContain("Ann's doctor");
+		expect(text).not.toContain("Ann's locker");
+		expect(text).toContain(`{"hidden":"${HIDDEN_MEMORY}"}`);
+		expect(text).toContain(`{"hidden":"${HIDDEN_UNRECORDED_MEMORY}"}`);
+		expect(text).toContain("a public file");
+		expect(text).toContain('"id":"c1"');
+	});
+
+	test("show to the exchange's person, and to no one in a summary", () => {
+		const own = textOf(
+			memoryProjection(history, { shared: true, reader: "ann" }),
+		);
+		expect(own).toContain("Ann's doctor");
+		const summary = textOf(summaryProjection(history));
+		expect(summary).not.toContain("Ann's doctor");
+		expect(summary).not.toContain("Ann's locker");
+		expect(summary).toContain("a public file");
+	});
+});
+
 describe("the tool calls that draw on the reader's memory", () => {
 	test("every call running when something reads it draws on it, a call nested in another's too; a later one does not", () => {
 		const draws = new MemoryDraws();
