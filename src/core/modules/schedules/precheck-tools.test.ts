@@ -13,6 +13,7 @@ import type { OwnerPrompts } from "../../interactions/prompts.ts";
 import { silentLogger } from "../../log.ts";
 import { ConfirmationGate } from "../../runtime/extensions/confirmation-gate.ts";
 import { tierAtLeast } from "../../speakers.ts";
+import { runsAsCreator } from "../../testing/background.ts";
 import {
 	describeDb,
 	openTestStore,
@@ -353,6 +354,7 @@ describeDb("precheck script tools over PostgreSQL", () => {
 			prechecks: registry,
 			holds: () => holds,
 			runner: {
+				runsAs: runsAsCreator,
 				runScheduled: async (schedule, _firedAt, finding) => {
 					turns.push({ schedule, ...(finding ? { finding } : {}) });
 					return { status: "ran" };

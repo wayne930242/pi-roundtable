@@ -193,6 +193,7 @@ export class Roundtable {
 		return {
 			handle: (message) => router().handle(message),
 			background: (turn) => router().background(turn),
+			runsAs: (turn) => router().runsAs(turn),
 			target: (name) => router().target(name),
 			startFresh: (channel) => router().startFresh(channel),
 			deleteConversation: (channel) => router().deleteConversation(channel),

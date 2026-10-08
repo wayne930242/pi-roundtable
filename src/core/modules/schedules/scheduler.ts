@@ -1,4 +1,7 @@
-import type { ScheduledOutcome } from "../../contract/channels.ts";
+import type {
+	BackgroundRunsAs,
+	ScheduledOutcome,
+} from "../../contract/channels.ts";
 import type { HoldCheck } from "../../holds.ts";
 import type { Logger } from "../../log.ts";
 import type { ScheduleStore } from "../../services.ts";
@@ -20,6 +23,11 @@ export interface ScheduledRunner {
 		firedAt: Date,
 		finding?: PrecheckFinding,
 	): Promise<ScheduledOutcome>;
+	/**
+	 * Who the schedule's turn would run as now, asked before its precheck: a precheck runs only for
+	 * a creator who may run the turn, at the tier it would run at. Throws when that cannot be told.
+	 */
+	runsAs(schedule: Schedule): Promise<BackgroundRunsAs>;
 }
 
 /** How long stop waits for running prechecks to clean up after aborting them. */
@@ -169,7 +177,29 @@ export class Scheduler {
 			schedule.precheck ??
 			(schedule.precheckScript ? SCRIPT_PRECHECK : undefined);
 		if (name) {
-			const decision = await this.#prechecks.run(schedule, name, firedAt);
+			// A creator who may not run the turn now, such as one disabled, runs no precheck either.
+			const runs = await this.#runsAs(schedule);
+			if (this.#stopping.signal.aborted) {
+				await this.#record(
+					schedule,
+					"skipped: the host stopped before its run",
+				);
+				return;
+			}
+			if ("skipped" in runs) {
+				logger.info(
+					{ schedule: schedule.id, reason: runs.skipped },
+					"schedule skipped before its precheck",
+				);
+				await this.#record(schedule, `skipped: ${runs.skipped}`);
+				return;
+			}
+			const decision = await this.#prechecks.run(
+				schedule,
+				name,
+				firedAt,
+				runs.speaker.tier,
+			);
 			if (this.#stopping.signal.aborted) {
 				await this.#record(
 					schedule,
@@ -200,6 +230,17 @@ export class Scheduler {
 			schedule,
 			`${precheckPrefix(finding)}${statusText(outcome)}`,
 		);
+	}
+
+	/** Who the schedule runs as; a failure to tell is a reason to skip it, as its turn would not run. */
+	async #runsAs(schedule: Schedule): Promise<BackgroundRunsAs> {
+		try {
+			return await this.#options.runner.runsAs(schedule);
+		} catch (error) {
+			return {
+				skipped: `whom it runs as could not be checked (${error instanceof Error ? error.message : String(error)})`,
+			};
+		}
 	}
 
 	/** Records a run the precheck skipped and posts its note; a note that cannot be posted is logged. */

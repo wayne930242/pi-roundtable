@@ -1,5 +1,6 @@
 import {
 	type Admission,
+	type BackgroundRunsAs,
 	type BackgroundTarget,
 	type BackgroundTurn,
 	type ChannelClaim,
@@ -21,7 +22,6 @@ import {
 import { SYSTEM_PRINCIPAL } from "../identity/principal-store.ts";
 import type { Logger } from "../log.ts";
 import type { ChannelKey } from "../sessions.ts";
-import type { Speaker } from "../speakers.ts";
 import type { ChannelQueue } from "./channel-queue.ts";
 import { ForwardJoin } from "./forward-join.ts";
 import { isSystemTurn } from "./system-turns.ts";
@@ -269,7 +269,7 @@ export class ChannelRouter implements ConversationPort {
 						reason: "no conversation takes background turns here",
 					};
 				// Checked as the turn starts, in its place in the queue, so a change meanwhile counts.
-				const runs = await this.#runsAs(turn);
+				const runs = await this.runsAs(turn);
 				if ("skipped" in runs)
 					return { status: "skipped", reason: runs.skipped };
 				return claim.background({ ...turn, speaker: runs.speaker });
@@ -285,9 +285,7 @@ export class ChannelRouter implements ConversationPort {
 	 * lower of the turn's tier and theirs. Why not, when it may not run; throws when the identity
 	 * service cannot tell.
 	 */
-	async #runsAs(
-		turn: BackgroundTurn,
-	): Promise<{ speaker: Speaker } | { skipped: string }> {
+	async runsAs(turn: BackgroundTurn): Promise<BackgroundRunsAs> {
 		const { author, tier } = turn;
 		if (!author?.principalId || !tier)
 			return {

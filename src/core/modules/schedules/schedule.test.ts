@@ -11,6 +11,7 @@ import type { BackgroundTarget } from "../../contract/channels.ts";
 import { ScheduleError } from "../../domain/errors.ts";
 import { messages } from "../../i18n/index.ts";
 import { silentLogger } from "../../log.ts";
+import { runsAsCreator } from "../../testing/background.ts";
 import {
 	describeDb,
 	openTestStore,
@@ -307,6 +308,7 @@ describeDb("PostgreSQL", () => {
 			return new Scheduler({
 				store,
 				runner: {
+					runsAs: runsAsCreator,
 					runScheduled: async (schedule) => {
 						fired.push(schedule);
 						return outcome;

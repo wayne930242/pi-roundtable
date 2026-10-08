@@ -35,6 +35,11 @@ export interface PrecheckContext {
 	/** The due schedule, already moved to its next run (or deleted, when it runs once). */
 	schedule: Schedule;
 	firedAt: Date;
+	/**
+	 * The tier this run is for: the schedule's, capped at what its creator holds now, as its turn
+	 * would run. A precheck runs only for a creator who may run the turn.
+	 */
+	tier: Tier;
 	/** Aborted when the precheck runs out of time or the host stops; its answer is then ignored. */
 	signal: AbortSignal;
 }
@@ -61,8 +66,9 @@ export interface PrecheckScope {
 	/** The schedule's background target, such as the owner's. */
 	target: string;
 	/**
-	 * The tier of whoever set the script: its creator's when it runs, the asker's when schedule_list
-	 * describes it; absent when the asker's is unknown. A runner may grant lower tiers less.
+	 * The tier of whoever set the script: the run's (`PrecheckContext.tier`) when it runs, the
+	 * asker's when schedule_list describes it; absent when the asker's is unknown. A runner may grant
+	 * lower tiers less.
 	 */
 	tier?: Tier;
 }

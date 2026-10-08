@@ -18,6 +18,7 @@ import { schedulesExtension } from "./modules/schedules/schedules.ts";
 import { isSystemTurn } from "./routing/system-turns.ts";
 import type { ScheduleStore } from "./services.ts";
 import type { Speaker } from "./speakers.ts";
+import { runsAsAuthor } from "./testing/background.ts";
 
 const ROOT = resolve(import.meta.dir, "../..");
 
@@ -263,6 +264,7 @@ describe("the turns nobody wrote", () => {
 		const turns: BackgroundTurn[] = [];
 		const made = new ConversationBackgroundTurns({
 			conversations: {
+				runsAs: runsAsAuthor,
 				background: async (turn) => {
 					turns.push(turn);
 					return { status: "ran" };

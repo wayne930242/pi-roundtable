@@ -213,6 +213,7 @@ test.skipIf(
 					createdAt: new Date(),
 				},
 				firedAt: new Date("2026-10-04T01:30:00Z"),
+				tier: "owner",
 				timeZone: "Asia/Taipei",
 				today: "2026-10-04",
 				tools: [{ server: "health", tool: "get-hrv" }],

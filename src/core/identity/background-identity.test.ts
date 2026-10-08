@@ -4,6 +4,7 @@ import { runMigrations } from "../db/migrations.ts";
 import { silentLogger } from "../log.ts";
 import { ConversationBackgroundTurns } from "../modules/background/background-turns.ts";
 import type { Schedule } from "../modules/schedules/schedule-store.ts";
+import { Scheduler } from "../modules/schedules/scheduler.ts";
 import { ChannelQueue } from "../routing/channel-queue.ts";
 import { ChannelRouter } from "../routing/channel-router.ts";
 import type { Speaker } from "../speakers.ts";
@@ -12,6 +13,7 @@ import {
 	type ScratchDatabase,
 	scratchDatabase,
 } from "../testing/fixture-database.ts";
+import { fakePrechecks, fakeScriptRunner } from "../testing/prechecks.ts";
 import type { AccessRules } from "./access-policy.ts";
 import { identityMigrations } from "./identity-schema.ts";
 import { PgIdentityService } from "./identity-service.ts";
@@ -108,7 +110,7 @@ describeDb(
 					} as unknown as Schedule,
 					new Date(clock),
 				);
-			return { service, ran, fire };
+			return { service, ran, fire, turns };
 		}
 
 		test("a disabled principal's schedule is skipped, saying so, and runs again once they are enabled", async () => {
@@ -141,6 +143,85 @@ describeDb(
 			expect(ran).toEqual([
 				{ id: noa, name: "Someone", tier: "member", principalId: noa },
 			]);
+		});
+
+		/**
+		 * The scheduler over the same host, firing one due schedule with a precheck script, as 0.8
+		 * stored it: at the owner tier `created_tier` defaulted to. What the script ran with, and the
+		 * status the run left.
+		 */
+		async function scripted(createdById: string) {
+			const { turns } = await host();
+			const runner = fakeScriptRunner({ wake: true, context: "disk full" });
+			const prechecks = fakePrechecks();
+			prechecks.useScriptRunner(runner);
+			const statuses: string[] = [];
+			// SAFETY: the scheduler and the script's run read only these fields of a schedule.
+			const schedule = {
+				id: 7,
+				channel: "web:c1",
+				target: "chat",
+				title: "patrol",
+				prompt: "check the disk",
+				recurrence: { kind: "once", date: "2026-10-08", time: "09:00" },
+				nextRun: new Date(clock),
+				createdById,
+				createdByName: "Someone",
+				createdTier: "owner",
+				precheckScript: "export default () => ({ wake: true, context: 'x' });",
+				precheckTools: [],
+			} as unknown as Schedule;
+			const scheduler = new Scheduler({
+				store: {
+					due: async () => [schedule],
+					claim: async () => true,
+					recordStatus: async (_id, status) => {
+						statuses.push(status);
+					},
+				},
+				runner: turns,
+				prechecks,
+				logger: silentLogger(),
+				now: () => new Date(clock),
+			});
+			const fire = async () => {
+				await scheduler.tick();
+				await scheduler.idle();
+			};
+			return { runner, statuses, fire };
+		}
+
+		test("a disabled principal's precheck script does not run; the firing is skipped, saying why", async () => {
+			const { service } = await host();
+			const kai = (await service.resolve(web("kai")))?.principalId ?? "";
+			await service.store.disable(kai);
+			const { runner, statuses, fire } = await scripted(kai);
+			await fire();
+			expect(runner.calls).toEqual([]);
+			expect(statuses).toEqual([`skipped: principal ${kai} is disabled`]);
+		});
+
+		test("a precheck script set at 0.8's default owner tier runs at the tier its creator holds now", async () => {
+			const { service } = await host();
+			const kai = (await service.resolve(web("kai")))?.principalId ?? "";
+			const { runner, statuses, fire } = await scripted(kai);
+			await fire();
+			expect(runner.calls.map(({ context }) => context.tier)).toEqual([
+				"member",
+			]);
+			expect(statuses).toEqual(["woken by precheck; ran"]);
+		});
+
+		test("the precheck of someone unseen past backgroundStaleDays does not run", async () => {
+			const { service } = await host();
+			const noa = (await service.resolve(web("noa")))?.principalId ?? "";
+			clock += 31 * DAY_MS;
+			const { runner, statuses, fire } = await scripted(noa);
+			await fire();
+			expect(runner.calls).toEqual([]);
+			expect(statuses).toHaveLength(1);
+			expect(statuses[0]).toStartWith("skipped: ");
+			expect(statuses[0]).toContain("access.backgroundStaleDays");
 		});
 
 		test("a configured owner's schedule runs at the tier it was set at, below theirs", async () => {

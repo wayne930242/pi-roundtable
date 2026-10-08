@@ -339,7 +339,7 @@ export function precheckScriptRunner(
 			await grant({
 				channel: schedule.channel,
 				target: schedule.target,
-				tier: schedule.createdTier,
+				tier: context.tier,
 			})
 		).flatMap((server) => {
 			const tools = server.tools.filter((tool) =>

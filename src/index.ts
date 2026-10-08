@@ -35,6 +35,7 @@ export type {
 export type {
 	Admission,
 	AttachmentRef,
+	BackgroundRunsAs,
 	BackgroundTarget,
 	BackgroundTurn,
 	ChannelClaim,

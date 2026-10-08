@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { silentLogger } from "../../log.ts";
+import { runsAsCreator } from "../../testing/background.ts";
 import type { Schedule } from "./schedule-store.ts";
 import { Scheduler } from "./scheduler.ts";
 
@@ -47,6 +48,7 @@ describe("scheduler shutdown races", () => {
 				},
 			},
 			runner: {
+				runsAs: runsAsCreator,
 				runScheduled: () => {
 					runs += 1;
 					return answer.promise;
@@ -79,6 +81,7 @@ describe("scheduler shutdown races", () => {
 				recordStatus: async () => {},
 			},
 			runner: {
+				runsAs: runsAsCreator,
 				runScheduled: async () => {
 					runs += 1;
 					return { status: "ran" };
@@ -122,6 +125,7 @@ describe("scheduler shutdown races", () => {
 				},
 			},
 			runner: {
+				runsAs: runsAsCreator,
 				runScheduled: async () => {
 					runs += 1;
 					return { status: "ran" };

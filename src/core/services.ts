@@ -1,7 +1,10 @@
 import type { Agent, AgentGroup } from "./agents/agent-rules.ts";
 import type { AvatarMode } from "./agents/agent-tools.ts";
 import type { TeamStatus } from "./agents/team-status.ts";
-import type { ScheduledOutcome } from "./contract/channels.ts";
+import type {
+	BackgroundRunsAs,
+	ScheduledOutcome,
+} from "./contract/channels.ts";
 import type { AgentRuntime } from "./contract/runtime.ts";
 import { type ServiceKey, serviceKey } from "./contract/services.ts";
 import type { ConversationRegistry } from "./conversations/conversation-registry.ts";
@@ -215,6 +218,12 @@ export interface BackgroundTurns {
 		firedAt: Date,
 		finding?: PrecheckFinding,
 	): Promise<ScheduledOutcome>;
+	/**
+	 * Who a due schedule's turn would run as now, checked as the turn is: asked before its
+	 * precheck, which runs only for a creator who may run the turn, at the tier it would run at.
+	 * Throws when the identity service cannot tell.
+	 */
+	runsAs(schedule: Schedule): Promise<BackgroundRunsAs>;
 	/** A delegated task's report, answered in its channel under the same rules as a schedule. */
 	runDelegated(job: DelegationJob, result: DelegationOutcome): Promise<void>;
 	/** The process's own logged error, reported to an agent in its channel as a report turn. */

@@ -1,5 +1,6 @@
 import type { HoldCheck } from "../../holds.ts";
 import type { Logger } from "../../log.ts";
+import type { Tier } from "../../speakers.ts";
 import { timeZone, zonedStamp } from "../../time.ts";
 import { type PrecheckTool, precheckScriptTools } from "./precheck-tools.ts";
 import {
@@ -33,10 +34,12 @@ export class SchedulePrechecks {
 		this.#options = options;
 	}
 
+	/** Runs the schedule's precheck for a run at `tier`, its creator's capped tier now. */
 	async run(
 		schedule: Schedule,
 		name: string,
 		firedAt: Date,
+		tier: Tier,
 	): Promise<PrecheckOutcome> {
 		const { logger } = this.#options;
 		let decision: PrecheckOutcome;
@@ -47,7 +50,7 @@ export class SchedulePrechecks {
 					? { kind: "failed", error: precheck }
 					: await runPrecheck(
 							precheck,
-							{ schedule, firedAt },
+							{ schedule, firedAt, tier },
 							{
 								signal: this.#options.signal,
 								settled: (run) => {

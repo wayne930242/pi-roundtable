@@ -12,6 +12,7 @@ import type { BackgroundTarget } from "../../contract/channels.ts";
 import { PluginError } from "../../errors.ts";
 import { silentLogger } from "../../log.ts";
 import { scheduleToolSpecs } from "../../shared/schedule-tools.ts";
+import { runsAsCreator } from "../../testing/background.ts";
 import {
 	describeDb,
 	openTestStore,
@@ -184,6 +185,7 @@ describeDb("precheck scripts over PostgreSQL", () => {
 			store,
 			prechecks,
 			runner: {
+				runsAs: runsAsCreator,
 				runScheduled: async (schedule, _firedAt, finding) => {
 					turns.push({ schedule, ...(finding ? { finding } : {}) });
 					return { status: "ran" };

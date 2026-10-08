@@ -15,6 +15,7 @@ test("the precheck stays quiet on a normal reading and wakes the agent on a low 
 	const context = {
 		schedule: { id: 1, title: "recovery" } as Schedule,
 		firedAt: new Date(),
+		tier: "owner" as const,
 		signal: new AbortController().signal,
 	};
 	expect(await precheck.run(context)).toEqual({

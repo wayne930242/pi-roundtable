@@ -336,10 +336,12 @@ function scriptContext(
 		server: "health",
 		tool,
 	})),
+	tier: PrecheckScriptContext["tier"] = "owner",
 ): PrecheckScriptContext {
 	return {
 		schedule,
 		firedAt: new Date("2026-10-04T01:30:00Z"),
+		tier,
 		timeZone: "Asia/Taipei",
 		today: "2026-10-04",
 		tools,
@@ -348,6 +350,32 @@ function scriptContext(
 }
 
 describe("the precheck script runner", () => {
+	test("grants a script what the tier of its run reaches, not the tier its schedule was set at", async () => {
+		const scopes: unknown[] = [];
+		const runner = precheckScriptRunner({
+			image: "sandbox:pi",
+			runRoot: root(),
+			uid: 1000,
+			gid: 1000,
+			grant: (scope) => {
+				scopes.push(scope);
+				return [];
+			},
+			driver: {
+				exec: async () => JSON.stringify({ ok: true, result: { wake: false } }),
+			},
+		});
+		// The schedule was set at the owner tier, as 0.8 stored every one; its creator holds member now.
+		expect(schedule.createdTier).toBe("owner");
+		await runner.run(
+			"export default () => ({ wake: false })",
+			scriptContext(undefined, "member"),
+		);
+		expect(scopes).toEqual([
+			{ channel: "discord:owner", target: "owner", tier: "member" },
+		]);
+	});
+
 	test("hands the worker, and lets the broker forward, only the tools approved with the script", async () => {
 		const inputs: PrecheckWorkerInput[] = [];
 		const runner = precheckScriptRunner({

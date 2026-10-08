@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `precheckScriptRunner` grants a script what `context.tier`, the tier of its run (pi-roundtable 0.9's `PrecheckContext.tier`, its schedule's capped at what its creator holds now), reaches, instead of the tier the schedule was set at, so a script 0.8 stored at the owner tier no longer reaches the owner's tools for a member.
 - `ScopedSandboxDelegator.start` takes the author's `principalId` and the tier `member`, as pi-roundtable 0.9's `DelegationJob.author` requires them, and refuses any other tier, as it refused a tier before: a guest's report runs as the principal the host bound them to, at the member tier or theirs, whichever is lower. The worker's `run` still hears only the author's `id` and `name`.
 
 ## 0.8.0

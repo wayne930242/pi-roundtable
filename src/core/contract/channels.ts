@@ -129,6 +129,9 @@ export interface BackgroundTurn {
 	speaker?: Speaker;
 }
 
+/** Who a background turn runs as, once checked; or why it may not run now. */
+export type BackgroundRunsAs = { speaker: Speaker } | { skipped: string };
+
 /**
  * Whose conversation a channel holds, as the claim that owns it names it when `startFresh` says
  * whose it was: any string, such as "owner" or "study". The host reads none of them, so a plugin
@@ -206,6 +209,12 @@ export interface ConversationPort {
 	 * tier. Never rejects.
 	 */
 	background(turn: BackgroundTurn): Promise<ScheduledOutcome>;
+	/**
+	 * Who a background turn would run as now, checked as `background` checks it, without running
+	 * it: for work that must not happen for an author who may not run the turn, such as a
+	 * schedule's precheck. Throws when the identity service cannot tell.
+	 */
+	runsAs(turn: BackgroundTurn): Promise<BackgroundRunsAs>;
 	/** A contributed background target, read when used; undefined when no plugin contributes it. */
 	target(name: string): BackgroundTarget | undefined;
 	/** Waits for the channel's running turn, then starts its conversation over; says whose it was. */

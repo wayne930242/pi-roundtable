@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { runsAsCreator } from "./core/testing/background.ts";
 import {
 	AGENTS,
 	type AgentDirectory,
@@ -39,6 +40,7 @@ const schedules: ScheduleStore = {
 };
 
 const background: BackgroundTurns = {
+	runsAs: runsAsCreator,
 	runScheduled: async () => ({ status: "ran" }),
 	runDelegated: async () => undefined,
 	runErrorReport: async () => ({ status: "ran" }),

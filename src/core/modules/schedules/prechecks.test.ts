@@ -15,6 +15,7 @@ import { migrate } from "../../db/migrations.ts";
 import { ScheduleError } from "../../domain/errors.ts";
 import { PluginError } from "../../errors.ts";
 import { type Logger, silentLogger } from "../../log.ts";
+import { runsAsAuthor, runsAsCreator } from "../../testing/background.ts";
 import {
 	describeDb,
 	openTestStore,
@@ -82,6 +83,7 @@ describe("the precheck registry", () => {
 			await runPrecheck(fakePrecheck("boom", new Error("sensor offline")), {
 				schedule,
 				firedAt,
+				tier: "owner",
 			}),
 		).toEqual({ kind: "failed", error: "it threw: sensor offline" });
 		let aborted = false;
@@ -95,7 +97,9 @@ describe("the precheck registry", () => {
 				}),
 			{ timeoutMs: 20 },
 		);
-		expect(await runPrecheck(slow, { schedule, firedAt })).toEqual({
+		expect(
+			await runPrecheck(slow, { schedule, firedAt, tier: "owner" }),
+		).toEqual({
 			kind: "failed",
 			error: "it did not answer within 0.02 seconds",
 		});
@@ -104,7 +108,11 @@ describe("the precheck registry", () => {
 			"wrong",
 			() => ({ wake: true }) as unknown as { wake: false },
 		);
-		const outcome = await runPrecheck(wrong, { schedule, firedAt });
+		const outcome = await runPrecheck(wrong, {
+			schedule,
+			firedAt,
+			tier: "owner",
+		});
 		expect(outcome.kind).toBe("failed");
 	});
 });
@@ -167,6 +175,7 @@ describeDb("PostgreSQL", () => {
 			store,
 			prechecks,
 			runner: {
+				runsAs: runsAsCreator,
 				runScheduled: async (schedule, _firedAt, finding) => {
 					turns.push({ schedule, ...(finding ? { finding } : {}) });
 					return { status: "ran" };
@@ -233,6 +242,7 @@ describeDb("PostgreSQL", () => {
 			prechecks,
 			runner: new ConversationBackgroundTurns({
 				conversations: {
+					runsAs: runsAsAuthor,
 					background: async (turn) => {
 						background.push(turn);
 						return { status: "ran" };

@@ -4,6 +4,7 @@ import { schedulerPlugin } from "./core/builtin/modules.ts";
 import type { ChatSurface } from "./core/contract/surface.ts";
 import { messages } from "./core/i18n/index.ts";
 import { PgScheduleStore } from "./core/modules/schedules/schedule-store.ts";
+import { runsAsCreator } from "./core/testing/background.ts";
 import {
 	BACKGROUND_TURNS,
 	type BackgroundTurns,
@@ -83,6 +84,7 @@ describeDb("the scheduler plugin with a precheck", () => {
 				}),
 				servicePair(PRECHECKS, prechecks),
 				servicePair(BACKGROUND_TURNS, {
+					runsAs: runsAsCreator,
 					runScheduled: async (s: Schedule) => {
 						ran.push(s);
 						return { status: "ran" as const };

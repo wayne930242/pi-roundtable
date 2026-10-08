@@ -342,6 +342,7 @@ export async function testPlugin(
 			(router ?? unlinked("conversations")).handle(message),
 		background: async (turn) =>
 			(router ?? unlinked("conversations")).background(turn),
+		runsAs: async (turn) => (router ?? unlinked("conversations")).runsAs(turn),
 		target: (name) => (router ?? unlinked("conversations")).target(name),
 		startFresh: async (channel) =>
 			(router ?? unlinked("conversations")).startFresh(channel),

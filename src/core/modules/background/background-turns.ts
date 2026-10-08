@@ -1,5 +1,7 @@
 import { OWNER_TARGET } from "../../agents/agent-claim.ts";
 import type {
+	BackgroundRunsAs,
+	BackgroundTurn,
 	ConversationPort,
 	ScheduledOutcome,
 } from "../../contract/channels.ts";
@@ -18,7 +20,7 @@ import type { Schedule } from "../schedules/schedule-store.ts";
 import { scheduledTurnText } from "../schedules/schedule-tools.ts";
 
 export interface BackgroundTurnsOptions {
-	conversations: Pick<ConversationPort, "background">;
+	conversations: Pick<ConversationPort, "background" | "runsAs">;
 	/** Who a turn the process itself starts, such as a logged error's report, is written by. */
 	system: { id: string; name: string };
 	/**
@@ -46,17 +48,35 @@ export class ConversationBackgroundTurns implements BackgroundTurns {
 		firedAt: Date,
 		finding?: PrecheckFinding,
 	): Promise<ScheduledOutcome> {
+		return this.#options.conversations.background(
+			await this.#scheduled(schedule, firedAt, finding),
+		);
+	}
+
+	/** Who a due schedule's turn would run as now, checked as the turn is. */
+	async runsAs(schedule: Schedule): Promise<BackgroundRunsAs> {
+		return this.#options.conversations.runsAs(
+			await this.#scheduled(schedule, new Date()),
+		);
+	}
+
+	/** A due schedule's turn, by its creator: the principal their id stands for, at the schedule's tier. */
+	async #scheduled(
+		schedule: Schedule,
+		firedAt: Date,
+		finding?: PrecheckFinding,
+	): Promise<BackgroundTurn> {
 		const { createdById } = schedule;
 		const principalId =
 			(await this.#options.principalOf?.(createdById)) ?? createdById;
-		return this.#options.conversations.background({
+		return {
 			channel: schedule.channel,
 			target: schedule.target,
 			author: { principalId, id: createdById, name: schedule.createdByName },
 			tier: schedule.createdTier,
 			turnId: `schedule-${schedule.id}-${firedAt.getTime()}`,
 			text: scheduledTurnText(schedule, firedAt, finding),
-		});
+		};
 	}
 
 	/** A delegated task's report, answered in its channel under the same rules as a schedule. */

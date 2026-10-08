@@ -867,8 +867,9 @@ The core stores the script with the schedule and decides with it exactly as with
 pi-roundtable-sandbox's `precheckScriptRunner` runs each script in a sealed container whose only way out is the MCP tools the host grants for that schedule; see its README.
 
 - `schedule_create` and `schedule_update` take `precheck_script`, a JavaScript module of at most `PRECHECK_SCRIPT_CHARS` (8,000) characters with a default export; it is parsed, never run, when it is set. A schedule has a `precheck` or a `precheck_script`; setting one removes the other, and `null` removes either.
-- The runner's `run(script, context)` gets the `PrecheckScriptContext`: the schedule, `firedAt`, `signal`, the host's `timeZone`, and `today`, the date there. Its answer is checked like a named precheck's, and its finding is named `script`.
-- `describe({ channel, target, tier })` (a `PrecheckScope`) tells the model how to write one and what it may call there; `schedule_list` shows it, waiting at most 10 seconds. `tier` is the asker's there and the script's creator's when it runs, so a runner may grant lower tiers less.
+- The runner's `run(script, context)` gets the `PrecheckScriptContext`: the schedule, `firedAt`, `tier`, `signal`, the host's `timeZone`, and `today`, the date there. `tier` is the tier the run is for: the schedule's, capped at what its creator holds now, as its turn would run. Its answer is checked like a named precheck's, and its finding is named `script`.
+- `describe({ channel, target, tier })` (a `PrecheckScope`) tells the model how to write one and what it may call there; `schedule_list` shows it, waiting at most 10 seconds. `tier` is the asker's there and the run's `tier` when it runs, so a runner may grant lower tiers less.
+- Before a schedule's precheck, named or a script, the scheduler checks who its turn would run as, as `ConversationPort.runsAs` does: a creator who may not run it now, such as one disabled, runs no precheck, and the run is recorded `skipped:` with the reason.
 - When the host stops, the scheduler aborts running scripts and waits up to 15 seconds for the runner to clean up; a precheck that ends then starts no turn.
 - Without a runner, the tools neither take nor mention `precheck_script`, a script is refused with the registered names, and a schedule that already has one wakes with `### Precheck failed: script`, never a silent skip.
 
@@ -2865,6 +2866,7 @@ Import from the entries listed below; source area files are internal.
 | `AvatarStudio` | `pi-roundtable` | type |
 | `BACKGROUND_TURNS` | `pi-roundtable` | value |
 | `CONVERSATIONS` | `pi-roundtable` | value |
+| `BackgroundRunsAs` | `pi-roundtable` | type |
 | `BackgroundTarget` | `pi-roundtable` | type |
 | `BackgroundTurn` | `pi-roundtable` | type |
 | `BackgroundTurns` | `pi-roundtable` | type |

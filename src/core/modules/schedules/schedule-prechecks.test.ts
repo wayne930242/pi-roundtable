@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import type { HoldCheck } from "../../holds.ts";
 import { silentLogger } from "../../log.ts";
+import { runsAsCreator } from "../../testing/background.ts";
 import { useTestLocale } from "../../testing/locale.ts";
 import {
 	fakePrecheck,
@@ -67,6 +68,7 @@ function harness(options: {
 			notes.push({ id: given.id, note });
 		},
 		runner: options.runner ?? {
+			runsAs: runsAsCreator,
 			runScheduled: async (given, _firedAt, finding) => {
 				runs.push({ schedule: given, finding });
 				return { status: "ran" };
@@ -84,6 +86,92 @@ async function runScheduler(h: ReturnType<typeof harness>) {
 }
 
 describe("scheduler precheck behavior", () => {
+	test("a creator who may not run the turn runs no precheck: the run is skipped, saying why, with no note", async () => {
+		const precheck = fakePrecheck("health.wake", {
+			wake: false,
+			note: "nothing to say",
+		});
+		const runs: Schedule[] = [];
+		const h = harness({
+			prechecks: fakePrechecks(precheck),
+			schedules: [
+				schedule(1, { precheck: "health.wake" }),
+				schedule(2, { precheck: "health.wake", createdById: "lost" }),
+			],
+			runner: {
+				runsAs: async (given) => {
+					if (given.id === 1) return { skipped: "principal owner is disabled" };
+					throw new Error("the database is down");
+				},
+				runScheduled: async (given) => {
+					runs.push(given);
+					return { status: "ran" };
+				},
+			},
+		});
+		await runScheduler(h);
+		expect(precheck.calls).toEqual([]);
+		expect(runs).toEqual([]);
+		expect(h.notes).toEqual([]);
+		expect(h.statuses).toEqual([
+			{ id: 1, status: "skipped: principal owner is disabled" },
+			{
+				id: 2,
+				status:
+					"skipped: whom it runs as could not be checked (the database is down)",
+			},
+		]);
+	});
+
+	test("a precheck runs at the tier the run is for, not the one the schedule was set at", async () => {
+		const precheck = fakePrecheck("health.wake", { wake: false });
+		const h = harness({
+			prechecks: fakePrechecks(precheck),
+			schedules: [schedule(1, { precheck: "health.wake" })],
+			runner: {
+				runsAs: async (given) => ({
+					speaker: {
+						id: given.createdById,
+						name: given.createdByName,
+						tier: "admin",
+						principalId: given.createdById,
+					},
+				}),
+				runScheduled: async () => ({ status: "ran" }),
+			},
+		});
+		await runScheduler(h);
+		expect(precheck.calls.map((call) => call.tier)).toEqual(["admin"]);
+	});
+
+	test("a host that stops while whom a schedule runs as is checked runs no precheck", async () => {
+		const precheck = fakePrecheck("health.wake", { wake: true, context: "x" });
+		const { promise: asked, resolve: ask } = Promise.withResolvers<void>();
+		const { promise: checked, resolve: check } = Promise.withResolvers<void>();
+		const h = harness({
+			prechecks: fakePrechecks(precheck),
+			schedules: [schedule(1, { precheck: "health.wake" })],
+			runner: {
+				runsAs: async (given) => {
+					ask();
+					await checked;
+					return runsAsCreator(given);
+				},
+				runScheduled: async () => ({ status: "ran" }),
+			},
+		});
+		await h.scheduler.tick();
+		await asked;
+		const stopping = h.scheduler.stop();
+		check();
+		await h.scheduler.idle();
+		await stopping;
+		expect(precheck.calls).toEqual([]);
+		expect(h.statuses).toEqual([
+			{ id: 1, status: "skipped: the host stopped before its run" },
+		]);
+	});
+
 	test("registered prechecks skip, wake, and fail with existing statuses", async () => {
 		const prechecks = fakePrechecks(
 			fakePrecheck("health.skip", { wake: false, note: "recovery normal" }),
@@ -266,8 +354,10 @@ describe("scheduler precheck behavior", () => {
 	test("stop aborts an active precheck and drains cleanup without starting a turn", async () => {
 		let signal: AbortSignal | undefined;
 		let finishCleanup = () => {};
+		const { promise: started, resolve: start } = Promise.withResolvers<void>();
 		const precheck = fakePrecheck("health.active", (context) => {
 			signal = context.signal;
+			start();
 			return new Promise((resolve) => {
 				finishCleanup = () => resolve({ wake: true, context: "too late" });
 			});
@@ -277,6 +367,8 @@ describe("scheduler precheck behavior", () => {
 			schedules: [schedule(1, { precheck: "health.active" })],
 		});
 		await h.scheduler.tick();
+		// The precheck starts once whom the schedule runs as is checked.
+		await started;
 		let stopped = false;
 		const stopping = h.scheduler.stop().then(() => {
 			stopped = true;
