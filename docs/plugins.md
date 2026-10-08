@@ -1754,6 +1754,7 @@ It rejects with `NotLinkedError` during `setup`, and with a `PluginError` on a h
 
 Before each turn runs, `context.turns.run` records its conversation in the host's registry, `CONVERSATIONS`: at the first turn its key, surface, kind, visibility, owner, and title, and at every later turn only that it was active.
 `conversation: { visibility: "private" }` records it as the speaker's own (its `principalId` is `speaker.principalId`); without it the conversation is `shared`.
+Only its person speaks in a private conversation: a turn whose speaker is another principal is refused before it starts, except the host's own turns (`SYSTEM_PRINCIPAL`), such as a report's.
 Neither a later turn nor another plugin changes what the first turn recorded, with one exception for data from before 0.9: `adopt(key, principalId)` makes a conversation recorded `shared` with no principal, as 0.8 recorded every turn run without `conversation`, private to that principal.
 It is for a plugin migrating what its own 0.8 version left, such as remote-mcp giving each session 0.8 opened to the primary owner; it never changes a private conversation or one with a principal, and repeating or racing it is safe.
 `conversation.title` names it at its first turn; `setTitle(key, title)` renames it later.
@@ -2002,7 +2003,7 @@ The host reaches a person through the first provider, in contribution order, tha
 The Discord plugin contributes one named `discord`: it finds a principal's Discord identities through `IDENTITY` and reaches the first one's direct messages, the primary owner's configured identity first, so a single owner is reached in the same direct messages as in 0.8.
 
 The `notify` tool, 0.8's `notify_owner`, sends such a notice. A session has it only when a provider is contributed, and a private conversation only when a provider reaches its person.
-It notifies the conversation's person in a private conversation and the turn's speaker in a shared one, and refuses when no provider reaches them; the host's own turns, such as a report's, notify the primary owner, as `notify_owner` did.
+It notifies the conversation's person in a private conversation and the turn's speaker in a shared one, and refuses when no provider reaches them or when the speaker is not the private conversation's person; the host's own turns, such as a report's, notify the conversation's person in a private conversation and the primary owner elsewhere, as `notify_owner` did.
 Its description names the channels that can reach the person, so a host with only Discord reads `Send Ada a direct message on Discord. …` as 0.8 did.
 Until 1.0 the name `notify_owner` still selects it in a selection or a profile, and an operator's `toolTiers` entry for `notify_owner` applies to `notify` unless `notify` has its own.
 Using the old name logs a deprecation warning once per logger, whether in a selection or in `toolTiers`.

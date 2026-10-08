@@ -471,8 +471,8 @@ describe("notify", () => {
 		});
 		const owner = { ...OWNER_SPEAKER };
 		const ann = { ...ANN, tier: "owner" as const };
-		await notifyIn(setup, contextOf(owner, "other:ann"), "to ann");
-		await notifyIn(setup, contextOf(ann, "other:own"), "to the owner");
+		await notifyIn(setup, contextOf(ann, "other:ann"), "to ann");
+		await notifyIn(setup, contextOf(owner, "other:own"), "to the owner");
 		await notifyIn(setup, contextOf(ann, HOME), "to the speaker");
 		expect(setup.record.notified).toEqual([
 			{ principalId: "p_ann", text: "to ann" },
@@ -480,6 +480,21 @@ describe("notify", () => {
 			{ principalId: "p_ann", text: "to the speaker" },
 		]);
 		expect(setup.record.ownerChannelAsked).toBe(0);
+	});
+
+	test("in someone else's private conversation, a speaker's notice is refused and nothing is sent to either", async () => {
+		const setup = await setUpModules({
+			direct: { "1": OWNER_CHANNEL, p_ann: "discord:ann-dm" },
+			conversations: { get: privately({ "other:own": "1" }) },
+		});
+		const answer = await notifyIn(
+			setup,
+			contextOf({ ...ANN, tier: "owner" }, "other:own"),
+			"from ann",
+		);
+		expect(answer?.error).toBe(true);
+		expect(answer?.text).toContain("private to someone else");
+		expect(setup.record.notified).toEqual([]);
 	});
 
 	test("a private conversation of someone no direct channel reaches gets no notify", async () => {

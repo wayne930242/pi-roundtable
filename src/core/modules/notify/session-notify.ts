@@ -33,13 +33,27 @@ export function sessionNotify(
 	deps: SessionNotifyDeps,
 ): (session: SessionContext) => ExtensionFactory | null {
 	const { directChannels, owner, logger } = deps;
-	// The speaker a notice in a shared conversation is for; the host's own turns are the primary owner's.
-	const speakerOf = (session: SessionContext): string | undefined => {
+	// Whom a notice is for: the person of a private conversation, the speaker of a shared one; the
+	// host's own turns notify the conversation's person, or else the primary owner. Anyone else
+	// speaking in someone's private conversation is refused, so their text never reaches its person.
+	const recipientOf = (
+		session: SessionContext,
+		own: string | undefined,
+	): { principalId: string } | { refused: string } => {
 		const speaker = session.speaker();
-		if (!speaker) return undefined;
-		return speaker.principalId === SYSTEM_PRINCIPAL
-			? owner.id
-			: speaker.principalId;
+		if (!speaker)
+			return {
+				refused:
+					"a notice is sent only in a turn someone is named for, whose notice it is",
+			};
+		if (speaker.principalId === SYSTEM_PRINCIPAL)
+			return { principalId: own ?? owner.id };
+		if (own !== undefined && speaker.principalId !== own)
+			return {
+				refused:
+					"this conversation is private to someone else, so a notice here is not yours to send",
+			};
+		return { principalId: speaker.principalId };
 	};
 	return (session) => {
 		const providers = directChannels.providers();
@@ -66,7 +80,7 @@ export function sessionNotify(
 			await notifyExtension(
 				{
 					notifier: directChannels,
-					recipient: async () => own ?? speakerOf(session),
+					recipient: async () => recipientOf(session, own),
 					channels: labels(reaching),
 				},
 				owner,

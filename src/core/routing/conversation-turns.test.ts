@@ -289,6 +289,52 @@ describe("conversation turns", () => {
 		]);
 	});
 
+	test("a private conversation runs only its principal's turns and the host's own, refusing anyone else's before the turn starts", async () => {
+		const stored = new Map<string, ConversationRegistration>();
+		const { turns, log, requests } = setup(
+			async () => ({ ok: true, text: "hi" }),
+			{
+				register: async (entry) => {
+					const kept = stored.get(entry.key) ?? entry;
+					stored.set(entry.key, kept);
+					return {
+						...kept,
+						surface: "fake",
+						createdAt: new Date(),
+						lastActiveAt: new Date(),
+					};
+				},
+			},
+		);
+		const mine = { ...input, channel: "fake:mine" } as const;
+		await turns.run({ ...mine, conversation: { visibility: "private" } });
+		const ann = {
+			id: "ann",
+			name: "Ann",
+			tier: "owner",
+			principalId: "p_ann",
+		} as const;
+		await expect(turns.run({ ...mine, speaker: ann })).rejects.toThrow(
+			`fake:mine is private to ${OWNER_SPEAKER.principalId}`,
+		);
+		await expect(
+			turns.run({
+				...mine,
+				speaker: ann,
+				conversation: { visibility: "private" },
+			}),
+		).rejects.toThrow("is private to");
+		await turns.run({
+			...mine,
+			speaker: { ...ann, id: "assistant", principalId: "system" },
+		});
+		expect(requests.map((request) => request.speaker.principalId)).toEqual([
+			OWNER_SPEAKER.principalId,
+			"system",
+		]);
+		expect(log.filter((line) => line === "started")).toHaveLength(2);
+	});
+
 	test("a private conversation needs the speaker it belongs to, and a failed record runs no turn", async () => {
 		const { turns, log } = setup(async () => ({ ok: true, text: "hi" }), {
 			register: async () => {

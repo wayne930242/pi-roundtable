@@ -10,6 +10,7 @@ import type { TurnConversation } from "../domain/ports.ts";
 import type { TurnProgress } from "../domain/progress.ts";
 import { PluginError } from "../errors.ts";
 import { messages } from "../i18n/index.ts";
+import { SYSTEM_PRINCIPAL } from "../identity/principal-store.ts";
 import type { Logger } from "../log.ts";
 import type { EventSink } from "../plugin.ts";
 import { splitReply } from "../presentation/reply-splitter.ts";
@@ -61,8 +62,10 @@ export interface ConversationTurns {
 	 * `turnEnded` with the turn's `kind`, settles a runtime that throws into a failed result, and
 	 * posts the reply, or a failure or stopped notice, through the surface unless `reply` is given.
 	 * It rejects during setup (NotLinkedError), when the host has no runtime to run the turn on,
-	 * and when the conversation cannot be recorded in the host's registry (a database error, or a
-	 * `private` conversation without a speaker). Each of these rejects before the turn starts:
+	 * when the conversation cannot be recorded in the host's registry (a database error, or a
+	 * `private` conversation without a speaker), and when the conversation is recorded private to a
+	 * principal other than the speaker's, unless the speaker is the host's own (`SYSTEM_PRINCIPAL`).
+	 * Each of these rejects before the turn starts:
 	 * nothing is shown, no event is emitted, and `reply` is not called, so a claim that answers
 	 * its person tells them itself.
 	 */
@@ -111,9 +114,16 @@ async function record(
 			: {}),
 		...(title === undefined ? {} : { title }),
 	});
-	return kept.visibility === "private" && kept.principalId !== undefined
-		? { visibility: "private", principalId: kept.principalId }
-		: { visibility: "shared" };
+	if (kept.visibility !== "private" || kept.principalId === undefined)
+		return { visibility: "shared" };
+	// Only its person, or the host itself, speaks in a private conversation: anyone else's turn would
+	// read and act on what is theirs.
+	const { principalId } = input.speaker;
+	if (principalId !== kept.principalId && principalId !== SYSTEM_PRINCIPAL)
+		throw new PluginError(
+			`${input.channel} is private to ${kept.principalId}, so ${principalId} may not speak in it; run their turn in a conversation of their own.`,
+		);
+	return { visibility: "private", principalId: kept.principalId };
 }
 
 function conversationOf(

@@ -10,9 +10,9 @@ export interface SessionNotify {
 	notifier: Notifier;
 	/**
 	 * Whom a call notifies, read when it runs: the conversation's person in a private one, the
-	 * turn's speaker in a shared one; undefined in a turn nobody is named for.
+	 * turn's speaker in a shared one; or why nobody is, such as in a turn nobody is named for.
 	 */
-	recipient: () => Promise<string | undefined>;
+	recipient: () => Promise<{ principalId: string } | { refused: string }>;
 	/** How a notice reaches them, completing "Send Ada …", such as "a direct message on Discord". */
 	channels: string;
 }
@@ -36,12 +36,9 @@ export function notifyExtension(
 				text: Type.String({ description: "The message to send." }),
 			}),
 			execute: async (_toolCallId, params) => {
-				const principalId = await notify.recipient();
-				if (principalId === undefined)
-					return toolError(
-						"a notice is sent only in a turn someone is named for, whose notice it is",
-					);
-				if (!(await notify.notifier.notify(principalId, params.text)))
+				const recipient = await notify.recipient();
+				if ("refused" in recipient) return toolError(recipient.refused);
+				if (!(await notify.notifier.notify(recipient.principalId, params.text)))
 					return toolError(
 						"the person this notice is for has no direct channel on this host to send it to",
 					);
