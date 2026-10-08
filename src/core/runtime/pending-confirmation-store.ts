@@ -57,13 +57,16 @@ export class PendingConfirmationStore {
 	};
 
 	/**
-	 * The principal of that speaker, who approves the actions on any of their identities. It
-	 * belongs to the same hold as the speaker, so it counts only where `speaker_id` does.
+	 * The principal of that speaker, who approves the actions on any of their identities, and the
+	 * hold it belongs to, by its `held_at`. 0.8 replaces a row's held actions and speaker and
+	 * leaves `principal_id` as it was, so after a rollback and an upgrade a principal counts only
+	 * while the row still holds the actions it was written with.
 	 */
 	static readonly principalMigration: Migration = {
 		name: "held-actions-principal",
 		up: async (sql) => {
 			await sql`ALTER TABLE held_actions ADD COLUMN IF NOT EXISTS principal_id text`;
+			await sql`ALTER TABLE held_actions ADD COLUMN IF NOT EXISTS principal_held_at timestamptz`;
 		},
 	};
 
@@ -83,11 +86,12 @@ export class PendingConfirmationStore {
 	}
 
 	async load(channel: ChannelKey): Promise<PendingConfirmation | undefined> {
-		// A speaker written with other held actions than the row's, or without its hold, is none.
+		// A speaker or principal written with other held actions than the row's, or without its hold, is none.
 		const rows: Row[] = await this.#sql`
 			SELECT selection_id, held_at, calls,
 				CASE WHEN speaker_held_at = held_at THEN speaker_id END AS speaker_id,
-				CASE WHEN speaker_held_at = held_at THEN principal_id END AS principal_id
+				CASE WHEN speaker_held_at = held_at AND principal_held_at = held_at
+					THEN principal_id END AS principal_id
 			FROM held_actions
 			WHERE channel_key = ${channel}`;
 		const row = rows[0];
@@ -118,13 +122,15 @@ export class PendingConfirmationStore {
 		const principal = speaker === null ? null : (pending.principalId ?? null);
 		await this.#sql`
 			INSERT INTO held_actions
-				(channel_key, selection_id, held_at, calls, speaker_id, speaker_held_at, principal_id)
+				(channel_key, selection_id, held_at, calls, speaker_id, speaker_held_at,
+					principal_id, principal_held_at)
 			VALUES (${channel}, ${pending.selectionId}, ${pending.heldAt},
 				${JSON.stringify(pending.calls)}, ${speaker},
-				${speaker === null ? null : pending.heldAt}, ${principal})
+				${speaker === null ? null : pending.heldAt}, ${principal},
+				${principal === null ? null : pending.heldAt})
 			ON CONFLICT (channel_key) DO UPDATE SET selection_id = EXCLUDED.selection_id,
 				held_at = EXCLUDED.held_at, calls = EXCLUDED.calls,
 				speaker_id = EXCLUDED.speaker_id, speaker_held_at = EXCLUDED.speaker_held_at,
-				principal_id = EXCLUDED.principal_id`;
+				principal_id = EXCLUDED.principal_id, principal_held_at = EXCLUDED.principal_held_at`;
 	}
 }

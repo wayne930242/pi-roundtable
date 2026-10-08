@@ -197,6 +197,32 @@ describeDb("PostgreSQL", () => {
 			expect(speakers()).toEqual(["infra"]);
 			expect(fx.runtime.turns[0]?.confirmed).toBe(true);
 		});
+
+		test("held actions 0.8 held over another's after a rollback are its speaker's: the principal of the hold before approves nothing", async () => {
+			script.scores = { coordinator: 0.1, infra: 0.1, doctor: 0.1 };
+			// What PendingConfirmationStore.load gives for that row: B's, by their id alone.
+			fx.runtime.held.set(groupSessionKey(opsGroup(), "infra"), {
+				selectionId: "agent",
+				heldAt: new Date(),
+				calls: [{ tool: "deploy", input: "{}", action: "deploy the site" }],
+				speakerId: "B",
+			});
+			const say = (id: string, principalId: string) =>
+				fx.team.answerGroup(
+					group,
+					{ id, name: `admin ${id}`, tier: "admin", principalId },
+					"yes, do it",
+					"yes, do it",
+					NO_ATTACHMENTS,
+					undefined,
+				);
+			await say("A", "pA");
+			expect(fx.runtime.turns.map((t) => t.confirmed)).toEqual([undefined]);
+			fx.runtime.turns = [];
+			await say("B", "pB");
+			expect(speakers()).toEqual(["infra"]);
+			expect(fx.runtime.turns[0]?.confirmed).toBe(true);
+		});
 	});
 
 	describe("archive", () => {

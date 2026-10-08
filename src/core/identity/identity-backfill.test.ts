@@ -67,7 +67,7 @@ async function personRows(sql: SQL) {
 		memory: await sql`SELECT * FROM owner_memory ORDER BY id`,
 		schedules: await sql`SELECT * FROM schedules ORDER BY id`,
 		conversations: await sql`SELECT * FROM conversations ORDER BY key`,
-		// 0.8's columns: the runtime's migrations add principal_id, empty on these rows.
+		// 0.8's columns: the runtime's migrations add principal_id and principal_held_at, empty on these rows.
 		held: await sql`
 			SELECT channel_key, selection_id, held_at, calls, speaker_id, speaker_held_at
 			FROM held_actions ORDER BY channel_key`,
@@ -323,11 +323,10 @@ describeDb("the principal backfill", () => {
 		const plugins = await hostPlugins(db.url);
 		await runMigrations(db.sql, plugins);
 		// As this version stores one: the actor id beside the principal it resolved to.
-		await db.sql`ALTER TABLE held_actions ADD COLUMN IF NOT EXISTS principal_id text`;
 		const calls = JSON.stringify([]);
 		await db.sql`
-			INSERT INTO held_actions (channel_key, selection_id, held_at, calls, speaker_id, speaker_held_at, principal_id)
-			VALUES ('discord:966666600000000014', 'agent', now(), ${calls}, '966666600000000009', now(), 'p_01K0000000000000000000000A')`;
+			INSERT INTO held_actions (channel_key, selection_id, held_at, calls, speaker_id, speaker_held_at, principal_id, principal_held_at)
+			VALUES ('discord:966666600000000014', 'agent', now(), ${calls}, '966666600000000009', now(), 'p_01K0000000000000000000000A', now())`;
 		// As 0.8 writes one after a downgrade: no principal named.
 		await db.sql`
 			INSERT INTO held_actions (channel_key, selection_id, held_at, calls, speaker_id, speaker_held_at)
@@ -336,6 +335,30 @@ describeDb("the principal backfill", () => {
 		const ids = (await principals(db.sql)).map((row) => row.id);
 		expect(ids).toContain("966666600000000008");
 		expect(ids).not.toContain("966666600000000009");
+	});
+
+	test("a held action 0.8 wrote over this version's is 0.8's: the principal left from the hold before makes its actor id no less a 0.8 speaker", async () => {
+		db = await scratchDatabase("0.8.0");
+		const plugins = await hostPlugins(db.url);
+		await runMigrations(db.sql, plugins);
+		const calls = JSON.stringify([]);
+		const first = new Date("2026-10-01T01:00:00Z");
+		const later = new Date("2026-10-02T01:00:00Z");
+		// As this version stores A's hold.
+		await db.sql`
+			INSERT INTO held_actions (channel_key, selection_id, held_at, calls, speaker_id, speaker_held_at, principal_id, principal_held_at)
+			VALUES ('discord:966666600000000016', 'agent', ${first}, ${calls}, '966666600000000009', ${first}, 'p_01K0000000000000000000000A', ${first})`;
+		// As v0.8.0 writes B's hold over it after a downgrade, leaving principal_id as it was.
+		await db.sql`
+			INSERT INTO held_actions (channel_key, selection_id, held_at, calls, speaker_id, speaker_held_at)
+			VALUES ('discord:966666600000000016', 'agent', ${later}, ${calls}, '966666600000000010', ${later})
+			ON CONFLICT (channel_key) DO UPDATE SET selection_id = EXCLUDED.selection_id,
+				held_at = EXCLUDED.held_at, calls = EXCLUDED.calls,
+				speaker_id = EXCLUDED.speaker_id, speaker_held_at = EXCLUDED.speaker_held_at`;
+		await runMigrations(db.sql, plugins);
+		expect((await principals(db.sql)).map((row) => row.id)).toContain(
+			"966666600000000010",
+		);
 	});
 
 	test("a 0.8 author of schedules is seen at upgrade at the highest tier they scheduled at, capped by what the rules could give them", async () => {

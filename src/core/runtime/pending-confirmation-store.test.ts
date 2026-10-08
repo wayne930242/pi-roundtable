@@ -74,6 +74,32 @@ describeDb("PendingConfirmationStore", () => {
 		await store.save("discord:6", undefined);
 	});
 
+	test("a principal does not carry over to actions 0.8, which keeps the column as it was, held over theirs", async () => {
+		await store.save("discord:7", {
+			...held,
+			speakerId: "A",
+			principalId: "pA",
+		});
+		const admin = new SQL(testDatabaseUrl);
+		const later = { ...held, heldAt: new Date("2026-09-28T01:00:00Z") };
+		try {
+			// v0.8.0's save, which knows the speaker and leaves principal_id as it was.
+			await admin`
+				INSERT INTO held_actions
+					(channel_key, selection_id, held_at, calls, speaker_id, speaker_held_at)
+				VALUES ('discord:7', ${later.selectionId}, ${later.heldAt},
+					${JSON.stringify(later.calls)}, 'B', ${later.heldAt})
+				ON CONFLICT (channel_key) DO UPDATE SET selection_id = EXCLUDED.selection_id,
+					held_at = EXCLUDED.held_at, calls = EXCLUDED.calls,
+					speaker_id = EXCLUDED.speaker_id, speaker_held_at = EXCLUDED.speaker_held_at`;
+		} finally {
+			await admin.close();
+		}
+		// B's, by their id: A's principal no longer names who approves them.
+		expect(await store.load("discord:7")).toEqual({ ...later, speakerId: "B" });
+		await store.save("discord:7", undefined);
+	});
+
 	test("a speaker does not carry over to actions 0.7, which keeps the column as it was, held over theirs", async () => {
 		await store.save("discord:5", { ...held, speakerId: "7" });
 		const admin = new SQL(testDatabaseUrl);

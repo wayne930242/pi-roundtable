@@ -31,7 +31,9 @@ export interface BackfillSummary {
 /**
  * The column each table keeps a person's id in, and the column naming them, where there is one.
  * `principal` is a column a newer build fills with the principal beside an actor id: a row with
- * it filled is not 0.8's, so its id makes no principal.
+ * it filled is not 0.8's, so its id makes no principal. Where `principalHold` names the hold the
+ * principal was written with, it counts only while that is the row's (`principalHold = held`),
+ * as 0.8 writes over a row and leaves the principal as it was.
  */
 const TABLES: readonly {
 	table: Exclude<BackfillSource, "config">;
@@ -39,6 +41,7 @@ const TABLES: readonly {
 	name?: string;
 	order?: string;
 	principal?: string;
+	principalHold?: { column: string; held: string };
 }[] = [
 	{ table: "owner_memory", column: "speaker_id" },
 	{
@@ -48,7 +51,12 @@ const TABLES: readonly {
 		order: "created_at DESC",
 	},
 	{ table: "conversations", column: "principal_id" },
-	{ table: "held_actions", column: "speaker_id", principal: "principal_id" },
+	{
+		table: "held_actions",
+		column: "speaker_id",
+		principal: "principal_id",
+		principalHold: { column: "principal_held_at", held: "held_at" },
+	},
 ];
 
 /** Whether the tier's rules could hold the person of a 0.8 speaker id, whose surface and roles are unknown here. */
@@ -125,9 +133,14 @@ async function idsIn(
 	// The identifiers are this module's constants, never input.
 	const name = source.name ?? "NULL::text";
 	const order = source.order ? `, ${source.order}` : "";
+	const hold =
+		source.principalHold &&
+		(await hasColumn(sql, source.table, source.principalHold.column))
+			? ` OR ${source.principalHold.column} IS DISTINCT FROM ${source.principalHold.held}`
+			: "";
 	const legacy =
 		source.principal && (await hasColumn(sql, source.table, source.principal))
-			? ` AND ${source.principal} IS NULL`
+			? ` AND (${source.principal} IS NULL${hold})`
 			: "";
 	return (await sql.unsafe(
 		`SELECT DISTINCT ON (${source.column}) ${source.column} AS id, ${name} AS name
@@ -140,7 +153,8 @@ async function idsIn(
  * Makes a principal of the same id for every person 0.8 stored: the configured owners, and each
  * id in `owner_memory`, `schedules`, `conversations`, and `held_actions`, skipping a table or a
  * column the database does not have yet, and a held action that names its principal in
- * `principal_id`, whose `speaker_id` is an actor id this version stored, and any id a surface
+ * `principal_id` for the hold it holds (`principal_held_at`), whose `speaker_id` is an actor id
+ * this version stored, and any id a surface
  * knows a linked identity by (its subject, or `<provider>:<subject>`, as `ActorFacts.legacyId`
  * names it): that person has a principal already, and this version wrote the row, so the boot
  * after someone is admitted makes no second principal of their actor id. Each but a configured
