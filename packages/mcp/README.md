@@ -246,6 +246,8 @@ export function hostRemote(dispatchToken: string, publicUrl: string) {
 
 - `answer(channel, text, speaker)` runs one turn and never rejects.
   `speaker` is whom the turn is for: the principal the dispatch token stands for, from `IDENTITY.speakerFor`.
+  Run the turn as `speaker`, such as by passing it to `context.turns.run`: its tier decides the tools and its principal the memory.
+  An `answer` that ignores it, such as one that runs every turn as the owner, gives whoever holds the token owner turns, and `principal` then only decides whose the sessions are.
   The plugin does not queue it, so it joins the channel's queue itself (`context.queue.run`).
   The host owns the conversations' kind and persona, so the plugin contributes no persona in this mode.
 - `claim` is what the claim over the `mcp:<session>` channels does with those conversations: `startFresh` (required; the string it returns is the conversation's kind), `deleteConversation` (required; the plugin removes the session record after it), and optional `stop` and `background`.
@@ -258,7 +260,7 @@ At every start the host links it to `principal`, or to the primary owner without
 `roundtable principal list` shows it under that principal as `token:remote-mcp  (plugin remote-mcp)`, and `roundtable principal unlink` refuses it: change the option instead.
 The start stops when the principal does not exist, or when the identity is linked to someone else by the configuration or the CLI; the error names what to change.
 
-Bound to a member, a remote turn reads and changes the member's memory, and only the tools of their tier are offered.
+Bound to a member, a remote turn reads and changes the member's memory, and only the tools of their tier are offered; when the host runs the conversations itself, that holds only if its `answer` runs the turn as the `speaker` it receives.
 Give that member a lasting role with `roundtable principal grant <principal> member` (or `admin`).
 A remote turn does not record them as seen, so a member whose tier comes only from what a surface reports stops being served `access.backgroundStaleDays` (30 by default) after they were last seen elsewhere: every remote run fails until they are seen again.
 
