@@ -83,7 +83,7 @@ export class PiAgentRuntime implements AgentRuntime {
 		this.#tiers = options.toolTiers ?? toolTiers();
 		this.#factory = new SessionFactory(options, {
 			speaker: (channel) => this.#turns.get(channel)?.speaker,
-			runTask: (channel, task) => this.#runTask(channel, task),
+			runTask: (scope, task) => this.#runTask(scope, task),
 		});
 		this.#sessions = new ConversationSessions(
 			options,
@@ -335,24 +335,28 @@ export class PiAgentRuntime implements AgentRuntime {
 	 * confirmation gate, and returns its final text.
 	 */
 	// pi-lens-ignore: high-fan-out — builds, runs, and disposes one transient session; batch 4 turns it into the core's child-run API
-	async #runTask(channel: ChannelKey, task: TransientTask): Promise<string> {
+	async #runTask(
+		scope: { turn: ChannelKey; home: ChannelKey },
+		task: TransientTask,
+	): Promise<string> {
 		const { dataDir } = this.#options;
 		const { signal } = task;
 		// A task works at the tier of the turn that started it; without one there is no tier to take.
-		const turn = this.#turns.get(channel);
+		const turn = this.#turns.get(scope.turn);
 		if (!turn)
 			throw new AgentRunError(
-				`a task runs beside a turn of its conversation, at that turn's tier, and ${channel} has no turn running`,
+				`a task runs beside a turn of its conversation, at that turn's tier, and ${scope.turn} has no turn running`,
 			);
-		// A worker asks nothing: its held actions wait for the owner's next message.
+		// A worker asks nothing, and works in its conversation for the turn that started it.
 		const worker = await this.#factory.create(
-			channel,
+			scope.home,
 			SessionManager.inMemory(this.#factory.workDir()),
-			await this.#sessions.gate(channel, false),
+			await this.#sessions.gate(scope.home, false),
 			new PromptSlot(),
-			ownerAttachmentDir(dataDir, channel),
+			ownerAttachmentDir(dataDir, scope.home),
 			undefined,
 			"owner",
+			scope.turn,
 		);
 		const { session } = worker;
 		const toolCalls: string[] = [];

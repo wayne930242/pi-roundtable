@@ -56,8 +56,14 @@ import {
 export interface SessionFactoryDeps {
 	/** The person the conversation's running turn is for. */
 	speaker(channel: ChannelKey): Speaker | undefined;
-	/** Runs a task beside the conversation, under its gate. */
-	runTask(channel: ChannelKey, task: TransientTask): Promise<string>;
+	/**
+	 * Runs a task beside the conversation of `home`, under its gate, at the tier of the running
+	 * turn of `turn`: the conversation's own channel, or an agent's seat in a group.
+	 */
+	runTask(
+		scope: { turn: ChannelKey; home: ChannelKey },
+		task: TransientTask,
+	): Promise<string>;
 }
 
 /** Builds Pi sessions for the runtime: one resource loader per session, its extensions in order. */
@@ -212,6 +218,8 @@ export class SessionFactory {
 		attachmentDir: string,
 		agent: AgentTurnScope | undefined,
 		kind: string,
+		/** The conversation whose running turn the session acts in, when not its own: a worker's. */
+		turn?: ChannelKey,
 	): Promise<ChannelSession> {
 		const { agentDir, model, thinking, logger } = this.#options;
 		// An agent's prompt is set before each run; the other kinds are refused here, before a session is built.
@@ -235,8 +243,9 @@ export class SessionFactory {
 				this.#modelRuntime.getModel(provider, id)?.contextWindow,
 			this.plan.compaction?.engine,
 		);
-		// The running turn is the conversation's: an agent's seat in a group, or its own channel.
-		const turnKey = agent?.session ?? channel;
+		// The running turn is the conversation's: an agent's seat in a group, or its own channel; a
+		// worker's is the turn that started it.
+		const turnKey = turn ?? agent?.session ?? channel;
 		const context: SessionContext = {
 			kind: agent ? "agent" : kind,
 			homeChannel: channel,
@@ -251,7 +260,8 @@ export class SessionFactory {
 					),
 			},
 			speaker: () => this.#deps.speaker(turnKey),
-			runTask: (task) => this.#deps.runTask(turnKey, task),
+			runTask: (task) =>
+				this.#deps.runTask({ turn: turnKey, home: channel }, task),
 		};
 		if (agent) context.agent = agent;
 		const resourceLoader = new DefaultResourceLoader({

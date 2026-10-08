@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
 	createFauxCore,
+	type FauxResponseStep,
 	fauxAssistantMessage,
 	fauxText,
 	fauxToolCall,
@@ -31,7 +32,7 @@ const SELECTION = { id: "probe", tools: ["probe_task"], groups: [] };
  * A Pi runtime on a faux model whose turns call `probe_task`, a session tool that records whom
  * its session's turn is for and runs a task beside it; agent turns run with a stand-in team.
  */
-async function probeHost(responses: ReturnType<typeof fauxAssistantMessage>[]) {
+async function probeHost(responses: FauxResponseStep[]) {
 	const dir = mkdtempSync(join(tmpdir(), "roundtable-fail-closed-"));
 	const core = createFauxCore({ provider: "faux", models: [{ id: "faux-1" }] });
 	core.setResponses(responses);
@@ -222,6 +223,46 @@ test("a task beside a group seat's turn runs as that turn's speaker, whose tier 
 		});
 		expect(result).toEqual({ ok: true, text: "Done." });
 		expect(host.seen).toEqual([{ speaker: MEMBER, task: "Found it." }]);
+	} finally {
+		await host.done();
+	}
+});
+
+test("a task beside a group seat's turn works in the agent's own conversation, for the seat turn's speaker", async () => {
+	let worker: { home: string; speaker: Speaker | undefined } | undefined;
+	let host: Awaited<ReturnType<typeof probeHost>> | undefined;
+	host = await probeHost([
+		fauxAssistantMessage([fauxToolCall("probe_task", {})], {
+			stopReason: "toolUse",
+		}),
+		// The worker's answer, read while its session is the newest and its task runs.
+		() => {
+			const session = host?.sessions.at(-1);
+			worker = session && {
+				home: session.homeChannel,
+				speaker: session.speaker(),
+			};
+			return fauxAssistantMessage([fauxText("Found it.")]);
+		},
+		fauxAssistantMessage([fauxText("Done.")]),
+	]);
+	try {
+		await host.runtime.runTurn({
+			channel: "fake:group",
+			selection: SELECTION,
+			text: "Look it up.",
+			speaker: MEMBER,
+			agent: {
+				name: "infra",
+				session: "fake:group#infra",
+				home: "fake:infra",
+				group: "ops",
+			},
+		});
+		const seat = host.sessions.find((session) => session.agent);
+		// Its home is the seat session's, which a surface carries, not the seat's key, which none does.
+		expect(worker).toEqual({ home: seat?.homeChannel ?? "", speaker: MEMBER });
+		expect(worker?.home).not.toBe("fake:group#infra");
 	} finally {
 		await host.done();
 	}
