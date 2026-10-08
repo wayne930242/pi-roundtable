@@ -217,6 +217,7 @@ const CORE_EXTENSIONS = {
 	confirmationGate: noop,
 	askUser: noop,
 	selfCompactGuard: noop,
+	privateMemory: noop,
 	activeTools: noop,
 };
 

@@ -1,10 +1,10 @@
-import { SYSTEM_PRINCIPAL } from "../identity/principal-store.ts";
 import type { OwnerIdentity } from "../identity.ts";
 import { ownerMemoryExtension } from "../modules/memory/owner-memory.ts";
 import { PgMemoryStore } from "../modules/memory/owner-memory-store.ts";
 import { memoryPrecheckRegistry } from "../modules/schedules/prechecks.ts";
 import { PgScheduleStore } from "../modules/schedules/schedule-store.ts";
 import type { RoundtablePlugin } from "../plugin.ts";
+import { memoryReader } from "../runtime/session-conversation.ts";
 import { MEMORY, type MemoryStore, PRECHECKS, SCHEDULES } from "../services.ts";
 import type { SessionContext, SessionTool } from "../sessions.ts";
 import type { Tier } from "../speakers.ts";
@@ -32,20 +32,19 @@ function memoryOwner(
 ): { principalId: string; name: string } | undefined {
 	const speaker = session.speaker();
 	const { conversation } = session;
-	if (conversation.visibility === "private") {
-		const { principalId, principal } = conversation;
-		// A principal 0.8 left is named by their id until someone names them; their speaker has a name.
-		const named =
-			principal && principal.displayName !== principal.id
-				? principal.displayName
-				: undefined;
-		const name =
-			named ??
-			(speaker?.principalId === principalId ? speaker.name : principalId);
-		return { principalId, name };
-	}
-	if (!speaker || speaker.principalId === SYSTEM_PRINCIPAL) return undefined;
-	return { principalId: speaker.principalId, name: speaker.name };
+	const principalId = memoryReader(conversation, speaker);
+	if (principalId === undefined) return undefined;
+	// A principal 0.8 left is named by their id until someone names them; their speaker has a name.
+	const principal =
+		conversation.visibility === "private" ? conversation.principal : undefined;
+	const named =
+		principal && principal.displayName !== principal.id
+			? principal.displayName
+			: undefined;
+	const name =
+		named ??
+		(speaker?.principalId === principalId ? speaker.name : principalId);
+	return { principalId, name };
 }
 
 /** The memory tools and prompt block of every conversation, over the given store; none for a persona without memory. */

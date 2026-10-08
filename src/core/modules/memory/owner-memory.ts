@@ -46,6 +46,24 @@ export interface MemoryFor {
 	whose(): { principalId: string; name: string } | undefined;
 }
 
+/** The memory tools, whose results hold one person's memory. */
+export const MEMORY_TOOLS = [
+	"memory_add",
+	"memory_search",
+	"memory_remove",
+] as const;
+
+/** What a memory tool's result records in the session: whose memory it holds. */
+interface PrivateMemory {
+	privateTo: string;
+}
+
+/** A memory tool's answer from the principal's memory, which records whose it is. */
+function privateText(text: string, principalId: string) {
+	const details: PrivateMemory = { privateTo: principalId };
+	return { ...toolText(text), details };
+}
+
 /** What the memory tools answer in a turn that reads no one's memory, such as the host's own report. */
 const NO_ONE =
 	"This turn reads no one's memory, so there is nothing to remember, search, or forget in it.";
@@ -61,9 +79,15 @@ export function ownerMemoryExtension(
 	memory: MemoryFor,
 ): ExtensionFactory {
 	const o = addresseeWords(memory.addressee);
+	// Whose memory the call reads and changes; its result records them.
 	const storeOf = () => {
 		const whose = memory.whose();
-		return whose && memories.forSpeaker(whose.principalId);
+		return (
+			whose && {
+				store: memories.forSpeaker(whose.principalId),
+				whose: whose.principalId,
+			}
+		);
 	};
 	const shared = memory.describesSpeakers
 		? " Whoever is speaking has a memory of their own, shared by every agent; this reads and changes theirs, not someone else's."
@@ -104,10 +128,13 @@ export function ownerMemoryExtension(
 				),
 			}),
 			execute: async (_toolCallId, params) => {
-				const store = storeOf();
-				if (!store) return toolError(NO_ONE);
-				const saved = await store.add(params.fact, params.kind, params.date);
-				return toolText(`Remembered as ${saved.kind}: ${line(saved).slice(2)}`);
+				const of = storeOf();
+				if (!of) return toolError(NO_ONE);
+				const saved = await of.store.add(params.fact, params.kind, params.date);
+				return privateText(
+					`Remembered as ${saved.kind}: ${line(saved).slice(2)}`,
+					of.whose,
+				);
 			},
 		});
 
@@ -119,15 +146,16 @@ export function ownerMemoryExtension(
 				query: Type.String({ description: "Keywords separated by spaces." }),
 			}),
 			execute: async (_toolCallId, params) => {
-				const store = storeOf();
-				if (!store) return toolError(NO_ONE);
-				const found = await store.search(params.query);
-				return toolText(
+				const of = storeOf();
+				if (!of) return toolError(NO_ONE);
+				const found = await of.store.search(params.query);
+				return privateText(
 					found.length === 0
 						? `Nothing remembered matches "${params.query}".`
 						: found
 								.map((memory) => `- [${memory.kind}] ${line(memory).slice(2)}`)
 								.join("\n"),
+					of.whose,
 				);
 			},
 		});
@@ -142,16 +170,17 @@ export function ownerMemoryExtension(
 				}),
 			}),
 			execute: async (_toolCallId, params) => {
-				const store = storeOf();
-				if (!store) return toolError(NO_ONE);
-				const removed = await store.remove(params.text);
+				const of = storeOf();
+				if (!of) return toolError(NO_ONE);
+				const removed = await of.store.remove(params.text);
 				if (removed.length === 0) {
 					return toolError(
 						`No remembered fact contains "${params.text}". Nothing was forgotten.`,
 					);
 				}
-				return toolText(
+				return privateText(
 					`Forgot:\n${removed.map((fact) => `- ${fact}`).join("\n")}`,
+					of.whose,
 				);
 			},
 		});

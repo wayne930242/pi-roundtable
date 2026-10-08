@@ -37,6 +37,7 @@ import {
 	type ConfirmationGate,
 	confirmationGateExtension,
 } from "./extensions/confirmation-gate.ts";
+import { privateMemoryExtension } from "./extensions/private-memory.ts";
 import {
 	COMPACT_TOOL,
 	selfCompactGuardExtension,
@@ -53,7 +54,11 @@ import {
 	sessionExtensions,
 	skillsKey,
 } from "./runtime-types.ts";
-import { sessionAddressee, turnAddressee } from "./session-conversation.ts";
+import {
+	memoryReader,
+	sessionAddressee,
+	turnAddressee,
+} from "./session-conversation.ts";
 
 /** What a session factory asks of the runtime that owns the turns. */
 export interface SessionFactoryDeps {
@@ -325,6 +330,11 @@ export class SessionFactory {
 					),
 				),
 				selfCompactGuard: selfCompactGuardExtension(),
+				// Each request carries no one's memory but the running turn's reader's.
+				privateMemory: privateMemoryExtension(
+					conversation.visibility === "shared",
+					() => memoryReader(conversation, this.#deps.speaker(turnKey)),
+				),
 				activeTools: activeToolsExtension(() => state.tools),
 			}),
 			// An agent's prompt is set before each run by the agent-prompt extension.

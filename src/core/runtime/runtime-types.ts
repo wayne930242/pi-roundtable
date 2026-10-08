@@ -101,12 +101,14 @@ export interface CoreExtensions {
 	confirmationGate: ExtensionFactory;
 	askUser: ExtensionFactory;
 	selfCompactGuard: ExtensionFactory;
+	privateMemory: ExtensionFactory;
 	activeTools: ExtensionFactory;
 }
 
 /**
  * A session's extensions in load order: the tools phase, the core's attachment, gate, ask-user,
- * and compact guard, the compactor, the MCP phase, and active-tools last, so its
+ * and compact guard, the compactor, the MCP phase, the memory projection, so each request is
+ * projected after every other extension changed it, and active-tools last, so its
  * before_agent_start handler runs after every other extension's.
  */
 export function sessionExtensions(
@@ -127,6 +129,7 @@ export function sessionExtensions(
 		{ name: "self-compact-guard", factory: core.selfCompactGuard },
 		...contributed(plan.compaction ? [plan.compaction] : []),
 		...contributed(plan.mcp),
+		{ name: "private-memory", factory: core.privateMemory },
 		{ name: "active-tools", factory: core.activeTools },
 	];
 }

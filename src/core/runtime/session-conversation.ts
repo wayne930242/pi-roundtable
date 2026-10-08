@@ -100,6 +100,20 @@ export function turnAddressee(
 }
 
 /**
+ * Whose memory a session's running turn reads: a private conversation's person's, whoever speaks
+ * in it, and in a shared one the speaker's; no one's for the host's own turns there, nor while
+ * no turn runs.
+ */
+export function memoryReader(
+	conversation: SessionConversation,
+	speaker: Speaker | undefined,
+): string | undefined {
+	if (conversation.visibility === "private") return conversation.principalId;
+	if (!speaker || speaker.principalId === SYSTEM_PRINCIPAL) return undefined;
+	return speaker.principalId;
+}
+
+/**
  * Why a turn may not run in the session's conversation: someone other than its person speaking
  * in a private one. The host's own turns may.
  */

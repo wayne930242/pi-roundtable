@@ -1602,7 +1602,7 @@ The built-in addons use it: each declares the tiers of its own tools.
 
 A session tool is a Pi extension placed in every conversation session by its phase: `tools`, `compaction`, or `mcp`.
 Use it for tools that `defineTool` cannot express, such as a set that changes while the process runs (bump `revision`) or a tool that depends on the session.
-Each extension needs a unique name; the core reserves `read-attachment`, `confirmation-gate`, `ask-user`, `self-compact-guard`, and `active-tools`.
+Each extension needs a unique name; the core reserves `read-attachment`, `confirmation-gate`, `ask-user`, `self-compact-guard`, `private-memory`, and `active-tools`.
 A runtime of your own pins the active tools the way the core does: `activeToolsExtension(() => tools)` from `pi-roundtable/kit` is the extension the core places last, so its handler runs after every other extension's.
 At most one plugin may add a `compaction` extension, and it must name the `engine` its compactions record.
 
@@ -1754,6 +1754,7 @@ The runtime reads `prompt()` when it creates the conversation's session, so mess
   The Pi runtime refuses when it makes the session; a runtime of your own does the same, as the example's does.
 - With the memory addon on, the conversation decides whose memory the system prompt carries and the memory tools change, by principal and never by tier: a private conversation's person's, whoever speaks in it; in a shared conversation, each turn's speaker's (`speaker.principalId`), so a second owner reads their own and not the primary owner's; and no one's in the host's own turns (`SYSTEM_PRINCIPAL`) in a shared conversation.
   The primary owner's memory keeps its 0.8 heading and rows: their principal is 0.8's owner id.
+- A shared conversation's history never hands one person's memory to another. Each memory tool's result records whose memory it holds (`details: { privateTo: <principalId> }`), and before every model request the Pi runtime shows a result of someone other than the turn's reader, the host's own turns included, as `(another person's private memory, hidden)`, and a memory result recorded before results said whose as a placeholder too; the prompt states Pi recorded in the history collapse into the current prompt alone, so an earlier speaker's memory section is not sent either. What people wrote, and the assistant's replies, stay shared. A tool of your own whose result holds someone's private memory returns the same `details`, and is hidden the same way.
 - A conversation 0.8 recorded through `context.turns` without `conversation` stays shared: whether such a room was one person's cannot be told, and adopting it for someone would refuse everyone else's turns. Its memory is each speaker's, as before, and its tools name the speaker. A plugin whose 0.8 conversations were one person's adopts them with `CONVERSATIONS.adopt`, as remote-mcp does.
 
 Call `context.turns.run(input)` inside your claim's queue task to run a turn in a conversation it owns.
