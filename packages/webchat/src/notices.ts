@@ -36,6 +36,12 @@ const MAX_NOTICE_CHARS = 4096;
 // ASCII UUID and timestamps plus JSON field names fit within this reserve.
 const FRAME_OVERHEAD = 256;
 
+/** The first `length` UTF-16 units of `text`, one shorter when that would split a surrogate pair. */
+const cut = (text: string, length: number): string => {
+	const last = text.charCodeAt(length - 1);
+	return text.slice(0, last >= 0xd800 && last <= 0xdbff ? length - 1 : length);
+};
+
 /** Notices scoped by surface and principal in every query, including marking one read. */
 export class PgNotices {
 	readonly #sql: SQL;
@@ -75,9 +81,10 @@ export class PgNotices {
 	};
 
 	async add(principalId: string, text: string): Promise<Notice> {
+		// A cut between a surrogate pair would store U+FFFD, so it moves before the pair.
 		const bounded =
 			text.length > this.#textChars
-				? `${text.slice(0, this.#textChars - 1)}…`
+				? `${cut(text, this.#textChars - 1)}…`
 				: text;
 		return this.#sql.begin(async (sql) => {
 			// Serialize insert/prune for one inbox even across pools/processes.

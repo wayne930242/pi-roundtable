@@ -125,6 +125,11 @@ describeDb("webchat's persistent private inbox", () => {
 			const first = await notices.add(principal, "\u0001".repeat(50_000));
 			expect(first.text.length).toBeLessThanOrEqual(4096);
 			expect(first.text.endsWith("…")).toBe(true);
+			const split = await notices.add(
+				principal,
+				`${"a".repeat(4094)}😀${"b".repeat(10)}`,
+			);
+			expect(split.text).toBe(`${"a".repeat(4094)}…`);
 			const bytes = Buffer.byteLength(
 				JSON.stringify({ type: "notice", notice: first }),
 			);
