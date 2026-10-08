@@ -252,8 +252,11 @@ export class SessionFactory {
 		kind: string,
 		/** Whom the conversation serves, fixed for the session's life. */
 		conversation: SessionConversation,
-		/** The conversation whose running turn the session acts in, when not its own: a worker's. */
-		turn?: ChannelKey,
+		/**
+		 * A worker's: the conversation whose running turn it acts in, and that conversation's memory
+		 * policy, which it keeps rather than reading its own kind's.
+		 */
+		worker?: { turn: ChannelKey; memory: SessionContext["memory"] },
 	): Promise<ChannelSession> {
 		const { agentDir, model, thinking, logger } = this.#options;
 		// An agent's prompt is set before each run; the other kinds are refused here, before a session is built.
@@ -262,12 +265,18 @@ export class SessionFactory {
 		const addressee = agent
 			? THE_SPEAKER
 			: sessionAddressee(conversation, this.#options.owner);
+		// An agent's conversations read each speaker's memory; another kind's, as its persona says;
+		// a worker's, as the conversation it works for.
+		const memory =
+			worker?.memory ??
+			(agent ? "speaker" : (this.link().personaMemory?.(kind) ?? "speaker"));
 		const state = {
 			tools: [] as readonly string[],
 			revisions: revisionsKey(this.plan),
 			skills: skillsKey(skills),
 			conversation,
 			addressee,
+			memory,
 		};
 		const awaited = planOrder(this.plan).flatMap(
 			(tool) => tool.snapshot().awaitTools ?? [],
@@ -284,7 +293,7 @@ export class SessionFactory {
 		);
 		// The running turn is the conversation's: an agent's seat in a group, or its own channel; a
 		// worker's is the turn that started it.
-		const turnKey = turn ?? agent?.session ?? channel;
+		const turnKey = worker?.turn ?? agent?.session ?? channel;
 		const context: SessionContext = {
 			kind: agent ? "agent" : kind,
 			homeChannel: channel,
@@ -300,10 +309,7 @@ export class SessionFactory {
 			},
 			conversation,
 			addressee,
-			// An agent's conversations read each speaker's memory; another kind's, as its persona says.
-			memory: agent
-				? "speaker"
-				: (this.link().personaMemory?.(kind) ?? "speaker"),
+			memory,
 			speaker: () => this.#deps.speaker(turnKey),
 			runTask: (task) =>
 				this.#deps.runTask({ turn: turnKey, home: channel }, task),

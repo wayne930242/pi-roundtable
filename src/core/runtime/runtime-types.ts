@@ -146,4 +146,6 @@ export interface ChannelSession {
 	conversation: SessionConversation;
 	/** Whom its tool descriptions address. */
 	addressee: OwnerIdentity;
+	/** Whose memory its turns read, as resolved when it was built; a worker beside it keeps the same. */
+	memory: SessionContext["memory"];
 }

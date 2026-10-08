@@ -347,8 +347,8 @@ export class PiAgentRuntime implements AgentRuntime {
 				`a task runs beside a turn of its conversation, at that turn's tier, and ${scope.turn} has no turn running`,
 			);
 		// A worker asks nothing, and works in its conversation for the turn that started it, for
-		// whom that conversation serves.
-		const { conversation } = await this.#sessions.session(scope.turn);
+		// whom that conversation serves, under its memory policy.
+		const { conversation, memory } = await this.#sessions.session(scope.turn);
 		const worker = await this.#factory.create(
 			scope.home,
 			SessionManager.inMemory(this.#factory.workDir()),
@@ -358,7 +358,7 @@ export class PiAgentRuntime implements AgentRuntime {
 			undefined,
 			"owner",
 			conversation,
-			scope.turn,
+			{ turn: scope.turn, memory },
 		);
 		const { session } = worker;
 		const toolCalls: string[] = [];

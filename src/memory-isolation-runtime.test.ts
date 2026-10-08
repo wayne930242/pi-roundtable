@@ -558,3 +558,34 @@ describe("a conversation nothing names at a turn", () => {
 		}
 	});
 });
+
+describe("a task beside a turn", () => {
+	test("works under its conversation's memory policy: a persona without memory gives its worker none", async () => {
+		let worker: TranscriptContext | undefined;
+		const host = await isolationHost(STORE(), [
+			call("probe_task", {}),
+			(context) => {
+				worker = context;
+				return fauxAssistantMessage("Found nothing.");
+			},
+			fauxAssistantMessage("Done."),
+		]);
+		try {
+			expect(
+				(
+					await host.run(ANN, "fake:quiz", {
+						conversation: privateTo("ann"),
+						kind: "quiz",
+					})
+				).ok,
+			).toBe(true);
+			if (!worker) throw new Error("the worker asked nothing");
+			for (const sent of asSent(worker)) {
+				expect(sent).not.toContain("ANN_CORE_SECRET");
+				expect(sent).not.toContain("memory_search");
+			}
+		} finally {
+			await host.stop();
+		}
+	});
+});
