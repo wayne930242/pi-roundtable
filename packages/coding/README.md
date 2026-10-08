@@ -70,7 +70,7 @@ Workers activate only `SHELL_TOOLS` (`bash`, `read`, `edit`, `write`); extension
 | --- | --- | --- |
 | `repo_add` | `repo` | Clone `owner/repo` into `shelfDir/owner/repo`; refuse invalid names and existing clones. |
 | `repo_list` | `fetch?` | List paths, branches, upstream ahead/behind counts, dirty files, last commits, prose summaries, CI hints and linked skills. |
-| `repo_task` | `repo`, `task`, `skills?` | Start a background worker, returning its job number immediately. |
+| `repo_task` | `repo`, `task`, `skills?` | Start a background worker, returning its job number immediately. The host's own turns, such as a report's, may not. |
 | `repo_change_report` | `repo` | Fetch and post the commits and diffstat ahead of the default branch; return its full SHA. |
 | `repo_push` | `repo`, `sha` | Push the exact reported SHA to the reported default branch, without force, after the hold gate permits it. |
 

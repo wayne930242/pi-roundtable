@@ -5,6 +5,7 @@ import {
 	type HoldCheck,
 	PluginError,
 	SKILLS,
+	SYSTEM_PRINCIPAL,
 	serviceKey,
 	type ThinkingLevel,
 	ToolRefusal,
@@ -368,6 +369,11 @@ export function coding(options: CodingOptions) {
 						}),
 						run: ({ repo, task, skills: names }, turn) =>
 							refusal(async () => {
+								// A report's turn reads text no one vouches for; it hands no worker a task.
+								if (turn.speaker?.principalId === SYSTEM_PRINCIPAL)
+									throw new AgentError(
+										"the host's own turns, such as a report's, start no coding tasks; ask the owner to start it",
+									);
 								if (shipping.has(repo))
 									throw new AgentError(
 										"A report or push is in progress for this repository.",

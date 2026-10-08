@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- `repo_task` refuses the host's own turns, whose speaker is `SYSTEM_PRINCIPAL`, such as an ops error report's or a Discord webhook report's: their text is untrusted input, and a coding task started there would run later as the owner's. Ask the owner to start it. Needs pi-roundtable 0.9, which exports `SYSTEM_PRINCIPAL`.
+
 ## [0.8.0] - 2026-10-07
 
 - Release in lockstep with pi-roundtable 0.8.0; no package-specific behavior changes.
