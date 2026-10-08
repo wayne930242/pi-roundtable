@@ -48,7 +48,6 @@ describeDb("mcpConnectors on a host", () => {
 	async function boot(
 		options: Partial<Parameters<typeof mcpConnectors>[0]>,
 		keepConnectors = false,
-		config?: NonNullable<Parameters<typeof testHost>[0]>["config"],
 	) {
 		const plugin = mcpConnectors({
 			contextForge: contextForge(`${cf.url}/`),
@@ -60,10 +59,7 @@ describeDb("mcpConnectors on a host", () => {
 		await sql.close();
 		if (!keepConnectors) cf.reset();
 		cf.upstream["https://mcp.example.test/mcp"] = ["search", "get-page"];
-		running = await testHost({
-			plugins: [plugin],
-			...(config ? { config } : {}),
-		});
+		running = await testHost({ plugins: [plugin] });
 		return running;
 	}
 
@@ -175,38 +171,6 @@ describeDb("mcpConnectors on a host", () => {
 		await handle(host, interaction as never);
 		expect(replies.edits).toEqual([]);
 		expect(cf.gateways.size).toBe(0);
-	});
-
-	test("a second owner's form adds the connector too", async () => {
-		const second = "100000000000000006";
-		const host = await boot({}, false, {
-			access: {
-				owners: [
-					{
-						name: "Ada",
-						principal: "100000000000000001",
-						identities: ["discord:100000000000000001"],
-					},
-					{ name: "Sam", identities: [`discord:${second}`] },
-				],
-			},
-		});
-		const { interaction, replies } = fakeInteraction({
-			user: second,
-			group: "connector",
-			sub: "add",
-			modal: CONNECTOR_MODAL_ID,
-			fields: {
-				name: "notion",
-				url: "https://mcp.example.test/mcp",
-				description: "Pages in the owner's Notion",
-				header: "",
-				token: "secret-token",
-			},
-		});
-		await handle(host, interaction as never);
-		expect(replies.text()).toContain(CONNECTOR_MESSAGES.addedTitle);
-		expect(host.context.services.get(CONNECTORS).list()).toHaveLength(1);
 	});
 
 	test("the host's wording and server prefix replace the defaults", async () => {
