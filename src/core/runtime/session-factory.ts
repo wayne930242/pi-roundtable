@@ -37,7 +37,10 @@ import {
 	type ConfirmationGate,
 	confirmationGateExtension,
 } from "./extensions/confirmation-gate.ts";
-import { privateMemoryExtension } from "./extensions/private-memory.ts";
+import {
+	MemoryDraws,
+	privateMemoryExtension,
+} from "./extensions/private-memory.ts";
 import {
 	COMPACT_TOOL,
 	selfCompactGuardExtension,
@@ -277,6 +280,7 @@ export class SessionFactory {
 			conversation,
 			addressee,
 			memory,
+			draws: new MemoryDraws(),
 		};
 		const awaited = planOrder(this.plan).flatMap(
 			(tool) => tool.snapshot().awaitTools ?? [],
@@ -340,6 +344,7 @@ export class SessionFactory {
 				privateMemory: privateMemoryExtension(
 					conversation.visibility === "shared",
 					() => memoryReader(conversation, this.#deps.speaker(turnKey)),
+					state.draws,
 				),
 				activeTools: activeToolsExtension(() => state.tools),
 			}),

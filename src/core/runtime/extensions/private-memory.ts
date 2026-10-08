@@ -62,14 +62,56 @@ export function memoryProjection(
 }
 
 /**
+ * The tool calls a session runs at once, and those of them that drew on the reader's memory while
+ * they ran, such as one whose task's worker read it: their results hold that memory too.
+ */
+export class MemoryDraws {
+	readonly #running = new Set<string>();
+	readonly #drawn = new Set<string>();
+
+	/** Every call running now draws on the reader's memory: something it started read it. */
+	drawn(): void {
+		for (const id of this.#running) this.#drawn.add(id);
+	}
+
+	start(toolCallId: string): void {
+		this.#running.add(toolCallId);
+	}
+
+	/** Whether the call drew on the reader's memory; it is forgotten, as it ended. */
+	end(toolCallId: string): boolean {
+		this.#running.delete(toolCallId);
+		return this.#drawn.delete(toolCallId);
+	}
+}
+
+/**
  * Projects each model request of a session so it carries no one's memory but the running turn's
- * reader's: a person's memory is theirs per request, never the history's to share.
+ * reader's: a person's memory is theirs per request, never the history's to share. A tool result
+ * that drew on the reader's memory, nested calls' and tasks' included, records it as theirs, as a
+ * memory tool's does.
  */
 export function privateMemoryExtension(
 	shared: boolean,
 	reader: () => string | undefined,
+	draws: MemoryDraws,
 ): ExtensionFactory {
 	return (pi) => {
+		pi.on("tool_execution_start", (event) => {
+			draws.start(event.toolCallId);
+		});
+		pi.on("tool_result", (event) => {
+			if (!draws.end(event.toolCallId)) return undefined;
+			const whose = reader();
+			if (whose === undefined) return undefined;
+			const details = "details" in event ? event.details : undefined;
+			return {
+				details: {
+					...(typeof details === "object" && details !== null ? details : {}),
+					privateTo: whose,
+				},
+			};
+		});
 		pi.on("context_with_system", (event) => {
 			const messages = memoryProjection(event.messages, {
 				shared,

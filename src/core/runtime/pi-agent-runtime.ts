@@ -24,6 +24,7 @@ import {
 	type ThinkingLevel,
 	type ThinkingSetting,
 } from "../models.ts";
+import { MEMORY_TOOLS } from "../modules/memory/owner-memory.ts";
 import { withoutReplyFiles } from "../reply-files.ts";
 import type { TransientTask } from "../sessions.ts";
 import { textOf } from "../shared/session-messages.ts";
@@ -41,7 +42,11 @@ import {
 	type TurnMessage,
 } from "./runtime-types.ts";
 import { archiveSessions } from "./session-archive.ts";
-import { refusedSpeaker, turnAddressee } from "./session-conversation.ts";
+import {
+	memoryReader,
+	refusedSpeaker,
+	turnAddressee,
+} from "./session-conversation.ts";
 import { SessionFactory } from "./session-factory.ts";
 import { promptImages, SteerableRun } from "./steerable-run.ts";
 import { lastReply, turnAnswer, unspokenTurn } from "./turn-answer.ts";
@@ -335,7 +340,8 @@ export class PiAgentRuntime implements AgentRuntime {
 			);
 		// A worker asks nothing, and works in its conversation for the turn that started it, for
 		// whom that conversation serves, under its memory policy.
-		const { conversation, memory } = await this.#sessions.session(scope.turn);
+		const parent = await this.#sessions.session(scope.turn);
+		const { conversation, memory } = parent;
 		const worker = await this.#factory.create(
 			scope.home,
 			SessionManager.inMemory(this.#factory.workDir()),
@@ -357,6 +363,13 @@ export class PiAgentRuntime implements AgentRuntime {
 		const timer = setTimeout(abort, task.timeoutMs);
 		try {
 			const registered = new Set(session.getAllTools().map((t) => t.name));
+			// A worker that loaded the reader's memory may report it: the calls of the turn running now,
+			// the one that started it among them, then record their results as the reader's.
+			if (
+				memoryReader(conversation, turn.speaker) !== undefined &&
+				MEMORY_TOOLS.some((name) => registered.has(name))
+			)
+				parent.draws.drawn();
 			const { tier } = turn;
 			worker.tools = this.#factory
 				.taskTools(task.selection, task.exclude)

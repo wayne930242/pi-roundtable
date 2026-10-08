@@ -589,3 +589,51 @@ describe("a task beside a turn", () => {
 		}
 	});
 });
+
+describe("a task beside a turn in a shared conversation", () => {
+	test("its result, which the worker drew from the reader's memory, reaches no one else's request", async () => {
+		const seen: TranscriptContext[] = [];
+		const look: FauxResponseStep = (context) => {
+			seen.push(context);
+			return fauxAssistantMessage("OK.");
+		};
+		const host = await isolationHost(STORE(), [
+			// Ann's turn hands a worker the lookup; the worker searches her memory and reports it.
+			call("probe_task", {}),
+			call("memory_search", { query: "doctor" }),
+			(context) => {
+				const found = context.messages.findLast((m) => m.role === "toolResult");
+				return fauxAssistantMessage(
+					`Found: ${found?.role === "toolResult" ? JSON.stringify(found.content) : "nothing"}`,
+				);
+			},
+			look,
+			look,
+			look,
+			look,
+		]);
+		try {
+			expect((await host.run(ANN, "fake:room")).ok).toBe(true);
+			const [ann] = seen.splice(0);
+			if (!ann) throw new Error("Ann's turn asked nothing after its task");
+			// The worker's report holds her note, in her own turn.
+			expect(JSON.stringify(ann.messages)).toContain("ANN_NOTE_SECRET");
+			expect((await host.run(BO, "fake:room")).ok).toBe(true);
+			expect((await host.run(SYSTEM, "fake:room")).ok).toBe(true);
+			expect((await host.run(ANN, "fake:room")).ok).toBe(true);
+			const [bo, system, again] = seen;
+			if (!bo || !system || !again) throw new Error("a turn asked nothing");
+			for (const request of [bo, system])
+				for (const sent of asSent(request)) {
+					for (const secret of SECRETS) expect(sent).not.toContain(secret);
+					expect(sent).toContain(HIDDEN);
+				}
+			for (const sent of asSent(again)) {
+				expect(sent).toContain("ANN_NOTE_SECRET");
+				expect(sent).not.toContain(HIDDEN);
+			}
+		} finally {
+			await host.stop();
+		}
+	});
+});

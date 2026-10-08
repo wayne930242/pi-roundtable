@@ -22,6 +22,7 @@ import {
 	type SessionTool,
 } from "../sessions.ts";
 import type { ToolTiers } from "../tool-tiers.ts";
+import type { MemoryDraws } from "./extensions/private-memory.ts";
 import type { PendingConfirmationStore } from "./pending-confirmation-store.ts";
 
 export type TurnMessage = Extract<
@@ -148,4 +149,6 @@ export interface ChannelSession {
 	addressee: OwnerIdentity;
 	/** Whose memory its turns read, as resolved when it was built; a worker beside it keeps the same. */
 	memory: SessionContext["memory"];
+	/** Its tool calls running now, which a task that reads the reader's memory marks as drawing on it. */
+	draws: MemoryDraws;
 }

@@ -3,6 +3,7 @@ import type { ContextWithSystemEvent } from "@earendil-works/pi-coding-agent";
 import {
 	HIDDEN_MEMORY,
 	HIDDEN_UNRECORDED_MEMORY,
+	MemoryDraws,
 	memoryProjection,
 } from "./private-memory.ts";
 
@@ -100,5 +101,22 @@ describe("the memory a request may carry", () => {
 				{ shared: true, reader: "bo" },
 			),
 		).toBeUndefined();
+	});
+});
+
+describe("the tool calls that draw on the reader's memory", () => {
+	test("every call running when something reads it draws on it, a call nested in another's too; a later one does not", () => {
+		const draws = new MemoryDraws();
+		draws.start("outer");
+		draws.start("outer/1");
+		draws.start("beside");
+		expect(draws.end("beside")).toBe(false);
+		draws.drawn();
+		draws.start("later");
+		expect(draws.end("outer/1")).toBe(true);
+		expect(draws.end("outer")).toBe(true);
+		expect(draws.end("later")).toBe(false);
+		// An ended call is forgotten.
+		expect(draws.end("outer")).toBe(false);
 	});
 });
