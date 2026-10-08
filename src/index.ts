@@ -27,6 +27,7 @@ export type {
 } from "./core/config/access.ts";
 export type {
 	AdapterConfig,
+	BackgroundConfig,
 	DiscordConfig,
 	Pronouns,
 	RoundtableConfig,
@@ -162,7 +163,10 @@ export { promptScope } from "./core/interactions/prompts.ts";
 export type { JudgeModel } from "./core/judging/model-judge.ts";
 export type { LogEntry, LogFn, Logger } from "./core/log.ts";
 export type { ThinkingLevel, ThinkingSetting } from "./core/models.ts";
-export { PERSONAL_TARGET } from "./core/modules/background/personal-target.ts";
+export {
+	PERSONAL_TARGET,
+	type PerPrincipalLimits,
+} from "./core/modules/background/personal-target.ts";
 export type {
 	DelegationJob,
 	DelegationOutcome,

@@ -1915,6 +1915,7 @@ In a turn nobody is named for, the schedule and delegation tools refuse.
 - Two targets with the same name are refused, naming both plugins.
 - The core's `modules` plugin contributes `PERSONAL_TARGET` (name `"owner"`, exported from the main entry; `OWNER_TARGET` is a deprecated alias) on every host, for every person's conversations whose claim answers background turns, such as the agents' and an app's owner conversation.
   The agent server's claim answers that target and skips all others, so a turn for another target never runs with the owner's tools.
+  Its limits are 0.8's, and it holds no one to a number of schedules or running tasks across their conversations unless the host's configuration says so: `background: { perPrincipal: { schedules: 20, delegations: 2 } }` sets its `perPrincipal` and `maxRunningPerPrincipal`. A host that serves many people sets both.
 - The built-in schedule and delegation tools make `PERSONAL_TARGET` work, and a session has them only where it can run: when the claim that owns its conversation has `background`, or, for a conversation no chat surface carries, when the host has the owner's Discord messages to post runs in. There only the primary owner's schedules and delegated tasks are set up, and anyone else's are refused; such a conversation the host has no record of is the speaker's own, so its schedule tools see only the speaker's schedules.
   In a private conversation, as the host's conversation registry records it, `schedule_list`, `schedule_update`, and `schedule_cancel` see only the speaker's own schedules.
 - A turn for a target no plugin contributes is skipped with the reason `no plugin contributes the background target "<name>"`.
@@ -2867,6 +2868,7 @@ Import from the entries listed below; source area files are internal.
 | `AvatarStudio` | `pi-roundtable` | type |
 | `BACKGROUND_TURNS` | `pi-roundtable` | value |
 | `CONVERSATIONS` | `pi-roundtable` | value |
+| `BackgroundConfig` | `pi-roundtable` | type |
 | `BackgroundRunsAs` | `pi-roundtable` | type |
 | `BackgroundTarget` | `pi-roundtable` | type |
 | `BackgroundTurn` | `pi-roundtable` | type |
@@ -2948,6 +2950,7 @@ Import from the entries listed below; source area files are internal.
 | `OwnerPrompts` | `pi-roundtable` | type |
 | `OwnerQuestion` | `pi-roundtable` | type |
 | `PendingConfirmation` | `pi-roundtable` | type |
+| `PerPrincipalLimits` | `pi-roundtable` | type |
 | `Persona` | `pi-roundtable` | type |
 | `PluginContext` | `pi-roundtable` | type |
 | `PluginIdentity` | `pi-roundtable` | type |

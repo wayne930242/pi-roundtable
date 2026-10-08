@@ -76,6 +76,25 @@ describe("resolveConfig", () => {
 		});
 	});
 
+	test("each person's background limits are unset by default, and set as given", () => {
+		expect(resolveConfig(minimal).background).toEqual({ perPrincipal: {} });
+		expect(
+			resolveConfig({
+				...minimal,
+				background: { perPrincipal: { schedules: 10, delegations: 2 } },
+			}).background,
+		).toEqual({ perPrincipal: { schedules: 10, delegations: 2 } });
+		expect(
+			refused({ ...minimal, background: { perPrincipal: { schedules: 0 } } }),
+		).toContain("config background.perPrincipal.schedules");
+		expect(
+			refused({
+				...minimal,
+				background: { perPrincipal: { delegations: 1.5 } },
+			}),
+		).toContain("config background.perPrincipal.delegations");
+	});
+
 	test("an unknown key names the nearest known key, at any depth", () => {
 		expect(refused({ ...minimal, discrod: {} })).toStartWith(
 			'config discrod: unknown key. Did you mean "discord"? The keys here are name, owner, discord,',

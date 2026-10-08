@@ -132,6 +132,42 @@ describeDb("the personal background target on a host without Discord", () => {
 		}
 	});
 
+	test("the configured per-person limits reach the personal target, and hold each person to that many schedules across their conversations", async () => {
+		const turns: BackgroundTurn[] = [];
+		host = await testHost({
+			discord: false,
+			plugins: [desk(turns)],
+			config: {
+				background: { perPrincipal: { schedules: 1, delegations: 1 } },
+			},
+		});
+		expect(host.context.conversations.target("owner")).toMatchObject({
+			schedules: { perChannel: 20, perPrincipal: 1 },
+			delegation: { maxRunning: 3, maxRunningPerPrincipal: 1 },
+		});
+		const store = host.context.services.get(SCHEDULES);
+		for (const kept of await store.all()) await store.remove(kept.id);
+		const at = (home: string) =>
+			({
+				...host?.sessionContext(),
+				homeChannel: home,
+				turnChannel: home,
+				speaker: () => ADA,
+			}) as SessionContext;
+		const create = async (home: string) =>
+			(await toolsOf(host as TestHost, "schedules", at(home))).get(
+				"schedule_create",
+			)?.({ title: "patrol", prompt: "check the disk", in_minutes: 600 });
+		try {
+			expect(await create("test:a")).toContain("Scheduled #");
+			expect(await create("test:b")).toContain(
+				"the most one person may have here",
+			);
+		} finally {
+			for (const kept of await store.all()) await store.remove(kept.id);
+		}
+	});
+
 	test("with no claim that takes background turns, no session has the schedule or delegation tools, as in 0.8", async () => {
 		host = await testHost({ discord: false });
 		const names = (await host.sessionTools()).flatMap(

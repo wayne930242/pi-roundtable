@@ -1,5 +1,6 @@
 import type { ExtensionFactory } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import type { BackgroundTarget } from "../../contract/channels.ts";
 import type { ChannelKey } from "../../domain/conversation.ts";
 import { ScheduleError } from "../../domain/errors.ts";
 import type { HoldCheck } from "../../holds.ts";
@@ -40,6 +41,8 @@ export interface OwnerSchedules {
 	visibility?: () => Promise<"private" | "shared">;
 	/** The principal a schedule's creator id stands for, such as the primary owner for 0.8's `remote-mcp`. */
 	principalOf?: (createdById: string) => Promise<string | undefined>;
+	/** The target the schedules are made for, with its limits; default `PERSONAL_TARGET`. */
+	target?: BackgroundTarget;
 }
 
 /** Finds another agent's channel, for reading its schedules; throws ScheduleError when there is none. */
@@ -73,8 +76,15 @@ export function schedulesExtension(
 	/** The person the running turn is for; their schedules run at their tier. */
 	speaker: () => Speaker | undefined = () => undefined,
 ): ExtensionFactory {
-	const { store, channelFor, prechecks, holds, visibility, principalOf } =
-		schedules;
+	const {
+		store,
+		channelFor,
+		prechecks,
+		holds,
+		visibility,
+		principalOf,
+		target: kept = PERSONAL_TARGET,
+	} = schedules;
 	const defs = scheduleToolSpecs({
 		locale: activeLocale(),
 		timeZone: timeZone(),
@@ -98,7 +108,7 @@ export function schedulesExtension(
 					{
 						store,
 						channel: target,
-						target: PERSONAL_TARGET,
+						target: kept,
 						author: {
 							principalId: author.principalId,
 							id: author.id,

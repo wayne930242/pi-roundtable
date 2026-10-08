@@ -14,3 +14,37 @@ export const PERSONAL_TARGET: BackgroundTarget = {
 	schedules: { perChannel: 20, promptChars: 8_000, aheadDays: 366 },
 	delegation: { maxRunning: 3 },
 };
+
+/** How many schedules, and running delegated tasks, one person may have across their conversations. */
+export interface PerPrincipalLimits {
+	schedules?: number;
+	delegations?: number;
+}
+
+/**
+ * `PERSONAL_TARGET` holding each person to `limits` across all their conversations: as many
+ * schedules (`perPrincipal`) and running delegated tasks (`maxRunningPerPrincipal`) as given; a
+ * limit left out is unset, as in `PERSONAL_TARGET`.
+ */
+export function personalTarget(
+	limits: PerPrincipalLimits = {},
+): BackgroundTarget {
+	const { schedules, delegation } = PERSONAL_TARGET;
+	if (!schedules || !delegation)
+		throw new Error("the personal target schedules and delegates");
+	return {
+		...PERSONAL_TARGET,
+		schedules: {
+			...schedules,
+			...(limits.schedules === undefined
+				? {}
+				: { perPrincipal: limits.schedules }),
+		},
+		delegation: {
+			...delegation,
+			...(limits.delegations === undefined
+				? {}
+				: { maxRunningPerPrincipal: limits.delegations }),
+		},
+	};
+}

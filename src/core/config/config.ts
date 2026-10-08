@@ -12,6 +12,7 @@ import {
 	THINKING_LEVELS,
 	type ThinkingLevel,
 } from "../models.ts";
+import type { PerPrincipalLimits } from "../modules/background/personal-target.ts";
 import type { RoundtablePlugin } from "../plugin.ts";
 import { PRIMARY_CHARS } from "../runtime/interim-text.ts";
 import type { ChannelKey } from "../sessions.ts";
@@ -80,6 +81,11 @@ export interface DiscordAdapterConfig extends AdapterConfig {
 }
 
 /** What `roundtable.config.ts` gives `defineRoundtable`. */
+/** The configuration's `background`: each person's share of the host's background work. */
+export interface BackgroundConfig {
+	perPrincipal?: PerPrincipalLimits;
+}
+
 export interface RoundtableConfig {
 	/** The assistant's display name; default "Roundtable". */
 	name?: string;
@@ -127,6 +133,11 @@ export interface RoundtableConfig {
 	 * unless the deprecated `owner` is given, and never with it.
 	 */
 	access?: AccessConfig;
+	/**
+	 * Each person's limits across all their conversations: `perPrincipal.schedules` they may keep and
+	 * `perPrincipal.delegations` running at once. Unset, only each conversation's, as in 0.8.
+	 */
+	background?: BackgroundConfig;
 	toolTiers?: Record<string, Tier>;
 	/** Prompt files, read once at start; `shared` starts every agent's prompt. */
 	prompts?: { shared: string; guest?: string };
@@ -231,6 +242,16 @@ const schema = shape({
 		shape({ admins: optional(tierMembers), members: optional(tierMembers) }),
 	),
 	access: optional(accessShape),
+	background: optional(
+		shape({
+			perPrincipal: optional(
+				shape({
+					schedules: optional(integer(1, 10_000)),
+					delegations: optional(integer(1, 1_000)),
+				}),
+			),
+		}),
+	),
 	toolTiers: optional(record(oneOf<Tier>("owner", "admin", "member"))),
 	prompts: optional(shape({ shared: text, guest: optional(text) })),
 	agents: optional(
@@ -309,6 +330,8 @@ export interface ResolvedConfig {
 	timeZone: string;
 	/** The 0.8 `speakers`; empty when the configuration writes `access`. Deprecated: read `access`. */
 	speakers: { admins?: TierMembers; members?: TierMembers };
+	/** Each person's limits across their conversations; a limit left out is unset. */
+	background: { perPrincipal: PerPrincipalLimits };
 	toolTiers: Record<string, Tier>;
 	prompts: { shared?: string; guest?: string };
 	agents: AgentSeed[];
@@ -446,6 +469,7 @@ export function resolveConfig(input: unknown): ResolvedConfig {
 			...(config.speakers?.admins ? { admins: config.speakers.admins } : {}),
 			...(config.speakers?.members ? { members: config.speakers.members } : {}),
 		},
+		background: { perPrincipal: { ...config.background?.perPrincipal } },
 		toolTiers: config.toolTiers ?? {},
 		prompts: config.prompts ?? {},
 		agents: config.agents ?? [],

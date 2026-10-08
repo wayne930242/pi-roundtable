@@ -281,6 +281,7 @@ export async function defineRoundtable(
 				agentDir: config.agentDir,
 				dataDir: config.dataDir,
 				delegation: config.delegation,
+				perPrincipal: config.background.perPrincipal,
 				// A conversation's reports are the modules' to deliver.
 				...(errorReporter && "conversation" in errorReporter.destination
 					? { errorReporter }

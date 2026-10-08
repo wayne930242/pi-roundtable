@@ -13,7 +13,10 @@ import { legacyPrincipalsOf } from "../identity/identity-view.ts";
 import type { OwnerIdentity } from "../identity.ts";
 import type { ModelRef, ThinkingLevel } from "../models.ts";
 import { ConversationBackgroundTurns } from "../modules/background/background-turns.ts";
-import { PERSONAL_TARGET } from "../modules/background/personal-target.ts";
+import {
+	type PerPrincipalLimits,
+	personalTarget,
+} from "../modules/background/personal-target.ts";
 import { delegateExtension } from "../modules/delegation/delegate.ts";
 import {
 	DefaultDelegator,
@@ -57,6 +60,11 @@ export interface ModulesOptions {
 	modelRuntime: ModelRuntime;
 	agentDir: string;
 	dataDir: string;
+	/**
+	 * Each person's limits across their conversations, which the personal target holds them to;
+	 * unset, only each conversation's, as in 0.8.
+	 */
+	perPrincipal?: PerPrincipalLimits;
 	/** The model that runs delegated tasks, or a worker of your own that replaces it. */
 	delegation: {
 		model: ModelRef;
@@ -83,12 +91,13 @@ const MODULE_TIERS: Readonly<Record<string, Tier>> = {
  * The owner's modules: notifications, schedules, and delegated tasks, each a session tool, and
  * the turns nobody wrote. The delegator's running jobs join the shutdown drain. Without Discord
  * there are no owner's messages: no `notify_owner`, and a conversation no chat surface carries
- * can neither schedule nor delegate. It contributes `PERSONAL_TARGET`, whose turns the schedules
+ * can neither schedule nor delegate. It contributes `PERSONAL_TARGET`, with the per-person limits given, whose turns the schedules
  * and delegated reports are, and a session whose conversation's claim takes no background turns
  * gets neither tool.
  */
 export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 	const { owner } = options;
+	const personal = personalTarget(options.perPrincipal);
 	// A conversation no chat surface carries posts its runs in the owner's messages, when there are
 	// any, and only the primary owner's: anyone else's would run in a conversation that is not theirs.
 	const channelFor = async (
@@ -269,6 +278,7 @@ export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 										holds: () => sessions().holds,
 										visibility: visibility(session),
 										...(principalOf ? { principalOf } : {}),
+										target: personal,
 									},
 									session.homeChannel,
 									served(session),
@@ -294,7 +304,7 @@ export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 				],
 				toolTiers: MODULE_TIERS,
 				// Every person's conversations where a claim takes background turns are its own.
-				backgroundTargets: [PERSONAL_TARGET],
+				backgroundTargets: [personal],
 			};
 		},
 	};
