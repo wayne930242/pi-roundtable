@@ -64,7 +64,7 @@ export interface WebChatLimits {
 	/** New conversations one person may open in any hour, written in or not; default 60. */
 	newConversationsPerHour: number;
 	/**
-	 * Turns one person may have running or queued at once, across their conversations; default 2.
+	 * Interactive turns one person may have running or queued at once, across their conversations; default 2.
 	 * A conversation also holds at most its running turn and one queued behind it.
 	 */
 	turnsPerPrincipal: number;
@@ -651,37 +651,30 @@ export class WebChat {
 					if (!(error instanceof Refusal)) throw error;
 					return { status: "skipped", reason: error.code };
 				}
-				const release = this.#turns.take(speaker.principalId, conversation);
-				if (!release)
-					return {
-						status: "skipped",
-						reason: "the principal's turn budget is busy",
-					};
-				try {
-					const result = await this.#deps.turns().run({
-						channel: turn.channel,
-						kind: persona.kind,
-						text: turn.text,
-						speaker,
-						interactive: turn.report === true,
-						conversation: { visibility: "private" },
-						...(persona.selection
-							? {
-									selection: {
-										id: `webchat:${persona.kind}`,
-										...persona.selection,
-									},
-								}
-							: {}),
-						reply: async (result) =>
-							this.#reply(speaker.principalId, conversation, result),
-					});
-					return result.ok
-						? { status: "ran" }
-						: { status: "failed", error: "a webchat background turn failed" };
-				} finally {
-					release();
-				}
+				// Background work has already been admitted by core. Its runtime queue is
+				// separate from interactive admission: a busy browser must not discard
+				// a completed delegation or scheduled reminder. Runtime owns stop/shutdown.
+				const result = await this.#deps.turns().run({
+					channel: turn.channel,
+					kind: persona.kind,
+					text: turn.text,
+					speaker,
+					interactive: turn.report === true,
+					conversation: { visibility: "private" },
+					...(persona.selection
+						? {
+								selection: {
+									id: `webchat:${persona.kind}`,
+									...persona.selection,
+								},
+							}
+						: {}),
+					reply: async (result) =>
+						this.#reply(speaker.principalId, conversation, result),
+				});
+				return result.ok
+					? { status: "ran" }
+					: { status: "failed", error: "a webchat background turn failed" };
 			},
 			startFresh: async (channel) => {
 				const record = await this.#deps.registry().get(channel);

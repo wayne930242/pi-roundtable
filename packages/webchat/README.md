@@ -242,7 +242,8 @@ A request from a browser origin not in `origins` gets 403; an allowed origin get
   Every valid client frame rechecks the stored verified facts against core identity: revoked admission or a changed principal closes with 4403, and approvals use the current tier, subject to the core's identity-cache delay.
 - **Origins.** `origins` is required and checked on every upgrade and every browser request, so another site cannot open a socket or call the API with a browser's credentials.
 - **Limits.** Each person holds at most `connectionsPerPrincipal` sockets, and the route at most `maxConnections`; frames are limited in size and rate.
-  Each person has at most `turnsPerPrincipal` turns running or queued at once, however many conversations or sockets they use, and a conversation at most its running turn and one queued behind it, so one account cannot spend a shared model subscription on many turns at once; a message over either limit is refused with `busy` and never queued.
+  Each person has at most `turnsPerPrincipal` interactive turns running or queued at once, however many conversations or sockets they use, and a conversation at most its running interactive turn and one queued behind it; a browser message over either limit is refused with `busy` and never queued.
+  Personal schedules and delegated reports use the core runtime's conversation queue separately from this interactive admission budget, so a busy browser cannot discard them; runtime stop and shutdown still apply.
   Each person opens at most `newConversationsPerHour` conversations an hour, over the socket or the REST API alike.
 - **Approvals.** A held call's card goes to the conversation's person only, and needs the tier the call needs.
   A card whose tier the person lacks is never shown, so the call stays held.
