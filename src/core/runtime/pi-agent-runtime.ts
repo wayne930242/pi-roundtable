@@ -430,9 +430,8 @@ export class PiAgentRuntime implements AgentRuntime {
 		channel: ChannelKey,
 		limit: number,
 	): Promise<TranscriptEntry[]> {
-		const { session } = await this.#sessions.session(channel);
 		const entries: TranscriptEntry[] = [];
-		for (const message of session.messages) {
+		for (const message of await this.#sessions.messages(channel)) {
 			if (message.role !== "user" && message.role !== "assistant") continue;
 			const text = textOf(message.content).trim();
 			if (text)

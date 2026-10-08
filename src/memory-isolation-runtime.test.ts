@@ -10,7 +10,7 @@ import {
 	fauxToolCall,
 	type TranscriptContext,
 } from "@earendil-works/pi-ai";
-import { ModelRuntime } from "@earendil-works/pi-coding-agent";
+import { ModelRuntime, SessionManager } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { MEMORY_TIERS, memorySessionTool } from "./core/builtin/stores.ts";
 import { definePlugin } from "./core/define.ts";
@@ -127,10 +127,18 @@ afterEach(() => {
 async function isolationHost(
 	store: MemoryStore,
 	steps: FauxResponseStep[],
-	recorded = new Map<ChannelKey, TurnConversation>(),
+	options: {
+		recorded?: Map<ChannelKey, TurnConversation>;
+		/** The data directory of an earlier host, to start again over its sessions. */
+		dir?: string;
+	} = {},
 ) {
-	const dir = mkdtempSync(join(tmpdir(), "roundtable-memory-isolation-"));
-	dirs.push(dir);
+	const recorded = options.recorded ?? new Map<ChannelKey, TurnConversation>();
+	const dir =
+		options.dir ?? mkdtempSync(join(tmpdir(), "roundtable-memory-isolation-"));
+	if (!options.dir) dirs.push(dir);
+	// The probe tool's revision; a test bumps it to rebuild every session for changed tools.
+	let revision = 0;
 	const core = createFauxCore({ provider: "faux", models: [{ id: "faux-1" }] });
 	core.setResponses(steps);
 	const modelRuntime = await ModelRuntime.create({
@@ -187,7 +195,7 @@ async function isolationHost(
 						name: "probe",
 						phase: "tools",
 						snapshot: () => ({
-							revision: 0,
+							revision,
 							factory: (session) => (pi) => {
 								pi.registerTool({
 									name: "probe_task",
@@ -234,17 +242,27 @@ async function isolationHost(
 	const { runtime } = harness;
 	if (!runtime) throw new Error("the plugin fills the runtime slot");
 	return {
+		dir,
+		runtime,
 		recorded,
+		/** Changes the tools of every session, which rebuilds each at its next turn. */
+		bumpTools: () => {
+			revision += 1;
+		},
 		/** A turn of the speaker's in the channel, naming its conversation when one is given. */
 		run: (
 			speaker: Speaker,
 			channel: ChannelKey,
-			options: { conversation?: TurnConversation; kind?: string } = {},
+			options: {
+				conversation?: TurnConversation;
+				kind?: string;
+				text?: string;
+			} = {},
 		) =>
 			runtime.runTurn({
 				channel,
 				kind: options.kind ?? "study",
-				text: "Hello.",
+				text: options.text ?? "Hello.",
 				speaker,
 				selection: {
 					id: "study",
@@ -321,6 +339,164 @@ describe("memory in a shared conversation's history", () => {
 			});
 		} finally {
 			await host.stop();
+		}
+	});
+});
+
+/** What Ann wrote in her own conversation, which no one else's request may replay. */
+const DIARY = "ANN_DIARY_SECRET: I am changing jobs.";
+const privateTo = (principalId: string): TurnConversation => ({
+	visibility: "private",
+	principalId,
+});
+
+/** Steps that record each request in `seen` and answer it. */
+const looking = (
+	seen: TranscriptContext[],
+	count: number,
+): FauxResponseStep[] =>
+	Array.from({ length: count }, () => (context: TranscriptContext) => {
+		seen.push(context);
+		return fauxAssistantMessage("OK.");
+	});
+
+describe("a conversation whose scope changes", () => {
+	test("Ann's private history reaches neither Bo's private turn nor a shared one in the same channel", async () => {
+		const seen: TranscriptContext[] = [];
+		const host = await isolationHost(STORE(), [
+			() => call("memory_search", { query: "doctor" }),
+			...looking(seen, 3),
+		]);
+		try {
+			expect(
+				(
+					await host.run(ANN, "fake:desk", {
+						conversation: privateTo("ann"),
+						text: DIARY,
+					})
+				).ok,
+			).toBe(true);
+			expect(
+				(await host.run(BO, "fake:desk", { conversation: privateTo("bo") })).ok,
+			).toBe(true);
+			expect(
+				(
+					await host.run(BO, "fake:desk", {
+						conversation: { visibility: "shared" },
+					})
+				).ok,
+			).toBe(true);
+			const [, bo, shared] = seen;
+			if (!bo || !shared) throw new Error("a turn asked nothing");
+			for (const request of [bo, shared])
+				for (const sent of asSent(request))
+					for (const secret of [...SECRETS, "ANN_DIARY_SECRET"])
+						expect(sent).not.toContain(secret);
+		} finally {
+			await host.stop();
+		}
+	});
+
+	test("a host started again over the sessions does not replay one person's history for another", async () => {
+		const first = await isolationHost(STORE(), looking([], 1));
+		const seen: TranscriptContext[] = [];
+		try {
+			expect(
+				(
+					await first.run(ANN, "fake:desk", {
+						conversation: privateTo("ann"),
+						text: DIARY,
+					})
+				).ok,
+			).toBe(true);
+		} finally {
+			await first.stop();
+		}
+		const again = await isolationHost(STORE(), looking(seen, 1), {
+			dir: first.dir,
+		});
+		try {
+			expect(
+				(await again.run(BO, "fake:desk", { conversation: privateTo("bo") }))
+					.ok,
+			).toBe(true);
+			const [bo] = seen;
+			if (!bo) throw new Error("Bo's turn asked nothing");
+			for (const sent of asSent(bo))
+				expect(sent).not.toContain("ANN_DIARY_SECRET");
+		} finally {
+			await again.stop();
+		}
+	});
+
+	test("changed tools rebuild the session with its history, and so does starting again in the same scope", async () => {
+		const seen: TranscriptContext[] = [];
+		const first = await isolationHost(STORE(), looking(seen, 2));
+		try {
+			const ann = { conversation: privateTo("ann") };
+			expect(
+				(await first.run(ANN, "fake:desk", { ...ann, text: DIARY })).ok,
+			).toBe(true);
+			first.bumpTools();
+			expect((await first.run(ANN, "fake:desk", ann)).ok).toBe(true);
+		} finally {
+			await first.stop();
+		}
+		const again = await isolationHost(STORE(), looking(seen, 1), {
+			dir: first.dir,
+		});
+		try {
+			expect(
+				(await again.run(ANN, "fake:desk", { conversation: privateTo("ann") }))
+					.ok,
+			).toBe(true);
+		} finally {
+			await again.stop();
+		}
+		const [, rebuilt, restarted] = seen;
+		for (const request of [rebuilt, restarted])
+			expect(JSON.stringify(request?.messages)).toContain("ANN_DIARY_SECRET");
+	});
+
+	test("a history recorded before conversations said their scope carries on, and reading its transcript first fixes no scope", async () => {
+		const host = await isolationHost(STORE(), looking([], 0));
+		const owner: Speaker = {
+			id: OWNER.id,
+			name: OWNER.name,
+			tier: "owner",
+			principalId: OWNER.id,
+		};
+		// A session as 0.8 left it: messages, and nothing about whom it served.
+		const old = SessionManager.continueRecent(
+			join(host.dir, "work"),
+			join(host.dir, "sessions", "fake_riley"),
+		);
+		old.appendMessage({
+			role: "user",
+			content: [{ type: "text", text: "RILEY_OLD_NOTE: water the plants." }],
+			timestamp: 1,
+		});
+		old.appendMessage(fauxAssistantMessage("Noted."));
+		await host.stop();
+		const seen: TranscriptContext[] = [];
+		const again = await isolationHost(STORE(), looking(seen, 1), {
+			dir: host.dir,
+		});
+		try {
+			const transcript = await again.runtime.recentTranscript("fake:riley", 5);
+			expect(transcript.map((entry) => entry.text)).toContain(
+				"RILEY_OLD_NOTE: water the plants.",
+			);
+			expect(
+				(
+					await again.run(owner, "fake:riley", {
+						conversation: privateTo(OWNER.id),
+					})
+				).ok,
+			).toBe(true);
+			expect(JSON.stringify(seen[0]?.messages)).toContain("RILEY_OLD_NOTE");
+		} finally {
+			await again.stop();
 		}
 	});
 });

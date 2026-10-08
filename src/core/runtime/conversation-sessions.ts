@@ -1,5 +1,5 @@
 import { mkdirSync } from "node:fs";
-import { SessionManager } from "@earendil-works/pi-coding-agent";
+import type { AgentSession } from "@earendil-works/pi-coding-agent";
 import { ownerAttachmentDir } from "../attachments/attachment-dir.ts";
 import type {
 	ChannelKey,
@@ -17,6 +17,9 @@ import {
 	sessionConversation,
 } from "./session-conversation.ts";
 import type { SessionFactory } from "./session-factory.ts";
+import { historyMessages, scopedHistory } from "./session-scope.ts";
+
+type AgentMessage = AgentSession["messages"][number];
 
 /** The open sessions of a runtime's conversations and what is held for each of them. */
 export class ConversationSessions {
@@ -108,29 +111,60 @@ export class ConversationSessions {
 			mkdirSync(sessionDir, { recursive: true });
 			const channel = request?.channel ?? key;
 			const agent = request?.agent;
-			pending = (async () =>
-				this.#factory.create(
+			pending = (async () => {
+				const conversation = await sessionConversation(
+					key,
+					request,
+					this.#options,
+				);
+				// A history of another scope is archived, never replayed.
+				const { history, archived } = scopedHistory(
+					sessionDir,
+					this.#factory.cwd(agent),
+					conversation,
+				);
+				if (archived > 0)
+					this.#options.logger.info(
+						{ channel: key, archived },
+						"the conversation serves someone else now; its earlier history was archived",
+					);
+				return this.#factory.create(
 					agent?.home ?? channel,
-					SessionManager.continueRecent(this.#factory.cwd(agent), sessionDir),
+					history,
 					await this.gate(key, agent !== undefined),
 					this.slot(key),
 					ownerAttachmentDir(this.#options.dataDir, channel),
 					agent,
 					request?.kind ?? "owner",
-					await sessionConversation(key, request, this.#options),
-				))();
+					conversation,
+				);
+			})();
 			pending.catch(() => this.#sessions.delete(key));
 			this.#sessions.set(key, pending);
 		}
 		return pending;
 	}
 
-	/** The conversation's session, rebuilt with its history when its session tools or skills changed. */
+	/**
+	 * The conversation's session for the turn: rebuilt with its history when its session tools or
+	 * skills changed, and made anew, with nothing held for it, when the conversation serves someone
+	 * else than it was made for, its history archived rather than replayed.
+	 */
 	async freshSession(
 		key: ChannelKey,
 		request: TurnRequest,
 	): Promise<ChannelSession> {
 		const channelSession = await this.session(key, request);
+		if (
+			conversationChanged(channelSession.conversation, request.conversation)
+		) {
+			this.#options.logger.info(
+				{ channel: key },
+				"the conversation's scope changed; starting an isolated session",
+			);
+			await this.forget(key);
+			return this.session(key, request);
+		}
 		const stale = this.#staleReason(channelSession, request);
 		if (!stale) return channelSession;
 		this.#options.logger.info(
@@ -142,7 +176,7 @@ export class ConversationSessions {
 		return this.session(key, request);
 	}
 
-	/** Why a cached session must be rebuilt before this turn, or undefined when it is current. */
+	/** Why a cached session must be rebuilt, keeping its history, before this turn; undefined when it is current. */
 	#staleReason(
 		channelSession: ChannelSession,
 		request: TurnRequest,
@@ -153,9 +187,22 @@ export class ConversationSessions {
 			channelSession.skills !== skillsKey(this.#factory.skillsOf(request.agent))
 		)
 			return "skills changed";
-		if (conversationChanged(channelSession.conversation, request.conversation))
-			return "the conversation's visibility changed";
 		return undefined;
+	}
+
+	/**
+	 * The messages of a conversation's history: its open session's, or else read from its files
+	 * without opening one, so reading them fixes no scope; none when they were recorded for someone
+	 * else than the conversation serves now.
+	 */
+	async messages(key: ChannelKey): Promise<readonly AgentMessage[]> {
+		const open = this.#sessions.get(key);
+		if (open) return (await open).session.messages;
+		return historyMessages(
+			this.#factory.sessionDir(key),
+			this.#factory.cwd(undefined),
+			await sessionConversation(key, undefined, this.#options),
+		);
 	}
 
 	/** Drops the open session and everything held for the conversation, leaving its files. */
