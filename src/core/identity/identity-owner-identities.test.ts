@@ -48,6 +48,19 @@ async function carriedOver(id: string, name = id): Promise<void> {
 	await db.sql`INSERT INTO principals (id, display_name, claimable) VALUES (${id}, ${name}, true)`;
 }
 
+/** A service over the scratch database, its configuration synced, on the test's clock. */
+async function service(
+	rules: Partial<AccessRules> = {},
+): Promise<PgIdentityService> {
+	const made = new PgIdentityService(
+		store,
+		{ ...RULES, ...rules },
+		{ logger: silentLogger(), now: () => clock },
+	);
+	await made.syncConfig();
+	return made;
+}
+
 describeDb(
 	"the identity service's owner identities and contacts by turns",
 	() => {
@@ -64,6 +77,48 @@ describeDb(
 		});
 		afterAll(async () => {
 			await db.drop();
+		});
+
+		test("an identity the configuration lists for an owner, linked to them before by another way, becomes the configuration's, so dropping it unlinks it", async () => {
+			const web = `oidc:aHR0cHM6Ly9pZHAuZXhhbXBsZS5jb20:ada`;
+			await service();
+			await store.link(
+				ADA,
+				{ provider: "oidc:aHR0cHM6Ly9pZHAuZXhhbXBsZS5jb20", subject: "ada" },
+				"cli",
+			);
+			const withWeb = {
+				...RULES.owners[0],
+				name: "Ada",
+				identities: [`discord:${ADA}`, web],
+			};
+			await service({ owners: [withWeb] });
+			expect(
+				await store.identity("oidc:aHR0cHM6Ly9pZHAuZXhhbXBsZS5jb20", "ada"),
+			).toMatchObject({ principalId: ADA, source: "config" });
+			await service();
+			expect(
+				await store.identity("oidc:aHR0cHM6Ly9pZHAuZXhhbXBsZS5jb20", "ada"),
+			).toBeUndefined();
+		});
+
+		test("an identity the configuration lists for an owner is never admitted or claimed as someone else, even while unlinked", async () => {
+			const bo = {
+				name: "Bo",
+				principal: "bo",
+				identities: [`discord:${KAI}`],
+			};
+			const identity = await service({ owners: [...RULES.owners, bo] });
+			await carriedOver(KAI, "Kai");
+			// Unlinked meanwhile, such as by another process: no one until a boot links it again.
+			await store.unlink("discord", KAI);
+			expect(await identity.assess(discordFacts(KAI, "Kai"))).toBeUndefined();
+			expect(await identity.resolve(discordFacts(KAI, "Kai"))).toBeUndefined();
+			expect(await store.identity("discord", KAI)).toBeUndefined();
+			expect((await store.get(KAI))?.claimable).toBe(true);
+			expect(
+				(await db.sql`SELECT id FROM principals WHERE id LIKE 'p_%'`).length,
+			).toBe(0);
 		});
 
 		test("someone served and refused by turns, such as in two guilds, is written a few times, not at every message", async () => {

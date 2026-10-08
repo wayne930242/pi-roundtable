@@ -88,9 +88,10 @@ export interface PrincipalStore {
 		change: { displayName?: string; pronouns?: Pronouns | null },
 	): Promise<PrincipalRecord | undefined>;
 	/**
-	 * Links the identity to the principal; linking it again to the same one changes nothing, to
-	 * another one is refused. A principal with any identity linked is no longer claimable, even
-	 * after the identity is unlinked.
+	 * Links the identity to the principal; linking it again to the same one changes nothing, but
+	 * that the configuration linking it makes the link the configuration's, and to another one is
+	 * refused. A principal with any identity linked is no longer claimable, even after the identity
+	 * is unlinked.
 	 */
 	link(
 		principalId: string,
@@ -320,7 +321,14 @@ export class PgPrincipalStore implements PrincipalStore {
 					throw new IdentityError(
 						`${provider}:${subject} is already linked to principal ${existing.principal_id}; unlink it first`,
 					);
-				return linkOf(existing);
+				if (source !== "config" || existing.source === "config")
+					return linkOf(existing);
+				// The configuration names it now, so it is the configuration's to unlink.
+				const owned: IdentityRow[] = await tx`
+					UPDATE principal_identities SET source = 'config'
+					WHERE provider = ${provider} AND subject = ${subject}
+					RETURNING *`;
+				return linkOf(owned[0] ?? existing);
 			}
 			const spent = await tx`
 				UPDATE principals SET claimable = false WHERE id = ${principalId}

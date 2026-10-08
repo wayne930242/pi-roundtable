@@ -130,6 +130,8 @@ export class PgIdentityService implements IdentityService, ContactAssessor {
 	readonly #seen = new SeenThrottle();
 	/** The new principal id each person assessed at a first contact would get, until it is taken. */
 	readonly #provisional = new Map<string, string>();
+	/** The identities the configuration lists under an owner, as `<provider>:<subject>`. */
+	readonly #ownerIdentities: ReadonlySet<string>;
 	/** The configured owners' principal ids, in the configuration's order, once synced. */
 	#configOwners: string[] = [];
 
@@ -141,6 +143,9 @@ export class PgIdentityService implements IdentityService, ContactAssessor {
 		this.#now = options.now ?? Date.now;
 		this.store = new CachingPrincipalStore(store, this.#now);
 		this.#rules = checkAccessRules(rules);
+		this.#ownerIdentities = new Set(
+			this.#rules.owners.flatMap((owner) => owner.identities),
+		);
 		this.#logger = options.logger;
 	}
 
@@ -382,6 +387,8 @@ export class PgIdentityService implements IdentityService, ContactAssessor {
 		conversation: ChannelKey | undefined,
 	): Promise<{ principalId: string; tier: Tier } | undefined> {
 		if (this.#rules.provisioning !== "admitted") return undefined;
+		// An owner's identity is theirs alone, linked at boot: unlinked meanwhile, it is no one until then.
+		if (this.#ownerIdentities.has(identityOf(facts))) return undefined;
 		const claimable = await this.#claimable(facts);
 		if (claimable) {
 			// Disabled before they came back: no one, and no new principal either.
@@ -417,7 +424,11 @@ export class PgIdentityService implements IdentityService, ContactAssessor {
 	): Promise<Speaker | undefined> {
 		const ref = { provider: facts.provider, subject: facts.subject };
 		let link = await this.store.identity(ref.provider, ref.subject);
-		if (!link && this.#rules.provisioning === "admitted") {
+		if (
+			!link &&
+			this.#rules.provisioning === "admitted" &&
+			!this.#ownerIdentities.has(identityOf(ref))
+		) {
 			if (assessed === facts.legacyId)
 				link = await this.store.claim(assessed, ref);
 			if (!link && factsTier(this.#rules, facts, conversation)) {
