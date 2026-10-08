@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { messages } from "../i18n/index.ts";
+import type { ActorFacts } from "../identity/actor-facts.ts";
+import type { IdentityLink } from "../identity/principal-store.ts";
 import { type PromptScope, promptScope } from "../interactions/prompts.ts";
 import { silentLogger } from "../log.ts";
 import type { Speaker } from "../speakers.ts";
@@ -15,11 +17,15 @@ import {
 
 const SECOND_OWNER = "100000000000000006";
 const ADMIN = "100000000000000002";
+const MEMBER = "100000000000000003";
+const PHONE = "100000000000000008";
+const STRANGER = "100000000000000009";
 
 /** Two owners, as the CLI may grant a second one; the second has a principal of their own. */
 const identity = mapIdentity({
 	owners: [OWNER, SECOND_OWNER],
 	admins: { users: [ADMIN] },
+	members: { users: [MEMBER] },
 });
 
 const second: Speaker = {
@@ -36,11 +42,11 @@ const admin: Speaker = {
 };
 
 /** Cards in a thread, where they mention whom they are for. */
-function cardsInThread() {
+function cardsInThread(who: typeof identity = identity) {
 	const fake = fakeChannel(true);
 	const cards = new OwnerCards({
 		ownerId: OWNER,
-		identity,
+		identity: who,
 		channel: fake.channel,
 		logger: silentLogger(),
 	});
@@ -191,5 +197,146 @@ describe("cards by the prompt scope", () => {
 		const sent = json(fake.sent[0]);
 		expect(sent).toContain(`<@${OWNER}> <@${SECOND_OWNER}>`);
 		expect(sent).not.toContain("<@assistant>");
+	});
+
+	test("a member's turn whose tier defaulted to owner asks the owners for an owner-tier call, as 0.8 did", async () => {
+		const member: Speaker = {
+			id: MEMBER,
+			name: "Mo",
+			tier: "owner",
+			principalId: MEMBER,
+		};
+		const { fake, approval, pressAs } = cardsInThread();
+		const answer = approval(promptScope(member));
+		await tick();
+		const sent = json(fake.sent[0]);
+		expect(sent).toContain(`<@${OWNER}> <@${SECOND_OWNER}>`);
+		expect(sent).not.toContain(`<@${MEMBER}>`);
+		expect(sent).not.toContain("Who can");
+		expect(await pressAs(MEMBER)).toEqual([messages().cardOwnerOnly]);
+		expect(await pressAs(OWNER)).toEqual([]);
+		expect(await answer).toBe("approved");
+	});
+
+	test("with one owner, that card reads exactly as the owner's own", async () => {
+		const single = mapIdentity({
+			owners: [OWNER],
+			members: { users: [MEMBER] },
+		});
+		const theirs = cardsInThread(single);
+		void theirs.approval(
+			promptScope({
+				id: MEMBER,
+				name: "Mo",
+				tier: "owner",
+				principalId: MEMBER,
+			}),
+		);
+		const owners = cardsInThread(single);
+		void owners.approval(
+			promptScope({
+				id: OWNER,
+				name: "Ada",
+				tier: "owner",
+				principalId: OWNER,
+			}),
+		);
+		await tick();
+		const card = (fake: typeof theirs.fake) =>
+			json(fake.sent[0]).replace(/[0-9a-f]{8}-[0-9a-f-]{27}/g, "<id>");
+		expect(card(theirs.fake)).toBe(card(owners.fake));
+		expect(theirs.fake.sent[0]?.allowedMentions).toEqual({ users: [OWNER] });
+	});
+
+	describe("a principal with two Discord identities", () => {
+		/** Ada (admin) on her desktop account and her phone's; anyone else is a stranger. */
+		const resolved: string[] = [];
+		const links = (principalId: string): IdentityLink[] =>
+			principalId === "p_ada"
+				? [ADMIN, PHONE].map((subject) => ({
+						provider: "discord",
+						subject,
+						principalId,
+						source: "cli",
+						linkedAt: new Date(0),
+					}))
+				: identityLinks(principalId);
+		const identityLinks = (id: string): IdentityLink[] =>
+			id === OWNER
+				? [
+						{
+							provider: "discord",
+							subject: OWNER,
+							principalId: OWNER,
+							source: "config",
+							linkedAt: new Date(0),
+						},
+					]
+				: [];
+		const two: typeof identity = {
+			...identity,
+			owners: async () => [
+				{ id: OWNER, displayName: "Owner", disabled: false },
+			],
+			identities: async (principalId) => links(principalId),
+			resolve: async (facts: ActorFacts) => {
+				resolved.push(facts.subject);
+				if (facts.subject === OWNER)
+					return {
+						id: OWNER,
+						name: "Owner",
+						tier: "owner",
+						principalId: OWNER,
+					};
+				if (facts.subject === ADMIN || facts.subject === PHONE)
+					return {
+						id: facts.subject,
+						name: "Ada",
+						tier: "admin",
+						principalId: "p_ada",
+					};
+				return undefined;
+			},
+		};
+		const ada = (id: string): Speaker => ({
+			id,
+			name: "Ada",
+			tier: "admin",
+			principalId: "p_ada",
+		});
+
+		test("the card mentions the identity that spoke, and her other identity may approve it too", async () => {
+			const { fake, approval, pressAs } = cardsInThread(two);
+			const answer = approval(promptScope(ada(ADMIN)), "admin");
+			await tick();
+			expect(fake.sent[0]?.allowedMentions).toEqual({ users: [ADMIN] });
+			expect(json(fake.sent[0])).toContain(
+				JSON.stringify(messages().cardApproversNote(ADMIN)).slice(1, -1),
+			);
+			expect(await pressAs(PHONE)).toEqual([]);
+			expect(await answer).toBe("approved");
+		});
+
+		test("a turn whose speaker is no Discord identity of hers, as a background turn's, mentions all of hers", async () => {
+			const { fake, approval, pressAs } = cardsInThread(two);
+			const answer = approval(promptScope(ada("p_ada")), "admin");
+			await tick();
+			expect(fake.sent[0]?.allowedMentions).toEqual({
+				users: [ADMIN, PHONE],
+			});
+			expect(await pressAs(ADMIN)).toEqual([]);
+			expect(await answer).toBe("approved");
+		});
+
+		test("a stranger's press is refused without resolving them, so it admits no one", async () => {
+			const { approval, pressAs } = cardsInThread(two);
+			void approval(promptScope(ada(ADMIN)), "admin");
+			await tick();
+			resolved.length = 0;
+			expect(await pressAs(STRANGER)).toEqual([
+				messages().cardApproversRefusal,
+			]);
+			expect(resolved).toEqual([]);
+		});
 	});
 });

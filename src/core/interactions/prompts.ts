@@ -36,11 +36,23 @@ export interface OwnerAnswer {
  * visibility with `promptScope`.
  */
 export interface PromptScope {
-	/** The principal whose turn asks; an answer of theirs is theirs on any of their identities. */
+	/**
+	 * The principal whose turn asks. They are the person who answers on any of their identities:
+	 * a surface accepts an answer from each identity it knows of theirs, and, where it has none of
+	 * theirs, the prompt is one their tier would not reach.
+	 */
 	principalId: string;
-	/** Their id on the surface, as `Speaker.id`: who a press or a reply is matched by. */
+	/**
+	 * The identity that spoke, as `Speaker.id`: whom a surface addresses the prompt to when it is
+	 * one of its own, or else every identity it knows of the principal. A background turn's may be
+	 * no surface's at all.
+	 */
 	speakerId: string;
-	/** Their tier when the turn asked; an approval above it is not theirs, and the surface checks it again when they answer where it can. */
+	/**
+	 * Their tier when the turn asked; an approval above it is not theirs, and the surface checks it
+	 * again when they answer where it can. An owner-tier approval is theirs only when the principal
+	 * is an owner: a turn's tier may default to owner without its person being one.
+	 */
 	tier: Tier;
 	/**
 	 * Who else may answer: `owners` in a shared conversation, where an approval above the

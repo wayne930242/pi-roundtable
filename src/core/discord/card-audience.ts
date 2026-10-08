@@ -32,10 +32,12 @@ export interface CardAudienceOptions {
 }
 
 /**
- * Whom a card is for, by the prompt scope of the turn that asks. The speaker answers their own
- * card when they are a Discord person of their principal and, for an approval, hold its tier,
- * checked again when they press. Where the scope escalates to the owners, every owner with a
- * Discord identity answers it too, and a card the speaker cannot answer is theirs alone; where it
+ * Whom a card is for, by the prompt scope of the turn that asks. The speaker's principal answers
+ * their own card on any of their Discord identities when, for an approval, they hold its tier,
+ * checked again when they press, and, for an owner-tier one, they are an owner; the card mentions
+ * the identity that spoke where it is one of those, or else all of them. Where the scope
+ * escalates to the owners, every owner with a Discord identity answers it too, and a card the
+ * speaker cannot answer, or whose principal has no Discord identity, is theirs alone; where it
  * escalates to no one, that card goes to no one. Without a scope, a card is the owners'.
  */
 export class CardAudiences {
@@ -67,20 +69,25 @@ export class CardAudiences {
 	async #audience(
 		scope: PromptScope | undefined,
 		minTier: Tier | undefined,
-		words: { note(userId: string): string; refusal: string },
+		words: { note(...userIds: string[]): string; refusal: string },
 	): Promise<Audience | undefined> {
 		const { ownerId } = this.#options;
 		const escalates = scope?.escalate !== "none";
-		if (scope && (await this.#answersOwn(scope, minTier))) {
-			const primary = scope.speakerId === ownerId;
+		const own = scope && (await this.#ownIdentities(scope, minTier));
+		if (scope && own) {
+			const primary = own.includes(ownerId);
+			const mentions = own.includes(scope.speakerId) ? [scope.speakerId] : own;
 			return {
 				allows: async (user) => {
-					if (user.id === scope.speakerId)
-						return primary || this.#holds(user, minTier);
+					if (own.includes(user.id))
+						return (
+							(primary && user.id === ownerId) ||
+							this.#holds(user, minTier, scope.principalId)
+						);
 					return escalates && this.#isOwner(user);
 				},
-				mentions: [scope.speakerId],
-				note: primary ? "" : words.note(scope.speakerId),
+				mentions,
+				note: primary ? "" : words.note(...mentions),
 				refusal: primary ? messages().cardOwnerOnly : words.refusal,
 			};
 		}
@@ -93,26 +100,37 @@ export class CardAudiences {
 		};
 	}
 
-	/** Whether the scope's speaker may answer their own card: a Discord person of their principal, at the tier it needs. */
-	async #answersOwn(
+	/**
+	 * The Discord identities of the scope's principal when they may answer their own card: at the
+	 * tier it needs and, for an owner-tier call, an owner; undefined when they may not, or have
+	 * none.
+	 */
+	async #ownIdentities(
 		scope: PromptScope,
 		minTier: Tier | undefined,
-	): Promise<boolean> {
+	): Promise<string[] | undefined> {
 		const { identity, logger } = this.#options;
 		if (!identity || (minTier && !tierAtLeast(scope.tier, minTier)))
-			return false;
+			return undefined;
 		try {
-			const links = await identity.identities(scope.principalId);
-			return links.some(
-				(link) =>
-					link.provider === "discord" && link.subject === scope.speakerId,
-			);
+			// A turn whose tier defaulted to owner is not an owner's: its owner-tier call is the owners'.
+			if (
+				minTier === "owner" &&
+				!(await identity.owners()).some(
+					(owner) => owner.id === scope.principalId,
+				)
+			)
+				return undefined;
+			const own = (await identity.identities(scope.principalId))
+				.filter((link) => link.provider === "discord")
+				.map((link) => link.subject);
+			return own.length > 0 ? own : undefined;
 		} catch (error) {
 			logger.warn(
 				{ principal: scope.principalId, err: error },
 				"could not read the speaker's identities; their card goes to the owners",
 			);
-			return false;
+			return undefined;
 		}
 	}
 
@@ -142,8 +160,15 @@ export class CardAudiences {
 		return this.#holds(user, "owner");
 	}
 
-	/** Whether the user holds `minTier` as they press; a question needs none. */
-	async #holds(user: CardUser, minTier: Tier | undefined): Promise<boolean> {
+	/**
+	 * Whether the user holds `minTier` as they press, as the principal named when there is one; a
+	 * question needs no tier.
+	 */
+	async #holds(
+		user: CardUser,
+		minTier: Tier | undefined,
+		principalId?: string,
+	): Promise<boolean> {
 		const { identity } = this.#options;
 		if (!minTier) return true;
 		if (!identity) return false;
@@ -157,6 +182,10 @@ export class CardAudiences {
 				: {}),
 			legacyId: user.id,
 		});
-		return who !== undefined && tierAtLeast(who.tier, minTier);
+		return (
+			who !== undefined &&
+			(principalId === undefined || who.principalId === principalId) &&
+			tierAtLeast(who.tier, minTier)
+		);
 	}
 }

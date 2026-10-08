@@ -11,10 +11,12 @@ export function cardsEn(ctx: CatalogContext) {
 		cardStopped: "⏹️ This round was stopped.",
 		cardExpired: "⌛ Timed out with no answer.",
 		cardOwnerOnly: `Only ${ctx.assistant}'s owner can answer this card.`,
-		cardApproversNote: (userId: string) => `-# Who can approve: <@${userId}>`,
+		cardApproversNote: (...userIds: readonly string[]) =>
+			`-# Who can approve: ${userIds.map((id) => `<@${id}>`).join(" ")}`,
 		cardApproversRefusal:
 			"This approval is for the speaker whose turn asked for it.",
-		cardAskerNote: (userId: string) => `-# Who can answer: <@${userId}>`,
+		cardAskerNote: (...userIds: readonly string[]) =>
+			`-# Who can answer: ${userIds.map((id) => `<@${id}>`).join(" ")}`,
 		cardAskerRefusal: "This question is for another speaker.",
 		cardInactive: `This card is no longer active (it timed out, or ${ctx.assistant} restarted); reply in text if you need to.`,
 		cardApproved: "✅ Approved to run.",
@@ -41,9 +43,11 @@ export function cardsZhTW(ctx: CatalogContext): ReturnType<typeof cardsEn> {
 		cardStopped: "⏹️ 這一輪已停止。",
 		cardExpired: "⌛ 已逾時，沒有回答。",
 		cardOwnerOnly: `只有 ${ctx.assistant} 的擁有者能回答這張卡片。`,
-		cardApproversNote: (userId: string) => `-# 可以核准的人：<@${userId}>`,
+		cardApproversNote: (...userIds: readonly string[]) =>
+			`-# 可以核准的人：${userIds.map((id) => `<@${id}>`).join(" ")}`,
 		cardApproversRefusal: "這張核准卡是給提出這一輪的發話者的。",
-		cardAskerNote: (userId: string) => `-# 可以回答的人：<@${userId}>`,
+		cardAskerNote: (...userIds: readonly string[]) =>
+			`-# 可以回答的人：${userIds.map((id) => `<@${id}>`).join(" ")}`,
 		cardAskerRefusal: "這張問題是問另一位發話者的。",
 		cardInactive: `這張卡片已經失效（逾時，或 ${ctx.assistant} 重新啟動過）；需要的話直接打字回覆。`,
 		cardApproved: "✅ 已核准執行。",

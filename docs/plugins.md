@@ -1978,18 +1978,18 @@ The runtime asks for approvals through `context.surfaces.prompts`, so a surface 
 
 #### Who answers a prompt: `PromptScope`
 
-The runtime makes each interactive turn's `PromptScope` from its speaker and its conversation: `principalId` and `speakerId` (the speaker's principal and their id on the surface), `tier`, and `escalate`.
+The runtime makes each interactive turn's `PromptScope` from its speaker and its conversation: `principalId` and `speakerId` (the speaker's principal and the identity that spoke), `tier`, and `escalate`.
 A conversation `context.turns` records as `private` gives `escalate: "none"`; a shared one, and a turn that names no conversation, `"owners"`.
 A surface's prompts keep these rules:
 
-- The speaker answers their own question, and approves a call when their tier is at least its `minTier` (the owner tier when absent); a surface that can check their tier again when they answer does.
+- The speaker's principal answers their own question on any of their identities the surface knows, and approves a call when their tier is at least its `minTier` (the owner tier when absent) and, for an owner-tier call, the principal is an owner; a surface that can check their tier again when they answer does.
 - Where the scope escalates to the owners, every owner may answer too, and an approval above the speaker's tier is the owners' alone.
 - Where it escalates to no one, nobody else answers, and an approval above the speaker's tier resolves `expired` at once, shown to no one: the call stays held.
 - Anyone else is refused, even at the same tier as the speaker.
 - Without a scope, as for a turn with no speaker, the prompts are the owners'.
 
-On Discord the owners are every owner with a Discord identity, and the primary owner always; a card in a thread mentions the speaker when it is theirs, and the owners when it goes to them, so a single owner's cards read as they did in 0.8.
-A speaker who is no Discord person of their principal, such as the reporter of a background report, answers nothing there, so their card goes to the owners.
+On Discord the owners are every owner with a Discord identity, and the primary owner always; a card in a thread mentions the identity that spoke when it is theirs and one of the principal's Discord identities, every Discord identity of the principal when the speaker is none of them, and the owners when it goes to them, so a single owner's cards read as they did in 0.8.
+A principal with no Discord identity, such as the reporter of a background report, answers nothing there, so their card goes to the owners; so does an owner-tier call of a turn whose tier defaulted to owner when its principal is not an owner.
 The web chat shows prompts to the conversation's person only: its owners are not on it, so an approval above that person's tier expires at once whatever the scope says.
 
 #### Interim text: what a turn writes before its final answer
