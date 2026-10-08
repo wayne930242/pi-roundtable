@@ -24,9 +24,10 @@ export interface OwnerSchedules {
 	store: ScheduleStore;
 	/**
 	 * The chat channel a conversation's schedules belong to: itself, or the owner's direct
-	 * messages for a conversation no chat surface carries, where a run could not be posted.
+	 * messages for a conversation no chat surface carries, where a run could not be posted; asked
+	 * with the asker's principal, and throws ScheduleError when their runs could go nowhere.
 	 */
-	channelFor: (channel: ChannelKey) => Promise<ChannelKey>;
+	channelFor: (channel: ChannelKey, principalId: string) => Promise<ChannelKey>;
 	/** The host's prechecks a schedule may name, and the runner of scripts it may carry; without them, none can be attached. */
 	prechecks?: Pick<PrecheckRegistry, "get" | "list"> &
 		Partial<Pick<PrecheckRegistry, "scriptRunner">>;
@@ -92,7 +93,7 @@ export function schedulesExtension(
 					agents && typeof input.agent === "string" && input.agent
 						? agents(input.agent)
 						: undefined;
-				const target = peer ?? (await channelFor(channel));
+				const target = peer ?? (await channelFor(channel, author.principalId));
 				const answer = await callScheduleTool(
 					{
 						store,

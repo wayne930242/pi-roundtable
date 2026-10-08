@@ -89,18 +89,25 @@ const MODULE_TIERS: Readonly<Record<string, Tier>> = {
  */
 export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 	const { owner } = options;
-	// A conversation no chat surface carries posts its runs in the owner's messages, when there are any.
+	// A conversation no chat surface carries posts its runs in the owner's messages, when there are
+	// any, and only the primary owner's: anyone else's would run in a conversation that is not theirs.
 	const channelFor = async (
 		channel: ChannelKey,
+		principalId: string,
 		surfaces: SurfacePort,
 		ownerChannel: (() => Promise<ChannelKey>) | undefined,
 		refused: (message: string) => Error,
 	) => {
 		if (surfaces.of(channel)) return channel;
-		if (ownerChannel) return ownerChannel();
-		throw refused(
-			"this conversation has no chat surface to post a run in, and the host has no owner's messages to post it in instead",
-		);
+		if (!ownerChannel)
+			throw refused(
+				"this conversation has no chat surface to post a run in, and the host has no owner's messages to post it in instead",
+			);
+		if (principalId !== owner.id)
+			throw refused(
+				"this conversation has no chat surface to post a run in, and only the primary owner's runs go to the owner's direct messages instead",
+			);
+		return ownerChannel();
 	};
 	// Set up once the modules set up; the preflight reads it after every plugin linked.
 	let reportsReach: (() => void) | undefined;
@@ -128,16 +135,18 @@ export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 			// Another agent's channel, for schedule_list; asked when a tool runs, after the agent server set up.
 			const agentChannelOf = (agent: string) =>
 				services.get(AGENTS).team.channelOf(agent);
-			const scheduleChannelFor = (channel: ChannelKey) =>
+			const scheduleChannelFor = (channel: ChannelKey, principalId: string) =>
 				channelFor(
 					channel,
+					principalId,
 					surfaces,
 					ownerChannel,
 					(message) => new ScheduleError(message),
 				);
-			const delegateChannelFor = (channel: ChannelKey) =>
+			const delegateChannelFor = (channel: ChannelKey, principalId: string) =>
 				channelFor(
 					channel,
+					principalId,
 					surfaces,
 					ownerChannel,
 					(message) => new DelegationError(message),
@@ -178,7 +187,8 @@ export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 					? conversations.takesBackground(session.homeChannel)
 					: ownerChannel !== undefined;
 			// Whose a conversation is, read when a tool runs: an agent's serves everyone; another is
-			// private when the host recorded it so, otherwise shared.
+			// as the host recorded it, and one it has no record of is shared on a chat surface and the
+			// speaker's own without one, where its schedules are kept in a conversation it is not.
 			const visibility =
 				(session: SessionContext) =>
 				async (): Promise<"private" | "shared"> => {
@@ -186,7 +196,9 @@ export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 					const record = await services
 						.find(CONVERSATIONS)
 						?.get(session.homeChannel);
-					return record?.visibility === "private" ? "private" : "shared";
+					if (!record)
+						return surfaces.of(session.homeChannel) ? "shared" : "private";
+					return record.visibility === "private" ? "private" : "shared";
 				};
 			const principalOf = identity ? legacyPrincipalsOf(identity) : undefined;
 			// A reporter for an ops agent is the agent server's to connect.

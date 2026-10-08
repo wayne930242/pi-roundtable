@@ -11,8 +11,8 @@ import { PERSONAL_TARGET } from "../background/personal-target.ts";
 
 export interface OwnerDelegation {
 	delegator: Pick<Delegator, "start">;
-	/** The chat channel a conversation's reports go to, as for schedules. */
-	channelFor: (channel: ChannelKey) => Promise<ChannelKey>;
+	/** The chat channel a conversation's reports go to, as for schedules, asked with the asker's principal. */
+	channelFor: (channel: ChannelKey, principalId: string) => Promise<ChannelKey>;
 }
 
 /**
@@ -43,7 +43,10 @@ export function delegateExtension(
 							"the host's own turns, such as a report's, delegate no tasks; ask the owner to",
 						);
 					const { title, task } = input as { title: string; task: string };
-					const target = await delegation.channelFor(channel);
+					const target = await delegation.channelFor(
+						channel,
+						author.principalId,
+					);
 					const job = delegation.delegator.start({
 						channel: target,
 						origin,

@@ -18,6 +18,7 @@ import {
 	compileSessionPlan,
 	type SessionContext,
 } from "../sessions.ts";
+import type { Speaker } from "../speakers.ts";
 import { OWNER_CHANNEL, setUpModules } from "../testing/modules.ts";
 import { OWNER_SPEAKER } from "../testing/owner.ts";
 
@@ -46,6 +47,19 @@ function context(agent?: AgentTurnScope, home?: ChannelKey): SessionContext {
 	if (agent) session.agent = agent;
 	return session;
 }
+
+/** A session of a conversation of the owner's kind whose turns are someone else's. */
+function contextOf(speaker: Speaker, home: ChannelKey): SessionContext {
+	return { ...context(undefined, home), speaker: () => speaker };
+}
+
+/** An admin who is not the primary owner, such as one a remote MCP token is bound to. */
+const ANN: Speaker = {
+	id: "p_ann",
+	name: "Ann",
+	tier: "admin",
+	principalId: "p_ann",
+};
 
 interface Registered {
 	name: string;
@@ -207,6 +221,77 @@ describe("modulesPlugin", () => {
 		await setup.services.get(DELEGATION).idle();
 		expect(setup.record.reportChannels).toEqual([OWNER_CHANNEL]);
 		expect(setup.record.ownerChannelAsked).toBe(1);
+	});
+
+	test("someone other than the primary owner neither schedules nor delegates into the owner's messages from a conversation without a chat channel", async () => {
+		const created: unknown[] = [];
+		const schedules = {
+			forChannel: async () => [],
+			all: async () => [],
+			create: async (schedule: unknown) => {
+				created.push(schedule);
+				return { ...(schedule as object), id: 7 };
+			},
+		} as unknown as ScheduleStore;
+		const setup = await setUpModules({ schedules });
+		const session = contextOf(ANN, OUTSIDE);
+		const create = (await registered(setup, session, "schedules")).find(
+			(tool) => tool.name === "schedule_create",
+		);
+		const scheduled = await create?.execute("1", {
+			title: "t",
+			prompt: "p",
+			in_minutes: 5,
+		});
+		expect(scheduled?.isError).toBe(true);
+		expect(scheduled?.content[0]?.text).toContain("owner's");
+		const [delegate] = await registered(setup, session, "delegate");
+		const delegated = await delegate?.execute("1", {
+			title: "t",
+			task: "look it up",
+		});
+		expect(delegated?.isError).toBe(true);
+		await setup.services.get(DELEGATION).idle();
+		expect(created).toEqual([]);
+		expect(setup.record.reportChannels).toEqual([]);
+		expect(setup.record.ownerChannelAsked).toBe(0);
+	});
+
+	test("a conversation without a chat channel the host has no record of lists only the speaker's own schedules", async () => {
+		const kept = (id: number, createdById: string) => ({
+			id,
+			channel: OWNER_CHANNEL,
+			target: "owner",
+			title: `by ${createdById}`,
+			prompt: `PROMPT OF ${createdById}`,
+			recurrence: { kind: "once", date: "2026-12-01", time: "09:00" },
+			nextRun: new Date("2026-12-01T09:00:00Z"),
+			createdById,
+			createdByName: createdById,
+			createdTier: "owner",
+			createdAt: new Date(0),
+		});
+		const schedules = {
+			forChannel: async (channel: ChannelKey) =>
+				channel === OWNER_CHANNEL
+					? [kept(1, OWNER_SPEAKER.principalId), kept(2, "p_kai")]
+					: [],
+			get: async (id: number) =>
+				kept(id, id === 1 ? OWNER_SPEAKER.principalId : "p_kai"),
+		} as unknown as ScheduleStore;
+		const setup = await setUpModules({
+			schedules,
+			conversations: { get: async () => undefined },
+		});
+		const list = (
+			await registered(setup, context(undefined, OUTSIDE), "schedules")
+		).find((tool) => tool.name === "schedule_list");
+		const listed = (await list?.execute("1", {}))?.content[0]?.text ?? "";
+		expect(listed).toContain("#1 by 1");
+		expect(listed).not.toContain("#2 ");
+		const read = await list?.execute("1", { id: 2 });
+		expect(read?.isError).toBe(true);
+		expect(read?.content[0]?.text).not.toContain("PROMPT OF p_kai");
 	});
 
 	test("only agent sessions may read another agent's schedules", async () => {
