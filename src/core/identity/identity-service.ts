@@ -14,6 +14,7 @@ import {
 	surfaceOf,
 } from "./actor-facts.ts";
 import { CachingPrincipalStore } from "./caching-principal-store.ts";
+import { configuredOwnerId } from "./config-owner.ts";
 import type { Contact, ContactAssessor } from "./contact.ts";
 import {
 	type DeclaredIdentity,
@@ -161,42 +162,12 @@ export class PgIdentityService implements IdentityService, ContactAssessor {
 					throw new ConfigError(`config access.owners[${n}]: ${identity}`);
 				return ref;
 			});
-			const links = await Promise.all(
-				refs.map(async (ref) => {
-					const link = await store.identity(ref.provider, ref.subject);
-					if (link?.source !== "plugin" || declaredBy.has(identityOf(link)))
-						return link;
-					// No plugin declares it any more, so this boot unlinks it anyway: before it tells anyone anything.
-					await store.unlink(link.provider, link.subject);
-					this.#logger.info(
-						`${identityOf(link)} is no longer an identity a plugin declares; it was unlinked from principal ${link.principalId}`,
-					);
-					return undefined;
-				}),
-			);
-			let id = owner.principal;
-			// A plugin's credential is not the person's own identity, so its link never tells who the owner is.
-			const plugins = links.map((link) =>
-				link?.source === "plugin" ? link : undefined,
-			);
-			links.forEach((link, i) => {
-				if (!link || plugins[i]) return;
-				id ??= link.principalId;
-				if (link.principalId !== id)
-					throw new ConfigError(
-						`config access.owners[${n}].identities[${i}]: ${owner.identities[i]} is linked to principal ${link.principalId}, not to this owner's ${id}. Unlink it with roundtable principal unlink ${owner.identities[i]}, or fix the configuration.`,
-					);
-			});
-			plugins.forEach((link, i) => {
-				if (!link || link.principalId === id) return;
-				const path = `config access.owners[${n}].identities[${i}]`;
-				const declared = `${owner.identities[i]} is an identity plugin ${declaredBy.get(identityOf(link))} declares, bound to principal ${link.principalId}`;
-				// The CLI refuses to unlink a plugin's identity: the plugin's options move it.
-				throw new ConfigError(
-					id === undefined
-						? `${path}: ${declared}, and a plugin's credential does not tell who this owner is. Remove it from access.owners[${n}].identities, or give this owner its principal and bind plugin ${declaredBy.get(identityOf(link))} to it.`
-						: `${path}: ${declared}, not to this owner's ${id}. Remove it from access.owners[${n}].identities, or bind plugin ${declaredBy.get(identityOf(link))} to ${id} in its options.`,
-				);
+			const id = await configuredOwnerId(store, {
+				owner,
+				index: n,
+				refs,
+				declaredBy,
+				logger: this.#logger,
 			});
 			const pronouns = owner.pronouns ?? null;
 			const existing = id === undefined ? undefined : await store.get(id);
