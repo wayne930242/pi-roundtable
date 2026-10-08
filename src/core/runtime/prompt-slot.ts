@@ -1,5 +1,5 @@
-import type { OwnerPrompts, OwnerQuestion } from "../domain/owner-prompts.ts";
 import { assistantName } from "../i18n/index.ts";
+import type { OwnerQuestion, Prompts } from "../interactions/prompts.ts";
 
 /**
  * A run's way to ask the owner while it works. A turn they started or a report turn binds the
@@ -9,7 +9,7 @@ import { assistantName } from "../i18n/index.ts";
  * leaves out.
  */
 export class PromptSlot {
-	#prompts: OwnerPrompts | undefined;
+	#prompts: Prompts | undefined;
 	#beforeCard: (() => Promise<void>) | undefined;
 	#asker = assistantName();
 	#open = 0;
@@ -21,7 +21,7 @@ export class PromptSlot {
 	 * runs before each card opens, such as posting the text the turn wrote before it.
 	 */
 	bind(
-		prompts: OwnerPrompts | undefined,
+		prompts: Prompts | undefined,
 		asker: string,
 		beforeCard?: () => Promise<void>,
 	): void {
@@ -42,7 +42,7 @@ export class PromptSlot {
 	}
 
 	/** The turn's prompts, each open card counted as waiting; undefined when none is bound. */
-	get prompts(): OwnerPrompts | undefined {
+	get prompts(): Prompts | undefined {
 		const prompts = this.#prompts;
 		if (!prompts) return undefined;
 		return {

@@ -67,7 +67,10 @@ async function personRows(sql: SQL) {
 		memory: await sql`SELECT * FROM owner_memory ORDER BY id`,
 		schedules: await sql`SELECT * FROM schedules ORDER BY id`,
 		conversations: await sql`SELECT * FROM conversations ORDER BY key`,
-		held: await sql`SELECT * FROM held_actions ORDER BY channel_key`,
+		// 0.8's columns: the runtime's migrations add principal_id, empty on these rows.
+		held: await sql`
+			SELECT channel_key, selection_id, held_at, calls, speaker_id, speaker_held_at
+			FROM held_actions ORDER BY channel_key`,
 	};
 }
 

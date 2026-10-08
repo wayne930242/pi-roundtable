@@ -2,8 +2,12 @@ import { describe, test } from "bun:test";
 import type { InboundMessage } from "../contract/channels.ts";
 import type { ChatSurface } from "../contract/surface.ts";
 import { parseChannelKey } from "../contract/surface.ts";
-import type { Approval } from "../domain/owner-prompts.ts";
 import type { TurnProgress } from "../domain/progress.ts";
+import {
+	type Approval,
+	type PromptScope,
+	promptScope,
+} from "../interactions/prompts.ts";
 import type { ChannelKey } from "../sessions.ts";
 import type { Speaker } from "../speakers.ts";
 
@@ -33,21 +37,32 @@ export interface SurfaceContractSubject {
 	/** The person answers an open approval; without it the prompt checks are skipped. */
 	answer?(prompt: string, approved: boolean): Promise<void>;
 	/**
-	 * The person as the speaker of the turns that ask them, given to `surface.prompts`; default an
-	 * owner-tier speaker. Every approval the contract asks for needs exactly the speaker's tier, so
-	 * it is theirs to answer.
+	 * The person as the speaker of the turns that ask them, given to `surface.prompts` as the
+	 * scope `promptScope(speaker, visibility)`; default an owner-tier speaker. Every approval the
+	 * contract asks for needs exactly the speaker's tier, so it is theirs to answer; one above a
+	 * speaker below the owner tier checks that a private conversation escalates to no one.
 	 */
 	speaker?: Speaker;
 	/**
-	 * Someone else on the surface's network, not the owner, who knows the id of the person's open
-	 * prompt and answers it; without it the responder-scope check is skipped.
+	 * Someone else on the surface's network, another principal and not an owner, who knows the
+	 * id of the person's open prompt and answers it; without it the responder-scope check is
+	 * skipped.
 	 */
-	stranger?: {
-		/** They join the surface, once it has started. */
-		join?(): Promise<void>;
-		answer(prompt: string, approved: boolean): Promise<void>;
-	};
+	stranger?: SurfaceContractAnswerer;
+	/**
+	 * An owner on the surface's network, another principal than the person, who knows the id of
+	 * the person's open prompt in their private conversation and answers it; without it that
+	 * check is skipped.
+	 */
+	owner?: SurfaceContractAnswerer;
 	close?(): Promise<void>;
+}
+
+/** Someone on the network other than the person, who answers a prompt by its id. */
+export interface SurfaceContractAnswerer {
+	/** They join the surface, once it has started. */
+	join?(): Promise<void>;
+	answer(prompt: string, approved: boolean): Promise<void>;
 }
 
 /** One way the subject broke the contract. */
@@ -100,6 +115,12 @@ const speakerOf = (subject: SurfaceContractSubject): Speaker =>
 		principalId: "contract-speaker",
 	};
 
+/** The person's prompt scope in a conversation of this visibility. */
+const scopeOf = (
+	subject: SurfaceContractSubject,
+	visibility: "private" | "shared" = "shared",
+): PromptScope => promptScope(speakerOf(subject), visibility);
+
 /** The newest prompt the person has seen, once one more than `before` is open. */
 async function nextPrompt(running: Running, before: number): Promise<string> {
 	await until(
@@ -114,7 +135,7 @@ async function nextPrompt(running: Running, before: number): Promise<string> {
 /** Asks for one approval and answers it as the person does. */
 async function approval(running: Running, approved: boolean) {
 	const { surface, channel, answer } = running.subject;
-	const prompts = surface.prompts?.(channel, speakerOf(running.subject));
+	const prompts = surface.prompts?.(channel, scopeOf(running.subject));
 	if (!prompts || !answer)
 		throw new ContractBroken("the surface shows no prompts");
 	const before = seen(running, "prompt").length;
@@ -269,7 +290,7 @@ const CHECKS: readonly Check[] = [
 			subject.surface.prompts !== undefined && subject.answer !== undefined,
 		run: async (running) => {
 			const { surface, channel } = running.subject;
-			const prompts = surface.prompts?.(channel, speakerOf(running.subject));
+			const prompts = surface.prompts?.(channel, scopeOf(running.subject));
 			if (!prompts) throw new ContractBroken("the surface shows no prompts");
 			const stop = new AbortController();
 			const before = seen(running, "prompt").length;
@@ -298,38 +319,88 @@ const CHECKS: readonly Check[] = [
 			subject.surface.prompts !== undefined &&
 			subject.answer !== undefined &&
 			subject.stranger !== undefined,
+		run: (running) =>
+			answeredOnlyByThem(running, running.subject.stranger, "shared"),
+	},
+	{
+		name: "another principal cannot answer for the person in their private conversation, even an owner",
+		applies: (subject) =>
+			subject.surface.prompts !== undefined &&
+			subject.answer !== undefined &&
+			subject.owner !== undefined,
+		run: (running) =>
+			answeredOnlyByThem(running, running.subject.owner, "private"),
+	},
+	{
+		name: "a private conversation's approval above the person's tier goes to no one: it expires at once",
+		applies: (subject) =>
+			subject.surface.prompts !== undefined &&
+			speakerOf(subject).tier !== "owner",
 		run: async (running) => {
-			const { surface, channel, answer, stranger } = running.subject;
-			const prompts = surface.prompts?.(channel, speakerOf(running.subject));
-			if (!prompts || !answer || !stranger)
-				throw new ContractBroken("the surface shows no prompts");
-			await stranger.join?.();
-			const before = seen(running, "prompt").length;
-			let settled: Approval | undefined;
-			const result = prompts
-				.confirm(
-					"Approve?",
-					"Send the report.",
-					undefined,
-					speakerOf(running.subject).tier,
-				)
-				.then((value) => {
-					settled = value;
-					return value;
-				});
-			const id = await nextPrompt(running, before);
-			await stranger.answer(id, true);
-			await Bun.sleep(50);
-			expectThat(
-				settled === undefined,
-				`another person's answer settled the approval as ${settled}`,
+			const { surface, channel } = running.subject;
+			const prompts = surface.prompts?.(
+				channel,
+				scopeOf(running.subject, "private"),
 			);
-			await answer(id, false);
-			const own = await result;
-			expectThat(own === "declined", `the person's answer came back ${own}`);
+			if (!prompts) throw new ContractBroken("the surface shows no prompts");
+			const before = seen(running, "prompt").length;
+			const answer = await Promise.race([
+				prompts.confirm("Approve?", "Delete the notes.", undefined, "owner"),
+				Bun.sleep(1000).then(() => "still open" as const),
+			]);
+			expectThat(
+				answer === "expired",
+				`an approval no one may answer came back ${answer}`,
+			);
+			expectThat(
+				seen(running, "prompt").length === before,
+				"an approval no one may answer was shown",
+			);
 		},
 	},
 ];
+
+/**
+ * Opens the person's approval in a conversation of `visibility`, has `other` answer it by its id,
+ * and checks that only the person's own answer settles it.
+ */
+async function answeredOnlyByThem(
+	running: Running,
+	other: SurfaceContractAnswerer | undefined,
+	visibility: "private" | "shared",
+): Promise<void> {
+	const { surface, channel, answer } = running.subject;
+	const prompts = surface.prompts?.(
+		channel,
+		scopeOf(running.subject, visibility),
+	);
+	if (!prompts || !answer || !other)
+		throw new ContractBroken("the surface shows no prompts");
+	await other.join?.();
+	const before = seen(running, "prompt").length;
+	let settled: Approval | undefined;
+	const result = prompts
+		.confirm(
+			"Approve?",
+			"Send the report.",
+			undefined,
+			speakerOf(running.subject).tier,
+		)
+		.then((value) => {
+			settled = value;
+			return value;
+		});
+	const id = await nextPrompt(running, before);
+	await other.answer(id, true);
+	await Bun.sleep(50);
+	expectThat(
+		settled === undefined,
+		`another principal's answer settled the approval as ${settled}`,
+	);
+	await answer(id, false);
+	const own = await result;
+	expectThat(own === "declined", `the person's answer came back ${own}`);
+}
 
 async function runCheck(
 	check: Check,
@@ -371,8 +442,9 @@ export async function checkSurfaceContract(
  * Registers the chat surface contract as one test per check, under `name`: the surface names a
  * prefix and owns its channel, delivers what its person writes, shows every chunk of a reply, and,
  * where it offers them, delivers files, ends typing and stop controls idempotently, shows
- * progress, resolves approvals as the person answers or as a stopped turn cancels them, and
- * ignores another person's answer to the person's approval. Each
+ * progress, resolves approvals as the person answers or as a stopped turn cancels them, ignores
+ * another person's answer to the person's approval, and, in a private conversation, an owner's
+ * too, and lets an approval above the person's tier there expire at once, shown to no one. Each
  * check gets a fresh subject from `make`; a check for an optional part the surface lacks passes.
  */
 export function describeSurfaceContract(

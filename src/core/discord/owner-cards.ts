@@ -14,16 +14,20 @@ import {
 } from "discord.js";
 import { parseChannelKey } from "../contract/surface.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
+import { messages } from "../i18n/index.ts";
 import type {
 	Approval,
 	OwnerAnswer,
-	OwnerPrompts,
 	OwnerQuestion,
-} from "../domain/owner-prompts.ts";
-import { messages } from "../i18n/index.ts";
-import type { IdentityService } from "../identity/identity-service.ts";
+	PromptScope,
+	Prompts,
+} from "../interactions/prompts.ts";
 import type { Logger } from "../log.ts";
-import { type Speaker, type Tier, tierAtLeast } from "../speakers.ts";
+import {
+	type Audience,
+	type CardAudienceOptions,
+	CardAudiences,
+} from "./card-audience.ts";
 import type { InteractionModule } from "./interaction-module.ts";
 import { ownerPanel, type PanelContent, plain } from "./owner-panel.ts";
 
@@ -33,7 +37,7 @@ export const CARD_TIMEOUT_MS = 30 * 60_000;
 const OTHER = "other";
 const TEXT_FIELD = "text";
 
-/** A card's message: the panel, led by a mention of the owner in a thread. */
+/** A card's message: the panel, led in a thread by a mention of those it is for. */
 export type CardPayload = Omit<
 	ReturnType<typeof ownerPanel>,
 	"components" | "allowedMentions"
@@ -53,14 +57,18 @@ export interface CardMessage {
 /** Where a channel's cards are posted. */
 export interface CardChannel {
 	send(payload: CardPayload): Promise<CardMessage>;
-	/** A thread, where the owner is mentioned so they hear of the card; a channel never mentions them. */
+	/** A thread, where those a card is for are mentioned so they hear of it; a channel mentions no one. */
 	thread?: boolean;
 }
 
 export interface OwnerCardsOptions {
+	/** The primary owner's Discord user id. */
 	ownerId: string;
-	/** Who holds a tier now, for cards that lower tiers may answer; without it only the owner answers. */
-	identity?: Pick<IdentityService, "resolve">;
+	/**
+	 * Who holds a tier now, and which owners have a Discord identity, for cards that others than
+	 * the primary owner may answer; without it only the primary owner answers.
+	 */
+	identity?: CardAudienceOptions["identity"];
 	/** The Discord channel by id; throws when it cannot take messages. */
 	channel(channelId: string): Promise<CardChannel>;
 	logger: Logger;
@@ -87,47 +95,41 @@ interface OpenCard {
 	audience: Audience;
 }
 
-/** The people a card is for. */
-interface Audience {
-	/** Whether this user may answer; their roles are unknown where the press carries no member. */
-	allows(user: {
-		id: string;
-		name: string;
-		roleIds?: readonly string[];
-	}): boolean | Promise<boolean>;
-	/** The user the card mentions in a thread. */
-	mentionId: string;
-	/** Shown on the card. */
-	note: string;
-	refusal: string;
-}
-
 /**
- * The owner's cards in the assistant's channels: approvals of held actions and ask_user questions,
- * answered with buttons, a menu, or a form. The owner may answer, and so may the speaker whose
- * turn asks, when the card allows (a question always; an approval at its tier); an unanswered card
- * expires after 30 minutes and a stopped turn cancels it. Open cards live in memory, so a
- * restart abandons them; pressing one then says it no longer works.
+ * The cards in the assistant's channels: approvals of held actions and ask_user questions,
+ * answered with buttons, a menu, or a form, by those the turn's prompt scope names (see
+ * `CardAudiences`): the speaker whose turn asks, when the card allows (a question always; an
+ * approval at its tier), and, in a shared conversation, the owners. An unanswered card expires
+ * after 30 minutes and a stopped turn cancels it. Open cards live in memory, so a restart
+ * abandons them; pressing one then says it no longer works.
  */
 export class OwnerCards implements InteractionModule {
 	readonly #options: OwnerCardsOptions;
+	readonly #audiences: CardAudiences;
 	readonly #open = new Map<string, OpenCard>();
 
 	constructor(options: OwnerCardsOptions) {
 		this.#options = options;
+		this.#audiences = new CardAudiences(options);
 	}
 
 	commands() {
 		return [];
 	}
 
-	/** The channel's cards; the chat surface port sends only Discord keys here. */
-	prompts(channel: ChannelKey, speaker?: Speaker): OwnerPrompts | undefined {
+	/**
+	 * The channel's cards for the scope's turn; without a scope they are the owners'. The chat
+	 * surface port sends only Discord keys here.
+	 */
+	prompts(channel: ChannelKey, scope?: PromptScope): Prompts | undefined {
 		const channelId = parseChannelKey(channel).id;
 		return {
-			confirm: (title, message, signal, minTier = "owner") =>
-				this.#post<Approval>(channelId, signal, "expired", "cancelled", {
-					audience: this.#approvers(minTier, speaker),
+			confirm: async (title, message, signal, minTier = "owner") => {
+				const audience = await this.#audiences.approval(scope, minTier);
+				// A private conversation's call above its person's tier is no one's to approve.
+				if (!audience) return "expired";
+				return this.#post<Approval>(channelId, signal, "expired", "cancelled", {
+					audience,
 					title,
 					sections: [message],
 					rows: (id, disabled) => [
@@ -147,22 +149,26 @@ export class OwnerCards implements InteractionModule {
 						),
 					],
 					footer: messages().cardApprovalFooter,
-				}),
-			ask: (title, question, signal) =>
-				this.#post<OwnerAnswer | undefined>(
+				});
+			},
+			ask: async (title, question, signal) => {
+				const audience = await this.#audiences.question(scope);
+				if (!audience) return undefined;
+				return this.#post<OwnerAnswer | undefined>(
 					channelId,
 					signal,
 					undefined,
 					undefined,
 					{
-						audience: this.#asker(speaker),
+						audience,
 						title,
 						sections: [question.question],
 						question,
 						rows: (id, disabled) => askRows(id, question, disabled),
 						footer: messages().cardQuestionFooter,
 					},
-				),
+				);
+			},
 		};
 	}
 
@@ -215,7 +221,7 @@ export class OwnerCards implements InteractionModule {
 						footer,
 					},
 					open.mention === true,
-					card.audience.mentionId,
+					card.audience.mentions,
 				);
 			const abort = () => settle(cancelled, messages().cardStopped);
 			const timer = setTimeout(
@@ -251,77 +257,22 @@ export class OwnerCards implements InteractionModule {
 	}
 
 	/** The card's panel; in a thread it leads with the mention of who may answer. */
-	#panel(content: PanelContent, mention: boolean, userId: string): CardPayload {
+	#panel(
+		content: PanelContent,
+		mention: boolean,
+		userIds: readonly string[],
+	): CardPayload {
 		const panel = ownerPanel(content);
 		if (!mention) return panel;
 		return {
 			...panel,
 			components: [
-				new TextDisplayBuilder().setContent(`<@${userId}>`),
+				new TextDisplayBuilder().setContent(
+					userIds.map((id) => `<@${id}>`).join(" "),
+				),
 				...panel.components,
 			],
-			allowedMentions: { users: [userId] },
-		};
-	}
-
-	/**
-	 * An approval is for the speaker whose turn held the call, when their tier holds it, and for
-	 * the owner; the owner's alone by default, and always when only the owner tier may make the
-	 * call. Nobody else in the channel may approve it.
-	 */
-	#approvers(minTier: Tier, speaker: Speaker | undefined): Audience {
-		const { ownerId, identity } = this.#options;
-		if (
-			minTier === "owner" ||
-			!identity ||
-			!speaker ||
-			speaker.id === ownerId ||
-			!tierAtLeast(speaker.tier, minTier)
-		)
-			return {
-				allows: (user) => user.id === ownerId,
-				mentionId: ownerId,
-				note: "",
-				refusal: messages().cardOwnerOnly,
-			};
-		return {
-			allows: async (user) => {
-				if (user.id === ownerId) return true;
-				if (user.id !== speaker.id) return false;
-				// Their tier when they press, in case it was lowered during the turn.
-				const who = await identity.resolve({
-					provider: "discord",
-					subject: user.id,
-					name: user.name,
-					surface: "discord",
-					...(user.roleIds
-						? { roles: user.roleIds.map((role) => `discord:role:${role}`) }
-						: {}),
-					legacyId: user.id,
-				});
-				return who !== undefined && tierAtLeast(who.tier, minTier);
-			},
-			mentionId: speaker.id,
-			note: messages().cardApproversNote(speaker.id),
-			refusal: messages().cardApproversRefusal,
-		};
-	}
-
-	/** A question is for the speaker whose turn asks it, and for the owner. */
-	#asker(speaker: Speaker | undefined): Audience {
-		const { ownerId } = this.#options;
-		if (!speaker || speaker.id === ownerId)
-			return {
-				allows: (user) => user.id === ownerId,
-				mentionId: ownerId,
-				note: "",
-				refusal: messages().cardOwnerOnly,
-			};
-		return {
-			allows: (user) => user.id === speaker.id || user.id === ownerId,
-			mentionId: speaker.id,
-			note: messages().cardAskerNote(speaker.id),
-			refusal: messages().cardAskerRefusal,
+			allowedMentions: { users: [...userIds] },
 		};
 	}
 
@@ -372,7 +323,7 @@ export class OwnerCards implements InteractionModule {
 					footer: outcome,
 				},
 				card.mention === true,
-				card.audience.mentionId,
+				card.audience.mentions,
 			);
 		if (interaction.isButton() && (action === "yes" || action === "no")) {
 			const approved = action === "yes";

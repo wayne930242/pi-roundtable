@@ -110,6 +110,7 @@ export type {
 } from "./core/testing/recording-logger.ts";
 export { recordingLogger } from "./core/testing/recording-logger.ts";
 export type {
+	SurfaceContractAnswerer,
 	SurfaceContractFailure,
 	SurfaceContractSubject,
 	SurfaceObservation,

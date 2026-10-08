@@ -8,8 +8,8 @@ import {
 } from "bun:test";
 import { SQL } from "bun";
 import type { BackgroundTarget } from "../../contract/channels.ts";
-import type { OwnerPrompts } from "../../domain/owner-prompts.ts";
 import { type HoldCheck, type HoldRule, holdChain } from "../../holds.ts";
+import type { OwnerPrompts } from "../../interactions/prompts.ts";
 import { silentLogger } from "../../log.ts";
 import { ConfirmationGate } from "../../runtime/extensions/confirmation-gate.ts";
 import { tierAtLeast } from "../../speakers.ts";

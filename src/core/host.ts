@@ -155,6 +155,7 @@ export class Roundtable {
 	#listeners: HttpListeners | undefined;
 	#pool: SQL | undefined;
 	readonly #queue = new ChannelQueue();
+	readonly #warned = new Set<string>();
 	readonly #tiers: ToolTierTable;
 	readonly #events: EventBus;
 	#services: ServiceRegistry | undefined;
@@ -204,13 +205,23 @@ export class Roundtable {
 
 	/** The contributed surfaces by channel prefix; every call before linking throws NotLinkedError. */
 	#surfaces(): SurfacePort {
-		return surfacePort(() => {
-			if (!this.#sessions)
-				throw new NotLinkedError(
-					"chat surfaces are linked once every plugin is set up. Use surfaces from a service's start or from a handler, not during setup.",
-				);
-			return this.#registry.surfaces;
-		});
+		return surfacePort(
+			() => {
+				if (!this.#sessions)
+					throw new NotLinkedError(
+						"chat surfaces are linked once every plugin is set up. Use surfaces from a service's start or from a handler, not during setup.",
+					);
+				return this.#registry.surfaces;
+			},
+			{ deprecated: (message) => this.#deprecated(message) },
+		);
+	}
+
+	/** Logs a deprecation once per host. */
+	#deprecated(message: string): void {
+		if (this.#warned.has(message)) return;
+		this.#warned.add(message);
+		this.#options.logger.warn(message);
 	}
 
 	/** Turns over the runtime plugin's runtime and the surfaces; every call before linking is refused with NotLinkedError. */

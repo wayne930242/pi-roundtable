@@ -18,6 +18,7 @@ import type {
 import { AgentRunError, ConfigError } from "../domain/errors.ts";
 import type { TurnRequest } from "../domain/ports.ts";
 import { assistantName } from "../i18n/index.ts";
+import { promptScopeOf } from "../interactions/prompts.ts";
 import {
 	AUTO_THINKING,
 	parseModelRef,
@@ -168,7 +169,7 @@ export class PiAgentRuntime implements AgentRuntime {
 			request.selection.id,
 			request.confirmed === true,
 			addressee(request.speaker, this.#options.owner),
-			request.speaker?.id,
+			request.speaker,
 		);
 		if (request.confirmed && pending) {
 			logger.info(
@@ -203,7 +204,7 @@ export class PiAgentRuntime implements AgentRuntime {
 		const slot = this.#sessions.slot(key);
 		slot.bind(
 			request.interactive
-				? this.#options.prompts?.(request.channel, request.speaker)
+				? this.#options.prompts?.(request.channel, promptScopeOf(request))
 				: undefined,
 			request.agent?.name ?? assistantName(),
 			interim ? () => interim.flush() : undefined,

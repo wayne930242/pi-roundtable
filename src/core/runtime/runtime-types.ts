@@ -7,8 +7,8 @@ import type {
 import type { AgentSessions, LoadedSkill } from "../contract/runtime.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
 import type { InterimTextMode } from "../domain/interim.ts";
-import type { OwnerPrompts } from "../domain/owner-prompts.ts";
 import type { OwnerIdentity } from "../identity.ts";
+import type { PromptScope, Prompts } from "../interactions/prompts.ts";
 import type { Logger } from "../log.ts";
 import type { ThinkingLevel, ThinkingPicker } from "../models.ts";
 import type { LinkedSessions } from "../plugin.ts";
@@ -56,13 +56,11 @@ export interface PiAgentRuntimeOptions {
 	/** The agent server's sessions: their shared workspace, model, and skills. */
 	agents?: AgentSessions;
 	/**
-	 * Cards the owner answers in a channel, for interactive turns; undefined for a channel that
-	 * cannot show them. Without it every held action waits for their next message.
+	 * The prompts of a channel for an interactive turn's scope, made from its speaker and its
+	 * conversation's visibility; undefined for a channel that cannot show them. Without it every
+	 * held action waits for a message that approves it.
 	 */
-	prompts?: (
-		channel: ChannelKey,
-		speaker?: Speaker,
-	) => OwnerPrompts | undefined;
+	prompts?: (channel: ChannelKey, scope?: PromptScope) => Prompts | undefined;
 	/** The lowest tier that may use each tool; the default names the core's tools and leaves the rest to the owner. */
 	toolTiers?: ToolTiers;
 	/** A run that takes longer, not counting time spent waiting on the owner's cards, is aborted and reported as failed. */

@@ -3,10 +3,11 @@ import type {
 	HeldCall,
 	PendingConfirmation,
 } from "../../domain/conversation.ts";
-import type { OwnerPrompts } from "../../domain/owner-prompts.ts";
 import { type HoldCheck, type HoldContext, higherTier } from "../../holds.ts";
 import { messages } from "../../i18n/index.ts";
 import { type OwnerIdentity, ownerWords } from "../../identity.ts";
+import type { Prompts } from "../../interactions/prompts.ts";
+import type { Speaker } from "../../speakers.ts";
 import type { ToolTiers } from "../../tool-tiers.ts";
 import type { PromptSlot } from "../prompt-slot.ts";
 
@@ -55,7 +56,7 @@ function byCodeUnit(a: string, b: string): number {
 export class ConfirmationGate {
 	#selectionId: string | undefined;
 	/** The running turn's speaker, whom the actions it holds belong to. */
-	#speakerId: string | undefined;
+	#speaker: Pick<Speaker, "id" | "principalId"> | undefined;
 	#pending: PendingConfirmation | undefined;
 	#approved: HeldCall[] = [];
 	readonly #holds: HoldCheck;
@@ -94,17 +95,18 @@ export class ConfirmationGate {
 	}
 
 	/**
-	 * `addressee` is who the turn is for; without one, the owner. `speakerId` is who spoke the turn,
-	 * recorded with what it holds; without one, only the owner may approve them.
+	 * `addressee` is who the turn is for; without one, the owner. `speaker` is who spoke the turn,
+	 * recorded with what it holds by their id and principal; without one, only the owners may
+	 * approve them.
 	 */
 	beginTurn(
 		selectionId: string,
 		confirmed: boolean,
 		addressee?: OwnerIdentity,
-		speakerId?: string,
+		speaker?: Pick<Speaker, "id" | "principalId">,
 	): void {
 		this.#selectionId = selectionId;
-		this.#speakerId = speakerId;
+		this.#speaker = speaker;
 		this.#addressee = addressee ?? this.#owner;
 		this.#approved = confirmed ? [...(this.pending()?.calls ?? [])] : [];
 		this.#pending = undefined;
@@ -127,7 +129,7 @@ export class ConfirmationGate {
 	async review(
 		tool: string,
 		input: Record<string, unknown>,
-		ask?: { prompts: OwnerPrompts; asker: string; signal?: AbortSignal },
+		ask?: { prompts: Prompts; asker: string; signal?: AbortSignal },
 	): Promise<string | undefined> {
 		return (await this.decide(tool, input, ask)).reason;
 	}
@@ -139,7 +141,7 @@ export class ConfirmationGate {
 	async decide(
 		tool: string,
 		input: Record<string, unknown>,
-		ask?: { prompts: OwnerPrompts; asker: string; signal?: AbortSignal },
+		ask?: { prompts: Prompts; asker: string; signal?: AbortSignal },
 	): Promise<{ reason?: string; approvedOnCard?: true }> {
 		const call = this.#needing(tool, input);
 		if (!call) return {};
@@ -191,7 +193,12 @@ export class ConfirmationGate {
 			selectionId,
 			heldAt: new Date(),
 			calls: [],
-			...(this.#speakerId === undefined ? {} : { speakerId: this.#speakerId }),
+			...(this.#speaker
+				? {
+						speakerId: this.#speaker.id,
+						principalId: this.#speaker.principalId,
+					}
+				: {}),
 		};
 		if (
 			!pending.calls.some((c) => c.tool === call.tool && c.input === call.input)

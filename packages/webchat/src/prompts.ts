@@ -1,9 +1,9 @@
 import {
 	type Approval,
 	type OwnerAnswer,
-	type OwnerPrompts,
 	type OwnerQuestion,
-	type Speaker,
+	type PromptScope,
+	type Prompts,
 	TIERS,
 	type Tier,
 } from "pi-roundtable";
@@ -54,17 +54,17 @@ export class PromptDesk {
 	}
 
 	/**
-	 * The prompts of a conversation for the speaker whose turn runs there. An approval whose tier
-	 * the speaker lacks expires at once without being shown: no one else can answer in a private
-	 * conversation, so the call stays held, as an unanswered card leaves it.
+	 * The prompts of a conversation for the scope's speaker, whose turn runs there. An approval
+	 * whose tier the speaker lacks expires at once without being shown: no one else can answer in
+	 * a private conversation, so the call stays held, as an unanswered card leaves it.
 	 */
-	prompts(conversation: string, speaker: Speaker): OwnerPrompts {
+	prompts(conversation: string, scope: PromptScope): Prompts {
 		return {
 			confirm: async (title, message, signal, minTier = "owner") => {
-				if (!atLeast(speaker.tier, minTier)) return "expired";
+				if (!atLeast(scope.tier, minTier)) return "expired";
 				const outcome = await this.#ask(
 					conversation,
-					speaker.id,
+					scope.speakerId,
 					(id) => ({ id, kind: "approval", title, message }),
 					signal,
 					minTier,
@@ -74,7 +74,7 @@ export class PromptDesk {
 			ask: async (title, question, signal) => {
 				const { outcome, answer } = await this.#ask(
 					conversation,
-					speaker.id,
+					scope.speakerId,
 					(id) => questionFrame(id, title, question),
 					signal,
 				);

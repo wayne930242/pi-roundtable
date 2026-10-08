@@ -6,6 +6,7 @@ import type {
 } from "../conversations/conversation-registry.ts";
 import type { TurnAttachments } from "../domain/attachment.ts";
 import type { TurnResult } from "../domain/conversation.ts";
+import type { TurnConversation } from "../domain/ports.ts";
 import type { TurnProgress } from "../domain/progress.ts";
 import { PluginError } from "../errors.ts";
 import { messages } from "../i18n/index.ts";
@@ -85,19 +86,23 @@ export interface ConversationTurnsOptions {
 /** The selection of a turn that gives none: the plugins' `agentSelection`. */
 const DEFAULT_SELECTION = "turns";
 
-/** Records the conversation of a turn: private to the speaker when asked, else shared. */
+/**
+ * Records the conversation of a turn, private to the speaker when asked, else shared, and returns
+ * who it belongs to as the record keeps it; without a registry, as the turn asks, if it does.
+ */
 async function record(
 	registry: Pick<ConversationRegistry, "register"> | undefined,
 	input: ConversationTurnInput,
-): Promise<void> {
-	if (!registry) return;
+): Promise<TurnConversation | undefined> {
 	const visibility = input.conversation?.visibility ?? "shared";
 	if (visibility === "private" && !input.speaker)
 		throw new PluginError(
 			`a private conversation needs the speaker it belongs to; ${input.channel} was run without one.`,
 		);
+	if (!registry)
+		return input.conversation && conversationOf(visibility, input.speaker);
 	const title = input.conversation?.title;
-	await registry.register({
+	const kept = await registry.register({
 		key: input.channel,
 		kind: input.kind,
 		visibility,
@@ -106,6 +111,18 @@ async function record(
 			: {}),
 		...(title === undefined ? {} : { title }),
 	});
+	return kept.visibility === "private" && kept.principalId !== undefined
+		? { visibility: "private", principalId: kept.principalId }
+		: { visibility: "shared" };
+}
+
+function conversationOf(
+	visibility: ConversationVisibility,
+	speaker: Speaker,
+): TurnConversation {
+	return visibility === "private"
+		? { visibility, principalId: speaker.principalId }
+		: { visibility };
 }
 
 export function conversationTurns(
@@ -119,7 +136,7 @@ export function conversationTurns(
 			// A host without a runtime is a setup mistake, so it is refused before anything is shown.
 			const runtime = options.runtime();
 			// A conversation that cannot be recorded runs no turn: who it belongs to would be lost.
-			await record(options.registry?.(), input);
+			const conversation = await record(options.registry?.(), input);
 			const stopTyping = surfaces.startTyping(channel);
 			const hideStop = surfaces.showStop(channel);
 			const turn = { kind, channel, speaker };
@@ -152,6 +169,7 @@ export function conversationTurns(
 								},
 								text: input.text,
 								speaker,
+								...(conversation ? { conversation } : {}),
 								...(input.attachments
 									? { attachments: input.attachments }
 									: {}),

@@ -58,6 +58,22 @@ describeDb("PendingConfirmationStore", () => {
 		await store.save("discord:4", undefined);
 	});
 
+	test("the principal of that speaker comes back with them; 0.8's held actions name none", async () => {
+		const theirs = { ...held, speakerId: "7", principalId: "p_7" };
+		await store.save("discord:6", theirs);
+		expect(await store.load("discord:6")).toEqual(theirs);
+		const admin = new SQL(testDatabaseUrl);
+		try {
+			// 0.8's save, which knows the speaker and no principal.
+			await admin`
+				UPDATE held_actions SET principal_id = NULL WHERE channel_key = 'discord:6'`;
+		} finally {
+			await admin.close();
+		}
+		expect(await store.load("discord:6")).toEqual({ ...held, speakerId: "7" });
+		await store.save("discord:6", undefined);
+	});
+
 	test("a speaker does not carry over to actions 0.7, which keeps the column as it was, held over theirs", async () => {
 		await store.save("discord:5", { ...held, speakerId: "7" });
 		const admin = new SQL(testDatabaseUrl);

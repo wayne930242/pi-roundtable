@@ -252,6 +252,43 @@ describe("conversation turns", () => {
 		expect(registered.map((entry) => entry.principalId)).toEqual(["p_owner"]);
 	});
 
+	test("the conversation as its record keeps it reaches the runtime, so a private one stays its principal's at every turn", async () => {
+		const stored = new Map<string, ConversationRegistration>();
+		const { turns, requests } = setup(async () => ({ ok: true, text: "hi" }), {
+			register: async (entry) => {
+				const kept = stored.get(entry.key) ?? entry;
+				stored.set(entry.key, kept);
+				return {
+					...kept,
+					surface: "fake",
+					createdAt: new Date(),
+					lastActiveAt: new Date(),
+				};
+			},
+		});
+		const mine = {
+			...input,
+			channel: "fake:mine",
+			speaker: { ...OWNER_SPEAKER, principalId: "p_owner" },
+		} as const;
+		await turns.run({ ...mine, conversation: { visibility: "private" } });
+		await turns.run(mine);
+		await turns.run(input);
+		expect(requests.map((request) => request.conversation)).toEqual([
+			{ visibility: "private", principalId: "p_owner" },
+			{ visibility: "private", principalId: "p_owner" },
+			{ visibility: "shared" },
+		]);
+		// Without a registry, the turn's own word is all there is.
+		const bare = setup(async () => ({ ok: true, text: "hi" }));
+		await bare.turns.run({ ...mine, conversation: { visibility: "private" } });
+		await bare.turns.run(mine);
+		expect(bare.requests.map((request) => request.conversation)).toEqual([
+			{ visibility: "private", principalId: "p_owner" },
+			undefined,
+		]);
+	});
+
 	test("a private conversation needs the speaker it belongs to, and a failed record runs no turn", async () => {
 		const { turns, log } = setup(async () => ({ ok: true, text: "hi" }), {
 			register: async () => {

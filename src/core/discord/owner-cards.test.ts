@@ -1,88 +1,20 @@
 import { describe, expect, test } from "bun:test";
-import type { Interaction } from "discord.js";
-import type { OwnerQuestion } from "../domain/owner-prompts.ts";
 import { messages } from "../i18n/index.ts";
+import { type OwnerQuestion, promptScope } from "../interactions/prompts.ts";
 import { silentLogger } from "../log.ts";
 import { mapIdentity } from "../testing/map-identity.ts";
 import {
 	CARD_PREFIX,
-	type CardPayload,
 	OwnerCards,
 	type OwnerCardsOptions,
 } from "./owner-cards.ts";
-
-const OWNER = "100000000000000001";
-
-/** The card's JSON, where its text, custom ids, and disabled flags can be read. */
-const json = (payload: CardPayload | undefined) =>
-	JSON.stringify(payload?.components.map((c) => c.toJSON()));
-
-/** A channel, or a thread, that records the cards sent to it and every edit of them. */
-function fakeChannel(thread = false) {
-	const sent: CardPayload[] = [];
-	const edits: CardPayload[] = [];
-	return {
-		sent,
-		edits,
-		/** The id of the latest card sent. */
-		cardId: () =>
-			json(sent.at(-1)).match(new RegExp(`${CARD_PREFIX}([0-9a-f-]+):`))?.[1] ??
-			"",
-		channel: async () => ({
-			thread,
-			send: async (payload: CardPayload) => {
-				sent.push(payload);
-				return {
-					edit: async (change: CardPayload) => {
-						edits.push(change);
-					},
-				};
-			},
-		}),
-	};
-}
-
-type Kind = "button" | "select" | "modal";
-
-/** A press of a card's control, recording how it was answered. */
-function press(
-	kind: Kind,
-	customId: string,
-	options: {
-		user?: string;
-		roles?: string[];
-		values?: string[];
-		text?: string;
-	} = {},
-) {
-	const replies: string[] = [];
-	const updates: CardPayload[] = [];
-	const modals: unknown[] = [];
-	const interaction = {
-		isButton: () => kind === "button",
-		isStringSelectMenu: () => kind === "select",
-		isModalSubmit: () => kind === "modal",
-		isFromMessage: () => true,
-		customId,
-		user: { id: options.user ?? OWNER },
-		member: {
-			roles: { cache: new Map((options.roles ?? []).map((r) => [r, r])) },
-		},
-		values: options.values ?? [],
-		fields: { getTextInputValue: () => options.text ?? "" },
-		reply: async (answer: { content: string }) => {
-			replies.push(answer.content);
-		},
-		update: async (payload: CardPayload) => {
-			updates.push(payload);
-		},
-		showModal: async (modal: unknown) => {
-			modals.push(modal);
-		},
-		deferUpdate: async () => undefined,
-	} as unknown as Interaction;
-	return { interaction, replies, updates, modals };
-}
+import {
+	fakeChannel,
+	json,
+	OWNER,
+	press,
+	tick,
+} from "./owner-cards-fixture.ts";
 
 function setup(options: Partial<OwnerCardsOptions> = {}) {
 	const fake = fakeChannel();
@@ -96,8 +28,6 @@ function setup(options: Partial<OwnerCardsOptions> = {}) {
 	if (!prompts) throw new Error("no prompts for a Discord channel");
 	return { fake, cards, prompts };
 }
-
-const tick = () => Bun.sleep(1);
 
 describe("OwnerCards", () => {
 	test("a dispatch thread's cards are posted in the thread", async () => {
@@ -334,7 +264,8 @@ describe("cards for lower tiers", () => {
 	const identity = mapIdentity({
 		owners: [OWNER],
 		admins: { users: [ADMIN] },
-		members: { roles: [ROLE] },
+		// The member spoke before, so their Discord identity is linked.
+		members: { roles: [ROLE], users: [MEMBER] },
 	});
 	const askAdminApproval = () => {
 		const fake = fakeChannel();
@@ -351,7 +282,7 @@ describe("cards for lower tiers", () => {
 			principalId: ADMIN,
 		} as const;
 		const answer = cards
-			.prompts("discord:555", speaker)
+			.prompts("discord:555", promptScope(speaker))
 			?.confirm("t", "**create an agent**", undefined, "admin");
 		return { fake, cards, answer };
 	};
@@ -398,7 +329,10 @@ describe("cards for lower tiers", () => {
 			logger: silentLogger(),
 		});
 		const answer = cards
-			.prompts("discord:555", { ...speaker, principalId: speaker.id })
+			.prompts(
+				"discord:555",
+				promptScope({ ...speaker, principalId: speaker.id }),
+			)
 			?.confirm("t", "**search the web**", undefined, "member");
 		return { fake, cards, answer };
 	};
@@ -460,7 +394,7 @@ describe("cards for lower tiers", () => {
 			principalId: MEMBER,
 		} as const;
 		void cards
-			.prompts("discord:555", speaker)
+			.prompts("discord:555", promptScope(speaker))
 			?.confirm("t", "**create an agent**", undefined, "admin");
 		await tick();
 		for (const [user, roles] of [
@@ -493,7 +427,9 @@ describe("cards for lower tiers", () => {
 					logger: silentLogger(),
 					timeoutMs: 5,
 				});
-				void cards.prompts("discord:555", speaker)?.confirm("t", "**fix CI**");
+				void cards
+					.prompts("discord:555", speaker && promptScope(speaker))
+					?.confirm("t", "**fix CI**");
 				await tick();
 				const sent = fake.sent[0];
 				return {
@@ -531,7 +467,9 @@ describe("cards for lower tiers", () => {
 			tier: "admin",
 			principalId: ADMIN,
 		} as const;
-		void cards.prompts("discord:555", speaker)?.confirm("t", "**rm**");
+		void cards
+			.prompts("discord:555", promptScope(speaker))
+			?.confirm("t", "**rm**");
 		await tick();
 		const admin = press("button", `${CARD_PREFIX}${fake.cardId()}:yes`, {
 			user: ADMIN,
@@ -560,7 +498,9 @@ describe("cards for lower tiers", () => {
 			multi: false,
 			allowOther: false,
 		};
-		const answer = cards.prompts("discord:555", speaker)?.ask("t", question);
+		const answer = cards
+			.prompts("discord:555", promptScope(speaker))
+			?.ask("t", question);
 		await tick();
 		const stranger = press("select", `${CARD_PREFIX}${fake.cardId()}:pick`, {
 			user: MEMBER,

@@ -4,6 +4,7 @@ import type {
 	ConversationTurns,
 	InboundMessage,
 } from "pi-roundtable";
+import { promptScope } from "pi-roundtable";
 import { checkPersonas, type WebChatLimits } from "./chat.ts";
 import { oidcSpeakerId } from "./oidc.ts";
 import { CLOSE_CODES } from "./protocol.ts";
@@ -276,7 +277,10 @@ test("an approval goes to the conversation's person, only they answer it, and on
 	const ada = connect("ada");
 	const eve = connect("eve");
 	await say(ada, { type: "stop", conversation });
-	const prompts = chat.surface.prompts(`web:${conversation}`, speakerOf("ada"));
+	const prompts = chat.surface.prompts(
+		`web:${conversation}`,
+		promptScope(speakerOf("ada"), "private"),
+	);
 	if (!prompts) throw new Error("no prompts for the conversation's person");
 	// A card the speaker's tier cannot approve is never shown: it stays held.
 	expect(await prompts.confirm("Approve?", "Delete it.")).toBe("expired");
@@ -305,7 +309,10 @@ test("an approval goes to the conversation's person, only they answer it, and on
 		outcome: "approved",
 	});
 	expect(
-		chat.surface.prompts(`web:${conversation}`, speakerOf("eve")),
+		chat.surface.prompts(
+			`web:${conversation}`,
+			promptScope(speakerOf("eve"), "private"),
+		),
 	).toBeUndefined();
 });
 
@@ -314,7 +321,10 @@ test("a question takes only an answer it allows, and an open prompt is sent agai
 	const conversation = chat.open(speakerOf("ada"), "helper");
 	const ada = connect("ada");
 	await say(ada, { type: "stop", conversation });
-	const prompts = chat.surface.prompts(`web:${conversation}`, speakerOf("ada"));
+	const prompts = chat.surface.prompts(
+		`web:${conversation}`,
+		promptScope(speakerOf("ada"), "private"),
+	);
 	const asked = prompts?.ask("Which?", {
 		question: "Pick one",
 		options: [{ label: "A" }, { label: "B" }],

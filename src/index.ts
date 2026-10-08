@@ -107,14 +107,7 @@ export type {
 	InterimPosts,
 	InterimTextMode,
 } from "./core/domain/interim.ts";
-export type {
-	Approval,
-	AskOption,
-	OwnerAnswer,
-	OwnerPrompts,
-	OwnerQuestion,
-} from "./core/domain/owner-prompts.ts";
-export type { TurnRequest } from "./core/domain/ports.ts";
+export type { TurnConversation, TurnRequest } from "./core/domain/ports.ts";
 export type { TurnProgress } from "./core/domain/progress.ts";
 export type { DrainOptions } from "./core/drain.ts";
 export {
@@ -155,6 +148,16 @@ export type {
 	RoleSource,
 } from "./core/identity/principal-store.ts";
 export { SYSTEM_PRINCIPAL } from "./core/identity/principal-store.ts";
+export type {
+	Approval,
+	AskOption,
+	OwnerAnswer,
+	OwnerPrompts,
+	OwnerQuestion,
+	PromptScope,
+	Prompts,
+} from "./core/interactions/prompts.ts";
+export { promptScope } from "./core/interactions/prompts.ts";
 export type { JudgeModel } from "./core/judging/model-judge.ts";
 export type { LogEntry, LogFn, Logger } from "./core/log.ts";
 export type { ThinkingLevel, ThinkingSetting } from "./core/models.ts";

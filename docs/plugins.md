@@ -517,7 +517,7 @@ export const cleanup = definePlugin({
 
 A rule whose verdict depends on the input, such as one that holds only a `delete` action, can also answer `mayHold(tool)`: whether it may hold some call of that tool.
 It is asked when the input is not known yet, as for a [precheck script](#precheck-scripts-prechecks-the-agent-writes)'s call whose arguments are computed when it runs; a rule without it is judged by `describe` with an empty input.
-A rule whose held call stands for others can answer `approvalTier(tool, input, context)`: the lowest tier that may approve it when higher than the tool's own. The held call keeps it as `minTier`, and both its card and a confirming message require it. A card is answered, and a confirming message accepted, from the speaker whose turn held the call, when their tier is at least `minTier`, and from the owner; nobody else in the channel may approve it. The held call records that speaker as `PendingConfirmation.speakerId`; a call held without one is the owner's to approve.
+A rule whose held call stands for others can answer `approvalTier(tool, input, context)`: the lowest tier that may approve it when higher than the tool's own. The held call keeps it as `minTier`, and both its card and a confirming message require it. A card is answered, and a confirming message accepted, from the speaker whose turn held the call, when their tier is at least `minTier`, and from the owners where the conversation is shared ([who answers a prompt](#who-answers-a-prompt-promptscope)); nobody else in the channel may approve it. The held call records that speaker as `PendingConfirmation.speakerId` and their principal as `principalId`, so a confirming message from another identity of theirs counts after a restart too; a call held without them is the owners' to approve, and one held before 0.9, without a principal, is matched by `speakerId`.
 
 #### The shell rule
 
@@ -1044,7 +1044,8 @@ The slot's default factory refuses calls: read the running runtime with `service
 The slot is a `RuntimeFactory`: `(deps: RuntimeDeps) => AgentRuntime`, called once when the runtime plugin sets up, before the agent server.
 `deps` provides `logger`, `env`, `owner`, `toolTiers`, and the host's `judge`.
 Its `sessions()` gives you linked hold rules, packages, session tools, and personas from preflight onwards; call it in a turn, when those parts are available.
-`prompts(conversation, speaker)` gives you the owner's approval and question cards on the conversation's surface, or `undefined`.
+`prompts(conversation, scope)` gives you the approval and question prompts on the conversation's surface for a turn's `PromptScope`, made with `promptScope(speaker, visibility)` from the turn's speaker and `TurnRequest.conversation`, or `undefined`; see [who answers a prompt](#who-answers-a-prompt-promptscope).
+Given a `Speaker`, the 0.8 form, it reads them as the speaker of a shared conversation and the host warns once that the form goes away in 1.0.
 `agents` holds the agent server's per-agent settings: `workDir`, `scratchDir` (the agents' shell's `TMPDIR`), `skills(name)`, `modelOf(name)`, and `turnChannel(scope)`.
 The agent server sets up after the runtime is built, so read `agents` when a turn runs; it is `undefined` on a host without the agent server, where no agent turn runs.
 `confirmations` stores held actions across restarts.
@@ -1063,7 +1064,7 @@ An `AgentRuntime` has these methods:
 | `preflight?()` | Runs in the host's preflight, before anything starts; a throw stops the boot |
 | `dispose?()` | Runs when the host stops the runtime plugin's `runtime` service |
 
-A request has the turn's `channel`, `selection` (its tools), `text`, `attachments`, `speaker`, flags (`steerable`, `interactive`, `confirmed`), and `interim`, where the turn may post the text it writes before its final answer ([interim text](#interim-text-what-a-turn-writes-before-its-final-answer)).
+A request has the turn's `channel`, `selection` (its tools), `text`, `attachments`, `speaker`, `conversation` (`TurnConversation`: `private` to a `principalId`, or `shared`, as `context.turns` records it; shared when absent), flags (`steerable`, `interactive`, `confirmed`), and `interim`, where the turn may post the text it writes before its final answer ([interim text](#interim-text-what-a-turn-writes-before-its-final-answer)).
 An agent's turn also has `agent`, the agent's scope, whose `session` is the conversation's key.
 Other turns use `kind` to name the conversation's persona, defaulting to `"owner"` when absent.
 
@@ -1736,6 +1737,7 @@ It rejects with `NotLinkedError` during `setup`, and with a `PluginError` on a h
 Before each turn runs, `context.turns.run` records its conversation in the host's registry, `CONVERSATIONS`: at the first turn its key, surface, kind, visibility, owner, and title, and at every later turn only that it was active.
 `conversation: { visibility: "private" }` records it as the speaker's own (its `principalId` is `speaker.principalId`); without it the conversation is `shared`.
 `conversation.title` names it at its first turn; `setTitle(key, title)` renames it later.
+The runtime is told who the conversation belongs to as the registry keeps it, in `TurnRequest.conversation`, so a private conversation's prompts stay its person's at every later turn; a host without the registry passes the turn's own `conversation`, if it gives one.
 A turn whose conversation cannot be recorded does not run, and the call rejects.
 The registry records and never refuses: who may speak in a conversation stays your claim's decision, which may read `get(key)` to check the owner.
 `list({ principal })` gives one principal's conversations and `list()` every one, the most recently active first; the web console lists them too.
@@ -1957,7 +1959,7 @@ The agent server claims only `discord:` keys, so claims on your surface's channe
 | `startTyping(channel)` | Shows a typing indicator until the returned function is called | none is shown |
 | `showStop(channel)` | Shows the owner a stop control until the returned function is called; using it calls `conversations.stop(channel)` | none is shown |
 | `react`, `unreact` | Adds or removes the bot's reaction on a message | no marks on queued or steered messages |
-| `prompts(channel, speaker?)` | The owner's way to approve a held action or answer `ask_user` inside a running turn, as `OwnerPrompts`: `confirm` and `ask` | the action is held until the owner's next message |
+| `prompts(channel, scope?)` | How those the turn's `PromptScope` names approve a held action or answer `ask_user` inside a running turn, as `Prompts`: `confirm` and `ask`; without a scope, the owners | the action is held until a message approves it |
 | `interim(channel)` | Where a running turn posts the text it writes before its final answer, as `InterimPosts`: `post(text)` sends one message of at most 2000 characters and resolves to an `InterimMessage` whose `edit(text)` changes it in place | only the final reply is posted |
 | `progress(channel, event)` | Shows a turn run through `context.turns` as it goes, such as a live preview in a web chat. `event` is a `TurnProgress`: `{ type: "text", delta }` (the reply's text, joined over 250 ms and always sent before a tool event, never the thinking), `{ type: "tool_start", id, tool, preview? }` (a one-line preview of the arguments, at most 80 characters, never their full text), or `{ type: "tool_end", id, tool, ok }`. The final reply still comes through `sendReply`; a rejection is logged and the turn goes on | only the final reply is shown |
 
@@ -1970,9 +1972,25 @@ The host logs and drops messages whose prefix differs from the delivering surfac
 `context.surfaces` picks the surface by the key's prefix.
 Its `sendReply` rejects with a `PluginError` naming the prefix when no surface serves it.
 `startTyping`, `showStop`, `react`, and `unreact` do nothing when a channel has no surface or its surface omits those methods.
-If `prompts` is unavailable, it returns `undefined` and held actions wait for the owner's next message.
+If `prompts` is unavailable, it returns `undefined` and held actions wait for a message that approves them.
 `of(channel)` returns the surface, or `undefined`.
-The agent server asks the owner for approvals through `context.surfaces.prompts`, so a surface that gives `prompts` gets them in its own channels.
+The runtime asks for approvals through `context.surfaces.prompts`, so a surface that gives `prompts` gets them in its own channels.
+
+#### Who answers a prompt: `PromptScope`
+
+The runtime makes each interactive turn's `PromptScope` from its speaker and its conversation: `principalId` and `speakerId` (the speaker's principal and their id on the surface), `tier`, and `escalate`.
+A conversation `context.turns` records as `private` gives `escalate: "none"`; a shared one, and a turn that names no conversation, `"owners"`.
+A surface's prompts keep these rules:
+
+- The speaker answers their own question, and approves a call when their tier is at least its `minTier` (the owner tier when absent); a surface that can check their tier again when they answer does.
+- Where the scope escalates to the owners, every owner may answer too, and an approval above the speaker's tier is the owners' alone.
+- Where it escalates to no one, nobody else answers, and an approval above the speaker's tier resolves `expired` at once, shown to no one: the call stays held.
+- Anyone else is refused, even at the same tier as the speaker.
+- Without a scope, as for a turn with no speaker, the prompts are the owners'.
+
+On Discord the owners are every owner with a Discord identity, and the primary owner always; a card in a thread mentions the speaker when it is theirs, and the owners when it goes to them, so a single owner's cards read as they did in 0.8.
+A speaker who is no Discord person of their principal, such as the reporter of a background report, answers nothing there, so their card goes to the owners.
+The web chat shows prompts to the conversation's person only: its owners are not on it, so an approval above that person's tier expires at once whatever the scope says.
 
 #### Interim text: what a turn writes before its final answer
 
@@ -1998,14 +2016,25 @@ Its plugin adds a claim that answers through `context.surfaces`:
 <!-- example: examples/fake-surface.ts -->
 ```ts
 import {
+	type Approval,
 	type ChannelKey,
 	type ChatSurface,
 	definePlugin,
 	type InboundMessage,
 	type OutboundReply,
-	type OwnerPrompts,
+	type PromptScope,
+	type Prompts,
 	parseChannelKey,
+	TIERS,
 } from "pi-roundtable";
+
+/** A prompt the surface showed, open until someone it is for answers it. */
+interface Asked {
+	id: string;
+	channel: ChannelKey;
+	title: string;
+	open: boolean;
+}
 
 /**
  * A chat surface connects the host to one chat network. This one is an in-memory chat: its
@@ -2018,7 +2047,12 @@ export class FakeSurface implements ChatSurface {
 	readonly replies: { channel: ChannelKey; reply: OutboundReply }[] = [];
 	readonly typing: string[] = [];
 	readonly stops: string[] = [];
-	readonly asked: string[] = [];
+	readonly asked: Asked[] = [];
+	/** Who may answer each open prompt, and how it settles. */
+	readonly #answering = new Map<
+		string,
+		{ principalId?: string; owners: boolean; settle(answer: Approval): void }
+	>();
 	#deliver: ((message: InboundMessage) => void) | undefined;
 
 	/** The host hands over its router; every message the network reports goes to it. */
@@ -2060,15 +2094,65 @@ export class FakeSurface implements ChatSurface {
 		return () => void this.stops.push(`hide ${channel}`);
 	}
 
-	/** How the owner would approve a held action or answer a question in a turn. */
-	prompts(channel: ChannelKey): OwnerPrompts {
+	/**
+	 * How a turn asks to approve a held action or answers a question. The scope names who may
+	 * answer: its speaker when their tier holds the call, and the owners unless the conversation
+	 * is private, where a call above the speaker's tier goes to no one and expires at once.
+	 */
+	prompts(channel: ChannelKey, scope?: PromptScope): Prompts {
 		return {
-			confirm: async (title) => {
-				this.asked.push(`${channel}: ${title}`);
-				return "approved";
+			confirm: async (title, _message, signal, minTier = "owner") => {
+				const theirs =
+					scope !== undefined &&
+					TIERS.indexOf(scope.tier) >= TIERS.indexOf(minTier);
+				const owners = scope?.escalate !== "none";
+				if (!theirs && !owners) return "expired";
+				return this.#ask(channel, title, signal, {
+					...(theirs ? { principalId: scope.principalId } : {}),
+					owners,
+				});
 			},
 			ask: async () => undefined,
 		};
+	}
+
+	/** Someone answers an open prompt; it settles only when it is theirs to answer. */
+	answer(
+		id: string,
+		who: { principalId: string; owner?: boolean },
+		approved: boolean,
+	): void {
+		const open = this.#answering.get(id);
+		if (!open) return;
+		const theirs = open.principalId === who.principalId;
+		if (theirs || (who.owner && open.owners))
+			open.settle(approved ? "approved" : "declined");
+	}
+
+	#ask(
+		channel: ChannelKey,
+		title: string,
+		signal: AbortSignal | undefined,
+		audience: { principalId?: string; owners: boolean },
+	): Promise<Approval> {
+		const asked = {
+			id: `q${this.asked.length + 1}`,
+			channel,
+			title,
+			open: true,
+		};
+		this.asked.push(asked);
+		return new Promise((resolve) => {
+			const settle = (answer: Approval) => {
+				this.#answering.delete(asked.id);
+				asked.open = false;
+				resolve(answer);
+			};
+			this.#answering.set(asked.id, { ...audience, settle });
+			signal?.addEventListener("abort", () => settle("cancelled"), {
+				once: true,
+			});
+		});
 	}
 }
 
@@ -2496,9 +2580,9 @@ It returns:
 ### `describeSurfaceContract`: what every chat surface keeps
 
 A plugin that contributes a `ChatSurface` can test it against the contract every surface keeps.
-`describeSurfaceContract(name, make)` registers one test per check, each on a fresh `SurfaceContractSubject` from `make`: the `surface`, a `channel` of it, and one person on its network, who can `write(text)`, whose `observations()` list what they have seen (`SurfaceObservation`: a reply's text and file names, typing and stop controls going on and off, progress, and prompts opening and closing), and who may `answer(prompt, approved)` an approval; `speaker` is who they are to `surface.prompts`, an owner by default, and every approval the contract asks for needs exactly their tier. `stranger`, when given, is someone else on the network, not the owner, who knows the id of the person's open approval and may `join()` and `answer(prompt, approved)` it.
+`describeSurfaceContract(name, make)` registers one test per check, each on a fresh `SurfaceContractSubject` from `make`: the `surface`, a `channel` of it, and one person on its network, who can `write(text)`, whose `observations()` list what they have seen (`SurfaceObservation`: a reply's text and file names, typing and stop controls going on and off, progress, and prompts opening and closing), and who may `answer(prompt, approved)` an approval; `speaker` is who they are to `surface.prompts`, given as `promptScope(speaker, visibility)`, an owner by default, and every approval the contract asks for needs exactly their tier. `stranger`, when given, is someone else on the network, another principal and not an owner, who knows the id of the person's open approval and may `join()` and `answer(prompt, approved)` it; `owner`, when given, is an owner on the network, another principal than the person, who does the same in the person's private conversation. Both are `SurfaceContractAnswerer`s.
 The contract starts the surface, calls the subject's `join()`, and stops the surface after the subject's `close()`.
-It checks that the surface names a prefix and owns its channel, delivers what the person writes, and shows every chunk of a reply; and, for the parts the surface offers, that it delivers files when `supportsFiles` is set, ends typing and stop controls idempotently, shows progress, and resolves an approval as the person approves or declines it, or `cancelled` when the turn stops, and, with a `stranger`, that the stranger's answer leaves the person's approval open.
+It checks that the surface names a prefix and owns its channel, delivers what the person writes, and shows every chunk of a reply; and, for the parts the surface offers, that it delivers files when `supportsFiles` is set, ends typing and stop controls idempotently, shows progress, and resolves an approval as the person approves or declines it, or `cancelled` when the turn stops, with a `stranger`, that the stranger's answer leaves the person's approval open, and with an `owner`, that an owner's answer leaves it open in a private conversation; and, for a speaker below the owner tier, that a private conversation's approval above their tier resolves `expired` at once and is not shown.
 A check for a part the surface does not offer passes.
 `checkSurfaceContract(make)` runs the same checks and returns the ones that failed, as `SurfaceContractFailure`s.
 
@@ -2840,8 +2924,10 @@ Import from the entries listed below; source area files are internal.
 | `PluginError` | `pi-roundtable` | value |
 | `Principal` | `pi-roundtable` | type |
 | `PromptMemory` | `pi-roundtable` | type |
+| `PromptScope` | `pi-roundtable` | type |
 | `PromptSection` | `pi-roundtable` | type |
 | `PromptTurn` | `pi-roundtable` | type |
+| `Prompts` | `pi-roundtable` | type |
 | `Pronouns` | `pi-roundtable` | type |
 | `ProviderError` | `pi-roundtable` | value |
 | `Providers` | `pi-roundtable` | type |
@@ -2918,6 +3004,7 @@ Import from the entries listed below; source area files are internal.
 | `TranscriptEntry` | `pi-roundtable` | type |
 | `TransientTask` | `pi-roundtable` | type |
 | `TurnAttachments` | `pi-roundtable` | type |
+| `TurnConversation` | `pi-roundtable` | type |
 | `TurnEndEvent` | `pi-roundtable` | type |
 | `TurnProgress` | `pi-roundtable` | type |
 | `TurnProgressEvent` | `pi-roundtable` | type |
@@ -2930,6 +3017,7 @@ Import from the entries listed below; source area files are internal.
 | `WebSocketSendResult` | `pi-roundtable` | type |
 | `Weekday` | `pi-roundtable` | type |
 | `attachReplyFile` | `pi-roundtable` | value |
+| `promptScope` | `pi-roundtable` | value |
 | `withReplyFiles` | `pi-roundtable` | value |
 | `prepareImageBytes` | `pi-roundtable/kit` | value |
 | `ImagePreparationError` | `pi-roundtable/kit` | value |
@@ -2946,6 +3034,7 @@ Import from the entries listed below; source area files are internal.
 | `OWNER_SPEAKER` | `pi-roundtable/testing` | value |
 | `RecordedEvent` | `pi-roundtable/testing` | type |
 | `ServicePair` | `pi-roundtable/testing` | type |
+| `SurfaceContractAnswerer` | `pi-roundtable/testing` | type |
 | `TEST_GUILD` | `pi-roundtable/testing` | value |
 | `TestHost` | `pi-roundtable/testing` | type |
 | `TestHostOptions` | `pi-roundtable/testing` | type |

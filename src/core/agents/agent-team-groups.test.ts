@@ -170,6 +170,33 @@ describeDb("PostgreSQL", () => {
 			expect(speakers()).toEqual(["infra"]);
 			expect(fx.runtime.turns[0]?.confirmed).toBe(true);
 		});
+
+		test("a held call is its principal's: the same person on another identity approves it, another principal of the same tier does not", async () => {
+			script.scores = { coordinator: 0.1, infra: 0.1, doctor: 0.1 };
+			fx.runtime.held.set(groupSessionKey(opsGroup(), "infra"), {
+				selectionId: "agent",
+				heldAt: new Date(),
+				calls: [{ tool: "deploy", input: "{}", action: "deploy the site" }],
+				speakerId: "7",
+				principalId: "p_ada",
+			});
+			const say = (id: string, principalId: string) =>
+				fx.team.answerGroup(
+					group,
+					{ id, name: `admin ${id}`, tier: "admin", principalId },
+					"yes, do it",
+					"yes, do it",
+					NO_ATTACHMENTS,
+					undefined,
+				);
+			// The same surface id under another principal, as after an unlink and a new link, is not them.
+			await say("7", "p_bob");
+			expect(fx.runtime.turns.map((t) => t.confirmed)).toEqual([undefined]);
+			fx.runtime.turns = [];
+			await say("8", "p_ada");
+			expect(speakers()).toEqual(["infra"]);
+			expect(fx.runtime.turns[0]?.confirmed).toBe(true);
+		});
 	});
 
 	describe("archive", () => {

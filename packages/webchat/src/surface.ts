@@ -3,10 +3,10 @@ import {
 	type ChatSurface,
 	type InboundMessage,
 	type OutboundReply,
-	type OwnerPrompts,
 	PluginError,
+	type PromptScope,
+	type Prompts,
 	parseChannelKey,
-	type Speaker,
 	type TurnProgress,
 } from "pi-roundtable";
 import type { PromptDesk } from "./prompts.ts";
@@ -111,12 +111,16 @@ export class WebSurface implements ChatSurface {
 		return this.#toggle(channel, "stoppable");
 	}
 
-	/** Prompts for the conversation's own person only; a turn for anyone else asks nothing here. */
-	prompts(channel: ChannelKey, speaker?: Speaker): OwnerPrompts | undefined {
-		if (!speaker) return undefined;
+	/**
+	 * Prompts for the conversation's own person only; a turn for anyone else asks nothing here.
+	 * Its owners are not on the web chat, so a prompt above the person's tier goes to no one,
+	 * whatever the scope escalates to.
+	 */
+	prompts(channel: ChannelKey, scope?: PromptScope): Prompts | undefined {
+		if (!scope) return undefined;
 		const { principal, conversation } = this.#to(channel);
-		if (speaker.id !== principal) return undefined;
-		return this.#options.prompts.prompts(conversation, speaker);
+		if (scope.speakerId !== principal) return undefined;
+		return this.#options.prompts.prompts(conversation, scope);
 	}
 
 	progress(channel: ChannelKey, event: TurnProgress): void {

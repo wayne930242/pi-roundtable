@@ -1,8 +1,8 @@
 import type { OutboundReply } from "../domain/conversation.ts";
 import type { InterimPosts } from "../domain/interim.ts";
-import type { OwnerPrompts } from "../domain/owner-prompts.ts";
 import type { TurnProgress } from "../domain/progress.ts";
 import { PluginError } from "../errors.ts";
+import type { PromptScope, Prompts } from "../interactions/prompts.ts";
 import type { ChannelKey } from "../sessions.ts";
 import type { Speaker } from "../speakers.ts";
 import type { InboundMessage } from "./channels.ts";
@@ -66,10 +66,12 @@ export interface ChatSurface {
 		emoji: string,
 	): Promise<void>;
 	/**
-	 * How the owner approves held actions or answers ask_user in a running turn; undefined, or
-	 * absent, = the action is held until the owner's next message.
+	 * How those the scope names approve held actions or answer ask_user in a running turn: the
+	 * scope's speaker, and in a shared conversation the owners; see `Prompts` and `PromptScope`.
+	 * Without a scope the prompts are the owners'. Undefined, or absent, = the action is held
+	 * until a message approves it.
 	 */
-	prompts?(channel: ChannelKey, speaker?: Speaker): OwnerPrompts | undefined;
+	prompts?(channel: ChannelKey, scope?: PromptScope): Prompts | undefined;
 	/**
 	 * Where a running turn posts the text it writes before its final answer: ordinary messages it
 	 * may edit in place. Absent, or undefined, = only the final reply is posted.
@@ -98,8 +100,15 @@ export interface SurfacePort {
 	showStop(channel: ChannelKey): () => void;
 	react(channel: ChannelKey, messageId: string, emoji: string): Promise<void>;
 	unreact(channel: ChannelKey, messageId: string, emoji: string): Promise<void>;
-	/** The owner's prompts in the channel; undefined when its surface has none. */
-	prompts(channel: ChannelKey, speaker?: Speaker): OwnerPrompts | undefined;
+	/**
+	 * The prompts in the channel for the scope's turn; undefined when its surface has none. A
+	 * `Speaker`, the 0.8 form, is read as theirs in a shared conversation, with a deprecation
+	 * warning, until 1.0.
+	 */
+	prompts(
+		channel: ChannelKey,
+		scope?: PromptScope | Speaker,
+	): Prompts | undefined;
 	/** The channel's interim posts; undefined when its surface has none. */
 	interim(channel: ChannelKey): InterimPosts | undefined;
 	/**

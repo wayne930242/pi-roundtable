@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import type { ChatSurface } from "../contract/surface.ts";
 import { PluginError } from "../errors.ts";
+import { promptScope } from "../interactions/prompts.ts";
 import { surfacePort } from "./surface-port.ts";
 
 /** A surface that records every call; `with` gives it only some of the optional methods. */
@@ -125,4 +126,40 @@ test("the surfaces are read when a call is made, so a port linked later still an
 	expect(() => port.of("a:1")).toThrow("not linked");
 	linked = [recording("a", [])];
 	expect(port.of("a:1")?.surface).toBe("a");
+});
+
+test("prompts take a scope as given, and 0.8's speaker as theirs in a shared conversation, with a deprecation", async () => {
+	const given: unknown[] = [];
+	const deprecations: string[] = [];
+	const surface: ChatSurface = {
+		surface: "a",
+		start: async () => undefined,
+		sendReply: async () => undefined,
+		prompts: (_channel, scope) => {
+			given.push(scope);
+			return undefined;
+		},
+	};
+	const port = surfacePort(() => [surface], {
+		deprecated: (message) => void deprecations.push(message),
+	});
+	const speaker = {
+		id: "7",
+		name: "Sam",
+		tier: "admin",
+		principalId: "p_sam",
+	} as const;
+	const scope = promptScope(speaker, "private");
+	port.prompts("a:1", scope);
+	port.prompts("a:1");
+	expect(deprecations).toEqual([]);
+	port.prompts("a:1", speaker);
+	expect(given).toEqual([
+		scope,
+		undefined,
+		{ principalId: "p_sam", speakerId: "7", tier: "admin", escalate: "owners" },
+	]);
+	expect(deprecations).toEqual([
+		expect.stringContaining("prompts(channel, speaker) takes a PromptScope"),
+	]);
 });

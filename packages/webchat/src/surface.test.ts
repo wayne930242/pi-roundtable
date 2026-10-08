@@ -30,12 +30,16 @@ function observation(frame: ServerFrame): SurfaceObservation | undefined {
 	}
 }
 
-/** A web chat whose person is `person` at `tier`, and whose stranger is another signed-in person. */
+/**
+ * A web chat whose person is `person` at `tier`, whose stranger is another signed-in person, and,
+ * when the person is not the owner, whose owner is the owner signed in.
+ */
 function webSubject(person: string, tier: Tier, roles: string[]) {
 	const { chat, connect, say } = testChat();
 	const conversation = chat.open(speakerOf(person, tier), "helper");
 	let socket: ReturnType<typeof connect> | undefined;
 	let stranger: ReturnType<typeof connect> | undefined;
+	let owner: ReturnType<typeof connect> | undefined;
 	return {
 		surface: chat.surface,
 		channel: `web:${conversation}` as const,
@@ -66,9 +70,23 @@ function webSubject(person: string, tier: Tier, roles: string[]) {
 					await say(stranger, { type: "approval", prompt, approved });
 			},
 		},
+		...(person === "boss"
+			? {}
+			: {
+					owner: {
+						join: async () => {
+							owner = connect("boss", ["Admin"]);
+						},
+						answer: async (prompt: string, approved: boolean) => {
+							if (owner)
+								await say(owner, { type: "approval", prompt, approved });
+						},
+					},
+				}),
 		close: async () => {
 			if (socket) chat.closed(socket);
 			if (stranger) chat.closed(stranger);
+			if (owner) chat.closed(owner);
 		},
 	};
 }

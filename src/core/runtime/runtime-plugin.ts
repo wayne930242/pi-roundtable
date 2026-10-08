@@ -8,6 +8,7 @@ import type {
 import type { ChannelKey } from "../domain/conversation.ts";
 import type { InterimTextMode } from "../domain/interim.ts";
 import type { OwnerIdentity } from "../identity.ts";
+import type { PromptScope } from "../interactions/prompts.ts";
 import { AGENT_BRIEF, EffortJudge } from "../judging/effort-judge.ts";
 import type { ModelRef, ThinkingLevel } from "../models.ts";
 import type { PluginContext, RoundtablePlugin } from "../plugin.ts";
@@ -89,8 +90,8 @@ export function runtimePlugin(
 		setup: async (context) => {
 			const { logger, providers } = context;
 			const heldActions = await openHeldActions(context);
-			const prompts = (channel: ChannelKey, speaker?: Speaker) =>
-				context.surfaces.prompts(channel, speaker);
+			const prompts = (channel: ChannelKey, scope?: PromptScope | Speaker) =>
+				context.surfaces.prompts(channel, scope);
 			const agents = () => options.agents?.current();
 			const running: AgentRuntime = providers.filled.has("runtime")
 				? providers.runtime(

@@ -1,8 +1,8 @@
 import type { ExtensionFactory } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import type { OwnerAnswer, OwnerQuestion } from "../../domain/owner-prompts.ts";
 import { messages } from "../../i18n/index.ts";
 import { type OwnerIdentity, ownerWords } from "../../identity.ts";
+import type { OwnerAnswer, OwnerQuestion } from "../../interactions/prompts.ts";
 import { toolText } from "../../shared/tool-result.ts";
 import type { PromptSlot } from "../prompt-slot.ts";
 

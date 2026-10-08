@@ -27,10 +27,15 @@ export interface PendingConfirmation {
 	heldAt: Date;
 	calls: HeldCall[];
 	/**
-	 * The speaker whose turn held the calls. Besides the owner, only they may approve them, at a
-	 * tier that holds them; without one, the owner alone may.
+	 * The speaker whose turn held the calls, by their id on the surface. Besides the owners, only
+	 * they may approve them, at a tier that holds them; without one, the owners alone may.
 	 */
 	speakerId?: string;
+	/**
+	 * The principal of that speaker, who approves them on any of their identities; absent for
+	 * calls held before 0.9, which are matched by `speakerId`.
+	 */
+	principalId?: string;
 }
 
 /** A file produced for a reply; data is raw bytes, not a path or base64. */

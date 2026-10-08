@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import type { OwnerAnswer, OwnerQuestion } from "../../domain/owner-prompts.ts";
 import { messages } from "../../i18n/index.ts";
+import type { OwnerAnswer, OwnerQuestion } from "../../interactions/prompts.ts";
 import { TEST_OWNER as OWNER } from "../../testing/owner.ts";
 import { PromptSlot } from "../prompt-slot.ts";
 import { ASK_USER_TOOL, askUserExtension } from "./ask-user.ts";

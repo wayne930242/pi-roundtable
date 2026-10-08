@@ -5,8 +5,8 @@ import type {
 	TranscriptEntry,
 	TurnResult,
 } from "../domain/conversation.ts";
-import type { OwnerPrompts } from "../domain/owner-prompts.ts";
 import type { TurnRequest } from "../domain/ports.ts";
+import type { PromptScope, Prompts } from "../interactions/prompts.ts";
 import type { Logger } from "../log.ts";
 import type { ThinkingSetting } from "../models.ts";
 import type { HostEnv, LinkedSessions } from "../plugin.ts";
@@ -124,13 +124,15 @@ export interface RuntimeDeps {
 	/** What each tool needs; plugin tools are added when the host links, so ask at use time. */
 	toolTiers: ToolTiers;
 	/**
-	 * The owner's approval and question prompts in a conversation, from its chat surface; undefined
-	 * when the surface has none, and the action then waits for the owner's next message.
+	 * The approval and question prompts in a conversation for a turn's scope, made with
+	 * `promptScope(speaker, visibility)`, from its chat surface; undefined when the surface has
+	 * none, and the action then waits for a message that approves it. A `Speaker`, the 0.8 form,
+	 * is read as theirs in a shared conversation, with a deprecation warning, until 1.0.
 	 */
 	prompts(
 		conversation: ChannelKey,
-		speaker?: Speaker,
-	): OwnerPrompts | undefined;
+		scope?: PromptScope | Speaker,
+	): Prompts | undefined;
 	/**
 	 * The agent server's per-agent settings, for agent turns. The runtime is built before the agent
 	 * server, so read this when a turn runs, not in the factory; it stays undefined on a host without

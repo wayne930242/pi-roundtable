@@ -4,11 +4,16 @@ import {
 	definePlugin,
 	NotLinkedError,
 	PluginError,
+	promptScope,
 	Roundtable,
 	type RoundtablePlugin,
 	type SurfacePort,
 } from "pi-roundtable";
-import { silentLogger } from "pi-roundtable/testing";
+import {
+	describeSurfaceContract,
+	type SurfaceObservation,
+	silentLogger,
+} from "pi-roundtable/testing";
 import { FakeSurface, fakeChat } from "./fake-surface.ts";
 
 /** One host runs per process, so each test stops its own. */
@@ -97,17 +102,75 @@ test("the port picks the surface by the key's prefix and refuses a prefix nobody
 	expect(surface.stops).toEqual(["show fake:1", "hide fake:1"]);
 });
 
-test("the owner's approvals in a channel of the surface use the surface's prompts, and other channels have none", async () => {
+test("approvals in a channel of the surface use the surface's prompts, and other channels have none", async () => {
 	const surface = new FakeSurface();
 	const probe = portOf();
 	await host([fakeChat(surface), probe.plugin]).run();
-	const prompts = probe.port().prompts("fake:1");
-	expect(await prompts?.confirm("Run rm?", "deletes the notes")).toBe(
-		"approved",
+	const speaker = {
+		id: "1",
+		name: "Ada",
+		tier: "member",
+		principalId: "p1",
+	} as const;
+	const prompts = probe.port().prompts("fake:1", promptScope(speaker));
+	const answer = prompts?.confirm(
+		"Search?",
+		"searches the web",
+		undefined,
+		"member",
 	);
-	expect(surface.asked).toEqual(["fake:1: Run rm?"]);
+	expect(surface.asked).toEqual([
+		{ id: "q1", channel: "fake:1", title: "Search?", open: true },
+	]);
+	surface.answer("q1", { principalId: "p1" }, true);
+	expect(await answer).toBe("approved");
 	expect(probe.port().prompts("mcp:1")).toBeUndefined();
 });
+
+/** The fake chat as the contract sees it: what its person, author "1", has seen. */
+function contractSubject(tier: "owner" | "member") {
+	const surface = new FakeSurface();
+	return {
+		surface,
+		channel: "fake:room" as const,
+		speaker: { id: "1", name: "Ada", tier, principalId: "p1" },
+		write: async (text: string) => surface.say("fake:room", text),
+		observations: (): SurfaceObservation[] => [
+			...surface.replies.map(({ reply }) => ({
+				kind: "reply" as const,
+				text: reply.chunks.join("\n"),
+				files: [],
+			})),
+			...surface.typing.map((entry) => ({
+				kind: "typing" as const,
+				on: entry.startsWith("start"),
+			})),
+			...surface.stops.map((entry) => ({
+				kind: "stop" as const,
+				on: entry.startsWith("show"),
+			})),
+			...surface.asked.flatMap(({ id, title, open }) => [
+				{ kind: "prompt" as const, id, title },
+				...(open ? [] : [{ kind: "prompt_closed" as const, id }]),
+			]),
+		],
+		answer: async (id: string, approved: boolean) =>
+			surface.answer(id, { principalId: "p1" }, approved),
+		stranger: {
+			answer: async (id: string, approved: boolean) =>
+				surface.answer(id, { principalId: "p2" }, approved),
+		},
+		owner: {
+			answer: async (id: string, approved: boolean) =>
+				surface.answer(id, { principalId: "p0", owner: true }, approved),
+		},
+	};
+}
+
+describeSurfaceContract("the fake chat", async () => contractSubject("owner"));
+describeSurfaceContract("the fake chat for a member", async () =>
+	contractSubject("member"),
+);
 
 test("two surfaces with one prefix are refused, naming both plugins", async () => {
 	const second = definePlugin({

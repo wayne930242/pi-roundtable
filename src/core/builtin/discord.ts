@@ -64,7 +64,7 @@ export function discordPlugin(options: DiscordOptions): RoundtablePlugin {
 			// The surface exists by the time a turn posts a card.
 			const cards: OwnerCards = new OwnerCards({
 				ownerId: options.ownerId,
-				// Who may answer a card besides the owner, by the identity service.
+				// Who may answer a card besides the primary owner, by the identity service.
 				...(identity ? { identity } : {}),
 				channel: (channelId) => connected.cardChannel(channelId),
 				logger,
@@ -73,7 +73,7 @@ export function discordPlugin(options: DiscordOptions): RoundtablePlugin {
 				token: options.token,
 				ownerId: options.ownerId,
 				ownerName: options.ownerName,
-				prompts: (channel, speaker) => cards.prompts(channel, speaker),
+				prompts: (channel, scope) => cards.prompts(channel, scope),
 				logger,
 			});
 			surface = connected;

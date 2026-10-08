@@ -18,13 +18,12 @@ import type {
 	OutboundReply,
 } from "../domain/conversation.ts";
 import type { InterimPosts } from "../domain/interim.ts";
-import type { OwnerPrompts } from "../domain/owner-prompts.ts";
 import type { OwnerNotifier } from "../domain/ports.ts";
 import { messages } from "../i18n/index.ts";
+import type { PromptScope, Prompts } from "../interactions/prompts.ts";
 import type { Logger } from "../log.ts";
 import type { OwnerOperations } from "../modules/discord-admin/discord-admin.ts";
 import { splitReply } from "../presentation/reply-splitter.ts";
-import type { Speaker } from "../speakers.ts";
 import { DiscordAgentChannels, DiscordDashboard } from "./agent-discord.ts";
 import { discordChannelExecutor } from "./channel-executor.ts";
 import type { ChannelExecutor } from "./channel-operations.ts";
@@ -50,8 +49,8 @@ export interface DiscordSurfaceOptions {
 	ownerId: string;
 	/** How the owner is named in audit-log reasons and refusals. */
 	ownerName: string;
-	/** The owner's cards in a Discord channel; the surface hands them out as its `prompts`. */
-	prompts: (channel: ChannelKey, speaker?: Speaker) => OwnerPrompts | undefined;
+	/** The cards in a Discord channel; the surface hands them out as its `prompts`. */
+	prompts: (channel: ChannelKey, scope?: PromptScope) => Prompts | undefined;
 	logger: Logger;
 }
 
@@ -155,9 +154,9 @@ export class DiscordSurface
 		this.#client.on(Events.ChannelDelete, (channel) => handler(channel.id));
 	}
 
-	/** The owner's approval and question cards in a Discord channel. */
-	prompts(channel: ChannelKey, speaker?: Speaker): OwnerPrompts | undefined {
-		return this.#options.prompts(channel, speaker);
+	/** The approval and question cards in a Discord channel, for those the scope names. */
+	prompts(channel: ChannelKey, scope?: PromptScope): Prompts | undefined {
+		return this.#options.prompts(channel, scope);
 	}
 
 	/** The channel's interim posts: ordinary messages, edited in place for the progress line. */

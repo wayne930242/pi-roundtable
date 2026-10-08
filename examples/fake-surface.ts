@@ -1,12 +1,23 @@
 import {
+	type Approval,
 	type ChannelKey,
 	type ChatSurface,
 	definePlugin,
 	type InboundMessage,
 	type OutboundReply,
-	type OwnerPrompts,
+	type PromptScope,
+	type Prompts,
 	parseChannelKey,
+	TIERS,
 } from "pi-roundtable";
+
+/** A prompt the surface showed, open until someone it is for answers it. */
+interface Asked {
+	id: string;
+	channel: ChannelKey;
+	title: string;
+	open: boolean;
+}
 
 /**
  * A chat surface connects the host to one chat network. This one is an in-memory chat: its
@@ -19,7 +30,12 @@ export class FakeSurface implements ChatSurface {
 	readonly replies: { channel: ChannelKey; reply: OutboundReply }[] = [];
 	readonly typing: string[] = [];
 	readonly stops: string[] = [];
-	readonly asked: string[] = [];
+	readonly asked: Asked[] = [];
+	/** Who may answer each open prompt, and how it settles. */
+	readonly #answering = new Map<
+		string,
+		{ principalId?: string; owners: boolean; settle(answer: Approval): void }
+	>();
 	#deliver: ((message: InboundMessage) => void) | undefined;
 
 	/** The host hands over its router; every message the network reports goes to it. */
@@ -61,15 +77,65 @@ export class FakeSurface implements ChatSurface {
 		return () => void this.stops.push(`hide ${channel}`);
 	}
 
-	/** How the owner would approve a held action or answer a question in a turn. */
-	prompts(channel: ChannelKey): OwnerPrompts {
+	/**
+	 * How a turn asks to approve a held action or answers a question. The scope names who may
+	 * answer: its speaker when their tier holds the call, and the owners unless the conversation
+	 * is private, where a call above the speaker's tier goes to no one and expires at once.
+	 */
+	prompts(channel: ChannelKey, scope?: PromptScope): Prompts {
 		return {
-			confirm: async (title) => {
-				this.asked.push(`${channel}: ${title}`);
-				return "approved";
+			confirm: async (title, _message, signal, minTier = "owner") => {
+				const theirs =
+					scope !== undefined &&
+					TIERS.indexOf(scope.tier) >= TIERS.indexOf(minTier);
+				const owners = scope?.escalate !== "none";
+				if (!theirs && !owners) return "expired";
+				return this.#ask(channel, title, signal, {
+					...(theirs ? { principalId: scope.principalId } : {}),
+					owners,
+				});
 			},
 			ask: async () => undefined,
 		};
+	}
+
+	/** Someone answers an open prompt; it settles only when it is theirs to answer. */
+	answer(
+		id: string,
+		who: { principalId: string; owner?: boolean },
+		approved: boolean,
+	): void {
+		const open = this.#answering.get(id);
+		if (!open) return;
+		const theirs = open.principalId === who.principalId;
+		if (theirs || (who.owner && open.owners))
+			open.settle(approved ? "approved" : "declined");
+	}
+
+	#ask(
+		channel: ChannelKey,
+		title: string,
+		signal: AbortSignal | undefined,
+		audience: { principalId?: string; owners: boolean },
+	): Promise<Approval> {
+		const asked = {
+			id: `q${this.asked.length + 1}`,
+			channel,
+			title,
+			open: true,
+		};
+		this.asked.push(asked);
+		return new Promise((resolve) => {
+			const settle = (answer: Approval) => {
+				this.#answering.delete(asked.id);
+				asked.open = false;
+				resolve(answer);
+			};
+			this.#answering.set(asked.id, { ...audience, settle });
+			signal?.addEventListener("abort", () => settle("cancelled"), {
+				once: true,
+			});
+		});
 	}
 }
 

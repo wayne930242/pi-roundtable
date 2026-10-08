@@ -117,6 +117,7 @@ describe("the runtime plugin", () => {
 			"held-actions",
 			"held-actions-speaker",
 			"held-actions-speaker-hold",
+			"held-actions-principal",
 		]);
 		expect(plugin.provides?.map((key) => key.id)).toEqual([
 			"roundtable.runtime",

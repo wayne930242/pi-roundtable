@@ -7,6 +7,11 @@ import type { TurnProgress } from "./progress.ts";
 
 export type { AgentTurnScope };
 
+/** Who a turn's conversation belongs to. */
+export type TurnConversation =
+	| { visibility: "private"; principalId: string }
+	| { visibility: "shared" };
+
 export interface TurnRequest {
 	/** Where the turn's message arrived and its attachments are saved. */
 	channel: ChannelKey;
@@ -21,6 +26,12 @@ export interface TurnRequest {
 	agent?: AgentTurnScope;
 	/** The person the turn is for: who wrote the message, or who set up the work. */
 	speaker?: Speaker;
+	/**
+	 * Who the conversation belongs to, as the host records it: `private` to one principal, or
+	 * `shared` by whoever its claim admits, which it is taken to be when absent. A private
+	 * conversation's prompts are its person's alone; a shared one's escalate to the owners.
+	 */
+	conversation?: TurnConversation;
 	/**
 	 * The conversation's kind, fixed when its session is made: the string a claim's `startFresh`
 	 * returns, which picks the persona of a non-agent conversation. "owner" when absent.
