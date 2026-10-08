@@ -21,7 +21,7 @@ import { CONVERSATIONS, IDENTITY, RUNTIME } from "../services.ts";
 import type { Speaker } from "../speakers.ts";
 import {
 	bridgeMemoryError,
-	grantedCrowd,
+	liveBridgeRefusal,
 	onClaudeBridge,
 } from "./bridge-guard.ts";
 import { PendingConfirmationStore } from "./pending-confirmation-store.ts";
@@ -95,19 +95,22 @@ export function runtimePlugin(
 ): RoundtablePlugin {
 	let runtime: AgentRuntime | undefined;
 	let identity: IdentityService | undefined;
-	// Why claude-bridge may not run here, once the preflight read the stored roles; undefined when it may.
-	let bridgeRefusal: string | undefined;
+	// Why claude-bridge may not run here, read again at the boot and at every shared turn, so a role
+	// granted while the host runs counts at once; undefined while it may.
+	const bridgeRefusal = liveBridgeRefusal({
+		memory: options.memory,
+		crowd: options.crowd,
+		identity: () => identity,
+		primary: options.owner.id,
+	});
 	return {
 		name: RUNTIME_PLUGIN,
 		migrations: PendingConfirmationStore.migrations(),
 		provides: [RUNTIME],
 		preflight: async () => {
-			if (options.memory) {
-				bridgeRefusal =
-					options.crowd ??
-					(identity && (await grantedCrowd(identity, options.owner.id)));
-				if (bridgeRefusal && onClaudeBridge(options.model))
-					throw bridgeMemoryError(formatModelRef(options.model), bridgeRefusal);
+			if (onClaudeBridge(options.model)) {
+				const why = await bridgeRefusal();
+				if (why) throw bridgeMemoryError(formatModelRef(options.model), why);
 			}
 			await runtime?.preflight?.();
 		},
@@ -144,7 +147,7 @@ export function runtimePlugin(
 								: { visibility: "shared" };
 						},
 						principalOf: async (id) => services.find(IDENTITY)?.principal(id),
-						bridgeRefusal: () => bridgeRefusal,
+						bridgeRefusal,
 						sessions: context.sessions,
 						agentDir: options.agentDir,
 						modelRuntime: options.modelRuntime,

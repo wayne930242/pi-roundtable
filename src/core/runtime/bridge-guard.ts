@@ -1,8 +1,9 @@
-import { AgentRunError, ConfigError } from "../domain/errors.ts";
+import type { AgentSessions } from "../contract/runtime.ts";
+import { ConfigError } from "../domain/errors.ts";
 import type { AccessRules, AccessTier } from "../identity/access-policy.ts";
 import type { IdentityService } from "../identity/identity-service.ts";
 import { SYSTEM_PRINCIPAL } from "../identity/principal-store.ts";
-import { formatModelRef, type ModelRef } from "../models.ts";
+import { formatModelRef, type ModelRef, parseModelRef } from "../models.ts";
 import type { RoundtablePlugin } from "../plugin.ts";
 
 /**
@@ -52,7 +53,7 @@ export function configuredCrowd(
  * conversation may have more than one person speaking in it; undefined when only the primary
  * owner holds a lasting role.
  */
-export async function grantedCrowd(
+async function grantedCrowd(
 	identity: Pick<IdentityService, "list" | "tierOf" | "owners">,
 	primary: string,
 ): Promise<string | undefined> {
@@ -84,18 +85,47 @@ export function bridgeMemoryError(model: string, crowd: string): ConfigError {
 }
 
 /**
- * Refuses an agent's turn on a model of claude-bridge while the host refuses it, as `refusal`
- * says why, before the model is asked.
+ * Why a shared turn may not run on the model it asks, as `bridgeRefusal` says at the turn;
+ * undefined when it may. The model is the agent's own for an agent's turn, the host's otherwise.
  */
-export function refuseBridgeModel(
-	agent: string,
-	model: ModelRef | undefined,
-	refusal: (() => string | undefined) | undefined,
-): void {
-	if (!model || !onClaudeBridge(model)) return;
-	const why = refusal?.();
-	if (why)
-		throw new AgentRunError(
-			`${agent}: ${bridgeMemoryError(formatModelRef(model), why).message}`,
-		);
+export async function bridgeTurnRefusal(
+	agent: string | undefined,
+	options: {
+		model: ModelRef;
+		agents?: Pick<AgentSessions, "modelOf"> | undefined;
+		bridgeRefusal?:
+			| (() => string | undefined | Promise<string | undefined>)
+			| undefined;
+	},
+): Promise<string | undefined> {
+	const model =
+		agent === undefined
+			? options.model
+			: options.agents && parseModelRef(options.agents.modelOf(agent).model);
+	if (!model || !onClaudeBridge(model)) return undefined;
+	const why = await options.bridgeRefusal?.();
+	if (!why) return undefined;
+	const message = bridgeMemoryError(formatModelRef(model), why).message;
+	return agent === undefined ? message : `${agent}: ${message}`;
+}
+
+/**
+ * Why claude-bridge may not serve the host now, read at each turn: the configuration's crowd, or
+ * the roles the host stores as they are now, so one granted after the boot counts at once.
+ * Undefined while one person alone may speak, or the host keeps no memory.
+ */
+export function liveBridgeRefusal(options: {
+	memory: boolean | undefined;
+	crowd: string | undefined;
+	identity: () =>
+		| Pick<IdentityService, "list" | "tierOf" | "owners">
+		| undefined;
+	primary: string;
+}): () => Promise<string | undefined> {
+	return async () => {
+		if (!options.memory) return undefined;
+		if (options.crowd) return options.crowd;
+		const identity = options.identity();
+		return identity && (await grantedCrowd(identity, options.primary));
+	};
 }

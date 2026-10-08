@@ -29,7 +29,7 @@ import type { TransientTask } from "../sessions.ts";
 import { textOf } from "../shared/session-messages.ts";
 import type { Speaker, Tier } from "../speakers.ts";
 import { type ToolTiers, toolsForTier, toolTiers } from "../tool-tiers.ts";
-import { refuseBridgeModel } from "./bridge-guard.ts";
+import { bridgeTurnRefusal } from "./bridge-guard.ts";
 import { ConversationSessions } from "./conversation-sessions.ts";
 import { confirmedTurnText } from "./extensions/confirmation-gate.ts";
 import { loadsMemory } from "./extensions/private-memory.ts";
@@ -115,7 +115,11 @@ export class PiAgentRuntime implements AgentRuntime {
 		// Whom the conversation serves now, the host's record read again; only its person, or the
 		// host itself, speaks in a private one, refused before its session is touched.
 		const conversation = await this.#sessions.conversation(key, request);
-		const refused = refusedSpeaker(conversation, request.speaker);
+		const refused =
+			refusedSpeaker(conversation, request.speaker) ??
+			(conversation.visibility === "shared"
+				? await bridgeTurnRefusal(request.agent?.name, this.#options)
+				: undefined);
 		if (refused) return { ok: false, error: new AgentRunError(refused) };
 		const scoped = { ...request, conversation };
 		const channelSession = await this.#sessions.freshSession(key, scoped);
@@ -475,7 +479,6 @@ export class PiAgentRuntime implements AgentRuntime {
 			throw new ConfigError("agent turns need the runtime's agents option");
 		const { model, thinking } = agents.modelOf(name);
 		const ref = parseModelRef(model);
-		refuseBridgeModel(name, ref, this.#options.bridgeRefusal);
 		if (
 			session.model?.provider !== ref?.provider ||
 			session.model?.id !== ref?.id

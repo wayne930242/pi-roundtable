@@ -2,7 +2,9 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
+import { createFauxCore, fauxAssistantMessage } from "@earendil-works/pi-ai";
+import { ModelRuntime } from "@earendil-works/pi-coding-agent";
+import { Type } from "typebox";
 import type {
 	AgentRuntime,
 	AgentSessions,
@@ -14,7 +16,11 @@ import { PluginError } from "../errors.ts";
 import type { IdentityService } from "../identity/identity-service.ts";
 import type { Principal } from "../identity/principal-store.ts";
 import { silentLogger } from "../log.ts";
-import type { PluginContext, RoundtablePlugin } from "../plugin.ts";
+import type {
+	LinkedSessions,
+	PluginContext,
+	RoundtablePlugin,
+} from "../plugin.ts";
 import {
 	collectContributions,
 	linkSessions,
@@ -22,6 +28,7 @@ import {
 import { resolveProviders } from "../registry/providers.ts";
 import { ServiceRegistry } from "../registry/services.ts";
 import { IDENTITY, RUNTIME } from "../services.ts";
+import type { Speaker } from "../speakers.ts";
 import { toolTiers } from "../tool-tiers.ts";
 import { PiAgentRuntime } from "./pi-agent-runtime.ts";
 import {
@@ -72,11 +79,13 @@ async function setUp(
 ) {
 	const plugins = [...filling, plugin];
 	const services = new ServiceRegistry([...plugins]);
+	let linked: LinkedSessions | undefined;
 	const context = {
 		logger: silentLogger(),
 		env: { locale: "en", timeZone: "UTC", now: () => new Date() },
 		sessions: () => {
-			throw new Error("not linked");
+			if (!linked) throw new Error("not linked");
+			return linked;
 		},
 		queue: {},
 		toolTiers: toolTiers(),
@@ -96,7 +105,7 @@ async function setUp(
 		toolTiers(),
 		services,
 	);
-	linkSessions(registry);
+	linked = linkSessions(registry);
 	return { services, registry };
 }
 
@@ -272,6 +281,124 @@ describe("the runtime plugin's preflight of claude-bridge with memory", () => {
 			const preflight = plugin.preflight?.();
 			await expect(preflight).rejects.toBeInstanceOf(ConfigError);
 			await expect(preflight).rejects.toThrow(/claude-bridge/);
+		}
+	});
+
+	test("refuses a shared turn on claude-bridge once a role granted after the boot lets someone else speak, before the model is asked", async () => {
+		const dir = mkdtempSync(join(tmpdir(), "runtime-plugin-bridge-"));
+		dirs.push(dir);
+		// A faux model under claude-bridge's provider id, so the guard sees the host run on it.
+		const core = createFauxCore({
+			provider: "claude-bridge",
+			models: [{ id: "faux-1" }],
+		});
+		let asked = 0;
+		core.setResponses(
+			Array.from({ length: 4 }, () => () => {
+				asked += 1;
+				return fauxAssistantMessage("OK.");
+			}),
+		);
+		const modelRuntime = await ModelRuntime.create({
+			authPath: join(dir, "auth.json"),
+			modelsPath: null,
+			allowModelNetwork: false,
+			refreshOnCreate: false,
+		});
+		modelRuntime.registerProvider("claude-bridge", {
+			api: core.api,
+			apiKey: "test",
+			baseUrl: "http://faux.invalid",
+			streamSimple: core.streamSimple,
+			models: [
+				{
+					id: "faux-1",
+					name: "Faux",
+					reasoning: false,
+					input: ["text"],
+					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+					contextWindow: 100_000,
+					maxTokens: 1_000,
+				},
+			],
+		});
+		const tiers: Record<string, "owner" | "admin" | "member"> = {
+			"1": "owner",
+		};
+		const plugin = runtimePlugin(
+			options({
+				model: { provider: "claude-bridge", id: "faux-1" },
+				memory: true,
+				modelRuntime,
+				thinking: "off",
+			}),
+			async () => heldActions,
+		);
+		// The compaction tool every session requires, as pi-self-compact registers it.
+		const compact: RoundtablePlugin = {
+			name: "compact",
+			setup: () => ({
+				sessionTools: [
+					{
+						name: "compact",
+						phase: "tools",
+						snapshot: () => ({
+							revision: 0,
+							factory: () => (pi) =>
+								pi.registerTool({
+									name: "compact_session",
+									label: "compact_session",
+									description: "Compact the session.",
+									parameters: Type.Object({}),
+									execute: async () => {
+										throw new Error("not scripted");
+									},
+								}),
+						}),
+					},
+				],
+			}),
+		};
+		const { services } = await setUp(plugin, [identity(tiers), compact]);
+		await plugin.preflight?.();
+		const runtime = services.get(RUNTIME);
+		const turn = (speaker: Speaker) =>
+			runtime.runTurn({
+				channel: "fake:room",
+				kind: "owner",
+				text: "Hello.",
+				speaker,
+				selection: { id: "chat", tools: [], groups: [] },
+			});
+		const owner: Speaker = {
+			id: "1",
+			name: "Owner",
+			tier: "owner",
+			principalId: "1",
+		};
+		const bo: Speaker = {
+			id: "bo-1",
+			name: "Bo",
+			tier: "member",
+			principalId: "p_bo",
+		};
+		try {
+			expect((await turn(owner)).ok).toBe(true);
+			expect(asked).toBe(1);
+			// `roundtable principal grant` gives Bo a lasting role while the host runs.
+			tiers.p_bo = "member";
+			const refused = await turn(bo);
+			expect(refused.ok).toBe(false);
+			if (!refused.ok)
+				expect(refused.error.message).toMatch(
+					/claude-bridge.*principal p_bo holds the member role.*private memory/s,
+				);
+			expect(asked).toBe(1);
+			// The owner's own shared turn is refused too: Bo's memory may be in its history.
+			expect((await turn(owner)).ok).toBe(false);
+			expect(asked).toBe(1);
+		} finally {
+			runtime.dispose?.();
 		}
 	});
 

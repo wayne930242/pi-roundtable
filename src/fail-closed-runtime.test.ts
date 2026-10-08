@@ -94,7 +94,7 @@ async function probeHost(
 						toolTiers: deps.toolTiers,
 						logger: deps.logger,
 						confirmations: deps.confirmations,
-						bridgeRefusal: () => agentModel.bridgeRefusal,
+						bridgeRefusal: async () => agentModel.bridgeRefusal,
 						agents: {
 							workDir: dir,
 							skills: () => [],
@@ -414,15 +414,18 @@ test("an agent on claude-bridge is refused before its turn when the host's share
 		bridgeRefusal: "access.members admits people besides the owner",
 	});
 	try {
-		await expect(
-			host.runtime.runTurn({
-				channel: "fake:infra",
-				selection: SELECTION,
-				text: "Look it up.",
-				speaker: MEMBER,
-				agent: { name: "infra", session: "fake:infra", home: "fake:infra" },
-			}),
-		).rejects.toThrow(/claude-bridge.*private memory/s);
+		const refused = await host.runtime.runTurn({
+			channel: "fake:infra",
+			selection: SELECTION,
+			text: "Look it up.",
+			speaker: MEMBER,
+			agent: { name: "infra", session: "fake:infra", home: "fake:infra" },
+		});
+		expect(refused.ok).toBe(false);
+		if (!refused.ok)
+			expect(refused.error.message).toMatch(
+				/^infra: .*claude-bridge.*private memory/s,
+			);
 		expect(host.pending()).toBe(3);
 	} finally {
 		await host.done();
