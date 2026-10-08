@@ -7,5 +7,6 @@ test("the host's plugin is a remote-mcp plugin that declares its own migrations"
 	expect(plugin.migrations?.map((m) => m.name)).toEqual([
 		"channel-grants",
 		"remote-sessions",
+		"remote-sessions-principal",
 	]);
 });

@@ -6,7 +6,7 @@ Two plugins for [pi-roundtable](https://github.com/wayne930242/pi-roundtable), t
   The owner adds an external MCP server (Notion, a calendar, anything that speaks MCP over HTTP) with a private Discord form, and the host gets the servers and a routing description for each, to give its agents.
   [ContextForge](#contextforge) holds every upstream server and its token.
 - `remoteMcp`: an MCP server over HTTP for agents outside Discord.
-  One endpoint relays turns to the owner's agent and returns the answer when polled.
+  One endpoint relays turns to the agent, for the owner or another principal the dispatch token stands for, and returns the answer when polled.
   Another offers Discord channel tools, only for the channels the owner granted on Discord.
 
 Bun only, like pi-roundtable.
@@ -161,9 +161,10 @@ The owner manages connectors on Discord with `/<root> connector`, where `<root>`
 | --- | --- | --- | --- |
 | `dispatchToken` | `string` | required | The bearer token an outside agent presents at `/mcp/personal`. Make it long and keep it secret |
 | `publicUrl` | `string` | required | The HTTPS address that reaches the host's `public` listener. Granted-channel URLs are built on its origin |
-| `persona` | `string` | a short neutral prompt | The system prompt of the default `remote` conversations |
+| `principal` | `string` | the primary owner | The id of the principal the dispatch token stands for: whose memory, schedules, conversations, and tier the remote turns have. See [whom the token stands for](#whom-the-token-stands-for) |
+| `persona` | `string` | a short prompt | The system prompt of the default `remote` conversations. The default names the owner when the token stands for an owner, and no one otherwise |
 | `answer`, `claim` | see [below](#when-the-host-runs-the-conversations-itself) | the core's runtime | Give both, or neither |
-| `messages` | `Partial<RemoteMcpMessages>` | English | The relay note, the tool descriptions, and the Discord text, in your wording. `dispatchDescription` and `resultDescription` are functions that receive the tool names |
+| `messages` | `Partial<RemoteMcpMessages>` | English | The relay notes (`relayNote` for an owner, `memberRelayNote` for anyone else, which falls back to your `relayNote`), the tool descriptions, and the Discord text, in your wording. `dispatchDescription` and `resultDescription` are functions that receive the tool names |
 | `toolNames` | `{ dispatch?: string; result?: string }` | `agent_dispatch`, `agent_result` | The names of the two tools at `/mcp/personal`, for agents that are already set up with other names. The default descriptions follow them |
 
 The plugin serves two endpoints on the host's `public` listener:
@@ -202,10 +203,12 @@ The tables belong to the plugin: change them through the plugin on Discord, or t
 
 #### The default conversation
 
-Without `answer` and `claim`, a relayed turn runs on the core: `context.turns.run` of kind `remote`, for an owner-tier speaker, in the channel `mcp:<session>`, through the agent server's runtime.
+Without `answer` and `claim`, a relayed turn runs on the core: `context.turns.run` of kind `remote`, for the principal the dispatch token stands for (`IDENTITY.speakerFor`, at their tier), in the channel `mcp:<session>`, through the agent server's runtime.
+The conversation is recorded as private to that principal.
 Nothing is posted to Discord, since no chat surface serves `mcp:` channels; the outside agent polls for the answer.
-A relayed message that the host's judge reads as approving held actions confirms them, as the owner's own reply would.
-Each message begins with a short note that says the owner wrote it in an outside agent.
+A relayed message that the host's judge reads as approving held actions confirms them, as the person's own reply would.
+Each message begins with a short note that says it was written in an outside agent: for an owner, the note and the persona name the owner, word for word as in 0.8; for anyone else they name no owner, so the agent does not take them for one.
+Which of the two is chosen at the start, by whether the principal then holds the owner role.
 Starting a remote conversation over archives it, and deleting it also ends the outside agent's session.
 Sessions that stay idle for 14 days are deleted once a day.
 
@@ -226,9 +229,10 @@ export function hostRemote(dispatchToken: string, publicUrl: string) {
 	return remoteMcp({
 		dispatchToken,
 		publicUrl,
-		answer: async (channel, text) => ({
+		// `speaker` is the principal the dispatch token stands for.
+		answer: async (channel, text, speaker) => ({
 			ok: true,
-			text: `Answered ${text.length} characters in ${channel}.`,
+			text: `Answered ${speaker.name}'s ${text.length} characters in ${channel}.`,
 		}),
 		claim: {
 			// The string names whose conversation it was: the host's own kind.
@@ -240,15 +244,32 @@ export function hostRemote(dispatchToken: string, publicUrl: string) {
 ```
 <!-- /example -->
 
-- `answer(channel, text)` runs one turn and never rejects.
+- `answer(channel, text, speaker)` runs one turn and never rejects.
+  `speaker` is whom the turn is for: the principal the dispatch token stands for, from `IDENTITY.speakerFor`.
   The plugin does not queue it, so it joins the channel's queue itself (`context.queue.run`).
   The host owns the conversations' kind and persona, so the plugin contributes no persona in this mode.
 - `claim` is what the claim over the `mcp:<session>` channels does with those conversations: `startFresh` (required; the string it returns is the conversation's kind), `deleteConversation` (required; the plugin removes the session record after it), and optional `stop` and `background`.
   A claim without `background` skips background turns.
 
+#### Whom the token stands for
+
+The dispatch token is the identity `token:<toolNames.dispatch, or remote-mcp>`, which the plugin declares in its `identities`.
+At every start the host links it to `principal`, or to the primary owner without one, as in 0.8.
+`roundtable principal list` shows it under that principal as `token:remote-mcp  (plugin remote-mcp)`, and `roundtable principal unlink` refuses it: change the option instead.
+The start stops when the principal does not exist, or when the identity is linked to someone else by the configuration or the CLI; the error names what to change.
+
+Bound to a member, a remote turn reads and changes the member's memory, and only the tools of their tier are offered.
+Give that member a lasting role with `roundtable principal grant <principal> member` (or `admin`).
+A remote turn does not record them as seen, so a member whose tier comes only from what a surface reports stops being served `access.backgroundStaleDays` (30 by default) after they were last seen elsewhere: every remote run fails until they are seen again.
+
+Changing `principal` and restarting moves the token.
+Each session belongs to the principal it was opened for: after a move, continuing a session of the earlier principal answers `SESSION_NOT_FOUND`, and moving back makes it continue.
+Sessions 0.8 opened belong to the primary owner.
+The tool descriptions the outside agent reads still say "the owner"; give `dispatchDescription` in `messages` for other wording.
+
 ## The grant and security model
 
-- **The dispatch token is the owner's voice.** Whoever holds it can send the owner's agent messages as the owner (owner tier, with every tool the owner's agent has), and can approve its held actions by saying so. Keep it secret, change it by changing the option, and serve the endpoint only over HTTPS.
+- **The dispatch token is the voice of the principal it stands for.** Whoever holds it can send the agent messages as that principal (the primary owner by default: owner tier, with every tool the owner's agent has), and can approve the held actions of its turns by saying so. Keep it secret, change it by changing the option, and serve the endpoint only over HTTPS.
 - **A bundle URL is a credential.** It carries 32 random bytes; only its SHA-256 hash is stored, and the URL is shown once, when the bundle is created or replaced. Everyone holding it can use every channel in the bundle with the operations granted there, and nothing else.
 - **The owner approves each grant on Discord.** Only the owner can use the commands. A grant needs the owner to hold *Manage Channels* in the channel, and both the owner and the bot to hold the Discord permissions behind every operation chosen, so a grant never exceeds what both may do. The pending choice expires after five minutes.
 - **Every call is checked again.** The grant, the guild, and the bundle's token are read after Discord is inspected, so a revoke or a replaced URL stops a call in flight. Each call is written to an audit table before it runs and marked afterwards.
@@ -275,7 +296,7 @@ Operation labels (`read`, `send`, ...) come from pi-roundtable and follow the ho
 ## Database
 
 Each plugin declares its migrations; the host runs them before any setup.
-Tables: `owner_connectors`; `discord_mcp_bundles`, `discord_channel_grants`, `discord_channel_audit`, `remote_agent_sessions`.
+Tables: `owner_connectors`; `discord_mcp_bundles`, `discord_channel_grants`, `discord_channel_audit`, `remote_agent_sessions` (with `principal_id`, the migration `remote-sessions-principal`).
 
 ## Development
 

@@ -133,10 +133,16 @@ describeDb("both plugins on a host", () => {
 			text: "pong",
 		});
 		const turn = runtime.turns.at(-1);
+		// The primary owner's principal, which the dispatch token stands for by default.
 		expect(turn).toMatchObject({
 			channel: `mcp:${started.sessionId}`,
 			kind: "remote",
-			speaker: { tier: "owner" },
+			speaker: {
+				id: "100000000000000001",
+				name: "Ada",
+				tier: "owner",
+				principalId: "100000000000000001",
+			},
 		});
 		expect(turn?.text).toContain("\nping");
 		expect(turn?.text).toContain("the owner");

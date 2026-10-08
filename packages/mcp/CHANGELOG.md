@@ -5,9 +5,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `remoteMcp({ principal })`: the id of the principal the dispatch token stands for, the primary owner by default, as in 0.8. The plugin declares the token as the identity `token:<toolNames.dispatch, or remote-mcp>` in its `identities`, which the host links to that principal at every start; a principal that does not exist, or the identity linked to someone else, stops the start.
+- `RemoteMcpMessages.memberRelayNote`: the note opening each relayed message when the token stands for someone who is not an owner; it falls back to a `relayNote` you give.
+
 ### Changed
 
 - The connector form of `/<root> connector add` is accepted from every owner, as pi-roundtable's `CommandGuard.allows` sees them, not only the primary owner.
+- A default remote turn is the bound principal's, from `IDENTITY.speakerFor`, at their tier, and its conversation is recorded as private to them. Bound to the primary owner, as by default, the speaker is the owner's principal at the owner tier, so the prompt, memory, and tools are 0.8's; bound to a member, the turn reads their memory and offers only their tier's tools, and the persona and relay note name no owner. The host's own `answer` receives that speaker as a third argument.
+- `remoteMcp` requires `IDENTITY` (provided by the built-in `identity` plugin of pi-roundtable 0.9); a `testPlugin` test of it gives one with `principalOf`, `tierOf`, `speakerFor`, and `owners`.
+- Each remote session belongs to the principal it was opened for (`remote_agent_sessions.principal_id`, migration `remote-sessions-principal`); after the token moves to another principal, continuing a session of the earlier one answers `SESSION_NOT_FOUND`. Sessions 0.8 opened belong to the primary owner.
+
+### Deprecated
+
+- `REMOTE_SPEAKER` in `default-conversation.ts`: remote turns are for the bound principal. It goes away in 1.0.
 
 ## [0.8.0] - 2026-10-07
 

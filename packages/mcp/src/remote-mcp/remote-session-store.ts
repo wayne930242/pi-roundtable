@@ -2,7 +2,10 @@ import { randomUUID } from "node:crypto";
 import type { SQL } from "bun";
 import type { Migration } from "pi-roundtable";
 
-/** The conversations outside agents opened with the owner's agent, so they survive a restart. */
+/**
+ * The conversations outside agents opened with the agent, each the principal's the dispatch token
+ * stood for when it was opened, so they survive a restart and stay theirs.
+ */
 export class RemoteSessionStore {
 	readonly #sql: SQL;
 
@@ -23,21 +26,46 @@ export class RemoteSessionStore {
 		},
 	};
 
+	/** Whose each session is: null for one 0.8 opened, which `adopt` gives the primary owner. */
+	static readonly principalMigration: Migration = {
+		name: "remote-sessions-principal",
+		up: async (sql) => {
+			await sql`ALTER TABLE remote_agent_sessions ADD COLUMN IF NOT EXISTS principal_id text`;
+		},
+	};
+
+	/** Both, in order: what a pool needs before the store attaches. */
+	static migrations(): Migration[] {
+		return [
+			RemoteSessionStore.migration,
+			RemoteSessionStore.principalMigration,
+		];
+	}
+
 	/** The store over the host's migrated pool. */
 	static async attach(sql: SQL): Promise<RemoteSessionStore> {
 		return new RemoteSessionStore(sql);
 	}
 
-	async create(): Promise<string> {
+	/** Gives the sessions of no principal, which 0.8 opened for the owner, to the primary owner. */
+	async adopt(principalId: string): Promise<void> {
+		await this.#sql`
+			UPDATE remote_agent_sessions SET principal_id = ${principalId} WHERE principal_id IS NULL`;
+	}
+
+	async create(principalId: string): Promise<string> {
 		const id = randomUUID();
-		await this.#sql`INSERT INTO remote_agent_sessions (id) VALUES (${id})`;
+		await this.#sql`
+			INSERT INTO remote_agent_sessions (id, principal_id) VALUES (${id}, ${principalId})`;
 		return id;
 	}
 
-	/** Marks the session used; resolves false when it does not exist. */
-	async touch(id: string): Promise<boolean> {
+	/** Marks the principal's session used; resolves false when they have no such session. */
+	async touch(id: string, principalId: string): Promise<boolean> {
 		const rows = await this.#sql`
-			UPDATE remote_agent_sessions SET last_used_at = now() WHERE id = ${id} RETURNING id`;
+			UPDATE remote_agent_sessions SET last_used_at = now()
+			WHERE id = ${id} AND principal_id = ${principalId}
+			RETURNING id`;
 		return rows.length > 0;
 	}
 
@@ -46,7 +74,7 @@ export class RemoteSessionStore {
 		await this.#sql`DELETE FROM remote_agent_sessions WHERE id = ${id}`;
 	}
 
-	/** Sessions last used before the cutoff. */
+	/** Sessions last used before the cutoff, whoever's they are. */
 	async idleSince(cutoff: Date): Promise<string[]> {
 		const rows: { id: string }[] = await this.#sql`
 			SELECT id FROM remote_agent_sessions WHERE last_used_at < ${cutoff} ORDER BY last_used_at`;

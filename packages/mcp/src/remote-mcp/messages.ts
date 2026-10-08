@@ -14,8 +14,13 @@ export const DEFAULT_TOOL_NAMES: RemoteToolNames = {
  * and what the owner reads in the Discord commands.
  */
 export interface RemoteMcpMessages {
-	/** Opens every relayed turn, so the agent knows where the message comes from. */
+	/** Opens every relayed turn, so the agent knows where the message comes from, when the dispatch token stands for an owner. */
 	relayNote: string;
+	/**
+	 * Opens every relayed turn when the dispatch token stands for someone who is not an owner; it
+	 * names no owner. A host that gives only `relayNote` has it open those turns too.
+	 */
+	memberRelayNote: string;
 	/** The reason an outside agent is told for a run that did not complete. */
 	runFailed: string;
 	/** Sent for a granted tool call that failed in a way the agent must not retry. */
@@ -118,6 +123,8 @@ export interface RemoteMcpMessages {
 export const REMOTE_MCP_MESSAGES: RemoteMcpMessages = {
 	relayNote:
 		"(The owner wrote this in a personal agent that relays it over MCP, not on Discord. Answer the owner directly, just as you would on Discord; the agent passes your reply back.)",
+	memberRelayNote:
+		"(This was written in a personal agent that relays it over MCP, not on Discord. Answer the person who wrote it directly, just as you would on Discord; the agent passes your reply back.)",
 	runFailed: "This run did not complete. Try again later.",
 	operationUnfinished:
 		"The operation did not complete. Check the audit log of the grants on Discord; do not retry automatically.",

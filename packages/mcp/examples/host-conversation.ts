@@ -9,9 +9,10 @@ export function hostRemote(dispatchToken: string, publicUrl: string) {
 	return remoteMcp({
 		dispatchToken,
 		publicUrl,
-		answer: async (channel, text) => ({
+		// `speaker` is the principal the dispatch token stands for.
+		answer: async (channel, text, speaker) => ({
 			ok: true,
-			text: `Answered ${text.length} characters in ${channel}.`,
+			text: `Answered ${speaker.name}'s ${text.length} characters in ${channel}.`,
 		}),
 		claim: {
 			// The string names whose conversation it was: the host's own kind.

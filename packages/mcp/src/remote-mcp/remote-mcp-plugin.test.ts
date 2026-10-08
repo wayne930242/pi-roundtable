@@ -2,7 +2,17 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { SQL } from "bun";
-import { AGENTS, type ChannelKey, migrateDatabase } from "pi-roundtable";
+import {
+	AGENTS,
+	type ChannelKey,
+	CONVERSATIONS,
+	type ConversationRegistration,
+	IDENTITY,
+	IdentityError,
+	migrateDatabase,
+	type Speaker,
+	type Tier,
+} from "pi-roundtable";
 import {
 	describeDb,
 	fakeDiscord,
@@ -17,12 +27,50 @@ import {
 	recordingRuntime,
 } from "../testing/recording-runtime.ts";
 import { ChannelGrantStore } from "./channel-grants.ts";
+import { MEMBER_PERSONA } from "./default-conversation.ts";
 import { REMOTE_MCP_MESSAGES, type RemoteMcpMessages } from "./messages.ts";
 import { remoteMcp } from "./remote-mcp-plugin.ts";
 
 const TOKEN = "dispatch-token-for-tests";
 const PUBLIC_URL = "https://bot.example.test";
 const base = { dispatchToken: TOKEN, publicUrl: PUBLIC_URL };
+
+/** The 0.8 texts a single-owner host's remote turns are told, word for word. */
+const PERSONA_0_8 =
+	"You are the owner's personal assistant. The owner is writing to you through an outside agent over MCP, not on Discord, and each message begins with a note saying so. Answer the owner directly.";
+const RELAY_NOTE_0_8 =
+	"(The owner wrote this in a personal agent that relays it over MCP, not on Discord. Answer the owner directly, just as you would on Discord; the agent passes your reply back.)";
+
+/** Whom the dispatch token stands for, as `IDENTITY` reads it once the identity plugin linked it. */
+interface Bound {
+	principal: string;
+	name: string;
+	tier: Tier;
+	/** Throws from `speakerFor`, as for a principal disabled since. */
+	refused?: boolean;
+	/** The token linked to no one, as a replacement `IDENTITY` may leave it. */
+	unlinked?: boolean;
+}
+
+const OWNER_BOUND: Bound = { principal: "owner", name: "Owner", tier: "owner" };
+const KAI_BOUND: Bound = { principal: "p_kai", name: "Kai", tier: "member" };
+
+/** `IDENTITY` with the token `identity` linked as `bound` says, the primary owner `owner`. */
+function boundIdentity(bound: Bound, identity = "token:remote-mcp") {
+	return servicePair(IDENTITY, {
+		principalOf: async (written) =>
+			written === identity && !bound.unlinked ? bound.principal : undefined,
+		tierOf: async (id) =>
+			id === bound.principal && bound.tier === "owner" ? "owner" : undefined,
+		speakerFor: async (id): Promise<Speaker> => {
+			if (bound.refused) throw new IdentityError(`principal ${id} is disabled`);
+			return { id, name: bound.name, tier: bound.tier, principalId: id };
+		},
+		owners: async () => [
+			{ id: "owner", displayName: "Owner", disabled: false },
+		],
+	});
+}
 
 const jsonOf = (result: unknown) =>
 	JSON.parse(
@@ -50,6 +98,18 @@ test.each([
 	);
 });
 
+test("declares the dispatch token as an identity, bound to the principal given or the primary owner", () => {
+	expect(remoteMcp(base).identities).toEqual([
+		{ identity: "token:remote-mcp" },
+	]);
+	expect(remoteMcp({ ...base, principal: "p_kai" }).identities).toEqual([
+		{ identity: "token:remote-mcp", principal: "p_kai" },
+	]);
+	expect(
+		remoteMcp({ ...base, toolNames: { dispatch: "ask_agent" } }).identities,
+	).toEqual([{ identity: "token:ask_agent" }]);
+});
+
 // Runs against a real PostgreSQL, only when ROUNDTABLE_TEST_DATABASE_URL is set.
 describeDb("remoteMcp on a plugin harness", () => {
 	let sql: SQL;
@@ -64,21 +124,42 @@ describeDb("remoteMcp on a plugin harness", () => {
 		await sql.close();
 	});
 
-	/** The plugin over a migrated database, with the agent server's runtime and a Discord stand-in. */
+	/**
+	 * The plugin over a migrated database, with the agent server's runtime, a Discord stand-in,
+	 * `IDENTITY` with the token bound as given, and a registry that records each conversation.
+	 */
 	async function boot(
 		options: Parameters<typeof remoteMcp>[0],
 		runtime: RecordingRuntime = recordingRuntime(),
 		approves = false,
+		bound: Bound = OWNER_BOUND,
 	) {
 		const plugin = remoteMcp(options);
 		await migrateDatabase(testDatabaseUrl, [plugin]);
 		const discord = fakeDiscord();
+		const registered: ConversationRegistration[] = [];
 		const harness = await testPlugin(plugin, {
 			database: sql,
 			services: [
 				servicePair(AGENTS, {
 					runtime,
 					approvals: { approves: async () => approves },
+				}),
+				boundIdentity(
+					bound,
+					`token:${options.toolNames?.dispatch ?? "remote-mcp"}`,
+				),
+				servicePair(CONVERSATIONS, {
+					register: async (registration) => {
+						registered.push(registration);
+						const at = new Date();
+						return {
+							...registration,
+							surface: "mcp",
+							createdAt: at,
+							lastActiveAt: at,
+						};
+					},
 				}),
 				{
 					key: discord.service.key,
@@ -87,7 +168,7 @@ describeDb("remoteMcp on a plugin harness", () => {
 			],
 		});
 		harnesses.push(harness);
-		return { harness, runtime, discord };
+		return { harness, runtime, discord, registered };
 	}
 
 	/** An MCP client whose HTTP goes straight into the plugin's routes. */
@@ -112,14 +193,22 @@ describeDb("remoteMcp on a plugin harness", () => {
 		return client;
 	}
 
-	async function relay(harness: TestPluginResult, message: string) {
+	async function relay(
+		harness: TestPluginResult,
+		message: string,
+		sessionId?: string,
+	) {
 		const client = await connect(harness, "/mcp/personal");
 		const started = jsonOf(
 			await client.callTool({
 				name: "agent_dispatch",
-				arguments: { message },
+				arguments: { message, ...(sessionId ? { sessionId } : {}) },
 			}),
 		);
+		if (started.error) {
+			await client.close();
+			return { error: started.error as string };
+		}
 		for (let tries = 0; tries < 100; tries++) {
 			const state = jsonOf(
 				await client.callTool({
@@ -135,6 +224,123 @@ describeDb("remoteMcp on a plugin harness", () => {
 		}
 		throw new Error("the run did not finish");
 	}
+
+	test("the default turn is the bound principal's, in a conversation private to them", async () => {
+		const { harness, runtime, registered } = await boot(
+			{ ...base, principal: "p_kai" },
+			recordingRuntime(),
+			false,
+			KAI_BOUND,
+		);
+		const result = await relay(harness, "hi");
+		expect(result.status).toBe("completed");
+		expect(runtime.turns.at(-1)?.speaker).toEqual({
+			id: "p_kai",
+			name: "Kai",
+			tier: "member",
+			principalId: "p_kai",
+		});
+		expect(registered.at(-1)).toMatchObject({
+			key: `mcp:${result.sessionId}`,
+			kind: "remote",
+			visibility: "private",
+			principalId: "p_kai",
+		});
+	});
+
+	test("bound to an owner, the persona and the relay note are 0.8's word for word; bound to a member, they say someone writes", async () => {
+		const owner = await boot(base);
+		expect(owner.harness.contribution.personas?.[0]?.prompt()).toBe(
+			PERSONA_0_8,
+		);
+		await relay(owner.harness, "hi");
+		expect(owner.runtime.turns.at(-1)?.text).toBe(`${RELAY_NOTE_0_8}\nhi`);
+		expect(owner.runtime.turns.at(-1)?.speaker).toMatchObject({
+			tier: "owner",
+			principalId: "owner",
+		});
+
+		const member = await boot(base, recordingRuntime(), false, KAI_BOUND);
+		expect(member.harness.contribution.personas?.[0]?.prompt()).toBe(
+			MEMBER_PERSONA,
+		);
+		expect(MEMBER_PERSONA).not.toContain("owner");
+		await relay(member.harness, "hi");
+		expect(member.runtime.turns.at(-1)?.text).toBe(
+			`${REMOTE_MCP_MESSAGES.memberRelayNote}\nhi`,
+		);
+		expect(REMOTE_MCP_MESSAGES.memberRelayNote).not.toContain("owner");
+
+		// The host's own wording stands for whoever the token stands for.
+		const worded = await boot(
+			{ ...base, persona: "You are a helper.", messages: { relayNote: "[r]" } },
+			recordingRuntime(),
+			false,
+			KAI_BOUND,
+		);
+		expect(worded.harness.contribution.personas?.[0]?.prompt()).toBe(
+			"You are a helper.",
+		);
+		await relay(worded.harness, "hi");
+		expect(worded.runtime.turns.at(-1)?.text).toBe("[r]\nhi");
+	});
+
+	test("a session another principal opened is not found once the token stands for someone else", async () => {
+		const owner = await boot(base);
+		const opened = await relay(owner.harness, "hi");
+		expect(opened.status).toBe("completed");
+
+		const kai = await boot(base, recordingRuntime(), false, KAI_BOUND);
+		expect(await relay(kai.harness, "and me?", opened.sessionId)).toEqual({
+			error: "SESSION_NOT_FOUND",
+		});
+		expect(kai.runtime.turns).toEqual([]);
+		const own = await relay(kai.harness, "hi");
+		expect(own.status).toBe("completed");
+
+		// Bound back, the owner's session goes on, and Kai's is not theirs.
+		const again = await boot(base);
+		expect(
+			(await relay(again.harness, "still there?", opened.sessionId)).status,
+		).toBe("completed");
+		expect(await relay(again.harness, "and Kai's?", own.sessionId)).toEqual({
+			error: "SESSION_NOT_FOUND",
+		});
+	});
+
+	test("a session 0.8 left, of no principal, is the primary owner's", async () => {
+		const id = crypto.randomUUID();
+		await sql`INSERT INTO remote_agent_sessions (id) VALUES (${id})`;
+		const kai = await boot(base, recordingRuntime(), false, KAI_BOUND);
+		expect(await relay(kai.harness, "hi", id)).toEqual({
+			error: "SESSION_NOT_FOUND",
+		});
+		const owner = await boot(base);
+		expect((await relay(owner.harness, "hi", id)).status).toBe("completed");
+	});
+
+	test("a turn for a principal IDENTITY refuses, such as one disabled since, fails the run", async () => {
+		const { harness, runtime } = await boot(base, recordingRuntime(), false, {
+			...KAI_BOUND,
+			refused: true,
+		});
+		expect(await relay(harness, "hi")).toMatchObject({
+			status: "failed",
+			error: REMOTE_MCP_MESSAGES.runFailed,
+		});
+		expect(runtime.turns).toEqual([]);
+	});
+
+	test("the start stops when IDENTITY links the dispatch token to no one", async () => {
+		expect(
+			boot(base, recordingRuntime(), false, {
+				...OWNER_BOUND,
+				unlinked: true,
+			}),
+		).rejects.toThrow(
+			"remote-mcp: token:remote-mcp, the dispatch token's identity, is linked to no principal",
+		);
+	});
 
 	test("the default turn confirms held actions when the relayed message approves them", async () => {
 		const runtime = recordingRuntime();
@@ -203,14 +409,14 @@ describeDb("remoteMcp on a plugin harness", () => {
 	});
 
 	test("a host that runs the turns itself supplies the answer and the claim", async () => {
-		const seen: { channel: ChannelKey; text: string }[] = [];
+		const seen: { channel: ChannelKey; text: string; speaker: Speaker }[] = [];
 		const calls: string[] = [];
 		const runtime = recordingRuntime();
 		const { harness } = await boot(
 			{
 				...base,
-				answer: async (channel, text) => {
-					seen.push({ channel, text });
+				answer: async (channel, text, speaker) => {
+					seen.push({ channel, text, speaker });
 					return { ok: true, text: "from the host" };
 				},
 				claim: {
@@ -231,6 +437,13 @@ describeDb("remoteMcp on a plugin harness", () => {
 			text: "from the host",
 		});
 		expect(seen[0]?.text).toContain("\nhello");
+		// Whom the turn is for: the principal the token stands for.
+		expect(seen[0]?.speaker).toEqual({
+			id: "owner",
+			name: "Owner",
+			tier: "owner",
+			principalId: "owner",
+		});
 		// The core's runtime ran nothing, and no persona was contributed for it.
 		expect(runtime.turns).toEqual([]);
 		expect(harness.contribution.personas ?? []).toEqual([]);

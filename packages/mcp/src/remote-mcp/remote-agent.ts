@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { ChannelKey, Logger, TurnResult } from "pi-roundtable";
 import { REMOTE_MCP_MESSAGES, type RemoteMcpMessages } from "./messages.ts";
-import type { RemoteSessionStore } from "./remote-session-store.ts";
 
 /** A dispatch the caller should fix rather than retry as is. */
 export class RemoteAgentError extends Error {
@@ -23,9 +22,16 @@ interface Run {
 	finishedAt?: number;
 }
 
+/** The sessions of the principal the dispatch token stands for. */
+interface RemoteSessions {
+	create(): Promise<string>;
+	/** Marks their session used; false when they have no such session. */
+	touch(id: string): Promise<boolean>;
+}
+
 export interface RemoteAgentOptions {
-	sessions: Pick<RemoteSessionStore, "create" | "touch">;
-	/** Runs one owner turn in the session's channel; never rejects. */
+	sessions: RemoteSessions;
+	/** Runs one turn in the session's channel for the principal the token stands for; never rejects. */
 	answer(channel: ChannelKey, text: string): Promise<TurnResult>;
 	logger: Logger;
 	/** A run still working after this long is reported failed. */
@@ -43,8 +49,9 @@ export const remoteChannel = (sessionId: string): ChannelKey =>
 	`mcp:${sessionId}`;
 
 /**
- * Turns an outside agent relays for the owner. A dispatch returns at once; the caller polls
- * the run. Runs live in memory: a restart forgets them, but not their sessions.
+ * Turns an outside agent relays for the principal the dispatch token stands for. A dispatch
+ * returns at once; the caller polls the run. Runs live in memory: a restart forgets them, but not
+ * their sessions.
  */
 export class RemoteAgent {
 	readonly #options: RemoteAgentOptions;
