@@ -173,7 +173,7 @@ A verifier may vouch for members as well as owners, through a proxy that lets th
 In 0.8 the console took everyone the verifier admitted as the owner.
 It now admits a person only when the identity the verifier reports is linked to an owner, so link yours before you upgrade, or the console answers 403 after it:
 
-1. Find your Access user id, the token's `sub`: open Zero Trust, then My Team, then Users, and open your user; or sign in once after the upgrade, and copy the identity from the warning in the host's log.
+1. Find your Access user id, the token's `sub`: sign in once after the upgrade, and copy the identity from the warning in the host's log, which gives it whole.
 2. Add `cloudflareAccessIdentity(teamDomain, sub)` to your entry in `access.owners[].identities`, or run `roundtable principal link <your principal id> <identity>` on the host.
 
 A verifier of your own that still answers `admit()` without an actor keeps working as before: its requests are the primary owner's, with a warning.
