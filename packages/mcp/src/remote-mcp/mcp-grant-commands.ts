@@ -89,7 +89,10 @@ export function mcpGrantCommands(
 					!interaction.customId.startsWith(GRANT_PREFIX)
 				)
 					return false;
-				await guard.run(interaction, () => flow.component(interaction));
+				// The flow outlives the command: an owner revoked since then completes nothing.
+				await guard.run(interaction, async () =>
+					flow.component(interaction, await guard.allows(interaction)),
+				);
 				return true;
 			},
 		}),

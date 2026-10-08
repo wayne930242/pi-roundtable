@@ -16,6 +16,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - A default remote turn is the bound principal's, from `IDENTITY.speakerFor`, at their tier, and its conversation is recorded as private to them. Bound to the primary owner, as by default, the speaker is the owner's principal at the owner tier, so the prompt, memory, and tools are 0.8's; bound to a member, the turn reads their memory and offers only their tier's tools, and the persona and relay note name no owner. The host's own `answer` receives that speaker as a third argument.
 - `remoteMcp` requires `IDENTITY` (provided by the built-in `identity` plugin of pi-roundtable 0.9); a `testPlugin` test of it gives one with `principalOf`, `tierOf`, `speakerFor`, and `owners`.
 - Each remote session belongs to the principal it was opened for (`remote_agent_sessions.principal_id`, migration `remote-sessions-principal`); after the token moves to another principal, continuing a session of the earlier one answers `SESSION_NOT_FOUND`. Sessions 0.8 opened are handed to the primary owner at the start, and their conversations, which 0.8 recorded as shared, are adopted as private to them with `CONVERSATIONS.adopt`, so a single-owner host's remote turns stay 0.8's. `remoteMcp` therefore requires `CONVERSATIONS` too, and a `testPlugin` test of it gives one with `adopt`.
+- The buttons and menu of `/<root> mcp authorize` and `/<root> mcp token` check again, at each press, that whoever presses is an owner, so an owner revoked while the flow is open completes nothing.
 
 ### Deprecated
 

@@ -120,14 +120,18 @@ export class McpGrantFlow {
 		);
 	}
 
-	/** Buttons and the operations menu of a pending grant or rotation. */
-	async component(interaction: ButtonOrMenu): Promise<void> {
+	/**
+	 * Buttons and the operations menu of a pending grant or rotation; one pressed by someone who is
+	 * not an owner now (`owner` false) finds it expired, as anyone's but its starter's does.
+	 */
+	async component(interaction: ButtonOrMenu, owner = true): Promise<void> {
 		const text = this.#text;
 		const [action, id = ""] = interaction.customId
 			.slice(GRANT_PREFIX.length)
 			.split(":");
 		const pending = this.#pending.get(id);
 		if (
+			!owner ||
 			!pending ||
 			pending.userId !== interaction.user.id ||
 			pending.channelId !== interaction.channelId ||
