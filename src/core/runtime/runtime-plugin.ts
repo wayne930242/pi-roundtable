@@ -7,13 +7,23 @@ import type {
 } from "../contract/runtime.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
 import type { InterimTextMode } from "../domain/interim.ts";
+import type { IdentityService } from "../identity/identity-service.ts";
 import type { OwnerIdentity } from "../identity.ts";
 import type { PromptScope } from "../interactions/prompts.ts";
 import { AGENT_BRIEF, EffortJudge } from "../judging/effort-judge.ts";
-import type { ModelRef, ThinkingLevel } from "../models.ts";
+import {
+	formatModelRef,
+	type ModelRef,
+	type ThinkingLevel,
+} from "../models.ts";
 import type { PluginContext, RoundtablePlugin } from "../plugin.ts";
 import { CONVERSATIONS, IDENTITY, RUNTIME } from "../services.ts";
 import type { Speaker } from "../speakers.ts";
+import {
+	bridgeMemoryError,
+	grantedCrowd,
+	onClaudeBridge,
+} from "./bridge-guard.ts";
 import { PendingConfirmationStore } from "./pending-confirmation-store.ts";
 import { PiAgentRuntime } from "./pi-agent-runtime.ts";
 
@@ -64,6 +74,10 @@ export interface RuntimePluginOptions {
 	interimText?: InterimTextMode;
 	/** An intermediate text this long or longer is posted as an ordinary message; default 400. */
 	interimPrimaryChars?: number;
+	/** Whether the host keeps each person's memory; with it, claude-bridge serves one person alone. */
+	memory?: boolean;
+	/** Why the configuration lets several people speak in a shared conversation, as `configuredCrowd` says. */
+	crowd?: string;
 }
 
 /**
@@ -80,15 +94,26 @@ export function runtimePlugin(
 		PendingConfirmationStore.attach(context.database()),
 ): RoundtablePlugin {
 	let runtime: AgentRuntime | undefined;
+	let identity: IdentityService | undefined;
+	// Why claude-bridge may not run here, once the preflight read the stored roles; undefined when it may.
+	let bridgeRefusal: string | undefined;
 	return {
 		name: RUNTIME_PLUGIN,
 		migrations: PendingConfirmationStore.migrations(),
 		provides: [RUNTIME],
 		preflight: async () => {
+			if (options.memory) {
+				bridgeRefusal =
+					options.crowd ??
+					(identity && (await grantedCrowd(identity, options.owner.id)));
+				if (bridgeRefusal && onClaudeBridge(options.model))
+					throw bridgeMemoryError(formatModelRef(options.model), bridgeRefusal);
+			}
 			await runtime?.preflight?.();
 		},
 		setup: async (context) => {
 			const { logger, providers, services } = context;
+			identity = services.find(IDENTITY);
 			const heldActions = await openHeldActions(context);
 			const prompts = (channel: ChannelKey, scope?: PromptScope | Speaker) =>
 				context.surfaces.prompts(channel, scope);
@@ -119,6 +144,7 @@ export function runtimePlugin(
 								: { visibility: "shared" };
 						},
 						principalOf: async (id) => services.find(IDENTITY)?.principal(id),
+						bridgeRefusal: () => bridgeRefusal,
 						sessions: context.sessions,
 						agentDir: options.agentDir,
 						modelRuntime: options.modelRuntime,

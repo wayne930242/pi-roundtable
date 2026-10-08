@@ -87,6 +87,11 @@ export interface PiAgentRuntimeOptions {
 	interimPrimaryChars?: number;
 	/** How long a new session waits for its MCP tools to register. */
 	mcpConnectTimeoutMs?: number;
+	/**
+	 * Why an agent may not switch to a model on claude-bridge, read at its turn: the host keeps
+	 * several people's memory in its shared conversations. Undefined when it may.
+	 */
+	bridgeRefusal?: () => string | undefined;
 }
 
 export type { AgentSessions, LoadedSkill };

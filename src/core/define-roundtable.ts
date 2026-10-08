@@ -31,6 +31,11 @@ import { formatModelRef, type ModelRef } from "./models.ts";
 import { ErrorReporter } from "./ops/error-reporter.ts";
 import type { RoundtablePlugin } from "./plugin.ts";
 import {
+	bridgeMemoryError,
+	configuredCrowd,
+	onClaudeBridge,
+} from "./runtime/bridge-guard.ts";
+import {
 	type AgentSessionsSlot,
 	agentSessionsSlot,
 	runtimePlugin,
@@ -215,6 +220,10 @@ export async function defineRoundtable(
 ): Promise<DefinedRoundtable> {
 	const config = resolveConfig(input);
 	const { name, owner, discord } = config;
+	// claude-bridge resumes a conversation's history unfiltered, so it never serves several people's memory.
+	const crowd = configuredCrowd(config.access, config.plugins);
+	if (config.memory && crowd && onClaudeBridge(config.model))
+		throw bridgeMemoryError(formatModelRef(config.model), crowd);
 	// Nothing here touches the process: the host applies the environment when it runs.
 	const modelRuntime =
 		overrides.modelRuntime ??
@@ -301,6 +310,8 @@ export async function defineRoundtable(
 				agents: agentSessions,
 				interimText: config.interimText,
 				interimPrimaryChars: config.interimPrimaryChars,
+				memory: config.memory,
+				...(crowd ? { crowd } : {}),
 			}),
 			...(assembly ? [assembly.agentServer, assembly.seeds] : []),
 			...config.plugins,

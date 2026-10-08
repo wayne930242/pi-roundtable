@@ -36,6 +36,10 @@ async function probeHost(
 	responses: FauxResponseStep[],
 	/** The host's record of each conversation, read when a session is made and the turn names none. */
 	recorded?: TurnConversation,
+	/** The agents' model, and why the host refuses claude-bridge, if it does. */
+	agentModel: { model: string; bridgeRefusal?: string } = {
+		model: "faux/faux-1",
+	},
 ) {
 	const dir = mkdtempSync(join(tmpdir(), "roundtable-fail-closed-"));
 	const core = createFauxCore({ provider: "faux", models: [{ id: "faux-1" }] });
@@ -90,10 +94,11 @@ async function probeHost(
 						toolTiers: deps.toolTiers,
 						logger: deps.logger,
 						confirmations: deps.confirmations,
+						bridgeRefusal: () => agentModel.bridgeRefusal,
 						agents: {
 							workDir: dir,
 							skills: () => [],
-							modelOf: () => ({ model: "faux/faux-1", thinking: "off" }),
+							modelOf: () => ({ model: agentModel.model, thinking: "off" }),
 							turnChannel: (scope) => (scope.group ? "fake:group" : scope.home),
 						},
 					}),
@@ -398,6 +403,27 @@ test("a task works for whom its turn's conversation serves", async () => {
 			conversation: { visibility: "private", principalId: "p_sam" },
 		});
 		expect(worker).toEqual({ visibility: "private", principalId: "p_sam" });
+	} finally {
+		await host.done();
+	}
+});
+
+test("an agent on claude-bridge is refused before its turn when the host's shared conversations hold several people's memory", async () => {
+	const host = await probeHost(PROBE_TURN(), undefined, {
+		model: "claude-bridge/claude-opus-5-5",
+		bridgeRefusal: "access.members admits people besides the owner",
+	});
+	try {
+		await expect(
+			host.runtime.runTurn({
+				channel: "fake:infra",
+				selection: SELECTION,
+				text: "Look it up.",
+				speaker: MEMBER,
+				agent: { name: "infra", session: "fake:infra", home: "fake:infra" },
+			}),
+		).rejects.toThrow(/claude-bridge.*private memory/s);
+		expect(host.pending()).toBe(3);
 	} finally {
 		await host.done();
 	}

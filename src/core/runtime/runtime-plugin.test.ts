@@ -9,7 +9,10 @@ import type {
 	HeldActionStore,
 	RuntimeDeps,
 } from "../contract/runtime.ts";
+import { ConfigError } from "../domain/errors.ts";
 import { PluginError } from "../errors.ts";
+import type { IdentityService } from "../identity/identity-service.ts";
+import type { Principal } from "../identity/principal-store.ts";
 import { silentLogger } from "../log.ts";
 import type { PluginContext, RoundtablePlugin } from "../plugin.ts";
 import {
@@ -18,7 +21,7 @@ import {
 } from "../registry/contributions.ts";
 import { resolveProviders } from "../registry/providers.ts";
 import { ServiceRegistry } from "../registry/services.ts";
-import { RUNTIME } from "../services.ts";
+import { IDENTITY, RUNTIME } from "../services.ts";
 import { toolTiers } from "../tool-tiers.ts";
 import { PiAgentRuntime } from "./pi-agent-runtime.ts";
 import {
@@ -225,5 +228,63 @@ describe("the runtime plugin", () => {
 		await plugin.preflight?.();
 		const service = registry.services.find((s) => s.name === "runtime");
 		await service?.stop?.();
+	});
+});
+
+describe("the runtime plugin's preflight of claude-bridge with memory", () => {
+	const person = (id: string) => ({ id }) as Principal;
+	/** The identity service of a host whose stored roles are these: each principal's tier, and the owners. */
+	function identity(tiers: Record<string, "owner" | "admin" | "member">) {
+		const service = {
+			list: async () => Object.keys(tiers).map(person),
+			tierOf: async (id: string) => tiers[id],
+			owners: async () =>
+				Object.entries(tiers)
+					.filter(([, tier]) => tier === "owner")
+					.map(([id]) => person(id)),
+		} as unknown as IdentityService;
+		return {
+			name: "identity",
+			provides: [IDENTITY],
+			setup: ({ services }) => {
+				services.provide(IDENTITY, service);
+				return {};
+			},
+		} satisfies RoundtablePlugin;
+	}
+	const echo: RoundtablePlugin = {
+		name: "echo",
+		providers: { runtime: () => quiet },
+		setup: () => ({}),
+	};
+	const bridge = { provider: "claude-bridge", id: "claude-opus-5-5" };
+
+	test("stops the boot when the stored roles admit someone besides the owner", async () => {
+		for (const tiers of [
+			{ "1": "owner", p_bo: "owner" },
+			{ "1": "owner", p_bo: "member" },
+		] as const) {
+			const plugin = runtimePlugin(
+				options({ model: bridge, memory: true }),
+				async () => heldActions,
+			);
+			await setUp(plugin, [identity(tiers), echo]);
+			const preflight = plugin.preflight?.();
+			await expect(preflight).rejects.toBeInstanceOf(ConfigError);
+			await expect(preflight).rejects.toThrow(/claude-bridge/);
+		}
+	});
+
+	test("boots for the owner alone, without memory, or on another provider", async () => {
+		const crowd = { "1": "owner", p_bo: "member" } as const;
+		for (const [tiers, extra] of [
+			[{ "1": "owner" }, { model: bridge, memory: true }],
+			[crowd, { model: bridge, memory: false }],
+			[crowd, { memory: true }],
+		] as const) {
+			const plugin = runtimePlugin(options(extra), async () => heldActions);
+			await setUp(plugin, [identity(tiers), echo]);
+			await plugin.preflight?.();
+		}
 	});
 });

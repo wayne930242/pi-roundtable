@@ -16,6 +16,11 @@ export const HIDDEN_UNRECORDED_MEMORY =
 
 const MEMORY = new Set<string>(MEMORY_TOOLS);
 
+/** Whether a session with these tools registered loaded someone's memory: its memory tools, and its prompt's section with them. */
+export function loadsMemory(registered: ReadonlySet<string>): boolean {
+	return MEMORY_TOOLS.some((name) => registered.has(name));
+}
+
 /** The principal a result's details say it is private to, if they say. */
 function privateTo(details: unknown): string | undefined {
 	if (typeof details !== "object" || details === null) return undefined;

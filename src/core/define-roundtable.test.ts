@@ -510,3 +510,74 @@ describeDb("the built-in plugins' tables", () => {
 		}
 	});
 });
+
+describe("claude-bridge in a host whose shared conversations several people speak in", () => {
+	const BRIDGE = "claude-bridge/claude-opus-5-5";
+	/** One owner, whose remote MCP token is theirs, on claude-bridge with memory. */
+	const remote: RoundtablePlugin = {
+		name: "remote",
+		identities: [{ identity: "token:remote" }],
+		setup: () => ({}),
+	};
+
+	test("stops with a ConfigError that says why and how to fix it", async () => {
+		const refusal = defineRoundtable({
+			...config,
+			model: BRIDGE,
+			speakers: { members: { everyone: true } },
+		});
+		await expect(refusal).rejects.toBeInstanceOf(ConfigError);
+		await expect(refusal).rejects.toThrow(/claude-bridge/);
+		await expect(refusal).rejects.toThrow(/access\.members/);
+		await expect(refusal).rejects.toThrow(/memory: false/);
+	});
+
+	test("counts a second owner, and a plugin's identity bound to someone else, as more than one speaker", async () => {
+		await expect(
+			defineRoundtable({
+				...config,
+				owner: undefined,
+				access: {
+					owners: [
+						{ name: "Ada", principal: "ada", identities: ["discord:1"] },
+						{ name: "Bo", identities: ["discord:2"] },
+					],
+				},
+				model: BRIDGE,
+			}),
+		).rejects.toThrow(/2 owners/);
+		await expect(
+			defineRoundtable({
+				...config,
+				model: BRIDGE,
+				plugins: [
+					{
+						name: "kiosk",
+						identities: [{ identity: "token:kiosk", principal: "p_kiosk" }],
+						setup: () => ({}),
+					},
+				],
+			}),
+		).rejects.toThrow(/plugin kiosk/);
+	});
+
+	test("a single owner's host on claude-bridge still boots, and so does a crowd without memory or on another provider", async () => {
+		await expect(
+			defineRoundtable({ ...config, model: BRIDGE, plugins: [remote] }),
+		).resolves.toBeDefined();
+		await expect(
+			defineRoundtable({
+				...config,
+				model: BRIDGE,
+				memory: false,
+				speakers: { members: { everyone: true } },
+			}),
+		).resolves.toBeDefined();
+		await expect(
+			defineRoundtable({
+				...config,
+				speakers: { members: { everyone: true } },
+			}),
+		).resolves.toBeDefined();
+	});
+});

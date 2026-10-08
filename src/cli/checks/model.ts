@@ -1,8 +1,17 @@
 import { parseModelRef } from "../../core/models.ts";
+import {
+	BRIDGE_MEMORY_FIX,
+	bridgeMemoryProblem,
+	configuredCrowd,
+	onClaudeBridge,
+} from "../../core/runtime/bridge-guard.ts";
 import type { Ports, Project } from "../project.ts";
 import { fail, ok, type Result, skipped } from "../report.ts";
 
-/** A login exists for the provider of the configured model: an API key variable or a stored login. */
+/**
+ * A login exists for the provider of the configured model: an API key variable or a stored login;
+ * and the model is not on claude-bridge while several people's memory meets in shared conversations.
+ */
 export async function checkModelLogin(
 	project: Project,
 	ports: Pick<Ports, "login">,
@@ -15,6 +24,14 @@ export async function checkModelLogin(
 			`the model ${JSON.stringify(model)} is not written <provider>/<id>.`,
 			"Write it like anthropic/claude-sonnet-5-5 in MODEL in .env.",
 		);
+	// As the start refuses it: claude-bridge resumes a conversation's history unfiltered.
+	const assembled = await project.assembled();
+	if (assembled.ok) {
+		const { config } = assembled.value;
+		const crowd = configuredCrowd(config.access, config.plugins);
+		if (config.memory && crowd && onClaudeBridge(ref))
+			return fail(bridgeMemoryProblem(model, crowd), BRIDGE_MEMORY_FIX);
+	}
 	const dir = await project.text("agentDir");
 	const dataDir = await project.text("dataDir");
 	const agentDir = dir ?? (dataDir ? `${dataDir}/pi` : undefined);

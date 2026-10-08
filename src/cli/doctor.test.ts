@@ -87,6 +87,21 @@ describe("doctor", () => {
 		expect(lines[failed + 1]).toContain("API key");
 	});
 
+	test("the model check refuses claude-bridge with memory while several people speak in shared conversations, and passes the one owner's host", async () => {
+		const status = async (config: object) => {
+			const report = await doctor(inputs({ ports: fakePorts(config) }));
+			return report.outcomes.find(({ name }) => name === "model login")?.result;
+		};
+		const bridge = { ...validConfig, model: "claude-bridge/claude-opus-5-5" };
+		const crowd = await status({
+			...bridge,
+			speakers: { members: { everyone: true } },
+		});
+		expect(crowd?.status).toBe("fail");
+		expect(JSON.stringify(crowd)).toContain("access.members");
+		expect((await status(bridge))?.status).toBe("ok");
+	});
+
 	test("a missing credential fails the checks that need it and skips what depends on it, changing nothing", async () => {
 		const incomplete = {
 			...validConfig,

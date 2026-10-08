@@ -24,14 +24,15 @@ import {
 	type ThinkingLevel,
 	type ThinkingSetting,
 } from "../models.ts";
-import { MEMORY_TOOLS } from "../modules/memory/owner-memory.ts";
 import { withoutReplyFiles } from "../reply-files.ts";
 import type { TransientTask } from "../sessions.ts";
 import { textOf } from "../shared/session-messages.ts";
 import type { Speaker, Tier } from "../speakers.ts";
 import { type ToolTiers, toolsForTier, toolTiers } from "../tool-tiers.ts";
+import { refuseBridgeModel } from "./bridge-guard.ts";
 import { ConversationSessions } from "./conversation-sessions.ts";
 import { confirmedTurnText } from "./extensions/confirmation-gate.ts";
+import { loadsMemory } from "./extensions/private-memory.ts";
 import { missingToolsError } from "./extensions/self-compact-guard.ts";
 import { interimPoster } from "./interim-text.ts";
 import { preflightTools } from "./preflight-tools.ts";
@@ -365,10 +366,7 @@ export class PiAgentRuntime implements AgentRuntime {
 			const registered = new Set(session.getAllTools().map((t) => t.name));
 			// A worker that loaded the reader's memory may report it: the calls of the turn running now,
 			// the one that started it among them, then record their results as the reader's.
-			if (
-				memoryReader(conversation, turn.speaker) !== undefined &&
-				MEMORY_TOOLS.some((name) => registered.has(name))
-			)
+			if (memoryReader(conversation, turn.speaker) && loadsMemory(registered))
 				parent.draws.drawn();
 			const { tier } = turn;
 			worker.tools = this.#factory
@@ -477,6 +475,7 @@ export class PiAgentRuntime implements AgentRuntime {
 			throw new ConfigError("agent turns need the runtime's agents option");
 		const { model, thinking } = agents.modelOf(name);
 		const ref = parseModelRef(model);
+		refuseBridgeModel(name, ref, this.#options.bridgeRefusal);
 		if (
 			session.model?.provider !== ref?.provider ||
 			session.model?.id !== ref?.id
