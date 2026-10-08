@@ -223,16 +223,20 @@ export class ConversationSessions {
 
 	/**
 	 * The messages of a conversation's history: its open session's, or else read from its files
-	 * without opening one, so reading them fixes no scope; none when they were recorded for someone
-	 * else than the conversation serves now.
+	 * without opening one, so reading them fixes no scope; none when they were recorded, or its open
+	 * session was made, for someone else than the conversation serves now.
 	 */
 	async messages(key: ChannelKey): Promise<readonly AgentMessage[]> {
+		const now = await this.conversation(key, {});
 		const open = this.#sessions.get(key);
-		if (open) return (await open).session.messages;
+		if (open) {
+			const { conversation, session } = await open;
+			return conversationChanged(conversation, now) ? [] : session.messages;
+		}
 		return historyMessages(
 			this.#factory.sessionDir(key),
 			this.#factory.cwd(undefined),
-			await this.conversation(key, {}),
+			now,
 		);
 	}
 

@@ -559,6 +559,24 @@ describe("a conversation the host records anew while its session is open", () =>
 	});
 });
 
+describe("a conversation's transcript", () => {
+	test("is none while its open session serves someone else than the host now records", async () => {
+		const recorded = new Map<ChannelKey, TurnConversation>();
+		const host = await isolationHost(STORE(), looking([], 1), { recorded });
+		try {
+			recorded.set("fake:desk", privateTo("ann"));
+			expect((await host.run(ANN, "fake:desk", { text: DIARY })).ok).toBe(true);
+			const own = await host.runtime.recentTranscript("fake:desk", 5);
+			expect(own.map((entry) => entry.text)).toContain(DIARY);
+			// The host records it shared now; the next turn would archive Ann's history.
+			recorded.set("fake:desk", { visibility: "shared" });
+			expect(await host.runtime.recentTranscript("fake:desk", 5)).toEqual([]);
+		} finally {
+			await host.stop();
+		}
+	});
+});
+
 describe("a conversation nothing names at a turn", () => {
 	test("carries on as its history records whom it serves, after a restart too, refusing anyone else", async () => {
 		const first = await isolationHost(STORE(), looking([], 1));

@@ -1072,7 +1072,7 @@ An `AgentRuntime` has these methods:
 | `stop(conversation)` | Aborts the conversation's running turn; `false` when none runs |
 | `startFresh(conversation)`, `deleteConversation(conversation)` | Archive the conversation, or remove it for good; called between turns |
 | `pendingConfirmation(conversation)`, `heldActions(conversation)` | The held actions known in memory, and those restored from the store after a restart: the agent server reads `heldActions` to show an approval card again after a restart. A `PendingConfirmation` carries the `selectionId` of the `TurnSelection` whose turn held the calls, an opaque string that the caller resolves again when the owner confirms; the core stores it and never reads it |
-| `recentTranscript(conversation, limit)` | The latest messages, for the owner's and the dashboard's views of a conversation |
+| `recentTranscript(conversation, limit)` | The latest messages, for the owner's and the dashboard's views of a conversation; the built-in runtime gives none of a history recorded, or a session opened, for someone else than the conversation serves now |
 | `contextUsage?(conversation)` | How full the conversation's context is, `{ tokens, contextWindow }`; leave it out and the team status shows no context bar |
 | `preflight?()` | Runs in the host's preflight, before anything starts; a throw stops the boot |
 | `dispose?()` | Runs when the host stops the runtime plugin's `runtime` service |
