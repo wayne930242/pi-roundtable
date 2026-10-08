@@ -19,6 +19,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - `owner` and `speakers` are deprecated and go away in 0.10: they keep working, converted to the same `access` (the owner's principal is the old `owner.id`, which is also their Discord identity on a host with Discord, and `everyone` means everyone on Discord), so every author keeps the tier 0.8 gave them, and the host logs one `deprecated` warning. `owner` is now optional, required only without `access`.
 - `speakerPolicy(map)` now evaluates the access rules its map means on one surface; who it admits, and at which tier, is unchanged.
+- `IDENTITY` holds someone served and refused by turns, such as by the roles of two Discord servers, at no tier for their background turns for five minutes, instead of writing them as seen at every message.
 
 ## [0.8.0] - 2026-10-07
 

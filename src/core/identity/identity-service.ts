@@ -24,6 +24,7 @@ import {
 	type RoleGrant,
 	SYSTEM_PRINCIPAL,
 } from "./principal-store.ts";
+import { SeenThrottle } from "./seen-throttle.ts";
 import { isPrincipalId, newPrincipalId } from "./ulid.ts";
 
 /**
@@ -78,8 +79,6 @@ export function systemSpeaker(tier: Tier): Speaker {
 	};
 }
 
-/** How often being seen is written for one principal, unless the tier changes. */
-const TOUCH_MS = 5 * 60_000;
 const DAY_MS = 24 * 60 * 60_000;
 /** How many people assessed at a first contact but not yet taken are remembered. */
 const PROVISIONAL_MAX = 1_000;
@@ -127,8 +126,8 @@ export class PgIdentityService implements IdentityService, ContactAssessor {
 	readonly #rules: AccessRules;
 	readonly #logger: Logger;
 	readonly #now: () => number;
-	/** When each principal was last written as seen, and at which tier, null for none. */
-	readonly #seen = new Map<string, { at: number; tier: Tier | null }>();
+	/** When each principal is written as seen. */
+	readonly #seen = new SeenThrottle();
 	/** The new principal id each person assessed at a first contact would get, until it is taken. */
 	readonly #provisional = new Map<string, string>();
 	/** The configured owners' principal ids, in the configuration's order, once synced. */
@@ -450,22 +449,18 @@ export class PgIdentityService implements IdentityService, ContactAssessor {
 	}
 
 	/**
-	 * Records the principal as seen at the tier, null when refused, at most every `TOUCH_MS`
-	 * unless the tier changed; a refusal is written whenever the store still holds a tier for them.
+	 * Records the principal as seen at the tier, null when refused, as `SeenThrottle` lets it.
 	 * A failure is logged, not thrown.
 	 */
 	async #touch(principal: PrincipalRecord, tier: Tier | null): Promise<void> {
 		const principalId = principal.id;
 		const now = this.#now();
-		const last = this.#seen.get(principalId);
 		const stored = tier !== null || principal.lastTier === undefined;
-		if (last && last.tier === tier && now - last.at < TOUCH_MS && stored)
-			return;
-		this.#seen.set(principalId, { at: now, tier });
+		if (!this.#seen.take(principalId, tier, now, stored)) return;
 		try {
 			await this.store.touch(principalId, tier, new Date(now));
 		} catch (error) {
-			this.#seen.delete(principalId);
+			this.#seen.forget(principalId);
 			this.#logger.warn(
 				{ err: error, principal: principalId },
 				"could not record that a principal was seen",
