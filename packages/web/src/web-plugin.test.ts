@@ -498,13 +498,53 @@ describe("several owners", () => {
 	});
 });
 
-describe("one owner, as before", () => {
-	test("an Access identity not yet linked is the only owner", async () => {
+describe("one owner", () => {
+	test("an Access identity not yet linked is refused, even with a single owner", async () => {
 		const { call } = await boot({}, [OWNER]);
 		const jwt = await sign({ sub: "not-linked-yet" });
-		expect((await call("/console/api/config", {}, jwt)).status).toBe(200);
+		for (const path of [
+			"/console/",
+			"/console/api/config",
+			"/console/api/notes",
+		])
+			expect((await call(path, {}, jwt)).status).toBe(403);
+	});
+
+	test("a member whose Access identity is linked to no one is refused, though her Discord identity is linked", async () => {
+		const alice: FakePrincipal = {
+			id: "p_01J0000000000000000000ALI0",
+			name: "Alice",
+			tier: "member",
+			identities: ["discord:222"],
+		};
+		const verifyAlice = cloudflareAccess({
+			teamDomain: TEAM,
+			audience: AUDIENCE,
+			email: [OWNER_EMAIL, "alice@example.test"],
+			keys,
+		});
+		const { call } = await boot({ verifier: verifyAlice }, [OWNER, alice]);
+		const jwt = await sign({
+			email: "alice@example.test",
+			sub: "alice-cf-sub",
+		});
+		for (const path of [
+			"/console/",
+			"/console/api/config",
+			"/console/api/conversations",
+			"/console/api/notes",
+			"/console/api/events",
+		])
+			expect((await call(path, {}, jwt)).status).toBe(403);
+		expect((await call("/console/api/config", {}, await sign())).status).toBe(
+			200,
+		);
+	});
+
+	test("the owner's linked Access identity enters, notes and all", async () => {
+		const { call } = await boot({}, [OWNER]);
 		const notes = (await (
-			await call("/console/api/notes", {}, jwt)
+			await call("/console/api/notes", {}, await sign())
 		).json()) as NoteView[];
 		expect(notes.map((n) => n.fact)).toEqual(["Likes tea"]);
 	});

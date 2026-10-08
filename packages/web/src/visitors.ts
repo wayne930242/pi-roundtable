@@ -25,15 +25,15 @@ export interface VisitorOptions {
 	logger: Logger;
 }
 
-/** How many identities taken as the only owner are remembered, so each is warned about once. */
+/** How many unlinked identities are remembered, so each is warned about once. */
 const WARNED_MAX = 100;
 
 /**
  * Identifies the person behind each request the verifier admitted, by reading `IDENTITY` only, so
  * a visitor never makes a principal: the principal their identity is linked to, who must hold the
- * owner role. An identity linked to no one is the only owner when the host has exactly one, as
- * the verifier vouched for them and 0.8 took everyone it admitted as the owner; with more owners
- * it is refused. A verifier that reports no actor speaks for `ownerId`, default the primary owner.
+ * owner role. An identity linked to no one is refused on every host, however many owners it has:
+ * the verifier may vouch for members too, so only a link says whose an identity is. A verifier
+ * that reports no actor speaks for `ownerId`, default the primary owner, as in 0.8.
  */
 export function consoleVisitors(
 	identity: ConsoleIdentity,
@@ -75,16 +75,10 @@ export function consoleVisitors(
 			return { refusal: "the verifier's actor is no identity" };
 		}
 		if (id !== undefined) return owner(id);
-		const owners = await identity.owners();
-		const only = owners.length === 1 ? owners[0] : undefined;
-		if (!only)
-			return {
-				refusal: `${named} is linked to no principal; list it under its owner's access.owners[].identities, or link it with roundtable principal link`,
-			};
 		warnOnce(
 			named,
-			`${named} is linked to no principal, so the console takes it as the only owner, ${only.id}. Add it to that owner's access.owners[].identities before you configure a second owner`,
+			`${named} is linked to no principal, so the console refuses it. If it is an owner's, add "${named}" to that owner's access.owners[].identities, or run: roundtable principal link <owner's principal id> ${named}`,
 		);
-		return owner(only.id);
+		return { refusal: `${named} is linked to no principal` };
 	};
 }

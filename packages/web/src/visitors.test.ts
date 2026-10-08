@@ -27,6 +27,12 @@ const MEL: FakePrincipal = {
 	tier: "member",
 	identities: [accessIdentity("mel")],
 };
+const ALICE: FakePrincipal = {
+	id: "p_01J0000000000000000000ALI0",
+	name: "Alice",
+	tier: "member",
+	identities: ["discord:222"],
+};
 const ADMIN: FakePrincipal = {
 	id: "p_01J0000000000000000000ADM0",
 	name: "Ari",
@@ -92,17 +98,33 @@ describe("consoleVisitors", () => {
 	test("with two owners, an identity linked to no one is refused with what to configure", async () => {
 		const { identify } = setup([ADA, BEA]);
 		expect(await identify(facts("stranger"))).toEqual({
-			refusal: `${accessIdentity("stranger")} is linked to no principal; list it under its owner's access.owners[].identities, or link it with roundtable principal link`,
+			refusal: `${accessIdentity("stranger")} is linked to no principal`,
 		});
 	});
 
-	test("with one owner, an identity linked to no one is that owner, as the verifier vouched for them, with one warning", async () => {
-		const { who, warnings } = setup([ADA, MEL]);
-		expect(await who(facts("new-sub"))).toBe(ADA.id);
-		expect(await who(facts("new-sub"))).toBe(ADA.id);
+	test("with one owner, a member's Access identity linked to no one is refused, and the fix is logged once", async () => {
+		const { identify, who, warnings } = setup([ADA, ALICE]);
+		expect(await identify(facts("alice-cf-sub"))).toEqual({
+			refusal: `${accessIdentity("alice-cf-sub")} is linked to no principal`,
+		});
+		expect(await who(facts("alice-cf-sub"))).toBe("refused");
+		const named = accessIdentity("alice-cf-sub");
 		expect(warnings()).toEqual([
-			`web-console: ${accessIdentity("new-sub")} is linked to no principal, so the console takes it as the only owner, ${ADA.id}. Add it to that owner's access.owners[].identities before you configure a second owner`,
+			`web-console: ${named} is linked to no principal, so the console refuses it. If it is an owner's, add "${named}" to that owner's access.owners[].identities, or run: roundtable principal link <owner's principal id> ${named}`,
 		]);
+	});
+
+	test("with one owner, the owner's linked identity enters", async () => {
+		const { who, warnings } = setup([ADA, ALICE]);
+		expect(await who(facts("ada"))).toBe(ADA.id);
+		expect(warnings()).toEqual([]);
+	});
+
+	test("the fix is logged for at most a bounded number of identities", async () => {
+		const { who, warnings } = setup([ADA]);
+		for (let i = 0; i < 150; i++)
+			expect(await who(facts(`sub-${i}`))).toBe("refused");
+		expect(warnings()).toHaveLength(100);
 	});
 
 	test("an identity of a principal who is no owner is never taken as the only owner", async () => {

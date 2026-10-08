@@ -43,7 +43,8 @@ Without the cleanup hook, conversations remain read-only.
 - The host must run on the machine that holds its data directory: the console reads `<dataDir>/sessions` from disk.
 - The `memory` addon for the Notes pane (it is on by default; switch the pane off with `panes` when you run without memory).
 - A way to authenticate the owners in front of the listener, such as Cloudflare Access, or a verifier of your own (see [Authentication](#authentication)).
-- Each person who uses the console is an owner in the host's `access` configuration, with the identity the verifier reports for them among their `identities`.
+- Each person who uses the console is an owner in the host's `access` configuration, with the identity the verifier reports for them among their `identities` or linked to them with `roundtable principal link`.
+  This holds on a host with a single owner too: the console refuses an identity linked to no one.
 - A Discord connection is optional: with the Discord entry's `DISCORD` service the console names channels, and without one it shows channel ids.
 
 The package ships its page prebuilt in `dist/`, so installing it needs no build step and no bundler on the host.
@@ -160,11 +161,21 @@ The console decides who the request comes from by what the verifier reported:
 |---|---|
 | An identity linked to an owner's principal | Admits them as that owner. |
 | An identity linked to anyone else, such as a member, or to a disabled principal | Refuses. |
-| An identity linked to no one, on a host with exactly one owner | Admits them as that owner, as 0.8 took everyone the verifier admitted, and warns once naming the identity to add to that owner's `identities`. |
-| An identity linked to no one, on a host with several owners | Refuses, and logs the identity so you can add it to its owner's `identities`. |
+| An identity linked to no one, however many owners the host has | Refuses, and warns once with the full identity, the line to add to its owner's `access.owners[].identities`, and the `roundtable principal link <owner> <identity>` command that links it instead. |
 | No actor (`admit()`, a verifier written for 0.8) | Admits the request as the primary owner, the first of `access.owners`, or as `ownerId` when set, and warns once. |
 
 The console never resolves an identity the way a chat surface does: a visitor is never admitted as a new principal and never claims a 0.8 one.
+A verifier may vouch for members as well as owners, through a proxy that lets the whole company in or an allowlist that grows, so the console never guesses whose an identity is: only a link says so.
+
+### Upgrading from 0.8
+
+In 0.8 the console took everyone the verifier admitted as the owner.
+It now admits a person only when the identity the verifier reports is linked to an owner, so link yours before you upgrade, or the console answers 403 after it:
+
+1. Find your Access user id, the token's `sub`: open Zero Trust, then My Team, then Users, and open your user; or sign in once after the upgrade, and copy the identity from the warning in the host's log.
+2. Add `cloudflareAccessIdentity(teamDomain, sub)` to your entry in `access.owners[].identities`, or run `roundtable principal link <your principal id> <identity>` on the host.
+
+A verifier of your own that still answers `admit()` without an actor keeps working as before: its requests are the primary owner's, with a warning.
 
 ### Cloudflare Access
 
@@ -194,8 +205,8 @@ To set it up:
 5. Take your team name from Zero Trust settings, the `<team-name>` of `<team-name>.cloudflareaccess.com`, and pass the full domain as `teamDomain`.
 6. Set the plugin's `origin` to the address you opened in step 1, `https://console.example.com`.
 7. Add each owner's identity to their entry in `access.owners`.
-   Sign in once: the host's log names the identity the console saw (`oidc:…:<sub>`), or build it with `cloudflareAccessIdentity(teamDomain, sub)` from the user id shown in Zero Trust.
-   With a single owner the console admits them before you do, and warns; once you configure a second owner, an identity linked to no one is refused.
+   Build it with `cloudflareAccessIdentity(teamDomain, sub)` from the user id shown in Zero Trust, or sign in once: the console refuses you and the host's log names the identity it saw (`oidc:…:<sub>`) with the line to add.
+   Until you do, the console refuses that owner, on a single-owner host as well.
 
 A request to the console from a browser that has not signed in is sent by Access to its login page and never reaches the host.
 The host still refuses any request that arrives without a valid token, so a listener that becomes reachable without Access, through a wrong route or a second tunnel, does not open the console.
