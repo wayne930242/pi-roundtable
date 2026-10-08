@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
-import { testPlugin } from "pi-roundtable/testing";
+import { IDENTITY } from "pi-roundtable";
+import { servicePair, testPlugin } from "pi-roundtable/testing";
 import { createEchoRuntime } from "./echo-runtime.ts";
 import { FakeSurface } from "./fake-surface.ts";
 import { studyRoom } from "./study-room.ts";
@@ -10,6 +11,16 @@ async function studying() {
 	const harness = await testPlugin(studyRoom, {
 		surfaces: [surface],
 		providers: { runtime: createEchoRuntime },
+		services: [
+			servicePair(IDENTITY, {
+				resolve: async (facts) => ({
+					id: facts.subject,
+					name: facts.name,
+					principalId: "student",
+					tier: "member",
+				}),
+			}),
+		],
 	});
 	return { surface, harness };
 }
@@ -39,6 +50,7 @@ test("a message in a study room runs as a turn of the study kind, with the tutor
 	expect(started?.turn).toMatchObject({
 		kind: "study",
 		channel: "fake:study-algebra",
+		speaker: { principalId: "student", tier: "member" },
 	});
 	expect(started?.turn?.agent).toBeUndefined();
 	await harness.stop();
@@ -58,6 +70,22 @@ test("starting a room over says it was a study conversation", async () => {
 		"study",
 	);
 	await harness.stop();
+});
+
+test("an author with no resolved tier never starts a study turn", async () => {
+	const surface = new FakeSurface();
+	const harness = await testPlugin(studyRoom, {
+		surfaces: [surface],
+		providers: { runtime: createEchoRuntime },
+	});
+	try {
+		surface.say("fake:study-algebra", "hello");
+		await Bun.sleep(30);
+		expect(surface.replies).toEqual([]);
+		expect(harness.events).toEqual([]);
+	} finally {
+		await harness.stop();
+	}
 });
 
 test("the persona is the plugin's and belongs to the study kind only", async () => {

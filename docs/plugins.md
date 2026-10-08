@@ -153,8 +153,8 @@ Use `QueuePort` from the main entry for `context.queue`; the kit's `ChannelQueue
 
 With `defineRoundtable`, the host's logger sends every `error` and `fatal` line to the ops agent named by `config.ops.agent`, which reports it in its channel, or, with `config.ops.conversation`, to that conversation as a visible message and a report turn its claim answers.
 The report turn is the host's own background turn of the `owner` target: it runs as the system principal (`SYSTEM_PRINCIPAL`) at the owner tier, as in 0.8, and so does the report turn of an outside Discord webhook's post in an agent's channel, whose text is untrusted input; neither can set up a schedule or delegate a task. The host does not start, with a `ConfigError` naming `config ops.conversation` and the reason, when no chat surface serves the key, no plugin's claim owns it, no plugin contributes the `owner` background target, the claim that owns it takes no background turns (has no `background`), or that claim says `takesSystemReports: false`, since its conversations are each private to their person and refuse the system principal's turns; a report is then never only logged. A claim like that is answered at startup, not by a warning at each report.
-On a host without Discord no plugin contributes `owner` unless one of yours does, so `ops.conversation` needs such a plugin there.
-The web chat takes no error reports in 0.8: it posts only to a conversation a signed-in person opened, and its claim takes no background turns, so `web:<id>` fails at startup; name a conversation of another surface, or an agent with Discord.
+The core contributes `PERSONAL_TARGET` (`"owner"`) with or without Discord; `ops.conversation` still needs a surface and a claim that accepts system report turns.
+Webchat accepts personal background turns but declares `takesSystemReports: false`, so `web:<id>` fails at startup; name a shared conversation of another surface, or an agent with Discord.
 It then calls `DefineOverrides.errorSink(entry)` if you supply one; this function must not throw.
 A logger you supply reaches the ops agent and `errorSink` only if it forwards its error lines there.
 The report names the plugin next to `app` and `module`; the same error is reported at most once an hour, regardless of which plugin wrote it.
@@ -357,11 +357,152 @@ service roundtable.memory is not provided. The memory addon is switched off (con
 `serviceKey(id, { absent })` lets your own keys say the same.
 Switching an addon off and adding a plugin of yours that provides the same key is equivalent to `replaces`.
 
+## Principals and access
+
+A principal is the person the host serves; an identity is an account or credential linked to that person.
+`Speaker.id` identifies the external actor, while required `Speaker.principalId` keys memory, private conversations, schedule authors, notifications, and per-person limits.
+Link Discord and web accounts with `roundtable principal link <principal> <identity>` to make them one person rather than two memories.
+A 0.8 person's principal retains their old speaker id; new admitted people get opaque `p_<ulid>` ids.
+
+Configure top-level `access.owners`, `admins`, and `members`.
+Identities are `<provider>:<subject>` (OIDC uses `oidc:<base64url issuer>:<subject>`), and roles are `<surface>:role:<name>`.
+`everyone: ["web"]` admits that surface only; `everyone: true` admits all surfaces and deserves particular care on a host with several adapters.
+The primary owner is the first owner, with an explicit `principal` and, on Discord, a Discord identity; Discord administration still acts with that person's permissions.
+Owner is granted only through configuration or the principal CLI, never an IdP role.
+`provisioning: "admitted"` is the default; `"linked"` admits only already linked identities.
+A disabled principal is refused, and CLI changes reach a running host within the identity cache's 30 seconds.
+
+Surfaces report verified `ActorFacts`, not authority.
+The router resolves them through `IDENTITY` before admission and overwrites a surface's own `message.speaker`.
+A claim must ignore a message without a resolved speaker and run an admitted message as that speaker, rather than reconstructing one at an assumed tier.
+Old author fields are a warned fallback until 1.0.
+A plugin initiating a turn on someone's behalf uses `IDENTITY.speakerFor(principalId)` and passes the speaker explicitly; `runTurn` without one is refused.
+A plugin's own credential bindings accept only `token:` (see [the plugin object](#the-plugin-object)), never a surface's account.
+
+The example below reads only the current principal, so two linked actors ask about the same person and owner tier alone cannot invent a missing principal.
+Put its `access` in the host configuration and its plugin in `plugins`.
+
+<!-- example: examples/principals.ts -->
+```ts
+import {
+	type AccessConfig,
+	definePlugin,
+	defineTool,
+	IDENTITY,
+	ToolRefusal,
+} from "pi-roundtable";
+import { Type } from "typebox";
+
+/** One person may have several identities; surface roles never make an owner. */
+export const access = {
+	owners: [
+		{
+			principal: "operator",
+			name: "Ada",
+			identities: ["discord:966666600000000001", "token:remote-mcp"],
+		},
+	],
+	members: { roles: ["web:role:App.User"] },
+	provisioning: "admitted",
+} satisfies AccessConfig;
+
+/** Ask about the current principal, not the external actor or the primary owner. */
+export const principals = definePlugin({
+	name: "principals",
+	requires: [IDENTITY],
+	setup: ({ services }) => {
+		const identity = services.get(IDENTITY);
+		return {
+			tools: [
+				defineTool({
+					name: "principal_who",
+					description: "Show who this turn is for.",
+					parameters: Type.Object({}),
+					minTier: "member",
+					run: async (_args, turn) => {
+						if (!turn.speaker) throw new ToolRefusal("No speaker for this turn.");
+						const person = await identity.principal(turn.speaker.principalId);
+						if (!person || person.disabled)
+							throw new ToolRefusal("This principal is not available.");
+						return `${person.displayName} (${person.id})`;
+					},
+				}),
+			],
+		};
+	},
+});
+```
+<!-- /example -->
+
+<!-- example: examples/principals.test.ts -->
+```ts
+import { expect, test } from "bun:test";
+import { IDENTITY, type Speaker } from "pi-roundtable";
+import { servicePair, testPlugin } from "pi-roundtable/testing";
+import { access, principals } from "./principals.ts";
+
+test("two actor identities of one principal ask about the same person", async () => {
+	const lookedUp: string[] = [];
+	const harness = await testPlugin(principals, {
+		services: [
+			servicePair(IDENTITY, {
+				principal: async (id) => {
+					lookedUp.push(id);
+					return { id, displayName: "Mo", disabled: false };
+				},
+			}),
+		],
+	});
+	try {
+		for (const id of ["discord-actor", "web-actor"]) {
+			const speaker: Speaker = {
+				id,
+				name: "Mo",
+				principalId: "p_mo",
+				tier: "member",
+			};
+			expect(await harness.runTool("principal_who", {}, { speaker })).toBe(
+				"Mo (p_mo)",
+			);
+		}
+		expect(lookedUp).toEqual(["p_mo", "p_mo"]);
+	} finally {
+		await harness.stop();
+	}
+});
+
+test("an unavailable principal is refused even at owner tier", async () => {
+	const harness = await testPlugin(principals, {
+		services: [servicePair(IDENTITY, { principal: async () => undefined })],
+	});
+	try {
+		expect(
+			await harness.runTool("principal_who", {}, {
+				speaker: {
+					id: "actor",
+					name: "Ada",
+					principalId: "operator",
+					tier: "owner",
+				},
+			}),
+		).toContain("This principal is not available.");
+		expect(access.owners[0]?.principal).toBe("operator");
+		expect(access.members.roles).toEqual(["web:role:App.User"]);
+	} finally {
+		await harness.stop();
+	}
+});
+```
+<!-- /example -->
+
+For existing hosts and compatibility aliases, read [Migrating to 0.9](migration-0.9.md).
+
 ## Tiers: who may use what
 
 Every turn has a speaker with a tier: `owner`, `admin`, or `member`, from most to least trusted.
-By default, only the owner speaks.
-The operator can open the bot to others by listing them under `speakers` in `roundtable.config.ts` and is responsible for that setup.
+By default, only the configured owner speaks.
+The operator can open admission through `access` and is responsible for that setup.
+A turn's `kind` chooses a persona, never a tier.
 
 Each tool names the lowest tier that may call it.
 The bot offers the tool in turns whose speaker is at that tier or above; the operator's `toolTiers` setting can override the plugin's choice.
@@ -1776,7 +1917,9 @@ The runtime is told who the conversation belongs to as the registry keeps it, in
 A turn whose conversation cannot be recorded does not run, and the call rejects.
 The registry records and never refuses: who may speak in a conversation stays your claim's decision, which may read `get(key)` to check the owner.
 `list({ principal })` gives one principal's conversations and `list()` every one, the most recently active first; the web console lists them too.
-No session file moves, and a conversation from before the registry is recorded at its next turn.
+A conversation from before the registry is recorded at its next turn.
+Register a private conversation before the first direct runtime call, transcript reads included, rather than relying on a current speaker to define the session.
+Never change visibility to reuse history: when the effective private principal or visibility changes, the runtime archives history, drops held actions, and starts isolated, after a restart too.
 
 <!-- example: examples/study-room.ts -->
 ```ts
@@ -1807,26 +1950,22 @@ export const studyRoom = definePlugin({
 				priority: 10,
 				// The id of a room starts with `study-`, on whichever surface carries it.
 				owns: (channel) => parseChannelKey(channel).id.startsWith("study-"),
-				admit: (message) =>
-					message.authorIsBot
-						? undefined
-						: {
-								kind: "turn",
-								run: async () => {
-									await turns.run({
-										channel: message.channel,
-										kind: STUDY,
-										text: message.text,
-										speaker: {
-											id: message.authorId,
-											name: message.authorName,
-											tier: "member",
-											principalId: message.authorId,
-										},
-									});
-								},
-								failure: "a study turn failed",
-							},
+				admit: (message) => {
+					const speaker = message.speaker;
+					if (message.authorIsBot || !speaker) return undefined;
+					return {
+						kind: "turn",
+						run: async () => {
+							await turns.run({
+								channel: message.channel,
+								kind: STUDY,
+								text: message.text,
+								speaker,
+							});
+						},
+						failure: "a study turn failed",
+					};
+				},
 				// What the conversation was, so a host picks the right persona when it starts over.
 				startFresh: async () => STUDY,
 			},
@@ -1841,7 +1980,8 @@ The test uses the fake surface and echo runtime from [the runtime slot](#the-run
 <!-- example: examples/study-room.test.ts -->
 ```ts
 import { expect, test } from "bun:test";
-import { testPlugin } from "pi-roundtable/testing";
+import { IDENTITY } from "pi-roundtable";
+import { servicePair, testPlugin } from "pi-roundtable/testing";
 import { createEchoRuntime } from "./echo-runtime.ts";
 import { FakeSurface } from "./fake-surface.ts";
 import { studyRoom } from "./study-room.ts";
@@ -1852,6 +1992,16 @@ async function studying() {
 	const harness = await testPlugin(studyRoom, {
 		surfaces: [surface],
 		providers: { runtime: createEchoRuntime },
+		services: [
+			servicePair(IDENTITY, {
+				resolve: async (facts) => ({
+					id: facts.subject,
+					name: facts.name,
+					principalId: "student",
+					tier: "member",
+				}),
+			}),
+		],
 	});
 	return { surface, harness };
 }
@@ -1881,6 +2031,7 @@ test("a message in a study room runs as a turn of the study kind, with the tutor
 	expect(started?.turn).toMatchObject({
 		kind: "study",
 		channel: "fake:study-algebra",
+		speaker: { principalId: "student", tier: "member" },
 	});
 	expect(started?.turn?.agent).toBeUndefined();
 	await harness.stop();
@@ -1900,6 +2051,22 @@ test("starting a room over says it was a study conversation", async () => {
 		"study",
 	);
 	await harness.stop();
+});
+
+test("an author with no resolved tier never starts a study turn", async () => {
+	const surface = new FakeSurface();
+	const harness = await testPlugin(studyRoom, {
+		surfaces: [surface],
+		providers: { runtime: createEchoRuntime },
+	});
+	try {
+		surface.say("fake:study-algebra", "hello");
+		await Bun.sleep(30);
+		expect(surface.replies).toEqual([]);
+		expect(harness.events).toEqual([]);
+	} finally {
+		await harness.stop();
+	}
 });
 
 test("the persona is the plugin's and belongs to the study kind only", async () => {
@@ -2329,9 +2496,9 @@ The runtime plugin still builds the runtime, so every claim that runs turns thro
 
 What needs Discord is refused or left out rather than failing later:
 
-- `agents`, `skills` (anything but `false`), and `ops.agent` are configuration errors. `ops: { conversation: "<surface>:<id>" }` needs a chat surface that serves it and a claim that owns it and takes background turns, or the host does not start. The web chat takes no error reports in 0.8.
+- `agents`, `skills` (anything but `false`), and `ops.agent` are configuration errors. `ops: { conversation: "<surface>:<id>" }` needs a chat surface that serves it and a claim that owns it and takes background turns, or the host does not start. Webchat declares `takesSystemReports: false` and takes no system error reports.
 - `notify` is not registered unless a plugin contributes a [direct channel](#directchannels-reaching-a-person-on-their-own), since there is nowhere to send a notice.
-- `schedule_*` and `delegate_task` are registered only in a conversation whose claim takes background turns: their runs are turns of the [background target](#backgroundtargets-whose-turn-a-schedule-or-delegated-task-is) `PERSONAL_TARGET`, named `owner`, which the core contributes on every host. A conversation of a claim without `background`, and one no chat surface carries, has neither.
+- `schedule_*` and `delegate_task` are registered only in a conversation whose claim takes background turns: their runs are turns of the [background target](#backgroundtargets-whose-turn-a-schedule-or-delegated-task-is) `PERSONAL_TARGET`, named `owner`, which the core contributes on every host. A conversation of a claim without `background` has neither; a no-surface conversation needs a registered private principal known to a direct channel, as [background targets](#backgroundtargets-whose-turn-a-schedule-or-delegated-task-is) describes.
 - `roundtable doctor` skips the Discord checks.
 
 Pi's runtime still needs the `compact_session` tool in every session, from the Pi package pi-self-compact: load it from a plugin with `piPackages: ["pi-self-compact"]`, as the `plugins/self-compact.ts` of a project `roundtable init` creates does, or the preflight stops the start and says so.
@@ -2380,13 +2547,13 @@ export function studyHall(
 ### Web chat: pi-roundtable-webchat
 
 [pi-roundtable-webchat][webchat-package] is a chat network that comes as a plugin.
-`webChat({ verifier, access, personas, origins })` adds a chat surface whose conversations have keys `web:<conversation>`, the claim that runs each message as a turn of its conversation's persona through `context.turns`, and a REST API and a WebSocket under `/chat` on the host's `public` listener.
+`webChat({ verifier, personas, origins })` adds a chat surface whose conversations have keys `web:<conversation>`, the claim that runs each message as a turn of its conversation's persona through `context.turns`, and a REST API and a WebSocket under `/chat` on the host's `public` listener.
 People an OpenID Connect provider signs in open private conversations, see each turn's text and tools as it runs, and answer its approval cards.
 It needs no Discord: a host whose configuration has no `discord` and lists `webChat(...)` in `plugins` is a web-only assistant.
 
 #### `roundtable init --adapter web`
 
-`roundtable init --adapter web` writes a project without Discord around it: no `agents.ts` and no shared persona, a `roundtable.config.ts` that lists `webChat(...)` with an `oidcJwtVerifier`, an access map whose members and admins come from the token's roles, and one persona, `assistant`, whose prompt is `persona/assistant.md`.
+`roundtable init --adapter web` writes a project without Discord around it: no `agents.ts` and no shared persona, a `roundtable.config.ts` that lists `webChat(...)` with an `oidcJwtVerifier`, an access map whose members and admins come from the token's roles, in top-level `access`, and one persona, `assistant`, whose prompt is `persona/assistant.md`.
 The persona's `selection` names its tools (the hello plugin's), so tools a later plugin adds, such as pi-web-access's, stay out until you add them by name.
 `package.json` pins pi-roundtable-webchat at the core's version and pi-self-compact, and `.env.example` asks for `OWNER_NAME`, `DATABASE_URL`, `MODEL`, `OIDC_ISSUER`, `OIDC_AUDIENCE`, `OIDC_JWKS_URL`, `CHAT_MEMBER_ROLES`, and `CHAT_ORIGINS`, with no Discord variable.
 The host listens on `127.0.0.1:3000`; serve it over HTTPS through a reverse proxy.
@@ -2396,9 +2563,10 @@ The host listens on `127.0.0.1:3000`; serve it over HTTPS through a reverse prox
 
 A browser asks for a one-time ticket with `POST /chat/tickets` and `Authorization: Bearer <token>`, then opens `/chat/socket` offering the subprotocols `roundtable.webchat.v1` and `ticket.<ticket>`; another client sends the bearer token on the upgrade.
 The token never travels in a URL.
-Each WebSocket message is one JSON object with a `type`: the client sends `send`, `stop`, `approval`, `answer`, and `auth`; the server answers with `ready`, `accepted`, `typing`, `stoppable`, `progress`, `reply`, `failed`, `prompt`, `prompt_closed`, `reauth`, and `error`.
+Each WebSocket message is one JSON object with a `type`: the client sends `send`, `stop`, `approval`, `answer`, and `auth`; the server answers with `ready`, `accepted`, `typing`, `stoppable`, `progress`, `reply`, `failed`, `prompt`, `prompt_closed`, `notice`, `reauth`, and `error`.
 `progress` carries the turn's [`TurnProgress`](#surfaces-a-chat-network-of-your-own) events, never the thinking and never a tool's full arguments; `reply` carries the answer in full markdown.
-The REST API lists a person's conversations, opens one, and reads its messages.
+The REST API lists a person's conversations, opens one, reads its messages, and lists and acknowledges private inbox notices from `notify`.
+Tickets, quotas, connections, and approvals follow `principalId`; refreshing a token to another principal closes the socket with 4403.
 The package README documents every frame, error code, close code, and limit.
 
 #### Security model
@@ -2408,14 +2576,17 @@ The package README documents every frame, error code, close code, and limit.
 - `origins` is required, and checked on every upgrade and every browser request.
 - Each person has bounded sockets, tickets, conversations opened per hour, and turns running or queued at once; frames are bounded in size and rate.
 - An approval card goes to the conversation's person only, at the tier the held call needs.
-- No token claim makes anyone the owner; owners are listed by speaker id, `oidc:<base64url(issuer)>:<subject>`.
+- No token claim makes anyone the owner; list their linked identity in top-level `access.owners` or grant a lasting role through the CLI.
+- The old webchat `access` option is removed; prefix roles as `<surface>:role:<name>` and scope old `everyone: true` to `everyone: ["<surface>"]`.
 
 #### Provider settings
 
 The verifier is generic; what makes it safe is how it is pointed at your provider.
 The README's [provider settings][webchat-provider-settings] explain, with Microsoft Entra ID as the example, why to name people by a claim that stays the same across app registrations (`subjectClaim`), pin the tenant in `check`, accept access tokens only, refuse app-only tokens, merge issuers of one tenant only (`speakerIssuer`), and mind the guests `everyone` admits.
 
-The web chat takes no attachments and no background turns yet: leave `schedule_*` and `delegate_task` out of a web persona's `selection`, and `web_search` and `fetch_content` unless people may make the host fetch any address, internal ones included.
+The web chat takes no attachments or system error reports (`takesSystemReports: false`), so `ops.conversation` cannot name it.
+It accepts `PERSONAL_TARGET` background turns only for the private conversation's principal; include `schedule_*`, `delegate_task`, and `notify` in a persona's selection only deliberately, adjusting their tiers if needed.
+Leave out `web_search` and `fetch_content` unless people may make the host fetch any address, internal ones included.
 
 [webchat-package]: https://github.com/wayne930242/pi-roundtable/blob/master/packages/webchat/README.md
 [webchat-provider-settings]: https://github.com/wayne930242/pi-roundtable/blob/master/packages/webchat/README.md#provider-settings

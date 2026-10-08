@@ -25,26 +25,22 @@ export const studyRoom = definePlugin({
 				priority: 10,
 				// The id of a room starts with `study-`, on whichever surface carries it.
 				owns: (channel) => parseChannelKey(channel).id.startsWith("study-"),
-				admit: (message) =>
-					message.authorIsBot
-						? undefined
-						: {
-								kind: "turn",
-								run: async () => {
-									await turns.run({
-										channel: message.channel,
-										kind: STUDY,
-										text: message.text,
-										speaker: {
-											id: message.authorId,
-											name: message.authorName,
-											tier: "member",
-											principalId: message.authorId,
-										},
-									});
-								},
-								failure: "a study turn failed",
-							},
+				admit: (message) => {
+					const speaker = message.speaker;
+					if (message.authorIsBot || !speaker) return undefined;
+					return {
+						kind: "turn",
+						run: async () => {
+							await turns.run({
+								channel: message.channel,
+								kind: STUDY,
+								text: message.text,
+								speaker,
+							});
+						},
+						failure: "a study turn failed",
+					};
+				},
 				// What the conversation was, so a host picks the right persona when it starts over.
 				startFresh: async () => STUDY,
 			},
