@@ -18,6 +18,13 @@ MIT licensed.
 - The native [canvas](#the-native-canvas-dependency) package, which comes with this one.
 - For `draw_cards`, a deck directory of your own; see [the deck directory](#the-deck-directory).
 
+## Principal migration in 0.9
+
+The drawing tools need no principal-specific migration: they keep the calling turn's speaker, tier gate, and reply attachments.
+Use the matching lockstep core release and follow [Migrating to 0.9](../../docs/migration-0.9.md) for configuration changes.
+The legacy `owner` example below remains accepted with a warning; new hosts use top-level `access`.
+Drawn captions and replies are public in a shared conversation, not private memory exchanges.
+
 ## Install
 
 ```sh

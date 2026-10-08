@@ -64,6 +64,13 @@ const workerPackages = [packageDir("your-provider-package", import.meta.url)];
 Install the provider package on the host first and pass `workerPackages` to `coding`.
 Workers activate only `SHELL_TOOLS` (`bash`, `read`, `edit`, `write`); extension packages are trusted executable code, not a way to grant extra model tools.
 
+## Principal migration in 0.9
+
+Use the same lockstep core and package release; [Migrating to 0.9](../../docs/migration-0.9.md) covers the host changes.
+Owner skills depend on a private conversation's principal holding a lasting owner role, not `kind: "owner"` or an assumed tier.
+Pass the router-resolved speaker to any custom turn or report integration, and direct personal reports only to that principal's own channel.
+System report turns cannot call `repo_task`; do the work in the turn or hand it to a person.
+
 ## Tools and flow
 
 | Tool | Parameters | Behavior |

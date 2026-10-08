@@ -170,6 +170,9 @@ A verifier may vouch for members as well as owners, through a proxy that lets th
 
 ### Upgrading from 0.8
 
+The core [Migrating to 0.9](../../docs/migration-0.9.md) guide covers backfill, rollback, and the principal isolation boundary.
+This console remains an owner administration surface, not a principal-private view: every admitted owner can inspect every conversation and principal's notes.
+
 In 0.8 the console took everyone the verifier admitted as the owner.
 It now admits a person only when the identity the verifier reports is linked to an owner, so link yours before you upgrade, or the console answers 403 after it:
 

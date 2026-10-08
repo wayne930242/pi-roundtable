@@ -142,7 +142,7 @@ A host whose configuration has no `discord` and lists `webChat({ ... })` in `plu
 npx pi-roundtable init my-desk --adapter web
 ```
 
-Its README describes the protocol, the access map, the limits, and the [provider settings](packages/webchat/README.md#provider-settings) that keep one person one identity, such as a stable subject claim and a pinned tenant.
+Its README describes the protocol, core access rules, the private notice inbox, the limits, and the [provider settings](packages/webchat/README.md#provider-settings) that keep one person one identity, such as a stable subject claim and a pinned tenant.
 
 ## MCP connectors
 
@@ -179,18 +179,20 @@ export default {
 ## Threat model
 
 pi-roundtable runs one assistant for one owner.
-It does not yet isolate the people it talks to from each other the way a multi-user service must; whoever lets others in takes that on.
+0.9 adds principal-scoped memory and private conversations, but this is not a complete multi-user service: credentials and host execution remain shared, and whoever lets others in takes that on.
 
-- **Who is trusted.** The operator controls the host, its configuration, and its credentials. The owner (`owner.id`) may use every tool. Everyone else is admitted at a tier, `member` or `admin`: in Discord from user and role ids in `speakers`, on the web from the access map over the token's roles. No token claim makes anyone the owner.
+- **Who is trusted.** The operator controls the host, its configuration, and its credentials. Principals holding owner may use every tool; owner is granted only in `access.owners` or through `roundtable principal`, never a token claim. Others are admitted at `member` or `admin` through core `access` rules over verified identities and surface-prefixed roles. Linking identities makes the accounts one principal; plugins cannot assert a speaker's authority.
 - **What a turn may do.** A turn gets only the tools its speaker's tier holds, and a tool no plugin gives a tier is the owner's alone. Tools run in the host process, with its files and its network: `web_search` and `fetch_content` can reach internal addresses, so name the tools of a web persona in its `selection`. Plugins run in the same process, with the same access.
 - **Approvals.** A held call is approved only by the speaker whose turn held it, at a tier that still holds the call, or, in a shared conversation, by an owner, on its card or by a confirming message. In a private conversation nobody else may, and a call above the speaker's tier is not approved there.
 - **Conversations.** In Discord an agent's channel and a group room are shared: everyone who writes there adds to one conversation the agent reads. A web chat conversation belongs to the person who opened it: in the web chat only they may read it, write in it, or answer its prompts, but the owner can read it through the owner console ([pi-roundtable-web](packages/web)), and the operator through the database and the data directory.
-- **Memory.** Each speaker's memory is their own. One person who writes from Discord and from the web has two identities, and two memories, until principals arrive in 0.9. With memory on, a host whose shared conversations more than one person may speak in does not start on a `claude-bridge` model, which replays a conversation's history unfiltered; use another provider, `memory: false`, or one owner alone.
+- **Memory isolation.** Memory follows the principal, not owner tier: a private conversation's person, or the current speaker in a shared room. Link accounts to share one person's memory across Discord and web. In shared requests and summaries, memory-tool and memory-loaded-worker exchanges (arguments and results together) are hidden from other speakers, and earlier reasoning is removed with provider-aware handling. Other tools' arguments and public assistant replies remain public, even if the model repeats private memory there; this is not general secret-flow prevention. Third-party compactors must use `privateCompaction` before summarizing shared history. With memory on, `claude-bridge` is refused at boot and before each shared turn when more than one principal may speak, because it replays unfiltered history; use another provider, `memory: false`, or one principal alone.
 - **Model credentials.** Every turn, whoever speaks, runs on the host's model login and is billed to it. Per-person credentials are planned for a later release.
 - **Data.** Conversations, memory, and schedules sit unencrypted in PostgreSQL and the data directory.
 
 ## Upgrading
 
+[Migrating to 0.9](docs/migration-0.9.md) covers principal backfill, explicit speakers, package changes, the memory isolation boundary, prompt differences, and rollback.
+Ordinary single-owner Discord hosts can keep their old configuration; custom runtime callers and web integrations have explicit migration steps.
 [Migrating to 0.8](docs/migrating-0.8.md) covers upgrading a Discord project from 0.7, which needs no configuration change, and starting a host without Discord.
 
 ## Commands

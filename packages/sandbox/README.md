@@ -243,6 +243,14 @@ Callbacks must still validate input and enforce per-person quotas, memory author
 Optional person/notes/moments tools can use an existing PostgreSQL store without copying the connection, schema, migration ledger or owner memory into the image.
 Schedules can be host tools with a declared channel-local background target and host-bound author; no scheduler is enabled automatically.
 
+### Principal migration in 0.9
+
+Follow [Migrating to 0.9](../../docs/migration-0.9.md) for the core upgrade.
+The sandbox claim ignores an author with no resolved tier; guests need core `access` admission, not an implicit owner fallback.
+`SandboxRuntime.runTurn` requires a host-bound speaker with `principalId`, and credential/host-tool hooks receive that id; the worker protocol still receives only the actor id and name.
+This does not isolate a shared channel's workspace by principal: guests in that channel still share its stored history and memory.
+Per-person model credentials remain the host integration's responsibility, not a guarantee of the core release.
+
 ### Compaction
 
 Worker sessions compact with the core's tiers, as the host's own sessions do: a model whose window leaves more than 300,000 tokens compacts at 300,000 through the host compactor, and past 500,000 through Pi's own summary, whose model calls go through the broker like any other.

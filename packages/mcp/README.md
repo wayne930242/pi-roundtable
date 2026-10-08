@@ -34,6 +34,15 @@ After the lockstep release:
 bun add pi-roundtable-mcp
 ```
 
+## Principal migration in 0.9
+
+Follow [Migrating to 0.9](../../docs/migration-0.9.md) when changing the lockstep core and package together.
+The dispatch token defaults to the primary owner's principal; 0.8 sessions and schedule authors retain that attribution.
+The plugin registers its private scope before runtime use and converges pre-0.9 shared registry records through `CONVERSATIONS.adopt` on startup.
+Explicit `principal` bindings need an existing principal with a lasting role; only `token:` identities may be declared by plugins.
+A custom `answer` must run as the supplied speaker, never silently as the owner, and must record private ownership before a direct runtime call.
+The channel grants of `/mcp/discord/<token>` do not become per-principal grants in this release.
+
 ## Configure
 
 List the plugins in `roundtable.config.ts`.

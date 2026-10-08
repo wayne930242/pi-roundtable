@@ -92,6 +92,9 @@ The kinds `owner` and `agent` belong to the host and are refused.
 
 ### Access
 
+The core [Migrating to 0.9](../../docs/migration-0.9.md) guide covers the removed access option, backfill, memory isolation, prompt differences, and rollback.
+Use matching lockstep core and package releases; these principal contracts do not imply isolated per-person model credentials.
+
 Use the host's top-level `access`, not a `webChat` option.
 The removed `webChat({ access })` option fails at configuration load with migration guidance; `WebAccessMap` and `webAccess` are removed too.
 Token roles become `web:role:<role>` (or `<surface>:role:<role>` for a custom surface), and identities are written as `oidcSpeakerId(issuer, subject)`.
@@ -256,7 +259,7 @@ A REST notice page therefore contains at most 100 bounded entries, less than 2.5
   Personal schedules and delegated reports use the core runtime's conversation queue separately from this interactive admission budget, so a busy browser cannot discard them; runtime stop and shutdown still apply.
   Each person opens at most `newConversationsPerHour` conversations an hour, over the socket or the REST API alike.
 - **Approvals.** A held call's card goes to the conversation's person only, and needs the tier the call needs.
-  A card whose tier the person lacks is never shown, so the call stays held.
+  A card whose tier the person lacks is never shown: its prompt resolves `expired`, without owner escalation.
 - **Owner.** Nobody becomes the owner through a token's claims; grant owner in core configuration or the principal CLI.
   Owner-tier tools stay out of web turns unless an owner is chatting.
 

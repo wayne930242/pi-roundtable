@@ -34,7 +34,8 @@ export const principals = definePlugin({
 					parameters: Type.Object({}),
 					minTier: "member",
 					run: async (_args, turn) => {
-						if (!turn.speaker) throw new ToolRefusal("No speaker for this turn.");
+						if (!turn.speaker)
+							throw new ToolRefusal("No speaker for this turn.");
 						const person = await identity.principal(turn.speaker.principalId);
 						if (!person || person.disabled)
 							throw new ToolRefusal("This principal is not available.");

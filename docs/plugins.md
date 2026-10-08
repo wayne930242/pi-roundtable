@@ -194,7 +194,7 @@ The built-in plugins provide these, from the main entry:
 | `SKILLS` | `SkillRegistry` | `skills` (an addon) | What agents carry: `carried`, `carriedNames`, `describeCarried`, `catalog`, `list`, `linkedFrom`, `checkRegistered`, `link`, `attach` |
 | `SCHEDULES` | `ScheduleStore` | `schedule-store` | The stored schedules: `create`, `createWithin`, `get`, `forChannel`, `all`, `update`, `remove`, `due`, `claim`, `recordStatus` |
 | `PRECHECKS` | `PrecheckRegistry` | `prechecks` | The host's named [prechecks](#prechecks-wake-a-schedule-only-when-it-has-work): `register`, `get`, `list`; and the runner of agents' precheck scripts: `useScriptRunner`, `scriptRunner` |
-| `MEMORY` | `MemoryStore` | `memory` (an addon) | `forSpeaker(id)` gives that speaker's `SpeakerMemory`: `list`, `forPrompt`, `add`, `search`, `update`, `removeById`, `remove`; `MEMORY_KINDS` is `core`, `note`, `event` |
+| `MEMORY` | `MemoryStore` | `memory` (an addon) | `forSpeaker(principalId)` gives that principal's `SpeakerMemory`: `list`, `forPrompt`, `add`, `search`, `update`, `removeById`, `remove`; `MEMORY_KINDS` is `core`, `note`, `event` |
 | `BACKGROUND_TURNS` | `BackgroundTurns` | `modules` | Turns nobody wrote: `runScheduled`, `runDelegated`, `runErrorReport` |
 | `DELEGATION` | `Delegator` | `modules` | `start(request)` a background task, `runningChannels()`, `idle()` |
 
@@ -420,7 +420,8 @@ export const principals = definePlugin({
 					parameters: Type.Object({}),
 					minTier: "member",
 					run: async (_args, turn) => {
-						if (!turn.speaker) throw new ToolRefusal("No speaker for this turn.");
+						if (!turn.speaker)
+							throw new ToolRefusal("No speaker for this turn.");
 						const person = await identity.principal(turn.speaker.principalId);
 						if (!person || person.disabled)
 							throw new ToolRefusal("This principal is not available.");
@@ -477,14 +478,18 @@ test("an unavailable principal is refused even at owner tier", async () => {
 	});
 	try {
 		expect(
-			await harness.runTool("principal_who", {}, {
-				speaker: {
-					id: "actor",
-					name: "Ada",
-					principalId: "operator",
-					tier: "owner",
+			await harness.runTool(
+				"principal_who",
+				{},
+				{
+					speaker: {
+						id: "actor",
+						name: "Ada",
+						principalId: "operator",
+						tier: "owner",
+					},
 				},
-			}),
+			),
 		).toContain("This principal is not available.");
 		expect(access.owners[0]?.principal).toBe("operator");
 		expect(access.members.roles).toEqual(["web:role:App.User"]);
@@ -2701,6 +2706,8 @@ Use `testPlugin(plugin, options?)` for most tests; it sets up one plugin against
 Use [`testHost`](#testhost-the-built-in-plugins-and-yours-over-postgresql) for tests that depend on built-in plugins or the host's setup order; it boots them alongside yours over PostgreSQL.
 
 `testPlugin` sets one plugin up against a fake context and starts its services, with no Discord and no PostgreSQL unless you pass `{ database }`.
+It resolves only its default owner unless you inject `servicePair(IDENTITY, { resolve })` for your test's actors; do not invent a speaker in a claim to bypass admission.
+The [principals example](#principals-and-access) injects only the read method it exercises, and the study-room example tests router-resolved attribution and refusal.
 It returns:
 
 | Field | What it is |

@@ -39,14 +39,18 @@ test("an unavailable principal is refused even at owner tier", async () => {
 	});
 	try {
 		expect(
-			await harness.runTool("principal_who", {}, {
-				speaker: {
-					id: "actor",
-					name: "Ada",
-					principalId: "operator",
-					tier: "owner",
+			await harness.runTool(
+				"principal_who",
+				{},
+				{
+					speaker: {
+						id: "actor",
+						name: "Ada",
+						principalId: "operator",
+						tier: "owner",
+					},
 				},
-			}),
+			),
 		).toContain("This principal is not available.");
 		expect(access.owners[0]?.principal).toBe("operator");
 		expect(access.members.roles).toEqual(["web:role:App.User"]);

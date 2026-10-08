@@ -88,7 +88,8 @@ In shared conversations, the principal who spoke may answer from any linked iden
 - `notify_owner` becomes `notify`.
   Until 1.0 the old name works in selections, profiles, task exclusions, required tools, and tool-tier overrides, with a warning; models see the new tool name.
   Notices go to the private conversation's person, or the current speaker in a shared conversation, through contributed direct channels.
-- `ownerWords` becomes `addresseeWords`; the old kit export remains deprecated.
+- Internal prompt naming changes from `ownerWords` to `addresseeWords`, with the old internal alias retained; neither is a public package export.
+  Consumers should use the public `SessionContext.addressee` rather than importing core paths.
   Synchronous `CommandGuard.isOwner` is deprecated and tests only the primary owner's actor id; use asynchronous `allows(actor)` to check every owner now.
 - Surfaces report verified `ActorFacts`; only the router sets `InboundMessage.speaker` before admission.
   A surface-supplied speaker is overwritten.
