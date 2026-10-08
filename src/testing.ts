@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { SQL } from "bun";
-import { agentClaim, OWNER_TARGET } from "./core/agents/agent-claim.ts";
+import { agentClaim } from "./core/agents/agent-claim.ts";
 import { DISCORD } from "./core/builtin/discord.ts";
 import type {
 	ConversationPort,
@@ -40,6 +40,7 @@ import type { OwnerIdentity } from "./core/identity.ts";
 import { ConfirmationJudge } from "./core/judging/confirmation-judge.ts";
 import { silentLogger } from "./core/log.ts";
 import { ConversationBackgroundTurns } from "./core/modules/background/background-turns.ts";
+import { PERSONAL_TARGET } from "./core/modules/background/personal-target.ts";
 import type {
 	Contribution,
 	HostEnv,
@@ -535,7 +536,9 @@ export async function testPlugin(
 		],
 		targets: (name) =>
 			registry.backgroundTargets.find((t) => t.name === name) ??
-			(agentServer && name === OWNER_TARGET.name ? OWNER_TARGET : undefined),
+			(agentServer && name === PERSONAL_TARGET.name
+				? PERSONAL_TARGET
+				: undefined),
 		queue,
 		logger,
 		...(options.forwardJoinMs === undefined

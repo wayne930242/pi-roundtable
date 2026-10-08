@@ -1,13 +1,14 @@
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import type { SQL } from "bun";
-import { OWNER_TARGET } from "../agents/agent-claim.ts";
 import { DISCORD, type DiscordServices } from "../builtin/discord.ts";
 import { discordAdminPlugin } from "../builtin/discord-admin.ts";
 import { type ModulesOptions, modulesPlugin } from "../builtin/modules.ts";
 import { skillsPlugin } from "../builtin/skills.ts";
 import { memoryPlugin } from "../builtin/stores.ts";
+import type { ConversationRegistry } from "../conversations/conversation-registry.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
 import { silentLogger } from "../log.ts";
+import { PERSONAL_TARGET } from "../modules/background/personal-target.ts";
 import type { SkillStore } from "../modules/skills/skill-store.ts";
 import {
 	type Contribution,
@@ -18,7 +19,7 @@ import {
 import { ServiceRegistry } from "../registry/services.ts";
 import { surfacePort } from "../routing/surface-port.ts";
 import type { AgentServer, MemoryStore, ScheduleStore } from "../services.ts";
-import { AGENTS, MEMORY, SCHEDULES } from "../services.ts";
+import { AGENTS, CONVERSATIONS, MEMORY, SCHEDULES } from "../services.ts";
 
 /** What the modules' tools did, for a test to read. */
 export interface ModuleRecord {
@@ -47,6 +48,10 @@ export async function setUpModules(
 		/** Whether the claim owning a channel takes background turns; by default every owned channel's does. */
 		takesBackground?: (channel: ChannelKey) => boolean;
 		errorReporter?: ModulesOptions["errorReporter"];
+		/** The schedules the tools keep; by default a stub that answers nothing. */
+		schedules?: ScheduleStore;
+		/** The conversations the host records, which say whose a conversation is; by default none is recorded. */
+		conversations?: Pick<ConversationRegistry, "get">;
 	} = {},
 ): Promise<{
 	plugin: RoundtablePlugin;
@@ -81,7 +86,13 @@ export async function setUpModules(
 	const services = new ServiceRegistry([plugin]);
 	// SAFETY: the tools under test read no store; each stub is asked for nothing else.
 	services.preset(MEMORY, {} as MemoryStore);
-	services.preset(SCHEDULES, {} as ScheduleStore);
+	services.preset(SCHEDULES, options.schedules ?? ({} as ScheduleStore));
+	if (options.conversations)
+		// SAFETY: the schedule tools only read a conversation's record.
+		services.preset(
+			CONVERSATIONS,
+			options.conversations as unknown as ConversationRegistry,
+		);
 	if (options.agentChannelOf)
 		// SAFETY: the schedule tools ask the agent team for a channel and nothing else.
 		services.preset(AGENTS, {
@@ -113,8 +124,8 @@ export async function setUpModules(
 		logger: silentLogger(),
 		conversations: {
 			target: (name: string) =>
-				options.ownerTarget !== false && name === OWNER_TARGET.name
-					? OWNER_TARGET
+				options.ownerTarget !== false && name === PERSONAL_TARGET.name
+					? PERSONAL_TARGET
 					: undefined,
 			owns,
 			takesBackground: options.takesBackground ?? owns,

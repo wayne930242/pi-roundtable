@@ -24,6 +24,11 @@ const TARGETS: readonly BackgroundTarget[] = [
 	{ name: "main", label: () => "Main", delegation: { maxRunning: 3 } },
 	{ name: "open", label: () => "Open", delegation: { maxRunning: 2 } },
 	{ name: "closed", label: () => "Closed" },
+	{
+		name: "personal",
+		label: () => "Personal",
+		delegation: { maxRunning: 3, maxRunningPerPrincipal: 2 },
+	},
 ];
 
 function setup(
@@ -57,6 +62,34 @@ const request = (channel: ChannelKey = "discord:1") => ({
 });
 
 describe("DefaultDelegator", () => {
+	test("a target's maxRunningPerPrincipal holds a person to so many running jobs across their channels", async () => {
+		const { promise: gate, resolve: release } = Promise.withResolvers<void>();
+		const { delegator } = setup(async () => {
+			await gate;
+			return "done";
+		});
+		const KAI = { ...OWNER, principalId: "p_kai", id: "kai", name: "Kai" };
+		const personal = (channel: ChannelKey, author = OWNER) => ({
+			...request(channel),
+			target: "personal",
+			author,
+		});
+		delegator.start(personal("web:a"));
+		delegator.start(personal("web:b"));
+		expect(() => delegator.start(personal("web:c"))).toThrow(
+			new DelegationError(
+				"you already have 2 delegated tasks running, the most one person may have here; wait for one to report back",
+			),
+		);
+		// Someone else, and the same person for another target, still start theirs.
+		delegator.start(personal("web:c", KAI));
+		delegator.start(request("web:c"));
+		release();
+		await delegator.idle();
+		delegator.start(personal("web:c"));
+		await delegator.idle();
+	});
+
 	test("a report comes back with its job, after start has returned", async () => {
 		const { delegator, reports } = setup(async (task) => `report for ${task}`);
 		const job = delegator.start(request());

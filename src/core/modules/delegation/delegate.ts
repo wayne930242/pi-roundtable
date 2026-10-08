@@ -1,5 +1,4 @@
 import type { ExtensionFactory } from "@earendil-works/pi-coding-agent";
-import { OWNER_TARGET } from "../../agents/agent-claim.ts";
 import type { ChannelKey } from "../../domain/conversation.ts";
 import { DelegationError } from "../../domain/errors.ts";
 import { SYSTEM_PRINCIPAL } from "../../identity/principal-store.ts";
@@ -8,6 +7,7 @@ import { textToolsExtension } from "../../runtime/text-tools.ts";
 import type { Delegator } from "../../services.ts";
 import { DELEGATE_TOOL_SPEC } from "../../shared/delegate-tool.ts";
 import type { Speaker } from "../../speakers.ts";
+import { PERSONAL_TARGET } from "../background/personal-target.ts";
 
 export interface OwnerDelegation {
 	delegator: Pick<Delegator, "start">;
@@ -47,7 +47,7 @@ export function delegateExtension(
 					const job = delegation.delegator.start({
 						channel: target,
 						origin,
-						target: OWNER_TARGET.name,
+						target: PERSONAL_TARGET.name,
 						author: {
 							principalId: author.principalId,
 							id: author.id,

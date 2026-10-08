@@ -1,4 +1,3 @@
-import { OWNER_TARGET } from "../../agents/agent-claim.ts";
 import type {
 	BackgroundRunsAs,
 	BackgroundTurn,
@@ -18,6 +17,7 @@ import {
 import type { PrecheckFinding } from "../schedules/prechecks.ts";
 import type { Schedule } from "../schedules/schedule-store.ts";
 import { scheduledTurnText } from "../schedules/schedule-tools.ts";
+import { PERSONAL_TARGET } from "./personal-target.ts";
 
 export interface BackgroundTurnsOptions {
 	conversations: Pick<ConversationPort, "background" | "runsAs">;
@@ -112,7 +112,7 @@ export class ConversationBackgroundTurns implements BackgroundTurns {
 		return this.#options.conversations.background(
 			systemTurn({
 				channel,
-				target: OWNER_TARGET.name,
+				target: PERSONAL_TARGET.name,
 				author: this.#options.system,
 				tier: "owner",
 				turnId: `error-${Date.now()}`,

@@ -81,18 +81,31 @@ export class DefaultDelegator implements Delegator {
 			throw new DelegationError(
 				`the task is ${task.length} characters; keep it within ${MAX_TASK_CHARS}`,
 			);
-		const busy = [...this.#running.values()].filter(
-			({ job }) => job.channel === request.channel,
+		const running = [...this.#running.values()].map(({ job }) => job);
+		const busy = running.filter(
+			(job) => job.channel === request.channel,
 		).length;
-		const limit = this.#options.targets(request.target)?.delegation?.maxRunning;
-		if (limit === undefined)
+		const limits = this.#options.targets(request.target)?.delegation;
+		if (limits === undefined)
 			throw new DelegationError(
 				`delegated tasks are not available for ${request.target} conversations`,
 			);
-		if (busy >= limit)
+		if (busy >= limits.maxRunning)
 			throw new DelegationError(
 				`this channel already has ${busy} delegated tasks running; wait for one to report back`,
 			);
+		const perPrincipal = limits.maxRunningPerPrincipal;
+		if (perPrincipal !== undefined) {
+			const theirs = running.filter(
+				(job) =>
+					job.target === request.target &&
+					job.author.principalId === request.author.principalId,
+			).length;
+			if (theirs >= perPrincipal)
+				throw new DelegationError(
+					`you already have ${theirs} delegated tasks running, the most one person may have here; wait for one to report back`,
+				);
+		}
 		const job: DelegationJob = {
 			...request,
 			title,

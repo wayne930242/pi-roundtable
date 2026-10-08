@@ -93,10 +93,22 @@ export interface BackgroundTarget {
 	name: string;
 	/** How lists such as `/<root> schedule` name it, in the host's locale. */
 	label(locale: Locale): string;
-	/** Limits of the schedules made for it; absent, nothing may be scheduled for it. */
-	schedules?: { perChannel: number; promptChars: number; aheadDays: number };
-	/** Limits of the delegated tasks reporting to it; absent, nothing may be delegated to it. */
-	delegation?: { maxRunning: number };
+	/**
+	 * Limits of the schedules made for it; absent, nothing may be scheduled for it. `perPrincipal`,
+	 * when set, holds each person to that many of its schedules across all their conversations.
+	 */
+	schedules?: {
+		perChannel: number;
+		perPrincipal?: number;
+		promptChars: number;
+		aheadDays: number;
+	};
+	/**
+	 * Limits of the delegated tasks reporting to it; absent, nothing may be delegated to it.
+	 * `maxRunningPerPrincipal`, when set, holds each person to that many running at once across
+	 * all their conversations.
+	 */
+	delegation?: { maxRunning: number; maxRunningPerPrincipal?: number };
 }
 
 /** A turn nobody wrote in the channel: a schedule's, or a report of work done elsewhere. */

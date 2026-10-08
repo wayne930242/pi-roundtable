@@ -2,7 +2,7 @@ import { chmodSync, lstatSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import type { SQL } from "bun";
-import { agentClaim, OWNER_TARGET } from "../agents/agent-claim.ts";
+import { agentClaim } from "../agents/agent-claim.ts";
 import { AgentDashboard } from "../agents/agent-dashboard.ts";
 import { PgAgentStore } from "../agents/agent-store.ts";
 import { DiscordAgentTeam } from "../agents/agent-team.ts";
@@ -274,8 +274,6 @@ export function agentServerPlugin(
 						},
 					},
 				],
-				// The schedules and delegated tasks of the owner's and the agents' conversations are its own.
-				backgroundTargets: [OWNER_TARGET],
 				channels: [
 					agentClaim({
 						owner: options.owner,

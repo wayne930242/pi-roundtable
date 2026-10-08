@@ -1,6 +1,5 @@
 import { join } from "node:path";
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
-import { OWNER_TARGET } from "../agents/agent-claim.ts";
 import type { SurfacePort } from "../contract/surface.ts";
 import { scheduleCommands } from "../discord/schedule-commands.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
@@ -14,6 +13,7 @@ import { legacyPrincipalsOf } from "../identity/identity-view.ts";
 import type { OwnerIdentity } from "../identity.ts";
 import type { ModelRef, ThinkingLevel } from "../models.ts";
 import { ConversationBackgroundTurns } from "../modules/background/background-turns.ts";
+import { PERSONAL_TARGET } from "../modules/background/personal-target.ts";
 import { delegateExtension } from "../modules/delegation/delegate.ts";
 import {
 	DefaultDelegator,
@@ -30,6 +30,7 @@ import { splitReply } from "../presentation/reply-splitter.ts";
 import {
 	AGENTS,
 	BACKGROUND_TURNS,
+	CONVERSATIONS,
 	DELEGATION,
 	IDENTITY,
 	PRECHECKS,
@@ -82,8 +83,9 @@ const MODULE_TIERS: Readonly<Record<string, Tier>> = {
  * The owner's modules: notifications, schedules, and delegated tasks, each a session tool, and
  * the turns nobody wrote. The delegator's running jobs join the shutdown drain. Without Discord
  * there are no owner's messages: no `notify_owner`, and a conversation no chat surface carries
- * can neither schedule nor delegate. Without the owner's background target no session gets the
- * schedule or delegation tools.
+ * can neither schedule nor delegate. It contributes `PERSONAL_TARGET`, whose turns the schedules
+ * and delegated reports are, and a session whose conversation's claim takes no background turns
+ * gets neither tool.
  */
 export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 	const { owner } = options;
@@ -167,11 +169,26 @@ export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 			// An agent session serves every speaker, so its tools name none.
 			const served = (session: SessionContext) =>
 				session.agent ? THE_SPEAKER : owner;
-			// Schedules and delegated reports run as the owner's background turns; without a plugin
-			// contributing that target, as on a host without the agent server, none could ever start,
-			// so no session gets the tools. Read when a session is made, after every plugin set up.
-			const ownerTurns = () =>
-				conversations.target(OWNER_TARGET.name) !== undefined;
+			// Schedules and delegated reports run as background turns in the conversation, or, for one
+			// no chat surface carries, in the owner's messages; where no claim would take them, none
+			// could ever start, so the session gets no tools. Read when a session is made, after every
+			// plugin set up.
+			const takesRuns = (session: SessionContext) =>
+				surfaces.of(session.homeChannel)
+					? conversations.takesBackground(session.homeChannel)
+					: ownerChannel !== undefined;
+			// Whose a conversation is, read when a tool runs: an agent's serves everyone; another is
+			// private when the host recorded it so, otherwise shared.
+			const visibility =
+				(session: SessionContext) =>
+				async (): Promise<"private" | "shared"> => {
+					if (session.agent) return "shared";
+					const record = await services
+						.find(CONVERSATIONS)
+						?.get(session.homeChannel);
+					return record?.visibility === "private" ? "private" : "shared";
+				};
+			const principalOf = identity ? legacyPrincipalsOf(identity) : undefined;
 			// A reporter for an ops agent is the agent server's to connect.
 			const reporter =
 				options.errorReporter &&
@@ -190,10 +207,6 @@ export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 					if (!conversations.owns(channel))
 						throw new ConfigError(
 							`config ops.conversation: no plugin's conversations own ${JSON.stringify(channel)}, so nothing answers its error reports. Name a conversation a plugin's claim owns, or leave ops out.`,
-						);
-					if (!ownerTurns())
-						throw new ConfigError(
-							`config ops.conversation: no plugin contributes the "${OWNER_TARGET.name}" background target, so the report turns of ${JSON.stringify(channel)} could never run. Configure discord, whose agent server contributes it, add a plugin that contributes it, or leave ops out.`,
 						);
 					if (!conversations.takesBackground(channel))
 						throw new ConfigError(
@@ -235,13 +248,15 @@ export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 						? [fixed("notify", () => notifyExtension(connection, owner))]
 						: []),
 					fixed("schedules", (session) =>
-						ownerTurns()
+						takesRuns(session)
 							? schedulesExtension(
 									{
 										store: schedules,
 										channelFor: scheduleChannelFor,
 										...(prechecks ? { prechecks } : {}),
 										holds: () => sessions().holds,
+										visibility: visibility(session),
+										...(principalOf ? { principalOf } : {}),
 									},
 									session.homeChannel,
 									served(session),
@@ -251,7 +266,7 @@ export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 							: null,
 					),
 					fixed("delegate", (session) =>
-						ownerTurns()
+						takesRuns(session)
 							? delegateExtension(
 									{
 										delegator,
@@ -266,6 +281,8 @@ export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 					),
 				],
 				toolTiers: MODULE_TIERS,
+				// Every person's conversations where a claim takes background turns are its own.
+				backgroundTargets: [PERSONAL_TARGET],
 			};
 		},
 	};

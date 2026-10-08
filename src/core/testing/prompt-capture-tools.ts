@@ -1,8 +1,11 @@
+import type { ChatSurface } from "../contract/surface.ts";
+import type { PluginContext, RoundtablePlugin } from "../plugin.ts";
+
 /**
  * Every built-in tool a deployment may select for its conversations, as an app's selection
  * names them; a host without a tool's plugin runs without it.
  */
-export const SELECTED = [
+const SELECTED = [
 	"delegate_task",
 	"discord_add_member_role",
 	"discord_ban_member",
@@ -44,3 +47,51 @@ export const SELECTED = [
 	"schedule_list",
 	"schedule_update",
 ];
+
+/**
+ * A surface whose conversations run persona turns through `context.turns`; hands over its context.
+ * With `background`, a claim of its conversations answers background turns there, as a plugin's
+ * conversations on a Discord host do, so their sessions schedule and delegate; without it, as the
+ * 0.8 web chat's, they take none.
+ */
+export const personas = (
+	seen: (context: PluginContext) => void,
+	background: boolean,
+): RoundtablePlugin => ({
+	name: "capture-personas",
+	setup: (context) => {
+		seen(context);
+		const surface: ChatSurface = {
+			surface: "fake",
+			start: async () => undefined,
+			sendReply: async () => undefined,
+		};
+		return {
+			// As the self-compact plugin of a project `roundtable init` creates.
+			piPackages: ["pi-self-compact"],
+			agentSelection: () => ({ tools: SELECTED, groups: [] }),
+			surfaces: [surface],
+			channels: [
+				{
+					name: "capture-personas",
+					priority: 0,
+					owns: (channel) => channel.startsWith("fake:"),
+					admit: () => undefined,
+					...(background
+						? {
+								background: async () => ({
+									status: "skipped" as const,
+									reason: "the capture host runs no background turns",
+								}),
+							}
+						: {}),
+					startFresh: async () => "study",
+				},
+			],
+			personas: [
+				{ kind: "study", prompt: () => "You are a tutor." },
+				{ kind: "chat", prompt: () => "You answer on the web." },
+			],
+		};
+	},
+});

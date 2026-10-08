@@ -1,6 +1,5 @@
 import type { ExtensionFactory } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { OWNER_TARGET } from "../../agents/agent-claim.ts";
 import type { ChannelKey } from "../../domain/conversation.ts";
 import { ScheduleError } from "../../domain/errors.ts";
 import type { HoldCheck } from "../../holds.ts";
@@ -17,6 +16,7 @@ import {
 } from "../../shared/schedule-tools.ts";
 import type { Speaker } from "../../speakers.ts";
 import { timeZone } from "../../time.ts";
+import { PERSONAL_TARGET } from "../background/personal-target.ts";
 import type { PrecheckRegistry } from "./prechecks.ts";
 import { callScheduleTool } from "./schedule-tools.ts";
 
@@ -32,6 +32,13 @@ export interface OwnerSchedules {
 		Partial<Pick<PrecheckRegistry, "scriptRunner">>;
 	/** The host's hold rules, which mark a saved script's approved tools. */
 	holds?: () => HoldCheck;
+	/**
+	 * Whose the conversation is, read when a tool runs: in a private one the speaker sees only
+	 * their own schedules. Without it, every schedule of the channel, as in a shared one.
+	 */
+	visibility?: () => Promise<"private" | "shared">;
+	/** The principal a schedule's creator id stands for, such as the primary owner for 0.8's `remote-mcp`. */
+	principalOf?: (createdById: string) => Promise<string | undefined>;
 }
 
 /** Finds another agent's channel, for reading its schedules; throws ScheduleError when there is none. */
@@ -65,7 +72,8 @@ export function schedulesExtension(
 	/** The person the running turn is for; their schedules run at their tier. */
 	speaker: () => Speaker | undefined = () => undefined,
 ): ExtensionFactory {
-	const { store, channelFor, prechecks, holds } = schedules;
+	const { store, channelFor, prechecks, holds, visibility, principalOf } =
+		schedules;
 	const defs = scheduleToolSpecs({
 		locale: activeLocale(),
 		timeZone: timeZone(),
@@ -89,7 +97,7 @@ export function schedulesExtension(
 					{
 						store,
 						channel: target,
-						target: OWNER_TARGET,
+						target: PERSONAL_TARGET,
 						author: {
 							principalId: author.principalId,
 							id: author.id,
@@ -99,6 +107,8 @@ export function schedulesExtension(
 						now: new Date(),
 						...(prechecks ? { prechecks } : {}),
 						...(holds ? { holds } : {}),
+						...(visibility ? { visibility: await visibility() } : {}),
+						...(principalOf ? { principalOf } : {}),
 					},
 					spec.name,
 					input,

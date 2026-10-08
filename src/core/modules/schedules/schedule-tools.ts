@@ -30,10 +30,12 @@ const DESCRIBE_TIMEOUT_MS = 10_000;
 const DAY_MS = 86_400_000;
 
 export interface ScheduleToolContext {
+	/** The schedules; `all` is needed only where the target counts each person's (`perPrincipal`). */
 	store: Pick<
 		ScheduleStore,
 		"create" | "get" | "forChannel" | "update" | "remove"
-	>;
+	> &
+		Partial<Pick<ScheduleStore, "all">>;
 	channel: ChannelKey;
 	/** Whose schedules these are; its `schedules` limits apply, and without them nothing is scheduled. */
 	target: BackgroundTarget;
@@ -44,6 +46,16 @@ export interface ScheduleToolContext {
 	 */
 	author: { principalId: string; id: string; name: string; tier: Tier };
 	now: Date;
+	/**
+	 * Whose the conversation is: in a `private` one the asker lists, reads, changes, and cancels
+	 * only their own schedules; in a `shared` one, the default, every schedule of the channel.
+	 */
+	visibility?: "private" | "shared";
+	/**
+	 * The principal a schedule's creator id stands for, such as the primary owner for 0.8's
+	 * `remote-mcp`; without it, or when it knows none, the id is the principal's.
+	 */
+	principalOf?: (createdById: string) => Promise<string | undefined>;
 	/**
 	 * The host's prechecks a schedule may name, and the runner of the scripts it may carry instead;
 	 * without them, none can be attached.
@@ -226,13 +238,59 @@ function line(schedule: Schedule): string {
 	return `- #${schedule.id} ${schedule.title}: ${describeRecurrence(schedule.recurrence)}, next ${zonedStamp(schedule.nextRun)}; set by ${schedule.createdByName}${precheck}${last}\n  ${prompt.replace(/\n/g, " ")}`;
 }
 
+/** The principal who created a schedule. */
+async function creatorOf(
+	ctx: ScheduleToolContext,
+	schedule: Schedule,
+): Promise<string> {
+	return (
+		(await ctx.principalOf?.(schedule.createdById)) ?? schedule.createdById
+	);
+}
+
+/** Whether the asker sees a schedule of the channel: in a private conversation only their own. */
+async function visible(
+	ctx: ScheduleToolContext,
+	schedule: Schedule,
+): Promise<boolean> {
+	return (
+		ctx.visibility !== "private" ||
+		(await creatorOf(ctx, schedule)) === ctx.author.principalId
+	);
+}
+
 async function own(ctx: ScheduleToolContext, input: Input): Promise<Schedule> {
 	const schedule = await ctx.store.get(id(input));
-	if (!schedule || schedule.channel !== ctx.channel)
+	if (
+		!schedule ||
+		schedule.channel !== ctx.channel ||
+		!(await visible(ctx, schedule))
+	)
 		throw new ScheduleError(
 			`this channel has no schedule #${String(input.id)}`,
 		);
 	return schedule;
+}
+
+/** Refuses a schedule beyond the target's limit of one person's, across all their conversations. */
+async function withinPerPrincipal(ctx: ScheduleToolContext): Promise<void> {
+	const { perPrincipal } = limitsOf(ctx);
+	if (perPrincipal === undefined) return;
+	if (!ctx.store.all)
+		throw new ScheduleError(
+			`${ctx.target.name} schedules are counted per person, and this host's schedule store cannot count them`,
+		);
+	let theirs = 0;
+	for (const schedule of await ctx.store.all())
+		if (
+			schedule.target === ctx.target.name &&
+			(await creatorOf(ctx, schedule)) === ctx.author.principalId
+		)
+			theirs += 1;
+	if (theirs >= perPrincipal)
+		throw new ScheduleError(
+			`you already have ${theirs} schedules, the most one person may have here; cancel one first`,
+		);
 }
 
 /** A schedule runs at its creator's tier, so someone of a lower tier may not rewrite it. */
@@ -285,6 +343,7 @@ export async function callScheduleTool(
 				throw new ScheduleError(
 					`this channel already has ${existing.length} schedules, the most it may have; cancel one first`,
 				);
+			await withinPerPrincipal(ctx);
 			const created = await ctx.store.create({
 				channel: ctx.channel,
 				target: ctx.target.name,
@@ -315,7 +374,9 @@ export async function callScheduleTool(
 					: "";
 				return `${line(schedule).split("\n")[0]}\n\nPrompt:\n${schedule.prompt}${script}`;
 			}
-			const all = await ctx.store.forChannel(ctx.channel);
+			const all: Schedule[] = [];
+			for (const schedule of await ctx.store.forChannel(ctx.channel))
+				if (await visible(ctx, schedule)) all.push(schedule);
 			const listed =
 				all.length === 0
 					? "This channel has no schedules."

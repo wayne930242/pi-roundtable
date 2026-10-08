@@ -11,7 +11,6 @@ import type { DiscordAgentTeam } from "../agents/agent-team.ts";
 import { FakeChannels } from "../agents/agent-team-fixture.ts";
 import { discordKey } from "../agents/team-keys.ts";
 import type { RoundtableConfig } from "../config/config.ts";
-import type { ChatSurface } from "../contract/surface.ts";
 import { openPool } from "../db/migrations.ts";
 import { defineRoundtable } from "../define-roundtable.ts";
 import { CommandCollection } from "../discord/command-collection.ts";
@@ -26,7 +25,7 @@ import type { PluginContext, RoundtablePlugin } from "../plugin.ts";
 import { AGENTS, MEMORY, RUNTIME } from "../services.ts";
 import type { Speaker } from "../speakers.ts";
 import { testDatabaseUrl } from "./database.ts";
-import { SELECTED } from "./prompt-capture-tools.ts";
+import { personas } from "./prompt-capture-tools.ts";
 import { standInDiscord } from "./test-host.ts";
 
 /** One tool as the model is told about it. */
@@ -160,31 +159,6 @@ const silentJudge: RoundtablePlugin = {
 	},
 	setup: () => ({}),
 };
-
-/** A surface whose conversations run persona turns through `context.turns`; hands over its context. */
-const personas = (
-	seen: (context: PluginContext) => void,
-): RoundtablePlugin => ({
-	name: "capture-personas",
-	setup: (context) => {
-		seen(context);
-		const surface: ChatSurface = {
-			surface: "fake",
-			start: async () => undefined,
-			sendReply: async () => undefined,
-		};
-		return {
-			// As the self-compact plugin of a project `roundtable init` creates.
-			piPackages: ["pi-self-compact"],
-			agentSelection: () => ({ tools: SELECTED, groups: [] }),
-			surfaces: [surface],
-			personas: [
-				{ kind: "study", prompt: () => "You are a tutor." },
-				{ kind: "chat", prompt: () => "You answer on the web." },
-			],
-		};
-	},
-});
 
 /** The checkout this module runs from, whose paths the prompt names for Pi's docs and the built-in skills. */
 const CHECKOUT = resolve(import.meta.dir, "../../..");
@@ -334,7 +308,7 @@ async function captureHost(
 				silentJudge,
 				personas((context) => {
 					probed = context;
-				}),
+				}, withDiscord),
 			],
 		},
 		{ logger: silentLogger(), modelRuntime },

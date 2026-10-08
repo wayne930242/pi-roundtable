@@ -1900,7 +1900,7 @@ test("the persona is the plugin's and belongs to the study kind only", async () 
 
 Schedules and delegated tasks return later as turns without a new message in the channel.
 A `BackgroundTarget` says whose turn that is: a `name` that the schedule or job stores, a `label(locale)` that lists such as `/<root> schedule` show, and the limits that apply to it.
-`schedules` (`perChannel`, `promptChars`, `aheadDays`) bounds what `schedule_create` accepts, and `delegation` (`maxRunning`) bounds how many delegated tasks may run in one channel; a target without one of them may not schedule or delegate at all.
+`schedules` (`perChannel`, `promptChars`, `aheadDays`, and optionally `perPrincipal`) bounds what `schedule_create` accepts, and `delegation` (`maxRunning`, and optionally `maxRunningPerPrincipal`) bounds how many delegated tasks may run in one channel; a target without one of them may not schedule or delegate at all. `perPrincipal` and `maxRunningPerPrincipal` hold each person to that many of the target's schedules, or running tasks, across all their conversations.
 The claim that answers the target serves it in its `background(turn)`, where `turn.target` is the name, and skips every target it does not serve.
 A channel's claim runs turns only for its own target, keeping the owner's tools out of channels open to many people.
 
@@ -1913,8 +1913,10 @@ In a turn nobody is named for, the schedule and delegation tools refuse.
 
 - Contribute `backgroundTargets` alongside the claim that serves them; read one with `context.conversations.target(name)` from a service or handler.
 - Two targets with the same name are refused, naming both plugins.
-- The agent server contributes `OWNER_TARGET` (name `"owner"`, exported from the main entry) for the owner's and agents' conversations.
-  Its claim answers that target and skips all others, so a turn for another target never runs with the owner's tools.
+- The core's `modules` plugin contributes `PERSONAL_TARGET` (name `"owner"`, exported from the main entry; `OWNER_TARGET` is a deprecated alias) on every host, for every person's conversations whose claim answers background turns, such as the agents' and an app's owner conversation.
+  The agent server's claim answers that target and skips all others, so a turn for another target never runs with the owner's tools.
+- The built-in schedule and delegation tools make `PERSONAL_TARGET` work, and a session has them only where it can run: when the claim that owns its conversation has `background`, or, for a conversation no chat surface carries, when the host has the owner's Discord messages to post runs in.
+  In a private conversation, as the host's conversation registry records it, `schedule_list`, `schedule_update`, and `schedule_cancel` see only the speaker's own schedules.
 - A turn for a target no plugin contributes is skipped with the reason `no plugin contributes the background target "<name>"`.
   It never falls back to the owner's target; a recurring schedule keeps the reason as its last status and runs again once a plugin contributes the target.
   A one-time schedule is spent when it fires.
@@ -2271,10 +2273,9 @@ The runtime plugin still builds the runtime, so every claim that runs turns thro
 
 What needs Discord is refused or left out rather than failing later:
 
-- `agents`, `skills` (anything but `false`), and `ops.agent` are configuration errors. `ops: { conversation: "<surface>:<id>" }` needs a chat surface that serves it, a claim that owns it and takes background turns, and a plugin that contributes the `owner` background target, or the host does not start; without Discord nothing contributes `owner` unless a plugin of yours does. The web chat takes no error reports in 0.8.
+- `agents`, `skills` (anything but `false`), and `ops.agent` are configuration errors. `ops: { conversation: "<surface>:<id>" }` needs a chat surface that serves it and a claim that owns it and takes background turns, or the host does not start. The web chat takes no error reports in 0.8.
 - `notify_owner` is not registered, since there are no owner's messages to send to.
-- `schedule_*` and `delegate_task` are not registered: their runs are turns of the [background target](#backgroundtargets-whose-turn-a-schedule-or-delegated-task-is) named `owner`, which the agent server contributes, so without it none could start.
-  A plugin that contributes `owner`, and a claim that takes its background turns, bring them back; they then work in a conversation a chat surface carries, posting their runs there, and refuse elsewhere.
+- `schedule_*` and `delegate_task` are registered only in a conversation whose claim takes background turns: their runs are turns of the [background target](#backgroundtargets-whose-turn-a-schedule-or-delegated-task-is) `PERSONAL_TARGET`, named `owner`, which the core contributes on every host. A conversation of a claim without `background`, and one no chat surface carries, has neither.
 - `roundtable doctor` skips the Discord checks.
 
 Pi's runtime still needs the `compact_session` tool in every session, from the Pi package pi-self-compact: load it from a plugin with `piPackages: ["pi-self-compact"]`, as the `plugins/self-compact.ts` of a project `roundtable init` creates does, or the preflight stops the start and says so.
@@ -2941,6 +2942,7 @@ Import from the entries listed below; source area files are internal.
 | `NewSchedule` | `pi-roundtable` | type |
 | `NotLinkedError` | `pi-roundtable` | value |
 | `OWNER_TARGET` | `pi-roundtable` | value |
+| `PERSONAL_TARGET` | `pi-roundtable` | value |
 | `OutboundReply` | `pi-roundtable` | type |
 | `OwnerAnswer` | `pi-roundtable` | type |
 | `OwnerPrompts` | `pi-roundtable` | type |

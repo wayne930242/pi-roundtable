@@ -1,3 +1,5 @@
+import type { ChannelKey } from "../domain/conversation.ts";
+import type { RoundtablePlugin } from "../plugin.ts";
 import { ASK_USER_TOOL } from "../runtime/extensions/ask-user.ts";
 import { COMPACT_TOOL } from "../runtime/extensions/self-compact-guard.ts";
 import { AGENTS } from "../services.ts";
@@ -15,6 +17,36 @@ export const seat: AgentTurnScope = {
 	home: "discord:scout",
 	group: "war-room",
 };
+
+/**
+ * The conversations the recorded sessions live in, served as a host serves them: the owner's
+ * direct messages by an app's claim, such as one that answers the owner there, and the agent's
+ * channel by the agent server; both answer background turns, so their sessions schedule and
+ * delegate. Give it to the test host the tool set is captured on.
+ */
+export function servedConversations(
+	ownerChannel: ChannelKey,
+): RoundtablePlugin {
+	const served = new Set<ChannelKey>([ownerChannel, scout.home, seat.home]);
+	return {
+		name: "served-conversations",
+		setup: () => ({
+			channels: [
+				{
+					name: "served-conversations",
+					priority: 0,
+					owns: (channel) => served.has(channel),
+					admit: () => undefined,
+					background: async () => ({
+						status: "skipped",
+						reason: "the tool set's host runs no background turns",
+					}),
+					startFresh: async () => "owner",
+				},
+			],
+		}),
+	};
+}
 
 /** Tools the core's own extensions and pi-web-access register, which no fake session here loads. */
 const NAMED_ELSEWHERE = [

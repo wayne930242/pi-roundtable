@@ -8,9 +8,9 @@ import type {
 import type { AgentRuntime } from "../contract/runtime.ts";
 import type { SurfacePort } from "../contract/surface.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
-import { messages } from "../i18n/index.ts";
 import type { OwnerIdentity } from "../identity.ts";
 import type { Logger } from "../log.ts";
+import { PERSONAL_TARGET } from "../modules/background/personal-target.ts";
 import { withReference } from "../routing/message-text.ts";
 import { outcome } from "../routing/settle-turn.ts";
 import { systemTurn } from "../routing/system-turns.ts";
@@ -28,17 +28,11 @@ import { discordIdOf } from "./team-keys.ts";
 export const AGENT_SERVER_PRIORITY = 100;
 
 /**
- * The host's own background target: the conversations of the owner and of the agent server. The
- * agent server contributes it, so schedules and delegated tasks made in those conversations carry
- * its name and limits. Its label is read when a list is shown, never when this module loads,
- * because the host applies its catalog at startup.
+ * The host's own background target, which the agent server answers.
+ * @deprecated Use `PERSONAL_TARGET`, the same target, which the core contributes on every host;
+ * this name goes away in 1.0.
  */
-export const OWNER_TARGET: BackgroundTarget = {
-	name: "owner",
-	label: () => messages().scheduleModeOwner,
-	schedules: { perChannel: 20, promptChars: 8_000, aheadDays: 366 },
-	delegation: { maxRunning: 3 },
-};
+export const OWNER_TARGET: BackgroundTarget = PERSONAL_TARGET;
 
 export interface AgentClaimOptions {
 	/** The owner, as forwarded messages name them. */
@@ -79,7 +73,7 @@ export function agentClaim(options: AgentClaimOptions): ChannelClaim {
 			// The host's own turn, at the owner tier as in 0.8; what the webhook posted is untrusted input.
 			turn: systemTurn({
 				channel: message.channel,
-				target: OWNER_TARGET.name,
+				target: PERSONAL_TARGET.name,
 				author: { id: message.authorId, name: message.authorName },
 				tier: "owner",
 				turnId: `webhook-${message.messageId}`,
@@ -162,10 +156,10 @@ export function agentClaim(options: AgentClaimOptions): ChannelClaim {
 		},
 		background: async (turn) => {
 			// Fail closed: a turn for any target but the owner's never reaches the owner's tools.
-			if (turn.target !== OWNER_TARGET.name)
+			if (turn.target !== PERSONAL_TARGET.name)
 				return {
 					status: "skipped",
-					reason: `the agent server answers only "${OWNER_TARGET.name}" background turns`,
+					reason: `the agent server answers only "${PERSONAL_TARGET.name}" background turns`,
 				};
 			const owned = team.owns(turn.channel);
 			if (owned === "group")

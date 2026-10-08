@@ -3,8 +3,15 @@ import type {
 	ExtensionAPI,
 	ExtensionFactory,
 } from "@earendil-works/pi-coding-agent";
+import { OWNER_TARGET } from "../agents/agent-claim.ts";
+import type { ConversationRecord } from "../conversations/conversation-registry.ts";
+import { PERSONAL_TARGET } from "../modules/background/personal-target.ts";
 import { ErrorReporter } from "../ops/error-reporter.ts";
-import { BACKGROUND_TURNS, DELEGATION } from "../services.ts";
+import {
+	BACKGROUND_TURNS,
+	DELEGATION,
+	type ScheduleStore,
+} from "../services.ts";
 import {
 	type AgentTurnScope,
 	type ChannelKey,
@@ -47,6 +54,18 @@ interface Registered {
 		id: string,
 		params: unknown,
 	): Promise<{ content: { text: string }[]; isError?: boolean }>;
+}
+
+/** The extension one of the modules' session tools gives a session; null when it gives none. */
+function factoryOf(
+	setup: Awaited<ReturnType<typeof setUpModules>>,
+	name: string,
+	session: SessionContext,
+): ExtensionFactory | null | undefined {
+	return setup.contribution.sessionTools
+		?.find((tool) => tool.name === name)
+		?.snapshot()
+		.factory(session);
 }
 
 /** The tools one of the modules' extensions registers in a session. */
@@ -97,6 +116,68 @@ describe("modulesPlugin", () => {
 			get_search_content: "member",
 		});
 		expect(toolTiers).not.toHaveProperty("notify_owner");
+	});
+
+	test("contributes the personal background target, named owner with 0.8's limits, on any host", async () => {
+		for (const discord of [true, false]) {
+			const { backgroundTargets } = (await setUpModules({ discord }))
+				.contribution;
+			expect(backgroundTargets).toEqual([PERSONAL_TARGET]);
+		}
+		expect(PERSONAL_TARGET).toMatchObject({
+			name: "owner",
+			schedules: { perChannel: 20, promptChars: 8_000, aheadDays: 366 },
+			delegation: { maxRunning: 3 },
+		});
+		expect(OWNER_TARGET).toBe(PERSONAL_TARGET);
+	});
+
+	test("in a private conversation the schedule tools list only the speaker's own schedules", async () => {
+		const kept = (id: number, createdById: string) => ({
+			id,
+			channel: HOME,
+			target: "owner",
+			title: `by ${createdById}`,
+			prompt: "p",
+			recurrence: { kind: "once", date: "2026-12-01", time: "09:00" },
+			nextRun: new Date("2026-12-01T09:00:00Z"),
+			createdById,
+			createdByName: createdById,
+			createdTier: "member",
+			createdAt: new Date(0),
+		});
+		const schedules = {
+			forChannel: async () => [
+				kept(1, OWNER_SPEAKER.principalId),
+				kept(2, "p_kai"),
+			],
+			get: async (id: number) =>
+				kept(id, id === 1 ? OWNER_SPEAKER.principalId : "p_kai"),
+		} as unknown as ScheduleStore;
+		const listed = async (visibility?: "private" | "shared") => {
+			const setup = await setUpModules({
+				schedules,
+				conversations: {
+					get: async (key) =>
+						visibility && key === HOME
+							? ({
+									key,
+									visibility,
+									principalId: OWNER_SPEAKER.principalId,
+								} as unknown as ConversationRecord)
+							: undefined,
+				},
+			});
+			const list = (
+				await registered(setup, context(undefined, HOME), "schedules")
+			).find((tool) => tool.name === "schedule_list");
+			return (await list?.execute("1", {}))?.content[0]?.text ?? "";
+		};
+		const own = await listed("private");
+		expect(own).toContain("#1 by 1");
+		expect(own).not.toContain("#2 ");
+		for (const everyone of [await listed("shared"), await listed()])
+			expect(everyone).toContain("#2 by p_kai");
 	});
 
 	test("provides the background turns and the delegator to the plugins after it", async () => {
@@ -169,35 +250,30 @@ describe("modulesPlugin without Discord", () => {
 		expect(setup.record.threadOrigins).toEqual([]);
 	});
 
-	test("a conversation no chat surface carries is refused, not sent to the owner's messages", async () => {
-		const setup = await setUpModules({ discord: false });
+	test("a conversation no chat surface carries gets no schedule or delegation tools, with no owner's messages to post its runs in", async () => {
+		const setup = await setUpModules({ discord: false, owns: () => true });
 		const outside = context(undefined, OUTSIDE);
-		const [delegate] = await registered(setup, outside, "delegate");
-		const delegated = await delegate?.execute("1", {
-			title: "t",
-			task: "look it up",
-		});
-		expect(delegated?.isError).toBe(true);
-		expect(delegated?.content[0]?.text).toContain("no chat surface");
-		const list = (await registered(setup, outside, "schedules")).find(
-			(tool) => tool.name === "schedule_list",
-		);
-		const listed = await list?.execute("1", {});
-		expect(listed?.isError).toBe(true);
-		expect(listed?.content[0]?.text).toContain("no chat surface");
+		expect(factoryOf(setup, "schedules", outside)).toBeNull();
+		expect(factoryOf(setup, "delegate", outside)).toBeNull();
 		expect(setup.record.reportChannels).toEqual([]);
 	});
 
-	test("without the owner's background target no session gets the schedule or delegation tools, since their runs could never start", async () => {
-		const setup = await setUpModules({ discord: false, ownerTarget: false });
-		const factoryOf = (name: string, session: SessionContext) =>
-			setup.contribution.sessionTools
-				?.find((tool) => tool.name === name)
-				?.snapshot()
-				.factory(session);
+	test("a conversation whose claim takes no background turns gets no schedule or delegation tools, since their runs could never start", async () => {
+		const setup = await setUpModules({
+			discord: false,
+			takesBackground: () => false,
+		});
 		for (const session of [context(undefined, HOME), context(scout)]) {
-			expect(factoryOf("schedules", session)).toBeNull();
-			expect(factoryOf("delegate", session)).toBeNull();
+			expect(factoryOf(setup, "schedules", session)).toBeNull();
+			expect(factoryOf(setup, "delegate", session)).toBeNull();
+		}
+	});
+
+	test("a headless conversation whose claim takes background turns schedules and delegates in place", async () => {
+		const setup = await setUpModules({ discord: false });
+		for (const session of [context(undefined, HOME), context(scout)]) {
+			expect(factoryOf(setup, "schedules", session)).not.toBeNull();
+			expect(factoryOf(setup, "delegate", session)).not.toBeNull();
 		}
 	});
 });
@@ -263,21 +339,6 @@ describe("the error reporter's conversation", () => {
 		});
 		expect(async () => plugin.preflight?.()).toThrow(
 			'config ops.conversation: no plugin\'s conversations own "discord:scout"',
-		);
-	});
-
-	test("the preflight refuses a reporter's conversation when no plugin contributes the owner's background target", async () => {
-		const reporter = new ErrorReporter({
-			destination: { conversation: HOME },
-			app: "Roundtable",
-		});
-		const { plugin } = await setUpModules({
-			discord: false,
-			ownerTarget: false,
-			errorReporter: reporter,
-		});
-		expect(async () => plugin.preflight?.()).toThrow(
-			'config ops.conversation: no plugin contributes the "owner" background target',
 		);
 	});
 
