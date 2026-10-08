@@ -84,7 +84,8 @@ Explicit skill requests still refuse missing or unknown skills.
 A private conversation whose person holds the owner role, as `IDENTITY.tierOf` tells, gets the public `skillListExtension`, whatever its kind.
 A member's private conversation and any shared conversation, an owner's included, get none; so does every conversation when the identity service is absent or its lookup fails.
 Agent sessions keep the core's existing `skill_list` instead of registering it twice.
-The role is read when the session is built, so a role granted or removed later applies once the session is rebuilt.
+The role is checked when the session is built and again before every extra `skill_list` execution; a removed role or failed lookup immediately refuses the call, even in a reused session.
+A newly granted role makes the extra tool available once the session is rebuilt.
 
 A worker reads the repository's instructions, edits and checks the work, and commits using repository conventions.
 One worker may use a repository at a time, with up to three per channel.

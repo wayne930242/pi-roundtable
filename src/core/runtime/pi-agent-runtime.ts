@@ -1,5 +1,4 @@
 import { rmSync } from "node:fs";
-import { join } from "node:path";
 import {
 	type AgentSession,
 	type ModelRuntime,
@@ -31,12 +30,10 @@ import { textOf } from "../shared/session-messages.ts";
 import type { Speaker, Tier } from "../speakers.ts";
 import { type ToolTiers, toolsForTier, toolTiers } from "../tool-tiers.ts";
 import { ConversationSessions } from "./conversation-sessions.ts";
-import {
-	ConfirmationGate,
-	confirmedTurnText,
-} from "./extensions/confirmation-gate.ts";
+import { confirmedTurnText } from "./extensions/confirmation-gate.ts";
 import { missingToolsError } from "./extensions/self-compact-guard.ts";
 import { interimPoster } from "./interim-text.ts";
+import { preflightTools } from "./preflight-tools.ts";
 import { PromptSlot, workTimeout } from "./prompt-slot.ts";
 import {
 	type PiAgentRuntimeOptions,
@@ -90,24 +87,11 @@ export class PiAgentRuntime implements AgentRuntime {
 	}
 
 	/**
-	 * Proves the model and every required tool resolve, in a throwaway session that runs no turn;
-	 * startup stops here before anything connects.
+	 * Proves the model and every required tool resolve across shared and owner-private throwaway
+	 * sessions that run no turn; startup stops here before anything connects.
 	 */
 	async preflight(): Promise<void> {
-		const probe = await this.#factory.create(
-			"probe:startup",
-			SessionManager.inMemory(this.#factory.workDir()),
-			new ConfirmationGate(this.#factory.link().holds, this.#options.owner),
-			new PromptSlot(),
-			join(this.#factory.workDir(), "probe-attachments"),
-			undefined,
-			"owner",
-			{ visibility: "shared" },
-		);
-		const registered = new Set(
-			probe.session.getAllTools().map((tool) => tool.name),
-		);
-		probe.session.dispose();
+		const registered = await preflightTools(this.#factory, this.#options.owner);
 		const missing = this.#factory
 			.requiredTools()
 			.filter((name) => !registered.has(name));

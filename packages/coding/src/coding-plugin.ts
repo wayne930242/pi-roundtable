@@ -267,9 +267,35 @@ export function coding(options: CodingOptions) {
 										const list = skillListExtension(skills);
 										return async (pi) => {
 											if (
-												await holdsOwnerRole(conversation.principalId, session)
+												!(await holdsOwnerRole(
+													conversation.principalId,
+													session,
+												))
 											)
-												await list(pi);
+												return;
+											await list({
+												...pi,
+												registerTool: (tool) =>
+													pi.registerTool({
+														...tool,
+														execute: async (...args) => {
+															// A cached session must not retain a removed owner role.
+															const current = session.conversation;
+															if (
+																session.agent ||
+																current.visibility !== "private" ||
+																!(await holdsOwnerRole(
+																	current.principalId,
+																	session,
+																))
+															)
+																throw new ToolRefusal(
+																	"The extra skill list requires a private conversation whose principal currently holds the owner role.",
+																);
+															return tool.execute(...args);
+														},
+													}),
+											});
 										};
 									},
 								}),
