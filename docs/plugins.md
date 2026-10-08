@@ -1757,6 +1757,7 @@ Before each turn runs, `context.turns.run` records its conversation in the host'
 Only its person speaks in a private conversation: a turn whose speaker is another principal is refused before it starts, except the host's own turns (`SYSTEM_PRINCIPAL`), such as a report's.
 Neither a later turn nor another plugin changes what the first turn recorded, with one exception for data from before 0.9: `adopt(key, principalId)` makes a conversation recorded `shared` with no principal, as 0.8 recorded every turn run without `conversation`, private to that principal.
 It is for a plugin migrating what its own 0.8 version left, such as remote-mcp giving each session 0.8 opened to the primary owner; it never changes a private conversation or one with a principal, and repeating or racing it is safe.
+Adopting a conversation that 0.9 or later recorded is outside its contract: a shared conversation recorded since then is shared on purpose, and a later version may refuse to adopt it.
 `conversation.title` names it at its first turn; `setTitle(key, title)` renames it later.
 The runtime is told who the conversation belongs to as the registry keeps it, in `TurnRequest.conversation`, so a private conversation's prompts stay its person's at every later turn; a host without the registry passes the turn's own `conversation`, if it gives one.
 A turn whose conversation cannot be recorded does not run, and the call rejects.

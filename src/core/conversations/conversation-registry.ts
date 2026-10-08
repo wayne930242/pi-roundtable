@@ -40,7 +40,9 @@ export interface ConversationRegistry {
 	 * `principalId`, as the plugin that hands over what 0.8 left behind decides, such as remote-mcp
 	 * giving 0.8's sessions to the primary owner. A conversation that is private or names a
 	 * principal never changes, so adopting is safe to repeat and to race: one principal wins.
-	 * Returns what is stored, or undefined when the key is unknown.
+	 * Returns what is stored, or undefined when the key is unknown. Adopting a conversation 0.9 or
+	 * later recorded is outside this contract: today it changes one recorded shared like any other,
+	 * and a later version may refuse it.
 	 */
 	adopt(
 		key: ChannelKey,
