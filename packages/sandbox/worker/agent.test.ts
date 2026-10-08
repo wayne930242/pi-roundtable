@@ -35,7 +35,7 @@ test("near-capacity memory and long Unicode history still fit the broker and all
 		const broker = new SandboxBroker({
 			context: {
 				channel: "fake:guests",
-				speaker: { id: "alice", name: "Alice" },
+				speaker: { id: "alice", name: "Alice", principalId: "p_alice" },
 				signal: new AbortController().signal,
 			},
 			model: "fake",

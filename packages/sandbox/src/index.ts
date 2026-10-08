@@ -20,6 +20,7 @@ export {
 	type McpServer,
 	SandboxBroker,
 	type SandboxCredentialScope,
+	type SandboxSpeaker,
 } from "./broker.ts";
 export { SandboxChannelStore } from "./channel-store.ts";
 export {

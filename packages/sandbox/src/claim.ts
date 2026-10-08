@@ -34,6 +34,10 @@ export function sandboxClaim(options: SandboxClaimOptions): ChannelClaim {
 		admit: (message) => {
 			if (!options.channels.has(message.channel) || !isSandboxAddress(message))
 				return undefined;
+			// The router resolved the author; one the host's access rules serve no one by goes
+			// unanswered, as does a message whose author it could not resolve.
+			const { speaker } = message;
+			if (!speaker) return undefined;
 			return {
 				kind: "turn",
 				failure: "sandbox turn failed",
@@ -45,7 +49,11 @@ export function sandboxClaim(options: SandboxClaimOptions): ChannelClaim {
 						const text = `${message.reference?.text ? `Quoted message (untrusted): ${message.reference.text}\n\n` : ""}${message.text}${message.attachments.length ? "\n[Attachments are not supported in this sandbox.]" : ""}`;
 						const reply = await options.runtime.runTurn(
 							message.channel,
-							{ id: message.authorId, name: message.authorName },
+							{
+								id: message.authorId,
+								name: message.authorName,
+								principalId: speaker.principalId,
+							},
 							text,
 						);
 						await options.surfaces.sendReply(message.channel, {

@@ -59,7 +59,8 @@ export const guestPlugins = [sandbox({
 Choose a model available to your endpoint and sign the host into its provider.
 By default, `context.apiKey(provider)` is read on every request, allowing login refresh without copying credentials into the worker.
 Alternatively supply `apiKey: () => process.env.MODEL_API_KEY` when the endpoint uses a separate key.
-`apiKey` receives `{ channel, speaker }` (`SandboxCredentialScope`) before every model call, so a host can pick a different key per channel or speaker, for example `apiKey: ({ channel }) => keys.get(channel)`; a zero-argument function keeps working.
+`apiKey` receives `{ channel, speaker }` (`SandboxCredentialScope`) before every model call, so a host can pick a different key per channel, speaker or principal, for example `apiKey: ({ channel }) => keys.get(channel)` or `apiKey: ({ speaker }) => keys.get(speaker.principalId)`; a zero-argument function keeps working.
+`speaker.principalId` is the principal the host's identity service resolved the author to; it never reaches the worker.
 When the hook has no key it should return `undefined` (the call fails closed) rather than fall back to the host's own login.
 Keep secrets in the service's protected environment, not configuration source or the worker image.
 All directories must be dedicated to this package and owned by the service account.
@@ -74,7 +75,8 @@ Only one host process may own these directories.
 Restart the bot, then run `/roundtable sandbox on` in a guild channel as the owner.
 The command root follows your `discord.rootCommand` setting.
 The claim outranks the core agent-server claim (priority 200 versus 100), including when the owner speaks there.
-It answers non-bot, non-integration guild messages that mention the bot or reply to it.
+It answers non-bot, non-integration guild messages that mention the bot or reply to it, from an author the host's `access` rules serve.
+Give guests a tier there, for example `access.members.roles` naming their guild role; the sandbox ignores an author the rules serve no one by, as it ignores a message whose author could not be resolved.
 Other messages are dropped, never routed to a host agent.
 `/roundtable sandbox status` shows the mode; `/roundtable sandbox off` retains memory and restores normal routing after queued work completes.
 These commands are guarded by the published owner-command helper and serialized through the shared channel queue.
@@ -105,7 +107,7 @@ const tools: HostTool[] = [{
 Pass `tools` to `sandbox()`.
 Host tool and MCP server/tool names must match `[a-z][a-z0-9_]{0,47}`.
 The worker exposes them as `host_clock`, while the broker accepts only `POST /tools/clock`.
-The host binds `context.channel` and `context.speaker` to the current admitted turn.
+The host binds `context.channel` and `context.speaker` to the current admitted turn; `context.speaker.principalId` is the principal the author was admitted as.
 The callback signal combines the request's deadline/closure and the turn's cancellation, and aborts when either scope ends.
 Body fields cannot change that identity, even if a guest replaces the worker or forges a broker call.
 Callbacks must validate every input field, enforce their own authorization and rate limits, obey cancellation, and avoid returning secrets.

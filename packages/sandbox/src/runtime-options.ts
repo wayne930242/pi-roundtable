@@ -114,7 +114,7 @@ export function resolveSandboxRuntimeOptions(
 		...options,
 		context: {
 			channel: "sandbox:preflight",
-			speaker: { id: "", name: "" },
+			speaker: { id: "", name: "", principalId: "" },
 			signal: new AbortController().signal,
 		},
 	});

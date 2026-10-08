@@ -65,7 +65,7 @@ test.skipIf(
 			expect(
 				await runtime.runTurn(
 					"fake:guests",
-					{ id: "guest", name: "Guest" },
+					{ id: "guest", name: "Guest", principalId: "p_guest" },
 					"Hello",
 				),
 			).toEqual({ ok: true, text: "Hello from the sealed worker." });
@@ -94,7 +94,7 @@ test.skipIf(
 			await expect(
 				hostile.runTurn(
 					"fake:hostile",
-					{ id: "guest", name: "Guest" },
+					{ id: "guest", name: "Guest", principalId: "p_guest" },
 					"Hello",
 				),
 			).rejects.toThrow();

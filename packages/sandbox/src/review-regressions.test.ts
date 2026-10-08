@@ -17,6 +17,7 @@ import { modelInput } from "./model-input.ts";
 import { isRecord, type SandboxTurn } from "./protocol.ts";
 import { SandboxRuntime } from "./runtime.ts";
 
+const admitted = { id: "guest", name: "Guest", principalId: "p_guest" };
 const turn: SandboxTurn = {
 	text: "Hello",
 	speaker: { id: "guest", name: "Guest" },
@@ -74,7 +75,7 @@ test("Unix transport preserves a plain-text budget refusal status without forwar
 	const listener = await new SandboxBroker({
 		context: {
 			channel: "fake:a",
-			speaker: turn.speaker,
+			speaker: admitted,
 			signal: new AbortController().signal,
 		},
 		model: "fake",
@@ -160,7 +161,7 @@ for (const variant of ["invalid-name", "long-id", "duplicate-id"]) {
 			const broker = new SandboxBroker({
 				context: {
 					channel: "fake:guests",
-					speaker: turn.speaker,
+					speaker: admitted,
 					signal: new AbortController().signal,
 				},
 				model: "fake",
@@ -287,9 +288,10 @@ test("normal turn completion aborts a host call when its worker exits without wa
 		},
 	});
 	try {
-		expect(await runtime.runTurn("fake:guests", turn.speaker, "Hello")).toEqual(
-			{ ok: true, text: "Done." },
-		);
+		expect(await runtime.runTurn("fake:guests", admitted, "Hello")).toEqual({
+			ok: true,
+			text: "Done.",
+		});
 		await pending;
 		expect(aborted).toBe(true);
 	} finally {

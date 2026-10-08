@@ -2,13 +2,17 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import type { ChannelKey } from "pi-roundtable";
-import { type BrokerListener, SandboxBroker } from "./broker.ts";
+import {
+	type BrokerListener,
+	SandboxBroker,
+	type SandboxSpeaker,
+} from "./broker.ts";
 import type { SandboxReply, SandboxTurn } from "./protocol.ts";
 import type { ResolvedSandboxRuntimeOptions } from "./runtime-options.ts";
 
 interface SandboxTurnRequest {
 	channel: ChannelKey;
-	speaker: { id: string; name: string };
+	speaker: SandboxSpeaker;
 	text: string;
 	reset: boolean;
 	signal: AbortSignal;
@@ -42,7 +46,8 @@ export async function runSandboxTurn(
 		}).listen(socket);
 		const turn: SandboxTurn = {
 			text,
-			speaker,
+			// The worker reads who speaks; whose principal they are stays with the host.
+			speaker: { id: speaker.id, name: speaker.name },
 			model: options.model,
 			prompt:
 				options.prompt ??

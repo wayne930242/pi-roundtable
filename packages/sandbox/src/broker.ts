@@ -16,15 +16,29 @@ export interface BrokerListener {
 	stop(force?: boolean): Promise<void>;
 }
 
+/**
+ * Whom a turn is for, as the host admitted them: the author's `id` and `name` as their surface
+ * knows them, which the worker also reads, and the `principalId` the host's identity service
+ * resolved them to, which stays on the host.
+ */
+export interface SandboxSpeaker {
+	id: string;
+	name: string;
+	principalId: string;
+}
 export interface HostToolContext {
 	channel: ChannelKey;
-	speaker: { id: string; name: string };
+	speaker: SandboxSpeaker;
 	signal: AbortSignal;
 }
-/** Who a model call is made for; a credential hook can pick a token per channel or speaker. */
+/**
+ * Who a model call is made for; a credential hook can pick a token per channel, speaker or
+ * principal. A `sandbox` plugin turn always carries the principal; a `PiSandboxRuntime` turn
+ * carries none, as its author names none.
+ */
 export interface SandboxCredentialScope {
 	channel: ChannelKey;
-	speaker: { id: string; name: string };
+	speaker: { id: string; name: string; principalId?: string };
 }
 export interface HostTool extends ToolSpec {
 	run(
@@ -230,7 +244,11 @@ export class SandboxBroker {
 			const { channel, speaker } = this.#options.context;
 			const key = await this.#options.apiKey({
 				channel,
-				speaker: { id: speaker.id, name: speaker.name },
+				speaker: {
+					id: speaker.id,
+					name: speaker.name,
+					principalId: speaker.principalId,
+				},
 			});
 			if (!key) throw new Error("model credential unavailable");
 			return await this.#forward(

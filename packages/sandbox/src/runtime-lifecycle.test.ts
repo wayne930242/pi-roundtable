@@ -41,7 +41,7 @@ for (const failure of ["reply", "throw"] as const) {
 			runtime.startFresh("fake:a");
 			const first = runtime.runTurn(
 				"fake:a",
-				{ id: "guest", name: "Guest" },
+				{ id: "guest", name: "Guest", principalId: "p_guest" },
 				"first",
 			);
 			if (failure === "throw")
@@ -52,8 +52,16 @@ for (const failure of ["reply", "throw"] as const) {
 			expect(
 				await Bun.file(join(specs[0]?.workspaceDir ?? "", "note.txt")).text(),
 			).toBe("keep me");
-			await runtime.runTurn("fake:a", { id: "guest", name: "Guest" }, "retry");
-			await runtime.runTurn("fake:a", { id: "guest", name: "Guest" }, "next");
+			await runtime.runTurn(
+				"fake:a",
+				{ id: "guest", name: "Guest", principalId: "p_guest" },
+				"retry",
+			);
+			await runtime.runTurn(
+				"fake:a",
+				{ id: "guest", name: "Guest", principalId: "p_guest" },
+				"next",
+			);
 			expect(resets).toEqual([true, true, false]);
 			expect(specs[1]?.workspaceDir).toBe(specs[0]?.workspaceDir);
 			expect(specs[1]?.runDir).not.toBe(specs[0]?.runDir);
@@ -90,16 +98,20 @@ test("channels run independently but reject overlap in the same channel", async 
 	try {
 		const first = runtime.runTurn(
 			"fake:a",
-			{ id: "guest", name: "Guest" },
+			{ id: "guest", name: "Guest", principalId: "p_guest" },
 			"first",
 		);
 		await firstStarted;
 		await expect(
-			runtime.runTurn("fake:a", { id: "guest", name: "Guest" }, "overlap"),
+			runtime.runTurn(
+				"fake:a",
+				{ id: "guest", name: "Guest", principalId: "p_guest" },
+				"overlap",
+			),
 		).rejects.toThrow("channel is busy");
 		const second = runtime.runTurn(
 			"fake:b",
-			{ id: "guest", name: "Guest" },
+			{ id: "guest", name: "Guest", principalId: "p_guest" },
 			"second",
 		);
 		await bothStarted;
@@ -118,7 +130,7 @@ test("channels run independently but reject overlap in the same channel", async 
 
 test("normalizes options once and retains the admitted speaker through broker startup", async () => {
 	const root = mkdtempSync("/tmp/sb-runtime-life-");
-	const speaker = { id: "guest", name: "Guest" };
+	const speaker = { id: "guest", name: "Guest", principalId: "p_guest" };
 	const runtime = new SandboxRuntime({
 		...options(root),
 		runRoot: join(root, "run", "..", "run"),

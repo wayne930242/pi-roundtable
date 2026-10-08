@@ -1,4 +1,5 @@
 import type { ChannelKey } from "pi-roundtable";
+import type { SandboxSpeaker } from "./broker.ts";
 import type { SandboxReply } from "./protocol.ts";
 import {
 	type ResolvedSandboxRuntimeOptions,
@@ -23,17 +24,26 @@ export class SandboxRuntime {
 		this.#options = resolveSandboxRuntimeOptions(options);
 	}
 
+	/**
+	 * Runs one turn for `speaker`, the author the host admitted, with the principal they resolved
+	 * to; host tools and the credential hook read it, and a turn without one is refused.
+	 */
 	async runTurn(
 		channel: ChannelKey,
-		speaker: { id: string; name: string },
+		speaker: SandboxSpeaker,
 		text: string,
 	): Promise<SandboxReply> {
 		if (this.#closed || this.#active.has(channel))
 			throw new Error("sandbox is stopped or channel is busy");
+		if (typeof speaker.principalId !== "string" || !speaker.principalId)
+			throw new Error(
+				"a sandbox turn needs the principal its speaker was admitted as",
+			);
 		if (
 			text.length > 32_000 ||
 			speaker.id.length > 256 ||
-			speaker.name.length > 256
+			speaker.name.length > 256 ||
+			speaker.principalId.length > 256
 		)
 			throw new Error("sandbox message too large");
 		const controller = new AbortController();
@@ -48,7 +58,11 @@ export class SandboxRuntime {
 			this.#options,
 			{
 				channel,
-				speaker: { ...speaker },
+				speaker: {
+					id: speaker.id,
+					name: speaker.name,
+					principalId: speaker.principalId,
+				},
 				text,
 				reset: resetGeneration > 0,
 				signal: controller.signal,

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The sandbox claim answers only an author the host's `access` rules serve: it reads the router's `message.speaker` and ignores a message without one, as it ignores a bot's. A guest who was answered in 0.8 without any tier is now ignored until `access` gives them one, for example `access.members.roles` naming their guild role. The message is still never routed to a host agent.
+- `SandboxRuntime.runTurn` takes the author's `principalId` with their `id` and `name` (`SandboxSpeaker`, a new export) and refuses a turn without one. Host tools read it as `context.speaker.principalId`, and the credential hook as `scope.speaker.principalId`, so a host can pick a key per principal. The worker still reads only the author's `id` and `name`; its memory namespaces are unchanged. A `PiSandboxRuntime` turn's scope carries no principal.
 - `precheckScriptRunner` grants a script what `context.tier`, the tier of its run (pi-roundtable 0.9's `PrecheckContext.tier`, its schedule's capped at what its creator holds now), reaches, instead of the tier the schedule was set at, so a script 0.8 stored at the owner tier no longer reaches the owner's tools for a member.
 - `ScopedSandboxDelegator.start` takes the author's `principalId` and the tier `member`, as pi-roundtable 0.9's `DelegationJob.author` requires them, and refuses any other tier, as it refused a tier before: a guest's report runs as the principal the host bound them to, at the member tier or theirs, whichever is lower. The worker's `run` still hears only the author's `id` and `name`.
 

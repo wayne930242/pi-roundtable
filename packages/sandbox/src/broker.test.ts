@@ -9,7 +9,7 @@ import { DUMMY_KEY } from "./protocol.ts";
 
 const context = {
 	channel: "fake:guests" as const,
-	speaker: { id: "guest-a", name: "Guest" },
+	speaker: { id: "guest-a", name: "Guest", principalId: "p_guest_a" },
 	signal: new AbortController().signal,
 };
 function options(overrides: Partial<BrokerOptions> = {}): BrokerOptions {
@@ -421,7 +421,7 @@ test("resolves the model credential per call from the bound channel and speaker"
 				context: {
 					...context,
 					channel,
-					speaker: { id: speaker, name: speaker },
+					speaker: { id: speaker, name: speaker, principalId: `p_${speaker}` },
 				},
 				apiKey: (scope) => {
 					scopes.push(scope);
@@ -445,8 +445,17 @@ test("resolves the model credential per call from the bound channel and speaker"
 		"Bearer alpha-key-3",
 	]);
 	expect(scopes).toEqual([
-		{ channel: "fake:alpha", speaker: { id: "guest-a", name: "guest-a" } },
-		{ channel: "fake:beta", speaker: { id: "guest-b", name: "guest-b" } },
-		{ channel: "fake:alpha", speaker: { id: "guest-a", name: "guest-a" } },
+		{
+			channel: "fake:alpha",
+			speaker: { id: "guest-a", name: "guest-a", principalId: "p_guest-a" },
+		},
+		{
+			channel: "fake:beta",
+			speaker: { id: "guest-b", name: "guest-b", principalId: "p_guest-b" },
+		},
+		{
+			channel: "fake:alpha",
+			speaker: { id: "guest-a", name: "guest-a", principalId: "p_guest-a" },
+		},
 	]);
 });
