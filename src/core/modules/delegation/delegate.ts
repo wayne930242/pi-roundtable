@@ -2,7 +2,6 @@ import type { ExtensionFactory } from "@earendil-works/pi-coding-agent";
 import type { ChannelKey } from "../../domain/conversation.ts";
 import { DelegationError } from "../../domain/errors.ts";
 import { SYSTEM_PRINCIPAL } from "../../identity/principal-store.ts";
-import type { OwnerIdentity } from "../../identity.ts";
 import { textToolsExtension } from "../../runtime/text-tools.ts";
 import type { Delegator } from "../../services.ts";
 import { DELEGATE_TOOL_SPEC } from "../../shared/delegate-tool.ts";
@@ -23,7 +22,6 @@ export interface OwnerDelegation {
 export function delegateExtension(
 	delegation: OwnerDelegation,
 	channel: ChannelKey,
-	identity: OwnerIdentity,
 	origin: ChannelKey = channel,
 	/** The person the running turn is for; the report comes back at their tier. */
 	speaker: () => Speaker | undefined = () => undefined,
@@ -61,9 +59,7 @@ export function delegateExtension(
 						task,
 					});
 					const where =
-						target === channel
-							? "here"
-							: `in ${identity.name}'s Discord direct messages`;
+						target === channel ? "here" : `in ${author.name}'s direct messages`;
 					return `Delegated as task #${job.id}; the report comes back ${where} as a new turn.`;
 				},
 			},

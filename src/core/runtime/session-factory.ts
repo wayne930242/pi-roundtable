@@ -114,7 +114,7 @@ export class SessionFactory {
 			(tool) => tool.snapshot().groups ?? [],
 		);
 		return [
-			...currentToolNames(selection.tools),
+			...currentToolNames(selection.tools, this.#options.logger),
 			COMPACT_TOOL,
 			ASK_USER_TOOL,
 			...groups

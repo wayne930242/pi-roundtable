@@ -1917,7 +1917,11 @@ In a turn nobody is named for, the schedule and delegation tools refuse.
 - The core's `modules` plugin contributes `PERSONAL_TARGET` (name `"owner"`, exported from the main entry; `OWNER_TARGET` is a deprecated alias) on every host, for every person's conversations whose claim answers background turns, such as the agents' and an app's owner conversation.
   The agent server's claim answers that target and skips all others, so a turn for another target never runs with the owner's tools.
   Its limits are 0.8's, and it holds no one to a number of schedules or running tasks across their conversations unless the host's configuration says so: `background: { perPrincipal: { schedules: 20, delegations: 2 } }` sets its `perPrincipal` and `maxRunningPerPrincipal`. A host that serves many people sets both.
-- The built-in schedule and delegation tools make `PERSONAL_TARGET` work, and a session has them only where it can run: when the claim that owns its conversation has `background`, or, for a conversation no chat surface carries, when the host has the owner's Discord messages to post runs in. There only the primary owner's schedules and delegated tasks are set up, and anyone else's are refused; such a conversation the host has no record of is the speaker's own, so its schedule tools see only the speaker's schedules.
+- The built-in schedule and delegation tools make `PERSONAL_TARGET` work, and a session has them only where it can run: when the claim that owns its conversation has `background`, or, for a conversation no chat surface carries, when its creator has a direct channel whose claim takes background turns.
+  The creator must be known when the tools load, from the registry's private conversation or a current speaker; otherwise no tools are offered.
+  The runtime builds sessions between turns, so a plugin that calls it directly must record its no-surface conversation as private before building it.
+  Creation rechecks the speaker's own direct channel and its claim, refusing when either is absent; it never falls back to the primary owner's messages.
+  Such a conversation the host has no record of is the speaker's own, so its schedule tools see only the speaker's schedules.
   In a private conversation, as the host's conversation registry records it, `schedule_list`, `schedule_update`, and `schedule_cancel` see only the speaker's own schedules.
 - A turn for a target no plugin contributes is skipped with the reason `no plugin contributes the background target "<name>"`.
   It never falls back to the owner's target; a recurring schedule keeps the reason as its last status and runs again once a plugin contributes the target.
@@ -2001,6 +2005,7 @@ The `notify` tool, 0.8's `notify_owner`, sends such a notice. A session has it o
 It notifies the conversation's person in a private conversation and the turn's speaker in a shared one, and refuses when no provider reaches them; the host's own turns, such as a report's, notify the primary owner, as `notify_owner` did.
 Its description names the channels that can reach the person, so a host with only Discord reads `Send Ada a direct message on Discord. …` as 0.8 did.
 Until 1.0 the name `notify_owner` still selects it in a selection or a profile, and an operator's `toolTiers` entry for `notify_owner` applies to `notify` unless `notify` has its own.
+Using the old name logs a deprecation warning once per logger, whether in a selection or in `toolTiers`.
 
 ### `surfaces`: a chat network of your own
 

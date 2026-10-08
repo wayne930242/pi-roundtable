@@ -259,7 +259,7 @@ export async function defineRoundtable(
 				agentDir: config.agentDir,
 			},
 			database: { url: config.databaseUrl },
-			toolTiers: toolTiers(config.toolTiers),
+			toolTiers: toolTiers(config.toolTiers, logger),
 			listeners: [
 				...(config.http ? [publicListener(config.http)] : []),
 				...(overrides.listeners ?? []),

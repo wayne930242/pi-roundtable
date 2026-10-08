@@ -55,11 +55,12 @@ export function sessionNotify(
 					if (!reached) return;
 					reaching = [reached.provider];
 				} catch (error) {
-					// Offered anyway: the call tries again, and says so when it cannot send.
+					// No destination was established; do not advertise an unusable tool.
 					logger.warn(
 						{ channel: session.homeChannel, err: error },
 						"could not tell whether a direct channel reaches the conversation's person",
 					);
+					return;
 				}
 			}
 			await notifyExtension(

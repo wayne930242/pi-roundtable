@@ -1,4 +1,5 @@
 import { PluginError } from "./errors.ts";
+import type { Logger } from "./log.ts";
 import { ASK_USER_TOOL } from "./runtime/extensions/ask-user.ts";
 import { COMPACT_TOOL } from "./runtime/extensions/self-compact-guard.ts";
 import { type Tier, tierAtLeast } from "./speakers.ts";
@@ -35,8 +36,28 @@ export const RENAMED_TOOLS: Readonly<Record<string, string>> = {
 	notify_owner: "notify",
 };
 
+const warnedAliases = new WeakMap<Logger, Set<string>>();
+
+/** Each logger warns once for an old name used in tiers or selections. */
+function warnAliases(tools: readonly string[], logger: Logger): void {
+	const warned = warnedAliases.get(logger) ?? new Set<string>();
+	warnedAliases.set(logger, warned);
+	for (const tool of tools) {
+		const renamed = RENAMED_TOOLS[tool];
+		if (!renamed || warned.has(tool)) continue;
+		warned.add(tool);
+		logger.warn(
+			`deprecated: ${tool} is now ${renamed}; update selections and toolTiers before 1.0`,
+		);
+	}
+}
+
 /** The tools named, each by its current name and once, in order. */
-export function currentToolNames(tools: readonly string[]): string[] {
+export function currentToolNames(
+	tools: readonly string[],
+	logger?: Logger,
+): string[] {
+	if (logger) warnAliases(tools, logger);
 	return [...new Set(tools.map((tool) => RENAMED_TOOLS[tool] ?? tool))];
 }
 
@@ -94,7 +115,9 @@ export class ToolTierTable implements ToolTiers {
 /** The core's tiers with the operator's on top; plugins add theirs through `declare`. */
 export function toolTiers(
 	operator: Readonly<Record<string, Tier>> = {},
+	logger?: Logger,
 ): ToolTierTable {
+	if (logger) warnAliases(Object.keys(operator), logger);
 	return new ToolTierTable(operator);
 }
 

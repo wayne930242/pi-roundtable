@@ -5,7 +5,6 @@ import type { ChannelKey } from "../../domain/conversation.ts";
 import { ScheduleError } from "../../domain/errors.ts";
 import type { HoldCheck } from "../../holds.ts";
 import { activeLocale } from "../../i18n/index.ts";
-import type { OwnerIdentity } from "../../identity.ts";
 import {
 	type ToolInput,
 	textToolsExtension,
@@ -24,9 +23,9 @@ import { callScheduleTool } from "./schedule-tools.ts";
 export interface OwnerSchedules {
 	store: ScheduleStore;
 	/**
-	 * The chat channel a conversation's schedules belong to: itself, or the owner's direct
-	 * messages for a conversation no chat surface carries, where a run could not be posted; asked
-	 * with the asker's principal, and throws ScheduleError when their runs could go nowhere.
+	 * The chat channel a conversation's schedules belong to: itself, or, for a conversation no chat
+	 * surface carries, where a run could not be posted, the asker's direct messages; asked with the
+	 * asker's principal, and throws ScheduleError when their runs could go nowhere.
 	 */
 	channelFor: (channel: ChannelKey, principalId: string) => Promise<ChannelKey>;
 	/** The host's prechecks a schedule may name, and the runner of scripts it may carry; without them, none can be attached. */
@@ -71,7 +70,6 @@ function withAgentOption(spec: ScheduleToolSpec): ScheduleToolSpec {
 export function schedulesExtension(
 	schedules: OwnerSchedules,
 	channel: ChannelKey,
-	identity: OwnerIdentity,
 	agents?: AgentChannelLookup,
 	/** The person the running turn is for; their schedules run at their tier. */
 	speaker: () => Speaker | undefined = () => undefined,
@@ -126,7 +124,7 @@ export function schedulesExtension(
 				);
 				if (peer) return `Agent ${String(input.agent)}'s channel:\n${answer}`;
 				if (target === channel) return answer;
-				return `${answer}\n(These are the schedules of ${identity.name}'s Discord direct messages; their runs are posted there.)`;
+				return `${answer}\n(These are the schedules of ${author.name}'s direct messages; their runs are posted there.)`;
 			},
 		};
 	});

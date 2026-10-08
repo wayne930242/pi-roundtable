@@ -159,10 +159,6 @@ describe("schedules and delegated tasks are someone's", () => {
 			schedulesExtension(
 				{ store, channelFor: async (channel) => channel },
 				"fake:1",
-				{
-					name: "Ada",
-					pronouns: { subject: "they", object: "them", possessive: "their" },
-				},
 				undefined,
 				speaker,
 			),
@@ -264,10 +260,6 @@ describe("schedules and delegated tasks are someone's", () => {
 					channelFor: async (channel) => channel,
 				},
 				"fake:1",
-				{
-					name: "Ada",
-					pronouns: { subject: "they", object: "them", possessive: "their" },
-				},
 				"fake:1",
 				speaker,
 			),

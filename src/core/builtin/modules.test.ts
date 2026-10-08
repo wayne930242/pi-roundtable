@@ -104,6 +104,32 @@ async function registered(
 	return tools;
 }
 
+/** A conversation the host recorded as one person's own. */
+const privately =
+	(owners: Readonly<Record<string, string>>) => async (key: ChannelKey) =>
+		owners[key]
+			? ({
+					key,
+					visibility: "private",
+					principalId: owners[key],
+				} as unknown as ConversationRecord)
+			: undefined;
+
+/** Runs notify in a session; the tool's answer and whether it was an error. */
+async function notifyIn(
+	setup: Awaited<ReturnType<typeof setUpModules>>,
+	session: SessionContext,
+	text = "the build is green",
+) {
+	const [notify] = await registered(setup, session, "notify");
+	if (!notify) return undefined;
+	const answer = await notify.execute("1", { text });
+	return {
+		text: answer.content[0]?.text ?? "",
+		error: answer.isError === true,
+	};
+}
+
 describe("modulesPlugin", () => {
 	test("adds the owner's tools in a fixed order, and the delegator to the shutdown drain", async () => {
 		const setup = await setUpModules();
@@ -212,7 +238,7 @@ describe("modulesPlugin", () => {
 		expect(setup.record.ownerChannelAsked).toBe(0);
 	});
 
-	test("a conversation without a chat channel reports in the owner's messages", async () => {
+	test("a conversation without a chat channel reports in the creator's direct messages: the single owner's, as in 0.8", async () => {
 		const setup = await setUpModules();
 		const [delegate] = await registered(
 			setup,
@@ -222,20 +248,27 @@ describe("modulesPlugin", () => {
 		await delegate?.execute("1", { title: "t", task: "look it up" });
 		await setup.services.get(DELEGATION).idle();
 		expect(setup.record.reportChannels).toEqual([OWNER_CHANNEL]);
-		expect(setup.record.ownerChannelAsked).toBe(1);
+		expect(setup.record.directAsked).toEqual([
+			OWNER_SPEAKER.principalId,
+			OWNER_SPEAKER.principalId,
+		]);
+		expect(setup.record.ownerChannelAsked).toBe(0);
 	});
 
-	test("someone other than the primary owner neither schedules nor delegates into the owner's messages from a conversation without a chat channel", async () => {
-		const created: unknown[] = [];
+	test("from a conversation without a chat channel, another person's schedules and reports go to their own direct messages, never the owner's", async () => {
+		const created: { channel: ChannelKey }[] = [];
 		const schedules = {
 			forChannel: async () => [],
 			all: async () => [],
-			create: async (schedule: unknown) => {
+			create: async (schedule: { channel: ChannelKey }) => {
 				created.push(schedule);
-				return { ...(schedule as object), id: 7 };
+				return { ...schedule, id: 7 };
 			},
 		} as unknown as ScheduleStore;
-		const setup = await setUpModules({ schedules });
+		const setup = await setUpModules({
+			schedules,
+			direct: { "1": OWNER_CHANNEL, p_ann: "discord:ann-dm" },
+		});
 		const session = contextOf(ANN, OUTSIDE);
 		const create = (await registered(setup, session, "schedules")).find(
 			(tool) => tool.name === "schedule_create",
@@ -245,18 +278,122 @@ describe("modulesPlugin", () => {
 			prompt: "p",
 			in_minutes: 5,
 		});
-		expect(scheduled?.isError).toBe(true);
-		expect(scheduled?.content[0]?.text).toContain("owner's");
+		expect(scheduled?.isError).toBeFalsy();
+		expect(scheduled?.content[0]?.text).toContain("Ann's direct messages");
 		const [delegate] = await registered(setup, session, "delegate");
-		const delegated = await delegate?.execute("1", {
-			title: "t",
-			task: "look it up",
-		});
-		expect(delegated?.isError).toBe(true);
+		await delegate?.execute("1", { title: "t", task: "look it up" });
 		await setup.services.get(DELEGATION).idle();
-		expect(created).toEqual([]);
-		expect(setup.record.reportChannels).toEqual([]);
+		expect(created.map((schedule) => schedule.channel)).toEqual([
+			"discord:ann-dm",
+		]);
+		expect(setup.record.reportChannels).toEqual(["discord:ann-dm"]);
 		expect(setup.record.ownerChannelAsked).toBe(0);
+	});
+
+	test("creation rechecks the creator's direct channel and background claim after tools were offered", async () => {
+		const created: unknown[] = [];
+		const schedules = {
+			forChannel: async () => [],
+			all: async () => [],
+			create: async (schedule: object) => {
+				created.push(schedule);
+				return { ...schedule, id: 7 };
+			},
+		} as unknown as ScheduleStore;
+		for (const refusal of ["no direct channel", "background turns"]) {
+			const direct: Record<string, ChannelKey> = {
+				"1": OWNER_CHANNEL,
+				p_ann: "discord:ann-dm",
+			};
+			let background = true;
+			const setup = await setUpModules({
+				schedules,
+				direct,
+				takesBackground: () => background,
+			});
+			const session = contextOf(ANN, OUTSIDE);
+			const create = (await registered(setup, session, "schedules")).find(
+				(tool) => tool.name === "schedule_create",
+			);
+			const [delegate] = await registered(setup, session, "delegate");
+			if (refusal === "no direct channel") delete direct.p_ann;
+			else background = false;
+			const scheduled = await create?.execute("1", {
+				title: "t",
+				prompt: "p",
+				in_minutes: 5,
+			});
+			expect(scheduled?.isError).toBe(true);
+			expect(scheduled?.content[0]?.text).toContain(refusal);
+			const delegated = await delegate?.execute("1", {
+				title: "t",
+				task: "look it up",
+			});
+			expect(delegated?.isError).toBe(true);
+			expect(delegated?.content[0]?.text).toContain(refusal);
+			await setup.services.get(DELEGATION).idle();
+			expect(setup.record.reportChannels).toEqual([]);
+		}
+		expect(created).toEqual([]);
+	});
+
+	test("a private conversation without a chat channel has the schedule and delegation tools only when its person's direct messages take background turns", async () => {
+		const offered = async (
+			direct: Readonly<Record<string, ChannelKey>>,
+			takesBackground: (channel: ChannelKey) => boolean = () => true,
+		) => {
+			const setup = await setUpModules({
+				direct,
+				takesBackground,
+				conversations: { get: privately({ "mcp:s1": "p_ann" }) },
+			});
+			// The real runtime builds a private session before setting its current speaker.
+			const session = { ...contextOf(ANN, "mcp:s1"), speaker: () => undefined };
+			return [
+				...(await registered(setup, session, "schedules")),
+				...(await registered(setup, session, "delegate")),
+			].map((tool) => tool.name);
+		};
+		expect(await offered({ p_ann: "discord:ann-dm" })).toContain(
+			"schedule_create",
+		);
+		expect(await offered({ p_ann: "discord:ann-dm" })).toContain(
+			"delegate_task",
+		);
+		expect(await offered({ "1": OWNER_CHANNEL })).toEqual([]);
+		expect(
+			await offered(
+				{ p_ann: "discord:ann-dm" },
+				(channel) => channel !== "discord:ann-dm",
+			),
+		).toEqual([]);
+	});
+
+	test("no-surface tools are absent when the creator is unknown, unreachable, or reach lookup fails", async () => {
+		for (const speaker of [undefined, ANN]) {
+			const setup = await setUpModules();
+			const session = {
+				...context(undefined, OUTSIDE),
+				speaker: () => speaker,
+			};
+			for (const extension of ["schedules", "delegate"])
+				expect(await registered(setup, session, extension)).toEqual([]);
+		}
+		const setup = await setUpModules({
+			conversations: { get: privately({ "mcp:s1": "p_ann" }) },
+			direct: new Proxy(
+				{},
+				{
+					get: () => {
+						throw new Error("network unavailable");
+					},
+				},
+			),
+		});
+		for (const extension of ["schedules", "delegate", "notify"])
+			expect(
+				await registered(setup, contextOf(ANN, "mcp:s1"), extension),
+			).toEqual([]);
 	});
 
 	test("a conversation without a chat channel the host has no record of lists only the speaker's own schedules", async () => {
@@ -310,32 +447,6 @@ describe("modulesPlugin", () => {
 		).not.toContain("agent");
 	});
 });
-
-/** A conversation the host recorded as one person's own. */
-const privately =
-	(owners: Readonly<Record<string, string>>) => async (key: ChannelKey) =>
-		owners[key]
-			? ({
-					key,
-					visibility: "private",
-					principalId: owners[key],
-				} as unknown as ConversationRecord)
-			: undefined;
-
-/** Runs notify in a session; the tool's answer and whether it was an error. */
-async function notifyIn(
-	setup: Awaited<ReturnType<typeof setUpModules>>,
-	session: SessionContext,
-	text = "the build is green",
-) {
-	const [notify] = await registered(setup, session, "notify");
-	if (!notify) return undefined;
-	const answer = await notify.execute("1", { text });
-	return {
-		text: answer.content[0]?.text ?? "",
-		error: answer.isError === true,
-	};
-}
 
 describe("notify", () => {
 	test("is named notify, and with only Discord's direct messages reads word for word as notify_owner did", async () => {

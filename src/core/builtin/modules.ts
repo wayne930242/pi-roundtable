@@ -1,6 +1,8 @@
 import { join } from "node:path";
-import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
-import type { SurfacePort } from "../contract/surface.ts";
+import type {
+	ExtensionFactory,
+	ModelRuntime,
+} from "@earendil-works/pi-coding-agent";
 import { scheduleCommands } from "../discord/schedule-commands.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
 import {
@@ -42,7 +44,7 @@ import {
 import type { SessionContext } from "../sessions.ts";
 import { DELEGATE_TOOL } from "../shared/delegate-tool.ts";
 import { SCHEDULE_TOOLS } from "../shared/schedule-tools.ts";
-import { THE_SPEAKER, type Tier } from "../speakers.ts";
+import type { Tier } from "../speakers.ts";
 import { DISCORD } from "./discord.ts";
 import { fixed } from "./session-tool.ts";
 
@@ -90,8 +92,8 @@ const MODULE_TIERS: Readonly<Record<string, Tier>> = {
 /**
  * The modules: notifications, schedules, and delegated tasks, each a session tool, and the turns
  * nobody wrote. The delegator's running jobs join the shutdown drain. `notify` sends through the
- * plugins' direct channels, so with none there is no notify. Without Discord there are no owner's
- * messages, and a conversation no chat surface carries can neither schedule nor delegate. It
+ * plugins' direct channels, so with none there is no notify. A conversation no chat surface carries
+ * can schedule or delegate only into its creator's reachable, background-capable direct channel. It
  * contributes `PERSONAL_TARGET`, with the per-person limits given, whose turns the schedules and
  * delegated reports are, and a session whose conversation's claim takes no background turns gets
  * neither tool.
@@ -99,26 +101,6 @@ const MODULE_TIERS: Readonly<Record<string, Tier>> = {
 export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 	const { owner } = options;
 	const personal = personalTarget(options.perPrincipal);
-	// A conversation no chat surface carries posts its runs in the owner's messages, when there are
-	// any, and only the primary owner's: anyone else's would run in a conversation that is not theirs.
-	const channelFor = async (
-		channel: ChannelKey,
-		principalId: string,
-		surfaces: SurfacePort,
-		ownerChannel: (() => Promise<ChannelKey>) | undefined,
-		refused: (message: string) => Error,
-	) => {
-		if (surfaces.of(channel)) return channel;
-		if (!ownerChannel)
-			throw refused(
-				"this conversation has no chat surface to post a run in, and the host has no owner's messages to post it in instead",
-			);
-		if (principalId !== owner.id)
-			throw refused(
-				"this conversation has no chat surface to post a run in, and only the primary owner's runs go to the owner's direct messages instead",
-			);
-		return ownerChannel();
-	};
 	// Set up once the modules set up; the preflight reads it after every plugin linked.
 	let reportsReach: (() => void) | undefined;
 	return {
@@ -137,31 +119,34 @@ export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 			const schedules = services.get(SCHEDULES);
 			// Absent when a plugin list leaves the prechecks plugin out: then none can be attached.
 			const prechecks = services.find(PRECHECKS);
-			// Absent on a host without Discord: then there are no owner's messages and no threads.
+			// Absent on a host without Discord: then there are no threads.
 			const discord = services.find(DISCORD);
-			const connection = discord?.connection;
-			const ownerChannel = connection
-				? () => connection.ownerChannel()
-				: undefined;
 			// Another agent's channel, for schedule_list; asked when a tool runs, after the agent server set up.
 			const agentChannelOf = (agent: string) =>
 				services.get(AGENTS).team.channelOf(agent);
+			// A conversation no chat surface carries keeps its runs in the creator's direct messages, where
+			// a claim must take them; anyone's elsewhere would run in a conversation that is not theirs.
+			const channelFor = async (
+				channel: ChannelKey,
+				principalId: string,
+				refused: (message: string) => Error,
+			) => {
+				if (surfaces.of(channel)) return channel;
+				const reached = await directChannels.reach(principalId);
+				if (!reached)
+					throw refused(
+						"this conversation has no chat surface to post a run in, and you have no direct channel on this host to post it in instead",
+					);
+				if (!conversations.takesBackground(reached.channel))
+					throw refused(
+						`this conversation has no chat surface to post a run in, and nothing here takes background turns in your ${reached.provider.name} direct messages, where it would go instead`,
+					);
+				return reached.channel;
+			};
 			const scheduleChannelFor = (channel: ChannelKey, principalId: string) =>
-				channelFor(
-					channel,
-					principalId,
-					surfaces,
-					ownerChannel,
-					(message) => new ScheduleError(message),
-				);
+				channelFor(channel, principalId, (m) => new ScheduleError(m));
 			const delegateChannelFor = (channel: ChannelKey, principalId: string) =>
-				channelFor(
-					channel,
-					principalId,
-					surfaces,
-					ownerChannel,
-					(message) => new DelegationError(message),
-				);
+				channelFor(channel, principalId, (m) => new DelegationError(m));
 			const identity = services.find(IDENTITY);
 			const background = new ConversationBackgroundTurns({
 				conversations,
@@ -186,17 +171,42 @@ export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 			});
 			services.provide(BACKGROUND_TURNS, background);
 			services.provide(DELEGATION, delegator);
-			// An agent session serves every speaker, so its tools name none.
-			const served = (session: SessionContext) =>
-				session.agent ? THE_SPEAKER : owner;
 			// Schedules and delegated reports run as background turns in the conversation, or, for one
-			// no chat surface carries, in the owner's messages; where no claim would take them, none
-			// could ever start, so the session gets no tools. Read when a session is made, after every
-			// plugin set up.
-			const takesRuns = (session: SessionContext) =>
-				surfaces.of(session.homeChannel)
-					? conversations.takesBackground(session.homeChannel)
-					: ownerChannel !== undefined;
+			// no chat surface carries, in the creator's direct messages; where no claim would take them,
+			// none could ever start, so the session gets no tools. Read when a session is made, after
+			// every plugin set up: the creator must be known from a private record or a current
+			// speaker. Creation still checks the executing speaker's own destination again.
+			const offered = (
+				session: SessionContext,
+				extension: () => ExtensionFactory,
+			): ExtensionFactory | null => {
+				const home = session.homeChannel;
+				if (surfaces.of(home))
+					return conversations.takesBackground(home) ? extension() : null;
+				if (directChannels.providers().length === 0) return null;
+				return async (pi) => {
+					const record = await recordOf(session);
+					const own =
+						record?.visibility === "private"
+							? record.principalId
+							: session.speaker()?.principalId;
+					// The runtime builds sessions between turns. With neither a recorded principal nor
+					// a current speaker, it cannot promise any background-capable destination.
+					if (own === undefined) return;
+					try {
+						const reached = await directChannels.reach(own);
+						if (!reached || !conversations.takesBackground(reached.channel))
+							return;
+					} catch (error) {
+						logger.warn(
+							{ channel: home, err: error },
+							"could not tell whether the conversation's person has a direct channel",
+						);
+						return;
+					}
+					await extension()(pi);
+				};
+			};
 			// Whose a conversation is, read when a tool runs: an agent's serves everyone; another is
 			// as the host recorded it, and one it has no record of is shared on a chat surface and the
 			// speaker's own without one, where its schedules are kept in a conversation it is not.
@@ -275,37 +285,32 @@ export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 						sessionNotify({ directChannels, recordOf, owner, logger }),
 					),
 					fixed("schedules", (session) =>
-						takesRuns(session)
-							? schedulesExtension(
-									{
-										store: schedules,
-										channelFor: scheduleChannelFor,
-										...(prechecks ? { prechecks } : {}),
-										holds: () => sessions().holds,
-										visibility: visibility(session),
-										...(principalOf ? { principalOf } : {}),
-										target: personal,
-									},
-									session.homeChannel,
-									served(session),
-									session.agent ? agentChannelOf : undefined,
-									session.speaker,
-								)
-							: null,
+						offered(session, () =>
+							schedulesExtension(
+								{
+									store: schedules,
+									channelFor: scheduleChannelFor,
+									...(prechecks ? { prechecks } : {}),
+									holds: () => sessions().holds,
+									visibility: visibility(session),
+									...(principalOf ? { principalOf } : {}),
+									target: personal,
+								},
+								session.homeChannel,
+								session.agent ? agentChannelOf : undefined,
+								session.speaker,
+							),
+						),
 					),
 					fixed("delegate", (session) =>
-						takesRuns(session)
-							? delegateExtension(
-									{
-										delegator,
-										channelFor: delegateChannelFor,
-									},
-									session.homeChannel,
-									served(session),
-									session.turnChannel,
-									session.speaker,
-								)
-							: null,
+						offered(session, () =>
+							delegateExtension(
+								{ delegator, channelFor: delegateChannelFor },
+								session.homeChannel,
+								session.turnChannel,
+								session.speaker,
+							),
+						),
 					),
 				],
 				toolTiers: MODULE_TIERS,

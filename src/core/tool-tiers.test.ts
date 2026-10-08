@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { CORE_TOOL_TIERS, toolsForTier, toolTiers } from "./tool-tiers.ts";
+import { silentLogger } from "./log.ts";
+import {
+	CORE_TOOL_TIERS,
+	currentToolNames,
+	toolsForTier,
+	toolTiers,
+} from "./tool-tiers.ts";
 
 describe("default tiers", () => {
 	const tiers = toolTiers();
@@ -30,6 +36,33 @@ describe("default tiers", () => {
 });
 
 describe("a tool renamed since 0.8", () => {
+	test("warns once per host logger when an old name is used in tiers or selections, and never for the new name", () => {
+		const messages: unknown[] = [];
+		const logger = {
+			...silentLogger(),
+			warn: (message: unknown) => {
+				messages.push(message);
+			},
+		};
+		toolTiers({ notify: "member" }, logger);
+		currentToolNames(["notify"], logger);
+		expect(messages).toEqual([]);
+		toolTiers({ notify_owner: "member" }, logger);
+		currentToolNames(["notify_owner"], logger);
+		toolTiers({ notify_owner: "admin" }, logger);
+		expect(messages).toEqual([
+			"deprecated: notify_owner is now notify; update selections and toolTiers before 1.0",
+		]);
+		const other: unknown[] = [];
+		currentToolNames(["notify_owner"], {
+			...silentLogger(),
+			warn: (message: unknown) => {
+				other.push(message);
+			},
+		});
+		expect(other).toHaveLength(1);
+	});
+
 	test("the operator's tier under its old name, such as notify_owner, is the new name's, unless the new name has its own", () => {
 		expect(toolTiers({ notify_owner: "member" }).minTier("notify")).toBe(
 			"member",
