@@ -42,8 +42,9 @@ export interface PiAgentRuntimeOptions {
 	 */
 	owner: OwnerIdentity & { id: string };
 	/**
-	 * The host's record of a conversation, read when its session is made and the turn names none,
-	 * such as a session made between turns; without it, or without a record, it is shared.
+	 * The host's record of a conversation, read at every turn that names none, so a record changed
+	 * while its session is open counts, and when its transcript is read; without it, or without a
+	 * record, the conversation is as its open session or its history was made, else shared.
 	 */
 	conversationOf?: (key: ChannelKey) => Promise<TurnConversation | undefined>;
 	/** A principal's name and pronouns, which a private conversation's tool descriptions use. */

@@ -134,7 +134,7 @@ export function runtimePlugin(
 					)
 				: new PiAgentRuntime({
 						owner: options.owner,
-						// Read when a session is made, after every plugin set up.
+						// Read at every turn that names no conversation, after every plugin set up.
 						conversationOf: async (key) => {
 							const record = await services.find(CONVERSATIONS)?.get(key);
 							if (!record) return undefined;
