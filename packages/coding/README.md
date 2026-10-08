@@ -190,6 +190,8 @@ The `CODING` service exposes `shelf: RepoShelf` and `desk: CodingDesk` for trust
 `RepoShelf`, `CodingDesk`, `PiCodingWorker`, `CodingWorkerFailure`, `REPO_TOOLS`, `codingReport`, `reportPost` and their option/result types are exported for testing and host integrations.
 `resolveRun(turn)` receives the public `ToolTurn`, including the calling agent scope and channel.
 It returns `{ model, thinking, channel, origin? }`; skill selection still follows the caller, not the resolved report destination.
+A `resolveRun` or `postChangeReport` that sends a person's report away from the calling channel sends it to that person's own direct channel, `context.directChannels.reach(turn.speaker.principalId)`, and throws `ToolRefusal` when none reaches them.
+It never falls back to the primary owner's channel: on a host serving more than one person, that channel would carry someone else's repository work.
 `onResult` receives those fields plus loaded `skillNames` and the optional progress `thread` in `result.job`, so a host can enqueue its own localized conversation turn.
 `adoptClones` and `RepoShelf.adopt` keep existing clone contents and path layout without database migrations.
 No database or Discord-specific types are required.
