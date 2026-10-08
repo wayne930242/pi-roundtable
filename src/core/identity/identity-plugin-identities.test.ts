@@ -22,6 +22,7 @@ import { PgPrincipalStore } from "./principal-store.ts";
 const ADA = "966666600000000001";
 const BO = "966666600000000002";
 const KAI = "966666600000000003";
+const BOB = "966666600000000004";
 const TOKEN = "token:remote-mcp";
 
 const RULES: AccessRules = {
@@ -224,6 +225,72 @@ describeDb("identities plugins declare, linked at boot", () => {
 			principalId: ADA,
 			source: "config",
 		});
+	});
+
+	// A config owner written without `principal`, listing an identity a plugin declares.
+	const bob = { name: "Bob", identities: [TOKEN, `discord:${BOB}`] };
+
+	test("a plugin's link never tells which principal a configured owner is: one listing the primary owner's token is not merged into them", async () => {
+		await boot([remote()]);
+		const failed = boot([remote()], { owners: [...RULES.owners, bob] });
+		expect(failed).rejects.toThrow(ConfigError);
+		expect(failed).rejects.toThrow(
+			`config access.owners[1].identities[0]: ${TOKEN} is an identity plugin remote-mcp declares, bound to principal ${ADA}, and a plugin's credential does not tell who this owner is. Remove it from access.owners[1].identities, or give this owner its principal and bind plugin remote-mcp to it.`,
+		);
+		await failed.catch(() => undefined);
+		expect(await store.identity("discord", BOB)).toBeUndefined();
+		expect((await store.get(ADA))?.displayName).toBe("Ada");
+		expect(await store.identity("token", "remote-mcp")).toMatchObject({
+			principalId: ADA,
+			source: "plugin",
+		});
+		expect(
+			(await store.holders("owner")).map((holder) => holder.principalId),
+		).toEqual([ADA]);
+	});
+
+	test("a plugin's link never tells which principal a configured owner is: one listing a member's token does not make them an owner", async () => {
+		await carriedOver(KAI, "Kai");
+		await boot([remote(KAI)]);
+		const failed = boot([remote(KAI)], { owners: [...RULES.owners, bob] });
+		expect(failed).rejects.toThrow(
+			`${TOKEN} is an identity plugin remote-mcp declares, bound to principal ${KAI}`,
+		);
+		await failed.catch(() => undefined);
+		expect(await store.identity("discord", BOB)).toBeUndefined();
+		expect(await store.get(KAI)).toMatchObject({ displayName: "Kai" });
+		expect(await store.rolesOf(KAI)).toEqual([]);
+		const identity = await boot([remote(KAI)]);
+		expect(await identity.resolve(discordFacts(KAI, "Kai"))).toMatchObject({
+			principalId: KAI,
+			tier: "member",
+		});
+	});
+
+	test("an owner's other identity tells who they are, and the token a plugin binds to that same principal is theirs", async () => {
+		await boot([remote()]);
+		const ada = { name: "Ada", identities: [TOKEN, `discord:${ADA}`] };
+		await boot([remote()], { owners: [ada] });
+		expect(await store.identity("token", "remote-mcp")).toMatchObject({
+			principalId: ADA,
+			source: "config",
+		});
+		expect(
+			(await store.holders("owner")).map((holder) => holder.principalId),
+		).toEqual([ADA]);
+	});
+
+	test("a plugin's link no plugin declares any more is unlinked before the owners are synced, so it tells no one", async () => {
+		await carriedOver(KAI, "Kai");
+		await boot([remote(KAI)]);
+		await boot([], { owners: [...RULES.owners, bob] });
+		const token = await store.identity("token", "remote-mcp");
+		expect(token).toMatchObject({ source: "config" });
+		expect(token?.principalId).not.toBe(KAI);
+		expect(await store.identity("discord", BOB)).toMatchObject({
+			principalId: token?.principalId,
+		});
+		expect(await store.rolesOf(KAI)).toEqual([]);
 	});
 
 	test("rebound at the next boot it moves, and no longer declared it is unlinked", async () => {

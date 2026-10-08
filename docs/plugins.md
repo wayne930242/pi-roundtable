@@ -115,6 +115,7 @@ Each entry is a `PluginIdentity`, `{ identity, principal? }`: the identity writt
 At every start the `identity` plugin links each one to its principal as the plugin's (`roundtable principal list` shows `plugin <name>`), moves one whose principal changed since the last start, and unlinks one no plugin declares any more.
 The start stops with a `ConfigError` for an identity that does not parse, one two plugins declare, the system principal, a principal that does not exist, and an identity linked to someone else by the configuration, the CLI, or a first contact; the message names what to change.
 A declared identity is never admitted or claimed as someone new, and linking it leaves the principal's 0.8 claim alone: a plugin's credential is not the person's own identity.
+Nor does its link tell who a configured owner is: an owner in `access.owners` that also lists a declared identity is known by its `principal` or its other identities, and the start stops when that is not the principal the plugin binds the identity to, or when nothing else tells who the owner is.
 Read whom it stands for with `IDENTITY.principalOf(identity)`, and start the turn with `IDENTITY.speakerFor(principalId)`.
 A plugin that replaces `IDENTITY` replaces this too: the declarations are the built-in `identity` plugin's to link.
 

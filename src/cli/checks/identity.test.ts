@@ -3,7 +3,7 @@ import { resolveConfig } from "../../core/config/config.ts";
 import { runMigrations } from "../../core/db/migrations.ts";
 import { identityPlugin } from "../../core/identity/identity-plugin.ts";
 import { PgPrincipalStore } from "../../core/identity/principal-store.ts";
-import type { PluginContext } from "../../core/plugin.ts";
+import type { PluginContext, RoundtablePlugin } from "../../core/plugin.ts";
 import { describeDb } from "../../core/testing/database.ts";
 import {
 	type ScratchDatabase,
@@ -17,9 +17,13 @@ import { checkAccess, checkPrincipals } from "./identity.ts";
 
 /** The owner of the 0.8.0 fixture (scripts/fixture-db.ts). */
 const OWNER = "966666600000000001";
+const TOKEN = "token:remote-mcp";
 
 /** A project whose configuration is `config`, assembled with these plugins. */
-function project(config: unknown, plugins: { name: string }[] = []): Project {
+function project(
+	config: unknown,
+	plugins: Pick<RoundtablePlugin, "name" | "identities">[] = [],
+): Project {
 	return new Project(
 		"/x",
 		fakePorts(config, {
@@ -118,6 +122,25 @@ describeDb("the principals check", () => {
 		database: { url },
 	});
 
+	/** Starts the identity plugin once on the scratch database, with these plugins' identities. */
+	async function bootWith(
+		scratch: ScratchDatabase,
+		config: ReturnType<typeof withDatabase>,
+		plugins: Pick<RoundtablePlugin, "name" | "identities">[],
+	): Promise<void> {
+		const plugin = identityPlugin({
+			rules: resolveConfig(config).access,
+			plugins: plugins.map((made) => ({ ...made, setup: () => ({}) })),
+		});
+		await runMigrations(scratch.sql, [plugin]);
+		const sql = scratch.sql;
+		await plugin.setup?.({
+			logger: recordingLogger().logger,
+			database: () => sql,
+			services: { provide: () => {} },
+		} as unknown as PluginContext);
+	}
+
 	test("on a 0.8.0 database, prints the backfill the next start logs, word for word", async () => {
 		db = await scratchDatabase("0.8.0");
 		const config = withDatabase(db.url);
@@ -169,6 +192,33 @@ describeDb("the principals check", () => {
 			expect(result.fix).toContain(
 				`roundtable principal unlink discord:${OWNER}`,
 			);
+		}
+	});
+
+	test("fails when a configured owner without a principal lists a plugin's identity, saying to remove it or bind the plugin", async () => {
+		const scratch = await scratchDatabase("0.8.0");
+		db = scratch;
+		const base = withDatabase(scratch.url);
+		const remote = [{ name: "remote-mcp", identities: [{ identity: TOKEN }] }];
+		await bootWith(scratch, base, remote);
+		const bob = {
+			name: "Bob",
+			identities: [TOKEN, "discord:966666600000000004"],
+		};
+		const config = {
+			...base,
+			access: { ...base.access, owners: [...base.access.owners, bob] },
+		};
+		const result = await checkPrincipals(project(config, remote), postgres);
+		expect(result.status).toBe("fail");
+		if (result.status === "fail") {
+			expect(result.problem).toContain(
+				`access.owners[1].identities[0]: ${TOKEN} is an identity plugin remote-mcp declares, bound to principal ${OWNER}`,
+			);
+			expect(result.fix).toContain(
+				"Remove it from access.owners[1].identities, or give this owner its principal and bind plugin remote-mcp to it",
+			);
+			expect(result.fix).not.toContain("roundtable principal unlink");
 		}
 	});
 

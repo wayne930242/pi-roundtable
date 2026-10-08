@@ -2,12 +2,13 @@ import type { SQL } from "bun";
 import { LEGACY_ACCESS } from "../../core/config/access.ts";
 import type { ResolvedConfig } from "../../core/config/config.ts";
 import type { AccessRules } from "../../core/identity/access-policy.ts";
-import { parseIdentity } from "../../core/identity/actor-facts.ts";
+import { identityOf, parseIdentity } from "../../core/identity/actor-facts.ts";
 import { backfillLine } from "../../core/identity/identity-plugin.ts";
 import {
 	type BackfillSummary,
 	backfillPrincipals,
 } from "../../core/identity/identity-schema.ts";
+import { declaredIdentities } from "../../core/identity/plugin-identities.ts";
 import { PgPrincipalStore } from "../../core/identity/principal-store.ts";
 import type { Project } from "../project.ts";
 import { fail, ok, type Result, skipped, warn } from "../report.ts";
@@ -67,8 +68,8 @@ export async function checkAccess(project: Project): Promise<Result> {
 /** What the database says about the configured owners, and what the next start's backfill would make. */
 export interface PrincipalFindings {
 	summary: BackfillSummary;
-	/** A configured owner's identity linked to another principal, which stops the start. */
-	conflicts: { problem: string; identity: string }[];
+	/** A configured owner's identity linked to another principal, which stops the start, and how to fix it. */
+	conflicts: { problem: string; identity: string; fix: string }[];
 	/** Configured owners whose principal is disabled. */
 	disabled: { index: number; id: string; name: string }[];
 	/** Whether any owner, configured or granted by the CLI, can reach the host. */
@@ -77,11 +78,13 @@ export interface PrincipalFindings {
 
 /**
  * Reads, without writing, what the identity plugin would do at the next start: the backfill as a
- * dry run, and the configured owners' identity links as its sync checks them.
+ * dry run, and the configured owners' identity links as its sync checks them. `declaredBy` names
+ * the plugin that declares each identity the plugins declare.
  */
 export async function principalFindings(
 	sql: SQL,
 	rules: AccessRules,
+	declaredBy: ReadonlyMap<string, string> = new Map(),
 ): Promise<PrincipalFindings> {
 	const summary = await backfillPrincipals(sql, rules, { dryRun: true });
 	const [tables] = await sql`
@@ -96,16 +99,47 @@ export async function principalFindings(
 	let reachable = false;
 	for (const [index, owner] of rules.owners.entries()) {
 		let id = owner.principal;
-		for (const [i, identity] of owner.identities.entries()) {
-			const ref = parseIdentity(identity);
-			const link = ref && (await store.identity(ref.provider, ref.subject));
-			if (!link) continue;
+		const links = await Promise.all(
+			owner.identities.map(async (identity) => {
+				const ref = parseIdentity(identity);
+				const link = ref && (await store.identity(ref.provider, ref.subject));
+				// A plugin's link no plugin declares any more is unlinked by the start before the owners are synced.
+				return link?.source === "plugin" && !declaredBy.has(identityOf(link))
+					? undefined
+					: link;
+			}),
+		);
+		const unlink = (identity: string) =>
+			`Unlink it with roundtable principal unlink ${identity}, or fix access.owners in roundtable.config.ts`;
+		// As at the start, a plugin's link never tells who the owner is.
+		for (const [i, link] of links.entries()) {
+			if (!link || link.source === "plugin") continue;
 			id ??= link.principalId;
+			const identity = owner.identities[i] ?? "";
 			if (link.principalId !== id)
 				conflicts.push({
 					problem: `access.owners[${index}].identities[${i}]: ${identity} is linked to principal ${link.principalId}, not to this owner's ${id}`,
 					identity,
+					fix: unlink(identity),
 				});
+		}
+		for (const [i, link] of links.entries()) {
+			if (link?.source !== "plugin" || link.principalId === id) continue;
+			const identity = owner.identities[i] ?? "";
+			const plugin = declaredBy.get(identityOf(link));
+			conflicts.push(
+				id === undefined
+					? {
+							problem: `access.owners[${index}].identities[${i}]: ${identity} is an identity plugin ${plugin} declares, bound to principal ${link.principalId}, and a plugin's credential does not tell who this owner is`,
+							identity,
+							fix: `Remove it from access.owners[${index}].identities, or give this owner its principal and bind plugin ${plugin} to it`,
+						}
+					: {
+							problem: `access.owners[${index}].identities[${i}]: ${identity} is linked to principal ${link.principalId}, not to this owner's ${id}`,
+							identity,
+							fix: unlink(identity),
+						},
+			);
 		}
 		const principal = id === undefined ? undefined : await store.get(id);
 		if (principal?.disabled)
@@ -135,9 +169,23 @@ export async function checkPrincipals(
 	const assembled = await project.assembled();
 	if (!assembled.ok) return skipped("the configuration is not valid yet");
 	const rules = assembled.value.config.access;
+	let declaredBy: Map<string, string>;
+	try {
+		declaredBy = new Map(
+			declaredIdentities(assembled.value.defined.plugins).map(
+				({ identity, plugin }) => [identity, plugin],
+			),
+		);
+	} catch (error) {
+		return skipped(
+			`the plugins' identities are not valid yet (${message(error)})`,
+		);
+	}
 	let findings: PrincipalFindings;
 	try {
-		findings = await database.read(url, (sql) => principalFindings(sql, rules));
+		findings = await database.read(url, (sql) =>
+			principalFindings(sql, rules, declaredBy),
+		);
 	} catch (error) {
 		return skipped(`PostgreSQL did not answer (${message(error)})`);
 	}
@@ -145,12 +193,7 @@ export async function checkPrincipals(
 	if (findings.conflicts.length > 0)
 		return fail(
 			`${findings.conflicts.map((conflict) => conflict.problem).join("; ")}; the host does not start until this is fixed.`,
-			[
-				"Unlink each identity from the principal it is linked to, or fix access.owners in roundtable.config.ts:",
-				...findings.conflicts.map(
-					(conflict) => `  roundtable principal unlink ${conflict.identity}`,
-				),
-			].join("\n"),
+			findings.conflicts.map((conflict) => conflict.fix).join("\n"),
 		);
 	if (findings.disabled.length > 0) {
 		const who = list(
