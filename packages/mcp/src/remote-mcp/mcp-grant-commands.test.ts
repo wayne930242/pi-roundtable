@@ -1,9 +1,11 @@
 import { expect, test } from "bun:test";
+import type { ButtonInteraction } from "discord.js";
 import { commandGuard } from "pi-roundtable/discord";
 import { silentLogger } from "pi-roundtable/testing";
 import { fakeInteraction } from "../testing/fake-interaction.ts";
 import type { ChannelGrantStore } from "./channel-grants.ts";
 import { mcpGrantCommands } from "./mcp-grant-commands.ts";
+import type { McpGrantFlow } from "./mcp-grant-flow.ts";
 import { MCP_IDS } from "./mcp-grant-panels.ts";
 import { REMOTE_MCP_MESSAGES } from "./messages.ts";
 
@@ -89,4 +91,11 @@ test("an owner revoked while their grant flow is open cannot complete it", async
 		REMOTE_MCP_MESSAGES.expiredTitle,
 	);
 	expect(rotated).toEqual(["b1"]);
+});
+
+test("a grant flow's press is told whether its presser is an owner; nothing assumes it", () => {
+	const press = (flow: McpGrantFlow, interaction: ButtonInteraction) =>
+		// @ts-expect-error The caller checks the presser at each press and says so; there is no default.
+		flow.component(interaction);
+	expect(press).toBeFunction();
 });

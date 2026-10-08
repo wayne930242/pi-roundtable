@@ -122,9 +122,10 @@ export class McpGrantFlow {
 
 	/**
 	 * Buttons and the operations menu of a pending grant or rotation; one pressed by someone who is
-	 * not an owner now (`owner` false) finds it expired, as anyone's but its starter's does.
+	 * not an owner now (`owner` false) finds it expired, as anyone's but its starter's does. Whether
+	 * the presser is an owner is the caller's to check at each press; nothing assumes it.
 	 */
-	async component(interaction: ButtonOrMenu, owner = true): Promise<void> {
+	async component(interaction: ButtonOrMenu, owner: boolean): Promise<void> {
 		const text = this.#text;
 		const [action, id = ""] = interaction.customId
 			.slice(GRANT_PREFIX.length)

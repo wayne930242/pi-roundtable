@@ -77,7 +77,7 @@ export function toolTiers(
 	return new ToolTierTable(operator);
 }
 
-/** The tools a tier may use, in order; a turn nobody spoke in has the owner's tier. */
+/** The tools a tier may use, in order; a turn's tier is its speaker's, and a turn without one is refused. */
 export function toolsForTier(
 	tools: readonly string[],
 	tier: Tier,

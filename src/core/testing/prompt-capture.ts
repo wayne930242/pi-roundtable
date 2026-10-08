@@ -36,12 +36,12 @@ export interface CapturedTool {
 	parameters: unknown;
 }
 
-/** What the model received at the first request of a turn: the prompt and the tools. */
 /** A turn the runtime refused before asking the model, by its error's message. */
 export interface CapturedRefusal {
 	refused: string;
 }
 
+/** What the model received at the first request of a turn: the prompt and the tools. */
 export interface CapturedPrompt {
 	/** Each system message's text and named sections, in order. */
 	system: { content: unknown; sections?: Record<string, string | null> }[];
