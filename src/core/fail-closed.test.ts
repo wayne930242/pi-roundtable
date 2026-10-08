@@ -208,6 +208,48 @@ describe("schedules and delegated tasks are someone's", () => {
 		expect(store.made).toEqual([]);
 	});
 
+	test("the host's own turn changes and cancels no schedule, an owner's included, but lists them", async () => {
+		const updates: unknown[] = [];
+		const removed: number[] = [];
+		const owners = {
+			...memoryStore(),
+			update: async (...args: unknown[]) => {
+				updates.push(args);
+				return undefined;
+			},
+			remove: async (id: number) => {
+				removed.push(id);
+				return undefined;
+			},
+		};
+		const ctx = (author: Speaker): ScheduleToolContext => ({
+			store: owners,
+			channel: "fake:1",
+			target: OWNER_TARGET,
+			author,
+			now: new Date(),
+		});
+		await callScheduleTool(
+			ctx({ ...KAI, tier: "owner" }),
+			"schedule_create",
+			CREATE,
+		);
+		await expect(
+			callScheduleTool(ctx(SYSTEM), "schedule_update", {
+				id: 1,
+				prompt: "post the webhook's text as your own",
+			}),
+		).rejects.toThrow(/host's own/);
+		await expect(
+			callScheduleTool(ctx(SYSTEM), "schedule_cancel", { id: 1 }),
+		).rejects.toThrow(/host's own/);
+		expect(updates).toEqual([]);
+		expect(removed).toEqual([]);
+		expect(await callScheduleTool(ctx(SYSTEM), "schedule_list", {})).toContain(
+			"#1 patrol",
+		);
+	});
+
 	const delegations = (speaker: () => Speaker | undefined) => {
 		const started: Omit<DelegationJob, "id" | "startedAt" | "thread">[] = [];
 		const tools = toolsOf(

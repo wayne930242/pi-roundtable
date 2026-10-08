@@ -244,6 +244,18 @@ function changeable(ctx: ScheduleToolContext, schedule: Schedule): Schedule {
 	return schedule;
 }
 
+/**
+ * The host's own turns, such as a logged error's or an outside webhook's report, read text no one
+ * vouches for, so they leave no schedule behind them that runs later as someone's: they may only
+ * list schedules.
+ */
+function notTheHost(ctx: ScheduleToolContext, refusal: string): void {
+	if (ctx.author.principalId === SYSTEM_PRINCIPAL)
+		throw new ScheduleError(
+			`the host's own turns, such as a report's, ${refusal}`,
+		);
+}
+
 /** Runs one schedule tool against the channel's schedules and returns the answer for the model. */
 export async function callScheduleTool(
 	ctx: ScheduleToolContext,
@@ -254,10 +266,7 @@ export async function callScheduleTool(
 	const limits = limitsOf(ctx);
 	switch (name) {
 		case "schedule_create": {
-			if (ctx.author.principalId === SYSTEM_PRINCIPAL)
-				throw new ScheduleError(
-					"the host's own turns, such as a report's, set up no schedules; ask the owner to set it up",
-				);
+			notTheHost(ctx, "set up no schedules; ask the owner to set it up");
 			const title = text(input, "title", TITLE_CHARS);
 			const prompt = text(input, "prompt", limits.promptChars);
 			const [recurrence, next] = timing(ctx, input);
@@ -314,6 +323,7 @@ export async function callScheduleTool(
 			return `${listed}${await precheckCatalog(ctx)}`;
 		}
 		case "schedule_update": {
+			notTheHost(ctx, "change no schedules; ask the owner to change it");
 			const schedule = changeable(ctx, await own(ctx, input));
 			const change: Parameters<ScheduleToolContext["store"]["update"]>[2] = {};
 			if (input.title !== undefined)
@@ -358,6 +368,7 @@ export async function callScheduleTool(
 			return `Updated #${updated.id} "${updated.title}": ${describeRecurrence(updated.recurrence)}, next run ${zonedStamp(updated.nextRun)}${checked}.`;
 		}
 		case "schedule_cancel": {
+			notTheHost(ctx, "cancel no schedules; ask the owner to cancel it");
 			const schedule = changeable(ctx, await own(ctx, input));
 			await ctx.store.remove(schedule.id, ctx.channel);
 			return `Cancelled #${schedule.id} "${schedule.title}".`;
