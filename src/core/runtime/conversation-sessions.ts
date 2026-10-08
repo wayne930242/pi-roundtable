@@ -12,6 +12,10 @@ import { ConfirmationGate } from "./extensions/confirmation-gate.ts";
 import { PromptSlot } from "./prompt-slot.ts";
 import type { ChannelSession, PiAgentRuntimeOptions } from "./runtime-types.ts";
 import { revisionsKey, skillsKey } from "./runtime-types.ts";
+import {
+	conversationChanged,
+	sessionConversation,
+} from "./session-conversation.ts";
 import type { SessionFactory } from "./session-factory.ts";
 
 /** The open sessions of a runtime's conversations and what is held for each of them. */
@@ -96,7 +100,7 @@ export class ConversationSessions {
 	 */
 	session(
 		key: ChannelKey,
-		request?: Pick<TurnRequest, "channel" | "agent" | "kind">,
+		request?: Pick<TurnRequest, "channel" | "agent" | "kind" | "conversation">,
 	): Promise<ChannelSession> {
 		let pending = this.#sessions.get(key);
 		if (!pending) {
@@ -113,6 +117,7 @@ export class ConversationSessions {
 					ownerAttachmentDir(this.#options.dataDir, channel),
 					agent,
 					request?.kind ?? "owner",
+					await sessionConversation(key, request, this.#options),
 				))();
 			pending.catch(() => this.#sessions.delete(key));
 			this.#sessions.set(key, pending);
@@ -148,6 +153,8 @@ export class ConversationSessions {
 			channelSession.skills !== skillsKey(this.#factory.skillsOf(request.agent))
 		)
 			return "skills changed";
+		if (conversationChanged(channelSession.conversation, request.conversation))
+			return "the conversation's visibility changed";
 		return undefined;
 	}
 

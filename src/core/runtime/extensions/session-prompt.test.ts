@@ -11,7 +11,8 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { ownerMemoryExtension } from "../../modules/memory/owner-memory.ts";
 import type { MemoryStore, SpeakerMemory } from "../../services.ts";
-import { TEST_OWNER as OWNER } from "../../testing/owner.ts";
+import type { Speaker } from "../../speakers.ts";
+import { TEST_OWNER as OWNER, OWNER_SPEAKER } from "../../testing/owner.ts";
 import { agentPromptExtension } from "./agent-prompt.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "session-prompt-"));
@@ -98,6 +99,16 @@ function storeOf(facts: Record<string, string>): MemoryStore {
 	};
 }
 
+/** The memory extension of a session whose turns read `speaker`'s memory, the owner's principal "1". */
+function memoryOf(store: MemoryStore, speaker: Speaker) {
+	return ownerMemoryExtension(store, {
+		ownerId: "1",
+		addressee: OWNER,
+		describesSpeakers: false,
+		whose: () => ({ principalId: speaker.principalId, name: speaker.name }),
+	});
+}
+
 describe("appended system prompt", () => {
 	test("a speaker other than the owner gets their own memory, not the owner's", async () => {
 		const owner = storeOf({ "1": "Drinks oolong tea", "2": "Prefers coffee" });
@@ -111,7 +122,7 @@ describe("appended system prompt", () => {
 			[
 				{
 					name: "owner-memory",
-					factory: ownerMemoryExtension(owner, "1", OWNER, speaker),
+					factory: memoryOf(owner, speaker()),
 				},
 			],
 			[],
@@ -134,7 +145,7 @@ describe("appended system prompt", () => {
 			[
 				{
 					name: "owner-memory",
-					factory: ownerMemoryExtension(owner, "1", OWNER, speaker),
+					factory: memoryOf(owner, speaker()),
 				},
 			],
 			[],
@@ -148,7 +159,7 @@ describe("appended system prompt", () => {
 			[
 				{
 					name: "owner-memory",
-					factory: ownerMemoryExtension(memory, "1", OWNER),
+					factory: memoryOf(memory, OWNER_SPEAKER),
 				},
 			],
 			["You are the assistant."],
@@ -164,7 +175,7 @@ describe("appended system prompt", () => {
 			[
 				{
 					name: "owner-memory",
-					factory: ownerMemoryExtension(memory, "1", OWNER),
+					factory: memoryOf(memory, OWNER_SPEAKER),
 				},
 				{
 					name: "agent-prompt",

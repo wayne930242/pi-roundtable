@@ -192,6 +192,7 @@
 			"ServiceStartedEvent",
 			"Services",
 			"SessionContext",
+			"SessionConversation",
 			"SessionPlan",
 			"SessionTool",
 			"SessionToolSnapshot",

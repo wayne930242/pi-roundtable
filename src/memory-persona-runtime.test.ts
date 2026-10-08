@@ -154,7 +154,10 @@ async function studyRoom(store: MemoryStore, steps: FauxResponseStep[]) {
 					}),
 			},
 			setup: () => ({
-				personas: [{ kind: "study", prompt: () => "You are a tutor." }],
+				personas: [
+					{ kind: "study", prompt: () => "You are a tutor." },
+					{ kind: "quiz", prompt: () => "You ask questions.", memory: "none" },
+				],
 				sessionTools: [
 					memorySessionTool(store, OWNER),
 					{
@@ -191,10 +194,15 @@ async function studyRoom(store: MemoryStore, steps: FauxResponseStep[]) {
 		},
 	);
 	return {
-		run: (speaker: Speaker, channel = "fake:study") =>
+		/** A turn of the speaker's in the channel: shared, or private to them, of the kind given. */
+		run: (
+			speaker: Speaker,
+			channel = "fake:study",
+			options: { private?: boolean; kind?: string } = {},
+		) =>
 			harness.turns.run({
 				channel: channel as `fake:${string}`,
-				kind: "study",
+				kind: options.kind ?? "study",
 				text: "Remember that I like algebra.",
 				speaker,
 				selection: {
@@ -202,6 +210,9 @@ async function studyRoom(store: MemoryStore, steps: FauxResponseStep[]) {
 					tools: ["memory_add", "memory_search", "memory_remove"],
 					groups: [],
 				},
+				...(options.private
+					? { conversation: { visibility: "private" as const } }
+					: {}),
 			}),
 		stop: () => harness.stop(),
 	};
@@ -265,7 +276,7 @@ describe("memory in a persona conversation", () => {
 		}
 	});
 
-	test("the owner's turn in the same kind of conversation keeps the owner memory", async () => {
+	test("the owner's private conversation keeps the owner memory and the owner's words", async () => {
 		const { store, writes } = memoryOf({
 			owner: ["Riley drinks oolong tea"],
 		});
@@ -281,13 +292,15 @@ describe("memory in a persona conversation", () => {
 			fauxAssistantMessage("Noted."),
 		]);
 		try {
-			expect((await room.run(OWNER_SPEAKER)).ok).toBe(true);
+			expect(
+				(await room.run(OWNER_SPEAKER, "fake:riley", { private: true })).ok,
+			).toBe(true);
 			expect(prompt).toContain("## Owner memory");
 			expect(prompt).toContain("Riley drinks oolong tea");
 			expect(prompt).not.toContain("## Memory of");
 			// The tools keep the owner's words, exactly as before.
 			expect(prompt).toContain(
-				"Remember one fact about Riley for future conversations",
+				"Remember one fact about Riley for future conversations, when he asks you to",
 			);
 			expect(prompt).not.toContain("Whoever is speaking");
 			expect(writes).toEqual([
@@ -298,7 +311,125 @@ describe("memory in a persona conversation", () => {
 		}
 	});
 
-	test("an owner-tier speaker under another id, such as remote MCP, keeps the owner memory", async () => {
+	test("in a shared conversation the owner's turn reads the owner memory, and the tools name the speaker", async () => {
+		const { store } = memoryOf({ owner: ["Riley drinks oolong tea"] });
+		let prompt = "";
+		const room = await studyRoom(store, [
+			(context) => {
+				prompt = systemOf(context);
+				return fauxAssistantMessage("Noted.");
+			},
+		]);
+		try {
+			expect((await room.run(OWNER_SPEAKER)).ok).toBe(true);
+			expect(prompt).toContain("## Owner memory");
+			expect(prompt).toContain("Riley drinks oolong tea");
+			expect(prompt).toContain(
+				"Remember one fact about the speaker for future conversations",
+			);
+			expect(prompt).toContain("Whoever is speaking has a memory of their own");
+		} finally {
+			await room.stop();
+		}
+	});
+
+	test("two people's private conversations each carry only their own memory, and memory_add writes their own", async () => {
+		const { store, writes } = memoryOf({
+			owner: ["Riley's bank PIN hint is the cat's name"],
+			"member-7": ["Ada studies for the finals"],
+			"admin-3": ["Kai teaches algebra"],
+		});
+		const prompts: string[] = [];
+		const turn = (fact: string): FauxResponseStep[] => [
+			(context) => {
+				prompts.push(systemOf(context));
+				return call("memory_add", { fact, kind: "core" });
+			},
+			fauxAssistantMessage("Noted."),
+		];
+		const room = await studyRoom(store, [
+			...turn("Ada likes algebra"),
+			...turn("Kai likes geometry"),
+		]);
+		try {
+			expect((await room.run(MEMBER, "fake:ada", { private: true })).ok).toBe(
+				true,
+			);
+			expect((await room.run(ADMIN, "fake:kai", { private: true })).ok).toBe(
+				true,
+			);
+			const [ada = "", kai = ""] = prompts;
+			expect(ada).toContain("Ada studies for the finals");
+			expect(ada).not.toContain("Kai teaches");
+			expect(ada).not.toContain("bank PIN");
+			expect(kai).toContain("Kai teaches algebra");
+			expect(kai).not.toContain("Ada studies");
+			expect(kai).not.toContain("bank PIN");
+			expect(writes).toEqual([
+				{ speaker: "member-7", fact: "Ada likes algebra" },
+				{ speaker: "admin-3", fact: "Kai likes geometry" },
+			]);
+		} finally {
+			await room.stop();
+		}
+	});
+
+	test("a second owner, and a web user at the owner tier, read and change their own memory, never the primary owner's", async () => {
+		const { store, writes } = memoryOf({
+			owner: ["Riley's bank PIN hint is the cat's name"],
+			bo: ["Bo runs the night shift"],
+			"oidc:aXNz:sam": ["Sam plans a trip"],
+		});
+		const prompts: string[] = [];
+		const turn = (fact: string): FauxResponseStep[] => [
+			(context) => {
+				prompts.push(systemOf(context));
+				return call("memory_add", { fact, kind: "core" });
+			},
+			fauxAssistantMessage("Noted."),
+		];
+		const room = await studyRoom(store, [
+			...turn("Bo likes tea"),
+			...turn("Bo likes coffee"),
+			...turn("Sam likes trains"),
+		]);
+		const bo: Speaker = {
+			id: "bo-discord",
+			name: "Bo",
+			tier: "owner",
+			principalId: "bo",
+		};
+		const sam: Speaker = {
+			id: "oidc:aXNz:sam",
+			name: "Sam",
+			tier: "owner",
+			principalId: "oidc:aXNz:sam",
+		};
+		try {
+			expect((await room.run(bo, "fake:room")).ok).toBe(true);
+			expect((await room.run(bo, "fake:bo", { private: true })).ok).toBe(true);
+			expect((await room.run(sam, "fake:sam", { private: true })).ok).toBe(
+				true,
+			);
+			const [shared = "", own = "", web = ""] = prompts;
+			for (const prompt of [shared, own])
+				expect(prompt).toContain("Bo runs the night shift");
+			expect(web).toContain("Sam plans a trip");
+			for (const prompt of prompts) {
+				expect(prompt).not.toContain("bank PIN");
+				expect(prompt).not.toContain("## Owner memory");
+			}
+			expect(writes).toEqual([
+				{ speaker: "bo", fact: "Bo likes tea" },
+				{ speaker: "bo", fact: "Bo likes coffee" },
+				{ speaker: "oidc:aXNz:sam", fact: "Sam likes trains" },
+			]);
+		} finally {
+			await room.stop();
+		}
+	});
+
+	test("the owner's principal under another surface id, as remote MCP's turns are, keeps the owner memory", async () => {
 		const { store, writes } = memoryOf({ owner: ["Riley drinks oolong tea"] });
 		let prompt = "";
 		const room = await studyRoom(store, [
@@ -314,16 +445,81 @@ describe("memory in a persona conversation", () => {
 		try {
 			const remote: Speaker = {
 				id: "remote-mcp",
-				name: "Remote",
+				name: OWNER.name,
 				tier: "owner",
-				principalId: "remote-mcp",
+				principalId: OWNER.id,
 			};
-			expect((await room.run(remote)).ok).toBe(true);
+			expect((await room.run(remote, "fake:mcp-1", { private: true })).ok).toBe(
+				true,
+			);
 			expect(prompt).toContain("## Owner memory");
 			expect(prompt).toContain("Riley drinks oolong tea");
 			expect(writes).toEqual([
 				{ speaker: "owner", fact: "Riley likes algebra" },
 			]);
+		} finally {
+			await room.stop();
+		}
+	});
+
+	test("the host's own turn in a shared conversation reads no one's memory; in a private one, its person's", async () => {
+		const { store, reads } = memoryOf({
+			owner: ["Riley drinks oolong tea"],
+			"member-7": ["Ada studies for the finals"],
+		});
+		const prompts: string[] = [];
+		const look: FauxResponseStep = (context) => {
+			prompts.push(systemOf(context));
+			return fauxAssistantMessage("Noted.");
+		};
+		const room = await studyRoom(store, [look, look, look]);
+		const system: Speaker = {
+			id: "assistant",
+			name: "Assistant",
+			tier: "owner",
+			principalId: "system",
+		};
+		try {
+			expect((await room.run(MEMBER, "fake:ada", { private: true })).ok).toBe(
+				true,
+			);
+			expect((await room.run(system, "fake:ada")).ok).toBe(true);
+			expect((await room.run(system, "fake:room")).ok).toBe(true);
+			const [, own = "", shared = ""] = prompts;
+			expect(own).toContain("Ada studies for the finals");
+			expect(shared).not.toContain("## Owner memory");
+			expect(shared).not.toContain("## Memory of");
+			expect(shared).not.toContain("Riley drinks");
+			expect(reads).not.toContain("system");
+			expect(reads).not.toContain("assistant");
+		} finally {
+			await room.stop();
+		}
+	});
+
+	test("a persona with memory none loads no memory: no section and no tools", async () => {
+		const { store, reads } = memoryOf({ owner: ["Riley drinks oolong tea"] });
+		let request: TranscriptContext | undefined;
+		const room = await studyRoom(store, [
+			(context) => {
+				request = context;
+				return fauxAssistantMessage("Hi.");
+			},
+		]);
+		try {
+			expect(
+				(
+					await room.run(OWNER_SPEAKER, "fake:quiz", {
+						private: true,
+						kind: "quiz",
+					})
+				).ok,
+			).toBe(true);
+			const prompt = request ? systemOf(request) : "";
+			expect(prompt).toContain("You ask questions.");
+			expect(prompt).not.toContain("## Owner memory");
+			expect(prompt).not.toContain("memory_add");
+			expect(reads).toEqual([]);
 		} finally {
 			await room.stop();
 		}

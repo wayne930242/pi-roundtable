@@ -5669,7 +5669,7 @@
 		"tools": [
 			{
 				"name": "ask_user",
-				"description": "Ask Ada a question on a card with buttons in this channel and wait for her answer, within this turn. Use it when you need her decision to continue, instead of ending your turn with a question. The card should read on its own, so put the context she needs in the question too. Offer options when the choices are known; set multi when several may apply and allow_other to let her write her own answer. She has 30 minutes; after that the result says there was no answer.",
+				"description": "Ask the speaker a question on a card with buttons in this channel and wait for the speaker's answer, within this turn. Use it when you need the speaker's decision to continue, instead of ending your turn with a question. The card should read on its own, so put the context the speaker needs in the question too. Offer options when the choices are known; set multi when several may apply and allow_other to let the speaker write the speaker's own answer. The speaker has 30 minutes; after that the result says there was no answer.",
 				"parameters": {
 					"type": "object",
 					"required": [
@@ -5709,7 +5709,7 @@
 						},
 						"allow_other": {
 							"type": "boolean",
-							"description": "She may write an answer besides the options."
+							"description": "The speaker may write an answer besides the options."
 						}
 					},
 					"additionalProperties": false
@@ -5734,7 +5734,7 @@
 			},
 			{
 				"name": "memory_add",
-				"description": "Remember one fact about Ada for future conversations, when she asks you to or when it will clearly matter later. Search first and do not store what is already there. kind core: a stable fact about who she is or how she wants things done; it is shown in every conversation, so keep core facts few and short. kind note: projects, people, references, and other details worth finding later with memory_search. kind event: something happening on a date, shown until that date passes.",
+				"description": "Remember one fact about the speaker for future conversations, when the speaker asks you to or when it will clearly matter later. Search first and do not store what is already there. kind core: a stable fact about who the speaker is or how the speaker wants things done; it is shown in every conversation, so keep core facts few and short. kind note: projects, people, references, and other details worth finding later with memory_search. kind event: something happening on a date, shown until that date passes. Whoever is speaking has a memory of their own, shared by every agent; this reads and changes theirs, not someone else's.",
 				"parameters": {
 					"type": "object",
 					"required": [
@@ -5772,7 +5772,7 @@
 			},
 			{
 				"name": "memory_remove",
-				"description": "Forget remembered facts about Ada. Removes every remembered fact that contains the given text.",
+				"description": "Forget remembered facts about the speaker. Removes every remembered fact that contains the given text. Whoever is speaking has a memory of their own, shared by every agent; this reads and changes theirs, not someone else's.",
 				"parameters": {
 					"type": "object",
 					"required": [
@@ -5788,7 +5788,7 @@
 			},
 			{
 				"name": "memory_search",
-				"description": "Search everything remembered about Ada, including notes and past events. Give a few short keywords separated by spaces, in the language the memory is likely written in; results contain any of them, best matches first.",
+				"description": "Search everything remembered about the speaker, including notes and past events. Give a few short keywords separated by spaces, in the language the memory is likely written in; results contain any of them, best matches first. Whoever is speaking has a memory of their own, shared by every agent; this reads and changes theirs, not someone else's.",
 				"parameters": {
 					"type": "object",
 					"required": [
@@ -5989,7 +5989,7 @@
 		"tools": [
 			{
 				"name": "ask_user",
-				"description": "Ask Ada a question on a card with buttons in this channel and wait for her answer, within this turn. Use it when you need her decision to continue, instead of ending your turn with a question. The card should read on its own, so put the context she needs in the question too. Offer options when the choices are known; set multi when several may apply and allow_other to let her write her own answer. She has 30 minutes; after that the result says there was no answer.",
+				"description": "Ask the speaker a question on a card with buttons in this channel and wait for the speaker's answer, within this turn. Use it when you need the speaker's decision to continue, instead of ending your turn with a question. The card should read on its own, so put the context the speaker needs in the question too. Offer options when the choices are known; set multi when several may apply and allow_other to let the speaker write the speaker's own answer. The speaker has 30 minutes; after that the result says there was no answer.",
 				"parameters": {
 					"type": "object",
 					"required": [
@@ -6029,7 +6029,7 @@
 						},
 						"allow_other": {
 							"type": "boolean",
-							"description": "She may write an answer besides the options."
+							"description": "The speaker may write an answer besides the options."
 						}
 					},
 					"additionalProperties": false
@@ -6054,7 +6054,7 @@
 			},
 			{
 				"name": "memory_add",
-				"description": "Remember one fact about Ada for future conversations, when she asks you to or when it will clearly matter later. Search first and do not store what is already there. kind core: a stable fact about who she is or how she wants things done; it is shown in every conversation, so keep core facts few and short. kind note: projects, people, references, and other details worth finding later with memory_search. kind event: something happening on a date, shown until that date passes.",
+				"description": "Remember one fact about the speaker for future conversations, when the speaker asks you to or when it will clearly matter later. Search first and do not store what is already there. kind core: a stable fact about who the speaker is or how the speaker wants things done; it is shown in every conversation, so keep core facts few and short. kind note: projects, people, references, and other details worth finding later with memory_search. kind event: something happening on a date, shown until that date passes.",
 				"parameters": {
 					"type": "object",
 					"required": [
@@ -6092,7 +6092,7 @@
 			},
 			{
 				"name": "memory_remove",
-				"description": "Forget remembered facts about Ada. Removes every remembered fact that contains the given text.",
+				"description": "Forget remembered facts about the speaker. Removes every remembered fact that contains the given text.",
 				"parameters": {
 					"type": "object",
 					"required": [
@@ -6108,7 +6108,7 @@
 			},
 			{
 				"name": "memory_search",
-				"description": "Search everything remembered about Ada, including notes and past events. Give a few short keywords separated by spaces, in the language the memory is likely written in; results contain any of them, best matches first.",
+				"description": "Search everything remembered about the speaker, including notes and past events. Give a few short keywords separated by spaces, in the language the memory is likely written in; results contain any of them, best matches first.",
 				"parameters": {
 					"type": "object",
 					"required": [

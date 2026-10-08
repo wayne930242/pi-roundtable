@@ -267,6 +267,31 @@ describe("collectContributions", () => {
 		expect(linked.persona("study")).toBe("Changed.");
 	});
 
+	test("a persona's memory is speaker by default, none when it says so, and nothing else", async () => {
+		const linked = linkSessions(
+			await collect([
+				plugin("a", {
+					personas: [
+						{ kind: "study", prompt: () => "p" },
+						{ kind: "quiz", prompt: () => "q", memory: "none" },
+					],
+				}),
+			]),
+		);
+		expect(linked.personaMemory?.("study")).toBe("speaker");
+		expect(linked.personaMemory?.("quiz")).toBe("none");
+		expect(linked.personaMemory?.("owner")).toBe("speaker");
+		await expect(
+			collect([
+				plugin("a", {
+					personas: [
+						{ kind: "quiz", prompt: () => "q", memory: "owner" as "none" },
+					],
+				}),
+			]),
+		).rejects.toThrow('has memory "owner"; expected "speaker" or "none"');
+	});
+
 	test("two personas of one kind are refused, naming both plugins", async () => {
 		const persona = { kind: "study", prompt: () => "p" };
 		await expect(

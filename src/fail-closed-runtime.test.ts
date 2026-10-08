@@ -13,7 +13,7 @@ import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { definePlugin } from "./core/define.ts";
 import { AgentRunError } from "./core/domain/errors.ts";
-import type { TurnRequest } from "./core/domain/ports.ts";
+import type { TurnConversation, TurnRequest } from "./core/domain/ports.ts";
 import { PiAgentRuntime } from "./core/runtime/pi-agent-runtime.ts";
 import type { SessionContext } from "./core/sessions.ts";
 import type { Speaker } from "./core/speakers.ts";
@@ -32,7 +32,11 @@ const SELECTION = { id: "probe", tools: ["probe_task"], groups: [] };
  * A Pi runtime on a faux model whose turns call `probe_task`, a session tool that records whom
  * its session's turn is for and runs a task beside it; agent turns run with a stand-in team.
  */
-async function probeHost(responses: FauxResponseStep[]) {
+async function probeHost(
+	responses: FauxResponseStep[],
+	/** The host's record of each conversation, read when a session is made and the turn names none. */
+	recorded?: TurnConversation,
+) {
 	const dir = mkdtempSync(join(tmpdir(), "roundtable-fail-closed-"));
 	const core = createFauxCore({ provider: "faux", models: [{ id: "faux-1" }] });
 	core.setResponses(responses);
@@ -82,6 +86,7 @@ async function probeHost(responses: FauxResponseStep[]) {
 						thinking: "off",
 						effort: { judge: async () => "off" },
 						sessions: deps.sessions,
+						...(recorded ? { conversationOf: async () => recorded } : {}),
 						toolTiers: deps.toolTiers,
 						logger: deps.logger,
 						confirmations: deps.confirmations,
@@ -296,6 +301,103 @@ test("a task asked for between turns, with no turn to take its tier from, is ref
 			"no turn",
 		);
 		expect(host.pending()).toBe(1);
+	} finally {
+		await host.done();
+	}
+});
+
+test("in a private conversation, another principal's turn is refused before the model is asked; its person's and the host's run", async () => {
+	const host = await probeHost([
+		fauxAssistantMessage([fauxText("Hi, Sam.")]),
+		fauxAssistantMessage([fauxText("Report noted.")]),
+	]);
+	const conversation = { visibility: "private", principalId: "p_sam" } as const;
+	const turn = (speaker: Speaker) =>
+		host.runtime.runTurn({
+			channel: "fake:sam",
+			selection: SELECTION,
+			text: "Hello.",
+			kind: "helper",
+			speaker,
+			conversation,
+		});
+	try {
+		const other = await turn({
+			...MEMBER,
+			principalId: "p_ann",
+			tier: "owner",
+		});
+		expect(other.ok).toBe(false);
+		if (!other.ok) expect(other.error.message).toContain("private to p_sam");
+		expect(host.pending()).toBe(2);
+		expect((await turn(MEMBER)).ok).toBe(true);
+		const system = {
+			id: "assistant",
+			name: "Assistant",
+			tier: "owner",
+			principalId: "system",
+		} as const;
+		expect((await turn(system)).ok).toBe(true);
+	} finally {
+		await host.done();
+	}
+});
+
+test("a session the turn names no conversation for is as the host recorded it, and a turn naming another rebuilds it", async () => {
+	const host = await probeHost(
+		[
+			fauxAssistantMessage([fauxText("One.")]),
+			fauxAssistantMessage([fauxText("Two.")]),
+		],
+		{ visibility: "private", principalId: "p_sam" },
+	);
+	const turn = (conversation?: TurnConversation) =>
+		host.runtime.runTurn({
+			channel: "fake:sam",
+			selection: SELECTION,
+			text: "Hello.",
+			kind: "helper",
+			speaker: MEMBER,
+			...(conversation ? { conversation } : {}),
+		});
+	try {
+		expect((await turn()).ok).toBe(true);
+		expect((await turn({ visibility: "shared" })).ok).toBe(true);
+		const made = host.sessions.filter((s) => s.homeChannel === "fake:sam");
+		expect(made.map((session) => session.conversation)).toEqual([
+			{ visibility: "private", principalId: "p_sam" },
+			{ visibility: "shared" },
+		]);
+		// A private conversation of someone the host knows nothing of addresses the speaker.
+		expect(made[0]?.addressee.name).toBe("the speaker");
+	} finally {
+		await host.done();
+	}
+});
+
+test("a task works for whom its turn's conversation serves", async () => {
+	let worker: SessionContext["conversation"] | undefined;
+	let host: Awaited<ReturnType<typeof probeHost>> | undefined;
+	host = await probeHost([
+		fauxAssistantMessage([fauxToolCall("probe_task", {})], {
+			stopReason: "toolUse",
+		}),
+		() => {
+			worker = host?.sessions.at(-1)?.conversation;
+			return fauxAssistantMessage([fauxText("Found it.")]);
+		},
+		fauxAssistantMessage([fauxText("Done.")]),
+	]);
+	try {
+		await host.runtime.runTurn({
+			channel: "fake:sam",
+			selection: SELECTION,
+			text: "Look it up.",
+			kind: "helper",
+			speaker: MEMBER,
+			conversation: { visibility: "private", principalId: "p_sam" },
+		});
+		expect(worker).toEqual({ visibility: "private", principalId: "p_sam" });
 	} finally {
 		await host.done();
 	}

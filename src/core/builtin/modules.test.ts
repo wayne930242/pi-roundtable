@@ -22,7 +22,7 @@ import {
 	GROUP,
 	HOME,
 	OUTSIDE,
-	privately,
+	privateTo,
 	registered,
 	scout,
 	seat,
@@ -97,21 +97,16 @@ describe("modulesPlugin", () => {
 				kept(id, id === 1 ? OWNER_SPEAKER.principalId : "p_kai"),
 		} as unknown as ScheduleStore;
 		const listed = async (visibility?: "private" | "shared") => {
-			const setup = await setUpModules({
-				schedules,
-				conversations: {
-					get: async (key) =>
-						visibility && key === HOME
-							? ({
-									key,
-									visibility,
-									principalId: OWNER_SPEAKER.principalId,
-								} as unknown as ConversationRecord)
-							: undefined,
-				},
-			});
+			const setup = await setUpModules({ schedules });
+			const session = context(undefined, HOME);
 			const list = (
-				await registered(setup, context(undefined, HOME), "schedules")
+				await registered(
+					setup,
+					visibility === "private"
+						? privateTo(session, OWNER_SPEAKER.principalId)
+						: session,
+					"schedules",
+				)
 			).find((tool) => tool.name === "schedule_list");
 			return (await list?.execute("1", {}))?.content[0]?.text ?? "";
 		};
@@ -139,14 +134,10 @@ describe("modulesPlugin", () => {
 	});
 
 	test("a conversation without a chat channel reports in the creator's direct messages: the single owner's, as in 0.8", async () => {
-		const setup = await setUpModules({
-			conversations: {
-				get: privately({ [OUTSIDE]: OWNER_SPEAKER.principalId }),
-			},
-		});
+		const setup = await setUpModules();
 		const [delegate] = await registered(
 			setup,
-			context(undefined, OUTSIDE),
+			privateTo(context(undefined, OUTSIDE), OWNER_SPEAKER.principalId),
 			"delegate",
 		);
 		await delegate?.execute("1", { title: "t", task: "look it up" });
@@ -170,9 +161,8 @@ describe("modulesPlugin", () => {
 		const setup = await setUpModules({
 			schedules,
 			direct: { "1": OWNER_CHANNEL, p_ann: "discord:ann-dm" },
-			conversations: { get: privately({ [OUTSIDE]: "p_ann" }) },
 		});
-		const session = contextOf(ANN, OUTSIDE);
+		const session = privateTo(contextOf(ANN, OUTSIDE), "p_ann");
 		const create = (await registered(setup, session, "schedules")).find(
 			(tool) => tool.name === "schedule_create",
 		);
@@ -213,9 +203,8 @@ describe("modulesPlugin", () => {
 				schedules,
 				direct,
 				takesBackground: () => background,
-				conversations: { get: privately({ [OUTSIDE]: "p_ann" }) },
 			});
-			const session = contextOf(ANN, OUTSIDE);
+			const session = privateTo(contextOf(ANN, OUTSIDE), "p_ann");
 			const create = (await registered(setup, session, "schedules")).find(
 				(tool) => tool.name === "schedule_create",
 			);
@@ -256,10 +245,12 @@ describe("modulesPlugin", () => {
 			} as unknown as ScheduleStore,
 			direct: { p_ann: "discord:ann-dm" },
 			online: () => online,
-			conversations: { get: privately({ "mcp:s1": "p_ann" }) },
 		});
 		// Built between turns, while Discord is down: the tools stay, since Ann has a direct channel.
-		const session = { ...contextOf(ANN, "mcp:s1"), speaker: () => speaker };
+		const session = {
+			...privateTo(contextOf(ANN, "mcp:s1"), "p_ann"),
+			speaker: () => speaker,
+		};
 		const tools = [
 			...(await registered(setup, session, "schedules")),
 			...(await registered(setup, session, "delegate")),
@@ -289,10 +280,12 @@ describe("modulesPlugin", () => {
 			const setup = await setUpModules({
 				direct,
 				takesBackground,
-				conversations: { get: privately({ "mcp:s1": "p_ann" }) },
 			});
 			// The real runtime builds a private session before setting its current speaker.
-			const session = { ...contextOf(ANN, "mcp:s1"), speaker: () => undefined };
+			const session = {
+				...privateTo(contextOf(ANN, "mcp:s1"), "p_ann"),
+				speaker: () => undefined,
+			};
 			return [
 				...(await registered(setup, session, "schedules")),
 				...(await registered(setup, session, "delegate")),
@@ -324,10 +317,9 @@ describe("modulesPlugin", () => {
 				speaker: () => speaker,
 			};
 			for (const extension of ["schedules", "delegate"])
-				expect(await registered(setup, session, extension)).toEqual([]);
+				expect(factoryOf(setup, extension, session)).toBeNull();
 		}
 		const setup = await setUpModules({
-			conversations: { get: privately({ "mcp:s1": "p_ann" }) },
 			direct: new Proxy(
 				{},
 				{
@@ -339,7 +331,11 @@ describe("modulesPlugin", () => {
 		});
 		for (const extension of ["schedules", "delegate", "notify"])
 			expect(
-				await registered(setup, contextOf(ANN, "mcp:s1"), extension),
+				await registered(
+					setup,
+					privateTo(contextOf(ANN, "mcp:s1"), "p_ann"),
+					extension,
+				),
 			).toEqual([]);
 	});
 

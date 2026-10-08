@@ -1,5 +1,4 @@
 import type { ExtensionFactory } from "@earendil-works/pi-coding-agent";
-import type { ConversationRecord } from "../../conversations/conversation-registry.ts";
 import { SYSTEM_PRINCIPAL } from "../../identity/principal-store.ts";
 import type { OwnerIdentity } from "../../identity.ts";
 import type { Logger } from "../../log.ts";
@@ -12,10 +11,13 @@ import { notifyExtension } from "./notify.ts";
 
 export interface SessionNotifyDeps {
 	directChannels: DirectChannels;
-	/** The host's record of a session's conversation; undefined for an agent's, or one it has no record of. */
-	recordOf(session: SessionContext): Promise<ConversationRecord | undefined>;
 	/** The primary owner: the host's own turns, such as a report's, notify them, as 0.8 did. */
 	owner: OwnerIdentity & { id: string };
+	/**
+	 * Whether a notice in a shared conversation can only be the primary owner's: the host has no
+	 * other owner, and only owners may use notify. Its description then names them, as in 0.8.
+	 */
+	onlyOwnerNotified(): Promise<boolean>;
 	logger: Logger;
 }
 
@@ -55,13 +57,24 @@ export function sessionNotify(
 			};
 		return { principalId: speaker.principalId };
 	};
+	// A failed lookup names no one: the speaker's words are true whoever it is.
+	const onlyOwner = (session: SessionContext) =>
+		deps.onlyOwnerNotified().catch((error: unknown) => {
+			logger.warn(
+				{ channel: session.homeChannel, err: error },
+				"could not tell whether the primary owner is the only owner",
+			);
+			return false;
+		});
 	return (session) => {
 		const providers = directChannels.providers();
 		if (providers.length === 0) return null;
+		const { conversation } = session;
+		const own =
+			conversation.visibility === "private"
+				? conversation.principalId
+				: undefined;
 		return async (pi) => {
-			const record = await deps.recordOf(session);
-			const own =
-				record?.visibility === "private" ? record.principalId : undefined;
 			let reaching = providers;
 			if (own !== undefined) {
 				try {
@@ -83,7 +96,9 @@ export function sessionNotify(
 					recipient: async () => recipientOf(session, own),
 					channels: labels(reaching),
 				},
-				owner,
+				own === undefined && (await onlyOwner(session))
+					? owner
+					: session.addressee,
 			)(pi);
 		};
 	};

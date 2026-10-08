@@ -1,5 +1,10 @@
 import { expect, test } from "bun:test";
-import { PluginError, type SessionContext, SKILLS } from "pi-roundtable";
+import {
+	PluginError,
+	type SessionContext,
+	SKILLS,
+	THE_SPEAKER,
+} from "pi-roundtable";
 import { servicePair, testPlugin } from "pi-roundtable/testing";
 import { coding } from "./coding-plugin.ts";
 
@@ -9,6 +14,9 @@ function session(kind: string): SessionContext {
 		homeChannel: "test:room",
 		turnChannel: "test:room",
 		compaction: { wrap: (factory) => factory },
+		conversation: { visibility: "shared" },
+		addressee: THE_SPEAKER,
+		memory: "speaker",
 		speaker: () => undefined,
 		runTask: async () => "",
 	};

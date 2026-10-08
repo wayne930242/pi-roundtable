@@ -7,6 +7,8 @@ import type {
 import type { AgentSessions, LoadedSkill } from "../contract/runtime.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
 import type { InterimTextMode } from "../domain/interim.ts";
+import type { TurnConversation } from "../domain/ports.ts";
+import type { Principal } from "../identity/principal-store.ts";
 import type { OwnerIdentity } from "../identity.ts";
 import type { PromptScope, Prompts } from "../interactions/prompts.ts";
 import type { Logger } from "../log.ts";
@@ -15,10 +17,10 @@ import type { LinkedSessions } from "../plugin.ts";
 import {
 	planOrder,
 	type SessionContext,
+	type SessionConversation,
 	type SessionPlan,
 	type SessionTool,
 } from "../sessions.ts";
-import type { Speaker } from "../speakers.ts";
 import type { ToolTiers } from "../tool-tiers.ts";
 import type { PendingConfirmationStore } from "./pending-confirmation-store.ts";
 
@@ -33,8 +35,18 @@ export type CompactionEnd = Extract<
 export const TRANSCRIPT_ENTRY_CHARS = 1000;
 
 export interface PiAgentRuntimeOptions {
-	/** Who the conversations serve, as prompts and tool results name them. */
-	owner: OwnerIdentity;
+	/**
+	 * The primary owner, by their principal id: their conversations' prompts and tool results name
+	 * them as configured, and the host's own turns address them.
+	 */
+	owner: OwnerIdentity & { id: string };
+	/**
+	 * The host's record of a conversation, read when its session is made and the turn names none,
+	 * such as a session made between turns; without it, or without a record, it is shared.
+	 */
+	conversationOf?: (key: ChannelKey) => Promise<TurnConversation | undefined>;
+	/** A principal's name and pronouns, which a private conversation's tool descriptions use. */
+	principalOf?: (id: string) => Promise<Principal | undefined>;
 	agentDir: string;
 	/** Shared by the host's sessions, so logins refresh in one place. */
 	modelRuntime: ModelRuntime;
@@ -127,4 +139,8 @@ export interface ChannelSession {
 	revisions: string;
 	/** The skills an agent session was built with, as skillsKey. */
 	skills: string;
+	/** Whom the session's conversation serves, fixed when it was built. */
+	conversation: SessionConversation;
+	/** Whom its tool descriptions address. */
+	addressee: OwnerIdentity;
 }

@@ -17,6 +17,7 @@ import type { LinkedSessions } from "../plugin.ts";
 import {
 	planOrder,
 	type SessionContext,
+	type SessionConversation,
 	type SessionPlan,
 	type ToolSelection,
 	type TransientTask,
@@ -24,7 +25,7 @@ import {
 import { activeToolsExtension } from "../shared/active-tools.ts";
 import { packageDir } from "../shared/package-dir.ts";
 import { readAttachmentExtension } from "../shared/read-attachment-tool.ts";
-import { addressee, type Speaker, THE_SPEAKER } from "../speakers.ts";
+import { type Speaker, THE_SPEAKER } from "../speakers.ts";
 import { currentToolNames } from "../tool-tiers.ts";
 import {
 	CompactionTiers,
@@ -52,6 +53,7 @@ import {
 	sessionExtensions,
 	skillsKey,
 } from "./runtime-types.ts";
+import { sessionAddressee, turnAddressee } from "./session-conversation.ts";
 
 /** What a session factory asks of the runtime that owns the turns. */
 export interface SessionFactoryDeps {
@@ -243,6 +245,8 @@ export class SessionFactory {
 		attachmentDir: string,
 		agent: AgentTurnScope | undefined,
 		kind: string,
+		/** Whom the conversation serves, fixed for the session's life. */
+		conversation: SessionConversation,
 		/** The conversation whose running turn the session acts in, when not its own: a worker's. */
 		turn?: ChannelKey,
 	): Promise<ChannelSession> {
@@ -250,10 +254,15 @@ export class SessionFactory {
 		// An agent's prompt is set before each run; the other kinds are refused here, before a session is built.
 		const persona = agent ? undefined : this.personaOf(kind);
 		const skills = this.skillsOf(agent);
+		const addressee = agent
+			? THE_SPEAKER
+			: sessionAddressee(conversation, this.#options.owner);
 		const state = {
 			tools: [] as readonly string[],
 			revisions: revisionsKey(this.plan),
 			skills: skillsKey(skills),
+			conversation,
+			addressee,
 		};
 		const awaited = planOrder(this.plan).flatMap(
 			(tool) => tool.snapshot().awaitTools ?? [],
@@ -284,6 +293,12 @@ export class SessionFactory {
 						),
 					),
 			},
+			conversation,
+			addressee,
+			// An agent's conversations read each speaker's memory; another kind's, as its persona says.
+			memory: agent
+				? "speaker"
+				: (this.link().personaMemory?.(kind) ?? "speaker"),
 			speaker: () => this.#deps.speaker(turnKey),
 			runTask: (task) =>
 				this.#deps.runTask({ turn: turnKey, home: channel }, task),
@@ -302,10 +317,12 @@ export class SessionFactory {
 			extensionFactories: sessionExtensions(this.plan, context, {
 				readAttachment: readAttachmentExtension(attachmentDir),
 				confirmationGate: confirmationGateExtension(gate, slot),
-				askUser: askUserExtension(
-					slot,
-					agent ? THE_SPEAKER : this.#options.owner,
-					() => addressee(this.#deps.speaker(turnKey), this.#options.owner),
+				askUser: askUserExtension(slot, addressee, () =>
+					turnAddressee(
+						this.#deps.speaker(turnKey),
+						state,
+						this.#options.owner,
+					),
 				),
 				selfCompactGuard: selfCompactGuardExtension(),
 				activeTools: activeToolsExtension(() => state.tools),

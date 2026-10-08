@@ -271,6 +271,7 @@ export type {
 	AgentTurnScope,
 	ChannelKey,
 	SessionContext,
+	SessionConversation,
 	SessionPlan,
 	SessionTool,
 	SessionToolSnapshot,

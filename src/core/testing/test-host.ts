@@ -28,6 +28,7 @@ import { CompactionTiers } from "../runtime/compaction-tiers.ts";
 import { sessionExtensions } from "../runtime/runtime-types.ts";
 import { IDENTITY } from "../services.ts";
 import type { AgentTurnScope, SessionContext } from "../sessions.ts";
+import { THE_SPEAKER } from "../speakers.ts";
 import { testDatabaseUrl } from "./database.ts";
 
 export interface TestHostOptions {
@@ -306,6 +307,9 @@ export async function testHost(
 			compaction: {
 				wrap: (compactor) => tiers.wrapCompactor(compactor, () => undefined),
 			},
+			conversation: { visibility: "shared" },
+			addressee: THE_SPEAKER,
+			memory: "speaker",
 			speaker: () => undefined,
 			runTask: async () => {
 				throw new Error("a test host session cannot run tasks");

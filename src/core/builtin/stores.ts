@@ -1,3 +1,4 @@
+import { SYSTEM_PRINCIPAL } from "../identity/principal-store.ts";
 import type { OwnerIdentity } from "../identity.ts";
 import { ownerMemoryExtension } from "../modules/memory/owner-memory.ts";
 import { PgMemoryStore } from "../modules/memory/owner-memory-store.ts";
@@ -5,8 +6,8 @@ import { memoryPrecheckRegistry } from "../modules/schedules/prechecks.ts";
 import { PgScheduleStore } from "../modules/schedules/schedule-store.ts";
 import type { RoundtablePlugin } from "../plugin.ts";
 import { MEMORY, type MemoryStore, PRECHECKS, SCHEDULES } from "../services.ts";
-import type { SessionTool } from "../sessions.ts";
-import { THE_SPEAKER, type Tier } from "../speakers.ts";
+import type { SessionContext, SessionTool } from "../sessions.ts";
+import type { Tier } from "../speakers.ts";
 import { fixed } from "./session-tool.ts";
 
 export interface MemoryOptions {
@@ -21,29 +22,47 @@ export const MEMORY_TIERS: Readonly<Record<string, Tier>> = {
 	memory_remove: "member",
 };
 
-/** The memory tools and prompt block of every conversation, over the given store. */
+/**
+ * Whose memory a session's running turn reads: a private conversation's person's, whoever speaks
+ * in it, and in a shared one each turn's speaker's; never by tier, so a second owner reads their
+ * own. The host's own turns read no one's in a shared conversation.
+ */
+function memoryOwner(
+	session: SessionContext,
+): { principalId: string; name: string } | undefined {
+	const speaker = session.speaker();
+	const { conversation } = session;
+	if (conversation.visibility === "private") {
+		const { principalId, principal } = conversation;
+		// A principal 0.8 left is named by their id until someone names them; their speaker has a name.
+		const named =
+			principal && principal.displayName !== principal.id
+				? principal.displayName
+				: undefined;
+		const name =
+			named ??
+			(speaker?.principalId === principalId ? speaker.name : principalId);
+		return { principalId, name };
+	}
+	if (!speaker || speaker.principalId === SYSTEM_PRINCIPAL) return undefined;
+	return { principalId: speaker.principalId, name: speaker.name };
+}
+
+/** The memory tools and prompt block of every conversation, over the given store; none for a persona without memory. */
 export function memorySessionTool(
 	memory: MemoryStore,
 	owner: MemoryOptions["owner"],
 ): SessionTool {
-	return fixed("owner-memory", (session) => {
-		// An agent session serves every speaker, so its tools name none.
-		if (session.agent)
-			return ownerMemoryExtension(
-				memory,
-				owner.id,
-				THE_SPEAKER,
-				session.speaker,
-			);
-		// Any other conversation may admit a member or an admin, who reads and changes their own
-		// memory; an owner-tier speaker, such as remote MCP, speaks as the owner.
-		const speaker = () => {
-			const current = session.speaker();
-			return current?.tier === "owner" ? undefined : current;
-		};
-		// Its tools keep the owner's words, so the owner's own chats read as before.
-		return ownerMemoryExtension(memory, owner.id, owner, speaker, false);
-	});
+	return fixed("owner-memory", (session) =>
+		session.memory === "none"
+			? null
+			: ownerMemoryExtension(memory, {
+					ownerId: owner.id,
+					addressee: session.addressee,
+					describesSpeakers: session.conversation.visibility === "shared",
+					whose: () => memoryOwner(session),
+				}),
+	);
 }
 
 /**

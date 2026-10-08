@@ -7,6 +7,8 @@ import { skillsPlugin } from "../builtin/skills.ts";
 import { memoryPlugin } from "../builtin/stores.ts";
 import type { ConversationRegistry } from "../conversations/conversation-registry.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
+import type { IdentityService } from "../identity/identity-service.ts";
+import type { Principal } from "../identity/principal-store.ts";
 import { silentLogger } from "../log.ts";
 import { PERSONAL_TARGET } from "../modules/background/personal-target.ts";
 import type { SkillStore } from "../modules/skills/skill-store.ts";
@@ -23,7 +25,15 @@ import {
 import { ServiceRegistry } from "../registry/services.ts";
 import { surfacePort } from "../routing/surface-port.ts";
 import type { AgentServer, MemoryStore, ScheduleStore } from "../services.ts";
-import { AGENTS, CONVERSATIONS, MEMORY, SCHEDULES } from "../services.ts";
+import {
+	AGENTS,
+	CONVERSATIONS,
+	IDENTITY,
+	MEMORY,
+	SCHEDULES,
+} from "../services.ts";
+import type { Tier } from "../speakers.ts";
+import { toolTiers } from "../tool-tiers.ts";
 
 /** What the modules' tools did, for a test to read. */
 export interface ModuleRecord {
@@ -42,6 +52,13 @@ export interface ModuleRecord {
 }
 
 export const OWNER_CHANNEL: ChannelKey = "discord:owner-dm";
+
+/** The primary owner the modules serve: principal "1". */
+export const MODULES_OWNER = {
+	id: "1",
+	name: "Owner",
+	pronouns: { subject: "they", object: "them", possessive: "their" },
+};
 
 /** The direct messages the stand-in Discord provider reaches by default: the owner's, principal "1". */
 const DIRECT: Readonly<Record<string, ChannelKey>> = { "1": OWNER_CHANNEL };
@@ -73,6 +90,10 @@ export async function setUpModules(
 		 * while it does not; `knows` answers from its records either way. Default always.
 		 */
 		online?: () => boolean;
+		/** The host's owners, as `IDENTITY` lists them; by default there is no identity service. */
+		owners?: readonly Principal[];
+		/** The operator's tool tiers; by default none, so notify stays the owners'. */
+		toolTiers?: Readonly<Record<string, Tier>>;
 		/** The modules' options besides the test's own. */
 		modules?: Partial<ModulesOptions>;
 	} = {},
@@ -110,11 +131,7 @@ export async function setUpModules(
 			]
 		: [];
 	const plugin = modulesPlugin({
-		owner: {
-			id: "1",
-			name: "Owner",
-			pronouns: { subject: "they", object: "them", possessive: "their" },
-		},
+		owner: MODULES_OWNER,
 		assistant: "Assistant",
 		// SAFETY: a worker of the test's own replaces the one that would read the runtime.
 		modelRuntime: {} as ModelRuntime,
@@ -138,6 +155,14 @@ export async function setUpModules(
 			CONVERSATIONS,
 			options.conversations as unknown as ConversationRegistry,
 		);
+	if (options.owners) {
+		const owners = options.owners;
+		// SAFETY: the modules ask the identity service for the owners and a principal by id only.
+		services.preset(IDENTITY, {
+			owners: async () => owners,
+			principal: async (id: string) => owners.find((owner) => owner.id === id),
+		} as unknown as IdentityService);
+	}
 	if (options.agentChannelOf)
 		// SAFETY: the schedule tools ask the agent team for a channel and nothing else.
 		services.preset(AGENTS, {
@@ -190,6 +215,7 @@ export async function setUpModules(
 		},
 		surfaces,
 		directChannels: directChannelsPort(() => providers, surfaces),
+		toolTiers: toolTiers(options.toolTiers),
 	} as unknown as Omit<PluginContext, "services">;
 	const contribution = await services.setUp(plugin, () =>
 		plugin.setup(pluginContext(plugin, context, services.forPlugin(plugin))),

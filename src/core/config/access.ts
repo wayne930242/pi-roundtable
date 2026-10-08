@@ -6,7 +6,7 @@ import {
 	rulesOfSpeakerMap,
 } from "../identity/access-policy.ts";
 import { parseIdentity } from "../identity/actor-facts.ts";
-import type { OwnerIdentity } from "../identity.ts";
+import { PRONOUNS } from "../identity.ts";
 import type { Logger } from "../log.ts";
 import type { TierMembers } from "../speakers.ts";
 import type { Pronouns, ResolvedConfig, RoundtableConfig } from "./config.ts";
@@ -185,13 +185,6 @@ export function warnDeprecations(
 		logger.warn(`deprecated: ${message}`);
 	}
 }
-
-/** Each pronoun choice in the words prompts use. */
-const PRONOUNS: Record<Pronouns, OwnerIdentity["pronouns"]> = {
-	he: { subject: "he", object: "him", possessive: "his" },
-	she: { subject: "she", object: "her", possessive: "her" },
-	they: { subject: "they", object: "them", possessive: "their" },
-};
 
 /** The access rules and the primary owner, from `access` or the deprecated `owner` and `speakers`. */
 export function accessOf(

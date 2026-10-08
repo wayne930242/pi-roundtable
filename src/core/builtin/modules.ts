@@ -35,7 +35,6 @@ import { splitReply } from "../presentation/reply-splitter.ts";
 import {
 	AGENTS,
 	BACKGROUND_TURNS,
-	CONVERSATIONS,
 	DELEGATION,
 	IDENTITY,
 	PRECHECKS,
@@ -186,13 +185,12 @@ export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 				if (surfaces.of(home))
 					return conversations.takesBackground(home) ? extension() : null;
 				if (directChannels.providers().length === 0) return null;
+				// Only a conversation recorded private has a person to run its work for: a session
+				// outlives the turn it is built in, so whoever speaks then decides nothing.
+				const { conversation } = session;
+				if (session.agent || conversation.visibility !== "private") return null;
+				const own = conversation.principalId;
 				return async (pi) => {
-					const record = await recordOf(session);
-					// Only a conversation recorded private has a person to run its work for: a session
-					// outlives the turn it is built in, so whoever speaks then decides nothing.
-					const own =
-						record?.visibility === "private" ? record.principalId : undefined;
-					if (own === undefined) return;
 					// Only whether a direct channel knows them, without the network; the conversation there,
 					// and whether a claim takes its turns, are checked when a tool runs.
 					try {
@@ -207,22 +205,15 @@ export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 					await extension()(pi);
 				};
 			};
-			// Whose a conversation is, read when a tool runs: an agent's serves everyone; another is
-			// as the host recorded it, and one it has no record of is shared on a chat surface and the
-			// speaker's own without one, where its schedules are kept in a conversation it is not.
-			// The host's record of a session's conversation; an agent's is not recorded.
-			const recordOf = async (session: SessionContext) =>
-				session.agent
-					? undefined
-					: services.find(CONVERSATIONS)?.get(session.homeChannel);
+			// Whose a conversation is, as its session was made: an agent's serves everyone; another's
+			// schedules are its person's in a private one, and the speaker's own in one no chat surface
+			// carries, where its schedules are kept in a conversation it is not.
 			const visibility =
 				(session: SessionContext) =>
 				async (): Promise<"private" | "shared"> => {
 					if (session.agent) return "shared";
-					const record = await recordOf(session);
-					if (!record)
-						return surfaces.of(session.homeChannel) ? "shared" : "private";
-					return record.visibility === "private" ? "private" : "shared";
+					if (session.conversation.visibility === "private") return "private";
+					return surfaces.of(session.homeChannel) ? "shared" : "private";
 				};
 			const principalOf = identity ? legacyPrincipalsOf(identity) : undefined;
 			// A reporter for an ops agent is the agent server's to connect.
@@ -282,7 +273,14 @@ export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 				sessionTools: [
 					fixed(
 						"notify",
-						sessionNotify({ directChannels, recordOf, owner, logger }),
+						sessionNotify({
+							directChannels,
+							owner,
+							logger,
+							onlyOwnerNotified: async () =>
+								toolTiers.minTier("notify") === "owner" &&
+								(identity ? (await identity.owners()).length <= 1 : true),
+						}),
 					),
 					fixed("schedules", (session) =>
 						offered(session, () =>

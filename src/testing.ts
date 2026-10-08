@@ -78,7 +78,7 @@ import {
 	RUNTIME,
 } from "./core/services.ts";
 import type { ChannelKey, SessionContext } from "./core/sessions.ts";
-import type { Speaker } from "./core/speakers.ts";
+import { type Speaker, THE_SPEAKER } from "./core/speakers.ts";
 import { mapIdentity } from "./core/testing/map-identity.ts";
 import { type ToolTierTable, toolTiers } from "./core/tool-tiers.ts";
 
@@ -603,6 +603,9 @@ export async function testPlugin(
 				homeChannel: channel,
 				turnChannel: channel,
 				compaction: { wrap: (factory) => factory },
+				conversation: { visibility: "shared" },
+				addressee: THE_SPEAKER,
+				memory: "speaker",
 				speaker: () => runOptions?.speaker,
 				runTask: async () => {
 					throw new Error("test session cannot run tasks");

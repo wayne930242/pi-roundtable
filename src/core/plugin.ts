@@ -145,6 +145,12 @@ export interface Persona {
 	 * is in the host's language.
 	 */
 	prompt(): string;
+	/**
+	 * Whose memory its conversations read: `"speaker"` (the default), the conversation's person in a
+	 * private one and each turn's speaker in a shared one, or `"none"`: no memory tools and no
+	 * memory in the prompt.
+	 */
+	memory?: "speaker" | "none";
 }
 
 /** What a plugin adds to the process; a plugin that adds nothing is refused. */
@@ -247,6 +253,8 @@ export interface LinkedSessions {
 	prompt: readonly PromptSection[];
 	/** The prompt of a conversation kind, from the plugin that contributes its persona; undefined when none does. */
 	persona(kind: string): string | undefined;
+	/** Whose memory conversations of the kind read, as its persona declares; "speaker" when it declares none. */
+	personaMemory?(kind: string): "speaker" | "none";
 	/** Every tool name plugins require at startup, each once. */
 	requiredTools: readonly string[];
 	/** The tools plugins defined for agents, by name. */

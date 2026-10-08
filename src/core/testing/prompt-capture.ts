@@ -219,20 +219,23 @@ function captured(context: TranscriptContext): CapturedPrompt {
 	};
 }
 
-interface CaptureHost {
+/** A host booted on the faux model: its plugins' context, and what the model saw during an action. */
+export interface CaptureHost {
 	context: PluginContext;
 	capture(action: () => Promise<unknown>): Promise<CapturedPrompt>;
 	dirs: string[];
 	stop(): Promise<void>;
 }
 
-/** Boots `defineRoundtable` on the faux model, with or without the stand-in Discord. */
 /** How the capture hosts write their owner: the 0.8 `owner`, or the same person in `access`. */
 export type CaptureForm = "owner" | "access";
 
-async function captureHost(
+/** Boots `defineRoundtable` on the faux model, with or without the stand-in Discord. */
+export async function captureHost(
 	withDiscord: boolean,
 	form: CaptureForm,
+	/** The host's database; by default the test server's shared one. */
+	databaseUrl = testDatabaseUrl,
 ): Promise<CaptureHost> {
 	const dataDir = mkdtempSync(join(tmpdir(), "roundtable-prompt-capture-"));
 	const { modelRuntime, capture } = await fauxModel(dataDir);
@@ -252,7 +255,7 @@ async function captureHost(
 						],
 					},
 				}),
-		database: { url: testDatabaseUrl },
+		database: { url: databaseUrl },
 		dataDir,
 		workDir: dataDir,
 		model: "faux/faux-1",
@@ -417,19 +420,34 @@ export async function capturePrompts(
 				),
 			),
 		);
-		const persona = (channel: ChannelKey, speaker: Speaker) =>
+		// Each run's conversations are new ones: the registry keeps how a key was first recorded.
+		const persona = (
+			channel: ChannelKey,
+			speaker: Speaker,
+			visibility: "private" | "shared",
+		) =>
 			discord.capture(() =>
 				context.turns
-					.run({ channel, kind: "study", text: "Hello.", speaker })
+					.run({
+						channel,
+						kind: "study",
+						text: "Hello.",
+						speaker,
+						conversation: { visibility },
+					})
 					.then(ok),
 			);
+		// The owner's own conversation is the owner principal's private one, and reads as in 0.8.
 		out["c owner persona conversation"] = await persona(
-			"fake:study-owner",
+			`fake:study-owner-${crypto.randomUUID()}`,
 			CAPTURE_OWNER_SPEAKER,
+			"private",
 		);
+		// A room a member speaks in is shared: since 0.9 its tools name the speaker, not the owner.
 		out["d member persona conversation"] = await persona(
-			"fake:study-member",
+			`fake:study-member-${crypto.randomUUID()}`,
 			CAPTURE_MEMBER,
+			"shared",
 		);
 		const runtime = context.services.get(RUNTIME);
 		// SAFETY: it lacks only `speaker`, as 0.8's callers sent it; 0.9 refuses it, and keeps that.

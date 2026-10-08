@@ -12,7 +12,7 @@ import type { PromptScope } from "../interactions/prompts.ts";
 import { AGENT_BRIEF, EffortJudge } from "../judging/effort-judge.ts";
 import type { ModelRef, ThinkingLevel } from "../models.ts";
 import type { PluginContext, RoundtablePlugin } from "../plugin.ts";
-import { RUNTIME } from "../services.ts";
+import { CONVERSATIONS, IDENTITY, RUNTIME } from "../services.ts";
 import type { Speaker } from "../speakers.ts";
 import { PendingConfirmationStore } from "./pending-confirmation-store.ts";
 import { PiAgentRuntime } from "./pi-agent-runtime.ts";
@@ -88,7 +88,7 @@ export function runtimePlugin(
 			await runtime?.preflight?.();
 		},
 		setup: async (context) => {
-			const { logger, providers } = context;
+			const { logger, providers, services } = context;
 			const heldActions = await openHeldActions(context);
 			const prompts = (channel: ChannelKey, scope?: PromptScope | Speaker) =>
 				context.surfaces.prompts(channel, scope);
@@ -109,6 +109,16 @@ export function runtimePlugin(
 					)
 				: new PiAgentRuntime({
 						owner: options.owner,
+						// Read when a session is made, after every plugin set up.
+						conversationOf: async (key) => {
+							const record = await services.find(CONVERSATIONS)?.get(key);
+							if (!record) return undefined;
+							return record.visibility === "private" &&
+								record.principalId !== undefined
+								? { visibility: "private", principalId: record.principalId }
+								: { visibility: "shared" };
+						},
+						principalOf: async (id) => services.find(IDENTITY)?.principal(id),
 						sessions: context.sessions,
 						agentDir: options.agentDir,
 						modelRuntime: options.modelRuntime,

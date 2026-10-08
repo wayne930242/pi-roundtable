@@ -340,7 +340,7 @@ You can switch them off in the configuration.
 
 | Addon | Plugin | Switch in `roundtable.config.ts` | What it adds | When it is off |
 |---|---|---|---|---|
-| Memory | `memory` (provides `MEMORY`) | `memory: false` | The memory table, the `memory_add`, `memory_search` and `memory_remove` tools, and the memory block of every system prompt | No memory tools and no block; the table is left as it is |
+| Memory | `memory` (provides `MEMORY`) | `memory: false` | The memory table, keyed by principal, the `memory_add`, `memory_search` and `memory_remove` tools, and the memory block of every system prompt but a `memory: "none"` persona's | No memory tools and no block; the table is left as it is |
 | Skills | `skills` (provides `SKILLS`) | `skills: false` | The skill tables, the skill tools of agent sessions (`skill_list`, `skill_link`, `skill_create`, `agent_skills`, and the rest), and the skills every agent carries, `writing-skills` included | No skill tools and no skills in any session; `agent_get` has no skills line; `agent_create` leaves out its `skills` parameter and refuses a call that passes some with `Skills are off on this host`; the tables are left as they are |
 | Discord administration | `discord-admin` | `discord: { admin: false }` | The `discord_*` tools that read and manage the server, for the owner; they check what the primary owner may do on the server, whichever owner's turn calls them | No `discord_*` tools; the channel executor that remote MCP uses is the connection's, so it stays |
 
@@ -1605,6 +1605,14 @@ Use it for tools that `defineTool` cannot express, such as a set that changes wh
 Each extension needs a unique name; the core reserves `read-attachment`, `confirmation-gate`, `ask-user`, `self-compact-guard`, and `active-tools`.
 A runtime of your own pins the active tools the way the core does: `activeToolsExtension(() => tools)` from `pi-roundtable/kit` is the extension the core places last, so its handler runs after every other extension's.
 At most one plugin may add a `compaction` extension, and it must name the `engine` its compactions record.
+
+The factory gets the session's `SessionContext`, fixed when the session is made:
+- `kind`, `homeChannel`, `turnChannel`, and `agent` say what the session is for and where its turns run.
+- `conversation` (`SessionConversation`) says whom it serves: `{ visibility: "private", principalId, principal? }` for one person's conversation, with their name and pronouns when the host has a record of them, or `{ visibility: "shared" }`. An agent's session is always shared. Otherwise it is as the turn's `TurnRequest.conversation` names it, else as the conversation registry recorded it, else shared; it is never the owner's by default. A turn naming another visibility than the open session's rebuilds it, keeping its history.
+- `addressee` is whom tool descriptions should name: the primary owner exactly as configured in their own private conversation, another person by their name and pronouns (their name alone when they gave none), and `THE_SPEAKER` in a shared conversation, or a private one of someone the host knows by no name yet.
+- `memory` is `"none"` for a persona that declares it, and `"speaker"` otherwise; a memory tool of your own loads nothing for `"none"`.
+- `speaker()` is the running turn's speaker, undefined between turns; a tool reads it when it runs, never when the session is made, since a session outlives the turn it is built in.
+
 The core's Jev compactor is one such extension:
 
 ```ts
@@ -1732,7 +1740,8 @@ export const echo = definePlugin({
 
 A conversation has a kind: the string its claim returns from `startFresh`, such as `"owner"` or `"study"`.
 Your plugin names its claims' kinds; the host treats them as opaque strings.
-A `Persona` supplies the system prompt for every non-agent conversation of one kind: `{ kind, prompt() }`.
+A `Persona` supplies the system prompt for every non-agent conversation of one kind: `{ kind, prompt(), memory? }`.
+`memory: "none"` leaves memory out of its conversations: no memory tools and no memory in the prompt; `"speaker"`, the default, reads as the next list says.
 The runtime reads `prompt()` when it creates the conversation's session, so message catalog text uses the host's language.
 
 - A plugin contributes `personas` with the kinds it owns; `sessions().persona(kind)` is the linked lookup a runtime uses.
@@ -1743,7 +1752,9 @@ The runtime reads `prompt()` when it creates the conversation's session, so mess
   The host merges every plugin's list and keeps each name once.
 - A turn whose kind has no persona is refused with an error naming `personas`.
   The Pi runtime refuses when it makes the session; a runtime of your own does the same, as the example's does.
-- With the memory addon on, a turn's `speaker` decides whose memory the system prompt carries and the memory tools change: a member's or an admin's own, and the owner's for a speaker of the owner tier.
+- With the memory addon on, the conversation decides whose memory the system prompt carries and the memory tools change, by principal and never by tier: a private conversation's person's, whoever speaks in it; in a shared conversation, each turn's speaker's (`speaker.principalId`), so a second owner reads their own and not the primary owner's; and no one's in the host's own turns (`SYSTEM_PRINCIPAL`) in a shared conversation.
+  The primary owner's memory keeps its 0.8 heading and rows: their principal is 0.8's owner id.
+- A conversation 0.8 recorded through `context.turns` without `conversation` stays shared: whether such a room was one person's cannot be told, and adopting it for someone would refuse everyone else's turns. Its memory is each speaker's, as before, and its tools name the speaker. A plugin whose 0.8 conversations were one person's adopts them with `CONVERSATIONS.adopt`, as remote-mcp does.
 
 Call `context.turns.run(input)` inside your claim's queue task to run a turn in a conversation it owns.
 It shows typing and the stop control on the channel's surface, runs the turn, and emits `turnStarted` and `turnEnded` with the turn's `kind`.
@@ -3051,6 +3062,7 @@ Import from the entries listed below; source area files are internal.
 | `ServiceStartedEvent` | `pi-roundtable` | type |
 | `Services` | `pi-roundtable` | type |
 | `SessionContext` | `pi-roundtable` | type |
+| `SessionConversation` | `pi-roundtable` | type |
 | `SessionPlan` | `pi-roundtable` | type |
 | `SessionTool` | `pi-roundtable` | type |
 | `SessionToolSnapshot` | `pi-roundtable` | type |

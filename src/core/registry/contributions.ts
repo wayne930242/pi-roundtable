@@ -178,6 +178,14 @@ function claimPersona(
 		throw new PluginError(
 			`plugin ${plugin}: the persona of kind "${kind}" needs a prompt() that returns its text.`,
 		);
+	if (
+		persona.memory !== undefined &&
+		persona.memory !== "speaker" &&
+		persona.memory !== "none"
+	)
+		throw new PluginError(
+			`plugin ${plugin}: the persona of kind "${kind}" has memory ${JSON.stringify(persona.memory)}; expected "speaker" or "none".`,
+		);
 	const other = kinds.get(kind);
 	if (other !== undefined)
 		throw new PluginError(
@@ -453,6 +461,7 @@ export function linkSessions(registry: Registry): LinkedSessions {
 		seeds: registry.seeds,
 		prompt: registry.prompt,
 		persona: (kind) => personas.get(kind)?.prompt(),
+		personaMemory: (kind) => personas.get(kind)?.memory ?? "speaker",
 		requiredTools: [...new Set(registry.requiredTools)],
 		agentTools: registry.tools.flatMap((t) => (t.agent ? [t.name] : [])),
 		agentSelection: () => mergeSelections(registry.agentSelections),

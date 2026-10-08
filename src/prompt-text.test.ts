@@ -8,10 +8,15 @@ import { hasWebAccess } from "./core/testing/test-host.ts";
 // The system prompt and every tool's name, description, and parameters that the model receives,
 // for each kind of session a single-owner host runs, recorded on 0.8.0. The principal work of
 // 0.9 must keep these texts, so a change here is a change in what the assistant is told: review
-// it, and regenerate on purpose with UPDATE_PROMPT_TEXT=1. Two changes are intended: (e), a turn
+// it, and regenerate on purpose with UPDATE_PROMPT_TEXT=1. These changes are intended: (e), a turn
 // run without a speaker, which 0.8 ran as the owner's, is refused in 0.9 before the model is
-// asked, so its entry records the refusal instead of a prompt; and `notify_owner` is named
-// `notify` in 0.9, its description word for word as before.
+// asked, so its entry records the refusal instead of a prompt; `notify_owner` is named `notify` in
+// 0.9, its description word for word as before; and since 0.9 assembles each session by whom its
+// conversation serves, (c), the owner's own conversation, is their private one and reads as in
+// 0.8, while (d), a room a member speaks in, is shared, so its memory and ask_user tools name
+// "the speaker" and say each speaker has a memory of their own, where 0.8 named the owner, and
+// (g), a web member's private conversation, no longer names the owner: its person, whom the host
+// knows by no name yet, is "the speaker", their memory still headed by their name.
 const SNAPSHOT = join(import.meta.dir, "prompt-text.snapshot.json");
 
 // Runs against a real PostgreSQL, only when ROUNDTABLE_TEST_DATABASE_URL is set and the delegation worker can load.

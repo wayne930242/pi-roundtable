@@ -1,7 +1,7 @@
 import type { ExtensionFactory } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import type { Notifier } from "../../domain/ports.ts";
-import { type OwnerIdentity, ownerWords } from "../../identity.ts";
+import { addresseeWords, type OwnerIdentity } from "../../identity.ts";
 import { toolError, toolText } from "../../shared/tool-result.ts";
 
 /** What notify needs in one session. */
@@ -24,9 +24,10 @@ export interface SessionNotify {
  */
 export function notifyExtension(
 	notify: SessionNotify,
-	owner: OwnerIdentity,
+	/** Whom the description names: the private conversation's person, or the speaker. */
+	addressee: OwnerIdentity,
 ): ExtensionFactory {
-	const o = ownerWords(owner);
+	const o = addresseeWords(addressee);
 	return (pi) => {
 		pi.registerTool({
 			name: "notify",

@@ -2,13 +2,13 @@ import type {
 	ExtensionAPI,
 	ExtensionFactory,
 } from "@earendil-works/pi-coding-agent";
-import type { ConversationRecord } from "../conversations/conversation-registry.ts";
+import type { OwnerIdentity } from "../identity.ts";
 import type {
 	AgentTurnScope,
 	ChannelKey,
 	SessionContext,
 } from "../sessions.ts";
-import type { Speaker } from "../speakers.ts";
+import { type Speaker, THE_SPEAKER } from "../speakers.ts";
 import { OWNER_CHANNEL, type setUpModules } from "./modules.ts";
 import { OWNER_SPEAKER } from "./owner.ts";
 
@@ -38,6 +38,10 @@ export function context(
 		homeChannel: home ?? agent?.home ?? OWNER_CHANNEL,
 		turnChannel: agent?.session ?? home ?? OWNER_CHANNEL,
 		compaction: { wrap: (compactor) => compactor },
+		// Shared, as the host makes a session it has no record of; `privateTo` makes it someone's.
+		conversation: { visibility: "shared" },
+		addressee: THE_SPEAKER,
+		memory: "speaker",
 		// A turn of the owner's runs, as every tool call is part of one.
 		speaker: () => OWNER_SPEAKER,
 		runTask: async () => "report",
@@ -101,16 +105,18 @@ export async function registered(
 	return tools;
 }
 
-/** A conversation the host recorded as one person's own. */
-export const privately =
-	(owners: Readonly<Record<string, string>>) => async (key: ChannelKey) =>
-		owners[key]
-			? ({
-					key,
-					visibility: "private",
-					principalId: owners[key],
-				} as unknown as ConversationRecord)
-			: undefined;
+/** The session of a conversation private to `principalId`, its tools addressing them as given. */
+export function privateTo(
+	session: SessionContext,
+	principalId: string,
+	addressee: OwnerIdentity = THE_SPEAKER,
+): SessionContext {
+	return {
+		...session,
+		conversation: { visibility: "private", principalId },
+		addressee,
+	};
+}
 
 /** Runs notify in a session; the tool's answer and whether it was an error. */
 export async function notifyIn(

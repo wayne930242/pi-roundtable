@@ -28,7 +28,7 @@ import {
 import { withoutReplyFiles } from "../reply-files.ts";
 import type { TransientTask } from "../sessions.ts";
 import { textOf } from "../shared/session-messages.ts";
-import { addressee, type Speaker, type Tier } from "../speakers.ts";
+import type { Speaker, Tier } from "../speakers.ts";
 import { type ToolTiers, toolsForTier, toolTiers } from "../tool-tiers.ts";
 import { ConversationSessions } from "./conversation-sessions.ts";
 import {
@@ -44,6 +44,7 @@ import {
 	type TurnMessage,
 } from "./runtime-types.ts";
 import { archiveSessions } from "./session-archive.ts";
+import { refusedSpeaker, turnAddressee } from "./session-conversation.ts";
 import { SessionFactory } from "./session-factory.ts";
 import { promptImages, SteerableRun } from "./steerable-run.ts";
 import { lastReply, turnAnswer, unspokenTurn } from "./turn-answer.ts";
@@ -101,6 +102,7 @@ export class PiAgentRuntime implements AgentRuntime {
 			join(this.#factory.workDir(), "probe-attachments"),
 			undefined,
 			"owner",
+			{ visibility: "shared" },
 		);
 		const registered = new Set(
 			probe.session.getAllTools().map((tool) => tool.name),
@@ -118,6 +120,17 @@ export class PiAgentRuntime implements AgentRuntime {
 		if (!request.speaker) return unspokenTurn();
 		const key = request.agent?.session ?? request.channel;
 		const channelSession = await this.#sessions.freshSession(key, request);
+		// Only its person, or the host itself, speaks in a private conversation.
+		const refused = refusedSpeaker(
+			channelSession.conversation,
+			request.speaker,
+		);
+		if (refused) return { ok: false, error: new AgentRunError(refused) };
+		const who = turnAddressee(
+			request.speaker,
+			channelSession,
+			this.#options.owner,
+		);
 		const { session } = channelSession;
 		const level = await this.#thinkingLevel(key, session, request);
 		if (session.thinkingLevel !== level) session.setThinkingLevel(level);
@@ -156,7 +169,7 @@ export class PiAgentRuntime implements AgentRuntime {
 		gate.beginTurn(
 			request.selection.id,
 			request.confirmed === true,
-			addressee(request.speaker, this.#options.owner),
+			who,
 			request.speaker,
 		);
 		if (request.confirmed && pending) {
@@ -215,11 +228,7 @@ export class PiAgentRuntime implements AgentRuntime {
 			const attachments = request.attachments ?? NO_ATTACHMENTS;
 			const text =
 				request.confirmed && pending
-					? confirmedTurnText(
-							pending,
-							request.text,
-							addressee(request.speaker, this.#options.owner),
-						)
+					? confirmedTurnText(pending, request.text, who)
 					: request.text;
 			await running.run(() =>
 				session.prompt(
@@ -337,7 +346,9 @@ export class PiAgentRuntime implements AgentRuntime {
 			throw new AgentRunError(
 				`a task runs beside a turn of its conversation, at that turn's tier, and ${scope.turn} has no turn running`,
 			);
-		// A worker asks nothing, and works in its conversation for the turn that started it.
+		// A worker asks nothing, and works in its conversation for the turn that started it, for
+		// whom that conversation serves.
+		const { conversation } = await this.#sessions.session(scope.turn);
 		const worker = await this.#factory.create(
 			scope.home,
 			SessionManager.inMemory(this.#factory.workDir()),
@@ -346,6 +357,7 @@ export class PiAgentRuntime implements AgentRuntime {
 			ownerAttachmentDir(dataDir, scope.home),
 			undefined,
 			"owner",
+			conversation,
 			scope.turn,
 		);
 		const { session } = worker;

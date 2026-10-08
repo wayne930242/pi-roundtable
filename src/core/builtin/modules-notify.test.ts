@@ -1,23 +1,33 @@
 import { describe, expect, test } from "bun:test";
-import { SYSTEM_PRINCIPAL } from "../identity/principal-store.ts";
-import type { Speaker } from "../speakers.ts";
+import {
+	type Principal,
+	SYSTEM_PRINCIPAL,
+} from "../identity/principal-store.ts";
+import { addresseeOf } from "../identity.ts";
+import type { SessionContext } from "../sessions.ts";
+import type { Speaker, Tier } from "../speakers.ts";
 import {
 	ANN,
 	context,
 	contextOf,
 	HOME,
 	notifyIn,
-	privately,
+	privateTo,
 	registered,
 } from "../testing/module-sessions.ts";
-import { OWNER_CHANNEL, setUpModules } from "../testing/modules.ts";
-import { OWNER_SPEAKER } from "../testing/owner.ts";
+import {
+	MODULES_OWNER,
+	OWNER_CHANNEL,
+	setUpModules,
+} from "../testing/modules.ts";
+import { OWNER_PRINCIPAL, OWNER_SPEAKER } from "../testing/owner.ts";
 
 describe("notify", () => {
 	test("is named notify, and with only Discord's direct messages reads word for word as notify_owner did", async () => {
+		// The owner's own conversation, which addresses them as configured.
 		const [notify, ...rest] = await registered(
 			await setUpModules(),
-			context(),
+			privateTo(context(), OWNER_SPEAKER.principalId, MODULES_OWNER),
 			"notify",
 		);
 		expect(rest).toEqual([]);
@@ -27,17 +37,70 @@ describe("notify", () => {
 		);
 	});
 
+	test("names whom it notifies: a private conversation's person, the only owner, or else the speaker", async () => {
+		const description = async (
+			session: SessionContext,
+			host: {
+				tiers?: Readonly<Record<string, Tier>>;
+				owners?: Principal[];
+			} = {},
+		) => {
+			const setup = await setUpModules({
+				direct: { "1": OWNER_CHANNEL, p_ann: "discord:ann-dm" },
+				toolTiers: host.tiers ?? {},
+				...(host.owners ? { owners: host.owners } : {}),
+			});
+			const [notify] = await registered(setup, session, "notify");
+			return (notify as unknown as { description: string }).description;
+		};
+		expect(
+			await description(
+				privateTo(
+					contextOf(ANN, "other:ann"),
+					"p_ann",
+					addresseeOf({ displayName: "Ann" }),
+				),
+			),
+		).toBe(
+			"Send Ann a direct message on Discord. Use only when Ann asks to be notified or reminded by DM; your normal reply already reaches Ann.",
+		);
+		// In a shared conversation of a single-owner host only the owner may notify, so it names them.
+		expect(await description(contextOf(ANN, HOME))).toBe(
+			"Send Owner a direct message on Discord. Use only when they asks to be notified or reminded by DM; your normal reply already reaches them.",
+		);
+		// Once another owner, or anyone else, may use it, the notice is whoever speaks.
+		const second = { id: "p_bo", displayName: "Bo", disabled: false };
+		expect(
+			await description(contextOf(ANN, HOME), {
+				owners: [OWNER_PRINCIPAL, second],
+			}),
+		).toContain("Send the speaker");
+		expect(
+			await description(contextOf(ANN, HOME), { owners: [OWNER_PRINCIPAL] }),
+		).toContain("Send Owner");
+		expect(
+			await description(contextOf(ANN, HOME), { tiers: { notify: "admin" } }),
+		).toBe(
+			"Send the speaker a direct message on Discord. Use only when the speaker asks to be notified or reminded by DM; your normal reply already reaches the speaker.",
+		);
+	});
+
 	test("each person's notice goes to their own direct channel, in their conversation or as the speaker of a shared one", async () => {
 		const setup = await setUpModules({
 			direct: { "1": OWNER_CHANNEL, p_ann: "discord:ann-dm" },
-			conversations: {
-				get: privately({ "other:ann": "p_ann", "other:own": "1" }),
-			},
 		});
 		const owner = { ...OWNER_SPEAKER };
 		const ann = { ...ANN, tier: "owner" as const };
-		await notifyIn(setup, contextOf(ann, "other:ann"), "to ann");
-		await notifyIn(setup, contextOf(owner, "other:own"), "to the owner");
+		await notifyIn(
+			setup,
+			privateTo(contextOf(ann, "other:ann"), "p_ann"),
+			"to ann",
+		);
+		await notifyIn(
+			setup,
+			privateTo(contextOf(owner, "other:own"), "1"),
+			"to the owner",
+		);
 		await notifyIn(setup, contextOf(ann, HOME), "to the speaker");
 		expect(setup.record.notified).toEqual([
 			{ principalId: "p_ann", text: "to ann" },
@@ -50,11 +113,10 @@ describe("notify", () => {
 	test("in someone else's private conversation, a speaker's notice is refused and nothing is sent to either", async () => {
 		const setup = await setUpModules({
 			direct: { "1": OWNER_CHANNEL, p_ann: "discord:ann-dm" },
-			conversations: { get: privately({ "other:own": "1" }) },
 		});
 		const answer = await notifyIn(
 			setup,
-			contextOf({ ...ANN, tier: "owner" }, "other:own"),
+			privateTo(contextOf({ ...ANN, tier: "owner" }, "other:own"), "1"),
 			"from ann",
 		);
 		expect(answer?.error).toBe(true);
@@ -63,11 +125,13 @@ describe("notify", () => {
 	});
 
 	test("a private conversation of someone no direct channel reaches gets no notify", async () => {
-		const setup = await setUpModules({
-			conversations: { get: privately({ "other:kai": "p_kai" }) },
-		});
+		const setup = await setUpModules();
 		expect(
-			await registered(setup, contextOf(OWNER_SPEAKER, "other:kai"), "notify"),
+			await registered(
+				setup,
+				privateTo(contextOf(OWNER_SPEAKER, "other:kai"), "p_kai"),
+				"notify",
+			),
 		).toEqual([]);
 	});
 

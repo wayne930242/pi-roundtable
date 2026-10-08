@@ -1,10 +1,9 @@
 import type { ExtensionFactory } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { messages } from "../../i18n/index.ts";
-import { type OwnerIdentity, ownerWords } from "../../identity.ts";
+import { addresseeWords, type OwnerIdentity } from "../../identity.ts";
 import type { MemoryStore } from "../../services.ts";
 import { toolError, toolText } from "../../shared/tool-result.ts";
-import type { Speaker } from "../../speakers.ts";
 import { timeZone, zonedToday } from "../../time.ts";
 import type { Memory, PromptMemory } from "./owner-memory-store.ts";
 
@@ -17,8 +16,8 @@ function line(memory: Memory): string {
 export function ownerMemorySection(
 	memory: PromptMemory,
 	today: string,
-	/** Whose memory it is, when not the owner's. */
-	speaker?: Speaker,
+	/** The name of whose memory it is, when not the primary owner's. */
+	name?: string,
 ): string {
 	const core =
 		memory.core.length > 0
@@ -27,7 +26,7 @@ export function ownerMemorySection(
 	const events =
 		memory.events.length > 0 ? memory.events.map(line).join("\n") : "(none)";
 	return [
-		speaker ? `## Memory of ${speaker.name}` : "## Owner memory",
+		name === undefined ? "## Owner memory" : `## Memory of ${name}`,
 		`Today in ${messages().zoneName(timeZone())} is ${today}. What is stored right now, including anything you added earlier in this conversation; each appears once.`,
 		`### Core facts\n${core}`,
 		`### Upcoming events\n${events}`,
@@ -35,42 +34,49 @@ export function ownerMemorySection(
 	].join("\n\n");
 }
 
+/** Whose memory a session's turns read, and how its tools name them. */
+export interface MemoryFor {
+	/** The primary owner's principal, whose memory keeps 0.8's "Owner memory" heading. */
+	ownerId: string;
+	/** Whom the tool descriptions address: a private conversation's person, or `THE_SPEAKER`. */
+	addressee: OwnerIdentity;
+	/** Whether the tools tell the model that each speaker has a memory of their own, as in a shared conversation. */
+	describesSpeakers: boolean;
+	/** Whose memory the running turn reads and changes, and their name; undefined when it is no one's. */
+	whose(): { principalId: string; name: string } | undefined;
+}
+
+/** What the memory tools answer in a turn that reads no one's memory, such as the host's own report. */
+const NO_ONE =
+	"This turn reads no one's memory, so there is nothing to remember, search, or forget in it.";
+
 /**
- * Adds the owner's core facts and upcoming events to every run, and registers
- * memory_add, memory_search, and memory_remove. The section goes into appendSystemPrompt
- * because claude-bridge forwards only the prompt's option sections to Claude Code, not a
- * replaced system prompt.
+ * Adds the core facts and upcoming events of whose memory the turn reads to every run, and
+ * registers memory_add, memory_search, and memory_remove over it. The section goes into
+ * appendSystemPrompt because claude-bridge forwards only the prompt's option sections to Claude
+ * Code, not a replaced system prompt.
  */
 export function ownerMemoryExtension(
 	memories: MemoryStore,
-	/** The owner's Discord id: the speaker whose memory a turn reads when no other speaks. */
-	ownerId: string,
-	owner: OwnerIdentity,
-	/**
-	 * The person the running turn is for, when it may be someone other than the owner. Their
-	 * memory, not the owner's, is what the turn reads and changes; without it every turn is the owner's.
-	 */
-	speaker?: () => Speaker | undefined,
-	/** Whether the tools tell the model that each speaker has a memory of their own. */
-	describesSpeakers = speaker !== undefined,
+	memory: MemoryFor,
 ): ExtensionFactory {
-	const o = ownerWords(owner);
-	/** The running turn's other speaker; undefined when the owner's own memory applies. */
-	const other = (): Speaker | undefined => {
-		const current = speaker?.();
-		return current && current.id !== ownerId ? current : undefined;
+	const o = addresseeWords(memory.addressee);
+	const storeOf = () => {
+		const whose = memory.whose();
+		return whose && memories.forSpeaker(whose.principalId);
 	};
-	const storeOf = () => memories.forSpeaker(other()?.id ?? ownerId);
-	const shared = describesSpeakers
+	const shared = memory.describesSpeakers
 		? " Whoever is speaking has a memory of their own, shared by every agent; this reads and changes theirs, not someone else's."
 		: "";
 	return (pi) => {
 		pi.on("before_agent_start", async (event) => {
+			const whose = memory.whose();
+			if (!whose) return;
 			const today = zonedToday();
 			const section = ownerMemorySection(
-				await storeOf().forPrompt(today),
+				await memories.forSpeaker(whose.principalId).forPrompt(today),
 				today,
-				other(),
+				whose.principalId === memory.ownerId ? undefined : whose.name,
 			);
 			const appended = event.systemPromptOptions.appendSystemPrompt;
 			event.systemPromptOptions.appendSystemPrompt = appended
@@ -98,11 +104,9 @@ export function ownerMemoryExtension(
 				),
 			}),
 			execute: async (_toolCallId, params) => {
-				const saved = await storeOf().add(
-					params.fact,
-					params.kind,
-					params.date,
-				);
+				const store = storeOf();
+				if (!store) return toolError(NO_ONE);
+				const saved = await store.add(params.fact, params.kind, params.date);
 				return toolText(`Remembered as ${saved.kind}: ${line(saved).slice(2)}`);
 			},
 		});
@@ -115,7 +119,9 @@ export function ownerMemoryExtension(
 				query: Type.String({ description: "Keywords separated by spaces." }),
 			}),
 			execute: async (_toolCallId, params) => {
-				const found = await storeOf().search(params.query);
+				const store = storeOf();
+				if (!store) return toolError(NO_ONE);
+				const found = await store.search(params.query);
 				return toolText(
 					found.length === 0
 						? `Nothing remembered matches "${params.query}".`
@@ -136,7 +142,9 @@ export function ownerMemoryExtension(
 				}),
 			}),
 			execute: async (_toolCallId, params) => {
-				const removed = await storeOf().remove(params.text);
+				const store = storeOf();
+				if (!store) return toolError(NO_ONE);
+				const removed = await store.remove(params.text);
 				if (removed.length === 0) {
 					return toolError(
 						`No remembered fact contains "${params.text}". Nothing was forgotten.`,

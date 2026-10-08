@@ -1,5 +1,7 @@
 import type { ExtensionFactory } from "@earendil-works/pi-coding-agent";
 import { PluginError } from "./errors.ts";
+import type { Principal } from "./identity/principal-store.ts";
+import type { OwnerIdentity } from "./identity.ts";
 import type { Speaker } from "./speakers.ts";
 
 /** `<surface>:<channel id>`, for example `discord:1234`. A DM is one channel. */
@@ -41,6 +43,15 @@ export interface TransientTask {
 	onFinished?(toolCalls: readonly string[]): void;
 }
 
+/**
+ * Whom a session's conversation serves, fixed when the session is made: `private` to one
+ * principal, whose name and pronouns are known when the host has a record of them, or `shared`
+ * by whoever its claim admits, as an agent's session always is.
+ */
+export type SessionConversation =
+	| { visibility: "private"; principalId: string; principal?: Principal }
+	| { visibility: "shared" };
+
 /** What one Pi session is for, as a session tool's factory sees it. */
 export interface SessionContext {
 	/** "agent" for an agent's session; otherwise the kind of conversation, which the claim that owns the channel names. */
@@ -53,6 +64,23 @@ export interface SessionContext {
 	agent?: AgentTurnScope;
 	/** Wraps a compactor so the core's compaction tiers decide when it may answer. */
 	compaction: { wrap(compactor: ExtensionFactory): ExtensionFactory };
+	/**
+	 * Whom the conversation serves, as `TurnRequest.conversation` or the host's record says when the
+	 * session is made; shared when neither says. A private conversation's tools serve its person:
+	 * their memory, their notices. A shared one's serve each turn's speaker.
+	 */
+	conversation: SessionConversation;
+	/**
+	 * Whom the session's tool descriptions address, fixed when it is made: a private conversation's
+	 * person by their name and pronouns, the primary owner exactly as 0.8 wrote them, and
+	 * `THE_SPEAKER` in a shared conversation, where each turn's prompt says who speaks.
+	 */
+	addressee: OwnerIdentity;
+	/**
+	 * Whose memory the session's turns may read: `"speaker"` (the default), as `conversation` and
+	 * each turn's speaker decide, or `"none"`, for a persona that declares it; then no memory loads.
+	 */
+	memory: "speaker" | "none";
 	/** The person the session's running turn is for; undefined between turns. */
 	speaker(): Speaker | undefined;
 	/** Runs a task beside this session, under its confirmation gate. */
