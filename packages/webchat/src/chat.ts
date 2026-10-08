@@ -576,6 +576,7 @@ export class WebChat {
 			name: `webchat:${surface}`,
 			priority: 10,
 			postsInPlace: true,
+			takesSystemReports: false,
 			owns: (channel) => channel.startsWith(`${surface}:`),
 			admit: (message) => {
 				const pending = this.#pending.get(message.messageId);

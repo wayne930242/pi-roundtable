@@ -11,6 +11,7 @@ import {
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import {
 	CONVERSATIONS,
+	ConfigError,
 	definePlugin,
 	defineRoundtable,
 	defineTool,
@@ -459,7 +460,7 @@ describeDb("a host whose only surface is the web chat", () => {
 describeDb(
 	"a web chat host told to report its errors to a web conversation",
 	() => {
-		test("starts with a background-capable webchat claim (system reports still cannot enter a person's private conversation)", async () => {
+		test("rejects ops reports to a private web conversation at startup", async () => {
 			const issuer = await testIssuer();
 			const dir = mkdtempSync(join(tmpdir(), "webchat-ops-"));
 			try {
@@ -504,8 +505,15 @@ describeDb(
 					},
 				);
 				const host = new Roundtable(options, plugins);
-				await expect(host.run()).resolves.toBeUndefined();
-				await host.shutdown("test");
+				try {
+					await expect(host.run()).rejects.toThrow(
+						new ConfigError(
+							'config ops.conversation: the claim that owns "web:ops" keeps its conversations private to their people, so it takes no system error reports and each would only be logged. Name a conversation of a surface whose conversations are shared, such as a Discord channel, or report to an agent with ops.agent.',
+						),
+					);
+				} finally {
+					await host.shutdown("test");
+				}
 			} finally {
 				await issuer.close();
 				rmSync(dir, { recursive: true, force: true });

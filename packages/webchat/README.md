@@ -281,7 +281,8 @@ A REST notice page therefore contains at most 100 bounded entries, less than 2.5
 
 - Attachments: messages carry text only.
 - System error reports into a person's web conversation: the background claim accepts only `PERSONAL_TARGET` turns checked by core, whose author principal is the private conversation's principal.
-  A system report cannot enter someone else's private conversation; configure ops reports on another surface.
+  The claim declares `takesSystemReports: false`: configuring `ops.conversation` on this surface (for example, `web:ops`) fails at startup with core `ConfigError`, rather than silently skipping every report.
+  Use a shared conversation on another surface, such as a Discord channel, or `ops.agent`.
 - Agent teams: the web chat has no agent rooms.
 
 ## Testing
