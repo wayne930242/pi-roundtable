@@ -226,6 +226,11 @@ export type {
 	TurnEvent,
 	TurnProgressEvent,
 } from "./core/plugin.ts";
+export type {
+	DirectChannelProvider,
+	DirectChannels,
+	DirectReach,
+} from "./core/presence/direct-channels.ts";
 export {
 	attachReplyFile,
 	REPLY_FILE_LIMITS,

@@ -28,6 +28,19 @@ export const CORE_TOOL_TIERS: Readonly<Record<string, Tier>> = set("member", [
 ]);
 
 /**
+ * Tools renamed since 0.8, by their old name: until 1.0 the old name still names the tool in a
+ * selection and in the operator's `toolTiers`, where the new name's own setting wins.
+ */
+export const RENAMED_TOOLS: Readonly<Record<string, string>> = {
+	notify_owner: "notify",
+};
+
+/** The tools named, each by its current name and once, in order. */
+export function currentToolNames(tools: readonly string[]): string[] {
+	return [...new Set(tools.map((tool) => RENAMED_TOOLS[tool] ?? tool))];
+}
+
+/**
  * What each tool needs: the operator's setting first, then the tier its plugin declared, then
  * the core's default, and the owner for a tool nobody named. Plugins declare theirs when the
  * host links them, so a reader asks at use time and sees the final table.
@@ -38,7 +51,15 @@ export class ToolTierTable implements ToolTiers {
 	readonly #core = new Map(Object.entries(CORE_TOOL_TIERS));
 
 	constructor(operator: Readonly<Record<string, Tier>> = {}) {
-		this.#operator = new Map(Object.entries(operator));
+		const entries = Object.entries(operator);
+		// An old name first, so the new name's own setting overrides it.
+		this.#operator = new Map([
+			...entries.flatMap(([tool, tier]) => {
+				const renamed = RENAMED_TOOLS[tool];
+				return renamed ? [[renamed, tier] as const] : [];
+			}),
+			...entries,
+		]);
 	}
 
 	/**

@@ -77,7 +77,7 @@ function recordingSurface(replies: string[]): RoundtablePlugin {
 		});
 	});
 
-	test("its sessions have no Discord tools, no shell, no schedule or delegation tools, and no tool that messages the owner on Discord", async () => {
+	test("its sessions have no Discord tools, no shell, no schedule or delegation tools, and no notify, with no direct channel to send to", async () => {
 		const host = await testHost({ discord: false });
 		hosts.push(host);
 		const tools = (await host.sessionTools()).flatMap((entry) => entry.tools);
@@ -88,6 +88,7 @@ function recordingSurface(replies: string[]): RoundtablePlugin {
 			"schedule_create",
 			"schedule_list",
 			"delegate_task",
+			"notify",
 			"notify_owner",
 			"bash",
 			"read",

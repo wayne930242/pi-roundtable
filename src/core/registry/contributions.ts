@@ -2,7 +2,7 @@ import type { AgentSeed } from "../agents/agent-store.ts";
 import type { BackgroundTarget, ChannelClaim } from "../contract/channels.ts";
 import type { ChatSurface } from "../contract/surface.ts";
 import type { ToolContribution } from "../define.ts";
-import { PluginError } from "../errors.ts";
+import { NotLinkedError, PluginError } from "../errors.ts";
 import { type HoldRule, holdChain } from "../holds.ts";
 import type { HttpRoute } from "../http/listeners.ts";
 import {
@@ -20,6 +20,10 @@ import {
 	refuseRemovedSurfaceMethods,
 	type Service,
 } from "../plugin.ts";
+import {
+	type DirectChannelProvider,
+	directChannelsPort,
+} from "../presence/direct-channels.ts";
 import {
 	compileSessionPlan,
 	type SessionTool,
@@ -44,6 +48,8 @@ export interface Registry {
 	surfaces: ChatSurface[];
 	personas: Persona[];
 	backgroundTargets: BackgroundTarget[];
+	/** The contributed direct channels, in contribution order. */
+	directChannels: DirectChannelProvider[];
 	dashboard: string[];
 	tools: ToolContribution[];
 	seeds: AgentSeed[];
@@ -64,6 +70,7 @@ export const emptyRegistry = (): Registry => ({
 	surfaces: [],
 	personas: [],
 	backgroundTargets: [],
+	directChannels: [],
 	dashboard: [],
 	tools: [],
 	seeds: [],
@@ -180,6 +187,31 @@ function claimPersona(
 }
 
 /**
+ * Refuses a direct channel without a name, a label, or `reaches`, or whose name another plugin's
+ * already has, so the providers a person is reached through never depend on a typo.
+ */
+function claimDirectChannel(
+	names: Names,
+	plugin: string,
+	provider: DirectChannelProvider,
+): void {
+	const { name } = provider;
+	if (typeof name !== "string" || name === "")
+		throw new PluginError(
+			`plugin ${plugin}: a direct channel needs a name, a non-empty string such as "discord", and got ${JSON.stringify(name)}.`,
+		);
+	if (typeof provider.label !== "string" || provider.label === "")
+		throw new PluginError(
+			`plugin ${plugin}: the direct channel "${name}" needs a label, such as "a direct message on Discord", which the notify tool names it by.`,
+		);
+	if (typeof provider.reaches !== "function")
+		throw new PluginError(
+			`plugin ${plugin}: the direct channel "${name}" needs reaches(principalId), which finds a person's own conversation there.`,
+		);
+	names.claim(plugin, name);
+}
+
+/**
  * Refuses a background target without a name or a label, or whose name another plugin's target
  * already has, so a stored schedule's target never depends on plugin order.
  */
@@ -242,19 +274,32 @@ function surfaceService(
 /**
  * Sets up every plugin in order and collects what each adds. A plugin that adds nothing, that
  * reuses a name, or whose setup throws or returns a part the contract does not have is refused
- * with its name and what to fix.
+ * with its name and what to fix. The context's `directChannels` are the contributed ones, read
+ * once every plugin is set up.
  */
 export async function collectContributions(
 	plugins: readonly RoundtablePlugin[],
-	context: Omit<PluginContext, "services">,
+	base: Omit<PluginContext, "services" | "directChannels">,
 	tiers: ToolTierTable,
 	services: ServiceRegistry = new ServiceRegistry(plugins),
 ): Promise<Registry> {
 	const registry = emptyRegistry();
+	let collected = false;
+	const context: Omit<PluginContext, "services"> = {
+		...base,
+		directChannels: directChannelsPort(() => {
+			if (!collected)
+				throw new NotLinkedError(
+					"direct channels are linked once every plugin is set up. Use them from a service's start, a handler, or a session tool, not during setup.",
+				);
+			return registry.directChannels;
+		}, base.surfaces),
+	};
 	const serviceNames = new Names("service");
 	const sessionTools = new Names("session tool");
 	const holds = new Names("hold rule");
 	const surfaces = new Names("surface");
+	const directChannelNames = new Names("direct channel");
 	const personaKinds = new Map<string, string>();
 	const targetNames = new Map<string, string>();
 	for (const plugin of plugins) {
@@ -293,6 +338,7 @@ export async function collectContributions(
 			surfaces: contributedSurfaces = [],
 			personas = [],
 			backgroundTargets = [],
+			directChannels = [],
 			dashboard = [],
 			tools = [],
 			seeds = [],
@@ -309,6 +355,7 @@ export async function collectContributions(
 			contributedSurfaces,
 			personas,
 			backgroundTargets,
+			directChannels,
 			dashboard,
 			tools,
 			seeds,
@@ -348,6 +395,8 @@ export async function collectContributions(
 			claimPersona(personaKinds, plugin.name, persona);
 		for (const target of backgroundTargets)
 			claimTarget(targetNames, plugin.name, target);
+		for (const provider of directChannels)
+			claimDirectChannel(directChannelNames, plugin.name, provider);
 		for (const rule of holdRules) holds.claim(plugin.name, rule.name);
 		for (const tool of contribution.sessionTools ?? []) {
 			sessionTools.claim(plugin.name, tool.name);
@@ -380,12 +429,14 @@ export async function collectContributions(
 		registry.channels.push(...channels);
 		registry.personas.push(...personas);
 		registry.backgroundTargets.push(...backgroundTargets);
+		registry.directChannels.push(...directChannels);
 		registry.dashboard.push(...dashboard);
 		registry.seeds.push(...seeds);
 		registry.prompt.push(...prompt);
 		registry.requiredTools.push(...requiredTools);
 	}
 	services.settle();
+	collected = true;
 	return registry;
 }
 

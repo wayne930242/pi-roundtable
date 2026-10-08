@@ -15,6 +15,7 @@ import { defineRoundtable, discordOwnerOf } from "../define-roundtable.ts";
 import { CommandCollection } from "../discord/command-collection.ts";
 import type { ComposedCommands } from "../discord/compose-commands.ts";
 import type { DiscordConnection } from "../discord/connection.ts";
+import { discordDirectChannel } from "../discord/direct-channel.ts";
 import type {
 	CommandGuard,
 	InteractionContribution,
@@ -139,6 +140,8 @@ export function standInDiscord(
 	commands: CommandCollection,
 	guard: CommandGuard,
 	given: TestHostOptions["discord"],
+	/** The primary owner's Discord user id, whose direct messages are the owner channel. */
+	ownerId: string,
 ): RoundtablePlugin {
 	const surface: ChatSurface = {
 		surface: "discord",
@@ -150,6 +153,18 @@ export function standInDiscord(
 		provides: [DISCORD],
 		replaces: [DISCORD],
 		setup: ({ services }) => {
+			const identity = services.find(IDENTITY);
+			const ownerChannel =
+				(given ? given.ownerChannel : undefined) ??
+				(async () => "discord:owner-dm" as const);
+			// Each person's direct messages, as the Discord plugin's provider reaches them; the owner's is the owner channel.
+			const direct = discordDirectChannel({
+				directChannel: async (userId) =>
+					userId === ownerId ? ownerChannel() : `discord:dm-${userId}`,
+				sendDirect: async () => undefined,
+				...(identity ? { identity } : {}),
+				ownerId,
+			});
 			// SAFETY: the plugins after it read only these members while they set up; the rest is read when a tool runs, which a test host does not do.
 			services.provide(DISCORD, {
 				connection: {
@@ -164,7 +179,7 @@ export function standInDiscord(
 				guard,
 				threads: { open: async () => undefined, sweep: async () => undefined },
 			} as unknown as DiscordServices);
-			return { surfaces: [surface] };
+			return { surfaces: [surface], directChannels: [direct] };
 		},
 	};
 }
@@ -246,7 +261,9 @@ export async function testHost(
 	const config: RoundtableConfig = {
 		...base,
 		plugins: [
-			...(withDiscord ? [standInDiscord(commands, guard, given)] : []),
+			...(withDiscord
+				? [standInDiscord(commands, guard, given, discordOwnerOf(resolved).id)]
+				: []),
 			{
 				name: "test-runtime",
 				providers: { runtime: () => runtime },

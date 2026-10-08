@@ -319,6 +319,61 @@ describe("collectContributions", () => {
 		).rejects.toThrow('background target "support" is already registered');
 	});
 
+	test("direct channels are collected in contribution order, and two of one name are refused, naming both plugins", async () => {
+		const channel = (name: string) => ({
+			name,
+			label: `a message on ${name}`,
+			reaches: async () => undefined,
+		});
+		const registry = await collect([
+			plugin("a", { directChannels: [channel("chat")] }),
+			plugin("b", { directChannels: [channel("inbox")] }),
+		]);
+		expect(registry.directChannels.map((p) => p.name)).toEqual([
+			"chat",
+			"inbox",
+		]);
+		await expect(
+			collect([
+				plugin("a", { directChannels: [channel("chat")] }),
+				plugin("b", { directChannels: [channel("chat")] }),
+			]),
+		).rejects.toThrow(
+			"plugin b: direct channel chat is already registered by plugin a. Rename one of the two.",
+		);
+		// A plugin reads them once every plugin is set up, never during its setup.
+		let early: unknown;
+		let late: (() => string[]) | undefined;
+		await collect([
+			{
+				name: "reader",
+				setup: ({ directChannels }) => {
+					try {
+						directChannels.providers();
+					} catch (error) {
+						early = error;
+					}
+					late = () => directChannels.providers().map((p) => p.name);
+					return { directChannels: [channel("chat")] };
+				},
+			},
+		]);
+		expect(String(early)).toContain(
+			"direct channels are linked once every plugin is set up",
+		);
+		expect(late?.()).toEqual(["chat"]);
+		await expect(
+			collect([
+				plugin("a", { directChannels: [{ ...channel(""), name: "" }] }),
+			]),
+		).rejects.toThrow("plugin a: a direct channel needs a name");
+		await expect(
+			collect([
+				plugin("a", { directChannels: [{ ...channel("chat"), label: "" }] }),
+			]),
+		).rejects.toThrow('the direct channel "chat" needs a label');
+	});
+
 	test("a background target needs a name and a label function", async () => {
 		await expect(
 			collect([

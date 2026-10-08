@@ -474,7 +474,7 @@ export async function testPlugin(
 			}),
 		);
 	services.checkRequires();
-	const context: Omit<PluginContext, "services"> = {
+	const context: Omit<PluginContext, "services" | "directChannels"> = {
 		logger,
 		env,
 		sessions: () => linked ?? unlinked("sessions"),

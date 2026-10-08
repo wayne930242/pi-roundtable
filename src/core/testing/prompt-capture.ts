@@ -297,6 +297,7 @@ async function captureHost(
 						logger: silentLogger(),
 					}),
 					{ agentChannels: () => channels },
+					CAPTURE_OWNER.id,
 				),
 			]
 		: [];

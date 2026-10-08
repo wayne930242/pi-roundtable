@@ -122,6 +122,7 @@ export type {
 	DashboardBoard,
 	DelegationWorker,
 	GroupMessage,
+	Notifier,
 	OwnerNotifier,
 	SpeakerFacts,
 	SpeakerPolicy,

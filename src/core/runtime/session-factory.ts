@@ -25,6 +25,7 @@ import { activeToolsExtension } from "../shared/active-tools.ts";
 import { packageDir } from "../shared/package-dir.ts";
 import { readAttachmentExtension } from "../shared/read-attachment-tool.ts";
 import { addressee, type Speaker, THE_SPEAKER } from "../speakers.ts";
+import { currentToolNames } from "../tool-tiers.ts";
 import {
 	CompactionTiers,
 	compactionEngine,
@@ -113,7 +114,7 @@ export class SessionFactory {
 			(tool) => tool.snapshot().groups ?? [],
 		);
 		return [
-			...selection.tools,
+			...currentToolNames(selection.tools),
 			COMPACT_TOOL,
 			ASK_USER_TOOL,
 			...groups
@@ -326,6 +327,7 @@ export class SessionFactory {
 
 /** Pi's bash tool with TMPDIR set to `scratchDir`, so `mktemp` and tools write there. */
 export function scratchBash(cwd: string, scratchDir: string): ToolDefinition {
+	// SAFETY: Pi's bash definition is a ToolDefinition typed by its own parameter schema, which the session takes as any custom tool.
 	return createBashToolDefinition(cwd, {
 		spawnHook: (context) => ({
 			...context,

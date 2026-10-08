@@ -69,6 +69,16 @@ export type {
 	YesNoQuestion,
 } from "../contract/providers.ts";
 
+/** Sends a person a notice through their own channel; resolves false when they have none. */
+export interface Notifier {
+	notify(principalId: string, text: string): Promise<boolean>;
+}
+
+/**
+ * Sends the primary owner a direct message.
+ * @deprecated Since 0.9 there may be more than one owner: reach a person with a `Notifier`, such as
+ * `context.directChannels`. Goes away in 1.0.
+ */
 export interface OwnerNotifier {
 	notifyOwner(text: string): Promise<void>;
 }

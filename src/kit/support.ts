@@ -13,7 +13,7 @@ export type {
 export type { Backlog, GroupMessage } from "../core/agents/agent-rules.ts";
 export type { AgentOps } from "../core/agents/agent-tools.ts";
 export type { ThreadHost } from "../core/discord/dispatch-threads.ts";
-export type { OwnerNotifier } from "../core/domain/ports.ts";
+export type { Notifier, OwnerNotifier } from "../core/domain/ports.ts";
 export type { ThinkingPicker } from "../core/models.ts";
 export type { DelegationWorker } from "../core/modules/delegation/delegator.ts";
 export type { AgentChannelLookup } from "../core/modules/schedules/schedules.ts";

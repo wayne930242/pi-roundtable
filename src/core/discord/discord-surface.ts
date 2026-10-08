@@ -339,16 +339,26 @@ export class DiscordSurface
 		};
 	}
 
+	/** A Discord user's direct-message channel. */
+	async directChannel(userId: string): Promise<ChannelKey> {
+		const user = await this.#client.users.fetch(userId);
+		return `${PREFIX}${(await user.createDM()).id}`;
+	}
+
+	/** Sends a Discord user a direct message, split as a reply is. */
+	async sendDirect(userId: string, text: string): Promise<void> {
+		const user = await this.#client.users.fetch(userId);
+		for (const chunk of splitReply(text)) await user.send({ content: chunk });
+	}
+
 	/** @deprecated The primary owner's direct-message channel; see `DiscordConnection.ownerChannel`. */
 	async ownerChannel(): Promise<ChannelKey> {
-		const owner = await this.#client.users.fetch(this.#options.ownerId);
-		return `${PREFIX}${(await owner.createDM()).id}`;
+		return this.directChannel(this.#options.ownerId);
 	}
 
 	/** @deprecated Sends the primary owner a direct message; see `DiscordConnection.notifyOwner`. */
 	async notifyOwner(text: string): Promise<void> {
-		const owner = await this.#client.users.fetch(this.#options.ownerId);
-		for (const chunk of splitReply(text)) await owner.send({ content: chunk });
+		await this.sendDirect(this.#options.ownerId, text);
 	}
 
 	async stop(): Promise<void> {

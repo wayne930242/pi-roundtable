@@ -1654,7 +1654,7 @@
 				}
 			},
 			{
-				"name": "notify_owner",
+				"name": "notify",
 				"description": "Send Ada a direct message on Discord. Use only when she asks to be notified or reminded by DM; your normal reply already reaches her.",
 				"parameters": {
 					"type": "object",
@@ -3733,7 +3733,7 @@
 				}
 			},
 			{
-				"name": "notify_owner",
+				"name": "notify",
 				"description": "Send Ada a direct message on Discord. Use only when she asks to be notified or reminded by DM; your normal reply already reaches her.",
 				"parameters": {
 					"type": "object",
@@ -5429,7 +5429,7 @@
 				}
 			},
 			{
-				"name": "notify_owner",
+				"name": "notify",
 				"description": "Send Ada a direct message on Discord. Use only when she asks to be notified or reminded by DM; your normal reply already reaches her.",
 				"parameters": {
 					"type": "object",

@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { type ServiceKey, serviceKey } from "../contract/services.ts";
 import { CommandCollection } from "../discord/command-collection.ts";
 import type { DiscordConnection } from "../discord/connection.ts";
+import { discordDirectChannel } from "../discord/direct-channel.ts";
 import { DiscordSurface } from "../discord/discord-surface.ts";
 import { DispatchThreads } from "../discord/dispatch-threads.ts";
 import type {
@@ -118,6 +119,15 @@ export function discordPlugin(options: DiscordOptions): RoundtablePlugin {
 			return {
 				// The host starts the surface first; it registers the composed commands as it connects.
 				surfaces: [connected],
+				// A person's Discord direct messages, through a Discord identity of theirs.
+				directChannels: [
+					discordDirectChannel({
+						directChannel: (userId) => connected.directChannel(userId),
+						sendDirect: (userId, text) => connected.sendDirect(userId, text),
+						...(identity ? { identity } : {}),
+						ownerId: options.ownerId,
+					}),
+				],
 				services: [
 					// The sweep reads threads through the connection, so it follows the surface's start.
 					{ name: "threads", start: () => void threads.sweep() },

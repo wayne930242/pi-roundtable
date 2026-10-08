@@ -16,6 +16,10 @@ import {
 	pluginContext,
 	type RoundtablePlugin,
 } from "../plugin.ts";
+import {
+	type DirectChannelProvider,
+	directChannelsPort,
+} from "../presence/direct-channels.ts";
 import { ServiceRegistry } from "../registry/services.ts";
 import { surfacePort } from "../routing/surface-port.ts";
 import type { AgentServer, MemoryStore, ScheduleStore } from "../services.ts";
@@ -27,13 +31,20 @@ export interface ModuleRecord {
 	threadOrigins: (ChannelKey | undefined)[];
 	/** The channel each delegated report came back to. */
 	reportChannels: ChannelKey[];
-	/** How often a conversation without a chat channel fell back to the owner's messages. */
+	/** How often anything asked the connection for the primary owner's messages, which the modules no longer read. */
 	ownerChannelAsked: number;
+	/** Whose direct channel was asked for, in order. */
+	directAsked: string[];
+	/** The notices sent through a direct channel, by principal. */
+	notified: { principalId: string; text: string }[];
 	/** What was posted on the surface, by channel. */
 	posted: { channel: ChannelKey; text: string }[];
 }
 
 export const OWNER_CHANNEL: ChannelKey = "discord:owner-dm";
+
+/** The direct messages the stand-in Discord provider reaches by default: the owner's, principal "1". */
+const DIRECT: Readonly<Record<string, ChannelKey>> = { "1": OWNER_CHANNEL };
 
 /** The modules plugin set up over stand-in stores and surface; returns its contribution and the record. */
 export async function setUpModules(
@@ -52,6 +63,13 @@ export async function setUpModules(
 		schedules?: ScheduleStore;
 		/** The conversations the host records, which say whose a conversation is; by default none is recorded. */
 		conversations?: Pick<ConversationRegistry, "get">;
+		/**
+		 * Each principal's direct messages on the stand-in Discord provider, the host's only direct
+		 * channel; by default the owner's are `OWNER_CHANNEL`, and without Discord there is none.
+		 */
+		direct?: Readonly<Record<string, ChannelKey>>;
+		/** The modules' options besides the test's own. */
+		modules?: Partial<ModulesOptions>;
 	} = {},
 ): Promise<{
 	plugin: RoundtablePlugin;
@@ -63,8 +81,26 @@ export async function setUpModules(
 		threadOrigins: [],
 		reportChannels: [],
 		ownerChannelAsked: 0,
+		directAsked: [],
+		notified: [],
 		posted: [],
 	};
+	const direct =
+		options.direct ?? (options.discord === false ? undefined : DIRECT);
+	const providers: DirectChannelProvider[] = direct
+		? [
+				{
+					name: "discord",
+					label: "a direct message on Discord",
+					reaches: async (principalId) => {
+						record.directAsked.push(principalId);
+						return direct[principalId];
+					},
+					deliver: async (principalId, text) =>
+						void record.notified.push({ principalId, text }),
+				},
+			]
+		: [];
 	const plugin = modulesPlugin({
 		owner: {
 			id: "1",
@@ -82,6 +118,7 @@ export async function setUpModules(
 			worker: { run: async () => "found it" },
 		},
 		...(options.errorReporter ? { errorReporter: options.errorReporter } : {}),
+		...options.modules,
 	});
 	const services = new ServiceRegistry([plugin]);
 	// SAFETY: the tools under test read no store; each stub is asked for nothing else.
@@ -119,7 +156,16 @@ export async function setUpModules(
 		} as unknown as DiscordServices);
 	const owns =
 		options.owns ?? ((channel: ChannelKey) => channel.startsWith("discord:"));
-	// SAFETY: setup and the preflight read only the logger, the conversations' background, targets and owners, the surfaces, and the services.
+	// Only Discord's channels have a surface; any other conversation has none to report in.
+	const surfaces = surfacePort(() => [
+		{
+			surface: "discord",
+			start: async () => undefined,
+			sendReply: async (channel, reply) =>
+				void record.posted.push({ channel, text: reply.chunks.join("") }),
+		},
+	]);
+	// SAFETY: setup and the preflight read only the logger, the conversations' background, targets and owners, the surfaces, the direct channels, and the services.
 	const context = {
 		logger: silentLogger(),
 		conversations: {
@@ -134,15 +180,8 @@ export async function setUpModules(
 				return { status: "ran" };
 			},
 		},
-		// Only Discord's channels have a surface; any other conversation has none to report in.
-		surfaces: surfacePort(() => [
-			{
-				surface: "discord",
-				start: async () => undefined,
-				sendReply: async (channel, reply) =>
-					void record.posted.push({ channel, text: reply.chunks.join("") }),
-			},
-		]),
+		surfaces,
+		directChannels: directChannelsPort(() => providers, surfaces),
 	} as unknown as Omit<PluginContext, "services">;
 	const contribution = await services.setUp(plugin, () =>
 		plugin.setup(pluginContext(plugin, context, services.forPlugin(plugin))),

@@ -29,6 +29,18 @@ describe("default tiers", () => {
 	});
 });
 
+describe("a tool renamed since 0.8", () => {
+	test("the operator's tier under its old name, such as notify_owner, is the new name's, unless the new name has its own", () => {
+		expect(toolTiers({ notify_owner: "member" }).minTier("notify")).toBe(
+			"member",
+		);
+		expect(
+			toolTiers({ notify_owner: "member", notify: "admin" }).minTier("notify"),
+		).toBe("admin");
+		expect(toolTiers().minTier("notify")).toBe("owner");
+	});
+});
+
 describe("toolsForTier", () => {
 	const tiers = toolTiers();
 	tiers.declare("feature", { tool_list: "member", tool_create: "admin" });

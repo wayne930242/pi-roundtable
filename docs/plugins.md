@@ -137,9 +137,10 @@ A plugin that replaces `IDENTITY` replaces this too: the declarations are the bu
 | `services` | The services plugins provide to each other, read by key: `services.get(SCHEDULES)`; see [services](#services-what-plugins-provide-to-each-other) |
 | `surfaces` | Every contributed [chat surface](#surfaces-a-chat-network-of-your-own), chosen by the prefix of a channel key: `of`, `sendReply`, `startTyping`, `showStop`, `react`, `unreact`, `prompts` |
 | `turns` | Runs one turn of a conversation your claim owns, over the runtime and the surfaces: [`turns.run`](#personas-and-contextturns-conversations-of-a-kind-of-your-own) |
-| `sessions()`, `conversations`, `surfaces`, `turns`, `dashboard()` | Linked once every plugin has been set up; calling them during `setup` throws `NotLinkedError` |
+| `directChannels` | Every plugin's [direct channels](#directchannels-reaching-a-person-on-their-own): `providers()`, `reach(principalId)`, and `notify(principalId, text)` |
+| `sessions()`, `conversations`, `surfaces`, `directChannels`, `turns`, `dashboard()` | Linked once every plugin has been set up; calling them during `setup` throws `NotLinkedError` |
 
-`sessions()`, `conversations`, `surfaces`, `turns`, and `dashboard()` are available from a service's `start`, an event handler, or a claim's turn.
+`sessions()`, `conversations`, `surfaces`, `directChannels`, `turns`, and `dashboard()` are available from a service's `start`, an event handler, a session tool, or a claim's turn.
 
 Use `QueuePort` from the main entry for `context.queue`; the kit's `ChannelQueue` is also type-only.
 
@@ -1374,7 +1375,7 @@ That entry also exports `groupOption` for subcommand groups, the panel helpers (
 `DISCORD.guard` is the `CommandGuard`; `await guard.allows(actor)` is whether the actor is an owner now: the primary owner by user id, and every other owner principal by their Discord identity, checked through `IDENTITY` each time, so an owner granted or revoked with the CLI is seen at once and a stranger is never resolved. It accepts an interaction or anything with `user.id` (a `DiscordActor`), so a test needs no cast.
 `guard.isOwner(actor)` is deprecated until 1.0: it is the primary owner only, by user id, so a component handler that still asks it refuses the other owners.
 `commandGuard({ ownerId, identity?, root, logger, refusalHint? })` makes one; without `identity` the primary owner is the only owner.
-The connection's `ownerChannel()` and `notifyOwner(text)` are deprecated until 1.0: they reach the primary owner alone.
+The connection's `ownerChannel()` and `notifyOwner(text)` are deprecated until 1.0: they reach the primary owner alone. Reach a person through `context.directChannels` instead, where the Discord plugin's provider finds their direct messages by a Discord identity of theirs.
 `DiscordOptions.refusalHint` (`discord.refusalHint` in the configuration) is appended unchanged to the refusal a non-owner gets.
 
 <!-- example: examples/interactions.ts -->
@@ -1968,6 +1969,39 @@ export const supportDesk = definePlugin({
 ```
 <!-- /example -->
 
+### `directChannels`: reaching a person on their own
+
+A plugin whose chat network gives each person a conversation of their own, such as direct messages or a web inbox, contributes a `DirectChannelProvider` for it:
+
+```ts
+setup: ({ services }) => ({
+	directChannels: [
+		{
+			name: "inbox",
+			label: "a notice in the web chat's inbox",
+			reaches: async (principalId) => inboxOf(principalId),
+			deliver: async (principalId, text) => postNotice(principalId, text),
+		},
+	],
+}),
+```
+
+| Field | What it is |
+|---|---|
+| `name` | Unique across every plugin; a second provider of one name is a `PluginError` naming both plugins |
+| `label` | How the `notify` tool names a notice sent through it, completing "Send Ada …", such as `a direct message on Discord` |
+| `reaches(principalId)` | The person's own conversation here, as a channel key, or `undefined` when they have none here. It may reach the network and throw |
+| `deliver(principalId, text)` | Optional: sends the notice itself. Without it the host posts the text in the channel `reaches` names, through the surface that serves it |
+
+The host reaches a person through the first provider, in contribution order, that reaches them.
+`context.directChannels.reach(principalId)` resolves that provider and channel, or `undefined`; `notify(principalId, text)` sends a notice there and resolves `false` when no provider reaches the person.
+The Discord plugin contributes one named `discord`: it finds a principal's Discord identities through `IDENTITY` and reaches the first one's direct messages, the primary owner's configured identity first, so a single owner is reached in the same direct messages as in 0.8.
+
+The `notify` tool, 0.8's `notify_owner`, sends such a notice. A session has it only when a provider is contributed, and a private conversation only when a provider reaches its person.
+It notifies the conversation's person in a private conversation and the turn's speaker in a shared one, and refuses when no provider reaches them; the host's own turns, such as a report's, notify the primary owner, as `notify_owner` did.
+Its description names the channels that can reach the person, so a host with only Discord reads `Send Ada a direct message on Discord. …` as 0.8 did.
+Until 1.0 the name `notify_owner` still selects it in a selection or a profile, and an operator's `toolTiers` entry for `notify_owner` applies to `notify` unless `notify` has its own.
+
 ### `surfaces`: a chat network of your own
 
 A chat surface connects the host to one chat network: it reports what people write, and it posts what the conversations answer.
@@ -2275,7 +2309,7 @@ The runtime plugin still builds the runtime, so every claim that runs turns thro
 What needs Discord is refused or left out rather than failing later:
 
 - `agents`, `skills` (anything but `false`), and `ops.agent` are configuration errors. `ops: { conversation: "<surface>:<id>" }` needs a chat surface that serves it and a claim that owns it and takes background turns, or the host does not start. The web chat takes no error reports in 0.8.
-- `notify_owner` is not registered, since there are no owner's messages to send to.
+- `notify` is not registered unless a plugin contributes a [direct channel](#directchannels-reaching-a-person-on-their-own), since there is nowhere to send a notice.
 - `schedule_*` and `delegate_task` are registered only in a conversation whose claim takes background turns: their runs are turns of the [background target](#backgroundtargets-whose-turn-a-schedule-or-delegated-task-is) `PERSONAL_TARGET`, named `owner`, which the core contributes on every host. A conversation of a claim without `background`, and one no chat surface carries, has neither.
 - `roundtable doctor` skips the Discord checks.
 
@@ -2672,7 +2706,7 @@ These are the messages as the code writes them, with `<...>` where your names go
 | `plugin <name>: setup is missing. Give the function that returns what the plugin adds.` | Add `setup` |
 | `plugin <name> adds nothing. Give it a part (tools, services, channels, and so on), a migration, or a provider, or remove it.` | Return a part from `setup`, or remove the plugin from `roundtable.config.ts` |
 | `plugin <name>: setup must return an object of the parts it adds; return {} to add none.` | Return an object, not `undefined` |
-| `plugin <name>: setup returned an unknown part "<key>". Did you mean "<closest>"? The parts are services, events, http, holdRules, piPackages, sessionTools, channels, surfaces, personas, backgroundTargets, dashboard, tools, seeds, prompt, agentSelection, requiredTools.` | Fix the key; `migrations`, `providers`, and `preflight` belong on the plugin, not in what `setup` returns |
+| `plugin <name>: setup returned an unknown part "<key>". Did you mean "<closest>"? The parts are services, events, http, holdRules, piPackages, sessionTools, channels, surfaces, personas, backgroundTargets, directChannels, dashboard, tools, seeds, prompt, agentSelection, requiredTools.` | Fix the key; `migrations`, `providers`, and `preflight` belong on the plugin, not in what `setup` returns |
 
 ### Tools
 
@@ -2889,6 +2923,9 @@ Import from the entries listed below; source area files are internal.
 | `ConversationTurns` | `pi-roundtable` | type |
 | `DELEGATION` | `pi-roundtable` | value |
 | `DefineOverrides` | `pi-roundtable` | type |
+| `DirectChannelProvider` | `pi-roundtable` | type |
+| `DirectChannels` | `pi-roundtable` | type |
+| `DirectReach` | `pi-roundtable` | type |
 | `DefinedRoundtable` | `pi-roundtable` | type |
 | `DelegationError` | `pi-roundtable` | value |
 | `DelegationJob` | `pi-roundtable` | type |
@@ -3135,6 +3172,7 @@ Import from the entries listed below; source area files are internal.
 | `McpEndpoint` | `pi-roundtable/kit` | type |
 | `ModelRef` | `pi-roundtable/kit` | type |
 | `OwnerIdentity` | `pi-roundtable/kit` | type |
+| `Notifier` | `pi-roundtable/kit` | type |
 | `OwnerNotifier` | `pi-roundtable/kit` | type |
 | `PreviousTurn` | `pi-roundtable/kit` | type |
 | `PromptSlot` | `pi-roundtable/kit` | type |

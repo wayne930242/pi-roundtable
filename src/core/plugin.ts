@@ -17,6 +17,10 @@ import type { HoldCheck, HoldRule } from "./holds.ts";
 import type { HttpRoute } from "./http/listeners.ts";
 import type { Locale } from "./i18n/index.ts";
 import type { Logger } from "./log.ts";
+import type {
+	DirectChannelProvider,
+	DirectChannels,
+} from "./presence/direct-channels.ts";
 import type { ConversationTurns } from "./routing/conversation-turns.ts";
 import type {
 	AgentTurnScope,
@@ -179,6 +183,13 @@ export interface Contribution {
 	 * schedule or delegated task names one, and a turn for a target nobody contributes is skipped.
 	 */
 	backgroundTargets?: readonly BackgroundTarget[];
+	/**
+	 * Ways to reach a person on their own, such as a chat network's direct messages, one per name
+	 * across every plugin. The host reaches a person through the first, in contribution order,
+	 * that reaches them: `notify` sends there, and a conversation no chat surface carries keeps its
+	 * schedules and delegated reports in the creator's.
+	 */
+	directChannels?: readonly DirectChannelProvider[];
 	/** Lines the agent server's dashboard shows under its title, such as links, in contribution order. */
 	dashboard?: readonly string[];
 	/** Tools the plugin adds, each with the lowest tier that may use it; built with `defineTool`. */
@@ -213,6 +224,7 @@ export const CONTRIBUTION_KEYS = [
 	"surfaces",
 	"personas",
 	"backgroundTargets",
+	"directChannels",
 	"dashboard",
 	"tools",
 	"toolTiers",
@@ -269,6 +281,8 @@ export interface PluginContext {
 	conversations: ConversationPort;
 	/** Every contributed chat surface, chosen by a channel's prefix; calls during setup throw NotLinkedError. */
 	surfaces: SurfacePort;
+	/** Every plugin's direct channels, which reach a person on their own; calls during setup throw NotLinkedError. */
+	directChannels: DirectChannels;
 	/** Runs conversation turns of any kind over the runtime and the surfaces; calls during setup throw NotLinkedError. */
 	turns: ConversationTurns;
 	/** The host's one connection pool, migrated before any setup; throws PluginError without a database. */

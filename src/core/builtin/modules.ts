@@ -23,7 +23,7 @@ import {
 	type DelegationWorker,
 } from "../modules/delegation/delegator.ts";
 import { WebResearchWorker } from "../modules/delegation/web-research-worker.ts";
-import { notifyExtension } from "../modules/notify/notify.ts";
+import { sessionNotify } from "../modules/notify/session-notify.ts";
 import { precheckScriptHoldRule } from "../modules/schedules/precheck-tools.ts";
 import { Scheduler } from "../modules/schedules/scheduler.ts";
 import { schedulesExtension } from "../modules/schedules/schedules.ts";
@@ -88,12 +88,13 @@ const MODULE_TIERS: Readonly<Record<string, Tier>> = {
 };
 
 /**
- * The owner's modules: notifications, schedules, and delegated tasks, each a session tool, and
- * the turns nobody wrote. The delegator's running jobs join the shutdown drain. Without Discord
- * there are no owner's messages: no `notify_owner`, and a conversation no chat surface carries
- * can neither schedule nor delegate. It contributes `PERSONAL_TARGET`, with the per-person limits given, whose turns the schedules
- * and delegated reports are, and a session whose conversation's claim takes no background turns
- * gets neither tool.
+ * The modules: notifications, schedules, and delegated tasks, each a session tool, and the turns
+ * nobody wrote. The delegator's running jobs join the shutdown drain. `notify` sends through the
+ * plugins' direct channels, so with none there is no notify. Without Discord there are no owner's
+ * messages, and a conversation no chat surface carries can neither schedule nor delegate. It
+ * contributes `PERSONAL_TARGET`, with the per-person limits given, whose turns the schedules and
+ * delegated reports are, and a session whose conversation's claim takes no background turns gets
+ * neither tool.
  */
 export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 	const { owner } = options;
@@ -131,6 +132,7 @@ export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 			surfaces,
 			sessions,
 			toolTiers,
+			directChannels,
 		}) => {
 			const schedules = services.get(SCHEDULES);
 			// Absent when a plugin list leaves the prechecks plugin out: then none can be attached.
@@ -198,13 +200,16 @@ export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 			// Whose a conversation is, read when a tool runs: an agent's serves everyone; another is
 			// as the host recorded it, and one it has no record of is shared on a chat surface and the
 			// speaker's own without one, where its schedules are kept in a conversation it is not.
+			// The host's record of a session's conversation; an agent's is not recorded.
+			const recordOf = async (session: SessionContext) =>
+				session.agent
+					? undefined
+					: services.find(CONVERSATIONS)?.get(session.homeChannel);
 			const visibility =
 				(session: SessionContext) =>
 				async (): Promise<"private" | "shared"> => {
 					if (session.agent) return "shared";
-					const record = await services
-						.find(CONVERSATIONS)
-						?.get(session.homeChannel);
+					const record = await recordOf(session);
 					if (!record)
 						return surfaces.of(session.homeChannel) ? "shared" : "private";
 					return record.visibility === "private" ? "private" : "shared";
@@ -265,9 +270,10 @@ export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 					}),
 				],
 				sessionTools: [
-					...(connection
-						? [fixed("notify", () => notifyExtension(connection, owner))]
-						: []),
+					fixed(
+						"notify",
+						sessionNotify({ directChannels, recordOf, owner, logger }),
+					),
 					fixed("schedules", (session) =>
 						takesRuns(session)
 							? schedulesExtension(

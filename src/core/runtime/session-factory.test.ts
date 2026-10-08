@@ -61,6 +61,30 @@ describe("the persona of a conversation kind", () => {
 	});
 });
 
+describe("the tools of a selection", () => {
+	test("a tool's name before 0.9, such as notify_owner, selects the tool by its new name", () => {
+		// SAFETY: toolsFor reads only the linked plan.
+		const options = {
+			sessions: () =>
+				({
+					piPackages: [],
+					plan: { tools: [], mcp: [] },
+				}) as unknown as LinkedSessions,
+		} as unknown as PiAgentRuntimeOptions;
+		const tools = new SessionFactory(options, {
+			speaker: () => undefined,
+			runTask: async () => "",
+		}).toolsFor({
+			tools: ["memory_add", "notify_owner", "notify"],
+			groups: [],
+		});
+		expect(tools.filter((tool) => tool.startsWith("notify"))).toEqual([
+			"notify",
+		]);
+		expect(tools).toContain("memory_add");
+	});
+});
+
 describe("the agents' scratch dir", () => {
 	test("the agents' bash runs with TMPDIR at the scratch dir", async () => {
 		const root = realpathSync(mkdtempSync(join(tmpdir(), "scratch-bash-")));
