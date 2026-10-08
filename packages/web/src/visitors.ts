@@ -25,6 +25,9 @@ export interface VisitorOptions {
 	logger: Logger;
 }
 
+/** The provider of the aliases 0.9 keeps for 0.8 ids; `IDENTITY.resolve` refuses it as no surface's. */
+const LEGACY_PROVIDER = "legacy";
+
 /** How many unlinked identities are remembered, so each is warned about once. */
 const WARNED_MAX = 100;
 
@@ -68,6 +71,8 @@ export function consoleVisitors(
 				: owner(id);
 		}
 		const named = `${actor.provider}:${actor.subject}`;
+		if (actor.provider === LEGACY_PROVIDER)
+			return { refusal: `${named} is a 0.8 id, not an identity` };
 		let id: string | undefined;
 		try {
 			id = await identity.principalOf(named);

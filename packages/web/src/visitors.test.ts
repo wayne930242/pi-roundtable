@@ -153,6 +153,21 @@ describe("consoleVisitors", () => {
 		expect(await who(facts("stranger"))).toBe("refused");
 	});
 
+	test("a legacy identity is refused before it is looked up, as IDENTITY.resolve refuses it", async () => {
+		const legacy: FakePrincipal = {
+			...ADA,
+			identities: [...(ADA.identities ?? []), "legacy:remote-mcp"],
+		};
+		const { identify } = setup([legacy]);
+		expect(
+			await identify({
+				provider: "legacy",
+				subject: "remote-mcp",
+				name: "remote-mcp",
+			}),
+		).toEqual({ refusal: "legacy:remote-mcp is a 0.8 id, not an identity" });
+	});
+
 	test("facts that are no identity are refused", async () => {
 		const { identify } = setup([ADA]);
 		expect(
