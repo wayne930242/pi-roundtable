@@ -24,9 +24,10 @@ export type CardAudienceOptions = DiscordOwnersOptions;
 
 /**
  * Whom a card is for, by the prompt scope of the turn that asks. The speaker's principal answers
- * their own card on any of their Discord identities when, for an approval, they hold its tier,
- * checked again when they press, and, for an owner-tier one, they are an owner; the card mentions
- * the identity that spoke where it is one of those, or else all of them. Where the scope
+ * their own card on any of their Discord identities that is still theirs when they press when,
+ * for an approval, they hold its tier, checked again then, and, for an owner-tier one, they are
+ * an owner; the card mentions the identity that spoke where it is one of those, or else all of
+ * them. Where the scope
  * escalates to the owners, every owner with a Discord identity answers it too, and a card the
  * speaker cannot answer, or whose principal has no Discord identity, is theirs alone; where it
  * escalates to no one, that card goes to no one. Without a scope, a card is the owners'.
@@ -72,7 +73,11 @@ export class CardAudiences {
 			const mentions = own.includes(scope.speakerId) ? [scope.speakerId] : own;
 			return {
 				allows: async (user) => {
-					if (own.includes(user.id))
+					// Read the links again: one moved or unlinked since the card was posted is no longer theirs.
+					if (
+						own.includes(user.id) &&
+						(await this.#stillOwn(scope.principalId, user.id))
+					)
 						return (
 							(primary && user.id === ownerId) ||
 							this.#owners.holds(user, minTier, scope.principalId)
@@ -93,6 +98,30 @@ export class CardAudiences {
 		};
 	}
 
+	/** Whether the Discord user is still one of the principal's identities; false when that cannot be read. */
+	async #stillOwn(principalId: string, userId: string): Promise<boolean> {
+		return (
+			(await this.#discordIdentities(principalId))?.includes(userId) ?? false
+		);
+	}
+
+	/** The principal's Discord user ids; undefined, and logged, when they cannot be read. */
+	async #discordIdentities(principalId: string): Promise<string[] | undefined> {
+		const { identity, logger } = this.#options;
+		if (!identity) return undefined;
+		try {
+			return (await identity.identities(principalId))
+				.filter((link) => link.provider === "discord")
+				.map((link) => link.subject);
+		} catch (error) {
+			logger.warn(
+				{ principal: principalId, err: error },
+				"could not read the speaker's identities; none counts as theirs, so their card is the owners'",
+			);
+			return undefined;
+		}
+	}
+
 	/**
 	 * The Discord identities of the scope's principal when they may answer their own card: at the
 	 * tier it needs and, for an owner-tier call, an owner; undefined when they may not, or have
@@ -102,8 +131,10 @@ export class CardAudiences {
 		scope: PromptScope,
 		minTier: Tier | undefined,
 	): Promise<string[] | undefined> {
-		const { identity, logger } = this.#options;
-		if (!identity || (minTier && !tierAtLeast(scope.tier, minTier)))
+		if (
+			!this.#options.identity ||
+			(minTier && !tierAtLeast(scope.tier, minTier))
+		)
 			return undefined;
 		// A turn whose tier defaulted to owner is not an owner's: its owner-tier call is the owners'.
 		if (
@@ -111,17 +142,7 @@ export class CardAudiences {
 			!(await this.#owners.isOwnerPrincipal(scope.principalId))
 		)
 			return undefined;
-		try {
-			const own = (await identity.identities(scope.principalId))
-				.filter((link) => link.provider === "discord")
-				.map((link) => link.subject);
-			return own.length > 0 ? own : undefined;
-		} catch (error) {
-			logger.warn(
-				{ principal: scope.principalId, err: error },
-				"could not read the speaker's identities; their card goes to the owners",
-			);
-			return undefined;
-		}
+		const own = await this.#discordIdentities(scope.principalId);
+		return own && own.length > 0 ? own : undefined;
 	}
 }

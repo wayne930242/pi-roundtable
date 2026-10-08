@@ -251,9 +251,11 @@ describe("cards by the prompt scope", () => {
 	describe("a principal with two Discord identities", () => {
 		/** Ada (admin) on her desktop account and her phone's; anyone else is a stranger. */
 		const resolved: string[] = [];
+		/** Her phone's link, until a test moves it to someone else. */
+		let phone = "p_ada";
 		const links = (principalId: string): IdentityLink[] =>
 			principalId === "p_ada"
-				? [ADMIN, PHONE].map((subject) => ({
+				? [ADMIN, ...(phone === "p_ada" ? [PHONE] : [])].map((subject) => ({
 						provider: "discord",
 						subject,
 						principalId,
@@ -293,7 +295,7 @@ describe("cards by the prompt scope", () => {
 						id: facts.subject,
 						name: "Ada",
 						tier: "admin",
-						principalId: "p_ada",
+						principalId: facts.subject === PHONE ? phone : "p_ada",
 					};
 				return undefined;
 			},
@@ -326,6 +328,39 @@ describe("cards by the prompt scope", () => {
 			});
 			expect(await pressAs(ADMIN)).toEqual([]);
 			expect(await answer).toBe("approved");
+		});
+
+		test("an identity moved to someone else after the card was posted may not answer it, and is not resolved", async () => {
+			const { fake, cards, approval } = cardsInThread(two);
+			void approval(promptScope(ada("p_ada")), "admin");
+			await tick();
+			const approvalCard = fake.cardId();
+			void cards.prompts("discord:555", promptScope(ada("p_ada")))?.ask("t", {
+				question: "Which one?",
+				options: [{ label: "First" }],
+				multi: false,
+				allowOther: false,
+			});
+			await tick();
+			const questionCard = fake.cardId();
+			phone = "p_bea";
+			resolved.length = 0;
+			try {
+				const yes = press("button", `${CARD_PREFIX}${approvalCard}:yes`, {
+					user: PHONE,
+				});
+				await cards.handle(yes.interaction);
+				expect(yes.replies).toEqual([messages().cardApproversRefusal]);
+				const pick = press("select", `${CARD_PREFIX}${questionCard}:pick`, {
+					user: PHONE,
+					values: ["0"],
+				});
+				await cards.handle(pick.interaction);
+				expect(pick.replies).toEqual([messages().cardAskerRefusal]);
+				expect(resolved).toEqual([]);
+			} finally {
+				phone = "p_ada";
+			}
 		});
 
 		test("a stranger's press is refused without resolving them, so it admits no one", async () => {
