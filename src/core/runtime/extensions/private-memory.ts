@@ -2,6 +2,7 @@ import { getCurrentSystemMessage } from "@earendil-works/pi-ai";
 import type {
 	ContextWithSystemEvent,
 	ExtensionFactory,
+	SessionBeforeCompactEvent,
 } from "@earendil-works/pi-coding-agent";
 import { MEMORY_TOOLS } from "../../modules/memory/owner-memory.ts";
 
@@ -104,6 +105,39 @@ function projectedMessage(
 }
 
 /**
+ * What a shared conversation's compaction may summarize of its history: as no one's turn reads it,
+ * without the prompt states, whose memory sections are someone's, and without reasoning, which may
+ * restate the memory its turn read. A summary outlives the turns it covers and every later speaker
+ * reads it, so it is written from no one's memory.
+ */
+export function summaryProjection(
+	messages: ContextWithSystemEvent["messages"],
+): ContextWithSystemEvent["messages"] {
+	const view: MemoryView = { shared: true, reader: undefined };
+	return messages.flatMap((message) =>
+		message.role === "system"
+			? []
+			: [projectedMessage(message, view, true) ?? message],
+	);
+}
+
+/**
+ * Has a shared conversation's compaction summarize its history as `summaryProjection` gives it.
+ * Pi hands every `session_before_compact` handler, and its own summary after them, the same
+ * preparation, so each that reads it later reads the projection.
+ */
+export function privateCompaction(
+	preparation: SessionBeforeCompactEvent["preparation"],
+): void {
+	preparation.messagesToSummarize = summaryProjection(
+		preparation.messagesToSummarize,
+	);
+	preparation.turnPrefixMessages = summaryProjection(
+		preparation.turnPrefixMessages,
+	);
+}
+
+/**
  * The tool calls a session runs at once, and those of them that drew on the reader's memory while
  * they ran, such as one whose task's worker read it: their results hold that memory too.
  */
@@ -131,7 +165,7 @@ export class MemoryDraws {
  * Projects each model request of a session so it carries no one's memory but the running turn's
  * reader's: a person's memory is theirs per request, never the history's to share. A tool result
  * that drew on the reader's memory, nested calls' and tasks' included, records it as theirs, as a
- * memory tool's does.
+ * memory tool's does. A shared conversation's compaction summarizes no one's memory.
  */
 export function privateMemoryExtension(
 	shared: boolean,
@@ -154,6 +188,12 @@ export function privateMemoryExtension(
 				},
 			};
 		});
+		// The compaction extension placed through the core's wrapper got the projection already; Pi's
+		// own summary, which runs when no extension answers, reads it from here.
+		if (shared)
+			pi.on("session_before_compact", (event) => {
+				privateCompaction(event.preparation);
+			});
 		pi.on("context_with_system", (event) => {
 			const messages = memoryProjection(event.messages, {
 				shared,

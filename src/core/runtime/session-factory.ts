@@ -39,6 +39,7 @@ import {
 } from "./extensions/confirmation-gate.ts";
 import {
 	MemoryDraws,
+	privateCompaction,
 	privateMemoryExtension,
 } from "./extensions/private-memory.ts";
 import {
@@ -303,12 +304,18 @@ export class SessionFactory {
 			homeChannel: channel,
 			turnChannel: agent && agents ? agents.turnChannel(agent) : channel,
 			compaction: {
+				// A shared conversation's compactor summarizes no one's private memory.
 				wrap: (compactor) =>
-					tiers.wrapCompactor(compactor, (bypass) =>
-						logger.info(
-							{ channel, ...bypass, ceiling: HARD_COMPACT_TOKENS },
-							"compaction skips the extension for Pi's summary",
-						),
+					tiers.wrapCompactor(
+						compactor,
+						(bypass) =>
+							logger.info(
+								{ channel, ...bypass, ceiling: HARD_COMPACT_TOKENS },
+								"compaction skips the extension for Pi's summary",
+							),
+						conversation.visibility === "shared"
+							? (event) => privateCompaction(event.preparation)
+							: undefined,
 					),
 			},
 			conversation,

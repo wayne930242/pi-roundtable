@@ -164,16 +164,20 @@ export class CompactionTiers {
 	/**
 	 * Wraps a compaction extension so a compaction past the hard ceiling skips it and pi's summary
 	 * runs. pi keeps the last handler result and stops only on cancel, so a handler of the assistant's
-	 * own could not keep the extension from answering; wrapping its registration can.
+	 * own could not keep the extension from answering; wrapping its registration can. `prepare`
+	 * changes what the extension is given before it reads it, such as a shared conversation's
+	 * history without anyone's private memory.
 	 */
 	wrapCompactor(
 		compactor: ExtensionFactory,
 		onBypass: (details: { reason: string; tokensBefore: number }) => void,
+		prepare?: (event: SessionBeforeCompactEvent) => void,
 	): ExtensionFactory {
 		const gate = (event: SessionBeforeCompactEvent): boolean => {
 			const { tokensBefore } = event.preparation;
 			const reason = extensionBypass(tokensBefore, this.latest());
 			if (reason) onBypass({ reason, tokensBefore });
+			else prepare?.(event);
 			return reason === undefined;
 		};
 		type Handler = (event: unknown, ctx: unknown) => unknown;

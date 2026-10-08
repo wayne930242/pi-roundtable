@@ -28,6 +28,7 @@ import type {
 } from "./core/modules/memory/owner-memory-store.ts";
 import { PiAgentRuntime } from "./core/runtime/pi-agent-runtime.ts";
 import type { MemoryStore, SpeakerMemory } from "./core/services.ts";
+import type { SessionTool } from "./core/sessions.ts";
 import type { Speaker } from "./core/speakers.ts";
 import { testPlugin } from "./testing.ts";
 
@@ -126,6 +127,40 @@ afterEach(() => {
 });
 
 /**
+ * A compaction extension placed through the core's wrapper, as the core's own is, that hands on the text of
+ * what it is asked to summarize and answers with a summary of its own.
+ */
+function compactorTool(summarized: (text: string) => void): SessionTool {
+	return {
+		name: "recording-compactor",
+		phase: "compaction",
+		engine: "recording",
+		snapshot: () => ({
+			revision: 0,
+			factory: (session) =>
+				session.compaction.wrap((pi) => {
+					pi.on("session_before_compact", ({ preparation }) => {
+						summarized(
+							JSON.stringify([
+								...preparation.messagesToSummarize,
+								...preparation.turnPrefixMessages,
+							]),
+						);
+						return {
+							compaction: {
+								summary: "A summary.",
+								firstKeptEntryId: preparation.firstKeptEntryId,
+								tokensBefore: preparation.tokensBefore,
+								details: { engine: "recording" },
+							},
+						};
+					});
+				}),
+		}),
+	};
+}
+
+/**
  * A host whose plugin offers a "study" persona with memory and a "quiz" persona without, over
  * the real Pi runtime and a faux model. `recorded` is the host's record of each conversation,
  * which the runtime reads when a turn names none; a test may change it between turns.
@@ -139,6 +174,8 @@ async function isolationHost(
 		dir?: string;
 		/** The held actions' store, an earlier host's to start again over what it held. */
 		held?: HeldActionStore;
+		/** Receives what a compaction extension, placed through the core's wrapper, would summarize. */
+		compactor?: (summarized: string) => void;
 	} = {},
 ) {
 	const recorded = options.recorded ?? new Map<ChannelKey, TurnConversation>();
@@ -214,6 +251,7 @@ async function isolationHost(
 				],
 				sessionTools: [
 					memorySessionTool(store, OWNER),
+					...(options.compactor ? [compactorTool(options.compactor)] : []),
 					{
 						name: "probe",
 						phase: "tools",
@@ -809,6 +847,65 @@ describe("the reasoning of a shared conversation's earlier turns", () => {
 				expect(sent).not.toContain("BO_THOUGHT");
 				expect(sent).not.toContain("BO_TOOL_SIGNED");
 			}
+		} finally {
+			await host.stop();
+		}
+	});
+});
+
+describe("a shared conversation's compaction", () => {
+	/** A message long enough that the turn after it compacts the history before it. */
+	const LONG = `${"Bo reads a long text. ".repeat(16_000)}`;
+	const thought = {
+		type: "thinking" as const,
+		thinking: "ANN_THOUGHT_SECRET",
+		thinkingSignature: "ANN_SIGNED_SECRET",
+	};
+	/** Ann's turn finds her note, thinking aloud; Bo's then fills the context. */
+	const turns = (): FauxResponseStep[] => [
+		fauxAssistantMessage(
+			[thought, fauxToolCall("memory_search", { query: "doctor" })],
+			{ stopReason: "toolUse" },
+		),
+		fauxAssistantMessage("Noted."),
+		fauxAssistantMessage("Read it."),
+	];
+	const PRIVATE = [...SECRETS, "ANN_THOUGHT_SECRET", "ANN_SIGNED_SECRET"];
+
+	test("Pi's own summary is written from the history without anyone's private memory", async () => {
+		let summarized: string | undefined;
+		const host = await isolationHost(STORE(), [
+			...turns(),
+			(context) => {
+				summarized = JSON.stringify(context.messages);
+				return fauxAssistantMessage("A summary.");
+			},
+		]);
+		try {
+			expect((await host.run(ANN, "fake:room")).ok).toBe(true);
+			expect((await host.run(BO, "fake:room", { text: LONG })).ok).toBe(true);
+			if (!summarized) throw new Error("the history was not compacted");
+			expect(summarized).toContain("Noted.");
+			for (const secret of PRIVATE) expect(summarized).not.toContain(secret);
+		} finally {
+			await host.stop();
+		}
+	});
+
+	test("a compaction extension placed through the core's wrapper is given the history without it", async () => {
+		let summarized: string | undefined;
+		const host = await isolationHost(STORE(), turns(), {
+			compactor: (text) => {
+				summarized = text;
+			},
+		});
+		try {
+			expect((await host.run(ANN, "fake:room")).ok).toBe(true);
+			expect((await host.run(BO, "fake:room", { text: LONG })).ok).toBe(true);
+			if (!summarized) throw new Error("the history was not compacted");
+			expect(summarized).toContain("Noted.");
+			for (const secret of PRIVATE) expect(summarized).not.toContain(secret);
+			expect(summarized).toContain(HIDDEN);
 		} finally {
 			await host.stop();
 		}

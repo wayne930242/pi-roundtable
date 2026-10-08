@@ -25,6 +25,7 @@ import { Roundtable } from "../host.ts";
 import { silentLogger } from "../log.ts";
 import type { PluginContext, RoundtablePlugin } from "../plugin.ts";
 import { CompactionTiers } from "../runtime/compaction-tiers.ts";
+import { privateCompaction } from "../runtime/extensions/private-memory.ts";
 import { sessionExtensions } from "../runtime/runtime-types.ts";
 import { IDENTITY } from "../services.ts";
 import type { AgentTurnScope, SessionContext } from "../sessions.ts";
@@ -305,8 +306,14 @@ export async function testHost(
 			kind: scope ? "agent" : "owner",
 			homeChannel: scope?.home ?? ownerChannel,
 			turnChannel: turnChannelOf(scope) ?? ownerChannel,
+			// Shared, as the runtime makes it, so its compactor summarizes no one's private memory.
 			compaction: {
-				wrap: (compactor) => tiers.wrapCompactor(compactor, () => undefined),
+				wrap: (compactor) =>
+					tiers.wrapCompactor(
+						compactor,
+						() => undefined,
+						(event) => privateCompaction(event.preparation),
+					),
 			},
 			conversation: { visibility: "shared" },
 			addressee: THE_SPEAKER,

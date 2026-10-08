@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
 	type ExtensionAPI,
+	type SessionBeforeCompactEvent,
 	SessionManager,
 	shouldCompact,
 } from "@earendil-works/pi-coding-agent";
@@ -70,7 +71,10 @@ function trigger(tiers: CompactionTiers, model = LARGE): number {
 type Handler = (event: unknown, ctx: unknown) => unknown;
 
 /** Loads a stand-in for a compaction extension through the tiers' wrapper. */
-function loadExtension(tiers: CompactionTiers) {
+function loadExtension(
+	tiers: CompactionTiers,
+	prepare?: (event: SessionBeforeCompactEvent) => void,
+) {
 	const extensionCalls: number[] = [];
 	const bypasses: { reason: string; tokensBefore: number }[] = [];
 	const handlers = new Map<string, Handler>();
@@ -84,6 +88,7 @@ function loadExtension(tiers: CompactionTiers) {
 			});
 		},
 		(bypass) => bypasses.push(bypass),
+		prepare,
 	)({
 		on: (event: string, handler: Handler) => handlers.set(event, handler),
 	} as unknown as ExtensionAPI);
@@ -158,6 +163,18 @@ describe("hard ceiling", () => {
 		expect(extension.bypasses[0]?.reason).toContain(
 			"The extension's last compaction",
 		);
+	});
+
+	test("what the extension is given is prepared first, and only when it answers", async () => {
+		const prepared: number[] = [];
+		const extension = loadExtension(
+			tiersOver(SessionManager.inMemory("/tmp")),
+			(event) => prepared.push(event.preparation.tokensBefore),
+		);
+		await extension.compact(200_000);
+		await extension.compact(600_000);
+		expect(prepared).toEqual([200_000]);
+		expect(extension.extensionCalls).toEqual([200_000]);
 	});
 
 	test("only session_before_compact is wrapped", () => {

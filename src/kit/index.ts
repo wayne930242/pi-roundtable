@@ -24,7 +24,9 @@ export {
 	CompactionTiers,
 	compactionEngine,
 	HARD_COMPACT_TOKENS,
+	privateCompaction,
 	SOFT_COMPACT_TOKENS,
+	summaryProjection,
 } from "./compaction.ts";
 export { scrubDiagnostic } from "./diagnostics.ts";
 export type {

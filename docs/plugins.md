@@ -67,7 +67,7 @@ Use the kit's building blocks for a plugin that runs Pi itself, such as a coding
 - Tools: `textToolsExtension`, `requiredString`, `stringList` (with `toolText` and `toolError`) for tools that return text.
 - Mirroring a built-in tool in a worker that cannot reach the host: `SCHEDULE_TOOLS`, `scheduleToolSpecs({ locale, timeZone })`, `isScheduleTool`, `callScheduleTool`, `DELEGATE_TOOL` and `DELEGATE_TOOL_SPEC`.
   The specs take the locale and time zone for their descriptions, so the worker needs no process-wide setting.
-- Compaction: `CompactionTiers` gives a session the core's compaction tiers (`settings()` for Pi's `SettingsManager`, `wrapCompactor(factory, onBypass)` to hold a compaction extension back past the ceiling, `latest()`), with `SOFT_COMPACT_TOKENS` (300,000), `HARD_COMPACT_TOKENS` (500,000), `COMPACT_HEADROOM_TOKENS` (50,000), `compactionEngine(details, engine)` and the types `CompactionEngine`, `CompactionHistory` and `LatestCompaction`.
+- Compaction: `CompactionTiers` gives a session the core's compaction tiers (`settings()` for Pi's `SettingsManager`, `wrapCompactor(factory, onBypass, prepare?)` to hold a compaction extension back past the ceiling and change what it is given first, `latest()`), with `SOFT_COMPACT_TOKENS` (300,000), `HARD_COMPACT_TOKENS` (500,000), `COMPACT_HEADROOM_TOKENS` (50,000), `compactionEngine(details, engine)` and the types `CompactionEngine`, `CompactionHistory` and `LatestCompaction`. `summaryProjection(messages)` is what a shared conversation's compaction may summarize, without anyone's private memory, prompt states, or reasoning, and `privateCompaction(preparation)` sets a `session_before_compact` preparation to it.
 - Jev compaction: `jevCompact(input, options)` compacts through Jev (pi-jev-compaction 1.0.0) and returns `{ compaction }` or `{ skipped, detail? }` (a `JevSkipReason`: pi-jev-compaction's fallbacks `no_key`, `aborted`, `nothing_to_compact`, `no_candidates`, `cannot_fit`, `jev_error`, `reduction_too_small`, or `previous_summary_too_large`), for Pi's own summary to run instead.
   Its summary carries the previous summary once, as the transcript's `[previous compaction]` message, with `estimatedTokensAfter` measured on the final text; a previous summary over `previousSummaryLimitTokens` (default `JEV_PREVIOUS_SUMMARY_LIMIT_TOKENS`, 60,000) skips without calling Jev, so Pi's summary condenses the chain.
   Jev judges with `goal` (default `JEV_GOAL`: keep the tool results that set rules still in force, drop stale lookups, listings and finished edits), and the summary ends with a `## Rules loaded before this compaction` section naming each rule load among the summarized messages (tool name and JSON arguments cut at 200 characters) for the agent to load again; `ruleLoad(tool, args)` picks them (default `isRuleLoad`: tools ending in `invoke-skill` or `get-system-prompt`, and tools ending in `read` whose `path` is a `SKILL.md`, an `AGENTS.md` or under `.agents/skills/`).
@@ -1605,6 +1605,7 @@ Use it for tools that `defineTool` cannot express, such as a set that changes wh
 Each extension needs a unique name; the core reserves `read-attachment`, `confirmation-gate`, `ask-user`, `self-compact-guard`, `private-memory`, and `active-tools`.
 A runtime of your own pins the active tools the way the core does: `activeToolsExtension(() => tools)` from `pi-roundtable/kit` is the extension the core places last, so its handler runs after every other extension's.
 At most one plugin may add a `compaction` extension, and it must name the `engine` its compactions record.
+In a shared conversation the core's wrapper hands it the history to summarize as `summaryProjection` gives it, without anyone's private memory, the prompt states, or the turns' reasoning, and Pi's own summary reads the same, since a summary outlives the turns it covers and every later speaker reads it. A compactor that reads the history otherwise, outside `session.compaction.wrap` or in a runtime of your own, must summarize a shared conversation's history the same way: call `privateCompaction(event.preparation)` from `pi-roundtable/kit` before reading it.
 
 The factory gets the session's `SessionContext`, fixed when the session is made:
 - `kind`, `homeChannel`, `turnChannel`, and `agent` say what the session is for and where its turns run.
@@ -3236,6 +3237,8 @@ Import from the entries listed below; source area files are internal.
 | `compactionEngine` | `pi-roundtable/kit` | value |
 | `HARD_COMPACT_TOKENS` | `pi-roundtable/kit` | value |
 | `SOFT_COMPACT_TOKENS` | `pi-roundtable/kit` | value |
+| `summaryProjection` | `pi-roundtable/kit` | value |
+| `privateCompaction` | `pi-roundtable/kit` | value |
 | `CompactionEngine` | `pi-roundtable/kit` | type |
 | `CompactionHistory` | `pi-roundtable/kit` | type |
 | `LatestCompaction` | `pi-roundtable/kit` | type |
