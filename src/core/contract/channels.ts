@@ -208,6 +208,13 @@ export interface ChannelClaim {
 	deleteConversation?(channel: ChannelKey): Promise<void>;
 	/** Reports of work started in an owned channel stay in it instead of opening a thread. */
 	postsInPlace?: boolean;
+	/**
+	 * Whether the claim's `background` answers the host's own turns (`SYSTEM_PRINCIPAL`), such as
+	 * `ops.conversation`'s error reports, in its conversations; true when left out. A claim whose
+	 * conversations are each private to the person who opened them, such as the web chat's, says
+	 * false, and a host whose `ops.conversation` names one of them does not start.
+	 */
+	takesSystemReports?: boolean;
 }
 
 /** The conversations of every claimed channel, through the channel queue. */
@@ -241,6 +248,8 @@ export interface ConversationPort {
 	owns(channel: ChannelKey): boolean;
 	/** Whether the claim that owns the channel runs background turns there; false when none owns it. */
 	takesBackground(channel: ChannelKey): boolean;
+	/** Whether the claim that owns the channel takes the host's own turns; false when none owns it. */
+	takesSystemReports(channel: ChannelKey): boolean;
 }
 
 /** The host's channel queue, as plugins use it. */

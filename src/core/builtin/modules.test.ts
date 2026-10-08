@@ -485,6 +485,22 @@ describe("the error reporter's conversation", () => {
 		);
 	});
 
+	test("the preflight refuses a reporter's conversation whose claim keeps its conversations private, saying what to use", async () => {
+		const reporter = new ErrorReporter({
+			destination: { conversation: HOME },
+			app: "Roundtable",
+		});
+		const { plugin } = await setUpModules({
+			discord: false,
+			errorReporter: reporter,
+			takesSystemReports: () => false,
+		});
+		expect(async () => plugin.preflight?.()).toThrow(
+			'config ops.conversation: the claim that owns "discord:scout" keeps its conversations private to their people, so it takes no system error reports',
+		);
+		expect(async () => plugin.preflight?.()).toThrow("ops.agent");
+	});
+
 	test("the preflight passes for a Discord conversation with Discord there", async () => {
 		const reporter = new ErrorReporter({
 			destination: { conversation: HOME },

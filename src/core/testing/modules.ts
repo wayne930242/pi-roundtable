@@ -75,6 +75,8 @@ export async function setUpModules(
 		owns?: (channel: ChannelKey) => boolean;
 		/** Whether the claim owning a channel takes background turns; by default every owned channel's does. */
 		takesBackground?: (channel: ChannelKey) => boolean;
+		/** Whether the claim owning a channel takes the host's own turns; by default every owned channel's does. */
+		takesSystemReports?: (channel: ChannelKey) => boolean;
 		errorReporter?: ModulesOptions["errorReporter"];
 		/** The schedules the tools keep; by default a stub that answers nothing. */
 		schedules?: ScheduleStore;
@@ -208,6 +210,7 @@ export async function setUpModules(
 					: undefined,
 			owns,
 			takesBackground: options.takesBackground ?? owns,
+			takesSystemReports: options.takesSystemReports ?? owns,
 			background: async (turn: { channel: ChannelKey }) => {
 				record.reportChannels.push(turn.channel);
 				return { status: "ran" };

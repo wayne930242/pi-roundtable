@@ -357,4 +357,9 @@ export class ChannelRouter implements ConversationPort {
 	takesBackground(channel: ChannelKey): boolean {
 		return this.#owner(channel)?.background !== undefined;
 	}
+
+	takesSystemReports(channel: ChannelKey): boolean {
+		const owner = this.#owner(channel);
+		return owner !== undefined && owner.takesSystemReports !== false;
+	}
 }

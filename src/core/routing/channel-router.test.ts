@@ -386,6 +386,19 @@ describe("ChannelRouter", () => {
 		expect(routing.postsInPlace("discord:dm")).toBe(false);
 	});
 
+	test("a claim takes the host's own reports unless it says it does not", () => {
+		const routing = router([
+			claim("owner", 0, [], { channels: ["discord:dm"] }),
+			{
+				...claim("web", 20, [], { channels: ["web:ops"] }),
+				takesSystemReports: false,
+			},
+		]);
+		expect(routing.takesSystemReports("discord:dm")).toBe(true);
+		expect(routing.takesSystemReports("web:ops")).toBe(false);
+		expect(routing.takesSystemReports("test:hall")).toBe(false);
+	});
+
 	test("says whether a claim owns a channel", () => {
 		const routing = router([claim("room", 0, [], { channels: ["test:room"] })]);
 		expect(routing.owns("test:room")).toBe(true);

@@ -355,6 +355,8 @@ export async function testPlugin(
 		owns: (channel) => (router ?? unlinked("conversations")).owns(channel),
 		takesBackground: (channel) =>
 			(router ?? unlinked("conversations")).takesBackground(channel),
+		takesSystemReports: (channel) =>
+			(router ?? unlinked("conversations")).takesSystemReports(channel),
 		...options.conversations,
 	};
 	const surfaces = surfacePort(() =>

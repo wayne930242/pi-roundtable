@@ -239,6 +239,11 @@ export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 						throw new ConfigError(
 							`config ops.conversation: the claim that owns ${JSON.stringify(channel)} takes no background turns, so nothing answers its error reports. Name a conversation whose claim takes background turns, or leave ops out.`,
 						);
+					// A report turn is the system principal's, which a conversation private to its person refuses.
+					if (!conversations.takesSystemReports(channel))
+						throw new ConfigError(
+							`config ops.conversation: the claim that owns ${JSON.stringify(channel)} keeps its conversations private to their people, so it takes no system error reports and each would only be logged. Name a conversation of a surface whose conversations are shared, such as a Discord channel, or report to an agent with ops.agent.`,
+						);
 				};
 			}
 			return {

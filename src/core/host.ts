@@ -201,6 +201,7 @@ export class Roundtable {
 			postsInPlace: (channel) => router().postsInPlace(channel),
 			owns: (channel) => router().owns(channel),
 			takesBackground: (channel) => router().takesBackground(channel),
+			takesSystemReports: (channel) => router().takesSystemReports(channel),
 		};
 	}
 
