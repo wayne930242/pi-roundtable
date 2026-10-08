@@ -266,13 +266,13 @@ export class OwnerCards implements InteractionModule {
 
 	/**
 	 * An approval is for the speaker whose turn held the call, when their tier holds it, and for
-	 * the owner; the owner's alone by default. A call only the owner tier may make is so for
-	 * another owner's turn too, such as one the CLI granted. Nobody else in the channel may
-	 * approve it.
+	 * the owner; the owner's alone by default, and always when only the owner tier may make the
+	 * call. Nobody else in the channel may approve it.
 	 */
 	#approvers(minTier: Tier, speaker: Speaker | undefined): Audience {
 		const { ownerId, identity } = this.#options;
 		if (
+			minTier === "owner" ||
 			!identity ||
 			!speaker ||
 			speaker.id === ownerId ||

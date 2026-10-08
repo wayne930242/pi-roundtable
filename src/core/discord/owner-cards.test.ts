@@ -476,50 +476,45 @@ describe("cards for lower tiers", () => {
 		}
 	});
 
-	test("another owner, such as one the CLI granted, may approve their own owner-tier call; the primary owner too", async () => {
-		const SECOND_OWNER = "100000000000000006";
-		const ask = () => {
-			const fake = fakeChannel();
-			const cards = new OwnerCards({
-				ownerId: OWNER,
-				// The identity service holds the second owner, whom no 0.8 map lists.
-				identity: mapIdentity({ owners: [OWNER, SECOND_OWNER] }),
-				channel: fake.channel,
-				logger: silentLogger(),
-			});
-			const speaker = {
-				id: SECOND_OWNER,
-				name: "Sam",
+	test("a report turn at the owner tier mentions the owner in a thread, as an owner's own card does", async () => {
+		// The ops reporter speaks as "assistant"; a Discord webhook report as the webhook's id.
+		for (const id of ["assistant", "100000000000000009"]) {
+			const card = async (speaker?: {
+				id: string;
+				name: string;
+				tier: "owner";
+				principalId: string;
+			}) => {
+				const fake = fakeChannel(true);
+				const cards = new OwnerCards({
+					ownerId: OWNER,
+					identity,
+					channel: fake.channel,
+					logger: silentLogger(),
+					timeoutMs: 5,
+				});
+				void cards.prompts("discord:555", speaker)?.confirm("t", "**fix CI**");
+				await tick();
+				const sent = fake.sent[0];
+				return {
+					text: json(sent).replaceAll(fake.cardId(), "<card>"),
+					mentions: sent?.allowedMentions,
+				};
+			};
+			const report = await card({
+				id,
+				name: "reporter",
 				tier: "owner",
-				principalId: "p_second",
-			} as const;
-			const answer = cards
-				.prompts("discord:555", speaker)
-				?.confirm("t", "**rm**");
-			return { fake, cards, answer };
-		};
-		const own = ask();
-		await tick();
-		expect(json(own.fake.sent[0])).toContain(
-			messages().cardApproversNote(SECOND_OWNER),
-		);
-		const admin = press("button", `${CARD_PREFIX}${own.fake.cardId()}:yes`, {
-			user: ADMIN,
-		});
-		await own.cards.handle(admin.interaction);
-		expect(admin.replies).toEqual([messages().cardApproversRefusal]);
-		const second = press("button", `${CARD_PREFIX}${own.fake.cardId()}:yes`, {
-			user: SECOND_OWNER,
-		});
-		await own.cards.handle(second.interaction);
-		expect(await own.answer).toBe("approved");
-		const primary = ask();
-		await tick();
-		const owner = press("button", `${CARD_PREFIX}${primary.fake.cardId()}:no`, {
-			user: OWNER,
-		});
-		await primary.cards.handle(owner.interaction);
-		expect(await primary.answer).toBe("declined");
+				principalId: id,
+			});
+			expect(report.text).toContain(`<@${OWNER}>`);
+			expect(report.text).not.toContain(`<@${id}>`);
+			expect(report.text).not.toContain(
+				JSON.stringify(messages().cardApproversNote(id)).slice(1, -1),
+			);
+			expect(report.mentions).toEqual({ users: [OWNER] });
+			expect(report).toEqual(await card());
+		}
 	});
 
 	test("a shell approval stays the owner's even when the speaker is an admin", async () => {
