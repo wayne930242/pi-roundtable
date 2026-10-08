@@ -35,6 +35,7 @@ export type {
 	DiscordConnection,
 } from "../core/discord/connection.ts";
 export { discord } from "../core/discord/discord-adapter.ts";
+export type { DiscordActor } from "../core/discord/discord-owners.ts";
 export type {
 	CommandGuard,
 	CommandRegistrar,

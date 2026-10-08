@@ -46,8 +46,9 @@ const STOP_PANEL_DELAY_MS = 5_000;
 
 export interface DiscordSurfaceOptions {
 	token: string;
+	/** The primary owner's Discord user id, whom the admin tools act as and the deprecated owner channel reaches. */
 	ownerId: string;
-	/** How the owner is named in audit-log reasons and refusals. */
+	/** How the primary owner is named in audit-log reasons and refusals. */
 	ownerName: string;
 	/** The cards in a Discord channel; the surface hands them out as its `prompts`. */
 	prompts: (channel: ChannelKey, scope?: PromptScope) => Prompts | undefined;
@@ -95,7 +96,7 @@ export class DiscordSurface
 			: undefined;
 	}
 
-	/** Discord reading and management for the owner's agent; calls fail until the connection is ready. */
+	/** Discord reading and management for the owner's agent, as the primary owner may; calls fail until the connection is ready. */
 	ownerOperations(): OwnerOperations {
 		return new DiscordOwnerOps(
 			this.#client,
@@ -338,12 +339,13 @@ export class DiscordSurface
 		};
 	}
 
-	/** The owner's direct-message channel. */
+	/** @deprecated The primary owner's direct-message channel; see `DiscordConnection.ownerChannel`. */
 	async ownerChannel(): Promise<ChannelKey> {
 		const owner = await this.#client.users.fetch(this.#options.ownerId);
 		return `${PREFIX}${(await owner.createDM()).id}`;
 	}
 
+	/** @deprecated Sends the primary owner a direct message; see `DiscordConnection.notifyOwner`. */
 	async notifyOwner(text: string): Promise<void> {
 		const owner = await this.#client.users.fetch(this.#options.ownerId);
 		for (const chunk of splitReply(text)) await owner.send({ content: chunk });

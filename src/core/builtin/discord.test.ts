@@ -14,7 +14,9 @@ import { STOP_BUTTON_ID } from "../discord/stop-button.ts";
 import { PluginError } from "../errors.ts";
 import { silentLogger } from "../log.ts";
 import type { PluginContext } from "../plugin.ts";
+import { IDENTITY } from "../services.ts";
 import { speakerPolicy } from "../speakers.ts";
+import { mapIdentity } from "../testing/map-identity.ts";
 import { DISCORD, type DiscordServices, discordPlugin } from "./discord.ts";
 
 const OPTIONS = {
@@ -29,6 +31,7 @@ const OPTIONS = {
 async function setUp(
 	conversations: Partial<ConversationPort> = {},
 	options: { refusalHint?: string } = {},
+	identity?: ReturnType<typeof mapIdentity>,
 ): Promise<{
 	services: string[];
 	surfaces: string[];
@@ -53,7 +56,8 @@ async function setUp(
 			provide: (key: { id: string }, value: DiscordServices) => {
 				if (key.id === DISCORD.id) provided = value;
 			},
-			find: () => undefined,
+			find: (key: { id: string }) =>
+				key.id === IDENTITY.id ? identity : undefined,
 		},
 	} as unknown as PluginContext);
 	if (!provided) throw new Error("the discord plugin provided no DISCORD");
@@ -96,6 +100,22 @@ test("the plugin provides the connection, the registrar, the guard and the threa
 	expect(provided.guard.root).toBe("bot");
 	expect(provided.guard.isOwner({ user: { id: "1" } })).toBe(true);
 	expect(provided.guard.isOwner({ user: { id: "2" } })).toBe(false);
+});
+
+test("with the identity service, the guard lets every owner use the owner's commands, and no member", async () => {
+	const { provided } = await setUp(
+		{},
+		{},
+		mapIdentity({ owners: ["1", "6"], members: { users: ["3"] } }),
+	);
+	expect(await provided.guard.allows({ user: { id: "1" } })).toBe(true);
+	expect(await provided.guard.allows({ user: { id: "6" } })).toBe(true);
+	expect(await provided.guard.allows({ user: { id: "3" } })).toBe(false);
+	// The deprecated check stays the primary owner's.
+	expect(provided.guard.isOwner({ user: { id: "6" } })).toBe(false);
+	const alone = (await setUp()).provided.guard;
+	expect(await alone.allows({ user: { id: "1" } })).toBe(true);
+	expect(await alone.allows({ user: { id: "6" } })).toBe(false);
 });
 
 const module = (commands: string[] = []): InteractionModule => ({

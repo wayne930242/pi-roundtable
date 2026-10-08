@@ -9,7 +9,7 @@ import type {
 	CommandRegistrar,
 } from "../discord/interaction-module.ts";
 import { OwnerCards } from "../discord/owner-cards.ts";
-import { OwnerGuard, ownerRootCommand } from "../discord/owner-command.ts";
+import { commandGuard, ownerRootCommand } from "../discord/owner-command.ts";
 import { stopButtonModule } from "../discord/stop-button.ts";
 import type { RoundtablePlugin } from "../plugin.ts";
 import { IDENTITY } from "../services.ts";
@@ -19,7 +19,7 @@ export interface DiscordServices {
 	connection: DiscordConnection;
 	/** Adds a plugin's slash commands and components; during setup only. */
 	commands: CommandRegistrar;
-	/** Who may use the owner's commands. */
+	/** Who may use the owner's commands: every owner, by their Discord identity. */
 	guard: CommandGuard;
 	/** The threads that carry background reports. */
 	threads: DispatchThreads;
@@ -31,8 +31,12 @@ export const DISCORD: ServiceKey<DiscordServices> =
 
 export interface DiscordOptions {
 	token: string;
+	/**
+	 * The primary owner's Discord user id: an owner always, and the one the admin tools act as.
+	 * Every other owner the identity service knows uses the owner's commands and cards too.
+	 */
 	ownerId: string;
-	/** How the owner is named in audit-log reasons and refusals. */
+	/** How the primary owner is named in audit-log reasons and refusals. */
 	ownerName: string;
 	dataDir: string;
 	/** The name of the root slash command, without the slash. */
@@ -77,12 +81,16 @@ export function discordPlugin(options: DiscordOptions): RoundtablePlugin {
 				logger,
 			});
 			surface = connected;
-			const guard = new OwnerGuard(
-				options.ownerId,
+			// Every owner may use the owner's commands, by the identity service; the primary owner always.
+			const guard = commandGuard({
+				ownerId: options.ownerId,
+				...(identity ? { identity } : {}),
+				root: options.rootCommand,
 				logger,
-				options.rootCommand,
-				options.refusalHint,
-			);
+				...(options.refusalHint === undefined
+					? {}
+					: { refusalHint: options.refusalHint }),
+			});
 			// A channel whose claim keeps reports in place, such as an open channel, opens no thread.
 			const threads = new DispatchThreads({
 				host: {

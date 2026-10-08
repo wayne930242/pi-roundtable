@@ -15,7 +15,7 @@ import type { ChatSurface } from "../contract/surface.ts";
 import { openPool } from "../db/migrations.ts";
 import { defineRoundtable } from "../define-roundtable.ts";
 import { CommandCollection } from "../discord/command-collection.ts";
-import { OwnerGuard } from "../discord/owner-command.ts";
+import { commandGuard } from "../discord/owner-command.ts";
 import { NO_ATTACHMENTS } from "../domain/attachment.ts";
 import type { ChannelKey, TurnResult } from "../domain/conversation.ts";
 import { JudgeError } from "../errors.ts";
@@ -311,7 +311,11 @@ async function captureHost(
 		? [
 				standInDiscord(
 					new CommandCollection(),
-					new OwnerGuard(CAPTURE_OWNER.id, silentLogger(), "roundtable"),
+					commandGuard({
+						ownerId: CAPTURE_OWNER.id,
+						root: "roundtable",
+						logger: silentLogger(),
+					}),
 					{ agentChannels: () => channels },
 				),
 			]

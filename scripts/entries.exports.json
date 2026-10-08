@@ -440,6 +440,7 @@
 			"CommandRegistrar",
 			"CommandRoot",
 			"ComposedCommands",
+			"DiscordActor",
 			"DiscordAdapterConfig",
 			"DiscordConnection",
 			"DiscordServices",

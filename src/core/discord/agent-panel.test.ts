@@ -3,6 +3,7 @@ import type { Interaction } from "discord.js";
 import type { Agent } from "../agents/agent-store.ts";
 import { silentLogger } from "../log.ts";
 import type { AgentServer } from "../services.ts";
+import { mapIdentity } from "../testing/map-identity.ts";
 import { agentPanel } from "./agent-panel.ts";
 import { commandGuard } from "./owner-command.ts";
 
@@ -25,10 +26,14 @@ const agents = {
 	avatars: { url: () => "https://x/a.png", canDraw: true },
 } as unknown as AgentServer;
 
-const panel = () =>
+const SECOND_OWNER = "6";
+const MEMBER = "3";
+
+const panel = (identity?: ReturnType<typeof mapIdentity>) =>
 	agentPanel({
 		guard: commandGuard({
 			ownerId: OWNER,
+			...(identity ? { identity } : {}),
 			root: "bot",
 			logger: silentLogger(),
 		}),
@@ -72,6 +77,30 @@ describe("agentPanel", () => {
 		const stranger = interaction("button", "2", "roundtable:agent:edit:scout");
 		expect(await panel().handles(stranger.value)).toBe(true);
 		expect(stranger.log).toEqual([]);
+	});
+
+	test("answers a second owner's buttons and forms too, and a member's with nothing", async () => {
+		const identity = mapIdentity({
+			owners: [OWNER, SECOND_OWNER],
+			members: { users: [MEMBER] },
+		});
+		const second = interaction(
+			"button",
+			SECOND_OWNER,
+			"roundtable:agent:edit:scout",
+		);
+		expect(await panel(identity).handles(second.value)).toBe(true);
+		expect(second.log).toEqual(["form"]);
+		const submitted = interaction(
+			"modal",
+			SECOND_OWNER,
+			"roundtable:agent-modal:nothing:missing",
+		);
+		expect(await panel(identity).handles(submitted.value)).toBe(true);
+		expect(submitted.log[0]).toBe("defer");
+		const member = interaction("button", MEMBER, "roundtable:agent:edit:scout");
+		expect(await panel(identity).handles(member.value)).toBe(true);
+		expect(member.log).toEqual([]);
 	});
 
 	test("defers a submitted form before it works, and answers a stranger with nothing", async () => {

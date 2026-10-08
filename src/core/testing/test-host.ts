@@ -19,12 +19,13 @@ import type {
 	CommandGuard,
 	InteractionContribution,
 } from "../discord/interaction-module.ts";
-import { OwnerGuard, ownerRootCommand } from "../discord/owner-command.ts";
+import { commandGuard, ownerRootCommand } from "../discord/owner-command.ts";
 import { Roundtable } from "../host.ts";
 import { silentLogger } from "../log.ts";
 import type { PluginContext, RoundtablePlugin } from "../plugin.ts";
 import { CompactionTiers } from "../runtime/compaction-tiers.ts";
 import { sessionExtensions } from "../runtime/runtime-types.ts";
+import { IDENTITY } from "../services.ts";
 import type { AgentTurnScope, SessionContext } from "../sessions.ts";
 import { testDatabaseUrl } from "./database.ts";
 
@@ -229,11 +230,19 @@ export async function testHost(
 	const base: RoundtableConfig = { ...defaults, ...options.config };
 	const resolved = resolveConfig(base);
 	const rootCommand = resolved.slug;
-	const guard = new OwnerGuard(
-		discordOwnerOf(resolved).id,
-		silentLogger(),
-		rootCommand,
-	);
+	// Like the Discord plugin's, the guard asks the host's identity service, once the host is up.
+	const identity = () => captured?.services.find(IDENTITY);
+	const guard = commandGuard({
+		ownerId: discordOwnerOf(resolved).id,
+		identity: {
+			resolve: async (facts, scope) => identity()?.resolve(facts, scope),
+			owners: async () => (await identity()?.owners()) ?? [],
+			identities: async (principalId) =>
+				(await identity()?.identities(principalId)) ?? [],
+		},
+		root: rootCommand,
+		logger: silentLogger(),
+	});
 	const config: RoundtableConfig = {
 		...base,
 		plugins: [

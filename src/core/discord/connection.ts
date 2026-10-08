@@ -11,9 +11,17 @@ export type ChannelInfo =
 
 /** The Discord connection as plugins use it, apart from the chat surface the host drives. */
 export interface DiscordConnection {
-	/** The owner's direct-message channel. */
+	/**
+	 * The primary owner's direct-message channel.
+	 * @deprecated Since 0.9 there may be more than one owner; this is the primary owner's, kept for
+	 * plugins written for 0.8. Reach a principal through their own channel instead. Goes away in 1.0.
+	 */
 	ownerChannel(): Promise<ChannelKey>;
-	/** Sends the owner a direct message. */
+	/**
+	 * Sends the primary owner a direct message.
+	 * @deprecated Since 0.9 there may be more than one owner; this is the primary owner's, kept for
+	 * plugins written for 0.8. Goes away in 1.0.
+	 */
 	notifyOwner(text: string): Promise<void>;
 	/**
 	 * What a channel is called: undefined when Discord no longer knows it; throws while the
@@ -30,6 +38,10 @@ export interface DiscordConnection {
 	agentDashboard(guildId: string): DashboardBoard;
 	/** Threads for background dispatches, in the channel that started each. */
 	threadHost(): ThreadHost;
-	/** Discord reading and management for the owner's agent; calls fail until the connection is ready. */
+	/**
+	 * Discord reading and management for the owner's agent, checked against what the primary owner
+	 * may do on the server, whichever owner's turn calls them; calls fail until the connection is
+	 * ready.
+	 */
 	ownerOperations(): OwnerOperations;
 }

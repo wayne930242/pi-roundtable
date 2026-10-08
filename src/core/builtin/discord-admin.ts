@@ -8,7 +8,10 @@ import { DISCORD } from "./discord.ts";
 import { fixed } from "./session-tool.ts";
 
 export interface DiscordAdminOptions {
-	/** Whose Discord permissions the tools check, and who they serve. */
+	/**
+	 * Whose Discord permissions the tools check, and who they serve: the primary owner, by their
+	 * Discord user id, whichever owner's turn calls them.
+	 */
 	owner: OwnerIdentity & { id: string };
 }
 

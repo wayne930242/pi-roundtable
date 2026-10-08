@@ -28,6 +28,7 @@ import {
 	type CardAudienceOptions,
 	CardAudiences,
 } from "./card-audience.ts";
+import { DiscordOwners, discordUser } from "./discord-owners.ts";
 import type { InteractionModule } from "./interaction-module.ts";
 import { ownerPanel, type PanelContent, plain } from "./owner-panel.ts";
 
@@ -110,7 +111,7 @@ export class OwnerCards implements InteractionModule {
 
 	constructor(options: OwnerCardsOptions) {
 		this.#options = options;
-		this.#audiences = new CardAudiences(options);
+		this.#audiences = new CardAudiences(options, new DiscordOwners(options));
 	}
 
 	commands() {
@@ -297,16 +298,7 @@ export class OwnerCards implements InteractionModule {
 			});
 			return true;
 		}
-		const { member } = interaction;
-		const roleIds =
-			member && "cache" in member.roles
-				? [...member.roles.cache.keys()]
-				: undefined;
-		const user = {
-			id: interaction.user.id,
-			name: interaction.user.globalName ?? interaction.user.username,
-			...(roleIds ? { roleIds } : {}),
-		};
+		const user = discordUser(interaction);
 		if (!(await card.audience.allows(user))) {
 			await interaction.reply({
 				content: card.audience.refusal,

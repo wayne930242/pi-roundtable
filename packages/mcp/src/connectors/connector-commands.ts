@@ -314,7 +314,7 @@ export function connectorCommands(
 					interaction.customId !== CONNECTOR_MODAL_ID
 				)
 					return false;
-				if (!guard.isOwner(interaction)) return true;
+				if (!(await guard.allows(interaction))) return true;
 				await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 				await guard.run(interaction, () => commands.submit(interaction));
 				return true;

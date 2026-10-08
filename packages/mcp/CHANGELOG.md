@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- The connector form of `/<root> connector add` is accepted from every owner, as pi-roundtable's `CommandGuard.allows` sees them, not only the primary owner.
+
 ## [0.8.0] - 2026-10-07
 
 - Release in lockstep with pi-roundtable 0.8.0; no package-specific behavior changes.

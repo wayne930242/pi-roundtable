@@ -47,7 +47,7 @@ export function agentPanel(options: AgentPanelOptions): AgentPanel {
 				interaction.isButton() &&
 				interaction.customId.startsWith(AGENT_BUTTON_PREFIX)
 			) {
-				if (!guard.isOwner(interaction)) return true;
+				if (!(await guard.allows(interaction))) return true;
 				await guard.run(interaction, () => commands.button(interaction));
 				return true;
 			}
@@ -55,7 +55,7 @@ export function agentPanel(options: AgentPanelOptions): AgentPanel {
 				interaction.isModalSubmit() &&
 				interaction.customId.startsWith(AGENT_MODAL_PREFIX)
 			) {
-				if (!guard.isOwner(interaction)) return true;
+				if (!(await guard.allows(interaction))) return true;
 				await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 				await guard.run(interaction, () => commands.submit(interaction));
 				return true;

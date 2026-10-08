@@ -1,20 +1,16 @@
 import { messages } from "../i18n/index.ts";
-import type { IdentityService } from "../identity/identity-service.ts";
 import type { PromptScope } from "../interactions/prompts.ts";
-import type { Logger } from "../log.ts";
 import { type Tier, tierAtLeast } from "../speakers.ts";
-
-/** Who pressed a card's control; their roles are unknown where the press carries no member. */
-export interface CardUser {
-	id: string;
-	name: string;
-	roleIds?: readonly string[];
-}
+import type {
+	DiscordOwners,
+	DiscordOwnersOptions,
+	DiscordUser,
+} from "./discord-owners.ts";
 
 /** The people a card is for. */
 export interface Audience {
 	/** Whether this user may answer, as they are when they press. */
-	allows(user: CardUser): Promise<boolean>;
+	allows(user: DiscordUser): Promise<boolean>;
 	/** The users the card mentions in a thread, in order. */
 	mentions: readonly string[];
 	/** Shown on the card; empty for none. */
@@ -23,13 +19,8 @@ export interface Audience {
 	refusal: string;
 }
 
-export interface CardAudienceOptions {
-	/** The primary owner's Discord user id, who answers every card the owners may. */
-	ownerId: string;
-	/** Who holds a tier and which owners have a Discord identity; without it only the primary owner answers. */
-	identity?: Pick<IdentityService, "resolve" | "owners" | "identities">;
-	logger: Logger;
-}
+/** The primary owner, who answers every card the owners may, and who else holds a tier. */
+export type CardAudienceOptions = DiscordOwnersOptions;
 
 /**
  * Whom a card is for, by the prompt scope of the turn that asks. The speaker's principal answers
@@ -42,9 +33,11 @@ export interface CardAudienceOptions {
  */
 export class CardAudiences {
 	readonly #options: CardAudienceOptions;
+	readonly #owners: DiscordOwners;
 
-	constructor(options: CardAudienceOptions) {
+	constructor(options: CardAudienceOptions, owners: DiscordOwners) {
 		this.#options = options;
+		this.#owners = owners;
 	}
 
 	/** Who may approve a call held at `minTier`; undefined when no one may. */
@@ -82,9 +75,9 @@ export class CardAudiences {
 					if (own.includes(user.id))
 						return (
 							(primary && user.id === ownerId) ||
-							this.#holds(user, minTier, scope.principalId)
+							this.#owners.holds(user, minTier, scope.principalId)
 						);
-					return escalates && this.#isOwner(user);
+					return escalates && this.#owners.isOwner(user);
 				},
 				mentions,
 				note: primary ? "" : words.note(...mentions),
@@ -93,8 +86,8 @@ export class CardAudiences {
 		}
 		if (!escalates) return undefined;
 		return {
-			allows: (user) => this.#isOwner(user),
-			mentions: await this.#ownerIds(),
+			allows: (user) => this.#owners.isOwner(user),
+			mentions: await this.#owners.ids(),
 			note: "",
 			refusal: messages().cardOwnerOnly,
 		};
@@ -112,15 +105,13 @@ export class CardAudiences {
 		const { identity, logger } = this.#options;
 		if (!identity || (minTier && !tierAtLeast(scope.tier, minTier)))
 			return undefined;
+		// A turn whose tier defaulted to owner is not an owner's: its owner-tier call is the owners'.
+		if (
+			minTier === "owner" &&
+			!(await this.#owners.isOwnerPrincipal(scope.principalId))
+		)
+			return undefined;
 		try {
-			// A turn whose tier defaulted to owner is not an owner's: its owner-tier call is the owners'.
-			if (
-				minTier === "owner" &&
-				!(await identity.owners()).some(
-					(owner) => owner.id === scope.principalId,
-				)
-			)
-				return undefined;
 			const own = (await identity.identities(scope.principalId))
 				.filter((link) => link.provider === "discord")
 				.map((link) => link.subject);
@@ -132,60 +123,5 @@ export class CardAudiences {
 			);
 			return undefined;
 		}
-	}
-
-	/** The primary owner, then every other owner's Discord user ids. */
-	async #ownerIds(): Promise<string[]> {
-		const { ownerId, identity, logger } = this.#options;
-		if (!identity) return [ownerId];
-		const ids = new Set([ownerId]);
-		try {
-			for (const owner of await identity.owners())
-				for (const link of await identity.identities(owner.id))
-					if (link.provider === "discord") ids.add(link.subject);
-		} catch (error) {
-			logger.warn(
-				{ err: error },
-				"could not read the owners' identities; the card goes to the primary owner",
-			);
-		}
-		return [...ids];
-	}
-
-	/** Whether the user is an owner now: the primary owner, or another owner's Discord identity at the owner tier. */
-	async #isOwner(user: CardUser): Promise<boolean> {
-		if (user.id === this.#options.ownerId) return true;
-		// Only an owner's own identity is resolved, so a stranger's press admits no one.
-		if (!(await this.#ownerIds()).includes(user.id)) return false;
-		return this.#holds(user, "owner");
-	}
-
-	/**
-	 * Whether the user holds `minTier` as they press, as the principal named when there is one; a
-	 * question needs no tier.
-	 */
-	async #holds(
-		user: CardUser,
-		minTier: Tier | undefined,
-		principalId?: string,
-	): Promise<boolean> {
-		const { identity } = this.#options;
-		if (!minTier) return true;
-		if (!identity) return false;
-		const who = await identity.resolve({
-			provider: "discord",
-			subject: user.id,
-			name: user.name,
-			surface: "discord",
-			...(user.roleIds
-				? { roles: user.roleIds.map((role) => `discord:role:${role}`) }
-				: {}),
-			legacyId: user.id,
-		});
-		return (
-			who !== undefined &&
-			(principalId === undefined || who.principalId === principalId) &&
-			tierAtLeast(who.tier, minTier)
-		);
 	}
 }

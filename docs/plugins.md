@@ -330,7 +330,7 @@ You can switch them off in the configuration.
 |---|---|---|---|---|
 | Memory | `memory` (provides `MEMORY`) | `memory: false` | The memory table, the `memory_add`, `memory_search` and `memory_remove` tools, and the memory block of every system prompt | No memory tools and no block; the table is left as it is |
 | Skills | `skills` (provides `SKILLS`) | `skills: false` | The skill tables, the skill tools of agent sessions (`skill_list`, `skill_link`, `skill_create`, `agent_skills`, and the rest), and the skills every agent carries, `writing-skills` included | No skill tools and no skills in any session; `agent_get` has no skills line; `agent_create` leaves out its `skills` parameter and refuses a call that passes some with `Skills are off on this host`; the tables are left as they are |
-| Discord administration | `discord-admin` | `discord: { admin: false }` | The `discord_*` tools that read and manage the server, for the owner | No `discord_*` tools; the channel executor that remote MCP uses is the connection's, so it stays |
+| Discord administration | `discord-admin` | `discord: { admin: false }` | The `discord_*` tools that read and manage the server, for the owner; they check what the primary owner may do on the server, whichever owner's turn calls them | No `discord_*` tools; the channel executor that remote MCP uses is the connection's, so it stays |
 
 Switching an addon off leaves its tables and rows unchanged, ready for when you turn it on again.
 `skills` also takes the two directories (`skills: { builtinDir, reposDir }`) when it is on.
@@ -1356,9 +1356,12 @@ Call `commands.add` from `setup`; after preflight it throws `commands can be add
 Use `services.find(DISCORD)` if your plugin can work without Discord.
 When the service is absent, the rest of your plugin can run without commands.
 
-Build a feature's part of the root command with `ownerCommandModule(guard, handlers)` from `pi-roundtable/discord`; it is owner-only, defers interactions, and supplies a failure panel.
+Build a feature's part of the root command with `ownerCommandModule(guard, handlers)` from `pi-roundtable/discord`; only the owners may use it, it defers interactions, and supplies a failure panel.
 That entry also exports `groupOption` for subcommand groups, the panel helpers (`ownerPanel`, `ownerPanels`, `ephemeralPanel`, `replyWithPanels`, `plain`, `OwnerFacingError`), and `agentPanel({ guard, agents })` for an agent's profile panel.
-`DISCORD.guard` is the `CommandGuard`; its `isOwner(actor)` accepts an interaction or anything with `user.id`, so a test needs no cast.
+`DISCORD.guard` is the `CommandGuard`; `await guard.allows(actor)` is whether the actor is an owner now: the primary owner by user id, and every other owner principal by their Discord identity, checked through `IDENTITY` each time, so an owner granted or revoked with the CLI is seen at once and a stranger is never resolved. It accepts an interaction or anything with `user.id` (a `DiscordActor`), so a test needs no cast.
+`guard.isOwner(actor)` is deprecated until 1.0: it is the primary owner only, by user id, so a component handler that still asks it refuses the other owners.
+`commandGuard({ ownerId, identity?, root, logger, refusalHint? })` makes one; without `identity` the primary owner is the only owner.
+The connection's `ownerChannel()` and `notifyOwner(text)` are deprecated until 1.0: they reach the primary owner alone.
 `DiscordOptions.refusalHint` (`discord.refusalHint` in the configuration) is appended unchanged to the refusal a non-owner gets.
 
 <!-- example: examples/interactions.ts -->
@@ -3208,6 +3211,7 @@ Import from the entries listed below; source area files are internal.
 | `ComposedCommands` | `pi-roundtable/discord` | type |
 | `DISCORD` | `pi-roundtable/discord` | value |
 | `DISCORD_ADMIN_TOOLS` | `pi-roundtable/discord` | value |
+| `DiscordActor` | `pi-roundtable/discord` | type |
 | `DiscordAdapterConfig` | `pi-roundtable/discord` | type |
 | `DiscordConnection` | `pi-roundtable/discord` | type |
 | `DiscordServices` | `pi-roundtable/discord` | type |

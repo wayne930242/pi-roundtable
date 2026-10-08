@@ -12,7 +12,7 @@ import type { CommandGuard, InteractionModule } from "./interaction-module.ts";
 
 export const STOP_BUTTON_ID = "roundtable:stop";
 
-/** The message a long turn shows: a stop button only the owner may press. */
+/** The message a long turn shows: a stop button only an owner may press. */
 export function stopPanel() {
 	return {
 		content: messages().stopNote,
@@ -29,13 +29,13 @@ export function stopPanel() {
 }
 
 export interface StopButtonOptions {
-	guard: Pick<CommandGuard, "isOwner">;
+	guard: Pick<CommandGuard, "allows">;
 	/** Stops the running turn of the channel the button was pressed in, through its claim. */
 	conversations: Pick<ConversationPort, "stop">;
 }
 
 /**
- * Answers a press of the stop button: only the owner stops the channel's turn, and the answer,
+ * Answers a press of the stop button: only an owner stops the channel's turn, and the answer,
  * visible only to whoever pressed, says whether one was running.
  */
 export function stopButtonModule(
@@ -46,7 +46,7 @@ export function stopButtonModule(
 		handle: async (interaction: Interaction) => {
 			if (!interaction.isButton() || interaction.customId !== STOP_BUTTON_ID)
 				return false;
-			const owner = options.guard.isOwner(interaction);
+			const owner = await options.guard.allows(interaction);
 			const stopped =
 				owner &&
 				options.conversations.stop(

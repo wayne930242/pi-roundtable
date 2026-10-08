@@ -24,7 +24,10 @@ import type {
 	CommandRegistrar,
 	InteractionContribution,
 } from "./core/discord/interaction-module.ts";
-import { OwnerGuard, ownerRootCommand } from "./core/discord/owner-command.ts";
+import {
+	commandGuard,
+	ownerRootCommand,
+} from "./core/discord/owner-command.ts";
 import type {
 	PendingConfirmation,
 	ReplyFile,
@@ -166,11 +169,11 @@ export function fakeDiscord(
 ): FakeDiscord {
 	const collection = new CommandCollection();
 	const { rootCommand = "roundtable" } = options;
-	const guard = new OwnerGuard(
-		options.ownerId ?? "owner",
-		silentLogger(),
-		rootCommand,
-	);
+	const guard = commandGuard({
+		ownerId: options.ownerId ?? "owner",
+		root: rootCommand,
+		logger: silentLogger(),
+	});
 	return {
 		service: servicePair(DISCORD, { commands: collection.registrar, guard }),
 		commands: collection.registrar,

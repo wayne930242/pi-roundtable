@@ -7,7 +7,13 @@ import {
 	SlashCommandSubcommandGroupBuilder,
 } from "discord.js";
 import { messages } from "../i18n/index.ts";
+import type { IdentityService } from "../identity/identity-service.ts";
 import type { Logger } from "../log.ts";
+import {
+	type DiscordActor,
+	DiscordOwners,
+	discordUser,
+} from "./discord-owners.ts";
 import type {
 	CommandGuard,
 	CommandRoot,
@@ -33,31 +39,36 @@ export const groupOption = (
 ): RootOption => build(new SlashCommandSubcommandGroupBuilder()).toJSON();
 
 /**
- * Only the owner may use the root command, checked by user ID; every answer is visible only to them,
- * and a failure becomes a panel instead of a hanging interaction.
+ * Only an owner may use the root command: the primary owner by user ID, and, with the identity
+ * service, every other owner principal's Discord identity, checked again each time. Every answer
+ * is visible only to them, and a failure becomes a panel instead of a hanging interaction.
  */
-// pi-lens-ignore: large-class — two methods: the owner check and the failure panel
+// pi-lens-ignore: large-class — three methods: the owner checks and the failure panel
 export class OwnerGuard implements CommandGuard {
-	readonly #ownerId: string;
+	readonly #owners: DiscordOwners;
 	readonly #logger: Logger;
 	/** The name of the root command the guard serves, without the slash. */
 	readonly root: string;
 	readonly refusalHint: string | undefined;
 
 	constructor(
-		ownerId: string,
+		owners: DiscordOwners,
 		logger: Logger,
 		root: string,
 		refusalHint?: string,
 	) {
-		this.#ownerId = ownerId;
+		this.#owners = owners;
 		this.#logger = logger;
 		this.root = root;
 		this.refusalHint = refusalHint;
 	}
 
+	allows(actor: DiscordActor): Promise<boolean> {
+		return this.#owners.isOwner(discordUser(actor));
+	}
+
 	isOwner(actor: { user: { id: string } }): boolean {
-		return actor.user.id === this.#ownerId;
+		return actor.user.id === this.#owners.primary;
 	}
 
 	/** Runs a handler; failures become a panel instead of a hanging interaction. */
@@ -82,8 +93,10 @@ export class OwnerGuard implements CommandGuard {
 
 /** What `commandGuard` needs. */
 export interface CommandGuardOptions {
-	/** The one user who may use the owner's commands. */
+	/** The primary owner's Discord user id, who may always use the owner's commands. */
 	ownerId: string;
+	/** Which other owners there are and whether they still are; without it only `ownerId` may. */
+	identity?: Pick<IdentityService, "resolve" | "owners" | "identities">;
 	/** The name of the root command the guard serves, without the slash. */
 	root: string;
 	/** Where a failing command is logged. */
@@ -94,9 +107,10 @@ export interface CommandGuardOptions {
 
 /** A guard for the owner's commands, such as the one a test hands a module; the Discord plugin makes its own. */
 export function commandGuard(options: CommandGuardOptions): CommandGuard {
+	const { ownerId, identity, logger } = options;
 	return new OwnerGuard(
-		options.ownerId,
-		options.logger,
+		new DiscordOwners({ ownerId, ...(identity ? { identity } : {}), logger }),
+		logger,
 		options.root,
 		options.refusalHint,
 	);
@@ -121,7 +135,7 @@ const refusal = (hint: string | undefined) =>
 		sections: [`${messages().ownerRefusalBody}${hint ?? ""}`],
 	});
 
-/** Answers a feature's root subcommands and components, for the owner only. */
+/** Answers a feature's root subcommands and components, for the owners only. */
 export function ownerCommandModule(
 	guard: CommandGuard,
 	handlers: OwnerCommandHandlers,
@@ -139,14 +153,14 @@ export function ownerCommandModule(
 		async handle(interaction) {
 			if (interaction.isAutocomplete()) {
 				if (!owned(interaction)) return false;
-				if (!guard.isOwner(interaction)) await interaction.respond([]);
+				if (!(await guard.allows(interaction))) await interaction.respond([]);
 				else await handlers.autocomplete?.(interaction);
 				return true;
 			}
 			if (await handlers.component?.(interaction)) return true;
 			if (!interaction.isChatInputCommand() || !owned(interaction))
 				return false;
-			if (!guard.isOwner(interaction)) {
+			if (!(await guard.allows(interaction))) {
 				await interaction.reply(refusal(guard.refusalHint));
 				return true;
 			}

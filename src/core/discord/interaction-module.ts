@@ -5,6 +5,7 @@ import type {
 	InteractionContextType,
 	RESTPostAPIChatInputApplicationCommandsJSONBody,
 } from "discord.js";
+import type { DiscordActor } from "./discord-owners.ts";
 
 /** A group of slash commands and the components they post, handled together. */
 export interface InteractionModule {
@@ -50,7 +51,16 @@ export interface CommandGuard {
 	 * anyone may use; include the space or punctuation your language needs before it.
 	 */
 	readonly refusalHint?: string;
-	/** Whether the actor is the owner: an interaction, or anything with `user.id`, such as a test's. */
+	/**
+	 * Whether the actor may use the owner's commands now: an owner, the primary owner by their user
+	 * id and any other by their Discord identity, checked again each time. The actor is an
+	 * interaction, or anything with `user.id`, such as a test's.
+	 */
+	allows(actor: DiscordActor): Promise<boolean>;
+	/**
+	 * Whether the actor is the primary owner, by user id.
+	 * @deprecated Since 0.9 every owner uses the owner's commands; ask `allows`. Goes away in 1.0.
+	 */
 	isOwner(actor: { user: { id: string } }): boolean;
 	/** Runs a handler; a failure becomes a panel instead of a hanging interaction. */
 	run(interaction: Interaction, run: () => Promise<void>): Promise<void>;
