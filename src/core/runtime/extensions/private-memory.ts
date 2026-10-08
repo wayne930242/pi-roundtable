@@ -232,20 +232,40 @@ export function privateCompaction(
  */
 export class MemoryDraws {
 	readonly #running = new Set<string>();
+	/** The call each running call was made by, when another tool made it. */
+	readonly #parents = new Map<string, string>();
 	readonly #drawn = new Set<string>();
 
-	/** Every call running now draws on the reader's memory: something it started read it. */
-	drawn(): void {
-		for (const id of this.#running) this.#drawn.add(id);
+	/**
+	 * Something run within these calls, outermost first, read the reader's memory: the calls of
+	 * this session among them draw on it, and so do the calls that made them. Called from outside
+	 * every call of this session, it cannot say whose, so every call running now draws on it.
+	 */
+	drawn(within: readonly string[]): void {
+		const own = within.filter((id) => this.#running.has(id));
+		if (own.length === 0) {
+			for (const id of this.#running) this.#drawn.add(id);
+			return;
+		}
+		for (const id of own)
+			for (
+				let at: string | undefined = id;
+				at !== undefined && this.#running.has(at);
+				at = this.#parents.get(at)
+			)
+				this.#drawn.add(at);
 	}
 
-	start(toolCallId: string): void {
+	start(toolCallId: string, parentToolCallId?: string): void {
 		this.#running.add(toolCallId);
+		if (parentToolCallId !== undefined)
+			this.#parents.set(toolCallId, parentToolCallId);
 	}
 
 	/** Whether the call drew on the reader's memory; it is forgotten, as it ended. */
 	end(toolCallId: string): boolean {
 		this.#running.delete(toolCallId);
+		this.#parents.delete(toolCallId);
 		return this.#drawn.delete(toolCallId);
 	}
 }
@@ -253,8 +273,9 @@ export class MemoryDraws {
 /**
  * Projects each model request of a session so it carries no one's memory but the running turn's
  * reader's: a person's memory is theirs per request, never the history's to share. A tool result
- * that drew on the reader's memory, nested calls' and tasks' included, records it as theirs, as a
- * memory tool's does. A shared conversation's compaction summarizes no one's memory.
+ * that drew on the reader's memory, the call whose task's worker read it and the calls that call
+ * runs within, records it as theirs, as a memory tool's does; a call merely running beside it does
+ * not. A shared conversation's compaction summarizes no one's memory.
  *
  * What it guarantees in a shared conversation: a memory exchange, a memory tool's call and result
  * or a call whose task's worker loaded the reader's memory and its result, paired by the call's id,
@@ -271,7 +292,7 @@ export function privateMemoryExtension(
 ): ExtensionFactory {
 	return (pi) => {
 		pi.on("tool_execution_start", (event) => {
-			draws.start(event.toolCallId);
+			draws.start(event.toolCallId, event.parentToolCallId);
 		});
 		pi.on("tool_result", (event) => {
 			if (!draws.end(event.toolCallId)) return undefined;

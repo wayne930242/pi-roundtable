@@ -24,6 +24,7 @@ import {
 import type { ToolTiers } from "../tool-tiers.ts";
 import type { MemoryDraws } from "./extensions/private-memory.ts";
 import type { PendingConfirmationStore } from "./pending-confirmation-store.ts";
+import { scopedCalls } from "./tool-call-scope.ts";
 
 export type TurnMessage = Extract<
 	AgentSessionEvent,
@@ -128,7 +129,9 @@ export function sessionExtensions(
 	const contributed = (tools: readonly SessionTool[]) =>
 		tools.flatMap((tool) => {
 			const factory = tool.snapshot().factory(session);
-			return factory ? [{ name: tool.name, factory }] : [];
+			return factory
+				? [{ name: tool.name, factory: scopedCalls(factory) }]
+				: [];
 		});
 	return [
 		...contributed(plan.tools),

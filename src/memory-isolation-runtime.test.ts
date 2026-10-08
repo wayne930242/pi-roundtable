@@ -65,6 +65,8 @@ const ANN_NOTE = "ANN_NOTE_SECRET is Ann's doctor";
 const BO_CORE = "Bo studies chemistry";
 const SECRETS = ["ANN_CORE_SECRET", "ANN_NOTE_SECRET"];
 const HIDDEN = "(another person's private memory, hidden)";
+/** What `public_wait` answers: the public state of a queue, no one's memory. */
+const QUEUE = "QUEUE_PUBLIC: 3 jobs are waiting";
 
 /** Each principal's remembered facts, of the kinds given. */
 function memoryOf(facts: Record<string, { fact: string; kind: MemoryKind }[]>) {
@@ -186,6 +188,11 @@ async function isolationHost(
 	let revision = 0;
 	// The sites `deploy` ran for, once its held call was approved.
 	const deployed: string[] = [];
+	// `public_wait` answers once a `probe_task` beside it got its worker's report.
+	let reported = () => {};
+	const report = new Promise<void>((resolve) => {
+		reported = resolve;
+	});
 	const core = createFauxCore({ provider: "faux", models: [{ id: "faux-1" }] });
 	core.setResponses(steps);
 	const modelRuntime = await ModelRuntime.create({
@@ -265,12 +272,32 @@ async function isolationHost(
 									parameters: Type.Object({}),
 									execute: async () => {
 										const text = await session.runTask({
-											selection: { tools: ["memory_search"], groups: [] },
+											selection: {
+												tools: ["memory_search", "probe_task"],
+												groups: [],
+											},
 											text: "Look it up.",
 											timeoutMs: 10_000,
 											exclude: [],
 										});
+										reported();
 										return { content: [{ type: "text", text }], details: {} };
+									},
+								});
+								pi.registerTool({
+									name: "public_wait",
+									label: "public_wait",
+									description: "Wait for the public queue.",
+									parameters: Type.Object({}),
+									execute: async () => {
+										await Promise.race([
+											report,
+											new Promise((resolve) => setTimeout(resolve, 5_000)),
+										]);
+										return {
+											content: [{ type: "text", text: QUEUE }],
+											details: {},
+										};
 									},
 								});
 								pi.registerTool({
@@ -286,7 +313,11 @@ async function isolationHost(
 						}),
 					},
 				],
-				toolTiers: { ...MEMORY_TIERS, probe_task: "member" },
+				toolTiers: {
+					...MEMORY_TIERS,
+					probe_task: "member",
+					public_wait: "member",
+				},
 			}),
 		}),
 		{
@@ -335,6 +366,7 @@ async function isolationHost(
 						"memory_search",
 						"memory_remove",
 						"probe_task",
+						"public_wait",
 						"deploy",
 					],
 					groups: [],
@@ -1002,6 +1034,84 @@ describe("what the model writes into a memory exchange's call", () => {
 		} finally {
 			await own.stop();
 			await placed.stop();
+		}
+	});
+});
+
+describe("the calls a worker's memory reaches", () => {
+	const look =
+		(seen: TranscriptContext[]): FauxResponseStep =>
+		(context) => {
+			seen.push(context);
+			return fauxAssistantMessage("OK.");
+		};
+
+	test("are the call that started it, not a call running beside it, whose public result Bo still reads", async () => {
+		const seen: TranscriptContext[] = [];
+		const host = await isolationHost(STORE(), [
+			// Ann's turn waits on the public queue while a worker looks up her note.
+			fauxAssistantMessage(
+				[fauxToolCall("public_wait", {}), fauxToolCall("probe_task", {})],
+				{ stopReason: "toolUse" },
+			),
+			call("memory_search", { query: "doctor" }),
+			(context) => {
+				const found = context.messages.findLast((m) => m.role === "toolResult");
+				return fauxAssistantMessage(
+					`Found: ${found?.role === "toolResult" ? JSON.stringify(found.content) : "nothing"}`,
+				);
+			},
+			fauxAssistantMessage("Noted."),
+			look(seen),
+		]);
+		try {
+			expect((await host.run(ANN, "fake:room")).ok).toBe(true);
+			expect((await host.run(BO, "fake:room")).ok).toBe(true);
+			const [bo] = seen;
+			if (!bo) throw new Error("Bo's turn asked nothing");
+			for (const sent of asSent(bo)) {
+				for (const secret of SECRETS) expect(sent).not.toContain(secret);
+				expect(sent).toContain(QUEUE);
+				expect(sent).toContain(HIDDEN);
+			}
+		} finally {
+			await host.stop();
+		}
+	});
+
+	test("are every call of the chain that started it, a worker's own task inside a task included", async () => {
+		const seen: TranscriptContext[] = [];
+		const host = await isolationHost(STORE(), [
+			// Ann's turn hands a worker the lookup; that worker hands it to a worker of its own.
+			call("probe_task", {}),
+			call("probe_task", {}),
+			call("memory_search", { query: "doctor" }),
+			(context) => {
+				const found = context.messages.findLast((m) => m.role === "toolResult");
+				return fauxAssistantMessage(
+					`Found: ${found?.role === "toolResult" ? JSON.stringify(found.content) : "nothing"}`,
+				);
+			},
+			(context) => {
+				const found = context.messages.findLast((m) => m.role === "toolResult");
+				return fauxAssistantMessage(
+					`Relayed: ${found?.role === "toolResult" ? JSON.stringify(found.content) : "nothing"}`,
+				);
+			},
+			fauxAssistantMessage("Noted."),
+			look(seen),
+		]);
+		try {
+			expect((await host.run(ANN, "fake:room")).ok).toBe(true);
+			expect((await host.run(BO, "fake:room")).ok).toBe(true);
+			const [bo] = seen;
+			if (!bo) throw new Error("Bo's turn asked nothing");
+			for (const sent of asSent(bo)) {
+				for (const secret of SECRETS) expect(sent).not.toContain(secret);
+				expect(sent).toContain(HIDDEN);
+			}
+		} finally {
+			await host.stop();
 		}
 	});
 });

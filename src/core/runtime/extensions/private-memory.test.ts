@@ -178,19 +178,29 @@ describe("the calls of the memory exchanges a request hides", () => {
 });
 
 describe("the tool calls that draw on the reader's memory", () => {
-	test("every call running when something reads it draws on it, a call nested in another's too; a later one does not", () => {
+	test("are the call something ran within and the calls that made it, not a call beside them or a later one", () => {
 		const draws = new MemoryDraws();
 		draws.start("outer");
-		draws.start("outer/1");
+		draws.start("outer/1", "outer");
 		draws.start("beside");
-		expect(draws.end("beside")).toBe(false);
-		draws.drawn();
+		// A worker's call inside outer/1, which this session does not run, read it.
+		draws.drawn(["outer/1", "worker-call"]);
 		draws.start("later");
+		expect(draws.end("beside")).toBe(false);
 		expect(draws.end("outer/1")).toBe(true);
 		expect(draws.end("outer")).toBe(true);
 		expect(draws.end("later")).toBe(false);
 		// An ended call is forgotten.
 		expect(draws.end("outer")).toBe(false);
+	});
+
+	test("are every call running when what read it ran within none of them, as it cannot say whose", () => {
+		const draws = new MemoryDraws();
+		draws.start("one");
+		draws.start("two");
+		draws.drawn([]);
+		expect(draws.end("one")).toBe(true);
+		expect(draws.end("two")).toBe(true);
 	});
 });
 

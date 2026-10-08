@@ -50,6 +50,7 @@ import {
 } from "./session-conversation.ts";
 import { SessionFactory } from "./session-factory.ts";
 import { promptImages, SteerableRun } from "./steerable-run.ts";
+import { runningCalls } from "./tool-call-scope.ts";
 import { lastReply, turnAnswer, unspokenTurn } from "./turn-answer.ts";
 import { progressReporter } from "./turn-progress.ts";
 import { workerReport } from "./worker-task.ts";
@@ -368,10 +369,10 @@ export class PiAgentRuntime implements AgentRuntime {
 		const timer = setTimeout(abort, task.timeoutMs);
 		try {
 			const registered = new Set(session.getAllTools().map((t) => t.name));
-			// A worker that loaded the reader's memory may report it: the calls of the turn running now,
-			// the one that started it among them, then record their results as the reader's.
+			// A worker that loaded the reader's memory may report it: the call that started it, and the
+			// calls that one runs within, then record their results as the reader's.
 			if (memoryReader(conversation, turn.speaker) && loadsMemory(registered))
-				parent.draws.drawn();
+				parent.draws.drawn(runningCalls());
 			const { tier } = turn;
 			worker.tools = this.#factory
 				.taskTools(task.selection, task.exclude)
