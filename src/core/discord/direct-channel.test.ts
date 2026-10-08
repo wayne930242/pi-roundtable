@@ -22,10 +22,13 @@ function identities(links: Record<string, string[]>) {
 	};
 }
 
-function provider(links?: Record<string, string[]>) {
+function provider(links?: Record<string, string[]>, online = true) {
 	const sent: { user: string; text: string }[] = [];
 	const channel = discordDirectChannel({
-		directChannel: async (user): Promise<ChannelKey> => `discord:dm-${user}`,
+		directChannel: async (user): Promise<ChannelKey> => {
+			if (!online) throw new Error("Discord is unreachable");
+			return `discord:dm-${user}`;
+		},
 		sendDirect: async (user, text) => void sent.push({ user, text }),
 		...(links ? { identity: identities(links) } : {}),
 		ownerId: OWNER,
@@ -68,5 +71,16 @@ describe("the Discord direct channel", () => {
 		const { channel } = provider();
 		expect(await channel.reaches(OWNER)).toBe(`discord:dm-${OWNER}`);
 		expect(await channel.reaches("200")).toBeUndefined();
+	});
+
+	test("knows a principal by their Discord identities alone, without reaching Discord", async () => {
+		const { channel } = provider(
+			{ ada: [`discord:${OWNER}`], kai: ["oidc:aXNz:kai"] },
+			false,
+		);
+		expect(await channel.knows?.("ada")).toBe(true);
+		expect(await channel.knows?.("kai")).toBe(false);
+		await expect(channel.reaches("ada")).rejects.toThrow("unreachable");
+		expect(await provider(undefined, false).channel.knows?.(OWNER)).toBe(true);
 	});
 });

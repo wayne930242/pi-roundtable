@@ -193,10 +193,10 @@ export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 					// The runtime builds sessions between turns. With neither a recorded principal nor
 					// a current speaker, it cannot promise any background-capable destination.
 					if (own === undefined) return;
+					// Only whether a direct channel knows them, without the network; the conversation there,
+					// and whether a claim takes its turns, are checked when a tool runs.
 					try {
-						const reached = await directChannels.reach(own);
-						if (!reached || !conversations.takesBackground(reached.channel))
-							return;
+						if (!(await directChannels.known(own))) return;
 					} catch (error) {
 						logger.warn(
 							{ channel: home, err: error },

@@ -65,9 +65,9 @@ export function sessionNotify(
 			let reaching = providers;
 			if (own !== undefined) {
 				try {
-					const reached = await directChannels.reach(own);
-					if (!reached) return;
-					reaching = [reached.provider];
+					const known = await directChannels.known(own);
+					if (!known) return;
+					reaching = [known];
 				} catch (error) {
 					// No destination was established; do not advertise an unusable tool.
 					logger.warn(

@@ -23,6 +23,13 @@ export interface DirectChannelProvider {
 	 */
 	reaches(principalId: string): Promise<ChannelKey | undefined>;
 	/**
+	 * Whether the person has a conversation here, from the host's own records such as their linked
+	 * identities, without reaching the network. A session reads it when it decides whether to offer
+	 * a tool that sends or runs there, so a network outage then does not take the tool away; the
+	 * conversation itself is reached when the tool runs. Without it the host asks `reaches`.
+	 */
+	knows?(principalId: string): Promise<boolean>;
+	/**
 	 * Sends the person a notice here; without it the host posts the text in the channel `reaches`
 	 * names, through the surface that serves it.
 	 */
@@ -44,6 +51,11 @@ export interface DirectChannels extends Notifier {
 	providers(): readonly DirectChannelProvider[];
 	/** The person's own conversation on the first provider that reaches them; undefined when none does. */
 	reach(principalId: string): Promise<DirectReach | undefined>;
+	/**
+	 * The first provider that knows the person, as `DirectChannelProvider.knows` tells without the
+	 * network (or `reaches`, for a provider without it); undefined when none does.
+	 */
+	known(principalId: string): Promise<DirectChannelProvider | undefined>;
 	/**
 	 * Sends the person `text` through the first provider that reaches them; false when none does.
 	 * A provider's failure, such as a network error, rejects.
@@ -68,6 +80,15 @@ export function directChannelsPort(
 	return {
 		providers: () => providers(),
 		reach,
+		known: async (principalId) => {
+			for (const provider of providers()) {
+				const knows = provider.knows
+					? await provider.knows(principalId)
+					: (await provider.reaches(principalId)) !== undefined;
+				if (knows) return provider;
+			}
+			return undefined;
+		},
 		notify: async (principalId, text) => {
 			const reached = await reach(principalId);
 			if (!reached) return false;

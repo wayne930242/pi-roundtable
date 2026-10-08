@@ -13,6 +13,7 @@ import {
 	compileSessionPlan,
 	type SessionContext,
 } from "../sessions.ts";
+import type { Speaker } from "../speakers.ts";
 import {
 	ANN,
 	context,
@@ -147,10 +148,8 @@ describe("modulesPlugin", () => {
 		await delegate?.execute("1", { title: "t", task: "look it up" });
 		await setup.services.get(DELEGATION).idle();
 		expect(setup.record.reportChannels).toEqual([OWNER_CHANNEL]);
-		expect(setup.record.directAsked).toEqual([
-			OWNER_SPEAKER.principalId,
-			OWNER_SPEAKER.principalId,
-		]);
+		// Asked once, when the report needs the channel; offering the tool only asks whether one knows them.
+		expect(setup.record.directAsked).toEqual([OWNER_SPEAKER.principalId]);
 		expect(setup.record.ownerChannelAsked).toBe(0);
 	});
 
@@ -236,7 +235,47 @@ describe("modulesPlugin", () => {
 		expect(created).toEqual([]);
 	});
 
-	test("a private conversation without a chat channel has the schedule and delegation tools only when its person's direct messages take background turns", async () => {
+	test("offering the tools only asks whether a direct channel knows the person; the network is reached when a tool runs", async () => {
+		const created: { channel: ChannelKey }[] = [];
+		let online = false;
+		let speaker: Speaker | undefined;
+		const setup = await setUpModules({
+			schedules: {
+				forChannel: async () => [],
+				all: async () => [],
+				create: async (schedule: { channel: ChannelKey }) => {
+					created.push(schedule);
+					return { ...schedule, id: 7 };
+				},
+			} as unknown as ScheduleStore,
+			direct: { p_ann: "discord:ann-dm" },
+			online: () => online,
+			conversations: { get: privately({ "mcp:s1": "p_ann" }) },
+		});
+		// Built between turns, while Discord is down: the tools stay, since Ann has a direct channel.
+		const session = { ...contextOf(ANN, "mcp:s1"), speaker: () => speaker };
+		const tools = [
+			...(await registered(setup, session, "schedules")),
+			...(await registered(setup, session, "delegate")),
+			...(await registered(setup, session, "notify")),
+		];
+		expect(tools.map((tool) => tool.name)).toEqual(
+			expect.arrayContaining(["schedule_create", "delegate_task", "notify"]),
+		);
+		expect(setup.record.directAsked).toEqual([]);
+		online = true;
+		speaker = ANN;
+		const scheduled = await tools
+			.find((tool) => tool.name === "schedule_create")
+			?.execute("1", { title: "t", prompt: "p", in_minutes: 5 });
+		expect(scheduled?.isError).toBeFalsy();
+		expect(created.map((schedule) => schedule.channel)).toEqual([
+			"discord:ann-dm",
+		]);
+		expect(setup.record.directAsked).toEqual(["p_ann"]);
+	});
+
+	test("a private conversation without a chat channel has the schedule and delegation tools only when its person has a direct channel", async () => {
 		const offered = async (
 			direct: Readonly<Record<string, ChannelKey>>,
 			takesBackground: (channel: ChannelKey) => boolean = () => true,
@@ -260,12 +299,13 @@ describe("modulesPlugin", () => {
 			"delegate_task",
 		);
 		expect(await offered({ "1": OWNER_CHANNEL })).toEqual([]);
+		// Whether a claim takes turns there is asked when a tool runs, once the channel is known.
 		expect(
 			await offered(
 				{ p_ann: "discord:ann-dm" },
 				(channel) => channel !== "discord:ann-dm",
 			),
-		).toEqual([]);
+		).toContain("schedule_create");
 	});
 
 	test("no-surface tools are absent when the creator is unknown, unreachable, or reach lookup fails", async () => {

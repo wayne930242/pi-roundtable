@@ -68,6 +68,11 @@ export async function setUpModules(
 		 * channel; by default the owner's are `OWNER_CHANNEL`, and without Discord there is none.
 		 */
 		direct?: Readonly<Record<string, ChannelKey>>;
+		/**
+		 * Whether the stand-in provider reaches the network, read at each `reaches`, which throws
+		 * while it does not; `knows` answers from its records either way. Default always.
+		 */
+		online?: () => boolean;
 		/** The modules' options besides the test's own. */
 		modules?: Partial<ModulesOptions>;
 	} = {},
@@ -92,8 +97,11 @@ export async function setUpModules(
 				{
 					name: "discord",
 					label: "a direct message on Discord",
+					knows: async (principalId) => direct[principalId] !== undefined,
 					reaches: async (principalId) => {
 						record.directAsked.push(principalId);
+						if (options.online?.() === false)
+							throw new Error("Discord is unreachable");
 						return direct[principalId];
 					},
 					deliver: async (principalId, text) =>

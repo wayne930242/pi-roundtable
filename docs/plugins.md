@@ -137,7 +137,7 @@ A plugin that replaces `IDENTITY` replaces this too: the declarations are the bu
 | `services` | The services plugins provide to each other, read by key: `services.get(SCHEDULES)`; see [services](#services-what-plugins-provide-to-each-other) |
 | `surfaces` | Every contributed [chat surface](#surfaces-a-chat-network-of-your-own), chosen by the prefix of a channel key: `of`, `sendReply`, `startTyping`, `showStop`, `react`, `unreact`, `prompts` |
 | `turns` | Runs one turn of a conversation your claim owns, over the runtime and the surfaces: [`turns.run`](#personas-and-contextturns-conversations-of-a-kind-of-your-own) |
-| `directChannels` | Every plugin's [direct channels](#directchannels-reaching-a-person-on-their-own): `providers()`, `reach(principalId)`, and `notify(principalId, text)` |
+| `directChannels` | Every plugin's [direct channels](#directchannels-reaching-a-person-on-their-own): `providers()`, `reach(principalId)`, `known(principalId)`, and `notify(principalId, text)` |
 | `sessions()`, `conversations`, `surfaces`, `directChannels`, `turns`, `dashboard()` | Linked once every plugin has been set up; calling them during `setup` throws `NotLinkedError` |
 
 `sessions()`, `conversations`, `surfaces`, `directChannels`, `turns`, and `dashboard()` are available from a service's `start`, an event handler, a session tool, or a claim's turn.
@@ -1918,10 +1918,10 @@ In a turn nobody is named for, the schedule and delegation tools refuse.
 - The core's `modules` plugin contributes `PERSONAL_TARGET` (name `"owner"`, exported from the main entry; `OWNER_TARGET` is a deprecated alias) on every host, for every person's conversations whose claim answers background turns, such as the agents' and an app's owner conversation.
   The agent server's claim answers that target and skips all others, so a turn for another target never runs with the owner's tools.
   Its limits are 0.8's, and it holds no one to a number of schedules or running tasks across their conversations unless the host's configuration says so: `background: { perPrincipal: { schedules: 20, delegations: 2 } }` sets its `perPrincipal` and `maxRunningPerPrincipal`. A host that serves many people sets both.
-- The built-in schedule and delegation tools make `PERSONAL_TARGET` work, and a session has them only where it can run: when the claim that owns its conversation has `background`, or, for a conversation no chat surface carries, when its creator has a direct channel whose claim takes background turns.
+- The built-in schedule and delegation tools make `PERSONAL_TARGET` work, and a session has them only where it can run: when the claim that owns its conversation has `background`, or, for a conversation no chat surface carries, when its creator has a direct channel, as a provider knows without the network.
   The creator must be known when the tools load, from the registry's private conversation or a current speaker; otherwise no tools are offered.
   The runtime builds sessions between turns, so a plugin that calls it directly must record its no-surface conversation as private before building it.
-  Creation rechecks the speaker's own direct channel and its claim, refusing when either is absent; it never falls back to the primary owner's messages.
+  Creation reaches the speaker's own direct channel and checks that its claim takes background turns, refusing when either is absent; it never falls back to the primary owner's messages.
   Such a conversation the host has no record of is the speaker's own, so its schedule tools see only the speaker's schedules.
   In a private conversation, as the host's conversation registry records it, `schedule_list`, `schedule_update`, and `schedule_cancel` see only the speaker's own schedules.
 - A turn for a target no plugin contributes is skipped with the reason `no plugin contributes the background target "<name>"`.
@@ -1996,13 +1996,14 @@ setup: ({ services }) => ({
 | `name` | Unique across every plugin; a second provider of one name is a `PluginError` naming both plugins |
 | `label` | How the `notify` tool names a notice sent through it, completing "Send Ada …", such as `a direct message on Discord` |
 | `reaches(principalId)` | The person's own conversation here, as a channel key, or `undefined` when they have none here. It may reach the network and throw |
+| `knows(principalId)` | Optional: whether the person has a conversation here, from the host's own records such as their linked identities, without the network. A session asks it when it decides whether to offer `notify` or the schedule and delegation tools, so an outage then does not take them away; without it the host asks `reaches` |
 | `deliver(principalId, text)` | Optional: sends the notice itself. Without it the host posts the text in the channel `reaches` names, through the surface that serves it |
 
 The host reaches a person through the first provider, in contribution order, that reaches them.
-`context.directChannels.reach(principalId)` resolves that provider and channel, or `undefined`; `notify(principalId, text)` sends a notice there and resolves `false` when no provider reaches the person.
+`context.directChannels.reach(principalId)` resolves that provider and channel, or `undefined`; `known(principalId)` resolves the first provider that knows the person without the network; `notify(principalId, text)` sends a notice there and resolves `false` when no provider reaches the person.
 The Discord plugin contributes one named `discord`: it finds a principal's Discord identities through `IDENTITY` and reaches the first one's direct messages, the primary owner's configured identity first, so a single owner is reached in the same direct messages as in 0.8.
 
-The `notify` tool, 0.8's `notify_owner`, sends such a notice. A session has it only when a provider is contributed, and a private conversation only when a provider reaches its person.
+The `notify` tool, 0.8's `notify_owner`, sends such a notice. A session has it only when a provider is contributed, and a private conversation only when a provider knows its person; the channel itself is reached when a notice is sent.
 It notifies the conversation's person in a private conversation and the turn's speaker in a shared one, and refuses when no provider reaches them or when the speaker is not the private conversation's person; the host's own turns, such as a report's, notify the conversation's person in a private conversation and the primary owner elsewhere, as `notify_owner` did.
 Its description names the channels that can reach the person, so a host with only Discord reads `Send Ada a direct message on Discord. …` as 0.8 did.
 Until 1.0 the name `notify_owner` still selects it in a selection or a profile, and an operator's `toolTiers` entry for `notify_owner` applies to `notify` unless `notify` has its own.

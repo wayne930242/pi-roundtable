@@ -37,6 +37,7 @@ export function discordDirectChannel(
 	return {
 		name: "discord",
 		label: "a direct message on Discord",
+		knows: async (principalId) => (await userOf(principalId)) !== undefined,
 		reaches: async (principalId) => {
 			const user = await userOf(principalId);
 			return user === undefined ? undefined : options.directChannel(user);

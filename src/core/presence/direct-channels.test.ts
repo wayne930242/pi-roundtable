@@ -39,6 +39,23 @@ describe("the direct channels", () => {
 		expect(await port.reach("kai")).toBeUndefined();
 	});
 
+	test("know a person by the first provider that knows them without the network, or else that reaches them", async () => {
+		const offline: DirectChannelProvider = {
+			...inbox("offline", {}),
+			knows: async (principalId) => principalId === "ada",
+			reaches: async () => {
+				throw new Error("unreachable");
+			},
+		};
+		const second = inbox("second", { bo: "second:bo" });
+		const port = directChannelsPort(() => [offline, second], {
+			sendReply: async () => undefined,
+		});
+		expect(await port.known("ada")).toBe(offline);
+		expect(await port.known("bo")).toBe(second);
+		expect(await port.known("kai")).toBeUndefined();
+	});
+
 	test("notify through the provider's own delivery, or else posts in the channel it reaches; false for someone none reaches", async () => {
 		const delivered: { name: string; principalId: string; text: string }[] = [];
 		const posted: { channel: ChannelKey; chunks: string[] }[] = [];
