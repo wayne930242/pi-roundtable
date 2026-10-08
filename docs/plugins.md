@@ -1665,7 +1665,8 @@ Claims on other surfaces, such as the example's `echo:` keys, don't compete with
 Before a claim's `admit` sees a message, the router resolves its author through `IDENTITY` and sets `message.speaker`: their `id` on the surface, `name`, `tier`, and `principalId`, the principal whose memory, schedules, and conversations are theirs.
 It is undefined when the access rules serve no one by them, and for bots and integrations, which are not resolved; a `speaker` the surface set is dropped.
 A claim that serves only the people the host serves answers only when `speaker` is set.
-The router records the author, such as linking them at their first contact, only once a claim admits the message, so messages no claim takes write nothing.
+The router records the author, such as linking them at their first contact, only once a claim admits the message, so messages no claim takes link or make no one.
+One exception: an author already linked whom the access rules now refuse is recorded as seen at no tier when the message is resolved, whether or not a claim takes it, at most once every few minutes, so their background turns stop with them.
 
 A claim may have `stop(channel)`, which stops the channel's running turn and returns whether one was running; the Stop button, `conversations.stop`, and every other stop go through it.
 The router calls only the owning claim's `stop`, returning `false` when that method is absent.

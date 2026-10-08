@@ -110,7 +110,9 @@ export class ChannelRouter implements ConversationPort {
 	 * The claim's admission of the message, which carries the speaker its author resolves to; one
 	 * who cannot be resolved, such as while the database is down, reaches the claim as no one. The
 	 * author's contact is recorded, such as their first contact linked, only once the claim takes
-	 * the message, so a message nobody serves writes nothing. The admission stands even when that
+	 * the message, so a message nobody serves links or makes no one. A linked author the rules
+	 * refuse is still recorded as seen at no tier as the message is assessed, whether or not a
+	 * claim then takes it, at most once in a while. The admission stands even when that
 	 * record fails or finds them linked elsewhere meanwhile: the claim decided on who they were a
 	 * moment before, as a change another process makes is seen within the identity service's cache
 	 * anyway, and it may hold state for what it admitted.
