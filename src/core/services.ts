@@ -188,6 +188,16 @@ export interface AgentTeam {
 /** Scheduled turns, stored. A one-time schedule is deleted once it fires. */
 export interface ScheduleStore {
 	create(schedule: NewSchedule): Promise<Schedule>;
+	/**
+	 * Creates a schedule unless its creator already has `limit.max` of its target's schedules,
+	 * counting those whose creator id is one of `limit.creators`; resolves the count reached instead.
+	 * Two calls for one creator never count at once, so creates at once in many conversations stay
+	 * within the limit.
+	 */
+	createWithin(
+		schedule: NewSchedule,
+		limit: { creators: readonly string[]; max: number },
+	): Promise<{ created: Schedule } | { reached: number }>;
 	get(id: number): Promise<Schedule | undefined>;
 	forChannel(channel: ChannelKey): Promise<Schedule[]>;
 	all(): Promise<Schedule[]>;

@@ -29,6 +29,9 @@ const schedules: ScheduleStore = {
 	create: async () => {
 		throw new Error("unused");
 	},
+	createWithin: async () => {
+		throw new Error("unused");
+	},
 	get: async () => undefined,
 	forChannel: async () => [],
 	all: async () => [],

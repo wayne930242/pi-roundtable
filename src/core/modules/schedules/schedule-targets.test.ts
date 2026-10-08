@@ -280,4 +280,33 @@ describeDb("background targets on stored schedules", () => {
 		expect(text).toContain("Support line");
 		expect(text).toContain("retired");
 	});
+	test("a person's schedules created at once in many conversations stay within the target's perPrincipal limit", async () => {
+		const personal: BackgroundTarget = {
+			name: "personal",
+			label: () => "Personal",
+			schedules: {
+				perChannel: 20,
+				perPrincipal: 2,
+				promptChars: 8_000,
+				aheadDays: 366,
+			},
+		};
+		const outcomes = await Promise.allSettled(
+			Array.from({ length: 6 }, (_, i) =>
+				callScheduleTool(
+					ctx({ target: personal, channel: `web:c${i}` }),
+					"schedule_create",
+					{ title: `t${i}`, prompt: "p", time: "10:00" },
+				),
+			),
+		);
+		expect(outcomes.filter((o) => o.status === "fulfilled")).toHaveLength(2);
+		for (const outcome of outcomes.filter((o) => o.status === "rejected"))
+			expect(String(outcome.reason)).toContain(
+				"the most one person may have here",
+			);
+		expect(
+			(await store.all()).filter((s) => s.target === "personal"),
+		).toHaveLength(2);
+	});
 });

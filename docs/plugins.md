@@ -191,7 +191,7 @@ The built-in plugins provide these, from the main entry:
 | `RUNTIME` | `AgentRuntime` | `runtime` | The runtime every conversation turn runs on, the agent server's and `context.turns`': the `runtime` slot's when a plugin fills it, Pi's otherwise |
 | `AGENTS` | `AgentServer` | `agent-server` | The `team` (`AgentTeam`), the read-only `directory` (`AgentDirectory`), the `runtime` every agent turn runs on (the same one `RUNTIME` provides), `approvals` (whether the owner's reply approves held actions), and `avatars` (`AvatarStudio`) |
 | `SKILLS` | `SkillRegistry` | `skills` (an addon) | What agents carry: `carried`, `carriedNames`, `describeCarried`, `catalog`, `list`, `linkedFrom`, `checkRegistered`, `link`, `attach` |
-| `SCHEDULES` | `ScheduleStore` | `schedule-store` | The stored schedules: `create`, `get`, `forChannel`, `all`, `update`, `remove`, `due`, `claim`, `recordStatus` |
+| `SCHEDULES` | `ScheduleStore` | `schedule-store` | The stored schedules: `create`, `createWithin`, `get`, `forChannel`, `all`, `update`, `remove`, `due`, `claim`, `recordStatus` |
 | `PRECHECKS` | `PrecheckRegistry` | `prechecks` | The host's named [prechecks](#prechecks-wake-a-schedule-only-when-it-has-work): `register`, `get`, `list`; and the runner of agents' precheck scripts: `useScriptRunner`, `scriptRunner` |
 | `MEMORY` | `MemoryStore` | `memory` (an addon) | `forSpeaker(id)` gives that speaker's `SpeakerMemory`: `list`, `forPrompt`, `add`, `search`, `update`, `removeById`, `remove`; `MEMORY_KINDS` is `core`, `note`, `event` |
 | `BACKGROUND_TURNS` | `BackgroundTurns` | `modules` | Turns nobody wrote: `runScheduled`, `runDelegated`, `runErrorReport` |
@@ -1900,7 +1900,7 @@ test("the persona is the plugin's and belongs to the study kind only", async () 
 
 Schedules and delegated tasks return later as turns without a new message in the channel.
 A `BackgroundTarget` says whose turn that is: a `name` that the schedule or job stores, a `label(locale)` that lists such as `/<root> schedule` show, and the limits that apply to it.
-`schedules` (`perChannel`, `promptChars`, `aheadDays`, and optionally `perPrincipal`) bounds what `schedule_create` accepts, and `delegation` (`maxRunning`, and optionally `maxRunningPerPrincipal`) bounds how many delegated tasks may run in one channel; a target without one of them may not schedule or delegate at all. `perPrincipal` and `maxRunningPerPrincipal` hold each person to that many of the target's schedules, or running tasks, across all their conversations.
+`schedules` (`perChannel`, `promptChars`, `aheadDays`, and optionally `perPrincipal`) bounds what `schedule_create` accepts, and `delegation` (`maxRunning`, and optionally `maxRunningPerPrincipal`) bounds how many delegated tasks may run in one channel; a target without one of them may not schedule or delegate at all. `perPrincipal` and `maxRunningPerPrincipal` hold each person to that many of the target's schedules, or running tasks, across all their conversations. A schedule store counts a person's schedules for `perPrincipal` in `createWithin`, which must count and store as one step for that person, so creates at once in several conversations stay within the limit; the built-in store does it in one transaction under a lock on the creator.
 The claim that answers the target serves it in its `background(turn)`, where `turn.target` is the name, and skips every target it does not serve.
 A channel's claim runs turns only for its own target, keeping the owner's tools out of channels open to many people.
 

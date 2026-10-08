@@ -110,6 +110,34 @@ function toSchedule(row: Row): Schedule {
 	};
 }
 
+/** Refuses a schedule the table could not run: a precheck and a script both, or a script without its tools. */
+function checked(schedule: NewSchedule): void {
+	if (schedule.precheck && schedule.precheckScript)
+		throw new ScheduleError(
+			"a schedule has a precheck or a precheck script, not both",
+		);
+	if (schedule.precheckScript && !schedule.precheckTools)
+		throw new ScheduleError(
+			"a precheck script is saved with the tools it may call",
+		);
+}
+
+async function insert(sql: SQL, schedule: NewSchedule): Promise<Schedule> {
+	checked(schedule);
+	const rows: Row[] = await sql`
+		INSERT INTO schedules (channel_key, mode, title, prompt, recurrence, next_run,
+			created_by_id, created_by_name, created_tier, precheck, precheck_script, precheck_tools)
+		VALUES (${schedule.channel}, ${schedule.target}, ${schedule.title}, ${schedule.prompt},
+			${JSON.stringify(schedule.recurrence)}, ${schedule.nextRun},
+			${schedule.createdById}, ${schedule.createdByName}, ${schedule.createdTier},
+			${schedule.precheck ?? null}, ${schedule.precheckScript ?? null},
+			${schedule.precheckScript ? JSON.stringify(schedule.precheckTools) : null})
+		RETURNING *`;
+	const [row] = rows;
+	if (!row) throw new Error("the schedule insert returned no row");
+	return toSchedule(row);
+}
+
 /** Scheduled turns, in the database. A one-time schedule's row is deleted once it fires. */
 export class PgScheduleStore implements ScheduleStore {
 	readonly #sql: SQL;
@@ -176,26 +204,29 @@ export class PgScheduleStore implements ScheduleStore {
 	}
 
 	async create(schedule: NewSchedule): Promise<Schedule> {
-		if (schedule.precheck && schedule.precheckScript)
-			throw new ScheduleError(
-				"a schedule has a precheck or a precheck script, not both",
-			);
-		if (schedule.precheckScript && !schedule.precheckTools)
-			throw new ScheduleError(
-				"a precheck script is saved with the tools it may call",
-			);
-		const rows: Row[] = await this.#sql`
-			INSERT INTO schedules (channel_key, mode, title, prompt, recurrence, next_run,
-				created_by_id, created_by_name, created_tier, precheck, precheck_script, precheck_tools)
-			VALUES (${schedule.channel}, ${schedule.target}, ${schedule.title}, ${schedule.prompt},
-				${JSON.stringify(schedule.recurrence)}, ${schedule.nextRun},
-				${schedule.createdById}, ${schedule.createdByName}, ${schedule.createdTier},
-				${schedule.precheck ?? null}, ${schedule.precheckScript ?? null},
-				${schedule.precheckScript ? JSON.stringify(schedule.precheckTools) : null})
-			RETURNING *`;
-		const [row] = rows;
-		if (!row) throw new Error("the schedule insert returned no row");
-		return toSchedule(row);
+		return insert(this.#sql, schedule);
+	}
+
+	/**
+	 * Creates a schedule unless its creator already has `limit.max` of its target's schedules,
+	 * counting those whose creator id is one of `limit.creators`; resolves the count reached instead.
+	 * The count and the insert hold a lock on the creator, so creates at once by one person in many
+	 * conversations stay within the limit.
+	 */
+	async createWithin(
+		schedule: NewSchedule,
+		limit: { creators: readonly string[]; max: number },
+	): Promise<{ created: Schedule } | { reached: number }> {
+		checked(schedule);
+		return this.#sql.begin(async (tx) => {
+			await tx`SELECT pg_advisory_xact_lock(hashtextextended(${`schedules/creator:${schedule.createdById}`}, 0))`;
+			const [row]: { count: string | number }[] = await tx`
+				SELECT count(*) AS count FROM schedules
+				WHERE mode = ${schedule.target} AND created_by_id IN ${tx([...limit.creators])}`;
+			const count = Number(row?.count ?? 0);
+			if (count >= limit.max) return { reached: count };
+			return { created: await insert(tx, schedule) };
+		});
 	}
 
 	async get(id: number): Promise<Schedule | undefined> {

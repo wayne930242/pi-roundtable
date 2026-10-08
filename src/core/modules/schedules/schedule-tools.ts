@@ -21,7 +21,7 @@ import {
 	type Recurrence,
 	type RecurrenceInput,
 } from "./recurrence.ts";
-import type { Schedule } from "./schedule-store.ts";
+import type { NewSchedule, Schedule } from "./schedule-store.ts";
 
 const TITLE_CHARS = 80;
 const LIST_PROMPT_PREVIEW = 200;
@@ -30,12 +30,15 @@ const DESCRIBE_TIMEOUT_MS = 10_000;
 const DAY_MS = 86_400_000;
 
 export interface ScheduleToolContext {
-	/** The schedules; `all` is needed only where the target counts each person's (`perPrincipal`). */
+	/**
+	 * The schedules; `all` and `createWithin` are needed only where the target counts each person's
+	 * (`perPrincipal`).
+	 */
 	store: Pick<
 		ScheduleStore,
 		"create" | "get" | "forChannel" | "update" | "remove"
 	> &
-		Partial<Pick<ScheduleStore, "all">>;
+		Partial<Pick<ScheduleStore, "all" | "createWithin">>;
 	channel: ChannelKey;
 	/** Whose schedules these are; its `schedules` limits apply, and without them nothing is scheduled. */
 	target: BackgroundTarget;
@@ -272,25 +275,52 @@ async function own(ctx: ScheduleToolContext, input: Input): Promise<Schedule> {
 	return schedule;
 }
 
-/** Refuses a schedule beyond the target's limit of one person's, across all their conversations. */
-async function withinPerPrincipal(ctx: ScheduleToolContext): Promise<void> {
+/**
+ * The creator ids that stand for the asker among the target's schedules, for a target that counts
+ * each person's (`perPrincipal`): their principal's and any older id read as theirs, such as 0.8's
+ * `remote-mcp` for the primary owner. Undefined for a target that counts per conversation only.
+ */
+async function perPrincipalCreators(
+	ctx: ScheduleToolContext,
+): Promise<string[] | undefined> {
 	const { perPrincipal } = limitsOf(ctx);
-	if (perPrincipal === undefined) return;
-	if (!ctx.store.all)
+	if (perPrincipal === undefined) return undefined;
+	if (!ctx.store.all || !ctx.store.createWithin)
 		throw new ScheduleError(
 			`${ctx.target.name} schedules are counted per person, and this host's schedule store cannot count them`,
 		);
-	let theirs = 0;
+	const creators = new Set([ctx.author.principalId]);
 	for (const schedule of await ctx.store.all())
 		if (
 			schedule.target === ctx.target.name &&
+			!creators.has(schedule.createdById) &&
 			(await creatorOf(ctx, schedule)) === ctx.author.principalId
 		)
-			theirs += 1;
-	if (theirs >= perPrincipal)
+			creators.add(schedule.createdById);
+	return [...creators];
+}
+
+/**
+ * Stores a new schedule, within the target's limit of one person's across all their conversations
+ * where it has one: counted and stored under a lock on the person, so creates at once stay within it.
+ */
+async function created(
+	ctx: ScheduleToolContext,
+	schedule: NewSchedule,
+): Promise<Schedule> {
+	const creators = await perPrincipalCreators(ctx);
+	const { perPrincipal } = limitsOf(ctx);
+	if (!creators || perPrincipal === undefined || !ctx.store.createWithin)
+		return ctx.store.create(schedule);
+	const outcome = await ctx.store.createWithin(schedule, {
+		creators,
+		max: perPrincipal,
+	});
+	if ("reached" in outcome)
 		throw new ScheduleError(
-			`you already have ${theirs} schedules, the most one person may have here; cancel one first`,
+			`you already have ${outcome.reached} schedules, the most one person may have here; cancel one first`,
 		);
+	return outcome.created;
 }
 
 /** A schedule runs at its creator's tier, so someone of a lower tier may not rewrite it. */
@@ -343,8 +373,7 @@ export async function callScheduleTool(
 				throw new ScheduleError(
 					`this channel already has ${existing.length} schedules, the most it may have; cancel one first`,
 				);
-			await withinPerPrincipal(ctx);
-			const created = await ctx.store.create({
+			const made = await created(ctx, {
 				channel: ctx.channel,
 				target: ctx.target.name,
 				title,
@@ -364,7 +393,7 @@ export async function callScheduleTool(
 				: script
 					? "; its precheck script runs first"
 					: "";
-			return `Scheduled #${created.id} "${title}": ${describeRecurrence(recurrence)}, first run ${zonedStamp(next)} ${messages().zoneTime(timeZone())}${checked}.`;
+			return `Scheduled #${made.id} "${title}": ${describeRecurrence(recurrence)}, first run ${zonedStamp(next)} ${messages().zoneTime(timeZone())}${checked}.`;
 		}
 		case "schedule_list": {
 			if (input.id !== undefined) {

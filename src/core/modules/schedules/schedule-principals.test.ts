@@ -3,7 +3,7 @@ import type { BackgroundTarget } from "../../contract/channels.ts";
 import type { ChannelKey } from "../../domain/conversation.ts";
 import { useTestLocale } from "../../testing/locale.ts";
 import { setTimeZone } from "../../time.ts";
-import type { Schedule } from "./schedule-store.ts";
+import type { NewSchedule, Schedule } from "./schedule-store.ts";
 import {
 	callScheduleTool,
 	type ScheduleToolContext,
@@ -56,12 +56,19 @@ function memoryStore(seed: Partial<Schedule>[] = []) {
 				...given,
 			}) as Schedule,
 	);
+	const create = async (schedule: NewSchedule) => {
+		// SAFETY: the tools read back only what they stored and the id.
+		const created = { ...schedule, id: made.length + 1 } as Schedule;
+		made.push(created);
+		return created;
+	};
 	const store: ScheduleToolContext["store"] = {
-		create: async (schedule) => {
-			// SAFETY: the tools read back only what they stored and the id.
-			const created = { ...schedule, id: made.length + 1 } as Schedule;
-			made.push(created);
-			return created;
+		create,
+		createWithin: async (schedule, { creators, max }) => {
+			const reached = made.filter(
+				(s) => s.target === schedule.target && creators.includes(s.createdById),
+			).length;
+			return reached >= max ? { reached } : { created: await create(schedule) };
 		},
 		get: async (id) => made.find((schedule) => schedule.id === id),
 		forChannel: async (channel) =>
