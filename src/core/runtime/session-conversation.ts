@@ -10,17 +10,29 @@ import { addressee, type Speaker, THE_SPEAKER } from "../speakers.ts";
 import type { PiAgentRuntimeOptions } from "./runtime-types.ts";
 
 /**
- * Whom a new session's conversation serves: an agent's is shared; another is as the turn says,
- * else as the host's record says, else shared, never the owner's by default. A private one's
- * person is looked up for their name and pronouns.
+ * Whom a conversation serves as something says so: an agent's is shared; another is as the turn
+ * says, else as the host's record says; undefined when neither does.
+ */
+export async function namedConversation(
+	key: ChannelKey,
+	request: Pick<TurnRequest, "agent" | "conversation"> | undefined,
+	options: Pick<PiAgentRuntimeOptions, "conversationOf">,
+): Promise<TurnConversation | undefined> {
+	if (request?.agent) return { visibility: "shared" };
+	return request?.conversation ?? (await options.conversationOf?.(key));
+}
+
+/**
+ * Whom a new session's conversation serves: as the turn or the host's record names it, else
+ * shared, never the owner's by default. A private one's person is looked up for their name and
+ * pronouns.
  */
 export async function sessionConversation(
 	key: ChannelKey,
 	request: Pick<TurnRequest, "agent" | "conversation"> | undefined,
 	options: Pick<PiAgentRuntimeOptions, "conversationOf" | "principalOf">,
 ): Promise<SessionConversation> {
-	if (request?.agent) return { visibility: "shared" };
-	const given = request?.conversation ?? (await options.conversationOf?.(key));
+	const given = await namedConversation(key, request, options);
 	if (given?.visibility !== "private") return { visibility: "shared" };
 	const principal = await options.principalOf?.(given.principalId);
 	return {

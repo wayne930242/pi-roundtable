@@ -56,6 +56,15 @@ export function scopedHistory(
 	return { history, archived };
 }
 
+/** The scope the latest history in `dir` records, if any. */
+export function historyScope(
+	dir: string,
+	cwd: string,
+): TurnConversation | undefined {
+	if (!existsSync(dir)) return undefined;
+	return recordedScope(SessionManager.continueRecent(cwd, dir));
+}
+
 /**
  * The messages of the latest history in `dir`, read without opening a session, so reading them
  * fixes no scope; none when it was recorded in another scope than `scope`.

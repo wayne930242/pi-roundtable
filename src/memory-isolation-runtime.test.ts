@@ -500,3 +500,61 @@ describe("a conversation whose scope changes", () => {
 		}
 	});
 });
+
+describe("a conversation the host records anew while its session is open", () => {
+	test("a turn naming no conversation is checked against the host's record at every turn, before the model is asked", async () => {
+		const seen: TranscriptContext[] = [];
+		const recorded = new Map<ChannelKey, TurnConversation>();
+		const host = await isolationHost(STORE(), looking(seen, 2), { recorded });
+		try {
+			// Bo's turn opens the session of a conversation nothing records yet: shared.
+			expect(
+				(await host.run(BO, "fake:room", { text: "BO_ROOM_TEXT" })).ok,
+			).toBe(true);
+			// The host then records it as Ann's private conversation, as CONVERSATIONS.adopt does.
+			recorded.set("fake:room", privateTo("ann"));
+			const refused = await host.run(BO, "fake:room");
+			expect(refused.ok).toBe(false);
+			if (!refused.ok)
+				expect(refused.error.message).toContain("private to ann");
+			expect(seen).toHaveLength(1);
+			// Ann's turn runs in a session of her own, without the shared room's history.
+			expect((await host.run(ANN, "fake:room")).ok).toBe(true);
+			for (const sent of asSent(seen[1] as TranscriptContext))
+				expect(sent).not.toContain("BO_ROOM_TEXT");
+		} finally {
+			await host.stop();
+		}
+	});
+});
+
+describe("a conversation nothing names at a turn", () => {
+	test("carries on as its history records whom it serves, after a restart too, refusing anyone else", async () => {
+		const first = await isolationHost(STORE(), looking([], 1));
+		try {
+			expect(
+				(
+					await first.run(ANN, "fake:desk", {
+						conversation: privateTo("ann"),
+						text: DIARY,
+					})
+				).ok,
+			).toBe(true);
+		} finally {
+			await first.stop();
+		}
+		const seen: TranscriptContext[] = [];
+		const again = await isolationHost(STORE(), looking(seen, 1), {
+			dir: first.dir,
+		});
+		try {
+			const bo = await again.run(BO, "fake:desk");
+			expect(bo.ok).toBe(false);
+			if (!bo.ok) expect(bo.error.message).toContain("private to ann");
+			expect((await again.run(ANN, "fake:desk")).ok).toBe(true);
+			expect(JSON.stringify(seen[0]?.messages)).toContain("ANN_DIARY_SECRET");
+		} finally {
+			await again.stop();
+		}
+	});
+});

@@ -5,7 +5,7 @@ import type {
 	ChannelKey,
 	PendingConfirmation,
 } from "../domain/conversation.ts";
-import type { TurnRequest } from "../domain/ports.ts";
+import type { TurnConversation, TurnRequest } from "../domain/ports.ts";
 import type { ThinkingLevel } from "../models.ts";
 import type { ToolTiers } from "../tool-tiers.ts";
 import { ConfirmationGate } from "./extensions/confirmation-gate.ts";
@@ -14,10 +14,15 @@ import type { ChannelSession, PiAgentRuntimeOptions } from "./runtime-types.ts";
 import { revisionsKey, skillsKey } from "./runtime-types.ts";
 import {
 	conversationChanged,
+	namedConversation,
 	sessionConversation,
 } from "./session-conversation.ts";
 import type { SessionFactory } from "./session-factory.ts";
-import { historyMessages, scopedHistory } from "./session-scope.ts";
+import {
+	historyMessages,
+	historyScope,
+	scopedHistory,
+} from "./session-scope.ts";
 
 type AgentMessage = AgentSession["messages"][number];
 
@@ -146,6 +151,28 @@ export class ConversationSessions {
 	}
 
 	/**
+	 * Whom the conversation serves at this turn: as the turn names it, else as the host records it
+	 * now, read at every turn so a record changed while the session is open counts; else as its open
+	 * session was made for, or its history records, so a conversation nothing names carries on as it
+	 * was, after a restart too; else shared.
+	 */
+	async conversation(
+		key: ChannelKey,
+		request: Pick<TurnRequest, "agent" | "conversation">,
+	): Promise<TurnConversation> {
+		const named = await namedConversation(key, request, this.#options);
+		if (named) return named;
+		const open = this.#sessions.get(key);
+		if (open) return (await open).conversation;
+		return (
+			historyScope(
+				this.#factory.sessionDir(key),
+				this.#factory.cwd(request.agent),
+			) ?? { visibility: "shared" }
+		);
+	}
+
+	/**
 	 * The conversation's session for the turn: rebuilt with its history when its session tools or
 	 * skills changed, and made anew, with nothing held for it, when the conversation serves someone
 	 * else than it was made for, its history archived rather than replayed.
@@ -201,7 +228,7 @@ export class ConversationSessions {
 		return historyMessages(
 			this.#factory.sessionDir(key),
 			this.#factory.cwd(undefined),
-			await sessionConversation(key, undefined, this.#options),
+			await this.conversation(key, {}),
 		);
 	}
 

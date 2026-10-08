@@ -119,13 +119,13 @@ export class PiAgentRuntime implements AgentRuntime {
 		const { logger, turnTimeoutMs = 10 * 60_000 } = this.#options;
 		if (!request.speaker) return unspokenTurn();
 		const key = request.agent?.session ?? request.channel;
-		const channelSession = await this.#sessions.freshSession(key, request);
-		// Only its person, or the host itself, speaks in a private conversation.
-		const refused = refusedSpeaker(
-			channelSession.conversation,
-			request.speaker,
-		);
+		// Whom the conversation serves now, the host's record read again; only its person, or the
+		// host itself, speaks in a private one, refused before its session is touched.
+		const conversation = await this.#sessions.conversation(key, request);
+		const refused = refusedSpeaker(conversation, request.speaker);
 		if (refused) return { ok: false, error: new AgentRunError(refused) };
+		const scoped = { ...request, conversation };
+		const channelSession = await this.#sessions.freshSession(key, scoped);
 		const who = turnAddressee(
 			request.speaker,
 			channelSession,
@@ -205,7 +205,7 @@ export class PiAgentRuntime implements AgentRuntime {
 		const slot = this.#sessions.slot(key);
 		slot.bind(
 			request.interactive
-				? this.#options.prompts?.(request.channel, promptScopeOf(request))
+				? this.#options.prompts?.(request.channel, promptScopeOf(scoped))
 				: undefined,
 			request.agent?.name ?? assistantName(),
 			interim ? () => interim.flush() : undefined,
