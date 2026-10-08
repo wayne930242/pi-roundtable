@@ -80,12 +80,12 @@ export interface DiscordAdapterConfig extends AdapterConfig {
 	readonly discord: DiscordConfig;
 }
 
-/** What `roundtable.config.ts` gives `defineRoundtable`. */
 /** The configuration's `background`: each person's share of the host's background work. */
 export interface BackgroundConfig {
 	perPrincipal?: PerPrincipalLimits;
 }
 
+/** What `roundtable.config.ts` gives `defineRoundtable`. */
 export interface RoundtableConfig {
 	/** The assistant's display name; default "Roundtable". */
 	name?: string;
