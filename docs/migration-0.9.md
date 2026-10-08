@@ -1,0 +1,190 @@
+# Migrating to 0.9
+
+0.9 makes the person behind a turn explicit: a **principal** owns memory, private conversations, schedules, and notifications, while an **identity** is an account or credential linked to that principal.
+`Speaker.id` remains the external actor id; the required `Speaker.principalId` identifies the person.
+This is principal isolation, not a claim of a complete multi-user service: model credentials, host files, and plugin execution remain shared.
+
+## Who needs to act
+
+An ordinary single-owner Discord host using only the built-in conversation paths needs no configuration or data edits.
+Its old `owner` and `speakers` settings still work with a deprecation warning, the owner's principal keeps their old id, and their memory and schedules stay theirs.
+Back up the configuration, PostgreSQL, and the data directory before upgrading, run `roundtable doctor`, and check the first boot's identity backfill log.
+
+You must act if you:
+
+- Call `runtime.runTurn` yourself, construct speakers or background turns, implement a surface, or replace a core service port: see [plugin changes](#plugin-changes).
+- Contribute a background target named `"owner"`: the core now contributes it on every host, so remove your duplicate.
+- Use webchat's old `access` option: move it to the core configuration.
+- Use the web console with a verifier reporting an actor: link its identity to an owner, even on a single-owner host.
+- Use memory and a `claude-bridge` model where more than one principal may speak in shared conversations: choose one of the three fixes below.
+- Rely on system error or webhook report turns to schedule or delegate: they may no longer create, change, or cancel schedules, delegate tasks, or call coding's `repo_task`; they may still list schedules.
+
+## Upgrade the configuration
+
+Run these from the host project, with the environment its configuration normally loads:
+
+```sh
+bunx roundtable upgrade
+bunx roundtable upgrade --write
+bunx roundtable doctor
+```
+
+The first command previews a diff without changing files.
+`--write` checks that the rewritten configuration serves the same people and then writes only `roundtable.config.ts`.
+It converts `owner` and `speakers` to `access`, keeps the owner's old id as their `principal`, prefixes identities and roles, scopes old `everyone` to Discord, and moves top-level `discord` to `adapters: [discord(...)]` with its import.
+A second run has no diff.
+Dynamic objects or spreads it cannot safely rewrite need manual edits at the reported line.
+If the configuration cannot load for the equivalence check, provide its normal environment; `--write --unchecked` is an explicit opt-out with a warning, not the recommended path.
+It does not update plugin source, webchat options, or credentials.
+Do not combine `access` with old `owner` or `speakers`: the host refuses that configuration.
+The first configured owner is the primary owner and needs an explicit principal id; Discord also needs their linked Discord identity.
+
+Use `roundtable principal list` and `show` to inspect principals and copy identity strings.
+`link <principal> <identity>` links another account to the same person's memory; `grant`, `revoke`, `disable`, and `enable` manage lasting roles and admission.
+CLI changes can take up to 30 seconds to reach a running host's identity cache.
+Only configuration and CLI grants confer owner; IdP roles never do.
+`provisioning: "admitted"` creates a principal for a newly admitted person; `"linked"` accepts only existing links and does not claim old ids.
+
+## Data migration and conversation ownership
+
+The boot migrations add identity tables and held-action attribution without rewriting existing conversation, memory, or schedule rows.
+The backfill creates principals with the old person ids; an adapter's verified first contact can claim a backfilled id once.
+A principal created normally, one already linked, or a configured owner is not a new identity's legacy claim.
+Unlinking an identity does not restore that claim.
+The 0.8 `remote-mcp` author is attributed to the primary owner, including their existing schedules, not made into a separate member.
+An old non-owner schedule author gets an initial last-seen tier capped by current access rules and a 30-day background window by default.
+Background execution still caps the recorded tier at current lasting roles, or at the last admitted tier for someone whose roles come only from the IdP; after `access.backgroundStaleDays` (default 30), those IdP-only background turns are skipped until the person returns.
+Disabled, unknown, or unadmitted principals are skipped too.
+
+Register a private conversation with `CONVERSATIONS` **before the first runtime call**, including a transcript read.
+Registration fixes ownership on the first record; later registration does not change it.
+Use `CONVERSATIONS.adopt(key, principalId)` only to migrate a pre-0.9 shared record with no principal that your plugin knows was one person's conversation.
+Adoption is idempotent and does not change an existing private record; adoption of conversations created in 0.9 is outside its contract and may be refused in a later release.
+Remote MCP performs this migration for its old sessions.
+Other 0.8 shared rows stay shared: even a single owner's formerly shared room now uses "the speaker" tool wording.
+
+Never flip visibility or transfer a conversation to reuse its history.
+If its effective scope changes (private to another principal, private to shared, or shared to private), the runtime archives the old history, drops held actions, and starts an isolated session; this applies after a restart too.
+An explicit `TurnRequest.conversation` should agree with your registry's ownership.
+A private conversation refuses another principal's interactive turn both through `context.turns` and through the Pi runtime directly.
+Private prompts never escalate to an owner; a held call above the person's tier expires without being shown.
+In shared conversations, the principal who spoke may answer from any linked identity at the required tier, and owners may answer escalated prompts.
+
+## Plugin changes
+
+- `TurnRequest.speaker` is required.
+  `runTurn` without one returns `{ ok: false, error }` with an `AgentRunError` before asking the model; obtain it with `IDENTITY.speakerFor(principalId)` rather than assuming owner tier.
+  `kind: "owner"` selects a persona, not authority.
+- `BackgroundTurn.author` needs `{ principalId, id, name }`, and the turn needs an explicit `tier`.
+  Old shapes missing principal or tier are skipped with a reason, not elevated to owner.
+  A background claim runs as the router-checked `turn.speaker`.
+  Plugins cannot manufacture `SYSTEM_PRINCIPAL` turns; only core report paths do so.
+- `PERSONAL_TARGET` replaces the deprecated `OWNER_TARGET` export (the same object until 1.0).
+  Its persisted name remains `"owner"`; remove a plugin's own target with that name to avoid a duplicate.
+  Configure optional cross-conversation limits with `background.perPrincipal.schedules` and `delegations`; neither has a default cap.
+- `OwnerPrompts` is a deprecated alias of `Prompts` until 1.0.
+  A surface receives `PromptScope`, with `principalId`, `speakerId`, `tier`, and `escalate`, rather than treating every prompt as the primary owner's.
+  Old `prompts(channel, speaker)` calls remain accepted with a warning, interpreted as shared scope.
+- `notify_owner` becomes `notify`.
+  Until 1.0 the old name works in selections, profiles, task exclusions, required tools, and tool-tier overrides, with a warning; models see the new tool name.
+  Notices go to the private conversation's person, or the current speaker in a shared conversation, through contributed direct channels.
+- `ownerWords` becomes `addresseeWords`; the old kit export remains deprecated.
+  Synchronous `CommandGuard.isOwner` is deprecated and tests only the primary owner's actor id; use asynchronous `allows(actor)` to check every owner now.
+- Surfaces report verified `ActorFacts`; only the router sets `InboundMessage.speaker` before admission.
+  A surface-supplied speaker is overwritten.
+  Old author fields remain a warned fallback until 1.0; no tier means no admitted person, not owner.
+- A plugin's `identities: [{ identity, principal? }]` binds only `token:` credentials, defaulting to the primary owner.
+  Surface accounts must be linked in configuration or by CLI, not declared by plugins.
+  A conflicting or unknown principal stops boot; removing a declaration unlinks its plugin-owned token on the next boot.
+  Bind a token to a non-owner only after giving that principal a lasting CLI role: remote turns do not refresh IdP last-seen admission.
+- Stand-in ports must implement the new methods of their interfaces (including registry `adopt`, conversation `runsAs`/`takesSystemReports`, and schedule-store `createWithin`).
+  A manually built `SessionContext` supplies `conversation`, `addressee`, and `memory`; tasks inherit the resolved memory policy and need a parent turn's tier.
+
+See [Principals and access](plugins.md#principals-and-access) for a tested example.
+Scheduling and delegation tools are present only where a background claim can answer; a no-surface session must already be registered private to a person a direct channel knows.
+`DirectChannelProvider.knows` is a local capability check; actual delivery and claim reachability are rechecked when the tool runs.
+
+## Memory isolation and compactors
+
+Memory is keyed by principal, never by owner tier.
+Private sessions use their person's memory; shared turns project only the current speaker's memory into the request, non-persistently, and system turns in a shared session load none.
+`Persona.memory: "none"` disables both memory tools and the memory prompt, including its workers.
+
+In shared history, the isolation guarantee covers the **arguments and results together** of memory-tool calls and calls whose workers loaded a person's memory (including their enclosing exchanges).
+Those exchanges are hidden from other speakers, including system turns, and from compaction summaries.
+Earlier reasoning is removed with provider-aware handling of thinking blocks, encrypted reasoning, signatures, and paired message/call ids; the current turn keeps its reasoning.
+User messages, public assistant replies, and arguments/results of other tools remain public: the model can disclose something it knows in them, so do not treat this as general secret-flow prevention.
+Owners using the console and the operator reading storage can inspect all principals' data.
+
+Compaction registered through `session.compaction.wrap` receives a private-memory-free projection.
+A third-party compactor reading shared history outside that wrapper **must call `privateCompaction(event.preparation)`** from `pi-roundtable/kit` before summarizing.
+A custom tool returning private memory must mark its result's `details.privateTo` with the principal id.
+
+### claude-bridge guard
+
+claude-bridge reuses Claude Code's stored, unfiltered history, bypassing the per-request projection.
+With memory enabled, the host refuses a claude-bridge model when several principals may speak in shared conversations.
+This is checked at boot and live before every shared turn, including the default model, an agent's changed model, and roles granted while the host runs.
+The three fixes are:
+
+1. Choose a model from another provider.
+2. Set `memory: false` for the host.
+3. Restrict admission to one principal alone.
+
+A single-owner-only host still starts as before.
+
+## Official packages
+
+### Web console
+
+An actor-bearing verifier must report an identity linked to a principal holding owner.
+An unlinked identity receives 403 even on a one-owner host; the log gives the identity and the configuration/link instruction.
+For Cloudflare Access, use `cloudflareAccessIdentity(teamDomain, sub)` in `access.owners[].identities`, or the CLI equivalent.
+`legacy:` is never a console sign-in identity and is refused.
+A 0.8 verifier returning `admit()` without an actor retains primary-owner compatibility with a warning, not a recommended new verifier contract.
+Every admitted owner can inspect all conversations and choose any principal's notes; this is not a member self-service console.
+
+### Webchat
+
+Remove `webChat({ access })`, `webAccess`, and `WebAccessMap`.
+Use top-level `access`, prefix roles as `<surface>:role:<name>` (default `web:role:App.User`), replace user ids with identities, and scope old `everyone: true` to `everyone: ["<surface>"]`.
+Core `everyone: true` admits every surface, not only this verifier's people.
+Old OIDC principals and their private conversations remain theirs; new admitted people get opaque `p_` ids.
+Tickets, quotas, connection groups, and approvals now follow the principal; token refresh to a different principal closes with 4403.
+The protocol remains `roundtable.webchat.v1`, with added `notice` frames and private inbox REST endpoints (`GET <path>/notices`, `POST <path>/notices/<id>/read`).
+Notices are separate from conversation history and available after reconnect.
+The claim declares `takesSystemReports: false`: `ops.conversation` cannot point at webchat and fails at boot; use a shared report conversation or `ops.agent`.
+
+### MCP, coding, and sandbox
+
+Remote MCP's token defaults to the primary owner's principal and its private conversation reads that person's memory.
+Set `remoteMcp({ principal })` to bind it explicitly; `REMOTE_SPEAKER` is deprecated.
+`/mcp/discord/<token>` channel grants are unchanged by this migration.
+Coding's owner skill list is available only in a private conversation whose principal holds owner, not merely a turn whose kind is owner.
+Sandbox ignores visitors whose resolved speaker has no tier and passes the admitted principal to its runtime; its container and broker guarantees are unchanged.
+
+## Prompt changes from 0.8.0
+
+The acceptance snapshots record these exact differences; do not expect every single-owner prompt to be byte-identical:
+
+| Snapshot | Difference |
+|---|---|
+| (a) agent, (b) group seat, (c) owner's persona conversation | Only the tool name `notify_owner` becomes `notify`; system prompt, descriptions, and parameters are byte-identical. |
+| (d) member in a shared persona room | `ask_user` and the three memory tools replace `Ada`/`she` with `the speaker`; `memory_remove` and `memory_search` also add "Whoever is speaking has a memory of their own…". |
+| (e) direct `runTurn` without speaker | Refused; no prompt is sent. |
+| (f) headless webchat-style private conversation | Byte-identical to 0.8.0; the only unchanged whole snapshot. |
+| (g) web member's private conversation | The same tools no longer name the configured owner and use `the speaker`. |
+
+The tool-set snapshot changes only `notify_owner` to `notify`.
+For other private conversations, descriptions name their principal when known; old shared single-owner rooms retain shared "the speaker" wording until explicitly migrated where appropriate.
+
+## Rollback and downgrade
+
+Stop the host and all background work before a downgrade; keep the pre-upgrade configuration, package lock, database backup, and data directory together.
+Restore the old source/configuration and matching official package versions.
+0.8 does not understand `access`, principal CLI commands, plugin identity declarations, or webchat's new options/frames/inbox; it cannot load a 0.9 configuration unchanged.
+It ignores the additional identity tables, principal attribution columns, and new session metadata; existing 0.8-shaped rows still use their old ids, and the additive migrations do not delete them.
+But 0.8 cannot enforce principal-private session isolation, read the notice inbox, or safely interpret new `p_` principals/linked accounts as the original external speakers.
+It also lacks the memory-history filtering and fail-closed turn checks, so **do not resume newly principal-isolated or shared sensitive conversations under 0.8**.
+Restore the pre-upgrade database and session files when you need a faithful rollback, rather than expecting 0.8 to preserve new identity semantics.
+If you intentionally run 0.8 on the additive schema and later re-upgrade, the every-boot backfill discovers person ids written during the downgrade without rewriting their rows; verify the resulting links and roles before reopening access.
