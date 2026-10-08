@@ -55,7 +55,7 @@
 		"typecheck": "tsc --noEmit",
 		"lint": "biome check .",
 		"test": "bun test ./src ./scripts ./examples",
-		"check:packages": "bun run --workspaces typecheck && bun run --workspaces lint && bun run --workspaces test"
+		"check:packages": "bun run --workspaces typecheck && bun run --workspaces lint && bun run --workspaces --sequential test"
 	},
 	"dependencies": {
 		"@babel/parser": "7.29.9",

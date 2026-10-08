@@ -35,6 +35,27 @@ test("every workspace resolves the live core rather than a registry copy", () =>
 	}
 });
 
+// Package tests share one test database, and every host's boot syncs the configured owners into it,
+// so two packages' tests running at once revoke each other's owners mid-test.
+test("package tests run one workspace at a time, in CI and in check:packages", () => {
+	const scripts = (
+		JSON.parse(readFileSync(resolve(root, "package.json"), "utf8")) as {
+			scripts: Record<string, string>;
+		}
+	).scripts;
+	const ci = readFileSync(resolve(root, ".github/workflows/ci.yml"), "utf8");
+	const runs = [
+		...ci.matchAll(/bun run --workspaces[^\n]*\btest\b/g),
+		...(scripts["check:packages"] ?? "").matchAll(
+			/bun run --workspaces[^&]*\btest\b/g,
+		),
+	].map((m) => m[0].trim());
+	expect(runs).toEqual([
+		"bun run --workspaces --sequential test",
+		"bun run --workspaces --sequential test",
+	]);
+});
+
 test("coding and core share the same Pi instances, including in the canary", () => {
 	for (const name of [
 		"@earendil-works/pi-coding-agent",

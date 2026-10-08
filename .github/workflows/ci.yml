@@ -43,7 +43,7 @@ jobs:
       - name: Require PostgreSQL-backed tests
         run: test -n "$ROUNDTABLE_TEST_DATABASE_URL"
       - run: bun run test
-      - run: bun run --workspaces test
+      - run: bun run --workspaces --sequential test
       - name: Run the opt-in sandbox Docker integration on native Linux
         working-directory: packages/sandbox
         env:
