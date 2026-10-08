@@ -73,6 +73,67 @@ describeDb("PgConversationRegistry", () => {
 		expect(await registry.get("web:none")).toBeUndefined();
 	});
 
+	test("a conversation recorded shared with no principal, as 0.8 recorded a turn run without one, becomes private to the first turn that asks for it", async () => {
+		const first = await registry.register({
+			key: "mcp:0-8-session",
+			kind: "remote",
+			visibility: "shared",
+		});
+		const adopted = await registry.register({
+			key: "mcp:0-8-session",
+			kind: "remote",
+			visibility: "private",
+			principalId: "ada",
+		});
+		expect(adopted).toMatchObject({
+			kind: "remote",
+			visibility: "private",
+			principalId: "ada",
+		});
+		expect(adopted.createdAt).toEqual(first.createdAt);
+		// Then it is Ada's: no later turn, private or shared, takes it from her.
+		for (const visibility of ["private", "shared"] as const)
+			expect(
+				await registry.register({
+					key: "mcp:0-8-session",
+					kind: "remote",
+					visibility,
+					principalId: "bo",
+				}),
+			).toMatchObject({ visibility: "private", principalId: "ada" });
+		// A shared turn leaves a shared conversation shared.
+		await registry.register({
+			key: "fake:room",
+			kind: "study",
+			visibility: "shared",
+		});
+		expect(
+			await registry.register({
+				key: "fake:room",
+				kind: "study",
+				visibility: "shared",
+			}),
+		).toMatchObject({ visibility: "shared" });
+		expect((await registry.get("fake:room"))?.principalId).toBeUndefined();
+	});
+
+	test("a shared conversation that names a principal is never made private to another", async () => {
+		await registry.register({
+			key: "fake:named",
+			kind: "study",
+			visibility: "shared",
+			principalId: "ada",
+		});
+		expect(
+			await registry.register({
+				key: "fake:named",
+				kind: "study",
+				visibility: "private",
+				principalId: "bo",
+			}),
+		).toMatchObject({ visibility: "shared", principalId: "ada" });
+	});
+
 	test("list gives a principal's conversations, or every one, the most recently active first", async () => {
 		await registry.register({
 			key: "web:c2",

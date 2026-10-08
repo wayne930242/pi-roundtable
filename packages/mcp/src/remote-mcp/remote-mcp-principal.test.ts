@@ -188,6 +188,38 @@ describeDb("remote MCP bound to a principal on a host", () => {
 		await back.stop();
 	});
 
+	test("a conversation 0.8 recorded shared becomes private to the primary owner at their next turn, and no one else's turn reaches it", async () => {
+		// As 0.8 left it: the session of no principal, its conversation shared and no one's.
+		const id = crypto.randomUUID();
+		await sql`INSERT INTO remote_agent_sessions (id) VALUES (${id})`;
+		await sql`
+			INSERT INTO conversations (key, surface, kind, visibility)
+			VALUES (${`mcp:${id}`}, 'mcp', 'remote', 'shared')`;
+		await sql`DELETE FROM principal_identities WHERE principal_id = ${KAI}`;
+		await sql`DELETE FROM principals WHERE id = ${KAI}`;
+		await sql`INSERT INTO principals (id, display_name) VALUES (${KAI}, 'Kai')`;
+		await sql`INSERT INTO principal_roles (principal_id, role, source) VALUES (${KAI}, 'member', 'cli')`;
+
+		const member = await boot(KAI);
+		expect(await relay(member.socketPath, "mine?", id)).toEqual({
+			error: "SESSION_NOT_FOUND",
+		});
+		const registry = member.host.context.services.get(CONVERSATIONS);
+		expect(await registry.get(`mcp:${id}`)).toMatchObject({
+			visibility: "shared",
+		});
+		await member.stop();
+
+		const owner = await boot();
+		expect((await relay(owner.socketPath, "still there?", id)).status).toBe(
+			"completed",
+		);
+		expect(
+			await owner.host.context.services.get(CONVERSATIONS).get(`mcp:${id}`),
+		).toMatchObject({ visibility: "private", principalId: ADA });
+		await owner.stop();
+	});
+
 	test("bound to a principal that does not exist, the start stops and says so", async () => {
 		expect(boot("966666600000000049")).rejects.toThrow(
 			"plugin remote-mcp: token:remote-mcp is bound to principal 966666600000000049, and there is no principal 966666600000000049. roundtable principal list shows the principals, and roundtable principal create makes one.",

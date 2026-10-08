@@ -25,11 +25,17 @@ export interface ConversationRecord extends ConversationRegistration {
 
 /**
  * The conversations run through `context.turns`, recorded at their first turn. Its kind,
- * visibility, and principal are fixed then; each later turn only marks it active. Who may speak
- * in it stays the claim's decision: the registry records, it does not refuse.
+ * visibility, and principal are fixed then; each later turn only marks it active, except that one
+ * recorded `shared` with no principal, as 0.8 recorded every turn run without a visibility,
+ * becomes private to the first registration that asks for `private` with a principal. One with a
+ * principal never changes hands. Who may speak in it stays the claim's decision: the registry
+ * records, it does not refuse.
  */
 export interface ConversationRegistry {
-	/** Records the conversation at its first turn, or marks a known one active; returns what is stored. */
+	/**
+	 * Records the conversation at its first turn, or marks a known one active, making a shared one
+	 * of no principal private when asked; returns what is stored.
+	 */
 	register(entry: ConversationRegistration): Promise<ConversationRecord>;
 	get(key: ChannelKey): Promise<ConversationRecord | undefined>;
 	/** One principal's conversations, or every one; the most recently active first. */

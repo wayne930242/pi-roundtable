@@ -15,7 +15,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The connector form of `/<root> connector add` is accepted from every owner, as pi-roundtable's `CommandGuard.allows` sees them, not only the primary owner.
 - A default remote turn is the bound principal's, from `IDENTITY.speakerFor`, at their tier, and its conversation is recorded as private to them. Bound to the primary owner, as by default, the speaker is the owner's principal at the owner tier, so the prompt, memory, and tools are 0.8's; bound to a member, the turn reads their memory and offers only their tier's tools, and the persona and relay note name no owner. The host's own `answer` receives that speaker as a third argument.
 - `remoteMcp` requires `IDENTITY` (provided by the built-in `identity` plugin of pi-roundtable 0.9); a `testPlugin` test of it gives one with `principalOf`, `tierOf`, `speakerFor`, and `owners`.
-- Each remote session belongs to the principal it was opened for (`remote_agent_sessions.principal_id`, migration `remote-sessions-principal`); after the token moves to another principal, continuing a session of the earlier one answers `SESSION_NOT_FOUND`. Sessions 0.8 opened belong to the primary owner.
+- Each remote session belongs to the principal it was opened for (`remote_agent_sessions.principal_id`, migration `remote-sessions-principal`); after the token moves to another principal, continuing a session of the earlier one answers `SESSION_NOT_FOUND`. Sessions 0.8 opened belong to the primary owner, and their conversations, which 0.8 recorded as shared, become private to the primary owner at their next turn (with pi-roundtable 0.9's registry), so a single-owner host's remote turns stay 0.8's.
 
 ### Deprecated
 

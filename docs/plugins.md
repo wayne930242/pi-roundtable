@@ -1750,6 +1750,7 @@ It rejects with `NotLinkedError` during `setup`, and with a `PluginError` on a h
 
 Before each turn runs, `context.turns.run` records its conversation in the host's registry, `CONVERSATIONS`: at the first turn its key, surface, kind, visibility, owner, and title, and at every later turn only that it was active.
 `conversation: { visibility: "private" }` records it as the speaker's own (its `principalId` is `speaker.principalId`); without it the conversation is `shared`.
+A conversation recorded `shared` with no principal, as 0.8 recorded every turn run without `conversation`, becomes the speaker's at the first turn that asks for `private`; one with a principal never changes hands.
 `conversation.title` names it at its first turn; `setTitle(key, title)` renames it later.
 The runtime is told who the conversation belongs to as the registry keeps it, in `TurnRequest.conversation`, so a private conversation's prompts stay its person's at every later turn; a host without the registry passes the turn's own `conversation`, if it gives one.
 A turn whose conversation cannot be recorded does not run, and the call rejects.

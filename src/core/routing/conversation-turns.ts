@@ -45,7 +45,9 @@ export interface ConversationTurnInput {
 	reply?(result: TurnResult): Promise<void>;
 	/**
 	 * How the conversation is recorded at its first turn: `private` to the speaker, or `shared`
-	 * (the default). Later turns keep what the first recorded, and give a title only then.
+	 * (the default). Later turns keep what the first recorded, and give a title only then; a
+	 * `private` turn in a conversation recorded shared with no principal, such as one 0.8 recorded,
+	 * makes it the speaker's.
 	 */
 	conversation?: { visibility: ConversationVisibility; title?: string };
 }
