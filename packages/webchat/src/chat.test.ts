@@ -566,6 +566,18 @@ test("a failed turn, a dropped message, and a refused delivery free their place"
 		text: "b",
 	});
 	expect(dropping.errors(bob)).toEqual([]);
+
+	// Admitted, then dropped by the router, whose record found the author someone else meanwhile.
+	const routed = await gated({ turnsPerPrincipal: 1 }, { start: false });
+	const routedClaim = routed.chat.claim();
+	await routed.chat.surface.start((message) => {
+		const admission = routedClaim.admit(message);
+		if (admission?.kind === "turn") admission.dropped?.();
+	});
+	const cy = routed.connect("cy");
+	for (const id of ["1", "2"])
+		await routed.say(cy, { type: "send", id, persona: "helper", text: "a" });
+	expect(routed.errors(cy)).toEqual([]);
 });
 
 test("a person opens at most newConversationsPerHour conversations an hour", async () => {

@@ -151,6 +151,12 @@ export type Admission =
 			};
 			/** The turn, run in the channel's queue. */
 			run(): Promise<void>;
+			/**
+			 * Called instead of `run` when the router drops the message the claim admitted, because
+			 * its author, once recorded, was not who they were when admitted; frees what the claim
+			 * holds for it.
+			 */
+			dropped?(): void;
 			/** The log line when the turn throws. */
 			failure: string;
 	  }

@@ -1683,6 +1683,7 @@ It is undefined when the access rules serve no one by them, and for bots and int
 A claim that serves only the people the host serves answers only when `speaker` is set.
 The router records the author, such as linking them at their first contact, only once a claim admits the message, so messages no claim takes link or make no one.
 One exception: an author already linked whom the access rules now refuse is recorded as seen at no tier when the message is resolved, whether or not a claim takes it, at most once every few minutes, so their background turns stop with them.
+When that record finds the author someone else than the claim admitted, such as linked to another principal meanwhile or refused now, or cannot be made, the router drops the message: a turn admission's optional `dropped()` is called instead of `run`, so the claim frees what it holds for it, and a background admission's `unanswered` hears it skipped.
 
 A claim may have `stop(channel)`, which stops the channel's running turn and returns whether one was running; the Stop button, `conversations.stop`, and every other stop go through it.
 The router calls only the owning claim's `stop`, returning `false` when that method is absent.

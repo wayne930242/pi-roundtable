@@ -122,10 +122,10 @@ export class ChannelRouter implements ConversationPort {
 	 * author's contact is recorded, such as their first contact linked, only once the claim takes
 	 * the message, so a message nobody serves links or makes no one. A linked author the rules
 	 * refuse is still recorded as seen at no tier as the message is assessed, whether or not a
-	 * claim then takes it, at most once in a while. The admission stands even when that
-	 * record fails or finds them linked elsewhere meanwhile: the claim decided on who they were a
-	 * moment before, as a change another process makes is seen within the identity service's cache
-	 * anyway, and it may hold state for what it admitted.
+	 * claim then takes it, at most once in a while. When that record fails, or finds them someone
+	 * else or no one now, such as linked elsewhere meanwhile, the message is dropped: it would run
+	 * as a principal that may not exist, such as one only assessed at a first contact. The claim
+	 * hears it through the admission's `dropped` or `unanswered`.
 	 */
 	async #admit(
 		claim: ChannelClaim,
@@ -154,18 +154,24 @@ export class ChannelRouter implements ConversationPort {
 		if (!admission || !contact) return admission;
 		try {
 			const taken = await contact.take();
-			if (taken?.principalId !== contact.speaker.principalId)
-				logger.warn(
-					{ channel: message.channel },
-					"the author of a message was linked elsewhere, or refused, while it was admitted; it runs as who they were",
-				);
+			if (taken?.principalId === contact.speaker.principalId) return admission;
+			logger.warn(
+				{ channel: message.channel },
+				"the author of a message was linked elsewhere, or refused, while it was admitted; it does not run",
+			);
 		} catch (error) {
 			logger.error(
 				{ channel: message.channel, err: error },
-				"could not record who wrote a message; it runs as who they were",
+				"could not record who wrote a message; it does not run",
 			);
 		}
-		return admission;
+		if (admission.kind === "turn") admission.dropped?.();
+		else
+			admission.unanswered({
+				status: "skipped",
+				reason: "its author was not who they were when it was admitted",
+			});
+		return undefined;
 	}
 
 	/**

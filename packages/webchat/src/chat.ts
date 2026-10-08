@@ -591,6 +591,8 @@ export class WebChat {
 							pending.release();
 						}
 					},
+					// Dropped by the router after all: the message never runs, so its place is free.
+					dropped: () => pending.release(),
 					failure: "a web chat turn failed",
 				};
 			},

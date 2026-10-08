@@ -208,15 +208,9 @@ describe("ChannelRouter resolving who wrote a message", () => {
 		]);
 	});
 
-	test("an author who cannot be assessed reaches the claim as no one, and a contact that cannot be recorded leaves the admission standing", async () => {
+	test("an author who cannot be assessed reaches the claim as no one", async () => {
 		const log: string[] = [];
 		const recorded = recordingLogger();
-		// The claim decided on the speaker it saw; a claim may hold state for what it admitted, so it runs.
-		await routerWith(
-			[speakerClaim(log)],
-			contacts({ ada: "member" }, log, { takeAs: "p-other" }),
-			recorded.logger,
-		).handle(message({ authorId: "ada", actor: actor("ada") }));
 		await routerWith(
 			[
 				speakerClaim(log),
@@ -253,17 +247,60 @@ describe("ChannelRouter resolving who wrote a message", () => {
 			},
 			recorded.logger,
 		).handle(message({ authorId: "ada", actor: actor("ada") }));
+		expect(log).toEqual(["anyone ran, speaker undefined"]);
+		expect(recorded.lines.map((line) => line.level)).toEqual([
+			"error",
+			"error",
+		]);
+	});
+
+	test("a message whose author is not who the claim admitted once recorded, linked elsewhere meanwhile or not recorded at all, does not run, and the claim hears it dropped", async () => {
+		const log: string[] = [];
+		const recorded = recordingLogger();
+		/** A claim that admits a speaker's message, holding a place for it until it runs or is dropped. */
+		const holding = claim("people", 0, log, {
+			admit: (m) =>
+				m.speaker
+					? {
+							kind: "turn",
+							run: async () =>
+								void log.push(`run by ${m.speaker?.principalId}`),
+							dropped: () => log.push(`dropped ${m.speaker?.principalId}`),
+							failure: "failed",
+						}
+					: undefined,
+		});
+		// At a first contact the assessed principal is provisional: another process linked them meanwhile.
+		await routerWith(
+			[holding],
+			contacts({ ada: "member" }, log, { takeAs: "p-other" }),
+			recorded.logger,
+		).handle(message({ authorId: "ada", actor: actor("ada") }));
+		// Recording them fails, so the principal they were assessed as may never exist.
+		const failing: ContactAssessor = {
+			assess: async (facts) => {
+				const contact = await contacts({ ada: "member" }, log).assess(facts);
+				return (
+					contact && {
+						speaker: contact.speaker,
+						take: async () => {
+							throw new Error("database down");
+						},
+					}
+				);
+			},
+		};
+		await routerWith([holding], failing, recorded.logger).handle(
+			message({ authorId: "ada", actor: actor("ada") }),
+		);
 		expect(log).toEqual([
 			"assess discord:ada",
 			"take ada",
-			"run hi by p-ada at member",
-			"anyone ran, speaker undefined",
+			"dropped p-ada",
+			"assess discord:ada",
+			"dropped p-ada",
 		]);
-		expect(recorded.lines.map((line) => line.level)).toEqual([
-			"warn",
-			"error",
-			"error",
-		]);
+		expect(recorded.lines.map((line) => line.level)).toEqual(["warn", "error"]);
 	});
 
 	test("bots and integrations are not assessed", async () => {
