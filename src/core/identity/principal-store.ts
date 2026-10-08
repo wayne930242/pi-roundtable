@@ -115,11 +115,13 @@ export interface PrincipalStore {
 	/**
 	 * The identity's link, claiming the principal for it when the identity is still unlinked and
 	 * the principal claimable and not an owner; undefined when it may not be claimed. A principal
-	 * is claimed at most once.
+	 * is claimed at most once. A claim names the principal `displayName`, when given, while its
+	 * name is still its id, as the backfill names someone it knows no name of; a real name stays.
 	 */
 	claim(
 		principalId: string,
 		identity: IdentityRef,
+		displayName?: string,
 	): Promise<IdentityLink | undefined>;
 	/**
 	 * The identity's link, making a new `p_` principal for it, of `id` when given, when it is still
@@ -322,15 +324,21 @@ export class PgPrincipalStore implements PrincipalStore {
 	async claim(
 		principalId: string,
 		identity: IdentityRef,
+		displayName?: string,
 	): Promise<IdentityLink | undefined> {
+		const name = displayName?.trim() || null;
 		const { provider, subject } = identity;
 		return this.#sql.begin(async (tx) => {
 			await tx`SELECT pg_advisory_xact_lock(hashtextextended(${identityLock(identity)}, 0))`;
 			const linked: IdentityRow[] = await tx`
 				SELECT * FROM principal_identities WHERE provider = ${provider} AND subject = ${subject}`;
 			if (linked[0]) return linkOf(linked[0]);
+			// Named in the same write that spends the claim, so a claim that fails renames no one.
 			const taken = await tx`
-				UPDATE principals SET claimable = false
+				UPDATE principals SET
+					claimable = false,
+					display_name = CASE WHEN display_name = id AND ${name}::text IS NOT NULL
+						THEN ${name}::text ELSE display_name END
 				WHERE id = ${principalId} AND claimable AND NOT EXISTS (
 					SELECT 1 FROM principal_roles WHERE principal_id = ${principalId} AND role = 'owner'
 				)
