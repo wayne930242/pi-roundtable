@@ -249,6 +249,64 @@ describeDb("the principals check", () => {
 		}
 	});
 
+	test("passes once the plugin is bound to that owner, as the next start does", async () => {
+		const scratch = await scratchDatabase("0.8.0");
+		db = scratch;
+		const base = withDatabase(scratch.url);
+		await bootWith(scratch, base, [
+			{ name: "remote-mcp", identities: [{ identity: TOKEN }] },
+		]);
+		const bo = {
+			name: "Bo",
+			principal: "966666600000000004",
+			identities: [TOKEN],
+		};
+		const config = {
+			...base,
+			access: { ...base.access, owners: [...base.access.owners, bo] },
+		};
+		const rebound = [
+			{
+				name: "remote-mcp",
+				identities: [{ identity: TOKEN, principal: "966666600000000004" }],
+			},
+		];
+		const result = await checkPrincipals(project(config, rebound), postgres);
+		expect(result.status).toBe("ok");
+		await bootWith(scratch, config, rebound);
+		const token = await (await PgPrincipalStore.attach(scratch.sql)).identity(
+			"token",
+			"remote-mcp",
+		);
+		expect(token).toMatchObject({
+			principalId: "966666600000000004",
+			source: "config",
+		});
+	});
+
+	test("passes when the owner lists a token the plugin moves to them from a member at this start", async () => {
+		const scratch = await scratchDatabase("0.8.0");
+		db = scratch;
+		const base = withDatabase(scratch.url);
+		// 966666600000000005 is a member the fixture's 0.8 data carries over.
+		const kai = [
+			{
+				name: "remote-mcp",
+				identities: [{ identity: TOKEN, principal: "966666600000000005" }],
+			},
+		];
+		await bootWith(scratch, base, kai);
+		const ada = {
+			name: "Ada",
+			principal: OWNER,
+			identities: [`discord:${OWNER}`, TOKEN],
+		};
+		const config = { ...base, access: { ...base.access, owners: [ada] } };
+		const remote = [{ name: "remote-mcp", identities: [{ identity: TOKEN }] }];
+		const result = await checkPrincipals(project(config, remote), postgres);
+		expect(result.status).toBe("ok");
+	});
+
 	test("warns when no owner can reach the host because every owner is disabled", async () => {
 		db = await scratchDatabase("0.8.0");
 		const config = withDatabase(db.url);

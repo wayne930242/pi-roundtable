@@ -3,12 +3,16 @@ import { LEGACY_ACCESS } from "../../core/config/access.ts";
 import type { ResolvedConfig } from "../../core/config/config.ts";
 import type { AccessRules } from "../../core/identity/access-policy.ts";
 import { identityOf, parseIdentity } from "../../core/identity/actor-facts.ts";
+import { declaredConflict } from "../../core/identity/config-owner.ts";
 import { backfillLine } from "../../core/identity/identity-plugin.ts";
 import {
 	type BackfillSummary,
 	backfillPrincipals,
 } from "../../core/identity/identity-schema.ts";
-import { declaredIdentities } from "../../core/identity/plugin-identities.ts";
+import {
+	type DeclaredIdentity,
+	declaredIdentities,
+} from "../../core/identity/plugin-identities.ts";
 import { PgPrincipalStore } from "../../core/identity/principal-store.ts";
 import type { Project } from "../project.ts";
 import { fail, ok, type Result, skipped, warn } from "../report.ts";
@@ -78,13 +82,13 @@ export interface PrincipalFindings {
 
 /**
  * Reads, without writing, what the identity plugin would do at the next start: the backfill as a
- * dry run, and the configured owners' identity links as its sync checks them. `declaredBy` names
- * the plugin that declares each identity the plugins declare.
+ * dry run, and the configured owners' identity links as its sync checks them. `declaredBy` holds
+ * each identity the plugins declare, with the plugin and the principal it names.
  */
 export async function principalFindings(
 	sql: SQL,
 	rules: AccessRules,
-	declaredBy: ReadonlyMap<string, string> = new Map(),
+	declaredBy: ReadonlyMap<string, DeclaredIdentity> = new Map(),
 ): Promise<PrincipalFindings> {
 	const summary = await backfillPrincipals(sql, rules, { dryRun: true });
 	const [tables] = await sql`
@@ -95,6 +99,8 @@ export async function principalFindings(
 		return { summary, conflicts: [], disabled: [], reachable: true };
 	const store = await PgPrincipalStore.attach(sql);
 	const conflicts: PrincipalFindings["conflicts"] = [];
+	// The primary owner's principal, undefined when the start makes it.
+	let primary: string | undefined;
 	const disabled: PrincipalFindings["disabled"] = [];
 	let reachable = false;
 	for (const [index, owner] of rules.owners.entries()) {
@@ -123,26 +129,24 @@ export async function principalFindings(
 					fix: unlink(identity),
 				});
 		}
-		for (const [i, link] of links.entries()) {
-			if (link?.source !== "plugin" || link.principalId === id) continue;
-			const identity = owner.identities[i] ?? "";
-			const plugin = declaredBy.get(identityOf(link));
-			const declared = `access.owners[${index}].identities[${i}]: ${identity} is an identity plugin ${plugin} declares, bound to principal ${link.principalId}`;
-			// The CLI refuses to unlink a plugin's identity: the plugin's options move it.
-			conflicts.push(
-				id === undefined
-					? {
-							problem: `${declared}, and a plugin's credential does not tell who this owner is`,
-							identity,
-							fix: `Remove it from access.owners[${index}].identities, or give this owner its principal and bind plugin ${plugin} to it`,
-						}
-					: {
-							problem: `${declared}, not to this owner's ${id}`,
-							identity,
-							fix: `Remove it from access.owners[${index}].identities, or bind plugin ${plugin} to ${id} in its options`,
-						},
-			);
+		// As at the start, an identity a plugin declares is bound to this owner on this start, or it stops it.
+		for (const [i, identity] of owner.identities.entries()) {
+			const ref = parseIdentity(identity);
+			const declared = ref && declaredBy.get(identityOf(ref));
+			if (!declared) continue;
+			const conflict = declaredConflict({
+				index,
+				i,
+				identity,
+				id,
+				link: links[i],
+				declared,
+				primary,
+				first: index === 0,
+			});
+			if (conflict) conflicts.push({ ...conflict, identity });
 		}
+		if (index === 0) primary = id;
 		const principal = id === undefined ? undefined : await store.get(id);
 		if (principal?.disabled)
 			disabled.push({ index, id: principal.id, name: owner.name });
@@ -171,12 +175,13 @@ export async function checkPrincipals(
 	const assembled = await project.assembled();
 	if (!assembled.ok) return skipped("the configuration is not valid yet");
 	const rules = assembled.value.config.access;
-	let declaredBy: Map<string, string>;
+	let declaredBy: Map<string, DeclaredIdentity>;
 	try {
 		declaredBy = new Map(
-			declaredIdentities(assembled.value.defined.plugins).map(
-				({ identity, plugin }) => [identity, plugin],
-			),
+			declaredIdentities(assembled.value.defined.plugins).map((declared) => [
+				declared.identity,
+				declared,
+			]),
 		);
 	} catch (error) {
 		return skipped(

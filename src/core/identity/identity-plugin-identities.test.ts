@@ -221,12 +221,14 @@ describeDb("identities plugins declare, linked at boot", () => {
 		});
 	});
 
-	test("an identity the configuration lists under another owner stops the boot, naming the configuration", async () => {
+	test("an identity the configuration lists under another owner stops the boot before it is linked, naming the configuration and the plugin's options", async () => {
 		const bo = { name: "Bo", principal: BO, identities: [TOKEN] };
 		const failed = boot([remote()], { owners: [...RULES.owners, bo] });
 		expect(failed).rejects.toThrow(
-			`plugin remote-mcp: ${TOKEN} is linked to principal ${BO}, not to ${ADA} the plugin binds it to. access.owners lists it under that owner: remove it there, or bind the plugin to ${BO}.`,
+			`config access.owners[1].identities[0]: ${TOKEN} is an identity plugin remote-mcp declares, bound to principal ${ADA}, not to this owner's ${BO}. Remove it from access.owners[1].identities, or bind plugin remote-mcp to ${BO} in its options.`,
 		);
+		await failed.catch(() => undefined);
+		expect(await store.identity("token", "remote-mcp")).toBeUndefined();
 	});
 
 	test("an identity the configuration lists under the same owner stays the configuration's", async () => {
@@ -291,6 +293,62 @@ describeDb("identities plugins declare, linked at boot", () => {
 		);
 		await failed.catch(() => undefined);
 		expect(await store.get(BO)).toBeUndefined();
+		expect(await store.identity("token", "remote-mcp")).toMatchObject({
+			principalId: ADA,
+			source: "plugin",
+		});
+	});
+
+	test("following that advice, binding the plugin to that owner, starts at the next boot", async () => {
+		await boot([remote()]);
+		const bo = { name: "Bo", principal: BO, identities: [TOKEN] };
+		const owners = [...RULES.owners, bo];
+		await boot([remote()], { owners }).catch(() => undefined);
+		await boot([remote(BO)], { owners });
+		expect(await store.identity("token", "remote-mcp")).toMatchObject({
+			principalId: BO,
+			source: "config",
+		});
+		expect(
+			(await store.holders("owner")).map((holder) => holder.principalId),
+		).toEqual([ADA, BO]);
+	});
+
+	test.each([
+		["to them by name", ADA],
+		["to the primary owner they are", undefined],
+	])(
+		"a token a plugin bound to a member, rebound %s, moves to the owner listing it in one boot",
+		async (_name, principal) => {
+			await carriedOver(KAI, "Kai");
+			await boot([remote(KAI)]);
+			const ada = {
+				...RULES.owners[0],
+				name: "Ada",
+				identities: [`discord:${ADA}`, TOKEN],
+			};
+			await boot([remote(principal)], { owners: [ada] });
+			expect(await store.identity("token", "remote-mcp")).toMatchObject({
+				principalId: ADA,
+				source: "config",
+			});
+			expect(await store.rolesOf(KAI)).toEqual([]);
+		},
+	);
+
+	test("an owner listing a token a plugin binds elsewhere on this boot stops it, whoever the token was bound to before", async () => {
+		await boot([remote()]);
+		const ada = {
+			...RULES.owners[0],
+			name: "Ada",
+			identities: [`discord:${ADA}`, TOKEN],
+		};
+		await carriedOver(KAI, "Kai");
+		const failed = boot([remote(KAI)], { owners: [ada] });
+		expect(failed).rejects.toThrow(
+			`config access.owners[0].identities[1]: ${TOKEN} is an identity plugin remote-mcp declares, bound to principal ${KAI}, not to this owner's ${ADA}. Remove it from access.owners[0].identities, or bind plugin remote-mcp to ${ADA} in its options.`,
+		);
+		await failed.catch(() => undefined);
 		expect(await store.identity("token", "remote-mcp")).toMatchObject({
 			principalId: ADA,
 			source: "plugin",

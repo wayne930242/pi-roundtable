@@ -152,7 +152,7 @@ export class PgIdentityService implements IdentityService, ContactAssessor {
 		const owners: string[] = [];
 		const identities = new Set<string>();
 		const declaredBy = new Map(
-			this.#declared.map(({ identity, plugin }) => [identity, plugin]),
+			this.#declared.map((declared) => [declared.identity, declared]),
 		);
 		for (const [n, owner] of this.#rules.owners.entries()) {
 			const refs = owner.identities.map((identity) => {
@@ -167,6 +167,7 @@ export class PgIdentityService implements IdentityService, ContactAssessor {
 				index: n,
 				refs,
 				declaredBy,
+				primary: owners[0],
 				logger: this.#logger,
 			});
 			const pronouns = owner.pronouns ?? null;
