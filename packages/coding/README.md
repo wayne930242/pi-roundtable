@@ -81,7 +81,10 @@ The host's skills addon resolves explicit skills, or the calling agent's carried
 Missing or unknown skills refuse the task by default; requesting skills while the addon is off also refuses it.
 `skipUnavailableCarriedSkills: true` opts into skipping unavailable implicit skills and disclosing them in the task-start text or through `presentation.taskStarted`.
 Explicit skill requests still refuse missing or unknown skills.
-Sessions with kind `owner` get the public `skillListExtension`; agent sessions keep the core's existing `skill_list` instead of registering it twice.
+A private conversation whose person holds the owner role, as `IDENTITY.tierOf` tells, gets the public `skillListExtension`, whatever its kind.
+A member's private conversation and any shared conversation, an owner's included, get none; so does every conversation when the identity service is absent or its lookup fails.
+Agent sessions keep the core's existing `skill_list` instead of registering it twice.
+The role is read when the session is built, so a role granted or removed later applies once the session is rebuilt.
 
 A worker reads the repository's instructions, edits and checks the work, and commits using repository conventions.
 One worker may use a repository at a time, with up to three per channel.

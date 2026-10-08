@@ -18,7 +18,7 @@
 | Destination and branch approval binding | Changed push URL or remote default branch refuses; credential-bearing HTTP URL refuses before fetch | pass |
 | Host Git hardening | Configured fsmonitor and pre-push hook do not execute during list, report or push | pass |
 | Timer and report bounds | Overflow, non-finite and non-positive timeouts refuse; fake worker Held inputs and answer are explicitly truncated | pass |
-| Owner skill-list contract | Plugin configuration errors have PluginError type; owner-only skill-list factory excludes agent and study sessions | pass |
+| Owner skill-list contract | Plugin configuration errors have PluginError type; the extra skill list registers only in a private conversation whose person holds the owner role (any kind), never in a member's private conversation, a shared one or an agent's, and not when the role lookup is absent or fails | pass |
 | Credential-safe failure diagnostics | Real child missing-model failure reports exit category/code and leaves no child PID | pass |
 | Worker standing instructions | A real child includes regular repo AGENTS.md, excluding parent and symlinked instructions | pass |
 | Package boundaries | Actual 13-file tarball excludes tests/faux provider/local state; an installed consumer registers all five tools and runs a real child approval hold with PID cleanup | pass |

@@ -3,6 +3,7 @@ import {
 	definePlugin,
 	defineTool,
 	type HoldCheck,
+	IDENTITY,
 	PluginError,
 	SKILLS,
 	SYSTEM_PRINCIPAL,
@@ -214,6 +215,23 @@ export function coding(options: CodingOptions) {
 				}
 			}
 			context.services.provide(CODING, { shelf, desk });
+			// Whether the principal holds the owner role; no identity service, or a failed lookup,
+			// tells of no one holding it.
+			const holdsOwnerRole = async (
+				principalId: string,
+				session: { homeChannel: ChannelKey },
+			): Promise<boolean> => {
+				try {
+					const identity = context.services.find(IDENTITY);
+					return (await identity?.tierOf(principalId)) === "owner";
+				} catch (error) {
+					context.logger.warn(
+						{ channel: session.homeChannel, err: error },
+						"could not tell whether the conversation's person holds the owner role; no extra skill list",
+					);
+					return false;
+				}
+			};
 			const textOf = (tool: RepoToolName) => options.toolText?.[tool];
 			const describe = (tool: RepoToolName, fallback: string) =>
 				textOf(tool)?.description ?? fallback;
@@ -240,8 +258,19 @@ export function coding(options: CodingOptions) {
 								snapshot: () => ({
 									revision: 0,
 									factory: (session) => {
-										if (session.kind !== "owner") return null;
-										return skillListExtension(skills);
+										// Whom the conversation serves decides, not its persona's kind: an owner's own
+										// conversation. An agent's keeps the core's skill_list, and a shared one
+										// serves whoever speaks.
+										const { conversation } = session;
+										if (session.agent || conversation.visibility !== "private")
+											return null;
+										const list = skillListExtension(skills);
+										return async (pi) => {
+											if (
+												await holdsOwnerRole(conversation.principalId, session)
+											)
+												await list(pi);
+										};
 									},
 								}),
 							},

@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- The extra `skill_list` is offered by whom a conversation serves, not by its kind: only a private conversation whose person holds the owner role (`IDENTITY.tierOf`) gets it. A member's private conversation and any shared conversation, an owner's included, get none, and a failed or absent role lookup offers none. A host that ran its owner's conversation with kind `owner` but without `conversation: { visibility: "private", principalId }`, or without recording it private, loses the list until it does. Needs pi-roundtable 0.9, which gives `SessionContext.conversation`.
 - `repo_task` refuses the host's own turns, whose speaker is `SYSTEM_PRINCIPAL`, such as an ops error report's or a Discord webhook report's: their text is untrusted input, and a coding task started there would run later as the owner's. Ask the owner to start it. Needs pi-roundtable 0.9, which exports `SYSTEM_PRINCIPAL`.
 
 ## [0.8.0] - 2026-10-07
