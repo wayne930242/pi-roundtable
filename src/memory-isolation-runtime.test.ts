@@ -13,8 +13,12 @@ import {
 import { ModelRuntime, SessionManager } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { MEMORY_TIERS, memorySessionTool } from "./core/builtin/stores.ts";
-import { definePlugin } from "./core/define.ts";
-import type { ChannelKey } from "./core/domain/conversation.ts";
+import type { HeldActionStore } from "./core/contract/runtime.ts";
+import { definePlugin, defineTool } from "./core/define.ts";
+import type {
+	ChannelKey,
+	PendingConfirmation,
+} from "./core/domain/conversation.ts";
 import type { TurnConversation } from "./core/domain/ports.ts";
 import type {
 	Memory,
@@ -131,6 +135,8 @@ async function isolationHost(
 		recorded?: Map<ChannelKey, TurnConversation>;
 		/** The data directory of an earlier host, to start again over its sessions. */
 		dir?: string;
+		/** The held actions' store, an earlier host's to start again over what it held. */
+		held?: HeldActionStore;
 	} = {},
 ) {
 	const recorded = options.recorded ?? new Map<ChannelKey, TurnConversation>();
@@ -139,6 +145,8 @@ async function isolationHost(
 	if (!options.dir) dirs.push(dir);
 	// The probe tool's revision; a test bumps it to rebuild every session for changed tools.
 	let revision = 0;
+	// The sites `deploy` ran for, once its held call was approved.
+	const deployed: string[] = [];
 	const core = createFauxCore({ provider: "faux", models: [{ id: "faux-1" }] });
 	core.setResponses(steps);
 	const modelRuntime = await ModelRuntime.create({
@@ -180,11 +188,24 @@ async function isolationHost(
 						sessions: deps.sessions,
 						conversationOf: async (key) => recorded.get(key),
 						logger: deps.logger,
-						confirmations: deps.confirmations,
+						confirmations: options.held ?? deps.confirmations,
 						toolTiers: deps.toolTiers,
 					}),
 			},
 			setup: () => ({
+				tools: [
+					defineTool({
+						name: "deploy",
+						description: "Deploy a site.",
+						parameters: Type.Object({ site: Type.String() }),
+						minTier: "member",
+						hold: ({ site }) => `deploy ${site}`,
+						run: ({ site }) => {
+							deployed.push(site);
+							return "deployed";
+						},
+					}),
+				],
 				personas: [
 					{ kind: "study", prompt: () => "You are a tutor." },
 					{ kind: "quiz", prompt: () => "You ask questions.", memory: "none" },
@@ -245,6 +266,7 @@ async function isolationHost(
 		dir,
 		runtime,
 		recorded,
+		deployed,
 		/** Changes the tools of every session, which rebuilds each at its next turn. */
 		bumpTools: () => {
 			revision += 1;
@@ -257,6 +279,8 @@ async function isolationHost(
 				conversation?: TurnConversation;
 				kind?: string;
 				text?: string;
+				/** The turn approves what is held for the conversation. */
+				confirmed?: boolean;
 			} = {},
 		) =>
 			runtime.runTurn({
@@ -266,10 +290,17 @@ async function isolationHost(
 				speaker,
 				selection: {
 					id: "study",
-					tools: ["memory_add", "memory_search", "memory_remove", "probe_task"],
+					tools: [
+						"memory_add",
+						"memory_search",
+						"memory_remove",
+						"probe_task",
+						"deploy",
+					],
 					groups: [],
 				},
 				...(options.conversation ? { conversation: options.conversation } : {}),
+				...(options.confirmed ? { confirmed: true } : {}),
 			}),
 		stop: () => harness.stop(),
 	};
@@ -634,6 +665,71 @@ describe("a task beside a turn in a shared conversation", () => {
 			}
 		} finally {
 			await host.stop();
+		}
+	});
+});
+
+describe("what a conversation held when it comes to serve someone else", () => {
+	test("is dropped with its archived history, after a restart too, so no one approves the old scope's action", async () => {
+		const stored = new Map<ChannelKey, PendingConfirmation>();
+		const held: HeldActionStore = {
+			load: async (key) => stored.get(key),
+			save: async (key, actions) => {
+				if (actions) stored.set(key, actions);
+				else stored.delete(key);
+			},
+		};
+		const first = await isolationHost(
+			STORE(),
+			[
+				call("deploy", { site: "ann-site" }),
+				fauxAssistantMessage("Waiting for approval."),
+			],
+			{ held },
+		);
+		try {
+			expect(
+				(await first.run(ANN, "fake:desk", { conversation: privateTo("ann") }))
+					.ok,
+			).toBe(true);
+		} finally {
+			await first.stop();
+		}
+		expect(stored.get("fake:desk")?.calls[0]?.action).toBe("deploy ann-site");
+		const seen: TranscriptContext[] = [];
+		const again = await isolationHost(
+			STORE(),
+			[
+				(context) => {
+					seen.push(context);
+					return call("deploy", { site: "ann-site" });
+				},
+				fauxAssistantMessage("Done."),
+			],
+			{ dir: first.dir, held },
+		);
+		const owner: Speaker = {
+			id: OWNER.id,
+			name: OWNER.name,
+			tier: "owner",
+			principalId: OWNER.id,
+		};
+		try {
+			expect(
+				(
+					await again.run(owner, "fake:desk", {
+						conversation: privateTo(OWNER.id),
+						confirmed: true,
+						text: "Go ahead.",
+					})
+				).ok,
+			).toBe(true);
+			expect(again.deployed).toEqual([]);
+			expect(JSON.stringify(seen[0]?.messages)).not.toContain("ann-site");
+			// The model's new call is held anew, for the owner's turn, not released as Ann's.
+			expect(stored.get("fake:desk")?.principalId).toBe(OWNER.id);
+		} finally {
+			await again.stop();
 		}
 	});
 });

@@ -122,17 +122,21 @@ export class ConversationSessions {
 					request,
 					this.#options,
 				);
-				// A history of another scope is archived, never replayed.
+				// A history of another scope is archived, never replayed, and what it held goes with it,
+				// after a restart too: no one approves, or reads, an action held for someone else.
 				const { history, archived } = scopedHistory(
 					sessionDir,
 					this.#factory.cwd(agent),
 					conversation,
 				);
-				if (archived > 0)
+				if (archived > 0) {
 					this.#options.logger.info(
 						{ channel: key, archived },
 						"the conversation serves someone else now; its earlier history was archived",
 					);
+					this.#gates.delete(key);
+					await this.#options.confirmations.save(key, undefined);
+				}
 				return this.#factory.create(
 					agent?.home ?? channel,
 					history,
