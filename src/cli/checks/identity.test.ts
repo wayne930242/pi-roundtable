@@ -222,6 +222,33 @@ describeDb("the principals check", () => {
 		}
 	});
 
+	test("fails when a configured owner lists a plugin's identity bound to someone else, pointing at the plugin's options", async () => {
+		const scratch = await scratchDatabase("0.8.0");
+		db = scratch;
+		const base = withDatabase(scratch.url);
+		const remote = [{ name: "remote-mcp", identities: [{ identity: TOKEN }] }];
+		await bootWith(scratch, base, remote);
+		const bo = {
+			name: "Bo",
+			principal: "966666600000000004",
+			identities: [TOKEN],
+		};
+		const config = {
+			...base,
+			access: { ...base.access, owners: [...base.access.owners, bo] },
+		};
+		const result = await checkPrincipals(project(config, remote), postgres);
+		expect(result.status).toBe("fail");
+		if (result.status === "fail") {
+			expect(result.problem).toContain(
+				`access.owners[1].identities[0]: ${TOKEN} is an identity plugin remote-mcp declares, bound to principal ${OWNER}, not to this owner's 966666600000000004`,
+			);
+			expect(result.fix).toBe(
+				"Remove it from access.owners[1].identities, or bind plugin remote-mcp to 966666600000000004 in its options",
+			);
+		}
+	});
+
 	test("warns when no owner can reach the host because every owner is disabled", async () => {
 		db = await scratchDatabase("0.8.0");
 		const config = withDatabase(db.url);

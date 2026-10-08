@@ -127,17 +127,19 @@ export async function principalFindings(
 			if (link?.source !== "plugin" || link.principalId === id) continue;
 			const identity = owner.identities[i] ?? "";
 			const plugin = declaredBy.get(identityOf(link));
+			const declared = `access.owners[${index}].identities[${i}]: ${identity} is an identity plugin ${plugin} declares, bound to principal ${link.principalId}`;
+			// The CLI refuses to unlink a plugin's identity: the plugin's options move it.
 			conflicts.push(
 				id === undefined
 					? {
-							problem: `access.owners[${index}].identities[${i}]: ${identity} is an identity plugin ${plugin} declares, bound to principal ${link.principalId}, and a plugin's credential does not tell who this owner is`,
+							problem: `${declared}, and a plugin's credential does not tell who this owner is`,
 							identity,
 							fix: `Remove it from access.owners[${index}].identities, or give this owner its principal and bind plugin ${plugin} to it`,
 						}
 					: {
-							problem: `access.owners[${index}].identities[${i}]: ${identity} is linked to principal ${link.principalId}, not to this owner's ${id}`,
+							problem: `${declared}, not to this owner's ${id}`,
 							identity,
-							fix: unlink(identity),
+							fix: `Remove it from access.owners[${index}].identities, or bind plugin ${plugin} to ${id} in its options`,
 						},
 			);
 		}

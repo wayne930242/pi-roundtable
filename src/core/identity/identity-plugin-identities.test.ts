@@ -282,6 +282,21 @@ describeDb("identities plugins declare, linked at boot", () => {
 		});
 	});
 
+	test("an owner listing a token a plugin binds to someone else stops the start, pointing at the plugin's options rather than the CLI", async () => {
+		await boot([remote()]);
+		const bo = { name: "Bo", principal: BO, identities: [TOKEN] };
+		const failed = boot([remote()], { owners: [...RULES.owners, bo] });
+		expect(failed).rejects.toThrow(
+			`config access.owners[1].identities[0]: ${TOKEN} is an identity plugin remote-mcp declares, bound to principal ${ADA}, not to this owner's ${BO}. Remove it from access.owners[1].identities, or bind plugin remote-mcp to ${BO} in its options.`,
+		);
+		await failed.catch(() => undefined);
+		expect(await store.get(BO)).toBeUndefined();
+		expect(await store.identity("token", "remote-mcp")).toMatchObject({
+			principalId: ADA,
+			source: "plugin",
+		});
+	});
+
 	test("an owner's other identity tells who they are, and the token a plugin binds to that same principal is theirs", async () => {
 		await boot([remote()]);
 		const ada = { name: "Ada", identities: [TOKEN, `discord:${ADA}`] };

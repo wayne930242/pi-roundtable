@@ -188,15 +188,15 @@ export class PgIdentityService implements IdentityService, ContactAssessor {
 					);
 			});
 			plugins.forEach((link, i) => {
-				if (!link) return;
-				if (id === undefined)
-					throw new ConfigError(
-						`config access.owners[${n}].identities[${i}]: ${owner.identities[i]} is an identity plugin ${declaredBy.get(identityOf(link))} declares, bound to principal ${link.principalId}, and a plugin's credential does not tell who this owner is. Remove it from access.owners[${n}].identities, or give this owner its principal and bind plugin ${declaredBy.get(identityOf(link))} to it.`,
-					);
-				if (link.principalId !== id)
-					throw new ConfigError(
-						`config access.owners[${n}].identities[${i}]: ${owner.identities[i]} is linked to principal ${link.principalId}, not to this owner's ${id}. Unlink it with roundtable principal unlink ${owner.identities[i]}, or fix the configuration.`,
-					);
+				if (!link || link.principalId === id) return;
+				const path = `config access.owners[${n}].identities[${i}]`;
+				const declared = `${owner.identities[i]} is an identity plugin ${declaredBy.get(identityOf(link))} declares, bound to principal ${link.principalId}`;
+				// The CLI refuses to unlink a plugin's identity: the plugin's options move it.
+				throw new ConfigError(
+					id === undefined
+						? `${path}: ${declared}, and a plugin's credential does not tell who this owner is. Remove it from access.owners[${n}].identities, or give this owner its principal and bind plugin ${declaredBy.get(identityOf(link))} to it.`
+						: `${path}: ${declared}, not to this owner's ${id}. Remove it from access.owners[${n}].identities, or bind plugin ${declaredBy.get(identityOf(link))} to ${id} in its options.`,
+				);
 			});
 			const pronouns = owner.pronouns ?? null;
 			const existing = id === undefined ? undefined : await store.get(id);
