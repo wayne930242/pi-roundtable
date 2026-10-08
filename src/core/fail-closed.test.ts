@@ -21,6 +21,17 @@ import type { Speaker } from "./speakers.ts";
 
 const ROOT = resolve(import.meta.dir, "../..");
 
+// Where each implicit owner of 0.8 is refused now, by the test that shows it:
+// - a turn without a speaker, and a task with no turn to take its tier from: src/fail-closed-runtime.test.ts;
+// - a background turn without a principal or tier, of a disabled, unknown, or long-unseen principal,
+//   or naming the system principal from outside the host: src/core/routing/background-checks.test.ts
+//   and, through the identity service, src/core/identity/background-identity.test.ts;
+// - the agent server's background turn without the router's speaker: src/core/agents/agent-claim.test.ts;
+// - the ops reporter's and a Discord webhook's report turns, the host's own at the owner tier: below,
+//   and src/core/agents/agent-claim.test.ts;
+// - schedules and delegated tasks in a turn nobody is named for, or the host's own: below;
+// - a message whose author, once recorded, is not who was admitted: src/core/routing/channel-router-identity.test.ts.
+
 /**
  * Where a literal that makes someone the owner by default may stay in the source, and why. A new
  * one fails the scan until it is listed here with its reason: an implicit owner is how a turn
