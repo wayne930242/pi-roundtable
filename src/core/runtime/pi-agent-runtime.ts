@@ -91,10 +91,13 @@ export class PiAgentRuntime implements AgentRuntime {
 	 * sessions that run no turn; startup stops here before anything connects.
 	 */
 	async preflight(): Promise<void> {
-		const registered = await preflightTools(this.#factory, this.#options.owner);
-		const missing = this.#factory
-			.requiredTools()
-			.filter((name) => !registered.has(name));
+		const required = this.#factory.requiredTools();
+		const registered = await preflightTools(
+			this.#factory,
+			this.#options.owner,
+			required,
+		);
+		const missing = required.filter((name) => !registered.has(name));
 		if (missing.length > 0) throw missingToolsError(missing);
 	}
 

@@ -150,6 +150,17 @@ test("preflight boots with coding and requiredTools containing only skill_list",
 	}
 });
 
+test("preflight builds no private probe when the shared one has every required tool", async () => {
+	const f = await fixture(["shared_probe_tool"]);
+	try {
+		await f.runtime.preflight();
+		expect(f.scopes).toEqual([{ visibility: "shared" }]);
+		expect(f.principals).toEqual([]);
+	} finally {
+		await f.close();
+	}
+});
+
 test("preflight checks the union of owner-private and shared-only tools", async () => {
 	const f = await fixture(["skill_list", "shared_probe_tool"]);
 	try {
