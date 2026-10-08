@@ -81,7 +81,7 @@ function checkOptions(options: WebChatOptions): {
 } {
 	if ("access" in options)
 		throw new Error(
-			'webChat: access was removed; use top-level access on RoundtableConfig: members/admins roles become "web:role:<role>", users become identities, and owners become access.owners[].identities.',
+			'webChat: access was removed; use top-level access on RoundtableConfig: members/admins roles become "<surface>:role:<role>", users become identities, and owners become access.owners[].identities. Replace everyone: true with everyone: ["<surface>"] (substitute this chat\'s surface, default "web"); core everyone: true opens every surface.',
 		);
 	const path = options.path ?? "/chat";
 	if (!/^\/[A-Za-z0-9._~/-]*[A-Za-z0-9._~-]$/.test(path))

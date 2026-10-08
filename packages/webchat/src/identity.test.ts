@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import type {
 	AgentRuntime,
 	IdentityService,
@@ -156,13 +157,20 @@ test("startFresh refuses an unregistered key before touching runtime", async () 
 	expect(called).toBe(true);
 });
 
-test("webchat's removed access option fails with core migration guidance", () => {
-	expect(() =>
+test("webchat's removed access option fails with surface-scoped core migration guidance", () => {
+	const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8");
+	expect(readme).toContain('everyone: ["<surface>"]');
+	expect(readme).toContain("every surface");
+	const removed = () =>
 		webChat({
 			verifier: async () => identity("ada"),
 			origins: "any",
 			personas: [{ kind: "helper" }],
-			access: { members: { roles: ["User"] } },
-		} as never),
-	).toThrow("top-level access");
+			surface: "support",
+			access: { members: { roles: ["User"], everyone: true } },
+		} as never);
+	expect(removed).toThrow("top-level access");
+	expect(removed).toThrow("<surface>:role:<role>");
+	expect(removed).toThrow('everyone: ["<surface>"]');
+	expect(removed).toThrow("every surface");
 });

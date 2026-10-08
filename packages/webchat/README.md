@@ -96,6 +96,8 @@ Use the host's top-level `access`, not a `webChat` option.
 The removed `webChat({ access })` option fails at configuration load with migration guidance; `WebAccessMap` and `webAccess` are removed too.
 Token roles become `web:role:<role>` (or `<surface>:role:<role>` for a custom surface), and identities are written as `oidcSpeakerId(issuer, subject)`.
 Replace old `users` rules with `identities`, and old web owners with `access.owners: [{ name, principal?, identities: [oidcSpeakerId(...)] }]`.
+Replace the old webchat `everyone: true` with `everyone: ["<surface>"]`, substituting this chat's configured surface (default `"web"`).
+Core `everyone: true` opens every surface, including Discord, rather than only people this web verifier accepts.
 No IdP role can create an owner.
 A person the core policy gives no tier is not admitted: no ticket, no socket, no conversation, no turn.
 
@@ -139,7 +141,7 @@ Microsoft Entra ID is the example below, and the same questions apply to any pro
 - **Accept access tokens only.** `requireScopeOrRoles` refuses a token with no scope or app roles, as an ID token is. An Entra ID token may still carry `roles` when you assign app roles, so also require the delegated scope in `check` (`typeof claims.scp === "string"`); where you can, register the API apart from the web page's sign-in app, so a page's ID token never has the API's audience.
 - **Refuse app-only tokens.** `rejectAppOnly` refuses `idtyp: "app"`. Entra writes `idtyp` only when the app asks for that optional claim; requiring `scp` refuses app-only tokens either way, since they carry roles and no scope.
 - **Merge issuers of one tenant only.** `speakerIssuer` makes one person's id the same whichever listed issuer signed the token, such as Entra's v1 `https://sts.windows.net/<tenant>/` and v2 `https://login.microsoftonline.com/<tenant>/v2.0`. Never list issuers of different tenants or providers together: their subjects are separate namespaces, and two people could get one id.
-- **Mind who `everyone` admits.** `everyone: true` admits every person the verifier accepts, guest accounts of your tenant included. Prefer roles assigned to the users and groups who should chat; with Entra, the optional `acct` claim (`0` for a member of the tenant, `1` for a guest) lets `check` refuse guests.
+- **Mind who `everyone` admits.** `everyone: ["<surface>"]` admits every person the verifier accepts on that surface, guest accounts of your tenant included; core `everyone: true` also admits people on every other surface. Prefer roles assigned to the users and groups who should chat; with Entra, the optional `acct` claim (`0` for a member of the tenant, `1` for a guest) lets `check` refuse guests.
 
 ```ts
 const tenant = process.env.ENTRA_TENANT_ID ?? "";
