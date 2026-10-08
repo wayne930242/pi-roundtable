@@ -85,6 +85,39 @@ describe("the tools of a selection", () => {
 	});
 });
 
+describe("the tools of a task and of startup, by their names before 0.9 too", () => {
+	// SAFETY: these read only the linked plan and the plugins' required tools.
+	const factoryOf = (requiredTools: string[]) =>
+		new SessionFactory(
+			{
+				sessions: () =>
+					({
+						piPackages: [],
+						plan: { tools: [], mcp: [] },
+						requiredTools,
+					}) as unknown as LinkedSessions,
+			} as unknown as PiAgentRuntimeOptions,
+			{ speaker: () => undefined, runTask: async () => "" },
+		);
+
+	test("a task excluding notify_owner excludes notify, and never asks", () => {
+		const tools = factoryOf([]).taskTools(
+			{ tools: ["memory_add", "notify"], groups: [] },
+			["notify_owner"],
+		);
+		expect(tools).toContain("memory_add");
+		expect(tools).not.toContain("notify");
+		expect(tools).not.toContain("ask_user");
+	});
+
+	test("a plugin requiring notify_owner at startup requires notify", () => {
+		const expected = factoryOf(["notify_owner", "memory_add"]).requiredTools();
+		expect(expected).toContain("notify");
+		expect(expected).not.toContain("notify_owner");
+		expect(expected).toContain("memory_add");
+	});
+});
+
 describe("the agents' scratch dir", () => {
 	test("the agents' bash runs with TMPDIR at the scratch dir", async () => {
 		const root = realpathSync(mkdtempSync(join(tmpdir(), "scratch-bash-")));

@@ -72,6 +72,15 @@ describe("a tool renamed since 0.8", () => {
 		).toBe("admin");
 		expect(toolTiers().minTier("notify")).toBe("owner");
 	});
+
+	test("a plugin's tier under an old name, such as notify_owner, is the new name's, unless it declares the new name too", () => {
+		const tiers = toolTiers();
+		tiers.declare("feature", { notify_owner: "member" });
+		expect(tiers.minTier("notify")).toBe("member");
+		const both = toolTiers();
+		both.declare("feature", { notify: "admin", notify_owner: "member" });
+		expect(both.minTier("notify")).toBe("admin");
+	});
 });
 
 describe("toolsForTier", () => {

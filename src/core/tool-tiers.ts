@@ -30,7 +30,8 @@ export const CORE_TOOL_TIERS: Readonly<Record<string, Tier>> = set("member", [
 
 /**
  * Tools renamed since 0.8, by their old name: until 1.0 the old name still names the tool in a
- * selection and in the operator's `toolTiers`, where the new name's own setting wins.
+ * selection, a task's `exclude`, a plugin's `requiredTools`, and the operator's and plugins'
+ * `toolTiers`, where the new name's own setting wins.
  */
 export const RENAMED_TOOLS: Readonly<Record<string, string>> = {
 	notify_owner: "notify",
@@ -88,7 +89,16 @@ export class ToolTierTable implements ToolTiers {
 	 * plugin declaring its own tool again, as when the host retries its start, replaces it.
 	 */
 	declare(plugin: string, tiers: Readonly<Record<string, Tier>>): void {
-		for (const [tool, tier] of Object.entries(tiers)) {
+		const entries = Object.entries(tiers);
+		// An old name is the new name's, declared first so the new name's own tier wins.
+		const named = [
+			...entries.flatMap(([tool, tier]) => {
+				const renamed = RENAMED_TOOLS[tool];
+				return renamed ? [[renamed, tier] as const] : [];
+			}),
+			...entries.filter(([tool]) => !RENAMED_TOOLS[tool]),
+		];
+		for (const [tool, tier] of named) {
 			const other = this.#declared.get(tool);
 			if (other && other.plugin !== plugin)
 				throw new PluginError(

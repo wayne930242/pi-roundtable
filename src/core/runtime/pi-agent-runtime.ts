@@ -26,20 +26,16 @@ import {
 	type ThinkingSetting,
 } from "../models.ts";
 import { withoutReplyFiles } from "../reply-files.ts";
-import { planOrder, type TransientTask } from "../sessions.ts";
+import type { TransientTask } from "../sessions.ts";
 import { textOf } from "../shared/session-messages.ts";
 import { addressee, type Speaker, type Tier } from "../speakers.ts";
 import { type ToolTiers, toolsForTier, toolTiers } from "../tool-tiers.ts";
 import { ConversationSessions } from "./conversation-sessions.ts";
-import { ASK_USER_TOOL } from "./extensions/ask-user.ts";
 import {
 	ConfirmationGate,
 	confirmedTurnText,
 } from "./extensions/confirmation-gate.ts";
-import {
-	COMPACT_TOOL,
-	missingToolsError,
-} from "./extensions/self-compact-guard.ts";
+import { missingToolsError } from "./extensions/self-compact-guard.ts";
 import { interimPoster } from "./interim-text.ts";
 import { PromptSlot, workTimeout } from "./prompt-slot.ts";
 import {
@@ -110,15 +106,9 @@ export class PiAgentRuntime implements AgentRuntime {
 			probe.session.getAllTools().map((tool) => tool.name),
 		);
 		probe.session.dispose();
-		const expected = [
-			...this.#factory.link().requiredTools,
-			COMPACT_TOOL,
-			ASK_USER_TOOL,
-			...planOrder(this.#factory.plan).flatMap(
-				(tool) => tool.snapshot().requiredTools ?? [],
-			),
-		];
-		const missing = expected.filter((name) => !registered.has(name));
+		const missing = this.#factory
+			.requiredTools()
+			.filter((name) => !registered.has(name));
 		if (missing.length > 0) throw missingToolsError(missing);
 	}
 
@@ -368,15 +358,11 @@ export class PiAgentRuntime implements AgentRuntime {
 		const timer = setTimeout(abort, task.timeoutMs);
 		try {
 			const registered = new Set(session.getAllTools().map((t) => t.name));
-			const excluded = new Set([...task.exclude, ASK_USER_TOOL]);
 			const { tier } = turn;
 			worker.tools = this.#factory
-				.toolsFor(task.selection)
+				.taskTools(task.selection, task.exclude)
 				.filter(
-					(name) =>
-						!excluded.has(name) &&
-						registered.has(name) &&
-						this.#tiers.allows(tier, name),
+					(name) => registered.has(name) && this.#tiers.allows(tier, name),
 				);
 			session.setActiveToolsByName([...worker.tools]);
 			await withoutReplyFiles(() => session.prompt(task.text));

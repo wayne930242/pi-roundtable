@@ -123,6 +123,30 @@ export class SessionFactory {
 		];
 	}
 
+	/** The tools of a task beside a turn: its selection without what it excludes, and it never asks. */
+	taskTools(selection: ToolSelection, exclude: readonly string[]): string[] {
+		const excluded = new Set([
+			...currentToolNames(exclude, this.#options.logger),
+			ASK_USER_TOOL,
+		]);
+		return this.toolsFor(selection).filter((name) => !excluded.has(name));
+	}
+
+	/** Every tool startup refuses to run without: the plugins', the core's, and the session tools'. */
+	requiredTools(): string[] {
+		return currentToolNames(
+			[
+				...this.link().requiredTools,
+				COMPACT_TOOL,
+				ASK_USER_TOOL,
+				...planOrder(this.plan).flatMap(
+					(tool) => tool.snapshot().requiredTools ?? [],
+				),
+			],
+			this.#options.logger,
+		);
+	}
+
 	/** Waits for the tools the session tools register late, such as pi-mcp-adapter's after its eager connection. */
 	async #awaitTools(
 		session: AgentSession,
