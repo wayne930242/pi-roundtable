@@ -1919,10 +1919,9 @@ In a turn nobody is named for, the schedule and delegation tools refuse.
   The agent server's claim answers that target and skips all others, so a turn for another target never runs with the owner's tools.
   Its limits are 0.8's, and it holds no one to a number of schedules or running tasks across their conversations unless the host's configuration says so: `background: { perPrincipal: { schedules: 20, delegations: 2 } }` sets its `perPrincipal` and `maxRunningPerPrincipal`. A host that serves many people sets both.
 - The built-in schedule and delegation tools make `PERSONAL_TARGET` work, and a session has them only where it can run: when the claim that owns its conversation has `background`, or, for a conversation no chat surface carries, when its creator has a direct channel, as a provider knows without the network.
-  The creator must be known when the tools load, from the registry's private conversation or a current speaker; otherwise no tools are offered.
-  The runtime builds sessions between turns, so a plugin that calls it directly must record its no-surface conversation as private before building it.
+  Such a conversation has the tools only when the registry records it private: its person is whom the work runs for. One recorded shared, or not recorded, has neither tool, whoever speaks in it, because a session outlives the turn it is built in.
+  A plugin that calls the runtime directly records its no-surface conversation as private before the session is built.
   Creation reaches the speaker's own direct channel and checks that its claim takes background turns, refusing when either is absent; it never falls back to the primary owner's messages.
-  Such a conversation the host has no record of is the speaker's own, so its schedule tools see only the speaker's schedules.
   In a private conversation, as the host's conversation registry records it, `schedule_list`, `schedule_update`, and `schedule_cancel` see only the speaker's own schedules.
 - A turn for a target no plugin contributes is skipped with the reason `no plugin contributes the background target "<name>"`.
   It never falls back to the owner's target; a recurring schedule keeps the reason as its last status and runs again once a plugin contributes the target.

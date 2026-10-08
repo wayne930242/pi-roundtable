@@ -139,7 +139,11 @@ describe("modulesPlugin", () => {
 	});
 
 	test("a conversation without a chat channel reports in the creator's direct messages: the single owner's, as in 0.8", async () => {
-		const setup = await setUpModules();
+		const setup = await setUpModules({
+			conversations: {
+				get: privately({ [OUTSIDE]: OWNER_SPEAKER.principalId }),
+			},
+		});
 		const [delegate] = await registered(
 			setup,
 			context(undefined, OUTSIDE),
@@ -166,6 +170,7 @@ describe("modulesPlugin", () => {
 		const setup = await setUpModules({
 			schedules,
 			direct: { "1": OWNER_CHANNEL, p_ann: "discord:ann-dm" },
+			conversations: { get: privately({ [OUTSIDE]: "p_ann" }) },
 		});
 		const session = contextOf(ANN, OUTSIDE);
 		const create = (await registered(setup, session, "schedules")).find(
@@ -208,6 +213,7 @@ describe("modulesPlugin", () => {
 				schedules,
 				direct,
 				takesBackground: () => background,
+				conversations: { get: privately({ [OUTSIDE]: "p_ann" }) },
 			});
 			const session = contextOf(ANN, OUTSIDE);
 			const create = (await registered(setup, session, "schedules")).find(
@@ -308,8 +314,10 @@ describe("modulesPlugin", () => {
 		).toContain("schedule_create");
 	});
 
-	test("no-surface tools are absent when the creator is unknown, unreachable, or reach lookup fails", async () => {
-		for (const speaker of [undefined, ANN]) {
+	test("no-surface tools are absent when the conversation is not recorded private, its person has no direct channel, or the lookup fails", async () => {
+		// Not recorded: whoever speaks, even the owner, whose direct messages take background turns.
+		// A session outlives the turn it is built in, so a speaker never decides what it offers.
+		for (const speaker of [undefined, ANN, OWNER_SPEAKER]) {
 			const setup = await setUpModules();
 			const session = {
 				...context(undefined, OUTSIDE),
@@ -333,43 +341,6 @@ describe("modulesPlugin", () => {
 			expect(
 				await registered(setup, contextOf(ANN, "mcp:s1"), extension),
 			).toEqual([]);
-	});
-
-	test("a conversation without a chat channel the host has no record of lists only the speaker's own schedules", async () => {
-		const kept = (id: number, createdById: string) => ({
-			id,
-			channel: OWNER_CHANNEL,
-			target: "owner",
-			title: `by ${createdById}`,
-			prompt: `PROMPT OF ${createdById}`,
-			recurrence: { kind: "once", date: "2026-12-01", time: "09:00" },
-			nextRun: new Date("2026-12-01T09:00:00Z"),
-			createdById,
-			createdByName: createdById,
-			createdTier: "owner",
-			createdAt: new Date(0),
-		});
-		const schedules = {
-			forChannel: async (channel: ChannelKey) =>
-				channel === OWNER_CHANNEL
-					? [kept(1, OWNER_SPEAKER.principalId), kept(2, "p_kai")]
-					: [],
-			get: async (id: number) =>
-				kept(id, id === 1 ? OWNER_SPEAKER.principalId : "p_kai"),
-		} as unknown as ScheduleStore;
-		const setup = await setUpModules({
-			schedules,
-			conversations: { get: async () => undefined },
-		});
-		const list = (
-			await registered(setup, context(undefined, OUTSIDE), "schedules")
-		).find((tool) => tool.name === "schedule_list");
-		const listed = (await list?.execute("1", {}))?.content[0]?.text ?? "";
-		expect(listed).toContain("#1 by 1");
-		expect(listed).not.toContain("#2 ");
-		const read = await list?.execute("1", { id: 2 });
-		expect(read?.isError).toBe(true);
-		expect(read?.content[0]?.text).not.toContain("PROMPT OF p_kai");
 	});
 
 	test("only agent sessions may read another agent's schedules", async () => {

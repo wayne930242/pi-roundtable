@@ -93,7 +93,8 @@ const MODULE_TIERS: Readonly<Record<string, Tier>> = {
  * The modules: notifications, schedules, and delegated tasks, each a session tool, and the turns
  * nobody wrote. The delegator's running jobs join the shutdown drain. `notify` sends through the
  * plugins' direct channels, so with none there is no notify. A conversation no chat surface carries
- * can schedule or delegate only into its creator's reachable, background-capable direct channel. It
+ * schedules and delegates only when recorded private, into its creator's reachable,
+ * background-capable direct channel. It
  * contributes `PERSONAL_TARGET`, with the per-person limits given, whose turns the schedules and
  * delegated reports are, and a session whose conversation's claim takes no background turns gets
  * neither tool.
@@ -174,8 +175,9 @@ export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 			// Schedules and delegated reports run as background turns in the conversation, or, for one
 			// no chat surface carries, in the creator's direct messages; where no claim would take them,
 			// none could ever start, so the session gets no tools. Read when a session is made, after
-			// every plugin set up: the creator must be known from a private record or a current
-			// speaker. Creation still checks the executing speaker's own destination again.
+			// every plugin set up: a conversation without a chat surface has them only when it is
+			// recorded private to someone a direct channel knows. Creation checks the speaker's own
+			// destination again.
 			const offered = (
 				session: SessionContext,
 				extension: () => ExtensionFactory,
@@ -186,12 +188,10 @@ export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 				if (directChannels.providers().length === 0) return null;
 				return async (pi) => {
 					const record = await recordOf(session);
+					// Only a conversation recorded private has a person to run its work for: a session
+					// outlives the turn it is built in, so whoever speaks then decides nothing.
 					const own =
-						record?.visibility === "private"
-							? record.principalId
-							: session.speaker()?.principalId;
-					// The runtime builds sessions between turns. With neither a recorded principal nor
-					// a current speaker, it cannot promise any background-capable destination.
+						record?.visibility === "private" ? record.principalId : undefined;
 					if (own === undefined) return;
 					// Only whether a direct channel knows them, without the network; the conversation there,
 					// and whether a claim takes its turns, are checked when a tool runs.
