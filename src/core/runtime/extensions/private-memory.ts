@@ -38,11 +38,23 @@ export interface MemoryView {
 type Assistant = Extract<Messages[number], { role: "assistant" }>;
 
 /**
+ * The apis whose signature on an answer's text names the message it was, its id and phase, rather
+ * than reasoning: OpenAI's Responses, which every other api's signed text is not. Gemini signs a
+ * text part with the thought signature of the reasoning behind it, and its converter sends it back.
+ */
+const MESSAGE_SIGNED = new Set([
+	"openai-responses",
+	"azure-openai-responses",
+	"openai-codex-responses",
+]);
+
+/**
  * An earlier answer without its reasoning, or undefined when it gave none: its thinking, encrypted
- * or not, and the thought signatures of its tool calls, which may carry a person's memory as the
- * turn read it.
+ * or not, the thought signatures of its tool calls, and those its provider signed its text with,
+ * which may carry a person's memory as the turn read it.
  */
 function withoutReasoning(message: Assistant): Assistant | undefined {
+	const signsReasoning = !MESSAGE_SIGNED.has(message.api);
 	let changed = false;
 	const content = message.content.flatMap((part): Assistant["content"] => {
 		if (part.type === "thinking") {
@@ -53,6 +65,15 @@ function withoutReasoning(message: Assistant): Assistant | undefined {
 			changed = true;
 			const { thoughtSignature: _, ...call } = part;
 			return [call];
+		}
+		if (
+			part.type === "text" &&
+			signsReasoning &&
+			part.textSignature !== undefined
+		) {
+			changed = true;
+			const { textSignature: _, ...text } = part;
+			return [text];
 		}
 		return [part];
 	});

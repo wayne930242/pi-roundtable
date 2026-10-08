@@ -1,10 +1,19 @@
 import { describe, expect, test } from "bun:test";
+import {
+	type AssistantMessage,
+	type Message,
+	type Model,
+	normalizeContext,
+} from "@earendil-works/pi-ai";
+import { convertMessages as googleRequest } from "@earendil-works/pi-ai/api/google-shared";
+import { convertResponsesMessages as responsesRequest } from "@earendil-works/pi-ai/api/openai-responses-shared";
 import type { ContextWithSystemEvent } from "@earendil-works/pi-coding-agent";
 import {
 	HIDDEN_MEMORY,
 	HIDDEN_UNRECORDED_MEMORY,
 	MemoryDraws,
 	memoryProjection,
+	summaryProjection,
 } from "./private-memory.ts";
 
 type Messages = ContextWithSystemEvent["messages"];
@@ -166,5 +175,105 @@ describe("the reasoning a request may carry", () => {
 		expect(
 			memoryProjection(history, { shared: false, reader: "ann" }),
 		).toBeUndefined();
+	});
+});
+
+describe("the reasoning a provider signs onto an earlier answer's text", () => {
+	const USAGE = {
+		input: 0,
+		output: 0,
+		cacheRead: 0,
+		cacheWrite: 0,
+		totalTokens: 0,
+		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+	};
+	/** A model of the api, as its provider's converter reads it. */
+	const model = <A extends string>(api: A, provider: string, id: string) =>
+		({
+			id,
+			name: id,
+			api,
+			provider,
+			baseUrl: "http://provider.invalid",
+			reasoning: true,
+			input: ["text"],
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+			contextWindow: 100_000,
+			maxTokens: 1_000,
+		}) as Model<A>;
+	/** Ann's answer of the model, its text signed as the provider signs it. */
+	const signed = (
+		on: Model<string>,
+		textSignature: string,
+	): AssistantMessage => ({
+		role: "assistant",
+		content: [{ type: "text", text: "Noted.", textSignature }],
+		api: on.api,
+		provider: on.provider,
+		model: on.id,
+		usage: USAGE,
+		stopReason: "stop",
+		timestamp: 2,
+	});
+	const history = (answer: AssistantMessage): Messages => [
+		{ role: "user", content: "Hello.", timestamp: 1 },
+		answer,
+		{ role: "user", content: "Hi.", timestamp: 3 },
+	];
+	// SAFETY: this history holds only Pi's messages, no custom ones, as a converter reads them.
+	const context = (messages: Messages) =>
+		normalizeContext({ messages: messages as Message[] });
+	// Google's signatures are base64 bytes; its converter sends no other.
+	const SIGNED = Buffer.from("ANN_TEXT_SIGNED").toString("base64");
+	const shared = (messages: Messages) =>
+		memoryProjection(messages, { shared: true, reader: "bo" }) ?? messages;
+
+	test("Gemini's thought signature on the text of an earlier turn reaches neither the next request nor a summary", () => {
+		const gemini = model(
+			"google-generative-ai",
+			"google",
+			"gemini-3-pro-preview",
+		);
+		const messages = history(signed(gemini, SIGNED));
+		// The converter sends it back as the part's thoughtSignature while the history keeps it.
+		expect(JSON.stringify(googleRequest(gemini, context(messages)))).toContain(
+			SIGNED,
+		);
+		for (const sent of [shared(messages), summaryProjection(messages)]) {
+			const request = JSON.stringify(googleRequest(gemini, context(sent)));
+			expect(request).not.toContain(SIGNED);
+			expect(request).toContain("Noted.");
+		}
+		for (const api of ["google-vertex", "pi-messages", "another-api"]) {
+			const other = model(api, "elsewhere", "m-1");
+			const text = JSON.stringify(shared(history(signed(other, SIGNED))));
+			expect(text).not.toContain(SIGNED);
+		}
+	});
+
+	test("OpenAI's signature of an answer's message, its phase, is no reasoning and stays", () => {
+		for (const api of [
+			"openai-responses",
+			"azure-openai-responses",
+			"openai-codex-responses",
+		]) {
+			const gpt = model(api, "openai", "gpt-6.1-sol");
+			const messages = history(
+				signed(
+					gpt,
+					JSON.stringify({ v: 1, id: "msg_ann", phase: "final_answer" }),
+				),
+			);
+			for (const sent of [shared(messages), summaryProjection(messages)]) {
+				const request = responsesRequest(
+					gpt,
+					context(sent),
+					new Set(["openai"]),
+				);
+				expect(request).toContainEqual(
+					expect.objectContaining({ type: "message", phase: "final_answer" }),
+				);
+			}
+		}
 	});
 });
