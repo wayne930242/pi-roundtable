@@ -1,4 +1,5 @@
 import type { AskOption, Tier, TurnProgress } from "pi-roundtable";
+import type { Notice } from "./notices.ts";
 
 /**
  * The WebSocket subprotocol a client offers, and the server echoes, for this version of the
@@ -94,7 +95,7 @@ export type ServerFrame =
 	| {
 			type: "ready";
 			protocol: typeof WEBCHAT_PROTOCOL_VERSION;
-			speaker: { id: string; name: string; tier: Tier };
+			speaker: { id: string; name: string; tier: Tier; principalId: string };
 			personas: readonly PersonaSummary[];
 			/** When the token expires, as an ISO time. */
 			expiresAt: string;
@@ -125,6 +126,8 @@ export type ServerFrame =
 			prompt: string;
 			outcome: PromptOutcome;
 	  }
+	/** A durable private inbox entry; fetch the REST inbox to recover missed notices. */
+	| { type: "notice"; notice: Notice }
 	/** The token expires soon: send `auth` with a fresh one before `expiresAt`, or the server closes with 4401. */
 	| { type: "reauth"; expiresAt: string }
 	/** A frame was refused; `ref` is the `send` id or prompt id it was about. */

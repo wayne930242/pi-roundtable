@@ -1,5 +1,4 @@
 import {
-	type ActorFacts,
 	type AgentRuntime,
 	type ChannelClaim,
 	type ChannelKey,
@@ -8,7 +7,9 @@ import {
 	type ConversationRegistry,
 	type ConversationTurns,
 	channelKey,
+	type IdentityService,
 	type Logger,
+	PERSONAL_TARGET,
 	type RouteSocket,
 	type Speaker,
 	TIERS,
@@ -17,11 +18,10 @@ import {
 	type TranscriptEntry,
 	type TurnResult,
 } from "pi-roundtable";
-import type { WebAccess } from "./access.ts";
 import { RateWindow, TurnBudget } from "./budget.ts";
 import { type Connection, Connections } from "./connections.ts";
 import {
-	parseOidcSpeakerId,
+	identityActor,
 	TokenRefused,
 	type TokenVerifier,
 	type WebIdentity,
@@ -79,7 +79,7 @@ export interface WebChatLimits {
 export interface WebChatDeps {
 	surface: string;
 	verifier: TokenVerifier;
-	access: WebAccess;
+	identity(): IdentityService;
 	personas: readonly WebPersona[];
 	limits: WebChatLimits;
 	logger: Logger;
@@ -130,24 +130,6 @@ const HOUR_MS = 60 * 60_000;
 /** The longest delay a timer keeps; a longer one fires at once. */
 const MAX_TIMER_MS = 2 ** 31 - 1;
 const RESERVED_KINDS = new Set(["owner", "agent"]);
-
-/**
- * Who a person is, as the host's identity service reads them: an OpenID subject under its
- * issuer, or else the verifier's id under the surface; their speaker id is their 0.8 id.
- */
-function actorOf(identity: WebIdentity, surface: string): ActorFacts {
-	const oidc = parseOidcSpeakerId(identity.id);
-	return {
-		provider: oidc
-			? identity.id.slice(0, identity.id.length - oidc.subject.length - 1)
-			: surface,
-		subject: oidc ? oidc.subject : identity.id,
-		name: identity.name,
-		surface,
-		roles: identity.roles.map((role) => `${surface}:role:${role}`),
-		legacyId: identity.id,
-	};
-}
 
 const atLeast = (tier: Tier, least: Tier) =>
 	TIERS.indexOf(tier) >= TIERS.indexOf(least);
@@ -207,6 +189,8 @@ export class WebChat {
 	readonly #minted = new Map<string, Minted>();
 	/** Whose each conversation is, once its person wrote in it during this process. */
 	readonly #owners = new Map<string, string>();
+	/** Keys proved registered private before any direct runtime operation. */
+	readonly #registered = new Set<ChannelKey>();
 	/** Accepted messages waiting for the claim, by message id. */
 	readonly #pending = new Map<string, Pending>();
 	/** Each person's turns, running or queued. */
@@ -254,19 +238,12 @@ export class WebChat {
 		return this.admitIdentity(identity);
 	}
 
-	admitIdentity(identity: WebIdentity): Admitted {
-		const tier = this.#deps.access.tierOf(identity);
-		if (!tier) throw new Refusal("forbidden");
-		return {
-			identity,
-			// Their principal is their speaker id, as in 0.8, until the web chat resolves people through IDENTITY.
-			speaker: {
-				id: identity.id,
-				name: identity.name,
-				tier,
-				principalId: identity.id,
-			},
-		};
+	async admitIdentity(identity: WebIdentity): Promise<Admitted> {
+		const speaker = await this.#deps
+			.identity()
+			.resolve(identityActor(identity, this.#deps.surface));
+		if (!speaker) throw new Refusal("forbidden");
+		return { identity, speaker };
 	}
 
 	/** The personas a speaker may open. */
@@ -290,16 +267,16 @@ export class WebChat {
 	open(speaker: Speaker, kind: string, title?: string): string {
 		this.#persona(kind, speaker);
 		const unused = [...this.#minted.values()].filter(
-			(minted) => minted.principal === speaker.id,
+			(minted) => minted.principal === speaker.principalId,
 		).length;
 		if (unused >= this.#deps.limits.unusedConversationsPerPrincipal)
 			throw new Refusal("too_many_conversations");
-		if (!this.#opened.take(speaker.id))
+		if (!this.#opened.take(speaker.principalId))
 			throw new Refusal("too_many_conversations");
 		const id = crypto.randomUUID();
 		const cut = title === undefined ? undefined : titleOf(title);
 		this.#minted.set(id, {
-			principal: speaker.id,
+			principal: speaker.principalId,
 			persona: kind,
 			...(cut ? { title: cut } : {}),
 		});
@@ -322,24 +299,31 @@ export class WebChat {
 			.registry()
 			.get(channelKey(this.#deps.surface, conversation));
 		if (record) {
-			if (record.principalId !== speaker.id || record.visibility !== "private")
+			if (
+				record.principalId !== speaker.principalId ||
+				record.visibility !== "private"
+			)
 				throw new Refusal("forbidden");
 			const persona = this.#persona(record.kind, speaker);
-			this.#owners.set(conversation, speaker.id);
+			this.#owners.set(conversation, speaker.principalId);
+			this.#registered.add(record.key);
 			return { persona, record };
 		}
 		const minted = this.#minted.get(conversation);
 		if (!minted) throw new Refusal("unknown_conversation");
-		if (minted.principal !== speaker.id) throw new Refusal("forbidden");
+		if (minted.principal !== speaker.principalId)
+			throw new Refusal("forbidden");
 		const persona = this.#persona(minted.persona, speaker);
 		// The surface learns whose a conversation is from each check that proves it.
-		this.#owners.set(conversation, speaker.id);
+		this.#owners.set(conversation, speaker.principalId);
 		return { persona, minted };
 	}
 
 	/** The speaker's web conversations, the most recently active first. */
 	async list(speaker: Speaker): Promise<ConversationRecord[]> {
-		const records = await this.#deps.registry().list({ principal: speaker.id });
+		const records = await this.#deps
+			.registry()
+			.list({ principal: speaker.principalId });
 		return records.filter(
 			(record) =>
 				record.surface === this.#deps.surface &&
@@ -379,7 +363,7 @@ export class WebChat {
 			personas: this.personasFor(speaker),
 			expiresAt: identity.expiresAt.toISOString(),
 		});
-		for (const frame of this.desk.openFor(identity.id))
+		for (const frame of this.desk.openFor(speaker.principalId))
 			this.connections.send(connection, frame);
 		this.#watchToken(connection);
 	}
@@ -449,6 +433,23 @@ export class WebChat {
 	}
 
 	async #handle(connection: Connection, frame: ClientFrame): Promise<void> {
+		// Token facts remain verified until expiry, but linked principals and persistent roles can
+		// change while the socket is open. In particular, an approval must use the current tier.
+		if (frame.type !== "auth") {
+			let current: Speaker;
+			try {
+				current = (await this.admitIdentity(connection.identity)).speaker;
+			} catch (error) {
+				if (!(error instanceof Refusal)) throw error;
+				connection.socket?.close(CLOSE_CODES.notAdmitted, "not admitted");
+				return;
+			}
+			if (current.principalId !== connection.speaker.principalId) {
+				connection.socket?.close(CLOSE_CODES.notAdmitted, "another person");
+				return;
+			}
+			connection.speaker = current;
+		}
 		const { speaker } = connection;
 		switch (frame.type) {
 			case "auth":
@@ -502,7 +503,7 @@ export class WebChat {
 			throw error;
 		}
 		// A connection belongs to one person: a token for someone else ends it.
-		if (admitted.identity.id !== connection.identity.id) {
+		if (admitted.speaker.principalId !== connection.speaker.principalId) {
 			connection.socket?.close(CLOSE_CODES.notAdmitted, "another person");
 			return;
 		}
@@ -520,12 +521,12 @@ export class WebChat {
 		if (!text.trim() || text.length > this.#deps.limits.messageChars)
 			throw new Refusal("bad_frame");
 		// Checked before a conversation is opened for it, so a refused message opens none.
-		if (!this.#turns.allows(speaker.id, frame.conversation))
+		if (!this.#turns.allows(speaker.principalId, frame.conversation))
 			throw new Refusal("busy");
 		const conversation =
 			frame.conversation ?? this.open(speaker, frame.persona as string);
 		const { persona, record, minted } = await this.own(speaker, conversation);
-		const release = this.#turns.take(speaker.id, conversation);
+		const release = this.#turns.take(speaker.principalId, conversation);
 		if (!release) {
 			// Another message took the last place meanwhile.
 			if (!frame.conversation) this.#minted.delete(conversation);
@@ -548,7 +549,7 @@ export class WebChat {
 			this.surface.deliver({
 				channel: channelKey(this.#deps.surface, conversation),
 				messageId,
-				actor: actorOf(connection.identity, this.#deps.surface),
+				actor: identityActor(connection.identity, this.#deps.surface),
 				authorId: speaker.id,
 				authorName: speaker.name,
 				authorIsBot: false,
@@ -574,19 +575,35 @@ export class WebChat {
 		return {
 			name: `webchat:${surface}`,
 			priority: 10,
+			postsInPlace: true,
 			owns: (channel) => channel.startsWith(`${surface}:`),
 			admit: (message) => {
 				const pending = this.#pending.get(message.messageId);
 				this.#pending.delete(message.messageId);
-				if (!pending || pending.speaker.id !== message.authorId) {
+				const speaker = message.speaker;
+				if (
+					!pending ||
+					pending.speaker.id !== message.authorId ||
+					!speaker ||
+					speaker.principalId !== pending.speaker.principalId
+				) {
 					pending?.release();
+					if (pending)
+						this.connections.sendTo(pending.speaker.principalId, {
+							type: "failed",
+							conversation: this.surface.conversationOf(message.channel),
+							stopped: false,
+						});
 					return undefined;
 				}
 				return {
 					kind: "turn",
 					run: async () => {
 						try {
-							await this.#turn(message.channel, message.text, pending);
+							await this.#turn(message.channel, message.text, {
+								...pending,
+								speaker,
+							});
 						} finally {
 							pending.release();
 						}
@@ -595,7 +612,7 @@ export class WebChat {
 					// person, told it was accepted, is told it failed, as for a turn the host refused.
 					dropped: () => {
 						pending.release();
-						this.connections.sendTo(pending.speaker.id, {
+						this.connections.sendTo(pending.speaker.principalId, {
 							type: "failed",
 							conversation: this.surface.conversationOf(message.channel),
 							stopped: false,
@@ -604,12 +621,82 @@ export class WebChat {
 					failure: "a web chat turn failed",
 				};
 			},
+			background: async (turn) => {
+				if (turn.target !== PERSONAL_TARGET.name)
+					return {
+						status: "skipped",
+						reason: "webchat takes only personal background turns",
+					};
+				const { speaker } = turn;
+				if (!speaker || speaker.principalId !== turn.author.principalId)
+					return {
+						status: "skipped",
+						reason: "webchat needs the router's checked principal",
+					};
+				const conversation = this.surface.conversationOf(turn.channel);
+				const record = await this.#deps.registry().get(turn.channel);
+				if (
+					record?.visibility !== "private" ||
+					record.principalId !== turn.author.principalId
+				)
+					return {
+						status: "skipped",
+						reason:
+							"the background author does not own this private conversation",
+					};
+				let persona: WebPersona;
+				try {
+					persona = (await this.own(speaker, conversation)).persona;
+				} catch (error) {
+					if (!(error instanceof Refusal)) throw error;
+					return { status: "skipped", reason: error.code };
+				}
+				const release = this.#turns.take(speaker.principalId, conversation);
+				if (!release)
+					return {
+						status: "skipped",
+						reason: "the principal's turn budget is busy",
+					};
+				try {
+					const result = await this.#deps.turns().run({
+						channel: turn.channel,
+						kind: persona.kind,
+						text: turn.text,
+						speaker,
+						interactive: turn.report === true,
+						conversation: { visibility: "private" },
+						...(persona.selection
+							? {
+									selection: {
+										id: `webchat:${persona.kind}`,
+										...persona.selection,
+									},
+								}
+							: {}),
+						reply: async (result) =>
+							this.#reply(speaker.principalId, conversation, result),
+					});
+					return result.ok
+						? { status: "ran" }
+						: { status: "failed", error: "a webchat background turn failed" };
+				} finally {
+					release();
+				}
+			},
 			startFresh: async (channel) => {
 				const record = await this.#deps.registry().get(channel);
+				if (record?.visibility !== "private" || !record.principalId)
+					throw new Refusal("unknown_conversation");
+				this.#owners.set(
+					this.surface.conversationOf(channel),
+					record.principalId,
+				);
+				this.#registered.add(channel);
 				await this.#deps.runtime().startFresh(channel);
-				return record?.kind ?? "";
+				return record.kind;
 			},
-			stop: (channel) => this.#deps.runtime().stop(channel),
+			stop: (channel) =>
+				this.#registered.has(channel) && this.#deps.runtime().stop(channel),
 		};
 	}
 
@@ -621,15 +708,16 @@ export class WebChat {
 	): Promise<void> {
 		const { speaker, persona } = pending;
 		const conversation = this.surface.conversationOf(channel);
+		let registered = false;
 		try {
-			await this.own(speaker, conversation);
+			registered = (await this.own(speaker, conversation)).record !== undefined;
 		} catch (error) {
 			if (!(error instanceof Refusal)) throw error;
 			this.#deps.logger.warn(
 				{ channel, code: error.code },
 				"a web chat message was refused before its turn",
 			);
-			this.connections.sendTo(speaker.id, {
+			this.connections.sendTo(speaker.principalId, {
 				type: "error",
 				code: error.code,
 			});
@@ -637,6 +725,21 @@ export class WebChat {
 		}
 		let answered = false;
 		try {
+			if (!registered) {
+				const kept = await this.#deps.registry().register({
+					key: channel,
+					kind: persona.kind,
+					visibility: "private",
+					principalId: speaker.principalId,
+					...(pending.title ? { title: pending.title } : {}),
+				});
+				if (
+					kept.visibility !== "private" ||
+					kept.principalId !== speaker.principalId
+				)
+					throw new Refusal("forbidden");
+			}
+			this.#registered.add(channel);
 			await this.#deps.turns().run({
 				channel,
 				kind: persona.kind,
@@ -657,14 +760,14 @@ export class WebChat {
 				},
 				reply: async (result) => {
 					answered = true;
-					this.#reply(speaker.id, conversation, result);
+					this.#reply(speaker.principalId, conversation, result);
 				},
 			});
 		} catch (error) {
 			// A turn the host refused before it ran, such as one whose conversation could not be
 			// recorded, has no reply: the person is told it failed, and the router logs the cause.
 			if (!answered)
-				this.connections.sendTo(speaker.id, {
+				this.connections.sendTo(speaker.principalId, {
 					type: "failed",
 					conversation,
 					stopped: false,

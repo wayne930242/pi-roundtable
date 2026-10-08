@@ -5,10 +5,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Personal background turns and delegated reports run privately as the router-checked principal, with replies pushed only to that principal's connections; the claim rejects other targets, principals, and unregistered or shared conversations.
+- A private inbox provider with offline `knows`, durable `webchat_notices` storage, additive `notice` frames, `GET <path>/notices` pagination, and idempotent `POST <path>/notices/<id>/read`. Inbox entries never become fake transcript turns.
+
 ### Changed
 
+- Webchat resolves core `IDENTITY` at every token admission. Ownership, quotas, tickets, prompts and connection groups use `principalId`; `ready.speaker` adds it without changing `roundtable.webchat.v1`. A token switching principal closes with 4403, while linked identities of one principal can renew the same connection. Client frames recheck core admission and tier, so revoked admission or a relinked actor cannot keep acting on an old socket, and approvals do not use stale roles. Existing M1 conversations keep their OIDC principal ids unchanged.
+- Removed the plugin's `access` option and `WebAccessMap` / `webAccess` exports. Configure the host's top-level `access` with surface-prefixed roles and linked identities instead; passing the removed option fails with migration guidance. OIDC verification also reports `ActorFacts` for the core resolver.
+
 - A message the router drops after its claim admitted it (pi-roundtable 0.9's `Admission.dropped`, when the author's record finds them someone else) frees its place in the person's turn budget, as a message the claim drops does, and its person, told it was accepted, gets a `failed` frame for its conversation (`stopped: false`), as for a turn the host refused.
-- The surface's `prompts` take the core's `PromptScope` (pi-roundtable 0.9): a prompt goes to the scope's speaker, by `speakerId`, when the conversation is theirs, and an approval above their `tier` expires at once without being shown, whatever the scope escalates to, since the owners are not on the web chat. Who answers is unchanged: the conversation's person only, at the tier the call needs.
+- The surface's `prompts` take the core's `PromptScope` (pi-roundtable 0.9): a prompt goes to the scope's principal, by `principalId`, when the conversation is theirs, and an approval above their `tier` expires at once without being shown, whatever the scope escalates to, since the owners are not on the web chat. Who answers is unchanged: the conversation's person only, at the tier the call needs.
 
 ## [0.8.0] - 2026-10-07
 

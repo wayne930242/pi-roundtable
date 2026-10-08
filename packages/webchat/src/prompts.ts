@@ -16,7 +16,7 @@ import type {
 
 /** Who answers: the conversation's person, at their tier as of the answer. */
 export interface Answerer {
-	id: string;
+	principalId: string;
 	tier: Tier;
 }
 
@@ -64,7 +64,7 @@ export class PromptDesk {
 				if (!atLeast(scope.tier, minTier)) return "expired";
 				const outcome = await this.#ask(
 					conversation,
-					scope.speakerId,
+					scope.principalId,
 					(id) => ({ id, kind: "approval", title, message }),
 					signal,
 					minTier,
@@ -74,7 +74,7 @@ export class PromptDesk {
 			ask: async (title, question, signal) => {
 				const { outcome, answer } = await this.#ask(
 					conversation,
-					scope.speakerId,
+					scope.principalId,
 					(id) => questionFrame(id, title, question),
 					signal,
 				);
@@ -102,7 +102,7 @@ export class PromptDesk {
 	): ErrorCode | undefined {
 		const open = this.#open.get(prompt);
 		if (open?.frame.kind !== "approval") return "unknown_prompt";
-		if (open.principal !== from.id) return "forbidden";
+		if (open.principal !== from.principalId) return "forbidden";
 		if (open.minTier && !atLeast(from.tier, open.minTier)) return "forbidden";
 		open.settle(approved ? "approved" : "declined");
 		return undefined;
@@ -116,7 +116,7 @@ export class PromptDesk {
 	): ErrorCode | undefined {
 		const open = this.#open.get(prompt);
 		if (open?.frame.kind !== "ask") return "unknown_prompt";
-		if (open.principal !== from.id) return "forbidden";
+		if (open.principal !== from.principalId) return "forbidden";
 		if (!fits(open.frame, answer)) return "bad_frame";
 		open.settle("answered", answer);
 		return undefined;

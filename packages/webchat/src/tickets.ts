@@ -14,6 +14,7 @@ export interface TicketBookOptions {
 }
 
 interface Held {
+	principalId: string;
 	identity: WebIdentity;
 	expiresAt: number;
 }
@@ -40,10 +41,13 @@ export class TicketBook {
 		this.#now = options.now ?? Date.now;
 	}
 
-	issue(identity: WebIdentity): { ticket: string; expiresAt: Date } {
+	issue(
+		identity: WebIdentity,
+		principalId: string,
+	): { ticket: string; expiresAt: Date } {
 		const now = this.#now();
 		this.#sweep(now);
-		const mine = this.#byPerson.get(identity.id) ?? new Set<string>();
+		const mine = this.#byPerson.get(principalId) ?? new Set<string>();
 		for (const oldest of mine) {
 			if (mine.size < this.#perPrincipal) break;
 			this.#drop(oldest);
@@ -57,27 +61,31 @@ export class TicketBook {
 			crypto.getRandomValues(new Uint8Array(32)),
 		).toString("base64url");
 		const expiresAt = Math.min(now + this.#ttlMs, identity.expiresAt.getTime());
-		this.#held.set(ticket, { identity, expiresAt });
+		this.#held.set(ticket, { identity, principalId, expiresAt });
 		mine.add(ticket);
-		this.#byPerson.set(identity.id, mine);
+		this.#byPerson.set(principalId, mine);
 		return { ticket, expiresAt: new Date(expiresAt) };
 	}
 
 	/** The person the ticket was issued to, once; undefined for a spent, old, or unknown ticket. */
-	redeem(ticket: string): WebIdentity | undefined {
+	redeem(
+		ticket: string,
+	): { identity: WebIdentity; principalId: string } | undefined {
 		const held = this.#held.get(ticket);
 		if (!held) return undefined;
 		this.#drop(ticket);
-		return held.expiresAt >= this.#now() ? held.identity : undefined;
+		return held.expiresAt >= this.#now()
+			? { identity: held.identity, principalId: held.principalId }
+			: undefined;
 	}
 
 	#drop(ticket: string): void {
 		const held = this.#held.get(ticket);
 		if (!held) return;
 		this.#held.delete(ticket);
-		const mine = this.#byPerson.get(held.identity.id);
+		const mine = this.#byPerson.get(held.principalId);
 		mine?.delete(ticket);
-		if (mine?.size === 0) this.#byPerson.delete(held.identity.id);
+		if (mine?.size === 0) this.#byPerson.delete(held.principalId);
 	}
 
 	#sweep(now: number): void {

@@ -35,7 +35,7 @@ export class Connections {
 
 	/** Takes a place for an upgrade that is about to open; false when the person holds every place. */
 	reserve(connection: Connection): boolean {
-		const id = connection.identity.id;
+		const id = connection.speaker.principalId;
 		const held = this.#held.get(id) ?? 0;
 		if (held >= this.#perPrincipal) return false;
 		this.#held.set(id, held + 1);
@@ -53,7 +53,7 @@ export class Connections {
 		clearTimeout(connection.pending);
 		connection.pending = undefined;
 		connection.socket = socket;
-		const id = connection.identity.id;
+		const id = connection.speaker.principalId;
 		const set = this.#byPrincipal.get(id) ?? new Set();
 		set.add(connection);
 		this.#byPrincipal.set(id, set);
@@ -63,7 +63,7 @@ export class Connections {
 	closed(connection: Connection): void {
 		for (const timer of connection.timers) clearTimeout(timer);
 		connection.timers = [];
-		const id = connection.identity.id;
+		const id = connection.speaker.principalId;
 		const set = this.#byPrincipal.get(id);
 		set?.delete(connection);
 		if (set?.size === 0) this.#byPrincipal.delete(id);
@@ -75,7 +75,7 @@ export class Connections {
 		connection.pending = undefined;
 		if (!connection.holding) return;
 		connection.holding = false;
-		const id = connection.identity.id;
+		const id = connection.speaker.principalId;
 		const held = (this.#held.get(id) ?? 1) - 1;
 		if (held > 0) this.#held.set(id, held);
 		else this.#held.delete(id);

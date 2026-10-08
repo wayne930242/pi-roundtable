@@ -143,7 +143,10 @@ describeDb("a host whose only surface is the web chat", () => {
 		const { options, plugins } = await defineRoundtable(
 			{
 				name: "Helpdesk",
-				owner: { id: "operator", name: "Operator" },
+				access: {
+					owners: [{ principal: "operator", name: "Operator" }],
+					members: { roles: ["web:role:Chat.User"] },
+				},
 				database: { url: testDatabaseUrl },
 				dataDir,
 				model: "faux/faux-1",
@@ -158,7 +161,6 @@ describeDb("a host whose only surface is the web chat", () => {
 							issuers: [idp.issuer],
 							audiences: [idp.audience],
 						}),
-						access: { members: { roles: ["Chat.User"] } },
 						origins: [ORIGIN],
 						personas: [
 							{
@@ -313,7 +315,10 @@ describeDb("a host whose only surface is the web chat", () => {
 		expect(record).toMatchObject({
 			kind: "helpdesk",
 			visibility: "private",
-			principalId: oidcSpeakerId(idp.issuer, adaSub),
+			principalId:
+				ada.frames[0]?.type === "ready"
+					? ada.frames[0].speaker.principalId
+					: "missing",
 			title: "Send the team a note",
 		});
 		const listed = (await (await api("conversations", { token })).json()) as {
@@ -340,10 +345,15 @@ describeDb("a host whose only surface is the web chat", () => {
 		await eve.until(
 			(f) => f.filter((frame) => frame.type === "error").length >= 2,
 		);
-		expect(eve.frames.filter((frame) => frame.type === "error")).toEqual([
-			{ type: "error", code: "forbidden", ref: "e1" },
-			{ type: "error", code: "forbidden" },
-		]);
+		// Independent ownership checks can complete in either order; both refusals must arrive.
+		const refused = eve.frames.filter((frame) => frame.type === "error");
+		expect(refused).toHaveLength(2);
+		expect(refused).toEqual(
+			expect.arrayContaining([
+				{ type: "error", code: "forbidden", ref: "e1" },
+				{ type: "error", code: "forbidden" },
+			]),
+		);
 		expect(eve.frames.some((frame) => frame.type === "reply")).toBe(false);
 		expect(
 			(await api(`conversations/${conversation}/messages`, { token: eveToken }))
@@ -449,14 +459,17 @@ describeDb("a host whose only surface is the web chat", () => {
 describeDb(
 	"a web chat host told to report its errors to a web conversation",
 	() => {
-		test("does not start, naming ops.conversation: the web chat takes no report turns", async () => {
+		test("starts with a background-capable webchat claim (system reports still cannot enter a person's private conversation)", async () => {
 			const issuer = await testIssuer();
 			const dir = mkdtempSync(join(tmpdir(), "webchat-ops-"));
 			try {
 				const { options, plugins } = await defineRoundtable(
 					{
 						name: "Helpdesk",
-						owner: { id: "operator", name: "Operator" },
+						access: {
+							owners: [{ principal: "operator", name: "Operator" }],
+							members: { roles: ["web:role:Chat.User"] },
+						},
 						database: { url: testDatabaseUrl },
 						dataDir: dir,
 						model: "faux/faux-1",
@@ -471,7 +484,6 @@ describeDb(
 									issuers: [issuer.issuer],
 									audiences: [issuer.audience],
 								}),
-								access: { members: { roles: ["Chat.User"] } },
 								origins: [ORIGIN],
 								personas: [
 									{
@@ -492,7 +504,7 @@ describeDb(
 					},
 				);
 				const host = new Roundtable(options, plugins);
-				await expect(host.run()).rejects.toThrow("config ops.conversation:");
+				await expect(host.run()).resolves.toBeUndefined();
 				await host.shutdown("test");
 			} finally {
 				await issuer.close();

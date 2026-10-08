@@ -119,7 +119,7 @@ export class WebSurface implements ChatSurface {
 	prompts(channel: ChannelKey, scope?: PromptScope): Prompts | undefined {
 		if (!scope) return undefined;
 		const { principal, conversation } = this.#to(channel);
-		if (scope.speakerId !== principal) return undefined;
+		if (scope.principalId !== principal) return undefined;
 		return this.#options.prompts.prompts(conversation, scope);
 	}
 

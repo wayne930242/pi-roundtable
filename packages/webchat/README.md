@@ -8,11 +8,12 @@ Source lives in [`packages/webchat`][source] in the pi-roundtable repository and
 [roundtable]: https://www.npmjs.com/package/pi-roundtable
 [source]: https://github.com/wayne930242/pi-roundtable/tree/master/packages/webchat
 
-The plugin adds three things to a host:
+The plugin adds four things to a host:
 
 - a chat surface whose conversations have keys `web:<conversation>`;
 - the claim that runs each message as a turn of its conversation's persona, through `context.turns` and the host's runtime;
-- a REST API and a WebSocket under one path of the host's HTTP listener.
+- a REST API and a WebSocket under one path of the host's HTTP listener;
+- a durable private inbox for `notify`, with live `notice` frames and an authenticated REST inbox.
 
 It needs no Discord: a host whose `roundtable.config.ts` has no `discord` key and lists this plugin is a web-only assistant.
 `roundtable init --adapter web` creates such a project.
@@ -35,7 +36,11 @@ import type { RoundtableConfig } from "pi-roundtable";
 import { oidcJwtVerifier, webChat } from "pi-roundtable-webchat";
 
 export default {
-	owner: { id: "operator", name: "Ada" },
+	access: {
+		owners: [{ principal: "operator", name: "Ada" }],
+		admins: { roles: ["web:role:Helpdesk.Admin"] },
+		members: { roles: ["web:role:Helpdesk.User"] },
+	},
 	database: { url: process.env.DATABASE_URL ?? "" },
 	dataDir: "./data",
 	model: "anthropic/claude-sonnet-5-5",
@@ -47,10 +52,6 @@ export default {
 				issuers: ["https://login.example.com/"],
 				audiences: ["api://helpdesk"],
 			}),
-			access: {
-				admins: { roles: ["Helpdesk.Admin"] },
-				members: { roles: ["Helpdesk.User"] },
-			},
 			origins: ["https://chat.example.com"],
 			personas: [
 				{
@@ -71,7 +72,6 @@ Every mistake in these options throws when the configuration loads, so `roundtab
 | Option | What it sets |
 |---|---|
 | `verifier` | Checks each bearer token and names the person: `oidcJwtVerifier({ ... })`, or your own `TokenVerifier`. |
-| `access` | Who may chat, and at which tier: a `WebAccessMap`, or `webAccess(map)`. |
 | `personas` | The conversation kinds a person may open (`WebPersona`). |
 | `origins` | Required. The browser origins allowed to open the socket and call the API, each exactly `scheme://host[:port]`, such as `https://chat.example.com` or `chrome-extension://<id>`. `"any"` admits every origin, for clients that are not browsers; never use it where a browser holds the token. |
 | `listener` | The configured listener the route attaches to; default `public`, the one `http` names. |
@@ -85,16 +85,25 @@ A `WebPersona` is `{ kind, label?, prompt?, minTier?, selection? }`.
 `prompt()` is the system prompt of its conversations, contributed by this plugin; leave it out when another plugin contributes the persona of that kind.
 `minTier` (default `member`) is the lowest tier that may see and open it; a person whose tier falls below it later can no longer write in its conversations.
 `selection` (`{ tools, groups }`) names the tools its turns get; without it a turn gets the plugins' `agentSelection`, which grows with every plugin you add, so name the tools.
-Leave out `schedule_*` and `delegate_task` (see [what it does not do yet](#what-it-does-not-do-yet)), and `web_search` and `fetch_content` unless people may make the server fetch any address, internal ones included: they are member-tier tools, and a plugin that loads pi-web-access, such as one `roundtable add package pi-web-access` writes, adds them to `agentSelection`.
+Schedules and delegated reports can run in the person's private web conversation, even after reconnect or restart.
+Include their tools in `selection` only where intended: scheduling and delegation default to admin tier, and `notify` defaults to owner tier; top-level `toolTiers` can lower them deliberately.
+Leave out `web_search` and `fetch_content` unless people may make the server fetch any address, internal ones included: they are member-tier tools, and a plugin that loads pi-web-access adds them to `agentSelection`.
 The kinds `owner` and `agent` belong to the host and are refused.
 
 ### Access
 
-A `WebAccessMap` is `{ owners?, admins?, members? }`.
-`admins` and `members` name people by `users` (speaker ids), by `roles` (the names in the token's roles claim), or `everyone` the verifier accepts, guest accounts included; the highest tier a person qualifies for wins.
-`owners` is a list of speaker ids only: no claim a provider issues can make anyone the owner.
-A person the map gives no tier is not admitted: no ticket, no socket, no conversation, no turn.
-A map that admits no one throws.
+Use the host's top-level `access`, not a `webChat` option.
+The removed `webChat({ access })` option fails at configuration load with migration guidance; `WebAccessMap` and `webAccess` are removed too.
+Token roles become `web:role:<role>` (or `<surface>:role:<role>` for a custom surface), and identities are written as `oidcSpeakerId(issuer, subject)`.
+Replace old `users` rules with `identities`, and old web owners with `access.owners: [{ name, principal?, identities: [oidcSpeakerId(...)] }]`.
+No IdP role can create an owner.
+A person the core policy gives no tier is not admitted: no ticket, no socket, no conversation, no turn.
+
+Each successful contact resolves through `IDENTITY`.
+An admitted new person gets an opaque `p_` principal; existing M1 users claim their backfilled OIDC principal and keep their private conversations without rewriting them.
+Ownership, limits, tickets, approvals and connection groups use `principalId`, not the external actor id.
+Link another identity with `roundtable principal link <principal> <identity>` to share memory across Discord and web; the CLI reports the host's cache delay.
+A fresh token may name another linked actor of the same principal, but a changed principal closes the socket with 4403.
 
 ### `oidcJwtVerifier`
 
@@ -116,7 +125,9 @@ A map that admits no one throws.
 It checks the signature, `iss`, `aud`, `exp` (required), and `nbf`, then a scope or roles and no app-only token, then the subject claim and `check`.
 A refused token throws `TokenRefused`, whose `reason` goes to the host's log and never to the client.
 The speaker id of a person is `oidc:<base64url(issuer)>:<subject>`: `oidcSpeakerId(issuer, subject)` makes it, and `parseOidcSpeakerId(id)` turns it back into the pair.
-Use it to name owners in the access map.
+Use it in the host's `access.owners[].identities` or with `roundtable principal link`.
+The verifier also reports `ActorFacts` with the canonical OIDC provider, subject, name, prefixed roles and legacy id.
+A custom verifier may supply `WebIdentity.actor`; otherwise the chat derives these facts from its id.
 
 ### Provider settings
 
@@ -151,7 +162,7 @@ The token is never read from a URL.
 - **Another client**, such as a service, sends `Authorization: Bearer <token>` on the upgrade and offers `roundtable.webchat.v1`.
 
 The server echoes `roundtable.webchat.v1`.
-An upgrade from an origin not in `origins`, or without one, is refused with 403; without a valid ticket or token with 401; for a person the access map does not admit with 403; past the person's connection limit with 429.
+An upgrade from an origin not in `origins`, or without one, is refused with 403; without a valid ticket or token with 401; for a person the core policy does not admit with 403; past the person's connection limit with 429.
 
 ```js
 const { ticket } = await (
@@ -187,7 +198,7 @@ The TypeScript types are `ClientFrame` and `ServerFrame`.
 
 | Frame | Meaning |
 |---|---|
-| `{ type: "ready", protocol, speaker, personas, expiresAt }` | Sent first, and again after a fresh token: who you are (`{ id, name, tier }`), the personas you may open (`{ kind, label }`), and when the token expires. Open prompts follow it. |
+| `{ type: "ready", protocol, speaker, personas, expiresAt }` | Sent first, and again after a fresh token: who you are (`{ id, name, tier, principalId }`), the personas you may open (`{ kind, label }`), and when the token expires. Open prompts follow it. |
 | `{ type: "accepted", id, conversation }` | Your message `id` was taken into `conversation`, a new one when you named none. |
 | `{ type: "typing", conversation, on }` | The assistant is, or is no longer, working in the conversation. |
 | `{ type: "stoppable", conversation, on }` | A stop applies, or no longer applies. |
@@ -196,6 +207,7 @@ The TypeScript types are `ClientFrame` and `ServerFrame`.
 | `{ type: "failed", conversation, stopped }` | The turn ended without an answer: it failed, the host refused it before it ran (for example when its conversation could not be recorded), or it was stopped. The cause stays in the host's log. |
 | `{ type: "prompt", conversation, prompt }` | The turn asks you: `{ id, kind: "approval", title, message }`, or `{ id, kind: "ask", title, question, options, multi, allowOther }`. |
 | `{ type: "prompt_closed", conversation, prompt, outcome }` | The prompt closed: `approved`, `declined`, `answered`, `expired`, or `cancelled` (the turn stopped). |
+| `{ type: "notice", notice: { id, text, createdAt, readAt } }` | A durable private inbox entry; `readAt` is `null` until read. Fetch the REST inbox to recover entries missed while offline. |
 | `{ type: "reauth", expiresAt }` | Your token expires soon: send `auth` with a fresh one. |
 | `{ type: "error", code, ref? }` | A frame was refused. `ref` is the `send` id or prompt id it was about. |
 
@@ -206,7 +218,7 @@ The host's own limits close with `1008` (too many frames), `1009` (a frame too b
 
 ## REST API
 
-Every call sends `Authorization: Bearer <token>`; a missing or refused token gets 401 with `WWW-Authenticate: Bearer`, and a person the access map does not admit 403.
+Every call sends `Authorization: Bearer <token>`; a missing or refused token gets 401 with `WWW-Authenticate: Bearer`, and a person the core policy does not admit 403.
 A request from a browser origin not in `origins` gets 403; an allowed origin gets CORS headers and its preflight is answered.
 
 | Call | Answer |
@@ -215,23 +227,26 @@ A request from a browser origin not in `origins` gets 403; an allowed origin get
 | `GET <path>/conversations` | `{ conversations: [{ conversation, persona, title?, createdAt, lastActiveAt }] }`: your own, the most recently active first. |
 | `POST <path>/conversations` with `{ persona, title? }` | 201 `{ conversation, persona }`: a new conversation to write in. 429 `too_many_conversations` past either conversation limit. |
 | `GET <path>/conversations/<conversation>/messages?limit=50` | `{ messages: [{ role, text }] }`: its last messages, at most 500. Someone else's conversation is 403. |
+| `GET <path>/notices?limit=50&before=<id>` | `{ notices: [{ id, text, createdAt, readAt }] }`: only your principal's entries, newest first, at most 500. Omit `before` for the first page; use its last id to fetch the next. |
+| `POST <path>/notices/<id>/read` | `{ notice }` with `readAt` set. Idempotent; unknown ids or another principal's notice return 404. |
 
 ## Security model
 
 - **Private conversations.** A conversation belongs to the person who opened it.
-  The host's conversation registry records its person at its first turn, and the claim checks that record inside the conversation's queue before every turn; only that person may list it, read it, write in it, stop it, or answer its prompts.
+  The host's conversation registry records its principal before runtime use, including transcript reads, and the claim checks that record inside the conversation's queue before every turn; only that person may list it, read it, write in it, stop it, or answer its prompts.
   Conversation ids are random UUIDs, and the claim runs only messages this plugin accepted from a verified socket.
   The owner can still read every conversation through the owner console, pi-roundtable-web, and the operator through the database and the data directory.
 - **Tokens.** Tokens are checked on every REST call, every upgrade, and every `auth` frame, and never read from a URL.
   By default only a person's access token passes: one without a scope or app roles, or an app-only one, is refused.
   A socket is closed when its token expires.
+  Every valid client frame rechecks the stored verified facts against core identity: revoked admission or a changed principal closes with 4403, and approvals use the current tier, subject to the core's identity-cache delay.
 - **Origins.** `origins` is required and checked on every upgrade and every browser request, so another site cannot open a socket or call the API with a browser's credentials.
 - **Limits.** Each person holds at most `connectionsPerPrincipal` sockets, and the route at most `maxConnections`; frames are limited in size and rate.
   Each person has at most `turnsPerPrincipal` turns running or queued at once, however many conversations or sockets they use, and a conversation at most its running turn and one queued behind it, so one account cannot spend a shared model subscription on many turns at once; a message over either limit is refused with `busy` and never queued.
   Each person opens at most `newConversationsPerHour` conversations an hour, over the socket or the REST API alike.
 - **Approvals.** A held call's card goes to the conversation's person only, and needs the tier the call needs.
   A card whose tier the person lacks is never shown, so the call stays held.
-- **Owner.** Nobody becomes the owner through a token's claims; list owners by speaker id.
+- **Owner.** Nobody becomes the owner through a token's claims; grant owner in core configuration or the principal CLI.
   Owner-tier tools stay out of web turns unless an owner is chatting.
 
 ## Limits
@@ -254,10 +269,9 @@ A request from a browser origin not in `origins` gets 403; an allowed origin get
 ## What it does not do yet
 
 - Attachments: messages carry text only.
-- Schedules and delegated reports: the claim takes no background turns, so a schedule or a report aimed at a web conversation is skipped. Leave the `schedule_*` and `delegate_task` tools out of a web persona's `selection`.
-- Error reports: `ops: { conversation: "web:<id>" }` stops the host at startup with a `config ops.conversation` error, since the surface posts only to a conversation a signed-in person opened and the claim takes no background turns. Report errors to another surface's conversation, or to an agent with Discord.
+- System error reports into a person's web conversation: the background claim accepts only `PERSONAL_TARGET` turns checked by core, whose author principal is the private conversation's principal.
+  A system report cannot enter someone else's private conversation; configure ops reports on another surface.
 - Agent teams: the web chat has no agent rooms.
-- A person signed in on two providers, or on Discord and the web, has two speaker ids, and so two memories, until principals arrive in pi-roundtable 0.9.
 
 ## Testing
 

@@ -15,8 +15,16 @@ const list = (name: string): string[] =>
 export default {
 	name: "Roundtable",
 	// The operator who runs this host, as the host's owner. People sign in through your OpenID
-	// Connect provider instead, and the web chat's access below decides their tier.
-	access: { owners: [{ name: env("OWNER_NAME"), principal: "operator" }] },
+	// Connect provider instead; core access maps their verified, surface-prefixed roles to tiers.
+	access: {
+		owners: [{ name: env("OWNER_NAME"), principal: "operator" }],
+		members: {
+			roles: list("CHAT_MEMBER_ROLES").map((role) => `web:role:${role}`),
+		},
+		admins: {
+			roles: list("CHAT_ADMIN_ROLES").map((role) => `web:role:${role}`),
+		},
+	},
 	database: { url: env("DATABASE_URL") },
 	// Paths are relative to the project directory, where the roundtable command runs.
 	dataDir: "./data",
@@ -34,20 +42,15 @@ export default {
 				issuers: [env("OIDC_ISSUER")],
 				audiences: [env("OIDC_AUDIENCE")],
 			}),
-			// Members and admins come from the token's roles; owners only from speaker ids you list.
-			access: {
-				members: { roles: list("CHAT_MEMBER_ROLES") },
-				admins: { roles: list("CHAT_ADMIN_ROLES") },
-			},
 			origins: list("CHAT_ORIGINS"),
 			personas: [
 				{
 					kind: "assistant",
 					label: "Assistant",
 					prompt: () => readFileSync("./persona/assistant.md", "utf8"),
-					// The tools of its turns, by name. Leave out schedule_* and delegate_task, which a web
-					// conversation cannot hear back from, and web_search and fetch_content unless people
-					// may make this server fetch any address, internal ones included.
+					// The tools of its turns, by name. Schedules, delegated reports and notify can reach
+					// this private conversation; add those tools only where intended and permitted by tier.
+					// Leave out web_search and fetch_content unless people may make the server fetch any address.
 					selection: { tools: ["hello_greet"], groups: [] },
 				},
 			],

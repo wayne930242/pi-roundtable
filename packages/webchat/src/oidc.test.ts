@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import {
+	identityActor,
 	oidcJwtVerifier,
 	oidcSpeakerId,
 	parseOidcSpeakerId,
@@ -50,6 +51,19 @@ test("a valid token names the person by issuer and subject, with their name, rol
 	expect(identity.id).toBe(oidcSpeakerId(idp.issuer, "subject-1"));
 	expect(identity.name).toBe("Ada");
 	expect(identity.roles).toEqual(["Chat.User"]);
+	expect(identity.actor).toEqual({
+		provider: `oidc:${Buffer.from(idp.issuer).toString("base64url")}`,
+		subject: "subject-1",
+		name: "Ada",
+		surface: "web",
+		roles: ["web:role:Chat.User"],
+		legacyId: identity.id,
+	});
+	expect(identityActor(identity, "support")).toMatchObject({
+		surface: "support",
+		roles: ["support:role:Chat.User"],
+		legacyId: identity.id,
+	});
 	expect(identity.expiresAt.getTime()).toBeGreaterThan(Date.now());
 });
 

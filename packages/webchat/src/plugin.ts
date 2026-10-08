@@ -2,13 +2,13 @@ import {
 	CONVERSATIONS,
 	definePlugin,
 	type HttpRoute,
+	IDENTITY,
 	type PluginContext,
 	type RoundtablePlugin,
 	RUNTIME,
 	type WebSocketAccept,
 	type WebSocketRoute,
 } from "pi-roundtable";
-import { type WebAccess, type WebAccessMap, webAccess } from "./access.ts";
 import {
 	type Admitted,
 	checkPersonas,
@@ -18,6 +18,8 @@ import {
 	type WebPersona,
 } from "./chat.ts";
 import type { Connection } from "./connections.ts";
+import { webDirectChannel } from "./direct-channel.ts";
+import { PgNotices } from "./notices.ts";
 import { TokenRefused, type TokenVerifier } from "./oidc.ts";
 import { TICKET_PROTOCOL_PREFIX, WEBCHAT_PROTOCOL } from "./protocol.ts";
 import { restHandler } from "./rest.ts";
@@ -40,8 +42,6 @@ export interface WebChatRouteLimits {
 export interface WebChatOptions {
 	/** Checks each bearer token, such as `oidcJwtVerifier({ ... })`. */
 	verifier: TokenVerifier;
-	/** Who may chat and at which tier: an access map, or `webAccess(map)`. */
-	access: WebAccessMap | WebAccess;
 	/** The conversation kinds a person may open. */
 	personas: readonly WebPersona[];
 	/**
@@ -75,13 +75,14 @@ const DEFAULT_LIMITS: WebChatLimits & WebChatRouteLimits = {
 	ticketTtlMs: 30_000,
 };
 
-const isAccess = (access: WebAccessMap | WebAccess): access is WebAccess =>
-	typeof (access as WebAccess).tierOf === "function";
-
 function checkOptions(options: WebChatOptions): {
 	path: string;
 	surface: string;
 } {
+	if ("access" in options)
+		throw new Error(
+			'webChat: access was removed; use top-level access on RoundtableConfig: members/admins roles become "web:role:<role>", users become identities, and owners become access.owners[].identities.',
+		);
 	const path = options.path ?? "/chat";
 	if (!/^\/[A-Za-z0-9._~/-]*[A-Za-z0-9._~-]$/.test(path))
 		throw new Error(
@@ -119,19 +120,17 @@ function offered(request: Request): string[] {
 export function webChat(options: WebChatOptions): RoundtablePlugin {
 	const { path, surface } = checkOptions(options);
 	const limits = { ...DEFAULT_LIMITS, ...options.limits };
-	const access = isAccess(options.access)
-		? options.access
-		: webAccess(options.access);
 	// The personas are checked now, so a broken list stops the configuration rather than the boot.
 	checkPersonas(options.personas);
 	return definePlugin({
 		name: surface === "web" ? "webchat" : `webchat-${surface}`,
-		requires: [CONVERSATIONS, RUNTIME],
+		requires: [IDENTITY, CONVERSATIONS, RUNTIME],
+		migrations: [PgNotices.migration],
 		setup: (context: PluginContext) => {
 			const chat = new WebChat({
 				surface,
 				verifier: options.verifier,
-				access,
+				identity: () => context.services.get(IDENTITY),
 				personas: options.personas,
 				limits,
 				logger: context.logger,
@@ -145,8 +144,10 @@ export function webChat(options: WebChatOptions): RoundtablePlugin {
 				ttlMs: limits.ticketTtlMs,
 				perPrincipal: limits.connectionsPerPrincipal,
 			});
+			const notices = new PgNotices(context.database());
 			const rest = restHandler({
 				chat,
+				notices,
 				tickets,
 				path,
 				origins: options.origins,
@@ -172,9 +173,11 @@ export function webChat(options: WebChatOptions): RoundtablePlugin {
 				try {
 					if (token) admitted = await chat.admit(token);
 					else if (ticket) {
-						const identity = tickets.redeem(ticket);
-						if (!identity) return refuse(401, "Unauthorized");
-						admitted = chat.admitIdentity(identity);
+						const held = tickets.redeem(ticket);
+						if (!held) return refuse(401, "Unauthorized");
+						admitted = await chat.admitIdentity(held.identity);
+						if (admitted.speaker.principalId !== held.principalId)
+							return refuse(403, "Forbidden");
 					} else return refuse(401, "Unauthorized");
 				} catch (error) {
 					if (error instanceof TokenRefused) {
@@ -216,6 +219,14 @@ export function webChat(options: WebChatOptions): RoundtablePlugin {
 			return {
 				surfaces: [chat.surface],
 				channels: [chat.claim()],
+				directChannels: [
+					webDirectChannel({
+						chat,
+						notices,
+						identity: () => context.services.get(IDENTITY),
+						registry: () => context.services.get(CONVERSATIONS),
+					}),
+				],
 				personas: chat.contributedPersonas,
 				http: [route],
 			};

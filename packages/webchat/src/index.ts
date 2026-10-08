@@ -1,12 +1,12 @@
-export type { WebAccess, WebAccessMap, WebTierMembers } from "./access.ts";
-export { webAccess } from "./access.ts";
 export type { WebChatLimits, WebPersona } from "./chat.ts";
+export type { Notice } from "./notices.ts";
 export type {
 	OidcJwtVerifierOptions,
 	TokenVerifier,
 	WebIdentity,
 } from "./oidc.ts";
 export {
+	identityActor,
 	oidcJwtVerifier,
 	oidcSpeakerId,
 	parseOidcSpeakerId,

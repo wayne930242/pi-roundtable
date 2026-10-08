@@ -28,7 +28,7 @@ async function linked(answer = "done") {
 				kind: input.kind,
 				visibility: input.conversation?.visibility ?? "shared",
 				...(input.conversation?.visibility === "private"
-					? { principalId: input.speaker.id }
+					? { principalId: input.speaker.principalId }
 					: {}),
 				...(input.conversation?.title
 					? { title: input.conversation.title }
@@ -44,7 +44,10 @@ async function linked(answer = "done") {
 	const claim = harness.chat.claim();
 	const runs: Promise<void>[] = [];
 	await harness.chat.surface.start((message: InboundMessage) => {
-		const admission = claim.admit(message);
+		const admission = claim.admit({
+			...message,
+			speaker: speakerOf(message.authorId),
+		});
 		if (admission?.kind === "turn") runs.push(admission.run());
 	});
 	const settled = async () => {
@@ -98,7 +101,10 @@ test("a turn the host refuses before it runs, such as one whose conversation can
 	const claim = chat.claim();
 	const runs: Promise<void>[] = [];
 	await chat.surface.start((message: InboundMessage) => {
-		const admission = claim.admit(message);
+		const admission = claim.admit({
+			...message,
+			speaker: speakerOf(message.authorId),
+		});
 		if (admission?.kind === "turn") runs.push(admission.run());
 	});
 	const ada = connect("ada");
@@ -356,7 +362,7 @@ test("a question takes only an answer it allows, and an open prompt is sent agai
 
 test("a token valid for longer than a timer can wait keeps its connection open", async () => {
 	const { chat } = await linked();
-	const lasting = chat.admitIdentity(identity("ada", ["User"]));
+	const lasting = await chat.admitIdentity(identity("ada", ["User"]));
 	lasting.identity.expiresAt = new Date(Date.now() + 40 * 24 * 3_600_000);
 	const connection = { ...lasting, timers: [] };
 	chat.connections.reserve(connection);
@@ -380,7 +386,7 @@ test("a fresh token renews the connection; one for someone else, or none in time
 	await verifying.say(ada, { type: "auth", token: "eve" });
 	expect(ada.closed?.code).toBe(CLOSE_CODES.notAdmitted);
 	// A connection whose token lapses is closed with 4401 after a reauth request.
-	const lapsing = admit("ada");
+	const lapsing = await admit("ada");
 	lapsing.identity.expiresAt = new Date(Date.now() + 50);
 	const connection = { ...lapsing, timers: [] };
 	chat.connections.reserve(connection);
@@ -406,7 +412,7 @@ async function gated(
 				key: input.channel,
 				kind: input.kind,
 				visibility: "private",
-				principalId: input.speaker.id,
+				principalId: input.speaker.principalId,
 			});
 			await open.promise;
 			if (options.fail) throw new Error("the model is down");
@@ -423,7 +429,10 @@ async function gated(
 	const runs: Promise<void>[] = [];
 	const start = () =>
 		harness.chat.surface.start((message: InboundMessage) => {
-			const admission = claim.admit(message);
+			const admission = claim.admit({
+				...message,
+				speaker: speakerOf(message.authorId),
+			});
 			if (admission?.kind === "turn")
 				runs.push(admission.run().catch(() => undefined));
 		});
@@ -571,7 +580,10 @@ test("a failed turn, a dropped message, and a refused delivery free their place"
 	const routed = await gated({ turnsPerPrincipal: 1 }, { start: false });
 	const routedClaim = routed.chat.claim();
 	await routed.chat.surface.start((message) => {
-		const admission = routedClaim.admit(message);
+		const admission = routedClaim.admit({
+			...message,
+			speaker: speakerOf(message.authorId),
+		});
 		if (admission?.kind === "turn") admission.dropped?.();
 	});
 	const cy = routed.connect("cy");
@@ -584,7 +596,10 @@ test("a message the router drops after it was accepted tells its person it faile
 	const routed = await gated({}, { start: false });
 	const claim = routed.chat.claim();
 	await routed.chat.surface.start((message) => {
-		const admission = claim.admit(message);
+		const admission = claim.admit({
+			...message,
+			speaker: speakerOf(message.authorId),
+		});
 		if (admission?.kind === "turn") admission.dropped?.();
 	});
 	const cy = routed.connect("cy");

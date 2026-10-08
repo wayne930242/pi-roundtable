@@ -3,13 +3,13 @@ import type {
 	ConversationPort,
 	ConversationRecord,
 	ConversationRegistry,
+	IdentityService,
 	RouteSocket,
 	Speaker,
 	Tier,
 	WebSocketSendResult,
 } from "pi-roundtable";
 import { partial, silentLogger } from "pi-roundtable/testing";
-import { webAccess } from "../access.ts";
 import { WebChat, type WebChatDeps, type WebChatLimits } from "../chat.ts";
 import type { Connection } from "../connections.ts";
 import type { WebIdentity } from "../oidc.ts";
@@ -74,7 +74,13 @@ export function fakeSocket(connection: Connection): FakeSocket {
 		data: connection,
 		frames,
 		send: (message): WebSocketSendResult => {
-			frames.push(JSON.parse(String(message)) as ServerFrame);
+			try {
+				frames.push(JSON.parse(String(message)) as ServerFrame);
+			} catch (error) {
+				throw new Error("the adapter sent invalid JSON to the test socket", {
+					cause: error,
+				});
+			}
 			return "sent";
 		},
 		close: (code, reason) => {
@@ -111,16 +117,34 @@ export const TEST_LIMITS: WebChatLimits = {
 export function testChat(overrides: Partial<WebChatDeps> = {}) {
 	const registry = memoryRegistry();
 	const stopped: ChannelKey[] = [];
+	const principals = new Map<string, string>();
 	const chat = new WebChat({
 		surface: "web",
 		verifier: async () => {
 			throw new Error("no tokens in this test");
 		},
-		access: webAccess({
-			owners: ["boss"],
-			admins: { roles: ["Admin"] },
-			members: { roles: ["User"] },
-		}),
+		identity: () =>
+			partial<IdentityService>({
+				resolve: async (facts) => {
+					const id = facts.legacyId ?? facts.subject;
+					const tier =
+						id === "boss"
+							? "owner"
+							: facts.roles?.includes("web:role:Admin")
+								? "admin"
+								: facts.roles?.includes("web:role:User")
+									? "member"
+									: undefined;
+					return tier
+						? {
+								id,
+								name: facts.name,
+								tier,
+								principalId: principals.get(id) ?? id,
+							}
+						: undefined;
+				},
+			}),
 		personas: [
 			{ kind: "helper", label: "Helper", prompt: () => "Help." },
 			{ kind: "ops", minTier: "admin" },
@@ -140,8 +164,18 @@ export function testChat(overrides: Partial<WebChatDeps> = {}) {
 		...overrides,
 	});
 	/** Connects a person: an authenticated socket, opened and greeted. */
-	const connect = (id: string, roles: string[] = ["User"]) => {
-		const admitted = chat.admitIdentity(identity(id, roles));
+	const connect = (
+		id: string,
+		roles: string[] = ["User"],
+		principalId = id,
+	) => {
+		const tier =
+			id === "boss" ? "owner" : roles.includes("Admin") ? "admin" : "member";
+		principals.set(id, principalId);
+		const admitted = {
+			identity: identity(id, roles),
+			speaker: { ...speakerOf(id, tier), principalId },
+		};
 		const connection: Connection = { ...admitted, timers: [] };
 		if (!chat.connections.reserve(connection))
 			throw new Error(`${id} holds every connection`);

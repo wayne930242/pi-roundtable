@@ -5,9 +5,12 @@ import {
 	type JWTVerifyGetKey,
 	jwtVerify,
 } from "jose";
+import type { ActorFacts } from "pi-roundtable";
 
 /** Who a verified token names, and until when it may be trusted. */
 export interface WebIdentity {
+	/** Verified actor facts for the core identity service; custom verifiers may supply their own provider. */
+	actor?: ActorFacts;
 	/** The speaker id: reversible and unique across issuers, such as `oidc:<base64url(issuer)>:<sub>`. */
 	id: string;
 	/** How the person is shown, from the token's name claim. */
@@ -57,6 +60,26 @@ export function parseOidcSpeakerId(
 	// A round trip that does not give the same text back was not base64url of an issuer.
 	if (Buffer.from(issuer).toString("base64url") !== encoded) return undefined;
 	return { issuer, subject };
+}
+
+/** Core facts for a verified identity, with roles scoped to this chat's surface. */
+export function identityActor(
+	identity: WebIdentity,
+	surface = "web",
+): ActorFacts {
+	const oidc = parseOidcSpeakerId(identity.id);
+	return {
+		...(identity.actor ?? {
+			provider: oidc
+				? `oidc:${Buffer.from(oidc.issuer).toString("base64url")}`
+				: surface,
+			subject: oidc?.subject ?? identity.id,
+			legacyId: identity.id,
+		}),
+		name: identity.name,
+		surface,
+		roles: identity.roles.map((role) => `${surface}:role:${role}`),
+	};
 }
 
 export interface OidcJwtVerifierOptions {
@@ -225,12 +248,23 @@ export function oidcJwtVerifier(
 			text(options.nameClaim ? claims[options.nameClaim] : claims.name) ??
 			text(claims.preferred_username) ??
 			subject;
+		const issuer = speakerIssuer ?? (claims.iss as string);
+		const id = oidcSpeakerId(issuer, subject);
+		const roleNames = Array.isArray(roles)
+			? roles.filter((role): role is string => typeof role === "string")
+			: [];
 		return {
-			id: oidcSpeakerId(speakerIssuer ?? (claims.iss as string), subject),
+			actor: {
+				provider: `oidc:${Buffer.from(issuer).toString("base64url")}`,
+				subject,
+				name,
+				surface: "web",
+				legacyId: id,
+				roles: roleNames.map((role) => `web:role:${role}`),
+			},
+			id,
 			name,
-			roles: Array.isArray(roles)
-				? roles.filter((role): role is string => typeof role === "string")
-				: [],
+			roles: roleNames,
 			expiresAt: new Date((claims.exp as number) * 1000),
 		};
 	};

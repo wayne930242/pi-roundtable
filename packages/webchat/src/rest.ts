@@ -1,11 +1,13 @@
 import type { ConversationRecord, Logger } from "pi-roundtable";
 import { type Admitted, Refusal, type WebChat } from "./chat.ts";
+import type { PgNotices } from "./notices.ts";
 import { TokenRefused } from "./oidc.ts";
 import type { TicketBook } from "./tickets.ts";
 
 export interface RestOptions {
 	chat: WebChat;
 	tickets: TicketBook;
+	notices: PgNotices;
 	/** The route's path, such as `/chat`, without a trailing slash. */
 	path: string;
 	/** The browser origins allowed to call the API; "any" answers every origin. */
@@ -17,6 +19,7 @@ export interface RestOptions {
 const MAX_LIMIT = 500;
 const DEFAULT_LIMIT = 50;
 const MAX_BODY_BYTES = 16 * 1024;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type HeaderMap = Record<string, string>;
 
@@ -69,7 +72,7 @@ const STATUS: Record<string, number> = {
  * is allowed and 403 otherwise.
  */
 export function restHandler(options: RestOptions) {
-	const { chat, tickets, path, origins, logger } = options;
+	const { chat, tickets, notices, path, origins, logger } = options;
 	const surface = chat.surface.surface;
 	const cors = (origin: string | null): HeaderMap | undefined => {
 		if (origin === null) return {};
@@ -85,8 +88,33 @@ export function restHandler(options: RestOptions) {
 		const rest = url.pathname.slice(path.length + 1);
 		const { speaker, identity } = who;
 		if (rest === "tickets" && request.method === "POST") {
-			const { ticket, expiresAt } = tickets.issue(identity);
+			const { ticket, expiresAt } = tickets.issue(
+				identity,
+				speaker.principalId,
+			);
 			return json({ ticket, expiresAt: expiresAt.toISOString() }, 201, headers);
+		}
+		if (rest === "notices" && request.method === "GET") {
+			const before = url.searchParams.get("before") ?? undefined;
+			if (before !== undefined && !UUID.test(before))
+				throw new Refusal("bad_frame");
+			const asked = Number(url.searchParams.get("limit") ?? DEFAULT_LIMIT);
+			const limit = Number.isInteger(asked)
+				? Math.min(Math.max(asked, 1), MAX_LIMIT)
+				: DEFAULT_LIMIT;
+			return json(
+				{ notices: await notices.list(speaker.principalId, limit, before) },
+				200,
+				headers,
+			);
+		}
+		const readNotice = /^notices\/([^/]+)\/read$/.exec(rest);
+		if (readNotice?.[1] && request.method === "POST") {
+			if (!UUID.test(readNotice[1])) throw new Refusal("bad_frame");
+			const notice = await notices.read(speaker.principalId, readNotice[1]);
+			return notice
+				? json({ notice }, 200, headers)
+				: json({ error: "not_found" }, 404, headers);
 		}
 		if (rest === "conversations" && request.method === "GET") {
 			const records = await chat.list(speaker);
