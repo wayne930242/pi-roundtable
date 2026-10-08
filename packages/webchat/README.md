@@ -129,7 +129,8 @@ A refused token throws `TokenRefused`, whose `reason` goes to the host's log and
 The speaker id of a person is `oidc:<base64url(issuer)>:<subject>`: `oidcSpeakerId(issuer, subject)` makes it, and `parseOidcSpeakerId(id)` turns it back into the pair.
 Use it in the host's `access.owners[].identities` or with `roundtable principal link`.
 The verifier also reports `ActorFacts` with the canonical OIDC provider, subject, name, prefixed roles and legacy id.
-A custom verifier may supply `WebIdentity.actor`; otherwise the chat derives these facts from its id.
+A custom verifier may supply `WebIdentity.actor` only with a provider beginning `oidc:` or equal to this chat's configured surface; `token`, `discord`, or another surface's provider is refused with `TokenRefused` before core identity resolution.
+Otherwise the chat derives these facts from its id.
 
 ### Provider settings
 

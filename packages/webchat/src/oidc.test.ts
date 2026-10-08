@@ -34,6 +34,42 @@ async function refusal(promise: Promise<unknown>): Promise<string> {
 	throw new Error("the token was accepted");
 }
 
+test("custom verifier actors may name only OIDC or this chat's surface", () => {
+	const identity = {
+		id: "custom",
+		name: "Ada",
+		roles: ["User"],
+		expiresAt: new Date(),
+	};
+	for (const provider of ["oidc:issuer", "support"]) {
+		expect(
+			identityActor(
+				{ ...identity, actor: { provider, subject: "ada", name: "Ada" } },
+				"support",
+			),
+		).toMatchObject({
+			provider,
+			subject: "ada",
+			surface: "support",
+			roles: ["support:role:User"],
+		});
+	}
+	for (const provider of ["token", "discord", "web", "oidc", "oidc-impostor"]) {
+		const bad = () =>
+			identityActor(
+				{
+					...identity,
+					actor: { provider, subject: "remote-mcp", name: "Ada" },
+				},
+				"support",
+			);
+		expect(bad).toThrow(TokenRefused);
+		expect(bad).toThrow(
+			'provider must start with "oidc:" or equal this webchat surface "support"',
+		);
+	}
+});
+
 test("a speaker id is reversible and keeps issuers with colons apart", () => {
 	const id = oidcSpeakerId("https://login.example.test/t/v2.0", "a:b");
 	expect(id).toStartWith("oidc:");

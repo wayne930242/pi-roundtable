@@ -9,7 +9,7 @@ import type { ActorFacts } from "pi-roundtable";
 
 /** Who a verified token names, and until when it may be trusted. */
 export interface WebIdentity {
-	/** Verified actor facts for the core identity service; custom verifiers may supply their own provider. */
+	/** Verified actor facts for core; provider must start with `oidc:` or equal this chat's surface. */
 	actor?: ActorFacts;
 	/** The speaker id: reversible and unique across issuers, such as `oidc:<base64url(issuer)>:<sub>`. */
 	id: string;
@@ -67,6 +67,15 @@ export function identityActor(
 	identity: WebIdentity,
 	surface = "web",
 ): ActorFacts {
+	const provider = identity.actor?.provider;
+	if (
+		provider !== undefined &&
+		!provider.startsWith("oidc:") &&
+		provider !== surface
+	)
+		throw new TokenRefused(
+			`custom actor provider must start with "oidc:" or equal this webchat surface ${JSON.stringify(surface)}`,
+		);
 	const oidc = parseOidcSpeakerId(identity.id);
 	return {
 		...(identity.actor ?? {
