@@ -2536,7 +2536,11 @@ export function studyHall(
 ): RoundtableConfig {
 	return {
 		name: "Study Hall",
-		owner: { id: "owner", name: "Ada" },
+		access: {
+			owners: [{ principal: "owner", name: "Ada" }],
+			// Admit the fake surface's authors explicitly, not in the claim.
+			members: { everyone: ["fake"] },
+		},
 		database: { url: where.databaseUrl },
 		dataDir: where.dataDir,
 		model: "anthropic/claude-sonnet-5-5",
