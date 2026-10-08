@@ -1,9 +1,10 @@
-import type { HttpRoute, Logger } from "pi-roundtable";
+import type { ActorFacts, HttpRoute, Logger } from "pi-roundtable";
 import type { AssetBundle } from "./assets.ts";
 import type { ConsoleApi } from "./console-api.ts";
 import type { ConsolePresentation } from "./features.ts";
 import { presentPage } from "./page-presentation.ts";
 import type { RequestVerifier } from "./verifier.ts";
+import type { Identified, Visitor } from "./visitors.ts";
 
 const encoder = new TextEncoder();
 /** Changes closer together than this reach the page as one event. */
@@ -33,6 +34,8 @@ export interface ConsoleServerOptions {
 	mount: string;
 	assets: AssetBundle;
 	verifier: RequestVerifier;
+	/** Who a request the verifier admitted comes from, by the actor it reported; only an owner is a visitor. */
+	identify(actor: ActorFacts | undefined): Promise<Identified>;
 	/** The console's own origin; requests that change data must come from it. */
 	origin: string;
 	api: Pick<ConsoleApi, "handle">;
@@ -48,8 +51,8 @@ export interface ConsoleServerOptions {
 
 /**
  * The console on the host's listener: `<mount>` redirects to `<mount>/`, and everything under
- * it needs the verifier to vouch for the owner. A request that changes data must also carry the
- * console's own `Origin`.
+ * it needs the verifier to vouch for the person and that person to be an owner. A request that
+ * changes data must also carry the console's own `Origin`.
  */
 export class ConsoleServer {
 	readonly #options: ConsoleServerOptions;
@@ -113,9 +116,12 @@ export class ConsoleServer {
 		const path = new URL(request.url).pathname;
 		if (path !== this.#options.mount && !path.startsWith(this.#base))
 			return new Response("Not found", { status: 404 });
-		const refusal = await this.#refusal(request);
-		if (refusal !== undefined) {
-			this.#options.logger.warn({ refusal }, "console request refused");
+		const admission = await this.#admission(request);
+		if ("refusal" in admission) {
+			this.#options.logger.warn(
+				{ refusal: admission.refusal },
+				"console request refused",
+			);
 			return new Response("Forbidden", {
 				status: 403,
 				headers: { "cache-control": "no-store" },
@@ -130,7 +136,11 @@ export class ConsoleServer {
 		if (rest === "api/events" && request.method === "GET")
 			return this.#events();
 		if (rest.startsWith("api/"))
-			return this.#options.api.handle(request, rest.slice("api/".length));
+			return this.#options.api.handle(
+				request,
+				rest.slice("api/".length),
+				admission.visitor,
+			);
 		if (!READ_METHODS.has(request.method))
 			return new Response("Method not allowed", { status: 405 });
 		const asset = this.#options.assets.get(rest);
@@ -167,21 +177,33 @@ export class ConsoleServer {
 		return new Response("Not found", { status: 404 });
 	}
 
-	/** Undefined when the request may pass, otherwise why not; never throws. */
-	async #refusal(request: Request): Promise<string | undefined> {
+	/** The owner the request comes from when it may pass, otherwise why not; never throws. */
+	async #admission(
+		request: Request,
+	): Promise<{ visitor: Visitor } | { refusal: string }> {
+		let actor: ActorFacts | undefined;
 		try {
 			const verdict = await this.#options.verifier(request);
-			if (!verdict.admitted) return String(verdict.reason);
+			if (!verdict.admitted) return { refusal: String(verdict.reason) };
+			actor = verdict.actor;
 		} catch {
 			// A verifier that fails admits no one.
-			return "verifier failed";
+			return { refusal: "verifier failed" };
 		}
+		let identified: Identified;
+		try {
+			identified = await this.#options.identify(actor);
+		} catch {
+			// Nor does a lookup of who they are that fails.
+			return { refusal: "identity failed" };
+		}
+		if ("refusal" in identified) return { refusal: String(identified.refusal) };
 		if (
 			!READ_METHODS.has(request.method) &&
 			request.headers.get("origin") !== this.#options.origin
 		)
-			return "foreign origin";
-		return undefined;
+			return { refusal: "foreign origin" };
+		return identified;
 	}
 
 	/** A server-sent event stream that says `changed` whenever the console may differ. */

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { AGENTS, MEMORY } from "pi-roundtable";
+import { AGENTS, IDENTITY, MEMORY } from "pi-roundtable";
 import { DISCORD } from "pi-roundtable/discord";
 import {
 	partial,
@@ -15,16 +15,21 @@ import type {
 	ConversationsView,
 	NoteView,
 	OverviewView,
+	PrincipalsView,
 } from "./api-types.ts";
 import { cloudflareAccess } from "./cloudflare-access.ts";
 import {
 	AUDIENCE,
+	accessIdentity,
 	accessKeys,
+	type FakePrincipal,
+	fakeIdentity,
 	fakeMemory,
 	fixtureSessions,
 	ORIGIN,
 	OWNER_CHANNEL,
 	OWNER_EMAIL,
+	OWNER_SUB,
 	TEAM,
 } from "./testing/fixtures.ts";
 import { admit } from "./verifier.ts";
@@ -59,9 +64,46 @@ const agents = servicePair(AGENTS, {
 		status: async () => ({ agents: [], groups: [] }),
 	}) as never,
 });
+/** The owner, as the configuration links their Access identity, and their memory. */
+const OWNER: FakePrincipal = {
+	id: "owner",
+	name: "Owner",
+	tier: "owner",
+	identities: [accessIdentity(OWNER_SUB)],
+};
+const SECOND_EMAIL = "second@example.test";
+const SECOND: FakePrincipal = {
+	id: "p_01J0000000000000000000BEA0",
+	name: "Bea",
+	tier: "owner",
+	identities: [accessIdentity("bea")],
+};
+const MEMBER_EMAIL = "member@example.test";
+const MEMBER: FakePrincipal = {
+	id: "p_01J0000000000000000000MEL0",
+	name: "Mel",
+	tier: "member",
+	identities: [accessIdentity("mel")],
+};
+const identity = (people: FakePrincipal[] = [OWNER]) =>
+	servicePair(IDENTITY, fakeIdentity(people));
+/** Each principal's memory, kept like the store keeps it: the same rows on every read. */
+const memories = new Map<string, ReturnType<typeof fakeMemory>>();
+afterEach(() => memories.clear());
 const memory = servicePair(MEMORY, {
-	forSpeaker: () =>
-		fakeMemory([{ kind: "core", fact: "Likes tea", eventDate: null }]),
+	forSpeaker: (id: string) => {
+		const found =
+			memories.get(id) ??
+			fakeMemory([
+				{
+					kind: "core",
+					fact: id === OWNER.id ? "Likes tea" : `Notes of ${id}`,
+					eventDate: null,
+				},
+			]);
+		memories.set(id, found);
+		return found;
+	},
 });
 const discord = servicePair(DISCORD, {
 	connection: partial({
@@ -77,9 +119,12 @@ const base = () => ({
 	assetDir: assetDir(),
 });
 
-async function boot(options: Partial<Parameters<typeof webConsole>[0]> = {}) {
+async function boot(
+	options: Partial<Parameters<typeof webConsole>[0]> = {},
+	people?: FakePrincipal[],
+) {
 	const harness = await testPlugin(webConsole({ ...base(), ...options }), {
-		services: [agents, memory, discord],
+		services: [agents, memory, discord, identity(people)],
 	});
 	harnesses.push(harness);
 	const route = (name: string) => {
@@ -150,10 +195,14 @@ describe("refuses to start", () => {
 		).not.toThrow();
 	});
 
+	test("the notes pane needs no owner id either: it shows the visitor's own notes", () => {
+		expect(() => webConsole({ ...base(), ownerId: undefined })).not.toThrow();
+	});
+
 	test("with a page that was never built", async () => {
 		await expect(
 			testPlugin(webConsole({ ...base(), assetDir: "/nonexistent-page" }), {
-				services: [agents, memory, discord],
+				services: [agents, memory, discord, identity()],
 			}),
 		).rejects.toThrow("not built");
 	});
@@ -373,5 +422,109 @@ describe("webConsole on a plugin harness", () => {
 		expect((await call("/console/api/notes", {}, await sign())).status).toBe(
 			404,
 		);
+	});
+});
+
+describe("several owners", () => {
+	const verifyBoth = cloudflareAccess({
+		teamDomain: TEAM,
+		audience: AUDIENCE,
+		email: [OWNER_EMAIL, SECOND_EMAIL, MEMBER_EMAIL],
+		keys,
+	});
+	const people = [OWNER, SECOND, MEMBER];
+	const asSecond = () => sign({ email: SECOND_EMAIL, sub: "bea" });
+
+	test("each owner signs in and sees every conversation", async () => {
+		const { call } = await boot(
+			{ verifier: verifyBoth, ownerId: undefined },
+			people,
+		);
+		for (const jwt of [await sign(), await asSecond()]) {
+			expect((await call("/console/", {}, jwt)).status).toBe(200);
+			const view = (await (
+				await call("/console/api/conversations", {}, jwt)
+			).json()) as ConversationsView;
+			expect(view.conversations).toHaveLength(5);
+		}
+	});
+
+	test("a member the verifier vouches for is refused everywhere", async () => {
+		const { call } = await boot({ verifier: verifyBoth }, people);
+		const jwt = await sign({ email: MEMBER_EMAIL, sub: "mel" });
+		for (const path of [
+			"/console/",
+			"/console/api/config",
+			"/console/api/conversations",
+			"/console/api/notes",
+			"/console/api/events",
+		])
+			expect((await call(path, {}, jwt)).status).toBe(403);
+	});
+
+	test("an identity linked to no one is refused once there are two owners", async () => {
+		const { call } = await boot({ verifier: verifyBoth }, people);
+		const jwt = await sign({ email: SECOND_EMAIL, sub: "someone-else" });
+		expect((await call("/console/api/config", {}, jwt)).status).toBe(403);
+	});
+
+	test("the notes pane shows the visitor's own notes, and switches to another principal's", async () => {
+		const { call } = await boot({ verifier: verifyBoth }, people);
+		const facts = async (path: string, jwt: string) =>
+			((await (await call(path, {}, jwt)).json()) as NoteView[]).map(
+				(n) => n.fact,
+			);
+		const owner = await sign();
+		const second = await asSecond();
+		expect(await facts("/console/api/notes", owner)).toEqual(["Likes tea"]);
+		expect(await facts("/console/api/notes", second)).toEqual([
+			`Notes of ${SECOND.id}`,
+		]);
+		expect(
+			await facts(`/console/api/notes?principal=${OWNER.id}`, second),
+		).toEqual(["Likes tea"]);
+		expect(
+			await facts(`/console/api/notes?principal=${MEMBER.id}`, owner),
+		).toEqual([`Notes of ${MEMBER.id}`]);
+		const listed = (await (
+			await call("/console/api/principals", {}, second)
+		).json()) as PrincipalsView;
+		expect(listed.self).toBe(SECOND.id);
+		expect(listed.principals.map((p) => p.name)).toEqual([
+			"Bea",
+			"Owner",
+			"Mel",
+		]);
+	});
+});
+
+describe("one owner, as before", () => {
+	test("an Access identity not yet linked is the only owner", async () => {
+		const { call } = await boot({}, [OWNER]);
+		const jwt = await sign({ sub: "not-linked-yet" });
+		expect((await call("/console/api/config", {}, jwt)).status).toBe(200);
+		const notes = (await (
+			await call("/console/api/notes", {}, jwt)
+		).json()) as NoteView[];
+		expect(notes.map((n) => n.fact)).toEqual(["Likes tea"]);
+	});
+
+	test("a verifier that reports no actor is the primary owner, notes and all", async () => {
+		const { call } = await boot({ verifier: () => admit() }, [OWNER, SECOND]);
+		const notes = (await (
+			await call("/console/api/notes")
+		).json()) as NoteView[];
+		expect(notes.map((n) => n.fact)).toEqual(["Likes tea"]);
+	});
+
+	test("ownerId names the owner a verifier without an actor speaks for", async () => {
+		const { call } = await boot(
+			{ verifier: () => admit(), ownerId: SECOND.id },
+			[OWNER, SECOND],
+		);
+		const notes = (await (
+			await call("/console/api/notes")
+		).json()) as NoteView[];
+		expect(notes.map((n) => n.fact)).toEqual([`Notes of ${SECOND.id}`]);
 	});
 });

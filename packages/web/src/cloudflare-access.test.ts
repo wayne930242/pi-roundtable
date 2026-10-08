@@ -1,6 +1,16 @@
 import { describe, expect, test } from "bun:test";
-import { cloudflareAccess } from "./cloudflare-access.ts";
-import { AUDIENCE, accessKeys, OWNER_EMAIL, TEAM } from "./testing/fixtures.ts";
+import {
+	cloudflareAccess,
+	cloudflareAccessIdentity,
+} from "./cloudflare-access.ts";
+import {
+	ACCESS_PROVIDER,
+	AUDIENCE,
+	accessKeys,
+	OWNER_EMAIL,
+	OWNER_SUB,
+	TEAM,
+} from "./testing/fixtures.ts";
 
 const { keys, sign, strangerKey } = await accessKeys();
 const verify = cloudflareAccess({
@@ -16,11 +26,49 @@ const request = (jwt?: string) =>
 	});
 
 describe("cloudflareAccess", () => {
-	test("admits a token signed by the team for the owner, whatever the email's case", async () => {
-		expect(await verify(request(await sign()))).toEqual({ admitted: true });
+	test("admits a token signed by the team for the owner, whatever the email's case, and reports who signed in", async () => {
+		const owner = {
+			admitted: true as const,
+			actor: {
+				provider: ACCESS_PROVIDER,
+				subject: OWNER_SUB,
+				name: OWNER_EMAIL,
+			},
+		};
+		expect(await verify(request(await sign()))).toEqual(owner);
 		expect(
 			await verify(request(await sign({ email: "Owner@Example.Test" }))),
-		).toEqual({ admitted: true });
+		).toEqual({
+			...owner,
+			actor: { ...owner.actor, name: "owner@example.test" },
+		});
+	});
+
+	test("reports the Access user id as the subject, under the team's issuer, as an OpenID identity", async () => {
+		const verdict = await verify(request(await sign({ sub: "user-42" })));
+		expect(verdict).toMatchObject({
+			admitted: true,
+			actor: {
+				provider: `oidc:${Buffer.from(`https://${TEAM}`).toString("base64url")}`,
+				subject: "user-42",
+			},
+		});
+	});
+
+	test("cloudflareAccessIdentity writes the identity a user is reported as", async () => {
+		const verdict = await verify(request(await sign()));
+		const actor = verdict.admitted ? verdict.actor : undefined;
+		expect(cloudflareAccessIdentity(TEAM, OWNER_SUB)).toBe(
+			`${actor?.provider}:${actor?.subject}`,
+		);
+	});
+
+	test("refuses a token that names no user", async () => {
+		const verdict = await verify(request(await sign({ sub: null })));
+		expect(verdict).toEqual({
+			admitted: false,
+			reason: "Access token names no user",
+		});
 	});
 
 	test("refuses a missing, forged, mis-addressed, or foreign token", async () => {
@@ -53,7 +101,7 @@ describe("cloudflareAccess", () => {
 		});
 		expect(
 			await several(request(await sign({ email: "second@example.test" }))),
-		).toEqual({ admitted: true });
+		).toMatchObject({ admitted: true, actor: { name: "second@example.test" } });
 	});
 
 	test("refuses bad options when it is created", () => {

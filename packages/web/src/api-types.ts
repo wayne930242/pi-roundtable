@@ -81,8 +81,10 @@ export interface DashboardView {
 }
 
 /**
- * Who a stored conversation belongs to; `plugin` is one a plugin runs through `context.turns`,
- * such as a web chat, as the host's registry records it.
+ * Where a stored conversation came from, for the page to group it by; it grants nothing. `owner`
+ * is a Discord channel no agent or group owns, where an owner talks to the assistant; `plugin` is
+ * one a plugin runs through `context.turns`, such as a web chat, as the host's registry records
+ * it. Whose a conversation is, the registry says: `ConversationView.principal`.
  */
 export type ConversationKind =
 	| "agent"
@@ -110,8 +112,19 @@ export interface ConversationView {
 	startedAt?: string;
 	/** Plugin conversations only: the name the registry gives it. */
 	title?: string;
+	/** Conversations the host's registry records: `private` to one principal, or `shared`. */
+	visibility?: "private" | "shared";
+	/** Conversations the registry records as someone's: whose, by their principal's name. */
+	principal?: PrincipalName;
 	/** Turns running or waiting in the channel. */
 	busy: number;
+}
+
+/** A principal as the console names them. */
+export interface PrincipalName {
+	id: string;
+	/** Their display name, or their id when the host no longer knows them. */
+	name: string;
 }
 
 export interface ConversationsView {
@@ -149,6 +162,13 @@ export interface NoteView {
 	kind: NoteKind;
 	fact: string;
 	eventDate: string | null;
+}
+
+/** The people whose notes the notes pane can show: the visitor first, then the others, oldest first. */
+export interface PrincipalsView {
+	/** The visitor's own principal, whose notes the pane shows unless asked for another's. */
+	self: string;
+	principals: (PrincipalName & { disabled?: true })[];
 }
 
 export interface NoteInput {

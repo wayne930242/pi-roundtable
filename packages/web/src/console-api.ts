@@ -2,13 +2,15 @@ import { join } from "node:path";
 import type {
 	AgentTeam,
 	ChannelKey,
+	ConversationRecord,
 	ConversationRegistry,
+	IdentityService,
 	Logger,
 	MemoryKind,
 	QueuePort,
 	SpeakerMemory,
 } from "pi-roundtable";
-import { MemoryError, parseChannelKey } from "pi-roundtable";
+import { MemoryError, parseChannelKey, SYSTEM_PRINCIPAL } from "pi-roundtable";
 import { thinkingLabel } from "pi-roundtable/kit";
 import type {
 	ApiError,
@@ -22,6 +24,8 @@ import type {
 	NoteView,
 	OverviewView,
 	PaneName,
+	PrincipalName,
+	PrincipalsView,
 	TranscriptView,
 } from "./api-types.ts";
 import {
@@ -41,6 +45,7 @@ import {
 	message,
 	safeAdminUrl,
 } from "./features.ts";
+import type { Visitor } from "./visitors.ts";
 
 const NOTE_SEARCH_LIMIT = 500;
 /** The largest note body the console reads. */
@@ -57,11 +62,12 @@ export interface ConsolePorts {
 	queue: Pick<QueuePort, "size">;
 	/** Undefined when Discord no longer knows the channel; throws when it cannot be asked. */
 	channelName?: (channelId: string) => Promise<ChannelName | undefined>;
-	/** The owner's memory; present when the notes pane is served. */
-	memory?: Pick<
-		SpeakerMemory,
-		"list" | "search" | "add" | "update" | "removeById"
-	>;
+	/** A principal's memory; present when the notes pane is served. */
+	memoryOf?: (
+		principalId: string,
+	) => Pick<SpeakerMemory, "list" | "search" | "add" | "update" | "removeById">;
+	/** The host's principals, read only: whose notes the pane may show, and the names of conversations' principals. */
+	people?: Pick<IdentityService, "principal" | "list">;
 	/** Conversations the console must not list or read. */
 	exclude?: (key: ChannelKey) => boolean;
 	/** The host's conversation registry; without it only the conversations found by name are listed. */
@@ -105,10 +111,14 @@ export class ConsoleApi {
 		this.#ports = ports;
 	}
 
-	/** `path` is what follows `<mount>/api/`. */
-	async handle(request: Request, path: string): Promise<Response> {
+	/** `path` is what follows `<mount>/api/`; `visitor` is the owner the request comes from. */
+	async handle(
+		request: Request,
+		path: string,
+		visitor: Visitor,
+	): Promise<Response> {
 		try {
-			return await this.#route(request, path);
+			return await this.#route(request, path, visitor);
 		} catch (error) {
 			if (error instanceof HttpError)
 				return json(
@@ -143,7 +153,11 @@ export class ConsoleApi {
 			throw new HttpError(404, "This pane is not served.");
 	}
 
-	async #route(request: Request, path: string): Promise<Response> {
+	async #route(
+		request: Request,
+		path: string,
+		visitor: Visitor,
+	): Promise<Response> {
 		const method = request.method;
 		let parts: string[];
 		try {
@@ -205,7 +219,11 @@ export class ConsoleApi {
 		}
 		if (head === "notes" && parts.length <= 2) {
 			this.#pane("notes");
-			return this.#notes(request, id);
+			return this.#notes(request, id, visitor);
+		}
+		if (method === "GET" && head === "principals" && !id) {
+			this.#pane("notes");
+			return json(await this.principals(visitor));
 		}
 		throw new HttpError(404, "There is no such API.");
 	}
@@ -282,16 +300,19 @@ export class ConsoleApi {
 			excluded: (key: ChannelKey) => this.#hidden(key),
 			relayNotes,
 		};
+		const records = registry ? await registry.list() : [];
 		// The registry first; the directory scan reads the conversations from before it, by name.
-		const recorded = registry
-			? registeredConversations(sessionsDir, await registry.list(), filter)
-			: [];
+		const recorded = registeredConversations(sessionsDir, records, filter);
 		const stored = [
 			...recorded,
 			...storedConversations(sessionsDir, filter),
 		].sort((a, b) => (b.lastActive ?? "").localeCompare(a.lastActive ?? ""));
+		const byKey = new Map(records.map((record) => [record.key, record]));
+		const names = new Map<string, Promise<PrincipalName>>();
 		return {
-			conversations: await Promise.all(stored.map((c) => this.#view(c))),
+			conversations: await Promise.all(
+				stored.map((c) => this.#view(c, byKey.get(c.key), names)),
+			),
 		};
 	}
 
@@ -337,13 +358,16 @@ export class ConsoleApi {
 			throw new HttpError(404, "There is no such archive.");
 		const { entries, truncated } = readTranscript(dir, archive, relayNotes);
 		return {
-			conversation: await this.#view({
-				key: key as ChannelKey,
-				kind: parsed.kind,
-				id: parsed.id,
-				...(parsed.member ? { member: parsed.member } : {}),
-				...files,
-			}),
+			conversation: await this.#view(
+				{
+					key: key as ChannelKey,
+					kind: parsed.kind,
+					id: parsed.id,
+					...(parsed.member ? { member: parsed.member } : {}),
+					...files,
+				},
+				await this.#ports.registry?.get(key as ChannelKey),
+			),
 			archives,
 			...(archive !== undefined ? { archive } : {}),
 			entries,
@@ -351,8 +375,22 @@ export class ConsoleApi {
 		};
 	}
 
-	async #view(stored: StoredConversation): Promise<ConversationView> {
+	/**
+	 * How the page shows a conversation. `record` is what the registry holds of it, which says whose
+	 * it is; `names` gathers the principals' names one listing reads, so each is read once.
+	 */
+	async #view(
+		stored: StoredConversation,
+		record: ConversationRecord | undefined,
+		names = new Map<string, Promise<PrincipalName>>(),
+	): Promise<ConversationView> {
 		const { team, queue } = this.#ports;
+		const owner = record?.principalId;
+		let principal: Promise<PrincipalName> | undefined;
+		if (owner !== undefined) {
+			principal = names.get(owner) ?? this.#principalName(owner);
+			names.set(owner, principal);
+		}
 		const kind: ConversationKind =
 			stored.kind === "mcp"
 				? "outside"
@@ -375,11 +413,18 @@ export class ConsoleApi {
 			...(stored.lastActive ? { lastActive: stored.lastActive } : {}),
 			...(stored.firstMessage ? { firstMessage: stored.firstMessage } : {}),
 			...(stored.startedAt ? { startedAt: stored.startedAt } : {}),
+			...(record ? { visibility: record.visibility } : {}),
+			...(principal ? { principal: await principal } : {}),
 			// A group's turns queue under the group channel, not under each member's conversation.
 			busy: queue.size(
 				stored.kind === "group" ? `discord:${stored.id}` : stored.key,
 			),
 		};
+	}
+
+	async #principalName(id: string): Promise<PrincipalName> {
+		const known = await this.#ports.people?.principal(id);
+		return { id, name: known?.displayName ?? id };
 	}
 
 	async #name(channelId: string): Promise<ChannelName> {
@@ -395,9 +440,43 @@ export class ConsoleApi {
 
 	// ── Notes ──────────────────────────────────────────────────────────────
 
-	async #notes(request: Request, id: string | undefined): Promise<Response> {
-		const { memory } = this.#ports;
-		if (!memory) throw new HttpError(404, "This pane is not served.");
+	/** The people whose notes the pane can show: every principal but the host's own, the visitor first. */
+	async principals(visitor: Visitor): Promise<PrincipalsView> {
+		const self = visitor.principal.id;
+		const everyone = (await this.#ports.people?.list()) ?? [visitor.principal];
+		const listed = [
+			...everyone.filter((p) => p.id === self),
+			...everyone.filter((p) => p.id !== self && p.id !== SYSTEM_PRINCIPAL),
+		];
+		return {
+			self,
+			principals: listed.map((p) => ({
+				id: p.id,
+				name: p.displayName,
+				...(p.disabled ? { disabled: true as const } : {}),
+			})),
+		};
+	}
+
+	/** The memory of the principal the request names, default the visitor's own. */
+	async #memoryFor(request: Request, visitor: Visitor) {
+		const { memoryOf, people } = this.#ports;
+		if (!memoryOf) throw new HttpError(404, "This pane is not served.");
+		const named = new URL(request.url).searchParams.get("principal");
+		if (named === null || named === visitor.principal.id)
+			return memoryOf(visitor.principal.id);
+		// The host's own principal keeps no notes; anyone else must be a principal the host knows.
+		if (named === SYSTEM_PRINCIPAL || !(await people?.principal(named)))
+			throw new HttpError(404, "There is no such person.");
+		return memoryOf(named);
+	}
+
+	async #notes(
+		request: Request,
+		id: string | undefined,
+		visitor: Visitor,
+	): Promise<Response> {
+		const memory = await this.#memoryFor(request, visitor);
 		const method = request.method;
 		if (!id) {
 			if (method === "GET") {

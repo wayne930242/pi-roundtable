@@ -1,7 +1,7 @@
 {
 	"name": "pi-roundtable-web",
 	"version": "0.8.0",
-	"description": "An owner-only web console for pi-roundtable: conversations, transcripts, and memory notes, with live updates",
+	"description": "A web console for the owners of a pi-roundtable host: conversations, transcripts, and memory notes, with live updates",
 	"type": "module",
 	"license": "MIT",
 	"engines": {

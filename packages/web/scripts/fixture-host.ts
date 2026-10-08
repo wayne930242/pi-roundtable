@@ -9,19 +9,22 @@
 // agent between working and idle, so the live updates can be watched.
 import { appendFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { AGENTS, MEMORY } from "pi-roundtable";
+import { AGENTS, IDENTITY, MEMORY } from "pi-roundtable";
 import { DISCORD } from "pi-roundtable/discord";
 import { partial, servicePair, testPlugin } from "pi-roundtable/testing";
 import { cloudflareAccess } from "../src/cloudflare-access.ts";
 import {
 	AGENT_CHANNEL,
 	AUDIENCE,
+	accessIdentity,
 	accessKeys,
+	fakeIdentity,
 	fakeMemory,
 	fixtureSessions,
 	GROUP_CHANNEL,
 	OWNER_CHANNEL,
 	OWNER_EMAIL,
+	OWNER_SUB,
 	TEAM,
 } from "../src/testing/fixtures.ts";
 import { webConsole } from "../src/web-plugin.ts";
@@ -34,6 +37,38 @@ const { keys, sign } = await accessKeys();
 const listeners: (() => void)[] = [];
 let working = false;
 const today = new Date().toISOString().slice(0, 10);
+/** Each principal's notes, kept across requests as the store keeps them. */
+const memories = new Map<string, ReturnType<typeof fakeMemory>>();
+function memoryOf(id: string) {
+	const found =
+		memories.get(id) ??
+		fakeMemory(
+			id === "owner"
+				? [
+						{ kind: "core", fact: "Prefers short answers.", eventDate: null },
+						{
+							kind: "note",
+							fact: "The office wifi is on the guest network.",
+							eventDate: null,
+						},
+						{ kind: "event", fact: "Dentist", eventDate: "2026-01-15" },
+						{
+							kind: "event",
+							fact: "Conference",
+							eventDate: `${today.slice(0, 4)}-12-31`,
+						},
+					]
+				: [
+						{
+							kind: "core",
+							fact: "Reads the morning report.",
+							eventDate: null,
+						},
+					],
+		);
+	memories.set(id, found);
+	return found;
+}
 
 const harness = await testPlugin(
 	webConsole({
@@ -44,7 +79,6 @@ const harness = await testPlugin(
 			keys,
 		}),
 		origin,
-		ownerId: "owner",
 		dataDir,
 		title: "Fixture console",
 	}),
@@ -89,23 +123,23 @@ const harness = await testPlugin(
 					}),
 				}) as never,
 			}),
+			// Two owners, so the notes pane offers the second one's notes too.
+			servicePair(
+				IDENTITY,
+				fakeIdentity([
+					{
+						id: "owner",
+						name: "Owner",
+						tier: "owner",
+						identities: [accessIdentity(OWNER_SUB)],
+					},
+					{ id: "p_fixture_second", name: "Second owner", tier: "owner" },
+				]),
+			),
 			servicePair(MEMORY, {
-				forSpeaker: () =>
-					fakeMemory([
-						{ kind: "core", fact: "Prefers short answers.", eventDate: null },
-						{
-							kind: "note",
-							fact: "The office wifi is on the guest network.",
-							eventDate: null,
-						},
-						{ kind: "event", fact: "Dentist", eventDate: "2026-01-15" },
-						{
-							kind: "event",
-							fact: "Conference",
-							eventDate: `${today.slice(0, 4)}-12-31`,
-						},
-					]),
+				forSpeaker: (id: string) => memoryOf(id),
 			}),
+
 			servicePair(DISCORD, {
 				connection: partial({
 					channelInfo: async (id: string) =>

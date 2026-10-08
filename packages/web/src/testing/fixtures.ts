@@ -2,13 +2,27 @@ import { mkdirSync, mkdtempSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT } from "jose";
-import type { Memory, MemoryKind, SpeakerMemory } from "pi-roundtable";
-import { MemoryError } from "pi-roundtable";
+import type {
+	IdentityService,
+	Memory,
+	MemoryKind,
+	Principal,
+	SpeakerMemory,
+	Tier,
+} from "pi-roundtable";
+import { IdentityError, MemoryError } from "pi-roundtable";
+import { partial } from "pi-roundtable/testing";
 import { DEFAULT_RELAY_NOTE } from "../options.ts";
 
 export const TEAM = "team.example.test";
 export const AUDIENCE = "aud-for-tests";
 export const OWNER_EMAIL = "owner@example.test";
+/** The Access user id of the owner's token. */
+export const OWNER_SUB = "0b5e7c1a-0000-4000-8000-000000000001";
+/** The identity provider `cloudflareAccess` reports for the test team. */
+export const ACCESS_PROVIDER = `oidc:${Buffer.from(`https://${TEAM}`).toString("base64url")}`;
+/** The identity, as configuration writes it, of the Access user `sub`. */
+export const accessIdentity = (sub: string) => `${ACCESS_PROVIDER}:${sub}`;
 export const ORIGIN = "https://console.example.test";
 
 /** Ids that no real Discord channel has (they start with 9). */
@@ -25,10 +39,19 @@ export async function accessKeys() {
 	const jwk = { ...(await exportJWK(team.publicKey)), kid: "k1", alg: "RS256" };
 	const keys = createLocalJWKSet({ keys: [jwk] });
 	const sign = (
-		claims: { email?: string; aud?: string; iss?: string } = {},
+		claims: {
+			email?: string;
+			aud?: string;
+			iss?: string;
+			/** The Access user id; `null` leaves it out. */
+			sub?: string | null;
+		} = {},
 		key = team.privateKey,
 	) =>
-		new SignJWT({ email: claims.email ?? OWNER_EMAIL })
+		new SignJWT({
+			email: claims.email ?? OWNER_EMAIL,
+			...(claims.sub === null ? {} : { sub: claims.sub ?? OWNER_SUB }),
+		})
 			.setProtectedHeader({ alg: "RS256", kid: "k1" })
 			.setIssuer(claims.iss ?? `https://${TEAM}`)
 			.setAudience(claims.aud ?? AUDIENCE)
@@ -213,4 +236,48 @@ export function fakeMemory(initial: Omit<Memory, "id">[] = []): SpeakerMemory {
 		},
 		remove: async () => [],
 	};
+}
+
+/** A principal of `fakeIdentity`: who they are, their lasting tier, and the identities linked to them. */
+export interface FakePrincipal {
+	id: string;
+	name: string;
+	tier?: Tier;
+	identities?: readonly string[];
+	disabled?: boolean;
+}
+
+/**
+ * `IDENTITY` over these principals with only the reads the console may use: asking it to resolve,
+ * which may make a principal, throws. The owners come in the order given.
+ */
+export function fakeIdentity(
+	people: readonly FakePrincipal[],
+): IdentityService {
+	const publicOf = (person: FakePrincipal): Principal => ({
+		id: person.id,
+		displayName: person.name,
+		disabled: person.disabled ?? false,
+	});
+	const find = (id: string) => people.find((person) => person.id === id);
+	return partial<IdentityService>({
+		principalOf: async (identity) => {
+			if (identity.indexOf(":") <= 0)
+				throw new IdentityError(`${identity} is not an identity`);
+			return people.find((person) => person.identities?.includes(identity))?.id;
+		},
+		principal: async (id) => {
+			const person = find(id);
+			return person && publicOf(person);
+		},
+		tierOf: async (id) => {
+			const person = find(id);
+			return person && !person.disabled ? person.tier : undefined;
+		},
+		owners: async () =>
+			people
+				.filter((person) => person.tier === "owner" && !person.disabled)
+				.map(publicOf),
+		list: async () => people.map(publicOf),
+	});
 }

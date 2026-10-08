@@ -92,6 +92,14 @@ function Row(props: { item: ConversationView; now: number; timeZone: string }) {
 					: named.detail
 						? `${named.detail} · `
 						: ""}
+				{item.principal
+					? `${t(
+							item.visibility === "private"
+								? "Private to {name}"
+								: "Shared · {name}",
+							{ name: item.principal.name },
+						)} · `
+					: ""}
 				{t("Last active")} {ago(item.lastActive, props.now, props.timeZone)} ·{" "}
 				{size(item.liveBytes)} ·{" "}
 				{t("{count} archived", { count: item.archives })}

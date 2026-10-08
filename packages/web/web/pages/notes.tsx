@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { NoteInput, NoteKind, NoteView } from "../../src/api-types.ts";
+import type {
+	NoteInput,
+	NoteKind,
+	NoteView,
+	PrincipalsView,
+} from "../../src/api-types.ts";
 import { Dialog } from "../components/dialog.tsx";
 import { Badge, Empty, Failure, Loading } from "../components/states.tsx";
 import { api, messageOf } from "../lib/api.ts";
@@ -7,6 +12,7 @@ import { useConfig } from "../lib/config.ts";
 import { today } from "../lib/format.ts";
 import { useLive } from "../lib/live.ts";
 import { translate as t } from "../lib/messages.ts";
+import { useFetched } from "../lib/use-fetched.ts";
 
 const KINDS: { kind: NoteKind; label: string; hint: string }[] = [
 	{ kind: "core", label: "Core", hint: "Carried into every turn." },
@@ -42,20 +48,26 @@ export function NotesPage() {
 	const [error, setError] = useState<string>();
 	const [editing, setEditing] = useState<Editing>();
 	const [deleting, setDeleting] = useState<NoteView>();
+	// Whose notes are shown: undefined for the visitor's own.
+	const [principal, setPrincipal] = useState<string>();
+	const people = useFetched(() => api.principals(), "principals").data;
 
 	// Only the newest request may set the list, so a slow answer for an earlier search never replaces it.
 	const latest = useRef(0);
-	const load = useCallback(async (search: string) => {
-		const request = ++latest.current;
-		try {
-			const loaded = await api.notes(search.trim());
-			if (request !== latest.current) return;
-			setNotes(loaded);
-			setError(undefined);
-		} catch (failure) {
-			if (request === latest.current) setError(messageOf(failure));
-		}
-	}, []);
+	const load = useCallback(
+		async (search: string) => {
+			const request = ++latest.current;
+			try {
+				const loaded = await api.notes(search.trim(), principal);
+				if (request !== latest.current) return;
+				setNotes(loaded);
+				setError(undefined);
+			} catch (failure) {
+				if (request === latest.current) setError(messageOf(failure));
+			}
+		},
+		[principal],
+	);
 
 	// biome-ignore lint/correctness/useExhaustiveDependencies: the version moves whenever the server reports a change
 	useEffect(() => {
@@ -92,6 +104,16 @@ export function NotesPage() {
 					{t("Add")}
 				</button>
 			</div>
+			{people && people.principals.length > 1 ? (
+				<Whose
+					people={people}
+					shown={principal}
+					choose={(chosen) => {
+						setNotes(undefined);
+						setPrincipal(chosen);
+					}}
+				/>
+			) : null}
 			<div className="toolbar">
 				<div className="tabs" role="tablist">
 					{KINDS.map((entry) => (
@@ -180,8 +202,9 @@ export function NotesPage() {
 					<NoteEditor
 						initial={editing.draft}
 						save={async (input) => {
-							if (editing.note) await api.updateNote(editing.note.id, input);
-							else await api.addNote(input);
+							if (editing.note)
+								await api.updateNote(editing.note.id, input, principal);
+							else await api.addNote(input, principal);
 							// Close only the editor this save came from, not one opened since.
 							setEditing((current) =>
 								current === editing ? undefined : current,
@@ -201,7 +224,7 @@ export function NotesPage() {
 					<Confirm
 						text={deleting.fact}
 						run={async () => {
-							await api.deleteNote(deleting.id);
+							await api.deleteNote(deleting.id, principal);
 							setDeleting((current) =>
 								current === deleting ? undefined : current,
 							);
@@ -212,6 +235,38 @@ export function NotesPage() {
 				) : null}
 			</Dialog>
 		</section>
+	);
+}
+
+/** Picks whose notes the pane shows, the visitor's own first. */
+export function Whose(props: {
+	people: PrincipalsView;
+	shown: string | undefined;
+	choose(principal: string | undefined): void;
+}) {
+	const { people } = props;
+	return (
+		<label className="inline">
+			{t("Whose notes")}{" "}
+			<select
+				value={props.shown ?? people.self}
+				onChange={(event) =>
+					props.choose(
+						event.target.value === people.self ? undefined : event.target.value,
+					)
+				}
+			>
+				{people.principals.map((person) => (
+					<option key={person.id} value={person.id}>
+						{person.id === people.self
+							? t("{name} (you)", { name: person.name })
+							: person.disabled
+								? t("{name} (disabled)", { name: person.name })
+								: person.name}
+					</option>
+				))}
+			</select>
+		</label>
 	);
 }
 

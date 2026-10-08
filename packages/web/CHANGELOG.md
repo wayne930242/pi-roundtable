@@ -5,6 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+- Admit only owners, each as their own principal: the verifier reports who signed in (`Verdict.actor`, built with `admitAs`), and the console reads the host's `IDENTITY`, never making or claiming a principal. An identity linked to anyone but an owner is refused; one linked to no one is the only owner on a single-owner host (with one warning) and refused once there are several owners. A verifier that reports no actor is taken as the primary owner, or `ownerId`, with one warning. The plugin now requires `IDENTITY`.
+- `cloudflareAccess` reports the user as `oidc:<base64url(https://<teamDomain>)>:<sub>`, named by their email, and refuses a token that names no user; `cloudflareAccessIdentity(teamDomain, sub)` writes that identity for `access.owners[].identities`.
+- The Notes pane shows the signed-in owner's own notes, and any principal's through a picker (`GET api/principals`, `?principal=<id>` on the notes API). `ownerId` is no longer required and is deprecated.
+- A conversation the host's registry records shows whose it is, by display name, and whether it is private or shared (`ConversationView.principal`, `visibility`).
+
 ## [0.8.0] - 2026-10-07
 
 - List the conversations the host's registry (`CONVERSATIONS`) records beside the ones found by their directory names, under a new "Plugin conversations" section with their title and first message, and read their transcripts. A conversation from before the registry is still found by name.

@@ -19,11 +19,16 @@ import {
 	OUTSIDE_SESSION,
 	OWNER_CHANNEL,
 } from "./testing/fixtures.ts";
+import type { Visitor } from "./visitors.ts";
 
 const owner = `discord:${OWNER_CHANNEL}` as ChannelKey;
 const agent = `discord:${AGENT_CHANNEL}` as ChannelKey;
 const party = "discord:900000000000000088" as ChannelKey;
+const OWNER: Visitor = {
+	principal: { id: "owner", displayName: "Owner", disabled: false },
+};
 function fixture(change: Partial<ConsoleFeatures> = {}) {
+	const memory = fakeMemory();
 	const calls: string[] = [];
 	let changes = 0;
 	const features: ConsoleFeatures = {
@@ -99,7 +104,7 @@ function fixture(change: Partial<ConsoleFeatures> = {}) {
 		}),
 		queue: { size: () => 1 },
 		relayNotes: [],
-		memory: fakeMemory(),
+		memoryOf: () => memory,
 		features,
 		exclude: (key) => key === `discord:${HIDDEN_CHANNEL}`,
 		changed: () => changes++,
@@ -120,6 +125,7 @@ function fixture(change: Partial<ConsoleFeatures> = {}) {
 				...(body !== undefined ? { body } : {}),
 			}),
 			path,
+			OWNER,
 		);
 		return { status: response.status, body: await response.json() };
 	};
@@ -330,6 +336,7 @@ describe("host feature ports", () => {
 		const response = await api.handle(
 			new Request("http://host/console/api/skills/example/extra"),
 			"skills/example/extra",
+			OWNER,
 		);
 		expect(response.status).toBe(404);
 	});

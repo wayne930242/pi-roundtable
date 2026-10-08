@@ -2,6 +2,7 @@ import {
 	AGENTS,
 	CONVERSATIONS,
 	definePlugin,
+	IDENTITY,
 	MEMORY,
 	type RoundtablePlugin,
 } from "pi-roundtable";
@@ -14,17 +15,20 @@ import {
 	resolveOptions,
 	type WebConsoleOptions,
 } from "./options.ts";
+import { consoleVisitors } from "./visitors.ts";
 
 /**
- * The owner-only web console: conversations, transcripts, memory notes, and the agent team,
- * served on a route of the host's listener and updated live. The options are checked here, so
- * a missing verifier or a bad setting throws when the config is loaded.
+ * The owners' web console: conversations, transcripts, memory notes, and the agent team, served
+ * on a route of the host's listener and updated live. Every request needs the verifier to vouch
+ * for the person and `IDENTITY` to name them an owner. The options are checked here, so a missing
+ * verifier or a bad setting throws when the config is loaded.
  */
 export function webConsole(options: WebConsoleOptions): RoundtablePlugin {
 	const settings = resolveOptions(options);
 	return definePlugin({
 		name: "web-console",
 		requires: [
+			IDENTITY,
 			...(settings.panes.includes("overview") ? [AGENTS] : []),
 			...(settings.panes.includes("notes") ? [MEMORY] : []),
 		],
@@ -48,6 +52,7 @@ async function build(settings: ResolvedOptions, context: Context) {
 	const connection = services.find(DISCORD)?.connection;
 	// Absent on a host without the registry: the console then lists conversations found by name only.
 	const registry = services.find(CONVERSATIONS);
+	const identity = services.get(IDENTITY);
 	const listeners: (() => void)[] = [];
 	const changed = () => {
 		for (const listener of listeners) listener();
@@ -64,9 +69,13 @@ async function build(settings: ResolvedOptions, context: Context) {
 		...(connection
 			? { channelName: (id: string) => connection.channelInfo(id) }
 			: {}),
-		...(settings.ownerId && settings.panes.includes("notes")
-			? { memory: services.get(MEMORY).forSpeaker(settings.ownerId) }
+		...(settings.panes.includes("notes")
+			? {
+					memoryOf: (principalId: string) =>
+						services.get(MEMORY).forSpeaker(principalId),
+				}
 			: {}),
+		people: identity,
 		...(settings.exclude ? { exclude: settings.exclude } : {}),
 		...(registry ? { registry } : {}),
 		relayNotes: settings.relayNotes,
@@ -80,6 +89,10 @@ async function build(settings: ResolvedOptions, context: Context) {
 		mount: settings.mount,
 		assets,
 		verifier: settings.verifier,
+		identify: consoleVisitors(identity, {
+			logger,
+			...(settings.ownerId ? { ownerId: settings.ownerId } : {}),
+		}),
 		origin: settings.origin,
 		pathRouting: settings.routing === "path",
 		...(settings.presentation ? { presentation: settings.presentation } : {}),

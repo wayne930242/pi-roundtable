@@ -6,6 +6,7 @@ import type {
 	NoteInput,
 	NoteView,
 	OverviewView,
+	PrincipalsView,
 	SkillDetailView,
 	SkillView,
 	TranscriptView,
@@ -68,20 +69,36 @@ export const api = {
 				archive ? `?archive=${encodeURIComponent(archive)}` : ""
 			}`,
 		),
-	notes: (query: string) =>
-		request<NoteView[]>(
-			query ? `notes?q=${encodeURIComponent(query)}` : "notes",
-		),
-	addNote: (note: NoteInput) =>
-		request<NoteView>("notes", { method: "POST", body: JSON.stringify(note) }),
-	updateNote: (id: number, note: NoteInput) =>
-		request<NoteView>(`notes/${id}`, {
+	principals: () => request<PrincipalsView>("principals"),
+	notes: (query: string, principal?: string) =>
+		request<NoteView[]>(`notes${whose(principal, query ? { q: query } : {})}`),
+	addNote: (note: NoteInput, principal?: string) =>
+		request<NoteView>(`notes${whose(principal)}`, {
+			method: "POST",
+			body: JSON.stringify(note),
+		}),
+	updateNote: (id: number, note: NoteInput, principal?: string) =>
+		request<NoteView>(`notes/${id}${whose(principal)}`, {
 			method: "PATCH",
 			body: JSON.stringify(note),
 		}),
-	deleteNote: (id: number) =>
-		request<{ deleted: number }>(`notes/${id}`, { method: "DELETE" }),
+	deleteNote: (id: number, principal?: string) =>
+		request<{ deleted: number }>(`notes/${id}${whose(principal)}`, {
+			method: "DELETE",
+		}),
 };
+
+/** The query naming whose notes a request is about, with any other parameters; none for the visitor's own. */
+function whose(
+	principal: string | undefined,
+	more: Record<string, string> = {},
+): string {
+	const query = new URLSearchParams({
+		...(principal === undefined ? {} : { principal }),
+		...more,
+	}).toString();
+	return query ? `?${query}` : "";
+}
 
 export const EVENTS_URL = `${API}events`;
 

@@ -1,12 +1,15 @@
 import { createRemoteJWKSet, type JWTVerifyGetKey, jwtVerify } from "jose";
-import { admit, type RequestVerifier, refuse } from "./verifier.ts";
+import { admitAs, type RequestVerifier, refuse } from "./verifier.ts";
 
 export interface CloudflareAccessOptions {
 	/** The Access team domain, such as `example.cloudflareaccess.com`. */
 	teamDomain: string;
 	/** The AUD tag of the Access application in front of the console. */
 	audience: string;
-	/** The email, or emails, Access may vouch for; compared without regard to case. */
+	/**
+	 * The email, or emails, Access may vouch for; compared without regard to case. The console
+	 * then admits only those whose identity is linked to an owner: see `cloudflareAccessIdentity`.
+	 */
 	email: string | readonly string[];
 	/** Replaceable in tests; the team's published signing keys otherwise. */
 	keys?: JWTVerifyGetKey;
@@ -14,11 +17,29 @@ export interface CloudflareAccessOptions {
 
 const HEADER = "cf-access-jwt-assertion";
 
+/** The identity provider of an Access team's users: `oidc:<base64url(https://<teamDomain>)>`. */
+const providerOf = (issuer: string) =>
+	`oidc:${Buffer.from(issuer).toString("base64url")}`;
+
+/**
+ * The identity, as `access.owners[].identities` and `roundtable principal link` write it, of the
+ * Access user `sub` (the user id in the token) of a team: `oidc:<base64url(issuer)>:<sub>`, the
+ * form any OpenID issuer's users take.
+ */
+export function cloudflareAccessIdentity(
+	teamDomain: string,
+	sub: string,
+): string {
+	return `${providerOf(`https://${teamDomain.trim()}`)}:${sub}`;
+}
+
 /**
  * Admits a request only when Cloudflare Access vouches for an allowed email: its
  * `Cf-Access-Jwt-Assertion` header holds a token signed by the team's keys, issued by the team,
- * for this application, naming that email. The token is checked on every request, so the
- * console stays closed to a client that reaches it without passing through Access.
+ * for this application, naming that email and a user. The token is checked on every request, so
+ * the console stays closed to a client that reaches it without passing through Access. It reports
+ * the user as an OpenID identity of the team's issuer, their `sub` as the subject and their email
+ * as the name.
  */
 export function cloudflareAccess(
 	options: CloudflareAccessOptions,
@@ -38,22 +59,27 @@ export function cloudflareAccess(
 	const keys =
 		options.keys ??
 		createRemoteJWKSet(new URL(`https://${teamDomain}/cdn-cgi/access/certs`));
+	const issuer = `https://${teamDomain}`;
+	const provider = providerOf(issuer);
 	return async (request) => {
 		const token = request.headers.get(HEADER);
 		if (!token) return refuse("no Access token");
+		let email: string;
+		let subject: string;
 		try {
-			const { payload } = await jwtVerify(token, keys, {
-				issuer: `https://${teamDomain}`,
-				audience,
-			});
+			const { payload } = await jwtVerify(token, keys, { issuer, audience });
 			if (
 				typeof payload.email !== "string" ||
 				!emails.includes(payload.email.toLowerCase())
 			)
 				return refuse("email not allowed");
+			if (typeof payload.sub !== "string" || !payload.sub)
+				return refuse("Access token names no user");
+			email = payload.email.toLowerCase();
+			subject = payload.sub;
 		} catch {
 			return refuse("invalid Access token");
 		}
-		return admit();
+		return admitAs({ provider, subject, name: email });
 	};
 }

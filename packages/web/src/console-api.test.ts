@@ -8,12 +8,15 @@ import type {
 	ConversationsView,
 	NoteView,
 	OverviewView,
+	PrincipalsView,
 	TranscriptView,
 } from "./api-types.ts";
 import { ConsoleApi, type ConsolePorts } from "./console-api.ts";
 import { DEFAULT_RELAY_NOTE } from "./options.ts";
 import {
 	AGENT_CHANNEL,
+	type FakePrincipal,
+	fakeIdentity,
 	fakeMemory,
 	fixtureSessions,
 	GROUP_CHANNEL,
@@ -22,6 +25,28 @@ import {
 	OWNER_CHANNEL,
 	sessionFile,
 } from "./testing/fixtures.ts";
+import type { Visitor } from "./visitors.ts";
+
+const OWNER: FakePrincipal = { id: "owner", name: "Owner", tier: "owner" };
+const SECOND: FakePrincipal = {
+	id: "p_01J0000000000000000000BEA0",
+	name: "Bea",
+	tier: "owner",
+};
+const MEMBER: FakePrincipal = {
+	id: "oidc:aXNz:ada",
+	name: "Ada",
+	tier: "member",
+};
+const RETIRED: FakePrincipal = {
+	id: "p_01J0000000000000000000GON0",
+	name: "Gus",
+	disabled: true,
+};
+const visitorOf = (person: FakePrincipal): Visitor => ({
+	principal: { id: person.id, displayName: person.name, disabled: false },
+});
+const AS_OWNER = visitorOf(OWNER);
 
 const team = partial<Pick<AgentTeam, "status" | "owns" | "guildId">>({
 	guildId: "900000000000000099",
@@ -62,6 +87,24 @@ const team = partial<Pick<AgentTeam, "status" | "owns" | "guildId">>({
 function api(change: Partial<ConsolePorts> = {}) {
 	const changes: number[] = [];
 	const recorder = recordingLogger();
+	const memories = new Map([
+		[
+			OWNER.id,
+			fakeMemory([
+				{ kind: "core", fact: "Likes tea", eventDate: null },
+				{ kind: "event", fact: "Trip", eventDate: "2026-12-01" },
+			]),
+		],
+		[
+			SECOND.id,
+			fakeMemory([{ kind: "core", fact: "Likes coffee", eventDate: null }]),
+		],
+	]);
+	const memoryOf = (id: string) => {
+		const memory = memories.get(id) ?? fakeMemory();
+		memories.set(id, memory);
+		return memory;
+	};
 	const instance = new ConsoleApi({
 		title: "Test console",
 		timeZone: "Europe/Paris",
@@ -78,10 +121,8 @@ function api(change: Partial<ConsolePorts> = {}) {
 						guildId: "900000000000000099",
 					}
 				: undefined,
-		memory: fakeMemory([
-			{ kind: "core", fact: "Likes tea", eventDate: null },
-			{ kind: "event", fact: "Trip", eventDate: "2026-12-01" },
-		]),
+		memoryOf,
+		people: fakeIdentity([OWNER, SECOND, MEMBER, RETIRED]),
 		exclude: (key) => key === `discord:${HIDDEN_CHANNEL}`,
 		relayNotes: [DEFAULT_RELAY_NOTE],
 		changed: () => changes.push(Date.now()),
@@ -95,10 +136,12 @@ const call = async <T>(
 	instance: ConsoleApi,
 	path: string,
 	init: RequestInit = {},
+	visitor: Visitor = AS_OWNER,
 ): Promise<{ status: number; body: T }> => {
 	const response = await instance.handle(
 		new Request(`http://console/console/api/${path}`, init),
 		path.split("?")[0] ?? "",
+		visitor,
 	);
 	return { status: response.status, body: (await response.json()) as T };
 };
@@ -251,6 +294,10 @@ describe("registered conversations", () => {
 		lastActiveAt: new Date("2026-09-05T09:30:00.000Z"),
 		...change,
 	});
+	const shared = (key: string): ConversationRecord => {
+		const { principalId: _private, ...rest } = record(key);
+		return { ...rest, visibility: "shared" };
+	};
 	/** The fixture's sessions, a web chat's among them, and a registry that knows the web chats. */
 	function registered() {
 		const dataDir = fixtureSessions();
@@ -270,8 +317,8 @@ describe("registered conversations", () => {
 			record("web:chat-1", { title: "Algebra" }),
 			// Recorded, but its first turn left no session file: nothing to read.
 			record("web:chat-2"),
-			// A legacy key a plugin also recorded keeps its own kind.
-			record(`discord:${OWNER_CHANNEL}`, { visibility: "shared" }),
+			// A legacy key a plugin also recorded keeps its own kind; shared, it is no one's.
+			shared(`discord:${OWNER_CHANNEL}`),
 		];
 		return api({
 			sessionsDir: join(dataDir, "sessions"),
@@ -309,6 +356,48 @@ describe("registered conversations", () => {
 		expect(byKey[`discord:${OWNER_CHANNEL}`]?.kind).toBe("owner");
 	});
 
+	test("a conversation the registry records shows whose it is by their name, and whether it is shared", async () => {
+		const { body } = await call<ConversationsView>(
+			registered(),
+			"conversations",
+		);
+		const byKey = Object.fromEntries(body.conversations.map((c) => [c.key, c]));
+		expect(byKey["web:chat-1"]).toMatchObject({
+			visibility: "private",
+			principal: { id: MEMBER.id, name: "Ada" },
+		});
+		expect(byKey[`discord:${OWNER_CHANNEL}`]?.visibility).toBe("shared");
+		expect(byKey[`discord:${OWNER_CHANNEL}`]?.principal).toBeUndefined();
+		// Conversations the registry does not know say neither.
+		expect(byKey[`mcp:${OUTSIDE_SESSION}`]?.visibility).toBeUndefined();
+		expect(byKey[`mcp:${OUTSIDE_SESSION}`]?.principal).toBeUndefined();
+		const transcript = await call<TranscriptView>(
+			registered(),
+			`conversations/${encodeURIComponent("web:chat-1")}`,
+		);
+		expect(transcript.body.conversation.principal).toEqual({
+			id: MEMBER.id,
+			name: "Ada",
+		});
+	});
+
+	test("a principal the host no longer knows is shown by their id", async () => {
+		const instance = api({
+			sessionsDir: `${fixtureSessions()}/sessions`,
+			registry: {
+				list: async () => [
+					record(`mcp:${OUTSIDE_SESSION}`, { principalId: "p_gone" }),
+				],
+				get: async () => undefined,
+			},
+		}).api;
+		const { body } = await call<ConversationsView>(instance, "conversations");
+		expect(
+			body.conversations.find((c) => c.key === `mcp:${OUTSIDE_SESSION}`)
+				?.principal,
+		).toEqual({ id: "p_gone", name: "p_gone" });
+	});
+
 	test("a registered conversation's transcript is read from its own directory; an unregistered key is not", async () => {
 		const instance = registered();
 		const live = await call<TranscriptView>(
@@ -335,6 +424,88 @@ describe("registered conversations", () => {
 });
 
 describe("notes", () => {
+	test("are the visitor's own unless the page asks for someone else's", async () => {
+		const { api: instance } = api();
+		const facts = async (path: string, visitor = AS_OWNER) =>
+			(await call<NoteView[]>(instance, path, {}, visitor)).body.map(
+				(n) => n.fact,
+			);
+		expect(await facts("notes")).toEqual(["Likes tea", "Trip"]);
+		expect(await facts("notes", visitorOf(SECOND))).toEqual(["Likes coffee"]);
+		expect(
+			await facts(`notes?principal=${encodeURIComponent(SECOND.id)}`),
+		).toEqual(["Likes coffee"]);
+		expect(
+			await facts(
+				`notes?principal=${encodeURIComponent(OWNER.id)}&q=tea`,
+				visitorOf(SECOND),
+			),
+		).toEqual(["Likes tea"]);
+	});
+
+	test("adds, edits, and deletes in the chosen person's notes only", async () => {
+		const { api: instance } = api();
+		const theirs = `principal=${encodeURIComponent(SECOND.id)}`;
+		const added = await call<NoteView>(
+			instance,
+			`notes?${theirs}`,
+			send("POST", { fact: "Runs", kind: "note" }),
+		);
+		expect(added.status).toBe(201);
+		const edited = await call<NoteView>(
+			instance,
+			`notes/${added.body.id}?${theirs}`,
+			send("PATCH", { fact: "Runs far", kind: "note" }),
+		);
+		expect(edited.body.fact).toBe("Runs far");
+		expect(
+			(await call<NoteView[]>(instance, "notes")).body.map((n) => n.fact),
+		).toEqual(["Likes tea", "Trip"]);
+		const removed = await call(instance, `notes/${added.body.id}?${theirs}`, {
+			method: "DELETE",
+		});
+		expect(removed.status).toBe(200);
+		expect(
+			(await call<NoteView[]>(instance, `notes?${theirs}`)).body.map(
+				(n) => n.fact,
+			),
+		).toEqual(["Likes coffee"]);
+	});
+
+	test("refuses a person the host does not know, and the host's own principal", async () => {
+		const { api: instance } = api();
+		for (const id of ["nobody", "system", ""]) {
+			const response = await call<{ error: string }>(
+				instance,
+				`notes?principal=${encodeURIComponent(id)}`,
+			);
+			expect(response.status).toBe(404);
+			expect(response.body.error).toBe("There is no such person.");
+		}
+	});
+
+	test("lists the people whose notes the pane can show, the visitor first", async () => {
+		const { api: instance } = api();
+		const { body } = await call<PrincipalsView>(
+			instance,
+			"principals",
+			{},
+			visitorOf(SECOND),
+		);
+		expect(body).toEqual({
+			self: SECOND.id,
+			principals: [
+				{ id: SECOND.id, name: "Bea" },
+				{ id: OWNER.id, name: "Owner" },
+				{ id: MEMBER.id, name: "Ada" },
+				{ id: RETIRED.id, name: "Gus", disabled: true },
+			],
+		});
+		expect(
+			(await call(api({ panes: ["conversations"] }).api, "principals")).status,
+		).toBe(404);
+	});
+
 	test("lists, searches, adds, edits, and deletes, and tells the page each time", async () => {
 		const { api: instance, changes } = api();
 		const listed = await call<NoteView[]>(instance, "notes");
@@ -433,7 +604,7 @@ describe("body limit", () => {
 			body,
 			duplex: "half",
 		});
-		const response = await api().api.handle(request, "notes");
+		const response = await api().api.handle(request, "notes", AS_OWNER);
 		expect(response.status).toBe(413);
 	});
 });
@@ -458,18 +629,19 @@ describe("panes and errors", () => {
 
 	test("a failure answers 500 with a fixed message, and logs neither the URL nor the headers", async () => {
 		const { api: instance, logger } = api({
-			memory: {
+			memoryOf: () => ({
 				...fakeMemory(),
 				list: async () => {
 					throw new Error("boom");
 				},
-			},
+			}),
 		});
 		const response = await instance.handle(
 			new Request("http://console/console/api/notes?note=hunter2", {
 				headers: { authorization: "Bearer very-secret", cookie: "sid=abc" },
 			}),
 			"notes",
+			AS_OWNER,
 		);
 		expect(response.status).toBe(500);
 		const text = await response.text();
@@ -489,6 +661,7 @@ describe("panes and errors", () => {
 		const response = await api().api.handle(
 			new Request("http://console/console/api/config"),
 			"config",
+			AS_OWNER,
 		);
 		expect(response.headers.get("cache-control")).toBe("no-store");
 	});

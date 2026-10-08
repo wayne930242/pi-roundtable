@@ -1,9 +1,11 @@
 import { describe, expect, test } from "bun:test";
+import type { ActorFacts } from "pi-roundtable";
 import { recordingLogger } from "pi-roundtable/testing";
 import type { AssetBundle } from "./assets.ts";
 import { ConsoleServer } from "./console-server.ts";
 import { ORIGIN } from "./testing/fixtures.ts";
-import { admit, type RequestVerifier, refuse } from "./verifier.ts";
+import { admit, admitAs, type RequestVerifier, refuse } from "./verifier.ts";
+import type { Identified, Visitor } from "./visitors.ts";
 
 const assets: AssetBundle = new Map([
 	[
@@ -16,18 +18,33 @@ const assets: AssetBundle = new Map([
 	],
 ]);
 
-function setup(verifier: RequestVerifier = () => admit(), coalesceMs?: number) {
+const OWNER: Visitor = {
+	principal: { id: "owner", displayName: "Owner", disabled: false },
+};
+
+function setup(
+	verifier: RequestVerifier = () => admit(),
+	coalesceMs?: number,
+	identify: (
+		actor: ActorFacts | undefined,
+	) => Promise<Identified> = async () => ({
+		visitor: OWNER,
+	}),
+) {
 	const listeners: (() => void)[] = [];
 	const apiPaths: string[] = [];
+	const visitors: Visitor[] = [];
 	const recorder = recordingLogger();
 	const server = new ConsoleServer({
 		mount: "/console",
 		assets,
 		verifier,
+		identify,
 		origin: ORIGIN,
 		api: {
-			handle: async (_request, path) => {
+			handle: async (_request, path, visitor) => {
 				apiPaths.push(path);
+				visitors.push(visitor);
 				return Response.json({ ok: true });
 			},
 		},
@@ -35,7 +52,7 @@ function setup(verifier: RequestVerifier = () => admit(), coalesceMs?: number) {
 		logger: recorder.logger,
 		...(coalesceMs === undefined ? {} : { coalesceMs }),
 	});
-	return { server, listeners, apiPaths, recorder };
+	return { server, listeners, apiPaths, visitors, recorder };
 }
 
 const get = (server: ConsoleServer, path: string, init: RequestInit = {}) =>
@@ -78,6 +95,51 @@ describe("ConsoleServer", () => {
 			level: "warn",
 			fields: { refusal: "no assertion" },
 		});
+	});
+
+	test("someone the verifier admits but who is no owner is refused, and reaches no data", async () => {
+		const actors: (ActorFacts | undefined)[] = [];
+		const member: ActorFacts = { provider: "test", subject: "m", name: "M" };
+		const { server, apiPaths, recorder } = setup(
+			() => admitAs(member),
+			undefined,
+			async (actor) => {
+				actors.push(actor);
+				return { refusal: "principal m holds no owner role" };
+			},
+		);
+		for (const path of [
+			"/console",
+			"/console/",
+			"/console/chunk-abc.js",
+			"/console/api/config",
+			"/console/api/events",
+		]) {
+			const response = await get(server, path);
+			expect(response.status).toBe(403);
+			expect(await response.text()).toBe("Forbidden");
+		}
+		expect(apiPaths).toEqual([]);
+		expect(actors).toEqual(Array(5).fill(member));
+		expect(recorder.lines[0]).toMatchObject({
+			level: "warn",
+			fields: { refusal: "principal m holds no owner role" },
+		});
+	});
+
+	test("an identity lookup that fails admits no one", async () => {
+		const { server, apiPaths, recorder } = setup(undefined, undefined, () =>
+			Promise.reject(new Error("database down")),
+		);
+		expect((await get(server, "/console/api/config")).status).toBe(403);
+		expect(apiPaths).toEqual([]);
+		expect(recorder.lines[0]?.fields.refusal).toBe("identity failed");
+	});
+
+	test("the API is told who the request comes from", async () => {
+		const { server, visitors } = setup();
+		await get(server, "/console/api/notes");
+		expect(visitors).toEqual([OWNER]);
 	});
 
 	test("a verifier that throws or rejects admits no one", async () => {

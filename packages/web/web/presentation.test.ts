@@ -5,6 +5,7 @@ import { Cleanup } from "./components/cleanup.tsx";
 import { MarkdownDocument } from "./components/markdown.tsx";
 import { ConfigContext } from "./lib/config.ts";
 import { setPresentation, translate } from "./lib/messages.ts";
+import { Whose } from "./pages/notes.tsx";
 
 test("skill Markdown renders headings/emphasis/GFM tables and escapes HTML, scripts, local links and image fetches", () => {
 	const html = renderToStaticMarkup(
@@ -60,4 +61,27 @@ test("cleanup actions use host translations without interpreting hostile labels 
 	expect(html).not.toContain("<script>");
 	expect(translate("Absent {count}", { count: 3 })).toBe("Absent 3");
 	setPresentation({ title: "Console", panes: [], timeZone: "UTC" });
+});
+
+test("the notes pane names whose notes it shows, the visitor's own by default", () => {
+	setPresentation({ title: "Console", panes: ["notes"], timeZone: "UTC" });
+	const people = {
+		self: "p_bea",
+		principals: [
+			{ id: "p_bea", name: "Bea" },
+			{ id: "owner", name: "Owner" },
+			{ id: "p_gus", name: "Gus", disabled: true as const },
+		],
+	};
+	const own = renderToStaticMarkup(
+		createElement(Whose, { people, shown: undefined, choose: () => {} }),
+	);
+	expect(own).toContain("Whose notes");
+	expect(own).toContain('<option value="p_bea" selected="">Bea (you)</option>');
+	expect(own).toContain('<option value="owner">Owner</option>');
+	expect(own).toContain("Gus (disabled)");
+	const theirs = renderToStaticMarkup(
+		createElement(Whose, { people, shown: "owner", choose: () => {} }),
+	);
+	expect(theirs).toContain('<option value="owner" selected="">Owner</option>');
 });

@@ -14,8 +14,10 @@ export const DEFAULT_RELAY_NOTE =
 
 export interface WebConsoleOptions {
 	/**
-	 * Decides whether a request comes from the owner; required. `cloudflareAccess(...)` is the
-	 * built-in one. Without it the plugin refuses to start rather than serve without authentication.
+	 * Decides whether a request comes from someone the operator's proxy authenticated, and reports
+	 * who; required. `cloudflareAccess(...)` is the built-in one. Without it the plugin refuses to
+	 * start rather than serve without authentication. Only a person whose principal holds the owner
+	 * role gets in.
 	 */
 	verifier: RequestVerifier;
 	/** Host-specific data and actions, resolved against public plugin setup context. */
@@ -31,7 +33,11 @@ export interface WebConsoleOptions {
 	 * must carry it as their `Origin`, and the dashboard line links to it.
 	 */
 	origin: string;
-	/** The id memory notes are kept under: the owner's. Required when the `notes` pane is served. */
+	/**
+	 * Deprecated: the owner's principal that a verifier reporting no actor speaks for; default the
+	 * primary owner (the first of `access.owners`). The notes pane shows each visitor their own
+	 * notes, and any principal's on request.
+	 */
 	ownerId?: string;
 	/** The host's data directory, whose `sessions/` holds the conversations; default `./data`. */
 	dataDir?: string;
@@ -145,9 +151,9 @@ export function resolveOptions(options: WebConsoleOptions): ResolvedOptions {
 	}
 	const panes = checkPanes(options.panes);
 	const ownerId = options.ownerId?.trim();
-	if (panes.includes("notes") && !ownerId)
+	if (options.ownerId !== undefined && !ownerId)
 		fail(
-			"ownerId is required for the notes pane: it is the id the owner's memory is kept under. Set it, or leave `notes` out of panes",
+			"ownerId is empty. Leave it out: the console finds each visitor's principal, and a verifier that reports no actor speaks for the primary owner",
 		);
 	const title = options.title?.trim() ?? "Roundtable";
 	if (!title) fail("title is empty");
