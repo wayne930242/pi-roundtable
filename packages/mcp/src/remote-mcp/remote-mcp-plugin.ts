@@ -163,13 +163,16 @@ export function remoteMcp(options: RemoteMcpOptions): RoundtablePlugin {
 			const grants = await ChannelGrantStore.attach(database());
 			const sessions = await RemoteSessionStore.attach(database());
 			// 0.8's sessions were the owner's, and their conversations, recorded shared, become theirs.
+			const registry = services.get(CONVERSATIONS);
 			const [primary] = await identities.owners();
-			if (primary) {
-				const registry = services.get(CONVERSATIONS);
+			if (primary)
 				await sessions.adopt(primary.id, async (id) => {
 					await registry.adopt(`mcp:${id}`, primary.id);
 				});
-			}
+			// Every start adopts each session's conversation for its principal again, so one a failed
+			// hand-over left no one's becomes theirs; adopt never changes one already someone's.
+			for (const { id, principalId } of await sessions.owned())
+				await registry.adopt(`mcp:${id}`, principalId);
 			const gateway = new McpGateway({
 				dispatchToken: options.dispatchToken,
 				agent: new RemoteAgent({

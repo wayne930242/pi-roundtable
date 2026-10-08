@@ -66,6 +66,13 @@ export class RemoteSessionStore {
 		});
 	}
 
+	/** Every session that is someone's, with whose it is. */
+	async owned(): Promise<{ id: string; principalId: string }[]> {
+		return this.#sql`
+			SELECT id, principal_id AS "principalId" FROM remote_agent_sessions
+			WHERE principal_id IS NOT NULL ORDER BY id`;
+	}
+
 	async create(principalId: string): Promise<string> {
 		const id = randomUUID();
 		await this.#sql`

@@ -230,6 +230,34 @@ describeDb("remote MCP bound to a principal on a host", () => {
 		await owner.stop();
 	});
 
+	test("a session already someone's whose conversation is still no one's, as a failed hand-over leaves it, becomes theirs at the next start", async () => {
+		const id = crypto.randomUUID();
+		await sql`INSERT INTO remote_agent_sessions (id, principal_id) VALUES (${id}, ${KAI})`;
+		await sql`
+			INSERT INTO conversations (key, surface, kind, visibility)
+			VALUES (${`mcp:${id}`}, 'mcp', 'remote', 'shared')`;
+		// Kai's own private conversation, by now, and another principal's never change hands.
+		const theirs = crypto.randomUUID();
+		await sql`INSERT INTO remote_agent_sessions (id, principal_id) VALUES (${theirs}, ${KAI})`;
+		await sql`
+			INSERT INTO conversations (key, surface, kind, visibility, principal_id)
+			VALUES (${`mcp:${theirs}`}, 'mcp', 'remote', 'private', ${ADA})`;
+		const owner = await boot();
+		try {
+			const registry = owner.host.context.services.get(CONVERSATIONS);
+			expect(await registry.get(`mcp:${id}`)).toMatchObject({
+				visibility: "private",
+				principalId: KAI,
+			});
+			expect(await registry.get(`mcp:${theirs}`)).toMatchObject({
+				visibility: "private",
+				principalId: ADA,
+			});
+		} finally {
+			await owner.stop();
+		}
+	});
+
 	test("bound to a principal that does not exist, the start stops and says so", async () => {
 		expect(boot("966666600000000049")).rejects.toThrow(
 			"plugin remote-mcp: token:remote-mcp is bound to principal 966666600000000049, and there is no principal 966666600000000049. roundtable principal list shows the principals, and roundtable principal create makes one.",
