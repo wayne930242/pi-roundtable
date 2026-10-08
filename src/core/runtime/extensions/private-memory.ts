@@ -29,36 +29,78 @@ export interface MemoryView {
 	reader: string | undefined;
 }
 
+type Assistant = Extract<Messages[number], { role: "assistant" }>;
+
+/**
+ * An earlier answer without its reasoning, or undefined when it gave none: its thinking, encrypted
+ * or not, and the thought signatures of its tool calls, which may carry a person's memory as the
+ * turn read it.
+ */
+function withoutReasoning(message: Assistant): Assistant | undefined {
+	let changed = false;
+	const content = message.content.flatMap((part): Assistant["content"] => {
+		if (part.type === "thinking") {
+			changed = true;
+			return [];
+		}
+		if (part.type === "toolCall" && part.thoughtSignature !== undefined) {
+			changed = true;
+			const { thoughtSignature: _, ...call } = part;
+			return [call];
+		}
+		return [part];
+	});
+	return changed ? { ...message, content } : undefined;
+}
+
 /**
  * The request's messages as the view allows, or undefined when they need no change. A tool result
  * holding someone else's memory reads as a placeholder; in a shared conversation, so does a memory
- * result that does not say whose it is, and the prompt states its history recorded collapse into
- * one leading message of the current prompt, so no earlier turn's memory section remains.
+ * result that does not say whose it is, the answers of the turns before the running one read
+ * without their reasoning, and the prompt states its history recorded collapse into one leading
+ * message of the current prompt, so no earlier turn's memory section remains.
  */
 export function memoryProjection(
 	messages: Messages,
 	view: MemoryView,
 ): Messages | undefined {
+	// The running turn starts at the last message someone wrote; its own reasoning stays its own.
+	const running = view.shared
+		? messages.findLastIndex((message) => message.role === "user")
+		: -1;
 	let changed = false;
-	const shown = messages.map((message) => {
-		if (message.role !== "toolResult") return message;
-		const whose = privateTo(message.details);
-		const hidden =
-			whose !== undefined
-				? whose !== view.reader && HIDDEN_MEMORY
-				: view.shared &&
-					MEMORY.has(message.toolName) &&
-					!message.isError &&
-					HIDDEN_UNRECORDED_MEMORY;
-		if (!hidden) return message;
+	const shown = messages.map((message, index) => {
+		const projected = projectedMessage(message, view, index < running);
+		if (!projected) return message;
 		changed = true;
-		return { ...message, content: [{ type: "text" as const, text: hidden }] };
+		return projected;
 	});
 	const prompts = shown.filter((message) => message.role === "system").length;
 	if (!view.shared || prompts <= 1) return changed ? shown : undefined;
 	const head = getCurrentSystemMessage(shown);
 	if (!head) return changed ? shown : undefined;
 	return [head, ...shown.filter((message) => message.role !== "system")];
+}
+
+/** One message as the view allows, or undefined when it needs no change. */
+function projectedMessage(
+	message: Messages[number],
+	view: MemoryView,
+	earlier: boolean,
+): Messages[number] | undefined {
+	if (message.role === "assistant")
+		return earlier ? withoutReasoning(message) : undefined;
+	if (message.role !== "toolResult") return undefined;
+	const whose = privateTo(message.details);
+	const hidden =
+		whose !== undefined
+			? whose !== view.reader && HIDDEN_MEMORY
+			: view.shared &&
+				MEMORY.has(message.toolName) &&
+				!message.isError &&
+				HIDDEN_UNRECORDED_MEMORY;
+	if (!hidden) return undefined;
+	return { ...message, content: [{ type: "text" as const, text: hidden }] };
 }
 
 /**

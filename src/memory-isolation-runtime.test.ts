@@ -5,8 +5,10 @@ import { join } from "node:path";
 import {
 	collapseSystemMessages,
 	createFauxCore,
+	type FauxContentBlock,
 	type FauxResponseStep,
 	fauxAssistantMessage,
+	fauxText,
 	fauxToolCall,
 	type TranscriptContext,
 } from "@earendil-works/pi-ai";
@@ -748,6 +750,67 @@ describe("what a conversation held when it comes to serve someone else", () => {
 			expect(stored.get("fake:desk")?.principalId).toBe(OWNER.id);
 		} finally {
 			await again.stop();
+		}
+	});
+});
+
+describe("the reasoning of a shared conversation's earlier turns", () => {
+	/** An answer that thinks first, its reasoning also carried as a provider's encrypted signature. */
+	const thinking = (thought: string, then: FauxContentBlock) =>
+		fauxAssistantMessage(
+			[
+				{
+					type: "thinking",
+					thinking: thought,
+					thinkingSignature: `${thought}_SIGNED`,
+				},
+				then,
+			],
+			{ stopReason: then.type === "toolCall" ? "toolUse" : "stop" },
+		);
+
+	test("reaches no later turn's request, while a turn keeps its own as it goes", async () => {
+		const seen: TranscriptContext[] = [];
+		const host = await isolationHost(STORE(), [
+			thinking("ANN_THOUGHT_SECRET", fauxText("Noted.")),
+			(context) => {
+				seen.push(context);
+				return thinking("BO_THOUGHT", {
+					...fauxToolCall("memory_search", { query: "chemistry" }),
+					thoughtSignature: "BO_TOOL_SIGNED",
+				});
+			},
+			(context) => {
+				seen.push(context);
+				return fauxAssistantMessage("OK.");
+			},
+			(context) => {
+				seen.push(context);
+				return fauxAssistantMessage("OK.");
+			},
+		]);
+		try {
+			expect((await host.run(ANN, "fake:room")).ok).toBe(true);
+			expect((await host.run(BO, "fake:room")).ok).toBe(true);
+			expect((await host.run(SYSTEM, "fake:room")).ok).toBe(true);
+			const [bo, boAgain, system] = seen;
+			if (!bo || !boAgain || !system) throw new Error("a turn asked nothing");
+			for (const request of [bo, boAgain, system])
+				for (const sent of asSent(request)) {
+					expect(sent).not.toContain("ANN_THOUGHT_SECRET");
+					expect(sent).toContain("Noted.");
+				}
+			// Bo's turn, after its tool call, still reads the reasoning it gave for the call.
+			for (const sent of asSent(boAgain)) {
+				expect(sent).toContain("BO_THOUGHT_SIGNED");
+				expect(sent).toContain("BO_TOOL_SIGNED");
+			}
+			for (const sent of asSent(system)) {
+				expect(sent).not.toContain("BO_THOUGHT");
+				expect(sent).not.toContain("BO_TOOL_SIGNED");
+			}
+		} finally {
+			await host.stop();
 		}
 	});
 });

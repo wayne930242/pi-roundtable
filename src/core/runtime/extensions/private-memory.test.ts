@@ -120,3 +120,51 @@ describe("the tool calls that draw on the reader's memory", () => {
 		expect(draws.end("outer")).toBe(false);
 	});
 });
+
+describe("the reasoning a request may carry", () => {
+	const answer = (thought: string, timestamp: number) => ({
+		role: "assistant" as const,
+		content: [
+			{
+				type: "thinking" as const,
+				thinking: thought,
+				thinkingSignature: `${thought} signed`,
+			},
+			{ type: "text" as const, text: "An answer." },
+		],
+		api: "faux",
+		provider: "faux",
+		model: "faux-1",
+		usage: {
+			input: 0,
+			output: 0,
+			cacheRead: 0,
+			cacheWrite: 0,
+			totalTokens: 0,
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+		},
+		stopReason: "stop" as const,
+		timestamp,
+	});
+	const history: Messages = [
+		{ role: "user", content: "Hello.", timestamp: 1 },
+		answer("Ann's reasoning", 2),
+		{ role: "user", content: "Hi.", timestamp: 3 },
+		answer("Bo's reasoning", 4),
+	];
+
+	test("a shared conversation's earlier turns read without theirs, the running turn with its own", () => {
+		const text = textOf(
+			memoryProjection(history, { shared: true, reader: "bo" }),
+		);
+		expect(text).not.toContain("Ann's reasoning");
+		expect(text).toContain("Bo's reasoning signed");
+		expect(text.match(/An answer\./g)).toHaveLength(2);
+	});
+
+	test("a private conversation keeps every turn's", () => {
+		expect(
+			memoryProjection(history, { shared: false, reader: "ann" }),
+		).toBeUndefined();
+	});
+});
