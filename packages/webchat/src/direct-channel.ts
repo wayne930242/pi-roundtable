@@ -14,7 +14,7 @@ export interface WebDirectChannelOptions {
 	notices: PgNotices;
 }
 
-/** A private inbox, known offline through linked identities or existing private web conversations. */
+/** A private inbox, known offline through a same-surface identity or private conversation. */
 export function webDirectChannel(
 	options: WebDirectChannelOptions,
 ): DirectChannelProvider {
@@ -24,13 +24,9 @@ export function webDirectChannel(
 		const principal = await identity().principal(principalId);
 		if (!principal || principal.disabled) return false;
 		const linked = await identity().identities(principalId);
-		if (
-			linked.some(
-				(link) =>
-					link.provider.startsWith("oidc:") || link.provider === surface,
-			)
-		)
-			return true;
+		// OIDC links carry an issuer, not a chat surface. They alone cannot prove
+		// membership in this inbox: another webchat might use that same issuer.
+		if (linked.some((link) => link.provider === surface)) return true;
 		return (await registry().list({ principal: principalId })).some(
 			(record) => record.surface === surface && record.visibility === "private",
 		);

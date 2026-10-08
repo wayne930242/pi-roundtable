@@ -26,6 +26,8 @@ const noticeOf = (row: Row): Notice => ({
 export interface NoticeLimits {
 	messageChars?: number;
 	maxBufferedBytes?: number;
+	/** Inbox namespace; default web, matching the plugin's default surface. */
+	surface?: string;
 }
 
 /** Fixed retention and text caps bound storage and REST response sizes. */
@@ -34,13 +36,15 @@ const MAX_NOTICE_CHARS = 4096;
 // ASCII UUID and timestamps plus JSON field names fit within this reserve.
 const FRAME_OVERHEAD = 256;
 
-/** Notices scoped by principal in every query, including marking one read. */
+/** Notices scoped by surface and principal in every query, including marking one read. */
 export class PgNotices {
 	readonly #sql: SQL;
 	readonly #textChars: number;
+	readonly #surface: string;
 
 	constructor(sql: SQL, limits: NoticeLimits = {}) {
 		this.#sql = sql;
+		this.#surface = limits.surface ?? "web";
 		const bytes = limits.maxBufferedBytes ?? 4 * 1024 * 1024;
 		const chars = limits.messageChars ?? 32_000;
 		if (!Number.isSafeInteger(bytes) || bytes < FRAME_OVERHEAD + 6)
@@ -62,11 +66,11 @@ export class PgNotices {
 		name: "notices",
 		up: async (sql) => {
 			await sql`CREATE TABLE IF NOT EXISTS webchat_notices (
-				principal_id TEXT NOT NULL, id UUID PRIMARY KEY, text TEXT NOT NULL,
+				surface TEXT NOT NULL, principal_id TEXT NOT NULL, id UUID PRIMARY KEY, text TEXT NOT NULL,
 				created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), read_at TIMESTAMPTZ
 			)`;
-			await sql`CREATE INDEX IF NOT EXISTS webchat_notices_principal_created
-				ON webchat_notices (principal_id, created_at DESC, id)`;
+			await sql`CREATE INDEX IF NOT EXISTS webchat_notices_surface_principal_created
+				ON webchat_notices (surface, principal_id, created_at DESC, id)`;
 		},
 	};
 
@@ -77,13 +81,13 @@ export class PgNotices {
 				: text;
 		return this.#sql.begin(async (sql) => {
 			// Serialize insert/prune for one inbox even across pools/processes.
-			await sql`SELECT pg_advisory_xact_lock(hashtextextended(${`webchat-notices:${principalId}`}, 0))`;
+			await sql`SELECT pg_advisory_xact_lock(hashtextextended(${`webchat-notices:${this.#surface}:${principalId}`}, 0))`;
 			const rows: Row[] =
-				await sql`INSERT INTO webchat_notices (principal_id, id, text, created_at)
-				VALUES (${principalId}, ${crypto.randomUUID()}, ${bounded}, clock_timestamp()) RETURNING *`;
+				await sql`INSERT INTO webchat_notices (surface, principal_id, id, text, created_at)
+				VALUES (${this.#surface}, ${principalId}, ${crypto.randomUUID()}, ${bounded}, clock_timestamp()) RETURNING *`;
 			if (!rows[0]) throw new Error("webchat notice insert returned no row");
-			await sql`DELETE FROM webchat_notices WHERE principal_id = ${principalId} AND id IN (
-				SELECT id FROM webchat_notices WHERE principal_id = ${principalId}
+			await sql`DELETE FROM webchat_notices WHERE surface = ${this.#surface} AND principal_id = ${principalId} AND id IN (
+				SELECT id FROM webchat_notices WHERE surface = ${this.#surface} AND principal_id = ${principalId}
 				ORDER BY created_at DESC, id DESC OFFSET ${MAX_NOTICES}
 			)`;
 			return noticeOf(rows[0]);
@@ -102,19 +106,19 @@ export class PgNotices {
 		const rows: Row[] = before
 			? await this
 					.#sql`SELECT id, text, created_at, read_at FROM webchat_notices
-				WHERE principal_id = ${principalId} AND (created_at, id) < (
-					SELECT created_at, id FROM webchat_notices WHERE id = ${before}::uuid AND principal_id = ${principalId}
+				WHERE surface = ${this.#surface} AND principal_id = ${principalId} AND (created_at, id) < (
+					SELECT created_at, id FROM webchat_notices WHERE id = ${before}::uuid AND surface = ${this.#surface} AND principal_id = ${principalId}
 				) ORDER BY created_at DESC, id DESC LIMIT ${limit}`
 			: await this
 					.#sql`SELECT id, text, created_at, read_at FROM webchat_notices
-				WHERE principal_id = ${principalId} ORDER BY created_at DESC, id DESC LIMIT ${limit}`;
+				WHERE surface = ${this.#surface} AND principal_id = ${principalId} ORDER BY created_at DESC, id DESC LIMIT ${limit}`;
 		return rows.map(noticeOf);
 	}
 
 	async read(principalId: string, id: string): Promise<Notice | undefined> {
 		const rows: Row[] = await this
 			.#sql`UPDATE webchat_notices SET read_at = COALESCE(read_at, NOW())
-			WHERE principal_id = ${principalId} AND id = ${id}::uuid RETURNING *`;
+			WHERE surface = ${this.#surface} AND principal_id = ${principalId} AND id = ${id}::uuid RETURNING *`;
 		return rows[0] ? noticeOf(rows[0]) : undefined;
 	}
 }

@@ -230,12 +230,14 @@ A request from a browser origin not in `origins` gets 403; an allowed origin get
 | `GET <path>/conversations` | `{ conversations: [{ conversation, persona, title?, createdAt, lastActiveAt }] }`: your own, the most recently active first. |
 | `POST <path>/conversations` with `{ persona, title? }` | 201 `{ conversation, persona }`: a new conversation to write in. 429 `too_many_conversations` past either conversation limit. |
 | `GET <path>/conversations/<conversation>/messages?limit=50` | `{ messages: [{ role, text }] }`: its last messages, at most 500. Someone else's conversation is 403. |
-| `GET <path>/notices?limit=50&before=<id>` | `{ notices: [{ id, text, createdAt, readAt }] }`: only your principal's entries, newest first, at most 100. Omit `before` for the first page; use its last id to fetch the next. |
+| `GET <path>/notices?limit=50&before=<id>` | `{ notices: [{ id, text, createdAt, readAt }] }`: only your principal's entries on this surface, newest first, at most 100. Omit `before` for the first page; use its last id to fetch the next. |
 | `POST <path>/notices/<id>/read` | `{ notice }` with `readAt` set. Idempotent; unknown ids or another principal's notice return 404. |
 
 Inbox text is truncated with `…` to at most 4096 UTF-16 units, or `messageChars` if smaller.
 The cap is reduced further for a small `maxBufferedBytes`, reserving 256 bytes for the notice frame and allowing six JSON bytes per text unit; configurations below 262 bytes are refused.
-Each principal retains only its newest 100 notices, pruning oldest entries atomically with each insert (including concurrent deliveries).
+Each principal retains only its newest 100 notices per surface, pruning oldest entries atomically with each insert (including concurrent deliveries).
+List, read acknowledgements, pagination cursors and retention are isolated by surface as well as principal.
+Offline inbox discovery requires a private conversation on this surface or a linked identity whose provider equals this surface; a generic `oidc:` link alone does not establish membership in every webchat inbox.
 A REST notice page therefore contains at most 100 bounded entries, less than 2.5 MiB at the default text cap.
 
 ## Security model
