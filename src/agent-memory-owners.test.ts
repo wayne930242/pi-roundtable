@@ -6,6 +6,7 @@ import {
 	createFauxCore,
 	type FauxResponseStep,
 	fauxAssistantMessage,
+	fauxToolCall,
 	type TranscriptContext,
 } from "@earendil-works/pi-ai";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
@@ -94,6 +95,8 @@ async function host(
 	steps: FauxResponseStep[],
 	options: { provider: string; memory?: AgentSessions["memory"] },
 ) {
+	// The agent server's option, which a test may change between turns.
+	let memoryOption = options.memory;
 	const dir = mkdtempSync(join(tmpdir(), "roundtable-agent-memory-"));
 	dirs.push(dir);
 	const { provider } = options;
@@ -146,13 +149,42 @@ async function host(
 							skills: () => [],
 							modelOf: () => ({ model: `${provider}/faux-1`, thinking: "off" }),
 							turnChannel: (scope) => scope.home,
-							...(options.memory ? { memory: options.memory } : {}),
+							get memory() {
+								return memoryOption;
+							},
 						},
 					}),
 			},
 			setup: () => ({
 				sessionTools: [
 					memorySessionTool(store, OWNER),
+					{
+						name: "worker",
+						phase: "tools",
+						snapshot: () => ({
+							revision: 0,
+							factory: (session) => (pi) => {
+								pi.registerTool({
+									name: "probe_task",
+									label: "probe_task",
+									description: "Ask a worker to look something up.",
+									parameters: Type.Object({}),
+									execute: async () => {
+										const text = await session.runTask({
+											selection: {
+												tools: ["memory_search"],
+												groups: [],
+											},
+											text: "Look it up.",
+											timeoutMs: 10_000,
+											exclude: [],
+										});
+										return { content: [{ type: "text", text }], details: {} };
+									},
+								});
+							},
+						}),
+					},
 					{
 						name: "compactor",
 						phase: "tools",
@@ -172,7 +204,7 @@ async function host(
 						}),
 					},
 				],
-				toolTiers: MEMORY_TIERS,
+				toolTiers: { ...MEMORY_TIERS, probe_task: "member" },
 			}),
 		}),
 		{
@@ -193,10 +225,13 @@ async function host(
 		seen,
 		pending: () => core.getPendingResponseCount(),
 		stop: () => harness.stop(),
-		run: (speaker: Speaker) =>
+		setMemory: (memory: AgentSessions["memory"]) => {
+			memoryOption = memory;
+		},
+		run: (speaker: Speaker, tools: readonly string[] = MEMORY_TOOL_NAMES) =>
 			runtime.runTurn({
 				channel: AGENT.home,
-				selection: { id: "agent", tools: MEMORY_TOOL_NAMES, groups: [] },
+				selection: { id: "agent", tools, groups: [] },
 				text: "Hello.",
 				speaker,
 				agent: AGENT,
@@ -308,6 +343,60 @@ describe("the agent server's memory option", () => {
 			expect((await h.run(OWNER_SPEAKER)).ok).toBe(true);
 			expect((await h.run(MEMBER)).ok).toBe(false);
 			expect(h.pending()).toBe(1);
+		} finally {
+			await h.stop();
+		}
+	});
+
+	test("owners, on claude-bridge: a worker in a member's turn reads no memory and leaves the owner unblocked", async () => {
+		const worker: TranscriptContext[] = [];
+		const h = await host(
+			[
+				fauxAssistantMessage(fauxToolCall("probe_task", {}), {
+					stopReason: "toolUse",
+				}),
+				look(worker),
+				fauxAssistantMessage("OK."),
+				fauxAssistantMessage("OK."),
+			],
+			{ provider: "claude-bridge", memory: "owners" },
+		);
+		try {
+			expect((await h.run(MEMBER, ["probe_task"])).ok).toBe(true);
+			const [asked] = worker;
+			if (!asked) throw new Error("the worker asked nothing");
+			const sent = JSON.stringify(asked);
+			expect(sent).not.toContain("MEMBER_FACT_SECRET");
+			expect(sent).not.toContain("OWNER_FACT_SECRET");
+			for (const name of MEMORY_TOOL_NAMES)
+				expect(declares(asked, name)).toBe(false);
+			// The member's turn left no private-memory record, so the owner is not refused.
+			expect((await h.run(OWNER_SPEAKER)).ok).toBe(true);
+			expect(h.pending()).toBe(0);
+		} finally {
+			await h.stop();
+		}
+	});
+
+	test("owners: a member's earlier private exchange stays out of their withheld turn's request", async () => {
+		const seen: TranscriptContext[] = [];
+		const h = await host(
+			[
+				fauxAssistantMessage(fauxToolCall("memory_search", { query: "x" }), {
+					stopReason: "toolUse",
+				}),
+				fauxAssistantMessage("OK."),
+				look(seen),
+			],
+			{ provider: "faux" },
+		);
+		try {
+			expect((await h.run(MEMBER)).ok).toBe(true);
+			h.setMemory("owners");
+			expect((await h.run(MEMBER)).ok).toBe(true);
+			const [later] = seen;
+			if (!later) throw new Error("the turn asked nothing");
+			expect(JSON.stringify(later)).not.toContain("MEMBER_FACT_SECRET");
 		} finally {
 			await h.stop();
 		}
