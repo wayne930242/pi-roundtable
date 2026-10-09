@@ -17,6 +17,17 @@ const CARD_INPUT_CHARS = 1_500;
 /** Held actions older than this cannot be approved any more. */
 export const CONFIRMATION_TTL_MS = 24 * 3_600_000;
 
+/** The held actions when they can still be approved at `now`; expired ones count as none. */
+export function unexpired(
+	pending: PendingConfirmation | undefined,
+	now = new Date(),
+): PendingConfirmation | undefined {
+	if (!pending) return undefined;
+	return now.getTime() - pending.heldAt.getTime() > CONFIRMATION_TTL_MS
+		? undefined
+		: pending;
+}
+
 /** JSON with object keys sorted at every level, so equal inputs compare equal. */
 // pi-lens-ignore: no-unknown-parameters — tool input is untyped model JSON; this is where it is read
 export function canonicalJson(value: unknown): string {
@@ -87,11 +98,7 @@ export class ConfirmationGate {
 
 	/** Held actions awaiting the owner's answer; expired ones count as none. */
 	pending(now = new Date()): PendingConfirmation | undefined {
-		const pending = this.#pending;
-		if (!pending) return undefined;
-		return now.getTime() - pending.heldAt.getTime() > CONFIRMATION_TTL_MS
-			? undefined
-			: pending;
+		return unexpired(this.#pending, now);
 	}
 
 	/**

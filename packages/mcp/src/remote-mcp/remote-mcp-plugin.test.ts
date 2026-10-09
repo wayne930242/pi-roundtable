@@ -345,7 +345,7 @@ describeDb("remoteMcp on a plugin harness", () => {
 
 	test("the default turn confirms held actions when the relayed message approves them", async () => {
 		const runtime = recordingRuntime();
-		runtime.pendingConfirmation = () => ({ held: true }) as never;
+		runtime.heldActions = async () => ({ held: true }) as never;
 		const { harness } = await boot(base, runtime, true);
 		const result = await relay(harness, "yes, go ahead");
 		expect(result.status).toBe("completed");
@@ -355,9 +355,27 @@ describeDb("remoteMcp on a plugin harness", () => {
 		});
 	});
 
+	test("the default turn finds the actions a restart left held in the store, which pendingConfirmation does not know yet", async () => {
+		const runtime = recordingRuntime();
+		const asked: string[] = [];
+		let restored = false;
+		runtime.pendingConfirmation = () =>
+			restored ? ({ held: true } as never) : undefined;
+		runtime.heldActions = async (channel) => {
+			asked.push(channel);
+			restored = true;
+			return { held: true } as never;
+		};
+		const { harness } = await boot(base, runtime, true);
+		const result = await relay(harness, "yes, go ahead");
+		expect(result.status).toBe("completed");
+		expect(asked).toHaveLength(1);
+		expect(runtime.turns.at(-1)).toMatchObject({ confirmed: true });
+	});
+
 	test("a message that does not approve leaves held actions held", async () => {
 		const runtime = recordingRuntime();
-		runtime.pendingConfirmation = () => ({ held: true }) as never;
+		runtime.heldActions = async () => ({ held: true }) as never;
 		const { harness } = await boot(base, runtime, false);
 		await relay(harness, "what is pending?");
 		expect(runtime.turns.at(-1)?.confirmed).toBeUndefined();

@@ -71,7 +71,8 @@ export function defaultConversation({
 			queue.run(channel, () =>
 				settleTurn(async () => {
 					const { runtime, approvals } = server();
-					const pending = runtime.pendingConfirmation(channel);
+					// Restored from the store: after a restart nothing is held in memory yet.
+					const pending = await runtime.heldActions(channel);
 					const confirmed =
 						pending !== undefined && (await approvals.approves(pending, text));
 					return turns.run({

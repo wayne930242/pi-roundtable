@@ -22,6 +22,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - `REMOTE_SPEAKER` in `default-conversation.ts`: remote turns are for the bound principal. It goes away in 1.0.
 
+### Fixed
+
+- The default remote turn finds the actions a restart left held: it reads them with `heldActions`, which restores them from the store, instead of `pendingConfirmation`, which knows only the conversations that ran a turn since startup, so an approval relayed as the first message after a restart confirms them again, as in 0.8. Needs pi-roundtable with the same fix.
+
 ## [0.8.0] - 2026-10-07
 
 - Release in lockstep with pi-roundtable 0.8.0; no package-specific behavior changes.

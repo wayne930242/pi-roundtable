@@ -8,7 +8,7 @@ import type {
 import type { TurnConversation, TurnRequest } from "../domain/ports.ts";
 import type { ThinkingLevel } from "../models.ts";
 import type { ToolTiers } from "../tool-tiers.ts";
-import { ConfirmationGate } from "./extensions/confirmation-gate.ts";
+import { ConfirmationGate, unexpired } from "./extensions/confirmation-gate.ts";
 import { PromptSlot } from "./prompt-slot.ts";
 import type { ChannelSession, PiAgentRuntimeOptions } from "./runtime-types.ts";
 import { revisionsKey, skillsKey } from "./runtime-types.ts";
@@ -33,6 +33,11 @@ export class ConversationSessions {
 	readonly #tiers: ToolTiers;
 	readonly #sessions = new Map<ChannelKey, Promise<ChannelSession>>();
 	readonly #gates = new Map<ChannelKey, ConfirmationGate>();
+	/**
+	 * What the store held for a conversation that has no gate yet, once read: a host asks what is
+	 * pending before the conversation's first turn after a restart, which builds its gate.
+	 */
+	readonly #restored = new Map<ChannelKey, PendingConfirmation | undefined>();
 	/** Each conversation's way to ask the owner during its current turn. */
 	readonly #slots = new Map<ChannelKey, PromptSlot>();
 	/** Each conversation's level the judge picked for its last turn, kept while the judge is unsure. */
@@ -53,9 +58,24 @@ export class ConversationSessions {
 		this.#tiers = tiers;
 	}
 
-	/** The held actions of a conversation whose gate is open. */
+	/** The held actions of a conversation whose gate is open, or that `held` has restored from the store. */
 	pending(channel: ChannelKey): PendingConfirmation | undefined {
-		return this.#gates.get(channel)?.pending();
+		const gate = this.#gates.get(channel);
+		return gate ? gate.pending() : unexpired(this.#restored.get(channel));
+	}
+
+	/**
+	 * The conversation's held actions, restored from the store the first time they are asked for
+	 * after a restart. Builds neither a gate nor a session: a gate's flavour follows the turn that
+	 * first needs it, an agent's or not, and only the turn knows which.
+	 */
+	async held(key: ChannelKey): Promise<PendingConfirmation | undefined> {
+		if (!this.#gates.has(key) && !this.#restored.has(key)) {
+			const stored = await this.#options.confirmations.load(key);
+			// A turn may have built the gate while the store was read; its held actions are the later ones.
+			if (!this.#gates.has(key)) this.#restored.set(key, stored);
+		}
+		return this.pending(key);
 	}
 
 	/** Disposes every open session. */
@@ -89,6 +109,7 @@ export class ConversationSessions {
 				this.#tiers,
 			);
 			this.#gates.set(key, gate);
+			this.#restored.delete(key);
 		}
 		return gate;
 	}
@@ -135,6 +156,7 @@ export class ConversationSessions {
 						"the conversation serves someone else now; its earlier history was archived",
 					);
 					this.#gates.delete(key);
+					this.#restored.delete(key);
 					await this.#options.confirmations.save(key, undefined);
 				}
 				return this.#factory.create(
@@ -249,6 +271,7 @@ export class ConversationSessions {
 			?.then(({ session }) => session.dispose())
 			.catch(() => undefined);
 		this.#gates.delete(channel);
+		this.#restored.delete(channel);
 		this.#slots.delete(channel);
 		this.usage.delete(channel);
 		this.judged.delete(channel);

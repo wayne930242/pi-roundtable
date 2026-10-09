@@ -51,11 +51,18 @@ export interface AgentRuntime {
 	startFresh(conversation: ChannelKey): Promise<void>;
 	/** Like `startFresh`, but removes the conversation and every archive of it for good; called between turns. */
 	deleteConversation(conversation: ChannelKey): Promise<void>;
-	/** The conversation's held actions known in memory since startup. */
+	/**
+	 * The conversation's held actions known in memory: those of a turn run since startup, and those
+	 * `heldActions` or `recentTranscript` restored from the store for it. After a restart, ask one of
+	 * those first.
+	 */
 	pendingConfirmation(
 		conversation: ChannelKey,
 	): PendingConfirmation | undefined;
-	/** The conversation's held actions, restored from the store after a restart. */
+	/**
+	 * The conversation's held actions, restored from the store after a restart, so that
+	 * `pendingConfirmation` knows them too, as `recentTranscript` does. Expired ones count as none.
+	 */
 	heldActions(
 		conversation: ChannelKey,
 	): Promise<PendingConfirmation | undefined>;

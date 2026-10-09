@@ -456,14 +456,14 @@ export class PiAgentRuntime implements AgentRuntime {
 	async heldActions(
 		session: ChannelKey,
 	): Promise<PendingConfirmation | undefined> {
-		const gate = await this.#sessions.gate(session, true);
-		return gate.pending();
+		return this.#sessions.held(session);
 	}
 
 	async recentTranscript(
 		channel: ChannelKey,
 		limit: number,
 	): Promise<TranscriptEntry[]> {
+		await this.#sessions.held(channel);
 		return transcriptOf(await this.#sessions.messages(channel), limit);
 	}
 
