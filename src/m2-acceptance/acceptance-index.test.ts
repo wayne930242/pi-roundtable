@@ -618,6 +618,20 @@ const ACCEPTANCE: readonly Item[] = [
 	},
 	{
 		section: "6.2",
+		item: "public projection API has no guard-only legacy attribution escape hatch",
+		tests: [
+			t(
+				"src/entries.test.ts",
+				"published MemoryView exposes no guard-only legacyOwner attribution",
+			),
+			t(
+				"src/core/runtime/extensions/private-memory.test.ts",
+				"public memory projections cannot opt into guard-only legacy ownership",
+			),
+		],
+	},
+	{
+		section: "6.2",
 		item: "the bridge's owner legacy exception never adopts modern unowned memory results",
 		tests: [
 			t(

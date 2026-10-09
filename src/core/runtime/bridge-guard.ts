@@ -16,7 +16,7 @@ import {
 	type ThinkingSetting,
 } from "../models.ts";
 import type { RoundtablePlugin } from "../plugin.ts";
-import { hidesPrivateExchange } from "./extensions/private-memory.ts";
+import { guardHidesPrivateExchange } from "./extensions/private-memory.ts";
 import { bridgeHistoryHidesMemory } from "./reader-history.ts";
 
 /**
@@ -165,7 +165,7 @@ function hidesBridgeHistory(
 	const view = { shared: true, reader };
 	const branch = history.sessionManager?.getBranch();
 	if (!branch)
-		return hidesPrivateExchange(history.messages, {
+		return guardHidesPrivateExchange(history.messages, {
 			...view,
 			legacyOwner: primary,
 		});

@@ -33,11 +33,11 @@ export interface MemoryView {
 	shared: boolean;
 	/** The principal whose memory the running turn reads; undefined for no one's. */
 	reader: string | undefined;
-	/** Bridge guard only: pre-attribution built-in memory results belong to this owner. */
-	legacyOwner?: string;
 }
 
 interface GuardView extends MemoryView {
+	/** Bridge guard only: untagged built-in results belong to this legacy/recorded reader. */
+	legacyOwner?: string;
 	/** The recorded reader owns even unanswered built-in memory calls of this turn. */
 	turnReader?: string;
 }
@@ -149,7 +149,10 @@ export function hidesPrivateExchange(
 	messages: ContextWithSystemEvent["messages"],
 	view: MemoryView,
 ): boolean {
-	return hiddenExchanges(messages, view).size > 0;
+	return (
+		hiddenExchanges(messages, { shared: view.shared, reader: view.reader })
+			.size > 0
+	);
 }
 
 /**
@@ -166,7 +169,10 @@ export function memoryProjection(
 	const running = view.shared
 		? messages.findLastIndex((message) => message.role === "user")
 		: -1;
-	const hidden = hiddenExchanges(messages, view);
+	const hidden = hiddenExchanges(messages, {
+		shared: view.shared,
+		reader: view.reader,
+	});
 	const unpaired = unpairedCalls(messages, running);
 	let changed = false;
 	const shown = messages.map((message, index) => {
@@ -189,10 +195,7 @@ export function memoryProjection(
 type ToolResult = Extract<Messages[number], { role: "toolResult" }>;
 
 /** What a result reads as in the view when it holds memory the view may not show; undefined when it shows. */
-function hiddenResult(
-	result: ToolResult,
-	view: MemoryView,
-): string | undefined {
+function hiddenResult(result: ToolResult, view: GuardView): string | undefined {
 	const whose = privateTo(result.details);
 	if (whose !== undefined)
 		return whose === view.reader ? undefined : HIDDEN_MEMORY;

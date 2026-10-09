@@ -17,6 +17,7 @@ import type {
 import {
 	HIDDEN_MEMORY,
 	HIDDEN_UNRECORDED_MEMORY,
+	hidesPrivateExchange,
 	MemoryDraws,
 	memoryProjection,
 	privateCompaction,
@@ -51,6 +52,17 @@ const result = (
 });
 
 const textOf = (messages: Messages | undefined) => JSON.stringify(messages);
+
+test("public memory projections cannot opt into guard-only legacy ownership", () => {
+	const messages: Messages = [
+		result("memory_add", "UNOWNED_SECRET", undefined, true),
+	];
+	const view = { shared: true, reader: "owner", legacyOwner: "owner" };
+	expect(hidesPrivateExchange(messages, view)).toBe(true);
+	expect(textOf(memoryProjection(messages, view))).toContain(
+		HIDDEN_UNRECORDED_MEMORY,
+	);
+});
 
 test("custom private results hide their call arguments, including across split compaction boundaries", () => {
 	const call = fauxAssistantMessage(

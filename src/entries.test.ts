@@ -119,6 +119,15 @@ test("published declarations match the signature report and the remaining leak b
 		expect(text).not.toContain("/internal/");
 }, 15_000);
 
+test("published MemoryView exposes no guard-only legacyOwner attribution", () => {
+	const report = publicApi(ROOT);
+	expect(
+		report.declarations[
+			"src/core/runtime/extensions/private-memory.d.ts#MemoryView"
+		],
+	).not.toContain("legacyOwner");
+}, 15_000);
+
 test("the main and kit declarations name no discord.js type; only the discord entry does", () => {
 	const { discordTypes } = publicApi(ROOT);
 	// Every type the two entries reach, through any declaration, is free of discord.js.
