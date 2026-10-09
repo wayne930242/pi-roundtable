@@ -79,6 +79,8 @@ export interface SessionContext {
 	/**
 	 * Whose memory the session's turns may read: `"speaker"` (the default), as `conversation` and
 	 * each turn's speaker decide, or `"none"`, for a persona that declares it; then no memory loads.
+	 * While the running turn is one the agent server keeps out of memory (`AgentSessions.memory`),
+	 * it reads `"none"` for that turn alone.
 	 */
 	memory: "speaker" | "none";
 	/** The person the session's running turn is for; undefined between turns. */

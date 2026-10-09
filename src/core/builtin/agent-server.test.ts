@@ -146,6 +146,19 @@ describe("the agent server's runtime", () => {
 		expect(slot.current()?.workDir).toContain("work");
 	});
 
+	test("memory is left out of the settings unless the option names it", async () => {
+		for (const memory of [undefined, "owners"] as const) {
+			const slot = agentSessionsSlot();
+			await setUp(
+				agentServerPlugin(
+					options({ agents: slot, ...(memory ? { memory } : {}) }),
+					async () => stores,
+				),
+			);
+			expect(slot.current()?.memory).toBe(memory);
+		}
+	});
+
 	test("the server needs the runtime plugin, and leaves the held actions' table to it", () => {
 		const plugin = agentServerPlugin(options(), async () => stores);
 		expect(plugin.requires?.map((key) => key.id)).toEqual([

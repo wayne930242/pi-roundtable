@@ -67,6 +67,12 @@ export interface DiscordConfig {
 	 * needs before it. Default none.
 	 */
 	refusalHint?: string;
+	/**
+	 * Whose turns in the agents' channels load memory: `"everyone"` (default) lets each speaker
+	 * read their own, `"owners"` only the owners, so a guest's turn has no memory in its prompt and
+	 * no memory tools, and never makes claude-bridge refuse the owner afterwards.
+	 */
+	agentMemory?: "everyone" | "owners";
 }
 
 /** A chat network the host talks through, as its adapter's factory makes it; `adapter` names the network. */
@@ -318,6 +324,7 @@ export interface ResolvedConfig {
 		rootCommand: string;
 		admin: boolean;
 		refusalHint?: string;
+		agentMemory?: "everyone" | "owners";
 	};
 	databaseUrl: string;
 	dataDir: string;
@@ -443,6 +450,9 @@ export function resolveConfig(input: unknown): ResolvedConfig {
 						...(discord.refusalHint === undefined
 							? {}
 							: { refusalHint: discord.refusalHint }),
+						...(discord.agentMemory === undefined
+							? {}
+							: { agentMemory: discord.agentMemory }),
 					},
 				}
 			: {}),

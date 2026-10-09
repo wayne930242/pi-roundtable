@@ -17,6 +17,7 @@ You must act if you:
 - Use webchat's old `access` option: move it to the core configuration.
 - Use the web console with a verifier reporting an actor: link its identity to an owner, even on a single-owner host.
 - Use memory and a `claude-bridge` model in shared conversations: review the history-based turn guard and remaining risks below before admitting new readers.
+  A host whose agents' channels admit anyone but its owners (admins or members who talk to the agents) on `claude-bridge` should set `discord: { agentMemory: "owners" }`: a guest's turn then loads no memory, so it never makes the guard refuse the owner afterwards. It does not let the guest speak after the owner's memory turns; see the [bridge guard](#claude-bridge-guard).
 - Rely on system error or webhook report turns to schedule or delegate: they may no longer create, change, or cancel schedules, delegate tasks, or call coding's `repo_task`; they may still list schedules.
 
 ## Upgrade the configuration
@@ -145,6 +146,9 @@ After that scope marker, an unowned result or outstanding memory call with no re
 Request projection is unchanged: shared SYSTEM requests load no personal memory and redact everyone's private exchanges, but bridge bypasses that projection.
 A conversation holding only a guest's private turns admits that guest, not the owner or SYSTEM.
 Other providers and private conversations are unaffected by this guard.
+
+In the agents' channels, `discord.agentMemory: "owners"` (default `"everyone"`) keeps a speaker below the owner tier out of memory: that turn has no memory in its prompt, no memory tools, and no memory-loading workers, so its reader record carries no private memory and a later owner or SYSTEM turn is not refused because of it.
+The reverse stays: once an owner's turn has loaded memory, a guest's bridge turn in the same conversation is refused until the conversation starts fresh.
 
 Admission of another person in configuration or stored roles is only a startup warning, and `roundtable doctor` warns rather than fails for that risk.
 A guest admitted elsewhere but absent from this conversation does not block the owner's turns.

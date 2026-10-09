@@ -194,6 +194,7 @@ function discordAssembly(
 			scratchDir: config.scratchDir,
 			shellUser: userInfo().username,
 			prompts: { shared: sharedPrompt, guest },
+			...(discord.agentMemory ? { memory: discord.agentMemory } : {}),
 			avatarListener: "public",
 			// resolveConfig refuses Discord without a public address.
 			avatarUrl: config.http?.publicUrl ?? "",

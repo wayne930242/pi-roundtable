@@ -30,6 +30,7 @@ export const MEMORY_TIERS: Readonly<Record<string, Tier>> = {
 function memoryOwner(
 	session: SessionContext,
 ): { principalId: string; name: string } | undefined {
+	if (session.memory === "none") return undefined;
 	const speaker = session.speaker();
 	const { conversation } = session;
 	const principalId = memoryReader(conversation, speaker);

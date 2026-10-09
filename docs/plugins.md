@@ -357,6 +357,15 @@ service roundtable.memory is not provided. The memory addon is switched off (con
 `serviceKey(id, { absent })` lets your own keys say the same.
 Switching an addon off and adding a plugin of yours that provides the same key is equivalent to `replaces`.
 
+##### Memory in the agents' channels
+
+By default every speaker an agent's channel admits reads their own memory there, as in any shared conversation.
+`discord: { agentMemory: "owners" }` (or the same key in `discord({ ... })`; `AgentServerOptions.memory`, which the agent server hands the runtime as `AgentSessions.memory`) limits that to the owners: a turn of a speaker below the owner tier has no memory block in its prompt and no memory tools, and its worker tasks load none either, while an owner's turns in the same channel are unchanged.
+A guest's turn then records no private memory, so it never makes a `claude-bridge` model refuse the owner afterwards (see the [bridge guard](migration-0.9.md#claude-bridge-guard)).
+It does not make the guest's turn safe to run after the owner's: once the owner's turn has loaded memory, the guest's bridge turns are refused, as they are without the option, until the conversation starts fresh.
+It applies to the agents' channels and groups only; other conversations keep deciding by their persona.
+The default `"everyone"` is the 0.8 and 0.9 behavior.
+
 ## Principals and access
 
 A principal is the person the host serves; an identity is an account or credential linked to that person.
@@ -1205,7 +1214,7 @@ The slot is a `RuntimeFactory`: `(deps: RuntimeDeps) => AgentRuntime`, called on
 Its `sessions()` gives you linked hold rules, packages, session tools, and personas from preflight onwards; call it in a turn, when those parts are available.
 `prompts(conversation, scope)` gives you the approval and question prompts on the conversation's surface for a turn's `PromptScope`, made with `promptScope(speaker, visibility)` from the turn's speaker and `TurnRequest.conversation`, or `undefined`; see [who answers a prompt](#who-answers-a-prompt-promptscope).
 Given a `Speaker`, the 0.8 form, it reads them as the speaker of a shared conversation and the host warns once that the form goes away in 1.0.
-`agents` holds the agent server's per-agent settings: `workDir`, `scratchDir` (the agents' shell's `TMPDIR`), `skills(name)`, `modelOf(name)`, and `turnChannel(scope)`.
+`agents` holds the agent server's per-agent settings: `workDir`, `scratchDir` (the agents' shell's `TMPDIR`), `skills(name)`, `modelOf(name)`, `turnChannel(scope)`, and `memory` (`"everyone"`, the default, or `"owners"`; see [memory in the agents' channels](#memory-in-the-agents-channels)).
 The agent server sets up after the runtime is built, so read `agents` when a turn runs; it is `undefined` on a host without the agent server, where no agent turn runs.
 `confirmations` stores held actions across restarts.
 

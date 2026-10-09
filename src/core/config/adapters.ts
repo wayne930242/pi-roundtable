@@ -1,5 +1,5 @@
 import { ConfigError } from "../domain/errors.ts";
-import { bool, optional, shape, text } from "./schema.ts";
+import { bool, oneOf, optional, shape, text } from "./schema.ts";
 
 /** The Discord settings, at the top level or in a Discord adapter. */
 export const discordShape = shape({
@@ -9,6 +9,7 @@ export const discordShape = shape({
 	rootCommand: optional(text),
 	admin: optional(bool),
 	refusalHint: optional(text),
+	agentMemory: optional(oneOf<"everyone" | "owners">("everyone", "owners")),
 });
 
 /** The adapters `adapters` takes, by the name their factory gives them. */

@@ -169,6 +169,19 @@ describe("the addon switches", () => {
 		expect(config.skills).toEqual({});
 	});
 
+	test("discord.agentMemory is everyone by default, owners when asked, and nothing else", () => {
+		expect(resolveConfig(minimal).discord?.agentMemory).toBeUndefined();
+		expect(
+			resolveConfig({
+				...minimal,
+				discord: { ...discord, agentMemory: "owners" },
+			}).discord?.agentMemory,
+		).toBe("owners");
+		expect(
+			refused({ ...minimal, discord: { ...discord, agentMemory: "members" } }),
+		).toContain("agentMemory");
+	});
+
 	test("turn each addon off, and keep skills' directories when they are on", () => {
 		const off = resolveConfig({
 			...minimal,

@@ -68,6 +68,8 @@ import {
 export interface SessionFactoryDeps {
 	/** The person the conversation's running turn is for. */
 	speaker(channel: ChannelKey): Speaker | undefined;
+	/** Whether the conversation's running turn loads no memory, as the agent server's option keeps a speaker out of it. */
+	withholdsMemory(channel: ChannelKey): boolean;
 	/**
 	 * Runs a task beside the conversation of `home`, under its gate, at the tier of the running
 	 * turn of `turn`: the conversation's own channel, or an agent's seat in a group.
@@ -274,13 +276,20 @@ export class SessionFactory {
 		const memory =
 			worker?.memory ??
 			(agent ? "speaker" : (this.link().personaMemory?.(kind) ?? "speaker"));
+		// The running turn is the conversation's: an agent's seat in a group, or its own channel; a
+		// worker's is the turn that started it.
+		const turnKey = worker?.turn ?? agent?.session ?? channel;
+		const deps = this.#deps;
 		const state = {
 			tools: [] as readonly string[],
 			revisions: revisionsKey(this.plan),
 			skills: skillsKey(skills),
 			conversation,
 			addressee,
-			memory,
+			// A turn the agent server keeps out of memory reads none, and so does a worker beside it.
+			get memory(): SessionContext["memory"] {
+				return deps.withholdsMemory(turnKey) ? "none" : memory;
+			},
 			draws: new MemoryDraws(),
 		};
 		const awaited = planOrder(this.plan).flatMap(
@@ -296,9 +305,6 @@ export class SessionFactory {
 				this.#modelRuntime.getModel(provider, id)?.contextWindow,
 			this.plan.compaction?.engine,
 		);
-		// The running turn is the conversation's: an agent's seat in a group, or its own channel; a
-		// worker's is the turn that started it.
-		const turnKey = worker?.turn ?? agent?.session ?? channel;
 		const context: SessionContext = {
 			kind: agent ? "agent" : kind,
 			homeChannel: channel,
@@ -326,7 +332,9 @@ export class SessionFactory {
 			},
 			conversation,
 			addressee,
-			memory,
+			get memory() {
+				return state.memory;
+			},
 			speaker: () => this.#deps.speaker(turnKey),
 			runTask: (task) =>
 				this.#deps.runTask({ turn: turnKey, home: channel }, task),
@@ -356,7 +364,10 @@ export class SessionFactory {
 				// Each request carries no one's memory but the running turn's reader's.
 				privateMemory: privateMemoryExtension(
 					conversation.visibility === "shared",
-					() => memoryReader(conversation, this.#deps.speaker(turnKey)),
+					() =>
+						deps.withholdsMemory(turnKey)
+							? undefined
+							: memoryReader(conversation, deps.speaker(turnKey)),
 					state.draws,
 				),
 				activeTools: activeToolsExtension(() => state.tools),

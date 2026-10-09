@@ -96,6 +96,13 @@ export interface AgentSessions {
 	modelOf(name: string): { model: string; thinking: ThinkingSetting };
 	/** The channel the scope's turns run in: the group's for a seat in one, else the agent's own. */
 	turnChannel(scope: AgentTurnScope): ChannelKey;
+	/**
+	 * Whose turns in an agent's conversation load memory: `"everyone"` (the default) lets each
+	 * speaker read their own, `"owners"` only the owners, so a speaker below the owner tier gets no
+	 * memory in their prompt and no memory tools, and their turn never carries private memory into
+	 * the conversation's history.
+	 */
+	memory?: "everyone" | "owners";
 }
 
 /** Where a runtime keeps each conversation's held actions, so they survive a restart. */

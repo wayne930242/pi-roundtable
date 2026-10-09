@@ -26,6 +26,7 @@ function factory(personas: Record<string, string>): SessionFactory {
 	} as unknown as PiAgentRuntimeOptions;
 	return new SessionFactory(options, {
 		speaker: () => undefined,
+		withholdsMemory: () => false,
 		runTask: async () => "",
 	});
 }
@@ -73,6 +74,7 @@ describe("the tools of a selection", () => {
 		} as unknown as PiAgentRuntimeOptions;
 		const tools = new SessionFactory(options, {
 			speaker: () => undefined,
+			withholdsMemory: () => false,
 			runTask: async () => "",
 		}).toolsFor({
 			tools: ["memory_add", "notify_owner", "notify"],
@@ -97,7 +99,11 @@ describe("the tools of a task and of startup, by their names before 0.9 too", ()
 						requiredTools,
 					}) as unknown as LinkedSessions,
 			} as unknown as PiAgentRuntimeOptions,
-			{ speaker: () => undefined, runTask: async () => "" },
+			{
+				speaker: () => undefined,
+				withholdsMemory: () => false,
+				runTask: async () => "",
+			},
 		);
 
 	test("a task excluding notify_owner excludes notify, and never asks", () => {

@@ -19,6 +19,7 @@ import type { TurnRequest } from "../domain/ports.ts";
 import { assistantName } from "../i18n/index.ts";
 import { promptScopeOf } from "../interactions/prompts.ts";
 import { AUTO_THINKING, type ThinkingLevel } from "../models.ts";
+import { MEMORY_TOOLS } from "../modules/memory/owner-memory.ts";
 import { withoutReplyFiles } from "../reply-files.ts";
 import type { TransientTask } from "../sessions.ts";
 import { textOf } from "../shared/session-messages.ts";
@@ -63,6 +64,8 @@ export {
 	sessionExtensions,
 } from "./runtime-types.ts";
 
+const MEMORY = new Set<string>(MEMORY_TOOLS);
+
 /** AgentRuntime over the Pi SDK: one persistent session per channel, each with its own loader. */
 const STOPPED = "stopped by the owner";
 
@@ -74,7 +77,10 @@ export class PiAgentRuntime implements AgentRuntime {
 	readonly #factory: SessionFactory;
 	readonly #sessions: ConversationSessions;
 	/** The tier and speaker of each conversation's running turn. */
-	readonly #turns = new Map<ChannelKey, { tier: Tier; speaker: Speaker }>();
+	readonly #turns = new Map<
+		ChannelKey,
+		{ tier: Tier; speaker: Speaker; withheld: boolean }
+	>();
 	/** Each conversation's turn in progress, which the owner may steer or stop. */
 	readonly #running = new Map<ChannelKey, SteerableRun>();
 	readonly #memoryTurns = new Map<ChannelKey, () => void>();
@@ -86,6 +92,7 @@ export class PiAgentRuntime implements AgentRuntime {
 		this.#tiers = options.toolTiers ?? toolTiers();
 		this.#factory = new SessionFactory(options, {
 			speaker: (channel) => this.#turns.get(channel)?.speaker,
+			withholdsMemory: (channel) => this.#turns.get(channel)?.withheld === true,
 			runTask: (scope, task) => this.#runTask(scope, task),
 		});
 		this.#sessions = new ConversationSessions(
@@ -148,6 +155,11 @@ export class PiAgentRuntime implements AgentRuntime {
 		// The speaker's tier limits the tools.
 		const { tier } = request.speaker;
 		// An approving turn also has the held calls' tools, which a dispatched worker may have used.
+		// The agent server may keep a speaker below the owner tier out of memory: no tools, no block.
+		const withheld =
+			request.agent !== undefined &&
+			this.#options.agents?.memory === "owners" &&
+			tier !== "owner";
 		const wanted = toolsForTier(
 			[
 				...new Set([
@@ -159,16 +171,17 @@ export class PiAgentRuntime implements AgentRuntime {
 			],
 			tier,
 			this.#tiers,
-		);
+		).filter((name) => !withheld || !MEMORY.has(name));
 		const markPrivateMemory = recordMemoryTurn(
 			session.sessionManager,
 			request.speaker.principalId,
-			channelSession.memory !== "none" &&
+			!withheld &&
+				channelSession.memory !== "none" &&
 				memoryReader(conversation, request.speaker) !== undefined &&
 				loadsMemory(registered),
 		);
 		this.#memoryTurns.set(key, markPrivateMemory);
-		this.#turns.set(key, { tier, speaker: request.speaker });
+		this.#turns.set(key, { tier, speaker: request.speaker, withheld });
 		const missing = wanted.filter((name) => !registered.has(name));
 		if (missing.length > 0) {
 			logger.warn(

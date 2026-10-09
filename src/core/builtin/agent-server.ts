@@ -59,6 +59,11 @@ export interface AgentServerOptions {
 	scratchDir?: string;
 	/** The host account the agents' shell and file tools run as. */
 	shellUser: string;
+	/**
+	 * Whose turns in the agents' channels load memory: `"everyone"` (the default) or `"owners"`;
+	 * see `AgentSessions.memory`.
+	 */
+	memory?: "everyone" | "owners";
 	/** The prompt every agent starts with, and the one for speakers other than the owner. */
 	prompts: { shared: string; guest?: string };
 	/** The listener the avatar pictures are served on. */
@@ -223,6 +228,7 @@ export function agentServerPlugin(
 				modelOf: (name) => built.modelOf(name),
 				skills: (name) => built.skillsOf(name),
 				turnChannel: (scope) => built.turnChannel(scope),
+				...(options.memory ? { memory: options.memory } : {}),
 			};
 			options.agents?.bind(agentSessions);
 			context.services.provide(AGENTS, {
