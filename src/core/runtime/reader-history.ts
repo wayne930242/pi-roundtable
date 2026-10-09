@@ -40,7 +40,9 @@ export function recordMemoryTurn(
 }
 
 /** Includes immediate validation/truncation failures and calls an aborted turn left unanswered. */
-export function carriesMemory(message: Messages[number]): boolean {
+export function carriesMemory(
+	message: ContextWithSystemEvent["messages"][number],
+): boolean {
 	if (message.role === "assistant")
 		return message.content.some(
 			(part) => part.type === "toolCall" && MEMORY.has(part.name),
@@ -69,11 +71,23 @@ function readerRecord(data: unknown): ReaderRecord | undefined {
 
 /**
  * Whether bridge's raw branch would replay another reader's private turn, including retained
- * prompts/reasoning and compacted entries. Explicit privateTo results still restrict the reader.
- * Untagged memory before the first scope record keeps the primary-owner legacy attribution;
- * later unrecorded exchanges fail closed. SYSTEM counts as primary owner only when supplied.
+ * prompts/reasoning and compacted entries. Explicit privateTo results still restrict the reader,
+ * and SYSTEM is a reader of its own. Untagged memory before the first scope record is no one's
+ * in this public form; later unrecorded exchanges fail closed.
  */
 export function bridgeHistoryHidesMemory(
+	branch: ReturnType<SessionManager["getBranch"]>,
+	reader: string | undefined,
+): boolean {
+	return bridgeHistoryHidesMemoryFor(branch, reader);
+}
+
+/**
+ * The core's own check, which public `bridgeHistoryHidesMemory` leaves its attribution knob out
+ * of: untagged memory before the first scope record keeps the primary-owner legacy attribution,
+ * and SYSTEM counts as primary owner when `primaryOwner` is supplied.
+ */
+export function bridgeHistoryHidesMemoryFor(
 	branch: ReturnType<SessionManager["getBranch"]>,
 	reader: string | undefined,
 	primaryOwner?: string,

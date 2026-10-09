@@ -17,7 +17,7 @@ import {
 } from "../models.ts";
 import type { RoundtablePlugin } from "../plugin.ts";
 import { guardHidesPrivateExchange } from "./extensions/private-memory.ts";
-import { bridgeHistoryHidesMemory } from "./reader-history.ts";
+import { bridgeHistoryHidesMemoryFor } from "./reader-history.ts";
 
 /**
  * The Pi provider pi-claude-bridge registers. Its sessions resume the history Claude Code stored
@@ -169,7 +169,7 @@ function hidesBridgeHistory(
 			...view,
 			legacyOwner: primary,
 		});
-	return bridgeHistoryHidesMemory(branch, reader, primary);
+	return bridgeHistoryHidesMemoryFor(branch, reader, primary);
 }
 
 /**

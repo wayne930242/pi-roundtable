@@ -3,7 +3,12 @@ import {
 	type ContextWithSystemEvent,
 	SessionManager,
 } from "@earendil-works/pi-coding-agent";
+import { bridgeHistoryHidesMemory as publicCheck } from "../../kit/index.ts";
 import { bridgeTurnRefusal } from "./bridge-guard.ts";
+import {
+	bridgeHistoryHidesMemoryFor,
+	recordMemoryTurn,
+} from "./reader-history.ts";
 
 type Messages = ContextWithSystemEvent["messages"];
 function exchange(name: string, privateTo?: string): Messages {
@@ -184,4 +189,16 @@ test("bridge agent-model switch checks the same raw history", async () => {
 		{ messages: exchange("run_task", "owner"), reader: "guest" },
 	);
 	expect(message).toMatch(/^agent: .*claude-bridge.*private memory/s);
+});
+
+test("the kit's bridgeHistoryHidesMemory takes a branch and a reader; the owner attribution stays in the core", () => {
+	expect(publicCheck.length).toBe(2);
+	const manager = SessionManager.inMemory("/tmp");
+	recordMemoryTurn(manager, "owner", true);
+	const branch = manager.getBranch();
+	// Public form: SYSTEM is a reader of its own, so the owner's private turn hides from it.
+	expect(publicCheck(branch, "system")).toBe(true);
+	expect(publicCheck(branch, "owner")).toBe(false);
+	// The core's form maps SYSTEM to the primary owner, as bridge turns do.
+	expect(bridgeHistoryHidesMemoryFor(branch, "system", "owner")).toBe(false);
 });
