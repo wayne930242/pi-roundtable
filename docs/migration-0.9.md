@@ -205,7 +205,7 @@ See the [worker handshake](../packages/sandbox/README.md#worker-capability-hands
 ## Channel context
 
 New in 0.9: a turn for a message in an agent's channel also reads the channel messages posted since the assistant's last post there, including those that did not address it, such as other people's and other bots' messages.
-They are appended to the turn's text as a delimited block saying they were not addressed to the assistant, so they live in the conversation's history, not in the system prompt.
+They are appended to the turn's text as a delimited block saying they were not addressed to the assistant (each author as `from`, `id` and `role` attributes; tag-like `<` in a message's text is neutralized), so they live in the conversation's history, not in the system prompt.
 It reads Discord when the turn starts, so it needs no data migration and survives restarts.
 A group's round reads none, since it already carries what was said since its last turn, and direct messages never do.
 

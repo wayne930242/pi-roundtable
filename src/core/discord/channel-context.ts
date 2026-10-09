@@ -22,6 +22,21 @@ export const CHANNEL_CONTEXT_DEFAULTS: Readonly<
 	botMessageChars: 80,
 });
 
+/** Throws on a value outside what the configuration accepts: a programming error of the caller. */
+function assertChannelContextSettings(settings: ChannelContextSettings): void {
+	const { fetch, keep, similarity, messageChars, botMessageChars } = settings;
+	const positive = { fetch, keep, messageChars, botMessageChars };
+	for (const [name, value] of Object.entries(positive))
+		if (!Number.isInteger(value) || value < 1)
+			throw new RangeError(
+				`channel context option ${name} must be a positive integer, got ${value}`,
+			);
+	if (!(similarity >= 0 && similarity <= 1))
+		throw new RangeError(
+			`channel context option similarity must be between 0 and 1, got ${similarity}`,
+		);
+}
+
 /** What channel context reads of one fetched message. */
 export interface ContextSourceMessage {
 	id: string;
@@ -143,9 +158,18 @@ export function selectChannelContext(
 	const ordered = fetched.toSorted((a, b) => a.at - b.at);
 	const lastOwn = ordered.findLastIndex((message) => message.own);
 	const window = ordered.slice(lastOwn + 1);
-	const fresh = window.filter(
-		(message) => !message.own && !seen.has(message.id) && message.text !== "",
-	);
+	// Cut before comparing: the comparison is quadratic in the text lengths.
+	const fresh = window
+		.filter(
+			(message) => !message.own && !seen.has(message.id) && message.text !== "",
+		)
+		.map((message) => ({
+			...message,
+			text: cut(
+				message.text,
+				message.bot ? settings.botMessageChars : settings.messageChars,
+			),
+		}));
 	const kept = merged(fresh, settings.similarity).slice(-settings.keep);
 	return {
 		window: window.map((message) => message.id),
@@ -155,25 +179,34 @@ export function selectChannelContext(
 			authorName: message.authorName,
 			bot: message.bot,
 			owner: !message.bot && owners.includes(message.authorId),
-			text: cut(
-				message.text,
-				message.bot ? settings.botMessageChars : settings.messageChars,
-			),
+			text: message.text,
 			at: new Date(message.at),
 		})),
 	};
 }
 
-const CLOSING = /<\/(message|channel-context)/gi;
+/** Every `<` that starts a tag-like token, such as `<message`, `</channel-context` or `</ message`. */
+const TAG_START = /<(?=[\s/]*[a-z])/gi;
 
-function speakerOf(message: ChannelContextMessage): string {
-	const name = message.authorName.replaceAll('"', "'").replace(/[<>]/g, "");
-	const who = `${name} (${message.authorId})`;
-	if (message.bot) return `${who}, a bot`;
-	return message.owner ? `${who}, an owner` : who;
+/** A name without the characters that could end its attribute or imitate another one. */
+function nameOf(message: ChannelContextMessage): string {
+	const name = message.authorName
+		.replace(/["<>(),]/g, "")
+		.replace(/\s+/g, " ")
+		.trim();
+	return name || "unknown";
 }
 
-/** The block a turn's text carries: headed, delimited, and not closable by a message's text. */
+function roleOf(message: ChannelContextMessage): string {
+	if (message.bot) return "bot";
+	return message.owner ? "owner" : "member";
+}
+
+/**
+ * The block a turn's text carries: headed, delimited, and written so a message's text cannot
+ * pass as markup. Each message's author is the `id` and `role` attributes, never part of a name;
+ * a message's text has every tag-like `<` replaced by `‹`.
+ */
 export function formatChannelContext(
 	messages: readonly ChannelContextMessage[],
 ): string {
@@ -183,7 +216,7 @@ export function formatChannelContext(
 		"<channel-context>",
 		...messages.map(
 			(message) =>
-				`<message from="${speakerOf(message)}">${message.text.replace(CLOSING, "<\\/$1")}</message>`,
+				`<message from="${nameOf(message)}" id="${message.authorId}" role="${roleOf(message)}">${message.text.replace(TAG_START, "‹")}</message>`,
 		),
 		"</channel-context>",
 	].join("\n");
@@ -222,7 +255,7 @@ export class ChannelContextReader {
 	/**
 	 * The context of a message in a server channel; undefined in a direct message, on another
 	 * surface, when the host turned it off, when nothing new was said, and when Discord cannot be
-	 * read, which is logged. Never rejects.
+	 * read, which is logged. Rejects only for an invalid option, a programming error of the caller.
 	 */
 	async of(
 		message: InboundMessage,
@@ -234,6 +267,7 @@ export class ChannelContextReader {
 		const { surface, id: channelId } = parseChannelKey(message.channel);
 		if (surface !== "discord") return undefined;
 		const settings = { ...CHANNEL_CONTEXT_DEFAULTS, ...host, ...options };
+		assertChannelContextSettings(settings);
 		const seen = this.#seenIn(channelId);
 		seen.add(message.messageId);
 		try {

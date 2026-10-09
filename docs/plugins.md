@@ -2104,23 +2104,25 @@ A plugin's claim opts in by calling `DISCORD.channelContext(message, options?)` 
 
 It reads Discord, not the host's history, so it survives restarts:
 
-- It fetches the `fetch` messages before the addressed one (default 50, at most 100) and keeps those after the assistant's latest post there: its bot user's, or one of its application's webhooks, such as an agent's voice. Any post of the assistant ends the window, including a notice that a conversation started over; the core posts no marker of its own.
+- It fetches the `fetch` messages before the addressed one (default 50, at most 100) and keeps those after the assistant's latest post there: its bot user's, or one of its application's webhooks, such as an agent's voice. Any post of the assistant ends the window, including a notice that a conversation started over; the core posts no marker of its own, so a fresh-start reply must be a public post, not an ephemeral one, to cut the window.
 - It leaves out the assistant's own posts, the addressed message, empty messages, and every message it handed over before or that addressed it before in that channel, remembered in memory per channel, so a restart can repeat at most what came since the assistant's last post.
 - Other bots and integrations are kept and marked as bots; the host's owners (the primary owner and every other owner's Discord identities) are marked as owners.
 - Consecutive messages of one author at least `similarity` alike (default 0.8, by their longest common run of text) count as one, the later kept.
 - It keeps the newest `keep` (default 15), oldest first. Mentions read as names, and stickers and files as text with their names and links; nothing is downloaded or shown to the model as an image. A message is cut at `messageChars` (default 500), another bot's at `botMessageChars` (default 80).
-- It never fails the turn: a Discord error, such as a channel the bot cannot read, is logged and the turn runs without context.
+- It never fails the turn over Discord: a Discord error, such as a channel the bot cannot read, is logged and the turn runs without context.
 
 `DISCORD.channelContext` resolves undefined in a direct message, on another surface, when nothing new was said, and when the host's `discord.channelContext` is `false`, which turns it off for the agent server and every claim.
 The configuration's values are the host's defaults, and a call's `options` override them for that call.
 Call it once per answered message: what it returns is remembered as handed over.
+A call's `options` are validated like the configuration (`fetch`, `keep`, `messageChars` and `botMessageChars` positive integers, `similarity` from 0 to 1); an invalid one makes the call reject, a programming error, so `keep: 0` is not "none" (skip the call for that).
+It remembers what it handed over and what addressed the assistant, not every message that ran a turn: a post a claim answered some other way, such as a webhook report turn or a steered message, can also come in the context of a later turn if the assistant has not posted since.
 
 What it returns is public channel text, visible to everyone in the channel; it is not private memory, carries no `privateTo`, and goes into the turn's text, so it lives in the conversation's history, not in the system prompt.
 The turn's reader stays the person who addressed the assistant.
 People the access rules give no tier are included as channel text, as everyone there sees them, but they do not become speakers: they are not resolved, linked, or recorded, and the turn does not run as them.
 Only server channels are read, never direct messages, and only messages the bot can read.
 
-The block names each author with their Discord id and says the messages were not addressed to the assistant; a message cannot close it early.
+The block gives each author as a name, their Discord id and a role (`owner`, `bot` or `member`) in separate attributes, and says the messages were not addressed to the assistant. A name loses the characters `"`, `<`, `>`, `(`, `)` and `,`, so it cannot imitate another author or role, and every `<` in a message's text that starts a tag-like token is replaced by `‹`, so a message can neither close the block nor open a message of its own.
 `ChannelContext` is `{ messages, text }`: `messages` are `ChannelContextMessage`s (`id`, `authorId`, `authorName`, `bot`, `owner`, `text`, `at`), oldest first, and `text` is the block.
 `ChannelContextOptions` holds the options above, and `CHANNEL_CONTEXT_DEFAULTS` their defaults.
 In a test, `fakeDiscord({ channelContext })` answers `DISCORD.channelContext` as the test says; by default with no context.

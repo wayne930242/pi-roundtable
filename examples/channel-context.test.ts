@@ -17,7 +17,7 @@ const AROUND: ChannelContext = {
 			at: new Date(0),
 		},
 	],
-	text: '## Channel messages since your last answer\n<channel-context>\n<message from="Kai (7)">I open the cellar door</message>\n</channel-context>',
+	text: '## Channel messages since your last answer\n<channel-context>\n<message from="Kai" id="7" role="member">I open the cellar door</message>\n</channel-context>',
 };
 
 /** A server message from the owner in the tavern's channel. */
