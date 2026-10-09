@@ -1,8 +1,14 @@
 import { join } from "node:path";
 import { type ServiceKey, serviceKey } from "../contract/services.ts";
+import {
+	type ChannelContext,
+	type ChannelContextOptions,
+	ChannelContextReader,
+} from "../discord/channel-context.ts";
 import { CommandCollection } from "../discord/command-collection.ts";
 import type { DiscordConnection } from "../discord/connection.ts";
 import { discordDirectChannel } from "../discord/direct-channel.ts";
+import { DiscordOwners } from "../discord/discord-owners.ts";
 import { DiscordSurface } from "../discord/discord-surface.ts";
 import { DispatchThreads } from "../discord/dispatch-threads.ts";
 import type {
@@ -12,6 +18,7 @@ import type {
 import { OwnerCards } from "../discord/owner-cards.ts";
 import { commandGuard, ownerRootCommand } from "../discord/owner-command.ts";
 import { stopButtonModule } from "../discord/stop-button.ts";
+import type { InboundMessage } from "../domain/conversation.ts";
 import type { RoundtablePlugin } from "../plugin.ts";
 import { IDENTITY } from "../services.ts";
 
@@ -24,6 +31,18 @@ export interface DiscordServices {
 	guard: CommandGuard;
 	/** The threads that carry background reports. */
 	threads: DispatchThreads;
+	/**
+	 * What was said in a server channel since the assistant last posted there, before `message`:
+	 * for a claim that answers it, to append to its turn's text with `withChannelContext`. Call it
+	 * once per answered message, inside the turn's `run`: the messages it returns, and `message`,
+	 * are remembered per channel and not returned again. Undefined in a direct message, on another
+	 * surface, when the host's `discord.channelContext` is `false`, when nothing new was said, and
+	 * when Discord cannot be read (logged). Never rejects. `options` override the host's for this call.
+	 */
+	channelContext(
+		message: InboundMessage,
+		options?: ChannelContextOptions,
+	): Promise<ChannelContext | undefined>;
 }
 
 /** The Discord connection, provided by the Discord plugin. */
@@ -44,6 +63,8 @@ export interface DiscordOptions {
 	rootCommand: string;
 	/** Text appended as it is to the refusal a non-owner gets, such as a pointer to the commands anyone may use. */
 	refusalHint?: string;
+	/** The host's channel context settings; `false` turns it off. Default: on, with the defaults. */
+	channelContext?: ChannelContextOptions | false;
 }
 
 /**
@@ -110,11 +131,25 @@ export function discordPlugin(options: DiscordOptions): RoundtablePlugin {
 			collection.registrar.add({
 				module: stopButtonModule({ guard, conversations }),
 			});
+			// Marks the owners in channel context: the primary owner, and every other owner's Discord identities.
+			const owners = new DiscordOwners({
+				ownerId: options.ownerId,
+				...(identity ? { identity } : {}),
+				logger,
+			});
+			const context = new ChannelContextReader({
+				read: (channelId, before, limit) =>
+					connected.messagesBefore(channelId, before, limit),
+				owners: () => owners.ids(),
+				settings: options.channelContext ?? {},
+				logger,
+			});
 			services.provide(DISCORD, {
 				connection: connected,
 				commands: collection.registrar,
 				guard,
 				threads,
+				channelContext: (message, given) => context.of(message, given),
 			});
 			return {
 				// The host starts the surface first; it registers the composed commands as it connects.

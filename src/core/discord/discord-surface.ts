@@ -25,6 +25,10 @@ import type { Logger } from "../log.ts";
 import type { OwnerOperations } from "../modules/discord-admin/discord-admin.ts";
 import { splitReply } from "../presentation/reply-splitter.ts";
 import { DiscordAgentChannels, DiscordDashboard } from "./agent-discord.ts";
+import {
+	type ContextSourceMessage,
+	contextSourceOf,
+} from "./channel-context.ts";
 import { discordChannelExecutor } from "./channel-executor.ts";
 import type { ChannelExecutor } from "./channel-operations.ts";
 import type { ComposedCommands } from "./compose-commands.ts";
@@ -148,6 +152,29 @@ export class DiscordSurface
 			guild: channel.guild.name,
 			guildId: channel.guild.id,
 		};
+	}
+
+	/**
+	 * A server text channel's messages before one, as channel context reads them; undefined for a
+	 * direct message or a channel that holds no messages. Throws while the connection is not ready
+	 * or when Discord refuses, such as for a channel the bot cannot read.
+	 */
+	async messagesBefore(
+		channelId: string,
+		before: string,
+		limit: number,
+	): Promise<ContextSourceMessage[] | undefined> {
+		if (!this.#client.isReady()) throw new Error("Discord is not connected");
+		const channel = await this.#client.channels.fetch(channelId);
+		if (!channel?.isTextBased() || channel.isDMBased()) return undefined;
+		const fetched = await channel.messages.fetch({ before, limit });
+		const self = {
+			botId: this.#client.user.id,
+			applicationId: this.#client.application.id,
+		};
+		return [...fetched.values()].map((message) =>
+			contextSourceOf(message, self),
+		);
 	}
 
 	/** Reports deleted server channels by id; register before start. */

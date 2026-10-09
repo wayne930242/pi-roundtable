@@ -207,6 +207,38 @@ describe("the addon switches", () => {
 	});
 });
 
+describe("discord.channelContext", () => {
+	test("is on with the defaults unless configured", () => {
+		expect(resolveConfig(minimal).discord?.channelContext).toEqual({});
+	});
+
+	test("takes false to turn it off, or the options it changes", () => {
+		const with_ = (channelContext: unknown) =>
+			resolveConfig({
+				...minimal,
+				discord: { ...discord, channelContext },
+			} as RoundtableConfig).discord?.channelContext;
+		expect(with_(false)).toBe(false);
+		expect(with_({ keep: 5, similarity: 0.9 })).toEqual({
+			keep: 5,
+			similarity: 0.9,
+		});
+	});
+
+	test("refuses a value out of range or a key it does not know, naming it", () => {
+		const with_ = (channelContext: unknown) =>
+			refused({ ...minimal, discord: { ...discord, channelContext } });
+		expect(with_({ fetch: 101 })).toContain(
+			"config discord.channelContext.fetch: expected an integer from 1 to 100",
+		);
+		expect(with_({ similarity: 2 })).toContain(
+			"config discord.channelContext.similarity",
+		);
+		expect(with_({ kep: 3 })).toContain('Did you mean "keep"?');
+		expect(with_(true)).toContain("config discord.channelContext");
+	});
+});
+
 describe("a host without Discord", () => {
 	const { discord: _discord, http: _http, ...headless } = minimal;
 

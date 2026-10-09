@@ -30,7 +30,7 @@ const OPTIONS = {
 /** The Discord plugin set up alone; `compose` runs its preflight, which hands the commands to its surface. */
 async function setUp(
 	conversations: Partial<ConversationPort> = {},
-	options: { refusalHint?: string } = {},
+	options: { refusalHint?: string; channelContext?: false } = {},
 	identity?: ReturnType<typeof mapIdentity>,
 ): Promise<{
 	services: string[];
@@ -92,6 +92,7 @@ test("the Discord surface hands out the owner's cards for its channels", async (
 test("the plugin provides the connection, the registrar, the guard and the threads, and no cards", async () => {
 	const { provided } = await setUp();
 	expect(Object.keys(provided).sort()).toEqual([
+		"channelContext",
 		"commands",
 		"connection",
 		"guard",
@@ -100,6 +101,34 @@ test("the plugin provides the connection, the registrar, the guard and the threa
 	expect(provided.guard.root).toBe("bot");
 	expect(provided.guard.isOwner({ user: { id: "1" } })).toBe(true);
 	expect(provided.guard.isOwner({ user: { id: "2" } })).toBe(false);
+});
+
+const ADDRESSED = {
+	channel: "discord:77",
+	messageId: "50",
+	authorId: "1",
+	authorName: "Ada",
+	authorIsBot: false,
+	isDirect: false,
+	space: "g1",
+	mentionsBot: true,
+	repliesToBot: false,
+	text: "hello",
+	attachments: [],
+} as const;
+
+test("channel context fails open before the surface is connected, so the turn runs without it", async () => {
+	const { provided } = await setUp();
+	expect(
+		await provided.channelContext({ ...ADDRESSED, attachments: [] }),
+	).toBeUndefined();
+});
+
+test("channel context turned off reads nothing", async () => {
+	const { provided } = await setUp({}, { channelContext: false });
+	expect(
+		await provided.channelContext({ ...ADDRESSED, attachments: [] }),
+	).toBeUndefined();
 });
 
 test("with the identity service, the guard lets every owner use the owner's commands, and no member", async () => {

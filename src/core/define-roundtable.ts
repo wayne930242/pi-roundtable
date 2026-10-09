@@ -168,6 +168,7 @@ function discordAssembly(
 			...(discord.refusalHint === undefined
 				? {}
 				: { refusalHint: discord.refusalHint }),
+			channelContext: discord.channelContext,
 		}),
 		admin: discord.admin ? [discordAdminPlugin({ owner })] : [],
 		skills: config.skills

@@ -1,6 +1,7 @@
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentSeed } from "../agents/agent-rules.ts";
+import type { ChannelContextOptions } from "../discord/channel-context.ts";
 import { ConfigError } from "../domain/errors.ts";
 import type { InterimTextMode } from "../domain/interim.ts";
 import { isLocale, type Locale } from "../i18n/index.ts";
@@ -298,6 +299,8 @@ export interface ResolvedConfig {
 		admin: boolean;
 		refusalHint?: string;
 		agentMemory?: "everyone" | "owners";
+		/** As configured: `{}` when left out, so the defaults apply, or `false`. */
+		channelContext: ChannelContextOptions | false;
 	};
 	databaseUrl: string;
 	dataDir: string;
@@ -426,6 +429,7 @@ export function resolveConfig(input: unknown): ResolvedConfig {
 						...(discord.agentMemory === undefined
 							? {}
 							: { agentMemory: discord.agentMemory }),
+						channelContext: discord.channelContext ?? {},
 					},
 				}
 			: {}),

@@ -1,5 +1,15 @@
+import type { ChannelContextOptions } from "../discord/channel-context.ts";
 import { ConfigError } from "../domain/errors.ts";
-import { bool, oneOf, optional, shape, text } from "./schema.ts";
+import {
+	bool,
+	integer,
+	number,
+	oneOf,
+	optional,
+	orOff,
+	shape,
+	text,
+} from "./schema.ts";
 
 /** The Discord bot and its guild, as the top-level `discord` or `discord()` from `pi-roundtable/discord` gives them. */
 export interface DiscordConfig {
@@ -28,7 +38,22 @@ export interface DiscordConfig {
 	 * no memory tools, and never makes claude-bridge refuse the owner afterwards.
 	 */
 	agentMemory?: "everyone" | "owners";
+	/**
+	 * What a turn addressed to the assistant in a server channel reads of the messages posted there
+	 * since its last post, mentions or not; on with the defaults when left out. `false` turns it off
+	 * for the agent server and every plugin's claim.
+	 */
+	channelContext?: ChannelContextOptions | false;
 }
+
+/** What `discord.channelContext` takes besides `false`. */
+const channelContextShape = shape({
+	fetch: optional(integer(1, 100)),
+	keep: optional(integer(1, 100)),
+	similarity: optional(number(0, 1)),
+	messageChars: optional(integer(1, 4000)),
+	botMessageChars: optional(integer(1, 4000)),
+});
 
 /** The Discord settings, at the top level or in a Discord adapter. */
 export const discordShape = shape({
@@ -39,6 +64,7 @@ export const discordShape = shape({
 	admin: optional(bool),
 	refusalHint: optional(text),
 	agentMemory: optional(oneOf<"everyone" | "owners">("everyone", "owners")),
+	channelContext: optional(orOff(channelContextShape)),
 });
 
 /** The adapters `adapters` takes, by the name their factory gives them. */
