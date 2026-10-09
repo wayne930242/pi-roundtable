@@ -23,7 +23,7 @@ export interface PiImage {
 }
 export interface PiTurnRequest {
 	turnId: string;
-	author: { id: string; name: string };
+	author: { id: string; name: string; principalId?: string };
 	text: string;
 	memory: string;
 	images: PiImage[];
@@ -68,10 +68,14 @@ export interface PiToolResponse {
 	text?: string;
 	error?: string;
 	image?: PiImage;
+	/** The principal who may read this tool exchange, including its arguments. */
+	privateTo?: string;
 }
 export interface PiTurnContext {
 	authorId: string;
 	authorName: string;
+	/** Falls back to authorId for legacy workers whose actor id is already their principal. */
+	authorPrincipalId?: string;
 	outbox: string;
 	memory: string;
 }
@@ -248,6 +252,10 @@ export function validatePiTurn(value: unknown): asserts value is PiTurnRequest {
 		typeof value.author.name !== "string" ||
 		value.author.id.length > 256 ||
 		value.author.name.length > 256 ||
+		(value.author.principalId !== undefined &&
+			(typeof value.author.principalId !== "string" ||
+				value.author.principalId.length === 0 ||
+				value.author.principalId.length > 256)) ||
 		typeof value.text !== "string" ||
 		value.text.length > 100_000 ||
 		typeof value.memory !== "string" ||

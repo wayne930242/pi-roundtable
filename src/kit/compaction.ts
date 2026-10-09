@@ -12,7 +12,10 @@ export {
 	HARD_COMPACT_TOKENS,
 	SOFT_COMPACT_TOKENS,
 } from "../core/runtime/compaction-tiers.ts";
+export type { MemoryView } from "../core/runtime/extensions/private-memory.ts";
 export {
+	hidesPrivateExchange,
+	memoryProjection,
 	privateCompaction,
 	summaryProjection,
 } from "../core/runtime/extensions/private-memory.ts";

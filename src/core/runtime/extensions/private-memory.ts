@@ -131,26 +131,24 @@ function unpairedCalls(messages: Messages, before: number): Set<string> {
 	return ids;
 }
 
-/**
- * The request's messages as the view allows, or undefined when they need no change. A memory
- * exchange of someone else's reads as a placeholder, the call's arguments as well as its result,
- * so what the model wrote into the call from that memory goes too; in a shared conversation, so
- * does a memory exchange that does not say whose it is, a failed one too, the answers of the turns before the
- * running one read without their reasoning, and the prompt states its history recorded collapse
- * into one leading message of the current prompt, so no earlier turn's memory section remains.
- */
 /** Whether raw history contains a private exchange this view would hide (not reasoning/prompt changes). */
 export function hidesPrivateExchange(
-	messages: Messages,
+	messages: ContextWithSystemEvent["messages"],
 	view: MemoryView,
 ): boolean {
 	return hiddenExchanges(messages, view).size > 0;
 }
 
+/**
+ * The request's messages as the view allows, or undefined when they need no change. A private
+ * exchange reads as a placeholder for other readers, its call's arguments as well as its result.
+ * In shared history unowned built-in memory calls are hidden too, earlier reasoning is removed,
+ * and persisted prompt states collapse to the current prompt alone.
+ */
 export function memoryProjection(
-	messages: Messages,
+	messages: ContextWithSystemEvent["messages"],
 	view: MemoryView,
-): Messages | undefined {
+): ContextWithSystemEvent["messages"] | undefined {
 	// The running turn starts at the last message someone wrote; its own reasoning stays its own.
 	const running = view.shared
 		? messages.findLastIndex((message) => message.role === "user")
@@ -285,10 +283,12 @@ function projectedMessage(
  */
 export function summaryProjection(
 	messages: ContextWithSystemEvent["messages"],
+	/** Full exchange history when calls/results straddle a compaction boundary. */
+	history: ContextWithSystemEvent["messages"] = messages,
 ): ContextWithSystemEvent["messages"] {
 	const projection: Projection = {
-		hidden: hiddenExchanges(messages, { shared: true, reader: undefined }),
-		unpaired: unpairedCalls(messages, messages.length),
+		hidden: hiddenExchanges(history, { shared: true, reader: undefined }),
+		unpaired: unpairedCalls(history, history.length),
 		earlier: true,
 	};
 	return messages.flatMap((message) =>
@@ -305,12 +305,21 @@ export function summaryProjection(
  */
 export function privateCompaction(
 	preparation: SessionBeforeCompactEvent["preparation"],
+	/** Messages also handed to a custom compactor, such as the kept tail. */
+	additionalMessages: ContextWithSystemEvent["messages"] = [],
 ): void {
+	const history = [
+		...preparation.messagesToSummarize,
+		...preparation.turnPrefixMessages,
+		...additionalMessages,
+	];
 	preparation.messagesToSummarize = summaryProjection(
 		preparation.messagesToSummarize,
+		history,
 	);
 	preparation.turnPrefixMessages = summaryProjection(
 		preparation.turnPrefixMessages,
+		history,
 	);
 }
 
@@ -398,7 +407,12 @@ export function privateMemoryExtension(
 		// own summary, which runs when no extension answers, reads it from here.
 		if (shared)
 			pi.on("session_before_compact", (event) => {
-				privateCompaction(event.preparation);
+				privateCompaction(
+					event.preparation,
+					event.branchEntries.flatMap((entry) =>
+						entry.type === "message" ? [entry.message] : [],
+					),
+				);
 			});
 		pi.on("context_with_system", (event) => {
 			const messages = memoryProjection(event.messages, {

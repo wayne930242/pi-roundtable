@@ -133,7 +133,13 @@ export function brokerToolsExtension(
 					const body = JSON.parse(
 						await boundedText(response.body, 32 * 1024 * 1024),
 					) as PiToolResponse;
-					if (!body.ok) throw new Error(body.error ?? "Host tool failed");
+					if (
+						body.privateTo !== undefined &&
+						(typeof body.privateTo !== "string" ||
+							body.privateTo.length === 0 ||
+							body.privateTo.length > 256)
+					)
+						throw new Error("Invalid private tool owner");
 					if (body.image) {
 						validateImages([body.image]);
 						saveToOutbox(
@@ -142,7 +148,16 @@ export function brokerToolsExtension(
 							Buffer.from(body.image.data, "base64"),
 						);
 					}
-					return toolText(body.text ?? "");
+					return {
+						...toolText(
+							body.ok ? (body.text ?? "") : (body.error ?? "Host tool failed"),
+						),
+						isError: !body.ok,
+						details:
+							body.privateTo === undefined
+								? undefined
+								: { privateTo: body.privateTo },
+					};
 				},
 			});
 	};

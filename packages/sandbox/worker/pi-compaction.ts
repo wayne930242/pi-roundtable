@@ -13,6 +13,8 @@ import {
 	type CompactionHistory,
 	CompactionTiers,
 	compactionEngine,
+	privateCompaction,
+	summaryProjection,
 } from "pi-roundtable/kit";
 import type {
 	PiCompactionReport,
@@ -52,6 +54,12 @@ export function compactRequest(
 					.flatMap((entry) =>
 						entry.type === "message" ? [entry.message] : [],
 					);
+	privateCompaction(preparation, keptMessages);
+	const projectedKept = summaryProjection(keptMessages, [
+		...preparation.messagesToSummarize,
+		...preparation.turnPrefixMessages,
+		...keptMessages,
+	]);
 	const { read, written, edited } = preparation.fileOps;
 	const modified = new Set([...written, ...edited]);
 	return {
@@ -61,7 +69,7 @@ export function compactRequest(
 		isSplitTurn: preparation.isSplitTurn,
 		messagesToSummarize: preparation.messagesToSummarize as PiCompactMessage[],
 		turnPrefixMessages: preparation.turnPrefixMessages as PiCompactMessage[],
-		keptMessages: keptMessages as PiCompactMessage[],
+		keptMessages: projectedKept as PiCompactMessage[],
 		...(preparation.previousSummary === undefined
 			? {}
 			: { previousSummary: preparation.previousSummary }),
@@ -105,10 +113,20 @@ export class WorkerCompaction {
 		return [
 			{
 				name: "host-compaction",
-				factory: this.#tiers.wrapCompactor(handler, (bypass) => {
-					this.#options.log("compaction skips the host compactor", bypass);
-					void this.#report({ type: "bypass", ...bypass });
-				}),
+				factory: this.#tiers.wrapCompactor(
+					handler,
+					(bypass) => {
+						this.#options.log("compaction skips the host compactor", bypass);
+						void this.#report({ type: "bypass", ...bypass });
+					},
+					(event) =>
+						privateCompaction(
+							event.preparation,
+							event.branchEntries.flatMap((entry) =>
+								entry.type === "message" ? [entry.message] : [],
+							),
+						),
+				),
 			},
 		];
 	}

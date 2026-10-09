@@ -99,7 +99,7 @@ export interface PiSandboxTurn {
 	channel: ChannelKey;
 	profile: string;
 	turnId: string;
-	author: { id: string; name: string };
+	author: { id: string; name: string; principalId?: string };
 	text: string;
 	images: PiImage[];
 	signal?: AbortSignal;
@@ -370,7 +370,11 @@ export class PiSandboxRuntime {
 				!safeFileName(turn.turnId) ||
 				turn.text.length > 100_000 ||
 				turn.author.id.length > 256 ||
-				turn.author.name.length > 256
+				turn.author.name.length > 256 ||
+				(turn.author.principalId !== undefined &&
+					(typeof turn.author.principalId !== "string" ||
+						turn.author.principalId.length === 0 ||
+						turn.author.principalId.length > 256))
 			)
 				throw new Error("Invalid turn input");
 			validateImages(turn.images);

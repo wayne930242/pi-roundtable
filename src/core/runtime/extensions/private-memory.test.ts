@@ -1,18 +1,26 @@
 import { describe, expect, test } from "bun:test";
 import {
 	type AssistantMessage,
+	fauxAssistantMessage,
+	fauxToolCall,
 	type Message,
 	type Model,
 	normalizeContext,
 } from "@earendil-works/pi-ai";
 import { convertMessages as googleRequest } from "@earendil-works/pi-ai/api/google-shared";
 import { convertResponsesMessages as responsesRequest } from "@earendil-works/pi-ai/api/openai-responses-shared";
-import type { ContextWithSystemEvent } from "@earendil-works/pi-coding-agent";
+import type {
+	ContextWithSystemEvent,
+	ExtensionAPI,
+	SessionBeforeCompactEvent,
+} from "@earendil-works/pi-coding-agent";
 import {
 	HIDDEN_MEMORY,
 	HIDDEN_UNRECORDED_MEMORY,
 	MemoryDraws,
 	memoryProjection,
+	privateCompaction,
+	privateMemoryExtension,
 	summaryProjection,
 } from "./private-memory.ts";
 
@@ -43,6 +51,115 @@ const result = (
 });
 
 const textOf = (messages: Messages | undefined) => JSON.stringify(messages);
+
+test("custom private results hide their call arguments, including across split compaction boundaries", () => {
+	const call = fauxAssistantMessage(
+		fauxToolCall("recall_person", { secret: "ARG_SECRET" }),
+		{ stopReason: "toolUse" },
+	);
+	const part = call.content[0];
+	if (part?.type !== "toolCall") throw new Error("missing call");
+	const answer = {
+		...result("recall_person", "RESULT_SECRET", { privateTo: "ann" }),
+		toolCallId: part.id,
+	};
+	const messages: Messages = [call, answer];
+	const other = memoryProjection(messages, { shared: true, reader: "bo" });
+	expect(textOf(other)).not.toContain("ARG_SECRET");
+	expect(textOf(other)).not.toContain("RESULT_SECRET");
+	expect(other?.[0]?.role === "assistant" && other[0].content[0]).toMatchObject(
+		{
+			type: "toolCall",
+			id: part.id,
+			name: "recall_person",
+			arguments: { hidden: HIDDEN_MEMORY },
+		},
+	);
+	expect(
+		memoryProjection(messages, { shared: true, reader: "ann" }),
+	).toBeUndefined();
+	// Only these fields are read by the projection; split arrays still belong to one exchange.
+	const preparation: SessionBeforeCompactEvent["preparation"] = {
+		messagesToSummarize: [call],
+		turnPrefixMessages: [answer],
+		firstKeptEntryId: "kept",
+		isSplitTurn: true,
+		tokensBefore: 100,
+		settings: { enabled: true, reserveTokens: 1000, keepRecentTokens: 1000 },
+		fileOps: { read: new Set(), written: new Set(), edited: new Set() },
+	};
+	privateCompaction(preparation);
+	expect(textOf(preparation.messagesToSummarize)).not.toContain("ARG_SECRET");
+	expect(textOf(preparation.turnPrefixMessages)).not.toContain("RESULT_SECRET");
+	const cut = {
+		...preparation,
+		messagesToSummarize: [call],
+		turnPrefixMessages: [],
+	};
+	privateCompaction(cut, [answer]);
+	expect(textOf(cut.messagesToSummarize)).not.toContain("ARG_SECRET");
+	expect(textOf(summaryProjection([answer], [call, answer]))).not.toContain(
+		"RESULT_SECRET",
+	);
+});
+
+test("core compaction hook pairs a custom private result in the kept branch with summarized arguments", async () => {
+	const call = fauxAssistantMessage(
+		fauxToolCall("recall_person", { secret: "ARG_SECRET" }),
+		{ stopReason: "toolUse" },
+	);
+	const part = call.content[0];
+	if (part?.type !== "toolCall") throw new Error("missing call");
+	const answer = {
+		...result("recall_person", "RESULT_SECRET", { privateTo: "ann" }),
+		toolCallId: part.id,
+	};
+	let compact: ((event: SessionBeforeCompactEvent) => void) | undefined;
+	// The extension uses only on(); capture its real hook with the SDK event shape.
+	const pi = {
+		on: (name: string, handler: unknown) => {
+			if (name === "session_before_compact")
+				compact = handler as (event: SessionBeforeCompactEvent) => void;
+		},
+	} as unknown as ExtensionAPI;
+	await privateMemoryExtension(true, () => "ann", new MemoryDraws())(pi);
+	const event: SessionBeforeCompactEvent = {
+		type: "session_before_compact",
+		reason: "manual",
+		willRetry: false,
+		signal: new AbortController().signal,
+		preparation: {
+			messagesToSummarize: [call],
+			turnPrefixMessages: [],
+			firstKeptEntryId: "answer",
+			isSplitTurn: true,
+			tokensBefore: 100,
+			settings: { enabled: true, reserveTokens: 1000, keepRecentTokens: 1000 },
+			fileOps: { read: new Set(), written: new Set(), edited: new Set() },
+		},
+		branchEntries: [
+			{
+				type: "message",
+				id: "call",
+				parentId: null,
+				timestamp: "2026-01-01T00:00:00Z",
+				message: call,
+			},
+			{
+				type: "message",
+				id: "answer",
+				parentId: "call",
+				timestamp: "2026-01-01T00:00:01Z",
+				message: answer,
+			},
+		],
+	};
+	if (!compact) throw new Error("missing compaction hook");
+	compact(event);
+	expect(textOf(event.preparation.messagesToSummarize)).not.toContain(
+		"ARG_SECRET",
+	);
+});
 
 describe("the memory a request may carry", () => {
 	const history: Messages = [

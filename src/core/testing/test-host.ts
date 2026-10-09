@@ -312,7 +312,13 @@ export async function testHost(
 					tiers.wrapCompactor(
 						compactor,
 						() => undefined,
-						(event) => privateCompaction(event.preparation),
+						(event) =>
+							privateCompaction(
+								event.preparation,
+								event.branchEntries.flatMap((entry) =>
+									entry.type === "message" ? [entry.message] : [],
+								),
+							),
 					),
 			},
 			conversation: { visibility: "shared" },

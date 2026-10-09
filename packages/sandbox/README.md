@@ -247,9 +247,38 @@ Schedules can be host tools with a declared channel-local background target and 
 
 Follow [Migrating to 0.9](../../docs/migration-0.9.md) for the core upgrade.
 The sandbox claim ignores an author with no resolved tier; guests need core `access` admission, not an implicit owner fallback.
-`SandboxRuntime.runTurn` requires a host-bound speaker with `principalId`, and credential/host-tool hooks receive that id; the worker protocol still receives only the actor id and name.
-This does not isolate a shared channel's workspace by principal: guests in that channel still share its stored history and memory.
+`SandboxRuntime.runTurn` requires a host-bound speaker with `principalId`, and credential/host-tool hooks receive that id; the sealed worker protocol still receives only the actor id and name.
+For the separate `PiSandboxRuntime`, pass `author: { id, name, principalId }` from the admitted speaker: `id` remains the actor id and `principalId` is the reader used for private-history projection.
+It is optional for compatibility, falling back to `id` only for integrations whose actor id already is the principal id.
+Never take it from guest tool arguments.
+This does not isolate a shared channel's workspace by principal: guests in that channel still share its raw files and stored history.
+The sealed default's channel-shared memory contract is unchanged.
 Per-person model credentials remain the host integration's responsibility, not a guarantee of the core release.
+
+### Private tool exchanges in Pi mode
+
+The container creates its own Pi session, not the core's `SessionFactory`; the worker now explicitly applies core `memoryProjection` to requests and `privateCompaction` before summaries.
+Host tool callbacks may return `PiToolResponse` with `privateTo?: string`, a principal id:
+
+```ts
+const principalId = context.speaker.principalId;
+if (!principalId) throw new Error("Private tools require a bound principal");
+return { ok: true, text: "private facts", privateTo: principalId };
+```
+
+The broker validates and preserves the field; the worker persists it as `details.privateTo` on the Pi tool result, including tagged error results (`ok: false`).
+For another reader, the call's arguments and result become placeholders while their call id/name pairing stays valid.
+The principal itself still sees the original exchange.
+This applies to any custom tool name, not just core memory tools; `remember_person`, `recall_person`, and `forget_person` must be tagged by the host when their results are private.
+Untagged custom exchanges are public.
+Both Pi's summary and the host compactor receive no tagged private exchanges, including the kept tail sent to the host, and no earlier prompt memory or reasoning.
+Calls/results split across compaction boundaries are paired for redaction.
+The bridge provider bypasses request projection by replaying its own history: the worker refuses a bridge turn whose raw persisted branch contains a private exchange hidden from that reader, even after Pi compacted it.
+Unlike the core host guard, sandbox has no primary-owner compatibility exception for untagged old built-in memory exchanges.
+Existing summaries are not retroactively scrubbed.
+Start fresh before allowing new readers into histories previously summarized without this protection, and rebuild the worker image with the upgraded core and sandbox together.
+This is exchange isolation, not general secret-flow prevention or a hostile-container boundary: public replies, untagged tools, raw workspace files, and attachments/reply files remain shared.
+Do not put confidential data in the guest workspace.
 
 ### Compaction
 

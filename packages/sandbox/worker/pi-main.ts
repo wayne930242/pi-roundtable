@@ -38,7 +38,7 @@ import {
 import { boundedText } from "../src/protocol.ts";
 import { WorkerCompaction } from "./pi-compaction.ts";
 import type { PiWorkerContent } from "./pi-content.ts";
-import { speakerMemoryExtension } from "./pi-memory.ts";
+import { sandboxBridgeRefusal, speakerMemoryExtension } from "./pi-memory.ts";
 import {
 	loadSkillIndex,
 	skillsExtension,
@@ -312,6 +312,9 @@ async function runTurn(
 	mkdirSync(outbox, { recursive: true });
 	turnContext.authorId = turn.author.id;
 	turnContext.authorName = turn.author.name;
+	turnContext.authorPrincipalId = turn.author.principalId;
+	const refusal = sandboxBridgeRefusal(session, turnContext);
+	if (refusal) return { ok: false, error: refusal };
 	turnContext.outbox = outbox;
 	turnContext.memory = turn.memory;
 	session.setActiveToolsByName([...activeTools]);

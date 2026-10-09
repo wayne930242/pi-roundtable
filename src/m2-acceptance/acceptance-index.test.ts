@@ -514,6 +514,68 @@ const ACCEPTANCE: readonly Item[] = [
 		note: "OwnerPrompts and OWNER_TARGET warn through their @deprecated tags, which scripts/public-api.report.json keeps exported.",
 	},
 
+	{
+		section: "6.2",
+		item: "bridge guards use actual raw private history, while admission only warns; sandbox custom private exchanges are projected in requests and summaries",
+		tests: [
+			t(
+				"src/memory-isolation-runtime.test.ts",
+				"bridge reads actual shared history > owner and SYSTEM run over owner memory; guest is refused without a provider call, including after restart",
+			),
+			t(
+				"src/memory-isolation-runtime.test.ts",
+				"bridge reads actual shared history > only the guest's own memory admits the guest and refuses the owner and SYSTEM",
+			),
+			t(
+				"src/core/runtime/bridge-guard.test.ts",
+				"bridge refuses unowned outstanding memory calls but ignores public history and other providers",
+			),
+			t(
+				"src/core/runtime/bridge-guard.test.ts",
+				"bridge agent-model switch checks the same raw history",
+			),
+			t(
+				"src/core/runtime/runtime-plugin.test.ts",
+				"the runtime plugin's preflight of claude-bridge with memory > warns without stopping boot when stored roles admit someone besides the owner",
+			),
+			t(
+				"src/core/define-roundtable.test.ts",
+				"claude-bridge in a host whose shared conversations several people speak in > boots with a warning that says why shared bridge history remains risky",
+			),
+			t(
+				"packages/sandbox/worker/pi-tools.test.ts",
+				"sandbox host compactor receives no custom private exchange, including its kept tail",
+			),
+			t(
+				"packages/sandbox/worker/pi-tools.test.ts",
+				"sandbox built-in Pi summary contains no custom private exchange or prompt memory",
+			),
+			t(
+				"src/core/runtime/extensions/private-memory.test.ts",
+				"custom private results hide their call arguments, including across split compaction boundaries",
+			),
+		],
+	},
+	{
+		section: "6.2",
+		item: "core compaction redacts private custom call arguments even when their tagged result stays in the kept branch",
+		tests: [
+			t(
+				"src/core/runtime/extensions/private-memory.test.ts",
+				"core compaction hook pairs a custom private result in the kept branch with summarized arguments",
+			),
+		],
+	},
+	{
+		section: "6.2",
+		item: "the bridge's owner legacy exception never adopts modern unowned memory results",
+		tests: [
+			t(
+				"src/core/runtime/bridge-guard.test.ts",
+				"legacy owner compatibility stops at the first 0.9 scope record; modern unowned memory refuses even owner and SYSTEM",
+			),
+		],
+	},
 	// 6.5 The gates of the parent plan's §6.1, unchanged.
 	{
 		section: "6.5",

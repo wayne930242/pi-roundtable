@@ -314,7 +314,13 @@ export class SessionFactory {
 								"compaction skips the extension for Pi's summary",
 							),
 						conversation.visibility === "shared"
-							? (event) => privateCompaction(event.preparation)
+							? (event) =>
+									privateCompaction(
+										event.preparation,
+										event.branchEntries.flatMap((entry) =>
+											entry.type === "message" ? [entry.message] : [],
+										),
+									)
 							: undefined,
 					),
 			},

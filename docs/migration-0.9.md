@@ -118,15 +118,21 @@ User messages, public assistant replies, and arguments/results of other tools re
 Owners using the console and the operator reading storage can inspect all principals' data.
 
 Compaction registered through `session.compaction.wrap` receives a private-memory-free projection.
-A third-party compactor reading shared history outside that wrapper **must call `privateCompaction(event.preparation)`** from `pi-roundtable/kit` before summarizing.
-A custom tool returning private memory must mark its result's `details.privateTo` with the principal id.
+A third-party compactor reading shared history outside that wrapper **must call `privateCompaction(event.preparation, branchMessages)`** from `pi-roundtable/kit` before summarizing, where `branchMessages` is the message entries of `event.branchEntries` (so a private result in the kept tail can hide its earlier arguments).
+A custom tool returning private data must mark its result's `details.privateTo` with the principal id, including error results that repeat private arguments.
+This is independent of the tool name: the core hides both the tagged result and the arguments of its paired call, preserving the tool-call id and name.
+Do not rely on tagging to protect data repeated in public assistant replies or other untagged tools.
+Hosts building their own shared Pi sessions can use `memoryProjection(messages, { shared: true, reader })` and `hidesPrivateExchange(messages, view)` from `pi-roundtable/kit`; the latter checks exchanges, not reasoning/prompt changes.
+`summaryProjection(messages, history?)` and `privateCompaction(preparation, additionalMessages?)` accept the surrounding history when call/result pairs cross summary-prefix-kept boundaries.
 
 ### claude-bridge guard
 
 claude-bridge reuses Claude Code's stored, unfiltered history, bypassing the per-request projection.
 With memory enabled, each shared bridge turn checks the session's actual raw history before asking any provider, including after restart and when an agent switches to bridge.
+The raw persisted branch is checked even for exchanges already removed from Pi's active context by compaction.
 It returns an `AgentRunError` if that history holds an exchange the current reader's memory projection would hide: a result tagged `privateTo` another principal (including a worker that loaded memory), an unowned memory exchange, or an outstanding built-in memory call with no result.
-For this check only, SYSTEM reads as the primary owner, and untagged pre-0.9 built-in memory results count as that owner's; owner and SYSTEM turns can continue old owner-only shared histories, but another person's turn there is refused.
+For this check only, SYSTEM reads as the primary owner, and untagged pre-0.9 built-in memory results (before the first `roundtable-conversation` scope record) count as that owner's; owner and SYSTEM turns can continue old owner-only shared histories, but another person's turn there is refused.
+An unowned memory result recorded after that scope marker is not legacy: it refuses even owner and SYSTEM turns, as do outstanding memory calls with no result.
 This exception does not change request projection: shared SYSTEM requests still load no personal memory.
 A conversation holding only a guest's tagged private exchanges admits that guest, not the owner or SYSTEM.
 Other providers and private conversations are unaffected by this guard.
@@ -165,7 +171,10 @@ Remote MCP's token defaults to the primary owner's principal and its private con
 Set `remoteMcp({ principal })` to bind it explicitly; `REMOTE_SPEAKER` is deprecated.
 `/mcp/discord/<token>` channel grants are unchanged by this migration.
 Coding's owner skill list is available only in a private conversation whose principal holds owner, not merely a turn whose kind is owner.
-Sandbox ignores visitors whose resolved speaker has no tier and passes the admitted principal to its runtime; its container and broker guarantees are unchanged.
+Sandbox ignores visitors whose resolved speaker has no tier and passes the admitted principal to its runtime; its sealed default's container/channel-shared memory contract is unchanged.
+The opt-in `PiSandboxRuntime` now accepts `author.principalId` (falling back to actor `id` for legacy integrations where it is already the principal); host tool callbacks return `PiToolResponse.privateTo` to persist `details.privateTo` in the worker.
+Its independently-created Pi sessions explicitly project requests and summaries, including the host compactor's kept messages, using the core helpers. Rebuild the worker image with matching upgraded core/sandbox code.
+Tag every private custom-tool result and error; untagged custom tools, raw files, public replies and old summaries remain shared. See [sandbox private exchanges](../packages/sandbox/README.md#private-tool-exchanges-in-pi-mode).
 
 ## Prompt changes from 0.8.0
 

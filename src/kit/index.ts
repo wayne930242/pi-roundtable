@@ -18,12 +18,15 @@ export type {
 	CompactionEngine,
 	CompactionHistory,
 	LatestCompaction,
+	MemoryView,
 } from "./compaction.ts";
 export {
 	COMPACT_HEADROOM_TOKENS,
 	CompactionTiers,
 	compactionEngine,
 	HARD_COMPACT_TOKENS,
+	hidesPrivateExchange,
+	memoryProjection,
 	privateCompaction,
 	SOFT_COMPACT_TOKENS,
 	summaryProjection,

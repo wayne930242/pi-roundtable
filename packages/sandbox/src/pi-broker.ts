@@ -27,7 +27,7 @@ import { boundedText, isRecord } from "./protocol.ts";
 export interface PiHostContext {
 	channel: ChannelKey;
 	profile: string;
-	speaker: { id: string; name: string };
+	speaker: { id: string; name: string; principalId?: string };
 	/** The host-judged level for this turn; the worker can request less but never more. */
 	thinking: PiThinkingLevel;
 	signal: AbortSignal;
@@ -581,7 +581,11 @@ export class PiSandboxBroker {
 					!result ||
 					typeof result.ok !== "boolean" ||
 					(result.text?.length ?? 0) > 1_000_000 ||
-					(result.error?.length ?? 0) > 10_000
+					(result.error?.length ?? 0) > 10_000 ||
+					(result.privateTo !== undefined &&
+						(typeof result.privateTo !== "string" ||
+							result.privateTo.length === 0 ||
+							result.privateTo.length > 256))
 				)
 					throw new Error("Invalid tool output");
 				if (result.image) validateImages([result.image]);
