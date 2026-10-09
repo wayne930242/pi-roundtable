@@ -171,6 +171,34 @@ test("rich runtime retains JSONL/session/workspace paths, thinking and DB hook i
 		await f.close();
 	}
 });
+test("Pi memory prompt blocks default private and can explicitly remain shared", async () => {
+	for (const visibility of [undefined, "shared"] as const) {
+		const f = fixture(false, {
+			memory: { promptBlock: async () => "party-wide facts", visibility },
+		});
+		try {
+			expect(
+				(
+					await f.runtime.runTurn({
+						channel: "fake:party",
+						profile: "profile",
+						turnId: "a",
+						author: { id: "ann", name: "Ann" },
+						text: "hi",
+						images: [],
+					})
+				).ok,
+			).toBe(true);
+			expect(f.workerTurns[0]).toMatchObject({
+				memory: "party-wide facts",
+				memoryVisibility: visibility ?? "private",
+			});
+		} finally {
+			await f.close();
+		}
+	}
+});
+
 test("cancellation removes the exact channel container and deactivates the broker", async () => {
 	const f = fixture(true);
 	const controller = new AbortController();

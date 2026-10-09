@@ -37,6 +37,19 @@ export interface MemoryView {
 	legacyOwner?: string;
 }
 
+interface GuardView extends MemoryView {
+	/** The recorded reader owns even unanswered built-in memory calls of this turn. */
+	turnReader?: string;
+}
+
+/** Internal bridge check, including attribution of malformed or unanswered calls to their turn. */
+export function guardHidesPrivateExchange(
+	messages: Messages,
+	view: GuardView,
+): boolean {
+	return hiddenExchanges(messages, view).size > 0;
+}
+
 type Assistant = Extract<Messages[number], { role: "assistant" }>;
 
 /**
@@ -197,7 +210,7 @@ function hiddenResult(
  */
 function hiddenExchanges(
 	messages: Messages,
-	view: MemoryView,
+	view: GuardView,
 ): Map<string, string> {
 	const hidden = new Map<string, string>();
 	const answered = new Set<string>();
@@ -214,7 +227,8 @@ function hiddenExchanges(
 			if (
 				part.type === "toolCall" &&
 				MEMORY.has(part.name) &&
-				!answered.has(part.id)
+				!answered.has(part.id) &&
+				!(view.turnReader !== undefined && view.turnReader === view.reader)
 			)
 				hidden.set(part.id, HIDDEN_UNRECORDED_MEMORY);
 	}

@@ -79,6 +79,8 @@ export interface PiSandboxRuntimeOptions
 	driver?: PiContainerDriver;
 	mcp?: PiBrokerOptions["mcp"];
 	memory: {
+		/** Private by default; a party-wide block must explicitly declare shared visibility. */
+		visibility?: "shared" | "private";
 		promptBlock(channel: ChannelKey, id: string, name: string): Promise<string>;
 	};
 	effort: {
@@ -403,6 +405,7 @@ export class PiSandboxRuntime {
 				author: { ...turn.author },
 				text: turn.text,
 				memory,
+				memoryVisibility: this.#options.memory.visibility ?? "private",
 				images: turn.images,
 				thinking,
 			};

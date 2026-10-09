@@ -37,6 +37,7 @@ import { missingToolsError } from "./extensions/self-compact-guard.ts";
 import { interimPoster } from "./interim-text.ts";
 import { preflightTools } from "./preflight-tools.ts";
 import { PromptSlot, workTimeout } from "./prompt-slot.ts";
+import { carriesMemory, recordMemoryTurn } from "./reader-history.ts";
 import {
 	type PiAgentRuntimeOptions,
 	TRANSCRIPT_ENTRY_CHARS,
@@ -76,6 +77,7 @@ export class PiAgentRuntime implements AgentRuntime {
 	readonly #turns = new Map<ChannelKey, { tier: Tier; speaker: Speaker }>();
 	/** Each conversation's turn in progress, which the owner may steer or stop. */
 	readonly #running = new Map<ChannelKey, SteerableRun>();
+	readonly #memoryTurns = new Map<ChannelKey, () => void>();
 
 	/** Builds the runtime without starting a session; the preflight proves it can run. */
 	constructor(options: PiAgentRuntimeOptions) {
@@ -158,6 +160,14 @@ export class PiAgentRuntime implements AgentRuntime {
 			tier,
 			this.#tiers,
 		);
+		const markPrivateMemory = recordMemoryTurn(
+			session.sessionManager,
+			request.speaker.principalId,
+			channelSession.memory !== "none" &&
+				memoryReader(conversation, request.speaker) !== undefined &&
+				loadsMemory(registered),
+		);
+		this.#memoryTurns.set(key, markPrivateMemory);
 		this.#turns.set(key, { tier, speaker: request.speaker });
 		const missing = wanted.filter((name) => !registered.has(name));
 		if (missing.length > 0) {
@@ -204,6 +214,7 @@ export class PiAgentRuntime implements AgentRuntime {
 				interim?.toolStart(event.toolName);
 			}
 			if (event.type === "message_end") {
+				if (carriesMemory(event.message)) markPrivateMemory();
 				turnMessages.push(event.message);
 				interim?.messageEnd(event.message);
 			}
@@ -254,6 +265,7 @@ export class PiAgentRuntime implements AgentRuntime {
 		} finally {
 			this.#running.delete(key);
 			this.#turns.delete(key);
+			this.#memoryTurns.delete(key);
 			cancelTimeout();
 			slot.unbind();
 			unsubscribe();
@@ -375,8 +387,10 @@ export class PiAgentRuntime implements AgentRuntime {
 			const registered = new Set(session.getAllTools().map((t) => t.name));
 			// A worker that loaded the reader's memory may report it: the call that started it, and the
 			// calls that one runs within, then record their results as the reader's.
-			if (memoryReader(conversation, turn.speaker) && loadsMemory(registered))
+			if (memoryReader(conversation, turn.speaker) && loadsMemory(registered)) {
 				parent.draws.drawn(runningCalls());
+				this.#memoryTurns.get(scope.turn)?.();
+			}
 			const { tier } = turn;
 			worker.tools = this.#factory
 				.taskTools(task.selection, task.exclude)

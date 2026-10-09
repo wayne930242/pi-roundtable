@@ -3,9 +3,10 @@ import type {
 	SessionManager,
 } from "@earendil-works/pi-coding-agent";
 import {
-	hidesPrivateExchange,
+	bridgeHistoryHidesMemory,
 	memoryProjection,
 	privateCompaction,
+	recordMemoryTurn,
 } from "pi-roundtable/kit";
 import type { PiTurnContext } from "../src/pi-protocol.ts";
 
@@ -18,17 +19,26 @@ export function sandboxBridgeRefusal(
 	turn: PiTurnContext,
 ): string | undefined {
 	if (session.model?.provider !== "claude-bridge") return undefined;
-	const messages = session.sessionManager
-		.getBranch()
-		.flatMap((entry) => (entry.type === "message" ? [entry.message] : []));
 	if (
-		!hidesPrivateExchange(messages, {
-			shared: true,
-			reader: turn.authorPrincipalId ?? turn.authorId,
-		})
+		!bridgeHistoryHidesMemory(
+			session.sessionManager.getBranch(),
+			turn.authorPrincipalId ?? turn.authorId,
+		)
 	)
 		return undefined;
 	return "claude-bridge cannot replay private exchanges hidden from this sandbox reader; use another provider or a fresh conversation";
+}
+
+/** Record the declared privacy of the host's prompt block before any worker provider call. */
+export function recordSandboxMemoryTurn(
+	manager: Pick<SessionManager, "appendCustomEntry">,
+	turn: PiTurnContext,
+): () => void {
+	return recordMemoryTurn(
+		manager,
+		turn.authorPrincipalId ?? turn.authorId,
+		turn.memoryVisibility !== "shared" && turn.memory.length > 0,
+	);
 }
 
 /**

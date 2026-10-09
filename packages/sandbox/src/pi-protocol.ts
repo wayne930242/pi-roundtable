@@ -26,6 +26,8 @@ export interface PiTurnRequest {
 	author: { id: string; name: string; principalId?: string };
 	text: string;
 	memory: string;
+	/** Defaults to private for older callers; shared prompt blocks do not taint a reader record. */
+	memoryVisibility?: "shared" | "private";
 	images: PiImage[];
 	thinking: PiThinkingLevel;
 }
@@ -78,6 +80,7 @@ export interface PiTurnContext {
 	authorPrincipalId?: string;
 	outbox: string;
 	memory: string;
+	memoryVisibility?: "shared" | "private";
 }
 export interface PiMcpDiscovery {
 	servers: { name: string; tools: string[] }[];
@@ -260,6 +263,9 @@ export function validatePiTurn(value: unknown): asserts value is PiTurnRequest {
 		value.text.length > 100_000 ||
 		typeof value.memory !== "string" ||
 		value.memory.length > 100_000 ||
+		(value.memoryVisibility !== undefined &&
+			value.memoryVisibility !== "shared" &&
+			value.memoryVisibility !== "private") ||
 		!isPiThinkingLevel(value.thinking)
 	)
 		throw new Error("Invalid turn");

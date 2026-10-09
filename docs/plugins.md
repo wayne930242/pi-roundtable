@@ -3426,6 +3426,10 @@ Import from the entries listed below; source area files are internal.
 | `memoryProjection` | `pi-roundtable/kit` | value |
 | `hidesPrivateExchange` | `pi-roundtable/kit` | value |
 | `MemoryView` | `pi-roundtable/kit` | type |
+| `MEMORY_TURN_ENTRY` | `pi-roundtable/kit` | value |
+| `recordMemoryTurn` | `pi-roundtable/kit` | value |
+| `carriesMemory` | `pi-roundtable/kit` | value |
+| `bridgeHistoryHidesMemory` | `pi-roundtable/kit` | value |
 | `CompactionEngine` | `pi-roundtable/kit` | type |
 | `CompactionHistory` | `pi-roundtable/kit` | type |
 | `LatestCompaction` | `pi-roundtable/kit` | type |

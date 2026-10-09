@@ -12,6 +12,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import {
 	activeToolsExtension,
+	carriesMemory,
 	lastAssistant,
 	mcpAdapterExtension,
 	packageDir,
@@ -38,7 +39,11 @@ import {
 import { boundedText } from "../src/protocol.ts";
 import { WorkerCompaction } from "./pi-compaction.ts";
 import type { PiWorkerContent } from "./pi-content.ts";
-import { sandboxBridgeRefusal, speakerMemoryExtension } from "./pi-memory.ts";
+import {
+	recordSandboxMemoryTurn,
+	sandboxBridgeRefusal,
+	speakerMemoryExtension,
+} from "./pi-memory.ts";
 import {
 	loadSkillIndex,
 	skillsExtension,
@@ -317,11 +322,18 @@ async function runTurn(
 	if (refusal) return { ok: false, error: refusal };
 	turnContext.outbox = outbox;
 	turnContext.memory = turn.memory;
+	turnContext.memoryVisibility = turn.memoryVisibility;
+	const markPrivateMemory = recordSandboxMemoryTurn(
+		session.sessionManager,
+		turnContext,
+	);
 	session.setActiveToolsByName([...activeTools]);
 	session.setThinkingLevel(turn.thinking);
 	const timer = setTimeout(() => void session.abort(), TURN_TIMEOUT_MS);
 	const toolCalls: string[] = [];
 	const unsubscribe = session.subscribe((event) => {
+		if (event.type === "message_end" && carriesMemory(event.message))
+			markPrivateMemory();
 		if (event.type === "tool_execution_start") toolCalls.push(event.toolName);
 		else if (event.type === "tool_execution_end" && event.isError)
 			log("tool failed", {

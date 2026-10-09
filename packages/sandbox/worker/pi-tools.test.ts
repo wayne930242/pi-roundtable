@@ -19,7 +19,11 @@ import { Type } from "typebox";
 import { PiSandboxBroker } from "../src/pi-broker.ts";
 import type { PiCompactRequest, PiTurnContext } from "../src/pi-protocol.ts";
 import { WorkerCompaction } from "./pi-compaction.ts";
-import { sandboxBridgeRefusal, speakerMemoryExtension } from "./pi-memory.ts";
+import {
+	recordSandboxMemoryTurn,
+	sandboxBridgeRefusal,
+	speakerMemoryExtension,
+} from "./pi-memory.ts";
 import { brokerToolsExtension } from "./pi-tools.ts";
 
 const cleanup: (() => Promise<void>)[] = [];
@@ -224,6 +228,62 @@ test("sandbox host compactor receives no custom private exchange, including its 
 	);
 	for (const secret of ["ARG_SECRET", "RESULT_SECRET", "PROMPT_SECRET"])
 		expect(JSON.stringify(requests)).not.toContain(secret);
+});
+
+test("sandbox bridge reader records refuse prompt-only private memory but allow public party turns", () => {
+	for (const privateMemory of [false, true]) {
+		const history = SessionManager.inMemory("/tmp");
+		history.appendCustomEntry("roundtable-memory-turn", {
+			reader: "ann",
+			privateMemory,
+		});
+		const kept = history.appendMessage({
+			role: "user",
+			content: "public",
+			timestamp: 1,
+		});
+		history.appendCompaction("safe summary", kept, 10);
+		const turn: PiTurnContext = {
+			authorId: "bo-actor",
+			authorPrincipalId: "bo",
+			authorName: "Bo",
+			memory: "",
+			outbox: "/tmp",
+		};
+		const refused = sandboxBridgeRefusal(
+			{ model: { provider: "claude-bridge" }, sessionManager: history },
+			turn,
+		);
+		if (privateMemory) expect(refused).toBeDefined();
+		else expect(refused).toBeUndefined();
+	}
+});
+
+test("sandbox shared prompt blocks keep A to B to A bridge turns public; default private blocks refuse B", () => {
+	for (const memoryVisibility of [undefined, "shared"] as const) {
+		const history = SessionManager.inMemory("/tmp");
+		const session = {
+			model: { provider: "claude-bridge" },
+			sessionManager: history,
+		};
+		for (const reader of ["ann", "bo", "ann"]) {
+			const turn: PiTurnContext = {
+				authorId: reader,
+				authorPrincipalId: reader,
+				authorName: reader,
+				memory: "party-wide facts",
+				memoryVisibility,
+				outbox: "/tmp",
+			};
+			const refused = sandboxBridgeRefusal(session, turn);
+			if (reader === "bo" && memoryVisibility !== "shared")
+				expect(refused).toBeDefined();
+			else {
+				expect(refused).toBeUndefined();
+				recordSandboxMemoryTurn(history, turn);
+			}
+		}
+	}
 });
 
 test("sandbox built-in Pi summary contains no custom private exchange or prompt memory", async () => {

@@ -17,7 +17,7 @@ import {
 } from "../models.ts";
 import type { RoundtablePlugin } from "../plugin.ts";
 import { hidesPrivateExchange } from "./extensions/private-memory.ts";
-import { SCOPE_ENTRY } from "./session-scope.ts";
+import { bridgeHistoryHidesMemory } from "./reader-history.ts";
 
 /**
  * The Pi provider pi-claude-bridge registers. Its sessions resume the history Claude Code stored
@@ -169,20 +169,7 @@ function hidesBridgeHistory(
 			...view,
 			legacyOwner: primary,
 		});
-	const scope = branch.findIndex(
-		(entry) => entry.type === "custom" && entry.customType === SCOPE_ENTRY,
-	);
-	const cut = scope < 0 ? branch.length : scope;
-	const messagesOf = (entries: typeof branch) =>
-		entries.flatMap((entry) =>
-			entry.type === "message" ? [entry.message] : [],
-		);
-	return (
-		hidesPrivateExchange(messagesOf(branch.slice(0, cut)), {
-			...view,
-			legacyOwner: primary,
-		}) || hidesPrivateExchange(messagesOf(branch.slice(cut)), view)
-	);
+	return bridgeHistoryHidesMemory(branch, reader, primary);
 }
 
 /**
@@ -206,8 +193,7 @@ export async function bridgeTurnRefusal(
 			: parseModelRef(
 					chosen?.model ?? options.agents?.modelOf(agent).model ?? "",
 				);
-	if (options.memory === false || !model || !onClaudeBridge(model))
-		return undefined;
+	if (!model || !onClaudeBridge(model)) return undefined;
 	const reader =
 		history.reader === SYSTEM_PRINCIPAL ? options.owner.id : history.reader;
 	if (!hidesBridgeHistory(history, reader, options.owner.id)) return undefined;

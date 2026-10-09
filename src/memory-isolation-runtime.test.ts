@@ -383,6 +383,23 @@ async function isolationHost(
 }
 
 describe("bridge reads actual shared history", () => {
+	test("prompt-only private memory refuses another bridge reader before a provider call; memory-none turns stay public", async () => {
+		for (const kind of ["study", "quiz"]) {
+			const host = await isolationHost(
+				STORE(),
+				[fauxAssistantMessage("OK."), fauxAssistantMessage("unused")],
+				{ provider: "claude-bridge" },
+			);
+			try {
+				expect((await host.run(ANN, "fake:room", { kind })).ok).toBe(true);
+				const result = await host.run(BO, "fake:room", { kind });
+				expect(result.ok).toBe(kind === "quiz");
+				expect(host.pending()).toBe(kind === "quiz" ? 0 : 1);
+			} finally {
+				await host.stop();
+			}
+		}
+	});
 	const owner: Speaker = {
 		id: OWNER.id,
 		name: OWNER.name,

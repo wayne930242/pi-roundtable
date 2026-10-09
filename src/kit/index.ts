@@ -21,13 +21,17 @@ export type {
 	MemoryView,
 } from "./compaction.ts";
 export {
+	bridgeHistoryHidesMemory,
 	COMPACT_HEADROOM_TOKENS,
 	CompactionTiers,
+	carriesMemory,
 	compactionEngine,
 	HARD_COMPACT_TOKENS,
 	hidesPrivateExchange,
+	MEMORY_TURN_ENTRY,
 	memoryProjection,
 	privateCompaction,
+	recordMemoryTurn,
 	SOFT_COMPACT_TOKENS,
 	summaryProjection,
 } from "./compaction.ts";

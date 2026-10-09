@@ -19,3 +19,9 @@ export {
 	privateCompaction,
 	summaryProjection,
 } from "../core/runtime/extensions/private-memory.ts";
+export {
+	bridgeHistoryHidesMemory,
+	carriesMemory,
+	MEMORY_TURN_ENTRY,
+	recordMemoryTurn,
+} from "../core/runtime/reader-history.ts";

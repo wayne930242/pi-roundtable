@@ -176,6 +176,9 @@ Sandbox ignores visitors whose resolved speaker has no tier and passes the admit
 The opt-in `PiSandboxRuntime` now accepts `author.principalId` (falling back to actor `id` for legacy integrations where it is already the principal); host tool callbacks return `PiToolResponse.privateTo` to persist `details.privateTo` in the worker.
 Its independently-created Pi sessions explicitly project requests and summaries, including the host compactor's kept messages, using the core helpers. Rebuild the worker image with matching upgraded core/sandbox code.
 Tag every private custom-tool result and error; untagged custom tools, raw files, public replies and old summaries remain shared. See [sandbox private exchanges](../packages/sandbox/README.md#private-tool-exchanges-in-pi-mode).
+`PiSandboxRuntimeOptions.memory.visibility` defaults to `"private"`: a nonempty prompt block records that reader's private memory even without tool calls.
+For party-wide facts, explicitly set `memory.visibility: "shared"`, including for an upgraded 0.8 host, or another participant's next claude-bridge turn is refused.
+This declares only the prompt block public; a tool's `privateTo` result remains private.
 
 ## Prompt changes from 0.8.0
 

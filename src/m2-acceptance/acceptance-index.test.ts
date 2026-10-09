@@ -516,8 +516,24 @@ const ACCEPTANCE: readonly Item[] = [
 
 	{
 		section: "6.2",
-		item: "bridge guards use actual raw private history, while admission only warns; sandbox custom private exchanges are projected in requests and summaries",
+		item: "bridge guards use reader records and actual raw private history, while admission only warns; sandbox custom private exchanges are projected in requests and summaries",
 		tests: [
+			t(
+				"src/memory-isolation-runtime.test.ts",
+				"bridge reads actual shared history > prompt-only private memory refuses another bridge reader before a provider call; memory-none turns stay public",
+			),
+			t(
+				"src/core/runtime/bridge-guard.test.ts",
+				"reader records attribute malformed, truncated and aborted memory calls to their turn",
+			),
+			t(
+				"src/core/runtime/bridge-guard.test.ts",
+				"reader records guard prompt-only memory and preserve public multi-reader turns across compaction",
+			),
+			t(
+				"packages/sandbox/worker/pi-tools.test.ts",
+				"sandbox bridge reader records refuse prompt-only private memory but allow public party turns",
+			),
 			t(
 				"src/memory-isolation-runtime.test.ts",
 				"bridge reads actual shared history > owner and SYSTEM run over owner memory; guest is refused without a provider call, including after restart",
@@ -545,6 +561,14 @@ const ACCEPTANCE: readonly Item[] = [
 			t(
 				"packages/sandbox/worker/pi-tools.test.ts",
 				"sandbox host compactor receives no custom private exchange, including its kept tail",
+			),
+			t(
+				"packages/sandbox/worker/pi-tools.test.ts",
+				"sandbox shared prompt blocks keep A to B to A bridge turns public; default private blocks refuse B",
+			),
+			t(
+				"packages/sandbox/src/pi-runtime.test.ts",
+				"Pi memory prompt blocks default private and can explicitly remain shared",
 			),
 			t(
 				"packages/sandbox/worker/pi-tools.test.ts",

@@ -267,6 +267,10 @@ return { ok: true, text: "private facts", privateTo: principalId };
 ```
 
 The broker validates and preserves the field; the worker persists it as `details.privateTo` on the Pi tool result, including tagged error results (`ok: false`).
+`PiSandboxRuntimeOptions.memory.visibility` declares whether `promptBlock` is `"private"` (default) or `"shared"`.
+A private nonempty prompt block taints that turn's reader record even without a tool call; an explicitly shared block does not.
+A host with party-wide facts must set `memory.visibility: "shared"`, including when upgrading a 0.8 integration, or another participant's later claude-bridge turn is refused.
+Shared visibility applies only to that prompt block; a tool returning `privateTo` still creates a private exchange.
 For another reader, the call's arguments and result become placeholders while their call id/name pairing stays valid.
 The principal itself still sees the original exchange.
 This applies to any custom tool name, not just core memory tools; `remember_person`, `recall_person`, and `forget_person` must be tagged by the host when their results are private.

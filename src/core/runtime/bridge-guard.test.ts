@@ -77,9 +77,10 @@ test("bridge refuses unowned outstanding memory calls but ignores public history
 			model: { provider: "anthropic", id: "test" },
 		}),
 	).toBeUndefined();
+	// Disabling future memory loading cannot make retained private history safe.
 	expect(
 		await check(exchange("memory_search", "owner"), "guest", { memory: false }),
-	).toBeUndefined();
+	).toBeDefined();
 });
 
 test("legacy owner compatibility stops at the first 0.9 scope record; modern unowned memory refuses even owner and SYSTEM", async () => {
@@ -105,6 +106,68 @@ test("legacy owner compatibility stops at the first 0.9 scope record; modern uno
 			if (!modern && reader !== "guest") expect(refused).toBeUndefined();
 			else expect(refused).toBeDefined();
 		}
+	}
+});
+
+test("reader records attribute malformed, truncated and aborted memory calls to their turn", async () => {
+	for (const shape of ["validation", "truncated", "aborted"]) {
+		const history = SessionManager.inMemory("/tmp");
+		history.appendCustomEntry("roundtable-conversation", {
+			visibility: "shared",
+		});
+		history.appendCustomEntry("roundtable-memory-turn", {
+			reader: "owner",
+			privateMemory: false,
+		});
+		const messages = exchange("memory_add");
+		if (shape !== "aborted") {
+			const result = messages[1];
+			if (result?.role === "toolResult") {
+				result.isError = true;
+				result.details = {};
+			}
+		} else messages.pop();
+		for (const message of messages)
+			if (message.role === "assistant" || message.role === "toolResult")
+				history.appendMessage(message);
+		for (const reader of ["owner", "system", "guest"]) {
+			const refused = await bridgeTurnRefusal(undefined, options, {
+				messages: history.buildSessionContext().messages,
+				sessionManager: history,
+				reader,
+			});
+			if (reader === "guest") expect(refused).toBeDefined();
+			else expect(refused).toBeUndefined();
+		}
+	}
+});
+
+test("reader records guard prompt-only memory and preserve public multi-reader turns across compaction", async () => {
+	for (const privateMemory of [false, true]) {
+		const history = SessionManager.inMemory("/tmp");
+		history.appendCustomEntry("roundtable-memory-turn", {
+			reader: "ann",
+			privateMemory,
+		});
+		history.appendMessage(
+			exchange("public_tool")[0] as Extract<
+				Messages[number],
+				{ role: "assistant" }
+			>,
+		);
+		const kept = history.appendMessage({
+			role: "user",
+			content: "public",
+			timestamp: 3,
+		});
+		history.appendCompaction("safe summary", kept, 100);
+		const refused = await bridgeTurnRefusal(undefined, options, {
+			messages: history.buildSessionContext().messages,
+			sessionManager: history,
+			reader: "bo",
+		});
+		if (privateMemory) expect(refused).toBeDefined();
+		else expect(refused).toBeUndefined();
 	}
 });
 

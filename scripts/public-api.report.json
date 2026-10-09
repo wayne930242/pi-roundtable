@@ -320,6 +320,7 @@
 			"JevExtensionOptions": "src/kit/jev.d.ts#JevExtensionOptions",
 			"JevSkipReason": "src/kit/jev.d.ts#JevSkipReason",
 			"LatestCompaction": "src/core/runtime/compaction-tiers.d.ts#LatestCompaction",
+			"MEMORY_TURN_ENTRY": "src/core/runtime/reader-history.d.ts#MEMORY_TURN_ENTRY",
 			"McpEndpoint": "src/core/shared/mcp-adapter.d.ts#McpEndpoint",
 			"MemoryView": "src/core/runtime/extensions/private-memory.d.ts#MemoryView",
 			"ModelRef": "src/core/models.d.ts#ModelRef",
@@ -351,8 +352,10 @@
 			"approvalCard": "src/core/runtime/extensions/confirmation-gate.d.ts#approvalCard",
 			"archiveSessions": "src/core/runtime/session-archive.d.ts#archiveSessions",
 			"attachmentsOf": "src/core/attachments/turn-attachments.d.ts#attachmentsOf",
+			"bridgeHistoryHidesMemory": "src/core/runtime/reader-history.d.ts#bridgeHistoryHidesMemory",
 			"callScheduleTool": "src/core/modules/schedules/schedule-tools.d.ts#callScheduleTool",
 			"canonicalJson": "src/core/runtime/extensions/confirmation-gate.d.ts#canonicalJson",
+			"carriesMemory": "src/core/runtime/reader-history.d.ts#carriesMemory",
 			"channelQueue": "src/core/routing/channel-queue.d.ts#channelQueue",
 			"channelSegment": "src/core/attachments/attachment-dir.d.ts#channelSegment",
 			"checkRepoName": "src/core/modules/skills/repo-name.d.ts#checkRepoName",
@@ -381,6 +384,7 @@
 			"promptSlot": "src/core/runtime/prompt-slot.d.ts#promptSlot",
 			"quietLinks": "src/core/presentation/quiet-links.d.ts#quietLinks",
 			"readAttachmentExtension": "src/core/shared/read-attachment-tool.d.ts#readAttachmentExtension",
+			"recordMemoryTurn": "src/core/runtime/reader-history.d.ts#recordMemoryTurn",
 			"requiredString": "src/core/runtime/text-tools.d.ts#requiredString",
 			"runWorkerTask": "src/core/runtime/worker-task.d.ts#runWorkerTask",
 			"scheduleToolSpecs": "src/core/shared/schedule-tools.d.ts#scheduleToolSpecs",
@@ -778,6 +782,11 @@
 		"src/core/runtime/prompt-slot.d.ts#promptSlot": "declare function promptSlot(): PromptSlot;",
 		"src/core/runtime/prompt-slot.d.ts#PromptSlot": "declare class PromptSlot {\n    #private;\n    \n    bind(prompts: Prompts | undefined, asker: string, beforeCard?: () => Promise<void>): void;\n    unbind(): void;\n    get asker(): string;\n    \n    get prompts(): Prompts | undefined;\n    \n    waitedMs(now?: number): number;\n}",
 		"src/core/runtime/prompt-slot.d.ts#workTimeout": "declare function workTimeout(ms: number, slot: Pick<PromptSlot, \"waitedMs\">, expire: () => void): () => void;",
+		"src/core/runtime/reader-history.d.ts#bridgeHistoryHidesMemory": "declare function bridgeHistoryHidesMemory(branch: ReturnType<SessionManager[\"getBranch\"]>, reader: string | undefined, primaryOwner?: string): boolean;",
+		"src/core/runtime/reader-history.d.ts#carriesMemory": "declare function carriesMemory(message: Messages[number]): boolean;",
+		"src/core/runtime/reader-history.d.ts#MEMORY_TURN_ENTRY": "declare const MEMORY_TURN_ENTRY = \"roundtable-memory-turn\";",
+		"src/core/runtime/reader-history.d.ts#Messages": "type Messages = ContextWithSystemEvent[\"messages\"];",
+		"src/core/runtime/reader-history.d.ts#recordMemoryTurn": "declare function recordMemoryTurn(manager: Pick<SessionManager, \"appendCustomEntry\">, reader: string, privateMemory: boolean): () => void;",
 		"src/core/runtime/session-archive.d.ts#archiveSessions": "declare function archiveSessions(dir: string, now?: Date): number;",
 		"src/core/runtime/text-tools.d.ts#requiredString": "declare function requiredString(input: ToolInput, key: string): string;",
 		"src/core/runtime/text-tools.d.ts#stringList": "declare function stringList(input: ToolInput, key: string): string[] | undefined;",
@@ -901,7 +910,14 @@
 		"src/testing.d.ts#TestPluginOptions": "interface TestPluginOptions {\n    \n    env?: Partial<HostEnv>;\n    \n    owner?: {\n        id: string;\n        name: string;\n        pronouns?: OwnerIdentity[\"pronouns\"];\n    };\n    database?: SQL;\n    providers?: Partial<Providers>;\n    \n    surfaces?: readonly ChatSurface[];\n    \n    services?: readonly ServicePair[];\n    \n    conversations?: Partial<ConversationPort>;\n    \n    turns?: ConversationTurns;\n    \n    apiKeys?: Readonly<Record<string, string>>;\n    \n    forwardJoinMs?: number;\n}",
 		"src/testing.d.ts#TestPluginResult": "interface TestPluginResult {\n    contribution: Contribution;\n    \n    holds: HoldCheck;\n    \n    conversations: ConversationPort;\n    \n    turns: ConversationTurns;\n    \n    surfaces: SurfacePort;\n    \n    runtime: AgentRuntime | undefined;\n    tools: readonly string[];\n    tiers: ToolTierTable;\n    events: RecordedEvent[];\n    \n    files: {\n        channel: ChannelKey;\n        file: ReplyFile;\n    }[];\n    runTool(name: string, args: Record<string, unknown>, options?: {\n        speaker?: Speaker;\n        channel?: ChannelKey;\n    }): Promise<string>;\n    stop(): Promise<void>;\n}"
 	},
-	"leaks": [],
+	"leaks": [
+		{
+			"id": "src/core/runtime/reader-history.d.ts#Messages",
+			"references": [
+				"kit:carriesMemory via src/core/runtime/reader-history.d.ts#carriesMemory"
+			]
+		}
+	],
 	"discordTypes": {
 		"main": [],
 		"testing": [
