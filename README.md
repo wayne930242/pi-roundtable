@@ -187,6 +187,13 @@ Tune it under `discord.channelContext`, or set `channelContext: false` to turn i
 | `messageChars` | `500` | Where a message is cut |
 | `botMessageChars` | `80` | Where another bot's message is cut |
 
+When a conversation is started over in a server channel or thread, the assistant posts a short divider there so the next turn does not read what came before; direct messages get none.
+
+| `discord.freshMarker` | Default | What it is |
+| --- | --- | --- |
+| text | `─── new conversation ───` | The divider's text |
+| `false` | | Post no divider |
+
 ## Threat model
 
 pi-roundtable runs one assistant for one owner.

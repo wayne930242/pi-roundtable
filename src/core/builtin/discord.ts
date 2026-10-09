@@ -65,6 +65,8 @@ export interface DiscordOptions {
 	refusalHint?: string;
 	/** The host's channel context settings; `false` turns it off. Default: on, with the defaults. */
 	channelContext?: ChannelContextOptions | false;
+	/** The divider posted in a server channel when its conversation starts over; `false` posts none. Default: a short English divider. */
+	freshMarker?: string | false;
 }
 
 /**
@@ -101,6 +103,9 @@ export function discordPlugin(options: DiscordOptions): RoundtablePlugin {
 				ownerName: options.ownerName,
 				prompts: (channel, scope) => cards.prompts(channel, scope),
 				logger,
+				...(options.freshMarker === undefined
+					? {}
+					: { freshMarker: options.freshMarker }),
 			});
 			surface = connected;
 			// Every owner may use the owner's commands, by the identity service; the primary owner always.

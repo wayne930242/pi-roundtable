@@ -44,6 +44,12 @@ export interface DiscordConfig {
 	 * for the agent server and every plugin's claim.
 	 */
 	channelContext?: ChannelContextOptions | false;
+	/**
+	 * The divider the assistant posts in a server channel or thread when its conversation starts
+	 * over (a new conversation by an owner's command), which ends the window channel context reads;
+	 * never in a direct message. Default `─── new conversation ───`; `false` posts none.
+	 */
+	freshMarker?: string | false;
 }
 
 /** What `discord.channelContext` takes besides `false`. */
@@ -65,6 +71,7 @@ export const discordShape = shape({
 	refusalHint: optional(text),
 	agentMemory: optional(oneOf<"everyone" | "owners">("everyone", "owners")),
 	channelContext: optional(orOff(channelContextShape)),
+	freshMarker: optional(orOff(text)),
 });
 
 /** The adapters `adapters` takes, by the name their factory gives them. */

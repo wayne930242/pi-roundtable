@@ -169,6 +169,9 @@ function discordAssembly(
 				? {}
 				: { refusalHint: discord.refusalHint }),
 			channelContext: discord.channelContext,
+			...(discord.freshMarker === undefined
+				? {}
+				: { freshMarker: discord.freshMarker }),
 		}),
 		admin: discord.admin ? [discordAdminPlugin({ owner })] : [],
 		skills: config.skills

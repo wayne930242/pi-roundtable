@@ -9,6 +9,7 @@ import { PluginError } from "../errors.ts";
 import { silentLogger } from "../log.ts";
 import type { ChannelKey } from "../sessions.ts";
 import { mapIdentity } from "../testing/map-identity.ts";
+import { recordingLogger } from "../testing/recording-logger.ts";
 import { ChannelQueue } from "./channel-queue.ts";
 import { ChannelRouter, orderClaims } from "./channel-router.ts";
 
@@ -340,6 +341,45 @@ describe("ChannelRouter", () => {
 		expect(await turn).toEqual({ status: "ran" });
 		expect(await fresh).toBe("open");
 		expect(log).toEqual(["open background reminder", "open fresh discord:1"]);
+	});
+
+	test("marks a restart on the channel's surface once the claim started over, and logs a surface that cannot", async () => {
+		const marked: string[] = [];
+		let fail = false;
+		const surfaces = {
+			of: (channel: ChannelKey) =>
+				channel.startsWith("discord:")
+					? {
+							surface: "discord",
+							start: async () => undefined,
+							sendReply: async () => undefined,
+							markFresh: async (key: ChannelKey) => {
+								if (fail) throw new Error("Missing Permissions");
+								marked.push(key);
+							},
+						}
+					: undefined,
+		};
+		const recorded = recordingLogger();
+		const routing = new ChannelRouter({
+			claims: [claim("desk", 0, [])],
+			targets: () => undefined,
+			queue: new ChannelQueue(),
+			logger: recorded.logger,
+			surfaces,
+		});
+		expect(await routing.startFresh("discord:1")).toBe("desk");
+		expect(marked).toEqual(["discord:1"]);
+		expect(await routing.startFresh("web:1")).toBe("desk");
+		expect(marked).toEqual(["discord:1"]);
+		fail = true;
+		expect(await routing.startFresh("discord:2")).toBe("desk");
+		expect(
+			recorded.lines.some(
+				(line) =>
+					line.level === "warn" && line.message.includes("Missing Permissions"),
+			),
+		).toBe(true);
 	});
 
 	test("deletes only through a claim that deletes, and never while the channel is busy", async () => {

@@ -58,6 +58,13 @@ export interface ChatSurface {
 	 * `conversations.stop(channel)` when used. Absent = none shown.
 	 */
 	showStop?(channel: ChannelKey): () => void;
+	/**
+	 * Marks in the channel, publicly, that its conversation just started over, so what a reader of
+	 * the channel's history would take for the conversation's context ends there; called after the
+	 * claim's `startFresh` succeeded. A rejection is logged and the restart still counts. Absent =
+	 * nothing is posted.
+	 */
+	markFresh?(channel: ChannelKey): Promise<void>;
 	/** Adds or removes the bot's reaction on a message; failures are logged, never thrown. */
 	react?(channel: ChannelKey, messageId: string, emoji: string): Promise<void>;
 	unreact?(

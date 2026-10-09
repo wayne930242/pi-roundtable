@@ -212,6 +212,8 @@ A group's round reads none, since it already carries what was said since its las
 The defaults fetch the 50 messages before the addressed one and keep at most the newest 15 after the assistant's latest post, merging consecutive near-repeats of one author (80% alike) and cutting long messages (500 characters, another bot's at 80).
 Change them under `discord.channelContext` (`fetch`, `keep`, `similarity`, `messageChars`, `botMessageChars`), or turn it off for the host with `discord: { channelContext: false }`, in `adapters: [discord({ ... })]` or the top-level `discord`.
 
+When a conversation is started over in a server channel or thread (any claim: an agent's channel, a plugin's claim such as a party, an owner channel), the core posts a short divider there as the bot, so the next turn does not read what was said before; the owner's ephemeral reply is unchanged, and direct messages get none. Set the text with `discord.freshMarker` (default `─── new conversation ───`), or `false` for no divider; a failed post is logged and the restart still counts.
+
 Channel context is public channel text: it is not private memory, is never tagged `privateTo`, and the turn's reader stays the person who addressed the assistant.
 People with no tier appear in it as channel text but do not become speakers.
 A plugin's claim, such as one that runs a party in its own server, opts in with `DISCORD.channelContext(message)` and `withChannelContext(text, context)` from `pi-roundtable/discord`; see [Channel context](plugins.md#channel-context-what-was-said-around-an-addressed-message).

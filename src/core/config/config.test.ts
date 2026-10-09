@@ -239,6 +239,29 @@ describe("discord.channelContext", () => {
 	});
 });
 
+describe("discord.freshMarker", () => {
+	const with_ = (freshMarker: unknown) =>
+		resolveConfig({
+			...minimal,
+			discord: { ...discord, freshMarker },
+		} as RoundtableConfig).discord?.freshMarker;
+
+	test("is left out unless configured, so the default divider applies", () => {
+		expect(resolveConfig(minimal).discord?.freshMarker).toBeUndefined();
+	});
+
+	test("takes a text, or false for no divider", () => {
+		expect(with_("--- reset ---")).toBe("--- reset ---");
+		expect(with_(false)).toBe(false);
+	});
+
+	test("refuses true or a number, naming the key", () => {
+		expect(
+			refused({ ...minimal, discord: { ...discord, freshMarker: true } }),
+		).toContain("config discord.freshMarker");
+	});
+});
+
 describe("a host without Discord", () => {
 	const { discord: _discord, http: _http, ...headless } = minimal;
 

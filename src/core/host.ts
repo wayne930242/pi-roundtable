@@ -351,6 +351,7 @@ export class Roundtable {
 			targets: (name) =>
 				this.#registry.backgroundTargets.find((t) => t.name === name),
 			queue: this.#queue,
+			surfaces: this.#surfaces(),
 			logger,
 			...(this.#options.conversations?.forwardJoinMs === undefined
 				? {}

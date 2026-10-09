@@ -300,6 +300,7 @@ export interface ResolvedConfig {
 		agentMemory?: "everyone" | "owners";
 		/** As configured: `{}` when left out, so the defaults apply, or `false`. */
 		channelContext: NonNullable<DiscordConfig["channelContext"]>;
+		freshMarker?: string | false;
 	};
 	databaseUrl: string;
 	dataDir: string;
@@ -429,6 +430,9 @@ export function resolveConfig(input: unknown): ResolvedConfig {
 							? {}
 							: { agentMemory: discord.agentMemory }),
 						channelContext: discord.channelContext ?? {},
+						...(discord.freshMarker === undefined
+							? {}
+							: { freshMarker: discord.freshMarker }),
 					},
 				}
 			: {}),

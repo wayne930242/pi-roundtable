@@ -10,7 +10,7 @@ import {
 	type ScheduledOutcome,
 	STEERED_MARK,
 } from "../contract/channels.ts";
-import { parseChannelKey } from "../contract/surface.ts";
+import { parseChannelKey, type SurfacePort } from "../contract/surface.ts";
 import { IdentityError } from "../domain/errors.ts";
 import { PluginError } from "../errors.ts";
 import type { ActorFacts } from "../identity/actor-facts.ts";
@@ -37,6 +37,8 @@ export interface ChannelRouterOptions {
 	contacts?: ContactAssessor;
 	/** Whom a background turn runs as; without it, only the host's own turns run. */
 	principals?: Pick<IdentityService, "speakerFor">;
+	/** The surfaces, so a conversation started over is marked in a channel that shows one; without it, none is. */
+	surfaces?: Pick<SurfacePort, "of">;
 	/** How long a bare forward waits for the text sent with it; FORWARD_JOIN_MS by default. */
 	forwardJoinMs?: number;
 }
@@ -320,11 +322,24 @@ export class ChannelRouter implements ConversationPort {
 	}
 
 	startFresh(channel: ChannelKey): Promise<string> {
-		return this.#options.queue.run(channel, () => {
+		return this.#options.queue.run(channel, async () => {
 			const claim = this.#owner(channel);
 			if (!claim) throw new Error(`no conversation owns ${channel}`);
-			return claim.startFresh(channel);
+			const kind = await claim.startFresh(channel);
+			await this.#markFresh(channel);
+			return kind;
 		});
+	}
+
+	/** The restart already counts: a surface that cannot mark it is logged, not failed. */
+	async #markFresh(channel: ChannelKey): Promise<void> {
+		try {
+			await this.#options.surfaces?.of(channel)?.markFresh?.(channel);
+		} catch (error) {
+			this.#options.logger.warn(
+				`could not mark the restart of ${channel}: ${error instanceof Error ? error.message : String(error)}`,
+			);
+		}
 	}
 
 	async deleteConversation(channel: ChannelKey): Promise<"deleted" | "busy"> {

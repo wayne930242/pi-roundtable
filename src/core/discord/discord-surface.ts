@@ -35,6 +35,7 @@ import type { ComposedCommands } from "./compose-commands.ts";
 import type { ChannelInfo, DiscordConnection } from "./connection.ts";
 import { DiscordThreadHost } from "./dispatch-thread-host.ts";
 import type { ThreadHost } from "./dispatch-threads.ts";
+import { DEFAULT_FRESH_MARKER, postFreshMarker } from "./fresh-marker.ts";
 import { toInbound } from "./inbound-message.ts";
 import type { CardChannel } from "./owner-cards.ts";
 import { DiscordOwnerOps } from "./owner-discord.ts";
@@ -57,6 +58,8 @@ export interface DiscordSurfaceOptions {
 	/** The cards in a Discord channel; the surface hands them out as its `prompts`. */
 	prompts: (channel: ChannelKey, scope?: PromptScope) => Prompts | undefined;
 	logger: Logger;
+	/** The divider posted in a server channel when its conversation starts over; `false` posts none. Default: `DEFAULT_FRESH_MARKER`. */
+	freshMarker?: string | false;
 }
 
 /**
@@ -269,6 +272,20 @@ export class DiscordSurface
 				],
 			});
 		}
+	}
+
+	/** The divider that ends channel context's window; see `postFreshMarker`. */
+	async markFresh(channel: ChannelKey): Promise<void> {
+		await postFreshMarker(
+			this.#options.freshMarker ?? DEFAULT_FRESH_MARKER,
+			async () => {
+				const target = await this.#sendable(channel);
+				return {
+					dm: target.isDMBased(),
+					send: (text) => target.send({ content: text }),
+				};
+			},
+		);
 	}
 
 	startTyping(channel: ChannelKey): () => void {
