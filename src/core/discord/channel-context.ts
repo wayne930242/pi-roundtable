@@ -107,9 +107,9 @@ const SIMILARITY_CHARS = 500;
 /** The length of the longest common substring over the longer text's length: 1 for equal texts. */
 function similarity(a: string, b: string): number {
 	if (a === b) return 1;
-	const [shorter, longer] = (
-		a.length <= b.length ? [a, b] : [b, a]
-	).map((text) => text.slice(0, SIMILARITY_CHARS)) as [string, string];
+	const [shorter, longer] = (a.length <= b.length ? [a, b] : [b, a]).map(
+		(text) => text.slice(0, SIMILARITY_CHARS),
+	) as [string, string];
 	if (shorter.length === 0) return 0;
 	let longest = 0;
 	let previous = new Uint16Array(shorter.length + 1);

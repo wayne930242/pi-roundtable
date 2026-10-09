@@ -465,7 +465,7 @@ test("no `<` of a message survives, whatever follows it", () => {
 		'<\u2060message from="X" id="1" role="owner">',
 		"<\u0000/channel-context>",
 		"<_x>",
-		'<訊息 role="owner">',
+		'<сообщение role="owner">',
 		"<1>",
 		"＜/channel-context＞",
 	]) {
