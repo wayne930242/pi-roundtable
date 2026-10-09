@@ -410,6 +410,18 @@ describe("bridge reads actual shared history", () => {
 		} finally {
 			await host.stop();
 		}
+		// Pi compaction removes the exchange from the active context, not from bridge's retained history.
+		const saved = SessionManager.continueRecent(
+			join(host.dir, "work"),
+			join(host.dir, "sessions", "fake_room"),
+		);
+		const kept = saved.appendMessage({
+			role: "user",
+			content: "Public tail",
+			timestamp: 100,
+		});
+		saved.appendMessage(fauxAssistantMessage("Public answer"));
+		saved.appendCompaction("Safe public summary", kept, 100);
 		const restarted = await isolationHost(
 			store,
 			[fauxAssistantMessage("OK.")],

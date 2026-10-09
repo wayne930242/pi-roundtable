@@ -127,6 +127,7 @@ export class PiAgentRuntime implements AgentRuntime {
 			conversation.visibility === "shared"
 				? await bridgeTurnRefusal(request.agent?.name, this.#options, {
 						messages: session.messages,
+						sessionManager: session.sessionManager,
 						reader: request.speaker.principalId,
 					})
 				: undefined;

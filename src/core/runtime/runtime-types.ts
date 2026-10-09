@@ -89,7 +89,7 @@ export interface PiAgentRuntimeOptions {
 	interimPrimaryChars?: number;
 	/** How long a new session waits for its MCP tools to register. */
 	mcpConnectTimeoutMs?: number;
-	/** With memory enabled, bridge shared turns refuse raw private exchanges inaccessible to the reader. */
+	/** Defaults to true: bridge shared turns refuse raw private exchanges inaccessible to the reader. */
 	memory?: boolean;
 }
 

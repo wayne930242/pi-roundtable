@@ -14,7 +14,7 @@ import type {
 import { PluginError } from "../errors.ts";
 import type { IdentityService } from "../identity/identity-service.ts";
 import type { Principal } from "../identity/principal-store.ts";
-import { silentLogger } from "../log.ts";
+import { type Logger, silentLogger } from "../log.ts";
 import type {
 	LinkedSessions,
 	PluginContext,
@@ -28,6 +28,7 @@ import { resolveProviders } from "../registry/providers.ts";
 import { ServiceRegistry } from "../registry/services.ts";
 import { IDENTITY, RUNTIME } from "../services.ts";
 import type { Speaker } from "../speakers.ts";
+import { recordingLogger } from "../testing/recording-logger.ts";
 import { toolTiers } from "../tool-tiers.ts";
 import { PiAgentRuntime } from "./pi-agent-runtime.ts";
 import {
@@ -75,12 +76,13 @@ const heldActions: HeldActionStore = {
 async function setUp(
 	plugin: RoundtablePlugin,
 	filling: RoundtablePlugin[] = [],
+	logger: Logger = silentLogger(),
 ) {
 	const plugins = [...filling, plugin];
 	const services = new ServiceRegistry([...plugins]);
 	let linked: LinkedSessions | undefined;
 	const context = {
-		logger: silentLogger(),
+		logger,
 		env: { locale: "en", timeZone: "UTC", now: () => new Date() },
 		sessions: () => {
 			if (!linked) throw new Error("not linked");
@@ -276,9 +278,15 @@ describe("the runtime plugin's preflight of claude-bridge with memory", () => {
 				options({ model: bridge, memory: true }),
 				async () => heldActions,
 			);
-			await setUp(plugin, [identity(tiers), echo]);
-			const preflight = plugin.preflight?.();
-			await preflight;
+			const recorder = recordingLogger();
+			await setUp(plugin, [identity(tiers), echo], recorder.logger);
+			await plugin.preflight?.();
+			expect(
+				recorder.lines
+					.filter((line) => line.level === "warn")
+					.map((line) => line.message)
+					.join(" "),
+			).toMatch(/claude-bridge.*private memory.*risk/s);
 		}
 	});
 

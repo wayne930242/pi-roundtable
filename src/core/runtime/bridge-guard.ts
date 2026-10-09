@@ -1,4 +1,7 @@
-import type { ContextWithSystemEvent } from "@earendil-works/pi-coding-agent";
+import type {
+	ContextWithSystemEvent,
+	SessionManager,
+} from "@earendil-works/pi-coding-agent";
 import type { AgentSessions } from "../contract/runtime.ts";
 import { ConfigError } from "../domain/errors.ts";
 import type { AccessRules, AccessTier } from "../identity/access-policy.ts";
@@ -99,7 +102,7 @@ export function bridgeMemoryError(model: string, crowd: string): ConfigError {
 }
 
 /**
- * Why a shared turn may not run on the model it asks, as `bridgeRefusal` says at the turn;
+ * Why raw private history prevents a shared turn from running on its selected bridge model;
  * undefined when it may. The model is the agent's own for an agent's turn, the host's otherwise.
  */
 export async function bridgeTurnRefusal(
@@ -113,21 +116,33 @@ export async function bridgeTurnRefusal(
 	history: {
 		messages: ContextWithSystemEvent["messages"];
 		reader: string | undefined;
+		/** The raw persisted branch includes exchanges removed from the active context by compaction. */
+		sessionManager?: Pick<SessionManager, "getBranch">;
 	},
 ): Promise<string | undefined> {
 	const model =
 		agent === undefined
 			? options.model
 			: options.agents && parseModelRef(options.agents.modelOf(agent).model);
-	if (!options.memory || !model || !onClaudeBridge(model)) return undefined;
+	if (options.memory === false || !model || !onClaudeBridge(model))
+		return undefined;
 	const reader =
 		history.reader === SYSTEM_PRINCIPAL ? options.owner.id : history.reader;
 	if (
-		!hidesPrivateExchange(history.messages, {
-			shared: true,
-			reader,
-			legacyOwner: options.owner.id,
-		})
+		!hidesPrivateExchange(
+			history.sessionManager
+				? history.sessionManager
+						.getBranch()
+						.flatMap((entry) =>
+							entry.type === "message" ? [entry.message] : [],
+						)
+				: history.messages,
+			{
+				shared: true,
+				reader,
+				legacyOwner: options.owner.id,
+			},
+		)
 	)
 		return undefined;
 	const why =
@@ -137,7 +152,7 @@ export async function bridgeTurnRefusal(
 }
 
 /**
- * Why claude-bridge may not serve the host now, read at each turn: the configuration's crowd, or
+ * Why startup should warn about claude-bridge: the configuration's crowd, or
  * the roles the host stores as they are now, so one granted after the boot counts at once.
  * Undefined while one person alone may speak, or the host keeps no memory.
  */
