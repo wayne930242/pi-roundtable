@@ -34,6 +34,11 @@ afterEach(async () => {
 async function worker(
 	failure = false,
 	summarized?: (request: PiCompactRequest) => void,
+	options: {
+		provider?: string;
+		sharedPrompt?: boolean;
+		noTools?: boolean;
+	} = {},
 ) {
 	const dir = mkdtempSync(join(tmpdir(), "sbx-private-"));
 	let session: AgentSession | undefined;
@@ -94,19 +99,25 @@ async function worker(
 		authorId: "ann-actor",
 		authorPrincipalId: "ann",
 		authorName: "Ann",
-		memory: "PROMPT_SECRET",
+		memory: options.sharedPrompt ? "PARTY_WIDE_FACTS" : "PROMPT_SECRET",
+		memoryVisibility: options.sharedPrompt ? "shared" : "private",
 		outbox: dir,
 	};
+	const provider = options.provider ?? "faux";
 	const core = createFauxCore({
-		provider: "faux",
+		provider,
 		models: [{ id: "worker", contextWindow: 1_000_000 }],
 	});
 	const seen: TranscriptContext[] = [];
 	core.setResponses([
-		fauxAssistantMessage(
-			fauxToolCall("recall_person", { query: "ARG_SECRET" }),
-			{ stopReason: "toolUse" },
-		),
+		...(options.noTools
+			? []
+			: [
+					fauxAssistantMessage(
+						fauxToolCall("recall_person", { query: "ARG_SECRET" }),
+						{ stopReason: "toolUse" },
+					),
+				]),
 		...Array.from({ length: 8 }, () => (context: TranscriptContext) => {
 			seen.push(context);
 			return fauxAssistantMessage("OK");
@@ -139,7 +150,7 @@ async function worker(
 			{
 				name: "faux",
 				factory: (pi) =>
-					pi.registerProvider("faux", {
+					pi.registerProvider(provider, {
 						api: core.api,
 						apiKey: "offline",
 						baseUrl: "http://faux.invalid",
@@ -173,12 +184,36 @@ async function worker(
 		noTools: "builtin",
 	});
 	session = created.session;
-	const model = modelRuntime.getModel("faux", "worker");
+	const model = modelRuntime.getModel(provider, "worker");
 	if (!model) throw new Error("missing faux model");
 	await session.setModel(model);
 	session.setThinkingLevel("off");
 	return { session, turn, seen };
 }
+
+test("sandbox real Pi prompt-only bridge turns refuse private cross-reader replay but allow shared party A to B to A", async () => {
+	for (const sharedPrompt of [false, true]) {
+		const { session, turn, seen } = await worker(false, undefined, {
+			provider: "claude-bridge",
+			sharedPrompt,
+			noTools: true,
+		});
+		for (const reader of ["ann", "bo", "ann"]) {
+			turn.authorId = `${reader}-actor`;
+			turn.authorPrincipalId = reader;
+			const refused = sandboxBridgeRefusal(session, turn);
+			if (!sharedPrompt && reader === "bo") {
+				expect(refused).toBeDefined();
+				expect(seen.length).toBe(1);
+				continue;
+			}
+			expect(refused).toBeUndefined();
+			recordSandboxMemoryTurn(session.sessionManager, turn);
+			await session.prompt(`Hello from ${reader}`);
+		}
+		expect(seen.length).toBe(sharedPrompt ? 3 : 2);
+	}
+});
 
 for (const failure of [false, true])
 	test(`sandbox broker ownership persists and hides custom arguments/results for other readers (${failure ? "error" : "success"})`, async () => {

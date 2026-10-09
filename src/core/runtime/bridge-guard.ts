@@ -95,12 +95,12 @@ async function grantedCrowd(
 
 /** Why claude-bridge may not serve a host whose shared conversations hold several people's memory. */
 export function bridgeMemoryProblem(model: string, crowd: string): string {
-	return `model ${model} runs on ${CLAUDE_BRIDGE}, and this host keeps each person's private memory while ${crowd}. ${CLAUDE_BRIDGE} resumes the history Claude Code stored for a conversation, unfiltered, so one person's private memory could reach another reader. Shared turns with inaccessible private exchanges are refused; untagged legacy memory results count as the primary owner's for this check. Private information in retained prompts/reasoning, public replies, other untagged tools, or existing summaries remains a risk.`;
+	return `model ${model} runs on ${CLAUDE_BRIDGE}, and this host keeps each person's private memory while ${crowd}. ${CLAUDE_BRIDGE} resumes the history Claude Code stored for a conversation, unfiltered, so one person's private memory could reach another reader. Shared bridge turns refuse when raw reader records show private memory carried for another reader (including prompt-only memory and reasoning), or an exchange is inaccessible. Turns without private memory stay shareable; malformed memory calls belong to their recorded reader. SYSTEM counts as primary owner and may read that owner's raw exchanges/reasoning; untagged pre-scope legacy memory results keep primary-owner attribution. Public replies, untagged custom tools, and old prompts/reasoning/summaries without reader records remain a risk.`;
 }
 
 /** How to fix it. */
 export const BRIDGE_MEMORY_FIX =
-	"Use a model of another provider, set memory: false, or keep each conversation's private exchanges visible to its readers (start a fresh conversation before sharing old owner history).";
+	"Use another provider, or start a fresh conversation before sharing incompatible private history. memory: false or persona memory: none prevents future core memory loading, but does not bypass recorded private history.";
 
 /** The refusal of claude-bridge on a host whose shared conversations hold several people's memory. */
 export function bridgeMemoryError(model: string, crowd: string): ConfigError {
@@ -198,7 +198,7 @@ export async function bridgeTurnRefusal(
 		history.reader === SYSTEM_PRINCIPAL ? options.owner.id : history.reader;
 	if (!hidesBridgeHistory(history, reader, options.owner.id)) return undefined;
 	const why =
-		"this conversation's raw history holds a private exchange the current reader may not see";
+		"this conversation's raw history holds another reader's private memory or a private exchange the current reader may not see";
 	const message = bridgeMemoryError(formatModelRef(model), why).message;
 	return agent === undefined ? message : `${agent}: ${message}`;
 }

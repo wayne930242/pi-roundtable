@@ -221,7 +221,7 @@ Other model transports are not implicitly proxied by this broker.
 | `partyDir`, `image` | Dedicated private, host-owned directory and operator-built Pi image. |
 | `profiles` | Host allow-list mapping profile names to fixed Anthropic `model` and optional MCP server names. |
 | `oauthToken({ channel, speaker })` | Host-only credential getter called before each model request with the bound turn's channel and speaker, so a host can use a different subscription per channel or speaker; supports refresh without container credentials. A zero-argument getter still works. Returning `undefined` or an empty string fails the call; no other credential is used. |
-| `memory.promptBlock(channel, id, name)` | Current admitted speaker's context, at most 100,000 characters; database implementations remain host adapters. |
+| `memory.promptBlock(channel, id, name)`, `memory.visibility` | Context at most 100,000 characters; private to the admitted reader by default. Explicit `"shared"` declares party-wide facts public and avoids tainting reader records. Database implementations remain host adapters. |
 | `effort.judge(text, { level })` | Host-selected `low`, `medium`, `high`, or `xhigh`; the previous channel choice is retained for the next judgment. |
 | `tools.names`, `tools.call` | Explicit host tool allow-list and callback receiving fixed channel/profile/speaker plus cancellation signal. |
 | `mcp.servers`, `mcp.token()` | Fixed server URLs and tool-name allow-lists; host credential getter. |
@@ -277,7 +277,9 @@ This applies to any custom tool name, not just core memory tools; `remember_pers
 Untagged custom exchanges are public.
 Both Pi's summary and the host compactor receive no tagged private exchanges, including the kept tail sent to the host, and no earlier prompt memory or reasoning.
 Calls/results split across compaction boundaries are paired for redaction.
-The bridge provider bypasses request projection by replaying its own history: the worker refuses a bridge turn whose raw persisted branch contains a private exchange hidden from that reader, even after Pi compacted it.
+The bridge provider bypasses request projection by replaying its own history: before calling a provider, the worker refuses a bridge turn when its raw persisted branch records private memory carried for another reader, or holds an explicit private exchange hidden from that reader, even after Pi compacted it.
+Reader records cover private prompt blocks and their retained reasoning without requiring a tool call; memory exchanges, including malformed/truncated/unanswered built-in calls, belong to their turn's reader.
+A turn carrying no private memory never blocks another participant merely for speaking, so explicitly shared party-wide prompt blocks with public tools remain usable across A → B → A turns.
 Unlike the core host guard, sandbox has no primary-owner compatibility exception for untagged old built-in memory exchanges.
 Existing summaries are not retroactively scrubbed.
 Start fresh before allowing new readers into histories previously summarized without this protection, and rebuild the worker image with the upgraded core and sandbox together.

@@ -567,6 +567,10 @@ const ACCEPTANCE: readonly Item[] = [
 				"sandbox shared prompt blocks keep A to B to A bridge turns public; default private blocks refuse B",
 			),
 			t(
+				"packages/sandbox/worker/pi-tools.test.ts",
+				"sandbox real Pi prompt-only bridge turns refuse private cross-reader replay but allow shared party A to B to A",
+			),
+			t(
 				"packages/sandbox/src/pi-runtime.test.ts",
 				"Pi memory prompt blocks default private and can explicitly remain shared",
 			),

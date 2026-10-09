@@ -128,21 +128,30 @@ Hosts building their own shared Pi sessions can use `memoryProjection(messages, 
 ### claude-bridge guard
 
 claude-bridge reuses Claude Code's stored, unfiltered history, bypassing the per-request projection.
-With memory enabled, each shared bridge turn checks the session's actual raw history before asking any provider, including after restart and when an agent switches to bridge.
-The raw persisted branch is checked even for exchanges already removed from Pi's active context by compaction.
+Each shared core bridge turn checks the session's actual raw history before asking any provider, including after restart and when an agent switches to bridge.
+The raw persisted branch is checked even for turns already removed from Pi's active context by compaction.
+Every prompted turn, on any provider, appends a `roundtable-memory-turn` custom reader record: the actual principal (SYSTEM stays recorded as SYSTEM), a turn id, and whether its request carried private memory.
+Loading core memory into that reader's prompt marks the turn private even if it calls no tools; any memory exchange or memory-loaded worker marks it private too.
+A later private marker keeps the same turn id when memory is first used during the turn.
+Malformed, schema-rejected, truncated, and aborted built-in memory calls, including calls with no result or ownership tag, are attributed to that turn's recorded reader.
 An agent turn checks and uses one copied model/thinking snapshot; a setting changed during selection applies on the next turn rather than switching providers after the guard.
-It returns an `AgentRunError` if that history holds an exchange the current reader's memory projection would hide: a result tagged `privateTo` another principal (including a worker that loaded memory), an unowned memory exchange, or an outstanding built-in memory call with no result.
-For this check only, SYSTEM reads as the primary owner, and untagged pre-0.9 built-in memory results (before the first `roundtable-conversation` scope record) count as that owner's; owner and SYSTEM turns can continue old owner-only shared histories, but another person's turn there is refused.
-An unowned memory result recorded after that scope marker is not legacy: it refuses even owner and SYSTEM turns, as do outstanding memory calls with no result.
-This exception does not change request projection: shared SYSTEM requests still load no personal memory.
-A conversation holding only a guest's tagged private exchanges admits that guest, not the owner or SYSTEM.
+It returns an `AgentRunError` when a retained turn carried another reader's private memory, or an explicit `privateTo` exchange would be hidden from the current reader.
+This refuses reasoning replay across readers even when the earlier turn only read memory from its prompt and used no tools: request projection cannot clean Claude Code's retained transcript.
+A recorded turn that loaded no private memory never blocks another reader merely for having a different principal.
+For this core replay check only, SYSTEM counts as the primary owner, for modern records and old exchanges alike: owner and SYSTEM can alternate over owner memory.
+SYSTEM can therefore read the owner's raw retained private exchanges and reasoning on bridge, and can repeat them publicly; this is the retained compatibility design, not SYSTEM-private isolation.
+Pre-0.9 history without reader records keeps the legacy rule: untagged built-in memory results before the first `roundtable-conversation` scope marker belong to the primary owner for the guard.
+After that scope marker, an unowned result or outstanding memory call with no reader record still fails closed, including for owner and SYSTEM; with a reader record, the malformed exchange no longer locks its own reader out forever.
+Request projection is unchanged: shared SYSTEM requests load no personal memory and redact everyone's private exchanges, but bridge bypasses that projection.
+A conversation holding only a guest's private turns admits that guest, not the owner or SYSTEM.
 Other providers and private conversations are unaffected by this guard.
 
 Admission of another person in configuration or stored roles is only a startup warning, and `roundtable doctor` warns rather than fails for that risk.
 A guest admitted elsewhere but absent from this conversation does not block the owner's turns.
-To share incompatible history, choose another provider, set `memory: false`, or start a fresh conversation whose private exchanges are visible to its readers.
-Disabling memory bypasses the guard; it does not erase prior private data from bridge storage.
-The guard is not general secret-flow prevention: private data repeated in public replies, untagged custom tools, or pre-existing summaries can still reach later readers, and bridge's retained history bypasses per-request reasoning and prompt filtering.
+To share incompatible history, choose another provider or start a fresh conversation whose turns carry no private memory when readers differ.
+`memory: false` or persona `memory: "none"` prevents future core memory loading; disabling memory does not bypass the guard or erase already recorded private history.
+Reader records are prospective: earlier prompt/reasoning states with no reader records cannot be reliably attributed, so start fresh before sharing an old private history with new readers.
+The guard is not general secret-flow prevention: private data repeated in public replies, untagged custom tools, or pre-existing summaries can still reach later readers.
 
 ## Official packages
 
@@ -179,6 +188,11 @@ Tag every private custom-tool result and error; untagged custom tools, raw files
 `PiSandboxRuntimeOptions.memory.visibility` defaults to `"private"`: a nonempty prompt block records that reader's private memory even without tool calls.
 For party-wide facts, explicitly set `memory.visibility: "shared"`, including for an upgraded 0.8 host, or another participant's next claude-bridge turn is refused.
 This declares only the prompt block public; a tool's `privateTo` result remains private.
+The worker performs the same raw reader-record check before its provider call, without the core's primary-owner/SYSTEM compatibility mapping.
+It declares `privateTo` and `readerRecords` capabilities plus whether it holds private history at readiness; an incompatible image refuses private turns rather than silently dropping isolation.
+The host requires those capabilities only for a private prompt, known private history, or an actual tagged host-tool response; empty/shared prompt blocks and public-only tools remain compatible with older images.
+A first private response is withheld from an incompatible image and fails the entire turn, with an error naming the image to rebuild.
+See the [worker handshake](../packages/sandbox/README.md#worker-capability-handshake).
 
 ## Prompt changes from 0.8.0
 

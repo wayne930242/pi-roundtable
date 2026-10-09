@@ -26,7 +26,7 @@ export function sandboxBridgeRefusal(
 		)
 	)
 		return undefined;
-	return "claude-bridge cannot replay private exchanges hidden from this sandbox reader; use another provider or a fresh conversation";
+	return "claude-bridge cannot replay another reader's private-memory turns or private exchanges hidden from this sandbox reader; use another provider or a fresh conversation";
 }
 
 /** Record the declared privacy of the host's prompt block before any worker provider call. */
