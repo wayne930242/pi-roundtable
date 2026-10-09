@@ -37,7 +37,7 @@ async function probeHost(
 	/** The host's record of each conversation, read when a session is made and the turn names none. */
 	recorded?: TurnConversation,
 	/** The agents' model, and why the host refuses claude-bridge, if it does. */
-	agentModel: { model: string; bridgeRefusal?: string } = {
+	agentModel: { model: string; privateTo?: string } = {
 		model: "faux/faux-1",
 	},
 ) {
@@ -94,7 +94,7 @@ async function probeHost(
 						toolTiers: deps.toolTiers,
 						logger: deps.logger,
 						confirmations: deps.confirmations,
-						bridgeRefusal: async () => agentModel.bridgeRefusal,
+						memory: true,
 						agents: {
 							workDir: dir,
 							skills: () => [],
@@ -132,7 +132,9 @@ async function probeHost(
 										seen.push({ speaker, task });
 										return {
 											content: [{ type: "text", text: task }],
-											details: undefined,
+											details: agentModel.privateTo
+												? { privateTo: agentModel.privateTo }
+												: undefined,
 										};
 									},
 								});
@@ -409,11 +411,25 @@ test("a task works for whom its turn's conversation serves", async () => {
 });
 
 test("an agent on claude-bridge is refused before its turn when the host's shared conversations hold several people's memory", async () => {
-	const host = await probeHost(PROBE_TURN(), undefined, {
-		model: "claude-bridge/claude-opus-5-5",
-		bridgeRefusal: "access.members admits people besides the owner",
-	});
+	const agentModel = { model: "faux/faux-1", privateTo: "other" };
+	const host = await probeHost(
+		[...PROBE_TURN(), ...PROBE_TURN()],
+		undefined,
+		agentModel,
+	);
 	try {
+		expect(
+			(
+				await host.runtime.runTurn({
+					channel: "fake:infra",
+					selection: SELECTION,
+					text: "First.",
+					kind: "helper",
+					speaker: MEMBER,
+				})
+			).ok,
+		).toBe(true);
+		agentModel.model = "claude-bridge/claude-opus-5-5";
 		const refused = await host.runtime.runTurn({
 			channel: "fake:infra",
 			selection: SELECTION,

@@ -87,7 +87,7 @@ describe("doctor", () => {
 		expect(lines[failed + 1]).toContain("API key");
 	});
 
-	test("the model check refuses claude-bridge with memory while several people speak in shared conversations, and passes the one owner's host", async () => {
+	test("the model check warns about shared claude-bridge memory risk, and passes the one owner's host", async () => {
 		const status = async (config: object) => {
 			const report = await doctor(inputs({ ports: fakePorts(config) }));
 			return report.outcomes.find(({ name }) => name === "model login")?.result;
@@ -97,7 +97,7 @@ describe("doctor", () => {
 			...bridge,
 			speakers: { members: { everyone: true } },
 		});
-		expect(crowd?.status).toBe("fail");
+		expect(crowd?.status).toBe("warn");
 		expect(JSON.stringify(crowd)).toContain("access.members");
 		expect((await status(bridge))?.status).toBe("ok");
 	});

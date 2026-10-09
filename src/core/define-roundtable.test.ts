@@ -520,16 +520,25 @@ describe("claude-bridge in a host whose shared conversations several people spea
 		setup: () => ({}),
 	};
 
-	test("stops with a ConfigError that says why and how to fix it", async () => {
-		const refusal = defineRoundtable({
-			...config,
-			model: BRIDGE,
-			speakers: { members: { everyone: true } },
-		});
-		await expect(refusal).rejects.toBeInstanceOf(ConfigError);
-		await expect(refusal).rejects.toThrow(/claude-bridge/);
-		await expect(refusal).rejects.toThrow(/access\.members/);
-		await expect(refusal).rejects.toThrow(/memory: false/);
+	test("boots with a warning that says why shared bridge history remains risky", async () => {
+		const warnings: string[] = [];
+		const logger = {
+			...silentLogger(),
+			warn: (_fields: object | string, message?: string) =>
+				void warnings.push(message ?? ""),
+		};
+		const refusal = defineRoundtable(
+			{
+				...config,
+				model: BRIDGE,
+				speakers: { members: { everyone: true } },
+			},
+			{ logger },
+		);
+		await expect(refusal).resolves.toBeDefined();
+		expect(warnings.join(" ")).toMatch(
+			/claude-bridge.*access\.members.*private memory/s,
+		);
 	});
 
 	test("counts a second owner, and a plugin's identity bound to someone else, as more than one speaker", async () => {
@@ -545,7 +554,7 @@ describe("claude-bridge in a host whose shared conversations several people spea
 				},
 				model: BRIDGE,
 			}),
-		).rejects.toThrow(/2 owners/);
+		).resolves.toBeDefined();
 		await expect(
 			defineRoundtable({
 				...config,
@@ -558,7 +567,7 @@ describe("claude-bridge in a host whose shared conversations several people spea
 					},
 				],
 			}),
-		).rejects.toThrow(/plugin kiosk/);
+		).resolves.toBeDefined();
 	});
 
 	test("does not count the owner's own identity listed again under admins or members, but counts anyone listed beside it", async () => {
@@ -589,7 +598,7 @@ describe("claude-bridge in a host whose shared conversations several people spea
 				},
 				model: BRIDGE,
 			}),
-		).rejects.toThrow(/access\.members/);
+		).resolves.toBeDefined();
 	});
 
 	test("a single owner's host on claude-bridge still boots, and so does a crowd without memory or on another provider", async () => {

@@ -93,10 +93,7 @@ export class PiAgentRuntime implements AgentRuntime {
 		);
 	}
 
-	/**
-	 * Proves the model and every required tool resolve across shared and owner-private throwaway
-	 * sessions that run no turn; startup stops here before anything connects.
-	 */
+	/** Resolves the model and required tools in throwaway shared and private sessions, without a turn. */
 	async preflight(): Promise<void> {
 		const required = this.#factory.requiredTools();
 		const registered = await preflightTools(
@@ -116,11 +113,7 @@ export class PiAgentRuntime implements AgentRuntime {
 		// Whom the conversation serves now, the host's record read again; only its person, or the
 		// host itself, speaks in a private one, refused before its session is touched.
 		const conversation = await this.#sessions.conversation(key, request);
-		const refused =
-			refusedSpeaker(conversation, request.speaker) ??
-			(conversation.visibility === "shared"
-				? await bridgeTurnRefusal(request.agent?.name, this.#options)
-				: undefined);
+		const refused = refusedSpeaker(conversation, request.speaker);
 		if (refused) return { ok: false, error: new AgentRunError(refused) };
 		const scoped = { ...request, conversation };
 		const channelSession = await this.#sessions.freshSession(key, scoped);
@@ -130,6 +123,15 @@ export class PiAgentRuntime implements AgentRuntime {
 			this.#options.owner,
 		);
 		const { session } = channelSession;
+		const bridgeRefused =
+			conversation.visibility === "shared"
+				? await bridgeTurnRefusal(request.agent?.name, this.#options, {
+						messages: session.messages,
+						reader: request.speaker.principalId,
+					})
+				: undefined;
+		if (bridgeRefused)
+			return { ok: false, error: new AgentRunError(bridgeRefused) };
 		const level = await this.#thinkingLevel(key, session, request);
 		if (session.thinkingLevel !== level) session.setThinkingLevel(level);
 		const gate = await this.#sessions.gate(key, request.agent !== undefined);
@@ -327,10 +329,7 @@ export class PiAgentRuntime implements AgentRuntime {
 		return stopped;
 	}
 
-	/**
-	 * Runs a task in a fresh, unsaved session with the selected tools and the channel's
-	 * confirmation gate, and returns its final text.
-	 */
+	/** Runs a task in an unsaved session with the selected tools and conversation's gate. */
 	// pi-lens-ignore: high-fan-out — builds, runs, and disposes one transient session; batch 4 turns it into the core's child-run API
 	async #runTask(
 		scope: { turn: ChannelKey; home: ChannelKey },

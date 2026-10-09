@@ -20,7 +20,8 @@ import type { PluginContext, RoundtablePlugin } from "../plugin.ts";
 import { CONVERSATIONS, IDENTITY, RUNTIME } from "../services.ts";
 import type { Speaker } from "../speakers.ts";
 import {
-	bridgeMemoryError,
+	BRIDGE_MEMORY_FIX,
+	bridgeMemoryProblem,
 	liveBridgeRefusal,
 	onClaudeBridge,
 } from "./bridge-guard.ts";
@@ -74,7 +75,7 @@ export interface RuntimePluginOptions {
 	interimText?: InterimTextMode;
 	/** An intermediate text this long or longer is posted as an ordinary message; default 400. */
 	interimPrimaryChars?: number;
-	/** Whether the host keeps each person's memory; with it, claude-bridge serves one person alone. */
+	/** Whether the host keeps each person's memory; bridge turns then check private history. */
 	memory?: boolean;
 	/** Why the configuration lets several people speak in a shared conversation, as `configuredCrowd` says. */
 	crowd?: string;
@@ -95,8 +96,8 @@ export function runtimePlugin(
 ): RoundtablePlugin {
 	let runtime: AgentRuntime | undefined;
 	let identity: IdentityService | undefined;
-	// Why claude-bridge may not run here, read again at the boot and at every shared turn, so a role
-	// granted while the host runs counts at once; undefined while it may.
+	let warn: ((message: string) => void) | undefined;
+	// Admission is a startup risk warning, not proof that this conversation holds private history.
 	const bridgeRefusal = liveBridgeRefusal({
 		memory: options.memory,
 		crowd: options.crowd,
@@ -110,13 +111,17 @@ export function runtimePlugin(
 		preflight: async () => {
 			if (onClaudeBridge(options.model)) {
 				const why = await bridgeRefusal();
-				if (why) throw bridgeMemoryError(formatModelRef(options.model), why);
+				if (why)
+					warn?.(
+						`${bridgeMemoryProblem(formatModelRef(options.model), why)} ${BRIDGE_MEMORY_FIX}`,
+					);
 			}
 			await runtime?.preflight?.();
 		},
 		setup: async (context) => {
 			const { logger, providers, services } = context;
 			identity = services.find(IDENTITY);
+			warn = (message) => logger.warn({}, message);
 			const heldActions = await openHeldActions(context);
 			const prompts = (channel: ChannelKey, scope?: PromptScope | Speaker) =>
 				context.surfaces.prompts(channel, scope);
@@ -147,7 +152,7 @@ export function runtimePlugin(
 								: { visibility: "shared" };
 						},
 						principalOf: async (id) => services.find(IDENTITY)?.principal(id),
-						bridgeRefusal,
+						memory: options.memory === true,
 						sessions: context.sessions,
 						agentDir: options.agentDir,
 						modelRuntime: options.modelRuntime,

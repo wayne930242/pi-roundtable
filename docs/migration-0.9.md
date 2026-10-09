@@ -16,7 +16,7 @@ You must act if you:
 - Contribute a background target named `"owner"`: the core now contributes it on every host, so remove your duplicate.
 - Use webchat's old `access` option: move it to the core configuration.
 - Use the web console with a verifier reporting an actor: link its identity to an owner, even on a single-owner host.
-- Use memory and a `claude-bridge` model where more than one principal may speak in shared conversations: choose one of the three fixes below.
+- Use memory and a `claude-bridge` model in shared conversations: review the history-based turn guard and remaining risks below before admitting new readers.
 - Rely on system error or webhook report turns to schedule or delegate: they may no longer create, change, or cancel schedules, delegate tasks, or call coding's `repo_task`; they may still list schedules.
 
 ## Upgrade the configuration
@@ -124,15 +124,18 @@ A custom tool returning private memory must mark its result's `details.privateTo
 ### claude-bridge guard
 
 claude-bridge reuses Claude Code's stored, unfiltered history, bypassing the per-request projection.
-With memory enabled, the host refuses a claude-bridge model when several principals may speak in shared conversations.
-This is checked at boot and live before every shared turn, including the default model, an agent's changed model, and roles granted while the host runs.
-The three fixes are:
+With memory enabled, each shared bridge turn checks the session's actual raw history before asking any provider, including after restart and when an agent switches to bridge.
+It returns an `AgentRunError` if that history holds an exchange the current reader's memory projection would hide: a result tagged `privateTo` another principal (including a worker that loaded memory), an unowned memory exchange, or an outstanding built-in memory call with no result.
+For this check only, SYSTEM reads as the primary owner, and untagged pre-0.9 built-in memory results count as that owner's; owner and SYSTEM turns can continue old owner-only shared histories, but another person's turn there is refused.
+This exception does not change request projection: shared SYSTEM requests still load no personal memory.
+A conversation holding only a guest's tagged private exchanges admits that guest, not the owner or SYSTEM.
+Other providers and private conversations are unaffected by this guard.
 
-1. Choose a model from another provider.
-2. Set `memory: false` for the host.
-3. Restrict admission to one principal alone.
-
-A single-owner-only host still starts as before.
+Admission of another person in configuration or stored roles is only a startup warning, and `roundtable doctor` warns rather than fails for that risk.
+A guest admitted elsewhere but absent from this conversation does not block the owner's turns.
+To share incompatible history, choose another provider, set `memory: false`, or start a fresh conversation whose private exchanges are visible to its readers.
+Disabling memory bypasses the guard; it does not erase prior private data from bridge storage.
+The guard is not general secret-flow prevention: private data repeated in public replies, untagged custom tools, or pre-existing summaries can still reach later readers, and bridge's retained history bypasses per-request reasoning and prompt filtering.
 
 ## Official packages
 

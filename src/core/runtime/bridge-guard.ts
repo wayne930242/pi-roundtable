@@ -1,3 +1,4 @@
+import type { ContextWithSystemEvent } from "@earendil-works/pi-coding-agent";
 import type { AgentSessions } from "../contract/runtime.ts";
 import { ConfigError } from "../domain/errors.ts";
 import type { AccessRules, AccessTier } from "../identity/access-policy.ts";
@@ -5,6 +6,7 @@ import type { IdentityService } from "../identity/identity-service.ts";
 import { SYSTEM_PRINCIPAL } from "../identity/principal-store.ts";
 import { formatModelRef, type ModelRef, parseModelRef } from "../models.ts";
 import type { RoundtablePlugin } from "../plugin.ts";
+import { hidesPrivateExchange } from "./extensions/private-memory.ts";
 
 /**
  * The Pi provider pi-claude-bridge registers. Its sessions resume the history Claude Code stored
@@ -82,12 +84,12 @@ async function grantedCrowd(
 
 /** Why claude-bridge may not serve a host whose shared conversations hold several people's memory. */
 export function bridgeMemoryProblem(model: string, crowd: string): string {
-	return `model ${model} runs on ${CLAUDE_BRIDGE}, and this host keeps each person's private memory while ${crowd}, so several people speak in its shared conversations. ${CLAUDE_BRIDGE} resumes the history Claude Code stored for a conversation, unfiltered, so one person's private memory would reach the next person who speaks there.`;
+	return `model ${model} runs on ${CLAUDE_BRIDGE}, and this host keeps each person's private memory while ${crowd}. ${CLAUDE_BRIDGE} resumes the history Claude Code stored for a conversation, unfiltered, so one person's private memory could reach another reader. Shared turns with inaccessible private exchanges are refused; untagged legacy memory results count as the primary owner's for this check. Private information repeated in public replies, other untagged tools, or existing summaries remains a risk.`;
 }
 
 /** How to fix it. */
 export const BRIDGE_MEMORY_FIX =
-	"Use a model of another provider, set memory: false, or serve one person alone: one owner, and no admins or members.";
+	"Use a model of another provider, set memory: false, or keep each conversation's private exchanges visible to its readers (start a fresh conversation before sharing old owner history).";
 
 /** The refusal of claude-bridge on a host whose shared conversations hold several people's memory. */
 export function bridgeMemoryError(model: string, crowd: string): ConfigError {
@@ -105,18 +107,31 @@ export async function bridgeTurnRefusal(
 	options: {
 		model: ModelRef;
 		agents?: Pick<AgentSessions, "modelOf"> | undefined;
-		bridgeRefusal?:
-			| (() => string | undefined | Promise<string | undefined>)
-			| undefined;
+		memory?: boolean;
+		owner: { id: string };
+	},
+	history: {
+		messages: ContextWithSystemEvent["messages"];
+		reader: string | undefined;
 	},
 ): Promise<string | undefined> {
 	const model =
 		agent === undefined
 			? options.model
 			: options.agents && parseModelRef(options.agents.modelOf(agent).model);
-	if (!model || !onClaudeBridge(model)) return undefined;
-	const why = await options.bridgeRefusal?.();
-	if (!why) return undefined;
+	if (!options.memory || !model || !onClaudeBridge(model)) return undefined;
+	const reader =
+		history.reader === SYSTEM_PRINCIPAL ? options.owner.id : history.reader;
+	if (
+		!hidesPrivateExchange(history.messages, {
+			shared: true,
+			reader,
+			legacyOwner: options.owner.id,
+		})
+	)
+		return undefined;
+	const why =
+		"this conversation's raw history holds a private exchange the current reader may not see";
 	const message = bridgeMemoryError(formatModelRef(model), why).message;
 	return agent === undefined ? message : `${agent}: ${message}`;
 }

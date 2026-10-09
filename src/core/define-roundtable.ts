@@ -31,7 +31,8 @@ import { formatModelRef, type ModelRef } from "./models.ts";
 import { ErrorReporter } from "./ops/error-reporter.ts";
 import type { RoundtablePlugin } from "./plugin.ts";
 import {
-	bridgeMemoryError,
+	BRIDGE_MEMORY_FIX,
+	bridgeMemoryProblem,
 	configuredCrowd,
 	onClaudeBridge,
 } from "./runtime/bridge-guard.ts";
@@ -220,10 +221,7 @@ export async function defineRoundtable(
 ): Promise<DefinedRoundtable> {
 	const config = resolveConfig(input);
 	const { name, owner, discord } = config;
-	// claude-bridge resumes a conversation's history unfiltered, so it never serves several people's memory.
 	const crowd = configuredCrowd(config.access, config.plugins);
-	if (config.memory && crowd && onClaudeBridge(config.model))
-		throw bridgeMemoryError(formatModelRef(config.model), crowd);
 	// Nothing here touches the process: the host applies the environment when it runs.
 	const modelRuntime =
 		overrides.modelRuntime ??
@@ -236,7 +234,7 @@ export async function defineRoundtable(
 		? new ErrorReporter({ destination: config.ops, app: name })
 		: undefined;
 	const { errorSink } = overrides;
-	const logger =
+	const logger: Logger =
 		overrides.logger ??
 		createLogger(
 			config.slug,
@@ -246,6 +244,11 @@ export async function defineRoundtable(
 						errorSink?.(entry);
 					}
 				: undefined,
+		);
+	if (config.memory && crowd && onClaudeBridge(config.model))
+		logger.warn(
+			{},
+			`${bridgeMemoryProblem(formatModelRef(config.model), crowd)} ${BRIDGE_MEMORY_FIX}`,
 		);
 	warnDeprecations(logger, config.deprecations);
 	// The agent server hands the runtime its per-agent settings once it sets up.

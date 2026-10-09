@@ -11,7 +11,6 @@ import type {
 	HeldActionStore,
 	RuntimeDeps,
 } from "../contract/runtime.ts";
-import { ConfigError } from "../domain/errors.ts";
 import { PluginError } from "../errors.ts";
 import type { IdentityService } from "../identity/identity-service.ts";
 import type { Principal } from "../identity/principal-store.ts";
@@ -268,7 +267,7 @@ describe("the runtime plugin's preflight of claude-bridge with memory", () => {
 	};
 	const bridge = { provider: "claude-bridge", id: "claude-opus-5-5" };
 
-	test("stops the boot when the stored roles admit someone besides the owner", async () => {
+	test("warns without stopping boot when stored roles admit someone besides the owner", async () => {
 		for (const tiers of [
 			{ "1": "owner", p_bo: "owner" },
 			{ "1": "owner", p_bo: "member" },
@@ -279,12 +278,11 @@ describe("the runtime plugin's preflight of claude-bridge with memory", () => {
 			);
 			await setUp(plugin, [identity(tiers), echo]);
 			const preflight = plugin.preflight?.();
-			await expect(preflight).rejects.toBeInstanceOf(ConfigError);
-			await expect(preflight).rejects.toThrow(/claude-bridge/);
+			await preflight;
 		}
 	});
 
-	test("refuses a shared turn on claude-bridge once a role granted after the boot lets someone else speak, before the model is asked", async () => {
+	test("admitted guests and newly granted roles do not refuse turns without private history", async () => {
 		const dir = mkdtempSync(join(tmpdir(), "runtime-plugin-bridge-"));
 		dirs.push(dir);
 		// A faux model under claude-bridge's provider id, so the guard sees the host run on it.
@@ -387,16 +385,10 @@ describe("the runtime plugin's preflight of claude-bridge with memory", () => {
 			expect(asked).toBe(1);
 			// `roundtable principal grant` gives Bo a lasting role while the host runs.
 			tiers.p_bo = "member";
-			const refused = await turn(bo);
-			expect(refused.ok).toBe(false);
-			if (!refused.ok)
-				expect(refused.error.message).toMatch(
-					/claude-bridge.*principal p_bo holds the member role.*private memory/s,
-				);
-			expect(asked).toBe(1);
-			// The owner's own shared turn is refused too: Bo's memory may be in its history.
-			expect((await turn(owner)).ok).toBe(false);
-			expect(asked).toBe(1);
+			expect((await turn(bo)).ok).toBe(true);
+			expect(asked).toBe(2);
+			expect((await turn(owner)).ok).toBe(true);
+			expect(asked).toBe(3);
 		} finally {
 			runtime.dispose?.();
 		}

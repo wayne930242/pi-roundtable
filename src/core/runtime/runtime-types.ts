@@ -89,13 +89,8 @@ export interface PiAgentRuntimeOptions {
 	interimPrimaryChars?: number;
 	/** How long a new session waits for its MCP tools to register. */
 	mcpConnectTimeoutMs?: number;
-	/**
-	 * Why no turn of a shared conversation may run on a model of claude-bridge, the host's or an
-	 * agent's: the host keeps several people's memory in its shared conversations. Read at every
-	 * such turn before the model is asked, so roles granted while the host runs count; undefined
-	 * when it may.
-	 */
-	bridgeRefusal?: () => string | undefined | Promise<string | undefined>;
+	/** With memory enabled, bridge shared turns refuse raw private exchanges inaccessible to the reader. */
+	memory?: boolean;
 }
 
 export type { AgentSessions, LoadedSkill };

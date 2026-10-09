@@ -6,7 +6,7 @@ import {
 	onClaudeBridge,
 } from "../../core/runtime/bridge-guard.ts";
 import type { Ports, Project } from "../project.ts";
-import { fail, ok, type Result, skipped } from "../report.ts";
+import { fail, ok, type Result, skipped, warn } from "../report.ts";
 
 /**
  * A login exists for the provider of the configured model: an API key variable or a stored login;
@@ -24,13 +24,13 @@ export async function checkModelLogin(
 			`the model ${JSON.stringify(model)} is not written <provider>/<id>.`,
 			"Write it like anthropic/claude-sonnet-5-5 in MODEL in .env.",
 		);
-	// As the start refuses it: claude-bridge resumes a conversation's history unfiltered.
+	// Admission warns of risk; each shared turn checks actual private history.
 	const assembled = await project.assembled();
 	if (assembled.ok) {
 		const { config } = assembled.value;
 		const crowd = configuredCrowd(config.access, config.plugins);
 		if (config.memory && crowd && onClaudeBridge(ref))
-			return fail(bridgeMemoryProblem(model, crowd), BRIDGE_MEMORY_FIX);
+			return warn(bridgeMemoryProblem(model, crowd), BRIDGE_MEMORY_FIX);
 	}
 	const dir = await project.text("agentDir");
 	const dataDir = await project.text("dataDir");

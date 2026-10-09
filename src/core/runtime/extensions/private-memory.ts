@@ -33,6 +33,8 @@ export interface MemoryView {
 	shared: boolean;
 	/** The principal whose memory the running turn reads; undefined for no one's. */
 	reader: string | undefined;
+	/** Bridge guard only: pre-attribution built-in memory results belong to this owner. */
+	legacyOwner?: string;
 }
 
 type Assistant = Extract<Messages[number], { role: "assistant" }>;
@@ -137,6 +139,14 @@ function unpairedCalls(messages: Messages, before: number): Set<string> {
  * running one read without their reasoning, and the prompt states its history recorded collapse
  * into one leading message of the current prompt, so no earlier turn's memory section remains.
  */
+/** Whether raw history contains a private exchange this view would hide (not reasoning/prompt changes). */
+export function hidesPrivateExchange(
+	messages: Messages,
+	view: MemoryView,
+): boolean {
+	return hiddenExchanges(messages, view).size > 0;
+}
+
 export function memoryProjection(
 	messages: Messages,
 	view: MemoryView,
@@ -176,9 +186,10 @@ function hiddenResult(
 	if (whose !== undefined)
 		return whose === view.reader ? undefined : HIDDEN_MEMORY;
 	// A failed exchange too: its call's arguments are what the model wrote from someone's memory.
-	return view.shared && MEMORY.has(result.toolName)
-		? HIDDEN_UNRECORDED_MEMORY
-		: undefined;
+	if (!view.shared || !MEMORY.has(result.toolName)) return undefined;
+	if (view.legacyOwner !== undefined && view.reader === view.legacyOwner)
+		return undefined;
+	return HIDDEN_UNRECORDED_MEMORY;
 }
 
 /**

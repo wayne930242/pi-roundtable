@@ -178,6 +178,7 @@ async function isolationHost(
 		held?: HeldActionStore;
 		/** Receives what a compaction extension, placed through the core's wrapper, would summarize. */
 		compactor?: (summarized: string) => void;
+		provider?: string;
 	} = {},
 ) {
 	const recorded = options.recorded ?? new Map<ChannelKey, TurnConversation>();
@@ -193,7 +194,8 @@ async function isolationHost(
 	const report = new Promise<void>((resolve) => {
 		reported = resolve;
 	});
-	const core = createFauxCore({ provider: "faux", models: [{ id: "faux-1" }] });
+	const provider = options.provider ?? "faux";
+	const core = createFauxCore({ provider, models: [{ id: "faux-1" }] });
 	core.setResponses(steps);
 	const modelRuntime = await ModelRuntime.create({
 		authPath: join(dir, "auth.json"),
@@ -201,7 +203,7 @@ async function isolationHost(
 		allowModelNetwork: false,
 		refreshOnCreate: false,
 	});
-	modelRuntime.registerProvider("faux", {
+	modelRuntime.registerProvider(provider, {
 		api: core.api,
 		apiKey: "test",
 		baseUrl: "http://faux.invalid",
@@ -228,7 +230,8 @@ async function isolationHost(
 						agentDir: dir,
 						dataDir: dir,
 						modelRuntime,
-						model: { provider: "faux", id: "faux-1" },
+						model: { provider, id: "faux-1" },
+						memory: true,
 						thinking: "off",
 						effort: { judge: async () => "off" },
 						sessions: deps.sessions,
@@ -338,6 +341,7 @@ async function isolationHost(
 		runtime,
 		recorded,
 		deployed,
+		pending: () => core.getPendingResponseCount(),
 		/** Changes the tools of every session, which rebuilds each at its next turn. */
 		bumpTools: () => {
 			revision += 1;
@@ -377,6 +381,70 @@ async function isolationHost(
 		stop: () => harness.stop(),
 	};
 }
+
+describe("bridge reads actual shared history", () => {
+	const owner: Speaker = {
+		id: OWNER.id,
+		name: OWNER.name,
+		tier: "owner",
+		principalId: OWNER.id,
+	};
+	test("owner and SYSTEM run over owner memory; guest is refused without a provider call, including after restart", async () => {
+		const store = memoryOf({ owner: [{ fact: "OWNER_SECRET", kind: "note" }] });
+		const host = await isolationHost(
+			store,
+			[
+				() => call("memory_search", { query: "OWNER_SECRET" }),
+				fauxAssistantMessage("OK."),
+				fauxAssistantMessage("OK."),
+				fauxAssistantMessage("OK."),
+			],
+			{ provider: "claude-bridge" },
+		);
+		try {
+			expect((await host.run(owner, "fake:room")).ok).toBe(true);
+			expect((await host.run(owner, "fake:room")).ok).toBe(true);
+			expect((await host.run(SYSTEM, "fake:room")).ok).toBe(true);
+			expect((await host.run(ANN, "fake:room")).ok).toBe(false);
+			expect(host.pending()).toBe(0);
+		} finally {
+			await host.stop();
+		}
+		const restarted = await isolationHost(
+			store,
+			[fauxAssistantMessage("OK.")],
+			{ provider: "claude-bridge", dir: host.dir },
+		);
+		try {
+			expect((await restarted.run(ANN, "fake:room")).ok).toBe(false);
+			expect(restarted.pending()).toBe(1);
+			expect((await restarted.run(owner, "fake:room")).ok).toBe(true);
+		} finally {
+			await restarted.stop();
+		}
+	});
+	test("only the guest's own memory admits the guest and refuses the owner and SYSTEM", async () => {
+		const host = await isolationHost(
+			STORE(),
+			[
+				() => call("memory_search", { query: "doctor" }),
+				fauxAssistantMessage("OK."),
+				fauxAssistantMessage("OK."),
+				fauxAssistantMessage("unused"),
+			],
+			{ provider: "claude-bridge" },
+		);
+		try {
+			expect((await host.run(ANN, "fake:room")).ok).toBe(true);
+			expect((await host.run(ANN, "fake:room")).ok).toBe(true);
+			expect((await host.run(owner, "fake:room")).ok).toBe(false);
+			expect((await host.run(SYSTEM, "fake:room")).ok).toBe(false);
+			expect(host.pending()).toBe(1);
+		} finally {
+			await host.stop();
+		}
+	});
+});
 
 describe("memory in a shared conversation's history", () => {
 	test("another speaker's and the host's requests carry none of Ann's memory; Ann's own next turn still does", async () => {
