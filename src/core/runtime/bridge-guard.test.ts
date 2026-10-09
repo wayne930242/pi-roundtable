@@ -1,5 +1,8 @@
 import { expect, test } from "bun:test";
-import type { ContextWithSystemEvent } from "@earendil-works/pi-coding-agent";
+import {
+	type ContextWithSystemEvent,
+	SessionManager,
+} from "@earendil-works/pi-coding-agent";
 import { bridgeTurnRefusal } from "./bridge-guard.ts";
 
 type Messages = ContextWithSystemEvent["messages"];
@@ -77,6 +80,32 @@ test("bridge refuses unowned outstanding memory calls but ignores public history
 	expect(
 		await check(exchange("memory_search", "owner"), "guest", { memory: false }),
 	).toBeUndefined();
+});
+
+test("legacy owner compatibility stops at the first 0.9 scope record; modern unowned memory refuses even owner and SYSTEM", async () => {
+	for (const modern of [false, true]) {
+		const history = SessionManager.inMemory("/tmp");
+		if (modern)
+			history.appendCustomEntry("roundtable-conversation", {
+				visibility: "shared",
+			});
+		for (const message of exchange("memory_search"))
+			if (message.role === "assistant" || message.role === "toolResult")
+				history.appendMessage(message);
+		if (!modern)
+			history.appendCustomEntry("roundtable-conversation", {
+				visibility: "shared",
+			});
+		for (const reader of ["owner", "system", "guest"]) {
+			const refused = await bridgeTurnRefusal(undefined, options, {
+				messages: history.buildSessionContext().messages,
+				sessionManager: history,
+				reader,
+			});
+			if (!modern && reader !== "guest") expect(refused).toBeUndefined();
+			else expect(refused).toBeDefined();
+		}
+	}
 });
 
 test("bridge agent-model switch checks the same raw history", async () => {

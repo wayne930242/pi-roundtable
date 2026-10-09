@@ -4,7 +4,7 @@ import type { TurnConversation } from "../domain/ports.ts";
 import { archiveSessions } from "./session-archive.ts";
 
 /** The custom entry a session's history records whom it served in. */
-const SCOPE_ENTRY = "roundtable-conversation";
+export const SCOPE_ENTRY = "roundtable-conversation";
 
 /** Whom a conversation serves, as a session's history records it. */
 type Scope = Pick<TurnConversation, "visibility"> & { principalId?: string };

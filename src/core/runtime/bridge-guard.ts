@@ -10,6 +10,7 @@ import { SYSTEM_PRINCIPAL } from "../identity/principal-store.ts";
 import { formatModelRef, type ModelRef, parseModelRef } from "../models.ts";
 import type { RoundtablePlugin } from "../plugin.ts";
 import { hidesPrivateExchange } from "./extensions/private-memory.ts";
+import { SCOPE_ENTRY } from "./session-scope.ts";
 
 /**
  * The Pi provider pi-claude-bridge registers. Its sessions resume the history Claude Code stored
@@ -87,7 +88,7 @@ async function grantedCrowd(
 
 /** Why claude-bridge may not serve a host whose shared conversations hold several people's memory. */
 export function bridgeMemoryProblem(model: string, crowd: string): string {
-	return `model ${model} runs on ${CLAUDE_BRIDGE}, and this host keeps each person's private memory while ${crowd}. ${CLAUDE_BRIDGE} resumes the history Claude Code stored for a conversation, unfiltered, so one person's private memory could reach another reader. Shared turns with inaccessible private exchanges are refused; untagged legacy memory results count as the primary owner's for this check. Private information repeated in public replies, other untagged tools, or existing summaries remains a risk.`;
+	return `model ${model} runs on ${CLAUDE_BRIDGE}, and this host keeps each person's private memory while ${crowd}. ${CLAUDE_BRIDGE} resumes the history Claude Code stored for a conversation, unfiltered, so one person's private memory could reach another reader. Shared turns with inaccessible private exchanges are refused; untagged legacy memory results count as the primary owner's for this check. Private information in retained prompts/reasoning, public replies, other untagged tools, or existing summaries remains a risk.`;
 }
 
 /** How to fix it. */
@@ -98,6 +99,42 @@ export const BRIDGE_MEMORY_FIX =
 export function bridgeMemoryError(model: string, crowd: string): ConfigError {
 	return new ConfigError(
 		`${bridgeMemoryProblem(model, crowd)} ${BRIDGE_MEMORY_FIX}`,
+	);
+}
+
+interface BridgeHistory {
+	messages: ContextWithSystemEvent["messages"];
+	reader: string | undefined;
+	/** The persisted branch retains exchanges removed from the active context by compaction. */
+	sessionManager?: Pick<SessionManager, "getBranch">;
+}
+
+/** Only results recorded before the first 0.9 scope marker inherit legacy owner attribution. */
+function hidesBridgeHistory(
+	history: BridgeHistory,
+	reader: string | undefined,
+	primary: string,
+): boolean {
+	const view = { shared: true, reader };
+	const branch = history.sessionManager?.getBranch();
+	if (!branch)
+		return hidesPrivateExchange(history.messages, {
+			...view,
+			legacyOwner: primary,
+		});
+	const scope = branch.findIndex(
+		(entry) => entry.type === "custom" && entry.customType === SCOPE_ENTRY,
+	);
+	const cut = scope < 0 ? branch.length : scope;
+	const messagesOf = (entries: typeof branch) =>
+		entries.flatMap((entry) =>
+			entry.type === "message" ? [entry.message] : [],
+		);
+	return (
+		hidesPrivateExchange(messagesOf(branch.slice(0, cut)), {
+			...view,
+			legacyOwner: primary,
+		}) || hidesPrivateExchange(messagesOf(branch.slice(cut)), view)
 	);
 }
 
@@ -113,12 +150,7 @@ export async function bridgeTurnRefusal(
 		memory?: boolean;
 		owner: { id: string };
 	},
-	history: {
-		messages: ContextWithSystemEvent["messages"];
-		reader: string | undefined;
-		/** The raw persisted branch includes exchanges removed from the active context by compaction. */
-		sessionManager?: Pick<SessionManager, "getBranch">;
-	},
+	history: BridgeHistory,
 ): Promise<string | undefined> {
 	const model =
 		agent === undefined
@@ -128,23 +160,7 @@ export async function bridgeTurnRefusal(
 		return undefined;
 	const reader =
 		history.reader === SYSTEM_PRINCIPAL ? options.owner.id : history.reader;
-	if (
-		!hidesPrivateExchange(
-			history.sessionManager
-				? history.sessionManager
-						.getBranch()
-						.flatMap((entry) =>
-							entry.type === "message" ? [entry.message] : [],
-						)
-				: history.messages,
-			{
-				shared: true,
-				reader,
-				legacyOwner: options.owner.id,
-			},
-		)
-	)
-		return undefined;
+	if (!hidesBridgeHistory(history, reader, options.owner.id)) return undefined;
 	const why =
 		"this conversation's raw history holds a private exchange the current reader may not see";
 	const message = bridgeMemoryError(formatModelRef(model), why).message;
