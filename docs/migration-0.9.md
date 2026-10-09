@@ -18,6 +18,7 @@ You must act if you:
 - Use the web console with a verifier reporting an actor: link its identity to an owner, even on a single-owner host.
 - Use memory and a `claude-bridge` model in shared conversations: review the history-based turn guard and remaining risks below before admitting new readers.
   A host whose agents' channels admit anyone but its owners (admins or members who talk to the agents) on `claude-bridge` should set `discord: { agentMemory: "owners" }`: a guest's turn then loads no memory, so it never makes the guard refuse the owner afterwards. It does not let the guest speak after the owner's memory turns; see the [bridge guard](#claude-bridge-guard).
+- Do not want an agent's channel turn to read the server channel's other messages: set `discord: { channelContext: false }` (see [channel context](#channel-context)).
 - Rely on system error or webhook report turns to schedule or delegate: they may no longer create, change, or cancel schedules, delegate tasks, or call coding's `repo_task`; they may still list schedules.
 
 ## Upgrade the configuration
@@ -201,6 +202,21 @@ The host requires those capabilities only for a private prompt, known private hi
 A first private response is withheld from an incompatible image and fails the entire turn, with an error naming the image to rebuild.
 See the [worker handshake](../packages/sandbox/README.md#worker-capability-handshake).
 
+## Channel context
+
+New in 0.9: a turn for a message in an agent's channel also reads the channel messages posted since the assistant's last post there, including those that did not address it, such as other people's and other bots' messages.
+They are appended to the turn's text as a delimited block saying they were not addressed to the assistant, so they live in the conversation's history, not in the system prompt.
+It reads Discord when the turn starts, so it needs no data migration and survives restarts.
+A group's round reads none, since it already carries what was said since its last turn, and direct messages never do.
+
+The defaults fetch the 50 messages before the addressed one and keep at most the newest 15 after the assistant's latest post, merging consecutive near-repeats of one author (80% alike) and cutting long messages (500 characters, another bot's at 80).
+Change them under `discord.channelContext` (`fetch`, `keep`, `similarity`, `messageChars`, `botMessageChars`), or turn it off for the host with `discord: { channelContext: false }`, in `adapters: [discord({ ... })]` or the top-level `discord`.
+
+Channel context is public channel text: it is not private memory, is never tagged `privateTo`, and the turn's reader stays the person who addressed the assistant.
+People with no tier appear in it as channel text but do not become speakers.
+A plugin's claim, such as one that runs a party in its own server, opts in with `DISCORD.channelContext(message)` and `withChannelContext(text, context)` from `pi-roundtable/discord`; see [Channel context](plugins.md#channel-context-what-was-said-around-an-addressed-message).
+A plugin's own stand-in `DISCORD` service needs `channelContext`; `fakeDiscord()` has it.
+
 ## Prompt changes from 0.8.0
 
 The acceptance snapshots record these exact differences; do not expect every single-owner prompt to be byte-identical:
@@ -212,6 +228,7 @@ The acceptance snapshots record these exact differences; do not expect every sin
 | (e) direct `runTurn` without speaker | Refused; no prompt is sent. |
 | (f) headless webchat-style private conversation | Byte-identical to 0.8.0; the only unchanged whole snapshot. |
 | (g) web member's private conversation | The same tools no longer name the configured owner and use `the speaker`. |
+| (h) agent turn with channel context | New in 0.9: the archivist's agent session, which also records the turn's own message: its text, then the [channel context](#channel-context) block. Without channel context a turn's message is its text alone, as in 0.8. |
 
 The tool-set snapshot changes only `notify_owner` to `notify`.
 For other private conversations, descriptions name their principal when known; old shared single-owner rooms retain shared "the speaker" wording until explicitly migrated where appropriate.

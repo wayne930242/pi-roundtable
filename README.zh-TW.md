@@ -171,6 +171,17 @@ export default {
 } satisfies RoundtableConfig;
 ```
 
+有人在 agent 的頻道對助理說話時，那一輪也會讀進助理上次在該頻道發言之後的頻道訊息（頻道脈絡；見[外掛指南](docs/plugins.md#channel-context-what-was-said-around-an-addressed-message)）。
+用 `discord.channelContext` 調整，或設 `channelContext: false` 關閉：
+
+| `discord.channelContext` | 預設 | 說明 |
+| --- | --- | --- |
+| `fetch` | `50` | 在被呼叫的訊息之前抓取的訊息數，最多 100 |
+| `keep` | `15` | 保留的訊息數，取最新的 |
+| `similarity` | `0.8` | 同一作者相鄰兩則訊息相似到什麼程度算同一則 |
+| `messageChars` | `500` | 訊息截斷的長度 |
+| `botMessageChars` | `80` | 其他 bot 訊息截斷的長度 |
+
 ## 威脅模型
 
 pi-roundtable 為一位擁有者執行一個助理。

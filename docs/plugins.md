@@ -2095,6 +2095,103 @@ test("the persona is the plugin's and belongs to the study kind only", async () 
 ```
 <!-- /example -->
 
+### Channel context: what was said around an addressed message
+
+In a Discord server channel, people talk among themselves and address the assistant now and then.
+Channel context lets the turn for an addressed message also read what was posted there since the assistant last posted, mentions or not.
+The agent server reads it for every turn in an agent's channel; a group's round does not, since it already carries what was said since the group's last turn.
+A plugin's claim opts in by calling `DISCORD.channelContext(message, options?)` from `pi-roundtable/discord` inside its turn's `run`, and appending the result with `withChannelContext(text, context)`, as `withReference` adds the replied-to message.
+
+It reads Discord, not the host's history, so it survives restarts:
+
+- It fetches the `fetch` messages before the addressed one (default 50, at most 100) and keeps those after the assistant's latest post there: its bot user's, or one of its application's webhooks, such as an agent's voice. Any post of the assistant ends the window, including a notice that a conversation started over; the core posts no marker of its own.
+- It leaves out the assistant's own posts, the addressed message, empty messages, and every message it handed over before or that addressed it before in that channel, remembered in memory per channel, so a restart can repeat at most what came since the assistant's last post.
+- Other bots and integrations are kept and marked as bots; the host's owners (the primary owner and every other owner's Discord identities) are marked as owners.
+- Consecutive messages of one author at least `similarity` alike (default 0.8, by their longest common run of text) count as one, the later kept.
+- It keeps the newest `keep` (default 15), oldest first. Mentions read as names, and stickers and files as text with their names and links; nothing is downloaded or shown to the model as an image. A message is cut at `messageChars` (default 500), another bot's at `botMessageChars` (default 80).
+- It never fails the turn: a Discord error, such as a channel the bot cannot read, is logged and the turn runs without context.
+
+`DISCORD.channelContext` resolves undefined in a direct message, on another surface, when nothing new was said, and when the host's `discord.channelContext` is `false`, which turns it off for the agent server and every claim.
+The configuration's values are the host's defaults, and a call's `options` override them for that call.
+Call it once per answered message: what it returns is remembered as handed over.
+
+What it returns is public channel text, visible to everyone in the channel; it is not private memory, carries no `privateTo`, and goes into the turn's text, so it lives in the conversation's history, not in the system prompt.
+The turn's reader stays the person who addressed the assistant.
+People the access rules give no tier are included as channel text, as everyone there sees them, but they do not become speakers: they are not resolved, linked, or recorded, and the turn does not run as them.
+Only server channels are read, never direct messages, and only messages the bot can read.
+
+The block names each author with their Discord id and says the messages were not addressed to the assistant; a message cannot close it early.
+`ChannelContext` is `{ messages, text }`: `messages` are `ChannelContextMessage`s (`id`, `authorId`, `authorName`, `bot`, `owner`, `text`, `at`), oldest first, and `text` is the block.
+`ChannelContextOptions` holds the options above, and `CHANNEL_CONTEXT_DEFAULTS` their defaults.
+In a test, `fakeDiscord({ channelContext })` answers `DISCORD.channelContext` as the test says; by default with no context.
+
+<!-- example: examples/channel-context.ts -->
+```ts
+import { definePlugin, parseChannelKey } from "pi-roundtable";
+import { DISCORD, withChannelContext } from "pi-roundtable/discord";
+
+/** The kind of the tavern's conversations. */
+const TAVERN = "tavern";
+
+/**
+ * A claim that opts in to channel context: in the Discord channels it owns it answers only the
+ * messages that mention the assistant or reply to it, and each turn also reads what the others
+ * said there since the assistant last posted. The context is public channel text appended to the
+ * turn's text; the people who wrote it do not become speakers.
+ */
+export function tavern(channelIds: readonly string[]) {
+	return definePlugin({
+		name: "tavern",
+		setup: ({ turns, services }) => {
+			const discord = services.get(DISCORD);
+			return {
+				personas: [
+					{
+						kind: TAVERN,
+						prompt: () =>
+							"You keep the tavern's table. Answer the person who addressed you.",
+					},
+				],
+				channels: [
+					{
+						name: "tavern",
+						priority: 10,
+						owns: (channel) => {
+							const { surface, id } = parseChannelKey(channel);
+							return surface === "discord" && channelIds.includes(id);
+						},
+						admit: (message) => {
+							const { speaker } = message;
+							if (message.authorIsBot || !speaker) return undefined;
+							if (!message.mentionsBot && !message.repliesToBot)
+								return undefined;
+							return {
+								kind: "turn",
+								run: async () => {
+									// Once per answered message, inside `run`: what it returns is not returned again.
+									const around = await discord.channelContext(message, {
+										keep: 20,
+									});
+									await turns.run({
+										channel: message.channel,
+										kind: TAVERN,
+										text: withChannelContext(message.text, around),
+										speaker,
+									});
+								},
+								failure: "a tavern turn failed",
+							};
+						},
+						startFresh: async () => TAVERN,
+					},
+				],
+			};
+		},
+	});
+}
+```
+<!-- /example -->
+
 ### `backgroundTargets`: whose turn a schedule or delegated task is
 
 Schedules and delegated tasks return later as turns without a new message in the channel.
@@ -2819,7 +2916,7 @@ Use `partial<Port>({ ... })` to stand in for a port your code takes as an argume
 It provides the members you give it and throws an error naming any missing member you read, so the test needs no `as unknown as Port` cast.
 `fakePrecheck(name, answer, { description?, timeoutMs? })` is a precheck that answers `answer` (a `PrecheckResult`, an `Error` it throws, or a function of its context) and records each context in `calls`; `fakePrechecks(...prechecks)` is a real in-memory `PrecheckRegistry` with them registered, which a test gives a plugin as `servicePair(PRECHECKS, registry)` and reads back with `registry.get(name)`.
 `fakeScriptRunner(answer, { describe?, timeoutMs? })` is a `PrecheckScriptRunner` that runs nothing and answers `answer` (a result, an `Error` it throws, or a function of the script and its context), recording each call in `calls`; give it to `registry.useScriptRunner`.
-`fakeDiscord({ ownerId?, rootCommand? })` is the `DISCORD` service for a plugin that adds slash commands: give it as `services: [discord.service]`, read what the plugin added with `discord.added()`, and compose the tree Discord would get with `discord.compose()`.
+`fakeDiscord({ ownerId?, rootCommand?, channelContext? })` is the `DISCORD` service for a plugin that adds slash commands or reads channel context: give it as `services: [discord.service]`, read what the plugin added with `discord.added()`, and compose the tree Discord would get with `discord.compose()`; `channelContext` answers `DISCORD.channelContext`, by default with no context.
 Only `commands` and `guard` are given; a plugin that reads another member of `DISCORD` in a test gives its own with `servicePair(DISCORD, { ... })`.
 
 ### `testHost`: the built-in plugins and yours, over PostgreSQL
@@ -3489,8 +3586,12 @@ Import from the entries listed below; source area files are internal.
 | `AgentPanel` | `pi-roundtable/discord` | type |
 | `AgentPanelMessage` | `pi-roundtable/discord` | type |
 | `AgentPanelOptions` | `pi-roundtable/discord` | type |
+| `CHANNEL_CONTEXT_DEFAULTS` | `pi-roundtable/discord` | value |
 | `CHANNEL_OPERATIONS` | `pi-roundtable/discord` | value |
 | `CHANNEL_TOOLS` | `pi-roundtable/discord` | value |
+| `ChannelContext` | `pi-roundtable/discord` | type |
+| `ChannelContextMessage` | `pi-roundtable/discord` | type |
+| `ChannelContextOptions` | `pi-roundtable/discord` | type |
 | `ChannelExecutor` | `pi-roundtable/discord` | type |
 | `ChannelInfo` | `pi-roundtable/discord` | type |
 | `ChannelOperation` | `pi-roundtable/discord` | type |
@@ -3532,3 +3633,4 @@ Import from the entries listed below; source area files are internal.
 | `parseChannelTool` | `pi-roundtable/discord` | value |
 | `plain` | `pi-roundtable/discord` | value |
 | `replyWithPanels` | `pi-roundtable/discord` | value |
+| `withChannelContext` | `pi-roundtable/discord` | value |

@@ -176,6 +176,17 @@ export default {
 } satisfies RoundtableConfig;
 ```
 
+When someone addresses the assistant in an agent's channel, the turn also reads the channel messages posted since the assistant's last post there (channel context; see the [plugin guide](docs/plugins.md#channel-context-what-was-said-around-an-addressed-message)).
+Tune it under `discord.channelContext`, or set `channelContext: false` to turn it off:
+
+| `discord.channelContext` | Default | What it is |
+| --- | --- | --- |
+| `fetch` | `50` | Messages fetched before the addressed one, at most 100 |
+| `keep` | `15` | Messages kept, the newest |
+| `similarity` | `0.8` | How alike two consecutive messages of one author must be to count as one |
+| `messageChars` | `500` | Where a message is cut |
+| `botMessageChars` | `80` | Where another bot's message is cut |
+
 ## Threat model
 
 pi-roundtable runs one assistant for one owner.
