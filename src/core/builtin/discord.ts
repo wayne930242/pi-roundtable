@@ -1,10 +1,10 @@
 import { join } from "node:path";
+import type {
+	ChannelContext,
+	ChannelContextOptions,
+} from "../contract/channel-context.ts";
 import { type ServiceKey, serviceKey } from "../contract/services.ts";
-import {
-	type ChannelContext,
-	type ChannelContextOptions,
-	ChannelContextReader,
-} from "../discord/channel-context.ts";
+import { ChannelContextReader } from "../discord/channel-context.ts";
 import { CommandCollection } from "../discord/command-collection.ts";
 import type { DiscordConnection } from "../discord/connection.ts";
 import { discordDirectChannel } from "../discord/direct-channel.ts";

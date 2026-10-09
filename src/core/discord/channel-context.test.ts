@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { withChannelContext } from "../contract/channel-context.ts";
 import type { InboundMessage } from "../contract/channels.ts";
 import { recordingLogger } from "../testing/recording-logger.ts";
 import {
@@ -7,7 +8,6 @@ import {
 	contextSourceOf,
 	formatChannelContext,
 	selectChannelContext,
-	withChannelContext,
 } from "./channel-context.ts";
 
 const BOT = "900";

@@ -4,21 +4,19 @@
 export type { DiscordServices } from "../core/builtin/discord.ts";
 export { DISCORD } from "../core/builtin/discord.ts";
 export type { DiscordAdapterConfig } from "../core/config/config.ts";
+export type {
+	ChannelContext,
+	ChannelContextMessage,
+	ChannelContextOptions,
+} from "../core/contract/channel-context.ts";
+export { withChannelContext } from "../core/contract/channel-context.ts";
 export type { AgentPanelMessage } from "../core/discord/agent-commands.ts";
 export type {
 	AgentPanel,
 	AgentPanelOptions,
 } from "../core/discord/agent-panel.ts";
 export { agentPanel } from "../core/discord/agent-panel.ts";
-export type {
-	ChannelContext,
-	ChannelContextMessage,
-	ChannelContextOptions,
-} from "../core/discord/channel-context.ts";
-export {
-	CHANNEL_CONTEXT_DEFAULTS,
-	withChannelContext,
-} from "../core/discord/channel-context.ts";
+export { CHANNEL_CONTEXT_DEFAULTS } from "../core/discord/channel-context.ts";
 export type { ManagedChannel } from "../core/discord/channel-executor.ts";
 export {
 	fetchManagedChannel,

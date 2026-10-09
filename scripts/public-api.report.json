@@ -416,9 +416,9 @@
 			"CHANNEL_CONTEXT_DEFAULTS": "src/core/discord/channel-context.d.ts#CHANNEL_CONTEXT_DEFAULTS",
 			"CHANNEL_OPERATIONS": "src/core/discord/channel-operations.d.ts#CHANNEL_OPERATIONS",
 			"CHANNEL_TOOLS": "src/core/discord/channel-operations.d.ts#CHANNEL_TOOLS",
-			"ChannelContext": "src/core/discord/channel-context.d.ts#ChannelContext",
-			"ChannelContextMessage": "src/core/discord/channel-context.d.ts#ChannelContextMessage",
-			"ChannelContextOptions": "src/core/discord/channel-context.d.ts#ChannelContextOptions",
+			"ChannelContext": "src/core/contract/channel-context.d.ts#ChannelContext",
+			"ChannelContextMessage": "src/core/contract/channel-context.d.ts#ChannelContextMessage",
+			"ChannelContextOptions": "src/core/contract/channel-context.d.ts#ChannelContextOptions",
 			"ChannelExecutor": "src/core/discord/channel-operations.d.ts#ChannelExecutor",
 			"ChannelInfo": "src/core/discord/connection.d.ts#ChannelInfo",
 			"ChannelOperation": "src/core/discord/channel-operations.d.ts#ChannelOperation",
@@ -460,7 +460,7 @@
 			"parseChannelTool": "src/core/discord/channel-operations.d.ts#parseChannelTool",
 			"plain": "src/core/discord/owner-panel.d.ts#plain",
 			"replyWithPanels": "src/core/discord/owner-panel.d.ts#replyWithPanels",
-			"withChannelContext": "src/core/discord/channel-context.d.ts#withChannelContext"
+			"withChannelContext": "src/core/contract/channel-context.d.ts#withChannelContext"
 		}
 	},
 	"declarations": {
@@ -506,6 +506,10 @@
 		"src/core/config/config.d.ts#Pronouns": "type Pronouns = \"he\" | \"she\" | \"they\";",
 		"src/core/config/config.d.ts#RoundtableConfig": "interface RoundtableConfig {\n    \n    name?: string;\n    \n    owner?: {\n        id: string;\n        name: string;\n        pronouns?: Pronouns;\n    };\n    \n    discord?: DiscordConfig;\n    \n    adapters?: readonly AdapterConfig[];\n    database: {\n        url: string;\n    };\n    \n    dataDir: string;\n    \n    agentDir?: string;\n    \n    model: string;\n    \n    thinking?: ThinkingLevel;\n    \n    judge?: {\n        model?: string;\n        threshold?: number;\n    };\n    delegation?: {\n        model?: string;\n        thinking?: ThinkingLevel;\n    };\n    \n    locale?: Locale;\n    \n    timeZone?: string;\n    \n    speakers?: {\n        admins?: TierConfig;\n        members?: TierConfig;\n    };\n    \n    access?: AccessConfig;\n    \n    background?: BackgroundConfig;\n    toolTiers?: Record<string, Tier>;\n    \n    prompts?: {\n        shared: string;\n        guest?: string;\n    };\n    \n    agents?: AgentSeed[];\n    \n    http?: {\n        publicUrl?: string;\n        port?: number;\n        hostname?: string;\n        socketPath?: string;\n        socketMode?: number;\n    };\n    \n    avatar?: string;\n    \n    workDir?: string;\n    \n    scratchDir?: string;\n    \n    skills?: false | {\n        builtinDir?: string;\n        reposDir?: string;\n    };\n    \n    memory?: boolean;\n    \n    ops?: {\n        agent: string;\n    } | {\n        conversation: string;\n    };\n    \n    interimText?: InterimTextMode;\n    \n    interimPrimaryChars?: number;\n    plugins?: RoundtablePlugin[];\n}",
 		"src/core/config/config.d.ts#TierConfig": "interface TierConfig {\n    users?: readonly string[];\n    roles?: readonly string[];\n    everyone?: boolean;\n}",
+		"src/core/contract/channel-context.d.ts#ChannelContext": "interface ChannelContext {\n    \n    readonly messages: readonly ChannelContextMessage[];\n    \n    readonly text: string;\n}",
+		"src/core/contract/channel-context.d.ts#ChannelContextMessage": "interface ChannelContextMessage {\n    id: string;\n    authorId: string;\n    \n    authorName: string;\n    \n    bot: boolean;\n    \n    owner: boolean;\n    \n    text: string;\n    at: Date;\n}",
+		"src/core/contract/channel-context.d.ts#ChannelContextOptions": "interface ChannelContextOptions {\n    \n    fetch?: number;\n    \n    keep?: number;\n    \n    similarity?: number;\n    \n    messageChars?: number;\n    \n    botMessageChars?: number;\n}",
+		"src/core/contract/channel-context.d.ts#withChannelContext": "declare function withChannelContext(text: string, context: ChannelContext | undefined): string;",
 		"src/core/contract/channels.d.ts#Admission": "type Admission = {\n    kind: \"turn\";\n    \n    busy?: {\n        steer?(): Promise<boolean>;\n        react(emoji: string): Promise<void>;\n        unreact(emoji: string): Promise<void>;\n    };\n    \n    run(): Promise<void>;\n    \n    dropped?(): void;\n    \n    failure: string;\n} | {\n    kind: \"background\";\n    turn: BackgroundTurn;\n    \n    unanswered(outcome: ScheduledOutcome): void;\n};",
 		"src/core/contract/channels.d.ts#AttachmentRef": "interface AttachmentRef {\n    url: string;\n    name: string;\n    \n    contentType?: string;\n    size: number;\n}",
 		"src/core/contract/channels.d.ts#BackgroundRunsAs": "type BackgroundRunsAs = {\n    speaker: Speaker;\n} | {\n    skipped: string;\n};",
@@ -561,10 +565,6 @@
 		"src/core/discord/agent-panel.d.ts#AgentPanel": "interface AgentPanel {\n    \n    open(channelId: string): AgentPanelMessage;\n    \n    handles(interaction: Interaction): Promise<boolean>;\n}",
 		"src/core/discord/agent-panel.d.ts#AgentPanelOptions": "interface AgentPanelOptions {\n    \n    guard: CommandGuard;\n    \n    agents: AgentServer;\n    \n    skills?: Pick<SkillRegistry, \"carried\">;\n}",
 		"src/core/discord/channel-context.d.ts#CHANNEL_CONTEXT_DEFAULTS": "declare const CHANNEL_CONTEXT_DEFAULTS: Readonly<Required<ChannelContextOptions>>;",
-		"src/core/discord/channel-context.d.ts#ChannelContext": "interface ChannelContext {\n    \n    readonly messages: readonly ChannelContextMessage[];\n    \n    readonly text: string;\n}",
-		"src/core/discord/channel-context.d.ts#ChannelContextMessage": "interface ChannelContextMessage {\n    id: string;\n    authorId: string;\n    \n    authorName: string;\n    \n    bot: boolean;\n    \n    owner: boolean;\n    \n    text: string;\n    at: Date;\n}",
-		"src/core/discord/channel-context.d.ts#ChannelContextOptions": "interface ChannelContextOptions {\n    \n    fetch?: number;\n    \n    keep?: number;\n    \n    similarity?: number;\n    \n    messageChars?: number;\n    \n    botMessageChars?: number;\n}",
-		"src/core/discord/channel-context.d.ts#withChannelContext": "declare function withChannelContext(text: string, context: ChannelContext | undefined): string;",
 		"src/core/discord/channel-executor.d.ts#fetchManagedChannel": "declare function fetchManagedChannel(client: Client, channelId: string): Promise<ManagedChannel>;",
 		"src/core/discord/channel-executor.d.ts#ManagedChannel": "type ManagedChannel = TextChannel | NewsChannel;",
 		"src/core/discord/channel-executor.d.ts#OPERATION_PERMISSIONS": "declare const OPERATION_PERMISSIONS: Readonly<Record<ChannelOperation, readonly bigint[]>>;",

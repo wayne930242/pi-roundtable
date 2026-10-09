@@ -1,4 +1,8 @@
 import { attachmentsOf } from "../attachments/turn-attachments.ts";
+import {
+	type ChannelContext,
+	withChannelContext,
+} from "../contract/channel-context.ts";
 import type {
 	Admission,
 	BackgroundTarget,
@@ -7,10 +11,6 @@ import type {
 } from "../contract/channels.ts";
 import type { AgentRuntime } from "../contract/runtime.ts";
 import type { SurfacePort } from "../contract/surface.ts";
-import {
-	type ChannelContext,
-	withChannelContext,
-} from "../discord/channel-context.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
 import type { OwnerIdentity } from "../identity.ts";
 import type { Logger } from "../log.ts";

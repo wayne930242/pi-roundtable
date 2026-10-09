@@ -1,4 +1,4 @@
-import type { ChannelContextOptions } from "../discord/channel-context.ts";
+import type { ChannelContextOptions } from "../contract/channel-context.ts";
 import { ConfigError } from "../domain/errors.ts";
 import {
 	bool,
