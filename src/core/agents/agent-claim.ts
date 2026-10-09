@@ -7,6 +7,10 @@ import type {
 } from "../contract/channels.ts";
 import type { AgentRuntime } from "../contract/runtime.ts";
 import type { SurfacePort } from "../contract/surface.ts";
+import {
+	type ChannelContext,
+	withChannelContext,
+} from "../discord/channel-context.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
 import type { OwnerIdentity } from "../identity.ts";
 import type { Logger } from "../log.ts";
@@ -53,6 +57,13 @@ export interface AgentClaimOptions {
 	logger: Logger;
 	/** Replaceable in tests. */
 	fetchImpl?: typeof fetch;
+	/**
+	 * What was said in an agent's channel since its last post, `DISCORD.channelContext`; without it
+	 * the turns carry none. A group's round carries what was said since its last turn already.
+	 */
+	channelContext?: (
+		message: InboundMessage,
+	) => Promise<ChannelContext | undefined>;
 }
 
 /**
@@ -64,6 +75,20 @@ export function agentClaim(options: AgentClaimOptions): ChannelClaim {
 	const { team, runtime, surface, attachmentDir, logger, fetchImpl } = options;
 	const attachments = (message: InboundMessage) =>
 		attachmentsOf(message, attachmentDir(message.channel), logger, fetchImpl);
+	/** The channel context of a message in an agent's channel; none, logged, when it cannot be read. */
+	const around = async (
+		message: InboundMessage,
+	): Promise<ChannelContext | undefined> => {
+		try {
+			return await options.channelContext?.(message);
+		} catch (error) {
+			logger.warn(
+				{ channel: message.channel, err: error },
+				"channel context not read; the turn runs without it",
+			);
+			return undefined;
+		}
+	};
 
 	const webhookReport = (message: InboundMessage): Admission | undefined => {
 		const text = message.text.trim();
@@ -137,7 +162,10 @@ export function agentClaim(options: AgentClaimOptions): ChannelClaim {
 						await team.answerOwner(
 							channel,
 							speaker,
-							attributed(speaker, text),
+							attributed(
+								speaker,
+								withChannelContext(text, await around(message)),
+							),
 							message.text,
 							saved,
 						);

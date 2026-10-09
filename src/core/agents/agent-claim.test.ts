@@ -16,7 +16,9 @@ const ADMIN = "100000000000000002";
 const STRANGER = "100000000000000009";
 const ROLE = "200000000000000001";
 
-function setup() {
+function setup(
+	channelContext?: Parameters<typeof agentClaim>[0]["channelContext"],
+) {
 	const answered: { kind: string; speaker: Speaker; text: string }[] = [];
 	const stopped: string[] = [];
 	const team = {
@@ -59,6 +61,7 @@ function setup() {
 		surface: { react: async () => {}, unreact: async () => {} },
 		attachmentDir: () => "/tmp",
 		logger: silentLogger(),
+		...(channelContext ? { channelContext } : {}),
 	});
 	// The router resolves who wrote a message before a claim admits it; the 0.8 map stands in for the identity service.
 	const claim: ChannelClaim = {
@@ -134,6 +137,62 @@ test("a turn in an agent's channel names a speaker who is not the owner, and the
 	expect(answered[1]?.text).toBe(
 		"(Message from name-2, at the admin tier.)\n\nhello",
 	);
+});
+
+const AROUND = {
+	messages: [
+		{
+			id: "c1",
+			authorId: "300",
+			authorName: "Kai",
+			bot: false,
+			owner: false,
+			text: "the build is red",
+			at: new Date(0),
+		},
+	],
+	text: "## Channel messages since your last answer\n<channel-context>…</channel-context>",
+};
+
+test("a turn in an agent's channel carries the channel context after its text, for the message it answers", async () => {
+	const asked: InboundMessage[] = [];
+	const { claim, answered } = setup(async (m) => {
+		asked.push(m);
+		return AROUND;
+	});
+	for (const id of [OWNER, ADMIN]) {
+		const admission = claim.admit(message(id, "discord:10"));
+		if (admission?.kind !== "turn") throw new Error("expected a turn");
+		await admission.run();
+	}
+	expect(asked.map((m) => m.authorId)).toEqual([OWNER, ADMIN]);
+	expect(answered.map((a) => a.text)).toEqual([
+		`hello\n\n${AROUND.text}`,
+		`(Message from name-2, at the admin tier.)\n\nhello\n\n${AROUND.text}`,
+	]);
+});
+
+test("a group's turn reads no channel context: its round already carries what was said since its last turn", async () => {
+	let asked = 0;
+	const { claim, answered } = setup(async () => {
+		asked++;
+		return AROUND;
+	});
+	const admission = claim.admit(message(OWNER, "discord:20"));
+	if (admission?.kind !== "turn") throw new Error("expected a turn");
+	await admission.run();
+	expect(asked).toBe(0);
+	expect(answered[0]?.text).toBe("hello");
+});
+
+test("channel context that throws is logged and the turn runs on its own text", async () => {
+	const { claim, answered } = setup(async () => {
+		throw new Error("boom");
+	});
+	const admission = claim.admit(message(OWNER, "discord:10"));
+	if (admission?.kind !== "turn") throw new Error("expected a turn");
+	await admission.run();
+	expect(answered[0]?.text).toBe("hello");
 });
 
 test("an author the policy does not name gets no turn, in an agent or a group channel", () => {

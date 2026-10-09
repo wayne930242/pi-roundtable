@@ -422,6 +422,7 @@
 	},
 	"discord": {
 		"values": [
+			"CHANNEL_CONTEXT_DEFAULTS",
 			"CHANNEL_OPERATIONS",
 			"CHANNEL_TOOLS",
 			"ChannelToolError",
@@ -444,12 +445,16 @@
 			"ownerRootCommand",
 			"parseChannelTool",
 			"plain",
-			"replyWithPanels"
+			"replyWithPanels",
+			"withChannelContext"
 		],
 		"types": [
 			"AgentPanel",
 			"AgentPanelMessage",
 			"AgentPanelOptions",
+			"ChannelContext",
+			"ChannelContextMessage",
+			"ChannelContextOptions",
 			"ChannelExecutor",
 			"ChannelInfo",
 			"ChannelOperation",

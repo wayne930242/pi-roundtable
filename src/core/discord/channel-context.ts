@@ -24,7 +24,9 @@ export interface ChannelContextOptions {
 export type ChannelContextSettings = Required<ChannelContextOptions>;
 
 /** The defaults of `ChannelContextOptions`. */
-export const CHANNEL_CONTEXT_DEFAULTS: ChannelContextSettings = Object.freeze({
+export const CHANNEL_CONTEXT_DEFAULTS: Readonly<
+	Required<ChannelContextOptions>
+> = Object.freeze({
 	fetch: 50,
 	keep: 15,
 	similarity: 0.8,

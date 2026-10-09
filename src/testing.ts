@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { SQL } from "bun";
 import { agentClaim } from "./core/agents/agent-claim.ts";
-import { DISCORD } from "./core/builtin/discord.ts";
+import { DISCORD, type DiscordServices } from "./core/builtin/discord.ts";
 import type {
 	ConversationPort,
 	InboundMessage,
@@ -163,10 +163,16 @@ export interface FakeDiscord {
 /**
  * A `DISCORD` service for a plugin that adds slash commands, without a Discord connection: the
  * plugin's `commands.add` calls are recorded, and `compose()` shows the tree Discord would get.
- * `rootCommand` is the root command's name, `roundtable` by default. Only `commands` and `guard` are given; reading another member throws.
+ * `rootCommand` is the root command's name, `roundtable` by default. `channelContext` is what
+ * `DISCORD.channelContext` answers, by default no context, as on a host with it off. Only
+ * `commands`, `guard`, and `channelContext` are given; reading another member throws.
  */
 export function fakeDiscord(
-	options: { ownerId?: string; rootCommand?: string } = {},
+	options: {
+		ownerId?: string;
+		rootCommand?: string;
+		channelContext?: DiscordServices["channelContext"];
+	} = {},
 ): FakeDiscord {
 	const collection = new CommandCollection();
 	const { rootCommand = "roundtable" } = options;
@@ -176,7 +182,11 @@ export function fakeDiscord(
 		logger: silentLogger(),
 	});
 	return {
-		service: servicePair(DISCORD, { commands: collection.registrar, guard }),
+		service: servicePair(DISCORD, {
+			commands: collection.registrar,
+			guard,
+			channelContext: options.channelContext ?? (async () => undefined),
+		}),
 		commands: collection.registrar,
 		guard,
 		added: () => collection.added(),
@@ -531,6 +541,13 @@ export async function testPlugin(
 							surface: surfaces,
 							attachmentDir: () => attachmentDir,
 							logger,
+							// As on a host: the given DISCORD's channel context, when the test gives one.
+							channelContext: async (message) =>
+								(
+									given.get(DISCORD.id)?.given as
+										| Partial<DiscordServices>
+										| undefined
+								)?.channelContext?.(message),
 						}),
 					]
 				: []),

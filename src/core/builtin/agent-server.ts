@@ -288,6 +288,7 @@ export function agentServerPlugin(
 						surface: context.surfaces,
 						attachmentDir,
 						logger,
+						channelContext: (message) => discord.channelContext(message),
 					}),
 				],
 				http: [studio.route(options.avatarListener)],
