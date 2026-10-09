@@ -6,6 +6,7 @@ import { DISCORD, type DiscordServices } from "./builtin/discord.ts";
 import type { RoundtableConfig } from "./config/config.ts";
 import type { ChatSurface } from "./contract/surface.ts";
 import { defineRoundtable } from "./define-roundtable.ts";
+import { discord as discordAdapter } from "./discord/discord-adapter.ts";
 import { Roundtable } from "./host.ts";
 import { silentLogger } from "./log.ts";
 import type { RoundtablePlugin } from "./plugin.ts";
@@ -161,6 +162,48 @@ function hasWebAccess(): boolean {
 				team: config.discord.guild,
 			});
 			expect(await roundtable.shutdown("test")).toBe(0);
+		});
+
+		test("discord.agentMemory reaches the sessions the agent server hands the runtime", async () => {
+			const memories: unknown[] = [];
+			for (const [form, agentMemory] of [
+				["key", "owners"],
+				["adapter", "owners"],
+				["key", undefined],
+			] as const) {
+				let current: { readonly agents?: { memory?: string } } | undefined;
+				const spy: RoundtablePlugin = {
+					...quietRuntime,
+					providers: {
+						runtime: (deps) => {
+							current = deps;
+							// SAFETY: the agent server builds no Pi session over this runtime, which answers nothing.
+							return quietRuntime.providers?.runtime?.(deps) as never;
+						},
+					},
+				};
+				const { discord: _, ...rest } = config;
+				const { options, plugins } = await defineRoundtable(
+					{
+						...rest,
+						...(form === "key"
+							? { discord: { ...config.discord, agentMemory } }
+							: {
+									adapters: [
+										discordAdapter({ ...config.discord, agentMemory }),
+									],
+								}),
+						plugins: [quietDiscord(), spy],
+					},
+					{ logger: silentLogger() },
+				);
+				roundtable = new Roundtable(options, plugins);
+				await roundtable.run();
+				memories.push(current?.agents?.memory);
+				await roundtable.shutdown("test");
+				roundtable = undefined;
+			}
+			expect(memories).toEqual(["owners", "owners", undefined]);
 		});
 	},
 );
