@@ -16,7 +16,10 @@ import { hasWebAccess } from "./core/testing/test-host.ts";
 // 0.8, while (d), a room a member speaks in, is shared, so its memory and ask_user tools name
 // "the speaker" and say each speaker has a memory of their own, where 0.8 named the owner, and
 // (g), a web member's private conversation, no longer names the owner: its person, whom the host
-// knows by no name yet, is "the speaker", their memory still headed by their name.
+// knows by no name yet, is "the speaker", their memory still headed by their name. (h), new in
+// 0.9, also records the turn's own message: an agent's channel turn carries the channel messages
+// posted since the assistant's last post, after the message's text; its system prompt is the
+// archivist's agent session, as (a) is the librarian's.
 const SNAPSHOT = join(import.meta.dir, "prompt-text.snapshot.json");
 
 // Runs against a real PostgreSQL, only when ROUNDTABLE_TEST_DATABASE_URL is set and the delegation worker can load.

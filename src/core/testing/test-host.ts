@@ -144,6 +144,8 @@ export function standInDiscord(
 	given: TestHostOptions["discord"],
 	/** The primary owner's Discord user id, whose direct messages are the owner channel. */
 	ownerId: string,
+	/** What `DISCORD.channelContext` answers; by default no context, as on a host with it off. */
+	channelContext: DiscordServices["channelContext"] = async () => undefined,
 ): RoundtablePlugin {
 	const surface: ChatSurface = {
 		surface: "discord",
@@ -180,6 +182,7 @@ export function standInDiscord(
 				commands: commands.registrar,
 				guard,
 				threads: { open: async () => undefined, sweep: async () => undefined },
+				channelContext,
 			} as unknown as DiscordServices);
 			return { surfaces: [surface], directChannels: [direct] };
 		},

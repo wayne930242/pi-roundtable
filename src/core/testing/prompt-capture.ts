@@ -25,6 +25,14 @@ import type { PluginContext, RoundtablePlugin } from "../plugin.ts";
 import { AGENTS, MEMORY, RUNTIME } from "../services.ts";
 import type { Speaker } from "../speakers.ts";
 import { testDatabaseUrl } from "./database.ts";
+import {
+	addressed,
+	CAPTURE_GUILD,
+	CAPTURE_MEMBER,
+	CAPTURE_OWNER,
+	CAPTURE_WEB_MEMBER,
+	captureChannelContext,
+} from "./prompt-capture-scene.ts";
 import { personas } from "./prompt-capture-tools.ts";
 import { standInDiscord } from "./test-host.ts";
 
@@ -46,30 +54,11 @@ export interface CapturedPrompt {
 	system: { content: unknown; sections?: Record<string, string | null> }[];
 	/** Every tool the turn offers, sorted by name. */
 	tools: CapturedTool[];
+	/** The turn's own message as the model received it; recorded only where a scenario asks for it. */
+	turn?: unknown;
 }
 
-/** The owner of the capture hosts; ids scan-public lets through, kept apart from other tests' rows. */
-export const CAPTURE_OWNER = {
-	id: "966666600000000001",
-	name: "Ada",
-	pronouns: "she",
-} as const;
-/** The guild of the Discord capture host, so its agents are its own. */
-export const CAPTURE_GUILD = "966666600000000002";
-/** A member who speaks in a persona conversation. */
-export const CAPTURE_MEMBER: Speaker = {
-	id: "966666600000000003",
-	name: "Kai",
-	tier: "member",
-	principalId: "966666600000000003",
-};
-/** A web user as M1's webchat names them. */
-export const CAPTURE_WEB_MEMBER: Speaker = {
-	id: "oidc:aHR0cHM6Ly9pZHAuZXhhbXBsZS5jb20:user-7",
-	name: "Noa",
-	tier: "member",
-	principalId: "oidc:aHR0cHM6Ly9pZHAuZXhhbXBsZS5jb20:user-7",
-};
+export { CAPTURE_GUILD, CAPTURE_MEMBER, CAPTURE_OWNER, CAPTURE_WEB_MEMBER };
 
 /** Channels with ids of their own, which no other test's rows hold. */
 class CaptureChannels extends FakeChannels {
@@ -194,8 +183,8 @@ export function normalize<T>(
 	return JSON.parse(text) as T;
 }
 
-/** The prompt and tools of a request, without timestamps. */
-function captured(context: TranscriptContext): CapturedPrompt {
+/** The prompt and tools of a request, without timestamps; with the turn's own message when `turn` is set. */
+function captured(context: TranscriptContext, turn = false): CapturedPrompt {
 	const system: CapturedPrompt["system"] = [];
 	const tools = new Map<string, CapturedTool>();
 	for (const message of context.messages) {
@@ -213,16 +202,22 @@ function captured(context: TranscriptContext): CapturedPrompt {
 		for (const removed of message.toolsRemoved ?? [])
 			tools.delete(removed.name);
 	}
+	const own = context.messages.findLast((message) => message.role === "user");
 	return {
 		system,
 		tools: [...tools.values()].sort((a, b) => a.name.localeCompare(b.name)),
+		...(turn ? { turn: own?.content } : {}),
 	};
 }
 
 /** A host booted on the faux model: its plugins' context, and what the model saw during an action. */
 export interface CaptureHost {
 	context: PluginContext;
-	capture(action: () => Promise<unknown>): Promise<CapturedPrompt>;
+	/** What the model saw at the action's first request; with the turn's own message when `turn` is set. */
+	capture(
+		action: () => Promise<unknown>,
+		turn?: boolean,
+	): Promise<CapturedPrompt>;
 	dirs: string[];
 	stop(): Promise<void>;
 }
@@ -301,6 +296,7 @@ export async function captureHost(
 					}),
 					{ agentChannels: () => channels },
 					CAPTURE_OWNER.id,
+					captureChannelContext(),
 				),
 			]
 		: [];
@@ -325,7 +321,7 @@ export async function captureHost(
 	return {
 		context,
 		dirs,
-		capture: async (action) => captured(await capture(action)),
+		capture: async (action, turn) => captured(await capture(action), turn),
 		stop: async () => {
 			await roundtable.shutdown("test");
 		},
@@ -448,6 +444,12 @@ export async function capturePrompts(
 			`fake:study-member-${crypto.randomUUID()}`,
 			CAPTURE_MEMBER,
 			"shared",
+		);
+		// The owner addresses an agent in its channel after others spoke there: the turn reads them as channel context.
+		const archivist = await agentChannel(team, "archivist");
+		out["h agent session with channel context"] = await discord.capture(
+			() => context.conversations.handle(addressed(archivist)),
+			true,
 		);
 		const runtime = context.services.get(RUNTIME);
 		// SAFETY: it lacks only `speaker`, as 0.8's callers sent it; 0.9 refuses it, and keeps that.
