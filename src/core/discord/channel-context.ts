@@ -50,6 +50,13 @@ export interface ContextSourceMessage {
 	text: string;
 }
 
+/** The options that were given: a key set to undefined is the same as a missing one. */
+function defined(options: ChannelContextOptions): ChannelContextOptions {
+	return Object.fromEntries(
+		Object.entries(options).filter(([, value]) => value !== undefined),
+	);
+}
+
 function attachmentLabel(contentType: string | null | undefined): string {
 	const type = contentType ?? "";
 	if (type.startsWith("image/")) return "image";
@@ -94,10 +101,15 @@ export function contextSourceOf(
 	};
 }
 
+/** Texts are compared by no more than their first characters: the comparison is quadratic, and the display cap is configurable. */
+const SIMILARITY_CHARS = 500;
+
 /** The length of the longest common substring over the longer text's length: 1 for equal texts. */
 function similarity(a: string, b: string): number {
 	if (a === b) return 1;
-	const [shorter, longer] = a.length <= b.length ? [a, b] : [b, a];
+	const [shorter, longer] = (
+		a.length <= b.length ? [a, b] : [b, a]
+	).map((text) => text.slice(0, SIMILARITY_CHARS)) as [string, string];
 	if (shorter.length === 0) return 0;
 	let longest = 0;
 	let previous = new Uint16Array(shorter.length + 1);
@@ -185,13 +197,15 @@ export function selectChannelContext(
 	};
 }
 
-/** Every `<` that starts a tag-like token, such as `<message`, `</channel-context` or `</ message`. */
-const TAG_START = /<(?=[\s/]*[a-z])/gi;
+/** Neutralizes every `<`, plain or full-width, so no text imitates a tag whatever follows the bracket. */
+function defanged(text: string): string {
+	return text.replaceAll("<", "‹").replaceAll("＜", "‹");
+}
 
 /** A name without the characters that could end its attribute or imitate another one. */
 function nameOf(message: ChannelContextMessage): string {
-	const name = message.authorName
-		.replace(/["<>(),]/g, "")
+	const name = defanged(message.authorName)
+		.replace(/["'<>＜＞=(),‹]/g, "")
 		.replace(/\s+/g, " ")
 		.trim();
 	return name || "unknown";
@@ -205,7 +219,7 @@ function roleOf(message: ChannelContextMessage): string {
 /**
  * The block a turn's text carries: headed, delimited, and written so a message's text cannot
  * pass as markup. Each message's author is the `id` and `role` attributes, never part of a name;
- * a message's text has every tag-like `<` replaced by `‹`.
+ * a message's text has every `<` replaced by `‹`.
  */
 export function formatChannelContext(
 	messages: readonly ChannelContextMessage[],
@@ -216,7 +230,7 @@ export function formatChannelContext(
 		"<channel-context>",
 		...messages.map(
 			(message) =>
-				`<message from="${nameOf(message)}" id="${message.authorId}" role="${roleOf(message)}">${message.text.replace(TAG_START, "‹")}</message>`,
+				`<message from="${nameOf(message)}" id="${message.authorId}" role="${roleOf(message)}">${defanged(message.text)}</message>`,
 		),
 		"</channel-context>",
 	].join("\n");
@@ -266,7 +280,11 @@ export class ChannelContextReader {
 			return undefined;
 		const { surface, id: channelId } = parseChannelKey(message.channel);
 		if (surface !== "discord") return undefined;
-		const settings = { ...CHANNEL_CONTEXT_DEFAULTS, ...host, ...options };
+		const settings = {
+			...CHANNEL_CONTEXT_DEFAULTS,
+			...defined(host),
+			...defined(options),
+		};
 		assertChannelContextSettings(settings);
 		const seen = this.#seenIn(channelId);
 		seen.add(message.messageId);

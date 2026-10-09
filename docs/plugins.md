@@ -2122,7 +2122,7 @@ The turn's reader stays the person who addressed the assistant.
 People the access rules give no tier are included as channel text, as everyone there sees them, but they do not become speakers: they are not resolved, linked, or recorded, and the turn does not run as them.
 Only server channels are read, never direct messages, and only messages the bot can read.
 
-The block gives each author as a name, their Discord id and a role (`owner`, `bot` or `member`) in separate attributes, and says the messages were not addressed to the assistant. A name loses the characters `"`, `<`, `>`, `(`, `)` and `,`, so it cannot imitate another author or role, and every `<` in a message's text that starts a tag-like token is replaced by `‹`, so a message can neither close the block nor open a message of its own.
+The block gives each author as a name, their Discord id and a role (`owner`, `bot` or `member`) in separate attributes, and says the messages were not addressed to the assistant. A name loses the characters `"`, `'`, `=`, `<`, `>`, `(`, `)` and `,`, so it cannot imitate another author, an attribute or a role, and every `<` (also the full-width `＜`) in a message's text is replaced by `‹`, so a message can neither close the block nor open a message of its own.
 `ChannelContext` is `{ messages, text }`: `messages` are `ChannelContextMessage`s (`id`, `authorId`, `authorName`, `bot`, `owner`, `text`, `at`), oldest first, and `text` is the block.
 `ChannelContextOptions` holds the options above, and `CHANNEL_CONTEXT_DEFAULTS` their defaults.
 In a test, `fakeDiscord({ channelContext })` answers `DISCORD.channelContext` as the test says; by default with no context.
