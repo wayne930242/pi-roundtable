@@ -278,6 +278,7 @@ export class PiSandboxRuntime {
 			const broker = new PiSandboxBroker({
 				...this.#options,
 				model: selected.model,
+				workerImage: this.#options.image,
 				mcp: this.#options.mcp ? { ...this.#options.mcp, servers } : undefined,
 			});
 			const socket = join(paths.run, PI_BROKER_SOCKET);

@@ -67,6 +67,14 @@ async function worker(
 	});
 	const socket = join(dir, "broker.sock");
 	const listener = await broker.listen(socket);
+	await broker.handle(
+		new Request("http://broker/worker/ready", {
+			method: "POST",
+			body: JSON.stringify({
+				capabilities: { privateTo: true, readerRecords: true },
+			}),
+		}),
+	);
 	const controller = new AbortController();
 	const release = broker.bind({
 		channel: "fake:party",

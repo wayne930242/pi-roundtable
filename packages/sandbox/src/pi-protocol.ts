@@ -85,6 +85,13 @@ export interface PiTurnContext {
 export interface PiMcpDiscovery {
 	servers: { name: string; tools: string[] }[];
 }
+/** Protocol guarantees declared by the trusted image; missing fields mean an older worker. */
+export interface PiWorkerReady {
+	capabilities?: { privateTo?: boolean; readerRecords?: boolean };
+	/** Raw retained branch has private memory, even if the current turn's prompt is public. */
+	privateHistory?: boolean;
+}
+
 /** What the worker learns from the host at startup; `compaction` is absent when the host has no compactor. */
 export interface PiWorkerConfig {
 	compaction?: { engine: string };

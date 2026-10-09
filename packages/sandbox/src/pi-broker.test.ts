@@ -389,6 +389,7 @@ test("worker long polling carries host turns and bounded replies without any hos
 		author: { id: "host-bound", name: "Guest" },
 		text: "hello",
 		memory: "channel memory",
+		memoryVisibility: "shared" as const,
 		images: [],
 		thinking: "low" as const,
 	};

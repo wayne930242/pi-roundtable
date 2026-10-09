@@ -582,6 +582,32 @@ const ACCEPTANCE: readonly Item[] = [
 	},
 	{
 		section: "6.2",
+		item: "sandbox mixed versions fail closed only when private-history capabilities are needed",
+		tests: [
+			t(
+				"packages/sandbox/src/pi-capabilities.test.ts",
+				"sandbox capabilities are demand-driven: legacy public turns and tools still run",
+			),
+			t(
+				"packages/sandbox/src/pi-capabilities.test.ts",
+				"sandbox refuses old worker images before sending private prompts or replaying known private history",
+			),
+			t(
+				"packages/sandbox/src/pi-capabilities.test.ts",
+				"sandbox capability downgrade invalidates an already queued private turn",
+			),
+			t(
+				"packages/sandbox/src/pi-capabilities.test.ts",
+				"sandbox ready handshake validates capability shapes and upgraded workers preserve privateTo",
+			),
+			t(
+				"packages/sandbox/src/pi-runtime.test.ts",
+				"runtime names the stale image and sends no private prompt, while shared public hosts stay compatible",
+			),
+		],
+	},
+	{
+		section: "6.2",
 		item: "core compaction redacts private custom call arguments even when their tagged result stays in the kept branch",
 		tests: [
 			t(

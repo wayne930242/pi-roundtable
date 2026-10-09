@@ -27,6 +27,7 @@ import {
 function fixture(
 	cancel = false,
 	overrides: Partial<PiSandboxRuntimeOptions> = {},
+	capabilities = { privateTo: true, readerRecords: true },
 ) {
 	const root = realpathSync(mkdtempSync("/tmp/pi-sbx-"));
 	const workerTurns: unknown[] = [];
@@ -47,6 +48,9 @@ function fixture(
 			const ready = await fetch("http://broker/worker/ready", {
 				unix,
 				method: "POST",
+				body: JSON.stringify({
+					capabilities,
+				}),
 			});
 			await ready.body?.cancel();
 			tasks = [
@@ -193,6 +197,37 @@ test("Pi memory prompt blocks default private and can explicitly remain shared",
 				memory: "party-wide facts",
 				memoryVisibility: visibility ?? "private",
 			});
+		} finally {
+			await f.close();
+		}
+	}
+});
+
+test("runtime names the stale image and sends no private prompt, while shared public hosts stay compatible", async () => {
+	for (const shared of [false, true]) {
+		const f = fixture(
+			false,
+			{
+				memory: {
+					promptBlock: async () => "facts",
+					visibility: shared ? "shared" : "private",
+				},
+			},
+			{ privateTo: false, readerRecords: false },
+		);
+		try {
+			const result = await f.runtime.runTurn({
+				channel: "fake:party",
+				profile: "profile",
+				turnId: "a",
+				author: { id: "ann", name: "Ann" },
+				text: "hi",
+				images: [],
+			});
+			expect(result.ok).toBe(shared);
+			if (!result.ok)
+				expect(result.error.message).toMatch(/sandbox:test.*rebuild/i);
+			expect(f.workerTurns.length).toBe(shared ? 1 : 0);
 		} finally {
 			await f.close();
 		}

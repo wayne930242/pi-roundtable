@@ -17,6 +17,7 @@ import {
 	type PiTurnRequest,
 	type PiTurnResponse,
 	type PiWorkerConfig,
+	type PiWorkerReady,
 	validateCompactionReport,
 	validateCompactRequest,
 	validateImages,
@@ -66,6 +67,8 @@ export interface PiCompactor {
 }
 export interface PiBrokerOptions {
 	model: string;
+	/** Actual configured image, named in capability failures so the operator can rebuild it. */
+	workerImage?: string;
 	/** Host-only, read before each model call for its channel and speaker; a zero-argument function still works. Return `undefined` or an empty string when the scope has no token: the call fails rather than using another credential. Never sent to the worker. */
 	oauthToken: (
 		scope: SandboxCredentialScope,
@@ -282,6 +285,16 @@ function abortableCompact<T>(
 export class PiSandboxBroker {
 	readonly #options: PiBrokerOptions;
 	#ready = false;
+	#capabilities: NonNullable<PiWorkerReady["capabilities"]> = {};
+	#requiresPrivacy = false;
+	#capabilityProblem(): string | undefined {
+		const missing = (["privateTo", "readerRecords"] as const).filter(
+			(name) => this.#capabilities[name] !== true,
+		);
+		return missing.length === 0
+			? undefined
+			: `Sandbox worker image ${this.#options.workerImage ?? "(configured image)"} lacks ${missing.join(", ")}; rebuild this image with the installed core and sandbox packages`;
+	}
 	#receivingResult = false;
 	#next: ((turn: PiTurnRequest) => void) | undefined;
 	#pending:
@@ -301,6 +314,13 @@ export class PiSandboxBroker {
 		signal: AbortSignal,
 	): Promise<PiTurnResponse> {
 		if (this.#pending) return Promise.reject(new Error("Worker is busy"));
+		const privatePrompt =
+			request.memory.length > 0 && request.memoryVisibility !== "shared";
+		if (this.#requiresPrivacy || privatePrompt) {
+			const problem = this.#capabilityProblem();
+			if (problem) return Promise.reject(new Error(problem));
+			this.#requiresPrivacy = true;
+		}
 		return new Promise((resolve, reject) => {
 			const abort = () => {
 				this.#pending = undefined;
@@ -320,13 +340,52 @@ export class PiSandboxBroker {
 					this.#pending = undefined;
 					resolve(result);
 				},
-				reject,
+				reject: (error) => {
+					signal.removeEventListener("abort", abort);
+					this.#pending = undefined;
+					reject(error);
+				},
 			};
 			this.#next?.(request);
 		});
 	}
 	async #worker(request: Request, path: string): Promise<Response> {
 		if (path === "/worker/ready" && request.method === "POST") {
+			try {
+				const text = await boundedText(request.body, 16_384, request.signal);
+				const value: unknown = text.trim() ? JSON.parse(text) : {};
+				if (
+					!isRecord(value) ||
+					(value.privateHistory !== undefined &&
+						typeof value.privateHistory !== "boolean")
+				)
+					throw new Error("Invalid ready handshake");
+				const caps = value.capabilities;
+				if (
+					caps !== undefined &&
+					(!isRecord(caps) ||
+						[caps.privateTo, caps.readerRecords].some(
+							(flag) => flag !== undefined && typeof flag !== "boolean",
+						))
+				)
+					throw new Error("Invalid capabilities");
+				this.#capabilities = isRecord(caps)
+					? {
+							privateTo: caps.privateTo === true,
+							readerRecords: caps.readerRecords === true,
+						}
+					: {};
+				if (value.privateHistory === true) this.#requiresPrivacy = true;
+				if (this.#requiresPrivacy && this.#pending) {
+					const problem = this.#capabilityProblem();
+					if (problem) {
+						if (this.#turn) this.#turn.failed = true;
+						this.#pending.reject(new Error(problem));
+					}
+				}
+			} catch {
+				return new Response("Invalid ready handshake", { status: 400 });
+			}
 			this.#ready = true;
 			this.#rearmStartup();
 			return new Response("Ready");
@@ -416,7 +475,12 @@ export class PiSandboxBroker {
 		return new Response("Not found", { status: 404 });
 	}
 	#turn:
-		| { context: PiHostContext; remaining: number; active: number }
+		| {
+				context: PiHostContext;
+				remaining: number;
+				active: number;
+				failed?: boolean;
+		  }
 		| undefined;
 	/**
 	 * A restarted worker connects its MCP servers before any turn, so it needs the metadata-only
@@ -535,8 +599,20 @@ export class PiSandboxBroker {
 			return this.#compaction(request, url.pathname);
 		const startup = !this.#turn;
 		const turn = this.#turn ?? this.#startup;
-		if (!turn || turn.context.signal.aborted)
+		if (
+			!turn ||
+			turn.context.signal.aborted ||
+			("failed" in turn && turn.failed)
+		)
 			return new Response("Turn ended", { status: 410 });
+		if (this.#requiresPrivacy) {
+			const problem = this.#capabilityProblem();
+			if (problem) {
+				if (this.#turn) this.#turn.failed = true;
+				this.#pending?.reject(new Error(problem));
+				return new Response(problem, { status: 410 });
+			}
+		}
 		const toolName = url.pathname.startsWith("/tools/")
 			? url.pathname.slice(7)
 			: "";
@@ -588,6 +664,18 @@ export class PiSandboxBroker {
 							result.privateTo.length > 256))
 				)
 					throw new Error("Invalid tool output");
+				if (result.privateTo !== undefined) {
+					this.#requiresPrivacy = true;
+					const problem = this.#capabilityProblem();
+					if (problem) {
+						// Do not release private bytes to an old worker, even when it catches tool errors.
+						if (this.#turn === turn) {
+							this.#turn.failed = true;
+							this.#pending?.reject(new Error(problem));
+						}
+						return new Response(problem, { status: 409 });
+					}
+				}
 				if (result.image) validateImages([result.image]);
 				signal.throwIfAborted();
 				return Response.json(result);

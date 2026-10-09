@@ -12,6 +12,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import {
 	activeToolsExtension,
+	bridgeHistoryHidesMemory,
 	carriesMemory,
 	lastAssistant,
 	mcpAdapterExtension,
@@ -429,6 +430,14 @@ async function main(): Promise<void> {
 			const ready = await fetch("http://broker/worker/ready", {
 				unix: brokerSocket,
 				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({
+					capabilities: { privateTo: true, readerRecords: true },
+					privateHistory: bridgeHistoryHidesMemory(
+						session.sessionManager.getBranch(),
+						undefined,
+					),
+				}),
 				signal: AbortSignal.timeout(5000),
 			});
 			await ready.body?.cancel();

@@ -284,6 +284,21 @@ Start fresh before allowing new readers into histories previously summarized wit
 This is exchange isolation, not general secret-flow prevention or a hostile-container boundary: public replies, untagged tools, raw workspace files, and attachments/reply files remain shared.
 Do not put confidential data in the guest workspace.
 
+### Worker capability handshake
+
+The trusted Pi worker sends `POST /worker/ready` with `{ capabilities: { privateTo: true, readerRecords: true }, privateHistory: <boolean> }`.
+`privateTo` declares tagged call/result request projection and private compaction support; `readerRecords` declares persisted per-turn readers, prompt privacy, and raw-branch bridge refusal.
+`privateHistory` reports retained private history, including compacted turns, when a worker reconnects to a restarted host.
+A missing or empty ready body means an older worker, not implicit support; malformed capability declarations are refused.
+The host requires both capabilities only when a turn carries a nonempty private prompt block, the worker reports retained private history, or a host tool actually returns `privateTo`.
+Merely configuring tools does not require capabilities, and old images can still serve empty or explicitly shared prompt blocks with only public tools.
+If a host tool first returns `privateTo` to an incompatible image, its payload is not sent to the worker: the host fails the whole turn and blocks subsequent model calls, even if the old worker catches tool errors.
+The error names the exact configured image to rebuild with the installed core and sandbox packages; keeping the same local image tag is not proof that it has been rebuilt.
+A worker reconnecting without capabilities also invalidates an already queued private turn.
+For direct `PiSandboxBroker` integrations, supply `workerImage` so errors name that image; `PiSandboxRuntime` supplies its `image` automatically.
+This handshake detects mixed trusted versions, not a compromised worker that lies about its capabilities.
+It does not sanitize historical data written by an old worker; start fresh before sharing previously unsafe private history.
+
 ### Compaction
 
 Worker sessions compact with the core's tiers, as the host's own sessions do: a model whose window leaves more than 300,000 tokens compacts at 300,000 through the host compactor, and past 500,000 through Pi's own summary, whose model calls go through the broker like any other.
