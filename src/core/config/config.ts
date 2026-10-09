@@ -18,7 +18,7 @@ import { PRIMARY_CHARS } from "../runtime/interim-text.ts";
 import type { ChannelKey } from "../sessions.ts";
 import type { Tier, TierMembers } from "../speakers.ts";
 import { type AccessConfig, accessOf, accessShape } from "./access.ts";
-import { discordShape, liftAdapters } from "./adapters.ts";
+import { type DiscordConfig, discordShape, liftAdapters } from "./adapters.ts";
 import {
 	bool,
 	guarded,
@@ -33,6 +33,8 @@ import {
 	text,
 } from "./schema.ts";
 
+export type { DiscordConfig };
+
 /** How prompts refer back to the owner. */
 export type Pronouns = "he" | "she" | "they";
 
@@ -44,35 +46,6 @@ export interface TierConfig {
 	users?: readonly string[];
 	roles?: readonly string[];
 	everyone?: boolean;
-}
-
-/** The Discord bot and its guild, as the top-level `discord` or `discord()` from `pi-roundtable/discord` gives them. */
-export interface DiscordConfig {
-	/** The bot token; keep it in `.env`, not in this file. */
-	token: string;
-	/** The agent server's guild id. */
-	guild: string;
-	/** The channel the coordinator lives in. */
-	entryChannel: string;
-	/** The root slash command, without the slash; default the lowercase assistant name. */
-	rootCommand?: string;
-	/**
-	 * Whether the owner's conversations have Discord administration tools; default true. `false`
-	 * leaves the `discord-admin` addon out.
-	 */
-	admin?: boolean;
-	/**
-	 * Text appended as it is to the refusal a non-owner gets from the root command, such as a
-	 * pointer to the commands anyone may use; include the space or punctuation your language
-	 * needs before it. Default none.
-	 */
-	refusalHint?: string;
-	/**
-	 * Whose turns in the agents' channels load memory: `"everyone"` (default) lets each speaker
-	 * read their own, `"owners"` only the owners, so a guest's turn has no memory in its prompt and
-	 * no memory tools, and never makes claude-bridge refuse the owner afterwards.
-	 */
-	agentMemory?: "everyone" | "owners";
 }
 
 /** A chat network the host talks through, as its adapter's factory makes it; `adapter` names the network. */

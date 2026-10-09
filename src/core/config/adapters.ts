@@ -1,6 +1,35 @@
 import { ConfigError } from "../domain/errors.ts";
 import { bool, oneOf, optional, shape, text } from "./schema.ts";
 
+/** The Discord bot and its guild, as the top-level `discord` or `discord()` from `pi-roundtable/discord` gives them. */
+export interface DiscordConfig {
+	/** The bot token; keep it in `.env`, not in this file. */
+	token: string;
+	/** The agent server's guild id. */
+	guild: string;
+	/** The channel the coordinator lives in. */
+	entryChannel: string;
+	/** The root slash command, without the slash; default the lowercase assistant name. */
+	rootCommand?: string;
+	/**
+	 * Whether the owner's conversations have Discord administration tools; default true. `false`
+	 * leaves the `discord-admin` addon out.
+	 */
+	admin?: boolean;
+	/**
+	 * Text appended as it is to the refusal a non-owner gets from the root command, such as a
+	 * pointer to the commands anyone may use; include the space or punctuation your language
+	 * needs before it. Default none.
+	 */
+	refusalHint?: string;
+	/**
+	 * Whose turns in the agents' channels load memory: `"everyone"` (default) lets each speaker
+	 * read their own, `"owners"` only the owners, so a guest's turn has no memory in its prompt and
+	 * no memory tools, and never makes claude-bridge refuse the owner afterwards.
+	 */
+	agentMemory?: "everyone" | "owners";
+}
+
 /** The Discord settings, at the top level or in a Discord adapter. */
 export const discordShape = shape({
 	token: text,

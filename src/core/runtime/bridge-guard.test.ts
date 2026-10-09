@@ -3,10 +3,10 @@ import {
 	type ContextWithSystemEvent,
 	SessionManager,
 } from "@earendil-works/pi-coding-agent";
-import { bridgeHistoryHidesMemory as publicCheck } from "../../kit/index.ts";
 import { bridgeTurnRefusal } from "./bridge-guard.ts";
 import {
 	bridgeHistoryHidesMemoryFor,
+	bridgeHistoryHidesMemory as publicCheck,
 	recordMemoryTurn,
 } from "./reader-history.ts";
 
@@ -191,7 +191,7 @@ test("bridge agent-model switch checks the same raw history", async () => {
 	expect(message).toMatch(/^agent: .*claude-bridge.*private memory/s);
 });
 
-test("the kit's bridgeHistoryHidesMemory takes a branch and a reader; the owner attribution stays in the core", () => {
+test("the public bridgeHistoryHidesMemory takes a branch and a reader; the owner attribution stays in the core", () => {
 	expect(publicCheck.length).toBe(2);
 	const manager = SessionManager.inMemory("/tmp");
 	recordMemoryTurn(manager, "owner", true);

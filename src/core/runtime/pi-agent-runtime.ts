@@ -22,7 +22,6 @@ import { AUTO_THINKING, type ThinkingLevel } from "../models.ts";
 import { MEMORY_TOOLS } from "../modules/memory/owner-memory.ts";
 import { withoutReplyFiles } from "../reply-files.ts";
 import type { TransientTask } from "../sessions.ts";
-import { textOf } from "../shared/session-messages.ts";
 import type { Speaker, Tier } from "../speakers.ts";
 import { type ToolTiers, toolsForTier, toolTiers } from "../tool-tiers.ts";
 import {
@@ -39,11 +38,7 @@ import { interimPoster } from "./interim-text.ts";
 import { preflightTools } from "./preflight-tools.ts";
 import { PromptSlot, workTimeout } from "./prompt-slot.ts";
 import { carriesMemory, recordMemoryTurn } from "./reader-history.ts";
-import {
-	type PiAgentRuntimeOptions,
-	TRANSCRIPT_ENTRY_CHARS,
-	type TurnMessage,
-} from "./runtime-types.ts";
+import type { PiAgentRuntimeOptions, TurnMessage } from "./runtime-types.ts";
 import { archiveSessions } from "./session-archive.ts";
 import {
 	memoryReader,
@@ -53,7 +48,12 @@ import {
 import { SessionFactory } from "./session-factory.ts";
 import { promptImages, SteerableRun } from "./steerable-run.ts";
 import { runningCalls } from "./tool-call-scope.ts";
-import { lastReply, turnAnswer, unspokenTurn } from "./turn-answer.ts";
+import {
+	lastReply,
+	transcriptOf,
+	turnAnswer,
+	unspokenTurn,
+} from "./turn-answer.ts";
 import { progressReporter } from "./turn-progress.ts";
 import { workerReport } from "./worker-task.ts";
 
@@ -464,17 +464,7 @@ export class PiAgentRuntime implements AgentRuntime {
 		channel: ChannelKey,
 		limit: number,
 	): Promise<TranscriptEntry[]> {
-		const entries: TranscriptEntry[] = [];
-		for (const message of await this.#sessions.messages(channel)) {
-			if (message.role !== "user" && message.role !== "assistant") continue;
-			const text = textOf(message.content).trim();
-			if (text)
-				entries.push({
-					role: message.role,
-					text: text.slice(0, TRANSCRIPT_ENTRY_CHARS),
-				});
-		}
-		return entries.slice(-limit);
+		return transcriptOf(await this.#sessions.messages(channel), limit);
 	}
 
 	/** Uses the checked model snapshot; auto thinking keeps the last pick while the judge is unsure. */

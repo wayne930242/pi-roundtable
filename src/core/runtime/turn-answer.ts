@@ -1,7 +1,8 @@
-import type { TurnResult } from "../domain/conversation.ts";
+import type { TranscriptEntry, TurnResult } from "../domain/conversation.ts";
 import { AgentRunError } from "../domain/errors.ts";
 import { hasReplyFiles } from "../reply-files.ts";
 import { lastAssistant, textOf } from "../shared/session-messages.ts";
+import { TRANSCRIPT_ENTRY_CHARS } from "./runtime-types.ts";
 
 interface MessagePart {
 	type?: unknown;
@@ -28,6 +29,24 @@ export function unspokenTurn(): TurnResult {
 			"a turn needs a speaker: pass TurnRequest.speaker, the person the turn is for; for a turn started on someone's behalf, get theirs from IDENTITY.speakerFor",
 		),
 	};
+}
+
+/** The last `limit` user and assistant messages as transcript entries, each cut to its first characters. */
+export function transcriptOf(
+	messages: readonly (Message & { content?: unknown })[],
+	limit: number,
+): TranscriptEntry[] {
+	const entries: TranscriptEntry[] = [];
+	for (const message of messages) {
+		if (message.role !== "user" && message.role !== "assistant") continue;
+		const text = textOf(message.content).trim();
+		if (text)
+			entries.push({
+				role: message.role,
+				text: text.slice(0, TRANSCRIPT_ENTRY_CHARS),
+			});
+	}
+	return entries.slice(-limit);
 }
 
 /** The session's last answer, which tells the judge what a short follow-up continues. */
