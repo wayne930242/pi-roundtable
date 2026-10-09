@@ -124,6 +124,7 @@ A custom tool returning private data must mark its result's `details.privateTo` 
 This is independent of the tool name: the core hides both the tagged result and the arguments of its paired call, preserving the tool-call id and name.
 Do not rely on tagging to protect data repeated in public assistant replies or other untagged tools.
 Hosts building their own shared Pi sessions can use `memoryProjection(messages, { shared: true, reader })` and `hidesPrivateExchange(messages, view)` from `pi-roundtable/kit`; the latter checks exchanges, not reasoning/prompt changes.
+A host that builds its own shared Pi session and runs it on `claude-bridge` needs the core's reader records too, because `hidesPrivateExchange` cannot see retained prompts or reasoning: call `recordMemoryTurn(manager, reader, carriesPrivatePrompt)` before each prompt, call the marker it returns when a `message_end` event passes `carriesMemory(message)`, and refuse the turn before the provider call when `bridgeHistoryHidesMemory(manager.getBranch(), reader)` is true.
 `summaryProjection(messages, history?)` and `privateCompaction(preparation, additionalMessages?)` accept the surrounding history when call/result pairs cross summary-prefix-kept boundaries.
 
 ### claude-bridge guard
@@ -154,6 +155,8 @@ Admission of another person in configuration or stored roles is only a startup w
 A guest admitted elsewhere but absent from this conversation does not block the owner's turns.
 To share incompatible history, choose another provider or start a fresh conversation whose turns carry no private memory when readers differ.
 `memory: false` or persona `memory: "none"` prevents future core memory loading; disabling memory does not bypass the guard or erase already recorded private history.
+A reader record that is corrupt (not an object, or with an empty reader or a non-boolean `privateMemory`) cannot establish who owned its turn, so the guard fails closed: every later bridge turn in that conversation is refused, the owner's and SYSTEM's too, with the same error.
+Records are written only by the runtime, so this takes an edited or damaged session file; the recovery is to start the conversation fresh (the runtime's `startFresh`, which the channel's start-over command calls), which archives the old history and opens one without the record.
 Reader records are prospective: earlier prompt/reasoning states with no reader records cannot be reliably attributed, so start fresh before sharing an old private history with new readers.
 The guard is not general secret-flow prevention: private data repeated in public replies, untagged custom tools, or pre-existing summaries can still reach later readers.
 
