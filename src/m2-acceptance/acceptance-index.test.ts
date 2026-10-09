@@ -576,6 +576,16 @@ const ACCEPTANCE: readonly Item[] = [
 			),
 		],
 	},
+	{
+		section: "6.2",
+		item: "agent model switches cannot race the per-turn history guard",
+		tests: [
+			t(
+				"src/fail-closed-runtime.test.ts",
+				"an agent turn checks and uses one model snapshot when its settings change during selection",
+			),
+		],
+	},
 	// 6.5 The gates of the parent plan's §6.1, unchanged.
 	{
 		section: "6.5",

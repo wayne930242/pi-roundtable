@@ -1,13 +1,20 @@
 import type {
+	AgentSession,
 	ContextWithSystemEvent,
+	ModelRuntime,
 	SessionManager,
 } from "@earendil-works/pi-coding-agent";
 import type { AgentSessions } from "../contract/runtime.ts";
-import { ConfigError } from "../domain/errors.ts";
+import { AgentRunError, ConfigError } from "../domain/errors.ts";
 import type { AccessRules, AccessTier } from "../identity/access-policy.ts";
 import type { IdentityService } from "../identity/identity-service.ts";
 import { SYSTEM_PRINCIPAL } from "../identity/principal-store.ts";
-import { formatModelRef, type ModelRef, parseModelRef } from "../models.ts";
+import {
+	formatModelRef,
+	type ModelRef,
+	parseModelRef,
+	type ThinkingSetting,
+} from "../models.ts";
 import type { RoundtablePlugin } from "../plugin.ts";
 import { hidesPrivateExchange } from "./extensions/private-memory.ts";
 import { SCOPE_ENTRY } from "./session-scope.ts";
@@ -102,6 +109,46 @@ export function bridgeMemoryError(model: string, crowd: string): ConfigError {
 	);
 }
 
+export interface AgentModelSettings {
+	model: string;
+	thinking: ThinkingSetting;
+}
+
+/** Copy the turn's selected model/settings once: checking and using separate reads can race a switch. */
+export function chosenAgentModel(
+	agent: string | undefined,
+	options: { agents?: Pick<AgentSessions, "modelOf"> },
+): AgentModelSettings | undefined {
+	return agent !== undefined && options.agents
+		? { ...options.agents.modelOf(agent) }
+		: undefined;
+}
+
+/** Apply exactly the model snapshot the guard checked, never a later live settings read. */
+export async function useChosenAgentModel(
+	session: AgentSession,
+	modelRuntime: Pick<ModelRuntime, "getModel">,
+	name: string,
+	chosen: AgentModelSettings | undefined,
+): Promise<ThinkingSetting> {
+	if (!chosen)
+		throw new ConfigError("agent turns need the runtime's agents option");
+	const { model, thinking } = chosen;
+	const ref = parseModelRef(model);
+	if (
+		session.model?.provider !== ref?.provider ||
+		session.model?.id !== ref?.id
+	) {
+		const resolved = ref && modelRuntime.getModel(ref.provider, ref.id);
+		if (!resolved)
+			throw new AgentRunError(
+				`${name}'s model ${model} is not available on this host`,
+			);
+		await session.setModel(resolved);
+	}
+	return thinking;
+}
+
 interface BridgeHistory {
 	messages: ContextWithSystemEvent["messages"];
 	reader: string | undefined;
@@ -151,11 +198,14 @@ export async function bridgeTurnRefusal(
 		owner: { id: string };
 	},
 	history: BridgeHistory,
+	chosen?: AgentModelSettings,
 ): Promise<string | undefined> {
 	const model =
 		agent === undefined
 			? options.model
-			: options.agents && parseModelRef(options.agents.modelOf(agent).model);
+			: parseModelRef(
+					chosen?.model ?? options.agents?.modelOf(agent).model ?? "",
+				);
 	if (options.memory === false || !model || !onClaudeBridge(model))
 		return undefined;
 	const reader =

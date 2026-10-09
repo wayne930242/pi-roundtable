@@ -130,6 +130,7 @@ Hosts building their own shared Pi sessions can use `memoryProjection(messages, 
 claude-bridge reuses Claude Code's stored, unfiltered history, bypassing the per-request projection.
 With memory enabled, each shared bridge turn checks the session's actual raw history before asking any provider, including after restart and when an agent switches to bridge.
 The raw persisted branch is checked even for exchanges already removed from Pi's active context by compaction.
+An agent turn checks and uses one copied model/thinking snapshot; a setting changed during selection applies on the next turn rather than switching providers after the guard.
 It returns an `AgentRunError` if that history holds an exchange the current reader's memory projection would hide: a result tagged `privateTo` another principal (including a worker that loaded memory), an unowned memory exchange, or an outstanding built-in memory call with no result.
 For this check only, SYSTEM reads as the primary owner, and untagged pre-0.9 built-in memory results (before the first `roundtable-conversation` scope record) count as that owner's; owner and SYSTEM turns can continue old owner-only shared histories, but another person's turn there is refused.
 An unowned memory result recorded after that scope marker is not legacy: it refuses even owner and SYSTEM turns, as do outstanding memory calls with no result.

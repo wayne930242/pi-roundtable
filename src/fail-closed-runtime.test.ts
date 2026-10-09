@@ -37,7 +37,7 @@ async function probeHost(
 	/** The host's record of each conversation, read when a session is made and the turn names none. */
 	recorded?: TurnConversation,
 	/** The agents' model, and why the host refuses claude-bridge, if it does. */
-	agentModel: { model: string; privateTo?: string } = {
+	agentModel: { model: string; privateTo?: string; afterRead?: () => void } = {
 		model: "faux/faux-1",
 	},
 ) {
@@ -98,7 +98,11 @@ async function probeHost(
 						agents: {
 							workDir: dir,
 							skills: () => [],
-							modelOf: () => ({ model: agentModel.model, thinking: "off" }),
+							modelOf: () => {
+								const model = agentModel.model;
+								agentModel.afterRead?.();
+								return { model, thinking: "off" };
+							},
 							turnChannel: (scope) => (scope.group ? "fake:group" : scope.home),
 						},
 					}),
@@ -405,6 +409,42 @@ test("a task works for whom its turn's conversation serves", async () => {
 			conversation: { visibility: "private", principalId: "p_sam" },
 		});
 		expect(worker).toEqual({ visibility: "private", principalId: "p_sam" });
+	} finally {
+		await host.done();
+	}
+});
+
+test("an agent turn checks and uses one model snapshot when its settings change during selection", async () => {
+	const model: { model: string; privateTo: string; afterRead?: () => void } = {
+		model: "faux/faux-1",
+		privateTo: "other",
+	};
+	const host = await probeHost(
+		[...PROBE_TURN(), fauxAssistantMessage("Second turn"), ...PROBE_TURN()],
+		undefined,
+		model,
+	);
+	const request: TurnRequest = {
+		channel: "fake:infra",
+		selection: SELECTION,
+		text: "Look it up.",
+		speaker: MEMBER,
+		agent: { name: "infra", session: "fake:infra", home: "fake:infra" },
+	};
+	try {
+		expect((await host.runtime.runTurn(request)).ok).toBe(true);
+		model.afterRead = () => {
+			model.model = "claude-bridge/faux-1";
+		};
+		// The model selected at this turn's start is faux; the changed setting applies next turn.
+		expect((await host.runtime.runTurn(request)).ok).toBe(true);
+		const refused = await host.runtime.runTurn(request);
+		expect(refused.ok).toBe(false);
+		if (!refused.ok)
+			expect(refused.error.message).toMatch(
+				/^infra: .*claude-bridge.*private memory/s,
+			);
+		expect(host.pending()).toBe(3);
 	} finally {
 		await host.done();
 	}

@@ -14,22 +14,22 @@ import type {
 	TranscriptEntry,
 	TurnResult,
 } from "../domain/conversation.ts";
-import { AgentRunError, ConfigError } from "../domain/errors.ts";
+import { AgentRunError } from "../domain/errors.ts";
 import type { TurnRequest } from "../domain/ports.ts";
 import { assistantName } from "../i18n/index.ts";
 import { promptScopeOf } from "../interactions/prompts.ts";
-import {
-	AUTO_THINKING,
-	parseModelRef,
-	type ThinkingLevel,
-	type ThinkingSetting,
-} from "../models.ts";
+import { AUTO_THINKING, type ThinkingLevel } from "../models.ts";
 import { withoutReplyFiles } from "../reply-files.ts";
 import type { TransientTask } from "../sessions.ts";
 import { textOf } from "../shared/session-messages.ts";
 import type { Speaker, Tier } from "../speakers.ts";
 import { type ToolTiers, toolsForTier, toolTiers } from "../tool-tiers.ts";
-import { bridgeTurnRefusal } from "./bridge-guard.ts";
+import {
+	type AgentModelSettings,
+	bridgeTurnRefusal,
+	chosenAgentModel,
+	useChosenAgentModel,
+} from "./bridge-guard.ts";
 import { ConversationSessions } from "./conversation-sessions.ts";
 import { confirmedTurnText } from "./extensions/confirmation-gate.ts";
 import { loadsMemory } from "./extensions/private-memory.ts";
@@ -110,8 +110,7 @@ export class PiAgentRuntime implements AgentRuntime {
 		const { logger, turnTimeoutMs = 10 * 60_000 } = this.#options;
 		if (!request.speaker) return unspokenTurn();
 		const key = request.agent?.session ?? request.channel;
-		// Whom the conversation serves now, the host's record read again; only its person, or the
-		// host itself, speaks in a private one, refused before its session is touched.
+		// Resolve current scope; refuse a foreign private speaker before touching its session.
 		const conversation = await this.#sessions.conversation(key, request);
 		const refused = refusedSpeaker(conversation, request.speaker);
 		if (refused) return { ok: false, error: new AgentRunError(refused) };
@@ -123,17 +122,23 @@ export class PiAgentRuntime implements AgentRuntime {
 			this.#options.owner,
 		);
 		const { session } = channelSession;
+		const agentModel = chosenAgentModel(request.agent?.name, this.#options);
 		const bridgeRefused =
 			conversation.visibility === "shared"
-				? await bridgeTurnRefusal(request.agent?.name, this.#options, {
-						messages: session.messages,
-						sessionManager: session.sessionManager,
-						reader: request.speaker.principalId,
-					})
+				? await bridgeTurnRefusal(
+						request.agent?.name,
+						this.#options,
+						{
+							messages: session.messages,
+							sessionManager: session.sessionManager,
+							reader: request.speaker.principalId,
+						},
+						agentModel,
+					)
 				: undefined;
 		if (bridgeRefused)
 			return { ok: false, error: new AgentRunError(bridgeRefused) };
-		const level = await this.#thinkingLevel(key, session, request);
+		const level = await this.#thinkingLevel(key, session, request, agentModel);
 		if (session.thinkingLevel !== level) session.setThinkingLevel(level);
 		const gate = await this.#sessions.gate(key, request.agent !== undefined);
 		const pending = gate.pending();
@@ -344,8 +349,7 @@ export class PiAgentRuntime implements AgentRuntime {
 			throw new AgentRunError(
 				`a task runs beside a turn of its conversation, at that turn's tier, and ${scope.turn} has no turn running`,
 			);
-		// A worker asks nothing, and works in its conversation for the turn that started it, for
-		// whom that conversation serves, under its memory policy.
+		// A worker inherits the starting turn's conversation and memory policy, without asking.
 		const parent = await this.#sessions.session(scope.turn);
 		const { conversation, memory } = parent;
 		const worker = await this.#factory.create(
@@ -446,17 +450,20 @@ export class PiAgentRuntime implements AgentRuntime {
 		return entries.slice(-limit);
 	}
 
-	/**
-	 * The turn's thinking level: an agent's fixed setting, or the judge's pick, which is kept for the
-	 * next turn while the judge is unsure. An agent session also switches to the agent's model here.
-	 */
+	/** Uses the checked model snapshot; auto thinking keeps the last pick while the judge is unsure. */
 	async #thinkingLevel(
 		key: ChannelKey,
 		session: AgentSession,
 		request: TurnRequest,
+		agentModel?: AgentModelSettings,
 	): Promise<ThinkingLevel> {
 		const setting = request.agent
-			? await this.#useAgentModel(session, request.agent.name)
+			? await useChosenAgentModel(
+					session,
+					this.#modelRuntime,
+					request.agent.name,
+					agentModel,
+				)
 			: AUTO_THINKING;
 		if (setting !== AUTO_THINKING) {
 			this.#sessions.judged.delete(key);
@@ -468,30 +475,6 @@ export class PiAgentRuntime implements AgentRuntime {
 		});
 		this.#sessions.judged.set(key, level);
 		return level;
-	}
-
-	/** Switches an agent session to the agent's current model; returns its thinking setting. */
-	async #useAgentModel(
-		session: AgentSession,
-		name: string,
-	): Promise<ThinkingSetting> {
-		const agents = this.#options.agents;
-		if (!agents)
-			throw new ConfigError("agent turns need the runtime's agents option");
-		const { model, thinking } = agents.modelOf(name);
-		const ref = parseModelRef(model);
-		if (
-			session.model?.provider !== ref?.provider ||
-			session.model?.id !== ref?.id
-		) {
-			const resolved = ref && this.#modelRuntime.getModel(ref.provider, ref.id);
-			if (!resolved)
-				throw new AgentRunError(
-					`${name}'s model ${model} is not available on this host`,
-				);
-			await session.setModel(resolved);
-		}
-		return thinking;
 	}
 
 	dispose(): void {
