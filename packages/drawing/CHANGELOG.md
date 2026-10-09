@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-09
+
 ## [0.8.0] - 2026-10-07
 
 - Release in lockstep with pi-roundtable 0.8.0; no package-specific behavior changes.

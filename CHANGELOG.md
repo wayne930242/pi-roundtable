@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-09
+
 Principal and identity attribution replace implicit owner authority.
 Ordinary single-owner Discord configurations remain accepted, but direct runtime callers, custom background turns, and web integrations must follow [Migrating to 0.9](docs/migration-0.9.md).
 The guarantee isolates principal memory exchanges and private conversations, not shared credentials or arbitrary model disclosures in public replies.

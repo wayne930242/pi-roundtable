@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-09
+
 ### Added
 
 - `remoteMcp({ principal })`: the id of the principal the dispatch token stands for, the primary owner by default, as in 0.8. The plugin declares the token as the identity `token:<toolNames.dispatch, or remote-mcp>` in its `identities`, which the host links to that principal at every start; a principal that does not exist, or the identity linked to someone else, stops the start.

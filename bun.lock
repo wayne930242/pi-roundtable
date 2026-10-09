@@ -30,7 +30,7 @@
     },
     "packages/coding": {
       "name": "pi-roundtable-coding",
-      "version": "0.8.0",
+      "version": "0.9.0",
       "dependencies": {
         "@earendil-works/pi-coding-agent": ">=1.0.0 <2",
         "typebox": "1.3.34",
@@ -39,16 +39,16 @@
         "@biomejs/biome": "2.5.15",
         "@earendil-works/pi-ai": ">=1.0.0 <2",
         "@types/bun": "1.4.2",
-        "pi-roundtable": "0.8.0",
+        "pi-roundtable": "0.9.0",
         "typescript": "7.0.2",
       },
       "peerDependencies": {
-        "pi-roundtable": ">=0.8.0 <0.9.0",
+        "pi-roundtable": ">=0.9.0 <0.10.0",
       },
     },
     "packages/drawing": {
       "name": "pi-roundtable-drawing",
-      "version": "0.8.0",
+      "version": "0.9.0",
       "dependencies": {
         "@types/d3-force": "3.0.10",
         "canvas": "3.2.3",
@@ -59,16 +59,16 @@
       "devDependencies": {
         "@biomejs/biome": "2.5.15",
         "@types/bun": "1.4.2",
-        "pi-roundtable": "0.8.0",
+        "pi-roundtable": "0.9.0",
         "typescript": "7.0.2",
       },
       "peerDependencies": {
-        "pi-roundtable": ">=0.8.0 <0.9.0",
+        "pi-roundtable": ">=0.9.0 <0.10.0",
       },
     },
     "packages/mcp": {
       "name": "pi-roundtable-mcp",
-      "version": "0.8.0",
+      "version": "0.9.0",
       "dependencies": {
         "@modelcontextprotocol/sdk": "1.31.0",
         "discord.js": "14.27.0",
@@ -77,28 +77,28 @@
       "devDependencies": {
         "@biomejs/biome": "2.5.15",
         "@types/bun": "1.4.2",
-        "pi-roundtable": "0.8.0",
+        "pi-roundtable": "0.9.0",
         "typescript": "7.0.2",
       },
       "peerDependencies": {
-        "pi-roundtable": ">=0.8.0 <0.9.0",
+        "pi-roundtable": ">=0.9.0 <0.10.0",
       },
     },
     "packages/sandbox": {
       "name": "pi-roundtable-sandbox",
-      "version": "0.8.0",
+      "version": "0.9.0",
       "devDependencies": {
         "@biomejs/biome": "2.5.15",
         "@earendil-works/pi-coding-agent": "1.0.0",
         "@types/bun": "1.4.2",
         "discord.js": "14.27.0",
-        "pi-roundtable": "0.8.0",
+        "pi-roundtable": "0.9.0",
         "typebox": "1.3.34",
         "typescript": "7.0.2",
       },
       "peerDependencies": {
         "@earendil-works/pi-coding-agent": ">=1.0.0 <2",
-        "pi-roundtable": ">=0.8.0 <0.9.0",
+        "pi-roundtable": ">=0.9.0 <0.10.0",
         "typebox": ">=1.3.34 <2",
       },
       "optionalPeers": [
@@ -108,7 +108,7 @@
     },
     "packages/web": {
       "name": "pi-roundtable-web",
-      "version": "0.8.0",
+      "version": "0.9.0",
       "dependencies": {
         "jose": "6.2.12",
       },
@@ -117,7 +117,7 @@
         "@types/bun": "1.4.2",
         "@types/react": "19.3.0",
         "@types/react-dom": "19.3.0",
-        "pi-roundtable": "0.8.0",
+        "pi-roundtable": "0.9.0",
         "react": "19.3.0",
         "react-dom": "19.3.0",
         "react-markdown": "10.1.0",
@@ -125,12 +125,12 @@
         "typescript": "7.0.2",
       },
       "peerDependencies": {
-        "pi-roundtable": ">=0.8.0 <0.9.0",
+        "pi-roundtable": ">=0.9.0 <0.10.0",
       },
     },
     "packages/webchat": {
       "name": "pi-roundtable-webchat",
-      "version": "0.8.0",
+      "version": "0.9.0",
       "dependencies": {
         "jose": "6.2.12",
       },
@@ -139,12 +139,12 @@
         "@earendil-works/pi-ai": ">=1.0.0 <2",
         "@earendil-works/pi-coding-agent": ">=1.0.0 <2",
         "@types/bun": "1.4.2",
-        "pi-roundtable": "0.8.0",
+        "pi-roundtable": "0.9.0",
         "typebox": "1.3.34",
         "typescript": "7.0.2",
       },
       "peerDependencies": {
-        "pi-roundtable": ">=0.8.0 <0.9.0",
+        "pi-roundtable": ">=0.9.0 <0.10.0",
       },
     },
   },
