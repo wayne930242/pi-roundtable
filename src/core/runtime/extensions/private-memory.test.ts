@@ -60,13 +60,28 @@ test("custom private results hide their call arguments, including across split c
 	const part = call.content[0];
 	if (part?.type !== "toolCall") throw new Error("missing call");
 	const answer = {
-		...result("recall_person", "RESULT_SECRET", { privateTo: "ann" }),
+		...result("recall_person", "RESULT_SECRET", {
+			privateTo: "ann",
+			secret: "DETAIL_SECRET",
+		}),
 		toolCallId: part.id,
+		nestedCalls: {
+			complete: true,
+			calls: [
+				{
+					id: "child",
+					name: "private_child",
+					arguments: { secret: "NESTED_SECRET" },
+					status: "ok" as const,
+				},
+			],
+		},
 	};
 	const messages: Messages = [call, answer];
 	const other = memoryProjection(messages, { shared: true, reader: "bo" });
 	expect(textOf(other)).not.toContain("ARG_SECRET");
-	expect(textOf(other)).not.toContain("RESULT_SECRET");
+	for (const secret of ["RESULT_SECRET", "DETAIL_SECRET", "NESTED_SECRET"])
+		expect(textOf(other)).not.toContain(secret);
 	expect(other?.[0]?.role === "assistant" && other[0].content[0]).toMatchObject(
 		{
 			type: "toolCall",
@@ -90,7 +105,8 @@ test("custom private results hide their call arguments, including across split c
 	};
 	privateCompaction(preparation);
 	expect(textOf(preparation.messagesToSummarize)).not.toContain("ARG_SECRET");
-	expect(textOf(preparation.turnPrefixMessages)).not.toContain("RESULT_SECRET");
+	for (const secret of ["RESULT_SECRET", "DETAIL_SECRET", "NESTED_SECRET"])
+		expect(textOf(preparation.turnPrefixMessages)).not.toContain(secret);
 	const cut = {
 		...preparation,
 		messagesToSummarize: [call],
@@ -98,9 +114,10 @@ test("custom private results hide their call arguments, including across split c
 	};
 	privateCompaction(cut, [answer]);
 	expect(textOf(cut.messagesToSummarize)).not.toContain("ARG_SECRET");
-	expect(textOf(summaryProjection([answer], [call, answer]))).not.toContain(
-		"RESULT_SECRET",
-	);
+	for (const secret of ["RESULT_SECRET", "DETAIL_SECRET", "NESTED_SECRET"])
+		expect(textOf(summaryProjection([answer], [call, answer]))).not.toContain(
+			secret,
+		);
 });
 
 test("core compaction hook pairs a custom private result in the kept branch with summarized arguments", async () => {

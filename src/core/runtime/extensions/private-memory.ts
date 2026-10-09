@@ -266,12 +266,17 @@ function projectedMessage(
 		? unpairedCallId(message.toolCallId)
 		: message.toolCallId;
 	if (text === undefined && id === message.toolCallId) return undefined;
+	const owner = privateTo(message);
 	return {
 		...message,
 		toolCallId: id,
 		...(text === undefined
 			? {}
-			: { content: [{ type: "text" as const, text }] }),
+			: {
+					content: [{ type: "text" as const, text }],
+					details: owner ? { privateTo: owner } : undefined,
+					nestedCalls: undefined,
+				}),
 	};
 }
 
