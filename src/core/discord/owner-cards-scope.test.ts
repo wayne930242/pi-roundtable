@@ -137,9 +137,9 @@ describe("cards by the prompt scope", () => {
 		expect(pressed.replies).toEqual([messages().cardOwnerOnly]);
 	});
 
-	test("a private conversation's call above the speaker's tier expires at once, and no card is posted", async () => {
+	test("a private conversation's call above the speaker's tier is unavailable at once, and no card is posted", async () => {
 		const { fake, approval } = cardsInThread();
-		expect(await approval(promptScope(admin, "private"))).toBe("expired");
+		expect(await approval(promptScope(admin, "private"))).toBe("unavailable");
 		expect(fake.sent).toEqual([]);
 	});
 

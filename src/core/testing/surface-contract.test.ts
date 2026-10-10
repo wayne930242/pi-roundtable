@@ -70,7 +70,7 @@ function memoryChat(
 			confirm: async (title, _message, signal, minTier = "owner") => {
 				const theirs = !scope || tierAtLeast(scope.tier, minTier);
 				if (!theirs && scope?.escalate === "none" && !options.escalatesPrivate)
-					return "expired";
+					return "unavailable";
 				return new Promise<Approval>((resolve) => {
 					const id = `p${++next}`;
 					seen.push({ kind: "prompt", id, title });
@@ -158,7 +158,7 @@ test("the contract catches a surface that shows a private approval above the per
 		memoryChat({ tier: "member", escalatesPrivate: true }),
 	);
 	expect(failures.map((failure) => failure.name)).toEqual([
-		"a private conversation's approval above the person's tier goes to no one: it expires at once",
+		"a private conversation's approval above the person's tier goes to no one: it comes back at once, unshown",
 	]);
 });
 

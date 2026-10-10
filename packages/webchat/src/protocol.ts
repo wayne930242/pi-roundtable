@@ -40,6 +40,9 @@ export interface ReplyFileFrame {
 	data: string;
 }
 
+/** The most bytes (UTF-8, as JSON) an approval frame's `approval` carries before its long values are cut: 256 KiB. */
+export const APPROVAL_MAX_BYTES = 256 * 1024;
+
 /** An approval or a question the conversation's turn asks the person. */
 export type PromptFrame =
 	| {
@@ -50,10 +53,12 @@ export type PromptFrame =
 			message: string;
 			/**
 			 * The same approval as data, when the server has it: the action, the tool, the call's whole
-			 * input (never cut, unlike `message`) and the files it sends by path with their size in bytes
+			 * input (not cut, unlike `message`, unless it passes `APPROVAL_MAX_BYTES`) and the files it sends by path with their size in bytes
 			 * (absent when unreadable). A client shows this when it knows it, and `message` otherwise.
+			 * When the serialized details would pass `APPROVAL_MAX_BYTES`, each long string value of
+			 * `input` is cut to its start plus `… [N chars]` (N in code points) and `truncated` is true.
 			 */
-			approval?: ApprovalDetails;
+			approval?: ApprovalDetails & { truncated?: true };
 	  }
 	| {
 			id: string;

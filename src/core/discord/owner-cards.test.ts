@@ -145,13 +145,13 @@ describe("OwnerCards", () => {
 		expect(json(fake.edits[0])).toContain(messages().cardStopped);
 	});
 
-	test("a card that cannot be posted counts as expired", async () => {
+	test("a card that cannot be posted is unavailable", async () => {
 		const { prompts } = setup({
 			channel: async () => {
 				throw new Error("missing access");
 			},
 		});
-		expect(await prompts.confirm("t", "m")).toBe("expired");
+		expect(await prompts.confirm("t", "m")).toBe("unavailable");
 	});
 
 	test("a press of a card from before a restart says it no longer works", async () => {

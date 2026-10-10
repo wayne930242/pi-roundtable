@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { holdChain } from "../../holds.ts";
-import { setLocale } from "../../i18n/index.ts";
+import { messages, setLocale } from "../../i18n/index.ts";
 import type {
 	Approval,
 	ApprovalDetails,
@@ -12,10 +12,9 @@ import type {
 } from "../../interactions/prompts.ts";
 import { shellHoldRule } from "../../modules/host-shell/shell-policy.ts";
 import { TEST_OWNER as OWNER } from "../../testing/owner.ts";
+import { approvalCard, approvalDetails } from "./approval-card.ts";
 import { MAIL, MAIL_RULE } from "./confirmation-fixture.ts";
 import {
-	approvalCard,
-	approvalDetails,
 	CONFIRMATION_TTL_MS,
 	ConfirmationGate,
 	canonicalJson,
@@ -212,33 +211,86 @@ describe("an approval card's input", () => {
 		expect(approvalCard(held)).toContain(`\`\`\`json\n${held.input}\n\`\`\``);
 	});
 
-	test("a long value is cut on its own and marked with its length, so later keys stay", () => {
+	test("an input that fits the total is shown whole, whatever its values' length", () => {
+		const held = call({ body: "B".repeat(600), to: "a@b.c" });
+		expect(held.input.length).toBeLessThan(1_500);
+		expect(approvalCard(held)).toContain(`\`\`\`json\n${held.input}\n\`\`\``);
+	});
+
+	test("an input over the total has its longest values cut first, so later keys stay", () => {
 		const body = "x".repeat(5_000);
 		const card = approvalCard(call({ body, subject: "last key", to: "a@b.c" }));
 		expect(card).toContain("[5000 chars]");
-		expect(card).not.toContain("x".repeat(301));
+		expect(card).not.toContain("x".repeat(1_501));
 		expect(card).toContain('"subject":"last key"');
 		expect(card).toContain('"to":"a@b.c"');
+		// The cut spends the whole total on content: the long value keeps what fits.
+		const shown = card.split("\n```json\n")[1]?.split("\n```")[0] ?? "";
+		expect(shown.length).toBeGreaterThan(1_300);
+		expect(shown.length).toBeLessThanOrEqual(1_500);
 	});
 
-	test("each value's limit is configurable, and so is the card's total", () => {
+	test("the longest value is cut before a shorter one", () => {
+		const card = approvalCard(
+			call({
+				big: "b".repeat(3_000),
+				mid: "m".repeat(400),
+				small: "s".repeat(250),
+			}),
+		);
+		expect(card).toContain("[3000 chars]");
+		expect(card).toContain("m".repeat(400));
+		expect(card).toContain("s".repeat(250));
+		expect(card).not.toContain("[400 chars]");
+	});
+
+	test("a value is never cut below valueChars, and the total is configurable", () => {
 		const held = call({ a: "y".repeat(50), b: "z".repeat(50) });
-		const card = approvalCard(held, undefined, { valueChars: 10 });
-		expect(card).toContain(`${"y".repeat(10)}… [50 chars]`);
-		expect(card).toContain(`${"z".repeat(10)}… [50 chars]`);
-		const short = approvalCard(held, undefined, { totalChars: 20 });
-		expect(short).not.toContain("z".repeat(50));
-		expect(short).toContain("…");
+		const card = approvalCard(held, undefined, {
+			valueChars: 10,
+			totalChars: 90,
+		});
+		expect(card).toContain("… [50 chars]");
+		expect(card).toContain("y".repeat(10));
+		const floor = approvalCard(held, undefined, {
+			valueChars: 30,
+			totalChars: 60,
+		});
+		expect(floor).toContain(`${"y".repeat(30)}… [50 chars]`);
 	});
 
 	test("a nested string is cut like a top-level one", () => {
 		const card = approvalCard(
-			call({ items: [{ text: "n".repeat(900) }], z: 1 }),
-			undefined,
-			{ valueChars: 100 },
+			call({ items: [{ text: "n".repeat(2_900) }], z: 1 }),
 		);
-		expect(card).toContain("[900 chars]");
+		expect(card).toContain("[2900 chars]");
 		expect(card).toContain('"z":1');
+	});
+
+	test("keys that cannot be shown are named at the end of the card", () => {
+		const input: Record<string, unknown> = { to: "evil@x.test" };
+		for (let i = 0; i < 7; i++) input[`a${i}`] = "p".repeat(300);
+		const card = approvalCard(call(input));
+		expect(card).toContain("…");
+		expect(card).toContain(messages().cardHiddenKeys(['"to"']));
+		expect(card).not.toContain('"to":"evil');
+	});
+
+	test("an input that is cut to fit names no keys", () => {
+		const card = approvalCard(call({ body: "x".repeat(5_000), to: "a@b.c" }));
+		expect(card).not.toContain(messages().cardHiddenKeys(['"to"']));
+	});
+
+	test("a cut never splits a surrogate pair, and the length counts code points", () => {
+		const card = approvalCard(call({ a: `x${"😀".repeat(1_000)}`, b: 1 }));
+		expect(card).toContain("[1001 chars]");
+		expect(card).not.toMatch(/\\ud[89ab][0-9a-f]{2}/i);
+		const hidden = approvalCard(
+			call({ a: "😀".repeat(2_000), b: "y".repeat(10) }),
+			undefined,
+			{ totalChars: 101, valueChars: 200 },
+		);
+		expect(hidden).not.toMatch(/\\ud[89ab][0-9a-f]{2}/i);
 	});
 });
 

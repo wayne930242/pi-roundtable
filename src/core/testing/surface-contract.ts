@@ -332,7 +332,7 @@ const CHECKS: readonly Check[] = [
 			answeredOnlyByThem(running, running.subject.owner, "private"),
 	},
 	{
-		name: "a private conversation's approval above the person's tier goes to no one: it expires at once",
+		name: "a private conversation's approval above the person's tier goes to no one: it comes back at once, unshown",
 		applies: (subject) =>
 			subject.surface.prompts !== undefined &&
 			speakerOf(subject).tier !== "owner",
@@ -349,7 +349,8 @@ const CHECKS: readonly Check[] = [
 				Bun.sleep(1000).then(() => "still open" as const),
 			]);
 			expectThat(
-				answer === "expired",
+				// `expired` is what surfaces answered before `unavailable` existed.
+				answer === "unavailable" || answer === "expired",
 				`an approval no one may answer came back ${answer}`,
 			);
 			expectThat(
@@ -444,7 +445,7 @@ export async function checkSurfaceContract(
  * where it offers them, delivers files, ends typing and stop controls idempotently, shows
  * progress, resolves approvals as the person answers or as a stopped turn cancels them, ignores
  * another person's answer to the person's approval, and, in a private conversation, an owner's
- * too, and lets an approval above the person's tier there expire at once, shown to no one. Each
+ * too, and lets an approval above the person's tier there come back at once, shown to no one. Each
  * check gets a fresh subject from `make`; a check for an optional part the surface lacks passes.
  */
 export function describeSurfaceContract(

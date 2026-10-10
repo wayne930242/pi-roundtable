@@ -149,6 +149,17 @@ describe("in-turn approval", () => {
 		expect(gate.pending()).toBeUndefined();
 	});
 
+	test("a card that could not be shown holds the call for his next message", async () => {
+		const gate = new ConfirmationGate(holds, OWNER);
+		const slot = promptSlot();
+		slot.bind(answering("unavailable").prompts, "Assistant");
+		gate.beginTurn("workspace", false);
+		const result = await gateHandler(gate, slot)(MAIL, send);
+		expect(result?.reason).toContain("Held for Riley's confirmation");
+		gate.endTurn();
+		expect(gate.pending()?.calls).toHaveLength(1);
+	});
+
 	test("an expired card holds the call for his next message, as before", async () => {
 		const gate = new ConfirmationGate(holds, OWNER);
 		const slot = promptSlot();
@@ -261,6 +272,8 @@ describe("a refusal the gate makes", () => {
 		expect(await refusalOf("expired")).toBe("expired");
 		expect(await refusalOf("pending")).toBe("pending");
 		expect(await refusalOf("no card")).toBe("held");
+		// A card no one could be shown is held, not an unanswered one: it never expired.
+		expect(await refusalOf("unavailable")).toBe("held");
 	});
 
 	test("is not named for an approved call, a call that needs no card, or a stopped turn", async () => {

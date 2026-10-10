@@ -1,5 +1,3 @@
-import { statSync } from "node:fs";
-import { resolve } from "node:path";
 import type { ExtensionFactory } from "@earendil-works/pi-coding-agent";
 import type {
 	HeldCall,
@@ -9,28 +7,11 @@ import type { HoldRefusal } from "../../domain/progress.ts";
 import { type HoldCheck, type HoldContext, higherTier } from "../../holds.ts";
 import { messages } from "../../i18n/index.ts";
 import { type OwnerIdentity, ownerWords } from "../../identity.ts";
-import type {
-	ApprovalDetails,
-	LateAnswer,
-	Prompts,
-} from "../../interactions/prompts.ts";
+import type { LateAnswer, Prompts } from "../../interactions/prompts.ts";
 import type { Speaker } from "../../speakers.ts";
 import type { ToolTiers } from "../../tool-tiers.ts";
 import type { PromptSlot } from "../prompt-slot.ts";
-
-/** How many characters of one string value in a held call's input its approval card shows. */
-const CARD_VALUE_CHARS = 200;
-
-/** How many characters of the whole input its approval card shows, at most. */
-const CARD_INPUT_CHARS = 1_500;
-
-/** What an approval card shows of a call's input; see `approvalCard`. */
-export interface CardLimits {
-	/** Longest string value kept whole, at any depth; a longer one is cut and marked with its length. */
-	valueChars?: number;
-	/** Longest input shown, after the values are cut; the rest is dropped. */
-	totalChars?: number;
-}
+import { approvalCard, approvalDetails } from "./approval-card.ts";
 
 /** Held actions older than this cannot be approved any more. */
 export const CONFIRMATION_TTL_MS = 24 * 3_600_000;
@@ -209,6 +190,9 @@ export class ConfirmationGate {
 			};
 		}
 		if (answer === "cancelled") return { reason: "The turn was stopped." };
+		// No card was shown: no one may approve it, or it could not be posted.
+		if (answer === "unavailable")
+			return { reason: this.#record(call), refused: "held" };
 		return { reason: this.#record(call), refused: "expired" };
 	}
 
@@ -283,99 +267,6 @@ export function confirmedTurnText(
 		.map((call) => `- ${call.action}: ${call.tool} ${call.input}`)
 		.join("\n");
 	return `(${owner.name} approved the held actions below with this message. Make each call now with exactly this input.)\n${calls}\n\n${text}`;
-}
-
-/**
- * What an approval card says: the held action's words, the exact call, and each file it sends by
- * path with the file's size now; relative paths resolve against `workspace`. A string value in
- * the input longer than `limits.valueChars` is cut and marked with its length, so one long value
- * does not push the keys after it out of the card; `limits.totalChars` caps what is left.
- */
-export function approvalCard(
-	call: HeldCall,
-	workspace?: string,
-	limits: CardLimits = {},
-): string {
-	const total = limits.totalChars ?? CARD_INPUT_CHARS;
-	const shown = cutValues(call.input, limits.valueChars ?? CARD_VALUE_CHARS);
-	const input = shown.length > total ? `${shown.slice(0, total)}…` : shown;
-	const files = pathFiles(call.input).map(
-		(path) => `\n-# ${messages().cardFile(path, fileSize(path, workspace))}`,
-	);
-	return `**${call.action}**\n-# \`${call.tool}\`\n\`\`\`json\n${input.replaceAll("```", "`\u200b``")}\n\`\`\`${files.join("")}`;
-}
-
-/** The call's input as JSON with each string longer than `limit` cut and marked `… [N chars]`; the input itself when none is. */
-function cutValues(input: string, limit: number): string {
-	let parsed: unknown;
-	try {
-		parsed = JSON.parse(input);
-	} catch {
-		return input;
-	}
-	let cut = false;
-	const shown = JSON.stringify(parsed, (_key, v: unknown) => {
-		if (typeof v !== "string" || v.length <= limit) return v;
-		cut = true;
-		return `${v.slice(0, limit)}… [${v.length} chars]`;
-	});
-	return cut ? shown : input;
-}
-
-/**
- * A held call as data for a card that is not text: the action, the tool, the whole input, and
- * each file it sends by path with its size now (absent when unreadable). Unlike the text card,
- * nothing is cut and nothing is worded for a locale.
- */
-export function approvalDetails(
-	call: HeldCall,
-	workspace?: string,
-): ApprovalDetails {
-	const files = pathFiles(call.input).map((path) => {
-		const bytes = fileSize(path, workspace);
-		return bytes === undefined ? { path } : { path, bytes };
-	});
-	return {
-		action: call.action,
-		tool: call.tool,
-		input: parsedInput(call.input),
-		...(files.length > 0 ? { files } : {}),
-	};
-}
-
-/** A call's input object; `{}` for input that is not one (a held call's always is). */
-function parsedInput(input: string): Record<string, unknown> {
-	try {
-		const parsed: unknown = JSON.parse(input);
-		return isPlainObject(parsed) ? parsed : {};
-	} catch {
-		return {};
-	}
-}
-
-/** The paths of a call's `files` entries that name one. */
-function pathFiles(input: string): string[] {
-	let parsed: unknown;
-	try {
-		parsed = JSON.parse(input);
-	} catch {
-		return [];
-	}
-	const files = isPlainObject(parsed) ? parsed.files : undefined;
-	if (!Array.isArray(files)) return [];
-	return files.flatMap((file: unknown) =>
-		isPlainObject(file) && typeof file.path === "string" ? [file.path] : [],
-	);
-}
-
-/** A file's size in bytes, or undefined when it cannot be read. */
-function fileSize(path: string, workspace: string | undefined) {
-	try {
-		const info = statSync(resolve(workspace ?? "/", path));
-		return info.isFile() ? info.size : undefined;
-	} catch {
-		return undefined;
-	}
 }
 
 /** Without a slot, or with an empty one, every call that needs confirmation is held. */

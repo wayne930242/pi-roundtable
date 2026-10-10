@@ -33,6 +33,8 @@ export function conversationEn(ctx: CatalogContext) {
 			bytes === undefined
 				? `File \`${path}\` (not found now)`
 				: `File \`${path}\` (${formatBytes(bytes)})`,
+		cardHiddenKeys: (keys: readonly string[]) =>
+			`… not shown: ${keys.join(", ")}`,
 	};
 }
 
@@ -62,5 +64,6 @@ export function conversationZhTW(
 			bytes === undefined
 				? `檔案 \`${path}\`（目前找不到）`
 				: `檔案 \`${path}\`（${formatBytes(bytes)}）`,
+		cardHiddenKeys: (keys: readonly string[]) => `… 未顯示：${keys.join("、")}`,
 	};
 }

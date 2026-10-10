@@ -209,7 +209,7 @@ The TypeScript types are `ClientFrame` and `ServerFrame`.
 | `{ type: "accepted", id, conversation }` | Your message `id` was taken into `conversation`, a new one when you named none. |
 | `{ type: "typing", conversation, on }` | The assistant is, or is no longer, working in the conversation. |
 | `{ type: "stoppable", conversation, on }` | A stop applies, or no longer applies. |
-| `{ type: "progress", conversation, event }` | What the running turn writes and which tools it runs: `{ type: "text", delta }`, `{ type: "tool_start", id, tool, preview? }`, or `{ type: "tool_end", id, tool, ok, refused? }`. Never the thinking, never a tool's full arguments. A `tool_end` that a hold refused (not a real failure) has `ok: false` and `refused`: `declined` (turned down on its approval card), `expired` (the card went unanswered; the call is held for the next message), `pending` (the card is still open) or `held` (no card could be shown). `refused` is absent for a success and for a real failure. |
+| `{ type: "progress", conversation, event }` | What the running turn writes and which tools it runs: `{ type: "text", delta }`, `{ type: "tool_start", id, tool, preview? }`, or `{ type: "tool_end", id, tool, ok, refused? }`. Never the thinking, never a tool's full arguments. A `tool_end` that a hold refused (not a real failure) has `ok: false` and `refused`: `declined` (turned down on its approval card), `expired` (a card was shown and went unanswered; the call is held for the next message), `pending` (the card is still open) or `held` (no card could be shown: the person's tier is below the call's, or it could not be posted; the call is held for the next message). `refused` is absent for a success and for a real failure. |
 | `{ type: "reply", conversation, text, thinking?, files? }` | The turn's answer in full markdown, with its files inline as `{ name, data }` (base64). |
 | `{ type: "failed", conversation, stopped }` | The turn ended without an answer: it failed, the host refused it before it ran (for example when its conversation could not be recorded), or it was stopped. The cause stays in the host's log. |
 | `{ type: "prompt", conversation, prompt }` | The turn asks you: `{ id, kind: "approval", title, message, approval? }`, or `{ id, kind: "ask", title, question, options, multi, allowOther }`. |
@@ -224,12 +224,15 @@ An approval prompt's `message` is the card as markdown, as it always was, and it
 approval?: {
   action: string; // what the call would do, in plain words
   tool: string; // the tool's name
-  input: Record<string, unknown>; // the call's whole input, never cut
+  input: Record<string, unknown>; // the call's whole input, unless truncated is true (below)
   files?: { path: string; bytes?: number }[]; // files it sends by path; bytes is absent when unreadable
+  truncated?: true; // present only when input was cut to keep the frame within 256 KiB
 }
 ```
 
 `action` is worded in the host's locale (it is the same text as the card's bold line); `tool`, `input` and `files` are not. A client that knows `approval` shows it and may fall back to `message`; one that does not keeps showing `title` and `message`. A prompt sent again on reconnect carries the same `approval`.
+
+The frame's size is bounded: when `approval` serialized as UTF-8 JSON would pass 256 KiB (`APPROVAL_MAX_BYTES` in `protocol.ts`), every string value of `input` longer than what fits is cut to its start plus `… [N chars]` (N counts code points; a cut never splits a surrogate pair) and `approval.truncated` is `true`. Then `input` is no longer whole: show `message`, or tell the person it is cut. If even the shortest cut cannot fit, `input` is `{}` and `files` are left out.
 
 Error codes: `bad_frame` (it does not parse, its text is blank or too long, or an answer the question does not allow), `unknown_conversation`, `forbidden` (someone else's conversation or prompt, or an approval above your tier), `unknown_persona` (none of that kind you may open), `unknown_prompt`, `too_many_conversations` (you hold `unusedConversationsPerPrincipal` conversations you have not written in, or opened `newConversationsPerHour` in the last hour), `unknown_attachment` (a `send` named a file that is not waiting for you in that conversation: never uploaded, uploaded to another conversation, already used by a message, or deleted after its time; the whole message is refused and nothing is run), `attachment_quota` (the files would take what your messages keep past `usedAttachmentBytesPerPrincipal`; the whole message is refused and the files stay waiting), and `busy` (you have `turnsPerPrincipal` turns running or queued, or the conversation already has a turn queued behind its running one; the message was not taken, so send it again once a turn ends).
 
@@ -316,7 +319,7 @@ Only the person who uploaded a file can use it, and only in the conversation it 
   Type, size, rate and the waiting total are limited per person, and the bytes of an image or PDF are checked against the type.
   See [Attachments](#attachments).
 - **Approvals.** A held call's card goes to the conversation's person only, and needs the tier the call needs.
-  A card whose tier the person lacks is never shown: its prompt resolves `expired`, without owner escalation.
+  A card whose tier the person lacks is never shown: its prompt resolves `unavailable` (no frame is sent), without owner escalation.
 - **Owner.** Nobody becomes the owner through a token's claims; grant owner in core configuration or the principal CLI.
   Owner-tier tools stay out of web turns unless an owner is chatting.
 

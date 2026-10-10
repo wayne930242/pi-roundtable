@@ -7,7 +7,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- An approval `prompt` frame carries an optional `approval: { action, tool, input, files? }`, the held call as data: its whole input, never cut, and the files it sends by path with their size in bytes. `title` and `message` are unchanged, so a client that ignores `approval` works as before. `PromptFrame` types it with core's `ApprovalDetails`.
+- An approval `prompt` frame carries an optional `approval: { action, tool, input, files? }`, the held call as data: its whole input (cut only past a size limit, below), and the files it sends by path with their size in bytes. `title` and `message` are unchanged, so a client that ignores `approval` works as before. `PromptFrame` types it with core's `ApprovalDetails`. The serialized `approval` is bounded: over 256 KiB (UTF-8 JSON) each long string value of `input` is cut to its start plus `… [N chars]` (N in code points) and `approval.truncated` is `true`; `files` are then left out, and an input that still cannot fit is sent as `{}`.
+- A card that cannot be shown to the person (an approval above their tier) now resolves `unavailable` instead of `expired`, so a held call reports `refused: "held"`; a card that was shown and timed out is still `expired`. No frame is sent for the first.
 - A `progress` frame's `tool_end` event carries an optional `refused: "declined" | "expired" | "pending" | "held"` when a hold refused the call, so a client can tell that from a failed tool without guessing from the order of frames; it is absent for a success and for a real failure.
 
 ## [0.9.6] - 2026-10-10

@@ -3,14 +3,17 @@ import type { TurnRequest } from "../domain/ports.ts";
 import type { Speaker, Tier } from "../speakers.ts";
 
 /**
- * How a prompt ended: answered yes or no; `expired` when no one could answer it (no one's to
- * approve, or the card could not be posted); `cancelled` when its turn stopped; or `pending` when
- * the turn stopped waiting while the card stays open, its answer to come through `PromptWait`.
+ * How a prompt ended: answered yes or no; `expired` when the card was shown and no one answered
+ * it in time; `unavailable` when no card could be shown (no one may approve the call, the speaker
+ * is below its tier, or the card could not be posted); `cancelled` when its turn stopped; or
+ * `pending` when the turn stopped waiting while the card stays open, its answer to come through
+ * `PromptWait`. A surface that cannot tell the two may answer `expired` for both.
  */
 export type Approval =
 	| "approved"
 	| "declined"
 	| "expired"
+	| "unavailable"
 	| "cancelled"
 	| "pending";
 
@@ -100,7 +103,7 @@ export interface PromptScope {
 	/**
 	 * Who else may answer: `owners` in a shared conversation, where an approval above the
 	 * speaker's tier goes to the owners; `none` in a private one, which no one else sees, so such
-	 * an approval expires at once.
+	 * an approval comes back `unavailable` at once.
 	 */
 	escalate: "owners" | "none";
 }

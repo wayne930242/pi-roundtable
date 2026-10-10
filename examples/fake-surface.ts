@@ -80,7 +80,7 @@ export class FakeSurface implements ChatSurface {
 	/**
 	 * How a turn asks to approve a held action or answers a question. The scope names who may
 	 * answer: its speaker when their tier holds the call, and the owners unless the conversation
-	 * is private, where a call above the speaker's tier goes to no one and expires at once.
+	 * is private, where a call above the speaker's tier goes to no one and comes back `unavailable` at once.
 	 */
 	prompts(channel: ChannelKey, scope?: PromptScope): Prompts {
 		return {
@@ -89,7 +89,7 @@ export class FakeSurface implements ChatSurface {
 					scope !== undefined &&
 					TIERS.indexOf(scope.tier) >= TIERS.indexOf(minTier);
 				const owners = scope?.escalate !== "none";
-				if (!theirs && !owners) return "expired";
+				if (!theirs && !owners) return "unavailable";
 				return this.#ask(channel, title, signal, {
 					...(theirs ? { principalId: scope.principalId } : {}),
 					owners,

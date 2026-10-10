@@ -7,13 +7,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- `ApprovalDetails` and `ApprovalFile` (`{ action, tool, input, files? }`, files as `{ path, bytes? }`): a held call as data, with its whole input and the size of each file it sends by path. `Prompts.confirm` takes it as a new optional last argument, `details`, beside the card's text `message`; the confirmation gate passes it with every card, and a surface that shows text only ignores it (Discord's cards read as before). `approvalDetails` (`approvalDetails(call, workspace?)`) builds it, exported from `pi-roundtable/kit` beside `approvalCard`.
-- `TurnProgress`'s `tool_end` takes an optional `refused` (`HoldRefusal`: `declined`, `expired`, `pending` or `held`), set when the confirmation gate refused the call and absent for a success and for a real failure. The gate notes its refusal on the turn's `PromptSlot` (`refuse`, `refusalOf`), and `progressReporter` takes a `refusalOf` option to read it; a turn stopped while its card was open reports none. `decide` returns the same as `refused`.
+- `ApprovalDetails` and `ApprovalFile` (`{ action, tool, input, files? }`, files as `{ path, bytes? }`): a held call as data, with its whole input and the size of each file it sends by path. `Prompts.confirm` takes it as a new optional last argument, `details`, beside the card's text `message`; the confirmation gate passes it with every card, and a surface that shows text only ignores it (Discord's cards read as before). `approvalDetails` builds it (`approvalDetails(call, workspace?)`), exported from `pi-roundtable/kit` beside `approvalCard`.
+- `Approval` has a new value, `unavailable`: no card could be shown (no one may approve the call, the speaker is below its tier, or the card could not be posted). `expired` now means a card was shown and went unanswered. The Discord and web chat surfaces answer `unavailable` for the first case; a surface that cannot tell the two may keep answering `expired` for both, and the surface contract accepts either.
+- `TurnProgress`'s `tool_end` takes an optional `refused` (`HoldRefusal`: `declined`, `expired`, `pending` or `held`), set when a hold refused the call and absent for a success and for a real failure. A card that was shown and went unanswered is `expired`; one that could not be shown is `held`. It is set through `PromptSlot` (`refuse`, `refusalOf`, in `pi-roundtable/kit`); a turn stopped while its card was open reports none.
 - `approvalCard(call, workspace?, limits?)` takes `CardLimits` (also exported from the kit), `{ valueChars?, totalChars? }`, to set what its card shows of the input.
 
 ### Changed
 
-- An approval card cuts each long string value of the input on its own (at 200 characters by default, marked `… [N chars]` with the original length) instead of cutting the whole JSON at 1,500 characters, so the keys after one long value are no longer lost. The 1,500-character total stays as the cap on what is left. A short input renders exactly as before.
+- An approval card shows an input that fits `totalChars` (1,500 by default) whole, exactly as before. Only an input over it has its string values cut, the longest first and never below `valueChars` (200 by default), each marked `… [N chars]` with the original length in code points, until it fits; so the keys after one long value are no longer lost. If it still cannot fit, the rest is dropped and the card lists the top-level keys it no longer shows. A cut never splits a surrogate pair.
 
 ## [0.9.6] - 2026-10-10
 

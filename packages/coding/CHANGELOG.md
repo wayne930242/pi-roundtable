@@ -5,6 +5,7 @@
 ### Added
 
 - A held call's approval card is also given to the prompt as `ApprovalDetails`, so a surface that shows structured approvals (web chat) gets the call's whole input; other surfaces show the same text card.
+- Requires `pi-roundtable` 0.9.7 or later: the desk imports `approvalDetails` from the kit, which 0.9.6 does not export, so the plugin fails to load against an older core even though the peer range allows it.
 
 ## [0.9.6] - 2026-10-10
 

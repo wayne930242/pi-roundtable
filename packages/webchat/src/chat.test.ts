@@ -7,7 +7,7 @@ import type {
 import { promptScope } from "pi-roundtable";
 import { checkPersonas, type WebChatLimits } from "./chat.ts";
 import { oidcSpeakerId } from "./oidc.ts";
-import { CLOSE_CODES } from "./protocol.ts";
+import { APPROVAL_MAX_BYTES, CLOSE_CODES } from "./protocol.ts";
 import {
 	type FakeSocket,
 	fakeSocket,
@@ -289,7 +289,7 @@ test("an approval goes to the conversation's person, only they answer it, and on
 	);
 	if (!prompts) throw new Error("no prompts for the conversation's person");
 	// A card the speaker's tier cannot approve is never shown: it stays held.
-	expect(await prompts.confirm("Approve?", "Delete it.")).toBe("expired");
+	expect(await prompts.confirm("Approve?", "Delete it.")).toBe("unavailable");
 	const asked = prompts.confirm("Approve?", "Send it.", undefined, "member");
 	const prompt = ada.frames.find((f) => f.type === "prompt");
 	if (prompt?.type !== "prompt") throw new Error("no prompt sent");
@@ -365,6 +365,48 @@ test("an approval frame carries the structured details beside its unchanged text
 		await say(ada, { type: "approval", prompt: frame.id, approved: false });
 	expect(await asked).toBe("declined");
 	expect(await plain).toBe("declined");
+});
+
+test("an approval whose input is over the frame limit carries its values cut and says so", async () => {
+	const { chat, connect, say } = await linked();
+	const conversation = chat.open(speakerOf("ada"), "helper");
+	const ada = connect("ada");
+	await say(ada, { type: "stop", conversation });
+	const prompts = chat.surface.prompts(
+		`web:${conversation}`,
+		promptScope(speakerOf("ada"), "private"),
+	);
+	if (!prompts) throw new Error("no prompts for the conversation's person");
+	const input = {
+		dataBase64: "A".repeat(2_000_000),
+		note: "😀".repeat(400_000),
+		to: "a@b.c",
+	};
+	const asked = prompts.confirm(
+		"Approve?",
+		"**upload**",
+		undefined,
+		"member",
+		undefined,
+		{ action: "upload", tool: "upload", input, files: [{ path: "a.bin" }] },
+	);
+	const frame = ada.frames.flatMap((f) =>
+		f.type === "prompt" && f.prompt.kind === "approval" ? [f.prompt] : [],
+	)[0];
+	const approval = frame?.approval;
+	expect(approval?.truncated).toBe(true);
+	expect(
+		new TextEncoder().encode(JSON.stringify(approval)).length,
+	).toBeLessThanOrEqual(APPROVAL_MAX_BYTES);
+	expect(approval?.input.to).toBe("a@b.c");
+	expect(String(approval?.input.dataBase64)).toContain("… [2000000 chars]");
+	expect(String(approval?.input.note)).toContain("… [400000 chars]");
+	expect(String(approval?.input.note)).not.toMatch(/[\ud800-\udbff]… /);
+	// The text card travels whole beside it.
+	expect(frame?.message).toBe("**upload**");
+	if (frame)
+		await say(ada, { type: "approval", prompt: frame.id, approved: false });
+	expect(await asked).toBe("declined");
 });
 
 test("a refused tool's end reaches the client with its reason, and a plain failure has none", async () => {

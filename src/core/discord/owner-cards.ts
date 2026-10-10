@@ -167,42 +167,48 @@ export class OwnerCards implements InteractionModule {
 			confirm: async (title, message, signal, minTier = "owner", wait) => {
 				const audience = await this.#audiences.approval(scope, minTier);
 				// A private conversation's call above its person's tier is no one's to approve.
-				if (!audience) return "expired";
-				return this.#post<Approval>(channelId, signal, "expired", "cancelled", {
-					audience,
-					...(wait
-						? {
-								wait: {
-									pending: "pending",
-									late: (value, by) =>
-										wait.late({
-											kind: "approval",
-											approved: value === "approved",
-											by,
-										}),
-								},
-							}
-						: {}),
-					title,
-					sections: [message],
-					rows: (id, disabled) => [
-						new ActionRowBuilder<ButtonBuilder>().addComponents(
-							new ButtonBuilder()
-								.setCustomId(`${CARD_PREFIX}${id}:yes`)
-								.setLabel(messages().cardRunLabel)
-								.setEmoji("✅")
-								.setStyle(ButtonStyle.Success)
-								.setDisabled(disabled),
-							new ButtonBuilder()
-								.setCustomId(`${CARD_PREFIX}${id}:no`)
-								.setLabel(messages().cardCancelLabel)
-								.setEmoji("❌")
-								.setStyle(ButtonStyle.Secondary)
-								.setDisabled(disabled),
-						),
-					],
-					footer: messages().cardApprovalFooter,
-				});
+				if (!audience) return "unavailable";
+				return this.#post<Approval>(
+					channelId,
+					signal,
+					"unavailable",
+					"cancelled",
+					{
+						audience,
+						...(wait
+							? {
+									wait: {
+										pending: "pending",
+										late: (value, by) =>
+											wait.late({
+												kind: "approval",
+												approved: value === "approved",
+												by,
+											}),
+									},
+								}
+							: {}),
+						title,
+						sections: [message],
+						rows: (id, disabled) => [
+							new ActionRowBuilder<ButtonBuilder>().addComponents(
+								new ButtonBuilder()
+									.setCustomId(`${CARD_PREFIX}${id}:yes`)
+									.setLabel(messages().cardRunLabel)
+									.setEmoji("✅")
+									.setStyle(ButtonStyle.Success)
+									.setDisabled(disabled),
+								new ButtonBuilder()
+									.setCustomId(`${CARD_PREFIX}${id}:no`)
+									.setLabel(messages().cardCancelLabel)
+									.setEmoji("❌")
+									.setStyle(ButtonStyle.Secondary)
+									.setDisabled(disabled),
+							),
+						],
+						footer: messages().cardApprovalFooter,
+					},
+				);
 			},
 			ask: async (title, question, signal, wait) => {
 				const audience = await this.#audiences.question(scope);
@@ -239,13 +245,13 @@ export class OwnerCards implements InteractionModule {
 	}
 
 	/**
-	 * Posts a card and resolves with its answer, `expired` when it could not be posted, or
+	 * Posts a card and resolves with its answer, `unposted` when it could not be posted, or
 	 * `cancelled`; with `wait`, and a way to resume, `wait.pending` once the grace period passes.
 	 */
 	#post<T>(
 		channelId: string,
 		signal: AbortSignal | undefined,
-		expired: T,
+		unposted: T,
 		cancelled: T,
 		card: {
 			audience: Audience;
@@ -350,7 +356,7 @@ export class OwnerCards implements InteractionModule {
 				})
 				.catch((error: unknown) => {
 					logger.warn({ channelId, err: error }, "card not posted");
-					settle(expired, undefined);
+					settle(unposted, undefined);
 				});
 		});
 	}

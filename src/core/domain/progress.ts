@@ -8,9 +8,9 @@
 /**
  * Why a hold refused a tool call, as a tool's end reports it, so a surface need not tell a call
  * the owner turned down from a call that failed: `declined` on its approval card, `expired` when
- * the card went unanswered (the call is held for the owner's next message), `pending` while the
- * card stays open, and `held` when no card could be shown (the call waits for the owner's next
- * message). A turn that was stopped is none of these.
+ * a card was shown and went unanswered (the call is held for the owner's next message),
+ * `pending` while the card stays open, and `held` when no card could be shown (no one may approve
+ * it, or it could not be posted; the call waits for the owner's next message). A turn that was stopped is none of these.
  */
 export type HoldRefusal = "declined" | "expired" | "pending" | "held";
 
