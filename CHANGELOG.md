@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.9.6] - 2026-10-10
+
 ### Fixed
 
 - The compaction tiers measure the context a compaction left as a request sends it, system prompt and tool definitions included: the first request after the compaction reports it, and until then the conversation's estimate gets the fixed part the last request before it carried (what it sent less the estimate of its messages). They measured the conversation alone, so a session with a large fixed part (over 100k of tools) that compacted to about 270k kept its next compaction at 300k and compacted again every few tool results. `LatestCompaction` adds `measured`, and the `conversation compacted` log adds `contextAfter`, the measure the tiers use, beside `tokensAfter`.

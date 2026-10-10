@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [0.9.6] - 2026-10-10
+
+- Release in lockstep with pi-roundtable 0.9.6; no package-specific behavior changes.
+
 ## [0.9.5] - 2026-10-10
 
 0.9.4 was tagged but never published (its release checks failed on the recorded prompt texts); everything listed under it is released in 0.9.5.

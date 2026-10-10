@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.9.6
+
 - A worker's compaction tiers measure the context left with the system prompt and tools its requests carry, as the host's do; its compaction report and the host's `conversation compacted` log add `contextAfter`.
 
 ## 0.9.5
