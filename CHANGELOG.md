@@ -13,6 +13,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 
 - A hold that throws, not only one that rejects, is now held under a generic description in a turn; it used to fail the tool call. A hold that declares only its arguments and answers at once behaves exactly as before, and is still called with the arguments alone where a host checks the hold with no turn, such as a precheck script's tool call. A hold that declares `turn` is not called there: it is described as `run <tool>` and counts as held.
+- Hold lookups are awaited one tool call at a time, because the agent loop checks calls one after another: a message with N calls whose lookups hang waits up to N × `HOLD_DESCRIBE_TIMEOUT_MS`, and an approved call in the confirming turn still waits for its lookup. Keep lookups fast. This is documented in `docs/plugins.md`; behavior is unchanged.
+- A hold that declares `turn` through a wrapper (so its arity is not visible), or returns a thenable without `catch`, is now held as `run <tool>` where there is no turn, instead of failing with an obscure `TypeError`.
 
 ## [0.9.7] - 2026-10-10
 

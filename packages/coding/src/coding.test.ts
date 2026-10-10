@@ -908,9 +908,10 @@ test("owner policy is host-owned, validates names, and does not bypass linked ho
 	expect(
 		harness.holds("repo_push", { repo: "samples/future", sha }, {}),
 	).toContain("Push");
-	expect(() =>
+	// A name the hold refuses is held under the generic description, never let through.
+	expect(
 		harness.holds("repo_push", { repo: "sample/../escape", sha }, {}),
-	).toThrow();
+	).toBe("run repo_push");
 	expect(seen).not.toContain("sample/../escape");
 });
 

@@ -308,7 +308,20 @@ describe("a hold that looks things up", () => {
 });
 
 describe("a hold that does not look things up", () => {
-	test("a synchronous hold gives the same card as before and resolves without waiting", async () => {
+	test("a synchronous hold is held in the same tick, with no await before the call is recorded", async () => {
+		const gate = new ConfirmationGate(holdChain([MAIL_RULE]), OWNER);
+		gate.beginTurn("workspace", false);
+		// Not awaited: a decision that awaited anything would not have recorded the call yet.
+		const decision = gate.decide(MAIL, send("a@b.c"), undefined, {
+			toolTurn: turnOf,
+		});
+		expect(gate.pending()?.calls).toMatchObject([
+			{ tool: MAIL, action: "send an email to a@b.c" },
+		]);
+		expect((await decision).refused).toBe("held");
+	});
+
+	test("a synchronous hold gives the same card as before", async () => {
 		const { cards, call } = setup(MAIL_RULE);
 		const result = call(event("a@b.c"), {
 			signal: new AbortController().signal,
@@ -316,6 +329,24 @@ describe("a hold that does not look things up", () => {
 		expect((await result)?.block).toBe(true);
 		expect(cards[0]?.message).toContain("**send an email to a@b.c**");
 		expect(cards[0]?.details?.action).toBe("send an email to a@b.c");
+	});
+
+	test("a slow asynchronous call followed by a synchronous one keeps the order they were made in", async () => {
+		const { cards, call } = setup(
+			lookup((input) => {
+				if (input.to !== "slow") return `send an email to ${String(input.to)}`;
+				return Bun.sleep(30).then(() => "send an email to slow");
+			}),
+		);
+		const signal = new AbortController().signal;
+		await Promise.all([
+			call(event("slow", "c1"), { signal }),
+			call(event("quick", "c2"), { signal }),
+		]);
+		expect(cards.map((card) => card.details?.action)).toEqual([
+			"send an email to slow",
+			"send an email to quick",
+		]);
 	});
 
 	test("a rule with describeInTurn that answers at once is not awaited out of order", async () => {

@@ -249,7 +249,7 @@ export interface RecordedEvent {
 
 export interface TestPluginResult {
 	contribution: Contribution;
-	/** The hold rules the plugin contributed, chained as the host links them: the description of a call that must be approved first, or undefined. */
+	/** The hold rules the plugin contributed, chained as the host links them: the description of a call that must be approved first, or undefined. `holds.inTurn(tool, input, context, turn)` asks them as a turn does, so a hold that looks things up (and may return a promise) is called with the turn; the plain call has no turn, and counts a hold that declares `turn` as held under `run <tool>`. */
 	holds: HoldCheck;
 	/** What the plugin sees as `context.conversations`, for a test to drive its claims. */
 	conversations: ConversationPort;

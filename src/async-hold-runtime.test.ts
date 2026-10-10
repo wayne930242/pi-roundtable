@@ -38,6 +38,7 @@ async function heldHost(
 	turns: number,
 	hold: (args: { site: string }, turn: ToolTurn) => Promise<string | undefined>,
 	prompts?: ChatSurface["prompts"],
+	ran?: ToolTurn[],
 ): Promise<{
 	harness: Awaited<ReturnType<typeof testPlugin>>;
 	saved: (PendingConfirmation | undefined)[];
@@ -112,7 +113,10 @@ async function heldHost(
 						parameters: Type.Object({ site: Type.String() }),
 						minTier: "member",
 						hold,
-						run: () => "deployed",
+						run: (_args, turn) => {
+							ran?.push(turn);
+							return "deployed";
+						},
 					}),
 				],
 				sessionTools: [
@@ -201,6 +205,37 @@ test("a hold that fails still holds the call, under the generic description", as
 		expect(saved.at(-1)).toMatchObject({
 			calls: [{ tool: "deploy", action: messages().holdGeneric("deploy") }],
 		});
+	} finally {
+		await done();
+	}
+});
+
+test("a hold that lets the call run saw the same turn, speaker and channel as the tool's run", async () => {
+	const seen: ToolTurn[] = [];
+	const ran: ToolTurn[] = [];
+	const { harness, done } = await heldHost(
+		1,
+		async (_args, turn) => {
+			seen.push(turn);
+			return undefined;
+		},
+		undefined,
+		ran,
+	);
+	try {
+		await harness.turns.run({
+			channel: "fake:room",
+			kind: "helper",
+			text: "deploy the docs",
+			speaker: MEMBER,
+			selection: { id: "held", tools: ["deploy"], groups: [] },
+		});
+		expect(seen).toHaveLength(1);
+		expect(ran).toHaveLength(1);
+		expect(seen[0]?.speaker).toEqual(ran[0]?.speaker);
+		expect(seen[0]?.speaker).toEqual(MEMBER);
+		expect(seen[0]?.channel).toBe(ran[0]?.channel);
+		expect(seen[0]?.agent).toBe(ran[0]?.agent);
 	} finally {
 		await done();
 	}

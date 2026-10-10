@@ -739,6 +739,7 @@ The gate awaits the description before it posts the card, so the card's bold lin
 - The wait lasts `HOLD_DESCRIBE_TIMEOUT_MS` (10 seconds, exported from `pi-roundtable/kit`). A rejection, a throw or a timeout holds the call under a generic description (`run <tool>`, in the host's locale), never lets it run: the owner still sees the exact input on the card.
 - Returning `undefined` after the lookup lets the call run, as for a hold that answers at once.
 - Calls made together are held, and their cards opened, in the order they were made, each with its own description, whichever lookup returns first.
+- The agent loop runs one tool call's checks after another's, so hold lookups are awaited one call at a time: a model message with N calls whose lookups all hang waits up to N × `HOLD_DESCRIBE_TIMEOUT_MS` before the last card. This holds in the confirming turn too, where an already approved call still waits for its lookup before it is released. Keep lookups fast and give them a short timeout of their own.
 - A hold must change nothing: it may be called again for the same call, such as when the owner's confirming message makes the call again.
 - A hold that declares only its arguments and answers at once is called as it always was. Where a host checks the hold with no turn, such as the `holds` of a test harness or a [precheck script](#precheck-scripts-prechecks-the-agent-writes)'s tool call, a hold that declares `turn` is not called; it is described as `run <tool>` and so counts as held.
 

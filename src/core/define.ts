@@ -179,14 +179,18 @@ function holdWithoutTurn<Schema extends TObject>(
 	input: Record<string, unknown>,
 ): string | undefined {
 	if (hold.length >= 2) return messages().holdGeneric(name);
-	const answer = (
-		hold as (
-			args: Static<Schema>,
-		) => string | undefined | Promise<string | undefined>
-	)(input as Static<Schema>);
-	if (!isPromise(answer)) return answer;
-	// Its answer is not waited for here; a rejection must not surface on its own.
-	answer.catch(() => undefined);
+	try {
+		const answer = (
+			hold as (
+				args: Static<Schema>,
+			) => string | undefined | Promise<string | undefined>
+		)(input as Static<Schema>);
+		if (!isPromise(answer)) return answer;
+		// Its answer is not waited for here; a rejection must not surface on its own.
+		Promise.resolve(answer).catch(() => undefined);
+	} catch {
+		// A hold that needs the turn without declaring it, or that fails: it still counts as held.
+	}
 	return messages().holdGeneric(name);
 }
 

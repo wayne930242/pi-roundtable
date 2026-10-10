@@ -152,6 +152,28 @@ describe("defineTool", () => {
 		await Bun.sleep(5);
 	});
 
+	test("a turn-using hold wrapped so it shows no arity is held generically where there is no turn, never a raw TypeError", () => {
+		const inner = (_args: { text: string }, turn: ToolTurn) =>
+			`save for ${turn.speaker?.name}`;
+		const tool = defineTool({
+			...note,
+			hold: (...args: unknown[]) =>
+				(inner as (...a: unknown[]) => string | undefined)(...args),
+		});
+		expect(tool.hold?.describe("note_add", { text: "hi" }, {})).toBe(
+			messages().holdGeneric("note_add"),
+		);
+	});
+
+	test("a hold that returns a thenable without catch is held generically where there is no turn", () => {
+		// biome-ignore lint/suspicious/noThenProperty: a thenable without catch is the case under test
+		const thenable = { then: () => undefined } as unknown as Promise<string>;
+		const tool = defineTool({ ...note, hold: () => thenable });
+		expect(tool.hold?.describe("note_add", { text: "hi" }, {})).toBe(
+			messages().holdGeneric("note_add"),
+		);
+	});
+
 	test("a hold that declares only its arguments is called as before in a turn too", async () => {
 		const tool = defineTool({
 			...note,
