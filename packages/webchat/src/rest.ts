@@ -64,6 +64,7 @@ const STATUS: Record<string, number> = {
 	unknown_persona: 404,
 	too_many_conversations: 429,
 	unknown_attachment: 400,
+	attachment_quota: 429,
 };
 
 /**

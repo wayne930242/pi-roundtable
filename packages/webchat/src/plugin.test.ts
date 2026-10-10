@@ -90,6 +90,7 @@ test("limits it cannot honour stop the configuration", () => {
 		{ attachmentBytes: 26 * 1024 * 1024 },
 		{ attachmentBytes: 0 },
 		{ attachmentsPerMessage: 1.5 },
+		{ usedAttachmentBytesPerPrincipal: 0 },
 		{ attachmentTypes: ["PNG"] },
 	])
 		expect(() => webChat({ ...base, limits })).toThrow("webChat: limits.");

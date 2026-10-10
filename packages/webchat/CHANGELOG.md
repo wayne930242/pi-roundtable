@@ -5,6 +5,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Uploads that arrive together can no longer pass `unsentUploadBytesPerPrincipal`: the room an upload may fill is reserved per person before its body is read (its declared `Content-Length`, or the room left when none is declared), so ten slow uploads against a 64 MiB allowance take at most 64 MiB, and their request buffers are bounded by it. A body longer than its declared length is cut off and refused (413).
+- A file name loses line and paragraph separators and bidi controls too (they become underscores), and a request `Content-Type` that is not a plain `type/subtype` is refused (415) even under a `/*` entry of `attachmentTypes`, so neither can add to the model's prompt.
+- Long non-ASCII file names no longer fail on Linux (see pi-roundtable 0.9.3).
+
+### Added
+
+- The limit `usedAttachmentBytesPerPrincipal` (1 GiB): what one person's messages may keep across all their conversations. A `send` that would pass it is refused whole with the error code `attachment_quota` (REST 429), and its files stay waiting. Deleting a conversation through the core gives its bytes back. It is enforced by the core of pi-roundtable 0.9.3; with 0.9.2 the limit is ignored.
+
 ## [0.9.2] - 2026-10-10
 
 ### Added

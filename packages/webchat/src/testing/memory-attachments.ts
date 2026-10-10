@@ -24,6 +24,7 @@ export function memoryAttachments(
 } {
 	const staged = new Map<string, Staged>();
 	const used: StoredAttachment[] = [];
+	const owners = new Map<string, string>();
 	let counter = 0;
 	return {
 		staged,
@@ -42,7 +43,7 @@ export function memoryAttachments(
 			staged.set(file, { principalId, channel, stored, savedAt: clock() });
 			return stored;
 		},
-		turnAttachments: async (channel, principalId, files) => {
+		turnAttachments: async (channel, principalId, files, options) => {
 			const found = files.map((file) => {
 				const entry = staged.get(file);
 				if (
@@ -56,7 +57,17 @@ export function memoryAttachments(
 					);
 				return entry.stored;
 			});
+			const taken = used
+				.filter((stored) => owners.get(stored.file) === principalId)
+				.reduce((sum, stored) => sum + stored.size, 0);
+			const added = found.reduce((sum, stored) => sum + stored.size, 0);
+			if (
+				options?.usedBytesLimit !== undefined &&
+				taken + added > options.usedBytesLimit
+			)
+				throw new AttachmentRefusal("quota_exceeded", "over the used limit");
 			for (const file of files) staged.delete(file);
+			for (const stored of found) owners.set(stored.file, principalId);
 			used.push(...found);
 			return { files: found, images: [], failures: [] };
 		},

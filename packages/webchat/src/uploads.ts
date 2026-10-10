@@ -23,6 +23,11 @@ export interface UploadLimits {
 	uploadsPerHour: number;
 	/** The bytes one person may have uploaded and not yet sent in a message; default 64 MiB. */
 	unsentUploadBytesPerPrincipal: number;
+	/**
+	 * The bytes one person's messages may keep in all their conversations, until a conversation is
+	 * deleted and gives its bytes back; default 1 GiB.
+	 */
+	usedAttachmentBytesPerPrincipal: number;
 	/** The content types accepted, such as `image/png`; an entry ending in `/*` admits every type under it. */
 	attachmentTypes: readonly string[];
 	/** How long an upload no message referenced is kept before it is deleted; default 24 hours. */
@@ -66,13 +71,20 @@ const HOUR_MS = 60 * 60_000;
 /** The longest file name accepted, in characters. */
 const NAME_CHARS = 255;
 
+/** Control characters, line and paragraph separators, and bidi controls: none reaches a prompt or a screen as it is. */
+const UNSAFE_NAME_CHARS =
+	/[\p{Cc}\p{Zl}\p{Zp}\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/gu;
+/** A plain type/subtype, the grammar a configured `attachmentTypes` entry has too. */
+const PLAIN_TYPE = /^[a-z0-9.+-]+\/[a-z0-9.+-]+$/;
+
 /**
- * A name the model can read in its prompt: control characters become underscores and quotes
- * become apostrophes, so a name cannot add lines or close the quotes around it.
+ * A name the model can read in its prompt: control and bidi characters and line separators become
+ * underscores and quotes become apostrophes, so a name cannot add lines or close the quotes
+ * around it.
  */
 function safeName(name: string | null): string {
 	const cleaned = (name ?? "")
-		.replace(/\p{Cc}/gu, "_")
+		.replace(UNSAFE_NAME_CHARS, "_")
 		.replaceAll('"', "'")
 		.trim();
 	if (cleaned === "" || cleaned.length > NAME_CHARS)
@@ -121,6 +133,10 @@ async function readLimited(
 export class Uploads {
 	readonly #deps: UploadsDeps;
 	readonly #rate: RateWindow;
+	/** The bytes each person's uploads in flight may still write, counted against their allowance. */
+	readonly #reserved = new Map<string, number>();
+	/** The last admission queued for each person, which the next one waits for. */
+	readonly #admissions = new Map<string, Promise<void>>();
 
 	constructor(deps: UploadsDeps) {
 		this.#deps = deps;
@@ -145,6 +161,51 @@ export class Uploads {
 		};
 	}
 
+	/**
+	 * Reserves the bytes an upload may write against the person's allowance, one admission at a
+	 * time per person, so uploads in flight together count against it and not only the ones saved.
+	 * Returns the bytes reserved, and the most the body may be.
+	 */
+	#admit(
+		principalId: string,
+		declared: number | undefined,
+	): Promise<{ reserved: number; cap: number }> {
+		const { limits } = this.#deps;
+		const run = async () => {
+			const holding = this.#reserved.get(principalId) ?? 0;
+			const waiting = await this.#deps.attachments().pendingBytes(principalId);
+			const room = Math.max(
+				limits.unsentUploadBytesPerPrincipal - waiting - holding,
+				0,
+			);
+			const cap = Math.min(limits.attachmentBytes, room);
+			if (declared !== undefined && declared > room)
+				throw new UploadRefusal(429, "too_many_uploads");
+			const reserved = declared === undefined ? cap : Math.min(declared, cap);
+			this.#reserved.set(principalId, holding + reserved);
+			return { reserved, cap };
+		};
+		const result = (
+			this.#admissions.get(principalId) ?? Promise.resolve()
+		).then(run);
+		const tail = result.then(
+			() => undefined,
+			() => undefined,
+		);
+		this.#admissions.set(principalId, tail);
+		void tail.then(() => {
+			if (this.#admissions.get(principalId) === tail)
+				this.#admissions.delete(principalId);
+		});
+		return result;
+	}
+
+	#release(principalId: string, reserved: number): void {
+		const left = (this.#reserved.get(principalId) ?? 0) - reserved;
+		if (left > 0) this.#reserved.set(principalId, left);
+		else this.#reserved.delete(principalId);
+	}
+
 	/** Takes the request's body as a file for `principalId` in `channel`; throws an UploadRefusal. */
 	async receive(
 		request: Request,
@@ -155,37 +216,52 @@ export class Uploads {
 		const { limits } = this.#deps;
 		const fileName = safeName(name);
 		const type = baseType(request.headers.get("content-type"));
-		if (!type || !isAllowedType(limits.attachmentTypes, type))
+		if (
+			!type ||
+			!PLAIN_TYPE.test(type) ||
+			!isAllowedType(limits.attachmentTypes, type)
+		)
 			throw new UploadRefusal(415, "unsupported_media_type");
-		const declared = Number(request.headers.get("content-length"));
-		if (Number.isFinite(declared) && declared > limits.attachmentBytes)
+		const header = request.headers.get("content-length");
+		const length = header === null ? Number.NaN : Number(header);
+		// A header that is no length is no declaration; the body is held to the room left instead.
+		const declared =
+			Number.isFinite(length) && length >= 0 ? length : undefined;
+		if (declared !== undefined && declared > limits.attachmentBytes)
 			throw new UploadRefusal(413, "payload_too_large");
 		if (!this.#rate.take(principalId))
 			throw new UploadRefusal(429, "too_many_uploads");
-		const attachments = this.#deps.attachments();
-		const waiting = await attachments.pendingBytes(principalId);
-		const room = limits.unsentUploadBytesPerPrincipal - waiting;
-		const bytes = await readLimited(
-			request,
-			Math.min(limits.attachmentBytes, Math.max(room, 0)),
-		);
-		if (!bytes)
-			throw room < limits.attachmentBytes
-				? new UploadRefusal(429, "too_many_uploads")
-				: new UploadRefusal(413, "payload_too_large");
-		if (!bytesMatchType(type, bytes))
-			throw new UploadRefusal(415, "unsupported_media_type");
-		const stored = await attachments.save(channel, principalId, {
-			name: fileName,
-			contentType: type,
-			data: bytes,
-		});
-		return {
-			file: stored.file,
-			name: stored.name,
-			contentType: stored.contentType,
-			size: stored.size,
+		const { reserved, cap } = await this.#admit(principalId, declared);
+		let held = reserved;
+		const release = () => {
+			this.#release(principalId, held);
+			held = 0;
 		};
+		try {
+			const bytes = await readLimited(request, reserved);
+			if (!bytes)
+				// A body past its declared length lied; one past the room left is the allowance's.
+				throw declared === undefined && cap < limits.attachmentBytes
+					? new UploadRefusal(429, "too_many_uploads")
+					: new UploadRefusal(413, "payload_too_large");
+			if (!bytesMatchType(type, bytes))
+				throw new UploadRefusal(415, "unsupported_media_type");
+			const stored = await this.#deps.attachments().save(channel, principalId, {
+				name: fileName,
+				contentType: type,
+				data: bytes,
+			});
+			// The saved file counts as waiting from here on.
+			release();
+			return {
+				file: stored.file,
+				name: stored.name,
+				contentType: stored.contentType,
+				size: stored.size,
+			};
+		} finally {
+			release();
+		}
 	}
 
 	/** Deletes the uploads no message used within the time to live; returns how many. */

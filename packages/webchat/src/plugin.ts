@@ -73,6 +73,7 @@ const DEFAULT_LIMITS: WebChatLimits & WebChatRouteLimits = {
 	attachmentsPerMessage: 8,
 	uploadsPerHour: 60,
 	unsentUploadBytesPerPrincipal: 64 * 1024 * 1024,
+	usedAttachmentBytesPerPrincipal: 1024 * 1024 * 1024,
 	attachmentTypes: DEFAULT_ATTACHMENT_TYPES,
 	unsentUploadTtlMs: 24 * 60 * 60_000,
 	maxConnections: 256,
@@ -119,6 +120,7 @@ function checkAttachmentLimits(limits: WebChatLimits): void {
 		"attachmentsPerMessage",
 		"uploadsPerHour",
 		"unsentUploadBytesPerPrincipal",
+		"usedAttachmentBytesPerPrincipal",
 		"unsentUploadTtlMs",
 	] as const)
 		if (!Number.isInteger(limits[key]) || limits[key] < 1)

@@ -67,7 +67,9 @@ export type ErrorCode =
 	| "too_many_conversations"
 	| "busy"
 	/** A `send` named a file that is not waiting for this person in this conversation; the whole message is refused. */
-	| "unknown_attachment";
+	| "unknown_attachment"
+	/** A `send` would take the person past `usedAttachmentBytesPerPrincipal`; the whole message is refused and its files stay waiting. */
+	| "attachment_quota";
 
 /** What a client sends: one JSON object per WebSocket text message. */
 export type ClientFrame =

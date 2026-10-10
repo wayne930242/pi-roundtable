@@ -218,7 +218,7 @@ The TypeScript types are `ClientFrame` and `ServerFrame`.
 | `{ type: "reauth", expiresAt }` | Your token expires soon: send `auth` with a fresh one. |
 | `{ type: "error", code, ref? }` | A frame was refused. `ref` is the `send` id or prompt id it was about. |
 
-Error codes: `bad_frame` (it does not parse, its text is blank or too long, or an answer the question does not allow), `unknown_conversation`, `forbidden` (someone else's conversation or prompt, or an approval above your tier), `unknown_persona` (none of that kind you may open), `unknown_prompt`, `too_many_conversations` (you hold `unusedConversationsPerPrincipal` conversations you have not written in, or opened `newConversationsPerHour` in the last hour), `unknown_attachment` (a `send` named a file that is not waiting for you in that conversation: never uploaded, uploaded to another conversation, already used by a message, or deleted after its time; the whole message is refused and nothing is run), and `busy` (you have `turnsPerPrincipal` turns running or queued, or the conversation already has a turn queued behind its running one; the message was not taken, so send it again once a turn ends).
+Error codes: `bad_frame` (it does not parse, its text is blank or too long, or an answer the question does not allow), `unknown_conversation`, `forbidden` (someone else's conversation or prompt, or an approval above your tier), `unknown_persona` (none of that kind you may open), `unknown_prompt`, `too_many_conversations` (you hold `unusedConversationsPerPrincipal` conversations you have not written in, or opened `newConversationsPerHour` in the last hour), `unknown_attachment` (a `send` named a file that is not waiting for you in that conversation: never uploaded, uploaded to another conversation, already used by a message, or deleted after its time; the whole message is refused and nothing is run), `attachment_quota` (the files would take what your messages keep past `usedAttachmentBytesPerPrincipal`; the whole message is refused and the files stay waiting), and `busy` (you have `turnsPerPrincipal` turns running or queued, or the conversation already has a turn queued behind its running one; the message was not taken, so send it again once a turn ends).
 
 Close codes: `4401` when the token expired without a fresh `auth`, or a fresh one was refused; `4403` when the person is no longer admitted, or a fresh token names someone else.
 The host's own limits close with `1008` (too many frames), `1009` (a frame too big), and `1006` (a client that stopped reading).
@@ -267,7 +267,7 @@ const { file: id } = await response.json();
 socket.send(JSON.stringify({ type: "send", id: "2", conversation, text: "Why did this fail?", attachments: [id] }));
 ```
 
-What the server checks, in this order: the conversation is the caller's (403, 404); the file name is present and at most 255 characters, with control characters replaced and quotes made apostrophes so a name cannot add lines to the model's prompt (400); the `Content-Type` is one of `limits.attachmentTypes` (415); the person has not made `uploadsPerHour` uploads in the last hour (429); the file is within `attachmentBytes`, by `Content-Length` and again while the body streams, so a body that lies about its length is cut off (413); the person's uploads waiting for a message stay within `unsentUploadBytesPerPrincipal` (429); and for PNG, JPEG, GIF, WebP and PDF the first bytes match the type (415), whatever the file name says.
+What the server checks, in this order: the conversation is the caller's (403, 404); the file name is present and at most 255 characters, with control characters, line and paragraph separators and bidi controls replaced and quotes made apostrophes so a name cannot add lines to the model's prompt (400); the `Content-Type` is a plain `type/subtype` and one of `limits.attachmentTypes` (415); the person has not made `uploadsPerHour` uploads in the last hour (429); the file is within `attachmentBytes`, by `Content-Length` and again while the body streams, so a body that lies about its length is cut off (413); the person's uploads waiting for a message stay within `unsentUploadBytesPerPrincipal` (429), the bytes of uploads still arriving counted too, so a person who starts many at once cannot pass it (an upload declares its `Content-Length` to keep the room it needs small); and for PNG, JPEG, GIF, WebP and PDF the first bytes match the type (415), whatever the file name says.
 JSON, plain text and other types have no such check, since any bytes may be labelled so.
 The default types are `image/png`, `image/jpeg`, `image/webp`, `image/gif`, `application/json`, `text/plain` and `application/pdf`; an entry ending in `/*` admits every type under it.
 An rrweb recording is an ordinary `application/json` file.
@@ -275,10 +275,11 @@ An rrweb recording is an ordinary `application/json` file.
 A `send` that names files runs the turn with them: the core moves each file into the conversation's attachment directory, shows up to four images to the model, lists every file under `## Attachments` in the turn's prompt, and lets the model read text, JSON and PDF files with `read_attachment`.
 A plugin's tool passes a file on with `turn.attachment(file)`, which returns the bytes (see the core's [plugin guide](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md)).
 A message may name at most `attachmentsPerMessage` files, a file belongs to one message, and a message that names a file that is not waiting for the person is refused whole with `unknown_attachment`.
+A message that would take the files its person's messages keep, across all their conversations, past `usedAttachmentBytesPerPrincipal` is refused whole with `attachment_quota` and its files stay waiting.
 
 An upload no message used is deleted after `unsentUploadTtlMs` (24 hours): the plugin sweeps every ten minutes, and once when the host starts.
-Files a message used stay with their conversation, in the host's data directory, as long as the conversation does.
-This plugin has no way to delete a conversation, so none of its files go with it.
+Files a message used stay with their conversation, in the host's data directory, as long as the conversation does: when the conversation is deleted, the core removes them, the uploads waiting for it, and their share of the person's allowance.
+This plugin has no way to delete a conversation itself; a host surface that deletes one does it through the core.
 
 Uploads are as private as the transcript: files sit in the host's data directory under the private conversation, where the owner and the operator can read them, as they can the transcript.
 Only the person who uploaded a file can use it, and only in the conversation it was uploaded to; a shared conversation (one recorded for no one in particular) takes no uploads.
@@ -326,6 +327,7 @@ Only the person who uploaded a file can use it, and only in the conversation it 
 | `attachmentsPerMessage` | 8 files named by one message |
 | `uploadsPerHour` | 60 uploads per person in any hour |
 | `unsentUploadBytesPerPrincipal` | 64 MiB per person uploaded and not yet used by a message |
+| `usedAttachmentBytesPerPrincipal` | 1 GiB per person kept by their messages across all conversations until a conversation is deleted; needs pi-roundtable 0.9.3 to be enforced |
 | `attachmentTypes` | `image/png`, `image/jpeg`, `image/webp`, `image/gif`, `application/json`, `text/plain`, `application/pdf` |
 | `unsentUploadTtlMs` | 24 hours before an unused upload is deleted |
 

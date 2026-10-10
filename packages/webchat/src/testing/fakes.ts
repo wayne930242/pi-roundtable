@@ -117,6 +117,7 @@ export const TEST_LIMITS: WebChatLimits = {
 	attachmentsPerMessage: 3,
 	uploadsPerHour: 100,
 	unsentUploadBytesPerPrincipal: 10_000,
+	usedAttachmentBytesPerPrincipal: 1_000_000,
 	attachmentTypes: DEFAULT_ATTACHMENT_TYPES,
 	unsentUploadTtlMs: 60_000,
 };

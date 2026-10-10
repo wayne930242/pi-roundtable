@@ -8,7 +8,7 @@ import { Refusal } from "./chat.ts";
 import { speakerOf, TEST_LIMITS, testChat } from "./testing/fakes.ts";
 
 /** A chat whose turns are recorded and answered at once, with its claim and surface linked. */
-async function linked() {
+async function linked(overrides: Parameters<typeof testChat>[0] = {}) {
 	const turns: ConversationTurnInput[] = [];
 	const runner: ConversationTurns = {
 		run: async (input) => {
@@ -24,7 +24,7 @@ async function linked() {
 			return result;
 		},
 	};
-	const harness = testChat({ turns: () => runner });
+	const harness = testChat({ turns: () => runner, ...overrides });
 	const claim = harness.chat.claim();
 	const runs: Promise<void>[] = [];
 	await harness.chat.surface.start((message: InboundMessage) => {
@@ -333,4 +333,47 @@ test("the person's waiting uploads stay for the next message after a refused one
 	});
 	await settled();
 	expect(turns[0]?.attachments?.files).toHaveLength(1);
+});
+
+test("a message that would pass the person's used-attachment limit is refused whole with attachment_quota, and its files stay waiting", async () => {
+	const { chat, connect, say, turns, settled, attachments } = await linked({
+		limits: { ...TEST_LIMITS, usedAttachmentBytesPerPrincipal: 4 },
+	});
+	const ada = connect("ada");
+	const conversation = chat.open(speakerOf("ada"), "helper");
+	const first = await chat.upload(
+		speakerOf("ada"),
+		conversation,
+		upload("123"),
+		"a.txt",
+	);
+	const second = await chat.upload(
+		speakerOf("ada"),
+		conversation,
+		upload("456"),
+		"b.txt",
+	);
+	await say(ada, {
+		type: "send",
+		id: "m1",
+		conversation,
+		text: "one",
+		attachments: [first.file],
+	});
+	await settled();
+	await say(ada, {
+		type: "send",
+		id: "m2",
+		conversation,
+		text: "two",
+		attachments: [second.file],
+	});
+	await settled();
+	expect(ada.frames.at(-1)).toEqual({
+		type: "error",
+		code: "attachment_quota",
+		ref: "m2",
+	});
+	expect(turns).toHaveLength(1);
+	expect(attachments.staged.has(second.file)).toBe(true);
 });

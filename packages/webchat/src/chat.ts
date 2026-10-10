@@ -579,6 +579,9 @@ export class WebChat {
 						channelKey(this.#deps.surface, conversation),
 						speaker.principalId,
 						files,
+						{
+							usedBytesLimit: this.#deps.limits.usedAttachmentBytesPerPrincipal,
+						},
 					);
 			} catch (error) {
 				// The refused message holds no place and opens no conversation.
@@ -586,7 +589,11 @@ export class WebChat {
 				if (!frame.conversation) this.#minted.delete(conversation);
 				if (!(error instanceof AttachmentRefusal)) throw error;
 				throw new Refusal(
-					error.code === "unknown_file" ? "unknown_attachment" : "forbidden",
+					error.code === "unknown_file"
+						? "unknown_attachment"
+						: error.code === "quota_exceeded"
+							? "attachment_quota"
+							: "forbidden",
 				);
 			}
 		}
