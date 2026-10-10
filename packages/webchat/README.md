@@ -297,6 +297,12 @@ An upload no message used is deleted after `unsentUploadTtlMs` (24 hours): the p
 Files a message used stay with their conversation, in the host's data directory, as long as the conversation does: when the conversation is deleted, the core removes them, the uploads waiting for it, and their share of the person's allowance.
 This plugin has no way to delete a conversation itself; a host surface that deletes one does it through the core.
 
+**Privacy: removing used files after a period.** A host that must not keep uploads sets the core's `attachments.retention` (`{ maxAgeMs, sweepEveryMs? }` in the host configuration; see the core's [plugin guide](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md)), for example `{ maxAgeMs: 7 * 24 * 60 * 60_000 }` to keep no upload longer than seven days after the message that used it.
+The host then deletes the files and their records, and takes their bytes off the person's `usedAttachmentBytesPerPrincipal` allowance, so a person who sends files for months is not refused with `attachment_quota` for good.
+A model or tool that asks for a removed file is told it was removed after its retention period.
+The transcript is a separate record: this removes the files, not the messages that named them or what the model said about them. Uploads that no message used are deleted after `unsentUploadTtlMs` as before, whatever the retention.
+This needs a pi-roundtable release that has `attachments.retention`; on an earlier core the plugin keeps working and files simply live as long as their conversation.
+
 Uploads are as private as the transcript: files sit in the host's data directory under the private conversation, where the owner and the operator can read them, as they can the transcript.
 Only the person who uploaded a file can use it, and only in the conversation it was uploaded to; a shared conversation (one recorded for no one in particular) takes no uploads.
 
@@ -343,7 +349,7 @@ Only the person who uploaded a file can use it, and only in the conversation it 
 | `attachmentsPerMessage` | 8 files named by one message |
 | `uploadsPerHour` | 60 uploads per person in any hour |
 | `unsentUploadBytesPerPrincipal` | 64 MiB per person uploaded and not yet used by a message; uploads arriving together are counted per web chat plugin instance, so two web chats on one host each hold a person to it separately |
-| `usedAttachmentBytesPerPrincipal` | 1 GiB per person kept by their messages across all conversations until a conversation is deleted; needs pi-roundtable 0.9.3 to be enforced |
+| `usedAttachmentBytesPerPrincipal` | 1 GiB per person kept by their messages across all conversations until a conversation is deleted or the host's `attachments.retention` removes the files; needs pi-roundtable 0.9.3 to be enforced |
 | `attachmentTypes` | `image/png`, `image/jpeg`, `image/webp`, `image/gif`, `application/json`, `text/plain`, `application/pdf` |
 | `unsentUploadTtlMs` | 24 hours before an unused upload is deleted |
 

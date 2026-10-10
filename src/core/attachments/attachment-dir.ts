@@ -7,6 +7,9 @@ export const STAGING = "attachments-pending";
 /** Where each principal's tally of used bytes per conversation is kept. */
 export const USAGE = "attachments-used";
 
+/** The record of a saved file, in a directory next to it that no file name can be. */
+export const RECORDS = ".records";
+
 /** A channel key as a single path segment. */
 export function channelSegment(channel: ChannelKey): string {
 	return channel.replace(/[^A-Za-z0-9_-]/g, "_");

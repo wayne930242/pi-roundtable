@@ -1,6 +1,8 @@
 import { join } from "node:path";
 import { extractText, getDocumentProxy } from "unpdf";
+import { wasExpired } from "../attachments/attachment-expiry.ts";
 import { isAttachmentName, plainText } from "../attachments/attachment-name.ts";
+import { AttachmentExpiredError } from "../attachments/tool-attachment.ts";
 
 /** Characters returned per read; the model can ask for a later offset. */
 export const READ_LIMIT = 60_000;
@@ -72,6 +74,8 @@ export async function readAttachment(
 	}
 	const handle = Bun.file(join(dir, file));
 	if (!(await handle.exists())) {
+		if (await wasExpired(dir, file))
+			throw new AttachmentExpiredError(plainText(file));
 		throw new Error(`no attachment named "${file}" in this channel`);
 	}
 	let bytes: Uint8Array;

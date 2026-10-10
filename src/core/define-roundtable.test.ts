@@ -252,6 +252,21 @@ describe("defineRoundtable", () => {
 		expect(options.toolTiers?.minTier("shell")).toBe("admin");
 	});
 
+	test("config.attachments.retention reaches the host options, and is absent otherwise", async () => {
+		expect(
+			(await defineRoundtable(config)).options.attachments,
+		).toBeUndefined();
+		const { options } = await defineRoundtable({
+			...config,
+			attachments: {
+				retention: { maxAgeMs: 604_800_000, sweepEveryMs: 600_000 },
+			},
+		});
+		expect(options.attachments).toEqual({
+			retention: { maxAgeMs: 604_800_000, sweepEveryMs: 600_000 },
+		});
+	});
+
 	test("the public socket takes its file mode from config.http.socketMode", async () => {
 		const { options } = await defineRoundtable({
 			...config,

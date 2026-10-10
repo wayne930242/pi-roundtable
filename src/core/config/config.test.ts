@@ -76,6 +76,36 @@ describe("resolveConfig", () => {
 		});
 	});
 
+	test("attachment retention is off by default, and kept as given", () => {
+		expect(resolveConfig(minimal).attachments).toEqual({});
+		expect(
+			resolveConfig({
+				...minimal,
+				attachments: { retention: { maxAgeMs: 604_800_000 } },
+			}).attachments,
+		).toEqual({ retention: { maxAgeMs: 604_800_000 } });
+		expect(
+			resolveConfig({
+				...minimal,
+				attachments: {
+					retention: { maxAgeMs: 604_800_000, sweepEveryMs: 600_000 },
+				},
+			}).attachments.retention,
+		).toEqual({ maxAgeMs: 604_800_000, sweepEveryMs: 600_000 });
+		expect(
+			refused({ ...minimal, attachments: { retention: { maxAgeMs: 0 } } }),
+		).toContain("config attachments.retention.maxAgeMs");
+		expect(refused({ ...minimal, attachments: { retention: {} } })).toContain(
+			"config attachments.retention.maxAgeMs",
+		);
+		expect(
+			refused({
+				...minimal,
+				attachments: { retention: { maxAgeMs: 1_000, sweepEveryMs: 0.5 } },
+			}),
+		).toContain("config attachments.retention.sweepEveryMs");
+	});
+
 	test("each person's background limits are unset by default, and set as given", () => {
 		expect(resolveConfig(minimal).background).toEqual({ perPrincipal: {} });
 		expect(

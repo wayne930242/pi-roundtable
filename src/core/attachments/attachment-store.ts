@@ -1,11 +1,12 @@
-import { createHash } from "node:crypto";
 import { mkdirSync } from "node:fs";
-import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { rename, rm, stat } from "node:fs/promises";
+import { join } from "node:path";
 import {
 	type AttachmentPort,
 	AttachmentRefusal,
 	type AttachmentUpload,
+	type ExpiredAttachments,
+	type ExpireUsedOptions,
 	type TurnAttachmentOptions,
 } from "../contract/attachments.ts";
 import type { ConversationRegistry } from "../conversations/conversation-registry.ts";
@@ -19,22 +20,24 @@ import {
 	channelSegment,
 	listDir,
 	ownerAttachmentDir,
+	RECORDS,
 	removeIfEmpty,
 	STAGING,
 	USAGE,
 } from "./attachment-dir.ts";
+import { expireUsedFiles, type UsedRecord } from "./attachment-expiry.ts";
 import { MAX_ATTACHMENT_BYTES, safeFileName } from "./attachment-fetcher.ts";
 import { isAttachmentName } from "./attachment-name.ts";
+import { principalSegment, readTally, writeTally } from "./attachment-tally.ts";
 import { modelImagesOf } from "./model-images.ts";
-
-/** The record of a saved file, in a directory next to it that no file name can be. */
-export const RECORDS = ".records";
 
 export interface AttachmentStoreOptions {
 	dataDir: string;
 	/** Read when used, once the host linked its services; undefined when no registry records conversations. */
 	registry(): Pick<ConversationRegistry, "get"> | undefined;
 	logger: Logger;
+	/** The clock that stamps the turn that takes a file; epoch milliseconds, default `Date.now`. */
+	now?: () => number;
 }
 
 interface StagedRecord {
@@ -47,35 +50,6 @@ const isRecord = (value: unknown): value is StagedRecord =>
 	value !== null &&
 	typeof (value as StagedRecord).name === "string" &&
 	typeof (value as StagedRecord).contentType === "string";
-
-/** A principal id as one path segment; hashed, so two ids never share a directory. */
-function principalSegment(principalId: string): string {
-	return createHash("sha256").update(principalId).digest("hex").slice(0, 32);
-}
-
-/** The bytes of a tally file; none when it is missing or unreadable as a number. */
-async function readTally(path: string): Promise<number> {
-	try {
-		const value = Number(await readFile(path, "utf8"));
-		return Number.isFinite(value) && value > 0 ? value : 0;
-	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code === "ENOENT") return 0;
-		throw error;
-	}
-}
-
-/** Writes a tally whole or not at all, creating its directory if a conversation's deletion removed it meanwhile. */
-async function writeTally(path: string, bytes: number): Promise<void> {
-	const temporary = `${path}.tmp`;
-	try {
-		await writeFile(temporary, String(bytes));
-	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-		await mkdir(dirname(path), { recursive: true, mode: 0o700 });
-		await writeFile(temporary, String(bytes));
-	}
-	await rename(temporary, path);
-}
 
 /**
  * The files plugins take from people outside a turn. A saved file is staged under its principal and
@@ -240,6 +214,18 @@ export class AttachmentStore implements AttachmentPort {
 					join(staging, RECORDS, `${stored.file}.json`),
 					join(target, RECORDS, `${stored.file}.json`),
 				);
+				// Who used the file and when, for the sweep that expires it and gives the tally back.
+				const used: UsedRecord = {
+					name: stored.name,
+					contentType: stored.contentType,
+					principal: principalSegment(principalId),
+					usedAt: (this.#options.now ?? Date.now)(),
+					size: stored.size,
+				};
+				await Bun.write(
+					join(target, RECORDS, `${stored.file}.json`),
+					JSON.stringify(used),
+				);
 			}
 			await writeTally(tally, before + added);
 		} catch (error) {
@@ -333,6 +319,17 @@ export class AttachmentStore implements AttachmentPort {
 			}
 		}
 		return total;
+	}
+
+	async expireUsed(options: ExpireUsedOptions): Promise<ExpiredAttachments> {
+		return expireUsedFiles(
+			{
+				dataDir: this.#options.dataDir,
+				now: this.#options.now ?? Date.now,
+				exclusive: (principal, run) => this.#exclusive(principal, run),
+			},
+			options.olderThanMs,
+		);
 	}
 
 	/** The bytes the principal's turns used, across their conversations. */

@@ -377,3 +377,55 @@ test("a message that would pass the person's used-attachment limit is refused wh
 	expect(turns).toHaveLength(1);
 	expect(attachments.staged.has(second.file)).toBe(true);
 });
+
+test("once the host expires the files messages used, the person's allowance is back and the refused message can be sent", async () => {
+	const { chat, connect, say, turns, settled, attachments } = await linked({
+		limits: { ...TEST_LIMITS, usedAttachmentBytesPerPrincipal: 4 },
+	});
+	const ada = connect("ada");
+	const conversation = chat.open(speakerOf("ada"), "helper");
+	const first = await chat.upload(
+		speakerOf("ada"),
+		conversation,
+		upload("123"),
+		"a.txt",
+	);
+	const second = await chat.upload(
+		speakerOf("ada"),
+		conversation,
+		upload("456"),
+		"b.txt",
+	);
+	await say(ada, {
+		type: "send",
+		id: "m1",
+		conversation,
+		text: "one",
+		attachments: [first.file],
+	});
+	await settled();
+	await say(ada, {
+		type: "send",
+		id: "m2",
+		conversation,
+		text: "two",
+		attachments: [second.file],
+	});
+	await settled();
+	expect(ada.frames.at(-1)).toMatchObject({ code: "attachment_quota" });
+	await Bun.sleep(5);
+	expect(await attachments.expireUsed({ olderThanMs: 1 })).toMatchObject({
+		files: 1,
+		bytes: 3,
+	});
+	await say(ada, {
+		type: "send",
+		id: "m3",
+		conversation,
+		text: "two again",
+		attachments: [second.file],
+	});
+	await settled();
+	expect(turns).toHaveLength(2);
+	expect(turns[1]?.attachments?.files).toHaveLength(1);
+});

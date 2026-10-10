@@ -5,6 +5,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `attachments.retention` (`AttachmentsConfig`, `AttachmentRetention`: `{ maxAgeMs, sweepEveryMs? }`) in the configuration, and `RoundtableOptions.attachments` for a host built by hand: the host removes the files turns used once they are `maxAgeMs` old, counted from the turn that took the file, sweeping when it starts and every `sweepEveryMs` (default one hour, at most `maxAgeMs`). It is off by default, where used files live as long as their conversation. It needs `dataDir`; a setting the host cannot keep stops the start and names it. The logs carry counts only (`files`, `bytes`, `unattributedBytes`), never a file name.
+- `AttachmentPort.expireUsed({ olderThanMs })` (`ExpireUsedOptions`, `ExpiredAttachments`), the call the sweep makes: it removes the used files older than the age and takes exactly their bytes off each owner's used-bytes tally for the conversation, under the same per-person serialization as a message taking files, so a sweep never races a turn or a conversation's deletion. The allowance behind `usedBytesLimit` (the web chat's `usedAttachmentBytesPerPrincipal`) no longer stays full for good once a host sweeps its files. A custom `AttachmentPort`, such as a test double, must add the method.
+
+### Changed
+
+- A used file's record now carries its owner (a hash, never the principal id), when a turn took it and its size. A file used before this has none: the sweep ages it by its modified time, and gives the bytes back to the one person with a tally in its conversation; with several people it removes the file and reports the bytes as `unattributedBytes` without lowering any tally.
+- `read_attachment` and `ToolTurn.attachment()` answer a file removed after its retention period with a refusal that says so, and not "no attachment named …". The removed file's record keeps only that mark: neither the person's file name nor its type.
+
 ## [0.9.8] - 2026-10-10
 
 ### Added

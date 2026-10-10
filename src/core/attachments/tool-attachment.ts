@@ -1,6 +1,7 @@
 import { join } from "node:path";
+import { RECORDS } from "./attachment-dir.ts";
+import { expiredMessage, wasExpired } from "./attachment-expiry.ts";
 import { isAttachmentName, plainText } from "./attachment-name.ts";
-import { RECORDS } from "./attachment-store.ts";
 
 /** A file someone attached to the conversation, as a tool reads it. */
 export interface ToolAttachment {
@@ -17,6 +18,15 @@ export interface ToolAttachment {
 /** A name that is no attachment of the conversation, or a file that is not there. */
 export class AttachmentLookupError extends Error {
 	override name = "AttachmentLookupError";
+}
+
+/** A file the core removed after its retention period; the message says so, with no path. */
+export class AttachmentExpiredError extends AttachmentLookupError {
+	override name = "AttachmentExpiredError";
+
+	constructor(shown: string) {
+		super(expiredMessage(shown));
+	}
 }
 
 interface Recorded {
@@ -36,10 +46,12 @@ export async function openAttachment(
 	if (!isAttachmentName(file))
 		throw new AttachmentLookupError(`"${shown}" is not an attachment name`);
 	const handle = Bun.file(join(dir, file));
-	if (!(await handle.exists()))
+	if (!(await handle.exists())) {
+		if (await wasExpired(dir, file)) throw new AttachmentExpiredError(shown);
 		throw new AttachmentLookupError(
 			`no attachment named "${shown}" in this channel`,
 		);
+	}
 	const record = Bun.file(join(dir, RECORDS, `${file}.json`));
 	const recorded: Recorded = (await record.exists()) ? await record.json() : {};
 	return {

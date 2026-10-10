@@ -543,6 +543,7 @@ A plugin whose clients upload a file themselves, over HTTP for instance, has the
 | `remove(channel, principalId, file)` | Discards a saved file no turn used; `false` when there is none |
 | `discardPending(olderThan)` | Discards every saved file no turn used that was saved before the date, and returns how many; call it from a service's timer so abandoned uploads do not pile up |
 | `pendingBytes(principalId)` | The bytes the principal has saved that no turn used yet, for a quota of your own |
+| `expireUsed({ olderThanMs })` | Removes the files turns used more than that long ago and returns `{ files, bytes, unattributedBytes }`; the owners' used-bytes tallies shrink by exactly the bytes removed. See [Retention](#retention-removing-used-files-after-a-period) |
 
 A saved file waits for its owner: only the principal that saved it can use it, and only in the conversation it was saved for.
 The conversation's record decides who may save into it: a private conversation refuses every principal but its own with an `AttachmentRefusal` whose `code` is `forbidden`, and a shared one lets each principal save and use their own files.
@@ -554,6 +555,34 @@ The core limits only the size; the types a plugin accepts, the number of files, 
 
 Once a turn has used a file, the model reads it with `read_attachment`, and a tool reads it with `turn.attachment(file)` (see [`tools`](#tools-what-agents-can-call)).
 
+#### Retention: removing used files after a period
+
+Left alone, a file a turn used lives as long as its conversation.
+A host that must not keep uploads (for privacy, say) sets a retention period, and the core removes used files that old:
+
+```ts
+export default {
+	// ...
+	attachments: { retention: { maxAgeMs: 7 * 24 * 60 * 60_000 } },
+} satisfies RoundtableConfig;
+```
+
+`maxAgeMs` counts from the turn that took the file, not from the upload, so a file that waited a day before a message used it still lives its full period.
+The host sweeps when it starts and then every `sweepEveryMs` (default one hour, never more than `maxAgeMs`); a host built without `defineRoundtable` passes the same object as `RoundtableOptions.attachments`.
+It needs a `dataDir`, and `maxAgeMs` and `sweepEveryMs` must be positive whole numbers of milliseconds: a host that cannot keep the setting stops at start and names it.
+A plugin that wants its own schedule calls `context.attachments.expireUsed({ olderThanMs })` itself.
+
+A sweep, for each person who used files:
+
+- runs with that person's other attachment calls, one after another, so it never races a message taking files; a conversation deleted meanwhile is skipped, not brought back;
+- removes the file, then replaces its record with a mark that keeps no file name or type, then takes exactly the removed bytes off that person's used-bytes tally for the conversation. A failure part way leaves a tally that is too high, never too low, and the next sweep finishes the job. The `usedBytesLimit` allowance a plugin enforces (the web chat's `usedAttachmentBytesPerPrincipal`) comes back as files expire, instead of filling for good.
+
+After that, `read_attachment` and `turn.attachment(file)` answer a clear refusal that the file "was removed after its retention period", with neither a host path nor a bare "not found". The refusal is the only trace; the person's name for the file is gone.
+Files waiting for a turn are not touched: `discardPending` is theirs.
+A file a turn used under an earlier release has no recorded owner; the sweep ages it by the file's modified time and gives its bytes back to the one person with a tally in that conversation. When several people have tallies there, it removes the file but cannot tell whose bytes they were, so no tally shrinks and the bytes are reported as `unattributedBytes`; deleting the conversation clears the tallies.
+Only files taken through `context.attachments` are covered. Files the core downloads from Discord links keep their conversation's lifetime.
+The host logs counts only (`files`, `bytes`, `unattributedBytes`), never a file name, and a failed sweep only its error code.
+
 ### `tools`: what agents can call
 
 `defineTool` takes a name (lowercase words joined by underscores), a description the model reads to decide when to call it, a Typebox parameter schema, the lowest tier that may call it, and the function.
@@ -561,7 +590,7 @@ Once a turn has used a file, the model reads it with `read_attachment`, and a to
 `turn.workspace` is `{ workspace, scratchDir? }` in a session with a shared workspace (an agent's), the same roots as `SessionContext.workspace`, and undefined elsewhere: a tool that makes a file can save it there, under the scratch dir when there is one, and name its path, so the model sends it on with `attach_file` or a `discord_send_message` file `path` instead of carrying its bytes.
 It returns the text the model reads.
 `turn.attachment(file)` opens a file someone attached to the conversation, by the name the turn's `## Attachments` block lists, and returns `{ file, name, contentType, size, bytes() }`: a tool passes a user's file on without the model carrying its bytes.
-Only the conversation's own files open; a path, a hidden name, or a missing file throws a `ToolRefusal` the model reads.
+Only the conversation's own files open; a path, a hidden name, or a missing file throws a `ToolRefusal` the model reads, and so does a file the host's [retention period](#retention-removing-used-files-after-a-period) removed, which says so.
 Throw `ToolRefusal` for a call the model should correct; any other error fails the call.
 
 <!-- example: examples/tools.ts -->
@@ -3316,7 +3345,9 @@ Import from the entries listed below; source area files are internal.
 | `AttachmentRef` | `pi-roundtable` | type |
 | `AttachmentRefusal` | `pi-roundtable` | value |
 | `AttachmentRefusalCode` | `pi-roundtable` | type |
+| `AttachmentRetention` | `pi-roundtable` | type |
 | `AttachmentUpload` | `pi-roundtable` | type |
+| `AttachmentsConfig` | `pi-roundtable` | type |
 | `AvatarMode` | `pi-roundtable` | type |
 | `AvatarStudio` | `pi-roundtable` | type |
 | `BACKGROUND_TURNS` | `pi-roundtable` | value |
@@ -3355,6 +3386,8 @@ Import from the entries listed below; source area files are internal.
 | `DrainOptions` | `pi-roundtable` | type |
 | `EventHandlers` | `pi-roundtable` | type |
 | `EventSink` | `pi-roundtable` | type |
+| `ExpireUsedOptions` | `pi-roundtable` | type |
+| `ExpiredAttachments` | `pi-roundtable` | type |
 | `GroupStatus` | `pi-roundtable` | type |
 | `HeldActionStore` | `pi-roundtable` | type |
 | `HeldCall` | `pi-roundtable` | type |

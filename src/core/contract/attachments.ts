@@ -44,6 +44,26 @@ export interface TurnAttachmentOptions {
 	usedBytesLimit?: number;
 }
 
+/** What `expireUsed` asks: how old a used file must be to go. */
+export interface ExpireUsedOptions {
+	/** Files a turn used more than this many milliseconds ago are removed. */
+	olderThanMs: number;
+}
+
+/** What `expireUsed` removed. */
+export interface ExpiredAttachments {
+	/** How many used files were removed. */
+	files: number;
+	/** Their bytes; the owners' used-bytes tallies shrank by as much, less `unattributedBytes`. */
+	bytes: number;
+	/**
+	 * Bytes of removed files whose owner the core could not tell, because a turn used them before
+	 * the core recorded owners and their conversation has more than one person's tally. The files
+	 * are gone, but no tally shrank for them; deleting the conversation clears the tallies.
+	 */
+	unattributedBytes: number;
+}
+
 /**
  * Files a plugin takes from a person outside a turn, such as an upload over HTTP, kept for the
  * conversation until a turn uses them. A saved file waits for its person: only the principal that
@@ -89,4 +109,15 @@ export interface AttachmentPort {
 	discardPending(olderThan: Date): Promise<number>;
 	/** The bytes the principal has saved that no turn used yet, across their conversations. */
 	pendingBytes(principalId: string): Promise<number>;
+	/**
+	 * Removes the files turns used more than `olderThanMs` ago, and lowers each owner's used-bytes
+	 * tally for the conversation by exactly the bytes removed, so the allowance `usedBytesLimit`
+	 * checks comes back. The age counts from the turn that took the file, not from its upload. It
+	 * runs one after another with that person's other calls, so it never races a message taking
+	 * files. A removed file leaves a mark without its name: `read_attachment` and
+	 * `ToolTurn.attachment()` then say the file was removed after its retention period. Files
+	 * waiting for a turn are not touched; `discardPending` is theirs. A host sets
+	 * `attachments.retention` to run this on a timer.
+	 */
+	expireUsed(options: ExpireUsedOptions): Promise<ExpiredAttachments>;
 }

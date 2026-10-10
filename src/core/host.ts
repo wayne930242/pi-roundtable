@@ -1,5 +1,9 @@
 import type { SQL } from "bun";
 import { attachmentPort } from "./attachments/attachment-port.ts";
+import {
+	type AttachmentRetention,
+	retentionServices,
+} from "./attachments/attachment-retention.ts";
 import type { ConversationPort } from "./contract/channels.ts";
 import type { SurfacePort } from "./contract/surface.ts";
 import { openPool, runMigrations } from "./db/migrations.ts";
@@ -82,6 +86,13 @@ export interface RoundtableOptions {
 	database?: { url: string };
 	/** The directory the host keeps files in; `context.attachments` keeps its files there. Without it that port refuses every call. */
 	dataDir?: string;
+	/**
+	 * What the host does with the attachments it keeps. `retention` removes the files turns used once
+	 * they are `maxAgeMs` old, sweeping at start and every `sweepEveryMs` (default one hour), and gives
+	 * the owners' used-bytes allowance back; without it used files live as long as their conversation.
+	 * Needs `dataDir`.
+	 */
+	attachments?: { retention?: AttachmentRetention };
 	/** Receives the work a shutdown drain gave up on, before any service stops. */
 	aborted?: (left: string[]) => Promise<void>;
 	/**
@@ -270,6 +281,17 @@ export class Roundtable {
 		this.#services = new ServiceRegistry(this.#active);
 		this.#services.checkRequires();
 		const providers = resolveProviders(this.#active, this.#options.judgeModel);
+		const attachments = attachmentPort({
+			dataDir: this.#options.dataDir,
+			registry: () => this.#services?.find(CONVERSATIONS),
+			logger,
+		});
+		const retention = retentionServices(
+			this.#options.attachments?.retention,
+			this.#options.dataDir,
+			attachments,
+			logger,
+		);
 		await this.#migrate();
 		this.#registry = await collectContributions(
 			this.#active,
@@ -287,11 +309,7 @@ export class Roundtable {
 				toolTiers: this.#tiers,
 				events: this.#events.sink,
 				conversations: this.#conversations(),
-				attachments: attachmentPort({
-					dataDir: this.#options.dataDir,
-					registry: () => this.#services?.find(CONVERSATIONS),
-					logger,
-				}),
+				attachments,
 				surfaces: this.#surfaces(),
 				turns: this.#turns(),
 				database: () => {
@@ -331,7 +349,7 @@ export class Roundtable {
 		});
 		const http = new HttpListeners(listeners, routes, logger);
 		for (const plugin of this.#active) await plugin.preflight?.();
-		for (const service of this.#registry.services) {
+		for (const service of [...this.#registry.services, ...retention]) {
 			await service.start?.();
 			this.#started.push(service);
 		}

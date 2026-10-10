@@ -26,6 +26,7 @@ import {
 	type ResolvedDiscord,
 	resolvedDiscord,
 } from "./adapters.ts";
+import { type AttachmentsConfig, attachmentsShape } from "./attachments.ts";
 import {
 	bool,
 	guarded,
@@ -98,6 +99,8 @@ export interface RoundtableConfig {
 	database: { url: string };
 	/** Where the process keeps its files, such as pictures, attachments, and skills. */
 	dataDir: string;
+	/** What the host does with the files people send, such as removing them after a retention period. */
+	attachments?: AttachmentsConfig;
 	/** Pi's agent directory, holding the model logins; default `<dataDir>/pi`. */
 	agentDir?: string;
 	/** The model of the agents, written `<provider>/<id>`. */
@@ -211,6 +214,7 @@ const schema = shape({
 	discord: optional(discordShape),
 	database: shape({ url: text }),
 	dataDir: text,
+	attachments: attachmentsShape,
 	agentDir: optional(text),
 	model: text,
 	thinking: optional(oneOf(...THINKING_LEVELS)),
@@ -306,6 +310,8 @@ export interface ResolvedConfig {
 	discord?: ResolvedDiscord;
 	databaseUrl: string;
 	dataDir: string;
+	/** Absent `retention`: used files live as long as their conversation. */
+	attachments: AttachmentsConfig;
 	agentDir: string;
 	model: ModelRef;
 	thinking: ThinkingLevel;
@@ -421,6 +427,9 @@ export function resolveConfig(input: unknown): ResolvedConfig {
 		...(discord ? { discord: resolvedDiscord(discord, slug) } : {}),
 		databaseUrl: config.database.url,
 		dataDir: config.dataDir,
+		attachments: config.attachments?.retention
+			? { retention: config.attachments.retention }
+			: {},
 		agentDir: config.agentDir ?? `${config.dataDir}/pi`,
 		model,
 		thinking,

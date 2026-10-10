@@ -28,6 +28,7 @@ export function attachmentPort(options: {
 			remove: refuse,
 			discardPending: refuse,
 			pendingBytes: refuse,
+			expireUsed: refuse,
 		};
 	}
 	return new AttachmentStore({ dataDir, registry, logger });

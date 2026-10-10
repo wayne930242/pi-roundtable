@@ -279,6 +279,9 @@ export async function defineRoundtable(
 			},
 			database: { url: config.databaseUrl },
 			dataDir: config.dataDir,
+			...(config.attachments.retention
+				? { attachments: { retention: config.attachments.retention } }
+				: {}),
 			toolTiers: toolTiers(config.toolTiers, logger),
 			listeners: [
 				...(config.http ? [publicListener(config.http)] : []),

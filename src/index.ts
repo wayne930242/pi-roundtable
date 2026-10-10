@@ -16,6 +16,7 @@ export type {
 	GroupStatus,
 	TeamStatus,
 } from "./core/agents/team-status.ts";
+export type { AttachmentRetention } from "./core/attachments/attachment-retention.ts";
 export type { ToolAttachment } from "./core/attachments/tool-attachment.ts";
 export {
 	AGENT_SERVER_PLUGIN,
@@ -26,6 +27,7 @@ export type {
 	AccessOwnerConfig,
 	AccessTierConfig,
 } from "./core/config/access.ts";
+export type { AttachmentsConfig } from "./core/config/attachments.ts";
 export type {
 	AdapterConfig,
 	BackgroundConfig,
@@ -38,6 +40,8 @@ export type {
 	AttachmentPort,
 	AttachmentRefusalCode,
 	AttachmentUpload,
+	ExpiredAttachments,
+	ExpireUsedOptions,
 	TurnAttachmentOptions,
 } from "./core/contract/attachments.ts";
 export { AttachmentRefusal } from "./core/contract/attachments.ts";

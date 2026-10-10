@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- A privacy note in the README for the core's `attachments.retention`: a host can have the files messages used removed after a period, which also gives the person's `usedAttachmentBytesPerPrincipal` allowance back. The plugin needs no setting of its own for it. `memoryAttachments` (the test double) implements the port's new `expireUsed`.
+
 ## [0.9.8] - 2026-10-10
 
 - Release in lockstep with pi-roundtable 0.9.8; no package-specific behavior changes.

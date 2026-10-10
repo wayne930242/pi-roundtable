@@ -14,7 +14,8 @@ interface Staged {
 
 /**
  * The attachment port in memory: a saved file waits for its principal in its channel, a turn uses
- * it once, and `discardPending` drops what is older than the date. `clock` stamps saved files.
+ * it once, `discardPending` drops what is older than the date, and `expireUsed` drops the used files
+ * older than the age. `clock` stamps saved and used files.
  */
 export function memoryAttachments(
 	clock: () => number = Date.now,
@@ -25,6 +26,7 @@ export function memoryAttachments(
 	const staged = new Map<string, Staged>();
 	const used: StoredAttachment[] = [];
 	const owners = new Map<string, string>();
+	const usedAt = new Map<string, number>();
 	let counter = 0;
 	return {
 		staged,
@@ -67,7 +69,10 @@ export function memoryAttachments(
 			)
 				throw new AttachmentRefusal("quota_exceeded", "over the used limit");
 			for (const file of files) staged.delete(file);
-			for (const stored of found) owners.set(stored.file, principalId);
+			for (const stored of found) {
+				owners.set(stored.file, principalId);
+				usedAt.set(stored.file, clock());
+			}
 			used.push(...found);
 			return { files: found, images: [], failures: [] };
 		},
@@ -89,6 +94,18 @@ export function memoryAttachments(
 					dropped += 1;
 				}
 			return dropped;
+		},
+		expireUsed: async ({ olderThanMs }) => {
+			const result = { files: 0, bytes: 0, unattributedBytes: 0 };
+			for (const [index, stored] of used.entries().toArray().reverse()) {
+				if ((usedAt.get(stored.file) ?? 0) >= clock() - olderThanMs) continue;
+				used.splice(index, 1);
+				owners.delete(stored.file);
+				usedAt.delete(stored.file);
+				result.files += 1;
+				result.bytes += stored.size;
+			}
+			return result;
 		},
 		pendingBytes: async (principalId) =>
 			[...staged.values()]
