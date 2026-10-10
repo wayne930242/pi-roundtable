@@ -58,7 +58,7 @@
 		"check:packages": "bun run --workspaces typecheck && bun run --workspaces lint && bun run --workspaces --sequential test"
 	},
 	"dependencies": {
-		"@babel/parser": "7.29.9",
+		"@babel/parser": "8.0.6",
 		"@babel/types": "7.29.8",
 		"@earendil-works/pi-ai": ">=0.99.2 <2",
 		"@earendil-works/pi-coding-agent": ">=0.99.2 <2",
