@@ -106,6 +106,8 @@ Each tool draws one PNG and attaches it to the agent's reply with `turn.attachFi
 The model reads a short text back (the file name, and for card draws the cards), and a request it can fix comes back as a refusal with a plain message, such as `An edge references the unknown node "Ghost". Add it to nodes or fix the edge.`
 Nothing is attached for a refused call.
 
+In a session with a workspace (an agent's), the tool also saves the picture as `<scratchDir>/drawings/<tool>-<timestamp>.png`, or under the workspace when there is no scratch dir, and its result names that path, so the model can send the picture elsewhere with `attach_file` or a `discord_send_message` file `path` (pi-roundtable 0.9.4 or later). The picture's bytes never return to the model. A session with neither, such as a sandbox or an owner conversation, only attaches it.
+
 The tool does not send a message of its own: the host delivers the picture with the reply of the turn, after the agent's text, under the same name and avatar as the text.
 On Discord each picture goes out as one file in its own message.
 

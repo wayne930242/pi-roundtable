@@ -1,5 +1,13 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { rmSync } from "node:fs";
+import {
+	existsSync,
+	mkdtempSync,
+	readdirSync,
+	readFileSync,
+	rmSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
 	definePlugin,
 	REPLY_FILE_LIMITS,
@@ -328,6 +336,46 @@ describe("refusals", () => {
 		).rejects.toBeInstanceOf(ReplyFileError);
 		expect(harness.files).toHaveLength(0);
 		await harness.stop();
+	});
+
+	test("with a scratch dir the picture is attached and also saved there, and the result names the path", async () => {
+		const root = mkdtempSync(join(tmpdir(), "drawing-save-"));
+		const scratchDir = join(root, "scratch");
+		const workspace = join(root, "work");
+		const { harness } = await open({ random: seededRandom(1) });
+		const text = await harness.runTool(
+			"sigil_generate",
+			{ intention: "home", method: "chaos" },
+			{ workspace: { workspace, scratchDir } },
+		);
+		expect(harness.files).toHaveLength(1);
+		const saved = readdirSync(join(scratchDir, "drawings"));
+		expect(saved).toHaveLength(1);
+		expect(saved[0]).toMatch(/^sigil_generate-.+\.png$/);
+		const path = join(scratchDir, "drawings", saved[0] as string);
+		expect(text).toContain(path);
+		expect(text).toMatch(/discord_send_message or attach_file/);
+		expect(
+			Buffer.from(readFileSync(path)).equals(
+				Buffer.from(harness.files[0]?.file.data ?? []),
+			),
+		).toBe(true);
+		expect(existsSync(join(workspace, "drawings"))).toBe(false);
+		await harness.stop();
+		rmSync(root, { recursive: true, force: true });
+	});
+
+	test("without a scratch dir the picture is saved in the workspace", async () => {
+		const workspace = mkdtempSync(join(tmpdir(), "drawing-save-"));
+		const { harness } = await open({ random: seededRandom(1) });
+		const text = await harness.runTool("relationship_map", MAP, {
+			workspace: { workspace },
+		});
+		const saved = readdirSync(join(workspace, "drawings"));
+		expect(saved).toHaveLength(1);
+		expect(text).toContain(join(workspace, "drawings", saved[0] as string));
+		await harness.stop();
+		rmSync(workspace, { recursive: true, force: true });
 	});
 
 	test("a surface that cannot carry files fails the call instead of dropping the picture", async () => {

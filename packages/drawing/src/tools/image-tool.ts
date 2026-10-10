@@ -1,3 +1,5 @@
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import {
 	defineTool,
 	REPLY_FILE_LIMITS,
@@ -63,7 +65,31 @@ function checkArguments<Schema extends TObject>(
 }
 
 /**
- * A tool that draws one image and attaches it to the agent's reply as a file. A request the renderer
+ * Saves a picture under the session's scratch dir, or its workspace without one, so the model can
+ * send it on by path; says where, or why not. A session with neither saves nothing.
+ */
+async function saveDrawing(
+	tool: string,
+	image: Uint8Array,
+	turn: ToolTurn,
+): Promise<string | undefined> {
+	const root = turn.workspace?.scratchDir ?? turn.workspace?.workspace;
+	if (root === undefined) return undefined;
+	const dir = join(root, "drawings");
+	const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+	const path = join(dir, `${tool}-${stamp}.png`);
+	try {
+		await mkdir(dir, { recursive: true });
+		await writeFile(path, image, { flag: "wx" });
+	} catch (error) {
+		return `It was not saved to a file (${error instanceof Error ? error.message : String(error)}).`;
+	}
+	return `It is also saved at ${path}; to send it elsewhere, give this path to discord_send_message or attach_file rather than reading it.`;
+}
+
+/**
+ * A tool that draws one image, attaches it to the agent's reply as a file, and saves it in the
+ * session's scratch dir or workspace when it has one. A request the renderer
  * cannot honour comes back to the model as a refusal it can correct.
  */
 export function imageTool<Schema extends TObject>(
@@ -91,7 +117,9 @@ export function imageTool<Schema extends TObject>(
 					`The picture is ${(drawn.image.byteLength / 2 ** 20).toFixed(1)} MiB, over the ${REPLY_FILE_LIMITS.maxFileBytes / 2 ** 20} MiB a reply may carry. Ask for a smaller picture, such as fewer cards or a smaller size.`,
 				);
 			turn.attachFile({ name, data: drawn.image });
-			return drawn.text.replace("{file}", name);
+			const text = drawn.text.replace("{file}", name);
+			const saved = await saveDrawing(spec.name, drawn.image, turn);
+			return saved ? `${text}\n\n${saved}` : text;
 		},
 	});
 }
