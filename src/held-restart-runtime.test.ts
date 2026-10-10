@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -11,6 +11,8 @@ import {
 } from "@earendil-works/pi-ai";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import { ownerAttachmentDir } from "./core/attachments/attachment-dir.ts";
+import { AttachmentStore } from "./core/attachments/attachment-store.ts";
 import type { HeldActionStore, RuntimeDeps } from "./core/contract/runtime.ts";
 import { definePlugin, defineTool } from "./core/define.ts";
 import type {
@@ -18,6 +20,7 @@ import type {
 	PendingConfirmation,
 } from "./core/domain/conversation.ts";
 import type { TurnConversation } from "./core/domain/ports.ts";
+import { silentLogger } from "./core/log.ts";
 import { CONFIRMATION_TTL_MS } from "./core/runtime/extensions/confirmation-gate.ts";
 import { PiAgentRuntime } from "./core/runtime/pi-agent-runtime.ts";
 import type { AgentTurnScope } from "./core/sessions.ts";
@@ -207,6 +210,7 @@ async function host(responses: FauxResponseStep[]) {
 		},
 	};
 	return {
+		dir,
 		ran,
 		store,
 		core,
@@ -317,6 +321,40 @@ describe("held actions after a restart", () => {
 			await h.turn(AGENT.home, "yes", { agent: AGENT, confirmed: true });
 			expect(h.ran.probe).toBe(1);
 			expect(await h.store.load(AGENT.session)).toBeUndefined();
+		} finally {
+			await h.stop();
+		}
+	});
+
+	test("deleting a conversation removes the files its turns used and the files waiting for it", async () => {
+		const h = await host([]);
+		try {
+			const attachments = new AttachmentStore({
+				dataDir: h.dir,
+				registry: () => undefined,
+				logger: silentLogger(),
+			});
+			const upload = (name: string) => ({
+				name,
+				contentType: "text/plain",
+				data: new TextEncoder().encode("x"),
+			});
+			const used = await attachments.save("fake:dm", "owner", upload("a.txt"));
+			await attachments.turnAttachments("fake:dm", "owner", [used.file]);
+			const waiting = await attachments.save(
+				"fake:dm",
+				"owner",
+				upload("b.txt"),
+			);
+			const other = await attachments.save(
+				"fake:room",
+				"owner",
+				upload("c.txt"),
+			);
+			await h.runtime().deleteConversation("fake:dm");
+			expect(existsSync(ownerAttachmentDir(h.dir, "fake:dm"))).toBe(false);
+			expect(existsSync(waiting.path)).toBe(false);
+			expect(existsSync(other.path)).toBe(true);
 		} finally {
 			await h.stop();
 		}

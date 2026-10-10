@@ -5,6 +5,7 @@ import type {
 	AttachmentRef,
 	StoredAttachment,
 } from "../domain/attachment.ts";
+import { plainText } from "./attachment-name.ts";
 
 export const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 
@@ -22,13 +23,36 @@ export interface FetchResult {
 	failures: AttachmentFailure[];
 }
 
-/** Keeps a file name readable while removing path separators and control characters. */
+/** The most UTF-8 bytes a stored name keeps; a file system takes 255 bytes for the whole file name. */
+const MAX_NAME_BYTES = 150;
+
+const utf8Length = (codePoint: number): number =>
+	codePoint < 0x80 ? 1 : codePoint < 0x800 ? 2 : codePoint < 0x10000 ? 3 : 4;
+
+/** The end of `text` that fits `max` UTF-8 bytes, cut on a code point. */
+function lastBytes(text: string, max: number): string {
+	const points = [...text];
+	let bytes = 0;
+	let start = points.length;
+	while (start > 0) {
+		const size = utf8Length(points[start - 1]?.codePointAt(0) ?? 0);
+		if (bytes + size > max) break;
+		bytes += size;
+		start -= 1;
+	}
+	return points.slice(start).join("");
+}
+
+/**
+ * Keeps a file name readable while removing path separators and control characters, and keeps the
+ * end of a long name (its extension) within 150 UTF-8 bytes so a prefix and a record suffix still
+ * fit the 255 bytes a file system takes.
+ */
 export function safeFileName(name: string): string {
-	const cleaned = name
-		.normalize("NFC")
-		.replace(/[/\\\p{Cc}]/gu, "_")
-		.replace(/^\.+/, "_")
-		.slice(-120);
+	const cleaned = lastBytes(
+		plainText(name.toWellFormed().normalize("NFC").replace(/[/\\]/g, "_")),
+		MAX_NAME_BYTES,
+	).replace(/^\.+/, "_");
 	return cleaned || "file";
 }
 

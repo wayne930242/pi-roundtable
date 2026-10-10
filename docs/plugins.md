@@ -538,14 +538,16 @@ A plugin whose clients upload a file themselves, over HTTP for instance, has the
 | Call | What it does |
 |---|---|
 | `save(channel, principalId, { name, contentType, data })` | Keeps the file for that principal in that conversation and returns a `StoredAttachment`; its `file` is the name to hand back to the client. Refuses a file over 25 MiB (`too_large`) |
-| `turnAttachments(channel, principalId, files)` | Takes the `file` names `save` returned and returns the turn's `TurnAttachments`; pass it as `attachments` to [`turns.run`](#personas-and-contextturns-conversations-of-a-kind-of-your-own). Each file moves into the conversation's attachment directory, up to four images are prepared for the model, and the turn's prompt lists every file under `## Attachments`. Refuses the whole set when one name is unknown or already used (`unknown_file`); then none moves |
+| `turnAttachments(channel, principalId, files, options?)` | Takes the `file` names `save` returned and returns the turn's `TurnAttachments`; pass it as `attachments` to [`turns.run`](#personas-and-contextturns-conversations-of-a-kind-of-your-own). Each file moves into the conversation's attachment directory, up to four images are prepared for the model, and the turn's prompt lists every file under `## Attachments`. Refuses the whole set when one name is unknown or already used (`unknown_file`), or when `options.usedBytesLimit` would be passed (`quota_exceeded`); then none moves, even when other calls for the same principal run at once |
 | `remove(channel, principalId, file)` | Discards a saved file no turn used; `false` when there is none |
 | `discardPending(olderThan)` | Discards every saved file no turn used that was saved before the date, and returns how many; call it from a service's timer so abandoned uploads do not pile up |
 | `pendingBytes(principalId)` | The bytes the principal has saved that no turn used yet, for a quota of your own |
 
 A saved file waits for its owner: only the principal that saved it can use it, and only in the conversation it was saved for.
 The conversation's record decides who may save into it: a private conversation refuses every principal but its own with an `AttachmentRefusal` whose `code` is `forbidden`, and a shared one lets each principal save and use their own files.
-A channel with no record yet, such as a conversation opened but not written in, is not checked; the plugin that owns the channel checks it, as the web chat does before it saves.
+**The plugin that owns a channel checks that the caller may use it, before every call.** The port knows only the conversation's record: a channel with no record yet, such as a conversation opened but not written in, is admitted for every principal, and so is every channel on a host with no conversation registry. A plugin that takes the channel key from a person (a URL, a frame) and passes it on unchecked lets that person stage files into, and move files into the attachment directory of, a conversation that is not theirs. Check first that the channel is the person's, as the web chat does before it saves or uses a file.
+`usedBytesLimit` caps what one principal's turns keep, across all their conversations; the core sets no limit of its own, and a deleted conversation gives its bytes back.
+Deleting a conversation (`runtime.deleteConversation`) also removes its attachment directory, the files saved for it that no turn used, and its share of the tally.
 The calls reject with `AttachmentRefusal`, and throw a `PluginError` when the host has no `dataDir` (a host built by `defineRoundtable` always has one).
 The core limits only the size; the types a plugin accepts, the number of files, and the rate are its own to limit.
 
@@ -3429,6 +3431,7 @@ Import from the entries listed below; source area files are internal.
 | `ToolTurn` | `pi-roundtable` | type |
 | `TranscriptEntry` | `pi-roundtable` | type |
 | `TransientTask` | `pi-roundtable` | type |
+| `TurnAttachmentOptions` | `pi-roundtable` | type |
 | `TurnAttachments` | `pi-roundtable` | type |
 | `TurnConversation` | `pi-roundtable` | type |
 | `TurnEndEvent` | `pi-roundtable` | type |

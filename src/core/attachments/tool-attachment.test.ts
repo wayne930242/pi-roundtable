@@ -69,10 +69,25 @@ describe("openAttachment", () => {
 	test("refuses a path, a hidden name, and a file that is not there", async () => {
 		const dir = scratch();
 		await Bun.write(join(dir, "a.txt"), "x");
-		for (const bad of ["../a.txt", "sub/a.txt", ".records", "", "missing.txt"])
+		for (const bad of [
+			"../a.txt",
+			"sub/a.txt",
+			".records",
+			"",
+			"missing.txt",
+			"a\0b",
+		])
 			await expect(openAttachment(dir, bad)).rejects.toThrow(
 				/not an attachment name|no attachment named/,
 			);
+	});
+
+	test("never puts the directory in an error", async () => {
+		const dir = scratch();
+		for (const bad of ["a\0b", "missing.txt"]) {
+			const error = await openAttachment(dir, bad).catch((e: unknown) => e);
+			expect(String((error as Error).message)).not.toContain(dir);
+		}
 	});
 });
 

@@ -3,7 +3,10 @@ import {
 	type ModelRuntime,
 	SessionManager,
 } from "@earendil-works/pi-coding-agent";
-import { ownerAttachmentDir } from "../attachments/attachment-dir.ts";
+import {
+	discardConversationFiles,
+	ownerAttachmentDir,
+} from "../attachments/attachment-dir.ts";
 import { withAttachmentsBlock } from "../attachments/prompt-block.ts";
 import type { AgentRuntime } from "../contract/runtime.ts";
 import { NO_ATTACHMENTS, type TurnAttachments } from "../domain/attachment.ts";
@@ -447,6 +450,7 @@ export class PiAgentRuntime implements AgentRuntime {
 	async deleteConversation(channel: ChannelKey): Promise<void> {
 		await this.#sessions.forget(channel);
 		rmSync(this.#factory.sessionDir(channel), { recursive: true, force: true });
+		await discardConversationFiles(this.#options.dataDir, channel);
 		this.#options.logger.info({ channel }, "conversation deleted");
 	}
 

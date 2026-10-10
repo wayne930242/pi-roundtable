@@ -1,4 +1,8 @@
 import type { TurnAttachments } from "../domain/attachment.ts";
+import { plainContentType, plainText } from "./attachment-name.ts";
+
+/** A name a prompt can quote: no control or bidi characters, and no quote to close it early. */
+const quotable = (name: string): string => plainText(name).replaceAll('"', "'");
 
 function formatSize(bytes: number): string {
 	if (bytes < 1024) return `${bytes} B`;
@@ -19,13 +23,13 @@ export function withAttachmentsBlock(
 	for (const file of attachments.files) {
 		const origin = file.fromReference ? ", from the replied-to message" : "";
 		lines.push(
-			`- ${file.file} (original name "${file.name}", ${file.contentType}, ${formatSize(file.size)}${origin})`,
+			`- ${plainText(file.file)} (original name "${quotable(file.name)}", ${plainContentType(file.contentType)}, ${formatSize(file.size)}${origin})`,
 		);
 	}
 	for (const failure of attachments.failures) {
 		const origin = failure.fromReference ? " from the replied-to message" : "";
 		lines.push(
-			`- "${failure.name}"${origin} could not be received: ${failure.reason}`,
+			`- "${quotable(failure.name)}"${origin} could not be received: ${failure.reason}`,
 		);
 	}
 	if (lines.length === 0) return text;

@@ -224,6 +224,7 @@
 			"ToolTurn",
 			"TranscriptEntry",
 			"TransientTask",
+			"TurnAttachmentOptions",
 			"TurnAttachments",
 			"TurnConversation",
 			"TurnEndEvent",

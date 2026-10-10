@@ -5,6 +5,23 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- A long non-ASCII upload name no longer fails with `ENAMETOOLONG` on Linux: a stored file name is cut by UTF-8 bytes (150 at most, on a code point, keeping the end so the extension stays) instead of by UTF-16 units, so the file name and its `.json` record fit the 255 bytes a file system takes. A leading dot left by the cut is replaced too. The Discord download path shares the fix. `AttachmentPort.save` removes the data file when the record write fails, so a half-saved file no longer counts as waiting.
+- Calls on one principal's attachments run one after another, so two messages that name overlapping files no longer leave the refused one's other files moved into the conversation: `turnAttachments` moves the whole set or none, rolls back a partial move, and answers a file a sweep or a message took meanwhile with `AttachmentRefusal` (`unknown_file`) instead of a raw `ENOENT`.
+- The `## Attachments` block prints a name and a content type a prompt can trust: control characters, line and paragraph separators and bidi controls in a name become underscores and quotes become apostrophes, and a content type that is not a plain `type/subtype` prints as `application/octet-stream`.
+- `ToolTurn.attachment()` and `read_attachment` refuse a name with a NUL byte as "not an attachment name"; a NUL name no longer surfaces a runtime error that quoted the host's attachment directory, and a file that cannot be read reports its name, not its path.
+- `discardPending` removes the staging directories it emptied, so a conversation's uploads leave no empty directories behind.
+- `deleteConversation` of the Pi runtime removes the conversation's attachment directory, the files saved for it that no turn used, and its share of the used-bytes tally, so a deleted conversation keeps no files.
+
+### Added
+
+- `TurnAttachmentOptions` and `AttachmentPort.turnAttachments(channel, principalId, files, options?)`: `options.usedBytesLimit` caps the bytes one principal's turns keep across all their conversations. A call that would pass it moves nothing and is refused with the new `AttachmentRefusalCode` `quota_exceeded`; without it the core sets no limit. The core tallies the bytes per principal and conversation, and deleting a conversation gives its bytes back.
+
+### Documented
+
+- The guide says what the port checks (a private conversation's record) and what it does not: a channel with no record, or any channel on a host with no conversation registry, is admitted for every principal, so the plugin that owns a channel checks that the caller may use it before every call.
+
 ## [0.9.2] - 2026-10-10
 
 ### Added

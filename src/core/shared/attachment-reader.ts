@@ -1,5 +1,6 @@
-import { basename, join } from "node:path";
+import { join } from "node:path";
 import { extractText, getDocumentProxy } from "unpdf";
+import { isAttachmentName, plainText } from "../attachments/attachment-name.ts";
 
 /** Characters returned per read; the model can ask for a later offset. */
 export const READ_LIMIT = 60_000;
@@ -66,8 +67,8 @@ export async function readAttachment(
 	file: string,
 	offset = 0,
 ): Promise<ReadResult> {
-	if (basename(file) !== file || file.startsWith(".")) {
-		throw new Error(`"${file}" is not an attachment name`);
+	if (!isAttachmentName(file)) {
+		throw new Error(`"${plainText(file)}" is not an attachment name`);
 	}
 	const handle = Bun.file(join(dir, file));
 	if (!(await handle.exists())) {

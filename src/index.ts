@@ -38,6 +38,7 @@ export type {
 	AttachmentPort,
 	AttachmentRefusalCode,
 	AttachmentUpload,
+	TurnAttachmentOptions,
 } from "./core/contract/attachments.ts";
 export { AttachmentRefusal } from "./core/contract/attachments.ts";
 export type {
