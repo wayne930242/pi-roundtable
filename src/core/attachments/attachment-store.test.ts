@@ -9,7 +9,7 @@ import type { ConversationRecord } from "../conversations/conversation-registry.
 import { silentLogger } from "../log.ts";
 import { readAttachment } from "../shared/attachment-reader.ts";
 import { ownerAttachmentDir } from "./attachment-dir.ts";
-import { AttachmentStore, MAX_STAGED_BYTES } from "./attachment-store.ts";
+import { AttachmentStore } from "./attachment-store.ts";
 
 const roots: string[] = [];
 function root() {
@@ -274,6 +274,5 @@ describe("AttachmentStore staging", () => {
 		expect(await attachments.pendingBytes(ADA)).toBe(8);
 		await attachments.turnAttachments(CHANNEL, ADA, [a.file]);
 		expect(await attachments.pendingBytes(ADA)).toBe(3);
-		expect(MAX_STAGED_BYTES).toBe(64 * 1024 * 1024);
 	});
 });

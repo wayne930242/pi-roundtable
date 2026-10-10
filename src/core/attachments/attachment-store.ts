@@ -18,9 +18,6 @@ import { channelSegment, ownerAttachmentDir } from "./attachment-dir.ts";
 import { MAX_ATTACHMENT_BYTES, safeFileName } from "./attachment-fetcher.ts";
 import { modelImagesOf } from "./model-images.ts";
 
-/** The most bytes one principal may have saved without a turn using them; the plugin enforces it. */
-export const MAX_STAGED_BYTES = 64 * 1024 * 1024;
-
 /** Where saved files wait, beside the conversations' attachment directories. */
 const STAGING = "attachments-pending";
 /** The record of a saved file, in a directory next to it that no file name can be. */
