@@ -4,6 +4,7 @@ import {
 	type Message,
 	ThreadAutoArchiveDuration,
 } from "discord.js";
+import type { InterimMessage } from "../domain/interim.ts";
 import { splitReply } from "../presentation/reply-splitter.ts";
 import type { ThreadHost } from "./dispatch-threads.ts";
 
@@ -51,6 +52,16 @@ export class DiscordThreadHost implements ThreadHost {
 	async post(threadId: string, text: string): Promise<void> {
 		const thread = await this.#thread(threadId);
 		for (const chunk of splitReply(text)) await thread.send({ content: chunk });
+	}
+
+	async send(threadId: string, text: string): Promise<InterimMessage> {
+		const thread = await this.#thread(threadId);
+		const message = await thread.send({ content: text });
+		return {
+			edit: async (change) => {
+				await message.edit({ content: change });
+			},
+		};
 	}
 
 	async close(threadId: string): Promise<void> {

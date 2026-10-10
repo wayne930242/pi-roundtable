@@ -11,6 +11,7 @@ import {
 	activeToolsExtension,
 	runWorkerTask,
 	SHELL_TOOLS,
+	textOf,
 } from "pi-roundtable/kit";
 import type { CodingJob, HeldCallAnswer } from "./coding-desk.ts";
 
@@ -20,6 +21,8 @@ interface StartMessage {
 	packages: string[];
 	agentDir: string;
 	prompt?: string;
+	/** The host posts the worker's progress, so the session's messages and tools go to it. */
+	progress?: boolean;
 }
 export function codingWorkerPrompt(dir: string): string {
 	return [
@@ -42,6 +45,7 @@ async function run({
 	agentDir,
 	packages,
 	prompt,
+	progress,
 }: StartMessage): Promise<string> {
 	const modelRuntime = await ModelRuntime.create({
 		authPath: join(agentDir, "auth.json"),
@@ -115,6 +119,19 @@ async function run({
 		sessionManager: SessionManager.inMemory(job.dir),
 		settingsManager: SettingsManager.inMemory({}),
 	});
+	// Only what the host's progress posts read crosses: a message's text, never its thinking.
+	if (progress)
+		session.subscribe((event) => {
+			if (event.type === "tool_execution_start")
+				process.send?.({ type: "tool", name: event.toolName });
+			if (event.type === "message_end" && event.message.role === "assistant")
+				process.send?.({
+					type: "message",
+					role: event.message.role,
+					stopReason: event.message.stopReason,
+					text: textOf(event.message.content),
+				});
+		});
 	return runWorkerTask(session, {
 		modelRuntime,
 		model: job.model,

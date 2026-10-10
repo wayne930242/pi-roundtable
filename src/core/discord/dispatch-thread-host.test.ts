@@ -14,6 +14,12 @@ class FakeThread {
 	}
 	async send({ content }: { content: string }) {
 		this.sent.push(content);
+		const index = this.sent.length - 1;
+		return {
+			edit: async ({ content: change }: { content: string }) => {
+				this.sent[index] = change;
+			},
+		};
 	}
 	async edit(change: unknown) {
 		if (this.failEdit) throw new Error("Missing Permissions");
@@ -110,5 +116,12 @@ describe("DiscordThreadHost", () => {
 		thread.failEdit = true;
 		await host.close("700");
 		expect(thread.archived).toBe(true);
+	});
+
+	test("sends one message in the thread and edits it in place", async () => {
+		const { host, thread } = setup();
+		const message = await host.send("700", "-# bash");
+		await message.edit("-# bash ×2");
+		expect(thread.sent).toEqual(["-# bash ×2"]);
 	});
 });

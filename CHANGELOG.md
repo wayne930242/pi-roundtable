@@ -13,6 +13,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `discord_send_message` and `discord_edit_message` take each file as exactly one of `path` or `dataBase64`: a path names a local file inside the session's workspace or scratch dir (resolved through symlinks), read when the call runs, with `filename` defaulting to its base name; the 8 MiB total still applies. A session without a workspace, and remote MCP, take only `dataBase64`. The descriptions tell the model to prefer `path` and keep base64 for small generated data.
 - `SessionContext.workspace` and `ToolTurn.workspace` (`{ workspace, scratchDir? }`): the roots a session's tools may read and save files by path in; `testPlugin`'s `runTool` takes a `workspace` option to set it.
 - `approvalCard(call, workspace?)` lists each file a held call sends by path with its size.
+- `ThreadHost.send(threadId, text)` (optional) posts one editable message in a dispatch thread, and a `DispatchThread` whose host has it carries `interim`, the thread's `InterimPosts`; the Discord thread host and `FakeThreadHost` (which records edits in `edits`) implement it. The kit exports `InterimPoster` and `InterimPosterOptions`, so a worker of a plugin's own posts its interim text as the host's turns do.
 
 ### Changed
 

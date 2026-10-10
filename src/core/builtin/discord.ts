@@ -124,6 +124,7 @@ export function discordPlugin(options: DiscordOptions): RoundtablePlugin {
 					open: (parentId, name, line) =>
 						connected.threadHost().open(parentId, name, line),
 					post: (threadId, text) => connected.threadHost().post(threadId, text),
+					send: (threadId, text) => connected.threadHost().send(threadId, text),
 					close: (threadId) => connected.threadHost().close(threadId),
 				},
 				ledgerPath: join(options.dataDir, "dispatch-threads.json"),

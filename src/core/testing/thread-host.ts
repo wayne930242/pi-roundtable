@@ -5,6 +5,7 @@ import {
 	DispatchThreads,
 	type ThreadHost,
 } from "../discord/dispatch-threads.ts";
+import type { InterimMessage } from "../domain/interim.ts";
 import { silentLogger } from "../log.ts";
 
 /** A ThreadHost that records what happens; parents in `hostless` cannot host threads. */
@@ -14,6 +15,8 @@ export class FakeThreadHost implements ThreadHost {
 	readonly opened: { parentId: string; name: string; id: string }[] = [];
 	readonly posts: { threadId: string; text: string }[] = [];
 	readonly closed: string[] = [];
+	/** Edits of messages `send` posted, in order; each also changes its entry in `posts`. */
+	readonly edits: { threadId: string; text: string }[] = [];
 	readonly hostless = new Set<string>();
 	failOpen = false;
 	#next = 900;
@@ -33,6 +36,17 @@ export class FakeThreadHost implements ThreadHost {
 
 	async post(threadId: string, text: string): Promise<void> {
 		this.posts.push({ threadId, text });
+	}
+
+	async send(threadId: string, text: string): Promise<InterimMessage> {
+		const post = { threadId, text };
+		this.posts.push(post);
+		return {
+			edit: async (change) => {
+				post.text = change;
+				this.edits.push({ threadId, text: change });
+			},
+		};
 	}
 
 	async close(threadId: string): Promise<void> {

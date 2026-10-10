@@ -1,6 +1,7 @@
 import type {
 	ChannelKey,
 	HeldCall,
+	InterimTextMode,
 	Logger,
 	OwnerPrompts,
 	ThinkingLevel,
@@ -10,6 +11,7 @@ import {
 	approvalCard,
 	type DispatchThread,
 	type DispatchThreads,
+	InterimPoster,
 	promptSlot,
 	workTimeout,
 } from "pi-roundtable/kit";
@@ -34,11 +36,24 @@ export interface CodingJob {
 	startedAt: Date;
 	startHead: string;
 }
+/** What the worker writes and runs as it goes, for its thread's progress posts. */
+export interface CodingProgress {
+	/** A finished message of the worker's session: its role, stop reason, and text. */
+	messageEnd(message: {
+		role: string;
+		content?: unknown;
+		stopReason?: string;
+	}): void;
+	/** A tool the worker started. */
+	toolStart(name: string): void;
+}
 export interface CodingWorker {
+	/** `progress`, when given, hears the session's messages and tools as the worker goes. */
 	run(
 		job: CodingJob & { dir: string },
 		signal: AbortSignal,
 		review: (call: HeldCall) => Promise<HeldCallAnswer>,
+		progress?: CodingProgress,
 	): Promise<string>;
 }
 export interface CodingResult {
@@ -65,6 +80,13 @@ export interface CodingDeskOptions {
 	logger: Logger;
 	timeoutMs?: number;
 	limits?: CodingLimits;
+	/**
+	 * Whether the worker posts the text it writes before its report into its thread as it goes,
+	 * as the host's turns do; "on" by default. A thread whose host cannot edit its posts gets none.
+	 */
+	interimText?: InterimTextMode;
+	/** Length from which an intermediate text is posted as its own message; default 400. */
+	interimPrimaryChars?: number;
 }
 /** What a coding report keeps of a long run; each is a count of characters or entries, or `Infinity` for no bound. */
 export interface CodingLimits {
@@ -212,6 +234,7 @@ export class CodingDesk {
 			this.#options.limits?.heldEntries ?? MAX_HELD_ENTRIES;
 		const maxHeldChars = this.#options.limits?.heldChars ?? MAX_HELD_CHARS;
 		let cancel = () => {};
+		let interim: InterimPoster | undefined;
 		let timedOut = false;
 		let outcome: CodingResult["outcome"];
 		try {
@@ -235,11 +258,22 @@ export class CodingDesk {
 			}
 			if (controller.signal.aborted)
 				throw new AgentError("the worker was stopped");
+			// The worker's progress goes to its thread as it works, under the report's name.
+			if (job.thread?.interim && this.#options.interimText !== "off")
+				interim = new InterimPoster(job.thread.interim, {
+					logger: this.#options.logger,
+					channel: job.thread.channel,
+					...(this.#options.interimPrimaryChars
+						? { primaryChars: this.#options.interimPrimaryChars }
+						: {}),
+				});
+			const poster = interim;
 			slot.bind(
 				threads
 					? job.thread && prompts?.(job.thread.channel)
 					: prompts?.(job.channel),
 				`Coding worker #${job.id}`,
+				poster ? () => poster.flush() : undefined,
 			);
 			cancel = workTimeout(timeoutMs, slot, () => {
 				timedOut = true;
@@ -268,6 +302,7 @@ export class CodingDesk {
 						);
 						held.push(entry);
 						try {
+							await interim?.flush();
 							await job.thread?.post(
 								threadText?.held?.(entry, job) ?? `Held: ${entry}`,
 							);
@@ -282,6 +317,7 @@ export class CodingDesk {
 				{ ...job, dir },
 				controller.signal,
 				review,
+				interim,
 			);
 			if (controller.signal.aborted)
 				throw new AgentError("the worker was stopped");
@@ -304,6 +340,8 @@ export class CodingDesk {
 		} finally {
 			cancel();
 			slot.unbind();
+			// What the worker wrote lands before its report.
+			await interim?.flush();
 		}
 		let state: RepoState | undefined;
 		let commits: string[] = [];

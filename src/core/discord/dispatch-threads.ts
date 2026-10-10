@@ -7,6 +7,7 @@ import {
 } from "node:fs";
 import { dirname } from "node:path";
 import type { ChannelKey } from "../domain/conversation.ts";
+import type { InterimMessage, InterimPosts } from "../domain/interim.ts";
 import { messages } from "../i18n/index.ts";
 import type { Logger } from "../log.ts";
 
@@ -27,6 +28,11 @@ export interface ThreadHost {
 		line: (thread?: string) => string,
 	): Promise<string | undefined>;
 	post(threadId: string, text: string): Promise<void>;
+	/**
+	 * Posts one message of at most Discord's 2000 characters and resolves to it, so it can be
+	 * edited in place; without it a thread has no `interim` posts.
+	 */
+	send?(threadId: string, text: string): Promise<InterimMessage>;
 	/** Archives the thread, and locks it when allowed. */
 	close(threadId: string): Promise<void>;
 }
@@ -40,6 +46,12 @@ export interface DispatchThread {
 	readonly mention: string;
 	/** Posts in the thread; a failure is logged. */
 	post(text: string): Promise<void>;
+	/**
+	 * Where the dispatch posts its progress as it goes, under the same name as its report, such
+	 * as a coding worker's interim text; absent when the host cannot edit a message it posted.
+	 * Unlike `post`, a failure rejects.
+	 */
+	readonly interim?: InterimPosts;
 	/** Posts the final report, if any, then archives the thread. Runs once; never rejects. */
 	close(report?: string): Promise<void>;
 }
@@ -132,6 +144,7 @@ export class DispatchThreads {
 	#thread(id: string): DispatchThread {
 		const { host, logger } = this.#options;
 		let closed = false;
+		const send = host.send?.bind(host);
 		const post = async (text: string) => {
 			try {
 				await host.post(id, text);
@@ -144,6 +157,7 @@ export class DispatchThreads {
 			channel: `${PREFIX}${id}`,
 			mention: `<#${id}>`,
 			post,
+			...(send ? { interim: { post: (text: string) => send(id, text) } } : {}),
 			close: async (report) => {
 				if (closed) return;
 				closed = true;

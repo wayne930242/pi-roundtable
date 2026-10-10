@@ -4,6 +4,7 @@ import {
 	defineTool,
 	type HoldCheck,
 	IDENTITY,
+	type InterimTextMode,
 	PluginError,
 	SKILLS,
 	SYSTEM_PRINCIPAL,
@@ -99,6 +100,14 @@ export interface CodingOptions {
 	toolText?: Partial<Record<RepoToolName, CodingToolText>>;
 	threads?: Pick<DispatchThreads, "open">;
 	threadText?: CodingThreadText;
+	/**
+	 * Whether a worker posts its progress into its thread as it goes: longer text as messages, short
+	 * narration and its tools in one edited small-text message. Default "on"; "off" posts only the
+	 * task and the report. Pass the host config's `interimText` to follow it.
+	 */
+	interimText?: InterimTextMode;
+	/** Length from which a worker's intermediate text is its own message; default 400. */
+	interimPrimaryChars?: number;
 	workerWorkspace?: string;
 	workerPrompt?: (dir: string) => string;
 	/** How much of a long run a report keeps; see `CodingLimits`. */
@@ -183,6 +192,10 @@ export function coding(options: CodingOptions) {
 				logger: context.logger,
 				threads: options.threads,
 				threadText: options.threadText,
+				...(options.interimText ? { interimText: options.interimText } : {}),
+				...(options.interimPrimaryChars
+					? { interimPrimaryChars: options.interimPrimaryChars }
+					: {}),
 				prompts: (channel) => context.surfaces.prompts(channel),
 				deliver:
 					options.onResult ??

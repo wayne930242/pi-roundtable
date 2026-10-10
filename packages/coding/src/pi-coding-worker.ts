@@ -2,7 +2,12 @@ import { fileURLToPath } from "node:url";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import type { HeldCall, HoldCheck } from "pi-roundtable";
 import { AgentError, canonicalJson, shellHoldRule } from "pi-roundtable/kit";
-import type { CodingJob, CodingWorker, HeldCallAnswer } from "./coding-desk.ts";
+import type {
+	CodingJob,
+	CodingProgress,
+	CodingWorker,
+	HeldCallAnswer,
+} from "./coding-desk.ts";
 import { CodingWorkerFailure } from "./worker-failure.ts";
 
 export interface PiCodingWorkerOptions {
@@ -31,6 +36,10 @@ interface WorkerMessage {
 	input?: Record<string, unknown>;
 	report?: string;
 	message?: string;
+	role?: string;
+	stopReason?: string;
+	text?: string;
+	name?: string;
 }
 function isMessage(value: unknown): value is WorkerMessage {
 	return (
@@ -51,6 +60,7 @@ export class PiCodingWorker implements CodingWorker {
 		job: CodingJob & { dir: string },
 		signal: AbortSignal,
 		review: (call: HeldCall) => Promise<HeldCallAnswer>,
+		progress?: CodingProgress,
 	): Promise<string> {
 		if (process.platform === "win32")
 			throw new AgentError("Coding workers require a POSIX host.");
@@ -79,12 +89,27 @@ export class PiCodingWorker implements CodingWorker {
 							packages: this.#options.packages ?? [],
 							agentDir: this.#options.agentDir ?? getAgentDir(),
 							prompt,
+							progress: progress !== undefined,
 						});
 					} else if (
 						value.type === "report" &&
 						typeof value.report === "string"
 					) {
 						report = value.report;
+					} else if (
+						value.type === "message" &&
+						typeof value.role === "string" &&
+						typeof value.text === "string"
+					) {
+						progress?.messageEnd({
+							role: value.role,
+							content: value.text,
+							...(typeof value.stopReason === "string"
+								? { stopReason: value.stopReason }
+								: {}),
+						});
+					} else if (value.type === "tool" && typeof value.name === "string") {
+						progress?.toolStart(value.name);
 					} else if (
 						value.type === "failure" &&
 						typeof value.message === "string"

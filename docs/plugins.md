@@ -61,6 +61,7 @@ Use the kit's building blocks for a plugin that runs Pi itself, such as a coding
   Ordinary 48 MP images and thin 9000×1 images remain admitted.
   This helper is not a downloader or filesystem validator.
 - Work: `promptSlot` (how a run asks the owner while it works), `workTimeout` (a time limit that does not count the time spent waiting on the owner), `runWorkerTask`, `archiveSessions`, and `approvalCard` and `canonicalJson` for the cards of held actions.
+  `InterimPoster(posts, { logger, channel, primaryChars?, editMs? })` posts a run's [interim text](#interim-text-what-a-turn-writes-before-its-final-answer) to an `InterimPosts`, such as a dispatch thread's `interim`: feed it `messageEnd(message)` and `toolStart(name)` from the session's events, bind `() => poster.flush()` as the slot's `beforeCard`, and `await poster.flush()` before the final report.
 - Diagnostics: `scrubDiagnostic(text, max = 600)` masks credentials (URL userinfo, token shapes, secret-named assignments and JSON fields, `Authorization`/`Cookie`/`x-api-key` headers, JWTs, PEM blocks), turns control characters other than tab and newline into spaces, and cuts the result at `max` characters.
   It scans only the first `max * 4` characters (at least 4,096), in linear time, so pass it git, gh or provider error text before showing that text to a user.
 - Shell: `SHELL_TOOLS`, and `shellHoldRule` and `shellHoldRuleFor(policy)`, the hold rule that keeps risky host-shell commands behind the owner's approval; see [the shell rule](#the-shell-rule).
@@ -2406,7 +2407,8 @@ On a surface that gives `interim`, and in the agent server's channels through th
 Before any card, an `ask_user` question or an approval, the host posts the pending text and brings the progress message up to date, so what the model wrote before the card shows above it.
 The final reply is posted at the end as before, with its thinking line; an intermediate message is never the final one, so nothing is posted twice, and a steered run keeps its final text.
 A failed interim post or edit is logged and never fails the turn.
-Turns with nowhere to post, such as transient tasks, coding workers, and turns of a claim that passes its own `reply` to `context.turns.run`, post only their final reply.
+Turns with nowhere to post, such as transient tasks and turns of a claim that passes its own `reply` to `context.turns.run`, post only their final reply.
+A coding worker posts the same way into its dispatch thread, under the name its report uses, when the thread's host can edit its posts (`ThreadHost.send`, which the Discord thread host has; a `DispatchThread` then carries `interim`): its approval cards come after the text it wrote before them, and its report is posted once, at the end.
 A runtime that fills [the `runtime` slot](#the-runtime-slot-replace-pi) receives the place to post as `TurnRequest.interim` and may use it or not.
 
 The config's `interimText: "off"` posts only the final reply (default `"on"`), and `interimPrimaryChars` sets the length of primary text (default 400).
@@ -3591,6 +3593,8 @@ Import from the entries listed below; source area files are internal.
 | `CompactionHistory` | `pi-roundtable/kit` | type |
 | `LatestCompaction` | `pi-roundtable/kit` | type |
 | `isRuleLoad` | `pi-roundtable/kit` | value |
+| `InterimPoster` | `pi-roundtable/kit` | value |
+| `InterimPosterOptions` | `pi-roundtable/kit` | type |
 | `JEV_COMPACTION_ENGINE` | `pi-roundtable/kit` | value |
 | `JEV_GOAL` | `pi-roundtable/kit` | value |
 | `JEV_PREVIOUS_SUMMARY_LIMIT_TOKENS` | `pi-roundtable/kit` | value |

@@ -2,6 +2,7 @@ export type {
 	CodingDeskOptions,
 	CodingJob,
 	CodingLimits,
+	CodingProgress,
 	CodingResult,
 	CodingThreadText,
 	CodingWorker,

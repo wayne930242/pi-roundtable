@@ -158,6 +158,7 @@ export {
 	toolText,
 } from "./tools.ts";
 export type {
+	InterimPosterOptions,
 	McpEndpoint,
 	PromptSlot,
 	VirtualServer,
@@ -166,6 +167,7 @@ export {
 	approvalCard,
 	archiveSessions,
 	canonicalJson,
+	InterimPoster,
 	mcpAdapterExtension,
 	mcpExtension,
 	promptSlot,

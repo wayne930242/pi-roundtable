@@ -34,7 +34,6 @@ import type { ChannelExecutor } from "./channel-operations.ts";
 import type { ComposedCommands } from "./compose-commands.ts";
 import type { ChannelInfo, DiscordConnection } from "./connection.ts";
 import { DiscordThreadHost } from "./dispatch-thread-host.ts";
-import type { ThreadHost } from "./dispatch-threads.ts";
 import { DEFAULT_FRESH_MARKER, postFreshMarker } from "./fresh-marker.ts";
 import { toInbound } from "./inbound-message.ts";
 import type { CardChannel } from "./owner-cards.ts";
@@ -118,7 +117,7 @@ export class DiscordSurface
 	}
 
 	/** Threads for background dispatches, in the channel that started each. */
-	threadHost(): ThreadHost {
+	threadHost(): DiscordThreadHost {
 		return new DiscordThreadHost(this.#client);
 	}
 

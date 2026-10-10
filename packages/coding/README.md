@@ -128,6 +128,9 @@ The parent consults `shellHoldRule`, additional `holds`, and the host's linked h
 When `threads` is configured, progress and cards stay in a thread opened under the resolved run's `origin`; if no thread can open, calls remain held rather than falling back to another channel's approval cards.
 Without `threads`, the resolved report channel's prompts are used.
 `threadText` controls the initial post, held-action post, approval title and final report; the thread is archived before `onResult` is called, and a failed thread post/close does not discard result delivery.
+While it works, the worker posts its progress into its thread, as the host's own turns do: text of `interimPrimaryChars` (400) characters or more, or written with a Markdown heading, list, table or code fence, as ordinary messages, and short narration with the tools it called in one small-text progress message edited in place.
+The thread's cards come after the text written before them, the final report is posted once, and a failed progress post or edit is logged and never fails the job.
+`interimText: "off"` posts only the task, the held-action notices, the cards and the report; a thread whose host cannot edit its posts gets no progress either.
 `promptSlot` tracks these cards and `workTimeout` excludes their waiting time from the worker's budget (one hour by default).
 `timeoutMs` must be positive and finite, and at most 2,147,483,647 ms to fit the host timer.
 An approved call runs; a declined, expired, missing or failed card blocks it and instructs the worker not to retry or work around the refusal.
@@ -181,6 +184,8 @@ The `CODING` service exposes `shelf: RepoShelf` and `desk: CodingDesk` for trust
 | `toolText` | package wording | Trusted description and argument descriptions for each repository tool, as `{ repo_task: { description, parameters: { task: "…" } } }`; it never changes a tool's arguments or approval rules. |
 | `threads` | none | Public `DispatchThreads`-compatible progress and approval thread port. |
 | `threadText` | English package text | Thread introduction, held-action notice, approval title and final report. |
+| `interimText` | `"on"` | `"off"` keeps the worker's progress out of its thread; pass the host config's `interimText` to follow it. |
+| `interimPrimaryChars` | `400` | Length from which a worker's intermediate text is posted as its own message. |
 | `workerWorkspace` | individual clone | Trusted shell-policy write boundary; not an OS sandbox. |
 | `workerPrompt` | generic worker instructions | Trusted standing prompt replacement; it cannot bypass approval or cleanup. |
 | `workerBlockText` | "The owner declined / has not approved this call. Do not retry it or work around it; list it under Held in your report." | Trusted wording of what the worker reads when a call is declined or held, from `(answer, action)`; it never changes who is held, and the desk lists only unanswered calls as held. |

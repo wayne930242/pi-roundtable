@@ -5,6 +5,8 @@ export {
 	approvalCard,
 	canonicalJson,
 } from "../core/runtime/extensions/confirmation-gate.ts";
+export type { InterimPosterOptions } from "../core/runtime/interim-text.ts";
+export { InterimPoster } from "../core/runtime/interim-text.ts";
 export type { VirtualServer } from "../core/runtime/mcp.ts";
 export { mcpExtension } from "../core/runtime/mcp.ts";
 export type { PromptSlot } from "../core/runtime/prompt-slot.ts";

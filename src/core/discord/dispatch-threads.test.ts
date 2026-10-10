@@ -36,6 +36,25 @@ describe("DispatchThreads", () => {
 		expect(JSON.parse(readFileSync(ledgerPath, "utf8"))).toEqual({});
 	});
 
+	test("a thread's interim posts go through the host and edit in place", async () => {
+		const { host, threads, ledgerPath } = fakeThreads();
+		const thread = await threads.open("discord:10", "t");
+		const message = await thread?.interim?.post("-# read");
+		await message?.edit("-# read · bash");
+		expect(host.textsIn("900")).toEqual(["-# read · bash"]);
+		expect(host.edits).toEqual([{ threadId: "900", text: "-# read · bash" }]);
+		const plain = await new DispatchThreads({
+			host: {
+				open: async () => "901",
+				post: async () => {},
+				close: async () => {},
+			},
+			ledgerPath: `${ledgerPath}.bare`,
+			logger: silentLogger(),
+		}).open("discord:10", "t");
+		expect(plain?.interim).toBeUndefined();
+	});
+
 	test("no thread outside Discord, in excluded channels, where the host cannot, or when creation fails", async () => {
 		const host = new FakeThreadHost();
 		host.hostless.add("20");

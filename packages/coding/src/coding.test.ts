@@ -514,6 +514,7 @@ test("real out-of-process Pi worker requests host approval and cannot execute a 
 		const marker = join(repoDir, "..", "approval-marker.txt");
 		rmSync(marker, { force: true });
 		let reviewed = 0;
+		const heard: string[] = [];
 		const worker = new PiCodingWorker({ agentDir, packages: [extension] });
 		const job: CodingJob & { dir: string } = {
 			...request(),
@@ -531,8 +532,19 @@ test("real out-of-process Pi worker requests host approval and cannot execute a 
 				expect(existsSync(marker)).toBe(false);
 				return answer;
 			},
+			{
+				messageEnd: (message) =>
+					heard.push(`${message.role}:${message.stopReason}`),
+				toolStart: (name) => heard.push(`tool:${name}`),
+			},
 		);
 		expect(reviewed).toBe(1);
+		// The session's progress crosses to the host: the tool call, then each assistant message.
+		expect(heard).toEqual([
+			"assistant:toolUse",
+			"tool:write",
+			"assistant:stop",
+		]);
 		expect(existsSync(marker)).toBe(answer === "approved");
 		const pid = Number(report.match(/pid=(\d+)/)?.[1]);
 		expect(pid).not.toBe(process.pid);
@@ -956,6 +968,119 @@ test("threads own approval cards, archive before result delivery, and never fall
 		expect(results[0]?.outcome).toEqual({ ok: true, report: "held" });
 		await desk.stop();
 	}
+});
+
+test("a worker posts its progress into its thread, cards after it, and its report once", async () => {
+	const { shelf } = await fixture();
+	await shelf.add("sample/project");
+	const proposal = `## Plan\n${"Change the parser. ".repeat(30)}`;
+	for (const interimText of ["on", "off"] as const) {
+		const { host, threads } = fakeThreads();
+		const desk = new CodingDesk({
+			shelf,
+			threads,
+			logger: silentLogger(),
+			interimText,
+			prompts: (channel) => ({
+				confirm: async () => {
+					host.posts.push({ threadId: channel, text: "card" });
+					return "approved";
+				},
+				ask: async () => undefined,
+			}),
+			worker: {
+				run: async (_job, _signal, review, progress) => {
+					progress?.messageEnd({
+						role: "assistant",
+						stopReason: "toolUse",
+						content: proposal,
+					});
+					progress?.toolStart("read");
+					progress?.messageEnd({
+						role: "assistant",
+						stopReason: "toolUse",
+						content: "Running the tests.",
+					});
+					progress?.toolStart("bash");
+					progress?.toolStart("bash");
+					await review({ tool: "bash", input: "{}", action: "push" });
+					progress?.messageEnd({
+						role: "assistant",
+						stopReason: "stop",
+						content: "Final report",
+					});
+					return "Final report";
+				},
+			},
+			deliver: async () => {},
+		});
+		await desk.start({ ...request(), origin: "discord:origin" });
+		await desk.idle();
+		const texts = host.textsIn("900");
+		const report = texts.at(-1) ?? "";
+		expect(report).toContain("Final report");
+		expect(texts.filter((text) => text.includes("Final report"))).toHaveLength(
+			1,
+		);
+		if (interimText === "off") {
+			expect(texts).toHaveLength(2);
+			expect(host.posts.map((post) => post.text)).toContain("card");
+		} else {
+			expect(texts.slice(1, 3)).toEqual([
+				proposal.trim(),
+				"-# Running the tests.\n-# read · bash ×2",
+			]);
+			// The progress message was edited in place, not posted again.
+			expect(host.edits.length).toBeGreaterThan(0);
+			const order = host.posts.map((post) => post.text);
+			expect(order.indexOf("card")).toBeGreaterThan(
+				order.indexOf("-# Running the tests.\n-# read · bash ×2"),
+			);
+		}
+		await desk.stop();
+	}
+});
+
+test("a failed progress post never fails the coding job", async () => {
+	const { shelf } = await fixture();
+	await shelf.add("sample/project");
+	const delivered: CodingResult[] = [];
+	const desk = new CodingDesk({
+		shelf,
+		logger: silentLogger(),
+		threads: {
+			open: async () => ({
+				id: "1",
+				channel: "test:thread",
+				mention: "#1",
+				post: async () => {},
+				interim: {
+					post: async () => {
+						throw new Error("offline");
+					},
+				},
+				close: async () => {},
+			}),
+		},
+		worker: {
+			run: async (_job, _signal, _review, progress) => {
+				progress?.messageEnd({
+					role: "assistant",
+					stopReason: "toolUse",
+					content: "x".repeat(500),
+				});
+				progress?.toolStart("bash");
+				return "done";
+			},
+		},
+		deliver: async (result) => {
+			delivered.push(result);
+		},
+	});
+	await desk.start(request());
+	await desk.idle();
+	expect(delivered[0]?.outcome).toEqual({ ok: true, report: "done" });
+	await desk.stop();
 });
 
 test("thread failures cannot discard the worker result", async () => {
