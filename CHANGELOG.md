@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.9.8] - 2026-10-10
+
 ### Added
 
 - A tool's `hold` may return a promise and takes the turn as a second argument, the `ToolTurn` its `run` receives (the speaker, the channel, the agent, and a `signal`), so a plugin can describe a held call with data it fetches as the current speaker, such as an entity's display name looked up with the speaker's own credentials. The confirmation gate awaits it before it posts the card, so the card, `ApprovalDetails.action` (the web chat's `approval.action`) and the held call carry the fetched text. It waits `HOLD_DESCRIBE_TIMEOUT_MS` (10 seconds, exported from `pi-roundtable/kit`); a rejection, a throw or a timeout holds the call under a generic description (`run <tool>`) and never lets it run. `signal` aborts when the turn stops or the wait ends, and a turn stopped meanwhile opens no card and holds nothing. Calls made together are held and shown in the order they were made, each with its own description.

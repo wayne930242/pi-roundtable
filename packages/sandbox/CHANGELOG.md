@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.9.8
+
+- Release in lockstep with pi-roundtable 0.9.8; no package-specific behavior changes.
+
 ## 0.9.7
 
 - Release in lockstep with pi-roundtable 0.9.7; no package-specific behavior changes.
