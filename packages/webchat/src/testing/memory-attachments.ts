@@ -19,7 +19,7 @@ interface Staged {
  */
 export function memoryAttachments(
 	clock: () => number = Date.now,
-): AttachmentPort & {
+): Required<AttachmentPort> & {
 	staged: Map<string, Staged>;
 	used: StoredAttachment[];
 } {

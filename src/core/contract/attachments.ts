@@ -117,7 +117,9 @@ export interface AttachmentPort {
 	 * files. A removed file leaves a mark without its name: `read_attachment` and
 	 * `ToolTurn.attachment()` then say the file was removed after its retention period. Files
 	 * waiting for a turn are not touched; `discardPending` is theirs. A host sets
-	 * `attachments.retention` to run this on a timer.
+	 * `attachments.retention` to run this on a timer. Optional, so a port a plugin wrote before it
+	 * existed still type-checks; the host's own port always has it, and a retention setting refuses
+	 * a port without it.
 	 */
-	expireUsed(options: ExpireUsedOptions): Promise<ExpiredAttachments>;
+	expireUsed?(options: ExpireUsedOptions): Promise<ExpiredAttachments>;
 }

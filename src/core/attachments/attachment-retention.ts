@@ -14,6 +14,16 @@ export interface AttachmentRetention {
 /** The wait between two sweeps when the host sets none. */
 export const DEFAULT_SWEEP_EVERY_MS = 60 * 60_000;
 
+/** The port's `expireUsed`; `retentionServices` refuses a port without it before a sweep can run. */
+function expireUsedOf(
+	attachments: AttachmentPort,
+): NonNullable<AttachmentPort["expireUsed"]> {
+	const expire = attachments.expireUsed;
+	if (expire === undefined)
+		throw new PluginError("this attachment port cannot expire used files");
+	return expire.bind(attachments);
+}
+
 /** The wait between two sweeps for `retention`. */
 function sweepPeriod(retention: AttachmentRetention): number {
 	return Math.min(
@@ -37,7 +47,7 @@ export function retentionService(
 	let sweeping: Promise<void> | undefined;
 	const sweep = async (): Promise<void> => {
 		try {
-			const result = await attachments.expireUsed({
+			const result = await expireUsedOf(attachments)({
 				olderThanMs: retention.maxAgeMs,
 			});
 			if (result.files > 0)
@@ -92,6 +102,10 @@ export function retentionServices(
 	if (dataDir === undefined)
 		throw new PluginError(
 			"attachments.retention needs a dataDir: set dataDir in the configuration, or the dataDir option of the host.",
+		);
+	if (attachments.expireUsed === undefined)
+		throw new PluginError(
+			"attachments.retention needs an attachment port with expireUsed; this one has none.",
 		);
 	for (const [key, value] of Object.entries(retention))
 		if (!Number.isInteger(value) || value < 1)

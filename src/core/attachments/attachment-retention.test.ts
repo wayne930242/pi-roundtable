@@ -7,6 +7,7 @@ import type { Logger } from "../log.ts";
 import {
 	DEFAULT_SWEEP_EVERY_MS,
 	retentionService,
+	retentionServices,
 } from "./attachment-retention.ts";
 
 interface Line {
@@ -144,5 +145,19 @@ describe("retentionService", () => {
 		await service.stop?.();
 		await started;
 		expect(overlapped).toBe(false);
+	});
+});
+
+describe("retentionServices", () => {
+	test("refuses a port that cannot expire used files, so a custom port without it still type-checks", () => {
+		const { expireUsed: _, ...withoutExpiry } = port([]).fake;
+		expect(() =>
+			retentionServices(
+				{ maxAgeMs: 1_000 },
+				"/data",
+				withoutExpiry as AttachmentPort,
+				recordingLogger([]),
+			),
+		).toThrow("expireUsed");
 	});
 });

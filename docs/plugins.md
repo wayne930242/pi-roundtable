@@ -543,7 +543,7 @@ A plugin whose clients upload a file themselves, over HTTP for instance, has the
 | `remove(channel, principalId, file)` | Discards a saved file no turn used; `false` when there is none |
 | `discardPending(olderThan)` | Discards every saved file no turn used that was saved before the date, and returns how many; call it from a service's timer so abandoned uploads do not pile up |
 | `pendingBytes(principalId)` | The bytes the principal has saved that no turn used yet, for a quota of your own |
-| `expireUsed({ olderThanMs })` | Removes the files turns used more than that long ago and returns `{ files, bytes, unattributedBytes }`; the owners' used-bytes tallies shrink by exactly the bytes removed. See [Retention](#retention-removing-used-files-after-a-period) |
+| `expireUsed({ olderThanMs })` | Optional on a custom port; the host's own has it. Removes the files turns used more than that long ago and returns `{ files, bytes, unattributedBytes }`; the owners' used-bytes tallies shrink by exactly the bytes removed. See [Retention](#retention-removing-used-files-after-a-period) |
 
 A saved file waits for its owner: only the principal that saved it can use it, and only in the conversation it was saved for.
 The conversation's record decides who may save into it: a private conversation refuses every principal but its own with an `AttachmentRefusal` whose `code` is `forbidden`, and a shared one lets each principal save and use their own files.
