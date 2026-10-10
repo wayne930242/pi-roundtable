@@ -207,12 +207,14 @@ export class SessionFactory {
 
 	/**
 	 * Logs who compacted a conversation, the compaction extension or Pi's summary, by how much, and the context size
-	 * that compacts it next, so a move to the hard ceiling shows.
+	 * that compacts it next, so a move to the hard ceiling shows. `contextAfter` is the context the tiers measure,
+	 * system prompt and tools included, which `tokensAfter`, the conversation alone, leaves out.
 	 */
 	#logCompaction(
 		channel: ChannelKey,
 		event: CompactionEnd,
 		session: AgentSession,
+		tiers: CompactionTiers,
 	): void {
 		const { logger } = this.#options;
 		const trigger = event.reason === "manual" ? "self" : event.reason;
@@ -239,6 +241,7 @@ export class SessionFactory {
 				),
 				tokensBefore: event.result.tokensBefore,
 				tokensAfter: event.result.estimatedTokensAfter,
+				contextAfter: tiers.latest()?.contextTokens,
 				nextCompactionAt:
 					model &&
 					model.contextWindow -
@@ -423,7 +426,7 @@ export class SessionFactory {
 		await this.#awaitTools(session, awaited);
 		session.subscribe((event) => {
 			if (event.type === "compaction_end")
-				this.#logCompaction(channel, event, session);
+				this.#logCompaction(channel, event, session, tiers);
 		});
 		return Object.assign(state, { session });
 	}

@@ -204,8 +204,34 @@ test("a compact request round-trips through the broker and becomes the session's
 		trigger: "self",
 		engine: "extension",
 		tokensAfter: expect.any(Number),
+		contextAfter: expect.any(Number),
 		nextCompactionAt: SOFT_COMPACT_TOKENS,
 	});
+});
+
+test("a worker measures the context left with the fixed part its requests carry", async () => {
+	const { socket, config, dir, lines } = await host({
+		engine: ENGINE,
+		compact: async (request) => ({
+			summary: "HOST SUMMARY",
+			firstKeptEntryId: request.firstKeptEntryId,
+			tokensBefore: request.tokensBefore,
+			details: {},
+		}),
+	});
+	const { session, history, reports } = await worker(socket, config, dir);
+	// The last request sent about 240k of system prompt and tools beside the ~120k conversation.
+	const reply = fauxAssistantMessage("big tools");
+	history.appendMessage({
+		...reply,
+		usage: { ...reply.usage, input: 360_000, totalTokens: 360_000 },
+	});
+	await compactOnce(session, reports);
+	const compacted = lines.find((l) => l.message === "conversation compacted");
+	expect(compacted?.fields.contextAfter).toBeGreaterThan(
+		SOFT_COMPACT_TOKENS - 50_000,
+	);
+	expect(compacted?.fields.nextCompactionAt).toBe(HARD_COMPACT_TOKENS);
 });
 
 for (const [name, compactor, reason] of [

@@ -146,6 +146,8 @@ export type PiCompactionReport =
 			engine?: "extension" | "pi";
 			tokensBefore?: number;
 			tokensAfter?: number;
+			/** The context the tiers measure after it, system prompt and tools included. */
+			contextAfter?: number;
 			nextCompactionAt?: number;
 			error?: string;
 	  };
@@ -203,9 +205,12 @@ export function validateCompactionReport(
 				(value.engine === undefined ||
 					value.engine === "extension" ||
 					value.engine === "pi") &&
-				[value.tokensBefore, value.tokensAfter, value.nextCompactionAt].every(
-					(count) => count === undefined || isTokenCount(count),
-				) &&
+				[
+					value.tokensBefore,
+					value.tokensAfter,
+					value.contextAfter,
+					value.nextCompactionAt,
+				].every((count) => count === undefined || isTokenCount(count)) &&
 				(value.error === undefined ||
 					(typeof value.error === "string" && value.error.length <= 10_000)));
 	if (!valid) throw new Error("Invalid compaction report");

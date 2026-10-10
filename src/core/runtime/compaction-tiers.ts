@@ -1,9 +1,12 @@
 import {
+	buildSessionProjection,
 	type ExtensionAPI,
 	type ExtensionFactory,
 	estimateTokens,
 	type SessionBeforeCompactEvent,
+	type SessionEntry,
 	type SessionManager,
+	type SessionProjection,
 	SettingsManager,
 } from "@earendil-works/pi-coding-agent";
 
@@ -29,8 +32,14 @@ export type CompactionHistory = Pick<
 export interface LatestCompaction {
 	id: string;
 	engine: CompactionEngine;
-	/** Estimated context the compaction left: its summary and the entries it kept. */
+	/**
+	 * The context the compaction left, as a request sends it: system prompt and tools included.
+	 * The first request after it reports this; until then, its summary and kept entries plus the
+	 * fixed part the last request before it carried.
+	 */
 	contextTokens: number;
+	/** Whether a request after the compaction reported `contextTokens`, or it is still estimated. */
+	measured: boolean;
 }
 
 /** The extension's compactions record its `engine` in their details; Pi's own do not. */
@@ -42,6 +51,41 @@ export function compactionEngine(
 	return extensionEngine !== undefined && engine === extensionEngine
 		? "extension"
 		: "pi";
+}
+
+/** What a request sent, as its reply's usage reports it: undefined for a reply without usable usage. */
+function sentTokens(entry: SessionEntry | undefined): number | undefined {
+	if (entry?.type !== "message") return undefined;
+	const message = entry.message;
+	if (message.role !== "assistant") return undefined;
+	if (message.stopReason === "aborted" || message.stopReason === "error")
+		return undefined;
+	const { input, cacheRead, cacheWrite } = message.usage;
+	const sent = input + cacheRead + cacheWrite;
+	return sent > 0 ? sent : undefined;
+}
+
+function estimated(messages: SessionProjection["messages"]): number {
+	let tokens = 0;
+	for (const message of messages) tokens += estimateTokens(message);
+	return tokens;
+}
+
+/**
+ * The part of a request that is not the conversation, system prompt and tool definitions, as the
+ * last reply before `index` reported it: what that request sent less the estimate of its messages.
+ */
+function fixedTokens(branch: readonly SessionEntry[], index: number): number {
+	for (let at = index - 1; at >= 0; at--) {
+		const sent = sentTokens(branch[at]);
+		if (sent === undefined) continue;
+		const messages = buildSessionProjection(
+			branch.slice(0, at),
+			branch[at - 1]?.id ?? null,
+		).messages;
+		return Math.max(0, sent - estimated(messages));
+	}
+	return 0;
 }
 
 /** The branch's latest compaction, measured from the session as it stands now. */
@@ -56,16 +100,22 @@ export function latestCompaction(
 	const upToCompaction = new Set(
 		branch.slice(0, index + 1).map((each) => each.id),
 	);
-	let contextTokens = 0;
+	const engine = compactionEngine(entry.details, extensionEngine);
+	for (const after of branch.slice(index + 1)) {
+		const sent = sentTokens(after);
+		if (sent !== undefined)
+			return { id: entry.id, engine, contextTokens: sent, measured: true };
+	}
+	let messages = 0;
 	for (const projected of history.buildSessionProjection().entries) {
 		if (!upToCompaction.has(projected.sourceEntry.id)) continue;
-		for (const message of projected.messages)
-			contextTokens += estimateTokens(message);
+		messages += estimated(projected.messages);
 	}
 	return {
 		id: entry.id,
-		engine: compactionEngine(entry.details, extensionEngine),
-		contextTokens,
+		engine,
+		contextTokens: messages + fixedTokens(branch, index),
+		measured: false,
 	};
 }
 
@@ -124,12 +174,15 @@ export class CompactionTiers {
 		this.#extensionEngine = extensionEngine;
 	}
 
-	/** The latest compaction; measured once per compaction, since pi checks before every request. */
+	/**
+	 * The latest compaction; pi checks before every request, so it is measured once per compaction
+	 * after a request reports it, and estimated again until one does.
+	 */
 	latest(): LatestCompaction | undefined {
 		const branch = this.#history.getBranch();
 		const entry = branch.findLast((each) => each.type === "compaction");
 		if (!entry) return undefined;
-		if (this.#cached?.id !== entry.id) {
+		if (this.#cached?.id !== entry.id || !this.#cached.latest.measured) {
 			const latest = latestCompaction(this.#history, this.#extensionEngine);
 			if (!latest) return undefined;
 			this.#cached = { id: entry.id, latest };

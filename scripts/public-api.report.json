@@ -798,7 +798,7 @@
 		"src/core/runtime/compaction-tiers.d.ts#CompactionHistory": "type CompactionHistory = Pick<SessionManager, \"getBranch\" | \"buildSessionProjection\">;",
 		"src/core/runtime/compaction-tiers.d.ts#CompactionTiers": "declare class CompactionTiers {\n    #private;\n    constructor(history: CompactionHistory, contextWindow: (provider: string, id: string) => number | undefined, \n    \n    extensionEngine?: string);\n    \n    latest(): LatestCompaction | undefined;\n    \n    trigger(model: {\n        provider: string;\n        id: string;\n    }, reserveTokens: number): number | undefined;\n    \n    settings(): SettingsManager;\n    \n    wrapCompactor(compactor: ExtensionFactory, onBypass: (details: {\n        reason: string;\n        tokensBefore: number;\n    }) => void, prepare?: (event: SessionBeforeCompactEvent) => void): ExtensionFactory;\n}",
 		"src/core/runtime/compaction-tiers.d.ts#HARD_COMPACT_TOKENS": "declare const HARD_COMPACT_TOKENS = 500000;",
-		"src/core/runtime/compaction-tiers.d.ts#LatestCompaction": "interface LatestCompaction {\n    id: string;\n    engine: CompactionEngine;\n    \n    contextTokens: number;\n}",
+		"src/core/runtime/compaction-tiers.d.ts#LatestCompaction": "interface LatestCompaction {\n    id: string;\n    engine: CompactionEngine;\n    \n    contextTokens: number;\n    \n    measured: boolean;\n}",
 		"src/core/runtime/compaction-tiers.d.ts#SOFT_COMPACT_TOKENS": "declare const SOFT_COMPACT_TOKENS = 300000;",
 		"src/core/runtime/extensions/confirmation-gate.d.ts#approvalCard": "declare function approvalCard(call: HeldCall, workspace?: string): string;",
 		"src/core/runtime/extensions/confirmation-gate.d.ts#canonicalJson": "declare function canonicalJson(value: unknown): string;",

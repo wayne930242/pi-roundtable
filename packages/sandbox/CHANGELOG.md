@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- A worker's compaction tiers measure the context left with the system prompt and tools its requests carry, as the host's do; its compaction report and the host's `conversation compacted` log add `contextAfter`.
+
 ## 0.9.5
 
 - Release in lockstep with pi-roundtable 0.9.5; no package-specific behavior changes. 0.9.4 was tagged but never published.

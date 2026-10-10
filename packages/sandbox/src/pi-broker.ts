@@ -1026,6 +1026,7 @@ export class PiSandboxBroker {
 				engine: report.engine,
 				tokensBefore: report.tokensBefore,
 				tokensAfter: report.tokensAfter,
+				contextAfter: report.contextAfter,
 				nextCompactionAt: report.nextCompactionAt,
 			},
 			"conversation compacted",

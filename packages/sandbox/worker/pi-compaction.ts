@@ -149,6 +149,7 @@ export class WorkerCompaction {
 					...(result.estimatedTokensAfter === undefined
 						? {}
 						: { tokensAfter: result.estimatedTokensAfter }),
+					...this.#contextAfter(),
 					...(model
 						? {
 								nextCompactionAt:
@@ -172,6 +173,12 @@ export class WorkerCompaction {
 			fields,
 		);
 		await this.#report(report);
+	}
+
+	/** The context the tiers measure after the compaction, system prompt and tools included. */
+	#contextAfter(): { contextAfter?: number } {
+		const latest = this.#tiers.latest();
+		return latest ? { contextAfter: latest.contextTokens } : {};
 	}
 
 	async #compact(

@@ -50,6 +50,36 @@ function compacted(
 	);
 }
 
+/** Appends a reply whose request sent `sent` tokens, system prompt and tools included. */
+function replied(session: SessionManager, sent: number): void {
+	session.appendMessage({
+		role: "assistant",
+		content: [{ type: "text", text: "ok" }],
+		api: "anthropic-messages",
+		provider: "anthropic",
+		model: "claude-opus-5-5",
+		usage: {
+			input: 1_000,
+			output: 500,
+			cacheRead: sent - 1_000,
+			cacheWrite: 0,
+			totalTokens: sent + 500,
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+		},
+		stopReason: "stop",
+		timestamp: Date.now(),
+	});
+}
+
+/** A session whose requests carry `fixed` tokens of system prompt and tools, compacted to `left` of messages. */
+function compactedWithFixed(fixed: number, left: number): SessionManager {
+	const session = SessionManager.inMemory("/tmp");
+	say(session, 300_000);
+	replied(session, fixed + 300_000);
+	compacted(session, "extension", left);
+	return session;
+}
+
 function tiersOver(session: SessionManager): CompactionTiers {
 	return new CompactionTiers(
 		session,
@@ -226,6 +256,59 @@ describe("no compaction loop", () => {
 		say(session, 10_000);
 		compacted(session, "extension", 480_000);
 		expect(trigger(tiersOver(session))).toBe(HARD_COMPACT_TOKENS);
+	});
+});
+
+describe("the context a request sends", () => {
+	const FIXED = 112_000;
+
+	test("before a request, the context left counts the fixed part the last request carried", () => {
+		const tiers = tiersOver(compactedWithFixed(FIXED, 145_000));
+		const latest = tiers.latest();
+		expect(latest?.measured).toBe(false);
+		expect(latest?.contextTokens).toBeGreaterThan(FIXED + 145_000 - 1_000);
+		expect(latest?.contextTokens).toBeLessThan(FIXED + 145_000 + 1_000);
+		expect(trigger(tiers)).toBe(HARD_COMPACT_TOKENS);
+	});
+
+	test("the first request after the compaction measures it", () => {
+		const session = compactedWithFixed(FIXED, 145_000);
+		const tiers = tiersOver(session);
+		expect(trigger(tiers)).toBe(HARD_COMPACT_TOKENS);
+		replied(session, 272_000);
+		expect(tiers.latest()).toMatchObject({
+			contextTokens: 272_000,
+			measured: true,
+		});
+		expect(trigger(tiers)).toBe(HARD_COMPACT_TOKENS);
+		// Later requests grow the context; the compaction left what the first one sent.
+		replied(session, 400_000);
+		expect(tiers.latest()?.contextTokens).toBe(272_000);
+	});
+
+	test("a first request well below 300k keeps the soft threshold", () => {
+		const session = compactedWithFixed(FIXED, 145_000);
+		replied(session, 200_000);
+		expect(trigger(tiersOver(session))).toBe(SOFT_COMPACT_TOKENS);
+	});
+
+	test("a small fixed part keeps the soft threshold", () => {
+		const tiers = tiersOver(compactedWithFixed(5_000, 145_000));
+		expect(trigger(tiers)).toBe(SOFT_COMPACT_TOKENS);
+	});
+
+	test("a compaction that left 272k real does not compact again until past 500k", () => {
+		const session = compactedWithFixed(FIXED, 145_000);
+		const tiers = tiersOver(session);
+		replied(session, 272_000);
+		say(session, 20_000);
+		say(session, 20_000);
+		const settings = tiers.settings().getCompactionSettings(LARGE);
+		expect(shouldCompact(320_000, 1_000_000, settings)).toBe(false);
+		expect(shouldCompact(HARD_COMPACT_TOKENS, 1_000_000, settings)).toBe(false);
+		expect(shouldCompact(HARD_COMPACT_TOKENS + 1, 1_000_000, settings)).toBe(
+			true,
+		);
 	});
 });
 

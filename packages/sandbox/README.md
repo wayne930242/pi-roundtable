@@ -331,7 +331,7 @@ Without `compaction` the worker registers no compaction handler; the tiers and P
 `jevCompactor({ logger })` from `pi-roundtable/kit` is a ready compactor through Jev, the one the core's hosts use: `compaction: jevCompactor({ logger })`.
 Compactions are written to the session file in the channel workspace, so they survive container removal and restarts.
 
-The host logs, per channel: `conversation compacted` (`trigger`, `engine` `extension` or `pi`, `tokensBefore`, `tokensAfter`, `nextCompactionAt`), `compaction failed`, `compaction skips the extension for Pi's summary` past the ceiling, and `compaction falls back to Pi's summary` with its `fallback` reason.
+The host logs, per channel: `conversation compacted` (`trigger`, `engine` `extension` or `pi`, `tokensBefore`, `tokensAfter`, `contextAfter`, the context the tiers measure, system prompt and tools included, and `nextCompactionAt`), `compaction failed`, `compaction skips the extension for Pi's summary` past the ceiling, and `compaction falls back to Pi's summary` with its `fallback` reason.
 
 ### Worker content and files
 
