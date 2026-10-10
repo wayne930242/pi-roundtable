@@ -24,7 +24,11 @@ export function isAttachmentName(file: string): boolean {
 
 const TYPE_GRAMMAR = /^[a-z0-9.+-]+\/[a-z0-9.+-]+$/i;
 
-/** `type` when it is a plain type/subtype, else the generic binary type, for a prompt to print. */
+/**
+ * The type a prompt may print: `type` without its parameters (`text/plain; charset=utf-8` is
+ * `text/plain`) when that is a plain type/subtype, else the generic binary type.
+ */
 export function plainContentType(type: string): string {
-	return TYPE_GRAMMAR.test(type) ? type : "application/octet-stream";
+	const base = type.split(";")[0]?.trim().toLowerCase() ?? "";
+	return TYPE_GRAMMAR.test(base) ? base : "application/octet-stream";
 }

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { mkdirSync } from "node:fs";
-import { readFile, rename, rm, stat, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import {
 	type AttachmentPort,
 	AttachmentRefusal,
@@ -62,6 +62,19 @@ async function readTally(path: string): Promise<number> {
 		if ((error as NodeJS.ErrnoException).code === "ENOENT") return 0;
 		throw error;
 	}
+}
+
+/** Writes a tally whole or not at all, creating its directory if a conversation's deletion removed it meanwhile. */
+async function writeTally(path: string, bytes: number): Promise<void> {
+	const temporary = `${path}.tmp`;
+	try {
+		await writeFile(temporary, String(bytes));
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+		await mkdir(dirname(path), { recursive: true, mode: 0o700 });
+		await writeFile(temporary, String(bytes));
+	}
+	await rename(temporary, path);
 }
 
 /**
@@ -228,7 +241,7 @@ export class AttachmentStore implements AttachmentPort {
 					join(target, RECORDS, `${stored.file}.json`),
 				);
 			}
-			await writeFile(tally, String(before + added));
+			await writeTally(tally, before + added);
 		} catch (error) {
 			await this.#putBack(moved, staging, target, tally, before);
 			// Something else took the file between the check and the move.
@@ -259,7 +272,7 @@ export class AttachmentStore implements AttachmentPort {
 				join(staging, RECORDS, `${stored.file}.json`),
 			).catch(() => undefined);
 		}
-		await writeFile(tally, String(before)).catch(() => undefined);
+		await writeTally(tally, before).catch(() => undefined);
 	}
 
 	async remove(
@@ -327,7 +340,8 @@ export class AttachmentStore implements AttachmentPort {
 		const dir = this.#tallyDir(principalId);
 		let total = 0;
 		for (const channel of await listDir(dir))
-			total += await readTally(join(dir, channel));
+			if (!channel.endsWith(".tmp"))
+				total += await readTally(join(dir, channel));
 		return total;
 	}
 

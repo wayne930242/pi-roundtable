@@ -59,6 +59,7 @@ export async function discardConversationFiles(
 		for (const principal of await listDir(root)) {
 			const dir = join(root, principal);
 			await rm(join(dir, segment), { recursive: true, force: true });
+			await rm(join(dir, `${segment}.tmp`), { force: true });
 			await removeIfEmpty(dir);
 		}
 	}

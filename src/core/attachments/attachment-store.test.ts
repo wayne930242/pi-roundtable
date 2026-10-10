@@ -386,19 +386,25 @@ describe("AttachmentStore under concurrency", () => {
 
 	test("a sweep racing a turn refuses the turn instead of failing it", async () => {
 		const { store: attachments } = store();
-		const a = await attachments.save(CHANNEL, ADA, json("aa"));
 		const longAgo = new Date(Date.now() - 86_400_000);
-		utimesSync(a.path, longAgo, longAgo);
-		const [turn, swept] = await Promise.allSettled([
-			attachments.turnAttachments(CHANNEL, ADA, [a.file]),
-			attachments.discardPending(new Date()),
-		]);
-		// Either the turn won (file used, nothing swept) or the sweep did (the turn is a refusal).
-		if (turn.status === "rejected") {
-			expect(turn.reason).toBeInstanceOf(AttachmentRefusal);
-			expect(swept.status === "fulfilled" && swept.value).toBe(1);
-		} else {
-			expect(swept.status === "fulfilled" && swept.value).toBe(0);
+		for (let round = 0; round < 25; round += 1) {
+			const a = await attachments.save(CHANNEL, ADA, json("aa"));
+			utimesSync(a.path, longAgo, longAgo);
+			const [turn, swept] = await Promise.allSettled([
+				attachments.turnAttachments(CHANNEL, ADA, [a.file]),
+				attachments.discardPending(new Date()),
+			]);
+			if (swept.status !== "fulfilled") throw swept.reason;
+			if (turn.status === "rejected") {
+				// The sweep took the file first: a refusal, and the file is gone, not half moved.
+				expect(turn.reason).toBeInstanceOf(AttachmentRefusal);
+				expect(swept.value).toBe(1);
+				expect(existsSync(a.path)).toBe(false);
+			} else {
+				// The turn won: the file is in the conversation and the sweep found nothing.
+				expect(swept.value).toBe(0);
+				expect(existsSync(turn.value.files[0]?.path ?? "")).toBe(true);
+			}
 		}
 	});
 });

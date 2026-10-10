@@ -107,6 +107,24 @@ describe("withAttachmentsBlock", () => {
 		);
 	});
 
+	test("a content type keeps its type and subtype and drops its parameters", () => {
+		const text = withAttachmentsBlock("hi", {
+			files: [
+				{
+					name: "notes.txt",
+					file: "m-0-notes.txt",
+					path: "/data/m-0-notes.txt",
+					contentType: "Text/Plain; charset=utf-8",
+					size: 10,
+					fromReference: false,
+				},
+			],
+			images: [],
+			failures: [],
+		});
+		expect(text).toContain('"notes.txt", text/plain, 10 B)');
+	});
+
 	test("a name or content type cannot add lines, quotes or a bidi override to the block", () => {
 		const line = String.fromCodePoint(0x2028);
 		const rtl = String.fromCodePoint(0x202e);

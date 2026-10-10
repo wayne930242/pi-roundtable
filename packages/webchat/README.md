@@ -326,7 +326,7 @@ Only the person who uploaded a file can use it, and only in the conversation it 
 | `attachmentBytes` | 10 MiB per uploaded file; never above the core's 25 MiB |
 | `attachmentsPerMessage` | 8 files named by one message |
 | `uploadsPerHour` | 60 uploads per person in any hour |
-| `unsentUploadBytesPerPrincipal` | 64 MiB per person uploaded and not yet used by a message |
+| `unsentUploadBytesPerPrincipal` | 64 MiB per person uploaded and not yet used by a message; uploads arriving together are counted per web chat plugin instance, so two web chats on one host each hold a person to it separately |
 | `usedAttachmentBytesPerPrincipal` | 1 GiB per person kept by their messages across all conversations until a conversation is deleted; needs pi-roundtable 0.9.3 to be enforced |
 | `attachmentTypes` | `image/png`, `image/jpeg`, `image/webp`, `image/gif`, `application/json`, `text/plain`, `application/pdf` |
 | `unsentUploadTtlMs` | 24 hours before an unused upload is deleted |

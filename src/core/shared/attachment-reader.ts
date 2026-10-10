@@ -74,7 +74,13 @@ export async function readAttachment(
 	if (!(await handle.exists())) {
 		throw new Error(`no attachment named "${file}" in this channel`);
 	}
-	const bytes = new Uint8Array(await handle.arrayBuffer());
+	let bytes: Uint8Array;
+	try {
+		bytes = new Uint8Array(await handle.arrayBuffer());
+	} catch {
+		// A file system error names the path on the host; the model sees only the attachment's name.
+		throw new Error(`"${plainText(file)}" could not be read`);
+	}
 	let text: string;
 	if (isPdf(file, bytes)) {
 		const pdf = await getDocumentProxy(bytes);
