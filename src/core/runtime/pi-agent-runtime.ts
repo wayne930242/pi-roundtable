@@ -71,10 +71,10 @@ export class PiAgentRuntime implements AgentRuntime {
 	readonly #tiers: ToolTiers;
 	readonly #factory: SessionFactory;
 	readonly #sessions: ConversationSessions;
-	/** The tier and speaker of each conversation's running turn. */
+	/** The tier, speaker and origin of each conversation's running turn. */
 	readonly #turns = new Map<
 		ChannelKey,
-		{ tier: Tier; speaker: Speaker; withheld: boolean }
+		{ tier: Tier; speaker: Speaker; origin?: string; withheld: boolean }
 	>();
 	/** Each conversation's turn in progress, which the owner may steer or stop. */
 	readonly #running = new Map<ChannelKey, SteerableRun>();
@@ -87,6 +87,7 @@ export class PiAgentRuntime implements AgentRuntime {
 		this.#tiers = options.toolTiers ?? toolTiers();
 		this.#factory = new SessionFactory(options, {
 			speaker: (channel) => this.#turns.get(channel)?.speaker,
+			origin: (channel) => this.#turns.get(channel)?.origin,
 			withholdsMemory: (channel) => this.#turns.get(channel)?.withheld === true,
 			runTask: (scope, task) => this.#runTask(scope, task),
 		});
@@ -192,7 +193,12 @@ export class PiAgentRuntime implements AgentRuntime {
 				loadsMemory(registered),
 		);
 		this.#memoryTurns.set(key, markPrivateMemory);
-		this.#turns.set(key, { tier, speaker: request.speaker, withheld });
+		this.#turns.set(key, {
+			tier,
+			speaker: request.speaker,
+			...(request.origin === undefined ? {} : { origin: request.origin }),
+			withheld,
+		});
 		const missing = wanted.filter((name) => !registered.has(name));
 		if (missing.length > 0) {
 			logger.warn(

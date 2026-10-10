@@ -31,6 +31,13 @@ export interface TurnRequest {
 	 */
 	speaker: Speaker;
 	/**
+	 * Where the request came from, as the transport that carried it knows: the browser origin of a
+	 * web chat connection, such as `https://chat.example.com`. A channel with no such thing leaves it
+	 * out. Only a channel's transport sets it, never the message text or the model; a tool reads it
+	 * as `ToolTurn.origin`.
+	 */
+	origin?: string;
+	/**
 	 * Who the conversation belongs to, as the host records it: `private` to one principal, or
 	 * `shared` by whoever its claim admits, which it is taken to be when absent. A private
 	 * conversation's prompts are its person's alone; a shared one's escalate to the owners.

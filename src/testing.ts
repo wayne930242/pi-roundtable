@@ -270,6 +270,8 @@ export interface TestPluginResult {
 		/** `workspace` gives the session a workspace and scratch dir, as an agent's session has. */
 		options?: {
 			speaker?: Speaker;
+			/** Where the turn's request came from, as `ToolTurn.origin` shows it to the tool. */
+			origin?: string;
 			channel?: ChannelKey;
 			workspace?: SessionContext["workspace"];
 		},
@@ -640,6 +642,7 @@ export async function testPlugin(
 				...(runOptions?.workspace ? { workspace: runOptions.workspace } : {}),
 				attachmentDir: ownerAttachmentDir(attachmentDir, channel),
 				speaker: () => runOptions?.speaker,
+				origin: () => runOptions?.origin,
 				runTask: async () => {
 					throw new Error("test session cannot run tasks");
 				},

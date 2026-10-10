@@ -240,3 +240,35 @@ test("a hold that lets the call run saw the same turn, speaker and channel as th
 		await done();
 	}
 });
+
+test("a turn's origin reaches the hold and the run of its tools, and the next turn without one sees none", async () => {
+	const held: (string | undefined)[] = [];
+	const ran: ToolTurn[] = [];
+	const { harness, done } = await heldHost(
+		2,
+		async (_args, turn) => {
+			held.push(turn.origin);
+			return undefined;
+		},
+		undefined,
+		ran,
+	);
+	try {
+		const base = {
+			channel: "fake:room",
+			kind: "helper",
+			text: "deploy the docs",
+			speaker: MEMBER,
+			selection: { id: "held", tools: ["deploy"], groups: [] },
+		} as const;
+		await harness.turns.run({ ...base, origin: "https://chat.example.com" });
+		await harness.turns.run(base);
+		expect(held).toEqual(["https://chat.example.com", undefined]);
+		expect(ran.map((turn) => turn.origin)).toEqual([
+			"https://chat.example.com",
+			undefined,
+		]);
+	} finally {
+		await done();
+	}
+});

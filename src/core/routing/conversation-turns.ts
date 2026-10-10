@@ -29,6 +29,12 @@ export interface ConversationTurnInput {
 	text: string;
 	/** Who the turn is for; its tier limits the tools. */
 	speaker: Speaker;
+	/**
+	 * Where the request came from, as the claim's transport knows it, such as a web chat
+	 * connection's browser origin; tools read it as `ToolTurn.origin`. Leave it out for a turn the
+	 * transport gives none, and never fill it from message text.
+	 */
+	origin?: string;
 	/** Files and images the message carries. */
 	attachments?: TurnAttachments;
 	/** The turn's tools; by default the plugins' `agentSelection`, read at the turn. */
@@ -184,6 +190,7 @@ export function conversationTurns(
 								},
 								text: input.text,
 								speaker,
+								...(input.origin === undefined ? {} : { origin: input.origin }),
 								...(conversation ? { conversation } : {}),
 								...(input.attachments
 									? { attachments: input.attachments }

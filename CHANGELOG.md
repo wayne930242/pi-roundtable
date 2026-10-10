@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `ToolTurn.origin`, `TurnRequest.origin`, `ConversationTurnInput.origin` and `SessionContext.origin()`: where a turn's request came from, as the transport that carried it reported it, such as the browser origin of a web chat connection (`https://chat.example.com`). A tool's `run` and its `hold` read it from the `ToolTurn` they receive, so a tool can label what it creates (an issue's source line) and fail closed when it is undefined. A claim passes it to `context.turns.run({ ..., origin })`; the runtime keeps it with the turn's speaker and clears it when the turn ends. Only the transport sets it, never the message text or the model. A turn whose channel gives none (Discord, a schedule, an agent's turn, the CLI) leaves it undefined, and `testPlugin().runTool` takes `origin` in its options. Additive: nothing changes for a claim or a tool that does not use it, and `SessionContext.origin` is optional on the type so a context built before this still type-checks.
+
 ## [0.9.9] - 2026-10-10
 
 ### Added

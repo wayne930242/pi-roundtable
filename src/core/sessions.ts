@@ -92,6 +92,12 @@ export interface SessionContext {
 	attachmentDir?: string;
 	/** The person the session's running turn is for; undefined between turns. */
 	speaker(): Speaker | undefined;
+	/**
+	 * Where the running turn's request came from, as `TurnRequest.origin` says; undefined between
+	 * turns and for a turn whose transport gives none. A context built before 0.9.10 has no such
+	 * method, which reads as undefined.
+	 */
+	origin?(): string | undefined;
 	/** Runs a task beside this session, under its confirmation gate. */
 	runTask(task: TransientTask): Promise<string>;
 }

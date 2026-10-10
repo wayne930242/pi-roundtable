@@ -37,10 +37,14 @@ type Registered = {
 };
 
 /** Registers the tool in a fake Pi session the way the runtime does, and returns what it registered. */
-function register(tool: ReturnType<typeof defineTool>): Registered {
+function register(
+	tool: ReturnType<typeof defineTool>,
+	origin?: string,
+): Registered {
 	const registered: Registered[] = [];
 	const context = {
 		speaker: () => speaker,
+		...(origin === undefined ? {} : { origin: () => origin }),
 		turnChannel: "discord:2",
 		agent: { name: "helper", session: "discord:2", home: "discord:2" },
 	} as unknown as SessionContext;
@@ -73,6 +77,22 @@ describe("defineTool", () => {
 		expect(tool.session.snapshot().requiredTools).toEqual(["note_add"]);
 		expect(tool.minTier).toBe("member");
 		expect(tool.agent).toBe(true);
+	});
+
+	test("a tool's run sees the origin of the turn's connection, and none when the session has none", async () => {
+		const seen: (string | undefined)[] = [];
+		const tool = defineTool({
+			...note,
+			run: (_args, turn) => {
+				seen.push(turn.origin);
+				return "ok";
+			},
+		});
+		await register(tool, "https://chat.example.com").execute("c", {
+			text: "a",
+		});
+		await register(tool).execute("c", { text: "b" });
+		expect(seen).toEqual(["https://chat.example.com", undefined]);
 	});
 
 	test("a ToolRefusal becomes an error result the model reads; any other error fails the call", async () => {

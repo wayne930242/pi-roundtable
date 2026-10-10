@@ -589,6 +589,10 @@ The host logs counts only (`files`, `bytes`, `unattributedBytes`), never a file 
 `run` receives the arguments, already typed, and the turn: the speaker, the channel, the agent, an abort signal, `workspace`, `attachFile`, and `attachment`.
 `turn.workspace` is `{ workspace, scratchDir? }` in a session with a shared workspace (an agent's), the same roots as `SessionContext.workspace`, and undefined elsewhere: a tool that makes a file can save it there, under the scratch dir when there is one, and name its path, so the model sends it on with `attach_file` or a `discord_send_message` file `path` instead of carrying its bytes.
 It returns the text the model reads.
+`turn.origin` is where the turn's request came from, as the transport that carried it reported it, and undefined when the channel gives none: the web chat sets it to the browser origin its connection opened with (`https://chat.example.com`, `chrome-extension://<id>`), a Discord message, a schedule or an agent's turn leave it undefined.
+Only a channel's transport sets it, never the message text or the model, so a tool may write it on a record it creates, such as an issue's source line; a tool that needs it fails closed when it is undefined.
+A claim passes it to `context.turns.run` as `origin`, and the hold of the same call sees it too, since `hold` receives the same `ToolTurn`.
+
 `turn.attachment(file)` opens a file someone attached to the conversation, by the name the turn's `## Attachments` block lists, and returns `{ file, name, contentType, size, bytes() }`: a tool passes a user's file on without the model carrying its bytes.
 Only the conversation's own files open; a path, a hidden name, or a missing file throws a `ToolRefusal` the model reads, and so does a file the host's [retention period](#retention-removing-used-files-after-a-period) removed, which says so.
 Throw `ToolRefusal` for a call the model should correct; any other error fails the call.
@@ -746,7 +750,7 @@ export const cleanup = definePlugin({
 #### A hold that looks things up
 
 A hold may need something it must fetch as the speaker before it can describe the call, such as the display name of the entity an id stands for, read with the speaker's own credentials.
-A tool's `hold` may then return a promise and takes the turn as a second argument: the `ToolTurn` its `run` receives, with the `speaker`, the `channel` and the `agent` of the turn that makes the call.
+A tool's `hold` may then return a promise and takes the turn as a second argument: the `ToolTurn` its `run` receives, with the `speaker`, the `channel`, the `agent` and the `origin` of the turn that makes the call.
 
 ```ts
 defineTool({
@@ -1861,6 +1865,7 @@ The factory gets the session's `SessionContext`, fixed when the session is made:
 - `addressee` is whom tool descriptions should name: the primary owner exactly as configured in their own private conversation, another person by their name and pronouns (their name alone when they gave none), and `THE_SPEAKER` in a shared conversation, or a private one of someone the host knows by no name yet.
 - `memory` is `"none"` for a persona that declares it, and `"speaker"` otherwise; a memory tool of your own loads nothing for `"none"`. A task the session runs with `runTask` keeps its conversation's `memory`.
 - `speaker()` is the running turn's speaker, undefined between turns; a tool reads it when it runs, never when the session is made, since a session outlives the turn it is built in.
+- `origin()` is where the running turn's request came from, as `TurnRequest.origin` says, and undefined between turns and for a turn whose transport gives none; read it when the tool runs, like `speaker()`. It is optional on the type so a context built before 0.9.10 still type-checks.
 
 The core's Jev compactor is one such extension:
 
@@ -2012,7 +2017,7 @@ Call `context.turns.run(input)` inside your claim's queue task to run a turn in 
 It shows typing and the stop control on the channel's surface, runs the turn, and emits `turnStarted` and `turnEnded` with the turn's `kind`.
 It catches runtime errors as failed results and posts the answer, failure notice, or stopped notice through the surface.
 Supply `reply(result)` to handle the reply yourself.
-`input` has `channel`, `kind`, `text`, `speaker`, and optionally `attachments`, `selection` (by default the plugins' `agentSelection`), `steerable`, `interactive`, `confirmed`, `reply`, and `conversation`.
+`input` has `channel`, `kind`, `text`, `speaker`, and optionally `origin` (where the request came from, as your claim's transport knows it, such as a connection's browser origin; tools read it as `turn.origin`, so never fill it from message text), `attachments`, `selection` (by default the plugins' `agentSelection`), `steerable`, `interactive`, `confirmed`, `reply`, and `conversation`.
 It rejects with `NotLinkedError` during `setup`, and with a `PluginError` on a host whose runtime plugin has not provided a runtime.
 
 Before each turn runs, `context.turns.run` records its conversation in the host's registry, `CONVERSATIONS`: at the first turn its key, surface, kind, visibility, owner, and title, and at every later turn only that it was active.
@@ -2955,7 +2960,7 @@ It returns:
 | `contribution` | What the plugin added, as the host would collect it: `tools`, `prompt`, `seeds`, `events`, `services`, `http`, and the rest |
 | `tools`, `tiers` | The tool names, and the table that says what tier each needs |
 | `holds` | The plugin's `holdRules` chained as the host links them (`holdChain`): `holds(tool, input, { workspace?, scratchDir? })` returns the description of a call that must be approved first, or `undefined`; `holds.inTurn(tool, input, context, turn)` asks them as a turn does, and returns a promise when a hold looks things up |
-| `runTool(name, args, { speaker, channel, workspace }?)` | Runs a tool the way an agent's turn would, in the channel (default `test:1`) for the speaker, and returns the text the model reads; `workspace` (`{ workspace, scratchDir? }`) is the session's `turn.workspace` |
+| `runTool(name, args, { speaker, origin, channel, workspace }?)` | Runs a tool the way an agent's turn would, in the channel (default `test:1`) for the speaker, and returns the text the model reads; `origin` is the turn's `turn.origin`, and `workspace` (`{ workspace, scratchDir? }`) is the session's `turn.workspace` |
 | `files` | Accepted files from `runTool`, recorded as `{ channel, file: ReplyFile }`; inject a surface with `supportsFiles: true` and pass its channel to test attachment tools |
 | `events` | The events the plugin itself reported through `context.events`, and those of `context.turns` |
 | `conversations`, `turns`, `surfaces` | What the plugin sees as `context.conversations`, `context.turns`, and `context.surfaces`, for a test to drive its claims |

@@ -117,6 +117,14 @@ describe("conversation turns", () => {
 		]);
 	});
 
+	test("the origin a claim gives reaches the runtime's request, and none is made up", async () => {
+		const { turns, requests } = setup(async () => ({ ok: true, text: "ok" }));
+		await turns.run({ ...input, origin: "https://chat.example.com" });
+		await turns.run(input);
+		expect(requests[0]?.origin).toBe("https://chat.example.com");
+		expect(requests[1]).not.toHaveProperty("origin");
+	});
+
 	test("what the runtime reports as the turn goes reaches the surface and the plugins' handlers, until the turn ends", async () => {
 		let late: TurnRequest["progress"];
 		const { turns, log, progress } = setup(async (request) => {

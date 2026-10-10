@@ -27,6 +27,14 @@ export interface ToolTurn {
 	agent: AgentTurnScope | undefined;
 	signal: AbortSignal | undefined;
 	/**
+	 * Where the turn's request came from, as its transport reported it, such as the browser origin
+	 * of a web chat connection (`https://chat.example.com`); undefined for a turn whose channel gives
+	 * none, such as a Discord message or a schedule. Only the transport sets it, never the message
+	 * text or the model, so a tool may label a record with it; a tool that needs one fails closed
+	 * when it is undefined.
+	 */
+	origin?: string;
+	/**
 	 * The session's shared workspace and scratch dir, where a tool may save a file for the model to
 	 * pass on by path; undefined for a session without a workspace.
 	 */

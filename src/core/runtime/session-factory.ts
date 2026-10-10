@@ -73,6 +73,8 @@ import {
 export interface SessionFactoryDeps {
 	/** The person the conversation's running turn is for. */
 	speaker(channel: ChannelKey): Speaker | undefined;
+	/** Where the conversation's running turn came from, as its transport reported it. */
+	origin(channel: ChannelKey): string | undefined;
 	/** Whether the conversation's running turn loads no memory, as the agent server's option keeps a speaker out of it. */
 	withholdsMemory(channel: ChannelKey): boolean;
 	/**
@@ -355,6 +357,7 @@ export class SessionFactory {
 				return state.memory;
 			},
 			speaker: () => this.#deps.speaker(turnKey),
+			origin: () => this.#deps.origin(turnKey),
 			runTask: (task) =>
 				this.#deps.runTask({ turn: turnKey, home: channel }, task),
 		};

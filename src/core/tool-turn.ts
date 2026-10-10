@@ -15,11 +15,13 @@ export function toolTurn(
 	context: SessionContext,
 	signal: AbortSignal | undefined,
 ): ToolTurn {
+	const origin = context.origin?.();
 	return {
 		speaker: context.speaker(),
 		channel: context.turnChannel,
 		agent: context.agent,
 		signal,
+		...(origin === undefined ? {} : { origin }),
 		...(context.workspace ? { workspace: context.workspace } : {}),
 		attachFile: attachReplyFile,
 		attachment: async (file) => {

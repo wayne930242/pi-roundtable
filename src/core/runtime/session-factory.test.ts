@@ -26,6 +26,7 @@ function factory(personas: Record<string, string>): SessionFactory {
 	} as unknown as PiAgentRuntimeOptions;
 	return new SessionFactory(options, {
 		speaker: () => undefined,
+		origin: () => undefined,
 		withholdsMemory: () => false,
 		runTask: async () => "",
 	});
@@ -74,6 +75,7 @@ describe("the tools of a selection", () => {
 		} as unknown as PiAgentRuntimeOptions;
 		const tools = new SessionFactory(options, {
 			speaker: () => undefined,
+			origin: () => undefined,
 			withholdsMemory: () => false,
 			runTask: async () => "",
 		}).toolsFor({
@@ -101,6 +103,7 @@ describe("the tools of a task and of startup, by their names before 0.9 too", ()
 			} as unknown as PiAgentRuntimeOptions,
 			{
 				speaker: () => undefined,
+				origin: () => undefined,
 				withholdsMemory: () => false,
 				runTask: async () => "",
 			},
