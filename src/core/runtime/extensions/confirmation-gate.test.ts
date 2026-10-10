@@ -212,6 +212,35 @@ describe("ConfirmationGate with a card that outlives its turn", () => {
 		return { waits, ask: { prompts, asker: "infra" } };
 	}
 
+	test("a card resolves a relative file path from the session's directory", async () => {
+		const dir = mkdtempSync(join(tmpdir(), "approval-root-"));
+		writeFileSync(join(dir, "sigil.png"), new Uint8Array(2048));
+		const gate = new ConfirmationGate(
+			holds,
+			OWNER,
+			undefined,
+			{},
+			undefined,
+			dir,
+		);
+		gate.beginTurn("workspace", false);
+		let card = "";
+		const prompts: Prompts = {
+			confirm: async (_title, message) => {
+				card = message;
+				return "approved";
+			},
+			ask: async () => undefined,
+		};
+		await gate.decide(
+			MAIL,
+			{ ...send, files: [{ path: "sigil.png" }] },
+			{ prompts, asker: "infra" },
+		);
+		expect(card).toContain("File `sigil.png` (2.0 KiB)");
+		rmSync(dir, { recursive: true, force: true });
+	});
+
 	test("an unanswered card blocks the call, holds nothing, and tells the model to end its turn waiting", async () => {
 		const gate = new ConfirmationGate(holds, OWNER);
 		gate.beginTurn("workspace", false);

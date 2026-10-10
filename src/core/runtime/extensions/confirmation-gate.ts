@@ -80,10 +80,14 @@ export class ConfirmationGate {
 	#addressee: OwnerIdentity;
 	readonly #context: HoldContext;
 	readonly #tiers: ToolTiers | undefined;
+	/** Where the session's relative file paths resolve, for the sizes a card shows. */
+	readonly #fileRoot: string | undefined;
 
 	/**
 	 * `holds` decides which calls wait for the owner. With a workspace, the session has a shell,
 	 * and its writes outside the workspace and the context's scratch dir are held too.
+	 * `fileRoot` is the session's working directory, where a card resolves relative file paths;
+	 * it defaults to the workspace.
 	 */
 	constructor(
 		holds: HoldCheck,
@@ -91,8 +95,10 @@ export class ConfirmationGate {
 		pending?: PendingConfirmation,
 		context: HoldContext = {},
 		tiers?: ToolTiers,
+		fileRoot?: string,
 	) {
 		this.#tiers = tiers;
+		this.#fileRoot = fileRoot ?? context.workspace;
 		this.#holds = holds;
 		this.#owner = owner;
 		this.#addressee = owner;
@@ -159,7 +165,7 @@ export class ConfirmationGate {
 		if (!ask) return { reason: this.#record(call) };
 		const answer = await ask.prompts.confirm(
 			messages().confirmTitle(ask.asker),
-			approvalCard(call, this.#context.workspace),
+			approvalCard(call, this.#fileRoot),
 			ask.signal,
 			higherTier(this.#tiers?.minTier(call.tool), call.minTier),
 			{ late: (late) => this.#late(call, late) },

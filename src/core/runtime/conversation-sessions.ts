@@ -107,6 +107,8 @@ export class ConversationSessions {
 						}
 					: {},
 				this.#tiers,
+				// Owner sessions have no shell workspace but still send files from their own directory.
+				agents ? agents.workDir : this.#factory.cwd(undefined),
 			);
 			this.#gates.set(key, gate);
 			this.#restored.delete(key);
