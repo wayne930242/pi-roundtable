@@ -5,6 +5,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- File attachments. A person uploads a file to one of their conversations with `POST <path>/conversations/<id>/files?name=<file name>` (the body is the file, its `Content-Type` the type; answers 201 `{ file, name, contentType, size }`), then names it in a `send` frame's new `attachments` field. The turn runs with the files as the core's attachments: images reach the model, every file is listed under `## Attachments`, and `read_attachment` and a tool's `turn.attachment()` read them. An rrweb recording is an ordinary `application/json` file.
+- `ready` carries `attachments: { maxBytes, perMessage, types }`, so a client shows an upload control only when the server takes files; the subprotocol stays `roundtable.webchat.v1`, and a client that sends no `attachments` sees no change.
+- The error code `unknown_attachment` (a `send` named a file that is not waiting for the person in that conversation; the whole message is refused) and the REST errors `payload_too_large` (413), `unsupported_media_type` (415) and `too_many_uploads` (429).
+- The limits `attachmentBytes` (10 MiB, at most the core's 25 MiB), `attachmentsPerMessage` (8), `uploadsPerHour` (60), `unsentUploadBytesPerPrincipal` (64 MiB), `attachmentTypes` (PNG, JPEG, WebP, GIF, JSON, plain text, PDF; an entry may end in `/*`) and `unsentUploadTtlMs` (24 hours). The first bytes of an image or PDF must match its type. An upload no message used is deleted after its time; a swept file, a file of another conversation or person, or a file a message already used is `unknown_attachment`.
+- Nothing needs configuring. The plugin needs `context.attachments` from pi-roundtable 0.9.2 and refuses to set up without it, and a host that has no `dataDir` fails at startup with a message naming it.
+
+### Fixed
+
+- The README named `>=0.8.0 <0.9.0` as the peer range of pi-roundtable; it is `>=0.9.0 <0.10.0`.
+
 ## [0.9.1] - 2026-10-10
 
 - Release in lockstep with pi-roundtable 0.9.1; no package-specific behavior changes.

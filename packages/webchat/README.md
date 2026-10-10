@@ -8,19 +8,20 @@ Source lives in [`packages/webchat`][source] in the pi-roundtable repository and
 [roundtable]: https://www.npmjs.com/package/pi-roundtable
 [source]: https://github.com/wayne930242/pi-roundtable/tree/master/packages/webchat
 
-The plugin adds four things to a host:
+The plugin adds five things to a host:
 
 - a chat surface whose conversations have keys `web:<conversation>`;
 - the claim that runs each message as a turn of its conversation's persona, through `context.turns` and the host's runtime;
 - a REST API and a WebSocket under one path of the host's HTTP listener;
-- a durable private inbox for `notify`, with live `notice` frames and an authenticated REST inbox.
+- a durable private inbox for `notify`, with live `notice` frames and an authenticated REST inbox;
+- file uploads to a conversation (screenshots, a JSON recording, a PDF), which a message then references; see [Attachments](#attachments).
 
 It needs no Discord: a host whose `roundtable.config.ts` has no `discord` key and lists this plugin is a web-only assistant.
 `roundtable init --adapter web` creates such a project.
 
 ## Requirements
 
-- Bun 1.3 or later, and pi-roundtable `>=0.8.0 <0.9.0` as a peer dependency.
+- Bun 1.3 or later, and pi-roundtable `>=0.9.0 <0.10.0` as a peer dependency. Uploading files needs `context.attachments`, which pi-roundtable added in 0.9.2: the plugin refuses to set up on an earlier core and names the version to install.
 - An HTTP listener on the host (`http` in the configuration), behind a reverse proxy that serves it over HTTPS.
 - An OpenID Connect provider that issues access tokens for this API, with signing keys published as a JWKS.
 
@@ -194,7 +195,7 @@ The TypeScript types are `ClientFrame` and `ServerFrame`.
 | Frame | Meaning |
 |---|---|
 | `{ type: "send", id, persona, text }` | Opens a new conversation of `persona` with this message. `id` is your reference, echoed by `accepted` or `error`. |
-| `{ type: "send", id, conversation, text }` | A message in one of your conversations. |
+| `{ type: "send", id, conversation, text, attachments? }` | A message in one of your conversations. `attachments` lists files you [uploaded](#attachments) to this conversation, by the `file` each upload returned. |
 | `{ type: "stop", conversation }` | Stops the conversation's running turn. |
 | `{ type: "approval", prompt, approved }` | Approves or declines an approval prompt. |
 | `{ type: "answer", prompt, choices, text? }` | Answers a question prompt: the chosen options' labels, and your own text where the question allows it. |
@@ -204,7 +205,7 @@ The TypeScript types are `ClientFrame` and `ServerFrame`.
 
 | Frame | Meaning |
 |---|---|
-| `{ type: "ready", protocol, speaker, personas, expiresAt }` | Sent first, and again after a fresh token: who you are (`{ id, name, tier, principalId }`), the personas you may open (`{ kind, label }`), and when the token expires. Open prompts follow it. |
+| `{ type: "ready", protocol, speaker, personas, attachments, expiresAt }` | Sent first, and again after a fresh token: who you are (`{ id, name, tier, principalId }`), the personas you may open (`{ kind, label }`), what an upload may be (`attachments`: `{ maxBytes, perMessage, types }`), and when the token expires. Open prompts follow it. |
 | `{ type: "accepted", id, conversation }` | Your message `id` was taken into `conversation`, a new one when you named none. |
 | `{ type: "typing", conversation, on }` | The assistant is, or is no longer, working in the conversation. |
 | `{ type: "stoppable", conversation, on }` | A stop applies, or no longer applies. |
@@ -217,7 +218,7 @@ The TypeScript types are `ClientFrame` and `ServerFrame`.
 | `{ type: "reauth", expiresAt }` | Your token expires soon: send `auth` with a fresh one. |
 | `{ type: "error", code, ref? }` | A frame was refused. `ref` is the `send` id or prompt id it was about. |
 
-Error codes: `bad_frame` (it does not parse, its text is blank or too long, or an answer the question does not allow), `unknown_conversation`, `forbidden` (someone else's conversation or prompt, or an approval above your tier), `unknown_persona` (none of that kind you may open), `unknown_prompt`, `too_many_conversations` (you hold `unusedConversationsPerPrincipal` conversations you have not written in, or opened `newConversationsPerHour` in the last hour), and `busy` (you have `turnsPerPrincipal` turns running or queued, or the conversation already has a turn queued behind its running one; the message was not taken, so send it again once a turn ends).
+Error codes: `bad_frame` (it does not parse, its text is blank or too long, or an answer the question does not allow), `unknown_conversation`, `forbidden` (someone else's conversation or prompt, or an approval above your tier), `unknown_persona` (none of that kind you may open), `unknown_prompt`, `too_many_conversations` (you hold `unusedConversationsPerPrincipal` conversations you have not written in, or opened `newConversationsPerHour` in the last hour), `unknown_attachment` (a `send` named a file that is not waiting for you in that conversation: never uploaded, uploaded to another conversation, already used by a message, or deleted after its time; the whole message is refused and nothing is run), and `busy` (you have `turnsPerPrincipal` turns running or queued, or the conversation already has a turn queued behind its running one; the message was not taken, so send it again once a turn ends).
 
 Close codes: `4401` when the token expired without a fresh `auth`, or a fresh one was refused; `4403` when the person is no longer admitted, or a fresh token names someone else.
 The host's own limits close with `1008` (too many frames), `1009` (a frame too big), and `1006` (a client that stopped reading).
@@ -232,6 +233,7 @@ A request from a browser origin not in `origins` gets 403; an allowed origin get
 | `POST <path>/tickets` | 201 `{ ticket, expiresAt }`. |
 | `GET <path>/conversations` | `{ conversations: [{ conversation, persona, title?, createdAt, lastActiveAt }] }`: your own, the most recently active first. |
 | `POST <path>/conversations` with `{ persona, title? }` | 201 `{ conversation, persona }`: a new conversation to write in. 429 `too_many_conversations` past either conversation limit. |
+| `POST <path>/conversations/<conversation>/files?name=<file name>` with the file's bytes as the body and its type as `Content-Type` | 201 `{ file, name, contentType, size }`: the file waits for your next message that names `file`. 400 `bad_request` (no name, or a name over 255 characters), 403 (not your conversation), 404 (unknown conversation), 413 `payload_too_large`, 415 `unsupported_media_type`, 429 `too_many_uploads`. See [Attachments](#attachments). |
 | `GET <path>/conversations/<conversation>/messages?limit=50` | `{ messages: [{ role, text }] }`: its last messages, at most 500. Someone else's conversation is 403. |
 | `GET <path>/notices?limit=50&before=<id>` | `{ notices: [{ id, text, createdAt, readAt }] }`: only your principal's entries on this surface, newest first, at most 100. Omit `before` for the first page; use its last id to fetch the next. |
 | `POST <path>/notices/<id>/read` | `{ notice }` with `readAt` set. Idempotent; unknown ids or another principal's notice return 404. |
@@ -242,6 +244,44 @@ Each principal retains only its newest 100 notices per surface, pruning oldest e
 List, read acknowledgements, pagination cursors and retention are isolated by surface as well as principal.
 Offline inbox discovery requires a private conversation on this surface or a linked identity whose provider equals this surface; a generic `oidc:` link alone does not establish membership in every webchat inbox.
 A REST notice page therefore contains at most 100 bounded entries, less than 2.5 MiB at the default text cap.
+
+## Attachments
+
+A person sends a file in two steps, because the socket carries JSON text only: they upload it over REST to a conversation they own, then name it in a `send` frame.
+Open the conversation first (`POST <path>/conversations`, or an earlier message), since a message that opens a conversation cannot reference files that have no conversation to wait in.
+`ready.attachments` tells the client the limits (`maxBytes`, `perMessage`, `types`) before it shows an upload control.
+
+```js
+const open = await fetch("/chat/conversations", {
+	method: "POST",
+	headers: { authorization: `Bearer ${token}` },
+	body: JSON.stringify({ persona: "helpdesk" }),
+});
+const { conversation } = await open.json();
+const response = await fetch(`/chat/conversations/${conversation}/files?name=${encodeURIComponent(file.name)}`, {
+	method: "POST",
+	headers: { authorization: `Bearer ${token}`, "content-type": file.type },
+	body: file,
+});
+const { file: id } = await response.json();
+socket.send(JSON.stringify({ type: "send", id: "2", conversation, text: "Why did this fail?", attachments: [id] }));
+```
+
+What the server checks, in this order: the conversation is the caller's (403, 404); the file name is present and at most 255 characters, with control characters replaced and quotes made apostrophes so a name cannot add lines to the model's prompt (400); the `Content-Type` is one of `limits.attachmentTypes` (415); the person has not made `uploadsPerHour` uploads in the last hour (429); the file is within `attachmentBytes`, by `Content-Length` and again while the body streams, so a body that lies about its length is cut off (413); the person's uploads waiting for a message stay within `unsentUploadBytesPerPrincipal` (429); and for PNG, JPEG, GIF, WebP and PDF the first bytes match the type (415), whatever the file name says.
+JSON, plain text and other types have no such check, since any bytes may be labelled so.
+The default types are `image/png`, `image/jpeg`, `image/webp`, `image/gif`, `application/json`, `text/plain` and `application/pdf`; an entry ending in `/*` admits every type under it.
+An rrweb recording is an ordinary `application/json` file.
+
+A `send` that names files runs the turn with them: the core moves each file into the conversation's attachment directory, shows up to four images to the model, lists every file under `## Attachments` in the turn's prompt, and lets the model read text, JSON and PDF files with `read_attachment`.
+A plugin's tool passes a file on with `turn.attachment(file)`, which returns the bytes (see the core's [plugin guide](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md)).
+A message may name at most `attachmentsPerMessage` files, a file belongs to one message, and a message that names a file that is not waiting for the person is refused whole with `unknown_attachment`.
+
+An upload no message used is deleted after `unsentUploadTtlMs` (24 hours): the plugin sweeps every ten minutes, and once when the host starts.
+Files a message used stay with their conversation, in the host's data directory, as long as the conversation does.
+This plugin has no way to delete a conversation, so none of its files go with it.
+
+Uploads are as private as the transcript: files sit in the host's data directory under the private conversation, where the owner and the operator can read them, as they can the transcript.
+Only the person who uploaded a file can use it, and only in the conversation it was uploaded to; a shared conversation (one recorded for no one in particular) takes no uploads.
 
 ## Security model
 
@@ -258,6 +298,9 @@ A REST notice page therefore contains at most 100 bounded entries, less than 2.5
   Each person has at most `turnsPerPrincipal` interactive turns running or queued at once, however many conversations or sockets they use, and a conversation at most its running interactive turn and one queued behind it; a browser message over either limit is refused with `busy` and never queued.
   Personal schedules and delegated reports use the core runtime's conversation queue separately from this interactive admission budget, so a busy browser cannot discard them; runtime stop and shutdown still apply.
   Each person opens at most `newConversationsPerHour` conversations an hour, over the socket or the REST API alike.
+- **Uploads.** Only a conversation's own person may upload to it, a file waits for that person and conversation alone, and a message names it by an id nobody can guess.
+  Type, size, rate and the waiting total are limited per person, and the bytes of an image or PDF are checked against the type.
+  See [Attachments](#attachments).
 - **Approvals.** A held call's card goes to the conversation's person only, and needs the tier the call needs.
   A card whose tier the person lacks is never shown: its prompt resolves `expired`, without owner escalation.
 - **Owner.** Nobody becomes the owner through a token's claims; grant owner in core configuration or the principal CLI.
@@ -279,10 +322,15 @@ A REST notice page therefore contains at most 100 bounded entries, less than 2.5
 | `rate` | 60 frames a minute per socket |
 | `maxBufferedBytes` | 4 MiB waiting for a slow client |
 | `ticketTtlMs` | 30 seconds |
+| `attachmentBytes` | 10 MiB per uploaded file; never above the core's 25 MiB |
+| `attachmentsPerMessage` | 8 files named by one message |
+| `uploadsPerHour` | 60 uploads per person in any hour |
+| `unsentUploadBytesPerPrincipal` | 64 MiB per person uploaded and not yet used by a message |
+| `attachmentTypes` | `image/png`, `image/jpeg`, `image/webp`, `image/gif`, `application/json`, `text/plain`, `application/pdf` |
+| `unsentUploadTtlMs` | 24 hours before an unused upload is deleted |
 
 ## What it does not do yet
 
-- Attachments: messages carry text only.
 - System error reports into a person's web conversation: the background claim accepts only `PERSONAL_TARGET` turns checked by core, whose author principal is the private conversation's principal.
   The claim declares `takesSystemReports: false`: configuring `ops.conversation` on this surface (for example, `web:ops`) fails at startup with core `ConfigError`, rather than silently skipping every report.
   Use a shared conversation on another surface, such as a Discord channel, or `ops.agent`.

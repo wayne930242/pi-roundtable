@@ -2734,12 +2734,14 @@ The package README documents every frame, error code, close code, and limit.
 The verifier is generic; what makes it safe is how it is pointed at your provider.
 The README's [provider settings][webchat-provider-settings] explain, with Microsoft Entra ID as the example, why to name people by a claim that stays the same across app registrations (`subjectClaim`), pin the tenant in `check`, accept access tokens only, refuse app-only tokens, merge issuers of one tenant only (`speakerIssuer`), and mind the guests `everyone` admits.
 
-The web chat takes no attachments or system error reports (`takesSystemReports: false`), so `ops.conversation` cannot name it.
+The web chat takes files people upload to their conversation and then name in a message (see the README's [attachments][webchat-attachments]), built on [`context.attachments`](#contextattachments-files-from-outside-a-turn).
+It takes no system error reports (`takesSystemReports: false`), so `ops.conversation` cannot name it.
 It accepts `PERSONAL_TARGET` background turns only for the private conversation's principal; include `schedule_*`, `delegate_task`, and `notify` in a persona's selection only deliberately, adjusting their tiers if needed.
 Leave out `web_search` and `fetch_content` unless people may make the host fetch any address, internal ones included.
 
 [webchat-package]: https://github.com/wayne930242/pi-roundtable/blob/master/packages/webchat/README.md
 [webchat-provider-settings]: https://github.com/wayne930242/pi-roundtable/blob/master/packages/webchat/README.md#provider-settings
+[webchat-attachments]: https://github.com/wayne930242/pi-roundtable/blob/master/packages/webchat/README.md#attachments
 
 ### What plugins do not extend
 

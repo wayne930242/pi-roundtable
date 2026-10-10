@@ -39,7 +39,7 @@ Without the cleanup hook, conversations remain read-only.
 
 ## Requirements
 
-- Bun 1.3 or later, and pi-roundtable `>=0.8.0 <0.9.0` as a peer dependency.
+- Bun 1.3 or later, and pi-roundtable `>=0.9.0 <0.10.0` as a peer dependency.
 - The host must run on the machine that holds its data directory: the console reads `<dataDir>/sessions` from disk.
 - The `memory` addon for the Notes pane (it is on by default; switch the pane off with `panes` when you run without memory).
 - A way to authenticate the owners in front of the listener, such as Cloudflare Access, or a verifier of your own (see [Authentication](#authentication)).
