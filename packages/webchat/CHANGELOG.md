@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.9.10] - 2026-10-10
+
 ### Added
 
 - A turn run for a message carries the `Origin` header its connection's upgrade was accepted with, as `origin` on `context.turns.run`, so a tool reads it as `ToolTurn.origin`. It is trimmed and lower-cased and kept only when it is a serialized `scheme://host[:port]` of at most 256 characters; a connection that sent none, or an `Origin` of another shape, leaves it undefined. It is read from the transport at the upgrade, never from a frame or the message text. Needs pi-roundtable 0.9.10 or later to reach tools; on an older core the extra field is ignored.
