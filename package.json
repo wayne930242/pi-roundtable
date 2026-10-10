@@ -59,7 +59,7 @@
 	},
 	"dependencies": {
 		"@babel/parser": "7.29.9",
-		"@babel/types": "7.29.8",
+		"@babel/types": "8.0.6",
 		"@earendil-works/pi-ai": ">=0.99.2 <2",
 		"@earendil-works/pi-coding-agent": ">=0.99.2 <2",
 		"canvas": "3.2.3",
