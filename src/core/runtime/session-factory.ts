@@ -23,6 +23,10 @@ import {
 	type TransientTask,
 } from "../sessions.ts";
 import { activeToolsExtension } from "../shared/active-tools.ts";
+import {
+	ATTACH_FILE_TOOL,
+	attachFileExtension,
+} from "../shared/attach-file-tool.ts";
 import { packageDir } from "../shared/package-dir.ts";
 import { readAttachmentExtension } from "../shared/read-attachment-tool.ts";
 import { type Speaker, THE_SPEAKER } from "../speakers.ts";
@@ -130,6 +134,8 @@ export class SessionFactory {
 			...currentToolNames(selection.tools, this.#options.logger),
 			COMPACT_TOOL,
 			ASK_USER_TOOL,
+			// Registered only by a session with a workspace.
+			ATTACH_FILE_TOOL,
 			...groups
 				.filter((group) => selection.groups.includes(group.name))
 				.flatMap((group) => group.tools),
@@ -332,6 +338,14 @@ export class SessionFactory {
 			},
 			conversation,
 			addressee,
+			...(agents
+				? {
+						workspace: {
+							workspace: cwd,
+							...(agents.scratchDir ? { scratchDir: agents.scratchDir } : {}),
+						},
+					}
+				: {}),
 			attachmentDir,
 			get memory() {
 				return state.memory;
@@ -353,6 +367,9 @@ export class SessionFactory {
 			additionalExtensionPaths: this.link().extensionPaths,
 			extensionFactories: sessionExtensions(this.plan, context, {
 				readAttachment: readAttachmentExtension(attachmentDir),
+				...(context.workspace
+					? { attachFile: attachFileExtension(context.workspace) }
+					: {}),
 				confirmationGate: confirmationGateExtension(gate, slot),
 				askUser: askUserExtension(slot, addressee, () =>
 					turnAddressee(

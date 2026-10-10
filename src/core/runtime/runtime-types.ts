@@ -111,6 +111,8 @@ export const revisionsKey = (plan: SessionPlan) =>
 /** The core's own extensions of one session, which the plan's contributions surround. */
 export interface CoreExtensions {
 	readAttachment: ExtensionFactory;
+	/** `attach_file`, for a session with a workspace. */
+	attachFile?: ExtensionFactory;
 	confirmationGate: ExtensionFactory;
 	askUser: ExtensionFactory;
 	selfCompactGuard: ExtensionFactory;
@@ -139,6 +141,9 @@ export function sessionExtensions(
 	return [
 		...contributed(plan.tools),
 		{ name: "read-attachment", factory: core.readAttachment },
+		...(core.attachFile
+			? [{ name: "attach-file", factory: core.attachFile }]
+			: []),
 		{ name: "confirmation-gate", factory: core.confirmationGate },
 		{ name: "ask-user", factory: core.askUser },
 		{ name: "self-compact-guard", factory: core.selfCompactGuard },

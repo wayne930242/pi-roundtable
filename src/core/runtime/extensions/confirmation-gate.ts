@@ -1,3 +1,5 @@
+import { statSync } from "node:fs";
+import { resolve } from "node:path";
 import type { ExtensionFactory } from "@earendil-works/pi-coding-agent";
 import type {
 	HeldCall,
@@ -155,7 +157,7 @@ export class ConfirmationGate {
 		if (!ask) return { reason: this.#record(call) };
 		const answer = await ask.prompts.confirm(
 			messages().confirmTitle(ask.asker),
-			approvalCard(call),
+			approvalCard(call, this.#context.workspace),
 			ask.signal,
 			higherTier(this.#tiers?.minTier(call.tool), call.minTier),
 		);
@@ -229,13 +231,44 @@ export function confirmedTurnText(
 	return `(${owner.name} approved the held actions below with this message. Make each call now with exactly this input.)\n${calls}\n\n${text}`;
 }
 
-/** What an approval card says: the held action's words, then the exact call. */
-export function approvalCard(call: HeldCall): string {
+/**
+ * What an approval card says: the held action's words, the exact call, and each file it sends by
+ * path with the file's size now; relative paths resolve against `workspace`.
+ */
+export function approvalCard(call: HeldCall, workspace?: string): string {
 	const input =
 		call.input.length > CARD_INPUT_CHARS
 			? `${call.input.slice(0, CARD_INPUT_CHARS)}…`
 			: call.input;
-	return `**${call.action}**\n-# \`${call.tool}\`\n\`\`\`json\n${input.replaceAll("```", "`\u200b``")}\n\`\`\``;
+	const files = pathFiles(call.input).map(
+		(path) => `\n-# ${messages().cardFile(path, fileSize(path, workspace))}`,
+	);
+	return `**${call.action}**\n-# \`${call.tool}\`\n\`\`\`json\n${input.replaceAll("```", "`\u200b``")}\n\`\`\`${files.join("")}`;
+}
+
+/** The paths of a call's `files` entries that name one. */
+function pathFiles(input: string): string[] {
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(input);
+	} catch {
+		return [];
+	}
+	const files = isPlainObject(parsed) ? parsed.files : undefined;
+	if (!Array.isArray(files)) return [];
+	return files.flatMap((file: unknown) =>
+		isPlainObject(file) && typeof file.path === "string" ? [file.path] : [],
+	);
+}
+
+/** A file's size in bytes, or undefined when it cannot be read. */
+function fileSize(path: string, workspace: string | undefined) {
+	try {
+		const info = statSync(resolve(workspace ?? "/", path));
+		return info.isFile() ? info.size : undefined;
+	} catch {
+		return undefined;
+	}
 }
 
 /** Without a slot, or with an empty one, every call that needs confirmation is held. */

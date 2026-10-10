@@ -1,8 +1,10 @@
 import type { ExtensionFactory } from "@earendil-works/pi-coding-agent";
 import { type TObject, Type } from "typebox";
+import { resolveChannelFiles } from "../../discord/channel-files.ts";
 import {
 	CHANNEL_TOOLS,
 	ChannelToolError,
+	SESSION_CHANNEL_TOOLS,
 } from "../../discord/channel-operations.ts";
 import { assistantName } from "../../i18n/index.ts";
 import {
@@ -11,6 +13,7 @@ import {
 	ownerWords,
 } from "../../identity.ts";
 import { textToolsExtension } from "../../runtime/text-tools.ts";
+import type { WorkspaceRoots } from "../../shared/workspace-files.ts";
 
 const id = Type.String({ pattern: "^\\d{1,20}$" });
 const guild = { guildId: id };
@@ -259,13 +262,18 @@ export interface OwnerOperations {
 	run(tool: string, args: Record<string, unknown>): Promise<unknown>;
 }
 
+/**
+ * The owner's Discord tools for one session. With `roots`, a file to send may name a path inside
+ * the session's workspace or scratch dir; without, files go inline only.
+ */
 export function discordAdminExtension(
 	discord: OwnerOperations,
 	owner: OwnerIdentity,
+	roots?: WorkspaceRoots,
 ): ExtensionFactory {
 	const o = ownerWords(owner);
 	const specs = [
-		...Object.entries(CHANNEL_TOOLS).map(([name, spec]) => ({
+		...Object.entries(SESSION_CHANNEL_TOOLS).map(([name, spec]) => ({
 			name,
 			label: name,
 			description: spec.description,
@@ -281,7 +289,13 @@ export function discordAdminExtension(
 	return textToolsExtension(
 		specs.map((spec) => ({
 			...spec,
-			run: async (input) => JSON.stringify(await discord.run(spec.name, input)),
+			run: async (input) =>
+				JSON.stringify(
+					await discord.run(
+						spec.name,
+						await resolveChannelFiles(spec.name, input, roots),
+					),
+				),
 		})),
 		ChannelToolError,
 	);

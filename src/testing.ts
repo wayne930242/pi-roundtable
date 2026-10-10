@@ -267,7 +267,12 @@ export interface TestPluginResult {
 	runTool(
 		name: string,
 		args: Record<string, unknown>,
-		options?: { speaker?: Speaker; channel?: ChannelKey },
+		/** `workspace` gives the session a workspace and scratch dir, as an agent's session has. */
+		options?: {
+			speaker?: Speaker;
+			channel?: ChannelKey;
+			workspace?: SessionContext["workspace"];
+		},
 	): Promise<string>;
 	stop(): Promise<void>;
 }
@@ -632,6 +637,7 @@ export async function testPlugin(
 				conversation: { visibility: "shared" },
 				addressee: THE_SPEAKER,
 				memory: "speaker",
+				...(runOptions?.workspace ? { workspace: runOptions.workspace } : {}),
 				attachmentDir: ownerAttachmentDir(attachmentDir, channel),
 				speaker: () => runOptions?.speaker,
 				runTask: async () => {

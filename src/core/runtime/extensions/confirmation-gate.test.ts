@@ -1,9 +1,13 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { holdChain } from "../../holds.ts";
 import { shellHoldRule } from "../../modules/host-shell/shell-policy.ts";
 import { TEST_OWNER as OWNER } from "../../testing/owner.ts";
 import { MAIL, MAIL_RULE } from "./confirmation-fixture.ts";
 import {
+	approvalCard,
 	CONFIRMATION_TTL_MS,
 	ConfirmationGate,
 	canonicalJson,
@@ -159,4 +163,31 @@ describe("ConfirmationGate with a workspace", () => {
 		gate.beginTurn("general", false);
 		expect(gate.hold("bash", { command: "rm x" })).toBeUndefined();
 	});
+});
+
+test("an approval card names a file sent by path with its size, not its bytes", () => {
+	const dir = mkdtempSync(join(tmpdir(), "approval-card-"));
+	const path = join(dir, "sigil.png");
+	writeFileSync(path, new Uint8Array(2048));
+	const card = approvalCard(
+		{
+			tool: "discord_send_message",
+			input: canonicalJson({ channelId: "1", files: [{ path }] }),
+			action: "send a message in #general",
+		},
+		dir,
+	);
+	expect(card).toContain(`File \`${path}\` (2.0 KiB)`);
+	expect(card).not.toContain("AAAA");
+	expect(
+		approvalCard(
+			{
+				tool: "discord_send_message",
+				input: canonicalJson({ channelId: "1", files: [{ path: "gone.png" }] }),
+				action: "send",
+			},
+			dir,
+		),
+	).toContain("File `gone.png` (not found now)");
+	rmSync(dir, { recursive: true, force: true });
 });

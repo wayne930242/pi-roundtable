@@ -38,7 +38,7 @@ const message = { channelId: id, messageId: id };
 const strict = { additionalProperties: false } as const;
 
 /** One upload may carry at most this much, in all files together. */
-const CHANNEL_UPLOAD_MAX_BYTES = 8 * 1024 * 1024;
+export const CHANNEL_UPLOAD_MAX_BYTES = 8 * 1024 * 1024;
 
 const file = Type.Object(
 	{
@@ -70,11 +70,89 @@ const files = Type.Optional(
 	}),
 );
 
+/** A file a session sends: one on its disk by path, or small generated data inline. */
+const localFile = Type.Object(
+	{
+		path: Type.Optional(
+			Type.String({
+				minLength: 1,
+				maxLength: 4096,
+				description:
+					"A file on disk inside the workspace or the scratch dir; prefer this for any file you have",
+			}),
+		),
+		filename: Type.Optional(
+			Type.String({
+				...file.properties.filename,
+				description:
+					"The attachment file name, without a path; defaults to the path's base name, required with dataBase64",
+			}),
+		),
+		dataBase64: Type.Optional(
+			Type.String({
+				...file.properties.dataBase64,
+				description:
+					"Small generated content as standard base64, without a data URL prefix; never base64 a file you have on disk, give its path",
+			}),
+		),
+		description: file.properties.description,
+	},
+	strict,
+);
+const localFiles = Type.Optional(
+	Type.Array(localFile, {
+		minItems: 1,
+		maxItems: 10,
+		description:
+			"Images or files to add, each with exactly one of path or dataBase64; at most 8 MiB in total for the whole call",
+	}),
+);
+
 export interface ChannelTool {
 	readonly operation: ChannelOperation;
 	readonly schema: Readonly<TSchema>;
 	readonly description: string;
 }
+
+const sendMessage = (attached: typeof files | typeof localFiles) => ({
+	operation: "send" as const,
+	schema: Type.Object(
+		{
+			...channel,
+			content: Type.Optional(Type.String({ maxLength: 2000 })),
+			files: attached,
+		},
+		strict,
+	),
+	description:
+		"Send a message, optionally with images or files; it triggers no @ mentions.",
+});
+
+const editMessage = (attached: typeof files | typeof localFiles) => ({
+	operation: "edit" as const,
+	schema: Type.Object(
+		{
+			...message,
+			content: Type.Optional(Type.String({ maxLength: 2000 })),
+			files: attached,
+			keepAttachmentIds: Type.Optional(
+				Type.Array(id, {
+					maxItems: 10,
+					description:
+						"Omit to keep every old attachment; an empty array removes them all; listed ids keep only those attachments",
+				}),
+			),
+		},
+		strict,
+	),
+	description: "Edit a message the bot itself sent.",
+});
+
+/** The tools that upload files; a session's files may name a path, which it reads before the call. */
+export const FILE_CHANNEL_TOOLS: readonly string[] = Object.freeze([
+	"discord_send_message",
+	"discord_edit_message",
+]);
 
 /** Discord tool descriptions and schemas, each gated by one channel operation. */
 export const CHANNEL_TOOLS: Readonly<Record<string, ChannelTool>> = freeze<
@@ -164,38 +242,8 @@ export const CHANNEL_TOOLS: Readonly<Record<string, ChannelTool>> = freeze<
 		schema: Type.Object(channel, strict),
 		description: "Read the channel's pinned messages.",
 	},
-	discord_send_message: {
-		operation: "send",
-		schema: Type.Object(
-			{
-				...channel,
-				content: Type.Optional(Type.String({ maxLength: 2000 })),
-				files,
-			},
-			strict,
-		),
-		description:
-			"Send a message, optionally with images or files; it triggers no @ mentions.",
-	},
-	discord_edit_message: {
-		operation: "edit",
-		schema: Type.Object(
-			{
-				...message,
-				content: Type.Optional(Type.String({ maxLength: 2000 })),
-				files,
-				keepAttachmentIds: Type.Optional(
-					Type.Array(id, {
-						maxItems: 10,
-						description:
-							"Omit to keep every old attachment; an empty array removes them all; listed ids keep only those attachments",
-					}),
-				),
-			},
-			strict,
-		),
-		description: "Edit a message the bot itself sent.",
-	},
+	discord_send_message: sendMessage(files),
+	discord_edit_message: editMessage(files),
 	discord_delete_message: {
 		operation: "delete",
 		schema: Type.Object(message, strict),
@@ -250,6 +298,25 @@ export const CHANNEL_TOOLS: Readonly<Record<string, ChannelTool>> = freeze<
 			"Remove a role's or member's permission overwrite in this channel.",
 	},
 });
+
+/**
+ * The channel tools as a session offers them: a file may name a path on the session's disk, which
+ * `resolveChannelFiles` reads into `CHANNEL_TOOLS`' inline form before the call runs.
+ */
+export const SESSION_CHANNEL_TOOLS: Readonly<Record<string, ChannelTool>> =
+	freeze<Record<string, ChannelTool>>({
+		...CHANNEL_TOOLS,
+		discord_send_message: {
+			...sendMessage(localFiles),
+			description:
+				"Send a message, optionally with images or files; it triggers no @ mentions. To send a file you have on disk, give its path; base64 is for small generated data only.",
+		},
+		discord_edit_message: {
+			...editMessage(localFiles),
+			description:
+				"Edit a message the bot itself sent. To add a file you have on disk, give its path; base64 is for small generated data only.",
+		},
+	});
 
 /** A tool call that cannot be run as asked; the code is safe to show the caller. */
 export class ChannelToolError extends Error {

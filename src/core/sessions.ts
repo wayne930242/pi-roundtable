@@ -83,6 +83,11 @@ export interface SessionContext {
 	 * it reads `"none"` for that turn alone.
 	 */
 	memory: "speaker" | "none";
+	/**
+	 * The shared workspace of a session with a shell, and its scratch dir: the roots its shell writes
+	 * in without a hold, and where its tools may read a file by path. Absent for a session without one.
+	 */
+	workspace?: { workspace: string; scratchDir?: string };
 	/** Where the session's conversation keeps the files people attached; absent when the session keeps none. */
 	attachmentDir?: string;
 	/** The person the session's running turn is for; undefined between turns. */
@@ -124,6 +129,7 @@ export interface SessionTool {
 /** Extensions the core places itself; no contribution may take their names. */
 const CORE_EXTENSIONS = [
 	"read-attachment",
+	"attach-file",
 	"confirmation-gate",
 	"ask-user",
 	"self-compact-guard",

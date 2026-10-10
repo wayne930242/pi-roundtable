@@ -30,8 +30,12 @@ export function discordAdminPlugin(
 			const { connection } = services.get(DISCORD);
 			return {
 				sessionTools: [
-					fixed("discord-admin", () =>
-						discordAdminExtension(connection.ownerOperations(), owner),
+					fixed("discord-admin", (session) =>
+						discordAdminExtension(
+							connection.ownerOperations(),
+							owner,
+							session.workspace,
+						),
 					),
 				],
 				// Administering the server stays with the owner until an operator lowers a tool.

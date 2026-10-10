@@ -29,6 +29,11 @@ export interface ToolTurn {
 	/** The agent whose turn it is. */
 	agent: AgentTurnScope | undefined;
 	signal: AbortSignal | undefined;
+	/**
+	 * The session's shared workspace and scratch dir, where a tool may save a file for the model to
+	 * pass on by path; undefined for a session without a workspace.
+	 */
+	workspace?: { workspace: string; scratchDir?: string };
 	/** Queues a file for this turn's successful reply; throws ReplyFileError when refused. */
 	attachFile(file: ReplyFile): void;
 	/**
@@ -124,6 +129,9 @@ export function defineTool<Schema extends TObject>(
 									channel: context.turnChannel,
 									agent: context.agent,
 									signal,
+									...(context.workspace
+										? { workspace: context.workspace }
+										: {}),
 									attachFile: attachReplyFile,
 									attachment: async (file) => {
 										if (context.attachmentDir === undefined)

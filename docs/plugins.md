@@ -556,7 +556,8 @@ Once a turn has used a file, the model reads it with `read_attachment`, and a to
 ### `tools`: what agents can call
 
 `defineTool` takes a name (lowercase words joined by underscores), a description the model reads to decide when to call it, a Typebox parameter schema, the lowest tier that may call it, and the function.
-`run` receives the arguments, already typed, and the turn: the speaker, the channel, the agent, an abort signal, `attachFile`, and `attachment`.
+`run` receives the arguments, already typed, and the turn: the speaker, the channel, the agent, an abort signal, `workspace`, `attachFile`, and `attachment`.
+`turn.workspace` is `{ workspace, scratchDir? }` in a session with a shared workspace (an agent's), the same roots as `SessionContext.workspace`, and undefined elsewhere: a tool that makes a file can save it there, under the scratch dir when there is one, and name its path, so the model sends it on with `attach_file` or a `discord_send_message` file `path` instead of carrying its bytes.
 It returns the text the model reads.
 `turn.attachment(file)` opens a file someone attached to the conversation, by the name the turn's `## Attachments` block lists, and returns `{ file, name, contentType, size, bytes() }`: a tool passes a user's file on without the model carrying its bytes.
 Only the conversation's own files open; a path, a hidden name, or a missing file throws a `ToolRefusal` the model reads.
@@ -644,6 +645,9 @@ Raw `sessionTools` and Pi package tools may import and call `attachReplyFile` du
 It uses the current asynchronous turn, not a global channel queue, so simultaneous turns and nested conversation turns keep separate files.
 A Pi package should use the host's peer dependency on `pi-roundtable`, not bundle another copy of it.
 Transient `SessionContext.runTask` tasks return only text and cannot attach to their parent's reply.
+
+The model attaches a file it already has on disk with the core's `attach_file({ path, filename? })`. A session with a workspace (`SessionContext.workspace`, an agent's) registers it; the path must resolve, symlinks followed, inside the workspace or the scratch dir, a relative path resolves in the workspace, and `filename` defaults to the path's base name. It queues the file with `attachReplyFile`, so `REPLY_FILE_LIMITS` apply and a surface without reply files refuses it as a tool error; its result tells the model the file will appear with its reply. It holds nothing, since it only posts in the channel the turn answers in, and its tier defaults to the owner, like any tool the core's table does not name.
+The Discord tools that upload, `discord_send_message` and `discord_edit_message`, take each file as exactly one of `path` (a local file, read when the call runs, with the same roots; `filename` defaults to its base name) or `dataBase64` with a `filename`, at most 8 MiB in all. A session without a workspace takes only `dataBase64`, and so does remote MCP, whose schemas stay inline only. A path outside the roots, a missing file, or a directory is a tool error naming the path. A held call's card (`approvalCard(call, workspace?)`) lists each file it sends by path with the file's size now, never its bytes.
 Calling the helper outside `context.turns.run` or an agent-team turn, or after that turn finishes, throws `ReplyFileError`; direct standalone runtime calls have no reply collector.
 Await work that produces files before returning from the tool.
 A standalone isolated worker may wrap its complete awaited turn in `withReplyFiles(supported, run)` from the main entry.
@@ -718,7 +722,7 @@ A rule whose held call stands for others can answer `approvalTier(tool, input, c
 `shellHoldRule` in `pi-roundtable/kit` judges the agents' `bash`, `write` and `edit` calls; the agent server links it, and a session without a workspace has no shell.
 Its scratch roots are the shared workspace (`HoldContext.workspace`) and the scratch dir (`HoldContext.scratchDir`).
 The scratch dir is the config's `scratchDir`, by default `<os temp dir>/<discord.rootCommand>-scratch` (such as `/tmp/roundtable-scratch`); the agent server creates it with mode 0700 at startup and refuses one that is a symlink or another user's, and the agents' `bash` runs with `TMPDIR` pointing to it, so `mktemp` and tools write there.
-`AgentSessions.scratchDir` carries it to a runtime, and the agents' prompt tells them to write temporary files there.
+`AgentSessions.scratchDir` carries it to a runtime, and the agents' prompt tells them to write temporary files there, and to show a file with `attach_file` or a `discord_send_message` file `path` rather than reading an image or base64-encoding it.
 
 - A `>`, `>>` or `tee` target, and a `write` or `edit` path, inside a scratch root run; anything else, the rest of `/tmp` included, is held.
 - An `rm` runs when every operand resolves inside a scratch root and none is a root itself or `/`. Operands resolve after the variables assigned earlier in the same command line (`NAME=value` and `export NAME=value` with literal values; `$TMPDIR` is the scratch dir and `$HOME` the service user's home), from the directory of the last `cd`, through `..` and, for paths that exist, symlinks, so a link out of a root is held. A glob is judged by its directory part. A command substitution, an unknown variable, `~user`, an `rm` without operands, and `xargs rm` are held.
@@ -2864,7 +2868,7 @@ It returns:
 | `contribution` | What the plugin added, as the host would collect it: `tools`, `prompt`, `seeds`, `events`, `services`, `http`, and the rest |
 | `tools`, `tiers` | The tool names, and the table that says what tier each needs |
 | `holds` | The plugin's `holdRules` chained as the host links them (`holdChain`): `holds(tool, input, { workspace?, scratchDir? })` returns the description of a call that must be approved first, or `undefined` |
-| `runTool(name, args, { speaker, channel }?)` | Runs a tool the way an agent's turn would, in the channel (default `test:1`) for the speaker, and returns the text the model reads |
+| `runTool(name, args, { speaker, channel, workspace }?)` | Runs a tool the way an agent's turn would, in the channel (default `test:1`) for the speaker, and returns the text the model reads; `workspace` (`{ workspace, scratchDir? }`) is the session's `turn.workspace` |
 | `files` | Accepted files from `runTool`, recorded as `{ channel, file: ReplyFile }`; inject a surface with `supportsFiles: true` and pass its channel to test attachment tools |
 | `events` | The events the plugin itself reported through `context.events`, and those of `context.turns` |
 | `conversations`, `turns`, `surfaces` | What the plugin sees as `context.conversations`, `context.turns`, and `context.surfaces`, for a test to drive its claims |

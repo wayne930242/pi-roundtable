@@ -1,5 +1,12 @@
 import type { CatalogContext } from "./types.ts";
 
+/** A size in B, KiB, or MiB. */
+function formatBytes(bytes: number): string {
+	if (bytes < 1024) return `${bytes} B`;
+	if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
+	return `${(bytes / 1024 / 1024).toFixed(1)} MiB`;
+}
+
 /** Notices, thread lines, and titles a conversation posts on its own. */
 export function conversationEn(ctx: CatalogContext) {
 	return {
@@ -22,6 +29,10 @@ export function conversationEn(ctx: CatalogContext) {
 		thinkingAuto: "auto",
 		confirmTitle: (asker: string) => `${asker} wants to run this action`,
 		askTitle: (asker: string) => `${asker} has a question for you`,
+		cardFile: (path: string, bytes: number | undefined) =>
+			bytes === undefined
+				? `File \`${path}\` (not found now)`
+				: `File \`${path}\` (${formatBytes(bytes)})`,
 	};
 }
 
@@ -47,5 +58,9 @@ export function conversationZhTW(
 		thinkingAuto: "自動",
 		confirmTitle: (asker: string) => `${asker} 要執行這個動作`,
 		askTitle: (asker: string) => `${asker} 想問你`,
+		cardFile: (path: string, bytes: number | undefined) =>
+			bytes === undefined
+				? `檔案 \`${path}\`（目前找不到）`
+				: `檔案 \`${path}\`（${formatBytes(bytes)}）`,
 	};
 }
