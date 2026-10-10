@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.9.3] - 2026-10-10
+
 ### Fixed
 
 - Uploads that arrive together can no longer pass `unsentUploadBytesPerPrincipal`: the room an upload may fill is reserved per person before its body is read (its declared `Content-Length`, or the room left when none is declared), so ten slow uploads against a 64 MiB allowance take at most 64 MiB, and their request buffers are bounded by it. A body longer than its declared length is cut off and refused (413).

@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.9.3] - 2026-10-10
+
 ### Fixed
 
 - A long non-ASCII upload name no longer fails with `ENAMETOOLONG` on Linux: a stored file name is cut by UTF-8 bytes (150 at most, on a code point, keeping the end so the extension stays) instead of by UTF-16 units, so the file name and its `.json` record fit the 255 bytes a file system takes. A leading dot left by the cut is replaced too. The Discord download path shares the fix. `AttachmentPort.save` removes the data file when the record write fails, so a half-saved file no longer counts as waiting.
