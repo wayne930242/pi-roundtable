@@ -169,6 +169,9 @@ The token is never read from a URL.
 - **Another client**, such as a service, sends `Authorization: Bearer <token>` on the upgrade and offers `roundtable.webchat.v1`.
 
 The server echoes `roundtable.webchat.v1`.
+The `Origin` an accepted upgrade carried is kept on the connection, trimmed and lower-cased, and each message's turn passes it to the core as `origin`, so a tool reads it as `turn.origin` (for example to write where an issue was filed from).
+It is read from the transport only, never from a frame or the message text.
+A client that sent none, which only a route with `origins: "any"` admits, or a header that is not a serialized `scheme://host[:port]`, leaves `turn.origin` undefined; a tool that needs it should fail closed then.
 An upgrade from an origin not in `origins`, or without one, is refused with 403; without a valid ticket or token with 401; for a person the core policy does not admit with 403; past the person's connection limit with 429.
 
 ```js

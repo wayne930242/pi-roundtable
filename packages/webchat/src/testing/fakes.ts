@@ -179,6 +179,7 @@ export function testChat(overrides: Partial<WebChatDeps> = {}) {
 		id: string,
 		roles: string[] = ["User"],
 		principalId = id,
+		origin?: string,
 	) => {
 		const tier =
 			id === "boss" ? "owner" : roles.includes("Admin") ? "admin" : "member";
@@ -187,7 +188,11 @@ export function testChat(overrides: Partial<WebChatDeps> = {}) {
 			identity: identity(id, roles),
 			speaker: { ...speakerOf(id, tier), principalId },
 		};
-		const connection: Connection = { ...admitted, timers: [] };
+		const connection: Connection = {
+			...admitted,
+			...(origin === undefined ? {} : { origin }),
+			timers: [],
+		};
 		if (!chat.connections.reserve(connection))
 			throw new Error(`${id} holds every connection`);
 		const socket = fakeSocket(connection);

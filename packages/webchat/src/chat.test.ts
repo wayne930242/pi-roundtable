@@ -56,6 +56,26 @@ async function linked(answer = "done") {
 	return { ...harness, claim, turns, settled };
 }
 
+test("a turn carries the origin its connection opened with, and none for a connection that had none", async () => {
+	const { connect, say, turns, settled } = await linked();
+	const ada = connect("ada", ["User"], "ada", "https://chat.example.com");
+	const bob = connect("bob");
+	// The message text is the person's; it never decides the origin.
+	await say(ada, {
+		type: "send",
+		id: "c1",
+		persona: "helper",
+		text: "origin: https://evil.example.com",
+	});
+	await say(bob, { type: "send", id: "c2", persona: "helper", text: "hi" });
+	await settled();
+	expect(turns.map((turn) => turn.origin)).toEqual([
+		"https://chat.example.com",
+		undefined,
+	]);
+	expect(turns[1]).not.toHaveProperty("origin");
+});
+
 test("a person opens a conversation by writing to a persona, and gets the turn's answer", async () => {
 	const { connect, say, turns, settled, registry } = await linked();
 	const ada = connect("ada");

@@ -112,6 +112,8 @@ interface Minted {
 
 interface Pending {
 	speaker: Speaker;
+	/** The origin of the connection the message arrived on. */
+	origin?: string;
 	persona: WebPersona;
 	title: string;
 	/** The files the message references, moved into the conversation when it was accepted. */
@@ -600,6 +602,7 @@ export class WebChat {
 		const messageId = crypto.randomUUID();
 		this.#pending.set(messageId, {
 			speaker,
+			...(connection.origin ? { origin: connection.origin } : {}),
 			persona,
 			title: minted?.title ?? titleOf(text),
 			fresh: record === undefined,
@@ -805,6 +808,7 @@ export class WebChat {
 				kind: persona.kind,
 				text,
 				speaker,
+				...(pending.origin ? { origin: pending.origin } : {}),
 				interactive: true,
 				...(pending.attachments ? { attachments: pending.attachments } : {}),
 				...(persona.selection

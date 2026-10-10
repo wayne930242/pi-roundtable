@@ -6,6 +6,12 @@ import type { ServerFrame } from "./protocol.ts";
 export interface Connection {
 	identity: WebIdentity;
 	speaker: Speaker;
+	/**
+	 * The normalized `Origin` the upgrade carried and the route accepted; undefined when it sent none
+	 * (a client that is not a browser, on a route that admits `"any"` origin). Fixed for the
+	 * connection's life: it comes from the transport, never from a frame.
+	 */
+	origin?: string;
 	socket?: RouteSocket<Connection>;
 	/** Asks for a fresh token, then closes the socket when the token expires. */
 	timers: ReturnType<typeof setTimeout>[];

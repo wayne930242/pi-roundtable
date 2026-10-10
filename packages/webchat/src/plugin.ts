@@ -21,6 +21,7 @@ import type { Connection } from "./connections.ts";
 import { webDirectChannel } from "./direct-channel.ts";
 import { PgNotices } from "./notices.ts";
 import { TokenRefused, type TokenVerifier } from "./oidc.ts";
+import { normalizeOrigin } from "./origin.ts";
 import { TICKET_PROTOCOL_PREFIX, WEBCHAT_PROTOCOL } from "./protocol.ts";
 import { restHandler } from "./rest.ts";
 import { TicketBook } from "./tickets.ts";
@@ -240,7 +241,12 @@ export function webChat(options: WebChatOptions): RoundtablePlugin {
 					if (error instanceof Refusal) return refuse(403, "Forbidden");
 					throw error;
 				}
-				const connection: Connection = { ...admitted, timers: [] };
+				const origin = normalizeOrigin(request.headers.get("origin"));
+				const connection: Connection = {
+					...admitted,
+					...(origin ? { origin } : {}),
+					timers: [],
+				};
 				if (!chat.connections.reserve(connection))
 					return refuse(429, "Too Many Connections");
 				return {

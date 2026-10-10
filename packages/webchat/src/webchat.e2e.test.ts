@@ -41,6 +41,8 @@ let context: PluginContext | undefined;
 let port = 0;
 let dataDir = "";
 const sent: string[] = [];
+/** The origin the note tool's hold and run saw on their turn. */
+const origins: (string | undefined)[] = [];
 
 /** A port nothing listens on, for the host's listener. */
 function freePort(): number {
@@ -128,10 +130,12 @@ const notes = definePlugin({
 				minTier: "member",
 				// Looks the sender up as the speaker, so the card is built from what the turn fetched.
 				hold: async ({ to }, turn) => {
+					origins.push(turn.origin);
 					await Bun.sleep(5);
 					return `send a note to ${to} as ${turn.speaker?.name}`;
 				},
-				run: ({ to }) => {
+				run: ({ to }, turn) => {
+					origins.push(turn.origin);
 					sent.push(to);
 					return `Sent to ${to}.`;
 				},
@@ -299,6 +303,8 @@ describeDb("a host whose only surface is the web chat", () => {
 		if (accepted?.type !== "accepted") throw new Error("not accepted");
 		const { conversation } = accepted;
 		expect(sent).toEqual(["team"]);
+		// The tool saw where the request came from: the Origin the socket opened with.
+		expect(origins).toEqual([ORIGIN, ORIGIN]);
 		const types = ada.frames.map((frame) => frame.type);
 		expect(types).toContain("typing");
 		expect(types).toContain("stoppable");
