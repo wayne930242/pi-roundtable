@@ -65,7 +65,9 @@ export type ErrorCode =
 	| "unknown_persona"
 	| "unknown_prompt"
 	| "too_many_conversations"
-	| "busy";
+	| "busy"
+	/** A `send` named a file that is not waiting for this person in this conversation; the whole message is refused. */
+	| "unknown_attachment";
 
 /** What a client sends: one JSON object per WebSocket text message. */
 export type ClientFrame =
@@ -81,6 +83,11 @@ export type ClientFrame =
 			conversation?: string;
 			persona?: string;
 			text: string;
+			/**
+			 * Files uploaded to the conversation (`POST <path>/conversations/<id>/files`) for this
+			 * message, by the `file` each upload returned; at most `ready.attachments.perMessage`.
+			 */
+			attachments?: string[];
 	  }
 	/** Stops the conversation's running turn. */
 	| { type: "stop"; conversation: string }
@@ -97,6 +104,16 @@ export type ServerFrame =
 			protocol: typeof WEBCHAT_PROTOCOL_VERSION;
 			speaker: { id: string; name: string; tier: Tier; principalId: string };
 			personas: readonly PersonaSummary[];
+			/**
+			 * What an upload may be: the most bytes in a file, the most files in a message, and the
+			 * content types accepted, each exactly or as `<type>/*`. Absent from a server before 0.9.2,
+			 * which takes no attachments: show no upload control then.
+			 */
+			attachments: {
+				maxBytes: number;
+				perMessage: number;
+				types: readonly string[];
+			};
 			/** When the token expires, as an ISO time. */
 			expiresAt: string;
 	  }
@@ -135,12 +152,26 @@ export type ServerFrame =
 
 /** The longest client reference, conversation id, or prompt id accepted. */
 const ID_CHARS = 128;
+/** The longest uploaded file reference accepted: a 36-character id, a dash, and a name cut to 120. */
+const FILE_ID_CHARS = 200;
+/** The most file references one frame may carry, whatever the server's own limit is. */
+const MAX_FRAME_FILES = 32;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
 	typeof value === "object" && value !== null && !Array.isArray(value);
 
 const isId = (value: unknown): value is string =>
 	typeof value === "string" && value.length > 0 && value.length <= ID_CHARS;
+
+const isFileList = (value: unknown): value is string[] =>
+	Array.isArray(value) &&
+	value.length <= MAX_FRAME_FILES &&
+	value.every(
+		(item) =>
+			typeof item === "string" &&
+			item.length > 0 &&
+			item.length <= FILE_ID_CHARS,
+	);
 
 const optional = <T>(value: unknown, check: (v: unknown) => v is T) =>
 	value === undefined || check(value);
@@ -169,12 +200,17 @@ export function parseClientFrame(
 			if (!optional(conversation, isId) || !optional(persona, isId))
 				return undefined;
 			if (conversation === undefined && persona === undefined) return undefined;
+			if (!optional(value.attachments, isFileList)) return undefined;
+			const { attachments } = value;
 			return {
 				type: "send",
 				id,
 				text,
 				...(conversation === undefined ? {} : { conversation }),
 				...(persona === undefined ? {} : { persona }),
+				...(attachments === undefined || attachments.length === 0
+					? {}
+					: { attachments }),
 			};
 		}
 		case "stop":

@@ -24,6 +24,7 @@ import { TokenRefused, type TokenVerifier } from "./oidc.ts";
 import { TICKET_PROTOCOL_PREFIX, WEBCHAT_PROTOCOL } from "./protocol.ts";
 import { restHandler } from "./rest.ts";
 import { TicketBook } from "./tickets.ts";
+import { DEFAULT_ATTACHMENT_TYPES } from "./uploads.ts";
 
 /** Limits of the WebSocket route, besides the chat's own. */
 export interface WebChatRouteLimits {
@@ -68,6 +69,12 @@ const DEFAULT_LIMITS: WebChatLimits & WebChatRouteLimits = {
 	messageChars: 32_000,
 	promptTimeoutMs: 30 * 60_000,
 	reauthLeadMs: 60_000,
+	attachmentBytes: 10 * 1024 * 1024,
+	attachmentsPerMessage: 8,
+	uploadsPerHour: 60,
+	unsentUploadBytesPerPrincipal: 64 * 1024 * 1024,
+	attachmentTypes: DEFAULT_ATTACHMENT_TYPES,
+	unsentUploadTtlMs: 24 * 60 * 60_000,
 	maxConnections: 256,
 	maxMessageBytes: 64 * 1024,
 	rate: { messages: 60, perMs: 60_000 },
@@ -100,6 +107,41 @@ function checkOptions(options: WebChatOptions): {
 	return { path, surface };
 }
 
+/** The core keeps no file over this; a web chat's own limit may be lower, never higher. */
+const CORE_ATTACHMENT_BYTES = 25 * 1024 * 1024;
+/** The longest wait between two sweeps of uploads no message used. */
+const SWEEP_EVERY_MS = 10 * 60_000;
+
+/** Refuses an attachment limit that is not a positive whole number, or a size the core cannot keep. */
+function checkAttachmentLimits(limits: WebChatLimits): void {
+	for (const key of [
+		"attachmentBytes",
+		"attachmentsPerMessage",
+		"uploadsPerHour",
+		"unsentUploadBytesPerPrincipal",
+		"unsentUploadTtlMs",
+	] as const)
+		if (!Number.isInteger(limits[key]) || limits[key] < 1)
+			throw new Error(
+				`webChat: limits.${key} must be a positive whole number; got ${String(limits[key])}`,
+			);
+	if (limits.attachmentBytes > CORE_ATTACHMENT_BYTES)
+		throw new Error(
+			`webChat: limits.attachmentBytes may be at most ${CORE_ATTACHMENT_BYTES} (25 MiB), the most the core keeps; got ${limits.attachmentBytes}`,
+		);
+	if (
+		!Array.isArray(limits.attachmentTypes) ||
+		limits.attachmentTypes.some(
+			(type) =>
+				typeof type !== "string" ||
+				!/^[a-z0-9.+-]+\/(\*|[a-z0-9.+-]+)$/.test(type),
+		)
+	)
+		throw new Error(
+			'webChat: limits.attachmentTypes must list content types in lower case, such as "image/png" or "image/*"',
+		);
+}
+
 /** The subprotocols a WebSocket upgrade offers. */
 function offered(request: Request): string[] {
 	return (request.headers.get("sec-websocket-protocol") ?? "")
@@ -122,11 +164,16 @@ export function webChat(options: WebChatOptions): RoundtablePlugin {
 	const limits = { ...DEFAULT_LIMITS, ...options.limits };
 	// The personas are checked now, so a broken list stops the configuration rather than the boot.
 	checkPersonas(options.personas);
+	checkAttachmentLimits(limits);
 	return definePlugin({
 		name: surface === "web" ? "webchat" : `webchat-${surface}`,
 		requires: [IDENTITY, CONVERSATIONS, RUNTIME],
 		migrations: [PgNotices.migration],
 		setup: (context: PluginContext) => {
+			if (!context.attachments)
+				throw new Error(
+					"webChat: this version keeps uploaded files with context.attachments, which pi-roundtable 0.9.2 added. Update pi-roundtable to 0.9.2 or later.",
+				);
 			const chat = new WebChat({
 				surface,
 				verifier: options.verifier,
@@ -136,6 +183,7 @@ export function webChat(options: WebChatOptions): RoundtablePlugin {
 				logger: context.logger,
 				registry: () => context.services.get(CONVERSATIONS),
 				conversations: () => context.conversations,
+				attachments: () => context.attachments,
 				turns: () => context.turns,
 				runtime: () => context.services.get(RUNTIME),
 			});
@@ -216,7 +264,41 @@ export function webChat(options: WebChatOptions): RoundtablePlugin {
 				handle: rest,
 				websocket,
 			};
+			// Uploads no message used are deleted once they are older than the limit's time.
+			let sweeper: ReturnType<typeof setInterval> | undefined;
+			const sweep = async () => {
+				try {
+					const dropped = await chat.uploads.sweep();
+					if (dropped > 0)
+						context.logger.info({ dropped }, "unused web chat uploads deleted");
+				} catch (error) {
+					context.logger.warn(
+						{ err: error },
+						"unused web chat uploads not deleted",
+					);
+				}
+			};
 			return {
+				services: [
+					{
+						name: `${surface}-uploads`,
+						start: async () => {
+							// Not caught: a host without a `dataDir` stops here, naming it, instead of failing at the first upload.
+							await chat.uploads.sweep();
+							sweeper = setInterval(
+								sweep,
+								Math.min(
+									SWEEP_EVERY_MS,
+									Math.max(limits.unsentUploadTtlMs, 100),
+								),
+							);
+						},
+						stop: () => {
+							clearInterval(sweeper);
+							sweeper = undefined;
+						},
+					},
+				],
 				surfaces: [chat.surface],
 				channels: [chat.claim()],
 				directChannels: [

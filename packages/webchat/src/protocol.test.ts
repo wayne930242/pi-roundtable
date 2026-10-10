@@ -57,3 +57,43 @@ test("refuses malformed frames instead of guessing", () => {
 	])
 		expect(parseClientFrame(raw)).toBeUndefined();
 });
+
+test("a send frame may reference uploaded files, which are checked as plain strings", () => {
+	expect(
+		parseClientFrame(
+			JSON.stringify({
+				type: "send",
+				id: "1",
+				conversation: "c",
+				text: "see",
+				attachments: ["f1-screenshot.png", "f2-session.json"],
+			}),
+		),
+	).toEqual({
+		type: "send",
+		id: "1",
+		conversation: "c",
+		text: "see",
+		attachments: ["f1-screenshot.png", "f2-session.json"],
+	});
+	expect(
+		parseClientFrame(
+			'{"type":"send","id":"1","conversation":"c","text":"see","attachments":[]}',
+		),
+	).toEqual({ type: "send", id: "1", conversation: "c", text: "see" });
+	const bad = (attachments: unknown) =>
+		parseClientFrame(
+			JSON.stringify({
+				type: "send",
+				id: "1",
+				conversation: "c",
+				text: "see",
+				attachments,
+			}),
+		);
+	expect(bad("f1")).toBeUndefined();
+	expect(bad([1])).toBeUndefined();
+	expect(bad([""])).toBeUndefined();
+	expect(bad(["x".repeat(201)])).toBeUndefined();
+	expect(bad(Array.from({ length: 33 }, (_, i) => `f${i}`))).toBeUndefined();
+});

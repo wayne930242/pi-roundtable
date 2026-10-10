@@ -1,5 +1,7 @@
 import {
 	type AgentRuntime,
+	type AttachmentPort,
+	AttachmentRefusal,
 	type ChannelClaim,
 	type ChannelKey,
 	type ConversationPort,
@@ -16,6 +18,7 @@ import {
 	type Tier,
 	type ToolSelection,
 	type TranscriptEntry,
+	type TurnAttachments,
 	type TurnResult,
 } from "pi-roundtable";
 import { RateWindow, TurnBudget } from "./budget.ts";
@@ -37,6 +40,7 @@ import {
 	WEBCHAT_PROTOCOL_VERSION,
 } from "./protocol.ts";
 import { WebSurface } from "./surface.ts";
+import { type UploadedFile, type UploadLimits, Uploads } from "./uploads.ts";
 
 /** A conversation kind a client may open. */
 export interface WebPersona {
@@ -55,8 +59,8 @@ export interface WebPersona {
 	selection?: ToolSelection;
 }
 
-/** The limits of one web chat. */
-export interface WebChatLimits {
+/** The limits of one web chat, those of uploads and attachments included. */
+export interface WebChatLimits extends UploadLimits {
 	/** Connections one person may hold open at once; default 5. */
 	connectionsPerPrincipal: number;
 	/** New conversations one person may hold before writing in them; default 20. */
@@ -86,6 +90,8 @@ export interface WebChatDeps {
 	/** Read when used, after the host linked every plugin. */
 	registry(): ConversationRegistry;
 	conversations(): ConversationPort;
+	/** Where uploaded files wait for the message that uses them. */
+	attachments(): AttachmentPort;
 	turns(): ConversationTurns;
 	runtime(): AgentRuntime;
 	/** The clock, in milliseconds; default `Date.now`. */
@@ -108,6 +114,8 @@ interface Pending {
 	speaker: Speaker;
 	persona: WebPersona;
 	title: string;
+	/** The files the message references, moved into the conversation when it was accepted. */
+	attachments?: TurnAttachments;
 	/** Whether the conversation was new when the message was accepted. */
 	fresh: boolean;
 	/** Frees the message's place in the person's turn budget; called once its turn ends or never runs. */
@@ -181,6 +189,7 @@ export function checkPersonas(
  */
 export class WebChat {
 	readonly surface: WebSurface;
+	readonly uploads: Uploads;
 	readonly connections: Connections;
 	readonly desk: PromptDesk;
 	readonly #deps: WebChatDeps;
@@ -200,6 +209,11 @@ export class WebChat {
 
 	constructor(deps: WebChatDeps) {
 		this.#deps = deps;
+		this.uploads = new Uploads({
+			limits: deps.limits,
+			attachments: deps.attachments,
+			...(deps.now ? { now: deps.now } : {}),
+		});
 		this.#personas = checkPersonas(deps.personas);
 		this.#turns = new TurnBudget(deps.limits.turnsPerPrincipal);
 		this.#opened = new RateWindow(
@@ -319,6 +333,26 @@ export class WebChat {
 		return { persona, minted };
 	}
 
+	/**
+	 * Keeps the request's body as a file for one of the speaker's conversations until a message
+	 * uses it; a Refusal when the conversation is not theirs, an UploadRefusal when the file is not
+	 * accepted.
+	 */
+	async upload(
+		speaker: Speaker,
+		conversation: string,
+		request: Request,
+		name: string | null,
+	): Promise<UploadedFile> {
+		await this.own(speaker, conversation);
+		return this.uploads.receive(
+			request,
+			channelKey(this.#deps.surface, conversation),
+			speaker.principalId,
+			name,
+		);
+	}
+
 	/** The speaker's web conversations, the most recently active first. */
 	async list(speaker: Speaker): Promise<ConversationRecord[]> {
 		const records = await this.#deps
@@ -361,6 +395,7 @@ export class WebChat {
 			protocol: WEBCHAT_PROTOCOL_VERSION,
 			speaker: { ...speaker },
 			personas: this.personasFor(speaker),
+			attachments: this.uploads.advertised,
 			expiresAt: identity.expiresAt.toISOString(),
 		});
 		for (const frame of this.desk.openFor(speaker.principalId))
@@ -520,6 +555,9 @@ export class WebChat {
 		const text = frame.text;
 		if (!text.trim() || text.length > this.#deps.limits.messageChars)
 			throw new Refusal("bad_frame");
+		const files = frame.attachments ?? [];
+		if (files.length > this.#deps.limits.attachmentsPerMessage)
+			throw new Refusal("bad_frame");
 		// Checked before a conversation is opened for it, so a refused message opens none.
 		if (!this.#turns.allows(speaker.principalId, frame.conversation))
 			throw new Refusal("busy");
@@ -532,12 +570,33 @@ export class WebChat {
 			if (!frame.conversation) this.#minted.delete(conversation);
 			throw new Refusal("busy");
 		}
+		let attachments: TurnAttachments | undefined;
+		if (files.length > 0) {
+			try {
+				attachments = await this.#deps
+					.attachments()
+					.turnAttachments(
+						channelKey(this.#deps.surface, conversation),
+						speaker.principalId,
+						files,
+					);
+			} catch (error) {
+				// The refused message holds no place and opens no conversation.
+				release();
+				if (!frame.conversation) this.#minted.delete(conversation);
+				if (!(error instanceof AttachmentRefusal)) throw error;
+				throw new Refusal(
+					error.code === "unknown_file" ? "unknown_attachment" : "forbidden",
+				);
+			}
+		}
 		const messageId = crypto.randomUUID();
 		this.#pending.set(messageId, {
 			speaker,
 			persona,
 			title: minted?.title ?? titleOf(text),
 			fresh: record === undefined,
+			...(attachments ? { attachments } : {}),
 			release,
 		});
 		this.connections.send(connection, {
@@ -740,6 +799,7 @@ export class WebChat {
 				text,
 				speaker,
 				interactive: true,
+				...(pending.attachments ? { attachments: pending.attachments } : {}),
 				...(persona.selection
 					? {
 							selection: {

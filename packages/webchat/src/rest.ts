@@ -3,6 +3,7 @@ import { type Admitted, Refusal, type WebChat } from "./chat.ts";
 import { MAX_NOTICES, type PgNotices } from "./notices.ts";
 import { TokenRefused } from "./oidc.ts";
 import type { TicketBook } from "./tickets.ts";
+import { UploadRefusal } from "./uploads.ts";
 
 export interface RestOptions {
 	chat: WebChat;
@@ -62,13 +63,17 @@ const STATUS: Record<string, number> = {
 	unknown_conversation: 404,
 	unknown_persona: 404,
 	too_many_conversations: 429,
+	unknown_attachment: 400,
 };
 
 /**
  * The web chat's REST API, under its path, every call with `Authorization: Bearer <token>`:
  * `POST tickets` (a one-time ticket for the WebSocket), `GET conversations` (the caller's own),
  * `POST conversations` (`{ persona, title? }` opens one), and `GET conversations/<id>/messages`
- * (`?limit=`, its last messages). A browser on another origin gets CORS headers when its origin
+ * (`?limit=`, its last messages), and `POST conversations/<id>/files?name=<file name>` (the body is
+ * the file's bytes, its `Content-Type` the file's type; answers 201 with `{ file, name, contentType,
+ * size }`, 413 over the size limit, 415 for a type that is not accepted, 429 over the person's
+ * allowance). A browser on another origin gets CORS headers when its origin
  * is allowed and 403 otherwise.
  */
 export function restHandler(options: RestOptions) {
@@ -143,6 +148,16 @@ export function restHandler(options: RestOptions) {
 			const entries = await chat.transcript(speaker, messages[1], limit);
 			return json({ messages: entries }, 200, headers);
 		}
+		const files = /^conversations\/([A-Za-z0-9-]{1,128})\/files$/.exec(rest);
+		if (files?.[1] && request.method === "POST") {
+			const uploaded = await chat.upload(
+				speaker,
+				files[1],
+				request,
+				url.searchParams.get("name"),
+			);
+			return json(uploaded, 201, headers);
+		}
 		return json({ error: "not_found" }, 404, headers);
 	}
 	return async (request: Request): Promise<Response> => {
@@ -179,6 +194,8 @@ export function restHandler(options: RestOptions) {
 		try {
 			return await route(request, url, who, headers);
 		} catch (error) {
+			if (error instanceof UploadRefusal)
+				return json({ error: error.code }, error.status, headers);
 			if (!(error instanceof Refusal)) throw error;
 			return json({ error: error.code }, STATUS[error.code] ?? 400, headers);
 		}

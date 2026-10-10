@@ -14,6 +14,8 @@ import { WebChat, type WebChatDeps, type WebChatLimits } from "../chat.ts";
 import type { Connection } from "../connections.ts";
 import type { WebIdentity } from "../oidc.ts";
 import type { ServerFrame } from "../protocol.ts";
+import { DEFAULT_ATTACHMENT_TYPES } from "../uploads.ts";
+import { memoryAttachments } from "./memory-attachments.ts";
 
 /**
  * The registry's behavior in memory: first registration fixes the record, later ones touch it, and
@@ -111,6 +113,12 @@ export const TEST_LIMITS: WebChatLimits = {
 	messageChars: 1000,
 	promptTimeoutMs: 60_000,
 	reauthLeadMs: 1_000,
+	attachmentBytes: 1024,
+	attachmentsPerMessage: 3,
+	uploadsPerHour: 100,
+	unsentUploadBytesPerPrincipal: 10_000,
+	attachmentTypes: DEFAULT_ATTACHMENT_TYPES,
+	unsentUploadTtlMs: 60_000,
 };
 
 /** A web chat over an in-memory registry, with a `helper` persona for members and an `ops` one for admins. */
@@ -118,6 +126,7 @@ export function testChat(overrides: Partial<WebChatDeps> = {}) {
 	const registry = memoryRegistry();
 	const stopped: ChannelKey[] = [];
 	const principals = new Map<string, string>();
+	const attachments = memoryAttachments();
 	const chat = new WebChat({
 		surface: "web",
 		verifier: async () => {
@@ -152,6 +161,7 @@ export function testChat(overrides: Partial<WebChatDeps> = {}) {
 		limits: TEST_LIMITS,
 		logger: silentLogger(),
 		registry: () => registry,
+		attachments: () => attachments,
 		conversations: () =>
 			partial<ConversationPort>({
 				stop: (channel) => {
@@ -185,7 +195,7 @@ export function testChat(overrides: Partial<WebChatDeps> = {}) {
 	};
 	const say = (socket: FakeSocket, frame: Record<string, unknown>) =>
 		chat.message(socket, JSON.stringify(frame));
-	return { chat, registry, stopped, connect, say };
+	return { chat, registry, stopped, connect, say, attachments };
 }
 
 export const speakerOf = (id: string, tier: Tier = "member"): Speaker => ({
