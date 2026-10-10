@@ -2,11 +2,13 @@
 
 ## [Unreleased]
 
-## [0.9.4] - 2026-10-10
+## [0.9.5] - 2026-10-10
+
+0.9.4 was tagged but never published (its release checks failed on the recorded prompt texts); everything listed under it is released in 0.9.5.
 
 ### Added
 
-- A coding worker posts its progress into its thread as it works, as the host's turns do: longer or structured text as ordinary messages, and short narration with the tools it called in one small-text progress message edited in place. Its approval cards come after the text written before them, the report is posted once at the end, and a failed post or edit is logged without failing the job. `interimText: "off"` (on `coding` and `CodingDeskOptions`) keeps today's thread of task, cards and report; `interimPrimaryChars` sets the length of primary text (default 400). It needs pi-roundtable 0.9.4's `DispatchThread.interim`.
+- A coding worker posts its progress into its thread as it works, as the host's turns do: longer or structured text as ordinary messages, and short narration with the tools it called in one small-text progress message edited in place. Its approval cards come after the text written before them, the report is posted once at the end, and a failed post or edit is logged without failing the job. `interimText: "off"` (on `coding` and `CodingDeskOptions`) keeps today's thread of task, cards and report; `interimPrimaryChars` sets the length of primary text (default 400). It needs pi-roundtable 0.9.5's `DispatchThread.interim`.
 - `CodingWorker.run` takes an optional fourth argument, `CodingProgress` (`messageEnd(message)`, `toolStart(name)`), which `PiCodingWorker` feeds from the worker's session over its IPC channel (message text and tool names only, never thinking).
 
 ### Changed

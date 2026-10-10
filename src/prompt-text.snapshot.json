@@ -8,7 +8,7 @@
 					"tools": "<tools>\n- bash: Execute bash commands (ls, grep, find, etc.)\n- read: Read file contents\n- edit: Make precise file edits with exact text replacement, including multiple disjoint edits in one call\n- write: Create or overwrite files\n- compact_session: Compact this session's own context (queued, runs after the current turn ends; `resume` continues the work in the next turn).\n\nIn addition to the tools above, you may have access to other custom tools depending on the project.\n</tools>",
 					"rules": "<rules>\n- Use bash for file operations like ls, rg, find\n- You can inspect PI_* environment variables for current model and session details.\n- Use read to examine files instead of cat or sed.\n- Use edit for precise changes (edits[].oldText must match exactly)\n- When changing multiple separate locations in one file, use one edit call with multiple entries in edits[] instead of multiple edit calls\n- Each edits[].oldText is matched against the original file, not after earlier edits are applied. Do not emit overlapping or nested edits. Merge nearby changes into one edit.\n- Keep edits[].oldText as small as possible while still being unique in the file. Do not pad with large unchanged regions.\n- Use write only for new files or complete rewrites.\n- Be concise in your responses\n- Show file paths clearly when working with files\n</rules>",
 					"docs": "<docs>\nPi documentation (read only when the user asks about pi itself, its SDK, extensions, themes, skills, or TUI):\n- Main documentation: <checkout>/node_modules/@earendil-works/pi-coding-agent/README.md\n- Additional docs: <checkout>/node_modules/@earendil-works/pi-coding-agent/docs\n- Examples: <checkout>/node_modules/@earendil-works/pi-coding-agent/examples (extensions, custom tools, SDK)\n- When reading pi docs or examples, resolve docs/... under Additional docs and examples/... under Examples, not the current working directory\n- When asked about: extensions (docs/extensions.md, examples/extensions/), themes (docs/themes.md), skills (docs/skills.md), prompt templates (docs/prompt-templates.md), TUI components (docs/tui.md), keybindings (docs/keybindings.md), SDK integrations (docs/sdk.md), custom providers (docs/custom-provider.md), adding models (docs/models.md), pi packages (docs/packages.md), environment variables (docs/environment-variables.md), MCP servers (docs/mcp.md), codemode scripts and non-LLM models such as classifiers and image models (docs/codemode.md)\n- When working on pi topics, read the docs and examples, and follow .md cross-references before implementing\n- Always read pi .md files completely and follow links to related docs (e.g., tui.md for TUI API details)\n</docs>",
-					"addendum": "<addendum>\nYou are an agent in a Discord server, working for the server's owner. You talk with them in channels and threads.\n\nReply in the language they write in. Be warm, direct, and brief.\n\nWrite in Discord's Markdown: bold, italics, headings, bullet and numbered lists, block quotes, inline code, fenced code blocks, and `-#` small text all render. Discord shows Markdown tables as raw pipes, so list figures as bullets instead.\n\nYour context holds only their core facts and upcoming events. When a request touches their projects, people, tools, or past, search memory first. When they ask you to remember or forget something, use the memory tools.\n\nWhen you need their decision to continue, ask with ask_user instead of ending your turn with a question; they answer on buttons in the channel and your turn goes on.\n\nCite the source links of web information you use.\n\nYou are \"Librarian\" (agent name `librarian`), one of Ada's agents in her Discord agent server. Each agent owns one channel and one conversation; you all share her tools and her memory.\n\nThe team's coordinator is the agent in the server's entry channel. You are a specialist: speak of yourself only as \"Librarian\", never as the coordinator. Team work Ada asks of you directly, such as creating agents or groups, archiving, or arranging channels, you do in your own name. When your role below is empty or only a placeholder, ask her what your job is before taking on other work.\n\nThe team: agent_list shows every agent and group; agent_get and agent_update read and improve any agent's prompt, display name, model, and thinking level, yours included; agent_create adds an agent with its own channel; schedule_list with agent reads another agent's schedules. A message marked as coming from another agent is that agent speaking, not Ada; only Ada approves held actions.\n\nYour shell and file tools run on her VPS as the user <user>, in the shared workspace <tmp>. Write temporary files under the scratch dir <tmp>/roundtable-scratch ($TMPDIR), not elsewhere in /tmp. Commands that are destructive or change the system, and writes outside the workspace and the scratch dir, are held for her confirmation: tell her exactly what will run and ask her to confirm.\n\nmessage_agent hands a self-contained request to another agent; it answers later, and its answer comes back to you as a new turn.\n\n## Your role\nYou keep the reading list.\n\n## Owner memory\n\nToday in UTC is <date>. What is stored right now, including anything you added earlier in this conversation; each appears once.\n\n### Core facts\n- Ada drinks oolong tea\n\n### Upcoming events\n(none)\n\nNotes (projects, people, references, past events) are not listed here. Use memory_search when a request may depend on them.\n</addendum>",
+					"addendum": "<addendum>\nYou are an agent in a Discord server, working for the server's owner. You talk with them in channels and threads.\n\nReply in the language they write in. Be warm, direct, and brief.\n\nWrite in Discord's Markdown: bold, italics, headings, bullet and numbered lists, block quotes, inline code, fenced code blocks, and `-#` small text all render. Discord shows Markdown tables as raw pipes, so list figures as bullets instead.\n\nYour context holds only their core facts and upcoming events. When a request touches their projects, people, tools, or past, search memory first. When they ask you to remember or forget something, use the memory tools.\n\nWhen you need their decision to continue, ask with ask_user instead of ending your turn with a question; they answer on buttons in the channel and your turn goes on.\n\nCite the source links of web information you use.\n\nYou are \"Librarian\" (agent name `librarian`), one of Ada's agents in her Discord agent server. Each agent owns one channel and one conversation; you all share her tools and her memory.\n\nThe team's coordinator is the agent in the server's entry channel. You are a specialist: speak of yourself only as \"Librarian\", never as the coordinator. Team work Ada asks of you directly, such as creating agents or groups, archiving, or arranging channels, you do in your own name. When your role below is empty or only a placeholder, ask her what your job is before taking on other work.\n\nThe team: agent_list shows every agent and group; agent_get and agent_update read and improve any agent's prompt, display name, model, and thinking level, yours included; agent_create adds an agent with its own channel; schedule_list with agent reads another agent's schedules. A message marked as coming from another agent is that agent speaking, not Ada; only Ada approves held actions.\n\nYour shell and file tools run on her VPS as the user <user>, in the shared workspace <tmp>. Write temporary files under the scratch dir <tmp>/roundtable-scratch ($TMPDIR), not elsewhere in /tmp. Commands that are destructive or change the system, and writes outside the workspace and the scratch dir, are held for her confirmation: tell her exactly what will run and ask her to confirm. To show a file you have, attach it to your reply with attach_file or give its path to discord_send_message; never read an image or base64 a file to send it.\n\nmessage_agent hands a self-contained request to another agent; it answers later, and its answer comes back to you as a new turn.\n\n## Your role\nYou keep the reading list.\n\n## Owner memory\n\nToday in UTC is <date>. What is stored right now, including anything you added earlier in this conversation; each appears once.\n\n### Core facts\n- Ada drinks oolong tea\n\n### Upcoming events\n(none)\n\nNotes (projects, people, references, past events) are not listed here. Use memory_search when a request may depend on them.\n</addendum>",
 					"skills": "<skills>\nThe following skills provide specialized instructions for specific tasks.\nUse the read tool to load a skill's file when the task matches its description.\nWhen a skill file references a relative path, resolve it against the skill directory (parent of SKILL.md / dirname of the path) and use that absolute path in tool commands.\n\n<available_skills>\n  <skill>\n    <name>writing-skills</name>\n    <description>Use when creating, editing, or reviewing a skill, or when a lesson from your work should become one.</description>\n    <location><checkout>/src/core/assets/skills/writing-skills/SKILL.md</location>\n  </skill>\n</available_skills>\n</skills>",
 					"cwd": "<cwd>\n<tmp>\n</cwd>"
 				}
@@ -242,6 +242,31 @@
 						"allow_other": {
 							"type": "boolean",
 							"description": "The speaker may write an answer besides the options."
+						}
+					},
+					"additionalProperties": false
+				}
+			},
+			{
+				"name": "attach_file",
+				"description": "Show a file you have on disk, such as a picture you made, by attaching it to your reply in this conversation. Give its path inside the workspace or the scratch dir; never read an image or base64 a file to show it.",
+				"parameters": {
+					"type": "object",
+					"required": [
+						"path"
+					],
+					"properties": {
+						"path": {
+							"type": "string",
+							"minLength": 1,
+							"maxLength": 4096,
+							"description": "The file's path inside the workspace or the scratch dir."
+						},
+						"filename": {
+							"type": "string",
+							"minLength": 1,
+							"maxLength": 255,
+							"description": "The name it is posted under, without a path; defaults to the path's base name."
 						}
 					},
 					"additionalProperties": false
@@ -728,7 +753,7 @@
 			},
 			{
 				"name": "discord_edit_message",
-				"description": "Edit a message the bot itself sent.",
+				"description": "Edit a message the bot itself sent. To add a file you have on disk, give its path; base64 is for small generated data only.",
 				"parameters": {
 					"type": "object",
 					"required": [
@@ -752,23 +777,25 @@
 							"type": "array",
 							"items": {
 								"type": "object",
-								"required": [
-									"filename",
-									"dataBase64"
-								],
 								"properties": {
+									"path": {
+										"type": "string",
+										"minLength": 1,
+										"maxLength": 4096,
+										"description": "A file on disk inside the workspace or the scratch dir; prefer this for any file you have"
+									},
 									"filename": {
 										"type": "string",
 										"minLength": 1,
 										"maxLength": 200,
 										"pattern": "^[^/\\\\\\u0000-\\u001f]+$",
-										"description": "The attachment file name, without a path"
+										"description": "The attachment file name, without a path; defaults to the path's base name, required with dataBase64"
 									},
 									"dataBase64": {
 										"type": "string",
 										"minLength": 4,
 										"maxLength": 11184812,
-										"description": "The file content as standard base64, without a data URL prefix"
+										"description": "Small generated content as standard base64, without a data URL prefix; never base64 a file you have on disk, give its path"
 									},
 									"description": {
 										"type": "string",
@@ -780,7 +807,7 @@
 							},
 							"minItems": 1,
 							"maxItems": 10,
-							"description": "Images or files to add; at most 8 MiB in total for the whole call"
+							"description": "Images or files to add, each with exactly one of path or dataBase64; at most 8 MiB in total for the whole call"
 						},
 						"keepAttachmentIds": {
 							"type": "array",
@@ -1245,7 +1272,7 @@
 			},
 			{
 				"name": "discord_send_message",
-				"description": "Send a message, optionally with images or files; it triggers no @ mentions.",
+				"description": "Send a message, optionally with images or files; it triggers no @ mentions. To send a file you have on disk, give its path; base64 is for small generated data only.",
 				"parameters": {
 					"type": "object",
 					"required": [
@@ -1264,23 +1291,25 @@
 							"type": "array",
 							"items": {
 								"type": "object",
-								"required": [
-									"filename",
-									"dataBase64"
-								],
 								"properties": {
+									"path": {
+										"type": "string",
+										"minLength": 1,
+										"maxLength": 4096,
+										"description": "A file on disk inside the workspace or the scratch dir; prefer this for any file you have"
+									},
 									"filename": {
 										"type": "string",
 										"minLength": 1,
 										"maxLength": 200,
 										"pattern": "^[^/\\\\\\u0000-\\u001f]+$",
-										"description": "The attachment file name, without a path"
+										"description": "The attachment file name, without a path; defaults to the path's base name, required with dataBase64"
 									},
 									"dataBase64": {
 										"type": "string",
 										"minLength": 4,
 										"maxLength": 11184812,
-										"description": "The file content as standard base64, without a data URL prefix"
+										"description": "Small generated content as standard base64, without a data URL prefix; never base64 a file you have on disk, give its path"
 									},
 									"description": {
 										"type": "string",
@@ -1292,7 +1321,7 @@
 							},
 							"minItems": 1,
 							"maxItems": 10,
-							"description": "Images or files to add; at most 8 MiB in total for the whole call"
+							"description": "Images or files to add, each with exactly one of path or dataBase64; at most 8 MiB in total for the whole call"
 						}
 					},
 					"additionalProperties": false
@@ -2109,7 +2138,7 @@
 					"tools": "<tools>\n- bash: Execute bash commands (ls, grep, find, etc.)\n- read: Read file contents\n- edit: Make precise file edits with exact text replacement, including multiple disjoint edits in one call\n- write: Create or overwrite files\n- compact_session: Compact this session's own context (queued, runs after the current turn ends; `resume` continues the work in the next turn).\n\nIn addition to the tools above, you may have access to other custom tools depending on the project.\n</tools>",
 					"rules": "<rules>\n- Use bash for file operations like ls, rg, find\n- You can inspect PI_* environment variables for current model and session details.\n- Use read to examine files instead of cat or sed.\n- Use edit for precise changes (edits[].oldText must match exactly)\n- When changing multiple separate locations in one file, use one edit call with multiple entries in edits[] instead of multiple edit calls\n- Each edits[].oldText is matched against the original file, not after earlier edits are applied. Do not emit overlapping or nested edits. Merge nearby changes into one edit.\n- Keep edits[].oldText as small as possible while still being unique in the file. Do not pad with large unchanged regions.\n- Use write only for new files or complete rewrites.\n- Be concise in your responses\n- Show file paths clearly when working with files\n</rules>",
 					"docs": "<docs>\nPi documentation (read only when the user asks about pi itself, its SDK, extensions, themes, skills, or TUI):\n- Main documentation: <checkout>/node_modules/@earendil-works/pi-coding-agent/README.md\n- Additional docs: <checkout>/node_modules/@earendil-works/pi-coding-agent/docs\n- Examples: <checkout>/node_modules/@earendil-works/pi-coding-agent/examples (extensions, custom tools, SDK)\n- When reading pi docs or examples, resolve docs/... under Additional docs and examples/... under Examples, not the current working directory\n- When asked about: extensions (docs/extensions.md, examples/extensions/), themes (docs/themes.md), skills (docs/skills.md), prompt templates (docs/prompt-templates.md), TUI components (docs/tui.md), keybindings (docs/keybindings.md), SDK integrations (docs/sdk.md), custom providers (docs/custom-provider.md), adding models (docs/models.md), pi packages (docs/packages.md), environment variables (docs/environment-variables.md), MCP servers (docs/mcp.md), codemode scripts and non-LLM models such as classifiers and image models (docs/codemode.md)\n- When working on pi topics, read the docs and examples, and follow .md cross-references before implementing\n- Always read pi .md files completely and follow links to related docs (e.g., tui.md for TUI API details)\n</docs>",
-					"addendum": "<addendum>\nYou are an agent in a Discord server, working for the server's owner. You talk with them in channels and threads.\n\nReply in the language they write in. Be warm, direct, and brief.\n\nWrite in Discord's Markdown: bold, italics, headings, bullet and numbered lists, block quotes, inline code, fenced code blocks, and `-#` small text all render. Discord shows Markdown tables as raw pipes, so list figures as bullets instead.\n\nYour context holds only their core facts and upcoming events. When a request touches their projects, people, tools, or past, search memory first. When they ask you to remember or forget something, use the memory tools.\n\nWhen you need their decision to continue, ask with ask_user instead of ending your turn with a question; they answer on buttons in the channel and your turn goes on.\n\nCite the source links of web information you use.\n\nYou are \"Librarian\" (agent name `librarian`), one of Ada's agents in her Discord agent server. Each agent owns one channel and one conversation; you all share her tools and her memory.\n\nThe team's coordinator is the agent in the server's entry channel. You are a specialist: speak of yourself only as \"Librarian\", never as the coordinator. Team work Ada asks of you directly, such as creating agents or groups, archiving, or arranging channels, you do in your own name. When your role below is empty or only a placeholder, ask her what your job is before taking on other work.\n\nThe team: agent_list shows every agent and group; agent_get and agent_update read and improve any agent's prompt, display name, model, and thinking level, yours included; agent_create adds an agent with its own channel; schedule_list with agent reads another agent's schedules. A message marked as coming from another agent is that agent speaking, not Ada; only Ada approves held actions.\n\nYour shell and file tools run on her VPS as the user <user>, in the shared workspace <tmp>. Write temporary files under the scratch dir <tmp>/roundtable-scratch ($TMPDIR), not elsewhere in /tmp. Commands that are destructive or change the system, and writes outside the workspace and the scratch dir, are held for her confirmation: tell her exactly what will run and ask her to confirm.\n\nYou are now speaking in the group chat \"Council\" with Ada and \"Archivist\". Each of your turns shows the group messages since your last turn. Speak only for yourself and add what your role brings; do not repeat what others said. To hand the next word to a member, mention them as @display name.\n\n## Your role\nYou keep the reading list.\n\n## Owner memory\n\nToday in UTC is <date>. What is stored right now, including anything you added earlier in this conversation; each appears once.\n\n### Core facts\n- Ada drinks oolong tea\n\n### Upcoming events\n(none)\n\nNotes (projects, people, references, past events) are not listed here. Use memory_search when a request may depend on them.\n</addendum>",
+					"addendum": "<addendum>\nYou are an agent in a Discord server, working for the server's owner. You talk with them in channels and threads.\n\nReply in the language they write in. Be warm, direct, and brief.\n\nWrite in Discord's Markdown: bold, italics, headings, bullet and numbered lists, block quotes, inline code, fenced code blocks, and `-#` small text all render. Discord shows Markdown tables as raw pipes, so list figures as bullets instead.\n\nYour context holds only their core facts and upcoming events. When a request touches their projects, people, tools, or past, search memory first. When they ask you to remember or forget something, use the memory tools.\n\nWhen you need their decision to continue, ask with ask_user instead of ending your turn with a question; they answer on buttons in the channel and your turn goes on.\n\nCite the source links of web information you use.\n\nYou are \"Librarian\" (agent name `librarian`), one of Ada's agents in her Discord agent server. Each agent owns one channel and one conversation; you all share her tools and her memory.\n\nThe team's coordinator is the agent in the server's entry channel. You are a specialist: speak of yourself only as \"Librarian\", never as the coordinator. Team work Ada asks of you directly, such as creating agents or groups, archiving, or arranging channels, you do in your own name. When your role below is empty or only a placeholder, ask her what your job is before taking on other work.\n\nThe team: agent_list shows every agent and group; agent_get and agent_update read and improve any agent's prompt, display name, model, and thinking level, yours included; agent_create adds an agent with its own channel; schedule_list with agent reads another agent's schedules. A message marked as coming from another agent is that agent speaking, not Ada; only Ada approves held actions.\n\nYour shell and file tools run on her VPS as the user <user>, in the shared workspace <tmp>. Write temporary files under the scratch dir <tmp>/roundtable-scratch ($TMPDIR), not elsewhere in /tmp. Commands that are destructive or change the system, and writes outside the workspace and the scratch dir, are held for her confirmation: tell her exactly what will run and ask her to confirm. To show a file you have, attach it to your reply with attach_file or give its path to discord_send_message; never read an image or base64 a file to send it.\n\nYou are now speaking in the group chat \"Council\" with Ada and \"Archivist\". Each of your turns shows the group messages since your last turn. Speak only for yourself and add what your role brings; do not repeat what others said. To hand the next word to a member, mention them as @display name.\n\n## Your role\nYou keep the reading list.\n\n## Owner memory\n\nToday in UTC is <date>. What is stored right now, including anything you added earlier in this conversation; each appears once.\n\n### Core facts\n- Ada drinks oolong tea\n\n### Upcoming events\n(none)\n\nNotes (projects, people, references, past events) are not listed here. Use memory_search when a request may depend on them.\n</addendum>",
 					"skills": "<skills>\nThe following skills provide specialized instructions for specific tasks.\nUse the read tool to load a skill's file when the task matches its description.\nWhen a skill file references a relative path, resolve it against the skill directory (parent of SKILL.md / dirname of the path) and use that absolute path in tool commands.\n\n<available_skills>\n  <skill>\n    <name>writing-skills</name>\n    <description>Use when creating, editing, or reviewing a skill, or when a lesson from your work should become one.</description>\n    <location><checkout>/src/core/assets/skills/writing-skills/SKILL.md</location>\n  </skill>\n</available_skills>\n</skills>",
 					"cwd": "<cwd>\n<tmp>\n</cwd>"
 				}
@@ -2343,6 +2372,31 @@
 						"allow_other": {
 							"type": "boolean",
 							"description": "The speaker may write an answer besides the options."
+						}
+					},
+					"additionalProperties": false
+				}
+			},
+			{
+				"name": "attach_file",
+				"description": "Show a file you have on disk, such as a picture you made, by attaching it to your reply in this conversation. Give its path inside the workspace or the scratch dir; never read an image or base64 a file to show it.",
+				"parameters": {
+					"type": "object",
+					"required": [
+						"path"
+					],
+					"properties": {
+						"path": {
+							"type": "string",
+							"minLength": 1,
+							"maxLength": 4096,
+							"description": "The file's path inside the workspace or the scratch dir."
+						},
+						"filename": {
+							"type": "string",
+							"minLength": 1,
+							"maxLength": 255,
+							"description": "The name it is posted under, without a path; defaults to the path's base name."
 						}
 					},
 					"additionalProperties": false
@@ -2829,7 +2883,7 @@
 			},
 			{
 				"name": "discord_edit_message",
-				"description": "Edit a message the bot itself sent.",
+				"description": "Edit a message the bot itself sent. To add a file you have on disk, give its path; base64 is for small generated data only.",
 				"parameters": {
 					"type": "object",
 					"required": [
@@ -2853,23 +2907,25 @@
 							"type": "array",
 							"items": {
 								"type": "object",
-								"required": [
-									"filename",
-									"dataBase64"
-								],
 								"properties": {
+									"path": {
+										"type": "string",
+										"minLength": 1,
+										"maxLength": 4096,
+										"description": "A file on disk inside the workspace or the scratch dir; prefer this for any file you have"
+									},
 									"filename": {
 										"type": "string",
 										"minLength": 1,
 										"maxLength": 200,
 										"pattern": "^[^/\\\\\\u0000-\\u001f]+$",
-										"description": "The attachment file name, without a path"
+										"description": "The attachment file name, without a path; defaults to the path's base name, required with dataBase64"
 									},
 									"dataBase64": {
 										"type": "string",
 										"minLength": 4,
 										"maxLength": 11184812,
-										"description": "The file content as standard base64, without a data URL prefix"
+										"description": "Small generated content as standard base64, without a data URL prefix; never base64 a file you have on disk, give its path"
 									},
 									"description": {
 										"type": "string",
@@ -2881,7 +2937,7 @@
 							},
 							"minItems": 1,
 							"maxItems": 10,
-							"description": "Images or files to add; at most 8 MiB in total for the whole call"
+							"description": "Images or files to add, each with exactly one of path or dataBase64; at most 8 MiB in total for the whole call"
 						},
 						"keepAttachmentIds": {
 							"type": "array",
@@ -3346,7 +3402,7 @@
 			},
 			{
 				"name": "discord_send_message",
-				"description": "Send a message, optionally with images or files; it triggers no @ mentions.",
+				"description": "Send a message, optionally with images or files; it triggers no @ mentions. To send a file you have on disk, give its path; base64 is for small generated data only.",
 				"parameters": {
 					"type": "object",
 					"required": [
@@ -3365,23 +3421,25 @@
 							"type": "array",
 							"items": {
 								"type": "object",
-								"required": [
-									"filename",
-									"dataBase64"
-								],
 								"properties": {
+									"path": {
+										"type": "string",
+										"minLength": 1,
+										"maxLength": 4096,
+										"description": "A file on disk inside the workspace or the scratch dir; prefer this for any file you have"
+									},
 									"filename": {
 										"type": "string",
 										"minLength": 1,
 										"maxLength": 200,
 										"pattern": "^[^/\\\\\\u0000-\\u001f]+$",
-										"description": "The attachment file name, without a path"
+										"description": "The attachment file name, without a path; defaults to the path's base name, required with dataBase64"
 									},
 									"dataBase64": {
 										"type": "string",
 										"minLength": 4,
 										"maxLength": 11184812,
-										"description": "The file content as standard base64, without a data URL prefix"
+										"description": "Small generated content as standard base64, without a data URL prefix; never base64 a file you have on disk, give its path"
 									},
 									"description": {
 										"type": "string",
@@ -3393,7 +3451,7 @@
 							},
 							"minItems": 1,
 							"maxItems": 10,
-							"description": "Images or files to add; at most 8 MiB in total for the whole call"
+							"description": "Images or files to add, each with exactly one of path or dataBase64; at most 8 MiB in total for the whole call"
 						}
 					},
 					"additionalProperties": false
@@ -4638,7 +4696,7 @@
 			},
 			{
 				"name": "discord_edit_message",
-				"description": "Edit a message the bot itself sent.",
+				"description": "Edit a message the bot itself sent. To add a file you have on disk, give its path; base64 is for small generated data only.",
 				"parameters": {
 					"type": "object",
 					"required": [
@@ -4662,23 +4720,25 @@
 							"type": "array",
 							"items": {
 								"type": "object",
-								"required": [
-									"filename",
-									"dataBase64"
-								],
 								"properties": {
+									"path": {
+										"type": "string",
+										"minLength": 1,
+										"maxLength": 4096,
+										"description": "A file on disk inside the workspace or the scratch dir; prefer this for any file you have"
+									},
 									"filename": {
 										"type": "string",
 										"minLength": 1,
 										"maxLength": 200,
 										"pattern": "^[^/\\\\\\u0000-\\u001f]+$",
-										"description": "The attachment file name, without a path"
+										"description": "The attachment file name, without a path; defaults to the path's base name, required with dataBase64"
 									},
 									"dataBase64": {
 										"type": "string",
 										"minLength": 4,
 										"maxLength": 11184812,
-										"description": "The file content as standard base64, without a data URL prefix"
+										"description": "Small generated content as standard base64, without a data URL prefix; never base64 a file you have on disk, give its path"
 									},
 									"description": {
 										"type": "string",
@@ -4690,7 +4750,7 @@
 							},
 							"minItems": 1,
 							"maxItems": 10,
-							"description": "Images or files to add; at most 8 MiB in total for the whole call"
+							"description": "Images or files to add, each with exactly one of path or dataBase64; at most 8 MiB in total for the whole call"
 						},
 						"keepAttachmentIds": {
 							"type": "array",
@@ -5155,7 +5215,7 @@
 			},
 			{
 				"name": "discord_send_message",
-				"description": "Send a message, optionally with images or files; it triggers no @ mentions.",
+				"description": "Send a message, optionally with images or files; it triggers no @ mentions. To send a file you have on disk, give its path; base64 is for small generated data only.",
 				"parameters": {
 					"type": "object",
 					"required": [
@@ -5174,23 +5234,25 @@
 							"type": "array",
 							"items": {
 								"type": "object",
-								"required": [
-									"filename",
-									"dataBase64"
-								],
 								"properties": {
+									"path": {
+										"type": "string",
+										"minLength": 1,
+										"maxLength": 4096,
+										"description": "A file on disk inside the workspace or the scratch dir; prefer this for any file you have"
+									},
 									"filename": {
 										"type": "string",
 										"minLength": 1,
 										"maxLength": 200,
 										"pattern": "^[^/\\\\\\u0000-\\u001f]+$",
-										"description": "The attachment file name, without a path"
+										"description": "The attachment file name, without a path; defaults to the path's base name, required with dataBase64"
 									},
 									"dataBase64": {
 										"type": "string",
 										"minLength": 4,
 										"maxLength": 11184812,
-										"description": "The file content as standard base64, without a data URL prefix"
+										"description": "Small generated content as standard base64, without a data URL prefix; never base64 a file you have on disk, give its path"
 									},
 									"description": {
 										"type": "string",
@@ -5202,7 +5264,7 @@
 							},
 							"minItems": 1,
 							"maxItems": 10,
-							"description": "Images or files to add; at most 8 MiB in total for the whole call"
+							"description": "Images or files to add, each with exactly one of path or dataBase64; at most 8 MiB in total for the whole call"
 						}
 					},
 					"additionalProperties": false
@@ -5826,7 +5888,7 @@
 					"tools": "<tools>\n- bash: Execute bash commands (ls, grep, find, etc.)\n- read: Read file contents\n- edit: Make precise file edits with exact text replacement, including multiple disjoint edits in one call\n- write: Create or overwrite files\n- compact_session: Compact this session's own context (queued, runs after the current turn ends; `resume` continues the work in the next turn).\n\nIn addition to the tools above, you may have access to other custom tools depending on the project.\n</tools>",
 					"rules": "<rules>\n- Use bash for file operations like ls, rg, find\n- You can inspect PI_* environment variables for current model and session details.\n- Use read to examine files instead of cat or sed.\n- Use edit for precise changes (edits[].oldText must match exactly)\n- When changing multiple separate locations in one file, use one edit call with multiple entries in edits[] instead of multiple edit calls\n- Each edits[].oldText is matched against the original file, not after earlier edits are applied. Do not emit overlapping or nested edits. Merge nearby changes into one edit.\n- Keep edits[].oldText as small as possible while still being unique in the file. Do not pad with large unchanged regions.\n- Use write only for new files or complete rewrites.\n- Be concise in your responses\n- Show file paths clearly when working with files\n</rules>",
 					"docs": "<docs>\nPi documentation (read only when the user asks about pi itself, its SDK, extensions, themes, skills, or TUI):\n- Main documentation: <checkout>/node_modules/@earendil-works/pi-coding-agent/README.md\n- Additional docs: <checkout>/node_modules/@earendil-works/pi-coding-agent/docs\n- Examples: <checkout>/node_modules/@earendil-works/pi-coding-agent/examples (extensions, custom tools, SDK)\n- When reading pi docs or examples, resolve docs/... under Additional docs and examples/... under Examples, not the current working directory\n- When asked about: extensions (docs/extensions.md, examples/extensions/), themes (docs/themes.md), skills (docs/skills.md), prompt templates (docs/prompt-templates.md), TUI components (docs/tui.md), keybindings (docs/keybindings.md), SDK integrations (docs/sdk.md), custom providers (docs/custom-provider.md), adding models (docs/models.md), pi packages (docs/packages.md), environment variables (docs/environment-variables.md), MCP servers (docs/mcp.md), codemode scripts and non-LLM models such as classifiers and image models (docs/codemode.md)\n- When working on pi topics, read the docs and examples, and follow .md cross-references before implementing\n- Always read pi .md files completely and follow links to related docs (e.g., tui.md for TUI API details)\n</docs>",
-					"addendum": "<addendum>\nYou are an agent in a Discord server, working for the server's owner. You talk with them in channels and threads.\n\nReply in the language they write in. Be warm, direct, and brief.\n\nWrite in Discord's Markdown: bold, italics, headings, bullet and numbered lists, block quotes, inline code, fenced code blocks, and `-#` small text all render. Discord shows Markdown tables as raw pipes, so list figures as bullets instead.\n\nYour context holds only their core facts and upcoming events. When a request touches their projects, people, tools, or past, search memory first. When they ask you to remember or forget something, use the memory tools.\n\nWhen you need their decision to continue, ask with ask_user instead of ending your turn with a question; they answer on buttons in the channel and your turn goes on.\n\nCite the source links of web information you use.\n\nYou are \"Archivist\" (agent name `archivist`), one of Ada's agents in her Discord agent server. Each agent owns one channel and one conversation; you all share her tools and her memory.\n\nThe team's coordinator is the agent in the server's entry channel. You are a specialist: speak of yourself only as \"Archivist\", never as the coordinator. Team work Ada asks of you directly, such as creating agents or groups, archiving, or arranging channels, you do in your own name. When your role below is empty or only a placeholder, ask her what your job is before taking on other work.\n\nThe team: agent_list shows every agent and group; agent_get and agent_update read and improve any agent's prompt, display name, model, and thinking level, yours included; agent_create adds an agent with its own channel; schedule_list with agent reads another agent's schedules. A message marked as coming from another agent is that agent speaking, not Ada; only Ada approves held actions.\n\nYour shell and file tools run on her VPS as the user <user>, in the shared workspace <tmp>. Write temporary files under the scratch dir <tmp>/roundtable-scratch ($TMPDIR), not elsewhere in /tmp. Commands that are destructive or change the system, and writes outside the workspace and the scratch dir, are held for her confirmation: tell her exactly what will run and ask her to confirm.\n\nmessage_agent hands a self-contained request to another agent; it answers later, and its answer comes back to you as a new turn.\n\n## Your role\nYou file the notes.\n\n## Owner memory\n\nToday in UTC is <date>. What is stored right now, including anything you added earlier in this conversation; each appears once.\n\n### Core facts\n- Ada drinks oolong tea\n\n### Upcoming events\n(none)\n\nNotes (projects, people, references, past events) are not listed here. Use memory_search when a request may depend on them.\n</addendum>",
+					"addendum": "<addendum>\nYou are an agent in a Discord server, working for the server's owner. You talk with them in channels and threads.\n\nReply in the language they write in. Be warm, direct, and brief.\n\nWrite in Discord's Markdown: bold, italics, headings, bullet and numbered lists, block quotes, inline code, fenced code blocks, and `-#` small text all render. Discord shows Markdown tables as raw pipes, so list figures as bullets instead.\n\nYour context holds only their core facts and upcoming events. When a request touches their projects, people, tools, or past, search memory first. When they ask you to remember or forget something, use the memory tools.\n\nWhen you need their decision to continue, ask with ask_user instead of ending your turn with a question; they answer on buttons in the channel and your turn goes on.\n\nCite the source links of web information you use.\n\nYou are \"Archivist\" (agent name `archivist`), one of Ada's agents in her Discord agent server. Each agent owns one channel and one conversation; you all share her tools and her memory.\n\nThe team's coordinator is the agent in the server's entry channel. You are a specialist: speak of yourself only as \"Archivist\", never as the coordinator. Team work Ada asks of you directly, such as creating agents or groups, archiving, or arranging channels, you do in your own name. When your role below is empty or only a placeholder, ask her what your job is before taking on other work.\n\nThe team: agent_list shows every agent and group; agent_get and agent_update read and improve any agent's prompt, display name, model, and thinking level, yours included; agent_create adds an agent with its own channel; schedule_list with agent reads another agent's schedules. A message marked as coming from another agent is that agent speaking, not Ada; only Ada approves held actions.\n\nYour shell and file tools run on her VPS as the user <user>, in the shared workspace <tmp>. Write temporary files under the scratch dir <tmp>/roundtable-scratch ($TMPDIR), not elsewhere in /tmp. Commands that are destructive or change the system, and writes outside the workspace and the scratch dir, are held for her confirmation: tell her exactly what will run and ask her to confirm. To show a file you have, attach it to your reply with attach_file or give its path to discord_send_message; never read an image or base64 a file to send it.\n\nmessage_agent hands a self-contained request to another agent; it answers later, and its answer comes back to you as a new turn.\n\n## Your role\nYou file the notes.\n\n## Owner memory\n\nToday in UTC is <date>. What is stored right now, including anything you added earlier in this conversation; each appears once.\n\n### Core facts\n- Ada drinks oolong tea\n\n### Upcoming events\n(none)\n\nNotes (projects, people, references, past events) are not listed here. Use memory_search when a request may depend on them.\n</addendum>",
 					"skills": "<skills>\nThe following skills provide specialized instructions for specific tasks.\nUse the read tool to load a skill's file when the task matches its description.\nWhen a skill file references a relative path, resolve it against the skill directory (parent of SKILL.md / dirname of the path) and use that absolute path in tool commands.\n\n<available_skills>\n  <skill>\n    <name>writing-skills</name>\n    <description>Use when creating, editing, or reviewing a skill, or when a lesson from your work should become one.</description>\n    <location><checkout>/src/core/assets/skills/writing-skills/SKILL.md</location>\n  </skill>\n</available_skills>\n</skills>",
 					"cwd": "<cwd>\n<tmp>\n</cwd>"
 				}
@@ -6060,6 +6122,31 @@
 						"allow_other": {
 							"type": "boolean",
 							"description": "The speaker may write an answer besides the options."
+						}
+					},
+					"additionalProperties": false
+				}
+			},
+			{
+				"name": "attach_file",
+				"description": "Show a file you have on disk, such as a picture you made, by attaching it to your reply in this conversation. Give its path inside the workspace or the scratch dir; never read an image or base64 a file to show it.",
+				"parameters": {
+					"type": "object",
+					"required": [
+						"path"
+					],
+					"properties": {
+						"path": {
+							"type": "string",
+							"minLength": 1,
+							"maxLength": 4096,
+							"description": "The file's path inside the workspace or the scratch dir."
+						},
+						"filename": {
+							"type": "string",
+							"minLength": 1,
+							"maxLength": 255,
+							"description": "The name it is posted under, without a path; defaults to the path's base name."
 						}
 					},
 					"additionalProperties": false
@@ -6546,7 +6633,7 @@
 			},
 			{
 				"name": "discord_edit_message",
-				"description": "Edit a message the bot itself sent.",
+				"description": "Edit a message the bot itself sent. To add a file you have on disk, give its path; base64 is for small generated data only.",
 				"parameters": {
 					"type": "object",
 					"required": [
@@ -6570,23 +6657,25 @@
 							"type": "array",
 							"items": {
 								"type": "object",
-								"required": [
-									"filename",
-									"dataBase64"
-								],
 								"properties": {
+									"path": {
+										"type": "string",
+										"minLength": 1,
+										"maxLength": 4096,
+										"description": "A file on disk inside the workspace or the scratch dir; prefer this for any file you have"
+									},
 									"filename": {
 										"type": "string",
 										"minLength": 1,
 										"maxLength": 200,
 										"pattern": "^[^/\\\\\\u0000-\\u001f]+$",
-										"description": "The attachment file name, without a path"
+										"description": "The attachment file name, without a path; defaults to the path's base name, required with dataBase64"
 									},
 									"dataBase64": {
 										"type": "string",
 										"minLength": 4,
 										"maxLength": 11184812,
-										"description": "The file content as standard base64, without a data URL prefix"
+										"description": "Small generated content as standard base64, without a data URL prefix; never base64 a file you have on disk, give its path"
 									},
 									"description": {
 										"type": "string",
@@ -6598,7 +6687,7 @@
 							},
 							"minItems": 1,
 							"maxItems": 10,
-							"description": "Images or files to add; at most 8 MiB in total for the whole call"
+							"description": "Images or files to add, each with exactly one of path or dataBase64; at most 8 MiB in total for the whole call"
 						},
 						"keepAttachmentIds": {
 							"type": "array",
@@ -7063,7 +7152,7 @@
 			},
 			{
 				"name": "discord_send_message",
-				"description": "Send a message, optionally with images or files; it triggers no @ mentions.",
+				"description": "Send a message, optionally with images or files; it triggers no @ mentions. To send a file you have on disk, give its path; base64 is for small generated data only.",
 				"parameters": {
 					"type": "object",
 					"required": [
@@ -7082,23 +7171,25 @@
 							"type": "array",
 							"items": {
 								"type": "object",
-								"required": [
-									"filename",
-									"dataBase64"
-								],
 								"properties": {
+									"path": {
+										"type": "string",
+										"minLength": 1,
+										"maxLength": 4096,
+										"description": "A file on disk inside the workspace or the scratch dir; prefer this for any file you have"
+									},
 									"filename": {
 										"type": "string",
 										"minLength": 1,
 										"maxLength": 200,
 										"pattern": "^[^/\\\\\\u0000-\\u001f]+$",
-										"description": "The attachment file name, without a path"
+										"description": "The attachment file name, without a path; defaults to the path's base name, required with dataBase64"
 									},
 									"dataBase64": {
 										"type": "string",
 										"minLength": 4,
 										"maxLength": 11184812,
-										"description": "The file content as standard base64, without a data URL prefix"
+										"description": "Small generated content as standard base64, without a data URL prefix; never base64 a file you have on disk, give its path"
 									},
 									"description": {
 										"type": "string",
@@ -7110,7 +7201,7 @@
 							},
 							"minItems": 1,
 							"maxItems": 10,
-							"description": "Images or files to add; at most 8 MiB in total for the whole call"
+							"description": "Images or files to add, each with exactly one of path or dataBase64; at most 8 MiB in total for the whole call"
 						}
 					},
 					"additionalProperties": false

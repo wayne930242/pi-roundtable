@@ -1,6 +1,6 @@
 {
 	"name": "pi-roundtable-webchat",
-	"version": "0.9.4",
+	"version": "0.9.5",
 	"description": "A WebSocket chat adapter for pi-roundtable: private web conversations for people an OpenID Connect provider signs in, with live progress and approval cards",
 	"type": "module",
 	"license": "MIT",
@@ -43,7 +43,7 @@
 		"@earendil-works/pi-ai": ">=1.0.0 <2",
 		"@earendil-works/pi-coding-agent": ">=1.0.0 <2",
 		"@types/bun": "1.4.2",
-		"pi-roundtable": "0.9.4",
+		"pi-roundtable": "0.9.5",
 		"typebox": "1.3.34",
 		"typescript": "7.0.2"
 	}

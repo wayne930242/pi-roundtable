@@ -1,6 +1,6 @@
 {
 	"name": "pi-roundtable-web",
-	"version": "0.9.4",
+	"version": "0.9.5",
 	"description": "A web console for the owners of a pi-roundtable host: conversations, transcripts, and memory notes, with live updates",
 	"type": "module",
 	"license": "MIT",
@@ -47,7 +47,7 @@
 		"@types/bun": "1.4.2",
 		"@types/react": "19.3.0",
 		"@types/react-dom": "19.3.0",
-		"pi-roundtable": "0.9.4",
+		"pi-roundtable": "0.9.5",
 		"react": "19.3.0",
 		"react-dom": "19.3.0",
 		"react-markdown": "10.1.0",

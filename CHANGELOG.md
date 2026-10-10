@@ -5,7 +5,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-## [0.9.4] - 2026-10-10
+## [0.9.5] - 2026-10-10
+
+0.9.4 was tagged but never published (its release checks failed on the recorded prompt texts); everything listed under it is released in 0.9.5.
 
 ### Added
 
