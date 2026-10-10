@@ -2396,6 +2396,22 @@ On Discord the owners are every owner with a Discord identity, and the primary o
 A principal with no Discord identity, such as the reporter of a background report, answers nothing there, so their card goes to the owners; so does an owner-tier call of a turn whose tier defaulted to owner when its principal is not an owner.
 The web chat shows prompts to the conversation's person only: its owners are not on it, so an approval above that person's tier expires at once whatever the scope says.
 
+#### A prompt that outlives its turn: `PromptWait`
+
+`confirm(title, message, signal?, minTier?, wait?)` and `ask(title, question, signal?, wait?)` take an optional `PromptWait`, whose `late(answer)` hears a `LateAnswer` (`{ kind: "approval", approved, by }` or `{ kind: "question", answer, by }`, `by` naming who answered) and returns the text of the turn that tells the conversation, or undefined for none.
+Given one, a surface may stop the turn's wait after a grace period: `confirm` then resolves `pending` and `ask` resolves `"pending"`, the prompt stays open, and when it is answered later the surface starts a turn in the prompt's conversation with that text, as a message from whoever answered, so the conversation's claim answers it as theirs.
+Without one, a prompt waits for its answer, or for its turn's stop; a surface that cannot start a turn ignores `wait` and waits too.
+A stop cancels a prompt only while its turn still waits on it; after that the prompt belongs to the conversation.
+
+The runtime gives both of its prompts a `wait`.
+`ask_user` then tells the model the person has not answered yet and to end its turn saying it is waiting, without asking again, and the late answer's turn carries the question and the answer.
+A held action's call is blocked as awaiting the approval, and is not held for a later message; a late approval lets that exact call (same tool, same canonical input) run once in whichever turn makes it next, and its turn tells the model to make it now and report the result, so the call runs under the gate and tier rules every call does; a late refusal starts a turn that says so.
+A coding worker's cards give no `wait`, since nothing could resume a worker: it waits for the answer, and the waiting does not count against its time.
+
+On Discord the grace period is `discord.cardGraceSeconds` (default 120), and the cards carry no countdown.
+A card answered late is edited to show the answer with its controls disabled, as one answered in time is; a second press finds it answered.
+Open cards live in memory: after a restart, pressing one replies, to the presser alone, that it is no longer valid and to ask again.
+
 #### Interim text: what a turn writes before its final answer
 
 A model often writes text in an assistant message that then calls tools, such as a proposal before it asks `ask_user` "go with this version?".
@@ -3320,6 +3336,7 @@ Import from the entries listed below; source area files are internal.
 | `Judge` | `pi-roundtable` | type |
 | `JudgeError` | `pi-roundtable` | value |
 | `JudgeModel` | `pi-roundtable` | type |
+| `LateAnswer` | `pi-roundtable` | type |
 | `LinkedSessions` | `pi-roundtable` | type |
 | `LinkSource` | `pi-roundtable` | type |
 | `ListenerAddress` | `pi-roundtable` | type |
@@ -3359,6 +3376,7 @@ Import from the entries listed below; source area files are internal.
 | `PromptScope` | `pi-roundtable` | type |
 | `PromptSection` | `pi-roundtable` | type |
 | `PromptTurn` | `pi-roundtable` | type |
+| `PromptWait` | `pi-roundtable` | type |
 | `Prompts` | `pi-roundtable` | type |
 | `Pronouns` | `pi-roundtable` | type |
 | `ProviderError` | `pi-roundtable` | value |

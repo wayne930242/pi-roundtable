@@ -35,8 +35,8 @@ import type { ComposedCommands } from "./compose-commands.ts";
 import type { ChannelInfo, DiscordConnection } from "./connection.ts";
 import { DiscordThreadHost } from "./dispatch-thread-host.ts";
 import { DEFAULT_FRESH_MARKER, postFreshMarker } from "./fresh-marker.ts";
-import { toInbound } from "./inbound-message.ts";
-import type { CardChannel } from "./owner-cards.ts";
+import { lateAnswerMessage, toInbound } from "./inbound-message.ts";
+import type { CardChannel, LateTurn } from "./owner-cards.ts";
 import { DiscordOwnerOps } from "./owner-discord.ts";
 import { stopPanel } from "./stop-button.ts";
 
@@ -85,6 +85,7 @@ export class DiscordSurface
 	});
 
 	#interactions: ComposedCommands = { commands: [], modules: [] };
+	#onMessage: ((message: InboundMessage) => void) | undefined;
 
 	constructor(options: DiscordSurfaceOptions) {
 		this.#options = options;
@@ -208,8 +209,25 @@ export class DiscordSurface
 		};
 	}
 
+	/**
+	 * Hands the router a card's late answer as a message from whoever answered, in the card's
+	 * channel, so the conversation's claim answers it as theirs; dropped (logged) before start.
+	 */
+	resume(turn: LateTurn): void {
+		const onMessage = this.#onMessage;
+		if (!onMessage) {
+			this.#options.logger.warn(
+				{ channelId: turn.channelId },
+				"late card answer before the surface started; dropped",
+			);
+			return;
+		}
+		onMessage(lateAnswerMessage(turn));
+	}
+
 	async start(onMessage: (message: InboundMessage) => void): Promise<void> {
 		const { logger, token } = this.#options;
+		this.#onMessage = onMessage;
 		this.#client.on(Events.MessageCreate, (message) => {
 			toInbound(message, {
 				botId: this.#client.user?.id,

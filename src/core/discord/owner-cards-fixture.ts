@@ -56,6 +56,9 @@ export function press(
 		isModalSubmit: () => kind === "modal",
 		isFromMessage: () => true,
 		customId,
+		inGuild: () => true,
+		guildId: "300000000000000003",
+		message: { id: "400000000000000004" },
 		user: { id: options.user ?? OWNER },
 		member: {
 			roles: { cache: new Map((options.roles ?? []).map((r) => [r, r])) },

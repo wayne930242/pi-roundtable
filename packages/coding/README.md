@@ -133,7 +133,8 @@ The thread's cards come after the text written before them, the final report is 
 `interimText: "off"` posts only the task, the held-action notices, the cards and the report; a thread whose host cannot edit its posts gets no progress either.
 `promptSlot` tracks these cards and `workTimeout` excludes their waiting time from the worker's budget (one hour by default).
 `timeoutMs` must be positive and finite, and at most 2,147,483,647 ms to fit the host timer.
-An approved call runs; a declined, expired, missing or failed card blocks it and instructs the worker not to retry or work around the refusal.
+A worker's card has no grace period and no deadline: the worker waits for the answer until it is stopped, and the waiting does not count against its time.
+An approved call runs; a declined, missing or failed card blocks it and instructs the worker not to retry or work around the refusal.
 Unapproved actions appear in the report rather than running later automatically.
 By default worker answers are capped at 20,000 characters and the Held list keeps ten entries of at most 1,000 characters each, with explicit truncation and omission notices; `limits` changes each bound.
 A worker failure carries its exit category and numeric code; git and gh stderr and the worker's own error text reach the report only after `scrubDiagnostic` masks credentials, and are cut at `diagnosticChars`.

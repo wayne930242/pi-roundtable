@@ -6,10 +6,9 @@ export function cardsEn(ctx: CatalogContext) {
 		cardRunLabel: "Run",
 		cardCancelLabel: "Cancel",
 		cardApprovalFooter:
-			"If nobody answers within 30 minutes, it falls back to waiting for your confirmation in text.",
-		cardQuestionFooter: "Valid for 30 minutes.",
+			"Nothing runs until you approve; answer whenever you are ready.",
+		cardQuestionFooter: "Answer whenever you are ready.",
 		cardStopped: "⏹️ This round was stopped.",
-		cardExpired: "⌛ Timed out with no answer.",
 		cardOwnerOnly: `Only ${ctx.assistant}'s owner can answer this card.`,
 		cardApproversNote: (...userIds: readonly string[]) =>
 			`-# Who can approve: ${userIds.map((id) => `<@${id}>`).join(" ")}`,
@@ -18,7 +17,7 @@ export function cardsEn(ctx: CatalogContext) {
 		cardAskerNote: (...userIds: readonly string[]) =>
 			`-# Who can answer: ${userIds.map((id) => `<@${id}>`).join(" ")}`,
 		cardAskerRefusal: "This question is for another speaker.",
-		cardInactive: `This card is no longer active (it timed out, or ${ctx.assistant} restarted); reply in text if you need to.`,
+		cardInactive: `This card is no longer valid (${ctx.assistant} restarted since it was posted, or it was already answered); ask again, or reply in text.`,
 		cardApproved: "✅ Approved to run.",
 		cardDeclined: "❌ Cancelled.",
 		cardAnswerLabel: "Answer…",
@@ -38,10 +37,9 @@ export function cardsZhTW(ctx: CatalogContext): ReturnType<typeof cardsEn> {
 	return {
 		cardRunLabel: "執行",
 		cardCancelLabel: "取消",
-		cardApprovalFooter: "30 分鐘內沒回覆，就改成等你用文字確認。",
-		cardQuestionFooter: "30 分鐘內有效。",
+		cardApprovalFooter: "你核准之前不會執行；準備好再回覆就好。",
+		cardQuestionFooter: "準備好再回答就好。",
 		cardStopped: "⏹️ 這一輪已停止。",
-		cardExpired: "⌛ 已逾時，沒有回答。",
 		cardOwnerOnly: `只有 ${ctx.assistant} 的擁有者能回答這張卡片。`,
 		cardApproversNote: (...userIds: readonly string[]) =>
 			`-# 可以核准的人：${userIds.map((id) => `<@${id}>`).join(" ")}`,
@@ -49,7 +47,7 @@ export function cardsZhTW(ctx: CatalogContext): ReturnType<typeof cardsEn> {
 		cardAskerNote: (...userIds: readonly string[]) =>
 			`-# 可以回答的人：${userIds.map((id) => `<@${id}>`).join(" ")}`,
 		cardAskerRefusal: "這張問題是問另一位發話者的。",
-		cardInactive: `這張卡片已經失效（逾時，或 ${ctx.assistant} 重新啟動過）；需要的話直接打字回覆。`,
+		cardInactive: `這張卡片已經失效（${ctx.assistant} 在它發出後重新啟動過，或它已經回答過了）；請再問一次，或直接打字回覆。`,
 		cardApproved: "✅ 已核准執行。",
 		cardDeclined: "❌ 已取消。",
 		cardAnswerLabel: "回答…",

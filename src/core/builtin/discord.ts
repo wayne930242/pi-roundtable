@@ -67,6 +67,11 @@ export interface DiscordOptions {
 	channelContext?: ChannelContextOptions | false;
 	/** The divider posted in a server channel when its conversation starts over; `false` posts none. Default: a short English divider. */
 	freshMarker?: string | false;
+	/**
+	 * How long a turn waits on its owner card before it goes on without the answer, leaving the
+	 * card open; a later answer starts a new turn. Default `CARD_GRACE_MS`, two minutes.
+	 */
+	cardGraceMs?: number;
 }
 
 /**
@@ -96,6 +101,10 @@ export function discordPlugin(options: DiscordOptions): RoundtablePlugin {
 				...(identity ? { identity } : {}),
 				channel: (channelId) => connected.cardChannel(channelId),
 				logger,
+				...(options.cardGraceMs === undefined
+					? {}
+					: { graceMs: options.cardGraceMs }),
+				resume: (turn) => connected.resume(turn),
 			});
 			const connected = new DiscordSurface({
 				token: options.token,

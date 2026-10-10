@@ -3,6 +3,11 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { holdChain } from "../../holds.ts";
+import type {
+	Approval,
+	Prompts,
+	PromptWait,
+} from "../../interactions/prompts.ts";
 import { shellHoldRule } from "../../modules/host-shell/shell-policy.ts";
 import { TEST_OWNER as OWNER } from "../../testing/owner.ts";
 import { MAIL, MAIL_RULE } from "./confirmation-fixture.ts";
@@ -190,4 +195,65 @@ test("an approval card names a file sent by path with its size, not its bytes", 
 		),
 	).toContain("File `gone.png` (not found now)");
 	rmSync(dir, { recursive: true, force: true });
+});
+
+describe("ConfirmationGate with a card that outlives its turn", () => {
+	const send = { to: "a@b.c", subject: "hi" };
+	/** Cards that answer `answer` and keep each wait they were given. */
+	function cards(answer: Approval) {
+		const waits: PromptWait[] = [];
+		const prompts: Prompts = {
+			confirm: async (_title, _message, _signal, _tier, wait) => {
+				if (wait) waits.push(wait);
+				return answer;
+			},
+			ask: async () => undefined,
+		};
+		return { waits, ask: { prompts, asker: "infra" } };
+	}
+
+	test("an unanswered card blocks the call, holds nothing, and tells the model to end its turn waiting", async () => {
+		const gate = new ConfirmationGate(holds, OWNER);
+		gate.beginTurn("workspace", false);
+		const { ask } = cards("pending");
+		const { reason } = await gate.decide(MAIL, send, ask);
+		expect(reason).toContain("Awaiting Riley's approval");
+		expect(reason).toContain("End your turn now");
+		expect(reason).not.toContain("30");
+		expect(gate.pending()).toBeUndefined();
+	});
+
+	test("a late approval releases exactly that call, once, in a later turn", async () => {
+		const gate = new ConfirmationGate(holds, OWNER);
+		gate.beginTurn("workspace", false);
+		const { waits, ask } = cards("pending");
+		await gate.decide(MAIL, send, ask);
+		gate.endTurn();
+		const text = waits[0]?.late({
+			kind: "approval",
+			approved: true,
+			by: "Riley",
+		});
+		expect(text).toContain("Riley approved");
+		expect(text).toContain(`${MAIL} ${canonicalJson(send)}`);
+		gate.beginTurn("workspace", false);
+		expect(gate.hold(MAIL, { ...send, subject: "other" })).toContain("Held");
+		expect(gate.hold(MAIL, send)).toBeUndefined();
+		expect(gate.hold(MAIL, send)).toContain("Held");
+	});
+
+	test("a late refusal releases nothing and says so", async () => {
+		const gate = new ConfirmationGate(holds, OWNER);
+		gate.beginTurn("workspace", false);
+		const { waits, ask } = cards("pending");
+		await gate.decide(MAIL, send, ask);
+		const text = waits[0]?.late({
+			kind: "approval",
+			approved: false,
+			by: "Riley",
+		});
+		expect(text).toContain("Riley declined");
+		gate.beginTurn("workspace", false);
+		expect(gate.hold(MAIL, send)).toContain("Held");
+	});
 });

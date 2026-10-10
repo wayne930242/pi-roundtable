@@ -3,10 +3,33 @@ import type { TurnRequest } from "../domain/ports.ts";
 import type { Speaker, Tier } from "../speakers.ts";
 
 /**
- * How a prompt ended: answered yes or no, unanswered until it expired, or cancelled when its turn
- * stopped.
+ * How a prompt ended: answered yes or no; `expired` when no one could answer it (no one's to
+ * approve, or the card could not be posted); `cancelled` when its turn stopped; or `pending` when
+ * the turn stopped waiting while the card stays open, its answer to come through `PromptWait`.
  */
-export type Approval = "approved" | "declined" | "expired" | "cancelled";
+export type Approval =
+	| "approved"
+	| "declined"
+	| "expired"
+	| "cancelled"
+	| "pending";
+
+/** An answer given on a prompt after its turn stopped waiting; `by` names who gave it. */
+export type LateAnswer = { by: string } & (
+	| { kind: "approval"; approved: boolean }
+	| { kind: "question"; answer: OwnerAnswer }
+);
+
+/**
+ * How a prompt may outlive its turn. Given, a surface may stop the turn's wait after a grace
+ * period, resolving `pending`, and keep the prompt open; an answer that comes later goes to
+ * `late`, and the surface starts a turn in the prompt's conversation with the text `late`
+ * returns, as a message from whoever answered (none when it returns undefined). Without it the
+ * prompt waits for its answer or its turn's stop.
+ */
+export interface PromptWait {
+	late(answer: LateAnswer): string | undefined;
+}
 
 export interface AskOption {
 	label: string;
@@ -64,27 +87,33 @@ export interface PromptScope {
 
 /**
  * Prompts inside a running turn, on its conversation's surface: an approval of a held action and an
- * `ask_user` question, answered by those its `PromptScope` names. Unanswered prompts expire; a
- * stopped turn cancels its open ones.
+ * `ask_user` question, answered by those its `PromptScope` names. A stopped turn cancels the ones
+ * it still waits on; with a `PromptWait`, a prompt may outlive the turn's wait (see there).
  */
 export interface Prompts {
 	/**
 	 * Asks to approve an action; `signal` cancels the prompt when the turn stops. `minTier` is the
 	 * tier the scope's speaker needs to approve it themselves, `owner` when absent; below it the
 	 * prompt goes to the owners, or, when the scope escalates to no one, resolves `expired` at once.
+	 * `pending` comes only with a `wait`.
 	 */
 	confirm(
 		title: string,
 		message: string,
 		signal?: AbortSignal,
 		minTier?: Tier,
+		wait?: PromptWait,
 	): Promise<Approval>;
-	/** Asks a question; undefined when it expired or was cancelled. */
+	/**
+	 * Asks a question; undefined when no one answered it or it was cancelled, and `pending`, only
+	 * with a `wait`, when the turn stopped waiting and the question stays open.
+	 */
 	ask(
 		title: string,
 		question: OwnerQuestion,
 		signal?: AbortSignal,
-	): Promise<OwnerAnswer | undefined>;
+		wait?: PromptWait,
+	): Promise<OwnerAnswer | "pending" | undefined>;
 }
 
 /** @deprecated Since 0.9 the prompts are `Prompts`, answered by those their `PromptScope` names; this name goes away in 1.0. */

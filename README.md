@@ -194,6 +194,10 @@ When a conversation is started over in a server channel or thread, the assistant
 | text | `─── new conversation ───` | The divider's text |
 | `false` | | Post no divider |
 
+An approval card or an `ask_user` question holds its turn for `discord.cardGraceSeconds` (default `120`).
+Answered within it, the turn goes on with the answer; otherwise the turn ends saying it is waiting, the card stays open with no deadline, and answering it later starts a new turn in that conversation with the answer, or with the result of the approved action.
+A coding worker's cards keep the worker waiting instead.
+
 ## Threat model
 
 pi-roundtable runs one assistant for one owner.

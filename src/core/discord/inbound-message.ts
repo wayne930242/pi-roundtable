@@ -2,6 +2,7 @@ import { type Message, MessageReferenceType } from "discord.js";
 import type { InboundMessage } from "../contract/channels.ts";
 import { channelKey } from "../contract/surface.ts";
 import type { AttachmentRef } from "../domain/attachment.ts";
+import type { LateTurn } from "./owner-cards.ts";
 
 /** Who the bot is on Discord, as far as the client knows it. */
 export interface BotIdentity {
@@ -111,5 +112,38 @@ export async function toInbound(
 				}
 			: {}),
 		...(referenced ? { reference: referenceOf(referenced, mention) } : {}),
+	};
+}
+
+/**
+ * A card's late answer as a message from whoever answered, in the card's channel, standing in
+ * for the card's message: the router resolves its author as any other's, and the claim answers it.
+ */
+export function lateAnswerMessage(turn: LateTurn): InboundMessage {
+	const { user } = turn;
+	const roles = user.roleIds;
+	return {
+		channel: channelKey("discord", turn.channelId),
+		messageId: turn.messageId,
+		actor: {
+			provider: "discord",
+			subject: user.id,
+			name: user.name,
+			surface: "discord",
+			...(roles ? { roles: roles.map((role) => `discord:role:${role}`) } : {}),
+			...(turn.guildId ? { space: turn.guildId } : {}),
+			legacyId: user.id,
+		},
+		authorId: user.id,
+		authorName: user.name,
+		authorIsBot: false,
+		...(roles ? { authorRoleIds: roles } : {}),
+		...(turn.guildId ? { space: turn.guildId } : {}),
+		isDirect: turn.isDirect,
+		// Pressing the assistant's card speaks to it, as a mention does.
+		mentionsBot: true,
+		repliesToBot: true,
+		text: turn.text,
+		attachments: [],
 	};
 }

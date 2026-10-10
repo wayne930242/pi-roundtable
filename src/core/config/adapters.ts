@@ -50,6 +50,52 @@ export interface DiscordConfig {
 	 * never in a direct message. Default `─── new conversation ───`; `false` posts none.
 	 */
 	freshMarker?: string | false;
+	/**
+	 * Seconds a turn waits on an owner card (an approval or an `ask_user` question) before it goes
+	 * on without the answer; the card stays open, and answering it later starts a new turn with
+	 * the answer. Default 120.
+	 */
+	cardGraceSeconds?: number;
+}
+
+/** The Discord settings with every default filled in. */
+export interface ResolvedDiscord {
+	token: string;
+	guild: string;
+	entryChannel: string;
+	rootCommand: string;
+	admin: boolean;
+	refusalHint?: string;
+	agentMemory?: "everyone" | "owners";
+	/** As configured: `{}` when left out, so the defaults apply, or `false`. */
+	channelContext: NonNullable<DiscordConfig["channelContext"]>;
+	freshMarker?: string | false;
+	cardGraceSeconds: number;
+}
+
+/** The configured Discord settings, defaults filled in; `rootCommand` is the host's slug. */
+export function resolvedDiscord(
+	discord: DiscordConfig,
+	rootCommand: string,
+): ResolvedDiscord {
+	return {
+		token: discord.token,
+		guild: discord.guild,
+		entryChannel: discord.entryChannel,
+		rootCommand,
+		admin: discord.admin ?? true,
+		...(discord.refusalHint === undefined
+			? {}
+			: { refusalHint: discord.refusalHint }),
+		...(discord.agentMemory === undefined
+			? {}
+			: { agentMemory: discord.agentMemory }),
+		channelContext: discord.channelContext ?? {},
+		...(discord.freshMarker === undefined
+			? {}
+			: { freshMarker: discord.freshMarker }),
+		cardGraceSeconds: discord.cardGraceSeconds ?? 120,
+	};
 }
 
 /** What `discord.channelContext` takes besides `false`. */
@@ -72,6 +118,7 @@ export const discordShape = shape({
 	agentMemory: optional(oneOf<"everyone" | "owners">("everyone", "owners")),
 	channelContext: optional(orOff(channelContextShape)),
 	freshMarker: optional(orOff(text)),
+	cardGraceSeconds: optional(integer(1, 86_400)),
 });
 
 /** The adapters `adapters` takes, by the name their factory gives them. */

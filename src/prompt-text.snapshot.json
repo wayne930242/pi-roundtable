@@ -201,7 +201,7 @@
 			},
 			{
 				"name": "ask_user",
-				"description": "Ask the speaker a question on a card with buttons in this channel and wait for the speaker's answer, within this turn. Use it when you need the speaker's decision to continue, instead of ending your turn with a question. The card should read on its own, so put the context the speaker needs in the question too. Offer options when the choices are known; set multi when several may apply and allow_other to let the speaker write the speaker's own answer. The speaker has 30 minutes; after that the result says there was no answer.",
+				"description": "Ask the speaker a question on a card with buttons in this channel and wait for the speaker's answer, within this turn. Use it when you need the speaker's decision to continue, instead of ending your turn with a question. The card should read on its own, so put the context the speaker needs in the question too. Offer options when the choices are known; set multi when several may apply and allow_other to let the speaker write the speaker's own answer. If the speaker does not answer soon, the result says so and the card stays open: then end your turn saying you are waiting, and the speaker's answer comes in a new turn.",
 				"parameters": {
 					"type": "object",
 					"required": [
@@ -2302,7 +2302,7 @@
 			},
 			{
 				"name": "ask_user",
-				"description": "Ask the speaker a question on a card with buttons in this channel and wait for the speaker's answer, within this turn. Use it when you need the speaker's decision to continue, instead of ending your turn with a question. The card should read on its own, so put the context the speaker needs in the question too. Offer options when the choices are known; set multi when several may apply and allow_other to let the speaker write the speaker's own answer. The speaker has 30 minutes; after that the result says there was no answer.",
+				"description": "Ask the speaker a question on a card with buttons in this channel and wait for the speaker's answer, within this turn. Use it when you need the speaker's decision to continue, instead of ending your turn with a question. The card should read on its own, so put the context the speaker needs in the question too. Offer options when the choices are known; set multi when several may apply and allow_other to let the speaker write the speaker's own answer. If the speaker does not answer soon, the result says so and the card stays open: then end your turn saying you are waiting, and the speaker's answer comes in a new turn.",
 				"parameters": {
 					"type": "object",
 					"required": [
@@ -4196,7 +4196,7 @@
 		"tools": [
 			{
 				"name": "ask_user",
-				"description": "Ask Ada a question on a card with buttons in this channel and wait for her answer, within this turn. Use it when you need her decision to continue, instead of ending your turn with a question. The card should read on its own, so put the context she needs in the question too. Offer options when the choices are known; set multi when several may apply and allow_other to let her write her own answer. She has 30 minutes; after that the result says there was no answer.",
+				"description": "Ask Ada a question on a card with buttons in this channel and wait for her answer, within this turn. Use it when you need her decision to continue, instead of ending your turn with a question. The card should read on its own, so put the context she needs in the question too. Offer options when the choices are known; set multi when several may apply and allow_other to let her write her own answer. If she does not answer soon, the result says so and the card stays open: then end your turn saying you are waiting, and her answer comes in a new turn.",
 				"parameters": {
 					"type": "object",
 					"required": [
@@ -5669,7 +5669,7 @@
 		"tools": [
 			{
 				"name": "ask_user",
-				"description": "Ask the speaker a question on a card with buttons in this channel and wait for the speaker's answer, within this turn. Use it when you need the speaker's decision to continue, instead of ending your turn with a question. The card should read on its own, so put the context the speaker needs in the question too. Offer options when the choices are known; set multi when several may apply and allow_other to let the speaker write the speaker's own answer. The speaker has 30 minutes; after that the result says there was no answer.",
+				"description": "Ask the speaker a question on a card with buttons in this channel and wait for the speaker's answer, within this turn. Use it when you need the speaker's decision to continue, instead of ending your turn with a question. The card should read on its own, so put the context the speaker needs in the question too. Offer options when the choices are known; set multi when several may apply and allow_other to let the speaker write the speaker's own answer. If the speaker does not answer soon, the result says so and the card stays open: then end your turn saying you are waiting, and the speaker's answer comes in a new turn.",
 				"parameters": {
 					"type": "object",
 					"required": [
@@ -6019,7 +6019,7 @@
 			},
 			{
 				"name": "ask_user",
-				"description": "Ask the speaker a question on a card with buttons in this channel and wait for the speaker's answer, within this turn. Use it when you need the speaker's decision to continue, instead of ending your turn with a question. The card should read on its own, so put the context the speaker needs in the question too. Offer options when the choices are known; set multi when several may apply and allow_other to let the speaker write the speaker's own answer. The speaker has 30 minutes; after that the result says there was no answer.",
+				"description": "Ask the speaker a question on a card with buttons in this channel and wait for the speaker's answer, within this turn. Use it when you need the speaker's decision to continue, instead of ending your turn with a question. The card should read on its own, so put the context the speaker needs in the question too. Offer options when the choices are known; set multi when several may apply and allow_other to let the speaker write the speaker's own answer. If the speaker does not answer soon, the result says so and the card stays open: then end your turn saying you are waiting, and the speaker's answer comes in a new turn.",
 				"parameters": {
 					"type": "object",
 					"required": [
@@ -7944,7 +7944,7 @@
 		"tools": [
 			{
 				"name": "ask_user",
-				"description": "Ask Ada a question on a card with buttons in this channel and wait for her answer, within this turn. Use it when you need her decision to continue, instead of ending your turn with a question. The card should read on its own, so put the context she needs in the question too. Offer options when the choices are known; set multi when several may apply and allow_other to let her write her own answer. She has 30 minutes; after that the result says there was no answer.",
+				"description": "Ask Ada a question on a card with buttons in this channel and wait for her answer, within this turn. Use it when you need her decision to continue, instead of ending your turn with a question. The card should read on its own, so put the context she needs in the question too. Offer options when the choices are known; set multi when several may apply and allow_other to let her write her own answer. If she does not answer soon, the result says so and the card stays open: then end your turn saying you are waiting, and her answer comes in a new turn.",
 				"parameters": {
 					"type": "object",
 					"required": [
@@ -8096,7 +8096,7 @@
 		"tools": [
 			{
 				"name": "ask_user",
-				"description": "Ask the speaker a question on a card with buttons in this channel and wait for the speaker's answer, within this turn. Use it when you need the speaker's decision to continue, instead of ending your turn with a question. The card should read on its own, so put the context the speaker needs in the question too. Offer options when the choices are known; set multi when several may apply and allow_other to let the speaker write the speaker's own answer. The speaker has 30 minutes; after that the result says there was no answer.",
+				"description": "Ask the speaker a question on a card with buttons in this channel and wait for the speaker's answer, within this turn. Use it when you need the speaker's decision to continue, instead of ending your turn with a question. The card should read on its own, so put the context the speaker needs in the question too. Offer options when the choices are known; set multi when several may apply and allow_other to let the speaker write the speaker's own answer. If the speaker does not answer soon, the result says so and the card stays open: then end your turn saying you are waiting, and the speaker's answer comes in a new turn.",
 				"parameters": {
 					"type": "object",
 					"required": [

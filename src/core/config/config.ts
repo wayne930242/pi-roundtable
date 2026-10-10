@@ -19,7 +19,13 @@ import { PRIMARY_CHARS } from "../runtime/interim-text.ts";
 import type { ChannelKey } from "../sessions.ts";
 import type { Tier, TierMembers } from "../speakers.ts";
 import { type AccessConfig, accessOf, accessShape } from "./access.ts";
-import { type DiscordConfig, discordShape, liftAdapters } from "./adapters.ts";
+import {
+	type DiscordConfig,
+	discordShape,
+	liftAdapters,
+	type ResolvedDiscord,
+	resolvedDiscord,
+} from "./adapters.ts";
 import {
 	bool,
 	guarded,
@@ -297,18 +303,7 @@ export interface ResolvedConfig {
 	/** What the configuration wrote in a deprecated form, which the host logs once. */
 	deprecations: string[];
 	/** Undefined on a host without Discord. */
-	discord?: {
-		token: string;
-		guild: string;
-		entryChannel: string;
-		rootCommand: string;
-		admin: boolean;
-		refusalHint?: string;
-		agentMemory?: "everyone" | "owners";
-		/** As configured: `{}` when left out, so the defaults apply, or `false`. */
-		channelContext: NonNullable<DiscordConfig["channelContext"]>;
-		freshMarker?: string | false;
-	};
+	discord?: ResolvedDiscord;
 	databaseUrl: string;
 	dataDir: string;
 	agentDir: string;
@@ -423,27 +418,7 @@ export function resolveConfig(input: unknown): ResolvedConfig {
 			name: primaryOwner.name,
 			pronouns: primaryOwner.pronouns,
 		},
-		...(discord
-			? {
-					discord: {
-						token: discord.token,
-						guild: discord.guild,
-						entryChannel: discord.entryChannel,
-						rootCommand: slug,
-						admin: discord.admin ?? true,
-						...(discord.refusalHint === undefined
-							? {}
-							: { refusalHint: discord.refusalHint }),
-						...(discord.agentMemory === undefined
-							? {}
-							: { agentMemory: discord.agentMemory }),
-						channelContext: discord.channelContext ?? {},
-						...(discord.freshMarker === undefined
-							? {}
-							: { freshMarker: discord.freshMarker }),
-					},
-				}
-			: {}),
+		...(discord ? { discord: resolvedDiscord(discord, slug) } : {}),
 		databaseUrl: config.database.url,
 		dataDir: config.dataDir,
 		agentDir: config.agentDir ?? `${config.dataDir}/pi`,

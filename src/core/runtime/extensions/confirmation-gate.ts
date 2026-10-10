@@ -8,7 +8,7 @@ import type {
 import { type HoldCheck, type HoldContext, higherTier } from "../../holds.ts";
 import { messages } from "../../i18n/index.ts";
 import { type OwnerIdentity, ownerWords } from "../../identity.ts";
-import type { Prompts } from "../../interactions/prompts.ts";
+import type { LateAnswer, Prompts } from "../../interactions/prompts.ts";
 import type { Speaker } from "../../speakers.ts";
 import type { ToolTiers } from "../../tool-tiers.ts";
 import type { PromptSlot } from "../prompt-slot.ts";
@@ -72,6 +72,8 @@ export class ConfirmationGate {
 	#speaker: Pick<Speaker, "id" | "principalId"> | undefined;
 	#pending: PendingConfirmation | undefined;
 	#approved: HeldCall[] = [];
+	/** Calls approved on their cards after the turn that asked stopped waiting; each runs once, in any turn. */
+	#lateApproved: HeldCall[] = [];
 	readonly #holds: HoldCheck;
 	readonly #owner: OwnerIdentity;
 	/** Whom the running turn's held actions and refusals speak of: the turn's speaker. */
@@ -160,8 +162,15 @@ export class ConfirmationGate {
 			approvalCard(call, this.#context.workspace),
 			ask.signal,
 			higherTier(this.#tiers?.minTier(call.tool), call.minTier),
+			{ late: (late) => this.#late(call, late) },
 		);
 		if (answer === "approved") return { approvedOnCard: true };
+		if (answer === "pending") {
+			const o = ownerWords(this.#addressee);
+			return {
+				reason: `Awaiting ${o.name}'s approval: this would ${call.action}. Its card stays open, and the call did not run. Do not retry it or ask again in this turn. End your turn now: say briefly that you are waiting for ${o.his} approval on the card. When ${o.he} answers, a new turn tells you.`,
+			};
+		}
 		if (answer === "declined") {
 			const o = ownerWords(this.#addressee);
 			return {
@@ -170,6 +179,18 @@ export class ConfirmationGate {
 		}
 		if (answer === "cancelled") return { reason: "The turn was stopped." };
 		return { reason: this.#record(call) };
+	}
+
+	/**
+	 * A late answer on a call's card: an approval lets the identical call run once, in whichever
+	 * turn makes it next; returns the text of the turn that tells the model.
+	 */
+	#late(call: HeldCall, late: LateAnswer): string | undefined {
+		if (late.kind !== "approval") return undefined;
+		if (!late.approved)
+			return `(${late.by} declined on its card the action you were waiting on: it would ${call.action}. It did not run; do not make the call again. Go on without it, or ask what ${late.by} wants instead.)`;
+		this.#lateApproved.push(call);
+		return `(${late.by} approved on its card the action you were waiting on: it would ${call.action}. Make this call now with exactly this input, and it runs once; then report its result.)\n- ${call.tool} ${call.input}`;
 	}
 
 	/** The call when it needs the owner's confirmation and no approval releases it. */
@@ -184,12 +205,14 @@ export class ConfirmationGate {
 			action,
 			...(minTier ? { minTier } : {}),
 		};
-		const approved = this.#approved.findIndex(
-			(c) => c.tool === call.tool && c.input === call.input,
-		);
-		if (approved !== -1) {
-			this.#approved.splice(approved, 1);
-			return undefined;
+		for (const released of [this.#approved, this.#lateApproved]) {
+			const approved = released.findIndex(
+				(c) => c.tool === call.tool && c.input === call.input,
+			);
+			if (approved !== -1) {
+				released.splice(approved, 1);
+				return undefined;
+			}
 		}
 		return call;
 	}

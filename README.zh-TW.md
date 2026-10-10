@@ -182,6 +182,10 @@ export default {
 | `messageChars` | `500` | 訊息截斷的長度 |
 | `botMessageChars` | `80` | 其他 bot 訊息截斷的長度 |
 
+核准卡和 `ask_user` 問題會讓這一輪等 `discord.cardGraceSeconds` 秒（預設 `120`）。
+在這段時間內回答，這一輪就帶著答案繼續；沒回答的話，這一輪會說它在等你，然後結束，卡片繼續開著、沒有期限，之後再回答就會在同一個對話開新的一輪，帶上你的答案，或核准後那個動作的結果。
+coding worker 的卡片則會讓 worker 一直等下去。
+
 ## 威脅模型
 
 pi-roundtable 為一位擁有者執行一個助理。

@@ -46,10 +46,12 @@ export class PromptSlot {
 		const prompts = this.#prompts;
 		if (!prompts) return undefined;
 		return {
-			confirm: (title, message, signal, minTier) =>
-				this.#waiting(() => prompts.confirm(title, message, signal, minTier)),
-			ask: (title, question: OwnerQuestion, signal) =>
-				this.#waiting(() => prompts.ask(title, question, signal)),
+			confirm: (title, message, signal, minTier, wait) =>
+				this.#waiting(() =>
+					prompts.confirm(title, message, signal, minTier, wait),
+				),
+			ask: (title, question: OwnerQuestion, signal, wait) =>
+				this.#waiting(() => prompts.ask(title, question, signal, wait)),
 		};
 	}
 

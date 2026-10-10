@@ -160,7 +160,8 @@ test("a tool description in a shared session names the speaker, not the owner", 
 	} as unknown as ExtensionAPI);
 	expect(description).toContain("Ask the speaker a question");
 	expect(description).toContain("wait for the speaker's answer");
-	expect(description).toContain("The speaker has 30 minutes");
+	expect(description).toContain("If the speaker does not answer soon");
+	expect(description).not.toContain("30 minutes");
 	expect(description).not.toContain("Alice");
 });
 

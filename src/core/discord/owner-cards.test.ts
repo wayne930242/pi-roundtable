@@ -40,9 +40,9 @@ describe("OwnerCards", () => {
 				return fake.channel();
 			},
 			logger: silentLogger(),
-			timeoutMs: 5,
 		});
-		await cards.prompts("discord:900")?.confirm("t", "m");
+		void cards.prompts("discord:900")?.confirm("t", "m");
+		await tick();
 		expect(asked).toEqual(["900"]);
 		expect(fake.sent).toHaveLength(1);
 	});
@@ -64,11 +64,12 @@ describe("OwnerCards", () => {
 	});
 
 	test("a card in a channel mentions nobody", async () => {
-		const { fake, prompts } = setup({ timeoutMs: 5 });
-		await prompts.confirm(
+		const { fake, prompts } = setup();
+		void prompts.confirm(
 			"The assistant wants to run this action",
 			"**send mail**",
 		);
+		await tick();
 		expect(fake.sent[0]?.allowedMentions).toEqual({ parse: [] });
 		expect(json(fake.sent[0])).not.toContain(`<@${OWNER}>`);
 	});
@@ -116,16 +117,21 @@ describe("OwnerCards", () => {
 		expect(json(no.updates[0])).toContain(messages().cardDeclined);
 	});
 
-	test("an unanswered card expires and is edited to say so", async () => {
-		const { fake, cards, prompts } = setup({ timeoutMs: 5 });
-		expect(await prompts.confirm("t", "m")).toBe("expired");
-		await tick();
-		expect(json(fake.edits[0])).toContain(messages().cardExpired);
-		expect(json(fake.edits[0])).toContain('"disabled":true');
-		// A late press finds the card gone.
-		const late = press("button", `${CARD_PREFIX}${fake.cardId()}:yes`);
-		await cards.handle(late.interaction);
-		expect(late.replies[0]).toContain(messages().cardInactive);
+	test("without a way to resume, an unanswered card waits, with no countdown, until it is answered", async () => {
+		const { fake, cards, prompts } = setup({ graceMs: 5 });
+		let settled = false;
+		const answer = prompts.confirm("t", "m", undefined, undefined, {
+			late: () => "late",
+		});
+		void answer.then(() => {
+			settled = true;
+		});
+		await Bun.sleep(20);
+		expect(settled).toBe(false);
+		expect(fake.edits).toHaveLength(0);
+		const yes = press("button", `${CARD_PREFIX}${fake.cardId()}:yes`);
+		await cards.handle(yes.interaction);
+		expect(await answer).toBe("approved");
 	});
 
 	test("a stopped turn cancels its card", async () => {
@@ -250,9 +256,13 @@ describe("OwnerCards", () => {
 			expect(await answer).toEqual({ choices: [], text: "anything" });
 		});
 
-		test("an unanswered question has no answer", async () => {
-			const { prompts } = setup({ timeoutMs: 5 });
-			expect(await prompts.ask("t", question({}))).toBeUndefined();
+		test("a stopped turn's question has no answer", async () => {
+			const { prompts } = setup();
+			const stop = new AbortController();
+			const answer = prompts.ask("t", question({}), stop.signal);
+			await tick();
+			stop.abort();
+			expect(await answer).toBeUndefined();
 		});
 	});
 });
@@ -425,7 +435,6 @@ describe("cards for lower tiers", () => {
 					identity,
 					channel: fake.channel,
 					logger: silentLogger(),
-					timeoutMs: 5,
 				});
 				void cards
 					.prompts("discord:555", speaker && promptScope(speaker))

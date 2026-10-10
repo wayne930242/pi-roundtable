@@ -162,11 +162,13 @@ export { SYSTEM_PRINCIPAL } from "./core/identity/principal-store.ts";
 export type {
 	Approval,
 	AskOption,
+	LateAnswer,
 	OwnerAnswer,
 	OwnerPrompts,
 	OwnerQuestion,
 	PromptScope,
 	Prompts,
+	PromptWait,
 } from "./core/interactions/prompts.ts";
 export { promptScope } from "./core/interactions/prompts.ts";
 export type { JudgeModel } from "./core/judging/model-judge.ts";

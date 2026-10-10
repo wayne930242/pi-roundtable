@@ -1,7 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { messages } from "../../i18n/index.ts";
-import type { OwnerAnswer, OwnerQuestion } from "../../interactions/prompts.ts";
+import type {
+	OwnerAnswer,
+	OwnerQuestion,
+	PromptWait,
+} from "../../interactions/prompts.ts";
 import { TEST_OWNER as OWNER } from "../../testing/owner.ts";
 import { PromptSlot } from "../prompt-slot.ts";
 import { ASK_USER_TOOL, askUserExtension } from "./ask-user.ts";
@@ -16,15 +20,17 @@ interface Tool {
 }
 
 /** ask_user over a slot whose cards answer with `answer`, recording each question. */
-function askUser(answer: OwnerAnswer | undefined, bound = true) {
+function askUser(answer: OwnerAnswer | "pending" | undefined, bound = true) {
 	const asked: { title: string; question: OwnerQuestion }[] = [];
+	const waits: PromptWait[] = [];
 	const slot = new PromptSlot();
 	slot.bind(
 		bound
 			? {
 					confirm: async () => "expired",
-					ask: async (title, question) => {
+					ask: async (title, question, _signal, wait) => {
 						asked.push({ title, question });
+						if (wait) waits.push(wait);
 						return answer;
 					},
 				}
@@ -44,6 +50,7 @@ function askUser(answer: OwnerAnswer | undefined, bound = true) {
 	const t = tool;
 	return {
 		asked,
+		waits,
 		call: async (params: unknown) =>
 			(await t.execute("call-1", params)).content[0]?.text ?? "",
 	};
@@ -99,9 +106,28 @@ describe("ask_user", () => {
 		expect(asked[0]?.question.options).toEqual([]);
 	});
 
-	test("no answer in time says so", async () => {
+	test("no answer says so", async () => {
 		const { call } = askUser(undefined);
 		expect(await call({ question: "?" })).toStartWith("No answer");
+	});
+
+	test("a question still open tells the model to end its turn waiting, and its late answer carries the question", async () => {
+		const { waits, call } = askUser("pending");
+		const text = await call({ question: "Which day?" });
+		expect(text).toContain("Riley has not answered yet");
+		expect(text).toContain("do not ask again");
+		expect(text).toContain("End your turn now");
+		const late = waits[0]?.late({
+			kind: "question",
+			answer: { choices: ["Sunday"], text: "after lunch" },
+			by: "Riley",
+		});
+		expect(late).toContain("Question: Which day?");
+		expect(late).toContain("Riley chose: Sunday");
+		expect(late).toContain("Riley wrote: after lunch");
+		expect(
+			waits[0]?.late({ kind: "approval", approved: true, by: "Riley" }),
+		).toBeUndefined();
 	});
 
 	test("a turn he did not start tells the model to ask in its reply", async () => {
