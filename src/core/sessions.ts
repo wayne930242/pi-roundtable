@@ -83,6 +83,8 @@ export interface SessionContext {
 	 * it reads `"none"` for that turn alone.
 	 */
 	memory: "speaker" | "none";
+	/** Where the session's conversation keeps the files people attached; absent when the session keeps none. */
+	attachmentDir?: string;
 	/** The person the session's running turn is for; undefined between turns. */
 	speaker(): Speaker | undefined;
 	/** Runs a task beside this session, under its confirmation gate. */

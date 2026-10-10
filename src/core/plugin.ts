@@ -1,5 +1,6 @@
 import type { SQL } from "bun";
 import type { AgentSeed } from "./agents/agent-store.ts";
+import type { AttachmentPort } from "./contract/attachments.ts";
 import type {
 	BackgroundTarget,
 	ChannelClaim,
@@ -287,6 +288,11 @@ export interface PluginContext {
 	events: EventSink;
 	/** The claimed channels' conversations; calls during setup throw NotLinkedError. */
 	conversations: ConversationPort;
+	/**
+	 * Files a plugin takes from a person outside a turn, such as an upload, kept for a conversation
+	 * until a turn uses them; a call throws PluginError when the host has no `dataDir`.
+	 */
+	attachments: AttachmentPort;
 	/** Every contributed chat surface, chosen by a channel's prefix; calls during setup throw NotLinkedError. */
 	surfaces: SurfacePort;
 	/** Every plugin's direct channels, which reach a person on their own; calls during setup throw NotLinkedError. */

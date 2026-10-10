@@ -4,6 +4,8 @@ import { join } from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { SQL } from "bun";
 import { agentClaim } from "./core/agents/agent-claim.ts";
+import { ownerAttachmentDir } from "./core/attachments/attachment-dir.ts";
+import { attachmentPort } from "./core/attachments/attachment-port.ts";
 import { DISCORD, type DiscordServices } from "./core/builtin/discord.ts";
 import type {
 	ConversationPort,
@@ -486,6 +488,7 @@ export async function testPlugin(
 			}),
 		);
 	services.checkRequires();
+	const attachmentDir = mkdtempSync(join(tmpdir(), "roundtable-test-plugin-"));
 	const context: Omit<PluginContext, "services" | "directChannels"> = {
 		logger,
 		env,
@@ -494,6 +497,11 @@ export async function testPlugin(
 		toolTiers: tiers,
 		events: sink,
 		conversations,
+		attachments: attachmentPort({
+			dataDir: attachmentDir,
+			registry: () => services.find(CONVERSATIONS),
+			logger,
+		}),
 		surfaces,
 		turns,
 		database: () => {
@@ -518,7 +526,6 @@ export async function testPlugin(
 	// With a team given, the agent server's claim and its target are in the router, as on a host.
 	const team = given.get(AGENTS.id)?.given;
 	const agentServer = team && "team" in team ? services.get(AGENTS) : undefined;
-	const attachmentDir = mkdtempSync(join(tmpdir(), "roundtable-test-plugin-"));
 	const identity = services.find(IDENTITY);
 	// Who wrote a message, and whom a background turn runs as: by the given IDENTITY, else the owner alone, at the owner tier.
 	const people = mapIdentity({ owners: [owner.id] });
@@ -625,6 +632,7 @@ export async function testPlugin(
 				conversation: { visibility: "shared" },
 				addressee: THE_SPEAKER,
 				memory: "speaker",
+				attachmentDir: ownerAttachmentDir(attachmentDir, channel),
 				speaker: () => runOptions?.speaker,
 				runTask: async () => {
 					throw new Error("test session cannot run tasks");

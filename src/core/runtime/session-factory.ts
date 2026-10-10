@@ -332,6 +332,7 @@ export class SessionFactory {
 			},
 			conversation,
 			addressee,
+			attachmentDir,
 			get memory() {
 				return state.memory;
 			},

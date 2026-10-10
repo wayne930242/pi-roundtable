@@ -135,6 +135,7 @@ A plugin that replaces `IDENTITY` replaces this too: the declarations are the bu
 | `apiKey(provider)` | The credential the host's model login holds for a provider such as `openai-codex`, the same login the agents use. It resolves to `undefined` when the host has none for that provider and never throws for that. The value is a secret: keep it out of logs and error messages. Read it when you use it rather than keeping it, since a login may refresh its token |
 | `queue` | The one channel queue that every conversation and channel operation shares |
 | `services` | The services plugins provide to each other, read by key: `services.get(SCHEDULES)`; see [services](#services-what-plugins-provide-to-each-other) |
+| `attachments` | Files a plugin takes from a person outside a turn, such as an upload, kept for a conversation until a turn uses them: [`attachments`](#contextattachments-files-from-outside-a-turn) |
 | `surfaces` | Every contributed [chat surface](#surfaces-a-chat-network-of-your-own), chosen by the prefix of a channel key: `of`, `sendReply`, `startTyping`, `showStop`, `react`, `unreact`, `prompts` |
 | `turns` | Runs one turn of a conversation your claim owns, over the runtime and the surfaces: [`turns.run`](#personas-and-contextturns-conversations-of-a-kind-of-your-own) |
 | `directChannels` | Every plugin's [direct channels](#directchannels-reaching-a-person-on-their-own): `providers()`, `reach(principalId)`, `known(principalId)`, and `notify(principalId, text)` |
@@ -528,11 +529,35 @@ A plugin that adds raw session tools names their tiers with `toolTiers`; the cor
 Each heading below is a key `setup` may return.
 A key the contract does not have stops the start and names the closest one.
 
+### `context.attachments`: files from outside a turn
+
+A surface that takes a file as it arrives, such as Discord, hands the core a link, and the core downloads it into the conversation's attachment directory.
+A plugin whose clients upload a file themselves, over HTTP for instance, has the file before any turn exists.
+`context.attachments` keeps such a file for the conversation until a turn uses it:
+
+| Call | What it does |
+|---|---|
+| `save(channel, principalId, { name, contentType, data })` | Keeps the file for that principal in that conversation and returns a `StoredAttachment`; its `file` is the name to hand back to the client. Refuses a file over 25 MiB (`too_large`) |
+| `turnAttachments(channel, principalId, files)` | Takes the `file` names `save` returned and returns the turn's `TurnAttachments`; pass it as `attachments` to [`turns.run`](#personas-and-contextturns-conversations-of-a-kind-of-your-own). Each file moves into the conversation's attachment directory, up to four images are prepared for the model, and the turn's prompt lists every file under `## Attachments`. Refuses the whole set when one name is unknown or already used (`unknown_file`); then none moves |
+| `remove(channel, principalId, file)` | Discards a saved file no turn used; `false` when there is none |
+| `discardPending(olderThan)` | Discards every saved file no turn used that was saved before the date, and returns how many; call it from a service's timer so abandoned uploads do not pile up |
+| `pendingBytes(principalId)` | The bytes the principal has saved that no turn used yet, for a quota of your own |
+
+A saved file waits for its owner: only the principal that saved it can use it, and only in the conversation it was saved for.
+The conversation's record decides who may save into it: a private conversation refuses every principal but its own with an `AttachmentRefusal` whose `code` is `forbidden`, and a shared one lets each principal save and use their own files.
+A channel with no record yet, such as a conversation opened but not written in, is not checked; the plugin that owns the channel checks it, as the web chat does before it saves.
+The calls reject with `AttachmentRefusal`, and throw a `PluginError` when the host has no `dataDir` (a host built by `defineRoundtable` always has one).
+The core limits only the size; the types a plugin accepts, the number of files, and the rate are its own to limit.
+
+Once a turn has used a file, the model reads it with `read_attachment`, and a tool reads it with `turn.attachment(file)` (see [`tools`](#tools-what-agents-can-call)).
+
 ### `tools`: what agents can call
 
 `defineTool` takes a name (lowercase words joined by underscores), a description the model reads to decide when to call it, a Typebox parameter schema, the lowest tier that may call it, and the function.
-`run` receives the arguments, already typed, and the turn: the speaker, the channel, the agent, an abort signal, and `attachFile`.
+`run` receives the arguments, already typed, and the turn: the speaker, the channel, the agent, an abort signal, `attachFile`, and `attachment`.
 It returns the text the model reads.
+`turn.attachment(file)` opens a file someone attached to the conversation, by the name the turn's `## Attachments` block lists, and returns `{ file, name, contentType, size, bytes() }`: a tool passes a user's file on without the model carrying its bytes.
+Only the conversation's own files open; a path, a hidden name, or a missing file throws a `ToolRefusal` the model reads.
 Throw `ToolRefusal` for a call the model should correct; any other error fails the call.
 
 <!-- example: examples/tools.ts -->
@@ -3219,7 +3244,11 @@ Import from the entries listed below; source area files are internal.
 | `Approval` | `pi-roundtable` | type |
 | `AskOption` | `pi-roundtable` | type |
 | `AttachmentFailure` | `pi-roundtable` | type |
+| `AttachmentPort` | `pi-roundtable` | type |
 | `AttachmentRef` | `pi-roundtable` | type |
+| `AttachmentRefusal` | `pi-roundtable` | value |
+| `AttachmentRefusalCode` | `pi-roundtable` | type |
+| `AttachmentUpload` | `pi-roundtable` | type |
 | `AvatarMode` | `pi-roundtable` | type |
 | `AvatarStudio` | `pi-roundtable` | type |
 | `BACKGROUND_TURNS` | `pi-roundtable` | value |
@@ -3388,6 +3417,7 @@ Import from the entries listed below; source area files are internal.
 | `ThinkingSetting` | `pi-roundtable` | type |
 | `Tier` | `pi-roundtable` | type |
 | `TierConfig` | `pi-roundtable` | type |
+| `ToolAttachment` | `pi-roundtable` | type |
 | `ToolContribution` | `pi-roundtable` | type |
 | `ToolRefusal` | `pi-roundtable` | value |
 | `ToolSelection` | `pi-roundtable` | type |

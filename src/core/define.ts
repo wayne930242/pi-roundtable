@@ -1,4 +1,9 @@
 import type { Static, TObject } from "typebox";
+import {
+	AttachmentLookupError,
+	openAttachment,
+	type ToolAttachment,
+} from "./attachments/tool-attachment.ts";
 import type { ReplyFile } from "./domain/conversation.ts";
 import { PluginError } from "./errors.ts";
 import type { HoldRule } from "./holds.ts";
@@ -26,6 +31,13 @@ export interface ToolTurn {
 	signal: AbortSignal | undefined;
 	/** Queues a file for this turn's successful reply; throws ReplyFileError when refused. */
 	attachFile(file: ReplyFile): void;
+	/**
+	 * Opens a file someone attached to this conversation, by the name `## Attachments` lists, to read
+	 * its bytes or pass it on. Only this conversation's files open; a path, a hidden name, or a file
+	 * that is not there throws a ToolRefusal the model reads. A session without an attachment store
+	 * refuses every call.
+	 */
+	attachment(file: string): Promise<ToolAttachment>;
 }
 
 /**
@@ -113,6 +125,19 @@ export function defineTool<Schema extends TObject>(
 									agent: context.agent,
 									signal,
 									attachFile: attachReplyFile,
+									attachment: async (file) => {
+										if (context.attachmentDir === undefined)
+											throw new ToolRefusal(
+												"this session keeps no attachments",
+											);
+										try {
+											return await openAttachment(context.attachmentDir, file);
+										} catch (error) {
+											if (error instanceof AttachmentLookupError)
+												throw new ToolRefusal(error.message);
+											throw error;
+										}
+									},
 								}),
 							);
 						} catch (error) {

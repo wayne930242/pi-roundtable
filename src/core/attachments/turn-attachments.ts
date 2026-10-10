@@ -2,11 +2,7 @@ import type { TurnAttachments } from "../domain/attachment.ts";
 import type { InboundMessage } from "../domain/conversation.ts";
 import type { Logger } from "../log.ts";
 import { fetchAttachments } from "./attachment-fetcher.ts";
-import {
-	isModelImage,
-	MAX_IMAGES_PER_TURN,
-	prepareImage,
-} from "./image-prep.ts";
+import { modelImagesOf } from "./model-images.ts";
 
 /** Saves the message's and its reference's files, and turns up to four images into model images. */
 export async function collectAttachments(
@@ -35,22 +31,9 @@ export async function collectAttachments(
 	);
 	const files = [...own.files, ...referenced.files];
 	const failures = [...own.failures, ...referenced.failures];
-	const images = [];
-	for (const file of files.filter(isModelImage).slice(0, MAX_IMAGES_PER_TURN)) {
-		try {
-			images.push(await prepareImage(file));
-		} catch (error) {
-			logger.warn(
-				{ file: file.file, err: error },
-				"image could not be prepared",
-			);
-			failures.push({
-				name: file.name,
-				reason: "the image could not be decoded",
-				fromReference: file.fromReference,
-			});
-		}
-	}
+	const prepared = await modelImagesOf(files, logger);
+	const images = prepared.images;
+	failures.push(...prepared.failures);
 	if (files.length > 0 || failures.length > 0) {
 		logger.info(
 			{

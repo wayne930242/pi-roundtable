@@ -16,6 +16,7 @@ export type {
 	GroupStatus,
 	TeamStatus,
 } from "./core/agents/team-status.ts";
+export type { ToolAttachment } from "./core/attachments/tool-attachment.ts";
 export {
 	AGENT_SERVER_PLUGIN,
 	AGENT_TEAM_SERVICE,
@@ -33,6 +34,12 @@ export type {
 	RoundtableConfig,
 	TierConfig,
 } from "./core/config/config.ts";
+export type {
+	AttachmentPort,
+	AttachmentRefusalCode,
+	AttachmentUpload,
+} from "./core/contract/attachments.ts";
+export { AttachmentRefusal } from "./core/contract/attachments.ts";
 export type {
 	Admission,
 	AttachmentRef,

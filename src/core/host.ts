@@ -1,4 +1,5 @@
 import type { SQL } from "bun";
+import { attachmentPort } from "./attachments/attachment-port.ts";
 import type { ConversationPort } from "./contract/channels.ts";
 import type { SurfacePort } from "./contract/surface.ts";
 import { openPool, runMigrations } from "./db/migrations.ts";
@@ -77,6 +78,8 @@ export interface RoundtableOptions {
 	toolTiers?: ToolTierTable;
 	/** The database the plugins' migrations and stores use; the host owns its one pool. */
 	database?: { url: string };
+	/** The directory the host keeps files in; `context.attachments` keeps its files there. Without it that port refuses every call. */
+	dataDir?: string;
 	/** Receives the work a shutdown drain gave up on, before any service stops. */
 	aborted?: (left: string[]) => Promise<void>;
 	/**
@@ -276,6 +279,11 @@ export class Roundtable {
 				toolTiers: this.#tiers,
 				events: this.#events.sink,
 				conversations: this.#conversations(),
+				attachments: attachmentPort({
+					dataDir: this.#options.dataDir,
+					registry: () => this.#services?.find(CONVERSATIONS),
+					logger,
+				}),
 				surfaces: this.#surfaces(),
 				turns: this.#turns(),
 				database: () => {
