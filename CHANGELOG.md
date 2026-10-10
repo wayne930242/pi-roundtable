@@ -12,7 +12,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The `## Attachments` block prints a name and a content type a prompt can trust: control characters, line and paragraph separators and bidi controls in a name become underscores and quotes become apostrophes, and a content type that is not a plain `type/subtype` prints as `application/octet-stream`.
 - `ToolTurn.attachment()` and `read_attachment` refuse a name with a NUL byte as "not an attachment name"; a NUL name no longer surfaces a runtime error that quoted the host's attachment directory, and a file that cannot be read reports its name, not its path.
 - `discardPending` removes the staging directories it emptied, so a conversation's uploads leave no empty directories behind.
-- `deleteConversation` of the Pi runtime removes the conversation's attachment directory, the files saved for it that no turn used, and its share of the used-bytes tally, so a deleted conversation keeps no files.
+- `deleteConversation` of the Pi runtime removes the conversation's attachment directory, the files saved for it that no turn used, and its share of the used-bytes tally, so a deleted conversation keeps no files (a conversation deleted in the instant a message is taking its files can leave that message's share of the tally behind).
 
 ### Added
 
