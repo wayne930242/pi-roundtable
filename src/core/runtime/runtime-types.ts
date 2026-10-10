@@ -81,6 +81,14 @@ export interface PiAgentRuntimeOptions {
 	/** A run that takes longer, not counting time spent waiting on the owner's cards, is aborted and reported as failed. */
 	turnTimeoutMs?: number;
 	/**
+	 * How long a turn that was aborted, by its timeout or a stop, gets to end before its session is
+	 * disposed of and the turn is reported failed; default 15 seconds. A model that ignores the
+	 * abort would otherwise hold the turn, and the shutdown drain, for ever.
+	 */
+	turnAbortGraceMs?: number;
+	/** Whether the host is shutting down: a turn or a task is then refused before it starts. */
+	stopping?: () => boolean;
+	/**
 	 * Whether a turn given a place for interim posts shows the text it writes before its final
 	 * answer as it goes; default "on". "off" posts only the final reply.
 	 */

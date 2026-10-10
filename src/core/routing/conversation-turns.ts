@@ -8,7 +8,7 @@ import type { TurnAttachments } from "../domain/attachment.ts";
 import type { TurnResult } from "../domain/conversation.ts";
 import type { TurnConversation } from "../domain/ports.ts";
 import type { TurnProgress } from "../domain/progress.ts";
-import { PluginError } from "../errors.ts";
+import { HostStoppingError, PluginError } from "../errors.ts";
 import { messages } from "../i18n/index.ts";
 import { SYSTEM_PRINCIPAL } from "../identity/principal-store.ts";
 import type { Logger } from "../log.ts";
@@ -61,7 +61,8 @@ export interface ConversationTurns {
 	 * task. It shows typing and the stop control on the channel's surface, emits `turnStarted` and
 	 * `turnEnded` with the turn's `kind`, settles a runtime that throws into a failed result, and
 	 * posts the reply, or a failure or stopped notice, through the surface unless `reply` is given.
-	 * It rejects during setup (NotLinkedError), when the host has no runtime to run the turn on,
+	 * It rejects during setup (NotLinkedError), once the host is shutting down (HostStoppingError),
+	 * when the host has no runtime to run the turn on,
 	 * when the conversation cannot be recorded in the host's registry (a database error, or a
 	 * `private` conversation without a speaker), and when the conversation is recorded private to a
 	 * principal other than the speaker's, unless the speaker is the host's own (`SYSTEM_PRINCIPAL`).
@@ -75,6 +76,8 @@ export interface ConversationTurns {
 export interface ConversationTurnsOptions {
 	/** Throws NotLinkedError until every plugin is set up and linked. */
 	linked: () => void;
+	/** Whether the host is shutting down, so no turn starts; undefined or false while it serves. */
+	stopping?: () => boolean;
 	/** The runtime that runs the turn; throws PluginError when the host has none yet. */
 	runtime: () => AgentRuntime;
 	/** Where each turn records its conversation; absent, or undefined, records none. */
@@ -143,6 +146,8 @@ export function conversationTurns(
 		async run(input) {
 			const { channel, kind, speaker } = input;
 			options.linked();
+			// Refused before anything is shown or recorded, like a turn the host cannot run.
+			if (options.stopping?.()) throw new HostStoppingError();
 			// A host without a runtime is a setup mistake, so it is refused before anything is shown.
 			const runtime = options.runtime();
 			// A conversation that cannot be recorded runs no turn: who it belongs to would be lost.

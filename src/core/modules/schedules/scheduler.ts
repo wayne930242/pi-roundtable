@@ -49,6 +49,12 @@ export interface SchedulerOptions {
 	holds?: () => HoldCheck;
 	/** Posts a skipping precheck's note in the schedule's channel as the bot's own message, which starts no turn. */
 	notify?: (schedule: Schedule, note: string) => Promise<void>;
+	/**
+	 * Whether the host is shutting down. A due schedule is then left unclaimed, so it stays due and
+	 * fires after the next start, if it is not too late by then (LATE_LIMIT_MS), instead of being
+	 * moved on to its next run and its turn refused.
+	 */
+	draining?: () => boolean;
 	logger: Logger;
 	intervalMs?: number;
 	/** Replaceable in tests. */
@@ -119,15 +125,20 @@ export class Scheduler {
 		await this.#prechecks.drain(PRECHECK_STOP_MS);
 	}
 
+	#draining(): boolean {
+		return this.#options.draining?.() ?? false;
+	}
+
 	/** Claims every due schedule and starts its run; runs continue after tick resolves. */
 	async tick(): Promise<void> {
-		if (this.#ticking || this.#stopping.signal.aborted) return;
+		if (this.#ticking || this.#stopping.signal.aborted || this.#draining())
+			return;
 		this.#ticking = true;
 		const { store, logger } = this.#options;
 		try {
 			const now = this.#options.now?.() ?? new Date();
 			for (const schedule of await store.due(now)) {
-				if (this.#stopping.signal.aborted) break;
+				if (this.#stopping.signal.aborted || this.#draining()) break;
 				const claimed = await store.claim(
 					schedule,
 					nextRun(schedule.recurrence, now),

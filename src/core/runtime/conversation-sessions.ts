@@ -262,6 +262,21 @@ export class ConversationSessions {
 		);
 	}
 
+	/**
+	 * Forgets a session that was disposed of while its turn still ran, so the conversation's next
+	 * turn opens a new one from its files; a newer session of the conversation stays.
+	 */
+	drop(key: ChannelKey, disposed: ChannelSession): void {
+		const open = this.#sessions.get(key);
+		if (!open) return;
+		void open
+			.then((current) => {
+				if (current === disposed && this.#sessions.get(key) === open)
+					this.#sessions.delete(key);
+			})
+			.catch(() => undefined);
+	}
+
 	/** Drops the open session and everything held for the conversation, leaving its files. */
 	// pi-lens-ignore: mixed-async-styles — disposal failures of a dropped session are swallowed in a chain on purpose
 	async forget(channel: ChannelKey): Promise<void> {

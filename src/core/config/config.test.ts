@@ -318,6 +318,16 @@ describe("a host without Discord", () => {
 		expect(resolveConfig({ ...headless, agents: [] }).agents).toEqual([]);
 	});
 
+	test("the shutdown drain waits three minutes unless the config says otherwise", () => {
+		expect(resolveConfig(minimal).drainMs).toBe(180_000);
+		expect(resolveConfig({ ...minimal, drainSeconds: 45 }).drainMs).toBe(
+			45_000,
+		);
+		expect(refused({ ...minimal, drainSeconds: 0 })).toContain(
+			"config drainSeconds",
+		);
+	});
+
 	test("the ops reports go to an agent or to a conversation, one of them", () => {
 		expect(resolveConfig({ ...minimal, ops: { agent: "infra" } }).ops).toEqual({
 			agent: "infra",

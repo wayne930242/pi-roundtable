@@ -168,6 +168,7 @@ export function runtimePlugin(
 						}),
 						confirmations: heldActions,
 						toolTiers: context.toolTiers,
+						stopping: () => context.queue.closed,
 						get agents() {
 							return agents();
 						},

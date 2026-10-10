@@ -11,6 +11,7 @@
 			"ConfigError",
 			"DELEGATION",
 			"DelegationError",
+			"HostStoppingError",
 			"IDENTITY",
 			"IdentityError",
 			"JudgeError",

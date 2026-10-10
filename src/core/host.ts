@@ -2,9 +2,10 @@ import type { SQL } from "bun";
 import type { ConversationPort } from "./contract/channels.ts";
 import type { SurfacePort } from "./contract/surface.ts";
 import { openPool, runMigrations } from "./db/migrations.ts";
-import { type DrainOptions, waitUntilIdle } from "./drain.ts";
+import { type DrainOptions, drainWork, stopTurns } from "./drain.ts";
 import { MigrationError, NotLinkedError, PluginError } from "./errors.ts";
 import { EventBus } from "./events.ts";
+import { attempt, startInBackground } from "./host-background.ts";
 import { HttpListeners, type ListenerConfig } from "./http/listeners.ts";
 import { type Locale, setLocale } from "./i18n/index.ts";
 import { contactsOf } from "./identity/identity-view.ts";
@@ -15,7 +16,6 @@ import type {
 	LinkedSessions,
 	RoundtablePlugin,
 	Service,
-	ServiceStartedEvent,
 } from "./plugin.ts";
 import { refuseRemovedFields } from "./plugin.ts";
 import {
@@ -34,6 +34,7 @@ import {
 } from "./routing/conversation-turns.ts";
 import { surfacePort } from "./routing/surface-port.ts";
 import { CONVERSATIONS, IDENTITY, RUNTIME } from "./services.ts";
+import type { ChannelKey } from "./sessions.ts";
 import { setTimeZone } from "./time.ts";
 import { type ToolTierTable, toolTiers } from "./tool-tiers.ts";
 
@@ -78,7 +79,11 @@ export interface RoundtableOptions {
 	database?: { url: string };
 	/** Receives the work a shutdown drain gave up on, before any service stops. */
 	aborted?: (left: string[]) => Promise<void>;
-	/** The drain's limit and clock; tests shorten them. */
+	/**
+	 * The shutdown drain: it waits up to `limitMs` (3 minutes by default) for the turns already
+	 * running, then stops them, gives them `abortGraceMs` (10 seconds) to end, and goes on without
+	 * them. Nothing new starts once it begins. Tests shorten the limits and the clock.
+	 */
 	drain?: Omit<DrainOptions, "busy">;
 	/** What `listen()` calls with the shutdown's exit code; the process's own exit by default. */
 	exit?: (code: number) => void;
@@ -87,63 +92,13 @@ export interface RoundtableOptions {
 /** The host running in this process; the text catalog, time zone and environment are process-wide. */
 let running: Roundtable | undefined;
 
-type Attempt = { ok: true } | { ok: false; error: unknown };
-
-/** Runs one step whose failure the caller reports and moves past. */
-async function attempt(step: () => Promise<void> | void): Promise<Attempt> {
-	try {
-		await step();
-		return { ok: true };
-	} catch (error) {
-		return { ok: false, error };
-	}
-}
-
-/**
- * Runs every service's background start at once and tells every plugin, as each ends, how it
- * went; the rest of the process runs either way, and a failing start or handler never stops the
- * others.
- */
-async function startInBackground(
-	registry: Registry,
-	logger: Logger,
-): Promise<void> {
-	const { services, servicePlugins, handlers } = registry;
-	await Promise.all(
-		// pi-lens-ignore: array-callback-return — an async callback returns its promise on every path; map only starts the tasks for Promise.all, and the early return skips a service with no background start
-		services.map(async (service) => {
-			if (!service.startInBackground) return;
-			const plugin = servicePlugins.get(service) ?? "unknown";
-			const started = await attempt(() => service.startInBackground?.());
-			if (started.ok) logger.info({ plugin, service: service.name }, "ready");
-			else
-				logger.error(
-					{ plugin, service: service.name, err: started.error },
-					"service did not start in the background",
-				);
-			const event: ServiceStartedEvent = {
-				plugin,
-				service: service.name,
-				outcome: started.ok ? "ready" : "failed",
-			};
-			for (const { plugin: heard, events } of handlers) {
-				const handled = await attempt(() => events.serviceStarted?.(event));
-				if (!handled.ok)
-					logger.error(
-						{ plugin: heard, err: handled.error },
-						"service started handler failed",
-					);
-			}
-		}),
-	);
-}
-
 /**
  * The process around the plugins: it sets them all up, links what they add (session parts,
  * HTTP routes) and runs the preflight, then starts their services in order and the
  * HTTP listeners last, then runs the services' background starts. Nothing reaches Discord or a listener unless
- * every setup, link, and the preflight succeeded. On shutdown it waits until no work runs or
- * waits before closing the listeners and stopping the services in reverse.
+ * every setup, link, and the preflight succeeded. On shutdown it starts no new work, waits for
+ * what runs for at most the drain limit, then closes the listeners and stops the services in
+ * reverse.
  */
 // pi-lens-ignore: large-class
 export class Roundtable {
@@ -243,6 +198,7 @@ export class Roundtable {
 			registry: () => this.#services?.find(CONVERSATIONS),
 			surfaces: this.#surfaces(),
 			events: this.#events.sink,
+			stopping: () => this.#queue.closed,
 			selection: () => {
 				if (!this.#sessions)
 					throw new NotLinkedError("session parts are not linked yet.");
@@ -423,7 +379,8 @@ export class Roundtable {
 	}
 
 	/**
-	 * Stops the host once no work runs or waits and returns the exit code: 0, or 1 when the
+	 * Stops the host once no work runs or waits, or the drain limit has passed, and returns the
+	 * exit code: 0, or 1 when the
 	 * boot had failed or a listener, service or the pool did not stop. Every call shares the one
 	 * shutdown.
 	 */
@@ -437,19 +394,27 @@ export class Roundtable {
 		// A signal during the boot waits for it to settle; a failed boot has already stopped.
 		await this.#booting?.catch(() => undefined);
 		if (running !== this) return this.#bootFailed ? 1 : 0;
-		// Everything keeps serving until nothing runs or waits, so a deploy never cuts a turn short.
+		// Turns already running finish, but nothing new starts from here on, whoever asks.
 		logger.info({ signal }, "shutting down once idle");
-		const left = await waitUntilIdle({
+		this.#queue.close();
+		const left = await drainWork({
 			...drain,
 			busy: () => [
 				...this.#queue.busy(),
 				...this.#started.flatMap((service) => service.busy?.() ?? []),
 			],
+			// A turn the limit finds still running is stopped, as the owner's stop would.
+			abort: () =>
+				stopTurns(
+					this.#queue.busy(),
+					(channel) => this.#router?.stop(channel as ChannelKey) ?? false,
+					logger,
+				),
 		});
 		if (left.length > 0) {
 			logger.warn(
 				{ aborted: left },
-				"still busy after the drain limit; aborting",
+				"still busy after the drain limit; aborted",
 			);
 			const recorded = await attempt(() => aborted?.(left));
 			if (!recorded.ok)

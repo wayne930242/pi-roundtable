@@ -27,3 +27,16 @@ export class JudgeError extends Error {
 export class ProviderError extends Error {
 	override name = "ProviderError";
 }
+
+/**
+ * Work refused because the host is shutting down: once the drain starts, no turn, queue task, or
+ * background run starts any more, and what was waiting behind a running one is dropped.
+ */
+export class HostStoppingError extends Error {
+	override name = "HostStoppingError";
+	constructor() {
+		super(
+			"the host is shutting down and starts no new work; try again once it is back",
+		);
+	}
+}

@@ -7,7 +7,7 @@ import type {
 } from "../conversations/conversation-registry.ts";
 import type { TurnResult } from "../domain/conversation.ts";
 import type { TurnRequest } from "../domain/ports.ts";
-import { NotLinkedError, PluginError } from "../errors.ts";
+import { HostStoppingError, NotLinkedError, PluginError } from "../errors.ts";
 import { silentLogger } from "../log.ts";
 import type { TurnEndEvent, TurnEvent, TurnProgressEvent } from "../plugin.ts";
 import { useTestLocale } from "../testing/locale.ts";
@@ -513,6 +513,34 @@ describe("conversation turns", () => {
 			},
 		});
 		await expect(bare.run(input)).rejects.toBeInstanceOf(PluginError);
+		expect(log).toEqual([]);
+	});
+	test("no turn starts once the host is shutting down, and nothing is shown for it", async () => {
+		const log: string[] = [];
+		let stopping = false;
+		const turns = conversationTurns({
+			linked: () => undefined,
+			stopping: () => stopping,
+			runtime: () =>
+				({
+					runTurn: async () => {
+						log.push("ran");
+						return { ok: true, text: "Hi" };
+					},
+				}) as unknown as AgentRuntime,
+			surfaces: recordingSurface(log),
+			events: {
+				turnStarted: () => void log.push("started"),
+				turnEnded: () => undefined,
+				changed: () => undefined,
+			},
+			selection: () => ({ tools: [], groups: [] }),
+			logger: silentLogger(),
+		});
+		expect(await turns.run(input)).toEqual({ ok: true, text: "Hi" });
+		log.length = 0;
+		stopping = true;
+		await expect(turns.run(input)).rejects.toBeInstanceOf(HostStoppingError);
 		expect(log).toEqual([]);
 	});
 });

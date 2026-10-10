@@ -898,7 +898,7 @@ test("the handlers record a turn, a team change, and the shutdown", async () => 
 
 A service has a name and optional `start`, `stop`, and `busy`.
 Services start once everything is set up and stop in reverse order.
-`busy` lists the work still running, one entry each; a shutdown waits until every service's list is empty, for at most an hour, so a deploy rarely cuts work short.
+`busy` lists the work still running, one entry each; a shutdown waits until every service's list is empty, for at most the drain limit (three minutes by default, `drainSeconds` in the config), so a deploy rarely cuts work short.
 The host adds its own channel queue to that wait, so a surface that queues its turns through `context.queue` needs no `busy` for them.
 
 A service may also have `startInBackground`.
@@ -2791,7 +2791,7 @@ The copied file begins with this warning.
 `release-notice` listens to two [events](#events-hear-what-the-core-does).
 When the agent server's team service reports `ready`, it reads the release file and posts if the release's `sha` differs from the one it last announced (`announced-release` in the data directory), or if the previous shutdown cut work short.
 It records the announced `sha` only after the post succeeds, so a failed post is tried again at the next start, and a `release.json` that is not valid (not JSON, an empty `sha`, or `commits` that is not a list of strings) fails the handler with its path in the log.
-At `shutdown(left)` it adds the channels in `left`, the work the drain gave up on after an hour, to `aborted-on-shutdown.json` in the data directory; the next start's announcement names them as cut short (a Discord channel key as a `<#id>` mention), and once it is posted they are removed from the file. A shutdown that arrives while a post is still in flight keeps its channels for the next announcement.
+At `shutdown(left)` it adds the channels in `left`, the work the drain gave up on at its limit, to `aborted-on-shutdown.json` in the data directory; the next start's announcement names them as cut short (a Discord channel key as a `<#id>` mention), and once it is posted they are removed from the file. A shutdown that arrives while a post is still in flight keeps its channels for the next announcement.
 A plain restart of the same release with nothing cut short posts nothing.
 
 The deploy writes `release.json` into the release directory, where the bot runs, before it starts the bot.
@@ -2999,16 +2999,19 @@ If a startup step fails, the host stops its listeners, stops services in reverse
 The process exits non-zero.
 The same host may call `run()` again after that.
 
-On `SIGTERM` or `SIGINT` the bot stops serving new work last:
+On `SIGTERM` or `SIGINT` the bot takes no new work at once, finishes what runs, and stops serving last:
 
-1. It keeps serving until the channel queue is empty and no service reports `busy()` work, for at most an hour; whatever is left is logged and given up on.
-2. Every plugin hears `shutdown(left)`, while every service is still running.
-3. The HTTP listener closes, so no request reaches a service that has stopped.
-4. Services stop in the reverse of the order they started.
-5. The database pool closes.
+1. It stops starting work: the channel queue closes (`context.queue.closed` turns true), and from then on no new turn starts, whoever asks. A message that arrives is not run; its channel gets one short "restarting, try again shortly" reply, except a bot's or an integration's message, which is only logged. A background turn (a schedule's, a delegated task's report, an error report) is skipped, and so is a turn a plugin asks of `context.turns.run`, which rejects with `HostStoppingError`; a task for the queue that has not started, whether queued before or after, is refused with the same error. The scheduler claims nothing, so a due schedule stays due and fires after the next start if it is less than twelve hours late. A turn that is already running finishes. A plugin that starts turns from a timer or a route of its own should check `context.queue.closed` first.
+2. It waits until the channel queue is empty and no service reports `busy()` work, for at most three minutes (`drainSeconds` in the config, `drain.limitMs` in `RoundtableOptions`). If work is left, it stops each running turn as the owner's stop does, gives them ten seconds (`drain.abortGraceMs`) to end, and goes on; whatever is left is logged and given up on.
+3. Every plugin hears `shutdown(left)`, while every service is still running.
+4. The HTTP listener closes, so no request reaches a service that has stopped.
+5. Services stop in the reverse of the order they started.
+6. The database pool closes.
 
 `shutdown()` returns exit code `0`, or `1` if a listener, service, or pool failed to stop.
 Every call shares the same shutdown.
+Give the service manager a stop timeout longer than the drain limit plus about a minute for the steps after it, such as systemd's `TimeoutStopSec=5min` with the default three-minute drain; a shorter one has the manager kill the process in the middle of the drain.
+A turn whose model ignores its abort (a subprocess that does not exit) is given up on too: a turn that outlives its timeout, or is stopped, gets `turnAbortGraceMs` (15 seconds by default) to end, and then its session is disposed of and the turn is reported failed, so it cannot hold the queue.
 `listen()`, called by the command line and a host's own entry point, exits the process with that code.
 
 ## Errors and their fixes
@@ -3263,6 +3266,7 @@ Import from the entries listed below; source area files are internal.
 | `HoldRule` | `pi-roundtable` | type |
 | `HostEnv` | `pi-roundtable` | type |
 | `HostEnvironment` | `pi-roundtable` | type |
+| `HostStoppingError` | `pi-roundtable` | value |
 | `HttpRoute` | `pi-roundtable` | type |
 | `IDENTITY` | `pi-roundtable` | value |
 | `IdentityError` | `pi-roundtable` | value |

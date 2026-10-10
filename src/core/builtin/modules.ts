@@ -331,7 +331,15 @@ export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 export function schedulerPlugin(): RoundtablePlugin {
 	return {
 		name: "schedules",
-		setup: ({ conversations, services, env, logger, surfaces, sessions }) => {
+		setup: ({
+			conversations,
+			services,
+			env,
+			logger,
+			surfaces,
+			sessions,
+			queue,
+		}) => {
 			const schedules = services.get(SCHEDULES);
 			const prechecks = services.find(PRECHECKS);
 			const scheduler = new Scheduler({
@@ -339,6 +347,7 @@ export function schedulerPlugin(): RoundtablePlugin {
 				runner: services.get(BACKGROUND_TURNS),
 				...(prechecks ? { prechecks } : {}),
 				holds: () => sessions().holds,
+				draining: () => queue.closed,
 				// The bot's own message: the surface drops it, so it starts no turn.
 				notify: (schedule, note) =>
 					surfaces.sendReply(schedule.channel, {

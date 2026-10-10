@@ -1,6 +1,5 @@
 import { rmSync } from "node:fs";
 import {
-	type AgentSession,
 	type ModelRuntime,
 	SessionManager,
 } from "@earendil-works/pi-coding-agent";
@@ -16,20 +15,16 @@ import type {
 } from "../domain/conversation.ts";
 import { AgentRunError } from "../domain/errors.ts";
 import type { TurnRequest } from "../domain/ports.ts";
+import { HostStoppingError } from "../errors.ts";
 import { assistantName } from "../i18n/index.ts";
 import { promptScopeOf } from "../interactions/prompts.ts";
-import { AUTO_THINKING, type ThinkingLevel } from "../models.ts";
 import { MEMORY_TOOLS } from "../modules/memory/owner-memory.ts";
 import { withoutReplyFiles } from "../reply-files.ts";
 import type { TransientTask } from "../sessions.ts";
 import type { Speaker, Tier } from "../speakers.ts";
 import { type ToolTiers, toolsForTier, toolTiers } from "../tool-tiers.ts";
-import {
-	type AgentModelSettings,
-	bridgeTurnRefusal,
-	chosenAgentModel,
-	useChosenAgentModel,
-} from "./bridge-guard.ts";
+import { AbortGuard } from "./abort-guard.ts";
+import { bridgeTurnRefusal, chosenAgentModel } from "./bridge-guard.ts";
 import { ConversationSessions } from "./conversation-sessions.ts";
 import { confirmedTurnText } from "./extensions/confirmation-gate.ts";
 import { loadsMemory } from "./extensions/private-memory.ts";
@@ -47,14 +42,11 @@ import {
 } from "./session-conversation.ts";
 import { SessionFactory } from "./session-factory.ts";
 import { promptImages, SteerableRun } from "./steerable-run.ts";
+import { thinkingLevel } from "./thinking-level.ts";
 import { runningCalls } from "./tool-call-scope.ts";
-import {
-	lastReply,
-	transcriptOf,
-	turnAnswer,
-	unspokenTurn,
-} from "./turn-answer.ts";
+import { transcriptOf, turnAnswer, unspokenTurn } from "./turn-answer.ts";
 import { progressReporter } from "./turn-progress.ts";
+import { wrapUpTurn } from "./turn-wrapup.ts";
 import { workerReport } from "./worker-task.ts";
 
 export {
@@ -118,6 +110,12 @@ export class PiAgentRuntime implements AgentRuntime {
 	async runTurn(request: TurnRequest): Promise<TurnResult> {
 		const { logger, turnTimeoutMs = 10 * 60_000 } = this.#options;
 		if (!request.speaker) return unspokenTurn();
+		// A turn that is only asked for now, such as a group's next member, starts nothing.
+		if (this.#options.stopping?.())
+			return {
+				ok: false,
+				error: new AgentRunError(new HostStoppingError().message),
+			};
 		const key = request.agent?.session ?? request.channel;
 		// Resolve current scope; refuse a foreign private speaker before touching its session.
 		const conversation = await this.#sessions.conversation(key, request);
@@ -147,7 +145,17 @@ export class PiAgentRuntime implements AgentRuntime {
 				: undefined;
 		if (bridgeRefused)
 			return { ok: false, error: new AgentRunError(bridgeRefused) };
-		const level = await this.#thinkingLevel(key, session, request, agentModel);
+		const level = await thinkingLevel(
+			{
+				modelRuntime: this.#modelRuntime,
+				effort: this.#options.effort,
+				judged: this.#sessions.judged,
+			},
+			key,
+			session,
+			request,
+			agentModel,
+		);
 		if (session.thinkingLevel !== level) session.setThinkingLevel(level);
 		const gate = await this.#sessions.gate(key, request.agent !== undefined);
 		const pending = gate.pending();
@@ -240,17 +248,29 @@ export class PiAgentRuntime implements AgentRuntime {
 			request.agent?.name ?? assistantName(),
 			interim ? () => interim.flush() : undefined,
 		);
+		// A model that ignores the abort must not hold the turn: its session is disposed of instead.
+		const guard = new AbortGuard(session, {
+			graceMs: this.#options.turnAbortGraceMs,
+			onGiveUp: () => {
+				logger.error(
+					{ channel: request.channel },
+					"turn did not stop after its abort; disposing of its session",
+				);
+				this.#sessions.drop(key, channelSession);
+			},
+		});
 		// Time spent waiting on the owner's cards does not count towards the timeout.
 		const cancelTimeout = workTimeout(turnTimeoutMs, slot, () => {
 			logger.warn(
 				{ channel: request.channel, turnTimeoutMs },
 				"turn timed out; aborting",
 			);
-			void session.abort();
+			guard.abort();
 		});
 		const running = new SteerableRun(
 			session,
 			() => request.steerable === true && !gate.pending(),
+			() => guard.abort(),
 		);
 		this.#running.set(key, running);
 
@@ -260,7 +280,7 @@ export class PiAgentRuntime implements AgentRuntime {
 				request.confirmed && pending
 					? confirmedTurnText(pending, request.text, who)
 					: request.text;
-			await running.run(() =>
+			const prompted = running.run(() =>
 				session.prompt(
 					withAttachmentsBlock(text, attachments),
 					attachments.images.length > 0
@@ -268,6 +288,9 @@ export class PiAgentRuntime implements AgentRuntime {
 						: undefined,
 				),
 			);
+			// A run abandoned by the guard may still reject later; nobody waits for it then.
+			prompted.catch(() => undefined);
+			await Promise.race([prompted, guard.gaveUp]);
 		} catch (error) {
 			if (running.stopped)
 				return { ok: false, error: new AgentRunError(STOPPED), stopped: true };
@@ -280,42 +303,20 @@ export class PiAgentRuntime implements AgentRuntime {
 			this.#turns.delete(key);
 			this.#memoryTurns.delete(key);
 			cancelTimeout();
+			guard.release();
 			slot.unbind();
 			unsubscribe();
 			progress?.close();
 			await interim?.flush();
-			gate.endTurn();
-			const usage = session.getContextUsage();
-			if (usage)
-				this.#sessions.usage.set(key, {
-					tokens: usage.tokens,
-					contextWindow: usage.contextWindow,
-				});
-			const held = gate.pending();
-			await this.#options.confirmations
-				.save(key, held)
-				// pi-lens-ignore: no-unknown-parameters — a rejection reason is unknown; it only reaches the logger
-				.catch((error: unknown) =>
-					logger.error({ channel: key, err: error }, "held actions not saved"),
-				);
-			if (held)
-				logger.info(
-					{ channel: key, held: held.calls.map((call) => call.action) },
-					"actions held for confirmation",
-				);
-			logger.info(
-				{
-					channel: key,
-					selection: request.selection.id,
-					toolCalls,
-					thinking: session.thinkingLevel,
-					// pi-lens-ignore: no-conditional-empty-object-spread — owner turns keep their log line without a model key
-					...(request.agent
-						? { model: `${session.model?.provider}/${session.model?.id}` }
-						: {}),
-				},
-				"turn finished",
-			);
+			await wrapUpTurn({
+				key,
+				request,
+				session,
+				gate,
+				toolCalls,
+				options: this.#options,
+				recordUsage: (usage) => this.#sessions.usage.set(key, usage),
+			});
 		}
 
 		if (running.stopped)
@@ -368,6 +369,8 @@ export class PiAgentRuntime implements AgentRuntime {
 	): Promise<string> {
 		const { dataDir } = this.#options;
 		const { signal } = task;
+		if (this.#options.stopping?.())
+			throw new AgentRunError(new HostStoppingError().message);
 		// A task works at the tier of the turn that started it; without one there is no tier to take.
 		const turn = this.#turns.get(scope.turn);
 		if (!turn)
@@ -393,7 +396,11 @@ export class PiAgentRuntime implements AgentRuntime {
 		const unsubscribe = session.subscribe((event) => {
 			if (event.type === "tool_execution_start") toolCalls.push(event.toolName);
 		});
-		const abort = () => void session.abort();
+		// A worker whose model ignores the abort is given up on, like a turn's.
+		const guard = new AbortGuard(session, {
+			graceMs: this.#options.turnAbortGraceMs,
+		});
+		const abort = () => guard.abort();
 		signal?.addEventListener("abort", abort, { once: true });
 		const timer = setTimeout(abort, task.timeoutMs);
 		try {
@@ -411,13 +418,16 @@ export class PiAgentRuntime implements AgentRuntime {
 					(name) => registered.has(name) && this.#tiers.allows(tier, name),
 				);
 			session.setActiveToolsByName([...worker.tools]);
-			await withoutReplyFiles(() => session.prompt(task.text));
+			const prompted = withoutReplyFiles(() => session.prompt(task.text));
+			prompted.catch(() => undefined);
+			await Promise.race([prompted, guard.gaveUp]);
 			return workerReport(
 				session.messages,
 				"the worker stopped before it reported",
 			);
 		} finally {
 			clearTimeout(timer);
+			guard.release();
 			signal?.removeEventListener("abort", abort);
 			unsubscribe();
 			session.dispose();
@@ -465,33 +475,6 @@ export class PiAgentRuntime implements AgentRuntime {
 	): Promise<TranscriptEntry[]> {
 		await this.#sessions.held(channel);
 		return transcriptOf(await this.#sessions.messages(channel), limit);
-	}
-
-	/** Uses the checked model snapshot; auto thinking keeps the last pick while the judge is unsure. */
-	async #thinkingLevel(
-		key: ChannelKey,
-		session: AgentSession,
-		request: TurnRequest,
-		agentModel?: AgentModelSettings,
-	): Promise<ThinkingLevel> {
-		const setting = request.agent
-			? await useChosenAgentModel(
-					session,
-					this.#modelRuntime,
-					request.agent.name,
-					agentModel,
-				)
-			: AUTO_THINKING;
-		if (setting !== AUTO_THINKING) {
-			this.#sessions.judged.delete(key);
-			return setting;
-		}
-		const level = await this.#options.effort.judge(request.text, {
-			reply: lastReply(session.messages),
-			level: this.#sessions.judged.get(key),
-		});
-		this.#sessions.judged.set(key, level);
-		return level;
 	}
 
 	dispose(): void {

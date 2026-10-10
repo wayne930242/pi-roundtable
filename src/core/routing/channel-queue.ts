@@ -1,3 +1,4 @@
+import { HostStoppingError } from "../errors.ts";
 import type { ChannelKey } from "../sessions.ts";
 
 /** Runs tasks one at a time per channel, in arrival order; different channels run independently. */
@@ -5,6 +6,7 @@ export class ChannelQueue {
 	readonly #tails = new Map<ChannelKey, Promise<unknown>>();
 	readonly #sizes = new Map<ChannelKey, number>();
 	readonly #listeners: ((channel: ChannelKey) => void)[] = [];
+	#closed = false;
 
 	/** Called whenever a channel's count of running and waiting tasks changes. */
 	onChange(listener: (channel: ChannelKey) => void): void {
@@ -15,11 +17,26 @@ export class ChannelQueue {
 		for (const listener of this.#listeners) listener(channel);
 	}
 
+	/** Whether the host is shutting down, so no task starts any more. */
+	get closed(): boolean {
+		return this.#closed;
+	}
+
+	/**
+	 * Starts the shutdown: from now on a task that has not started, whether queued before or after
+	 * this call, is refused with HostStoppingError. A running task finishes.
+	 */
+	close(): void {
+		this.#closed = true;
+	}
+
 	run<T>(channel: ChannelKey, task: () => Promise<T>): Promise<T> {
+		const start = () =>
+			this.#closed ? Promise.reject(new HostStoppingError()) : task();
 		this.#sizes.set(channel, this.size(channel) + 1);
 		this.#changed(channel);
 		const previous = this.#tails.get(channel) ?? Promise.resolve();
-		const result = previous.then(task, task);
+		const result = previous.then(start, start);
 		const tail = result.catch(() => undefined);
 		this.#tails.set(channel, tail);
 		void tail.then(() => {

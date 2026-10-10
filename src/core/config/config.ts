@@ -3,6 +3,7 @@ import { join } from "node:path";
 import type { AgentSeed } from "../agents/agent-rules.ts";
 import { ConfigError } from "../domain/errors.ts";
 import type { InterimTextMode } from "../domain/interim.ts";
+import { DRAIN_LIMIT_MS } from "../drain.ts";
 import { isLocale, type Locale } from "../i18n/index.ts";
 import type { AccessRules } from "../identity/access-policy.ts";
 import type { OwnerIdentity } from "../identity.ts";
@@ -165,6 +166,11 @@ export interface RoundtableConfig {
 	 */
 	ops?: { agent: string } | { conversation: string };
 	/**
+	 * Seconds a shutdown waits for running turns before stopping them; default 180. Give the
+	 * service manager a stop timeout a minute longer, such as systemd's `TimeoutStopSec`.
+	 */
+	drainSeconds?: number;
+	/**
 	 * Whether a turn posts the text it writes before its final answer as it goes: long or
 	 * structured text as ordinary messages, short narration and the tools called in one small
 	 * progress message. Default "on"; "off" posts only the final reply.
@@ -261,6 +267,7 @@ const schema = shape({
 	),
 	memory: optional(bool),
 	ops: optional(shape({ agent: optional(text), conversation: optional(text) })),
+	drainSeconds: optional(integer(1, 3_600)),
 	interimText: optional(oneOf<InterimTextMode>("on", "off")),
 	interimPrimaryChars: optional(integer(1, 100_000)),
 	plugins: optional(
@@ -334,6 +341,7 @@ export interface ResolvedConfig {
 	skills: false | { builtinDir?: string; reposDir?: string };
 	memory: boolean;
 	ops?: { agent: string } | { conversation: ChannelKey };
+	drainMs: number;
 	interimText: InterimTextMode;
 	interimPrimaryChars: number;
 	plugins: RoundtablePlugin[];
@@ -483,6 +491,7 @@ export function resolveConfig(input: unknown): ResolvedConfig {
 		skills: config.skills ?? (discord ? {} : false),
 		memory: config.memory ?? true,
 		...(ops ? { ops } : {}),
+		drainMs: (config.drainSeconds ?? DRAIN_LIMIT_MS / 1_000) * 1_000,
 		interimText: config.interimText ?? "on",
 		interimPrimaryChars: config.interimPrimaryChars ?? PRIMARY_CHARS,
 		plugins: config.plugins ?? [],

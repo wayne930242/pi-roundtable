@@ -5,6 +5,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- A SIGTERM no longer lets the host keep taking work until it was idle: in 0.9.0 the shutdown drain only waited, so messages, error and webhook reports, schedules, and plugin turns that arrived meanwhile were served and waited for too, and a host that kept getting them never became idle until the one-hour limit (a deploy waited for systemd to kill it). The drain now starts by closing the channel queue: no new turn starts from any source. A message that arrives is not run and its channel gets one short restarting notice (not for a bot's or an integration's message, which is only logged), including a message that waited behind a running turn, and a message is no longer steered into a running turn; a background turn (a schedule's, a delegated task's report, an error report) is skipped; `context.turns.run`, a task for `context.queue.run` that has not started, and a group's next member's turn are refused (`HostStoppingError`, new in `pi-roundtable`), and so are new worker tasks; a remote MCP run fails instead of starting. The scheduler claims nothing during the drain, so a due schedule stays due and fires after the next start if it is less than twelve hours late. Turns already running finish.
+- The drain is bounded by three minutes by default instead of an hour: `drainSeconds` in the config, or `drain.limitMs` in `RoundtableOptions`. At the limit the host stops each running turn as the owner's stop does, gives it `drain.abortGraceMs` (ten seconds by default) to end, hands what is left to `aborted`, and goes on to stop the services and exit. Give the service manager a stop timeout a minute longer than the drain, such as systemd's `TimeoutStopSec=5min`.
+- A turn or worker task whose model ignores the abort (a claude-bridge subprocess that stays alive after "turn timed out; aborting") no longer holds its channel, and the drain, for ever: a run still going `turnAbortGraceMs` (15 seconds by default, `PiAgentRuntimeOptions`) after its abort has its session disposed of and ends as failed, and the conversation's next turn opens a new session from its files. An owner's stop of such a turn is guarded the same way.
+
+### Added
+
+- `QueuePort.closed` (`context.queue.closed`): whether the host is shutting down, for a plugin that starts work from its own timer or route.
+- The `drainSeconds` configuration key.
+
 ## [0.9.0] - 2026-10-09
 
 Principal and identity attribution replace implicit owner authority.

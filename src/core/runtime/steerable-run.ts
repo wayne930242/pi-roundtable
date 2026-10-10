@@ -33,13 +33,22 @@ export class SteerableRun {
 	readonly #canSteer: () => boolean;
 	/** Steered prompts in arrival order, each with its images. */
 	readonly #steers: { text: string; images: PromptImages }[] = [];
+	readonly #abort: () => void;
 	#stopped = false;
 	#done = false;
 
-	/** `canSteer` is asked at each steer: the turn is the owner's and holds no actions. */
-	constructor(session: SteeringSession, canSteer: () => boolean) {
+	/**
+	 * `canSteer` is asked at each steer: the turn is the owner's and holds no actions. `abort`
+	 * ends the session's run when the turn is stopped; by default the session's own abort.
+	 */
+	constructor(
+		session: SteeringSession,
+		canSteer: () => boolean,
+		abort: () => void = () => void session.abort(),
+	) {
 		this.#session = session;
 		this.#canSteer = canSteer;
+		this.#abort = abort;
 	}
 
 	get stopped(): boolean {
@@ -106,7 +115,7 @@ export class SteerableRun {
 		if (this.#done) return false;
 		this.#stopped = true;
 		this.#session.clearQueue();
-		void this.#session.abort();
+		this.#abort();
 		return true;
 	}
 

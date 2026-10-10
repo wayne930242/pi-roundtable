@@ -12,7 +12,8 @@ import {
 } from "../contract/channels.ts";
 import { parseChannelKey, type SurfacePort } from "../contract/surface.ts";
 import { IdentityError } from "../domain/errors.ts";
-import { PluginError } from "../errors.ts";
+import { HostStoppingError, PluginError } from "../errors.ts";
+import { messages } from "../i18n/index.ts";
 import type { ActorFacts } from "../identity/actor-facts.ts";
 import type { Contact, ContactAssessor } from "../identity/contact.ts";
 import {
@@ -37,8 +38,11 @@ export interface ChannelRouterOptions {
 	contacts?: ContactAssessor;
 	/** Whom a background turn runs as; without it, only the host's own turns run. */
 	principals?: Pick<IdentityService, "speakerFor">;
-	/** The surfaces, so a conversation started over is marked in a channel that shows one; without it, none is. */
-	surfaces?: Pick<SurfacePort, "of">;
+	/**
+	 * The surfaces, so a conversation started over is marked in a channel that shows one, and a
+	 * message that arrives while the host shuts down is told so; without it, neither is.
+	 */
+	surfaces?: Pick<SurfacePort, "of"> & Partial<Pick<SurfacePort, "sendReply">>;
 	/** How long a bare forward waits for the text sent with it; FORWARD_JOIN_MS by default. */
 	forwardJoinMs?: number;
 }
@@ -56,6 +60,12 @@ export function orderClaims(
 	return claims.toSorted((a, b) => b.priority - a.priority);
 }
 
+/** The outcome of a background turn the host did not start because it is shutting down. */
+const stopping = (): ScheduledOutcome => ({
+	status: "skipped",
+	reason: new HostStoppingError().message,
+});
+
 /**
  * Routes every conversation operation to the claim that owns its channel, each inside the
  * channel's queue: messages after joining a bare forward to its text, background turns,
@@ -69,6 +79,8 @@ export class ChannelRouter implements ConversationPort {
 	readonly #admitting = new Map<ChannelKey, Promise<unknown>>();
 	/** The surfaces already warned that their messages carry no actor. */
 	readonly #warned = new Set<string>();
+	/** The channels already told that the host is restarting, so a burst of messages gets one notice. */
+	readonly #told = new Set<ChannelKey>();
 
 	constructor(options: ChannelRouterOptions) {
 		this.#options = options;
@@ -100,7 +112,13 @@ export class ChannelRouter implements ConversationPort {
 		if (!claim) return;
 		const started = await this.#inOrder(message.channel, async () => {
 			const admission = await this.#admit(claim, message);
-			return admission && (await this.#start(message, admission));
+			if (!admission) return undefined;
+			// Once the host shuts down only the turns already running finish: this one starts nothing.
+			if (this.#options.queue.closed) {
+				await this.#refuse(message, admission);
+				return undefined;
+			}
+			return this.#start(message, admission);
 		});
 		await started?.done;
 	}
@@ -210,6 +228,33 @@ export class ChannelRouter implements ConversationPort {
 	}
 
 	/**
+	 * Drops a message the host no longer starts a turn for because it is shutting down, and tells
+	 * its channel once that it restarts; no one is told for a bot's or an integration's message, such
+	 * as a report, since a notice there would only start the next one.
+	 */
+	async #refuse(message: InboundMessage, admission: Admission): Promise<void> {
+		const { logger, surfaces } = this.#options;
+		const { channel } = message;
+		if (admission.kind === "turn") admission.dropped?.();
+		else
+			admission.unanswered({
+				status: "skipped",
+				reason: new HostStoppingError().message,
+			});
+		logger.info({ channel }, "message not run: the host is shutting down");
+		if (message.authorIsBot || message.integration || this.#told.has(channel))
+			return;
+		this.#told.add(channel);
+		try {
+			await surfaces?.sendReply?.(channel, {
+				chunks: [messages().restartingNotice],
+			});
+		} catch (error) {
+			logger.warn({ channel, err: error }, "restart notice not posted");
+		}
+	}
+
+	/**
 	 * Starts what the claim admitted, in the channel's queue, and returns while it runs: a message
 	 * during a turn is first offered to it, then marked as waiting.
 	 */
@@ -238,12 +283,17 @@ export class ChannelRouter implements ConversationPort {
 				return admission.run();
 			})
 			// pi-lens-ignore: no-unknown-parameters
-			.catch((error: unknown) =>
+			.catch(async (error: unknown) => {
+				// The host began shutting down while this message waited behind a running turn.
+				if (error instanceof HostStoppingError) {
+					if (queued) void busy?.unreact(QUEUED_MARK);
+					return this.#refuse(message, admission);
+				}
 				logger.error(
 					{ channel: message.channel, err: error },
 					admission.failure,
-				),
-			);
+				);
+			});
 		return { done };
 	}
 
@@ -257,6 +307,7 @@ export class ChannelRouter implements ConversationPort {
 	 * handed to another target's claim, and so is one whose author may not run it now.
 	 */
 	async background(turn: BackgroundTurn): Promise<ScheduledOutcome> {
+		if (this.#options.queue.closed) return stopping();
 		if (!this.#options.targets(turn.target))
 			return {
 				status: "skipped",
@@ -277,6 +328,7 @@ export class ChannelRouter implements ConversationPort {
 				return claim.background({ ...turn, speaker: runs.speaker });
 			});
 		} catch (error) {
+			if (error instanceof HostStoppingError) return stopping();
 			return { status: "failed", error: String(error) };
 		}
 	}

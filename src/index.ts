@@ -113,6 +113,7 @@ export type { TurnConversation, TurnRequest } from "./core/domain/ports.ts";
 export type { TurnProgress } from "./core/domain/progress.ts";
 export type { DrainOptions } from "./core/drain.ts";
 export {
+	HostStoppingError,
 	JudgeError,
 	MigrationError,
 	NotLinkedError,

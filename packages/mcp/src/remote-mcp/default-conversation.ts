@@ -68,25 +68,34 @@ export function defaultConversation({
 }: Parts): RemoteConversation {
 	return {
 		answer: (channel, text, speaker) =>
-			queue.run(channel, () =>
-				settleTurn(async () => {
-					const { runtime, approvals } = server();
-					// Restored from the store: after a restart nothing is held in memory yet.
-					const pending = await runtime.heldActions(channel);
-					const confirmed =
-						pending !== undefined && (await approvals.approves(pending, text));
-					return turns.run({
-						channel,
-						kind: REMOTE_KIND,
-						text,
-						speaker,
-						conversation: { visibility: "private" },
-						confirmed,
-						// The outside agent polls for the answer; no surface posts it.
-						reply: async () => undefined,
-					});
-				}, "remote turn"),
-			),
+			queue
+				.run(channel, () =>
+					settleTurn(async () => {
+						const { runtime, approvals } = server();
+						// Restored from the store: after a restart nothing is held in memory yet.
+						const pending = await runtime.heldActions(channel);
+						const confirmed =
+							pending !== undefined &&
+							(await approvals.approves(pending, text));
+						return turns.run({
+							channel,
+							kind: REMOTE_KIND,
+							text,
+							speaker,
+							conversation: { visibility: "private" },
+							confirmed,
+							// The outside agent polls for the answer; no surface posts it.
+							reply: async () => undefined,
+						});
+					}, "remote turn"),
+				)
+				// A host shutting down starts no turn: the run fails, and the caller may try again later.
+				.catch(
+					(error: unknown): TurnResult => ({
+						ok: false,
+						error: error instanceof Error ? error : new Error(String(error)),
+					}),
+				),
 		claim: {
 			stop: (channel) => server().runtime.stop(channel),
 			startFresh: async (channel) => {

@@ -283,6 +283,7 @@ export async function defineRoundtable(
 			],
 			judgeModel: judgeThrough(modelRuntime, config.judge.model),
 			apiKey: (provider) => registry.getApiKeyForProvider(provider),
+			drain: { limitMs: config.drainMs },
 			...(overrides.aborted ? { aborted: overrides.aborted } : {}),
 		},
 		plugins: [

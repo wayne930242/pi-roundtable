@@ -259,6 +259,11 @@ export interface QueuePort {
 	size(channel: ChannelKey): number;
 	/** Channels with a task running or waiting. */
 	busy(): ChannelKey[];
+	/**
+	 * Whether the host is shutting down: a task that has not started is then refused with
+	 * HostStoppingError, and a plugin that starts work on its own, such as a timer, starts none.
+	 */
+	readonly closed: boolean;
 	/** Called whenever a channel's count of running and waiting tasks changes. */
 	onChange(listener: (channel: ChannelKey) => void): void;
 }

@@ -145,4 +145,64 @@ describe("scheduler shutdown races", () => {
 		expect(prechecks).toBe(0);
 		expect(statuses).toEqual(["skipped: the host stopped before its run"]);
 	});
+
+	test("claims nothing while the host drains, so a due run stays due for the next start", async () => {
+		let draining = false;
+		let claims = 0;
+		let runs = 0;
+		const scheduler = new Scheduler({
+			store: {
+				due: async () => [schedule()],
+				claim: async () => {
+					claims += 1;
+					return true;
+				},
+				recordStatus: async () => {},
+			},
+			runner: {
+				runsAs: runsAsCreator,
+				runScheduled: async () => {
+					runs += 1;
+					return { status: "ran" };
+				},
+			},
+			draining: () => draining,
+			logger: silentLogger(),
+			now: () => now,
+		});
+		draining = true;
+		await scheduler.tick();
+		await scheduler.idle();
+		expect([claims, runs]).toEqual([0, 0]);
+		draining = false;
+		await scheduler.tick();
+		await scheduler.idle();
+		expect([claims, runs]).toEqual([1, 1]);
+	});
+
+	test("claims no further schedule once the drain begins during a check", async () => {
+		let draining = false;
+		const claimed: number[] = [];
+		const scheduler = new Scheduler({
+			store: {
+				due: async () => [schedule(1), schedule(2)],
+				claim: async (due) => {
+					claimed.push(due.id);
+					draining = true;
+					return true;
+				},
+				recordStatus: async () => {},
+			},
+			runner: {
+				runsAs: runsAsCreator,
+				runScheduled: async () => ({ status: "ran" }),
+			},
+			draining: () => draining,
+			logger: silentLogger(),
+			now: () => now,
+		});
+		await scheduler.tick();
+		await scheduler.idle();
+		expect(claimed).toEqual([1]);
+	});
 });
