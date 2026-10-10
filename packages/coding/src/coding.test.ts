@@ -554,7 +554,7 @@ test("real out-of-process Pi worker requests host approval and cannot execute a 
 	}
 });
 
-test("a write inside the host's scratch dir runs without asking the owner", async () => {
+test("a worker is told its scratch dir, and a write inside it runs without asking the owner", async () => {
 	const { shelf, dir } = await fixture();
 	const repoDir = await shelf.add("sample/project");
 	const agentDir = join(dir, "login");
@@ -572,7 +572,7 @@ test("a write inside the host's scratch dir runs without asking the owner", asyn
 		packages: [extension],
 		scratchDir,
 	});
-	await worker.run(
+	const report = await worker.run(
 		{
 			...request(),
 			id: 1,
@@ -588,6 +588,8 @@ test("a write inside the host's scratch dir runs without asking the owner", asyn
 	);
 	expect(reviewed).toBe(0);
 	expect(existsSync(marker)).toBe(true);
+	// The worker is told where its scratch dir is, without the task having to say so.
+	expect(report).toContain("scratchPrompt=true");
 });
 
 test("a host words what the worker reads when a call is declined or held", async () => {

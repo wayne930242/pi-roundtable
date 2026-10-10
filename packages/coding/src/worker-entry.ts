@@ -23,6 +23,12 @@ interface StartMessage {
 	prompt?: string;
 	/** The host posts the worker's progress, so the session's messages and tools go to it. */
 	progress?: boolean;
+	/** The host's scratch dir, the worker's TMPDIR, where writes and removals need no approval. */
+	scratchDir?: string;
+}
+/** Said to every worker whose host has a scratch dir, after the host's own prompt or the default. */
+export function scratchDirPrompt(scratchDir: string): string {
+	return `Temporary files, test homes and throwaway clones go under the scratch dir ${scratchDir} ($TMPDIR): writes and removals there, and inside the repository, run without approval; elsewhere they wait for the owner.`;
 }
 export function codingWorkerPrompt(dir: string): string {
 	return [
@@ -46,6 +52,7 @@ async function run({
 	packages,
 	prompt,
 	progress,
+	scratchDir,
 }: StartMessage): Promise<string> {
 	const modelRuntime = await ModelRuntime.create({
 		authPath: join(agentDir, "auth.json"),
@@ -107,7 +114,10 @@ async function run({
 				},
 			},
 		],
-		appendSystemPrompt: [prompt ?? codingWorkerPrompt(job.dir)],
+		appendSystemPrompt: [
+			prompt ?? codingWorkerPrompt(job.dir),
+			...(scratchDir ? [scratchDirPrompt(scratchDir)] : []),
+		],
 	});
 	await loader.reload();
 	const { session } = await createAgentSession({

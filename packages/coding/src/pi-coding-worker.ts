@@ -98,6 +98,9 @@ export class PiCodingWorker implements CodingWorker {
 							agentDir: this.#options.agentDir ?? getAgentDir(),
 							prompt,
 							progress: progress !== undefined,
+							...(this.#options.scratchDir
+								? { scratchDir: this.#options.scratchDir }
+								: {}),
 						});
 					} else if (
 						value.type === "report" &&
