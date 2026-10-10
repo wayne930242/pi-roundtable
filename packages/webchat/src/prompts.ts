@@ -60,12 +60,25 @@ export class PromptDesk {
 	 */
 	prompts(conversation: string, scope: PromptScope): Prompts {
 		return {
-			confirm: async (title, message, signal, minTier = "owner") => {
+			confirm: async (
+				title,
+				message,
+				signal,
+				minTier = "owner",
+				_wait,
+				details,
+			) => {
 				if (!atLeast(scope.tier, minTier)) return "expired";
 				const outcome = await this.#ask(
 					conversation,
 					scope.principalId,
-					(id) => ({ id, kind: "approval", title, message }),
+					(id) => ({
+						id,
+						kind: "approval",
+						title,
+						message,
+						...(details ? { approval: details } : {}),
+					}),
 					signal,
 					minTier,
 				);

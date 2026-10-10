@@ -228,8 +228,11 @@ export class PiAgentRuntime implements AgentRuntime {
 		// Text written before the final answer is posted as the turn goes; the final reply stays the caller's.
 		const interim = interimPoster(request, this.#options);
 		// The caller's live view: the text as it streams and each tool, never the thinking.
+		const slot = this.#sessions.slot(key);
 		const progress = request.progress
-			? progressReporter(request.progress)
+			? progressReporter(request.progress, {
+					refusalOf: (id) => slot.refusalOf(id),
+				})
 			: undefined;
 		const unsubscribe = session.subscribe((event) => {
 			progress?.observe(event);
@@ -243,7 +246,6 @@ export class PiAgentRuntime implements AgentRuntime {
 				interim?.messageEnd(event.message);
 			}
 		});
-		const slot = this.#sessions.slot(key);
 		slot.bind(
 			request.interactive
 				? this.#options.prompts?.(request.channel, promptScopeOf(scoped))

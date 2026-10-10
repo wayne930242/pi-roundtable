@@ -14,6 +14,26 @@ export type Approval =
 	| "cancelled"
 	| "pending";
 
+/** A file a held call sends by path; `bytes` is its size when it was read, absent when it could not be. */
+export interface ApprovalFile {
+	path: string;
+	bytes?: number;
+}
+
+/**
+ * What an approval is for, as data: the same facts a card's text shows, so a surface that is not
+ * text (a web client) need not read them back out of the markdown. `input` is the call's whole
+ * input, never cut.
+ */
+export interface ApprovalDetails {
+	/** What the call would do, in plain words. */
+	action: string;
+	tool: string;
+	input: Record<string, unknown>;
+	/** The files the call sends by path; absent when it sends none. */
+	files?: ApprovalFile[];
+}
+
 /** An answer given on a prompt after its turn stopped waiting; `by` names who gave it. */
 export type LateAnswer = { by: string } & (
 	| { kind: "approval"; approved: boolean }
@@ -95,7 +115,8 @@ export interface Prompts {
 	 * Asks to approve an action; `signal` cancels the prompt when the turn stops. `minTier` is the
 	 * tier the scope's speaker needs to approve it themselves, `owner` when absent; below it the
 	 * prompt goes to the owners, or, when the scope escalates to no one, resolves `expired` at once.
-	 * `pending` comes only with a `wait`.
+	 * `pending` comes only with a `wait`. `details` is the approval as data beside `message`, its
+	 * text; a surface that shows text only ignores it.
 	 */
 	confirm(
 		title: string,
@@ -103,6 +124,7 @@ export interface Prompts {
 		signal?: AbortSignal,
 		minTier?: Tier,
 		wait?: PromptWait,
+		details?: ApprovalDetails,
 	): Promise<Approval>;
 	/**
 	 * Asks a question; undefined when no one answered it or it was cancelled, and `pending`, only

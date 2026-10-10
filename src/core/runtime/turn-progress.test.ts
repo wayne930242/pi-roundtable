@@ -36,6 +36,62 @@ function reporter() {
 	};
 }
 
+describe("a tool the gate refused", () => {
+	function refusing(refusals: Record<string, "declined" | "expired">) {
+		const sent: TurnProgress[] = [];
+		const progress = progressReporter((event) => void sent.push(event), {
+			refusalOf: (id) => refusals[id],
+		});
+		return { sent, progress };
+	}
+
+	test("ends with the reason it was refused, for a failed result only", () => {
+		const { sent, progress } = refusing({ a: "declined", b: "expired" });
+		progress.toolEnd("a", "mail", true);
+		progress.toolEnd("b", "mail", true);
+		progress.toolEnd("c", "mail", true);
+		progress.toolEnd("a", "mail", false);
+		expect(sent).toEqual([
+			{
+				type: "tool_end",
+				id: "a",
+				tool: "mail",
+				ok: false,
+				refused: "declined",
+			},
+			{
+				type: "tool_end",
+				id: "b",
+				tool: "mail",
+				ok: false,
+				refused: "expired",
+			},
+			{ type: "tool_end", id: "c", tool: "mail", ok: false },
+			{ type: "tool_end", id: "a", tool: "mail", ok: true },
+		]);
+	});
+
+	test("is read from the session's own end event", () => {
+		const { sent, progress } = refusing({ x: "declined" });
+		progress.observe({
+			type: "tool_execution_end",
+			toolCallId: "x",
+			toolName: "mail",
+			result: {},
+			isError: true,
+		});
+		expect(sent).toEqual([
+			{
+				type: "tool_end",
+				id: "x",
+				tool: "mail",
+				ok: false,
+				refused: "declined",
+			},
+		]);
+	});
+});
+
 describe("progressReporter", () => {
 	test("text deltas are joined and sent at most once per interval", () => {
 		const { sent, progress, advance } = reporter();

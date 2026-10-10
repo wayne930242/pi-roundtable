@@ -158,6 +158,7 @@ export {
 	toolText,
 } from "./tools.ts";
 export type {
+	CardLimits,
 	InterimPosterOptions,
 	McpEndpoint,
 	PromptSlot,
@@ -165,6 +166,7 @@ export type {
 } from "./worker.ts";
 export {
 	approvalCard,
+	approvalDetails,
 	archiveSessions,
 	canonicalJson,
 	InterimPoster,

@@ -209,14 +209,27 @@ The TypeScript types are `ClientFrame` and `ServerFrame`.
 | `{ type: "accepted", id, conversation }` | Your message `id` was taken into `conversation`, a new one when you named none. |
 | `{ type: "typing", conversation, on }` | The assistant is, or is no longer, working in the conversation. |
 | `{ type: "stoppable", conversation, on }` | A stop applies, or no longer applies. |
-| `{ type: "progress", conversation, event }` | What the running turn writes and which tools it runs: `{ type: "text", delta }`, `{ type: "tool_start", id, tool, preview? }`, or `{ type: "tool_end", id, tool, ok }`. Never the thinking, never a tool's full arguments. |
+| `{ type: "progress", conversation, event }` | What the running turn writes and which tools it runs: `{ type: "text", delta }`, `{ type: "tool_start", id, tool, preview? }`, or `{ type: "tool_end", id, tool, ok, refused? }`. Never the thinking, never a tool's full arguments. A `tool_end` that a hold refused (not a real failure) has `ok: false` and `refused`: `declined` (turned down on its approval card), `expired` (the card went unanswered; the call is held for the next message), `pending` (the card is still open) or `held` (no card could be shown). `refused` is absent for a success and for a real failure. |
 | `{ type: "reply", conversation, text, thinking?, files? }` | The turn's answer in full markdown, with its files inline as `{ name, data }` (base64). |
 | `{ type: "failed", conversation, stopped }` | The turn ended without an answer: it failed, the host refused it before it ran (for example when its conversation could not be recorded), or it was stopped. The cause stays in the host's log. |
-| `{ type: "prompt", conversation, prompt }` | The turn asks you: `{ id, kind: "approval", title, message }`, or `{ id, kind: "ask", title, question, options, multi, allowOther }`. |
+| `{ type: "prompt", conversation, prompt }` | The turn asks you: `{ id, kind: "approval", title, message, approval? }`, or `{ id, kind: "ask", title, question, options, multi, allowOther }`. |
 | `{ type: "prompt_closed", conversation, prompt, outcome }` | The prompt closed: `approved`, `declined`, `answered`, `expired`, or `cancelled` (the turn stopped). |
 | `{ type: "notice", notice: { id, text, createdAt, readAt } }` | A durable private inbox entry; `readAt` is `null` until read. Fetch the REST inbox to recover entries missed while offline. |
 | `{ type: "reauth", expiresAt }` | Your token expires soon: send `auth` with a fresh one. |
 | `{ type: "error", code, ref? }` | A frame was refused. `ref` is the `send` id or prompt id it was about. |
+
+An approval prompt's `message` is the card as markdown, as it always was, and its long input values are cut there (each marked with its length). `approval`, when present, is the same approval as data, so a client need not read it back out of the markdown:
+
+```ts
+approval?: {
+  action: string; // what the call would do, in plain words
+  tool: string; // the tool's name
+  input: Record<string, unknown>; // the call's whole input, never cut
+  files?: { path: string; bytes?: number }[]; // files it sends by path; bytes is absent when unreadable
+}
+```
+
+`action` is worded in the host's locale (it is the same text as the card's bold line); `tool`, `input` and `files` are not. A client that knows `approval` shows it and may fall back to `message`; one that does not keeps showing `title` and `message`. A prompt sent again on reconnect carries the same `approval`.
 
 Error codes: `bad_frame` (it does not parse, its text is blank or too long, or an answer the question does not allow), `unknown_conversation`, `forbidden` (someone else's conversation or prompt, or an approval above your tier), `unknown_persona` (none of that kind you may open), `unknown_prompt`, `too_many_conversations` (you hold `unusedConversationsPerPrincipal` conversations you have not written in, or opened `newConversationsPerHour` in the last hour), `unknown_attachment` (a `send` named a file that is not waiting for you in that conversation: never uploaded, uploaded to another conversation, already used by a message, or deleted after its time; the whole message is refused and nothing is run), `attachment_quota` (the files would take what your messages keep past `usedAttachmentBytesPerPrincipal`; the whole message is refused and the files stay waiting), and `busy` (you have `turnsPerPrincipal` turns running or queued, or the conversation already has a turn queued behind its running one; the message was not taken, so send it again once a turn ends).
 

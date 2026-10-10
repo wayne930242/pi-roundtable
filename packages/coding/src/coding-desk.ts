@@ -9,6 +9,7 @@ import type {
 import {
 	AgentError,
 	approvalCard,
+	approvalDetails,
 	type DispatchThread,
 	type DispatchThreads,
 	InterimPoster,
@@ -287,6 +288,9 @@ export class CodingDesk {
 							`${slot.asker} requests approval`,
 						approvalCard(call),
 						controller.signal,
+						undefined,
+						undefined,
+						approvalDetails(call),
 					);
 					if (decision === "approved" || decision === "declined")
 						answer = decision;

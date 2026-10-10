@@ -1,4 +1,9 @@
-import type { AskOption, Tier, TurnProgress } from "pi-roundtable";
+import type {
+	ApprovalDetails,
+	AskOption,
+	Tier,
+	TurnProgress,
+} from "pi-roundtable";
 import type { Notice } from "./notices.ts";
 
 /**
@@ -37,7 +42,19 @@ export interface ReplyFileFrame {
 
 /** An approval or a question the conversation's turn asks the person. */
 export type PromptFrame =
-	| { id: string; kind: "approval"; title: string; message: string }
+	| {
+			id: string;
+			kind: "approval";
+			title: string;
+			/** The card as markdown text, as every client could always show it. */
+			message: string;
+			/**
+			 * The same approval as data, when the server has it: the action, the tool, the call's whole
+			 * input (never cut, unlike `message`) and the files it sends by path with their size in bytes
+			 * (absent when unreadable). A client shows this when it knows it, and `message` otherwise.
+			 */
+			approval?: ApprovalDetails;
+	  }
 	| {
 			id: string;
 			kind: "ask";

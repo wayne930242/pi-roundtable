@@ -1,3 +1,4 @@
+import type { HoldRefusal } from "../domain/progress.ts";
 import { assistantName } from "../i18n/index.ts";
 import type { OwnerQuestion, Prompts } from "../interactions/prompts.ts";
 
@@ -15,6 +16,7 @@ export class PromptSlot {
 	#open = 0;
 	#openSince = 0;
 	#waited = 0;
+	#refused = new Map<string, HoldRefusal>();
 
 	/**
 	 * Binds the turn's prompts; `asker` names who asks, the assistant or an agent. `beforeCard`
@@ -30,6 +32,19 @@ export class PromptSlot {
 		this.#asker = asker;
 		this.#open = 0;
 		this.#waited = 0;
+		this.#refused.clear();
+	}
+
+	/** Notes that a hold refused a tool call, for the progress of the turn to report once. */
+	refuse(toolCallId: string, refusal: HoldRefusal): void {
+		this.#refused.set(toolCallId, refusal);
+	}
+
+	/** Why a hold refused a tool call, once; undefined when it did not. */
+	refusalOf(toolCallId: string): HoldRefusal | undefined {
+		const refusal = this.#refused.get(toolCallId);
+		this.#refused.delete(toolCallId);
+		return refusal;
 	}
 
 	unbind(): void {
@@ -46,9 +61,9 @@ export class PromptSlot {
 		const prompts = this.#prompts;
 		if (!prompts) return undefined;
 		return {
-			confirm: (title, message, signal, minTier, wait) =>
+			confirm: (title, message, signal, minTier, wait, details) =>
 				this.#waiting(() =>
-					prompts.confirm(title, message, signal, minTier, wait),
+					prompts.confirm(title, message, signal, minTier, wait, details),
 				),
 			ask: (title, question: OwnerQuestion, signal, wait) =>
 				this.#waiting(() => prompts.ask(title, question, signal, wait)),

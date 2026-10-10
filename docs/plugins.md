@@ -60,7 +60,7 @@ Use the kit's building blocks for a plugin that runs Pi itself, such as a coding
   `ImagePreparationError.reason` is `byte-limit`, `pixel-limit`, or `invalid-image`; hosts can localize refusals without parsing native decoder errors.
   Ordinary 48 MP images and thin 9000×1 images remain admitted.
   This helper is not a downloader or filesystem validator.
-- Work: `promptSlot` (how a run asks the owner while it works), `workTimeout` (a time limit that does not count the time spent waiting on the owner), `runWorkerTask`, `archiveSessions`, and `approvalCard` and `canonicalJson` for the cards of held actions.
+- Work: `promptSlot` (how a run asks the owner while it works), `workTimeout` (a time limit that does not count the time spent waiting on the owner), `runWorkerTask`, `archiveSessions`, and `approvalCard`, `approvalDetails` and `canonicalJson` for the cards of held actions.
   `InterimPoster(posts, { logger, channel, primaryChars?, editMs? })` posts a run's [interim text](#interim-text-what-a-turn-writes-before-its-final-answer) to an `InterimPosts`, such as a dispatch thread's `interim`: feed it `messageEnd(message)` and `toolStart(name)` from the session's events, bind `() => poster.flush()` as the slot's `beforeCard`, and `await poster.flush()` before the final report.
 - Diagnostics: `scrubDiagnostic(text, max = 600)` masks credentials (URL userinfo, token shapes, secret-named assignments and JSON fields, `Authorization`/`Cookie`/`x-api-key` headers, JWTs, PEM blocks), turns control characters other than tab and newline into spaces, and cuts the result at `max` characters.
   It scans only the first `max * 4` characters (at least 4,096), in linear time, so pass it git, gh or provider error text before showing that text to a user.
@@ -648,7 +648,7 @@ A Pi package should use the host's peer dependency on `pi-roundtable`, not bundl
 Transient `SessionContext.runTask` tasks return only text and cannot attach to their parent's reply.
 
 The model attaches a file it already has on disk with the core's `attach_file({ path, filename? })`. A session with a workspace (`SessionContext.workspace`, an agent's) registers it; the path must resolve, symlinks followed, inside the workspace or the scratch dir, a relative path resolves in the workspace, and `filename` defaults to the path's base name. It queues the file with `attachReplyFile`, so `REPLY_FILE_LIMITS` apply and a surface without reply files refuses it as a tool error; its result tells the model the file will appear with its reply. It holds nothing, since it only posts in the channel the turn answers in, and its tier defaults to the owner, like any tool the core's table does not name.
-The Discord tools that upload, `discord_send_message` and `discord_edit_message`, take each file as exactly one of `path` (a local file, read when the call runs, with the same roots; `filename` defaults to its base name) or `dataBase64` with a `filename`, at most 8 MiB in all. A session without a workspace takes only `dataBase64`, and so does remote MCP, whose schemas stay inline only. A path outside the roots, a missing file, or a directory is a tool error naming the path. A held call's card (`approvalCard(call, workspace?)`) lists each file it sends by path with the file's size now, never its bytes.
+The Discord tools that upload, `discord_send_message` and `discord_edit_message`, take each file as exactly one of `path` (a local file, read when the call runs, with the same roots; `filename` defaults to its base name) or `dataBase64` with a `filename`, at most 8 MiB in all. A session without a workspace takes only `dataBase64`, and so does remote MCP, whose schemas stay inline only. A path outside the roots, a missing file, or a directory is a tool error naming the path. A held call's card (`approvalCard(call, workspace?, limits?)`) lists each file it sends by path with the file's size now, never its bytes, and cuts each string value of the input longer than `limits.valueChars` (200) to its start plus `… [N chars]`, with `limits.totalChars` (1,500) as the cap on the whole input. `approvalDetails(call, workspace?)` gives the same call as data (`{ action, tool, input, files? }`, the whole input, files as `{ path, bytes? }`); the gate passes it to `Prompts.confirm` as `details`, for a surface that is not text.
 Calling the helper outside `context.turns.run` or an agent-team turn, or after that turn finishes, throws `ReplyFileError`; direct standalone runtime calls have no reply collector.
 Await work that produces files before returning from the tool.
 A standalone isolated worker may wrap its complete awaited turn in `withReplyFiles(supported, run)` from the main entry.
@@ -2365,7 +2365,7 @@ The agent server claims only `discord:` keys, so claims on your surface's channe
 | `react`, `unreact` | Adds or removes the bot's reaction on a message | no marks on queued or steered messages |
 | `prompts(channel, scope?)` | How those the turn's `PromptScope` names approve a held action or answer `ask_user` inside a running turn, as `Prompts`: `confirm` and `ask`; without a scope, the owners | the action is held until a message approves it |
 | `interim(channel)` | Where a running turn posts the text it writes before its final answer, as `InterimPosts`: `post(text)` sends one message of at most 2000 characters and resolves to an `InterimMessage` whose `edit(text)` changes it in place | only the final reply is posted |
-| `progress(channel, event)` | Shows a turn run through `context.turns` as it goes, such as a live preview in a web chat. `event` is a `TurnProgress`: `{ type: "text", delta }` (the reply's text, joined over 250 ms and always sent before a tool event, never the thinking), `{ type: "tool_start", id, tool, preview? }` (a one-line preview of the arguments, at most 80 characters, never their full text), or `{ type: "tool_end", id, tool, ok }`. The final reply still comes through `sendReply`; a rejection is logged and the turn goes on | only the final reply is shown |
+| `progress(channel, event)` | Shows a turn run through `context.turns` as it goes, such as a live preview in a web chat. `event` is a `TurnProgress`: `{ type: "text", delta }` (the reply's text, joined over 250 ms and always sent before a tool event, never the thinking), `{ type: "tool_start", id, tool, preview? }` (a one-line preview of the arguments, at most 80 characters, never their full text), or `{ type: "tool_end", id, tool, ok, refused? }` (`refused`, only on a failed end that a hold refused, says how: `declined` on its approval card, `expired` when the card went unanswered, `pending` while the card stays open, or `held` when no card could be shown; it is absent for a success and for a real failure). The final reply still comes through `sendReply`; a rejection is logged and the turn goes on | only the final reply is shown |
 
 Each message a surface delivers says who wrote it in `actor`, the `ActorFacts` the identity service resolves: `provider` and `subject`, such as `discord` and the user id, `name`, `roles` written `<surface>:role:<name>` (left out where the surface does not know them, such as a Discord DM, which is not the same as none), and `legacyId`, the speaker id 0.8 gave the person, so someone carried over keeps their principal.
 A surface that leaves `actor` out has it read from `authorId`, `authorName`, and `authorRoleIds` with its prefix as the provider, and the host warns once that this goes away in 1.0.
@@ -2395,6 +2395,13 @@ A surface's prompts keep these rules:
 On Discord the owners are every owner with a Discord identity, and the primary owner always; a card in a thread mentions the identity that spoke when it is theirs and one of the principal's Discord identities, every Discord identity of the principal when the speaker is none of them, and the owners when it goes to them, so a single owner's cards read as they did in 0.8.
 A principal with no Discord identity, such as the reporter of a background report, answers nothing there, so their card goes to the owners; so does an owner-tier call of a turn whose tier defaulted to owner when its principal is not an owner.
 The web chat shows prompts to the conversation's person only: its owners are not on it, so an approval above that person's tier expires at once whatever the scope says.
+
+#### An approval as data: `ApprovalDetails`
+
+`confirm(title, message, signal?, minTier?, wait?, details?)` takes the approval twice: `message` is the card as markdown text, and the optional `details` (`ApprovalDetails`: `{ action, tool, input, files? }`) is the same held call as data, with its whole input, never cut, and each file it sends by path as `{ path, bytes? }`.
+The confirmation gate and a coding worker's cards pass both.
+A surface that shows text, such as Discord, uses `message` and ignores `details`; the web chat sends `details` to the client as the prompt frame's `approval`, beside the unchanged `title` and `message`.
+A surface or a `Prompts` of your own may ignore it: nothing requires reading it.
 
 #### A prompt that outlives its turn: `PromptWait`
 
@@ -3268,6 +3275,8 @@ Import from the entries listed below; source area files are internal.
 | `AgentTeam` | `pi-roundtable` | type |
 | `AgentTurnScope` | `pi-roundtable` | type |
 | `Approval` | `pi-roundtable` | type |
+| `ApprovalDetails` | `pi-roundtable` | type |
+| `ApprovalFile` | `pi-roundtable` | type |
 | `AskOption` | `pi-roundtable` | type |
 | `AttachmentFailure` | `pi-roundtable` | type |
 | `AttachmentPort` | `pi-roundtable` | type |
@@ -3318,6 +3327,7 @@ Import from the entries listed below; source area files are internal.
 | `HeldCall` | `pi-roundtable` | type |
 | `HoldCheck` | `pi-roundtable` | type |
 | `HoldContext` | `pi-roundtable` | type |
+| `HoldRefusal` | `pi-roundtable` | type |
 | `HoldRule` | `pi-roundtable` | type |
 | `HostEnv` | `pi-roundtable` | type |
 | `HostEnvironment` | `pi-roundtable` | type |
@@ -3534,6 +3544,7 @@ Import from the entries listed below; source area files are internal.
 | `AgentTurnRunner` | `pi-roundtable/kit` | type |
 | `AssistantLike` | `pi-roundtable/kit` | type |
 | `Backlog` | `pi-roundtable/kit` | type |
+| `CardLimits` | `pi-roundtable/kit` | type |
 | `CategoryLayout` | `pi-roundtable/kit` | type |
 | `ChannelMessage` | `pi-roundtable/kit` | type |
 | `ChannelQueue` | `pi-roundtable/kit` | type |
@@ -3581,6 +3592,7 @@ Import from the entries listed below; source area files are internal.
 | `YesNoQuestion` | `pi-roundtable/kit` | type |
 | `activeToolsExtension` | `pi-roundtable/kit` | value |
 | `approvalCard` | `pi-roundtable/kit` | value |
+| `approvalDetails` | `pi-roundtable/kit` | value |
 | `archiveSessions` | `pi-roundtable/kit` | value |
 | `attachmentsOf` | `pi-roundtable/kit` | value |
 | `callScheduleTool` | `pi-roundtable/kit` | value |

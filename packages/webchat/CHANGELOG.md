@@ -5,6 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- An approval `prompt` frame carries an optional `approval: { action, tool, input, files? }`, the held call as data: its whole input, never cut, and the files it sends by path with their size in bytes. `title` and `message` are unchanged, so a client that ignores `approval` works as before. `PromptFrame` types it with core's `ApprovalDetails`.
+- A `progress` frame's `tool_end` event carries an optional `refused: "declined" | "expired" | "pending" | "held"` when a hold refused the call, so a client can tell that from a failed tool without guessing from the order of frames; it is absent for a success and for a real failure.
+
 ## [0.9.6] - 2026-10-10
 
 - Release in lockstep with pi-roundtable 0.9.6; no package-specific behavior changes.

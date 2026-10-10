@@ -1,5 +1,5 @@
 import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
-import type { TurnProgress } from "../domain/progress.ts";
+import type { HoldRefusal, TurnProgress } from "../domain/progress.ts";
 
 /** How long text is joined before it is sent, so a fast stream costs a few events a second. */
 export const PROGRESS_INTERVAL_MS = 250;
@@ -19,6 +19,11 @@ export interface ProgressReporter {
 
 export interface ProgressReporterOptions {
 	intervalMs?: number;
+	/**
+	 * Why a hold refused a tool's call, asked when a failed tool ends and read once; the gate that
+	 * refused it is how a surface tells that from a failure.
+	 */
+	refusalOf?: (toolCallId: string) => HoldRefusal | undefined;
 	/** Runs `run` after `ms`; returns a cancel. Replaceable in tests. */
 	setTimer?: (run: () => void, ms: number) => () => void;
 }
@@ -104,7 +109,14 @@ export function progressReporter(
 		toolEnd(id, tool, isError) {
 			if (closed) return;
 			flush();
-			send({ type: "tool_end", id, tool, ok: !isError });
+			const refused = isError ? options.refusalOf?.(id) : undefined;
+			send({
+				type: "tool_end",
+				id,
+				tool,
+				ok: !isError,
+				...(refused ? { refused } : {}),
+			});
 		},
 		close() {
 			if (closed) return;

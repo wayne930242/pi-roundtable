@@ -322,6 +322,79 @@ test("an approval goes to the conversation's person, only they answer it, and on
 	).toBeUndefined();
 });
 
+test("an approval frame carries the structured details beside its unchanged text", async () => {
+	const { chat, connect, say } = await linked();
+	const conversation = chat.open(speakerOf("ada"), "helper");
+	const ada = connect("ada");
+	await say(ada, { type: "stop", conversation });
+	const prompts = chat.surface.prompts(
+		`web:${conversation}`,
+		promptScope(speakerOf("ada"), "private"),
+	);
+	if (!prompts) throw new Error("no prompts for the conversation's person");
+	const input = { body: "x".repeat(5_000), to: "a@b.c" };
+	const details = {
+		action: "send mail",
+		tool: "mail_send",
+		input,
+		files: [{ path: "a.png", bytes: 2048 }, { path: "gone.png" }],
+	};
+	const asked = prompts.confirm(
+		"Approve?",
+		"**send mail**",
+		undefined,
+		"member",
+		undefined,
+		details,
+	);
+	const plain = prompts.confirm("Approve?", "Send it.", undefined, "member");
+	const frames = ada.frames.flatMap((f) =>
+		f.type === "prompt" && f.prompt.kind === "approval" ? [f.prompt] : [],
+	);
+	expect(frames[0]).toEqual({
+		id: frames[0]?.id ?? "",
+		kind: "approval",
+		title: "Approve?",
+		message: "**send mail**",
+		approval: details,
+	});
+	// The full input travels in the frame, and the open prompt keeps it for a reconnect.
+	expect(frames[0]?.approval?.input).toEqual(input);
+	expect(frames[1]).not.toHaveProperty("approval");
+	for (const frame of frames)
+		await say(ada, { type: "approval", prompt: frame.id, approved: false });
+	expect(await asked).toBe("declined");
+	expect(await plain).toBe("declined");
+});
+
+test("a refused tool's end reaches the client with its reason, and a plain failure has none", async () => {
+	const { chat, connect, say } = await linked();
+	const conversation = chat.open(speakerOf("ada"), "helper");
+	const ada = connect("ada");
+	await say(ada, { type: "stop", conversation });
+	const channel = `web:${conversation}` as const;
+	chat.surface.progress(channel, {
+		type: "tool_end",
+		id: "1",
+		tool: "mail",
+		ok: false,
+		refused: "declined",
+	});
+	chat.surface.progress(channel, {
+		type: "tool_end",
+		id: "2",
+		tool: "mail",
+		ok: false,
+	});
+	const ends = ada.frames.flatMap((f) =>
+		f.type === "progress" && f.event.type === "tool_end" ? [f.event] : [],
+	);
+	expect(ends).toEqual([
+		{ type: "tool_end", id: "1", tool: "mail", ok: false, refused: "declined" },
+		{ type: "tool_end", id: "2", tool: "mail", ok: false },
+	]);
+});
+
 test("a question takes only an answer it allows, and an open prompt is sent again on reconnect", async () => {
 	const { chat, connect, say } = await linked();
 	const conversation = chat.open(speakerOf("ada"), "helper");

@@ -5,16 +5,32 @@ import type {
 	HeldCall,
 	PendingConfirmation,
 } from "../../domain/conversation.ts";
+import type { HoldRefusal } from "../../domain/progress.ts";
 import { type HoldCheck, type HoldContext, higherTier } from "../../holds.ts";
 import { messages } from "../../i18n/index.ts";
 import { type OwnerIdentity, ownerWords } from "../../identity.ts";
-import type { LateAnswer, Prompts } from "../../interactions/prompts.ts";
+import type {
+	ApprovalDetails,
+	LateAnswer,
+	Prompts,
+} from "../../interactions/prompts.ts";
 import type { Speaker } from "../../speakers.ts";
 import type { ToolTiers } from "../../tool-tiers.ts";
 import type { PromptSlot } from "../prompt-slot.ts";
 
-/** How much of a held call's input its approval card shows. */
+/** How many characters of one string value in a held call's input its approval card shows. */
+const CARD_VALUE_CHARS = 200;
+
+/** How many characters of the whole input its approval card shows, at most. */
 const CARD_INPUT_CHARS = 1_500;
+
+/** What an approval card shows of a call's input; see `approvalCard`. */
+export interface CardLimits {
+	/** Longest string value kept whole, at any depth; a longer one is cut and marked with its length. */
+	valueChars?: number;
+	/** Longest input shown, after the values are cut; the rest is dropped. */
+	totalChars?: number;
+}
 
 /** Held actions older than this cannot be approved any more. */
 export const CONFIRMATION_TTL_MS = 24 * 3_600_000;
@@ -153,38 +169,47 @@ export class ConfirmationGate {
 
 	/**
 	 * `review`, plus whether a card's approval released the call, so its result can say so:
-	 * the card's own message is shown to the person, never to the model.
+	 * the card's own message is shown to the person, never to the model. When a hold refuses the
+	 * call, `refused` says how, for the turn's progress to report beside the failed result.
 	 */
 	async decide(
 		tool: string,
 		input: Record<string, unknown>,
 		ask?: { prompts: Prompts; asker: string; signal?: AbortSignal },
-	): Promise<{ reason?: string; approvedOnCard?: true }> {
+	): Promise<{
+		reason?: string;
+		approvedOnCard?: true;
+		/** Why a hold refused the call, for a surface that tells that from a failure; absent when it ran or the turn stopped. */
+		refused?: HoldRefusal;
+	}> {
 		const call = this.#needing(tool, input);
 		if (!call) return {};
-		if (!ask) return { reason: this.#record(call) };
+		if (!ask) return { reason: this.#record(call), refused: "held" };
 		const answer = await ask.prompts.confirm(
 			messages().confirmTitle(ask.asker),
 			approvalCard(call, this.#fileRoot),
 			ask.signal,
 			higherTier(this.#tiers?.minTier(call.tool), call.minTier),
 			{ late: (late) => this.#late(call, late) },
+			approvalDetails(call, this.#fileRoot),
 		);
 		if (answer === "approved") return { approvedOnCard: true };
 		if (answer === "pending") {
 			const o = ownerWords(this.#addressee);
 			return {
 				reason: `Awaiting ${o.name}'s approval: this would ${call.action}. Its card stays open, and the call did not run. Do not retry it or ask again in this turn. End your turn now: say briefly that you are waiting for ${o.his} approval on the card. When ${o.he} answers, a new turn tells you.`,
+				refused: "pending",
 			};
 		}
 		if (answer === "declined") {
 			const o = ownerWords(this.#addressee);
 			return {
 				reason: `${o.name} declined this on its approval card: it would ${call.action}. Do not retry it; go on without it, or ask ${o.him} what ${o.he} wants instead.`,
+				refused: "declined",
 			};
 		}
 		if (answer === "cancelled") return { reason: "The turn was stopped." };
-		return { reason: this.#record(call) };
+		return { reason: this.#record(call), refused: "expired" };
 	}
 
 	/**
@@ -262,17 +287,70 @@ export function confirmedTurnText(
 
 /**
  * What an approval card says: the held action's words, the exact call, and each file it sends by
- * path with the file's size now; relative paths resolve against `workspace`.
+ * path with the file's size now; relative paths resolve against `workspace`. A string value in
+ * the input longer than `limits.valueChars` is cut and marked with its length, so one long value
+ * does not push the keys after it out of the card; `limits.totalChars` caps what is left.
  */
-export function approvalCard(call: HeldCall, workspace?: string): string {
-	const input =
-		call.input.length > CARD_INPUT_CHARS
-			? `${call.input.slice(0, CARD_INPUT_CHARS)}…`
-			: call.input;
+export function approvalCard(
+	call: HeldCall,
+	workspace?: string,
+	limits: CardLimits = {},
+): string {
+	const total = limits.totalChars ?? CARD_INPUT_CHARS;
+	const shown = cutValues(call.input, limits.valueChars ?? CARD_VALUE_CHARS);
+	const input = shown.length > total ? `${shown.slice(0, total)}…` : shown;
 	const files = pathFiles(call.input).map(
 		(path) => `\n-# ${messages().cardFile(path, fileSize(path, workspace))}`,
 	);
 	return `**${call.action}**\n-# \`${call.tool}\`\n\`\`\`json\n${input.replaceAll("```", "`\u200b``")}\n\`\`\`${files.join("")}`;
+}
+
+/** The call's input as JSON with each string longer than `limit` cut and marked `… [N chars]`; the input itself when none is. */
+function cutValues(input: string, limit: number): string {
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(input);
+	} catch {
+		return input;
+	}
+	let cut = false;
+	const shown = JSON.stringify(parsed, (_key, v: unknown) => {
+		if (typeof v !== "string" || v.length <= limit) return v;
+		cut = true;
+		return `${v.slice(0, limit)}… [${v.length} chars]`;
+	});
+	return cut ? shown : input;
+}
+
+/**
+ * A held call as data for a card that is not text: the action, the tool, the whole input, and
+ * each file it sends by path with its size now (absent when unreadable). Unlike the text card,
+ * nothing is cut and nothing is worded for a locale.
+ */
+export function approvalDetails(
+	call: HeldCall,
+	workspace?: string,
+): ApprovalDetails {
+	const files = pathFiles(call.input).map((path) => {
+		const bytes = fileSize(path, workspace);
+		return bytes === undefined ? { path } : { path, bytes };
+	});
+	return {
+		action: call.action,
+		tool: call.tool,
+		input: parsedInput(call.input),
+		...(files.length > 0 ? { files } : {}),
+	};
+}
+
+/** A call's input object; `{}` for input that is not one (a held call's always is). */
+function parsedInput(input: string): Record<string, unknown> {
+	try {
+		const parsed: unknown = JSON.parse(input);
+		return isPlainObject(parsed) ? parsed : {};
+	} catch {
+		return {};
+	}
 }
 
 /** The paths of a call's `files` entries that name one. */
@@ -324,12 +402,13 @@ export function confirmationGateExtension(
 				ask = { prompts, asker: slot.asker };
 				if (ctx.signal) ask.signal = ctx.signal;
 			}
-			const { reason, approvedOnCard } = await gate.decide(
+			const { reason, approvedOnCard, refused } = await gate.decide(
 				event.toolName,
 				event.input as Record<string, unknown>,
 				ask,
 			);
 			if (approvedOnCard) approved.add(event.toolCallId);
+			if (refused) slot?.refuse(event.toolCallId, refused);
 			return reason ? { block: true, reason } : undefined;
 		});
 	};

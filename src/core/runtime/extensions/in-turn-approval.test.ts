@@ -237,6 +237,67 @@ describe("in-turn approval", () => {
 	});
 });
 
+describe("a refusal the gate makes", () => {
+	/** What the slot recorded for the call after the gate decided it. */
+	async function refusalOf(
+		answer: Approval | "no card",
+		approvedCall = false,
+	): Promise<string | undefined> {
+		const gate = new ConfirmationGate(holds, OWNER);
+		const slot = promptSlot();
+		slot.bind(
+			answer === "no card" ? undefined : answering(answer).prompts,
+			"helper",
+		);
+		gate.beginTurn("workspace", false);
+		const { call } = gateHandlers(gate, slot);
+		if (approvedCall) await call("list-calendars", {});
+		else await call(MAIL, send);
+		return slot.refusalOf("call-1");
+	}
+
+	test("is named on the slot by the card's answer, for the progress of the call", async () => {
+		expect(await refusalOf("declined")).toBe("declined");
+		expect(await refusalOf("expired")).toBe("expired");
+		expect(await refusalOf("pending")).toBe("pending");
+		expect(await refusalOf("no card")).toBe("held");
+	});
+
+	test("is not named for an approved call, a call that needs no card, or a stopped turn", async () => {
+		expect(await refusalOf("approved")).toBeUndefined();
+		expect(await refusalOf("declined", true)).toBeUndefined();
+		expect(await refusalOf("cancelled")).toBeUndefined();
+	});
+
+	test("is spent when read, and does not outlive a new turn on the slot", async () => {
+		const gate = new ConfirmationGate(holds, OWNER);
+		const slot = promptSlot();
+		slot.bind(answering("declined").prompts, "helper");
+		gate.beginTurn("workspace", false);
+		await gateHandlers(gate, slot).call(MAIL, send);
+		expect(slot.refusalOf("call-1")).toBe("declined");
+		expect(slot.refusalOf("call-1")).toBeUndefined();
+		await gateHandlers(gate, slot).call(MAIL, send);
+		slot.bind(answering("declined").prompts, "helper");
+		expect(slot.refusalOf("call-1")).toBeUndefined();
+	});
+
+	test("the gate says why it refused in decide's answer", async () => {
+		const gate = new ConfirmationGate(holds, OWNER);
+		gate.beginTurn("workspace", false);
+		const declined = await gate.decide(MAIL, send, {
+			prompts: answering("declined").prompts,
+			asker: "helper",
+		});
+		expect(declined.refused).toBe("declined");
+		const approved = await gate.decide(MAIL, send, {
+			prompts: answering("approved").prompts,
+			asker: "helper",
+		});
+		expect(approved.refused).toBeUndefined();
+	});
+});
+
 describe("PromptSlot", () => {
 	test("counts the time a turn waits on open cards", async () => {
 		const slot = promptSlot();

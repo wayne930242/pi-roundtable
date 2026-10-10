@@ -1,8 +1,10 @@
 // Plugin helpers, versioned like the main entry; see the plugin guide.
 // Running a Pi session of your own: MCP servers for it, its work timeout, its held-action cards.
 
+export type { CardLimits } from "../core/runtime/extensions/confirmation-gate.ts";
 export {
 	approvalCard,
+	approvalDetails,
 	canonicalJson,
 } from "../core/runtime/extensions/confirmation-gate.ts";
 export type { InterimPosterOptions } from "../core/runtime/interim-text.ts";

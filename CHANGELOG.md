@@ -5,6 +5,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `ApprovalDetails` and `ApprovalFile` (`{ action, tool, input, files? }`, files as `{ path, bytes? }`): a held call as data, with its whole input and the size of each file it sends by path. `Prompts.confirm` takes it as a new optional last argument, `details`, beside the card's text `message`; the confirmation gate passes it with every card, and a surface that shows text only ignores it (Discord's cards read as before). `approvalDetails` (`approvalDetails(call, workspace?)`) builds it, exported from `pi-roundtable/kit` beside `approvalCard`.
+- `TurnProgress`'s `tool_end` takes an optional `refused` (`HoldRefusal`: `declined`, `expired`, `pending` or `held`), set when the confirmation gate refused the call and absent for a success and for a real failure. The gate notes its refusal on the turn's `PromptSlot` (`refuse`, `refusalOf`), and `progressReporter` takes a `refusalOf` option to read it; a turn stopped while its card was open reports none. `decide` returns the same as `refused`.
+- `approvalCard(call, workspace?, limits?)` takes `CardLimits` (also exported from the kit), `{ valueChars?, totalChars? }`, to set what its card shows of the input.
+
+### Changed
+
+- An approval card cuts each long string value of the input on its own (at 200 characters by default, marked `… [N chars]` with the original length) instead of cutting the whole JSON at 1,500 characters, so the keys after one long value are no longer lost. The 1,500-character total stays as the cap on what is left. A short input renders exactly as before.
+
 ## [0.9.6] - 2026-10-10
 
 ### Fixed

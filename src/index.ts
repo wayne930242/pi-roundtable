@@ -118,7 +118,7 @@ export type {
 	InterimTextMode,
 } from "./core/domain/interim.ts";
 export type { TurnConversation, TurnRequest } from "./core/domain/ports.ts";
-export type { TurnProgress } from "./core/domain/progress.ts";
+export type { HoldRefusal, TurnProgress } from "./core/domain/progress.ts";
 export type { DrainOptions } from "./core/drain.ts";
 export {
 	HostStoppingError,
@@ -161,6 +161,8 @@ export type {
 export { SYSTEM_PRINCIPAL } from "./core/identity/principal-store.ts";
 export type {
 	Approval,
+	ApprovalDetails,
+	ApprovalFile,
 	AskOption,
 	LateAnswer,
 	OwnerAnswer,

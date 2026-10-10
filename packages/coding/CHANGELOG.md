@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- A held call's approval card is also given to the prompt as `ApprovalDetails`, so a surface that shows structured approvals (web chat) gets the call's whole input; other surfaces show the same text card.
+
 ## [0.9.6] - 2026-10-10
 
 - Release in lockstep with pi-roundtable 0.9.6; no package-specific behavior changes.

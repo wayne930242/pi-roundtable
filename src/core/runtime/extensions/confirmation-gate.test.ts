@@ -3,8 +3,10 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { holdChain } from "../../holds.ts";
+import { setLocale } from "../../i18n/index.ts";
 import type {
 	Approval,
+	ApprovalDetails,
 	Prompts,
 	PromptWait,
 } from "../../interactions/prompts.ts";
@@ -13,6 +15,7 @@ import { TEST_OWNER as OWNER } from "../../testing/owner.ts";
 import { MAIL, MAIL_RULE } from "./confirmation-fixture.ts";
 import {
 	approvalCard,
+	approvalDetails,
 	CONFIRMATION_TTL_MS,
 	ConfirmationGate,
 	canonicalJson,
@@ -195,6 +198,133 @@ test("an approval card names a file sent by path with its size, not its bytes", 
 		),
 	).toContain("File `gone.png` (not found now)");
 	rmSync(dir, { recursive: true, force: true });
+});
+
+describe("an approval card's input", () => {
+	const call = (input: Record<string, unknown>) => ({
+		tool: "mail_send",
+		input: canonicalJson(input),
+		action: "send mail",
+	});
+
+	test("a short input is shown exactly as the call carries it", () => {
+		const held = call({ to: "a@b.c", subject: "hi" });
+		expect(approvalCard(held)).toContain(`\`\`\`json\n${held.input}\n\`\`\``);
+	});
+
+	test("a long value is cut on its own and marked with its length, so later keys stay", () => {
+		const body = "x".repeat(5_000);
+		const card = approvalCard(call({ body, subject: "last key", to: "a@b.c" }));
+		expect(card).toContain("[5000 chars]");
+		expect(card).not.toContain("x".repeat(301));
+		expect(card).toContain('"subject":"last key"');
+		expect(card).toContain('"to":"a@b.c"');
+	});
+
+	test("each value's limit is configurable, and so is the card's total", () => {
+		const held = call({ a: "y".repeat(50), b: "z".repeat(50) });
+		const card = approvalCard(held, undefined, { valueChars: 10 });
+		expect(card).toContain(`${"y".repeat(10)}… [50 chars]`);
+		expect(card).toContain(`${"z".repeat(10)}… [50 chars]`);
+		const short = approvalCard(held, undefined, { totalChars: 20 });
+		expect(short).not.toContain("z".repeat(50));
+		expect(short).toContain("…");
+	});
+
+	test("a nested string is cut like a top-level one", () => {
+		const card = approvalCard(
+			call({ items: [{ text: "n".repeat(900) }], z: 1 }),
+			undefined,
+			{ valueChars: 100 },
+		);
+		expect(card).toContain("[900 chars]");
+		expect(card).toContain('"z":1');
+	});
+});
+
+describe("approvalDetails", () => {
+	test("carries the action, the tool, the whole input object and the files with their sizes", () => {
+		const dir = mkdtempSync(join(tmpdir(), "approval-details-"));
+		writeFileSync(join(dir, "a.png"), new Uint8Array(2048));
+		const body = "x".repeat(5_000);
+		const input = {
+			body,
+			files: [{ path: "a.png" }, { path: "gone.png" }],
+			to: "a@b.c",
+		};
+		const details = approvalDetails(
+			{ tool: "mail_send", input: canonicalJson(input), action: "send mail" },
+			dir,
+		);
+		expect(details).toEqual({
+			action: "send mail",
+			tool: "mail_send",
+			input,
+			files: [{ path: "a.png", bytes: 2048 }, { path: "gone.png" }],
+		});
+		rmSync(dir, { recursive: true, force: true });
+	});
+
+	test("has no files key when the call sends none", () => {
+		const details = approvalDetails({
+			tool: "t",
+			input: canonicalJson({ a: 1 }),
+			action: "do",
+		});
+		expect(details).toEqual({ action: "do", tool: "t", input: { a: 1 } });
+		expect("files" in details).toBe(false);
+	});
+
+	for (const locale of ["en", "zh-TW"] as const) {
+		test(`the structure is the same in ${locale}; only the rendered card changes`, () => {
+			const dir = mkdtempSync(join(tmpdir(), "approval-locale-"));
+			writeFileSync(join(dir, "a.png"), new Uint8Array(2048));
+			const held = {
+				tool: "mail_send",
+				input: canonicalJson({ files: [{ path: "a.png" }], to: "a@b.c" }),
+				action: "send mail",
+			};
+			try {
+				setLocale("en", { assistant: "Roundtable", root: "roundtable" });
+				const english = approvalDetails(held, dir);
+				setLocale(locale, { assistant: "Roundtable", root: "roundtable" });
+				expect(approvalDetails(held, dir)).toEqual(english);
+				expect(approvalCard(held, dir)).toContain(
+					locale === "en" ? "File `a.png` (2.0 KiB)" : "`a.png`",
+				);
+				if (locale === "zh-TW")
+					expect(approvalCard(held, dir)).not.toContain("File `a.png`");
+			} finally {
+				setLocale("en", { assistant: "Roundtable", root: "roundtable" });
+				rmSync(dir, { recursive: true, force: true });
+			}
+		});
+	}
+
+	test("the gate hands a card's prompt the details with the untruncated input beside the text", async () => {
+		const gate = new ConfirmationGate(holds, OWNER);
+		gate.beginTurn("workspace", false);
+		const body = "x".repeat(5_000);
+		let message = "";
+		let seen: ApprovalDetails | undefined;
+		const prompts: Prompts = {
+			confirm: async (_title, text, _signal, _tier, _wait, details) => {
+				message = text;
+				seen = details;
+				return "approved";
+			},
+			ask: async () => undefined,
+		};
+		await gate.decide(
+			MAIL,
+			{ to: "a@b.c", subject: "hi", body },
+			{ prompts, asker: "infra" },
+		);
+		expect(seen?.tool).toBe(MAIL);
+		expect(seen?.input).toEqual({ to: "a@b.c", subject: "hi", body });
+		expect(message).toContain("[5000 chars]");
+		expect(message).not.toContain(body);
+	});
 });
 
 describe("ConfirmationGate with a card that outlives its turn", () => {
