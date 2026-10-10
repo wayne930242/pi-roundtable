@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.9.4] - 2026-10-10
+
 ### Added
 
 - Every image tool also saves its picture as `<scratchDir>/drawings/<tool>-<timestamp>.png`, or under the workspace without a scratch dir, and names the path in its result, so the model can send it on with `attach_file` or a `discord_send_message` file `path`. It still attaches the picture to the reply, and a session with neither root (with pi-roundtable before 0.9.4, any session) only attaches it.

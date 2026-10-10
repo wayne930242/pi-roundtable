@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.9.4] - 2026-10-10
+
 ### Added
 
 - `attach_file({ path, filename? })`: a core tool, in sessions with a workspace (an agent's), that attaches a file from the workspace or the scratch dir to the turn's reply with `attachReplyFile`, under `REPLY_FILE_LIMITS`. Its tier defaults to the owner.
