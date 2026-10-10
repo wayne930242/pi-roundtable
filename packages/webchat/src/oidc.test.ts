@@ -114,10 +114,10 @@ test("refuses an expired token, one not valid yet, and one for another audience 
 	const now = Math.floor(Date.now() / 1000);
 	const verify = verifier({ clockSkewSeconds: 30 });
 	expect(
-		await refusal(verify(await idp.sign({ claims: { exp: now - 31 } }))),
+		await refusal(verify(await idp.sign({ claims: { exp: now - 120 } }))),
 	).toContain("exp");
 	expect(
-		await refusal(verify(await idp.sign({ claims: { nbf: now + 31 } }))),
+		await refusal(verify(await idp.sign({ claims: { nbf: now + 120 } }))),
 	).toContain("nbf");
 	expect(
 		await refusal(verify(await idp.sign({ claims: { aud: "api://other" } }))),

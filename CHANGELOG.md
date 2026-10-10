@@ -17,11 +17,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - `PromptWait` and `LateAnswer`: `Prompts.confirm` and `Prompts.ask` take an optional last `wait`, whose `late(answer)` returns the text of a turn for an answer given after the turn stopped waiting. With it a prompt may resolve the new `Approval` `pending`, or `"pending"` from `ask`, and stay open. Prompts without it, such as a coding worker's, wait for their answer or their turn's stop.
 - `discord.cardGraceSeconds` (default 120): how long a turn waits on its owner card before it goes on without the answer.
+- `HostEnv.scratchDir`: the host's scratch dir, when it has one, so a plugin that runs a shell of its own gives it the same TMPDIR and hold roots as the agents' (`HostEnvironment.scratchDir`; `defineRoundtable` sets it from `scratchDir`).
 
 ### Changed
 
 - The agents' prompt tells them to show a file with `attach_file` or a `discord_send_message` file `path`, and never to read an image or base64 a file to send it.
 - Owner cards no longer expire after 30 minutes, and say nothing of a countdown. A turn waits on its approval or `ask_user` card for the grace period; answered within it, the turn goes on as before. After it, `ask_user` returns that the person has not answered yet and the model ends its turn saying it is waiting, and a held action is blocked as awaiting approval (not held for a text confirmation). The card stays open for the life of the process, and answering it later starts a turn in the same conversation, as a message from whoever answered: a question's turn carries the question and the answer; an approval lets exactly the call shown on the card run once, under the same gate and tier rules, in the turn that tells the model to make it and report the result; a refusal's turn says so. A late card is edited and disabled as before, and a second press does nothing. A stopped turn cancels only a card it still waits on. A coding worker's cards keep the worker waiting, with no deadline. After a restart a card's press says it is no longer valid and to ask again. The `ask_user` description says so instead of "30 minutes".
+
+### Fixed
+
+- An approval card in an owner conversation sizes a file sent by a relative path from the session's own directory, as the send reads it, instead of showing it as not found.
+- The webchat OIDC test of expired and not-yet-valid tokens no longer fails when the clock crosses a second between signing and verifying.
 
 ## [0.9.3] - 2026-10-10
 
