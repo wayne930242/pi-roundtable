@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.9.9] - 2026-10-10
+
 ### Added
 
 - `attachments.retention` (`AttachmentsConfig`, `AttachmentRetention`: `{ maxAgeMs, sweepEveryMs? }`) in the configuration, and `RoundtableOptions.attachments` for a host built by hand: the host removes the files turns used once they are `maxAgeMs` old, counted from the turn that took the file, sweeping when it starts and every `sweepEveryMs` (default one hour, at most `maxAgeMs`). It is off by default, where used files live as long as their conversation. It needs `dataDir`; a setting the host cannot keep stops the start and names it. The logs carry counts only (`files`, `bytes`, `unattributedBytes`), never a file name.
