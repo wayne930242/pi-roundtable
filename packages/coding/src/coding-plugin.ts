@@ -177,6 +177,9 @@ export function coding(options: CodingOptions) {
 					packages: options.workerPackages,
 					agentDir: options.agentDir,
 					workspace: options.workerWorkspace,
+					...(context.env.scratchDir
+						? { scratchDir: context.env.scratchDir }
+						: {}),
 					prompt: options.workerPrompt,
 					blockText: options.workerBlockText,
 					diagnosticChars: options.diagnosticChars,

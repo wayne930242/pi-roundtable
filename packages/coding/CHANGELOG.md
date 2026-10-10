@@ -13,6 +13,10 @@
 
 - A worker's approval card no longer expires after 30 minutes: the worker waits for the answer, with no countdown on the card, until it is stopped; the waiting does not count against `timeoutMs`.
 
+### Fixed
+
+- A worker's shell gets the host's scratch dir (`env.scratchDir`): TMPDIR points to it, and writes, redirects and removals inside it run without the owner's approval, as in the agents' shell. Before, every scratch-dir command a worker ran asked the owner.
+
 ## [0.9.3] - 2026-10-10
 
 - Release in lockstep with pi-roundtable 0.9.3; no package-specific behavior changes.

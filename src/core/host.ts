@@ -55,6 +55,8 @@ export interface HostEnvironment {
 	rootCommand?: string;
 	/** Exported as `PI_CODING_AGENT_DIR` for Pi packages such as pi-web-access; unset leaves the process's own. */
 	agentDir?: string;
+	/** The host's scratch dir, which plugins read as `env.scratchDir`; unset gives them none. */
+	scratchDir?: string;
 }
 
 export interface RoundtableOptions {
@@ -245,12 +247,18 @@ export class Roundtable {
 			assistant = "Roundtable",
 			rootCommand = "roundtable",
 			agentDir,
+			scratchDir,
 		} = this.#options.environment ?? {};
 		setLocale(locale, { assistant, root: rootCommand });
 		setTimeZone(timeZone);
 		// Pi packages such as pi-web-access read their config from the Pi agent directory.
 		if (agentDir !== undefined) process.env.PI_CODING_AGENT_DIR = agentDir;
-		return { locale, timeZone, now: () => new Date() };
+		return {
+			locale,
+			timeZone,
+			now: () => new Date(),
+			...(scratchDir !== undefined ? { scratchDir } : {}),
+		};
 	}
 
 	async #boot(): Promise<void> {

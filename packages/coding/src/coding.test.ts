@@ -3,6 +3,7 @@ import {
 	existsSync,
 	mkdirSync,
 	mkdtempSync,
+	realpathSync,
 	rmSync,
 	symlinkSync,
 	writeFileSync,
@@ -551,6 +552,42 @@ test("real out-of-process Pi worker requests host approval and cannot execute a 
 		expect(() => process.kill(pid, 0)).toThrow();
 		if (answer !== "approved") expect(report).toContain("Do not retry");
 	}
+});
+
+test("a write inside the host's scratch dir runs without asking the owner", async () => {
+	const { shelf, dir } = await fixture();
+	const repoDir = await shelf.add("sample/project");
+	const agentDir = join(dir, "login");
+	mkdirSync(agentDir);
+	const extension = fileURLToPath(
+		new URL("./testing/faux-provider.ts", import.meta.url),
+	);
+	// The faux model writes next to the clone, which here is the scratch dir.
+	const scratchDir = realpathSync(join(repoDir, ".."));
+	const marker = join(scratchDir, "approval-marker.txt");
+	rmSync(marker, { force: true });
+	let reviewed = 0;
+	const worker = new PiCodingWorker({
+		agentDir,
+		packages: [extension],
+		scratchDir,
+	});
+	await worker.run(
+		{
+			...request(),
+			id: 1,
+			startedAt: new Date(),
+			startHead: "",
+			dir: repoDir,
+		},
+		AbortSignal.timeout(10_000),
+		async () => {
+			reviewed++;
+			return "declined";
+		},
+	);
+	expect(reviewed).toBe(0);
+	expect(existsSync(marker)).toBe(true);
 });
 
 test("a host words what the worker reads when a call is declined or held", async () => {

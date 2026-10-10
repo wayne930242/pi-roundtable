@@ -19,6 +19,11 @@ export interface PiCodingWorkerOptions {
 	holds?: HoldCheck;
 	/** Trusted host policy boundary for writes; defaults to the individual clone. */
 	workspace?: string;
+	/**
+	 * The host's scratch dir: the worker's shell runs with TMPDIR pointing to it, and writes and
+	 * removals inside it run without a hold, as in the agents' shell.
+	 */
+	scratchDir?: string;
 	/** Trusted host standing prompt, replacing the generic worker instructions. */
 	prompt?: (dir: string) => string;
 	/**
@@ -75,6 +80,9 @@ export class PiCodingWorker implements CodingWorker {
 			],
 			{
 				cwd: job.dir,
+				...(this.#options.scratchDir
+					? { env: { ...process.env, TMPDIR: this.#options.scratchDir } }
+					: {}),
 				stdin: "ignore",
 				stdout: "ignore",
 				stderr: "ignore",
@@ -134,6 +142,9 @@ export class PiCodingWorker implements CodingWorker {
 							try {
 								const context = {
 									workspace: this.#options.workspace ?? job.dir,
+									...(this.#options.scratchDir
+										? { scratchDir: this.#options.scratchDir }
+										: {}),
 								};
 								const action =
 									shellHoldRule.describe(tool, input, context) ??

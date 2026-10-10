@@ -275,6 +275,7 @@ export async function defineRoundtable(
 				assistant: name,
 				rootCommand: config.slug,
 				agentDir: config.agentDir,
+				scratchDir: config.scratchDir,
 			},
 			database: { url: config.databaseUrl },
 			dataDir: config.dataDir,

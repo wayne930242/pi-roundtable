@@ -271,6 +271,11 @@ export interface HostEnv {
 	readonly timeZone: string;
 	/** The current instant. */
 	now(): Date;
+	/**
+	 * The host's scratch dir, when it has one: the agents' TMPDIR, where writes and removals run
+	 * without a hold. Plugins that run shells of their own (coding workers) give it to them too.
+	 */
+	readonly scratchDir?: string;
 }
 
 /** What the host gives every plugin. */

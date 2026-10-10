@@ -128,7 +128,7 @@ A plugin that replaces `IDENTITY` replaces this too: the declarations are the bu
 | Field | What it is |
 |---|---|
 | `logger` | The host's logger with `plugin: <your name>` on every line; each line is JSON on stdout. Its type is `Logger` (`debug`, `info`, `warn`, `error`, `fatal`, `child(fields)`), which a pino logger satisfies |
-| `env` | The host's own environment for the run: `locale`, `timeZone` (an IANA zone), and `now()`; read the zone from here rather than from the process |
+| `env` | The host's own environment for the run: `locale`, `timeZone` (an IANA zone), `now()`, and `scratchDir` when the host has one; read the zone from here rather than from the process, and give `scratchDir` to a shell the plugin runs itself |
 | `database()` | The host's one PostgreSQL connection (a Bun `SQL`), already migrated |
 | `toolTiers` | What each tool needs; ask it when a tool is used, not during setup |
 | `events` | Where the core reports turns and team changes to every plugin's handlers |
