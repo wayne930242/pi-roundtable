@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-10-10
+
 ### Fixed
 
 - A SIGTERM no longer lets the host keep taking work until it was idle: in 0.9.0 the shutdown drain only waited, so messages, error and webhook reports, schedules, and plugin turns that arrived meanwhile were served and waited for too, and a host that kept getting them never became idle until the one-hour limit (a deploy waited for systemd to kill it). The drain now starts by closing the channel queue: no new turn starts from any source. A message that arrives is not run and its channel gets one short restarting notice (not for a bot's or an integration's message, which is only logged), including a message that waited behind a running turn, and a message is no longer steered into a running turn; a background turn (a schedule's, a delegated task's report, an error report) is skipped; `context.turns.run`, a task for `context.queue.run` that has not started, and a group's next member's turn are refused (`HostStoppingError`, new in `pi-roundtable`), and so are new worker tasks; a remote MCP run fails instead of starting. The scheduler claims nothing during the drain, so a due schedule stays due and fires after the next start if it is less than twelve hours late. Turns already running finish.

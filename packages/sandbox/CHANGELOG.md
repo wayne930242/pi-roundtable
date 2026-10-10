@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.9.1
+
+- Release in lockstep with pi-roundtable 0.9.1; no package-specific behavior changes.
+
 ## 0.9.0
 
 - The sandbox claim answers only an author the host's `access` rules serve: it reads the router's `message.speaker` and ignores a message without one, as it ignores a bot's. A guest who was answered in 0.8 without any tier is now ignored until `access` gives them one, for example `access.members.roles` naming their guild role. The message is still never routed to a host agent.

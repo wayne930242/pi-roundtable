@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-10-10
+
+- Release in lockstep with pi-roundtable 0.9.1; no package-specific behavior changes.
+
 ## [0.9.0] - 2026-10-09
 
 - The extra `skill_list` is offered by whom a conversation serves, not by its kind: only a private conversation whose person holds the owner role (`IDENTITY.tierOf`) gets it. A member's private conversation and any shared conversation, an owner's included, get none, and a failed or absent role lookup offers none. A host that ran its owner's conversation with kind `owner` but without `conversation: { visibility: "private", principalId }`, or without recording it private, loses the list until it does. Needs pi-roundtable 0.9, which gives `SessionContext.conversation`.

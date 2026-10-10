@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-10-10
+
+- Release in lockstep with pi-roundtable 0.9.1; no package-specific behavior changes.
+
 ## [0.9.0] - 2026-10-09
 
 - Admit only owners, each as their own principal: the verifier reports who signed in (`Verdict.actor`, built with `admitAs`), and the console reads the host's `IDENTITY`, never making or claiming a principal. An identity linked to anyone but an owner is refused, and so is one linked to no one, on a single-owner host too, with one warning per identity that names the line to add to `access.owners[].identities` and the `roundtable principal link` command. An identity of the `legacy` provider, an alias 0.9 keeps for a 0.8 id, is refused. A verifier that reports no actor is taken as the primary owner, or `ownerId`, with one warning. The plugin now requires `IDENTITY`.
