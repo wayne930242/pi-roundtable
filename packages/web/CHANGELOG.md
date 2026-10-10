@@ -5,6 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-10-10
+
+- Release in lockstep with pi-roundtable 0.9.2; no package-specific behavior changes.
+- The README named `>=0.8.0 <0.9.0` as the peer range of pi-roundtable; it is `>=0.9.0 <0.10.0`.
+
 ## [0.9.1] - 2026-10-10
 
 - Release in lockstep with pi-roundtable 0.9.1; no package-specific behavior changes.

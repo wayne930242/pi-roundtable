@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-10-10
+
 ### Added
 
 - File attachments. A person uploads a file to one of their conversations with `POST <path>/conversations/<id>/files?name=<file name>` (the body is the file, its `Content-Type` the type; answers 201 `{ file, name, contentType, size }`), then names it in a `send` frame's new `attachments` field. The turn runs with the files as the core's attachments: images reach the model, every file is listed under `## Attachments`, and `read_attachment` and a tool's `turn.attachment()` read them. An rrweb recording is an ordinary `application/json` file.

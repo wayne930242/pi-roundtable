@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-10-10
+
 ### Added
 
 - `context.attachments` (`AttachmentPort`, with `AttachmentUpload`, `AttachmentRefusal` and `AttachmentRefusalCode`): a plugin keeps a file a person uploaded outside a turn until a turn uses it. `save` stages the file for its principal in a conversation, `turnAttachments` turns the named files into the turn's `TurnAttachments` (they move into the conversation's attachment directory, so `read_attachment` and the `## Attachments` block see them, and up to four images reach the model), `remove` and `discardPending` drop files no turn used, and `pendingBytes` counts what a principal has waiting. A staged file is usable only by the principal that saved it, in the conversation it was saved for; a conversation recorded private refuses every other principal (`AttachmentRefusal` with code `forbidden`). It needs the host's `dataDir`, a new `RoundtableOptions` field that `defineRoundtable` sets, and throws a `PluginError` without it.
