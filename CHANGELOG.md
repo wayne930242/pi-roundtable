@@ -5,6 +5,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- A tool's `hold` may return a promise and takes the turn as a second argument, the `ToolTurn` its `run` receives (the speaker, the channel, the agent, and a `signal`), so a plugin can describe a held call with data it fetches as the current speaker, such as an entity's display name looked up with the speaker's own credentials. The confirmation gate awaits it before it posts the card, so the card, `ApprovalDetails.action` (the web chat's `approval.action`) and the held call carry the fetched text. It waits `HOLD_DESCRIBE_TIMEOUT_MS` (10 seconds, exported from `pi-roundtable/kit`); a rejection, a throw or a timeout holds the call under a generic description (`run <tool>`) and never lets it run. `signal` aborts when the turn stops or the wait ends, and a turn stopped meanwhile opens no card and holds nothing. Calls made together are held and shown in the order they were made, each with its own description.
+- `HoldRule.describeInTurn(tool, input, context, turn)`, the same for a hold rule of a plugin's `holdRules`: it may return a promise and the gate asks it instead of `describe` in a turn. `HoldCheck.inTurn` asks a chain's rules as a turn does. `describe` stays required and is what a host with no turn sees.
+
+### Changed
+
+- A hold that throws, not only one that rejects, is now held under a generic description in a turn; it used to fail the tool call. A hold that declares only its arguments and answers at once behaves exactly as before, and is still called with the arguments alone where a host checks the hold with no turn, such as a precheck script's tool call. A hold that declares `turn` is not called there: it is described as `run <tool>` and counts as held.
+
 ## [0.9.7] - 2026-10-10
 
 ### Added

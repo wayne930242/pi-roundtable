@@ -1,10 +1,17 @@
 import type { ExtensionFactory } from "@earendil-works/pi-coding-agent";
+import type { ToolTurn } from "../../define.ts";
 import type {
 	HeldCall,
 	PendingConfirmation,
 } from "../../domain/conversation.ts";
 import type { HoldRefusal } from "../../domain/progress.ts";
-import { type HoldCheck, type HoldContext, higherTier } from "../../holds.ts";
+import {
+	HOLD_DESCRIBE_TIMEOUT_MS,
+	type HoldCheck,
+	type HoldContext,
+	higherTier,
+	isPromise,
+} from "../../holds.ts";
 import { messages } from "../../i18n/index.ts";
 import { type OwnerIdentity, ownerWords } from "../../identity.ts";
 import type { LateAnswer, Prompts } from "../../interactions/prompts.ts";
@@ -26,6 +33,20 @@ export function unexpired(
 		? undefined
 		: pending;
 }
+
+/** The turn a hold that looks things up sees; see `HoldRule.describeInTurn`. */
+export interface HoldTurn {
+	/** Aborts when the turn stops; a call being described then opens no card. */
+	signal?: AbortSignal;
+	/** The turn a hold receives, with `signal` as the signal that ends its wait. */
+	toolTurn(signal: AbortSignal): ToolTurn;
+}
+
+/** The answer of a description wait the turn's stop cut short. */
+const STOPPED = Symbol("stopped");
+
+/** What waiting for a call's description comes to: its text, or the turn stopped first. */
+type Described = string | undefined | typeof STOPPED;
 
 /** JSON with object keys sorted at every level, so equal inputs compare equal. */
 // pi-lens-ignore: no-unknown-parameters — tool input is untyped model JSON; this is where it is read
@@ -79,12 +100,18 @@ export class ConfirmationGate {
 	readonly #tiers: ToolTiers | undefined;
 	/** Where the session's relative file paths resolve, for the sizes a card shows. */
 	readonly #fileRoot: string | undefined;
+	readonly #describeTimeoutMs: number;
+	/** Settles when the descriptions asked for so far have all been used, in the order they were asked. */
+	#describing: Promise<void> = Promise.resolve();
+	/** Descriptions asked for and not used yet. */
+	#undescribed = 0;
 
 	/**
 	 * `holds` decides which calls wait for the owner. With a workspace, the session has a shell,
 	 * and its writes outside the workspace and the context's scratch dir are held too.
 	 * `fileRoot` is the session's working directory, where a card resolves relative file paths;
-	 * it defaults to the workspace.
+	 * it defaults to the workspace. A hold that looks things up gets `describeTimeoutMs` to answer
+	 * (`HOLD_DESCRIBE_TIMEOUT_MS` by default) before its call is held under a generic description.
 	 */
 	constructor(
 		holds: HoldCheck,
@@ -93,7 +120,9 @@ export class ConfirmationGate {
 		context: HoldContext = {},
 		tiers?: ToolTiers,
 		fileRoot?: string,
+		describeTimeoutMs = HOLD_DESCRIBE_TIMEOUT_MS,
 	) {
+		this.#describeTimeoutMs = describeTimeoutMs;
 		this.#tiers = tiers;
 		this.#fileRoot = fileRoot ?? context.workspace;
 		this.#holds = holds;
@@ -144,26 +173,32 @@ export class ConfirmationGate {
 		tool: string,
 		input: Record<string, unknown>,
 		ask?: { prompts: Prompts; asker: string; signal?: AbortSignal },
+		turn?: HoldTurn,
 	): Promise<string | undefined> {
-		return (await this.decide(tool, input, ask)).reason;
+		return (await this.decide(tool, input, ask, turn)).reason;
 	}
 
 	/**
 	 * `review`, plus whether a card's approval released the call, so its result can say so:
 	 * the card's own message is shown to the person, never to the model. When a hold refuses the
 	 * call, `refused` says how, for the turn's progress to report beside the failed result.
+	 * With `turn`, a hold that looks things up as the turn's speaker is waited for before any card
+	 * opens, and a turn that stops meanwhile opens none.
 	 */
 	async decide(
 		tool: string,
 		input: Record<string, unknown>,
 		ask?: { prompts: Prompts; asker: string; signal?: AbortSignal },
+		turn?: HoldTurn,
 	): Promise<{
 		reason?: string;
 		approvedOnCard?: true;
 		/** Why a hold refused the call, for a surface that tells that from a failure; absent when it ran or the turn stopped. */
 		refused?: HoldRefusal;
 	}> {
-		const call = this.#needing(tool, input);
+		const found = this.#needingIn(tool, input, turn);
+		const call = isPromise(found) ? await found : found;
+		if (call === STOPPED) return { reason: "The turn was stopped." };
 		if (!call) return {};
 		if (!ask) return { reason: this.#record(call), refused: "held" };
 		const answer = await ask.prompts.confirm(
@@ -210,10 +245,112 @@ export class ConfirmationGate {
 
 	/** The call when it needs the owner's confirmation and no approval releases it. */
 	#needing(tool: string, input: Record<string, unknown>): HeldCall | undefined {
-		const context = this.#context;
-		const action = this.#holds(tool, input, context);
-		if (!action) return undefined;
-		const minTier = this.#holds.approvalTier?.(tool, input, context);
+		const action = this.#holds(tool, input, this.#context);
+		return action ? this.#unlessApproved(tool, input, action) : undefined;
+	}
+
+	/**
+	 * `#needing` inside a turn, where a hold may look things up first: the call when it needs the
+	 * owner's confirmation, or `STOPPED` when the turn stopped while its description was awaited.
+	 * It answers at once when every hold asked does and no earlier call is still being described.
+	 */
+	#needingIn(
+		tool: string,
+		input: Record<string, unknown>,
+		turn: HoldTurn | undefined,
+	):
+		| HeldCall
+		| undefined
+		| typeof STOPPED
+		| Promise<HeldCall | undefined | typeof STOPPED> {
+		const inTurn = this.#holds.inTurn;
+		if (!turn || !inTurn) return this.#needing(tool, input);
+		const controller = new AbortController();
+		if (turn.signal?.aborted) controller.abort();
+		let answer: string | undefined | Promise<string | undefined>;
+		try {
+			answer = inTurn.call(
+				this.#holds,
+				tool,
+				input,
+				this.#context,
+				turn.toolTurn(controller.signal),
+			);
+		} catch {
+			answer = messages().holdGeneric(tool);
+		}
+		const described: Described | Promise<Described> = isPromise(answer)
+			? this.#awaited(answer, tool, controller, turn.signal)
+			: answer;
+		return this.#inOrder(described, (action) => {
+			if (action === STOPPED) return STOPPED;
+			return action ? this.#unlessApproved(tool, input, action) : undefined;
+		});
+	}
+
+	/**
+	 * What a hold that answers later comes to: its text; the generic description when it rejects or
+	 * outlasts the timeout, so the call is still held; `STOPPED` when the turn stops first. Whatever
+	 * the hold is still doing is aborted when the wait ends.
+	 */
+	#awaited(
+		answer: Promise<string | undefined>,
+		tool: string,
+		hold: AbortController,
+		stop: AbortSignal | undefined,
+	): Promise<Described> {
+		return new Promise<Described>((resolve) => {
+			const onStop = () => end(STOPPED);
+			const timer = setTimeout(
+				() => end(messages().holdGeneric(tool)),
+				this.#describeTimeoutMs,
+			);
+			let ended = false;
+			const end = (described: Described) => {
+				if (ended) return;
+				ended = true;
+				clearTimeout(timer);
+				stop?.removeEventListener("abort", onStop);
+				hold.abort();
+				resolve(described);
+			};
+			// Handled first, so a rejection after the wait ended is never left unhandled.
+			answer.then(end, () => end(messages().holdGeneric(tool)));
+			if (stop?.aborted) return end(STOPPED);
+			stop?.addEventListener("abort", onStop, { once: true });
+		});
+	}
+
+	/**
+	 * Hands `described` to `use` after every description asked for before it has been used, so
+	 * calls made together are held, and their cards opened, in the order they were made whichever
+	 * description comes back first.
+	 */
+	#inOrder<T, R>(
+		described: T | Promise<T>,
+		use: (described: T) => R,
+	): R | Promise<R> {
+		if (this.#undescribed === 0 && !isPromise(described)) return use(described);
+		this.#undescribed++;
+		const used = this.#describing.then(() => described).then(use);
+		this.#describing = used.then(
+			() => {
+				this.#undescribed--;
+			},
+			() => {
+				this.#undescribed--;
+			},
+		);
+		return used;
+	}
+
+	/** The call for `action`, unless an approval releases it, which that approval then spends. */
+	#unlessApproved(
+		tool: string,
+		input: Record<string, unknown>,
+		action: string,
+	): HeldCall | undefined {
+		const minTier = this.#holds.approvalTier?.(tool, input, this.#context);
 		const call: HeldCall = {
 			tool,
 			input: canonicalJson(input),
@@ -269,10 +406,14 @@ export function confirmedTurnText(
 	return `(${owner.name} approved the held actions below with this message. Make each call now with exactly this input.)\n${calls}\n\n${text}`;
 }
 
-/** Without a slot, or with an empty one, every call that needs confirmation is held. */
+/**
+ * Without a slot, or with an empty one, every call that needs confirmation is held. `turnOf` builds
+ * the turn a hold that looks things up receives; without it, such a hold is not asked in a turn.
+ */
 export function confirmationGateExtension(
 	gate: ConfirmationGate,
 	slot?: PromptSlot,
+	turnOf?: (signal: AbortSignal) => ToolTurn,
 ): ExtensionFactory {
 	return (pi) => {
 		/** Calls a card's approval released, until their results are back. */
@@ -293,10 +434,14 @@ export function confirmationGateExtension(
 				ask = { prompts, asker: slot.asker };
 				if (ctx.signal) ask.signal = ctx.signal;
 			}
+			const turn: HoldTurn | undefined = turnOf
+				? { toolTurn: turnOf, ...(ctx.signal ? { signal: ctx.signal } : {}) }
+				: undefined;
 			const { reason, approvedOnCard, refused } = await gate.decide(
 				event.toolName,
 				event.input as Record<string, unknown>,
 				ask,
+				turn,
 			);
 			if (approvedOnCard) approved.add(event.toolCallId);
 			if (refused) slot?.refuse(event.toolCallId, refused);

@@ -126,7 +126,11 @@ const notes = definePlugin({
 				description: "Send a note to someone.",
 				parameters: Type.Object({ to: Type.String() }),
 				minTier: "member",
-				hold: ({ to }) => `send a note to ${to}`,
+				// Looks the sender up as the speaker, so the card is built from what the turn fetched.
+				hold: async ({ to }, turn) => {
+					await Bun.sleep(5);
+					return `send a note to ${to} as ${turn.speaker?.name}`;
+				},
 				run: ({ to }) => {
 					sent.push(to);
 					return `Sent to ${to}.`;
@@ -284,7 +288,10 @@ describeDb("a host whose only surface is the web chat", () => {
 		expect(prompt.prompt).toMatchObject({ kind: "approval" });
 		expect(
 			prompt.prompt.kind === "approval" && prompt.prompt.message,
-		).toContain("send a note to team");
+		).toContain("send a note to team as Ada");
+		expect(
+			prompt.prompt.kind === "approval" && prompt.prompt.approval?.action,
+		).toBe("send a note to team as Ada");
 		expect(sent).toEqual([]);
 		ada.send({ type: "approval", prompt: prompt.prompt.id, approved: true });
 		await ada.until((f) => f.some((frame) => frame.type === "reply"));

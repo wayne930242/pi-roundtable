@@ -31,6 +31,7 @@ import { packageDir } from "../shared/package-dir.ts";
 import { readAttachmentExtension } from "../shared/read-attachment-tool.ts";
 import { type Speaker, THE_SPEAKER } from "../speakers.ts";
 import { currentToolNames } from "../tool-tiers.ts";
+import { toolTurn } from "../tool-turn.ts";
 import {
 	CompactionTiers,
 	compactionEngine,
@@ -373,7 +374,9 @@ export class SessionFactory {
 				...(context.workspace
 					? { attachFile: attachFileExtension(context.workspace) }
 					: {}),
-				confirmationGate: confirmationGateExtension(gate, slot),
+				confirmationGate: confirmationGateExtension(gate, slot, (signal) =>
+					toolTurn(context, signal),
+				),
 				askUser: askUserExtension(slot, addressee, () =>
 					turnAddressee(
 						this.#deps.speaker(turnKey),

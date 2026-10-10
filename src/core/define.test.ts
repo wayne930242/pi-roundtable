@@ -1,8 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { definePlugin, defineTool, ToolRefusal } from "./define.ts";
+import {
+	definePlugin,
+	defineTool,
+	ToolRefusal,
+	type ToolTurn,
+} from "./define.ts";
 import { PluginError } from "./errors.ts";
+import { messages } from "./i18n/index.ts";
 import type { SessionContext } from "./sessions.ts";
 import type { Speaker } from "./speakers.ts";
 
@@ -102,6 +108,62 @@ describe("defineTool", () => {
 		);
 		expect(rule?.describe("note_add", { text: "hi" }, {})).toBeUndefined();
 		expect(rule?.describe("other", { text: "rm" }, {})).toBeUndefined();
+	});
+
+	test("a hold that looks things up gets the turn in a turn, and the generic description where there is none", async () => {
+		const seen: ToolTurn[] = [];
+		const tool = defineTool({
+			...note,
+			hold: async (args, turn) => {
+				seen.push(turn);
+				return `save ${args.text} for ${turn.speaker?.name}`;
+			},
+		});
+		const rule = tool.hold;
+		const turn = {
+			speaker,
+			channel: "discord:2",
+			signal: undefined,
+		} as unknown as ToolTurn;
+		expect(
+			await rule?.describeInTurn?.("note_add", { text: "hi" }, {}, turn),
+		).toBe("save hi for Ann");
+		expect(seen).toEqual([turn]);
+		expect(
+			await rule?.describeInTurn?.("other", { text: "hi" }, {}, turn),
+		).toBeUndefined();
+		// Without a turn the hold is not called; the call is still held.
+		expect(rule?.describe("note_add", { text: "hi" }, {})).toBe(
+			messages().holdGeneric("note_add"),
+		);
+		expect(seen).toHaveLength(1);
+	});
+
+	test("a hold that answers later without declaring the turn is held generically where there is none, and its rejection stays quiet", async () => {
+		const tool = defineTool({
+			...note,
+			hold: async () => {
+				throw new Error("directory is down");
+			},
+		});
+		expect(tool.hold?.describe("note_add", { text: "hi" }, {})).toBe(
+			messages().holdGeneric("note_add"),
+		);
+		await Bun.sleep(5);
+	});
+
+	test("a hold that declares only its arguments is called as before in a turn too", async () => {
+		const tool = defineTool({
+			...note,
+			hold: (args) => (args.text === "rm" ? "delete everything" : undefined),
+		});
+		const turn = { speaker } as unknown as ToolTurn;
+		expect(
+			await tool.hold?.describeInTurn?.("note_add", { text: "rm" }, {}, turn),
+		).toBe("delete everything");
+		expect(
+			await tool.hold?.describeInTurn?.("note_add", { text: "hi" }, {}, turn),
+		).toBeUndefined();
 	});
 
 	test("each mistake is refused with the tool's name and the fix", () => {

@@ -230,7 +230,7 @@ approval?: {
 }
 ```
 
-`action` is worded in the host's locale (it is the same text as the card's bold line); `tool`, `input` and `files` are not. A client that knows `approval` shows it and may fall back to `message`; one that does not keeps showing `title` and `message`. A prompt sent again on reconnect carries the same `approval`.
+`action` is worded in the host's locale (it is the same text as the card's bold line, and it carries what a hold that looks things up fetched before the card was posted); `tool`, `input` and `files` are not. A client that knows `approval` shows it and may fall back to `message`; one that does not keeps showing `title` and `message`. A prompt sent again on reconnect carries the same `approval`.
 
 The frame's size is bounded: when `approval` serialized as UTF-8 JSON would pass 256 KiB (`APPROVAL_MAX_BYTES` in `protocol.ts`), every string value of `input` longer than what fits is cut to its start plus `… [N chars]` (N counts code points; a cut never splits a surrogate pair) and `approval.truncated` is `true`. Then `input` is no longer whole: show `message`, or tell the person it is cut. If even the shortest cut cannot fit, `input` is `{}` and `files` are left out.
 

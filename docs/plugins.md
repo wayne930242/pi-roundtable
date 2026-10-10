@@ -714,6 +714,37 @@ export const cleanup = definePlugin({
 ```
 <!-- /example -->
 
+#### A hold that looks things up
+
+A hold may need something it must fetch as the speaker before it can describe the call, such as the display name of the entity an id stands for, read with the speaker's own credentials.
+A tool's `hold` may then return a promise and takes the turn as a second argument: the `ToolTurn` its `run` receives, with the `speaker`, the `channel` and the `agent` of the turn that makes the call.
+
+```ts
+defineTool({
+	name: "ticket_close",
+	description: "Close a ticket.",
+	parameters: Type.Object({ id: Type.String() }),
+	minTier: "member",
+	hold: async ({ id }, turn) => {
+		const ticket = await tickets.get(id, turn.speaker, turn.signal);
+		return `Close ticket ${ticket.title}`;
+	},
+	run: ({ id }) => tickets.close(id),
+});
+```
+
+The gate awaits the description before it posts the card, so the card's bold line, the `action` of `ApprovalDetails` (the web chat's `approval.action`) and the held call all carry the fetched text.
+
+- `turn.signal` aborts when the turn stops, or when the wait ends. A turn stopped while its description is awaited opens no card and holds nothing.
+- The wait lasts `HOLD_DESCRIBE_TIMEOUT_MS` (10 seconds, exported from `pi-roundtable/kit`). A rejection, a throw or a timeout holds the call under a generic description (`run <tool>`, in the host's locale), never lets it run: the owner still sees the exact input on the card.
+- Returning `undefined` after the lookup lets the call run, as for a hold that answers at once.
+- Calls made together are held, and their cards opened, in the order they were made, each with its own description, whichever lookup returns first.
+- A hold must change nothing: it may be called again for the same call, such as when the owner's confirming message makes the call again.
+- A hold that declares only its arguments and answers at once is called as it always was. Where a host checks the hold with no turn, such as the `holds` of a test harness or a [precheck script](#precheck-scripts-prechecks-the-agent-writes)'s tool call, a hold that declares `turn` is not called; it is described as `run <tool>` and so counts as held.
+
+A rule of `holdRules` does the same with `describeInTurn(tool, input, context, turn)`, which may return a promise and which the gate asks instead of `describe` in a turn.
+`describe` is still required and is what a host without a turn sees. `holdChain(rules).inTurn(tool, input, context, turn)` asks the rules as a turn does, in order: each rule's `describeInTurn`, or its `describe` for a rule without one.
+
 A rule whose verdict depends on the input, such as one that holds only a `delete` action, can also answer `mayHold(tool)`: whether it may hold some call of that tool.
 It is asked when the input is not known yet, as for a [precheck script](#precheck-scripts-prechecks-the-agent-writes)'s call whose arguments are computed when it runs; a rule without it is judged by `describe` with an empty input.
 A rule whose held call stands for others can answer `approvalTier(tool, input, context)`: the lowest tier that may approve it when higher than the tool's own. The held call keeps it as `minTier`, and both its card and a confirming message require it. A card is answered, and a confirming message accepted, from the speaker whose turn held the call, when their tier is at least `minTier`, and from the owners where the conversation is shared ([who answers a prompt](#who-answers-a-prompt-promptscope)); nobody else in the channel may approve it. The held call records that speaker as `PendingConfirmation.speakerId` and their principal as `principalId`, so a confirming message from another identity of theirs counts after a restart too; a call held without them is the owners' to approve, and one held before 0.9, without a principal, is matched by `speakerId`.
@@ -2893,7 +2924,7 @@ It returns:
 |---|---|
 | `contribution` | What the plugin added, as the host would collect it: `tools`, `prompt`, `seeds`, `events`, `services`, `http`, and the rest |
 | `tools`, `tiers` | The tool names, and the table that says what tier each needs |
-| `holds` | The plugin's `holdRules` chained as the host links them (`holdChain`): `holds(tool, input, { workspace?, scratchDir? })` returns the description of a call that must be approved first, or `undefined` |
+| `holds` | The plugin's `holdRules` chained as the host links them (`holdChain`): `holds(tool, input, { workspace?, scratchDir? })` returns the description of a call that must be approved first, or `undefined`; `holds.inTurn(tool, input, context, turn)` asks them as a turn does, and returns a promise when a hold looks things up |
 | `runTool(name, args, { speaker, channel, workspace }?)` | Runs a tool the way an agent's turn would, in the channel (default `test:1`) for the speaker, and returns the text the model reads; `workspace` (`{ workspace, scratchDir? }`) is the session's `turn.workspace` |
 | `files` | Accepted files from `runTool`, recorded as `{ channel, file: ReplyFile }`; inject a surface with `supportsFiles: true` and pass its channel to test attachment tools |
 | `events` | The events the plugin itself reported through `context.events`, and those of `context.turns` |
@@ -3606,6 +3637,7 @@ Import from the entries listed below; source area files are internal.
 | `formatModelRef` | `pi-roundtable/kit` | value |
 | `headline` | `pi-roundtable/kit` | value |
 | `holdChain` | `pi-roundtable/kit` | value |
+| `HOLD_DESCRIBE_TIMEOUT_MS` | `pi-roundtable/kit` | value |
 | `COMPACT_HEADROOM_TOKENS` | `pi-roundtable/kit` | value |
 | `CompactionTiers` | `pi-roundtable/kit` | value |
 | `compactionEngine` | `pi-roundtable/kit` | value |

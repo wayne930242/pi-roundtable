@@ -301,6 +301,7 @@
 			"DELEGATE_TOOL",
 			"DELEGATE_TOOL_SPEC",
 			"HARD_COMPACT_TOKENS",
+			"HOLD_DESCRIBE_TIMEOUT_MS",
 			"ImagePreparationError",
 			"InterimPoster",
 			"JEV_COMPACTION_ENGINE",

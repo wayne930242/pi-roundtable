@@ -28,6 +28,7 @@ export function conversationEn(ctx: CatalogContext) {
 		answerReturned: (text: string) => `↩️ Reply:\n${text}`,
 		thinkingAuto: "auto",
 		confirmTitle: (asker: string) => `${asker} wants to run this action`,
+		holdGeneric: (tool: string) => `run ${tool}`,
 		askTitle: (asker: string) => `${asker} has a question for you`,
 		cardFile: (path: string, bytes: number | undefined) =>
 			bytes === undefined
@@ -59,6 +60,7 @@ export function conversationZhTW(
 		answerReturned: (text: string) => `↩️ 回覆：\n${text}`,
 		thinkingAuto: "自動",
 		confirmTitle: (asker: string) => `${asker} 要執行這個動作`,
+		holdGeneric: (tool: string) => `執行 ${tool}`,
 		askTitle: (asker: string) => `${asker} 想問你`,
 		cardFile: (path: string, bytes: number | undefined) =>
 			bytes === undefined

@@ -1,17 +1,14 @@
 import type { Static, TObject } from "typebox";
-import {
-	AttachmentLookupError,
-	openAttachment,
-	type ToolAttachment,
-} from "./attachments/tool-attachment.ts";
+import type { ToolAttachment } from "./attachments/tool-attachment.ts";
 import type { ReplyFile } from "./domain/conversation.ts";
 import { PluginError } from "./errors.ts";
-import type { HoldRule } from "./holds.ts";
+import { type HoldRule, isPromise } from "./holds.ts";
+import { messages } from "./i18n/index.ts";
 import { type RoundtablePlugin, refuseRemovedFields } from "./plugin.ts";
-import { attachReplyFile } from "./reply-files.ts";
 import type { AgentTurnScope, ChannelKey, SessionTool } from "./sessions.ts";
 import { toolError, toolText } from "./shared/tool-result.ts";
 import { type Speaker, TIERS, type Tier } from "./speakers.ts";
+import { toolTurn } from "./tool-turn.ts";
 
 /** Tool names are lowercase words joined by underscores, like every tool the core ships. */
 const TOOL_NAME = /^[a-z][a-z0-9]*(_[a-z0-9]+)*$/;
@@ -64,8 +61,22 @@ export interface ToolSpec<Schema extends TObject> {
 	minTier: Tier;
 	/** Whether agents carry the tool in their turns; default true. */
 	agent?: boolean;
-	/** A short description of what the call would do when it must wait for approval; undefined lets it run. */
-	hold?: (args: Static<Schema>) => string | undefined;
+	/**
+	 * A short description of what the call would do when it must wait for approval; undefined lets it
+	 * run. It may answer later, after looking something up as the turn's speaker, such as a name to
+	 * show instead of an id: `turn` is the turn `run` would get, and its `signal` aborts when the
+	 * turn stops or the wait ends. The owner's approval card waits for it up to
+	 * `HOLD_DESCRIBE_TIMEOUT_MS`; a rejection or a timeout holds the call under a generic
+	 * description, so a hold that fails never lets the call run. It must change nothing.
+	 *
+	 * A host that checks the hold with no turn, such as a precheck script's call, never calls a hold
+	 * that declares `turn`; it sees the generic description. A hold that declares only `args` and
+	 * answers at once is called there as it always was.
+	 */
+	hold?: (
+		args: Static<Schema>,
+		turn: ToolTurn,
+	) => string | undefined | Promise<string | undefined>;
 	run(args: Static<Schema>, turn: ToolTurn): Promise<string> | string;
 }
 
@@ -124,29 +135,10 @@ export function defineTool<Schema extends TObject>(
 					execute: async (_toolCallId, params, signal) => {
 						try {
 							return toolText(
-								await spec.run(params as Static<Schema>, {
-									speaker: context.speaker(),
-									channel: context.turnChannel,
-									agent: context.agent,
-									signal,
-									...(context.workspace
-										? { workspace: context.workspace }
-										: {}),
-									attachFile: attachReplyFile,
-									attachment: async (file) => {
-										if (context.attachmentDir === undefined)
-											throw new ToolRefusal(
-												"this session keeps no attachments",
-											);
-										try {
-											return await openAttachment(context.attachmentDir, file);
-										} catch (error) {
-											if (error instanceof AttachmentLookupError)
-												throw new ToolRefusal(error.message);
-											throw error;
-										}
-									},
-								}),
+								await spec.run(
+									params as Static<Schema>,
+									toolTurn(context, signal),
+								),
 							);
 						} catch (error) {
 							if (error instanceof ToolRefusal) return toolError(error.message);
@@ -170,9 +162,32 @@ export function defineTool<Schema extends TObject>(
 		hold: {
 			name: `tool:${name}`,
 			describe: (tool, input) =>
-				tool === name ? hold(input as Static<Schema>) : undefined,
+				tool === name ? holdWithoutTurn(name, hold, input) : undefined,
+			describeInTurn: (tool, input, _context, turn) =>
+				tool === name ? hold(input as Static<Schema>, turn) : undefined,
 		},
 	};
+}
+
+/**
+ * A tool's hold as a host with no turn sees it: called with the arguments alone, unless it declares
+ * the turn, and described generically when it needs the turn or answers later.
+ */
+function holdWithoutTurn<Schema extends TObject>(
+	name: string,
+	hold: NonNullable<ToolSpec<Schema>["hold"]>,
+	input: Record<string, unknown>,
+): string | undefined {
+	if (hold.length >= 2) return messages().holdGeneric(name);
+	const answer = (
+		hold as (
+			args: Static<Schema>,
+		) => string | undefined | Promise<string | undefined>
+	)(input as Static<Schema>);
+	if (!isPromise(answer)) return answer;
+	// Its answer is not waited for here; a rejection must not surface on its own.
+	answer.catch(() => undefined);
+	return messages().holdGeneric(name);
 }
 
 /**

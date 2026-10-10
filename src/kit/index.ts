@@ -52,7 +52,7 @@ export {
 	THINKING_LEVELS,
 	thinkingLabel,
 } from "./domain.ts";
-export { holdChain } from "./holds.ts";
+export { HOLD_DESCRIBE_TIMEOUT_MS, holdChain } from "./holds.ts";
 export type {
 	JevCompactInput,
 	JevCompactOptions,
