@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.9.7] - 2026-10-10
+
 ### Added
 
 - A held call's approval card is also given to the prompt as `ApprovalDetails`, so a surface that shows structured approvals (web chat) gets the call's whole input; other surfaces show the same text card.

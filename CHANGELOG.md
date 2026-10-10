@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.9.7] - 2026-10-10
+
 ### Added
 
 - `ApprovalDetails` and `ApprovalFile` (`{ action, tool, input, files? }`, files as `{ path, bytes? }`): a held call as data, with its whole input and the size of each file it sends by path. `Prompts.confirm` takes it as a new optional last argument, `details`, beside the card's text `message`; the confirmation gate passes it with every card, and a surface that shows text only ignores it (Discord's cards read as before). `approvalDetails` builds it (`approvalDetails(call, workspace?)`), exported from `pi-roundtable/kit` beside `approvalCard`.
