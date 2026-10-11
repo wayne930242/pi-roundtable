@@ -5,6 +5,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Client calls: a connection may declare functions it can run for the assistant's tools, and a tool asks it through `turn.client` (`ClientPort`, new in pi-roundtable 0.9.11; on an older core the field is ignored and tools see no client). The client sends `client_hello` (`{ version: 1, tools }`); a call becomes `client_call` (`{ conversation, call, name, args, timeoutMs }`) on the one connection the turn's message arrived on, never the person's others, and is answered with `client_result` (`{ call, ok, value, parts? }` or `{ call, ok: false, code, message? }`) from that same connection; `client_cancel` (`turn_stopped`, `timeout` or `turn_ended`) tells the client to stop. A connection that never sends `client_hello` is unaffected: its turns carry no client.
+- `PUT <path>/conversations/<id>/client-calls/<call>/parts/<n>`: the binary parts of an answer, such as a screenshot, are uploaded over REST before the answer names them, since a frame stays at 64 KiB. Only `image/jpeg`, `image/png` and `image/webp` are accepted, with their bytes checked against the type.
+- `ready.clientCalls` (`{ timeoutMs, maxTimeoutMs, maxValueBytes, maxParts, maxPartBytes }`) advertises what a call may take; a server before this omits it. The error code `unknown_call` answers a `client_result` for a call not open on that connection.
+- `limits.clientCalls`: `timeoutMs` (default 30 seconds), `maxTimeoutMs` (60 seconds), `maxValueBytes` (48 KiB), `maxParts` (2), `maxPartBytes` (2 MiB) and `perMinute` (60 calls a minute per connection). `ClientCallLimits` types it. One call is open on a connection at a time; a closed connection ends its call as `disconnected`, with no second chance after a reconnect.
+
+### Changed
+
+- The default `rate.messages` is 120 frames a minute per socket, up from 60, since a client's answers count with the person's own frames. `maxMessageBytes` stays 64 KiB.
+- The REST preflight also allows `PUT`.
+
 ## [0.9.10] - 2026-10-10
 
 ### Added

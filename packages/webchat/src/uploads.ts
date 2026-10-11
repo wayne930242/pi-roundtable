@@ -93,7 +93,7 @@ function safeName(name: string | null): string {
 }
 
 /** The request body, or undefined once it passes `max` bytes; the rest of the stream is not read. */
-async function readLimited(
+export async function readLimited(
 	request: Request,
 	max: number,
 ): Promise<Uint8Array | undefined> {

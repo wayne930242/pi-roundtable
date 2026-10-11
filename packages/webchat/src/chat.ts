@@ -22,6 +22,7 @@ import {
 	type TurnResult,
 } from "pi-roundtable";
 import { RateWindow, TurnBudget } from "./budget.ts";
+import { type ClientCallLimits, ClientDesk } from "./client-calls.ts";
 import { type Connection, Connections } from "./connections.ts";
 import {
 	identityActor,
@@ -78,6 +79,8 @@ export interface WebChatLimits extends UploadLimits {
 	promptTimeoutMs: number;
 	/** How long before a token expires the client is asked for a fresh one; default 60 seconds. */
 	reauthLeadMs: number;
+	/** What the assistant's tools may ask a client that declared functions to run. */
+	clientCalls: ClientCallLimits;
 }
 
 export interface WebChatDeps {
@@ -112,6 +115,8 @@ interface Minted {
 
 interface Pending {
 	speaker: Speaker;
+	/** The connection the message arrived on, which a call the turn makes to its client goes to. */
+	connection: Connection;
 	/** The origin of the connection the message arrived on. */
 	origin?: string;
 	persona: WebPersona;
@@ -194,6 +199,8 @@ export class WebChat {
 	readonly uploads: Uploads;
 	readonly connections: Connections;
 	readonly desk: PromptDesk;
+	/** The calls the assistant's tools make to the client that started their turn. */
+	readonly clients: ClientDesk;
 	readonly #deps: WebChatDeps;
 	readonly #personas: Map<string, WebPersona>;
 	/** Conversations opened but not yet written in, so the registry has no record of them. */
@@ -232,6 +239,11 @@ export class WebChat {
 		this.desk = new PromptDesk({
 			send,
 			timeoutMs: deps.limits.promptTimeoutMs,
+		});
+		this.clients = new ClientDesk({
+			limits: deps.limits.clientCalls,
+			send: (connection, frame) => this.connections.send(connection, frame),
+			...(deps.now ? { now: deps.now } : {}),
 		});
 		this.surface = new WebSurface({
 			surface: deps.surface,
@@ -355,6 +367,28 @@ export class WebChat {
 		);
 	}
 
+	/**
+	 * Keeps a binary part of the answer to a call the assistant made to the speaker's client, for the
+	 * conversation it was made in; a Refusal when the conversation is not theirs, a ClientPartRefusal
+	 * when the part is not accepted.
+	 */
+	async clientPart(
+		speaker: Speaker,
+		conversation: string,
+		call: string,
+		index: number,
+		request: Request,
+	): Promise<void> {
+		await this.own(speaker, conversation);
+		await this.clients.receivePart(
+			speaker.principalId,
+			conversation,
+			call,
+			index,
+			request,
+		);
+	}
+
 	/** The speaker's web conversations, the most recently active first. */
 	async list(speaker: Speaker): Promise<ConversationRecord[]> {
 		const records = await this.#deps
@@ -398,6 +432,7 @@ export class WebChat {
 			speaker: { ...speaker },
 			personas: this.personasFor(speaker),
 			attachments: this.uploads.advertised,
+			clientCalls: this.clients.advertised,
 			expiresAt: identity.expiresAt.toISOString(),
 		});
 		for (const frame of this.desk.openFor(speaker.principalId))
@@ -437,6 +472,7 @@ export class WebChat {
 	}
 
 	closed(socket: RouteSocket<Connection>): void {
+		this.clients.closed(socket.data);
 		this.connections.closed(socket.data);
 	}
 
@@ -460,7 +496,9 @@ export class WebChat {
 					? frame.id
 					: frame.type === "approval" || frame.type === "answer"
 						? frame.prompt
-						: undefined;
+						: frame.type === "client_result"
+							? frame.call
+							: undefined;
 			this.connections.send(connection, {
 				type: "error",
 				code: error.code,
@@ -506,6 +544,14 @@ export class WebChat {
 					frame.prompt,
 					frame.approved,
 				);
+				if (refused) throw new Refusal(refused);
+				return;
+			}
+			case "client_hello":
+				connection.clientTools = frame.tools;
+				return;
+			case "client_result": {
+				const refused = this.clients.result(connection, frame);
 				if (refused) throw new Refusal(refused);
 				return;
 			}
@@ -602,6 +648,7 @@ export class WebChat {
 		const messageId = crypto.randomUUID();
 		this.#pending.set(messageId, {
 			speaker,
+			connection,
 			...(connection.origin ? { origin: connection.origin } : {}),
 			persona,
 			title: minted?.title ?? titleOf(text),
@@ -803,31 +850,38 @@ export class WebChat {
 					throw new Refusal("forbidden");
 			}
 			this.#registered.add(channel);
-			await this.#deps.turns().run({
-				channel,
-				kind: persona.kind,
-				text,
-				speaker,
-				...(pending.origin ? { origin: pending.origin } : {}),
-				interactive: true,
-				...(pending.attachments ? { attachments: pending.attachments } : {}),
-				...(persona.selection
-					? {
-							selection: {
-								id: `webchat:${persona.kind}`,
-								...persona.selection,
-							},
-						}
-					: {}),
-				conversation: {
-					visibility: "private",
-					...(pending.fresh && pending.title ? { title: pending.title } : {}),
-				},
-				reply: async (result) => {
-					answered = true;
-					this.#reply(speaker.principalId, conversation, result);
-				},
-			});
+			// What the connection that sent the message can do for the turn's tools, until the turn ends.
+			const client = this.clients.portFor(pending.connection, conversation);
+			try {
+				await this.#deps.turns().run({
+					channel,
+					kind: persona.kind,
+					text,
+					speaker,
+					...(pending.origin ? { origin: pending.origin } : {}),
+					...(client ? { client } : {}),
+					interactive: true,
+					...(pending.attachments ? { attachments: pending.attachments } : {}),
+					...(persona.selection
+						? {
+								selection: {
+									id: `webchat:${persona.kind}`,
+									...persona.selection,
+								},
+							}
+						: {}),
+					conversation: {
+						visibility: "private",
+						...(pending.fresh && pending.title ? { title: pending.title } : {}),
+					},
+					reply: async (result) => {
+						answered = true;
+						this.#reply(speaker.principalId, conversation, result);
+					},
+				});
+			} finally {
+				client?.end();
+			}
 		} catch (error) {
 			// A turn the host refused before it ran, such as one whose conversation could not be
 			// recorded, has no reply: the person is told it failed, and the router logs the cause.

@@ -1,4 +1,5 @@
 export type { WebChatLimits, WebPersona } from "./chat.ts";
+export type { ClientCallLimits } from "./client-calls.ts";
 export type { Notice } from "./notices.ts";
 export type {
 	OidcJwtVerifierOptions,
@@ -15,6 +16,9 @@ export {
 export type { WebChatOptions, WebChatRouteLimits } from "./plugin.ts";
 export { webChat } from "./plugin.ts";
 export type {
+	ClientCallsAdvertised,
+	ClientCancelReason,
+	ClientFailure,
 	ClientFrame,
 	ErrorCode,
 	PersonaSummary,
