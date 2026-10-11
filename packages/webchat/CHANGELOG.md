@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.9.11] - 2026-10-11
+
 ### Added
 
 - Client calls: a connection may declare functions it can run for the assistant's tools, and a tool asks it through `turn.client` (`ClientPort`, new in pi-roundtable 0.9.11; this package needs pi-roundtable 0.9.11 with it, because its source imports types that release adds, so upgrade the two together; on an older core at run time the field is ignored and tools see no client). The client sends `client_hello` (`{ version: 1, tools }`); a call becomes `client_call` (`{ conversation, call, name, args, timeoutMs }`) on the one connection the turn's message arrived on, never the person's others, and is answered with `client_result` (`{ call, ok, value, parts? }` or `{ call, ok: false, code, message? }`) from that same connection; `client_cancel` (`turn_stopped`, `timeout` or `turn_ended`) tells the client to stop. A connection that never sends `client_hello` is unaffected: its turns carry no client.

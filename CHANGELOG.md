@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.9.11] - 2026-10-11
+
 ### Added
 
 - `ToolTurn.client`, `TurnRequest.client`, `ConversationTurnInput.client` and `SessionContext.client()`: what the client that started a turn can do for its tools, as a `ClientPort` (`names`, and `call(name, args, options?)` with `ClientCallOptions`: `{ timeoutMs?, maxValueBytes?, signal? }`). A transport that carries a client able to run functions for a tool, such as the browser extension of a web chat, provides one with `context.turns.run({ ..., client })`; the runtime keeps it with the turn and clears it when the turn ends. `call` never rejects for a transport problem: it resolves `ClientCallResult`, `{ ok: true, value, parts }` with `ClientPart`s (`{ mimeType, data }`, such as a screenshot) or `{ ok: false, error, message }` where `error` is a `ClientCallError`: `no_client`, `refused`, `timeout`, `cancelled`, `disconnected`, `too_large`, `busy` or `failed`. One call is open on a client at a time. The core adds the turn's signal to every call, so stopping the turn cancels a call in flight. A turn whose transport gives none (Discord, a schedule, an agent's turn, the CLI) leaves it undefined, and `SessionContext.client` is optional on the type so a context built before this still type-checks.
