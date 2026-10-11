@@ -309,6 +309,14 @@ test("runTool runs in the channel and for the speaker it is given, test:1 by def
 	await harness.stop();
 });
 
+/** A real 1x1 image: the core checks the pictures a tool returns. */
+const PNG = Uint8Array.from(
+	Buffer.from(
+		"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+		"base64",
+	),
+);
+
 test("runTool gives the tool the client it is given, none by default, and keeps the images a tool returns", async () => {
 	const probe = defineTool({
 		name: "client_probe",
@@ -340,9 +348,7 @@ test("runTool gives the tool the client it is given, none by default, and keeps 
 						return {
 							ok: true,
 							value: { url: "u" },
-							parts: [
-								{ mimeType: "image/png", data: new Uint8Array([137, 80]) },
-							],
+							parts: [{ mimeType: "image/png", data: PNG }],
 						};
 					},
 				},
@@ -353,7 +359,7 @@ test("runTool gives the tool the client it is given, none by default, and keeps 
 	expect(harness.images).toEqual([
 		{
 			channel: "test:1",
-			image: { mimeType: "image/png", data: new Uint8Array([137, 80]) },
+			image: { mimeType: "image/png", data: PNG },
 		},
 	]);
 	await harness.stop();

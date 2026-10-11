@@ -66,9 +66,10 @@ export interface ToolTurn {
 	attachment(file: string): Promise<ToolAttachment>;
 	/**
 	 * The files someone attached to this conversation, the newest first; only names that
-	 * `attachment` opens. A session without an attachment store lists none.
+	 * `attachment` opens. A session without an attachment store lists none. The turns the core builds
+	 * always have it; code that builds a turn by hand may leave it out.
 	 */
-	attachments(): Promise<readonly ToolAttachmentInfo[]>;
+	attachments?(): Promise<readonly ToolAttachmentInfo[]>;
 }
 
 /**

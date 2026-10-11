@@ -595,7 +595,7 @@ A claim passes it to `context.turns.run` as `origin`, and the hold of the same c
 
 `turn.attachment(file)` opens a file someone attached to the conversation, by the name the turn's `## Attachments` block lists, and returns `{ file, name, contentType, size, bytes() }`: a tool passes a user's file on without the model carrying its bytes.
 Only the conversation's own files open; a path, a hidden name, or a missing file throws a `ToolRefusal` the model reads, and so does a file the host's [retention period](#retention-removing-used-files-after-a-period) removed, which says so.
-`turn.attachments()` lists those files, the newest first, as `{ file, name, contentType, size, addedAt }` (`ToolAttachmentInfo`): the names `attachment` opens and nothing else; a session that keeps no attachments lists none.
+`turn.attachments?.()` lists those files, the newest first, as `{ file, name, contentType, size, addedAt }` (`ToolAttachmentInfo`): the names `attachment` opens and nothing else; a session that keeps no attachments lists none. The turns the core builds always have it; it is optional on the type for code that builds a turn by hand.
 Throw `ToolRefusal` for a call the model should correct; any other error fails the call.
 
 ##### `turn.client`: asking the party that started the turn

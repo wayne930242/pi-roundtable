@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { createCanvas } from "canvas";
 import { Type } from "typebox";
 import {
 	definePlugin,
@@ -207,18 +208,82 @@ describe("defineTool", () => {
 	});
 
 	test("a tool may return text with images, which the model reads as content parts", async () => {
+		const png = createCanvas(2, 2).toBuffer("image/png");
 		const tool = defineTool({
 			...note,
 			run: () => ({
 				text: "the page",
-				images: [{ mimeType: "image/png", data: new Uint8Array([1, 2, 3]) }],
+				images: [{ mimeType: "image/png", data: png }],
 			}),
 		});
 		const result = await register(tool).execute("c", { text: "a" });
 		expect(result.content).toEqual([
 			{ type: "text", text: "the page" },
-			{ type: "image", mimeType: "image/png", data: "AQID" },
+			{ type: "image", mimeType: "image/png", data: png.toString("base64") },
 		]);
+	});
+
+	test("an image over the side limit comes back downscaled as a JPEG", async () => {
+		const canvas = createCanvas(8100, 10);
+		const tool = defineTool({
+			...note,
+			run: () => ({
+				text: "the page",
+				images: [{ mimeType: "image/png", data: canvas.toBuffer("image/png") }],
+			}),
+		});
+		const result = await register(tool).execute("c", { text: "a" });
+		expect(result.isError).toBeUndefined();
+		expect(result.content[1]?.mimeType).toBe("image/jpeg");
+	});
+
+	test("an image of a type the model does not read is a tool error", async () => {
+		const tool = defineTool({
+			...note,
+			run: () => ({
+				text: "the page",
+				images: [
+					{
+						mimeType: "image/svg+xml",
+						data: new TextEncoder().encode("<svg/>"),
+					},
+				],
+			}),
+		});
+		const result = await register(tool).execute("c", { text: "a" });
+		expect(result.isError).toBe(true);
+		expect(result.content[0]?.text).toContain("image 1");
+		expect(result.content[0]?.text).toContain("image/svg+xml");
+	});
+
+	test("bytes that are not the image they claim to be are a tool error", async () => {
+		const tool = defineTool({
+			...note,
+			run: () => ({
+				text: "x",
+				images: [{ mimeType: "image/png", data: new Uint8Array([1, 2, 3]) }],
+			}),
+		});
+		const result = await register(tool).execute("c", { text: "a" });
+		expect(result.isError).toBe(true);
+		expect(result.content[0]?.text).toContain("image 1");
+	});
+
+	test("more images than a turn may carry are a tool error", async () => {
+		const png = createCanvas(2, 2).toBuffer("image/png");
+		const tool = defineTool({
+			...note,
+			run: () => ({
+				text: "x",
+				images: Array.from({ length: 5 }, () => ({
+					mimeType: "image/png",
+					data: png,
+				})),
+			}),
+		});
+		const result = await register(tool).execute("c", { text: "a" });
+		expect(result.isError).toBe(true);
+		expect(result.content[0]?.text).toContain("5 images");
 	});
 
 	test("a tool's attachments list is empty for a session that keeps none", async () => {
@@ -226,7 +291,7 @@ describe("defineTool", () => {
 		const tool = defineTool({
 			...note,
 			run: async (_args, turn) => {
-				listed.push(await turn.attachments());
+				listed.push(await turn.attachments?.());
 				return "ok";
 			},
 		});

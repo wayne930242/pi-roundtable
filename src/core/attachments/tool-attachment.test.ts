@@ -197,7 +197,9 @@ describe("ToolTurn.attachment", () => {
 		const file = await usedUpload(scratch());
 		const dir = join(file.path, "..");
 		const listing = async (turn: ToolTurn) =>
-			JSON.stringify((await turn.attachments()).map((item) => item.file));
+			JSON.stringify(
+				((await turn.attachments?.()) ?? []).map((item) => item.file),
+			);
 		const some = await register(listing, dir).execute("c", {});
 		expect(some.content[0]?.text).toBe(JSON.stringify([file.file]));
 		const none = await register(listing).execute("c", {});

@@ -8,13 +8,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - `ToolTurn.client`, `TurnRequest.client`, `ConversationTurnInput.client` and `SessionContext.client()`: what the client that started a turn can do for its tools, as a `ClientPort` (`names`, and `call(name, args, options?)` with `ClientCallOptions`: `{ timeoutMs?, maxValueBytes?, signal? }`). A transport that carries a client able to run functions for a tool, such as the browser extension of a web chat, provides one with `context.turns.run({ ..., client })`; the runtime keeps it with the turn and clears it when the turn ends. `call` never rejects for a transport problem: it resolves `ClientCallResult`, `{ ok: true, value, parts }` with `ClientPart`s (`{ mimeType, data }`, such as a screenshot) or `{ ok: false, error, message }` where `error` is a `ClientCallError`: `no_client`, `refused`, `timeout`, `cancelled`, `disconnected`, `too_large`, `busy` or `failed`. One call is open on a client at a time. The core adds the turn's signal to every call, so stopping the turn cancels a call in flight. A turn whose transport gives none (Discord, a schedule, an agent's turn, the CLI) leaves it undefined, and `SessionContext.client` is optional on the type so a context built before this still type-checks.
-- `ToolOutput` (`string | { text, images? }`): a tool's `run` may return text with images, which reach the model as image parts of the tool result.
-- `ToolTurn.attachments()` (`ToolAttachmentInfo`: `{ file, name, contentType, size, addedAt }`): the files someone attached to the conversation, the newest first, only the names `ToolTurn.attachment()` opens; a session without an attachment store lists none.
+- `ToolOutput` (`string | { text, images? }`): a tool's `run` may return text with images, which reach the model as image parts of the tool result. Each image goes through the same checks as a user's attachment (png, jpeg, gif or webp, size and pixel limits, at most 4, a large one downscaled); one that fails is the tool's error result, not a provider rejection.
+- `ToolTurn.attachments?()` (optional, so a `ToolTurn` built by hand still type-checks; the turns the core builds always have it; `ToolAttachmentInfo`: `{ file, name, contentType, size, addedAt }`): the files someone attached to the conversation, the newest first, only the names `ToolTurn.attachment()` opens; a session without an attachment store lists none.
 - `testPlugin().runTool` takes `client` in its options (a `ClientPort` the test fakes), and `testPlugin().images` records the images a successful `runTool` returned.
-
-### Changed
-
-- `ToolTurn` has a new required method, `attachments()`. A plugin that builds a `ToolTurn` by hand in a test adds `attachments: async () => []`; the turns the core builds have it.
 
 ## [0.9.10] - 2026-10-10
 
