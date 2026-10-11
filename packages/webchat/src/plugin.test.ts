@@ -95,3 +95,25 @@ test("limits it cannot honour stop the configuration", () => {
 	])
 		expect(() => webChat({ ...base, limits })).toThrow("webChat: limits.");
 });
+
+test("a client-call rate that reaches the frame rate stops the configuration, since answers are frames", () => {
+	expect(() =>
+		webChat({
+			...base,
+			limits: {
+				rate: { messages: 60, perMs: 60_000 },
+				clientCalls: { perMinute: 60 },
+			},
+		}),
+	).toThrow("clientCalls.perMinute");
+	expect(() =>
+		webChat({
+			...base,
+			limits: {
+				rate: { messages: 100, perMs: 60_000 },
+				clientCalls: { perMinute: 60 },
+			},
+		}),
+	).not.toThrow();
+	expect(() => webChat(base)).not.toThrow();
+});

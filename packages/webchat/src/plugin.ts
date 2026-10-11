@@ -165,6 +165,7 @@ const MAX_PART_BYTES = 16 * 1024 * 1024;
 function checkClientCallLimits(
 	limits: ClientCallLimits,
 	maxMessageBytes: number,
+	rate: { messages: number; perMs: number },
 ): void {
 	for (const key of [
 		"timeoutMs",
@@ -185,6 +186,11 @@ function checkClientCallLimits(
 	if (limits.maxValueBytes >= maxMessageBytes)
 		throw new Error(
 			`webChat: limits.clientCalls.maxValueBytes (${limits.maxValueBytes}) must be under maxMessageBytes (${maxMessageBytes}), the most a client's answer frame can carry`,
+		);
+	const framesPerMinute = (rate.messages * 60_000) / rate.perMs;
+	if (limits.perMinute >= framesPerMinute)
+		throw new Error(
+			`webChat: limits.clientCalls.perMinute (${limits.perMinute}) must be under the frame rate of ${framesPerMinute} a minute (limits.rate), since each answer to a call is a frame the socket counts; a busy client would be disconnected. Lower perMinute or raise rate.messages`,
 		);
 	if (limits.maxParts > MAX_PARTS)
 		throw new Error(
@@ -226,7 +232,11 @@ export function webChat(options: WebChatOptions): RoundtablePlugin {
 	// The personas are checked now, so a broken list stops the configuration rather than the boot.
 	checkPersonas(options.personas);
 	checkAttachmentLimits(limits);
-	checkClientCallLimits(limits.clientCalls, limits.maxMessageBytes);
+	checkClientCallLimits(
+		limits.clientCalls,
+		limits.maxMessageBytes,
+		limits.rate,
+	);
 	return definePlugin({
 		name: surface === "web" ? "webchat" : `webchat-${surface}`,
 		requires: [IDENTITY, CONVERSATIONS, RUNTIME],

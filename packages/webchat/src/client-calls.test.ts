@@ -449,6 +449,75 @@ describe("the binary parts of an answer", () => {
 		});
 	});
 
+	test("a part already being read refuses a second upload of the same index at once", async () => {
+		const { desk, call } = await open();
+		let release: () => void = () => undefined;
+		const gate = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		const slow = new Request("http://chat.test/x", {
+			method: "PUT",
+			headers: { "content-type": "image/jpeg" },
+			body: new ReadableStream({
+				async pull(controller) {
+					await gate;
+					controller.enqueue(JPEG);
+					controller.close();
+				},
+			}),
+			duplex: "half",
+		} as RequestInit);
+		const first = desk.receivePart("ada", "c1", call, 0, slow);
+		await tick();
+		const second = new Request("http://chat.test/x", {
+			method: "PUT",
+			headers: { "content-type": "image/jpeg" },
+			body: new ReadableStream({
+				pull(controller) {
+					controller.enqueue(JPEG);
+					controller.close();
+				},
+			}),
+			duplex: "half",
+		} as RequestInit);
+		expect(
+			await refusal(desk.receivePart("ada", "c1", call, 0, second)),
+		).toEqual({ status: 409, code: "duplicate_part" });
+		release();
+		await first;
+		// The index is free again for a failed read, and taken for a good one.
+		expect(
+			await refusal(
+				desk.receivePart("ada", "c1", call, 0, put(JPEG, "image/jpeg")),
+			),
+		).toEqual({ status: 409, code: "duplicate_part" });
+	});
+
+	test("an index whose read failed can be uploaded again", async () => {
+		const { desk, call } = await open();
+		expect(
+			await refusal(
+				desk.receivePart("ada", "c1", call, 0, put(PNG, "image/jpeg")),
+			),
+		).toEqual({ status: 415, code: "unsupported_media_type" });
+		await desk.receivePart("ada", "c1", call, 0, put(JPEG, "image/jpeg"));
+	});
+
+	test("an answer declaring more parts than the limit says so", async () => {
+		const state = await open();
+		await state.desk.receivePart(
+			"ada",
+			"c1",
+			state.call,
+			0,
+			put(JPEG, "image/jpeg"),
+		);
+		state.desk.result(state.started, ok(state.call, "x", 3));
+		const result = await state.pending;
+		expect(result).toMatchObject({ ok: false, error: "failed" });
+		expect(result?.ok === false && result.message).toContain("limit of 2");
+	});
+
 	test("are refused as soon as the declared length is over the limit, without reading the body", async () => {
 		const { desk, call } = await open();
 		const request = new Request("http://chat.test/x", {

@@ -328,6 +328,8 @@ This is the opposite of an approval card: a card goes to every connection of the
 The `value`, the parts and the `message` come from the client, so the tool treats them as untrusted data; the server accepts only JSON of at most `maxValueBytes`, images of the three types whose bytes match, and a message cut to one plain line of 300 characters.
 Stopping the conversation, or the turn ending, cancels the call in flight.
 
+Client calls need pi-roundtable 0.9.11 or later: the source of this package uses types that release adds, so type-check both together and upgrade them together.
+
 `ready.clientCalls` is `{ timeoutMs, maxTimeoutMs, maxValueBytes, maxParts, maxPartBytes }`; `limits.clientCalls` sets them and `perMinute` (below).
 
 ## Security model
@@ -373,7 +375,7 @@ Stopping the conversation, or the turn ending, cancels the call in flight.
 | `clientCalls.maxValueBytes` | 48 KiB of JSON in an answer's `value`, under `maxMessageBytes` |
 | `clientCalls.maxParts` | 2 binary parts per answer (at most 16) |
 | `clientCalls.maxPartBytes` | 2 MiB per part (at most 16 MiB) |
-| `clientCalls.perMinute` | 60 calls a minute per connection |
+| `clientCalls.perMinute` | 60 calls a minute per connection; it must be under the `rate` frame rate, since each answer is a frame |
 | `maxBufferedBytes` | 4 MiB waiting for a slow client |
 | `ticketTtlMs` | 30 seconds |
 | `attachmentBytes` | 10 MiB per uploaded file; never above the core's 25 MiB |

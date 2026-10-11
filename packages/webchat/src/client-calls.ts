@@ -97,6 +97,8 @@ interface Open {
 	maxValueBytes: number;
 	/** The binary parts uploaded for this call, by index. */
 	parts: Map<number, ClientPart>;
+	/** The indexes whose body is being read, so one index is never buffered twice at once. */
+	receiving: Set<number>;
 	/** The turn's port that made the call. */
 	owner: object;
 	/** Ends the call with `result`; tells the client to stop when `cancel` says why. */
@@ -248,6 +250,7 @@ export class ClientDesk {
 				conversation: turn.conversation,
 				maxValueBytes,
 				parts: new Map(),
+				receiving: new Set(),
 				owner: turn.owner,
 				settle: (result, cancel) => {
 					if (this.#open.get(id) !== open) return;
@@ -310,10 +313,19 @@ export class ClientDesk {
 			return undefined;
 		}
 		const declared = frame.parts ?? 0;
+		if (declared > this.#limits.maxParts) {
+			open.settle(
+				failure(
+					"failed",
+					`the answer declared ${declared} parts, over the limit of ${this.#limits.maxParts}`,
+				),
+			);
+			return undefined;
+		}
 		const parts: ClientPart[] = [];
 		for (let index = 0; index < declared; index++) {
 			const part = open.parts.get(index);
-			if (!part || declared > this.#limits.maxParts) {
+			if (!part) {
 				open.settle(
 					failure(
 						"failed",
@@ -353,13 +365,20 @@ export class ClientDesk {
 		const type = baseType(request.headers.get("content-type"));
 		if (!type || !PART_TYPES.includes(type))
 			throw new ClientPartRefusal(415, "unsupported_media_type");
-		if (open.parts.has(index))
+		if (open.parts.has(index) || open.receiving.has(index))
 			throw new ClientPartRefusal(409, "duplicate_part");
 		const header = request.headers.get("content-length");
 		const length = header === null ? Number.NaN : Number(header);
 		if (Number.isFinite(length) && length > maxPartBytes)
 			throw new ClientPartRefusal(413, "payload_too_large");
-		const bytes = await readLimited(request, maxPartBytes);
+		// The index is held while the body is read, so parallel uploads of it buffer one body.
+		open.receiving.add(index);
+		let bytes: Uint8Array | undefined;
+		try {
+			bytes = await readLimited(request, maxPartBytes);
+		} finally {
+			open.receiving.delete(index);
+		}
 		if (!bytes) throw new ClientPartRefusal(413, "payload_too_large");
 		// The call may have ended, or the same part arrived, while the body was read.
 		if (this.#open.get(call) !== open)

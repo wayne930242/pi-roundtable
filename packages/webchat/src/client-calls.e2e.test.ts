@@ -32,9 +32,13 @@ import {
 import { type TestIssuer, testIssuer } from "./testing/issuer.ts";
 
 const ORIGIN = "https://chat.example.test";
-const PNG = Uint8Array.from([
-	0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4,
-]);
+/** A real 1x1 image: the core checks the pictures a tool returns. */
+const PNG = Uint8Array.from(
+	Buffer.from(
+		"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+		"base64",
+	),
+);
 
 /** What the peek tool's call to the client came to, as the tool saw it. */
 type Outcome =
