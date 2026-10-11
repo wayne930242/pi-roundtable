@@ -5,6 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `generate_image({ prompt, reference_paths? })`: a core session tool, offered to agent and owner sessions only when a plugin fills the `images` provider, that draws a new picture from a description, saves it under `<scratch dir or workspace>/drawings/`, attaches it to the reply, and names the saved path. Up to 4 reference images (PNG, JPEG, WebP or GIF by content, 20 MiB each, 40 MiB together) resolve inside the workspace or the scratch dir like `attach_file` paths. A provider error is a tool error with its message. Owner-only by default; the agents' prompt names it only when offered.
+- `ImageDrawer` takes an optional third argument `{ signal? }`, the asking turn's abort signal; an existing two-argument drawer still fits.
+
 ## [0.9.11] - 2026-10-11
 
 ### Added

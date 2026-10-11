@@ -149,6 +149,7 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 			shellUser,
 			...(scratchDir ? { scratchDir } : {}),
 			avatars: this.#avatars(),
+			images: this.#avatars(),
 			...(group
 				? {
 						group: {

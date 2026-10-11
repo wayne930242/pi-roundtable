@@ -562,7 +562,7 @@
 		"src/core/contract/channels.d.ts#ScheduledOutcome": "type ScheduledOutcome = {\n    status: \"ran\";\n} | {\n    status: \"failed\";\n    error: string;\n} | {\n    status: \"skipped\";\n    reason: string;\n};",
 		"src/core/contract/providers.d.ts#ChoiceAnswer": "interface ChoiceAnswer {\n    choice: string;\n    confidence: number;\n}",
 		"src/core/contract/providers.d.ts#ChoiceQuestion": "interface ChoiceQuestion {\n    type: \"choice\";\n    instructions: string;\n    criteria: Record<string, string>;\n}",
-		"src/core/contract/providers.d.ts#ImageDrawer": "type ImageDrawer = (prompt: string, references: readonly ReferenceImage[]) => Promise<Uint8Array>;",
+		"src/core/contract/providers.d.ts#ImageDrawer": "type ImageDrawer = (prompt: string, references: readonly ReferenceImage[], options?: {\n    signal?: AbortSignal;\n}) => Promise<Uint8Array>;",
 		"src/core/contract/providers.d.ts#Judge": "interface Judge {\n    askYesNo(state: Record<string, unknown>, questions: Record<string, YesNoQuestion>): Promise<Record<string, number>>;\n    askChoice(state: Record<string, unknown>, name: string, question: ChoiceQuestion): Promise<ChoiceAnswer>;\n    \n    askScore(state: Record<string, unknown>, name: string, question: ScoreQuestion): Promise<number[]>;\n}",
 		"src/core/contract/providers.d.ts#Providers": "interface Providers {\n    judge: Judge;\n    images: ImageDrawer;\n    \n    runtime: RuntimeFactory;\n}",
 		"src/core/contract/providers.d.ts#ReferenceImage": "interface ReferenceImage {\n    \n    data: string;\n    mimeType: string;\n}",

@@ -10,6 +10,7 @@ import {
 	type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import { channelSegment } from "../attachments/attachment-dir.ts";
+import type { ImageDrawer } from "../contract/providers.ts";
 import type { ClientPort } from "../domain/client.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
 import { ConfigError } from "../domain/errors.ts";
@@ -28,8 +29,13 @@ import {
 	ATTACH_FILE_TOOL,
 	attachFileExtension,
 } from "../shared/attach-file-tool.ts";
+import {
+	GENERATE_IMAGE_TOOL,
+	generateImageExtension,
+} from "../shared/generate-image-tool.ts";
 import { packageDir } from "../shared/package-dir.ts";
 import { readAttachmentExtension } from "../shared/read-attachment-tool.ts";
+import type { WorkspaceRoots } from "../shared/workspace-files.ts";
 import { type Speaker, THE_SPEAKER } from "../speakers.ts";
 import { currentToolNames } from "../tool-tiers.ts";
 import { toolTurn } from "../tool-turn.ts";
@@ -56,6 +62,7 @@ import type { PromptSlot } from "./prompt-slot.ts";
 import type {
 	ChannelSession,
 	CompactionEnd,
+	CoreExtensions,
 	PiAgentRuntimeOptions,
 } from "./runtime-types.ts";
 import {
@@ -142,6 +149,8 @@ export class SessionFactory {
 			ASK_USER_TOOL,
 			// Registered only by a session with a workspace.
 			ATTACH_FILE_TOOL,
+			// Registered only with an image provider.
+			GENERATE_IMAGE_TOOL,
 			...groups
 				.filter((group) => selection.groups.includes(group.name))
 				.flatMap((group) => group.tools),
@@ -381,6 +390,10 @@ export class SessionFactory {
 				...(context.workspace
 					? { attachFile: attachFileExtension(context.workspace) }
 					: {}),
+				...imageTools(
+					this.#options.images,
+					context.workspace ?? { workspace: cwd },
+				),
 				confirmationGate: confirmationGateExtension(gate, slot, (signal) =>
 					toolTurn(context, signal),
 				),
@@ -440,6 +453,14 @@ export class SessionFactory {
 		});
 		return Object.assign(state, { session });
 	}
+}
+
+/** `generate_image` for a session of a host with an image provider; nothing without one. */
+export function imageTools(
+	images: ImageDrawer | undefined,
+	roots: WorkspaceRoots,
+): Pick<CoreExtensions, "generateImage"> {
+	return images ? { generateImage: generateImageExtension(images, roots) } : {};
 }
 
 /** Pi's bash tool with TMPDIR set to `scratchDir`, so `mktemp` and tools write there. */
