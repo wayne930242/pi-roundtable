@@ -10,6 +10,7 @@ import {
 	type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import { channelSegment } from "../attachments/attachment-dir.ts";
+import type { ClientPort } from "../domain/client.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
 import { ConfigError } from "../domain/errors.ts";
 import type { AgentTurnScope } from "../domain/ports.ts";
@@ -75,6 +76,8 @@ export interface SessionFactoryDeps {
 	speaker(channel: ChannelKey): Speaker | undefined;
 	/** Where the conversation's running turn came from, as its transport reported it. */
 	origin(channel: ChannelKey): string | undefined;
+	/** What the client that started the conversation's running turn can do for its tools. */
+	client(channel: ChannelKey): ClientPort | undefined;
 	/** Whether the conversation's running turn loads no memory, as the agent server's option keeps a speaker out of it. */
 	withholdsMemory(channel: ChannelKey): boolean;
 	/**
@@ -358,6 +361,7 @@ export class SessionFactory {
 			},
 			speaker: () => this.#deps.speaker(turnKey),
 			origin: () => this.#deps.origin(turnKey),
+			client: () => this.#deps.client(turnKey),
 			runTask: (task) =>
 				this.#deps.runTask({ turn: turnKey, home: channel }, task),
 		};

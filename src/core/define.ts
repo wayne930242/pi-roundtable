@@ -1,12 +1,20 @@
 import type { Static, TObject } from "typebox";
-import type { ToolAttachment } from "./attachments/tool-attachment.ts";
+import type {
+	ToolAttachment,
+	ToolAttachmentInfo,
+} from "./attachments/tool-attachment.ts";
+import type { ClientPort } from "./domain/client.ts";
 import type { ReplyFile } from "./domain/conversation.ts";
 import { PluginError } from "./errors.ts";
 import { type HoldRule, isPromise } from "./holds.ts";
 import { messages } from "./i18n/index.ts";
 import { type RoundtablePlugin, refuseRemovedFields } from "./plugin.ts";
 import type { AgentTurnScope, ChannelKey, SessionTool } from "./sessions.ts";
-import { toolError, toolText } from "./shared/tool-result.ts";
+import {
+	type ToolOutput,
+	toolError,
+	toolOutput,
+} from "./shared/tool-result.ts";
 import { type Speaker, TIERS, type Tier } from "./speakers.ts";
 import { toolTurn } from "./tool-turn.ts";
 
@@ -35,6 +43,14 @@ export interface ToolTurn {
 	 */
 	origin?: string;
 	/**
+	 * What the client that started the turn can do for this tool, such as run a function in the
+	 * browser the person chats from; undefined for a turn whose transport gives none, such as a
+	 * Discord message or a schedule, or whose client declared nothing. Every call carries this turn's
+	 * `signal`, so stopping the turn cancels a call in flight. A tool that needs one fails closed
+	 * when it is undefined.
+	 */
+	client?: ClientPort;
+	/**
 	 * The session's shared workspace and scratch dir, where a tool may save a file for the model to
 	 * pass on by path; undefined for a session without a workspace.
 	 */
@@ -48,6 +64,11 @@ export interface ToolTurn {
 	 * refuses every call.
 	 */
 	attachment(file: string): Promise<ToolAttachment>;
+	/**
+	 * The files someone attached to this conversation, the newest first; only names that
+	 * `attachment` opens. A session without an attachment store lists none.
+	 */
+	attachments(): Promise<readonly ToolAttachmentInfo[]>;
 }
 
 /**
@@ -85,8 +106,10 @@ export interface ToolSpec<Schema extends TObject> {
 		args: Static<Schema>,
 		turn: ToolTurn,
 	) => string | undefined | Promise<string | undefined>;
-	run(args: Static<Schema>, turn: ToolTurn): Promise<string> | string;
+	run(args: Static<Schema>, turn: ToolTurn): Promise<ToolOutput> | ToolOutput;
 }
+
+export type { ToolAttachmentInfo, ToolOutput };
 
 /** A tool a plugin adds, as `defineTool` builds it. */
 export interface ToolContribution {
@@ -142,7 +165,7 @@ export function defineTool<Schema extends TObject>(
 					parameters: spec.parameters,
 					execute: async (_toolCallId, params, signal) => {
 						try {
-							return toolText(
+							return toolOutput(
 								await spec.run(
 									params as Static<Schema>,
 									toolTurn(context, signal),

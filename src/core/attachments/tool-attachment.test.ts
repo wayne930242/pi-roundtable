@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -8,7 +8,7 @@ import { defineTool, type ToolTurn } from "../define.ts";
 import { silentLogger } from "../log.ts";
 import type { SessionContext } from "../sessions.ts";
 import { AttachmentStore } from "./attachment-store.ts";
-import { openAttachment } from "./tool-attachment.ts";
+import { listAttachments, openAttachment } from "./tool-attachment.ts";
 
 const dirs: string[] = [];
 const scratch = () => {
@@ -91,6 +91,51 @@ describe("openAttachment", () => {
 	});
 });
 
+describe("listAttachments", () => {
+	test("lists the files of the conversation, the newest first, with their recorded names and types", async () => {
+		const dir = scratch();
+		await Bun.write(join(dir, "old.txt"), "aa");
+		await Bun.write(join(dir, "new.json"), "{}");
+		await Bun.write(join(dir, "mid.png"), "xyz");
+		await Bun.write(
+			join(dir, ".records", "new.json.json"),
+			JSON.stringify({ name: "Report.json", contentType: "application/json" }),
+		);
+		utimesSync(join(dir, "old.txt"), 1000, 1000);
+		utimesSync(join(dir, "mid.png"), 2000, 2000);
+		utimesSync(join(dir, "new.json"), 3000, 3000);
+		const listed = await listAttachments(dir);
+		expect(listed.map((item) => item.file)).toEqual([
+			"new.json",
+			"mid.png",
+			"old.txt",
+		]);
+		expect(listed[0]).toEqual({
+			file: "new.json",
+			name: "Report.json",
+			contentType: "application/json",
+			size: 2,
+			addedAt: new Date(3_000_000).toISOString(),
+		});
+		expect(listed[1]).toMatchObject({ name: "mid.png", size: 3 });
+	});
+
+	test("lists only names an attachment can have: no hidden entry, no directory", async () => {
+		const dir = scratch();
+		await Bun.write(join(dir, "a.txt"), "x");
+		await Bun.write(join(dir, ".hidden"), "x");
+		mkdirSync(join(dir, "sub"));
+		await Bun.write(join(dir, "sub", "b.txt"), "x");
+		expect((await listAttachments(dir)).map((item) => item.file)).toEqual([
+			"a.txt",
+		]);
+	});
+
+	test("a directory that is not there lists nothing", async () => {
+		expect(await listAttachments(join(scratch(), "missing"))).toEqual([]);
+	});
+});
+
 describe("ToolTurn.attachment", () => {
 	type Registered = {
 		execute(
@@ -146,6 +191,17 @@ describe("ToolTurn.attachment", () => {
 		const result = await tool.execute("c", {});
 		expect(result.isError).toBe(true);
 		expect(result.content[0]?.text).toContain("not an attachment name");
+	});
+
+	test("a tool lists the conversation's attachments, none for a session that keeps none", async () => {
+		const file = await usedUpload(scratch());
+		const dir = join(file.path, "..");
+		const listing = async (turn: ToolTurn) =>
+			JSON.stringify((await turn.attachments()).map((item) => item.file));
+		const some = await register(listing, dir).execute("c", {});
+		expect(some.content[0]?.text).toBe(JSON.stringify([file.file]));
+		const none = await register(listing).execute("c", {});
+		expect(none.content[0]?.text).toBe("[]");
 	});
 
 	test("a session that keeps no attachments refuses the call by saying so", async () => {

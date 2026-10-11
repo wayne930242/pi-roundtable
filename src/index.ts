@@ -17,7 +17,10 @@ export type {
 	TeamStatus,
 } from "./core/agents/team-status.ts";
 export type { AttachmentRetention } from "./core/attachments/attachment-retention.ts";
-export type { ToolAttachment } from "./core/attachments/tool-attachment.ts";
+export type {
+	ToolAttachment,
+	ToolAttachmentInfo,
+} from "./core/attachments/tool-attachment.ts";
 export {
 	AGENT_SERVER_PLUGIN,
 	AGENT_TEAM_SERVICE,
@@ -86,7 +89,12 @@ export type {
 } from "./core/conversations/conversation-registry.ts";
 export type { Migration, MigrationReport } from "./core/db/migrations.ts";
 export { migrateDatabase } from "./core/db/migrations.ts";
-export type { ToolContribution, ToolSpec, ToolTurn } from "./core/define.ts";
+export type {
+	ToolContribution,
+	ToolOutput,
+	ToolSpec,
+	ToolTurn,
+} from "./core/define.ts";
 export { definePlugin, defineTool, ToolRefusal } from "./core/define.ts";
 export type {
 	DefinedRoundtable,
@@ -100,6 +108,13 @@ export type {
 	TurnAttachments,
 } from "./core/domain/attachment.ts";
 export { NO_ATTACHMENTS } from "./core/domain/attachment.ts";
+export type {
+	ClientCallError,
+	ClientCallOptions,
+	ClientCallResult,
+	ClientPart,
+	ClientPort,
+} from "./core/domain/client.ts";
 export type {
 	HeldCall,
 	OutboundReply,

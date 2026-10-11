@@ -272,3 +272,38 @@ test("a turn's origin reaches the hold and the run of its tools, and the next tu
 		await done();
 	}
 });
+
+test("a turn's client reaches the run of its tools, and the next turn without one sees none", async () => {
+	const ran: ToolTurn[] = [];
+	const { harness, done } = await heldHost(
+		2,
+		async () => undefined,
+		undefined,
+		ran,
+	);
+	try {
+		const asked: string[] = [];
+		const client = {
+			names: ["page_status"],
+			call: async (name: string) => {
+				asked.push(name);
+				return { ok: true as const, value: null, parts: [] };
+			},
+		};
+		const base = {
+			channel: "fake:room",
+			kind: "helper",
+			text: "deploy the docs",
+			speaker: MEMBER,
+			selection: { id: "held", tools: ["deploy"], groups: [] },
+		} as const;
+		await harness.turns.run({ ...base, client });
+		await harness.turns.run(base);
+		expect(ran[0]?.client?.names).toEqual(["page_status"]);
+		await ran[0]?.client?.call("page_status", {});
+		expect(asked).toEqual(["page_status"]);
+		expect(ran[1]).not.toHaveProperty("client");
+	} finally {
+		await done();
+	}
+});

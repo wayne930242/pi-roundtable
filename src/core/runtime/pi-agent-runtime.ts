@@ -24,7 +24,6 @@ import { promptScopeOf } from "../interactions/prompts.ts";
 import { MEMORY_TOOLS } from "../modules/memory/owner-memory.ts";
 import { withoutReplyFiles } from "../reply-files.ts";
 import type { TransientTask } from "../sessions.ts";
-import type { Speaker, Tier } from "../speakers.ts";
 import { type ToolTiers, toolsForTier, toolTiers } from "../tool-tiers.ts";
 import { AbortGuard } from "./abort-guard.ts";
 import { bridgeTurnRefusal, chosenAgentModel } from "./bridge-guard.ts";
@@ -36,6 +35,7 @@ import { interimPoster } from "./interim-text.ts";
 import { preflightTools } from "./preflight-tools.ts";
 import { PromptSlot, workTimeout } from "./prompt-slot.ts";
 import { carriesMemory, recordMemoryTurn } from "./reader-history.ts";
+import type { RunningTurn } from "./running-turn.ts";
 import type { PiAgentRuntimeOptions, TurnMessage } from "./runtime-types.ts";
 import { archiveSessions } from "./session-archive.ts";
 import {
@@ -71,11 +71,8 @@ export class PiAgentRuntime implements AgentRuntime {
 	readonly #tiers: ToolTiers;
 	readonly #factory: SessionFactory;
 	readonly #sessions: ConversationSessions;
-	/** The tier, speaker and origin of each conversation's running turn. */
-	readonly #turns = new Map<
-		ChannelKey,
-		{ tier: Tier; speaker: Speaker; origin?: string; withheld: boolean }
-	>();
+	/** The tier, speaker, origin and client of each conversation's running turn. */
+	readonly #turns = new Map<ChannelKey, RunningTurn>();
 	/** Each conversation's turn in progress, which the owner may steer or stop. */
 	readonly #running = new Map<ChannelKey, SteerableRun>();
 	readonly #memoryTurns = new Map<ChannelKey, () => void>();
@@ -88,6 +85,7 @@ export class PiAgentRuntime implements AgentRuntime {
 		this.#factory = new SessionFactory(options, {
 			speaker: (channel) => this.#turns.get(channel)?.speaker,
 			origin: (channel) => this.#turns.get(channel)?.origin,
+			client: (channel) => this.#turns.get(channel)?.client,
 			withholdsMemory: (channel) => this.#turns.get(channel)?.withheld === true,
 			runTask: (scope, task) => this.#runTask(scope, task),
 		});
@@ -197,6 +195,7 @@ export class PiAgentRuntime implements AgentRuntime {
 			tier,
 			speaker: request.speaker,
 			...(request.origin === undefined ? {} : { origin: request.origin }),
+			...(request.client === undefined ? {} : { client: request.client }),
 			withheld,
 		});
 		const missing = wanted.filter((name) => !registered.has(name));

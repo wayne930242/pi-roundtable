@@ -36,6 +36,7 @@ function turnOf(signal: AbortSignal | undefined): ToolTurn {
 		attachment: async () => {
 			throw new Error("no attachments");
 		},
+		attachments: async () => [],
 	};
 }
 
