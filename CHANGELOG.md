@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.9.12] - 2026-10-11
+
 ### Added
 
 - `generate_image({ prompt, reference_paths? })`: a core session tool, offered to agent and owner sessions only when a plugin fills the `images` provider, that draws a new picture from a description, saves it under `<scratch dir or workspace>/drawings/`, attaches it to the reply, and names the saved path. Up to 4 reference images (PNG, JPEG, WebP or GIF by content, 20 MiB each, 40 MiB together) resolve inside the workspace or the scratch dir like `attach_file` paths. A provider error is a tool error with its message. Owner-only by default; the agents' prompt names it only when offered.
