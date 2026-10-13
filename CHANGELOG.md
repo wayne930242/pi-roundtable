@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `packages/line` (`pi-roundtable-line`), a new lockstep workspace for a LINE Messaging API transport. Its first slice is intake: stateless channel access tokens, a signed webhook that persists events before it answers, an allowlist of chats, and a durable inbox worker. It needs a manual first publication; see `.github/PACKAGE-RELEASES.md`.
+
 ## [0.9.10] - 2026-10-10
 
 ### Added
