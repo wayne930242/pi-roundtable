@@ -76,15 +76,28 @@ export async function checkAccess(project: Project): Promise<Result> {
 		typeof rule === "string"
 			? []
 			: Object.keys(rule).filter((key) => !surfaces.includes(key));
-	if (unknown.length > 0)
-		return warn(
-			`access.provisioning names ${list(unknown.map((key) => JSON.stringify(key)))}, which ${unknown.length === 1 ? "is" : "are"} not a surface this host talks through (${list(surfaces)}); a surface the map leaves out is linked; provisioning ${summary}.`,
+	const problems: string[] = [];
+	const fixes: string[] = [];
+	if (unknown.length > 0) {
+		problems.push(
+			`access.provisioning names ${list(unknown.map((key) => JSON.stringify(key)))}, which ${unknown.length === 1 ? "is" : "are"} not a surface this host talks through (${list(surfaces)}); a surface the map leaves out is linked.`,
+		);
+		fixes.push(
 			`Fix the spelling of the surface name in access.provisioning, or remove it.`,
 		);
-	if (broad.length > 0 && surfaces.length > 1)
-		return warn(
-			`${list(broad.map((tier) => `access.${tier}.everyone`))} ${broad.length === 1 ? "is" : "are"} true, which admits everyone on every surface: ${list(surfaces)}; provisioning ${summary}.`,
+	}
+	if (broad.length > 0 && surfaces.length > 1) {
+		problems.push(
+			`${list(broad.map((tier) => `access.${tier}.everyone`))} ${broad.length === 1 ? "is" : "are"} true, which admits everyone on every surface: ${list(surfaces)}.`,
+		);
+		fixes.push(
 			`Name the surfaces where everyone may talk, such as everyone: ["discord"], and admit the others by identity or by role, such as roles: ["web:role:<name>"].`,
+		);
+	}
+	if (problems.length > 0)
+		return warn(
+			`${problems.join(" ")} (provisioning ${summary})`,
+			fixes.join(" "),
 		);
 	const owners = config.access.owners;
 	const legacy = config.deprecations.includes(LEGACY_ACCESS)

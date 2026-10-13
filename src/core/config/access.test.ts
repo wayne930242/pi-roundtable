@@ -179,7 +179,7 @@ describe("the access configuration", () => {
 		);
 		expect(() => make("open")).toThrow(/access\.provisioning/);
 		for (const bad of [["linked"], 5, null])
-			expect(() => make(bad)).toThrow(/a string.*or an object|one of/);
+			expect(() => make(bad)).toThrow(/one of admitted, linked, or an object/);
 		expect(() => make(5)).toThrow(/access\.provisioning/);
 	});
 
