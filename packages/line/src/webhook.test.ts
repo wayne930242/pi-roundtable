@@ -121,6 +121,27 @@ describeDb("the webhook", () => {
 		});
 	});
 
+	test("R4REV-F005: an event with U+0000 in its text does not cost the other events of its request", async () => {
+		await handler()(webhookRequest(body(messageEvent({ id: "first" }))));
+		await sources().allow(GROUP);
+		const response = await handler()(
+			webhookRequest(
+				body(messageEvent({ id: "ok", timestamp: 10 }), {
+					...messageEvent({ id: "nul", timestamp: 20, text: "x\u0000y" }),
+					"k\u0000ey": "lone \ud800 surrogate",
+				}),
+			),
+		);
+		expect(response.status).toBe(200);
+		const found = (await rows()).filter(
+			(r: { status: string }) => r.status === "pending",
+		);
+		expect(
+			found.map((r: { webhook_event_id: string }) => r.webhook_event_id),
+		).toEqual(["ok", "nul"]);
+		expect(found[1].payload.message.text).toBe("x\uFFFDy");
+	});
+
 	test("an event of a bot in standby mode, or with no chat, is dropped", async () => {
 		await handler()(
 			webhookRequest(

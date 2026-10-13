@@ -19,6 +19,25 @@ export interface IntakeResult {
  */
 const MEMBERSHIP = new Set(["join", "leave"]);
 
+/**
+ * PostgreSQL refuses U+0000 in text and in JSONB, and a lone surrogate in JSONB; either would fail
+ * the whole request's transaction and with it every other event stored beside this one. They are
+ * replaced with U+FFFD, which loses nothing a chat mirror could use.
+ */
+function clean(text: string): string {
+	return text.replaceAll("\u0000", "\uFFFD").toWellFormed();
+}
+
+function scrub(value: unknown): unknown {
+	if (typeof value === "string") return clean(value);
+	if (Array.isArray(value)) return value.map(scrub);
+	if (typeof value === "object" && value !== null)
+		return Object.fromEntries(
+			Object.entries(value).map(([key, item]) => [clean(key), scrub(item)]),
+		);
+	return value;
+}
+
 /** Why an event is dropped, or undefined when it is kept. */
 function dropReason(
 	event: ParsedEvent,
@@ -69,12 +88,16 @@ export async function persistEvents(
 				? statuses.get(event.sourceKey)
 				: undefined;
 			const reason = dropReason(event, status);
-			const payload = reason ? null : JSON.stringify(event.raw);
+			const payload = reason ? null : JSON.stringify(scrub(event.raw));
+			const id = clean(event.id);
+			const type = clean(event.type);
+			const messageId =
+				event.messageId === null ? null : clean(event.messageId);
 			const inserted: { webhook_event_id: string }[] =
 				await tx`INSERT INTO line_inbox
 				(webhook_event_id, source_key, event_type, message_id, event_ts, payload, status,
 				 next_attempt_at, last_error_code, created_at, completed_at)
-				VALUES (${event.id}, ${event.sourceKey}, ${event.type}, ${event.messageId}, ${event.timestamp},
+				VALUES (${id}, ${event.sourceKey}, ${type}, ${messageId}, ${event.timestamp},
 					${payload}::text::jsonb, ${reason ? "skipped" : "pending"}, ${now}, ${reason ?? null}, ${now},
 					${reason ? now : null})
 				ON CONFLICT (webhook_event_id) DO NOTHING
