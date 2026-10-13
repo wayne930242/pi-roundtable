@@ -103,8 +103,35 @@ describe("the access check", () => {
 			"1 owner, Ada; provisioning discord linked, web admitted",
 		);
 		expect(await detail({ discord: "linked" })).toBe(
-			"1 owner, Ada; provisioning discord linked, web admitted",
+			"1 owner, Ada; provisioning discord linked, web linked",
 		);
+	});
+
+	test("warns when a provisioning map names a key that is not a surface", async () => {
+		const config = accessConfig({ everyone: ["discord"] });
+		const result = await checkAccess(
+			project(
+				{
+					...config,
+					access: { ...config.access, provisioning: { dsicord: "linked" } },
+				},
+				[{ name: "webchat" }],
+			),
+		);
+		expect(result.status).toBe("warn");
+		if (result.status === "warn") {
+			expect(result.problem).toContain('"dsicord"');
+			expect(result.problem).toContain("provisioning");
+		}
+	});
+
+	test("the everyone warning includes the provisioning summary", async () => {
+		const result = await checkAccess(
+			project(accessConfig({ everyone: true }), [{ name: "webchat" }]),
+		);
+		expect(result.status).toBe("warn");
+		if (result.status === "warn")
+			expect(result.problem).toContain("provisioning admitted");
 	});
 
 	test("is skipped while the configuration is not valid", async () => {

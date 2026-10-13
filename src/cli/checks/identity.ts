@@ -70,9 +70,20 @@ export async function checkAccess(project: Project): Promise<Result> {
 	const broad = (["admins", "members"] as const).filter(
 		(tier) => config.access[tier]?.everyone === true,
 	);
+	const summary = provisioningSummary(config.access.provisioning, surfaces);
+	const rule = config.access.provisioning;
+	const unknown =
+		typeof rule === "string"
+			? []
+			: Object.keys(rule).filter((key) => !surfaces.includes(key));
+	if (unknown.length > 0)
+		return warn(
+			`access.provisioning names ${list(unknown.map((key) => JSON.stringify(key)))}, which ${unknown.length === 1 ? "is" : "are"} not a surface this host talks through (${list(surfaces)}); a surface the map leaves out is linked; provisioning ${summary}.`,
+			`Fix the spelling of the surface name in access.provisioning, or remove it.`,
+		);
 	if (broad.length > 0 && surfaces.length > 1)
 		return warn(
-			`${list(broad.map((tier) => `access.${tier}.everyone`))} ${broad.length === 1 ? "is" : "are"} true, which admits everyone on every surface: ${list(surfaces)}.`,
+			`${list(broad.map((tier) => `access.${tier}.everyone`))} ${broad.length === 1 ? "is" : "are"} true, which admits everyone on every surface: ${list(surfaces)}; provisioning ${summary}.`,
 			`Name the surfaces where everyone may talk, such as everyone: ["discord"], and admit the others by identity or by role, such as roles: ["web:role:<name>"].`,
 		);
 	const owners = config.access.owners;
@@ -80,7 +91,7 @@ export async function checkAccess(project: Project): Promise<Result> {
 		? "; written as the 0.8 owner and speakers, which roundtable upgrade rewrites as access"
 		: "";
 	return ok(
-		`${owners.length} ${owners.length === 1 ? "owner" : "owners"}, ${list(owners.map((owner) => owner.name))}${legacy}; provisioning ${provisioningSummary(config.access.provisioning, surfaces)}`,
+		`${owners.length} ${owners.length === 1 ? "owner" : "owners"}, ${list(owners.map((owner) => owner.name))}${legacy}; provisioning ${summary}`,
 	);
 }
 

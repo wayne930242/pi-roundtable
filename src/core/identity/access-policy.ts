@@ -40,7 +40,7 @@ export interface AccessTier {
 /** Whether someone the rules admit gets a principal at first contact (`admitted`), or only already linked identities are served (`linked`). */
 export type Provisioning = "admitted" | "linked";
 
-/** The provisioning mode for every surface, or per surface; a surface a map leaves out is `admitted`. */
+/** The provisioning mode for every surface, or per surface; a surface a map leaves out is `linked`, so a misspelled surface name cannot admit everyone. */
 export type ProvisioningRule =
 	| Provisioning
 	| Readonly<Record<string, Provisioning>>;
@@ -50,7 +50,8 @@ export function provisioningOf(
 	rule: ProvisioningRule,
 	surface: string,
 ): Provisioning {
-	return typeof rule === "string" ? rule : (rule[surface] ?? "admitted");
+	if (typeof rule === "string") return rule;
+	return (Object.hasOwn(rule, surface) ? rule[surface] : undefined) ?? "linked";
 }
 
 /** Who the host serves, and at which tier. */
@@ -59,7 +60,7 @@ export interface AccessRules {
 	owners: readonly AccessOwner[];
 	admins?: AccessTier;
 	members?: AccessTier;
-	/** `admitted`: someone the rules admit gets a principal at first contact, and a 0.8 speaker claims theirs; `linked`: only identities already linked, such as by the CLI or the configuration, are served. A map gives a mode per surface, such as `{ web: "admitted", discord: "linked" }`, and leaves an unnamed surface `admitted`. Owners are never admitted. */
+	/** `admitted`: someone the rules admit gets a principal at first contact, and a 0.8 speaker claims theirs; `linked`: only identities already linked, such as by the CLI or the configuration, are served. A map gives a mode per surface, such as `{ web: "admitted", discord: "linked" }`, and leaves an unnamed surface `linked`. Owners are never admitted. */
 	provisioning: ProvisioningRule;
 	/** How many days a principal whose tier came only from the rules on contact may go unseen before their background turns are refused. */
 	backgroundStaleDays: number;

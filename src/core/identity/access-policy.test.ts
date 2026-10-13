@@ -153,13 +153,15 @@ describe("checkAccessRules", () => {
 });
 
 describe("provisioningOf", () => {
-	test("is the one mode for every surface, or the surface's own, an unnamed surface being admitted", () => {
+	test("is the one mode for every surface, or the surface's own, an unnamed surface under a map being linked", () => {
 		expect(provisioningOf("linked", "web")).toBe("linked");
 		expect(provisioningOf("admitted", "discord")).toBe("admitted");
 		const map = { web: "admitted", discord: "linked" } as const;
 		expect(provisioningOf(map, "discord")).toBe("linked");
 		expect(provisioningOf(map, "web")).toBe("admitted");
-		expect(provisioningOf(map, "line")).toBe("admitted");
+		expect(provisioningOf(map, "line")).toBe("linked");
+		expect(provisioningOf({ dsicord: "linked" }, "discord")).toBe("linked");
+		expect(provisioningOf(map, "constructor")).toBe("linked");
 	});
 
 	test("checkAccessRules refuses a mode that is neither admitted nor linked, and a blank surface name", () => {

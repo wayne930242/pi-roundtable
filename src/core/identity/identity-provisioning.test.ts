@@ -34,6 +34,7 @@ const discordFacts = (id: string, name: string) =>
 		provider: "discord",
 		subject: id,
 		name,
+		surface: "discord",
 		legacyId: id,
 	}) satisfies ActorFacts;
 
@@ -93,7 +94,7 @@ describeDb("per-surface provisioning", () => {
 		expect(speaker?.tier).toBe("member");
 	});
 
-	test("web still admits at first contact, and so does a surface the map leaves out", async () => {
+	test("web still admits at first contact, and a surface the map leaves out is linked", async () => {
 		const identity = await service();
 		const web = await identity.resolve(webFacts("user-9"));
 		expect(web?.tier).toBe("member");
@@ -105,9 +106,26 @@ describeDb("per-surface provisioning", () => {
 			provisioning: { discord: "linked" },
 		});
 		expect(
-			(await other.resolve({ provider: "slack", subject: "u1", name: "U" }))
-				?.tier,
-		).toBe("member");
+			await other.resolve({
+				provider: "slack",
+				subject: "u1",
+				name: "U",
+				surface: "slack",
+			}),
+		).toBeUndefined();
+		expect(await store.identity("slack", "u1")).toBeUndefined();
+	});
+
+	test("facts without a surface fall back to their provider", async () => {
+		const identity = await service();
+		expect(
+			await identity.resolve({
+				provider: "discord",
+				subject: KAI,
+				name: "Kai",
+				legacyId: KAI,
+			}),
+		).toBeUndefined();
 	});
 
 	test("the one-word form still applies to every surface", async () => {

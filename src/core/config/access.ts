@@ -4,6 +4,7 @@ import {
 	type AccessTier,
 	checkAccessRules,
 	type Provisioning,
+	type ProvisioningRule,
 	rulesOfSpeakerMap,
 } from "../identity/access-policy.ts";
 import { parseIdentity } from "../identity/actor-facts.ts";
@@ -53,9 +54,9 @@ export interface AccessConfig {
 	members?: AccessTierConfig;
 	/**
 	 * `admitted` (default): someone the rules admit gets a principal at first contact, and a 0.8 speaker claims theirs; `linked`: only identities linked with the CLI, or the owners' configured ones, are served, and no one claims a 0.8 principal.
-	 * A map gives a mode per surface, such as `{ web: "admitted", discord: "linked" }`; a surface it leaves out is `admitted`.
+	 * A map gives a mode per surface, such as `{ web: "admitted", discord: "linked" }`; a surface it leaves out is `linked`, so a misspelled surface cannot admit everyone.
 	 */
-	provisioning?: Provisioning | Record<string, Provisioning>;
+	provisioning?: ProvisioningRule;
 	/** How many days someone whose tier comes only from the rules may go unseen before their background turns are refused; default 30. */
 	backgroundStaleDays?: number;
 }

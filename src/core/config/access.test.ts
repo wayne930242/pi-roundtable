@@ -178,7 +178,9 @@ describe("the access configuration", () => {
 			/access\.provisioning\.discord/,
 		);
 		expect(() => make("open")).toThrow(/access\.provisioning/);
-		expect(() => make(["linked"])).toThrow(/access\.provisioning/);
+		for (const bad of [["linked"], 5, null])
+			expect(() => make(bad)).toThrow(/a string.*or an object|one of/);
+		expect(() => make(5)).toThrow(/access\.provisioning/);
 	});
 
 	test("the 0.8 owner of a host without Discord gets no Discord identity", () => {
