@@ -142,6 +142,22 @@ describeDb("message content", () => {
 		});
 	});
 
+	test("the wait for transcoding is bounded by a deadline, requests included", async () => {
+		build({ transcodingPollMs: 5, transcodingMaxMs: 150 });
+		fake.hangTranscoding.add("v6");
+		const started = Date.now();
+		await expect(content.fetch("v6", { kind: "video" })).rejects.toMatchObject({
+			code: "transcoding_timeout",
+		});
+		const took = Date.now() - started;
+		expect(took).toBeGreaterThanOrEqual(100);
+		expect(took).toBeLessThan(1500);
+		// The request was given what was left of the wait, not its own 15 seconds.
+		expect(
+			fake.calls.filter((c) => c.url.endsWith("/transcoding")).length,
+		).toBe(1);
+	});
+
 	test("an abort stops a download, and a wait for transcoding, with the signal's own reason", async () => {
 		fake.hang.add("slow");
 		const controller = new AbortController();

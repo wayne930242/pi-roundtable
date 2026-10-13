@@ -109,6 +109,8 @@ export interface FakeLine {
 	transcoding: Record<string, string[]>;
 	/** Message ids whose content download never answers until its signal aborts. */
 	hang: Set<string>;
+	/** Message ids whose transcoding status never answers until its signal aborts. */
+	hangTranscoding: Set<string>;
 }
 
 /** A LINE that issues tokens, knows the bot and the group names, and records every call. */
@@ -124,6 +126,7 @@ export function fakeLine(): FakeLine {
 		contents: {},
 		transcoding: {},
 		hang: new Set(),
+		hangTranscoding: new Set(),
 		revoke: (token) => void revoked.add(token),
 		failTokens: (status) => {
 			tokenStatus = status;
@@ -176,6 +179,12 @@ export function fakeLine(): FakeLine {
 				if (new URL(url).host !== "api-data.line.me")
 					return new Response("wrong host", { status: 404 });
 				if (media[2]) {
+					if (fake.hangTranscoding.has(id))
+						return new Promise<Response>((_, reject) => {
+							init?.signal?.addEventListener("abort", () =>
+								reject(init.signal?.reason),
+							);
+						});
 					const steps = fake.transcoding[id];
 					if (!steps?.length) return new Response("{}", { status: 404 });
 					const status = steps.length > 1 ? steps.shift() : steps[0];

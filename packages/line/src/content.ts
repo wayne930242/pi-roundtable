@@ -7,7 +7,10 @@ export interface MediaOptions {
 	maxBytes: number;
 	/** How long to wait between looks at a video or audio that LINE is still transcoding; default 2 seconds. */
 	transcodingPollMs: number;
-	/** How long to wait for it altogether; default 60 seconds. Past it the call fails with `transcoding_timeout`. */
+	/**
+	 * How long to wait for it altogether, requests included; default 60 seconds. Past it the call
+	 * fails with `transcoding_timeout`.
+	 */
 	transcodingMaxMs: number;
 }
 
@@ -36,6 +39,8 @@ export interface LineContentRequest {
 
 /** The longest a download of content may take, body included. */
 const DOWNLOAD_TIMEOUT_MS = 60_000;
+/** The longest one look at the transcoding status may take, when the wait has more time than that left. */
+const STATUS_TIMEOUT_MS = 15_000;
 const MESSAGE_ID = /^[A-Za-z0-9_-]{1,64}$/;
 
 function sleep(ms: number, signal: AbortSignal | undefined): Promise<void> {
@@ -114,26 +119,40 @@ export class MessageContent {
 		path: string,
 		signal: AbortSignal | undefined,
 	): Promise<LineContentResult | undefined> {
-		const polls = Math.max(
-			1,
-			Math.ceil(this.options.transcodingMaxMs / this.options.transcodingPollMs),
-		);
-		for (let poll = 0; poll < polls; poll++) {
+		const deadline = Date.now() + this.options.transcodingMaxMs;
+		for (let first = true; ; first = false) {
+			const remaining = deadline - Date.now();
+			// At least one look, however short the wait is.
+			if (remaining <= 0 && !first) break;
 			let status: unknown;
 			try {
 				const body = (await this.#api.json(`${path}/transcoding`, {
 					host: "data",
+					// A slow answer cannot outlast the wait: each request gets what is left of it.
+					timeoutMs: Math.max(1, Math.min(remaining, STATUS_TIMEOUT_MS)),
 					...(signal ? { signal } : {}),
 				})) as { status?: unknown };
 				status = body?.status;
 			} catch (error) {
 				if (isGone(error)) return { expired: true, reason: "expired" };
+				if (
+					error instanceof LineError &&
+					error.code === "api_unreachable" &&
+					remaining <= STATUS_TIMEOUT_MS
+				)
+					break;
 				throw error;
 			}
 			if (status === "succeeded") return undefined;
 			if (status === "failed")
 				return { expired: true, reason: "transcoding_failed" };
-			await sleep(this.options.transcodingPollMs, signal);
+			await sleep(
+				Math.max(
+					0,
+					Math.min(this.options.transcodingPollMs, deadline - Date.now()),
+				),
+				signal,
+			);
 		}
 		throw new LineError(
 			"transcoding_timeout",
