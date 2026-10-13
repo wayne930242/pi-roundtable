@@ -5,10 +5,14 @@ import {
 } from "pi-roundtable";
 import { LineApi } from "./api.ts";
 import { BotIdentity } from "./bot.ts";
+import { LineConsumer } from "./consumer.ts";
+import { MessageContent } from "./content.ts";
 import { type InboxProcessor, InboxWorker } from "./inbox.ts";
-import { INBOX_MIGRATION } from "./migrations.ts";
+import type { LineSubscriber } from "./messages.ts";
+import { MIGRATIONS } from "./migrations.ts";
 import { checkOptions, type LineOptions } from "./options.ts";
 import { LINE, type LineBridgePort } from "./port.ts";
+import { RetentionSweeper } from "./retention.ts";
 import { PgSources } from "./sources.ts";
 import { TokenSource } from "./token.ts";
 import { webhookHandler } from "./webhook.ts";
@@ -29,7 +33,7 @@ export function line(options: LineOptions): RoundtablePlugin {
 	});
 	return definePlugin({
 		name: "line",
-		migrations: [INBOX_MIGRATION],
+		migrations: MIGRATIONS,
 		provides: [LINE],
 		setup: (context: PluginContext) => {
 			const sql = context.database();
@@ -40,13 +44,28 @@ export function line(options: LineOptions): RoundtablePlugin {
 			});
 			const bot = new BotIdentity({ api, logger: context.logger, now });
 			const sources = new PgSources(sql, () => api, now);
-			let processor: InboxProcessor | undefined;
+			const consumer = new LineConsumer({
+				sql,
+				logger: context.logger,
+				now,
+			});
+			const content = new MessageContent(sql, api, options.media);
+			const retention = new RetentionSweeper({
+				sql,
+				logger: context.logger,
+				now,
+				...(options.retention ? { options: options.retention } : {}),
+			});
+			// The subscriber and the processor made for it; the worker hands events out only while both are set.
+			let subscription:
+				| { handler: LineSubscriber; processor: InboxProcessor }
+				| undefined;
 			const worker = new InboxWorker({
 				sql,
 				logger: context.logger,
 				now,
 				sources,
-				processor: () => processor,
+				processor: () => subscription?.processor,
 				...(options.inbox ? { options: options.inbox } : {}),
 			});
 			const port: LineBridgePort = {
@@ -59,15 +78,20 @@ export function line(options: LineOptions): RoundtablePlugin {
 						tokenFailure: health.lastFailure,
 					};
 				},
-				attachProcessor: (attached) => {
-					if (processor)
-						throw new Error("line: an inbox processor is already attached");
-					processor = attached;
+				subscribe: (handler) => {
+					if (subscription)
+						throw new Error("line: a subscriber is already attached");
+					const attached = {
+						handler,
+						processor: consumer.processorFor(handler),
+					};
+					subscription = attached;
 					worker.kick();
 					return () => {
-						if (processor === attached) processor = undefined;
+						if (subscription === attached) subscription = undefined;
 					};
 				},
+				content: (messageId, request) => content.fetch(messageId, request),
 			};
 			context.services.provide(LINE, port);
 			return {
@@ -81,6 +105,12 @@ export function line(options: LineOptions): RoundtablePlugin {
 						start: () => worker.start(),
 						stop: () => worker.stop(),
 						busy: () => worker.busy(),
+					},
+					{
+						name: "line-retention",
+						start: () => retention.start(),
+						stop: () => retention.stop(),
+						busy: () => retention.busy(),
 					},
 				],
 				http: [

@@ -7,7 +7,7 @@ import type {
 	ServiceKey,
 } from "pi-roundtable";
 import { describeDb, partial, recordingLogger } from "pi-roundtable/testing";
-import type { InboxEvent } from "./inbox.ts";
+import type { LineEvent } from "./messages.ts";
 import { line } from "./plugin.ts";
 import { LINE, type LineBridgePort } from "./port.ts";
 import {
@@ -21,7 +21,7 @@ import {
 	sign,
 	webhookRequest,
 } from "./testing/line-fake.ts";
-import { freshPool } from "./testing/pool.ts";
+import { freshPool, truncateAll } from "./testing/pool.ts";
 
 const credentials = { channelId: CHANNEL_ID, channelSecret: SECRET };
 
@@ -53,6 +53,22 @@ test("a configuration mistake throws when the plugin is made, before the host st
 		line({
 			credentials,
 			inbox: { maxHandleMs: 2_147_483_647, leaseMs: 2_147_483_647 },
+		}),
+	).not.toThrow();
+	expect(() => line({ credentials, media: { maxBytes: 0 } })).toThrow(
+		"media.maxBytes",
+	);
+	expect(() => line({ credentials, media: { nope: 1 } as never })).toThrow(
+		"media.nope",
+	);
+	expect(() => line({ credentials, retention: { inboxMs: -1 } })).toThrow(
+		"retention.inboxMs",
+	);
+	expect(() =>
+		line({
+			credentials,
+			media: { maxBytes: 1024 },
+			retention: { inboxMs: 1000, messagesMs: 1000, intervalMs: 1000 },
 		}),
 	).not.toThrow();
 });
@@ -103,7 +119,7 @@ describeDb("the line plugin", () => {
 
 	beforeEach(async () => {
 		sql ??= await freshPool();
-		await sql`TRUNCATE line_inbox, line_sources`;
+		await truncateAll(sql);
 		logs.lines.length = 0;
 		provided = undefined;
 	});
@@ -111,14 +127,18 @@ describeDb("the line plugin", () => {
 		await sql?.close();
 	});
 
-	test("it contributes the webhook route, two services and the LINE service, and declares its migration", async () => {
+	test("it contributes the webhook route, three services and the LINE service, and declares its migration", async () => {
 		const { plugin, contribution, route, port } = await boot();
 		expect(plugin.name).toBe("line");
 		expect(plugin.provides).toEqual([LINE]);
-		expect(plugin.migrations?.map((m) => m.name)).toEqual(["inbox"]);
+		expect(plugin.migrations?.map((m) => m.name)).toEqual([
+			"inbox",
+			"messages",
+		]);
 		expect(contribution.services?.map((s) => s.name)).toEqual([
 			"line-bot",
 			"line-inbox",
+			"line-retention",
 		]);
 		expect(route).toMatchObject({
 			name: "line-webhook",
@@ -127,10 +147,11 @@ describeDb("the line plugin", () => {
 			methods: ["POST"],
 		});
 		expect(Object.keys(port).sort()).toEqual([
-			"attachProcessor",
 			"botUserId",
+			"content",
 			"health",
 			"sources",
+			"subscribe",
 		]);
 		const custom = await boot({ webhookPath: "/hooks/line", listener: "edge" });
 		expect(custom.route).toMatchObject({
@@ -144,12 +165,12 @@ describeDb("the line plugin", () => {
 		await service("line-bot").startInBackground?.();
 		expect(port.botUserId()).toBe(BOT);
 		await service("line-inbox").start?.();
-		const got: InboxEvent[] = [];
-		const detach = port.attachProcessor(async (event) => {
+		const got: LineEvent[] = [];
+		const detach = port.subscribe(async (event) => {
 			got.push(event);
 			return undefined;
 		});
-		expect(() => port.attachProcessor(async () => undefined)).toThrow(
+		expect(() => port.subscribe(async () => undefined)).toThrow(
 			"already attached",
 		);
 
@@ -171,14 +192,87 @@ describeDb("the line plugin", () => {
 			).status,
 		).toBe(401);
 		for (let i = 0; i < 400 && got.length < 1; i++) await Bun.sleep(10);
-		expect(got.map((e) => e.id)).toEqual(["m2"]);
-		expect(got[0]?.payload).toMatchObject({ message: { text: "second" } });
+		expect(got).toEqual([
+			{
+				type: "message",
+				eventId: "m2",
+				sourceKey: GROUP,
+				timestamp: 1_700_000_000_000,
+				messageId: "m-m2",
+				userId: "Uuser0001",
+				body: { kind: "text", text: "second" },
+			},
+		]);
 		expect(port.health()).toEqual({ tokensIssued: 1, tokenFailure: undefined });
 		expect(fake.issued).toHaveLength(1);
 
 		detach();
 		await service("line-inbox").stop?.();
 		expect(service("line-inbox").busy?.()).toEqual([]);
+	});
+
+	test("one subscriber at a time: a second is refused, detaching frees the place, and events wait while none is attached", async () => {
+		const { service, route, port } = await boot();
+		await service("line-inbox").start?.();
+		await route.handle(webhookRequest(body(messageEvent({ id: "s0" }))));
+		await port.sources.allow(GROUP);
+		await route.handle(
+			webhookRequest(body(messageEvent({ id: "s1", text: "waits" }))),
+		);
+		// Nobody is attached: the event waits with its payload and is not counted as handled.
+		await Bun.sleep(80);
+		const [waiting] =
+			await sql`SELECT status, attempts, payload FROM line_inbox WHERE webhook_event_id = 's1'`;
+		expect(waiting).toMatchObject({ status: "pending", attempts: 0 });
+		expect(waiting.payload.message.text).toBe("waits");
+
+		const first: LineEvent[] = [];
+		const detach = port.subscribe(async (event) => {
+			first.push(event);
+		});
+		expect(() => port.subscribe(async () => undefined)).toThrow(
+			"already attached",
+		);
+		for (let i = 0; i < 400 && first.length < 1; i++) await Bun.sleep(10);
+		expect(first.map((e) => e.type)).toEqual(["message"]);
+
+		detach();
+		detach();
+		await route.handle(
+			webhookRequest(body(messageEvent({ id: "s2", text: "after" }))),
+		);
+		await Bun.sleep(80);
+		expect(first).toHaveLength(1);
+		const second: LineEvent[] = [];
+		port.subscribe(async (event) => {
+			second.push(event);
+		});
+		for (let i = 0; i < 400 && second.length < 1; i++) await Bun.sleep(10);
+		expect(second.map((e) => (e as { eventId: string }).eventId)).toEqual([
+			"s2",
+		]);
+		await service("line-inbox").stop?.();
+	});
+
+	test("content comes through the service with the configured cap, and retention runs as a service", async () => {
+		const { fake, service, port } = await boot({ media: { maxBytes: 50 } });
+		fake.contents.pic = { bytes: new Uint8Array(40) };
+		fake.contents.huge = { bytes: new Uint8Array(51) };
+		expect(await port.content("pic", { kind: "image" })).toMatchObject({
+			contentType: "application/octet-stream",
+		});
+		expect(await port.content("huge")).toEqual({ tooLarge: true });
+		const retention = service("line-retention");
+		await sql`INSERT INTO line_tombstones (source_key, message_id, created_at) VALUES (${GROUP}, 'old', ${new Date(time.getTime() - 8 * 86_400_000)})`;
+		await retention.start?.();
+		for (let i = 0; i < 200; i++) {
+			const [row] = await sql`SELECT count(*)::int AS n FROM line_tombstones`;
+			if (row.n === 0) break;
+			await Bun.sleep(10);
+		}
+		await retention.stop?.();
+		expect((await sql`SELECT 1 FROM line_tombstones`).length).toBe(0);
+		expect(retention.busy?.()).toEqual([]);
 	});
 
 	test("the token and the secret appear in no log line and no error, through a whole run and through failures", async () => {

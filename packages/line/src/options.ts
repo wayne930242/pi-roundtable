@@ -1,4 +1,6 @@
+import type { MediaOptions } from "./content.ts";
 import type { InboxOptions } from "./inbox.ts";
+import { checkRetention, type RetentionOptions } from "./retention.ts";
 import type { LineCredentials } from "./token.ts";
 
 export interface LineOptions {
@@ -10,6 +12,10 @@ export interface LineOptions {
 	listener?: string;
 	/** Tunes the inbox worker. */
 	inbox?: Partial<InboxOptions>;
+	/** Tunes how message content is fetched: `maxBytes` (default 10 MiB) and the transcoding wait. */
+	media?: Partial<MediaOptions>;
+	/** Tunes how long the package keeps what it stores; default 7 days for everything. */
+	retention?: Partial<RetentionOptions>;
 	/** Replaces `fetch` for every call to LINE, for tests. */
 	fetch?: typeof fetch;
 }
@@ -37,6 +43,12 @@ const TIMER_KEYS: readonly (keyof InboxOptions)[] = [
 	"pollMs",
 ];
 
+const MEDIA_KEYS: Record<keyof MediaOptions, true> = {
+	maxBytes: true,
+	transcodingPollMs: true,
+	transcodingMaxMs: true,
+};
+
 /** Refuses a mistake in the options, naming the field; the host stops before it starts. */
 export function checkOptions(options: LineOptions): { path: string } {
 	const path = options.webhookPath ?? "/line/webhook";
@@ -59,5 +71,14 @@ export function checkOptions(options: LineOptions): { path: string } {
 				`line: inbox.${key} must be at most ${MAX_TIMER_MS} milliseconds (about 24 days); got ${String(value)}`,
 			);
 	}
+	for (const [key, value] of Object.entries(options.media ?? {})) {
+		if (!(key in MEDIA_KEYS))
+			throw new Error(`line: media.${key} is not a media option`);
+		if (!Number.isInteger(value) || (value as number) < 1)
+			throw new Error(
+				`line: media.${key} must be a positive whole number; got ${String(value)}`,
+			);
+	}
+	checkRetention(options.retention ?? {});
 	return { path };
 }
