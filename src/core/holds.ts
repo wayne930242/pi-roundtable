@@ -71,6 +71,13 @@ export interface HoldRule {
 		context: HoldContext,
 		turn: ToolTurn,
 	): readonly string[] | undefined | Promise<readonly string[] | undefined>;
+	/**
+	 * Whether `approversInTurn` may name approvers for some call of `tool`, for a rule whose answer
+	 * depends on the input. Asked when the input is not known yet, as for a precheck script's call
+	 * whose arguments are computed when it runs; a rule with `approversInTurn` and without this is
+	 * taken to name approvers for every tool.
+	 */
+	mayName?(tool: string): boolean;
 }
 
 /** The description of a call that must be approved first, or undefined to let it run. */
@@ -109,6 +116,8 @@ export type HoldCheck = ((
 		context: HoldContext,
 		turn: ToolTurn,
 	): readonly string[] | undefined | Promise<readonly string[] | undefined>;
+	/** The name of a rule that may name approvers for some call of `tool` whatever its input; see `HoldRule.mayName`. */
+	mayName?(tool: string): string | undefined;
 };
 
 /** The higher of two tiers; undefined only when both are. */
@@ -165,7 +174,11 @@ export function holdChain(rules: readonly HoldRule[]): HoldCheck {
 				higherTier(tier, rule.approvalTier?.(tool, input, context)),
 			undefined,
 		);
-	if (rules.some((rule) => rule.approversInTurn))
+	if (rules.some((rule) => rule.approversInTurn)) {
+		check.mayName = (tool) =>
+			rules.find(
+				(rule) => rule.approversInTurn && (rule.mayName?.(tool) ?? true),
+			)?.name;
 		check.approversInTurn = (tool, input, context, turn) => {
 			const named = rules.flatMap((rule) => {
 				const approvers = rule.approversInTurn?.(tool, input, context, turn);
@@ -176,6 +189,7 @@ export function holdChain(rules: readonly HoldRule[]): HoldCheck {
 				return Promise.all(named).then(commonApprovers);
 			return commonApprovers(named as (readonly string[] | undefined)[]);
 		};
+	}
 	return check;
 }
 

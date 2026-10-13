@@ -362,6 +362,56 @@ describe("saving a script whose held calls name approvers (RV-F004)", () => {
 		expect(await approvers(MAILS_COMPUTED)).toEqual([]);
 	});
 
+	/** A chain whose only approvers rule answers by the arguments: only mail to the shared inbox has any. */
+	function byArguments(mayName?: HoldRule["mayName"]) {
+		const arguments_: HoldCheck = holdChain([
+			MAIL_RULE,
+			{
+				name: "by-arguments",
+				describe: () => undefined,
+				approversInTurn: (_tool, input) =>
+					input.to === "inbox@example.test" ? ["p_ada"] : undefined,
+				...(mayName ? { mayName } : {}),
+			},
+			precheckScriptHoldRule({
+				prechecks: () => registry,
+				holds: () => arguments_,
+				tiers: () => TIERS,
+			}),
+		]);
+		return arguments_;
+	}
+
+	test("a call with computed arguments, under a rule that names approvers by its arguments, needs an owner (RV2-F002)", async () => {
+		const chained = byArguments();
+		const asked = (precheck_script: string) =>
+			chained.approversInTurn?.(
+				"schedule_create",
+				create(precheck_script),
+				{},
+				turn,
+			);
+		// Written out, an address the rule does not name approvers for is left to its speaker, as before.
+		expect(await asked(script("other@example.test"))).toBeUndefined();
+		expect(await asked(script("inbox@example.test"))).toEqual(["p_ada"]);
+		// Computed, it may be the inbox when it runs: saving it is the owners' alone.
+		expect(await asked(MAILS_COMPUTED)).toEqual([]);
+	});
+
+	test("a rule that says it names no approvers for the tool leaves a computed call to the speaker", async () => {
+		const chained = byArguments((tool) => tool !== GMAIL);
+		expect(
+			await chained.approversInTurn?.(
+				"schedule_create",
+				create(MAILS_COMPUTED),
+				{},
+				turn,
+			),
+		).toBeUndefined();
+		expect(chained.mayName?.(GMAIL)).toBeUndefined();
+		expect(byArguments().mayName?.(GMAIL)).toBe("by-arguments");
+	});
+
 	test("a lookup that fails leaves the owners alone to approve saving it", async () => {
 		const failing = holdChain([
 			MAIL_RULE,

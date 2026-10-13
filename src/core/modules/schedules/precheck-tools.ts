@@ -313,6 +313,8 @@ interface JudgedScriptCall {
 	name: string;
 	/** The arguments written out in the script; empty when it computes them. */
 	input: Record<string, unknown>;
+	/** Whether the script writes its arguments out, so `input` is what the call will be made with. */
+	literal: boolean;
 	held?: string;
 }
 
@@ -339,6 +341,7 @@ function judgedScriptCalls(
 			tool: call.tool,
 			name,
 			input,
+			literal: call.args !== undefined,
 			...(held ? { held } : {}),
 		};
 	});
@@ -363,7 +366,12 @@ export function precheckScriptHoldRule(options: {
 		tool: string,
 		input: Record<string, unknown>,
 		context: HoldContext,
-	): { name: string; input: Record<string, unknown>; held: string }[] => {
+	): {
+		name: string;
+		input: Record<string, unknown>;
+		literal: boolean;
+		held: string;
+	}[] => {
 		const script = input.precheck_script;
 		if (!SCHEDULE_TOOLS.has(tool) || typeof script !== "string" || judging)
 			return [];
@@ -377,7 +385,14 @@ export function precheckScriptHoldRule(options: {
 				context,
 			}).flatMap((call) =>
 				call.held
-					? [{ name: call.name, input: call.input, held: call.held }]
+					? [
+							{
+								name: call.name,
+								input: call.input,
+								literal: call.literal,
+								held: call.held,
+							},
+						]
 					: [],
 			);
 		} catch {
@@ -424,17 +439,32 @@ export function precheckScriptHoldRule(options: {
 				undefined,
 			);
 		},
+		mayName: (tool) => SCHEDULE_TOOLS.has(tool),
 		// Whoever approves must also be named for each held call the script makes: the principals
 		// every call names, and, where a call's approvers cannot be read, the owners alone.
 		approversInTurn(tool, input, context, turn) {
 			const calls = scriptCalls(tool, input, context);
-			const lookup = options.holds().approversInTurn;
+			const holds = options.holds();
+			const lookup = holds.approversInTurn;
 			if (calls.length === 0 || !lookup) return undefined;
 			return Promise.all(
 				calls.map(async (call) => {
 					try {
 						// A script's computed arguments are not known now, so its call is judged by none.
-						return await lookup(call.name, call.input, context, turn);
+						const named = await lookup.call(
+							holds,
+							call.name,
+							call.input,
+							context,
+							turn,
+						);
+						// A rule that answers by the arguments may name approvers once they are known:
+						// until then only the owners can stand for them.
+						return named === undefined &&
+							!call.literal &&
+							holds.mayName?.(call.name) !== undefined
+							? []
+							: named;
 					} catch {
 						return [];
 					}
