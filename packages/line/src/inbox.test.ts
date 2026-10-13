@@ -307,7 +307,7 @@ describeDb("the inbox worker", () => {
 		expect(await row("unsend-1")).toMatchObject({
 			status: "pending",
 			attempts: 0,
-			requeues: 1,
+			requeues: 0,
 			last_error_code: "waiting_for_message",
 		});
 		expect(await w.runOnce()).toBe(true);
@@ -403,5 +403,256 @@ describeDb("the inbox worker", () => {
 		await stopping;
 		expect(w.busy()).toEqual([]);
 		expect((await row("slow")).status).toBe("done");
+	});
+
+	/** An `unsend` of `messageId`. */
+	const unsendOf = (id: string, messageId: string, timestamp: number) => ({
+		...messageEvent({ id, timestamp, type: "unsend" }),
+		message: undefined,
+		unsend: { messageId },
+	});
+	/** A `messageEdited` of `messageId`. */
+	const editOf = (id: string, messageId: string, timestamp: number) =>
+		messageEvent({ id, timestamp, type: "messageEdited", messageId });
+	/** Lets the next `handled` entry appear, for a handler that runs in the background. */
+	const until = async (done: () => boolean) => {
+		for (let i = 0; i < 400 && !done(); i++) await Bun.sleep(10);
+		expect(done()).toBe(true);
+	};
+
+	test("R4REV-F001: an unsend waits for an original that keeps failing, however long, and never dies before it settles", async () => {
+		await store(
+			messageEvent({ id: "m1", timestamp: 1000, messageId: "M1" }),
+			unsendOf("u1", "M1", 2000),
+		);
+		let tries = 0;
+		processor = async (event) => {
+			if (event.id === "m1" && ++tries < 6)
+				throw new LineError("discord_down", "no");
+			handled.push(event);
+			return undefined;
+		};
+		const w = worker({
+			maxRequeues: 3,
+			dependencyRetryMs: 5000,
+			backoffBaseMs: 40_000,
+			backoffCapMs: 40_000,
+		});
+		for (let i = 0; i < 400 && handled.length < 2; i++) {
+			await w.runOnce();
+			advance(5000);
+		}
+		expect(handled.map((e) => e.id)).toEqual(["m1", "u1"]);
+		expect(await row("u1")).toMatchObject({ status: "done" });
+		expect(await row("m1")).toMatchObject({ status: "done", attempts: 6 });
+	});
+
+	test("R4REV-F001: an unsend goes on once the original is dead, and the wait it did does not count against the limit", async () => {
+		await store(
+			messageEvent({ id: "m1", timestamp: 1000, messageId: "M1" }),
+			unsendOf("u1", "M1", 2000),
+		);
+		processor = async (event) => {
+			if (event.id === "m1") throw new LineError("always_fails", "no");
+			handled.push(event);
+			return undefined;
+		};
+		const w = worker({
+			maxRequeues: 2,
+			maxAttempts: 3,
+			backoffBaseMs: 20_000,
+			backoffCapMs: 20_000,
+		});
+		for (let i = 0; i < 100 && handled.length < 1; i++) {
+			await w.runOnce();
+			advance(5000);
+		}
+		expect(handled.map((e) => e.id)).toEqual(["u1"]);
+		expect(await row("m1")).toMatchObject({ status: "dead" });
+		expect(await row("u1")).toMatchObject({ status: "done", requeues: 0 });
+	});
+
+	test("R4REV-F002: after block() an event that fails or asks for later is not handed out again, and loses its payload", async () => {
+		for (const outcome of ["throw", "later"] as const) {
+			await sql`TRUNCATE line_inbox, line_sources`;
+			handled = [];
+			await store(messageEvent({ id: "m1", text: "customer words" }));
+			processor = async (event) => {
+				handled.push(event);
+				await sources().block(GROUP);
+				if (outcome === "throw") throw new LineError("discord_down", "no");
+				return { retryInMs: 1000 };
+			};
+			const w = worker({ backoffBaseMs: 1000 });
+			expect(await w.runOnce()).toBe(true);
+			advance(2 * 3_600_000);
+			expect(await w.runOnce()).toBe(false);
+			expect(handled.map((e) => e.id)).toEqual(["m1"]);
+			expect(await row("m1")).toMatchObject({
+				status: "skipped",
+				payload: null,
+				last_error_code: "source_blocked",
+			});
+		}
+	});
+
+	test("R4REV-F002: a pending event of a blocked chat is dropped at the claim, and one of a chat that is not allowed waits unread except join and leave", async () => {
+		await store(
+			messageEvent({ id: "m1", text: "customer words", timestamp: 1000 }),
+			{ ...messageEvent({ id: "j1", timestamp: 2000 }), type: "join" },
+		);
+		await sql`UPDATE line_sources SET status = 'left' WHERE source_key = ${GROUP}`;
+		const w = worker();
+		expect(await w.runOnce()).toBe(true);
+		expect(handled.map((e) => e.id)).toEqual(["j1"]);
+		expect(await w.runOnce()).toBe(false);
+		expect(await row("m1")).toMatchObject({ status: "pending" });
+		expect((await row("m1")).payload.message.text).toBe("customer words");
+		await sql`UPDATE line_sources SET status = 'blocked' WHERE source_key = ${GROUP}`;
+		expect(await w.runOnce()).toBe(false);
+		expect(handled.map((e) => e.id)).toEqual(["j1"]);
+		expect(await row("m1")).toMatchObject({
+			status: "skipped",
+			payload: null,
+			last_error_code: "source_blocked",
+		});
+	});
+
+	test("R4REV-F003: a slow handler keeps its lease by heartbeat, and a worker recovering leases does not take its event", async () => {
+		await store(messageEvent({ id: "slow" }));
+		const gate = Promise.withResolvers<void>();
+		processor = async (event) => {
+			handled.push(event);
+			await gate.promise;
+			return undefined;
+		};
+		const w = worker({ leaseMs: 900 });
+		const running = w.runOnce();
+		await until(() => handled.length === 1);
+		// Time passes by the clock the lease is read with; the heartbeat runs in real time.
+		advance(800);
+		for (
+			let i = 0;
+			i < 400 &&
+			new Date((await row("slow")).claimed_at).getTime() === START.getTime();
+			i++
+		)
+			await Bun.sleep(10);
+		advance(800);
+		expect(await w.recoverLeases()).toBe(0);
+		// Another process (its own clock and no knowledge of this one's handlers) sees a live lease too.
+		expect(await worker({ leaseMs: 900 }).recoverLeases()).toBe(0);
+		expect(await w.runOnce()).toBe(false);
+		gate.resolve();
+		await running;
+		expect(handled.length).toBe(1);
+		expect(await row("slow")).toMatchObject({ status: "done", attempts: 1 });
+	});
+
+	test("R4REV-F003: a worker never reclaims its own live event, even past the lease", async () => {
+		await store(messageEvent({ id: "slow" }));
+		const gate = Promise.withResolvers<void>();
+		processor = async (event) => {
+			handled.push(event);
+			await gate.promise;
+			return undefined;
+		};
+		const w = worker({ leaseMs: 100_000 });
+		const running = w.runOnce();
+		await until(() => handled.length === 1);
+		advance(500_000);
+		expect(await w.recoverLeases()).toBe(0);
+		expect(await w.runOnce()).toBe(false);
+		// A worker of another process cannot know it, so it does.
+		expect(await worker({ leaseMs: 100_000 }).recoverLeases()).toBe(1);
+		gate.resolve();
+		await running;
+	});
+
+	test("R4REV-F003: a handler that lost its lease cannot reopen what the next claim finished", async () => {
+		await store(messageEvent({ id: "m1" }));
+		const failLate = Promise.withResolvers<void>();
+		processor = async (event) => {
+			handled.push(event);
+			if (event.attempt === 1) {
+				await failLate.promise;
+				throw new LineError("late_failure", "no");
+			}
+			return undefined;
+		};
+		const a = worker().runOnce();
+		await until(() => handled.length === 1);
+		// The lease was lost (another process recovered it) and a second worker handles the event.
+		await sql`UPDATE line_inbox SET status = 'pending', claimed_at = NULL WHERE webhook_event_id = 'm1'`;
+		advance(1);
+		await worker().runOnce();
+		expect(await row("m1")).toMatchObject({ status: "done", payload: null });
+		// The late failure of the first handler is dropped instead of putting the event back.
+		failLate.resolve();
+		await a;
+		expect(await row("m1")).toMatchObject({
+			status: "done",
+			payload: null,
+			attempts: 2,
+		});
+		expect(handled.map((e) => e.attempt)).toEqual([1, 2]);
+	});
+
+	test("R4REV-F003: a handler that finishes after its lease was lost leaves the next claim alone", async () => {
+		await store(messageEvent({ id: "m1" }));
+		const gates = [
+			Promise.withResolvers<void>(),
+			Promise.withResolvers<void>(),
+		];
+		processor = async (event) => {
+			handled.push(event);
+			await gates[event.attempt - 1]?.promise;
+			return undefined;
+		};
+		const a = worker().runOnce();
+		await until(() => handled.length === 1);
+		await sql`UPDATE line_inbox SET status = 'pending', claimed_at = NULL WHERE webhook_event_id = 'm1'`;
+		advance(1);
+		const b = worker().runOnce();
+		await until(() => handled.length === 2);
+		gates[0]?.resolve();
+		await a;
+		expect(await row("m1")).toMatchObject({
+			status: "processing",
+			attempts: 2,
+		});
+		expect((await row("m1")).payload).not.toBeNull();
+		gates[1]?.resolve();
+		await b;
+		expect(await row("m1")).toMatchObject({ status: "done" });
+	});
+
+	test("R4REV-F004: edits of one message run in order even when the earlier one is backing off, while other messages go on", async () => {
+		await store(
+			messageEvent({ id: "m1", timestamp: 1000, messageId: "M1" }),
+			editOf("e1", "M1", 2000),
+			messageEvent({ id: "other", timestamp: 2500, messageId: "M2" }),
+			editOf("e2", "M1", 3000),
+		);
+		let failed = false;
+		processor = async (event) => {
+			if (event.id === "e1" && !failed) {
+				failed = true;
+				throw new LineError("discord_down", "no");
+			}
+			handled.push(event);
+			return undefined;
+		};
+		const w = worker({ backoffBaseMs: 30_000, dependencyRetryMs: 5000 });
+		for (let i = 0; i < 40 && handled.length < 4; i++) {
+			await w.runOnce();
+			advance(5000);
+		}
+		const order = handled.map((e) => e.id);
+		expect(order.indexOf("e1")).toBeLessThan(order.indexOf("e2"));
+		expect(order.indexOf("m1")).toBeLessThan(order.indexOf("e1"));
+		// The other message was not held behind the edit that was backing off.
+		expect(order.indexOf("other")).toBeLessThan(order.indexOf("e1"));
+		expect(order.length).toBe(4);
 	});
 });

@@ -80,6 +80,7 @@ export function backoffMs(
 }
 
 interface Claimed {
+	seq: string | number;
 	webhook_event_id: string;
 	source_key: string | null;
 	event_type: string;
@@ -89,6 +90,13 @@ interface Claimed {
 	attempts: number;
 	requeues: number;
 	created_at: Date;
+	claimed_at: Date;
+}
+
+/** The claim an event is handled under; every write that ends the handling is fenced by it. */
+interface Lease {
+	/** `claimed_at` as the row holds it now, moved on by each renewal. */
+	at: Date;
 }
 
 export interface InboxWorkerDeps {
@@ -105,14 +113,21 @@ export interface InboxWorkerDeps {
 
 /**
  * Takes stored events one chat at a time, oldest event first, and hands them to the processor.
+ * Delivery is at least once: a handler that outlives its lease (the worker's process died, or it
+ * could not renew) may run again, so a processor must be idempotent.
  *
  * - A claim is `FOR UPDATE SKIP LOCKED` under a per-chat advisory lock, so two workers (or two
- *   processes) never hold events of one chat together.
- * - A claimed event has a lease; one still claimed when the lease ends goes back to waiting, and
- *   that is counted as a handing out, so an event that crashes its worker is eventually dead.
+ *   processes) do not hold events of one chat together while leases are kept.
+ * - A claimed event has a lease, which the worker renews while the handler runs; one still claimed
+ *   when the lease ends goes back to waiting, and that is counted as a handing out, so an event that
+ *   crashes its worker is eventually dead. Every write that ends a handling is fenced by its claim,
+ *   so a handler that lost the event cannot change what the next claim wrote.
  * - Order is by LINE's event time among the events that are due; an event that is backing off does
  *   not hold the ones behind it, because a stuck head would then stall a whole chat. The events
- *   that depend on a message wait for it instead.
+ *   that act on a message wait, without limit, until the message and the earlier events on it are
+ *   settled, so events of one message run strictly in order.
+ * - Only the events of allowed chats (and the join and leave of any chat that is not blocked) are
+ *   handed out; what a blocked chat still has waiting is dropped with its payload.
  * - A finished event keeps its row and loses its payload.
  */
 export class InboxWorker {
@@ -161,6 +176,8 @@ export class InboxWorker {
 	async recoverLeases(): Promise<number> {
 		const now = this.#now();
 		const expired = new Date(now.getTime() - this.options.leaseMs);
+		// Events this worker is handling renew their own lease; it does not take them back.
+		const own = JSON.stringify([...this.#active]);
 		const rows: { attempts: number }[] = await this.#sql`UPDATE line_inbox
 			SET status = CASE WHEN attempts >= ${this.options.maxAttempts} THEN 'dead' ELSE 'pending' END,
 				next_attempt_at = ${now},
@@ -169,6 +186,7 @@ export class InboxWorker {
 				completed_at = CASE WHEN attempts >= ${this.options.maxAttempts} THEN ${now}::timestamptz ELSE NULL::timestamptz END,
 				last_error_code = 'lease_expired'
 			WHERE status = 'processing' AND claimed_at < ${expired}
+				AND webhook_event_id NOT IN (SELECT jsonb_array_elements_text(${own}::text::jsonb))
 			RETURNING attempts`;
 		if (rows.length > 0)
 			this.#logger.warn(
@@ -205,14 +223,19 @@ export class InboxWorker {
 				source_key: string | null;
 				event_ts: string | number;
 				seq: string | number;
+				source_status: string | null;
 			}[] =
-				await tx`(SELECT DISTINCT ON (i.source_key) i.webhook_event_id, i.source_key, i.event_ts, i.seq
+				await tx`(SELECT DISTINCT ON (i.source_key) i.webhook_event_id, i.source_key, i.event_ts, i.seq,
+							s.status AS source_status
 						FROM line_inbox i
+						JOIN line_sources s ON s.source_key = i.source_key
 						WHERE i.status = 'pending' AND i.next_attempt_at <= ${now} AND i.source_key IS NOT NULL
+							AND (s.status IN ('allowed', 'blocked')
+								OR (s.status IN ('pending', 'left') AND i.event_type IN ('join', 'leave')))
 							AND NOT EXISTS (SELECT 1 FROM line_inbox p WHERE p.source_key = i.source_key AND p.status = 'processing')
 						ORDER BY i.source_key, i.event_ts, i.seq)
 					UNION ALL
-					(SELECT i.webhook_event_id, i.source_key, i.event_ts, i.seq FROM line_inbox i
+					(SELECT i.webhook_event_id, i.source_key, i.event_ts, i.seq, NULL AS source_status FROM line_inbox i
 						WHERE i.status = 'pending' AND i.next_attempt_at <= ${now} AND i.source_key IS NULL
 						ORDER BY i.event_ts, i.seq LIMIT 20)`;
 			heads.sort(
@@ -232,6 +255,14 @@ export class InboxWorker {
 					const [busy] = (await tx`SELECT 1 AS busy FROM line_inbox
 						WHERE source_key = ${head.source_key} AND status = 'processing' LIMIT 1`) as unknown[];
 					if (busy) continue;
+					if (head.source_status === "blocked") {
+						// What a blocked chat still has waiting is never handed out; the chat is left to the next look.
+						await tx`UPDATE line_inbox
+							SET status = 'skipped', payload = NULL, last_error_code = 'source_blocked', completed_at = ${now}
+							WHERE source_key = ${head.source_key} AND status = 'pending'
+								AND EXISTS (SELECT 1 FROM line_sources WHERE source_key = ${head.source_key} AND status = 'blocked')`;
+						continue;
+					}
 				}
 				// Locked, then claimed: a row another transaction holds (a block, say) is left to it.
 				const claimed: Claimed[] = await tx`UPDATE line_inbox
@@ -240,8 +271,8 @@ export class InboxWorker {
 						SELECT webhook_event_id FROM line_inbox
 						WHERE webhook_event_id = ${head.webhook_event_id} AND status = 'pending' AND next_attempt_at <= ${now}
 						FOR UPDATE SKIP LOCKED)
-					RETURNING webhook_event_id, source_key, event_type, message_id, event_ts, payload,
-						attempts, requeues, created_at`;
+					RETURNING seq, webhook_event_id, source_key, event_type, message_id, event_ts, payload,
+						attempts, requeues, created_at, claimed_at`;
 				if (claimed[0]) return claimed[0];
 			}
 			return undefined;
@@ -254,10 +285,20 @@ export class InboxWorker {
 			type: row.event_type,
 			attempt: row.attempts,
 		});
+		const lease: Lease = { at: row.claimed_at };
+		const beat = this.#keepLease(row, lease, log);
 		try {
 			const wait = await this.#mustWait(row);
-			if (wait !== undefined)
-				return await this.#later(row, wait, "waiting_for_message");
+			if (wait !== undefined) {
+				await beat.stop();
+				return await this.#later(
+					row,
+					lease,
+					wait,
+					"waiting_for_message",
+					false,
+				);
+			}
 			const timestamp = Number(row.event_ts);
 			if (row.source_key && row.event_type === "join")
 				await this.#sources.markJoined(row.source_key, timestamp);
@@ -272,72 +313,204 @@ export class InboxWorker {
 				payload: row.payload ?? {},
 				attempt: row.attempts,
 			});
+			await beat.stop();
 			if (result && Number.isFinite(result.retryInMs))
 				return await this.#later(
 					row,
+					lease,
 					Math.max(0, result.retryInMs),
 					"retry_requested",
+					true,
 				);
-			await this.#sql`UPDATE line_inbox
-				SET status = 'done', payload = NULL, claimed_at = NULL, last_error_code = NULL, completed_at = ${this.#now()}
-				WHERE webhook_event_id = ${row.webhook_event_id}`;
+			this.#settled(
+				row,
+				await this.#sql`UPDATE line_inbox
+					SET status = 'done', payload = NULL, claimed_at = NULL, last_error_code = NULL, completed_at = ${this.#now()}
+					WHERE webhook_event_id = ${row.webhook_event_id} AND status = 'processing' AND claimed_at = ${lease.at}
+					RETURNING 1`,
+			);
 		} catch (error) {
 			const code = errorCode(error);
 			log.warn({ code }, "a LINE inbox event failed");
-			await this.#fail(row, code);
+			await beat.stop();
+			await this.#fail(row, lease, code);
+		} finally {
+			await beat.stop();
 		}
 	}
 
 	/**
-	 * For an event that acts on a message: how long to wait when the message has not been mirrored
-	 * yet, or undefined when it may go on. A message that is not in the inbox at all may still be
-	 * on its way, so it is waited for until the grace is over; after that the processor decides.
+	 * Renews the claim while the handler runs, so a slow handler (an upload, say) is not taken for a
+	 * crashed one. A renewal that finds the claim changed means the event was recovered by someone
+	 * else: the heartbeat stops and the handler's last write will be refused.
+	 */
+	#keepLease(
+		row: Claimed,
+		lease: Lease,
+		log: Logger,
+	): { stop: () => Promise<void> } {
+		let renewing: Promise<void> | undefined;
+		let timer: ReturnType<typeof setInterval> | undefined;
+		const renew = async () => {
+			try {
+				const next = this.#now();
+				const rows: unknown[] = await this.#sql`UPDATE line_inbox
+					SET claimed_at = ${next}
+					WHERE webhook_event_id = ${row.webhook_event_id} AND status = 'processing' AND claimed_at = ${lease.at}
+					RETURNING 1`;
+				if (rows.length > 0) {
+					lease.at = next;
+					return;
+				}
+				log.warn({}, "a LINE inbox event lost its lease while it was handled");
+			} catch (error) {
+				log.warn(
+					{ code: errorCode(error) },
+					"a LINE inbox lease could not be renewed",
+				);
+				return;
+			}
+			if (timer) clearInterval(timer);
+			timer = undefined;
+		};
+		timer = setInterval(
+			() => {
+				renewing ??= renew().finally(() => {
+					renewing = undefined;
+				});
+			},
+			Math.max(1, Math.floor(this.options.leaseMs / 3)),
+		);
+		timer.unref?.();
+		return {
+			stop: async () => {
+				if (timer) clearInterval(timer);
+				timer = undefined;
+				await renewing;
+			},
+		};
+	}
+
+	/** Logs a write that changed nothing: the event was no longer this handler's. */
+	#settled(row: Claimed, rows: unknown[]): boolean {
+		if (rows.length > 0) return true;
+		this.#logger.warn(
+			{ event: row.webhook_event_id, type: row.event_type },
+			"a LINE inbox event was recovered while it was handled, so its outcome was dropped",
+		);
+		return false;
+	}
+
+	/**
+	 * For an event that acts on a message: how long to wait when the message, or an earlier event on
+	 * it, is not settled yet, or undefined when it may go on. Events of one message run in order:
+	 * the message first, then its edits and unsends by LINE's time, each only once the ones before it
+	 * are done or dead (an event backing off is not done). A message that is not in the inbox at all
+	 * may still be on its way, so it is waited for until the grace is over; after that the processor
+	 * decides.
 	 */
 	async #mustWait(row: Claimed): Promise<number | undefined> {
 		if (!DEPENDENT.has(row.event_type) || !row.message_id) return undefined;
-		const found: { status: string }[] = await this
-			.#sql`SELECT status FROM line_inbox
-			WHERE message_id = ${row.message_id} AND event_type = 'message'
-				AND source_key IS NOT DISTINCT FROM ${row.source_key}::text`;
-		if (found.some((m) => m.status === "pending" || m.status === "processing"))
+		const found: {
+			event_type: string;
+			status: string;
+			event_ts: string | number;
+			seq: string | number;
+		}[] = await this
+			.#sql`SELECT event_type, status, event_ts, seq FROM line_inbox
+			WHERE message_id = ${row.message_id} AND source_key IS NOT DISTINCT FROM ${row.source_key}::text
+				AND webhook_event_id <> ${row.webhook_event_id}
+				AND (event_type = 'message' OR event_type IN ('unsend', 'messageEdited'))`;
+		const open = (e: { status: string }) =>
+			e.status === "pending" || e.status === "processing";
+		const before = (e: { event_ts: string | number; seq: string | number }) =>
+			Number(e.event_ts) < Number(row.event_ts) ||
+			(Number(e.event_ts) === Number(row.event_ts) &&
+				Number(e.seq) < Number(row.seq));
+		const originals = found.filter((e) => e.event_type === "message");
+		if (found.some((e) => open(e) && (e.event_type === "message" || before(e))))
 			return this.options.dependencyRetryMs;
-		if (found.length > 0) return undefined;
+		if (originals.length > 0) return undefined;
 		const age = this.#now().getTime() - row.created_at.getTime();
 		return age < this.options.messageGraceMs
 			? this.options.dependencyRetryMs
 			: undefined;
 	}
 
-	/** Back to waiting without a failure: the handing out is not counted. */
-	async #later(row: Claimed, delayMs: number, code: string): Promise<void> {
+	/**
+	 * Drops the event when its chat was blocked while it was in hand, so it is never handed out
+	 * again; true when it did.
+	 */
+	async #dropIfBlocked(row: Claimed, lease: Lease): Promise<boolean> {
+		if (!row.source_key) return false;
+		const [source] = (await this.#sql`SELECT status FROM line_sources
+			WHERE source_key = ${row.source_key}`) as { status: string }[];
+		if (source?.status !== "blocked") return false;
+		this.#settled(
+			row,
+			await this.#sql`UPDATE line_inbox
+				SET status = 'skipped', payload = NULL, claimed_at = NULL, last_error_code = 'source_blocked',
+					completed_at = ${this.#now()}
+				WHERE webhook_event_id = ${row.webhook_event_id} AND status = 'processing' AND claimed_at = ${lease.at}
+				RETURNING 1`,
+		);
+		return true;
+	}
+
+	/**
+	 * Back to waiting without a failure: the handing out is not counted. `counted` says whether the
+	 * return counts towards `maxRequeues`; waiting for a message does not, because the message is
+	 * settled by its own attempts and the wait must outlast them.
+	 */
+	async #later(
+		row: Claimed,
+		lease: Lease,
+		delayMs: number,
+		code: string,
+		counted: boolean,
+	): Promise<void> {
+		if (await this.#dropIfBlocked(row, lease)) return;
 		const now = this.#now();
-		if (row.requeues + 1 > this.options.maxRequeues) {
-			await this.#die(row, "requeue_limit");
+		if (counted && row.requeues + 1 > this.options.maxRequeues) {
+			await this.#die(row, lease, "requeue_limit");
 			return;
 		}
-		await this.#sql`UPDATE line_inbox
-			SET status = 'pending', claimed_at = NULL, attempts = attempts - 1, requeues = requeues + 1,
-				next_attempt_at = ${new Date(now.getTime() + delayMs)}, last_error_code = ${code}
-			WHERE webhook_event_id = ${row.webhook_event_id}`;
+		this.#settled(
+			row,
+			await this.#sql`UPDATE line_inbox
+				SET status = 'pending', claimed_at = NULL, attempts = attempts - 1,
+					requeues = requeues + ${counted ? 1 : 0},
+					next_attempt_at = ${new Date(now.getTime() + delayMs)}, last_error_code = ${code}
+				WHERE webhook_event_id = ${row.webhook_event_id} AND status = 'processing' AND claimed_at = ${lease.at}
+				RETURNING 1`,
+		);
 	}
 
-	async #fail(row: Claimed, code: string): Promise<void> {
-		if (row.attempts >= this.options.maxAttempts) return this.#die(row, code);
+	async #fail(row: Claimed, lease: Lease, code: string): Promise<void> {
+		if (await this.#dropIfBlocked(row, lease)) return;
+		if (row.attempts >= this.options.maxAttempts)
+			return this.#die(row, lease, code);
 		const delay = backoffMs(row.attempts, this.options, this.#random);
-		await this.#sql`UPDATE line_inbox
-			SET status = 'pending', claimed_at = NULL, last_error_code = ${code},
-				next_attempt_at = ${new Date(this.#now().getTime() + delay)}
-			WHERE webhook_event_id = ${row.webhook_event_id}`;
+		this.#settled(
+			row,
+			await this.#sql`UPDATE line_inbox
+				SET status = 'pending', claimed_at = NULL, last_error_code = ${code},
+					next_attempt_at = ${new Date(this.#now().getTime() + delay)}
+				WHERE webhook_event_id = ${row.webhook_event_id} AND status = 'processing' AND claimed_at = ${lease.at}
+				RETURNING 1`,
+		);
 	}
 
-	async #die(row: Claimed, code: string): Promise<void> {
+	async #die(row: Claimed, lease: Lease, code: string): Promise<void> {
+		const rows = await this.#sql`UPDATE line_inbox
+			SET status = 'dead', payload = NULL, claimed_at = NULL, last_error_code = ${code}, completed_at = ${this.#now()}
+			WHERE webhook_event_id = ${row.webhook_event_id} AND status = 'processing' AND claimed_at = ${lease.at}
+			RETURNING 1`;
+		if (!this.#settled(row, rows)) return;
 		this.#logger.error(
 			{ event: row.webhook_event_id, type: row.event_type, code },
 			"a LINE inbox event is dead",
 		);
-		await this.#sql`UPDATE line_inbox
-			SET status = 'dead', payload = NULL, claimed_at = NULL, last_error_code = ${code}, completed_at = ${this.#now()}
-			WHERE webhook_event_id = ${row.webhook_event_id}`;
 	}
 
 	/** Starts the loop: leases are recovered first, then events are handled as they come. */

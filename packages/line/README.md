@@ -1,7 +1,7 @@
 # pi-roundtable-line
 
 A LINE Messaging API transport for [pi-roundtable][roundtable].
-It receives the events of a LINE Official Account's group chats on the host's HTTP listener, stores each one before it answers, and hands the stored events of the chats you allow to one consumer, in order and exactly once.
+It receives the events of a LINE Official Account's group chats on the host's HTTP listener, stores each one before it answers, and hands the stored events of the chats you allow to one consumer, in order and at least once.
 Source lives in [`packages/line`][source] in the pi-roundtable repository and releases in lockstep with the core.
 
 [roundtable]: https://www.npmjs.com/package/pi-roundtable
@@ -123,11 +123,13 @@ const detach = context.services.get(LINE).attachProcessor(async (event) => {
 
 Until a processor is attached, events stay in the inbox with their payload.
 
-- A claim is `FOR UPDATE SKIP LOCKED` under a per-chat lock: no chat has two events in hand at once, across workers and processes, and events of a chat go out in order of LINE's event time among those that are due. An event that is backing off does not hold the ones behind it.
-- A claimed event has a 2-minute lease. The worker puts back events whose lease ran out when it starts and every minute after, and that counts as a handing out, so an event that keeps crashing its worker ends up dead.
+- Delivery is at least once. A handler that outlives its lease (its process died, or it could not renew) may run again for the same event, so a processor must be idempotent.
+- A claim is `FOR UPDATE SKIP LOCKED` under a per-chat lock: while leases are kept no chat has two events in hand at once, across workers and processes, and events of a chat go out in order of LINE's event time among those that are due. An event that is backing off does not hold the ones behind it.
+- A claimed event has a 2-minute lease that the worker renews every 40 seconds while the handler runs, so a slow handler is not taken for a crashed one. Every write that ends a handling is fenced by its claim: a handler that lost the event cannot change what the next claim wrote. The worker puts back events whose lease ran out when it starts and every minute after, other than ones it is handling itself, and that counts as a handing out, so an event that keeps crashing its worker ends up dead.
 - A thrown error retries with exponential backoff and jitter (5 seconds doubling to 1 hour); after 12 handings out the event is `dead`. Only the error's lower-case `code` word is stored, never its message, because messages may quote what a customer wrote.
-- An `unsend` or `messageEdited` event waits while the message it acts on is still in the inbox, or has not arrived yet (up to 10 minutes), then goes to the processor.
-- A finished event keeps its row and loses its payload.
+- An `unsend` or `messageEdited` event runs strictly after the message it acts on and after the earlier events on that message: it waits, however long, while any of them is still pending, being handled or backing off, and goes to the processor once they are done or dead. The wait does not count against `maxRequeues`. A message that has not reached the inbox at all is waited for up to 10 minutes.
+- Only events of `allowed` chats, and the `join` and `leave` of a chat that is not blocked, are handed out. When a chat is blocked, what it still has waiting is dropped with its payload, and an event that was in hand at that moment is dropped instead of retried.
+- A finished event keeps its row and loses its payload. U+0000 and lone surrogates in an event are replaced with U+FFFD when it is stored, so one odd event never costs the others of its request.
 
 Options tune the worker: `inbox: { leaseMs, maxAttempts, backoffBaseMs, backoffCapMs, concurrency, pollMs, ... }`.
 
