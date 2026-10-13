@@ -109,8 +109,14 @@ export class FakeSurface implements ChatSurface {
 			) => {
 				const owners = scope?.escalate !== "none";
 				const named = options?.approvers;
-				// Alone with the bot, the person answers for themselves, if the call is theirs to approve.
-				if (named && !owners && !named.includes(scope?.principalId ?? ""))
+				// Alone with the bot, the person answers for themselves, if the call is theirs to approve:
+				// they are named, or an owner.
+				if (
+					named &&
+					!owners &&
+					scope?.tier !== "owner" &&
+					!named.includes(scope?.principalId ?? "")
+				)
 					return "unavailable";
 				const shared = owners ? named : undefined;
 				const theirs =

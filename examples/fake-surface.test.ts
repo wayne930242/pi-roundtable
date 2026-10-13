@@ -234,6 +234,33 @@ test("a private conversation's approval that names others is not shown to a pers
 	expect(surface.asked).toEqual([]);
 });
 
+test("a private conversation's approval that names others is shown to its person when they are an owner (RV2-F004)", async () => {
+	const surface = new FakeSurface();
+	const owner = {
+		id: "1",
+		name: "Riley",
+		tier: "owner",
+		principalId: "p1",
+	} as const;
+	const prompts = surface.prompts("fake:1", promptScope(owner, "private"));
+	let approver: unknown;
+	const answer = prompts.confirm(
+		"Send?",
+		"sends a message",
+		undefined,
+		"member",
+		undefined,
+		undefined,
+		{ approvers: ["p3"], approvedBy: (by) => (approver = by) },
+	);
+	expect(surface.asked[0]?.open).toBe(true);
+	surface.answer("q1", { principalId: "p3", tier: "member" }, true);
+	expect(surface.asked[0]?.open).toBe(true);
+	surface.answer("q1", { principalId: "p1", owner: true, tier: "owner" }, true);
+	expect(await answer).toBe("approved");
+	expect(approver).toMatchObject({ principalId: "p1", owner: true });
+});
+
 test("a private conversation's approval that names its person is answered by them alone", async () => {
 	const surface = new FakeSurface();
 	const speaker = {
