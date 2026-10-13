@@ -783,6 +783,37 @@ A rule whose verdict depends on the input, such as one that holds only a `delete
 It is asked when the input is not known yet, as for a [precheck script](#precheck-scripts-prechecks-the-agent-writes)'s call whose arguments are computed when it runs; a rule without it is judged by `describe` with an empty input.
 A rule whose held call stands for others can answer `approvalTier(tool, input, context)`: the lowest tier that may approve it when higher than the tool's own. The held call keeps it as `minTier`, and both its card and a confirming message require it. A card is answered, and a confirming message accepted, from the speaker whose turn held the call, when their tier is at least `minTier`, and from the owners where the conversation is shared ([who answers a prompt](#who-answers-a-prompt-promptscope)); nobody else in the channel may approve it. The held call records that speaker as `PendingConfirmation.speakerId` and their principal as `principalId`, so a confirming message from another identity of theirs counts after a restart too; a call held without them is the owners' to approve, and one held before 0.9, without a principal, is matched by `speakerId`.
 
+#### A hold that names its approvers
+
+A held call is approved by the speaker whose turn made it, or by an owner where the conversation is shared. A tool whose call stands for someone else, such as a message sent under another person's name, can name who approves it instead:
+
+```ts
+defineTool({
+	name: "customer_message_send",
+	description: "Send a message to a customer.",
+	parameters: Type.Object({ customer: Type.String(), text: Type.String() }),
+	minTier: "member",
+	hold: ({ customer }) => `Send a message to ${customer}`,
+	approvers: async ({ customer }, turn) => owners.ofCustomer(customer, turn.signal),
+	run: ({ customer, text }, turn) => {
+		if (!turn.approvedBy)
+			throw new ToolRefusal("this surface does not say who approved the message");
+		return messages.send(customer, text, turn.approvedBy.name);
+	},
+});
+```
+
+`approvers(args, turn)` returns the principal ids that may approve this call. It is asked, as `hold` is, in the turn that makes the call, with the same `ToolTurn`, the same wait (`HOLD_DESCRIBE_TIMEOUT_MS`) and the same `turn.signal`, once for each call a rule holds; it must change nothing. A rule of `holdRules` does the same with `approversInTurn(tool, input, context, turn)`, and `holdChain(rules).approversInTurn(...)` leaves the principals every rule that names approvers names.
+
+- The named principals approve the call **instead of the speaker**: the speaker whose turn made the call may not answer its card or confirm it by message unless they are named. Owners may still, where the conversation is shared.
+- Each named principal needs the call's tier (its tool's tier, or the `approvalTier` a rule gives it) when they answer, checked again then, and is accepted only on an identity of theirs the surface knows.
+- An empty list leaves the owners alone. A rejection, a throw or a timeout of the lookup does the same: it never widens who may approve.
+- A [private conversation](#who-answers-a-prompt-promptscope) ignores the names: its person alone answers, as without them, and a call above their tier resolves `unavailable`.
+- The names are kept with the held call as `HeldCall.approverIds`, in the same record as `minTier`, so a message that confirms it after a restart is judged by them: from the speaker or an owner, as before, only when the call names none; otherwise from a named principal or an owner, and only when their tier now holds every held call. A confirming message that holds several calls needs a person every one of them accepts. A row written before this, or by a version that does not know it, names nobody, which leaves the speaker as the approver.
+- A call whose rules name no approvers is unchanged, and so is a call held where no turn is known, such as a [precheck script](#precheck-scripts-prechecks-the-agent-writes)'s.
+
+`run` learns who approved: `turn.approvedBy` is `{ principalId, speakerId, name }` of the person who pressed the card, or whose message confirmed the call, and the same for a card answered after the turn stopped waiting. It is undefined for a call that was not held, and for a call a surface released without saying who (the web chat does not); a tool that must know the approver fails closed when it is undefined. A surface reports it through `ApprovalOptions.approvedBy` of `Prompts.confirm`, and `LateAnswer.approvedBy`.
+
 #### The shell rule
 
 `shellHoldRule` in `pi-roundtable/kit` judges the agents' `bash`, `write` and `edit` calls; the agent server links it, and a session without a workspace has no shell.
@@ -2457,6 +2488,10 @@ A surface's prompts keep these rules:
 - Where it escalates to no one, nobody else answers, and an approval above the speaker's tier resolves `unavailable` at once, shown to no one: the call stays held. (`expired` is for a card that was shown and went unanswered; a surface that cannot tell the two may answer `expired` for both.)
 - Anyone else is refused, even at the same tier as the speaker.
 - Without a scope, as for a turn with no speaker, the prompts are the owners'.
+- An approval that names [approvers](#a-hold-that-names-its-approvers) (`ApprovalOptions.approvers`, which a surface may read as `PromptScope.approvers`) is theirs **instead of the speaker's**, where the scope escalates to the owners: each named principal answers on any of their identities the surface knows, at the tier it needs, checked again when they answer; the speaker does not answer it unless named, and an owner still does. When none of the named has an identity on the surface, or none is named, it is the owners' alone. Where the scope escalates to no one the names are ignored.
+
+On Discord a card for named approvers mentions every Discord identity of every named principal that has one, in a thread, and refuses anyone else with a line that says it is for the people it names and the owners.
+The web chat shows prompts to the conversation's person only, so it ignores approvers.
 
 On Discord the owners are every owner with a Discord identity, and the primary owner always; a card in a thread mentions the identity that spoke when it is theirs and one of the principal's Discord identities, every Discord identity of the principal when the speaker is none of them, and the owners when it goes to them, so a single owner's cards read as they did in 0.8.
 A principal with no Discord identity, such as the reporter of a background report, answers nothing there, so their card goes to the owners; so does an owner-tier call of a turn whose tier defaulted to owner when its principal is not an owner.
@@ -2464,15 +2499,16 @@ The web chat shows prompts to the conversation's person only: its owners are not
 
 #### An approval as data: `ApprovalDetails`
 
-`confirm(title, message, signal?, minTier?, wait?, details?)` takes the approval twice: `message` is the card as markdown text, and the optional `details` (`ApprovalDetails`: `{ action, tool, input, files? }`) is the same held call as data, with its whole input (the web chat cuts it only past 256 KiB and says so with `truncated`), and each file it sends by path as `{ path, bytes? }`.
+`confirm(title, message, signal?, minTier?, wait?, details?, options?)` takes the approval twice: `message` is the card as markdown text, and the optional `details` (`ApprovalDetails`: `{ action, tool, input, files? }`) is the same held call as data, with its whole input (the web chat cuts it only past 256 KiB and says so with `truncated`), and each file it sends by path as `{ path, bytes? }`.
 The confirmation gate and a coding worker's cards pass both.
+`options` (`ApprovalOptions`) says who else may approve the call and hears who did: `approvers`, the principal ids that approve it instead of the speaker (see [who answers a prompt](#who-answers-a-prompt-promptscope)), and `approvedBy(by)`, which a surface that knows who answered calls with `{ principalId, speakerId, name }` (`ApprovedBy`) before `confirm` resolves `approved`. A surface may ignore both.
 A surface that shows text, such as Discord, uses `message` and ignores `details`; the web chat sends `details` to the client as the prompt frame's `approval`, beside the unchanged `title` and `message`.
 A surface or a `Prompts` of your own may ignore it: nothing requires reading it.
 `confirm` resolves `approved`, `declined`, `expired` (a card was shown and went unanswered), `unavailable` (no card could be shown: no one may approve the call, the speaker is below its tier, or the card could not be posted), `cancelled` (the turn stopped), or `pending` (with a `wait`). Both `expired` and `unavailable` leave the call held for the owner's next message; the turn's progress reports them as `refused: "expired"` and `refused: "held"`.
 
 #### A prompt that outlives its turn: `PromptWait`
 
-`confirm(title, message, signal?, minTier?, wait?)` and `ask(title, question, signal?, wait?)` take an optional `PromptWait`, whose `late(answer)` hears a `LateAnswer` (`{ kind: "approval", approved, by }` or `{ kind: "question", answer, by }`, `by` naming who answered) and returns the text of the turn that tells the conversation, or undefined for none.
+`confirm(title, message, signal?, minTier?, wait?)` and `ask(title, question, signal?, wait?)` take an optional `PromptWait`, whose `late(answer)` hears a `LateAnswer` (`{ kind: "approval", approved, by, approvedBy? }`, `approvedBy` naming the approver where the surface knows them, or `{ kind: "question", answer, by }`, `by` naming who answered) and returns the text of the turn that tells the conversation, or undefined for none.
 Given one, a surface may stop the turn's wait after a grace period: `confirm` then resolves `pending` and `ask` resolves `"pending"`, the prompt stays open, and when it is answered later the surface starts a turn in the prompt's conversation with that text, as a message from whoever answered, so the conversation's claim answers it as theirs.
 Without one, a prompt waits for its answer, or for its turn's stop; a surface that cannot start a turn ignores `wait` and waits too.
 A stop cancels a prompt only while its turn still waits on it; after that the prompt belongs to the conversation.
@@ -2512,6 +2548,7 @@ Its plugin adds a claim that answers through `context.surfaces`:
 ```ts
 import {
 	type Approval,
+	type ApprovedBy,
 	type ChannelKey,
 	type ChatSurface,
 	definePlugin,
@@ -2521,6 +2558,7 @@ import {
 	type Prompts,
 	parseChannelKey,
 	TIERS,
+	type Tier,
 } from "pi-roundtable";
 
 /** A prompt the surface showed, open until someone it is for answers it. */
@@ -2529,6 +2567,18 @@ interface Asked {
 	channel: ChannelKey;
 	title: string;
 	open: boolean;
+}
+
+/** Who may answer an open prompt and what happens when they do. */
+interface Answering {
+	/** The principals who may answer it: the speaker, or the approvers the call named. */
+	principals: readonly string[];
+	owners: boolean;
+	/** The lowest tier an answer needs, when the principals are the approvers'. */
+	minTier?: Tier;
+	/** Hears who approved it. */
+	approved?(by: ApprovedBy): void;
+	settle(answer: Approval): void;
 }
 
 /**
@@ -2544,10 +2594,7 @@ export class FakeSurface implements ChatSurface {
 	readonly stops: string[] = [];
 	readonly asked: Asked[] = [];
 	/** Who may answer each open prompt, and how it settles. */
-	readonly #answering = new Map<
-		string,
-		{ principalId?: string; owners: boolean; settle(answer: Approval): void }
-	>();
+	readonly #answering = new Map<string, Answering>();
 	#deliver: ((message: InboundMessage) => void) | undefined;
 
 	/** The host hands over its router; every message the network reports goes to it. */
@@ -2593,42 +2640,74 @@ export class FakeSurface implements ChatSurface {
 	 * How a turn asks to approve a held action or answers a question. The scope names who may
 	 * answer: its speaker when their tier holds the call, and the owners unless the conversation
 	 * is private, where a call above the speaker's tier goes to no one and comes back `unavailable` at once.
+	 * Where the call names approvers and the conversation is shared, they answer it instead of the
+	 * speaker, at the tier it needs; a private conversation ignores them.
 	 */
 	prompts(channel: ChannelKey, scope?: PromptScope): Prompts {
 		return {
-			confirm: async (title, _message, signal, minTier = "owner") => {
+			confirm: async (
+				title,
+				_message,
+				signal,
+				minTier = "owner",
+				_wait,
+				_details,
+				options,
+			) => {
+				const owners = scope?.escalate !== "none";
+				const named = owners ? options?.approvers : undefined;
 				const theirs =
 					scope !== undefined &&
 					TIERS.indexOf(scope.tier) >= TIERS.indexOf(minTier);
-				const owners = scope?.escalate !== "none";
-				if (!theirs && !owners) return "unavailable";
+				const principals = named ?? (theirs ? [scope.principalId] : []);
+				if (principals.length === 0 && !owners) return "unavailable";
 				return this.#ask(channel, title, signal, {
-					...(theirs ? { principalId: scope.principalId } : {}),
+					principals,
 					owners,
+					...(named ? { minTier } : {}),
+					...(options?.approvedBy ? { approved: options.approvedBy } : {}),
 				});
 			},
 			ask: async () => undefined,
 		};
 	}
 
-	/** Someone answers an open prompt; it settles only when it is theirs to answer. */
+	/**
+	 * Someone answers an open prompt; it settles only when it is theirs to answer. `name` and
+	 * `speakerId` say who they are to a call that asks who approved it.
+	 */
 	answer(
 		id: string,
-		who: { principalId: string; owner?: boolean },
+		who: {
+			principalId: string;
+			owner?: boolean;
+			tier?: Tier;
+			name?: string;
+			speakerId?: string;
+		},
 		approved: boolean,
 	): void {
 		const open = this.#answering.get(id);
 		if (!open) return;
-		const theirs = open.principalId === who.principalId;
-		if (theirs || (who.owner && open.owners))
-			open.settle(approved ? "approved" : "declined");
+		const tierOk =
+			!open.minTier ||
+			TIERS.indexOf(who.tier ?? open.minTier) >= TIERS.indexOf(open.minTier);
+		const theirs = open.principals.includes(who.principalId) && tierOk;
+		if (!theirs && !(who.owner && open.owners)) return;
+		if (approved)
+			open.approved?.({
+				principalId: who.principalId,
+				speakerId: who.speakerId ?? who.principalId,
+				name: who.name ?? who.principalId,
+			});
+		open.settle(approved ? "approved" : "declined");
 	}
 
 	#ask(
 		channel: ChannelKey,
 		title: string,
 		signal: AbortSignal | undefined,
-		audience: { principalId?: string; owners: boolean },
+		audience: Omit<Answering, "settle">,
 	): Promise<Approval> {
 		const asked = {
 			id: `q${this.asked.length + 1}`,
@@ -3086,9 +3165,9 @@ It returns:
 ### `describeSurfaceContract`: what every chat surface keeps
 
 A plugin that contributes a `ChatSurface` can test it against the contract every surface keeps.
-`describeSurfaceContract(name, make)` registers one test per check, each on a fresh `SurfaceContractSubject` from `make`: the `surface`, a `channel` of it, and one person on its network, who can `write(text)`, whose `observations()` list what they have seen (`SurfaceObservation`: a reply's text and file names, typing and stop controls going on and off, progress, and prompts opening and closing), and who may `answer(prompt, approved)` an approval; `speaker` is who they are to `surface.prompts`, given as `promptScope(speaker, visibility)`, an owner by default, and every approval the contract asks for needs exactly their tier. `stranger`, when given, is someone else on the network, another principal and not an owner, who knows the id of the person's open approval and may `join()` and `answer(prompt, approved)` it; `owner`, when given, is an owner on the network, another principal than the person, who does the same in the person's private conversation. Both are `SurfaceContractAnswerer`s.
+`describeSurfaceContract(name, make)` registers one test per check, each on a fresh `SurfaceContractSubject` from `make`: the `surface`, a `channel` of it, and one person on its network, who can `write(text)`, whose `observations()` list what they have seen (`SurfaceObservation`: a reply's text and file names, typing and stop controls going on and off, progress, and prompts opening and closing), and who may `answer(prompt, approved)` an approval; `speaker` is who they are to `surface.prompts`, given as `promptScope(speaker, visibility)`, an owner by default, and every approval the contract asks for needs exactly their tier. `stranger`, when given, is someone else on the network, another principal and not an owner, who knows the id of the person's open approval and may `join()` and `answer(prompt, approved)` it; `owner`, when given, is an owner on the network, another principal than the person, who does the same in the person's private conversation. Both are `SurfaceContractAnswerer`s. `approver`, when given, is a third person on the network with a `principalId`, not an owner and at the person's tier, whom the contract names in `approvers`; `privateOnly` marks a surface that serves only conversations private to one person, such as the web chat.
 The contract starts the surface, calls the subject's `join()`, and stops the surface after the subject's `close()`.
-It checks that the surface names a prefix and owns its channel, delivers what the person writes, and shows every chunk of a reply; and, for the parts the surface offers, that it delivers files when `supportsFiles` is set, ends typing and stop controls idempotently, shows progress, and resolves an approval as the person approves or declines it, or `cancelled` when the turn stops, with a `stranger`, that the stranger's answer leaves the person's approval open, and with an `owner`, that an owner's answer leaves it open in a private conversation; and, for a speaker below the owner tier, that a private conversation's approval above their tier resolves `unavailable` (or `expired`, as older surfaces answer) at once and is not shown.
+It checks that the surface names a prefix and owns its channel, delivers what the person writes, and shows every chunk of a reply; and, for the parts the surface offers, that it delivers files when `supportsFiles` is set, ends typing and stop controls idempotently, shows progress, and resolves an approval as the person approves or declines it, or `cancelled` when the turn stops, with a `stranger`, that the stranger's answer leaves the person's approval open, and with an `owner`, that an owner's answer leaves it open in a private conversation; with an `approver` and a `stranger`, that an approval naming the approver is answered by the approver and not by the person or the stranger, unless the surface is `privateOnly`, and, with an `approver`, that a private conversation ignores the names; and, for a speaker below the owner tier, that a private conversation's approval above their tier resolves `unavailable` (or `expired`, as older surfaces answer) at once and is not shown.
 A check for a part the surface does not offer passes.
 `checkSurfaceContract(make)` runs the same checks and returns the ones that failed, as `SurfaceContractFailure`s.
 
@@ -3344,6 +3423,8 @@ Import from the entries listed below; source area files are internal.
 | `Approval` | `pi-roundtable` | type |
 | `ApprovalDetails` | `pi-roundtable` | type |
 | `ApprovalFile` | `pi-roundtable` | type |
+| `ApprovalOptions` | `pi-roundtable` | type |
+| `ApprovedBy` | `pi-roundtable` | type |
 | `AskOption` | `pi-roundtable` | type |
 | `AttachmentFailure` | `pi-roundtable` | type |
 | `AttachmentPort` | `pi-roundtable` | type |
