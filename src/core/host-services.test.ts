@@ -2,8 +2,11 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { serviceKey } from "./contract/services.ts";
 import { PluginError } from "./errors.ts";
 import { Roundtable } from "./host.ts";
+import { checkAccessRules } from "./identity/access-policy.ts";
+import { identityPlugin } from "./identity/identity-plugin.ts";
 import { silentLogger } from "./log.ts";
 import type { PluginContext, RoundtablePlugin } from "./plugin.ts";
+import { IDENTITY } from "./services.ts";
 
 interface Counter {
 	next(): number;
@@ -285,6 +288,29 @@ describe("replaces", () => {
 		expect(error).toBeInstanceOf(PluginError);
 		expect(String(error)).toContain(
 			"plugin mine: replacing plugin builtin would drop test.label too, which it also provides.",
+		);
+	});
+
+	test("replacing IDENTITY without IDENTITY_LINKS is refused while access.selfLink is set", async () => {
+		const rules = checkAccessRules({
+			owners: [],
+			members: { everyone: [] },
+			provisioning: "linked",
+			backgroundStaleDays: 30,
+			selfLink: { providers: ["discord"] },
+		});
+		const error = await run([
+			identityPlugin({ rules }),
+			{
+				name: "mine",
+				provides: [IDENTITY],
+				replaces: [IDENTITY],
+				setup: () => ({}),
+			},
+		]);
+		expect(error).toBeInstanceOf(PluginError);
+		expect(String(error)).toContain(
+			"replacing plugin identity would drop roundtable.identity-links too",
 		);
 	});
 

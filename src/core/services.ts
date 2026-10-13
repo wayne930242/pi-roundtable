@@ -10,6 +10,7 @@ import { type ServiceKey, serviceKey } from "./contract/services.ts";
 import type { ConversationRegistry } from "./conversations/conversation-registry.ts";
 import type { PendingConfirmation } from "./domain/conversation.ts";
 import type { HttpRoute } from "./http/listeners.ts";
+import type { IdentityLinks } from "./identity/identity-links.ts";
 import type { IdentityService } from "./identity/identity-service.ts";
 import type { ThinkingSetting } from "./models.ts";
 import type {
@@ -46,6 +47,16 @@ import type { AgentTurnScope, ChannelKey } from "./sessions.ts";
  */
 export const IDENTITY: ServiceKey<IdentityService> =
 	serviceKey<IdentityService>("roundtable.identity");
+/**
+ * Links a person's own account to their principal, which `IDENTITY` cannot. Provided by the
+ * `identity` plugin only when the configuration lists providers in `access.selfLink`; read it with
+ * `find` when your plugin works without it, and with `get` when it cannot.
+ */
+export const IDENTITY_LINKS: ServiceKey<IdentityLinks> =
+	serviceKey<IdentityLinks>("roundtable.identity-links", {
+		absent:
+			'Self-linking is switched off. List the providers people may link in the configuration, such as access: { selfLink: { providers: ["discord"] } }.',
+	});
 /**
  * The runtime every conversation turn runs on: the agent server's, and each turn run through
  * `context.turns`. The `runtime` provider slot's when a plugin fills it, Pi's otherwise. Provided

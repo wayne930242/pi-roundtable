@@ -47,9 +47,16 @@ export interface IdentityRef {
 
 /**
  * How an identity came to be linked: by the configuration, a plugin declaring it
- * (`RoundtablePlugin.identities`), the CLI, admission on first contact, or a 0.8 speaker id claimed.
+ * (`RoundtablePlugin.identities`), the CLI, admission on first contact, a 0.8 speaker id claimed,
+ * or the person themself through `IDENTITY_LINKS` (`self`).
  */
-export type LinkSource = "config" | "plugin" | "cli" | "jit" | "legacy";
+export type LinkSource =
+	| "config"
+	| "plugin"
+	| "cli"
+	| "jit"
+	| "legacy"
+	| "self";
 
 /** Which source a link made again by another becomes: the configuration's over all, a plugin's over the rest. */
 const LINK_RANK: Readonly<Record<LinkSource, number>> = {
@@ -58,6 +65,7 @@ const LINK_RANK: Readonly<Record<LinkSource, number>> = {
 	cli: 0,
 	jit: 0,
 	legacy: 0,
+	self: 0,
 };
 
 export interface IdentityLink extends IdentityRef {
@@ -132,8 +140,12 @@ export interface PrincipalStore {
 		displayName: string,
 		id?: string,
 	): Promise<IdentityLink>;
-	/** Whether there was a link to remove. */
-	unlink(provider: string, subject: string): Promise<boolean>;
+	/** Whether there was a link to remove; with `source`, only a link made by it is removed. */
+	unlink(
+		provider: string,
+		subject: string,
+		source?: LinkSource,
+	): Promise<boolean>;
 	identity(
 		provider: string,
 		subject: string,
@@ -302,14 +314,29 @@ export class PgPrincipalStore implements PrincipalStore {
 					RETURNING *`;
 				return linkOf(owned[0] ?? existing);
 			}
+			// A person's own link is refused to an owner, judged in this write rather than on a cached read.
 			const spent =
 				source === "plugin"
 					? await tx`SELECT id FROM principals WHERE id = ${principalId}`
-					: await tx`
-						UPDATE principals SET claimable = false WHERE id = ${principalId}
-						RETURNING id`;
-			if (spent.length === 0)
+					: source === "self"
+						? await tx`
+							UPDATE principals SET claimable = false
+							WHERE id = ${principalId} AND NOT EXISTS (
+								SELECT 1 FROM principal_roles WHERE principal_id = ${principalId} AND role = 'owner'
+							)
+							RETURNING id`
+						: await tx`
+							UPDATE principals SET claimable = false WHERE id = ${principalId}
+							RETURNING id`;
+			if (spent.length === 0) {
+				const present =
+					await tx`SELECT id FROM principals WHERE id = ${principalId}`;
+				if (present.length > 0)
+					throw new IdentityError(
+						`principal ${principalId} is an owner; owners' identities are linked in access.owners or with roundtable principal link`,
+					);
 				throw new IdentityError(`there is no principal ${principalId}`);
+			}
 			const made: IdentityRow[] = await tx`
 				INSERT INTO principal_identities (provider, subject, principal_id, source)
 				VALUES (${provider}, ${subject}, ${principalId}, ${source})
@@ -377,10 +404,20 @@ export class PgPrincipalStore implements PrincipalStore {
 		});
 	}
 
-	async unlink(provider: string, subject: string): Promise<boolean> {
-		const rows = await this.#sql`
-			DELETE FROM principal_identities WHERE provider = ${provider} AND subject = ${subject}
-			RETURNING provider`;
+	async unlink(
+		provider: string,
+		subject: string,
+		source?: LinkSource,
+	): Promise<boolean> {
+		const rows =
+			source === undefined
+				? await this.#sql`
+					DELETE FROM principal_identities WHERE provider = ${provider} AND subject = ${subject}
+					RETURNING provider`
+				: await this.#sql`
+					DELETE FROM principal_identities
+					WHERE provider = ${provider} AND subject = ${subject} AND source = ${source}
+					RETURNING provider`;
 		return rows.length > 0;
 	}
 

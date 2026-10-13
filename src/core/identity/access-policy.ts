@@ -47,7 +47,17 @@ export interface AccessRules {
 	provisioning: "admitted" | "linked";
 	/** How many days a principal whose tier came only from the rules on contact may go unseen before their background turns are refused. */
 	backgroundStaleDays: number;
+	/** The identity providers whose people may link their own account through `IDENTITY_LINKS`; without it that service is not provided. */
+	selfLink?: SelfLinkRules;
 }
+
+/** Which providers' identities a person may link to their own principal themselves. */
+export interface SelfLinkRules {
+	providers: readonly string[];
+}
+
+/** Providers whose identities are credentials or carried-over ids, never a person's own account to link. */
+const NOT_SELF_LINKABLE = ["token", "legacy"];
 
 const holds = (
 	tier: AccessTier | undefined,
@@ -150,6 +160,27 @@ export function checkAccessRules(rules: AccessRules): AccessRules {
 		throw new ConfigError(
 			`config access.backgroundStaleDays: expected a positive whole number of days, got ${JSON.stringify(rules.backgroundStaleDays)}.`,
 		);
+	if (rules.selfLink) {
+		const { providers } = rules.selfLink;
+		if (providers.length === 0)
+			throw new ConfigError(
+				'config access.selfLink.providers: expected at least one provider, such as ["discord"]. Remove selfLink to switch self-linking off.',
+			);
+		providers.forEach((provider, i) => {
+			if (provider.trim() === "")
+				throw new ConfigError(
+					`config access.selfLink.providers[${i}]: expected a provider such as discord, got ${JSON.stringify(provider)}.`,
+				);
+			if (provider === "oidc")
+				throw new ConfigError(
+					`config access.selfLink.providers[${i}]: an OIDC provider is written oidc:<base64url issuer>, not oidc.`,
+				);
+			if (NOT_SELF_LINKABLE.includes(provider))
+				throw new ConfigError(
+					`config access.selfLink.providers[${i}]: ${provider} identities are not a person's own account; list the provider of the account people sign in with, such as discord.`,
+				);
+		});
+	}
 	return rules;
 }
 

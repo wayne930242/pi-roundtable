@@ -190,6 +190,7 @@ The built-in plugins provide these, from the main entry:
 | Key | Port | Provided by | What it is |
 |---|---|---|---|
 | `IDENTITY` | `IdentityService` | `identity` | Who the host serves, read-only: `resolve(facts, { conversation }?)` gives the `Speaker` with its `principalId` behind a surface's `ActorFacts`, or undefined; `principal(id)`, `list()`, `identities(principalId)`, `roles(principalId)`, `tierOf(principalId)` (the lasting roles' tier), `speakerFor(principalId, tier?)` for a turn on someone's behalf, `owners()`, and `principalOf(identity)`, the principal an identity written `<provider>:<subject>` is linked to, such as one a plugin declares in `identities`. Principals are written only by the configuration and `roundtable principal`. `SYSTEM_PRINCIPAL` is the host's own, which no plugin speaks as |
+| `IDENTITY_LINKS` | `IdentityLinks` | `identity`, only with `access.selfLink` | Lets a plugin link a person's own account to their principal, which `IDENTITY` cannot: `link(principalId, identity)` and `unlink(identity)`, identities written `<provider>:<subject>`. See [Self-linking](#self-linking). Absent unless the configuration lists the providers; read it with `find` |
 | `CONVERSATIONS` | `ConversationRegistry` | `conversations` | The conversations run through `context.turns`: `register`, `get(key)`, `list({ principal }?)`, `setTitle(key, title)`, and `adopt(key, principalId)` only for migrating a conversation recorded before 0.9; each a `ConversationRecord` of `key`, `surface`, `kind`, `visibility` (`"private"` or `"shared"`), `principalId?`, `title?`, `createdAt`, `lastActiveAt` |
 | `RUNTIME` | `AgentRuntime` | `runtime` | The runtime every conversation turn runs on, the agent server's and `context.turns`': the `runtime` slot's when a plugin fills it, Pi's otherwise |
 | `AGENTS` | `AgentServer` | `agent-server` | The `team` (`AgentTeam`), the read-only `directory` (`AgentDirectory`), the `runtime` every agent turn runs on (the same one `RUNTIME` provides), `approvals` (whether the owner's reply approves held actions), and `avatars` (`AvatarStudio`) |
@@ -384,6 +385,22 @@ The primary owner is the first owner, with an explicit `principal` and, on Disco
 Owner is granted only through configuration or the principal CLI, never an IdP role.
 `provisioning: "admitted"` is the default; `"linked"` admits only already linked identities.
 A disabled principal is refused, and CLI changes reach a running host within the identity cache's 30 seconds.
+
+### Self-linking
+
+`access: { selfLink: { providers: ["discord"] } }` lets a plugin link the account a person controls to their principal.
+A plugin that proved who someone is, such as one that checked a one-time code a signed-in person read out, calls `IDENTITY_LINKS.link(principalId, "discord:<user id>")`; the host provides the service only when `selfLink` is configured, so without it `services.find(IDENTITY_LINKS)` is undefined and `services.get` explains how to switch it on.
+The plugin proves the person; the host only checks the rules below, so it must not link an identity it has not verified.
+`token` and `legacy` cannot be listed: they are credentials and carried-over ids, not a person's own account. An OIDC provider is listed in its full form `oidc:<base64url issuer>`; a bare `oidc` is refused.
+
+`link` throws `IdentityError`, and changes nothing, for a provider `selfLink` does not list, text that is no identity, the system principal, a principal that does not exist, a principal holding the owner role (owners' identities are linked in `access.owners` or with `roundtable principal link`), and an identity already linked to another principal, whoever linked it.
+The owner check is part of the link's own database transaction, so a role another process granted a moment ago is seen; an owner role granted after a self link was made leaves that link in place.
+Linking the identity again to the same principal changes nothing and keeps the source it already has.
+The link has the source `self`, which `roundtable principal show` and `list` print.
+`unlink(identity)` removes only a `self` link and answers true when it removed one, false when there was no self link to remove (the identity was linked to no one, or its link went away meanwhile); a link the configuration, a plugin, the CLI, a first contact, or a 0.8 claim made throws `IdentityError`, and a link another source took over meanwhile is kept.
+The host logs the principal id and the identity on each, never a name.
+A plugin that replaces `IDENTITY` must replace `IDENTITY_LINKS` too when `selfLink` is configured, as the host refuses a partial replacement.
+A link made here is served at once by this process; another process sees it within the identity cache's 30 seconds.
 
 Surfaces report verified `ActorFacts`, not authority.
 The router resolves them through `IDENTITY` before admission and overwrites a surface's own `message.speaker`.
@@ -3407,8 +3424,10 @@ Import from the entries listed below; source area files are internal.
 | `HostStoppingError` | `pi-roundtable` | value |
 | `HttpRoute` | `pi-roundtable` | type |
 | `IDENTITY` | `pi-roundtable` | value |
+| `IDENTITY_LINKS` | `pi-roundtable` | value |
 | `IdentityError` | `pi-roundtable` | value |
 | `IdentityLink` | `pi-roundtable` | type |
+| `IdentityLinks` | `pi-roundtable` | type |
 | `IdentityRef` | `pi-roundtable` | type |
 | `IdentityService` | `pi-roundtable` | type |
 | `ImageDrawer` | `pi-roundtable` | type |
@@ -3501,6 +3520,7 @@ Import from the entries listed below; source area files are internal.
 | `ScheduleError` | `pi-roundtable` | value |
 | `ScheduleStore` | `pi-roundtable` | type |
 | `ScheduledOutcome` | `pi-roundtable` | type |
+| `SelfLinkRules` | `pi-roundtable` | type |
 | `Service` | `pi-roundtable` | type |
 | `ServiceKey` | `pi-roundtable` | type |
 | `ServiceStartOutcome` | `pi-roundtable` | type |

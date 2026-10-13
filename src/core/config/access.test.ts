@@ -159,6 +159,32 @@ describe("the access configuration", () => {
 		expect(config.primaryOwner.discordId).toBeUndefined();
 	});
 
+	test("access.selfLink lists the providers whose people may link their own account, and is part of the rules only when written", () => {
+		const access = {
+			owners: [
+				{
+					name: "Ops",
+					principal: "operator",
+					identities: [`discord:${OWNER}`],
+				},
+			],
+		};
+		const without = resolveConfig({ ...base, access });
+		expect(without.access).not.toHaveProperty("selfLink");
+		const config = resolveConfig({
+			...base,
+			access: { ...access, selfLink: { providers: ["discord"] } },
+		});
+		expect(config.access.selfLink).toEqual({ providers: ["discord"] });
+		for (const providers of [[], ["token"], [" "]])
+			expect(() =>
+				resolveConfig({
+					...base,
+					access: { ...access, selfLink: { providers } },
+				}),
+			).toThrow(ConfigError);
+	});
+
 	test("the 0.8 owner of a host without Discord gets no Discord identity", () => {
 		const config = resolveConfig({
 			...base,

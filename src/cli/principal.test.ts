@@ -5,6 +5,7 @@ import type { DeclaredIdentity } from "../core/identity/plugin-identities.ts";
 import { PgPrincipalStore } from "../core/identity/principal-store.ts";
 import {
 	PRINCIPAL_PLUGIN_LINKS,
+	PRINCIPAL_SELF_LINKS,
 	PRINCIPAL_TABLES,
 	PRINCIPALS_CLAIMABLE,
 } from "../core/identity/principal-tables.ts";
@@ -115,6 +116,7 @@ describeDb("roundtable principal", () => {
 			{ name: "identity/principals", up: PRINCIPAL_TABLES },
 			{ name: "identity/principals-claimable", up: PRINCIPALS_CLAIMABLE },
 			{ name: "identity/principals-plugin-links", up: PRINCIPAL_PLUGIN_LINKS },
+			{ name: "identity/principals-self-links", up: PRINCIPAL_SELF_LINKS },
 		]);
 		const host = await freshHost();
 		await host.syncConfig();
@@ -290,6 +292,24 @@ describeDb("roundtable principal", () => {
 		);
 		expect((await principal("show", OWNER)).out).not.toContain(
 			"discord:966666600000000010",
+		);
+	});
+
+	test("list and show name an identity a person linked themself as self, and unlink removes it", async () => {
+		const store = await PgPrincipalStore.attach(db?.sql as never);
+		const member = await store.create({ displayName: "Mel" });
+		const subject = "966666600000000041";
+		await store.link(member.id, { provider: "discord", subject }, "self");
+		expect((await principal("show", member.id)).out).toContain(
+			`    discord:${subject}  (self, linked `,
+		);
+		expect((await principal("list")).out).toContain(
+			`    discord:${subject}  (self)`,
+		);
+		const unlinked = await principal("unlink", `discord:${subject}`);
+		expect(unlinked.code).toBe(0);
+		expect(unlinked.out).toContain(
+			`Unlinked discord:${subject} from principal ${member.id}.`,
 		);
 	});
 

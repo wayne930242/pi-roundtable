@@ -52,6 +52,12 @@ export interface AccessConfig {
 	provisioning?: "admitted" | "linked";
 	/** How many days someone whose tier comes only from the rules may go unseen before their background turns are refused; default 30. */
 	backgroundStaleDays?: number;
+	/**
+	 * Lets people link their own account of these identity providers, such as `["discord"]`, to
+	 * their principal through the `IDENTITY_LINKS` service a plugin reads; without it no such
+	 * service exists. A principal that holds the owner role cannot be linked this way.
+	 */
+	selfLink?: { providers: readonly string[] };
 }
 
 const everyone: Field<boolean | string[]> = guarded(
@@ -82,6 +88,7 @@ export const accessShape = shape({
 	members: optional(tierShape),
 	provisioning: optional(oneOf<"admitted" | "linked">("admitted", "linked")),
 	backgroundStaleDays: optional(integer(1, 36_500)),
+	selfLink: optional(shape({ providers: list(text) })),
 });
 
 /** The days an unseen principal's background turns keep their last tier, by default. */
@@ -124,6 +131,7 @@ export function rulesOfAccess(config: AccessConfig): AccessRules {
 		...(members ? { members } : {}),
 		provisioning: config.provisioning ?? "admitted",
 		backgroundStaleDays: config.backgroundStaleDays ?? BACKGROUND_STALE_DAYS,
+		...(config.selfLink ? { selfLink: config.selfLink } : {}),
 	});
 }
 
