@@ -23,6 +23,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `ConfirmationGate.beginTurn` accepts the speaker's `name` (optional), which names the approver of calls their message confirmed. The gate's internals moved to `held-calls.ts` and `confirmation-gate-extension.ts`; `canonicalJson`, `confirmedTurnText`, `unexpired`, `CONFIRMATION_TTL_MS` and `confirmationGateExtension` are still exported from `confirmation-gate.ts`.
 - **Before downgrading** to a version without approver sets, clear the pending held calls that carry `approverIds` (approve, refuse or let them expire): an older version ignores the names and lets the speaker and the owners approve them.
 - Additive: nothing changes for a tool, rule, surface or stored row that does not use approvers. Rows written by a version that does not know `approverIds` name nobody, which leaves the speaker as the approver, and a version that does not know it ignores the names when it reads such a row and drops them when it saves it back, so the speaker and the owners approve it, as for any held call.
+- `packages/line` (`pi-roundtable-line`), a new lockstep workspace for a LINE Messaging API transport. Its first slice is intake: stateless channel access tokens, a signed webhook that persists events before it answers, an allowlist of chats, and a durable inbox worker. It needs a manual first publication; see `.github/PACKAGE-RELEASES.md`.
 
 ## [0.9.10] - 2026-10-10
 

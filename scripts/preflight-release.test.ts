@@ -127,3 +127,9 @@ test("a package missing from npm is refused with the steps of its manual first p
 		".github/PACKAGE-RELEASES.md#webchats-first-publication",
 	);
 });
+
+test("the line package is pointed at its own first-publication steps", () => {
+	expect(firstPublicationNeeded("pi-roundtable-line").message).toContain(
+		".github/PACKAGE-RELEASES.md#lines-first-publication",
+	);
+});

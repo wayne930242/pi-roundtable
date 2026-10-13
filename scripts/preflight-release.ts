@@ -100,7 +100,9 @@ export function firstPublicationNeeded(name: string): ReleaseContractError {
 	const section =
 		name === "pi-roundtable-webchat"
 			? "webchats-first-publication"
-			: "first-publication-and-trust";
+			: name === "pi-roundtable-line"
+				? "lines-first-publication"
+				: "first-publication-and-trust";
 	return new ReleaseContractError(
 		`${name} needs its manual first publication before a lockstep tag; see .github/PACKAGE-RELEASES.md#${section}`,
 	);

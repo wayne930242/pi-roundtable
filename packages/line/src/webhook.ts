@@ -1,0 +1,110 @@
+import type { SQL } from "bun";
+import type { Logger } from "pi-roundtable";
+import { errorCode, LineError } from "./errors.ts";
+import { parseWebhook } from "./events.ts";
+import { persistEvents } from "./intake.ts";
+import type { TokenSource } from "./token.ts";
+
+/** The most a webhook request body may hold: LINE sends far less, and anything near this is not LINE. */
+export const WEBHOOK_MAX_BYTES = 1024 * 1024;
+
+export interface WebhookOptions {
+	sql: SQL;
+	tokens: TokenSource;
+	logger: Logger;
+	now: () => Date;
+	/** The bot's user id, once known; a webhook for another bot is refused. Unknown means the signature alone vouches. */
+	botUserId: () => string | undefined;
+	/** Called after events were stored, so the worker looks at the inbox now rather than at its next poll. */
+	stored: () => void;
+	maxBytes?: number;
+}
+
+const reply = (status: number, text: string) =>
+	new Response(text, { status, headers: { "cache-control": "no-store" } });
+
+/**
+ * Reads a body of at most `max` bytes; undefined when it is larger. The declared length is
+ * checked first, and a body that lies about it is cut off as soon as it passes the limit.
+ */
+async function readCapped(
+	request: Request,
+	max: number,
+): Promise<Uint8Array | undefined> {
+	const declared = Number(request.headers.get("content-length"));
+	if (Number.isFinite(declared) && declared > max) return undefined;
+	if (!request.body) return new Uint8Array();
+	const chunks: Uint8Array[] = [];
+	let size = 0;
+	const reader = request.body.getReader();
+	for (;;) {
+		const { done, value } = await reader.read();
+		if (done) break;
+		size += value.byteLength;
+		if (size > max) {
+			await reader.cancel().catch(() => undefined);
+			return undefined;
+		}
+		chunks.push(value);
+	}
+	const body = new Uint8Array(size);
+	let at = 0;
+	for (const chunk of chunks) {
+		body.set(chunk, at);
+		at += chunk.byteLength;
+	}
+	return body;
+}
+
+/**
+ * LINE's webhook: the raw body is verified against `x-line-signature` before anything is parsed,
+ * every event is stored in one transaction, and only then does it answer `200`. A database that
+ * is down answers `500`, which makes LINE's redelivery (if the channel has it on) resend.
+ * An empty `events` array (LINE's Verify button) is a `200` that stores nothing.
+ */
+export function webhookHandler(
+	options: WebhookOptions,
+): (request: Request) => Promise<Response> {
+	const max = options.maxBytes ?? WEBHOOK_MAX_BYTES;
+	return async (request) => {
+		if (request.method !== "POST") return reply(405, "Method Not Allowed");
+		const body = await readCapped(request, max);
+		if (!body) return reply(413, "Payload Too Large");
+		const signature = request.headers.get("x-line-signature");
+		if (!signature || !options.tokens.verifies(body, signature)) {
+			options.logger.warn("a LINE webhook was refused: bad signature");
+			return reply(401, "Unauthorized");
+		}
+		let parsed: Awaited<ReturnType<typeof parseWebhook>>;
+		try {
+			parsed = await parseWebhook(body);
+		} catch (error) {
+			if (!(error instanceof LineError)) throw error;
+			options.logger.warn({ code: error.code }, "a LINE webhook was refused");
+			return reply(400, "Bad Request");
+		}
+		const bot = options.botUserId();
+		if (bot !== undefined && parsed.destination !== bot) {
+			options.logger.warn("a LINE webhook was refused: it is for another bot");
+			return reply(403, "Forbidden");
+		}
+		if (parsed.events.length === 0) return reply(200, "OK");
+		try {
+			const result = await persistEvents(
+				options.sql,
+				parsed.events,
+				options.now(),
+			);
+			options.logger.info(result, "LINE events stored");
+			if (result.queued > 0) options.stored();
+		} catch (error) {
+			// The code only: the message could quote a column of the event being stored.
+			options.logger.error(
+				{ code: errorCode(error) },
+				"LINE events could not be stored",
+			);
+			return reply(500, "Internal Server Error");
+		}
+		return reply(200, "OK");
+	};
+}
