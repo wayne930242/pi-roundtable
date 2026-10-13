@@ -93,6 +93,35 @@ describe("the access check", () => {
 		}
 	});
 
+	test("warns about admins on Discord alone, naming the tier, and reports it together with the broad-everyone warning", async () => {
+		const base = accessConfig({ identities: ["web:someone"] });
+		const admins = {
+			...base,
+			access: { ...base.access, admins: { identities: ["discord:7"] } },
+		};
+		const alone = await checkAccess(project(admins));
+		expect(alone.status).toBe("warn");
+		if (alone.status === "warn") {
+			expect(alone.problem).toContain("access.admins admits");
+			expect(alone.problem).not.toContain("access.members");
+		}
+		const both = await checkAccess(
+			project(
+				{
+					...admins,
+					access: { ...admins.access, members: { everyone: true } },
+				},
+				[{ name: "webchat" }],
+			),
+		);
+		expect(both.status).toBe("warn");
+		if (both.status === "warn") {
+			expect(both.problem).toContain("access.members.everyone is true");
+			expect(both.problem).toContain("access.admins");
+			expect(both.fix).toContain("agentSpeakers");
+		}
+	});
+
 	test("passes members on Discord once the agent server answers owners only", async () => {
 		const config = accessConfig({ everyone: ["discord"] });
 		const owners = {

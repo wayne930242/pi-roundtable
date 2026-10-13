@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DISCORD, type DiscordServices } from "./builtin/discord.ts";
 import type { RoundtableConfig } from "./config/config.ts";
+import type { ChannelClaim } from "./contract/channels.ts";
 import type { ChatSurface } from "./contract/surface.ts";
 import { defineRoundtable } from "./define-roundtable.ts";
 import { discord as discordAdapter } from "./discord/discord-adapter.ts";
@@ -204,6 +205,84 @@ function hasWebAccess(): boolean {
 				roundtable = undefined;
 			}
 			expect(memories).toEqual(["owners", "owners", undefined]);
+		});
+		test("discord.agentSpeakers reaches the agent server's claim, from the key and from the adapter", async () => {
+			const answers: (string | undefined)[] = [];
+			for (const [form, agentSpeakers] of [
+				["key", "owners"],
+				["adapter", "owners"],
+				["key", undefined],
+			] as const) {
+				let claim: ChannelClaim | undefined;
+				const { discord: _, ...rest } = config;
+				const { options, plugins } = await defineRoundtable(
+					{
+						...rest,
+						...(form === "key"
+							? { discord: { ...config.discord, agentSpeakers } }
+							: {
+									adapters: [
+										discordAdapter({ ...config.discord, agentSpeakers }),
+									],
+								}),
+						plugins: [quietDiscord(), quietRuntime],
+					},
+					{ logger: silentLogger() },
+				);
+				// Watch what the agent server's plugin hands the host.
+				const watched = plugins.map((plugin) => {
+					const { setup } = plugin;
+					if (!setup) return plugin;
+					return {
+						...plugin,
+						setup: async (context: Parameters<typeof setup>[0]) => {
+							const contribution = await setup(context);
+							const found = contribution?.channels?.find(
+								(c) => c.name === "agent-server",
+							);
+							if (found) claim = found;
+							return contribution;
+						},
+					};
+				});
+				roundtable = new Roundtable(options, watched);
+				await roundtable.run();
+				if (!claim) throw new Error("the agent server claimed no channel");
+				const channel = "discord:900000000000000010" as const;
+				const say = (authorId: string, tier: "owner" | "admin") =>
+					claim?.admit({
+						channel,
+						messageId: "m1",
+						authorId,
+						authorName: "Bo",
+						authorIsBot: false,
+						isDirect: false,
+						space: config.discord.guild,
+						mentionsBot: false,
+						repliesToBot: false,
+						text: "hello",
+						attachments: [],
+						speaker: {
+							id: authorId,
+							name: "Bo",
+							tier,
+							principalId: `p_${authorId}`,
+						},
+					});
+				// The team starts in the background: the owner is answered once the agent's channel is its own.
+				for (
+					let i = 0;
+					i < 100 && say(config.owner.id, "owner")?.kind !== "turn";
+					i++
+				)
+					await new Promise((resolve) => setTimeout(resolve, 50));
+				expect(say(config.owner.id, "owner")?.kind).toBe("turn");
+				const admission = say("100000000000000002", "admin");
+				answers.push(admission?.kind);
+				await roundtable.shutdown("test");
+				roundtable = undefined;
+			}
+			expect(answers).toEqual([undefined, undefined, "turn"]);
 		});
 	},
 );

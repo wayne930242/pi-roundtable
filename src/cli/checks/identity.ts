@@ -43,7 +43,9 @@ export function surfacesOf(
 }
 
 /** Whether a tier admits anyone on Discord: everyone there, or an identity or role of its own. */
-function admitsDiscord(tier: AccessRules["members"]): boolean {
+function admitsDiscord(
+	tier: AccessRules["members"] | AccessRules["admins"],
+): boolean {
 	if (!tier) return false;
 	const { everyone } = tier;
 	if (everyone === true) return true;
@@ -55,7 +57,7 @@ function admitsDiscord(tier: AccessRules["members"]): boolean {
 
 /**
  * Whom the configuration serves: the owners by name, a warning when `everyone: true` admits
- * everyone on every surface of a host with more than one, a warning when members are admitted on
+ * everyone on every surface of a host with more than one, a warning when admins or members are admitted on
  * Discord and `discord.agentSpeakers` is not `"owners"`, and a note when it is written in the
  * deprecated 0.8 form. It reads no database, so `start` runs it too.
  */
@@ -67,20 +69,32 @@ export async function checkAccess(project: Project): Promise<Result> {
 	const broad = (["admins", "members"] as const).filter(
 		(tier) => config.access[tier]?.everyone === true,
 	);
-	if (broad.length > 0 && surfaces.length > 1)
-		return warn(
+	const problems: string[] = [];
+	const fixes: string[] = [];
+	if (broad.length > 0 && surfaces.length > 1) {
+		problems.push(
 			`${list(broad.map((tier) => `access.${tier}.everyone`))} ${broad.length === 1 ? "is" : "are"} true, which admits everyone on every surface: ${list(surfaces)}.`,
+		);
+		fixes.push(
 			`Name the surfaces where everyone may talk, such as everyone: ["discord"], and admit the others by identity or by role, such as roles: ["web:role:<name>"].`,
 		);
+	}
+	const discordTiers = (["admins", "members"] as const).filter((tier) =>
+		admitsDiscord(config.access[tier]),
+	);
 	if (
 		config.discord &&
 		config.discord.agentSpeakers !== "owners" &&
-		admitsDiscord(config.access.members)
-	)
-		return warn(
-			'access.members admits Discord speakers, and discord.agentSpeakers is not "owners": a member can talk to the agents in their channels, with their shell and other owner-level tools.',
-			'Set discord.agentSpeakers to "owners", or stop admitting Discord in access.members.',
+		discordTiers.length > 0
+	) {
+		problems.push(
+			`${list(discordTiers.map((tier) => `access.${tier}`))} admit${discordTiers.length === 1 ? "s" : ""} Discord speakers, and discord.agentSpeakers is not "owners": their turns in the agents' channels run in the agent's home session, shared with the owners, so they can read earlier owner conversation and shell output and leave history that owner turns inherit.`,
 		);
+		fixes.push(
+			`Set discord.agentSpeakers to "owners" (members' messages still reach owner turns as channel context), or stop admitting Discord in ${list(discordTiers.map((tier) => `access.${tier}`))}.`,
+		);
+	}
+	if (problems.length > 0) return warn(problems.join(" "), fixes.join(" "));
 	const owners = config.access.owners;
 	const legacy = config.deprecations.includes(LEGACY_ACCESS)
 		? "; written as the 0.8 owner and speakers, which roundtable upgrade rewrites as access"

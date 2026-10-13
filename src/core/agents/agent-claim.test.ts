@@ -413,3 +413,52 @@ test("a claim of a plugin at priority 10 on another surface's keys hears its mes
 	expect(heard).toEqual(["fake:10 a", "fake:20 b", "mcp:10 c"]);
 	expect(answered.map((a) => a.kind)).toEqual(["agent"]);
 });
+
+const backgroundTurn = (speaker?: Speaker) => ({
+	channel: "discord:10" as const,
+	target: "owner",
+	author: { principalId: "p_01JADMIN", id: ADMIN, name: "n" },
+	tier: "owner" as const,
+	turnId: "t",
+	text: "go",
+	...(speaker ? { speaker } : {}),
+});
+
+test("with owners-only speakers, an admin's scheduled or report turn is skipped, and the owner's and the system's still run", async () => {
+	const { claim, answered } = setup(undefined, "owners");
+	const admin: Speaker = {
+		id: ADMIN,
+		name: "n",
+		tier: "admin",
+		principalId: "p_01JADMIN",
+	};
+	const owner: Speaker = {
+		id: OWNER,
+		name: "o",
+		tier: "owner",
+		principalId: "p_01JOWNER",
+	};
+	for (const report of [false, true])
+		expect(
+			await claim.background?.({ ...backgroundTurn(admin), report }),
+		).toMatchObject({ status: "skipped" });
+	expect(answered).toHaveLength(0);
+	await claim.background?.(backgroundTurn(owner));
+	await claim.background?.({ ...backgroundTurn(owner), report: true });
+	expect(answered.map((a) => a.speaker.tier)).toEqual(["owner", "owner"]);
+});
+
+test("by default, and with speakers everyone, an admin's background turn runs as before", async () => {
+	for (const speakers of [undefined, "everyone"] as const) {
+		const { claim, answered } = setup(undefined, speakers);
+		await claim.background?.(
+			backgroundTurn({
+				id: ADMIN,
+				name: "n",
+				tier: "admin",
+				principalId: "p_01JADMIN",
+			}),
+		);
+		expect(answered.map((a) => a.speaker.tier)).toEqual(["admin"]);
+	}
+});

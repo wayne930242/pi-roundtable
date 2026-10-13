@@ -207,6 +207,11 @@ export function agentClaim(options: AgentClaimOptions): ChannelClaim {
 					reason:
 						"a background turn reaches the agent server through the router, which says whom it runs as",
 				};
+			if (options.speakers === "owners" && speaker.tier !== "owner")
+				return {
+					status: "skipped",
+					reason: 'the agent server answers owners only (speakers: "owners")',
+				};
 			return outcome(
 				await team.answerBackground(
 					turn.channel,
