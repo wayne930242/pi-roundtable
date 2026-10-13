@@ -8,7 +8,16 @@ export interface QuotaOptions {
 	 * left; the gate keeps to the lower of the two. Unset: the plan's quota alone.
 	 */
 	monthlyCap?: number;
+	/**
+	 * How long, in milliseconds, a push that was sent (or may have been) stays reserved when LINE's
+	 * consumption has not grown by its recipients by then. LINE calls its figure approximate and may
+	 * be slow to count; this bounds how long the gate waits for it. Default 10 minutes.
+	 */
+	holdMs?: number;
 }
+
+/** How long a sent push stays reserved if LINE's consumption never shows it. */
+export const QUOTA_HOLD_MS = 10 * 60_000;
 
 /** How long a reading of LINE's quota, consumption and a chat's member count is trusted. */
 export const QUOTA_CACHE_MS = 60_000;
@@ -50,9 +59,10 @@ export interface QuotaGateDeps {
  * this process has reserved for pushes it has sent or is sending, and the push's own recipients (one,
  * or the member count of a group or room) stay within the lower of the plan's quota and `monthlyCap`.
  *
- * LINE's quota and consumption are read at most once a minute. A reservation for a push that went
- * out stays counted until a reading begun after it was sent, which then includes it; one for a push
- * that did not go out is dropped at once. Only this process's reservations are known: with several
+ * LINE's quota and consumption are read at most once a minute. LINE calls the figure approximate,
+ * so a reservation for a push that went out (or may have: a timeout or a 5xx) stays counted until
+ * the consumption read has grown by its recipients since the push was sent, or `holdMs` has passed;
+ * one for a push that did not go out is dropped at once. Only this process's reservations are known: with several
  * processes, set `monthlyCap` below the quota by their share.
  */
 export class QuotaGate {
@@ -60,12 +70,15 @@ export class QuotaGate {
 	readonly #now: () => Date;
 	readonly #cap: number | undefined;
 	readonly #cacheMs: number;
+	readonly #holdMs: number;
 	#reading: Reading | undefined;
 	#inflight: Promise<Reading> | undefined;
 	readonly #reservations = new Map<
 		Reservation,
-		{ settledAt: number | undefined }
+		{ settledAt: number | undefined; unseen: number }
 	>();
+	/** The consumption of the previous reading, to see how much it has grown. */
+	#lastUsed: number | undefined;
 	readonly #counts = new Map<string, { n: number; at: number }>();
 
 	constructor(deps: QuotaGateDeps) {
@@ -73,6 +86,7 @@ export class QuotaGate {
 		this.#now = deps.now;
 		this.#cap = deps.options?.monthlyCap;
 		this.#cacheMs = deps.cacheMs ?? QUOTA_CACHE_MS;
+		this.#holdMs = deps.options?.holdMs ?? QUOTA_HOLD_MS;
 	}
 
 	/** How many people a push to the chat reaches; a count is trusted for a minute. */
@@ -103,10 +117,20 @@ export class QuotaGate {
 					: await this.#api.messageConsumption();
 			const reading = { limit, used, at };
 			this.#reading = reading;
-			// What was sent before this reading began is in `used` now.
-			for (const [reservation, state] of this.#reservations)
-				if (state.settledAt !== undefined && state.settledAt <= at)
-					this.#reservations.delete(reservation);
+			// What consumption has grown by since the last reading is what LINE has counted of the pushes
+			// sent before this reading began, oldest first; a push is let go once all of it is counted.
+			let grown =
+				this.#lastUsed === undefined ? 0 : Math.max(0, used - this.#lastUsed);
+			this.#lastUsed = used;
+			const counted = [...this.#reservations]
+				.filter(([, state]) => state.settledAt !== undefined && state.settledAt <= at)
+				.sort(([, a], [, b]) => (a.settledAt ?? 0) - (b.settledAt ?? 0));
+			for (const [reservation, state] of counted) {
+				const take = Math.min(grown, state.unseen);
+				grown -= take;
+				state.unseen -= take;
+				if (state.unseen <= 0) this.#reservations.delete(reservation);
+			}
 			return reading;
 		})().finally(() => {
 			this.#inflight = undefined;
@@ -120,23 +144,26 @@ export class QuotaGate {
 	 */
 	async reserve(recipients: number): Promise<Reserved> {
 		const reading = await this.#read();
+		this.#expire();
 		const caps = [reading.limit, this.#cap].filter(
 			(cap): cap is number => cap !== undefined,
 		);
 		const cap = caps.length > 0 ? Math.min(...caps) : Number.POSITIVE_INFINITY;
-		let reserved = 0;
-		for (const reservation of this.#reservations.keys())
-			reserved += reservation.recipients;
+		const reserved = this.reserved();
 		if (reading.used + reserved + recipients > cap)
 			return { ok: false, used: reading.used, reserved, recipients, cap };
 		const reservation: Reservation = { recipients };
-		this.#reservations.set(reservation, { settledAt: undefined });
+		this.#reservations.set(reservation, {
+			settledAt: undefined,
+			unseen: recipients,
+		});
 		return { ok: true, reservation };
 	}
 
 	/**
-	 * Ends a reservation: `sent` keeps it counted until LINE's consumption includes the push, otherwise
-	 * it is dropped now.
+	 * Ends a reservation: `sent` (also for a push whose outcome is not known) keeps it counted until
+	 * LINE's consumption has grown by its recipients or `holdMs` has passed, otherwise it is dropped
+	 * now.
 	 */
 	settle(reservation: Reservation, sent: boolean): void {
 		const state = this.#reservations.get(reservation);
@@ -145,11 +172,19 @@ export class QuotaGate {
 		else this.#reservations.delete(reservation);
 	}
 
+	/** Lets go of pushes that have been reserved for `holdMs` since they were sent. */
+	#expire(): void {
+		const now = this.#now().getTime();
+		for (const [reservation, state] of this.#reservations)
+			if (state.settledAt !== undefined && now - state.settledAt >= this.#holdMs)
+				this.#reservations.delete(reservation);
+	}
+
 	/** Messages reserved and not yet in LINE's consumption, for tests and status. */
 	reserved(): number {
+		this.#expire();
 		let total = 0;
-		for (const reservation of this.#reservations.keys())
-			total += reservation.recipients;
+		for (const state of this.#reservations.values()) total += state.unseen;
 		return total;
 	}
 }

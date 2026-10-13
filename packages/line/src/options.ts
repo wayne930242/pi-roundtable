@@ -112,11 +112,16 @@ export function checkOptions(options: LineOptions): {
 	const cap = options.quota?.monthlyCap;
 	if (options.quota !== undefined) {
 		for (const key of Object.keys(options.quota))
-			if (key !== "monthlyCap")
+			if (key !== "monthlyCap" && key !== "holdMs")
 				throw new Error(`line: quota.${key} is not a quota option`);
 		if (cap !== undefined && (!Number.isInteger(cap) || cap < 1))
 			throw new Error(
 				`line: quota.monthlyCap must be a positive whole number; got ${String(cap)}`,
+			);
+		const hold = options.quota.holdMs;
+		if (hold !== undefined && (!Number.isInteger(hold) || hold < 1))
+			throw new Error(
+				`line: quota.holdMs must be a positive whole number of milliseconds; got ${String(hold)}`,
 			);
 	}
 	if (options.joinNotice !== undefined) checkJoinNotice(options.joinNotice);

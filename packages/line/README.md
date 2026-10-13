@@ -268,8 +268,8 @@ LINE has the last word: a name it refuses anyway comes back as a dead push with 
 
 Before a push is sent the gate reads LINE's monthly limit (`/v2/bot/message/quota`) and consumption (`/v2/bot/message/quota/consumption`), cached for 60 seconds, and counts the push's recipients: 1 for a user chat, the member count (`/members/count`, cached for 60 seconds) for a group or room.
 The push goes only if consumption, plus what this process has already reserved for pushes it sent or is sending, plus its own recipients, stays within the lower of the plan's quota and `quota.monthlyCap`; otherwise it is `refused` with `quota_exhausted`.
-A reservation for a push that went out stays counted until a reading begun after it, which then includes it. When the quota cannot be read the push backs off and retries; it is not refused and not sent blind.
-Only this process's reservations are known: with several processes, set `monthlyCap` below the plan's quota by their share.
+A reservation for a push that went out stays counted until the consumption LINE reports has grown by at least the push's recipients since it was sent, or until `quota.holdMs` (10 minutes by default) has passed. A push whose outcome is unknown (a timeout, no answer, or a `5xx`) is held as if it had been sent; one LINE refused with a `4xx` or `429` is dropped at once. When the quota cannot be read the push backs off and retries; it is not refused and not sent blind.
+This rests on an assumption: LINE calls its consumption figure approximate, and the gate treats it as approximate. It may count late, so keep `monthlyCap` below the plan's quota with some headroom, and keep it lower still when other processes, or the LINE Official Account Manager, send too. Only this process's reservations are known, and they are lost on a restart.
 
 ```ts
 line({ credentials, quota: { monthlyCap: 400 } })

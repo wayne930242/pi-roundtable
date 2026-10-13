@@ -571,6 +571,23 @@ describeDb("the outbox", () => {
 		expect((await rows()).at(-1)?.status).toBe("refused");
 	});
 
+	test("a push whose outcome is unknown stays reserved like a sent one, a refused one does not (R6-F005)", async () => {
+		fake.quota = 100;
+		build({}, 90);
+		await outbox.enqueue(USER, [text("a")], { origin: "p1" });
+		await outbox.enqueue(OTHER_GROUP, [text("b")], { origin: "p2" });
+		fake.members.Cgroup0002 = 10;
+		clock = 2_000;
+		fake.pushScript.push(500);
+		await worker.runOnce();
+		// A 5xx may have been taken by LINE: its recipient is held.
+		expect(quota.reserved()).toBe(1);
+		fake.pushScript.push(400);
+		await worker.runOnce();
+		// A definite refusal sends nothing, so nothing of it is held.
+		expect(quota.reserved()).toBe(1);
+	});
+
 	test("the plan's quota holds when the cap is higher, and a quota that cannot be read backs off instead of refusing", async () => {
 		fake.quota = 2;
 		fake.usage = 2;

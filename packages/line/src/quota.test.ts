@@ -24,7 +24,7 @@ function gate(monthlyCap?: number) {
 	const reads = () =>
 		fake.calls.filter((c) => c.url.endsWith("/message/quota/consumption"))
 			.length;
-	return { fake, quota, reads };
+	return { fake, quota, reads, api };
 }
 
 beforeEach(() => {
@@ -122,6 +122,48 @@ test("a reservation of a push that went out stays counted until a reading after 
 	expect(after.ok).toBe(true);
 	// 2 used + the new 2 = the quota of 4: the sent push is counted once, by LINE.
 	expect(quota.reserved()).toBe(2);
+});
+
+test("a sent push stays reserved until consumption has grown by its recipients, or the hold has passed (R6-F005)", async () => {
+	const { fake, quota } = gate();
+	fake.quota = 100;
+	const sent = await quota.reserve(3);
+	if (!sent.ok) throw new Error("expected it to fit");
+	quota.settle(sent.reservation, true);
+	// A later reading in which LINE has counted nothing of it yet keeps the reservation.
+	clock = 61_000;
+	await quota.reserve(1);
+	expect(quota.reserved()).toBe(4);
+	// Counted in part: part of it is still held.
+	fake.usage = 1;
+	clock = 122_000;
+	await quota.reserve(1);
+	expect(quota.reserved()).toBe(2 + 1 + 1);
+	fake.usage = 3;
+	clock = 183_000;
+	await quota.reserve(1);
+	expect(quota.reserved()).toBe(3);
+	// A figure that never grows is not waited for forever.
+	const lazy = gate();
+	lazy.fake.quota = 100;
+	const late = await lazy.quota.reserve(2);
+	if (!late.ok) throw new Error("expected it to fit");
+	lazy.quota.settle(late.reservation, true);
+	clock = 183_000 + 9 * 60_000;
+	expect(lazy.quota.reserved()).toBe(2);
+	clock = 183_000 + 10 * 60_000;
+	expect(lazy.quota.reserved()).toBe(0);
+	// The hold is configurable.
+	const quick = new QuotaGate({
+		api: lazy.api,
+		now,
+		options: { holdMs: 1_000 },
+	});
+	const one = await quick.reserve(1);
+	if (!one.ok) throw new Error("expected it to fit");
+	quick.settle(one.reservation, true);
+	clock += 1_000;
+	expect(quick.reserved()).toBe(0);
 });
 
 test("a group's recipients are its member count, a user's is one, and a count is cached for a minute", async () => {

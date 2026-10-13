@@ -203,7 +203,9 @@ export class OutboxWorker {
 					recipients,
 				);
 			}
-			let sent = false;
+			// Counted as sent until the push is known not to have gone out: a timeout or a 5xx may have
+			// been taken by LINE, so its reservation is held like a sent push's.
+			let sent = true;
 			try {
 				const sender = {
 					...(row.sender_name ? { name: row.sender_name } : {}),
@@ -219,7 +221,6 @@ export class OutboxWorker {
 					controller.signal,
 				);
 				if (pushed.outcome === "sent") {
-					sent = true;
 					return await this.#finish(
 						row,
 						"sent",
@@ -229,6 +230,7 @@ export class OutboxWorker {
 						pushed.requestId,
 					);
 				}
+				if (pushed.status < 500) sent = false;
 				if (pushed.status === 429 || pushed.status >= 500)
 					return await this.#retry(row, log, pushed.code, pushed.retryAfterMs);
 				return await this.#finish(
