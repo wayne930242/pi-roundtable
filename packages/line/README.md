@@ -1,14 +1,13 @@
 # pi-roundtable-line
 
 A LINE Messaging API transport for [pi-roundtable][roundtable].
-It receives the events of a LINE Official Account's group chats on the host's HTTP listener, stores each one before it answers, and hands the stored events of the chats you allow to one consumer, in order and at least once.
+It receives the events of a LINE Official Account's group chats on the host's HTTP listener, stores each one before it answers, hands the stored events of the chats you allow to one consumer, in order and at least once, and sends pushes back to those chats under a sender name, a retry key and a monthly budget.
 Source lives in [`packages/line`][source] in the pi-roundtable repository and releases in lockstep with the core.
 
 [roundtable]: https://www.npmjs.com/package/pi-roundtable
 [source]: https://github.com/wayne930242/pi-roundtable/tree/master/packages/line
 
-It covers intake (the credentials and token source, the webhook, the allowlist of chats, and the inbox worker) and the consumer side: typed events for one subscriber, tombstones for unsent messages, message content, and retention.
-Sending, quota and the join notice follow in later releases of this package.
+It covers intake (the credentials and token source, the webhook, the allowlist of chats, and the inbox worker), the consumer side (typed events for one subscriber, tombstones for unsent messages, message content, and retention) and the sending side: an outbox with per-chat ordering and coalescing, sender names, persisted retry keys and a quota gate, the join notice, an optional router delivery, a `line` chat surface and a route that serves a sender icon.
 
 ## Requirements
 
@@ -144,7 +143,7 @@ const detach = context.services.get(LINE).subscribe(async (event, signal, line) 
 		case "left":
 		case "memberJoined": // event.userIds
 		case "memberLeft":
-		case "outboxResult": // declared now; emitted once the outbox ships
+		case "outboxResult": // how a push you queued ended
 	}
 });
 ```
@@ -158,12 +157,12 @@ The processor that serves it is the package's own; there is no way to read raw i
 | `message` | `messageId`, `userId`, `quotedMessageId`, and a `body`: `text`, `image`, `video`, `audio` (with `durationMs`), `file` (`fileName`, `fileSize`), `sticker` (`packageId`, `stickerId`, `keywords`), `location` (`title`, `address`, `latitude`, `longitude`), or `unsupported` for a type this version does not know, so nothing disappears silently |
 | `edited` | the new `text` and the `refs` of the original, in the order the subscriber gave them; groups only, and only text can be edited |
 | `unsent` | the `refs` to take down |
-| `joined` | `notice`: `"unconfirmed"` while no join notice is configured |
+| `joined` | `notice`: `"sent"`, `"failed"` or `"unconfirmed"`, truthfully (see [The join notice](#the-join-notice)) |
 | `left` | |
 | `memberJoined`, `memberLeft` | `userIds` |
-| `outboxResult` | reserved in the type; not emitted yet |
+| `outboxResult` | `sourceKey`, `originRef`, `status` (`sent`, `dead`, `refused`) and `errorCode` (see [Sending](#sending)) |
 
-Every event has `eventId` (LINE's `webhookEventId`, the same on every redelivery), `sourceKey` and `timestamp`.
+Every event but `outboxResult` has `eventId` (LINE's `webhookEventId`, the same on every redelivery), `sourceKey` and `timestamp`; a push is not a webhook event, so `outboxResult` has none of the three.
 No event carries a reply token, a quote token or a URL.
 
 A `message` is answered with `{ refs }`: opaque strings of at most 512 characters (at most 100 per message, kept and answered together) that the package stores one to many in `line_message_refs`, in order, and gives back on `edited` and `unsent`.
@@ -223,6 +222,7 @@ The `line-retention` service sweeps once at start and every hour (`retention.int
 | inbox events that are `done`, `skipped` or `dead` | 7 days (`retention.inboxMs`) |
 | inbox events still `pending`, which no subscriber handled | 7 days (`retention.inboxMs`), payload and all |
 | message metadata and tokens, refs, tombstones | 7 days (`retention.messagesMs`) |
+| pushes that finished, pushes that never got sent, join notice records | 7 days (`retention.outboxMs`) |
 
 Before it trims, every sweep hands back strays: refs still stored for a message that has a tombstone and were stored more than `retention.strayMs` (15 minutes) ago go to the subscriber as `unsent`, and are forgotten once it returns.
 A stray happens when a handler that outlived its lease keeps a ref after its message was unsent and the take-back is refused, so nobody else would hand the ref over.
@@ -233,10 +233,95 @@ A subscriber that stays detached longer than the window loses what was waiting f
 It logs counts only, never ids, text or tokens, and counts as `busy` while a sweep runs so the shutdown waits for it.
 A table that cannot be trimmed is logged by its code and the others go on.
 
+## Sending
+
+```ts
+const { outbox } = context.services.get(LINE);
+await outbox.enqueue(
+	"line:group:C...",
+	[{ type: "text", text: "On it." }],
+	{
+		sender: { name: "Ada | Support", iconUrl: "https://example.com/line/staff-icon.png" },
+		origin: "draft-42", // your own reference, given back in the outboxResult
+	},
+);
+```
+
+`enqueue` queues LINE message objects for a chat on the allowlist; it throws before queuing anything when the sender is one LINE would refuse (`bad_sender`), an object cannot be sent (`bad_messages`: not an object with a `type`, an empty or over-long text, a `sender` of its own, over 50,000 bytes, more than 100 in one call), the key is not a source key (`bad_source_key`), or the chat is not allowed (`source_not_allowed`).
+Message objects hold what you send, so they live in `line_outbox.messages` until the push finishes and are then set to null; the row itself goes after the retention window.
+
+- **Pushes of at most five objects, per chat and sender.** Objects queued for the same chat and the same sender within `outbox.coalesceMs` (2 seconds, counted from the first object, not from the last) share one push, in the order they were queued; a sixth object starts the next push, and a push that holds five goes at once. Different senders never share a push, and a push is never joined if a later push of the chat exists (that would reorder the chat). The chat's pushes go out strictly in order: a push that is backing off holds the ones behind it (a dead or refused one does not).
+- **A retry key from the start.** Each push gets a UUID the moment its row exists, before any attempt, and every attempt and every retry after a crash sends it as `X-Line-Retry-Key`. LINE keeps a key for 24 hours (`outbox.retryKeyMs`): a push still unsent then is `dead` with `retry_key_expired` and is never sent under a new key.
+- **Outcomes.** `2xx` and `409` (LINE already has this key) are `sent`. `429`, `5xx` and no answer back off (5 seconds doubling to 1 hour, at least `Retry-After`) and retry, up to `outbox.maxAttempts` (12), then `dead` with the last code. Any other `4xx` is `dead` at once with a code: `sender_name_refused` or `sender_icon_refused` when LINE names that property of the request, else `http_<status>`; nothing else of LINE's answer is kept. A push the quota gate refuses is `refused` and is never sent. A push for a chat that stopped being allowed is `dead` with `source_not_allowed`.
+- **Results.** The subscriber hears an `outboxResult` for each push once it has ended, once per distinct `origin` the push carries (once with `originRef: null` when none was given), at least once: a result waits while no subscriber is attached and is told again later, up to 12 times, if the subscriber throws.
+- **Crashes.** A push in hand when the process dies has a 2-minute lease; the worker puts it back and sends it again under the same key, which LINE answers with `409` if it had taken the first request.
+- **Service.** The `line-outbox` service runs the worker and counts as `busy` while a push is in flight, so the shutdown waits for it; a push still in flight when the host stops is put back as it was.
+- **Nothing sensitive in logs.** The worker logs push ids, attempt numbers, status words and codes; never message objects, sender names, retry keys or tokens.
+
+### Senders
+
+A sender is `{ name?, iconUrl? }`, shown by LINE as "<name> from '<channel>'".
+It is checked when you enqueue: the name is 1 to 20 characters (counted as characters, so an emoji is one), has no leading or trailing space or control character, and contains none of the forbidden words (`sender.forbiddenWords`, default `["LINE", "LY"]`, compared whole-word and case-insensitively, so "Online" and "Sally" pass); the icon is an `https` URL of at most 2000 characters without credentials.
+LINE has the last word: a name it refuses anyway comes back as a dead push with `sender_name_refused`.
+
+### Quota
+
+Before a push is sent the gate reads LINE's monthly limit (`/v2/bot/message/quota`) and consumption (`/v2/bot/message/quota/consumption`), cached for 60 seconds, and counts the push's recipients: 1 for a user chat, the member count (`/members/count`, cached for 60 seconds) for a group or room.
+The push goes only if consumption, plus what this process has already reserved for pushes it sent or is sending, plus its own recipients, stays within the lower of the plan's quota and `quota.monthlyCap`; otherwise it is `refused` with `quota_exhausted`.
+A reservation for a push that went out stays counted until a reading begun after it, which then includes it. When the quota cannot be read the push backs off and retries; it is not refused and not sent blind.
+Only this process's reservations are known: with several processes, set `monthlyCap` below the plan's quota by their share.
+
+```ts
+line({ credentials, quota: { monthlyCap: 400 } })
+```
+
+## The join notice
+
+```ts
+line({
+	credentials,
+	joinNotice: { text: NOTICE_TEXT, sha256: NOTICE_SHA256 },
+})
+```
+
+When the bot joins a chat the package answers the `join` event with **one Reply**, using the event's reply token, if and only if the SHA-256 of the text's UTF-8 bytes (lower-case hex) equals `joinNotice.sha256`.
+`digestOf(text)` computes it. A digest that is not 64 lower-case hex digits, or a text over 5000 characters, throws when the plugin is made; a well-formed digest that does not match the text does not stop the host, but nothing is ever sent and every join is `failed` (and a warning is logged once at start).
+Without `joinNotice` nothing is ever sent.
+
+- It applies to any chat the bot joins that is not blocked, allowlisted or not.
+- It is never a push. When the Reply fails, or its token has lapsed (reply tokens live a short time), the notice is `failed` and nothing is sent in its place.
+- The subscriber's `joined` event says what happened: `"sent"`, `"failed"`, or `"unconfirmed"` (no notice configured, or the first try was cut short and nobody knows whether LINE got the Reply). The outcome is recorded before the Reply is made, so a join that is handed out again never replies twice.
+- The inbox worker only runs while a subscriber is attached (or `route` is on), so attach one before the bot can be added to chats; a join that waits past its reply token's life is `failed`.
+
+## Router delivery
+
+`route: true` hands the text of messages of allowed chats to the host's router, as messages of the `line` surface (channel `line:group:<id>`, author the LINE user id, `mentionsBot` when the bot is @mentioned, with the bot's mention cut out of the text), after the subscriber has mirrored them and once per message.
+Images, stickers and other kinds are not routed, nor are messages LINE did not name a sender for.
+It is off by default.
+**Never admit `line` through the core's `everyone` access**: anyone who can add the bot to a group, or write in a chat you allow, would reach the assistant. Admit only identities you have linked to a person.
+With `route` on the inbox is served even when no subscriber is attached.
+
+## The `line` chat surface
+
+The plugin contributes a chat surface under the prefix `line`; its channel is a source key (`line:group:<id>`, `line:room:<id>`, `line:user:<id>`).
+What the host writes there (`sendReply`) is queued as text objects, one per chunk (a chunk over 5000 characters is cut, never inside a surrogate pair), and goes out as a push with no sender; it reaches only a chat on the allowlist.
+The surface shows no typing indicator, stop control, progress, files or approval prompts: LINE has none the bot can show.
+It passes `describeSurfaceContract` (`pi-roundtable/testing`).
+
+## The sender icon route
+
+```ts
+line({ credentials, senderIconRoute: { path: "/line/staff-icon.png", png: readFileSync("staff-icon.png") } })
+```
+
+Serves fixed PNG bytes at `path` to `GET` and `HEAD` with `cache-control: public, max-age=31536000, immutable`, on the same listener as the webhook, so the host can give LINE a stable `iconUrl` (`https://<your host>/line/staff-icon.png`) without another service.
+The bytes are copied when the plugin is made and checked: they must be a PNG of at most 1 MiB, and `path` must differ from `webhookPath`.
+
 ## Safety
 
-Do not admit a `line` surface through the core's `everyone` access: anyone who can add the bot to a group would reach the assistant.
-This release contributes no surface and starts no turn.
+Do not admit a `line` surface through the core's `everyone` access: anyone who can add the bot to a group would reach the assistant (see [Router delivery](#router-delivery)).
+A push goes only to a chat on the allowlist, under a sender that was checked before it was queued, inside the month's budget.
+The access token, the channel secret, reply and quote tokens, retry keys and message text appear in no log line and no error.
 
 ## Tests
 

@@ -9,6 +9,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - `packages/line`: the consumer side of the LINE transport. One subscriber receives typed events (`message`, `edited`, `unsent`, `joined`, `left`, `memberJoined`, `memberLeft`) with opaque mirror refs stored one to many, tombstones and `keep(ref)` that take an unsent message down in every race except a crash between a post and its `keep`, message content held in memory under a size cap, and a retention sweeper. See the package changelog.
 
+- `packages/line`: the sending side. An outbox (`LINE.outbox.enqueue`) with per-chat and per-sender coalescing into pushes of at most five, validated sender names and icons, a retry key stored before the first attempt and reused for 24 hours, backoff, dead letters with LINE's code and a quota gate that counts group members; the digest-gated join notice sent as a Reply; the `line` chat surface; optional router delivery (`route`, off by default) and a sender icon route. See the package changelog.
+
 ### Changed
 
 - **Breaking (`pi-roundtable-line`, published in 0.9.13):** `LINE.attachProcessor` is removed in favour of `LINE.subscribe`, without a shim. The next lockstep release is 0.10.0.

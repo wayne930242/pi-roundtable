@@ -1,0 +1,88 @@
+---
+title: LINE 套件
+description: 在 host 上接收 LINE 群組的訊息、交給唯一的消費者處理，並以寄件人名稱、重試金鑰和每月額度控管把訊息推回去。
+sidebar:
+  order: 15
+---
+
+`pi-roundtable-line` 是以外掛形式提供的 LINE Messaging API 傳輸層。
+它在 host 的 HTTP listener 上接收 LINE 官方帳號各聊天室的事件，先存起來再回應，並把你允許的聊天室的事件依序、至少一次地交給唯一的消費者。
+往 LINE 的方向，它送出每次最多五則訊息物件的推播，每則帶寄件人名稱和圖示、一把不會改變的重試金鑰，並先對照當月額度。
+原始碼在 [`packages/line`](https://github.com/wayne930242/pi-roundtable/tree/master/packages/line)，每個選項見[套件 README](https://github.com/wayne930242/pi-roundtable/blob/master/packages/line/README.md)。
+
+## 加進 host
+
+```sh
+bun add pi-roundtable-line
+```
+
+```ts
+import { readFileSync } from "node:fs";
+import { line } from "pi-roundtable-line";
+
+export default {
+  // ……你的 roundtable 設定，含 http: { port: 3000, hostname: "127.0.0.1" }……
+  plugins: [
+    line({
+      credentials: {
+        channelId: process.env.LINE_CHANNEL_ID ?? "",
+        channelSecret: process.env.LINE_CHANNEL_SECRET ?? "",
+      },
+      quota: { monthlyCap: 400 },
+      senderIconRoute: {
+        path: "/line/staff-icon.png",
+        png: readFileSync("staff-icon.png"),
+      },
+    }),
+  ],
+};
+```
+
+把頻道的 webhook URL 指到 `https://<你的 host>/line/webhook`，並開啟 webhook。
+無狀態的設定只需要頻道 ID 和 secret：套件會向 LINE 要約 15 分鐘有效的 access token，只放在記憶體，也不寫進任何 log。
+
+## 聊天室與允許清單
+
+還沒被告知要鏡像的聊天室，只會以「待決定」記下計數；成員寫了什麼都不會保存。
+從 `LINE` service 讀取允許清單並做決定：
+
+```ts
+import { LINE } from "pi-roundtable-line";
+
+const { sources } = context.services.get(LINE);
+await sources.pending(); // 等待決定的聊天室
+await sources.allow("line:group:C...");
+```
+
+## 唯一的消費者
+
+`LINE.subscribe(handler)` 註冊唯一的消費者。
+它會收到有型別的事件：`message`、`edited`、`unsent`、`joined`、`left`、`memberJoined`、`memberLeft` 和 `outboxResult`。
+消費者以不透明的參照回應一則 `message`（例如它建立的鏡像）；這些參照會在 `edited` 和 `unsent` 時交還給它。套件保存墓碑，所以收回的訊息在各種競態下都會被拿下來。
+`LINE.content(messageId)` 把訊息的圖片、影片或檔案讀進記憶體，不寫磁碟，也不放在任何網址上。
+
+## 傳送
+
+`LINE.outbox.enqueue(聊天室, 訊息, { sender, origin })` 為允許清單上的聊天室排入訊息物件。
+
+- **寄件人。** `{ name, iconUrl }` 在排入前就檢查：名稱是 1 到 20 個字元，避開 LINE 不接受的字（清單可調整）；圖示是長度不超過 2000 字元的 `https` 網址。LINE 一定會拒絕的寄件人，會立刻丟出錯誤，而不是之後才推播失敗。
+- **合併。** 同一個聊天室、同一個寄件人在 2 秒內排入的物件，共用一次最多五則的推播；同一個聊天室的推播依序送出。
+- **重試金鑰。** 每次推播從建立的那一刻就有 UUID 重試金鑰，每次嘗試都帶著它，所以逾時或當機後的重試不會重複發送。超過 24 小時（LINE 的上限）仍未送出的推播就是 dead，不會換新金鑰再送。
+- **結果。** `2xx` 和 `409` 算已送出；`429`、`5xx` 和沒有回應會退避後重試；其他 `4xx` 是 dead，並帶一個能指出寄件人名稱或圖示被拒的代碼。消費者會以 `outboxResult` 收到每一筆結果。
+- **額度。** 推播前，套件會讀 LINE 的額度和已用量（快取一分鐘），算出收件人數（一人，或群組的成員數）加上本行程已預留的量，若會超過方案額度與 `quota.monthlyCap` 兩者中較低的那個，就拒絕這次推播。
+
+## 加入通知
+
+設定 `joinNotice: { text, sha256 }` 後，機器人被加入任何聊天室時，套件只會在文字的 SHA-256 等於你設定的摘要時，用該事件的 reply token 回覆一則訊息。
+它絕不會改用推播：Reply 失敗或 token 已過期時，什麼都不送，消費者會收到 `notice: "failed"` 的 `joined`。
+沒有設定時，永遠不會送出任何通知。
+
+## 路由投遞與 surface
+
+這個外掛提供一個 `line` 聊天 surface，頻道就是聊天室的 key，所以 host 能寫回聊天室。
+設定 `route: true` 時，它也會把允許聊天室的文字交給 host 的路由器；預設關閉。
+**絕對不要讓 `line` 通過核心的 `everyone` 存取規則。** 任何能把機器人加進群組的人，都會因此連到助理。
+
+`senderIconRoute: { path, png }` 在 `path` 提供一張固定的 PNG，附上長效快取標頭，讓寄件人不必另外架服務就能指定穩定的圖示網址。
+
+收件匣和寄件匣都放在 PostgreSQL，預設七天後由保留服務清除。

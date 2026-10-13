@@ -1,0 +1,88 @@
+---
+title: LINE package
+description: Receive the messages of LINE group chats on the host, hand them to one consumer, and send pushes back under a sender name, a retry key and a monthly budget.
+sidebar:
+  order: 15
+---
+
+`pi-roundtable-line` is a LINE Messaging API transport that comes as a plugin.
+It receives the events of a LINE Official Account's chats on the host's HTTP listener, stores each one before it answers, and hands the events of the chats you allow to one consumer, in order and at least once.
+Back toward LINE it sends pushes of up to five message objects, each under a sender name and icon, with a retry key that never changes and a check against the month's quota.
+Source lives in [`packages/line`](https://github.com/wayne930242/pi-roundtable/tree/master/packages/line), and the [package README](https://github.com/wayne930242/pi-roundtable/blob/master/packages/line/README.md) documents every option.
+
+## Add it to a host
+
+```sh
+bun add pi-roundtable-line
+```
+
+```ts
+import { readFileSync } from "node:fs";
+import { line } from "pi-roundtable-line";
+
+export default {
+  // ...your roundtable settings, with http: { port: 3000, hostname: "127.0.0.1" }...
+  plugins: [
+    line({
+      credentials: {
+        channelId: process.env.LINE_CHANNEL_ID ?? "",
+        channelSecret: process.env.LINE_CHANNEL_SECRET ?? "",
+      },
+      quota: { monthlyCap: 400 },
+      senderIconRoute: {
+        path: "/line/staff-icon.png",
+        png: readFileSync("staff-icon.png"),
+      },
+    }),
+  ],
+};
+```
+
+Point the channel's webhook URL at `https://<your host>/line/webhook` and turn the webhook on.
+The channel id and secret are all a stateless setup needs: the package asks LINE for an access token of about 15 minutes, keeps it in memory, and never logs it.
+
+## Chats and the allowlist
+
+A chat the bot has not been told to mirror is recorded as pending with counts only; nothing its members write is kept.
+Read the allowlist from the `LINE` service and decide:
+
+```ts
+import { LINE } from "pi-roundtable-line";
+
+const { sources } = context.services.get(LINE);
+await sources.pending(); // chats waiting for a decision
+await sources.allow("line:group:C...");
+```
+
+## One consumer
+
+`LINE.subscribe(handler)` takes the one consumer.
+It is handed typed events: `message`, `edited`, `unsent`, `joined`, `left`, `memberJoined`, `memberLeft` and `outboxResult`.
+A `message` is answered with the opaque references of what the consumer made for it (a mirror, for example); they come back on `edited` and `unsent`, and an unsent message is taken down in every race, because the package keeps a tombstone.
+`LINE.content(messageId)` reads a message's image, video or file into memory, never to disk and never at a URL.
+
+## Sending
+
+`LINE.outbox.enqueue(chat, messages, { sender, origin })` queues message objects for a chat on the allowlist.
+
+- **Sender.** `{ name, iconUrl }` is checked before anything is queued: the name is 1 to 20 characters and avoids the words LINE refuses (a list you can change), the icon is an `https` URL of at most 2000 characters. A sender LINE would refuse is an error at once, not a failed push later.
+- **Coalescing.** Objects of one chat and one sender queued within 2 seconds share one push of at most five; the pushes of a chat go out in order.
+- **Retry key.** A push has its UUID retry key from the moment it exists and sends it on every attempt, so a retry after a timeout or a crash cannot post twice. After 24 hours, LINE's limit, a push still unsent is dead; it is never sent under a new key.
+- **Outcomes.** `2xx` and `409` are sent; `429`, `5xx` and no answer back off and retry; any other `4xx` is dead with a code that names a refused sender name or icon. Your consumer hears each result as an `outboxResult`.
+- **Quota.** Before a push, the package reads LINE's quota and consumption (cached for a minute), counts the recipients (one, or a group's member count) and its own reservations, and refuses the push if it would pass the lower of the plan's quota and `quota.monthlyCap`.
+
+## The join notice
+
+With `joinNotice: { text, sha256 }` the package answers a `join` with one Reply, on the event's reply token, only when the SHA-256 of the text equals the digest you configured, in any chat the bot joins.
+It is never a push: if the Reply fails or its token has lapsed, nothing is sent and the consumer hears `joined` with `notice: "failed"`.
+Without it, no notice is ever sent.
+
+## Router delivery and the surface
+
+The plugin contributes a `line` chat surface whose channels are the chats' keys, so a host can write back to a chat.
+With `route: true` it also hands the text of allowed chats to the host's router; it is off by default.
+**Never admit `line` through the core's `everyone` access.** Anyone who can add the bot to a group would reach the assistant.
+
+`senderIconRoute: { path, png }` serves one fixed PNG at `path` with a long cache header, so a sender can name a stable icon URL without another service.
+
+PostgreSQL holds the inbox and the outbox, and a retention service removes everything after seven days by default.
