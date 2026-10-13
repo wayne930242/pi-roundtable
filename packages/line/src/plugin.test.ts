@@ -275,6 +275,33 @@ describeDb("the line plugin", () => {
 		expect(retention.busy?.()).toEqual([]);
 	});
 
+	test("the retention service hands the refs of an unsent message that nobody took back to the attached subscriber", async () => {
+		const { service, port } = await boot();
+		const old = new Date(time.getTime() - 60 * 60_000);
+		await sql`INSERT INTO line_tombstones (source_key, message_id, created_at) VALUES (${GROUP}, 'gone', ${old})`;
+		await sql`INSERT INTO line_message_refs (source_key, message_id, ref, position, created_at)
+			VALUES (${GROUP}, 'gone', 'stray-post', 0, ${old})`;
+		const heard: LineEvent[] = [];
+		// Nobody is attached: the ref waits, and the sweep does not drop it for being old.
+		const retention = service("line-retention");
+		await retention.start?.();
+		await Bun.sleep(100);
+		await retention.stop?.();
+		expect((await sql`SELECT 1 FROM line_message_refs`).length).toBe(1);
+
+		port.subscribe(async (event) => {
+			heard.push(event);
+			return undefined;
+		});
+		await retention.start?.();
+		for (let i = 0; i < 200 && heard.length === 0; i++) await Bun.sleep(10);
+		await retention.stop?.();
+		expect(heard).toMatchObject([
+			{ type: "unsent", messageId: "gone", refs: ["stray-post"] },
+		]);
+		expect((await sql`SELECT 1 FROM line_message_refs`).length).toBe(0);
+	});
+
 	test("the token and the secret appear in no log line and no error, through a whole run and through failures", async () => {
 		const { fake, service, route, port } = await boot();
 		fake.failTokens(500);

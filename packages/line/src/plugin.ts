@@ -50,16 +50,24 @@ export function line(options: LineOptions): RoundtablePlugin {
 				now,
 			});
 			const content = new MessageContent(sql, api, options.media);
-			const retention = new RetentionSweeper({
-				sql,
-				logger: context.logger,
-				now,
-				...(options.retention ? { options: options.retention } : {}),
-			});
 			// The subscriber and the processor made for it; the worker hands events out only while both are set.
 			let subscription:
 				| { handler: LineSubscriber; processor: InboxProcessor }
 				| undefined;
+			// Aborted when the retention service stops, so a hand-back in progress does not outlive the host.
+			let sweeping = new AbortController();
+			const retention = new RetentionSweeper({
+				sql,
+				logger: context.logger,
+				now,
+				strays: async (before) => {
+					const attached = subscription;
+					return attached
+						? consumer.handBackStrays(attached.handler, sweeping.signal, before)
+						: 0;
+				},
+				...(options.retention ? { options: options.retention } : {}),
+			});
 			const worker = new InboxWorker({
 				sql,
 				logger: context.logger,
@@ -108,8 +116,16 @@ export function line(options: LineOptions): RoundtablePlugin {
 					},
 					{
 						name: "line-retention",
-						start: () => retention.start(),
-						stop: () => retention.stop(),
+						start: () => {
+							sweeping = new AbortController();
+							retention.start();
+						},
+						stop: async () => {
+							sweeping.abort(
+								new Error("line: the retention service is stopping"),
+							);
+							await retention.stop();
+						},
 						busy: () => retention.busy(),
 					},
 				],

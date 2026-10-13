@@ -1,6 +1,6 @@
 import type { SQL } from "bun";
 import type { Logger } from "pi-roundtable";
-import { LineError } from "./errors.ts";
+import { errorCode, LineError } from "./errors.ts";
 import type { InboxEvent, InboxProcessor, InboxResult } from "./inbox.ts";
 import {
 	type LineContext,
@@ -373,7 +373,7 @@ export class LineConsumer {
 	 */
 	async #retract(
 		handler: LineSubscriber,
-		event: InboxEvent,
+		event: Pick<InboxEvent, "id" | "timestamp">,
 		sourceKey: string,
 		messageId: string,
 		signal: AbortSignal,
@@ -393,6 +393,51 @@ export class LineConsumer {
 		if (refs.length > 0)
 			await this.#sql`DELETE FROM line_message_refs
 				WHERE source_key = ${sourceKey} AND message_id = ${messageId} AND ref IN ${this.#sql([...refs])}`;
+	}
+
+	/**
+	 * Hands back, as `unsent`, the refs that are still stored for a message that has a tombstone and
+	 * that were stored before `before`. They are strays: a handler that outlived its lease kept a ref
+	 * after the unsend had taken the message back, and nobody was left to hand it over. The pass leaves
+	 * a ref alone until it is old enough that no unsend or `keep` in flight can still be taking it
+	 * back. A message whose take-back fails keeps its refs for the next pass. Returns how many
+	 * messages were handed back.
+	 */
+	async handBackStrays(
+		handler: LineSubscriber,
+		signal: AbortSignal,
+		before: Date,
+	): Promise<number> {
+		const strays: { source_key: string; message_id: string }[] = await this
+			.#sql`SELECT DISTINCT r.source_key, r.message_id
+			FROM line_message_refs r
+			JOIN line_tombstones t ON t.source_key = r.source_key AND t.message_id = r.message_id
+			WHERE r.created_at < ${before} LIMIT 100`;
+		let handed = 0;
+		for (const stray of strays) {
+			signal.throwIfAborted();
+			try {
+				await this.#retract(
+					handler,
+					{
+						id: `stray:${stray.source_key}:${stray.message_id}`,
+						timestamp: this.#now().getTime(),
+					},
+					stray.source_key,
+					stray.message_id,
+					signal,
+					false,
+				);
+				handed++;
+			} catch (error) {
+				if (signal.aborted) throw error;
+				this.#logger.warn(
+					{ code: errorCode(error) },
+					"refs of an unsent LINE message could not be handed back",
+				);
+			}
+		}
+		return handed;
 	}
 
 	async #refs(sourceKey: string, messageId: string): Promise<string[]> {

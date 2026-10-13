@@ -17,6 +17,7 @@ test("the defaults keep everything for seven days and sweep hourly, and a mistak
 	expect(RETENTION_DEFAULTS).toEqual({
 		inboxMs: 7 * DAY,
 		messagesMs: 7 * DAY,
+		strayMs: 15 * 60_000,
 		intervalMs: 3_600_000,
 	});
 	expect(() =>
@@ -154,6 +155,46 @@ describeDb("the retention sweeper", () => {
 		await running;
 		await s.stop();
 		expect(s.busy()).toEqual([]);
+	});
+
+	test("the sweep hands strays back first, with the cutoff of the stray window; a failure is logged by its code and trimming goes on", async () => {
+		await inbox("done-old", "done", 8 * DAY);
+		const cutoffs: Date[] = [];
+		const counts = await new RetentionSweeper({
+			sql,
+			logger: logs.logger,
+			now: () => NOW,
+			options: { strayMs: 60_000 },
+			strays: async (before) => {
+				cutoffs.push(before);
+				// It runs before the tables are trimmed.
+				expect(await ids("line_inbox", "webhook_event_id")).toEqual([
+					"done-old",
+				]);
+				return 3;
+			},
+		}).sweepOnce();
+		expect(cutoffs).toEqual([ago(60_000)]);
+		expect(counts).toMatchObject({ strays: 3, inbox: 1 });
+
+		await inbox("done-older", "done", 9 * DAY);
+		logs.lines.length = 0;
+		const failing = await new RetentionSweeper({
+			sql,
+			logger: logs.logger,
+			now: () => NOW,
+			strays: async () => {
+				throw Object.assign(new Error("subscriber said: secret text"), {
+					code: "discord_down",
+				});
+			},
+		}).sweepOnce();
+		expect(failing).toMatchObject({ strays: 0, inbox: 1 });
+		expect(logs.lines.find((l) => l.level === "warn")?.fields).toMatchObject({
+			table: "strays",
+			code: "discord_down",
+		});
+		expect(JSON.stringify(logs.lines)).not.toContain("secret text");
 	});
 
 	test("a table that cannot be trimmed is logged by its code and the others still go", async () => {

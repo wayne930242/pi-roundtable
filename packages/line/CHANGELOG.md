@@ -13,8 +13,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Reply and quote tokens are kept per message in `line_messages` for a later reply mode, never logged or handed to the subscriber, and deleted with the message.
 - The `line-retention` service and the `retention` option: inbox events that are done, skipped, dead or never handled, and message metadata, refs and tombstones, are removed after 7 days by default; it logs counts only. A subscriber that stays detached longer than the window loses the unsends and refs that waited for it. New migration `messages` (the released `inbox` migration is untouched).
 
+- The retention sweep hands strays back first: refs stored for a message that has a tombstone, more than `retention.strayMs` (default 15 minutes) ago, go to the subscriber as `unsent` until they are gone. A handler that outlived its lease could keep a ref after the unsend had run and its take-back was refused, and nothing else would have handed the ref over.
+
 ### Changed
 
+- A ref a handler kept and also returns at the end is no longer handed back a second time when the message was unsent meanwhile.
 - **Breaking (published in 0.9.13):** `LINE.attachProcessor` is removed in favour of `LINE.subscribe`: a raw processor could read events without the tombstone rules. There is no deprecated shim. Code that attached a processor must subscribe instead; the next lockstep release is 0.10.0. `InboxProcessor` and its types stay exported for the inbox options.
 
 ## [0.9.13] - 2026-10-13

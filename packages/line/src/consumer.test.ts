@@ -439,6 +439,70 @@ describeDb("the consumer", () => {
 		]);
 	});
 
+	test("a ref stored for a tombstoned message that nobody handed back is handed back by the stray pass until it is gone (R5R-F002)", async () => {
+		const aborted = new AbortController();
+		// A handler that outlived its lease: its signal is aborted, so the subscriber refuses the take-back.
+		answer = async (event, context) => {
+			await run(unsendEvent(event.messageId, "su", 2000));
+			failNext = new Error("discord down: signal aborted");
+			await context.keep("late-post").catch(() => undefined);
+			throw new Error("the stale handler gives up");
+		};
+		await expect(
+			run(messageEvent({ id: "s0", messageId: "ms" })),
+		).rejects.toThrow("gives up");
+		// The message and the unsend are both finished; only the ref is left, with its tombstone.
+		expect((await rows("line_message_refs")).map((r) => r.ref)).toEqual([
+			"late-post",
+		]);
+		expect(await rows("line_tombstones")).toHaveLength(1);
+		events = [];
+
+		const handler: LineSubscriber = async (event) => {
+			events.push(event);
+			return undefined;
+		};
+		// Too young: an unsend or a keep in flight may still be taking it back.
+		const young = new Date(TIME.getTime() - 60_000);
+		expect(await consumer.handBackStrays(handler, aborted.signal, young)).toBe(
+			0,
+		);
+		expect(events).toEqual([]);
+
+		// A take-back that fails keeps the ref for the next pass and does not stop the others.
+		const failing: LineSubscriber = async () => {
+			throw new Error("discord still down");
+		};
+		expect(
+			await consumer.handBackStrays(
+				failing,
+				aborted.signal,
+				new Date(TIME.getTime() + 1),
+			),
+		).toBe(0);
+		expect(await rows("line_message_refs")).toHaveLength(1);
+
+		const later = new Date(TIME.getTime() + 1);
+		expect(await consumer.handBackStrays(handler, aborted.signal, later)).toBe(
+			1,
+		);
+		expect(events).toMatchObject([
+			{ type: "unsent", messageId: "ms", refs: ["late-post"] },
+		]);
+		expect(await rows("line_message_refs")).toEqual([]);
+		// Nothing is left for the next pass.
+		expect(await consumer.handBackStrays(handler, aborted.signal, later)).toBe(
+			0,
+		);
+		expect(events).toHaveLength(1);
+		// A message that is not tombstoned is never a stray, however old its refs.
+		await sql`INSERT INTO line_message_refs (source_key, message_id, ref, position, created_at)
+			VALUES (${GROUP}, 'live', 'live-ref', 0, ${new Date(0)})`;
+		expect(await consumer.handBackStrays(handler, aborted.signal, later)).toBe(
+			0,
+		);
+	});
+
 	test("keeping is refused outside a message, and past the limit of refs for one message", async () => {
 		let outsider: unknown;
 		const probing = consumer.processorFor(async (event, _signal, context) => {

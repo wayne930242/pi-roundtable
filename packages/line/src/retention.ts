@@ -12,6 +12,12 @@ export interface RetentionOptions {
 	inboxMs: number;
 	/** How long a message's metadata and tokens, its references and its tombstone are kept; default 7 days. */
 	messagesMs: number;
+	/**
+	 * How long a ref of an unsent message may wait before the sweep hands it back to the subscriber as
+	 * `unsent`; default 15 minutes. Such a ref is a stray: a handler that outlived its lease kept it
+	 * after the unsend had run.
+	 */
+	strayMs: number;
 	/** How often the sweeper runs; default 1 hour. At most 2_147_483_647. */
 	intervalMs: number;
 }
@@ -19,6 +25,7 @@ export interface RetentionOptions {
 export const RETENTION_DEFAULTS: RetentionOptions = {
 	inboxMs: 7 * DAY_MS,
 	messagesMs: 7 * DAY_MS,
+	strayMs: 15 * 60_000,
 	intervalMs: 60 * 60_000,
 };
 
@@ -109,6 +116,12 @@ export interface RetentionDeps {
 	logger: Logger;
 	now: () => Date;
 	options?: Partial<RetentionOptions>;
+	/**
+	 * Hands the refs of unsent messages that nobody took back to the subscriber, those stored before
+	 * `before`; answers how many messages it handed back. Runs first in every sweep, so a stray is
+	 * taken back before retention would forget it.
+	 */
+	strays?: (before: Date) => Promise<number>;
 }
 
 /**
@@ -120,6 +133,7 @@ export class RetentionSweeper {
 	readonly #sql: SQL;
 	readonly #logger: Logger;
 	readonly #now: () => Date;
+	readonly #strays: ((before: Date) => Promise<number>) | undefined;
 	readonly options: RetentionOptions;
 	#timer: ReturnType<typeof setTimeout> | undefined;
 	#running = false;
@@ -129,6 +143,7 @@ export class RetentionSweeper {
 		this.#sql = deps.sql;
 		this.#logger = deps.logger;
 		this.#now = deps.now;
+		this.#strays = deps.strays;
 		this.options = { ...RETENTION_DEFAULTS, ...deps.options };
 	}
 
@@ -148,6 +163,19 @@ export class RetentionSweeper {
 	async #sweep(): Promise<Record<string, number>> {
 		const counts: Record<string, number> = {};
 		const now = this.#now().getTime();
+		if (this.#strays) {
+			try {
+				counts.strays = await this.#strays(
+					new Date(now - this.options.strayMs),
+				);
+			} catch (error) {
+				counts.strays = 0;
+				this.#logger.warn(
+					{ table: "strays", code: errorCode(error) },
+					"a LINE retention sweep could not hand back stray refs",
+				);
+			}
+		}
 		for (const task of TASKS) {
 			const cutoff = new Date(now - this.options[task.window]);
 			try {

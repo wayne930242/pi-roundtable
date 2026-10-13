@@ -173,7 +173,7 @@ A redelivery of a message that is already recorded is not handed to the subscrib
 One message may become several posts (a long text is cut into chunks, media and text are posted apart), and the last one can fail.
 So the third argument of the subscriber, `line`, has `keep(ref)`: call it as each post lands.
 It stores the reference at once, under the same per-message lock and tombstone check as the answer at the end, and resolves `{ unsent }`.
-Refs answered at the end merge with the kept ones (one already stored keeps its place), so keeping and answering the same ref is fine.
+Refs answered at the end merge with the kept ones (one already stored keeps its place), so keeping and answering the same ref is fine; a ref that was kept is never handed back a second time because it is answered again.
 A handler that throws after keeping some refs leaves them stored: the retry mirrors the message again, and an `unsent` hands over the posts of every attempt, so none is left behind.
 If the sender had already taken the message back, `keep` stores the ref, hands it to the subscriber as `unsent` at once (the same take-back the final store does) and resolves `{ unsent: true }`: stop posting.
 Keep each post as it lands, and throw to give up.
@@ -223,6 +223,10 @@ The `line-retention` service sweeps once at start and every hour (`retention.int
 | inbox events that are `done`, `skipped` or `dead` | 7 days (`retention.inboxMs`) |
 | inbox events still `pending`, which no subscriber handled | 7 days (`retention.inboxMs`), payload and all |
 | message metadata and tokens, refs, tombstones | 7 days (`retention.messagesMs`) |
+
+Before it trims, every sweep hands back strays: refs still stored for a message that has a tombstone and were stored more than `retention.strayMs` (15 minutes) ago go to the subscriber as `unsent`, and are forgotten once it returns.
+A stray happens when a handler that outlived its lease keeps a ref after its message was unsent and the take-back is refused, so nobody else would hand the ref over.
+A take-back that fails is logged by its code and retried at the next sweep, until the ref is gone; with no subscriber attached the refs wait.
 
 A subscriber that stays detached longer than the window loses what was waiting for it: an `unsend` still pending is removed with the rest, and the refs of the message it names are removed too, so that mirror can no longer be taken back. Keep a subscriber attached, or raise `retention.inboxMs` and `retention.messagesMs` beyond the longest outage.
 
