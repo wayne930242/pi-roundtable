@@ -796,7 +796,7 @@ describeDb("the line plugin", () => {
 		await route.handle(webhookRequest(body(messageEvent({ id: "q0" }))));
 		await port.sources.allow(GROUP);
 		await surface.sendReply(GROUP as `${string}:${string}`, {
-			chunks: ["a".repeat(5001), "  ", "short", "😀".repeat(2500) + "x"],
+			chunks: ["a".repeat(5001), "  ", "short", `${"😀".repeat(2500)}x`],
 		});
 		const [push] = await sql`SELECT messages FROM line_outbox`;
 		const texts = (push.messages as { text: string }[]).map(

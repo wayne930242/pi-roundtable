@@ -221,6 +221,9 @@ export class PgOutbox implements LineOutbox {
 		const icon = sender?.iconUrl ?? null;
 		const now = this.#now();
 		const window = new Date(now.getTime() + this.#coalesceMs);
+		// A push that fills goes at once; one that is still gathering is ready when its window ends.
+		let filled = false;
+		let gathering = false;
 		await this.#sql.begin(async (tx) => {
 			// One enqueue at a time per chat, so pushes of a chat are formed in order.
 			await tx`SELECT pg_advisory_xact_lock(hashtextextended(${sourceKey}, 13))`;
@@ -242,6 +245,7 @@ export class PgOutbox implements LineOutbox {
 				rest = rest.slice(take.length);
 				const origins = [...new Set([...open.origin_refs, origin])];
 				const full = open.message_count + take.length >= PUSH_MAX_MESSAGES;
+				filled ||= full;
 				await tx`UPDATE line_outbox
 					SET messages = messages || ${JSON.stringify(take)}::text::jsonb,
 						message_count = message_count + ${take.length},
@@ -253,6 +257,8 @@ export class PgOutbox implements LineOutbox {
 				const take = rest.slice(0, PUSH_MAX_MESSAGES);
 				rest = rest.slice(take.length);
 				const full = take.length >= PUSH_MAX_MESSAGES;
+				if (full) filled = true;
+				else gathering = true;
 				await tx`INSERT INTO line_outbox
 					(source_key, sender_name, sender_icon_url, messages, message_count, origin_refs, retry_key,
 					 status, created_at, ready_at, next_attempt_at)
@@ -261,6 +267,7 @@ export class PgOutbox implements LineOutbox {
 						${full ? now : window}, ${now})`;
 			}
 		});
-		this.#queued?.(this.#coalesceMs);
+		if (filled) this.#queued?.(0);
+		if (gathering || !filled) this.#queued?.(this.#coalesceMs);
 	}
 }
