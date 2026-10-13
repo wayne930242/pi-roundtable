@@ -492,6 +492,24 @@ describeDb("the outbox", () => {
 		expect(await worker.runOnce()).toBe(false);
 	});
 
+	test("a push whose first request was cut short by a stop still expires with its key, and is never gathered into", async () => {
+		await outbox.enqueue(GROUP, [text("hi")]);
+		clock = 2_000;
+		// What a stop leaves behind: the attempt is not counted, the key has been used.
+		await sql`UPDATE line_outbox SET attempts = 0, first_attempt_at = ${now()}`;
+		clock += 25 * 3_600_000;
+		await worker.runOnce();
+		expect(await rows()).toMatchObject([
+			{ status: "dead", last_error_code: "retry_key_expired", messages: null },
+		]);
+		expect(fake.pushes).toHaveLength(0);
+		await sql`TRUNCATE line_outbox`;
+		await outbox.enqueue(GROUP, [text("a")]);
+		await sql`UPDATE line_outbox SET attempts = 0, first_attempt_at = ${now()}`;
+		await outbox.enqueue(GROUP, [text("b")]);
+		expect(await rows()).toHaveLength(2);
+	});
+
 	test("a push that keeps failing is dead after the allowed attempts, with the last code", async () => {
 		build({ maxAttempts: 3 });
 		await outbox.enqueue(GROUP, [text("hi")]);

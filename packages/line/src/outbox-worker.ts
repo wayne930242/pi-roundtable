@@ -171,9 +171,9 @@ export class OutboxWorker {
 		if (this.#stopping) controller.abort(stopped());
 		const now = this.#now().getTime();
 		try {
-			// The key of a first attempt is new; one older than LINE keeps it is dead rather than resent.
+			// A key older than LINE keeps it is dead rather than resent, even when the request that
+			// first used it was cut short by a stop and so is not counted as an attempt.
 			if (
-				row.attempts > 1 &&
 				row.first_attempt_at &&
 				now - row.first_attempt_at.getTime() > this.options.retryKeyMs
 			)

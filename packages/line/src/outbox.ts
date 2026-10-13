@@ -233,7 +233,7 @@ export class PgOutbox implements LineOutbox {
 					AND id = (SELECT max(id) FROM line_outbox WHERE source_key = ${sourceKey})
 					AND sender_name IS NOT DISTINCT FROM ${name}::text
 					AND sender_icon_url IS NOT DISTINCT FROM ${icon}::text
-					AND status = 'queued' AND attempts = 0 AND ready_at > ${now}
+					AND status = 'queued' AND first_attempt_at IS NULL AND ready_at > ${now}
 				FOR UPDATE`) as {
 					id: string | number;
 					message_count: number;
