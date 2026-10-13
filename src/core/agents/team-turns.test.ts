@@ -434,4 +434,146 @@ describe("approvals", () => {
 		await reply(owner.team, "owner");
 		expect(owner.turns[0]?.confirmed).toBe(true);
 	});
+
+	describe("a held call that names its approvers", () => {
+		const held = (approverIds: string[]): PendingConfirmation => ({
+			...shell,
+			speakerId: "2",
+			principalId: "p_sam",
+			calls: [
+				{
+					tool: "agent_create",
+					input: "{}",
+					action: "create an agent",
+					approverIds,
+				},
+			],
+		});
+		const as = (
+			team: TeamTurns,
+			principalId: string,
+			tier: "owner" | "admin" | "member",
+		) =>
+			team.answerOwner(
+				discordKey("1000"),
+				{ id: `d_${principalId}`, name: principalId, tier, principalId },
+				"yes, run it",
+				"yes, run it",
+				NO_ATTACHMENTS,
+			);
+
+		test("a named approver confirms it by message", async () => {
+			const { team, turns, judged } = setup(
+				answer,
+				undefined,
+				true,
+				held(["p_ada"]),
+			);
+			await as(team, "p_ada", "admin");
+			expect(judged).toEqual(["yes, run it"]);
+			expect(turns[0]?.confirmed).toBe(true);
+		});
+
+		test("another principal at the same tier cannot, and is not asked to", async () => {
+			const { team, turns, judged } = setup(
+				answer,
+				undefined,
+				true,
+				held(["p_ada"]),
+			);
+			await as(team, "p_bob", "admin");
+			expect(judged).toEqual([]);
+			expect(turns[0]?.confirmed).toBeUndefined();
+		});
+
+		test("the speaker whose turn held it cannot unless named", async () => {
+			const { team, turns, judged } = setup(
+				answer,
+				undefined,
+				true,
+				held(["p_ada"]),
+			);
+			await as(team, "p_sam", "admin");
+			expect(judged).toEqual([]);
+			expect(turns[0]?.confirmed).toBeUndefined();
+			const named = setup(answer, undefined, true, held(["p_sam"]));
+			await as(named.team, "p_sam", "admin");
+			expect(named.turns[0]?.confirmed).toBe(true);
+		});
+
+		test("an owner still confirms it, also when no one is named", async () => {
+			for (const approverIds of [["p_ada"], []]) {
+				const { team, turns } = setup(
+					answer,
+					undefined,
+					true,
+					held(approverIds),
+				);
+				await as(team, "p_boss", "owner");
+				expect(turns[0]?.confirmed).toBe(true);
+			}
+		});
+
+		test("an empty set leaves it to the owners", async () => {
+			const { team, turns, judged } = setup(answer, undefined, true, held([]));
+			await as(team, "p_sam", "admin");
+			await as(team, "p_ada", "admin");
+			expect(judged).toEqual([]);
+			expect(turns.map((t) => t.confirmed)).toEqual([undefined, undefined]);
+		});
+
+		test("a named approver whose tier no longer holds the tool cannot", async () => {
+			const { team, judged } = setup(answer, undefined, true, held(["p_ada"]));
+			await as(team, "p_ada", "member");
+			expect(judged).toEqual([]);
+			const tier: PendingConfirmation = {
+				...held(["p_ada"]),
+				calls: [
+					{
+						tool: "agent_create",
+						input: "{}",
+						action: "create an agent",
+						minTier: "owner",
+						approverIds: ["p_ada"],
+					},
+				],
+			};
+			const high = setup(answer, undefined, true, tier);
+			await as(high.team, "p_ada", "admin");
+			expect(high.judged).toEqual([]);
+		});
+
+		test("a pending record with no calls is still the owners' and its speaker's alone", async () => {
+			const empty: PendingConfirmation = { ...held(["p_ada"]), calls: [] };
+			const named = setup(answer, undefined, true, empty);
+			await as(named.team, "p_ada", "admin");
+			await as(named.team, "p_bob", "admin");
+			expect(named.judged).toEqual([]);
+			const speaker = setup(answer, undefined, true, empty);
+			await as(speaker.team, "p_sam", "admin");
+			expect(speaker.judged).toEqual(["yes, run it"]);
+		});
+
+		test("a call that names none keeps its speaker as its approver beside a call that does", async () => {
+			const mixed: PendingConfirmation = {
+				...shell,
+				speakerId: "2",
+				principalId: "p_sam",
+				calls: [
+					{ tool: "agent_create", input: "{}", action: "create an agent" },
+					{
+						tool: "agent_create",
+						input: '{"a":1}',
+						action: "create another",
+						approverIds: ["p_ada"],
+					},
+				],
+			};
+			// Neither the speaker nor the named approver may release both calls alone.
+			const { team, judged } = setup(answer, undefined, true, mixed);
+			await as(team, "p_sam", "admin");
+			await as(team, "p_ada", "admin");
+			expect(judged).toEqual([]);
+		});
+	});
 });

@@ -68,7 +68,15 @@ describe("OwnerCards after the grace period", () => {
 		const id = fake.cardId();
 		const yes = press("button", `${CARD_PREFIX}${id}:yes`);
 		await cards.handle(yes.interaction);
-		expect(heard).toEqual([{ kind: "approval", approved: true, by: OWNER }]);
+		expect(heard).toEqual([
+			{
+				kind: "approval",
+				approved: true,
+				by: OWNER,
+				// No identity service: the primary owner is their own principal.
+				approvedBy: { principalId: OWNER, speakerId: OWNER, name: OWNER },
+			},
+		]);
 		expect(resumed).toEqual([
 			{
 				channelId: "555",

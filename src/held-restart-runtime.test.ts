@@ -20,6 +20,7 @@ import type {
 	PendingConfirmation,
 } from "./core/domain/conversation.ts";
 import type { TurnConversation } from "./core/domain/ports.ts";
+import type { ApprovedBy } from "./core/interactions/prompts.ts";
 import { silentLogger } from "./core/log.ts";
 import { CONFIRMATION_TTL_MS } from "./core/runtime/extensions/confirmation-gate.ts";
 import { PiAgentRuntime } from "./core/runtime/pi-agent-runtime.ts";
@@ -42,7 +43,19 @@ const AGENT: AgentTurnScope = {
 	session: "fake:infra",
 	home: "fake:infra",
 };
-const TOOLS = ["deploy", "probe"];
+const TOOLS = ["deploy", "probe", "ship"];
+const SAM: Speaker = {
+	id: "7",
+	name: "Sam",
+	tier: "member",
+	principalId: "p_sam",
+};
+const ADA: Speaker = {
+	id: "9",
+	name: "Ada",
+	tier: "member",
+	principalId: "p_ada",
+};
 
 /** A turn whose model calls `tool` once, then answers. */
 const calling = (
@@ -92,7 +105,7 @@ async function host(responses: FauxResponseStep[]) {
 			},
 		],
 	});
-	const ran = { deploy: 0, probe: 0 };
+	const ran = { deploy: 0, probe: 0, ship: [] as (ApprovedBy | undefined)[] };
 	let deps: RuntimeDeps | undefined;
 	const build = (given: RuntimeDeps): PiAgentRuntime =>
 		new PiAgentRuntime({
@@ -150,6 +163,18 @@ async function host(responses: FauxResponseStep[]) {
 						run: () => {
 							ran.deploy += 1;
 							return "deployed";
+						},
+					}),
+					defineTool({
+						name: "ship",
+						description: "Ship it, approved by one of the people it names.",
+						parameters: Type.Object({ to: Type.String() }),
+						minTier: "member",
+						hold: ({ to }) => `ship to ${to}`,
+						approvers: async () => ["p_ada"],
+						run: (_args, turn) => {
+							ran.ship.push(turn.approvedBy);
+							return "shipped";
 						},
 					}),
 					defineTool({
@@ -230,13 +255,14 @@ async function host(responses: FauxResponseStep[]) {
 				confirmed?: boolean;
 				conversation?: TurnConversation;
 				agent?: AgentTurnScope;
+				speaker?: Speaker;
 			} = {},
 		) =>
 			live().runTurn({
 				channel,
 				kind: "helper",
 				text,
-				speaker: OWNER_SPEAKER,
+				speaker: options.speaker ?? OWNER_SPEAKER,
 				selection: { id: "held", tools: TOOLS, groups: [] },
 				...(options.confirmed ? { confirmed: true } : {}),
 				...(options.conversation ? { conversation: options.conversation } : {}),
@@ -289,6 +315,40 @@ describe("held actions after a restart", () => {
 			}
 		});
 	}
+
+	test("the approvers a held call names survive a restart, and the person whose message confirms it is the approver its run sees", async () => {
+		const h = await host([
+			...calling("ship", { to: "acme" }),
+			...calling("ship", { to: "acme" }),
+		]);
+		try {
+			await h.turn("fake:room", "ship to acme", {
+				conversation: SHARED,
+				speaker: SAM,
+			});
+			expect(h.ran.ship).toEqual([]);
+			expect((await h.store.load("fake:room"))?.calls[0]?.approverIds).toEqual([
+				"p_ada",
+			]);
+
+			const runtime = h.restart();
+			await runtime.recentTranscript("fake:room", 5);
+			expect(
+				runtime.pendingConfirmation("fake:room")?.calls[0]?.approverIds,
+			).toEqual(["p_ada"]);
+
+			await h.turn("fake:room", "yes, ship it", {
+				conversation: SHARED,
+				speaker: ADA,
+				confirmed: true,
+			});
+			expect(h.ran.ship).toEqual([
+				{ principalId: "p_ada", speakerId: "9", name: "Ada" },
+			]);
+		} finally {
+			await h.stop();
+		}
+	});
 
 	test("heldActions restores them too, and builds no gate in the agent flavour for an owner conversation", async () => {
 		const h = await host([

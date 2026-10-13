@@ -13,7 +13,11 @@ import { Type } from "typebox";
 import type { ChatSurface } from "./core/contract/surface.ts";
 import { definePlugin, defineTool } from "./core/define.ts";
 import type { PendingConfirmation } from "./core/domain/conversation.ts";
-import type { PromptScope } from "./core/interactions/prompts.ts";
+import type {
+	ApprovalOptions,
+	ApprovedBy,
+	PromptScope,
+} from "./core/interactions/prompts.ts";
 import { PiAgentRuntime } from "./core/runtime/pi-agent-runtime.ts";
 import type { Speaker } from "./core/speakers.ts";
 import { testPlugin } from "./testing.ts";
@@ -24,6 +28,17 @@ const MEMBER: Speaker = {
 	tier: "member",
 	principalId: "7",
 };
+
+/** Who approved each `ship` that ran. */
+const shipped: (ApprovedBy | undefined)[] = [];
+
+/** A turn that calls `ship`, held for approval by `p_ada`, then reports. */
+const SHIP_TURN = () => [
+	fauxAssistantMessage([fauxToolCall("ship", { to: "acme" })], {
+		stopReason: "toolUse",
+	}),
+	fauxAssistantMessage([fauxText("Shipped.")]),
+];
 
 /** A turn that calls `deploy`, held for approval, then waits. */
 const DEPLOY_TURN = () => [
@@ -37,6 +52,7 @@ const DEPLOY_TURN = () => [
 async function heldHost(
 	turns: number,
 	prompts?: ChatSurface["prompts"],
+	script: () => ReturnType<typeof DEPLOY_TURN> = DEPLOY_TURN,
 ): Promise<{
 	harness: Awaited<ReturnType<typeof testPlugin>>;
 	saved: (PendingConfirmation | undefined)[];
@@ -44,7 +60,7 @@ async function heldHost(
 }> {
 	const dir = mkdtempSync(join(tmpdir(), "roundtable-held-"));
 	const core = createFauxCore({ provider: "faux", models: [{ id: "faux-1" }] });
-	core.setResponses(Array.from({ length: turns }, DEPLOY_TURN).flat());
+	core.setResponses(Array.from({ length: turns }, script).flat());
 	const modelRuntime = await ModelRuntime.create({
 		authPath: join(dir, "auth.json"),
 		modelsPath: null,
@@ -112,6 +128,18 @@ async function heldHost(
 						minTier: "member",
 						hold: ({ site }) => `deploy ${site}`,
 						run: () => "deployed",
+					}),
+					defineTool({
+						name: "ship",
+						description: "Ship it, approved by one of the people it names.",
+						parameters: Type.Object({ to: Type.String() }),
+						minTier: "member",
+						hold: ({ to }) => `ship to ${to}`,
+						approvers: async () => ["p_ada"],
+						run: (_args, turn) => {
+							shipped.push(turn.approvedBy);
+							return "shipped";
+						},
 					}),
 				],
 				sessionTools: [
@@ -212,6 +240,67 @@ test("a turn's prompts are scoped to its speaker: escalating to the owners in a 
 				escalate: "none",
 			},
 		]);
+	} finally {
+		await done();
+	}
+});
+
+test("a call held for named approvers is asked with them, and its run sees who approved the card", async () => {
+	shipped.length = 0;
+	const asked: (ApprovalOptions | undefined)[] = [];
+	const { harness, done } = await heldHost(
+		1,
+		() => ({
+			confirm: async (_t, _m, _s, _tier, _wait, _details, options) => {
+				asked.push(options);
+				options?.approvedBy?.({
+					principalId: "p_ada",
+					speakerId: "9",
+					name: "Ada",
+				});
+				return "approved";
+			},
+			ask: async () => undefined,
+		}),
+		SHIP_TURN,
+	);
+	try {
+		await harness.turns.run({
+			channel: "fake:room",
+			kind: "helper",
+			text: "ship to acme",
+			speaker: { ...MEMBER, principalId: "p_sam" },
+			interactive: true,
+			conversation: { visibility: "shared" },
+			selection: { id: "held", tools: ["ship"], groups: [] },
+		});
+		expect(asked.map((options) => options?.approvers)).toEqual([["p_ada"]]);
+		expect(shipped).toEqual([
+			{ principalId: "p_ada", speakerId: "9", name: "Ada" },
+		]);
+	} finally {
+		await done();
+	}
+});
+
+test("a call approved by a surface that does not say who runs without an approver", async () => {
+	shipped.length = 0;
+	const { harness, done } = await heldHost(
+		1,
+		() => ({ confirm: async () => "approved", ask: async () => undefined }),
+		SHIP_TURN,
+	);
+	try {
+		await harness.turns.run({
+			channel: "fake:room",
+			kind: "helper",
+			text: "ship to acme",
+			speaker: { ...MEMBER, principalId: "p_sam" },
+			interactive: true,
+			conversation: { visibility: "shared" },
+			selection: { id: "held", tools: ["ship"], groups: [] },
+		});
+		expect(shipped).toEqual([undefined]);
 	} finally {
 		await done();
 	}

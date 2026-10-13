@@ -58,6 +58,33 @@ describeDb("PendingConfirmationStore", () => {
 		await store.save("discord:4", undefined);
 	});
 
+	test("the approvers a call names come back with it, an empty set too, and a call that names none still names none", async () => {
+		const named: PendingConfirmation = {
+			...held,
+			speakerId: "7",
+			principalId: "p_7",
+			calls: [
+				{
+					tool: "send",
+					input: "{}",
+					action: "send",
+					approverIds: ["p_8", "p_9"],
+				},
+				{ tool: "wipe", input: "{}", action: "wipe", approverIds: [] },
+				{ tool: "read", input: "{}", action: "read" },
+			],
+		};
+		await store.save("discord:8", named);
+		const loaded = await store.load("discord:8");
+		expect(loaded).toEqual(named);
+		expect(loaded?.calls.map((call) => call.approverIds)).toEqual([
+			["p_8", "p_9"],
+			[],
+			undefined,
+		]);
+		await store.save("discord:8", undefined);
+	});
+
 	test("the principal of that speaker comes back with them; 0.8's held actions name none", async () => {
 		const theirs = { ...held, speakerId: "7", principalId: "p_7" };
 		await store.save("discord:6", theirs);
