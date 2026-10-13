@@ -14,7 +14,10 @@ export function assertImagePixelBudget(
 	const pixels = (width: number, height: number): number => {
 		if (width < 1 || height < 1) throw invalid();
 		if (maxSide !== undefined && (width > maxSide || height > maxSide))
-			throw new ImagePreparationError("pixel-limit");
+			throw new ImagePreparationError(
+				"pixel-limit",
+				`Image exceeds the ${maxSide}-pixel side limit.`,
+			);
 		const area = width * height;
 		check(area);
 		return area;

@@ -146,7 +146,11 @@ export interface RoundtableConfig {
 		socketPath?: string;
 		socketMode?: number;
 	};
-	/** A picture of your own for agents without one, and the style reference for drawing them; default a plain bot. */
+	/**
+	 * A picture of your own for agents without one, and the style reference for drawing them; default
+	 * a plain bot. A PNG, JPEG or GIF of any side within the 64 MP decoded-pixel budget (an ordinary
+	 * camera photo); one that cannot be read as a picture is logged and the plain bot is used.
+	 */
 	avatar?: string;
 	/** The agents' shared working directory; default `<dataDir>/work`. */
 	workDir?: string;

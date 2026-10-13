@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createCanvas, loadImage } from "canvas";
@@ -116,5 +116,43 @@ describe("FileAvatarStudio", () => {
 			expect([image.width, image.height]).toEqual([512, 512]);
 			expect(s.url(hash)).toBe(`https://example.com/avatars/${hash}.png`);
 		});
+	});
+
+	test("a configured reference over 4096 pixels a side starts the studio, a drawn one is refused", async () => {
+		const dir = mkdtempSync(join(tmpdir(), "roundtable-avatar-ref-"));
+		const photo = join(dir, "photo.png");
+		writeFileSync(photo, picture(5000, 3000, "blue"));
+		const failures: string[] = [];
+		const s = new FileAvatarStudio({
+			dir: join(dir, "avatars"),
+			publicUrl: "https://example.com",
+			referencePath: photo,
+			neutralPath: REFERENCE,
+			onReferenceFailed: (code) => failures.push(code),
+			draw: async () => picture(5000, 3000, "red"),
+		});
+		await s.init();
+		expect(failures).toEqual([]);
+		expect(s.url(undefined)).toMatch(/\/avatars\/[0-9a-f]{64}\.png$/);
+		await expect(s.draw("a role")).rejects.toMatchObject({
+			reason: "pixel-limit",
+		});
+	});
+
+	test("a reference that is not a picture is logged and replaced by the neutral avatar", async () => {
+		const dir = mkdtempSync(join(tmpdir(), "roundtable-avatar-bad-"));
+		const bad = join(dir, "bad.png");
+		writeFileSync(bad, "not a picture");
+		const failures: string[] = [];
+		const s = new FileAvatarStudio({
+			dir: join(dir, "avatars"),
+			publicUrl: "https://example.com",
+			referencePath: bad,
+			neutralPath: REFERENCE,
+			onReferenceFailed: (code) => failures.push(code),
+		});
+		await s.init();
+		expect(failures).toEqual(["invalid-image"]);
+		expect(s.serve(new URL(s.url(undefined)).pathname)?.status).toBe(200);
 	});
 });

@@ -95,3 +95,31 @@ test("size and maxBytes must be whole numbers in range", async () => {
 		await expect(squarePng(source, { size })).rejects.toThrow(RangeError);
 	await expect(squarePng(source, { maxBytes: 0 })).rejects.toThrow(RangeError);
 });
+
+test("a WebP is refused as invalid-image, since the canvas cannot decode it", async () => {
+	const webp = Buffer.alloc(40);
+	webp.write("RIFF", 0, "ascii");
+	webp.writeUInt32LE(32, 4);
+	webp.write("WEBPVP8 ", 8, "ascii");
+	await expect(squarePng(webp)).rejects.toMatchObject({
+		name: "ImagePreparationError",
+		reason: "invalid-image",
+	});
+});
+
+test("a picture whose header passes but cannot be decoded is invalid-image", async () => {
+	await expect(squarePng(declaring(10, 10))).rejects.toMatchObject({
+		name: "ImagePreparationError",
+		reason: "invalid-image",
+	});
+});
+
+test("a side-limit refusal names the side limit, and maxSide raises it", async () => {
+	await expect(squarePng(declaring(5000, 10))).rejects.toMatchObject({
+		reason: "pixel-limit",
+		message: expect.stringContaining("4096-pixel side limit"),
+	});
+	await expect(
+		squarePng(declaring(5000, 10), { maxSide: 6000 }),
+	).rejects.toMatchObject({ reason: "invalid-image" });
+});

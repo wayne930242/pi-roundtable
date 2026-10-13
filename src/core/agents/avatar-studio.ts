@@ -10,6 +10,8 @@ import { fallbackAvatar } from "./fallback-avatar.ts";
 
 const AVATAR_SIDE = 512;
 const REFERENCE_SIDE = 512;
+/** The configured reference is the host's own photo, so only the decoded-pixel budget limits it. */
+const REFERENCE_MAX_SIDE = Number.MAX_SAFE_INTEGER;
 const HASH_PATH = /^\/avatars\/([0-9a-f]{64})\.png$/;
 
 export type { ImageDrawer };
@@ -21,6 +23,10 @@ export interface AvatarStudioOptions {
 	publicUrl: string;
 	/** The assistant's neutral avatar: the style reference and the picture of an agent without one. */
 	referencePath: string;
+	/** The neutral avatar shipped with the package; the reference is replaced by it when the reference cannot be read as a picture. */
+	neutralPath?: string;
+	/** Told the error code of a reference that was replaced by `neutralPath`. */
+	onReferenceFailed?: (code: string) => void;
 	/** Draws the pictures. Without one, the studio only makes each agent a picture from its name. */
 	draw?: ImageDrawer;
 }
@@ -33,17 +39,37 @@ export interface AvatarStudioOptions {
 export class FileAvatarStudio implements AvatarStudio {
 	readonly #options: AvatarStudioOptions;
 	#defaultHash: string | undefined;
+	#referencePath: string;
 
 	constructor(options: AvatarStudioOptions) {
 		this.#options = options;
+		this.#referencePath = options.referencePath;
 		mkdirSync(options.dir, { recursive: true });
 	}
 
 	/** Stores the assistant's neutral avatar, the picture of an agent that has none yet. */
 	async init(): Promise<void> {
-		this.#defaultHash = await this.#store(
-			readFileSync(this.#options.referencePath),
-		);
+		try {
+			this.#defaultHash = await this.#referenceStore();
+		} catch (error) {
+			const { neutralPath, onReferenceFailed } = this.#options;
+			if (!neutralPath || neutralPath === this.#referencePath) throw error;
+			const code =
+				(error as { code?: unknown }).code ??
+				(error as { reason?: unknown }).reason ??
+				(error as Error).name;
+			onReferenceFailed?.(
+				/^[A-Za-z][A-Za-z0-9_-]{0,40}$/.test(String(code))
+					? String(code)
+					: "error",
+			);
+			this.#referencePath = neutralPath;
+			this.#defaultHash = await this.#referenceStore();
+		}
+	}
+
+	async #referenceStore(): Promise<string> {
+		return this.#store(readFileSync(this.#referencePath), REFERENCE_MAX_SIDE);
 	}
 
 	/** Whether an image provider is configured; without one, only `fallback` makes pictures. */
@@ -65,10 +91,10 @@ export class FileAvatarStudio implements AvatarStudio {
 	 */
 	async draw(avatarPrompt: string): Promise<string> {
 		const draw = this.#drawer();
-		const reference = await squarePng(
-			readFileSync(this.#options.referencePath),
-			{ size: REFERENCE_SIDE },
-		);
+		const reference = await squarePng(readFileSync(this.#referencePath), {
+			size: REFERENCE_SIDE,
+			maxSide: REFERENCE_MAX_SIDE,
+		});
 		const bytes = await draw(
 			`Draw a square Discord avatar of the person in the reference image, redrawn as an anime character: keep their face, short dark hair, and features recognizable as the same person, but in vivid anime cel-shading with a big, exaggerated expression and a dramatic pose that shows the role. Dress them and paint the background exactly in the colours the description names; ignore the reference's green jacket and teal background. Head-and-shoulders framing that still reads at 40 px. No text, no border. The role: ${avatarPrompt}`,
 			[{ data: reference.toString("base64"), mimeType: "image/png" }],
@@ -97,7 +123,7 @@ export class FileAvatarStudio implements AvatarStudio {
 		return this.#store(
 			await fallbackAvatar(
 				displayName,
-				readFileSync(this.#options.referencePath),
+				readFileSync(this.#referencePath),
 				name,
 			),
 		);
@@ -149,8 +175,11 @@ export class FileAvatarStudio implements AvatarStudio {
 		return join(this.#options.dir, `${hash}.png`);
 	}
 
-	async #store(bytes: Uint8Array): Promise<string> {
-		const png = await squarePng(bytes, { size: AVATAR_SIDE });
+	async #store(bytes: Uint8Array, maxSide?: number): Promise<string> {
+		const png = await squarePng(bytes, {
+			size: AVATAR_SIDE,
+			...(maxSide === undefined ? {} : { maxSide }),
+		});
 		const hash = createHash("sha256").update(png).digest("hex");
 		const path = this.#path(hash);
 		if (!existsSync(path)) writeFileSync(path, png);

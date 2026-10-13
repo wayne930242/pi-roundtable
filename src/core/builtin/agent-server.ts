@@ -83,6 +83,8 @@ export interface AgentServerOptions {
 	avatarUrl: string;
 	/** The assistant's neutral avatar: the style reference and the picture of an agent without one. */
 	avatarReference: string;
+	/** The picture used instead when `avatarReference` cannot be read as one; the failure is logged. */
+	avatarNeutral?: string;
 	/** Reports the process's own errors to an agent; without one nothing is reported. */
 	errorReporter?: ErrorReporter;
 }
@@ -161,6 +163,16 @@ export function agentServerPlugin(
 				dir: join(options.dataDir, "avatars"),
 				publicUrl: options.avatarUrl,
 				referencePath: options.avatarReference,
+				...(options.avatarNeutral
+					? {
+							neutralPath: options.avatarNeutral,
+							onReferenceFailed: (code: string) =>
+								logger.warn(
+									{ code },
+									"the configured avatar could not be used; the neutral avatar is used instead",
+								),
+						}
+					: {}),
 				// Without an image provider the studio makes each agent a picture from its name.
 				...(providers.filled.has("images") ? { draw: providers.images } : {}),
 			});

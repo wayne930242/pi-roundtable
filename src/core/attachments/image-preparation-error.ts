@@ -2,13 +2,17 @@
 export class ImagePreparationError extends Error {
 	override readonly name = "ImagePreparationError";
 
-	constructor(readonly reason: "byte-limit" | "pixel-limit" | "invalid-image") {
+	constructor(
+		readonly reason: "byte-limit" | "pixel-limit" | "invalid-image",
+		detail?: string,
+	) {
 		super(
-			{
-				"byte-limit": "Image is larger than 25 MiB.",
-				"pixel-limit": "Image exceeds the 64 MP decoded-pixel budget.",
-				"invalid-image": "Image has an invalid or unsupported raster header.",
-			}[reason],
+			detail ??
+				{
+					"byte-limit": "Image is larger than 25 MiB.",
+					"pixel-limit": "Image exceeds the 64 MP decoded-pixel budget.",
+					"invalid-image": "Image has an invalid or unsupported raster header.",
+				}[reason],
 		);
 	}
 }

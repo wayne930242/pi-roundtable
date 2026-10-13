@@ -209,6 +209,7 @@ function discordAssembly(
 			// resolveConfig refuses Discord without a public address.
 			avatarUrl: config.http?.publicUrl ?? "",
 			avatarReference: config.avatar ?? join(ASSETS, "neutral.png"),
+			avatarNeutral: join(ASSETS, "neutral.png"),
 			// An ops agent's reports are the agent server's to deliver.
 			...(errorReporter && "agent" in errorReporter.destination
 				? { errorReporter }
