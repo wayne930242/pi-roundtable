@@ -39,8 +39,15 @@ jobs:
       - run: bun install
       - name: Move pi to the newest release the range allows
         run: bun update @earendil-works/pi-coding-agent @earendil-works/pi-ai
+      # The sandbox package pins pi exactly for its own checks; move that pin too, or it keeps a
+      # second, older pi whose types do not match the root's.
+      - name: Move the sandbox package's pi pin to the same release
+        run: |
+          version="$(node -p 'require("./node_modules/@earendil-works/pi-coding-agent/package.json").version')"
+          (cd packages/sandbox && bun add --dev --exact "@earendil-works/pi-coding-agent@${version}")
+          bun install
       - name: Show the pi versions under test
-        run: bun pm ls 2>&1 | grep -E '@earendil-works/pi-(coding-agent|ai)@'
+        run: bun pm ls --all 2>&1 | grep -E '@earendil-works/pi-(coding-agent|ai)@'
       - run: bun run typecheck
       - run: bun run lint
       - name: Require PostgreSQL-backed tests
