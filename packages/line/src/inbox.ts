@@ -30,6 +30,8 @@ export type InboxProcessor = (
 	 * Aborted when the handler has run `maxHandleMs`, when the worker stops, and when the worker
 	 * finds the event is no longer its own (the lease was lost); give up whatever it waits on.
 	 * `signal.reason` is a `LineError` coded `handler_timeout`, `worker_stopped` or `lease_lost`.
+	 * To give up, throw (`throw signal.reason`, or the abort error a fetch rejects with) or return
+	 * `{ retryInMs }`: returning `undefined` means the event was handled, and it is marked done.
 	 */
 	signal: AbortSignal,
 ) => Promise<InboxResult>;
@@ -362,6 +364,18 @@ export class InboxWorker {
 				await this.#sources.markJoined(row.source_key, timestamp);
 			if (row.source_key && row.event_type === "leave")
 				await this.#sources.markLeft(row.source_key, timestamp);
+			// The waits above take time too: a processor detached or replaced meanwhile gets nothing,
+			// and the event waits, uncounted, for the one attached now.
+			if (this.#processor() !== processor) {
+				await beat.stop();
+				return await this.#later(
+					row,
+					lease,
+					this.options.pollMs,
+					"no_processor",
+					false,
+				);
+			}
 			const result = await this.#callProcessor(
 				processor,
 				{
@@ -394,9 +408,10 @@ export class InboxWorker {
 		} catch (error) {
 			const code = errorCode(error);
 			await beat.stop();
-			// Whatever the handler threw on being told the worker stops is the restart's doing, not the
-			// event's: it goes back without being counted. A timeout is the event's own.
-			if (code !== "handler_timeout" && isStopped(controller.signal)) {
+			// Giving up on being told the worker stops is the restart's doing, not the event's: it goes
+			// back without being counted. Any other error the handler throws meanwhile is its own, and so
+			// is a timeout.
+			if (isStopped(controller.signal) && gaveUp(error, controller.signal)) {
 				await this.#later(row, lease, 0, "worker_stopped", false);
 				return;
 			}
@@ -729,6 +744,15 @@ export class InboxWorker {
 
 function stopped(): LineError {
 	return new LineError("worker_stopped", "line: the inbox worker is stopping");
+}
+
+/** The handler threw the signal's reason, an abort, or a `worker_stopped` error of its own. */
+function gaveUp(error: unknown, signal: AbortSignal): boolean {
+	return (
+		error === signal.reason ||
+		errorCode(error) === "worker_stopped" ||
+		(error instanceof Error && error.name === "AbortError")
+	);
 }
 
 function isStopped(signal: AbortSignal): boolean {

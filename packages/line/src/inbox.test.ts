@@ -1014,6 +1014,51 @@ describeDb("the inbox worker", () => {
 		expect(handled.map((e) => [e.id, e.attempt])).toEqual([["m1", 1]]);
 	});
 
+	test("RR3-F001: a processor detached while a claimed event waited on its checks gets nothing", async () => {
+		await store(messageEvent({ id: "m1" }));
+		let looks = 0;
+		// Before the claim, after it, and just before the call: detached by the third look.
+		const processorLooks = () => (++looks >= 3 ? undefined : processor);
+		const w = new InboxWorker({
+			sql,
+			logger: logs.logger,
+			now: () => time,
+			sources: sources(),
+			processor: processorLooks,
+			random: () => 1,
+			options: { pollMs: 20 },
+		});
+		expect(await w.runOnce()).toBe(true);
+		expect(handled).toEqual([]);
+		expect(await row("m1")).toMatchObject({
+			status: "pending",
+			attempts: 0,
+			requeues: 0,
+			last_error_code: "no_processor",
+		});
+		expect((await row("m1")).payload).not.toBeNull();
+	});
+
+	test("RR3-nit: an error of its own a handler throws while the worker stops still counts", async () => {
+		await store(messageEvent({ id: "m1" }));
+		processor = async (event, signal) => {
+			handled.push(event);
+			await new Promise<void>((resolve) => {
+				if (signal.aborted) resolve();
+				else signal.addEventListener("abort", () => resolve());
+			});
+			throw Object.assign(new Error("down"), { code: "discord_down" });
+		};
+		const w = worker({ maxHandleMs: 600_000 });
+		await w.start();
+		await until(() => handled.length === 1);
+		await w.stop();
+		expect(await row("m1")).toMatchObject({
+			status: "pending",
+			last_error_code: "discord_down",
+		});
+	});
+
 	test("N-F002: the loop does not hand a new event to a processor it replaced", async () => {
 		await store(messageEvent({ id: "first" }));
 		const w = worker({ pollMs: 5 });
