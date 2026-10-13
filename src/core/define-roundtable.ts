@@ -173,6 +173,7 @@ function discordAssembly(
 				? {}
 				: { freshMarker: discord.freshMarker }),
 			cardGraceMs: discord.cardGraceSeconds * 1_000,
+			cardCopies: discord.cardCopies,
 		}),
 		admin: discord.admin ? [discordAdminPlugin({ owner })] : [],
 		skills: config.skills

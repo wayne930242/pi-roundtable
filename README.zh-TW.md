@@ -185,6 +185,7 @@ export default {
 | `attachments` | `{ images: 0, maxBytes: 10 MiB }` | `images`：替這一輪抓取保留訊息中的幾張圖片，最多 4 張 |
 
 核准卡和 `ask_user` 問題會讓這一輪等 `discord.cardGraceSeconds` 秒（預設 `120`）。
+核准卡「複製」按鈕的文字存在資料目錄的 `card-copies.json`，預設留最新 100 張、30 天；`discord.cardCopies`（`{ keepDays?, keep? }`）可以調整，設成 `false` 則只留在記憶體。
 在這段時間內回答，這一輪就帶著答案繼續；沒回答的話，這一輪會說它在等你，然後結束，卡片繼續開著、沒有期限，之後再回答就會在同一個對話開新的一輪，帶上你的答案，或核准後那個動作的結果。
 coding worker 的卡片則會讓 worker 一直等下去。
 

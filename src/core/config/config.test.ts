@@ -304,6 +304,34 @@ describe("discord.channelContext", () => {
 	});
 });
 
+describe("discord.cardCopies", () => {
+	const with_ = (cardCopies: unknown) =>
+		resolveConfig({
+			...minimal,
+			discord: { ...discord, cardCopies },
+		} as RoundtableConfig).discord?.cardCopies;
+
+	test("keeps the copy texts in a file with the defaults unless configured", () => {
+		expect(resolveConfig(minimal).discord?.cardCopies).toEqual({});
+	});
+
+	test("takes how long and how many, or false for memory only", () => {
+		expect(with_({ keepDays: 7, keep: 20 })).toEqual({ keepDays: 7, keep: 20 });
+		expect(with_(false)).toBe(false);
+	});
+
+	test("refuses a value out of range, a key it does not know, or true, naming it", () => {
+		const refusing = (cardCopies: unknown) =>
+			refused({ ...minimal, discord: { ...discord, cardCopies } });
+		expect(refusing({ keepDays: 0 })).toContain(
+			"config discord.cardCopies.keepDays",
+		);
+		expect(refusing({ keep: 1.5 })).toContain("config discord.cardCopies.keep");
+		expect(refusing({ kep: 3 })).toContain('Did you mean "keep"?');
+		expect(refusing(true)).toContain("config discord.cardCopies");
+	});
+});
+
 describe("discord.freshMarker", () => {
 	const with_ = (freshMarker: unknown) =>
 		resolveConfig({

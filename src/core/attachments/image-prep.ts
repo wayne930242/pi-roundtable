@@ -30,6 +30,26 @@ export function isModelImage(
 }
 
 /**
+ * The type the bytes themselves say they are (PNG, JPEG, GIF or WebP), whatever was declared for
+ * them; undefined for anything else.
+ */
+export function sniffImageType(data: Uint8Array): string | undefined {
+	const at = (offset: number, ...bytes: number[]) =>
+		bytes.every((byte, index) => data[offset + index] === byte);
+	if (at(0, 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a)) return "image/png";
+	if (at(0, 0xff, 0xd8, 0xff)) return "image/jpeg";
+	if (
+		at(0, 0x47, 0x49, 0x46, 0x38) &&
+		(at(4, 0x37) || at(4, 0x39)) &&
+		at(5, 0x61)
+	)
+		return "image/gif";
+	if (at(0, 0x52, 0x49, 0x46, 0x46) && at(8, 0x57, 0x45, 0x42, 0x50))
+		return "image/webp";
+	return undefined;
+}
+
+/**
  * Returns the image as the model accepts it. An image over the size or side limit is
  * re-encoded as JPEG with its long side at 2,000 px instead of being dropped.
  */
@@ -55,16 +75,19 @@ export async function prepareImage(
 }
 
 /** Prepare bounded raster bytes without reopening a guest-writable filesystem path.
- * Headers and all GIF/WebP frames must fit 64 MP; encoded bytes must fit 25 MiB. */
+ * Headers and all GIF/WebP frames must fit 64 MP; encoded bytes must fit 25 MiB. The type of the
+ * result is the one the bytes show (PNG, JPEG, GIF or WebP), not the declared `contentType`, which
+ * may be a file name's guess; bytes of none of them are `invalid-image`. */
 export async function prepareImageBytes(
 	data: Uint8Array,
-	contentType: string,
+	_contentType: string,
 ): Promise<ModelImage> {
 	if (data.byteLength > MAX_ATTACHMENT_BYTES)
 		throw new ImagePreparationError("byte-limit");
 	const bytes = Buffer.from(data);
 	assertImagePixelBudget(bytes, MAX_SIDE * MAX_SIDE);
-	const mimeType = contentType.split(";")[0]?.trim().toLowerCase() ?? "";
+	const mimeType = sniffImageType(bytes);
+	if (!mimeType) throw new ImagePreparationError("invalid-image");
 	const image = await loadImage(bytes);
 	if (
 		bytes.byteLength <= MAX_RAW_BYTES &&

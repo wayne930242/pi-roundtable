@@ -83,7 +83,7 @@ export interface ChannelContextMessage {
 export interface ChannelContext {
 	/** Oldest first; never empty. */
 	readonly messages: readonly ChannelContextMessage[];
-	/** The delimited block `withChannelContext` appends to a turn's text. */
+	/** The delimited block `withChannelContext` appends to a turn's text; it says nothing of images, `withChannelContext` adds that. */
 	readonly text: string;
 	/**
 	 * The images of the messages, newest first, as `TurnAttachments.images`: fetched for the call
@@ -94,27 +94,40 @@ export interface ChannelContext {
 	readonly images?: readonly ModelImage[];
 }
 
-/** The turn's text, then its channel context when there is one, as `withReference` adds a replied-to message. */
+/** What the turn is told when channel context images are among its images. */
+const CONTEXT_IMAGES_NOTE =
+	"Pictures posted in the channel messages above are shown to you among this turn's images, the newest first.";
+
+/**
+ * The turn's text, then its channel context when there is one, as `withReference` adds a replied-to
+ * message. `imagesKept` is how many of the context's images the turn carries, as
+ * `withChannelContextImages` reports; above zero the block says so, and it never does otherwise.
+ */
 export function withChannelContext(
 	text: string,
 	context: ChannelContext | undefined,
+	imagesKept = 0,
 ): string {
-	return context ? `${text}\n\n${context.text}` : text;
+	if (!context) return text;
+	return `${text}\n\n${context.text}${imagesKept > 0 ? `\n${CONTEXT_IMAGES_NOTE}` : ""}`;
 }
 
 /**
  * The turn's attachments with the context's images after its own, at most as many images as a turn
- * carries (4); the turn's own images come first and are never displaced. Untouched without a context
- * or images.
+ * carries (4); the turn's own images come first and are never displaced, so a turn that already
+ * carries four takes none, and an image crowded out is not noted anywhere. `kept` is how many of
+ * the context's images made it, the newest first; give it to `withChannelContext` so the block says
+ * so only for images the turn has. The attachments are untouched without a context or images.
  */
 export function withChannelContextImages(
 	attachments: TurnAttachments,
 	context: ChannelContext | undefined,
-): TurnAttachments {
+): { attachments: TurnAttachments; kept: number } {
 	const more = context?.images ?? [];
-	if (more.length === 0) return attachments;
+	if (more.length === 0) return { attachments, kept: 0 };
+	const images = [...attachments.images, ...more].slice(0, MAX_TURN_IMAGES);
 	return {
-		...attachments,
-		images: [...attachments.images, ...more].slice(0, MAX_TURN_IMAGES),
+		attachments: { ...attachments, images },
+		kept: Math.max(0, images.length - attachments.images.length),
 	};
 }

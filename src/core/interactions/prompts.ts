@@ -40,7 +40,9 @@ export interface ApprovalDetails {
 	 * that can shows a control, usable by anyone who sees the card, any number of times, that hands
 	 * them `text` (`label` names the control, default the surface's own); using it never answers
 	 * the prompt. It is informational: a surface that cannot show it ignores it. The text is
-	 * visible to everyone who sees the card, so it holds nothing the card's audience may not read.
+	 * visible to anyone who can see the card, so it holds nothing they may not read. A text over
+	 * 20,000 characters is not offered (Discord logs a warning), and a surface with a size limit of
+	 * its own leaves it out before it cuts the call's `input`.
 	 */
 	copy?: { label?: string; text: string };
 }

@@ -25,6 +25,20 @@ test("byte-based image preparation preserves admitted small images and downsizes
 	).rejects.toThrow();
 });
 
+test("the type of a prepared image is the one its bytes show, not the declared one", async () => {
+	const source = createCanvas(8, 8);
+	const jpeg = source.toBuffer("image/jpeg");
+	expect(await prepareImageBytes(jpeg, "image/png")).toEqual({
+		data: jpeg.toString("base64"),
+		mimeType: "image/jpeg",
+	});
+	const png = source.toBuffer("image/png");
+	expect((await prepareImageBytes(png, "")).mimeType).toBe("image/png");
+	await expect(
+		prepareImageBytes(new Uint8Array(32), "image/png"),
+	).rejects.toBeInstanceOf(ImagePreparationError);
+});
+
 function crc32(bytes: Buffer): number {
 	let value = 0xffffffff;
 	for (const byte of bytes) {

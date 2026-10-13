@@ -20,7 +20,12 @@ function setup(
 	channelContext?: Parameters<typeof agentClaim>[0]["channelContext"],
 	speakers?: "everyone" | "owners",
 ) {
-	const answered: { kind: string; speaker: Speaker; text: string }[] = [];
+	const answered: {
+		kind: string;
+		speaker: Speaker;
+		text: string;
+		images?: readonly unknown[];
+	}[] = [];
 	const stopped: string[] = [];
 	const team = {
 		guildId: "1",
@@ -30,8 +35,19 @@ function setup(
 				: channel === "discord:20"
 					? ("group" as const)
 					: undefined,
-		answerOwner: async (_c: string, speaker: Speaker, text: string) => {
-			answered.push({ kind: "agent", speaker, text });
+		answerOwner: async (
+			_c: string,
+			speaker: Speaker,
+			text: string,
+			_reply: string,
+			carried: { images: readonly unknown[] },
+		) => {
+			answered.push({
+				kind: "agent",
+				speaker,
+				text,
+				images: carried.images,
+			});
 			return { ok: true as const, text: "" };
 		},
 		answerGroup: async (_c: string, speaker: Speaker, text: string) => {
@@ -461,4 +477,24 @@ test("by default, and with speakers everyone, an admin's background turn runs as
 		);
 		expect(answered.map((a) => a.speaker.tier)).toEqual(["admin"]);
 	}
+});
+
+test("an agent's turn carries the channel context's images after its own, and the block mentions pictures only when some are carried", async () => {
+	const image = { data: "x", mimeType: "image/png" };
+	const context = { messages: [], text: "BLOCK", images: [image, image] };
+	const { claim, answered } = setup(async () => context);
+	const admission = claim.admit(message(OWNER, "discord:10"));
+	if (admission?.kind !== "turn") throw new Error("expected a turn");
+	await admission.run();
+	expect(answered[0]?.images).toEqual([image, image]);
+	expect(answered[0]?.text).toContain("BLOCK");
+	expect(answered[0]?.text).toContain(
+		"Pictures posted in the channel messages",
+	);
+	// Without images the text says nothing of pictures.
+	const bare = setup(async () => ({ messages: [], text: "BLOCK" }));
+	const plain = bare.claim.admit(message(OWNER, "discord:10"));
+	if (plain?.kind !== "turn") throw new Error("expected a turn");
+	await plain.run();
+	expect(bare.answered[0]?.text).not.toContain("Pictures posted");
 });

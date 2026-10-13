@@ -57,6 +57,7 @@ export type PromptFrame =
 			 * (absent when unreadable). A client shows this when it knows it, and `message` otherwise.
 			 * When the serialized details would pass `APPROVAL_MAX_BYTES`, each long string value of
 			 * `input` is cut to its start plus `… [N chars]` (N in code points) and `truncated` is true.
+			 * The informational `copy` text is kept only if it still fits then, never at the cost of `input`.
 			 */
 			approval?: ApprovalDetails & { truncated?: true };
 	  }

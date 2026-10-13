@@ -570,6 +570,55 @@ test("an approval whose input is over the frame limit carries its values cut and
 	expect(await asked).toBe("declined");
 });
 
+test("an approval's copy text never costs the call's input: a copy too large for the frame is left out and the input stays whole; a copy that fits is carried", async () => {
+	const { chat, connect, say } = await linked();
+	const conversation = chat.open(speakerOf("ada"), "helper");
+	const ada = connect("ada");
+	await say(ada, { type: "stop", conversation });
+	const prompts = chat.surface.prompts(
+		`web:${conversation}`,
+		promptScope(speakerOf("ada"), "private"),
+	);
+	if (!prompts) throw new Error("no prompts for the conversation's person");
+	const ask = (input: Record<string, unknown>, copy: string) =>
+		prompts.confirm("Approve?", "**run**", undefined, "member", undefined, {
+			action: "run",
+			tool: "bash",
+			input,
+			copy: { text: copy },
+		});
+	const approvals = () =>
+		ada.frames.flatMap((f) =>
+			f.type === "prompt" && f.prompt.kind === "approval" ? [f.prompt] : [],
+		);
+	const input = { command: "echo hello", note: "x".repeat(1_000) };
+	const decline = async (asked: Promise<unknown>) => {
+		for (const frame of approvals())
+			await say(ada, { type: "approval", prompt: frame.id, approved: false });
+		await asked;
+	};
+	// A large copy beside an ordinary input: the input is whole and untruncated, the copy is left out.
+	const large = ask(input, "😀".repeat(100_000));
+	const first = approvals()[0]?.approval;
+	expect(first?.input).toEqual(input);
+	expect(first?.truncated).toBeUndefined();
+	expect(first?.copy).toBeUndefined();
+	// A small copy that fits is carried beside the whole input.
+	const small = ask(input, "echo hello");
+	const second = approvals()[1]?.approval;
+	expect(second?.input).toEqual(input);
+	expect(second?.copy).toEqual({ text: "echo hello" });
+	// An input that needs cutting keeps all the room it can: the copy that does not fit after is left out.
+	const cut = ask({ ...input, data: "A".repeat(2_000_000) }, "echo hello");
+	const third = approvals()[2]?.approval;
+	expect(third?.truncated).toBe(true);
+	expect(String(third?.input.data)).toContain("… [2000000 chars]");
+	expect(
+		new TextEncoder().encode(JSON.stringify(third)).length,
+	).toBeLessThanOrEqual(APPROVAL_MAX_BYTES);
+	await decline(Promise.all([large, small, cut]));
+});
+
 test("a refused tool's end reaches the client with its reason, and a plain failure has none", async () => {
 	const { chat, connect, say } = await linked();
 	const conversation = chat.open(speakerOf("ada"), "helper");

@@ -184,11 +184,26 @@ type ApprovalFrame = NonNullable<
  * The approval as the frame carries it: whole while its JSON is within `APPROVAL_MAX_BYTES`.
  * Over that, each string value of the input is cut to the most code points that fit, marked
  * `… [N chars]`, and `truncated` is set; an input that does not fit even then is sent as `{}`
- * with no files. The card's `message` text always accompanies it.
+ * with no files. The copy text is only informational, so it is carried after the input is
+ * settled and only if it fits then, never at the input's cost. The card's `message` text always
+ * accompanies it.
  */
 function boundedApproval(details: ApprovalDetails): ApprovalFrame {
 	const size = (value: unknown) =>
 		new TextEncoder().encode(JSON.stringify(value)).length;
+	if (size(details) <= APPROVAL_MAX_BYTES) return details;
+	const { copy, ...withoutCopy } = details;
+	const bounded = boundedWithoutCopy(withoutCopy, size);
+	if (!copy) return bounded;
+	const candidate: ApprovalFrame = { ...bounded, copy };
+	return size(candidate) <= APPROVAL_MAX_BYTES ? candidate : bounded;
+}
+
+/** `boundedApproval` for details without a copy text. */
+function boundedWithoutCopy(
+	details: Omit<ApprovalDetails, "copy">,
+	size: (value: unknown) => number,
+): ApprovalFrame {
 	if (size(details) <= APPROVAL_MAX_BYTES) return details;
 	const { files: _files, ...base } = details;
 	const fits = (limit: number): ApprovalFrame | undefined => {

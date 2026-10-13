@@ -63,6 +63,14 @@ export interface DiscordConfig {
 	 * the answer. Default 120.
 	 */
 	cardGraceSeconds?: number;
+	/**
+	 * How the texts behind approval cards' copy buttons are kept: the newest `keep` (default 100)
+	 * for `keepDays` (default 30), in `card-copies.json` under the data directory, so the buttons
+	 * work after a restart. `false` keeps them in memory only, with the same limits: they are gone
+	 * when the process restarts, and the button then says so. Discarding a conversation does not
+	 * remove them; they age out.
+	 */
+	cardCopies?: { keepDays?: number; keep?: number } | false;
 }
 
 /** The Discord settings with every default filled in. */
@@ -79,6 +87,8 @@ export interface ResolvedDiscord {
 	channelContext: NonNullable<DiscordConfig["channelContext"]>;
 	freshMarker?: string | false;
 	cardGraceSeconds: number;
+	/** As configured: `{}` when left out, so the defaults apply, or `false`. */
+	cardCopies: NonNullable<DiscordConfig["cardCopies"]> | false;
 }
 
 /** The configured Discord settings, defaults filled in; `rootCommand` is the host's slug. */
@@ -106,6 +116,7 @@ export function resolvedDiscord(
 			? {}
 			: { freshMarker: discord.freshMarker }),
 		cardGraceSeconds: discord.cardGraceSeconds ?? 120,
+		cardCopies: discord.cardCopies ?? {},
 	};
 }
 
@@ -144,6 +155,14 @@ export const discordShape = shape({
 	channelContext: optional(orOff(channelContextShape)),
 	freshMarker: optional(orOff(text)),
 	cardGraceSeconds: optional(integer(1, 86_400)),
+	cardCopies: optional(
+		orOff(
+			shape({
+				keepDays: optional(integer(1, 3_650)),
+				keep: optional(integer(1, 10_000)),
+			}),
+		),
+	),
 });
 
 /** The adapters `adapters` takes, by the name their factory gives them. */

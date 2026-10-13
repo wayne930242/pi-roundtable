@@ -72,6 +72,13 @@ export interface DiscordOptions {
 	 * card open; a later answer starts a new turn. Default `CARD_GRACE_MS`, two minutes.
 	 */
 	cardGraceMs?: number;
+	/**
+	 * How the texts behind approval cards' copy buttons are kept: the newest `keep` (default 100)
+	 * for `keepDays` (default 30), in `card-copies.json` under `dataDir`, so the buttons work after
+	 * a restart. `false` keeps them in memory only, with the same limits: they are gone when the
+	 * process restarts and the button then says so.
+	 */
+	cardCopies?: { keepDays?: number; keep?: number } | false;
 }
 
 /**
@@ -105,7 +112,12 @@ export function discordPlugin(options: DiscordOptions): RoundtablePlugin {
 					? {}
 					: { graceMs: options.cardGraceMs }),
 				resume: (turn) => connected.resume(turn),
-				copyLedgerPath: join(options.dataDir, "card-copies.json"),
+				copies: {
+					...(options.cardCopies === false
+						? {}
+						: { path: join(options.dataDir, "card-copies.json") }),
+					...(options.cardCopies || {}),
+				},
 			});
 			const connected = new DiscordSurface({
 				token: options.token,

@@ -2,17 +2,20 @@ import { expect, test } from "bun:test";
 import { createCanvas } from "canvas";
 import {
 	type ChannelContext,
+	withChannelContext,
 	withChannelContextImages,
 } from "../contract/channel-context.ts";
 import type { InboundMessage } from "../contract/channels.ts";
 import { NO_ATTACHMENTS } from "../domain/attachment.ts";
 import { recordingLogger } from "../testing/recording-logger.ts";
 import {
+	CHANNEL_CONTEXT_DEFAULTS,
 	ChannelContextReader,
 	type ContextSourceMessage,
 	contextSourceOf,
 	selectChannelContext,
 } from "./channel-context.ts";
+import { contextImages } from "./context-images.ts";
 
 const BOT = "900";
 const BRIDGE = "w-bridge";
@@ -308,7 +311,8 @@ test("up to the asked number of images come back, newest first, as the turn's mo
 		data: Buffer.from(png()).toString("base64"),
 		mimeType: "image/png",
 	});
-	expect(got?.text).toContain("Pictures posted in them are shown to you");
+	// The block itself says nothing of images: only the turn that carries them does.
+	expect(got?.text).not.toContain("Pictures posted");
 	// The images are the turn's: they join its own after the turn's, within the limit of four.
 	const own = {
 		...NO_ATTACHMENTS,
@@ -317,11 +321,40 @@ test("up to the asked number of images come back, newest first, as the turn's mo
 			mimeType: "image/png",
 		})),
 	};
-	const merged = withChannelContextImages(own, got);
+	const { attachments: merged, kept } = withChannelContextImages(own, got);
 	expect(merged.images).toHaveLength(4);
 	expect(merged.images.slice(0, 3)).toEqual(own.images);
 	expect(merged.images[3]).toEqual(got?.images?.[0]);
-	expect(withChannelContextImages(own, undefined)).toBe(own);
+	// Only one of the two fitted, and the text says pictures are there because one is.
+	expect(kept).toBe(1);
+	expect(withChannelContext("hi", got, kept)).toContain(
+		"Pictures posted in the channel messages above are shown to you",
+	);
+	expect(withChannelContextImages(own, undefined)).toEqual({
+		attachments: own,
+		kept: 0,
+	});
+});
+
+test("a turn that already carries four images keeps none of the context's, and its text does not claim any", async () => {
+	const messages = [source("10", "a", { attachments: [file("a.png")] })];
+	const net = bodies({ "a.png": png() });
+	const { reader: r } = reader(async () => messages, {}, net.fetchImpl);
+	const got = await r.of(inbound(), { attachments: { images: 1 } });
+	expect(got?.images).toHaveLength(1);
+	const full = {
+		...NO_ATTACHMENTS,
+		images: Array.from({ length: 4 }, () => ({
+			data: "x",
+			mimeType: "image/png",
+		})),
+	};
+	const { attachments, kept } = withChannelContextImages(full, got);
+	expect(attachments.images).toEqual(full.images);
+	expect(kept).toBe(0);
+	expect(withChannelContext("hi", got, kept)).not.toContain("Pictures posted");
+	// A claim that never calls it tells nothing of pictures either.
+	expect(withChannelContext("hi", got)).not.toContain("Pictures posted");
 });
 
 test("an image that is too large, of a type the model does not take, not fetchable or not decodable is skipped and named in its message", async () => {
@@ -333,13 +366,16 @@ test("an image that is too large, of a type the model does not take, not fetchab
 				file("gone.png"),
 				file("down.png"),
 				file("broken.png"),
+				file("fake.png"),
 				file("plain.png", { url: "http://cdn.example/plain.png" }),
 			],
 		}),
 	];
 	const net = bodies({
 		"gone.png": 404,
-		"broken.png": new Uint8Array([1, 2, 3]),
+		// A PNG signature and nothing else: it says what it is and cannot be read.
+		"broken.png": new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 0, 0]),
+		"fake.png": new Uint8Array([1, 2, 3]),
 	});
 	const { reader: r } = reader(async () => messages, {}, net.fetchImpl);
 	const got = await r.of(inbound(), { attachments: { images: 4 } });
@@ -353,7 +389,8 @@ test("an image that is too large, of a type the model does not take, not fetchab
 		"[image not attached: broken.png: could not be decoded]",
 	);
 	expect(text).toContain("[image not attached: plain.png: unsupported type]");
-	expect(got?.text).not.toContain("Pictures posted in them");
+	// What the bytes are decides, not the name Discord went by.
+	expect(text).toContain("[image not attached: fake.png: unsupported type]");
 	// Nothing over the declared size was ever requested.
 	expect(net.asked).not.toContain("https://cdn.example/huge.png");
 });
@@ -413,7 +450,125 @@ test("image options are validated like the others", async () => {
 
 test("withChannelContextImages leaves the turn's attachments alone for a context without images", () => {
 	const context: ChannelContext = { messages: [], text: "BLOCK" };
-	expect(withChannelContextImages(NO_ATTACHMENTS, context)).toBe(
+	const { attachments, kept } = withChannelContextImages(
 		NO_ATTACHMENTS,
+		context,
+	);
+	expect(attachments).toBe(NO_ATTACHMENTS);
+	expect(kept).toBe(0);
+});
+
+test("without a foreign webhook, an outside webhook's two names are merged as one author's near repeats, as before", () => {
+	const post = (id: string, name: string, text: string) =>
+		source(id, text, {
+			authorId: "w-outside",
+			authorName: name,
+			bot: true,
+			own: false,
+		});
+	const fetched = [
+		post("1", "Ana", "meet at the north gate at dusk"),
+		post("2", "Ben", "meet at the north gate at dusk!"),
+	];
+	expect(select(fetched).map((m) => m.id)).toEqual(["2"]);
+	expect(select(fetched, isBridge).map((m) => m.id)).toEqual(["2"]);
+});
+
+test("the defaults cannot be changed from outside, the attachments' included", () => {
+	expect(Object.isFrozen(CHANNEL_CONTEXT_DEFAULTS)).toBe(true);
+	expect(Object.isFrozen(CHANNEL_CONTEXT_DEFAULTS.attachments)).toBe(true);
+	expect(() => {
+		(CHANNEL_CONTEXT_DEFAULTS.attachments as { images: number }).images = 4;
+	}).toThrow();
+	expect(CHANNEL_CONTEXT_DEFAULTS.attachments.images).toBe(0);
+});
+
+/** JPEG bytes of a few pixels. */
+function jpeg(): Uint8Array {
+	const canvas = createCanvas(4, 4);
+	canvas.getContext("2d").fillRect(0, 0, 4, 4);
+	return new Uint8Array(canvas.toBuffer("image/jpeg"));
+}
+
+test("an image is sent as the type its bytes show, whatever Discord guessed from the name", async () => {
+	const messages = [
+		source("10", "a", {
+			attachments: [file("really-a-jpeg.png"), file("no-type.png")],
+		}),
+	];
+	const net = bodies({ "really-a-jpeg.png": jpeg(), "no-type.png": png() });
+	const { reader: r } = reader(async () => messages, {}, net.fetchImpl);
+	const got = await r.of(inbound(), { attachments: { images: 2 } });
+	expect(got?.images?.map((image) => image.mimeType).toSorted()).toEqual([
+		"image/jpeg",
+		"image/png",
+	]);
+});
+
+/** A fetch that never answers until its signal fires, counting how many are in flight at most. */
+function hanging() {
+	const state = { inFlight: 0, peak: 0, asked: 0 };
+	const fetchImpl = ((_url: string, init?: RequestInit) => {
+		state.asked++;
+		state.inFlight++;
+		state.peak = Math.max(state.peak, state.inFlight);
+		return new Promise((_resolve, reject) => {
+			init?.signal?.addEventListener("abort", () => {
+				state.inFlight--;
+				reject(new Error("aborted"));
+			});
+		});
+	}) as unknown as typeof fetch;
+	return { state, fetchImpl };
+}
+
+test("the images of one call share a deadline: what is still to be fetched when it passes is skipped, and no more than two are fetched at once", async () => {
+	const candidates = Array.from({ length: 8 }, (_, index) => ({
+		...file(`p${index}.png`),
+		messageId: "10",
+	}));
+	const net = hanging();
+	const started = Date.now();
+	const { images, skipped } = await contextImages(candidates, {
+		count: 4,
+		maxBytes: 1_000_000,
+		fetchImpl: net.fetchImpl,
+		logger: recordingLogger().logger,
+		deadlineMs: 100,
+	});
+	expect(Date.now() - started).toBeLessThan(5_000);
+	expect(images).toEqual([]);
+	expect(net.state.peak).toBeLessThanOrEqual(2);
+	// Every one it was to try, up to twice the count, is named with the one reason.
+	expect(skipped).toHaveLength(8);
+	expect(skipped.every((image) => image.reason === "download failed")).toBe(
+		true,
+	);
+	expect(net.state.asked).toBeLessThan(8);
+});
+
+test("fetching two at a time keeps the newest-first order and stops at the asked number", async () => {
+	const candidates = ["a", "b", "c", "d", "e"].map((name) => ({
+		...file(`${name}.png`),
+		messageId: "10",
+	}));
+	const net = bodies({
+		"a.png": png(2),
+		"b.png": png(3),
+		"c.png": png(4),
+		"d.png": png(5),
+		"e.png": png(6),
+	});
+	const { images } = await contextImages(candidates, {
+		count: 3,
+		maxBytes: 1_000_000,
+		fetchImpl: net.fetchImpl,
+		logger: recordingLogger().logger,
+	});
+	expect(images.map((image) => image.data)).toEqual(
+		[2, 3, 4].map((side) => Buffer.from(png(side)).toString("base64")),
+	);
+	expect(net.asked).toEqual(
+		["a", "b", "c"].map((name) => `https://cdn.example/${name}.png`),
 	);
 });

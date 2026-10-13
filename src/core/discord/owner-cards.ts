@@ -77,10 +77,12 @@ export interface OwnerCardsOptions {
 	 */
 	resume?(turn: LateTurn): void;
 	/**
-	 * A JSON file that keeps the text behind approval cards' copy buttons across restarts; without
-	 * it a card's copy button stops working when the process restarts.
+	 * Where and how long the text behind approval cards' copy buttons is kept. With a `path` it is
+	 * a JSON file that survives a restart; without one the texts live in memory and a card's copy
+	 * button stops working when the process restarts. `keep` (default 100) is how many cards'
+	 * texts, the newest, and `keepDays` (default 30) how long.
 	 */
-	copyLedgerPath?: string;
+	copies?: { path?: string; keep?: number; keepDays?: number };
 }
 
 /**
@@ -102,11 +104,13 @@ export class OwnerCards implements InteractionModule {
 	constructor(options: OwnerCardsOptions) {
 		this.#options = options;
 		this.#copies = new CardCopies({
-			...(options.copyLedgerPath ? { path: options.copyLedgerPath } : {}),
+			...options.copies,
 			logger: options.logger,
 		});
 		this.#audiences = new CardAudiences(options, new DiscordOwners(options));
 	}
+	/** Resolves once the remembered copy texts are on disk. */
+	flushCopies = (): Promise<void> => this.#copies.flush();
 
 	commands() {
 		return [];

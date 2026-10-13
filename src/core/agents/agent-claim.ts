@@ -2,6 +2,7 @@ import { attachmentsOf } from "../attachments/turn-attachments.ts";
 import {
 	type ChannelContext,
 	withChannelContext,
+	withChannelContextImages,
 } from "../contract/channel-context.ts";
 import type {
 	Admission,
@@ -165,18 +166,21 @@ export function agentClaim(options: AgentClaimOptions): ChannelClaim {
 					const saved = await attachments(message);
 					const text = withReference(message, forwarder);
 					// A group's history already names each author.
-					if (owned === "agent")
+					if (owned === "agent") {
+						const context = await around(message);
+						// The turn's own images first; the block mentions the context's only if they fit.
+						const { attachments: carried, kept } = withChannelContextImages(
+							saved,
+							context,
+						);
 						await team.answerOwner(
 							channel,
 							speaker,
-							attributed(
-								speaker,
-								withChannelContext(text, await around(message)),
-							),
+							attributed(speaker, withChannelContext(text, context, kept)),
 							message.text,
-							saved,
+							carried,
 						);
-					else
+					} else
 						await team.answerGroup(
 							channel,
 							speaker,
