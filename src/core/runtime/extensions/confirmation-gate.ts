@@ -465,7 +465,7 @@ export class ConfirmationGate {
 	#record(call: HeldCall): string {
 		this.#remember(call);
 		const refusal = this.#unlessNamed(call);
-		return refusal ? refusal([]) : this.#askSpeaker(call);
+		return refusal ? refusal([], false) : this.#askSpeaker(call);
 	}
 
 	/**
@@ -476,7 +476,8 @@ export class ConfirmationGate {
 		this.#remember(call);
 		const refusal = this.#unlessNamed(call);
 		if (!refusal) return this.#askSpeaker(call);
-		return refusal(await this.#namesOf(call.approverIds ?? []));
+		const { names, missing } = await this.#namesOf(call.approverIds ?? []);
+		return refusal(names, missing);
 	}
 
 	#remember(call: HeldCall): void {
@@ -527,15 +528,21 @@ export class ConfirmationGate {
 	 * tells the model the truth about it, from the names of those who may approve; undefined when
 	 * the speaker may.
 	 */
-	#unlessNamed(call: HeldCall): ((names: string[]) => string) | undefined {
+	#unlessNamed(
+		call: HeldCall,
+	): ((names: string[], missing: boolean) => string) | undefined {
 		if (!call.approverIds || mayApproveNamed(this.#speaker, call))
 			return undefined;
 		const o = ownerWords(this.#addressee);
 		const anyone = (call.approverIds?.length ?? 0) > 0;
-		return (names) => {
+		return (names, missing) => {
 			// Names that could not be read still leave the people the tool named.
 			const named =
-				names.length === 0 && anyone ? ["the people named for it"] : names;
+				names.length === 0 && anyone
+					? ["the people named for it"]
+					: missing
+						? [...names, "others named for it"]
+						: names;
 			const who = orList([...named, "an owner"]);
 			const approval = `Only ${who} can approve it.`;
 			if (this.#private)
@@ -544,10 +551,12 @@ export class ConfirmationGate {
 		};
 	}
 
-	/** The names of the principals, as far as they are known; ids are never shown. */
-	async #namesOf(principalIds: readonly string[]): Promise<string[]> {
+	/** The names of the principals, as far as they are known; ids are never shown. `missing` says some could not be read. */
+	async #namesOf(
+		principalIds: readonly string[],
+	): Promise<{ names: string[]; missing: boolean }> {
 		const nameOf = this.#nameOf;
-		if (!nameOf) return [];
+		if (!nameOf) return { names: [], missing: principalIds.length > 0 };
 		const names = await Promise.all(
 			[...new Set(principalIds)].map(async (id) => {
 				try {
@@ -557,7 +566,10 @@ export class ConfirmationGate {
 				}
 			}),
 		);
-		return [...new Set(names.filter((name): name is string => !!name))];
+		return {
+			names: [...new Set(names.filter((name): name is string => !!name))],
+			missing: names.some((name) => !name),
+		};
 	}
 }
 

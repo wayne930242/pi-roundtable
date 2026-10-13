@@ -197,6 +197,9 @@ export function defineTool<Schema extends TObject>(
 				hold && tool === name ? hold(input as Static<Schema>, turn) : undefined,
 			...(approvers
 				? {
+						// The tool names approvers for its own calls only, so another tool's call with
+						// computed arguments in a precheck script is not made owner-only by it.
+						mayName: (tool: string) => tool === name,
 						approversInTurn: (
 							tool: string,
 							input: Record<string, unknown>,

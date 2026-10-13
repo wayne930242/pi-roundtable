@@ -110,7 +110,13 @@ export class ConversationSessions {
 				// Owner sessions have no shell workspace but still send files from their own directory.
 				agents ? agents.workDir : this.#factory.cwd(undefined),
 				undefined,
-				async (id) => (await this.#options.principalOf?.(id))?.displayName,
+				// A disabled principal cannot approve, so it is not named as one who can.
+				async (id) => {
+					const principal = await this.#options.principalOf?.(id);
+					return principal && !principal.disabled
+						? principal.displayName
+						: undefined;
+				},
 			);
 			this.#gates.set(key, gate);
 			this.#restored.delete(key);

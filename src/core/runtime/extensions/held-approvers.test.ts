@@ -105,6 +105,21 @@ describe("what a speaker who cannot approve a call that names approvers is told 
 		expect(reason).not.toContain("Held for");
 	});
 
+	test("a name that cannot be read beside one that can is still counted (RV3-F003)", async () => {
+		const gate = gateNaming(["p_ada", "p_zed"]);
+		gate.beginTurn("s", false, undefined, SAM, true);
+		const { reason } = await gate.decide(
+			MAIL,
+			send,
+			{ prompts: answering("approved"), asker: "Sam" },
+			inTurn,
+		);
+		expect(reason).toContain(
+			"Only Ada, others named for it or an owner can approve it",
+		);
+		expect(reason).not.toContain("p_zed");
+	});
+
 	test("names that cannot be read are not replaced by ids", async () => {
 		const gate = gateNaming(["p_ada"], null);
 		gate.beginTurn("s", false, undefined, SAM, true);

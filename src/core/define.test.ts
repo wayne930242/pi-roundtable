@@ -232,6 +232,9 @@ describe("defineTool", () => {
 			await rule?.approversInTurn?.("other", { text: "hi" }, {}, turn),
 		).toBeUndefined();
 		expect(seen).toEqual([turn, turn]);
+		// It may name approvers for its own calls only (RV3-F001).
+		expect(rule?.mayName?.("note_add")).toBe(true);
+		expect(rule?.mayName?.("other")).toBe(false);
 		// The check with no turn, such as a precheck script's call, asks no one.
 		expect(rule?.describe("note_add", { text: "hi" }, {})).toBe("save a note");
 		expect(seen).toHaveLength(2);
