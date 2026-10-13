@@ -148,6 +148,23 @@ describeDb("the join notice", () => {
 		expect(fake.replies).toHaveLength(2);
 	});
 
+	test("a Reply that got no answer is unconfirmed and stays attempting; a join handed out again does not reply (R6-F003)", async () => {
+		const joins = notifier({ text: TEXT, sha256: DIGEST });
+		expect(await joins.send(event("a", "rt-a"))).toBe("sent");
+		fake.breakNetwork(true);
+		expect(await joins.send(event("n", "rt-n"))).toBe("unconfirmed");
+		fake.breakNetwork(false);
+		expect(
+			(await sql`SELECT outcome FROM line_notices WHERE webhook_event_id = 'n'`)[0],
+		).toMatchObject({ outcome: "attempting" });
+		const replies = fake.replies.length;
+		expect(await joins.send(event("n", "rt-n"))).toBe("unconfirmed");
+		expect(fake.replies).toHaveLength(replies);
+		expect(
+			logs.lines.filter((l) => l.level === "warn").map((l) => l.fields.code),
+		).toEqual(["api_unreachable"]);
+	});
+
 	test("a join handed out again does not reply twice: it learns the outcome, or unconfirmed when the first try was cut short", async () => {
 		const joins = notifier({ text: TEXT, sha256: DIGEST });
 		expect(await joins.send(event("a", "rt-a"))).toBe("sent");

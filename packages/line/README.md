@@ -289,8 +289,8 @@ When the bot joins a chat the package answers the `join` event with **one Reply*
 Without `joinNotice` nothing is ever sent.
 
 - It applies to any chat the bot joins that is not blocked, allowlisted or not.
-- It is never a push. When the Reply fails, or its token has lapsed (reply tokens live a short time), the notice is `failed` and nothing is sent in its place.
-- The subscriber's `joined` event says what happened: `"sent"`, `"failed"`, or `"unconfirmed"` (no notice configured, or the first try was cut short and nobody knows whether LINE got the Reply). The outcome is recorded before the Reply is made, so a join that is handed out again never replies twice.
+- It is never a push. When LINE refuses the Reply, or its token has lapsed (reply tokens live a short time), the notice is `failed` and nothing is sent in its place. When the Reply gets no answer (a timeout or an unreachable LINE) nobody knows whether LINE took it, so the notice is `unconfirmed` and is not tried again.
+- The subscriber's `joined` event says what happened: `"sent"`, `"failed"`, or `"unconfirmed"` (no notice configured, or the Reply got no answer, or the first try was cut short, and nobody knows whether LINE got the Reply). The outcome is recorded before the Reply is made, so a join that is handed out again never replies twice.
 - The inbox worker only runs while a subscriber is attached (or `route` is on), so attach one before the bot can be added to chats; a join that waits past its reply token's life is `failed`.
 
 ## Router delivery

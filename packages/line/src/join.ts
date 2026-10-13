@@ -49,8 +49,9 @@ export interface JoinNotifierDeps {
 /**
  * Answers a `join` event with the configured notice, once, as a Reply with the event's reply token.
  * It sends only text whose SHA-256 is the configured digest, to any chat the bot joins, allowed or
- * not, and never as a push: when the Reply fails or the token has lapsed the notice is `failed`, and
- * nothing else is sent.
+ * not, and never as a push: when LINE refuses the Reply or the token has lapsed the notice is `failed`,
+ * and nothing else is sent. A Reply that got no answer is `unconfirmed`, and its record stays
+ * `attempting`.
  *
  * The outcome is recorded before the Reply is made, so a join that is handed out again never
  * replies twice: it learns `sent` or `failed`, or `unconfirmed` when the first try was cut short
@@ -110,7 +111,7 @@ export class JoinNotifier {
 					: "unconfirmed";
 		}
 		const token = nonEmpty(event.payload.replyToken);
-		let outcome: "sent" | "failed" = "failed";
+		let outcome: "sent" | "failed" | "attempting" = "failed";
 		if (!token) {
 			this.#logger.warn(
 				{ code: "no_reply_token" },
@@ -121,12 +122,13 @@ export class JoinNotifier {
 				await this.#api.reply(token, [{ type: "text", text: notice.text }]);
 				outcome = "sent";
 			} catch (error) {
-				this.#logger.warn(
-					{ code: errorCode(error) },
-					"the LINE join notice could not be sent",
-				);
+				const code = errorCode(error);
+				// No answer is not a refusal: LINE may have taken the Reply, so nobody can say it failed.
+				if (code === "api_unreachable") outcome = "attempting";
+				this.#logger.warn({ code }, "the LINE join notice could not be sent");
 			}
 		}
+		if (outcome === "attempting") return "unconfirmed";
 		await this
 			.#sql`UPDATE line_notices SET outcome = ${outcome} WHERE webhook_event_id = ${event.id}`;
 		return outcome;
