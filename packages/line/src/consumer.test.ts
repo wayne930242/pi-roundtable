@@ -6,8 +6,10 @@ import { parseWebhook } from "./events.ts";
 import { type InboxEvent, type InboxProcessor, InboxWorker } from "./inbox.ts";
 import { persistEvents } from "./intake.ts";
 import type {
+	LineContext,
 	LineEvent,
 	LineMessageEvent,
+	LineSubscriber,
 	LineUnsentEvent,
 } from "./messages.ts";
 import { PgSources } from "./sources.ts";
@@ -63,7 +65,8 @@ describeDb("the consumer", () => {
 	/** What the stub subscriber answers for a message; default two refs named after the message. */
 	let answer: (
 		event: LineMessageEvent,
-	) => Promise<{ refs: string[] } | undefined> = async (event) => ({
+		context: LineContext,
+	) => Promise<unknown> = async (event) => ({
 		refs: [`post-${event.messageId}-1`, `post-${event.messageId}-2`],
 	});
 	let failNext: Error | undefined;
@@ -107,14 +110,15 @@ describeDb("the consumer", () => {
 			refs: [`post-${event.messageId}-1`, `post-${event.messageId}-2`],
 		});
 		consumer = new LineConsumer({ sql, logger: logs.logger, now: () => TIME });
-		process = consumer.processorFor(async (event) => {
+		process = consumer.processorFor(async (event, _signal, context) => {
 			events.push(event);
 			if (failNext) {
 				const error = failNext;
 				failNext = undefined;
 				throw error;
 			}
-			if (event.type === "message") return answer(event);
+			if (event.type === "message")
+				return answer(event, context) as ReturnType<LineSubscriber>;
 			return undefined;
 		});
 	});
@@ -331,7 +335,7 @@ describeDb("the consumer", () => {
 			Array.from({ length: 101 }, (_, i) => `r${i}`),
 			[7],
 		]) {
-			answer = async () => ({ refs: refs as string[] });
+			answer = async () => ({ refs });
 			await expect(
 				run(messageEvent({ id: "badref", messageId: "mbad" })),
 			).rejects.toMatchObject({
@@ -350,6 +354,100 @@ describeDb("the consumer", () => {
 		expect(await rows("line_messages")).toEqual([]);
 		await run(messageEvent({ id: "f", messageId: "mf" }));
 		expect((await rows("line_messages")).length).toBe(1);
+	});
+
+	test("a subscriber that throws after keeping a post leaves it stored for the retry, and an unsend takes back every post", async () => {
+		let attempt = 0;
+		answer = async (_event, context) => {
+			const n = attempt++;
+			await context.keep(`chunk1-try${n}`);
+			if (n === 0) throw new Error("discord 502 on chunk 2");
+			await context.keep("chunk2");
+			// What is returned at the end merges with what was kept.
+			return { refs: [`chunk1-try${n}`, "chunk2"] };
+		};
+		await expect(
+			run(messageEvent({ id: "k", messageId: "mk" })),
+		).rejects.toThrow("discord 502");
+		expect(await rows("line_messages")).toEqual([]);
+		expect((await rows("line_message_refs")).map((r) => r.ref)).toEqual([
+			"chunk1-try0",
+		]);
+		await run(messageEvent({ id: "k", messageId: "mk" }));
+		expect(await rows("line_messages")).toHaveLength(1);
+		const stored = await sql`SELECT ref, position FROM line_message_refs
+			WHERE message_id = 'mk' ORDER BY position`;
+		expect(stored).toEqual([
+			{ ref: "chunk1-try0", position: 0 },
+			{ ref: "chunk1-try1", position: 1 },
+			{ ref: "chunk2", position: 2 },
+		]);
+		await run(unsendEvent("mk", "ku", 2000));
+		expect(refsOf(events.at(-1))).toEqual([
+			"chunk1-try0",
+			"chunk1-try1",
+			"chunk2",
+		]);
+		expect(await rows("line_message_refs")).toEqual([]);
+	});
+
+	test("a post kept after the unsend is handed back as unsent at once, and not a second time at the end", async () => {
+		const kept: { unsent: boolean }[] = [];
+		answer = async (event, context) => {
+			kept.push(await context.keep("a"));
+			await run(unsendEvent(event.messageId, "ju", 2000));
+			kept.push(await context.keep("b"));
+			return { refs: ["a", "b"] };
+		};
+		await run(messageEvent({ id: "j", messageId: "mj" }));
+		expect(kept).toEqual([{ unsent: false }, { unsent: true }]);
+		// The unsend took "a" back; keeping "b" found the tombstone and took "b" back straight away;
+		// "a" is returned again at the end and the final store takes it back too (taking back is idempotent).
+		expect(types()).toEqual(["message", "unsent", "unsent", "unsent"]);
+		expect(events.slice(1).map((e) => refsOf(e))).toEqual([
+			["a"],
+			["b"],
+			["a"],
+		]);
+		expect(await rows("line_messages")).toEqual([]);
+		expect(await rows("line_message_refs")).toEqual([]);
+		expect(await rows("line_tombstones")).toHaveLength(1);
+	});
+
+	test("keeping is refused outside a message, and past the limit of refs for one message", async () => {
+		let outsider: unknown;
+		const probing = consumer.processorFor(async (event, _signal, context) => {
+			if (event.type === "left")
+				outsider = await context.keep("x").catch((e) => e);
+		});
+		await probing(
+			await inbox(plainEvent("leave")),
+			new AbortController().signal,
+		);
+		expect(outsider).toMatchObject({ code: "keep_unavailable" });
+
+		answer = async (_event, context) => {
+			for (let i = 0; i < 100; i++) await context.keep(`r${i}`);
+			return { refs: ["one-too-many"] };
+		};
+		await expect(
+			run(messageEvent({ id: "lim", messageId: "mlim" })),
+		).rejects.toMatchObject({ code: "bad_refs" });
+		expect(await rows("line_message_refs")).toHaveLength(100);
+		expect(await rows("line_messages")).toEqual([]);
+	});
+
+	test("an answer that is not { refs } fails instead of counting as mirrored with no refs", async () => {
+		for (const wrong of [{ retryInMs: 1000 }, {}, null, "ok", 7]) {
+			answer = async () => wrong;
+			await expect(
+				run(messageEvent({ id: "w", messageId: "mw" })),
+			).rejects.toMatchObject({ code: "bad_refs" });
+		}
+		expect(await rows("line_messages")).toEqual([]);
+		answer = async () => undefined;
+		await run(messageEvent({ id: "w", messageId: "mw" }));
+		expect(await rows("line_messages")).toHaveLength(1);
 	});
 
 	test("an edit carries the refs of the original, and the latest edit wins however they arrive", async () => {

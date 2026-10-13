@@ -14,6 +14,7 @@ export type {
 } from "./inbox.ts";
 export type {
 	JoinNotice,
+	LineContext,
 	LineEditedEvent,
 	LineEvent,
 	LineJoinedEvent,

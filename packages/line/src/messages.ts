@@ -120,13 +120,36 @@ export interface LineMirror {
 }
 
 /**
+ * What a subscriber can do while it handles a `message`. For any other event `keep` rejects with
+ * `keep_unavailable`.
+ */
+export interface LineContext {
+	/**
+	 * Keeps the reference of a post the subscriber has just made, at once: stored under the same
+	 * per-message lock and tombstone check as the references it answers at the end, so the post can
+	 * still be taken back if the handler fails later (the references stay stored for the retry and for
+	 * an `unsent`). Calling it again for a kept reference changes nothing. Resolves `{ unsent: true }`
+	 * when the sender had already taken the message back: the reference has then been handed to the
+	 * subscriber as `unsent` already, and the subscriber should stop mirroring.
+	 */
+	keep(ref: string): Promise<{ unsent: boolean }>;
+}
+
+/**
  * The one consumer of the package. It is called at least once per event, so it must be idempotent;
  * `signal` aborts when the worker stops or the event is no longer its own. To give up, throw: the
- * event is retried with backoff.
+ * event is retried with backoff (a returned value is never read as a retry request, and a `message`
+ * answer that is not `{ refs }` fails with `bad_refs`).
+ *
+ * A `message` may become several posts. Call `context.keep(ref)` as each post lands: the references
+ * of posts made before a later one fails are then still known to the retry and to an `unsent`, so
+ * none is left behind. Refs returned at the end merge with the kept ones. Only a crash between a post
+ * and its `keep` can leave a post the package does not know of.
  */
 export type LineSubscriber = (
 	event: LineEvent,
 	signal: AbortSignal,
+	context: LineContext,
 ) => // biome-ignore lint/suspicious/noConfusingVoidType: an async handler that returns nothing is Promise<void>
 Promise<LineMirror | undefined | void>;
 

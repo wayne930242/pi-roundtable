@@ -3,6 +3,7 @@ import type { Logger } from "pi-roundtable";
 import { LineError } from "./errors.ts";
 import type { InboxEvent, InboxProcessor, InboxResult } from "./inbox.ts";
 import {
+	type LineContext,
 	type LineEditedEvent,
 	type LineMessageEvent,
 	type LineSubscriber,
@@ -24,33 +25,52 @@ export interface ConsumerDeps {
 	now: () => Date;
 }
 
-/** The references a subscriber answered, checked: strings that PostgreSQL can store, once each, in order. */
-function cleanRefs(answer: unknown): string[] {
-	const refs: unknown =
-		typeof answer === "object" && answer !== null && "refs" in answer
-			? answer.refs
-			: [];
-	if (!Array.isArray(refs) || refs.length > MAX_REFS)
+const checkRef = (ref: unknown): string => {
+	if (
+		typeof ref !== "string" ||
+		ref === "" ||
+		ref.length > MAX_REF_CHARS ||
+		ref.includes("\u0000")
+	)
 		throw new LineError(
 			"bad_refs",
-			`line: a subscriber may return at most ${MAX_REFS} refs`,
+			`line: a ref is a non-empty string of at most ${MAX_REF_CHARS} characters`,
 		);
-	const seen = new Set<string>();
-	for (const ref of refs) {
-		if (
-			typeof ref !== "string" ||
-			ref === "" ||
-			ref.length > MAX_REF_CHARS ||
-			ref.includes("\u0000")
-		)
-			throw new LineError(
-				"bad_refs",
-				`line: a ref is a non-empty string of at most ${MAX_REF_CHARS} characters`,
-			);
-		seen.add(ref);
-	}
-	return [...seen];
+	return ref;
+};
+
+const tooManyRefs = (): LineError =>
+	new LineError(
+		"bad_refs",
+		`line: a message may have at most ${MAX_REFS} refs`,
+	);
+
+/**
+ * The references a subscriber answered, checked: strings that PostgreSQL can store, once each, in
+ * order. Nothing is a message with no references to add; anything else than `{ refs }` is refused,
+ * so an answer meant as something else (a retry request, say) is not taken for a mirror.
+ */
+function cleanRefs(answer: unknown): string[] {
+	if (answer === undefined) return [];
+	if (typeof answer !== "object" || answer === null || !("refs" in answer))
+		throw new LineError(
+			"bad_refs",
+			"line: a subscriber answers a message with { refs } or nothing; to give up, throw",
+		);
+	const refs: unknown = answer.refs;
+	if (!Array.isArray(refs) || refs.length > MAX_REFS) throw tooManyRefs();
+	return [...new Set(refs.map(checkRef))];
 }
+
+/** The context of an event that keeps nothing. */
+const NO_KEEP: LineContext = {
+	keep: async () => {
+		throw new LineError(
+			"keep_unavailable",
+			"line: references are kept only while a message is being mirrored",
+		);
+	},
+};
 
 /** A token PostgreSQL can store, or null. */
 const storable = (value: unknown): string | null => {
@@ -124,17 +144,22 @@ export class LineConsumer {
 				await handler(
 					{ type: "joined", ...base, notice: "unconfirmed" },
 					signal,
+					NO_KEEP,
 				);
 				return undefined;
 			case "leave":
-				await handler({ type: "left", ...base }, signal);
+				await handler({ type: "left", ...base }, signal, NO_KEEP);
 				return undefined;
 			case "memberJoined":
 			case "memberLeft": {
 				const joined = event.type === "memberJoined";
 				const userIds = readMembers(event.payload, joined ? "joined" : "left");
 				if (userIds.length > 0)
-					await handler({ type: event.type, ...base, userIds }, signal);
+					await handler(
+						{ type: event.type, ...base, userIds },
+						signal,
+						NO_KEEP,
+					);
 				return undefined;
 			}
 			default:
@@ -176,7 +201,28 @@ export class LineConsumer {
 			body: readBody(message),
 			...(quoted ? { quotedMessageId: quoted } : {}),
 		};
-		const refs = cleanRefs(await handler(typed, signal));
+		// Refs the sender's unsend already took back through `keep`; they are not handed back twice.
+		const takenBack = new Set<string>();
+		const context: LineContext = {
+			keep: async (ref) => {
+				const unsent = await this.#keep(sourceKey, messageId, checkRef(ref));
+				if (unsent) {
+					takenBack.add(ref);
+					await this.#retract(
+						handler,
+						event,
+						sourceKey,
+						messageId,
+						signal,
+						false,
+					);
+				}
+				return { unsent };
+			},
+		};
+		const refs = cleanRefs(await handler(typed, signal, context)).filter(
+			(ref) => !takenBack.has(ref),
+		);
 		const late = await this.#store(event, sourceKey, messageId, typed, refs);
 		if (late) {
 			// An unsend landed while the subscriber was mirroring: take the new mirror back at once.
@@ -189,8 +235,45 @@ export class LineConsumer {
 	}
 
 	/**
-	 * Keeps the message and its references, unless it has been unsent meanwhile, in which case only
-	 * the references are kept (so they can be handed back) and true is returned.
+	 * Stores one reference the subscriber has just made, under the message's lock. True when the
+	 * message has been unsent: the reference is stored all the same, so it can be handed back.
+	 */
+	async #keep(
+		sourceKey: string,
+		messageId: string,
+		ref: string,
+	): Promise<boolean> {
+		const now = this.#now();
+		return this.#sql.begin(async (tx) => {
+			await tx`SELECT pg_advisory_xact_lock(hashtextextended(${lockOf(sourceKey, messageId)}, 11))`;
+			await this.#addRefs(tx, sourceKey, messageId, [ref], now);
+			return this.#tombstonedIn(tx, sourceKey, messageId);
+		});
+	}
+
+	/** Adds references after the ones stored, in order; one already stored keeps its place. The lock is held. */
+	async #addRefs(
+		tx: SQL,
+		sourceKey: string,
+		messageId: string,
+		refs: readonly string[],
+		now: Date,
+	): Promise<void> {
+		for (const ref of refs)
+			await tx`INSERT INTO line_message_refs (source_key, message_id, ref, position, created_at)
+				SELECT ${sourceKey}, ${messageId}, ${ref}, COALESCE(MAX(position) + 1, 0), ${now}
+				FROM line_message_refs WHERE source_key = ${sourceKey} AND message_id = ${messageId}
+				ON CONFLICT (source_key, message_id, ref) DO NOTHING`;
+		const [count] = (await tx`SELECT count(*)::int AS n FROM line_message_refs
+			WHERE source_key = ${sourceKey} AND message_id = ${messageId}`) as {
+			n: number;
+		}[];
+		if ((count?.n ?? 0) > MAX_REFS) throw tooManyRefs();
+	}
+
+	/**
+	 * Keeps the message and the references it answered, unless it has been unsent meanwhile, in which
+	 * case only the references are kept (so they can be handed back) and true is returned.
 	 */
 	async #store(
 		event: InboxEvent,
@@ -205,19 +288,14 @@ export class LineConsumer {
 		const quoteToken = storable(message.quoteToken);
 		return this.#sql.begin(async (tx) => {
 			await tx`SELECT pg_advisory_xact_lock(hashtextextended(${lockOf(sourceKey, messageId)}, 11))`;
-			const tombstone = await tx`SELECT 1 FROM line_tombstones
-				WHERE source_key = ${sourceKey} AND message_id = ${messageId}`;
-			const unsent = tombstone.length > 0;
+			const unsent = await this.#tombstonedIn(tx, sourceKey, messageId);
 			if (!unsent)
 				await tx`INSERT INTO line_messages
 					(source_key, message_id, message_type, event_ts, reply_token, reply_token_at, quote_token, created_at)
 					VALUES (${sourceKey}, ${messageId}, ${typed.body.kind}, ${event.timestamp},
 						${replyToken}, ${replyToken ? new Date(event.timestamp) : null}, ${quoteToken}, ${now})
 					ON CONFLICT (source_key, message_id) DO NOTHING`;
-			for (const [position, ref] of refs.entries())
-				await tx`INSERT INTO line_message_refs (source_key, message_id, ref, position, created_at)
-					VALUES (${sourceKey}, ${messageId}, ${ref}, ${position}, ${now})
-					ON CONFLICT (source_key, message_id, ref) DO NOTHING`;
+			await this.#addRefs(tx, sourceKey, messageId, refs, now);
 			return unsent;
 		});
 	}
@@ -257,7 +335,7 @@ export class LineConsumer {
 			text: message.text,
 			refs: await this.#refs(sourceKey, messageId),
 		};
-		await handler(typed, signal);
+		await handler(typed, signal, NO_KEEP);
 		await this
 			.#sql`UPDATE line_messages SET edit_ts = GREATEST(edit_ts, ${event.timestamp})
 			WHERE source_key = ${sourceKey} AND message_id = ${messageId}`;
@@ -310,7 +388,7 @@ export class LineConsumer {
 			messageId,
 			refs,
 		};
-		await handler(typed, signal);
+		await handler(typed, signal, NO_KEEP);
 		if (refs.length > 0)
 			await this.#sql`DELETE FROM line_message_refs
 				WHERE source_key = ${sourceKey} AND message_id = ${messageId} AND ref IN ${this.#sql([...refs])}`;
@@ -324,7 +402,15 @@ export class LineConsumer {
 	}
 
 	async #tombstoned(sourceKey: string, messageId: string): Promise<boolean> {
-		const rows = await this.#sql`SELECT 1 FROM line_tombstones
+		return this.#tombstonedIn(this.#sql, sourceKey, messageId);
+	}
+
+	async #tombstonedIn(
+		sql: SQL,
+		sourceKey: string,
+		messageId: string,
+	): Promise<boolean> {
+		const rows = await sql`SELECT 1 FROM line_tombstones
 			WHERE source_key = ${sourceKey} AND message_id = ${messageId}`;
 		return rows.length > 0;
 	}
