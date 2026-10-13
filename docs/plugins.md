@@ -384,6 +384,7 @@ Identities are `<provider>:<subject>` (OIDC uses `oidc:<base64url issuer>:<subje
 The primary owner is the first owner, with an explicit `principal` and, on Discord, a Discord identity; Discord administration still acts with that person's permissions.
 Owner is granted only through configuration or the principal CLI, never an IdP role.
 `provisioning: "admitted"` is the default; `"linked"` admits only already linked identities.
+A map gives the mode per surface, such as `provisioning: { web: "admitted", discord: "linked" }`: with `members.everyone: ["web", "discord"]`, a Discord id someone linked is served at member, an unlinked one is refused and not recorded, and web admits as before. A surface the map leaves out is `linked`, so a misspelled name cannot admit everyone; the one-word form and an omitted field stay `admitted`. `roundtable doctor` warns about a map key that is not a known surface and prints the effective mode.
 A disabled principal is refused, and CLI changes reach a running host within the identity cache's 30 seconds.
 
 ### Self-linking
@@ -3483,6 +3484,8 @@ Import from the entries listed below; source area files are internal.
 | `Pronouns` | `pi-roundtable` | type |
 | `ProviderError` | `pi-roundtable` | value |
 | `Providers` | `pi-roundtable` | type |
+| `Provisioning` | `pi-roundtable` | type |
+| `ProvisioningRule` | `pi-roundtable` | type |
 | `QueuePort` | `pi-roundtable` | type |
 | `Recurrence` | `pi-roundtable` | type |
 | `ReferenceImage` | `pi-roundtable` | type |

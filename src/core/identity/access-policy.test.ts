@@ -4,6 +4,7 @@ import {
 	type AccessRules,
 	checkAccessRules,
 	factsTier,
+	provisioningOf,
 } from "./access-policy.ts";
 import { identityOf, parseIdentity } from "./actor-facts.ts";
 
@@ -148,5 +149,37 @@ describe("checkAccessRules", () => {
 			checkAccessRules({ ...RULES, admins: { identities: ["nope"] } }),
 		).toThrow(/access\.admins\.identities\[0\]/);
 		expect(() => checkAccessRules({ ...RULES, owners: [owner] })).not.toThrow();
+	});
+});
+
+describe("provisioningOf", () => {
+	test("is the one mode for every surface, or the surface's own, an unnamed surface under a map being linked", () => {
+		expect(provisioningOf("linked", "web")).toBe("linked");
+		expect(provisioningOf("admitted", "discord")).toBe("admitted");
+		const map = { web: "admitted", discord: "linked" } as const;
+		expect(provisioningOf(map, "discord")).toBe("linked");
+		expect(provisioningOf(map, "web")).toBe("admitted");
+		expect(provisioningOf(map, "line")).toBe("linked");
+		expect(provisioningOf({ dsicord: "linked" }, "discord")).toBe("linked");
+		expect(provisioningOf(map, "constructor")).toBe("linked");
+	});
+
+	test("checkAccessRules refuses a mode that is neither admitted nor linked, and a blank surface name", () => {
+		const rules = {
+			...RULES,
+			owners: [{ name: "Ada", principal: "ada", identities: [] }],
+		};
+		expect(() =>
+			checkAccessRules({
+				...rules,
+				provisioning: { discord: "open" as never },
+			}),
+		).toThrow(ConfigError);
+		expect(() =>
+			checkAccessRules({ ...rules, provisioning: { " ": "linked" } }),
+		).toThrow(ConfigError);
+		expect(() =>
+			checkAccessRules({ ...rules, provisioning: { discord: "linked" } }),
+		).not.toThrow();
 	});
 });

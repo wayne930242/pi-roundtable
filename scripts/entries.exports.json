@@ -184,6 +184,8 @@
 			"Prompts",
 			"Pronouns",
 			"Providers",
+			"Provisioning",
+			"ProvisioningRule",
 			"QueuePort",
 			"Recurrence",
 			"ReferenceImage",

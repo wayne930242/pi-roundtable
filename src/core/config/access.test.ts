@@ -185,6 +185,30 @@ describe("the access configuration", () => {
 			).toThrow(ConfigError);
 	});
 
+	test("access.provisioning is one mode or a mode per surface; anything else is refused", () => {
+		const make = (provisioning: unknown) =>
+			resolveConfig({
+				...base,
+				discord: undefined,
+				http: undefined,
+				access: {
+					owners: [{ name: "Ops", principal: "operator" }],
+					provisioning,
+				},
+			} as never);
+		expect(make("linked").access.provisioning).toBe("linked");
+		expect(
+			make({ web: "admitted", discord: "linked" }).access.provisioning,
+		).toEqual({ web: "admitted", discord: "linked" });
+		expect(() => make({ discord: "open" })).toThrow(
+			/access\.provisioning\.discord/,
+		);
+		expect(() => make("open")).toThrow(/access\.provisioning/);
+		for (const bad of [["linked"], 5, null])
+			expect(() => make(bad)).toThrow(/one of admitted, linked, or an object/);
+		expect(() => make(5)).toThrow(/access\.provisioning/);
+	});
+
 	test("the 0.8 owner of a host without Discord gets no Discord identity", () => {
 		const config = resolveConfig({
 			...base,

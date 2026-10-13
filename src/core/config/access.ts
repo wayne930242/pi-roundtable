@@ -3,6 +3,8 @@ import {
 	type AccessRules,
 	type AccessTier,
 	checkAccessRules,
+	type Provisioning,
+	type ProvisioningRule,
 	rulesOfSpeakerMap,
 } from "../identity/access-policy.ts";
 import { parseIdentity } from "../identity/actor-facts.ts";
@@ -11,12 +13,14 @@ import type { Logger } from "../log.ts";
 import type { TierMembers } from "../speakers.ts";
 import type { Pronouns, ResolvedConfig, RoundtableConfig } from "./config.ts";
 import {
+	either,
 	type Field,
 	guarded,
 	integer,
 	list,
 	oneOf,
 	optional,
+	record,
 	shape,
 	text,
 } from "./schema.ts";
@@ -48,8 +52,11 @@ export interface AccessConfig {
 	owners: readonly AccessOwnerConfig[];
 	admins?: AccessTierConfig;
 	members?: AccessTierConfig;
-	/** `admitted` (default): someone the rules admit gets a principal at first contact, and a 0.8 speaker claims theirs; `linked`: only identities linked with the CLI, or the owners' configured ones, are served, and no one claims a 0.8 principal. */
-	provisioning?: "admitted" | "linked";
+	/**
+	 * `admitted` (default): someone the rules admit gets a principal at first contact, and a 0.8 speaker claims theirs; `linked`: only identities linked with the CLI, or the owners' configured ones, are served, and no one claims a 0.8 principal.
+	 * A map gives a mode per surface, such as `{ web: "admitted", discord: "linked" }`; a surface it leaves out is `linked`, so a misspelled surface cannot admit everyone.
+	 */
+	provisioning?: ProvisioningRule;
 	/** How many days someone whose tier comes only from the rules may go unseen before their background turns are refused; default 30. */
 	backgroundStaleDays?: number;
 	/**
@@ -86,7 +93,12 @@ export const accessShape = shape({
 	),
 	admins: optional(tierShape),
 	members: optional(tierShape),
-	provisioning: optional(oneOf<"admitted" | "linked">("admitted", "linked")),
+	provisioning: optional(
+		either(
+			oneOf<Provisioning>("admitted", "linked"),
+			record(oneOf<Provisioning>("admitted", "linked")),
+		),
+	),
 	backgroundStaleDays: optional(integer(1, 36_500)),
 	selfLink: optional(shape({ providers: list(text) })),
 });

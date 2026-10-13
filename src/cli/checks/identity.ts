@@ -1,7 +1,10 @@
 import type { SQL } from "bun";
 import { LEGACY_ACCESS } from "../../core/config/access.ts";
 import type { ResolvedConfig } from "../../core/config/config.ts";
-import type { AccessRules } from "../../core/identity/access-policy.ts";
+import {
+	type AccessRules,
+	provisioningOf,
+} from "../../core/identity/access-policy.ts";
 import { identityOf, parseIdentity } from "../../core/identity/actor-facts.ts";
 import { declaredConflict } from "../../core/identity/config-owner.ts";
 import { backfillLine } from "../../core/identity/identity-plugin.ts";
@@ -55,6 +58,18 @@ function admitsDiscord(
 	);
 }
 
+/** The effective provisioning mode, one word, or one per surface (those the host talks through and those the map names) when it differs by surface. */
+function provisioningSummary(
+	rule: AccessRules["provisioning"],
+	surfaces: readonly string[],
+): string {
+	if (typeof rule === "string") return rule;
+	const named = [...new Set([...surfaces, ...Object.keys(rule)])];
+	return named
+		.map((surface) => `${surface} ${provisioningOf(rule, surface)}`)
+		.join(", ");
+}
+
 /**
  * Whom the configuration serves: the owners by name, a warning when `everyone: true` admits
  * everyone on every surface of a host with more than one, a warning when admins or members are admitted on
@@ -69,8 +84,22 @@ export async function checkAccess(project: Project): Promise<Result> {
 	const broad = (["admins", "members"] as const).filter(
 		(tier) => config.access[tier]?.everyone === true,
 	);
+	const summary = provisioningSummary(config.access.provisioning, surfaces);
+	const rule = config.access.provisioning;
+	const unknown =
+		typeof rule === "string"
+			? []
+			: Object.keys(rule).filter((key) => !surfaces.includes(key));
 	const problems: string[] = [];
 	const fixes: string[] = [];
+	if (unknown.length > 0) {
+		problems.push(
+			`access.provisioning names ${list(unknown.map((key) => JSON.stringify(key)))}, which ${unknown.length === 1 ? "is" : "are"} not a surface this host talks through (${list(surfaces)}); a surface the map leaves out is linked.`,
+		);
+		fixes.push(
+			`Fix the spelling of the surface name in access.provisioning, or remove it.`,
+		);
+	}
 	if (broad.length > 0 && surfaces.length > 1) {
 		problems.push(
 			`${list(broad.map((tier) => `access.${tier}.everyone`))} ${broad.length === 1 ? "is" : "are"} true, which admits everyone on every surface: ${list(surfaces)}.`,
@@ -94,13 +123,17 @@ export async function checkAccess(project: Project): Promise<Result> {
 			`Set discord.agentSpeakers to "owners" (their messages still reach owner turns as channel context), or stop admitting Discord in ${list(discordTiers.map((tier) => `access.${tier}`))}.`,
 		);
 	}
-	if (problems.length > 0) return warn(problems.join(" "), fixes.join(" "));
+	if (problems.length > 0)
+		return warn(
+			`${problems.join(" ")} (provisioning ${summary})`,
+			fixes.join(" "),
+		);
 	const owners = config.access.owners;
 	const legacy = config.deprecations.includes(LEGACY_ACCESS)
 		? "; written as the 0.8 owner and speakers, which roundtable upgrade rewrites as access"
 		: "";
 	return ok(
-		`${owners.length} ${owners.length === 1 ? "owner" : "owners"}, ${list(owners.map((owner) => owner.name))}${legacy}`,
+		`${owners.length} ${owners.length === 1 ? "owner" : "owners"}, ${list(owners.map((owner) => owner.name))}${legacy}; provisioning ${summary}`,
 	);
 }
 

@@ -6,6 +6,7 @@ import {
 	type AccessRules,
 	checkAccessRules,
 	factsTier,
+	provisioningFor,
 } from "./access-policy.ts";
 import {
 	type ActorFacts,
@@ -45,7 +46,7 @@ export interface IdentityService {
 	 * linked identity is its principal's; an unlinked one first claims the principal of its 0.8
 	 * id (`legacyId`) when the backfill made it and no identity was ever linked to it, unless it
 	 * holds the owner role, taking the facts' name when the backfill named it by its id, and is
-	 * otherwise admitted as a new principal when the rules give it a tier. Both happen only when `provisioning` is `admitted`; under `linked` only identities
+	 * otherwise admitted as a new principal when the rules give it a tier. Both happen only when `provisioning` is `admitted` on the contact's surface; under `linked` only identities
 	 * already linked are served. A disabled principal is no one. The tier is the higher of the
 	 * principal's lasting roles and what the rules give the facts on this contact.
 	 */
@@ -392,7 +393,8 @@ export class PgIdentityService implements IdentityService, ContactAssessor {
 		facts: ActorFacts,
 		conversation: ChannelKey | undefined,
 	): Promise<{ principalId: string; tier: Tier } | undefined> {
-		if (this.#rules.provisioning !== "admitted") return undefined;
+		if (provisioningFor(this.#rules, facts, conversation) !== "admitted")
+			return undefined;
 		// An owner's identity, or a plugin's, is its principal's alone, linked at boot: unlinked
 		// meanwhile, it is no one until then.
 		if (this.#bootIdentities.has(identityOf(facts))) return undefined;
@@ -434,7 +436,7 @@ export class PgIdentityService implements IdentityService, ContactAssessor {
 		let link = await this.store.identity(ref.provider, ref.subject);
 		if (
 			!link &&
-			this.#rules.provisioning === "admitted" &&
+			provisioningFor(this.#rules, facts, conversation) === "admitted" &&
 			!this.#bootIdentities.has(identityOf(ref))
 		) {
 			if (assessed === facts.legacyId)

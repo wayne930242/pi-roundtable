@@ -37,14 +37,31 @@ export interface AccessTier {
 	everyone?: boolean | readonly string[];
 }
 
+/** Whether someone the rules admit gets a principal at first contact (`admitted`), or only already linked identities are served (`linked`). */
+export type Provisioning = "admitted" | "linked";
+
+/** The provisioning mode for every surface, or per surface; a surface a map leaves out is `linked`, so a misspelled surface name cannot admit everyone. */
+export type ProvisioningRule =
+	| Provisioning
+	| Readonly<Record<string, Provisioning>>;
+
+/** The mode that applies to a contact on this surface. */
+export function provisioningOf(
+	rule: ProvisioningRule,
+	surface: string,
+): Provisioning {
+	if (typeof rule === "string") return rule;
+	return (Object.hasOwn(rule, surface) ? rule[surface] : undefined) ?? "linked";
+}
+
 /** Who the host serves, and at which tier. */
 export interface AccessRules {
 	/** The owners, the first of them the primary owner. The owner tier comes only from here or the CLI, never from a role a surface reports. */
 	owners: readonly AccessOwner[];
 	admins?: AccessTier;
 	members?: AccessTier;
-	/** `admitted`: someone the rules admit gets a principal at first contact, and a 0.8 speaker claims theirs; `linked`: only identities already linked, such as by the CLI or the configuration, are served. Owners are never admitted. */
-	provisioning: "admitted" | "linked";
+	/** `admitted`: someone the rules admit gets a principal at first contact, and a 0.8 speaker claims theirs; `linked`: only identities already linked, such as by the CLI or the configuration, are served. A map gives a mode per surface, such as `{ web: "admitted", discord: "linked" }`, and leaves an unnamed surface `linked`. Owners are never admitted. */
+	provisioning: ProvisioningRule;
 	/** How many days a principal whose tier came only from the rules on contact may go unseen before their background turns are refused. */
 	backgroundStaleDays: number;
 	/** The identity providers whose people may link their own account through `IDENTITY_LINKS`; without it that service is not provided. */
@@ -85,6 +102,15 @@ export function factsTier(
 	if (holds(rules.admins, facts, surface)) return "admin";
 	if (holds(rules.members, facts, surface)) return "member";
 	return undefined;
+}
+
+/** How the rules provision a contact with these facts, by the surface they came through. */
+export function provisioningFor(
+	rules: Pick<AccessRules, "provisioning">,
+	facts: ActorFacts,
+	conversation?: ChannelKey,
+): Provisioning {
+	return provisioningOf(rules.provisioning, surfaceOf(facts, conversation));
 }
 
 /** The configured owner whose identities include these facts', if any. */
@@ -149,6 +175,12 @@ export function checkAccessRules(rules: AccessRules): AccessRules {
 			seenIdentity.set(identity, n);
 		});
 	});
+	if (typeof rules.provisioning !== "string")
+		for (const [surface, mode] of Object.entries(rules.provisioning))
+			if (surface.trim() === "" || (mode !== "admitted" && mode !== "linked"))
+				throw new ConfigError(
+					`config access.provisioning.${surface}: expected "admitted" or "linked" for a named surface, got ${JSON.stringify(mode)}. Write it like { web: "admitted", discord: "linked" }.`,
+				);
 	checkTier(rules.admins, "access.admins");
 	checkTier(rules.members, "access.members");
 	if (
