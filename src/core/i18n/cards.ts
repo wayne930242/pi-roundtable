@@ -5,6 +5,10 @@ export function cardsEn(ctx: CatalogContext) {
 	return {
 		cardRunLabel: "Run",
 		cardCancelLabel: "Cancel",
+		cardCopyLabel: "Copy",
+		cardCopyGone:
+			"The text of this card is no longer kept; ask the assistant to show it again.",
+		cardCopyFile: "The text is long, so it is attached as a file.",
 		cardApprovalFooter:
 			"Nothing runs until you approve; answer whenever you are ready.",
 		cardQuestionFooter: "Answer whenever you are ready.",
@@ -39,6 +43,9 @@ export function cardsZhTW(ctx: CatalogContext): ReturnType<typeof cardsEn> {
 	return {
 		cardRunLabel: "執行",
 		cardCancelLabel: "取消",
+		cardCopyLabel: "複製",
+		cardCopyGone: "這張卡片的文字已經不在了；請再請助理顯示一次。",
+		cardCopyFile: "文字比較長，所以用檔案附上。",
 		cardApprovalFooter: "你核准之前不會執行；準備好再回覆就好。",
 		cardQuestionFooter: "準備好再回答就好。",
 		cardStopped: "⏹️ 這一輪已停止。",

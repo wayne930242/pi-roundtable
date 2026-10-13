@@ -105,6 +105,7 @@ export function discordPlugin(options: DiscordOptions): RoundtablePlugin {
 					? {}
 					: { graceMs: options.cardGraceMs }),
 				resume: (turn) => connected.resume(turn),
+				copyLedgerPath: join(options.dataDir, "card-copies.json"),
 			});
 			const connected = new DiscordSurface({
 				token: options.token,

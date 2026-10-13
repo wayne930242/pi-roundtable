@@ -47,6 +47,8 @@ export function press(
 	} = {},
 ) {
 	const replies: string[] = [];
+	/** Everything a reply carried besides its text. */
+	const replied: { files?: unknown[]; flags?: unknown }[] = [];
 	const updates: CardPayload[] = [];
 	const modals: unknown[] = [];
 	// SAFETY: the cards read only these members of an interaction.
@@ -65,8 +67,13 @@ export function press(
 		},
 		values: options.values ?? [],
 		fields: { getTextInputValue: () => options.text ?? "" },
-		reply: async (answer: { content: string }) => {
+		reply: async (answer: {
+			content: string;
+			files?: unknown[];
+			flags?: unknown;
+		}) => {
 			replies.push(answer.content);
+			replied.push(answer);
 		},
 		update: async (payload: CardPayload) => {
 			updates.push(payload);
@@ -76,7 +83,7 @@ export function press(
 		},
 		deferUpdate: async () => undefined,
 	} as unknown as Interaction;
-	return { interaction, replies, updates, modals };
+	return { interaction, replies, replied, updates, modals };
 }
 
 /** Lets a posted card settle. */

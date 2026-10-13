@@ -24,6 +24,7 @@ import {
 	type CardAudienceOptions,
 	CardAudiences,
 } from "./card-audience.ts";
+import { CardCopies, copyReply, offeredCopy } from "./card-copies.ts";
 import { DiscordOwners, discordUser } from "./discord-owners.ts";
 import type { InteractionModule } from "./interaction-module.ts";
 import {
@@ -75,6 +76,11 @@ export interface OwnerCardsOptions {
 	 * answered. Without it no turn stops waiting on its cards.
 	 */
 	resume?(turn: LateTurn): void;
+	/**
+	 * A JSON file that keeps the text behind approval cards' copy buttons across restarts; without
+	 * it a card's copy button stops working when the process restarts.
+	 */
+	copyLedgerPath?: string;
 }
 
 /**
@@ -91,9 +97,14 @@ export class OwnerCards implements InteractionModule {
 	readonly #options: OwnerCardsOptions;
 	readonly #audiences: CardAudiences;
 	readonly #open = new Map<string, OpenCard>();
+	readonly #copies: CardCopies;
 
 	constructor(options: OwnerCardsOptions) {
 		this.#options = options;
+		this.#copies = new CardCopies({
+			...(options.copyLedgerPath ? { path: options.copyLedgerPath } : {}),
+			logger: options.logger,
+		});
 		this.#audiences = new CardAudiences(options, new DiscordOwners(options));
 	}
 
@@ -114,9 +125,15 @@ export class OwnerCards implements InteractionModule {
 				signal,
 				minTier = "owner",
 				wait,
-				_details,
+				details,
 				options,
 			) => {
+				const copy = offeredCopy(details?.copy, (chars) =>
+					this.#options.logger.warn(
+						{ channelId, chars },
+						"card copy text too long; the card has no copy button",
+					),
+				);
 				const audience = await this.#audiences.approval(
 					scope,
 					minTier,
@@ -154,6 +171,7 @@ export class OwnerCards implements InteractionModule {
 							: {}),
 						title,
 						sections: [message],
+						...(copy ? { copy: copy.text } : {}),
 						rows: (id, disabled) => [
 							new ActionRowBuilder<ButtonBuilder>().addComponents(
 								new ButtonBuilder()
@@ -168,6 +186,16 @@ export class OwnerCards implements InteractionModule {
 									.setEmoji("❌")
 									.setStyle(ButtonStyle.Secondary)
 									.setDisabled(disabled),
+								// Copying answers nothing, so it stays usable once the card has ended.
+								...(copy
+									? [
+											new ButtonBuilder()
+												.setCustomId(`${CARD_PREFIX}${id}:copy`)
+												.setLabel(copy.label)
+												.setEmoji("📋")
+												.setStyle(ButtonStyle.Secondary),
+										]
+									: []),
 							),
 						],
 						footer: messages().cardApprovalFooter,
@@ -221,6 +249,8 @@ export class OwnerCards implements InteractionModule {
 			audience: Audience;
 			title: string;
 			sections: string[];
+			/** The text behind the card's copy button, kept under the card's id. */
+			copy?: string;
 			question?: OwnerQuestion;
 			rows(id: string, disabled: boolean): Rows;
 			footer: string;
@@ -236,6 +266,7 @@ export class OwnerCards implements InteractionModule {
 		if (signal?.aborted) return Promise.resolve(cancelled);
 		const wait = resume ? card.wait : undefined;
 		const id = randomUUID();
+		if (card.copy !== undefined) this.#copies.remember(id, card.copy);
 		const sections = [
 			...card.sections,
 			...(card.audience.note ? [card.audience.note] : []),
@@ -361,6 +392,17 @@ export class OwnerCards implements InteractionModule {
 		const [id = "", action = ""] = interaction.customId
 			.slice(CARD_PREFIX.length)
 			.split(":");
+		// Copying answers nothing: anyone who sees the card may copy, as often as they like, also
+		// once the card has ended or the process restarted.
+		if (interaction.isButton() && action === "copy") {
+			const text = this.#copies.recall(id);
+			await interaction.reply(
+				text === undefined
+					? { content: messages().cardCopyGone, flags: MessageFlags.Ephemeral }
+					: copyReply(text),
+			);
+			return true;
+		}
 		const card = this.#open.get(id);
 		if (!card) {
 			await interaction.reply({

@@ -35,6 +35,14 @@ export interface ApprovalDetails {
 	input: Record<string, unknown>;
 	/** The files the call sends by path; absent when it sends none. */
 	files?: ApprovalFile[];
+	/**
+	 * A text the card offers to copy, such as a command or a message the call would send. A surface
+	 * that can shows a control, usable by anyone who sees the card, any number of times, that hands
+	 * them `text` (`label` names the control, default the surface's own); using it never answers
+	 * the prompt. It is informational: a surface that cannot show it ignores it. The text is
+	 * visible to everyone who sees the card, so it holds nothing the card's audience may not read.
+	 */
+	copy?: { label?: string; text: string };
 }
 
 /**
