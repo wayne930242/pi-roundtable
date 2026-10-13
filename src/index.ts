@@ -151,8 +151,10 @@ export type {
 	AccessOwner,
 	AccessRules,
 	AccessTier,
+	SelfLinkRules,
 } from "./core/identity/access-policy.ts";
 export type { ActorFacts } from "./core/identity/actor-facts.ts";
+export type { IdentityLinks } from "./core/identity/identity-links.ts";
 export type { IdentityService } from "./core/identity/identity-service.ts";
 export type {
 	IdentityLink,
@@ -278,6 +280,7 @@ export {
 	CONVERSATIONS,
 	DELEGATION,
 	IDENTITY,
+	IDENTITY_LINKS,
 	MEMORY,
 	PRECHECKS,
 	RUNTIME,

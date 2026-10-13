@@ -51,3 +51,11 @@ export const PRINCIPAL_PLUGIN_LINKS = async (sql: SQL): Promise<void> => {
 		ALTER TABLE principal_identities ADD CONSTRAINT principal_identities_source_check
 		CHECK (source IN ('config', 'plugin', 'cli', 'jit', 'legacy'))`;
 };
+
+/** Links people make themselves through `IDENTITY_LINKS`: their own source, beside the five before it. */
+export const PRINCIPAL_SELF_LINKS = async (sql: SQL): Promise<void> => {
+	await sql`ALTER TABLE principal_identities DROP CONSTRAINT IF EXISTS principal_identities_source_check`;
+	await sql`
+		ALTER TABLE principal_identities ADD CONSTRAINT principal_identities_source_check
+		CHECK (source IN ('config', 'plugin', 'cli', 'jit', 'legacy', 'self'))`;
+};

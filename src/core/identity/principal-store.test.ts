@@ -120,6 +120,27 @@ describeDb("PgPrincipalStore", () => {
 		).rejects.toThrow(IdentityError);
 	});
 
+	test("unlinking by source removes only a link that source made, and a self link ranks with the CLI's and a first contact's", async () => {
+		const a = await store.create({ displayName: "A" });
+		const identity = { provider: "discord", subject: "966666600000000051" };
+		await store.link(a.id, identity, "self");
+		expect(await store.unlink("discord", identity.subject, "cli")).toBe(false);
+		expect(await store.identity("discord", identity.subject)).toMatchObject({
+			source: "self",
+		});
+		// Another way linking it again keeps the self link; the configuration's takes it over.
+		expect(await store.link(a.id, identity, "cli")).toMatchObject({
+			source: "self",
+		});
+		expect(await store.link(a.id, identity, "config")).toMatchObject({
+			source: "config",
+		});
+		expect(await store.unlink("discord", identity.subject, "self")).toBe(false);
+		expect(await store.unlink("discord", identity.subject, "config")).toBe(
+			true,
+		);
+	});
+
 	test("roles are granted and revoked by source: a CLI grant outlives the config's revoke", async () => {
 		const p = await store.create({ displayName: "P" });
 		await store.grant(p.id, "owner", "config");

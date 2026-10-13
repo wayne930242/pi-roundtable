@@ -220,6 +220,7 @@ describe("defineRoundtable", () => {
 			"principals",
 			"principals-claimable",
 			"principals-plugin-links",
+			"principals-self-links",
 			"backfill",
 			"owner-memory",
 			"owner-memory-speaker",

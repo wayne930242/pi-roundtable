@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `access.selfLink: { providers: ["discord"] }` and the `IDENTITY_LINKS` service (`IdentityLinks`, `SelfLinkRules`): a plugin that proved who someone is can link the account that person controls to their principal with `link(principalId, "<provider>:<subject>")` and take it back with `unlink(identity)`. The `identity` plugin provides it only when the configuration lists the providers, so `IDENTITY` stays read-only and a host without `selfLink` has no such service. `link` refuses, and changes nothing for, a provider that is not listed, the system principal, a principal that holds the owner role or does not exist, and an identity linked to another principal; linking it again to the same principal is a no-op that keeps its source. `unlink` removes only links of the new source `self` (`LinkSource` gains `"self"`, printed by `roundtable principal show`); the configuration's, a plugin's, the CLI's, a first contact's and a 0.8 claim's are refused. `token` and `legacy` cannot be listed as providers. Logs carry the principal id and the identity only. The migration `principals-self-links` widens the `principal_identities.source` check; `PrincipalStore.unlink` takes an optional `source`.
+
 ## [0.9.10] - 2026-10-10
 
 ### Added

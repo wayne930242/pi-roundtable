@@ -10,6 +10,7 @@ import {
 } from "./principal-store.ts";
 import {
 	PRINCIPAL_PLUGIN_LINKS,
+	PRINCIPAL_SELF_LINKS,
 	PRINCIPAL_TABLES,
 	PRINCIPALS_CLAIMABLE,
 } from "./principal-tables.ts";
@@ -259,7 +260,7 @@ export async function backfillPrincipals(
 
 /**
  * The identity plugin's migrations: its tables once, the claimable column and the plugins' link
- * source once each (apart, so a database an earlier build made the tables on gets them too), then
+ * source and the people's own link source once each (apart, so a database an earlier build made the tables on gets them too), then
  * the backfill at every boot, which hands its summary to `report`.
  */
 export function identityMigrations(
@@ -270,6 +271,7 @@ export function identityMigrations(
 		{ name: "principals", up: PRINCIPAL_TABLES },
 		{ name: "principals-claimable", up: PRINCIPALS_CLAIMABLE },
 		{ name: "principals-plugin-links", up: PRINCIPAL_PLUGIN_LINKS },
+		{ name: "principals-self-links", up: PRINCIPAL_SELF_LINKS },
 		{
 			name: "backfill",
 			runs: "every-boot",

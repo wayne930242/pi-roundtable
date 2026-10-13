@@ -86,8 +86,8 @@ export class CachingPrincipalStore implements PrincipalStore {
 	admit(identity: IdentityRef, displayName: string, id?: string) {
 		return this.#write(this.#store.admit(identity, displayName, id));
 	}
-	unlink(provider: string, subject: string) {
-		return this.#write(this.#store.unlink(provider, subject));
+	unlink(provider: string, subject: string, source?: LinkSource) {
+		return this.#write(this.#store.unlink(provider, subject, source));
 	}
 	grant(principalId: string, role: Tier, source: RoleSource) {
 		return this.#write(this.#store.grant(principalId, role, source));

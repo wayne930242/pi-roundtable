@@ -1,6 +1,7 @@
 import type { RoundtablePlugin } from "../plugin.ts";
-import { IDENTITY } from "../services.ts";
+import { IDENTITY, IDENTITY_LINKS } from "../services.ts";
 import type { AccessRules } from "./access-policy.ts";
+import { identityLinks } from "./identity-links.ts";
 import { type BackfillSummary, identityMigrations } from "./identity-schema.ts";
 import { PgIdentityService } from "./identity-service.ts";
 import { identityView } from "./identity-view.ts";
@@ -29,7 +30,8 @@ export function backfillLine(summary: BackfillSummary): string {
  * The principals, their identity links, and their roles: the tables, the backfill that makes a
  * principal of every person 0.8 stored, and the identity service over them provided as
  * `IDENTITY`, read-only, its configured owners and the plugins' declared identities synced at
- * setup. It runs first, so every later plugin may read it.
+ * setup. When the rules list `selfLink` providers it also provides `IDENTITY_LINKS`. It runs
+ * first, so every later plugin may read them.
  */
 export function identityPlugin(options: IdentityOptions): RoundtablePlugin {
 	const { rules } = options;
@@ -40,7 +42,7 @@ export function identityPlugin(options: IdentityOptions): RoundtablePlugin {
 		migrations: identityMigrations(rules, (made) => {
 			summary = made;
 		}),
-		provides: [IDENTITY],
+		provides: rules.selfLink ? [IDENTITY, IDENTITY_LINKS] : [IDENTITY],
 		setup: async ({ database, services, logger }) => {
 			if (summary) logger.info(backfillLine(summary));
 			const identity = new PgIdentityService(
@@ -50,6 +52,11 @@ export function identityPlugin(options: IdentityOptions): RoundtablePlugin {
 			);
 			await identity.syncConfig();
 			services.provide(IDENTITY, identityView(identity));
+			if (rules.selfLink)
+				services.provide(
+					IDENTITY_LINKS,
+					identityLinks(identity.store, rules.selfLink, logger),
+				);
 			return {};
 		},
 	};
