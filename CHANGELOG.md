@@ -10,7 +10,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - A held tool call's approval card can carry a copy button. A tool's `hold`, and a hold rule's `describeInTurn`, may answer `HoldDescription` (new type, exported from `pi-roundtable`): the description as before, or `{ text, copy? }` with `copy` (`{ label?, text }`, as `ApprovalDetails.copy`) for the card to offer; the confirmation gate puts it in the `ApprovalDetails` it builds, so every limit of `ApprovalDetails.copy` applies (Discord's button, `discord.cardCopies`, the 20,000 character cap, the web chat's `approval.copy`). It shares the description's wait and failure: a rejection, a throw or a timeout holds the call under the generic description with no copy, and a `copy` that is not a non-empty text is left out. The copy is not kept with the held call, so a confirmation by message after a restart has no button; a host with no turn (a precheck script's call) uses `text`. A hold that answers a string is unchanged, as is `holdChain(rules).inTurn(...)` for rules that do.
-- `ChannelContextOptions.foreignWebhook` may return `"skip"` as well as a boolean (`(webhookId: string) => boolean | "skip"`): a post through that webhook of the application is dropped from the channel context and does not end the window, as if it were not in the channel, for a plugin whose own status notices go through a webhook of their own. `true` and `false` mean what they did, and any other answer reads as false.
+- `ChannelContextOptions.foreignWebhook` may return `"skip"` as well as a boolean (`(webhookId: string) => boolean | "skip"`): a post through that webhook of the application is dropped from the channel context and does not end the window, as if it were not in the channel, for a plugin whose own status notices go through a webhook of their own. `true` and `false` mean what they did, and any other answer reads as false. A skipped post is still one of the `fetch` messages read, so it uses that budget.
+
+### Changed
+
+- Code that reads a hold through `HoldCheck.inTurn`, `holdChain(rules)`, `testPlugin().holds.inTurn`, a wrapped `describeInTurn` or `ToolSpec.hold` now gets a `HoldDescription` (a string or `{ text, copy? }`) where it got a string; `ChannelContextOptions.foreignWebhook` may return the truthy `"skip"`, so a caller that treats its answer as a boolean should compare with `true`.
 
 ## [0.11.0] - 2026-10-13
 

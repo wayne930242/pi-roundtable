@@ -262,8 +262,16 @@ function holdWithoutTurn<Schema extends TObject>(
 				args: Static<Schema>,
 			) => HoldDescription | undefined | Promise<HoldDescription | undefined>
 		)(input as Static<Schema>);
-		if (!isPromise(answer))
-			return typeof answer === "object" ? answer.text : answer;
+		if (!isPromise(answer)) {
+			if (answer === undefined || typeof answer === "string") return answer;
+			// An object without a non-empty text still holds the call, never lets it run.
+			return typeof answer === "object" &&
+				answer !== null &&
+				typeof answer.text === "string" &&
+				answer.text !== ""
+				? answer.text
+				: messages().holdGeneric(name);
+		}
 		// Its answer is not waited for here; a rejection must not surface on its own.
 		Promise.resolve(answer).catch(() => undefined);
 	} catch {

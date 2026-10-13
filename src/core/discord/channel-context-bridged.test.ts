@@ -179,6 +179,18 @@ test('a webhook the host answers "skip" for is dropped between the mirror\'s pos
 	expect(select(fetched, (id) => id === BRIDGE).map((m) => m.id)).toEqual([]);
 });
 
+test('an answer other than true and "skip" reads as false: the post is the assistant\'s', () => {
+	const fetched = [
+		mirrored("1", "Ana", "before"),
+		mirrored("2", "Ben", "after"),
+	];
+	for (const answer of [undefined, "other", 1, null]) {
+		expect(select(fetched, (() => answer) as never).map((m) => m.id)).toEqual(
+			[],
+		);
+	}
+});
+
 test("a skipped post is not in the window the reader marks as delivered, and a reply still ends the window", () => {
 	const chosen = selectChannelContext(
 		[

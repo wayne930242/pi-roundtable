@@ -128,6 +128,33 @@ describe("approver sets", () => {
 		expect(gate.pending()?.calls[0]?.approverIds).toEqual(["p_ada", "p_bo"]);
 	});
 
+	test("a copy and the approvers a rule names reach the card together", async () => {
+		const copy = { label: "Copy message", text: "Hello Dana" };
+		const rule: HoldRule = {
+			...mailRule(async () => ["p_ada"]),
+			describeInTurn: async () => ({ text: "send an email", copy }),
+		};
+		const gate = new ConfirmationGate(holdChain([rule]), OWNER);
+		const slot = promptSlot();
+		const details: unknown[] = [];
+		const asked: (ApprovalOptions | undefined)[] = [];
+		slot.bind(
+			{
+				confirm: async (_t, _m, _s, _tier, _given, detail, options) => {
+					details.push(detail);
+					asked.push(options);
+					return "expired";
+				},
+				ask: async () => undefined,
+			},
+			"helper",
+		);
+		gate.beginTurn("workspace", false, undefined, SAM);
+		await handlers(gate, slot).call("c1");
+		expect(asked[0]?.approvers).toEqual(["p_ada"]);
+		expect(details[0]).toEqual(expect.objectContaining({ copy }));
+	});
+
 	test("an approver set that arrives later is waited for and joined to the card", async () => {
 		const gate = new ConfirmationGate(
 			holdChain([mailRule(async () => ["p_ada"])]),

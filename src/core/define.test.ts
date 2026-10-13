@@ -389,6 +389,15 @@ describe("defineTool", () => {
 		);
 	});
 
+	test("a hold that answers a malformed object without a turn is held generically, never let through", () => {
+		for (const answer of [{}, { copy: { text: "x" } }, { text: "" }, null]) {
+			const tool = defineTool({ ...note, hold: () => answer as never });
+			expect(tool.hold?.describe("note_add", { text: "hi" }, {})).toBe(
+				messages().holdGeneric("note_add"),
+			);
+		}
+	});
+
 	test("a hold that returns a thenable without catch is held generically where there is no turn", () => {
 		// biome-ignore lint/suspicious/noThenProperty: a thenable without catch is the case under test
 		const thenable = { then: () => undefined } as unknown as Promise<string>;
