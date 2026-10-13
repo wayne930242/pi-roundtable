@@ -82,7 +82,7 @@ const isBridge = (webhookId: string) => webhookId === BRIDGE;
 
 function select(
 	fetched: ContextSourceMessage[],
-	foreignWebhook?: (webhookId: string) => boolean,
+	foreignWebhook?: (webhookId: string) => boolean | "skip",
 ) {
 	return selectChannelContext(fetched, {
 		seen: new Set(),
@@ -90,6 +90,20 @@ function select(
 		settings: { ...SETTINGS, ...(foreignWebhook ? { foreignWebhook } : {}) },
 	}).messages;
 }
+
+const NOTICES = "w-notices";
+const isMirrorOrNotices = (webhookId: string) =>
+	webhookId === BRIDGE ? true : webhookId === NOTICES ? "skip" : false;
+
+/** A status notice the plugin posts through its own webhook. */
+const notice = (id: string) =>
+	source(id, "the bridge is back online", {
+		authorId: NOTICES,
+		authorName: "Status",
+		bot: true,
+		own: true,
+		webhookId: NOTICES,
+	});
 
 test("by default a post of the application's webhook is the assistant's: it ends the window and is left out", () => {
 	const fetched = [
@@ -148,6 +162,67 @@ test("two people mirrored through one webhook are not merged as a near repeat, o
 		mirrored("3", "Ben", "meet at the north gate at dusk!!"),
 	];
 	expect(select(fetched, isBridge).map((m) => m.id)).toEqual(["1", "3"]);
+});
+
+test('a webhook the host answers "skip" for is dropped between the mirror\'s posts and does not end the window', () => {
+	const fetched = [
+		mirrored("1", "Ana", "before the notice"),
+		notice("2"),
+		mirrored("3", "Ben", "after the notice"),
+		notice("4"),
+	];
+	expect(select(fetched, isMirrorOrNotices).map((m) => m.id)).toEqual([
+		"1",
+		"3",
+	]);
+	// Answered false instead, the same notice is the assistant's and ends the window.
+	expect(select(fetched, (id) => id === BRIDGE).map((m) => m.id)).toEqual([]);
+});
+
+test("a skipped post is not in the window the reader marks as delivered, and a reply still ends the window", () => {
+	const chosen = selectChannelContext(
+		[
+			mirrored("1", "Ana", "old"),
+			reply("2"),
+			mirrored("3", "Ben", "new"),
+			notice("4"),
+		],
+		{
+			seen: new Set(),
+			owners: [],
+			settings: { ...SETTINGS, foreignWebhook: isMirrorOrNotices },
+		},
+	);
+	expect(chosen.messages.map((m) => m.id)).toEqual(["3"]);
+	expect(chosen.window).toEqual(["3"]);
+});
+
+test('"skip" is not near-repeat merged into its neighbours', () => {
+	const fetched = [
+		mirrored("1", "Ana", "the bridge is back online"),
+		notice("2"),
+		mirrored("3", "Ana", "the bridge is back online!"),
+	];
+	expect(select(fetched, isMirrorOrNotices).map((m) => m.id)).toEqual(["3"]);
+});
+
+test("the reader drops a skipped webhook, keeps the window open across it, and hands each kept post over once", async () => {
+	const fetched = [
+		mirrored("10", "Ana", "first"),
+		notice("11"),
+		mirrored("12", "Ben", "second"),
+	];
+	const { reader: r } = reader(async () => fetched, {
+		foreignWebhook: isMirrorOrNotices,
+	});
+	const first = await r.of(inbound());
+	expect(first?.messages.map((m) => m.id)).toEqual(["10", "12"]);
+	expect(first?.text).not.toContain("back online");
+	fetched.push(notice("13"));
+	expect(await r.of(inbound({ messageId: "60" }))).toBeUndefined();
+	fetched.push(mirrored("14", "Cy", "third"));
+	const third = await r.of(inbound({ messageId: "70" }));
+	expect(third?.messages.map((m) => m.id)).toEqual(["14"]);
 });
 
 test("a Discord message through the application's webhook carries the webhook's id; another webhook's and a person's do not", () => {

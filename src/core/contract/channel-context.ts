@@ -29,8 +29,13 @@ export interface ChannelContextOptions {
 	 * plugin mirrors into the channel through a webhook of its own are read. The assistant's own
 	 * posts, which end the window, stay its bot user and every webhook this returns false for, such
 	 * as an agent's voice. Default: none, every webhook of the application is the assistant's.
+	 *
+	 * `"skip"` is for a webhook that is neither: one the plugin posts its own status notices
+	 * through. A post through it is dropped from the context and does not end the window, as if it
+	 * were not in the channel; it is not another author's words and not the assistant's answer.
+	 * Only `true` and `"skip"` change anything; any other answer reads as false.
 	 */
-	foreignWebhook?: (webhookId: string) => boolean;
+	foreignWebhook?: (webhookId: string) => boolean | "skip";
 	/** Which attachments of the kept messages are fetched for the turn; none by default. */
 	attachments?: ChannelContextAttachmentOptions;
 }

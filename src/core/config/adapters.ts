@@ -130,7 +130,7 @@ const channelContextShape = shape({
 	foreignWebhook: optional(
 		guarded(
 			"a function of a webhook id",
-			(value): value is (webhookId: string) => boolean =>
+			(value): value is (webhookId: string) => boolean | "skip" =>
 				typeof value === "function",
 		),
 	),

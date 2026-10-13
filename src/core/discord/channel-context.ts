@@ -241,11 +241,17 @@ export function selectChannelContext(
 	fetched: readonly ContextSourceMessage[],
 	{ seen, owners, settings }: ChannelContextSelection,
 ): { messages: ChannelContextMessage[]; window: string[] } {
-	const ordered = fetched.toSorted((a, b) => a.at - b.at);
-	// A webhook of the application that the host calls foreign speaks for other people, not for the assistant.
-	const foreign = (message: ContextSourceMessage) =>
-		message.webhookId !== undefined &&
-		settings.foreignWebhook?.(message.webhookId) === true;
+	// A webhook of the application that the host calls foreign speaks for other people, not for the
+	// assistant; one it calls "skip" speaks for no one: its posts are not in the channel as far as the
+	// window and the context go.
+	const verdict = (message: ContextSourceMessage) =>
+		message.webhookId === undefined
+			? undefined
+			: settings.foreignWebhook?.(message.webhookId);
+	const ordered = fetched
+		.filter((message) => verdict(message) !== "skip")
+		.toSorted((a, b) => a.at - b.at);
+	const foreign = (message: ContextSourceMessage) => verdict(message) === true;
 	const assistants = (message: ContextSourceMessage) =>
 		message.own && !foreign(message);
 	const lastOwn = ordered.findLastIndex(assistants);
