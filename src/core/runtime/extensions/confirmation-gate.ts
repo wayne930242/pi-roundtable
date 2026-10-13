@@ -18,9 +18,17 @@ import type {
 	LateAnswer,
 	Prompts,
 } from "../../interactions/prompts.ts";
-import type { Speaker } from "../../speakers.ts";
 import type { ToolTiers } from "../../tool-tiers.ts";
 import { approvalCard, approvalDetails } from "./approval-card.ts";
+import {
+	askSpeaker,
+	type Needing,
+	namesOf,
+	type Release,
+	remembered,
+	type SpeakerRef,
+	unlessNamed,
+} from "./gate-refusals.ts";
 import {
 	canonicalJson,
 	mayApproveNamed,
@@ -45,24 +53,6 @@ export {
 	unexpired,
 } from "./held-calls.ts";
 export type { HoldTurn } from "./hold-lookups.ts";
-
-/**
- * The speaker of a turn as the gate records them; `name` is what an approval by their message is
- * attributed to, and `tier` tells whether they approve as an owner.
- */
-type SpeakerRef = Pick<Speaker, "id" | "principalId"> & {
-	name?: string;
-	tier?: Speaker["tier"];
-};
-
-/** A call an approval released, and who gave it, when that is known. */
-interface Release {
-	call: HeldCall;
-	by?: ApprovedBy;
-}
-
-/** What a call needs of the gate: nothing, a hold, or a release that spends an approval. */
-type Needing = { held: HeldCall } | { released: ApprovedBy | undefined };
 
 /**
  * Per-channel state of held actions. With the owner's prompts bound, a call that needs their
@@ -464,8 +454,13 @@ export class ConfirmationGate {
 	/** Records the call as held and returns what the model is told about it. */
 	#record(call: HeldCall): string {
 		this.#remember(call);
-		const refusal = this.#unlessNamed(call);
-		return refusal ? refusal([], false) : this.#askSpeaker(call);
+		const refusal = unlessNamed(
+			call,
+			this.#speaker,
+			this.#addressee,
+			this.#private,
+		);
+		return refusal ? refusal([], false) : askSpeaker(this.#addressee, call);
 	}
 
 	/**
@@ -474,9 +469,17 @@ export class ConfirmationGate {
 	 */
 	async #held(call: HeldCall): Promise<string> {
 		this.#remember(call);
-		const refusal = this.#unlessNamed(call);
-		if (!refusal) return this.#askSpeaker(call);
-		const { names, missing } = await this.#namesOf(call.approverIds ?? []);
+		const refusal = unlessNamed(
+			call,
+			this.#speaker,
+			this.#addressee,
+			this.#private,
+		);
+		if (!refusal) return askSpeaker(this.#addressee, call);
+		const { names, missing } = await namesOf(
+			this.#nameOf,
+			call.approverIds ?? [],
+		);
 		return refusal(names, missing);
 	}
 
@@ -484,98 +487,13 @@ export class ConfirmationGate {
 		const selectionId = this.#selectionId;
 		if (selectionId === undefined)
 			throw new Error("a call was held outside a turn");
-		let pending = this.#pending;
-		// A partial release kept calls that name approvers, which belong to no speaker: what this turn
-		// holds is its speaker's, from now.
-		if (pending && pending === this.#kept) {
-			pending = { ...pending, calls: [...pending.calls] };
-			pending.selectionId = selectionId;
-			pending.heldAt = new Date();
-			delete pending.speakerId;
-			delete pending.principalId;
-			if (this.#speaker) {
-				pending.speakerId = this.#speaker.id;
-				pending.principalId = this.#speaker.principalId;
-			}
-		}
-		this.#kept = undefined;
-		pending ??= {
+		this.#pending = remembered(
+			this.#pending,
+			this.#kept,
 			selectionId,
-			heldAt: new Date(),
-			calls: [],
-			...(this.#speaker
-				? {
-						speakerId: this.#speaker.id,
-						principalId: this.#speaker.principalId,
-					}
-				: {}),
-		};
-		if (
-			!pending.calls.some((c) => c.tool === call.tool && c.input === call.input)
-		)
-			pending.calls.push(call);
-		this.#pending = pending;
-	}
-
-	/** The text for a held call that the speaker's own message confirms. */
-	#askSpeaker(call: HeldCall): string {
-		const o = ownerWords(this.#addressee);
-		return `Held for ${o.name}'s confirmation: this would ${call.action}. Do not retry it in this turn. Tell ${o.him} exactly what will happen and ask ${o.him} to confirm; once ${o.he} agrees in ${o.his} next message, make the same call with the same input and it runs.`;
-	}
-
-	/**
-	 * For a call that names approvers the speaker is neither among nor an owner of: the text that
-	 * tells the model the truth about it, from the names of those who may approve; undefined when
-	 * the speaker may.
-	 */
-	#unlessNamed(
-		call: HeldCall,
-	): ((names: string[], missing: boolean) => string) | undefined {
-		if (!call.approverIds || mayApproveNamed(this.#speaker, call))
-			return undefined;
-		const o = ownerWords(this.#addressee);
-		const anyone = (call.approverIds?.length ?? 0) > 0;
-		return (names, missing) => {
-			// Names that could not be read still leave the people the tool named.
-			const named =
-				names.length === 0 && anyone
-					? ["the people named for it"]
-					: missing
-						? [...names, "others named for it"]
-						: names;
-			const who = orList([...named, "an owner"]);
-			const approval = `Only ${who} can approve it.`;
-			if (this.#private)
-				return `Held, and ${o.name} cannot approve it here: this would ${call.action}. ${approval} A private conversation can only be answered by its person, so it stays held and nothing ${o.he} says here releases it. Do not retry it, and do not ask ${o.him} to confirm it or to say yes. Tell ${o.him} plainly that it was not done and needs ${who}.`;
-			return `Held, and ${o.name} cannot approve it: this would ${call.action}. ${approval} Do not retry it in this turn, and do not ask ${o.name} to confirm it. Tell ${o.him} plainly that it was not done, and ask ${who} to confirm in this channel; once one of them agrees in a message, make the same call with the same input and it runs.`;
-		};
-	}
-
-	/** The names of the principals, as far as they are known; ids are never shown. `missing` says some could not be read. */
-	async #namesOf(
-		principalIds: readonly string[],
-	): Promise<{ names: string[]; missing: boolean }> {
-		const nameOf = this.#nameOf;
-		if (!nameOf) return { names: [], missing: principalIds.length > 0 };
-		const names = await Promise.all(
-			[...new Set(principalIds)].map(async (id) => {
-				try {
-					return await nameOf(id);
-				} catch {
-					return undefined;
-				}
-			}),
+			this.#speaker,
+			call,
 		);
-		return {
-			names: [...new Set(names.filter((name): name is string => !!name))],
-			missing: names.some((name) => !name),
-		};
+		this.#kept = undefined;
 	}
-}
-
-/** "a", "a or b", "a, b or c". */
-function orList(items: readonly string[]): string {
-	const last = items.at(-1);
-	if (items.length < 2 || last === undefined) return items.join("");
-	return `${items.slice(0, -1).join(", ")} or ${last}`;
 }
