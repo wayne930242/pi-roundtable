@@ -37,7 +37,7 @@ test("a name is 1 to 20 characters, counted as characters and not as bytes or co
 	expect(refusal({ name: "😀".repeat(21) })).toMatchObject({
 		code: "bad_sender",
 	});
-	expect(validateSender({ name: "王小明｜專人客服" })).toBeDefined();
+	expect(validateSender({ name: "Zoë｜Desk, さくら" })).toBeDefined();
 	for (const name of ["", "   ", " Ada", "Ada ", "Ada\nLovelace", "Ada\u0000"])
 		expect(refusal({ name })).toMatchObject({ code: "bad_sender" });
 	expect(refusal({ name: 42 })).toMatchObject({ code: "bad_sender" });

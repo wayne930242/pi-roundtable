@@ -1,7 +1,8 @@
 import type { SQL } from "bun";
-import type { Logger } from "pi-roundtable";
+import type { InboundMessage, Logger } from "pi-roundtable";
 import { errorCode, LineError } from "./errors.ts";
 import type { InboxEvent, InboxProcessor, InboxResult } from "./inbox.ts";
+import type { JoinNotifier } from "./join.ts";
 import {
 	type LineContext,
 	type LineEditedEvent,
@@ -14,6 +15,7 @@ import {
 	readMembers,
 	senderOf,
 } from "./messages.ts";
+import { inboundOf } from "./route.ts";
 
 /** The most references a subscriber may return for one message, and the longest one. */
 const MAX_REFS = 100;
@@ -23,6 +25,13 @@ export interface ConsumerDeps {
 	sql: SQL;
 	logger: Logger;
 	now: () => Date;
+	/** Answers a `join` with the notice and says how it went; absent, a join's notice is `"unconfirmed"`. */
+	joins?: Pick<JoinNotifier, "send">;
+	/**
+	 * Hands a text message of an allowed chat to the host's router, once the subscriber has mirrored
+	 * it. Throwing fails the event, which is retried. Absent: nothing is routed.
+	 */
+	route?: (message: InboundMessage) => void;
 }
 
 const checkRef = (ref: unknown): string => {
@@ -63,7 +72,7 @@ function cleanRefs(answer: unknown): string[] {
 }
 
 /** The context of an event that keeps nothing. */
-const NO_KEEP: LineContext = {
+export const NO_KEEP: LineContext = {
 	keep: async () => {
 		throw new LineError(
 			"keep_unavailable",
@@ -99,11 +108,15 @@ export class LineConsumer {
 	readonly #sql: SQL;
 	readonly #logger: Logger;
 	readonly #now: () => Date;
+	readonly #joins: Pick<JoinNotifier, "send"> | undefined;
+	readonly #route: ((message: InboundMessage) => void) | undefined;
 
 	constructor(deps: ConsumerDeps) {
 		this.#sql = deps.sql;
 		this.#logger = deps.logger;
 		this.#now = deps.now;
+		this.#joins = deps.joins;
+		this.#route = deps.route;
 	}
 
 	/** An inbox processor that hands typed events to `handler`. */
@@ -139,14 +152,15 @@ export class LineConsumer {
 			case "unsend":
 				await this.#unsent(handler, event, sourceKey, signal);
 				return undefined;
-			case "join":
-				// The notice is sent by a later release; until then it is never confirmed.
-				await handler(
-					{ type: "joined", ...base, notice: "unconfirmed" },
-					signal,
-					NO_KEEP,
-				);
+			case "join": {
+				// The notice goes first, on the event's own reply token, which lapses within minutes; the
+				// subscriber hears how it went.
+				const notice = this.#joins
+					? await this.#joins.send(event)
+					: "unconfirmed";
+				await handler({ type: "joined", ...base, notice }, signal, NO_KEEP);
 				return undefined;
+			}
 			case "leave":
 				await handler({ type: "left", ...base }, signal, NO_KEEP);
 				return undefined;
@@ -224,6 +238,15 @@ export class LineConsumer {
 		const refs = cleanRefs(await handler(typed, signal, context)).filter(
 			(ref) => !kept.has(ref),
 		);
+		if (this.#route) {
+			const inbound = inboundOf(typed, message);
+			if (inbound) this.#route(inbound);
+			else
+				this.#logger.info(
+					{ event: event.id },
+					"a LINE message was not routed: it is not text from a named sender",
+				);
+		}
 		const late = await this.#store(event, sourceKey, messageId, typed, refs);
 		if (late) {
 			// An unsend landed while the subscriber was mirroring: take the new mirror back at once.
