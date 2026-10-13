@@ -61,34 +61,77 @@ describe("expired card copy texts leave the file", () => {
 		let tick: (() => void) | undefined;
 		let interval: number | undefined;
 		let cleared = false;
-		const realClear = globalThis.clearInterval;
-		globalThis.clearInterval = (() => {
-			cleared = true;
-		}) as typeof clearInterval;
-		try {
-			const copies = new CardCopies({
-				path,
-				keepDays: 30,
-				logger: silentLogger(),
-				now: () => now,
-				sweepMs: 1234,
-				setInterval: ((fn: () => void, ms: number) => {
-					tick = fn;
-					interval = ms;
-					return { unref() {} };
-				}) as unknown as typeof setInterval,
-			});
-			copies.start();
-			expect(interval).toBe(1234);
-			now = 31 * DAY;
-			tick?.();
-			await copies.flush();
-			expect(stored(path)).toEqual([]);
-			await copies.stop();
-			expect(cleared).toBe(true);
-		} finally {
-			globalThis.clearInterval = realClear;
-		}
+		const copies = new CardCopies({
+			path,
+			keepDays: 30,
+			logger: silentLogger(),
+			now: () => now,
+			sweepMs: 1234,
+			setInterval: ((fn: () => void, ms: number) => {
+				tick = fn;
+				interval = ms;
+				return { unref() {} };
+			}) as unknown as typeof setInterval,
+			clearInterval: (() => {
+				cleared = true;
+			}) as unknown as typeof clearInterval,
+		});
+		copies.start();
+		expect(interval).toBe(1234);
+		now = 31 * DAY;
+		tick?.();
+		await copies.flush();
+		expect(stored(path)).toEqual([]);
+		await copies.stop();
+		expect(cleared).toBe(true);
+	});
+
+	function fakeTimers() {
+		const state = { set: 0, cleared: 0, unref: 0 };
+		return {
+			state,
+			setInterval: (() => {
+				state.set += 1;
+				return {
+					unref() {
+						state.unref += 1;
+					},
+				};
+			}) as unknown as typeof setInterval,
+			clearInterval: (() => {
+				state.cleared += 1;
+			}) as unknown as typeof clearInterval,
+		};
+	}
+
+	test("start twice sets one timer, stop twice clears it once, and the timer is unref'd", async () => {
+		const timers = fakeTimers();
+		const copies = new CardCopies({
+			path: ledger({}),
+			logger: silentLogger(),
+			setInterval: timers.setInterval,
+			clearInterval: timers.clearInterval,
+		});
+		copies.start();
+		copies.start();
+		expect(timers.state.set).toBe(1);
+		expect(timers.state.unref).toBe(1);
+		await copies.stop();
+		await copies.stop();
+		expect(timers.state.cleared).toBe(1);
+	});
+
+	test("without a path no timer is set", async () => {
+		const timers = fakeTimers();
+		const copies = new CardCopies({
+			logger: silentLogger(),
+			setInterval: timers.setInterval,
+			clearInterval: timers.clearInterval,
+		});
+		copies.start();
+		await copies.stop();
+		expect(timers.state.set).toBe(0);
+		expect(timers.state.cleared).toBe(0);
 	});
 
 	test("nothing is written when nothing expired", async () => {

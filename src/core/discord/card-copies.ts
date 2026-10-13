@@ -33,6 +33,8 @@ export interface CardCopiesOptions {
 	sweepMs?: number;
 	/** Replaceable in tests. */
 	setInterval?: typeof setInterval;
+	/** Replaceable in tests, with `setInterval`. */
+	clearInterval?: typeof clearInterval;
 }
 
 /**
@@ -103,7 +105,8 @@ export class CardCopies {
 
 	/** Stops the sweep and resolves once what was remembered so far is on disk; for a host that stops and for tests. */
 	async stop(): Promise<void> {
-		if (this.#timer) clearInterval(this.#timer);
+		if (this.#timer)
+			(this.#options.clearInterval ?? clearInterval)(this.#timer);
 		this.#timer = undefined;
 		await this.flush();
 	}

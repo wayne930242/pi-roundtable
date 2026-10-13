@@ -68,3 +68,31 @@ test("a caller's signal aborts the downloads too", async () => {
 	expect(result.files).toEqual([]);
 	expect(result.failures).toHaveLength(3);
 });
+
+test("the deadline's signal reaches fetch: a fetch that only ends on abort lets a file finish within the deadline", async () => {
+	const dir = mkdtempSync(join(tmpdir(), "turn-attachments-"));
+	dirs.push(dir);
+	const hanging = Object.assign(
+		(_url: unknown, init?: RequestInit) =>
+			new Promise<Response>((_resolve, reject) => {
+				const signal = init?.signal;
+				if (!signal) return;
+				signal.addEventListener("abort", () => reject(signal.reason), {
+					once: true,
+				});
+			}),
+		{ preconnect: fetch.preconnect },
+	) as unknown as typeof fetch;
+	const single = {
+		messageId: "m2",
+		attachments: [ref("a.txt")],
+	} as unknown as InboundMessage;
+	const started = Date.now();
+	const result = await attachmentsOf(single, dir, silentLogger(), hanging, {
+		deadlineMs: 100,
+	});
+	expect(Date.now() - started).toBeLessThan(2_000);
+	expect(result.files).toEqual([]);
+	expect(result.failures).toHaveLength(1);
+	expect(result.failures[0]?.reason).toContain("download failed");
+});
