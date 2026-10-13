@@ -21,7 +21,10 @@ export type {
 	AgentPanelOptions,
 } from "../core/discord/agent-panel.ts";
 export { agentPanel } from "../core/discord/agent-panel.ts";
-export { CHANNEL_CONTEXT_DEFAULTS } from "../core/discord/channel-context.ts";
+export {
+	CHANNEL_CONTEXT_DEFAULTS,
+	formatChannelContext,
+} from "../core/discord/channel-context.ts";
 export type { ManagedChannel } from "../core/discord/channel-executor.ts";
 export {
 	fetchManagedChannel,

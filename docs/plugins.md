@@ -2320,6 +2320,7 @@ A surface a plugin contributes may implement the optional `ChatSurface.markFresh
 The block gives each author as a name, their Discord id and a role (`owner`, `bot` or `member`) in separate attributes, and says the messages were not addressed to the assistant. A name loses the characters `"`, `'`, `=`, `<`, `>`, `(`, `)` and `,`, so it cannot imitate another author, an attribute or a role, and every `<` (also the full-width `＜`) in a message's text is replaced by `‹`, so a message can neither close the block nor open a message of its own.
 `ChannelContext` is `{ messages, text, images? }`: `messages` are `ChannelContextMessage`s (`id`, `authorId`, `authorName`, `bot`, `owner`, `text`, `at`, `attachments`), oldest first, `text` is the block, and `images` the fetched images (see above).
 `ChannelContextOptions` holds the options above, and `CHANNEL_CONTEXT_DEFAULTS` their defaults.
+`formatChannelContext(messages)` is the function that writes `ChannelContext.text`, exported so a host can test what the model sees without reaching into the core: it takes `ChannelContextMessage`s (only `authorId`, `authorName`, `bot`, `owner` and `text` are read) and returns the block, headed and delimited by `<channel-context>`. Each message is a `<message from="…" id="…" role="owner|member|bot">` line whose author is in the attributes, never in the text, and every `<` of a name or text (plain or full-width) is replaced by `‹`, so no message can pass as markup. It does not fetch, cut or select anything, and it is the same function the reader calls, so a block it returns is the block a turn carries.
 In a test, `fakeDiscord({ channelContext })` answers `DISCORD.channelContext` as the test says; by default with no context.
 
 <!-- example: examples/channel-context.ts -->
@@ -3929,6 +3930,7 @@ Import from the entries listed below; source area files are internal.
 | `ChannelContextAttachmentOptions` | `pi-roundtable/discord` | type |
 | `ChannelContextMessage` | `pi-roundtable/discord` | type |
 | `ChannelContextOptions` | `pi-roundtable/discord` | type |
+| `formatChannelContext` | `pi-roundtable/discord` | value |
 | `ChannelExecutor` | `pi-roundtable/discord` | type |
 | `ChannelInfo` | `pi-roundtable/discord` | type |
 | `ChannelOperation` | `pi-roundtable/discord` | type |

@@ -475,6 +475,7 @@
 			"discord",
 			"ephemeralPanel",
 			"fetchManagedChannel",
+			"formatChannelContext",
 			"groupOption",
 			"isChannelOperation",
 			"operationLabel",
