@@ -164,6 +164,11 @@ function contractSubject(tier: "owner" | "member") {
 			answer: async (id: string, approved: boolean) =>
 				surface.answer(id, { principalId: "p0", owner: true }, approved),
 		},
+		approver: {
+			principalId: "p3",
+			answer: async (id: string, approved: boolean) =>
+				surface.answer(id, { principalId: "p3", tier }, approved),
+		},
 	};
 }
 
@@ -171,6 +176,64 @@ describeSurfaceContract("the fake chat", async () => contractSubject("owner"));
 describeSurfaceContract("the fake chat for a member", async () =>
 	contractSubject("member"),
 );
+
+test("an approval that names approvers is answered by them at the tier it needs, and reports who approved", async () => {
+	const surface = new FakeSurface();
+	const speaker = {
+		id: "1",
+		name: "Ada",
+		tier: "member",
+		principalId: "p1",
+	} as const;
+	const prompts = surface.prompts("fake:1", promptScope(speaker));
+	let approver: unknown;
+	const answer = prompts.confirm(
+		"Send?",
+		"sends a message",
+		undefined,
+		"admin",
+		undefined,
+		undefined,
+		{
+			approvers: ["p3"],
+			approvedBy: (by) => {
+				approver = by;
+			},
+		},
+	);
+	// Not the speaker, not another principal, and not a named approver below the tier.
+	surface.answer("q1", { principalId: "p1" }, true);
+	surface.answer("q1", { principalId: "p2" }, true);
+	surface.answer("q1", { principalId: "p3", tier: "member" }, true);
+	expect(surface.asked[0]?.open).toBe(true);
+	surface.answer("q1", { principalId: "p3", tier: "admin", name: "Bo" }, true);
+	expect(await answer).toBe("approved");
+	expect(approver).toEqual({ principalId: "p3", speakerId: "p3", name: "Bo" });
+});
+
+test("a private conversation's approval ignores the approvers it names", async () => {
+	const surface = new FakeSurface();
+	const speaker = {
+		id: "1",
+		name: "Ada",
+		tier: "member",
+		principalId: "p1",
+	} as const;
+	const prompts = surface.prompts("fake:1", promptScope(speaker, "private"));
+	const answer = prompts.confirm(
+		"Send?",
+		"sends a message",
+		undefined,
+		"member",
+		undefined,
+		undefined,
+		{ approvers: ["p3"] },
+	);
+	surface.answer("q1", { principalId: "p3", tier: "member" }, true);
+	expect(surface.asked[0]?.open).toBe(true);
+	surface.answer("q1", { principalId: "p1" }, false);
+	expect(await answer).toBe("declined");
+});
 
 test("two surfaces with one prefix are refused, naming both plugins", async () => {
 	const second = definePlugin({

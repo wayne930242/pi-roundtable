@@ -42,7 +42,7 @@ const ALLOWED: Record<string, string> = {
 	'src/core/runtime/conversation-sessions.ts: ?? "owner"':
 		"the conversation kind picks only the persona, never a tier",
 	'src/core/testing/owner.ts: tier: "owner"': "the test owner's speaker",
-	'src/core/testing/surface-contract.ts: tier: "owner"':
+	'src/core/testing/surface-contract-support.ts: tier: "owner"':
 		"the surface contract's owner, a test fixture",
 	'src/core/testing/prompt-capture.ts: tier: "owner"':
 		"the capture host's owner speaker, a test fixture",
