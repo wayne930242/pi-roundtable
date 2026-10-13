@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `LINE.health()` gains `webhooks: WebhookHealth` (new type, exported): `{ accepted, rejected: { signature, destination, malformed }, lastAcceptedAt?, lastRejectedAt? }`, the counts and times of what the webhook has answered since the plugin was set up. `signature` is a missing or wrong signature (401), `destination` a signed webhook for another bot (403), `malformed` a body over the cap or not an events object (413, 400). Nothing of a request but its count is kept. A caller that built a `LineBridgePort` of its own, to test a plugin that reads `LINE`, must add the field.
+
 ## [0.12.1] - 2026-10-13
 
 - Release in lockstep with pi-roundtable 0.12.1; no package-specific behavior changes. The core peer range stays `>=0.12.0 <0.13.0`.

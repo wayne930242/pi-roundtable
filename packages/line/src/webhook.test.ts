@@ -16,7 +16,7 @@ import {
 } from "./testing/line-fake.ts";
 import { freshPool } from "./testing/pool.ts";
 import { TokenSource } from "./token.ts";
-import { webhookHandler } from "./webhook.ts";
+import { WebhookStats, webhookHandler } from "./webhook.ts";
 
 describeDb("the webhook", () => {
 	let sql: SQL;
@@ -35,6 +35,7 @@ describeDb("the webhook", () => {
 			logger: logs.logger,
 			now: () => time,
 			botUserId: () => bot,
+			stats: new WebhookStats(),
 			stored: () => {
 				stored++;
 			},

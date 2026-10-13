@@ -21,7 +21,7 @@ import { RetentionSweeper } from "./retention.ts";
 import { PgSources } from "./sources.ts";
 import { LineSurface } from "./surface.ts";
 import { TokenSource } from "./token.ts";
-import { webhookHandler } from "./webhook.ts";
+import { WebhookStats, webhookHandler } from "./webhook.ts";
 
 /**
  * The LINE transport: a webhook on the host's HTTP listener that stores every signed event before
@@ -44,6 +44,7 @@ export function line(options: LineOptions): RoundtablePlugin {
 		setup: (context: PluginContext) => {
 			const sql = context.database();
 			const now = () => context.env.now();
+			const webhooks = new WebhookStats();
 			const api = new LineApi({
 				tokens,
 				...(options.fetch ? { fetch: options.fetch } : {}),
@@ -143,6 +144,7 @@ export function line(options: LineOptions): RoundtablePlugin {
 					return {
 						tokensIssued: health.issued,
 						tokenFailure: health.lastFailure,
+						webhooks: webhooks.health(),
 					};
 				},
 				subscribe: (handler) => {
@@ -212,6 +214,7 @@ export function line(options: LineOptions): RoundtablePlugin {
 							now,
 							botUserId: () => bot.current(),
 							stored: () => worker.kick(),
+							stats: webhooks,
 						}),
 					},
 				],

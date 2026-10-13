@@ -3,6 +3,7 @@ import type { LineContentRequest, LineContentResult } from "./content.ts";
 import type { LineSubscriber } from "./messages.ts";
 import type { LineOutbox } from "./outbox.ts";
 import type { LineSources } from "./sources.ts";
+import type { WebhookHealth } from "./webhook.ts";
 
 /** What other plugins read from this one, through the `LINE` service key. */
 export interface LineBridgePort {
@@ -12,8 +13,16 @@ export interface LineBridgePort {
 	readonly outbox: LineOutbox;
 	/** The bot's user id once LINE has told it, else undefined. */
 	botUserId(): string | undefined;
-	/** The token source's health: how many tokens were issued and why the last attempt failed, if it did. */
-	health(): { tokensIssued: number; tokenFailure: string | undefined };
+	/**
+	 * The plugin's health: how many tokens were issued and why the last attempt failed, if it did, and
+	 * what the webhook has answered since the plugin was set up (`webhooks`: counts and times only,
+	 * never a body, an address or a signature).
+	 */
+	health(): {
+		tokensIssued: number;
+		tokenFailure: string | undefined;
+		webhooks: WebhookHealth;
+	};
 	/**
 	 * Becomes the one consumer of the package: from now on each stored event of an allowed chat, the
 	 * `join` and `leave` of any chat that is not blocked, and an `unsend` stored while its chat was

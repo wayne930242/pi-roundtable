@@ -81,6 +81,27 @@ An event with a `webhookEventId` already stored is not stored again, so LINE's r
 The bot's user id comes from `GET /v2/bot/info` when the host starts.
 If LINE cannot be reached then, the plugin logs a warning with a code and keeps trying (at most every 30 seconds, when a webhook arrives); until it knows the id a webhook is vouched for by its signature alone.
 
+### Webhook counters
+
+`LINE.health()` returns `{ tokensIssued, tokenFailure, webhooks }`, where `webhooks` is what the webhook has answered since the plugin was set up (it starts at zero with each process):
+
+```ts
+webhooks: {
+	accepted: number; // answered 200, a Verify included
+	rejected: {
+		signature: number; // 401: the signature is missing or wrong
+		destination: number; // 403: signed, but for another bot
+		malformed: number; // 400 and 413: not a LINE events object, or over 1 MiB
+	};
+	lastAcceptedAt?: string; // ISO time; left out until there was one
+	lastRejectedAt?: string;
+};
+```
+
+They are counts and times only: no body, address or signature is kept, and a request adds one to a counter and nothing else.
+A `405` and a `500` (the database could not store the events) are in no counter.
+A host that watches for a channel whose webhook URL or secret has drifted can alarm on `rejected.signature` growing while `accepted` does not.
+
 ## Chats and the allowlist
 
 The first event from a chat the bot has not seen records it as `pending`: its key, when it was first and last seen, and counts.

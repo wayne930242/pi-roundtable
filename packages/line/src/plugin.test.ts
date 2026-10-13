@@ -289,7 +289,11 @@ describeDb("the line plugin", () => {
 				body: { kind: "text", text: "second" },
 			},
 		]);
-		expect(port.health()).toEqual({ tokensIssued: 1, tokenFailure: undefined });
+		expect(port.health()).toMatchObject({
+			tokensIssued: 1,
+			tokenFailure: undefined,
+			webhooks: { accepted: 2, rejected: { signature: 1 } },
+		});
 		expect(fake.issued).toHaveLength(1);
 
 		detach();
