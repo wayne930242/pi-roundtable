@@ -131,6 +131,7 @@
 			"HeldCall",
 			"HoldCheck",
 			"HoldContext",
+			"HoldDescription",
 			"HoldRefusal",
 			"HoldRule",
 			"HostEnv",
