@@ -91,7 +91,7 @@ export async function checkAccess(project: Project): Promise<Result> {
 			`${list(discordTiers.map((tier) => `access.${tier}`))} admit${discordTiers.length === 1 ? "s" : ""} Discord speakers, and discord.agentSpeakers is not "owners": their turns in the agents' channels run in the agent's home session, shared with the owners, so they can read earlier owner conversation and shell output and leave history that owner turns inherit.`,
 		);
 		fixes.push(
-			`Set discord.agentSpeakers to "owners" (members' messages still reach owner turns as channel context), or stop admitting Discord in ${list(discordTiers.map((tier) => `access.${tier}`))}.`,
+			`Set discord.agentSpeakers to "owners" (their messages still reach owner turns as channel context), or stop admitting Discord in ${list(discordTiers.map((tier) => `access.${tier}`))}.`,
 		);
 	}
 	if (problems.length > 0) return warn(problems.join(" "), fixes.join(" "));
