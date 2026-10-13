@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-10-13
+
 ### Added
 
 - A held tool call's approval card can carry a copy button. A tool's `hold`, and a hold rule's `describeInTurn`, may answer `HoldDescription` (new type, exported from `pi-roundtable`): the description as before, or `{ text, copy? }` with `copy` (`{ label?, text }`, as `ApprovalDetails.copy`) for the card to offer; the confirmation gate puts it in the `ApprovalDetails` it builds, so every limit of `ApprovalDetails.copy` applies (Discord's button, `discord.cardCopies`, the 20,000 character cap, the web chat's `approval.copy`). It shares the description's wait and failure: a rejection, a throw or a timeout holds the call under the generic description with no copy, and a `copy` that is not a non-empty text is left out. The copy is not kept with the held call, so a confirmation by message after a restart has no button; a host with no turn (a precheck script's call) uses `text`. A hold that answers a string is unchanged, as is `holdChain(rules).inTurn(...)` for rules that do.
