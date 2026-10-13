@@ -70,22 +70,28 @@ async function appendedPrompt(
 		sessionManager: SessionManager.inMemory(dir),
 	});
 	// The SDK runs these handlers inside prompt(); calling them directly needs no model.
+	// pi 1.2 takes (trigger, options) where earlier releases took (prompt, images, options).
+	type Emitted = Promise<{
+		systemPromptOptions: { appendSystemPrompt: string };
+	}>;
 	const internals = session as unknown as {
 		_extensionRunner: {
-			emitBeforeAgentStart(
-				prompt: string,
-				images: unknown[],
-				options: unknown,
-			): Promise<{ systemPromptOptions: { appendSystemPrompt: string } }>;
+			emitBeforeAgentStart: ((...args: unknown[]) => Emitted) & {
+				length: number;
+			};
 		};
 		_baseSystemPromptOptions: unknown;
 	};
 	try {
-		const result = await internals._extensionRunner.emitBeforeAgentStart(
-			"hello",
-			[],
-			internals._baseSystemPromptOptions,
-		);
+		const runner = internals._extensionRunner;
+		const options = internals._baseSystemPromptOptions;
+		const result =
+			runner.emitBeforeAgentStart.length >= 3
+				? await runner.emitBeforeAgentStart("hello", [], options)
+				: await runner.emitBeforeAgentStart(
+						{ messageType: "user", prompt: "hello", images: [] },
+						options,
+					);
 		return result.systemPromptOptions.appendSystemPrompt;
 	} finally {
 		session.dispose();
