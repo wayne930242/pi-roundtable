@@ -39,20 +39,11 @@ jobs:
       - run: bun install
       - name: Move pi to the newest release the range allows
         run: bun update @earendil-works/pi-coding-agent @earendil-works/pi-ai
-      # The sandbox package pins pi exactly for its own checks; move that pin too (by editing the
-      # manifest: `bun add` there swaps the workspace link to pi-roundtable for a registry copy), or it keeps a
-      # second, older pi whose types do not match the root's.
-      - name: Move the sandbox package's pi pin to the same release
-        run: |
-          node -e '
-            const fs = require("node:fs");
-            const version = require("./node_modules/@earendil-works/pi-coding-agent/package.json").version;
-            const path = "packages/sandbox/package.json";
-            const pkg = JSON.parse(fs.readFileSync(path, "utf8"));
-            pkg.devDependencies["@earendil-works/pi-coding-agent"] = version;
-            fs.writeFileSync(path, `${JSON.stringify(pkg, null, "\t")}\n`);
-          '
-          bun install
+      # The sandbox package pins pi exactly for its own checks, so it keeps a nested, older pi whose
+      # types do not match the root's. Drop that nested copy so it resolves the root's newer pi.
+      # Re-pinning and reinstalling instead relinks its pi-roundtable to the package itself.
+      - name: Let the sandbox package use the root's pi
+        run: rm -rf packages/sandbox/node_modules/@earendil-works
       - name: Show the pi versions under test
         run: bun pm ls --all 2>&1 | grep -E '@earendil-works/pi-(coding-agent|ai)@'
       - run: bun run typecheck
