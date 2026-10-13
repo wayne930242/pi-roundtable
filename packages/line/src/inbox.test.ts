@@ -496,25 +496,86 @@ describeDb("the inbox worker", () => {
 		}
 	});
 
-	test("R4REV-F002: a pending event of a blocked chat is dropped at the claim, and one of a chat that is not allowed waits unread except join and leave", async () => {
+	test("R4REV-F002: a pending event of a blocked chat is dropped at the claim, and a chat that is not allowed hands out only its join and leave", async () => {
 		await store(
 			messageEvent({ id: "m1", text: "customer words", timestamp: 1000 }),
 			{ ...messageEvent({ id: "j1", timestamp: 2000 }), type: "join" },
 		);
 		await sql`UPDATE line_sources SET status = 'left' WHERE source_key = ${GROUP}`;
 		const w = worker();
+		// The message of a chat the bot left is dropped with its payload; the join behind it still goes out.
 		expect(await w.runOnce()).toBe(true);
-		expect(handled.map((e) => e.id)).toEqual(["j1"]);
-		expect(await w.runOnce()).toBe(false);
-		expect(await row("m1")).toMatchObject({ status: "pending" });
-		expect((await row("m1")).payload.message.text).toBe("customer words");
-		await sql`UPDATE line_sources SET status = 'blocked' WHERE source_key = ${GROUP}`;
-		expect(await w.runOnce()).toBe(false);
 		expect(handled.map((e) => e.id)).toEqual(["j1"]);
 		expect(await row("m1")).toMatchObject({
 			status: "skipped",
 			payload: null,
+			last_error_code: "source_left",
+		});
+		await sql`UPDATE line_sources SET status = 'allowed' WHERE source_key = ${GROUP}`;
+		await receive(messageEvent({ id: "m2", timestamp: 3000 }));
+		await sql`UPDATE line_sources SET status = 'blocked' WHERE source_key = ${GROUP}`;
+		expect(await w.runOnce()).toBe(false);
+		expect(handled.map((e) => e.id)).toEqual(["j1"]);
+		expect(await row("m2")).toMatchObject({
+			status: "skipped",
+			payload: null,
 			last_error_code: "source_blocked",
+		});
+	});
+
+	test("R4RR-F003: an event backing off when the bot leaves is dropped with its payload and never surfaces after a rejoin", async () => {
+		const membership = (id: string, type: string, timestamp: number) => ({
+			...messageEvent({ id, timestamp, type }),
+			message: undefined,
+		});
+		await store(
+			messageEvent({ id: "m1", text: "customer words", timestamp: 1000 }),
+		);
+		processor = async (event) => {
+			handled.push(event);
+			if (event.id === "m1") throw new LineError("discord_down", "no");
+			return undefined;
+		};
+		const w = worker({ backoffBaseMs: 60_000 });
+		expect(await w.runOnce()).toBe(true);
+		expect(await row("m1")).toMatchObject({ status: "pending" });
+		// The bot is removed while m1 waits for its retry.
+		await receive(membership("lv", "leave", 2000));
+		expect(await w.runOnce()).toBe(true);
+		expect((await sources().get(GROUP))?.status).toBe("left");
+		expect(await row("m1")).toMatchObject({
+			status: "skipped",
+			payload: null,
+			last_error_code: "source_left",
+		});
+		// Added back and allowed again: the old message does not come back.
+		await receive(membership("jn", "join", 3000));
+		expect(await w.runOnce()).toBe(true);
+		await sources().allow(GROUP);
+		advance(2 * 3_600_000);
+		expect(await w.runOnce()).toBe(false);
+		expect(handled.map((e) => e.id)).toEqual(["m1", "lv", "jn"]);
+		expect(await row("m1")).toMatchObject({ status: "skipped", payload: null });
+	});
+
+	test("R4RR-F003: the claim drops what an undecided chat or a chat the bot left still holds, apart from join and leave", async () => {
+		await store(
+			messageEvent({ id: "m1", timestamp: 1000 }),
+			messageEvent({ id: "m2", timestamp: 1100, group: "Cgroup0002" }),
+		);
+		await sql`UPDATE line_inbox SET next_attempt_at = ${new Date(START.getTime() + 3_600_000)}`;
+		await sql`UPDATE line_sources SET status = 'left' WHERE source_key = ${GROUP}`;
+		await sql`UPDATE line_sources SET status = 'pending' WHERE source_key = ${OTHER_GROUP}`;
+		expect(await worker().runOnce()).toBe(false);
+		expect(await row("m1")).toMatchObject({
+			status: "skipped",
+			payload: null,
+			last_error_code: "source_left",
+		});
+		expect(await row("m2")).toMatchObject({
+			status: "skipped",
+			payload: null,
+			last_error_code: "source_pending",
 		});
 	});
 
@@ -654,5 +715,171 @@ describeDb("the inbox worker", () => {
 		// The other message was not held behind the edit that was backing off.
 		expect(order.indexOf("other")).toBeLessThan(order.indexOf("e1"));
 		expect(order.length).toBe(4);
+	});
+
+	test("R4RR-F001: a handler that never settles fails with handler_timeout, its chat goes on, and its late settle changes nothing", async () => {
+		await store(
+			messageEvent({ id: "a1", timestamp: 1000 }),
+			messageEvent({ id: "a2", timestamp: 2000 }),
+		);
+		const gates = [
+			Promise.withResolvers<void>(),
+			Promise.withResolvers<void>(),
+		];
+		let aborted = false;
+		processor = async (event, signal) => {
+			handled.push(event);
+			if (event.id === "a1") {
+				signal.addEventListener("abort", () => {
+					aborted = true;
+				});
+				await gates[event.attempt - 1]?.promise;
+				return { retryInMs: 1 };
+			}
+			return undefined;
+		};
+		const w = worker({
+			maxHandleMs: 300,
+			leaseMs: 60_000,
+			backoffBaseMs: 1000,
+		});
+		const started = Date.now();
+		expect(await w.runOnce()).toBe(true);
+		expect(Date.now() - started).toBeGreaterThanOrEqual(250);
+		expect(aborted).toBe(true);
+		expect(await row("a1")).toMatchObject({
+			status: "pending",
+			attempts: 1,
+			last_error_code: "handler_timeout",
+		});
+		// The chat is not held by the stuck event: the next one is handed out.
+		expect(await w.runOnce()).toBe(true);
+		expect(handled.map((e) => e.id)).toEqual(["a1", "a2"]);
+		// a1 comes back, attempt 2 is in hand; then the first handler finally settles.
+		advance(2000);
+		const second = w.runOnce();
+		await until(() => handled.length === 3);
+		gates[0]?.resolve();
+		await Bun.sleep(50);
+		expect(await row("a1")).toMatchObject({
+			status: "processing",
+			attempts: 2,
+			requeues: 0,
+		});
+		expect((await row("a1")).payload).not.toBeNull();
+		gates[1]?.resolve();
+		await second;
+		// Attempt 2 asked to look again later, which is its own outcome, not the first handler's.
+		expect(await row("a1")).toMatchObject({ status: "pending", requeues: 1 });
+	});
+
+	test("R4RR-F001: a handler that never settles does not keep the worker from stopping or the heartbeat from ending", async () => {
+		await store(messageEvent({ id: "stuck" }));
+		processor = async (event) => {
+			handled.push(event);
+			return new Promise<never>(() => undefined);
+		};
+		const w = worker({ maxHandleMs: 150, leaseMs: 300 });
+		await w.start();
+		await until(() => handled.length === 1);
+		const stopped = await Promise.race([
+			w.stop().then(() => "stopped"),
+			Bun.sleep(3000).then(() => "hung"),
+		]);
+		expect(stopped).toBe("stopped");
+		expect(w.busy()).toEqual([]);
+		expect(await row("stuck")).toMatchObject({
+			status: "pending",
+			last_error_code: "handler_timeout",
+		});
+	});
+
+	test("R4RR-F002: while a handler is stuck a kick hands another chat's new event out at once, and a poll does too", async () => {
+		await store(messageEvent({ id: "a1", timestamp: 1000 }));
+		const gate = Promise.withResolvers<void>();
+		processor = async (event) => {
+			handled.push(event);
+			if (event.id === "a1") await gate.promise;
+			return undefined;
+		};
+		const w = worker({ concurrency: 2, pollMs: 60_000, maxHandleMs: 600_000 });
+		await w.start();
+		await until(() => handled.length === 1);
+		await receive(messageEvent({ id: "b1", group: "Cgroup0002" }));
+		w.kick();
+		await until(() => handled.some((e) => e.id === "b1"));
+		expect(w.busy()).toEqual(["a1"]);
+		expect(await row("b1")).toMatchObject({ status: "done" });
+		gate.resolve();
+		await w.stop();
+
+		// Without a kick the poll finds it.
+		await sql`TRUNCATE line_inbox`;
+		handled = [];
+		await receive(messageEvent({ id: "a2", timestamp: 1000 }));
+		const gate2 = Promise.withResolvers<void>();
+		processor = async (event) => {
+			handled.push(event);
+			if (event.id === "a2") await gate2.promise;
+			return undefined;
+		};
+		const polled = worker({ concurrency: 2, pollMs: 30, maxHandleMs: 600_000 });
+		await polled.start();
+		await until(() => handled.length === 1);
+		await receive(messageEvent({ id: "b2", group: "Cgroup0002" }));
+		await until(() => handled.some((e) => e.id === "b2"));
+		gate2.resolve();
+		await polled.stop();
+	});
+
+	test("R4RR-F002: a free slot is refilled when a handler ends, and expired leases are still put back while one handler is stuck", async () => {
+		await store(
+			messageEvent({ id: "a1", timestamp: 1000 }),
+			messageEvent({ id: "x1", timestamp: 1000, group: "Cgroup0002" }),
+		);
+		// x1 was claimed by a process that died.
+		await sql`UPDATE line_inbox SET status = 'processing', claimed_at = ${START}, attempts = 1 WHERE webhook_event_id = 'x1'`;
+		const gate = Promise.withResolvers<void>();
+		processor = async (event) => {
+			handled.push(event);
+			if (event.id === "a1") await gate.promise;
+			return undefined;
+		};
+		const w = worker({
+			concurrency: 2,
+			leaseMs: 200,
+			pollMs: 20,
+			maxHandleMs: 600_000,
+		});
+		await w.start();
+		await until(() => handled.some((e) => e.id === "a1"));
+		advance(1000);
+		await until(() => handled.some((e) => e.id === "x1"));
+		expect(await row("x1")).toMatchObject({ status: "done", attempts: 2 });
+		expect(w.busy()).toEqual(["a1"]);
+		gate.resolve();
+		await w.stop();
+	});
+
+	test("R4RR-nit: an event waiting for a message that is backing off is looked at again when that message is due, not every few seconds", async () => {
+		await store(
+			messageEvent({ id: "m1", timestamp: 1000, messageId: "M1" }),
+			unsendOf("u1", "M1", 2000),
+		);
+		processor = async (event) => {
+			handled.push(event);
+			if (event.id === "m1") throw new LineError("discord_down", "no");
+			return undefined;
+		};
+		const w = worker({ backoffBaseMs: 600_000, dependencyRetryMs: 5000 });
+		expect(await w.runOnce()).toBe(true);
+		const backoffUntil = (await row("m1")).next_attempt_at as Date;
+		// u1 is claimed once, finds m1 backing off and sleeps until m1 is due.
+		expect(await w.runOnce()).toBe(true);
+		const waiting = await row("u1");
+		expect(waiting).toMatchObject({ status: "pending", attempts: 0 });
+		expect(new Date(waiting.next_attempt_at).getTime()).toBe(
+			backoffUntil.getTime(),
+		);
 	});
 });

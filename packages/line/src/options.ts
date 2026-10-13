@@ -16,6 +16,7 @@ export interface LineOptions {
 
 const INBOX_KEYS: readonly (keyof InboxOptions)[] = [
 	"leaseMs",
+	"maxHandleMs",
 	"maxAttempts",
 	"maxRequeues",
 	"backoffBaseMs",

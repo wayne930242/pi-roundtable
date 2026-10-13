@@ -162,12 +162,24 @@ export class PgSources implements LineSources {
 			WHERE source_key = ${key} AND membership_ts < ${timestamp}`;
 	}
 
-	/** Records that the bot was removed from a chat (a `leave` event); a blocked chat stays blocked. */
+	/**
+	 * Records that the bot was removed from a chat (a `leave` event); a blocked chat stays blocked.
+	 * Whatever else the chat has waiting (an event backing off, say) is dropped with its payload,
+	 * apart from its join and leave, so it cannot be handed out long after, when the bot is back.
+	 */
 	async markLeft(key: string, timestamp: number): Promise<void> {
-		await this.#sql`UPDATE line_sources
-			SET membership_ts = ${timestamp},
-				status = CASE WHEN status = 'blocked' THEN status ELSE 'left' END,
-				status_changed_at = CASE WHEN status = 'blocked' THEN status_changed_at ELSE ${this.#now()} END
-			WHERE source_key = ${key} AND membership_ts < ${timestamp}`;
+		const now = this.#now();
+		await this.#sql.begin(async (sql) => {
+			const rows: { status: SourceStatus }[] = await sql`UPDATE line_sources
+				SET membership_ts = ${timestamp},
+					status = CASE WHEN status = 'blocked' THEN status ELSE 'left' END,
+					status_changed_at = CASE WHEN status = 'blocked' THEN status_changed_at ELSE ${now} END
+				WHERE source_key = ${key} AND membership_ts < ${timestamp}
+				RETURNING status`;
+			if (rows[0]?.status !== "left") return;
+			await sql`UPDATE line_inbox
+				SET status = 'skipped', payload = NULL, last_error_code = 'source_left', completed_at = ${now}
+				WHERE source_key = ${key} AND status = 'pending' AND event_type NOT IN ('join', 'leave')`;
+		});
 	}
 }

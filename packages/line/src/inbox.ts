@@ -1,6 +1,6 @@
 import type { SQL } from "bun";
 import type { Logger } from "pi-roundtable";
-import { errorCode } from "./errors.ts";
+import { errorCode, LineError } from "./errors.ts";
 import type { PgSources } from "./sources.ts";
 
 /** One stored event as the processor sees it. */
@@ -24,11 +24,22 @@ export interface InboxEvent {
  * `code` word is stored, never its message.
  */
 export type InboxResult = undefined | { retryInMs: number };
-export type InboxProcessor = (event: InboxEvent) => Promise<InboxResult>;
+export type InboxProcessor = (
+	event: InboxEvent,
+	/** Aborted when the handler has run `maxHandleMs`; give up whatever it waits on. */
+	signal: AbortSignal,
+) => Promise<InboxResult>;
 
 export interface InboxOptions {
 	/** How long a claimed event may take before another worker may take it; default 2 minutes. */
 	leaseMs: number;
+	/**
+	 * Longest a handler may run, renewals included; default 10 minutes. Past it the processor's signal
+	 * is aborted, the lease is no longer renewed and the event fails with `handler_timeout` (retried
+	 * with backoff, dead after `maxAttempts`), so a handler that never settles cannot hold its chat or
+	 * the shutdown.
+	 */
+	maxHandleMs: number;
 	/** Handings out after which a failing event is dead; default 12. */
 	maxAttempts: number;
 	/** Retries that asked for later (`retryInMs`) before the event is dead; default 720. */
@@ -49,6 +60,7 @@ export interface InboxOptions {
 
 export const INBOX_DEFAULTS: InboxOptions = {
 	leaseMs: 2 * 60_000,
+	maxHandleMs: 10 * 60_000,
 	maxAttempts: 12,
 	maxRequeues: 720,
 	backoffBaseMs: 5_000,
@@ -217,6 +229,15 @@ export class InboxWorker {
 	async #claim(): Promise<Claimed | undefined> {
 		const now = this.#now();
 		return this.#sql.begin(async (tx) => {
+			// A chat the bot left, or one not decided, hands out only its join and leave. What else waits
+			// there (it was backing off when the chat changed) is dropped with its payload, because it
+			// could otherwise surface much later, after a rejoin.
+			await tx`UPDATE line_inbox i
+				SET status = 'skipped', payload = NULL, last_error_code = CASE s.status WHEN 'left' THEN 'source_left' ELSE 'source_pending' END,
+					completed_at = ${now}
+				FROM line_sources s
+				WHERE s.source_key = i.source_key AND s.status IN ('pending', 'left')
+					AND i.status = 'pending' AND i.event_type NOT IN ('join', 'leave')`;
 			// The oldest due event of each chat that has none in hand, and the events that name no chat.
 			const heads: {
 				webhook_event_id: string;
@@ -304,7 +325,7 @@ export class InboxWorker {
 				await this.#sources.markJoined(row.source_key, timestamp);
 			if (row.source_key && row.event_type === "leave")
 				await this.#sources.markLeft(row.source_key, timestamp);
-			const result = await processor({
+			const result = await this.#callProcessor(processor, {
 				id: row.webhook_event_id,
 				type: row.event_type,
 				sourceKey: row.source_key,
@@ -336,6 +357,37 @@ export class InboxWorker {
 			await this.#fail(row, lease, code);
 		} finally {
 			await beat.stop();
+		}
+	}
+
+	/**
+	 * Runs the processor for at most `maxHandleMs`. Past that its signal is aborted and the call
+	 * fails with `handler_timeout` while the handler is left behind: whatever it settles with later
+	 * is ignored, and its writes to the inbox are refused by the claim fence.
+	 */
+	async #callProcessor(
+		processor: InboxProcessor,
+		event: InboxEvent,
+	): Promise<InboxResult> {
+		const controller = new AbortController();
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		const limit = new Promise<never>((_, reject) => {
+			timer = setTimeout(() => {
+				const error = new LineError(
+					"handler_timeout",
+					`line: a handler ran past ${this.options.maxHandleMs} ms`,
+				);
+				controller.abort(error);
+				reject(error);
+			}, this.options.maxHandleMs);
+		});
+		try {
+			return await Promise.race([
+				Promise.resolve().then(() => processor(event, controller.signal)),
+				limit,
+			]);
+		} finally {
+			clearTimeout(timer);
 		}
 	}
 
@@ -407,7 +459,8 @@ export class InboxWorker {
 	 * the message first, then its edits and unsends by LINE's time, each only once the ones before it
 	 * are done or dead (an event backing off is not done). A message that is not in the inbox at all
 	 * may still be on its way, so it is waited for until the grace is over; after that the processor
-	 * decides.
+	 * decides. The wait lasts until the soonest event it waits for is due again, and at least
+	 * `dependencyRetryMs`.
 	 */
 	async #mustWait(row: Claimed): Promise<number | undefined> {
 		if (!DEPENDENT.has(row.event_type) || !row.message_id) return undefined;
@@ -416,8 +469,9 @@ export class InboxWorker {
 			status: string;
 			event_ts: string | number;
 			seq: string | number;
+			next_attempt_at: Date;
 		}[] = await this
-			.#sql`SELECT event_type, status, event_ts, seq FROM line_inbox
+			.#sql`SELECT event_type, status, event_ts, seq, next_attempt_at FROM line_inbox
 			WHERE message_id = ${row.message_id} AND source_key IS NOT DISTINCT FROM ${row.source_key}::text
 				AND webhook_event_id <> ${row.webhook_event_id}
 				AND (event_type = 'message' OR event_type IN ('unsend', 'messageEdited'))`;
@@ -428,8 +482,24 @@ export class InboxWorker {
 			(Number(e.event_ts) === Number(row.event_ts) &&
 				Number(e.seq) < Number(row.seq));
 		const originals = found.filter((e) => e.event_type === "message");
-		if (found.some((e) => open(e) && (e.event_type === "message" || before(e))))
-			return this.options.dependencyRetryMs;
+		const blockers = found.filter(
+			(e) => open(e) && (e.event_type === "message" || before(e)),
+		);
+		if (blockers.length > 0) {
+			// Nothing changes before the soonest blocker is due again, so wait for that instead of polling
+			// an event that is backing off for up to an hour; one being handled is looked at again soon.
+			const now = this.#now().getTime();
+			return Math.min(
+				...blockers.map((e) =>
+					e.status === "pending"
+						? Math.max(
+								this.options.dependencyRetryMs,
+								e.next_attempt_at.getTime() - now,
+							)
+						: this.options.dependencyRetryMs,
+				),
+			);
+		}
 		if (originals.length > 0) return undefined;
 		const age = this.#now().getTime() - row.created_at.getTime();
 		return age < this.options.messageGraceMs
@@ -529,7 +599,7 @@ export class InboxWorker {
 					lastSweep = this.#now().getTime();
 					await this.recoverLeases();
 				}
-				await this.#drain();
+				await this.#fill();
 			} catch (error) {
 				this.#logger.error(
 					{ code: errorCode(error) },
@@ -550,14 +620,13 @@ export class InboxWorker {
 		}
 	}
 
-	/** Handles due events, up to `concurrency` at once, until none is due. */
-	async #drain(): Promise<void> {
-		for (;;) {
-			while (this.#running && this.#inflight.size < this.options.concurrency)
-				if (!(await this.#startOne())) break;
-			if (this.#inflight.size === 0) return;
-			await Promise.race(this.#inflight);
-		}
+	/**
+	 * Hands due events out until every slot of `concurrency` is taken or none is due. The loop comes
+	 * back on a kick, on a poll and whenever a handler ends, so a slow handler holds one slot only.
+	 */
+	async #fill(): Promise<void> {
+		while (this.#running && this.#inflight.size < this.options.concurrency)
+			if (!(await this.#startOne())) break;
 	}
 
 	/** Claims one event and runs it in the background; false when none was due. */
@@ -577,6 +646,8 @@ export class InboxWorker {
 			.finally(() => {
 				this.#active.delete(event.webhook_event_id);
 				this.#inflight.delete(task);
+				// The slot is free: look at the inbox again now instead of at the next poll.
+				this.kick();
 			});
 		this.#inflight.add(task);
 		return true;
