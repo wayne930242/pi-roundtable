@@ -1,4 +1,5 @@
 import type { ExtensionFactory } from "@earendil-works/pi-coding-agent";
+import type { ClientPort } from "./domain/client.ts";
 import { PluginError } from "./errors.ts";
 import type { Principal } from "./identity/principal-store.ts";
 import type { OwnerIdentity } from "./identity.ts";
@@ -105,6 +106,12 @@ export interface SessionContext {
 	 * this method has none, which reads as undefined.
 	 */
 	approvedBy?(toolCallId: string): ApprovedBy | undefined;
+	/**
+	 * What the client that started the running turn can do for its tools, as `TurnRequest.client`
+	 * says; undefined between turns and for a turn whose transport gives none. A context built
+	 * before 0.9.11 has no such method, which reads as undefined.
+	 */
+	client?(): ClientPort | undefined;
 	/** Runs a task beside this session, under its confirmation gate. */
 	runTask(task: TransientTask): Promise<string>;
 }

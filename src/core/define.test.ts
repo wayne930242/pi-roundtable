@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { createCanvas } from "canvas";
 import { Type } from "typebox";
 import {
 	definePlugin,
@@ -7,6 +8,11 @@ import {
 	ToolRefusal,
 	type ToolTurn,
 } from "./define.ts";
+import type {
+	ClientCallOptions,
+	ClientCallResult,
+	ClientPort,
+} from "./domain/client.ts";
 import { PluginError } from "./errors.ts";
 import { messages } from "./i18n/index.ts";
 import type { SessionContext } from "./sessions.ts";
@@ -33,22 +39,30 @@ type Registered = {
 		id: string,
 		params: unknown,
 		signal?: AbortSignal,
-	): Promise<{ content: { text: string }[]; isError?: boolean }>;
+	): Promise<{
+		content: {
+			type: string;
+			text?: string;
+			data?: string;
+			mimeType?: string;
+		}[];
+		isError?: boolean;
+	}>;
 };
 
 /** Registers the tool in a fake Pi session the way the runtime does, and returns what it registered. */
 function register(
 	tool: ReturnType<typeof defineTool>,
 	origin?: string,
-	approvedBy?: SessionContext["approvedBy"],
+	extra: Partial<SessionContext> = {},
 ): Registered {
 	const registered: Registered[] = [];
 	const context = {
 		speaker: () => speaker,
 		...(origin === undefined ? {} : { origin: () => origin }),
-		...(approvedBy ? { approvedBy } : {}),
 		turnChannel: "discord:2",
 		agent: { name: "helper", session: "discord:2", home: "discord:2" },
+		...extra,
 	} as unknown as SessionContext;
 	const factory = tool.session.snapshot().factory(context);
 	factory?.({
@@ -95,6 +109,194 @@ describe("defineTool", () => {
 		});
 		await register(tool).execute("c", { text: "b" });
 		expect(seen).toEqual(["https://chat.example.com", undefined]);
+	});
+
+	test("a tool's run sees the client of the turn's connection, and none when the session has none", async () => {
+		const seen: (ClientPort | undefined)[] = [];
+		const tool = defineTool({
+			...note,
+			run: (_args, turn) => {
+				seen.push(turn.client);
+				return "ok";
+			},
+		});
+		const port: ClientPort = {
+			names: ["page_status"],
+			call: async () => ({ ok: true, value: 1, parts: [] }),
+		};
+		await register(tool, undefined, { client: () => port }).execute("c", {
+			text: "a",
+		});
+		await register(tool).execute("c", { text: "b" });
+		expect(seen[0]?.names).toEqual(["page_status"]);
+		expect(seen[1]).toBeUndefined();
+		expect(seen[1]).not.toHaveProperty("call");
+	});
+
+	test("a client call carries the turn's signal, so stopping the turn cancels the call in flight", async () => {
+		const options: (ClientCallOptions | undefined)[] = [];
+		let settle: (result: ClientCallResult) => void = () => undefined;
+		const port: ClientPort = {
+			names: ["page_status"],
+			call: (_name, _args, opt) => {
+				options.push(opt);
+				return new Promise((resolve) => {
+					settle = resolve;
+					opt?.signal?.addEventListener("abort", () =>
+						resolve({ ok: false, error: "cancelled", message: "stopped" }),
+					);
+				});
+			},
+		};
+		const outcomes: ClientCallResult[] = [];
+		const tool = defineTool({
+			...note,
+			run: async (_args, turn) => {
+				const own = new AbortController();
+				const pending = turn.client?.call(
+					"page_status",
+					{ a: 1 },
+					{ timeoutMs: 5000, signal: own.signal },
+				);
+				const result = await pending;
+				if (result) outcomes.push(result);
+				return "ok";
+			},
+		});
+		const turnStop = new AbortController();
+		const running = register(tool, undefined, { client: () => port }).execute(
+			"c",
+			{ text: "a" },
+			turnStop.signal,
+		);
+		await Bun.sleep(0);
+		expect(options[0]?.timeoutMs).toBe(5000);
+		expect(options[0]?.signal?.aborted).toBe(false);
+		turnStop.abort();
+		await running;
+		expect(options[0]?.signal?.aborted).toBe(true);
+		expect(outcomes).toEqual([
+			{ ok: false, error: "cancelled", message: "stopped" },
+		]);
+		settle({ ok: true, value: null, parts: [] });
+	});
+
+	test("a client call made after the turn was stopped is handed an aborted signal", async () => {
+		const seen: boolean[] = [];
+		const port: ClientPort = {
+			names: ["x"],
+			call: async (_name, _args, opt) => {
+				seen.push(opt?.signal?.aborted === true);
+				return { ok: false, error: "cancelled", message: "stopped" };
+			},
+		};
+		const tool = defineTool({
+			...note,
+			run: async (_args, turn) => {
+				await turn.client?.call("x", {});
+				return "ok";
+			},
+		});
+		const stop = new AbortController();
+		stop.abort();
+		await register(tool, undefined, { client: () => port }).execute(
+			"c",
+			{ text: "a" },
+			stop.signal,
+		);
+		expect(seen).toEqual([true]);
+	});
+
+	test("a tool may return text with images, which the model reads as content parts", async () => {
+		const png = createCanvas(2, 2).toBuffer("image/png");
+		const tool = defineTool({
+			...note,
+			run: () => ({
+				text: "the page",
+				images: [{ mimeType: "image/png", data: png }],
+			}),
+		});
+		const result = await register(tool).execute("c", { text: "a" });
+		expect(result.content).toEqual([
+			{ type: "text", text: "the page" },
+			{ type: "image", mimeType: "image/png", data: png.toString("base64") },
+		]);
+	});
+
+	test("an image over the side limit comes back downscaled as a JPEG", async () => {
+		const canvas = createCanvas(8100, 10);
+		const tool = defineTool({
+			...note,
+			run: () => ({
+				text: "the page",
+				images: [{ mimeType: "image/png", data: canvas.toBuffer("image/png") }],
+			}),
+		});
+		const result = await register(tool).execute("c", { text: "a" });
+		expect(result.isError).toBeUndefined();
+		expect(result.content[1]?.mimeType).toBe("image/jpeg");
+	});
+
+	test("an image of a type the model does not read is a tool error", async () => {
+		const tool = defineTool({
+			...note,
+			run: () => ({
+				text: "the page",
+				images: [
+					{
+						mimeType: "image/svg+xml",
+						data: new TextEncoder().encode("<svg/>"),
+					},
+				],
+			}),
+		});
+		const result = await register(tool).execute("c", { text: "a" });
+		expect(result.isError).toBe(true);
+		expect(result.content[0]?.text).toContain("image 1");
+		expect(result.content[0]?.text).toContain("image/svg+xml");
+	});
+
+	test("bytes that are not the image they claim to be are a tool error", async () => {
+		const tool = defineTool({
+			...note,
+			run: () => ({
+				text: "x",
+				images: [{ mimeType: "image/png", data: new Uint8Array([1, 2, 3]) }],
+			}),
+		});
+		const result = await register(tool).execute("c", { text: "a" });
+		expect(result.isError).toBe(true);
+		expect(result.content[0]?.text).toContain("image 1");
+	});
+
+	test("more images than a turn may carry are a tool error", async () => {
+		const png = createCanvas(2, 2).toBuffer("image/png");
+		const tool = defineTool({
+			...note,
+			run: () => ({
+				text: "x",
+				images: Array.from({ length: 5 }, () => ({
+					mimeType: "image/png",
+					data: png,
+				})),
+			}),
+		});
+		const result = await register(tool).execute("c", { text: "a" });
+		expect(result.isError).toBe(true);
+		expect(result.content[0]?.text).toContain("5 images");
+	});
+
+	test("a tool's attachments list is empty for a session that keeps none", async () => {
+		const listed: unknown[] = [];
+		const tool = defineTool({
+			...note,
+			run: async (_args, turn) => {
+				listed.push(await turn.attachments?.());
+				return "ok";
+			},
+		});
+		await register(tool).execute("c", { text: "a" });
+		expect(listed).toEqual([[]]);
 	});
 
 	test("a ToolRefusal becomes an error result the model reads; any other error fails the call", async () => {
@@ -264,9 +466,9 @@ describe("defineTool", () => {
 			},
 		});
 		const by = { principalId: "p_ada", speakerId: "9", name: "Ada" };
-		const registered = register(tool, undefined, (id) =>
-			id === "held" ? by : undefined,
-		);
+		const registered = register(tool, undefined, {
+			approvedBy: (id) => (id === "held" ? by : undefined),
+		});
 		await registered.execute("held", { text: "x" });
 		await registered.execute("plain", { text: "x" });
 		expect(seen).toEqual([by, undefined]);

@@ -30,6 +30,7 @@ import {
 	commandGuard,
 	ownerRootCommand,
 } from "./core/discord/owner-command.ts";
+import type { ClientPart, ClientPort } from "./core/domain/client.ts";
 import type {
 	PendingConfirmation,
 	ReplyFile,
@@ -264,6 +265,8 @@ export interface TestPluginResult {
 	events: RecordedEvent[];
 	/** Files accepted by successful runTool calls, copied and recorded with their channel. */
 	files: { channel: ChannelKey; file: ReplyFile }[];
+	/** Images returned by successful runTool calls, with their channel. */
+	images: { channel: ChannelKey; image: ClientPart }[];
 	runTool(
 		name: string,
 		args: Record<string, unknown>,
@@ -272,6 +275,8 @@ export interface TestPluginResult {
 			speaker?: Speaker;
 			/** Where the turn's request came from, as `ToolTurn.origin` shows it to the tool. */
 			origin?: string;
+			/** What the party that started the turn can do for the tool, as `ToolTurn.client` shows it. */
+			client?: ClientPort;
 			channel?: ChannelKey;
 			workspace?: SessionContext["workspace"];
 		},
@@ -606,6 +611,7 @@ export async function testPlugin(
 	await runtime?.preflight?.();
 	let stopped = false;
 	const files: { channel: ChannelKey; file: ReplyFile }[] = [];
+	const images: { channel: ChannelKey; image: ClientPart }[] = [];
 	return {
 		contribution,
 		holds: linked.holds,
@@ -617,6 +623,7 @@ export async function testPlugin(
 		tiers,
 		events,
 		files,
+		images,
 		async runTool(name, args, runOptions) {
 			const tool = registry.tools.find((item) => item.name === name);
 			if (!tool) throw new PluginError(`tool ${name} is not registered`);
@@ -626,7 +633,12 @@ export async function testPlugin(
 					params: Record<string, unknown>,
 					signal?: AbortSignal,
 				): Promise<{
-					content: readonly { type: string; text?: string }[];
+					content: readonly {
+						type: string;
+						text?: string;
+						data?: string;
+						mimeType?: string;
+					}[];
 					isError?: boolean;
 				}>;
 			}[] = [];
@@ -643,6 +655,7 @@ export async function testPlugin(
 				attachmentDir: ownerAttachmentDir(attachmentDir, channel),
 				speaker: () => runOptions?.speaker,
 				origin: () => runOptions?.origin,
+				client: () => runOptions?.client,
 				runTask: async () => {
 					throw new Error("test session cannot run tasks");
 				},
@@ -661,9 +674,21 @@ export async function testPlugin(
 				surfaces.of(channel)?.supportsFiles === true,
 				async () => {
 					const output = await execute("test-call", args);
+					for (const item of output.content)
+						if (item.type === "image" && item.data && item.mimeType)
+							images.push({
+								channel,
+								image: {
+									mimeType: item.mimeType,
+									data: new Uint8Array(Buffer.from(item.data, "base64")),
+								},
+							});
 					return {
 						ok: true,
-						text: output.content.map((item) => item.text ?? "").join("\n"),
+						text: output.content
+							.filter((item) => item.type === "text")
+							.map((item) => item.text ?? "")
+							.join("\n"),
 					};
 				},
 			);

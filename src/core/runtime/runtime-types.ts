@@ -4,6 +4,7 @@ import type {
 	ExtensionFactory,
 	ModelRuntime,
 } from "@earendil-works/pi-coding-agent";
+import type { ImageDrawer } from "../contract/providers.ts";
 import type { AgentSessions, LoadedSkill } from "../contract/runtime.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
 import type { InterimTextMode } from "../domain/interim.ts";
@@ -97,6 +98,8 @@ export interface PiAgentRuntimeOptions {
 	interimPrimaryChars?: number;
 	/** How long a new session waits for its MCP tools to register. */
 	mcpConnectTimeoutMs?: number;
+	/** The host's image provider, when one fills the slot; sessions then offer `generate_image`. */
+	images?: ImageDrawer;
 	/** Defaults to true: bridge shared turns refuse raw private exchanges inaccessible to the reader. */
 	memory?: boolean;
 }
@@ -113,6 +116,8 @@ export interface CoreExtensions {
 	readAttachment: ExtensionFactory;
 	/** `attach_file`, for a session with a workspace. */
 	attachFile?: ExtensionFactory;
+	/** `generate_image`, for a host with an image provider. */
+	generateImage?: ExtensionFactory;
 	confirmationGate: ExtensionFactory;
 	askUser: ExtensionFactory;
 	selfCompactGuard: ExtensionFactory;
@@ -143,6 +148,9 @@ export function sessionExtensions(
 		{ name: "read-attachment", factory: core.readAttachment },
 		...(core.attachFile
 			? [{ name: "attach-file", factory: core.attachFile }]
+			: []),
+		...(core.generateImage
+			? [{ name: "generate-image", factory: core.generateImage }]
 			: []),
 		{ name: "confirmation-gate", factory: core.confirmationGate },
 		{ name: "ask-user", factory: core.askUser },

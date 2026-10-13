@@ -1,5 +1,6 @@
 import type { ConversationRecord, Logger } from "pi-roundtable";
 import { type Admitted, Refusal, type WebChat } from "./chat.ts";
+import { ClientPartRefusal } from "./client-calls.ts";
 import { MAX_NOTICES, type PgNotices } from "./notices.ts";
 import { TokenRefused } from "./oidc.ts";
 import type { TicketBook } from "./tickets.ts";
@@ -61,6 +62,7 @@ const STATUS: Record<string, number> = {
 	bad_frame: 400,
 	forbidden: 403,
 	unknown_conversation: 404,
+	unknown_call: 404,
 	unknown_persona: 404,
 	too_many_conversations: 429,
 	unknown_attachment: 400,
@@ -74,7 +76,10 @@ const STATUS: Record<string, number> = {
  * (`?limit=`, its last messages), and `POST conversations/<id>/files?name=<file name>` (the body is
  * the file's bytes, its `Content-Type` the file's type; answers 201 with `{ file, name, contentType,
  * size }`, 413 over the size limit, 415 for a type that is not accepted, 429 over the person's
- * allowance). A browser on another origin gets CORS headers when its origin
+ * allowance), and `PUT conversations/<id>/client-calls/<call>/parts/<n>` (the body is a binary part of
+ * the answer to a call the assistant made to the caller's client, its `Content-Type` an image type;
+ * answers 201, 404 for a call that is not open, 409 for a part sent twice, 413 over the size limit,
+ * 415 for a type that is not an image or bytes that are not the type). A browser on another origin gets CORS headers when its origin
  * is allowed and 403 otherwise.
  */
 export function restHandler(options: RestOptions) {
@@ -159,6 +164,20 @@ export function restHandler(options: RestOptions) {
 			);
 			return json(uploaded, 201, headers);
 		}
+		const part =
+			/^conversations\/([A-Za-z0-9-]{1,128})\/client-calls\/([A-Za-z0-9-]{1,128})\/parts\/(\d{1,3})$/.exec(
+				rest,
+			);
+		if (part?.[1] && part[2] && part[3] && request.method === "PUT") {
+			await chat.clientPart(
+				speaker,
+				part[1],
+				part[2],
+				Number(part[3]),
+				request,
+			);
+			return json({ part: Number(part[3]) }, 201, headers);
+		}
 		return json({ error: "not_found" }, 404, headers);
 	}
 	return async (request: Request): Promise<Response> => {
@@ -169,7 +188,7 @@ export function restHandler(options: RestOptions) {
 				status: 204,
 				headers: {
 					...headers,
-					"Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+					"Access-Control-Allow-Methods": "GET, POST, PUT, OPTIONS",
 					"Access-Control-Allow-Headers": "authorization, content-type",
 					"Access-Control-Max-Age": "600",
 				},
@@ -195,7 +214,7 @@ export function restHandler(options: RestOptions) {
 		try {
 			return await route(request, url, who, headers);
 		} catch (error) {
-			if (error instanceof UploadRefusal)
+			if (error instanceof UploadRefusal || error instanceof ClientPartRefusal)
 				return json({ error: error.code }, error.status, headers);
 			if (!(error instanceof Refusal)) throw error;
 			return json({ error: error.code }, STATUS[error.code] ?? 400, headers);

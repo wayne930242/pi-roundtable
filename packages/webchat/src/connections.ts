@@ -12,6 +12,12 @@ export interface Connection {
 	 * connection's life: it comes from the transport, never from a frame.
 	 */
 	origin?: string;
+	/**
+	 * The functions the client declared with `client_hello` it can run for the assistant's tools;
+	 * undefined until it declares, and then it is a client's: a connection that declares none is
+	 * never asked to run anything.
+	 */
+	clientTools?: readonly string[];
 	socket?: RouteSocket<Connection>;
 	/** Asks for a fresh token, then closes the socket when the token expires. */
 	timers: ReturnType<typeof setTimeout>[];

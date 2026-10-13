@@ -5,6 +5,7 @@ import type {
 	ConversationVisibility,
 } from "../conversations/conversation-registry.ts";
 import type { TurnAttachments } from "../domain/attachment.ts";
+import type { ClientPort } from "../domain/client.ts";
 import type { TurnResult } from "../domain/conversation.ts";
 import type { TurnConversation } from "../domain/ports.ts";
 import type { TurnProgress } from "../domain/progress.ts";
@@ -35,6 +36,11 @@ export interface ConversationTurnInput {
 	 * transport gives none, and never fill it from message text.
 	 */
 	origin?: string;
+	/**
+	 * What the client that started the turn can do for its tools, as the claim's transport knows it;
+	 * tools read it as `ToolTurn.client`. Leave it out for a turn the transport gives none.
+	 */
+	client?: ClientPort;
 	/** Files and images the message carries. */
 	attachments?: TurnAttachments;
 	/** The turn's tools; by default the plugins' `agentSelection`, read at the turn. */
@@ -194,6 +200,7 @@ export function conversationTurns(
 								text: input.text,
 								speaker,
 								...(input.origin === undefined ? {} : { origin: input.origin }),
+								...(input.client === undefined ? {} : { client: input.client }),
 								...(conversation ? { conversation } : {}),
 								...(input.attachments
 									? { attachments: input.attachments }

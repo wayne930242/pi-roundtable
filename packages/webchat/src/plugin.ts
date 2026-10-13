@@ -17,6 +17,7 @@ import {
 	type WebChatLimits,
 	type WebPersona,
 } from "./chat.ts";
+import type { ClientCallLimits } from "./client-calls.ts";
 import type { Connection } from "./connections.ts";
 import { webDirectChannel } from "./direct-channel.ts";
 import { PgNotices } from "./notices.ts";
@@ -59,7 +60,9 @@ export interface WebChatOptions {
 	path?: string;
 	/** The key prefix of the conversations; default `web`. Two web chats on one host need two. */
 	surface?: string;
-	limits?: Partial<WebChatLimits & WebChatRouteLimits>;
+	limits?: Partial<Omit<WebChatLimits & WebChatRouteLimits, "clientCalls">> & {
+		clientCalls?: Partial<ClientCallLimits>;
+	};
 }
 
 const DEFAULT_LIMITS: WebChatLimits & WebChatRouteLimits = {
@@ -70,6 +73,14 @@ const DEFAULT_LIMITS: WebChatLimits & WebChatRouteLimits = {
 	messageChars: 32_000,
 	promptTimeoutMs: 30 * 60_000,
 	reauthLeadMs: 60_000,
+	clientCalls: {
+		timeoutMs: 30_000,
+		maxTimeoutMs: 60_000,
+		maxValueBytes: 48 * 1024,
+		maxParts: 2,
+		maxPartBytes: 2 * 1024 * 1024,
+		perMinute: 60,
+	},
 	attachmentBytes: 10 * 1024 * 1024,
 	attachmentsPerMessage: 8,
 	uploadsPerHour: 60,
@@ -79,7 +90,7 @@ const DEFAULT_LIMITS: WebChatLimits & WebChatRouteLimits = {
 	unsentUploadTtlMs: 24 * 60 * 60_000,
 	maxConnections: 256,
 	maxMessageBytes: 64 * 1024,
-	rate: { messages: 60, perMs: 60_000 },
+	rate: { messages: 120, perMs: 60_000 },
 	maxBufferedBytes: 4 * 1024 * 1024,
 	ticketTtlMs: 30_000,
 };
@@ -145,6 +156,52 @@ function checkAttachmentLimits(limits: WebChatLimits): void {
 		);
 }
 
+/** The most binary parts one answer may declare; see the protocol. */
+const MAX_PARTS = 16;
+/** The most bytes of one binary part, which the chat holds in memory until the call ends. */
+const MAX_PART_BYTES = 16 * 1024 * 1024;
+
+/** Refuses a client-call limit that is not a positive whole number, or one the protocol cannot carry. */
+function checkClientCallLimits(
+	limits: ClientCallLimits,
+	maxMessageBytes: number,
+	rate: { messages: number; perMs: number },
+): void {
+	for (const key of [
+		"timeoutMs",
+		"maxTimeoutMs",
+		"maxValueBytes",
+		"maxParts",
+		"maxPartBytes",
+		"perMinute",
+	] as const)
+		if (!Number.isInteger(limits[key]) || limits[key] < 1)
+			throw new Error(
+				`webChat: limits.clientCalls.${key} must be a positive whole number; got ${String(limits[key])}`,
+			);
+	if (limits.timeoutMs > limits.maxTimeoutMs)
+		throw new Error(
+			`webChat: limits.clientCalls.timeoutMs (${limits.timeoutMs}) may be at most maxTimeoutMs (${limits.maxTimeoutMs})`,
+		);
+	if (limits.maxValueBytes >= maxMessageBytes)
+		throw new Error(
+			`webChat: limits.clientCalls.maxValueBytes (${limits.maxValueBytes}) must be under maxMessageBytes (${maxMessageBytes}), the most a client's answer frame can carry`,
+		);
+	const framesPerMinute = (rate.messages * 60_000) / rate.perMs;
+	if (limits.perMinute >= framesPerMinute)
+		throw new Error(
+			`webChat: limits.clientCalls.perMinute (${limits.perMinute}) must be under the frame rate of ${framesPerMinute} a minute (limits.rate), since each answer to a call is a frame the socket counts; a busy client would be disconnected. Lower perMinute or raise rate.messages`,
+		);
+	if (limits.maxParts > MAX_PARTS)
+		throw new Error(
+			`webChat: limits.clientCalls.maxParts may be at most ${MAX_PARTS}; got ${limits.maxParts}`,
+		);
+	if (limits.maxPartBytes > MAX_PART_BYTES)
+		throw new Error(
+			`webChat: limits.clientCalls.maxPartBytes may be at most ${MAX_PART_BYTES} (16 MiB); got ${limits.maxPartBytes}`,
+		);
+}
+
 /** The subprotocols a WebSocket upgrade offers. */
 function offered(request: Request): string[] {
 	return (request.headers.get("sec-websocket-protocol") ?? "")
@@ -164,10 +221,22 @@ function offered(request: Request): string[] {
  */
 export function webChat(options: WebChatOptions): RoundtablePlugin {
 	const { path, surface } = checkOptions(options);
-	const limits = { ...DEFAULT_LIMITS, ...options.limits };
+	const limits = {
+		...DEFAULT_LIMITS,
+		...options.limits,
+		clientCalls: {
+			...DEFAULT_LIMITS.clientCalls,
+			...options.limits?.clientCalls,
+		},
+	};
 	// The personas are checked now, so a broken list stops the configuration rather than the boot.
 	checkPersonas(options.personas);
 	checkAttachmentLimits(limits);
+	checkClientCallLimits(
+		limits.clientCalls,
+		limits.maxMessageBytes,
+		limits.rate,
+	);
 	return definePlugin({
 		name: surface === "web" ? "webchat" : `webchat-${surface}`,
 		requires: [IDENTITY, CONVERSATIONS, RUNTIME],

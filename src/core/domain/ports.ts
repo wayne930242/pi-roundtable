@@ -1,6 +1,7 @@
 import type { AgentTurnScope, TurnSelection } from "../sessions.ts";
 import type { Speaker } from "../speakers.ts";
 import type { TurnAttachments } from "./attachment.ts";
+import type { ClientPort } from "./client.ts";
 import type { ChannelKey } from "./conversation.ts";
 import type { InterimPosts } from "./interim.ts";
 import type { TurnProgress } from "./progress.ts";
@@ -40,6 +41,12 @@ export interface TurnRequest {
 	 * as `ToolTurn.origin`.
 	 */
 	origin?: string;
+	/**
+	 * What the client that started the turn can do for its tools, such as run a function in a
+	 * browser; a tool reads it as `ToolTurn.client`. A channel whose transport has no such client
+	 * leaves it out. Only a channel's transport provides one, never the message text or the model.
+	 */
+	client?: ClientPort;
 	/**
 	 * Who the conversation belongs to, as the host records it: `private` to one principal, or
 	 * `shared` by whoever its claim admits, which it is taken to be when absent. A private

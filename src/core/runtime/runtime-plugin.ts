@@ -168,6 +168,9 @@ export function runtimePlugin(
 						}),
 						confirmations: heldActions,
 						toolTiers: context.toolTiers,
+						...(providers.filled.has("images")
+							? { images: providers.images }
+							: {}),
 						stopping: () => context.queue.closed,
 						get agents() {
 							return agents();

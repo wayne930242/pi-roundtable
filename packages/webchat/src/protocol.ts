@@ -79,6 +79,43 @@ export type PromptOutcome =
 	| "expired"
 	| "cancelled";
 
+/** The most functions a client may declare. */
+export const MAX_CLIENT_TOOLS = 64;
+/** The longest function name a client may declare. */
+const CLIENT_TOOL_CHARS = 64;
+/** A function name: lowercase words joined by underscores, as a tool's name is. */
+const CLIENT_TOOL_NAME = /^[a-z][a-z0-9]*(_[a-z0-9]+)*$/;
+/** The most binary parts one answer may declare, whatever the server's own limit is. */
+const MAX_FRAME_PARTS = 16;
+/** The longest failure message accepted from a client, in characters. */
+const CLIENT_MESSAGE_CHARS = 2000;
+
+/** Why a client says a call failed; the server maps each to a `ClientCallError`. */
+export const CLIENT_FAILURES = [
+	"refused",
+	"failed",
+	"timeout",
+	"stopped",
+] as const;
+export type ClientFailure = (typeof CLIENT_FAILURES)[number];
+
+/** Why the server cancels a call it sent. */
+export type ClientCancelReason = "turn_stopped" | "timeout" | "turn_ended";
+
+/** What the server tells a client about the calls it may be asked to run. */
+export interface ClientCallsAdvertised {
+	/** How long a call waits for an answer unless it names a time, in milliseconds. */
+	timeoutMs: number;
+	/** The longest a call waits, in milliseconds. */
+	maxTimeoutMs: number;
+	/** The most bytes (UTF-8, as JSON) an answer's `value` may take. */
+	maxValueBytes: number;
+	/** The most binary parts one answer may carry. */
+	maxParts: number;
+	/** The most bytes of one part. */
+	maxPartBytes: number;
+}
+
 /** Why the server refused a frame or a request. */
 export type ErrorCode =
 	| "bad_frame"
@@ -88,6 +125,8 @@ export type ErrorCode =
 	| "unknown_prompt"
 	| "too_many_conversations"
 	| "busy"
+	/** A `client_result` named a call that is not open on this connection. */
+	| "unknown_call"
 	/** A `send` named a file that is not waiting for this person in this conversation; the whole message is refused. */
 	| "unknown_attachment"
 	/** A `send` would take the person past `usedAttachmentBytesPerPrincipal`; the whole message is refused and its files stay waiting. */
@@ -118,7 +157,32 @@ export type ClientFrame =
 	/** Approves or declines an approval prompt. */
 	| { type: "approval"; prompt: string; approved: boolean }
 	/** Answers a question prompt: the chosen options' labels and, where allowed, their own text. */
-	| { type: "answer"; prompt: string; choices: string[]; text?: string };
+	| { type: "answer"; prompt: string; choices: string[]; text?: string }
+	/**
+	 * Declares the functions this connection can run for the assistant's tools, such as reading the
+	 * page the person has open. Send it after each `ready`. A connection that declares none is never
+	 * asked to run anything, and its turns carry no client.
+	 */
+	| { type: "client_hello"; version: 1; tools: string[] }
+	/**
+	 * The answer to a `client_call`, sent on the connection the call arrived on. Binary parts are
+	 * uploaded first (`PUT <path>/conversations/<id>/client-calls/<call>/parts/<n>`), and `parts`
+	 * says how many; a failure names why, and `message` is shown to the assistant as data.
+	 */
+	| {
+			type: "client_result";
+			call: string;
+			ok: true;
+			value: unknown;
+			parts?: number;
+	  }
+	| {
+			type: "client_result";
+			call: string;
+			ok: false;
+			code: ClientFailure;
+			message?: string;
+	  };
 
 /** What the server sends: one JSON object per WebSocket text message. */
 export type ServerFrame =
@@ -140,6 +204,11 @@ export type ServerFrame =
 			};
 			/** When the token expires, as an ISO time. */
 			expiresAt: string;
+			/**
+			 * What a call to this client may take. Absent from a server before 0.9.11, which never sends
+			 * `client_call`: show no feature that needs the page's help then.
+			 */
+			clientCalls?: ClientCallsAdvertised;
 	  }
 	/** The message `id` was taken into `conversation`, a new one when the client named none. */
 	| { type: "accepted"; id: string; conversation: string }
@@ -171,7 +240,21 @@ export type ServerFrame =
 	| { type: "notice"; notice: Notice }
 	/** The token expires soon: send `auth` with a fresh one before `expiresAt`, or the server closes with 4401. */
 	| { type: "reauth"; expiresAt: string }
-	/** A frame was refused; `ref` is the `send` id or prompt id it was about. */
+	/**
+	 * The assistant asks this connection, and no other, to run a function it declared and answer
+	 * with `client_result` within `timeoutMs`. One call is open on a connection at a time.
+	 */
+	| {
+			type: "client_call";
+			conversation: string;
+			call: string;
+			name: string;
+			args: unknown;
+			timeoutMs: number;
+	  }
+	/** The call is no longer wanted: stop running it; any answer is dropped. */
+	| { type: "client_cancel"; call: string; reason: ClientCancelReason }
+	/** A frame was refused; `ref` is the `send` id, prompt id or call id it was about. */
 	| { type: "error"; code: ErrorCode; ref?: string };
 
 /** The longest client reference, conversation id, or prompt id accepted. */
@@ -259,7 +342,66 @@ export function parseClientFrame(
 				...(text === undefined ? {} : { text }),
 			};
 		}
+		case "client_hello":
+			return parseHello(value);
+		case "client_result":
+			return parseResult(value);
 		default:
 			return undefined;
 	}
+}
+
+function parseHello(value: Record<string, unknown>): ClientFrame | undefined {
+	const { version, tools } = value;
+	if (version !== 1 || !Array.isArray(tools)) return undefined;
+	if (tools.length > MAX_CLIENT_TOOLS) return undefined;
+	for (const tool of tools)
+		if (
+			typeof tool !== "string" ||
+			tool.length > CLIENT_TOOL_CHARS ||
+			!CLIENT_TOOL_NAME.test(tool)
+		)
+			return undefined;
+	return {
+		type: "client_hello",
+		version: 1,
+		tools: [...new Set(tools as string[])],
+	};
+}
+
+function parseResult(value: Record<string, unknown>): ClientFrame | undefined {
+	const { call, ok, message } = value;
+	if (!isId(call) || typeof ok !== "boolean") return undefined;
+	if (ok) {
+		const { parts } = value;
+		if (
+			parts !== undefined &&
+			(typeof parts !== "number" ||
+				!Number.isInteger(parts) ||
+				parts < 0 ||
+				parts > MAX_FRAME_PARTS)
+		)
+			return undefined;
+		return {
+			type: "client_result",
+			call,
+			ok: true,
+			value: value.value === undefined ? null : value.value,
+			...(parts === undefined ? {} : { parts }),
+		};
+	}
+	const { code } = value;
+	if (!CLIENT_FAILURES.includes(code as ClientFailure)) return undefined;
+	if (
+		message !== undefined &&
+		(typeof message !== "string" || message.length > CLIENT_MESSAGE_CHARS)
+	)
+		return undefined;
+	return {
+		type: "client_result",
+		call,
+		ok: false,
+		code: code as ClientFailure,
+		...(message === undefined ? {} : { message }),
+	};
 }

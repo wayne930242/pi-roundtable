@@ -1,5 +1,6 @@
+import { stat } from "node:fs/promises";
 import { join } from "node:path";
-import { RECORDS } from "./attachment-dir.ts";
+import { listDir, RECORDS } from "./attachment-dir.ts";
 import { expiredMessage, wasExpired } from "./attachment-expiry.ts";
 import { isAttachmentName, plainText } from "./attachment-name.ts";
 
@@ -13,6 +14,18 @@ export interface ToolAttachment {
 	size: number;
 	/** The file's whole content. */
 	bytes(): Promise<Uint8Array>;
+}
+
+/** A file someone attached to the conversation, as a tool lists it. */
+export interface ToolAttachmentInfo {
+	/** The file name inside the conversation's attachment store; what `## Attachments` lists. */
+	file: string;
+	/** The name the person gave it, when the core recorded one; else the file name. */
+	name: string;
+	contentType: string;
+	size: number;
+	/** When the file was saved, as an ISO time. */
+	addedAt: string;
 }
 
 /** A name that is no attachment of the conversation, or a file that is not there. */
@@ -71,4 +84,33 @@ export async function openAttachment(
 			}
 		},
 	};
+}
+
+/**
+ * The files of a conversation's attachment store that a tool may open, the newest first. Only
+ * names an attachment can have are listed: no hidden entry, no directory. A directory that is not
+ * there lists nothing.
+ */
+export async function listAttachments(
+	dir: string,
+): Promise<ToolAttachmentInfo[]> {
+	const listed: ToolAttachmentInfo[] = [];
+	for (const file of await listDir(dir)) {
+		if (!isAttachmentName(file)) continue;
+		const info = await stat(join(dir, file)).catch(() => undefined);
+		if (!info?.isFile()) continue;
+		const opened = await openAttachment(dir, file).catch(() => undefined);
+		if (!opened) continue;
+		listed.push({
+			file,
+			name: opened.name,
+			contentType: opened.contentType,
+			size: opened.size,
+			addedAt: info.mtime.toISOString(),
+		});
+	}
+	return listed.sort(
+		(a, b) =>
+			b.addedAt.localeCompare(a.addedAt) || a.file.localeCompare(b.file),
+	);
 }

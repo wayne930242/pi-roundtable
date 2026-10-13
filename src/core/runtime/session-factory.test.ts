@@ -27,6 +27,7 @@ function factory(personas: Record<string, string>): SessionFactory {
 	return new SessionFactory(options, {
 		speaker: () => undefined,
 		origin: () => undefined,
+		client: () => undefined,
 		withholdsMemory: () => false,
 		runTask: async () => "",
 	});
@@ -76,6 +77,7 @@ describe("the tools of a selection", () => {
 		const tools = new SessionFactory(options, {
 			speaker: () => undefined,
 			origin: () => undefined,
+			client: () => undefined,
 			withholdsMemory: () => false,
 			runTask: async () => "",
 		}).toolsFor({
@@ -104,6 +106,7 @@ describe("the tools of a task and of startup, by their names before 0.9 too", ()
 			{
 				speaker: () => undefined,
 				origin: () => undefined,
+				client: () => undefined,
 				withholdsMemory: () => false,
 				runTask: async () => "",
 			},

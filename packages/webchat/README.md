@@ -203,12 +203,14 @@ The TypeScript types are `ClientFrame` and `ServerFrame`.
 | `{ type: "approval", prompt, approved }` | Approves or declines an approval prompt. |
 | `{ type: "answer", prompt, choices, text? }` | Answers a question prompt: the chosen options' labels, and your own text where the question allows it. |
 | `{ type: "auth", token }` | A fresh token for the same person, sent after `reauth`. |
+| `{ type: "client_hello", version: 1, tools }` | Declares the functions this connection can run for the assistant's tools, such as reading the page the person has open: up to 64 names, each lowercase words joined by underscores. Send it after each `ready`. See [Client calls](#client-calls). |
+| `{ type: "client_result", call, ok: true, value, parts? }` or `{ type: "client_result", call, ok: false, code, message? }` | The answer to a `client_call`: the JSON `value` and how many binary `parts` were uploaded first, or a failure `code` (`refused`, `failed`, `timeout`, or `stopped`) with a short `message`. |
 
 ### Server frames
 
 | Frame | Meaning |
 |---|---|
-| `{ type: "ready", protocol, speaker, personas, attachments, expiresAt }` | Sent first, and again after a fresh token: who you are (`{ id, name, tier, principalId }`), the personas you may open (`{ kind, label }`), what an upload may be (`attachments`: `{ maxBytes, perMessage, types }`), and when the token expires. Open prompts follow it. |
+| `{ type: "ready", protocol, speaker, personas, attachments, clientCalls, expiresAt }` | Sent first, and again after a fresh token: who you are (`{ id, name, tier, principalId }`), the personas you may open (`{ kind, label }`), what an upload may be (`attachments`: `{ maxBytes, perMessage, types }`), what a client call may take (`clientCalls`, below; absent from a server before 0.9.11, which never sends calls), and when the token expires. Open prompts follow it. |
 | `{ type: "accepted", id, conversation }` | Your message `id` was taken into `conversation`, a new one when you named none. |
 | `{ type: "typing", conversation, on }` | The assistant is, or is no longer, working in the conversation. |
 | `{ type: "stoppable", conversation, on }` | A stop applies, or no longer applies. |
@@ -219,7 +221,9 @@ The TypeScript types are `ClientFrame` and `ServerFrame`.
 | `{ type: "prompt_closed", conversation, prompt, outcome }` | The prompt closed: `approved`, `declined`, `answered`, `expired`, or `cancelled` (the turn stopped). |
 | `{ type: "notice", notice: { id, text, createdAt, readAt } }` | A durable private inbox entry; `readAt` is `null` until read. Fetch the REST inbox to recover entries missed while offline. |
 | `{ type: "reauth", expiresAt }` | Your token expires soon: send `auth` with a fresh one. |
-| `{ type: "error", code, ref? }` | A frame was refused. `ref` is the `send` id or prompt id it was about. |
+| `{ type: "client_call", conversation, call, name, args, timeoutMs }` | The assistant asks this connection, and no other, to run the function `name` it declared and to answer with `client_result` within `timeoutMs`. See [Client calls](#client-calls). |
+| `{ type: "client_cancel", call, reason }` | The call is no longer wanted (`turn_stopped`, `timeout`, or `turn_ended`): stop running it; an answer is dropped. |
+| `{ type: "error", code, ref? }` | A frame was refused. `ref` is the `send` id, prompt id or call id it was about. |
 
 An approval prompt's `message` is the card as markdown, as it always was, and its long input values are cut there (each marked with its length). `approval`, when present, is the same approval as data, so a client need not read it back out of the markdown:
 
@@ -237,7 +241,7 @@ approval?: {
 
 The frame's size is bounded: when `approval` serialized as UTF-8 JSON would pass 256 KiB (`APPROVAL_MAX_BYTES` in `protocol.ts`), every string value of `input` longer than what fits is cut to its start plus `… [N chars]` (N counts code points; a cut never splits a surrogate pair) and `approval.truncated` is `true`. Then `input` is no longer whole: show `message`, or tell the person it is cut. If even the shortest cut cannot fit, `input` is `{}` and `files` are left out.
 
-Error codes: `bad_frame` (it does not parse, its text is blank or too long, or an answer the question does not allow), `unknown_conversation`, `forbidden` (someone else's conversation or prompt, or an approval above your tier), `unknown_persona` (none of that kind you may open), `unknown_prompt`, `too_many_conversations` (you hold `unusedConversationsPerPrincipal` conversations you have not written in, or opened `newConversationsPerHour` in the last hour), `unknown_attachment` (a `send` named a file that is not waiting for you in that conversation: never uploaded, uploaded to another conversation, already used by a message, or deleted after its time; the whole message is refused and nothing is run), `attachment_quota` (the files would take what your messages keep past `usedAttachmentBytesPerPrincipal`; the whole message is refused and the files stay waiting), and `busy` (you have `turnsPerPrincipal` turns running or queued, or the conversation already has a turn queued behind its running one; the message was not taken, so send it again once a turn ends).
+Error codes: `bad_frame` (it does not parse, its text is blank or too long, or an answer the question does not allow), `unknown_conversation`, `forbidden` (someone else's conversation or prompt, or an approval above your tier), `unknown_persona` (none of that kind you may open), `unknown_prompt`, `too_many_conversations` (you hold `unusedConversationsPerPrincipal` conversations you have not written in, or opened `newConversationsPerHour` in the last hour), `unknown_attachment` (a `send` named a file that is not waiting for you in that conversation: never uploaded, uploaded to another conversation, already used by a message, or deleted after its time; the whole message is refused and nothing is run), `attachment_quota` (the files would take what your messages keep past `usedAttachmentBytesPerPrincipal`; the whole message is refused and the files stay waiting), `unknown_call` (a `client_result` named a call that is not open on this connection: it ended, was answered already, or was sent to another connection), and `busy` (you have `turnsPerPrincipal` turns running or queued, or the conversation already has a turn queued behind its running one; the message was not taken, so send it again once a turn ends).
 
 Close codes: `4401` when the token expired without a fresh `auth`, or a fresh one was refused; `4403` when the person is no longer admitted, or a fresh token names someone else.
 The host's own limits close with `1008` (too many frames), `1009` (a frame too big), and `1006` (a client that stopped reading).
@@ -253,6 +257,7 @@ A request from a browser origin not in `origins` gets 403; an allowed origin get
 | `GET <path>/conversations` | `{ conversations: [{ conversation, persona, title?, createdAt, lastActiveAt }] }`: your own, the most recently active first. |
 | `POST <path>/conversations` with `{ persona, title? }` | 201 `{ conversation, persona }`: a new conversation to write in. 429 `too_many_conversations` past either conversation limit. |
 | `POST <path>/conversations/<conversation>/files?name=<file name>` with the file's bytes as the body and its type as `Content-Type` | 201 `{ file, name, contentType, size }`: the file waits for your next message that names `file`. 400 `bad_request` (no name, or a name over 255 characters), 403 (not your conversation), 404 (unknown conversation), 413 `payload_too_large`, 415 `unsupported_media_type`, 429 `too_many_uploads`. See [Attachments](#attachments). |
+| `PUT <path>/conversations/<conversation>/client-calls/<call>/parts/<n>` with the part's bytes as the body and an image type as `Content-Type` | 201 `{ part: n }`: part `n` (0-based) of the answer to an open [client call](#client-calls). 400 `bad_request` (`n` is not below `maxParts`), 403 (not your conversation), 404 `unknown_call` (not open, not yours, or not in that conversation), 409 `duplicate_part`, 413 `payload_too_large`, 415 `unsupported_media_type` (not `image/jpeg`, `image/png` or `image/webp`, or bytes that are not the type). |
 | `GET <path>/conversations/<conversation>/messages?limit=50` | `{ messages: [{ role, text }] }`: its last messages, at most 500. Someone else's conversation is 403. |
 | `GET <path>/notices?limit=50&before=<id>` | `{ notices: [{ id, text, createdAt, readAt }] }`: only your principal's entries on this surface, newest first, at most 100. Omit `before` for the first page; use its last id to fetch the next. |
 | `POST <path>/notices/<id>/read` | `{ notice }` with `readAt` set. Idempotent; unknown ids or another principal's notice return 404. |
@@ -309,6 +314,24 @@ This needs a pi-roundtable release that has `attachments.retention`; on an earli
 Uploads are as private as the transcript: files sit in the host's data directory under the private conversation, where the owner and the operator can read them, as they can the transcript.
 Only the person who uploaded a file can use it, and only in the conversation it was uploaded to; a shared conversation (one recorded for no one in particular) takes no uploads.
 
+## Client calls
+
+A tool may need something only the person's own client can do, such as a browser extension reading the page they have open.
+A client that can says so, and the assistant's tools then call it:
+
+1. After `ready`, the client sends `client_hello` with the names of the functions it can run (`ready.clientCalls` says the server supports calls; a server before 0.9.11 omits it, so show no such feature then). A connection that declares none is never asked anything, and its turns carry no client: `turn.client` is undefined for a tool, which should fail closed.
+2. A message sent on that connection starts a turn whose tools read `turn.client` (`ClientPort`: `names` and `call(name, args, { timeoutMs?, maxValueBytes? })`). A call becomes a `client_call` frame **on the connection that sent the message, and on no other connection of the person**; an old client that never sent `client_hello` is unaffected.
+3. The client runs the function and answers with `client_result` on the same connection. A binary result, such as a screenshot, does not fit a frame: it `PUT`s each part to `<path>/conversations/<conversation>/client-calls/<call>/parts/<n>` first (see the [REST API](#rest-api)), then names the count in `parts`.
+4. The tool gets `{ ok: true, value, parts }`, or `{ ok: false, error }`: `refused` or `failed` as the client reported, `timeout` (no answer in time; the client gets `client_cancel`), `cancelled` (the turn was stopped, or the client reported `stopped`; the client gets `client_cancel`), `disconnected` (the connection closed first), `too_large` (the `value` passed `maxValueBytes`), `busy` (a call is already open on this connection, or the connection was asked `perMinute` calls in the last minute), `no_client`, or `failed` for a bad argument or a part that did not arrive.
+
+This is the opposite of an approval card: a card goes to every connection of the person and survives a reconnect, a call goes to one connection, ends when it closes, and is never sent again after a reconnect. Only the connection a call was sent to may answer it, and only as the same person; an answer from another connection, even the same person's, gets `error` `unknown_call`. A part is accepted for an open call of that person and conversation, whose id only the right connection received.
+The `value`, the parts and the `message` come from the client, so the tool treats them as untrusted data; the server accepts only JSON of at most `maxValueBytes`, images of the three types whose bytes match, and a message cut to one plain line of 300 characters.
+Stopping the conversation, or the turn ending, cancels the call in flight.
+
+Client calls need pi-roundtable 0.9.11 or later: the source of this package uses types that release adds, so type-check both together and upgrade them together.
+
+`ready.clientCalls` is `{ timeoutMs, maxTimeoutMs, maxValueBytes, maxParts, maxPartBytes }`; `limits.clientCalls` sets them and `perMinute` (below).
+
 ## Security model
 
 - **Private conversations.** A conversation belongs to the person who opened it.
@@ -327,6 +350,7 @@ Only the person who uploaded a file can use it, and only in the conversation it 
 - **Uploads.** Only a conversation's own person may upload to it, a file waits for that person and conversation alone, and a message names it by an id nobody can guess.
   Type, size, rate and the waiting total are limited per person, and the bytes of an image or PDF are checked against the type.
   See [Attachments](#attachments).
+- **Client calls.** A call goes only to the connection that started the turn and is answered only by that same connection and person, so another tab, another device, or another person cannot answer it or add a part. Each connection has one call open at a time and `perMinute` calls a minute; an answer is bounded in bytes and a part's bytes are checked against its image type. A connection that declared nothing is never asked.
 - **Approvals.** A held call's card goes to the conversation's person only, and needs the tier the call needs.
   A card whose tier the person lacks is never shown: its prompt resolves `unavailable` (no frame is sent), without owner escalation.
 - **Owner.** Nobody becomes the owner through a token's claims; grant owner in core configuration or the principal CLI.
@@ -345,7 +369,13 @@ Only the person who uploaded a file can use it, and only in the conversation it 
 | `reauthLeadMs` | `reauth` 60 seconds before the token expires |
 | `maxConnections` | 256 sockets on the route |
 | `maxMessageBytes` | 64 KiB per client frame |
-| `rate` | 60 frames a minute per socket |
+| `rate` | 120 frames a minute per socket |
+| `clientCalls.timeoutMs` | 30 seconds a [client call](#client-calls) waits for its answer unless the tool names a time |
+| `clientCalls.maxTimeoutMs` | 60 seconds, the longest any call waits |
+| `clientCalls.maxValueBytes` | 48 KiB of JSON in an answer's `value`, under `maxMessageBytes` |
+| `clientCalls.maxParts` | 2 binary parts per answer (at most 16) |
+| `clientCalls.maxPartBytes` | 2 MiB per part (at most 16 MiB) |
+| `clientCalls.perMinute` | 60 calls a minute per connection; it must be under the `rate` frame rate, since each answer is a frame |
 | `maxBufferedBytes` | 4 MiB waiting for a slow client |
 | `ticketTtlMs` | 30 seconds |
 | `attachmentBytes` | 10 MiB per uploaded file; never above the core's 25 MiB |

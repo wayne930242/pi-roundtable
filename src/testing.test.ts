@@ -309,6 +309,62 @@ test("runTool runs in the channel and for the speaker it is given, test:1 by def
 	await harness.stop();
 });
 
+/** A real 1x1 image: the core checks the pictures a tool returns. */
+const PNG = Uint8Array.from(
+	Buffer.from(
+		"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+		"base64",
+	),
+);
+
+test("runTool gives the tool the client it is given, none by default, and keeps the images a tool returns", async () => {
+	const probe = defineTool({
+		name: "client_probe",
+		description: "Asks the client for the page status",
+		parameters: Type.Object({}),
+		minTier: "member",
+		run: async (_args, turn) => {
+			if (!turn.client) return "no client";
+			const result = await turn.client.call("page_status", { a: 1 });
+			return result.ok
+				? { text: `got ${JSON.stringify(result.value)}`, images: result.parts }
+				: `failed ${result.error}`;
+		},
+	});
+	const harness = await testPlugin(
+		definePlugin({ name: "client-probe", setup: () => ({ tools: [probe] }) }),
+	);
+	expect(await harness.runTool("client_probe", {})).toBe("no client");
+	const calls: unknown[] = [];
+	expect(
+		await harness.runTool(
+			"client_probe",
+			{},
+			{
+				client: {
+					names: ["page_status"],
+					call: async (name, args) => {
+						calls.push([name, args]);
+						return {
+							ok: true,
+							value: { url: "u" },
+							parts: [{ mimeType: "image/png", data: PNG }],
+						};
+					},
+				},
+			},
+		),
+	).toBe('got {"url":"u"}');
+	expect(calls).toEqual([["page_status", { a: 1 }]]);
+	expect(harness.images).toEqual([
+		{
+			channel: "test:1",
+			image: { mimeType: "image/png", data: PNG },
+		},
+	]);
+	await harness.stop();
+});
+
 function probeServices(read: (services: Services) => unknown) {
 	return definePlugin({
 		name: "probe",

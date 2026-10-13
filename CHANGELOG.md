@@ -24,6 +24,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `ConfirmationGate.beginTurn` accepts the speaker's `name` (optional), which names the approver of calls their message confirmed. The gate's internals moved to `held-calls.ts` and `confirmation-gate-extension.ts`; `canonicalJson`, `confirmedTurnText`, `unexpired`, `CONFIRMATION_TTL_MS` and `confirmationGateExtension` are still exported from `confirmation-gate.ts`.
 - **Before downgrading** to a version without approver sets, clear the pending held calls that carry `approverIds` (approve, refuse or let them expire): an older version ignores the names and lets the speaker and the owners approve them.
 - Additive: nothing changes for a tool, rule, surface or stored row that does not use approvers. Rows written by a version that does not know `approverIds` name nobody, which leaves the speaker as the approver, and a version that does not know it ignores the names when it reads such a row and drops them when it saves it back, so the speaker and the owners approve it, as for any held call.
+## [0.9.12] - 2026-10-11
+
+### Added
+
+- `generate_image({ prompt, reference_paths? })`: a core session tool, offered to agent and owner sessions only when a plugin fills the `images` provider, that draws a new picture from a description, saves it under `<scratch dir or workspace>/drawings/`, attaches it to the reply, and names the saved path. Up to 4 reference images (PNG, JPEG, WebP or GIF by content, 20 MiB each, 40 MiB together) resolve inside the workspace or the scratch dir like `attach_file` paths. A provider error is a tool error with its message. Owner-only by default; the agents' prompt names it only when offered.
+- `ImageDrawer` takes an optional third argument `{ signal? }`, the asking turn's abort signal; an existing two-argument drawer still fits.
+
+## [0.9.11] - 2026-10-11
+
+### Added
+
+- `ToolTurn.client`, `TurnRequest.client`, `ConversationTurnInput.client` and `SessionContext.client()`: what the client that started a turn can do for its tools, as a `ClientPort` (`names`, and `call(name, args, options?)` with `ClientCallOptions`: `{ timeoutMs?, maxValueBytes?, signal? }`). A transport that carries a client able to run functions for a tool, such as the browser extension of a web chat, provides one with `context.turns.run({ ..., client })`; the runtime keeps it with the turn and clears it when the turn ends. `call` never rejects for a transport problem: it resolves `ClientCallResult`, `{ ok: true, value, parts }` with `ClientPart`s (`{ mimeType, data }`, such as a screenshot) or `{ ok: false, error, message }` where `error` is a `ClientCallError`: `no_client`, `refused`, `timeout`, `cancelled`, `disconnected`, `too_large`, `busy` or `failed`. One call is open on a client at a time. The core adds the turn's signal to every call, so stopping the turn cancels a call in flight. A turn whose transport gives none (Discord, a schedule, an agent's turn, the CLI) leaves it undefined, and `SessionContext.client` is optional on the type so a context built before this still type-checks.
+- `ToolOutput` (`string | { text, images? }`): a tool's `run` may return text with images, which reach the model as image parts of the tool result. Each image goes through the same checks as a user's attachment (png, jpeg, gif or webp, size and pixel limits, at most 4, a large one downscaled); one that fails is the tool's error result, not a provider rejection.
+- `ToolTurn.attachments?()` (optional, so a `ToolTurn` built by hand still type-checks; the turns the core builds always have it; `ToolAttachmentInfo`: `{ file, name, contentType, size, addedAt }`): the files someone attached to the conversation, the newest first, only the names `ToolTurn.attachment()` opens; a session without an attachment store lists none.
+- `testPlugin().runTool` takes `client` in its options (a `ClientPort` the test fakes), and `testPlugin().images` records the images a successful `runTool` returned.
 
 ## [0.9.10] - 2026-10-10
 

@@ -56,10 +56,14 @@ export interface ReferenceImage {
 	mimeType: string;
 }
 
-/** Draws one image from a prompt and reference images; returns PNG or other decodable bytes. */
+/**
+ * Draws one image from a prompt and reference images; returns PNG or other decodable bytes.
+ * `options.signal`, when given, aborts with the turn that asked; a drawer may ignore it.
+ */
 export type ImageDrawer = (
 	prompt: string,
 	references: readonly ReferenceImage[],
+	options?: { signal?: AbortSignal },
 ) => Promise<Uint8Array>;
 
 /** The replaceable parts the core runs on; a plugin provides at most the ones it replaces. */

@@ -606,16 +606,28 @@ The host logs counts only (`files`, `bytes`, `unattributedBytes`), never a file 
 ### `tools`: what agents can call
 
 `defineTool` takes a name (lowercase words joined by underscores), a description the model reads to decide when to call it, a Typebox parameter schema, the lowest tier that may call it, and the function.
-`run` receives the arguments, already typed, and the turn: the speaker, the channel, the agent, an abort signal, `workspace`, `attachFile`, and `attachment`.
+`run` receives the arguments, already typed, and the turn: the speaker, the channel, the agent, an abort signal, `workspace`, `attachFile`, `attachment`, `attachments`, `origin`, and `client`.
 `turn.workspace` is `{ workspace, scratchDir? }` in a session with a shared workspace (an agent's), the same roots as `SessionContext.workspace`, and undefined elsewhere: a tool that makes a file can save it there, under the scratch dir when there is one, and name its path, so the model sends it on with `attach_file` or a `discord_send_message` file `path` instead of carrying its bytes.
-It returns the text the model reads.
+It returns the text the model reads, or `{ text, images? }` (`ToolOutput`) to show the model images beside it: each image is `{ mimeType, data: Uint8Array }` and reaches the model as an image part of the tool result.
 `turn.origin` is where the turn's request came from, as the transport that carried it reported it, and undefined when the channel gives none: the web chat sets it to the browser origin its connection opened with (`https://chat.example.com`, `chrome-extension://<id>`), a Discord message, a schedule or an agent's turn leave it undefined.
 Only a channel's transport sets it, never the message text or the model, so a tool may write it on a record it creates, such as an issue's source line; a tool that needs it fails closed when it is undefined.
 A claim passes it to `context.turns.run` as `origin`, and the hold of the same call sees it too, since `hold` receives the same `ToolTurn`.
 
 `turn.attachment(file)` opens a file someone attached to the conversation, by the name the turn's `## Attachments` block lists, and returns `{ file, name, contentType, size, bytes() }`: a tool passes a user's file on without the model carrying its bytes.
 Only the conversation's own files open; a path, a hidden name, or a missing file throws a `ToolRefusal` the model reads, and so does a file the host's [retention period](#retention-removing-used-files-after-a-period) removed, which says so.
+`turn.attachments?.()` lists those files, the newest first, as `{ file, name, contentType, size, addedAt }` (`ToolAttachmentInfo`): the names `attachment` opens and nothing else; a session that keeps no attachments lists none. The turns the core builds always have it; it is optional on the type for code that builds a turn by hand.
 Throw `ToolRefusal` for a call the model should correct; any other error fails the call.
+
+##### `turn.client`: asking the party that started the turn
+
+Some transports carry a client that can do something for a tool: the web chat's browser extension can read the page the person has open.
+`turn.client` is that client's `ClientPort` when the turn's transport provides one and the client declared it, and undefined otherwise (a Discord message, a schedule, an agent's turn, and a web chat connection that declared nothing have none), so a tool that needs it fails closed with a `ToolRefusal` when it is undefined.
+`client.names` lists the functions the client declared, and `client.call(name, args, { timeoutMs?, maxValueBytes? })` asks it to run one.
+The call never rejects for a transport problem: it resolves `{ ok: true, value, parts }`, with the value the client answered with and its binary `parts` (`{ mimeType, data }`, such as a screenshot), or `{ ok: false, error, message }` where `error` is `no_client`, `refused`, `timeout`, `cancelled`, `disconnected`, `too_large`, `busy`, or `failed`.
+One call is open on a client at a time: a second one made meanwhile resolves `busy`, so make calls one after another.
+The core gives every call the turn's `signal`, so stopping the turn cancels the call in flight (`cancelled`) and the tool need not handle it.
+The value and the parts come from the client, outside the host, so a tool treats them as untrusted data: it checks their shape, and passes images on as `ToolOutput` images rather than trusting their names or types.
+The transport sets `client` and bounds each call (its default timeout, its ceiling and its size limits); a claim passes it to `context.turns.run` as `client`.
 
 <!-- example: examples/tools.ts -->
 ```ts
@@ -701,6 +713,8 @@ A Pi package should use the host's peer dependency on `pi-roundtable`, not bundl
 Transient `SessionContext.runTask` tasks return only text and cannot attach to their parent's reply.
 
 The model attaches a file it already has on disk with the core's `attach_file({ path, filename? })`. A session with a workspace (`SessionContext.workspace`, an agent's) registers it; the path must resolve, symlinks followed, inside the workspace or the scratch dir, a relative path resolves in the workspace, and `filename` defaults to the path's base name. It queues the file with `attachReplyFile`, so `REPLY_FILE_LIMITS` apply and a surface without reply files refuses it as a tool error; its result tells the model the file will appear with its reply. It holds nothing, since it only posts in the channel the turn answers in, and its tier defaults to the owner, like any tool the core's table does not name.
+
+With an `images` provider, agent and owner sessions also offer the core's `generate_image({ prompt, reference_paths? })`, which draws a new picture from a description (`prompt`, at most 4,000 characters). `reference_paths` lists up to 4 local images, checked like `attach_file` paths (inside the workspace or the scratch dir, symlinks followed, regular files only), each a PNG, JPEG, WebP or GIF by content, at most 20 MiB each and 40 MiB together; a refused reference is a tool error before the provider is called. It passes them to the provider as `ReferenceImage`s with the turn's signal, saves the picture under `<scratch dir or workspace>/drawings/generated-<ISO time>.<ext>`, and attaches it with `attachReplyFile`; when it cannot be attached the file is kept and the result says so. The result names the saved path, never the bytes, so the model can send it on or edit it. A provider error, such as a refusal, is a tool error carrying the provider's message. It holds nothing, and its tier defaults to the owner; `toolTiers` lowers it. The agents' prompt mentions it only when it is offered.
 The Discord tools that upload, `discord_send_message` and `discord_edit_message`, take each file as exactly one of `path` (a local file, read when the call runs, with the same roots; `filename` defaults to its base name) or `dataBase64` with a `filename`, at most 8 MiB in all. A session without a workspace takes only `dataBase64`, and so does remote MCP, whose schemas stay inline only. A path outside the roots, a missing file, or a directory is a tool error naming the path. A held call's card (`approvalCard(call, workspace?, limits?)`) lists each file it sends by path with the file's size now, never its bytes, and shows an input within `limits.totalChars` (1,500) whole; a longer input has its string values cut, longest first and never below `limits.valueChars` (200), to their start plus `… [N chars]` (N in code points) until it fits, and if it still does not, the rest is dropped and the keys no longer shown are listed. `approvalDetails(call, workspace?)` gives the same call as data (`{ action, tool, input, files? }`, the whole input, files as `{ path, bytes? }`); the gate passes it to `Prompts.confirm` as `details`, for a surface that is not text.
 Calling the helper outside `context.turns.run` or an agent-team turn, or after that turn finishes, throws `ReplyFileError`; direct standalone runtime calls have no reply collector.
 Await work that produces files before returning from the tool.
@@ -1323,10 +1337,11 @@ An unknown or misspelled slot stops startup with an error listing the valid name
 | Slot | The core's default | Your replacement |
 |---|---|---|
 | `judge` | Asks the configured model small questions: does this reply approve the held actions, how hard is this turn, which agents does this group message concern | An object with `askYesNo`, `askChoice`, and `askScore` |
-| `images` | No drawing; each agent gets an avatar generated from its display name | `async (prompt, references) => bytes` returning PNG bytes |
+| `images` | No drawing; each agent gets an avatar generated from its display name, and no session offers `generate_image` | `async (prompt, references, options?) => bytes` returning PNG, JPEG, WebP or GIF bytes; `options.signal` aborts with the turn that asked |
 | `runtime` | None: the runtime plugin builds the Pi runtime itself | `(deps) => runtime`, an [`AgentRuntime`](#the-runtime-slot-replace-pi) that runs every conversation |
 
-When no `images` provider is configured, `agent_create` has no `avatar_prompt` parameter and `agent_avatar` is unavailable.
+A filled `images` slot draws agents' avatars and also powers the core's [`generate_image`](#attach-files-to-the-agents-reply) tool.
+When no `images` provider is configured, `agent_create` has no `avatar_prompt` parameter, `agent_avatar` is unavailable, and no session offers `generate_image`.
 The owner's profile panel reports the missing provider and offers no redraw option.
 Each agent gets a picture generated from its display name and the assistant's icon, so you can tell agents apart.
 `bunx roundtable doctor` reports whether the slot is filled.
@@ -1921,6 +1936,7 @@ The factory gets the session's `SessionContext`, fixed when the session is made:
 - `addressee` is whom tool descriptions should name: the primary owner exactly as configured in their own private conversation, another person by their name and pronouns (their name alone when they gave none), and `THE_SPEAKER` in a shared conversation, or a private one of someone the host knows by no name yet.
 - `memory` is `"none"` for a persona that declares it, and `"speaker"` otherwise; a memory tool of your own loads nothing for `"none"`. A task the session runs with `runTask` keeps its conversation's `memory`.
 - `speaker()` is the running turn's speaker, undefined between turns; a tool reads it when it runs, never when the session is made, since a session outlives the turn it is built in.
+- `client()` is what the client that started the running turn can do for its tools, as `TurnRequest.client` says, and undefined between turns and for a turn whose transport gives none; it is optional on the type so a context built before 0.9.11 still type-checks.
 - `origin()` is where the running turn's request came from, as `TurnRequest.origin` says, and undefined between turns and for a turn whose transport gives none; read it when the tool runs, like `speaker()`. It is optional on the type so a context built before 0.9.10 still type-checks.
 
 The core's Jev compactor is one such extension:
@@ -2073,7 +2089,7 @@ Call `context.turns.run(input)` inside your claim's queue task to run a turn in 
 It shows typing and the stop control on the channel's surface, runs the turn, and emits `turnStarted` and `turnEnded` with the turn's `kind`.
 It catches runtime errors as failed results and posts the answer, failure notice, or stopped notice through the surface.
 Supply `reply(result)` to handle the reply yourself.
-`input` has `channel`, `kind`, `text`, `speaker`, and optionally `origin` (where the request came from, as your claim's transport knows it, such as a connection's browser origin; tools read it as `turn.origin`, so never fill it from message text), `attachments`, `selection` (by default the plugins' `agentSelection`), `steerable`, `interactive`, `confirmed` (the speaker's message approved the held calls; calls that [name approvers](#a-hold-that-names-its-approvers) the speaker is neither among nor an owner of stay held), `reply`, and `conversation`.
+`input` has `channel`, `kind`, `text`, `speaker`, and optionally `origin` (where the request came from, as your claim's transport knows it, such as a connection's browser origin; tools read it as `turn.origin`, so never fill it from message text), `client` (a `ClientPort` for what the client that started the turn can do, which tools read as `turn.client`; only your transport provides one), `attachments`, `selection` (by default the plugins' `agentSelection`), `steerable`, `interactive`, `confirmed` (the speaker's message approved the held calls; calls that [name approvers](#a-hold-that-names-its-approvers) the speaker is neither among nor an owner of stay held), `reply`, and `conversation`.
 It rejects with `NotLinkedError` during `setup`, and with a `PluginError` on a host whose runtime plugin has not provided a runtime.
 
 Before each turn runs, `context.turns.run` records its conversation in the host's registry, `CONVERSATIONS`: at the first turn its key, surface, kind, visibility, owner, and title, and at every later turn only that it was active.
@@ -3078,7 +3094,8 @@ It returns:
 | `contribution` | What the plugin added, as the host would collect it: `tools`, `prompt`, `seeds`, `events`, `services`, `http`, and the rest |
 | `tools`, `tiers` | The tool names, and the table that says what tier each needs |
 | `holds` | The plugin's `holdRules` chained as the host links them (`holdChain`): `holds(tool, input, { workspace?, scratchDir? })` returns the description of a call that must be approved first, or `undefined`; `holds.inTurn(tool, input, context, turn)` asks them as a turn does, and returns a promise when a hold looks things up |
-| `runTool(name, args, { speaker, origin, channel, workspace }?)` | Runs a tool the way an agent's turn would, in the channel (default `test:1`) for the speaker, and returns the text the model reads; `origin` is the turn's `turn.origin`, and `workspace` (`{ workspace, scratchDir? }`) is the session's `turn.workspace` |
+| `runTool(name, args, { speaker, origin, client, channel, workspace }?)` | Runs a tool the way an agent's turn would, in the channel (default `test:1`) for the speaker, and returns the text the model reads; `origin` is the turn's `turn.origin`, `client` its `turn.client` (a `ClientPort` the test fakes), and `workspace` (`{ workspace, scratchDir? }`) is the session's `turn.workspace` |
+| `images` | The images successful `runTool` calls returned as `ToolOutput` images, recorded as `{ channel, image: { mimeType, data } }` |
 | `files` | Accepted files from `runTool`, recorded as `{ channel, file: ReplyFile }`; inject a surface with `supportsFiles: true` and pass its channel to test attachment tools |
 | `events` | The events the plugin itself reported through `context.events`, and those of `context.turns` |
 | `conversations`, `turns`, `surfaces` | What the plugin sees as `context.conversations`, `context.turns`, and `context.surfaces`, for a test to drive its claims |
@@ -3485,6 +3502,11 @@ Import from the entries listed below; source area files are internal.
 | `ChannelClaim` | `pi-roundtable` | type |
 | `ChannelKey` | `pi-roundtable` | type |
 | `ChatSurface` | `pi-roundtable` | type |
+| `ClientCallError` | `pi-roundtable` | type |
+| `ClientCallOptions` | `pi-roundtable` | type |
+| `ClientCallResult` | `pi-roundtable` | type |
+| `ClientPart` | `pi-roundtable` | type |
+| `ClientPort` | `pi-roundtable` | type |
 | `ConfigError` | `pi-roundtable` | value |
 | `ContextUse` | `pi-roundtable` | type |
 | `Contribution` | `pi-roundtable` | type |
@@ -3652,7 +3674,9 @@ Import from the entries listed below; source area files are internal.
 | `Tier` | `pi-roundtable` | type |
 | `TierConfig` | `pi-roundtable` | type |
 | `ToolAttachment` | `pi-roundtable` | type |
+| `ToolAttachmentInfo` | `pi-roundtable` | type |
 | `ToolContribution` | `pi-roundtable` | type |
+| `ToolOutput` | `pi-roundtable` | type |
 | `ToolRefusal` | `pi-roundtable` | value |
 | `ToolSelection` | `pi-roundtable` | type |
 | `ToolSpec` | `pi-roundtable` | type |

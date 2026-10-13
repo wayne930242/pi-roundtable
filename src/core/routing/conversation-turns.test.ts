@@ -125,6 +125,18 @@ describe("conversation turns", () => {
 		expect(requests[1]).not.toHaveProperty("origin");
 	});
 
+	test("the client a claim gives reaches the runtime's request, and none is made up", async () => {
+		const { turns, requests } = setup(async () => ({ ok: true, text: "ok" }));
+		const client = {
+			names: ["page_status"],
+			call: async () => ({ ok: true as const, value: null, parts: [] }),
+		};
+		await turns.run({ ...input, client });
+		await turns.run(input);
+		expect(requests[0]?.client).toBe(client);
+		expect(requests[1]).not.toHaveProperty("client");
+	});
+
 	test("what the runtime reports as the turn goes reaches the surface and the plugins' handlers, until the turn ends", async () => {
 		let late: TurnRequest["progress"];
 		const { turns, log, progress } = setup(async (request) => {
