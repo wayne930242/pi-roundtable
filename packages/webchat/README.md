@@ -21,7 +21,7 @@ It needs no Discord: a host whose `roundtable.config.ts` has no `discord` key an
 
 ## Requirements
 
-- Bun 1.3 or later, and pi-roundtable `>=0.10.0 <0.11.0` as a peer dependency. Uploading files needs `context.attachments`, which pi-roundtable added in 0.9.2: the plugin refuses to set up on an earlier core and names the version to install.
+- Bun 1.3 or later, and pi-roundtable `>=0.11.0 <0.12.0` as a peer dependency. Uploading files needs `context.attachments`, which pi-roundtable added in 0.9.2: the plugin refuses to set up on an earlier core and names the version to install.
 - An HTTP listener on the host (`http` in the configuration), behind a reverse proxy that serves it over HTTPS.
 - An OpenID Connect provider that issues access tokens for this API, with signing keys published as a JWKS.
 

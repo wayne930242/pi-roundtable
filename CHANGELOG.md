@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-10-13
+
 ### Added
 
 - Channel context reads the people a plugin mirrors into a channel. `ChannelContextOptions.foreignWebhook(webhookId)` (host default under `discord.channelContext`, or per call) makes a post through a webhook of the assistant's application, for the webhooks it returns true for, another author's: kept as a bot named by the post's username, and no longer ending the window, which still ends at the assistant's own posts (its bot user and the webhooks it returns false for). Near-repeat merging of those posts also needs the same name, since one webhook carries many people. The default is unchanged: every webhook of the application is the assistant's.
