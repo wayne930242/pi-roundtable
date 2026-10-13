@@ -111,6 +111,8 @@ export class OwnerCards implements InteractionModule {
 	}
 	/** Resolves once the remembered copy texts are on disk. */
 	flushCopies = (): Promise<void> => this.#copies.flush();
+	startCopies = (): void => this.#copies.start();
+	stopCopies = (): Promise<void> => this.#copies.stop();
 
 	commands() {
 		return [];

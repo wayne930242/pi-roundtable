@@ -11,6 +11,8 @@ export const COPY_TEXT_LIMIT = 20_000;
 const COPY_KEEP = 100;
 /** How many days a copy text is kept by default. */
 const COPY_KEEP_DAYS = 30;
+/** How often expired texts are dropped from the file, an hour. */
+const SWEEP_MS = 60 * 60_000;
 
 interface Entry {
 	text: string;
@@ -27,6 +29,10 @@ export interface CardCopiesOptions {
 	logger: Logger;
 	/** Replaceable in tests. */
 	now?: () => number;
+	/** How often expired texts are dropped from the file; default `SWEEP_MS`. */
+	sweepMs?: number;
+	/** Replaceable in tests. */
+	setInterval?: typeof setInterval;
 }
 
 /**
@@ -42,6 +48,7 @@ export class CardCopies {
 	readonly #entries = new Map<string, Entry>();
 	#writing: Promise<void> | undefined;
 	#dirty = false;
+	#timer: ReturnType<typeof setInterval> | undefined;
 
 	constructor(options: CardCopiesOptions) {
 		this.#options = options;
@@ -56,7 +63,7 @@ export class CardCopies {
 				if (typeof text === "string" && typeof at === "number")
 					this.#entries.set(id, { text, at });
 			}
-			this.#prune();
+			if (this.#prune()) this.#schedule();
 		} catch (error) {
 			logger.warn(
 				{ path, err: error },
@@ -77,10 +84,28 @@ export class CardCopies {
 		const entry = this.#entries.get(id);
 		if (!entry) return undefined;
 		if (this.#now() - entry.at > this.#keepMs()) {
-			this.#entries.delete(id);
+			this.#prune();
+			this.#schedule();
 			return undefined;
 		}
 		return entry.text;
+	}
+
+	/** Starts the hourly sweep that drops expired texts from the file too; the timer does not hold the process. */
+	start(): void {
+		if (this.#timer || !this.#options.path) return;
+		const every = this.#options.setInterval ?? setInterval;
+		this.#timer = every(() => {
+			if (this.#prune()) this.#schedule();
+		}, this.#options.sweepMs ?? SWEEP_MS);
+		this.#timer.unref?.();
+	}
+
+	/** Stops the sweep and resolves once what was remembered so far is on disk; for a host that stops and for tests. */
+	async stop(): Promise<void> {
+		if (this.#timer) clearInterval(this.#timer);
+		this.#timer = undefined;
+		await this.flush();
 	}
 
 	/** Resolves once what was remembered so far is on disk; for a host that stops and for tests. */
@@ -96,15 +121,18 @@ export class CardCopies {
 		return (this.#options.keepDays ?? COPY_KEEP_DAYS) * 24 * 60 * 60_000;
 	}
 
-	#prune(): void {
+	/** Drops expired and surplus entries; true when any went. */
+	#prune(): boolean {
+		const before = this.#entries.size;
 		const now = this.#now();
 		const keep = this.#options.keep ?? COPY_KEEP;
 		for (const [id, entry] of this.#entries)
 			if (now - entry.at > this.#keepMs()) this.#entries.delete(id);
 		for (const id of this.#entries.keys()) {
-			if (this.#entries.size <= keep) return;
+			if (this.#entries.size <= keep) break;
 			this.#entries.delete(id);
 		}
+		return this.#entries.size < before;
 	}
 
 	/** Writes the file after the call that asked, once at a time; asks made meanwhile share the next write. */

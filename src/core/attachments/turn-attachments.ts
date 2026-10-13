@@ -4,19 +4,34 @@ import type { Logger } from "../log.ts";
 import { fetchAttachments } from "./attachment-fetcher.ts";
 import { modelImagesOf } from "./model-images.ts";
 
+/** The most milliseconds all of a message's downloads take together by default. */
+const DEADLINE_MS = 20_000;
+
 /** Saves the message's and its reference's files, and turns up to four images into model images. */
 export async function collectAttachments(
 	message: InboundMessage,
 	dir: string,
-	options: { logger: Logger; fetchImpl?: typeof fetch },
+	options: {
+		logger: Logger;
+		fetchImpl?: typeof fetch;
+		/** One deadline for the message's and its reference's files together; default 20 s. */
+		deadlineMs?: number;
+		/** Aborts the downloads, as the deadline does. */
+		signal?: AbortSignal;
+	},
 ): Promise<TurnAttachments> {
 	const { fetchImpl, logger } = options;
+	const deadline = AbortSignal.timeout(options.deadlineMs ?? DEADLINE_MS);
+	const signal = options.signal
+		? AbortSignal.any([deadline, options.signal])
+		: deadline;
 	const own = await fetchAttachments(
 		{
 			refs: message.attachments,
 			dir,
 			prefix: message.messageId,
 			fromReference: false,
+			signal,
 		},
 		fetchImpl,
 	);
@@ -26,6 +41,7 @@ export async function collectAttachments(
 			dir,
 			prefix: `${message.messageId}-ref`,
 			fromReference: true,
+			signal,
 		},
 		fetchImpl,
 	);
@@ -54,9 +70,11 @@ export function attachmentsOf(
 	dir: string,
 	logger: Logger,
 	fetchImpl?: typeof fetch,
+	limits: { deadlineMs?: number; signal?: AbortSignal } = {},
 ): Promise<TurnAttachments> {
 	return collectAttachments(message, dir, {
 		logger,
+		...limits,
 		...(fetchImpl ? { fetchImpl } : {}),
 	});
 }

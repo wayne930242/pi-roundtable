@@ -202,7 +202,11 @@ export function discordPlugin(options: DiscordOptions): RoundtablePlugin {
 					// The sweep reads threads through the connection, so it follows the surface's start.
 					{ name: "threads", start: () => void threads.sweep() },
 					// The copy texts of the last cards are on disk before the host exits.
-					{ name: "card-copies", stop: () => cards.flushCopies() },
+					{
+						name: "card-copies",
+						start: () => cards.startCopies(),
+						stop: () => cards.stopCopies(),
+					},
 				],
 			};
 		},

@@ -131,3 +131,48 @@ describe("attachment download resource use", () => {
 		expect(await Bun.file(result.files[0]?.path ?? "").text()).toBe("hello");
 	});
 });
+
+describe("attachment download limits", () => {
+	test("a directory that cannot be made is a recorded failure, not a throw", async () => {
+		const input = request();
+		const blocker = join(input.dir, "file");
+		await Bun.write(blocker, "x");
+		const result = await fetchAttachments(
+			{ ...input, dir: join(blocker, "inside") },
+			fetcher(new Response("hello")),
+		);
+		expect(result.files).toEqual([]);
+		expect(result.failures[0]?.reason).toContain("download failed");
+	});
+
+	test("an aborted signal fails the files still to come without fetching them", async () => {
+		const controller = new AbortController();
+		controller.abort();
+		let calls = 0;
+		const result = await fetchAttachments(
+			{ ...request(), signal: controller.signal },
+			Object.assign(
+				async () => {
+					calls += 1;
+					return new Response("hello");
+				},
+				{ preconnect: fetch.preconnect },
+			),
+		);
+		expect(calls).toBe(0);
+		expect(result.failures[0]?.reason).toContain("download failed");
+	});
+
+	test("a body that stalls ends with the signal", async () => {
+		const input = request();
+		const stalled = new Response(new ReadableStream({ start() {} }));
+		const started = Date.now();
+		const result = await fetchAttachments(
+			{ ...input, signal: AbortSignal.timeout(50) },
+			fetcher(stalled),
+		);
+		expect(Date.now() - started).toBeLessThan(2_000);
+		expect(result.files).toEqual([]);
+		expect(result.failures[0]?.reason).toContain("download failed");
+	});
+});

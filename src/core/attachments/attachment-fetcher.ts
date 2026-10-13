@@ -16,6 +16,8 @@ export interface FetchRequest {
 	/** Prefix that keeps files of different messages apart, such as the message ID. */
 	prefix: string;
 	fromReference: boolean;
+	/** Aborts the download of the files still to come, and the one in flight. */
+	signal?: AbortSignal;
 }
 
 export interface FetchResult {
@@ -63,25 +65,33 @@ export async function fetchAttachments(
 ): Promise<FetchResult> {
 	const files: StoredAttachment[] = [];
 	const failures: AttachmentFailure[] = [];
-	const { refs, dir, prefix, fromReference } = request;
+	const { refs, dir, prefix, fromReference, signal } = request;
 	if (refs.length === 0) return { files, failures };
-	mkdirSync(dir, { recursive: true, mode: 0o700 });
 
 	for (const [index, ref] of refs.entries()) {
 		const fail = (reason: string) =>
 			failures.push({ name: ref.name, reason, fromReference });
+		if (signal?.aborted) {
+			fail("download failed: deadline passed or download aborted");
+			continue;
+		}
 		if (ref.size > MAX_ATTACHMENT_BYTES) {
 			fail(`larger than 25 MB (${ref.size} bytes)`);
 			continue;
 		}
 		try {
-			const response = await fetchImpl(ref.url);
+			// A directory that cannot be made fails the file, not the turn.
+			mkdirSync(dir, { recursive: true, mode: 0o700 });
+			const response = await fetchImpl(
+				ref.url,
+				signal ? { signal } : undefined,
+			);
 			if (!response.ok) {
 				await response.body?.cancel();
 				fail(`download failed with HTTP ${response.status}`);
 				continue;
 			}
-			const data = await readAttachmentBody(response);
+			const data = await readAttachmentBody(response, signal);
 			if (typeof data === "number") {
 				fail(`larger than 25 MB (${data} bytes)`);
 				continue;
@@ -110,12 +120,17 @@ export async function fetchAttachments(
 /** Returns the bytes, or the observed size once the stream exceeds the limit. */
 async function readAttachmentBody(
 	response: Response,
+	signal?: AbortSignal,
 ): Promise<Uint8Array | number> {
 	if (!response.body) return new Uint8Array();
 	const reader = response.body.getReader();
 	const chunks: Uint8Array[] = [];
 	let size = 0;
+	// A body that stalls ends with the signal, also when the fetch itself ignores it.
+	const stop = () => void reader.cancel(signal?.reason).catch(() => {});
+	signal?.addEventListener("abort", stop, { once: true });
 	try {
+		if (signal?.aborted) throw signal.reason ?? new Error("aborted");
 		for (;;) {
 			const { done, value } = await reader.read();
 			if (done) break;
@@ -126,7 +141,10 @@ async function readAttachmentBody(
 			}
 			chunks.push(value);
 		}
+		// A cancelled reader reads as the end of the body, so a cut-short body is not a whole file.
+		if (signal?.aborted) throw signal.reason ?? new Error("aborted");
 	} finally {
+		signal?.removeEventListener("abort", stop);
 		reader.releaseLock();
 	}
 	const data = new Uint8Array(size);

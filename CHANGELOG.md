@@ -5,6 +5,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-10-13
+
+### Fixed
+
+- Expired card copy texts leave `card-copies.json`, not only memory. They are dropped from the file when the host starts, when a copy button finds one past `keepDays`, and on an hourly sweep (an unref'd timer that the Discord plugin starts and stops with the host), without waiting for a new card.
+- Downloading the files of an owner or agent channel message has an overall 20 second deadline for the message and its reference together, and takes an `AbortSignal`: `attachmentsOf(message, dir, logger, fetchImpl?, limits?)` gains `limits: { deadlineMs?: number; signal?: AbortSignal }`. Files still to come when it passes, a body that stalls, and a directory that cannot be created are recorded as `download failed` failures instead of holding the turn or throwing.
+
 ## [0.12.0] - 2026-10-13
 
 ### Added
