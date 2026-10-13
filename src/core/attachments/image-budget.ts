@@ -2,10 +2,19 @@ import { ImagePreparationError } from "./image-preparation-error.ts";
 
 const invalid = () => new ImagePreparationError("invalid-image");
 
-/** Inspect only encoded headers/blocks. Never allocate a raster or follow a media URL. */
-export function assertImagePixelBudget(bytes: Buffer, budget: number): void {
+/**
+ * Inspect only encoded headers/blocks. Never allocate a raster or follow a media URL. With
+ * `maxSide`, a declared width or height (of a canvas or of any frame) over it is `pixel-limit` too.
+ */
+export function assertImagePixelBudget(
+	bytes: Buffer,
+	budget: number,
+	maxSide?: number,
+): void {
 	const pixels = (width: number, height: number): number => {
 		if (width < 1 || height < 1) throw invalid();
+		if (maxSide !== undefined && (width > maxSide || height > maxSide))
+			throw new ImagePreparationError("pixel-limit");
 		const area = width * height;
 		check(area);
 		return area;

@@ -9,6 +9,11 @@ export {
 export { prepareImageBytes } from "../core/attachments/image-prep.ts";
 export { ImagePreparationError } from "../core/attachments/image-preparation-error.ts";
 export { withAttachmentsBlock } from "../core/attachments/prompt-block.ts";
+export {
+	SQUARE_PNG_MAX_SIDE,
+	type SquarePngOptions,
+	squarePng,
+} from "../core/attachments/square-png.ts";
 export { attachmentsOf } from "../core/attachments/turn-attachments.ts";
 export type { ChannelQueue } from "../core/routing/channel-queue.ts";
 export { channelQueue } from "../core/routing/channel-queue.ts";

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { createCanvas, loadImage } from "canvas";
+import { squarePng } from "../attachments/square-png.ts";
 import type { ImageDrawer } from "../contract/providers.ts";
 import { ProviderError } from "../errors.ts";
 import type { HttpRoute } from "../http/listeners.ts";
@@ -23,28 +23,6 @@ export interface AvatarStudioOptions {
 	referencePath: string;
 	/** Draws the pictures. Without one, the studio only makes each agent a picture from its name. */
 	draw?: ImageDrawer;
-}
-
-/** A centered square crop scaled to at most `side` pixels, as PNG. */
-async function squarePng(bytes: Uint8Array, side: number): Promise<Buffer> {
-	const image = await loadImage(Buffer.from(bytes));
-	const crop = Math.min(image.width, image.height);
-	const size = Math.min(side, crop);
-	const canvas = createCanvas(size, size);
-	canvas
-		.getContext("2d")
-		.drawImage(
-			image,
-			(image.width - crop) / 2,
-			(image.height - crop) / 2,
-			crop,
-			crop,
-			0,
-			0,
-			size,
-			size,
-		);
-	return canvas.toBuffer("image/png");
 }
 
 /**
@@ -89,7 +67,7 @@ export class FileAvatarStudio implements AvatarStudio {
 		const draw = this.#drawer();
 		const reference = await squarePng(
 			readFileSync(this.#options.referencePath),
-			REFERENCE_SIDE,
+			{ size: REFERENCE_SIDE },
 		);
 		const bytes = await draw(
 			`Draw a square Discord avatar of the person in the reference image, redrawn as an anime character: keep their face, short dark hair, and features recognizable as the same person, but in vivid anime cel-shading with a big, exaggerated expression and a dramatic pose that shows the role. Dress them and paint the background exactly in the colours the description names; ignore the reference's green jacket and teal background. Head-and-shoulders framing that still reads at 40 px. No text, no border. The role: ${avatarPrompt}`,
@@ -172,7 +150,7 @@ export class FileAvatarStudio implements AvatarStudio {
 	}
 
 	async #store(bytes: Uint8Array): Promise<string> {
-		const png = await squarePng(bytes, AVATAR_SIDE);
+		const png = await squarePng(bytes, { size: AVATAR_SIDE });
 		const hash = createHash("sha256").update(png).digest("hex");
 		const path = this.#path(hash);
 		if (!existsSync(path)) writeFileSync(path, png);

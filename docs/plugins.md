@@ -60,6 +60,9 @@ Use the kit's building blocks for a plugin that runs Pi itself, such as a coding
   `ImagePreparationError.reason` is `byte-limit`, `pixel-limit`, or `invalid-image`; hosts can localize refusals without parsing native decoder errors.
   Ordinary 48 MP images and thin 9000×1 images remain admitted.
   This helper is not a downloader or filesystem validator.
+- Square pictures: `squarePng(bytes, { size?, maxBytes? })` crops a PNG, JPEG, GIF or WebP to its centered square and scales it down to at most `size` pixels per side (default 512; a smaller picture is not enlarged), as PNG: the helper the agent avatars are made with, for a plugin that needs a profile picture or an icon.
+  The header is read first, and nothing is decoded for a picture that declares a width or height over `SQUARE_PNG_MAX_SIDE` (4096), which rejects with `ImagePreparationError` (`pixel-limit`), or for bytes of no such type (`invalid-image`).
+  With `maxBytes` the side steps down by a quarter at a time until the PNG is no larger; a picture that does not fit even at 16 pixels throws a `RangeError`, as does a `size` or `maxBytes` that is not a whole number in range. `SquarePngOptions` types the options.
 - Work: `promptSlot` (how a run asks the owner while it works), `workTimeout` (a time limit that does not count the time spent waiting on the owner), `runWorkerTask`, `archiveSessions`, and `approvalCard`, `approvalDetails` and `canonicalJson` for the cards of held actions.
   `InterimPoster(posts, { logger, channel, primaryChars?, editMs? })` posts a run's [interim text](#interim-text-what-a-turn-writes-before-its-final-answer) to an `InterimPosts`, such as a dispatch thread's `interim`: feed it `messageEnd(message)` and `toolStart(name)` from the session's events, bind `() => poster.flush()` as the slot's `beforeCard`, and `await poster.flush()` before the final report.
 - Diagnostics: `scrubDiagnostic(text, max = 600)` masks credentials (URL userinfo, token shapes, secret-named assignments and JSON fields, `Authorization`/`Cookie`/`x-api-key` headers, JWTs, PEM blocks), turns control characters other than tab and newline into spaces, and cuts the result at `max` characters.
@@ -3727,6 +3730,9 @@ Import from the entries listed below; source area files are internal.
 | `withReplyFiles` | `pi-roundtable` | value |
 | `prepareImageBytes` | `pi-roundtable/kit` | value |
 | `ImagePreparationError` | `pi-roundtable/kit` | value |
+| `squarePng` | `pi-roundtable/kit` | value |
+| `SQUARE_PNG_MAX_SIDE` | `pi-roundtable/kit` | value |
+| `SquarePngOptions` | `pi-roundtable/kit` | type |
 | `scrubDiagnostic` | `pi-roundtable/kit` | value |
 | `channelKey` | `pi-roundtable` | value |
 | `definePlugin` | `pi-roundtable` | value |

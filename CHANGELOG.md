@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `squarePng`, `SquarePngOptions` and `SQUARE_PNG_MAX_SIDE` (4096) are exported from `pi-roundtable/kit`. `squarePng(bytes, { size?, maxBytes? })` is the centered square crop, scaled down to at most `size` pixels per side (default 512) as PNG, that the agent avatars are made with. The header is read before decoding: a declared width or height over 4096 rejects with `ImagePreparationError` (`pixel-limit`), bytes of no PNG, JPEG, GIF or WebP with `invalid-image`. With `maxBytes` the side steps down by a quarter until the PNG fits, and a picture that does not fit at 16 pixels throws a `RangeError`. The avatar studio now refuses a drawn or reference picture that declares a side over 4096 the same way, where it used to decode it.
+
 ## [0.12.1] - 2026-10-13
 
 ### Fixed

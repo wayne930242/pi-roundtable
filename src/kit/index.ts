@@ -10,7 +10,10 @@ export {
 	outcome,
 	ownerAttachmentDir,
 	prepareImageBytes,
+	SQUARE_PNG_MAX_SIDE,
+	type SquarePngOptions,
 	settleTurn,
+	squarePng,
 	withAttachmentsBlock,
 	withReference,
 } from "./channels.ts";
