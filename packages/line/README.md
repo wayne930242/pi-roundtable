@@ -224,7 +224,7 @@ The `line-retention` service sweeps once at start and every hour (`retention.int
 | message metadata and tokens, refs, tombstones | 7 days (`retention.messagesMs`) |
 | pushes that finished, pushes that never got sent, join notice records | 7 days (`retention.outboxMs`) |
 
-Before it trims, every sweep hands back strays: refs still stored for a message that has a tombstone and were stored more than `retention.strayMs` (15 minutes) ago go to the subscriber as `unsent`, and are forgotten once it returns.
+Before it trims, every sweep hands back strays: refs still stored for a message that has a tombstone, where both the ref and the tombstone are more than `retention.strayMs` (15 minutes) old, go to the subscriber as `unsent`, and are forgotten once it returns.
 A stray happens when a handler that outlived its lease keeps a ref after its message was unsent and the take-back is refused, so nobody else would hand the ref over.
 A take-back that fails is logged by its code and retried at the next sweep, until the ref is gone; with no subscriber attached the refs wait.
 

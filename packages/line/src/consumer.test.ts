@@ -503,6 +503,28 @@ describeDb("the consumer", () => {
 		);
 	});
 
+	test("a ref that is old is not a stray while the unsend that took its message back is young (R6-F002)", async () => {
+		const aborted = new AbortController();
+		await sql`INSERT INTO line_message_refs (source_key, message_id, ref, position, created_at)
+			VALUES (${GROUP}, 'slow', 'slow-post', 0, ${new Date(0)})`;
+		await sql`INSERT INTO line_tombstones (source_key, message_id, created_at)
+			VALUES (${GROUP}, 'slow', ${TIME})`;
+		const seen: LineEvent[] = [];
+		const handler: LineSubscriber = async (event) => {
+			seen.push(event);
+			return undefined;
+		};
+		const before = new Date(TIME.getTime() - 60_000);
+		expect(await consumer.handBackStrays(handler, aborted.signal, before)).toBe(
+			0,
+		);
+		expect(seen).toEqual([]);
+		const after = new Date(TIME.getTime() + 1);
+		expect(await consumer.handBackStrays(handler, aborted.signal, after)).toBe(
+			1,
+		);
+	});
+
 	test("keeping is refused outside a message, and past the limit of refs for one message", async () => {
 		let outsider: unknown;
 		const probing = consumer.processorFor(async (event, _signal, context) => {

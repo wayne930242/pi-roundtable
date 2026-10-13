@@ -420,10 +420,10 @@ export class LineConsumer {
 
 	/**
 	 * Hands back, as `unsent`, the refs that are still stored for a message that has a tombstone and
-	 * that were stored before `before`. They are strays: a handler that outlived its lease kept a ref
+	 * that were stored before `before`, the message having been unsent before `before` too. They are strays: a handler that outlived its lease kept a ref
 	 * after the unsend had taken the message back, and nobody was left to hand it over. The pass leaves
-	 * a ref alone until it is old enough that no unsend or `keep` in flight can still be taking it
-	 * back. A message whose take-back fails keeps its refs for the next pass. Returns how many
+	 * a ref alone until both it and the unsend are old enough that no unsend or `keep` in flight
+	 * can still be taking it back. A message whose take-back fails keeps its refs for the next pass. Returns how many
 	 * messages were handed back.
 	 */
 	async handBackStrays(
@@ -435,7 +435,7 @@ export class LineConsumer {
 			.#sql`SELECT DISTINCT r.source_key, r.message_id
 			FROM line_message_refs r
 			JOIN line_tombstones t ON t.source_key = r.source_key AND t.message_id = r.message_id
-			WHERE r.created_at < ${before} LIMIT 100`;
+			WHERE r.created_at < ${before} AND t.created_at < ${before} LIMIT 100`;
 		let handed = 0;
 		for (const stray of strays) {
 			signal.throwIfAborted();
