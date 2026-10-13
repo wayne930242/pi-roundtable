@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `packages/line`: the consumer side of the LINE transport. One subscriber receives typed events (`message`, `edited`, `unsent`, `joined`, `left`, `memberJoined`, `memberLeft`) with opaque mirror refs stored one to many, tombstones that take an unsent message down in every race, message content held in memory under a size cap, and a retention sweeper. `LINE.attachProcessor` is replaced by `LINE.subscribe`. See the package changelog.
+
 ## [0.9.13] - 2026-10-13
 
 ### Added

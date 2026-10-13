@@ -5,6 +5,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- The consumer. `LINE.subscribe(handler)` takes the one subscriber (a second is refused; the returned function detaches it) and the package's own inbox processor hands it typed events: `message` (text, image, video, audio, file, sticker, location, and `unsupported` for a type it does not know), `edited`, `unsent`, `joined` (`notice: "unconfirmed"` until a join notice is configured), `left`, `memberJoined`, `memberLeft`, and `outboxResult` (declared, not emitted yet). A `message` is answered with `{ refs }`, opaque references stored one to many in `line_message_refs` and given back on `edited` and `unsent`; a redelivery of a recorded message is not handed out again and stores nothing twice.
+- Tombstones. An `unsend` writes a tombstone, nulls every inbox payload of the message and deletes its metadata in one transaction under a per-message lock, then hands the refs to the subscriber and forgets them once it returns. A `message` checks the tombstone before it calls the subscriber and again where its refs are stored; an unsend that lands meanwhile has the new refs handed straight back. Edits arrive out of order and the latest one wins.
+- `LINE.content(messageId, { kind, signal })`: message content into memory only, capped by `media.maxBytes` (default 10 MiB) and answered as `{ bytes, contentType }`, `{ tooLarge }` or `{ expired, reason }`; a video or audio waits for `/content/transcoding`. It uses the content host, reissues the token once on a `401`, stops on the signal, and never fetches a message that was unsent.
+- Reply and quote tokens are kept per message in `line_messages` for a later reply mode, never logged or handed to the subscriber, and deleted with the message.
+- The `line-retention` service and the `retention` option: inbox events that are done, skipped, dead or never handled, and message metadata, refs and tombstones, are removed after 7 days by default; it logs counts only. New migration `messages` (the released `inbox` migration is untouched).
+
+### Changed
+
+- `LINE.attachProcessor` is replaced by `LINE.subscribe`: a raw processor could read events without the tombstone rules. The package has not been published yet, so nothing outside this repository used it. `InboxProcessor` and its types stay exported for the inbox options.
+
 ## [0.9.13] - 2026-10-13
 
 ### Added
