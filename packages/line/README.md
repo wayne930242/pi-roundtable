@@ -90,6 +90,7 @@ webhooks: {
 	accepted: number; // answered 200, a Verify included
 	rejected: {
 		signature: number; // 401: the signature is missing or wrong
+		signatureForBot: number; // of those, the body names this bot as its destination
 		destination: number; // 403: signed, but for another bot
 		malformed: number; // 400 and 413: not a LINE events object, or over 1 MiB
 	};
@@ -100,7 +101,9 @@ webhooks: {
 
 They are counts and times only: no body, address or signature is kept, and a request adds one to a counter and nothing else.
 A `405` and a `500` (the database could not store the events) are in no counter.
-A host that watches for a channel whose webhook URL or secret has drifted can alarm on `rejected.signature` growing while `accepted` does not.
+A host that watches for a channel whose webhook URL or secret has drifted can alarm on `rejected.signatureForBot` growing while `accepted` does not: a scanner that finds the URL does not know the bot's user id, so a request that fails its signature yet names this bot as its `destination` is far more likely LINE with a wrong channel secret (or a rotated one) than noise.
+To tell, the handler reads the `destination` of a body that failed its signature, only within the 1 MiB limit, and never logs or keeps it; `signatureForBot` also counts in `signature`.
+Until the plugin knows the bot's user id it cannot tell, and `signatureForBot` stays at zero.
 
 ## Chats and the allowlist
 

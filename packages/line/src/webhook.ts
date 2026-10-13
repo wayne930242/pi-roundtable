@@ -13,10 +13,18 @@ export interface WebhookHealth {
 	/** Requests with a valid signature for this bot that were answered `200` (an empty Verify included). */
 	accepted: number;
 	/**
-	 * Requests turned away: `signature` is a missing or wrong `x-line-signature`, `destination` is a
-	 * signed webhook for another bot, `malformed` is a body that is too large or not a webhook.
+	 * Requests turned away: `signature` is a missing or wrong `x-line-signature`, `signatureForBot`
+	 * is the part of those whose body names this bot as its `destination` (a scanner does not know
+	 * the bot's id, so it rising while `accepted` stays flat means a wrong channel secret or URL),
+	 * `destination` is a signed webhook for another bot, `malformed` is a body that is too large or
+	 * not a webhook.
 	 */
-	rejected: { signature: number; destination: number; malformed: number };
+	rejected: {
+		signature: number;
+		signatureForBot: number;
+		destination: number;
+		malformed: number;
+	};
 	/** When the last request was accepted, as an ISO time; left out until one was. */
 	lastAcceptedAt?: string;
 	/** When the last request was rejected, as an ISO time; left out until one was. */
@@ -26,7 +34,12 @@ export interface WebhookHealth {
 /** The webhook's counters: each request adds to one of them and nothing else is kept. */
 export class WebhookStats {
 	#accepted = 0;
-	#rejected = { signature: 0, destination: 0, malformed: 0 };
+	#rejected = {
+		signature: 0,
+		signatureForBot: 0,
+		destination: 0,
+		malformed: 0,
+	};
 	#acceptedAt: string | undefined;
 	#rejectedAt: string | undefined;
 
@@ -35,9 +48,18 @@ export class WebhookStats {
 		this.#acceptedAt = at.toISOString();
 	}
 
-	reject(reason: keyof WebhookHealth["rejected"], at: Date): void {
+	reject(
+		reason: Exclude<keyof WebhookHealth["rejected"], "signatureForBot">,
+		at: Date,
+	): void {
 		this.#rejected[reason]++;
 		this.#rejectedAt = at.toISOString();
+	}
+
+	/** A refused signature; `forBot` when the body names this bot, which counts in `signatureForBot` too. */
+	rejectSignature(forBot: boolean, at: Date): void {
+		this.reject("signature", at);
+		if (forBot) this.#rejected.signatureForBot++;
 	}
 
 	health(): WebhookHealth {
@@ -101,6 +123,24 @@ async function readCapped(
 }
 
 /**
+ * The `destination` a body that failed its signature claims, only to tell a request meant for this
+ * bot from a scan. The body is already within the size limit; it is neither logged nor kept, and a
+ * body that is not JSON, or has no text `destination`, names nobody.
+ */
+function claimedDestination(body: Uint8Array): string | undefined {
+	try {
+		const value: unknown = JSON.parse(
+			new TextDecoder("utf-8", { fatal: true }).decode(body),
+		);
+		if (typeof value !== "object" || value === null) return undefined;
+		const destination = (value as { destination?: unknown }).destination;
+		return typeof destination === "string" ? destination : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+/**
  * LINE's webhook: the raw body is verified against `x-line-signature` before anything is parsed,
  * every event is stored in one transaction, and only then does it answer `200`. A database that
  * is down answers `500`, which makes LINE's redelivery (if the channel has it on) resend.
@@ -121,7 +161,11 @@ export function webhookHandler(
 		}
 		const signature = request.headers.get("x-line-signature");
 		if (!signature || !options.tokens.verifies(body, signature)) {
-			stats.reject("signature", options.now());
+			const bot = options.botUserId();
+			stats.rejectSignature(
+				bot !== undefined && claimedDestination(body) === bot,
+				options.now(),
+			);
 			options.logger.warn("a LINE webhook was refused: bad signature");
 			return reply(401, "Unauthorized");
 		}
