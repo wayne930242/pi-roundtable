@@ -1,6 +1,6 @@
 import type { IdentityService } from "../identity/identity-service.ts";
 import type { Logger } from "../log.ts";
-import { type Tier, tierAtLeast } from "../speakers.ts";
+import { type Speaker, type Tier, tierAtLeast } from "../speakers.ts";
 
 /** A Discord user who pressed or ran something; their roles are unknown where the interaction carries no member. */
 export interface DiscordUser {
@@ -102,19 +102,11 @@ export class DiscordOwners {
 		}
 	}
 
-	/**
-	 * Whether the user holds `minTier` as they act, as the principal named when there is one;
-	 * without `minTier` anyone does. Call it only for someone already known, so it admits no one.
-	 */
-	async holds(
-		user: DiscordUser,
-		minTier: Tier | undefined,
-		principalId?: string,
-	): Promise<boolean> {
+	/** The speaker the user is as they act; undefined without an identity service or when none serves them. Call it only for someone already admitted. */
+	async speakerOf(user: DiscordUser): Promise<Speaker | undefined> {
 		const { identity } = this.#options;
-		if (!minTier) return true;
-		if (!identity) return false;
-		const who = await identity.resolve({
+		if (!identity) return undefined;
+		return identity.resolve({
 			provider: "discord",
 			subject: user.id,
 			name: user.name,
@@ -124,6 +116,20 @@ export class DiscordOwners {
 				: {}),
 			legacyId: user.id,
 		});
+	}
+
+	/**
+	 * Whether the user holds `minTier` as they act, as the principal named when there is one;
+	 * without `minTier` anyone does. Call it only for someone already known, so it admits no one.
+	 */
+	async holds(
+		user: DiscordUser,
+		minTier: Tier | undefined,
+		principalId?: string,
+	): Promise<boolean> {
+		if (!minTier) return true;
+		if (!this.#options.identity) return false;
+		const who = await this.speakerOf(user);
 		return (
 			who !== undefined &&
 			(principalId === undefined || who.principalId === principalId) &&

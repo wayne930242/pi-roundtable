@@ -43,7 +43,10 @@ export interface ConversationTurnInput {
 	steerable?: boolean;
 	/** The turn may ask the owner on the surface's prompts, such as approvals of held actions. */
 	interactive?: boolean;
-	/** The owner confirmed the channel's held actions, so they may run in this turn. */
+	/**
+	 * The speaker confirmed the channel's held actions, so they may run in this turn, except those
+	 * that named approvers the speaker is neither among nor an owner of, which stay held.
+	 */
 	confirmed?: boolean;
 	/**
 	 * Posts the turn's outcome in place of the default reply (the text, or a failure or stopped

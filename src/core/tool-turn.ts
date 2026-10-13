@@ -9,19 +9,23 @@ import type { SessionContext } from "./sessions.ts";
 
 /**
  * The turn a tool's `run` and `hold` receive, built from the session that makes the call and the
- * signal that stops it.
+ * signal that stops it. For a call being run, `toolCallId` finds who approved it.
  */
 export function toolTurn(
 	context: SessionContext,
 	signal: AbortSignal | undefined,
+	toolCallId?: string,
 ): ToolTurn {
 	const origin = context.origin?.();
+	const approvedBy =
+		toolCallId === undefined ? undefined : context.approvedBy?.(toolCallId);
 	return {
 		speaker: context.speaker(),
 		channel: context.turnChannel,
 		agent: context.agent,
 		signal,
 		...(origin === undefined ? {} : { origin }),
+		...(approvedBy === undefined ? {} : { approvedBy }),
 		...(context.workspace ? { workspace: context.workspace } : {}),
 		attachFile: attachReplyFile,
 		attachment: async (file) => {

@@ -19,6 +19,13 @@ export interface HeldCall {
 	action: string;
 	/** The lowest tier that may approve it, when higher than its tool's own; see `HoldRule.approvalTier`. */
 	minTier?: Tier;
+	/**
+	 * The principal ids that may approve it instead of the speaker whose turn held it, as the tool's
+	 * `approvers` named them; the owners may still. Absent when the tool names none, and an empty
+	 * list leaves the owners alone. They are kept with the call, so a message that confirms it after
+	 * a restart honors them; a private conversation ignores them.
+	 */
+	approverIds?: string[];
 }
 
 export interface PendingConfirmation {

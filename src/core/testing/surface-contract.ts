@@ -1,15 +1,23 @@
 import { describe, test } from "bun:test";
-import type { InboundMessage } from "../contract/channels.ts";
 import type { ChatSurface } from "../contract/surface.ts";
 import { parseChannelKey } from "../contract/surface.ts";
 import type { TurnProgress } from "../domain/progress.ts";
-import {
-	type Approval,
-	type PromptScope,
-	promptScope,
-} from "../interactions/prompts.ts";
+import type { Approval } from "../interactions/prompts.ts";
 import type { ChannelKey } from "../sessions.ts";
 import type { Speaker } from "../speakers.ts";
+import {
+	answeredOnlyByThem,
+	approval,
+	ContractBroken,
+	expectThat,
+	namedApproverAnswers,
+	nextPrompt,
+	type Running,
+	scopeOf,
+	seen,
+	speakerOf,
+	until,
+} from "./surface-contract-support.ts";
 
 /** What the person on a surface's network has seen, as the contract reads it. */
 export type SurfaceObservation =
@@ -55,6 +63,20 @@ export interface SurfaceContractSubject {
 	 * check is skipped.
 	 */
 	owner?: SurfaceContractAnswerer;
+	/**
+	 * Another principal, not an owner, who holds the tier of the person's approvals and whom an
+	 * approval may name in `approvers`; they know the id of the person's open prompt and answer it.
+	 * A surface must report them through `ApprovalOptions.approvedBy`, because the runtime accepts
+	 * an approval of a call that names approvers only from one it names. Without it the
+	 * named-approver checks are skipped.
+	 */
+	approver?: SurfaceContractAnswerer & { principalId: string };
+	/**
+	 * Set by a surface that serves only conversations private to one person, such as the web chat:
+	 * it has no shared conversation in which an approval is the named approvers', so it skips that
+	 * check and keeps the one that its person alone answers a private conversation's.
+	 */
+	privateOnly?: boolean;
 	close?(): Promise<void>;
 }
 
@@ -71,82 +93,11 @@ export interface SurfaceContractFailure {
 	error: unknown;
 }
 
-interface Running {
-	subject: SurfaceContractSubject;
-	delivered: InboundMessage[];
-}
-
 interface Check {
 	name: string;
 	/** Whether the check applies to this subject; a check that does not is skipped. */
 	applies?(subject: SurfaceContractSubject): boolean;
 	run(running: Running): Promise<void>;
-}
-
-class ContractBroken extends Error {
-	override name = "ContractBroken";
-}
-
-function expectThat(condition: boolean, message: string): void {
-	if (!condition) throw new ContractBroken(message);
-}
-
-async function until(
-	done: () => boolean,
-	what: string,
-	ms = 2000,
-): Promise<void> {
-	const deadline = Date.now() + ms;
-	while (!done()) {
-		if (Date.now() > deadline)
-			throw new ContractBroken(`timed out waiting until ${what}`);
-		await Bun.sleep(5);
-	}
-}
-
-const seen = (running: Running, kind: SurfaceObservation["kind"]) =>
-	running.subject.observations().filter((o) => o.kind === kind);
-
-const speakerOf = (subject: SurfaceContractSubject): Speaker =>
-	subject.speaker ?? {
-		id: "contract-speaker",
-		name: "Ada",
-		tier: "owner",
-		principalId: "contract-speaker",
-	};
-
-/** The person's prompt scope in a conversation of this visibility. */
-const scopeOf = (
-	subject: SurfaceContractSubject,
-	visibility: "private" | "shared" = "shared",
-): PromptScope => promptScope(speakerOf(subject), visibility);
-
-/** The newest prompt the person has seen, once one more than `before` is open. */
-async function nextPrompt(running: Running, before: number): Promise<string> {
-	await until(
-		() => seen(running, "prompt").length > before,
-		"the person sees the approval",
-	);
-	const prompt = seen(running, "prompt").at(-1);
-	if (prompt?.kind !== "prompt") throw new ContractBroken("no prompt seen");
-	return prompt.id;
-}
-
-/** Asks for one approval and answers it as the person does. */
-async function approval(running: Running, approved: boolean) {
-	const { surface, channel, answer } = running.subject;
-	const prompts = surface.prompts?.(channel, scopeOf(running.subject));
-	if (!prompts || !answer)
-		throw new ContractBroken("the surface shows no prompts");
-	const before = seen(running, "prompt").length;
-	const result = prompts.confirm(
-		"Approve?",
-		"Send the report.",
-		undefined,
-		speakerOf(running.subject).tier,
-	);
-	await answer(await nextPrompt(running, before), approved);
-	return result;
 }
 
 const CHECKS: readonly Check[] = [
@@ -332,6 +283,28 @@ const CHECKS: readonly Check[] = [
 			answeredOnlyByThem(running, running.subject.owner, "private"),
 	},
 	{
+		name: "a named approver answers an approval instead of the person; the person and another person cannot",
+		applies: (subject) =>
+			subject.surface.prompts !== undefined &&
+			subject.answer !== undefined &&
+			subject.stranger !== undefined &&
+			subject.approver !== undefined &&
+			subject.privateOnly !== true,
+		run: namedApproverAnswers,
+	},
+	{
+		name: "a private conversation is answered by its person alone, whoever else a call names",
+		applies: (subject) =>
+			subject.surface.prompts !== undefined &&
+			subject.answer !== undefined &&
+			subject.approver !== undefined,
+		run: (running) =>
+			answeredOnlyByThem(running, running.subject.approver, "private", [
+				speakerOf(running.subject).principalId,
+				running.subject.approver?.principalId ?? "",
+			]),
+	},
+	{
 		name: "a private conversation's approval above the person's tier goes to no one: it comes back at once, unshown",
 		applies: (subject) =>
 			subject.surface.prompts !== undefined &&
@@ -360,48 +333,6 @@ const CHECKS: readonly Check[] = [
 		},
 	},
 ];
-
-/**
- * Opens the person's approval in a conversation of `visibility`, has `other` answer it by its id,
- * and checks that only the person's own answer settles it.
- */
-async function answeredOnlyByThem(
-	running: Running,
-	other: SurfaceContractAnswerer | undefined,
-	visibility: "private" | "shared",
-): Promise<void> {
-	const { surface, channel, answer } = running.subject;
-	const prompts = surface.prompts?.(
-		channel,
-		scopeOf(running.subject, visibility),
-	);
-	if (!prompts || !answer || !other)
-		throw new ContractBroken("the surface shows no prompts");
-	await other.join?.();
-	const before = seen(running, "prompt").length;
-	let settled: Approval | undefined;
-	const result = prompts
-		.confirm(
-			"Approve?",
-			"Send the report.",
-			undefined,
-			speakerOf(running.subject).tier,
-		)
-		.then((value) => {
-			settled = value;
-			return value;
-		});
-	const id = await nextPrompt(running, before);
-	await other.answer(id, true);
-	await Bun.sleep(50);
-	expectThat(
-		settled === undefined,
-		`another principal's answer settled the approval as ${settled}`,
-	);
-	await answer(id, false);
-	const own = await result;
-	expectThat(own === "declined", `the person's answer came back ${own}`);
-}
 
 async function runCheck(
 	check: Check,
@@ -445,7 +376,10 @@ export async function checkSurfaceContract(
  * where it offers them, delivers files, ends typing and stop controls idempotently, shows
  * progress, resolves approvals as the person answers or as a stopped turn cancels them, ignores
  * another person's answer to the person's approval, and, in a private conversation, an owner's
- * too, and lets an approval above the person's tier there come back at once, shown to no one. Each
+ * too, and lets an approval above the person's tier there come back at once, shown to no one.
+ * Where it can name approvers, an approval that does is answered by them, reported as the
+ * approver, and not by the person or another person, and a private conversation's is answered by
+ * its person alone, whoever the call names besides them. Each
  * check gets a fresh subject from `make`; a check for an optional part the surface lacks passes.
  */
 export function describeSurfaceContract(

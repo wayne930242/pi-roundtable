@@ -1,8 +1,10 @@
-import type { Tier } from "pi-roundtable";
+import { describe, expect, test } from "bun:test";
+import { promptScope, type Tier } from "pi-roundtable";
 import {
 	describeSurfaceContract,
 	type SurfaceObservation,
 } from "pi-roundtable/testing";
+import { PromptDesk } from "./prompts.ts";
 import type { ServerFrame } from "./protocol.ts";
 import { speakerOf, testChat } from "./testing/fakes.ts";
 
@@ -40,6 +42,7 @@ function webSubject(person: string, tier: Tier, roles: string[]) {
 	let socket: ReturnType<typeof connect> | undefined;
 	let stranger: ReturnType<typeof connect> | undefined;
 	let owner: ReturnType<typeof connect> | undefined;
+	let approver: ReturnType<typeof connect> | undefined;
 	return {
 		surface: chat.surface,
 		channel: `web:${conversation}` as const,
@@ -70,6 +73,18 @@ function webSubject(person: string, tier: Tier, roles: string[]) {
 					await say(stranger, { type: "approval", prompt, approved });
 			},
 		},
+		// Every web conversation is private to its person, so a name in `approvers` changes nothing.
+		privateOnly: true,
+		approver: {
+			principalId: "ned",
+			join: async () => {
+				approver = connect("ned", roles);
+			},
+			answer: async (prompt: string, approved: boolean) => {
+				if (approver)
+					await say(approver, { type: "approval", prompt, approved });
+			},
+		},
 		...(person === "boss"
 			? {}
 			: {
@@ -87,6 +102,7 @@ function webSubject(person: string, tier: Tier, roles: string[]) {
 			if (socket) chat.closed(socket);
 			if (stranger) chat.closed(stranger);
 			if (owner) chat.closed(owner);
+			if (approver) chat.closed(approver);
 		},
 	};
 }
@@ -99,3 +115,33 @@ describeSurfaceContract("the web chat surface", async () =>
 describeSurfaceContract("the web chat surface for a member", async () =>
 	webSubject("ann", "member", ["User"]),
 );
+
+describe("a held call that names approvers", () => {
+	test("the web chat answers it for its person alone, and names no approver", async () => {
+		const frames: ServerFrame[] = [];
+		const desk = new PromptDesk({
+			send: (_principal, frame) => void frames.push(frame),
+			timeoutMs: 60_000,
+		});
+		const scope = promptScope(speakerOf("ann", "member"), "shared");
+		let named = 0;
+		const answer = desk
+			.prompts("c1", scope)
+			.confirm("Send?", "sends it", undefined, "member", undefined, undefined, {
+				approvers: ["ned"],
+				approvedBy: () => {
+					named++;
+				},
+			});
+		const prompt = frames.find((frame) => frame.type === "prompt");
+		const id = prompt?.type === "prompt" ? prompt.prompt.id : "";
+		expect(desk.approve({ principalId: "ned", tier: "member" }, id, true)).toBe(
+			"forbidden",
+		);
+		expect(desk.approve({ principalId: "ann", tier: "member" }, id, true)).toBe(
+			undefined,
+		);
+		expect(await answer).toBe("approved");
+		expect(named).toBe(0);
+	});
+});

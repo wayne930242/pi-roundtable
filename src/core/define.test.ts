@@ -40,11 +40,13 @@ type Registered = {
 function register(
 	tool: ReturnType<typeof defineTool>,
 	origin?: string,
+	approvedBy?: SessionContext["approvedBy"],
 ): Registered {
 	const registered: Registered[] = [];
 	const context = {
 		speaker: () => speaker,
 		...(origin === undefined ? {} : { origin: () => origin }),
+		...(approvedBy ? { approvedBy } : {}),
 		turnChannel: "discord:2",
 		agent: { name: "helper", session: "discord:2", home: "discord:2" },
 	} as unknown as SessionContext;
@@ -206,6 +208,68 @@ describe("defineTool", () => {
 		expect(
 			await tool.hold?.describeInTurn?.("note_add", { text: "hi" }, {}, turn),
 		).toBeUndefined();
+	});
+
+	test("a tool's approvers are asked in a turn for the tool's own calls, and name no one where there is no turn", async () => {
+		const seen: ToolTurn[] = [];
+		const tool = defineTool({
+			...note,
+			hold: () => "save a note",
+			approvers: async (args, turn) => {
+				seen.push(turn);
+				return args.text === "rm" ? [] : ["p_ada", "p_bo"];
+			},
+		});
+		const rule = tool.hold;
+		const turn = { speaker } as unknown as ToolTurn;
+		expect(
+			await rule?.approversInTurn?.("note_add", { text: "hi" }, {}, turn),
+		).toEqual(["p_ada", "p_bo"]);
+		expect(
+			await rule?.approversInTurn?.("note_add", { text: "rm" }, {}, turn),
+		).toEqual([]);
+		expect(
+			await rule?.approversInTurn?.("other", { text: "hi" }, {}, turn),
+		).toBeUndefined();
+		expect(seen).toEqual([turn, turn]);
+		// It may name approvers for its own calls only (RV3-F001).
+		expect(rule?.mayName?.("note_add")).toBe(true);
+		expect(rule?.mayName?.("other")).toBe(false);
+		// The check with no turn, such as a precheck script's call, asks no one.
+		expect(rule?.describe("note_add", { text: "hi" }, {})).toBe("save a note");
+		expect(seen).toHaveLength(2);
+	});
+
+	test("a tool with approvers and no hold of its own holds nothing but still names the approvers of a call another rule holds", async () => {
+		const tool = defineTool({ ...note, approvers: async () => ["p_ada"] });
+		const rule = tool.hold;
+		const turn = { speaker } as unknown as ToolTurn;
+		expect(rule?.describe("note_add", { text: "hi" }, {})).toBeUndefined();
+		expect(
+			await rule?.describeInTurn?.("note_add", { text: "hi" }, {}, turn),
+		).toBeUndefined();
+		expect(
+			await rule?.approversInTurn?.("note_add", { text: "hi" }, {}, turn),
+		).toEqual(["p_ada"]);
+		expect(defineTool(note).hold).toBeUndefined();
+	});
+
+	test("run sees who approved its call as the turn's approvedBy, and nobody for a call that was not held", async () => {
+		const seen: unknown[] = [];
+		const tool = defineTool({
+			...note,
+			run: (_args, turn) => {
+				seen.push(turn.approvedBy);
+				return "ok";
+			},
+		});
+		const by = { principalId: "p_ada", speakerId: "9", name: "Ada" };
+		const registered = register(tool, undefined, (id) =>
+			id === "held" ? by : undefined,
+		);
+		await registered.execute("held", { text: "x" });
+		await registered.execute("plain", { text: "x" });
+		expect(seen).toEqual([by, undefined]);
 	});
 
 	test("each mistake is refused with the tool's name and the fix", () => {

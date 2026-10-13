@@ -4,6 +4,7 @@ import type { ReplyFile } from "./domain/conversation.ts";
 import { PluginError } from "./errors.ts";
 import { type HoldRule, isPromise } from "./holds.ts";
 import { messages } from "./i18n/index.ts";
+import type { ApprovedBy } from "./interactions/prompts.ts";
 import { type RoundtablePlugin, refuseRemovedFields } from "./plugin.ts";
 import type { AgentTurnScope, ChannelKey, SessionTool } from "./sessions.ts";
 import { toolError, toolText } from "./shared/tool-result.ts";
@@ -34,6 +35,13 @@ export interface ToolTurn {
 	 * when it is undefined.
 	 */
 	origin?: string;
+	/**
+	 * Who approved the call, for a call that was held: the person who pressed its card, or whose
+	 * message confirmed it, including a card answered after the turn stopped waiting. Undefined for
+	 * a call that ran without a hold, and for one a surface released without saying who; a tool
+	 * that must know the approver fails closed when it is undefined.
+	 */
+	approvedBy?: ApprovedBy;
 	/**
 	 * The session's shared workspace and scratch dir, where a tool may save a file for the model to
 	 * pass on by path; undefined for a session without a workspace.
@@ -85,6 +93,20 @@ export interface ToolSpec<Schema extends TObject> {
 		args: Static<Schema>,
 		turn: ToolTurn,
 	) => string | undefined | Promise<string | undefined>;
+	/**
+	 * The principal ids that may approve this call when it is held, instead of the speaker whose
+	 * turn makes it, looked up as that turn like `hold` (same wait, same `turn.signal`, and it
+	 * must change nothing). Each needs the call's tier when they answer, and the owners may still
+	 * approve it. An empty list leaves the owners alone. A rejection or a timeout leaves the owners
+	 * alone too. Only these and the owners approve the call, by a card or by a message that
+	 * confirms it, even after a restart: the speaker whose turn made it may not unless named, and in
+	 * a private conversation, whose person alone answers, the call is refused unless they are named
+	 * or an owner. The approver reaches `run` as `turn.approvedBy`.
+	 */
+	approvers?: (
+		args: Static<Schema>,
+		turn: ToolTurn,
+	) => Promise<readonly string[]>;
 	run(args: Static<Schema>, turn: ToolTurn): Promise<string> | string;
 }
 
@@ -140,12 +162,12 @@ export function defineTool<Schema extends TObject>(
 					label: name,
 					description: spec.description,
 					parameters: spec.parameters,
-					execute: async (_toolCallId, params, signal) => {
+					execute: async (toolCallId, params, signal) => {
 						try {
 							return toolText(
 								await spec.run(
 									params as Static<Schema>,
-									toolTurn(context, signal),
+									toolTurn(context, signal, toolCallId),
 								),
 							);
 						} catch (error) {
@@ -157,22 +179,38 @@ export function defineTool<Schema extends TObject>(
 			},
 		}),
 	};
-	const hold = spec.hold;
+	const { hold, approvers } = spec;
 	const contribution = {
 		name,
 		minTier: spec.minTier,
 		agent: spec.agent ?? true,
 		session,
 	};
-	if (!hold) return contribution;
+	if (!hold && !approvers) return contribution;
 	return {
 		...contribution,
 		hold: {
 			name: `tool:${name}`,
 			describe: (tool, input) =>
-				tool === name ? holdWithoutTurn(name, hold, input) : undefined,
+				hold && tool === name ? holdWithoutTurn(name, hold, input) : undefined,
 			describeInTurn: (tool, input, _context, turn) =>
-				tool === name ? hold(input as Static<Schema>, turn) : undefined,
+				hold && tool === name ? hold(input as Static<Schema>, turn) : undefined,
+			...(approvers
+				? {
+						// The tool names approvers for its own calls only, so another tool's call with
+						// computed arguments in a precheck script is not made owner-only by it.
+						mayName: (tool: string) => tool === name,
+						approversInTurn: (
+							tool: string,
+							input: Record<string, unknown>,
+							_context: unknown,
+							turn: ToolTurn,
+						) =>
+							tool === name
+								? approvers(input as Static<Schema>, turn)
+								: undefined,
+					}
+				: {}),
 		},
 	};
 }

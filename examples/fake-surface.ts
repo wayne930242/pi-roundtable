@@ -1,5 +1,6 @@
 import {
 	type Approval,
+	type ApprovedBy,
 	type ChannelKey,
 	type ChatSurface,
 	definePlugin,
@@ -9,6 +10,7 @@ import {
 	type Prompts,
 	parseChannelKey,
 	TIERS,
+	type Tier,
 } from "pi-roundtable";
 
 /** A prompt the surface showed, open until someone it is for answers it. */
@@ -17,6 +19,18 @@ interface Asked {
 	channel: ChannelKey;
 	title: string;
 	open: boolean;
+}
+
+/** Who may answer an open prompt and what happens when they do. */
+interface Answering {
+	/** The principals who may answer it: the speaker, or the approvers the call named. */
+	principals: readonly string[];
+	owners: boolean;
+	/** The lowest tier an answer needs, when the principals are the approvers'. */
+	minTier?: Tier;
+	/** Hears who approved it. */
+	approved?(by: ApprovedBy): void;
+	settle(answer: Approval): void;
 }
 
 /**
@@ -32,10 +46,7 @@ export class FakeSurface implements ChatSurface {
 	readonly stops: string[] = [];
 	readonly asked: Asked[] = [];
 	/** Who may answer each open prompt, and how it settles. */
-	readonly #answering = new Map<
-		string,
-		{ principalId?: string; owners: boolean; settle(answer: Approval): void }
-	>();
+	readonly #answering = new Map<string, Answering>();
 	#deliver: ((message: InboundMessage) => void) | undefined;
 
 	/** The host hands over its router; every message the network reports goes to it. */
@@ -81,42 +92,88 @@ export class FakeSurface implements ChatSurface {
 	 * How a turn asks to approve a held action or answers a question. The scope names who may
 	 * answer: its speaker when their tier holds the call, and the owners unless the conversation
 	 * is private, where a call above the speaker's tier goes to no one and comes back `unavailable` at once.
+	 * Where the call names approvers and the conversation is shared, they answer it instead of the
+	 * speaker, at the tier it needs. A private conversation's person alone answers it, and only if
+	 * named or an owner; for any other the call comes back `unavailable` at once.
 	 */
 	prompts(channel: ChannelKey, scope?: PromptScope): Prompts {
 		return {
-			confirm: async (title, _message, signal, minTier = "owner") => {
+			confirm: async (
+				title,
+				_message,
+				signal,
+				minTier = "owner",
+				_wait,
+				_details,
+				options,
+			) => {
+				const owners = scope?.escalate !== "none";
+				const named = options?.approvers;
+				// Alone with the bot, the person answers for themselves, if the call is theirs to approve:
+				// they are named, or an owner.
+				if (
+					named &&
+					!owners &&
+					scope?.tier !== "owner" &&
+					!named.includes(scope?.principalId ?? "")
+				)
+					return "unavailable";
+				const shared = owners ? named : undefined;
 				const theirs =
 					scope !== undefined &&
 					TIERS.indexOf(scope.tier) >= TIERS.indexOf(minTier);
-				const owners = scope?.escalate !== "none";
-				if (!theirs && !owners) return "unavailable";
+				const principals = shared ?? (theirs ? [scope.principalId] : []);
+				if (principals.length === 0 && !owners) return "unavailable";
 				return this.#ask(channel, title, signal, {
-					...(theirs ? { principalId: scope.principalId } : {}),
+					principals,
 					owners,
+					...(shared ? { minTier } : {}),
+					...(options?.approvedBy ? { approved: options.approvedBy } : {}),
 				});
 			},
 			ask: async () => undefined,
 		};
 	}
 
-	/** Someone answers an open prompt; it settles only when it is theirs to answer. */
+	/**
+	 * Someone answers an open prompt; it settles only when it is theirs to answer. `name` and
+	 * `speakerId` say who they are to a call that asks who approved it.
+	 */
 	answer(
 		id: string,
-		who: { principalId: string; owner?: boolean },
+		who: {
+			principalId: string;
+			owner?: boolean;
+			tier?: Tier;
+			name?: string;
+			speakerId?: string;
+		},
 		approved: boolean,
 	): void {
 		const open = this.#answering.get(id);
 		if (!open) return;
-		const theirs = open.principalId === who.principalId;
-		if (theirs || (who.owner && open.owners))
-			open.settle(approved ? "approved" : "declined");
+		// An answer that does not say its tier is not accepted where a tier is needed.
+		const tierOk =
+			!open.minTier ||
+			(who.tier !== undefined &&
+				TIERS.indexOf(who.tier) >= TIERS.indexOf(open.minTier));
+		const theirs = open.principals.includes(who.principalId) && tierOk;
+		if (!theirs && !(who.owner && open.owners)) return;
+		if (approved)
+			open.approved?.({
+				principalId: who.principalId,
+				speakerId: who.speakerId ?? who.principalId,
+				name: who.name ?? who.principalId,
+				...(who.owner ? { owner: true as const } : {}),
+			});
+		open.settle(approved ? "approved" : "declined");
 	}
 
 	#ask(
 		channel: ChannelKey,
 		title: string,
 		signal: AbortSignal | undefined,
-		audience: { principalId?: string; owners: boolean },
+		audience: Omit<Answering, "settle">,
 	): Promise<Approval> {
 		const asked = {
 			id: `q${this.asked.length + 1}`,

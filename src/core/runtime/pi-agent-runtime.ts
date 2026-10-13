@@ -162,7 +162,10 @@ export class PiAgentRuntime implements AgentRuntime {
 		);
 		if (session.thinkingLevel !== level) session.setThinkingLevel(level);
 		const gate = await this.#sessions.gate(key, request.agent !== undefined);
-		const pending = gate.pending();
+		// What this turn's message may release: a held call that named approvers is theirs alone.
+		const pending = request.confirmed
+			? gate.releasable(request.speaker)
+			: gate.pending();
 		const registered = new Set(session.getAllTools().map((tool) => tool.name));
 		// The speaker's tier limits the tools.
 		const { tier } = request.speaker;
@@ -217,8 +220,9 @@ export class PiAgentRuntime implements AgentRuntime {
 			request.confirmed === true,
 			who,
 			request.speaker,
+			conversation.visibility === "private",
 		);
-		if (request.confirmed && pending) {
+		if (request.confirmed && pending && pending.calls.length > 0) {
 			logger.info(
 				{
 					channel: request.channel,
@@ -288,7 +292,7 @@ export class PiAgentRuntime implements AgentRuntime {
 		try {
 			const attachments = request.attachments ?? NO_ATTACHMENTS;
 			const text =
-				request.confirmed && pending
+				request.confirmed && pending && pending.calls.length > 0
 					? confirmedTurnText(pending, request.text, who)
 					: request.text;
 			const prompted = running.run(() =>

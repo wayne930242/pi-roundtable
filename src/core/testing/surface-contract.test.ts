@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import type { InboundMessage } from "../contract/channels.ts";
 import type { ChatSurface } from "../contract/surface.ts";
-import type { Approval } from "../interactions/prompts.ts";
+import type { Approval, ApprovedBy } from "../interactions/prompts.ts";
 import { type Tier, tierAtLeast } from "../speakers.ts";
 import {
 	checkSurfaceContract,
@@ -23,13 +23,24 @@ function memoryChat(
 		escalatesPrivate?: boolean;
 		/** The person's tier; owner by default. */
 		tier?: Tier;
+		/** Lets the person answer an approval that names others, as if it named no one. */
+		ignoresApprovers?: boolean;
+		/** Lets a named approver answer in a private conversation, where its person alone answers. */
+		approversInPrivate?: boolean;
+		/** Does not report who approved an approval that names approvers. */
+		silentApprovers?: boolean;
 	} = {},
 ): SurfaceContractSubject {
 	const seen: SurfaceObservation[] = [];
-	/** Each open prompt's settle, and whether the owner may answer it. */
+	/** Each open prompt's settle, whether the owner may answer it, and the approvers it names. */
 	const open = new Map<
 		string,
-		{ settle: (answer: Approval) => void; owners: boolean }
+		{
+			settle: (answer: Approval) => void;
+			owners: boolean;
+			approvers?: readonly string[];
+			approvedBy?(by: ApprovedBy): void;
+		}
 	>();
 	/**
 	 * Answers prompt `id` as `who`: the person, author "1", or the owner "0" where the prompt's
@@ -37,11 +48,16 @@ function memoryChat(
 	 */
 	const answerAs = (who: string, id: string, approved: boolean) => {
 		const prompt = open.get(id);
+		const named = prompt?.approvers;
 		const may =
-			who === "1" ||
+			(who === "1" && (!named || options.ignoresApprovers)) ||
 			options.openPrompts ||
+			named?.includes(who) ||
 			(who === "0" && (prompt?.owners || options.ownerAnswersAll));
-		if (may) prompt?.settle(approved ? "approved" : "declined");
+		if (!may) return;
+		if (approved && named?.includes(who) && !options.silentApprovers)
+			prompt?.approvedBy?.({ principalId: who, speakerId: who, name: who });
+		prompt?.settle(approved ? "approved" : "declined");
 	};
 	let deliver: ((message: InboundMessage) => void) | undefined;
 	let next = 0;
@@ -67,7 +83,15 @@ function memoryChat(
 		},
 		progress: (_channel, event) => void seen.push({ kind: "progress", event }),
 		prompts: (_channel, scope) => ({
-			confirm: async (title, _message, signal, minTier = "owner") => {
+			confirm: async (
+				title,
+				_message,
+				signal,
+				minTier = "owner",
+				_wait,
+				_details,
+				given,
+			) => {
 				const theirs = !scope || tierAtLeast(scope.tier, minTier);
 				if (!theirs && scope?.escalate === "none" && !options.escalatesPrivate)
 					return "unavailable";
@@ -79,7 +103,15 @@ function memoryChat(
 						seen.push({ kind: "prompt_closed", id });
 						resolve(answer);
 					};
-					open.set(id, { settle, owners: scope?.escalate !== "none" });
+					const shared = scope?.escalate !== "none";
+					open.set(id, {
+						settle,
+						owners: shared,
+						...(given?.approvers && (shared || options.approversInPrivate)
+							? { approvers: given.approvers }
+							: {}),
+						...(given?.approvedBy ? { approvedBy: given.approvedBy } : {}),
+					});
 					signal?.addEventListener("abort", () =>
 						settle(options.brokenPrompts ? "expired" : "cancelled"),
 					);
@@ -114,6 +146,10 @@ function memoryChat(
 		},
 		stranger: { answer: async (id, approved) => answerAs("2", id, approved) },
 		owner: { answer: async (id, approved) => answerAs("0", id, approved) },
+		approver: {
+			principalId: "3",
+			answer: async (id, approved) => answerAs("3", id, approved),
+		},
 	};
 }
 
@@ -141,6 +177,8 @@ test("the contract catches a surface that lets another person answer an approval
 	expect(failures.map((failure) => failure.name)).toEqual([
 		"another person cannot answer the person's approval",
 		"another principal cannot answer for the person in their private conversation, even an owner",
+		"a named approver answers an approval instead of the person; the person and another person cannot",
+		"a private conversation is answered by its person alone, whoever else a call names",
 	]);
 });
 
@@ -151,6 +189,44 @@ test("the contract catches a surface where an owner answers for the person in th
 	expect(failures.map((failure) => failure.name)).toEqual([
 		"another principal cannot answer for the person in their private conversation, even an owner",
 	]);
+});
+
+test("the contract catches a surface where the person answers an approval that names others", async () => {
+	const failures = await checkSurfaceContract(async () =>
+		memoryChat({ ignoresApprovers: true }),
+	);
+	expect(failures.map((failure) => failure.name)).toEqual([
+		"a named approver answers an approval instead of the person; the person and another person cannot",
+	]);
+});
+
+test("the contract catches a surface where a named approver answers in a private conversation", async () => {
+	const failures = await checkSurfaceContract(async () =>
+		memoryChat({ approversInPrivate: true }),
+	);
+	expect(failures.map((failure) => failure.name)).toEqual([
+		"a private conversation is answered by its person alone, whoever else a call names",
+	]);
+});
+
+test("the contract catches a surface that does not report the named approver who answered", async () => {
+	const failures = await checkSurfaceContract(async () =>
+		memoryChat({ silentApprovers: true }),
+	);
+	expect(failures.map((failure) => failure.name)).toEqual([
+		"a named approver answers an approval instead of the person; the person and another person cannot",
+	]);
+});
+
+test("the contract skips the named-approver checks for a surface that names no approver, and the shared one for a private-only surface", async () => {
+	const { approver: _approver, ...without } = memoryChat();
+	expect(await checkSurfaceContract(async () => ({ ...without }))).toEqual([]);
+	expect(
+		await checkSurfaceContract(async () => ({
+			...memoryChat({ ignoresApprovers: true }),
+			privateOnly: true,
+		})),
+	).toEqual([]);
 });
 
 test("the contract catches a surface that shows a private approval above the person's tier, to wait for the owners", async () => {

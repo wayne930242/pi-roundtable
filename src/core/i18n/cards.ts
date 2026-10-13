@@ -14,6 +14,8 @@ export function cardsEn(ctx: CatalogContext) {
 			`-# Who can approve: ${userIds.map((id) => `<@${id}>`).join(" ")}`,
 		cardApproversRefusal:
 			"This approval is for the speaker whose turn asked for it.",
+		cardNamedApproversRefusal:
+			"This approval is for the people it names, and the owners.",
 		cardAskerNote: (...userIds: readonly string[]) =>
 			`-# Who can answer: ${userIds.map((id) => `<@${id}>`).join(" ")}`,
 		cardAskerRefusal: "This question is for another speaker.",
@@ -44,6 +46,7 @@ export function cardsZhTW(ctx: CatalogContext): ReturnType<typeof cardsEn> {
 		cardApproversNote: (...userIds: readonly string[]) =>
 			`-# 可以核准的人：${userIds.map((id) => `<@${id}>`).join(" ")}`,
 		cardApproversRefusal: "這張核准卡是給提出這一輪的發話者的。",
+		cardNamedApproversRefusal: "這張核准卡是給卡片上點名的人和擁有者的。",
 		cardAskerNote: (...userIds: readonly string[]) =>
 			`-# 可以回答的人：${userIds.map((id) => `<@${id}>`).join(" ")}`,
 		cardAskerRefusal: "這張問題是問另一位發話者的。",

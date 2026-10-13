@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+	type Context,
 	createFauxCore,
 	fauxAssistantMessage,
 	fauxText,
@@ -13,7 +14,11 @@ import { Type } from "typebox";
 import type { ChatSurface } from "./core/contract/surface.ts";
 import { definePlugin, defineTool } from "./core/define.ts";
 import type { PendingConfirmation } from "./core/domain/conversation.ts";
-import type { PromptScope } from "./core/interactions/prompts.ts";
+import type {
+	ApprovalOptions,
+	ApprovedBy,
+	PromptScope,
+} from "./core/interactions/prompts.ts";
 import { PiAgentRuntime } from "./core/runtime/pi-agent-runtime.ts";
 import type { Speaker } from "./core/speakers.ts";
 import { testPlugin } from "./testing.ts";
@@ -24,6 +29,17 @@ const MEMBER: Speaker = {
 	tier: "member",
 	principalId: "7",
 };
+
+/** Who approved each `ship` that ran. */
+const shipped: (ApprovedBy | undefined)[] = [];
+
+/** A turn that calls `ship`, held for approval by `p_ada`, then reports. */
+const SHIP_TURN = () => [
+	fauxAssistantMessage([fauxToolCall("ship", { to: "acme" })], {
+		stopReason: "toolUse",
+	}),
+	fauxAssistantMessage([fauxText("Shipped.")]),
+];
 
 /** A turn that calls `deploy`, held for approval, then waits. */
 const DEPLOY_TURN = () => [
@@ -37,6 +53,10 @@ const DEPLOY_TURN = () => [
 async function heldHost(
 	turns: number,
 	prompts?: ChatSurface["prompts"],
+	script: () => (
+		| ReturnType<typeof DEPLOY_TURN>[number]
+		| ((context: Context) => ReturnType<typeof DEPLOY_TURN>[number])
+	)[] = DEPLOY_TURN,
 ): Promise<{
 	harness: Awaited<ReturnType<typeof testPlugin>>;
 	saved: (PendingConfirmation | undefined)[];
@@ -44,7 +64,7 @@ async function heldHost(
 }> {
 	const dir = mkdtempSync(join(tmpdir(), "roundtable-held-"));
 	const core = createFauxCore({ provider: "faux", models: [{ id: "faux-1" }] });
-	core.setResponses(Array.from({ length: turns }, DEPLOY_TURN).flat());
+	core.setResponses(Array.from({ length: turns }, script).flat());
 	const modelRuntime = await ModelRuntime.create({
 		authPath: join(dir, "auth.json"),
 		modelsPath: null,
@@ -100,6 +120,10 @@ async function heldHost(
 							},
 						},
 						prompts: deps.prompts,
+						principalOf: async (id) =>
+							id === "p_ada"
+								? { id, displayName: "Ada", disabled: false }
+								: undefined,
 					}),
 			},
 			setup: () => ({
@@ -112,6 +136,18 @@ async function heldHost(
 						minTier: "member",
 						hold: ({ site }) => `deploy ${site}`,
 						run: () => "deployed",
+					}),
+					defineTool({
+						name: "ship",
+						description: "Ship it, approved by one of the people it names.",
+						parameters: Type.Object({ to: Type.String() }),
+						minTier: "member",
+						hold: ({ to }) => `ship to ${to}`,
+						approvers: async () => ["p_ada"],
+						run: (_args, turn) => {
+							shipped.push(turn.approvedBy);
+							return "shipped";
+						},
 					}),
 				],
 				sessionTools: [
@@ -212,6 +248,205 @@ test("a turn's prompts are scoped to its speaker: escalating to the owners in a 
 				escalate: "none",
 			},
 		]);
+	} finally {
+		await done();
+	}
+});
+
+test("a call held for named approvers is asked with them, and its run sees who approved the card", async () => {
+	shipped.length = 0;
+	const asked: (ApprovalOptions | undefined)[] = [];
+	const { harness, done } = await heldHost(
+		1,
+		() => ({
+			confirm: async (_t, _m, _s, _tier, _wait, _details, options) => {
+				asked.push(options);
+				options?.approvedBy?.({
+					principalId: "p_ada",
+					speakerId: "9",
+					name: "Ada",
+				});
+				return "approved";
+			},
+			ask: async () => undefined,
+		}),
+		SHIP_TURN,
+	);
+	try {
+		await harness.turns.run({
+			channel: "fake:room",
+			kind: "helper",
+			text: "ship to acme",
+			speaker: { ...MEMBER, principalId: "p_sam" },
+			interactive: true,
+			conversation: { visibility: "shared" },
+			selection: { id: "held", tools: ["ship"], groups: [] },
+		});
+		expect(asked.map((options) => options?.approvers)).toEqual([["p_ada"]]);
+		expect(shipped).toEqual([
+			{ principalId: "p_ada", speakerId: "9", name: "Ada" },
+		]);
+	} finally {
+		await done();
+	}
+});
+
+test("a shared conversation's approval that does not say who gave it leaves a call that names approvers held (RV-F003)", async () => {
+	shipped.length = 0;
+	const { harness, done } = await heldHost(
+		1,
+		() => ({ confirm: async () => "approved", ask: async () => undefined }),
+		SHIP_TURN,
+	);
+	try {
+		await harness.turns.run({
+			channel: "fake:room",
+			kind: "helper",
+			text: "ship to acme",
+			speaker: { ...MEMBER, principalId: "p_sam" },
+			interactive: true,
+			conversation: { visibility: "shared" },
+			selection: { id: "held", tools: ["ship"], groups: [] },
+		});
+		expect(shipped).toHaveLength(0);
+	} finally {
+		await done();
+	}
+});
+
+test("a private conversation's person who is not named is not asked, whatever the surface would answer (RV-F001)", async () => {
+	shipped.length = 0;
+	let asked = 0;
+	const { harness, saved, done } = await heldHost(
+		1,
+		() => ({
+			confirm: async () => {
+				asked++;
+				return "approved";
+			},
+			ask: async () => undefined,
+		}),
+		SHIP_TURN,
+	);
+	try {
+		await harness.turns.run({
+			channel: "fake:private",
+			kind: "helper",
+			text: "ship to acme",
+			speaker: { ...MEMBER, principalId: "p_sam" },
+			interactive: true,
+			conversation: { visibility: "private" },
+			selection: { id: "held", tools: ["ship"], groups: [] },
+		});
+		expect(asked).toBe(0);
+		expect(shipped).toHaveLength(0);
+		expect(saved.at(-1)?.calls[0]?.approverIds).toEqual(["p_ada"]);
+	} finally {
+		await done();
+	}
+});
+
+test("a turn started as an approval releases a call that names approvers only for a named speaker or an owner (RV-F002)", async () => {
+	shipped.length = 0;
+	const { harness, saved, done } = await heldHost(3, undefined, SHIP_TURN);
+	const turn = (speaker: Speaker) =>
+		harness.turns.run({
+			channel: "fake:room",
+			kind: "helper",
+			text: "yes, ship it",
+			speaker,
+			confirmed: true,
+			conversation: { visibility: "shared" },
+			selection: { id: "held", tools: ["ship"], groups: [] },
+		});
+	try {
+		// Held, with Ada named.
+		await harness.turns.run({
+			channel: "fake:room",
+			kind: "helper",
+			text: "ship to acme",
+			speaker: { ...MEMBER, principalId: "p_sam" },
+			conversation: { visibility: "shared" },
+			selection: { id: "held", tools: ["ship"], groups: [] },
+		});
+		// The requester, confirming it, does not release it.
+		await turn({ ...MEMBER, principalId: "p_sam" });
+		expect(shipped).toHaveLength(0);
+		expect(saved.at(-1)?.calls).toHaveLength(1);
+		// The named approver does, and run sees them.
+		await turn({ ...MEMBER, id: "9", name: "Ada", principalId: "p_ada" });
+		expect(shipped).toEqual([
+			{ principalId: "p_ada", speakerId: "9", name: "Ada" },
+		]);
+	} finally {
+		await done();
+	}
+});
+
+test("a private conversation's confirming message cannot release a call that names others, as a remote MCP conversation sends it (RV-F001)", async () => {
+	shipped.length = 0;
+	const { harness, saved, done } = await heldHost(2, undefined, SHIP_TURN);
+	const turn = (text: string, confirmed: boolean) =>
+		harness.turns.run({
+			channel: "fake:private",
+			kind: "helper",
+			text,
+			speaker: { ...MEMBER, principalId: "p_sam" },
+			...(confirmed ? { confirmed } : {}),
+			conversation: { visibility: "private" },
+			selection: { id: "held", tools: ["ship"], groups: [] },
+		});
+	try {
+		await turn("ship to acme", false);
+		await turn("yes, ship it", true);
+		expect(shipped).toHaveLength(0);
+		expect(saved.at(-1)?.calls[0]?.approverIds).toEqual(["p_ada"]);
+	} finally {
+		await done();
+	}
+});
+
+test("a private conversation's person who cannot approve is told so, and a yes releases nothing (RV2-F001)", async () => {
+	shipped.length = 0;
+	const seen: Context[] = [];
+	const { harness, saved, done } = await heldHost(2, undefined, () => [
+		fauxAssistantMessage([fauxToolCall("ship", { to: "acme" })], {
+			stopReason: "toolUse",
+		}),
+		(context) => {
+			seen.push(context);
+			return fauxAssistantMessage([fauxText("It needs Ada.")]);
+		},
+		(context) => {
+			seen.push(context);
+			return fauxAssistantMessage([fauxText("Understood.")]);
+		},
+	]);
+	const turn = (text: string, confirmed: boolean) =>
+		harness.turns.run({
+			channel: "fake:private",
+			kind: "helper",
+			text,
+			speaker: { ...MEMBER, principalId: "p_sam" },
+			...(confirmed ? { confirmed } : {}),
+			conversation: { visibility: "private" },
+			selection: { id: "held", tools: ["ship"], groups: [] },
+		});
+	const text = (context: Context) =>
+		JSON.stringify(context.messages.map((message) => message.content));
+	try {
+		await turn("ship to acme", false);
+		const told = text(seen[0] as Context);
+		expect(told).toContain("Ada");
+		expect(told).toContain("an owner");
+		expect(told).toContain("cannot approve it here");
+		expect(told).not.toContain("p_ada");
+		expect(told).not.toContain("make the same call");
+		await turn("yes", true);
+		expect(shipped).toHaveLength(0);
+		expect(saved.at(-1)?.calls[0]?.approverIds).toEqual(["p_ada"]);
+		// The yes was not an approval of anything, so the model is not told to make the call again.
+		expect(text(seen[1] as Context)).not.toContain("Make each call now");
 	} finally {
 		await done();
 	}
