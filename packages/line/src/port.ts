@@ -1,12 +1,15 @@
 import { serviceKey } from "pi-roundtable";
 import type { LineContentRequest, LineContentResult } from "./content.ts";
 import type { LineSubscriber } from "./messages.ts";
+import type { LineOutbox } from "./outbox.ts";
 import type { LineSources } from "./sources.ts";
 
 /** What other plugins read from this one, through the `LINE` service key. */
 export interface LineBridgePort {
 	/** The chats the bot has seen, and the allowlist over them. */
 	readonly sources: LineSources;
+	/** Pushes to the chats on the allowlist, with a sender, a retry key and the quota gate. */
+	readonly outbox: LineOutbox;
 	/** The bot's user id once LINE has told it, else undefined. */
 	botUserId(): string | undefined;
 	/** The token source's health: how many tokens were issued and why the last attempt failed, if it did. */

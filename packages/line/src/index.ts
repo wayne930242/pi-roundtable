@@ -6,12 +6,15 @@ export type {
 export { errorCode, LineApiError, LineError } from "./errors.ts";
 export type { ParsedEvent, SourceKind } from "./events.ts";
 export { parseSourceKey, sourceKeyOf } from "./events.ts";
+export type { SenderIconRoute } from "./icon.ts";
 export type {
 	InboxEvent,
 	InboxOptions,
 	InboxProcessor,
 	InboxResult,
 } from "./inbox.ts";
+export type { JoinNoticeOptions } from "./join.ts";
+export { digestOf } from "./join.ts";
 export type {
 	JoinNotice,
 	LineContext,
@@ -29,15 +32,24 @@ export type {
 	LineUnsentEvent,
 } from "./messages.ts";
 export type { LineOptions } from "./options.ts";
+export type {
+	EnqueueOptions,
+	LineOutbox,
+	LineOutMessage,
+	OutboxOptions,
+} from "./outbox.ts";
 export { line } from "./plugin.ts";
 export type { LineBridgePort } from "./port.ts";
 export { LINE } from "./port.ts";
+export type { QuotaOptions } from "./quota.ts";
 export type { RetentionOptions } from "./retention.ts";
+export type { LineSender, SenderOptions } from "./sender.ts";
 export type {
 	LineSource,
 	LineSourceSummary,
 	LineSources,
 	SourceStatus,
 } from "./sources.ts";
+export { LineSurface } from "./surface.ts";
 export type { LineCredentials, TokenMode } from "./token.ts";
 export { WEBHOOK_MAX_BYTES } from "./webhook.ts";

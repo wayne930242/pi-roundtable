@@ -5,15 +5,21 @@ import {
 } from "pi-roundtable";
 import { LineApi } from "./api.ts";
 import { BotIdentity } from "./bot.ts";
-import { LineConsumer } from "./consumer.ts";
+import { LineConsumer, NO_KEEP } from "./consumer.ts";
 import { MessageContent } from "./content.ts";
+import { iconRoute } from "./icon.ts";
 import { type InboxProcessor, InboxWorker } from "./inbox.ts";
+import { JoinNotifier } from "./join.ts";
 import type { LineSubscriber } from "./messages.ts";
 import { MIGRATIONS } from "./migrations.ts";
 import { checkOptions, type LineOptions } from "./options.ts";
+import { PgOutbox } from "./outbox.ts";
+import { OutboxWorker } from "./outbox-worker.ts";
 import { LINE, type LineBridgePort } from "./port.ts";
+import { QuotaGate } from "./quota.ts";
 import { RetentionSweeper } from "./retention.ts";
 import { PgSources } from "./sources.ts";
+import { LineSurface } from "./surface.ts";
 import { TokenSource } from "./token.ts";
 import { webhookHandler } from "./webhook.ts";
 
@@ -44,10 +50,42 @@ export function line(options: LineOptions): RoundtablePlugin {
 			});
 			const bot = new BotIdentity({ api, logger: context.logger, now });
 			const sources = new PgSources(sql, () => api, now);
+			const quota = new QuotaGate({
+				api,
+				now,
+				...(options.quota ? { options: options.quota } : {}),
+			});
+			// Told when a push is queued, so the worker looks as its gathering window ends.
+			let outboxWorker: OutboxWorker | undefined;
+			const outbox = new PgOutbox({
+				sql,
+				now,
+				sources,
+				...(options.outbox ? { options: options.outbox } : {}),
+				...(options.sender ? { sender: options.sender } : {}),
+				queued: (readyInMs) => outboxWorker?.kickIn(readyInMs),
+			});
+			const surface = new LineSurface(outbox);
+			const joins = new JoinNotifier({
+				sql,
+				api,
+				logger: context.logger,
+				now,
+				...(options.joinNotice ? { notice: options.joinNotice } : {}),
+			});
+			if (options.joinNotice && !joins.armed)
+				context.logger.warn(
+					{ code: "join_notice_digest_mismatch" },
+					"the LINE join notice text is not the one its digest names; no notice will be sent",
+				);
 			const consumer = new LineConsumer({
 				sql,
 				logger: context.logger,
 				now,
+				joins,
+				...(options.route
+					? { route: (message) => surface.deliver(message) }
+					: {}),
 			});
 			const content = new MessageContent(sql, api, options.media);
 			// The subscriber and the processor made for it; the worker hands events out only while both are set.
@@ -68,16 +106,37 @@ export function line(options: LineOptions): RoundtablePlugin {
 				},
 				...(options.retention ? { options: options.retention } : {}),
 			});
+			// With routing on, the inbox is served without a subscriber too: the router needs the text.
+			const routeOnly = options.route
+				? consumer.processorFor(async () => undefined)
+				: undefined;
 			const worker = new InboxWorker({
 				sql,
 				logger: context.logger,
 				now,
 				sources,
-				processor: () => subscription?.processor,
+				processor: () => subscription?.processor ?? routeOnly,
 				...(options.inbox ? { options: options.inbox } : {}),
 			});
+			outboxWorker = new OutboxWorker({
+				sql,
+				logger: context.logger,
+				now,
+				api,
+				quota,
+				sources,
+				emit: async (event, signal) => {
+					const attached = subscription;
+					if (!attached) return false;
+					await attached.handler(event, signal, NO_KEEP);
+					return true;
+				},
+				...(options.outbox ? { options: options.outbox } : {}),
+			});
+			const sending = outboxWorker;
 			const port: LineBridgePort = {
 				sources,
+				outbox,
 				botUserId: () => bot.current(),
 				health: () => {
 					const health = tokens.health();
@@ -95,6 +154,7 @@ export function line(options: LineOptions): RoundtablePlugin {
 					};
 					subscription = attached;
 					worker.kick();
+					sending.kick();
 					return () => {
 						if (subscription === attached) subscription = undefined;
 					};
@@ -115,6 +175,12 @@ export function line(options: LineOptions): RoundtablePlugin {
 						busy: () => worker.busy(),
 					},
 					{
+						name: "line-outbox",
+						start: () => sending.start(),
+						stop: () => sending.stop(),
+						busy: () => sending.busy(),
+					},
+					{
 						name: "line-retention",
 						start: () => {
 							sweeping = new AbortController();
@@ -129,7 +195,11 @@ export function line(options: LineOptions): RoundtablePlugin {
 						busy: () => retention.busy(),
 					},
 				],
+				surfaces: [surface],
 				http: [
+					...(options.senderIconRoute
+						? [iconRoute(options.senderIconRoute, options.listener ?? "public")]
+						: []),
 					{
 						name: "line-webhook",
 						listener: options.listener ?? "public",
