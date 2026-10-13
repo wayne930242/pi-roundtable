@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-13
+
 ### Added
 
 - The consumer. `LINE.subscribe(handler)` takes the one subscriber (a second is refused; the returned function detaches it) and the package's own inbox processor hands it typed events: `message` (text, image, video, audio, file, sticker, location, and `unsupported` for a type it does not know), `edited`, `unsent`, `joined` (`notice` says whether the join notice went out), `left`, `memberJoined`, `memberLeft`, and `outboxResult`. A `message` is answered with `{ refs }` (anything else fails with `bad_refs`), opaque references stored one to many in `line_message_refs` and given back on `edited` and `unsent`; a redelivery of a recorded message is not handed out again and stores nothing twice. The subscriber's third argument has `keep(ref)`, to store the reference of each post as it lands under the same lock and tombstone check as the final store (a ref kept after an unsend is handed back as `unsent` at once and `keep` resolves `{ unsent: true }`); a handler that throws after keeping some refs leaves them stored for the retry and for a later `unsend`.
