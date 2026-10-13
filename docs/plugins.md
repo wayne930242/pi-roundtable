@@ -556,7 +556,7 @@ A key the contract does not have stops the start and names the closest one.
 ### `context.attachments`: files from outside a turn
 
 A surface that takes a file as it arrives, such as Discord, hands the core a link, and the core downloads it into the conversation's attachment directory.
-The downloads of one message and of the message it replies to share a 20 second deadline; a file still to come when it passes, or whose directory cannot be made, is reported as `download failed` and the turn goes on without it.
+The downloads of one message and of the message it replies to share a 20 second deadline; a file still to come when it passes, or whose directory cannot be made, is reported as `download failed` and the turn goes on without it. A failure reason carries a code only (`download failed: ENOTDIR`, `download failed: TimeoutError`, `download failed: error`), never the error's text, which could quote a path of the host.
 A plugin whose clients upload a file themselves, over HTTP for instance, has the file before any turn exists.
 `context.attachments` keeps such a file for the conversation until a turn uses it:
 

@@ -58,6 +58,21 @@ export function safeFileName(name: string): string {
 	return cleaned || "file";
 }
 
+/**
+ * A failure's code, never its message: a message can quote the directory a file was to be written
+ * to, a host path the model and the channel have no use for. The code is an error's `code` (such
+ * as `ENOTDIR`) or its `name` (such as `TimeoutError`), and `error` when it has neither.
+ */
+function failureCode(error: unknown): string {
+	const word = /^[A-Za-z][A-Za-z0-9_]{0,40}$/;
+	if (typeof error !== "object" || error === null) return "error";
+	const { code, name } = error as { code?: unknown; name?: unknown };
+	if (typeof code === "string" && word.test(code)) return code;
+	if (typeof name === "string" && name !== "Error" && word.test(name))
+		return name;
+	return "error";
+}
+
 /** Downloads attachments one by one; a failed file is reported without stopping the others. */
 export async function fetchAttachments(
 	request: FetchRequest,
@@ -111,7 +126,7 @@ export async function fetchAttachments(
 				fromReference,
 			});
 		} catch (error) {
-			fail(`download failed: ${String(error)}`);
+			fail(`download failed: ${failureCode(error)}`);
 		}
 	}
 	return { files, failures };

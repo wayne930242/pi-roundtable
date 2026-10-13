@@ -126,7 +126,8 @@ describe("attachment download resource use", () => {
 				{ preconnect: fetch.preconnect },
 			),
 		);
-		expect(result.failures[0]?.reason).toContain("connection lost");
+		// The code, not the message: an error's message may quote a path.
+		expect(result.failures[0]?.reason).toBe("download failed: error");
 		expect(result.files[0]?.contentType).toBe("text/plain");
 		expect(await Bun.file(result.files[0]?.path ?? "").text()).toBe("hello");
 	});
@@ -142,7 +143,41 @@ describe("attachment download limits", () => {
 			fetcher(new Response("hello")),
 		);
 		expect(result.files).toEqual([]);
-		expect(result.failures[0]?.reason).toContain("download failed");
+		expect(result.failures[0]?.reason).toBe("download failed: ENOTDIR");
+		// The reason carries a code and never the directory that could not be made.
+		for (const part of [input.dir, blocker, "inside"])
+			expect(result.failures[0]?.reason).not.toContain(part);
+	});
+
+	test("an error that quotes a path is reported by its name or code only", async () => {
+		const secret = "/srv/data/private-dir/attachments";
+		const quoting = Object.assign(
+			new Error(`EACCES: cannot write '${secret}'`),
+			{
+				code: "EACCES",
+			},
+		);
+		const nameless = new Error(`failed at ${secret}`);
+		for (const [error, expected] of [
+			[quoting, "download failed: EACCES"],
+			[nameless, "download failed: error"],
+			[
+				new DOMException(`gave up on ${secret}`, "TimeoutError"),
+				"download failed: TimeoutError",
+			],
+		] as const) {
+			const result = await fetchAttachments(
+				request(),
+				Object.assign(
+					async () => {
+						throw error;
+					},
+					{ preconnect: fetch.preconnect },
+				),
+			);
+			expect(result.failures[0]?.reason).toBe(expected);
+			expect(result.failures[0]?.reason).not.toContain(secret);
+		}
 	});
 
 	test("an aborted signal fails the files still to come without fetching them", async () => {

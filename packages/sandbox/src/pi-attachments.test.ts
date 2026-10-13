@@ -123,3 +123,57 @@ test("a guest-planted symlink at the attachments directory is replaced, never fo
 		rmSync(outside, { recursive: true, force: true });
 	}
 });
+
+test("a failed download is reported by an error code and never quotes a path", async () => {
+	const root = mkdtempSync(join(tmpdir(), "pi-att-"));
+	const planted = join(root, "m4-0-first.txt");
+	const message = partial<InboundMessage>({
+		messageId: "m4",
+		reference: undefined,
+		attachments: [
+			{
+				name: "first.txt",
+				url: "https://files.test/1",
+				contentType: "text/plain",
+				size: 1,
+			},
+			{
+				name: "second.txt",
+				url: "https://files.test/2",
+				contentType: "text/plain",
+				size: 1,
+			},
+		],
+	});
+	writeFileSync(planted, "taken");
+	try {
+		let calls = 0;
+		// SAFETY: offline fixture transport, never a production override.
+		const fetchImpl = Object.assign(
+			async () => {
+				calls++;
+				if (calls === 2)
+					throw Object.assign(new Error(`cannot reach ${root}/secret`), {
+						code: "ECONNRESET",
+					});
+				return new Response("x");
+			},
+			{ preconnect: () => {} },
+		);
+		const result = await collectPiAttachments(message, root, {
+			fetchImpl,
+			prepareImage: async () => {
+				throw new Error("No images");
+			},
+		});
+		const reasons = result.failures.map((failure) => failure.reason);
+		expect(reasons).toHaveLength(2);
+		expect(reasons[1]).toBe("download failed: ECONNRESET");
+		for (const reason of reasons) {
+			expect(reason).not.toContain(root);
+			expect(reason).toMatch(/^download failed: [A-Za-z0-9_]+$/);
+		}
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});

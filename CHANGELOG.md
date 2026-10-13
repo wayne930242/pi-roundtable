@@ -10,6 +10,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `formatChannelContext` (`formatChannelContext(messages)`) is exported from `pi-roundtable/discord`, the function that writes `ChannelContext.text` (the `<channel-context>` block with each author in attributes and every `<` neutralised), so a host can test what the model sees without a deep import. It is the function the reader already used; nothing about the block changes.
 - `squarePng`, `SquarePngOptions` and `SQUARE_PNG_MAX_SIDE` (4096) are exported from `pi-roundtable/kit`. `squarePng(bytes, { size?, maxBytes? })` is the centered square crop, scaled down to at most `size` pixels per side (default 512) as PNG, that the agent avatars are made with. The header is read before decoding: a declared width or height over 4096 rejects with `ImagePreparationError` (`pixel-limit`), bytes of no PNG, JPEG, GIF or WebP with `invalid-image`. With `maxBytes` the side steps down by a quarter until the PNG fits, and a picture that does not fit at 16 pixels throws a `RangeError`. The avatar studio now refuses a drawn or reference picture that declares a side over 4096 the same way, where it used to decode it.
 
+### Fixed
+
+- An attachment's failure reason never quotes a file system path. A download that fails for any reason other than the ones with their own wording (a size over 25 MB, an HTTP status, the deadline) is recorded as `download failed: <code>`, where the code is the error's `code` (such as `ENOTDIR`, for a directory that could not be made, or `ECONNRESET`) or its `name` (such as `TimeoutError`), and `error` when it has neither; it used to be the error's own text, and the text of a failed `mkdir` quotes the directory. The reason is shown to the model in the turn's attachment block and to the channel, so a path of the host no longer reaches either.
+
 ## [0.12.1] - 2026-10-13
 
 ### Fixed

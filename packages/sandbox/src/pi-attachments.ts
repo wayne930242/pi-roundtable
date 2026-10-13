@@ -14,6 +14,16 @@ export interface PiAttachmentOptions {
 	/** Trusted presentation adapter for a failure; return undefined to keep the default wording. */
 	describeFailure?(error: unknown): string | undefined;
 }
+/** An error's `code` or `name` and never its message, which can quote the directory a file was written to. */
+function failureCode(error: unknown): string {
+	const word = /^[A-Za-z][A-Za-z0-9_]{0,40}$/;
+	if (typeof error !== "object" || error === null) return "error";
+	const { code, name } = error as { code?: unknown; name?: unknown };
+	if (typeof code === "string" && word.test(code)) return code;
+	if (typeof name === "string" && name !== "Error" && word.test(name))
+		return name;
+	return "error";
+}
 /** A failure whose message is already safe to show, matching the core's attachment wording. */
 class AttachmentRefused extends Error {}
 /** Bounded downloads and no-follow, descriptor-anchored writes into a guest-writable directory. */
@@ -147,7 +157,7 @@ export async function collectPiAttachments(
 						options.describeFailure?.(error) ??
 						(error instanceof AttachmentRefused
 							? error.message
-							: `download failed: ${String(error)}`),
+							: `download failed: ${failureCode(error)}`),
 					fromReference,
 				});
 			}
