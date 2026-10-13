@@ -1,5 +1,6 @@
 import type { ToolTurn } from "./define.ts";
 import { PluginError } from "./errors.ts";
+import type { ApprovalDetails } from "./interactions/prompts.ts";
 import { type Tier, tierAtLeast } from "./speakers.ts";
 
 /**
@@ -15,6 +16,14 @@ export interface HoldContext {
 	/** The session's scratch dir, where its shell's TMPDIR points; writes and removals inside it run. */
 	scratchDir?: string;
 }
+
+/**
+ * What a hold that runs in a turn answers with: the description of the call, or the description
+ * as `text` with a `copy` the owner's approval card offers beside it; see `ApprovalDetails.copy`.
+ */
+export type HoldDescription =
+	| string
+	| { text: string; copy?: NonNullable<ApprovalDetails["copy"]> };
 
 /**
  * Decides whether a tool call waits for the owner's approval. A rule answers with a short
@@ -40,14 +49,15 @@ export interface HoldRule {
 	 * when a turn makes the call, and waits for the answer up to `HOLD_DESCRIBE_TIMEOUT_MS`; a
 	 * rejection or a timeout holds the call under a generic description. `turn.signal` aborts when the
 	 * turn stops or the wait ends. `describe` stays what a host without a turn sees, such as a
-	 * precheck script's call, and answers at once.
+	 * precheck script's call, and answers at once. It may answer `{ text, copy }` instead of the
+	 * text alone, for the approval card to offer `copy`; a host that shows no card uses `text`.
 	 */
 	describeInTurn?(
 		tool: string,
 		input: Record<string, unknown>,
 		context: HoldContext,
 		turn: ToolTurn,
-	): string | undefined | Promise<string | undefined>;
+	): HoldDescription | undefined | Promise<HoldDescription | undefined>;
 	/**
 	 * The lowest tier that may approve a call this rule holds, when it is higher than the tool's own:
 	 * for a call that stands for others, such as saving a script whose runs make held calls.
@@ -98,7 +108,7 @@ export type HoldCheck = ((
 		input: Record<string, unknown>,
 		context: HoldContext,
 		turn: ToolTurn,
-	): string | undefined | Promise<string | undefined>;
+	): HoldDescription | undefined | Promise<HoldDescription | undefined>;
 	/** The highest tier any rule requires to approve the call; see `HoldRule.approvalTier`. */
 	approvalTier?(
 		tool: string,
@@ -150,7 +160,7 @@ export function holdChain(rules: readonly HoldRule[]): HoldCheck {
 	check.inTurn = (tool, input, context, turn) => {
 		const ask = (
 			from: number,
-		): string | undefined | Promise<string | undefined> => {
+		): HoldDescription | undefined | Promise<HoldDescription | undefined> => {
 			for (let at = from; at < rules.length; at++) {
 				const rule = rules[at];
 				if (!rule) continue;

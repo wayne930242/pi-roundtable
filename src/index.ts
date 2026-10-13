@@ -147,7 +147,12 @@ export {
 	PluginError,
 	ProviderError,
 } from "./core/errors.ts";
-export type { HoldCheck, HoldContext, HoldRule } from "./core/holds.ts";
+export type {
+	HoldCheck,
+	HoldContext,
+	HoldDescription,
+	HoldRule,
+} from "./core/holds.ts";
 export type { HostEnvironment, RoundtableOptions } from "./core/host.ts";
 export { Roundtable } from "./core/host.ts";
 export type {

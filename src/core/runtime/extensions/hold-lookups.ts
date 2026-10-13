@@ -1,5 +1,12 @@
 import type { ToolTurn } from "../../define.ts";
-import { type HoldCheck, type HoldContext, isPromise } from "../../holds.ts";
+import {
+	type HoldCheck,
+	type HoldContext,
+	type HoldDescription,
+	isPromise,
+} from "../../holds.ts";
+import { messages } from "../../i18n/index.ts";
+import type { ApprovalDetails } from "../../interactions/prompts.ts";
 
 /** The turn a hold that looks things up sees; see `HoldRule.describeInTurn`. */
 export interface HoldTurn {
@@ -13,13 +20,48 @@ export interface HoldTurn {
 export const STOPPED = Symbol("stopped");
 
 /** What waiting for a call's description comes to: its text, or the turn stopped first. */
-export type Described = string | undefined | typeof STOPPED;
+export type Described = HoldDescription | undefined | typeof STOPPED;
 
-/** A held call's description with who may approve it instead of the speaker; see `HoldRule.approversInTurn`. */
-export type Judged =
-	| { action: string; approvers?: readonly string[] }
-	| undefined
-	| typeof STOPPED;
+/**
+ * A held call's description, the text its card offers to copy, and who may approve it instead of
+ * the speaker; see `HoldRule.approversInTurn`.
+ */
+export interface Judgment {
+	action: string;
+	copy?: NonNullable<ApprovalDetails["copy"]>;
+	approvers?: readonly string[];
+}
+
+export type Judged = Judgment | undefined | typeof STOPPED;
+
+/**
+ * A hold's description as the action and the copy it carries. An answer that is neither a text
+ * nor a text with a copy still holds the call, under the generic description; a copy that is not
+ * a non-empty text is left out, so a hold that gets it wrong never lets the call run.
+ */
+export function described(
+	answer: HoldDescription,
+	tool: string,
+): { action: string; copy?: NonNullable<ApprovalDetails["copy"]> } {
+	if (typeof answer === "string") return { action: answer };
+	if (typeof answer !== "object" || answer === null)
+		return { action: messages().holdGeneric(tool) };
+	const { text, copy } = answer;
+	if (typeof text !== "string") return { action: messages().holdGeneric(tool) };
+	if (
+		!copy ||
+		typeof copy !== "object" ||
+		typeof copy.text !== "string" ||
+		copy.text === ""
+	)
+		return { action: text };
+	const label = typeof copy.label === "string" ? copy.label : undefined;
+	return {
+		action: text,
+		copy:
+			label === undefined ? { text: copy.text } : { label, text: copy.text },
+	};
+}
 
 /**
  * What a lookup that answers later comes to: its answer; `fallback` when it rejects or outlasts
@@ -58,16 +100,17 @@ export function awaited<T>(
  * none, so only the owners approve the call. A call no rule holds asks no one.
  */
 export function joinApprovers(
-	described: Described | Promise<Described>,
+	answer: Described | Promise<Described>,
 	from: { holds: HoldCheck; context: HoldContext; timeoutMs: number },
 	tool: string,
 	input: Record<string, unknown>,
 	turn: HoldTurn,
 ): Judged | Promise<Judged> {
 	const lookup = from.holds.approversInTurn;
-	if (!lookup) return withoutApprovers(described);
+	if (!lookup) return withoutApprovers(answer, tool);
 	const join = (action: Described): Judged | Promise<Judged> => {
 		if (action === STOPPED || action === undefined) return action;
+		const { action: text, copy } = described(action, tool);
 		const controller = new AbortController();
 		if (turn.signal?.aborted) controller.abort();
 		let named:
@@ -87,22 +130,31 @@ export function joinApprovers(
 		}
 		if (!isPromise(named)) {
 			controller.abort();
-			return named ? { action, approvers: named } : { action };
+			return {
+				action: text,
+				...(copy ? { copy } : {}),
+				...(named ? { approvers: named } : {}),
+			};
 		}
 		return awaited(named, [], controller, turn.signal, from.timeoutMs).then(
 			(approvers) => {
 				if (approvers === STOPPED) return STOPPED;
-				return approvers ? { action, approvers } : { action };
+				return {
+					action: text,
+					...(copy ? { copy } : {}),
+					...(approvers ? { approvers } : {}),
+				};
 			},
 		);
 	};
-	return isPromise(described) ? described.then(join) : join(described);
+	return isPromise(answer) ? answer.then(join) : join(answer);
 }
 
 function withoutApprovers(
-	described: Described | Promise<Described>,
+	answer: Described | Promise<Described>,
+	tool: string,
 ): Judged | Promise<Judged> {
-	const wrap = (action: Described): Judged =>
-		action === STOPPED || action === undefined ? action : { action };
-	return isPromise(described) ? described.then(wrap) : wrap(described);
+	const wrap = (found: Described): Judged =>
+		found === STOPPED || found === undefined ? found : described(found, tool);
+	return isPromise(answer) ? answer.then(wrap) : wrap(answer);
 }

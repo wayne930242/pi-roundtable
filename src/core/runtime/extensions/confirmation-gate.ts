@@ -7,6 +7,7 @@ import {
 	HOLD_DESCRIBE_TIMEOUT_MS,
 	type HoldCheck,
 	type HoldContext,
+	type HoldDescription,
 	higherTier,
 	isPromise,
 } from "../../holds.ts";
@@ -39,6 +40,7 @@ import {
 	awaited,
 	type Described,
 	type HoldTurn,
+	type Judgment,
 	joinApprovers,
 	STOPPED,
 } from "./hold-lookups.ts";
@@ -267,6 +269,7 @@ export class ConfirmationGate {
 		if ("released" in needing)
 			return needing.released ? { approvedBy: needing.released } : {};
 		const call = needing.held;
+		const { copy } = needing;
 		if (!ask) return { reason: await this.#held(call), refused: "held" };
 		// In a private conversation only its person answers: a call that names others is not theirs.
 		if (this.#private && !mayApproveNamed(this.#speaker, call))
@@ -284,7 +287,7 @@ export class ConfirmationGate {
 			ask.signal,
 			higherTier(this.#tiers?.minTier(call.tool), call.minTier),
 			{ late: (late) => this.#late(call, late) },
-			approvalDetails(call, this.#fileRoot),
+			{ ...approvalDetails(call, this.#fileRoot), ...(copy ? { copy } : {}) },
 			options,
 		);
 		if (answer === "approved") {
@@ -361,7 +364,10 @@ export class ConfirmationGate {
 		if (!turn || !inTurn) return this.#needing(tool, input);
 		const controller = new AbortController();
 		if (turn.signal?.aborted) controller.abort();
-		let answer: string | undefined | Promise<string | undefined>;
+		let answer:
+			| HoldDescription
+			| undefined
+			| Promise<HoldDescription | undefined>;
 		try {
 			answer = inTurn.call(
 				this.#holds,
@@ -373,7 +379,7 @@ export class ConfirmationGate {
 		} catch {
 			answer = messages().holdGeneric(tool);
 		}
-		const described: Described | Promise<Described> = isPromise(answer)
+		const found: Described | Promise<Described> = isPromise(answer)
 			? awaited(
 					answer,
 					messages().holdGeneric(tool),
@@ -384,7 +390,7 @@ export class ConfirmationGate {
 			: answer;
 		return this.#inOrder(
 			joinApprovers(
-				described,
+				found,
 				{
 					holds: this.#holds,
 					context: this.#context,
@@ -431,7 +437,7 @@ export class ConfirmationGate {
 	#unlessApproved(
 		tool: string,
 		input: Record<string, unknown>,
-		judged: { action: string; approvers?: readonly string[] },
+		judged: Judgment,
 	): Needing {
 		const minTier = this.#holds.approvalTier?.(tool, input, this.#context);
 		const call: HeldCall = {
@@ -448,7 +454,7 @@ export class ConfirmationGate {
 			const [spent] = approved === -1 ? [] : released.splice(approved, 1);
 			if (spent) return { released: spent.by };
 		}
-		return { held: call };
+		return { held: call, ...(judged.copy ? { copy: judged.copy } : {}) };
 	}
 
 	/** Records the call as held and returns what the model is told about it. */

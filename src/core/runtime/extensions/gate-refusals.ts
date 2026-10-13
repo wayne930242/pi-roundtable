@@ -3,7 +3,10 @@ import type {
 	PendingConfirmation,
 } from "../../domain/conversation.ts";
 import { type OwnerIdentity, ownerWords } from "../../identity.ts";
-import type { ApprovedBy } from "../../interactions/prompts.ts";
+import type {
+	ApprovalDetails,
+	ApprovedBy,
+} from "../../interactions/prompts.ts";
 import type { Speaker } from "../../speakers.ts";
 import { mayApproveNamed } from "./held-calls.ts";
 
@@ -23,7 +26,9 @@ export interface Release {
 }
 
 /** What a call needs of the gate: nothing, a hold, or a release that spends an approval. */
-export type Needing = { held: HeldCall } | { released: ApprovedBy | undefined };
+export type Needing =
+	| { held: HeldCall; copy?: NonNullable<ApprovalDetails["copy"]> }
+	| { released: ApprovedBy | undefined };
 
 /** The text for a held call that the speaker's own message confirms. */
 export function askSpeaker(addressee: OwnerIdentity, call: HeldCall): string {

@@ -6,7 +6,7 @@ import type {
 import type { ClientPort } from "./domain/client.ts";
 import type { ReplyFile } from "./domain/conversation.ts";
 import { PluginError } from "./errors.ts";
-import { type HoldRule, isPromise } from "./holds.ts";
+import { type HoldDescription, type HoldRule, isPromise } from "./holds.ts";
 import { messages } from "./i18n/index.ts";
 import type { ApprovedBy } from "./interactions/prompts.ts";
 import { type RoundtablePlugin, refuseRemovedFields } from "./plugin.ts";
@@ -110,11 +110,18 @@ export interface ToolSpec<Schema extends TObject> {
 	 * A host that checks the hold with no turn, such as a precheck script's call, never calls a hold
 	 * that declares `turn`; it sees the generic description. A hold that declares only `args` and
 	 * answers at once is called there as it always was.
+	 *
+	 * Instead of the description alone it may answer `{ text, copy }`, where `copy` (`{ label?, text }`)
+	 * is a text the owner's approval card offers to copy, such as the whole message the call would
+	 * send; see `ApprovalDetails.copy` for what a surface does with it and its limits. It is the same
+	 * answer as the description, so it shares its wait and its failure: a hold that rejects or
+	 * outlasts the timeout holds the call with the generic description and no copy. A host with no
+	 * card, or that checks the hold with no turn, uses `text` and ignores `copy`.
 	 */
 	hold?: (
 		args: Static<Schema>,
 		turn: ToolTurn,
-	) => string | undefined | Promise<string | undefined>;
+	) => HoldDescription | undefined | Promise<HoldDescription | undefined>;
 	/**
 	 * The principal ids that may approve this call when it is held, instead of the speaker whose
 	 * turn makes it, looked up as that turn like `hold` (same wait, same `turn.signal`, and it
@@ -253,9 +260,10 @@ function holdWithoutTurn<Schema extends TObject>(
 		const answer = (
 			hold as (
 				args: Static<Schema>,
-			) => string | undefined | Promise<string | undefined>
+			) => HoldDescription | undefined | Promise<HoldDescription | undefined>
 		)(input as Static<Schema>);
-		if (!isPromise(answer)) return answer;
+		if (!isPromise(answer))
+			return typeof answer === "object" ? answer.text : answer;
 		// Its answer is not waited for here; a rejection must not surface on its own.
 		Promise.resolve(answer).catch(() => undefined);
 	} catch {

@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { ToolTurn } from "../../define.ts";
-import type { HoldRule } from "../../holds.ts";
+import type { HoldDescription, HoldRule } from "../../holds.ts";
 import { holdChain } from "../../holds.ts";
 import { messages } from "../../i18n/index.ts";
 import type { ApprovalDetails, Prompts } from "../../interactions/prompts.ts";
@@ -44,7 +44,7 @@ function lookup(
 	describe: (
 		input: Record<string, unknown>,
 		turn: ToolTurn,
-	) => string | undefined | Promise<string | undefined>,
+	) => HoldDescription | undefined | Promise<HoldDescription | undefined>,
 ): HoldRule {
 	return {
 		name: "lookup",
@@ -215,6 +215,87 @@ describe("a hold that looks things up", () => {
 		expect(result?.block).toBe(true);
 		expect(cards[0]?.details?.action).toBe(messages().holdGeneric(MAIL));
 		expect(signal?.aborted).toBe(true);
+	});
+
+	test("a hold that answers a text with a copy puts the copy in the card's details", async () => {
+		const { cards, call } = setup(
+			lookup(async (input) => ({
+				text: `send an email to ${String(input.to)}`,
+				copy: { label: "Copy message", text: "Hello Dana,\nsee you soon." },
+			})),
+		);
+		const result = await call(event("dana"), {
+			signal: new AbortController().signal,
+		});
+		expect(result?.block).toBe(true);
+		expect(cards[0]?.details?.action).toBe("send an email to dana");
+		expect(cards[0]?.details?.copy).toEqual({
+			label: "Copy message",
+			text: "Hello Dana,\nsee you soon.",
+		});
+		expect(cards[0]?.message).toContain("**send an email to dana**");
+	});
+
+	test("a hold that answers a plain text leaves the card's copy out", async () => {
+		const { cards, call } = setup(lookup(async () => "send an email"));
+		await call(event("dana"), { signal: new AbortController().signal });
+		expect(cards[0]?.details).toBeDefined();
+		expect(cards[0]?.details && "copy" in cards[0].details).toBe(false);
+	});
+
+	test("a copy that is not a non-empty text is left out and the call is still held", async () => {
+		const { cards, call } = setup(
+			lookup(async () => ({
+				text: "send an email",
+				copy: { text: "" },
+			})),
+		);
+		const result = await call(event("dana"), {
+			signal: new AbortController().signal,
+		});
+		expect(result?.block).toBe(true);
+		expect(cards[0]?.details?.action).toBe("send an email");
+		expect(cards[0]?.details && "copy" in cards[0].details).toBe(false);
+	});
+
+	test("an answer that carries no text holds the call under the generic description", async () => {
+		const { cards, call } = setup(
+			lookup(
+				async () => ({ copy: { text: "x" } }) as unknown as HoldDescription,
+			),
+		);
+		const result = await call(event("dana"), {
+			signal: new AbortController().signal,
+		});
+		expect(result?.block).toBe(true);
+		expect(cards[0]?.details?.action).toBe(messages().holdGeneric(MAIL));
+		expect(cards[0]?.details && "copy" in cards[0].details).toBe(false);
+	});
+
+	test("a rejection or a timeout drops the copy with the description", async () => {
+		const rejected = setup(
+			lookup(async () => {
+				throw new Error("directory is down");
+			}),
+		);
+		await rejected.call(event("dana"), {
+			signal: new AbortController().signal,
+		});
+		expect(rejected.cards[0]?.details?.action).toBe(
+			messages().holdGeneric(MAIL),
+		);
+		expect(
+			rejected.cards[0]?.details && "copy" in rejected.cards[0].details,
+		).toBe(false);
+		const slow = setup(
+			lookup(() => new Promise<HoldDescription>(() => undefined)),
+			20,
+		);
+		await slow.call(event("dana"), { signal: new AbortController().signal });
+		expect(slow.cards[0]?.details?.action).toBe(messages().holdGeneric(MAIL));
+		expect(slow.cards[0]?.details && "copy" in slow.cards[0].details).toBe(
+			false,
+		);
 	});
 
 	test("a hold that answers undefined lets the call run", async () => {

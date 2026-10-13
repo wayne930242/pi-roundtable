@@ -412,6 +412,32 @@ describe("defineTool", () => {
 		).toBeUndefined();
 	});
 
+	test("a hold that answers a text with a copy hands both to a turn, and only the text where there is none", async () => {
+		const copy = { label: "Copy message", text: "the whole message" };
+		const tool = defineTool({
+			...note,
+			hold: (args) => ({ text: `save ${args.text}`, copy }),
+		});
+		const turn = { speaker } as unknown as ToolTurn;
+		expect(
+			await tool.hold?.describeInTurn?.("note_add", { text: "hi" }, {}, turn),
+		).toEqual({ text: "save hi", copy });
+		expect(tool.hold?.describe("note_add", { text: "hi" }, {})).toBe("save hi");
+		const later = defineTool({
+			...note,
+			hold: async (args, turn) => ({
+				text: `save ${args.text} for ${turn.speaker?.name}`,
+				copy,
+			}),
+		});
+		expect(
+			await later.hold?.describeInTurn?.("note_add", { text: "hi" }, {}, turn),
+		).toEqual({ text: "save hi for Ann", copy });
+		expect(later.hold?.describe("note_add", { text: "hi" }, {})).toBe(
+			messages().holdGeneric("note_add"),
+		);
+	});
+
 	test("a tool's approvers are asked in a turn for the tool's own calls, and name no one where there is no turn", async () => {
 		const seen: ToolTurn[] = [];
 		const tool = defineTool({
