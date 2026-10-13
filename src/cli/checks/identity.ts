@@ -42,9 +42,21 @@ export function surfacesOf(
 	return surfaces;
 }
 
+/** Whether a tier admits anyone on Discord: everyone there, or an identity or role of its own. */
+function admitsDiscord(tier: AccessRules["members"]): boolean {
+	if (!tier) return false;
+	const { everyone } = tier;
+	if (everyone === true) return true;
+	if (Array.isArray(everyone) && everyone.includes("discord")) return true;
+	return [...(tier.identities ?? []), ...(tier.roles ?? [])].some((entry) =>
+		entry.startsWith("discord:"),
+	);
+}
+
 /**
  * Whom the configuration serves: the owners by name, a warning when `everyone: true` admits
- * everyone on every surface of a host with more than one, and a note when it is written in the
+ * everyone on every surface of a host with more than one, a warning when members are admitted on
+ * Discord and `discord.agentSpeakers` is not `"owners"`, and a note when it is written in the
  * deprecated 0.8 form. It reads no database, so `start` runs it too.
  */
 export async function checkAccess(project: Project): Promise<Result> {
@@ -59,6 +71,15 @@ export async function checkAccess(project: Project): Promise<Result> {
 		return warn(
 			`${list(broad.map((tier) => `access.${tier}.everyone`))} ${broad.length === 1 ? "is" : "are"} true, which admits everyone on every surface: ${list(surfaces)}.`,
 			`Name the surfaces where everyone may talk, such as everyone: ["discord"], and admit the others by identity or by role, such as roles: ["web:role:<name>"].`,
+		);
+	if (
+		config.discord &&
+		config.discord.agentSpeakers !== "owners" &&
+		admitsDiscord(config.access.members)
+	)
+		return warn(
+			'access.members admits Discord speakers, and discord.agentSpeakers is not "owners": a member can talk to the agents in their channels, with their shell and other owner-level tools.',
+			'Set discord.agentSpeakers to "owners", or stop admitting Discord in access.members.',
 		);
 	const owners = config.access.owners;
 	const legacy = config.deprecations.includes(LEGACY_ACCESS)

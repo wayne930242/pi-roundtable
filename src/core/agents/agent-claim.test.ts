@@ -18,6 +18,7 @@ const ROLE = "200000000000000001";
 
 function setup(
 	channelContext?: Parameters<typeof agentClaim>[0]["channelContext"],
+	speakers?: "everyone" | "owners",
 ) {
 	const answered: { kind: string; speaker: Speaker; text: string }[] = [];
 	const stopped: string[] = [];
@@ -49,6 +50,7 @@ function setup(
 	});
 	const bare = agentClaim({
 		owner: TEST_OWNER,
+		...(speakers ? { speakers } : {}),
 		// biome-ignore lint/suspicious/noExplicitAny: a recording stand-in for the team
 		team: team as any,
 		runtime: {
@@ -308,6 +310,45 @@ test("a webhook post in an agent's channel is a report turn for the owner target
 	expect(admission?.kind === "background" && isSystemTurn(admission.turn)).toBe(
 		true,
 	);
+});
+
+test("with owners-only speakers, an admin's and a member's message starts no turn in an agent's or group's channel, and the owner's does", async () => {
+	const { claim, answered } = setup(undefined, "owners");
+	for (const channel of ["discord:10", "discord:20"] as const) {
+		expect(claim.admit(message(ADMIN, channel))).toBeUndefined();
+		expect(
+			claim.admit(message(STRANGER, channel, { authorRoleIds: [ROLE] })),
+		).toBeUndefined();
+		const admission = claim.admit(message(OWNER, channel));
+		if (admission?.kind !== "turn") throw new Error("expected a turn");
+		await admission.run();
+	}
+	expect(answered.map((a) => [a.kind, a.speaker.tier])).toEqual([
+		["agent", "owner"],
+		["group", "owner"],
+	]);
+});
+
+test("with owners-only speakers, an outside webhook's report in an agent's channel is unchanged", () => {
+	const { claim } = setup(undefined, "owners");
+	expect(
+		claim.admit({
+			...message("webhook", "discord:10"),
+			integration: { id: "hook", own: false },
+			text: "build failed",
+		}),
+	).toMatchObject({ kind: "background", turn: { report: true } });
+});
+
+test("by default, and with speakers everyone, admins and members are answered as before", () => {
+	for (const speakers of [undefined, "everyone"] as const) {
+		const { claim } = setup(undefined, speakers);
+		expect(claim.admit(message(ADMIN, "discord:10"))?.kind).toBe("turn");
+		expect(
+			claim.admit(message(STRANGER, "discord:20", { authorRoleIds: [ROLE] }))
+				?.kind,
+		).toBe("turn");
+	}
 });
 
 test("the agent server owns only Discord channels: a key of another surface is never taken, even with its id or guild", () => {

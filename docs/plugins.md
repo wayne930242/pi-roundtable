@@ -368,6 +368,8 @@ It does not make the guest's turn safe to run after the owner's: once the owner'
 It applies to the agents' channels and groups only; other conversations keep deciding by their persona.
 The default `"everyone"` is the 0.8 and 0.9 behavior.
 
+`discord: { agentSpeakers: "owners" }` (or the same key in `discord({ ... })`; `AgentServerOptions.speakers`) limits who the agents answer: in the agents' and groups' channels only an owner-tier speaker starts a turn, and a message from an admin or member gets no reply and no turn. The default `"everyone"` answers every speaker the access rules admit. An outside webhook's post in an agent's channel is a report turn either way. Use it on a host whose `access.members` admit Discord but whose agents hold shell and other owner-level tools; `roundtable doctor` warns about that combination.
+
 ## Principals and access
 
 A principal is the person the host serves; an identity is an account or credential linked to that person.

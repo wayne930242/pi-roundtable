@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `discord.agentSpeakers: "everyone" | "owners"` (`DiscordConfig`, `ResolvedDiscord`, `AgentServerOptions.speakers`, `AgentClaimOptions.speakers`; the same key in `discord({ ... })`). The default `"everyone"` is the 0.9 behavior: every speaker the access rules admit is answered in the agents' and groups' channels. With `"owners"` only owner-tier speakers are, and a message from an admin or member there starts no turn and gets no reply. An outside webhook's post in an agent's channel is still a report turn for the agent. `roundtable doctor` (the access check) now warns when `access.members` admits Discord speakers and `agentSpeakers` is not `"owners"`.
+
 ## [0.9.10] - 2026-10-10
 
 ### Added

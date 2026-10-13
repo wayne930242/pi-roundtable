@@ -150,6 +150,8 @@ A conversation holding only a guest's private turns admits that guest, not the o
 Other providers and private conversations are unaffected by this guard.
 
 In the agents' channels, `discord.agentMemory: "owners"` (default `"everyone"`) keeps a speaker below the owner tier out of memory: that turn has no memory in its prompt, no memory tools, and no memory-loading workers, so its reader record carries no private memory and a later owner or SYSTEM turn is not refused because of it.
+
+To keep admitted members from talking to the agents at all, set `discord.agentSpeakers: "owners"` (default `"everyone"`): only owners are answered in the agents' and groups' channels, and a webhook's report in an agent's channel is unchanged.
 The reverse stays: once an owner's turn has loaded memory, a guest's bridge turn in the same conversation is refused until the conversation starts fresh.
 
 Admission of another person in configuration or stored roles is only a startup warning, and `roundtable doctor` warns rather than fails for that risk.

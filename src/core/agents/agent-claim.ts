@@ -41,6 +41,11 @@ export const OWNER_TARGET: BackgroundTarget = PERSONAL_TARGET;
 export interface AgentClaimOptions {
 	/** The owner, as forwarded messages name them. */
 	owner: OwnerIdentity;
+	/**
+	 * Who is answered in the agents' and groups' channels: `"everyone"` (default) every speaker the
+	 * router resolved, `"owners"` only the owner tier; a webhook's report is the same either way.
+	 */
+	speakers?: "everyone" | "owners";
 	team: Pick<
 		DiscordAgentTeam,
 		| "guildId"
@@ -134,6 +139,8 @@ export function agentClaim(options: AgentClaimOptions): ChannelClaim {
 			// Who may talk to the agents, and at which tier, the router resolved through the identity service.
 			const { speaker } = message;
 			if (message.authorIsBot || !speaker) return undefined;
+			if (options.speakers === "owners" && speaker.tier !== "owner")
+				return undefined;
 			const { channel, messageId } = message;
 			const forwarder = addressee(speaker, options.owner);
 			return {
