@@ -1,5 +1,3 @@
-export type { LineApiOptions, RequestOptions } from "./api.ts";
-export { LineApi } from "./api.ts";
 export { errorCode, LineApiError, LineError } from "./errors.ts";
 export type { ParsedEvent, SourceKind } from "./events.ts";
 export { parseSourceKey, sourceKeyOf } from "./events.ts";
