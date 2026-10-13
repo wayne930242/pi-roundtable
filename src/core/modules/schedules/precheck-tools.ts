@@ -292,28 +292,56 @@ export function precheckScriptTools(
 	},
 ): PrecheckTool[] {
 	const tools = new Map<string, PrecheckTool>();
-	for (const call of readPrecheckScript(script).calls) {
-		const name = options.toolName(call.server, call.tool);
-		const context = options.context ?? {};
-		let held: string | undefined;
-		if (call.args) held = options.holds(name, call.args, context);
-		else {
-			held = options.holds(name, {}, context);
-			const rule =
-				held === undefined ? options.holds.mayHold?.(name) : undefined;
-			if (rule !== undefined) held = messages().precheckToolMayHold(name, rule);
-		}
+	for (const call of judgedScriptCalls(script, options)) {
 		const key = `${call.server}\u0000${call.tool}`;
 		const known = tools.get(key);
 		if (!known)
 			tools.set(key, {
 				server: call.server,
 				tool: call.tool,
-				...(held ? { held } : {}),
+				...(call.held ? { held: call.held } : {}),
 			});
-		else if (held && !known.held) known.held = held;
+		else if (call.held && !known.held) known.held = call.held;
 	}
 	return [...tools.values()];
+}
+
+/** A call in a precheck script, judged: the name its rules know it by, its input, and what they say it would do. */
+interface JudgedScriptCall {
+	server: string;
+	tool: string;
+	name: string;
+	/** The arguments written out in the script; empty when it computes them. */
+	input: Record<string, unknown>;
+	held?: string;
+}
+
+/** Each call of the script, judged by the host's hold rules, one entry per call. */
+function judgedScriptCalls(
+	script: unknown,
+	options: {
+		toolName: (server: string, tool: string) => string;
+		holds: HoldCheck;
+		context?: HoldContext;
+	},
+): JudgedScriptCall[] {
+	const context = options.context ?? {};
+	return readPrecheckScript(script).calls.map((call) => {
+		const name = options.toolName(call.server, call.tool);
+		const input = call.args ?? {};
+		let held = options.holds(name, input, context);
+		if (!call.args && held === undefined) {
+			const rule = options.holds.mayHold?.(name);
+			if (rule !== undefined) held = messages().precheckToolMayHold(name, rule);
+		}
+		return {
+			server: call.server,
+			tool: call.tool,
+			name,
+			input,
+			...(held ? { held } : {}),
+		};
+	});
 }
 
 const SCHEDULE_TOOLS = new Set(["schedule_create", "schedule_update"]);
@@ -330,12 +358,12 @@ export function precheckScriptHoldRule(options: {
 	tiers?: () => ToolTiers;
 }): HoldRule {
 	let judging = false;
-	/** The held tools a script being saved calls, by the names the hold rules know them by. */
-	const heldCalls = (
+	/** The held calls a script being saved makes, each with the name the hold rules know its tool by and its input. */
+	const scriptCalls = (
 		tool: string,
 		input: Record<string, unknown>,
 		context: HoldContext,
-	): { name: string; held: string }[] => {
+	): { name: string; input: Record<string, unknown>; held: string }[] => {
 		const script = input.precheck_script;
 		if (!SCHEDULE_TOOLS.has(tool) || typeof script !== "string" || judging)
 			return [];
@@ -343,13 +371,13 @@ export function precheckScriptHoldRule(options: {
 		if (!runner) return [];
 		judging = true;
 		try {
-			return precheckScriptTools(script, {
+			return judgedScriptCalls(script, {
 				toolName: (server, name) => runner.toolName(server, name),
 				holds: options.holds(),
 				context,
-			}).flatMap((t) =>
-				t.held
-					? [{ name: runner.toolName(t.server, t.tool), held: t.held }]
+			}).flatMap((call) =>
+				call.held
+					? [{ name: call.name, input: call.input, held: call.held }]
 					: [],
 			);
 		} catch {
@@ -358,6 +386,19 @@ export function precheckScriptHoldRule(options: {
 		} finally {
 			judging = false;
 		}
+	};
+	/** The held tools a script being saved calls, once each, by the names the hold rules know them by. */
+	const heldCalls = (
+		tool: string,
+		input: Record<string, unknown>,
+		context: HoldContext,
+	): { name: string; held: string }[] => {
+		const seen = new Set<string>();
+		return scriptCalls(tool, input, context).filter((call) => {
+			if (seen.has(call.name)) return false;
+			seen.add(call.name);
+			return true;
+		});
 	};
 	return {
 		name: "precheck-scripts",
@@ -382,6 +423,30 @@ export function precheckScriptHoldRule(options: {
 					higherTier(tier, tiers ? tiers.minTier(call.name) : "owner"),
 				undefined,
 			);
+		},
+		// Whoever approves must also be named for each held call the script makes: the principals
+		// every call names, and, where a call's approvers cannot be read, the owners alone.
+		approversInTurn(tool, input, context, turn) {
+			const calls = scriptCalls(tool, input, context);
+			const lookup = options.holds().approversInTurn;
+			if (calls.length === 0 || !lookup) return undefined;
+			return Promise.all(
+				calls.map(async (call) => {
+					try {
+						// A script's computed arguments are not known now, so its call is judged by none.
+						return await lookup(call.name, call.input, context, turn);
+					} catch {
+						return [];
+					}
+				}),
+			).then((lists) => {
+				const named = lists.filter(
+					(list): list is readonly string[] => list !== undefined,
+				);
+				const [first, ...rest] = named;
+				if (!first) return undefined;
+				return first.filter((id) => rest.every((list) => list.includes(id)));
+			});
 		},
 	};
 }

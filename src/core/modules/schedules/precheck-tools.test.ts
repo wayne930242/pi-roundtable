@@ -8,6 +8,7 @@ import {
 } from "bun:test";
 import { SQL } from "bun";
 import type { BackgroundTarget } from "../../contract/channels.ts";
+import type { ToolTurn } from "../../define.ts";
 import { type HoldCheck, type HoldRule, holdChain } from "../../holds.ts";
 import type { OwnerPrompts } from "../../interactions/prompts.ts";
 import { silentLogger } from "../../log.ts";
@@ -302,6 +303,128 @@ describe("saving a script through the confirmation gate", () => {
 		);
 		gate.beginTurn("general", false);
 		expect(gate.hold("schedule_create", create(MAILS))).toBeUndefined();
+	});
+});
+
+describe("saving a script whose held calls name approvers (RV-F004)", () => {
+	const registry = runnerRegistry();
+	/** Mail to the shared inbox is Ada's and Bo's to approve, to the owner's own address Bo's alone, any other call has none to name. */
+	const NAMING: HoldRule = {
+		name: "mail-approvers",
+		describe: () => undefined,
+		approversInTurn: async (tool, input) => {
+			if (tool !== GMAIL) return undefined;
+			if (input.to === "inbox@example.test") return ["p_ada", "p_bo"];
+			if (input.to === "owner@example.test") return ["p_bo"];
+			return [];
+		},
+	};
+	const holds = holdChain([
+		MAIL_RULE,
+		NAMING,
+		precheckScriptHoldRule({
+			prechecks: () => registry,
+			holds: () => holds,
+			tiers: () => TIERS,
+		}),
+	]);
+	const script = (...to: string[]) =>
+		`export default async ({ mcp }) => {${to
+			.map(
+				(address) =>
+					`await mcp.call("google", "send-gmail-message", { to: "${address}" });`,
+			)
+			.join("")} return { wake: false }; };`;
+	const create = (precheck_script: string) => ({
+		title: "recovery",
+		prompt: "check last night's recovery",
+		time: "09:30",
+		precheck_script,
+	});
+	const turn = {} as ToolTurn;
+	const approvers = (precheck_script: string, tool = "schedule_create") =>
+		holds.approversInTurn?.(tool, create(precheck_script), {}, turn);
+
+	test("the approvers of the held call are the approvers of saving the script", async () => {
+		expect(await approvers(script("inbox@example.test"))).toEqual([
+			"p_ada",
+			"p_bo",
+		]);
+	});
+
+	test("a script that makes several held calls needs the principals every one of them names", async () => {
+		expect(
+			await approvers(script("inbox@example.test", "owner@example.test")),
+		).toEqual(["p_bo"]);
+	});
+
+	test("a call whose arguments the script computes is asked with none, and names the owners alone", async () => {
+		expect(await approvers(MAILS_COMPUTED)).toEqual([]);
+	});
+
+	test("a lookup that fails leaves the owners alone to approve saving it", async () => {
+		const failing = holdChain([
+			MAIL_RULE,
+			{
+				name: "down",
+				describe: () => undefined,
+				approversInTurn: async (tool) => {
+					if (tool === GMAIL) throw new Error("down");
+					return undefined;
+				},
+			},
+			precheckScriptHoldRule({
+				prechecks: () => registry,
+				holds: () => failing,
+				tiers: () => TIERS,
+			}),
+		]);
+		expect(
+			await failing.approversInTurn?.(
+				"schedule_create",
+				create(script("inbox@example.test")),
+				{},
+				turn,
+			),
+		).toEqual([]);
+	});
+
+	test("a script that holds nothing, or another tool, names no approvers", async () => {
+		expect(await approvers(READS)).toBeUndefined();
+		expect(
+			await approvers(script("inbox@example.test"), "schedule_delete"),
+		).toBeUndefined();
+	});
+
+	test("the gate asks the card with them and keeps them with the held call", async () => {
+		const gate = new ConfirmationGate(holds, TEST_OWNER, undefined, {}, TIERS);
+		gate.beginTurn("general", false);
+		const asked: unknown[] = [];
+		await gate.decide(
+			"schedule_create",
+			create(script("inbox@example.test", "owner@example.test")),
+			{
+				prompts: {
+					confirm: async (
+						_title: string,
+						_message: string,
+						_signal?: AbortSignal,
+						_minTier?: string,
+						_wait?: unknown,
+						_details?: unknown,
+						options?: { approvers?: readonly string[] },
+					) => {
+						asked.push(options?.approvers);
+						return "expired";
+					},
+					ask: async () => undefined,
+				} as unknown as OwnerPrompts,
+				asker: "Sam",
+			},
+			{ toolTurn: () => turn },
+		);
+		expect(asked).toEqual([["p_bo"]]);
+		expect(gate.pending()?.calls[0]?.approverIds).toEqual(["p_bo"]);
 	});
 });
 
