@@ -1,4 +1,3 @@
-import type { ToolTurn } from "../../define.ts";
 import type {
 	HeldCall,
 	PendingConfirmation,
@@ -22,38 +21,39 @@ import type {
 import type { Speaker } from "../../speakers.ts";
 import type { ToolTiers } from "../../tool-tiers.ts";
 import { approvalCard, approvalDetails } from "./approval-card.ts";
-import { canonicalJson, unexpired } from "./held-calls.ts";
+import {
+	canonicalJson,
+	mayApproveNamed,
+	namedApprover,
+	unexpired,
+} from "./held-calls.ts";
+import {
+	awaited,
+	type Described,
+	type HoldTurn,
+	joinApprovers,
+	STOPPED,
+} from "./hold-lookups.ts";
 
 export { confirmationGateExtension } from "./confirmation-gate-extension.ts";
 export {
 	CONFIRMATION_TTL_MS,
 	canonicalJson,
 	confirmedTurnText,
+	mayApproveNamed,
+	namedApprover,
 	unexpired,
 } from "./held-calls.ts";
+export type { HoldTurn } from "./hold-lookups.ts";
 
-/** The turn a hold that looks things up sees; see `HoldRule.describeInTurn`. */
-export interface HoldTurn {
-	/** Aborts when the turn stops; a call being described then opens no card. */
-	signal?: AbortSignal;
-	/** The turn a hold receives, with `signal` as the signal that ends its wait. */
-	toolTurn(signal: AbortSignal): ToolTurn;
-}
-
-/** The answer of a description wait the turn's stop cut short. */
-const STOPPED = Symbol("stopped");
-
-/** What waiting for a call's description comes to: its text, or the turn stopped first. */
-type Described = string | undefined | typeof STOPPED;
-
-/** A held call's description with who may approve it instead of the speaker; see `HoldRule.approversInTurn`. */
-type Judged =
-	| { action: string; approvers?: readonly string[] }
-	| undefined
-	| typeof STOPPED;
-
-/** The speaker of a turn as the gate records them; `name` is what an approval by their message is attributed to. */
-type SpeakerRef = Pick<Speaker, "id" | "principalId"> & { name?: string };
+/**
+ * The speaker of a turn as the gate records them; `name` is what an approval by their message is
+ * attributed to, and `tier` tells whether they approve as an owner.
+ */
+type SpeakerRef = Pick<Speaker, "id" | "principalId"> & {
+	name?: string;
+	tier?: Speaker["tier"];
+};
 
 /** A call an approval released, and who gave it, when that is known. */
 interface Release {
@@ -76,6 +76,8 @@ export class ConfirmationGate {
 	#selectionId: string | undefined;
 	/** The running turn's speaker, whom the actions it holds belong to, and who approves those a message confirmed. */
 	#speaker: SpeakerRef | undefined;
+	/** Whether the running turn's conversation is private to its speaker, who then alone answers its cards. */
+	#private = false;
 	#pending: PendingConfirmation | undefined;
 	#approved: Release[] = [];
 	/** Calls approved on their cards after the turn that asked stopped waiting; each runs once, in any turn. */
@@ -128,39 +130,77 @@ export class ConfirmationGate {
 	}
 
 	/**
+	 * The held calls a message from `speaker` may release: all of them, except those that named
+	 * approvers the speaker is neither among nor an owner of, which stay held whoever else asked for
+	 * them to run. Undefined when there are none.
+	 */
+	releasable(speaker?: SpeakerRef): PendingConfirmation | undefined {
+		const pending = this.pending();
+		if (!pending) return undefined;
+		const calls = pending.calls.filter((call) =>
+			mayApproveNamed(speaker, call),
+		);
+		return calls.length === pending.calls.length
+			? pending
+			: { ...pending, calls };
+	}
+
+	/**
 	 * `addressee` is who the turn is for; without one, the owner. `speaker` is who spoke the turn,
 	 * recorded with what it holds by their id and principal; without one, only the owners may
 	 * approve them. When `confirmed`, the speaker's message approved the held calls, and they are
-	 * the approver the calls' `run` sees.
+	 * the approver the calls' `run` sees; a call that named approvers is released only when the
+	 * speaker is one of them or an owner, and otherwise stays held. `isPrivate` says the turn's
+	 * conversation is private to its speaker: they alone then answer its cards.
 	 */
 	beginTurn(
 		selectionId: string,
 		confirmed: boolean,
 		addressee?: OwnerIdentity,
 		speaker?: SpeakerRef,
+		isPrivate = false,
 	): void {
 		this.#selectionId = selectionId;
 		this.#speaker = speaker;
+		this.#private = isPrivate;
 		this.#addressee = addressee ?? this.#owner;
-		const by = speaker
+		const by: ApprovedBy | undefined = speaker
 			? {
 					principalId: speaker.principalId,
 					speakerId: speaker.id,
 					name: speaker.name ?? speaker.id,
+					...(speaker.tier === "owner" ? { owner: true as const } : {}),
 				}
 			: undefined;
-		this.#approved = confirmed
-			? (this.pending()?.calls ?? []).map((call) => ({
-					call,
-					...(by ? { by } : {}),
-				}))
-			: [];
-		this.#pending = undefined;
+		const held = this.pending();
+		const released = confirmed ? this.releasable(speaker) : undefined;
+		this.#approved = (released?.calls ?? []).map((call) => ({
+			call,
+			...(by ? { by } : {}),
+		}));
+		// What the speaker could not release stays held for those who may.
+		const kept = (held?.calls ?? []).filter(
+			(call) => confirmed && !released?.calls.includes(call),
+		);
+		this.#pending =
+			held && kept.length > 0 ? { ...held, calls: kept } : undefined;
 	}
 
 	endTurn(): void {
 		this.#approved = [];
 		this.#approvers.clear();
+	}
+
+	/** The running turn's speaker as an approver; undefined without one. */
+	#speakerAsApprover(): ApprovedBy | undefined {
+		const speaker = this.#speaker;
+		if (!speaker) return undefined;
+		return {
+			principalId: speaker.principalId,
+			speakerId: speaker.id,
+			name: speaker.name ?? speaker.id,
+			...(speaker.tier === "owner" ? { owner: true as const } : {}),
+		};
 	}
 
 	/** Who approved the held call running under this tool call id; undefined when it was not held or they are unknown. */
@@ -227,6 +267,9 @@ export class ConfirmationGate {
 			return needing.released ? { approvedBy: needing.released } : {};
 		const call = needing.held;
 		if (!ask) return { reason: this.#record(call), refused: "held" };
+		// In a private conversation only its person answers: a call that names others is not theirs.
+		if (this.#private && !mayApproveNamed(this.#speaker, call))
+			return { reason: this.#record(call), refused: "held" };
 		let approvedBy: ApprovedBy | undefined;
 		const options: ApprovalOptions = {
 			...(call.approverIds ? { approvers: call.approverIds } : {}),
@@ -243,8 +286,18 @@ export class ConfirmationGate {
 			approvalDetails(call, this.#fileRoot),
 			options,
 		);
-		if (answer === "approved")
-			return { approvedOnCard: true, ...(approvedBy ? { approvedBy } : {}) };
+		if (answer === "approved") {
+			// A private conversation's answer to a call that names approvers is its person's, whom a surface need not name.
+			const by =
+				approvedBy ??
+				(this.#private && call.approverIds
+					? this.#speakerAsApprover()
+					: undefined);
+			// A call that names approvers runs only on the word of one of them, or an owner.
+			if (!namedApprover(call, by))
+				return { reason: this.#record(call), refused: "held" };
+			return { approvedOnCard: true, ...(by ? { approvedBy: by } : {}) };
+		}
 		if (answer === "pending") {
 			const o = ownerWords(this.#addressee);
 			return {
@@ -272,6 +325,8 @@ export class ConfirmationGate {
 	 */
 	#late(call: HeldCall, late: LateAnswer): string | undefined {
 		if (late.kind !== "approval") return undefined;
+		if (late.approved && !namedApprover(call, late.approvedBy))
+			return undefined;
 		if (!late.approved)
 			return `(${late.by} declined on its card the action you were waiting on: it would ${call.action}. It did not run; do not make the call again. Go on without it, or ask what ${late.by} wants instead.)`;
 		this.#lateApproved.push({
@@ -318,104 +373,31 @@ export class ConfirmationGate {
 			answer = messages().holdGeneric(tool);
 		}
 		const described: Described | Promise<Described> = isPromise(answer)
-			? this.#awaited(
+			? awaited(
 					answer,
 					messages().holdGeneric(tool),
 					controller,
 					turn.signal,
+					this.#describeTimeoutMs,
 				)
 			: answer;
 		return this.#inOrder(
-			this.#judged(described, tool, input, turn),
+			joinApprovers(
+				described,
+				{
+					holds: this.#holds,
+					context: this.#context,
+					timeoutMs: this.#describeTimeoutMs,
+				},
+				tool,
+				input,
+				turn,
+			),
 			(judged) => {
 				if (judged === STOPPED) return STOPPED;
 				return judged ? this.#unlessApproved(tool, input, judged) : undefined;
 			},
 		);
-	}
-
-	/**
-	 * A description joined by the approvers the holds name for a call they hold, looked up as the
-	 * turn with the same wait as the description; a lookup that rejects or outlasts the timeout names
-	 * none, so only the owners approve the call. A call no rule holds asks no one.
-	 */
-	#judged(
-		described: Described | Promise<Described>,
-		tool: string,
-		input: Record<string, unknown>,
-		turn: HoldTurn,
-	): Judged | Promise<Judged> {
-		const lookup = this.#holds.approversInTurn;
-		if (!lookup) return this.#withoutApprovers(described);
-		const join = (action: Described): Judged | Promise<Judged> => {
-			if (action === STOPPED || action === undefined) return action;
-			const controller = new AbortController();
-			if (turn.signal?.aborted) controller.abort();
-			let named:
-				| readonly string[]
-				| undefined
-				| Promise<readonly string[] | undefined>;
-			try {
-				named = lookup.call(
-					this.#holds,
-					tool,
-					input,
-					this.#context,
-					turn.toolTurn(controller.signal),
-				);
-			} catch {
-				named = [];
-			}
-			if (!isPromise(named)) {
-				controller.abort();
-				return named ? { action, approvers: named } : { action };
-			}
-			return this.#awaited(named, [], controller, turn.signal).then(
-				(approvers) => {
-					if (approvers === STOPPED) return STOPPED;
-					return approvers ? { action, approvers } : { action };
-				},
-			);
-		};
-		return isPromise(described) ? described.then(join) : join(described);
-	}
-
-	#withoutApprovers(
-		described: Described | Promise<Described>,
-	): Judged | Promise<Judged> {
-		const wrap = (action: Described): Judged =>
-			action === STOPPED || action === undefined ? action : { action };
-		return isPromise(described) ? described.then(wrap) : wrap(described);
-	}
-
-	/**
-	 * What a lookup that answers later comes to: its answer; `fallback` when it rejects or outlasts
-	 * the timeout; `STOPPED` when the turn stops first. Whatever the lookup is still doing is
-	 * aborted when the wait ends.
-	 */
-	#awaited<T>(
-		answer: Promise<T>,
-		fallback: T,
-		lookup: AbortController,
-		stop: AbortSignal | undefined,
-	): Promise<T | typeof STOPPED> {
-		return new Promise((resolve) => {
-			const onStop = () => end(STOPPED);
-			const timer = setTimeout(() => end(fallback), this.#describeTimeoutMs);
-			let ended = false;
-			const end = (found: T | typeof STOPPED) => {
-				if (ended) return;
-				ended = true;
-				clearTimeout(timer);
-				stop?.removeEventListener("abort", onStop);
-				lookup.abort();
-				resolve(found);
-			};
-			// Handled first, so a rejection after the wait ended is never left unhandled.
-			answer.then(end, () => end(fallback));
-			if (stop?.aborted) return end(STOPPED);
-			stop?.addEventListener("abort", onStop, { once: true });
-		});
 	}
 
 	/**

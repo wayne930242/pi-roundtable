@@ -135,7 +135,7 @@ export async function answeredOnlyByThem(
 /**
  * Opens the person's approval in a shared conversation naming the approver, and checks that
  * another person and the person themselves cannot answer it, and the approver can, who is then
- * reported as the approver where the surface reports one.
+ * reported as the approver.
  */
 export async function namedApproverAnswers(running: Running): Promise<void> {
 	const { surface, channel, answer, stranger, approver } = running.subject;
@@ -182,8 +182,13 @@ export async function namedApproverAnswers(running: Running): Promise<void> {
 	await approver.answer(id, true);
 	const own = await result;
 	expectThat(own === "approved", `the approver's answer came back ${own}`);
+	// The runtime accepts an approval of a call that names approvers only from one it names.
 	expectThat(
-		reported === undefined || reported.principalId === approver.principalId,
+		reported !== undefined,
+		"the approval did not report who approved it through approvedBy",
+	);
+	expectThat(
+		reported?.principalId === approver.principalId,
 		`the approval reported ${reported?.principalId} as its approver, not ${approver.principalId}`,
 	);
 }

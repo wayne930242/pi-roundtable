@@ -37,11 +37,12 @@ export type CardAudienceOptions = DiscordOwnersOptions;
  * speaker cannot answer, or whose principal has no Discord identity, is theirs alone; where it
  * escalates to no one, that card goes to no one. Without a scope, a card is the owners'.
  *
- * An approval whose scope names `approvers`, where it escalates, is theirs instead of the
- * speaker's: each named principal answers on any of their Discord identities that is still theirs
- * when they press, at the tier it needs then, and the card mentions all of those identities. The
- * speaker does not answer it unless named. The owners still do, and are the whole audience when
- * none of the named has a Discord identity. A scope that escalates to no one ignores `approvers`.
+ * An approval that names `approvers`, where it escalates, is theirs instead of the speaker's:
+ * each named principal answers on any of their Discord identities that is still theirs when they
+ * press, at the tier it needs then, and the card mentions all of those identities. The speaker
+ * does not answer it unless named. The owners still do, and are the whole audience when none of
+ * the named has a Discord identity. Where the scope escalates to no one, the person is the only
+ * one who answers, and only if named or an owner: any other person's card is not posted.
  */
 export class CardAudiences {
 	readonly #options: CardAudienceOptions;
@@ -53,11 +54,17 @@ export class CardAudiences {
 	}
 
 	/** Who may approve a call held at `minTier`; undefined when no one may. */
-	approval(
+	async approval(
 		scope: PromptScope | undefined,
 		minTier: Tier,
+		named?: readonly string[],
 	): Promise<Audience | undefined> {
-		const approvers = scope?.escalate === "none" ? undefined : scope?.approvers;
+		let approvers = named;
+		// A private conversation's person is the only one who answers, so a call naming others is theirs only if named or an owner.
+		if (approvers && scope?.escalate === "none") {
+			if (!(await this.#mayAnswerPrivately(scope, approvers))) return undefined;
+			approvers = undefined;
+		}
 		return this.#audience(
 			scope,
 			minTier,
@@ -157,19 +164,35 @@ export class CardAudiences {
 		return named;
 	}
 
-	/** Who the user is as an approver: their principal and the name their identity goes by. */
+	/** Whether a private conversation's person may answer a call that names `approvers`: when named, or an owner. */
+	async #mayAnswerPrivately(
+		scope: PromptScope,
+		approvers: readonly string[],
+	): Promise<boolean> {
+		return (
+			approvers.includes(scope.principalId) ||
+			scope.speakerId === this.#options.ownerId ||
+			(await this.#owners.isOwnerPrincipal(scope.principalId))
+		);
+	}
+
+	/** Who the user is as an approver: their principal, the name their identity goes by, and whether they are an owner. */
 	async #approver(user: DiscordUser): Promise<ApprovedBy | undefined> {
+		const owner = (await this.#owners.isOwner(user))
+			? { owner: true as const }
+			: {};
 		const who = await this.#owners.speakerOf(user);
 		if (who)
 			return {
 				principalId: who.principalId,
 				speakerId: user.id,
 				name: user.name,
+				...owner,
 			};
 		// Without an identity service the primary owner is the only one who answers.
 		return this.#options.identity
 			? undefined
-			: { principalId: user.id, speakerId: user.id, name: user.name };
+			: { principalId: user.id, speakerId: user.id, name: user.name, ...owner };
 	}
 
 	/** Whether the Discord user is still one of the principal's identities; false when that cannot be read. */

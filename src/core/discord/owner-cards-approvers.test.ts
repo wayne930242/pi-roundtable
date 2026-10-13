@@ -129,7 +129,7 @@ describe("cards for a call that names its approvers", () => {
 		expect(await pressAs(OWNER)).toEqual([]);
 		expect(await answer).toBe("approved");
 		expect(approvals).toEqual([
-			{ principalId: OWNER, speakerId: OWNER, name: OWNER },
+			{ principalId: OWNER, speakerId: OWNER, name: OWNER, owner: true },
 		]);
 	});
 
@@ -201,9 +201,22 @@ describe("cards for a call that names its approvers", () => {
 		expect(await answer).toBe("declined");
 	});
 
-	test("a private conversation ignores the approvers: only its person answers", async () => {
+	test("a private conversation whose person is not named is refused: the card is unavailable and shown to no one", async () => {
+		const { fake, approval } = setup();
+		// Sam, an admin who holds the tier, asked; only Ada is named, and he is no owner.
+		expect(await approval([ADA], "private")).toBe("unavailable");
+		expect(fake.sent).toEqual([]);
+	});
+
+	test("a private conversation whose approvers are none leaves nobody but an owner", async () => {
+		const { fake, approval } = setup();
+		expect(await approval([], "private")).toBe("unavailable");
+		expect(fake.sent).toEqual([]);
+	});
+
+	test("a private conversation's person answers it alone when they are named, and is reported as the approver", async () => {
 		const { fake, approval, pressAs, approvals } = setup();
-		const answer = approval([ADA], "private");
+		const answer = approval([ADA, SAM], "private");
 		await tick();
 		expect(json(fake.sent[0])).toContain(`<@${SAM}>`);
 		expect(json(fake.sent[0])).not.toContain(`<@${ADA}>`);
@@ -213,6 +226,38 @@ describe("cards for a call that names its approvers", () => {
 		expect(await answer).toBe("approved");
 		expect(approvals).toEqual([
 			{ principalId: SAM, speakerId: SAM, name: SAM },
+		]);
+	});
+
+	test("a private conversation's person who is an owner answers it, though not named", async () => {
+		const fake = fakeChannel(true);
+		const cards = new OwnerCards({
+			ownerId: OWNER,
+			identity,
+			channel: fake.channel,
+			logger: silentLogger(),
+		});
+		const ownerSpeaker: Speaker = {
+			id: OWNER,
+			name: "Owner",
+			tier: "owner",
+			principalId: OWNER,
+		};
+		const approvals: ApprovedBy[] = [];
+		const answer = cards
+			.prompts("discord:555", promptScope(ownerSpeaker, "private"))
+			?.confirm("t", "**send**", undefined, "admin", undefined, undefined, {
+				approvers: [ADA],
+				approvedBy: (by) => approvals.push(by),
+			});
+		await tick();
+		const pressed = press("button", `${CARD_PREFIX}${fake.cardId()}:yes`, {
+			user: OWNER,
+		});
+		await cards.handle(pressed.interaction);
+		expect(await answer).toBe("approved");
+		expect(approvals).toEqual([
+			{ principalId: OWNER, speakerId: OWNER, name: OWNER, owner: true },
 		]);
 	});
 

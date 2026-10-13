@@ -25,8 +25,10 @@ function memoryChat(
 		tier?: Tier;
 		/** Lets the person answer an approval that names others, as if it named no one. */
 		ignoresApprovers?: boolean;
-		/** Lets a named approver answer in a private conversation, where the names are ignored. */
+		/** Lets a named approver answer in a private conversation, where its person alone answers. */
 		approversInPrivate?: boolean;
+		/** Does not report who approved an approval that names approvers. */
+		silentApprovers?: boolean;
 	} = {},
 ): SurfaceContractSubject {
 	const seen: SurfaceObservation[] = [];
@@ -53,7 +55,7 @@ function memoryChat(
 			named?.includes(who) ||
 			(who === "0" && (prompt?.owners || options.ownerAnswersAll));
 		if (!may) return;
-		if (approved && named?.includes(who))
+		if (approved && named?.includes(who) && !options.silentApprovers)
 			prompt?.approvedBy?.({ principalId: who, speakerId: who, name: who });
 		prompt?.settle(approved ? "approved" : "declined");
 	};
@@ -176,7 +178,7 @@ test("the contract catches a surface that lets another person answer an approval
 		"another person cannot answer the person's approval",
 		"another principal cannot answer for the person in their private conversation, even an owner",
 		"a named approver answers an approval instead of the person; the person and another person cannot",
-		"a private conversation ignores named approvers: only the person answers",
+		"a private conversation is answered by its person alone, whoever else a call names",
 	]);
 });
 
@@ -203,7 +205,16 @@ test("the contract catches a surface where a named approver answers in a private
 		memoryChat({ approversInPrivate: true }),
 	);
 	expect(failures.map((failure) => failure.name)).toEqual([
-		"a private conversation ignores named approvers: only the person answers",
+		"a private conversation is answered by its person alone, whoever else a call names",
+	]);
+});
+
+test("the contract catches a surface that does not report the named approver who answered", async () => {
+	const failures = await checkSurfaceContract(async () =>
+		memoryChat({ silentApprovers: true }),
+	);
+	expect(failures.map((failure) => failure.name)).toEqual([
+		"a named approver answers an approval instead of the person; the person and another person cannot",
 	]);
 });
 

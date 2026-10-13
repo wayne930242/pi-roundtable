@@ -20,7 +20,10 @@ export interface TurnRequest {
 	text: string;
 	/** Files and images the message carries; none when absent. */
 	attachments?: TurnAttachments;
-	/** The owner confirmed the channel's pending actions, so they may run in this turn. */
+	/**
+	 * The speaker confirmed the channel's pending actions, so they may run in this turn, except
+	 * those that named approvers the speaker is neither among nor an owner of, which stay pending.
+	 */
 	confirmed?: boolean;
 	/** Set for a turn of an agent-server agent. */
 	agent?: AgentTurnScope;

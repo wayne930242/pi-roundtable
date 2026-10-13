@@ -134,7 +134,7 @@ describe("approver sets", () => {
 			OWNER,
 		);
 		const slot = promptSlot();
-		const { asked, prompts } = answering("approved");
+		const { asked, prompts } = answering("approved", ADA);
 		slot.bind(prompts, "helper");
 		gate.beginTurn("workspace", false, undefined, SAM);
 		expect(await handlers(gate, slot).call("c1")).toBeUndefined();
@@ -358,5 +358,198 @@ describe("approvedBy", () => {
 		await handlers(gate, slot).call("c1");
 		gate.endTurn();
 		expect(gate.approvedBy("c1")).toBeUndefined();
+	});
+});
+
+const BO: ApprovedBy = { principalId: "p_bo", speakerId: "10", name: "Bo" };
+const BOSS: ApprovedBy = {
+	principalId: "p_boss",
+	speakerId: "1",
+	name: "Boss",
+	owner: true,
+};
+const speaker = (principalId: string, tier: Speaker["tier"] = "member") =>
+	({ id: principalId, name: principalId, tier, principalId }) satisfies Speaker;
+
+/** A gate whose mail names Ada alone as its approver. */
+const naming = (names: readonly string[] = ["p_ada"]) =>
+	new ConfirmationGate(holdChain([mailRule(() => names)]), OWNER);
+
+describe("a call that names approvers is refused outside them", () => {
+	test("in a private conversation whose person is not named, no card opens and the call stays held (RV-F001)", async () => {
+		const gate = naming();
+		const slot = promptSlot();
+		const { asked, prompts } = answering("approved");
+		slot.bind(prompts, "helper");
+		gate.beginTurn("workspace", false, undefined, SAM, true);
+		expect((await handlers(gate, slot).call("c1"))?.block).toBe(true);
+		expect(asked).toEqual([]);
+		expect(gate.pending()?.calls[0]?.approverIds).toEqual(["p_ada"]);
+		expect(gate.approvedBy("c1")).toBeUndefined();
+	});
+
+	test("in a private conversation whose person is named, they approve it, and are the approver even if the surface does not say", async () => {
+		const gate = naming();
+		const slot = promptSlot();
+		slot.bind(answering("approved").prompts, "helper");
+		const ada = speaker("p_ada");
+		gate.beginTurn("workspace", false, undefined, ada, true);
+		expect(await handlers(gate, slot).call("c1")).toBeUndefined();
+		expect(gate.approvedBy("c1")).toEqual({
+			principalId: "p_ada",
+			speakerId: "p_ada",
+			name: "p_ada",
+		});
+	});
+
+	test("in a private conversation whose person is an owner, they approve it", async () => {
+		const gate = naming();
+		const slot = promptSlot();
+		slot.bind(answering("approved").prompts, "helper");
+		gate.beginTurn(
+			"workspace",
+			false,
+			undefined,
+			speaker("p_boss", "owner"),
+			true,
+		);
+		expect(await handlers(gate, slot).call("c1")).toBeUndefined();
+		expect(gate.approvedBy("c1")?.owner).toBe(true);
+	});
+
+	test("a private conversation's call that names none is unchanged: asked, and no approver invented", async () => {
+		const gate = new ConfirmationGate(holdChain([mailRule(undefined)]), OWNER);
+		const slot = promptSlot();
+		const { asked, prompts } = answering("approved");
+		slot.bind(prompts, "helper");
+		gate.beginTurn("workspace", false, undefined, SAM, true);
+		expect(await handlers(gate, slot).call("c1")).toBeUndefined();
+		expect(asked).toHaveLength(1);
+		expect(gate.approvedBy("c1")).toBeUndefined();
+	});
+
+	test("in a shared conversation an approval that does not say who gave it leaves the call held (RV-F003)", async () => {
+		const gate = naming();
+		const slot = promptSlot();
+		slot.bind(answering("approved").prompts, "helper");
+		gate.beginTurn("workspace", false, undefined, SAM);
+		const { call } = handlers(gate, slot);
+		expect((await call("c1"))?.block).toBe(true);
+		expect(gate.approvedBy("c1")).toBeUndefined();
+		expect(gate.pending()?.calls).toHaveLength(1);
+	});
+
+	test("in a shared conversation an approval by someone neither named nor an owner leaves it held (RV-F003)", async () => {
+		const gate = naming();
+		const slot = promptSlot();
+		slot.bind(answering("approved", BO).prompts, "helper");
+		gate.beginTurn("workspace", false, undefined, SAM);
+		expect((await handlers(gate, slot).call("c1"))?.block).toBe(true);
+		expect(gate.approvedBy("c1")).toBeUndefined();
+	});
+
+	test("in a shared conversation a named approver's, or an owner's, approval runs it", async () => {
+		for (const by of [ADA, BOSS]) {
+			const gate = naming();
+			const slot = promptSlot();
+			slot.bind(answering("approved", by).prompts, "helper");
+			gate.beginTurn("workspace", false, undefined, SAM);
+			expect(await handlers(gate, slot).call("c1")).toBeUndefined();
+			expect(gate.approvedBy("c1")).toEqual(by);
+		}
+	});
+
+	test("an approval after the turn stopped waiting counts only from a named approver or an owner (RV-F003)", async () => {
+		for (const [by, runs] of [
+			[undefined, false],
+			[BO, false],
+			[ADA, true],
+			[BOSS, true],
+		] as const) {
+			const gate = naming();
+			const slot = promptSlot();
+			let wait: PromptWait | undefined;
+			slot.bind(
+				answering("pending", undefined, (given) => (wait = given)).prompts,
+				"helper",
+			);
+			gate.beginTurn("workspace", false, undefined, SAM);
+			await handlers(gate, slot).call("c1");
+			gate.endTurn();
+			wait?.late({
+				kind: "approval",
+				approved: true,
+				by: "x",
+				...(by ? { approvedBy: by } : {}),
+			});
+			gate.beginTurn("workspace", false, undefined, SAM);
+			const second = (await handlers(gate, promptSlot()).call("c2"))?.block;
+			expect(second === undefined).toBe(runs);
+		}
+	});
+});
+
+describe("a message that confirms held calls releases only those its speaker may approve (RV-F002)", () => {
+	/** A gate holding one call that names Ada, and, when `plain`, one that names nobody. */
+	async function holding(plain = false) {
+		const gate = new ConfirmationGate(
+			holdChain([
+				{
+					name: "mail",
+					describe: (tool, input) =>
+						tool === MAIL ? `send an email to ${String(input.to)}` : undefined,
+					approversInTurn: (_tool, input) =>
+						input.to === "a@b.c" ? ["p_ada"] : undefined,
+				},
+			]),
+			OWNER,
+		);
+		gate.beginTurn("first", false, undefined, SAM);
+		const { call } = handlers(gate, promptSlot());
+		await call("h1", MAIL, send);
+		if (plain) await call("h2", MAIL, { to: "x@y.z" });
+		gate.endTurn();
+		return gate;
+	}
+
+	test("a speaker the call does not name releases nothing, and it stays held", async () => {
+		const gate = await holding();
+		gate.beginTurn("second", true, undefined, speaker("p_bo", "admin"));
+		expect(gate.pending()?.calls).toHaveLength(1);
+		const slot = promptSlot();
+		expect((await handlers(gate, slot).call("c1"))?.block).toBe(true);
+		expect(gate.approvedBy("c1")).toBeUndefined();
+		// Still there for the one who may.
+		gate.endTurn();
+		gate.beginTurn("third", true, undefined, speaker("p_ada"));
+		expect(await handlers(gate, promptSlot()).call("c2")).toBeUndefined();
+		expect(gate.approvedBy("c2")?.principalId).toBe("p_ada");
+	});
+
+	test("the requester is no exception unless named", async () => {
+		const gate = await holding();
+		expect(gate.releasable(SAM)?.calls).toEqual([]);
+		expect(gate.releasable(speaker("p_sam"))?.calls).toEqual([]);
+		expect(gate.releasable(undefined)?.calls).toEqual([]);
+		expect(gate.releasable(speaker("p_ada"))?.calls).toHaveLength(1);
+		expect(gate.releasable(speaker("p_boss", "owner"))?.calls).toHaveLength(1);
+	});
+
+	test("the calls that name nobody are released, those that name others are not", async () => {
+		const gate = await holding(true);
+		gate.beginTurn("second", true, undefined, speaker("p_bo", "admin"));
+		const { call } = handlers(gate, promptSlot());
+		expect((await call("c1", MAIL, send))?.block).toBe(true);
+		expect(await call("c2", MAIL, { to: "x@y.z" })).toBeUndefined();
+		expect(gate.pending()?.calls.map((held) => held.input)).toEqual([
+			'{"to":"a@b.c"}',
+		]);
+	});
+
+	test("an owner's message releases it, and names them an owner", async () => {
+		const gate = await holding();
+		gate.beginTurn("second", true, undefined, speaker("p_boss", "owner"));
+		expect(await handlers(gate, promptSlot()).call("c1")).toBeUndefined();
+		expect(gate.approvedBy("c1")?.owner).toBe(true);
 	});
 });

@@ -118,10 +118,9 @@ export class OwnerCards implements InteractionModule {
 				options,
 			) => {
 				const audience = await this.#audiences.approval(
-					scope && options?.approvers
-						? { ...scope, approvers: options.approvers }
-						: scope,
+					scope,
 					minTier,
+					options?.approvers,
 				);
 				// A private conversation's call above its person's tier is no one's to approve.
 				if (!audience) return "unavailable";

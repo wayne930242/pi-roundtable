@@ -64,15 +64,17 @@ export interface SurfaceContractSubject {
 	 */
 	owner?: SurfaceContractAnswerer;
 	/**
-	 * Another principal, not an owner, who holds the tier of the person's approvals and whom a
-	 * scope may name in `approvers`; they know the id of the person's open prompt and answer it.
-	 * Without it the named-approver checks are skipped.
+	 * Another principal, not an owner, who holds the tier of the person's approvals and whom an
+	 * approval may name in `approvers`; they know the id of the person's open prompt and answer it.
+	 * A surface must report them through `ApprovalOptions.approvedBy`, because the runtime accepts
+	 * an approval of a call that names approvers only from one it names. Without it the
+	 * named-approver checks are skipped.
 	 */
 	approver?: SurfaceContractAnswerer & { principalId: string };
 	/**
 	 * Set by a surface that serves only conversations private to one person, such as the web chat:
 	 * it has no shared conversation in which an approval is the named approvers', so it skips that
-	 * check and keeps the one that private conversations ignore them.
+	 * check and keeps the one that its person alone answers a private conversation's.
 	 */
 	privateOnly?: boolean;
 	close?(): Promise<void>;
@@ -291,13 +293,14 @@ const CHECKS: readonly Check[] = [
 		run: namedApproverAnswers,
 	},
 	{
-		name: "a private conversation ignores named approvers: only the person answers",
+		name: "a private conversation is answered by its person alone, whoever else a call names",
 		applies: (subject) =>
 			subject.surface.prompts !== undefined &&
 			subject.answer !== undefined &&
 			subject.approver !== undefined,
 		run: (running) =>
 			answeredOnlyByThem(running, running.subject.approver, "private", [
+				speakerOf(running.subject).principalId,
 				running.subject.approver?.principalId ?? "",
 			]),
 	},
@@ -374,8 +377,9 @@ export async function checkSurfaceContract(
  * progress, resolves approvals as the person answers or as a stopped turn cancels them, ignores
  * another person's answer to the person's approval, and, in a private conversation, an owner's
  * too, and lets an approval above the person's tier there come back at once, shown to no one.
- * Where it can name approvers, an approval that does is answered by them and not by the person
- * or another person, and a private conversation ignores the names. Each
+ * Where it can name approvers, an approval that does is answered by them, reported as the
+ * approver, and not by the person or another person, and a private conversation's is answered by
+ * its person alone, whoever the call names besides them. Each
  * check gets a fresh subject from `make`; a check for an optional part the surface lacks passes.
  */
 export function describeSurfaceContract(

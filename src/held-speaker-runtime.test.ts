@@ -283,7 +283,7 @@ test("a call held for named approvers is asked with them, and its run sees who a
 	}
 });
 
-test("a call approved by a surface that does not say who runs without an approver", async () => {
+test("a shared conversation's approval that does not say who gave it leaves a call that names approvers held (RV-F003)", async () => {
 	shipped.length = 0;
 	const { harness, done } = await heldHost(
 		1,
@@ -300,7 +300,99 @@ test("a call approved by a surface that does not say who runs without an approve
 			conversation: { visibility: "shared" },
 			selection: { id: "held", tools: ["ship"], groups: [] },
 		});
-		expect(shipped).toEqual([undefined]);
+		expect(shipped).toHaveLength(0);
+	} finally {
+		await done();
+	}
+});
+
+test("a private conversation's person who is not named is not asked, whatever the surface would answer (RV-F001)", async () => {
+	shipped.length = 0;
+	let asked = 0;
+	const { harness, saved, done } = await heldHost(
+		1,
+		() => ({
+			confirm: async () => {
+				asked++;
+				return "approved";
+			},
+			ask: async () => undefined,
+		}),
+		SHIP_TURN,
+	);
+	try {
+		await harness.turns.run({
+			channel: "fake:private",
+			kind: "helper",
+			text: "ship to acme",
+			speaker: { ...MEMBER, principalId: "p_sam" },
+			interactive: true,
+			conversation: { visibility: "private" },
+			selection: { id: "held", tools: ["ship"], groups: [] },
+		});
+		expect(asked).toBe(0);
+		expect(shipped).toHaveLength(0);
+		expect(saved.at(-1)?.calls[0]?.approverIds).toEqual(["p_ada"]);
+	} finally {
+		await done();
+	}
+});
+
+test("a turn started as an approval releases a call that names approvers only for a named speaker or an owner (RV-F002)", async () => {
+	shipped.length = 0;
+	const { harness, saved, done } = await heldHost(3, undefined, SHIP_TURN);
+	const turn = (speaker: Speaker) =>
+		harness.turns.run({
+			channel: "fake:room",
+			kind: "helper",
+			text: "yes, ship it",
+			speaker,
+			confirmed: true,
+			conversation: { visibility: "shared" },
+			selection: { id: "held", tools: ["ship"], groups: [] },
+		});
+	try {
+		// Held, with Ada named.
+		await harness.turns.run({
+			channel: "fake:room",
+			kind: "helper",
+			text: "ship to acme",
+			speaker: { ...MEMBER, principalId: "p_sam" },
+			conversation: { visibility: "shared" },
+			selection: { id: "held", tools: ["ship"], groups: [] },
+		});
+		// The requester, confirming it, does not release it.
+		await turn({ ...MEMBER, principalId: "p_sam" });
+		expect(shipped).toHaveLength(0);
+		expect(saved.at(-1)?.calls).toHaveLength(1);
+		// The named approver does, and run sees them.
+		await turn({ ...MEMBER, id: "9", name: "Ada", principalId: "p_ada" });
+		expect(shipped).toEqual([
+			{ principalId: "p_ada", speakerId: "9", name: "Ada" },
+		]);
+	} finally {
+		await done();
+	}
+});
+
+test("a private conversation's confirming message cannot release a call that names others, as a remote MCP conversation sends it (RV-F001)", async () => {
+	shipped.length = 0;
+	const { harness, saved, done } = await heldHost(2, undefined, SHIP_TURN);
+	const turn = (text: string, confirmed: boolean) =>
+		harness.turns.run({
+			channel: "fake:private",
+			kind: "helper",
+			text,
+			speaker: { ...MEMBER, principalId: "p_sam" },
+			...(confirmed ? { confirmed } : {}),
+			conversation: { visibility: "private" },
+			selection: { id: "held", tools: ["ship"], groups: [] },
+		});
+	try {
+		await turn("ship to acme", false);
+		await turn("yes, ship it", true);
+		expect(shipped).toHaveLength(0);
+		expect(saved.at(-1)?.calls[0]?.approverIds).toEqual(["p_ada"]);
 	} finally {
 		await done();
 	}

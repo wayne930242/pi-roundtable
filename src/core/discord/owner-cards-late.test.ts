@@ -74,7 +74,12 @@ describe("OwnerCards after the grace period", () => {
 				approved: true,
 				by: OWNER,
 				// No identity service: the primary owner is their own principal.
-				approvedBy: { principalId: OWNER, speakerId: OWNER, name: OWNER },
+				approvedBy: {
+					principalId: OWNER,
+					speakerId: OWNER,
+					name: OWNER,
+					owner: true,
+				},
 			},
 		]);
 		expect(resumed).toEqual([

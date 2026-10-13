@@ -13,6 +13,7 @@ import { splitReply } from "../presentation/reply-splitter.ts";
 import { thinkingLine } from "../presentation/thinking-line.ts";
 import { withReplyFiles } from "../reply-files.ts";
 import { endOf, settleTurn } from "../routing/settle-turn.ts";
+import { mayApproveNamed } from "../runtime/extensions/held-calls.ts";
 import { type Speaker, tierAtLeast } from "../speakers.ts";
 import { toolTiers } from "../tool-tiers.ts";
 import { AgentMessages } from "./agent-messages.ts";
@@ -148,7 +149,8 @@ export class TeamTurns {
 	 * agents' channels are shared, or, for a call whose tool named its approvers, one of those
 	 * principals, or, for any other call, the principal whose turn held them (by their id, for
 	 * actions held before 0.9). Their tier must now hold every call. Nobody else in the channel
-	 * may, so a call that named approvers is not its speaker's to approve unless named.
+	 * may, so a call that named approvers is not its speaker's to approve unless named. The gate
+	 * checks the named approvers again when the turn begins, whoever asked for the release.
 	 */
 	#mayApprove(speaker: Speaker, pending: PendingConfirmation): boolean {
 		const theirs =
@@ -161,9 +163,7 @@ export class TeamTurns {
 		return pending.calls.every(
 			(call) =>
 				(speaker.tier === "owner" ||
-					(call.approverIds
-						? call.approverIds.includes(speaker.principalId)
-						: theirs)) &&
+					(call.approverIds ? mayApproveNamed(speaker, call) : theirs)) &&
 				tiers.allows(speaker.tier, call.tool) &&
 				(!call.minTier || tierAtLeast(speaker.tier, call.minTier)),
 		);

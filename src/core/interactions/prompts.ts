@@ -46,6 +46,12 @@ export interface ApprovedBy {
 	principalId: string;
 	speakerId: string;
 	name: string;
+	/**
+	 * True when they approved as a core owner. A surface sets it when the approver is one; a call
+	 * that named approvers is released only by an approver it names or by an `owner`, so an
+	 * approval without it, from anyone else, is not accepted.
+	 */
+	owner?: true;
 }
 
 /**
@@ -57,8 +63,10 @@ export interface ApprovalOptions {
 	 * The principal ids that may approve this call instead of the scope's speaker. Given in a
 	 * conversation that escalates to the owners, the speaker may not approve it unless named, and
 	 * each named principal needs the call's tier when they answer; the owners may still approve it.
-	 * An empty list leaves the owners alone. A private conversation ignores it: its person is the
-	 * only one who answers.
+	 * An empty list leaves the owners alone. In a private conversation, whose person is the only one
+	 * who answers, the person may approve it only when named or an owner; otherwise it comes back
+	 * `unavailable` at once. A surface must report who approved through `approvedBy`: in a shared
+	 * conversation an approval it does not name is not accepted for a call that names approvers.
 	 */
 	approvers?: readonly string[];
 	/**
@@ -140,12 +148,6 @@ export interface PromptScope {
 	 * an approval comes back `unavailable` at once.
 	 */
 	escalate: "owners" | "none";
-	/**
-	 * The principal ids that may approve the call being asked instead of the speaker, as
-	 * `ApprovalOptions.approvers` gave them; a surface that serves one call at a time reads them
-	 * here. Absent when the call names none, and ignored where `escalate` is `none`.
-	 */
-	approvers?: readonly string[];
 }
 
 /**

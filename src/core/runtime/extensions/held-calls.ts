@@ -1,5 +1,10 @@
-import type { PendingConfirmation } from "../../domain/conversation.ts";
+import type {
+	HeldCall,
+	PendingConfirmation,
+} from "../../domain/conversation.ts";
 import type { OwnerIdentity } from "../../identity.ts";
+import type { ApprovedBy } from "../../interactions/prompts.ts";
+import type { Speaker } from "../../speakers.ts";
 
 /** Held actions older than this cannot be approved any more. */
 export const CONFIRMATION_TTL_MS = 24 * 3_600_000;
@@ -53,4 +58,34 @@ export function confirmedTurnText(
 		.map((call) => `- ${call.action}: ${call.tool} ${call.input}`)
 		.join("\n");
 	return `(${owner.name} approved the held actions below with this message. Make each call now with exactly this input.)\n${calls}\n\n${text}`;
+}
+
+/**
+ * Whether a call's `approverIds` leave the person free to approve it: always, for a call that names
+ * none, since whoever asked decides who the person is; for one that does, only an owner or a named
+ * principal. Nobody known, such as a turn without a speaker, may approve a call that names approvers.
+ */
+export function mayApproveNamed(
+	person:
+		| (Pick<Speaker, "principalId"> & { tier?: Speaker["tier"] })
+		| undefined,
+	call: Pick<HeldCall, "approverIds">,
+): boolean {
+	if (!call.approverIds) return true;
+	return (
+		person !== undefined &&
+		(person.tier === "owner" || call.approverIds.includes(person.principalId))
+	);
+}
+
+/** Whether an approval reported for a call is one its `approverIds` accept: from a named principal or an owner. */
+export function namedApprover(
+	call: Pick<HeldCall, "approverIds">,
+	by: ApprovedBy | undefined,
+): boolean {
+	if (!call.approverIds) return true;
+	return (
+		by !== undefined &&
+		(by.owner === true || call.approverIds.includes(by.principalId))
+	);
 }
