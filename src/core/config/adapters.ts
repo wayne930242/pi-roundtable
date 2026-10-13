@@ -71,6 +71,14 @@ export interface DiscordConfig {
 	 * remove them; they age out.
 	 */
 	cardCopies?: { keepDays?: number; keep?: number } | false;
+	/**
+	 * How the files of an owner's or an agent's channel message are downloaded: `deadlineMs`
+	 * (default 60,000) is the most time all of a message's files, and those of the message it
+	 * replies to, may take together; `idleMs` (default 10,000) is how long one file may send no
+	 * byte before it is given up. A file still to come at the deadline, or one that went quiet, is
+	 * reported as `download failed` and the turn goes on without it.
+	 */
+	attachmentDownload?: { deadlineMs?: number; idleMs?: number };
 }
 
 /** The Discord settings with every default filled in. */
@@ -89,6 +97,8 @@ export interface ResolvedDiscord {
 	cardGraceSeconds: number;
 	/** As configured: `{}` when left out, so the defaults apply, or `false`. */
 	cardCopies: NonNullable<DiscordConfig["cardCopies"]> | false;
+	/** As configured: left out unless set, so the defaults apply. */
+	attachmentDownload?: NonNullable<DiscordConfig["attachmentDownload"]>;
 }
 
 /** The configured Discord settings, defaults filled in; `rootCommand` is the host's slug. */
@@ -117,6 +127,9 @@ export function resolvedDiscord(
 			: { freshMarker: discord.freshMarker }),
 		cardGraceSeconds: discord.cardGraceSeconds ?? 120,
 		cardCopies: discord.cardCopies ?? {},
+		...(discord.attachmentDownload === undefined
+			? {}
+			: { attachmentDownload: discord.attachmentDownload }),
 	};
 }
 
@@ -162,6 +175,12 @@ export const discordShape = shape({
 				keep: optional(integer(1, 10_000)),
 			}),
 		),
+	),
+	attachmentDownload: optional(
+		shape({
+			deadlineMs: optional(integer(1_000, 600_000)),
+			idleMs: optional(integer(1_000, 600_000)),
+		}),
 	),
 });
 

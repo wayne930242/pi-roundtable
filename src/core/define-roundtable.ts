@@ -202,6 +202,9 @@ function discordAssembly(
 			prompts: { shared: sharedPrompt, guest },
 			...(discord.agentMemory ? { memory: discord.agentMemory } : {}),
 			...(discord.agentSpeakers ? { speakers: discord.agentSpeakers } : {}),
+			...(discord.attachmentDownload
+				? { attachmentDownload: discord.attachmentDownload }
+				: {}),
 			avatarListener: "public",
 			// resolveConfig refuses Discord without a public address.
 			avatarUrl: config.http?.publicUrl ?? "",

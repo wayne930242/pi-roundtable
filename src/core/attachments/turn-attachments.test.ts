@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { InboundMessage } from "../domain/conversation.ts";
 import { silentLogger } from "../log.ts";
-import { attachmentsOf } from "./turn-attachments.ts";
+import { attachmentsOf, DEFAULT_DEADLINE_MS } from "./turn-attachments.ts";
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -95,4 +95,30 @@ test("the deadline's signal reaches fetch: a fetch that only ends on abort lets 
 	expect(result.files).toEqual([]);
 	expect(result.failures).toHaveLength(1);
 	expect(result.failures[0]?.reason).toContain("download failed");
+});
+
+test("the default overall deadline is 60 seconds, since a stalled file ends at the idle timeout", () => {
+	expect(DEFAULT_DEADLINE_MS).toBe(60_000);
+});
+
+test("idleMs reaches every file: a quiet one is given up and the rest of the message still comes", async () => {
+	const dir = mkdtempSync(join(tmpdir(), "turn-attachments-"));
+	dirs.push(dir);
+	let calls = 0;
+	const quiet = Object.assign(
+		async () =>
+			++calls === 1
+				? new Response(new ReadableStream({ start() {} }))
+				: new Response("x"),
+		{ preconnect: fetch.preconnect },
+	) as unknown as typeof fetch;
+	const started = Date.now();
+	const result = await attachmentsOf(message(), dir, silentLogger(), quiet, {
+		idleMs: 60,
+	});
+	expect(Date.now() - started).toBeLessThan(2_000);
+	expect(result.failures.map((failure) => failure.reason)).toEqual([
+		"download failed: idle_timeout",
+	]);
+	expect(result.files).toHaveLength(2);
 });

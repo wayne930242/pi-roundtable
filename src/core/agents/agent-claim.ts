@@ -60,6 +60,8 @@ export interface AgentClaimOptions {
 	surface: Pick<SurfacePort, "react" | "unreact">;
 	/** Where a channel's attachments are saved. */
 	attachmentDir: (channel: ChannelKey) => string;
+	/** The downloads' limits: all of a message's files together (default 60 s), and one file without a byte (default 10 s). */
+	attachmentDownload?: { deadlineMs?: number; idleMs?: number };
 	logger: Logger;
 	/** Replaceable in tests. */
 	fetchImpl?: typeof fetch;
@@ -80,7 +82,13 @@ export interface AgentClaimOptions {
 export function agentClaim(options: AgentClaimOptions): ChannelClaim {
 	const { team, runtime, surface, attachmentDir, logger, fetchImpl } = options;
 	const attachments = (message: InboundMessage) =>
-		attachmentsOf(message, attachmentDir(message.channel), logger, fetchImpl);
+		attachmentsOf(
+			message,
+			attachmentDir(message.channel),
+			logger,
+			fetchImpl,
+			options.attachmentDownload,
+		);
 	/** The channel context of a message in an agent's channel; none, logged, when it cannot be read. */
 	const around = async (
 		message: InboundMessage,

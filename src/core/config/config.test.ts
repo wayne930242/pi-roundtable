@@ -332,6 +332,41 @@ describe("discord.cardCopies", () => {
 	});
 });
 
+describe("discord.attachmentDownload", () => {
+	const with_ = (attachmentDownload: unknown) =>
+		resolveConfig({
+			...minimal,
+			discord: { ...discord, attachmentDownload },
+		} as RoundtableConfig).discord?.attachmentDownload;
+
+	test("is left out unless configured, so the 60 and 10 second defaults apply", () => {
+		expect(resolveConfig(minimal).discord?.attachmentDownload).toBeUndefined();
+	});
+
+	test("takes the overall deadline and the idle timeout, together or alone", () => {
+		expect(with_({ deadlineMs: 90_000, idleMs: 5_000 })).toEqual({
+			deadlineMs: 90_000,
+			idleMs: 5_000,
+		});
+		expect(with_({ idleMs: 3_000 })).toEqual({ idleMs: 3_000 });
+	});
+
+	test("refuses a value out of range, a key it does not know, or a non-object, naming it", () => {
+		const refusing = (attachmentDownload: unknown) =>
+			refused({ ...minimal, discord: { ...discord, attachmentDownload } });
+		expect(refusing({ deadlineMs: 999 })).toContain(
+			"config discord.attachmentDownload.deadlineMs",
+		);
+		expect(refusing({ idleMs: 0.5 })).toContain(
+			"config discord.attachmentDownload.idleMs",
+		);
+		expect(refusing({ deadline: 5_000 })).toContain(
+			'Did you mean "deadlineMs"?',
+		);
+		expect(refusing(true)).toContain("config discord.attachmentDownload");
+	});
+});
+
 describe("discord.freshMarker", () => {
 	const with_ = (freshMarker: unknown) =>
 		resolveConfig({

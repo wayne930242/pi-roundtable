@@ -1,5 +1,9 @@
 import { afterAll, expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { ChannelClaim, InboundMessage } from "../contract/channels.ts";
+import type { AttachmentFailure } from "../domain/attachment.ts";
 import { setLocale } from "../i18n/index.ts";
 import { SYSTEM_PRINCIPAL } from "../identity/principal-store.ts";
 import { silentLogger } from "../log.ts";
@@ -19,12 +23,14 @@ const ROLE = "200000000000000001";
 function setup(
 	channelContext?: Parameters<typeof agentClaim>[0]["channelContext"],
 	speakers?: "everyone" | "owners",
+	extra: Partial<Parameters<typeof agentClaim>[0]> = {},
 ) {
 	const answered: {
 		kind: string;
 		speaker: Speaker;
 		text: string;
 		images?: readonly unknown[];
+		failures?: readonly AttachmentFailure[];
 	}[] = [];
 	const stopped: string[] = [];
 	const team = {
@@ -40,13 +46,17 @@ function setup(
 			speaker: Speaker,
 			text: string,
 			_reply: string,
-			carried: { images: readonly unknown[] },
+			carried: {
+				images: readonly unknown[];
+				failures?: readonly AttachmentFailure[];
+			},
 		) => {
 			answered.push({
 				kind: "agent",
 				speaker,
 				text,
 				images: carried.images,
+				...(carried.failures ? { failures: carried.failures } : {}),
 			});
 			return { ok: true as const, text: "" };
 		},
@@ -80,6 +90,7 @@ function setup(
 		attachmentDir: () => "/tmp",
 		logger: silentLogger(),
 		...(channelContext ? { channelContext } : {}),
+		...extra,
 	});
 	// The router resolves who wrote a message before a claim admits it; the 0.8 map stands in for the identity service.
 	const claim: ChannelClaim = {
@@ -497,4 +508,44 @@ test("an agent's turn carries the channel context's images after its own, and th
 	if (plain?.kind !== "turn") throw new Error("expected a turn");
 	await plain.run();
 	expect(bare.answered[0]?.text).not.toContain("Pictures posted");
+});
+
+test("the download limits of discord.attachmentDownload reach an agent's turn: a file that goes quiet is given up and named in the turn", async () => {
+	const quiet = Object.assign(
+		async () => new Response(new ReadableStream({ start() {} })),
+		{ preconnect: fetch.preconnect },
+	) as unknown as typeof fetch;
+	const dir = mkdtempSync(join(tmpdir(), "agent-claim-"));
+	try {
+		const { claim, answered } = setup(undefined, undefined, {
+			attachmentDir: () => dir,
+			fetchImpl: quiet,
+			attachmentDownload: { deadlineMs: 30_000, idleMs: 60 },
+		});
+		const admission = claim.admit(
+			message(OWNER, "discord:10", {
+				attachments: [
+					{
+						url: "https://files.test/a",
+						name: "a.txt",
+						size: 1,
+						contentType: "text/plain",
+					},
+				],
+			}),
+		);
+		if (admission?.kind !== "turn") throw new Error("expected a turn");
+		const started = Date.now();
+		await admission.run();
+		expect(Date.now() - started).toBeLessThan(5_000);
+		expect(answered[0]?.failures).toEqual([
+			{
+				name: "a.txt",
+				reason: "download failed: idle_timeout",
+				fromReference: false,
+			},
+		]);
+	} finally {
+		rmSync(dir, { recursive: true, force: true });
+	}
 });

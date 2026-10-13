@@ -3,6 +3,7 @@ import { mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+	DEFAULT_IDLE_MS,
 	fetchAttachments,
 	MAX_ATTACHMENT_BYTES,
 } from "./attachment-fetcher.ts";
@@ -209,5 +210,102 @@ describe("attachment download limits", () => {
 		expect(Date.now() - started).toBeLessThan(2_000);
 		expect(result.files).toEqual([]);
 		expect(result.failures[0]?.reason).toContain("download failed");
+	});
+});
+
+describe("attachment idle timeout", () => {
+	const second = {
+		url: "https://example.test/second",
+		name: "second.txt",
+		size: 5,
+		contentType: "text/plain",
+	};
+	const stalling = () =>
+		new Response(
+			new ReadableStream({
+				start(controller) {
+					controller.enqueue(new TextEncoder().encode("par"));
+				},
+			}),
+		);
+
+	test("the default is 10 seconds", () => {
+		expect(DEFAULT_IDLE_MS).toBe(10_000);
+	});
+
+	test("a body that goes quiet is given up after idleMs, with no deadline signal at all, and the next file still downloads", async () => {
+		const input = request();
+		input.refs.push(second);
+		let calls = 0;
+		const started = Date.now();
+		const result = await fetchAttachments(
+			{ ...input, idleMs: 60 },
+			Object.assign(
+				async () => (++calls === 1 ? stalling() : new Response("hello")),
+				{ preconnect: fetch.preconnect },
+			),
+		);
+		expect(Date.now() - started).toBeLessThan(2_000);
+		expect(result.failures).toEqual([
+			{
+				name: "file.bin",
+				reason: "download failed: idle_timeout",
+				fromReference: false,
+			},
+		]);
+		expect(result.files.map((file) => file.name)).toEqual(["second.txt"]);
+	});
+
+	test("a fetch that never answers and ignores its signal is given up the same way", async () => {
+		const input = request();
+		const started = Date.now();
+		const result = await fetchAttachments(
+			{ ...input, idleMs: 60 },
+			Object.assign(() => new Promise<Response>(() => {}), {
+				preconnect: fetch.preconnect,
+			}),
+		);
+		expect(Date.now() - started).toBeLessThan(2_000);
+		expect(result.failures[0]?.reason).toBe("download failed: idle_timeout");
+	});
+
+	test("a slow body that keeps sending bytes is not idle, however long it takes", async () => {
+		const input = request();
+		let sent = 0;
+		const slow = new Response(
+			new ReadableStream<Uint8Array>({
+				async pull(controller) {
+					await Bun.sleep(40);
+					controller.enqueue(new TextEncoder().encode("x"));
+					if (++sent === 8) controller.close();
+				},
+			}),
+		);
+		const started = Date.now();
+		const result = await fetchAttachments(
+			{ ...input, idleMs: 120 },
+			fetcher(slow),
+		);
+		expect(Date.now() - started).toBeGreaterThan(250);
+		expect(result.failures).toEqual([]);
+		expect(result.files[0]?.size).toBe(8);
+	});
+
+	test("the deadline still wins over a body that keeps sending, and is not called idle", async () => {
+		const input = request();
+		const endless = new Response(
+			new ReadableStream<Uint8Array>({
+				async pull(controller) {
+					await Bun.sleep(10);
+					controller.enqueue(new Uint8Array(1));
+				},
+			}),
+		);
+		const result = await fetchAttachments(
+			{ ...input, idleMs: 1_000, signal: AbortSignal.timeout(80) },
+			fetcher(endless),
+		);
+		expect(result.files).toEqual([]);
+		expect(result.failures[0]?.reason).toBe("download failed: TimeoutError");
 	});
 });

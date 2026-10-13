@@ -4,8 +4,11 @@ import type { Logger } from "../log.ts";
 import { fetchAttachments } from "./attachment-fetcher.ts";
 import { modelImagesOf } from "./model-images.ts";
 
-/** The most milliseconds all of a message's downloads take together by default. */
-const DEADLINE_MS = 20_000;
+/**
+ * The most milliseconds all of a message's downloads take together by default. A download that
+ * stalls ends at `DEFAULT_IDLE_MS` without bytes, so the deadline only has to cover slow ones.
+ */
+export const DEFAULT_DEADLINE_MS = 60_000;
 
 /** Saves the message's and its reference's files, and turns up to four images into model images. */
 export async function collectAttachments(
@@ -14,17 +17,22 @@ export async function collectAttachments(
 	options: {
 		logger: Logger;
 		fetchImpl?: typeof fetch;
-		/** One deadline for the message's and its reference's files together; default 20 s. */
+		/** One deadline for the message's and its reference's files together; default 60 s. */
 		deadlineMs?: number;
+		/** How long one file may send no byte before it is given up and the next one tried; default 10 s. */
+		idleMs?: number;
 		/** Aborts the downloads, as the deadline does. */
 		signal?: AbortSignal;
 	},
 ): Promise<TurnAttachments> {
 	const { fetchImpl, logger } = options;
-	const deadline = AbortSignal.timeout(options.deadlineMs ?? DEADLINE_MS);
+	const deadline = AbortSignal.timeout(
+		options.deadlineMs ?? DEFAULT_DEADLINE_MS,
+	);
 	const signal = options.signal
 		? AbortSignal.any([deadline, options.signal])
 		: deadline;
+	const idle = options.idleMs === undefined ? {} : { idleMs: options.idleMs };
 	const own = await fetchAttachments(
 		{
 			refs: message.attachments,
@@ -32,6 +40,7 @@ export async function collectAttachments(
 			prefix: message.messageId,
 			fromReference: false,
 			signal,
+			...idle,
 		},
 		fetchImpl,
 	);
@@ -42,6 +51,7 @@ export async function collectAttachments(
 			prefix: `${message.messageId}-ref`,
 			fromReference: true,
 			signal,
+			...idle,
 		},
 		fetchImpl,
 	);
@@ -70,7 +80,7 @@ export function attachmentsOf(
 	dir: string,
 	logger: Logger,
 	fetchImpl?: typeof fetch,
-	limits: { deadlineMs?: number; signal?: AbortSignal } = {},
+	limits: { deadlineMs?: number; idleMs?: number; signal?: AbortSignal } = {},
 ): Promise<TurnAttachments> {
 	return collectAttachments(message, dir, {
 		logger,

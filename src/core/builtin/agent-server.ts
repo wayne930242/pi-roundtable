@@ -69,6 +69,12 @@ export interface AgentServerOptions {
 	 * `"owners"`, which leaves a speaker below the owner tier unanswered.
 	 */
 	speakers?: "everyone" | "owners";
+	/**
+	 * Limits of the downloads of a message's files (`discord.attachmentDownload`): `deadlineMs`
+	 * for all of a message's files together (default 60 s), `idleMs` for one file to send no byte
+	 * (default 10 s).
+	 */
+	attachmentDownload?: { deadlineMs?: number; idleMs?: number };
 	/** The prompt every agent starts with, and the one for speakers other than the owner. */
 	prompts: { shared: string; guest?: string };
 	/** The listener the avatar pictures are served on. */
@@ -293,6 +299,9 @@ export function agentServerPlugin(
 						runtime: running,
 						surface: context.surfaces,
 						attachmentDir,
+						...(options.attachmentDownload
+							? { attachmentDownload: options.attachmentDownload }
+							: {}),
 						logger,
 						channelContext: (message) => discord.channelContext(message),
 					}),

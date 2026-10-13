@@ -9,6 +9,9 @@ import { plainText } from "./attachment-name.ts";
 
 export const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 
+/** How long one download may go without a byte (the headers count as the first) before it is given up, by default. */
+export const DEFAULT_IDLE_MS = 10_000;
+
 export interface FetchRequest {
 	refs: readonly AttachmentRef[];
 	/** Directory of the channel's attachment store; created when missing. */
@@ -18,6 +21,8 @@ export interface FetchRequest {
 	fromReference: boolean;
 	/** Aborts the download of the files still to come, and the one in flight. */
 	signal?: AbortSignal;
+	/** Gives up on a file that sends no byte for this long, and goes on to the next; default 10 s. */
+	idleMs?: number;
 }
 
 export interface FetchResult {
@@ -73,6 +78,55 @@ function failureCode(error: unknown): string {
 	return "error";
 }
 
+/**
+ * Ends a download that has gone quiet: `signal` aborts, with the reason `idle`, once `idleMs` pass
+ * without a `touch`, and also when the outer signal does.
+ */
+class IdleWatch {
+	readonly signal: AbortSignal;
+	readonly #own = new AbortController();
+	readonly #idleMs: number;
+	#timer: ReturnType<typeof setTimeout> | undefined;
+
+	constructor(idleMs: number, outer?: AbortSignal) {
+		this.#idleMs = idleMs;
+		this.signal = outer
+			? AbortSignal.any([outer, this.#own.signal])
+			: this.#own.signal;
+		this.touch();
+	}
+
+	/** Whether the download was ended for want of bytes, not by the outer signal. */
+	get idled(): boolean {
+		return this.#own.signal.aborted;
+	}
+
+	touch(): void {
+		clearTimeout(this.#timer);
+		this.#timer = setTimeout(
+			() => this.#own.abort(new Error("idle")),
+			this.#idleMs,
+		);
+	}
+
+	stop(): void {
+		clearTimeout(this.#timer);
+	}
+}
+
+/** Rejects with the signal's reason when it aborts, so a fetch that ignores the signal still ends. */
+function untilAborted<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
+	if (signal.aborted) return Promise.reject(signal.reason);
+	let onAbort: (() => void) | undefined;
+	const aborted = new Promise<never>((_, reject) => {
+		onAbort = () => reject(signal.reason);
+		signal.addEventListener("abort", onAbort, { once: true });
+	});
+	return Promise.race([work, aborted]).finally(() => {
+		if (onAbort) signal.removeEventListener("abort", onAbort);
+	});
+}
+
 /** Downloads attachments one by one; a failed file is reported without stopping the others. */
 export async function fetchAttachments(
 	request: FetchRequest,
@@ -81,6 +135,7 @@ export async function fetchAttachments(
 	const files: StoredAttachment[] = [];
 	const failures: AttachmentFailure[] = [];
 	const { refs, dir, prefix, fromReference, signal } = request;
+	const idleMs = request.idleMs ?? DEFAULT_IDLE_MS;
 	if (refs.length === 0) return { files, failures };
 
 	for (const [index, ref] of refs.entries()) {
@@ -94,19 +149,20 @@ export async function fetchAttachments(
 			fail(`larger than 25 MB (${ref.size} bytes)`);
 			continue;
 		}
+		const watch = new IdleWatch(idleMs, signal);
 		try {
 			// A directory that cannot be made fails the file, not the turn.
 			mkdirSync(dir, { recursive: true, mode: 0o700 });
-			const response = await fetchImpl(
-				ref.url,
-				signal ? { signal } : undefined,
+			const response = await untilAborted(
+				fetchImpl(ref.url, { signal: watch.signal }),
+				watch.signal,
 			);
 			if (!response.ok) {
 				await response.body?.cancel();
 				fail(`download failed with HTTP ${response.status}`);
 				continue;
 			}
-			const data = await readAttachmentBody(response, signal);
+			const data = await readAttachmentBody(response, watch);
 			if (typeof data === "number") {
 				fail(`larger than 25 MB (${data} bytes)`);
 				continue;
@@ -126,7 +182,11 @@ export async function fetchAttachments(
 				fromReference,
 			});
 		} catch (error) {
-			fail(`download failed: ${failureCode(error)}`);
+			fail(
+				`download failed: ${watch.idled && !signal?.aborted ? "idle_timeout" : failureCode(error)}`,
+			);
+		} finally {
+			watch.stop();
 		}
 	}
 	return { files, failures };
@@ -135,20 +195,22 @@ export async function fetchAttachments(
 /** Returns the bytes, or the observed size once the stream exceeds the limit. */
 async function readAttachmentBody(
 	response: Response,
-	signal?: AbortSignal,
+	watch: IdleWatch,
 ): Promise<Uint8Array | number> {
 	if (!response.body) return new Uint8Array();
+	const { signal } = watch;
 	const reader = response.body.getReader();
 	const chunks: Uint8Array[] = [];
 	let size = 0;
 	// A body that stalls ends with the signal, also when the fetch itself ignores it.
-	const stop = () => void reader.cancel(signal?.reason).catch(() => {});
-	signal?.addEventListener("abort", stop, { once: true });
+	const stop = () => void reader.cancel(signal.reason).catch(() => {});
+	signal.addEventListener("abort", stop, { once: true });
 	try {
-		if (signal?.aborted) throw signal.reason ?? new Error("aborted");
+		if (signal.aborted) throw signal.reason ?? new Error("aborted");
 		for (;;) {
 			const { done, value } = await reader.read();
 			if (done) break;
+			watch.touch();
 			size += value.byteLength;
 			if (size > MAX_ATTACHMENT_BYTES) {
 				await reader.cancel();
@@ -157,9 +219,9 @@ async function readAttachmentBody(
 			chunks.push(value);
 		}
 		// A cancelled reader reads as the end of the body, so a cut-short body is not a whole file.
-		if (signal?.aborted) throw signal.reason ?? new Error("aborted");
+		if (signal.aborted) throw signal.reason ?? new Error("aborted");
 	} finally {
-		signal?.removeEventListener("abort", stop);
+		signal.removeEventListener("abort", stop);
 		reader.releaseLock();
 	}
 	const data = new Uint8Array(size);
