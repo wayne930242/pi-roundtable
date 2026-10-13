@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `access.provisioning` takes a map from surface to mode as well as one word: `{ web: "admitted", discord: "linked" }` admits a person at first contact on the web and serves only already linked identities on Discord. With `members: { everyone: ["web", "discord"] }`, a Discord id linked to a principal is served at member, while an unlinked one is refused and never recorded as a principal or an identity; web admits everyone it admitted before. A surface the map leaves out is `admitted`, and the string form (`"admitted"`, `"linked"`) means what it did. `roundtable doctor` prints the effective mode in the access line (`provisioning admitted`, or one `<surface> <mode>` per surface for a map). Exported types: `Provisioning` and `ProvisioningRule`.
+
 ## [0.9.10] - 2026-10-10
 
 ### Added

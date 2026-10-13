@@ -103,6 +103,18 @@ export const record = <T>(item: Field<T>): Field<Record<string, T>> => ({
 	},
 });
 
+/** A string `text` accepts, or an object `object` accepts: one field that is written either way. */
+export const either = <A extends string, B extends object>(
+	string: Field<A>,
+	object: Field<B>,
+): Field<A | B> => ({
+	describe: `${string.describe}, or ${object.describe}`,
+	check: (value, path) =>
+		typeof value === "string"
+			? string.check(value, path)
+			: object.check(value, path),
+});
+
 /** A value a caller-supplied predicate accepts, such as a plugin object. */
 export const guarded = <T>(
 	describe: string,

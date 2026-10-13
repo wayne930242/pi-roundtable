@@ -151,6 +151,8 @@ export type {
 	AccessOwner,
 	AccessRules,
 	AccessTier,
+	Provisioning,
+	ProvisioningRule,
 } from "./core/identity/access-policy.ts";
 export type { ActorFacts } from "./core/identity/actor-facts.ts";
 export type { IdentityService } from "./core/identity/identity-service.ts";

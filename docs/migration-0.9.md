@@ -45,7 +45,7 @@ Use `roundtable principal list` and `show` to inspect principals and copy identi
 `link <principal> <identity>` links another account to the same person's memory; `grant`, `revoke`, `disable`, and `enable` manage lasting roles and admission.
 CLI changes can take up to 30 seconds to reach a running host's identity cache.
 Only configuration and CLI grants confer owner; IdP roles never do.
-`provisioning: "admitted"` creates a principal for a newly admitted person; `"linked"` accepts only existing links and does not claim old ids.
+`provisioning: "admitted"` creates a principal for a newly admitted person; `"linked"` accepts only existing links and does not claim old ids; a map such as `{ web: "admitted", discord: "linked" }` chooses per surface, and an unnamed surface is `admitted`.
 
 ## Data migration and conversation ownership
 

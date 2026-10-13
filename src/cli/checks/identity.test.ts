@@ -84,8 +84,27 @@ describe("the access check", () => {
 		expect(result).toEqual({
 			status: "ok",
 			detail:
-				"1 owner, Ada; written as the 0.8 owner and speakers, which roundtable upgrade rewrites as access",
+				"1 owner, Ada; written as the 0.8 owner and speakers, which roundtable upgrade rewrites as access; provisioning admitted",
 		});
+	});
+
+	test("prints the effective provisioning mode, per surface when the configuration gives a map", async () => {
+		const detail = async (provisioning: unknown) => {
+			const config = accessConfig({ everyone: ["discord"] });
+			const result = await checkAccess(
+				project({ ...config, access: { ...config.access, provisioning } }, [
+					{ name: "webchat" },
+				]),
+			);
+			return result.status === "ok" ? result.detail : result;
+		};
+		expect(await detail("linked")).toBe("1 owner, Ada; provisioning linked");
+		expect(await detail({ web: "admitted", discord: "linked" })).toBe(
+			"1 owner, Ada; provisioning discord linked, web admitted",
+		);
+		expect(await detail({ discord: "linked" })).toBe(
+			"1 owner, Ada; provisioning discord linked, web admitted",
+		);
 	});
 
 	test("is skipped while the configuration is not valid", async () => {

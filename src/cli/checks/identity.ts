@@ -1,7 +1,10 @@
 import type { SQL } from "bun";
 import { LEGACY_ACCESS } from "../../core/config/access.ts";
 import type { ResolvedConfig } from "../../core/config/config.ts";
-import type { AccessRules } from "../../core/identity/access-policy.ts";
+import {
+	type AccessRules,
+	provisioningOf,
+} from "../../core/identity/access-policy.ts";
 import { identityOf, parseIdentity } from "../../core/identity/actor-facts.ts";
 import { declaredConflict } from "../../core/identity/config-owner.ts";
 import { backfillLine } from "../../core/identity/identity-plugin.ts";
@@ -42,6 +45,18 @@ export function surfacesOf(
 	return surfaces;
 }
 
+/** The effective provisioning mode, one word, or one per surface (those the host talks through and those the map names) when it differs by surface. */
+function provisioningSummary(
+	rule: AccessRules["provisioning"],
+	surfaces: readonly string[],
+): string {
+	if (typeof rule === "string") return rule;
+	const named = [...new Set([...surfaces, ...Object.keys(rule)])];
+	return named
+		.map((surface) => `${surface} ${provisioningOf(rule, surface)}`)
+		.join(", ");
+}
+
 /**
  * Whom the configuration serves: the owners by name, a warning when `everyone: true` admits
  * everyone on every surface of a host with more than one, and a note when it is written in the
@@ -65,7 +80,7 @@ export async function checkAccess(project: Project): Promise<Result> {
 		? "; written as the 0.8 owner and speakers, which roundtable upgrade rewrites as access"
 		: "";
 	return ok(
-		`${owners.length} ${owners.length === 1 ? "owner" : "owners"}, ${list(owners.map((owner) => owner.name))}${legacy}`,
+		`${owners.length} ${owners.length === 1 ? "owner" : "owners"}, ${list(owners.map((owner) => owner.name))}${legacy}; provisioning ${provisioningSummary(config.access.provisioning, surfaces)}`,
 	);
 }
 
