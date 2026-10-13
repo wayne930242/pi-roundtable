@@ -16,6 +16,10 @@ import { identityPlugin } from "./identity-plugin.ts";
 import { identityMigrations } from "./identity-schema.ts";
 import { PgIdentityService } from "./identity-service.ts";
 import { PgPrincipalStore, SYSTEM_PRINCIPAL } from "./principal-store.ts";
+import {
+	PRINCIPAL_PLUGIN_LINKS,
+	PRINCIPAL_SELF_LINKS,
+} from "./principal-tables.ts";
 
 const ADA = "966666600000000001";
 const KAI = "966666600000000003";
@@ -216,6 +220,43 @@ describeDb("IDENTITY_LINKS, the self-link service", () => {
 		expect(await host.principalOf(`discord:${KAI}`)).toBe(kai.id);
 	});
 
+	test("an owner role another store granted after rolesOf was cached still refuses a self link, and a link made before keeps", async () => {
+		const kai = await host.store.create({ displayName: "Kai" });
+		await host.store.rolesOf(kai.id); // cached for 30 s
+		const other = await PgPrincipalStore.attach(db.sql);
+		await other.grant(kai.id, "owner", "cli");
+		const before = await rows();
+		await expect(links.link(kai.id, `discord:${KAI}`)).rejects.toThrow(
+			/is an owner/,
+		);
+		expect(await rows()).toEqual(before);
+		await other.revoke(kai.id, "owner");
+		await links.link(kai.id, `discord:${KAI}`);
+		await other.grant(kai.id, "owner", "cli");
+		expect((await links.link(kai.id, `discord:${KAI}`)).source).toBe("self");
+		expect(await host.principalOf(`discord:${KAI}`)).toBe(kai.id);
+	});
+
+	test("unlink throws when another source took the identity over before the delete", async () => {
+		const kai = await host.store.create({ displayName: "Kai" });
+		await links.link(kai.id, `discord:${KAI}`);
+		const racing = {
+			...host.store,
+			identity: host.store.identity.bind(host.store),
+			unlink: async () => {
+				await db.sql`UPDATE principal_identities SET source = 'config' WHERE subject = ${KAI}`;
+				return host.store.unlink("discord", KAI, "self");
+			},
+		} as unknown as typeof host.store;
+		const raced = identityLinks(
+			racing,
+			RULES.selfLink as NonNullable<AccessRules["selfLink"]>,
+			recordingLogger().logger,
+		);
+		await expect(raced.unlink(`discord:${KAI}`)).rejects.toThrow(/config/);
+		expect(await host.principalOf(`discord:${KAI}`)).toBe(kai.id);
+	});
+
 	test("a link serves the person under the rules at once, an unlink stops it, and both are read again after 30 seconds only from another process", async () => {
 		const kai = await host.store.create({ displayName: "Kai" });
 		await host.store.grant(kai.id, "member", "cli");
@@ -236,6 +277,20 @@ describeDb("IDENTITY_LINKS, the self-link service", () => {
 		expect(await host.principalOf(`discord:${BOB}`)).toBeUndefined();
 		clock += 1;
 		expect(await host.principalOf(`discord:${BOB}`)).toBe(kai.id);
+	});
+
+	test("rerunning every migration on a database that holds a self link neither fails nor changes it", async () => {
+		const kai = await host.store.create({ displayName: "Kai" });
+		await links.link(kai.id, `discord:${KAI}`);
+		await PRINCIPAL_PLUGIN_LINKS(db.sql);
+		await PRINCIPAL_SELF_LINKS(db.sql);
+		await db.sql`DELETE FROM roundtable_migrations WHERE id LIKE 'identity/principals-%'`;
+		await runMigrations(db.sql, [
+			{ name: "identity", migrations: identityMigrations({ owners: [] }) },
+		]);
+		const [row] = await db.sql`
+			SELECT source FROM principal_identities WHERE subject = ${KAI}`;
+		expect(row.source).toBe("self");
 	});
 
 	test("logs ids only", async () => {
@@ -265,6 +320,10 @@ test("the rules refuse an empty list of providers, a blank one, and credentials 
 	expect(() => withProviders([" "])).toThrow(/expected a provider/);
 	expect(() => withProviders(["token"])).toThrow(/not a person's own account/);
 	expect(() => withProviders(["legacy"])).toThrow(ConfigError);
+	expect(() => withProviders(["oidc"])).toThrow(/oidc:<base64url issuer>/);
+	expect(withProviders(["oidc:aWRw"]).selfLink).toEqual({
+		providers: ["oidc:aWRw"],
+	});
 	expect(withProviders(["discord"]).selfLink).toEqual({
 		providers: ["discord"],
 	});

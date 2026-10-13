@@ -314,14 +314,29 @@ export class PgPrincipalStore implements PrincipalStore {
 					RETURNING *`;
 				return linkOf(owned[0] ?? existing);
 			}
+			// A person's own link is refused to an owner, judged in this write rather than on a cached read.
 			const spent =
 				source === "plugin"
 					? await tx`SELECT id FROM principals WHERE id = ${principalId}`
-					: await tx`
-						UPDATE principals SET claimable = false WHERE id = ${principalId}
-						RETURNING id`;
-			if (spent.length === 0)
+					: source === "self"
+						? await tx`
+							UPDATE principals SET claimable = false
+							WHERE id = ${principalId} AND NOT EXISTS (
+								SELECT 1 FROM principal_roles WHERE principal_id = ${principalId} AND role = 'owner'
+							)
+							RETURNING id`
+						: await tx`
+							UPDATE principals SET claimable = false WHERE id = ${principalId}
+							RETURNING id`;
+			if (spent.length === 0) {
+				const present =
+					await tx`SELECT id FROM principals WHERE id = ${principalId}`;
+				if (present.length > 0)
+					throw new IdentityError(
+						`principal ${principalId} is an owner; owners' identities are linked in access.owners or with roundtable principal link`,
+					);
 				throw new IdentityError(`there is no principal ${principalId}`);
+			}
 			const made: IdentityRow[] = await tx`
 				INSERT INTO principal_identities (provider, subject, principal_id, source)
 				VALUES (${provider}, ${subject}, ${principalId}, ${source})

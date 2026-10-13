@@ -20,13 +20,15 @@ import {
 export interface IdentityLinks {
 	/**
 	 * Links the identity, written `<provider>:<subject>`, to the principal, and gives the link.
-	 * Linking it again to the same principal changes nothing. Throws IdentityError for a provider
+	 * Linking it again to the same principal changes nothing, also when the principal has since been
+	 * granted the owner role: a link made before keeps. Throws IdentityError for a provider
 	 * `access.selfLink` does not list, the system principal, a principal that holds the owner role
 	 * or does not exist, text that is no identity, and an identity linked to another principal.
 	 */
 	link(principalId: string, identity: string): Promise<IdentityLink>;
 	/**
-	 * Unlinks the identity; false when it was linked to no one. Throws IdentityError for a link
+	 * Unlinks the identity; true when a self link was removed, false when there was none to remove
+	 * (it was linked to no one, or its link went away meanwhile). Throws IdentityError for a link
 	 * another source made, such as the configuration or the CLI: those are not unlinked here.
 	 */
 	unlink(identity: string): Promise<boolean>;
@@ -57,11 +59,6 @@ export function identityLinks(
 				throw new IdentityError(
 					`the host's own principal "${SYSTEM_PRINCIPAL}" has no identities`,
 				);
-			const roles = await store.rolesOf(principalId);
-			if (roles.some((grant) => grant.role === "owner"))
-				throw new IdentityError(
-					`principal ${principalId} is an owner; owners' identities are linked in access.owners or with roundtable principal link`,
-				);
 			const link = await store.link(principalId, ref, "self");
 			logger.info(
 				{
@@ -83,12 +80,21 @@ export function identityLinks(
 				);
 			// Only a self link goes: one the configuration or the CLI took over since is kept.
 			const removed = await store.unlink(ref.provider, ref.subject, "self");
-			if (removed)
+			if (removed) {
 				logger.info(
 					{ principal: link.principalId, identity: identityOf(ref) },
 					"an identity was unlinked by its person",
 				);
-			return removed;
+				return true;
+			}
+			// Nothing went: read again (a write through the store drops its cached reads) to tell a link
+			// another source took over from one that is gone.
+			const now = await store.identity(ref.provider, ref.subject);
+			if (now && now.source !== "self")
+				throw new IdentityError(
+					`${identityOf(ref)} was linked by ${now.source}, not by its person; it is not unlinked here`,
+				);
+			return false;
 		},
 	} satisfies IdentityLinks);
 }

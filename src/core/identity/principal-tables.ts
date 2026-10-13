@@ -44,12 +44,12 @@ export const PRINCIPALS_CLAIMABLE = async (sql: SQL): Promise<void> => {
 	await sql`ALTER TABLE principals ADD COLUMN IF NOT EXISTS claimable boolean NOT NULL DEFAULT false`;
 };
 
-/** Links a plugin declares: their own source, beside the four the tables were made with. */
+/** Links a plugin declares: their own source, beside the four the tables were made with. It accepts `self` too, so a rerun on a database that holds self links does not fail. */
 export const PRINCIPAL_PLUGIN_LINKS = async (sql: SQL): Promise<void> => {
 	await sql`ALTER TABLE principal_identities DROP CONSTRAINT IF EXISTS principal_identities_source_check`;
 	await sql`
 		ALTER TABLE principal_identities ADD CONSTRAINT principal_identities_source_check
-		CHECK (source IN ('config', 'plugin', 'cli', 'jit', 'legacy'))`;
+		CHECK (source IN ('config', 'plugin', 'cli', 'jit', 'legacy', 'self'))`;
 };
 
 /** Links people make themselves through `IDENTITY_LINKS`: their own source, beside the five before it. */

@@ -171,6 +171,10 @@ export function checkAccessRules(rules: AccessRules): AccessRules {
 				throw new ConfigError(
 					`config access.selfLink.providers[${i}]: expected a provider such as discord, got ${JSON.stringify(provider)}.`,
 				);
+			if (provider === "oidc")
+				throw new ConfigError(
+					`config access.selfLink.providers[${i}]: an OIDC provider is written oidc:<base64url issuer>, not oidc.`,
+				);
 			if (NOT_SELF_LINKABLE.includes(provider))
 				throw new ConfigError(
 					`config access.selfLink.providers[${i}]: ${provider} identities are not a person's own account; list the provider of the account people sign in with, such as discord.`,

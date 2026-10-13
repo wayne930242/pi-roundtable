@@ -389,12 +389,13 @@ A disabled principal is refused, and CLI changes reach a running host within the
 `access: { selfLink: { providers: ["discord"] } }` lets a plugin link the account a person controls to their principal.
 A plugin that proved who someone is, such as one that checked a one-time code a signed-in person read out, calls `IDENTITY_LINKS.link(principalId, "discord:<user id>")`; the host provides the service only when `selfLink` is configured, so without it `services.find(IDENTITY_LINKS)` is undefined and `services.get` explains how to switch it on.
 The plugin proves the person; the host only checks the rules below, so it must not link an identity it has not verified.
-`token` and `legacy` cannot be listed: they are credentials and carried-over ids, not a person's own account.
+`token` and `legacy` cannot be listed: they are credentials and carried-over ids, not a person's own account. An OIDC provider is listed in its full form `oidc:<base64url issuer>`; a bare `oidc` is refused.
 
 `link` throws `IdentityError`, and changes nothing, for a provider `selfLink` does not list, text that is no identity, the system principal, a principal that does not exist, a principal holding the owner role (owners' identities are linked in `access.owners` or with `roundtable principal link`), and an identity already linked to another principal, whoever linked it.
+The owner check is part of the link's own database transaction, so a role another process granted a moment ago is seen; an owner role granted after a self link was made leaves that link in place.
 Linking the identity again to the same principal changes nothing and keeps the source it already has.
 The link has the source `self`, which `roundtable principal show` and `list` print.
-`unlink(identity)` removes only a `self` link and answers false when the identity is linked to no one; a link the configuration, a plugin, the CLI, a first contact, or a 0.8 claim made throws `IdentityError`, and a link another source took over meanwhile is kept.
+`unlink(identity)` removes only a `self` link and answers true when it removed one, false when there was no self link to remove (the identity was linked to no one, or its link went away meanwhile); a link the configuration, a plugin, the CLI, a first contact, or a 0.8 claim made throws `IdentityError`, and a link another source took over meanwhile is kept.
 The host logs the principal id and the identity on each, never a name.
 A plugin that replaces `IDENTITY` must replace `IDENTITY_LINKS` too when `selfLink` is configured, as the host refuses a partial replacement.
 A link made here is served at once by this process; another process sees it within the identity cache's 30 seconds.
