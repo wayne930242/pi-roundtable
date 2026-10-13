@@ -5,11 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-10-13
+
 ### Added
 
 - `formatChannelContext` (`formatChannelContext(messages)`) is exported from `pi-roundtable/discord`, the function that writes `ChannelContext.text` (the `<channel-context>` block with each author in attributes and every `<` neutralised), so a host can test what the model sees without a deep import. It is the function the reader already used; nothing about the block changes.
 - `squarePng`, `SquarePngOptions` and `SQUARE_PNG_MAX_SIDE` (4096) are exported from `pi-roundtable/kit`. `squarePng(bytes, { size?, maxBytes? })` is the centered square crop, scaled down to at most `size` pixels per side (default 512) as PNG, that the agent avatars are made with. The header is read before decoding: a declared width or height over 4096 rejects with `ImagePreparationError` (`pixel-limit`), bytes of no PNG, JPEG, GIF or WebP with `invalid-image`. With `maxBytes` the side steps down by a quarter until the PNG fits, and a picture that does not fit at 16 pixels throws a `RangeError`. The avatar studio now refuses a drawn or reference picture that declares a side over 4096 the same way, where it used to decode it.
-
 - `discord.attachmentDownload: { deadlineMs?, idleMs? }` (each a whole number of milliseconds from 1,000 to 600,000) sets the limits of the downloads of the files of an owner or agent channel message on the agent server: `deadlineMs` is the overall deadline for the message and its reference together (default 60,000) and `idleMs` the time one file may send no byte before it is given up (default 10,000). `attachmentsOf` takes the same two as `limits.deadlineMs` and `limits.idleMs`, and `AgentServerOptions.attachmentDownload` passes them on for a host built without `defineRoundtable`. A file that goes quiet is recorded as `download failed: idle_timeout` and the next file is tried at once.
 
 ### Changed

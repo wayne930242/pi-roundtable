@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+## 0.13.0
+
+- Release in lockstep with pi-roundtable 0.13.0. The core peer range moves to `>=0.13.0 <0.14.0`.
 - A failed attachment download is reported as `download failed: <code>` (the error's `code` or `name`, else `error`) instead of the error's text, which could quote a path in the guest-writable directory.
 
 ## 0.12.1
