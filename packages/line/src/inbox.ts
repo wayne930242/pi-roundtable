@@ -26,18 +26,22 @@ export interface InboxEvent {
 export type InboxResult = undefined | { retryInMs: number };
 export type InboxProcessor = (
 	event: InboxEvent,
-	/** Aborted when the handler has run `maxHandleMs`; give up whatever it waits on. */
+	/**
+	 * Aborted when the handler has run `maxHandleMs`, when the worker stops, and when the worker
+	 * finds the event is no longer its own (the lease was lost); give up whatever it waits on.
+	 * `signal.reason` is a `LineError` coded `handler_timeout`, `worker_stopped` or `lease_lost`.
+	 */
 	signal: AbortSignal,
 ) => Promise<InboxResult>;
 
 export interface InboxOptions {
-	/** How long a claimed event may take before another worker may take it; default 2 minutes. */
+	/** How long a claimed event may take before another worker may take it; default 2 minutes. At most 2_147_483_647. */
 	leaseMs: number;
 	/**
 	 * Longest a handler may run, renewals included; default 10 minutes. Past it the processor's signal
 	 * is aborted, the lease is no longer renewed and the event fails with `handler_timeout` (retried
 	 * with backoff, dead after `maxAttempts`), so a handler that never settles cannot hold its chat or
-	 * the shutdown.
+	 * the shutdown. At most 2_147_483_647, the longest delay a timer can hold.
 	 */
 	maxHandleMs: number;
 	/** Handings out after which a failing event is dead; default 12. */
@@ -50,7 +54,7 @@ export interface InboxOptions {
 	backoffCapMs: number;
 	/** Events handled at once, always of different chats; default 2. */
 	concurrency: number;
-	/** How long the worker waits between looks at the inbox when nothing woke it; default 2 seconds. */
+	/** How long the worker waits between looks at the inbox when nothing woke it; default 2 seconds. At most 2_147_483_647. */
 	pollMs: number;
 	/** How long a `unsend` or edit waits for a message that has not reached the inbox; default 10 minutes. */
 	messageGraceMs: number;
@@ -138,8 +142,9 @@ export interface InboxWorkerDeps {
  *   not hold the ones behind it, because a stuck head would then stall a whole chat. The events
  *   that act on a message wait, without limit, until the message and the earlier events on it are
  *   settled, so events of one message run strictly in order.
- * - Only the events of allowed chats (and the join and leave of any chat that is not blocked) are
- *   handed out; what a blocked chat still has waiting is dropped with its payload.
+ * - Only the events of allowed chats (and the join, leave and unsend of any chat that is not blocked)
+ *   are handed out; what a blocked chat still has waiting is dropped with its payload, and what a
+ *   chat the bot left or one not decided has waiting is dropped too, apart from those three.
  * - A finished event keeps its row and loses its payload.
  */
 export class InboxWorker {
@@ -155,6 +160,9 @@ export class InboxWorker {
 	#wake = false;
 	readonly #inflight = new Set<Promise<void>>();
 	readonly #active = new Set<string>();
+	/** One per handling in progress, aborted when the worker stops. */
+	readonly #aborts = new Set<AbortController>();
+	#stopping = false;
 	#loop: Promise<void> | undefined;
 
 	constructor(deps: InboxWorkerDeps) {
@@ -213,31 +221,57 @@ export class InboxWorker {
 	 * Returns false when nothing was due (or there is no processor).
 	 */
 	async runOnce(): Promise<boolean> {
-		const processor = this.#processor();
-		if (!processor) return false;
-		const event = await this.#claim();
-		if (!event) return false;
-		this.#active.add(event.webhook_event_id);
+		const taken = await this.#take();
+		if (!taken) return false;
+		this.#active.add(taken.event.webhook_event_id);
 		try {
-			await this.#handle(event, processor);
+			await this.#handle(taken.event, taken.processor);
 		} finally {
-			this.#active.delete(event.webhook_event_id);
+			this.#active.delete(taken.event.webhook_event_id);
 		}
 		return true;
+	}
+
+	/**
+	 * Claims the oldest due event and the processor to hand it to. The processor is looked up again
+	 * after the claim, which takes time: one detached by then leaves the event waiting (not counted as a
+	 * handing out), and one attached in the meantime is the one that gets it. Once `stop` has been
+	 * called nothing is handed out, so an event claimed as it began goes back too.
+	 */
+	async #take(): Promise<
+		{ event: Claimed; processor: InboxProcessor } | undefined
+	> {
+		if (!this.#processor()) return undefined;
+		const event = await this.#claim();
+		if (!event) return undefined;
+		const processor = this.#processor();
+		// A stop that began during the claim hands nothing out: the event waits for the next start.
+		if (!processor || this.#stopping) {
+			await this.#later(
+				event,
+				{ at: event.claimed_at },
+				processor ? 0 : this.options.pollMs,
+				processor ? "worker_stopped" : "no_processor",
+				false,
+			);
+			return undefined;
+		}
+		return { event, processor };
 	}
 
 	async #claim(): Promise<Claimed | undefined> {
 		const now = this.#now();
 		return this.#sql.begin(async (tx) => {
-			// A chat the bot left, or one not decided, hands out only its join and leave. What else waits
-			// there (it was backing off when the chat changed) is dropped with its payload, because it
-			// could otherwise surface much later, after a rejoin.
+			// A chat the bot left, or one not decided, hands out only its join, leave and unsend. What else
+			// waits there (it was backing off when the chat changed) is dropped with its payload, because
+			// it could otherwise surface much later, after a rejoin. An unsend carries no content and only
+			// takes content down, so it is kept.
 			await tx`UPDATE line_inbox i
 				SET status = 'skipped', payload = NULL, last_error_code = CASE s.status WHEN 'left' THEN 'source_left' ELSE 'source_pending' END,
 					completed_at = ${now}
 				FROM line_sources s
 				WHERE s.source_key = i.source_key AND s.status IN ('pending', 'left')
-					AND i.status = 'pending' AND i.event_type NOT IN ('join', 'leave')`;
+					AND i.status = 'pending' AND i.event_type NOT IN ('join', 'leave', 'unsend')`;
 			// The oldest due event of each chat that has none in hand, and the events that name no chat.
 			const heads: {
 				webhook_event_id: string;
@@ -252,7 +286,7 @@ export class InboxWorker {
 						JOIN line_sources s ON s.source_key = i.source_key
 						WHERE i.status = 'pending' AND i.next_attempt_at <= ${now} AND i.source_key IS NOT NULL
 							AND (s.status IN ('allowed', 'blocked')
-								OR (s.status IN ('pending', 'left') AND i.event_type IN ('join', 'leave')))
+								OR (s.status IN ('pending', 'left') AND i.event_type IN ('join', 'leave', 'unsend')))
 							AND NOT EXISTS (SELECT 1 FROM line_inbox p WHERE p.source_key = i.source_key AND p.status = 'processing')
 						ORDER BY i.source_key, i.event_ts, i.seq)
 					UNION ALL
@@ -307,7 +341,10 @@ export class InboxWorker {
 			attempt: row.attempts,
 		});
 		const lease: Lease = { at: row.claimed_at };
-		const beat = this.#keepLease(row, lease, log);
+		const controller = new AbortController();
+		this.#aborts.add(controller);
+		if (this.#stopping) controller.abort(stopped());
+		const beat = this.#keepLease(row, lease, log, controller);
 		try {
 			const wait = await this.#mustWait(row);
 			if (wait !== undefined) {
@@ -325,15 +362,19 @@ export class InboxWorker {
 				await this.#sources.markJoined(row.source_key, timestamp);
 			if (row.source_key && row.event_type === "leave")
 				await this.#sources.markLeft(row.source_key, timestamp);
-			const result = await this.#callProcessor(processor, {
-				id: row.webhook_event_id,
-				type: row.event_type,
-				sourceKey: row.source_key,
-				messageId: row.message_id,
-				timestamp,
-				payload: row.payload ?? {},
-				attempt: row.attempts,
-			});
+			const result = await this.#callProcessor(
+				processor,
+				{
+					id: row.webhook_event_id,
+					type: row.event_type,
+					sourceKey: row.source_key,
+					messageId: row.message_id,
+					timestamp,
+					payload: row.payload ?? {},
+					attempt: row.attempts,
+				},
+				controller,
+			);
 			await beat.stop();
 			if (result && Number.isFinite(result.retryInMs))
 				return await this.#later(
@@ -352,11 +393,18 @@ export class InboxWorker {
 			);
 		} catch (error) {
 			const code = errorCode(error);
-			log.warn({ code }, "a LINE inbox event failed");
 			await beat.stop();
+			// Whatever the handler threw on being told the worker stops is the restart's doing, not the
+			// event's: it goes back without being counted. A timeout is the event's own.
+			if (code !== "handler_timeout" && isStopped(controller.signal)) {
+				await this.#later(row, lease, 0, "worker_stopped", false);
+				return;
+			}
+			log.warn({ code }, "a LINE inbox event failed");
 			await this.#fail(row, lease, code);
 		} finally {
 			await beat.stop();
+			this.#aborts.delete(controller);
 		}
 	}
 
@@ -368,8 +416,8 @@ export class InboxWorker {
 	async #callProcessor(
 		processor: InboxProcessor,
 		event: InboxEvent,
+		controller: AbortController,
 	): Promise<InboxResult> {
-		const controller = new AbortController();
 		let timer: ReturnType<typeof setTimeout> | undefined;
 		const limit = new Promise<never>((_, reject) => {
 			timer = setTimeout(() => {
@@ -394,12 +442,13 @@ export class InboxWorker {
 	/**
 	 * Renews the claim while the handler runs, so a slow handler (an upload, say) is not taken for a
 	 * crashed one. A renewal that finds the claim changed means the event was recovered by someone
-	 * else: the heartbeat stops and the handler's last write will be refused.
+	 * else: the heartbeat stops, the handler's signal is aborted and its last write will be refused.
 	 */
 	#keepLease(
 		row: Claimed,
 		lease: Lease,
 		log: Logger,
+		controller: AbortController,
 	): { stop: () => Promise<void> } {
 		let renewing: Promise<void> | undefined;
 		let timer: ReturnType<typeof setInterval> | undefined;
@@ -415,6 +464,12 @@ export class InboxWorker {
 					return;
 				}
 				log.warn({}, "a LINE inbox event lost its lease while it was handled");
+				controller.abort(
+					new LineError(
+						"lease_lost",
+						"line: the event is no longer this worker's",
+					),
+				);
 			} catch (error) {
 				log.warn(
 					{ code: errorCode(error) },
@@ -587,6 +642,7 @@ export class InboxWorker {
 	async start(): Promise<void> {
 		if (this.#running) return;
 		this.#running = true;
+		this.#stopping = false;
 		await this.recoverLeases();
 		this.#loop = this.#run();
 	}
@@ -631,10 +687,9 @@ export class InboxWorker {
 
 	/** Claims one event and runs it in the background; false when none was due. */
 	async #startOne(): Promise<boolean> {
-		const processor = this.#processor();
-		if (!processor) return false;
-		const event = await this.#claim();
-		if (!event) return false;
+		const taken = await this.#take();
+		if (!taken) return false;
+		const { event, processor } = taken;
 		this.#active.add(event.webhook_event_id);
 		const task: Promise<void> = this.#handle(event, processor)
 			.catch((error) =>
@@ -653,9 +708,14 @@ export class InboxWorker {
 		return true;
 	}
 
-	/** Stops claiming and waits for the events being handled. */
+	/**
+	 * Stops claiming, aborts the signals of the handlers in hand and waits for them to settle. A
+	 * handler that ignores its signal is waited for, up to `maxHandleMs`.
+	 */
 	async stop(): Promise<void> {
 		this.#running = false;
+		this.#stopping = true;
+		for (const controller of this.#aborts) controller.abort(stopped());
 		if (this.#timer) {
 			clearTimeout(this.#timer);
 			this.#timer = undefined;
@@ -665,4 +725,12 @@ export class InboxWorker {
 		this.#loop = undefined;
 		await Promise.allSettled([...this.#inflight]);
 	}
+}
+
+function stopped(): LineError {
+	return new LineError("worker_stopped", "line: the inbox worker is stopping");
+}
+
+function isStopped(signal: AbortSignal): boolean {
+	return signal.aborted && errorCode(signal.reason) === "worker_stopped";
 }

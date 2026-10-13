@@ -380,6 +380,8 @@ describeDb("the inbox worker", () => {
 		w.kick();
 		for (let i = 0; i < 400 && handled.length < 2; i++) await Bun.sleep(10);
 		expect(handled.map((e) => e.id)).toEqual(["one", "two"]);
+		// Both are done and the loop is looking at an empty inbox before the processor is swapped.
+		await until(() => w.busy().length === 0);
 
 		let release: () => void = () => undefined;
 		processor = async (event) => {
@@ -391,8 +393,7 @@ describeDb("the inbox worker", () => {
 		};
 		await receive(messageEvent({ id: "slow", timestamp: 1_700_000_001_000 }));
 		w.kick();
-		for (let i = 0; i < 400 && w.busy().length === 0; i++) await Bun.sleep(10);
-		expect(w.busy()).toEqual(["slow"]);
+		await until(() => w.busy().join() === "slow");
 		let stopped = false;
 		const stopping = w.stop().then(() => {
 			stopped = true;
@@ -808,7 +809,8 @@ describeDb("the inbox worker", () => {
 		await receive(messageEvent({ id: "b1", group: "Cgroup0002" }));
 		w.kick();
 		await until(() => handled.some((e) => e.id === "b1"));
-		expect(w.busy()).toEqual(["a1"]);
+		// b1 is done once only a1 is still in hand.
+		await until(() => w.busy().join() === "a1");
 		expect(await row("b1")).toMatchObject({ status: "done" });
 		gate.resolve();
 		await w.stop();
@@ -855,8 +857,8 @@ describeDb("the inbox worker", () => {
 		await until(() => handled.some((e) => e.id === "a1"));
 		advance(1000);
 		await until(() => handled.some((e) => e.id === "x1"));
+		await until(() => w.busy().join() === "a1");
 		expect(await row("x1")).toMatchObject({ status: "done", attempts: 2 });
-		expect(w.busy()).toEqual(["a1"]);
 		gate.resolve();
 		await w.stop();
 	});
@@ -881,5 +883,248 @@ describeDb("the inbox worker", () => {
 		expect(new Date(waiting.next_attempt_at).getTime()).toBe(
 			backoffUntil.getTime(),
 		);
+	});
+
+	const membership = (id: string, type: string, timestamp: number) => ({
+		...messageEvent({ id, timestamp, type }),
+		message: undefined,
+	});
+
+	test("N-F001: an unsend backing off when the bot leaves is still delivered (N1a)", async () => {
+		await store(
+			messageEvent({ id: "m1", timestamp: 1000, messageId: "M1" }),
+			unsendOf("u1", "M1", 2000),
+		);
+		let failed = false;
+		processor = async (event) => {
+			if (event.id === "u1" && !failed) {
+				failed = true;
+				throw new LineError("discord_down", "no");
+			}
+			handled.push(event);
+			return undefined;
+		};
+		const w = worker({ backoffBaseMs: 60_000 });
+		expect(await w.runOnce()).toBe(true);
+		expect(await w.runOnce()).toBe(true);
+		expect(await row("u1")).toMatchObject({ status: "pending", attempts: 1 });
+		await receive(membership("lv", "leave", 3000));
+		expect(await w.runOnce()).toBe(true);
+		expect((await sources().get(GROUP))?.status).toBe("left");
+		// The unsend is kept, with its payload, while everything else of the chat would be dropped.
+		expect(await row("u1")).toMatchObject({ status: "pending" });
+		expect((await row("u1")).payload).not.toBeNull();
+		advance(120_000);
+		expect(await w.runOnce()).toBe(true);
+		expect(handled.map((e) => e.id)).toEqual(["m1", "lv", "u1"]);
+		expect(await row("u1")).toMatchObject({ status: "done", attempts: 2 });
+	});
+
+	test("N-F001: an unsend waiting on an edit that is backing off survives the leave, and the edit is the one dropped (N1b)", async () => {
+		await store(
+			messageEvent({ id: "m1", timestamp: 1000, messageId: "M1" }),
+			editOf("e1", "M1", 2000),
+			unsendOf("u1", "M1", 3000),
+		);
+		let failed = false;
+		processor = async (event) => {
+			if (event.id === "e1" && !failed) {
+				failed = true;
+				throw new LineError("discord_down", "no");
+			}
+			handled.push(event);
+			return undefined;
+		};
+		const w = worker({ backoffBaseMs: 60_000, dependencyRetryMs: 5000 });
+		expect(await w.runOnce()).toBe(true); // m1
+		expect(await w.runOnce()).toBe(true); // e1 fails and backs off
+		expect(await w.runOnce()).toBe(true); // u1 finds e1 open and waits
+		expect(await row("u1")).toMatchObject({
+			status: "pending",
+			attempts: 0,
+			last_error_code: "waiting_for_message",
+		});
+		await receive(membership("lv", "leave", 4000));
+		expect(await w.runOnce()).toBe(true);
+		expect(await row("e1")).toMatchObject({
+			status: "skipped",
+			payload: null,
+			last_error_code: "source_left",
+		});
+		expect(await row("u1")).toMatchObject({ status: "pending" });
+		advance(120_000);
+		expect(await w.runOnce()).toBe(true);
+		expect(handled.map((e) => e.id)).toEqual(["m1", "lv", "u1"]);
+		expect(await row("u1")).toMatchObject({ status: "done" });
+	});
+
+	test("N-F001: at the claim a left or undecided chat hands out an unsend and drops a message, and block() still drops a waiting unsend", async () => {
+		await store(
+			messageEvent({ id: "m1", timestamp: 1000, messageId: "M1" }),
+			unsendOf("u1", "M1", 2000),
+			messageEvent({ id: "m2", timestamp: 3000, messageId: "M2" }),
+		);
+		await sql`UPDATE line_inbox SET status = 'done', payload = NULL WHERE webhook_event_id = 'm1'`;
+		await sql`UPDATE line_sources SET status = 'pending' WHERE source_key = ${GROUP}`;
+		const w = worker();
+		expect(await w.runOnce()).toBe(true);
+		expect(handled.map((e) => e.id)).toEqual(["u1"]);
+		expect(await row("m2")).toMatchObject({
+			status: "skipped",
+			payload: null,
+			last_error_code: "source_pending",
+		});
+		// block() is unchanged: it drops a waiting unsend like anything else.
+		await sql`UPDATE line_sources SET status = 'allowed' WHERE source_key = ${GROUP}`;
+		await receive(unsendOf("u2", "M1", 4000));
+		await sources().block(GROUP);
+		expect(await row("u2")).toMatchObject({
+			status: "skipped",
+			payload: null,
+			last_error_code: "source_blocked",
+		});
+	});
+
+	test("N-F002: an event claimed just as the processor was detached goes back uncounted, and nothing is handed to the old processor", async () => {
+		await store(messageEvent({ id: "m1" }));
+		let looks = 0;
+		const processorLooks = () => (++looks === 2 ? undefined : processor);
+		const w = new InboxWorker({
+			sql,
+			logger: logs.logger,
+			now: () => time,
+			sources: sources(),
+			// The first look is the one before the claim; the second is the one after it.
+			processor: processorLooks,
+			random: () => 1,
+			options: { pollMs: 20 },
+		});
+		expect(await w.runOnce()).toBe(false);
+		expect(handled).toEqual([]);
+		expect(await row("m1")).toMatchObject({
+			status: "pending",
+			attempts: 0,
+			requeues: 0,
+			last_error_code: "no_processor",
+		});
+		expect((await row("m1")).payload).not.toBeNull();
+		// Once it is due again and a processor is attached it is handled as attempt 1.
+		advance(20);
+		expect(await w.runOnce()).toBe(true);
+		expect(handled.map((e) => [e.id, e.attempt])).toEqual([["m1", 1]]);
+	});
+
+	test("N-F002: the loop does not hand a new event to a processor it replaced", async () => {
+		await store(messageEvent({ id: "first" }));
+		const w = worker({ pollMs: 5 });
+		await w.start();
+		await until(() => handled.length === 1);
+		await until(() => w.busy().length === 0);
+		const replaced: string[] = [];
+		processor = async (event) => {
+			replaced.push(event.id);
+			return undefined;
+		};
+		await receive(messageEvent({ id: "second", timestamp: 1_700_000_000_500 }));
+		w.kick();
+		await until(() => replaced.length === 1);
+		await w.stop();
+		expect(handled.map((e) => e.id)).toEqual(["first"]);
+		expect(replaced).toEqual(["second"]);
+	});
+
+	test("N-nit: stop() aborts the signal of a handler in hand, and the event goes back without a failure", async () => {
+		await store(messageEvent({ id: "slow" }));
+		let reason: unknown;
+		processor = async (event, signal) => {
+			handled.push(event);
+			await new Promise<void>((_, reject) => {
+				const giveUp = () => {
+					reason = signal.reason;
+					reject(signal.reason);
+				};
+				if (signal.aborted) giveUp();
+				else signal.addEventListener("abort", giveUp);
+			});
+			return undefined;
+		};
+		const w = worker({ maxHandleMs: 600_000 });
+		await w.start();
+		await until(() => handled.length === 1);
+		const started = Date.now();
+		await w.stop();
+		expect(Date.now() - started).toBeLessThan(2000);
+		expect(reason).toMatchObject({ code: "worker_stopped" });
+		// The requeued event was not handed out again while the worker was stopping.
+		expect(handled.length).toBe(1);
+		expect(w.busy()).toEqual([]);
+		expect(await row("slow")).toMatchObject({
+			status: "pending",
+			attempts: 0,
+			requeues: 0,
+			last_error_code: "worker_stopped",
+		});
+		expect((await row("slow")).payload).not.toBeNull();
+	});
+
+	test("N-nit: a stopped worker hands nothing out, and an event it claims as it stops goes back uncounted", async () => {
+		await store(messageEvent({ id: "m1" }));
+		const w = worker();
+		await w.start();
+		await w.stop();
+		expect(await w.runOnce()).toBe(false);
+		expect(handled).toEqual([]);
+		expect(await row("m1")).toMatchObject({
+			status: "pending",
+			attempts: 0,
+			requeues: 0,
+			last_error_code: "worker_stopped",
+		});
+		// Started again, it is handled as the first attempt.
+		await w.start();
+		await until(() => handled.length === 1);
+		await w.stop();
+		expect(handled.map((e) => [e.id, e.attempt])).toEqual([["m1", 1]]);
+	});
+
+	test("N-nit: a heartbeat that finds the lease gone aborts the signal of the handler", async () => {
+		await store(messageEvent({ id: "m1" }));
+		const gate = Promise.withResolvers<unknown>();
+		processor = async (event, signal) => {
+			handled.push(event);
+			if (signal.aborted) gate.resolve(signal.reason);
+			else signal.addEventListener("abort", () => gate.resolve(signal.reason));
+			return gate.promise.then(() => undefined);
+		};
+		const running = worker({ leaseMs: 300, maxHandleMs: 600_000 }).runOnce();
+		await until(() => handled.length === 1);
+		// Another process recovered the event.
+		await sql`UPDATE line_inbox SET status = 'pending', claimed_at = NULL WHERE webhook_event_id = 'm1'`;
+		expect(await gate.promise).toMatchObject({ code: "lease_lost" });
+		await running;
+		expect(await row("m1")).toMatchObject({ status: "pending" });
+	});
+
+	test("N-F003: a handler that ignores its signal is still running when the chat's next event is handed out", async () => {
+		await store(
+			messageEvent({ id: "a1", timestamp: 1000 }),
+			messageEvent({ id: "a2", timestamp: 2000 }),
+		);
+		let live = 0;
+		let maxLive = 0;
+		processor = async (event) => {
+			handled.push(event);
+			live++;
+			maxLive = Math.max(maxLive, live);
+			if (event.id === "a1") await Bun.sleep(400);
+			live--;
+			return undefined;
+		};
+		const w = worker({ maxHandleMs: 100, leaseMs: 60_000 });
+		expect(await w.runOnce()).toBe(true);
+		expect(await w.runOnce()).toBe(true);
+		// This is what the README documents: the abandoned handler overlaps the chat's next event.
+		expect(maxLive).toBe(2);
+		await Bun.sleep(450);
 	});
 });

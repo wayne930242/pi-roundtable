@@ -44,6 +44,17 @@ test("a configuration mistake throws when the plugin is made, before the host st
 	expect(() => line({ credentials, inbox: { nope: 1 } as never })).toThrow(
 		"inbox.nope",
 	);
+	// A timer cannot hold more than 2_147_483_647 ms; past it a handler would time out at once.
+	for (const key of ["maxHandleMs", "leaseMs", "pollMs"] as const)
+		expect(() =>
+			line({ credentials, inbox: { [key]: 2_147_483_648 } }),
+		).toThrow(`inbox.${key}`);
+	expect(() =>
+		line({
+			credentials,
+			inbox: { maxHandleMs: 2_147_483_647, leaseMs: 2_147_483_647 },
+		}),
+	).not.toThrow();
 });
 
 describeDb("the line plugin", () => {
