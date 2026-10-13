@@ -24,11 +24,11 @@ const MEMBERSHIP = new Set(["join", "leave"]);
  * the whole request's transaction and with it every other event stored beside this one. They are
  * replaced with U+FFFD, which loses nothing a chat mirror could use.
  */
-function clean(text: string): string {
+export function clean(text: string): string {
 	return text.replaceAll("\u0000", "\uFFFD").toWellFormed();
 }
 
-function scrub(value: unknown): unknown {
+export function scrub(value: unknown): unknown {
 	if (typeof value === "string") return clean(value);
 	if (Array.isArray(value)) return value.map(scrub);
 	if (typeof value === "object" && value !== null)

@@ -134,6 +134,7 @@ describeDb("the line plugin", () => {
 		expect(plugin.migrations?.map((m) => m.name)).toEqual([
 			"inbox",
 			"messages",
+			"outbox",
 		]);
 		expect(contribution.services?.map((s) => s.name)).toEqual([
 			"line-bot",

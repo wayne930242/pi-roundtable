@@ -79,6 +79,23 @@ interface Call {
 	method: string;
 	authorization: string | undefined;
 	body: string;
+	retryKey: string | undefined;
+}
+
+/** What the fake answers a push or a reply with, instead of success. */
+export interface Scripted {
+	status: number;
+	/** LINE's JSON error body. */
+	body?: unknown;
+	headers?: Record<string, string>;
+}
+
+/** A push or reply the fake received. */
+export interface Received {
+	to: string;
+	messages: Record<string, unknown>[];
+	retryKey: string | undefined;
+	status: number;
 }
 
 /** What the fake serves at `/v2/bot/message/<id>/content`. */
@@ -111,6 +128,30 @@ export interface FakeLine {
 	hang: Set<string>;
 	/** Message ids whose transcoding status never answers until its signal aborts. */
 	hangTranscoding: Set<string>;
+	/** Every push, in order, with the status it was answered with. */
+	pushes: Received[];
+	/** Statuses (or scripted answers) for the next pushes in turn; once empty, pushes succeed. */
+	pushScript: (number | Scripted)[];
+	/** Every reply, in order. */
+	replies: {
+		replyToken: string;
+		messages: Record<string, unknown>[];
+		status: number;
+	}[];
+	/** Statuses for the next replies in turn; once empty, a reply succeeds (a token only once). */
+	replyScript: (number | Scripted)[];
+	/** Retry keys of pushes LINE accepted: the same key again is a 409. */
+	acceptedKeys: Set<string>;
+	/** The plan's monthly limit; `null` is a plan without one. */
+	quota: number | null;
+	/** Messages used this month; an accepted push adds its recipients. */
+	usage: number;
+	/** Member counts by group id, room id as well. */
+	members: Record<string, number>;
+	/** Makes the quota endpoints answer with this status until cleared. */
+	failQuota(status: number | undefined): void;
+	/** Delays every push's answer by this many milliseconds. */
+	pushDelayMs: number;
 }
 
 /** A LINE that issues tokens, knows the bot and the group names, and records every call. */
@@ -118,6 +159,21 @@ export function fakeLine(): FakeLine {
 	const revoked = new Set<string>();
 	let tokenStatus: number | undefined;
 	let network = false;
+	let quotaStatus: number | undefined;
+	const answer = (script: number | Scripted | undefined, requestId: string) => {
+		const scripted = typeof script === "number" ? { status: script } : script;
+		const status = scripted?.status ?? 200;
+		return {
+			status,
+			response: new Response(
+				scripted?.body === undefined ? "{}" : JSON.stringify(scripted.body),
+				{
+					status,
+					headers: { "x-line-request-id": requestId, ...scripted?.headers },
+				},
+			),
+		};
+	};
 	const fake: FakeLine = {
 		calls: [],
 		issued: [],
@@ -127,6 +183,18 @@ export function fakeLine(): FakeLine {
 		transcoding: {},
 		hang: new Set(),
 		hangTranscoding: new Set(),
+		pushes: [],
+		pushScript: [],
+		replies: [],
+		replyScript: [],
+		acceptedKeys: new Set(),
+		quota: 1000,
+		usage: 0,
+		members: { Cgroup0001: 3, Cgroup0002: 40 },
+		pushDelayMs: 0,
+		failQuota: (status) => {
+			quotaStatus = status;
+		},
 		revoke: (token) => void revoked.add(token),
 		failTokens: (status) => {
 			tokenStatus = status;
@@ -143,6 +211,7 @@ export function fakeLine(): FakeLine {
 				method: init?.method ?? "GET",
 				authorization: headers.get("authorization") ?? undefined,
 				body: sent,
+				retryKey: headers.get("x-line-retry-key") ?? undefined,
 			};
 			fake.calls.push(call);
 			if (network)
@@ -172,6 +241,68 @@ export function fakeLine(): FakeLine {
 			if (!token || !fake.issued.includes(token) || revoked.has(token))
 				return new Response("unauthorized", { status: 401 });
 			if (path === "/v2/bot/info") return Response.json({ userId: BOT });
+			if (path === "/v2/bot/message/push" && call.method === "POST") {
+				const request = JSON.parse(sent) as {
+					to: string;
+					messages: Record<string, unknown>[];
+				};
+				if (fake.pushDelayMs > 0) await Bun.sleep(fake.pushDelayMs);
+				const key = call.retryKey;
+				const requestId = `req-${fake.pushes.length + 1}`;
+				let result = answer(fake.pushScript.shift(), requestId);
+				if (result.status < 300 && key && fake.acceptedKeys.has(key))
+					result = answer(409, requestId);
+				if (result.status < 300) {
+					if (key) fake.acceptedKeys.add(key);
+					fake.usage += fake.members[request.to] ?? 1;
+				}
+				fake.pushes.push({
+					to: request.to,
+					messages: request.messages,
+					retryKey: key,
+					status: result.status,
+				});
+				return result.response;
+			}
+			if (path === "/v2/bot/message/reply" && call.method === "POST") {
+				const request = JSON.parse(sent) as {
+					replyToken: string;
+					messages: Record<string, unknown>[];
+				};
+				const used = fake.replies.some(
+					(r) => r.replyToken === request.replyToken && r.status < 300,
+				);
+				const result = answer(
+					fake.replyScript.length > 0
+						? fake.replyScript.shift()
+						: used
+							? 400
+							: 200,
+					`rep-${fake.replies.length + 1}`,
+				);
+				fake.replies.push({ ...request, status: result.status });
+				return result.response;
+			}
+			if (path === "/v2/bot/message/quota") {
+				if (quotaStatus !== undefined)
+					return new Response("{}", { status: quotaStatus });
+				return Response.json(
+					fake.quota === null
+						? { type: "none" }
+						: { type: "limited", value: fake.quota },
+				);
+			}
+			if (path === "/v2/bot/message/quota/consumption") {
+				if (quotaStatus !== undefined)
+					return new Response("{}", { status: quotaStatus });
+				return Response.json({ totalUsage: fake.usage });
+			}
+			const counted =
+				/^\/v2\/bot\/(?:group|room)\/([^/]+)\/members\/count$/.exec(path)?.[1];
+			if (counted)
+				return fake.members[counted] === undefined
+					? new Response("{}", { status: 404 })
+					: Response.json({ count: fake.members[counted] });
 			const media =
 				/^\/v2\/bot\/message\/([^/]+)\/content(\/transcoding)?$/.exec(path);
 			if (media) {

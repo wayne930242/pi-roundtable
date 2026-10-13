@@ -12,5 +12,5 @@ export async function freshPool(): Promise<SQL> {
 
 /** Empties every table of the package. */
 export async function truncateAll(sql: SQL): Promise<void> {
-	await sql`TRUNCATE line_inbox, line_sources, line_messages, line_message_refs, line_tombstones`;
+	await sql`TRUNCATE line_inbox, line_sources, line_messages, line_message_refs, line_tombstones, line_outbox, line_notices`;
 }

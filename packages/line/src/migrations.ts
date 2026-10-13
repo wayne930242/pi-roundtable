@@ -90,5 +90,55 @@ export const MESSAGES_MIGRATION: Migration = {
 	},
 };
 
+/**
+ * The outbox: pushes queued for a chat, each with its retry key from the moment it exists, and the
+ * outcome of every join notice. The messages of a push are nulled when it is finished; rows go after
+ * the retention window.
+ */
+export const OUTBOX_MIGRATION: Migration = {
+	name: "outbox",
+	up: async (sql) => {
+		await sql`CREATE TABLE IF NOT EXISTS line_outbox (
+			id BIGSERIAL PRIMARY KEY,
+			source_key TEXT NOT NULL,
+			sender_name TEXT,
+			sender_icon_url TEXT,
+			messages JSONB,
+			message_count INTEGER NOT NULL,
+			origin_refs JSONB NOT NULL DEFAULT '[]'::jsonb,
+			retry_key UUID NOT NULL,
+			recipients INTEGER,
+			status TEXT NOT NULL CHECK (status IN ('queued', 'sending', 'sent', 'dead', 'refused')),
+			attempts INTEGER NOT NULL DEFAULT 0,
+			created_at TIMESTAMPTZ NOT NULL,
+			ready_at TIMESTAMPTZ NOT NULL,
+			next_attempt_at TIMESTAMPTZ NOT NULL,
+			first_attempt_at TIMESTAMPTZ,
+			claimed_at TIMESTAMPTZ,
+			completed_at TIMESTAMPTZ,
+			line_request_id TEXT,
+			last_error_code TEXT,
+			notified_at TIMESTAMPTZ,
+			notify_attempts INTEGER NOT NULL DEFAULT 0,
+			notify_after TIMESTAMPTZ
+		)`;
+		await sql`CREATE INDEX IF NOT EXISTS line_outbox_open
+			ON line_outbox (source_key, id) WHERE status IN ('queued', 'sending')`;
+		await sql`CREATE INDEX IF NOT EXISTS line_outbox_unnotified
+			ON line_outbox (id) WHERE notified_at IS NULL AND status IN ('sent', 'dead', 'refused')`;
+		await sql`CREATE INDEX IF NOT EXISTS line_outbox_age ON line_outbox (created_at)`;
+		await sql`CREATE TABLE IF NOT EXISTS line_notices (
+			webhook_event_id TEXT PRIMARY KEY,
+			outcome TEXT NOT NULL CHECK (outcome IN ('attempting', 'sent', 'failed')),
+			created_at TIMESTAMPTZ NOT NULL
+		)`;
+		await sql`CREATE INDEX IF NOT EXISTS line_notices_age ON line_notices (created_at)`;
+	},
+};
+
 /** Every migration of the package, in the order they run. */
-export const MIGRATIONS: Migration[] = [INBOX_MIGRATION, MESSAGES_MIGRATION];
+export const MIGRATIONS: Migration[] = [
+	INBOX_MIGRATION,
+	MESSAGES_MIGRATION,
+	OUTBOX_MIGRATION,
+];

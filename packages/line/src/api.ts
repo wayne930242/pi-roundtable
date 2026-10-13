@@ -1,8 +1,42 @@
 import { LineApiError, LineError } from "./errors.ts";
+import type { SourceKind } from "./events.ts";
 import { LINE_API, type TokenSource } from "./token.ts";
 
 /** The host LINE serves message content from; every other call goes to {@link LINE_API}. */
 const LINE_DATA_API = "https://api-data.line.me";
+
+/** How a push ended, as far as the caller needs to act on it. */
+export type PushOutcome =
+	| { outcome: "sent"; duplicate: boolean; requestId: string | undefined }
+	| {
+			outcome: "failed";
+			status: number;
+			/** A short lower-case word: `http_<status>`, or the property LINE refused when it names one. */
+			code: string;
+			requestId: string | undefined;
+			retryAfterMs?: number;
+	  };
+
+/**
+ * The code to keep for a refused push. LINE names the property it refused in `details`; the ones a
+ * sender can cause are named so the channel can say what to fix, everything else is the status.
+ */
+function refusalCode(status: number, detail: unknown): string {
+	const details =
+		typeof detail === "object" && detail !== null && "details" in detail
+			? (detail as { details: unknown }).details
+			: undefined;
+	if (Array.isArray(details))
+		for (const item of details) {
+			const property =
+				typeof item === "object" && item !== null && "property" in item
+					? String((item as { property: unknown }).property)
+					: "";
+			if (/sender\.name/i.test(property)) return "sender_name_refused";
+			if (/sender\.iconUrl/i.test(property)) return "sender_icon_refused";
+		}
+	return `http_${status}`;
+}
 
 export interface LineApiOptions {
 	tokens: TokenSource;
@@ -48,6 +82,27 @@ export class LineApi {
 
 	/** The response of a successful call; its body is the caller's to read. */
 	async request(path: string, options: RequestOptions = {}): Promise<Response> {
+		const response = await this.exchange(path, options);
+		if (!response.ok) {
+			await response.body?.cancel().catch(() => undefined);
+			throw new LineApiError(
+				response.status,
+				`http_${response.status}`,
+				`line: ${options.method ?? "GET"} ${path} answered ${response.status}`,
+				response.headers.get("x-line-request-id") ?? undefined,
+			);
+		}
+		return response;
+	}
+
+	/**
+	 * The response of a call whatever its status, for a caller that acts on the status itself. A
+	 * `401` is repeated once with a new token first. The body is the caller's to read or cancel.
+	 */
+	async exchange(
+		path: string,
+		options: RequestOptions = {},
+	): Promise<Response> {
 		for (let attempt = 0; ; attempt++) {
 			options.signal?.throwIfAborted();
 			const token = await this.#tokens.token();
@@ -83,15 +138,6 @@ export class LineApi {
 				await response.body?.cancel().catch(() => undefined);
 				continue;
 			}
-			if (!response.ok) {
-				await response.body?.cancel().catch(() => undefined);
-				throw new LineApiError(
-					response.status,
-					`http_${response.status}`,
-					`line: ${options.method ?? "GET"} ${path} answered ${response.status}`,
-					response.headers.get("x-line-request-id") ?? undefined,
-				);
-			}
 			return response;
 		}
 	}
@@ -106,6 +152,102 @@ export class LineApi {
 		if (typeof info?.userId !== "string" || info.userId === "")
 			throw new LineError("bot_info_malformed", "line: bot info has no userId");
 		return info.userId;
+	}
+
+	/**
+	 * Pushes up to five message objects to a chat under a retry key. A `2xx` is `sent`; a `409` says
+	 * LINE already accepted a request with this key, which is `sent` too. Any other status comes back
+	 * as `failed` with the status, a code (LINE's own refusal of a sender is named) and, for a `429`
+	 * or `5xx`, how long LINE asked to wait. A call that gets no answer rejects with `api_unreachable`.
+	 * No part of LINE's answer is kept but those.
+	 */
+	async push(
+		to: string,
+		messages: readonly unknown[],
+		retryKey: string,
+		signal?: AbortSignal,
+	): Promise<PushOutcome> {
+		const response = await this.exchange("/v2/bot/message/push", {
+			method: "POST",
+			headers: {
+				"content-type": "application/json",
+				"x-line-retry-key": retryKey,
+			},
+			body: JSON.stringify({ to, messages }),
+			...(signal ? { signal } : {}),
+		});
+		const requestId = response.headers.get("x-line-request-id") ?? undefined;
+		if (response.ok || response.status === 409) {
+			await response.body?.cancel().catch(() => undefined);
+			return { outcome: "sent", duplicate: response.status === 409, requestId };
+		}
+		const detail = await response
+			.text()
+			.then((text) => JSON.parse(text.slice(0, 8192)) as unknown)
+			.catch(() => undefined);
+		const retryAfter = Number(response.headers.get("retry-after"));
+		return {
+			outcome: "failed",
+			status: response.status,
+			code: refusalCode(response.status, detail),
+			requestId,
+			...(Number.isFinite(retryAfter) && retryAfter > 0
+				? { retryAfterMs: Math.min(retryAfter, 3600) * 1000 }
+				: {}),
+		};
+	}
+
+	/** Answers an event with its reply token; the token is single use and short lived. */
+	async reply(
+		replyToken: string,
+		messages: readonly unknown[],
+		signal?: AbortSignal,
+	): Promise<void> {
+		await this.request("/v2/bot/message/reply", {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify({ replyToken, messages }),
+			...(signal ? { signal } : {}),
+		});
+	}
+
+	/** How many people a push to a chat reaches: the member count of a group or room, else one. */
+	async recipients(kind: SourceKind, id: string): Promise<number> {
+		if (kind === "user") return 1;
+		const found = (await this.json(
+			`/v2/bot/${kind}/${encodeURIComponent(id)}/members/count`,
+		)) as { count?: unknown };
+		if (typeof found?.count !== "number" || !Number.isInteger(found.count))
+			throw new LineError(
+				"member_count_malformed",
+				"line: the member count has no count",
+			);
+		return Math.max(1, found.count);
+	}
+
+	/** The monthly message limit of the plan, or undefined when the plan has none. */
+	async messageQuota(): Promise<number | undefined> {
+		const found = (await this.json("/v2/bot/message/quota")) as {
+			type?: unknown;
+			value?: unknown;
+		};
+		if (found?.type === "none") return undefined;
+		if (found?.type !== "limited" || typeof found.value !== "number")
+			throw new LineError("quota_malformed", "line: the quota is malformed");
+		return found.value;
+	}
+
+	/** How many messages this month has used. */
+	async messageConsumption(): Promise<number> {
+		const found = (await this.json("/v2/bot/message/quota/consumption")) as {
+			totalUsage?: unknown;
+		};
+		if (typeof found?.totalUsage !== "number")
+			throw new LineError(
+				"consumption_malformed",
+				"line: the consumption has no totalUsage",
+			);
+		return found.totalUsage;
 	}
 
 	/** The name LINE shows for a group. */
