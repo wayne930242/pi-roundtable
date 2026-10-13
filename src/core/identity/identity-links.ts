@@ -72,17 +72,13 @@ export function identityLinks(
 		},
 		async unlink(identity) {
 			const ref = parse(identity);
-			const link = await store.identity(ref.provider, ref.subject);
-			if (!link) return false;
-			if (link.source !== "self")
-				throw new IdentityError(
-					`${identityOf(ref)} was linked by ${link.source}, not by its person; it is not unlinked here`,
-				);
-			// Only a self link goes: one the configuration or the CLI took over since is kept.
+			// The cached read only names the principal in the log: it may be up to 30 s old, so it
+			// decides nothing. Only a self link goes: one the configuration or the CLI took over is kept.
+			const before = await store.identity(ref.provider, ref.subject);
 			const removed = await store.unlink(ref.provider, ref.subject, "self");
 			if (removed) {
 				logger.info(
-					{ principal: link.principalId, identity: identityOf(ref) },
+					{ principal: before?.principalId, identity: identityOf(ref) },
 					"an identity was unlinked by its person",
 				);
 				return true;

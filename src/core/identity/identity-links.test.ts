@@ -237,6 +237,15 @@ describeDb("IDENTITY_LINKS, the self-link service", () => {
 		expect(await host.principalOf(`discord:${KAI}`)).toBe(kai.id);
 	});
 
+	test("unlink removes a self link another process made while this one still caches no link", async () => {
+		const kai = await host.store.create({ displayName: "Kai" });
+		expect(await host.store.identity("discord", KAI)).toBeUndefined(); // cached for 30 s
+		const other = await PgPrincipalStore.attach(db.sql);
+		await other.link(kai.id, { provider: "discord", subject: KAI }, "self");
+		expect(await links.unlink(`discord:${KAI}`)).toBe(true);
+		expect(await other.identity("discord", KAI)).toBeUndefined();
+	});
+
 	test("unlink throws when another source took the identity over before the delete", async () => {
 		const kai = await host.store.create({ displayName: "Kai" });
 		await links.link(kai.id, `discord:${KAI}`);
