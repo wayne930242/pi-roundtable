@@ -201,13 +201,14 @@ export class LineConsumer {
 			body: readBody(message),
 			...(quoted ? { quotedMessageId: quoted } : {}),
 		};
-		// Refs the sender's unsend already took back through `keep`; they are not handed back twice.
-		const takenBack = new Set<string>();
+		// Every ref `keep` has stored: whether it stayed stored or an unsend took it back, the answer at
+		// the end does not offer it again, so a ref is never handed back twice for the same take-back.
+		const kept = new Set<string>();
 		const context: LineContext = {
 			keep: async (ref) => {
 				const unsent = await this.#keep(sourceKey, messageId, checkRef(ref));
+				kept.add(ref);
 				if (unsent) {
-					takenBack.add(ref);
 					await this.#retract(
 						handler,
 						event,
@@ -221,7 +222,7 @@ export class LineConsumer {
 			},
 		};
 		const refs = cleanRefs(await handler(typed, signal, context)).filter(
-			(ref) => !takenBack.has(ref),
+			(ref) => !kept.has(ref),
 		);
 		const late = await this.#store(event, sourceKey, messageId, typed, refs);
 		if (late) {

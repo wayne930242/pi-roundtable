@@ -391,7 +391,7 @@ describeDb("the consumer", () => {
 		expect(await rows("line_message_refs")).toEqual([]);
 	});
 
-	test("a post kept after the unsend is handed back as unsent at once, and not a second time at the end", async () => {
+	test("a post kept after the unsend is handed back as unsent at once", async () => {
 		const kept: { unsent: boolean }[] = [];
 		answer = async (event, context) => {
 			kept.push(await context.keep("a"));
@@ -401,17 +401,42 @@ describeDb("the consumer", () => {
 		};
 		await run(messageEvent({ id: "j", messageId: "mj" }));
 		expect(kept).toEqual([{ unsent: false }, { unsent: true }]);
-		// The unsend took "a" back; keeping "b" found the tombstone and took "b" back straight away;
-		// "a" is returned again at the end and the final store takes it back too (taking back is idempotent).
-		expect(types()).toEqual(["message", "unsent", "unsent", "unsent"]);
-		expect(events.slice(1).map((e) => refsOf(e))).toEqual([
-			["a"],
-			["b"],
-			["a"],
-		]);
+		// The unsend took "a" back; keeping "b" found the tombstone and took "b" back straight away.
+		expect(types()).toEqual(["message", "unsent", "unsent"]);
+		expect(events.slice(1).map((e) => refsOf(e))).toEqual([["a"], ["b"]]);
 		expect(await rows("line_messages")).toEqual([]);
 		expect(await rows("line_message_refs")).toEqual([]);
 		expect(await rows("line_tombstones")).toHaveLength(1);
+	});
+
+	test("a ref kept and also returned at the end is handed back once, whatever order the unsend came in (R5R-F001)", async () => {
+		answer = async (event, context) => {
+			await context.keep("r1");
+			await run(unsendEvent(event.messageId, "fu", 2000));
+			await context.keep("r2");
+			// Both are offered again at the end; neither is handed back a second time.
+			return { refs: ["r1", "r2"] };
+		};
+		await run(messageEvent({ id: "f1", messageId: "mf1" }));
+		expect(
+			events.filter((e) => e.type === "unsent").map((e) => refsOf(e)),
+		).toEqual([["r1"], ["r2"]]);
+		expect(await rows("line_message_refs")).toEqual([]);
+
+		// No unsend at all: a kept ref that is returned again is stored once.
+		events = [];
+		answer = async (_event, context) => {
+			await context.keep("s1");
+			return { refs: ["s1", "s2"] };
+		};
+		await run(messageEvent({ id: "f2", messageId: "mf2" }));
+		expect(types()).toEqual(["message"]);
+		expect(
+			(await rows("line_message_refs")).map((r) => [r.ref, r.position]),
+		).toEqual([
+			["s1", 0],
+			["s2", 1],
+		]);
 	});
 
 	test("keeping is refused outside a message, and past the limit of refs for one message", async () => {
