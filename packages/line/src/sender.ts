@@ -13,8 +13,9 @@ export interface LineSender {
 
 export interface SenderOptions {
 	/**
-	 * Words a sender name may not contain, compared without regard to case and only as whole words
-	 * (a word is a run of letters and digits). Default `["LINE", "LY"]`, the words LINE refuses.
+	 * Words a sender name may not contain, compared without regard to case or width and only as whole words
+	 * (a word is a run of Latin letters and digits, or a run of letters of another script, so "LINE"
+	 * next to kana or hanzi is still the word). Default `["LINE", "LY"]`, the words LINE refuses.
 	 */
 	forbiddenWords: readonly string[];
 }
@@ -45,7 +46,10 @@ export function checkSenderOptions(options: Partial<SenderOptions>): void {
 		);
 }
 
-const WORD = /[\p{L}\p{N}]+/gu;
+// A word is a run of Latin letters and digits, or a run of letters of another script: a boundary
+// between the two breaks a word, so a name like "LINE" followed by kana still holds the word.
+const WORD =
+	/(?:\p{Script=Latin}|\p{M}|\p{N})+|(?:(?!\p{Script=Latin})\p{L})+/gu;
 
 /**
  * Checks a sender before anything is queued and returns it as it will be sent. Throws `LineError`
@@ -76,8 +80,13 @@ export function validateSender(
 		// biome-ignore lint/suspicious/noControlCharactersInRegex: control characters are what is refused
 		if (/[\u0000-\u001f\u007f]/.test(name))
 			throw bad("a sender name has no control characters");
-		const words = (name.match(WORD) ?? []).map((w) => w.toLowerCase());
-		const forbidden = options.forbiddenWords.map((w) => w.toLowerCase());
+		// Full-width letters are the letters they look like.
+		const words = (name.normalize("NFKC").match(WORD) ?? []).map((w) =>
+			w.toLowerCase(),
+		);
+		const forbidden = options.forbiddenWords.map((w) =>
+			w.normalize("NFKC").toLowerCase(),
+		);
 		if (words.some((w) => forbidden.includes(w)))
 			throw bad("a sender name may not use a word LINE refuses");
 		checked.name = name;

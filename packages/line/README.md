@@ -261,7 +261,7 @@ Message objects hold what you send, so they live in `line_outbox.messages` until
 ### Senders
 
 A sender is `{ name?, iconUrl? }`, shown by LINE as "<name> from '<channel>'".
-It is checked when you enqueue: the name is 1 to 20 characters (counted as characters, so an emoji is one), has no leading or trailing space or control character, and contains none of the forbidden words (`sender.forbiddenWords`, default `["LINE", "LY"]`, compared whole-word and case-insensitively, so "Online" and "Sally" pass); the icon is an `https` URL of at most 2000 characters without credentials.
+It is checked when you enqueue: the name is 1 to 20 characters (counted as characters, so an emoji is one), has no leading or trailing space or control character, and contains none of the forbidden words (`sender.forbiddenWords`, default `["LINE", "LY"]`, compared case-insensitively, with full-width letters read as plain ones, and as whole words, where a word is a run of Latin letters and digits or a run of letters of another script, so "Online" and "Sally" pass while "LINE" next to kana or hanzi does not); the icon is an `https` URL of at most 2000 characters without credentials.
 LINE has the last word: a name it refuses anyway comes back as a dead push with `sender_name_refused`.
 
 ### Quota

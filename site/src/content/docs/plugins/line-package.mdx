@@ -65,7 +65,7 @@ A `message` is answered with the opaque references of what the consumer made for
 
 `LINE.outbox.enqueue(chat, messages, { sender, origin })` queues message objects for a chat on the allowlist.
 
-- **Sender.** `{ name, iconUrl }` is checked before anything is queued: the name is 1 to 20 characters and avoids the words LINE refuses (a list you can change), the icon is an `https` URL of at most 2000 characters. A sender LINE would refuse is an error at once, not a failed push later.
+- **Sender.** `{ name, iconUrl }` is checked before anything is queued: the name is 1 to 20 characters and avoids the words LINE refuses (a list you can change), the icon is an `https` URL of at most 2000 characters. LINE has the last word: a name it refuses anyway comes back as a dead push.
 - **Coalescing.** Objects of one chat and one sender queued within 2 seconds share one push of at most five; the pushes of a chat go out in order.
 - **Retry key.** A push has its UUID retry key from the moment it exists and sends it on every attempt, so a retry after a timeout or a crash cannot post twice. After 24 hours, LINE's limit, a push still unsent is dead; it is never sent under a new key.
 - **Outcomes.** `2xx` and `409` are sent; `429`, `5xx` and no answer back off and retry; any other `4xx` is dead with a code that names a refused sender name or icon. Your consumer hears each result as an `outboxResult`.

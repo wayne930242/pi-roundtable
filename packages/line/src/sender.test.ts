@@ -57,6 +57,19 @@ test("the words LINE and LY are refused whole and in any case, and other names t
 		expect(refusal({ name })).toBeUndefined();
 });
 
+test("a forbidden word next to letters of another script, or in full-width letters, is still the word (R6-F004)", () => {
+	for (const name of [
+		"LINEさくら",
+		"さくらLINE",
+		"さくら LY",
+		"ＬＩＮＥさくら",
+		"ｌｉｎｅ",
+	])
+		expect(refusal({ name })).toMatchObject({ code: "bad_sender" });
+	for (const name of ["さくらOnline", "Sallyさくら", "さくら", "Zoëさくら"])
+		expect(refusal({ name })).toBeUndefined();
+});
+
 test("the forbidden words are configurable", () => {
 	const options = { forbiddenWords: ["Acme"] };
 	expect(refusal({ name: "acme desk" }, options)).toMatchObject({
