@@ -853,7 +853,7 @@
 		"src/core/runtime/compaction-tiers.d.ts#LatestCompaction": "interface LatestCompaction {\n    id: string;\n    engine: CompactionEngine;\n    \n    contextTokens: number;\n    \n    measured: boolean;\n}",
 		"src/core/runtime/compaction-tiers.d.ts#SOFT_COMPACT_TOKENS": "declare const SOFT_COMPACT_TOKENS = 300000;",
 		"src/core/runtime/extensions/approval-card.d.ts#approvalCard": "declare function approvalCard(call: HeldCall, workspace?: string, limits?: CardLimits): string;",
-		"src/core/runtime/extensions/approval-card.d.ts#approvalDetails": "declare function approvalDetails(call: HeldCall, workspace?: string): ApprovalDetails;",
+		"src/core/runtime/extensions/approval-card.d.ts#approvalDetails": "declare function approvalDetails(call: HeldCall, workspace?: string, copy?: ApprovalDetails[\"copy\"]): ApprovalDetails;",
 		"src/core/runtime/extensions/approval-card.d.ts#CardLimits": "interface CardLimits {\n    \n    valueChars?: number;\n    \n    totalChars?: number;\n}",
 		"src/core/runtime/extensions/held-calls.d.ts#canonicalJson": "declare function canonicalJson(value: unknown): string;",
 		"src/core/runtime/extensions/private-memory.d.ts#hidesPrivateExchange": "declare function hidesPrivateExchange(messages: ContextWithSystemEvent[\"messages\"], view: MemoryView): boolean;",

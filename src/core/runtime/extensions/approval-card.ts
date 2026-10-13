@@ -150,12 +150,13 @@ function prefix(text: string, max: number): string {
 
 /**
  * A held call as data for a card that is not text: the action, the tool, the whole input, and
- * each file it sends by path with its size now (absent when unreadable). Unlike the text card,
- * nothing is cut and nothing is worded for a locale.
+ * each file it sends by path with its size now (absent when unreadable), and the `copy` its hold
+ * offered. Unlike the text card, nothing is cut and nothing is worded for a locale.
  */
 export function approvalDetails(
 	call: HeldCall,
 	workspace?: string,
+	copy?: ApprovalDetails["copy"],
 ): ApprovalDetails {
 	const files = pathFiles(call.input).map((path) => {
 		const bytes = fileSize(path, workspace);
@@ -166,6 +167,7 @@ export function approvalDetails(
 		tool: call.tool,
 		input: parsedInput(call.input),
 		...(files.length > 0 ? { files } : {}),
+		...(copy ? { copy } : {}),
 	};
 }
 

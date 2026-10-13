@@ -7,7 +7,6 @@ import {
 	HOLD_DESCRIBE_TIMEOUT_MS,
 	type HoldCheck,
 	type HoldContext,
-	type HoldDescription,
 	higherTier,
 	isPromise,
 } from "../../holds.ts";
@@ -269,7 +268,6 @@ export class ConfirmationGate {
 		if ("released" in needing)
 			return needing.released ? { approvedBy: needing.released } : {};
 		const call = needing.held;
-		const { copy } = needing;
 		if (!ask) return { reason: await this.#held(call), refused: "held" };
 		// In a private conversation only its person answers: a call that names others is not theirs.
 		if (this.#private && !mayApproveNamed(this.#speaker, call))
@@ -287,7 +285,7 @@ export class ConfirmationGate {
 			ask.signal,
 			higherTier(this.#tiers?.minTier(call.tool), call.minTier),
 			{ late: (late) => this.#late(call, late) },
-			{ ...approvalDetails(call, this.#fileRoot), ...(copy ? { copy } : {}) },
+			approvalDetails(call, this.#fileRoot, needing.copy),
 			options,
 		);
 		if (answer === "approved") {
@@ -364,10 +362,7 @@ export class ConfirmationGate {
 		if (!turn || !inTurn) return this.#needing(tool, input);
 		const controller = new AbortController();
 		if (turn.signal?.aborted) controller.abort();
-		let answer:
-			| HoldDescription
-			| undefined
-			| Promise<HoldDescription | undefined>;
+		let answer: ReturnType<NonNullable<HoldCheck["inTurn"]>>;
 		try {
 			answer = inTurn.call(
 				this.#holds,
