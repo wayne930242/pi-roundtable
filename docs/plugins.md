@@ -795,24 +795,28 @@ defineTool({
 	minTier: "member",
 	hold: ({ customer }) => `Send a message to ${customer}`,
 	approvers: async ({ customer }, turn) => owners.ofCustomer(customer, turn.signal),
-	run: ({ customer, text }, turn) => {
-		if (!turn.approvedBy)
-			throw new ToolRefusal("this surface does not say who approved the message");
-		return messages.send(customer, text, turn.approvedBy.name);
+	run: async ({ customer, text }, turn) => {
+		const by = turn.approvedBy;
+		// The runtime already releases the call only for a named principal or an owner; a tool that
+		// sends under a name checks again, against its own set, and names the sender from the
+		// principal, never from `by.name`, which is only what the person's account calls itself.
+		if (!by || !(by.owner || (await owners.ofCustomer(customer, turn.signal)).includes(by.principalId)))
+			throw new ToolRefusal("the message was not approved by one of the customer's approvers");
+		return messages.send(customer, text, await people.displayName(by.principalId));
 	},
 });
 ```
 
 `approvers(args, turn)` returns the principal ids that may approve this call. It is asked, as `hold` is, in the turn that makes the call, with the same `ToolTurn`, the same wait (`HOLD_DESCRIBE_TIMEOUT_MS`) and the same `turn.signal`, once for each call a rule holds; it must change nothing. A rule of `holdRules` does the same with `approversInTurn(tool, input, context, turn)`, and `holdChain(rules).approversInTurn(...)` leaves the principals every rule that names approvers names.
 
-- The named principals approve the call **instead of the speaker**: the speaker whose turn made the call may not answer its card or confirm it by message unless they are named. Owners may still, where the conversation is shared.
+- The named principals approve the call **instead of the speaker**: the speaker whose turn made the call may not answer its card or confirm it by message unless they are named. Owners may still. This holds in every conversation, private or shared.
 - Each named principal needs the call's tier (its tool's tier, or the `approvalTier` a rule gives it) when they answer, checked again then, and is accepted only on an identity of theirs the surface knows.
 - An empty list leaves the owners alone. A rejection, a throw or a timeout of the lookup does the same: it never widens who may approve.
-- A [private conversation](#who-answers-a-prompt-promptscope) ignores the names: its person alone answers, as without them, and a call above their tier resolves `unavailable`.
-- The names are kept with the held call as `HeldCall.approverIds`, in the same record as `minTier`, so a message that confirms it after a restart is judged by them: from the speaker or an owner, as before, only when the call names none; otherwise from a named principal or an owner, and only when their tier now holds every held call. A confirming message that holds several calls needs a person every one of them accepts. A row written before this, or by a version that does not know it, names nobody, which leaves the speaker as the approver.
-- A call whose rules name no approvers is unchanged, and so is a call held where no turn is known, such as a [precheck script](#precheck-scripts-prechecks-the-agent-writes)'s.
+- In a [private conversation](#who-answers-a-prompt-promptscope) the person alone could answer, so the call is theirs only when they are named or an owner. Otherwise its card resolves `unavailable` at once, shown to no one, and a message confirming it is refused: the call stays held for the people who may approve it. A call above their tier resolves `unavailable` as without names.
+- The names are kept with the held call as `HeldCall.approverIds`, in the same record as `minTier`, so a message that confirms it after a restart is judged by them: from the speaker or an owner, as before, only when the call names none; otherwise from a named principal or an owner, and only when their tier now holds every held call. The runtime checks this whenever a turn is begun as an approval, so a plugin's own claim that starts a turn with `confirmed` cannot release a call whose approvers exclude its speaker: that call stays held, and the calls the speaker may approve run. A confirming message that holds several calls needs a person every one of them accepts. A row written before this, or by a version that does not know it, names nobody, which leaves the speaker as the approver.
+- A call whose rules name no approvers is unchanged, and so is a call held where no turn is known, such as a [precheck script](#precheck-scripts-prechecks-the-agent-writes)'s call when it runs. Saving a script that calls a tool that names approvers is held too: the schedule tool's call is approved by the principals every such call in the script names (a call whose arguments the script computes is asked with empty ones), or by the owners alone where they cannot be read.
 
-`run` learns who approved: `turn.approvedBy` is `{ principalId, speakerId, name }` of the person who pressed the card, or whose message confirmed the call, and the same for a card answered after the turn stopped waiting. It is undefined for a call that was not held, and for a call a surface released without saying who (the web chat does not); a tool that must know the approver fails closed when it is undefined. A surface reports it through `ApprovalOptions.approvedBy` of `Prompts.confirm`, and `LateAnswer.approvedBy`.
+`run` learns who approved: `turn.approvedBy` is `{ principalId, speakerId, name, owner? }` of the person who pressed the card, or whose message confirmed the call, and the same for a card answered after the turn stopped waiting. It is undefined for a call that was not held, and for a call a surface released without saying who (the web chat does not, for a call that names no approvers); a tool that must know the approver fails closed when it is undefined. `name` is the name the person's identity goes by on the surface, which they may change: look the sender up by `principalId`. `owner` is true when they approved as an owner. A surface reports it through `ApprovalOptions.approvedBy` of `Prompts.confirm`, and `LateAnswer.approvedBy`; for a call that names approvers it must, because the runtime accepts an approval from a named principal or an `owner` only: in a shared conversation an approval that does not say who gave it leaves the call held.
 
 #### The shell rule
 
@@ -1360,7 +1364,7 @@ An `AgentRuntime` has these methods:
 | `preflight?()` | Runs in the host's preflight, before anything starts; a throw stops the boot |
 | `dispose?()` | Runs when the host stops the runtime plugin's `runtime` service |
 
-A request has the turn's `channel`, `selection` (its tools), `text`, `attachments`, `speaker` (required: the person the turn is for, at whose tier it runs; the built-in runtime refuses a request without one with an `AgentRunError` before asking the model, and a plugin that starts a turn on someone's behalf gets theirs from `IDENTITY.speakerFor`), `conversation` (`TurnConversation`: `private` to a `principalId`, or `shared`, as `context.turns` records it; shared when absent), flags (`steerable`, `interactive`, `confirmed`), and `interim`, where the turn may post the text it writes before its final answer ([interim text](#interim-text-what-a-turn-writes-before-its-final-answer)).
+A request has the turn's `channel`, `selection` (its tools), `text`, `attachments`, `speaker` (required: the person the turn is for, at whose tier it runs; the built-in runtime refuses a request without one with an `AgentRunError` before asking the model, and a plugin that starts a turn on someone's behalf gets theirs from `IDENTITY.speakerFor`), `conversation` (`TurnConversation`: `private` to a `principalId`, or `shared`, as `context.turns` records it; shared when absent), flags (`steerable`, `interactive`, `confirmed`: the speaker's message approved the conversation's held calls, which the runtime releases for the speaker, except those that [name approvers](#a-hold-that-names-its-approvers) the speaker is neither among nor an owner of, which stay held), and `interim`, where the turn may post the text it writes before its final answer ([interim text](#interim-text-what-a-turn-writes-before-its-final-answer)).
 An agent's turn also has `agent`, the agent's scope, whose `session` is the conversation's key.
 Other turns use `kind` to name the conversation's persona, defaulting to `"owner"` when absent.
 
@@ -2048,7 +2052,7 @@ Call `context.turns.run(input)` inside your claim's queue task to run a turn in 
 It shows typing and the stop control on the channel's surface, runs the turn, and emits `turnStarted` and `turnEnded` with the turn's `kind`.
 It catches runtime errors as failed results and posts the answer, failure notice, or stopped notice through the surface.
 Supply `reply(result)` to handle the reply yourself.
-`input` has `channel`, `kind`, `text`, `speaker`, and optionally `origin` (where the request came from, as your claim's transport knows it, such as a connection's browser origin; tools read it as `turn.origin`, so never fill it from message text), `attachments`, `selection` (by default the plugins' `agentSelection`), `steerable`, `interactive`, `confirmed`, `reply`, and `conversation`.
+`input` has `channel`, `kind`, `text`, `speaker`, and optionally `origin` (where the request came from, as your claim's transport knows it, such as a connection's browser origin; tools read it as `turn.origin`, so never fill it from message text), `attachments`, `selection` (by default the plugins' `agentSelection`), `steerable`, `interactive`, `confirmed` (the speaker's message approved the held calls; calls that [name approvers](#a-hold-that-names-its-approvers) the speaker is neither among nor an owner of stay held), `reply`, and `conversation`.
 It rejects with `NotLinkedError` during `setup`, and with a `PluginError` on a host whose runtime plugin has not provided a runtime.
 
 Before each turn runs, `context.turns.run` records its conversation in the host's registry, `CONVERSATIONS`: at the first turn its key, surface, kind, visibility, owner, and title, and at every later turn only that it was active.
@@ -2488,10 +2492,10 @@ A surface's prompts keep these rules:
 - Where it escalates to no one, nobody else answers, and an approval above the speaker's tier resolves `unavailable` at once, shown to no one: the call stays held. (`expired` is for a card that was shown and went unanswered; a surface that cannot tell the two may answer `expired` for both.)
 - Anyone else is refused, even at the same tier as the speaker.
 - Without a scope, as for a turn with no speaker, the prompts are the owners'.
-- An approval that names [approvers](#a-hold-that-names-its-approvers) (`ApprovalOptions.approvers`, which a surface may read as `PromptScope.approvers`) is theirs **instead of the speaker's**, where the scope escalates to the owners: each named principal answers on any of their identities the surface knows, at the tier it needs, checked again when they answer; the speaker does not answer it unless named, and an owner still does. When none of the named has an identity on the surface, or none is named, it is the owners' alone. Where the scope escalates to no one the names are ignored.
+- An approval that names [approvers](#a-hold-that-names-its-approvers) (`ApprovalOptions.approvers`, which `confirm` receives beside the scope) is theirs **instead of the speaker's**, where the scope escalates to the owners: each named principal answers on any of their identities the surface knows, at the tier it needs, checked again when they answer; the speaker does not answer it unless named, and an owner still does. When none of the named has an identity on the surface, or none is named, it is the owners' alone. Where the scope escalates to no one, the person alone answers, and only when they are named or an owner: for anyone else the approval resolves `unavailable` at once, shown to no one. The runtime also refuses such a call before it asks, whatever the surface does.
 
 On Discord a card for named approvers mentions every Discord identity of every named principal that has one, in a thread, and refuses anyone else with a line that says it is for the people it names and the owners.
-The web chat shows prompts to the conversation's person only, so it ignores approvers.
+The web chat shows prompts to the conversation's person only. The runtime never asks it about a call that names approvers the person is neither among nor an owner of, and the person is the approver of one that names them.
 
 On Discord the owners are every owner with a Discord identity, and the primary owner always; a card in a thread mentions the identity that spoke when it is theirs and one of the principal's Discord identities, every Discord identity of the principal when the speaker is none of them, and the owners when it goes to them, so a single owner's cards read as they did in 0.8.
 A principal with no Discord identity, such as the reporter of a background report, answers nothing there, so their card goes to the owners; so does an owner-tier call of a turn whose tier defaulted to owner when its principal is not an owner.
@@ -2501,7 +2505,7 @@ The web chat shows prompts to the conversation's person only: its owners are not
 
 `confirm(title, message, signal?, minTier?, wait?, details?, options?)` takes the approval twice: `message` is the card as markdown text, and the optional `details` (`ApprovalDetails`: `{ action, tool, input, files? }`) is the same held call as data, with its whole input (the web chat cuts it only past 256 KiB and says so with `truncated`), and each file it sends by path as `{ path, bytes? }`.
 The confirmation gate and a coding worker's cards pass both.
-`options` (`ApprovalOptions`) says who else may approve the call and hears who did: `approvers`, the principal ids that approve it instead of the speaker (see [who answers a prompt](#who-answers-a-prompt-promptscope)), and `approvedBy(by)`, which a surface that knows who answered calls with `{ principalId, speakerId, name }` (`ApprovedBy`) before `confirm` resolves `approved`. A surface may ignore both.
+`options` (`ApprovalOptions`) says who else may approve the call and hears who did: `approvers`, the principal ids that approve it instead of the speaker (see [who answers a prompt](#who-answers-a-prompt-promptscope)), and `approvedBy(by)`, which a surface that knows who answered calls with `{ principalId, speakerId, name, owner? }` (`ApprovedBy`; `owner` when they approved as an owner) before `confirm` resolves `approved`. A surface may ignore both for a call that names no approvers. For one that does, the runtime accepts the approval only from a surface that calls `approvedBy` with a named principal or an `owner`, so a surface that cannot say who answered must not offer such a call to a shared conversation.
 A surface that shows text, such as Discord, uses `message` and ignores `details`; the web chat sends `details` to the client as the prompt frame's `approval`, beside the unchanged `title` and `message`.
 A surface or a `Prompts` of your own may ignore it: nothing requires reading it.
 `confirm` resolves `approved`, `declined`, `expired` (a card was shown and went unanswered), `unavailable` (no card could be shown: no one may approve the call, the speaker is below its tier, or the card could not be posted), `cancelled` (the turn stopped), or `pending` (with a `wait`). Both `expired` and `unavailable` leave the call held for the owner's next message; the turn's progress reports them as `refused: "expired"` and `refused: "held"`.
@@ -2641,7 +2645,8 @@ export class FakeSurface implements ChatSurface {
 	 * answer: its speaker when their tier holds the call, and the owners unless the conversation
 	 * is private, where a call above the speaker's tier goes to no one and comes back `unavailable` at once.
 	 * Where the call names approvers and the conversation is shared, they answer it instead of the
-	 * speaker, at the tier it needs; a private conversation ignores them.
+	 * speaker, at the tier it needs. A private conversation's person alone answers it, and only if
+	 * named or an owner; for any other the call comes back `unavailable` at once.
 	 */
 	prompts(channel: ChannelKey, scope?: PromptScope): Prompts {
 		return {
@@ -2655,16 +2660,20 @@ export class FakeSurface implements ChatSurface {
 				options,
 			) => {
 				const owners = scope?.escalate !== "none";
-				const named = owners ? options?.approvers : undefined;
+				const named = options?.approvers;
+				// Alone with the bot, the person answers for themselves, if the call is theirs to approve.
+				if (named && !owners && !named.includes(scope?.principalId ?? ""))
+					return "unavailable";
+				const shared = owners ? named : undefined;
 				const theirs =
 					scope !== undefined &&
 					TIERS.indexOf(scope.tier) >= TIERS.indexOf(minTier);
-				const principals = named ?? (theirs ? [scope.principalId] : []);
+				const principals = shared ?? (theirs ? [scope.principalId] : []);
 				if (principals.length === 0 && !owners) return "unavailable";
 				return this.#ask(channel, title, signal, {
 					principals,
 					owners,
-					...(named ? { minTier } : {}),
+					...(shared ? { minTier } : {}),
 					...(options?.approvedBy ? { approved: options.approvedBy } : {}),
 				});
 			},
@@ -2689,9 +2698,11 @@ export class FakeSurface implements ChatSurface {
 	): void {
 		const open = this.#answering.get(id);
 		if (!open) return;
+		// An answer that does not say its tier is not accepted where a tier is needed.
 		const tierOk =
 			!open.minTier ||
-			TIERS.indexOf(who.tier ?? open.minTier) >= TIERS.indexOf(open.minTier);
+			(who.tier !== undefined &&
+				TIERS.indexOf(who.tier) >= TIERS.indexOf(open.minTier));
 		const theirs = open.principals.includes(who.principalId) && tierOk;
 		if (!theirs && !(who.owner && open.owners)) return;
 		if (approved)
@@ -2699,6 +2710,7 @@ export class FakeSurface implements ChatSurface {
 				principalId: who.principalId,
 				speakerId: who.speakerId ?? who.principalId,
 				name: who.name ?? who.principalId,
+				...(who.owner ? { owner: true as const } : {}),
 			});
 		open.settle(approved ? "approved" : "declined");
 	}

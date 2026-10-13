@@ -98,9 +98,10 @@ export interface ToolSpec<Schema extends TObject> {
 	 * turn makes it, looked up as that turn like `hold` (same wait, same `turn.signal`, and it
 	 * must change nothing). Each needs the call's tier when they answer, and the owners may still
 	 * approve it. An empty list leaves the owners alone. A rejection or a timeout leaves the owners
-	 * alone too. A private conversation ignores them: its person alone approves. A message that
-	 * confirms the held call, even after a restart, is honored only from the speaker, an owner, or
-	 * one of these. The approver reaches `run` as `turn.approvedBy`.
+	 * alone too. Only these and the owners approve the call, by a card or by a message that
+	 * confirms it, even after a restart: the speaker whose turn made it may not unless named, and in
+	 * a private conversation, whose person alone answers, the call is refused unless they are named
+	 * or an owner. The approver reaches `run` as `turn.approvedBy`.
 	 */
 	approvers?: (
 		args: Static<Schema>,

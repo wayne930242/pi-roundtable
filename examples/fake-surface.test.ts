@@ -211,7 +211,30 @@ test("an approval that names approvers is answered by them at the tier it needs,
 	expect(approver).toEqual({ principalId: "p3", speakerId: "p3", name: "Bo" });
 });
 
-test("a private conversation's approval ignores the approvers it names", async () => {
+test("a private conversation's approval that names others is not shown to a person who is not named", async () => {
+	const surface = new FakeSurface();
+	const speaker = {
+		id: "1",
+		name: "Ada",
+		tier: "member",
+		principalId: "p1",
+	} as const;
+	const prompts = surface.prompts("fake:1", promptScope(speaker, "private"));
+	expect(
+		await prompts.confirm(
+			"Send?",
+			"sends a message",
+			undefined,
+			"member",
+			undefined,
+			undefined,
+			{ approvers: ["p3"] },
+		),
+	).toBe("unavailable");
+	expect(surface.asked).toEqual([]);
+});
+
+test("a private conversation's approval that names its person is answered by them alone", async () => {
 	const surface = new FakeSurface();
 	const speaker = {
 		id: "1",
@@ -227,12 +250,36 @@ test("a private conversation's approval ignores the approvers it names", async (
 		"member",
 		undefined,
 		undefined,
-		{ approvers: ["p3"] },
+		{ approvers: ["p1", "p3"] },
 	);
 	surface.answer("q1", { principalId: "p3", tier: "member" }, true);
 	expect(surface.asked[0]?.open).toBe(true);
 	surface.answer("q1", { principalId: "p1" }, false);
 	expect(await answer).toBe("declined");
+});
+
+test("an answer that does not say its tier is not accepted where the approvers need one", async () => {
+	const surface = new FakeSurface();
+	const speaker = {
+		id: "1",
+		name: "Ada",
+		tier: "member",
+		principalId: "p1",
+	} as const;
+	const prompts = surface.prompts("fake:1", promptScope(speaker));
+	const answer = prompts.confirm(
+		"Send?",
+		"sends a message",
+		undefined,
+		"admin",
+		undefined,
+		undefined,
+		{ approvers: ["p3"] },
+	);
+	surface.answer("q1", { principalId: "p3" }, true);
+	expect(surface.asked[0]?.open).toBe(true);
+	surface.answer("q1", { principalId: "p3", tier: "admin" }, true);
+	expect(await answer).toBe("approved");
 });
 
 test("two surfaces with one prefix are refused, naming both plugins", async () => {

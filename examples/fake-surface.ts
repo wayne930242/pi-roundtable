@@ -93,7 +93,8 @@ export class FakeSurface implements ChatSurface {
 	 * answer: its speaker when their tier holds the call, and the owners unless the conversation
 	 * is private, where a call above the speaker's tier goes to no one and comes back `unavailable` at once.
 	 * Where the call names approvers and the conversation is shared, they answer it instead of the
-	 * speaker, at the tier it needs; a private conversation ignores them.
+	 * speaker, at the tier it needs. A private conversation's person alone answers it, and only if
+	 * named or an owner; for any other the call comes back `unavailable` at once.
 	 */
 	prompts(channel: ChannelKey, scope?: PromptScope): Prompts {
 		return {
@@ -107,16 +108,20 @@ export class FakeSurface implements ChatSurface {
 				options,
 			) => {
 				const owners = scope?.escalate !== "none";
-				const named = owners ? options?.approvers : undefined;
+				const named = options?.approvers;
+				// Alone with the bot, the person answers for themselves, if the call is theirs to approve.
+				if (named && !owners && !named.includes(scope?.principalId ?? ""))
+					return "unavailable";
+				const shared = owners ? named : undefined;
 				const theirs =
 					scope !== undefined &&
 					TIERS.indexOf(scope.tier) >= TIERS.indexOf(minTier);
-				const principals = named ?? (theirs ? [scope.principalId] : []);
+				const principals = shared ?? (theirs ? [scope.principalId] : []);
 				if (principals.length === 0 && !owners) return "unavailable";
 				return this.#ask(channel, title, signal, {
 					principals,
 					owners,
-					...(named ? { minTier } : {}),
+					...(shared ? { minTier } : {}),
 					...(options?.approvedBy ? { approved: options.approvedBy } : {}),
 				});
 			},
@@ -141,9 +146,11 @@ export class FakeSurface implements ChatSurface {
 	): void {
 		const open = this.#answering.get(id);
 		if (!open) return;
+		// An answer that does not say its tier is not accepted where a tier is needed.
 		const tierOk =
 			!open.minTier ||
-			TIERS.indexOf(who.tier ?? open.minTier) >= TIERS.indexOf(open.minTier);
+			(who.tier !== undefined &&
+				TIERS.indexOf(who.tier) >= TIERS.indexOf(open.minTier));
 		const theirs = open.principals.includes(who.principalId) && tierOk;
 		if (!theirs && !(who.owner && open.owners)) return;
 		if (approved)
@@ -151,6 +158,7 @@ export class FakeSurface implements ChatSurface {
 				principalId: who.principalId,
 				speakerId: who.speakerId ?? who.principalId,
 				name: who.name ?? who.principalId,
+				...(who.owner ? { owner: true as const } : {}),
 			});
 		open.settle(approved ? "approved" : "declined");
 	}
