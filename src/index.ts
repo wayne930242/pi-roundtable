@@ -151,9 +151,9 @@ export type {
 	AccessOwner,
 	AccessRules,
 	AccessTier,
-	SelfLinkRules,
 	Provisioning,
 	ProvisioningRule,
+	SelfLinkRules,
 } from "./core/identity/access-policy.ts";
 export type { ActorFacts } from "./core/identity/actor-facts.ts";
 export type { IdentityLinks } from "./core/identity/identity-links.ts";
