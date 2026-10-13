@@ -2,6 +2,7 @@ import type { ChannelContextOptions } from "../contract/channel-context.ts";
 import { ConfigError } from "../domain/errors.ts";
 import {
 	bool,
+	guarded,
 	integer,
 	number,
 	oneOf,
@@ -115,6 +116,19 @@ const channelContextShape = shape({
 	similarity: optional(number(0, 1)),
 	messageChars: optional(integer(1, 4000)),
 	botMessageChars: optional(integer(1, 4000)),
+	foreignWebhook: optional(
+		guarded(
+			"a function of a webhook id",
+			(value): value is (webhookId: string) => boolean =>
+				typeof value === "function",
+		),
+	),
+	attachments: optional(
+		shape({
+			images: optional(integer(0, 4)),
+			maxBytes: optional(integer(1, 25 * 1024 * 1024)),
+		}),
+	),
 });
 
 /** The Discord settings, at the top level or in a Discord adapter. */

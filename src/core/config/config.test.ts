@@ -271,9 +271,28 @@ describe("discord.channelContext", () => {
 		});
 	});
 
+	test("takes a predicate for the webhooks that speak for others, and the images to fetch", () => {
+		const foreignWebhook = (id: string) => id === "w";
+		const given = {
+			foreignWebhook,
+			attachments: { images: 2, maxBytes: 1_000_000 },
+		};
+		const resolved = resolveConfig({
+			...minimal,
+			discord: { ...discord, channelContext: given },
+		} as RoundtableConfig).discord?.channelContext;
+		expect(resolved).toEqual(given);
+	});
+
 	test("refuses a value out of range or a key it does not know, naming it", () => {
 		const with_ = (channelContext: unknown) =>
 			refused({ ...minimal, discord: { ...discord, channelContext } });
+		expect(with_({ foreignWebhook: "w" })).toContain(
+			"config discord.channelContext.foreignWebhook",
+		);
+		expect(with_({ attachments: { images: 5 } })).toContain(
+			"config discord.channelContext.attachments.images: expected an integer from 0 to 4",
+		);
 		expect(with_({ fetch: 101 })).toContain(
 			"config discord.channelContext.fetch: expected an integer from 1 to 100",
 		);

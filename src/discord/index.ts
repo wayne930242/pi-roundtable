@@ -6,10 +6,15 @@ export { DISCORD } from "../core/builtin/discord.ts";
 export type { DiscordAdapterConfig } from "../core/config/config.ts";
 export type {
 	ChannelContext,
+	ChannelContextAttachment,
+	ChannelContextAttachmentOptions,
 	ChannelContextMessage,
 	ChannelContextOptions,
 } from "../core/contract/channel-context.ts";
-export { withChannelContext } from "../core/contract/channel-context.ts";
+export {
+	withChannelContext,
+	withChannelContextImages,
+} from "../core/contract/channel-context.ts";
 export type { AgentPanelMessage } from "../core/discord/agent-commands.ts";
 export type {
 	AgentPanel,

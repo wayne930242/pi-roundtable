@@ -481,13 +481,16 @@
 			"parseChannelTool",
 			"plain",
 			"replyWithPanels",
-			"withChannelContext"
+			"withChannelContext",
+			"withChannelContextImages"
 		],
 		"types": [
 			"AgentPanel",
 			"AgentPanelMessage",
 			"AgentPanelOptions",
 			"ChannelContext",
+			"ChannelContextAttachment",
+			"ChannelContextAttachmentOptions",
 			"ChannelContextMessage",
 			"ChannelContextOptions",
 			"ChannelExecutor",

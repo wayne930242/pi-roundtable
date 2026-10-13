@@ -19,6 +19,9 @@ export interface AttachmentFailure {
 	fromReference: boolean;
 }
 
+/** The most images one turn carries to the model. */
+export const MAX_TURN_IMAGES = 4;
+
 /** An image in the form the model accepts. */
 export interface ModelImage {
 	data: string;

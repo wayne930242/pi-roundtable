@@ -1,5 +1,9 @@
 import { createCanvas, loadImage } from "canvas";
-import type { ModelImage, StoredAttachment } from "../domain/attachment.ts";
+import {
+	MAX_TURN_IMAGES,
+	type ModelImage,
+	type StoredAttachment,
+} from "../domain/attachment.ts";
 import { MAX_ATTACHMENT_BYTES } from "./attachment-fetcher.ts";
 import { assertImagePixelBudget } from "./image-budget.ts";
 import { ImagePreparationError } from "./image-preparation-error.ts";
@@ -11,7 +15,7 @@ const IMAGE_TYPES = new Set([
 	"image/gif",
 	"image/webp",
 ]);
-export const MAX_IMAGES_PER_TURN = 4;
+export const MAX_IMAGES_PER_TURN = MAX_TURN_IMAGES;
 /** Base64 grows by a third, so 3.75 MB stays under Claude's 5 MB per image. */
 const MAX_RAW_BYTES = 3.75 * 1024 * 1024;
 const MAX_SIDE = 8000;

@@ -186,6 +186,8 @@ Tune it under `discord.channelContext`, or set `channelContext: false` to turn i
 | `similarity` | `0.8` | How alike two consecutive messages of one author must be to count as one |
 | `messageChars` | `500` | Where a message is cut |
 | `botMessageChars` | `80` | Where another bot's message is cut |
+| `foreignWebhook` | none | `(webhookId) => boolean`: posts through those webhooks of the application are read as other people's messages, not the assistant's (code only) |
+| `attachments` | `{ images: 0, maxBytes: 10 MiB }` | `images`: how many images of the kept messages are fetched for the turn, at most 4 |
 
 When a conversation is started over in a server channel or thread, the assistant posts a short divider there so the next turn does not read what came before; direct messages get none.
 

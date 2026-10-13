@@ -42,6 +42,7 @@ const SETTINGS = {
 	similarity: 0.8,
 	messageChars: 500,
 	botMessageChars: 80,
+	foreignWebhook: () => false,
 };
 
 function select(
@@ -265,6 +266,7 @@ function discordMessage(extra: Record<string, unknown> = {}) {
 					name: "map.png",
 					url: "https://files/map.png",
 					contentType: "image/png",
+					size: 1234,
 				},
 			],
 		]),
@@ -283,6 +285,14 @@ test("a Discord message reads as its author's name, its mentions by name, and it
 		own: false,
 		at: 5,
 		text: "hey @Noa N and <@!999> [sticker: wave] [image: map.png https://files/map.png]",
+		attachments: [
+			{
+				name: "map.png",
+				url: "https://files/map.png",
+				contentType: "image/png",
+				size: 1234,
+			},
+		],
 	});
 });
 

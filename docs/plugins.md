@@ -2278,13 +2278,17 @@ It reads Discord, not the host's history, so it survives restarts:
 - It leaves out the assistant's own posts, the addressed message, empty messages, and every message it handed over before or that addressed it before in that channel, remembered in memory per channel, so a restart can repeat at most what came since the assistant's last post.
 - Other bots and integrations are kept and marked as bots; the host's owners (the primary owner and every other owner's Discord identities) are marked as owners.
 - Consecutive messages of one author at least `similarity` alike (default 0.8, by their longest common run of text) count as one, the later kept.
-- It keeps the newest `keep` (default 15), oldest first. Mentions read as names, and stickers and files as text with their names and links; nothing is downloaded or shown to the model as an image. A message is cut at `messageChars` (default 500), another bot's at `botMessageChars` (default 80).
+- It keeps the newest `keep` (default 15), oldest first. Mentions read as names, and stickers and files as text with their names and links; by default nothing is downloaded or shown to the model as an image (see `attachments` below). A message is cut at `messageChars` (default 500), another bot's at `botMessageChars` (default 80).
 - It never fails the turn over Discord: a Discord error, such as a channel the bot cannot read, is logged and the turn runs without context.
+
+A plugin may mirror an outside chat into a channel through a webhook of its own, created by the bot, so that the application owns it; by default such a post counts as the assistant's own, which ends the window and is left out, and the people mirrored never reach a turn. `foreignWebhook(webhookId)` changes that for the webhooks it returns true for: a post through one is another author's, kept like another bot's (`bot: true`, `authorName` the post's username, `authorId` the webhook's id) and no longer ends the window, which then ends only at the assistant's own posts: its bot user's and every webhook `foreignWebhook` returns false for, such as an agent's voice. The host sets it as `discord.channelContext.foreignWebhook` and a call overrides it for that call; being a function, it can be set only in code. Messages of one webhook are merged as near repeats only when the poster's name is the same too, and an edited message reads as Discord now holds it.
+
+Every returned message has `attachments` (`ChannelContextAttachment`: `name`, `contentType`, `size`, `url`, `messageId`), whether or not anything was fetched. With `attachments: { images, maxBytes }` (`ChannelContextAttachmentOptions`; default none) a call also fetches up to `images` (at most 4, a turn's limit) PNG, JPEG, GIF or WebP images of the kept messages, the newest first, each at most `maxBytes` (default 10 MiB, at most 25 MiB), and returns them as `context.images`, prepared as a turn's own images are (large ones are scaled down) and kept in memory only: never stored or logged. Pass them on with `withChannelContextImages(attachments, context)`, which puts them after the turn's own images within the four a turn carries, and the block then says that pictures are shown among the turn's images. An image that is not a type the model takes, is over `maxBytes`, cannot be downloaded or cannot be decoded is skipped, and its message's text says `[image not attached: <name>: <reason>]`, the reason being `unsupported type`, `too large`, `download failed` or `could not be decoded`; skipped images do not count toward `images`, but at most twice that many are tried. An image of a message already handed over is not fetched again, since its message is not returned again.
 
 `DISCORD.channelContext` resolves undefined in a direct message, on another surface, when nothing new was said, and when the host's `discord.channelContext` is `false`, which turns it off for the agent server and every claim.
 The configuration's values are the host's defaults, and a call's `options` override them for that call.
 Call it once per answered message: what it returns is remembered as handed over.
-A call's `options` are validated like the configuration (`fetch`, `keep`, `messageChars` and `botMessageChars` positive integers, `similarity` from 0 to 1); an invalid one makes the call reject, a programming error, so `keep: 0` is not "none" (skip the call for that).
+A call's `options` are validated like the configuration (`fetch`, `keep`, `messageChars` and `botMessageChars` positive integers, `similarity` from 0 to 1, `foreignWebhook` a function, `attachments.images` an integer from 0 to 4, `attachments.maxBytes` an integer from 1 to 25 MiB); an invalid one makes the call reject, a programming error, so `keep: 0` is not "none" (skip the call for that).
 It remembers what it handed over and what addressed the assistant, not every message that ran a turn: a post a claim answered some other way, such as a webhook report turn or a steered message, can also come in the context of a later turn if the assistant has not posted since.
 
 What it returns is public channel text, visible to everyone in the channel; it is not private memory, carries no `privateTo`, and goes into the turn's text, so it lives in the conversation's history, not in the system prompt.
@@ -2299,7 +2303,7 @@ The text is `discord.freshMarker` (default `─── new conversation ───
 A surface a plugin contributes may implement the optional `ChatSurface.markFresh(channel)` for the same job.
 
 The block gives each author as a name, their Discord id and a role (`owner`, `bot` or `member`) in separate attributes, and says the messages were not addressed to the assistant. A name loses the characters `"`, `'`, `=`, `<`, `>`, `(`, `)` and `,`, so it cannot imitate another author, an attribute or a role, and every `<` (also the full-width `＜`) in a message's text is replaced by `‹`, so a message can neither close the block nor open a message of its own.
-`ChannelContext` is `{ messages, text }`: `messages` are `ChannelContextMessage`s (`id`, `authorId`, `authorName`, `bot`, `owner`, `text`, `at`), oldest first, and `text` is the block.
+`ChannelContext` is `{ messages, text, images? }`: `messages` are `ChannelContextMessage`s (`id`, `authorId`, `authorName`, `bot`, `owner`, `text`, `at`, `attachments`), oldest first, `text` is the block, and `images` the fetched images (see above).
 `ChannelContextOptions` holds the options above, and `CHANNEL_CONTEXT_DEFAULTS` their defaults.
 In a test, `fakeDiscord({ channelContext })` answers `DISCORD.channelContext` as the test says; by default with no context.
 
@@ -2548,7 +2552,7 @@ A surface or a `Prompts` of your own may ignore it: nothing requires reading it.
 
 `details.copy` (`{ label?, text }`) is a text the approval offers to copy, such as a command or a message the call would send; whoever builds `details` for a `confirm` of their own sets it.
 It is informational and never an answer: using it does not approve, decline or otherwise settle the prompt, and a surface that cannot show it ignores it, as the web chat's own client does (the frame carries it as `approval.copy`).
-On Discord the card gets a third button (`label`, default "Copy" or 「複製」) that any member who can see the card may press, any number of times, also after the card has ended; it replies ephemerally with the text in a code block, or as a `copy.txt` file when the text does not fit a message (2,000 characters) or holds a code fence. The button's custom id holds the card's id, never the text: the text is kept under that id in `card-copies.json` in the host's `dataDir` (the newest 100, for 30 days), so the button works after a restart even though the card itself no longer answers; a card whose text is gone says so. A text over 100,000 characters gets no button, and a warning is logged.
+On Discord the card gets a third button (`label`, default "Copy", or its Traditional Chinese equivalent on a host in that language) that any member who can see the card may press, any number of times, also after the card has ended; it replies ephemerally with the text in a code block, or as a `copy.txt` file when the text does not fit a message (2,000 characters) or holds a code fence. The button's custom id holds the card's id, never the text: the text is kept under that id in `card-copies.json` in the host's `dataDir` (the newest 100, for 30 days), so the button works after a restart even though the card itself no longer answers; a card whose text is gone says so. A text over 100,000 characters gets no button, and a warning is logged.
 Because everyone who sees the card can copy the text, it holds nothing the card's audience may not read.
 `confirm` resolves `approved`, `declined`, `expired` (a card was shown and went unanswered), `unavailable` (no card could be shown: no one may approve the call, the speaker is below its tier, or the card could not be posted), `cancelled` (the turn stopped), or `pending` (with a `wait`). Both `expired` and `unavailable` leave the call held for the owner's next message; the turn's progress reports them as `refused: "expired"` and `refused: "held"`.
 
@@ -3902,6 +3906,8 @@ Import from the entries listed below; source area files are internal.
 | `CHANNEL_OPERATIONS` | `pi-roundtable/discord` | value |
 | `CHANNEL_TOOLS` | `pi-roundtable/discord` | value |
 | `ChannelContext` | `pi-roundtable/discord` | type |
+| `ChannelContextAttachment` | `pi-roundtable/discord` | type |
+| `ChannelContextAttachmentOptions` | `pi-roundtable/discord` | type |
 | `ChannelContextMessage` | `pi-roundtable/discord` | type |
 | `ChannelContextOptions` | `pi-roundtable/discord` | type |
 | `ChannelExecutor` | `pi-roundtable/discord` | type |
@@ -3946,3 +3952,4 @@ Import from the entries listed below; source area files are internal.
 | `plain` | `pi-roundtable/discord` | value |
 | `replyWithPanels` | `pi-roundtable/discord` | value |
 | `withChannelContext` | `pi-roundtable/discord` | value |
+| `withChannelContextImages` | `pi-roundtable/discord` | value |
