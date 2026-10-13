@@ -64,6 +64,11 @@ export interface AgentServerOptions {
 	 * see `AgentSessions.memory`.
 	 */
 	memory?: "everyone" | "owners";
+	/**
+	 * Who the agents answer in their channels and groups' channels: `"everyone"` (the default) or
+	 * `"owners"`, which leaves a speaker below the owner tier unanswered.
+	 */
+	speakers?: "everyone" | "owners";
 	/** The prompt every agent starts with, and the one for speakers other than the owner. */
 	prompts: { shared: string; guest?: string };
 	/** The listener the avatar pictures are served on. */
@@ -283,6 +288,7 @@ export function agentServerPlugin(
 				channels: [
 					agentClaim({
 						owner: options.owner,
+						...(options.speakers ? { speakers: options.speakers } : {}),
 						team: built,
 						runtime: running,
 						surface: context.surfaces,

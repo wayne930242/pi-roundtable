@@ -18,6 +18,7 @@ const ROLE = "200000000000000001";
 
 function setup(
 	channelContext?: Parameters<typeof agentClaim>[0]["channelContext"],
+	speakers?: "everyone" | "owners",
 ) {
 	const answered: { kind: string; speaker: Speaker; text: string }[] = [];
 	const stopped: string[] = [];
@@ -49,6 +50,7 @@ function setup(
 	});
 	const bare = agentClaim({
 		owner: TEST_OWNER,
+		...(speakers ? { speakers } : {}),
 		// biome-ignore lint/suspicious/noExplicitAny: a recording stand-in for the team
 		team: team as any,
 		runtime: {
@@ -310,6 +312,45 @@ test("a webhook post in an agent's channel is a report turn for the owner target
 	);
 });
 
+test("with owners-only speakers, an admin's and a member's message starts no turn in an agent's or group's channel, and the owner's does", async () => {
+	const { claim, answered } = setup(undefined, "owners");
+	for (const channel of ["discord:10", "discord:20"] as const) {
+		expect(claim.admit(message(ADMIN, channel))).toBeUndefined();
+		expect(
+			claim.admit(message(STRANGER, channel, { authorRoleIds: [ROLE] })),
+		).toBeUndefined();
+		const admission = claim.admit(message(OWNER, channel));
+		if (admission?.kind !== "turn") throw new Error("expected a turn");
+		await admission.run();
+	}
+	expect(answered.map((a) => [a.kind, a.speaker.tier])).toEqual([
+		["agent", "owner"],
+		["group", "owner"],
+	]);
+});
+
+test("with owners-only speakers, an outside webhook's report in an agent's channel is unchanged", () => {
+	const { claim } = setup(undefined, "owners");
+	expect(
+		claim.admit({
+			...message("webhook", "discord:10"),
+			integration: { id: "hook", own: false },
+			text: "build failed",
+		}),
+	).toMatchObject({ kind: "background", turn: { report: true } });
+});
+
+test("by default, and with speakers everyone, admins and members are answered as before", () => {
+	for (const speakers of [undefined, "everyone"] as const) {
+		const { claim } = setup(undefined, speakers);
+		expect(claim.admit(message(ADMIN, "discord:10"))?.kind).toBe("turn");
+		expect(
+			claim.admit(message(STRANGER, "discord:20", { authorRoleIds: [ROLE] }))
+				?.kind,
+		).toBe("turn");
+	}
+});
+
 test("the agent server owns only Discord channels: a key of another surface is never taken, even with its id or guild", () => {
 	const { claim } = setup();
 	// A host's own `mcp:` conversations, and a surface a plugin contributes.
@@ -371,4 +412,53 @@ test("a claim of a plugin at priority 10 on another surface's keys hears its mes
 	await router.handle(message(OWNER, "discord:99", { text: "e" }));
 	expect(heard).toEqual(["fake:10 a", "fake:20 b", "mcp:10 c"]);
 	expect(answered.map((a) => a.kind)).toEqual(["agent"]);
+});
+
+const backgroundTurn = (speaker?: Speaker) => ({
+	channel: "discord:10" as const,
+	target: "owner",
+	author: { principalId: "p_01JADMIN", id: ADMIN, name: "n" },
+	tier: "owner" as const,
+	turnId: "t",
+	text: "go",
+	...(speaker ? { speaker } : {}),
+});
+
+test("with owners-only speakers, an admin's scheduled or report turn is skipped, and the owner's and the system's still run", async () => {
+	const { claim, answered } = setup(undefined, "owners");
+	const admin: Speaker = {
+		id: ADMIN,
+		name: "n",
+		tier: "admin",
+		principalId: "p_01JADMIN",
+	};
+	const owner: Speaker = {
+		id: OWNER,
+		name: "o",
+		tier: "owner",
+		principalId: "p_01JOWNER",
+	};
+	for (const report of [false, true])
+		expect(
+			await claim.background?.({ ...backgroundTurn(admin), report }),
+		).toMatchObject({ status: "skipped" });
+	expect(answered).toHaveLength(0);
+	await claim.background?.(backgroundTurn(owner));
+	await claim.background?.({ ...backgroundTurn(owner), report: true });
+	expect(answered.map((a) => a.speaker.tier)).toEqual(["owner", "owner"]);
+});
+
+test("by default, and with speakers everyone, an admin's background turn runs as before", async () => {
+	for (const speakers of [undefined, "everyone"] as const) {
+		const { claim, answered } = setup(undefined, speakers);
+		await claim.background?.(
+			backgroundTurn({
+				id: ADMIN,
+				name: "n",
+				tier: "admin",
+				principalId: "p_01JADMIN",
+			}),
+		);
+		expect(answered.map((a) => a.speaker.tier)).toEqual(["admin"]);
+	}
 });

@@ -65,18 +65,70 @@ describe("the access check", () => {
 		}
 	});
 
-	test("passes everyone on one named surface, everyone on the only surface, and the 0.8 form", async () => {
+	test("passes everyone on one named surface other than Discord, and a host that admits no members", async () => {
 		for (const config of [
-			accessConfig({ everyone: ["discord"] }),
+			accessConfig({ everyone: ["web"] }),
+			accessConfig({ identities: ["web:someone"] }),
 			validConfig,
-			{ ...validConfig, speakers: { members: { everyone: true } } },
 		])
 			expect(
 				(await checkAccess(project(config, [{ name: "webchat" }]))).status,
 			).toBe("ok");
-		expect(
-			(await checkAccess(project(accessConfig({ everyone: true })))).status,
-		).toBe("ok");
+	});
+
+	test("warns when members are admitted on Discord and the agent server still answers everyone", async () => {
+		for (const config of [
+			accessConfig({ everyone: ["discord"] }),
+			accessConfig({ everyone: true }),
+			accessConfig({ roles: ["discord:role:staff"] }),
+			accessConfig({ identities: ["discord:42"] }),
+			{ ...validConfig, speakers: { members: { everyone: true } } },
+		]) {
+			const result = await checkAccess(project(config));
+			expect(result.status).toBe("warn");
+			if (result.status === "warn") {
+				expect(result.problem).toContain("access.members");
+				expect(result.fix).toContain("agentSpeakers");
+			}
+		}
+	});
+
+	test("warns about admins on Discord alone, naming the tier, and reports it together with the broad-everyone warning", async () => {
+		const base = accessConfig({ identities: ["web:someone"] });
+		const admins = {
+			...base,
+			access: { ...base.access, admins: { identities: ["discord:7"] } },
+		};
+		const alone = await checkAccess(project(admins));
+		expect(alone.status).toBe("warn");
+		if (alone.status === "warn") {
+			expect(alone.problem).toContain("access.admins admits");
+			expect(alone.problem).not.toContain("access.members");
+		}
+		const both = await checkAccess(
+			project(
+				{
+					...admins,
+					access: { ...admins.access, members: { everyone: true } },
+				},
+				[{ name: "webchat" }],
+			),
+		);
+		expect(both.status).toBe("warn");
+		if (both.status === "warn") {
+			expect(both.problem).toContain("access.members.everyone is true");
+			expect(both.problem).toContain("access.admins");
+			expect(both.fix).toContain("agentSpeakers");
+		}
+	});
+
+	test("passes members on Discord once the agent server answers owners only", async () => {
+		const config = accessConfig({ everyone: ["discord"] });
+		const owners = {
+			...config,
+			discord: { ...validConfig.discord, agentSpeakers: "owners" },
+		};
+		expect((await checkAccess(project(owners))).status).toBe("ok");
 	});
 
 	test("says how many owners there are and that the 0.8 form is deprecated", async () => {

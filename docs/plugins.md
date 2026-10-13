@@ -368,6 +368,8 @@ It does not make the guest's turn safe to run after the owner's: once the owner'
 It applies to the agents' channels and groups only; other conversations keep deciding by their persona.
 The default `"everyone"` is the 0.8 and 0.9 behavior.
 
+`discord: { agentSpeakers: "owners" }` (or the same key in `discord({ ... })`) limits who the agents answer: in the agents' and groups' channels only an owner-tier speaker starts a turn, and a message from an admin or member gets no reply and no turn. The default `"everyone"` answers every speaker the access rules admit. An outside webhook's post in an agent's channel is a report turn either way. Scheduled turns and delegated-work reports started for a non-owner are skipped the same way. Under `"owners"` a member's message can still reach an owner's turn as channel context. Use it on a host whose `access.admins` or `access.members` admit Discord: a non-owner turn runs in the agent's home session, shared with the owners, so it can read earlier owner conversation and shell output and leaves history that owner turns inherit. `roundtable doctor` warns about that combination.
+
 ## Principals and access
 
 A principal is the person the host serves; an identity is an account or credential linked to that person.

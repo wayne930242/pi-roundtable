@@ -39,6 +39,12 @@ export interface DiscordConfig {
 	 */
 	agentMemory?: "everyone" | "owners";
 	/**
+	 * Who may talk to the agents in their channels and groups' channels: `"everyone"` (default)
+	 * lets every speaker the access rules admit, `"owners"` only the owners, so a member's message
+	 * there starts no turn. An outside webhook's post in an agent's channel is reported as before.
+	 */
+	agentSpeakers?: "everyone" | "owners";
+	/**
 	 * What a turn addressed to the assistant in a server channel reads of the messages posted there
 	 * since its last post, mentions or not; on with the defaults when left out. `false` turns it off
 	 * for the agent server and every plugin's claim.
@@ -67,6 +73,7 @@ export interface ResolvedDiscord {
 	admin: boolean;
 	refusalHint?: string;
 	agentMemory?: "everyone" | "owners";
+	agentSpeakers?: "everyone" | "owners";
 	/** As configured: `{}` when left out, so the defaults apply, or `false`. */
 	channelContext: NonNullable<DiscordConfig["channelContext"]>;
 	freshMarker?: string | false;
@@ -90,6 +97,9 @@ export function resolvedDiscord(
 		...(discord.agentMemory === undefined
 			? {}
 			: { agentMemory: discord.agentMemory }),
+		...(discord.agentSpeakers === undefined
+			? {}
+			: { agentSpeakers: discord.agentSpeakers }),
 		channelContext: discord.channelContext ?? {},
 		...(discord.freshMarker === undefined
 			? {}
@@ -116,6 +126,7 @@ export const discordShape = shape({
 	admin: optional(bool),
 	refusalHint: optional(text),
 	agentMemory: optional(oneOf<"everyone" | "owners">("everyone", "owners")),
+	agentSpeakers: optional(oneOf<"everyone" | "owners">("everyone", "owners")),
 	channelContext: optional(orOff(channelContextShape)),
 	freshMarker: optional(orOff(text)),
 	cardGraceSeconds: optional(integer(1, 86_400)),

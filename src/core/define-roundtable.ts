@@ -200,6 +200,7 @@ function discordAssembly(
 			shellUser: userInfo().username,
 			prompts: { shared: sharedPrompt, guest },
 			...(discord.agentMemory ? { memory: discord.agentMemory } : {}),
+			...(discord.agentSpeakers ? { speakers: discord.agentSpeakers } : {}),
 			avatarListener: "public",
 			// resolveConfig refuses Discord without a public address.
 			avatarUrl: config.http?.publicUrl ?? "",

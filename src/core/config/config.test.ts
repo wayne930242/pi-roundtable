@@ -212,6 +212,22 @@ describe("the addon switches", () => {
 		).toContain("agentMemory");
 	});
 
+	test("discord.agentSpeakers is everyone by default, owners when asked, and nothing else", () => {
+		expect(resolveConfig(minimal).discord?.agentSpeakers).toBeUndefined();
+		expect(
+			resolveConfig({
+				...minimal,
+				discord: { ...discord, agentSpeakers: "owners" },
+			}).discord?.agentSpeakers,
+		).toBe("owners");
+		expect(
+			refused({
+				...minimal,
+				discord: { ...discord, agentSpeakers: "members" },
+			}),
+		).toContain("agentSpeakers");
+	});
+
 	test("turn each addon off, and keep skills' directories when they are on", () => {
 		const off = resolveConfig({
 			...minimal,
