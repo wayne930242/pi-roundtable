@@ -155,7 +155,9 @@ describeDb("the join notice", () => {
 		expect(await joins.send(event("n", "rt-n"))).toBe("unconfirmed");
 		fake.breakNetwork(false);
 		expect(
-			(await sql`SELECT outcome FROM line_notices WHERE webhook_event_id = 'n'`)[0],
+			(
+				await sql`SELECT outcome FROM line_notices WHERE webhook_event_id = 'n'`
+			)[0],
 		).toMatchObject({ outcome: "attempting" });
 		const replies = fake.replies.length;
 		expect(await joins.send(event("n", "rt-n"))).toBe("unconfirmed");

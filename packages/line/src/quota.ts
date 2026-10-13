@@ -123,7 +123,9 @@ export class QuotaGate {
 				this.#lastUsed === undefined ? 0 : Math.max(0, used - this.#lastUsed);
 			this.#lastUsed = used;
 			const counted = [...this.#reservations]
-				.filter(([, state]) => state.settledAt !== undefined && state.settledAt <= at)
+				.filter(
+					([, state]) => state.settledAt !== undefined && state.settledAt <= at,
+				)
 				.sort(([, a], [, b]) => (a.settledAt ?? 0) - (b.settledAt ?? 0));
 			for (const [reservation, state] of counted) {
 				const take = Math.min(grown, state.unseen);
@@ -176,7 +178,10 @@ export class QuotaGate {
 	#expire(): void {
 		const now = this.#now().getTime();
 		for (const [reservation, state] of this.#reservations)
-			if (state.settledAt !== undefined && now - state.settledAt >= this.#holdMs)
+			if (
+				state.settledAt !== undefined &&
+				now - state.settledAt >= this.#holdMs
+			)
 				this.#reservations.delete(reservation);
 	}
 

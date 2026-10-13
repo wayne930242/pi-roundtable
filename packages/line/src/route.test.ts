@@ -103,10 +103,7 @@ describeDb("routing through the consumer", () => {
 			payload: parsed.raw,
 			attempt: 1,
 		};
-		return consumer.processorFor(answer)(
-			inbox,
-			new AbortController().signal,
-		);
+		return consumer.processorFor(answer)(inbox, new AbortController().signal);
 	};
 
 	beforeEach(async () => {
