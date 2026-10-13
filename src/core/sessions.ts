@@ -2,6 +2,7 @@ import type { ExtensionFactory } from "@earendil-works/pi-coding-agent";
 import { PluginError } from "./errors.ts";
 import type { Principal } from "./identity/principal-store.ts";
 import type { OwnerIdentity } from "./identity.ts";
+import type { ApprovedBy } from "./interactions/prompts.ts";
 import type { Speaker } from "./speakers.ts";
 
 /** `<surface>:<channel id>`, for example `discord:1234`. A DM is one channel. */
@@ -98,6 +99,12 @@ export interface SessionContext {
 	 * method, which reads as undefined.
 	 */
 	origin?(): string | undefined;
+	/**
+	 * Who approved the held call whose tool call has this id, while it runs; undefined for a call
+	 * that ran without a hold or whose approver the surface did not name. A context built before
+	 * this method has none, which reads as undefined.
+	 */
+	approvedBy?(toolCallId: string): ApprovedBy | undefined;
 	/** Runs a task beside this session, under its confirmation gate. */
 	runTask(task: TransientTask): Promise<string>;
 }

@@ -75,6 +75,8 @@
 			"Approval",
 			"ApprovalDetails",
 			"ApprovalFile",
+			"ApprovalOptions",
+			"ApprovedBy",
 			"AskOption",
 			"AttachmentFailure",
 			"AttachmentPort",

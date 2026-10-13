@@ -37,9 +37,43 @@ export interface ApprovalDetails {
 	files?: ApprovalFile[];
 }
 
-/** An answer given on a prompt after its turn stopped waiting; `by` names who gave it. */
+/**
+ * Who approved a held call: the principal, the identity they answered with as `Speaker.id`, and
+ * the name that identity goes by. A surface reports it when it knows it; a held call's `run`
+ * reads it as `ToolTurn.approvedBy`.
+ */
+export interface ApprovedBy {
+	principalId: string;
+	speakerId: string;
+	name: string;
+}
+
+/**
+ * What a held call's approval is asked with besides its text: who may approve it, and where to
+ * hear who did.
+ */
+export interface ApprovalOptions {
+	/**
+	 * The principal ids that may approve this call instead of the scope's speaker. Given in a
+	 * conversation that escalates to the owners, the speaker may not approve it unless named, and
+	 * each named principal needs the call's tier when they answer; the owners may still approve it.
+	 * An empty list leaves the owners alone. A private conversation ignores it: its person is the
+	 * only one who answers.
+	 */
+	approvers?: readonly string[];
+	/**
+	 * Called with who approved the call, before the approval resolves `approved`; not called for a
+	 * refusal, or by a surface that does not know who answered.
+	 */
+	approvedBy?(by: ApprovedBy): void;
+}
+
+/**
+ * An answer given on a prompt after its turn stopped waiting; `by` names who gave it. An approval
+ * names the approver too, where the surface knows them.
+ */
 export type LateAnswer = { by: string } & (
-	| { kind: "approval"; approved: boolean }
+	| { kind: "approval"; approved: boolean; approvedBy?: ApprovedBy }
 	| { kind: "question"; answer: OwnerAnswer }
 );
 
@@ -106,6 +140,12 @@ export interface PromptScope {
 	 * an approval comes back `unavailable` at once.
 	 */
 	escalate: "owners" | "none";
+	/**
+	 * The principal ids that may approve the call being asked instead of the speaker, as
+	 * `ApprovalOptions.approvers` gave them; a surface that serves one call at a time reads them
+	 * here. Absent when the call names none, and ignored where `escalate` is `none`.
+	 */
+	approvers?: readonly string[];
 }
 
 /**
@@ -119,7 +159,8 @@ export interface Prompts {
 	 * tier the scope's speaker needs to approve it themselves, `owner` when absent; below it the
 	 * prompt goes to the owners, or, when the scope escalates to no one, resolves `expired` at once.
 	 * `pending` comes only with a `wait`. `details` is the approval as data beside `message`, its
-	 * text; a surface that shows text only ignores it.
+	 * text; a surface that shows text only ignores it. `options` says who else may approve it and
+	 * hears who did; see `ApprovalOptions`.
 	 */
 	confirm(
 		title: string,
@@ -128,6 +169,7 @@ export interface Prompts {
 		minTier?: Tier,
 		wait?: PromptWait,
 		details?: ApprovalDetails,
+		options?: ApprovalOptions,
 	): Promise<Approval>;
 	/**
 	 * Asks a question; undefined when no one answered it or it was cancelled, and `pending`, only

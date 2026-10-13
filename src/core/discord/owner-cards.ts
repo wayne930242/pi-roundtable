@@ -24,11 +24,7 @@ import {
 	type CardAudienceOptions,
 	CardAudiences,
 } from "./card-audience.ts";
-import {
-	DiscordOwners,
-	type DiscordUser,
-	discordUser,
-} from "./discord-owners.ts";
+import { DiscordOwners, discordUser } from "./discord-owners.ts";
 import type { InteractionModule } from "./interaction-module.ts";
 import {
 	answeredLine,
@@ -39,35 +35,24 @@ import {
 	type Rows,
 	TEXT_FIELD,
 } from "./owner-card-rows.ts";
+import type {
+	Answerer,
+	CardChannel,
+	CardMessage,
+	CardPayload,
+	LateTurn,
+	OpenCard,
+} from "./owner-card-types.ts";
 import { ownerPanel, type PanelContent } from "./owner-panel.ts";
 
+export type {
+	CardChannel,
+	CardPayload,
+	LateTurn,
+} from "./owner-card-types.ts";
 export { CARD_PREFIX };
 /** How long a turn that can be resumed waits on its card before it goes on without the answer. */
 export const CARD_GRACE_MS = 2 * 60_000;
-
-/** A card's message: the panel, led in a thread by a mention of those it is for. */
-export type CardPayload = Omit<
-	ReturnType<typeof ownerPanel>,
-	"components" | "allowedMentions"
-> & {
-	components: (
-		| ReturnType<typeof ownerPanel>["components"][number]
-		| TextDisplayBuilder
-	)[];
-	allowedMentions: { parse?: never[]; users?: string[] };
-};
-
-/** The posted card, which is edited to show how it ended. */
-export interface CardMessage {
-	edit(payload: CardPayload): Promise<unknown>;
-}
-
-/** Where a channel's cards are posted. */
-export interface CardChannel {
-	send(payload: CardPayload): Promise<CardMessage>;
-	/** A thread, where those a card is for are mentioned so they hear of it; a channel mentions no one. */
-	thread?: boolean;
-}
 
 export interface OwnerCardsOptions {
 	/** The primary owner's Discord user id. */
@@ -90,47 +75,6 @@ export interface OwnerCardsOptions {
 	 * answered. Without it no turn stops waiting on its cards.
 	 */
 	resume?(turn: LateTurn): void;
-}
-
-/** A turn a card answered after its turn stopped waiting starts, as a message in its channel. */
-export interface LateTurn {
-	channelId: string;
-	/** The card's message, which the turn's message stands for. */
-	messageId: string;
-	/** Who answered. */
-	user: DiscordUser;
-	/** The server the channel belongs to; absent in a direct message. */
-	guildId?: string;
-	isDirect: boolean;
-	text: string;
-}
-
-/** Where and by whom a card was answered. */
-interface Answerer {
-	user: DiscordUser;
-	messageId?: string;
-	guildId?: string;
-	isDirect: boolean;
-}
-
-/** One open card: how it looks, and how it ends. */
-interface OpenCard {
-	title: string;
-	sections: string[];
-	/** The card's controls, disabled once it has ended. */
-	rows(disabled: boolean): Rows;
-	/**
-	 * Ends the card with its answer; the answering interaction shows the outcome. A card whose
-	 * turn stopped waiting starts a turn with the answer instead.
-	 */
-	end(value: unknown, by: Answerer): void;
-	question?: OwnerQuestion;
-	/** Options chosen together with "Other…", kept while its form is open. */
-	picked?: string[];
-	/** Posted in a thread, so it leads with the mention of who may answer. */
-	mention?: boolean;
-	/** Who may answer, and what to tell someone else who presses it. */
-	audience: Audience;
 }
 
 /**
@@ -164,8 +108,21 @@ export class OwnerCards implements InteractionModule {
 	prompts(channel: ChannelKey, scope?: PromptScope): Prompts | undefined {
 		const channelId = parseChannelKey(channel).id;
 		return {
-			confirm: async (title, message, signal, minTier = "owner", wait) => {
-				const audience = await this.#audiences.approval(scope, minTier);
+			confirm: async (
+				title,
+				message,
+				signal,
+				minTier = "owner",
+				wait,
+				_details,
+				options,
+			) => {
+				const audience = await this.#audiences.approval(
+					scope && options?.approvers
+						? { ...scope, approvers: options.approvers }
+						: scope,
+					minTier,
+				);
 				// A private conversation's call above its person's tier is no one's to approve.
 				if (!audience) return "unavailable";
 				return this.#post<Approval>(
@@ -183,8 +140,16 @@ export class OwnerCards implements InteractionModule {
 											wait.late({
 												kind: "approval",
 												approved: value === "approved",
-												by,
+												by: by.user.name,
+												...(by.approver ? { approvedBy: by.approver } : {}),
 											}),
+									},
+								}
+							: {}),
+						...(options?.approvedBy
+							? {
+									approved: (by: Answerer) => {
+										if (by.approver) options.approvedBy?.(by.approver);
 									},
 								}
 							: {}),
@@ -228,7 +193,7 @@ export class OwnerCards implements InteractionModule {
 											wait.late({
 												kind: "question",
 												answer: value as OwnerAnswer,
-												by,
+												by: by.user.name,
 											}),
 									},
 								}
@@ -262,8 +227,10 @@ export class OwnerCards implements InteractionModule {
 			footer: string;
 			wait?: {
 				pending: T;
-				late(value: unknown, by: string): ReturnType<PromptWait["late"]>;
+				late(value: unknown, by: Answerer): ReturnType<PromptWait["late"]>;
 			};
+			/** Hears who approved the card, before it resolves approved in its turn. */
+			approved?(by: Answerer): void;
 		},
 	): Promise<T> {
 		const { logger, graceMs = CARD_GRACE_MS, resume } = this.#options;
@@ -323,10 +290,11 @@ export class OwnerCards implements InteractionModule {
 				audience: card.audience,
 				end: (value, by) => {
 					const answeredLate = late;
+					if (value === "approved" && !answeredLate) card.approved?.(by);
 					settle(value as T, undefined);
 					if (!answeredLate || !wait || !resume) return;
 					try {
-						const text = wait.late(value, by.user.name);
+						const text = wait.late(value, by);
 						if (text === undefined) return;
 						resume({
 							channelId,
@@ -429,7 +397,19 @@ export class OwnerCards implements InteractionModule {
 			);
 		if (interaction.isButton() && (action === "yes" || action === "no")) {
 			const approved = action === "yes";
-			card.end(approved ? "approved" : "declined", by);
+			const approver = approved
+				? await card.audience.approver?.(user).catch((error: unknown) => {
+						this.#options.logger.warn(
+							{ err: error },
+							"could not tell who approved; the call runs without an approver",
+						);
+						return undefined;
+					})
+				: undefined;
+			card.end(
+				approved ? "approved" : "declined",
+				approver ? { ...by, approver } : by,
+			);
 			await interaction.update(
 				closed(approved ? messages().cardApproved : messages().cardDeclined),
 			);

@@ -1,4 +1,3 @@
-import type { ExtensionFactory } from "@earendil-works/pi-coding-agent";
 import type { ToolTurn } from "../../define.ts";
 import type {
 	HeldCall,
@@ -14,25 +13,24 @@ import {
 } from "../../holds.ts";
 import { messages } from "../../i18n/index.ts";
 import { type OwnerIdentity, ownerWords } from "../../identity.ts";
-import type { LateAnswer, Prompts } from "../../interactions/prompts.ts";
+import type {
+	ApprovalOptions,
+	ApprovedBy,
+	LateAnswer,
+	Prompts,
+} from "../../interactions/prompts.ts";
 import type { Speaker } from "../../speakers.ts";
 import type { ToolTiers } from "../../tool-tiers.ts";
-import type { PromptSlot } from "../prompt-slot.ts";
 import { approvalCard, approvalDetails } from "./approval-card.ts";
+import { canonicalJson, unexpired } from "./held-calls.ts";
 
-/** Held actions older than this cannot be approved any more. */
-export const CONFIRMATION_TTL_MS = 24 * 3_600_000;
-
-/** The held actions when they can still be approved at `now`; expired ones count as none. */
-export function unexpired(
-	pending: PendingConfirmation | undefined,
-	now = new Date(),
-): PendingConfirmation | undefined {
-	if (!pending) return undefined;
-	return now.getTime() - pending.heldAt.getTime() > CONFIRMATION_TTL_MS
-		? undefined
-		: pending;
-}
+export { confirmationGateExtension } from "./confirmation-gate-extension.ts";
+export {
+	CONFIRMATION_TTL_MS,
+	canonicalJson,
+	confirmedTurnText,
+	unexpired,
+} from "./held-calls.ts";
 
 /** The turn a hold that looks things up sees; see `HoldRule.describeInTurn`. */
 export interface HoldTurn {
@@ -48,33 +46,23 @@ const STOPPED = Symbol("stopped");
 /** What waiting for a call's description comes to: its text, or the turn stopped first. */
 type Described = string | undefined | typeof STOPPED;
 
-/** JSON with object keys sorted at every level, so equal inputs compare equal. */
-// pi-lens-ignore: no-unknown-parameters — tool input is untyped model JSON; this is where it is read
-export function canonicalJson(value: unknown): string {
-	// pi-lens-ignore: no-unknown-parameters — tool input is untyped model JSON; this is where it is read
-	return JSON.stringify(value, (_key, v: unknown) =>
-		isPlainObject(v) ? withSortedKeys(v) : v,
-	);
+/** A held call's description with who may approve it instead of the speaker; see `HoldRule.approversInTurn`. */
+type Judged =
+	| { action: string; approvers?: readonly string[] }
+	| undefined
+	| typeof STOPPED;
+
+/** The speaker of a turn as the gate records them; `name` is what an approval by their message is attributed to. */
+type SpeakerRef = Pick<Speaker, "id" | "principalId"> & { name?: string };
+
+/** A call an approval released, and who gave it, when that is known. */
+interface Release {
+	call: HeldCall;
+	by?: ApprovedBy;
 }
 
-// pi-lens-ignore: no-unknown-parameters — tool input is untyped model JSON; this is where it is read
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-	return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
-
-/** The same object with its keys in code-unit order. */
-function withSortedKeys(
-	value: Record<string, unknown>,
-): Record<string, unknown> {
-	return Object.fromEntries(
-		Object.entries(value).sort(([a], [b]) => byCodeUnit(a, b)),
-	);
-}
-
-function byCodeUnit(a: string, b: string): number {
-	if (a < b) return -1;
-	return a > b ? 1 : 0;
-}
+/** What a call needs of the gate: nothing, a hold, or a release that spends an approval. */
+type Needing = { held: HeldCall } | { released: ApprovedBy | undefined };
 
 /**
  * Per-channel state of held actions. With the owner's prompts bound, a call that needs their
@@ -86,12 +74,14 @@ function byCodeUnit(a: string, b: string): number {
 // pi-lens-ignore: large-class — one gate per conversation; its state is the held calls and their approvals
 export class ConfirmationGate {
 	#selectionId: string | undefined;
-	/** The running turn's speaker, whom the actions it holds belong to. */
-	#speaker: Pick<Speaker, "id" | "principalId"> | undefined;
+	/** The running turn's speaker, whom the actions it holds belong to, and who approves those a message confirmed. */
+	#speaker: SpeakerRef | undefined;
 	#pending: PendingConfirmation | undefined;
-	#approved: HeldCall[] = [];
+	#approved: Release[] = [];
 	/** Calls approved on their cards after the turn that asked stopped waiting; each runs once, in any turn. */
-	#lateApproved: HeldCall[] = [];
+	#lateApproved: Release[] = [];
+	/** Who approved each call that is running, by tool call id, until its result is back. */
+	readonly #approvers = new Map<string, ApprovedBy>();
 	readonly #holds: HoldCheck;
 	readonly #owner: OwnerIdentity;
 	/** Whom the running turn's held actions and refusals speak of: the turn's speaker. */
@@ -140,29 +130,60 @@ export class ConfirmationGate {
 	/**
 	 * `addressee` is who the turn is for; without one, the owner. `speaker` is who spoke the turn,
 	 * recorded with what it holds by their id and principal; without one, only the owners may
-	 * approve them.
+	 * approve them. When `confirmed`, the speaker's message approved the held calls, and they are
+	 * the approver the calls' `run` sees.
 	 */
 	beginTurn(
 		selectionId: string,
 		confirmed: boolean,
 		addressee?: OwnerIdentity,
-		speaker?: Pick<Speaker, "id" | "principalId">,
+		speaker?: SpeakerRef,
 	): void {
 		this.#selectionId = selectionId;
 		this.#speaker = speaker;
 		this.#addressee = addressee ?? this.#owner;
-		this.#approved = confirmed ? [...(this.pending()?.calls ?? [])] : [];
+		const by = speaker
+			? {
+					principalId: speaker.principalId,
+					speakerId: speaker.id,
+					name: speaker.name ?? speaker.id,
+				}
+			: undefined;
+		this.#approved = confirmed
+			? (this.pending()?.calls ?? []).map((call) => ({
+					call,
+					...(by ? { by } : {}),
+				}))
+			: [];
 		this.#pending = undefined;
 	}
 
 	endTurn(): void {
 		this.#approved = [];
+		this.#approvers.clear();
+	}
+
+	/** Who approved the held call running under this tool call id; undefined when it was not held or they are unknown. */
+	approvedBy(toolCallId: string): ApprovedBy | undefined {
+		return this.#approvers.get(toolCallId);
+	}
+
+	/** Notes who approved the call running under a tool call id, for its `run` to read. */
+	grant(toolCallId: string, by: ApprovedBy): void {
+		this.#approvers.set(toolCallId, by);
+	}
+
+	/** Forgets who approved a tool call, once its result is back. */
+	finish(toolCallId: string): void {
+		this.#approvers.delete(toolCallId);
 	}
 
 	/** Returns the reason a call is held, or undefined to let it run. */
 	hold(tool: string, input: Record<string, unknown>): string | undefined {
-		const call = this.#needing(tool, input);
-		return call ? this.#record(call) : undefined;
+		const needing = this.#needing(tool, input);
+		return needing && "held" in needing
+			? this.#record(needing.held)
+			: undefined;
 	}
 
 	/**
@@ -193,14 +214,26 @@ export class ConfirmationGate {
 	): Promise<{
 		reason?: string;
 		approvedOnCard?: true;
+		/** Who approved the call, when it was held and a surface or a confirming message said who. */
+		approvedBy?: ApprovedBy;
 		/** Why a hold refused the call, for a surface that tells that from a failure; absent when it ran or the turn stopped. */
 		refused?: HoldRefusal;
 	}> {
 		const found = this.#needingIn(tool, input, turn);
-		const call = isPromise(found) ? await found : found;
-		if (call === STOPPED) return { reason: "The turn was stopped." };
-		if (!call) return {};
+		const needing = isPromise(found) ? await found : found;
+		if (needing === STOPPED) return { reason: "The turn was stopped." };
+		if (!needing) return {};
+		if ("released" in needing)
+			return needing.released ? { approvedBy: needing.released } : {};
+		const call = needing.held;
 		if (!ask) return { reason: this.#record(call), refused: "held" };
+		let approvedBy: ApprovedBy | undefined;
+		const options: ApprovalOptions = {
+			...(call.approverIds ? { approvers: call.approverIds } : {}),
+			approvedBy: (by) => {
+				approvedBy = by;
+			},
+		};
 		const answer = await ask.prompts.confirm(
 			messages().confirmTitle(ask.asker),
 			approvalCard(call, this.#fileRoot),
@@ -208,8 +241,10 @@ export class ConfirmationGate {
 			higherTier(this.#tiers?.minTier(call.tool), call.minTier),
 			{ late: (late) => this.#late(call, late) },
 			approvalDetails(call, this.#fileRoot),
+			options,
 		);
-		if (answer === "approved") return { approvedOnCard: true };
+		if (answer === "approved")
+			return { approvedOnCard: true, ...(approvedBy ? { approvedBy } : {}) };
 		if (answer === "pending") {
 			const o = ownerWords(this.#addressee);
 			return {
@@ -239,14 +274,17 @@ export class ConfirmationGate {
 		if (late.kind !== "approval") return undefined;
 		if (!late.approved)
 			return `(${late.by} declined on its card the action you were waiting on: it would ${call.action}. It did not run; do not make the call again. Go on without it, or ask what ${late.by} wants instead.)`;
-		this.#lateApproved.push(call);
+		this.#lateApproved.push({
+			call,
+			...(late.approvedBy ? { by: late.approvedBy } : {}),
+		});
 		return `(${late.by} approved on its card the action you were waiting on: it would ${call.action}. Make this call now with exactly this input, and it runs once; then report its result.)\n- ${call.tool} ${call.input}`;
 	}
 
-	/** The call when it needs the owner's confirmation and no approval releases it. */
-	#needing(tool: string, input: Record<string, unknown>): HeldCall | undefined {
+	/** What a call needs when a rule holds it; undefined when none does. */
+	#needing(tool: string, input: Record<string, unknown>): Needing | undefined {
 		const action = this.#holds(tool, input, this.#context);
-		return action ? this.#unlessApproved(tool, input, action) : undefined;
+		return action ? this.#unlessApproved(tool, input, { action }) : undefined;
 	}
 
 	/**
@@ -259,10 +297,10 @@ export class ConfirmationGate {
 		input: Record<string, unknown>,
 		turn: HoldTurn | undefined,
 	):
-		| HeldCall
+		| Needing
 		| undefined
 		| typeof STOPPED
-		| Promise<HeldCall | undefined | typeof STOPPED> {
+		| Promise<Needing | undefined | typeof STOPPED> {
 		const inTurn = this.#holds.inTurn;
 		if (!turn || !inTurn) return this.#needing(tool, input);
 		const controller = new AbortController();
@@ -280,42 +318,101 @@ export class ConfirmationGate {
 			answer = messages().holdGeneric(tool);
 		}
 		const described: Described | Promise<Described> = isPromise(answer)
-			? this.#awaited(answer, tool, controller, turn.signal)
+			? this.#awaited(
+					answer,
+					messages().holdGeneric(tool),
+					controller,
+					turn.signal,
+				)
 			: answer;
-		return this.#inOrder(described, (action) => {
-			if (action === STOPPED) return STOPPED;
-			return action ? this.#unlessApproved(tool, input, action) : undefined;
-		});
+		return this.#inOrder(
+			this.#judged(described, tool, input, turn),
+			(judged) => {
+				if (judged === STOPPED) return STOPPED;
+				return judged ? this.#unlessApproved(tool, input, judged) : undefined;
+			},
+		);
 	}
 
 	/**
-	 * What a hold that answers later comes to: its text; the generic description when it rejects or
-	 * outlasts the timeout, so the call is still held; `STOPPED` when the turn stops first. Whatever
-	 * the hold is still doing is aborted when the wait ends.
+	 * A description joined by the approvers the holds name for a call they hold, looked up as the
+	 * turn with the same wait as the description; a lookup that rejects or outlasts the timeout names
+	 * none, so only the owners approve the call. A call no rule holds asks no one.
 	 */
-	#awaited(
-		answer: Promise<string | undefined>,
+	#judged(
+		described: Described | Promise<Described>,
 		tool: string,
-		hold: AbortController,
-		stop: AbortSignal | undefined,
-	): Promise<Described> {
-		return new Promise<Described>((resolve) => {
-			const onStop = () => end(STOPPED);
-			const timer = setTimeout(
-				() => end(messages().holdGeneric(tool)),
-				this.#describeTimeoutMs,
+		input: Record<string, unknown>,
+		turn: HoldTurn,
+	): Judged | Promise<Judged> {
+		const lookup = this.#holds.approversInTurn;
+		if (!lookup) return this.#withoutApprovers(described);
+		const join = (action: Described): Judged | Promise<Judged> => {
+			if (action === STOPPED || action === undefined) return action;
+			const controller = new AbortController();
+			if (turn.signal?.aborted) controller.abort();
+			let named:
+				| readonly string[]
+				| undefined
+				| Promise<readonly string[] | undefined>;
+			try {
+				named = lookup.call(
+					this.#holds,
+					tool,
+					input,
+					this.#context,
+					turn.toolTurn(controller.signal),
+				);
+			} catch {
+				named = [];
+			}
+			if (!isPromise(named)) {
+				controller.abort();
+				return named ? { action, approvers: named } : { action };
+			}
+			return this.#awaited(named, [], controller, turn.signal).then(
+				(approvers) => {
+					if (approvers === STOPPED) return STOPPED;
+					return approvers ? { action, approvers } : { action };
+				},
 			);
+		};
+		return isPromise(described) ? described.then(join) : join(described);
+	}
+
+	#withoutApprovers(
+		described: Described | Promise<Described>,
+	): Judged | Promise<Judged> {
+		const wrap = (action: Described): Judged =>
+			action === STOPPED || action === undefined ? action : { action };
+		return isPromise(described) ? described.then(wrap) : wrap(described);
+	}
+
+	/**
+	 * What a lookup that answers later comes to: its answer; `fallback` when it rejects or outlasts
+	 * the timeout; `STOPPED` when the turn stops first. Whatever the lookup is still doing is
+	 * aborted when the wait ends.
+	 */
+	#awaited<T>(
+		answer: Promise<T>,
+		fallback: T,
+		lookup: AbortController,
+		stop: AbortSignal | undefined,
+	): Promise<T | typeof STOPPED> {
+		return new Promise((resolve) => {
+			const onStop = () => end(STOPPED);
+			const timer = setTimeout(() => end(fallback), this.#describeTimeoutMs);
 			let ended = false;
-			const end = (described: Described) => {
+			const end = (found: T | typeof STOPPED) => {
 				if (ended) return;
 				ended = true;
 				clearTimeout(timer);
 				stop?.removeEventListener("abort", onStop);
-				hold.abort();
-				resolve(described);
+				lookup.abort();
+				resolve(found);
 			};
 			// Handled first, so a rejection after the wait ended is never left unhandled.
-			answer.then(end, () => end(messages().holdGeneric(tool)));
+			answer.then(end, () => end(fallback));
 			if (stop?.aborted) return end(STOPPED);
 			stop?.addEventListener("abort", onStop, { once: true });
 		});
@@ -344,29 +441,31 @@ export class ConfirmationGate {
 		return used;
 	}
 
-	/** The call for `action`, unless an approval releases it, which that approval then spends. */
+	/**
+	 * The call for a description, unless an approval releases it, which that approval then spends
+	 * and whose approver the release names.
+	 */
 	#unlessApproved(
 		tool: string,
 		input: Record<string, unknown>,
-		action: string,
-	): HeldCall | undefined {
+		judged: { action: string; approvers?: readonly string[] },
+	): Needing {
 		const minTier = this.#holds.approvalTier?.(tool, input, this.#context);
 		const call: HeldCall = {
 			tool,
 			input: canonicalJson(input),
-			action,
+			action: judged.action,
 			...(minTier ? { minTier } : {}),
+			...(judged.approvers ? { approverIds: [...judged.approvers] } : {}),
 		};
 		for (const released of [this.#approved, this.#lateApproved]) {
 			const approved = released.findIndex(
-				(c) => c.tool === call.tool && c.input === call.input,
+				(r) => r.call.tool === call.tool && r.call.input === call.input,
 			);
-			if (approved !== -1) {
-				released.splice(approved, 1);
-				return undefined;
-			}
+			const [spent] = approved === -1 ? [] : released.splice(approved, 1);
+			if (spent) return { released: spent.by };
 		}
-		return call;
+		return { held: call };
 	}
 
 	#record(call: HeldCall): string {
@@ -392,60 +491,4 @@ export class ConfirmationGate {
 		const o = ownerWords(this.#addressee);
 		return `Held for ${o.name}'s confirmation: this would ${call.action}. Do not retry it in this turn. Tell ${o.him} exactly what will happen and ask ${o.him} to confirm; once ${o.he} agrees in ${o.his} next message, make the same call with the same input and it runs.`;
 	}
-}
-
-/** The owner's approving message, preceded by the held calls it releases, so the model makes them again. */
-export function confirmedTurnText(
-	pending: PendingConfirmation,
-	text: string,
-	owner: OwnerIdentity,
-): string {
-	const calls = pending.calls
-		.map((call) => `- ${call.action}: ${call.tool} ${call.input}`)
-		.join("\n");
-	return `(${owner.name} approved the held actions below with this message. Make each call now with exactly this input.)\n${calls}\n\n${text}`;
-}
-
-/**
- * Without a slot, or with an empty one, every call that needs confirmation is held. `turnOf` builds
- * the turn a hold that looks things up receives; without it, such a hold is not asked in a turn.
- */
-export function confirmationGateExtension(
-	gate: ConfirmationGate,
-	slot?: PromptSlot,
-	turnOf?: (signal: AbortSignal) => ToolTurn,
-): ExtensionFactory {
-	return (pi) => {
-		/** Calls a card's approval released, until their results are back. */
-		const approved = new Set<string>();
-		pi.on("tool_result", (event) => {
-			if (!approved.delete(event.toolCallId)) return undefined;
-			const outcome = event.isError
-				? "It was approved on its card and ran, but it failed:"
-				: "It was approved on its card and ran; its result follows.";
-			return {
-				content: [{ type: "text", text: outcome }, ...event.content],
-			};
-		});
-		pi.on("tool_call", async (event, ctx) => {
-			const prompts = slot?.prompts;
-			let ask: Parameters<ConfirmationGate["review"]>[2];
-			if (prompts && slot) {
-				ask = { prompts, asker: slot.asker };
-				if (ctx.signal) ask.signal = ctx.signal;
-			}
-			const turn: HoldTurn | undefined = turnOf
-				? { toolTurn: turnOf, ...(ctx.signal ? { signal: ctx.signal } : {}) }
-				: undefined;
-			const { reason, approvedOnCard, refused } = await gate.decide(
-				event.toolName,
-				event.input as Record<string, unknown>,
-				ask,
-				turn,
-			);
-			if (approvedOnCard) approved.add(event.toolCallId);
-			if (refused) slot?.refuse(event.toolCallId, refused);
-			return reason ? { block: true, reason } : undefined;
-		});
-	};
 }

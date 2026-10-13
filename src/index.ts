@@ -167,6 +167,8 @@ export type {
 	Approval,
 	ApprovalDetails,
 	ApprovalFile,
+	ApprovalOptions,
+	ApprovedBy,
 	AskOption,
 	LateAnswer,
 	OwnerAnswer,
