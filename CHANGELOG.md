@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `attachmentsOf(message, dir, logger, fetchImpl?, limits?)` (`pi-roundtable/kit`) takes `limits.prepareImages?: boolean` (default `true`). `false` downloads the files only, with no `modelImagesOf`: `images` is empty and an image that cannot be decoded is not reported as a failure, so a host that hands the files to the attachment store does not decode twice or report an image failure twice. Download failures are reported as before.
+
 ## [0.13.0] - 2026-10-13
 
 ### Added

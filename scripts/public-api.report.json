@@ -540,7 +540,7 @@
 		"src/core/attachments/square-png.d.ts#SquarePngOptions": "interface SquarePngOptions {\n    \n    size?: number;\n    \n    maxBytes?: number;\n    \n    maxSide?: number;\n}",
 		"src/core/attachments/tool-attachment.d.ts#ToolAttachment": "interface ToolAttachment {\n    \n    file: string;\n    \n    name: string;\n    contentType: string;\n    size: number;\n    \n    bytes(): Promise<Uint8Array>;\n}",
 		"src/core/attachments/tool-attachment.d.ts#ToolAttachmentInfo": "interface ToolAttachmentInfo {\n    \n    file: string;\n    \n    name: string;\n    contentType: string;\n    size: number;\n    \n    addedAt: string;\n}",
-		"src/core/attachments/turn-attachments.d.ts#attachmentsOf": "declare function attachmentsOf(message: InboundMessage, dir: string, logger: Logger, fetchImpl?: typeof fetch, limits?: {\n    deadlineMs?: number;\n    idleMs?: number;\n    signal?: AbortSignal;\n}): Promise<TurnAttachments>;",
+		"src/core/attachments/turn-attachments.d.ts#attachmentsOf": "declare function attachmentsOf(message: InboundMessage, dir: string, logger: Logger, fetchImpl?: typeof fetch, limits?: {\n    deadlineMs?: number;\n    idleMs?: number;\n    signal?: AbortSignal;\n    prepareImages?: boolean;\n}): Promise<TurnAttachments>;",
 		"src/core/builtin/agent-server.d.ts#AGENT_SERVER_PLUGIN": "declare const AGENT_SERVER_PLUGIN = \"agent-server\";",
 		"src/core/builtin/agent-server.d.ts#AGENT_TEAM_SERVICE": "declare const AGENT_TEAM_SERVICE = \"team\";",
 		"src/core/builtin/discord.d.ts#DISCORD": "declare const DISCORD: ServiceKey<DiscordServices>;",

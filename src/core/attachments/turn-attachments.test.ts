@@ -122,3 +122,75 @@ test("idleMs reaches every file: a quiet one is given up and the rest of the mes
 	]);
 	expect(result.files).toHaveLength(2);
 });
+
+const imageMessage = (): InboundMessage =>
+	({
+		messageId: "m2",
+		attachments: [
+			{
+				url: "https://example.test/broken.png",
+				name: "broken.png",
+				size: 9,
+				contentType: "image/png",
+			},
+			ref("note.txt"),
+		],
+	}) as unknown as InboundMessage;
+
+const bytes = Object.assign(async () => new Response("not a picture"), {
+	preconnect: fetch.preconnect,
+}) as unknown as typeof fetch;
+
+test("by default an image that cannot be decoded is reported as a failure", async () => {
+	const dir = mkdtempSync(join(tmpdir(), "turn-attachments-"));
+	dirs.push(dir);
+	const result = await attachmentsOf(
+		imageMessage(),
+		dir,
+		silentLogger(),
+		bytes,
+	);
+	expect(result.files).toHaveLength(2);
+	expect(result.images).toEqual([]);
+	expect(result.failures.map((failure) => failure.reason)).toEqual([
+		"the image could not be decoded",
+	]);
+});
+
+test("prepareImages: false downloads the files only: no decoding, no image failure", async () => {
+	const dir = mkdtempSync(join(tmpdir(), "turn-attachments-"));
+	dirs.push(dir);
+	const result = await attachmentsOf(
+		imageMessage(),
+		dir,
+		silentLogger(),
+		bytes,
+		{ prepareImages: false },
+	);
+	expect(result.files.map((file) => file.name)).toEqual([
+		"broken.png",
+		"note.txt",
+	]);
+	expect(result.images).toEqual([]);
+	expect(result.failures).toEqual([]);
+});
+
+test("prepareImages: false keeps a download failure", async () => {
+	const dir = mkdtempSync(join(tmpdir(), "turn-attachments-"));
+	dirs.push(dir);
+	const refused = Object.assign(
+		async () => new Response("no", { status: 404 }),
+		{
+			preconnect: fetch.preconnect,
+		},
+	) as unknown as typeof fetch;
+	const result = await attachmentsOf(
+		imageMessage(),
+		dir,
+		silentLogger(),
+		refused,
+		{ prepareImages: false },
+	);
+	expect(result.files).toEqual([]);
+	expect(result.failures).toHaveLength(2);
+});

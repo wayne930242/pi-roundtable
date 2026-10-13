@@ -23,6 +23,12 @@ export async function collectAttachments(
 		idleMs?: number;
 		/** Aborts the downloads, as the deadline does. */
 		signal?: AbortSignal;
+		/**
+		 * Whether images are decoded for the model; default true. False downloads the files only:
+		 * `images` is empty and an image that cannot be decoded is no failure, for a host that hands
+		 * the files on to something that prepares them itself.
+		 */
+		prepareImages?: boolean;
 	},
 ): Promise<TurnAttachments> {
 	const { fetchImpl, logger } = options;
@@ -57,7 +63,10 @@ export async function collectAttachments(
 	);
 	const files = [...own.files, ...referenced.files];
 	const failures = [...own.failures, ...referenced.failures];
-	const prepared = await modelImagesOf(files, logger);
+	const prepared =
+		options.prepareImages === false
+			? { images: [], failures: [] }
+			: await modelImagesOf(files, logger);
 	const images = prepared.images;
 	failures.push(...prepared.failures);
 	if (files.length > 0 || failures.length > 0) {
@@ -74,13 +83,21 @@ export async function collectAttachments(
 	return { files, images, failures };
 }
 
-/** Collects a message's attachments into `dir`, reporting the files that failed. */
+/**
+ * Collects a message's attachments into `dir`, reporting the files that failed. `prepareImages:
+ * false` downloads the files only, without decoding the images for the model.
+ */
 export function attachmentsOf(
 	message: InboundMessage,
 	dir: string,
 	logger: Logger,
 	fetchImpl?: typeof fetch,
-	limits: { deadlineMs?: number; idleMs?: number; signal?: AbortSignal } = {},
+	limits: {
+		deadlineMs?: number;
+		idleMs?: number;
+		signal?: AbortSignal;
+		prepareImages?: boolean;
+	} = {},
 ): Promise<TurnAttachments> {
 	return collectAttachments(message, dir, {
 		logger,
