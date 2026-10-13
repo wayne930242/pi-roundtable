@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+	type Context,
 	createFauxCore,
 	fauxAssistantMessage,
 	fauxText,
@@ -52,7 +53,10 @@ const DEPLOY_TURN = () => [
 async function heldHost(
 	turns: number,
 	prompts?: ChatSurface["prompts"],
-	script: () => ReturnType<typeof DEPLOY_TURN> = DEPLOY_TURN,
+	script: () => (
+		| ReturnType<typeof DEPLOY_TURN>[number]
+		| ((context: Context) => ReturnType<typeof DEPLOY_TURN>[number])
+	)[] = DEPLOY_TURN,
 ): Promise<{
 	harness: Awaited<ReturnType<typeof testPlugin>>;
 	saved: (PendingConfirmation | undefined)[];
@@ -116,6 +120,10 @@ async function heldHost(
 							},
 						},
 						prompts: deps.prompts,
+						principalOf: async (id) =>
+							id === "p_ada"
+								? { id, displayName: "Ada", disabled: false }
+								: undefined,
 					}),
 			},
 			setup: () => ({
@@ -393,6 +401,52 @@ test("a private conversation's confirming message cannot release a call that nam
 		await turn("yes, ship it", true);
 		expect(shipped).toHaveLength(0);
 		expect(saved.at(-1)?.calls[0]?.approverIds).toEqual(["p_ada"]);
+	} finally {
+		await done();
+	}
+});
+
+test("a private conversation's person who cannot approve is told so, and a yes releases nothing (RV2-F001)", async () => {
+	shipped.length = 0;
+	const seen: Context[] = [];
+	const { harness, saved, done } = await heldHost(2, undefined, () => [
+		fauxAssistantMessage([fauxToolCall("ship", { to: "acme" })], {
+			stopReason: "toolUse",
+		}),
+		(context) => {
+			seen.push(context);
+			return fauxAssistantMessage([fauxText("It needs Ada.")]);
+		},
+		(context) => {
+			seen.push(context);
+			return fauxAssistantMessage([fauxText("Understood.")]);
+		},
+	]);
+	const turn = (text: string, confirmed: boolean) =>
+		harness.turns.run({
+			channel: "fake:private",
+			kind: "helper",
+			text,
+			speaker: { ...MEMBER, principalId: "p_sam" },
+			...(confirmed ? { confirmed } : {}),
+			conversation: { visibility: "private" },
+			selection: { id: "held", tools: ["ship"], groups: [] },
+		});
+	const text = (context: Context) =>
+		JSON.stringify(context.messages.map((message) => message.content));
+	try {
+		await turn("ship to acme", false);
+		const told = text(seen[0] as Context);
+		expect(told).toContain("Ada");
+		expect(told).toContain("an owner");
+		expect(told).toContain("cannot approve it here");
+		expect(told).not.toContain("p_ada");
+		expect(told).not.toContain("make the same call");
+		await turn("yes", true);
+		expect(shipped).toHaveLength(0);
+		expect(saved.at(-1)?.calls[0]?.approverIds).toEqual(["p_ada"]);
+		// The yes was not an approval of anything, so the model is not told to make the call again.
+		expect(text(seen[1] as Context)).not.toContain("Make each call now");
 	} finally {
 		await done();
 	}

@@ -93,6 +93,12 @@ export class ConfirmationGate {
 	/** Where the session's relative file paths resolve, for the sizes a card shows. */
 	readonly #fileRoot: string | undefined;
 	readonly #describeTimeoutMs: number;
+	/** The name a principal goes by, for telling a speaker who may approve a call; undefined when unknown. */
+	readonly #nameOf:
+		| ((principalId: string) => Promise<string | undefined>)
+		| undefined;
+	/** The held calls a partial release kept, until this turn records a hold of its own. */
+	#kept: PendingConfirmation | undefined;
 	/** Settles when the descriptions asked for so far have all been used, in the order they were asked. */
 	#describing: Promise<void> = Promise.resolve();
 	/** Descriptions asked for and not used yet. */
@@ -104,6 +110,8 @@ export class ConfirmationGate {
 	 * `fileRoot` is the session's working directory, where a card resolves relative file paths;
 	 * it defaults to the workspace. A hold that looks things up gets `describeTimeoutMs` to answer
 	 * (`HOLD_DESCRIBE_TIMEOUT_MS` by default) before its call is held under a generic description.
+	 * `nameOf` gives the name of a principal a call names as an approver, which the text a speaker
+	 * who cannot approve it is given lists.
 	 */
 	constructor(
 		holds: HoldCheck,
@@ -113,8 +121,10 @@ export class ConfirmationGate {
 		tiers?: ToolTiers,
 		fileRoot?: string,
 		describeTimeoutMs = HOLD_DESCRIBE_TIMEOUT_MS,
+		nameOf?: (principalId: string) => Promise<string | undefined>,
 	) {
 		this.#describeTimeoutMs = describeTimeoutMs;
+		this.#nameOf = nameOf;
 		this.#tiers = tiers;
 		this.#fileRoot = fileRoot ?? context.workspace;
 		this.#holds = holds;
@@ -184,6 +194,7 @@ export class ConfirmationGate {
 		);
 		this.#pending =
 			held && kept.length > 0 ? { ...held, calls: kept } : undefined;
+		this.#kept = this.#pending;
 	}
 
 	endTurn(): void {
@@ -266,10 +277,10 @@ export class ConfirmationGate {
 		if ("released" in needing)
 			return needing.released ? { approvedBy: needing.released } : {};
 		const call = needing.held;
-		if (!ask) return { reason: this.#record(call), refused: "held" };
+		if (!ask) return { reason: await this.#held(call), refused: "held" };
 		// In a private conversation only its person answers: a call that names others is not theirs.
 		if (this.#private && !mayApproveNamed(this.#speaker, call))
-			return { reason: this.#record(call), refused: "held" };
+			return { reason: await this.#held(call), refused: "held" };
 		let approvedBy: ApprovedBy | undefined;
 		const options: ApprovalOptions = {
 			...(call.approverIds ? { approvers: call.approverIds } : {}),
@@ -295,7 +306,7 @@ export class ConfirmationGate {
 					: undefined);
 			// A call that names approvers runs only on the word of one of them, or an owner.
 			if (!namedApprover(call, by))
-				return { reason: this.#record(call), refused: "held" };
+				return { reason: await this.#held(call), refused: "held" };
 			return { approvedOnCard: true, ...(by ? { approvedBy: by } : {}) };
 		}
 		if (answer === "pending") {
@@ -315,8 +326,8 @@ export class ConfirmationGate {
 		if (answer === "cancelled") return { reason: "The turn was stopped." };
 		// No card was shown: no one may approve it, or it could not be posted.
 		if (answer === "unavailable")
-			return { reason: this.#record(call), refused: "held" };
-		return { reason: this.#record(call), refused: "expired" };
+			return { reason: await this.#held(call), refused: "held" };
+		return { reason: await this.#held(call), refused: "expired" };
 	}
 
 	/**
@@ -450,11 +461,44 @@ export class ConfirmationGate {
 		return { held: call };
 	}
 
+	/** Records the call as held and returns what the model is told about it. */
 	#record(call: HeldCall): string {
+		this.#remember(call);
+		const refusal = this.#unlessNamed(call);
+		return refusal ? refusal([]) : this.#askSpeaker(call);
+	}
+
+	/**
+	 * `#record` for a call that names approvers the speaker is not among: the text then lists who
+	 * may approve it, which looks their names up first.
+	 */
+	async #held(call: HeldCall): Promise<string> {
+		this.#remember(call);
+		const refusal = this.#unlessNamed(call);
+		if (!refusal) return this.#askSpeaker(call);
+		return refusal(await this.#namesOf(call.approverIds ?? []));
+	}
+
+	#remember(call: HeldCall): void {
 		const selectionId = this.#selectionId;
 		if (selectionId === undefined)
 			throw new Error("a call was held outside a turn");
-		const pending: PendingConfirmation = this.#pending ?? {
+		let pending = this.#pending;
+		// A partial release kept calls that name approvers, which belong to no speaker: what this turn
+		// holds is its speaker's, from now.
+		if (pending && pending === this.#kept) {
+			pending = { ...pending, calls: [...pending.calls] };
+			pending.selectionId = selectionId;
+			pending.heldAt = new Date();
+			delete pending.speakerId;
+			delete pending.principalId;
+			if (this.#speaker) {
+				pending.speakerId = this.#speaker.id;
+				pending.principalId = this.#speaker.principalId;
+			}
+		}
+		this.#kept = undefined;
+		pending ??= {
 			selectionId,
 			heldAt: new Date(),
 			calls: [],
@@ -470,7 +514,56 @@ export class ConfirmationGate {
 		)
 			pending.calls.push(call);
 		this.#pending = pending;
+	}
+
+	/** The text for a held call that the speaker's own message confirms. */
+	#askSpeaker(call: HeldCall): string {
 		const o = ownerWords(this.#addressee);
 		return `Held for ${o.name}'s confirmation: this would ${call.action}. Do not retry it in this turn. Tell ${o.him} exactly what will happen and ask ${o.him} to confirm; once ${o.he} agrees in ${o.his} next message, make the same call with the same input and it runs.`;
 	}
+
+	/**
+	 * For a call that names approvers the speaker is neither among nor an owner of: the text that
+	 * tells the model the truth about it, from the names of those who may approve; undefined when
+	 * the speaker may.
+	 */
+	#unlessNamed(call: HeldCall): ((names: string[]) => string) | undefined {
+		if (!call.approverIds || mayApproveNamed(this.#speaker, call))
+			return undefined;
+		const o = ownerWords(this.#addressee);
+		const anyone = (call.approverIds?.length ?? 0) > 0;
+		return (names) => {
+			// Names that could not be read still leave the people the tool named.
+			const named =
+				names.length === 0 && anyone ? ["the people named for it"] : names;
+			const who = orList([...named, "an owner"]);
+			const approval = `Only ${who} can approve it.`;
+			if (this.#private)
+				return `Held, and ${o.name} cannot approve it here: this would ${call.action}. ${approval} A private conversation can only be answered by its person, so it stays held and nothing ${o.he} says here releases it. Do not retry it, and do not ask ${o.him} to confirm it or to say yes. Tell ${o.him} plainly that it was not done and needs ${who}.`;
+			return `Held, and ${o.name} cannot approve it: this would ${call.action}. ${approval} Do not retry it in this turn, and do not ask ${o.name} to confirm it. Tell ${o.him} plainly that it was not done, and ask ${who} to confirm in this channel; once one of them agrees in a message, make the same call with the same input and it runs.`;
+		};
+	}
+
+	/** The names of the principals, as far as they are known; ids are never shown. */
+	async #namesOf(principalIds: readonly string[]): Promise<string[]> {
+		const nameOf = this.#nameOf;
+		if (!nameOf) return [];
+		const names = await Promise.all(
+			[...new Set(principalIds)].map(async (id) => {
+				try {
+					return await nameOf(id);
+				} catch {
+					return undefined;
+				}
+			}),
+		);
+		return [...new Set(names.filter((name): name is string => !!name))];
+	}
+}
+
+/** "a", "a or b", "a, b or c". */
+function orList(items: readonly string[]): string {
+	const last = items.at(-1);
+	if (items.length < 2 || last === undefined) return items.join("");
+	return `${items.slice(0, -1).join(", ")} or ${last}`;
 }
