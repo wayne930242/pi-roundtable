@@ -66,8 +66,10 @@ export interface LineUnsentEvent extends EventBase {
 }
 
 /**
- * Whether the join notice went out: `"sent"`, `"failed"`, or `"unconfirmed"` when no notice is
- * configured (or it could not be confirmed).
+ * Whether the join notice went out: `"sent"` (LINE took the Reply), `"failed"` (the Reply was
+ * refused, the token had lapsed or the notice's text is not the one its digest names; nothing else
+ * was sent in its place), or `"unconfirmed"` when no notice is configured, or the first try was cut
+ * short and nobody knows whether LINE got it.
  */
 export type JoinNotice = "sent" | "unconfirmed" | "failed";
 
@@ -92,14 +94,26 @@ export interface LineMemberLeftEvent extends EventBase {
 	userIds: readonly string[];
 }
 
-/** How a push the subscriber enqueued ended. Declared now; the outbox that emits it arrives in a later release. */
+/**
+ * How a push ended, told once per `origin` the push carries (or once with `originRef: null` when it
+ * carries none). At least once: a subscriber that fails is told again later, so it must be idempotent.
+ * It has no event id or time; the push is not a webhook event.
+ */
 export interface LineOutboxResultEvent {
 	type: "outboxResult";
 	sourceKey: string;
 	/** The `origin` the subscriber gave when it enqueued, or null. */
 	originRef: string | null;
+	/**
+	 * `sent` (accepted, or already accepted under the same retry key), `dead` (LINE refused it, or it
+	 * kept failing, or its retry key lapsed), or `refused` (the quota gate would have been exceeded; nothing was sent).
+	 */
 	status: "sent" | "dead" | "refused";
-	/** LINE's error code or the package's reason, when the push did not go out. */
+	/**
+	 * Why the push did not go out: LINE's refusal as a code (`http_400`, `sender_name_refused`,
+	 * `sender_icon_refused`, ...) or the package's reason (`quota_exhausted`, `retry_key_expired`,
+	 * `source_not_allowed`); null when it was sent.
+	 */
 	errorCode: string | null;
 }
 

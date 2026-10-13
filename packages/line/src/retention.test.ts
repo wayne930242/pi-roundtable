@@ -17,6 +17,7 @@ test("the defaults keep everything for seven days and sweep hourly, and a mistak
 	expect(RETENTION_DEFAULTS).toEqual({
 		inboxMs: 7 * DAY,
 		messagesMs: 7 * DAY,
+		outboxMs: 7 * DAY,
 		strayMs: 15 * 60_000,
 		intervalMs: 3_600_000,
 	});
@@ -103,6 +104,34 @@ describeDb("the retention sweeper", () => {
 		expect(await ids("line_messages", "message_id")).toEqual(["new"]);
 		expect(await ids("line_message_refs", "ref")).toEqual(["ref-new"]);
 		expect(await ids("line_tombstones", "message_id")).toEqual(["new"]);
+	});
+
+	test("pushes go after their window, finished or never sent, with the join notice records; fresh ones stay", async () => {
+		const push = async (
+			status: string,
+			age: number,
+			messages: unknown = null,
+		) => {
+			await sql`INSERT INTO line_outbox
+				(source_key, messages, message_count, retry_key, status, created_at, ready_at, next_attempt_at, completed_at)
+				VALUES (${GROUP}, ${JSON.stringify(messages)}::text::jsonb, 1, ${crypto.randomUUID()}::uuid, ${status},
+					${ago(age)}, ${ago(age)}, ${ago(age)}, ${["queued", "sending"].includes(status) ? null : ago(age)})`;
+		};
+		await push("sent", 8 * DAY);
+		await push("dead", 8 * DAY);
+		await push("refused", 8 * DAY);
+		await push("queued", 8 * DAY, [{ type: "text", text: "never sent" }]);
+		await push("sent", DAY);
+		await push("queued", DAY, [{ type: "text", text: "waiting" }]);
+		await sql`INSERT INTO line_notices (webhook_event_id, outcome, created_at)
+			VALUES ('old-join', 'sent', ${ago(8 * DAY)}), ('new-join', 'failed', ${ago(DAY)})`;
+		const counts = await sweeper().sweepOnce();
+		expect(counts).toMatchObject({ outbox: 4, notices: 1 });
+		expect(await ids("line_outbox", "status")).toEqual(["queued", "sent"]);
+		expect(await ids("line_notices", "webhook_event_id")).toEqual(["new-join"]);
+		await sweeper({ outboxMs: 3_600_000 }).sweepOnce();
+		expect(await ids("line_outbox", "status")).toEqual([]);
+		expect(await ids("line_notices", "webhook_event_id")).toEqual([]);
 	});
 
 	test("the windows are configurable and independent", async () => {

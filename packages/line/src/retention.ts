@@ -13,6 +13,11 @@ export interface RetentionOptions {
 	/** How long a message's metadata and tokens, its references and its tombstone are kept; default 7 days. */
 	messagesMs: number;
 	/**
+	 * How long finished pushes (and a push that never got sent), and the record of a join notice, are
+	 * kept; default 7 days. A push loses its message objects when it finishes, long before this.
+	 */
+	outboxMs: number;
+	/**
 	 * How long a ref of an unsent message may wait before the sweep hands it back to the subscriber as
 	 * `unsent`; default 15 minutes. Such a ref is a stray: a handler that outlived its lease kept it
 	 * after the unsend had run.
@@ -25,6 +30,7 @@ export interface RetentionOptions {
 export const RETENTION_DEFAULTS: RetentionOptions = {
 	inboxMs: 7 * DAY_MS,
 	messagesMs: 7 * DAY_MS,
+	outboxMs: 7 * DAY_MS,
 	strayMs: 15 * 60_000,
 	intervalMs: 60 * 60_000,
 };
@@ -50,12 +56,11 @@ export function checkRetention(options: Partial<RetentionOptions>): void {
 
 /**
  * One table the sweeper trims. `window` names the retention option that says how old a row may get;
- * `run` deletes the rows older than `cutoff` and answers how many went. A later release adds the
- * outbox by appending a task here and an option above.
+ * `run` deletes the rows older than `cutoff` and answers how many went.
  */
 interface RetentionTask {
 	name: string;
-	window: "inboxMs" | "messagesMs";
+	window: "inboxMs" | "messagesMs" | "outboxMs";
 	run(sql: SQL, cutoff: Date): Promise<number>;
 }
 
@@ -107,6 +112,25 @@ const TASKS: readonly RetentionTask[] = [
 		run: (sql, cutoff) =>
 			count(sql`WITH gone AS (
 				DELETE FROM line_tombstones WHERE created_at < ${cutoff}
+				RETURNING 1) SELECT count(*)::int AS n FROM gone`),
+	},
+	{
+		// A push that finished, and one that never did (a chat that stopped being allowed, say).
+		name: "outbox",
+		window: "outboxMs",
+		run: (sql, cutoff) =>
+			count(sql`WITH gone AS (
+				DELETE FROM line_outbox
+				WHERE (status IN ('sent', 'dead', 'refused') AND completed_at < ${cutoff})
+					OR (status IN ('queued', 'sending') AND created_at < ${cutoff})
+				RETURNING 1) SELECT count(*)::int AS n FROM gone`),
+	},
+	{
+		name: "notices",
+		window: "outboxMs",
+		run: (sql, cutoff) =>
+			count(sql`WITH gone AS (
+				DELETE FROM line_notices WHERE created_at < ${cutoff}
 				RETURNING 1) SELECT count(*)::int AS n FROM gone`),
 	},
 ];

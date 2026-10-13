@@ -246,7 +246,14 @@ export function fakeLine(): FakeLine {
 					to: string;
 					messages: Record<string, unknown>[];
 				};
-				if (fake.pushDelayMs > 0) await Bun.sleep(fake.pushDelayMs);
+				if (fake.pushDelayMs > 0)
+					await new Promise<void>((resolve, reject) => {
+						const timer = setTimeout(resolve, fake.pushDelayMs);
+						init?.signal?.addEventListener("abort", () => {
+							clearTimeout(timer);
+							reject(init.signal?.reason);
+						});
+					});
 				const key = call.retryKey;
 				const requestId = `req-${fake.pushes.length + 1}`;
 				let result = answer(fake.pushScript.shift(), requestId);
