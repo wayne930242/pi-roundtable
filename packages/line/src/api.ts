@@ -1,10 +1,15 @@
 import { LineApiError, LineError } from "./errors.ts";
 import { LINE_API, type TokenSource } from "./token.ts";
 
+/** The host LINE serves message content from; every other call goes to {@link LINE_API}. */
+const LINE_DATA_API = "https://api-data.line.me";
+
 export interface LineApiOptions {
 	tokens: TokenSource;
 	fetch?: typeof fetch;
 	baseUrl?: string;
+	/** Where message content is fetched from; default `https://api-data.line.me`. */
+	dataBaseUrl?: string;
 	/** Per-request timeout in milliseconds; default 15 seconds. */
 	timeoutMs?: number;
 }
@@ -13,6 +18,12 @@ export interface RequestOptions {
 	method?: string;
 	headers?: Record<string, string>;
 	body?: string | Uint8Array;
+	/** `"data"` calls the content host; default `"api"`. */
+	host?: "api" | "data";
+	/** Aborts the call; an aborted call rejects with the signal's reason, not with a wrapped error. */
+	signal?: AbortSignal;
+	/** Replaces the client's per-request timeout, which also bounds reading the body. */
+	timeoutMs?: number;
 }
 
 /**
@@ -24,28 +35,39 @@ export class LineApi {
 	readonly #tokens: TokenSource;
 	readonly #fetch: typeof fetch;
 	readonly #base: string;
+	readonly #dataBase: string;
 	readonly #timeoutMs: number;
 
 	constructor(options: LineApiOptions) {
 		this.#tokens = options.tokens;
 		this.#fetch = options.fetch ?? fetch;
 		this.#base = options.baseUrl ?? LINE_API;
+		this.#dataBase = options.dataBaseUrl ?? LINE_DATA_API;
 		this.#timeoutMs = options.timeoutMs ?? 15_000;
 	}
 
 	/** The response of a successful call; its body is the caller's to read. */
 	async request(path: string, options: RequestOptions = {}): Promise<Response> {
 		for (let attempt = 0; ; attempt++) {
+			options.signal?.throwIfAborted();
 			const token = await this.#tokens.token();
 			let response: Response;
+			const timeout = AbortSignal.timeout(options.timeoutMs ?? this.#timeoutMs);
 			try {
-				response = await this.#fetch(`${this.#base}${path}`, {
-					method: options.method ?? "GET",
-					headers: { ...options.headers, authorization: `Bearer ${token}` },
-					...(options.body === undefined ? {} : { body: options.body }),
-					signal: AbortSignal.timeout(this.#timeoutMs),
-				});
+				response = await this.#fetch(
+					`${options.host === "data" ? this.#dataBase : this.#base}${path}`,
+					{
+						method: options.method ?? "GET",
+						headers: { ...options.headers, authorization: `Bearer ${token}` },
+						...(options.body === undefined ? {} : { body: options.body }),
+						signal: options.signal
+							? AbortSignal.any([options.signal, timeout])
+							: timeout,
+					},
+				);
 			} catch (error) {
+				// The caller gave up: it hears its own reason, which the inbox worker knows how to read.
+				if (options.signal?.aborted) throw options.signal.reason;
 				throw new LineError(
 					"api_unreachable",
 					`line: ${path} did not answer (${this.#tokens.redact(
