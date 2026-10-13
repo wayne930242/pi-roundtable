@@ -1,15 +1,17 @@
-import { expect, test } from "bun:test";
-import { mkdtempSync } from "node:fs";
+import { expect, spyOn, test } from "bun:test";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Interaction } from "discord.js";
 import type { ConversationPort } from "../contract/channels.ts";
 import type { ChatSurface } from "../contract/surface.ts";
 import type { ComposedCommands } from "../discord/compose-commands.ts";
+import { DiscordSurface } from "../discord/discord-surface.ts";
 import type {
 	InteractionContribution,
 	InteractionModule,
 } from "../discord/interaction-module.ts";
+import { fakeChannel } from "../discord/owner-cards-fixture.ts";
 import { STOP_BUTTON_ID } from "../discord/stop-button.ts";
 import { PluginError } from "../errors.ts";
 import { silentLogger } from "../log.ts";
@@ -78,10 +80,10 @@ async function setUp(
 	};
 }
 
-test("the plugin contributes the Discord surface, and its one service only sweeps threads once the surface is up", async () => {
+test("the plugin contributes the Discord surface, and its threads service only sweeps threads once the surface is up", async () => {
 	const { services, surfaces } = await setUp();
 	expect(surfaces).toEqual(["discord"]);
-	expect(services).toEqual(["threads"]);
+	expect(services).toEqual(["threads", "card-copies"]);
 });
 
 test("the Discord surface hands out the owner's cards for its channels", async () => {
@@ -268,4 +270,51 @@ test("another button is not the stop button's", async () => {
 	const other = press("1", "somebody:else");
 	expect(await answered(modules, other.interaction)).toBe(false);
 	expect(other.replies).toEqual([]);
+});
+
+test("the copy text of a card is on disk once the host has stopped the plugin's services", async () => {
+	const fake = fakeChannel();
+	const spy = spyOn(DiscordSurface.prototype, "cardChannel").mockImplementation(
+		fake.channel as never,
+	);
+	try {
+		const dataDir = mkdtempSync(join(tmpdir(), "roundtable-discord-"));
+		const plugin = discordPlugin({ ...OPTIONS, dataDir });
+		const contribution = await plugin.setup({
+			logger: silentLogger(),
+			queue: {},
+			conversations: {},
+			services: { provide: () => undefined, find: () => undefined },
+		} as unknown as PluginContext);
+		const surface = contribution.surfaces?.[0] as ChatSurface;
+		void surface
+			.prompts?.("discord:555")
+			?.confirm("t", "m", undefined, undefined, undefined, {
+				action: "run it",
+				tool: "bash",
+				input: {},
+				copy: { text: "ssh host 'uptime'" },
+			});
+		await new Promise((resolve) => setTimeout(resolve, 10));
+		for (const service of contribution.services ?? []) await service.stop?.();
+		expect(readFileSync(join(dataDir, "card-copies.json"), "utf8")).toContain(
+			"ssh host 'uptime'",
+		);
+	} finally {
+		spy.mockRestore();
+	}
+});
+
+test("cardCopies false removes the file an earlier run left, and its temporary file", async () => {
+	const dataDir = mkdtempSync(join(tmpdir(), "roundtable-discord-"));
+	for (const name of ["card-copies.json", "card-copies.json.tmp"])
+		writeFileSync(join(dataDir, name), "{}");
+	await discordPlugin({ ...OPTIONS, dataDir, cardCopies: false }).setup({
+		logger: silentLogger(),
+		queue: {},
+		conversations: {},
+		services: { provide: () => undefined, find: () => undefined },
+	} as unknown as PluginContext);
+	expect(existsSync(join(dataDir, "card-copies.json"))).toBe(false);
+	expect(existsSync(join(dataDir, "card-copies.json.tmp"))).toBe(false);
 });

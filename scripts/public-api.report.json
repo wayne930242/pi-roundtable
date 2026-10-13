@@ -527,7 +527,7 @@
 		"src/core/attachments/attachment-dir.d.ts#channelSegment": "declare function channelSegment(channel: ChannelKey): string;",
 		"src/core/attachments/attachment-dir.d.ts#ownerAttachmentDir": "declare function ownerAttachmentDir(dataDir: string, channel: ChannelKey): string;",
 		"src/core/attachments/attachment-retention.d.ts#AttachmentRetention": "interface AttachmentRetention {\n    \n    maxAgeMs: number;\n    \n    sweepEveryMs?: number;\n}",
-		"src/core/attachments/image-prep.d.ts#prepareImageBytes": "declare function prepareImageBytes(data: Uint8Array, _contentType: string): Promise<ModelImage>;",
+		"src/core/attachments/image-prep.d.ts#prepareImageBytes": "declare function prepareImageBytes(data: Uint8Array, contentType: string): Promise<ModelImage>;",
 		"src/core/attachments/image-preparation-error.d.ts#ImagePreparationError": "declare class ImagePreparationError extends Error {\n    readonly reason: \"byte-limit\" | \"pixel-limit\" | \"invalid-image\";\n    readonly name = \"ImagePreparationError\";\n    constructor(reason: \"byte-limit\" | \"pixel-limit\" | \"invalid-image\");\n}",
 		"src/core/attachments/prompt-block.d.ts#withAttachmentsBlock": "declare function withAttachmentsBlock(text: string, attachments: TurnAttachments): string;",
 		"src/core/attachments/tool-attachment.d.ts#ToolAttachment": "interface ToolAttachment {\n    \n    file: string;\n    \n    name: string;\n    contentType: string;\n    size: number;\n    \n    bytes(): Promise<Uint8Array>;\n}",

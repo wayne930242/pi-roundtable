@@ -1,3 +1,4 @@
+import { rmSync } from "node:fs";
 import { join } from "node:path";
 import type {
 	ChannelContext,
@@ -101,6 +102,12 @@ export function discordPlugin(options: DiscordOptions): RoundtablePlugin {
 		},
 		setup: async ({ conversations, services, logger }) => {
 			const identity = services.find(IDENTITY);
+			// A host that keeps no copy texts on disk drops what an earlier run left.
+			if (options.cardCopies === false) {
+				const file = join(options.dataDir, "card-copies.json");
+				rmSync(file, { force: true });
+				rmSync(`${file}.tmp`, { force: true });
+			}
 			// The surface exists by the time a turn posts a card.
 			const cards: OwnerCards = new OwnerCards({
 				ownerId: options.ownerId,
@@ -194,6 +201,8 @@ export function discordPlugin(options: DiscordOptions): RoundtablePlugin {
 				services: [
 					// The sweep reads threads through the connection, so it follows the surface's start.
 					{ name: "threads", start: () => void threads.sweep() },
+					// The copy texts of the last cards are on disk before the host exits.
+					{ name: "card-copies", stop: () => cards.flushCopies() },
 				],
 			};
 		},

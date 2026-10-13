@@ -80,7 +80,8 @@ export async function prepareImage(
  * may be a file name's guess; bytes of none of them are `invalid-image`. */
 export async function prepareImageBytes(
 	data: Uint8Array,
-	_contentType: string,
+	// biome-ignore lint/correctness/noUnusedFunctionParameters: kept for callers; the type comes from the bytes
+	contentType: string,
 ): Promise<ModelImage> {
 	if (data.byteLength > MAX_ATTACHMENT_BYTES)
 		throw new ImagePreparationError("byte-limit");
