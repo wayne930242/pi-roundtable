@@ -105,7 +105,7 @@ await sources.summary("line:group:C..."); // adds the group's name, asked of LIN
 | `blocked` | events are dropped; `block` also drops what was waiting |
 | `left` | the bot was removed; a `join` makes it `pending` again, because a new group needs a new decision |
 
-The `join` and `leave` events carry no customer text and are kept for every chat that is not blocked.
+The `join` and `leave` events carry no customer text and are kept for every chat that is not blocked. An `unsend` is stored only while its chat is allowed, but one that is already stored is still delivered after the bot has left the chat (see [The inbox worker](#the-inbox-worker)).
 Allowing a chat does not recover earlier events: they were dropped unread.
 This package never creates anything for a chat; what a chat becomes is the consumer's business.
 
@@ -118,7 +118,7 @@ Until a subscriber is attached, events stay in the inbox with their payload, are
 - Delivery is at least once. A handler that outlives its lease (its process died, or it could not renew) may run again for the same event, so a subscriber must be idempotent.
 - A claim is `FOR UPDATE SKIP LOCKED` under a per-chat lock: while leases are kept no chat has two events in hand at once, across workers and processes, and events of a chat go out in order of LINE's event time among those that are due. An event that is backing off does not hold the ones behind it.
 - A claimed event has a 2-minute lease that the worker renews every 40 seconds while the handler runs, so a slow handler is not taken for a crashed one. Every write that ends a handling is fenced by its claim: a handler that lost the event cannot change what the next claim wrote. The worker puts back events whose lease ran out when it starts and every minute after, other than ones it is handling itself, and that counts as a handing out, so an event that keeps crashing its worker ends up dead.
-- A handler runs for at most `maxHandleMs` (10 minutes). The processor (and so the subscriber) receives an `AbortSignal` as its second argument that is aborted then; the lease is no longer renewed and the event fails with `handler_timeout` like any thrown error, so a handler that never settles cannot hold its chat or the shutdown. What it settles with later is ignored. The signal is also aborted when the worker stops (`signal.reason` has the code `worker_stopped`; a handler that then throws the reason or an abort error puts the event back without counting as a failure, while any other error it throws counts) and when the worker finds the event is no longer its own (`lease_lost`). Only a handler that honours the signal gives up: one that ignores it may still be running while the same chat's next event, or the event's own retry, is handed out, so a subscriber must be safe against its own overlap. To give up, throw (for example `throw signal.reason`) or return `{ retryInMs }`: a handler that returns `undefined` has handled the event, and it is marked done. The subscriber is looked up again just before it is called, so one detached or replaced while the event waited gets nothing. `maxHandleMs`, `leaseMs` and `pollMs` are at most 2147483647 (about 24 days), the longest delay a timer holds.
+- A handler runs for at most `maxHandleMs` (10 minutes). The processor (and so the subscriber) receives an `AbortSignal` as its second argument that is aborted then; the lease is no longer renewed and the event fails with `handler_timeout` like any thrown error, so a handler that never settles cannot hold its chat or the shutdown. What it settles with later is ignored. The signal is also aborted when the worker stops (`signal.reason` has the code `worker_stopped`; a handler that then throws the reason or an abort error puts the event back without counting as a failure, while any other error it throws counts) and when the worker finds the event is no longer its own (`lease_lost`). Only a handler that honours the signal gives up: one that ignores it may still be running while the same chat's next event, or the event's own retry, is handed out, so a subscriber must be safe against its own overlap. To give up, throw (for example `throw signal.reason`): a handler that returns has handled the event, and it is marked done. A subscriber's result is never read as a retry request; a `message` answer that is neither nothing nor `{ refs }` (a `{ retryInMs }`, say) fails with `bad_refs`. The subscriber is looked up again just before it is called, so one detached or replaced while the event waited gets nothing. `maxHandleMs`, `leaseMs` and `pollMs` are at most 2147483647 (about 24 days), the longest delay a timer holds.
 - The worker looks at the inbox on a kick, on every poll and whenever a handler ends, also while handlers are running, so a slow handler holds one of the `concurrency` slots and nothing else; expired leases are put back on the same schedule.
 - A thrown error retries with exponential backoff and jitter (5 seconds doubling to 1 hour); after 12 handings out the event is `dead`. Only the error's lower-case `code` word is stored, never its message, because messages may quote what a customer wrote.
 - An `unsend` or `messageEdited` event runs strictly after the message it acts on and after the earlier events on that message: it waits, however long, while any of them is still pending, being handled or backing off, and goes to the processor once they are done or dead. The wait does not count against `maxRequeues`. It waits until the soonest of them is due again, and at least `dependencyRetryMs` (5 seconds). A message that has not reached the inbox at all is waited for up to 10 minutes.
@@ -130,10 +130,12 @@ Options tune the worker: `inbox: { leaseMs, maxHandleMs, maxAttempts, backoffBas
 ## The consumer
 
 ```ts
-const detach = context.services.get(LINE).subscribe(async (event, signal) => {
+const detach = context.services.get(LINE).subscribe(async (event, signal, line) => {
 	switch (event.type) {
 		case "message": {
-			// mirror event.body, then answer the opaque references to what you made
+			// mirror event.body; keep the opaque reference of each post as it lands
+			await line.keep("discord-message-1");
+			await line.keep("discord-message-2");
 			return { refs: ["discord-message-1", "discord-message-2"] };
 		}
 		case "edited": // event.text, event.refs (the original's)
@@ -164,10 +166,18 @@ The processor that serves it is the package's own; there is no way to read raw i
 Every event has `eventId` (LINE's `webhookEventId`, the same on every redelivery), `sourceKey` and `timestamp`.
 No event carries a reply token, a quote token or a URL.
 
-A `message` is answered with `{ refs }`: opaque strings of at most 512 characters (at most 100 per message) that the package stores one to many in `line_message_refs`, in order, and gives back on `edited` and `unsent`.
-Answering nothing is allowed; the message is then still recorded as mirrored.
+A `message` is answered with `{ refs }`: opaque strings of at most 512 characters (at most 100 per message, kept and answered together) that the package stores one to many in `line_message_refs`, in order, and gives back on `edited` and `unsent`.
+Answering nothing is allowed; the message is then still recorded as mirrored. Any other answer (an object without `refs`, a `{ retryInMs }`) fails the event with `bad_refs`; to give up, throw.
 A redelivery of a message that is already recorded is not handed to the subscriber again.
-If the process dies between the subscriber's work and the commit of its references, the message is mirrored again; the subscriber should deduplicate on `eventId` if that matters.
+
+One message may become several posts (a long text is cut into chunks, media and text are posted apart), and the last one can fail.
+So the third argument of the subscriber, `line`, has `keep(ref)`: call it as each post lands.
+It stores the reference at once, under the same per-message lock and tombstone check as the answer at the end, and resolves `{ unsent }`.
+Refs answered at the end merge with the kept ones (one already stored keeps its place), so keeping and answering the same ref is fine.
+A handler that throws after keeping some refs leaves them stored: the retry mirrors the message again, and an `unsent` hands over the posts of every attempt, so none is left behind.
+If the sender had already taken the message back, `keep` stores the ref, hands it to the subscriber as `unsent` at once (the same take-back the final store does) and resolves `{ unsent: true }`: stop posting.
+Keep each post as it lands, and throw to give up.
+Only a crash between a post and its `keep` can leave a post the package does not know of; the message is then mirrored again, and the subscriber should deduplicate on `eventId` if that matters.
 
 ### Unsent messages
 
@@ -175,7 +185,7 @@ An `unsend` event writes a tombstone for the message, nulls the stored payload o
 Only then are the stored refs handed to the subscriber as `unsent`; they are forgotten once it has returned, so a subscriber that failed halfway is handed the same refs again.
 
 - A `message` checks the tombstone before it calls the subscriber: an unsent message is never mirrored. Refs left over from a mirror that was cut short are still handed back.
-- The refs a subscriber returns are stored under the same lock and the tombstone is checked again there. If the sender took the message back while the subscriber was working, the new refs are stored, handed straight back as `unsent`, and the message record is not written.
+- The refs a subscriber keeps or returns are stored under the same lock and the tombstone is checked again there. If the sender took the message back while the subscriber was working, the new refs are stored, handed straight back as `unsent` (at the `keep` for a kept ref, at the end for the rest), and the message record is not written.
 - An `unsend` for a message the package never saw (it arrived first, or is older than retention) still writes the tombstone and is heard with `refs: []`.
 - An edit of a message that was unsent, was never mirrored, or is older than the last edit applied is skipped; edits arrive out of order, and the one with the latest time wins.
 
@@ -194,7 +204,7 @@ else placeholder(result.reason); // "expired" | "unsent" | "transcoding_failed"
 The content is read into memory, never to disk, never logged, and never exposed at a URL.
 `media: { maxBytes }` (default 10 MiB) caps it: a `content-length` over the cap is refused before reading, and a body without one is counted as it streams and dropped past the cap, giving `{ tooLarge: true }`.
 LINE keeps content for a limited time; a missing one is `{ expired: true }`.
-Pass the event's `kind` for a video or audio: the call then polls `/v2/bot/message/{id}/content/transcoding` (every `media.transcodingPollMs`, 2 seconds, up to `media.transcodingMaxMs`, 60 seconds) until it has `succeeded`; `failed` is `{ expired: true, reason: "transcoding_failed" }` and running out of time is a `transcoding_timeout` error, which the inbox retries.
+Pass the event's `kind` for a video or audio: the call then polls `/v2/bot/message/{id}/content/transcoding` (every `media.transcodingPollMs`, 2 seconds, until `media.transcodingMaxMs`, 60 seconds, have passed since the call began: a real deadline, so each request gets only what is left of it) until it has `succeeded`; `failed` is `{ expired: true, reason: "transcoding_failed" }` and running out of time is a `transcoding_timeout` error, which the inbox retries.
 The call uses the same token source as every other call (a `401` reissues the token once) and the content host `api-data.line.me`.
 Pass the handler's `signal` and an aborted event stops the download.
 A message that was unsent is never fetched.
@@ -213,6 +223,8 @@ The `line-retention` service sweeps once at start and every hour (`retention.int
 | inbox events that are `done`, `skipped` or `dead` | 7 days (`retention.inboxMs`) |
 | inbox events still `pending`, which no subscriber handled | 7 days (`retention.inboxMs`), payload and all |
 | message metadata and tokens, refs, tombstones | 7 days (`retention.messagesMs`) |
+
+A subscriber that stays detached longer than the window loses what was waiting for it: an `unsend` still pending is removed with the rest, and the refs of the message it names are removed too, so that mirror can no longer be taken back. Keep a subscriber attached, or raise `retention.inboxMs` and `retention.messagesMs` beyond the longest outage.
 
 It logs counts only, never ids, text or tokens, and counts as `busy` while a sweep runs so the shutdown waits for it.
 A table that cannot be trimmed is logged by its code and the others go on.

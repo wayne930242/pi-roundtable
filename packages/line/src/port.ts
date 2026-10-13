@@ -12,11 +12,13 @@ export interface LineBridgePort {
 	/** The token source's health: how many tokens were issued and why the last attempt failed, if it did. */
 	health(): { tokensIssued: number; tokenFailure: string | undefined };
 	/**
-	 * Becomes the one consumer of the package: from now on each stored event of an allowed chat (and
-	 * the join and leave of any chat) is turned into a typed event and handed to `handler`, oldest
-	 * first within a chat, at least once. A second subscriber is refused (the call throws). Returns the
-	 * function that detaches this one. With none attached events wait in the inbox, payload and all,
-	 * until retention removes them.
+	 * Becomes the one consumer of the package: from now on each stored event of an allowed chat, the
+	 * `join` and `leave` of any chat that is not blocked, and an `unsend` stored while its chat was
+	 * allowed (also after the bot has left it, so a mirror is still taken down), is turned into a typed
+	 * event and handed to `handler`, oldest first within a chat, at least once. A second subscriber is
+	 * refused (the call throws). Returns the function that detaches this one. With none attached
+	 * events wait in the inbox, payload and all, until retention removes them: a subscriber that stays
+	 * detached longer than the retention window loses the unsends that were waiting for it.
 	 */
 	subscribe(handler: LineSubscriber): () => void;
 	/**
