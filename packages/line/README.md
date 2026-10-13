@@ -295,7 +295,8 @@ Without `joinNotice` nothing is ever sent.
 
 ## Router delivery
 
-`route: true` hands the text of messages of allowed chats to the host's router, as messages of the `line` surface (channel `line:group:<id>`, author the LINE user id, `mentionsBot` when the bot is @mentioned, with the bot's mention cut out of the text), after the subscriber has mirrored them and once per message.
+`route: true` hands the text of messages of allowed chats to the host's router, as messages of the `line` surface (channel `line:group:<id>`, author the LINE user id, `mentionsBot` when the bot is @mentioned, with the bot's mention cut out of the text), after the subscriber has mirrored them, and never for a message that was unsent meanwhile.
+The hand-over happens in the same transaction that records the message, so a router that throws makes the event retry and a failed store hands over nothing. Delivery is at least once: only a failure of the commit itself, right after the router took the text, can hand the same text over a second time.
 Images, stickers and other kinds are not routed, nor are messages LINE did not name a sender for.
 It is off by default.
 **Never admit `line` through the core's `everyone` access**: anyone who can add the bot to a group, or write in a chat you allow, would reach the assistant. Admit only identities you have linked to a person.

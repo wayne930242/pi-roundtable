@@ -85,7 +85,12 @@ describeDb("routing through the consumer", () => {
 	let routeError: Error | undefined;
 	let consumer: LineConsumer;
 
-	const run = async (raw: Record<string, unknown>) => {
+	const run = async (
+		raw: Record<string, unknown>,
+		answer: () => Promise<{ refs: string[] }> = async () => ({
+			refs: ["post-1"],
+		}),
+	) => {
 		const [parsed] = (await parseWebhook(new TextEncoder().encode(body(raw))))
 			.events;
 		if (!parsed) throw new Error("no event");
@@ -98,7 +103,7 @@ describeDb("routing through the consumer", () => {
 			payload: parsed.raw,
 			attempt: 1,
 		};
-		return consumer.processorFor(async () => ({ refs: ["post-1"] }))(
+		return consumer.processorFor(answer)(
 			inbox,
 			new AbortController().signal,
 		);
@@ -141,6 +146,15 @@ describeDb("routing through the consumer", () => {
 		routeError = undefined;
 		await run(messageEvent({ id: "t2", messageId: "mt2" }));
 		expect(routed).toHaveLength(1);
+	});
+
+	test("a message unsent while it is mirrored is not routed (R6-F006)", async () => {
+		await run(messageEvent({ id: "t4", messageId: "mt4" }), async () => {
+			await sql`INSERT INTO line_tombstones (source_key, message_id, created_at) VALUES ('line:group:Cgroup0001', 'mt4', ${TIME}) ON CONFLICT DO NOTHING`;
+			return { refs: ["post-4"] };
+		});
+		expect(routed).toEqual([]);
+		expect(routed).toEqual([]);
 	});
 
 	test("an unsent message is not routed", async () => {

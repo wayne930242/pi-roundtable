@@ -238,16 +238,23 @@ export class LineConsumer {
 		const refs = cleanRefs(await handler(typed, signal, context)).filter(
 			(ref) => !kept.has(ref),
 		);
-		if (this.#route) {
-			const inbound = inboundOf(typed, message);
-			if (inbound) this.#route(inbound);
-			else
-				this.#logger.info(
-					{ event: event.id },
-					"a LINE message was not routed: it is not text from a named sender",
-				);
-		}
-		const late = await this.#store(event, sourceKey, messageId, typed, refs);
+		// The router gets the text only inside the store, once the message is known not to be unsent:
+		// a router that throws rolls the store back for a retry, and a store that fails routes nothing.
+		const route = this.#route;
+		const inbound = route ? inboundOf(typed, message) : undefined;
+		if (route && !inbound)
+			this.#logger.info(
+				{ event: event.id },
+				"a LINE message was not routed: it is not text from a named sender",
+			);
+		const late = await this.#store(
+			event,
+			sourceKey,
+			messageId,
+			typed,
+			refs,
+			route && inbound ? () => route(inbound) : undefined,
+		);
 		if (late) {
 			// An unsend landed while the subscriber was mirroring: take the new mirror back at once.
 			await this.#retract(handler, event, sourceKey, messageId, signal, false);
@@ -297,7 +304,9 @@ export class LineConsumer {
 
 	/**
 	 * Keeps the message and the references it answered, unless it has been unsent meanwhile, in which
-	 * case only the references are kept (so they can be handed back) and true is returned.
+	 * case only the references are kept (so they can be handed back) and true is returned. `deliver`
+	 * runs under the message's lock after the rows are written, only when the message is not unsent;
+	 * if it throws nothing is stored.
 	 */
 	async #store(
 		event: InboxEvent,
@@ -305,6 +314,7 @@ export class LineConsumer {
 		messageId: string,
 		typed: LineMessageEvent,
 		refs: readonly string[],
+		deliver?: () => void,
 	): Promise<boolean> {
 		const now = this.#now();
 		const message = messageOf(event.payload);
@@ -320,6 +330,7 @@ export class LineConsumer {
 						${replyToken}, ${replyToken ? new Date(event.timestamp) : null}, ${quoteToken}, ${now})
 					ON CONFLICT (source_key, message_id) DO NOTHING`;
 			await this.#addRefs(tx, sourceKey, messageId, refs, now);
+			if (!unsent) deliver?.();
 			return unsent;
 		});
 	}
