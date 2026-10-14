@@ -107,6 +107,12 @@ export interface SessionContext {
 	 */
 	approvedBy?(toolCallId: string): ApprovedBy | undefined;
 	/**
+	 * The id of the card whose approval released the held call whose tool call has this id, while it
+	 * runs; undefined for a call no card approved. A context built before this method has none,
+	 * which reads as undefined.
+	 */
+	approvedPrompt?(toolCallId: string): string | undefined;
+	/**
 	 * What the client that started the running turn can do for its tools, as `TurnRequest.client`
 	 * says; undefined between turns and for a turn whose transport gives none. A context built
 	 * before 0.9.11 has no such method, which reads as undefined.

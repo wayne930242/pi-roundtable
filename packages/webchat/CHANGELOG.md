@@ -5,9 +5,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- The approval prompt's `message` is the card text the core builds, and for a tool whose parameter schema is known it is now a list of labelled fields in markdown (`**label**: value`, long and multi-line values in fenced blocks) instead of one JSON block; a client that read the JSON out of `message` should read `approval.input`, which is unchanged and whole. A tool without a schema keeps the JSON block.
+- `PromptOutcome` gains `withdrawn`: a client that switches over the outcomes must handle it (close the prompt as for `cancelled`).
+
 ### Added
 
 - `prompt_closed` may carry the outcome `withdrawn` (new in `PromptOutcome`) and a `note`: the plugin that asked for an approval took it back (`ApprovalOptions.supersede`), and `note` is its reason, when it gave one as a text. The prompt is removed from the open ones a reconnect resends, and an answer to it finds `unknown_prompt`. A client that does not know the outcome should close the prompt as it does for `cancelled`. The turn reads a withdrawn approval as cancelled; the core tells the model it was withdrawn.
+- `client_call` may carry `approval: { prompt }` (`ClientCallOptions.approval` in the core): the id of the approval prompt the tool's call acts on, written into the frame unchanged when the tool passes one and absent otherwise. The server accepts a text of 1 to 128 characters and fails the call otherwise.
 
 ## [0.14.1] - 2026-10-14
 

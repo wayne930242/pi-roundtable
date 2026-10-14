@@ -509,6 +509,27 @@ describe("defineTool", () => {
 		expect(seen).toEqual([by, undefined]);
 	});
 
+	test("run sees the card that approved its call as the turn's approvedPrompt, and none for a call no card approved", async () => {
+		const seen: unknown[] = [];
+		const tool = defineTool({
+			...note,
+			run: (_args, turn) => {
+				seen.push(turn.approvedPrompt);
+				return "ok";
+			},
+		});
+		const registered = register(tool, undefined, {
+			approvedPrompt: (id) => (id === "carded" ? "card-7" : undefined),
+		});
+		await registered.execute("carded", { text: "x" });
+		await registered.execute("plain", { text: "x" });
+		expect(seen).toEqual(["card-7", undefined]);
+		// A context built before the method existed reads as none.
+		const old = register(tool, undefined, {});
+		await old.execute("carded", { text: "x" });
+		expect(seen.at(-1)).toBeUndefined();
+	});
+
 	test("each mistake is refused with the tool's name and the fix", () => {
 		const refused = (change: Record<string, unknown>) => () =>
 			defineTool({ ...note, ...change } as typeof note);

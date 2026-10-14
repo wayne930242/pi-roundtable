@@ -86,10 +86,13 @@ const script: FauxResponseFactory = (context) => {
 	const match = /peek (\w+)(?: (\d+))?/.exec(text);
 	return fauxAssistantMessage(
 		[
-			fauxToolCall("client_peek", {
-				name: match?.[1] ?? "page_status",
-				...(match?.[2] ? { timeoutMs: Number(match[2]) } : {}),
-			}),
+			fauxToolCall(
+				/held peek/.test(text) ? "client_held_peek" : "client_peek",
+				{
+					name: match?.[1] ?? "page_status",
+					...(match?.[2] ? { timeoutMs: Number(match[2]) } : {}),
+				},
+			),
 		],
 		{ stopReason: "toolUse" },
 	);
@@ -124,6 +127,9 @@ async function fauxModel(dir: string): Promise<ModelRuntime> {
 }
 
 /** A tool that asks the turn's client to run a function, and the compaction tool the host requires. */
+/** What the held tool saw of its approval, and what its client call came to. */
+const approvals: { approvedPrompt: string | undefined }[] = [];
+
 const peek = definePlugin({
 	name: "peek",
 	setup: () => ({
@@ -148,6 +154,34 @@ const peek = definePlugin({
 			},
 		],
 		tools: [
+			defineTool({
+				name: "client_held_peek",
+				description:
+					"Ask the client to run one of its functions, once the person approves.",
+				parameters: Type.Object({
+					name: Type.String(),
+					timeoutMs: Type.Optional(Type.Number()),
+				}),
+				minTier: "member",
+				hold: ({ name }) => `ask the page to run ${name}`,
+				run: async ({ name }, turn) => {
+					approvals.push({ approvedPrompt: turn.approvedPrompt });
+					if (!turn.client) return "no client";
+					const result = await turn.client.call(
+						name,
+						{ x: 1 },
+						turn.approvedPrompt
+							? { approval: { prompt: turn.approvedPrompt } }
+							: undefined,
+					);
+					outcomes.push(
+						result.ok
+							? { ok: true, value: result.value, parts: result.parts.length }
+							: { ok: false, error: result.error },
+					);
+					return result.ok ? "ran" : `failed: ${result.error}`;
+				},
+			}),
 			defineTool({
 				name: "client_peek",
 				description: "Ask the client to run one of its functions.",
@@ -213,7 +247,10 @@ describeDb(
 									kind: "helpdesk",
 									label: "Helpdesk",
 									prompt: () => "You look at the page.",
-									selection: { tools: ["client_peek"], groups: [] },
+									selection: {
+										tools: ["client_peek", "client_held_peek"],
+										groups: [],
+									},
 								},
 							],
 						}),
@@ -309,6 +346,7 @@ describeDb(
 		const reset = () => {
 			outcomes.length = 0;
 			results.length = 0;
+			approvals.length = 0;
 			faux.setResponses([script, script]);
 		};
 
@@ -359,6 +397,68 @@ describeDb(
 				parts: 0,
 			});
 			expect(JSON.stringify(results[0])).toContain("https://app.example/page");
+			ada.socket.close();
+		});
+
+		test("a call that acts on no approval carries none", async () => {
+			reset();
+			const { token } = await person("Ada");
+			const ada = await client(token, ["page_status"]);
+			ada.send({
+				type: "send",
+				id: "m1",
+				persona: "helpdesk",
+				text: "peek page_status",
+			});
+			const call = await ada.call();
+			expect("approval" in call).toBe(false);
+			ada.send({ type: "client_result", call: call.call, ok: true, value: 1 });
+			await ada.frame("reply");
+			ada.socket.close();
+		});
+
+		test("a held tool approved on its card sees that card's id, and its client call carries it as the approval", async () => {
+			reset();
+			const { token } = await person("Ada");
+			const ada = await client(token, ["page_status"]);
+			ada.send({
+				type: "send",
+				id: "m1",
+				persona: "helpdesk",
+				text: "held peek page_status",
+			});
+			const prompt = await ada.frame("prompt");
+			expect(prompt.prompt.kind).toBe("approval");
+			// Nothing was asked of the client before the person approved.
+			expect(ada.frames.some((frame) => frame.type === "client_call")).toBe(
+				false,
+			);
+			ada.send({ type: "approval", prompt: prompt.prompt.id, approved: true });
+			const call = await ada.call();
+			expect(call.approval).toEqual({ prompt: prompt.prompt.id });
+			expect(approvals).toEqual([{ approvedPrompt: prompt.prompt.id }]);
+			ada.send({ type: "client_result", call: call.call, ok: true, value: 1 });
+			expect((await ada.frame("reply")).text).toBe("peeked");
+			ada.socket.close();
+		});
+
+		test("a held tool the person declines never runs, so no approval reaches the client", async () => {
+			reset();
+			const { token } = await person("Ada");
+			const ada = await client(token, ["page_status"]);
+			ada.send({
+				type: "send",
+				id: "m1",
+				persona: "helpdesk",
+				text: "held peek page_status",
+			});
+			const prompt = await ada.frame("prompt");
+			ada.send({ type: "approval", prompt: prompt.prompt.id, approved: false });
+			await ada.frame("reply");
+			expect(approvals).toEqual([]);
+			expect(ada.frames.some((frame) => frame.type === "client_call")).toBe(
+				false,
+			);
 			ada.socket.close();
 		});
 

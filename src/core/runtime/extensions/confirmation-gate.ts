@@ -11,18 +11,20 @@ import {
 	isPromise,
 } from "../../holds.ts";
 import { messages } from "../../i18n/index.ts";
-import { type OwnerIdentity, ownerWords } from "../../identity.ts";
+import type { OwnerIdentity } from "../../identity.ts";
 import type {
-	ApprovalOptions,
 	ApprovedBy,
 	LateAnswer,
 	Prompts,
 } from "../../interactions/prompts.ts";
 import type { ToolTiers } from "../../tool-tiers.ts";
 import { approvalCard, approvalDetails } from "./approval-card.ts";
+import { askOnCard } from "./card-ask.ts";
 import {
 	approverOf,
 	askSpeaker,
+	awaitingText,
+	declinedText,
 	type Needing,
 	namesOf,
 	type Release,
@@ -31,6 +33,7 @@ import {
 	unlessNamed,
 	withdrawn,
 } from "./gate-refusals.ts";
+import { type Grant, Grants } from "./grants.ts";
 import {
 	canonicalJson,
 	mayApproveNamed,
@@ -40,6 +43,7 @@ import {
 } from "./held-calls.ts";
 import { HoldDescriber } from "./hold-describer.ts";
 import { type HoldTurn, type Judgment, STOPPED } from "./hold-lookups.ts";
+import { lateOutcome } from "./late-answer.ts";
 
 export { confirmationGateExtension } from "./confirmation-gate-extension.ts";
 export {
@@ -73,8 +77,8 @@ export class ConfirmationGate {
 	#approved: Release[] = [];
 	/** Calls approved on their cards after the turn that asked stopped waiting; each runs once, in any turn. */
 	#lateApproved: Release[] = [];
-	/** Who approved each call that is running, by tool call id, until its result is back. */
-	readonly #approvers = new Map<string, ApprovedBy>();
+	/** Who approved each call that is running, and on which card, by tool call id, until its result is back. */
+	readonly #grants = new Grants();
 	readonly #holds: HoldCheck;
 	readonly #owner: OwnerIdentity;
 	/** Whom the running turn's held actions and refusals speak of: the turn's speaker. */
@@ -188,7 +192,7 @@ export class ConfirmationGate {
 
 	endTurn(): void {
 		this.#approved = [];
-		this.#approvers.clear();
+		this.#grants.clear();
 		this.#sweep();
 	}
 
@@ -230,17 +234,22 @@ export class ConfirmationGate {
 
 	/** Who approved the held call running under this tool call id; undefined when it was not held or they are unknown. */
 	approvedBy(toolCallId: string): ApprovedBy | undefined {
-		return this.#approvers.get(toolCallId);
+		return this.#grants.get(toolCallId)?.by;
 	}
 
-	/** Notes who approved the call running under a tool call id, for its `run` to read. */
-	grant(toolCallId: string, by: ApprovedBy): void {
-		this.#approvers.set(toolCallId, by);
+	/** The id of the card that approved the call running under this tool call id; undefined when no card did. */
+	approvedPrompt(toolCallId: string): string | undefined {
+		return this.#grants.get(toolCallId)?.prompt;
+	}
+
+	/** Notes who approved the call running under a tool call id, and on which card, for its `run` to read. */
+	grant(toolCallId: string, grant: Grant): void {
+		this.#grants.set(toolCallId, grant);
 	}
 
 	/** Forgets who approved a tool call, once its result is back. */
 	finish(toolCallId: string): void {
-		this.#approvers.delete(toolCallId);
+		this.#grants.delete(toolCallId);
 	}
 
 	/** Returns the reason a call is held, or undefined to let it run. */
@@ -283,6 +292,8 @@ export class ConfirmationGate {
 		approvedOnCard?: true;
 		/** Who approved the call, when it was held and a surface or a confirming message said who. */
 		approvedBy?: ApprovedBy;
+		/** The id of the card whose approval released the call, in this turn or answered late; absent for a call a message confirmed. */
+		approvedPrompt?: string;
 		/** Why a hold refused the call, for a surface that tells that from a failure; absent when it ran or the turn stopped. */
 		refused?: HoldRefusal;
 	}> {
@@ -290,8 +301,13 @@ export class ConfirmationGate {
 		const needing = isPromise(found) ? await found : found;
 		if (needing === STOPPED) return { reason: "The turn was stopped." };
 		if (!needing) return {};
-		if ("released" in needing)
-			return needing.released ? { approvedBy: needing.released } : {};
+		if ("released" in needing) {
+			const { by, prompt } = needing.released;
+			return {
+				...(by ? { approvedBy: by } : {}),
+				...(prompt ? { approvedPrompt: prompt } : {}),
+			};
+		}
 		const call = needing.held;
 		const watch = needing.supersede
 			? this.#withdrawals.watch(call, needing.supersede)
@@ -299,6 +315,8 @@ export class ConfirmationGate {
 		if (watch?.withdrawn) return withdrawn(call);
 		/** Holds the call for a message, no card being open for it. */
 		const held = async (refused: "held" | "expired") => {
+			// A withdrawn call is never held again, whatever the card said last.
+			if (watch?.withdrawn) return withdrawn(call);
 			if (watch) watch.card = false;
 			return { reason: await this.#held(call), refused };
 		};
@@ -306,29 +324,21 @@ export class ConfirmationGate {
 		// In a private conversation only its person answers: a call that names others is not theirs.
 		if (this.#private && !mayApproveNamed(this.#speaker, call))
 			return held("held");
-		let approvedBy: ApprovedBy | undefined;
-		const options: ApprovalOptions = {
-			...(call.approverIds ? { approvers: call.approverIds } : {}),
-			approvedBy: (by) => {
-				approvedBy = by;
+		const { answer, approvedBy, approvedPrompt } = await askOnCard(
+			ask.prompts,
+			{
+				title: messages().confirmTitle(ask.asker),
+				message: approvalCard(call, this.#fileRoot, {}, parameters),
+				signal: ask.signal,
+				minTier: higherTier(this.#tiers?.minTier(call.tool), call.minTier),
+				wait: { late: (late) => this.#late(call, late, watch) },
+				details: approvalDetails(call, this.#fileRoot, needing.copy),
+				approvers: call.approverIds,
+				watch,
 			},
-			...(watch ? { supersede: watch.signal } : {}),
-		};
-		const asking = ask.prompts.confirm(
-			messages().confirmTitle(ask.asker),
-			approvalCard(call, this.#fileRoot, {}, parameters),
-			ask.signal,
-			higherTier(this.#tiers?.minTier(call.tool), call.minTier),
-			{ late: (late) => this.#late(call, late, watch) },
-			approvalDetails(call, this.#fileRoot, needing.copy),
-			options,
 		);
-		// The first of the card's answer and the withdrawal settles the call; the other changes nothing.
-		const answer = watch
-			? await Promise.race([asking, watch.whenWithdrawn])
-			: await asking;
-		if (watch) void asking.catch(() => undefined);
-		if (answer === "withdrawn" || (watch?.withdrawn && answer === "cancelled"))
+		// Whatever the card then reports, a call the plugin withdrew is refused, never held again.
+		if (answer === "withdrawn" || (watch?.withdrawn && answer !== "approved"))
 			return withdrawn(call);
 		if (answer === "approved") {
 			// A private conversation's answer to a call that names approvers is its person's, whom a surface need not name.
@@ -340,20 +350,21 @@ export class ConfirmationGate {
 			// A call that names approvers runs only on the word of one of them, or an owner.
 			if (!namedApprover(call, by)) return held("held");
 			watch?.end();
-			return { approvedOnCard: true, ...(by ? { approvedBy: by } : {}) };
-		}
-		if (answer === "pending") {
-			const o = ownerWords(this.#addressee);
 			return {
-				reason: `Awaiting ${o.name}'s approval: this would ${call.action}. Its card stays open, and the call did not run. Do not retry it or ask again in this turn. End your turn now: say briefly that you are waiting for ${o.his} approval on the card. When ${o.he} answers, a new turn tells you.`,
-				refused: "pending",
+				approvedOnCard: true,
+				...(by ? { approvedBy: by } : {}),
+				...(approvedPrompt ? { approvedPrompt } : {}),
 			};
 		}
+		if (answer === "pending")
+			return {
+				reason: awaitingText(this.#addressee, call),
+				refused: "pending",
+			};
 		if (answer === "declined") {
 			watch?.end();
-			const o = ownerWords(this.#addressee);
 			return {
-				reason: `${o.name} declined this on its approval card: it would ${call.action}. Do not retry it; go on without it, or ask ${o.him} what ${o.he} wants instead.`,
+				reason: declinedText(this.#addressee, call),
 				refused: "declined",
 			};
 		}
@@ -365,29 +376,15 @@ export class ConfirmationGate {
 		return held(answer === "unavailable" ? "held" : "expired");
 	}
 
-	/**
-	 * A late answer on a call's card: an approval lets the identical call run once, in whichever
-	 * turn makes it next; returns the text of the turn that tells the model.
-	 */
+	/** A late answer on a call's card; see `lateOutcome`. Returns the text of the turn that tells the model. */
 	#late(
 		call: HeldCall,
 		late: LateAnswer,
 		watch: Watch | undefined,
 	): string | undefined {
-		// A card the plugin withdrew answers nothing, whatever a surface that kept it open reports.
-		if (watch?.withdrawn || late.kind !== "approval") return undefined;
-		if (watch) watch.card = false;
-		if (late.approved && !namedApprover(call, late.approvedBy))
-			return undefined;
-		if (!late.approved) {
-			watch?.end();
-			return `(${late.by} declined on its card the action you were waiting on: it would ${call.action}. It did not run; do not make the call again. Go on without it, or ask what ${late.by} wants instead.)`;
-		}
-		this.#lateApproved.push({
-			call,
-			...(late.approvedBy ? { by: late.approvedBy } : {}),
-		});
-		return `(${late.by} approved on its card the action you were waiting on: it would ${call.action}. Make this call now with exactly this input, and it runs once; then report its result.)\n- ${call.tool} ${call.input}`;
+		const outcome = lateOutcome(call, late, watch);
+		if (outcome?.release) this.#lateApproved.push(outcome.release);
+		return outcome?.text;
 	}
 
 	/** What a call needs when a rule holds it; undefined when none does. */
@@ -442,7 +439,7 @@ export class ConfirmationGate {
 			const [spent] = approved === -1 ? [] : released.splice(approved, 1);
 			if (spent) {
 				this.#withdrawals.endCall(spent.call);
-				return { released: spent.by };
+				return { released: spent };
 			}
 		}
 		return {

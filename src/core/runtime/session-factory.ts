@@ -371,6 +371,7 @@ export class SessionFactory {
 			speaker: () => this.#deps.speaker(turnKey),
 			origin: () => this.#deps.origin(turnKey),
 			approvedBy: (toolCallId) => gate.approvedBy(toolCallId),
+			approvedPrompt: (toolCallId) => gate.approvedPrompt(toolCallId),
 			client: () => this.#deps.client(turnKey),
 			runTask: (task) =>
 				this.#deps.runTask({ turn: turnKey, home: channel }, task),

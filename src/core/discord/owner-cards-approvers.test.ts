@@ -321,6 +321,7 @@ describe("cards for a call that names its approvers", () => {
 				approved: true,
 				by: ADA,
 				approvedBy: { principalId: ADA, speakerId: ADA, name: ADA },
+				prompt: expect.any(String),
 			},
 		]);
 		// The turn that asked had moved on; nothing is reported to it.

@@ -258,6 +258,11 @@ export type ServerFrame =
 			name: string;
 			args: unknown;
 			timeoutMs: number;
+			/**
+			 * The approval the call acts on, when the tool passed one: `prompt` is the id of the
+			 * `prompt` frame the person approved. Absent for a call that acts on no approval.
+			 */
+			approval?: { prompt: string };
 	  }
 	/** The call is no longer wanted: stop running it; any answer is dropped. */
 	| { type: "client_cancel"; call: string; reason: ClientCancelReason }

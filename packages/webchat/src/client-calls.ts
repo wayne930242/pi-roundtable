@@ -47,6 +47,15 @@ function plain(text: string): string {
 
 const bytesOf = (text: string) => new TextEncoder().encode(text).length;
 
+/** The longest prompt id a call may name as its approval, as long as the ids a client may answer. */
+const APPROVAL_PROMPT_CHARS = 128;
+
+/** Whether `prompt` can be a prompt id: a text of 1 to 128 characters. */
+const validPrompt = (prompt: unknown): prompt is string =>
+	typeof prompt === "string" &&
+	prompt.length > 0 &&
+	prompt.length <= APPROVAL_PROMPT_CHARS;
+
 const failure = (
 	error: ClientCallError,
 	message: string,
@@ -208,6 +217,9 @@ export class ClientDesk {
 				"failed",
 				`the arguments must be JSON of at most ${MAX_ARGS_BYTES} bytes`,
 			);
+		const approval = options?.approval;
+		if (approval !== undefined && !validPrompt(approval.prompt))
+			return refuse("failed", "approval.prompt must be a prompt id");
 		if (this.#byConnection.has(connection))
 			return refuse("busy", "another call is open on this client");
 		let rate = this.#rates.get(connection);
@@ -277,6 +289,7 @@ export class ClientDesk {
 				name,
 				args: JSON.parse(argsJson),
 				timeoutMs,
+				...(approval ? { approval: { prompt: approval.prompt } } : {}),
 			});
 		});
 	}

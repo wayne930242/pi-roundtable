@@ -35,17 +35,22 @@ export function confirmationGateExtension(
 			const turn: HoldTurn | undefined = turnOf
 				? { toolTurn: turnOf, ...(ctx.signal ? { signal: ctx.signal } : {}) }
 				: undefined;
-			const { reason, approvedOnCard, approvedBy, refused } = await gate.decide(
-				event.toolName,
-				event.input as Record<string, unknown>,
-				ask,
-				turn,
-				// A host that gives no tool list shows the call as JSON.
-				pi.getAllTools?.().find((tool) => tool.name === event.toolName)
-					?.parameters,
-			);
+			const { reason, approvedOnCard, approvedBy, approvedPrompt, refused } =
+				await gate.decide(
+					event.toolName,
+					event.input as Record<string, unknown>,
+					ask,
+					turn,
+					// A host that gives no tool list shows the call as JSON.
+					pi.getAllTools?.().find((tool) => tool.name === event.toolName)
+						?.parameters,
+				);
 			if (approvedOnCard) approved.add(event.toolCallId);
-			if (approvedBy && !reason) gate.grant(event.toolCallId, approvedBy);
+			if (!reason && (approvedBy || approvedPrompt))
+				gate.grant(event.toolCallId, {
+					...(approvedBy ? { by: approvedBy } : {}),
+					...(approvedPrompt ? { prompt: approvedPrompt } : {}),
+				});
 			if (refused) slot?.refuse(event.toolCallId, refused);
 			return reason ? { block: true, reason } : undefined;
 		});

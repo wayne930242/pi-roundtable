@@ -228,3 +228,42 @@ describe("an approval its plugin withdraws", () => {
 		expect(frames).toEqual([]);
 	});
 });
+
+describe("the card that approved a call", () => {
+	function open(approvedPrompt: (prompt: string) => void) {
+		const frames: ServerFrame[] = [];
+		const desk = new PromptDesk({
+			send: (_principal, frame) => void frames.push(frame),
+			timeoutMs: 60_000,
+		});
+		const scope = promptScope(speakerOf("ann", "member"), "shared");
+		const answer = desk
+			.prompts("c1", scope)
+			.confirm("Send?", "sends it", undefined, "member", undefined, undefined, {
+				approvedPrompt,
+			});
+		const prompt = frames.find((frame) => frame.type === "prompt");
+		const id = prompt?.type === "prompt" ? prompt.prompt.id : "";
+		return { desk, answer, id };
+	}
+
+	test("is reported by its prompt id before the approval resolves", async () => {
+		const heard: string[] = [];
+		const { desk, answer, id } = open((prompt) => heard.push(prompt));
+		desk.approve({ principalId: "ann", tier: "member" }, id, true);
+		expect(heard).toEqual([id]);
+		expect(await answer).toBe("approved");
+	});
+
+	test("is not reported for a refusal, an expiry or a stop", async () => {
+		const heard: string[] = [];
+		const declined = open((prompt) => heard.push(prompt));
+		declined.desk.approve(
+			{ principalId: "ann", tier: "member" },
+			declined.id,
+			false,
+		);
+		expect(await declined.answer).toBe("declined");
+		expect(heard).toEqual([]);
+	});
+});

@@ -153,23 +153,21 @@ export class OwnerCards implements InteractionModule {
 							? {
 									wait: {
 										pending: "pending",
-										late: (value, by) =>
+										late: (value, by, prompt) =>
 											wait.late({
 												kind: "approval",
 												approved: value === "approved",
 												by: by.user.name,
 												...(by.approver ? { approvedBy: by.approver } : {}),
+												prompt,
 											}),
 									},
 								}
 							: {}),
-						...(options?.approvedBy
-							? {
-									approved: (by: Answerer) => {
-										if (by.approver) options.approvedBy?.(by.approver);
-									},
-								}
-							: {}),
+						approved: (by: Answerer, prompt: string) => {
+							if (by.approver) options?.approvedBy?.(by.approver);
+							options?.approvedPrompt?.(prompt);
+						},
 						title,
 						sections: [message],
 						...(options?.supersede ? { supersede: options.supersede } : {}),
@@ -235,10 +233,14 @@ export class OwnerCards implements InteractionModule {
 			footer: string;
 			wait?: {
 				pending: T;
-				late(value: unknown, by: Answerer): ReturnType<PromptWait["late"]>;
+				late(
+					value: unknown,
+					by: Answerer,
+					prompt: string,
+				): ReturnType<PromptWait["late"]>;
 			};
 			/** Hears who approved the card, before it resolves approved in its turn. */
-			approved?(by: Answerer): void;
+			approved?(by: Answerer, prompt: string): void;
 		},
 	): Promise<T> {
 		const { logger, graceMs = CARD_GRACE_MS, resume } = this.#options;
@@ -314,11 +316,11 @@ export class OwnerCards implements InteractionModule {
 					// Withdrawn or answered already: this answer changes nothing.
 					if (!this.#open.has(id)) return false;
 					const answeredLate = late;
-					if (value === "approved" && !answeredLate) card.approved?.(by);
+					if (value === "approved" && !answeredLate) card.approved?.(by, id);
 					settle(value as T, undefined);
 					if (!answeredLate || !wait || !resume) return true;
 					try {
-						const text = wait.late(value, by);
+						const text = wait.late(value, by, id);
 						if (text === undefined) return true;
 						resume({
 							channelId,

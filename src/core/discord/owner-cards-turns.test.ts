@@ -17,7 +17,13 @@ import { promptSlot } from "../runtime/prompt-slot.ts";
 import { TEST_OWNER } from "../testing/owner.ts";
 import { lateAnswerMessage } from "./inbound-message.ts";
 import { CARD_PREFIX, type LateTurn, OwnerCards } from "./owner-cards.ts";
-import { fakeChannel, json, OWNER, press } from "./owner-cards-fixture.ts";
+import {
+	fakeChannel,
+	json,
+	OWNER,
+	press,
+	tick,
+} from "./owner-cards-fixture.ts";
 
 /** Real cards over a fake channel with a short grace period, recording the turns they start. */
 function cards() {
@@ -126,6 +132,78 @@ describe("a card answered after its turn stopped waiting", () => {
 		});
 		expect(await call(send, "call-3")).toBeUndefined();
 		expect(await call(send, "call-4")).toMatchObject({ block: true });
+	});
+
+	test("a call a card approved in its turn knows the card's id until its result is back; one a message confirmed knows none", async () => {
+		const { fake, owner, prompts } = cards();
+		const gate = new ConfirmationGate(holdChain([MAIL_RULE]), TEST_OWNER);
+		const slot = promptSlot();
+		slot.bind(prompts, "infra");
+		let onCall: ToolCall | undefined;
+		confirmationGateExtension(
+			gate,
+			slot,
+		)({
+			on: (event: string, handler: ToolCall) => {
+				if (event === "tool_call") onCall = handler;
+			},
+		} as unknown as ExtensionAPI);
+		const send = { to: "a@b.c", subject: "hi" };
+		gate.beginTurn("workspace", false);
+		const running = onCall?.(
+			{ toolName: MAIL, toolCallId: "call-1", input: send },
+			{},
+		);
+		await tick();
+		const id = fake.cardId();
+		await owner.handle(press("button", `${CARD_PREFIX}${id}:yes`).interaction);
+		expect(await running).toBeUndefined();
+		expect(id).not.toBe("");
+		expect(gate.approvedPrompt("call-1")).toBe(id);
+		gate.finish("call-1");
+		expect(gate.approvedPrompt("call-1")).toBeUndefined();
+
+		// A message that confirms a held call is no card.
+		const other = new ConfirmationGate(holdChain([MAIL_RULE]), TEST_OWNER);
+		other.beginTurn("workspace", false);
+		other.hold(MAIL, send);
+		other.endTurn();
+		other.beginTurn("workspace", true);
+		const decided = await other.decide(MAIL, send);
+		expect(decided.reason).toBeUndefined();
+		expect(decided.approvedPrompt).toBeUndefined();
+	});
+
+	test("a card approved after its turn stopped waiting hands the call that runs in a later turn that card's id", async () => {
+		const { fake, owner, prompts } = cards();
+		const gate = new ConfirmationGate(holdChain([MAIL_RULE]), TEST_OWNER);
+		const slot = promptSlot();
+		slot.bind(prompts, "infra");
+		let onCall: ToolCall | undefined;
+		confirmationGateExtension(
+			gate,
+			slot,
+		)({
+			on: (event: string, handler: ToolCall) => {
+				if (event === "tool_call") onCall = handler;
+			},
+		} as unknown as ExtensionAPI);
+		const send = { to: "a@b.c", subject: "hi" };
+		gate.beginTurn("workspace", false);
+		await onCall?.({ toolName: MAIL, toolCallId: "call-1", input: send }, {});
+		gate.endTurn();
+		const id = fake.cardId();
+		await owner.handle(press("button", `${CARD_PREFIX}${id}:yes`).interaction);
+		gate.beginTurn("workspace", false);
+		expect(
+			await onCall?.({ toolName: MAIL, toolCallId: "call-2", input: send }, {}),
+		).toBeUndefined();
+		expect(gate.approvedPrompt("call-2")).toBe(id);
+		// Spent: the identical call again is held again, with no card to name.
+		expect(
+			await onCall?.({ toolName: MAIL, toolCallId: "call-3", input: send }, {}),
+		).toMatchObject({ block: true });
+		expect(gate.approvedPrompt("call-3")).toBeUndefined();
 	});
 
 	test("a late refusal starts a turn saying so, and the call stays refused", async () => {

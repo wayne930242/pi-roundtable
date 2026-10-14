@@ -39,6 +39,13 @@ export interface ClientCallOptions {
 	 * need not pass the turn's signal; the core adds it to every call.
 	 */
 	signal?: AbortSignal;
+	/**
+	 * The approval this call acts on, for a client that must check the person approved it: `prompt`
+	 * is the id of the approval card (`ToolTurn.approvedPrompt`). The transport hands it to the
+	 * client beside the call; a tool passes it only when it has one, so a call without it carries
+	 * no approval. The client, not the core, decides whether it satisfies the function.
+	 */
+	approval?: { prompt: string };
 }
 
 /**

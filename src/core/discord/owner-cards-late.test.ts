@@ -80,6 +80,8 @@ describe("OwnerCards after the grace period", () => {
 					name: OWNER,
 					owner: true,
 				},
+				// The card that was answered.
+				prompt: id,
 			},
 		]);
 		expect(resumed).toEqual([
@@ -104,9 +106,12 @@ describe("OwnerCards after the grace period", () => {
 	test("a late refusal starts a turn that says so", async () => {
 		const { fake, cards, prompts, resumed, heard, wait } = setup();
 		await prompts.confirm("t", "m", undefined, undefined, wait);
-		const no = press("button", `${CARD_PREFIX}${fake.cardId()}:no`);
+		const id = fake.cardId();
+		const no = press("button", `${CARD_PREFIX}${id}:no`);
 		await cards.handle(no.interaction);
-		expect(heard).toEqual([{ kind: "approval", approved: false, by: OWNER }]);
+		expect(heard).toEqual([
+			{ kind: "approval", approved: false, by: OWNER, prompt: id },
+		]);
 		expect(resumed).toHaveLength(1);
 		expect(json(no.updates[0])).toContain(messages().cardDeclined);
 	});

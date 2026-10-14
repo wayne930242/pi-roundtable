@@ -51,6 +51,17 @@ export interface ToolTurn {
 	 */
 	approvedBy?: ApprovedBy;
 	/**
+	 * The id of the approval card that released this call, for a tool that must show a client which
+	 * approval it acts on (pass it as `ClientCallOptions.approval.prompt`). Set when the person
+	 * approved the held call on its card (Discord's card id, the web chat's `prompt` id), in the turn
+	 * that asked or, for a card answered after that turn stopped waiting, when a later turn makes
+	 * the identical call. Undefined for a call that ran without a hold, one a message confirmed
+	 * (including after a restart, which keeps no cards), one a surface released without a card id,
+	 * and in a turn that has no gate, such as a precheck script's call; a tool that needs it fails
+	 * closed. It is never from the model or the message text.
+	 */
+	approvedPrompt?: string;
+	/**
 	 * What the client that started the turn can do for this tool, such as run a function in the
 	 * browser the person chats from; undefined for a turn whose transport gives none, such as a
 	 * Discord message or a schedule, or whose client declared nothing. Every call carries this turn's

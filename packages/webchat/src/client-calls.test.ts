@@ -83,6 +83,41 @@ async function refusal(promise: Promise<unknown>) {
 	throw new Error("expected a ClientPartRefusal");
 }
 
+describe("a call that names the approval it acts on", () => {
+	test("puts it on the frame as approval.prompt, and the answer still comes back", async () => {
+		const { desk, calls } = setup();
+		const started = connection("ada");
+		const pending = desk
+			.portFor(started, "c1")
+			?.call("page_status", {}, { approval: { prompt: "card-1" } });
+		await tick();
+		expect(calls()[0]?.approval).toEqual({ prompt: "card-1" });
+		expect(desk.result(started, ok(calls()[0]?.call ?? "", 1))).toBeUndefined();
+		expect(await pending).toMatchObject({ ok: true, value: 1 });
+	});
+
+	test("a prompt id that is not a text of 1 to 128 characters fails the call without sending it", async () => {
+		const { desk, calls } = setup();
+		const port = desk.portFor(connection("ada"), "c1");
+		for (const prompt of ["", "x".repeat(129), 5 as unknown as string]) {
+			const result = await port?.call(
+				"page_status",
+				{},
+				{ approval: { prompt } },
+			);
+			expect(result).toMatchObject({ ok: false, error: "failed" });
+		}
+		expect(calls()).toEqual([]);
+	});
+
+	test("an approval the tool does not pass adds nothing", async () => {
+		const { desk, calls } = setup();
+		void desk.portFor(connection("ada"), "c1")?.call("page_status", {});
+		await tick();
+		expect("approval" in (calls()[0] ?? {})).toBe(false);
+	});
+});
+
 describe("the port of a turn", () => {
 	test("exists only for a connection that declared functions", () => {
 		const { desk } = setup();

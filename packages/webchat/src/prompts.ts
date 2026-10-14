@@ -86,6 +86,7 @@ export class PromptDesk {
 					signal,
 					minTier,
 					options?.supersede,
+					options?.approvedPrompt,
 				);
 				return toApproval(outcome.outcome);
 			},
@@ -147,6 +148,7 @@ export class PromptDesk {
 		signal: AbortSignal | undefined,
 		minTier?: Tier,
 		supersede?: AbortSignal,
+		approvedPrompt?: (prompt: string) => void,
 	): Promise<{ outcome: PromptOutcome; answer?: OwnerAnswer }> {
 		const { send, timeoutMs } = this.#options;
 		if (signal?.aborted || supersede?.aborted)
@@ -166,6 +168,8 @@ export class PromptDesk {
 			) => {
 				// Whichever of an answer and a withdrawal comes first settles the prompt.
 				if (!this.#open.delete(id)) return;
+				// Heard before the approval resolves, so the call that runs on it can say which card it was.
+				if (outcome === "approved") approvedPrompt?.(id);
 				clearTimeout(timer);
 				signal?.removeEventListener("abort", onAbort);
 				supersede?.removeEventListener("abort", onSupersede);

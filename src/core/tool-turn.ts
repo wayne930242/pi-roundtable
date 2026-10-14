@@ -41,6 +41,8 @@ export function toolTurn(
 	const origin = context.origin?.();
 	const approvedBy =
 		toolCallId === undefined ? undefined : context.approvedBy?.(toolCallId);
+	const approvedPrompt =
+		toolCallId === undefined ? undefined : context.approvedPrompt?.(toolCallId);
 	const client = context.client?.();
 	return {
 		speaker: context.speaker(),
@@ -49,6 +51,7 @@ export function toolTurn(
 		signal,
 		...(origin === undefined ? {} : { origin }),
 		...(approvedBy === undefined ? {} : { approvedBy }),
+		...(approvedPrompt === undefined ? {} : { approvedPrompt }),
 		...(client === undefined ? {} : { client: clientIn(client, signal) }),
 		...(context.workspace ? { workspace: context.workspace } : {}),
 		attachFile: attachReplyFile,

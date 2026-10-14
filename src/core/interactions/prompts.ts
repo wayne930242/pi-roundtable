@@ -85,6 +85,14 @@ export interface ApprovalOptions {
 	 */
 	approvedBy?(by: ApprovedBy): void;
 	/**
+	 * Called with the id of the card whose approval released the call, right before the approval
+	 * resolves `approved` (after `approvedBy`); not called for a refusal, or by a surface whose
+	 * cards have no stable id. The id is the one the surface shows its people (Discord's card id in
+	 * the custom ids of its buttons, the web chat's `prompt` id), and reaches the tool's `run` as
+	 * `ToolTurn.approvedPrompt`, for a tool that must prove to a client which approval it acts on.
+	 */
+	approvedPrompt?(prompt: string): void;
+	/**
 	 * Aborts when the plugin that caused the call withdraws it (`HoldDescription.supersede`). A
 	 * surface that shows the card closes it then, controls off, with `withdrawalNote(signal)` as
 	 * its footer, also when the turn has stopped waiting and the card stays open; a card already
@@ -119,7 +127,13 @@ export function withdrawalNote(signal: AbortSignal, fallback: string): string {
  * names the approver too, where the surface knows them.
  */
 export type LateAnswer = { by: string } & (
-	| { kind: "approval"; approved: boolean; approvedBy?: ApprovedBy }
+	| {
+			kind: "approval";
+			approved: boolean;
+			approvedBy?: ApprovedBy;
+			/** The id of the card that was answered; see `ApprovalOptions.approvedPrompt`. */
+			prompt?: string;
+	  }
 	| { kind: "question"; answer: OwnerAnswer }
 );
 

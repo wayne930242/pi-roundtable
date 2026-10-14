@@ -166,6 +166,65 @@ describe("a plugin withdrawing a call while its card waits in the turn", () => {
 		}
 	});
 
+	test("a withdrawal that lands between the card's last word and the turn reading it refuses the call, never holds it again", async () => {
+		for (const last of [
+			"expired",
+			"unavailable",
+			"declined",
+			"pending",
+		] as const) {
+			const withdraw = new AbortController();
+			const { gate, saved } = setup(() => withdraw.signal);
+			const { prompts, answer } = card(false);
+			const deciding = decide(gate, prompts);
+			await Bun.sleep(1);
+			// Both in one tick: the card resolves first, then the plugin aborts before the turn continues.
+			answer(last);
+			withdraw.abort("replaced");
+			const result = await deciding;
+			expect(result.refused).toBe("withdrawn");
+			expect(gate.pending()).toBeUndefined();
+			expect(gate.watching).toBe(0);
+			// Held and forgotten at once would be saved as such; a call never held is not.
+			expect(saved.length).toBeLessThanOrEqual(1);
+		}
+	});
+
+	test("a card that fails ends the watch and leaves no listener on the signal", async () => {
+		const withdraw = new AbortController();
+		let listeners = 0;
+		const add = withdraw.signal.addEventListener.bind(withdraw.signal);
+		const remove = withdraw.signal.removeEventListener.bind(withdraw.signal);
+		withdraw.signal.addEventListener = (...args: Parameters<typeof add>) => {
+			listeners++;
+			add(...args);
+		};
+		withdraw.signal.removeEventListener = (
+			...args: Parameters<typeof remove>
+		) => {
+			listeners--;
+			remove(...args);
+		};
+		const { gate } = setup(() => withdraw.signal);
+		const failing: Prompts = {
+			confirm: () => Promise.reject(new Error("the card could not be shown")),
+			ask: async () => undefined,
+		};
+		await expect(decide(gate, failing)).rejects.toThrow("could not be shown");
+		expect(gate.watching).toBe(0);
+		expect(listeners).toBe(0);
+		// A card that throws at once does the same.
+		const throwing: Prompts = {
+			confirm: () => {
+				throw new Error("no channel");
+			},
+			ask: async () => undefined,
+		};
+		await expect(decide(gate, throwing)).rejects.toThrow("no channel");
+		expect(gate.watching).toBe(0);
+		expect(listeners).toBe(0);
+	});
+
 	test("a signal that is not a signal is ignored: the call is held as before", async () => {
 		expect(
 			described({ text: "t", supersede: "no" as unknown as AbortSignal }, MAIL),

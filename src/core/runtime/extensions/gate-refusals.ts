@@ -23,6 +23,8 @@ export type SpeakerRef = Pick<Speaker, "id" | "principalId"> & {
 export interface Release {
 	call: HeldCall;
 	by?: ApprovedBy;
+	/** The id of the card whose approval released the call, when one did. */
+	prompt?: string;
 }
 
 /** What a call needs of the gate: nothing, a hold, or a release that spends an approval. */
@@ -33,7 +35,7 @@ export type Needing =
 			/** Aborts when the plugin withdraws the call; see `HoldDescription`. */
 			supersede?: AbortSignal;
 	  }
-	| { released: ApprovedBy | undefined };
+	| { released: Release };
 
 /** A speaker as an approver; undefined without one. */
 export function approverOf(
@@ -57,6 +59,18 @@ export function withdrawn(call: HeldCall): {
 		reason: `This action was withdrawn before it was approved: it would ${call.action}. It did not run, and an approval of it will not run it. Do not retry it; go on without it, or tell the owner it is no longer needed.`,
 		refused: "withdrawn",
 	};
+}
+
+/** What a turn is told when its card is left open and the call did not run. */
+export function awaitingText(addressee: OwnerIdentity, call: HeldCall): string {
+	const o = ownerWords(addressee);
+	return `Awaiting ${o.name}'s approval: this would ${call.action}. Its card stays open, and the call did not run. Do not retry it or ask again in this turn. End your turn now: say briefly that you are waiting for ${o.his} approval on the card. When ${o.he} answers, a new turn tells you.`;
+}
+
+/** What a turn is told when its call was declined on its card. */
+export function declinedText(addressee: OwnerIdentity, call: HeldCall): string {
+	const o = ownerWords(addressee);
+	return `${o.name} declined this on its approval card: it would ${call.action}. Do not retry it; go on without it, or ask ${o.him} what ${o.he} wants instead.`;
 }
 
 /** The text for a held call that the speaker's own message confirms. */
