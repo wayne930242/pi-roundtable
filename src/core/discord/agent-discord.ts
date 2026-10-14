@@ -349,7 +349,15 @@ export class DiscordDashboard implements DashboardBoard {
 				// else is the caller's to log.
 				const gone = await this.#gone(message);
 				if (!gone && !isInvalidForm(error)) throw error;
-				if (!gone) await message.delete().catch(() => undefined);
+				if (!gone)
+					await message
+						.delete()
+						.catch((deleteError: unknown) =>
+							this.#logger.warn(
+								{ err: deleteError },
+								"old dashboard message not deleted; a fresh one is posted beside it",
+							),
+						);
 			}
 		}
 		const channel = await this.#channel();
