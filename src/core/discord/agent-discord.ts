@@ -3,6 +3,7 @@ import {
 	ChannelType,
 	type Client,
 	ContainerBuilder,
+	DiscordAPIError,
 	discordSort,
 	type Guild,
 	type Message,
@@ -291,6 +292,15 @@ function channelMessage(message: Message): ChannelMessage {
 	};
 }
 
+/** Discord's 400 "Invalid Form Body": the payload is refused for this message, retrying it as is cannot help. */
+function isInvalidForm(error: unknown): boolean {
+	return (
+		error instanceof DiscordAPIError &&
+		error.status === 400 &&
+		error.code === 50035
+	);
+}
+
 /**
  * `#dashboard` at the top of the agent server and the assistant's one message in it, found again after a
  * restart and made again when either is deleted. The message is pinned when the assistant has the Pin
@@ -324,6 +334,7 @@ export class DiscordDashboard implements DashboardBoard {
 		const body = {
 			components: [container],
 			allowedMentions: { parse: [] },
+			flags: MessageFlags.IsComponentsV2 as const,
 		};
 		const message = this.#message ?? (await this.#find());
 		if (message) {
@@ -333,15 +344,16 @@ export class DiscordDashboard implements DashboardBoard {
 				return;
 			} catch (error) {
 				this.#message = undefined;
-				// A message deleted by hand is made again; anything else is the caller's to log.
-				if (!(await this.#gone(message))) throw error;
+				// A message deleted by hand is made again, and so is one Discord refuses to edit as
+				// components v2 (an old v1 message): it is deleted and posted fresh, once. Anything
+				// else is the caller's to log.
+				const gone = await this.#gone(message);
+				if (!gone && !isInvalidForm(error)) throw error;
+				if (!gone) await message.delete().catch(() => undefined);
 			}
 		}
 		const channel = await this.#channel();
-		const posted = await channel.send({
-			...body,
-			flags: MessageFlags.IsComponentsV2,
-		});
+		const posted = await channel.send(body);
 		this.#message = posted;
 		await this.#pin(posted);
 	}
