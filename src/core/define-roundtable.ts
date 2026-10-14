@@ -137,7 +137,8 @@ interface DiscordAssembly {
 	admin: RoundtablePlugin[];
 	skills: RoundtablePlugin[];
 	agentServer: RoundtablePlugin;
-	seeds: RoundtablePlugin;
+	/** Absent when no agent is configured: a plugin that adds nothing is refused by the registry. */
+	seeds?: RoundtablePlugin;
 }
 
 function discordAssembly(
@@ -215,7 +216,7 @@ function discordAssembly(
 				? { errorReporter }
 				: {}),
 		}),
-		seeds: seedsPlugin(config.agents),
+		...(config.agents.length > 0 ? { seeds: seedsPlugin(config.agents) } : {}),
 	};
 }
 
@@ -334,7 +335,9 @@ export async function defineRoundtable(
 				memory: config.memory,
 				...(crowd ? { crowd } : {}),
 			}),
-			...(assembly ? [assembly.agentServer, assembly.seeds] : []),
+			...(assembly
+				? [assembly.agentServer, ...(assembly.seeds ? [assembly.seeds] : [])]
+				: []),
 			...config.plugins,
 			schedulerPlugin(),
 		],

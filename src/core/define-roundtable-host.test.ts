@@ -165,6 +165,24 @@ function hasWebAccess(): boolean {
 			expect(await roundtable.shutdown("test")).toBe(0);
 		});
 
+		test("boots with Discord configured and no agents to seed", async () => {
+			for (const agents of [undefined, []]) {
+				const { agents: _, ...rest } = config;
+				const { options, plugins } = await defineRoundtable(
+					{
+						...rest,
+						...(agents ? { agents } : {}),
+						plugins: [quietDiscord(), quietRuntime],
+					},
+					{ logger: silentLogger() },
+				);
+				roundtable = new Roundtable(options, plugins);
+				await roundtable.run();
+				expect(await roundtable.shutdown("test")).toBe(0);
+				roundtable = undefined;
+			}
+		});
+
 		test("discord.agentMemory reaches the sessions the agent server hands the runtime", async () => {
 			const memories: unknown[] = [];
 			for (const [form, agentMemory] of [

@@ -87,10 +87,32 @@ describe("defineRoundtable", () => {
 			"conversations",
 			"runtime",
 			"agent-server",
-			"seeds",
 			"mine",
 			"schedules",
 		]);
+	});
+
+	test("the seeds plugin joins only when agents are configured, since a plugin that adds nothing is refused", async () => {
+		const withAgents = await defineRoundtable({
+			...config,
+			agents: [
+				{
+					name: "ada",
+					displayName: "Ada",
+					prompt: "p",
+					avatarPrompt: "a",
+				},
+			],
+		});
+		const names = withAgents.plugins.map((plugin) => plugin.name);
+		expect(names.indexOf("seeds")).toBe(names.indexOf("agent-server") + 1);
+		for (const agents of [undefined, []]) {
+			const { plugins } = await defineRoundtable({
+				...config,
+				...(agents ? { agents } : {}),
+			});
+			expect(plugins.map((plugin) => plugin.name)).not.toContain("seeds");
+		}
 	});
 
 	test("without Discord, the Discord plugins, the agent server, and its seeds are left out, and the runtime stays", async () => {
@@ -135,7 +157,6 @@ describe("defineRoundtable", () => {
 			"conversations",
 			"runtime",
 			"agent-server",
-			"seeds",
 			"schedules",
 		]);
 		expect(
@@ -200,7 +221,6 @@ describe("defineRoundtable", () => {
 			"conversations",
 			"runtime",
 			"agent-server",
-			"seeds",
 			"schedules",
 		]);
 		// The modules plugin is one feature: its background turns and its delegation are replaced together or not at all.

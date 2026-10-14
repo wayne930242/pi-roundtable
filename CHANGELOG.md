@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- A host with `discord` configured and no `agents` (an empty first team) starts again. `defineRoundtable` always added the `seeds` plugin, which had nothing to seed, and the registry refuses a plugin that adds nothing ("plugin seeds adds nothing"); the plugin now joins only when at least one agent is configured.
+
 ## [0.14.0] - 2026-10-14
 
 ### Added
