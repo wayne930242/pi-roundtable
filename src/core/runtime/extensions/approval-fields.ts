@@ -13,6 +13,8 @@ const HIDDEN_LABELS = 20;
 /** One argument of a held call as a card shows it. */
 export interface CardField {
 	label: string;
+	/** An argument the schema does not list: its name is shown in code format, so it reads as a name the tool never declared. */
+	extra?: true;
 	// pi-lens-ignore: no-unknown-parameters — a tool's argument is untyped model JSON
 	value: unknown;
 }
@@ -33,7 +35,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 /**
  * The arguments of a call in the order its tool's parameter schema lists them, each labelled by
  * its property's `title` or else its name; absent arguments are left out, and an argument the
- * schema does not list follows the listed ones under its own name. Undefined when the schema
+ * schema does not list follows the listed ones under its own name in code format. Undefined when the schema
  * lists no properties, or the call has no arguments to show.
  */
 export function schemaFields(
@@ -45,7 +47,9 @@ export function schemaFields(
 		return undefined;
 	const properties = schema.properties;
 	const fields: CardField[] = [];
+	// Own properties only: a name like `toString` or `constructor` is not the prototype's.
 	for (const [name, property] of Object.entries(properties)) {
+		if (!Object.hasOwn(input, name)) continue;
 		const value = input[name];
 		if (value === undefined) continue;
 		const title =
@@ -55,8 +59,8 @@ export function schemaFields(
 		fields.push({ label: title || name, value });
 	}
 	for (const [name, value] of Object.entries(input))
-		if (value !== undefined && !(name in properties))
-			fields.push({ label: name, value });
+		if (value !== undefined && !Object.hasOwn(properties, name))
+			fields.push({ label: name, value, extra: true });
 	return fields.length > 0 ? fields : undefined;
 }
 
@@ -94,9 +98,7 @@ export function fieldList(fields: CardField[], limits: FieldLimits): string {
 		size += lines.length + 1;
 	}
 	const hidden = fields.slice(shown.length);
-	const labels = hidden
-		.slice(0, HIDDEN_LABELS)
-		.map((field) => inline(firstPoints(field.label, LABEL_CHARS)));
+	const labels = hidden.slice(0, HIDDEN_LABELS).map(labelText);
 	if (hidden.length > HIDDEN_LABELS) labels.push("…");
 	return `${render(limit, shown)}\n${messages().cardHiddenKeys(labels)}`;
 }
@@ -111,13 +113,32 @@ function longestValue(fields: CardField[]): number {
 	return longest;
 }
 
+/** The line-break characters a model can put in a string besides `\n`, made `\n` before a value is laid out. */
+const LINE_BREAKS = /\r\n?|\u2028|\u2029|\u0085/g;
+
+const lines = (text: string): string => text.replace(LINE_BREAKS, "\n");
+
+/** Whether a string shows nothing: empty, or only white space and zero-width characters. */
+const isInvisible = (text: string): boolean =>
+	/^[\s\u00ad\u061c\u180e\u200b-\u200f\u202a-\u202e\u2060-\u2064\ufeff]*$/.test(
+		text,
+	);
+
+/** `text` written with every character that is not printable ASCII escaped, so nothing in it is invisible. */
+function visible(text: string): string {
+	return JSON.stringify(text).replace(
+		/[^\x20-\x7e]/g,
+		(char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`,
+	);
+}
+
 /**
  * The text a field's value is shown as, or undefined for a number, a boolean or null, which are
  * never cut: a string as it is, an array of such scalars joined, anything else as compact JSON.
  */
 // pi-lens-ignore: no-unknown-parameters — a tool's argument is untyped model JSON
 function textOf(value: unknown): string | undefined {
-	if (typeof value === "string") return value.replaceAll("\r\n", "\n");
+	if (typeof value === "string") return lines(value);
 	if (value === null || typeof value === "number" || typeof value === "boolean")
 		return undefined;
 	if (Array.isArray(value) && value.every(isScalarText))
@@ -125,21 +146,41 @@ function textOf(value: unknown): string | undefined {
 	return JSON.stringify(value);
 }
 
+/** Whether an array item reads unambiguously in a comma-joined line: not a string that is empty, invisible, has a comma and space, or a line break. */
 // pi-lens-ignore: no-unknown-parameters — a tool's argument is untyped model JSON
 function isScalarText(item: unknown): boolean {
-	if (typeof item === "string") return !item.includes("\n");
+	if (typeof item === "string")
+		return (
+			!isInvisible(item) &&
+			!item.includes(", ") &&
+			lines(item) === item &&
+			!item.includes("\n")
+		);
 	return item === null || typeof item === "number" || typeof item === "boolean";
 }
 
+/** The label of a field as a card shows it: its title or name made safe, or a name the schema did not list in code format. */
+function labelText(field: CardField): string {
+	const label = firstPoints(lines(field.label), LABEL_CHARS);
+	if (field.extra)
+		return `\`${label.replace(/\s*\n\s*/g, " ").replaceAll("`", "'")}\``;
+	return inline(label);
+}
+
+const labelOf = (field: CardField): string => `**${labelText(field)}**`;
+
 /** One field as the lines of a card; strings over `limit` code points are cut and marked. */
 function fieldLines(field: CardField, limit: number): string {
-	const label = `**${inline(firstPoints(field.label, LABEL_CHARS))}**`;
+	const label = labelOf(field);
 	const text = textOf(field.value);
 	if (text === undefined) return `${label}: ${String(field.value)}`;
 	const points = countPoints(text);
 	const cut = points > limit;
 	const shown = cut ? firstPoints(text, limit) : text;
 	const note = cut ? `… [${points} chars]` : "";
+	// A string that shows nothing is written out, so the person sees it is there.
+	if (typeof field.value === "string" && isInvisible(shown))
+		return `${label}: \`${visible(shown)}\`${note}`;
 	const structured = typeof field.value !== "string" && !isScalarArray(field);
 	if (structured)
 		return shown.length + note.length <= INLINE_CHARS && !shown.includes("`")

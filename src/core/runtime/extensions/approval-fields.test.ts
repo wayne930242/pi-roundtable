@@ -128,7 +128,113 @@ describe("an approval card given its tool's parameters", () => {
 			{},
 			ISSUE,
 		);
-		expect(card).toContain("**Subject**: t\n**zeta**: z");
+		expect(card).toContain("**Subject**: t\n**`zeta`**: z");
+	});
+
+	test("an extra argument is named in code format, so it cannot pass for a declared label", () => {
+		const card = approvalCard(
+			call({ title: "t", "**Subject**": "evil", "a`b\nc": "x" }),
+			undefined,
+			{},
+			ISSUE,
+		);
+		expect(card).toContain("**`**Subject**`**: evil");
+		expect(card).toContain("**`a'b c`**: x");
+	});
+
+	test("an argument named like an Object.prototype member is its own value, not the prototype's", () => {
+		const input = JSON.parse(
+			'{"constructor":"c","toString":"s","__proto__":"p","hasOwnProperty":"h","title":"t"}',
+		) as Record<string, unknown>;
+		const card = approvalCard(call(input), undefined, {}, ISSUE);
+		expect(card).toContain("**`constructor`**: c");
+		expect(card).toContain("**`toString`**: s");
+		expect(card).toContain("**`__proto__`**: p");
+		expect(card).toContain("**`hasOwnProperty`**: h");
+		expect(card).toContain("**Subject**: t");
+	});
+
+	test("a schema-listed name on the prototype but absent from the input shows nothing", () => {
+		const card = approvalCard(
+			call({ title: "t" }),
+			undefined,
+			{},
+			{
+				type: "object",
+				properties: {
+					title: { type: "string" },
+					toString: { type: "string" },
+					constructor: { type: "string" },
+				},
+			},
+		);
+		expect(card).toBe("**create an issue**\n-# `issue_create`\n**title**: t");
+	});
+
+	test("a listed property named like a prototype member shows its own value", () => {
+		const input = JSON.parse('{"toString":"x"}') as Record<string, unknown>;
+		const card = approvalCard(
+			call(input),
+			undefined,
+			{},
+			{ type: "object", properties: { toString: { type: "string" } } },
+		);
+		expect(card).toContain("**toString**: x");
+	});
+
+	test("every kind of line break in a value is a line break, so a lone one cannot leave a single-line value", () => {
+		for (const sep of ["\r", "\u2028", "\u2029", "\u0085", "\r\n"]) {
+			const card = approvalCard(
+				call({ description: `first${sep}# second` }),
+				undefined,
+				{},
+				ISSUE,
+			);
+			expect(card).toContain("**Details**:\n```\nfirst\n# second\n```");
+		}
+	});
+
+	test("a line break in a label cannot start another line", () => {
+		const card = approvalCard(
+			call({ title: "t" }),
+			undefined,
+			{},
+			{
+				type: "object",
+				properties: { title: { type: "string", title: "Sub\rject\u2028x" } },
+			},
+		);
+		expect(card).toContain("**Sub ject x**: t");
+	});
+
+	test("an array of scalars joins on one line, but items that a comma or nothing would blur make it JSON", () => {
+		const plain = approvalCard(
+			call({ labels: ["a", "b"] }),
+			undefined,
+			{},
+			ISSUE,
+		);
+		expect(plain).toContain("**labels**: a, b");
+		for (const labels of [["a, b", "c"], ["", "x"], ["\u200b"], ["a\rb"]]) {
+			const card = approvalCard(call({ labels }), undefined, {}, ISSUE);
+			expect(card).toContain(`**labels**: \`${JSON.stringify(labels)}\``);
+		}
+	});
+
+	test("an empty or invisible string is written out so the person sees it is there", () => {
+		expect(approvalCard(call({ title: "" }), undefined, {}, ISSUE)).toContain(
+			'**Subject**: `""`',
+		);
+		expect(
+			approvalCard(call({ title: "\u200b\u200d" }), undefined, {}, ISSUE),
+		).toContain('**Subject**: `"\\u200b\\u200d"`');
+		expect(
+			approvalCard(call({ title: "  \n " }), undefined, {}, ISSUE),
+		).toContain('**Subject**: `"  \\n "`');
+		// A string with a visible character is shown as before.
+		expect(
+			approvalCard(call({ title: " x " }), undefined, {}, ISSUE),
+		).toContain("**Subject**:  x ");
 	});
 
 	test("cuts long strings the longest first, marks them, and keeps later fields", () => {
