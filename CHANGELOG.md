@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-10-14
+
 ### Added
 
 - `approvalCard(call, workspace?, limits?, parameters?)` (`pi-roundtable/kit`) takes the tool's parameter JSON Schema, and the confirmation gate passes the schema of the held tool, read from the session's tool list. With it the approval card shows the call as a field list instead of one JSON block: a line `**label**: value` per argument, in the order the schema declares its properties, labelled by the property's `title` or its name, absent arguments left out. An argument the schema does not list follows the listed ones with its name in code format, so it cannot pass for a declared label. Only an argument's own properties count: one named `toString` or `constructor` is shown with its value. A multi-line or long string (a lone `\r`, `\u2028`, `\u2029` and `\u0085` are line breaks too) and any nested value (as compact JSON) go in a fenced block that keeps their line breaks. A value on a line has its markdown, links and `@everyone`/`@here` escaped, as the model writes it; an array of scalars is joined with commas unless an item is empty, shows nothing, or holds a comma and a space or a line break, and then it is JSON; a string that is empty or shows nothing is written out (`""`, `"\u200b"`) so the person sees it is there. The `limits` apply as they did to the JSON: a long string is cut and marked `… [N chars]`, and fields that no longer fit are dropped and listed by label. A tool with no schema, or one that lists no properties, keeps the JSON block, as does a card built without `parameters` (the coding desk's).

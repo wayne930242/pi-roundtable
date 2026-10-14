@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-10-14
+
+Release in lockstep with pi-roundtable 0.15.0. The core peer range moves to `>=0.15.0 <0.16.0`.
+
 ### Changed
 
 - The approval prompt's `message` is the card text the core builds, and for a tool whose parameter schema is known it is now a list of labelled fields in markdown (`**label**: value`, long and multi-line values in fenced blocks) instead of one JSON block; a client that read the JSON out of `message` should read `approval.input`, which is unchanged and whole. A tool without a schema keeps the JSON block.

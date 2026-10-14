@@ -1,6 +1,6 @@
 {
 	"name": "pi-roundtable-line",
-	"version": "0.14.1",
+	"version": "0.15.0",
 	"description": "A LINE Messaging API transport for pi-roundtable: a signed webhook that persists events before it answers, a durable inbox worker, and an allowlist of the groups and chats it mirrors",
 	"type": "module",
 	"license": "MIT",
@@ -33,14 +33,14 @@
 		"test": "bun test"
 	},
 	"peerDependencies": {
-		"pi-roundtable": ">=0.14.0 <0.15.0"
+		"pi-roundtable": ">=0.15.0 <0.16.0"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.5.15",
 		"@earendil-works/pi-ai": ">=1.0.0 <2",
 		"@earendil-works/pi-coding-agent": ">=1.0.0 <2",
 		"@types/bun": "1.4.2",
-		"pi-roundtable": "0.14.1",
+		"pi-roundtable": "0.15.0",
 		"typebox": "1.3.34",
 		"typescript": "7.0.2"
 	}
