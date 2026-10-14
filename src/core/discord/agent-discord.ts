@@ -385,7 +385,11 @@ export class DiscordDashboard implements DashboardBoard {
 		const channel = await this.#channel();
 		const botId = this.#client.user?.id;
 		const recent = await channel.messages.fetch({ limit: 50 });
-		return recent.find((message) => message.author.id === botId);
+		// Pinning the dashboard makes Discord post a "pinned a message" notice in the bot's name; a
+		// system message cannot be edited, so it is never the dashboard.
+		return recent.find(
+			(message) => message.author.id === botId && !message.system,
+		);
 	}
 
 	async #gone(message: Message): Promise<boolean> {

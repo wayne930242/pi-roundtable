@@ -15,6 +15,8 @@ function fixture(options: {
 	pinned: boolean;
 	pinFails?: boolean;
 	editError?: unknown;
+	/** The newest message is the "pinned a message" notice Discord posts in the bot's name. */
+	pinNotice?: boolean;
 }) {
 	const pins: string[] = [];
 	const edits: Record<string, unknown>[] = [];
@@ -23,6 +25,7 @@ function fixture(options: {
 	const message = {
 		id: "m1",
 		pinned: options.pinned,
+		system: false,
 		author: { id: BOT },
 		channel: { messages: { fetch: async () => message } },
 		edit: async (body: Record<string, unknown>) => {
@@ -50,7 +53,33 @@ function fixture(options: {
 		},
 		messages: {
 			fetch: async () => ({
-				find: (match: (m: typeof message) => boolean) => [message].find(match),
+				find: (match: (m: typeof message) => boolean) =>
+					[
+						...(options.pinNotice
+							? [
+									{
+										...message,
+										id: "s1",
+										system: true,
+										pinned: false,
+										edit: async () => {
+											throw new DiscordAPIError(
+												{
+													code: 50021,
+													message: "Cannot execute action on a system message",
+												},
+												50021,
+												400,
+												"PATCH",
+												"/channels/1/messages/s1",
+												{},
+											);
+										},
+									},
+								]
+							: []),
+						message,
+					].find(match),
 			}),
 		},
 	};
@@ -127,6 +156,17 @@ describe("DiscordDashboard editing", () => {
 		expect(deletes).toEqual(["m1"]);
 		expect(sends).toHaveLength(1);
 		expect(sends[0]?.flags).toBe(MessageFlags.IsComponentsV2);
+	});
+
+	test("the pin notice Discord posts in the bot's name is passed over", async () => {
+		const { dashboard, edits, sends, deletes } = fixture({
+			pinned: true,
+			pinNotice: true,
+		});
+		await dashboard.show(["a"]);
+		expect(edits).toHaveLength(1);
+		expect(deletes).toEqual([]);
+		expect(sends).toHaveLength(0);
 	});
 
 	test("any other edit failure is thrown and nothing is deleted or posted", async () => {

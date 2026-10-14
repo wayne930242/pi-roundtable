@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- The agent server's `#dashboard` is found again after a restart once it is pinned. Pinning it makes Discord post a "pinned a message" notice in the bot's name, and the dashboard search took that system message as the dashboard: every edit failed with `Cannot execute action on a system message` and the host logged `dashboard not updated` at every start. The search now passes over system messages.
+
 ## [0.15.1] - 2026-10-15
 
 ### Fixed
