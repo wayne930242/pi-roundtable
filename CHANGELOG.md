@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.15.1] - 2026-10-15
+
 ### Fixed
 
 - The agent server's `#dashboard` message is updated again after a restart. The first message was posted as components v2 but later edits left the flag out, and an old v1 message found after a restart could not be edited at all: Discord answered 400 `Invalid Form Body` (`components[0][UNION_TYPE_CHOICES]`), the host logged `dashboard not updated` at every start, and the dashboard was never rebuilt. An edit now keeps the components v2 flag, and a message Discord refuses with that 400 is deleted and posted fresh once; any other failure is still reported.
