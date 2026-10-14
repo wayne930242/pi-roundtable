@@ -64,11 +64,7 @@ const matches = (path: string, patterns: readonly RegExp[]): boolean =>
 export function importsOf(source: string, file = "source.ts"): string[] {
 	const ast = parse(source, {
 		sourceType: "module",
-		plugins: [
-			"typescript",
-			...(file.endsWith("x") ? (["jsx"] as const) : []),
-			"importAttributes",
-		],
+		plugins: ["typescript", ...(file.endsWith("x") ? (["jsx"] as const) : [])],
 	});
 	const found: string[] = [];
 	function visit(node: unknown): void {

@@ -9,6 +9,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - `approvalCard(call, workspace?, limits?, parameters?)` takes the tool's parameter JSON Schema, and `ConfirmationGate.decide` a `parameters` argument after `turn`; the gate's extension passes the schema of the held tool from the session's tool list. With it the approval card shows the call as a field list instead of one JSON block: a line `**label**: value` per argument, in the order the schema declares its properties, labelled by the property's `title` or its name, absent arguments left out, an argument the schema does not list following under its own name. A multi-line or long string and any nested value (as compact JSON) go in a fenced block that keeps their line breaks. A value on a line has its markdown, links and `@everyone`/`@here` escaped, as the model writes it. The `limits` apply as they did to the JSON: a long string is cut and marked `… [N chars]`, and fields that no longer fit are dropped and listed by label. A tool with no schema, or one that lists no properties, keeps the JSON block, as does a card built without `parameters` (the coding desk's).
 
+### Changed
+
+- `@babel/parser` and `@babel/types` move to Babel 8 (8.0.7 and 8.0.6), which read a schedule's precheck script and the files the boundary check scans. Import attributes (`with { type: "json" }`) are on by default there, and `importAttributes` is no longer a plugin name. Babel 8 packages need Node 22.18 or newer, or Bun.
+
 ## [0.14.1] - 2026-10-14
 
 ### Fixed
