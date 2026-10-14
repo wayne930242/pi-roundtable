@@ -50,7 +50,8 @@
 			"parseChannelKey",
 			"promptScope",
 			"serviceKey",
-			"withReplyFiles"
+			"withReplyFiles",
+			"withdrawalNote"
 		],
 		"types": [
 			"AccessConfig",

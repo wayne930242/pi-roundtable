@@ -145,3 +145,86 @@ describe("a held call that names approvers", () => {
 		expect(named).toBe(0);
 	});
 });
+
+describe("an approval its plugin withdraws", () => {
+	function open(supersede?: AbortSignal) {
+		const frames: ServerFrame[] = [];
+		const desk = new PromptDesk({
+			send: (_principal, frame) => void frames.push(frame),
+			timeoutMs: 60_000,
+		});
+		const scope = promptScope(speakerOf("ann", "member"), "shared");
+		const answer = desk
+			.prompts("c1", scope)
+			.confirm(
+				"Send?",
+				"sends it",
+				undefined,
+				"member",
+				undefined,
+				undefined,
+				supersede ? { supersede } : undefined,
+			);
+		const prompt = frames.find((frame) => frame.type === "prompt");
+		const id = prompt?.type === "prompt" ? prompt.prompt.id : "";
+		return { frames, desk, answer, id };
+	}
+
+	test("closes the prompt with a `withdrawn` outcome and the plugin's reason, and the turn reads it as cancelled", async () => {
+		const withdraw = new AbortController();
+		const { frames, desk, answer, id } = open(withdraw.signal);
+		withdraw.abort("replaced by a newer request");
+		expect(await answer).toBe("cancelled");
+		expect(frames.at(-1)).toEqual({
+			type: "prompt_closed",
+			conversation: "c1",
+			prompt: id,
+			outcome: "withdrawn",
+			note: "replaced by a newer request",
+		});
+		// Nothing is left to resend after a reconnect, and a press on it finds nothing.
+		expect(desk.openFor("ann")).toEqual([]);
+		expect(desk.approve({ principalId: "ann", tier: "member" }, id, true)).toBe(
+			"unknown_prompt",
+		);
+	});
+
+	test("without a text reason the frame carries no note", async () => {
+		const withdraw = new AbortController();
+		const { frames, answer } = open(withdraw.signal);
+		withdraw.abort();
+		await answer;
+		const closed = frames.at(-1);
+		expect(closed).toMatchObject({ outcome: "withdrawn" });
+		expect(closed && "note" in closed).toBe(false);
+	});
+
+	test("an answer that came first stands, and the withdrawal after it closes nothing twice", async () => {
+		const withdraw = new AbortController();
+		const { frames, desk, answer, id } = open(withdraw.signal);
+		expect(desk.approve({ principalId: "ann", tier: "member" }, id, true)).toBe(
+			undefined,
+		);
+		withdraw.abort("too late");
+		expect(await answer).toBe("approved");
+		expect(frames.filter((f) => f.type === "prompt_closed")).toHaveLength(1);
+	});
+
+	test("a withdrawal that came first leaves a later approval refused", async () => {
+		const withdraw = new AbortController();
+		const { desk, answer, id } = open(withdraw.signal);
+		withdraw.abort();
+		expect(desk.approve({ principalId: "ann", tier: "member" }, id, true)).toBe(
+			"unknown_prompt",
+		);
+		expect(await answer).toBe("cancelled");
+	});
+
+	test("a signal that is already aborted opens no prompt", async () => {
+		const withdraw = new AbortController();
+		withdraw.abort();
+		const { frames, answer } = open(withdraw.signal);
+		expect(await answer).toBe("cancelled");
+		expect(frames).toEqual([]);
+	});
+});

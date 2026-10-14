@@ -117,6 +117,10 @@ export interface ToolSpec<Schema extends TObject> {
 	 * answer as the description, so it shares its wait and its failure: a hold that rejects or
 	 * outlasts the timeout holds the call with the generic description and no copy. A host with no
 	 * card, or that checks the hold with no turn, uses `text` and ignores `copy`.
+	 *
+	 * It may add `supersede`, an `AbortSignal` the plugin aborts to withdraw the call it held (a
+	 * newer request replaced it): the card closes, the held call is forgotten, and an approval after
+	 * that runs nothing; see `HoldDescription`.
 	 */
 	hold?: (
 		args: Static<Schema>,

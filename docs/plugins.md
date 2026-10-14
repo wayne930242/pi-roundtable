@@ -828,6 +828,30 @@ hold: async ({ customer, body }, turn) => ({
 
 `text` is the description, with every behaviour above; `copy` goes to the gate's `ApprovalDetails.copy` for that call, so the Discord card gets the [copy button](#who-answers-a-prompt-promptscope) with all of its limits (the 20,000 character cap, the label, `discord.cardCopies`), and the web chat forwards it as `approval.copy`. It is part of the same answer, so a rejection, a throw or a timeout drops it with the description: the call is held under the generic description with no copy, and the exact input is still on the card. A `copy` whose `text` is not a non-empty string is left out and the call is still held. The copy is not kept with the held call (`HeldCall` has no copy), so a card the owner answers by a message after a restart has no button, and a host that shows no card, or that checks the hold with no turn, such as a precheck script's call, uses `text` and ignores `copy`. A hold that answers a plain string is unchanged. The copy is visible to anyone who sees the card, so it holds nothing they may not read.
 
+#### Withdrawing a held call
+
+A hold that no longer wants a call it held, because a newer request replaced it or its subject is gone, withdraws it by answering `{ text, supersede }` with an `AbortSignal` of its own and aborting the signal when the time comes (`HoldDescription.supersede`, beside `copy`; a tool's `hold` and a rule's `describeInTurn` both may):
+
+```ts
+const replaced = new AbortController();
+hold: (args) => ({ text: `send ${args.to} the quote`, supersede: replaced.signal }),
+// later, when a newer quote for the same customer replaces it:
+replaced.abort("replaced by a newer quote");
+```
+
+Aborting does four things, whichever way the call was held, and the abort reason, when it is a text, is the footer the closed card shows (`withdrawalNote(signal, fallback)` gives the one-line text, cut to 200 characters; any other reason, and no reason, gives `fallback`):
+
+- Its approval card closes: controls off and the footer instead of "answer whenever you are ready", **also after the turn stopped waiting** (the card then stays open for as long as the process runs, and now closes by itself). On Discord the message is edited; on the web chat the prompt closes with the outcome `withdrawn` and the reason as `note`. A card that arrives with the signal already aborted is not shown. A surface implements this through `ApprovalOptions.supersede`, which the contract checks (`describeSurfaceContract`: an approval its plugin withdraws resolves `cancelled` and closes, and one answered first stays answered).
+- The held call is forgotten: it leaves the held actions (saved so, if it was held for a message), and an approval of the identical call that has not been spent yet, on the card late, or by a confirming message, no longer releases it. A repeated call is described by the hold anew.
+- A turn still waiting on the card is told the call was withdrawn (progress reports `refused: "withdrawn"`), not that it was declined or stopped. It does not retry.
+- A late answer to the closed card, or a press that was being checked when the signal aborted, answers nothing and starts no turn.
+
+**One outcome.** Withdrawing and approving are the two ways a held call leaves "may run", and the first one wins. An approval that was answered before the abort stands: the call runs once, or has run, and the abort changes nothing, the card keeps its answered footer. An abort that came first wins whatever the card then reports, also on a surface that ignores `supersede`, since the gate decides, not the card. Aborting twice, after the call ran, or after the card was declined does nothing. A call approved late but not made yet is withdrawable until the call is made.
+
+**Nothing leaks.** The gate listens to the signal only while the call can still run: from the hold until it is released, refused, or no longer held (the next turn that does not confirm it drops it); a gate that is dropped with its conversation stops listening. A signal that is never aborted keeps nothing alive after that.
+
+**After a restart.** A signal does not survive one, so a withdrawal cannot reach a call held before it: the stored call stays held, a confirming message still releases it, and its card (open cards are in memory) is gone anyway. The hold is what decides then: it describes the repeated call again, and a hold that answers with an already aborted `supersede` refuses the call without opening a card, drops a confirmation of it, and tells the model it was withdrawn. That is how a plugin withdraws what a restart left held.
+
 A rule of `holdRules` does the same with `describeInTurn(tool, input, context, turn)`, which may return a promise, and a `HoldDescription` as well as a string, and which the gate asks instead of `describe` in a turn.
 `describe` is still required and is what a host without a turn sees. `holdChain(rules).inTurn(tool, input, context, turn)` asks the rules as a turn does, in order: each rule's `describeInTurn`, or its `describe` for a rule without one.
 
@@ -2573,7 +2597,7 @@ A surface or a `Prompts` of your own may ignore it: nothing requires reading it.
 It is informational and never an answer: using it does not approve, decline or otherwise settle the prompt, and a surface that cannot show it ignores it, as the web chat's own client does (the frame carries it as `approval.copy`, left out when it would not fit beside the call's `input` in the frame's 256 KiB: the input is never cut for it).
 On Discord the card gets a third button (`label`, default "Copy", or its Traditional Chinese equivalent on a host in that language) that any member who can see the card may press, any number of times, also after the card has ended; it replies ephemerally with the text in a code block, or as a `copy.txt` file when the text does not fit a message (2,000 characters) or holds a code fence. The button's custom id holds the card's id, never the text: the text is kept under that id in `card-copies.json` in the host's `dataDir`, in plain text and readable by the host's user only, so the button works after a restart even though the card itself no longer answers; a card whose text is gone says so. `discord.cardCopies` (`{ keepDays?, keep? }`, default the newest 100 cards for 30 days) sets how long and how many; `false` keeps the texts in memory only, with the same limits, so they are gone at a restart. The file is written in the background, one write at a time, so a card is not held up by it. A text past `keepDays` leaves the file too, not only memory: when the host starts or a button finds one expired, and on an hourly sweep that does not keep the process alive. The attachments' `retention` and discarding a conversation do not remove the texts: they age out, or set `cardCopies` to `false` on a host that wants none on disk: the host then deletes an existing `card-copies.json` when it starts. A text over 20,000 characters gets no button, and a warning is logged.
 Because anyone who can see the card can copy the text, it holds nothing they may not read.
-`confirm` resolves `approved`, `declined`, `expired` (a card was shown and went unanswered), `unavailable` (no card could be shown: no one may approve the call, the speaker is below its tier, or the card could not be posted), `cancelled` (the turn stopped), or `pending` (with a `wait`). Both `expired` and `unavailable` leave the call held for the owner's next message; the turn's progress reports them as `refused: "expired"` and `refused: "held"`.
+`confirm` resolves `approved`, `declined`, `expired` (a card was shown and went unanswered), `unavailable` (no card could be shown: no one may approve the call, the speaker is below its tier, or the card could not be posted), `cancelled` (the turn stopped, or the plugin that held the call withdrew it through `ApprovalOptions.supersede`), or `pending` (with a `wait`). Both `expired` and `unavailable` leave the call held for the owner's next message; the turn's progress reports them as `refused: "expired"` and `refused: "held"`.
 
 #### A prompt that outlives its turn: `PromptWait`
 
@@ -2741,7 +2765,7 @@ export class FakeSurface implements ChatSurface {
 					TIERS.indexOf(scope.tier) >= TIERS.indexOf(minTier);
 				const principals = shared ?? (theirs ? [scope.principalId] : []);
 				if (principals.length === 0 && !owners) return "unavailable";
-				return this.#ask(channel, title, signal, {
+				return this.#ask(channel, title, [signal, options?.supersede], {
 					principals,
 					owners,
 					...(shared ? { minTier } : {}),
@@ -2789,9 +2813,12 @@ export class FakeSurface implements ChatSurface {
 	#ask(
 		channel: ChannelKey,
 		title: string,
-		signal: AbortSignal | undefined,
+		// The turn's stop and the plugin's withdrawal of the call both close the prompt as cancelled.
+		closers: (AbortSignal | undefined)[],
 		audience: Omit<Answering, "settle">,
 	): Promise<Approval> {
+		if (closers.some((closer) => closer?.aborted))
+			return Promise.resolve("cancelled");
 		const asked = {
 			id: `q${this.asked.length + 1}`,
 			channel,
@@ -2806,9 +2833,10 @@ export class FakeSurface implements ChatSurface {
 				resolve(answer);
 			};
 			this.#answering.set(asked.id, { ...audience, settle });
-			signal?.addEventListener("abort", () => settle("cancelled"), {
-				once: true,
-			});
+			for (const closer of closers)
+				closer?.addEventListener("abort", () => settle("cancelled"), {
+					once: true,
+				});
 		});
 	}
 }
@@ -3251,7 +3279,7 @@ It returns:
 A plugin that contributes a `ChatSurface` can test it against the contract every surface keeps.
 `describeSurfaceContract(name, make)` registers one test per check, each on a fresh `SurfaceContractSubject` from `make`: the `surface`, a `channel` of it, and one person on its network, who can `write(text)`, whose `observations()` list what they have seen (`SurfaceObservation`: a reply's text and file names, typing and stop controls going on and off, progress, and prompts opening and closing), and who may `answer(prompt, approved)` an approval; `speaker` is who they are to `surface.prompts`, given as `promptScope(speaker, visibility)`, an owner by default, and every approval the contract asks for needs exactly their tier. `stranger`, when given, is someone else on the network, another principal and not an owner, who knows the id of the person's open approval and may `join()` and `answer(prompt, approved)` it; `owner`, when given, is an owner on the network, another principal than the person, who does the same in the person's private conversation. Both are `SurfaceContractAnswerer`s. `approver`, when given, is a third person on the network with a `principalId`, not an owner and at the person's tier, whom the contract names in `approvers`; `privateOnly` marks a surface that serves only conversations private to one person, such as the web chat.
 The contract starts the surface, calls the subject's `join()`, and stops the surface after the subject's `close()`.
-It checks that the surface names a prefix and owns its channel, delivers what the person writes, and shows every chunk of a reply; and, for the parts the surface offers, that it delivers files when `supportsFiles` is set, ends typing and stop controls idempotently, shows progress, and resolves an approval as the person approves or declines it, or `cancelled` when the turn stops, with a `stranger`, that the stranger's answer leaves the person's approval open, and with an `owner`, that an owner's answer leaves it open in a private conversation; with an `approver` and a `stranger`, that an approval naming the approver is answered by the approver and not by the person or the stranger, unless the surface is `privateOnly`, and, with an `approver`, that a private conversation ignores the names; and, for a speaker below the owner tier, that a private conversation's approval above their tier resolves `unavailable` (or `expired`, as older surfaces answer) at once and is not shown.
+It checks that the surface names a prefix and owns its channel, delivers what the person writes, and shows every chunk of a reply; and, for the parts the surface offers, that it delivers files when `supportsFiles` is set, ends typing and stop controls idempotently, shows progress, and resolves an approval as the person approves or declines it, or `cancelled` when the turn stops or its plugin withdraws it (`ApprovalOptions.supersede`; one answered first stays answered), with a `stranger`, that the stranger's answer leaves the person's approval open, and with an `owner`, that an owner's answer leaves it open in a private conversation; with an `approver` and a `stranger`, that an approval naming the approver is answered by the approver and not by the person or the stranger, unless the surface is `privateOnly`, and, with an `approver`, that a private conversation ignores the names; and, for a speaker below the owner tier, that a private conversation's approval above their tier resolves `unavailable` (or `expired`, as older surfaces answer) at once and is not shown.
 A check for a part the surface does not offer passes.
 The contract has no check for `ApprovalDetails.copy`: a surface that shows it keeps it informational, so using it never resolves, approves or declines the prompt, whoever uses it.
 `checkSurfaceContract(make)` runs the same checks and returns the ones that failed, as `SurfaceContractFailure`s.
@@ -3732,6 +3760,7 @@ Import from the entries listed below; source area files are internal.
 | `attachReplyFile` | `pi-roundtable` | value |
 | `promptScope` | `pi-roundtable` | value |
 | `withReplyFiles` | `pi-roundtable` | value |
+| `withdrawalNote` | `pi-roundtable` | value |
 | `prepareImageBytes` | `pi-roundtable/kit` | value |
 | `ImagePreparationError` | `pi-roundtable/kit` | value |
 | `squarePng` | `pi-roundtable/kit` | value |

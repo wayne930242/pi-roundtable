@@ -124,7 +124,7 @@ export class FakeSurface implements ChatSurface {
 					TIERS.indexOf(scope.tier) >= TIERS.indexOf(minTier);
 				const principals = shared ?? (theirs ? [scope.principalId] : []);
 				if (principals.length === 0 && !owners) return "unavailable";
-				return this.#ask(channel, title, signal, {
+				return this.#ask(channel, title, [signal, options?.supersede], {
 					principals,
 					owners,
 					...(shared ? { minTier } : {}),
@@ -172,9 +172,12 @@ export class FakeSurface implements ChatSurface {
 	#ask(
 		channel: ChannelKey,
 		title: string,
-		signal: AbortSignal | undefined,
+		// The turn's stop and the plugin's withdrawal of the call both close the prompt as cancelled.
+		closers: (AbortSignal | undefined)[],
 		audience: Omit<Answering, "settle">,
 	): Promise<Approval> {
+		if (closers.some((closer) => closer?.aborted))
+			return Promise.resolve("cancelled");
 		const asked = {
 			id: `q${this.asked.length + 1}`,
 			channel,
@@ -189,9 +192,10 @@ export class FakeSurface implements ChatSurface {
 				resolve(answer);
 			};
 			this.#answering.set(asked.id, { ...audience, settle });
-			signal?.addEventListener("abort", () => settle("cancelled"), {
-				once: true,
-			});
+			for (const closer of closers)
+				closer?.addEventListener("abort", () => settle("cancelled"), {
+					once: true,
+				});
 		});
 	}
 }

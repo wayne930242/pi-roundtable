@@ -15,6 +15,8 @@ function memoryChat(
 	options: {
 		files?: boolean;
 		brokenPrompts?: boolean;
+		/** Leaves an approval open when its plugin withdraws the call. */
+		ignoresSupersede?: boolean;
 		/** Lets anyone answer a prompt, not only the person it is for. */
 		openPrompts?: boolean;
 		/** Lets the owner answer every prompt, a private conversation's too. */
@@ -95,6 +97,8 @@ function memoryChat(
 				const theirs = !scope || tierAtLeast(scope.tier, minTier);
 				if (!theirs && scope?.escalate === "none" && !options.escalatesPrivate)
 					return "unavailable";
+				if (given?.supersede?.aborted && !options.ignoresSupersede)
+					return "cancelled";
 				return new Promise<Approval>((resolve) => {
 					const id = `p${++next}`;
 					seen.push({ kind: "prompt", id, title });
@@ -115,6 +119,11 @@ function memoryChat(
 					signal?.addEventListener("abort", () =>
 						settle(options.brokenPrompts ? "expired" : "cancelled"),
 					);
+					if (!options.ignoresSupersede)
+						given?.supersede?.addEventListener(
+							"abort",
+							() => open.has(id) && settle("cancelled"),
+						);
 				});
 			},
 			ask: async () => undefined,
@@ -167,6 +176,15 @@ test("the contract catches a surface whose cancelled card does not say cancelled
 	);
 	expect(failures.map((failure) => failure.name)).toEqual([
 		"a stopped turn's approval resolves cancelled and closes",
+	]);
+});
+
+test("the contract catches a surface that leaves an approval open when its plugin withdraws the call", async () => {
+	const failures = await checkSurfaceContract(async () =>
+		memoryChat({ ignoresSupersede: true }),
+	);
+	expect(failures.map((failure) => failure.name)).toEqual([
+		"an approval its plugin withdraws resolves cancelled and closes; one answered first stays answered",
 	]);
 });
 

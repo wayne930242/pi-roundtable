@@ -60,9 +60,10 @@ export interface OpenCard {
 	rows(disabled: boolean): Rows;
 	/**
 	 * Ends the card with its answer; the answering interaction shows the outcome. A card whose
-	 * turn stopped waiting starts a turn with the answer instead.
+	 * turn stopped waiting starts a turn with the answer instead. False when the card had ended
+	 * already, answered by another press or withdrawn by its plugin, and this answer changed nothing.
 	 */
-	end(value: unknown, by: Answerer): void;
+	end(value: unknown, by: Answerer): boolean;
 	question?: OwnerQuestion;
 	/** Options chosen together with "Other…", kept while its form is open. */
 	picked?: string[];

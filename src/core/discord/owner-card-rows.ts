@@ -9,7 +9,11 @@ import {
 	TextInputStyle,
 } from "discord.js";
 import { messages } from "../i18n/index.ts";
-import type { OwnerAnswer, OwnerQuestion } from "../interactions/prompts.ts";
+import {
+	type OwnerAnswer,
+	type OwnerQuestion,
+	withdrawalNote,
+} from "../interactions/prompts.ts";
 import { type ownerPanel, plain } from "./owner-panel.ts";
 
 /** The prefix of every card control's custom id. */
@@ -95,4 +99,43 @@ export function answeredLine(answer: OwnerAnswer): string {
 			: []),
 	];
 	return messages().cardAnswered(parts);
+}
+
+/** An approval's controls: run, cancel, and, when the card offers a copy, a copy button that stays usable once it ended. */
+export function approvalRows(
+	id: string,
+	disabled: boolean,
+	copy: { label: string } | undefined,
+): Rows {
+	return [
+		new ActionRowBuilder<ButtonBuilder>().addComponents(
+			new ButtonBuilder()
+				.setCustomId(`${CARD_PREFIX}${id}:yes`)
+				.setLabel(messages().cardRunLabel)
+				.setEmoji("✅")
+				.setStyle(ButtonStyle.Success)
+				.setDisabled(disabled),
+			new ButtonBuilder()
+				.setCustomId(`${CARD_PREFIX}${id}:no`)
+				.setLabel(messages().cardCancelLabel)
+				.setEmoji("❌")
+				.setStyle(ButtonStyle.Secondary)
+				.setDisabled(disabled),
+			// Copying answers nothing, so it stays usable once the card has ended.
+			...(copy
+				? [
+						new ButtonBuilder()
+							.setCustomId(`${CARD_PREFIX}${id}:copy`)
+							.setLabel(copy.label)
+							.setEmoji("📋")
+							.setStyle(ButtonStyle.Secondary),
+					]
+				: []),
+		),
+	];
+}
+
+/** The footer of a card its plugin withdrew: the reason it gave as plain text, or that the call was withdrawn. */
+export function withdrawnFooter(signal: AbortSignal): string {
+	return plain(withdrawalNote(signal, messages().cardWithdrawn));
 }

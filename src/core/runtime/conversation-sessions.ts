@@ -80,6 +80,8 @@ export class ConversationSessions {
 
 	/** Disposes every open session. */
 	dispose(): void {
+		// A withdrawal after this must not touch what a later runtime keeps for the same conversations.
+		for (const gate of this.#gates.values()) gate.abandon();
 		for (const pending of this.#sessions.values()) {
 			void pending
 				.then(({ session }) => session.dispose())
@@ -118,6 +120,19 @@ export class ConversationSessions {
 						: undefined;
 				},
 			);
+			// A plugin's withdrawal of a held call is kept across a restart, unless the conversation was dropped since.
+			const own = gate;
+			gate.onHeldChange = (held) => {
+				if (this.#gates.get(key) !== own) return;
+				this.#options.confirmations
+					.save(key, held)
+					.catch((error: unknown) =>
+						this.#options.logger.error(
+							{ channel: key, err: error },
+							"held actions not saved",
+						),
+					);
+			};
 			this.#gates.set(key, gate);
 			this.#restored.delete(key);
 		}
@@ -295,6 +310,7 @@ export class ConversationSessions {
 		await pending
 			?.then(({ session }) => session.dispose())
 			.catch(() => undefined);
+		this.#gates.get(channel)?.abandon();
 		this.#gates.delete(channel);
 		this.#restored.delete(channel);
 		this.#slots.delete(channel);

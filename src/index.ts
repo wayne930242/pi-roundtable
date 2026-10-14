@@ -202,7 +202,7 @@ export type {
 	Prompts,
 	PromptWait,
 } from "./core/interactions/prompts.ts";
-export { promptScope } from "./core/interactions/prompts.ts";
+export { promptScope, withdrawalNote } from "./core/interactions/prompts.ts";
 export type { JudgeModel } from "./core/judging/model-judge.ts";
 export type { LogEntry, LogFn, Logger } from "./core/log.ts";
 export type { ThinkingLevel, ThinkingSetting } from "./core/models.ts";

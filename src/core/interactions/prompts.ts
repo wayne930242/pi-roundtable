@@ -84,6 +84,34 @@ export interface ApprovalOptions {
 	 * refusal, or by a surface that does not know who answered.
 	 */
 	approvedBy?(by: ApprovedBy): void;
+	/**
+	 * Aborts when the plugin that caused the call withdraws it (`HoldDescription.supersede`). A
+	 * surface that shows the card closes it then, controls off, with `withdrawalNote(signal)` as
+	 * its footer, also when the turn has stopped waiting and the card stays open; a card already
+	 * answered stays as answered, whichever came first. It resolves `cancelled`, or not at all when
+	 * it already resolved `pending`. A card that arrives with the signal already aborted is not
+	 * shown. A surface that ignores it loses nothing safety-relevant: the gate refuses the
+	 * withdrawn call whatever the card answers.
+	 */
+	supersede?: AbortSignal;
+}
+
+/** The longest footer a withdrawn card shows, in characters. */
+const WITHDRAWAL_NOTE_CHARS = 200;
+
+/**
+ * The footer for a card whose `ApprovalOptions.supersede` aborted: the abort reason when it is a
+ * text (`controller.abort("replaced by a newer request")`), one line cut to a short length, else
+ * `fallback`.
+ */
+export function withdrawalNote(signal: AbortSignal, fallback: string): string {
+	const reason: unknown = signal.reason;
+	if (typeof reason !== "string") return fallback;
+	const line = reason.replace(/\s+/g, " ").trim();
+	if (line === "") return fallback;
+	return line.length > WITHDRAWAL_NOTE_CHARS
+		? `${line.slice(0, WITHDRAWAL_NOTE_CHARS - 1)}…`
+		: line;
 }
 
 /**

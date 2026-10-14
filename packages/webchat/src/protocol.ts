@@ -72,13 +72,17 @@ export type PromptFrame =
 			allowOther: boolean;
 	  };
 
-/** How a prompt closed. */
+/**
+ * How a prompt closed. `withdrawn` is an approval the plugin that asked for it took back; the
+ * frame may carry a short `note` saying why.
+ */
 export type PromptOutcome =
 	| "approved"
 	| "declined"
 	| "answered"
 	| "expired"
-	| "cancelled";
+	| "cancelled"
+	| "withdrawn";
 
 /** The most functions a client may declare. */
 export const MAX_CLIENT_TOOLS = 64;
@@ -236,6 +240,8 @@ export type ServerFrame =
 			conversation: string;
 			prompt: string;
 			outcome: PromptOutcome;
+			/** Why a `withdrawn` prompt was taken back, in the plugin's words; absent otherwise. */
+			note?: string;
 	  }
 	/** A durable private inbox entry; fetch the REST inbox to recover missed notices. */
 	| { type: "notice"; notice: Notice }

@@ -7,6 +7,7 @@ import {
 	type Prompts,
 	TIERS,
 	type Tier,
+	withdrawalNote,
 } from "pi-roundtable";
 import {
 	APPROVAL_MAX_BYTES,
@@ -28,7 +29,7 @@ interface Open {
 	frame: PromptFrame;
 	/** The lowest tier that may approve; questions have none. */
 	minTier?: Tier;
-	settle(outcome: PromptOutcome, answer?: OwnerAnswer): void;
+	settle(outcome: PromptOutcome, answer?: OwnerAnswer, note?: string): void;
 }
 
 export interface PromptDeskOptions {
@@ -69,6 +70,7 @@ export class PromptDesk {
 				minTier = "owner",
 				_wait,
 				details,
+				options,
 			) => {
 				if (!atLeast(scope.tier, minTier)) return "unavailable";
 				const outcome = await this.#ask(
@@ -83,6 +85,7 @@ export class PromptDesk {
 					}),
 					signal,
 					minTier,
+					options?.supersede,
 				);
 				return toApproval(outcome.outcome);
 			},
@@ -143,23 +146,35 @@ export class PromptDesk {
 		frameOf: (id: string) => PromptFrame,
 		signal: AbortSignal | undefined,
 		minTier?: Tier,
+		supersede?: AbortSignal,
 	): Promise<{ outcome: PromptOutcome; answer?: OwnerAnswer }> {
 		const { send, timeoutMs } = this.#options;
-		if (signal?.aborted) return Promise.resolve({ outcome: "cancelled" });
+		if (signal?.aborted || supersede?.aborted)
+			return Promise.resolve({ outcome: "cancelled" });
 		return new Promise((resolve) => {
 			const id = crypto.randomUUID();
 			const frame = frameOf(id);
 			const onAbort = () => settle("cancelled");
 			const timer = setTimeout(() => settle("expired"), timeoutMs);
-			const settle = (outcome: PromptOutcome, answer?: OwnerAnswer) => {
+			const onSupersede = () =>
+				supersede &&
+				settle("withdrawn", undefined, withdrawalNote(supersede, ""));
+			const settle = (
+				outcome: PromptOutcome,
+				answer?: OwnerAnswer,
+				note?: string,
+			) => {
+				// Whichever of an answer and a withdrawal comes first settles the prompt.
 				if (!this.#open.delete(id)) return;
 				clearTimeout(timer);
 				signal?.removeEventListener("abort", onAbort);
+				supersede?.removeEventListener("abort", onSupersede);
 				send(principal, {
 					type: "prompt_closed",
 					conversation,
 					prompt: id,
 					outcome,
+					...(note ? { note } : {}),
 				});
 				resolve(answer ? { outcome, answer } : { outcome });
 			};
@@ -171,6 +186,7 @@ export class PromptDesk {
 				settle,
 			});
 			signal?.addEventListener("abort", onAbort, { once: true });
+			supersede?.addEventListener("abort", onSupersede, { once: true });
 			send(principal, { type: "prompt", conversation, prompt: frame });
 		});
 	}
@@ -266,7 +282,10 @@ function cutStrings(value: unknown, limit: number): unknown {
 
 function toApproval(outcome: PromptOutcome): Approval {
 	if (outcome === "approved" || outcome === "declined") return outcome;
-	return outcome === "cancelled" ? "cancelled" : "expired";
+	// A withdrawal is read as the turn's wait ending; the gate knows it was withdrawn.
+	return outcome === "cancelled" || outcome === "withdrawn"
+		? "cancelled"
+		: "expired";
 }
 
 function questionFrame(

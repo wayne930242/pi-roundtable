@@ -10,9 +10,15 @@
  * the owner turned down from a call that failed: `declined` on its approval card, `expired` when
  * a card was shown and went unanswered (the call is held for the owner's next message),
  * `pending` while the card stays open, and `held` when no card could be shown (no one may approve
- * it, or it could not be posted; the call waits for the owner's next message). A turn that was stopped is none of these.
+ * it, or it could not be posted; the call waits for the owner's next message), and `withdrawn` when the
+ * plugin that held it withdrew it (`HoldDescription.supersede`). A turn that was stopped is none of these.
  */
-export type HoldRefusal = "declined" | "expired" | "pending" | "held";
+export type HoldRefusal =
+	| "declined"
+	| "expired"
+	| "pending"
+	| "held"
+	| "withdrawn";
 
 export type TurnProgress =
 	| { type: "text"; delta: string }

@@ -106,6 +106,8 @@ async function host(responses: FauxResponseStep[]) {
 		],
 	});
 	const ran = { deploy: 0, probe: 0, ship: [] as (ApprovedBy | undefined)[] };
+	/** The signals the plugin withdraws a site's deploy by; a site without one is held by its text alone. */
+	const withdrawals = new Map<string, AbortController>();
 	let deps: RuntimeDeps | undefined;
 	const build = (given: RuntimeDeps): PiAgentRuntime =>
 		new PiAgentRuntime({
@@ -159,7 +161,12 @@ async function host(responses: FauxResponseStep[]) {
 						description: "Deploy a site.",
 						parameters: Type.Object({ site: Type.String() }),
 						minTier: "member",
-						hold: ({ site }) => `deploy ${site}`,
+						hold: ({ site }) => {
+							const withdraw = withdrawals.get(site);
+							return withdraw
+								? { text: `deploy ${site}`, supersede: withdraw.signal }
+								: `deploy ${site}`;
+						},
 						run: () => {
 							ran.deploy += 1;
 							return "deployed";
@@ -237,6 +244,7 @@ async function host(responses: FauxResponseStep[]) {
 	return {
 		dir,
 		ran,
+		withdrawals,
 		store,
 		core,
 		runtime: live,
@@ -315,6 +323,89 @@ describe("held actions after a restart", () => {
 			}
 		});
 	}
+
+	test("a plugin's withdrawal of a held call is saved: neither a message nor a restart brings it back", async () => {
+		const h = await host([
+			...calling("deploy", { site: "docs" }),
+			...calling("deploy", { site: "docs" }),
+		]);
+		try {
+			const withdraw = new AbortController();
+			h.withdrawals.set("docs", withdraw);
+			await h.turn("fake:room", "deploy docs", { conversation: SHARED });
+			expect((await h.store.load("fake:room"))?.calls).toHaveLength(1);
+
+			withdraw.abort("replaced by a newer request");
+			await Bun.sleep(5);
+			expect(await h.store.load("fake:room")).toBeUndefined();
+			expect(h.runtime().pendingConfirmation("fake:room")).toBeUndefined();
+
+			const runtime = h.restart();
+			await runtime.recentTranscript("fake:room", 5);
+			expect(runtime.pendingConfirmation("fake:room")).toBeUndefined();
+			// The plugin holds a repeated call anew, with no signal of the old request.
+			h.withdrawals.delete("docs");
+			// The owner's yes releases nothing: the model's repeated call is held again.
+			await h.turn("fake:room", "yes, go ahead", {
+				conversation: SHARED,
+				confirmed: true,
+			});
+			expect(h.ran.deploy).toBe(0);
+			expect((await h.store.load("fake:room"))?.calls).toHaveLength(1);
+		} finally {
+			await h.stop();
+		}
+	});
+
+	test("a withdrawal after a restart cannot reach the call: its signal did not survive, so the call stays held and confirmable", async () => {
+		const h = await host([
+			...calling("deploy", { site: "docs" }),
+			...calling("deploy", { site: "docs" }),
+		]);
+		try {
+			const withdraw = new AbortController();
+			h.withdrawals.set("docs", withdraw);
+			await h.turn("fake:room", "deploy docs", { conversation: SHARED });
+			const runtime = h.restart();
+			await runtime.recentTranscript("fake:room", 5);
+			withdraw.abort();
+			await Bun.sleep(5);
+			// The old runtime's gate no longer touches what the store keeps for the new one.
+			expect((await h.store.load("fake:room"))?.calls).toHaveLength(1);
+			expect(runtime.pendingConfirmation("fake:room")?.calls).toHaveLength(1);
+			// The plugin's hold decides anew when the call is repeated; here it gives no signal.
+			h.withdrawals.delete("docs");
+			await h.turn("fake:room", "yes", {
+				conversation: SHARED,
+				confirmed: true,
+			});
+			expect(h.ran.deploy).toBe(1);
+		} finally {
+			await h.stop();
+		}
+	});
+
+	test("a hold that answers an aborted signal refuses a confirmed call, which is how it withdraws one a restart left held", async () => {
+		const h = await host([
+			...calling("deploy", { site: "docs" }),
+			...calling("deploy", { site: "docs" }),
+		]);
+		try {
+			await h.turn("fake:room", "deploy docs", { conversation: SHARED });
+			h.restart();
+			// After the restart the plugin finds the subject gone: its hold answers an aborted signal.
+			const gone = new AbortController();
+			gone.abort();
+			h.withdrawals.set("docs", gone);
+			await h.turn("fake:room", "yes, go ahead", {
+				conversation: SHARED,
+				confirmed: true,
+			});
+			expect(h.ran.deploy).toBe(0);
+		} finally {
+			await h.stop();
+		}
+	});
 
 	test("the approvers a held call names survive a restart, and the person whose message confirms it is the approver its run sees", async () => {
 		const h = await host([

@@ -20,6 +20,14 @@ export function unexpired(
 		: pending;
 }
 
+/** Whether two held calls are the same call: the same tool with the same canonical input. */
+export function sameCall(
+	a: Pick<HeldCall, "tool" | "input">,
+	b: Pick<HeldCall, "tool" | "input">,
+): boolean {
+	return a.tool === b.tool && a.input === b.input;
+}
+
 /** JSON with object keys sorted at every level, so equal inputs compare equal. */
 // pi-lens-ignore: no-unknown-parameters — tool input is untyped model JSON; this is where it is read
 export function canonicalJson(value: unknown): string {

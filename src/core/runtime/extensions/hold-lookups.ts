@@ -29,37 +29,52 @@ export type Described = HoldDescription | undefined | typeof STOPPED;
 export interface Judgment {
 	action: string;
 	copy?: NonNullable<ApprovalDetails["copy"]>;
+	/** Aborts when the plugin withdraws the call; see `HoldDescription`. */
+	supersede?: AbortSignal;
 	approvers?: readonly string[];
 }
 
 export type Judged = Judgment | undefined | typeof STOPPED;
 
+/** Whether `value` is an abort signal, however it was made; anything else a hold answers is ignored. */
+function isSignal(value: unknown): value is AbortSignal {
+	return (
+		typeof value === "object" &&
+		value !== null &&
+		typeof (value as AbortSignal).aborted === "boolean" &&
+		typeof (value as AbortSignal).addEventListener === "function"
+	);
+}
+
 /**
- * A hold's description as the action and the copy it carries. An answer that is neither a text
- * nor a text with a copy still holds the call, under the generic description; a copy that is not
- * a non-empty text is left out, so a hold that gets it wrong never lets the call run.
+ * A hold's description as the action, the copy and the `supersede` signal it carries. An answer
+ * that is neither a text nor a text with a copy still holds the call, under the generic
+ * description; a copy that is not a non-empty text and a `supersede` that is not a signal are
+ * left out, so a hold that gets them wrong never lets the call run.
  */
 export function described(
 	answer: HoldDescription,
 	tool: string,
-): { action: string; copy?: NonNullable<ApprovalDetails["copy"]> } {
+): Pick<Judgment, "action" | "copy" | "supersede"> {
 	if (typeof answer === "string") return { action: answer };
 	if (typeof answer !== "object" || answer === null)
 		return { action: messages().holdGeneric(tool) };
-	const { text, copy } = answer;
+	const { text, copy, supersede } = answer;
 	if (typeof text !== "string") return { action: messages().holdGeneric(tool) };
+	const withdrawal = isSignal(supersede) ? { supersede } : {};
 	if (
 		!copy ||
 		typeof copy !== "object" ||
 		typeof copy.text !== "string" ||
 		copy.text === ""
 	)
-		return { action: text };
+		return { action: text, ...withdrawal };
 	const label = typeof copy.label === "string" ? copy.label : undefined;
 	return {
 		action: text,
 		copy:
 			label === undefined ? { text: copy.text } : { label, text: copy.text },
+		...withdrawal,
 	};
 }
 
@@ -110,7 +125,7 @@ export function joinApprovers(
 	if (!lookup) return withoutApprovers(answer, tool);
 	const join = (action: Described): Judged | Promise<Judged> => {
 		if (action === STOPPED || action === undefined) return action;
-		const { action: text, copy } = described(action, tool);
+		const { action: text, copy, supersede } = described(action, tool);
 		const controller = new AbortController();
 		if (turn.signal?.aborted) controller.abort();
 		let named:
@@ -133,6 +148,7 @@ export function joinApprovers(
 			return {
 				action: text,
 				...(copy ? { copy } : {}),
+				...(supersede ? { supersede } : {}),
 				...(named ? { approvers: named } : {}),
 			};
 		}
@@ -142,6 +158,7 @@ export function joinApprovers(
 				return {
 					action: text,
 					...(copy ? { copy } : {}),
+					...(supersede ? { supersede } : {}),
 					...(approvers ? { approvers } : {}),
 				};
 			},

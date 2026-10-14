@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `prompt_closed` may carry the outcome `withdrawn` (new in `PromptOutcome`) and a `note`: the plugin that asked for an approval took it back (`ApprovalOptions.supersede`), and `note` is its reason, when it gave one as a text. The prompt is removed from the open ones a reconnect resends, and an answer to it finds `unknown_prompt`. A client that does not know the outcome should close the prompt as it does for `cancelled`. The turn reads a withdrawn approval as cancelled; the core tells the model it was withdrawn.
+
 ## [0.14.1] - 2026-10-14
 
 - Release in lockstep with pi-roundtable 0.14.1; no package-specific behavior changes. The core peer range stays `>=0.14.0 <0.15.0`.

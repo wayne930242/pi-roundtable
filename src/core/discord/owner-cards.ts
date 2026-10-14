@@ -1,12 +1,5 @@
 import { randomUUID } from "node:crypto";
-import {
-	ActionRowBuilder,
-	ButtonBuilder,
-	ButtonStyle,
-	type Interaction,
-	MessageFlags,
-	TextDisplayBuilder,
-} from "discord.js";
+import { type Interaction, MessageFlags, TextDisplayBuilder } from "discord.js";
 import { parseChannelKey } from "../contract/surface.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
 import { messages } from "../i18n/index.ts";
@@ -30,11 +23,13 @@ import type { InteractionModule } from "./interaction-module.ts";
 import {
 	answeredLine,
 	answerModal,
+	approvalRows,
 	askRows,
 	CARD_PREFIX,
 	OTHER,
 	type Rows,
 	TEXT_FIELD,
+	withdrawnFooter,
 } from "./owner-card-rows.ts";
 import type {
 	Answerer,
@@ -177,33 +172,9 @@ export class OwnerCards implements InteractionModule {
 							: {}),
 						title,
 						sections: [message],
+						...(options?.supersede ? { supersede: options.supersede } : {}),
 						...(copy ? { copy: copy.text } : {}),
-						rows: (id, disabled) => [
-							new ActionRowBuilder<ButtonBuilder>().addComponents(
-								new ButtonBuilder()
-									.setCustomId(`${CARD_PREFIX}${id}:yes`)
-									.setLabel(messages().cardRunLabel)
-									.setEmoji("✅")
-									.setStyle(ButtonStyle.Success)
-									.setDisabled(disabled),
-								new ButtonBuilder()
-									.setCustomId(`${CARD_PREFIX}${id}:no`)
-									.setLabel(messages().cardCancelLabel)
-									.setEmoji("❌")
-									.setStyle(ButtonStyle.Secondary)
-									.setDisabled(disabled),
-								// Copying answers nothing, so it stays usable once the card has ended.
-								...(copy
-									? [
-											new ButtonBuilder()
-												.setCustomId(`${CARD_PREFIX}${id}:copy`)
-												.setLabel(copy.label)
-												.setEmoji("📋")
-												.setStyle(ButtonStyle.Secondary),
-										]
-									: []),
-							),
-						],
+						rows: (id, disabled) => approvalRows(id, disabled, copy),
 						footer: messages().cardApprovalFooter,
 					},
 				);
@@ -257,6 +228,8 @@ export class OwnerCards implements InteractionModule {
 			sections: string[];
 			/** The text behind the card's copy button, kept under the card's id. */
 			copy?: string;
+			/** Closes the card, also after its turn stopped waiting, when it aborts; see `ApprovalOptions.supersede`. */
+			supersede?: AbortSignal;
 			question?: OwnerQuestion;
 			rows(id: string, disabled: boolean): Rows;
 			footer: string;
@@ -269,7 +242,8 @@ export class OwnerCards implements InteractionModule {
 		},
 	): Promise<T> {
 		const { logger, graceMs = CARD_GRACE_MS, resume } = this.#options;
-		if (signal?.aborted) return Promise.resolve(cancelled);
+		if (signal?.aborted || card.supersede?.aborted)
+			return Promise.resolve(cancelled);
 		const wait = resume ? card.wait : undefined;
 		const id = randomUUID();
 		if (card.copy !== undefined) this.#copies.remember(id, card.copy);
@@ -282,20 +256,23 @@ export class OwnerCards implements InteractionModule {
 			let finish: string | undefined;
 			/** The turn went on without the answer; the card is the conversation's now. */
 			let late = false;
+			/** Shows the card as ended with `footer`, or once it is posted. */
+			const close = (footer: string) => {
+				finish = footer;
+				void message
+					?.edit(view(footer))
+					.catch((error: unknown) =>
+						logger.warn({ channelId, err: error }, "card not closed"),
+					);
+			};
 			const settle = (value: T, outcome: string | undefined) => {
 				if (!this.#open.delete(id)) return;
 				clearTimeout(timer);
 				signal?.removeEventListener("abort", abort);
+				card.supersede?.removeEventListener("abort", withdraw);
 				if (late) return;
 				// A card ended by an answer is edited by the answering interaction.
-				if (outcome !== undefined) {
-					finish = outcome;
-					void message
-						?.edit(view(outcome))
-						.catch((error: unknown) =>
-							logger.warn({ channelId, err: error }, "card not closed"),
-						);
-				}
+				if (outcome !== undefined) close(outcome);
 				resolve(value);
 			};
 			const view = (footer: string, disabled = true) =>
@@ -310,6 +287,14 @@ export class OwnerCards implements InteractionModule {
 					card.audience.mentions,
 				);
 			const abort = () => settle(cancelled, messages().cardStopped);
+			/** The plugin withdrew the call: the card closes, its turn waiting or not, unless an answer came first. */
+			const withdraw = () => {
+				if (!this.#open.delete(id) || !card.supersede) return;
+				clearTimeout(timer);
+				signal?.removeEventListener("abort", abort);
+				close(withdrawnFooter(card.supersede));
+				if (!late) resolve(cancelled);
+			};
 			const timer = wait
 				? setTimeout(() => {
 						if (!this.#open.has(id)) return;
@@ -319,19 +304,22 @@ export class OwnerCards implements InteractionModule {
 					}, graceMs)
 				: undefined;
 			signal?.addEventListener("abort", abort, { once: true });
+			card.supersede?.addEventListener("abort", withdraw, { once: true });
 			const open: OpenCard = {
 				title: card.title,
 				sections,
 				rows: (disabled) => card.rows(id, disabled),
 				audience: card.audience,
 				end: (value, by) => {
+					// Withdrawn or answered already: this answer changes nothing.
+					if (!this.#open.has(id)) return false;
 					const answeredLate = late;
 					if (value === "approved" && !answeredLate) card.approved?.(by);
 					settle(value as T, undefined);
-					if (!answeredLate || !wait || !resume) return;
+					if (!answeredLate || !wait || !resume) return true;
 					try {
 						const text = wait.late(value, by);
-						if (text === undefined) return;
+						if (text === undefined) return true;
 						resume({
 							channelId,
 							messageId: by.messageId ?? `card-${id}`,
@@ -343,6 +331,7 @@ export class OwnerCards implements InteractionModule {
 					} catch (error) {
 						logger.warn({ channelId, err: error }, "late card answer lost");
 					}
+					return true;
 				},
 				...(card.question ? { question: card.question } : {}),
 			};
@@ -453,10 +442,18 @@ export class OwnerCards implements InteractionModule {
 						return undefined;
 					})
 				: undefined;
-			card.end(
+			const accepted = card.end(
 				approved ? "approved" : "declined",
 				approver ? { ...by, approver } : by,
 			);
+			// The plugin withdrew the call, or another press answered, while this one was being checked.
+			if (!accepted) {
+				await interaction.reply({
+					content: messages().cardInactive,
+					flags: MessageFlags.Ephemeral,
+				});
+				return true;
+			}
 			await interaction.update(
 				closed(approved ? messages().cardApproved : messages().cardDeclined),
 			);

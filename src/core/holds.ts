@@ -19,11 +19,27 @@ export interface HoldContext {
 
 /**
  * What a hold that runs in a turn answers with: the description of the call, or the description
- * as `text` with a `copy` the owner's approval card offers beside it; see `ApprovalDetails.copy`.
+ * as `text` with a `copy` the owner's approval card offers beside it (see `ApprovalDetails.copy`)
+ * and a `supersede` signal to withdraw the call by.
+ *
+ * Aborting `supersede` withdraws the call the hold held, when the plugin no longer wants it
+ * (a newer request replaced it, its subject is gone): its approval card is closed, also after
+ * the turn stopped waiting on it, with the abort reason as its footer when that is a text
+ * (`controller.abort("replaced by a newer request")`); the held call is forgotten, so a later
+ * approval, on the card or by message, runs nothing; a turn still waiting on the card is told
+ * the call was withdrawn. An approval that was answered before the abort stands: the call runs
+ * once, or has run. Aborting again, or after the call ran or was answered, does nothing. A
+ * signal that is already aborted when the hold answers refuses the call without a card, and
+ * drops a confirmation of it, which is how a hold withdraws what a restart left held: the
+ * signals do not survive a restart, but a repeated call is described again.
  */
 export type HoldDescription =
 	| string
-	| { text: string; copy?: NonNullable<ApprovalDetails["copy"]> };
+	| {
+			text: string;
+			copy?: NonNullable<ApprovalDetails["copy"]>;
+			supersede?: AbortSignal;
+	  };
 
 /**
  * Decides whether a tool call waits for the owner's approval. A rule answers with a short

@@ -27,8 +27,37 @@ export interface Release {
 
 /** What a call needs of the gate: nothing, a hold, or a release that spends an approval. */
 export type Needing =
-	| { held: HeldCall; copy?: NonNullable<ApprovalDetails["copy"]> }
+	| {
+			held: HeldCall;
+			copy?: NonNullable<ApprovalDetails["copy"]>;
+			/** Aborts when the plugin withdraws the call; see `HoldDescription`. */
+			supersede?: AbortSignal;
+	  }
 	| { released: ApprovedBy | undefined };
+
+/** A speaker as an approver; undefined without one. */
+export function approverOf(
+	speaker: SpeakerRef | undefined,
+): ApprovedBy | undefined {
+	if (!speaker) return undefined;
+	return {
+		principalId: speaker.principalId,
+		speakerId: speaker.id,
+		name: speaker.name ?? speaker.id,
+		...(speaker.tier === "owner" ? { owner: true as const } : {}),
+	};
+}
+
+/** What a turn waiting on a call its plugin withdrew is told: the call did not run and no approval will run it. */
+export function withdrawn(call: HeldCall): {
+	reason: string;
+	refused: "withdrawn";
+} {
+	return {
+		reason: `This action was withdrawn before it was approved: it would ${call.action}. It did not run, and an approval of it will not run it. Do not retry it; go on without it, or tell the owner it is no longer needed.`,
+		refused: "withdrawn",
+	};
+}
 
 /** The text for a held call that the speaker's own message confirms. */
 export function askSpeaker(addressee: OwnerIdentity, call: HeldCall): string {

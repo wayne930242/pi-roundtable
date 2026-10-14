@@ -265,6 +265,75 @@ const CHECKS: readonly Check[] = [
 		},
 	},
 	{
+		name: "an approval its plugin withdraws resolves cancelled and closes; one answered first stays answered",
+		applies: (subject) =>
+			subject.surface.prompts !== undefined && subject.answer !== undefined,
+		run: async (running) => {
+			const { surface, channel, answer } = running.subject;
+			const prompts = surface.prompts?.(channel, scopeOf(running.subject));
+			if (!prompts || !answer)
+				throw new ContractBroken("the surface shows no prompts");
+			const ask = (supersede: AbortSignal) =>
+				prompts.confirm(
+					"Approve?",
+					"Send it.",
+					undefined,
+					speakerOf(running.subject).tier,
+					undefined,
+					undefined,
+					{ supersede },
+				);
+			const closes = (id: string) =>
+				seen(running, "prompt_closed").filter(
+					(o) => o.kind === "prompt_closed" && o.id === id,
+				).length;
+			const withdrawn = new AbortController();
+			let before = seen(running, "prompt").length;
+			const first = ask(withdrawn.signal);
+			const firstId = await nextPrompt(running, before);
+			withdrawn.abort("replaced by a newer request");
+			const result = await Promise.race([
+				first,
+				Bun.sleep(1000).then(() => "still open" as const),
+			]);
+			expectThat(
+				result === "cancelled",
+				`a withdrawn approval answered ${result}`,
+			);
+			await until(() => closes(firstId) > 0, "the withdrawn approval closes");
+			// An answer to the closed approval changes nothing, as for any ended prompt.
+			await answer(firstId, true).catch(() => undefined);
+			expectThat(closes(firstId) === 1, "the withdrawn approval closed twice");
+			// An approval answered before the withdrawal stays answered.
+			const later = new AbortController();
+			before = seen(running, "prompt").length;
+			const second = ask(later.signal);
+			const secondId = await nextPrompt(running, before);
+			await answer(secondId, true);
+			later.abort();
+			const approved: Approval = await second;
+			expectThat(
+				approved === "approved",
+				`an answered approval came back ${approved}`,
+			);
+			await Bun.sleep(20);
+			expectThat(closes(secondId) === 1, "the answered approval closed twice");
+			// A signal that is already aborted shows nothing.
+			const gone = new AbortController();
+			gone.abort();
+			before = seen(running, "prompt").length;
+			const none: Approval = await ask(gone.signal);
+			expectThat(
+				none === "cancelled",
+				`an approval withdrawn before it opened came back ${none}`,
+			);
+			expectThat(
+				seen(running, "prompt").length === before,
+				"a withdrawn approval was shown",
+			);
+		},
+	},
+	{
 		name: "another person cannot answer the person's approval",
 		applies: (subject) =>
 			subject.surface.prompts !== undefined &&
@@ -374,7 +443,8 @@ export async function checkSurfaceContract(
  * Registers the chat surface contract as one test per check, under `name`: the surface names a
  * prefix and owns its channel, delivers what its person writes, shows every chunk of a reply, and,
  * where it offers them, delivers files, ends typing and stop controls idempotently, shows
- * progress, resolves approvals as the person answers or as a stopped turn cancels them, ignores
+ * progress, resolves approvals as the person answers or as a stopped turn cancels them, closes
+ * one its plugin withdraws (`ApprovalOptions.supersede`) as cancelled, ignores
  * another person's answer to the person's approval, and, in a private conversation, an owner's
  * too, and lets an approval above the person's tier there come back at once, shown to no one.
  * Where it can name approvers, an approval that does is answered by them, reported as the

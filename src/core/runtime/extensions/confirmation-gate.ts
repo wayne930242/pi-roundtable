@@ -21,6 +21,7 @@ import type {
 import type { ToolTiers } from "../../tool-tiers.ts";
 import { approvalCard, approvalDetails } from "./approval-card.ts";
 import {
+	approverOf,
 	askSpeaker,
 	type Needing,
 	namesOf,
@@ -28,21 +29,17 @@ import {
 	remembered,
 	type SpeakerRef,
 	unlessNamed,
+	withdrawn,
 } from "./gate-refusals.ts";
 import {
 	canonicalJson,
 	mayApproveNamed,
 	namedApprover,
+	sameCall,
 	unexpired,
 } from "./held-calls.ts";
-import {
-	awaited,
-	type Described,
-	type HoldTurn,
-	type Judgment,
-	joinApprovers,
-	STOPPED,
-} from "./hold-lookups.ts";
+import { HoldDescriber } from "./hold-describer.ts";
+import { type HoldTurn, type Judgment, STOPPED } from "./hold-lookups.ts";
 
 export { confirmationGateExtension } from "./confirmation-gate-extension.ts";
 export {
@@ -53,18 +50,10 @@ export {
 	namedApprover,
 	unexpired,
 } from "./held-calls.ts";
-export type { HoldTurn } from "./hold-lookups.ts";
 
-/** A speaker as an approver; undefined without one. */
-function approverOf(speaker: SpeakerRef | undefined): ApprovedBy | undefined {
-	if (!speaker) return undefined;
-	return {
-		principalId: speaker.principalId,
-		speakerId: speaker.id,
-		name: speaker.name ?? speaker.id,
-		...(speaker.tier === "owner" ? { owner: true as const } : {}),
-	};
-}
+import { type Watch, Withdrawals } from "./withdrawals.ts";
+
+export type { HoldTurn } from "./hold-lookups.ts";
 
 /**
  * Per-channel state of held actions. With the owner's prompts bound, a call that needs their
@@ -94,17 +83,21 @@ export class ConfirmationGate {
 	readonly #tiers: ToolTiers | undefined;
 	/** Where the session's relative file paths resolve, for the sizes a card shows. */
 	readonly #fileRoot: string | undefined;
-	readonly #describeTimeoutMs: number;
 	/** The name a principal goes by, for telling a speaker who may approve a call; undefined when unknown. */
 	readonly #nameOf:
 		| ((principalId: string) => Promise<string | undefined>)
 		| undefined;
 	/** The held calls a partial release kept, until this turn records a hold of its own. */
 	#kept: PendingConfirmation | undefined;
-	/** Settles when the descriptions asked for so far have all been used, in the order they were asked. */
-	#describing: Promise<void> = Promise.resolve();
-	/** Descriptions asked for and not used yet. */
-	#undescribed = 0;
+	/** Asks the holds to describe a call in a turn, and hands the answers on in the order they were asked. */
+	readonly #describer: HoldDescriber;
+	/** The held calls their plugins may still withdraw. */
+	readonly #withdrawals = new Withdrawals((call) => this.#forget(call));
+	/**
+	 * Called with the held actions that remain when a plugin's withdrawal removed one from them,
+	 * for whoever keeps them across a restart to keep the smaller set.
+	 */
+	onHeldChange: ((held: PendingConfirmation | undefined) => void) | undefined;
 
 	/**
 	 * `holds` decides which calls wait for the owner. With a workspace, the session has a shell,
@@ -125,7 +118,7 @@ export class ConfirmationGate {
 		describeTimeoutMs = HOLD_DESCRIBE_TIMEOUT_MS,
 		nameOf?: (principalId: string) => Promise<string | undefined>,
 	) {
-		this.#describeTimeoutMs = describeTimeoutMs;
+		this.#describer = new HoldDescriber(holds, context, describeTimeoutMs);
 		this.#nameOf = nameOf;
 		this.#tiers = tiers;
 		this.#fileRoot = fileRoot ?? context.workspace;
@@ -190,16 +183,49 @@ export class ConfirmationGate {
 		this.#pending =
 			held && kept.length > 0 ? { ...held, calls: kept } : undefined;
 		this.#kept = this.#pending;
+		this.#sweep();
 	}
 
 	endTurn(): void {
 		this.#approved = [];
 		this.#approvers.clear();
+		this.#sweep();
 	}
 
-	/** The running turn's speaker as an approver; undefined without one. */
-	#speakerAsApprover(): ApprovedBy | undefined {
-		return approverOf(this.#speaker);
+	/** How many held calls a plugin may still withdraw. */
+	get watching(): number {
+		return this.#withdrawals.size;
+	}
+
+	/** Stops watching every call, for a gate that is dropped; a card still open is closed by its own surface. */
+	abandon(): void {
+		this.#withdrawals.clear();
+	}
+
+	/** Ends the watches of calls that nothing keeps and no card can answer. */
+	#sweep(): void {
+		const kept = (call: HeldCall) =>
+			(this.#pending?.calls.some((c) => sameCall(c, call)) ?? false) ||
+			[...this.#approved, ...this.#lateApproved].some((r) =>
+				sameCall(r.call, call),
+			);
+		this.#withdrawals.sweep(kept);
+	}
+
+	/** A plugin withdrew `call`: nothing that could run it stays, and what is held is kept anew. */
+	#forget(call: HeldCall): void {
+		const other = (r: { call: HeldCall }) => !sameCall(r.call, call);
+		this.#approved = this.#approved.filter(other);
+		this.#lateApproved = this.#lateApproved.filter(other);
+		const pending = this.#pending;
+		if (!pending?.calls.some((c) => sameCall(c, call))) return;
+		// In place, so a partial release's kept set stays the object `remembered` compares.
+		pending.calls = pending.calls.filter((c) => !sameCall(c, call));
+		if (pending.calls.length === 0) {
+			this.#pending = undefined;
+			if (this.#kept === pending) this.#kept = undefined;
+		}
+		this.onHeldChange?.(this.pending());
 	}
 
 	/** Who approved the held call running under this tool call id; undefined when it was not held or they are unknown. */
@@ -267,36 +293,53 @@ export class ConfirmationGate {
 		if ("released" in needing)
 			return needing.released ? { approvedBy: needing.released } : {};
 		const call = needing.held;
-		if (!ask) return { reason: await this.#held(call), refused: "held" };
+		const watch = needing.supersede
+			? this.#withdrawals.watch(call, needing.supersede)
+			: undefined;
+		if (watch?.withdrawn) return withdrawn(call);
+		/** Holds the call for a message, no card being open for it. */
+		const held = async (refused: "held" | "expired") => {
+			if (watch) watch.card = false;
+			return { reason: await this.#held(call), refused };
+		};
+		if (!ask) return held("held");
 		// In a private conversation only its person answers: a call that names others is not theirs.
 		if (this.#private && !mayApproveNamed(this.#speaker, call))
-			return { reason: await this.#held(call), refused: "held" };
+			return held("held");
 		let approvedBy: ApprovedBy | undefined;
 		const options: ApprovalOptions = {
 			...(call.approverIds ? { approvers: call.approverIds } : {}),
 			approvedBy: (by) => {
 				approvedBy = by;
 			},
+			...(watch ? { supersede: watch.signal } : {}),
 		};
-		const answer = await ask.prompts.confirm(
+		const asking = ask.prompts.confirm(
 			messages().confirmTitle(ask.asker),
 			approvalCard(call, this.#fileRoot, {}, parameters),
 			ask.signal,
 			higherTier(this.#tiers?.minTier(call.tool), call.minTier),
-			{ late: (late) => this.#late(call, late) },
+			{ late: (late) => this.#late(call, late, watch) },
 			approvalDetails(call, this.#fileRoot, needing.copy),
 			options,
 		);
+		// The first of the card's answer and the withdrawal settles the call; the other changes nothing.
+		const answer = watch
+			? await Promise.race([asking, watch.whenWithdrawn])
+			: await asking;
+		if (watch) void asking.catch(() => undefined);
+		if (answer === "withdrawn" || (watch?.withdrawn && answer === "cancelled"))
+			return withdrawn(call);
 		if (answer === "approved") {
 			// A private conversation's answer to a call that names approvers is its person's, whom a surface need not name.
 			const by =
 				approvedBy ??
 				(this.#private && call.approverIds
-					? this.#speakerAsApprover()
+					? approverOf(this.#speaker)
 					: undefined);
 			// A call that names approvers runs only on the word of one of them, or an owner.
-			if (!namedApprover(call, by))
-				return { reason: await this.#held(call), refused: "held" };
+			if (!namedApprover(call, by)) return held("held");
+			watch?.end();
 			return { approvedOnCard: true, ...(by ? { approvedBy: by } : {}) };
 		}
 		if (answer === "pending") {
@@ -307,29 +350,39 @@ export class ConfirmationGate {
 			};
 		}
 		if (answer === "declined") {
+			watch?.end();
 			const o = ownerWords(this.#addressee);
 			return {
 				reason: `${o.name} declined this on its approval card: it would ${call.action}. Do not retry it; go on without it, or ask ${o.him} what ${o.he} wants instead.`,
 				refused: "declined",
 			};
 		}
-		if (answer === "cancelled") return { reason: "The turn was stopped." };
-		// No card was shown: no one may approve it, or it could not be posted.
-		if (answer === "unavailable")
-			return { reason: await this.#held(call), refused: "held" };
-		return { reason: await this.#held(call), refused: "expired" };
+		if (answer === "cancelled") {
+			watch?.end();
+			return { reason: "The turn was stopped." };
+		}
+		// No card was shown, or it went unanswered: the call is held for a message, and stays withdrawable.
+		return held(answer === "unavailable" ? "held" : "expired");
 	}
 
 	/**
 	 * A late answer on a call's card: an approval lets the identical call run once, in whichever
 	 * turn makes it next; returns the text of the turn that tells the model.
 	 */
-	#late(call: HeldCall, late: LateAnswer): string | undefined {
-		if (late.kind !== "approval") return undefined;
+	#late(
+		call: HeldCall,
+		late: LateAnswer,
+		watch: Watch | undefined,
+	): string | undefined {
+		// A card the plugin withdrew answers nothing, whatever a surface that kept it open reports.
+		if (watch?.withdrawn || late.kind !== "approval") return undefined;
+		if (watch) watch.card = false;
 		if (late.approved && !namedApprover(call, late.approvedBy))
 			return undefined;
-		if (!late.approved)
+		if (!late.approved) {
+			watch?.end();
 			return `(${late.by} declined on its card the action you were waiting on: it would ${call.action}. It did not run; do not make the call again. Go on without it, or ask what ${late.by} wants instead.)`;
+		}
 		this.#lateApproved.push({
 			call,
 			...(late.approvedBy ? { by: late.approvedBy } : {}),
@@ -357,71 +410,11 @@ export class ConfirmationGate {
 		| undefined
 		| typeof STOPPED
 		| Promise<Needing | undefined | typeof STOPPED> {
-		const inTurn = this.#holds.inTurn;
-		if (!turn || !inTurn) return this.#needing(tool, input);
-		const controller = new AbortController();
-		if (turn.signal?.aborted) controller.abort();
-		let answer: ReturnType<NonNullable<HoldCheck["inTurn"]>>;
-		try {
-			answer = inTurn.call(
-				this.#holds,
-				tool,
-				input,
-				this.#context,
-				turn.toolTurn(controller.signal),
-			);
-		} catch {
-			answer = messages().holdGeneric(tool);
-		}
-		const found: Described | Promise<Described> = isPromise(answer)
-			? awaited(
-					answer,
-					messages().holdGeneric(tool),
-					controller,
-					turn.signal,
-					this.#describeTimeoutMs,
-				)
-			: answer;
-		return this.#inOrder(
-			joinApprovers(
-				found,
-				{
-					holds: this.#holds,
-					context: this.#context,
-					timeoutMs: this.#describeTimeoutMs,
-				},
-				tool,
-				input,
-				turn,
-			),
-			(judged) => {
-				if (judged === STOPPED) return STOPPED;
-				return judged ? this.#unlessApproved(tool, input, judged) : undefined;
-			},
-		);
-	}
-
-	/**
-	 * Hands `described` to `use` after every description asked for before it has been used, so
-	 * calls made together are held, and their cards opened, in the order they were made whichever
-	 * description comes back first.
-	 */
-	#inOrder<T, R>(
-		described: T | Promise<T>,
-		use: (described: T) => R,
-	): R | Promise<R> {
-		if (this.#undescribed === 0 && !isPromise(described)) return use(described);
-		this.#undescribed++;
-		const used = this.#describing.then(() => described).then(use);
-		this.#describing = used.then(
-			() => {
-				this.#undescribed--;
-			},
-			() => {
-				this.#undescribed--;
-			},
-		);
-		return used;
+		if (!turn || !this.#holds.inTurn) return this.#needing(tool, input);
+		return this.#describer.describe(tool, input, turn, (judged) => {
+			if (judged === STOPPED) return STOPPED;
+			return judged ? this.#unlessApproved(tool, input, judged) : undefined;
+		});
 	}
 
 	/**
@@ -441,14 +434,22 @@ export class ConfirmationGate {
 			...(minTier ? { minTier } : {}),
 			...(judged.approvers ? { approverIds: [...judged.approvers] } : {}),
 		};
-		for (const released of [this.#approved, this.#lateApproved]) {
-			const approved = released.findIndex(
-				(r) => r.call.tool === call.tool && r.call.input === call.input,
-			);
+		// A plugin that already withdrew the call lets no approval of it release it.
+		for (const released of judged.supersede?.aborted
+			? []
+			: [this.#approved, this.#lateApproved]) {
+			const approved = released.findIndex((r) => sameCall(r.call, call));
 			const [spent] = approved === -1 ? [] : released.splice(approved, 1);
-			if (spent) return { released: spent.by };
+			if (spent) {
+				this.#withdrawals.endCall(spent.call);
+				return { released: spent.by };
+			}
 		}
-		return { held: call, ...(judged.copy ? { copy: judged.copy } : {}) };
+		return {
+			held: call,
+			...(judged.copy ? { copy: judged.copy } : {}),
+			...(judged.supersede ? { supersede: judged.supersede } : {}),
+		};
 	}
 
 	/** Records the call as held and returns what the model is told about it. */
