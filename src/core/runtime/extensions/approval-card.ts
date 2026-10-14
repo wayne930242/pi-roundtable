@@ -3,6 +3,8 @@ import { resolve } from "node:path";
 import type { HeldCall } from "../../domain/conversation.ts";
 import { messages } from "../../i18n/index.ts";
 import type { ApprovalDetails } from "../../interactions/prompts.ts";
+import { fieldList, schemaFields } from "./approval-fields.ts";
+import { countPoints, firstPoints, prefix } from "./card-text.ts";
 
 /** The fewest characters of a long string value in a held call's input its approval card keeps, when the input does not fit whole. */
 const CARD_VALUE_CHARS = 200;
@@ -32,21 +34,30 @@ export interface CardLimits {
  * and never below `limits.valueChars`, each marked `… [N chars]` with its original length in code
  * points, until it fits, so one long value does not push the keys after it out of the card. If it
  * still does not fit, the rest is dropped and the keys that are no longer shown are listed.
+ *
+ * With the tool's `parameters` (its JSON Schema), the input is shown as fields instead of JSON:
+ * one per argument in the schema's order, labelled by the property's `title` or its name, a
+ * short value on the line (`**label**: value`, markdown in it escaped), a multi-line or long
+ * string, and JSON for anything nested, in a block that keeps its line breaks. The same limits
+ * apply, the cut values marked the same way and the fields no longer shown listed. A schema that
+ * lists no properties, or none, gives the JSON.
  */
 export function approvalCard(
 	call: HeldCall,
 	workspace?: string,
 	limits: CardLimits = {},
+	parameters?: unknown,
 ): string {
-	const input = shownInput(
-		call.input,
-		limits.valueChars ?? CARD_VALUE_CHARS,
-		limits.totalChars ?? CARD_INPUT_CHARS,
-	);
+	const valueChars = limits.valueChars ?? CARD_VALUE_CHARS;
+	const totalChars = limits.totalChars ?? CARD_INPUT_CHARS;
+	const fields = schemaFields(objectInput(call.input), parameters);
+	const body = fields
+		? fieldList(fields, { valueChars, totalChars })
+		: `\`\`\`json\n${shownInput(call.input, valueChars, totalChars).replaceAll("```", "`\u200b``")}\n\`\`\``;
 	const files = pathFiles(call.input).map(
 		(path) => `\n-# ${messages().cardFile(path, fileSize(path, workspace))}`,
 	);
-	return `**${call.action}**\n-# \`${call.tool}\`\n\`\`\`json\n${input.replaceAll("```", "`\u200b``")}\n\`\`\`${files.join("")}`;
+	return `**${call.action}**\n-# \`${call.tool}\`\n${body}${files.join("")}`;
 }
 
 /** The input as a card shows it within `total` characters; see `approvalCard`. */
@@ -120,34 +131,6 @@ function hiddenKeys(parsed: unknown, limit: number, shown: number): string {
 	return `\n${messages().cardHiddenKeys(names)}`;
 }
 
-/** How many code points `text` has. */
-function countPoints(text: string): number {
-	let points = 0;
-	for (let i = 0; i < text.length; i++) {
-		const code = text.charCodeAt(i);
-		if (code >= 0xd800 && code <= 0xdbff && i + 1 < text.length) i++;
-		points++;
-	}
-	return points;
-}
-
-/** The first `count` code points of `text`. */
-function firstPoints(text: string, count: number): string {
-	let end = 0;
-	for (let points = 0; points < count && end < text.length; points++) {
-		const code = text.charCodeAt(end);
-		end += code >= 0xd800 && code <= 0xdbff && end + 1 < text.length ? 2 : 1;
-	}
-	return text.slice(0, end);
-}
-
-/** The first `max` characters of `text`, backing off a cut that would split a surrogate pair. */
-function prefix(text: string, max: number): string {
-	if (text.length <= max) return text;
-	const code = text.charCodeAt(max - 1);
-	return text.slice(0, code >= 0xd800 && code <= 0xdbff ? max - 1 : max);
-}
-
 /**
  * A held call as data for a card that is not text: the action, the tool, the whole input, and
  * each file it sends by path with its size now (absent when unreadable), and the `copy` its hold
@@ -173,11 +156,16 @@ export function approvalDetails(
 
 /** A call's input object; `{}` for input that is not one (a held call's always is). */
 function parsedInput(input: string): Record<string, unknown> {
+	return objectInput(input) ?? {};
+}
+
+/** A call's input as an object; undefined for input that is not one. */
+function objectInput(input: string): Record<string, unknown> | undefined {
 	try {
 		const parsed: unknown = JSON.parse(input);
-		return isPlainObject(parsed) ? parsed : {};
+		return isPlainObject(parsed) ? parsed : undefined;
 	} catch {
-		return {};
+		return undefined;
 	}
 }
 

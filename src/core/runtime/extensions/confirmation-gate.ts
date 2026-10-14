@@ -55,6 +55,17 @@ export {
 } from "./held-calls.ts";
 export type { HoldTurn } from "./hold-lookups.ts";
 
+/** A speaker as an approver; undefined without one. */
+function approverOf(speaker: SpeakerRef | undefined): ApprovedBy | undefined {
+	if (!speaker) return undefined;
+	return {
+		principalId: speaker.principalId,
+		speakerId: speaker.id,
+		name: speaker.name ?? speaker.id,
+		...(speaker.tier === "owner" ? { owner: true as const } : {}),
+	};
+}
+
 /**
  * Per-channel state of held actions. With the owner's prompts bound, a call that needs their
  * confirmation waits for their answer on a card and runs or is refused in the same turn. Otherwise,
@@ -165,14 +176,7 @@ export class ConfirmationGate {
 		this.#speaker = speaker;
 		this.#private = isPrivate;
 		this.#addressee = addressee ?? this.#owner;
-		const by: ApprovedBy | undefined = speaker
-			? {
-					principalId: speaker.principalId,
-					speakerId: speaker.id,
-					name: speaker.name ?? speaker.id,
-					...(speaker.tier === "owner" ? { owner: true as const } : {}),
-				}
-			: undefined;
+		const by = approverOf(speaker);
 		const held = this.pending();
 		const released = confirmed ? this.releasable(speaker) : undefined;
 		this.#approved = (released?.calls ?? []).map((call) => ({
@@ -195,14 +199,7 @@ export class ConfirmationGate {
 
 	/** The running turn's speaker as an approver; undefined without one. */
 	#speakerAsApprover(): ApprovedBy | undefined {
-		const speaker = this.#speaker;
-		if (!speaker) return undefined;
-		return {
-			principalId: speaker.principalId,
-			speakerId: speaker.id,
-			name: speaker.name ?? speaker.id,
-			...(speaker.tier === "owner" ? { owner: true as const } : {}),
-		};
+		return approverOf(this.#speaker);
 	}
 
 	/** Who approved the held call running under this tool call id; undefined when it was not held or they are unknown. */
@@ -246,13 +243,15 @@ export class ConfirmationGate {
 	 * the card's own message is shown to the person, never to the model. When a hold refuses the
 	 * call, `refused` says how, for the turn's progress to report beside the failed result.
 	 * With `turn`, a hold that looks things up as the turn's speaker is waited for before any card
-	 * opens, and a turn that stops meanwhile opens none.
+	 * opens, and a turn that stops meanwhile opens none. The tool's JSON Schema, as `parameters`,
+	 * has the card show the call as fields.
 	 */
 	async decide(
 		tool: string,
 		input: Record<string, unknown>,
 		ask?: { prompts: Prompts; asker: string; signal?: AbortSignal },
 		turn?: HoldTurn,
+		parameters?: unknown,
 	): Promise<{
 		reason?: string;
 		approvedOnCard?: true;
@@ -281,7 +280,7 @@ export class ConfirmationGate {
 		};
 		const answer = await ask.prompts.confirm(
 			messages().confirmTitle(ask.asker),
-			approvalCard(call, this.#fileRoot),
+			approvalCard(call, this.#fileRoot, {}, parameters),
 			ask.signal,
 			higherTier(this.#tiers?.minTier(call.tool), call.minTier),
 			{ late: (late) => this.#late(call, late) },

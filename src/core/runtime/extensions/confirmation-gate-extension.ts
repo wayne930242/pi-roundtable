@@ -40,6 +40,9 @@ export function confirmationGateExtension(
 				event.input as Record<string, unknown>,
 				ask,
 				turn,
+				// A host that gives no tool list shows the call as JSON.
+				pi.getAllTools?.().find((tool) => tool.name === event.toolName)
+					?.parameters,
 			);
 			if (approvedOnCard) approved.add(event.toolCallId);
 			if (approvedBy && !reason) gate.grant(event.toolCallId, approvedBy);
