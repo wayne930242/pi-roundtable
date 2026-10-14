@@ -218,7 +218,12 @@ export class ClientDesk {
 				`the arguments must be JSON of at most ${MAX_ARGS_BYTES} bytes`,
 			);
 		const approval = options?.approval;
-		if (approval !== undefined && !validPrompt(approval.prompt))
+		if (
+			approval !== undefined &&
+			(typeof approval !== "object" ||
+				approval === null ||
+				!validPrompt(approval.prompt))
+		)
 			return refuse("failed", "approval.prompt must be a prompt id");
 		if (this.#byConnection.has(connection))
 			return refuse("busy", "another call is open on this client");

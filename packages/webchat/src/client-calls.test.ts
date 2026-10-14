@@ -107,6 +107,12 @@ describe("a call that names the approval it acts on", () => {
 			);
 			expect(result).toMatchObject({ ok: false, error: "failed" });
 		}
+		for (const approval of [null, "card-1"] as unknown as {
+			prompt: string;
+		}[]) {
+			const result = await port?.call("page_status", {}, { approval });
+			expect(result).toMatchObject({ ok: false, error: "failed" });
+		}
 		expect(calls()).toEqual([]);
 	});
 

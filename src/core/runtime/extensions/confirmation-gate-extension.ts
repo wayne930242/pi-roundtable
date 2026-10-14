@@ -26,6 +26,9 @@ export function confirmationGateExtension(
 			};
 		});
 		pi.on("tool_call", async (event, ctx) => {
+			// A tool call id the model reused must not inherit an earlier call's approval.
+			gate.finish(event.toolCallId);
+			approved.delete(event.toolCallId);
 			const prompts = slot?.prompts;
 			let ask: Parameters<ConfirmationGate["review"]>[2];
 			if (prompts && slot) {

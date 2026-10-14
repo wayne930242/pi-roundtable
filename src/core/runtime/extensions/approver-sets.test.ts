@@ -309,6 +309,19 @@ describe("approvedBy", () => {
 		expect(gate.approvedBy("c1")).toBeUndefined();
 	});
 
+	test("a tool call id the model reuses for a call that is not held does not inherit the approval", async () => {
+		const gate = new ConfirmationGate(holdChain([mailRule(undefined)]), OWNER);
+		const slot = promptSlot();
+		slot.bind(answering("approved", ADA).prompts, "helper");
+		gate.beginTurn("workspace", false, undefined, SAM);
+		const { call } = handlers(gate, slot);
+		expect(await call("c1")).toBeUndefined();
+		expect(gate.approvedBy("c1")).toEqual(ADA);
+		expect(await call("c1", "read", {})).toBeUndefined();
+		expect(gate.approvedBy("c1")).toBeUndefined();
+		expect(gate.approvedPrompt("c1")).toBeUndefined();
+	});
+
 	test("a surface that does not say who approved leaves it unnamed", async () => {
 		const gate = new ConfirmationGate(holdChain([mailRule(undefined)]), OWNER);
 		const slot = promptSlot();
