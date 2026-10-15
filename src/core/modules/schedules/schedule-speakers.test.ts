@@ -45,7 +45,6 @@ function harness(speakers: "everyone" | "owners") {
 	const claim = agentClaim({
 		owner: TEST_OWNER,
 		speakers,
-		// biome-ignore lint/suspicious/noExplicitAny: a recording stand-in for the team
 		team: {
 			guildId: "1",
 			owns: () => "agent" as const,
@@ -54,6 +53,7 @@ function harness(speakers: "everyone" | "owners") {
 				return { ok: true as const, text: "" };
 			},
 			startFresh: async () => {},
+			// biome-ignore lint/suspicious/noExplicitAny: a recording stand-in for the team
 		} as any,
 		runtime: { steer: async () => false, stop: () => false },
 		surface: { react: async () => {}, unreact: async () => {} },
