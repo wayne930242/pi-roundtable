@@ -109,4 +109,41 @@ describe("EffortJudge", () => {
 			criteria: AGENT_BRIEF.criteria,
 		});
 	});
+
+	describe("with a rule", () => {
+		const rule = { requiredMass: [0, 0.95, 0.8, 0.8] } as const;
+		const ruled = (
+			scores: number[] | Error,
+			previous: { level?: Level } = {},
+		) =>
+			new EffortJudge({
+				judge: new FakeJudge(scores),
+				brief: AGENT_BRIEF,
+				fallback: "medium",
+				threshold: 0.6,
+				logger: silentLogger(),
+			}).judge("hello", previous, rule);
+
+		test("a share short of the required mass stays at low", async () => {
+			expect(await ruled([0.06, 0.89, 0.045, 0.005])).toBe("low");
+		});
+
+		test("a clear medium reaches medium", async () => {
+			expect(await ruled([0.02, 0.9, 0.07, 0.01])).toBe("medium");
+		});
+
+		test("a clear high reaches high", async () => {
+			expect(await ruled([0.05, 0.1, 0.8, 0.05])).toBe("high");
+		});
+
+		test("the previous level does not carry over", async () => {
+			expect(await ruled([0.5, 0.3, 0.2, 0], { level: "high" })).toBe("low");
+		});
+
+		test("a failure gives low, not the fallback or the previous level", async () => {
+			expect(await ruled(new JudgeError("down"), { level: "high" })).toBe(
+				"low",
+			);
+		});
+	});
 });

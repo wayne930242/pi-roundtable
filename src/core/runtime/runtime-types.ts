@@ -13,7 +13,7 @@ import type { Principal } from "../identity/principal-store.ts";
 import type { OwnerIdentity } from "../identity.ts";
 import type { PromptScope, Prompts } from "../interactions/prompts.ts";
 import type { Logger } from "../log.ts";
-import type { ThinkingLevel, ThinkingPicker } from "../models.ts";
+import type { EffortPolicy, ThinkingLevel, ThinkingPicker } from "../models.ts";
 import type { LinkedSessions } from "../plugin.ts";
 import {
 	planOrder,
@@ -60,6 +60,8 @@ export interface PiAgentRuntimeOptions {
 	thinking: ThinkingLevel;
 	/** Picks the level of the assistant's turns and of agents whose thinking is `auto`. */
 	effort: ThinkingPicker;
+	/** Chooses a turn's rule for the picker, or a fixed level; absent = the judge decides alike for every turn. */
+	effortPolicy?: EffortPolicy;
 	/** Held actions survive a restart here, so a confirmation after one still runs. */
 	confirmations: Pick<PendingConfirmationStore, "load" | "save">;
 	logger: Logger;

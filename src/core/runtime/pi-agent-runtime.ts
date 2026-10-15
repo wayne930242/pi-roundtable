@@ -151,6 +151,9 @@ export class PiAgentRuntime implements AgentRuntime {
 			{
 				modelRuntime: this.#modelRuntime,
 				effort: this.#options.effort,
+				...(this.#options.effortPolicy
+					? { policy: this.#options.effortPolicy }
+					: {}),
 				judged: this.#sessions.judged,
 			},
 			key,

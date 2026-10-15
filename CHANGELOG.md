@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `effortPolicy` in the overrides of `defineRoundtable` (`EffortPolicy`, `EffortRequest` and `EffortRule` in `pi-roundtable/kit`): a host chooses, per turn that thinks at the judge's choice, how the level is decided. The policy gets the turn's `channel`, `kind`, `agent` and `origin` and answers `{ fixed: level }` to run the turn at that level without asking the judge, `{ requiredMass: [0, medium, high, xhigh] }` to run the highest level whose share of the judge's answer at or above it meets its entry (the previous turn's level does not carry over, and a judge that fails gives low), or `undefined` for the default. Without a policy nothing changes.
+
 ## [0.15.2] - 2026-10-15
 
 ### Fixed

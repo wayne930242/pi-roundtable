@@ -80,7 +80,7 @@ Use the kit's building blocks for a plugin that runs Pi itself, such as a coding
   Two adapters log each skip as `Jev leaves the compaction to Pi's summary` with `reason`, `detail` and `tokensBefore` through the `logger` they take: `jevCompactionExtension({ logger, ...options })`, the `compaction` session tool's extension, placed as `session.compaction.wrap(jevCompactionExtension({ logger }))` under the engine `JEV_COMPACTION_ENGINE` (`pi-jev-compaction`), and `jevCompactor({ logger, ...options })`, a `JevCompactor` for pi-roundtable-sandbox's `compaction` option that returns the compaction or `undefined` and logs with the `channel`.
   A `no_key` skip is logged once per adapter, as `Jev is not configured, so compaction uses Pi's summary`, and then not again; every other skip is logged each time.
   The types are `JevCompactInput`, `JevCompactOptions`, `JevCompactOutcome`, `JevCompactor`, `JevCompactRequest`, `JevExtensionOptions` and `JevSkipReason`.
-- Effort: `effortJudge` picks a turn's thinking level from a message with your own brief (`EffortBrief`, `JUDGE_WORK`).
+- Effort: `effortJudge` picks a turn's thinking level from a message with your own brief (`EffortBrief`, `JUDGE_WORK`). A host that wants other turns decided differently passes `effortPolicy` (an `EffortPolicy`) in the overrides of `defineRoundtable`: it gets the turn's `channel`, `kind`, `agent` and `origin` and answers `{ fixed: level }` (no judge call), `{ requiredMass: [0, medium, high, xhigh] }` (the highest level whose share of the judge's answer at or above it meets its entry; the previous level does not carry over and a failed judge gives low), or `undefined` for the default.
 - Presentation and small helpers: `thinkingLine`, `zonedStamp(date, timeZone)`, `channelQueue()` (a queue of your own, so work does not wait behind a running turn), `checkRepoName` and `SKILL_LIST_TOOL` with `skillListExtension` for repositories and skills, and `searchTerms` for memory search.
 
 The [coding package source][coding-source] shows these helpers in an out-of-process Pi worker.
@@ -3847,6 +3847,9 @@ Import from the entries listed below; source area files are internal.
 | `EffortJudgeOptions` | `pi-roundtable/kit` | type |
 | `EffortLevel` | `pi-roundtable/kit` | type |
 | `EffortPicker` | `pi-roundtable/kit` | type |
+| `EffortPolicy` | `pi-roundtable/kit` | type |
+| `EffortRequest` | `pi-roundtable/kit` | type |
+| `EffortRule` | `pi-roundtable/kit` | type |
 | `GroupMessage` | `pi-roundtable/kit` | type |
 | `JUDGE_WORK` | `pi-roundtable/kit` | value |
 | `McpEndpoint` | `pi-roundtable/kit` | type |

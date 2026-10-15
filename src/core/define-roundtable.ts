@@ -27,7 +27,7 @@ import type { ListenerConfig } from "./http/listeners.ts";
 import { identityPlugin } from "./identity/identity-plugin.ts";
 import { type JudgeModel, piJudgeModel } from "./judging/model-judge.ts";
 import { createLogger, type LogEntry, type Logger } from "./log.ts";
-import { formatModelRef, type ModelRef } from "./models.ts";
+import { type EffortPolicy, formatModelRef, type ModelRef } from "./models.ts";
 import { ErrorReporter } from "./ops/error-reporter.ts";
 import type { RoundtablePlugin } from "./plugin.ts";
 import {
@@ -64,6 +64,11 @@ export interface DefineOverrides {
 	 * agent's report. It must not throw.
 	 */
 	errorSink?: (entry: LogEntry) => void;
+	/**
+	 * Picks how each turn that thinks at the judge's choice is decided: a fixed level, or its own
+	 * required shares of the judge's answer. Undefined for a turn leaves the default.
+	 */
+	effortPolicy?: EffortPolicy;
 	/** More HTTP listeners than the one `config.http` names, each with its own id. */
 	listeners?: readonly ListenerConfig[];
 	/** Receives the work a shutdown drain gave up on, before any service stops. */
@@ -329,6 +334,9 @@ export async function defineRoundtable(
 				model: config.model,
 				thinking: config.thinking,
 				judgeThreshold: config.judge.threshold,
+				...(overrides.effortPolicy
+					? { effortPolicy: overrides.effortPolicy }
+					: {}),
 				agents: agentSessions,
 				interimText: config.interimText,
 				interimPrimaryChars: config.interimPrimaryChars,

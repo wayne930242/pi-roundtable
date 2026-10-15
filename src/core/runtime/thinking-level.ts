@@ -4,7 +4,11 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 import type { ChannelKey } from "../domain/conversation.ts";
 import type { TurnRequest } from "../domain/ports.ts";
-import { AUTO_THINKING, type ThinkingLevel } from "../models.ts";
+import {
+	AUTO_THINKING,
+	type EffortPolicy,
+	type ThinkingLevel,
+} from "../models.ts";
 import {
 	type AgentModelSettings,
 	useChosenAgentModel,
@@ -19,6 +23,8 @@ export async function thinkingLevel(
 		effort: PiAgentRuntimeOptions["effort"];
 		/** The level last judged for each conversation. */
 		judged: Map<ChannelKey, ThinkingLevel>;
+		/** The host's rule for a turn that thinks at the judge's choice. */
+		policy?: EffortPolicy;
 	},
 	key: ChannelKey,
 	session: AgentSession,
@@ -38,10 +44,21 @@ export async function thinkingLevel(
 		judged.delete(key);
 		return setting;
 	}
-	const level = await effort.judge(request.text, {
-		reply: lastReply(session.messages),
-		level: judged.get(key),
+	const rule = parts.policy?.({
+		channel: request.channel,
+		...(request.kind !== undefined ? { kind: request.kind } : {}),
+		...(request.agent ? { agent: request.agent.name } : {}),
+		...(request.origin !== undefined ? { origin: request.origin } : {}),
 	});
+	if (rule && "fixed" in rule) {
+		judged.delete(key);
+		return rule.fixed;
+	}
+	const level = await effort.judge(
+		request.text,
+		{ reply: lastReply(session.messages), level: judged.get(key) },
+		rule,
+	);
 	judged.set(key, level);
 	return level;
 }

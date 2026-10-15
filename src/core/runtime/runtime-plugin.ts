@@ -12,6 +12,7 @@ import type { OwnerIdentity } from "../identity.ts";
 import type { PromptScope } from "../interactions/prompts.ts";
 import { AGENT_BRIEF, EffortJudge } from "../judging/effort-judge.ts";
 import {
+	type EffortPolicy,
 	formatModelRef,
 	type ModelRef,
 	type ThinkingLevel,
@@ -69,6 +70,8 @@ export interface RuntimePluginOptions {
 	thinking: ThinkingLevel;
 	/** How sure the effort judge must be before its answer is used. */
 	judgeThreshold: number;
+	/** Picks a rule per turn instead of the judge's default; see `EffortPolicy`. */
+	effortPolicy?: EffortPolicy;
 	/** The agent server's settings, bound when it sets up; without a slot no agent turn runs. */
 	agents?: AgentSessionsSlot;
 	/** Whether turns post the text they write before their final answer as they go; default "on". */
@@ -159,6 +162,9 @@ export function runtimePlugin(
 						dataDir: options.dataDir,
 						model: options.model,
 						thinking: options.thinking,
+						...(options.effortPolicy
+							? { effortPolicy: options.effortPolicy }
+							: {}),
 						effort: new EffortJudge({
 							judge: providers.judge,
 							brief: AGENT_BRIEF,

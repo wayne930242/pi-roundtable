@@ -72,6 +72,7 @@ export interface EffortPicker<Fallback extends ThinkingLevel = ThinkingLevel> {
 	judge(
 		message: string,
 		previous?: PreviousTurn<EffortLevel | Fallback>,
+		rule?: { requiredMass: readonly [number, number, number, number] },
 	): Promise<EffortLevel | Fallback>;
 }
 
@@ -96,6 +97,7 @@ export class EffortJudge<Fallback extends ThinkingLevel = ThinkingLevel>
 	async judge(
 		message: string,
 		previous: PreviousTurn<EffortLevel | Fallback> = {},
+		rule?: { requiredMass: readonly [number, number, number, number] },
 	): Promise<EffortLevel | Fallback> {
 		const { judge, brief, fallback, threshold, logger } = this.#options;
 		try {
@@ -113,10 +115,13 @@ export class EffortJudge<Fallback extends ThinkingLevel = ThinkingLevel>
 					criteria: brief.criteria,
 				},
 			);
-			const from = EFFORT_LEVELS.indexOf(previous.level as EffortLevel);
+			// A rule picks each turn on its own: the previous turn's level does not carry over.
+			const from = rule
+				? -1
+				: EFFORT_LEVELS.indexOf(previous.level as EffortLevel);
 			const index =
 				from === -1
-					? levelIndex(probabilities)
+					? levelIndex(probabilities, rule?.requiredMass)
 					: moveIndex(from, probabilities, threshold);
 			const level =
 				index === from && previous.level
@@ -128,7 +133,7 @@ export class EffortJudge<Fallback extends ThinkingLevel = ThinkingLevel>
 			);
 			return level;
 		} catch (error) {
-			const level = previous.level ?? fallback;
+			const level = rule ? "low" : (previous.level ?? fallback);
 			logger.warn({ err: error, level }, "effort request failed");
 			return level;
 		}
@@ -140,11 +145,14 @@ export class EffortJudge<Fallback extends ThinkingLevel = ThinkingLevel>
  * meets REQUIRED_MASS. Below the top level that is the median of an ordinal answer, which
  * unlike the mean never lands on a middle level nothing voted for.
  */
-export function levelIndex(probabilities: readonly number[]): number {
+export function levelIndex(
+	probabilities: readonly number[],
+	requiredMass: readonly number[] = REQUIRED_MASS,
+): number {
 	let reached = 0;
 	for (let index = probabilities.length - 1; index > 0; index--) {
 		reached += probabilities[index] ?? 0;
-		if (reached >= (REQUIRED_MASS[index] ?? 0.5)) return index;
+		if (reached >= (requiredMass[index] ?? 0.5)) return index;
 	}
 	return 0;
 }
