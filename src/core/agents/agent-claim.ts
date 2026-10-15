@@ -7,6 +7,7 @@ import {
 import type {
 	Admission,
 	BackgroundTarget,
+	BackgroundTurn,
 	ChannelClaim,
 	InboundMessage,
 } from "../contract/channels.ts";
@@ -19,7 +20,7 @@ import { PERSONAL_TARGET } from "../modules/background/personal-target.ts";
 import { withReference } from "../routing/message-text.ts";
 import { outcome } from "../routing/settle-turn.ts";
 import { systemTurn } from "../routing/system-turns.ts";
-import { addressee, attributed } from "../speakers.ts";
+import { addressee, attributed, type Speaker } from "../speakers.ts";
 import type { DiscordAgentTeam } from "./agent-team.ts";
 import { discordIdOf } from "./team-keys.ts";
 
@@ -102,6 +103,19 @@ export function agentClaim(options: AgentClaimOptions): ChannelClaim {
 			);
 			return undefined;
 		}
+	};
+
+	/** Why the agent server would skip a background turn for its checked speaker; the turn's own skips. */
+	const backgroundRefusal = (
+		turn: BackgroundTurn & { speaker: Speaker },
+	): string | undefined => {
+		// Fail closed: a turn for any target but the owner's never reaches the owner's tools.
+		if (turn.target !== PERSONAL_TARGET.name)
+			return `the agent server answers only "${PERSONAL_TARGET.name}" background turns`;
+		if (team.owns(turn.channel) === "group") return "groups have no schedules";
+		if (options.speakers === "owners" && turn.speaker.tier !== "owner")
+			return 'the agent server answers owners only (speakers: "owners")';
+		return undefined;
 	};
 
 	const webhookReport = (message: InboundMessage): Admission | undefined => {
@@ -201,16 +215,8 @@ export function agentClaim(options: AgentClaimOptions): ChannelClaim {
 				failure: "agent message handling failed",
 			};
 		},
+		backgroundRefusal,
 		background: async (turn) => {
-			// Fail closed: a turn for any target but the owner's never reaches the owner's tools.
-			if (turn.target !== PERSONAL_TARGET.name)
-				return {
-					status: "skipped",
-					reason: `the agent server answers only "${PERSONAL_TARGET.name}" background turns`,
-				};
-			const owned = team.owns(turn.channel);
-			if (owned === "group")
-				return { status: "skipped", reason: "groups have no schedules" };
 			// Who the turn runs as, checked by the router: its author's principal, at a tier they hold.
 			const { speaker } = turn;
 			if (!speaker)
@@ -219,11 +225,8 @@ export function agentClaim(options: AgentClaimOptions): ChannelClaim {
 					reason:
 						"a background turn reaches the agent server through the router, which says whom it runs as",
 				};
-			if (options.speakers === "owners" && speaker.tier !== "owner")
-				return {
-					status: "skipped",
-					reason: 'the agent server answers owners only (speakers: "owners")',
-				};
+			const reason = backgroundRefusal({ ...turn, speaker });
+			if (reason !== undefined) return { status: "skipped", reason };
 			return outcome(
 				await team.answerBackground(
 					turn.channel,

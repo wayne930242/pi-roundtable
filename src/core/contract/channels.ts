@@ -197,6 +197,15 @@ export interface ChannelClaim {
 	admit(message: InboundMessage): Admission | undefined;
 	/** A background turn in an owned channel; a claim without one skips them. */
 	background?(turn: BackgroundTurn): Promise<ScheduledOutcome>;
+	/**
+	 * Why `background` would skip the turn for its checked speaker, without running it; undefined
+	 * when it would not. The router asks it in `runsAs`, so work that must not happen for a turn
+	 * the claim will skip, such as a schedule's precheck, does not start. It decides from the turn
+	 * and its speaker alone, and its reasons are the ones `background` skips with.
+	 */
+	backgroundRefusal?(
+		turn: BackgroundTurn & { speaker: Speaker },
+	): string | undefined;
 	/** Starts the channel's conversation over, saying whose it was. */
 	startFresh(channel: ChannelKey): Promise<string>;
 	/**
@@ -230,7 +239,8 @@ export interface ConversationPort {
 	background(turn: BackgroundTurn): Promise<ScheduledOutcome>;
 	/**
 	 * Who a background turn would run as now, checked as `background` checks it, without running
-	 * it: for work that must not happen for an author who may not run the turn, such as a
+	 * it: for work that must not happen for an author who may not run the turn, or one the channel's
+	 * claim would skip for that speaker (an agent server that answers owners only), such as a
 	 * schedule's precheck. Throws when the identity service cannot tell.
 	 */
 	runsAs(turn: BackgroundTurn): Promise<BackgroundRunsAs>;

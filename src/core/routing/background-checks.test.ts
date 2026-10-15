@@ -108,6 +108,42 @@ describe("ChannelRouter checking whom a background turn runs as", () => {
 		expect(ran).toEqual([]);
 	});
 
+	test("the channel's claim can refuse a checked speaker, and runsAs says so before the turn starts", async () => {
+		const ran: (Speaker | undefined)[] = [];
+		const asked: Speaker[] = [];
+		const claim: ChannelClaim = {
+			...recordingClaim(ran),
+			backgroundRefusal: (given) => {
+				asked.push(given.speaker);
+				return given.speaker.tier === "owner" ? undefined : "owners only";
+			},
+		};
+		const routing = new ChannelRouter({
+			claims: [claim],
+			targets: (name) =>
+				name === "main" ? { name, label: () => "Main" } : undefined,
+			queue: new ChannelQueue(),
+			logger: silentLogger(),
+			principals,
+		});
+		const kai = { principalId: "p_kai", id: "p_kai", name: "Kai" };
+		const ada = { principalId: "p_ada", id: "p_ada", name: "Ada" };
+		expect(await routing.runsAs(turn(kai, "member"))).toEqual({
+			skipped: "owners only",
+		});
+		expect(await routing.runsAs(turn(ada, "owner"))).toMatchObject({
+			speaker: { principalId: "p_ada", tier: "owner" },
+		});
+		// The claim is asked with the speaker the router checked, never with an unchecked author.
+		expect(asked.map((s) => s.principalId)).toEqual(["p_kai", "p_ada"]);
+		const bo = { principalId: "p_bo", id: "p_bo", name: "Bo" };
+		expect(await routing.runsAs(turn(bo, "member"))).toMatchObject({
+			skipped: expect.stringContaining("disabled"),
+		});
+		expect(asked).toHaveLength(2);
+		expect(ran).toEqual([]);
+	});
+
 	test("a turn without its author's principal or a tier, as 0.8 wrote one, is skipped and reaches no claim", async () => {
 		const ran: (Speaker | undefined)[] = [];
 		const routing = routerWith(ran);

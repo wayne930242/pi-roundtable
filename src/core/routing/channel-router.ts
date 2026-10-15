@@ -336,10 +336,23 @@ export class ChannelRouter implements ConversationPort {
 	/**
 	 * Who a background turn runs as: the system principal for the host's own turn, at its tier;
 	 * otherwise its author's principal, which must exist, be enabled, and hold a tier now, at the
-	 * lower of the turn's tier and theirs. Why not, when it may not run; throws when the identity
+	 * lower of the turn's tier and theirs; and the claim that owns the channel must not refuse it
+	 * for that speaker (`backgroundRefusal`). Why not, when it may not run; throws when the identity
 	 * service cannot tell.
 	 */
 	async runsAs(turn: BackgroundTurn): Promise<BackgroundRunsAs> {
+		const runs = await this.#speakerOf(turn);
+		if ("skipped" in runs) return runs;
+		// The claim that owns the channel has the last word, so work that must not start for a turn it
+		// would skip, such as a schedule's precheck, does not.
+		const refusal = this.#owner(turn.channel)?.backgroundRefusal?.({
+			...turn,
+			speaker: runs.speaker,
+		});
+		return refusal === undefined ? runs : { skipped: refusal };
+	}
+
+	async #speakerOf(turn: BackgroundTurn): Promise<BackgroundRunsAs> {
 		const { author, tier } = turn;
 		if (!author?.principalId || !tier)
 			return {
