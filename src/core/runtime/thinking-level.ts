@@ -24,7 +24,7 @@ export async function thinkingLevel(
 		/** The level last judged for each conversation. */
 		judged: Map<ChannelKey, ThinkingLevel>;
 		/** The host's rule for a turn that thinks at the judge's choice. */
-		policy?: EffortPolicy;
+		policy?: EffortPolicy | undefined;
 	},
 	key: ChannelKey,
 	session: AgentSession,
