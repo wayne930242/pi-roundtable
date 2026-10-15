@@ -5,6 +5,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.15.4] - 2026-10-15
+
+### Added
+
+- `LineOutboxResultEvent.attempts`: how many tries the push took, the one that ended it included (1 for a push LINE refused at once, 2 after a `5xx` and then a refusal), so a subscriber no longer reads `line_outbox`.
+- Migration `outbox-requested` adds the nullable `line_outbox.requested_at`, set just before a push's request is made and cleared when the push is claimed again.
+
+### Fixed
+
+- A stop no longer gives back an attempt whose request may have reached LINE. A push interrupted by the worker stopping used to be put back with its attempt uncounted even when the request was already out, so the count (and `outbox.maxAttempts`) understated the tries; it is now given back only when the stop came before the request.
+
+The core peer range stays `>=0.15.0 <0.16.0`.
+
 ## [0.15.3] - 2026-10-15
 
 - Release in lockstep with pi-roundtable 0.15.3; no package-specific behavior changes. The core peer range stays `>=0.15.0 <0.16.0`.

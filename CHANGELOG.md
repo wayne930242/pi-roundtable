@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.15.4] - 2026-10-15
+
+### Changed
+
+- With `discord.agentSpeakers: "owners"`, a schedule whose turn would run below the owner tier no longer starts its precheck or its container: the scheduler asks the channel's claim before the precheck, and the run is recorded `skipped:` with the reason the turn would have been skipped with (`the agent server answers owners only (speakers: "owners")`). A new optional `ChannelClaim.backgroundRefusal(turn)` answers that for a claim, with the turn and the speaker the router checked; `ConversationPort.runsAs` and `ChannelRouter.runsAs` now include it, and the agent server's claim uses it for its own `background` skips (the owner target only, no groups, owners only). A claim without it is unaffected.
+
 ## [0.15.3] - 2026-10-15
 
 ### Added
