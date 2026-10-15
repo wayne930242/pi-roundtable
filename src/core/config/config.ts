@@ -8,6 +8,7 @@ import { isLocale, type Locale } from "../i18n/index.ts";
 import type { AccessRules } from "../identity/access-policy.ts";
 import type { OwnerIdentity } from "../identity.ts";
 import {
+	type EffortPolicy,
 	type ModelRef,
 	parseModelRef,
 	THINKING_LEVELS,
@@ -109,6 +110,8 @@ export interface RoundtableConfig {
 	thinking?: ThinkingLevel;
 	/** The model that judges small questions and the delegated tasks' model; default the agents' model. */
 	judge?: { model?: string; threshold?: number };
+	/** How each turn that thinks at the judge's choice is decided, instead of the default; see `EffortPolicy`. */
+	effortPolicy?: EffortPolicy;
 	delegation?: { model?: string; thinking?: ThinkingLevel };
 	/** The language of what the bot shows in Discord; default "en". */
 	locale?: Locale;
@@ -200,6 +203,8 @@ const tierMembers = shape({
 	everyone: optional(bool),
 });
 
+const isPolicy = (value: unknown): value is EffortPolicy =>
+	typeof value === "function";
 const isPlugin = (value: unknown): value is RoundtablePlugin =>
 	typeof value === "object" &&
 	value !== null &&
@@ -224,6 +229,9 @@ const schema = shape({
 	thinking: optional(oneOf(...THINKING_LEVELS)),
 	judge: optional(
 		shape({ model: optional(text), threshold: optional(number(0, 1)) }),
+	),
+	effortPolicy: optional(
+		guarded("a function from a turn to its effort rule", isPolicy),
 	),
 	delegation: optional(
 		shape({
@@ -320,6 +328,7 @@ export interface ResolvedConfig {
 	model: ModelRef;
 	thinking: ThinkingLevel;
 	judge: { model: ModelRef; threshold: number };
+	effortPolicy?: EffortPolicy;
 	delegation: { model: ModelRef; thinking: ThinkingLevel };
 	locale: Locale;
 	timeZone: string;
@@ -443,6 +452,7 @@ export function resolveConfig(input: unknown): ResolvedConfig {
 				: model,
 			threshold: config.judge?.threshold ?? 0.6,
 		},
+		...(config.effortPolicy ? { effortPolicy: config.effortPolicy } : {}),
 		delegation: {
 			model: config.delegation?.model
 				? modelOf(config.delegation.model, "delegation.model")

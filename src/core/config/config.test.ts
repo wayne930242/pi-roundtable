@@ -125,6 +125,17 @@ describe("resolveConfig", () => {
 		).toContain("config background.perPrincipal.delegations");
 	});
 
+	test("effortPolicy is kept as given, and anything but a function is refused", () => {
+		const policy = () => ({ fixed: "low" as const });
+		expect(
+			resolveConfig({ ...minimal, effortPolicy: policy }).effortPolicy,
+		).toBe(policy);
+		expect(resolveConfig(minimal).effortPolicy).toBeUndefined();
+		expect(refused({ ...minimal, effortPolicy: "low" })).toContain(
+			"config effortPolicy",
+		);
+	});
+
 	test("an unknown key names the nearest known key, at any depth", () => {
 		expect(refused({ ...minimal, discrod: {} })).toStartWith(
 			'config discrod: unknown key. Did you mean "discord"? The keys here are name, owner, discord,',
