@@ -115,6 +115,13 @@ export interface LineOutboxResultEvent {
 	 * `source_not_allowed`); null when it was sent.
 	 */
 	errorCode: string | null;
+	/**
+	 * How many tries the push took, the one that ended it included: 1 for a push LINE refused at once,
+	 * 2 after a `5xx` and then a refusal. A try counts once its request has been made to LINE, also
+	 * when a stop cut it short, and once the worker took the push up only to end it without a request
+	 * (`refused`, `source_not_allowed`); a stop before the request does not count.
+	 */
+	attempts: number;
 }
 
 export type LineEvent =

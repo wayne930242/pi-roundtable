@@ -215,6 +215,7 @@ describeDb("the line plugin", () => {
 			"inbox",
 			"messages",
 			"outbox",
+			"outbox-requested",
 		]);
 		expect(contribution.services?.map((s) => s.name)).toEqual([
 			"line-bot",
@@ -469,6 +470,7 @@ describeDb("the line plugin", () => {
 				originRef: "draft-1",
 				status: "sent",
 				errorCode: null,
+				attempts: 1,
 			},
 		]);
 		// A sender LINE would refuse never reaches the queue.

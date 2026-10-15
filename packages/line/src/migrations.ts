@@ -136,9 +136,21 @@ export const OUTBOX_MIGRATION: Migration = {
 	},
 };
 
+/**
+ * When the request of the push's current attempt was handed to the network. A stop that comes after
+ * it cannot say LINE did not take the request, so the attempt stays counted.
+ */
+export const OUTBOX_REQUESTED_MIGRATION: Migration = {
+	name: "outbox-requested",
+	up: async (sql) => {
+		await sql`ALTER TABLE line_outbox ADD COLUMN IF NOT EXISTS requested_at TIMESTAMPTZ`;
+	},
+};
+
 /** Every migration of the package, in the order they run. */
 export const MIGRATIONS: Migration[] = [
 	INBOX_MIGRATION,
 	MESSAGES_MIGRATION,
 	OUTBOX_MIGRATION,
+	OUTBOX_REQUESTED_MIGRATION,
 ];

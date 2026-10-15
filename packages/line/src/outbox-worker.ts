@@ -138,7 +138,7 @@ export class OutboxWorker {
 				ORDER BY id LIMIT 1`) as { id: string | number }[];
 			if (!head) return undefined;
 			const [claimed] = (await tx`UPDATE line_outbox
-				SET status = 'sending', claimed_at = ${now}, attempts = attempts + 1,
+				SET status = 'sending', claimed_at = ${now}, requested_at = NULL, attempts = attempts + 1,
 					first_attempt_at = COALESCE(first_attempt_at, ${now})
 				WHERE id = (SELECT id FROM line_outbox WHERE id = ${head.id} AND status = 'queued' FOR UPDATE SKIP LOCKED)
 				RETURNING id, source_key, sender_name, sender_icon_url, messages, retry_key, attempts,
@@ -214,6 +214,11 @@ export class OutboxWorker {
 				const messages = row.messages.map((message) =>
 					Object.keys(sender).length > 0 ? { ...message, sender } : message,
 				);
+				// A stop that comes before this leaves the attempt uncounted; one after it cannot say LINE
+				// did not take the request.
+				controller.signal.throwIfAborted();
+				await this.#sql`UPDATE line_outbox SET requested_at = ${this.#now()}
+					WHERE id = ${row.id} AND status = 'sending' AND claimed_at = ${row.claimed_at}`;
 				const pushed = await this.#api.push(
 					source.id,
 					messages,
@@ -245,7 +250,8 @@ export class OutboxWorker {
 				this.#quota.settle(reserved.reservation, sent);
 			}
 		} catch (error) {
-			// Giving up because the worker stops is the restart's doing: the push goes back as it was.
+			// Giving up because the worker stops is the restart's doing: the push goes back as it was,
+			// unless its request had already been made.
 			if (this.#stopping && controller.signal.aborted) {
 				await this.#later(row, 0, "worker_stopped", false);
 				return;
@@ -307,7 +313,8 @@ export class OutboxWorker {
 		counted: boolean,
 	): Promise<void> {
 		await this.#sql`UPDATE line_outbox
-			SET status = 'queued', claimed_at = NULL, attempts = attempts - ${counted ? 0 : 1},
+			SET status = 'queued', claimed_at = NULL,
+				attempts = attempts - CASE WHEN ${counted ? 1 : 0}::int = 0 AND requested_at IS NULL THEN 1 ELSE 0 END,
 				next_attempt_at = ${new Date(this.#now().getTime() + delayMs)}, last_error_code = ${code}
 			WHERE id = ${row.id} AND status = 'sending' AND claimed_at = ${row.claimed_at}`;
 	}
@@ -332,8 +339,9 @@ export class OutboxWorker {
 			last_error_code: string | null;
 			origin_refs: (string | null)[];
 			notify_attempts: number;
+			attempts: number;
 		}[] = await this
-			.#sql`SELECT id, source_key, status, last_error_code, origin_refs, notify_attempts
+			.#sql`SELECT id, source_key, status, last_error_code, origin_refs, notify_attempts, attempts
 			FROM line_outbox
 			WHERE notified_at IS NULL AND status IN ('sent', 'dead', 'refused')
 				AND (notify_after IS NULL OR notify_after <= ${now})
@@ -356,6 +364,7 @@ export class OutboxWorker {
 								originRef,
 								status: row.status,
 								errorCode: row.last_error_code,
+								attempts: row.attempts,
 							},
 							controller.signal,
 						);

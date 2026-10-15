@@ -40,6 +40,7 @@ interface Row {
 	recipients: number | null;
 	status: string;
 	attempts: number;
+	requested_at: Date | null;
 	last_error_code: string | null;
 	line_request_id: string | null;
 	notified_at: Date | null;
@@ -315,6 +316,7 @@ describeDb("the outbox", () => {
 				originRef: "draft-1",
 				status: "sent",
 				errorCode: null,
+				attempts: 1,
 			},
 			{
 				type: "outboxResult",
@@ -322,6 +324,7 @@ describeDb("the outbox", () => {
 				originRef: "draft-2",
 				status: "sent",
 				errorCode: null,
+				attempts: 1,
 			},
 			{
 				type: "outboxResult",
@@ -329,6 +332,7 @@ describeDb("the outbox", () => {
 				originRef: null,
 				status: "sent",
 				errorCode: null,
+				attempts: 1,
 			},
 		]);
 		// Told once: a second look finds nothing.
@@ -555,6 +559,7 @@ describeDb("the outbox", () => {
 			originRef: "p4",
 			status: "refused",
 			errorCode: "quota_exhausted",
+			attempts: 1,
 		});
 		// LINE's own count (81) is read after a minute; the reservations are dropped, the sum is the same.
 		clock += 61_000;
@@ -711,7 +716,7 @@ describeDb("the outbox", () => {
 		await worker.stop();
 		expect(worker.busy()).toEqual([]);
 		expect(await rows()).toMatchObject([
-			{ status: "queued", attempts: 0, last_error_code: "worker_stopped" },
+			{ status: "queued", attempts: 1, last_error_code: "worker_stopped" },
 		]);
 		fake.pushDelayMs = 0;
 		build({ coalesceMs: 20, pollMs: 10 });
@@ -722,7 +727,86 @@ describeDb("the outbox", () => {
 		clearInterval(ticker);
 		expect((await rows())[0]?.status).toBe("sent");
 		expect(fake.pushes.at(-1)?.retryKey).toBe(row?.retry_key);
-		// The loop tells the subscriber too.
+		// The loop tells the subscriber too, and the request the stop cut short was a try.
 		expect(results).toHaveLength(1);
+		expect(results[0]?.attempts).toBe(2);
+	});
+
+	test("a stop before the request gives the attempt back, also after an earlier try; a stop after the request keeps it", async () => {
+		await outbox.enqueue(GROUP, [text("hi")]);
+		clock = 2_000;
+		fake.pushScript.push(500);
+		await worker.runOnce();
+		expect(await rows()).toMatchObject([{ status: "queued", attempts: 1 }]);
+		expect((await rows())[0]?.requested_at).not.toBeNull();
+		clock += 3_600_000;
+		// Stopped before the request is made: nothing reaches LINE and the count is what it was.
+		await worker.stop();
+		await worker.runOnce();
+		expect(fake.pushes).toHaveLength(1);
+		expect(await rows()).toMatchObject([
+			{ status: "queued", attempts: 1, last_error_code: "worker_stopped" },
+		]);
+		expect((await rows())[0]?.requested_at).toBeNull();
+		// Stopped with the request out: it may have reached LINE, so it stays counted.
+		build();
+		fake.pushDelayMs = 200;
+		const inFlight = worker.runOnce();
+		for (
+			let i = 0;
+			i < 100 && fake.calls.filter((c) => c.url.endsWith("/push")).length < 2;
+			i++
+		)
+			await Bun.sleep(10);
+		await worker.stop();
+		await inFlight;
+		expect(await rows()).toMatchObject([
+			{ status: "queued", attempts: 2, last_error_code: "worker_stopped" },
+		]);
+		expect((await rows())[0]?.requested_at).not.toBeNull();
+		// The next claim starts a clean attempt, which a stop before its request gives back.
+		build();
+		fake.pushDelayMs = 0;
+		await worker.stop();
+		await worker.runOnce();
+		expect(await rows()).toMatchObject([{ status: "queued", attempts: 2 }]);
+		expect((await rows())[0]?.requested_at).toBeNull();
+	});
+
+	test("the result event carries how many tries the push took", async () => {
+		await outbox.enqueue(GROUP, [text("one")], { origin: "a" });
+		clock = 2_000;
+		fake.pushScript.push({
+			status: 400,
+			body: { message: "bad", details: [] },
+		});
+		await worker.runOnce();
+		await worker.notify();
+		expect(results).toEqual([
+			{
+				type: "outboxResult",
+				sourceKey: GROUP,
+				originRef: "a",
+				status: "dead",
+				errorCode: "http_400",
+				attempts: 1,
+			},
+		]);
+		await outbox.enqueue(OTHER_GROUP, [text("two")], { origin: "b" });
+		clock += 2_000;
+		fake.pushScript.push(500, {
+			status: 400,
+			body: { message: "bad", details: [] },
+		});
+		await worker.runOnce();
+		clock += 3_600_000;
+		await worker.runOnce();
+		await worker.notify();
+		expect(results.at(-1)).toMatchObject({
+			originRef: "b",
+			status: "dead",
+			errorCode: "http_400",
+			attempts: 2,
+		});
 	});
 });
