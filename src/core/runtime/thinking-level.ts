@@ -16,6 +16,20 @@ import {
 import type { PiAgentRuntimeOptions } from "./runtime-types.ts";
 import { lastReply } from "./turn-answer.ts";
 
+function checkRequiredMass(mass: readonly number[]): void {
+	if (
+		!Array.isArray(mass) ||
+		mass.length !== 4 ||
+		!mass.every(
+			(n) => typeof n === "number" && Number.isFinite(n) && n >= 0 && n <= 1,
+		)
+	) {
+		throw new Error(
+			`effortPolicy requiredMass must be four finite numbers in [0, 1], got ${JSON.stringify(mass)}`,
+		);
+	}
+}
+
 /** Uses the checked model snapshot; auto thinking keeps the last pick while the judge is unsure. */
 export async function thinkingLevel(
 	parts: {
@@ -44,12 +58,14 @@ export async function thinkingLevel(
 		judged.delete(key);
 		return setting;
 	}
+	const kind = request.kind ?? (request.agent ? "agent" : undefined);
 	const rule = parts.policy?.({
 		channel: request.channel,
-		...(request.kind !== undefined ? { kind: request.kind } : {}),
+		...(kind !== undefined ? { kind } : {}),
 		...(request.agent ? { agent: request.agent.name } : {}),
 		...(request.origin !== undefined ? { origin: request.origin } : {}),
 	});
+	if (rule && "requiredMass" in rule) checkRequiredMass(rule.requiredMass);
 	if (rule && "fixed" in rule) {
 		judged.delete(key);
 		return rule.fixed;

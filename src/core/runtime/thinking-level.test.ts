@@ -49,12 +49,12 @@ describe("thinkingLevel with an effort policy", () => {
 			p.parts,
 			"discord:1",
 			session,
-			request({ kind: "line-pm-auto" }),
+			request({ kind: "auto" }),
 		);
 		expect(level).toBe("low");
 		expect(p.asked).toEqual([]);
 		expect(p.judged.has("discord:1")).toBe(false);
-		expect(seen).toEqual([{ channel: "discord:1", kind: "line-pm-auto" }]);
+		expect(seen).toEqual([{ channel: "discord:1", kind: "auto" }]);
 	});
 
 	test("a mass rule goes to the picker; undefined leaves the default", async () => {
@@ -70,5 +70,41 @@ describe("thinkingLevel with an effort policy", () => {
 			request({ channel: "web:1" }),
 		);
 		expect(p.asked).toEqual([mass, undefined]);
+	});
+
+	test("an agent turn is told kind agent", async () => {
+		const seen: unknown[] = [];
+		const p = parts((r) => {
+			seen.push(r);
+			return undefined;
+		});
+		await thinkingLevel(
+			p.parts,
+			"discord:1",
+			{
+				messages: [],
+				model: { provider: "p", id: "m" },
+			} as unknown as AgentSession,
+			request({ agent: { name: "ann" } } as never),
+			{ model: "p/m", thinking: "auto" } as never,
+		);
+		expect(seen).toEqual([
+			{ channel: "discord:1", kind: "agent", agent: "ann" },
+		]);
+	});
+
+	test("an invalid requiredMass fails the turn", async () => {
+		for (const bad of [
+			[0, Number.NaN, 0.5, 0.5],
+			[0, -0.1, 0.5, 0.5],
+			[0, 1.5, 0.5, 0.5],
+			[0, 0.5, 0.5],
+		]) {
+			const p = parts(() => ({ requiredMass: bad }) as never);
+			await expect(
+				thinkingLevel(p.parts, "discord:1", session, request()),
+			).rejects.toThrow(/requiredMass/);
+			expect(p.asked).toEqual([]);
+		}
 	});
 });
