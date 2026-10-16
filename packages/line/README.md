@@ -390,6 +390,9 @@ What the host writes there (`sendReply`) is queued as text objects, one per chun
 The surface shows no typing indicator, stop control, progress, files or approval prompts: LINE has none the bot can show.
 It passes `describeSurfaceContract` (`pi-roundtable/testing`).
 
+LINE shows plain text only, so the surface tells the model so: its `formatting` text is appended to the system prompt of every turn that replies in a LINE chat, after the persona, and says to use no headings, tables, bold, code fences or link syntax and to keep replies short.
+`formatting: "…"` in the plugin options replaces the text, and `formatting: false` tells the model nothing.
+
 ## The sender icon route
 
 ```ts

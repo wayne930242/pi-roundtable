@@ -119,6 +119,9 @@ export const linkCodes = definePlugin({
 設定 `route: true` 時，它也會把允許聊天室的文字交給 host 的路由器；預設關閉。
 **絕對不要讓 `line` 通過核心的 `everyone` 存取規則。** 任何能把機器人加進群組的人，都會因此連到助理。
 
+LINE 只顯示純文字，所以這個 surface 會告訴模型：每一輪在 LINE 聊天室回覆的對話，系統提示詞都會在人設之後附上一小段格式指引（英文），要求不要用標題、表格、粗體、程式碼區塊或連結語法。
+外掛選項的 `formatting: "…"` 會取代這段文字，`formatting: false` 則什麼都不告訴模型。
+
 `senderIconRoute: { path, png }` 在 `path` 提供一張固定的 PNG，附上長效快取標頭，讓寄件人不必另外架服務就能指定穩定的圖示網址。
 
 收件匣和寄件匣都放在 PostgreSQL，預設七天後由保留服務清除。

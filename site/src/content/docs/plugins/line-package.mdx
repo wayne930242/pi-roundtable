@@ -119,6 +119,9 @@ The plugin contributes a `line` chat surface whose channels are the chats' keys,
 With `route: true` it also hands the text of allowed chats to the host's router; it is off by default.
 **Never admit `line` through the core's `everyone` access.** Anyone who can add the bot to a group would reach the assistant.
 
+LINE shows plain text only, so the surface tells the model so: every turn that replies in a LINE chat gets a short guidance text appended to its system prompt, after the persona, saying to use no headings, tables, bold, code fences or link syntax.
+`formatting: "…"` in the plugin options replaces the text, and `formatting: false` tells the model nothing.
+
 `senderIconRoute: { path, png }` serves one fixed PNG at `path` with a long cache header, so a sender can name a stable icon URL without another service.
 
 PostgreSQL holds the inbox and the outbox, and a retention service removes everything after seven days by default.

@@ -38,6 +38,13 @@ export interface LineOptions {
 	 * through `everyone`.
 	 */
 	route?: boolean;
+	/**
+	 * What the model is told, English, about how a reply shows in LINE, appended to the system
+	 * prompt of every turn that replies there, after the persona. The default says LINE shows plain
+	 * text only, so Markdown appears as literal symbols. A text replaces it; `false` tells the
+	 * model nothing.
+	 */
+	formatting?: string | false;
 	/** Serves one fixed PNG at `path`, so a sender can name it as its icon without another service. */
 	senderIconRoute?: SenderIconRoute;
 	/** Replaces `fetch` for every call to LINE, for tests. */
@@ -82,6 +89,13 @@ export function checkOptions(options: LineOptions): {
 	if (!/^\/[A-Za-z0-9._~/-]*[A-Za-z0-9._~-]$/.test(path))
 		throw new Error(
 			`line: webhookPath ${JSON.stringify(path)} must start with / and not end with one, such as /line/webhook`,
+		);
+	if (
+		typeof options.formatting === "string" &&
+		options.formatting.trim() === ""
+	)
+		throw new Error(
+			"line: formatting is empty; write the guidance, or false to give the model none",
 		);
 	for (const [key, value] of Object.entries(options.inbox ?? {})) {
 		if (!INBOX_KEYS.includes(key as keyof InboxOptions))

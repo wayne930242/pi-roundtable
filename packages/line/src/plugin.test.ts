@@ -33,6 +33,13 @@ import { freshPool, truncateAll } from "./testing/pool.ts";
 
 const credentials = { channelId: CHANNEL_ID, channelSecret: SECRET };
 
+test("formatting guidance with nothing in it throws when the plugin is made", () => {
+	expect(() => line({ credentials, formatting: " " })).toThrow(
+		"line: formatting is empty",
+	);
+	expect(() => line({ credentials, formatting: false })).not.toThrow();
+});
+
 test("a configuration mistake throws when the plugin is made, before the host starts", () => {
 	expect(() =>
 		line({ credentials: { ...credentials, channelId: "x" } }),
@@ -878,6 +885,21 @@ describeDb("the line plugin", () => {
 		};
 	};
 	describeSurfaceContract("the LINE surface", lineSubject);
+
+	test("the surface tells the model LINE shows plain text, unless the host says otherwise", async () => {
+		const told = (await boot()).contribution.surfaces?.[0]?.formatting;
+		expect(told).toContain("plain text only");
+		expect(told).toContain("LINE");
+		expect(told?.length).toBeLessThan(400);
+		expect(
+			(await boot({ formatting: "Short and bare." })).contribution.surfaces?.[0]
+				?.formatting,
+		).toBe("Short and bare.");
+		expect(
+			(await boot({ formatting: false })).contribution.surfaces?.[0]
+				?.formatting,
+		).toBeUndefined();
+	});
 
 	test("a reply is cut into text objects LINE takes, empty chunks are skipped, and another surface's channel is refused", async () => {
 		const { contribution, route, port } = await boot();

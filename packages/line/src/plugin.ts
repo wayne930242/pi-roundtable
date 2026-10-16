@@ -68,7 +68,7 @@ export function line(options: LineOptions): RoundtablePlugin {
 				...(options.sender ? { sender: options.sender } : {}),
 				queued: (readyInMs) => outboxWorker?.kickIn(readyInMs),
 			});
-			const surface = new LineSurface(outbox);
+			const surface = new LineSurface(outbox, options.formatting);
 			const joins = new JoinNotifier({
 				sql,
 				api,

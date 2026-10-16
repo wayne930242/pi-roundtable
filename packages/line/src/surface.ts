@@ -13,6 +13,13 @@ import type { LineOutbox, LineOutMessage } from "./outbox.ts";
 /** The longest text one LINE message holds. */
 const TEXT_MAX = 5000;
 
+/**
+ * What the model is told about LINE's rendering, as the surface's `formatting`. English: it is
+ * model-facing text, not a message-catalog string.
+ */
+const LINE_FORMATTING =
+	"Reply formatting (LINE): plain text only. Markdown is not rendered and shows as literal symbols, so use no headings, tables, bold, code fences or link syntax. Write short paragraphs, and lists with plain dashes or numbers. Keep replies short.";
+
 /** `text` cut into pieces LINE takes, never inside a surrogate pair. */
 function pieces(text: string): string[] {
 	const parts: string[] = [];
@@ -39,11 +46,21 @@ function pieces(text: string): string[] {
  */
 export class LineSurface implements ChatSurface {
 	readonly surface = "line";
+	readonly formatting: string | undefined;
 	readonly #outbox: LineOutbox;
 	#deliver: ((message: InboundMessage) => void) | undefined;
 
-	constructor(outbox: LineOutbox) {
+	/** `formatting` replaces what the model is told about LINE's plain text, and `false` tells it nothing. */
+	constructor(outbox: LineOutbox, formatting?: string | false) {
 		this.#outbox = outbox;
+		if (formatting === false) this.formatting = undefined;
+		else if (formatting === undefined) this.formatting = LINE_FORMATTING;
+		else if (formatting.trim() === "")
+			throw new LineError(
+				"formatting_empty",
+				"line: formatting is empty; write the guidance, or false to give the model none",
+			);
+		else this.formatting = formatting;
 	}
 
 	async start(deliver: (message: InboundMessage) => void): Promise<void> {
