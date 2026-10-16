@@ -88,8 +88,18 @@ export interface PiAgentRuntimeOptions {
 	formatting?: (channel: ChannelKey) => string | undefined;
 	/** The lowest tier that may use each tool; the default names the core's tools and leaves the rest to the owner. */
 	toolTiers?: ToolTiers;
-	/** A run that takes longer, not counting time spent waiting on the owner's cards, is aborted and reported as failed. */
+	/**
+	 * A run that works longer, not counting time spent waiting on the owner's cards, is aborted and
+	 * reported as failed; default 10 minutes. Each message steered into the turn gives it this
+	 * budget again from that moment, up to `turnMaxMs`.
+	 */
 	turnTimeoutMs?: number;
+	/**
+	 * The most one turn may work in all, however often it is steered, not counting time spent
+	 * waiting on the owner's cards; default three times `turnTimeoutMs`. Once it is reached the turn
+	 * takes no more steering (the message waits for the next turn) and is aborted as on its timeout.
+	 */
+	turnMaxMs?: number;
 	/**
 	 * How long a turn that was aborted, by its timeout or a stop, gets to end before its session is
 	 * disposed of and the turn is reported failed; default 15 seconds. A model that ignores the

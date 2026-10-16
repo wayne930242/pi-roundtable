@@ -33,7 +33,7 @@ import { loadsMemory } from "./extensions/private-memory.ts";
 import { missingToolsError } from "./extensions/self-compact-guard.ts";
 import { interimPoster } from "./interim-text.ts";
 import { preflightTools } from "./preflight-tools.ts";
-import { PromptSlot, workTimeout } from "./prompt-slot.ts";
+import { PromptSlot } from "./prompt-slot.ts";
 import { carriesMemory, recordMemoryTurn } from "./reader-history.ts";
 import { type RunningTurn, runningTurn } from "./running-turn.ts";
 import type { PiAgentRuntimeOptions, TurnMessage } from "./runtime-types.ts";
@@ -48,6 +48,7 @@ import { promptImages, SteerableRun } from "./steerable-run.ts";
 import { thinkingLevel } from "./thinking-level.ts";
 import { runningCalls } from "./tool-call-scope.ts";
 import { transcriptOf, turnAnswer, unspokenTurn } from "./turn-answer.ts";
+import { runtimeTurnBudget, type TurnBudget } from "./turn-budget.ts";
 import { progressReporter } from "./turn-progress.ts";
 import { wrapUpTurn } from "./turn-wrapup.ts";
 import { workerReport } from "./worker-task.ts";
@@ -75,6 +76,8 @@ export class PiAgentRuntime implements AgentRuntime {
 	readonly #turns = new Map<ChannelKey, RunningTurn>();
 	/** Each conversation's turn in progress, which the owner may steer or stop. */
 	readonly #running = new Map<ChannelKey, SteerableRun>();
+	/** Each running turn's time limit, which a steered message renews. */
+	readonly #budgets = new Map<ChannelKey, TurnBudget>();
 	readonly #memoryTurns = new Map<ChannelKey, () => void>();
 
 	/** Builds the runtime without starting a session; the preflight proves it can run. */
@@ -114,7 +117,7 @@ export class PiAgentRuntime implements AgentRuntime {
 
 	// pi-lens-ignore: high-complexity, high-fan-out, mixed-async-styles — one turn's lifecycle end to end; batch 4 splits it with the channel router
 	async runTurn(request: TurnRequest): Promise<TurnResult> {
-		const { logger, turnTimeoutMs = 10 * 60_000 } = this.#options;
+		const { logger } = this.#options;
 		if (!request.speaker) return unspokenTurn();
 		// A turn that is only asked for now, such as a group's next member, starts nothing.
 		if (this.#options.stopping?.())
@@ -272,17 +275,14 @@ export class PiAgentRuntime implements AgentRuntime {
 				this.#sessions.drop(key, channelSession);
 			},
 		});
-		// Time spent waiting on the owner's cards does not count towards the timeout.
-		const cancelTimeout = workTimeout(turnTimeoutMs, slot, () => {
-			logger.warn(
-				{ channel: request.channel, turnTimeoutMs },
-				"turn timed out; aborting",
-			);
-			guard.abort();
-		});
+		// Time spent waiting on the owner's cards does not count towards the timeout or the cap.
+		const budget = runtimeTurnBudget(this.#options, slot, request.channel, () =>
+			guard.abort(),
+		);
+		this.#budgets.set(key, budget);
 		const running = new SteerableRun(
 			session,
-			() => request.steerable === true && !gate.pending(),
+			() => request.steerable === true && !gate.pending() && !budget.capped(),
 			() => guard.abort(),
 		);
 		this.#running.set(key, running);
@@ -313,9 +313,10 @@ export class PiAgentRuntime implements AgentRuntime {
 			};
 		} finally {
 			this.#running.delete(key);
+			this.#budgets.delete(key);
 			this.#turns.delete(key);
 			this.#memoryTurns.delete(key);
-			cancelTimeout();
+			budget.cancel();
 			guard.release();
 			slot.unbind();
 			unsubscribe();
@@ -358,8 +359,10 @@ export class PiAgentRuntime implements AgentRuntime {
 				withAttachmentsBlock(text, attachments),
 				promptImages(attachments),
 			);
-			if (steered)
+			if (steered) {
 				this.#options.logger.info({ channel }, "message steered into the turn");
+				this.#budgets.get(channel)?.renew();
+			}
 			return steered;
 		} catch (error) {
 			this.#options.logger.warn({ channel, err: error }, "steer refused");
