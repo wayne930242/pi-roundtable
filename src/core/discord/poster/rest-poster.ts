@@ -142,7 +142,9 @@ export function restPoster(
 			};
 			pending = find(channelId, name, make, release)
 				.then((found) => {
-					if (found) webhooks.set(slot, found);
+					// A made webhook is already kept; one made again while its listeners ran must not be replaced
+					// by this older one.
+					if (found && !webhooks.has(slot)) webhooks.set(slot, found);
 					return found;
 				})
 				.finally(release);
