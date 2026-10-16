@@ -112,7 +112,8 @@ A test file that must not be skipped calls `requireDatabase()`, which gives the 
 
 `new Roundtable(options, plugins).check()` sets up every plugin as the host would and refuses what the host refuses: a plugin that adds nothing, a clash, a missing service, a removed field, a bad route.
 It needs no database and starts nothing: it migrates nothing, opens no listener and does not reach Discord.
-It does run each plugin's `setup`, and the built-in agent server binds its sessions only once, so check a definition you do not run: call `defineRoundtable` again for the check, as `roundtable doctor` and `roundtable start` do.
+It does run each plugin's `setup`, and the built-in agent server binds its sessions only once, so check a definition you do not run: call `defineRoundtable` again for the check, as `roundtable doctor` and `roundtable start` do (they evaluate `roundtable.config.ts` again as well, so the plugins it makes with a factory are new objects).
+A plugin object that a module you import exports, and state kept at module level, stay shared, so a plugin's `setup` must keep nothing one-shot outside its call.
 Like `run()`, it sets the process's locale, time zone and, when `environment.agentDir` is set, `PI_CODING_AGENT_DIR`.
 It resolves a `RegistrationReport` of the plugins that run, the services they add, and their routes.
 
