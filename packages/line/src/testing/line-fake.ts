@@ -152,6 +152,13 @@ export interface FakeLine {
 	failQuota(status: number | undefined): void;
 	/** Delays every push's answer by this many milliseconds. */
 	pushDelayMs: number;
+	/**
+	 * Profiles by `<chat id>/<user id>` for a group or room member, and `<user id>` for the profile
+	 * of a one-to-one chat; a key that is not here is 404.
+	 */
+	profiles: Record<string, { displayName?: unknown; pictureUrl?: unknown }>;
+	/** What `/v2/bot/info` answers besides `userId`. */
+	botInfo: { basicId?: unknown; displayName?: unknown; pictureUrl?: unknown };
 }
 
 /** A LINE that issues tokens, knows the bot and the group names, and records every call. */
@@ -192,6 +199,12 @@ export function fakeLine(): FakeLine {
 		usage: 0,
 		members: { Cgroup0001: 3, Cgroup0002: 40 },
 		pushDelayMs: 0,
+		profiles: {},
+		botInfo: {
+			basicId: "@bot-for-tests",
+			displayName: "Test Bot",
+			pictureUrl: "https://pictures.example.test/bot.png",
+		},
 		failQuota: (status) => {
 			quotaStatus = status;
 		},
@@ -240,7 +253,17 @@ export function fakeLine(): FakeLine {
 			const token = call.authorization?.replace(/^Bearer /, "");
 			if (!token || !fake.issued.includes(token) || revoked.has(token))
 				return new Response("unauthorized", { status: 401 });
-			if (path === "/v2/bot/info") return Response.json({ userId: BOT });
+			if (path === "/v2/bot/info")
+				return Response.json({ userId: BOT, ...fake.botInfo });
+			const member =
+				/^\/v2\/bot\/(?:group|room)\/([^/]+)\/member\/([^/]+)$/.exec(path);
+			const profile = member
+				? fake.profiles[`${member[1]}/${member[2]}`]
+				: fake.profiles[/^\/v2\/bot\/profile\/([^/]+)$/.exec(path)?.[1] ?? ""];
+			if (member || path.startsWith("/v2/bot/profile/"))
+				return profile
+					? Response.json(profile)
+					: new Response("{}", { status: 404 });
 			if (path === "/v2/bot/message/push" && call.method === "POST") {
 				const request = JSON.parse(sent) as {
 					to: string;

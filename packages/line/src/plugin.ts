@@ -4,6 +4,7 @@ import {
 	type RoundtablePlugin,
 } from "pi-roundtable";
 import { LineApi } from "./api.ts";
+import { lineApiPort } from "./api-port.ts";
 import { BotIdentity } from "./bot.ts";
 import { LineConsumer, NO_KEEP } from "./consumer.ts";
 import { MessageContent } from "./content.ts";
@@ -18,6 +19,7 @@ import { OutboxWorker } from "./outbox-worker.ts";
 import { LINE, type LineBridgePort } from "./port.ts";
 import { QuotaGate } from "./quota.ts";
 import { RetentionSweeper } from "./retention.ts";
+import type { LineScreen } from "./screen.ts";
 import { PgSources } from "./sources.ts";
 import { LineSurface } from "./surface.ts";
 import { TokenSource } from "./token.ts";
@@ -135,6 +137,8 @@ export function line(options: LineOptions): RoundtablePlugin {
 				...(options.outbox ? { options: options.outbox } : {}),
 			});
 			const sending = outboxWorker;
+			// The one screen of the webhook; read at each request, so a detach takes effect at once.
+			let screen: LineScreen | undefined;
 			const port: LineBridgePort = {
 				sources,
 				outbox,
@@ -162,6 +166,16 @@ export function line(options: LineOptions): RoundtablePlugin {
 					};
 				},
 				content: (messageId, request) => content.fetch(messageId, request),
+				api: lineApiPort({ api, tokens, quota }),
+				screen: (handler) => {
+					if (typeof handler !== "function")
+						throw new TypeError("line: a screen is a function");
+					if (screen) throw new Error("line: a screen is already attached");
+					screen = handler;
+					return () => {
+						if (screen === handler) screen = undefined;
+					};
+				},
 			};
 			context.services.provide(LINE, port);
 			return {
@@ -215,6 +229,7 @@ export function line(options: LineOptions): RoundtablePlugin {
 							botUserId: () => bot.current(),
 							stored: () => worker.kick(),
 							stats: webhooks,
+							screen: () => screen,
 						}),
 					},
 				],

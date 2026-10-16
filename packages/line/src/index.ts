@@ -1,4 +1,11 @@
 export type {
+	LineApiPort,
+	LineBotInfo,
+	LineCallOptions,
+	LineProfile,
+	LineQuotaStanding,
+} from "./api-port.ts";
+export type {
 	LineContentRequest,
 	LineContentResult,
 	MediaOptions,
@@ -43,7 +50,17 @@ export type { LineBridgePort } from "./port.ts";
 export { LINE } from "./port.ts";
 export type { QuotaOptions } from "./quota.ts";
 export type { RetentionOptions } from "./retention.ts";
-export type { LineSender, SenderOptions } from "./sender.ts";
+export type { LineScreen, LineScreenVerdict } from "./screen.ts";
+export type {
+	LineSender,
+	SenderNameProblem,
+	SenderOptions,
+} from "./sender.ts";
+export {
+	SENDER_DEFAULTS,
+	SENDER_NAME_MAX,
+	senderNameProblem,
+} from "./sender.ts";
 export type {
 	LineSource,
 	LineSourceSummary,

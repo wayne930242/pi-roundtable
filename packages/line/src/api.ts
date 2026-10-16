@@ -201,21 +201,26 @@ export class LineApi {
 	async reply(
 		replyToken: string,
 		messages: readonly unknown[],
-		signal?: AbortSignal,
+		call: Pick<RequestOptions, "signal" | "timeoutMs"> = {},
 	): Promise<void> {
 		await this.request("/v2/bot/message/reply", {
 			method: "POST",
 			headers: { "content-type": "application/json" },
 			body: JSON.stringify({ replyToken, messages }),
-			...(signal ? { signal } : {}),
+			...call,
 		});
 	}
 
 	/** How many people a push to a chat reaches: the member count of a group or room, else one. */
-	async recipients(kind: SourceKind, id: string): Promise<number> {
+	async recipients(
+		kind: SourceKind,
+		id: string,
+		call: Pick<RequestOptions, "signal" | "timeoutMs"> = {},
+	): Promise<number> {
 		if (kind === "user") return 1;
 		const found = (await this.json(
 			`/v2/bot/${kind}/${encodeURIComponent(id)}/members/count`,
+			call,
 		)) as { count?: unknown };
 		if (typeof found?.count !== "number" || !Number.isInteger(found.count))
 			throw new LineError(

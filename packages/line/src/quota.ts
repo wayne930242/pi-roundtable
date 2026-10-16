@@ -1,4 +1,4 @@
-import type { LineApi } from "./api.ts";
+import type { LineApi, RequestOptions } from "./api.ts";
 import { LineError } from "./errors.ts";
 import { parseSourceKey } from "./events.ts";
 
@@ -90,7 +90,10 @@ export class QuotaGate {
 	}
 
 	/** How many people a push to the chat reaches; a count is trusted for a minute. */
-	async recipients(sourceKey: string): Promise<number> {
+	async recipients(
+		sourceKey: string,
+		call: Pick<RequestOptions, "signal" | "timeoutMs"> = {},
+	): Promise<number> {
 		const source = parseSourceKey(sourceKey);
 		if (!source)
 			throw new LineError("bad_source_key", "line: not a source key");
@@ -98,9 +101,24 @@ export class QuotaGate {
 		const now = this.#now().getTime();
 		const held = this.#counts.get(sourceKey);
 		if (held && now - held.at < this.#cacheMs) return held.n;
-		const n = await this.#api.recipients(source.kind, source.id);
+		const n = await this.#api.recipients(source.kind, source.id, call);
 		this.#counts.set(sourceKey, { n, at: now });
 		return n;
+	}
+
+	/**
+	 * The month as the gate last read it, refreshed when older than a minute: the plan's limit
+	 * (undefined without one) and the consumption, which is 0 when there is neither a limit nor a cap
+	 * of our own, because nothing is read then.
+	 */
+	async standing(): Promise<{ limit: number | undefined; used: number }> {
+		const { limit, used } = await this.#read();
+		return { limit, used };
+	}
+
+	/** The `monthlyCap` of the options, if one is set. */
+	get cap(): number | undefined {
+		return this.#cap;
 	}
 
 	async #read(): Promise<Reading> {

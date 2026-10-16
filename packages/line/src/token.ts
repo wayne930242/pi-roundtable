@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { scrubDiagnostic } from "pi-roundtable/kit";
-import { LineApiError, LineError } from "./errors.ts";
+import { errorCode, LineApiError, LineError } from "./errors.ts";
 
 /** How the package gets the channel access token it calls LINE with. */
 export type TokenMode = "stateless" | { static: string };
@@ -34,6 +34,12 @@ export interface TokenSourceOptions {
 	baseUrl?: string;
 }
 
+/** One issue of a stateless token in progress; `quiet` until a caller other than a probe shares it. */
+interface Flight {
+	promise: Promise<Issued>;
+	quiet: boolean;
+}
+
 interface Issued {
 	token: string;
 	/** Epoch milliseconds after which the token is replaced. */
@@ -44,7 +50,8 @@ interface Issued {
  * Hands out the channel access token. It issues stateless tokens one at a time (concurrent callers
  * share one request), keeps a token in memory only until a minute before it lapses, and forgets
  * one LINE rejected. The token and the secret live in private fields: they are in no log, no error
- * message and no serialized form of this object.
+ * message and no serialized form of this object. A failed issue is told, by its code, to the
+ * listeners of {@link TokenSource.onFailure}.
  */
 export class TokenSource {
 	readonly #id: string;
@@ -54,9 +61,10 @@ export class TokenSource {
 	readonly #now: () => number;
 	readonly #base: string;
 	#current: Issued | undefined;
-	#inflight: Promise<Issued> | undefined;
+	#inflight: Flight | undefined;
 	#issued = 0;
 	#lastFailure: string | undefined;
+	readonly #listeners = new Set<(code: string) => void>();
 
 	constructor(options: TokenSourceOptions) {
 		const {
@@ -118,10 +126,63 @@ export class TokenSource {
 		if (this.#static) return this.#static;
 		const held = this.#current;
 		if (held && held.validUntil > this.#now()) return held.token;
-		this.#inflight ??= this.#issue().finally(() => {
-			this.#inflight = undefined;
-		});
-		return (await this.#inflight).token;
+		return (await this.#join(false)).token;
+	}
+
+	/**
+	 * Undefined when a token is held or can be issued now, else the code of the failure. An issue it
+	 * starts is told to no listener, unless a caller of `token()` shares it meanwhile.
+	 */
+	async probe(): Promise<string | undefined> {
+		if (this.#static) return undefined;
+		const held = this.#current;
+		if (held && held.validUntil > this.#now()) return undefined;
+		try {
+			await this.#join(true);
+			return undefined;
+		} catch (error) {
+			return errorCode(error);
+		}
+	}
+
+	/**
+	 * Calls `listener` with the code of each failed issue (`token_refused`, `token_unreachable`,
+	 * `token_malformed`), once per issue however many callers shared it. Returns the function that
+	 * detaches it. A listener that throws is ignored.
+	 */
+	onFailure(listener: (code: string) => void): () => void {
+		this.#listeners.add(listener);
+		return () => void this.#listeners.delete(listener);
+	}
+
+	/** The issue in progress, started when there is none. A caller that is not a probe makes it audible. */
+	#join(quiet: boolean): Promise<Issued> {
+		if (this.#inflight) {
+			if (!quiet) this.#inflight.quiet = false;
+			return this.#inflight.promise;
+		}
+		const flight: Flight = {
+			quiet,
+			promise: this.#issue()
+				.catch((error: unknown) => {
+					if (!flight.quiet) this.#notify(errorCode(error));
+					throw error;
+				})
+				.finally(() => {
+					this.#inflight = undefined;
+				}),
+		};
+		this.#inflight = flight;
+		return flight.promise;
+	}
+
+	#notify(code: string): void {
+		for (const listener of [...this.#listeners])
+			try {
+				listener(code);
+			} catch {
+				// A listener must not throw; one that does costs the others nothing.
+			}
 	}
 
 	/**

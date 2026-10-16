@@ -1,7 +1,9 @@
 import { serviceKey } from "pi-roundtable";
+import type { LineApiPort } from "./api-port.ts";
 import type { LineContentRequest, LineContentResult } from "./content.ts";
 import type { LineSubscriber } from "./messages.ts";
 import type { LineOutbox } from "./outbox.ts";
+import type { LineScreen } from "./screen.ts";
 import type { LineSources } from "./sources.ts";
 import type { WebhookHealth } from "./webhook.ts";
 
@@ -43,6 +45,14 @@ export interface LineBridgePort {
 		messageId: string,
 		request?: LineContentRequest,
 	): Promise<LineContentResult>;
+	/** LINE's API through the plugin's token; see `LineApiPort`. */
+	readonly api: LineApiPort;
+	/**
+	 * Attaches the one screen of the webhook; a second is refused (throws). Attach it during setup:
+	 * the listeners open only after every plugin is set up, so no request arrives before it. Until one
+	 * is attached, and after it is detached, every event is kept. Returns the function that detaches it.
+	 */
+	screen(handler: LineScreen): () => void;
 }
 
 export const LINE = serviceKey<LineBridgePort>("roundtable.line", {

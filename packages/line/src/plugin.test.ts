@@ -233,10 +233,12 @@ describeDb("the line plugin", () => {
 			methods: ["POST"],
 		});
 		expect(Object.keys(port).sort()).toEqual([
+			"api",
 			"botUserId",
 			"content",
 			"health",
 			"outbox",
+			"screen",
 			"sources",
 			"subscribe",
 		]);
@@ -343,6 +345,87 @@ describeDb("the line plugin", () => {
 			"s2",
 		]);
 		await service("line-inbox").stop?.();
+	});
+
+	test("one screen at a time: a second is refused, detaching frees the place, and it leaves the subscriber alone", async () => {
+		const { service, route, port } = await boot();
+		await service("line-inbox").start?.();
+		await route.handle(webhookRequest(body(messageEvent({ id: "p0" }))));
+		await port.sources.allow(GROUP);
+		const got: string[] = [];
+		const detachSubscriber = port.subscribe(async (event) => {
+			if (event.type === "message") got.push(event.eventId);
+			return undefined;
+		});
+		const detach = port.screen(async (event) =>
+			event.id === "taken" ? "consume" : "keep",
+		);
+		expect(() => port.screen(async () => "keep")).toThrow("already attached");
+		expect(() => port.screen("x" as never)).toThrow("function");
+		await route.handle(
+			webhookRequest(
+				body(
+					messageEvent({ id: "taken", text: "to the screen only" }),
+					messageEvent({ id: "kept" }),
+				),
+			),
+		);
+		for (let i = 0; i < 400 && got.length < 1; i++) await Bun.sleep(10);
+		await Bun.sleep(50);
+		expect(got).toEqual(["kept"]);
+		const dump = JSON.stringify(await sql`SELECT * FROM line_inbox`);
+		expect(dump).not.toContain("to the screen only");
+		expect(dump).not.toContain("reply-taken");
+
+		// Once detached every event is kept again, as before a screen was attached.
+		detach();
+		detach();
+		await route.handle(
+			webhookRequest(body(messageEvent({ id: "taken", text: "now kept" }))),
+		);
+		for (let i = 0; i < 400 && got.length < 2; i++) await Bun.sleep(10);
+		expect(got).toEqual(["kept", "taken"]);
+
+		// A stale detach does not remove a screen attached after it.
+		const second = port.screen(async () => "consume");
+		detach();
+		const response = await route.handle(
+			webhookRequest(body(messageEvent({ id: "later" }))),
+		);
+		expect(response.status).toBe(200);
+		await Bun.sleep(50);
+		expect(got).toEqual(["kept", "taken"]);
+		second();
+		detachSubscriber();
+		await service("line-inbox").stop?.();
+	});
+
+	test("the API port goes through the plugin's token: a failure is told to its listener and shows in health", async () => {
+		const { fake, port } = await boot();
+		fake.profiles["Cgroup0001/Uone"] = { displayName: "Ada" };
+		const told: string[] = [];
+		port.api.onTokenFailure((code) => told.push(code));
+		expect(await port.api.profile(GROUP, "Uone")).toEqual({
+			displayName: "Ada",
+		});
+		expect(port.health().tokensIssued).toBe(1);
+		fake.revoke("access-token-1");
+		fake.failTokens(500);
+		await expect(port.api.profile(GROUP, "Uone")).rejects.toMatchObject({
+			code: "token_refused",
+		});
+		expect(told).toEqual(["token_refused"]);
+		expect(port.health().tokenFailure).toBe("token_refused");
+		expect(await port.api.probeToken()).toBe("token_refused");
+		expect(told).toEqual(["token_refused"]);
+		fake.failTokens(undefined);
+		expect(await port.api.probeToken()).toBeUndefined();
+		expect((await port.api.botInfo()).basicId).toBe("@bot-for-tests");
+		expect(await port.api.quota()).toEqual({
+			limit: 1000,
+			used: 0,
+			cap: undefined,
+		});
 	});
 
 	test("content comes through the service with the configured cap, and retention runs as a service", async () => {

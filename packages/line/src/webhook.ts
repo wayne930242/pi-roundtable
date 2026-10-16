@@ -1,8 +1,9 @@
 import type { SQL } from "bun";
 import type { Logger } from "pi-roundtable";
 import { errorCode, LineError } from "./errors.ts";
-import { parseWebhook } from "./events.ts";
+import { type ParsedEvent, parseWebhook } from "./events.ts";
 import { persistEvents } from "./intake.ts";
+import type { LineScreen } from "./screen.ts";
 import type { TokenSource } from "./token.ts";
 
 /** The most a webhook request body may hold: LINE sends far less, and anything near this is not LINE. */
@@ -83,6 +84,8 @@ export interface WebhookOptions {
 	stored: () => void;
 	/** Counts what the webhook answers; the plugin reads it for `LINE.health()`. */
 	stats: WebhookStats;
+	/** The screen attached at the moment of the request, if any; asked about each event before it is stored. */
+	screen?: () => LineScreen | undefined;
 	maxBytes?: number;
 }
 
@@ -141,11 +144,35 @@ function claimedDestination(body: Uint8Array): string | undefined {
 }
 
 /**
+ * The events the screen keeps, asked about each in order. Rejects when the screen throws or answers
+ * anything but "keep" or "consume", so no event of the request is stored on a half-made decision.
+ */
+async function screened(
+	screen: LineScreen,
+	events: readonly ParsedEvent[],
+): Promise<ParsedEvent[]> {
+	const kept: ParsedEvent[] = [];
+	for (const event of events) {
+		const verdict: unknown = await screen(event);
+		if (verdict === "keep") kept.push(event);
+		else if (verdict !== "consume")
+			throw new LineError(
+				"screen_verdict_invalid",
+				'line: a screen answers "keep" or "consume"',
+			);
+	}
+	return kept;
+}
+
+/**
  * LINE's webhook: the raw body is verified against `x-line-signature` before anything is parsed,
  * every event is stored in one transaction, and only then does it answer `200`. A database that
  * is down answers `500`, which makes LINE's redelivery (if the channel has it on) resend.
- * An empty `events` array (LINE's Verify button) is a `200` that stores nothing. Each answer adds
- * to `options.stats`, which keeps counts and times only.
+ * An empty `events` array (LINE's Verify button) is a `200` that stores nothing. When a screen is
+ * attached it is asked about each event, once the signature and destination have passed, and a
+ * consumed event is never stored; a request whose events are all consumed is a `200` like Verify,
+ * and a screen that fails is a `500` that stores nothing. Each answer adds to `options.stats`,
+ * which keeps counts and times only.
  */
 export function webhookHandler(
 	options: WebhookOptions,
@@ -184,16 +211,26 @@ export function webhookHandler(
 			options.logger.warn("a LINE webhook was refused: it is for another bot");
 			return reply(403, "Forbidden");
 		}
-		if (parsed.events.length === 0) {
+		let events = parsed.events;
+		const screen = options.screen?.();
+		if (screen && events.length > 0) {
+			try {
+				events = await screened(screen, events);
+			} catch (error) {
+				// The code only: the message could quote the event that was screened.
+				options.logger.error(
+					{ code: errorCode(error) },
+					"a LINE event could not be screened; the request was refused",
+				);
+				return reply(500, "Internal Server Error");
+			}
+		}
+		if (events.length === 0) {
 			stats.accept(options.now());
 			return reply(200, "OK");
 		}
 		try {
-			const result = await persistEvents(
-				options.sql,
-				parsed.events,
-				options.now(),
-			);
+			const result = await persistEvents(options.sql, events, options.now());
 			options.logger.info(result, "LINE events stored");
 			if (result.queued > 0) options.stored();
 		} catch (error) {
