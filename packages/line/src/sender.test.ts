@@ -2,6 +2,9 @@ import { expect, test } from "bun:test";
 import {
 	checkSenderOptions,
 	SENDER_DEFAULTS,
+	SENDER_NAME_MAX,
+	type SenderNameProblem,
+	senderNameProblem,
 	validateSender,
 } from "./sender.ts";
 
@@ -113,4 +116,64 @@ test("a sender with neither part, or with anything else, is refused, and the mes
 	expect(
 		refusal({ iconUrl: "http://SECRET.example.test" })?.message,
 	).not.toContain("SECRET");
+});
+
+test("senderNameProblem names why a name is refused, one code of each kind, and nothing for a name LINE takes", () => {
+	const cases: [string, SenderNameProblem | undefined][] = [
+		["Ada Lovelace", undefined],
+		["a".repeat(SENDER_NAME_MAX), undefined],
+		["😀".repeat(SENDER_NAME_MAX), undefined],
+		["", "empty"],
+		["   ", "empty"],
+		[" Ada", "edge_space"],
+		["Ada\u3000", "edge_space"],
+		["a".repeat(SENDER_NAME_MAX + 1), "too_long"],
+		["Ada\nLovelace", "control_character"],
+		["Ada\u007f", "control_character"],
+		["Ada from LINE", "forbidden_word"],
+		["ＬＩＮＥさくら", "forbidden_word"],
+		["Online", undefined],
+	];
+	for (const [name, problem] of cases)
+		expect(senderNameProblem(name)).toBe(problem);
+	expect(senderNameProblem("acme desk", { forbiddenWords: ["Acme"] })).toBe(
+		"forbidden_word",
+	);
+	expect(
+		senderNameProblem("LINE", { forbiddenWords: ["Acme"] }),
+	).toBeUndefined();
+});
+
+test("senderNameProblem never throws, and reports the first problem in a fixed order", () => {
+	expect(senderNameProblem(42 as never)).toBe("empty");
+	expect(senderNameProblem(undefined as never)).toBe("empty");
+	// Several problems at once: spacing, then length, then control characters, then words.
+	expect(senderNameProblem(` ${"a".repeat(30)}\n`)).toBe("edge_space");
+	expect(senderNameProblem(`${"a".repeat(30)}\u0000`)).toBe("too_long");
+	expect(senderNameProblem("LINE\u0000")).toBe("control_character");
+});
+
+test("C1 control characters are refused like C0 and DEL, and the neighbouring printable characters are not", () => {
+	for (const code of [0x80, 0x85, 0x9f]) {
+		const name = `Ada${String.fromCharCode(code)}`;
+		expect(senderNameProblem(name)).toBe("control_character");
+		expect(refusal({ name })).toMatchObject({
+			code: "bad_sender",
+			message: "line: a sender name has no control characters",
+		});
+	}
+	expect(senderNameProblem("Ada\u00a0B")).toBeUndefined();
+	expect(senderNameProblem("Ada\u00a1")).toBeUndefined();
+});
+
+test("validateSender keeps its English message for each problem", () => {
+	const messages: Record<string, string> = {
+		"": "line: a sender name is a non-empty string",
+		" Ada": "line: a sender name has no leading or trailing space",
+		["a".repeat(21)]: "line: a sender name is at most 20 characters",
+		"Ada\u0000": "line: a sender name has no control characters",
+		LINE: "line: a sender name may not use a word LINE refuses",
+	};
+	for (const [name, message] of Object.entries(messages))
+		expect(refusal({ name })).toMatchObject({ code: "bad_sender", message });
 });

@@ -51,6 +51,49 @@ export function checkSenderOptions(options: Partial<SenderOptions>): void {
 const WORD =
 	/(?:\p{Script=Latin}|\p{M}|\p{N})+|(?:(?!\p{Script=Latin})\p{L})+/gu;
 
+/** Why LINE would refuse a sender name. */
+export type SenderNameProblem =
+	| "empty"
+	| "edge_space"
+	| "control_character"
+	| "too_long"
+	| "forbidden_word";
+
+/**
+ * Why LINE would refuse `name` as a sender name, or undefined when it would take it. The first
+ * problem found is the one returned, checked in the order `empty`, `edge_space`,
+ * `too_long`, `control_character`, `forbidden_word`. `control_character` covers C0, DEL and C1
+ * (U+0080 to U+009F). Never throws: a value that is not a string is `empty`.
+ */
+export function senderNameProblem(
+	name: string,
+	options: SenderOptions = SENDER_DEFAULTS,
+): SenderNameProblem | undefined {
+	if (typeof name !== "string" || name.trim() === "") return "empty";
+	if (name !== name.trim()) return "edge_space";
+	if (Array.from(name).length > SENDER_NAME_MAX) return "too_long";
+	// biome-ignore lint/suspicious/noControlCharactersInRegex: control characters are what is refused
+	if (/[\u0000-\u001f\u007f-\u009f]/.test(name)) return "control_character";
+	// Full-width letters are the letters they look like.
+	const words = (name.normalize("NFKC").match(WORD) ?? []).map((w) =>
+		w.toLowerCase(),
+	);
+	const forbidden = options.forbiddenWords.map((w) =>
+		w.normalize("NFKC").toLowerCase(),
+	);
+	return words.some((w) => forbidden.includes(w))
+		? "forbidden_word"
+		: undefined;
+}
+
+const NAME_PROBLEM_TEXT: Record<SenderNameProblem, string> = {
+	empty: "a sender name is a non-empty string",
+	edge_space: "a sender name has no leading or trailing space",
+	too_long: `a sender name is at most ${SENDER_NAME_MAX} characters`,
+	control_character: "a sender name has no control characters",
+	forbidden_word: "a sender name may not use a word LINE refuses",
+};
+
 /**
  * Checks a sender before anything is queued and returns it as it will be sent. Throws `LineError`
  * `bad_sender` for a name that is empty, over 20 characters, holds a control character or a
@@ -71,25 +114,9 @@ export function validateSender(
 		throw bad("a sender needs a name or an iconUrl");
 	const checked: LineSender = {};
 	if (name !== undefined) {
-		if (typeof name !== "string" || name.trim() === "")
-			throw bad("a sender name is a non-empty string");
-		if (name !== name.trim())
-			throw bad("a sender name has no leading or trailing space");
-		if (Array.from(name).length > SENDER_NAME_MAX)
-			throw bad(`a sender name is at most ${SENDER_NAME_MAX} characters`);
-		// biome-ignore lint/suspicious/noControlCharactersInRegex: control characters are what is refused
-		if (/[\u0000-\u001f\u007f]/.test(name))
-			throw bad("a sender name has no control characters");
-		// Full-width letters are the letters they look like.
-		const words = (name.normalize("NFKC").match(WORD) ?? []).map((w) =>
-			w.toLowerCase(),
-		);
-		const forbidden = options.forbiddenWords.map((w) =>
-			w.normalize("NFKC").toLowerCase(),
-		);
-		if (words.some((w) => forbidden.includes(w)))
-			throw bad("a sender name may not use a word LINE refuses");
-		checked.name = name;
+		const problem = senderNameProblem(name as string, options);
+		if (problem) throw bad(NAME_PROBLEM_TEXT[problem]);
+		checked.name = name as string;
 	}
 	if (iconUrl !== undefined) {
 		if (typeof iconUrl !== "string" || iconUrl.length > SENDER_ICON_MAX)
