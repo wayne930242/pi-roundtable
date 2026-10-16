@@ -155,6 +155,7 @@ export type {
 } from "./core/holds.ts";
 export type { HostEnvironment, RoundtableOptions } from "./core/host.ts";
 export { Roundtable } from "./core/host.ts";
+export type { RegistrationReport } from "./core/host-registration.ts";
 export type {
 	HttpRoute,
 	ListenerAddress,

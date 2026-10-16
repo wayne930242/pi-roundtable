@@ -142,7 +142,10 @@ describe("configuration", () => {
 });
 
 describe("plugins", () => {
-	const plugin = (name: string) => ({ name, setup: () => ({}) });
+	const plugin = (name: string) => ({
+		name,
+		setup: () => ({ services: [{ name: `${name}-service` }] }),
+	});
 	const withPlugins = (names: string[]) =>
 		new Project(
 			"/x",

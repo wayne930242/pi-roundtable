@@ -48,6 +48,8 @@ export {
 	MIN_GROUP_MEMBERS,
 } from "./agent-rules.ts";
 
+import { isCheckDatabase } from "../db/check-database.ts";
+
 /**
  * Agents, groups, and group messages, in the database. Agents and groups are also held
  * in memory, because every inbound message asks and only this process changes them.
@@ -77,7 +79,8 @@ export class PgAgentStore implements AgentDirectory {
 	/** The store over the host's migrated pool, holding the rows of one guild. */
 	static async attach(sql: SQL, guildId: string): Promise<PgAgentStore> {
 		const store = new PgAgentStore(sql, guildId);
-		await store.#reload();
+		// `Roundtable.check()` has no database to read the rows from: the store starts empty.
+		if (!isCheckDatabase(sql)) await store.#reload();
 		return store;
 	}
 

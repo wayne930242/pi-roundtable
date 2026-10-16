@@ -1,47 +1,18 @@
 import type { SQL } from "bun";
-import { attachmentPort } from "./attachments/attachment-port.ts";
-import {
-	type AttachmentRetention,
-	retentionServices,
-} from "./attachments/attachment-retention.ts";
-import type { ConversationPort } from "./contract/channels.ts";
-import type { SurfacePort } from "./contract/surface.ts";
+import type { AttachmentRetention } from "./attachments/attachment-retention.ts";
+import { checkDatabase } from "./db/check-database.ts";
 import { openPool, runMigrations } from "./db/migrations.ts";
 import { type DrainOptions, drainWork, stopTurns } from "./drain.ts";
-import { MigrationError, NotLinkedError, PluginError } from "./errors.ts";
-import { EventBus } from "./events.ts";
+import { MigrationError, PluginError } from "./errors.ts";
 import { attempt, startInBackground } from "./host-background.ts";
-import { HttpListeners, type ListenerConfig } from "./http/listeners.ts";
-import { type Locale, setLocale } from "./i18n/index.ts";
-import { contactsOf } from "./identity/identity-view.ts";
+import { Linkage, type RegistrationReport } from "./host-registration.ts";
+import type { HttpListeners, ListenerConfig } from "./http/listeners.ts";
+import type { Locale } from "./i18n/index.ts";
 import type { JudgeModel } from "./judging/model-judge.ts";
 import type { Logger } from "./log.ts";
-import type {
-	HostEnv,
-	LinkedSessions,
-	RoundtablePlugin,
-	Service,
-} from "./plugin.ts";
-import { refuseRemovedFields } from "./plugin.ts";
-import {
-	collectContributions,
-	emptyRegistry,
-	linkSessions,
-	type Registry,
-} from "./registry/contributions.ts";
-import { resolveProviders } from "./registry/providers.ts";
-import { replaceServices, ServiceRegistry } from "./registry/services.ts";
-import { ChannelQueue } from "./routing/channel-queue.ts";
-import { ChannelRouter } from "./routing/channel-router.ts";
-import {
-	type ConversationTurns,
-	conversationTurns,
-} from "./routing/conversation-turns.ts";
-import { surfacePort } from "./routing/surface-port.ts";
-import { CONVERSATIONS, IDENTITY, RUNTIME } from "./services.ts";
+import type { RoundtablePlugin, Service } from "./plugin.ts";
 import type { ChannelKey } from "./sessions.ts";
-import { setTimeZone } from "./time.ts";
-import { type ToolTierTable, toolTiers } from "./tool-tiers.ts";
+import type { ToolTierTable } from "./tool-tiers.ts";
 
 /**
  * What differs between hosts: the words and time the process speaks in, and the Pi agent
@@ -120,18 +91,10 @@ let running: Roundtable | undefined;
 export class Roundtable {
 	readonly #options: RoundtableOptions;
 	readonly #plugins: readonly RoundtablePlugin[];
-	#registry: Registry = emptyRegistry();
-	#sessions: LinkedSessions | undefined;
-	#router: ChannelRouter | undefined;
+	/** What the plugins' registration built: the registry, router, queue and events the host runs on. */
+	readonly #link: Linkage;
 	#listeners: HttpListeners | undefined;
 	#pool: SQL | undefined;
-	readonly #queue = new ChannelQueue();
-	readonly #warned = new Set<string>();
-	readonly #tiers: ToolTierTable;
-	readonly #events: EventBus;
-	#services: ServiceRegistry | undefined;
-	/** The plugins that run: the registered ones, less those a replacement dropped, in set-up order. */
-	#active: readonly RoundtablePlugin[] = [];
 	/** The services whose start finished, in start order. */
 	#started: Service[] = [];
 	#booting: Promise<void> | undefined;
@@ -148,80 +111,7 @@ export class Roundtable {
 			);
 		this.#options = options;
 		this.#plugins = plugins;
-		this.#tiers = options.toolTiers ?? toolTiers();
-		this.#events = new EventBus(options.logger);
-	}
-
-	/** The claimed channels' conversations; every call before linking throws NotLinkedError. */
-	#conversations(): ConversationPort {
-		const router = () => {
-			if (!this.#router)
-				throw new NotLinkedError(
-					"conversations are linked once every plugin is set up. Use them from a service's start or from a handler, not during setup.",
-				);
-			return this.#router;
-		};
-		return {
-			handle: (message) => router().handle(message),
-			background: (turn) => router().background(turn),
-			runsAs: (turn) => router().runsAs(turn),
-			target: (name) => router().target(name),
-			startFresh: (channel) => router().startFresh(channel),
-			deleteConversation: (channel) => router().deleteConversation(channel),
-			stop: (channel) => router().stop(channel),
-			postsInPlace: (channel) => router().postsInPlace(channel),
-			owns: (channel) => router().owns(channel),
-			takesBackground: (channel) => router().takesBackground(channel),
-			takesSystemReports: (channel) => router().takesSystemReports(channel),
-		};
-	}
-
-	/** The contributed surfaces by channel prefix; every call before linking throws NotLinkedError. */
-	#surfaces(): SurfacePort {
-		return surfacePort(
-			() => {
-				if (!this.#sessions)
-					throw new NotLinkedError(
-						"chat surfaces are linked once every plugin is set up. Use surfaces from a service's start or from a handler, not during setup.",
-					);
-				return this.#registry.surfaces;
-			},
-			{ deprecated: (message) => this.#deprecated(message) },
-		);
-	}
-
-	/** Logs a deprecation once per host. */
-	#deprecated(message: string): void {
-		if (this.#warned.has(message)) return;
-		this.#warned.add(message);
-		this.#options.logger.warn(message);
-	}
-
-	/** Turns over the runtime plugin's runtime and the surfaces; every call before linking is refused with NotLinkedError. */
-	#turns(): ConversationTurns {
-		return conversationTurns({
-			linked: () => {
-				if (!this.#sessions)
-					throw new NotLinkedError(
-						"conversation turns are linked once every plugin is set up. Use turns from a service's start or from a handler, not during setup.",
-					);
-			},
-			runtime: () => {
-				if (!this.#services)
-					throw new NotLinkedError("the host has not started yet.");
-				return this.#services.get(RUNTIME);
-			},
-			registry: () => this.#services?.find(CONVERSATIONS),
-			surfaces: this.#surfaces(),
-			events: this.#events.sink,
-			stopping: () => this.#queue.closed,
-			selection: () => {
-				if (!this.#sessions)
-					throw new NotLinkedError("session parts are not linked yet.");
-				return this.#sessions.agentSelection();
-			},
-			logger: this.#options.logger,
-		});
+		this.#link = new Linkage(options, plugins);
 	}
 
 	/**
@@ -250,106 +140,16 @@ export class Roundtable {
 		}
 	}
 
-	/** Applies the host's environment to the process and returns what plugins read of it. */
-	#applyEnvironment(): HostEnv {
-		const {
-			locale = "en",
-			timeZone = "UTC",
-			assistant = "Roundtable",
-			rootCommand = "roundtable",
-			agentDir,
-			scratchDir,
-		} = this.#options.environment ?? {};
-		setLocale(locale, { assistant, root: rootCommand });
-		setTimeZone(timeZone);
-		// Pi packages such as pi-web-access read their config from the Pi agent directory.
-		if (agentDir !== undefined) process.env.PI_CODING_AGENT_DIR = agentDir;
-		return {
-			locale,
-			timeZone,
-			now: () => new Date(),
-			...(scratchDir !== undefined ? { scratchDir } : {}),
-		};
-	}
-
 	async #boot(): Promise<void> {
-		const { logger, listeners = [] } = this.#options;
-		for (const plugin of this.#plugins) refuseRemovedFields(plugin);
-		const env = this.#applyEnvironment();
-		// A plugin that replaces a service takes the place of the one that provided it.
-		this.#active = replaceServices(this.#plugins);
-		this.#services = new ServiceRegistry(this.#active);
-		this.#services.checkRequires();
-		const providers = resolveProviders(this.#active, this.#options.judgeModel);
-		const attachments = attachmentPort({
-			dataDir: this.#options.dataDir,
-			registry: () => this.#services?.find(CONVERSATIONS),
-			logger,
-		});
-		const retention = retentionServices(
-			this.#options.attachments?.retention,
-			this.#options.dataDir,
-			attachments,
-			logger,
-		);
+		const link = this.#link;
+		link.prepare();
 		await this.#migrate();
-		this.#registry = await collectContributions(
-			this.#active,
-			{
-				logger,
-				env,
-				sessions: () => {
-					if (!this.#sessions)
-						throw new NotLinkedError(
-							"session parts are linked once every plugin is set up. Call sessions() from a service's start or from a handler, not during setup.",
-						);
-					return this.#sessions;
-				},
-				queue: this.#queue,
-				toolTiers: this.#tiers,
-				events: this.#events.sink,
-				conversations: this.#conversations(),
-				attachments,
-				surfaces: this.#surfaces(),
-				turns: this.#turns(),
-				database: () => {
-					if (!this.#pool) throw new PluginError("no database is configured");
-					return this.#pool;
-				},
-				providers,
-				dashboard: () => {
-					if (!this.#sessions)
-						throw new NotLinkedError(
-							"dashboard lines are linked once every plugin is set up. Call dashboard() from a service's start or from a handler, not during setup.",
-						);
-					return this.#registry.dashboard;
-				},
-				apiKey: async (provider) => this.#options.apiKey?.(provider),
-			},
-			this.#tiers,
-			this.#services,
-		);
-		const { routes, channels } = this.#registry;
-		this.#sessions = linkSessions(this.#registry);
-		this.#events.link(this.#registry.handlers);
-		const identity = this.#services.find(IDENTITY);
-		this.#router = new ChannelRouter({
-			claims: channels,
-			...(identity
-				? { contacts: contactsOf(identity), principals: identity }
-				: {}),
-			targets: (name) =>
-				this.#registry.backgroundTargets.find((t) => t.name === name),
-			queue: this.#queue,
-			surfaces: this.#surfaces(),
-			logger,
-			...(this.#options.conversations?.forwardJoinMs === undefined
-				? {}
-				: { forwardJoinMs: this.#options.conversations.forwardJoinMs }),
+		const { http, retention } = await link.link(() => {
+			if (!this.#pool) throw new PluginError("no database is configured");
+			return this.#pool;
 		});
-		const http = new HttpListeners(listeners, routes, logger);
-		for (const plugin of this.#active) await plugin.preflight?.();
-		for (const service of [...this.#registry.services, ...retention]) {
+		for (const plugin of link.active) await plugin.preflight?.();
+		for (const service of [...link.registry.services, ...retention]) {
 			await service.start?.();
 			this.#started.push(service);
 		}
@@ -357,12 +157,27 @@ export class Roundtable {
 		this.#listeners = http;
 		http.start();
 		// After the listeners, so a background start may rely on everything else running.
-		void startInBackground(this.#registry, logger);
+		void startInBackground(link.registry, this.#options.logger);
+	}
+
+	/**
+	 * Sets up every plugin as `run()` would and refuses what `run()` refuses (a plugin that adds
+	 * nothing, a clash, a missing service, a removed field, a bad route), without migrating the
+	 * database, starting a service, opening a listener or reaching Discord. A plugin that queries the
+	 * database during setup is refused with a message that says to query from a service's start.
+	 * Preflights are not run. It applies the host's locale and time zone, as `run()` does.
+	 * It does not count as a running host.
+	 */
+	async check(): Promise<RegistrationReport> {
+		const link = new Linkage(this.#options, this.#plugins);
+		link.prepare();
+		await link.link(checkDatabase);
+		return link.report();
 	}
 
 	/** Opens the pool and runs every plugin's migrations; a failure closes it again and stops the boot. */
 	async #migrate(): Promise<void> {
-		const migrations = this.#active.flatMap(
+		const migrations = this.#link.active.flatMap(
 			(plugin) => plugin.migrations ?? [],
 		);
 		const { database } = this.#options;
@@ -373,7 +188,7 @@ export class Roundtable {
 		}
 		const pool = openPool(database.url);
 		try {
-			const report = await runMigrations(pool, this.#active);
+			const report = await runMigrations(pool, this.#link.active);
 			this.#options.logger.info(
 				{
 					applied: report.applied,
@@ -385,7 +200,7 @@ export class Roundtable {
 		} catch (error) {
 			await pool.close();
 			if (error instanceof MigrationError) {
-				const owner = this.#active.find((plugin) =>
+				const owner = this.#link.active.find((plugin) =>
 					plugin.migrations?.some(
 						({ name }) => `${plugin.name}/${name}` === error.migration,
 					),
@@ -430,18 +245,18 @@ export class Roundtable {
 		if (running !== this) return this.#bootFailed ? 1 : 0;
 		// Turns already running finish, but nothing new starts from here on, whoever asks.
 		logger.info({ signal }, "shutting down once idle");
-		this.#queue.close();
+		this.#link.queue.close();
 		const left = await drainWork({
 			...drain,
 			busy: () => [
-				...this.#queue.busy(),
+				...this.#link.queue.busy(),
 				...this.#started.flatMap((service) => service.busy?.() ?? []),
 			],
 			// A turn the limit finds still running is stopped, as the owner's stop would.
 			abort: () =>
 				stopTurns(
-					this.#queue.busy(),
-					(channel) => this.#router?.stop(channel as ChannelKey) ?? false,
+					this.#link.queue.busy(),
+					(channel) => this.#link.router?.stop(channel as ChannelKey) ?? false,
 					logger,
 				),
 		});
@@ -454,7 +269,7 @@ export class Roundtable {
 			if (!recorded.ok)
 				logger.error({ err: recorded.error }, "aborted work not recorded");
 		}
-		await this.#events.deliver("shutdown", left);
+		await this.#link.events.deliver("shutdown", left);
 		logger.info({ signal }, "shutting down");
 		const clean = await this.#teardown();
 		running = undefined;

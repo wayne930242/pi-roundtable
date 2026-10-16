@@ -51,7 +51,12 @@ export function fakePorts(
 ): Ports {
 	const defined: DefinedRoundtable = {
 		options: { logger: {} as never },
-		plugins: [{ name: "database", setup: () => ({}) }],
+		plugins: [
+			{
+				name: "database",
+				setup: () => ({ services: [{ name: "database-service" }] }),
+			},
+		],
 	};
 	return {
 		loadConfig: async () => config,

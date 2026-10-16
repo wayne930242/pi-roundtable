@@ -1,3 +1,4 @@
+import { isCheckDatabase } from "../db/check-database.ts";
 import type { RoundtablePlugin } from "../plugin.ts";
 import { IDENTITY, IDENTITY_LINKS } from "../services.ts";
 import type { AccessRules } from "./access-policy.ts";
@@ -45,12 +46,14 @@ export function identityPlugin(options: IdentityOptions): RoundtablePlugin {
 		provides: rules.selfLink ? [IDENTITY, IDENTITY_LINKS] : [IDENTITY],
 		setup: async ({ database, services, logger }) => {
 			if (summary) logger.info(backfillLine(summary));
+			const sql = database();
 			const identity = new PgIdentityService(
-				await PgPrincipalStore.attach(database()),
+				await PgPrincipalStore.attach(sql),
 				rules,
 				{ logger, identities },
 			);
-			await identity.syncConfig();
+			// `Roundtable.check()` has no database to write the configured principals to.
+			if (!isCheckDatabase(sql)) await identity.syncConfig();
 			services.provide(IDENTITY, identityView(identity));
 			if (rules.selfLink)
 				services.provide(

@@ -168,6 +168,22 @@ describe("doctor", () => {
 		expect(report.ok).toBe(true);
 	});
 
+	test("an offline run fails the plugins check on a plugin that adds nothing, as the host would refuse it", async () => {
+		const empty = fakePorts(validConfig, {
+			define: async () => ({
+				options: { logger: {} as never },
+				plugins: [{ name: "hollow", setup: () => ({}) }],
+			}),
+		});
+		const report = await doctor(inputs({ ports: empty, reachable: false }));
+		const plugins = report.outcomes.find(({ name }) => name === "plugins");
+		expect(plugins?.result).toMatchObject({
+			status: "fail",
+			problem: expect.stringContaining("plugin hollow adds nothing"),
+		});
+		expect(report.ok).toBe(false);
+	});
+
 	test("a check that throws is reported as failed without hiding the ones after it", async () => {
 		const checks: Check[] = [
 			{
@@ -206,6 +222,26 @@ describe("start", () => {
 			launch: async (defined: DefinedRoundtable) => void seen.push(defined),
 		};
 	};
+
+	test("does not start the bot on a plugin that adds nothing", async () => {
+		const { seen, launch } = launched();
+		const report = await start({
+			...inputs({
+				ports: fakePorts(validConfig, {
+					define: async () => ({
+						options: { logger: {} as never },
+						plugins: [{ name: "hollow", setup: () => ({}) }],
+					}),
+				}),
+			}),
+			launch,
+		});
+		expect(report.started).toBe(false);
+		expect(seen).toEqual([]);
+		expect(
+			report.outcomes.find(({ name }) => name === "plugins")?.result,
+		).toMatchObject({ status: "fail" });
+	});
 
 	test("runs only the checks that need no network, then starts the bot", async () => {
 		const http = fakeHttp({});

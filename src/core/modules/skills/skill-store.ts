@@ -1,4 +1,5 @@
 import type { SQL } from "bun";
+import { isCheckDatabase } from "../../db/check-database.ts";
 import { scopeToGuild } from "../../db/guild-scope.ts";
 import type { Migration } from "../../db/migrations.ts";
 import { AgentError } from "../../domain/errors.ts";
@@ -128,7 +129,8 @@ export class SkillStore {
 	/** The store over the host's migrated pool; the skills agents carry are those of one guild. */
 	static async attach(sql: SQL, guildId: string): Promise<SkillStore> {
 		const store = new SkillStore(sql, guildId);
-		await store.#reload();
+		// `Roundtable.check()` has no database to read the rows from: the store starts empty.
+		if (!isCheckDatabase(sql)) await store.#reload();
 		return store;
 	}
 
