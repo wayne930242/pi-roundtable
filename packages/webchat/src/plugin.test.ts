@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import type { SQL } from "bun";
 import type { PluginContext, Service } from "pi-roundtable";
 import { partial, silentLogger } from "pi-roundtable/testing";
@@ -116,4 +116,32 @@ test("a client-call rate that reaches the frame rate stops the configuration, si
 		}),
 	).not.toThrow();
 	expect(() => webChat(base)).not.toThrow();
+});
+
+describe("the formatting guidance of the web chat surface", () => {
+	const surfaceOf = async (formatting?: string | false) => {
+		const contribution = await webChat({
+			...base,
+			...(formatting === undefined ? {} : { formatting }),
+		}).setup(contextOver(memoryAttachments()));
+		return contribution.surfaces?.[0]?.formatting;
+	};
+
+	test("tells the model that full Markdown, tables included, renders", async () => {
+		const told = await surfaceOf();
+		expect(told).toContain("full Markdown");
+		expect(told).toContain("tables");
+		expect(told?.length).toBeLessThan(400);
+	});
+
+	test("is replaced by a text, and removed by false", async () => {
+		expect(await surfaceOf("No tables, please.")).toBe("No tables, please.");
+		expect(await surfaceOf(false)).toBeUndefined();
+	});
+
+	test("refuses a text with nothing in it when the plugin is made", () => {
+		expect(() => webChat({ ...base, formatting: " " })).toThrow(
+			"webChat: formatting is empty",
+		);
+	});
 });

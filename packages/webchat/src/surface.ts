@@ -20,7 +20,16 @@ export interface WebSurfaceOptions {
 	/** Sends a frame to every connection of a person. */
 	send(principal: string, frame: ServerFrame): void;
 	prompts: PromptDesk;
+	/** What the model is told about how replies render; `false` tells it nothing. Default: full Markdown. */
+	formatting?: string | false;
 }
+
+/**
+ * What the model is told about the web chat's rendering, as the surface's `formatting`. English:
+ * it is model-facing text, not a message-catalog string.
+ */
+const WEB_FORMATTING =
+	"Reply formatting (web chat): full Markdown renders, including tables, headings, lists, quotes, links, inline code and fenced code blocks.";
 
 /**
  * The web conversations as a chat surface: what the host shows in a conversation goes to every
@@ -30,11 +39,16 @@ export interface WebSurfaceOptions {
 export class WebSurface implements ChatSurface {
 	readonly surface: string;
 	readonly supportsFiles = true;
+	readonly formatting: string | undefined;
 	readonly #options: WebSurfaceOptions;
 	#deliver: ((message: InboundMessage) => void) | undefined;
 
 	constructor(options: WebSurfaceOptions) {
 		this.surface = options.surface;
+		this.formatting =
+			options.formatting === false
+				? undefined
+				: (options.formatting ?? WEB_FORMATTING);
 		this.#options = options;
 	}
 

@@ -60,6 +60,13 @@ export interface WebChatOptions {
 	path?: string;
 	/** The key prefix of the conversations; default `web`. Two web chats on one host need two. */
 	surface?: string;
+	/**
+	 * What the model is told, English, about how a reply shows in this chat, appended to the system
+	 * prompt of every turn that replies here, after the persona. The default says full Markdown
+	 * renders, tables included. A text replaces it, for a client that renders less; `false` tells
+	 * the model nothing.
+	 */
+	formatting?: string | false;
 	limits?: Partial<Omit<WebChatLimits & WebChatRouteLimits, "clientCalls">> & {
 		clientCalls?: Partial<ClientCallLimits>;
 	};
@@ -116,6 +123,13 @@ function checkOptions(options: WebChatOptions): {
 	if (options.origins !== "any" && options.origins.length === 0)
 		throw new Error(
 			'webChat: origins is empty; list the origins your web pages are served from, or write "any" for clients that are not browsers',
+		);
+	if (
+		typeof options.formatting === "string" &&
+		options.formatting.trim() === ""
+	)
+		throw new Error(
+			"webChat: formatting is empty; write the guidance, or false to give the model none",
 		);
 	return { path, surface };
 }
@@ -248,6 +262,9 @@ export function webChat(options: WebChatOptions): RoundtablePlugin {
 				);
 			const chat = new WebChat({
 				surface,
+				...(options.formatting === undefined
+					? {}
+					: { formatting: options.formatting }),
 				verifier: options.verifier,
 				identity: () => context.services.get(IDENTITY),
 				personas: options.personas,

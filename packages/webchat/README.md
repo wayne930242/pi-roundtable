@@ -78,6 +78,7 @@ Every mistake in these options throws when the configuration loads, so `roundtab
 | `listener` | The configured listener the route attaches to; default `public`, the one `http` names. |
 | `path` | Where the API and the socket live; default `/chat`. |
 | `surface` | The key prefix of the conversations; default `web`. Two web chats on one host need two prefixes, and two paths. |
+| `formatting` | What the model is told about how a reply shows, appended to the system prompt of every turn that replies here, after the persona. The default says full Markdown renders, tables included; a text replaces it, for a client that renders less, and `false` tells the model nothing. |
 | `limits` | Overrides of the limits below. |
 
 ### Personas

@@ -97,6 +97,8 @@ export interface WebChatDeps {
 	attachments(): AttachmentPort;
 	turns(): ConversationTurns;
 	runtime(): AgentRuntime;
+	/** What the model is told about how replies render; see `WebChatOptions.formatting`. */
+	formatting?: string | false;
 	/** The clock, in milliseconds; default `Date.now`. */
 	now?(): number;
 }
@@ -250,6 +252,7 @@ export class WebChat {
 			principalOf: (conversation) => this.#owners.get(conversation),
 			send,
 			prompts: this.desk,
+			...(deps.formatting === undefined ? {} : { formatting: deps.formatting }),
 		});
 	}
 

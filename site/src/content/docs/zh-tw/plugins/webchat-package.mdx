@@ -79,6 +79,9 @@ token 從不出現在 URL 裡。
 REST API 可以列出一個人的對話、開新對話、讀取對話訊息。
 每種 frame、錯誤碼、關閉碼和上限，見[套件 README](https://github.com/wayne930242/pi-roundtable/blob/master/packages/webchat/README.md)（英文）。
 
+網頁聊天會告訴模型完整 Markdown 都能顯示，包括表格：每一輪在這裡回覆的對話，系統提示詞都會在人設之後附上一小段格式指引（英文）。
+用戶端顯示能力較弱時，可設定 `formatting: "…"` 取代這段文字，或設定 `formatting: false` 什麼都不告訴模型。
+
 ## 安全模型
 
 - **私人對話。** 對話屬於開啟它的人。host 的對話登錄在第一輪記下這個人，claim 在每一輪之前檢查：在網頁聊天裡只有這個人能列出、讀取、發言、停止或回答它。擁有者仍可以透過[擁有者主控台](/zh-tw/plugins/web-package/)讀取，營運者也能從資料庫和資料目錄讀到。

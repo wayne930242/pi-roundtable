@@ -79,6 +79,9 @@ The client sends `send`, `stop`, `approval`, `answer`, and `auth`; the server an
 A REST API lists a person's conversations, opens one, and reads its messages.
 The [package README](https://github.com/wayne930242/pi-roundtable/blob/master/packages/webchat/README.md) documents every frame, error code, close code, and limit.
 
+The web chat tells the model that full Markdown renders, tables included: a short guidance text is appended to the system prompt of every turn that replies in it, after the persona.
+Set `formatting: "…"` to replace the text for a client that renders less, or `formatting: false` to tell the model nothing.
+
 ## Security model
 
 - **Private conversations.** A conversation belongs to the person who opened it. The host's conversation registry records that person at the first turn, and the claim checks it before every turn: only that person may list, read, write in, stop, or answer it in the web chat. The owner can still read it through the [owner console](/plugins/web-package/), and the operator through the database and the data directory.
