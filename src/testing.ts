@@ -1,7 +1,6 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { SQL } from "bun";
 import { agentClaim } from "./core/agents/agent-claim.ts";
 import { ownerAttachmentDir } from "./core/attachments/attachment-dir.ts";
@@ -60,11 +59,6 @@ import {
 } from "./core/registry/contributions.ts";
 import { resolveProviders } from "./core/registry/providers.ts";
 import { ServiceRegistry } from "./core/registry/services.ts";
-import {
-	attachReplyFile,
-	hasReplyFileScope,
-	withReplyFiles,
-} from "./core/reply-files.ts";
 import { ChannelQueue } from "./core/routing/channel-queue.ts";
 import { ChannelRouter } from "./core/routing/channel-router.ts";
 import {
@@ -83,6 +77,10 @@ import {
 import type { ChannelKey, SessionContext } from "./core/sessions.ts";
 import { type Speaker, THE_SPEAKER } from "./core/speakers.ts";
 import { mapIdentity } from "./core/testing/map-identity.ts";
+import {
+	callRegisteredTool,
+	registeredTools,
+} from "./core/testing/run-tool.ts";
 import { type ToolTierTable, toolTiers } from "./core/tool-tiers.ts";
 
 // Fixtures for plugin tests.
@@ -92,6 +90,7 @@ export type { TestStore } from "./core/testing/database.ts";
 export {
 	describeDb,
 	openTestStore,
+	requireDatabase,
 	TEST_GUILD,
 	testDatabaseUrl,
 } from "./core/testing/database.ts";
@@ -100,6 +99,8 @@ export type { TestLocale } from "./core/testing/locale.ts";
 export { useTestLocale } from "./core/testing/locale.ts";
 export { OWNER_SPEAKER } from "./core/testing/owner.ts";
 export { partial } from "./core/testing/partial.ts";
+export type { UsePostgresOptions } from "./core/testing/postgres.ts";
+export { usePostgresForTests } from "./core/testing/postgres.ts";
 export type {
 	FakePrecheck,
 	FakePrecheckAnswer,
@@ -627,21 +628,6 @@ export async function testPlugin(
 		async runTool(name, args, runOptions) {
 			const tool = registry.tools.find((item) => item.name === name);
 			if (!tool) throw new PluginError(`tool ${name} is not registered`);
-			const registered: {
-				execute(
-					id: string,
-					params: Record<string, unknown>,
-					signal?: AbortSignal,
-				): Promise<{
-					content: readonly {
-						type: string;
-						text?: string;
-						data?: string;
-						mimeType?: string;
-					}[];
-					isError?: boolean;
-				}>;
-			}[] = [];
 			const channel = runOptions?.channel ?? "test:1";
 			const session = {
 				kind: "agent",
@@ -660,44 +646,18 @@ export async function testPlugin(
 					throw new Error("test session cannot run tasks");
 				},
 			} satisfies SessionContext;
-			const factory = tool.session.snapshot().factory(session);
-			// SAFETY: defineTool's session factory only calls registerTool; the fake captures its definition.
-			factory?.({
-				registerTool: (definition: (typeof registered)[number]) => {
-					registered.push(definition);
-				},
-			} as unknown as ExtensionAPI);
-			const execute = registered[0]?.execute;
-			if (!execute)
-				throw new PluginError(`tool ${name} did not register in the session`);
-			const result = await withReplyFiles(
-				surfaces.of(channel)?.supportsFiles === true,
-				async () => {
-					const output = await execute("test-call", args);
-					for (const item of output.content)
-						if (item.type === "image" && item.data && item.mimeType)
-							images.push({
-								channel,
-								image: {
-									mimeType: item.mimeType,
-									data: new Uint8Array(Buffer.from(item.data, "base64")),
-								},
-							});
-					return {
-						ok: true,
-						text: output.content
-							.filter((item) => item.type === "text")
-							.map((item) => item.text ?? "")
-							.join("\n"),
-					};
-				},
+			const [registered] = await registeredTools(
+				tool.session.snapshot().factory(session),
 			);
-			if (!result.ok) throw result.error;
-			for (const file of result.files ?? []) {
-				files.push({ channel, file });
-				// When runTool is used by a fake runtime, forward into the enclosing real turn.
-				if (hasReplyFileScope()) attachReplyFile(file);
-			}
+			if (!registered)
+				throw new PluginError(`tool ${name} did not register in the session`);
+			const result = await callRegisteredTool(
+				registered,
+				args,
+				surfaces.of(channel)?.supportsFiles === true,
+			);
+			for (const image of result.images) images.push({ channel, image });
+			for (const file of result.files) files.push({ channel, file });
 			return result.text;
 		},
 		async stop() {

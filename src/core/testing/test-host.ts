@@ -2,10 +2,10 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-	type ExtensionAPI,
 	type ExtensionFactory,
 	SessionManager,
 } from "@earendil-works/pi-coding-agent";
+import { ownerAttachmentDir } from "../attachments/attachment-dir.ts";
 import { DISCORD, type DiscordServices } from "../builtin/discord.ts";
 import { type RoundtableConfig, resolveConfig } from "../config/config.ts";
 import type { ConversationPort } from "../contract/channels.ts";
@@ -21,6 +21,7 @@ import type {
 	InteractionContribution,
 } from "../discord/interaction-module.ts";
 import { commandGuard, ownerRootCommand } from "../discord/owner-command.ts";
+import type { HoldDescription } from "../holds.ts";
 import { Roundtable } from "../host.ts";
 import { silentLogger } from "../log.ts";
 import type { PluginContext, RoundtablePlugin } from "../plugin.ts";
@@ -28,9 +29,15 @@ import { CompactionTiers } from "../runtime/compaction-tiers.ts";
 import { privateCompaction } from "../runtime/extensions/private-memory.ts";
 import { sessionExtensions } from "../runtime/runtime-types.ts";
 import { IDENTITY } from "../services.ts";
-import type { AgentTurnScope, SessionContext } from "../sessions.ts";
-import { THE_SPEAKER } from "../speakers.ts";
+import type {
+	AgentTurnScope,
+	ChannelKey,
+	SessionContext,
+} from "../sessions.ts";
+import { type Speaker, THE_SPEAKER } from "../speakers.ts";
+import { toolTurn } from "../tool-turn.ts";
 import { testDatabaseUrl } from "./database.ts";
+import { callRegisteredTool, registeredTools, toolNamed } from "./run-tool.ts";
 
 export interface TestHostOptions {
 	/**
@@ -74,6 +81,25 @@ export interface TestHost {
 	): Promise<{ extension: string; tools: string[] }[]>;
 	/** A session context as the runtime builds it, with the real compaction wrapper. */
 	sessionContext(scope?: AgentTurnScope): SessionContext;
+	/**
+	 * Runs a contributed tool in the owner's session as `speaker` on `channel` (the owner's channel
+	 * by default), as `testPlugin`'s `runTool` does, and gives the text the model would read. A tool
+	 * that throws or reports an error throws here; a tool no plugin added throws a PluginError.
+	 */
+	runTool(
+		name: string,
+		args: Record<string, unknown>,
+		options?: { speaker?: Speaker; channel?: ChannelKey; origin?: string },
+	): Promise<string>;
+	/**
+	 * What the tool's hold would show for the call, asked as a turn of `speaker` on `channel` asks
+	 * it, or undefined when the call runs without an approval.
+	 */
+	hold(
+		name: string,
+		args: Record<string, unknown>,
+		options?: { speaker?: Speaker; channel?: ChannelKey },
+	): Promise<HoldDescription | undefined>;
 	/** Stops the host, services first-started last. */
 	stop(): Promise<void>;
 }
@@ -189,31 +215,6 @@ export function standInDiscord(
 	};
 }
 
-/** Anything an extension may call or read on the Pi API besides registering a tool: accepted, does nothing. */
-type Ignored = (...args: readonly never[]) => Ignored;
-
-function ignored(): Ignored {
-	return new Proxy((() => ignored()) as Ignored, {
-		get: (target, key) => (key === "then" ? undefined : target),
-	});
-}
-
-/** The tools a factory registers, by name; every other registration (handlers, commands, events) is accepted and ignored. */
-async function registeredBy(factory: ExtensionFactory): Promise<string[]> {
-	const names: string[] = [];
-	const registerTool = (tool: { name: string }) => names.push(tool.name);
-	// SAFETY: a session factory only registers tools, handlers and commands; the fake records the tool names and ignores the rest.
-	const api = new Proxy(
-		{},
-		{
-			get: (_target, key) =>
-				key === "registerTool" ? registerTool : ignored(),
-		},
-	) as unknown as ExtensionAPI;
-	await factory(api);
-	return names;
-}
-
 const noop: ExtensionFactory = () => undefined;
 /** The core's own extensions, which a session here does not load: only the plugins' registrations are listed. */
 const CORE_EXTENSIONS = {
@@ -296,6 +297,26 @@ export async function testHost(
 	const ownerChannel = withDiscord
 		? await (given?.ownerChannel ?? (async () => "discord:owner-dm" as const))()
 		: ("test:owner" as const);
+	let tools: string | undefined;
+	/** The directory the tool runs of this host keep their attachments in; made on the first run. */
+	const attachmentDir = () =>
+		(tools ??= mkdtempSync(join(tmpdir(), "roundtable-test-host-tools-")));
+	/** The owner's session as a tool call of `call` finds it: that speaker on that channel. */
+	const toolSession = (call?: {
+		speaker?: Speaker;
+		channel?: ChannelKey;
+		origin?: string;
+	}): SessionContext => {
+		const channel = call?.channel ?? ownerChannel;
+		return {
+			...sessionContext(),
+			homeChannel: channel,
+			turnChannel: channel,
+			attachmentDir: ownerAttachmentDir(attachmentDir(), channel),
+			speaker: () => call?.speaker,
+			origin: () => call?.origin,
+		};
+	};
 	/** A group seat's turns run in the group's channel; an agent's in its own. */
 	const turnChannelOf = (scope?: AgentTurnScope) =>
 		scope?.group ? scope.session : scope?.home;
@@ -351,11 +372,34 @@ export async function testHost(
 			))
 				tools.push({
 					extension: extension.name,
-					tools: await registeredBy(extension.factory),
+					tools: (await registeredTools(extension.factory)).map(
+						(tool) => tool.name,
+					),
 				});
 			return tools;
 		},
 		sessionContext,
+		runTool: async (name, args, call) => {
+			const channel = call?.channel ?? ownerChannel;
+			const session = toolSession(call);
+			const tools = [];
+			for (const extension of sessionExtensions(
+				context.sessions().plan,
+				session,
+				CORE_EXTENSIONS,
+			))
+				tools.push(...(await registeredTools(extension.factory)));
+			const result = await callRegisteredTool(
+				toolNamed(tools, name),
+				args,
+				context.surfaces.of(channel)?.supportsFiles === true,
+			);
+			return result.text;
+		},
+		hold: async (name, args, call) =>
+			context
+				.sessions()
+				.holds.inTurn?.(name, args, {}, toolTurn(toolSession(call), undefined)),
 		stop: async () => {
 			await roundtable.shutdown("test");
 		},
