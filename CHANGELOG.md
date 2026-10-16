@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- The runtime's startup probe of the model and the required tools runs after every plugin's `preflight`, not in the runtime plugin's own preflight, which ran first. Since 0.17.0 a plugin that resolves its MCP servers does so in its preflight, so the probe no longer saw the tools they yield, and a required tool that was missing failed only the first session instead of the start. The host now runs the `RUNTIME` service's `preflight` once every plugin's preflight has finished, still before any service starts or any listener opens; a failure stops the start, and the same host may try again. A custom runtime provider's `preflight` moves to the same place. The runtime plugin's claude-bridge memory warning stays in its own preflight. `Roundtable.check()` still runs no preflight.
+
 ## [0.17.1] - 2026-10-16
 
 ### Changed

@@ -11,6 +11,7 @@ import type { Locale } from "./i18n/index.ts";
 import type { JudgeModel } from "./judging/model-judge.ts";
 import type { Logger } from "./log.ts";
 import type { RoundtablePlugin, Service } from "./plugin.ts";
+import { RUNTIME } from "./services.ts";
 import type { ChannelKey } from "./sessions.ts";
 import type { ToolTierTable } from "./tool-tiers.ts";
 
@@ -149,6 +150,8 @@ export class Roundtable {
 			return this.#pool;
 		});
 		for (const plugin of link.active) await plugin.preflight?.();
+		// Last, so the probe sees the tools other plugins fill in during their preflight.
+		await link.services?.find(RUNTIME)?.preflight?.();
 		for (const service of [...link.registry.services, ...retention]) {
 			await service.start?.();
 			this.#started.push(service);

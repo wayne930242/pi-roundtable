@@ -238,7 +238,7 @@ describe("the runtime plugin", () => {
 		expect(() => slot.bind(sessions)).toThrow("bound once");
 	});
 
-	test("its preflight and its runtime service run the runtime's preflight and dispose", async () => {
+	test("its preflight leaves the runtime's preflight to the host, and its runtime service disposes it", async () => {
 		const calls: string[] = [];
 		const runtime: AgentRuntime = {
 			...quiet,
@@ -255,7 +255,7 @@ describe("the runtime plugin", () => {
 		await plugin.preflight?.();
 		const service = registry.services.find((s) => s.name === "runtime");
 		await service?.stop?.();
-		expect(calls).toEqual(["preflight", "dispose"]);
+		expect(calls).toEqual(["dispose"]);
 	});
 
 	test("a runtime without preflight or dispose is left alone by them", async () => {

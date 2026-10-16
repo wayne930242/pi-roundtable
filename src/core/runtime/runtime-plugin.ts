@@ -97,7 +97,6 @@ export function runtimePlugin(
 	) => Promise<HeldActionStore> = (context) =>
 		PendingConfirmationStore.attach(context.database()),
 ): RoundtablePlugin {
-	let runtime: AgentRuntime | undefined;
 	let identity: IdentityService | undefined;
 	let warn: ((message: string) => void) | undefined;
 	// Admission is a startup risk warning, not proof that this conversation holds private history.
@@ -119,7 +118,6 @@ export function runtimePlugin(
 						`${bridgeMemoryProblem(formatModelRef(options.model), why)} ${BRIDGE_MEMORY_FIX}`,
 					);
 			}
-			await runtime?.preflight?.();
 		},
 		setup: async (context) => {
 			const { logger, providers, services } = context;
@@ -194,7 +192,6 @@ export function runtimePlugin(
 							? { interimPrimaryChars: options.interimPrimaryChars }
 							: {}),
 					});
-			runtime = running;
 			context.services.provide(RUNTIME, running);
 			return {
 				services: [{ name: "runtime", stop: () => running.dispose?.() }],

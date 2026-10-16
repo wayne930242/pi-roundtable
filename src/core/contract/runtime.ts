@@ -72,7 +72,7 @@ export interface AgentRuntime {
 	): Promise<TranscriptEntry[]>;
 	/** Undefined when unknown; the team status shows no context bar for the conversation then. */
 	contextUsage?(conversation: ChannelKey): ContextUse | undefined;
-	/** Runs in the host's preflight, before anything starts; a throw stops the boot. */
+	/** Runs after every plugin's preflight, before anything starts; a throw stops the boot. */
 	preflight?(): Promise<void>;
 	/** Runs when the host stops the agent server's runtime service. */
 	dispose?(): Promise<void> | void;

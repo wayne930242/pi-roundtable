@@ -4,12 +4,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Type } from "typebox";
 import type { QueuePort } from "./contract/channels.ts";
+import type { AgentRuntime } from "./contract/runtime.ts";
 import { defineTool } from "./define.ts";
 import { PluginError } from "./errors.ts";
 import { Roundtable, type RoundtableOptions } from "./host.ts";
 import { assistantName } from "./i18n/index.ts";
 import { silentLogger } from "./log.ts";
 import type { HostEnv, RoundtablePlugin, Service } from "./plugin.ts";
+import { RUNTIME } from "./services.ts";
 import { useTestLocale } from "./testing/locale.ts";
 import { timeZone, zonedStamp } from "./time.ts";
 
@@ -224,6 +226,56 @@ describe("a failed start", () => {
 		await expect(roundtable.run()).rejects.toThrow("misconfigured");
 		expect(log).toEqual([]);
 		fails = false;
+		await roundtable.run();
+		expect(log).toEqual(["start gateway"]);
+	});
+
+	/**
+	 * A runtime whose probe requires `lookup` among the tools a later plugin fills in during its
+	 * preflight, as a host plugin resolving its MCP servers does, and that plugin with a service.
+	 */
+	function lateTools(resolve: () => string[], log: string[]) {
+		const tools: string[] = [];
+		const runtime = {
+			preflight: async () => {
+				if (!tools.includes("lookup"))
+					throw new Error("required tools are not registered: lookup");
+			},
+		} as unknown as AgentRuntime;
+		return [
+			{
+				name: "runtime",
+				provides: [RUNTIME],
+				setup: ({ services }) => {
+					services.provide(RUNTIME, runtime);
+					return {};
+				},
+			},
+			{
+				name: "late-tools",
+				preflight: () => {
+					tools.splice(0, tools.length, ...resolve());
+				},
+				setup: () => ({ services: [service("gateway", log)] }),
+			},
+		] satisfies RoundtablePlugin[];
+	}
+
+	test("the runtime's probe runs after every plugin's preflight and sees the tools one filled in", async () => {
+		const log: string[] = [];
+		await host(lateTools(() => ["lookup"], log)).run();
+		expect(log).toEqual(["start gateway"]);
+	});
+
+	test("a probe missing a tool starts nothing, and the retry once a preflight fills it starts everything", async () => {
+		const log: string[] = [];
+		let resolved: string[] = [];
+		const roundtable = host(lateTools(() => resolved, log));
+		await expect(roundtable.run()).rejects.toThrow(
+			"required tools are not registered: lookup",
+		);
+		expect(log).toEqual([]);
+		resolved = ["lookup"];
 		await roundtable.run();
 		expect(log).toEqual(["start gateway"]);
 	});

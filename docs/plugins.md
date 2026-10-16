@@ -1443,7 +1443,7 @@ An `AgentRuntime` has these methods:
 | `pendingConfirmation(conversation)`, `heldActions(conversation)` | The held actions known in memory, and those restored from the store after a restart: the agent server reads `heldActions` to show an approval card again after a restart. After a restart `pendingConfirmation` knows a conversation's held actions only once `heldActions` or `recentTranscript` has restored them, so a host that decides an approval asks one of them first. A `PendingConfirmation` carries the `selectionId` of the `TurnSelection` whose turn held the calls, an opaque string that the caller resolves again when the owner confirms; the core stores it and never reads it |
 | `recentTranscript(conversation, limit)` | The latest messages, for the owner's and the dashboard's views of a conversation; the built-in runtime gives none of a history recorded, or a session opened, for someone else than the conversation serves now |
 | `contextUsage?(conversation)` | How full the conversation's context is, `{ tokens, contextWindow }`; leave it out and the team status shows no context bar |
-| `preflight?()` | Runs in the host's preflight, before anything starts; a throw stops the boot |
+| `preflight?()` | Runs after every plugin's preflight, before anything starts; a throw stops the boot |
 | `dispose?()` | Runs when the host stops the runtime plugin's `runtime` service |
 
 A request has the turn's `channel`, `selection` (its tools), `text`, `attachments`, `speaker` (required: the person the turn is for, at whose tier it runs; the built-in runtime refuses a request without one with an `AgentRunError` before asking the model, and a plugin that starts a turn on someone's behalf gets theirs from `IDENTITY.speakerFor`), `conversation` (`TurnConversation`: `private` to a `principalId`, or `shared`, as `context.turns` records it; shared when absent), flags (`steerable`, `interactive`, `confirmed`: the speaker's message approved the conversation's held calls, which the runtime releases for the speaker, except those that [name approvers](#a-hold-that-names-its-approvers) the speaker is neither among nor an owner of, which stay held), and `interim`, where the turn may post the text it writes before its final answer ([interim text](#interim-text-what-a-turn-writes-before-its-final-answer)).
@@ -1698,6 +1698,10 @@ test("only one plugin may fill the runtime slot", async () => {
 `preflight` also sits on the plugin.
 It runs once every plugin is set up and linked, before any command is registered or any service starts.
 A throw stops the boot, so a missing setting is caught before Discord connects.
+Plugins' preflights run in plugin order.
+Once every one has finished, the host runs the runtime's own `preflight` (the `RUNTIME` service's), which for Pi's runtime builds throwaway sessions and checks the model and the required tools.
+So tools a plugin fills in during its preflight, such as MCP servers it resolves there, are in those sessions, and a required tool still missing stops the start before any service starts or any listener opens.
+`Roundtable.check()` runs no preflight.
 
 <!-- example: examples/preflight.ts -->
 ```ts

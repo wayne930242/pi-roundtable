@@ -3,6 +3,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
+import { Type } from "typebox";
 import { DISCORD } from "./builtin/discord.ts";
 import type { AgentRuntime } from "./contract/runtime.ts";
 import type { ChatSurface } from "./contract/surface.ts";
@@ -159,5 +160,65 @@ function recordingSurface(replies: string[]): RoundtablePlugin {
 		expect(host.seen.context?.services.get(RUNTIME)).toBeInstanceOf(
 			PiAgentRuntime,
 		);
+	});
+
+	/**
+	 * A plugin that, like one resolving its MCP servers, learns its tools in its preflight and
+	 * builds the session tool that registers them, and requires `lookup`; its service logs its start.
+	 */
+	function lateTools(resolve: () => string[], log: string[]): RoundtablePlugin {
+		let names: string[] = [];
+		return {
+			name: "late-tools",
+			preflight: () => {
+				names = resolve();
+			},
+			setup: () => ({
+				piPackages: ["pi-self-compact"],
+				requiredTools: ["lookup"],
+				sessionTools: [
+					{
+						name: "late-tools",
+						phase: "mcp",
+						snapshot: () => ({
+							revision: names.length,
+							factory: () => (pi) => {
+								for (const name of names)
+									pi.registerTool({
+										name,
+										label: name,
+										description: "A tool.",
+										parameters: Type.Object({}),
+										execute: async () => {
+											throw new Error("not scripted");
+										},
+									});
+							},
+						}),
+					},
+				],
+				services: [{ name: "late", start: () => void log.push("start late") }],
+			}),
+		};
+	}
+
+	test("the runtime's probe runs after every plugin's preflight, so it sees the tools one filled in", async () => {
+		const log: string[] = [];
+		const host = await piHost([lateTools(() => ["lookup"], log)]);
+		await host.roundtable.run();
+		expect(log).toEqual(["start late"]);
+	});
+
+	test("a required tool no preflight filled in stops the start, and the retry once it is filled starts everything", async () => {
+		const log: string[] = [];
+		let resolved: string[] = [];
+		const host = await piHost([lateTools(() => resolved, log)]);
+		await expect(host.roundtable.run()).rejects.toThrow(
+			"required tools are not registered: lookup",
+		);
+		expect(log).toEqual([]);
+		resolved = ["lookup"];
+		await host.roundtable.run();
+		expect(log).toEqual(["start late"]);
 	});
 });
