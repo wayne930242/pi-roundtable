@@ -68,7 +68,7 @@ export async function registeredTools(
 /**
  * Runs the call as a turn on a surface that takes files or not runs it: the text, the files it
  * attached and the images it returned. A file is also queued for the enclosing real turn when a
- * fake runtime runs the call inside one. A tool that throws, or reports an error, throws here.
+ * fake runtime runs the call inside one. A tool that throws throws here; a refusal (an `isError` result) comes back as its text.
  */
 export async function callRegisteredTool(
 	tool: RegisteredTool,

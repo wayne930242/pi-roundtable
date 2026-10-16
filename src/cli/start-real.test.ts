@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DISCORD, type DiscordServices } from "../core/builtin/discord.ts";
@@ -14,7 +14,8 @@ import { silentLogger } from "../core/log.ts";
 import type { RoundtablePlugin } from "../core/plugin.ts";
 import { describeDb, testDatabaseUrl } from "../core/testing/database.ts";
 import { checkPlugins } from "./checks/configuration.ts";
-import { Project } from "./project.ts";
+import { loadConfigFile, Project } from "./project.ts";
+import { assemble } from "./runtime.ts";
 import { start } from "./start.ts";
 import { fakeHttp, fakePorts } from "./testing/fixtures.ts";
 
@@ -163,5 +164,108 @@ describeDb("roundtable start over the real assembly", () => {
 		expect(
 			report.outcomes.find(({ name }) => name === "plugins")?.result.status,
 		).toBe("ok");
+	});
+
+	/**
+	 * A project whose configuration file makes an operator plugin with a factory that keeps a
+	 * one-shot value, as the core's agent sessions slot does: the plugin binds it in setup and
+	 * refuses a second setup.
+	 */
+	function project(): string {
+		const dir = mkdtempSync(join(tmpdir(), "roundtable-start-project-"));
+		dirs.push(dir);
+		writeFileSync(
+			join(dir, "roundtable.config.ts"),
+			`function oneShot() {
+	let bound = false;
+	return {
+		name: "one-shot",
+		setup: () => {
+			if (bound) throw new Error("the one-shot slot is bound once");
+			bound = true;
+			return { services: [{ name: "one-shot" }] };
+		},
+	};
+}
+const quietRuntime = {
+	name: "quiet-runtime",
+	providers: {
+		runtime: () => ({
+			runTurn: async () => ({ ok: true, text: "" }),
+			steer: async () => false,
+			stop: () => false,
+			startFresh: async () => undefined,
+			deleteConversation: async () => undefined,
+			pendingConfirmation: () => undefined,
+			heldActions: async () => undefined,
+			recentTranscript: async () => [],
+		}),
+	},
+	setup: () => ({}),
+};
+export default {
+	owner: { id: "100000000000000001", name: "Ada" },
+	database: { url: ${JSON.stringify(testDatabaseUrl)} },
+	dataDir: ${JSON.stringify(join(dir, "data"))},
+	agentDir: ${JSON.stringify(join(dir, "agent"))},
+	model: "anthropic/claude-sonnet-5-5",
+	plugins: [quietRuntime, oneShot()],
+};
+`,
+		);
+		return dir;
+	}
+
+	const real = (loadConfig: typeof loadConfigFile) => ({
+		loadConfig,
+		define: assemble,
+		login: async () => "ANTHROPIC_API_KEY",
+	});
+
+	const launching =
+		(launched: string[]) => async (defined: DefinedRoundtable) => {
+			const host = new Roundtable(defined.options, defined.plugins);
+			hosts.push(host);
+			await host.run();
+			launched.push("run");
+		};
+
+	test("the plugins the configuration file makes with a factory are new for the check, so start runs plugins that were never set up", async () => {
+		const cwd = project();
+		const launched: string[] = [];
+		const report = await start({
+			cwd,
+			env: {},
+			bun,
+			ports: real(loadConfigFile),
+			database: { check: async () => undefined, read: async () => [] } as never,
+			http: fakeHttp({}),
+			launch: launching(launched),
+		});
+		expect(
+			report.outcomes.find(({ name }) => name === "plugins")?.result,
+		).toMatchObject({ status: "ok" });
+		expect(launched).toEqual(["run"]);
+	});
+
+	test("a check over the very plugin objects start launches would have set them up twice", async () => {
+		const cwd = project();
+		const launched: string[] = [];
+		await expect(
+			start({
+				cwd,
+				env: {},
+				bun,
+				// A port that ignores `fresh`: the plugin objects of the check are the launched ones.
+				ports: real((dir) => loadConfigFile(dir)),
+				database: {
+					check: async () => undefined,
+					read: async () => [],
+				} as never,
+				http: fakeHttp({}),
+				launch: launching(launched),
+			}),
+		).rejects.toThrow("the one-shot slot is bound once");
+		expect(launched).toEqual([]);
 	});
 });

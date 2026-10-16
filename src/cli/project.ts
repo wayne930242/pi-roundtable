@@ -8,6 +8,7 @@ import {
 	resolveConfig,
 } from "../core/config/config.ts";
 import type { DefinedRoundtable } from "../core/define-roundtable.ts";
+import { type Logger, silentLogger } from "../core/log.ts";
 import { fail, type Result } from "./report.ts";
 
 export const CONFIG_FILE = "roundtable.config.ts";
@@ -15,29 +16,49 @@ export const CONFIG_FILE = "roundtable.config.ts";
 /** What the command line reaches outside itself, so each check can be run against a fake. */
 export interface Ports {
 	/** The value `roundtable.config.ts` exports by default. */
-	loadConfig(cwd: string): Promise<unknown>;
+	loadConfig(cwd: string, options?: { fresh?: boolean }): Promise<unknown>;
 	/** The bot's options and plugin list, assembled from a valid configuration. */
 	define(
 		config: RoundtableConfig,
 		agentDir: string,
+		overrides?: { logger?: Logger },
 	): Promise<DefinedRoundtable>;
 	/** Where the login for `provider` in `agentDir` comes from, or undefined when there is none. */
 	login(agentDir: string, provider: string): Promise<string | undefined>;
 }
 
-/** Loads the project's configuration file with Bun, which reads `.env` on its own. */
-export async function loadConfigFile(cwd: string): Promise<unknown> {
+/**
+ * Loads the project's configuration file with Bun, which reads `.env` on its own. With `fresh`
+ * the file is evaluated again, so the plugins its default export makes are new objects.
+ */
+export async function loadConfigFile(
+	cwd: string,
+	options: { fresh?: boolean } = {},
+): Promise<unknown> {
 	const path = join(cwd, CONFIG_FILE);
 	if (!existsSync(path))
 		throw new Error(
 			`${CONFIG_FILE} is not in ${cwd}. Run this in the project directory, or create a project with \`roundtable init\`.`,
 		);
-	return loadDefault(path);
+	return loadDefault(path, options);
 }
 
-/** The value a configuration file exports by default, imported with Bun. */
-export async function loadDefault(path: string): Promise<unknown> {
-	const module = (await import(pathToFileURL(path).href)) as {
+let evaluations = 0;
+
+/**
+ * The value a configuration file exports by default, imported with Bun. With `fresh` the file is
+ * imported under a path of its own (Bun evaluates a plain path with a new query again, and not a
+ * `file:` URL with one), so what the file makes at its top level is made again; the modules it
+ * imports stay as they were, shared with the first evaluation.
+ */
+export async function loadDefault(
+	path: string,
+	{ fresh = false }: { fresh?: boolean } = {},
+): Promise<unknown> {
+	const specifier = fresh
+		? `${path}?fresh=${++evaluations}`
+		: pathToFileURL(path).href;
+	const module = (await import(specifier)) as {
 		default?: unknown;
 	};
 	if (module.default === undefined)
@@ -134,18 +155,23 @@ export class Project {
 	}
 
 	/**
-	 * The configuration assembled again, as a new definition with its own plugin objects. A host's
-	 * plugins keep what their setup makes (the agent server binds its sessions once), so the
-	 * definition `start` runs is never the one a check set up.
+	 * The configuration assembled again, for a check that runs every plugin's setup: the
+	 * configuration file is evaluated again, so the plugins its default export makes with a factory
+	 * are new objects, and the built-in plugins are made again. A plugin object that a module the
+	 * file imports exports is the same object, and so is state kept at module level, so a plugin's
+	 * `setup` must keep nothing one-shot outside its call. The plugins' own log lines go nowhere:
+	 * the definition `start` runs speaks for the host.
 	 */
 	async reassemble(): Promise<DefinedRoundtable> {
-		const raw = await this.raw();
 		const assembled = await this.assembled();
-		if (!raw.ok || !assembled.ok)
-			throw new Error("the configuration is not valid yet");
+		if (!assembled.ok) throw new Error("the configuration is not valid yet");
+		const value = lifted(
+			await this.#ports.loadConfig(this.#cwd, { fresh: true }),
+		);
 		return this.#ports.define(
-			raw.value as RoundtableConfig,
+			value as RoundtableConfig,
 			assembled.value.config.agentDir,
+			{ logger: silentLogger() },
 		);
 	}
 

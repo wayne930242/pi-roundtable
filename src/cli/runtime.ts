@@ -4,6 +4,7 @@ import type { Credential, CredentialStore } from "@earendil-works/pi-ai";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import type { DefinedRoundtable } from "../core/define-roundtable.ts";
 import { defineRoundtable } from "../core/define-roundtable.ts";
+import type { Logger } from "../core/log.ts";
 
 /** A credential store that holds nothing and refuses writes, so looking never creates `auth.json`. */
 const emptyCredentials: CredentialStore = {
@@ -46,8 +47,10 @@ export async function providerLogin(
 export async function assemble(
 	config: Parameters<typeof defineRoundtable>[0],
 	agentDir: string,
+	overrides: { logger?: Logger } = {},
 ): Promise<DefinedRoundtable> {
 	return defineRoundtable(config, {
 		modelRuntime: await openModelRuntime(agentDir),
+		...(overrides.logger ? { logger: overrides.logger } : {}),
 	});
 }

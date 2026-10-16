@@ -163,6 +163,35 @@ describe("plugins", () => {
 		const result = await checkPlugins(withPlugins(["database", "hello"]));
 		expect(result).toEqual({ status: "ok", detail: "yours: hello" });
 	});
+	test("checks a definition assembled again, with a logger of its own so a deprecation warns once", async () => {
+		const calls: { fresh: boolean | undefined; logger: unknown }[] = [];
+		const loaded: (boolean | undefined)[] = [];
+		const project = new Project(
+			"/x",
+			fakePorts(
+				{ ...validConfig, plugins: [plugin("hello")] },
+				{
+					loadConfig: async (_cwd, options) => {
+						loaded.push(options?.fresh);
+						return { ...validConfig, plugins: [plugin("hello")] };
+					},
+					define: async (_config, _agentDir, overrides) => {
+						calls.push({ fresh: loaded.at(-1), logger: overrides?.logger });
+						return {
+							options: { logger: {} as never },
+							plugins: [plugin("database"), plugin("hello")],
+						};
+					},
+				},
+			),
+		);
+		expect((await checkPlugins(project)).status).toBe("ok");
+		// The first definition is the one start runs and speaks for the host; the check's is a second one.
+		expect(loaded).toEqual([undefined, true]);
+		expect(calls[0]?.logger).toBeUndefined();
+		expect(calls[1]?.fresh).toBe(true);
+		expect(calls[1]?.logger).toBeDefined();
+	});
 	test("fails on a repeated name and says to rename", async () => {
 		const text = failure(
 			await checkPlugins(withPlugins(["database", "hello", "hello"])),
