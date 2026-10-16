@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-10-16
+
 ### Added
 
 - `LINE.screen(handler)` and the types `LineScreen` and `LineScreenVerdict`: one screen of the webhook, asked for every event of a request whose signature and destination passed, in order and before anything is stored, that answers `"keep"` or `"consume"`. A consumed event is never stored, routed or handed to the subscriber, and a request whose events are all consumed is a `200` that counts as accepted. A screen that throws or answers anything else fails the request with `500` and stores nothing. The screen is handed a deeply frozen copy of the event, so it cannot change what is stored. A second `screen()` while one is attached throws; until one is attached every event is kept.

@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-10-16
+
+### Changed
+
+- Release in lockstep with pi-roundtable-line 0.16.0, which adds a webhook screen, LINE's API through the plugin and `senderNameProblem`; the core has no behavior change. Every package's core peer range moves to `>=0.16.0 <0.17.0`.
+
 ## [0.15.4] - 2026-10-15
 
 ### Changed
