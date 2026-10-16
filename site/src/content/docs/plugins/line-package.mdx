@@ -71,6 +71,31 @@ A `message` is answered with the opaque references of what the consumer made for
 - **Outcomes.** `2xx` and `409` are sent; `429`, `5xx` and no answer back off and retry; any other `4xx` is dead with a code that names a refused sender name or icon. Your consumer hears each result as an `outboxResult`.
 - **Quota.** Before a push, the package reads LINE's quota and consumption (cached for a minute), counts the recipients (one, or a group's member count) and its own reservations, and refuses the push if it would pass the lower of the plan's quota and `quota.monthlyCap`.
 
+## Screening events
+
+`LINE.screen(handler)` attaches the one screen of the webhook, so a host can take an event out before the plugin stores it: a code a person sends to link their account, say, which must reach no inbox, mirror or log.
+It returns the function that detaches it, and a second `screen()` while one is attached throws.
+Attach it during setup; until one is attached every event is kept.
+
+```ts
+import { LINE, type LineScreen } from "pi-roundtable-line";
+
+const screen: LineScreen = async (event) =>
+  isLinkCode(event.raw) ? "consume" : "keep";
+// in a plugin's setup: context.services.lazy(LINE)().screen(screen)
+```
+
+The screen is asked once the signature and the `destination` have passed, for every event of the request in order, one at a time, and answers `"keep"` or `"consume"`.
+A consumed event is never stored, routed or handed to the consumer, and a request whose events are all consumed is a `200` like Verify.
+A screen that throws or answers anything else fails the whole request with `500` and stores nothing; LINE redelivers where it can.
+It sees the event as LINE sent it, so it must not log or keep what it does not consume.
+
+## Calling LINE through the plugin
+
+`LINE.api` calls LINE with the plugin's own token source, timeout and `401` retry, so a host that needs a profile or a reply does not open a second token source: `profile`, `memberCount`, `quota`, `botInfo`, `reply` (1 to 5 messages on a reply token, outside the push quota), `probeToken` and `onTokenFailure`, which tells a listener the code of each failed issue of the access token.
+Failures throw `LineApiError` or `LineError` with a short code, never a response body.
+`senderNameProblem(name)` answers why LINE would refuse a sender name, or `undefined`.
+
 ## The join notice
 
 With `joinNotice: { text, sha256 }` the package answers a `join` with one Reply, on the event's reply token, only when the SHA-256 of the text equals the digest you configured, in any chat the bot joins.

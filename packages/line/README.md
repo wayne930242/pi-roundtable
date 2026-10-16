@@ -66,13 +66,13 @@ Errors carry a short code (`token_refused`, `api_unreachable`, `http_429`, ...) 
 
 | Status | When |
 |---|---|
-| `200` | the events were stored (or there were none: LINE's Verify button) |
+| `200` | the events were stored (or there were none: LINE's Verify button, or a screen consumed them all) |
 | `400` | the body is signed but is not a LINE events object |
 | `401` | `x-line-signature` is missing or is not the HMAC-SHA256 of the raw body under the channel secret |
 | `403` | the body's `destination` is not this bot (checked once the bot's user id is known) |
 | `405` | not a `POST` |
 | `413` | the body is over 1 MiB |
-| `500` | the database could not store the events |
+| `500` | the database could not store the events, or the attached [screen](#screening-events) failed |
 
 The signature is checked on the raw bytes, in constant time, before the body is parsed.
 All events of a request are stored in one transaction, and `200` follows the commit.
@@ -100,10 +100,55 @@ webhooks: {
 ```
 
 They are counts and times only: no body, address or signature is kept, and a request adds one to a counter and nothing else.
-A `405` and a `500` (the database could not store the events) are in no counter.
+A `405` and a `500` (the database could not store the events, or a screen failed) are in no counter.
 A host that watches for a channel whose webhook URL or secret has drifted can alarm on `rejected.signatureForBot` growing while `accepted` does not: a scanner that finds the URL does not know the bot's user id, so a request that fails its signature yet names this bot as its `destination` is far more likely LINE with a wrong channel secret (or a rotated one) than noise.
 To tell, the handler reads the `destination` of a body that failed its signature, only within the 1 MiB limit, and never logs or keeps it; `signatureForBot` also counts in `signature`.
 Until the plugin knows the bot's user id it cannot tell, and `signatureForBot` stays at zero.
+
+## Screening events
+
+A host can look at every event before the plugin stores it, and take some out: a code a person sends to link their account, say, which must reach no inbox, mirror or log.
+`LINE.screen(handler)` attaches the one screen of the webhook and returns the function that detaches it; a second `screen()` while one is attached throws.
+Attach it during setup: the listeners open only after every plugin is set up, so no request arrives before it.
+Until one is attached, and after it is detached, every event is kept.
+
+```ts
+import { LINE, type LineScreen } from "pi-roundtable-line";
+
+const screen: LineScreen = async (event) =>
+	isLinkCode(event.raw) ? "consume" : "keep";
+// in a plugin's setup: context.services.lazy(LINE)().screen(screen)
+```
+
+The screen is asked after the signature and the `destination` passed, and before anything is stored, for every event of the request in order, one at a time (the events of a request that failed before that, a Verify with no events, and a `405` never reach it).
+Every kind of event is asked about, standby and chat-less ones included; the handler filters.
+It gets the `ParsedEvent` with LINE's event as `raw`, and answers `"keep"` or `"consume"`.
+A consumed event is not stored, not routed, not handed to the subscriber and does not record its chat as pending.
+A request whose events are all consumed is a `200` and counts as accepted, like Verify.
+
+A screen that throws, or answers anything else, fails the whole request with `500` and stores nothing, not even the events it had kept; LINE redelivers where it can.
+The log line holds a code, never the event.
+The screen sees what the plugin does not keep for chats that are not connected, so it must not log or keep what it does not consume.
+
+## Calling LINE through the plugin
+
+`LINE.api` calls LINE with the plugin's own token source, timeout and `401` retry, so a host that needs a profile or a reply does not open a second token source.
+Failures throw `LineApiError` (the `status` and an `http_<status>` code) or `LineError` with a short code; no message holds a response body.
+Every call takes `{ signal, timeoutMs }`, where `timeoutMs` replaces the 15-second default.
+
+| Call | Does |
+|---|---|
+| `profile(sourceKey, userId)` | the display name and picture of a group or room member, or of the user of a one-to-one chat; `undefined` when LINE answers `404` (not in the chat), and for someone else in a one-to-one chat without a request |
+| `memberCount(sourceKey)` | how many people a push to the chat reaches (1 for a one-to-one chat), from the quota gate's one-minute reading |
+| `quota()` | `{ limit, used, cap }`: the plan's monthly limit, consumption (at most a minute old; 0 when there is neither a limit nor a `quota.monthlyCap`, which are then not read) and the host's cap |
+| `botInfo()` | the bot's `userId`, `basicId` and, when LINE says, `displayName` and `pictureUrl`; asked once and kept |
+| `reply(replyToken, messages)` | answers an event with its single-use reply token: 1 to 5 messages, free of the push quota, not through the outbox |
+| `probeToken()` | `undefined` when a token is held or can be issued now, else the failure's code; tells no failure listener |
+| `onTokenFailure(listener)` | told the code (`token_refused`, `token_unreachable`, `token_malformed`) of each failed issue of the channel access token, whichever part of the plugin asked, once per issue however many callers shared it, never for a probe; returns the function that detaches it |
+
+`senderNameProblem(name, options?)` answers why LINE would refuse a sender name (`empty`, `edge_space`, `too_long`, `control_character`, `forbidden_word`) or `undefined`, so a host can check a name before it queues a push.
+`SENDER_NAME_MAX` and `SENDER_DEFAULTS` are the limit and the default forbidden words it uses.
+A control character is anything in U+0000 to U+001F, U+007F or U+0080 to U+009F.
 
 ## Chats and the allowlist
 
