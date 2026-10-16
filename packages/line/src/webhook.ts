@@ -143,6 +143,17 @@ function claimedDestination(body: Uint8Array): string | undefined {
 	}
 }
 
+function deepFreeze<T>(value: T): T {
+	if (typeof value === "object" && value !== null) {
+		for (const inner of Object.values(value)) deepFreeze(inner);
+		Object.freeze(value);
+	}
+	return value;
+}
+
+const frozenCopy = (event: ParsedEvent): ParsedEvent =>
+	deepFreeze(structuredClone(event));
+
 /**
  * The events the screen keeps, asked about each in order. Rejects when the screen throws or answers
  * anything but "keep" or "consume", so no event of the request is stored on a half-made decision.
@@ -153,7 +164,8 @@ async function screened(
 ): Promise<ParsedEvent[]> {
 	const kept: ParsedEvent[] = [];
 	for (const event of events) {
-		const verdict: unknown = await screen(event);
+		// A frozen copy: whatever the screen does to it, the event that is stored is LINE's.
+		const verdict: unknown = await screen(frozenCopy(event));
 		if (verdict === "keep") kept.push(event);
 		else if (verdict !== "consume")
 			throw new LineError(

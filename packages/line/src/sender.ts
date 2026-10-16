@@ -20,9 +20,9 @@ export interface SenderOptions {
 	forbiddenWords: readonly string[];
 }
 
-export const SENDER_DEFAULTS: SenderOptions = {
-	forbiddenWords: ["LINE", "LY"],
-};
+export const SENDER_DEFAULTS: SenderOptions = Object.freeze({
+	forbiddenWords: Object.freeze(["LINE", "LY"]),
+});
 
 export const SENDER_NAME_MAX = 20;
 export const SENDER_ICON_MAX = 2000;
@@ -78,9 +78,12 @@ export function senderNameProblem(
 	const words = (name.normalize("NFKC").match(WORD) ?? []).map((w) =>
 		w.toLowerCase(),
 	);
-	const forbidden = options.forbiddenWords.map((w) =>
-		w.normalize("NFKC").toLowerCase(),
-	);
+	// An options object without the list (a cast, or untyped JavaScript) means the default list.
+	const forbidden = (
+		Array.isArray(options?.forbiddenWords)
+			? options.forbiddenWords
+			: SENDER_DEFAULTS.forbiddenWords
+	).map((w) => w.normalize("NFKC").toLowerCase());
 	return words.some((w) => forbidden.includes(w))
 		? "forbidden_word"
 		: undefined;

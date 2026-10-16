@@ -148,7 +148,7 @@ export class TokenSource {
 	/**
 	 * Calls `listener` with the code of each failed issue (`token_refused`, `token_unreachable`,
 	 * `token_malformed`), once per issue however many callers shared it. Returns the function that
-	 * detaches it. A listener that throws is ignored.
+	 * detaches it. A listener that throws, or returns a promise that rejects, is ignored.
 	 */
 	onFailure(listener: (code: string) => void): () => void {
 		this.#listeners.add(listener);
@@ -179,7 +179,8 @@ export class TokenSource {
 	#notify(code: string): void {
 		for (const listener of [...this.#listeners])
 			try {
-				listener(code);
+				// An async listener that rejects is as harmless as one that throws.
+				void Promise.resolve(listener(code)).catch(() => undefined);
 			} catch {
 				// A listener must not throw; one that does costs the others nothing.
 			}

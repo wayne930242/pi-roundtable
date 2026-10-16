@@ -113,6 +113,36 @@ const text = (value: unknown): string | undefined =>
 export function lineApiPort(deps: LineApiPortDeps): LineApiPort {
 	const { api, tokens, quota } = deps;
 	let botInfo: LineBotInfo | undefined;
+	/** The first read in progress, shared by callers that arrive before it ends. */
+	let asking: Promise<LineBotInfo> | undefined;
+	const readBotInfo = async (
+		call: Pick<RequestOptions, "timeoutMs">,
+	): Promise<LineBotInfo> => {
+		const found = (await api.json("/v2/bot/info", call)) as
+			| {
+					userId?: unknown;
+					basicId?: unknown;
+					displayName?: unknown;
+					pictureUrl?: unknown;
+			  }
+			| undefined;
+		const userId = text(found?.userId);
+		const basicId = text(found?.basicId);
+		if (!userId || !basicId || !/^@\S+$/.test(basicId))
+			throw new LineError(
+				"bot_info_malformed",
+				"line: bot info has no userId or basicId",
+			);
+		const displayName = text(found?.displayName);
+		const pictureUrl = text(found?.pictureUrl);
+		botInfo = {
+			userId,
+			basicId,
+			...(displayName ? { displayName } : {}),
+			...(pictureUrl ? { pictureUrl } : {}),
+		};
+		return botInfo;
+	};
 	return {
 		async profile(sourceKey, userId, options) {
 			const call = callOf(options);
@@ -169,31 +199,24 @@ export function lineApiPort(deps: LineApiPortDeps): LineApiPort {
 			return { limit, used, cap: quota.cap };
 		},
 		async botInfo(options) {
+			const { signal, timeoutMs } = callOf(options);
+			signal?.throwIfAborted();
 			if (botInfo) return { ...botInfo };
-			const found = (await api.json("/v2/bot/info", callOf(options))) as
-				| {
-						userId?: unknown;
-						basicId?: unknown;
-						displayName?: unknown;
-						pictureUrl?: unknown;
-				  }
-				| undefined;
-			const userId = text(found?.userId);
-			const basicId = text(found?.basicId);
-			if (!userId || !basicId || !/^@\S+$/.test(basicId))
-				throw new LineError(
-					"bot_info_malformed",
-					"line: bot info has no userId or basicId",
-				);
-			const displayName = text(found?.displayName);
-			const pictureUrl = text(found?.pictureUrl);
-			botInfo = {
-				userId,
-				basicId,
-				...(displayName ? { displayName } : {}),
-				...(pictureUrl ? { pictureUrl } : {}),
-			};
-			return { ...botInfo };
+			// Callers that arrive while a read is in progress share it, and so its timeout (the first
+			// caller's); each still hears its own signal.
+			asking ??= readBotInfo(
+				timeoutMs === undefined ? {} : { timeoutMs },
+			).finally(() => {
+				asking = undefined;
+			});
+			const read = asking;
+			if (!signal) return { ...(await read) };
+			const aborted = new Promise<never>((_, reject) => {
+				signal.addEventListener("abort", () => reject(signal.reason), {
+					once: true,
+				});
+			});
+			return { ...(await Promise.race([read, aborted])) };
 		},
 		async reply(replyToken, messages, options) {
 			const call = callOf(options);

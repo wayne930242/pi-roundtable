@@ -273,4 +273,47 @@ describeDb("the webhook's screen", () => {
 		expect(response.status).toBe(500);
 		expect(await ids()).toEqual([]);
 	});
+
+	test("the screen is handed a frozen copy: changing it changes nothing that is stored", async () => {
+		const frozen: boolean[] = [];
+		const response = await handler({
+			screen: async (event) => {
+				frozen.push(
+					Object.isFrozen(event),
+					Object.isFrozen(event.raw),
+					Object.isFrozen(event.raw.message),
+				);
+				for (const change of [
+					() => {
+						(event as { id: string }).id = "renamed";
+					},
+					() => {
+						(event as { sourceKey: string | null }).sourceKey =
+							"line:group:Cother";
+					},
+					() => {
+						(event.raw.message as { text: string }).text = "changed words";
+					},
+					() => {
+						event.raw.extra = true;
+					},
+				])
+					try {
+						change();
+					} catch {
+						// Writing to a frozen object throws; a screen that tries is not stopped by it.
+					}
+				return "keep";
+			},
+		})(
+			webhookRequest(body(messageEvent({ id: "mine", text: "the original" }))),
+		);
+		expect(response.status).toBe(200);
+		expect(frozen).toEqual([true, true, true]);
+		expect(await ids()).toEqual(["mine"]);
+		const [row] = await sql`SELECT source_key, payload FROM line_inbox`;
+		expect(row.source_key).toBe(GROUP);
+		expect(row.payload.message.text).toBe("the original");
+		expect(row.payload.extra).toBeUndefined();
+	});
 });

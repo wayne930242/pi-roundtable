@@ -387,3 +387,64 @@ test("a probe that a real caller joins is told, and one listener that throws doe
 	expect(await asking).toBeInstanceOf(LineError);
 	expect(told).toEqual(["token_refused"]);
 });
+
+test("a listener that returns a rejecting promise is ignored like one that throws", async () => {
+	const { line, port, tokens } = setup();
+	const told: string[] = [];
+	const unhandled: unknown[] = [];
+	const onUnhandled = (reason: unknown) => void unhandled.push(reason);
+	process.on("unhandledRejection", onUnhandled);
+	try {
+		port.onTokenFailure((async () => {
+			throw new Error("a rejecting listener");
+		}) as unknown as (code: string) => void);
+		port.onTokenFailure((code) => told.push(code));
+		line.failTokens(500);
+		await tokens.token().catch(() => undefined);
+		await Bun.sleep(20);
+	} finally {
+		process.off("unhandledRejection", onUnhandled);
+	}
+	expect(told).toEqual(["token_refused"]);
+	expect(unhandled).toEqual([]);
+});
+
+test("callers that ask for bot info together share one request, and a shared failure is asked again next time", async () => {
+	const { line, port } = setup();
+	const answers = await Promise.all(
+		Array.from({ length: 5 }, () => port.botInfo()),
+	);
+	expect(new Set(answers.map((info) => info.basicId))).toEqual(
+		new Set(["@bot-for-tests"]),
+	);
+	expect(calls(line, "/v2/bot/info")).toHaveLength(1);
+	// Each caller has its own copy.
+	expect(new Set(answers).size).toBe(5);
+
+	const failing = setup();
+	failing.line.botInfo = { basicId: "no-at-sign" };
+	const results = await Promise.allSettled([
+		failing.port.botInfo(),
+		failing.port.botInfo(),
+	]);
+	expect(results.map((r) => r.status)).toEqual(["rejected", "rejected"]);
+	expect(calls(failing.line, "/v2/bot/info")).toHaveLength(1);
+	failing.line.botInfo = { basicId: "@bot-for-tests" };
+	expect((await failing.port.botInfo()).basicId).toBe("@bot-for-tests");
+});
+
+test("a caller's own signal ends its wait for shared bot info without ending the read for the others", async () => {
+	const { line, port } = setup();
+	const controller = new AbortController();
+	const quitting = port.botInfo({ signal: controller.signal });
+	const staying = port.botInfo();
+	controller.abort(new Error("gave up"));
+	await expect(quitting).rejects.toThrow("gave up");
+	expect((await staying).basicId).toBe("@bot-for-tests");
+	expect(calls(line, "/v2/bot/info")).toHaveLength(1);
+	const already = new AbortController();
+	already.abort(new Error("already gone"));
+	await expect(port.botInfo({ signal: already.signal })).rejects.toThrow(
+		"already gone",
+	);
+});

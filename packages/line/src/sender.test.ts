@@ -177,3 +177,28 @@ test("validateSender keeps its English message for each problem", () => {
 	for (const [name, message] of Object.entries(messages))
 		expect(refusal({ name })).toMatchObject({ code: "bad_sender", message });
 });
+
+test("the default sender options cannot be changed by a caller", () => {
+	expect(Object.isFrozen(SENDER_DEFAULTS)).toBe(true);
+	expect(Object.isFrozen(SENDER_DEFAULTS.forbiddenWords)).toBe(true);
+	expect(() =>
+		(SENDER_DEFAULTS.forbiddenWords as string[]).push("Acme"),
+	).toThrow();
+	expect(() => {
+		(SENDER_DEFAULTS as { forbiddenWords: string[] }).forbiddenWords = [];
+	}).toThrow();
+	expect(senderNameProblem("LINE")).toBe("forbidden_word");
+	expect(senderNameProblem("Acme")).toBeUndefined();
+});
+
+test("senderNameProblem takes options without a word list as the defaults, and still never throws", () => {
+	for (const options of [
+		{},
+		{ forbiddenWords: undefined },
+		{ forbiddenWords: "LINE" },
+	])
+		expect(senderNameProblem("LINE", options as never)).toBe("forbidden_word");
+	expect(senderNameProblem("Ada", {} as never)).toBeUndefined();
+	expect(senderNameProblem("Ada", null as never)).toBeUndefined();
+	expect(senderNameProblem("LINE", null as never)).toBe("forbidden_word");
+});
