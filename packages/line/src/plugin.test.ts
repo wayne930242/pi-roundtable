@@ -592,56 +592,63 @@ describeDb("the line plugin", () => {
 	};
 
 	test("a push queued through the service goes out under its sender and key, and the subscriber hears how it ended", async () => {
-		realClock = true;
+		// The clock is frozen, so what the gathering window collects is the test's to say, not the
+		// machine's: both objects are queued at one instant, inside the window, however slow the
+		// machine is, and the push is ready only when the test lets the window end.
 		const { fake, service, route, port } = await boot(FAST);
-		await route.handle(webhookRequest(body(messageEvent({ id: "o0" }))));
-		await port.sources.allow(GROUP);
-		const heard: LineEvent[] = [];
-		port.subscribe(async (event) => {
-			heard.push(event);
-			return undefined;
-		});
-		await service("line-inbox").start?.();
-		await service("line-outbox").start?.();
-		const sender = {
-			name: "Ada｜Support",
-			iconUrl: "https://icons.example.test/staff.png",
-		};
-		await port.outbox.enqueue(GROUP, [{ type: "text", text: "one" }], {
-			sender,
-			origin: "draft-1",
-		});
-		await port.outbox.enqueue(GROUP, [{ type: "text", text: "two" }], {
-			sender,
-			origin: "draft-1",
-		});
-		await until(() => heard.some((e) => e.type === "outboxResult"));
-		expect(fake.pushes).toHaveLength(1);
-		expect(fake.pushes[0]?.to).toBe("Cgroup0001");
-		expect(fake.pushes[0]?.messages).toEqual([
-			{ type: "text", text: "one", sender },
-			{ type: "text", text: "two", sender },
-		]);
-		expect(fake.pushes[0]?.retryKey).toMatch(/^[0-9a-f-]{36}$/);
-		expect(heard.filter((e) => e.type === "outboxResult")).toEqual([
-			{
-				type: "outboxResult",
-				sourceKey: GROUP,
-				originRef: "draft-1",
-				status: "sent",
-				errorCode: null,
-				attempts: 1,
-			},
-		]);
-		// A sender LINE would refuse never reaches the queue.
-		await expect(
-			port.outbox.enqueue(GROUP, [{ type: "text", text: "x" }], {
-				sender: { name: "LINE desk" },
-			}),
-		).rejects.toMatchObject({ code: "bad_sender" });
-		expect(fake.pushes).toHaveLength(1);
-		await service("line-inbox").stop?.();
-		await service("line-outbox").stop?.();
+		try {
+			await route.handle(webhookRequest(body(messageEvent({ id: "o0" }))));
+			await port.sources.allow(GROUP);
+			const heard: LineEvent[] = [];
+			port.subscribe(async (event) => {
+				heard.push(event);
+				return undefined;
+			});
+			await service("line-inbox").start?.();
+			await service("line-outbox").start?.();
+			const sender = {
+				name: "Ada｜Support",
+				iconUrl: "https://icons.example.test/staff.png",
+			};
+			await port.outbox.enqueue(GROUP, [{ type: "text", text: "one" }], {
+				sender,
+				origin: "draft-1",
+			});
+			await port.outbox.enqueue(GROUP, [{ type: "text", text: "two" }], {
+				sender,
+				origin: "draft-1",
+			});
+			advance(FAST.outbox.coalesceMs);
+			await until(() => heard.some((e) => e.type === "outboxResult"));
+			expect(fake.pushes).toHaveLength(1);
+			expect(fake.pushes[0]?.to).toBe("Cgroup0001");
+			expect(fake.pushes[0]?.messages).toEqual([
+				{ type: "text", text: "one", sender },
+				{ type: "text", text: "two", sender },
+			]);
+			expect(fake.pushes[0]?.retryKey).toMatch(/^[0-9a-f-]{36}$/);
+			expect(heard.filter((e) => e.type === "outboxResult")).toEqual([
+				{
+					type: "outboxResult",
+					sourceKey: GROUP,
+					originRef: "draft-1",
+					status: "sent",
+					errorCode: null,
+					attempts: 1,
+				},
+			]);
+			// A sender LINE would refuse never reaches the queue.
+			await expect(
+				port.outbox.enqueue(GROUP, [{ type: "text", text: "x" }], {
+					sender: { name: "LINE desk" },
+				}),
+			).rejects.toMatchObject({ code: "bad_sender" });
+			expect(fake.pushes).toHaveLength(1);
+		} finally {
+			// Whether it passed or not: a worker left running goes on claiming rows of the tests after it.
+			await service("line-inbox").stop?.();
+			await service("line-outbox").stop?.();
+		}
 		expect(service("line-outbox").busy?.()).toEqual([]);
 	});
 
