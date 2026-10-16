@@ -35,8 +35,8 @@ const REAL_CLOCK: BudgetClock = {
  * The shortest wait before a budget looks again at a turn that still has time. While a card is
  * open the turn's work time stands still, so a timer that fires with a few milliseconds left would
  * otherwise re-arm for those milliseconds, again and again, for as long as the card waits. The
- * floor bounds that to one look a second; the cost is that a limit may fire up to this much late,
- * when the card closes just before it.
+ * floor bounds that to one look a second; the cost is that a limit that waiting on a card pushed
+ * back, by less than the floor, may fire up to this much late.
  */
 const REARM_FLOOR_MS = 1_000;
 
