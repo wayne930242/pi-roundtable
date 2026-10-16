@@ -133,7 +133,17 @@ export async function usePostgresForTests(
 	// A global hook of the run: bun runs preload hooks once, after every test file.
 	afterAll(stop);
 	process.on("exit", () => {
-		if (!stopped) server.kill("SIGINT");
+		if (stopped) return;
+		server.kill("SIGINT");
+		// A process that exits without the run's hooks leaves no data directory behind. The server
+		// writes while it shuts down, so removing it takes a few tries.
+		for (let attempt = 0; attempt < 100 && existsSync(root); attempt++) {
+			try {
+				rmSync(root, { recursive: true, force: true });
+			} catch {
+				Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
+			}
+		}
 	});
 	for (const signal of ["SIGINT", "SIGTERM"] as const)
 		process.on(signal, () => {

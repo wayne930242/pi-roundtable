@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { Type } from "typebox";
-import { definePlugin, defineTool } from "../define.ts";
+import { definePlugin, defineTool, ToolRefusal } from "../define.ts";
 import { PluginError } from "../errors.ts";
 import { describeDb } from "./database.ts";
 import { hasWebAccess, type TestHost, testHost } from "./test-host.ts";
@@ -25,6 +25,16 @@ const note = defineTool({
 		`${turn.speaker?.name ?? "anonymous"} on ${turn.channel} via ${turn.origin ?? "nowhere"}: ${args.text}`,
 });
 
+const refuse = defineTool({
+	name: "host_refuse",
+	description: "Refuses",
+	parameters: Type.Object({}),
+	minTier: "member",
+	run: () => {
+		throw new ToolRefusal("not now");
+	},
+});
+
 let host: TestHost | undefined;
 afterEach(async () => {
 	await host?.stop();
@@ -34,7 +44,10 @@ afterEach(async () => {
 const boot = () =>
 	testHost({
 		plugins: [
-			definePlugin({ name: "host-notes", setup: () => ({ tools: [note] }) }),
+			definePlugin({
+				name: "host-notes",
+				setup: () => ({ tools: [note, refuse] }),
+			}),
 		],
 	});
 
@@ -58,6 +71,11 @@ const boot = () =>
 					},
 				),
 			).toBe("Alice on fake:room via https://chat.example.com: hi");
+		});
+
+		test("runTool gives a refusal back as the text the model reads", async () => {
+			host = await boot();
+			expect(await host.runTool("host_refuse", {})).toBe("not now");
 		});
 
 		test("runTool names a tool no plugin added", async () => {

@@ -1,4 +1,4 @@
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -84,7 +84,8 @@ export interface TestHost {
 	/**
 	 * Runs a contributed tool in the owner's session as `speaker` on `channel` (the owner's channel
 	 * by default), as `testPlugin`'s `runTool` does, and gives the text the model would read. A tool
-	 * that throws or reports an error throws here; a tool no plugin added throws a PluginError.
+	 * that throws throws here, a refusal (`ToolRefusal`) comes back as the text the model reads, and a
+	 * tool no plugin added throws a PluginError.
 	 */
 	runTool(
 		name: string,
@@ -402,6 +403,8 @@ export async function testHost(
 				.holds.inTurn?.(name, args, {}, toolTurn(toolSession(call), undefined)),
 		stop: async () => {
 			await roundtable.shutdown("test");
+			if (tools) rmSync(tools, { recursive: true, force: true });
+			tools = undefined;
 		},
 	};
 }

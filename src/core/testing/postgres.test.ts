@@ -1,5 +1,11 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+	mkdirSync,
+	mkdtempSync,
+	readdirSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -94,13 +100,26 @@ console.log("seen " + JSON.stringify({ message }));`,
 			{ ROUNDTABLE_TEST_DATABASE_URL: "postgres://u@127.0.0.1:1/x" },
 		);
 		expect(seenOf(given.output).url).toBe("postgres://u@127.0.0.1:1/x");
-	});
+	}, 60_000);
 });
 
 describe("usePostgresForTests", () => {
+	/** A temp directory of its own for the nested run's throwaway PostgreSQL, so what it leaves is seen. */
+	// Short, since PostgreSQL's socket path under it must fit a unix socket's limit.
+	const scratch = (name: string) => {
+		const dir = mkdtempSync(join("/tmp", `rtpg-${name}-`));
+		scratches.push(dir);
+		return dir;
+	};
+	const scratches: string[] = [];
+	afterAll(() => {
+		for (const dir of scratches) rmSync(dir, { recursive: true, force: true });
+	});
+
 	test.skipIf(!HAS_PG)(
 		"starts a throwaway PostgreSQL the tests can query, sets the live exports and variable, and stops it after the run",
 		async () => {
+			const tmp = scratch("starts-tmp");
 			const started = await run(
 				"starts",
 				usePg("{ require: true }"),
@@ -113,7 +132,7 @@ console.log("seen " + JSON.stringify({
 	one: row.one,
 	describeDbOn: testing.describeDb === describe,
 }));`,
-				{},
+				{ TMPDIR: tmp },
 			);
 			expect(started.exitCode).toBe(0);
 			const seen = seenOf(started.output);
@@ -123,6 +142,8 @@ console.log("seen " + JSON.stringify({
 			expect(seen.env).toBe(seen.url);
 			expect(seen.one).toBe(1);
 			expect(seen.describeDbOn).toBe(true);
+			// Nothing of the throwaway database stays in the temp directory.
+			expect(readdirSync(tmp)).toEqual([]);
 			// The run is over, so the server it started is gone: nothing accepts on its port.
 			const { port } = new URL(String(seen.url));
 			await expect(
@@ -136,6 +157,23 @@ console.log("seen " + JSON.stringify({
 		60_000,
 	);
 
+	test.skipIf(!HAS_PG)(
+		"a process that exits without running the hooks still removes the data directory",
+		async () => {
+			const tmp = scratch("exits-tmp");
+			const exited = await run(
+				"exits",
+				usePg("{ require: true }"),
+				`console.log("seen " + JSON.stringify({ url: testing.testDatabaseUrl }));
+process.exit(0);`,
+				{ TMPDIR: tmp },
+			);
+			expect(seenOf(exited.output).url).toMatch(/^postgres:\/\//);
+			expect(readdirSync(tmp)).toEqual([]);
+		},
+		60_000,
+	);
+
 	test("does nothing when the run already names a database", async () => {
 		const given = await run(
 			"already",
@@ -145,7 +183,7 @@ console.log("seen " + JSON.stringify({
 		);
 		expect(given.exitCode).toBe(0);
 		expect(seenOf(given.output).url).toBe("postgres://u@127.0.0.1:1/named");
-	});
+	}, 60_000);
 
 	test("does nothing when initdb and postgres are not found and require is off, and throws naming how to fix it when it is on", async () => {
 		const empty = join(root, "no-bin");
@@ -168,5 +206,5 @@ console.log("seen " + JSON.stringify({
 		expect(on.exitCode).not.toBe(0);
 		expect(on.output).toContain("this run needs PostgreSQL");
 		expect(on.output).toContain("PG_BIN");
-	});
+	}, 60_000);
 });
