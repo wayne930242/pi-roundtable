@@ -11,7 +11,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- `ErrorReporter` takes its once-an-hour and five-reports-an-hour limits from an internal throttle that `OpsAlerts` shares. What it reports, when, and the summary of the suppressed errors are unchanged.
+- `ErrorReporter` takes its once-an-hour and five-reports-an-hour limits from internal throttle code that `OpsAlerts` also uses, each with its own limits and state. What it reports, when, and the summary of the suppressed errors are unchanged.
 - The `pi-web-access` peer dependency range is `>=0.35.0 <0.41.0` (was `>=0.35.0 <0.36.0`), the range the package is tested against: 0.35.0 and the 0.40.0 its checks now run on both keep `"pi": { "extensions": ["./dist"] }`, which is how the delegation worker loads it, and nothing in 0.36 to 0.40 changes that. The error a project without it gets now says `bun add pi-web-access@0.40.0` (was 0.35.0).
 - The packages depend on `typebox` 1.3.37 (was 1.3.34), and a project made by `roundtable init` pins `typebox` 1.3.37 and `@types/bun` 1.4.3 (were 1.3.34 and 1.4.2), so a new project matches the package's own tools. The packages depend on `pi-mcp-adapter` 5.3.0 (was 5.2.0), and the `pi-web-access` used for the package's own checks is 0.40.0. The pi range the package accepts is unchanged; it is built and tested against pi 1.3.0.
 
