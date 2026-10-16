@@ -6,6 +6,7 @@ import {
 	createFauxCore,
 	fauxAssistantMessage,
 	fauxText,
+	type TranscriptContext,
 } from "@earendil-works/pi-ai";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
