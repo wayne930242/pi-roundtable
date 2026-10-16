@@ -113,12 +113,23 @@ Attach it during setup: the listeners open only after every plugin is set up, so
 Until one is attached, and after it is detached, every event is kept.
 
 ```ts
+import { definePlugin } from "pi-roundtable";
 import { LINE, type LineScreen } from "pi-roundtable-line";
 
 const screen: LineScreen = async (event) =>
 	isLinkCode(event.raw) ? "consume" : "keep";
-// in a plugin's setup: context.services.lazy(LINE)().screen(screen)
+
+export const linkCodes = definePlugin({
+	name: "link-codes",
+	requires: [LINE], // so line() must come before this plugin in `plugins`
+	setup: (context) => {
+		context.services.get(LINE).screen(screen);
+		return {};
+	},
+});
 ```
+
+Read `LINE` with `services.get` in `setup`, and declare it in `requires` so the host refuses a plugin list that puts `line()` after it; `services.lazy(LINE)` answers only after every plugin is set up, so it does not suit attaching a screen there.
 
 The screen is asked after the signature and the `destination` passed, and before anything is stored, for every event of the request in order, one at a time (the events of a request that failed before that, a Verify with no events, and a `405` never reach it).
 Every kind of event is asked about, standby and chat-less ones included; the handler filters.
@@ -128,7 +139,7 @@ A request whose events are all consumed is a `200` and counts as accepted, like 
 
 A screen that throws, or answers anything else, fails the whole request with `500` and stores nothing, not even the events it had kept; LINE redelivers where it can.
 The log line holds a code, never the event.
-The screen sees what the plugin does not keep for chats that are not connected, so it must not log or keep what it does not consume.
+The screen gets a deeply frozen copy of the event, so it cannot change what is stored. It sees what the plugin does not keep for chats that are not connected, so it must not log or keep what it does not consume.
 
 ## Calling LINE through the plugin
 

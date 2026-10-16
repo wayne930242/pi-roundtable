@@ -78,17 +78,28 @@ await sources.allow("line:group:C...");
 請在 setup 階段掛上；還沒掛上之前，每個事件都會保留。
 
 ```ts
+import { definePlugin } from "pi-roundtable";
 import { LINE, type LineScreen } from "pi-roundtable-line";
 
 const screen: LineScreen = async (event) =>
   isLinkCode(event.raw) ? "consume" : "keep";
-// 在 plugin 的 setup 裡：context.services.lazy(LINE)().screen(screen)
+
+export const linkCodes = definePlugin({
+  name: "link-codes",
+  requires: [LINE], // 所以 plugins 裡 line() 必須排在這個 plugin 之前
+  setup: (context) => {
+    context.services.get(LINE).screen(screen);
+    return {};
+  },
+});
 ```
+
+在 `setup` 裡用 `services.get` 讀取 `LINE`，並把它寫進 `requires`；`services.lazy(LINE)` 要等所有 plugin 都 setup 完才會回答，所以不能用來在 setup 裡掛篩選器。
 
 簽章與 `destination` 都通過之後，篩選器會依序、一次一個，針對請求中的每個事件被詢問，回答 `"keep"` 或 `"consume"`。
 被 consume 的事件不會被儲存、路由，也不會交給消費者；整個請求的事件都被 consume 時，回應與 Verify 一樣是 `200`。
 篩選器丟出錯誤，或回答了其他值，整個請求會以 `500` 失敗、什麼都不儲存；LINE 在能重送時會重送。
-篩選器看到的是 LINE 送來的原樣事件，所以對沒有 consume 的內容，不可記錄也不可保留。
+篩選器拿到的是 LINE 送來的事件的凍結副本，所以改不動被儲存的內容；對沒有 consume 的內容，不可記錄也不可保留。
 
 ## 透過 plugin 呼叫 LINE
 

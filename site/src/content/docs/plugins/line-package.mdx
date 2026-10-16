@@ -78,17 +78,28 @@ It returns the function that detaches it, and a second `screen()` while one is a
 Attach it during setup; until one is attached every event is kept.
 
 ```ts
+import { definePlugin } from "pi-roundtable";
 import { LINE, type LineScreen } from "pi-roundtable-line";
 
 const screen: LineScreen = async (event) =>
   isLinkCode(event.raw) ? "consume" : "keep";
-// in a plugin's setup: context.services.lazy(LINE)().screen(screen)
+
+export const linkCodes = definePlugin({
+  name: "link-codes",
+  requires: [LINE], // so line() must come before this plugin in `plugins`
+  setup: (context) => {
+    context.services.get(LINE).screen(screen);
+    return {};
+  },
+});
 ```
+
+Read `LINE` with `services.get` in `setup` and declare it in `requires`; `services.lazy(LINE)` answers only after every plugin is set up, so it cannot attach a screen there.
 
 The screen is asked once the signature and the `destination` have passed, for every event of the request in order, one at a time, and answers `"keep"` or `"consume"`.
 A consumed event is never stored, routed or handed to the consumer, and a request whose events are all consumed is a `200` like Verify.
 A screen that throws or answers anything else fails the whole request with `500` and stores nothing; LINE redelivers where it can.
-It sees the event as LINE sent it, so it must not log or keep what it does not consume.
+It sees a frozen copy of the event as LINE sent it, so it cannot change what is stored, and it must not log or keep what it does not consume.
 
 ## Calling LINE through the plugin
 
