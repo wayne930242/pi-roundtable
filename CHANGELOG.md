@@ -5,8 +5,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `OpsAlerts`, `OpsAlertsOptions`, `OpsRaiseOptions` and `OpsAlertKind` (`pi-roundtable/kit`): short alerts for the people who run a host, for a plugin's own faults. `new OpsAlerts({ sink?, logger, kinds?, windowMs?, kindCap?, now? })` posts through `sink(text)`, a function that resolves `true` when it posted and `false` when it chose not to, so the kit names no discord.js type. `raise(key, text, { code?, info? })` posts at once, never queued, a key at most once per window (one hour) and a kind (the key's word before the first colon) at most `kindCap` times per window (8), whatever the keys; what is held back is only counted. A sink that throws or answers `false` gives the key and the slot back, so the next raise tries again; a throw is logged by the error's name and `raise` never throws. `info: true` is news, posted once per key, outside the cap and outside `faults()`. `faults()` lists the last fault of each kind, newest first, with `name` (from `kinds`), `code`, `raised` and `suppressed`, in memory. With no `sink` the alerts are recorded, the key stays held, and the log has one line per window (`an ops alert was raised and there is no sink to post it to`). No summary of the held-back alerts is posted, so there is no new text to translate.
+
 ### Changed
 
+- `ErrorReporter` takes its once-an-hour and five-reports-an-hour limits from an internal throttle that `OpsAlerts` shares. What it reports, when, and the summary of the suppressed errors are unchanged.
+- The `pi-web-access` peer dependency range is `>=0.35.0 <0.41.0` (was `>=0.35.0 <0.36.0`), the range the package is tested against: 0.35.0 and the 0.40.0 its checks now run on both keep `"pi": { "extensions": ["./dist"] }`, which is how the delegation worker loads it, and nothing in 0.36 to 0.40 changes that. The error a project without it gets now says `bun add pi-web-access@0.40.0` (was 0.35.0).
 - The packages depend on `typebox` 1.3.37 (was 1.3.34), and a project made by `roundtable init` pins `typebox` 1.3.37 and `@types/bun` 1.4.3 (were 1.3.34 and 1.4.2), so a new project matches the package's own tools. The packages depend on `pi-mcp-adapter` 5.3.0 (was 5.2.0), and the `pi-web-access` used for the package's own checks is 0.40.0. The pi range the package accepts is unchanged; it is built and tested against pi 1.3.0.
 
 ## [0.17.3] - 2026-10-16

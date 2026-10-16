@@ -27,7 +27,7 @@ function webAccessDir(): string {
 		return packageDir("pi-web-access");
 	} catch (error) {
 		throw new PluginError(
-			"the delegation worker loads pi-web-access, which this project does not have installed. It is a peer dependency of pi-roundtable: run `bun add pi-web-access@0.35.0` (or your own build of it, which the worker then uses too).",
+			"the delegation worker loads pi-web-access, which this project does not have installed. It is a peer dependency of pi-roundtable: run `bun add pi-web-access@0.40.0` (or your own build of it, which the worker then uses too).",
 			{ cause: error },
 		);
 	}

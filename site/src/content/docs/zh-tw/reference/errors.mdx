@@ -130,7 +130,7 @@ judge 的模型不可用時，會出現 `the judge's model <provider>/<id> is no
 | `plugin <b>: tool <name> is already defined by plugin <a>. Rename one of the two tools.` | 替其中一個工具改名。 |
 | `plugin <name>: setup failed: <what the error said>. Fix the error, or remove the plugin.` | 修正訊息引用的那個錯誤。 |
 | `plugin <name>: migration <migration> failed: <what the database said>. Fix the migration or restore the database, then start again.` | 修正 migration 或還原資料庫，再啟動一次。 |
-| ``the delegation worker loads pi-web-access, which this project does not have installed. It is a peer dependency of pi-roundtable: run `bun add pi-web-access@0.35.0` (or your own build of it, which the worker then uses too).`` | 安裝 `pi-web-access`。內建的 `modules` 外掛會把它回報成 `plugin modules: setup failed: ...`。 |
+| ``the delegation worker loads pi-web-access, which this project does not have installed. It is a peer dependency of pi-roundtable: run `bun add pi-web-access@0.40.0` (or your own build of it, which the worker then uses too).`` | 安裝 `pi-web-access`。內建的 `modules` 外掛會把它回報成 `plugin modules: setup failed: ...`。 |
 | `required tools are not registered: compact_session. compact_session comes from the Pi package pi-self-compact: ...` | 執行 `bun add pi-self-compact`，並用一個外掛以 `piPackages: ["pi-self-compact"]` 載入它，就像 `roundtable init` 建立的專案裡的 `plugins/self-compact.ts`。`doctor` 查不出這一項，要到 `start` 才會停下來。 |
 
 外掛指南（英文）列了其餘的錯誤，例如服務衝突，以及只有 setup 之後才能用的部分。

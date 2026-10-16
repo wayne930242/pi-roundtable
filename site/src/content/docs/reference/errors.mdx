@@ -129,7 +129,7 @@ A plugin error stops startup before Discord connects, with a message of the form
 | `plugin <b>: tool <name> is already defined by plugin <a>. Rename one of the two tools.` | Rename one tool. |
 | `plugin <name>: setup failed: <what the error said>. Fix the error, or remove the plugin.` | Fix the error the message quotes. |
 | `plugin <name>: migration <migration> failed: <what the database said>. Fix the migration or restore the database, then start again.` | Fix the migration or restore the database, then start again. |
-| ``the delegation worker loads pi-web-access, which this project does not have installed. It is a peer dependency of pi-roundtable: run `bun add pi-web-access@0.35.0` (or your own build of it, which the worker then uses too).`` | Install `pi-web-access`. The built-in `modules` plugin reports it as `plugin modules: setup failed: ...`. |
+| ``the delegation worker loads pi-web-access, which this project does not have installed. It is a peer dependency of pi-roundtable: run `bun add pi-web-access@0.40.0` (or your own build of it, which the worker then uses too).`` | Install `pi-web-access`. The built-in `modules` plugin reports it as `plugin modules: setup failed: ...`. |
 | `required tools are not registered: compact_session. compact_session comes from the Pi package pi-self-compact: ...` | `bun add pi-self-compact`, and load it from a plugin with `piPackages: ["pi-self-compact"]`, as the `plugins/self-compact.ts` of a project `roundtable init` creates does. `doctor` does not catch this; `start` stops with it. |
 
 The plugin guide lists the rest, such as service clashes and the parts that only work after setup.

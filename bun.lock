@@ -25,7 +25,7 @@
         "typescript": "7.0.2",
       },
       "peerDependencies": {
-        "pi-web-access": ">=0.35.0 <0.36.0",
+        "pi-web-access": ">=0.35.0 <0.41.0",
       },
     },
     "packages/coding": {
