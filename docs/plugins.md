@@ -2439,7 +2439,7 @@ export function tavern(channelIds: readonly string[]) {
 
 `DISCORD.poster` (`DiscordPoster`, from `pi-roundtable/discord`) is Discord's REST API for a plugin's own posts, over the Discord plugin's own client.
 A host has one REST queue for the whole process, so the poster and the gateway client share Discord's rate-limit state, which Discord keeps per bot token.
-It is usable from a service's `start` on, and from `setup` too, since it needs no gateway login; making it sends nothing, so `Roundtable.check()` still never reaches Discord.
+It is usable from a service's `start` on; do not call it from `setup`, which `Roundtable.check()` also runs. Making it sends nothing, so the check never reaches Discord.
 There is no factory: a host that has no Discord has no poster.
 
 ```ts

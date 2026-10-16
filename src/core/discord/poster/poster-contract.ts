@@ -310,6 +310,32 @@ const messageScenarios: Scenario[] = [
 		},
 	},
 	{
+		name: "6b. a listener that sets the new webhook's picture finishes: the webhook is usable while it is announced",
+		async run({ poster, world }) {
+			const ch = freshId();
+			world.channel(ch);
+			const detach = poster.onWebhookMade(async (channel, name) => {
+				await poster.setAvatar(channel, name, PNG);
+			});
+			const done = poster
+				.post(ch, { webhook: "relay", username: "A", content: "x" })
+				.then(() => "done");
+			const result = await Promise.race([
+				done,
+				Bun.sleep(3_000).then(() => "hung"),
+			]);
+			detach();
+			expect(result).toBe("done");
+			expect((await poster.webhookIds(ch, ["relay"])).relay).toHaveLength(1);
+			// Names that are Object.prototype members are names like any other.
+			const odd = await poster.webhookIds(ch, ["constructor", "__proto__"]);
+			expect(
+				Object.entries(odd).find(([k]) => k === "constructor")?.[1],
+			).toEqual([]);
+			expect(Object.keys(odd).sort()).toEqual(["__proto__", "constructor"]);
+		},
+	},
+	{
 		name: "7. pins: idempotent, newest first across pages, 250 at most; pin notices can be listed and deleted",
 		async run({ poster, world }) {
 			const ch = freshId();

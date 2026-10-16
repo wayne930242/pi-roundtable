@@ -67,7 +67,7 @@ The Discord connection's key, `DISCORD`, comes from `pi-roundtable/discord`, bec
 ### Posting to Discord: `DISCORD.poster`
 
 `DISCORD` (from `pi-roundtable/discord`) has a `poster`: Discord's REST API for your plugin's own posts, over the Discord plugin's own client and its rate limits.
-It is usable from `setup` on, because it needs no gateway login, and making it sends nothing.
+Use it from a service's `start` on, not from `setup` (which `Roundtable.check()` also runs); making it sends nothing.
 
 ```ts
 const { poster } = services.get(DISCORD);

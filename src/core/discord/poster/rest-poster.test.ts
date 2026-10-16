@@ -356,3 +356,24 @@ test("a rename Discord holds back is never sent later", async () => {
 		close();
 	}
 });
+
+test("a rename Discord holds for minutes frees the caller after about the wait, not the minutes", async () => {
+	const { poster, emulator, close } = restSubject({ renameRetryAfter: 600 });
+	try {
+		const ch = freshId();
+		emulator.addChannel(ch, "900000000000000001");
+		await poster.renameChannel(ch, "one");
+		await poster.renameChannel(ch, "two");
+		const started = performance.now();
+		const held = await poster.renameChannel(ch, "three").then(
+			() => undefined,
+			(e: unknown) => e,
+		);
+		const took = performance.now() - started;
+		expect((held as DiscordPosterError).kind).toBe("unavailable");
+		// renameWaitMs is 200 in the subject.
+		expect(took).toBeLessThan(1_500);
+	} finally {
+		close();
+	}
+});

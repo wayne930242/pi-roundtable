@@ -111,9 +111,13 @@ export function restPoster(
 			);
 		// The new webhook has the default picture; whoever kept an avatar for the channel forgets it
 		// before the webhook is used, so a late record cannot outlive the picture it describes.
+		// The webhook is kept before the listeners run, so one that posts through it (or sets its
+		// picture) finds it instead of waiting on this very look.
+		const fresh = { id, token };
+		webhooks.set(`${channelId}:${name}`, fresh);
 		for (const listener of madeListeners)
 			await listener(channelId, name).catch(() => undefined);
-		return { id, token };
+		return fresh;
 	};
 
 	const webhook = (
@@ -269,7 +273,7 @@ export function restPoster(
 		async webhookIds(channelId, names) {
 			checkSnowflake("a channel", channelId);
 			for (const name of names) checkWebhookName(name);
-			const ids: Record<string, string[]> = {};
+			const ids: Record<string, string[]> = Object.create(null);
 			for (const name of names) ids[name] = [];
 			for (const hook of await listMine(channelId)) {
 				const id = text(hook.id);

@@ -262,7 +262,7 @@ class FakePosterImpl extends FakePosterGuild implements FakeDiscordPoster {
 		checkSnowflake("a channel", channelId);
 		for (const name of names) checkWebhookName(name);
 		this.sent("webhookIds");
-		const ids: Record<string, string[]> = {};
+		const ids: Record<string, string[]> = Object.create(null);
 		for (const name of names) {
 			const id = this.#webhooks.get(`${channelId}:${name}`);
 			ids[name] = id ? [id] : [];

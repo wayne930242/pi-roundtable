@@ -67,7 +67,7 @@ Discord 連線的 key `DISCORD` 來自 `pi-roundtable/discord`，因為它的 po
 ### 在 Discord 發文：`DISCORD.poster`
 
 `DISCORD`（來自 `pi-roundtable/discord`）有一個 `poster`：給你的外掛自己發文用的 Discord REST API，走 Discord 外掛自己的 client 和它的限速。
-從 `setup` 起就能用，因為它不需要 gateway 登入，建立它也不會送出任何請求。
+請從服務的 `start` 起使用，不要在 `setup` 裡呼叫（`Roundtable.check()` 也會跑 `setup`）；建立它不會送出任何請求。
 
 ```ts
 const { poster } = services.get(DISCORD);
