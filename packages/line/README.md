@@ -152,7 +152,7 @@ Every call takes `{ signal, timeoutMs }`, where `timeoutMs` replaces the 15-seco
 | `profile(sourceKey, userId)` | the display name and picture of a group or room member, or of the user of a one-to-one chat; `undefined` when LINE answers `404` (not in the chat), and for someone else in a one-to-one chat without a request |
 | `memberCount(sourceKey)` | how many people a push to the chat reaches (1 for a one-to-one chat), from the quota gate's one-minute reading |
 | `quota()` | `{ limit, used, cap }`: the plan's monthly limit, consumption (at most a minute old; 0 when there is neither a limit nor a `quota.monthlyCap`, which are then not read) and the host's cap |
-| `botInfo()` | the bot's `userId`, `basicId` and, when LINE says, `displayName` and `pictureUrl`; asked once and kept |
+| `botInfo()` | the bot's `userId`, `basicId` and, when LINE says, `displayName` and `pictureUrl`; asked once and kept; a call made while the first read is running shares that read and its timeout, so use `signal` to give up sooner |
 | `reply(replyToken, messages)` | answers an event with its single-use reply token: 1 to 5 messages, free of the push quota, not through the outbox |
 | `probeToken()` | `undefined` when a token is held or can be issued now, else the failure's code; tells no failure listener |
 | `onTokenFailure(listener)` | told the code (`token_refused`, `token_unreachable`, `token_malformed`) of each failed issue of the channel access token, whichever part of the plugin asked, once per issue however many callers shared it, never for a probe; returns the function that detaches it |

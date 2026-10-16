@@ -211,12 +211,16 @@ export function lineApiPort(deps: LineApiPortDeps): LineApiPort {
 			});
 			const read = asking;
 			if (!signal) return { ...(await read) };
+			let onAbort: (() => void) | undefined;
 			const aborted = new Promise<never>((_, reject) => {
-				signal.addEventListener("abort", () => reject(signal.reason), {
-					once: true,
-				});
+				onAbort = () => reject(signal.reason);
+				signal.addEventListener("abort", onAbort, { once: true });
 			});
-			return { ...(await Promise.race([read, aborted])) };
+			try {
+				return { ...(await Promise.race([read, aborted])) };
+			} finally {
+				if (onAbort) signal.removeEventListener("abort", onAbort);
+			}
 		},
 		async reply(replyToken, messages, options) {
 			const call = callOf(options);
