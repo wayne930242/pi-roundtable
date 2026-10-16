@@ -229,7 +229,7 @@ export function createCodexImages(options: CodexImagesOptions = {}) {
 				if (onMissingLogin !== "warn" || !(error instanceof PluginError))
 					throw error;
 				context.logger.warn(
-					`plugin codex-images: ${NO_LOGIN} Drawing fails until it does.`,
+					`${NO_LOGIN} Drawing images fails until the login exists.`,
 				);
 			}
 			return {};

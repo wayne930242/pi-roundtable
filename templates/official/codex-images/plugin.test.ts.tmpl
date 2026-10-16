@@ -139,4 +139,8 @@ test("codex-images with onMissingLogin warn logs one warning at setup", async ()
 	await plugin.setup?.({ apiKey: async () => undefined, logger } as never);
 	expect(lines.map((line) => line.level)).toEqual(["warn"]);
 	expect(lines[0]?.message).toContain("openai-codex");
+	expect(lines[0]?.message).toContain(
+		"Drawing images fails until the login exists.",
+	);
+	expect(lines[0]?.message).not.toContain("plugin codex-images:");
 });
