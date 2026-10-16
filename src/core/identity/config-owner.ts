@@ -143,3 +143,37 @@ export async function configuredOwnerId(
 	}
 	return id;
 }
+
+/**
+ * The refusals `configuredOwnerId` makes about an identity a plugin declares that the configuration
+ * settles alone: an owner who names their `principal`, and so is the same principal on every boot,
+ * against the principal the plugin binds the identity to. An owner the boot would tell by a stored
+ * link, or who follows an owner so told, is left to the start.
+ */
+export function refuseOwnerDeclarations(
+	owners: readonly AccessOwner[],
+	declared: readonly DeclaredIdentity[],
+): void {
+	const declaredBy = new Map(declared.map((each) => [each.identity, each]));
+	const primary = owners[0]?.principal;
+	for (const [n, owner] of owners.entries()) {
+		if (owner.principal === undefined || (n > 0 && primary === undefined))
+			continue;
+		for (const [i, identity] of owner.identities.entries()) {
+			const plugin = declaredBy.get(identity);
+			if (!plugin) continue;
+			const conflict = declaredConflict({
+				index: n,
+				i,
+				identity,
+				id: owner.principal,
+				link: undefined,
+				declared: plugin,
+				primary: n === 0 ? undefined : primary,
+				first: n === 0,
+			});
+			if (conflict)
+				throw new ConfigError(`config ${conflict.problem}. ${conflict.fix}.`);
+		}
+	}
+}

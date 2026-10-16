@@ -165,8 +165,11 @@ export class Roundtable {
 	 * nothing, a clash, a missing service, a removed field, a bad route), without migrating the
 	 * database, starting a service, opening a listener or reaching Discord. A plugin that queries the
 	 * database during setup is refused with a message that says to query from a service's start.
-	 * Preflights are not run. It applies the host's locale and time zone, as `run()` does.
-	 * It does not count as a running host.
+	 * Preflights are not run. It runs each plugin's `setup`, so check a definition you do not run,
+	 * such as `defineRoundtable` called again: the built-in agent server binds its sessions once, and
+	 * a plugin keeps whatever its setup keeps. As `run()` does, it sets the process's locale and time
+	 * zone, and `PI_CODING_AGENT_DIR` when `environment.agentDir` is set. It does not count as a
+	 * running host.
 	 */
 	async check(): Promise<RegistrationReport> {
 		const link = new Linkage(this.#options, this.#plugins);

@@ -52,8 +52,10 @@ export function identityPlugin(options: IdentityOptions): RoundtablePlugin {
 				rules,
 				{ logger, identities },
 			);
-			// `Roundtable.check()` has no database to write the configured principals to.
-			if (!isCheckDatabase(sql)) await identity.syncConfig();
+			// `Roundtable.check()` has no database to write the configured principals to: it asks
+			// only what the configuration and the declared identities settle without one.
+			if (isCheckDatabase(sql)) identity.checkConfig();
+			else await identity.syncConfig();
 			services.provide(IDENTITY, identityView(identity));
 			if (rules.selfLink)
 				services.provide(

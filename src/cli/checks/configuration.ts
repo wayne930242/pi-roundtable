@@ -27,8 +27,9 @@ export async function checkPlugins(project: Project): Promise<Result> {
 			);
 		seen.add(name);
 	}
-	const { defined } = assembled.value;
 	try {
+		// A definition of its own: the one `start` runs must not have had its plugins set up.
+		const defined = await project.reassemble();
 		// The plugins' own log lines are the boot's to print, not the check's.
 		await new Roundtable(
 			{ ...defined.options, logger: silentLogger() },

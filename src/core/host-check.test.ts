@@ -1,11 +1,13 @@
-import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync } from "node:fs";
+import { afterAll, afterEach, describe, expect, test } from "bun:test";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { serviceKey } from "./contract/services.ts";
 import { defineRoundtable } from "./define-roundtable.ts";
 import { Roundtable, type RoundtableOptions } from "./host.ts";
 import type { HttpRoute } from "./http/listeners.ts";
+import type { AccessRules } from "./identity/access-policy.ts";
+import { identityPlugin } from "./identity/identity-plugin.ts";
 import { silentLogger } from "./log.ts";
 import type { RoundtablePlugin, Service } from "./plugin.ts";
 
@@ -13,6 +15,7 @@ const MISSING = serviceKey<{ x: number }>("host-check.missing");
 
 const dir = mkdtempSync(join(tmpdir(), "roundtable-host-check-"));
 const SOCKET = join(dir, "main.sock");
+afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
 function options(extra: Partial<RoundtableOptions> = {}): RoundtableOptions {
 	return {
@@ -256,5 +259,65 @@ describe("Roundtable.check", () => {
 		expect(report.plugins).toContain("identity");
 		expect(report.plugins).toContain("runtime");
 		expect(existsSync(SOCKET)).toBe(false);
+	});
+
+	describe("the configured identities, which the check settles without a stored principal", () => {
+		const ADA = "966666600000000001";
+		const BO = "966666600000000002";
+		const rules = (
+			...owners: AccessRules["owners"][number][]
+		): AccessRules => ({
+			owners,
+			members: {},
+			provisioning: "admitted",
+			backgroundStaleDays: 30,
+		});
+		const declaring = (principal?: string): RoundtablePlugin => ({
+			name: "remote",
+			identities: [
+				{ identity: "token:remote", ...(principal ? { principal } : {}) },
+			],
+			setup: () => ({ services: [service("remote")] }),
+		});
+		const checked = async (access: AccessRules, declares: RoundtablePlugin) =>
+			new Roundtable(options(), [
+				identityPlugin({ rules: access, plugins: [declares] }),
+				declares,
+			])
+				.check()
+				.then(
+					() => "",
+					(error: Error) => error.message,
+				);
+
+		test("passes a plugin identity bound to a configured owner", async () => {
+			const ada = { name: "Ada", principal: ADA, identities: [] };
+			expect(await checked(rules(ada), declaring())).toBe("");
+			expect(await checked(rules(ada), declaring(ADA))).toBe("");
+		});
+
+		test("refuses an identity that names no principal when no owner is listed to bind it to", async () => {
+			expect(await checked(rules(), declaring())).toContain(
+				"plugin remote: token:remote names no principal, and access.owners lists no primary owner",
+			);
+		});
+
+		test("refuses an owner who lists an identity a plugin binds to another principal", async () => {
+			const ada = { name: "Ada", principal: ADA, identities: [] };
+			const bo = {
+				name: "Bo",
+				principal: BO,
+				identities: ["token:remote"],
+			};
+			expect(await checked(rules(ada, bo), declaring())).toContain(
+				`config access.owners[1].identities[0]: token:remote is an identity plugin remote declares, bound to principal ${ADA}, not to this owner's ${BO}`,
+			);
+		});
+
+		test("leaves to the start what a stored link would settle", async () => {
+			const ada = { name: "Ada", principal: ADA, identities: [] };
+			const bo = { name: "Bo", identities: ["token:remote"] };
+			expect(await checked(rules(ada, bo), declaring(BO))).toBe("");
+		});
 	});
 });

@@ -133,6 +133,22 @@ export class Project {
 		return this.#assembled;
 	}
 
+	/**
+	 * The configuration assembled again, as a new definition with its own plugin objects. A host's
+	 * plugins keep what their setup makes (the agent server binds its sessions once), so the
+	 * definition `start` runs is never the one a check set up.
+	 */
+	async reassemble(): Promise<DefinedRoundtable> {
+		const raw = await this.raw();
+		const assembled = await this.assembled();
+		if (!raw.ok || !assembled.ok)
+			throw new Error("the configuration is not valid yet");
+		return this.#ports.define(
+			raw.value as RoundtableConfig,
+			assembled.value.config.agentDir,
+		);
+	}
+
 	async #assemble(): Promise<Loaded<Assembled>> {
 		const raw = await this.raw();
 		if (!raw.ok) return raw;

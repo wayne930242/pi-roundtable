@@ -15,10 +15,11 @@ import {
 	surfaceOf,
 } from "./actor-facts.ts";
 import { CachingPrincipalStore } from "./caching-principal-store.ts";
-import { configuredOwnerId } from "./config-owner.ts";
+import { configuredOwnerId, refuseOwnerDeclarations } from "./config-owner.ts";
 import type { Contact, ContactAssessor } from "./contact.ts";
 import {
 	type DeclaredIdentity,
+	refuseUnboundIdentities,
 	syncDeclaredIdentities,
 } from "./plugin-identities.ts";
 import { highest, lowest, publicOf, speakerOf } from "./principal-reads.ts";
@@ -139,6 +140,12 @@ export class PgIdentityService implements IdentityService, ContactAssessor {
 			...this.#declared.map((declared) => declared.identity),
 		]);
 		this.#logger = options.logger;
+	}
+
+	/** The refusals `syncConfig` makes from the configuration and the declarations alone, for `Roundtable.check()`. */
+	checkConfig(): void {
+		refuseUnboundIdentities(this.#declared, this.#rules.owners.length > 0);
+		refuseOwnerDeclarations(this.#rules.owners, this.#declared);
 	}
 
 	/**

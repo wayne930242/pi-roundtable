@@ -58,6 +58,21 @@ export function declaredIdentities(
 }
 
 /**
+ * The refusal `syncDeclaredIdentities` makes that needs no stored principal: an identity that names
+ * no principal when the configuration lists no primary owner to bind it to.
+ */
+export function refuseUnboundIdentities(
+	identities: readonly DeclaredIdentity[],
+	hasPrimaryOwner: boolean,
+): void {
+	for (const { plugin, identity, principal } of identities)
+		if (principal === undefined && !hasPrimaryOwner)
+			throw new ConfigError(
+				`plugin ${plugin}: ${identity} names no principal, and access.owners lists no primary owner to bind it to. Give the plugin the principal it stands for.`,
+			);
+}
+
+/**
  * Links each identity a plugin declares to its principal, `primaryOwner` by default, as the
  * plugin's: one the plugins bound to another principal at an earlier boot moves, one the
  * configuration or the CLI linked to the same principal stays linked, and one the plugins no
@@ -76,10 +91,10 @@ export async function syncDeclaredIdentities(
 		const ref = parseIdentity(identity);
 		if (!ref) throw new ConfigError(`plugin ${plugin}: ${identity}`);
 		const id = principal ?? primaryOwner;
-		if (id === undefined)
-			throw new ConfigError(
-				`plugin ${plugin}: ${identity} names no principal, and access.owners lists no primary owner to bind it to. Give the plugin the principal it stands for.`,
-			);
+		if (id === undefined) {
+			refuseUnboundIdentities([{ plugin, identity, principal }], false);
+			continue;
+		}
 		if (id === SYSTEM_PRINCIPAL || !(await store.get(id)))
 			throw new ConfigError(
 				`plugin ${plugin}: ${identity} is bound to principal ${id}, and there is no principal ${id}. roundtable principal list shows the principals, and roundtable principal create makes one.`,
