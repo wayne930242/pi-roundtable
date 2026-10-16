@@ -31,6 +31,11 @@ export interface CodexImagesOptions {
 	fetch?: CodexFetch;
 	/** The model that routes the request; default `gpt-6-sol`. */
 	model?: string;
+	/**
+	 * What setup does when the openai-codex login is missing or unusable: "throw" (the default)
+	 * stops the host; "warn" logs a warning, and a drawing then fails with the same PluginError.
+	 */
+	onMissingLogin?: "throw" | "warn";
 }
 
 /** The ChatGPT account the login token belongs to, from the token's claims. */
@@ -197,7 +202,11 @@ const NO_LOGIN = `the host has no login for ${CODEX_PROVIDER}, the provider that
 
 /** The plugin, with its request function and model replaceable for a test. */
 export function createCodexImages(options: CodexImagesOptions = {}) {
-	const { fetch: fetchImpl = fetch, model = CODEX_MODEL } = options;
+	const {
+		fetch: fetchImpl = fetch,
+		model = CODEX_MODEL,
+		onMissingLogin = "throw",
+	} = options;
 	let apiKey: ((provider: string) => Promise<string | undefined>) | undefined;
 	// The login refreshes its token, so each image reads it again instead of keeping the first.
 	const token = async (): Promise<string> => {
@@ -214,7 +223,15 @@ export function createCodexImages(options: CodexImagesOptions = {}) {
 		},
 		async setup(context) {
 			apiKey = context.apiKey;
-			await token();
+			try {
+				await token();
+			} catch (error) {
+				if (onMissingLogin !== "warn" || !(error instanceof PluginError))
+					throw error;
+				context.logger.warn(
+					`plugin codex-images: ${NO_LOGIN} Drawing fails until it does.`,
+				);
+			}
 			return {};
 		},
 	});

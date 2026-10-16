@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { PluginError } from "pi-roundtable";
-import { testPlugin } from "pi-roundtable/testing";
+import { recordingLogger, testPlugin } from "pi-roundtable/testing";
 import {
 	type CodexFetch,
 	codexImages,
@@ -115,4 +115,28 @@ test("codex-images refuses to start without an openai-codex login", async () => 
 	expect(failure).toBeInstanceOf(PluginError);
 	expect((failure as PluginError).message).toContain("openai-codex");
 	expect((failure as PluginError).message).toContain("Log in");
+});
+
+test("codex-images with onMissingLogin warn starts without a login and fails the drawing", async () => {
+	const plugin = createCodexImages({
+		onMissingLogin: "warn",
+		fetch: async () => stream(completed),
+	});
+	const harness = await testPlugin(plugin);
+	const failure = await plugin.providers?.images?.("a fox", []).then(
+		() => undefined,
+		(error: unknown) => error,
+	);
+	expect(failure).toBeInstanceOf(PluginError);
+	expect((failure as PluginError).message).toContain("openai-codex");
+	await harness.stop();
+});
+
+test("codex-images with onMissingLogin warn logs one warning at setup", async () => {
+	const { logger, lines } = recordingLogger();
+	const plugin = createCodexImages({ onMissingLogin: "warn" });
+	// SAFETY: setup reads only apiKey and logger.
+	await plugin.setup?.({ apiKey: async () => undefined, logger } as never);
+	expect(lines.map((line) => line.level)).toEqual(["warn"]);
+	expect(lines[0]?.message).toContain("openai-codex");
 });

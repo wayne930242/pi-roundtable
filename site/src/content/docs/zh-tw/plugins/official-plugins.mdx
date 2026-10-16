@@ -78,6 +78,7 @@ agent 會呼叫這個工具，再把結果回報給你。
 它需要登入 `openai-codex` provider，登入機制和 agent 登入模型時用的相同。
 host 沒有登入時，外掛會拒絕啟動，訊息會說要登入 `openai-codex`。
 外掛每次畫圖都會重新讀取登入資料，所以更新過的 token 會被用到。
+傳入 `createCodexImages({ onMissingLogin: "warn" })`，沒有登入的 host 也能啟動：setup 只記一則警告，之後畫圖時才用同樣的錯誤失敗。
 
 <Aside type="caution" title="它可能隨時失效，不會另行通知">
 `codex-images` 用的是 ChatGPT 的 Codex 後端，OpenAI 並沒有為這種用途提供文件，而且是用你自己的 ChatGPT 訂閱登入。

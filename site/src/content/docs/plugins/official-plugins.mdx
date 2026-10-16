@@ -78,6 +78,7 @@ Its [copy-in source template](https://github.com/wayne930242/pi-roundtable/blob/
 It needs a login to the `openai-codex` provider, the same login mechanism the agents use for their models.
 When the host has none, the plugin refuses to start and the message says to log in to `openai-codex`.
 The plugin reads the login each time it draws, picking up refreshed tokens.
+Pass `createCodexImages({ onMissingLogin: "warn" })` to let a host without the login start: setup logs a warning, and a drawing then fails with the same error.
 
 <Aside type="caution" title="It can stop working without notice">
 `codex-images` uses ChatGPT's Codex backend, which OpenAI does not document for this use, signed in with your own ChatGPT subscription.
