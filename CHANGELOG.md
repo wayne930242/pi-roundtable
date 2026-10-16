@@ -5,6 +5,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `Roundtable.check()` and `RegistrationReport` (`pi-roundtable`): sets up every plugin as `run()` would and refuses what `run()` refuses (a plugin that adds nothing, a clash, a missing service, a removed field, a bad route), with the same messages, without migrating the database, starting a service, opening a listener or reaching Discord. It resolves the plugins that run, the services they add in start order and their routes. A plugin whose `setup` queries the database fails the check with `plugin <name>: setup failed: the database was queried during setup…`, which says to query from a service's `start`; the built-in identity sync and the skills and agent stores skip their load under it. It runs no preflight, applies the host's locale and time zone as `run()` does, and does not count as a running host, so the same host can `run()` afterwards. The registration moved out of `src/core/host.ts` into one shared module, and `run()` behaves as before.
+- `requireDatabase`, `usePostgresForTests` and `UsePostgresOptions` (`pi-roundtable/testing`). `requireDatabase()` gives the test database's URL and throws, naming how to provide one, when the run has none. `usePostgresForTests({ binDirs?, require? })` is for a test preload: unless `ROUNDTABLE_TEST_DATABASE_URL` is set, it starts a throwaway PostgreSQL on `127.0.0.1` (trust authentication, `fsync` off, a temporary data directory), sets the variable and `testDatabaseUrl`, and stops and removes it after the run; with `require: true` it throws when `initdb` or `postgres` is not found.
+- `TestHost.runTool(name, args, options?)` and `TestHost.hold(name, args, options?)` (`pi-roundtable/testing`): run a contributed tool in the owner's session as a speaker on a channel and read the text the model would read, and ask the tool's hold what it would show for the call. `testPlugin`'s `runTool` shares the code that runs the tool.
+
+### Changed
+
+- `roundtable doctor` and `roundtable start` run `Roundtable.check()` in the offline `plugins` check, after the duplicate-name check, and print the message `run()` would fail with. A configuration with a plugin that adds nothing, or any other registration clash, now fails before `start` migrates the database or contacts Discord.
+- `testDatabaseUrl` and `describeDb` (`pi-roundtable/testing`) are live exports (`declare let`): `usePostgresForTests()` updates them after the module has loaded. Reading them is unchanged.
+
 ## [0.16.0] - 2026-10-16
 
 ### Changed

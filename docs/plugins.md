@@ -3233,6 +3233,18 @@ Run every test with `bun test`, and the types with `bun run typecheck`.
 Importing `pi-roundtable/testing` works with `CI=true` and no database URL.
 `describeDb` is Bun's `describe` when `ROUNDTABLE_TEST_DATABASE_URL` is set, and `describe.skip` otherwise; use it to gate a database suite.
 `testDatabaseUrl` is that URL or an empty string, and `TEST_GUILD` is a synthetic guild identifier.
+Both are live bindings: `describeDb` and `testDatabaseUrl` read after `usePostgresForTests()` has run show the database it started.
+`requireDatabase()` gives the URL, and throws an error that says how to provide one when the run has none, for a test file that must not be skipped.
+`usePostgresForTests({ binDirs?, require? })` is for a test preload: unless `ROUNDTABLE_TEST_DATABASE_URL` is already set, it starts a throwaway PostgreSQL on `127.0.0.1` (trust authentication, `fsync` off, a temporary data directory), sets the variable and `testDatabaseUrl`, and stops and removes it after the run.
+It looks for `initdb` and `postgres` in `binDirs` (default `PG_BIN` and the usual Homebrew and Debian directories) and then on `PATH`; with `require: true` it throws when it finds neither, and without it the tests that need a database skip or call `requireDatabase()`.
+Three lines are the whole setup: put `[test]` `preload = ["./test-support/postgres.ts"]` in `bunfig.toml`, and in that file:
+
+```ts
+import { usePostgresForTests } from "pi-roundtable/testing";
+
+await usePostgresForTests({ require: true });
+```
+
 `openTestStore(Store, ...args)` runs the store's `migrations(...args)` or its single `migration`, calls `Store.attach`, and returns a `TestStore<T>` whose `close()` closes its own SQL pool.
 Use it with your own store class in a gated database test, and close the store when the test ends.
 It doesn't attach another instance of the host's stores.
@@ -3270,6 +3282,8 @@ It returns:
 | `commands` | `added`, every slash-command contribution the plugins handed Discord in order, and `composed()`, the tree Discord would register |
 | `sessionTools(scope?)` | The tools each extension of a session registers, in plan order (an extension that registers commands, flags, or event handlers besides tools is accepted, and only its tools are listed); the owner's session unless an `AgentTurnScope` is given |
 | `sessionContext(scope?)` | A `SessionContext` as the runtime builds it, with the real compaction wrapper |
+| `runTool(name, args, { speaker?, channel?, origin? })` | Runs a contributed tool in the owner's session as the speaker on the channel (the owner's channel by default), as `testPlugin`'s `runTool` does, and gives the text the model would read; a tool no plugin added throws a `PluginError` |
+| `hold(name, args, { speaker?, channel? })` | What the tool's hold shows for the call, asked as a turn of that speaker on that channel asks it, or `undefined` when the call runs without an approval |
 | `stop()` | Stops the host; call it when the test ends |
 
 `useEagerCatalog()` sets a catalog that marks every text and uses a foreign time zone.
@@ -3277,6 +3291,34 @@ It returns:
 `useTestLocale()` restores the neutral defaults.
 
 `holdChain(rules)` is in `pi-roundtable/kit`: the chain the host links from every plugin's hold rules, to test a rule set without a harness.
+
+### `Roundtable.check()`: prove the registration without a database
+
+`new Roundtable(options, plugins).check()` sets up every plugin as `run()` would and refuses what `run()` refuses: a plugin that adds nothing, two services of one name, a service no plugin provides, a field the host removed, a route that clashes or names a listener that is not configured.
+It migrates nothing, starts no service, opens no listener, reaches no Discord and runs no preflight, so it needs neither PostgreSQL nor the network, and the same host can `run()` afterwards.
+It applies the host's locale and time zone as `run()` does, and it is no running host: it works while another host runs in the process.
+It resolves a `RegistrationReport`: `plugins` (those that run, in set-up order), `services` (those they contribute, in start order) and `routes` (as `<listener> <path>`).
+
+A plugin's `setup` sees a database that refuses every query, so setup may take `database()` and hand it to a store but may not query it: query from a service's `start` or from a handler.
+A plugin that queries during setup fails the check with `plugin <name>: setup failed: the database was queried during setup…`.
+The built-in plugins that read or write rows when they attach (the identity sync, the skills and the agent stores) skip that load here and start empty.
+Because `check()` runs each `setup` once, keep resources out of `setup`; open them from a service's `start`.
+
+Test the production composition with it, since the other tests build their settings by hand:
+
+```ts
+import { expect, test } from "bun:test";
+import { defineRoundtable, Roundtable } from "pi-roundtable";
+import { silentLogger } from "pi-roundtable/testing";
+
+test("the production configuration registers every plugin", async () => {
+	const defined = await defineRoundtable(productionConfig(), { logger: silentLogger() });
+	const report = await new Roundtable(defined.options, defined.plugins).check();
+	expect(report.plugins).toContain("my-plugin");
+});
+```
+
+`roundtable doctor` and `roundtable start` run it in the offline `plugins` check, so a configuration the host would refuse fails before `start` migrates or contacts Discord.
 
 ### `describeSurfaceContract`: what every chat surface keeps
 
@@ -3384,6 +3426,7 @@ These are the messages as the code writes them, with `<...>` where your names go
 | `no persona is registered for the conversation kind "<kind>". A plugin adds one with personas: [...], or its claim must start conversations of a kind that has one.` (a failed turn) | Contribute a persona of that kind, or run the turn with a kind that has one |
 | `no runtime provider is configured: the runtime plugin builds the Pi runtime when no plugin fills the runtime slot; read the running one from services.get(RUNTIME)` | Only a plugin that calls `providers.runtime` without `providers.filled.has("runtime")` sees it; read `services.get(RUNTIME)` instead |
 | `session tool <name> takes a core extension name. Rename it.` | Pick a name other than the core's |
+| `plugin <name>: setup failed: the database was queried during setup…` (from `Roundtable.check()`, `roundtable doctor` or `start`) | A plugin's `setup` ran a query. Take `database()` in setup and query from a service's `start` or from a handler |
 | `two plugins are named <name>.` (from `roundtable doctor`) | Rename yours; the built-in plugins are `memory`, `schedule-store`, `prechecks`, `discord`, `modules`, `discord-admin`, `skills`, `conversations`, `runtime`, `agent-server`, `seeds`, and `schedules` |
 | `migration <plugin>/<name> is declared twice` | A plugin declares two migrations with one name: rename one (the same name in two plugins is fine) |
 | `/<root> <name> is added twice`, `/<name> is registered twice` | Give each slash command and subcommand its own name |
@@ -3683,6 +3726,7 @@ Import from the entries listed below; source area files are internal.
 | `REPLY_FILE_LIMITS` | `pi-roundtable` | value |
 | `RoundtableConfig` | `pi-roundtable` | type |
 | `RoundtableOptions` | `pi-roundtable` | type |
+| `RegistrationReport` | `pi-roundtable` | type |
 | `RoundtablePlugin` | `pi-roundtable` | type |
 | `RouteSocket` | `pi-roundtable` | type |
 | `RuntimeDeps` | `pi-roundtable` | type |
@@ -3791,6 +3835,7 @@ Import from the entries listed below; source area files are internal.
 | `TestPluginOptions` | `pi-roundtable/testing` | type |
 | `TestPluginResult` | `pi-roundtable/testing` | type |
 | `TestStore` | `pi-roundtable/testing` | type |
+| `UsePostgresOptions` | `pi-roundtable/testing` | type |
 | `describeDb` | `pi-roundtable/testing` | value |
 | `describeSurfaceContract` | `pi-roundtable/testing` | value |
 | `checkSurfaceContract` | `pi-roundtable/testing` | value |
@@ -3810,6 +3855,7 @@ Import from the entries listed below; source area files are internal.
 | `openTestStore` | `pi-roundtable/testing` | value |
 | `servicePair` | `pi-roundtable/testing` | value |
 | `partial` | `pi-roundtable/testing` | value |
+| `requireDatabase` | `pi-roundtable/testing` | value |
 | `recordingLogger` | `pi-roundtable/testing` | value |
 | `RecordingLogger` | `pi-roundtable/testing` | type |
 | `RecordedLog` | `pi-roundtable/testing` | type |
@@ -3818,6 +3864,7 @@ Import from the entries listed below; source area files are internal.
 | `testHost` | `pi-roundtable/testing` | value |
 | `testPlugin` | `pi-roundtable/testing` | value |
 | `useEagerCatalog` | `pi-roundtable/testing` | value |
+| `usePostgresForTests` | `pi-roundtable/testing` | value |
 | `useTestLocale` | `pi-roundtable/testing` | value |
 | `AUTO_THINKING` | `pi-roundtable/kit` | value |
 | `AgentCategory` | `pi-roundtable/kit` | type |

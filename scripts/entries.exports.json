@@ -198,6 +198,7 @@
 			"QueuePort",
 			"Recurrence",
 			"ReferenceImage",
+			"RegistrationReport",
 			"ReplyFile",
 			"ResolvedProviders",
 			"ResolvedSkill",
@@ -281,12 +282,14 @@
 			"openTestStore",
 			"partial",
 			"recordingLogger",
+			"requireDatabase",
 			"servicePair",
 			"silentLogger",
 			"testDatabaseUrl",
 			"testHost",
 			"testPlugin",
 			"useEagerCatalog",
+			"usePostgresForTests",
 			"useTestLocale"
 		],
 		"types": [
@@ -309,7 +312,8 @@
 			"TestLocale",
 			"TestPluginOptions",
 			"TestPluginResult",
-			"TestStore"
+			"TestStore",
+			"UsePostgresOptions"
 		]
 	},
 	"kit": {

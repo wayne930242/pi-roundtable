@@ -94,6 +94,41 @@ Use a disposable database:
 ROUNDTABLE_TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5432/plugin_test bun test
 ```
 
+Or let the run start a throwaway PostgreSQL of its own.
+`usePostgresForTests()` is a test preload: unless the variable is set, it starts PostgreSQL on `127.0.0.1` in a temporary directory, sets `ROUNDTABLE_TEST_DATABASE_URL` and `testDatabaseUrl`, and removes it after the run.
+It needs `initdb` and `postgres` on `PATH` or in `PG_BIN`.
+Put `[test]` `preload = ["./test-support/postgres.ts"]` in `bunfig.toml`, and in that file:
+
+```ts
+import { usePostgresForTests } from "pi-roundtable/testing";
+
+await usePostgresForTests({ require: true });
+```
+
+With `require: true` the run fails when PostgreSQL is not installed; without it the suites gated with `describeDb` skip.
+A test file that must not be skipped calls `requireDatabase()`, which gives the URL or throws an error that says how to provide one.
+
+## Check the registration
+
+`new Roundtable(options, plugins).check()` sets up every plugin as the host would and refuses what the host refuses: a plugin that adds nothing, a clash, a missing service, a removed field, a bad route.
+It needs no database and starts nothing: it migrates nothing, opens no listener and does not reach Discord.
+It resolves a `RegistrationReport` of the plugins that run, the services they add, and their routes.
+
+```ts
+import { expect, test } from "bun:test";
+import { defineRoundtable, Roundtable } from "pi-roundtable";
+import { silentLogger } from "pi-roundtable/testing";
+
+test("the production configuration registers every plugin", async () => {
+	const defined = await defineRoundtable(productionConfig(), { logger: silentLogger() });
+	const report = await new Roundtable(defined.options, defined.plugins).check();
+	expect(report.plugins).toContain("my-plugin");
+});
+```
+
+During the check a plugin's `setup` gets a database that refuses every query, so take `database()` in setup and query from a service's `start`.
+`roundtable doctor` and `roundtable start` run the same check.
+
 ## testHost
 
 `testHost` boots the whole host over the test database with Discord and the runtime standing in.
@@ -106,7 +141,7 @@ Gate the suite with `describeDb`.
 | `runtime` | The runtime every turn runs on. By default one that answers an empty string and builds no Pi session |
 | `discord` | What the stand-in Discord hands out: `agentChannels(guildId)` and `ownerChannel()` |
 
-It returns `context` (the context of a probe plugin set up after every other), `conversations`, `commands` (what was added, and the composed slash-command tree), `sessionTools(scope?)`, `sessionContext(scope?)`, and `stop()`.
+It returns `context` (the context of a probe plugin set up after every other), `conversations`, `commands` (what was added, and the composed slash-command tree), `sessionTools(scope?)`, `sessionContext(scope?)`, `runTool(name, args, options?)` (runs a contributed tool as a speaker on a channel and gives the text the model would read), `hold(name, args, options?)` (what the tool's hold shows for the call, or `undefined`), and `stop()`.
 Call `stop()` when the test ends.
 
 Run every test with `bun test`, and the types with `bun run typecheck`.

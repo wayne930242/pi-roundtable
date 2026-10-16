@@ -90,6 +90,41 @@ handler 和 `build` 函式要自己呼叫，範例 [`events.test.ts`](https://gi
 ROUNDTABLE_TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5432/plugin_test bun test
 ```
 
+也可以讓測試自己啟動一個用完即丟的 PostgreSQL。
+`usePostgresForTests()` 是測試的 preload：沒設那個變數時，它在暫存目錄裡於 `127.0.0.1` 啟動 PostgreSQL，設好 `ROUNDTABLE_TEST_DATABASE_URL` 和 `testDatabaseUrl`，測試結束後移除。
+它需要 `PATH` 上或 `PG_BIN` 裡有 `initdb` 和 `postgres`。
+在 `bunfig.toml` 裡寫 `[test]` `preload = ["./test-support/postgres.ts"]`，那個檔案的內容是：
+
+```ts
+import { usePostgresForTests } from "pi-roundtable/testing";
+
+await usePostgresForTests({ require: true });
+```
+
+`require: true` 時，沒有安裝 PostgreSQL 就讓測試失敗；沒給的話，用 `describeDb` 控管的測試會被跳過。
+不能被跳過的測試檔呼叫 `requireDatabase()`：它回傳 URL，沒有的話丟出說明怎麼提供的錯誤。
+
+## 檢查註冊
+
+`new Roundtable(options, plugins).check()` 像 host 那樣 setup 每個外掛，host 會拒絕的它也拒絕：沒有新增任何東西的外掛、名稱衝突、缺少的服務、已移除的欄位、錯誤的 route。
+它不需要資料庫，也不啟動任何東西：不做 migration、不開 listener、不連 Discord。
+它回傳 `RegistrationReport`，列出會執行的外掛、它們新增的服務和 route。
+
+```ts
+import { expect, test } from "bun:test";
+import { defineRoundtable, Roundtable } from "pi-roundtable";
+import { silentLogger } from "pi-roundtable/testing";
+
+test("the production configuration registers every plugin", async () => {
+	const defined = await defineRoundtable(productionConfig(), { logger: silentLogger() });
+	const report = await new Roundtable(defined.options, defined.plugins).check();
+	expect(report.plugins).toContain("my-plugin");
+});
+```
+
+檢查期間，外掛的 `setup` 拿到的資料庫會拒絕任何查詢，所以在 setup 裡只取得 `database()`，查詢放到服務的 `start` 裡。
+`roundtable doctor` 和 `roundtable start` 執行的是同一個檢查。
+
 ## testHost
 
 `testHost` 在測試資料庫上啟動整個 host，由替身代替 Discord 和 runtime。
@@ -102,7 +137,7 @@ ROUNDTABLE_TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5432/plugin_
 | `runtime` | 每一輪所用的 runtime。預設是一個回答空字串、不建立 Pi session 的 runtime |
 | `discord` | 替身 Discord 提供的東西：`agentChannels(guildId)` 和 `ownerChannel()` |
 
-它回傳 `context`（一個探測用外掛的 context，排在其他所有外掛之後 setup）、`conversations`、`commands`（新增了什麼，以及組好的斜線指令樹）、`sessionTools(scope?)`、`sessionContext(scope?)` 和 `stop()`。
+它回傳 `context`（一個探測用外掛的 context，排在其他所有外掛之後 setup）、`conversations`、`commands`（新增了什麼，以及組好的斜線指令樹）、`sessionTools(scope?)`、`sessionContext(scope?)`、`runTool(name, args, options?)`（以某個發話者在某個頻道執行外掛新增的工具，回傳模型會讀到的文字）、`hold(name, args, options?)`（這個工具的 hold 對這次呼叫會顯示什麼，沒有 hold 時是 `undefined`）和 `stop()`。
 測試結束時要呼叫 `stop()`。
 
 用 `bun test` 跑所有測試，用 `bun run typecheck` 檢查型別。
