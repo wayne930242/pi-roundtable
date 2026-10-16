@@ -29,6 +29,7 @@ import {
 	sign,
 	webhookRequest,
 } from "./testing/line-fake.ts";
+import { claimParker } from "./testing/park-claim.ts";
 import { freshPool, truncateAll } from "./testing/pool.ts";
 
 const credentials = { channelId: CHANNEL_ID, channelSecret: SECRET };
@@ -157,19 +158,26 @@ test("a join notice, quota, sender, outbox or icon mistake throws when the plugi
 
 describeDb("the line plugin", () => {
 	let sql: SQL;
-	const time = new Date("2026-10-13T00:00:00Z");
+	const START = new Date("2026-10-13T00:00:00Z");
+	let time = START;
+	/** How long the inbox puts an event back when its subscriber goes before it is handed over. */
+	const POLL_MS = 20;
+	/** Lets time pass on the frozen clock, which otherwise stands still. */
+	const advance = (ms: number) => {
+		time = new Date(time.getTime() + ms);
+	};
 	const logs = recordingLogger();
 	let provided: unknown;
 	/** The tests that need time to pass (the outbox's window) run on the real clock. */
 	let realClock = false;
 
-	const context = (): PluginContext =>
+	const context = (database: SQL = sql): PluginContext =>
 		partial<PluginContext>({
 			logger: logs.logger,
 			env: partial<PluginContext["env"]>({
 				now: () => (realClock ? new Date() : time),
 			}),
-			database: () => sql,
+			database: () => database,
 			services: partial<PluginContext["services"]>({
 				provide: <T>(key: ServiceKey<T>, value: T) => {
 					expect(key.id).toBe(LINE.id);
@@ -177,15 +185,18 @@ describeDb("the line plugin", () => {
 				},
 			}),
 		});
-	const boot = async (options: Partial<Parameters<typeof line>[0]> = {}) => {
+	const boot = async (
+		options: Partial<Parameters<typeof line>[0]> = {},
+		database?: SQL,
+	) => {
 		const fake = fakeLine();
 		const plugin = line({
 			credentials,
 			fetch: fake.fetch,
-			inbox: { pollMs: 20 },
+			inbox: { pollMs: POLL_MS },
 			...options,
 		});
-		const contribution: Contribution = await plugin.setup(context());
+		const contribution: Contribution = await plugin.setup(context(database));
 		const service = (name: string): Service => {
 			const found = contribution.services?.find((s) => s.name === name);
 			if (!found) throw new Error(`no service ${name}`);
@@ -209,6 +220,7 @@ describeDb("the line plugin", () => {
 		logs.lines.length = 0;
 		provided = undefined;
 		realClock = false;
+		time = START;
 	});
 	afterAll(async () => {
 		await sql?.close();
@@ -343,14 +355,64 @@ describeDb("the line plugin", () => {
 		);
 		await Bun.sleep(80);
 		expect(first).toHaveLength(1);
+		// The worker may have claimed s2 as the first subscriber went and put it back for a moment
+		// (the next test makes it so); the clock stands still, so let that moment pass.
+		advance(POLL_MS);
 		const second: LineEvent[] = [];
 		port.subscribe(async (event) => {
 			second.push(event);
 		});
-		for (let i = 0; i < 400 && second.length < 1; i++) await Bun.sleep(10);
+		await until(() => second.length >= 1);
 		expect(second.map((e) => (e as { eventId: string }).eventId)).toEqual([
 			"s2",
 		]);
+		await service("line-inbox").stop?.();
+	});
+
+	test("an event the worker claims as the subscriber goes is put back uncounted and goes to the next subscriber once its moment has passed", async () => {
+		const parker = claimParker(sql);
+		const { service, route, port } = await boot({}, parker.sql);
+		await service("line-inbox").start?.();
+		await route.handle(webhookRequest(body(messageEvent({ id: "c0" }))));
+		await port.sources.allow(GROUP);
+		await route.handle(webhookRequest(body(messageEvent({ id: "c1" }))));
+		const status = async (id: string) =>
+			(
+				await sql`SELECT status, attempts, requeues, last_error_code FROM line_inbox WHERE webhook_event_id = ${id}`
+			)[0];
+		const first: LineEvent[] = [];
+		const detach = port.subscribe(async (event) => {
+			first.push(event);
+		});
+		await until(async () => (await status("c1"))?.status === "done");
+		// The worker's next look at the inbox begins with the subscriber still attached ...
+		const letGo = await parker.park();
+		// ... and goes on only after the subscriber has gone and c2 has come in.
+		detach();
+		await route.handle(webhookRequest(body(messageEvent({ id: "c2" }))));
+		letGo();
+		await until(async () => (await status("c2"))?.last_error_code != null);
+		expect(await status("c2")).toMatchObject({
+			status: "pending",
+			attempts: 0,
+			requeues: 0,
+			last_error_code: "no_processor",
+		});
+		expect(first.map((e) => (e as { eventId: string }).eventId)).toEqual([
+			"c1",
+		]);
+		// It comes due once the moment has passed; the next subscriber is handed it, as attempt one.
+		advance(POLL_MS);
+		const second: LineEvent[] = [];
+		port.subscribe(async (event) => {
+			second.push(event);
+		});
+		await until(() => second.length >= 1);
+		expect(second.map((e) => (e as { eventId: string }).eventId)).toEqual([
+			"c2",
+		]);
+		await until(async () => (await status("c2"))?.status === "done");
+		expect(await status("c2")).toMatchObject({ status: "done", attempts: 1 });
 		await service("line-inbox").stop?.();
 	});
 
