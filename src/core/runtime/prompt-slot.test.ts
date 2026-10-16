@@ -15,8 +15,11 @@ test("workTimeout calls expire once after the work time, and cancel stops it", a
 	expect(cancelled).toBe(0);
 });
 
-test("workTimeout does not count the time the slot waited on a card", async () => {
-	// The slot reports 100 ms of waiting from the start: a 60 ms limit is then due at 160 ms.
+test("workTimeout does not count the time the slot waited on a card, and looks again no sooner than a second after a look that finds work left", async () => {
+	// The slot reports 100 ms of waiting from the start. The 60 ms limit first comes due at 60 ms,
+	// finds all of its 60 ms still left (the wait has used the time), and looks again after the
+	// floor of a second, not after the 60 ms left, so it fires at about 1,060 ms. Without the floor
+	// it would look again at 120 ms and fire at 160.
 	const started = Date.now();
 	const slot = { waitedMs: (now = Date.now()) => Math.min(now - started, 100) };
 	let expiredAt = 0;
@@ -25,7 +28,7 @@ test("workTimeout does not count the time the slot waited on a card", async () =
 	});
 	await Bun.sleep(100);
 	expect(expiredAt).toBe(0);
-	// It looks again for the work left, which a floor keeps from being a few milliseconds.
 	for (let i = 0; i < 300 && expiredAt === 0; i++) await Bun.sleep(10);
-	expect(expiredAt).toBeGreaterThanOrEqual(160);
+	expect(expiredAt).toBeGreaterThanOrEqual(1_000);
+	expect(expiredAt).toBeLessThan(2_000);
 });
