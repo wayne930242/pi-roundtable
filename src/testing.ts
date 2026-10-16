@@ -607,6 +607,8 @@ export async function testPlugin(
 	// The plugin's own surfaces start as services; the injected ones start beside them, after.
 	const deliver = (message: InboundMessage) =>
 		void conversations.handle(message);
+	// As the host does, the plugin's preflight runs once everything is set up and before any service starts.
+	await plugin.preflight?.();
 	for (const service of registry.services) await service.start?.();
 	for (const surface of options.surfaces ?? []) await surface.start(deliver);
 	await runtime?.preflight?.();

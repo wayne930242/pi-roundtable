@@ -168,13 +168,6 @@ describeDb("remoteMcp on a plugin harness", () => {
 				},
 			],
 		});
-		// The host runs a plugin's preflight before its services start; `testPlugin` does not.
-		try {
-			await plugin.preflight?.();
-		} catch (error) {
-			await harness.stop();
-			throw error;
-		}
 		harnesses.push(harness);
 		return { harness, runtime, discord, registered };
 	}

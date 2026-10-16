@@ -213,7 +213,7 @@ export function remoteMcp(options: RemoteMcpOptions): RoundtablePlugin {
 				mcpGrantCommands(discord.guard, grants, options.publicUrl, text),
 			);
 			services.provide(REMOTE_MCP, remoteMcpService(grants, text));
-			// Read before any service starts; see `preflight` below.
+			// Read before any service starts, by `preflight` above.
 			adopt = async () => {
 				found = await boundPrincipal(identities, identity);
 				// 0.8's sessions were the owner's, and their conversations, recorded shared, become theirs.

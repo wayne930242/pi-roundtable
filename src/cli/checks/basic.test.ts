@@ -192,6 +192,22 @@ describe("plugins", () => {
 		expect(calls[1]?.fresh).toBe(true);
 		expect(calls[1]?.logger).toBeDefined();
 	});
+	test("fails, naming the file, when the configuration was not evaluated again", async () => {
+		const config = { ...validConfig, plugins: [plugin("hello")] };
+		const project = new Project(
+			"/x",
+			fakePorts(config, {
+				// A loader that hands back the very object it gave the first time.
+				loadConfig: async () => config,
+				define: async () => ({
+					options: { logger: {} as never },
+					plugins: [plugin("database"), plugin("hello")],
+				}),
+			}),
+		);
+		const text = failure(await checkPlugins(project));
+		expect(text).toContain("roundtable.config.ts was not evaluated again");
+	});
 	test("fails on a repeated name and says to rename", async () => {
 		const text = failure(
 			await checkPlugins(withPlugins(["database", "hello", "hello"])),

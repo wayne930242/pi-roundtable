@@ -150,6 +150,49 @@ test("database and built-in services fail with the host's errors until provided"
 	await harness.stop();
 });
 
+test("the plugin's preflight runs after setup and before its services start", async () => {
+	const order: string[] = [];
+	const harness = await testPlugin({
+		name: "ordered",
+		preflight: () => {
+			order.push("preflight");
+		},
+		setup: () => {
+			order.push("setup");
+			return {
+				services: [
+					{
+						name: "ordered",
+						start: () => {
+							order.push("start");
+						},
+					},
+				],
+			};
+		},
+	});
+	expect(order).toEqual(["setup", "preflight", "start"]);
+	await harness.stop();
+});
+
+test("a plugin whose preflight throws fails testPlugin with that error before any service starts", async () => {
+	const started: string[] = [];
+	await expect(
+		testPlugin({
+			name: "refusing",
+			preflight: () => {
+				throw new Error("not ready");
+			},
+			setup: () => ({
+				services: [
+					{ name: "refusing", start: () => void started.push("start") },
+				],
+			}),
+		}),
+	).rejects.toThrow("not ready");
+	expect(started).toEqual([]);
+});
+
 test("events reach the plugin and are recorded", async () => {
 	const received: string[] = [];
 	const harness = await testPlugin(

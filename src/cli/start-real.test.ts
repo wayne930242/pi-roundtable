@@ -251,21 +251,26 @@ export default {
 	test("a check over the very plugin objects start launches would have set them up twice", async () => {
 		const cwd = project();
 		const launched: string[] = [];
-		await expect(
-			start({
-				cwd,
-				env: {},
-				bun,
-				// A port that ignores `fresh`: the plugin objects of the check are the launched ones.
-				ports: real((dir) => loadConfigFile(dir)),
-				database: {
-					check: async () => undefined,
-					read: async () => [],
-				} as never,
-				http: fakeHttp({}),
-				launch: launching(launched),
-			}),
-		).rejects.toThrow("the one-shot slot is bound once");
+		const report = await start({
+			cwd,
+			env: {},
+			bun,
+			// A port that ignores `fresh`: the plugin objects of the check are the launched ones.
+			ports: real((dir) => loadConfigFile(dir)),
+			database: {
+				check: async () => undefined,
+				read: async () => [],
+			} as never,
+			http: fakeHttp({}),
+			launch: launching(launched),
+		});
+		// The check refuses to run over the plugins start would launch, and says why.
+		expect(report.started).toBe(false);
 		expect(launched).toEqual([]);
+		expect(
+			JSON.stringify(
+				report.outcomes.find(({ name }) => name === "plugins")?.result,
+			),
+		).toContain("was not evaluated again");
 	});
 });

@@ -59,7 +59,11 @@ export function fakePorts(
 		],
 	};
 	return {
-		loadConfig: async () => config,
+		// A file evaluated again makes a new object, as the real loader's `fresh` does.
+		loadConfig: async (_cwd, options) =>
+			options?.fresh && typeof config === "object" && config !== null
+				? { ...config }
+				: config,
 		define: async () => defined,
 		login: async () => "ANTHROPIC_API_KEY",
 		...overrides,

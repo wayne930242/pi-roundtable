@@ -97,6 +97,8 @@ export class Project {
 	readonly #cwd: string;
 	readonly #ports: Ports;
 	#raw: Promise<Loaded<unknown>> | undefined;
+	/** The configuration file's default export as it was loaded, before its adapters were lifted. */
+	#exported: unknown;
 	#assembled: Promise<Loaded<Assembled>> | undefined;
 
 	constructor(cwd: string, ports: Ports) {
@@ -111,7 +113,10 @@ export class Project {
 	 */
 	raw(): Promise<Loaded<unknown>> {
 		this.#raw ??= this.#ports.loadConfig(this.#cwd).then(
-			(value): Loaded<unknown> => ({ ok: true, value: lifted(value) }),
+			(value): Loaded<unknown> => {
+				this.#exported = value;
+				return { ok: true, value: lifted(value) };
+			},
 			(error: unknown): Loaded<unknown> => ({
 				ok: false,
 				failure: fail(
@@ -165,9 +170,13 @@ export class Project {
 	async reassemble(): Promise<DefinedRoundtable> {
 		const assembled = await this.assembled();
 		if (!assembled.ok) throw new Error("the configuration is not valid yet");
-		const value = lifted(
-			await this.#ports.loadConfig(this.#cwd, { fresh: true }),
-		);
+		const fresh = await this.#ports.loadConfig(this.#cwd, { fresh: true });
+		// A runtime that did not evaluate the file again would share every plugin with the first definition.
+		if (fresh === this.#exported)
+			throw new Error(
+				`${CONFIG_FILE} was not evaluated again, so the check would set up the plugins that start runs. This Bun does not run a file again when it is imported under a new query; use a Bun that does (1.4.2 does).`,
+			);
+		const value = lifted(fresh);
 		return this.#ports.define(
 			value as RoundtableConfig,
 			assembled.value.config.agentDir,
