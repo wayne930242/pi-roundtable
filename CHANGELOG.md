@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-10-17
+
 ### Added
 
 - `OpsAlerts`, `OpsAlertsOptions`, `OpsRaiseOptions` and `OpsAlertKind` (`pi-roundtable/kit`): short alerts for the people who run a host, for a plugin's own faults. `new OpsAlerts({ sink?, logger, kinds?, windowMs?, kindCap?, now? })` posts through `sink(text)`, a function that resolves `true` when it posted and `false` when it chose not to, so the kit names no discord.js type. `raise(key, text, { code?, info? })` posts at once, never queued, a key at most once per window (one hour) and a kind (the key's word before the first colon) at most `kindCap` times per window (8), whatever the keys; what is held back is only counted. A sink that throws or answers `false` gives the key and the slot back, so the next raise tries again; a throw is logged by the error's name and `raise` never throws. `info: true` is news, posted once per key, outside the cap and outside `faults()`. `faults()` lists the last fault of each kind, newest first, with `name` (from `kinds`), `code`, `raised` and `suppressed`, in memory. With no `sink` the alerts are recorded, the key stays held, and the log has one line per window (`an ops alert was raised and there is no sink to post it to`). No summary of the held-back alerts is posted, so there is no new text to translate.
