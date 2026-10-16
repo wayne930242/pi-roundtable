@@ -3282,7 +3282,7 @@ It returns:
 | `commands` | `added`, every slash-command contribution the plugins handed Discord in order, and `composed()`, the tree Discord would register |
 | `sessionTools(scope?)` | The tools each extension of a session registers, in plan order (an extension that registers commands, flags, or event handlers besides tools is accepted, and only its tools are listed); the owner's session unless an `AgentTurnScope` is given |
 | `sessionContext(scope?)` | A `SessionContext` as the runtime builds it, with the real compaction wrapper |
-| `runTool(name, args, { speaker?, channel?, origin? })` | Runs a contributed tool in the owner's session as the speaker on the channel (the owner's channel by default), as `testPlugin`'s `runTool` does, and gives the text the model would read; a tool no plugin added throws a `PluginError` |
+| `runTool(name, args, { speaker?, channel?, origin? })` | Runs a contributed tool in the owner's session as the speaker on the channel (the owner's channel by default), as `testPlugin`'s `runTool` does, and gives the text the model would read: a tool that throws throws, a refusal (`ToolRefusal`) comes back as its text, and a tool no plugin added throws a `PluginError` |
 | `hold(name, args, { speaker?, channel? })` | What the tool's hold shows for the call, asked as a turn of that speaker on that channel asks it, or `undefined` when the call runs without an approval |
 | `stop()` | Stops the host; call it when the test ends |
 
@@ -3295,14 +3295,20 @@ It returns:
 ### `Roundtable.check()`: prove the registration without a database
 
 `new Roundtable(options, plugins).check()` sets up every plugin as `run()` would and refuses what `run()` refuses: a plugin that adds nothing, two services of one name, a service no plugin provides, a field the host removed, a route that clashes or names a listener that is not configured.
-It migrates nothing, starts no service, opens no listener, reaches no Discord and runs no preflight, so it needs neither PostgreSQL nor the network, and the same host can `run()` afterwards.
-It applies the host's locale and time zone as `run()` does, and it is no running host: it works while another host runs in the process.
+It migrates nothing, starts no service, opens no listener, reaches no Discord and runs no preflight, so it needs neither PostgreSQL nor the network.
+It runs each plugin's `setup`, so a plugin keeps whatever its setup keeps: the built-in agent server binds its sessions once, so the plugin objects of a definition that was checked cannot be run, or checked again.
+Check a definition you do not run: call `defineRoundtable` again for the check, as `roundtable doctor` and `roundtable start` do, and run the one you did not check.
+As `run()` does, it sets three things of the process: the locale and the time zone from the host's `environment`, and `PI_CODING_AGENT_DIR` when `environment.agentDir` is set.
+A check of another host while one runs therefore changes them for the running host, and in one `bun test` process they carry into later test files; give the hosts you check the same `environment`.
+It is no running host: a check never makes `run()` refuse a second host.
 It resolves a `RegistrationReport`: `plugins` (those that run, in set-up order), `services` (those they contribute, in start order) and `routes` (as `<listener> <path>`).
 
 A plugin's `setup` sees a database that refuses every query, so setup may take `database()` and hand it to a store but may not query it: query from a service's `start` or from a handler.
 A plugin that queries during setup fails the check with `plugin <name>: setup failed: the database was queried during setup…`.
 The built-in plugins that read or write rows when they attach (the identity sync, the skills and the agent stores) skip that load here and start empty.
-Because `check()` runs each `setup` once, keep resources out of `setup`; open them from a service's `start`.
+The identity sync still settles what the configuration and the declared identities settle without a stored principal: a plugin identity that names no principal when `access.owners` lists no one to bind it to, and an owner who names their `principal` and lists an identity a plugin binds to another principal.
+What needs a stored principal or link, such as a plugin bound to a principal that does not exist, is left to the start.
+Keep resources out of `setup`; open them from a service's `start`, which `check()` never runs.
 
 Test the production composition with it, since the other tests build their settings by hand:
 
@@ -3318,7 +3324,7 @@ test("the production configuration registers every plugin", async () => {
 });
 ```
 
-`roundtable doctor` and `roundtable start` run it in the offline `plugins` check, so a configuration the host would refuse fails before `start` migrates or contacts Discord.
+`roundtable doctor` and `roundtable start` run it in the offline `plugins` check, on a definition assembled again for the purpose, so a configuration the host would refuse fails before `start` migrates or contacts Discord.
 
 ### `describeSurfaceContract`: what every chat surface keeps
 

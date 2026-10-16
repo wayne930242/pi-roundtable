@@ -108,6 +108,8 @@ await usePostgresForTests({ require: true });
 
 `new Roundtable(options, plugins).check()` 像 host 那樣 setup 每個外掛，host 會拒絕的它也拒絕：沒有新增任何東西的外掛、名稱衝突、缺少的服務、已移除的欄位、錯誤的 route。
 它不需要資料庫，也不啟動任何東西：不做 migration、不開 listener、不連 Discord。
+它會執行每個外掛的 `setup`，而內建的 agent server 只能綁定一次它的 session，所以要檢查的是你不會拿去執行的那一份定義：為檢查再呼叫一次 `defineRoundtable`，`roundtable doctor` 和 `roundtable start` 就是這麼做的。
+和 `run()` 一樣，它會設定整個行程的 locale、時區，以及（設了 `environment.agentDir` 時）`PI_CODING_AGENT_DIR`。
 它回傳 `RegistrationReport`，列出會執行的外掛、它們新增的服務和 route。
 
 ```ts
