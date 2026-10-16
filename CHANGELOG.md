@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.17.1] - 2026-10-16
+
 ### Changed
 
 - A message steered into a running turn renews the turn's time budget: the built-in runtime gives the turn its full `turnTimeoutMs` (10 minutes by default) again from the steer, so a turn the owner kept steering is no longer aborted, and its final reply lost, at 10 minutes from its start. The new runtime option `turnMaxMs` caps the work of one turn, steered or not, at three times `turnTimeoutMs` by default (30 minutes); once it is reached the turn takes no more steering, the message waits for the next turn, and the turn is aborted as on its timeout. Time waiting on the owner's cards counts towards neither. A renewal is logged at info (`steer renewed the turn's time budget`, with `channel` and `deadlineMs`, the work time left), and the timeout warning names the limit that fired (`limit: "turn"` or `"turnMax"`). Task workers, coding workers and sandbox guests keep their own timeouts.
