@@ -40,7 +40,7 @@
 		"canvas": "3.2.3",
 		"d3-force": "3.0.0",
 		"roughjs": "4.6.6",
-		"typebox": "1.3.34"
+		"typebox": "1.3.37"
 	},
 	"peerDependencies": {
 		"pi-roundtable": ">=0.17.0 <0.18.0"
