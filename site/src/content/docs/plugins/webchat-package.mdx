@@ -90,6 +90,8 @@ The [package README](https://github.com/wayne930242/pi-roundtable/blob/master/pa
 
 The verifier is generic; what makes it safe is how you point it at your provider.
 Read the README's [provider settings](https://github.com/wayne930242/pi-roundtable/blob/master/packages/webchat/README.md#provider-settings) before anyone signs in: name people by a claim that stays the same across app registrations, pin your tenant, accept access tokens only, and merge issuers of one tenant only.
+For Microsoft Entra ID v2 access tokens, `entraV2Check({ tenant, scope, guests? })` is a ready-made `check`: it pins `tid`, requires `ver` `"2.0"` and the delegated scope in `scp`, and accepts only members (`acct` `0` or `"0"`) unless `guests: true`.
+For tests, `pi-roundtable-webchat/testing` exports `testIssuer`, an OpenID provider on a local port that signs tokens with `sign({ claims })` and serves the JWKS at `jwksUrl`.
 The [security](/configure/security/) page covers what the rest of the host trusts.
 
 ## What it does not do yet

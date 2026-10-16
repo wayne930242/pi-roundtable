@@ -90,6 +90,8 @@ REST API 可以列出一個人的對話、開新對話、讀取對話訊息。
 
 verifier 本身是通用的；安不安全，取決於你怎麼把它指向自己的供應商。
 有人登入之前，請先讀 README 的[供應商設定](https://github.com/wayne930242/pi-roundtable/blob/master/packages/webchat/README.md#provider-settings)：用跨 app 註冊都不變的 claim 識別人、固定租戶、只接受 access token，而且只合併同一個租戶的 issuer。
+對 Microsoft Entra ID v2 的 access token，`entraV2Check({ tenant, scope, guests? })` 是現成的 `check`：它固定 `tid`，要求 `ver` 為 `"2.0"`、`scp` 含委派的 scope，而且除非設 `guests: true`，只接受成員（`acct` 為 `0` 或 `"0"`）。
+測試時，`pi-roundtable-webchat/testing` 匯出 `testIssuer`：它在本機 port 上跑一個 OpenID provider，用 `sign({ claims })` 簽 token，並在 `jwksUrl` 提供 JWKS。
 host 其他部分信任哪些東西，見[安全性](/zh-tw/configure/security/)。
 
 ## 目前還不支援

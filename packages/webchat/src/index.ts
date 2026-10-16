@@ -2,11 +2,13 @@ export type { WebChatLimits, WebPersona } from "./chat.ts";
 export type { ClientCallLimits } from "./client-calls.ts";
 export type { Notice } from "./notices.ts";
 export type {
+	EntraV2CheckOptions,
 	OidcJwtVerifierOptions,
 	TokenVerifier,
 	WebIdentity,
 } from "./oidc.ts";
 export {
+	entraV2Check,
 	identityActor,
 	oidcJwtVerifier,
 	oidcSpeakerId,

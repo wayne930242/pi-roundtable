@@ -148,16 +148,37 @@ Microsoft Entra ID is the example below, and the same questions apply to any pro
 - **Merge issuers of one tenant only.** `speakerIssuer` makes one person's id the same whichever listed issuer signed the token, such as Entra's v1 `https://sts.windows.net/<tenant>/` and v2 `https://login.microsoftonline.com/<tenant>/v2.0`. Never list issuers of different tenants or providers together: their subjects are separate namespaces, and two people could get one id.
 - **Mind who `everyone` admits.** `everyone: ["<surface>"]` admits every person the verifier accepts on that surface, guest accounts of your tenant included; core `everyone: true` also admits people on every other surface. Prefer roles assigned to the users and groups who should chat; with Entra, the optional `acct` claim (`0` for a member of the tenant, `1` for a guest) lets `check` refuse guests.
 
+`entraV2Check` does the tenant, version, scope and guest checks for Entra ID v2 access tokens:
+
 ```ts
+import { entraV2Check, oidcJwtVerifier } from "pi-roundtable-webchat";
+
 const tenant = process.env.ENTRA_TENANT_ID ?? "";
 const verifier = oidcJwtVerifier({
 	jwksUrl: `https://login.microsoftonline.com/${tenant}/discovery/v2.0/keys`,
 	issuers: [`https://login.microsoftonline.com/${tenant}/v2.0`],
 	audiences: [process.env.ENTRA_API_CLIENT_ID ?? ""],
 	subjectClaim: "oid",
-	check: (claims) => claims.tid === tenant && typeof claims.scp === "string",
+	check: entraV2Check({ tenant, scope: "access_as_user" }),
 });
 ```
+
+It requires `tid` to equal `tenant`, `ver` to be `"2.0"`, `scp` to list `scope`, and `acct` to be `0` or `"0"`, so a guest or a token without `acct` is refused; `guests: true` also admits `acct` `1`.
+
+### Testing a host that verifies tokens
+
+`pi-roundtable-webchat/testing` exports `testIssuer`, a self-made OpenID provider on a local port with RS256 and ES256 keys:
+
+```ts
+import { testIssuer } from "pi-roundtable-webchat/testing";
+
+const idp = await testIssuer();
+const token = await idp.sign({ claims: { scp: "access_as_user" } });
+// idp.jwksUrl, idp.issuer and idp.audience go into oidcJwtVerifier.
+await idp.close();
+```
+
+`sign({ claims, omit, alg, unknownKey })` signs over the issuer's defaults, and `rotate()` publishes a fresh key set.
 
 ## Connecting
 

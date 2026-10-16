@@ -278,3 +278,31 @@ export function oidcJwtVerifier(
 		};
 	};
 }
+
+export interface EntraV2CheckOptions {
+	/** The tenant id `tid` must equal. */
+	tenant: string;
+	/** A delegated scope `scp` must list. */
+	scope: string;
+	/** Admit guest accounts (`acct` 1); default false, members only. */
+	guests?: boolean;
+}
+
+/**
+ * The `check` of `oidcJwtVerifier` for Microsoft Entra ID v2 access tokens of one tenant: `tid` is
+ * the tenant, `ver` is "2.0", `scp` lists the scope, and `acct` is 0 (a member) unless guests are
+ * admitted, which also admits 1. Entra writes `acct` as a number or a string; both are read. A
+ * token without `acct` is refused.
+ */
+export function entraV2Check(
+	options: EntraV2CheckOptions,
+): NonNullable<OidcJwtVerifierOptions["check"]> {
+	const { tenant, scope, guests = false } = options;
+	const accounts = guests ? [0, "0", 1, "1"] : [0, "0"];
+	return (claims) =>
+		claims.tid === tenant &&
+		claims.ver === "2.0" &&
+		accounts.includes(claims.acct as string | number) &&
+		typeof claims.scp === "string" &&
+		claims.scp.split(" ").includes(scope);
+}
