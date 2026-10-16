@@ -207,6 +207,11 @@ describe("plugins", () => {
 		);
 		const text = failure(await checkPlugins(project));
 		expect(text).toContain("roundtable.config.ts was not evaluated again");
+		// It names both causes and the fix, and does not blame the runtime alone.
+		expect(text).toContain("built in a module the file imports");
+		expect(text).toContain(
+			"Build the definition in roundtable.config.ts itself",
+		);
 	});
 	test("fails on a repeated name and says to rename", async () => {
 		const text = failure(

@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DISCORD, type DiscordServices } from "../core/builtin/discord.ts";
@@ -272,5 +272,35 @@ export default {
 				report.outcomes.find(({ name }) => name === "plugins")?.result,
 			),
 		).toContain("was not evaluated again");
+	});
+
+	test("a default export built in an imported module is refused with the cause and the fix", async () => {
+		const cwd = project();
+		const config = join(cwd, "roundtable.config.ts");
+		// The same file, moved to a module that the configuration file only re-exports.
+		writeFileSync(join(cwd, "base.ts"), readFileSync(config, "utf8"));
+		writeFileSync(
+			config,
+			'import base from "./base.ts";\nexport default base;\n',
+		);
+		const launched: string[] = [];
+		const report = await start({
+			cwd,
+			env: {},
+			bun,
+			ports: real(loadConfigFile),
+			database: { check: async () => undefined, read: async () => [] } as never,
+			http: fakeHttp({}),
+			launch: launching(launched),
+		});
+		expect(report.started).toBe(false);
+		expect(launched).toEqual([]);
+		const text = JSON.stringify(
+			report.outcomes.find(({ name }) => name === "plugins")?.result,
+		);
+		expect(text).toContain("built in a module the file imports");
+		expect(text).toContain(
+			"Build the definition in roundtable.config.ts itself",
+		);
 	});
 });

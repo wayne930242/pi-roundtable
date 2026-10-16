@@ -175,11 +175,25 @@ test("the plugin's preflight runs after setup and before its services start", as
 	await harness.stop();
 });
 
-test("a plugin whose preflight throws fails testPlugin with that error before any service starts", async () => {
+test("a plugin whose preflight throws fails testPlugin with that error before any service starts, and disposes the runtime it built", async () => {
 	const started: string[] = [];
+	const disposed: string[] = [];
 	await expect(
 		testPlugin({
 			name: "refusing",
+			providers: {
+				runtime: () => ({
+					runTurn: async () => ({ ok: true, text: "" }),
+					steer: async () => false,
+					stop: () => false,
+					startFresh: async () => undefined,
+					deleteConversation: async () => undefined,
+					pendingConfirmation: () => undefined,
+					heldActions: async () => undefined,
+					recentTranscript: async () => [],
+					dispose: async () => void disposed.push("runtime"),
+				}),
+			},
 			preflight: () => {
 				throw new Error("not ready");
 			},
@@ -191,6 +205,7 @@ test("a plugin whose preflight throws fails testPlugin with that error before an
 		}),
 	).rejects.toThrow("not ready");
 	expect(started).toEqual([]);
+	expect(disposed).toEqual(["runtime"]);
 });
 
 test("events reach the plugin and are recorded", async () => {

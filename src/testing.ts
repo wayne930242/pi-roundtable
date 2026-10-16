@@ -608,7 +608,13 @@ export async function testPlugin(
 	const deliver = (message: InboundMessage) =>
 		void conversations.handle(message);
 	// As the host does, the plugin's preflight runs once everything is set up and before any service starts.
-	await plugin.preflight?.();
+	try {
+		await plugin.preflight?.();
+	} catch (error) {
+		// The runtime the provider built is not left running when the plugin refuses.
+		await runtime?.dispose?.();
+		throw error;
+	}
 	for (const service of registry.services) await service.start?.();
 	for (const surface of options.surfaces ?? []) await surface.start(deliver);
 	await runtime?.preflight?.();

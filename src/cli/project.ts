@@ -174,7 +174,7 @@ export class Project {
 		// A runtime that did not evaluate the file again would share every plugin with the first definition.
 		if (fresh === this.#exported)
 			throw new Error(
-				`${CONFIG_FILE} was not evaluated again, so the check would set up the plugins that start runs. This Bun does not run a file again when it is imported under a new query; use a Bun that does (1.4.2 does).`,
+				`${CONFIG_FILE} was not evaluated again, so the check would set up the very plugins that start runs. Either this Bun did not run the file again when it was imported under a new query (1.4.2 does), or the default export is built in a module the file imports (\`import config from "./base.ts"; export default config;\`), which stays shared. Build the definition in ${CONFIG_FILE} itself: call defineRoundtable and the plugin factories there.`,
 			);
 		const value = lifted(fresh);
 		return this.#ports.define(
