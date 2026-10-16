@@ -164,6 +164,12 @@ It then calls `DefineOverrides.errorSink(entry)` if you supply one; this functio
 A logger you supply reaches the ops agent and `errorSink` only if it forwards its error lines there.
 The report names the plugin next to `app` and `module`; the same error is reported at most once an hour, regardless of which plugin wrote it.
 
+`OpsAlerts` in `pi-roundtable/kit` is for a plugin's own alerts, such as a failed push, that the people who run the host should read; it is not the error report above, and a host that wants both uses both.
+`new OpsAlerts({ sink?, logger, kinds?, windowMs?, kindCap?, now? })` takes `sink(text) => Promise<boolean>`, which posts the text where those people read it: resolve `true` when it was posted, `false` when you chose not to (log why yourself, for example a channel outside the one guild alerts may go to), or throw. The kit names no discord.js type, so the sink is the only place a transport appears.
+`raise(key, text, { code?, info? })` resolves whether the alert was posted. The kind is the key's word before the first colon (`push:group-7` is `push`).
+A key is posted at most once per window (one hour by default) and a kind at most `kindCap` times per window (8 by default), whatever the keys, so a fault that touches everything cannot flood the sink. An alert is posted when it is raised, not queued, and what is held back is only counted: `faults()` lists the last fault of each kind, newest first, with its `name` (from `kinds`, else the kind itself), `code`, `raised` and `suppressed`, in memory only, for a status command. `info: true` marks news, not a fault: it posts at most once per key, does not count against the kind's cap and is not listed in `faults()`.
+A sink that throws or answers `false` gives the key and the kind's slot back, so the next raise tries again, and a throw is logged by the error's name only. `raise` never throws. With no `sink`, alerts are only recorded, the key stays held and the log has one line per window (`an ops alert was raised and there is no sink to post it to`); `posts` tells which. `ErrorReporter` and `OpsAlerts` share one internal throttle, so the error reports above keep their limit of five reports an hour.
+
 ### Services: what plugins provide to each other
 
 A service is something one plugin builds and others read, such as the schedule store or the agent team.
@@ -3989,6 +3995,10 @@ Import from the entries listed below; source area files are internal.
 | `isRuleLoad` | `pi-roundtable/kit` | value |
 | `InterimPoster` | `pi-roundtable/kit` | value |
 | `InterimPosterOptions` | `pi-roundtable/kit` | type |
+| `OpsAlerts` | `pi-roundtable/kit` | value |
+| `OpsAlertsOptions` | `pi-roundtable/kit` | type |
+| `OpsRaiseOptions` | `pi-roundtable/kit` | type |
+| `OpsAlertKind` | `pi-roundtable/kit` | type |
 | `JEV_COMPACTION_ENGINE` | `pi-roundtable/kit` | value |
 | `JEV_GOAL` | `pi-roundtable/kit` | value |
 | `JEV_PREVIOUS_SUMMARY_LIMIT_TOKENS` | `pi-roundtable/kit` | value |

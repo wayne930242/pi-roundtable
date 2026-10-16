@@ -100,6 +100,12 @@ export {
 	SCHEDULE_TOOLS,
 	scheduleToolSpecs,
 } from "./mirror.ts";
+export type {
+	OpsAlertKind,
+	OpsAlertsOptions,
+	OpsRaiseOptions,
+} from "./ops-alerts.ts";
+export { OpsAlerts } from "./ops-alerts.ts";
 export {
 	headline,
 	quietLinks,

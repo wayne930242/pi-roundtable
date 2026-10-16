@@ -2,6 +2,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import type { ScheduledOutcome } from "../contract/channels.ts";
 import type { LogEntry, Logger } from "../log.ts";
 import type { ChannelKey } from "../sessions.ts";
+import { AlertThrottle } from "./alert-throttle.ts";
 
 /** Errors that are expected and never reported, matched against the message and the error's. */
 export const IGNORED_ERRORS: readonly RegExp[] = [];
@@ -9,6 +10,8 @@ export const IGNORED_ERRORS: readonly RegExp[] = [];
 const HOUR_MS = 3_600_000;
 /** Reports, summaries included, per rolling hour. */
 const REPORTS_PER_HOUR = 5;
+/** The throttle group of every report. */
+const ALL = "*";
 /** Errors kept from before the agent server is ready; older ones are dropped and counted. */
 const EARLY_BUFFER = 20;
 const REPORT_LIMIT = 1500;
@@ -70,8 +73,8 @@ export class ErrorReporter {
 	#earlyDropped = 0;
 	/** Report turns started and not yet finished. */
 	#turns = 0;
-	#sent: number[] = [];
-	readonly #lastSent = new Map<string, number>();
+	/** One group for every report: the limit is on the process, not on a kind of error. */
+	readonly #throttle: AlertThrottle;
 	readonly #suppressed = new Map<string, number>();
 	#summaryDue = false;
 
@@ -80,6 +83,11 @@ export class ErrorReporter {
 		this.#app = options.app;
 		this.#ignored = options.ignored ?? IGNORED_ERRORS;
 		this.#now = options.now ?? Date.now;
+		this.#throttle = new AlertThrottle({
+			windowMs: HOUR_MS,
+			groupCap: REPORTS_PER_HOUR,
+			now: this.#now,
+		});
 		this.#setTimer =
 			options.setTimer ??
 			((run, ms) => {
@@ -134,43 +142,38 @@ export class ErrorReporter {
 	#consider(entry: LogEntry): void {
 		const now = this.#now();
 		const key = fingerprint(entry);
-		const last = this.#lastSent.get(key);
-		if (last !== undefined && now - last < HOUR_MS) return;
-		if (!this.#hasRoom(now)) {
+		const admission = this.#throttle.admit(key, ALL);
+		if (admission === "repeat") return;
+		if (admission === "full") {
 			this.#suppressed.set(key, (this.#suppressed.get(key) ?? 0) + 1);
 			this.#scheduleSummary(now);
 			return;
 		}
-		this.#lastSent.set(key, now);
-		this.#sent.push(now);
+		this.#throttle.hold(key);
+		this.#throttle.slot(ALL);
 		void this.#deliver(reportText(entry, this.#app));
-	}
-
-	#hasRoom(now: number): boolean {
-		this.#sent = this.#sent.filter((at) => now - at < HOUR_MS);
-		return this.#sent.length < REPORTS_PER_HOUR;
 	}
 
 	#scheduleSummary(now: number): void {
 		if (this.#summaryDue) return;
 		this.#summaryDue = true;
-		const oldest = this.#sent[0] ?? now;
-		this.#setTimer(() => this.#summarize(), oldest + HOUR_MS - now);
+		const roomAt = this.#throttle.roomAt(ALL) ?? now;
+		this.#setTimer(() => this.#summarize(), roomAt - now);
 	}
 
 	#summarize(): void {
 		this.#summaryDue = false;
 		const now = this.#now();
 		if (this.#suppressed.size === 0) return;
-		if (!this.#hasRoom(now)) {
+		if (this.#throttle.roomAt(ALL) !== undefined) {
 			this.#scheduleSummary(now);
 			return;
 		}
 		const counts = [...this.#suppressed];
 		this.#suppressed.clear();
 		const total = counts.reduce((sum, [, n]) => sum + n, 0);
-		for (const [key] of counts) this.#lastSent.set(key, now);
-		this.#sent.push(now);
+		for (const [key] of counts) this.#throttle.hold(key);
+		this.#throttle.slot(ALL);
 		const list = counts
 			.map(([key, n]) => (n > 1 ? `${key} (×${n})` : key))
 			.join("; ");

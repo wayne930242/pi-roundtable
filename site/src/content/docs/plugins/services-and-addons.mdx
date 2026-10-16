@@ -120,6 +120,23 @@ A replacement must provide all the services of the built-in plugin it replaces.
 For example, `BACKGROUND_TURNS` and `DELEGATION` come from the same `modules` plugin, so you replace them together.
 The guide lists each refusal message with its fix under [Replacing a built-in service](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#replacing-a-built-in-service).
 
+### Ops alerts
+
+`OpsAlerts` from `pi-roundtable/kit` is not a service: a plugin builds one for the alerts of its own faults, such as a push that failed, and passes it where they are raised.
+It posts a short text through a `sink` you give it, a function that sends the text where the people who run the host read it, so it names no Discord type.
+
+```ts
+const alerts = new OpsAlerts({ sink, logger, kinds: { push: "LINE push" } });
+await alerts.raise("push:group-7", "A push to a group failed.", { code: "429" });
+alerts.faults(); // the last fault of each kind, for a status command
+```
+
+Every alert has a key, and its kind is the key's word before the first colon.
+A key posts once an hour and a kind at most eight times an hour (`windowMs` and `kindCap` change both), so a fault that touches everything cannot flood the sink.
+What is held back is counted in `faults()`, never summed up in a post.
+An alert is posted when it is raised, a failed post (the sink throws or answers `false`) gives the key back so the next raise tries again, and `raise` never throws.
+`info: true` marks news: it posts once per key, outside the kind's cap and outside `faults()`.
+
 ## Addons
 
 Memory, skills, and Discord administration are built-in plugins that the host adds unless the configuration switches them off.

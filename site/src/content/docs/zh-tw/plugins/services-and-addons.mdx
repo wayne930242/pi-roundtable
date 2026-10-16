@@ -120,6 +120,23 @@ host 會拒絕無法補齊的替換。
 例如 `BACKGROUND_TURNS` 和 `DELEGATION` 都來自同一個 `modules` 外掛，所以要一起換，不然就都不換。
 每一則拒絕訊息和它的修正方式，列在指南的[取代內建服務](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#replacing-a-built-in-service)（英文）。
 
+### 維運告警
+
+`pi-roundtable/kit` 的 `OpsAlerts` 不是服務：外掛為自己的故障（例如推送失敗）建一個，再傳到會發出告警的地方。
+它透過你給的 `sink` 發出一則短文字；`sink` 是一個函式，把文字送到負責維運的人會看的地方，所以不涉及任何 Discord 型別。
+
+```ts
+const alerts = new OpsAlerts({ sink, logger, kinds: { push: "LINE 推送" } });
+await alerts.raise("push:group-7", "群組推送失敗。", { code: "429" });
+alerts.faults(); // 每個類型最後一次的故障，給狀態指令用
+```
+
+每則告警都有一個 key，類型是 key 第一個冒號前的字。
+同一個 key 一小時只發一次，同一個類型一小時最多發八則（`windowMs` 與 `kindCap` 可以調整），所以影響範圍很大的故障不會洗版。
+被擋下的只會記在 `faults()` 的計數裡，不會另外發彙總貼文。
+告警在 raise 當下就發送；發送失敗（`sink` 丟出錯誤或回傳 `false`）會歸還 key，下一次 raise 會再試，而且 `raise` 永遠不會丟出錯誤。
+`info: true` 代表消息而不是故障：每個 key 只發一次，不計入類型的上限，也不列在 `faults()`。
+
 ## Addon
 
 記憶、技能和 Discord 管理是內建外掛；設定沒有把它們關掉，host 就會加進來。
