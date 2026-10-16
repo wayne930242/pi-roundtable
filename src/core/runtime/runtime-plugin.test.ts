@@ -77,6 +77,7 @@ async function setUp(
 	plugin: RoundtablePlugin,
 	filling: RoundtablePlugin[] = [],
 	logger: Logger = silentLogger(),
+	surfaces: Record<string, unknown> = { prompts: () => undefined },
 ) {
 	const plugins = [...filling, plugin];
 	const services = new ServiceRegistry([...plugins]);
@@ -92,7 +93,7 @@ async function setUp(
 		toolTiers: toolTiers(),
 		events: {},
 		conversations: {},
-		surfaces: { prompts: () => undefined },
+		surfaces,
 		turns: {},
 		database: () => {
 			throw new PluginError("no database");
@@ -175,6 +176,37 @@ describe("the runtime plugin", () => {
 		expect(given.toolTiers).toBeDefined();
 		expect(await given.confirmations.load("web:1")).toBeUndefined();
 		expect(loads).toContain("web:1");
+	});
+
+	test("the deps give the formatting guidance of the surface that serves a channel", async () => {
+		let deps: RuntimeDeps | undefined;
+		const echo: RoundtablePlugin = {
+			name: "echo",
+			providers: {
+				runtime: (given) => {
+					deps = given;
+					return quiet;
+				},
+			},
+			setup: () => ({}),
+		};
+		await setUp(
+			runtimePlugin(options(), async () => heldActions),
+			[echo],
+			silentLogger(),
+			{
+				prompts: () => undefined,
+				of: (channel: string) =>
+					channel.startsWith("chat:")
+						? { surface: "chat", formatting: "No tables." }
+						: channel.startsWith("bare:")
+							? { surface: "bare" }
+							: undefined,
+			},
+		);
+		expect(deps?.formatting?.("chat:1")).toBe("No tables.");
+		expect(deps?.formatting?.("bare:1")).toBeUndefined();
+		expect(deps?.formatting?.("other:1")).toBeUndefined();
 	});
 
 	test("the deps read the agent server's sessions once it binds them", async () => {

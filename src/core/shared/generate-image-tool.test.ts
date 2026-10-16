@@ -183,6 +183,7 @@ test("the tool is offered only with an image provider", () => {
 		askUser: () => {},
 		selfCompactGuard: () => {},
 		privateMemory: () => {},
+		surfaceFormatting: () => {},
 		activeTools: () => {},
 	};
 	const names = (images?: ImageDrawer) =>

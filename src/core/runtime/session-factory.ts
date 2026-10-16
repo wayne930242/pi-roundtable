@@ -58,6 +58,7 @@ import {
 	COMPACT_TOOL,
 	selfCompactGuardExtension,
 } from "./extensions/self-compact-guard.ts";
+import { surfaceFormattingExtension } from "./extensions/surface-formatting.ts";
 import type { PromptSlot } from "./prompt-slot.ts";
 import type {
 	ChannelSession,
@@ -85,6 +86,8 @@ export interface SessionFactoryDeps {
 	origin(channel: ChannelKey): string | undefined;
 	/** What the client that started the conversation's running turn can do for its tools. */
 	client(channel: ChannelKey): ClientPort | undefined;
+	/** The formatting guidance of the surface the conversation's running turn replies on. */
+	formatting(channel: ChannelKey): string | undefined;
 	/** Whether the conversation's running turn loads no memory, as the agent server's option keeps a speaker out of it. */
 	withholdsMemory(channel: ChannelKey): boolean;
 	/**
@@ -415,6 +418,9 @@ export class SessionFactory {
 							? undefined
 							: memoryReader(conversation, deps.speaker(turnKey)),
 					state.draws,
+				),
+				surfaceFormatting: surfaceFormattingExtension(() =>
+					deps.formatting(turnKey),
 				),
 				activeTools: activeToolsExtension(() => state.tools),
 			}),

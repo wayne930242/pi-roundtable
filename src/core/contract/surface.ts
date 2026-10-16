@@ -44,6 +44,13 @@ export interface ChatSurface {
 	/** Explicit opt-in to delivering OutboundReply.files; absent or false refuses turn attachments. */
 	readonly supportsFiles?: boolean;
 	/**
+	 * Short English guidance on how a reply renders here, such as "no Markdown tables", which the
+	 * runtime appends to the system prompt of every turn that replies on this surface, after the
+	 * persona. It is model-facing text, so it is not a message-catalog string. Absent = nothing is
+	 * appended; a turn whose channel has no surface gets none either.
+	 */
+	readonly formatting?: string;
+	/**
 	 * Connects and delivers every incoming message; the host passes its conversation router. A
 	 * message whose channel key has another prefix is logged and dropped.
 	 */

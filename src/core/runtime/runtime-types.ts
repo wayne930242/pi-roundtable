@@ -79,6 +79,13 @@ export interface PiAgentRuntimeOptions {
 	 * held action waits for a message that approves it.
 	 */
 	prompts?: (channel: ChannelKey, scope?: PromptScope) => Prompts | undefined;
+	/**
+	 * The formatting guidance of the chat surface that serves a channel, such as
+	 * `ChatSurface.formatting`; undefined for a channel with no surface or no guidance. Read before
+	 * each run for the channel the turn replies in, and appended to the system prompt after the
+	 * persona.
+	 */
+	formatting?: (channel: ChannelKey) => string | undefined;
 	/** The lowest tier that may use each tool; the default names the core's tools and leaves the rest to the owner. */
 	toolTiers?: ToolTiers;
 	/** A run that takes longer, not counting time spent waiting on the owner's cards, is aborted and reported as failed. */
@@ -124,13 +131,16 @@ export interface CoreExtensions {
 	askUser: ExtensionFactory;
 	selfCompactGuard: ExtensionFactory;
 	privateMemory: ExtensionFactory;
+	/** The formatting guidance of the surface the turn replies on, appended after the persona. */
+	surfaceFormatting: ExtensionFactory;
 	activeTools: ExtensionFactory;
 }
 
 /**
  * A session's extensions in load order: the tools phase, the core's attachment, gate, ask-user,
  * and compact guard, the compactor, the MCP phase, the memory projection, so each request is
- * projected after every other extension changed it, and active-tools last, so its
+ * projected after every other extension changed it, the surface's formatting guidance, so it follows
+ * the persona and everything appended before it, and active-tools last, so its
  * before_agent_start handler runs after every other extension's.
  */
 export function sessionExtensions(
@@ -160,6 +170,7 @@ export function sessionExtensions(
 		...contributed(plan.compaction ? [plan.compaction] : []),
 		...contributed(plan.mcp),
 		{ name: "private-memory", factory: core.privateMemory },
+		{ name: "surface-formatting", factory: core.surfaceFormatting },
 		{ name: "active-tools", factory: core.activeTools },
 	];
 }

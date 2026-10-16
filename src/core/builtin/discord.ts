@@ -68,6 +68,8 @@ export interface DiscordOptions {
 	channelContext?: ChannelContextOptions | false;
 	/** The divider posted in a server channel when its conversation starts over; `false` posts none. Default: a short English divider. */
 	freshMarker?: string | false;
+	/** What the model is told about how replies render in Discord; `false` tells it nothing. Default: Markdown renders, except tables. */
+	formatting?: string | false;
 	/**
 	 * How long a turn waits on its owner card before it goes on without the answer, leaving the
 	 * card open; a later answer starts a new turn. Default `CARD_GRACE_MS`, two minutes.
@@ -135,6 +137,9 @@ export function discordPlugin(options: DiscordOptions): RoundtablePlugin {
 				...(options.freshMarker === undefined
 					? {}
 					: { freshMarker: options.freshMarker }),
+				...(options.formatting === undefined
+					? {}
+					: { formatting: options.formatting }),
 			});
 			surface = connected;
 			// Every owner may use the owner's commands, by the identity service; the primary owner always.

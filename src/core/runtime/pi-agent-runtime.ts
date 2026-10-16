@@ -35,7 +35,7 @@ import { interimPoster } from "./interim-text.ts";
 import { preflightTools } from "./preflight-tools.ts";
 import { PromptSlot, workTimeout } from "./prompt-slot.ts";
 import { carriesMemory, recordMemoryTurn } from "./reader-history.ts";
-import type { RunningTurn } from "./running-turn.ts";
+import { type RunningTurn, runningTurn } from "./running-turn.ts";
 import type { PiAgentRuntimeOptions, TurnMessage } from "./runtime-types.ts";
 import { archiveSessions } from "./session-archive.ts";
 import {
@@ -86,6 +86,10 @@ export class PiAgentRuntime implements AgentRuntime {
 			speaker: (channel) => this.#turns.get(channel)?.speaker,
 			origin: (channel) => this.#turns.get(channel)?.origin,
 			client: (channel) => this.#turns.get(channel)?.client,
+			formatting: (channel) => {
+				const reply = this.#turns.get(channel)?.channel;
+				return reply === undefined ? undefined : options.formatting?.(reply);
+			},
 			withholdsMemory: (channel) => this.#turns.get(channel)?.withheld === true,
 			runTask: (scope, task) => this.#runTask(scope, task),
 		});
@@ -195,13 +199,7 @@ export class PiAgentRuntime implements AgentRuntime {
 				loadsMemory(registered),
 		);
 		this.#memoryTurns.set(key, markPrivateMemory);
-		this.#turns.set(key, {
-			tier,
-			speaker: request.speaker,
-			...(request.origin === undefined ? {} : { origin: request.origin }),
-			...(request.client === undefined ? {} : { client: request.client }),
-			withheld,
-		});
+		this.#turns.set(key, runningTurn(request, tier, withheld));
 		const missing = wanted.filter((name) => !registered.has(name));
 		if (missing.length > 0) {
 			logger.warn(

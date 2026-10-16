@@ -148,6 +148,13 @@ export interface RuntimeDeps {
 		scope?: PromptScope | Speaker,
 	): Prompts | undefined;
 	/**
+	 * The formatting guidance of the chat surface that serves a channel, as `ChatSurface.formatting`
+	 * says; undefined when none serves it or it gives none. A runtime that builds its own system
+	 * prompt appends it after the persona, for the channel a turn replies in. Optional so a host
+	 * that predates 0.17 still type-checks.
+	 */
+	formatting?(channel: ChannelKey): string | undefined;
+	/**
 	 * The agent server's per-agent settings, for agent turns. The runtime is built before the agent
 	 * server, so read this when a turn runs, not in the factory; it stays undefined on a host without
 	 * the agent server, where no agent turn runs.

@@ -448,6 +448,7 @@ export async function testPlugin(
 			sessions: () => linked ?? unlinked("sessions"),
 			toolTiers: tiers,
 			prompts: (channel, speaker) => surfaces.prompts(channel, speaker),
+			formatting: (channel) => surfaces.of(channel)?.formatting,
 			agents: {
 				workDir: tmpdir(),
 				skills: () => [],

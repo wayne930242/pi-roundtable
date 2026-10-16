@@ -401,6 +401,30 @@ describe("discord.freshMarker", () => {
 	});
 });
 
+describe("discord.formatting", () => {
+	const with_ = (formatting: unknown) =>
+		resolveConfig({
+			...minimal,
+			discord: { ...discord, formatting },
+		} as RoundtableConfig).discord?.formatting;
+
+	test("is left out unless configured, so the built-in guidance applies", () => {
+		expect(resolveConfig(minimal).discord?.formatting).toBeUndefined();
+	});
+
+	test("takes a text, or false for no guidance", () => {
+		expect(with_("Plain text.")).toBe("Plain text.");
+		expect(with_(false)).toBe(false);
+	});
+
+	test("refuses true, a number or an empty text, naming the key", () => {
+		for (const formatting of [true, 3, ""])
+			expect(
+				refused({ ...minimal, discord: { ...discord, formatting } }),
+			).toContain("config discord.formatting");
+	});
+});
+
 describe("a host without Discord", () => {
 	const { discord: _discord, http: _http, ...headless } = minimal;
 

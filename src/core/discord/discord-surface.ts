@@ -34,6 +34,7 @@ import type { ChannelExecutor } from "./channel-operations.ts";
 import type { ComposedCommands } from "./compose-commands.ts";
 import type { ChannelInfo, DiscordConnection } from "./connection.ts";
 import { DiscordThreadHost } from "./dispatch-thread-host.ts";
+import { DISCORD_FORMATTING, pickFormatting } from "./formatting.ts";
 import { DEFAULT_FRESH_MARKER, postFreshMarker } from "./fresh-marker.ts";
 import { lateAnswerMessage, toInbound } from "./inbound-message.ts";
 import type { CardChannel, LateTurn } from "./owner-cards.ts";
@@ -59,6 +60,8 @@ export interface DiscordSurfaceOptions {
 	logger: Logger;
 	/** The divider posted in a server channel when its conversation starts over; `false` posts none. Default: `DEFAULT_FRESH_MARKER`. */
 	freshMarker?: string | false;
+	/** What the model is told about how replies render here; `false` tells it nothing. Default: `DISCORD_FORMATTING`. */
+	formatting?: string | false;
 }
 
 /**
@@ -72,6 +75,7 @@ export class DiscordSurface
 {
 	readonly surface = "discord";
 	readonly supportsFiles = true;
+	readonly formatting: string | undefined;
 	readonly #options: DiscordSurfaceOptions;
 	readonly #client = new Client({
 		intents: [
@@ -89,6 +93,7 @@ export class DiscordSurface
 
 	constructor(options: DiscordSurfaceOptions) {
 		this.#options = options;
+		this.formatting = pickFormatting(options.formatting, DISCORD_FORMATTING);
 	}
 
 	/** Slash commands and the modules that answer them; the commands are registered globally at startup. */

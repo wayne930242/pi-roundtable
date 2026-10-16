@@ -28,6 +28,7 @@ function factory(personas: Record<string, string>): SessionFactory {
 		speaker: () => undefined,
 		origin: () => undefined,
 		client: () => undefined,
+		formatting: () => undefined,
 		withholdsMemory: () => false,
 		runTask: async () => "",
 	});
@@ -78,6 +79,7 @@ describe("the tools of a selection", () => {
 			speaker: () => undefined,
 			origin: () => undefined,
 			client: () => undefined,
+			formatting: () => undefined,
 			withholdsMemory: () => false,
 			runTask: async () => "",
 		}).toolsFor({
@@ -107,6 +109,7 @@ describe("the tools of a task and of startup, by their names before 0.9 too", ()
 				speaker: () => undefined,
 				origin: () => undefined,
 				client: () => undefined,
+				formatting: () => undefined,
 				withholdsMemory: () => false,
 				runTask: async () => "",
 			},

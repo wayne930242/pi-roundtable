@@ -58,6 +58,13 @@ export interface DiscordConfig {
 	 */
 	freshMarker?: string | false;
 	/**
+	 * What the model is told, English, about how a reply renders in Discord, appended to the system
+	 * prompt of every turn that replies there, after the persona. The default says Markdown
+	 * renders except tables, so the model writes bullet lists or `key: value` lines instead. A text
+	 * replaces it; `false` tells the model nothing.
+	 */
+	formatting?: string | false;
+	/**
 	 * Seconds a turn waits on an owner card (an approval or an `ask_user` question) before it goes
 	 * on without the answer; the card stays open, and answering it later starts a new turn with
 	 * the answer. Default 120.
@@ -94,6 +101,7 @@ export interface ResolvedDiscord {
 	/** As configured: `{}` when left out, so the defaults apply, or `false`. */
 	channelContext: NonNullable<DiscordConfig["channelContext"]>;
 	freshMarker?: string | false;
+	formatting?: string | false;
 	cardGraceSeconds: number;
 	/** As configured: `{}` when left out, so the defaults apply, or `false`. */
 	cardCopies: NonNullable<DiscordConfig["cardCopies"]> | false;
@@ -125,6 +133,9 @@ export function resolvedDiscord(
 		...(discord.freshMarker === undefined
 			? {}
 			: { freshMarker: discord.freshMarker }),
+		...(discord.formatting === undefined
+			? {}
+			: { formatting: discord.formatting }),
 		cardGraceSeconds: discord.cardGraceSeconds ?? 120,
 		cardCopies: discord.cardCopies ?? {},
 		...(discord.attachmentDownload === undefined
@@ -167,6 +178,7 @@ export const discordShape = shape({
 	agentSpeakers: optional(oneOf<"everyone" | "owners">("everyone", "owners")),
 	channelContext: optional(orOff(channelContextShape)),
 	freshMarker: optional(orOff(text)),
+	formatting: optional(orOff(text)),
 	cardGraceSeconds: optional(integer(1, 86_400)),
 	cardCopies: optional(
 		orOff(

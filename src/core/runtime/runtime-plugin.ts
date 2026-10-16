@@ -129,6 +129,8 @@ export function runtimePlugin(
 			const prompts = (channel: ChannelKey, scope?: PromptScope | Speaker) =>
 				context.surfaces.prompts(channel, scope);
 			const agents = () => options.agents?.current();
+			const formatting = (channel: ChannelKey) =>
+				context.surfaces.of(channel)?.formatting;
 			const running: AgentRuntime = providers.filled.has("runtime")
 				? providers.runtime(
 						runtimeDeps({
@@ -138,6 +140,7 @@ export function runtimePlugin(
 							sessions: context.sessions,
 							toolTiers: context.toolTiers,
 							prompts,
+							formatting,
 							agents,
 							confirmations: heldActions,
 							judge: providers.judge,
@@ -182,6 +185,7 @@ export function runtimePlugin(
 							return agents();
 						},
 						prompts,
+						formatting,
 						logger,
 						...(options.interimText
 							? { interimText: options.interimText }

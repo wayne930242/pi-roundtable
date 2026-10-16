@@ -14,6 +14,7 @@ import type { MemoryStore, SpeakerMemory } from "../../services.ts";
 import type { Speaker } from "../../speakers.ts";
 import { TEST_OWNER as OWNER, OWNER_SPEAKER } from "../../testing/owner.ts";
 import { agentPromptExtension } from "./agent-prompt.ts";
+import { surfaceFormattingExtension } from "./surface-formatting.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "session-prompt-"));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
@@ -205,5 +206,69 @@ describe("appended system prompt", () => {
 			[],
 		);
 		expect(prompt).toBe("You are Infra.");
+	});
+
+	test("a surface's guidance follows the persona and the owner memory", async () => {
+		const prompt = await appendedPrompt(
+			[
+				{ name: "owner-memory", factory: memoryOf(memory, OWNER_SPEAKER) },
+				{
+					name: "surface-formatting",
+					factory: surfaceFormattingExtension(() => "No tables here."),
+				},
+			],
+			["You are the assistant."],
+		);
+		expect(prompt.startsWith("You are the assistant.\n\n## Owner memory")).toBe(
+			true,
+		);
+		expect(prompt.endsWith("\n\nNo tables here.")).toBe(true);
+	});
+
+	test("an agent's guidance comes after its own prompt, wherever the extension loads", async () => {
+		const prompt = await appendedPrompt(
+			[
+				{
+					name: "agent-prompt",
+					factory: agentPromptExtension(() => "You are Infra."),
+				},
+				{
+					name: "surface-formatting",
+					factory: surfaceFormattingExtension(() => "No tables here."),
+				},
+			],
+			[],
+		);
+		expect(prompt).toBe("You are Infra.\n\nNo tables here.");
+	});
+
+	test("guidance stands alone when nothing was appended before it", async () => {
+		const prompt = await appendedPrompt(
+			[
+				{
+					name: "surface-formatting",
+					factory: surfaceFormattingExtension(() => "No tables here."),
+				},
+			],
+			[],
+		);
+		expect(prompt).toBe("No tables here.");
+	});
+
+	test("no guidance leaves the appended prompt as it was, and is asked again at each run", async () => {
+		let guidance: string | undefined;
+		const factories = [
+			{
+				name: "surface-formatting",
+				factory: surfaceFormattingExtension(() => guidance),
+			},
+		];
+		expect(await appendedPrompt(factories, ["You are the assistant."])).toBe(
+			"You are the assistant.",
+		);
+		guidance = "Plain text.";
+		expect(await appendedPrompt(factories, ["You are the assistant."])).toBe(
+			"You are the assistant.\n\nPlain text.",
+		);
 	});
 });

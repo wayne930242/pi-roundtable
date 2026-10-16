@@ -224,6 +224,7 @@ const CORE_EXTENSIONS = {
 	askUser: noop,
 	selfCompactGuard: noop,
 	privateMemory: noop,
+	surfaceFormatting: noop,
 	activeTools: noop,
 };
 

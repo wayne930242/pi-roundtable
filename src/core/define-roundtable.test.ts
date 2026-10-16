@@ -19,7 +19,7 @@ import {
 } from "./i18n/index.ts";
 import { createZhTW } from "./i18n/zh-tw.ts";
 import { type LogEntry, silentLogger } from "./log.ts";
-import type { RoundtablePlugin } from "./plugin.ts";
+import type { PluginContext, RoundtablePlugin } from "./plugin.ts";
 import { replaceServices } from "./registry/services.ts";
 import { BACKGROUND_TURNS, SCHEDULES, type ScheduleStore } from "./services.ts";
 import { describeDb, testDatabaseUrl } from "./testing/database.ts";
@@ -176,6 +176,30 @@ describe("defineRoundtable", () => {
 				}),
 			),
 		).toEqual(names(await defineRoundtable(config)));
+	});
+
+	test("discord.formatting reaches the Discord surface, and is the built-in guidance when left out", async () => {
+		const surfaceOf = async (formatting?: string | false) => {
+			const { plugins } = await defineRoundtable({
+				...config,
+				discord: {
+					...discord,
+					...(formatting === undefined ? {} : { formatting }),
+				},
+			});
+			const contribution = await plugins
+				.find((plugin) => plugin.name === "discord")
+				?.setup({
+					logger: silentLogger(),
+					queue: {},
+					conversations: {},
+					services: { provide: () => undefined, find: () => undefined },
+				} as unknown as PluginContext);
+			return contribution?.surfaces?.[0]?.formatting;
+		};
+		expect(await surfaceOf()).toContain("except tables");
+		expect(await surfaceOf("Only haiku.")).toBe("Only haiku.");
+		expect(await surfaceOf(false)).toBeUndefined();
 	});
 
 	test("each built-in service is provided by one plugin, and a plugin may replace a store in its place", async () => {

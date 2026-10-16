@@ -2348,6 +2348,10 @@ It is not posted in a direct message or on another surface, and a failed post is
 The text is `discord.freshMarker` (default `─── new conversation ───`); `false` posts none.
 A surface a plugin contributes may implement the optional `ChatSurface.markFresh(channel)` for the same job.
 
+Discord does not render Markdown tables, so the Discord surface tells the model about it: every turn that replies in a Discord channel gets a short guidance text appended to its system prompt, after the persona.
+The default says that Markdown renders except tables, that bullet lists or `key: value` lines replace them, that headings, bold, lists, quotes, inline code, fenced code blocks and `-#` small text work, and that a reply over 2,000 characters is split.
+`discord.formatting` replaces the text; `false` tells the model nothing.
+
 The block gives each author as a name, their Discord id and a role (`owner`, `bot` or `member`) in separate attributes, and says the messages were not addressed to the assistant. A name loses the characters `"`, `'`, `=`, `<`, `>`, `(`, `)` and `,`, so it cannot imitate another author, an attribute or a role, and every `<` (also the full-width `＜`) in a message's text is replaced by `‹`, so a message can neither close the block nor open a message of its own.
 `ChannelContext` is `{ messages, text, images? }`: `messages` are `ChannelContextMessage`s (`id`, `authorId`, `authorName`, `bot`, `owner`, `text`, `at`, `attachments`), oldest first, `text` is the block, and `images` the fetched images (see above).
 `ChannelContextOptions` holds the options above, and `CHANNEL_CONTEXT_DEFAULTS` their defaults.
@@ -2549,12 +2553,20 @@ The agent server claims only `discord:` keys, so claims on your surface's channe
 | `start(deliver)` | Connects, and calls `deliver(message)` for every incoming message; the host passes its conversation router | (required) |
 | `sendReply(channel, reply)` | Posts an `OutboundReply`: a thinking line, a card, text chunks, then files | (required) |
 | `stop()` | Disconnects when the host stops | nothing to stop |
+| `formatting` | A short English text on how a reply renders here, such as "no Markdown tables"; the runtime appends it to the system prompt of every turn that replies on this surface, after the persona | nothing is appended |
 | `startTyping(channel)` | Shows a typing indicator until the returned function is called | none is shown |
 | `showStop(channel)` | Shows the owner a stop control until the returned function is called; using it calls `conversations.stop(channel)` | none is shown |
 | `react`, `unreact` | Adds or removes the bot's reaction on a message | no marks on queued or steered messages |
 | `prompts(channel, scope?)` | How those the turn's `PromptScope` names approve a held action or answer `ask_user` inside a running turn, as `Prompts`: `confirm` and `ask`; without a scope, the owners | the action is held until a message approves it |
 | `interim(channel)` | Where a running turn posts the text it writes before its final answer, as `InterimPosts`: `post(text)` sends one message of at most 2000 characters and resolves to an `InterimMessage` whose `edit(text)` changes it in place | only the final reply is posted |
 | `progress(channel, event)` | Shows a turn run through `context.turns` as it goes, such as a live preview in a web chat. `event` is a `TurnProgress`: `{ type: "text", delta }` (the reply's text, joined over 250 ms and always sent before a tool event, never the thinking), `{ type: "tool_start", id, tool, preview? }` (a one-line preview of the arguments, at most 80 characters, never their full text), or `{ type: "tool_end", id, tool, ok, refused? }` (`refused`, only on a failed end that a hold refused, says how: `declined` on its approval card, `expired` when a card was shown and went unanswered, `pending` while the card stays open, or `held` when no card could be shown (no one may approve it, or it could not be posted); it is absent for a success and for a real failure). The final reply still comes through `sendReply`; a rejection is logged and the turn goes on | only the final reply is shown |
+
+A surface tells the model how its replies render with `formatting`: a short English text, kept under about 400 characters, which the runtime appends to the system prompt of every turn that replies on the surface, after the persona and everything appended before it, for the channel the turn replies in.
+One persona can answer on several surfaces, so the guidance comes from the surface and never from the persona.
+A turn whose channel has no surface, and a surface without `formatting`, add nothing.
+The built-in values: Discord says that Markdown renders except tables, which show as raw pipes, so the model writes bullet lists or `key: value` lines instead; the `line` surface says it shows plain text only; the web chat says full Markdown renders, tables included.
+A host overrides or removes a built-in value through that surface's options (`discord.formatting`, `line({ formatting })`, `webChat({ formatting })`): a text replaces it, and `false` tells the model nothing.
+A custom runtime provider reads the same lookup as `RuntimeDeps.formatting(channel)`.
 
 Each message a surface delivers says who wrote it in `actor`, the `ActorFacts` the identity service resolves: `provider` and `subject`, such as `discord` and the user id, `name`, `roles` written `<surface>:role:<name>` (left out where the surface does not know them, such as a Discord DM, which is not the same as none), and `legacyId`, the speaker id 0.8 gave the person, so someone carried over keeps their principal.
 A surface that leaves `actor` out has it read from `authorId`, `authorName`, and `authorRoleIds` with its prefix as the provider, and the host warns once that this goes away in 1.0.

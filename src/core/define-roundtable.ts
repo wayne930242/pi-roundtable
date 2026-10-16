@@ -173,6 +173,9 @@ function discordAssembly(
 			...(discord.freshMarker === undefined
 				? {}
 				: { freshMarker: discord.freshMarker }),
+			...(discord.formatting === undefined
+				? {}
+				: { formatting: discord.formatting }),
 			cardGraceMs: discord.cardGraceSeconds * 1_000,
 			cardCopies: discord.cardCopies,
 		}),

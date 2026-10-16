@@ -32,7 +32,11 @@ const OPTIONS = {
 /** The Discord plugin set up alone; `compose` runs its preflight, which hands the commands to its surface. */
 async function setUp(
 	conversations: Partial<ConversationPort> = {},
-	options: { refusalHint?: string; channelContext?: false } = {},
+	options: {
+		refusalHint?: string;
+		channelContext?: false;
+		formatting?: string | false;
+	} = {},
 	identity?: ReturnType<typeof mapIdentity>,
 ): Promise<{
 	services: string[];
@@ -84,6 +88,26 @@ test("the plugin contributes the Discord surface, and its threads service only s
 	const { services, surfaces } = await setUp();
 	expect(surfaces).toEqual(["discord"]);
 	expect(services).toEqual(["threads", "card-copies"]);
+});
+
+test("the Discord surface tells the model that tables do not render, unless the host says otherwise", async () => {
+	const told = (await setUp()).surface.formatting;
+	expect(told).toContain("Discord");
+	expect(told).toContain("except tables");
+	expect(told).toContain("2,000");
+	expect(told?.length).toBeLessThan(400);
+	expect(
+		(await setUp({}, { formatting: "Only haiku." })).surface.formatting,
+	).toBe("Only haiku.");
+	expect(
+		(await setUp({}, { formatting: false })).surface.formatting,
+	).toBeUndefined();
+});
+
+test("a Discord formatting text with nothing in it is refused, not read as none", async () => {
+	await expect(setUp({}, { formatting: "  " })).rejects.toThrow(
+		"formatting is empty",
+	);
 });
 
 test("the Discord surface hands out the owner's cards for its channels", async () => {
