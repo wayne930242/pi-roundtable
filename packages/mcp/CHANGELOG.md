@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- `mcpConnectors` and `remoteMcp` no longer query the database, or reach ContextForge, during `setup`, so `Roundtable.check()` passes with them and needs neither. `ConnectorRegistry.attach` is synchronous and a new `load()` reads the stored connectors and resolves their servers; the plugin calls it from a new `connectors` service as the host starts. `CONNECTORS.list()`, `servers()` and `profileSources()` are empty until then, so a plugin that reads them in its own `setup` sees none: read them from a service's `start` registered after `mcpConnectors`, or later. `remoteMcp` reads the principal the dispatch token stands for, and adopts the sessions and conversations of earlier versions, in a new `remote-principal` service that starts before `remote-sweeper` and before the listeners open; a persona and the relay note read the principal when a conversation opens. Under `run()` nothing else changes: a principal that does not exist, or a token linked to no one, still stops the start, now when that service starts, and the error is the same.
+
 ## [0.16.0] - 2026-10-16
 
 - Release in lockstep with pi-roundtable 0.16.0; no package-specific behavior changes. The core peer range moves to `>=0.16.0 <0.17.0`.

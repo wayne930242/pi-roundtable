@@ -90,13 +90,13 @@ export function mcpConnectors(options: McpConnectorsOptions): RoundtablePlugin {
 		requires: [DISCORD],
 		provides: [CONNECTORS],
 		migrations: [ConnectorRegistry.migration],
-		setup: async ({ database, services, logger }) => {
+		setup: ({ database, services, logger }) => {
 			const { jwtSecret, user } = options.contextForge;
 			const token = contextForgeToken(jwtSecret, user, TOKEN_TTL_SECONDS);
 			const admin = new ContextForgeAdmin(url, token, fetch, text);
 			const resolve = (name: string) =>
 				resolveVirtualServer(url, token, name, fetch, text);
-			const registry = await ConnectorRegistry.attach(database(), {
+			const registry = ConnectorRegistry.attach(database(), {
 				admin,
 				resolve,
 				logger,
@@ -120,7 +120,10 @@ export function mcpConnectors(options: McpConnectorsOptions): RoundtablePlugin {
 					servers: () => admin.servers(),
 				},
 			});
-			return {};
+			// The stored connectors are read, and their servers resolved, as the host starts.
+			return {
+				services: [{ name: "connectors", start: () => registry.load() }],
+			};
 		},
 	});
 }

@@ -72,6 +72,7 @@ export const PUBLIC_NAME_ALLOWLIST: NameAllowlist = {
 			"examples/roundtable.config.ts",
 			"src/index.ts",
 			"src/plugins.test.ts",
+			"src/check.test.ts",
 			`src/testing/fake-${spell("context", "forge")}.ts`,
 			"src/connectors/connector-commands.ts",
 			"src/connectors/connector-registry.ts",

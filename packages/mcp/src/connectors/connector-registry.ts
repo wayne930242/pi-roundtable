@@ -106,27 +106,33 @@ export class ConnectorRegistry {
 		},
 	};
 
-	/** The registry over the host's migrated pool, with each connector's server resolved. */
-	static async attach(
+	/** The registry over the host's migrated pool, with no connector read yet; `load()` reads them. */
+	static attach(
 		sql: SQL,
 		options: ConnectorRegistryOptions,
-	): Promise<ConnectorRegistry> {
-		const registry = new ConnectorRegistry(sql, options);
-		const rows: Row[] = await sql`SELECT * FROM owner_connectors ORDER BY name`;
+	): ConnectorRegistry {
+		return new ConnectorRegistry(sql, options);
+	}
+
+	/** Reads the stored connectors and resolves each one's server; one that cannot be reached is logged and left without a server. */
+	async load(): Promise<void> {
+		const rows: Row[] = await this
+			.#sql`SELECT * FROM owner_connectors ORDER BY name`;
 		for (const row of rows) {
 			const connector = fromRow(row);
 			// One unreachable connector must not keep the host from starting.
 			try {
-				connector.server = await options.resolve(registry.serverName(row.name));
+				connector.server = await this.#options.resolve(
+					this.serverName(row.name),
+				);
 			} catch (error) {
-				options.logger.error(
+				this.#options.logger.error(
 					{ connector: row.name, err: error },
 					"connector could not be read; its profile is off",
 				);
 			}
-			registry.#connectors.set(row.name, connector);
+			this.#connectors.set(row.name, connector);
 		}
-		return registry;
 	}
 
 	/** The name of the connector's virtual server in ContextForge. */

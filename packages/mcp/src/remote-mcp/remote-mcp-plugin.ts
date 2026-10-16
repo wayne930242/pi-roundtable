@@ -158,36 +158,39 @@ export function remoteMcp(options: RemoteMcpOptions): RoundtablePlugin {
 			const { services, logger, conversations, database } = context;
 			const discord = services.get(DISCORD);
 			const identities = services.get(IDENTITY);
-			const bound = await boundPrincipal(identities, identity);
+			// Who the token stands for is read from the stored principals, once the host starts.
+			let found: Bound | undefined;
+			const bound = (): Bound => {
+				if (!found)
+					throw new PluginError(
+						"remote-mcp: the dispatch token's principal is read when the host starts; a request before that has no one to act for.",
+					);
+				return found;
+			};
 			const conversation = conversationOf(options, context);
 			const grants = await ChannelGrantStore.attach(database());
 			const sessions = await RemoteSessionStore.attach(database());
-			// 0.8's sessions were the owner's, and their conversations, recorded shared, become theirs.
 			const registry = services.get(CONVERSATIONS);
-			const [primary] = await identities.owners();
-			if (primary)
-				await sessions.adopt(primary.id, async (id) => {
-					await registry.adopt(`mcp:${id}`, primary.id);
-				});
-			// Every start adopts each session's conversation for its principal again, so one a failed
-			// hand-over left no one's becomes theirs; adopt never changes one already someone's.
-			for (const { id, principalId } of await sessions.owned())
-				await registry.adopt(`mcp:${id}`, principalId);
 			const gateway = new McpGateway({
 				dispatchToken: options.dispatchToken,
 				agent: new RemoteAgent({
 					sessions: {
-						create: () => sessions.create(bound.id),
-						touch: (id) => sessions.touch(id, bound.id),
+						create: () => sessions.create(bound().id),
+						touch: (id) => sessions.touch(id, bound().id),
 					},
 					answer: async (channel, relayed) =>
 						conversation.answer(
 							channel,
 							relayed,
-							await identities.speakerFor(bound.id),
+							await identities.speakerFor(bound().id),
 						),
 					logger,
-					messages: { ...text, relayNote: relayNoteOf(options, bound) },
+					messages: {
+						...text,
+						get relayNote() {
+							return relayNoteOf(options, bound());
+						},
+					},
 				}),
 				grants,
 				executor: () => discord.connection.channelExecutor(),
@@ -207,6 +210,22 @@ export function remoteMcp(options: RemoteMcpOptions): RoundtablePlugin {
 			services.provide(REMOTE_MCP, remoteMcpService(grants, text));
 			return {
 				services: [
+					{
+						name: "remote-principal",
+						start: async () => {
+							found = await boundPrincipal(identities, identity);
+							// 0.8's sessions were the owner's, and their conversations, recorded shared, become theirs.
+							const [primary] = await identities.owners();
+							if (primary)
+								await sessions.adopt(primary.id, async (id) => {
+									await registry.adopt(`mcp:${id}`, primary.id);
+								});
+							// Every start adopts each session's conversation for its principal again, so one a failed
+							// hand-over left no one's becomes theirs; adopt never changes one already someone's.
+							for (const { id, principalId } of await sessions.owned())
+								await registry.adopt(`mcp:${id}`, principalId);
+						},
+					},
 					{
 						name: "remote-sweeper",
 						start: () => sweeper.start(),
@@ -262,14 +281,20 @@ function conversationOf(
 
 /**
  * The persona of the default conversations, the owner's or one that names no owner, as the token
- * stands for at the start; a host that runs its own brings its own.
+ * stands for at the start (read when a conversation opens); a host that runs its own brings its own.
  */
 function personaOf(
 	options: RemoteMcpOptions,
-	bound: Bound,
+	bound: () => Bound,
 ): Pick<Contribution, "personas"> {
 	if (options.answer) return {};
-	const prompt =
-		options.persona ?? (bound.owner ? DEFAULT_PERSONA : MEMBER_PERSONA);
-	return { personas: [{ kind: REMOTE_KIND, prompt: () => prompt }] };
+	return {
+		personas: [
+			{
+				kind: REMOTE_KIND,
+				prompt: () =>
+					options.persona ?? (bound().owner ? DEFAULT_PERSONA : MEMBER_PERSONA),
+			},
+		],
+	};
 }

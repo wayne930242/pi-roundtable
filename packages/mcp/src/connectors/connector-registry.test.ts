@@ -90,6 +90,8 @@ describeDb("PostgreSQL", () => {
 			logger: silentLogger(),
 		});
 		opened.push(registry);
+		// The plugin reads the stored connectors when the host starts.
+		await registry.load();
 		return registry;
 	}
 
