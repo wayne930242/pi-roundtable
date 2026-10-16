@@ -5,10 +5,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-10-16
+
 ### Added
 
 - `entraV2Check({ tenant, scope, guests? })` (and the type `EntraV2CheckOptions`): the `check` of `oidcJwtVerifier` for Microsoft Entra ID v2 access tokens of one tenant. It requires `tid` to be the tenant, `ver` to be `"2.0"`, `scp` to list the scope, and `acct` to be `0` or `"0"` (a member); `guests: true` also admits `1` or `"1"`. A token without `acct` is refused either way.
 - The subpath `pi-roundtable-webchat/testing` with `testIssuer` (and the types `TestIssuer`, `TokenSpec`): a self-made OpenID provider on a local port, for tests of a host that verifies tokens. The package now ships `src/testing`; test files stay out.
+- Release in lockstep with pi-roundtable 0.17.0. The core peer range moves to `>=0.17.0 <0.18.0`.
 
 ## [0.16.0] - 2026-10-16
 
