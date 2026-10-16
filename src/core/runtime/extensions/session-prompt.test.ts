@@ -271,4 +271,19 @@ describe("appended system prompt", () => {
 			"You are the assistant.\n\nPlain text.",
 		);
 	});
+
+	test("blank guidance adds nothing, not a trailing blank paragraph", async () => {
+		for (const blank of ["", "  \n"]) {
+			const prompt = await appendedPrompt(
+				[
+					{
+						name: "surface-formatting",
+						factory: surfaceFormattingExtension(() => blank),
+					},
+				],
+				["You are the assistant."],
+			);
+			expect(prompt).toBe("You are the assistant.");
+		}
+	});
 });

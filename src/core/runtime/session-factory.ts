@@ -420,7 +420,8 @@ export class SessionFactory {
 					state.draws,
 				),
 				surfaceFormatting: surfaceFormattingExtension(() =>
-					deps.formatting(turnKey),
+					// A worker writes a report for the turn, not a reply on its surface.
+					worker ? undefined : deps.formatting(turnKey),
 				),
 				activeTools: activeToolsExtension(() => state.tools),
 			}),

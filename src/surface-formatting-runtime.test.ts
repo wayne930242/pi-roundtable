@@ -3,9 +3,11 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+	type AssistantMessage,
 	createFauxCore,
 	fauxAssistantMessage,
 	fauxText,
+	fauxToolCall,
 	type TranscriptContext,
 } from "@earendil-works/pi-ai";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
@@ -92,6 +94,33 @@ async function fixture(surfaces: { surface: string; formatting?: string }[]) {
 				personas: [{ kind: "owner", prompt: () => "You are the persona." }],
 				sessionTools: [
 					{
+						name: "probe",
+						phase: "tools",
+						snapshot: () => ({
+							revision: 0,
+							factory: (session) => (pi) => {
+								pi.registerTool({
+									name: "probe_task",
+									label: "probe_task",
+									description: "Run a task beside this conversation.",
+									parameters: Type.Object({}),
+									execute: async () => {
+										const report = await session.runTask({
+											selection: { tools: [], groups: [] },
+											text: "Look it up.",
+											timeoutMs: 10_000,
+											exclude: [],
+										});
+										return {
+											content: [{ type: "text", text: report }],
+											details: undefined,
+										};
+									},
+								});
+							},
+						}),
+					},
+					{
 						name: "compactor",
 						phase: "tools",
 						snapshot: () => ({
@@ -142,6 +171,36 @@ async function fixture(surfaces: { surface: string; formatting?: string }[]) {
 			if (prompt === undefined) throw new Error("the model got no request");
 			return prompt;
 		},
+		/**
+		 * The system prompts of a turn on `channel` that runs a task beside itself: the turn's first
+		 * request, the task worker's, and the turn's last.
+		 */
+		async promptsWithWorker(channel: ChannelKey): Promise<string[]> {
+			const record =
+				(reply: AssistantMessage) => (context: TranscriptContext) => {
+					prompts.push(systemPrompt(context));
+					return reply;
+				};
+			core.appendResponses([
+				record(
+					fauxAssistantMessage([fauxToolCall("probe_task", {})], {
+						stopReason: "toolUse",
+					}),
+				),
+				record(fauxAssistantMessage([fauxText("The report.")])),
+				record(fauxAssistantMessage([fauxText("Done.")])),
+			]);
+			const before = prompts.length;
+			const result = await harness.turns.run({
+				channel,
+				kind: "owner",
+				text: "hello",
+				speaker: OWNER_SPEAKER,
+				selection: { id: "formatting", tools: ["probe_task"], groups: [] },
+			});
+			expect(result.ok).toBe(true);
+			return prompts.slice(before);
+		},
 		close: async () => {
 			await harness.stop();
 			rmSync(dir, { recursive: true, force: true });
@@ -182,6 +241,31 @@ test("a surface without guidance, and a channel with no surface, add nothing", a
 		const unserved = await f.promptOn("schedule:nightly");
 		expect(unserved).toContain("You are the persona.");
 		expect(unserved).not.toContain("Reply formatting");
+	} finally {
+		await f.close();
+	}
+});
+
+test("a task worker beside a turn gets no reply guidance, while its turn's requests keep it", async () => {
+	const f = await fixture([{ surface: "tables", formatting: TABLES }]);
+	try {
+		const [first, worker, last] = await f.promptsWithWorker("tables:room");
+		expect(first).toContain(TABLES);
+		expect(worker).not.toContain(TABLES);
+		expect(worker).not.toContain("Reply formatting");
+		expect(last).toContain(TABLES);
+	} finally {
+		await f.close();
+	}
+});
+
+test("a surface whose guidance is blank adds nothing", async () => {
+	const f = await fixture([{ surface: "blank", formatting: "" }]);
+	try {
+		const prompt = await f.promptOn("blank:room");
+		expect(prompt).toContain("You are the persona.");
+		expect(prompt).not.toMatch(/You are the persona\.\s*\n\s*\n\s*$/);
+		expect(prompt.endsWith("\n")).toBe(false);
 	} finally {
 		await f.close();
 	}
