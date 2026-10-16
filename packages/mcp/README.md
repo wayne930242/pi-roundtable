@@ -110,7 +110,7 @@ It provides the `CONNECTORS` service (`Connectors`):
 | `resolve(serverName)` | Reads one virtual server's URL and tools by name, for servers the host manages itself rather than as connectors |
 | `admin` | `gateways()` and `servers()`: what ContextForge holds, upstream gateways with their state and every virtual server with its tool names, for a host's status view |
 
-The plugin reads the stored connectors, and resolves each one's server in ContextForge, when the host starts the plugin's `connectors` service, not during setup: `list()`, `servers()` and `profileSources()` are empty until then, so read them from a service's `start` registered after `mcpConnectors`, or later (a turn, a command, a request). `resolve(serverName)` and `token` work from setup. A host's `Roundtable.check()` therefore needs neither the database nor ContextForge.
+The plugin reads the stored connectors, and resolves each one's server in ContextForge, in its `preflight`, which the host runs after every plugin is set up and before any service starts or any listener opens: during `setup` `list()`, `servers()` and `profileSources()` are empty and `version` is 0, and `version` changes once the connectors are loaded. Read them from a service's `start`, or later (a turn, a command, a request); no command or turn arrives before they are loaded. `resolve(serverName)` and `token` work from setup. A host's `Roundtable.check()` runs no preflight, so it needs neither the database nor ContextForge.
 The plugin does not decide which agent uses which connector.
 The host reads the service, builds its own profiles, and compares `version` with the one it built at.
 A plugin registered after `mcpConnectors` can read the list like this:
@@ -218,7 +218,7 @@ The conversation is recorded as private to that principal.
 Nothing is posted to Discord, since no chat surface serves `mcp:` channels; the outside agent polls for the answer.
 A relayed message that the host's judge reads as approving held actions confirms them, as the person's own reply would.
 Each message begins with a short note that says it was written in an outside agent: for an owner, the note and the persona name the owner, word for word as in 0.8; for anyone else they name no owner, so the agent does not take them for one.
-Which of the two is chosen at the start, by whether the principal then holds the owner role: the plugin reads the principal, and adopts the sessions and conversations of earlier versions, when the host starts its `remote-principal` service, before the listeners open, so a request never arrives before it. A conversation's persona and relay note read it when the conversation opens.
+Which of the two is chosen at the start, by whether the principal then holds the owner role: the plugin reads the principal, and adopts the sessions and conversations of earlier versions, in its `preflight`, before any service starts and the listeners open, so a request never arrives before it. A conversation's persona and relay note read it when the conversation opens.
 Starting a remote conversation over archives it, and deleting it also ends the outside agent's session.
 Sessions that stay idle for 14 days are deleted once a day.
 
@@ -268,7 +268,7 @@ export function hostRemote(dispatchToken: string, publicUrl: string) {
 The dispatch token is the identity `token:<toolNames.dispatch, or remote-mcp>`, which the plugin declares in its `identities`.
 At every start the host links it to `principal`, or to the primary owner without one, as in 0.8.
 `roundtable principal list` shows it under that principal as `token:remote-mcp  (plugin remote-mcp)`, and `roundtable principal unlink` refuses it: change the option instead.
-The start stops (at the plugin's service start, after every plugin is set up) when the principal does not exist, or when the identity is linked to someone else by the configuration or the CLI; the error names what to change.
+The start stops when the principal does not exist, or when the identity is linked to someone else by the configuration or the CLI (the identity plugin refuses either as it sets up), or when `IDENTITY` links the token to no one (the plugin's `preflight`); the error names what to change.
 
 Bound to a member, a remote turn reads and changes the member's memory, and only the tools of their tier are offered; when the host runs the conversations itself, that holds only if its `answer` runs the turn as the `speaker` it receives.
 Give that member a lasting role with `roundtable principal grant <principal> member` (or `admin`).

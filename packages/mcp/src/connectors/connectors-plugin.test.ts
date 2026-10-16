@@ -1,6 +1,6 @@
 import { afterAll, afterEach, expect, test } from "bun:test";
 import { SQL } from "bun";
-import { migrateDatabase } from "pi-roundtable";
+import { definePlugin, migrateDatabase } from "pi-roundtable";
 import {
 	describeDb,
 	type TestHost,
@@ -103,12 +103,14 @@ describeDb("mcpConnectors on a host", () => {
 	test("an added connector reaches the host through CONNECTORS, and removing it bumps the version", async () => {
 		const host = await boot({});
 		const connectors = host.context.services.get(CONNECTORS);
-		expect(connectors.version).toBe(0);
+		// The host's preflight loaded the (empty) table once.
+		const loaded = connectors.version;
+		expect(loaded).toBe(1);
 
 		const added = addNotion();
 		await handle(host, added.interaction as never);
 		expect(added.replies.text()).toContain(CONNECTOR_MESSAGES.addedTitle);
-		expect(connectors.version).toBe(1);
+		expect(connectors.version).toBe(loaded + 1);
 		expect(connectors.profileSources()).toEqual([
 			{
 				name: "notion",
@@ -130,7 +132,7 @@ describeDb("mcpConnectors on a host", () => {
 		});
 		await handle(host, removed.interaction as never);
 		expect(removed.replies.text()).toContain(CONNECTOR_MESSAGES.removedTitle);
-		expect(connectors.version).toBe(2);
+		expect(connectors.version).toBe(loaded + 2);
 		expect(connectors.list()).toEqual([]);
 		expect(cf.gateways.size).toBe(0);
 		expect(cf.servers.size).toBe(0);
@@ -203,5 +205,36 @@ describeDb("mcpConnectors on a host", () => {
 		expect(list.replies.text()).toContain(
 			"**notion** ~ https://mcp.example.test/…",
 		);
+	});
+
+	test("the stored connectors are loaded before any service starts, so no command or turn sees an empty list", async () => {
+		const first = await boot({});
+		await handle(first, addNotion().interaction as never);
+		await running?.stop();
+		running = undefined;
+		const seen: { count: number; version: number }[] = [];
+		const plugin = mcpConnectors({ contextForge: contextForge(`${cf.url}/`) });
+		// Registered first, so its service starts before any service of the connectors plugin.
+		const probe = definePlugin({
+			name: "connector-probe",
+			setup: ({ services }) => {
+				const connectors = services.lazy(CONNECTORS);
+				return {
+					services: [
+						{
+							name: "connector-probe",
+							start: () => {
+								seen.push({
+									count: connectors().list().length,
+									version: connectors().version,
+								});
+							},
+						},
+					],
+				};
+			},
+		});
+		running = await testHost({ plugins: [probe, plugin] });
+		expect(seen).toEqual([{ count: 1, version: 1 }]);
 	});
 });

@@ -138,6 +138,7 @@ export function remoteMcp(options: RemoteMcpOptions): RoundtablePlugin {
 	const text = remoteMcpMessages(options.messages);
 	const toolNames = toolNamesOf(options);
 	const identity = tokenIdentity(options);
+	let adopt: (() => Promise<void>) | undefined;
 	return definePlugin({
 		name: "remote-mcp",
 		requires: [DISCORD, IDENTITY, CONVERSATIONS],
@@ -154,16 +155,20 @@ export function remoteMcp(options: RemoteMcpOptions): RoundtablePlugin {
 			ChannelGrantStore.migration,
 			...RemoteSessionStore.migrations(),
 		],
+		// Who the token stands for is read, and the sessions of earlier versions adopted, before any
+		// service starts, so a failure stops the start before Discord connects; `Roundtable.check()`
+		// never runs it.
+		preflight: () => adopt?.(),
 		setup: async (context) => {
 			const { services, logger, conversations, database } = context;
 			const discord = services.get(DISCORD);
 			const identities = services.get(IDENTITY);
-			// Who the token stands for is read from the stored principals, once the host starts.
+			// Who the token stands for is read from the stored principals in preflight.
 			let found: Bound | undefined;
 			const bound = (): Bound => {
 				if (!found)
 					throw new PluginError(
-						"remote-mcp: the dispatch token's principal is read when the host starts; a request before that has no one to act for.",
+						"remote-mcp: the dispatch token's principal is read in preflight, before the listeners open; a request before that has no one to act for.",
 					);
 				return found;
 			};
@@ -208,24 +213,22 @@ export function remoteMcp(options: RemoteMcpOptions): RoundtablePlugin {
 				mcpGrantCommands(discord.guard, grants, options.publicUrl, text),
 			);
 			services.provide(REMOTE_MCP, remoteMcpService(grants, text));
+			// Read before any service starts; see `preflight` below.
+			adopt = async () => {
+				found = await boundPrincipal(identities, identity);
+				// 0.8's sessions were the owner's, and their conversations, recorded shared, become theirs.
+				const [primary] = await identities.owners();
+				if (primary)
+					await sessions.adopt(primary.id, async (id) => {
+						await registry.adopt(`mcp:${id}`, primary.id);
+					});
+				// Every start adopts each session's conversation for its principal again, so one a failed
+				// hand-over left no one's becomes theirs; adopt never changes one already someone's.
+				for (const { id, principalId } of await sessions.owned())
+					await registry.adopt(`mcp:${id}`, principalId);
+			};
 			return {
 				services: [
-					{
-						name: "remote-principal",
-						start: async () => {
-							found = await boundPrincipal(identities, identity);
-							// 0.8's sessions were the owner's, and their conversations, recorded shared, become theirs.
-							const [primary] = await identities.owners();
-							if (primary)
-								await sessions.adopt(primary.id, async (id) => {
-									await registry.adopt(`mcp:${id}`, primary.id);
-								});
-							// Every start adopts each session's conversation for its principal again, so one a failed
-							// hand-over left no one's becomes theirs; adopt never changes one already someone's.
-							for (const { id, principalId } of await sessions.owned())
-								await registry.adopt(`mcp:${id}`, principalId);
-						},
-					},
 					{
 						name: "remote-sweeper",
 						start: () => sweeper.start(),

@@ -89,7 +89,8 @@ describeDb("both plugins on a host", () => {
 
 	test("provides the connector registry to other plugins", () => {
 		const connectors = host.context.services.get(CONNECTORS);
-		expect(connectors.version).toBe(0);
+		// The host's preflight loaded the (empty) table once.
+		expect(connectors.version).toBe(1);
 		expect(connectors.list()).toEqual([]);
 		expect(connectors.servers()).toEqual([]);
 		expect(connectors.profileSources()).toEqual([]);

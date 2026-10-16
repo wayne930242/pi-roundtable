@@ -114,7 +114,7 @@ export class ConnectorRegistry {
 		return new ConnectorRegistry(sql, options);
 	}
 
-	/** Reads the stored connectors and resolves each one's server; one that cannot be reached is logged and left without a server. */
+	/** Reads the stored connectors and resolves each one's server; one that cannot be reached is logged and left without a server. Changes `version`. */
 	async load(): Promise<void> {
 		const rows: Row[] = await this
 			.#sql`SELECT * FROM owner_connectors ORDER BY name`;
@@ -133,6 +133,8 @@ export class ConnectorRegistry {
 			}
 			this.#connectors.set(row.name, connector);
 		}
+		// What a host built from the list before this is stale.
+		this.#version += 1;
 	}
 
 	/** The name of the connector's virtual server in ContextForge. */

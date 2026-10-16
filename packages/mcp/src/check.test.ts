@@ -103,7 +103,8 @@ test("mcp-connectors sets up without reading the database or ContextForge", asyn
 		}),
 	);
 	expect(report.plugins).toContain("mcp-connectors");
-	expect(report.services).toContain("connectors");
+	// Nothing is read until the host starts: no service of its own is needed.
+	expect(report.services).not.toContain("connectors");
 	expect(CONNECTORS.id).toBeString();
 });
 
@@ -115,9 +116,8 @@ test("remote-mcp sets up without reading the stored principals", async () => {
 		}),
 	);
 	expect(report.plugins).toContain("remote-mcp");
-	expect(report.services).toEqual(
-		expect.arrayContaining(["remote-principal", "remote-sweeper"]),
-	);
+	expect(report.services).toContain("remote-sweeper");
+	expect(report.services).not.toContain("remote-principal");
 	expect(report.routes.some((route) => route.includes("/mcp/"))).toBe(true);
 	expect(REMOTE_MCP.id).toBeString();
 });

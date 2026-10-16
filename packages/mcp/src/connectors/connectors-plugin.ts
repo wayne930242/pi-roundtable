@@ -85,11 +85,15 @@ function checkOptions({ contextForge }: McpConnectorsOptions): string {
 export function mcpConnectors(options: McpConnectorsOptions): RoundtablePlugin {
 	const url = checkOptions(options);
 	const text = connectorMessages(options.messages);
+	let load: (() => Promise<void>) | undefined;
 	return definePlugin({
 		name: "mcp-connectors",
 		requires: [DISCORD],
 		provides: [CONNECTORS],
 		migrations: [ConnectorRegistry.migration],
+		// The stored connectors are read, and their servers resolved, before any service starts, so
+		// Discord takes no command or turn that sees an empty list; `Roundtable.check()` never runs it.
+		preflight: () => load?.(),
 		setup: ({ database, services, logger }) => {
 			const { jwtSecret, user } = options.contextForge;
 			const token = contextForgeToken(jwtSecret, user, TOKEN_TTL_SECONDS);
@@ -120,10 +124,9 @@ export function mcpConnectors(options: McpConnectorsOptions): RoundtablePlugin {
 					servers: () => admin.servers(),
 				},
 			});
-			// The stored connectors are read, and their servers resolved, as the host starts.
-			return {
-				services: [{ name: "connectors", start: () => registry.load() }],
-			};
+			// Nothing is added but what preflight reads.
+			load = () => registry.load();
+			return {};
 		},
 	});
 }
