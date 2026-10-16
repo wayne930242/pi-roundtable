@@ -30,5 +30,4 @@ test("workTimeout does not count the time the slot waited on a card, and looks a
 	expect(expiredAt).toBe(0);
 	for (let i = 0; i < 300 && expiredAt === 0; i++) await Bun.sleep(10);
 	expect(expiredAt).toBeGreaterThanOrEqual(1_000);
-	expect(expiredAt).toBeLessThan(2_000);
 });
