@@ -392,6 +392,7 @@ It passes `describeSurfaceContract` (`pi-roundtable/testing`).
 
 LINE shows plain text only, so the surface tells the model so: its `formatting` text is appended to the system prompt of every turn that replies in a LINE chat, after the persona, and says to use no headings, tables, bold, code fences or link syntax and to keep replies short.
 `formatting: "…"` in the plugin options replaces the text, and `formatting: false` tells the model nothing.
+The built-in text is exported as `LINE_FORMATTING`, so a host can reuse it, such as in the description of a tool that sends to LINE.
 
 ## The sender icon route
 

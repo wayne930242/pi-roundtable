@@ -14,10 +14,11 @@ import type { LineOutbox, LineOutMessage } from "./outbox.ts";
 const TEXT_MAX = 5000;
 
 /**
- * What the model is told about LINE's rendering, as the surface's `formatting`. English: it is
- * model-facing text, not a message-catalog string.
+ * What the model is told about LINE's rendering, as the surface's `formatting` unless the host
+ * replaces it; exported so a host can reuse it, such as in the description of a tool that sends to
+ * LINE. English: it is model-facing text, not a message-catalog string.
  */
-const LINE_FORMATTING =
+export const LINE_FORMATTING =
 	"Reply formatting (LINE): plain text only. Markdown is not rendered and shows as literal symbols, so use no headings, tables, bold, code fences or link syntax. Write short paragraphs, and lists with plain dashes or numbers. Keep replies short.";
 
 /** `text` cut into pieces LINE takes, never inside a surrogate pair. */

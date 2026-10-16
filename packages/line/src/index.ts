@@ -67,7 +67,7 @@ export type {
 	LineSources,
 	SourceStatus,
 } from "./sources.ts";
-export { LineSurface } from "./surface.ts";
+export { LINE_FORMATTING, LineSurface } from "./surface.ts";
 export type { LineCredentials, TokenMode } from "./token.ts";
 export type { WebhookHealth } from "./webhook.ts";
 export { WEBHOOK_MAX_BYTES } from "./webhook.ts";

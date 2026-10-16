@@ -5,6 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- The `line` surface tells the model that LINE shows plain text only: its `formatting` text is appended to the system prompt of every turn that replies in a LINE chat, after the persona. `line({ formatting })` replaces it and `false` tells the model nothing. Needs pi-roundtable with `ChatSurface.formatting`.
+- `LINE_FORMATTING`: the built-in guidance text, for a host that wants the same words elsewhere, such as in the description of a tool that sends to LINE.
+
 ## [0.16.0] - 2026-10-16
 
 ### Added
