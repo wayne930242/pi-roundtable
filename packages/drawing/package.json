@@ -40,14 +40,14 @@
 		"canvas": "3.2.3",
 		"d3-force": "3.0.0",
 		"roughjs": "4.6.6",
-		"typebox": "1.3.34"
+		"typebox": "1.3.37"
 	},
 	"peerDependencies": {
 		"pi-roundtable": ">=0.17.0 <0.18.0"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.5.15",
-		"@types/bun": "1.4.2",
+		"@types/bun": "1.4.3",
 		"pi-roundtable": "0.17.3",
 		"typescript": "7.0.2"
 	}

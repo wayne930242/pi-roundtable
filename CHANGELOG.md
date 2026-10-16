@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- The packages depend on `typebox` 1.3.37 (was 1.3.34), and a project made by `roundtable init` pins `typebox` 1.3.37 and `@types/bun` 1.4.3 (were 1.3.34 and 1.4.2), so a new project matches the package's own tools. `pi-mcp-adapter` is 5.3.0 and the `pi-web-access` used for the package's own checks is 0.40.0. The pi range the package accepts is unchanged; it is built and tested against pi 1.3.0.
+
 ## [0.17.3] - 2026-10-16
 
 ### Fixed
