@@ -5,8 +5,11 @@ const HEADS = "DISTINCT ON (i.source_key)";
 
 type Call = (...args: unknown[]) => unknown;
 
-/** How long a test waits for a claim to reach the query before it is told the query is gone. */
-const WAIT_MS = 5_000;
+/**
+ * How long a test waits for a claim to reach the query before it is told the query is gone. It stays
+ * under Bun's five-second limit on a test, or that limit would end the test first and hide the message.
+ */
+const WAIT_MS = 2_000;
 
 export interface ClaimParker {
 	/** `sql` as the inbox worker should be given it. */

@@ -356,13 +356,17 @@ describeDb("the line plugin", () => {
 		await Bun.sleep(80);
 		expect(first).toHaveLength(1);
 		// The worker may have claimed s2 as the first subscriber went and put it back for a moment
-		// (the next test makes it so); the clock stands still, so let that moment pass.
-		advance(POLL_MS);
+		// (the next test makes it so); the clock stands still, so let that moment pass. The put-back
+		// reads the clock when it is written, which may be after any one step of it, so the clock
+		// goes on stepping while the test waits.
 		const second: LineEvent[] = [];
 		port.subscribe(async (event) => {
 			second.push(event);
 		});
-		await until(() => second.length >= 1);
+		await until(() => {
+			advance(POLL_MS);
+			return second.length >= 1;
+		});
 		expect(second.map((e) => (e as { eventId: string }).eventId)).toEqual([
 			"s2",
 		]);
@@ -372,48 +376,52 @@ describeDb("the line plugin", () => {
 	test("an event the worker claims as the subscriber goes is put back uncounted and goes to the next subscriber once its moment has passed", async () => {
 		const parker = claimParker(sql);
 		const { service, route, port } = await boot({}, parker.sql);
-		await service("line-inbox").start?.();
-		await route.handle(webhookRequest(body(messageEvent({ id: "c0" }))));
-		await port.sources.allow(GROUP);
-		await route.handle(webhookRequest(body(messageEvent({ id: "c1" }))));
-		const status = async (id: string) =>
-			(
-				await sql`SELECT status, attempts, requeues, last_error_code FROM line_inbox WHERE webhook_event_id = ${id}`
-			)[0];
-		const first: LineEvent[] = [];
-		const detach = port.subscribe(async (event) => {
-			first.push(event);
-		});
-		await until(async () => (await status("c1"))?.status === "done");
-		// The worker's next look at the inbox begins with the subscriber still attached ...
-		const letGo = await parker.park();
-		// ... and goes on only after the subscriber has gone and c2 has come in.
-		detach();
-		await route.handle(webhookRequest(body(messageEvent({ id: "c2" }))));
-		letGo();
-		await until(async () => (await status("c2"))?.last_error_code != null);
-		expect(await status("c2")).toMatchObject({
-			status: "pending",
-			attempts: 0,
-			requeues: 0,
-			last_error_code: "no_processor",
-		});
-		expect(first.map((e) => (e as { eventId: string }).eventId)).toEqual([
-			"c1",
-		]);
-		// It comes due once the moment has passed; the next subscriber is handed it, as attempt one.
-		advance(POLL_MS);
-		const second: LineEvent[] = [];
-		port.subscribe(async (event) => {
-			second.push(event);
-		});
-		await until(() => second.length >= 1);
-		expect(second.map((e) => (e as { eventId: string }).eventId)).toEqual([
-			"c2",
-		]);
-		await until(async () => (await status("c2"))?.status === "done");
-		expect(await status("c2")).toMatchObject({ status: "done", attempts: 1 });
-		await service("line-inbox").stop?.();
+		try {
+			await service("line-inbox").start?.();
+			await route.handle(webhookRequest(body(messageEvent({ id: "c0" }))));
+			await port.sources.allow(GROUP);
+			await route.handle(webhookRequest(body(messageEvent({ id: "c1" }))));
+			const status = async (id: string) =>
+				(
+					await sql`SELECT status, attempts, requeues, last_error_code FROM line_inbox WHERE webhook_event_id = ${id}`
+				)[0];
+			const first: LineEvent[] = [];
+			const detach = port.subscribe(async (event) => {
+				first.push(event);
+			});
+			await until(async () => (await status("c1"))?.status === "done");
+			// The worker's next look at the inbox begins with the subscriber still attached ...
+			const letGo = await parker.park();
+			// ... and goes on only after the subscriber has gone and c2 has come in.
+			detach();
+			await route.handle(webhookRequest(body(messageEvent({ id: "c2" }))));
+			letGo();
+			await until(async () => (await status("c2"))?.last_error_code != null);
+			expect(await status("c2")).toMatchObject({
+				status: "pending",
+				attempts: 0,
+				requeues: 0,
+				last_error_code: "no_processor",
+			});
+			expect(first.map((e) => (e as { eventId: string }).eventId)).toEqual([
+				"c1",
+			]);
+			// It comes due once the moment has passed; the next subscriber is handed it, as attempt one.
+			advance(POLL_MS);
+			const second: LineEvent[] = [];
+			port.subscribe(async (event) => {
+				second.push(event);
+			});
+			await until(() => second.length >= 1);
+			expect(second.map((e) => (e as { eventId: string }).eventId)).toEqual([
+				"c2",
+			]);
+			await until(async () => (await status("c2"))?.status === "done");
+			expect(await status("c2")).toMatchObject({ status: "done", attempts: 1 });
+		} finally {
+			// Whether it passed or not: a worker left running goes on claiming rows of the tests after it.
+			await service("line-inbox").stop?.();
+		}
 	});
 
 	test("one screen at a time: a second is refused, detaching frees the place, and it leaves the subscriber alone", async () => {
