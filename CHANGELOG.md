@@ -5,11 +5,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.17.3] - 2026-10-16
+
 ### Fixed
 
 - The 0.17.1 entry and the plugin guide called `turnTimeoutMs` and `turnMaxMs` options of the built-in runtime that a host can set. Nothing public sets them: the runtime plugin passes neither, and the runtime class is not exported. Every host runs a turn with 10 minutes of work, renewed by each steer up to 30 minutes in all. The guide now says the two limits are fixed, and its startup order lists the runtime's own `preflight`, which 0.17.2 moved after every plugin's.
 - `testPlugin` runs the runtime's `preflight` where the host does, right after the plugin's own and before the plugin's services and surfaces start, not after they have. A runtime whose `preflight` throws fails `testPlugin` with that error, with nothing started and the runtime disposed.
 - A time limit on a turn, or on a coding worker (`workTimeout`), that comes due while an owner's card is open looks at the turn again no oftener than once a second, not once a millisecond for as long as the card waits. The limit still fires once; a limit that waiting on a card pushed back can fire up to a second late.
+
+### Changed
+
+- 0.17.2 was tagged but never published: its release run stopped on a LINE plugin test that raced its own frozen clock. 0.17.3 carries 0.17.2's fix, the runtime's startup probe after every plugin's `preflight`; the LINE tests that raced now step their clock, and no shipped LINE code changed.
 
 ## [0.17.2] - 2026-10-16
 
