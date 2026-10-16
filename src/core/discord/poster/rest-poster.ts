@@ -88,6 +88,7 @@ export function restPoster(
 		channelId: string,
 		name: string,
 		make: boolean,
+		release: () => void,
 	): Promise<Webhook | undefined> => {
 		for (const hook of await listMine(channelId)) {
 			const id = text(hook.id);
@@ -111,10 +112,13 @@ export function restPoster(
 			);
 		// The new webhook has the default picture; whoever kept an avatar for the channel forgets it
 		// before the webhook is used, so a late record cannot outlive the picture it describes.
-		// The webhook is kept before the listeners run, so one that posts through it (or sets its
-		// picture) finds it instead of waiting on this very look.
+		// The webhook is kept, and the look released, before the listeners run: one that posts through
+		// it (or sets its picture) finds it instead of waiting on this very look, and a listener that
+		// never returns holds only the call that made the webhook, not later looks for it. Concurrent
+		// calls may use the new webhook before the listeners finish.
 		const fresh = { id, token };
 		webhooks.set(`${channelId}:${name}`, fresh);
+		release();
 		for (const listener of madeListeners)
 			await listener(channelId, name).catch(() => undefined);
 		return fresh;
@@ -133,12 +137,15 @@ export function restPoster(
 		const search = `${slot}:${make ? "make" : "find"}`;
 		let pending = finding.get(search);
 		if (!pending) {
-			pending = find(channelId, name, make)
+			const release = () => {
+				if (finding.get(search) === pending) finding.delete(search);
+			};
+			pending = find(channelId, name, make, release)
 				.then((found) => {
 					if (found) webhooks.set(slot, found);
 					return found;
 				})
-				.finally(() => finding.delete(search));
+				.finally(release);
 			finding.set(search, pending);
 		}
 		return pending;

@@ -199,7 +199,7 @@ export interface DiscordPoster {
 	setAvatar(channelId: string, webhook: string, png: Uint8Array): Promise<void>;
 	/**
 	 * Told, and awaited, when the poster makes a webhook (the first, or one made again after it was
-	 * deleted: it carries the default picture). A listener that fails never fails the call. Returns
+	 * deleted: it carries the default picture). Only the call that made the webhook waits for the listeners; concurrent calls may use the new webhook before they finish. A listener that fails never fails the call. Returns
 	 * the function that detaches it.
 	 */
 	onWebhookMade(

@@ -314,7 +314,9 @@ const messageScenarios: Scenario[] = [
 		async run({ poster, world }) {
 			const ch = freshId();
 			world.channel(ch);
+			let heard = 0;
 			const detach = poster.onWebhookMade(async (channel, name) => {
+				heard += 1;
 				await poster.setAvatar(channel, name, PNG);
 			});
 			const done = poster
@@ -326,6 +328,7 @@ const messageScenarios: Scenario[] = [
 			]);
 			detach();
 			expect(result).toBe("done");
+			expect(heard).toBe(1);
 			expect((await poster.webhookIds(ch, ["relay"])).relay).toHaveLength(1);
 			// Names that are Object.prototype members are names like any other.
 			const odd = await poster.webhookIds(ch, ["constructor", "__proto__"]);
@@ -333,6 +336,32 @@ const messageScenarios: Scenario[] = [
 				Object.entries(odd).find(([k]) => k === "constructor")?.[1],
 			).toEqual([]);
 			expect(Object.keys(odd).sort()).toEqual(["__proto__", "constructor"]);
+		},
+	},
+	{
+		name: "6c. a listener that never returns holds only the call that made the webhook",
+		async run({ poster, world }) {
+			const ch = freshId();
+			world.channel(ch);
+			const post = () =>
+				poster.post(ch, { webhook: "relay", username: "A", content: "x" });
+			await post();
+			let hang = true;
+			const detach = poster.onWebhookMade(() =>
+				hang ? new Promise<void>(() => undefined) : Promise.resolve(),
+			);
+			world.deleteWebhook(ch, "relay");
+			void post().catch(() => undefined);
+			await Bun.sleep(100);
+			// The webhook is gone again; the next post meets the refusal, makes it once more, and ends.
+			world.deleteWebhook(ch, "relay");
+			hang = false;
+			const result = await Promise.race([
+				post().then(() => "done"),
+				Bun.sleep(3_000).then(() => "hung"),
+			]);
+			detach();
+			expect(result).toBe("done");
 		},
 	},
 	{
