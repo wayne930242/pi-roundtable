@@ -175,6 +175,19 @@ test("the plugin's preflight runs after setup and before its services start", as
 	await harness.stop();
 });
 
+/** A runtime that does nothing, with what a test lets it do in place of that. */
+const idleRuntime = (own: Partial<AgentRuntime> = {}): AgentRuntime => ({
+	runTurn: async () => ({ ok: true, text: "" }),
+	steer: async () => false,
+	stop: () => false,
+	startFresh: async () => undefined,
+	deleteConversation: async () => undefined,
+	pendingConfirmation: () => undefined,
+	heldActions: async () => undefined,
+	recentTranscript: async () => [],
+	...own,
+});
+
 test("a plugin whose preflight throws fails testPlugin with that error before any service starts, and disposes the runtime it built", async () => {
 	const started: string[] = [];
 	const disposed: string[] = [];
@@ -182,17 +195,8 @@ test("a plugin whose preflight throws fails testPlugin with that error before an
 		testPlugin({
 			name: "refusing",
 			providers: {
-				runtime: () => ({
-					runTurn: async () => ({ ok: true, text: "" }),
-					steer: async () => false,
-					stop: () => false,
-					startFresh: async () => undefined,
-					deleteConversation: async () => undefined,
-					pendingConfirmation: () => undefined,
-					heldActions: async () => undefined,
-					recentTranscript: async () => [],
-					dispose: async () => void disposed.push("runtime"),
-				}),
+				runtime: () =>
+					idleRuntime({ dispose: async () => void disposed.push("runtime") }),
 			},
 			preflight: () => {
 				throw new Error("not ready");
@@ -204,6 +208,54 @@ test("a plugin whose preflight throws fails testPlugin with that error before an
 			}),
 		}),
 	).rejects.toThrow("not ready");
+	expect(started).toEqual([]);
+	expect(disposed).toEqual(["runtime"]);
+});
+
+test("the runtime's own preflight runs after the plugin's and before its services start", async () => {
+	const order: string[] = [];
+	const harness = await testPlugin({
+		name: "probed",
+		providers: {
+			runtime: () =>
+				idleRuntime({
+					preflight: async () => void order.push("runtime preflight"),
+				}),
+		},
+		preflight: () => void order.push("preflight"),
+		setup: () => {
+			order.push("setup");
+			return {
+				services: [{ name: "probed", start: () => void order.push("start") }],
+			};
+		},
+	});
+	expect(order).toEqual(["setup", "preflight", "runtime preflight", "start"]);
+	await harness.stop();
+});
+
+test("a runtime whose preflight throws fails testPlugin with that error before any service starts, and is disposed", async () => {
+	const started: string[] = [];
+	const disposed: string[] = [];
+	await expect(
+		testPlugin({
+			name: "unready",
+			providers: {
+				runtime: () =>
+					idleRuntime({
+						preflight: async () => {
+							throw new Error("model not reachable");
+						},
+						dispose: async () => void disposed.push("runtime"),
+					}),
+			},
+			setup: () => ({
+				services: [
+					{ name: "unready", start: () => void started.push("start") },
+				],
+			}),
+		}),
+	).rejects.toThrow("model not reachable");
 	expect(started).toEqual([]);
 	expect(disposed).toEqual(["runtime"]);
 });

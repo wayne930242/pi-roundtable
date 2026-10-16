@@ -608,17 +608,18 @@ export async function testPlugin(
 	// The plugin's own surfaces start as services; the injected ones start beside them, after.
 	const deliver = (message: InboundMessage) =>
 		void conversations.handle(message);
-	// As the host does, the plugin's preflight runs once everything is set up and before any service starts.
+	// As the host does, the plugin's preflight runs once everything is set up and before any service
+	// starts, and the runtime's own after it, so it sees what the preflight filled in.
 	try {
 		await plugin.preflight?.();
+		await runtime?.preflight?.();
 	} catch (error) {
-		// The runtime the provider built is not left running when the plugin refuses.
+		// The runtime the provider built is not left running when the plugin or the runtime refuses.
 		await runtime?.dispose?.();
 		throw error;
 	}
 	for (const service of registry.services) await service.start?.();
 	for (const surface of options.surfaces ?? []) await surface.start(deliver);
-	await runtime?.preflight?.();
 	let stopped = false;
 	const files: { channel: ChannelKey; file: ReplyFile }[] = [];
 	const images: { channel: ChannelKey; image: ClientPart }[] = [];
