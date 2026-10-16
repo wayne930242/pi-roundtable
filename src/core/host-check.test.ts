@@ -1,7 +1,8 @@
-import { afterAll, afterEach, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, describe, expect, spyOn, test } from "bun:test";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { REST } from "discord.js";
 import { serviceKey } from "./contract/services.ts";
 import { defineRoundtable } from "./define-roundtable.ts";
 import { Roundtable, type RoundtableOptions } from "./host.ts";
@@ -259,6 +260,31 @@ describe("Roundtable.check", () => {
 		expect(report.plugins).toContain("identity");
 		expect(report.plugins).toContain("runtime");
 		expect(existsSync(SOCKET)).toBe(false);
+	});
+
+	test("the Discord plugin's poster sends nothing while the host checks its configuration", async () => {
+		const request = spyOn(REST.prototype, "request");
+		try {
+			const defined = await defineRoundtable(
+				{
+					owner: { id: "100000000000000001", name: "Ada" },
+					discord: {
+						token: "token",
+						guild: "900000000000000001",
+						entryChannel: "900000000000000002",
+					},
+					database: { url: "postgres://unused@127.0.0.1:1/none" },
+					dataDir: dir,
+					model: "anthropic/claude-sonnet-5-5",
+					http: { publicUrl: "https://bot.example.com", socketPath: SOCKET },
+				},
+				{ logger: silentLogger() },
+			);
+			await new Roundtable(defined.options, defined.plugins).check();
+			expect(request).not.toHaveBeenCalled();
+		} finally {
+			request.mockRestore();
+		}
 	});
 
 	describe("the configured identities, which the check settles without a stored principal", () => {

@@ -64,6 +64,27 @@ The built-in plugins provide these keys, all exported from `pi-roundtable`:
 Your plugins run after the built-ins, so they can read every key above.
 The Discord connection's key, `DISCORD`, comes from `pi-roundtable/discord`, because its port names discord.js types.
 
+### Posting to Discord: `DISCORD.poster`
+
+`DISCORD` (from `pi-roundtable/discord`) has a `poster`: Discord's REST API for your plugin's own posts, over the Discord plugin's own client and its rate limits.
+It is usable from `setup` on, because it needs no gateway login, and making it sends nothing.
+
+```ts
+const { poster } = services.get(DISCORD);
+const posted = await poster.post(channelId, { webhook: "relay", username: "Ann", content: "Hello" });
+await poster.edit(channelId, posted.messageId, { content: "Hello again" }, ["relay"]);
+```
+
+- Webhooks are yours to name: `post` finds the bot's webhook of that name in the channel, or makes it. A webhook name and a `username` are 1 to 80 characters without "discord" or "clyde"; anything else fails as `invalid` before a request is sent.
+- A post, edit, card or direct message never pings anyone it does not name: `allowed_mentions` is sent with `parse: []`, and only the `mentions` you list can ping.
+- A card is a Components V2 message. `editCard` keeps it one; a message posted with `say` cannot become a card (`rejected`), and the notice Discord posts when something is pinned is the bot's message that no one can edit.
+- Discord lets a channel be renamed twice in ten minutes. `renameChannel` does not queue a third: it fails as `unavailable` after ten seconds and is never sent later.
+- `threadCloser` reads the audit log (View Audit Log, else `forbidden`) among the newest 50 thread updates; Discord's own auto-archive reads as `unknown`.
+- A failure is a `DiscordPosterError` with a `kind` (`invalid`, `channel_gone`, `message_gone`, `forbidden`, `rejected`, `unavailable`); its message never holds a URL or a token.
+
+The full list of calls and rules is in [Posting through `DISCORD.poster`](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#posting-through-discordposter) in the guide.
+A hand-made `DISCORD` stand-in needs a `poster` too; `fakeDiscord()` and `testHost` give a `fakeDiscordPoster()`.
+
 ### Prechecks
 
 A precheck decides, before a schedule's turn, whether the agent is woken at all.

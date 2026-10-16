@@ -2,7 +2,7 @@ import { expect, spyOn, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Interaction } from "discord.js";
+import { type Interaction, REST } from "discord.js";
 import type { ConversationPort } from "../contract/channels.ts";
 import type { ChatSurface } from "../contract/surface.ts";
 import type { ComposedCommands } from "../discord/compose-commands.ts";
@@ -18,6 +18,7 @@ import { silentLogger } from "../log.ts";
 import type { PluginContext } from "../plugin.ts";
 import { IDENTITY } from "../services.ts";
 import { speakerPolicy } from "../speakers.ts";
+import { DiscordEmulator } from "../testing/discord-api-emulator.ts";
 import { mapIdentity } from "../testing/map-identity.ts";
 import { DISCORD, type DiscordServices, discordPlugin } from "./discord.ts";
 
@@ -122,6 +123,7 @@ test("the plugin provides the connection, the registrar, the guard and the threa
 		"commands",
 		"connection",
 		"guard",
+		"poster",
 		"threads",
 	]);
 	expect(provided.guard.root).toBe("bot");
@@ -341,4 +343,24 @@ test("cardCopies false removes the file an earlier run left, and its temporary f
 	} as unknown as PluginContext);
 	expect(existsSync(join(dataDir, "card-copies.json"))).toBe(false);
 	expect(existsSync(join(dataDir, "card-copies.json.tmp"))).toBe(false);
+});
+
+test("DISCORD.poster is made over the surface's own REST queue, usable before the gateway is up, and sends nothing until called", async () => {
+	const request = spyOn(REST.prototype, "request");
+	const emulator = new DiscordEmulator();
+	emulator.token = OPTIONS.token;
+	emulator.start();
+	try {
+		const { provided, surface } = await setUp();
+		expect(request).not.toHaveBeenCalled();
+		// The surface's REST client is the one the poster uses: point it at the emulated Discord.
+		const rest = (surface as unknown as DiscordSurface).rest();
+		(rest.options as { api: string }).api = emulator.api;
+		expect(await provided.poster.botUserId()).toBe("960000000000000009");
+		expect(emulator.log.map((r) => r.authorization)).toEqual(["Bot token"]);
+		expect(request).toHaveBeenCalledTimes(1);
+	} finally {
+		emulator.stop();
+		request.mockRestore();
+	}
 });

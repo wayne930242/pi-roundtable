@@ -78,5 +78,26 @@ export {
 	plain,
 	replyWithPanels,
 } from "../core/discord/owner-panel.ts";
+export type {
+	CardButton,
+	CardLink,
+	CardSelect,
+	CategoryChannel,
+	DiscordCard,
+	DiscordFailure,
+	DiscordMessage,
+	DiscordPoster,
+	DiscordReason,
+	PostedMessage,
+	PosterFile,
+	RecentMessage,
+	ThreadCloser,
+	ThreadState,
+	WebhookPost,
+} from "../core/discord/poster/poster.ts";
+export {
+	DISCORD_LIMITS,
+	DiscordPosterError,
+} from "../core/discord/poster/poster.ts";
 export type { OwnerOperations } from "../core/modules/discord-admin/discord-admin.ts";
 export { DISCORD_ADMIN_TOOLS } from "../core/modules/discord-admin/discord-admin.ts";

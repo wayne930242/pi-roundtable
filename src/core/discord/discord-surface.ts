@@ -9,6 +9,7 @@ import {
 	type Message,
 	MessageFlags,
 	Partials,
+	type REST,
 } from "discord.js";
 import type { AgentChannels, DashboardBoard } from "../agents/agent-ports.ts";
 import type { ChatSurface } from "../contract/surface.ts";
@@ -94,6 +95,13 @@ export class DiscordSurface
 	constructor(options: DiscordSurfaceOptions) {
 		this.#options = options;
 		this.formatting = pickFormatting(options.formatting, DISCORD_FORMATTING);
+		// REST works before the gateway logs in; `login` sets the same token again.
+		this.#client.rest.setToken(options.token);
+	}
+
+	/** The client's REST queue, whose rate limits every request of this process shares. */
+	rest(): REST {
+		return this.#client.rest;
 	}
 
 	/** Slash commands and the modules that answer them; the commands are registered globally at startup. */

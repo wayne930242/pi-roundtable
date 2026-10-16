@@ -212,7 +212,7 @@ The built-in plugins provide these, from the main entry:
 
 The data types the ports use (`Schedule`, `NewSchedule`, `Agent`, `AgentGroup`, `TeamStatus`, `Memory`, `SkillSet`, `DelegationJob`, and so on) are in the main entry too.
 Your plugins run after the built-ins, so they can read every key above.
-The Discord connection's key, `DISCORD`, is in the Discord entry, because its port names discord.js types: `DiscordServices` has `connection`, `commands`, `guard`, and `threads` (see [`commands.add`](#slash-commands-commandsadd)).
+The Discord connection's key, `DISCORD`, is in the Discord entry, because its port names discord.js types: `DiscordServices` has `connection`, `commands`, `guard`, `threads`, `poster` (see [Posting through `DISCORD.poster`](#posting-through-discordposter)) and `channelContext`; commands are in [`commands.add`](#slash-commands-commandsadd). A plugin's own stand-in for `DISCORD` (such as one written with `as unknown as DiscordServices`) needs a `poster` too before code that posts runs under it; `fakeDiscord()` and `testHost` give one.
 
 To share your own service, export its key as a constant and its port as an interface.
 Plugins registered after yours can read it during setup.
@@ -2435,6 +2435,38 @@ export function tavern(channelIds: readonly string[]) {
 ```
 <!-- /example -->
 
+### Posting through `DISCORD.poster`
+
+`DISCORD.poster` (`DiscordPoster`, from `pi-roundtable/discord`) is Discord's REST API for a plugin's own posts, over the Discord plugin's own client.
+A host has one REST queue for the whole process, so the poster and the gateway client share Discord's rate-limit state, which Discord keeps per bot token.
+It is usable from a service's `start` on, and from `setup` too, since it needs no gateway login; making it sends nothing, so `Roundtable.check()` still never reaches Discord.
+There is no factory: a host that has no Discord has no poster.
+
+```ts
+import { DISCORD } from "pi-roundtable/discord";
+
+const { poster } = services.get(DISCORD);
+const posted = await poster.post(channelId, { webhook: "relay", username: "Ann", content: "Hello" });
+await poster.edit(channelId, posted.messageId, { content: "Hello again" }, ["relay"]);
+await poster.remove(channelId, posted.messageId, ["relay"]);
+```
+
+What it covers: webhook posts under names you choose (`post`, `edit`, `remove`, `webhookIds`, `setAvatar`, `onWebhookMade`), the bot's own messages and cards (`say`, `sayCard`, `editCard`, `deleteAsBot`), direct messages (`sendDirect`), pins, reading (`message`, `recentMessages`, `botUserId`, `channelGuild`, `canView`, `memberName`), text channels (`createTextChannel`, `textChannels`, `deleteChannel`, `renameChannel`) and threads (`startThread`, `setThreadArchived`, `threadState`, `threadCloser`).
+Use `DISCORD.connection.channelInfo(channelId)` to read what a channel is called now: it comes from the gateway's cache.
+
+The rules the poster keeps, so a plugin does not rediscover them:
+
+- **Webhooks are named by the plugin.** `post` finds the bot's webhook of that name in the channel, or makes it on first use; a same-named webhook someone else made is never used. A plugin that needs several voices keeps one name per voice, so the `webhookId` on a message tells them apart. A webhook name, and a post's `username`, are 1 to 80 characters without "discord" or "clyde" in any case (full-width letters too); a username is not "everyone" or "here" either. Anything else is refused as `invalid` before a request is sent. `edit` and `remove` take the names to ask, in order, since a webhook changes only its own messages; they make no webhook. `remove` falls back to deleting as the bot (Manage Messages) for a message an earlier webhook of the same name posted.
+- **Nothing pings by accident.** Every post, edit, card and direct message sends `allowed_mentions` with `parse: []` and, for a post, the `mentions` users you list (at most 20). `@everyone`, roles and users merely named in the text never ping.
+- **Cards are Components V2 messages.** A card carries no `content`. Three lessons: every `editCard` re-sends the Components V2 flag (without it Discord answers a 400); a message posted by `say` cannot be edited into a card (`rejected`: delete it and post a card, which changes the message id); and a pin makes Discord post a system notice (type 6) as the bot, which `recentMessages` lists, `deleteAsBot` deletes, and nothing can edit (`rejected`, Discord's 50021), so skip it when looking for your own message.
+- **A channel is renamed twice in ten minutes.** Discord answers a third with a wait of minutes. `renameChannel` does not queue it: after ten seconds it fails as `unavailable`, and the held request is aborted, never sent later.
+- **Threads.** `startThread` makes a public thread on a message that archives itself after a week and wakes on the next post. The bot needs no Manage Threads to archive or open a thread it started; a locked thread needs it to open again (`forbidden`). `threadCloser` reads the guild's audit log (View Audit Log, else `forbidden`): a person's id, the bot, or `unknown` for Discord's own auto-archive. An archive counts only if its entry is within two minutes of the thread's `archive_timestamp`. It reads the newest 50 `THREAD_UPDATE` entries, so on a busy guild an old close may have left the log and read as `unknown`.
+- **Errors.** Every failure is a `DiscordPosterError` with a `kind`: `invalid` (refused before sending), `channel_gone`, `message_gone`, `forbidden` (a missing permission), `rejected` (Discord refused; asking again fails again) and `unavailable` (Discord or the network failed, or a rate limit held the call; `retryable`). `reason` says more for a full category (`category_full`), a channel that is no category (`not_category`) and one in no guild (`wrong_guild`). A webhook deleted by hand is found or made again once. A person who takes no direct messages is the answer `"closed"`, and a user who is not a member is `false` from `canView` and `undefined` from `memberName`, not failures. A message never holds a URL, a webhook token or the bot token.
+
+`DISCORD_LIMITS` (frozen) holds the limits the poster checks: 2,000 characters a post, 80 for a username, 10 files and 10 MiB a post, 1 MiB for an avatar, 20 mentions, 250 pins, 100 characters for a channel name, 3,800 characters of card text, 5 card buttons and 25 menu choices.
+
+In a test, `fakeDiscordPoster()` is a `DiscordPoster` in memory and `fakeDiscord({ poster })` or `testHost({ discord: { poster } })` gives it to the plugin; see [Testing a plugin](#testing-a-plugin). The real poster and the fake run the same scenarios, the real one over a local emulation of Discord's HTTP API.
+
 ### `backgroundTargets`: whose turn a schedule or delegated task is
 
 Schedules and delegated tasks return later as turns without a new message in the channel.
@@ -3278,8 +3310,9 @@ Use `partial<Port>({ ... })` to stand in for a port your code takes as an argume
 It provides the members you give it and throws an error naming any missing member you read, so the test needs no `as unknown as Port` cast.
 `fakePrecheck(name, answer, { description?, timeoutMs? })` is a precheck that answers `answer` (a `PrecheckResult`, an `Error` it throws, or a function of its context) and records each context in `calls`; `fakePrechecks(...prechecks)` is a real in-memory `PrecheckRegistry` with them registered, which a test gives a plugin as `servicePair(PRECHECKS, registry)` and reads back with `registry.get(name)`.
 `fakeScriptRunner(answer, { describe?, timeoutMs? })` is a `PrecheckScriptRunner` that runs nothing and answers `answer` (a result, an `Error` it throws, or a function of the script and its context), recording each call in `calls`; give it to `registry.useScriptRunner`.
-`fakeDiscord({ ownerId?, rootCommand?, channelContext? })` is the `DISCORD` service for a plugin that adds slash commands or reads channel context: give it as `services: [discord.service]`, read what the plugin added with `discord.added()`, and compose the tree Discord would get with `discord.compose()`; `channelContext` answers `DISCORD.channelContext`, by default with no context.
-Only `commands` and `guard` are given; a plugin that reads another member of `DISCORD` in a test gives its own with `servicePair(DISCORD, { ... })`.
+`fakeDiscord({ ownerId?, rootCommand?, channelContext?, poster? })` is the `DISCORD` service for a plugin that adds slash commands, reads channel context or posts through `DISCORD.poster`: give it as `services: [discord.service]`, read what the plugin added with `discord.added()`, and compose the tree Discord would get with `discord.compose()`; `channelContext` answers `DISCORD.channelContext`, by default with no context.
+Only `commands`, `guard`, `poster` and `channelContext` are given; `discord.poster` is the poster the test passed, else a new `fakeDiscordPoster()`. A plugin that reads another member of `DISCORD` in a test gives its own with `servicePair(DISCORD, { ... })`.
+`fakeDiscordPoster({ idOffset?, now? })` is a `DiscordPoster` in memory: `channels` with their messages, pins and webhook pictures, `directs`, and the knobs a test turns (`closedDirects`, `goneChannels`, `categories`, `memberNames`, `hiddenFrom`, `nonMembers`, `pinNotices`, `canReadAuditLog`, `failNext(operation, error)`, `speak`, `personCloses`, `autoArchives`, `personOpens`, `deleteWebhook`, `recreateWebhook`). `messagesIn(channelId)` lists what a channel holds. It keeps the real poster's argument checks and error kinds, a channel's two renames in ten minutes (by `now`) and the 250 pins. `idOffset` moves every id it makes, so test files that share a database never meet the same id.
 
 ### `testHost`: the built-in plugins and yours, over PostgreSQL
 
@@ -3293,7 +3326,7 @@ It boots `defineRoundtable` over `ROUNDTABLE_TEST_DATABASE_URL`, with stand-ins 
 | `plugins` | Your plugins, placed after the built-in ones as `defineRoundtable` places them |
 | `runtime` | The runtime every turn runs on; by default one that answers `""` and builds no Pi session |
 | `apiKeys` | The credentials `context.apiKey(provider)` returns, by provider name; a provider not listed reads as having none, whatever login the machine holds |
-| `discord` | What the stand-in Discord hands out: `agentChannels(guildId)` and `ownerChannel()`; `false` boots a [host without Discord](#a-host-without-discord), with no `discord`, `http`, or `agents` in the test configuration |
+| `discord` | What the stand-in Discord hands out: `agentChannels(guildId)`, `ownerChannel()`, `channelInfo(channelId)` and `poster` (what `DISCORD.poster` is; by default a `fakeDiscordPoster()`); `false` boots a [host without Discord](#a-host-without-discord), with no `discord`, `http`, or `agents` in the test configuration |
 
 It returns:
 
@@ -3877,6 +3910,10 @@ Import from the entries listed below; source area files are internal.
 | `SurfaceObservation` | `pi-roundtable/testing` | type |
 | `eagerText` | `pi-roundtable/testing` | value |
 | `fakeDiscord` | `pi-roundtable/testing` | value |
+| `fakeDiscordPoster` | `pi-roundtable/testing` | value |
+| `FakeDiscordPoster` | `pi-roundtable/testing` | type |
+| `FakePosterChannel` | `pi-roundtable/testing` | type |
+| `FakePosterMessage` | `pi-roundtable/testing` | type |
 | `fakePrecheck` | `pi-roundtable/testing` | value |
 | `fakePrechecks` | `pi-roundtable/testing` | value |
 | `FakePrecheck` | `pi-roundtable/testing` | type |
@@ -4070,6 +4107,23 @@ Import from the entries listed below; source area files are internal.
 | `DiscordAdapterConfig` | `pi-roundtable/discord` | type |
 | `DiscordConnection` | `pi-roundtable/discord` | type |
 | `DiscordServices` | `pi-roundtable/discord` | type |
+| `DISCORD_LIMITS` | `pi-roundtable/discord` | value |
+| `DiscordPosterError` | `pi-roundtable/discord` | value |
+| `CardButton` | `pi-roundtable/discord` | type |
+| `CardLink` | `pi-roundtable/discord` | type |
+| `CardSelect` | `pi-roundtable/discord` | type |
+| `CategoryChannel` | `pi-roundtable/discord` | type |
+| `DiscordCard` | `pi-roundtable/discord` | type |
+| `DiscordFailure` | `pi-roundtable/discord` | type |
+| `DiscordMessage` | `pi-roundtable/discord` | type |
+| `DiscordPoster` | `pi-roundtable/discord` | type |
+| `DiscordReason` | `pi-roundtable/discord` | type |
+| `PostedMessage` | `pi-roundtable/discord` | type |
+| `PosterFile` | `pi-roundtable/discord` | type |
+| `RecentMessage` | `pi-roundtable/discord` | type |
+| `ThreadCloser` | `pi-roundtable/discord` | type |
+| `ThreadState` | `pi-roundtable/discord` | type |
+| `WebhookPost` | `pi-roundtable/discord` | type |
 | `InteractionContribution` | `pi-roundtable/discord` | type |
 | `InteractionModule` | `pi-roundtable/discord` | type |
 | `ManagedChannel` | `pi-roundtable/discord` | type |

@@ -64,6 +64,27 @@ export const notes = definePlugin({
 你的外掛在內建外掛之後執行，所以上面每個 key 都讀得到。
 Discord 連線的 key `DISCORD` 來自 `pi-roundtable/discord`，因為它的 port 用到 discord.js 的型別。
 
+### 在 Discord 發文：`DISCORD.poster`
+
+`DISCORD`（來自 `pi-roundtable/discord`）有一個 `poster`：給你的外掛自己發文用的 Discord REST API，走 Discord 外掛自己的 client 和它的限速。
+從 `setup` 起就能用，因為它不需要 gateway 登入，建立它也不會送出任何請求。
+
+```ts
+const { poster } = services.get(DISCORD);
+const posted = await poster.post(channelId, { webhook: "relay", username: "Ann", content: "Hello" });
+await poster.edit(channelId, posted.messageId, { content: "Hello again" }, ["relay"]);
+```
+
+- webhook 的名稱由你決定：`post` 會在頻道裡找 bot 建的同名 webhook，沒有就建立。webhook 名稱和 `username` 是 1 到 80 個字元，不能含 "discord" 或 "clyde"；不合的在送出請求前就以 `invalid` 失敗。
+- 發文、編輯、卡片和私訊都不會 ping 到沒指名的人：請求一律帶 `allowed_mentions` 的 `parse: []`，只有你列在 `mentions` 的人會被 ping。
+- 卡片是 Components V2 訊息。`editCard` 會讓它維持這個型態；用 `say` 發的訊息不能改成卡片（`rejected`），而釘選時 Discord 發的那則通知是 bot 的訊息，沒有人能編輯它。
+- Discord 允許頻道 10 分鐘內改名 2 次。`renameChannel` 不會把第 3 次排隊：10 秒後以 `unavailable` 失敗，之後也不會再送出。
+- `threadCloser` 讀 audit log（要有 View Audit Log，否則 `forbidden`），範圍是最近 50 筆討論串更新；Discord 自己的自動封存會讀成 `unknown`。
+- 失敗一律是 `DiscordPosterError`，有 `kind`（`invalid`、`channel_gone`、`message_gone`、`forbidden`、`rejected`、`unavailable`）；訊息裡不會有 URL 或 token。
+
+完整的呼叫清單和規則在指南的 [Posting through `DISCORD.poster`](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#posting-through-discordposter)（英文）。
+自己做的 `DISCORD` 替身也要有 `poster`；`fakeDiscord()` 和 `testHost` 會給一個 `fakeDiscordPoster()`。
+
 ### 預檢
 
 預檢在排程那一輪開始前，決定要不要叫醒 agent。

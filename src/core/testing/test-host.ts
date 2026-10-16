@@ -21,6 +21,7 @@ import type {
 	InteractionContribution,
 } from "../discord/interaction-module.ts";
 import { commandGuard, ownerRootCommand } from "../discord/owner-command.ts";
+import type { DiscordPoster } from "../discord/poster/poster.ts";
 import type { HoldDescription } from "../holds.ts";
 import { Roundtable } from "../host.ts";
 import { silentLogger } from "../log.ts";
@@ -37,6 +38,7 @@ import type {
 import { type Speaker, THE_SPEAKER } from "../speakers.ts";
 import { toolTurn } from "../tool-turn.ts";
 import { testDatabaseUrl } from "./database.ts";
+import { fakeDiscordPoster } from "./fake-poster.ts";
 import { callRegisteredTool, registeredTools, toolNamed } from "./run-tool.ts";
 
 export interface TestHostOptions {
@@ -61,7 +63,15 @@ export interface TestHostOptions {
 	 */
 	discord?:
 		| false
-		| Partial<Pick<DiscordConnection, "agentChannels" | "ownerChannel">>;
+		| (Partial<
+				Pick<
+					DiscordConnection,
+					"agentChannels" | "ownerChannel" | "channelInfo"
+				>
+		  > & {
+				/** What `DISCORD.poster` is; by default a `fakeDiscordPoster()`. */
+				poster?: DiscordPoster;
+		  });
 }
 
 export interface TestHost {
@@ -168,7 +178,7 @@ function quietRuntime(): AgentRuntime {
 export function standInDiscord(
 	commands: CommandCollection,
 	guard: CommandGuard,
-	given: TestHostOptions["discord"],
+	given: Exclude<TestHostOptions["discord"], false>,
 	/** The primary owner's Discord user id, whose direct messages are the owner channel. */
 	ownerId: string,
 	/** What `DISCORD.channelContext` answers; by default no context, as on a host with it off. */
@@ -185,9 +195,9 @@ export function standInDiscord(
 		replaces: [DISCORD],
 		setup: ({ services }) => {
 			const identity = services.find(IDENTITY);
+			const { poster, ...overrides } = given ?? {};
 			const ownerChannel =
-				(given ? given.ownerChannel : undefined) ??
-				(async () => "discord:owner-dm" as const);
+				overrides.ownerChannel ?? (async () => "discord:owner-dm" as const);
 			// Each person's direct messages, as the Discord plugin's provider reaches them; the owner's is the owner channel.
 			const direct = discordDirectChannel({
 				directChannel: async (userId) =>
@@ -204,11 +214,12 @@ export function standInDiscord(
 					onChannelDeleted: () => undefined,
 					ownerChannel: async () => "discord:owner-dm",
 					ownerOperations: () => ({}),
-					...given,
+					...overrides,
 				},
 				commands: commands.registrar,
 				guard,
 				threads: { open: async () => undefined, sweep: async () => undefined },
+				poster: poster ?? fakeDiscordPoster(),
 				channelContext,
 			} as unknown as DiscordServices);
 			return { surfaces: [surface], directChannels: [direct] };

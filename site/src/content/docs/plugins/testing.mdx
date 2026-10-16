@@ -84,6 +84,10 @@ A few helpers cover the rest:
   Reading a member you did not give throws an error that names it.
 - `fakeDiscord()` is the `DISCORD` service for a plugin that adds slash commands.
   `discord.added()` lists what the plugin added, and `discord.compose()` returns the tree Discord would get.
+  `fakeDiscord({ poster })` gives the plugin the poster you pass as `DISCORD.poster`; by default it is a new `fakeDiscordPoster()`, which `discord.poster` returns.
+- `fakeDiscordPoster({ idOffset?, now? })` is a `DiscordPoster` in memory.
+  `messagesIn(channelId)` lists what a channel holds, `directs` the direct messages sent, and `failNext(operation, error)`, `closedDirects`, `goneChannels`, `hiddenFrom`, `pinNotices` and the rest are the knobs a test turns.
+  It keeps the real poster's argument checks and error kinds, so a plugin that breaks a limit fails in the test too.
 - `useTestLocale()` resets the process-wide locale to English and the time zone to UTC.
 
 The one example whose test needs PostgreSQL is [`migrations.test.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/migrations.test.ts).
@@ -143,7 +147,7 @@ Gate the suite with `describeDb`.
 | `config` | Keys of `RoundtableConfig` laid over a test configuration, such as `skills: false` |
 | `plugins` | Your plugins, placed after the built-in ones |
 | `runtime` | The runtime every turn runs on. By default one that answers an empty string and builds no Pi session |
-| `discord` | What the stand-in Discord hands out: `agentChannels(guildId)` and `ownerChannel()` |
+| `discord` | What the stand-in Discord hands out: `agentChannels(guildId)`, `ownerChannel()`, `channelInfo(channelId)` and `poster` (what `DISCORD.poster` is; by default a `fakeDiscordPoster()`) |
 
 It returns `context` (the context of a probe plugin set up after every other), `conversations`, `commands` (what was added, and the composed slash-command tree), `sessionTools(scope?)`, `sessionContext(scope?)`, `runTool(name, args, options?)` (runs a contributed tool as a speaker on a channel and gives the text the model would read), `hold(name, args, options?)` (what the tool's hold shows for the call, or `undefined`), and `stop()`.
 Call `stop()` when the test ends.

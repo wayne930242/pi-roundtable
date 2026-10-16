@@ -29,6 +29,7 @@ import {
 	commandGuard,
 	ownerRootCommand,
 } from "./core/discord/owner-command.ts";
+import type { DiscordPoster } from "./core/discord/poster/poster.ts";
 import type { ClientPart, ClientPort } from "./core/domain/client.ts";
 import type {
 	PendingConfirmation,
@@ -76,6 +77,7 @@ import {
 } from "./core/services.ts";
 import type { ChannelKey, SessionContext } from "./core/sessions.ts";
 import { type Speaker, THE_SPEAKER } from "./core/speakers.ts";
+import { fakeDiscordPoster } from "./core/testing/fake-poster.ts";
 import { mapIdentity } from "./core/testing/map-identity.ts";
 import {
 	callRegisteredTool,
@@ -95,6 +97,12 @@ export {
 	testDatabaseUrl,
 } from "./core/testing/database.ts";
 export { eagerText, useEagerCatalog } from "./core/testing/eager-catalog.ts";
+export type {
+	FakeDiscordPoster,
+	FakePosterChannel,
+	FakePosterMessage,
+} from "./core/testing/fake-poster.ts";
+export { fakeDiscordPoster } from "./core/testing/fake-poster.ts";
 export type { TestLocale } from "./core/testing/locale.ts";
 export { useTestLocale } from "./core/testing/locale.ts";
 export { OWNER_SPEAKER } from "./core/testing/owner.ts";
@@ -156,6 +164,8 @@ export interface FakeDiscord {
 	readonly service: ServicePair;
 	/** What `DISCORD.commands` is to the plugin: the real registrar, which refuses what the Discord plugin refuses. */
 	readonly commands: CommandRegistrar;
+	/** What `DISCORD.poster` is: the one the test gave, else a `fakeDiscordPoster()`. */
+	readonly poster: DiscordPoster;
 	/** What `DISCORD.guard` is: the owner, `owner` unless the test gave another id, serving the root command. */
 	readonly guard: CommandGuard;
 	/** Every contribution the plugin added, in the order it added them. */
@@ -169,13 +179,14 @@ export interface FakeDiscord {
  * plugin's `commands.add` calls are recorded, and `compose()` shows the tree Discord would get.
  * `rootCommand` is the root command's name, `roundtable` by default. `channelContext` is what
  * `DISCORD.channelContext` answers, by default no context, as on a host with it off. Only
- * `commands`, `guard`, and `channelContext` are given; reading another member throws.
+ * `commands`, `guard`, `poster`, and `channelContext` are given; reading another member throws.
  */
 export function fakeDiscord(
 	options: {
 		ownerId?: string;
 		rootCommand?: string;
 		channelContext?: DiscordServices["channelContext"];
+		poster?: DiscordPoster;
 	} = {},
 ): FakeDiscord {
 	const collection = new CommandCollection();
@@ -185,12 +196,15 @@ export function fakeDiscord(
 		root: rootCommand,
 		logger: silentLogger(),
 	});
+	const poster = options.poster ?? fakeDiscordPoster();
 	return {
 		service: servicePair(DISCORD, {
 			commands: collection.registrar,
 			guard,
+			poster,
 			channelContext: options.channelContext ?? (async () => undefined),
 		}),
+		poster,
 		commands: collection.registrar,
 		guard,
 		added: () => collection.added(),

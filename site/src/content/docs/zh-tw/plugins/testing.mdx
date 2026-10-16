@@ -80,7 +80,8 @@ handler 和 `build` 函式要自己呼叫，範例 [`events.test.ts`](https://gi
 - `OWNER_SPEAKER`、`fakeThreads` 和 `silentLogger`：中性的替身，分別代替 owner 的輪次、派工的 thread 和 logging。
 - `recordingLogger()`：把收到的內容記下來，用來測試你的程式碼記了什麼 log。
 - `partial<Port>({ ... })`：代替你的程式碼當作參數收到的 port。讀取你沒給的成員時，會丟出指出它的錯誤。
-- `fakeDiscord()`：給新增斜線指令的外掛用的 `DISCORD` 服務。`discord.added()` 列出外掛新增的東西，`discord.compose()` 回傳 Discord 會收到的指令樹。
+- `fakeDiscord()`：給新增斜線指令的外掛用的 `DISCORD` 服務。`discord.added()` 列出外掛新增的東西，`discord.compose()` 回傳 Discord 會收到的指令樹。`fakeDiscord({ poster })` 把你傳入的 poster 當作 `DISCORD.poster`；預設是新的 `fakeDiscordPoster()`，由 `discord.poster` 回傳。
+- `fakeDiscordPoster({ idOffset?, now? })`：記憶體裡的 `DiscordPoster`。`messagesIn(channelId)` 列出頻道裡的訊息，`directs` 是送出的私訊，`failNext(operation, error)`、`closedDirects`、`goneChannels`、`hiddenFrom`、`pinNotices` 等是測試可以調的旋鈕。它沿用真正 poster 的參數檢查和錯誤種類，所以外掛超出限制時，測試裡也會失敗。
 - `useTestLocale()`：把整個行程的 locale 重設為英文，時區重設為 UTC。
 
 唯一需要 PostgreSQL 的範例測試是 [`migrations.test.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/migrations.test.ts)。
@@ -139,7 +140,7 @@ test("the production configuration registers every plugin", async () => {
 | `config` | 疊在測試設定上的 `RoundtableConfig` key，例如 `skills: false` |
 | `plugins` | 你的外掛，放在內建外掛之後 |
 | `runtime` | 每一輪所用的 runtime。預設是一個回答空字串、不建立 Pi session 的 runtime |
-| `discord` | 替身 Discord 提供的東西：`agentChannels(guildId)` 和 `ownerChannel()` |
+| `discord` | 替身 Discord 提供的東西：`agentChannels(guildId)`、`ownerChannel()`、`channelInfo(channelId)` 和 `poster`（`DISCORD.poster` 的內容；預設是 `fakeDiscordPoster()`） |
 
 它回傳 `context`（一個探測用外掛的 context，排在其他所有外掛之後 setup）、`conversations`、`commands`（新增了什麼，以及組好的斜線指令樹）、`sessionTools(scope?)`、`sessionContext(scope?)`、`runTool(name, args, options?)`（以某個發話者在某個頻道執行外掛新增的工具，回傳模型會讀到的文字）、`hold(name, args, options?)`（這個工具的 hold 對這次呼叫會顯示什麼，沒有 hold 時是 `undefined`）和 `stop()`。
 測試結束時要呼叫 `stop()`。

@@ -18,6 +18,8 @@ import type {
 } from "../discord/interaction-module.ts";
 import { OwnerCards } from "../discord/owner-cards.ts";
 import { commandGuard, ownerRootCommand } from "../discord/owner-command.ts";
+import type { DiscordPoster } from "../discord/poster/poster.ts";
+import { restOf, restPoster } from "../discord/poster/rest-poster.ts";
 import { stopButtonModule } from "../discord/stop-button.ts";
 import type { InboundMessage } from "../domain/conversation.ts";
 import type { RoundtablePlugin } from "../plugin.ts";
@@ -32,6 +34,13 @@ export interface DiscordServices {
 	guard: CommandGuard;
 	/** The threads that carry background reports. */
 	threads: DispatchThreads;
+	/**
+	 * Discord's REST API for a plugin's own posts, over the Discord plugin's own client and its rate
+	 * limits: webhook posts under names the plugin chooses, the bot's own messages and cards, pins,
+	 * direct messages, threads and channels. Usable from a service's `start` on; a call never pings
+	 * anyone it does not name. See `DiscordPoster`.
+	 */
+	poster: DiscordPoster;
 	/**
 	 * What was said in a server channel since the assistant last posted there, before `message`:
 	 * for a claim that answers it, to append to its turn's text with `withChannelContext`. Call it
@@ -189,6 +198,8 @@ export function discordPlugin(options: DiscordOptions): RoundtablePlugin {
 				commands: collection.registrar,
 				guard,
 				threads,
+				// Built over the client's REST queue and sends nothing until a plugin calls it.
+				poster: restPoster(restOf(connected.rest())),
 				channelContext: (message, given) => context.of(message, given),
 			});
 			return {
