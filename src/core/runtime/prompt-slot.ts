@@ -1,6 +1,7 @@
 import type { HoldRefusal } from "../domain/progress.ts";
 import { assistantName } from "../i18n/index.ts";
 import type { OwnerQuestion, Prompts } from "../interactions/prompts.ts";
+import { turnBudget } from "./turn-budget.ts";
 
 /**
  * A run's way to ask the owner while it works. A turn they started or a report turn binds the
@@ -101,22 +102,13 @@ export function promptSlot(): PromptSlot {
 
 /**
  * Calls `expire` once the run has worked `ms`, not counting time the slot spent waiting on the
- * owner's cards; returns a function that cancels it.
+ * owner's cards; returns a function that cancels it. It is a turn budget with nothing to renew,
+ * so it looks again at a run that waits on a card no oftener than `turnBudget` does.
  */
 export function workTimeout(
 	ms: number,
 	slot: Pick<PromptSlot, "waitedMs">,
 	expire: () => void,
 ): () => void {
-	const started = Date.now();
-	let timer: ReturnType<typeof setTimeout> | undefined;
-	const arm = (delay: number) => {
-		timer = setTimeout(() => {
-			const left = ms - (Date.now() - started - slot.waitedMs());
-			if (left > 0) return arm(left);
-			expire();
-		}, delay);
-	};
-	arm(ms);
-	return () => clearTimeout(timer);
+	return turnBudget(ms, ms, slot, () => expire()).cancel;
 }

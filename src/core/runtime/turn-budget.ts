@@ -32,6 +32,15 @@ const REAL_CLOCK: BudgetClock = {
 };
 
 /**
+ * The shortest wait before a budget looks again at a turn that still has time. While a card is
+ * open the turn's work time stands still, so a timer that fires with a few milliseconds left would
+ * otherwise re-arm for those milliseconds, again and again, for as long as the card waits. The
+ * floor bounds that to one look a second; the cost is that a limit may fire up to this much late,
+ * when the card closes just before it.
+ */
+const REARM_FLOOR_MS = 1_000;
+
+/**
  * Calls `expire` once the turn has worked `ms` since it started or since its last renewal, or
  * `maxMs` in all, whichever comes first; time the slot spent waiting on the owner's cards counts
  * towards neither. `expire` is told which limit fired.
@@ -54,7 +63,7 @@ export function turnBudget(
 	const arm = (delay: number) => {
 		cancelTimer = clock.schedule(() => {
 			const left = deadline - worked();
-			if (left > 0) return arm(left);
+			if (left > 0) return arm(Math.max(left, REARM_FLOOR_MS));
 			expired = true;
 			expire(deadline >= maxMs ? "turnMax" : "turn");
 		}, delay);

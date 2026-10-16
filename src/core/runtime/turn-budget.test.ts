@@ -6,10 +6,12 @@ const MIN = 60_000;
 /** A clock moved by hand, whose timers fire as it passes them. */
 function fakeClock() {
 	let now = 0;
+	let scheduled = 0;
 	let timers: { at: number; run: () => void }[] = [];
 	const clock: BudgetClock = {
 		now: () => now,
 		schedule: (run, ms) => {
+			scheduled++;
 			const timer = { at: now + ms, run };
 			timers.push(timer);
 			return () => {
@@ -29,7 +31,7 @@ function fakeClock() {
 		}
 		now = to;
 	};
-	return { clock, advanceTo };
+	return { clock, advanceTo, scheduled: () => scheduled };
 }
 
 function budget(waited: () => number = () => 0) {
@@ -101,5 +103,54 @@ describe("turnBudget", () => {
 		b.cancel();
 		advanceTo(60 * MIN);
 		expect(fired).toEqual([]);
+	});
+
+	test("a card left open as the limit comes due is looked at about once a second, not once a millisecond, and the limit still fires once", () => {
+		const { clock, advanceTo, scheduled } = fakeClock();
+		const fired: { at: number; limit: TurnLimit }[] = [];
+		// A card opens 1 ms before the 10-minute limit and stays open a minute and a half-second.
+		const opened = 10 * MIN - 1;
+		const closed = opened + 60_500;
+		const waitedMs = (now = clock.now()) =>
+			Math.max(0, Math.min(now, closed) - opened);
+		turnBudget(
+			10 * MIN,
+			30 * MIN,
+			{ waitedMs },
+			(limit) => fired.push({ at: clock.now(), limit }),
+			clock,
+		);
+		advanceTo(closed);
+		// Nothing fires while the card is open, and the looks are bounded by the floor, not by the
+		// millisecond left (60,500 timers without it).
+		expect(fired).toEqual([]);
+		expect(scheduled()).toBeLessThanOrEqual(1 + 61);
+		advanceTo(closed + 10 * MIN);
+		// The turn had 1 ms of work left when the card closed: the limit fires once, no sooner than
+		// that and less than the floor late.
+		expect(fired).toHaveLength(1);
+		expect(fired[0]?.limit).toBe("turn");
+		expect(fired[0]?.at).toBeGreaterThanOrEqual(closed + 1);
+		expect(fired[0]?.at).toBeLessThan(closed + 1 + 1_000);
+		expect(scheduled()).toBeLessThanOrEqual(1 + 62);
+	});
+
+	test("a card that closes before the limit leaves it on time", () => {
+		const { clock, advanceTo, scheduled } = fakeClock();
+		const fired: { at: number; limit: TurnLimit }[] = [];
+		// The card is open for the first 5 minutes of the turn, so the limit is due at 15.
+		const waitedMs = (now = clock.now()) => Math.min(now, 5 * MIN);
+		turnBudget(
+			10 * MIN,
+			30 * MIN,
+			{ waitedMs },
+			(limit) => fired.push({ at: clock.now(), limit }),
+			clock,
+		);
+		advanceTo(15 * MIN - 1);
+		expect(fired).toEqual([]);
+		advanceTo(20 * MIN);
+		expect(fired).toEqual([{ at: 15 * MIN, limit: "turn" }]);
+		expect(scheduled()).toBe(2);
 	});
 });
