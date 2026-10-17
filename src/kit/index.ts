@@ -57,6 +57,19 @@ export {
 } from "./domain.ts";
 export { HOLD_DESCRIBE_TIMEOUT_MS, holdChain } from "./holds.ts";
 export type {
+	CodexFetch,
+	CodexImage,
+	CodexImageRequest,
+	CodexImagesOptions,
+} from "./images.ts";
+export {
+	CODEX_IMAGE_MODEL,
+	CODEX_IMAGES_PROVIDER,
+	createCodexImages,
+	drawCodexImage,
+	ImageNotGeneratedError,
+} from "./images.ts";
+export type {
 	JevCompactInput,
 	JevCompactOptions,
 	JevCompactOutcome,

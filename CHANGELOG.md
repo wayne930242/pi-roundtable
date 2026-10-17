@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `drawCodexImage`, `createCodexImages`, `ImageNotGeneratedError`, `CODEX_IMAGE_MODEL`, `CODEX_IMAGES_PROVIDER`, `CodexImage`, `CodexImageRequest`, `CodexImagesOptions` and `CodexFetch` (`pi-roundtable/kit`): the Codex image client and the `codex-images` plugin built on it, so a project imports one implementation instead of copying one. `drawCodexImage({ token, prompt, references?, model?, signal?, fetch? })` draws one image through ChatGPT's Codex backend and returns `{ data, revisedPrompt? }`, `data` being PNG bytes and `revisedPrompt` the prompt Codex says it drew. It aborts with `signal`, both before the response arrives and while its stream is read, and rejects with the signal's own reason, so a turn's `signal?.throwIfAborted()` still sees its own abort; it stops after five minutes with a `TimeoutError`, refuses a stream over 32 MiB (`Codex image response too large`), and reads only the first image. A call that ran and returned no image, and a completed response with no image at all, both throw `ImageNotGeneratedError`: asking again with the same prompt fails again. `createCodexImages({ fetch?, model?, onMissingLogin? })` is the plugin `codex-images`: it fills `providers.images`, reads the `openai-codex` login through `context.apiKey` for each drawing, and passes the drawing's `options.signal` on, so the turn that asked for an image can abort it. `CODEX_IMAGES_PROVIDER` is `"openai-codex"` and `CODEX_IMAGE_MODEL` is `"gpt-6-sol"`, the model that routes the request. The backend is ChatGPT's own, signed in with the owner's ChatGPT subscription, and OpenAI does not document it for this use: it can stop working without notice, and OpenAI's terms for the subscription apply.
+
 ## [0.18.0] - 2026-10-17
 
 ### Added

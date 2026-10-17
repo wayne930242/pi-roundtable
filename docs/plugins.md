@@ -3947,12 +3947,18 @@ Import from the entries listed below; source area files are internal.
 | `AgentTurnRunner` | `pi-roundtable/kit` | type |
 | `AssistantLike` | `pi-roundtable/kit` | type |
 | `Backlog` | `pi-roundtable/kit` | type |
+| `CODEX_IMAGES_PROVIDER` | `pi-roundtable/kit` | value |
+| `CODEX_IMAGE_MODEL` | `pi-roundtable/kit` | value |
 | `CardLimits` | `pi-roundtable/kit` | type |
 | `CategoryLayout` | `pi-roundtable/kit` | type |
 | `ChannelMessage` | `pi-roundtable/kit` | type |
 | `ChannelQueue` | `pi-roundtable/kit` | type |
 | `ChoiceAnswer` | `pi-roundtable/kit` | type |
 | `ChoiceQuestion` | `pi-roundtable/kit` | type |
+| `CodexFetch` | `pi-roundtable/kit` | type |
+| `CodexImage` | `pi-roundtable/kit` | type |
+| `CodexImageRequest` | `pi-roundtable/kit` | type |
+| `CodexImagesOptions` | `pi-roundtable/kit` | type |
 | `DELEGATE_TOOL` | `pi-roundtable/kit` | value |
 | `DELEGATE_TOOL_SPEC` | `pi-roundtable/kit` | value |
 | `DashboardBoard` | `pi-roundtable/kit` | type |
@@ -3968,6 +3974,7 @@ Import from the entries listed below; source area files are internal.
 | `EffortRequest` | `pi-roundtable/kit` | type |
 | `EffortRule` | `pi-roundtable/kit` | type |
 | `GroupMessage` | `pi-roundtable/kit` | type |
+| `ImageNotGeneratedError` | `pi-roundtable/kit` | value |
 | `JUDGE_WORK` | `pi-roundtable/kit` | value |
 | `McpEndpoint` | `pi-roundtable/kit` | type |
 | `ModelRef` | `pi-roundtable/kit` | type |
@@ -3980,6 +3987,8 @@ Import from the entries listed below; source area files are internal.
 | `SCHEDULE_TOOLS` | `pi-roundtable/kit` | value |
 | `SHELL_TOOLS` | `pi-roundtable/kit` | value |
 | `SKILL_LIST_TOOL` | `pi-roundtable/kit` | value |
+| `createCodexImages` | `pi-roundtable/kit` | value |
+| `drawCodexImage` | `pi-roundtable/kit` | value |
 | `packageDir` | `pi-roundtable/kit` | value |
 | `serveUnix` | `pi-roundtable/kit` | value |
 | `ScheduleToolContext` | `pi-roundtable/kit` | type |
