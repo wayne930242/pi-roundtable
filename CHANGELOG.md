@@ -5,6 +5,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.19.1] - 2026-10-18
+
+### Fixed
+
+- The core's tests no longer depend on the host's `mktemp` or on a free-port probe. The check that the agents' `bash` writes into the scratch dir ran a bare `mktemp`, which macOS's BSD `mktemp` sends to the user temp dir whatever `TMPDIR` says; it now runs `mktemp -p "$TMPDIR"`, which both implementations honour, and the bare `mktemp` is held to the scratch dir only where GNU `mktemp` is the default. The listener tests found a free port by opening one and closing it, and another process could take it before the listener bound it (`EADDRINUSE`); they now let the listener bind port 0 and ask which port it got.
+- The docs say what the scratch dir promises: the agents' shell runs with `TMPDIR` pointing to it, so tools that read `TMPDIR` and GNU `mktemp` write there, while macOS's BSD `mktemp` ignores `TMPDIR` for a bare `mktemp` and needs `mktemp -p "$TMPDIR"`. The agents' prompt is unchanged: the agents run on a Linux host.
+
 ## [0.19.0] - 2026-10-17
 
 ### Added
