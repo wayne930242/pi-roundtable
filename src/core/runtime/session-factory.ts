@@ -472,7 +472,7 @@ export function imageTools(
 	return images ? { generateImage: generateImageExtension(images, roots) } : {};
 }
 
-/** Pi's bash tool with TMPDIR set to `scratchDir`, so `mktemp` and tools write there. */
+/** Pi's bash tool with TMPDIR set to `scratchDir`, so tools that read TMPDIR and GNU `mktemp` write there (BSD `mktemp` needs `-p "$TMPDIR"`). */
 export function scratchBash(cwd: string, scratchDir: string): ToolDefinition {
 	// SAFETY: Pi's bash definition is a ToolDefinition typed by its own parameter schema, which the session takes as any custom tool.
 	return createBashToolDefinition(cwd, {

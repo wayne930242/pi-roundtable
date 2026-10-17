@@ -225,6 +225,7 @@ export class HttpListeners {
 	readonly #sockets: SocketSet;
 	readonly #closeTimeoutMs: number;
 	#servers: Pick<Server<unknown>, "stop">[] = [];
+	readonly #ports = new Map<string, number>();
 
 	/** Validates every route before any socket opens; `closeTimeoutMs` bounds how long a stop waits on WebSocket handlers. */
 	constructor(
@@ -271,15 +272,26 @@ export class HttpListeners {
 					);
 					chmodSync(listener.socketPath, listener.mode ?? 0o660);
 				} else {
-					this.#servers.push(
-						serveTcp(listener.port, listener.hostname, handle, websocket),
+					const server = serveTcp(
+						listener.port,
+						listener.hostname,
+						handle,
+						websocket,
 					);
+					this.#servers.push(server);
+					if (server.port !== undefined)
+						this.#ports.set(listener.id, server.port);
 				}
 			}
 		} catch (error) {
 			void this.stop();
 			throw error;
 		}
+	}
+
+	/** The port an open TCP listener is bound to, which differs from the configured one when that was 0. */
+	portOf(listener: string): number | undefined {
+		return this.#ports.get(listener);
 	}
 
 	/** The listener's WebSocket handler, sized for its largest route limits; none without WebSocket routes. */
@@ -314,6 +326,7 @@ export class HttpListeners {
 		this.#sockets.closeAll();
 		for (const server of this.#servers) void server.stop(true);
 		this.#servers = [];
+		this.#ports.clear();
 		await this.#sockets.drain(this.#closeTimeoutMs);
 	}
 }

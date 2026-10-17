@@ -61,23 +61,20 @@ afterEach(async () => {
 	running = undefined;
 });
 
-/** Starts a TCP listener with `routes` on a free port and returns its port. */
+/** Starts a TCP listener with `routes` on a port the listener picks itself and returns that port. */
 function serve(
 	routes: HttpRoute[],
 	logger = silentLogger(),
 	options?: { closeTimeoutMs?: number },
 ): number {
-	const probe = Bun.serve({ port: 0, fetch: () => new Response("") });
-	const port = probe.port ?? 0;
-	void probe.stop(true);
 	running = new HttpListeners(
-		[{ id: "public", port, hostname: "127.0.0.1" }],
+		[{ id: "public", port: 0, hostname: "127.0.0.1" }],
 		routes,
 		logger,
 		options,
 	);
 	running.start();
-	return port;
+	return running.portOf("public") ?? 0;
 }
 
 /** A client socket that collects what it receives and how it closed. */

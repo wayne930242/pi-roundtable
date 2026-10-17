@@ -134,7 +134,8 @@ describe("the tools of a task and of startup, by their names before 0.9 too", ()
 });
 
 describe("the agents' scratch dir", () => {
-	test("the agents' bash runs with TMPDIR at the scratch dir", async () => {
+	/** What the agents' bash prints for `command`, one line per entry, with `scratch` as its TMPDIR. */
+	async function runInScratchBash(command: string) {
 		const root = realpathSync(mkdtempSync(join(tmpdir(), "scratch-bash-")));
 		try {
 			const scratch = ensureScratchDir(join(root, "roundtable-scratch"));
@@ -144,7 +145,7 @@ describe("the agents' scratch dir", () => {
 			// SAFETY: the bash tool reads no context.
 			const result = await bash.execute(
 				"call",
-				{ command: "echo $TMPDIR; mktemp" },
+				{ command },
 				undefined,
 				undefined,
 				undefined as never,
@@ -152,12 +153,28 @@ describe("the agents' scratch dir", () => {
 			const text = result.content
 				.map((part) => ("text" in part ? part.text : ""))
 				.join("");
-			expect(text.split("\n")[0]).toBe(scratch);
-			expect(text.split("\n")[1]).toStartWith(`${scratch}/`);
+			return { scratch, lines: text.split("\n") };
 		} finally {
 			rmSync(root, { recursive: true, force: true });
 		}
+	}
+
+	test("the agents' bash runs with TMPDIR at the scratch dir, and mktemp -p $TMPDIR lands there", async () => {
+		const { scratch, lines } = await runInScratchBash(
+			'echo $TMPDIR; mktemp -p "$TMPDIR"',
+		);
+		expect(lines[0]).toBe(scratch);
+		expect(lines[1]).toStartWith(`${scratch}/`);
 	});
+
+	// macOS's BSD mktemp prefers the user temp dir to TMPDIR, so only GNU mktemp is held to this.
+	test.skipIf(process.platform === "darwin")(
+		"a bare mktemp writes into the scratch dir",
+		async () => {
+			const { scratch, lines } = await runInScratchBash("mktemp");
+			expect(lines[0]).toStartWith(`${scratch}/`);
+		},
+	);
 
 	test("a symlink in the scratch dir's place is refused", () => {
 		const root = mkdtempSync(join(tmpdir(), "scratch-link-"));

@@ -165,17 +165,15 @@ describe("HttpListeners", () => {
 	});
 
 	test("serves a TCP listener with only its own routes", async () => {
-		// A free port, found by opening one and closing it again.
-		const probe = Bun.serve({ port: 0, fetch: () => new Response("") });
-		const port = probe.port ?? 0;
-		await probe.stop(true);
 		const http = new HttpListeners(
-			[{ id: "public", port, hostname: "127.0.0.1" }],
+			[{ id: "public", port: 0, hostname: "127.0.0.1" }],
 			[answer("avatar")({ prefix: "/avatars/" })],
 			silentLogger(),
 		);
 		http.start();
 		try {
+			const port = http.portOf("public");
+			expect(port).toBeGreaterThan(0);
 			const get = async (path: string) => {
 				const response = await fetch(`http://127.0.0.1:${port}${path}`);
 				return [response.status, await response.text()];
@@ -185,6 +183,26 @@ describe("HttpListeners", () => {
 		} finally {
 			http.stop();
 		}
+	});
+
+	test("reports the port a listener bound when it was asked for port 0, and none once stopped or for a socket", async () => {
+		const dir = mkdtempSync(join(tmpdir(), "listeners-port-"));
+		const http = new HttpListeners(
+			[
+				{ id: "public", port: 0, hostname: "127.0.0.1" },
+				{ id: "web", socketPath: join(dir, "web.sock") },
+			],
+			[],
+			silentLogger(),
+		);
+		expect(http.portOf("public")).toBeUndefined();
+		http.start();
+		const port = http.portOf("public");
+		expect(port).toBeGreaterThan(0);
+		expect(http.portOf("web")).toBeUndefined();
+		expect(http.portOf("unknown")).toBeUndefined();
+		await http.stop();
+		expect(http.portOf("public")).toBeUndefined();
 	});
 });
 
