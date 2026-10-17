@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, statSync } from "node:fs";
+import { mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PluginError } from "../errors.ts";
@@ -195,14 +195,19 @@ describe("HttpListeners", () => {
 			[],
 			silentLogger(),
 		);
-		expect(http.portOf("public")).toBeUndefined();
-		http.start();
-		const port = http.portOf("public");
-		expect(port).toBeGreaterThan(0);
-		expect(http.portOf("web")).toBeUndefined();
-		expect(http.portOf("unknown")).toBeUndefined();
-		await http.stop();
-		expect(http.portOf("public")).toBeUndefined();
+		try {
+			expect(http.portOf("public")).toBeUndefined();
+			http.start();
+			const port = http.portOf("public");
+			expect(port).toBeGreaterThan(0);
+			expect(http.portOf("web")).toBeUndefined();
+			expect(http.portOf("unknown")).toBeUndefined();
+			await http.stop();
+			expect(http.portOf("public")).toBeUndefined();
+		} finally {
+			await http.stop();
+			rmSync(dir, { recursive: true, force: true });
+		}
 	});
 });
 
