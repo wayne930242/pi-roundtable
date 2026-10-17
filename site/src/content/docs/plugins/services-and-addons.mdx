@@ -158,6 +158,20 @@ What is held back is counted in `faults()`, never summed up in a post.
 An alert is posted when it is raised, a failed post (the sink throws or answers `false`) gives the key back so the next raise tries again, and `raise` never throws.
 `info: true` marks news: it posts once per key, outside the kind's cap and outside `faults()`.
 
+### Codex images
+
+`drawCodexImage` and `createCodexImages` from `pi-roundtable/kit` are the client and the plugin behind the official [`codex-images`](/plugins/official-plugins/#codex-images) plugin, for a project that wants to draw images itself or to build its own `images` provider on them.
+`drawCodexImage` takes the `openai-codex` login's token, a prompt and optional reference pictures, and returns the PNG bytes with the prompt Codex says it drew:
+
+```ts
+const { data, revisedPrompt } = await drawCodexImage({ token, prompt, signal });
+```
+
+It aborts with `signal`, stops after five minutes, and refuses a response over 32 MiB.
+When Codex refuses a prompt it throws `ImageNotGeneratedError`, and the same prompt fails again.
+`createCodexImages({ fetch?, model?, onMissingLogin? })` is the plugin: it reads the login for each drawing and passes the drawing's `signal` on.
+It uses ChatGPT's Codex backend, which OpenAI does not document for this use, so it can stop working without notice.
+
 ## Addons
 
 Memory, skills, and Discord administration are built-in plugins that the host adds unless the configuration switches them off.
@@ -184,4 +198,4 @@ Switching an addon off and adding a plugin of yours that provides the same key i
 
 For the full text, see [Services](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#services-what-plugins-provide-to-each-other) and [Addons](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#addons-memory-skills-and-discord-administration) in the plugin guide.
 
-{/* Sources: docs/plugins.md:120-303, examples/shared-services.ts, src/core/define-roundtable.ts:160-215, src/core/config/config.ts:53-113, src/core/config/config.ts:279-322, src/core/services.ts:56-67 */}
+{/* Sources: src/core/images/codex-image.ts, src/core/images/codex-images-plugin.ts, src/kit/images.ts, docs/plugins.md:120-303, examples/shared-services.ts, src/core/define-roundtable.ts:160-215, src/core/config/config.ts:53-113, src/core/config/config.ts:279-322, src/core/services.ts:56-67 */}

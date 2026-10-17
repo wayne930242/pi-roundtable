@@ -73,7 +73,8 @@ Its [copy-in source template](https://github.com/wayne930242/pi-roundtable/blob/
 With it, `agent_create` accepts an avatar prompt, agents get an `agent_avatar` tool, and the owner's profile panel offers to redraw.
 Without an `images` plugin, each agent gets a generated picture from its display name instead.
 `roundtable doctor` reports whether a plugin fills the slot.
-Its [copy-in source template](https://github.com/wayne930242/pi-roundtable/blob/master/templates/official/codex-images/plugin.ts) is a complete `images` provider implementation.
+Its [copy-in source template](https://github.com/wayne930242/pi-roundtable/blob/master/templates/official/codex-images/plugin.ts) is a short file: it builds the plugin with `createCodexImages` from `pi-roundtable/kit`, which draws through the kit's `drawCodexImage`.
+A fix to the protocol arrives with an upgrade of the package, not with a new copy.
 
 It needs a login to the `openai-codex` provider, the same login mechanism the agents use for their models.
 When the host has none, the plugin refuses to start and the message says to log in to `openai-codex`.
@@ -88,7 +89,10 @@ The plugin file begins with the same warning.
 
 When Codex refuses a request, usually because of the prompt, it fails with `ImageNotGeneratedError`.
 Repeating the same prompt fails again.
-A request has a five-minute limit, and an image over 32 MiB is refused.
+A drawing is aborted with the turn that asked for it.
+A request has a five-minute limit, and a response over 32 MiB is refused.
+The model name only routes the request, because the backend picks the image model itself; it is the kit's `CODEX_IMAGE_MODEL`, and `createCodexImages({ model })` changes it.
+A copy made before 0.19.0 holds the whole client and keeps working as it was, without the abort and the size limit, until you copy the template again.
 
 ## `release-notice`
 
@@ -156,4 +160,4 @@ Each requires the matching pi-roundtable minor version.
 
 See [What plugins can add](/plugins/what-plugins-can-add/) for other plugin features and [Test a plugin](/plugins/testing/) for testing.
 
-{/* Sources: src/cli/templates.ts:13-25, src/cli/templates.ts:84-102, src/cli/add-plugin.ts:34-75, templates/official/dice/plugin.ts, templates/official/dice/plugin.test.ts.tmpl, templates/official/codex-images/plugin.ts, templates/official/codex-images/plugin.test.ts.tmpl, templates/official/release-notice/plugin.ts, templates/official/release-notice/plugin.test.ts.tmpl, src/core/plugin.ts:268-276, docs/plugins.md:757-772 (images slot, agent_avatar, doctor), src/cli/checks/images.ts */}
+{/* Sources: src/cli/templates.ts:13-25, src/core/images/codex-image.ts, src/core/images/codex-images-plugin.ts, src/kit/images.ts, src/cli/templates.ts:84-102, src/cli/add-plugin.ts:34-75, templates/official/dice/plugin.ts, templates/official/dice/plugin.test.ts.tmpl, templates/official/codex-images/plugin.ts, templates/official/codex-images/plugin.test.ts.tmpl, templates/official/release-notice/plugin.ts, templates/official/release-notice/plugin.test.ts.tmpl, src/core/plugin.ts:268-276, docs/plugins.md:757-772 (images slot, agent_avatar, doctor), src/cli/checks/images.ts */}

@@ -63,6 +63,12 @@ Use the kit's building blocks for a plugin that runs Pi itself, such as a coding
 - Square pictures: `squarePng(bytes, { size?, maxBytes?, maxSide? })` crops a PNG, JPEG or GIF to its centered square and scales it down to at most `size` pixels per side (default 512; a smaller picture is not enlarged), as PNG: the helper the agent avatars are made with, for a plugin that needs a profile picture or an icon.
   The header is read first, and nothing is decoded for a picture that declares a width or height over `SQUARE_PNG_MAX_SIDE` (4096), which rejects with `ImagePreparationError` (`pixel-limit`, the message naming the side limit; `maxSide` sets another limit, and the 64 MP decoded-pixel budget always applies), or for bytes of no such type, a WebP (the canvas cannot decode it) or a picture that fails to decode (`invalid-image`).
   With `maxBytes` the side steps down by a quarter at a time until the PNG is no larger; a picture that does not fit even at 16 pixels throws a `RangeError`, as does a `size` or `maxBytes` that is not a whole number in range. `SquarePngOptions` types the options.
+- Codex images: `drawCodexImage({ token, prompt, references?, model?, signal?, fetch? })` draws one image through ChatGPT's Codex backend with the owner's `openai-codex` login (`CODEX_IMAGES_PROVIDER`) and returns `{ data, revisedPrompt? }`: `data` is PNG bytes, and `revisedPrompt` is the prompt Codex says it drew, when it says. `model` defaults to `CODEX_IMAGE_MODEL` (`gpt-6-sol`), which only routes the request; the backend picks the image model. `fetch` is a `CodexFetch`, which `typeof fetch` satisfies, for tests.
+  The call aborts with `signal`, before the response arrives and while its stream is read, and rejects with the signal's own reason, so a turn's `signal?.throwIfAborted()` still sees its own abort. It stops after five minutes with a `TimeoutError`, refuses a stream over 32 MiB (`Codex image response too large`; the completed event may repeat the image, so a PNG of about 12 MiB can be refused), and reads only the first image. An HTTP error carries its status and the first 300 characters of the body, never the token.
+  A call that ran and returned no image, and a response that completed without one, both throw `ImageNotGeneratedError`, usually because Codex refused the prompt; asking again with the same prompt fails again.
+  `createCodexImages({ fetch?, model?, onMissingLogin? })` is the `codex-images` plugin built on it. It fills the `images` provider, reads the login through `context.apiKey` for each drawing (the login refreshes), and passes the drawing's `options.signal` on, so the turn that asked for an image can abort it. Without a login, setup throws a `PluginError`; `onMissingLogin: "warn"` logs once and lets the host start, and a drawing then fails with the same `PluginError`. The kit exports no ready-made plugin object, because a plugin object shared between `check()` and `run()` should come from your own module; the `codex-images` template makes one.
+  The types are `CodexFetch`, `CodexImage`, `CodexImageRequest` and `CodexImagesOptions`.
+  This uses ChatGPT's Codex backend, signed in with the owner's ChatGPT subscription. OpenAI does not document it for this use, so it can stop working without notice, and OpenAI's terms for the subscription apply.
 - Work: `promptSlot` (how a run asks the owner while it works), `workTimeout` (a time limit that does not count the time spent waiting on the owner), `runWorkerTask`, `archiveSessions`, and `approvalCard`, `approvalDetails` and `canonicalJson` for the cards of held actions.
   `InterimPoster(posts, { logger, channel, primaryChars?, editMs? })` posts a run's [interim text](#interim-text-what-a-turn-writes-before-its-final-answer) to an `InterimPosts`, such as a dispatch thread's `interim`: feed it `messageEnd(message)` and `toolStart(name)` from the session's events, bind `() => poster.flush()` as the slot's `beforeCard`, and `await poster.flush()` before the final report.
 - Diagnostics: `scrubDiagnostic(text, max = 600)` masks credentials (URL userinfo, token shapes, secret-named assignments and JSON fields, `Authorization`/`Cookie`/`x-api-key` headers, JWTs, PEM blocks), turns control characters other than tab and newline into spaces, and cuts the result at `max` characters.
@@ -1400,7 +1406,7 @@ When no `images` provider is configured, `agent_create` has no `avatar_prompt` p
 The owner's profile panel reports the missing provider and offers no redraw option.
 Each agent gets a picture generated from its display name and the assistant's icon, so you can tell agents apart.
 `bunx roundtable doctor` reports whether the slot is filled.
-The copy-in [`codex-images` provider template][codex-images-template] is a complete implementation of the `images` slot.
+The copy-in [`codex-images` provider template][codex-images-template] fills the `images` slot with `createCodexImages` from `pi-roundtable/kit`, which also exports the client it is built on, `drawCodexImage`.
 
 <!-- example: examples/providers.ts -->
 ```ts
@@ -3163,6 +3169,10 @@ Install only the packages your host uses; the core does not depend on these work
 It sends requests to ChatGPT's Codex backend using the owner's ChatGPT subscription login.
 OpenAI doesn't document the backend for this use, so it can stop working without notice; the subscription's terms apply.
 The copied file begins with this warning.
+Its client and plugin come from `pi-roundtable/kit` (`createCodexImages`, built on `drawCodexImage`): the copied `plugins/codex-images.ts` imports them and makes the plugin you list, so a fix to the protocol arrives with an upgrade of the package, not with a new copy.
+A drawing aborts with the turn that asked for it, a request stops after five minutes, and a response stream over 32 MiB is refused.
+A copy made before 0.19.0 holds the whole client and keeps working as it was, without the abort and the stream limit, until you copy the template again.
+To change the model, pass `createCodexImages({ model })`; the default is `CODEX_IMAGE_MODEL`.
 
 `release-notice` listens to two [events](#events-hear-what-the-core-does).
 When the agent server's team service reports `ready`, it reads the release file and posts if the release's `sha` differs from the one it last announced (`announced-release` in the data directory), or if the previous shutdown cut work short.

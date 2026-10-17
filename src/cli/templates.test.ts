@@ -99,7 +99,7 @@ describe("every template rendered into one project", () => {
 	});
 	test("still typechecks, tests, and lints after the official plugins are added", () => {
 		expect(official.typecheck.output).toBe("");
-		expect(official.test.output).toContain("27 pass");
+		expect(official.test.output).toContain("28 pass");
 		expect(official.lint.output).toContain("No fixes applied");
 		expect(official.typecheck.ok && official.test.ok && official.lint.ok).toBe(
 			true,
@@ -107,7 +107,7 @@ describe("every template rendered into one project", () => {
 	});
 	test("still typechecks, tests, and lints after `add package`", () => {
 		expect(packaged.typecheck.output).toBe("");
-		expect(packaged.test.output).toContain("30 pass");
+		expect(packaged.test.output).toContain("31 pass");
 		expect(packaged.lint.output).toContain("No fixes applied");
 		expect(packaged.typecheck.ok && packaged.test.ok && packaged.lint.ok).toBe(
 			true,

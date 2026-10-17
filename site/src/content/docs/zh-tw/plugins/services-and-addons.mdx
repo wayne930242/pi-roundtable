@@ -158,6 +158,20 @@ alerts.faults(); // 每個類型最後一次的故障，給狀態指令用
 告警在 raise 當下就發送；發送失敗（`sink` 丟出錯誤或回傳 `false`）會歸還 key，下一次 raise 會再試，而且 `raise` 永遠不會丟出錯誤。
 `info: true` 代表消息而不是故障：每個 key 只發一次，不計入類型的上限，也不列在 `faults()`。
 
+### Codex 畫圖
+
+`pi-roundtable/kit` 的 `drawCodexImage` 和 `createCodexImages`，是官方 [`codex-images`](/zh-tw/plugins/official-plugins/#codex-images) 外掛背後的客戶端和外掛，給想自己畫圖、或想用它們組出自己 `images` provider 的專案。
+`drawCodexImage` 接收 `openai-codex` 登入的 token、提示詞和選用的參考圖，回傳 PNG 位元組，以及 Codex 說它實際畫的提示詞：
+
+```ts
+const { data, revisedPrompt } = await drawCodexImage({ token, prompt, signal });
+```
+
+它會隨 `signal` 中止，五分鐘後停止，超過 32 MiB 的回應會被拒絕。
+Codex 拒絕提示詞時會丟出 `ImageNotGeneratedError`，同一個提示詞再問還是一樣。
+`createCodexImages({ fetch?, model?, onMissingLogin? })` 是外掛本身：每次畫圖都重新讀取登入，並把這次畫圖的 `signal` 傳下去。
+它用的是 ChatGPT 的 Codex 後端，OpenAI 並沒有為這種用途提供文件，所以可能隨時失效，不會另行通知。
+
 ## Addon
 
 記憶、技能和 Discord 管理是內建外掛；設定沒有把它們關掉，host 就會加進來。
@@ -183,4 +197,4 @@ service roundtable.memory is not provided. The memory addon is switched off (con
 
 完整內容見外掛指南的[服務](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#services-what-plugins-provide-to-each-other)和 [Addon](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#addons-memory-skills-and-discord-administration)（英文）。
 
-{/* Sources: docs/plugins.md:120-303, examples/shared-services.ts, src/core/define-roundtable.ts:160-215, src/core/config/config.ts:53-113, src/core/config/config.ts:279-322, src/core/services.ts:56-67 */}
+{/* Sources: src/core/images/codex-image.ts, src/core/images/codex-images-plugin.ts, src/kit/images.ts, docs/plugins.md:120-303, examples/shared-services.ts, src/core/define-roundtable.ts:160-215, src/core/config/config.ts:53-113, src/core/config/config.ts:279-322, src/core/services.ts:56-67 */}

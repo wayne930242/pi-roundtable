@@ -73,7 +73,8 @@ agent 會呼叫這個工具，再把結果回報給你。
 有了它，`agent_create` 能接受頭像提示詞，agent 會有一個 `agent_avatar` 工具，owner 的個人檔案面板也能提供重畫。
 沒有 `images` 外掛時，每個 agent 的頭像，是用它的顯示名稱產生的圖片。
 `roundtable doctor` 會回報有沒有外掛填入這個槽位。
-它的[複製式來源範本](https://github.com/wayne930242/pi-roundtable/blob/master/templates/official/codex-images/plugin.ts)是完整的 `images` provider 實作。
+它的[複製式來源範本](https://github.com/wayne930242/pi-roundtable/blob/master/templates/official/codex-images/plugin.ts)是一個很短的檔案：用 `pi-roundtable/kit` 的 `createCodexImages` 建出外掛，畫圖則由 kit 的 `drawCodexImage` 負責。
+通訊協定的修正會隨套件升級而來，不必重新複製。
 
 它需要登入 `openai-codex` provider，登入機制和 agent 登入模型時用的相同。
 host 沒有登入時，外掛會拒絕啟動，訊息會說要登入 `openai-codex`。
@@ -88,7 +89,10 @@ OpenAI 隨時可能更改或封鎖它，並適用 OpenAI 對這個訂閱的條�
 </Aside>
 
 Codex 拒絕的請求（通常是提示詞的問題）會以 `ImageNotGeneratedError` 失敗，同一個提示詞再問一次還是一樣。
-一個請求有五分鐘的時間限制，超過 32 MiB 的圖片會被拒絕。
+畫圖會隨提出要求的那個 turn 一起中止。
+一個請求有五分鐘的時間限制，超過 32 MiB 的回應會被拒絕。
+模型名稱只用來導向請求，影像模型由後端自己挑；它是 kit 的 `CODEX_IMAGE_MODEL`，用 `createCodexImages({ model })` 可以更改。
+0.19.0 之前複製的檔案帶著完整的客戶端，照原樣繼續運作，但沒有中止和大小限制，要重新複製範本才會有。
 
 ## `release-notice`
 
@@ -163,4 +167,4 @@ printf '{"sha":"%s","commits":%s}\n' "$(git rev-parse --short HEAD)" "$commits" 
 
 外掛在這之外還能新增什麼，見[外掛能新增什麼](/zh-tw/plugins/what-plugins-can-add/)；想寫這樣的測試，見[測試外掛](/zh-tw/plugins/testing/)。
 
-{/* Sources: src/cli/templates.ts:13-25, src/cli/templates.ts:84-102, src/cli/add-plugin.ts:34-75, templates/official/dice/plugin.ts, templates/official/dice/plugin.test.ts.tmpl, templates/official/codex-images/plugin.ts, templates/official/codex-images/plugin.test.ts.tmpl, templates/official/release-notice/plugin.ts, templates/official/release-notice/plugin.test.ts.tmpl, src/core/plugin.ts:268-276, docs/plugins.md:757-772 (images slot, agent_avatar, doctor), src/cli/checks/images.ts */}
+{/* Sources: src/cli/templates.ts:13-25, src/core/images/codex-image.ts, src/core/images/codex-images-plugin.ts, src/kit/images.ts, src/cli/templates.ts:84-102, src/cli/add-plugin.ts:34-75, templates/official/dice/plugin.ts, templates/official/dice/plugin.test.ts.tmpl, templates/official/codex-images/plugin.ts, templates/official/codex-images/plugin.test.ts.tmpl, templates/official/release-notice/plugin.ts, templates/official/release-notice/plugin.test.ts.tmpl, src/core/plugin.ts:268-276, docs/plugins.md:757-772 (images slot, agent_avatar, doctor), src/cli/checks/images.ts */}

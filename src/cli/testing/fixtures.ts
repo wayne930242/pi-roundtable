@@ -139,6 +139,7 @@ export function linkCheckout(project: string): void {
 			exports: {
 				".": "./src/index.ts",
 				"./testing": "./src/testing.ts",
+				"./kit": "./src/kit/index.ts",
 				"./discord": "./src/discord/index.ts",
 			},
 		}),

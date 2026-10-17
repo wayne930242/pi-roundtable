@@ -107,6 +107,37 @@ test("codex-images reports an HTTP error with its status, and never the token", 
 	await harness.stop();
 });
 
+test("codex-images aborts a drawing with the turn that asked for it", async () => {
+	const signals: AbortSignal[] = [];
+	const plugin = createCodexImages({
+		fetch: (_url, init) => {
+			const signal = init.signal as AbortSignal;
+			signals.push(signal);
+			return new Promise((_resolve, reject) => {
+				signal.addEventListener("abort", () => reject(signal.reason));
+			});
+		},
+	});
+	const harness = await testPlugin(plugin, {
+		apiKeys: { "openai-codex": token("acct-1") },
+	});
+	const turn = new AbortController();
+	const reason = new Error("the turn ended");
+	const drawing = plugin.providers?.images?.("a fox", [], {
+		signal: turn.signal,
+	});
+	const outcome = drawing?.then(
+		() => undefined,
+		(error: unknown) => error,
+	);
+	await new Promise((done) => setTimeout(done, 20));
+	expect(signals[0]?.aborted).toBe(false);
+	turn.abort(reason);
+	expect(await outcome).toBe(reason);
+	expect(signals[0]?.aborted).toBe(true);
+	await harness.stop();
+});
+
 test("codex-images refuses to start without an openai-codex login", async () => {
 	const failure = await testPlugin(codexImages).then(
 		() => undefined,
