@@ -87,6 +87,8 @@ export {
 	jevCompactionExtension,
 	jevCompactor,
 } from "./jev.ts";
+export type { JevJudgeOptions } from "./jev-judge.ts";
+export { jevJudge } from "./jev-judge.ts";
 export type {
 	EffortBrief,
 	EffortJudgeOptions,

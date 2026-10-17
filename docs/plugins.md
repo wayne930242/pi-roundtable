@@ -80,6 +80,9 @@ Use the kit's building blocks for a plugin that runs Pi itself, such as a coding
   Two adapters log each skip as `Jev leaves the compaction to Pi's summary` with `reason`, `detail` and `tokensBefore` through the `logger` they take: `jevCompactionExtension({ logger, ...options })`, the `compaction` session tool's extension, placed as `session.compaction.wrap(jevCompactionExtension({ logger }))` under the engine `JEV_COMPACTION_ENGINE` (`pi-jev-compaction`), and `jevCompactor({ logger, ...options })`, a `JevCompactor` for pi-roundtable-sandbox's `compaction` option that returns the compaction or `undefined` and logs with the `channel`.
   A `no_key` skip is logged once per adapter, as `Jev is not configured, so compaction uses Pi's summary`, and then not again; every other skip is logged each time.
   The types are `JevCompactInput`, `JevCompactOptions`, `JevCompactOutcome`, `JevCompactor`, `JevCompactRequest`, `JevExtensionOptions` and `JevSkipReason`.
+- Jev judge: `jevJudge({ apiKey, model?, baseUrl?, timeoutMs?, fetch? })` is a `Judge` (the `judge` provider) that asks Jev, built on pi-jev-compaction's client. Each question is one request: a yes-or-no question goes out as Jev's own question type and its probability is read from Jev's answer, a choice question's answer must be one of the options you listed, and a score question's probabilities are read by criterion index, so a missing index is an error. Probabilities must be numbers from 0 to 1.
+  Every failure throws a `JudgeError`: a failed request, an answer that is missing or malformed, a choice that is not an option, and a question that outlasts `timeoutMs` (default 20,000, a limit of its own for each question that also covers reading the answer), as `Jev did not answer within <n> ms`.
+  The `apiKey` is required, and an empty or blank one throws a `JudgeError` when `jevJudge` is called, because pi-jev-compaction's client would otherwise fall back to the key in the environment. `baseUrl` and `model` default to pi-jev-compaction's; `fetch` replaces the request function, for tests. The option type is `JevJudgeOptions`.
 - Effort: `effortJudge` picks a turn's thinking level from a message with your own brief (`EffortBrief`, `JUDGE_WORK`). A host that wants other turns decided differently sets `effortPolicy` (an `EffortPolicy`) in its configuration: it gets the turn's `channel`, `kind`, `agent` and `origin` and answers `{ fixed: level }` (no judge call), `{ requiredMass: [0, medium, high, xhigh] }` (the highest level whose share of the judge's answer at or above it meets its entry; the previous level does not carry over and a failed judge gives low), or `undefined` for the default. The `kind` of an agent-server agent's turn is `"agent"`; a policy that throws, or a `requiredMass` that is not four finite numbers in [0, 1], fails the turn.
 - Presentation and small helpers: `thinkingLine`, `zonedStamp(date, timeZone)`, `channelQueue()` (a queue of your own, so work does not wait behind a running turn), `checkRepoName` and `SKILL_LIST_TOOL` with `skillListExtension` for repositories and skills, and `searchTerms` for memory search.
 
@@ -3976,6 +3979,7 @@ Import from the entries listed below; source area files are internal.
 | `GroupMessage` | `pi-roundtable/kit` | type |
 | `ImageNotGeneratedError` | `pi-roundtable/kit` | value |
 | `JUDGE_WORK` | `pi-roundtable/kit` | value |
+| `JevJudgeOptions` | `pi-roundtable/kit` | type |
 | `McpEndpoint` | `pi-roundtable/kit` | type |
 | `ModelRef` | `pi-roundtable/kit` | type |
 | `OwnerIdentity` | `pi-roundtable/kit` | type |
@@ -3989,6 +3993,7 @@ Import from the entries listed below; source area files are internal.
 | `SKILL_LIST_TOOL` | `pi-roundtable/kit` | value |
 | `createCodexImages` | `pi-roundtable/kit` | value |
 | `drawCodexImage` | `pi-roundtable/kit` | value |
+| `jevJudge` | `pi-roundtable/kit` | value |
 | `packageDir` | `pi-roundtable/kit` | value |
 | `serveUnix` | `pi-roundtable/kit` | value |
 | `ScheduleToolContext` | `pi-roundtable/kit` | type |

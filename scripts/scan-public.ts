@@ -110,6 +110,16 @@ export const PUBLIC_NAME_ALLOWLIST: NameAllowlist = {
 		// Its public compaction package names this service in its environment key.
 		spell("type", "safe"),
 	],
+	// The kit's judge over the service names the service's wire name for a yes-or-no question; its test also names the environment key it must not fall back to.
+	[`src/kit/${spell("j", "ev")}-judge.ts`]: [
+		spell("j", "ev"),
+		spell("no", "ul"),
+	],
+	[`src/kit/${spell("j", "ev")}-judge.test.ts`]: [
+		spell("j", "ev"),
+		spell("no", "ul"),
+		spell("type", "safe"),
+	],
 };
 
 /**
