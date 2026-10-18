@@ -237,3 +237,47 @@ describe("ask_user, the questions form", () => {
 		);
 	});
 });
+
+describe("ask_user, review fixes", () => {
+	const noCards =
+		"Riley cannot answer buttons in this turn, such as a schedule's. Ask him in your reply instead.";
+	test("no prompts: the 0.19 text, in both forms", async () => {
+		const { call } = askUser({ choices: ["x"] }, false);
+		expect(await call({ question: "?" })).toBe(noCards);
+		expect(await call({ questions: [{ question: "?" }] })).toBe(noCards);
+	});
+	test("a non-boolean allow_other reaches the schema instead of becoming false", async () => {
+		const { tool } = (() => {
+			let tool: Tool | undefined;
+			askUserExtension(
+				new PromptSlot(),
+				OWNER,
+			)({
+				registerTool: (t: Tool) => {
+					tool = t;
+				},
+			} as unknown as ExtensionAPI);
+			return { tool };
+		})();
+		const folded = tool?.prepareArguments?.({
+			question: "?",
+			allow_other: "true",
+		});
+		expect(folded).toMatchObject({ questions: [{ allow_other: "true" }] });
+	});
+	test("a double-encoded element is decoded; both forms at once is an error", async () => {
+		const { asked, call } = askUser({ choices: [], text: "x" });
+		await call({ questions: ['{"question":"b"}'] });
+		expect(asked[0]?.question.question).toBe("b");
+		await expect(
+			call({ question: "a", questions: [{ question: "b" }] }),
+		).rejects.toThrow("not both");
+	});
+	test("the sequential fallback names the question it stopped at", async () => {
+		const { call } = askUser(undefined);
+		const text = await call({
+			questions: [{ question: "First?" }, { question: "Second?" }],
+		});
+		expect(text).toStartWith("1. First?: No answer");
+	});
+});

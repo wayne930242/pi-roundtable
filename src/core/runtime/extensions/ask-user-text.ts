@@ -121,7 +121,15 @@ export function sequentialText(
 						),
 				]
 			: []),
-		...(stopped === undefined ? [] : [stoppedText]),
+		...(stopped === undefined
+			? []
+			: [
+					`${
+						asked.questions.length > 1
+							? `${answers.length + 1}. ${nameOf(asked.questions[answers.length] as OwnerQuestion)}: `
+							: ""
+					}${stoppedText}`,
+				]),
 		...(notAsked.length > 0
 			? [
 					`Not asked: ${notAsked

@@ -87,7 +87,7 @@ export function askUserExtension(
 				const prompts = slot.prompts;
 				if (!prompts)
 					return toolText(
-						`$o.namecannot answer buttons in this turn, such as a schedule's. Ask ${o.him} in your reply instead.`,
+						`${o.name} cannot answer buttons in this turn, such as a schedule's. Ask ${o.him} in your reply instead.`,
 					);
 				const p = params as {
 					questions: {

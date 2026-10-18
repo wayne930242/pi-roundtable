@@ -195,7 +195,7 @@ describe("askQuestions", () => {
 			const { prompts, asked } = v1([undefined]);
 			const text = await run(prompts, two);
 			expect(asked).toHaveLength(1);
-			expect(text).toStartWith("No answer");
+			expect(text).toStartWith("1. Type: No answer");
 			expect(text).toContain("Not asked: 2. Testing?; 3. Release;");
 		});
 	});

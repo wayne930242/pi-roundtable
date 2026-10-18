@@ -20,6 +20,10 @@ export function foldAskArguments(args: unknown): unknown {
 	if (typeof args !== "object" || args === null || Array.isArray(args))
 		return args;
 	const input = args as Record<string, unknown>;
+	if (input.questions !== undefined && input.question !== undefined)
+		throw new Error(
+			"Use either `questions` or the old top-level `question`, not both.",
+		);
 	if (input.questions === undefined && typeof input.question === "string") {
 		const { question, options, multi, allow_other, ...rest } = input;
 		return {
@@ -29,7 +33,7 @@ export function foldAskArguments(args: unknown): unknown {
 					question,
 					...(options !== undefined ? { options: decoded(options) } : {}),
 					...(multi !== undefined ? { multi } : {}),
-					allow_other: allow_other === true,
+					allow_other: allow_other ?? false,
 				},
 			],
 		};
@@ -38,10 +42,11 @@ export function foldAskArguments(args: unknown): unknown {
 	if (!Array.isArray(questions)) return { ...input, questions };
 	return {
 		...input,
-		questions: questions.map((q: unknown) =>
-			typeof q === "object" && q !== null && "options" in q
+		questions: questions.map((item: unknown) => {
+			const q = decoded(item);
+			return typeof q === "object" && q !== null && "options" in q
 				? { ...q, options: decoded((q as { options: unknown }).options) }
-				: q,
-		),
+				: q;
+		}),
 	};
 }
