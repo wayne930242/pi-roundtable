@@ -13,7 +13,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - The web chat shows a whole set on one card too, to clients that declared they can (see the `pi-roundtable-webchat` changelog); a person whose tabs have not is asked one question at a time.
 
-- Questionnaire checks in the surface contract (`pi-roundtable/testing`): a surface whose `prompts` declare `asks` must settle a questionnaire as its person answers it (a blank question stays blank, the note comes back only where `asks.note`), close it when the turn stops, and ignore another person's answer. `SurfaceContractSubject` and `SurfaceContractAnswerer` gain an optional `answerQuestionnaire(prompt, answer, questionnaire)`; without it the checks are skipped. `describeQuestionnaireContract` (with the same `(name, make)` arguments) registers only those checks, for a card layer that is not a whole chat. The Discord cards and the web chat run them; the example surface stays on one question at a time.
+- Questionnaire checks in the surface contract (`pi-roundtable/testing`): a surface that declares `asks` must settle a questionnaire as its person answers it (a blank question stays blank, the note comes back where `asks.note`), close it when the turn stops, and ignore another person's answer. `SurfaceContractSubject` and `SurfaceContractAnswerer` gain an optional `answerQuestionnaire(prompt, answer, questionnaire)`; without it the checks are skipped, and a subject that gives it must declare `asks`, or the contract fails it. The Discord cards and the web chat run them; the example surface stays on one question at a time.
 
 ### Changed
 

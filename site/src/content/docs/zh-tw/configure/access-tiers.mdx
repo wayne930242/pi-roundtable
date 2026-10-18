@@ -66,7 +66,7 @@ export default {
 - 每位 speaker 有自己的記憶，由所有 agent 共用。member 的 `memory_add` 不會寫進 owner 的記憶。
 - 執行很久的那一輪會出現停止按鈕，只有 owner 按了有效。
 - 被擱置的動作，例如具破壞性的 shell 指令，會在一張卡片上等待核准。預設只有 owner 能回應。用 `toolTiers` 降低了工具的層級，該層級以上的 speaker 也能核准，卡片上會寫 `Who can approve: <tier> and above`。
-- agent 用 `ask_user` 提出的問題，那一輪的 speaker 和 owner 都可以回答。一組問題是同一張卡片，規則相同；卡片上的「預覽」按鈕只是顯示預覽，所以看得到卡片的人都能按。
+- agent 用 `ask_user` 提出的問題，那一輪的 speaker 和 owner 都可以回答。一組問題放在同一張卡片上，誰能回答也一樣；卡片上的「預覽」按鈕只是顯示預覽，所以看得到卡片的人都能按。
 
 ## 修改工具的層級
 

@@ -12,9 +12,12 @@ export const json = (payload: CardPayload | undefined) =>
 export function fakeChannel(thread = false) {
 	const sent: CardPayload[] = [];
 	const edits: CardPayload[] = [];
+	/** The index in `sent` of the card each edit changed. */
+	const edited: number[] = [];
 	return {
 		sent,
 		edits,
+		edited,
 		/** The id of the latest card sent. */
 		cardId: () =>
 			json(sent.at(-1)).match(new RegExp(`${CARD_PREFIX}([0-9a-f-]+):`))?.[1] ??
@@ -23,9 +26,11 @@ export function fakeChannel(thread = false) {
 			thread,
 			send: async (payload: CardPayload) => {
 				sent.push(payload);
+				const index = sent.length - 1;
 				return {
 					edit: async (change: CardPayload) => {
 						edits.push(change);
+						edited.push(index);
 					},
 				};
 			},

@@ -18,6 +18,7 @@ import {
 	namedApproverAnswers,
 	nextPrompt,
 	type Running,
+	runCheck,
 	scopeOf,
 	seen,
 	speakerOf,
@@ -421,24 +422,6 @@ const CHECKS: readonly Check[] = [
 	...QUESTIONNAIRE_CHECKS,
 ];
 
-async function runCheck(
-	check: Check,
-	make: () => Promise<SurfaceContractSubject>,
-): Promise<"passed" | "skipped"> {
-	const subject = await make();
-	const running: Running = { subject, delivered: [] };
-	try {
-		if (check.applies && !check.applies(subject)) return "skipped";
-		await subject.surface.start((message) => running.delivered.push(message));
-		await subject.join?.();
-		await check.run(running);
-		return "passed";
-	} finally {
-		await subject.close?.();
-		await subject.surface.stop?.();
-	}
-}
-
 /**
  * Runs the chat surface contract on fresh subjects from `make`, one per check, and returns the
  * checks the surface broke. `describeSurfaceContract` registers the same checks as tests.
@@ -467,8 +450,9 @@ export async function checkSurfaceContract(
  * too, and lets an approval above the person's tier there come back at once, shown to no one.
  * Where it can name approvers, an approval that does is answered by them, reported as the
  * approver, and not by the person or another person, and a private conversation's is answered by
- * its person alone, whoever the call names besides them. Each
- * Where it declares `asks`, questionnaires keep the same rules. Each check gets a fresh subject from `make`; a check for an optional part the surface lacks passes.
+ * its person alone, whoever the call names besides them. A subject that gives
+ * `answerQuestionnaire` must declare `asks`, and then questionnaires keep the same rules. Each
+ * check gets a fresh subject from `make`; a check for an optional part the surface lacks passes.
  */
 export function describeSurfaceContract(
 	name: string,
@@ -476,22 +460,6 @@ export function describeSurfaceContract(
 ): void {
 	describe(`${name} keeps the chat surface contract`, () => {
 		for (const check of CHECKS)
-			test(check.name, async () => {
-				await runCheck(check, make);
-			});
-	});
-}
-
-/**
- * Registers only the questionnaire part of the contract, for a surface that cannot run the rest
- * (a card layer without a chat around it). A surface that declares no `asks` passes it.
- */
-export function describeQuestionnaireContract(
-	name: string,
-	make: () => Promise<SurfaceContractSubject>,
-): void {
-	describe(`${name} keeps the questionnaire contract`, () => {
-		for (const check of QUESTIONNAIRE_CHECKS)
 			test(check.name, async () => {
 				await runCheck(check, make);
 			});

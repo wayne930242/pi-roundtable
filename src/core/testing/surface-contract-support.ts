@@ -192,3 +192,25 @@ export async function namedApproverAnswers(running: Running): Promise<void> {
 		`the approval reported ${reported?.principalId} as its approver, not ${approver.principalId}`,
 	);
 }
+
+/** Runs one check on a fresh subject from `make`, starting and stopping its surface around it. */
+export async function runCheck(
+	check: {
+		applies?(subject: SurfaceContractSubject): boolean;
+		run(running: Running): Promise<void>;
+	},
+	make: () => Promise<SurfaceContractSubject>,
+): Promise<"passed" | "skipped"> {
+	const subject = await make();
+	const running: Running = { subject, delivered: [] };
+	try {
+		if (check.applies && !check.applies(subject)) return "skipped";
+		await subject.surface.start((message) => running.delivered.push(message));
+		await subject.join?.();
+		await check.run(running);
+		return "passed";
+	} finally {
+		await subject.close?.();
+		await subject.surface.stop?.();
+	}
+}

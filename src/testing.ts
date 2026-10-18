@@ -133,7 +133,6 @@ export type {
 } from "./core/testing/surface-contract.ts";
 export {
 	checkSurfaceContract,
-	describeQuestionnaireContract,
 	describeSurfaceContract,
 } from "./core/testing/surface-contract.ts";
 export type { TestHost, TestHostOptions } from "./core/testing/test-host.ts";

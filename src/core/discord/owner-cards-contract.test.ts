@@ -6,13 +6,14 @@ import type {
 import { silentLogger } from "../log.ts";
 import { partial } from "../testing/partial.ts";
 import type { SurfaceObservation } from "../testing/surface-contract.ts";
-import { describeQuestionnaireContract } from "../testing/surface-contract.ts";
+import { describeQuestionnaireContract } from "../testing/surface-contract-questionnaire.ts";
 import { CARD_PREFIX, OwnerCards } from "./owner-cards.ts";
 import { fakeChannel, OWNER, press } from "./owner-cards-fixture.ts";
 
 /** The Discord card layer as the questionnaire contract sees it: the cards a channel was sent. */
 async function discordSubject() {
 	const fake = fakeChannel();
+	/** Cards a press closed by editing its own reply. */
 	const closed: string[] = [];
 	const cards = new OwnerCards({
 		ownerId: OWNER,
@@ -78,10 +79,10 @@ async function discordSubject() {
 				id: idOf(i),
 				title: "Questions",
 			})),
-			...[
-				...closed,
-				...fake.edits.map((_, i) => idOf(Math.min(i, fake.sent.length - 1))),
-			].map((id) => ({ kind: "prompt_closed" as const, id })),
+			...[...new Set([...closed, ...fake.edited.map(idOf)])].map((id) => ({
+				kind: "prompt_closed" as const,
+				id,
+			})),
 		],
 		answerQuestionnaire: answerAs(OWNER),
 		stranger: {

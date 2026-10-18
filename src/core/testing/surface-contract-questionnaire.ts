@@ -1,3 +1,4 @@
+import { describe, test } from "bun:test";
 import {
 	type AskSupport,
 	type Questionnaire,
@@ -10,6 +11,7 @@ import {
 	expectThat,
 	nextPrompt,
 	type Running,
+	runCheck,
 	scopeOf,
 	seen,
 	until,
@@ -51,7 +53,10 @@ function contractSet(asks: AskSupport): Questionnaire {
 function questionnairePrompts(running: Running) {
 	const { surface, channel } = running.subject;
 	const prompts = surface.prompts?.(channel, scopeOf(running.subject));
-	if (!prompts?.asks || !prompts.questionnaire) return undefined;
+	if (!prompts?.asks || !prompts.questionnaire)
+		throw new ContractBroken(
+			"the subject answers questionnaires, but its prompts declare no asks",
+		);
 	return { prompts, asks: prompts.asks, ask: prompts.questionnaire };
 }
 
@@ -70,8 +75,8 @@ const applies = (subject: SurfaceContractSubject) =>
 	subject.answerQuestionnaire !== undefined;
 
 /**
- * The questionnaire checks. A surface whose `prompts` declare no `asks` passes them without being
- * asked anything: it takes one question at a time, which the core's fallback covers.
+ * The questionnaire checks. They apply to a subject that gives `answerQuestionnaire`, which must declare `asks`;
+ * a surface that takes one question at a time gives none and is skipped.
  */
 export const QUESTIONNAIRE_CHECKS: readonly QuestionnaireCheck[] = [
 	{
@@ -80,7 +85,7 @@ export const QUESTIONNAIRE_CHECKS: readonly QuestionnaireCheck[] = [
 		run: async (running) => {
 			const found = questionnairePrompts(running);
 			const answer = running.subject.answerQuestionnaire;
-			if (!found || !answer) return;
+			if (!answer) return;
 			const set = contractSet(found.asks);
 			const before = seen(running, "prompt").length;
 			const result = found.ask("Questions", set);
@@ -113,7 +118,6 @@ export const QUESTIONNAIRE_CHECKS: readonly QuestionnaireCheck[] = [
 		applies,
 		run: async (running) => {
 			const found = questionnairePrompts(running);
-			if (!found) return;
 			const stop = new AbortController();
 			const before = seen(running, "prompt").length;
 			const result = found.ask(
@@ -145,7 +149,7 @@ export const QUESTIONNAIRE_CHECKS: readonly QuestionnaireCheck[] = [
 			const found = questionnairePrompts(running);
 			const stranger = running.subject.stranger;
 			const answer = running.subject.answerQuestionnaire;
-			if (!found || !answer || !stranger?.answerQuestionnaire) return;
+			if (!answer || !stranger?.answerQuestionnaire) return;
 			await stranger.join?.();
 			const set = contractSet(found.asks);
 			const before = seen(running, "prompt").length;
@@ -170,3 +174,19 @@ export const QUESTIONNAIRE_CHECKS: readonly QuestionnaireCheck[] = [
 		},
 	},
 ];
+
+/**
+ * Registers only the questionnaire part of the contract, for a card layer without a chat around
+ * it. Internal: the published contract is `describeSurfaceContract`.
+ */
+export function describeQuestionnaireContract(
+	name: string,
+	make: () => Promise<SurfaceContractSubject>,
+): void {
+	describe(`${name} keeps the questionnaire contract`, () => {
+		for (const check of QUESTIONNAIRE_CHECKS)
+			test(check.name, async () => {
+				await runCheck(check, make);
+			});
+	});
+}

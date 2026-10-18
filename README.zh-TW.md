@@ -184,7 +184,7 @@ export default {
 | `foreignWebhook` | 無 | `(webhookId) => boolean \| "skip"`：回傳 true 的 webhook 所發的貼文視為別人的訊息，不是助理自己的；回傳 `"skip"` 則把該 webhook 的貼文當作不存在，不納入也不截斷範圍（只能用程式碼設定） |
 | `attachments` | `{ images: 0, maxBytes: 10 MiB }` | `images`：替這一輪抓取保留訊息中的幾張圖片，最多 4 張 |
 
-核准卡和 `ask_user` 問題（一組最多四題的問題是同一張卡片）會讓這一輪等 `discord.cardGraceSeconds` 秒（預設 `120`）。
+核准卡和 `ask_user` 問題（一次最多四題的一組問題放在同一張卡片上）會讓這一輪等 `discord.cardGraceSeconds` 秒（預設 `120`）。
 agent 頻道裡訊息的附件，整則訊息（連同它回覆的那則）要在 `discord.attachmentDownload.deadlineMs`（預設 60,000）毫秒內下載完；單一檔案連續 `discord.attachmentDownload.idleMs`（預設 10,000）毫秒沒收到任何位元組就放棄，這一輪會略過收不到的檔案繼續。
 核准卡「複製」按鈕的文字存在資料目錄的 `card-copies.json`，預設留最新 100 張、30 天；`discord.cardCopies`（`{ keepDays?, keep? }`）可以調整，設成 `false` 則只留在記憶體。
 在這段時間內回答，這一輪就帶著答案繼續；沒回答的話，這一輪會說它在等你，然後結束，卡片繼續開著、沒有期限，之後再回答就會在同一個對話開新的一輪，帶上你的答案，或核准後那個動作的結果。

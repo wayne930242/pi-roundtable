@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import type { InboundMessage } from "../contract/channels.ts";
 import type { ChatSurface } from "../contract/surface.ts";
 import type { Approval, ApprovedBy } from "../interactions/prompts.ts";
+import type { QuestionnaireAnswer } from "../interactions/questionnaire.ts";
 import { type Tier, tierAtLeast } from "../speakers.ts";
 import {
 	checkSurfaceContract,
@@ -264,4 +265,61 @@ test("the contract catches a surface that delivers nothing", async () => {
 	expect(failures.map((failure) => failure.name)).toContain(
 		"delivers what the person writes, in their channel",
 	);
+});
+
+test("the contract catches a subject that answers questionnaires but declares no asks", async () => {
+	const failures = await checkSurfaceContract(async () => ({
+		...memoryChat(),
+		answerQuestionnaire: async () => undefined,
+	}));
+	expect(failures.map((failure) => failure.name)).toEqual(
+		[
+			"a questionnaire resolves as the person answers it, keeps a blank question blank, and closes",
+			"a stopped turn's questionnaire resolves with no answer and closes",
+			"another person cannot answer the person's questionnaire",
+		].filter((name) => !name.startsWith("another")),
+	);
+});
+
+test("the contract catches a surface where another person answers a questionnaire", async () => {
+	/** A chat whose questionnaire any answer settles, the person's or not. */
+	const open = memoryChat();
+	const seen = open.observations() as SurfaceObservation[];
+	const waiting = new Map<string, (a: QuestionnaireAnswer) => void>();
+	let next = 0;
+	const base = open.surface;
+	const surface: ChatSurface = {
+		...base,
+		prompts: (channel, scope) => {
+			const prompts = base.prompts?.(channel, scope);
+			if (!prompts) throw new Error("no prompts");
+			return {
+				...prompts,
+				asks: { questions: 4, previews: true, note: true },
+				questionnaire: (_title, _set, signal) =>
+					new Promise((resolve) => {
+						const id = `q${++next}`;
+						seen.push({ kind: "prompt", id, title: "Questions" });
+						const settle = (answer: QuestionnaireAnswer | undefined) => {
+							waiting.delete(id);
+							seen.push({ kind: "prompt_closed", id });
+							resolve(answer);
+						};
+						waiting.set(id, settle);
+						signal?.addEventListener("abort", () => settle(undefined));
+					}),
+			};
+		},
+	};
+	const answer = async (id: string, given: QuestionnaireAnswer) =>
+		waiting.get(id)?.(given);
+	const failures = await checkSurfaceContract(async () => ({
+		...open,
+		surface,
+		answerQuestionnaire: answer,
+		stranger: { answer: async () => undefined, answerQuestionnaire: answer },
+	}));
+	expect(failures.map((failure) => failure.name)).toEqual([
+		"another person cannot answer the person's questionnaire",
+	]);
 });
