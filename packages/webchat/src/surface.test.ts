@@ -1,11 +1,15 @@
 import { describe, expect, test } from "bun:test";
-import { promptScope, type Tier } from "pi-roundtable";
+import {
+	promptScope,
+	type QuestionnaireAnswer,
+	type Tier,
+} from "pi-roundtable";
 import {
 	describeSurfaceContract,
 	type SurfaceObservation,
 } from "pi-roundtable/testing";
 import { PromptDesk } from "./prompts.ts";
-import type { ServerFrame } from "./protocol.ts";
+import { ADVERTISED_ASK, type ServerFrame } from "./protocol.ts";
 import { speakerOf, testChat } from "./testing/fakes.ts";
 
 /** What a browser shows for each frame, in the contract's words. */
@@ -32,6 +36,14 @@ function observation(frame: ServerFrame): SurfaceObservation | undefined {
 	}
 }
 
+/** The `answers` frame a client sends for `answer`; a blank question is null. */
+const answersFrame = (prompt: string, answer: QuestionnaireAnswer) => ({
+	type: "answers",
+	prompt,
+	answers: answer.answers.map((a) => a ?? null),
+	...(answer.note !== undefined ? { note: answer.note } : {}),
+});
+
 /**
  * A web chat whose person is `person` at `tier`, whose stranger is another signed-in person, and,
  * when the person is not the owner, whose owner is the owner signed in.
@@ -51,6 +63,8 @@ function webSubject(person: string, tier: Tier, roles: string[]) {
 			socket = connect(person, roles);
 			// Proving the conversation is theirs teaches the surface whose it is.
 			await say(socket, { type: "stop", conversation });
+			// A current client declares what it shows once the server's ready says it can take it.
+			await say(socket, { type: "prompt_features", ask: ADVERTISED_ASK });
 		},
 		write: async (text: string) => {
 			if (socket)
@@ -64,9 +78,21 @@ function webSubject(person: string, tier: Tier, roles: string[]) {
 		answer: async (prompt: string, approved: boolean) => {
 			if (socket) await say(socket, { type: "approval", prompt, approved });
 		},
+		answerQuestionnaire: async (
+			prompt: string,
+			answer: QuestionnaireAnswer,
+		) => {
+			if (socket) await say(socket, answersFrame(prompt, answer));
+		},
 		stranger: {
 			join: async () => {
 				stranger = connect("mallory", roles);
+			},
+			answerQuestionnaire: async (
+				prompt: string,
+				answer: QuestionnaireAnswer,
+			) => {
+				if (stranger) await say(stranger, answersFrame(prompt, answer));
 			},
 			answer: async (prompt: string, approved: boolean) => {
 				if (stranger)

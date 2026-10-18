@@ -281,6 +281,7 @@
 			"TEST_GUILD",
 			"checkSurfaceContract",
 			"describeDb",
+			"describeQuestionnaireContract",
 			"describeSurfaceContract",
 			"eagerText",
 			"fakeDiscord",

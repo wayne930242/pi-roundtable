@@ -145,6 +145,32 @@ describe("askQuestions", () => {
 		expect(noPreviews.asked[0]).toContain("**a**");
 	});
 
+	test("a late answer to one question with previews reads exactly as 0.19's", async () => {
+		const one: Questionnaire = {
+			questions: [
+				{
+					question: "Which day?",
+					options: [{ label: "Saturday", preview: "x" }, { label: "Sunday" }],
+					multi: false,
+					allowOther: true,
+				},
+			],
+		};
+		const open = v2("pending");
+		await run(open.prompts, one);
+		expect(
+			open.waits[0]?.late({
+				kind: "questionnaire",
+				answer: {
+					answers: [{ choices: ["Sunday"], text: "after lunch" }],
+				},
+				by: "Ada",
+			}),
+		).toBe(
+			"(Ada answered your earlier ask_user question on its card, after your turn had ended. Continue from where you stopped, with this answer.)\nQuestion: Which day?\nAda chose: Sunday\nAda wrote: after lunch",
+		);
+	});
+
 	test("a questionnaire surface with room for fewer questions falls back to asking one at a time", async () => {
 		const small = v2(undefined, 2);
 		const { prompts } = v1([{ choices: ["Bug"] }]);

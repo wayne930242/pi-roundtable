@@ -3,8 +3,13 @@ import type { ChatSurface } from "../contract/surface.ts";
 import { parseChannelKey } from "../contract/surface.ts";
 import type { TurnProgress } from "../domain/progress.ts";
 import type { Approval } from "../interactions/prompts.ts";
+import type {
+	Questionnaire,
+	QuestionnaireAnswer,
+} from "../interactions/questionnaire.ts";
 import type { ChannelKey } from "../sessions.ts";
 import type { Speaker } from "../speakers.ts";
+import { QUESTIONNAIRE_CHECKS } from "./surface-contract-questionnaire.ts";
 import {
 	answeredOnlyByThem,
 	approval,
@@ -44,6 +49,12 @@ export interface SurfaceContractSubject {
 	observations(): readonly SurfaceObservation[];
 	/** The person answers an open approval; without it the prompt checks are skipped. */
 	answer?(prompt: string, approved: boolean): Promise<void>;
+	/** The person answers an open questionnaire, as shaped for `asks`; without it those checks are skipped. */
+	answerQuestionnaire?(
+		prompt: string,
+		answer: QuestionnaireAnswer,
+		questionnaire: Questionnaire,
+	): Promise<void>;
 	/**
 	 * The person as the speaker of the turns that ask them, given to `surface.prompts` as the
 	 * scope `promptScope(speaker, visibility)`; default an owner-tier speaker. Every approval the
@@ -85,6 +96,12 @@ export interface SurfaceContractAnswerer {
 	/** They join the surface, once it has started. */
 	join?(): Promise<void>;
 	answer(prompt: string, approved: boolean): Promise<void>;
+	/** They answer an open questionnaire; without it its stranger check is skipped. */
+	answerQuestionnaire?(
+		prompt: string,
+		answer: QuestionnaireAnswer,
+		questionnaire: Questionnaire,
+	): Promise<void>;
 }
 
 /** One way the subject broke the contract. */
@@ -401,6 +418,7 @@ const CHECKS: readonly Check[] = [
 			);
 		},
 	},
+	...QUESTIONNAIRE_CHECKS,
 ];
 
 async function runCheck(
@@ -450,7 +468,7 @@ export async function checkSurfaceContract(
  * Where it can name approvers, an approval that does is answered by them, reported as the
  * approver, and not by the person or another person, and a private conversation's is answered by
  * its person alone, whoever the call names besides them. Each
- * check gets a fresh subject from `make`; a check for an optional part the surface lacks passes.
+ * Where it declares `asks`, questionnaires keep the same rules. Each check gets a fresh subject from `make`; a check for an optional part the surface lacks passes.
  */
 export function describeSurfaceContract(
 	name: string,
@@ -458,6 +476,22 @@ export function describeSurfaceContract(
 ): void {
 	describe(`${name} keeps the chat surface contract`, () => {
 		for (const check of CHECKS)
+			test(check.name, async () => {
+				await runCheck(check, make);
+			});
+	});
+}
+
+/**
+ * Registers only the questionnaire part of the contract, for a surface that cannot run the rest
+ * (a card layer without a chat around it). A surface that declares no `asks` passes it.
+ */
+export function describeQuestionnaireContract(
+	name: string,
+	make: () => Promise<SurfaceContractSubject>,
+): void {
+	describe(`${name} keeps the questionnaire contract`, () => {
+		for (const check of QUESTIONNAIRE_CHECKS)
 			test(check.name, async () => {
 				await runCheck(check, make);
 			});
