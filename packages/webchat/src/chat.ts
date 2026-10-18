@@ -86,6 +86,8 @@ export interface WebChatLimits extends UploadLimits {
 
 export interface WebChatDeps {
 	surface: string;
+	/** How long a questionnaire no connection can show waits for one before it expires; default 60 seconds. */
+	promptGraceMs?: number;
 	verifier: TokenVerifier;
 	identity(): IdentityService;
 	personas: readonly WebPersona[];
@@ -246,6 +248,9 @@ export class WebChat {
 			supports: (principal) => this.connections.askSupports(principal),
 			sendOne: (connection, frame) => this.connections.send(connection, frame),
 			timeoutMs: deps.limits.promptTimeoutMs,
+			...(deps.promptGraceMs === undefined
+				? {}
+				: { graceMs: deps.promptGraceMs }),
 		});
 		this.clients = new ClientDesk({
 			limits: deps.limits.clientCalls,
@@ -486,6 +491,7 @@ export class WebChat {
 	closed(socket: RouteSocket<Connection>): void {
 		this.clients.closed(socket.data);
 		this.connections.closed(socket.data);
+		this.desk.closed(socket.data.speaker.principalId);
 	}
 
 	/** One frame from a socket; a refused frame is answered with `error`, never thrown. */

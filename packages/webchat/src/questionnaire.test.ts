@@ -12,12 +12,7 @@ import {
 	parseClientFrame,
 	type ServerFrame,
 } from "./protocol.ts";
-import {
-	type FakeSocket,
-	speakerOf,
-	TEST_LIMITS,
-	testChat,
-} from "./testing/fakes.ts";
+import { type FakeSocket, speakerOf, testChat } from "./testing/fakes.ts";
 
 const single: OwnerQuestion = {
 	question: "Pick one",
@@ -63,21 +58,32 @@ async function client(
 		await harness.declare(socket, ask);
 }
 
-/** The v1 harness's assertion: no `questionnaire` prompt, and no close for one, ever reached it. */
-function neverQuestionnaire(socket: FakeSocket) {
+/**
+ * The v1 harness's assertion: no `questionnaire` prompt reached the socket, and no close for any
+ * of the questionnaire `ids` (which only other tabs saw) did either.
+ */
+function neverQuestionnaire(socket: FakeSocket, ids: string[] = []) {
 	expect(kinds(socket)).not.toContain("questionnaire");
-	const ids = new Set(
-		socket.frames.flatMap((f) =>
-			f.type === "prompt" && (f.prompt.kind as string) === "questionnaire"
-				? [f.prompt.id]
-				: [],
+	expect(
+		socket.frames.filter(
+			(f) => f.type === "prompt_closed" && ids.includes(f.prompt),
 		),
-	);
-	expect(ids.size).toBe(0);
+	).toEqual([]);
 }
 
-async function setup() {
-	const harness = testChat();
+/** Every `prompt_closed` a socket received. */
+const closes = (socket: FakeSocket) =>
+	socket.frames.flatMap((f) => (f.type === "prompt_closed" ? [f] : []));
+
+/** The id of the questionnaire a socket was sent last. */
+function questionnaireId(socket: FakeSocket): string {
+	const frame = seen(socket, "questionnaire").at(-1);
+	if (frame?.type !== "prompt") throw new Error("no questionnaire");
+	return frame.prompt.id;
+}
+
+async function setup(graceMs = 60_000) {
+	const harness = testChat({ promptGraceMs: graceMs });
 	const conversation = harness.chat.open(speakerOf("ada"), "helper");
 	// A conversation is known to its owner once the person writes in it.
 	const first = harness.connect("ada");
@@ -224,7 +230,13 @@ test("a v1 client harness never receives a questionnaire in any of the flows abo
 });
 
 test("a questionnaire is not in the open prompts of a connection that declared nothing", () => {
-	const desk = new PromptDesk({ send: () => undefined, timeoutMs: 1000 });
+	const desk = new PromptDesk({
+		send: () => undefined,
+		sendWhere: () => undefined,
+		sendOne: () => undefined,
+		supports: () => [],
+		timeoutMs: 1000,
+	});
 	const scope = promptScope(speakerOf("ada"), "private");
 	void desk.prompts("c", scope).ask("Which?", single);
 	expect(desk.openFor("ada").map((f) => f.type)).toEqual(["prompt"]);
@@ -306,5 +318,181 @@ test("a malformed prompt_features frame is refused as bad_frame", async () => {
 	const ada = harness.connect("ada");
 	await harness.say(ada, { type: "prompt_features", ask: { questions: 9 } });
 	expect(ada.frames.at(-1)).toEqual({ type: "error", code: "bad_frame" });
-	expect(TEST_LIMITS.promptTimeoutMs).toBeGreaterThan(0);
+});
+
+test("a declaring tab that closes mid-questionnaire: the prompt expires after the grace and the old tab sees nothing", async () => {
+	const harness = await setup(30);
+	const old = harness.connect("ada");
+	const fresh = harness.connect("ada");
+	await client(harness, fresh);
+	const asked = harness.prompts().questionnaire?.("Set", set);
+	const id = questionnaireId(fresh);
+	harness.chat.closed(fresh);
+	// The old tab cannot answer it: it is not shown one, and a v1 `answer` finds no `ask`.
+	await harness.say(old, { type: "answer", prompt: id, choices: ["A"] });
+	expect(old.frames.at(-1)).toMatchObject({ code: "unknown_prompt" });
+	expect(await asked).toBeUndefined();
+	neverQuestionnaire(old, [id]);
+	// A re-ask now falls back to the sequential path.
+	expect(harness.prompts().asks).toBeUndefined();
+});
+
+test("a declaring tab that reconnects within the grace keeps the questionnaire", async () => {
+	const harness = await setup(60);
+	const first = harness.connect("ada");
+	await client(harness, first);
+	let settled = false;
+	const asked = harness.prompts().questionnaire?.("Set", set);
+	void asked?.then(() => {
+		settled = true;
+	});
+	const id = questionnaireId(first);
+	harness.chat.closed(first);
+	await Bun.sleep(20);
+	const again = harness.connect("ada");
+	await client(harness, again);
+	await Bun.sleep(80);
+	expect(settled).toBe(false);
+	await harness.say(again, {
+		type: "answers",
+		prompt: id,
+		answers: [{ choices: ["A"] }, null],
+	});
+	expect(await asked).toEqual({ answers: [{ choices: ["A"] }, undefined] });
+});
+
+test("a questionnaire sent to no tab that can show it expires after the grace, not the prompt timeout", async () => {
+	const harness = await setup(30);
+	const old = harness.connect("ada");
+	// The old tab never declared: the set reaches no one. With a tab or none, the wait is the same
+	// short grace, because a panel that declares in time can still take it.
+	const asked = harness.prompts().questionnaire;
+	expect(asked).toBeUndefined();
+	// A declaring tab appears, asks, then narrows so it cannot show the set: sent to it, then stranded.
+	const fresh = harness.connect("ada");
+	await client(harness, fresh);
+	const pending = harness.prompts().questionnaire?.("Set", set);
+	const id = questionnaireId(fresh);
+	await harness.declare(fresh, { questions: 1, previews: false, note: false });
+	// It was sent the set, so it hears the close; the old tab never does.
+	expect(await pending).toBeUndefined();
+	expect(closes(fresh).map((c) => c.prompt)).toEqual([id]);
+	neverQuestionnaire(old, [id]);
+});
+
+test("a questionnaire asked while no tab is connected expires after the grace", async () => {
+	const harness = await setup(30);
+	const first = harness.connect("ada");
+	await client(harness, first);
+	const questionnaire = harness.prompts().questionnaire;
+	harness.chat.closed(first);
+	const started = Date.now();
+	expect(await questionnaire?.("Set", set)).toBeUndefined();
+	expect(Date.now() - started).toBeLessThan(1000);
+});
+
+test("cancel and expiry of a questionnaire do not reach a v1 tab", async () => {
+	const harness = await setup(30);
+	const old = harness.connect("ada");
+	const fresh = harness.connect("ada");
+	await client(harness, fresh);
+	const stop = new AbortController();
+	const cancelled = harness.prompts().questionnaire?.("Set", set, stop.signal);
+	const id = questionnaireId(fresh);
+	stop.abort();
+	expect(await cancelled).toBeUndefined();
+	expect(closes(fresh).map((c) => [c.prompt, c.outcome])).toEqual([
+		[id, "cancelled"],
+	]);
+	neverQuestionnaire(old, [id]);
+	// Expiry: the declaring tab closes, the grace runs out.
+	const expiring = harness.prompts().questionnaire?.("Set", set);
+	const second = questionnaireId(fresh);
+	harness.chat.closed(fresh);
+	expect(await expiring).toBeUndefined();
+	neverQuestionnaire(old, [id, second]);
+});
+
+test("a tab that narrows its declaration still hears the close of a questionnaire it was sent", async () => {
+	const harness = await setup();
+	const ada = harness.connect("ada");
+	await client(harness, ada);
+	const asked = harness.prompts().questionnaire?.("Set", set);
+	const id = questionnaireId(ada);
+	await harness.declare(ada, { questions: 1, previews: false, note: false });
+	const other = harness.connect("ada");
+	await client(harness, other);
+	await harness.say(other, {
+		type: "answers",
+		prompt: id,
+		answers: [{ choices: ["A"] }, null],
+	});
+	await asked;
+	expect(closes(ada).map((c) => c.prompt)).toEqual([id]);
+	expect(closes(other).map((c) => c.prompt)).toEqual([id]);
+});
+
+test("a second tab answering after the first gets unknown_prompt", async () => {
+	const harness = await setup();
+	const a = harness.connect("ada");
+	const b = harness.connect("ada");
+	await client(harness, a);
+	await client(harness, b);
+	const asked = harness.prompts().questionnaire?.("Set", set);
+	const id = questionnaireId(a);
+	const body = {
+		type: "answers",
+		prompt: id,
+		answers: [{ choices: ["A"] }, null],
+	};
+	await harness.say(a, body);
+	await asked;
+	await harness.say(b, body);
+	expect(b.frames.at(-1)).toEqual({
+		type: "error",
+		code: "unknown_prompt",
+		ref: id,
+	});
+});
+
+test("own text and the note are taken at 1000 characters and refused at 1001", async () => {
+	const harness = await setup();
+	const ada = harness.connect("ada");
+	await client(harness, ada);
+	const asked = harness.prompts().questionnaire?.("Set", set);
+	const id = questionnaireId(ada);
+	const send = (text: string, note: string) =>
+		harness.say(ada, {
+			type: "answers",
+			prompt: id,
+			answers: [null, { choices: [], text }],
+			note,
+		});
+	await send("x".repeat(1001), "n");
+	expect(ada.frames.at(-1)).toEqual({
+		type: "error",
+		code: "bad_frame",
+		ref: id,
+	});
+	await send("x", "n".repeat(1001));
+	expect(ada.frames.at(-1)).toEqual({
+		type: "error",
+		code: "bad_frame",
+		ref: id,
+	});
+	await send("x".repeat(1000), "n".repeat(1000));
+	expect(await asked).toMatchObject({ note: "n".repeat(1000) });
+});
+
+test("a reauth greeting on a declaring connection re-sends the open questionnaire only if it was not sent", async () => {
+	const harness = await setup();
+	const ada = harness.connect("ada");
+	await client(harness, ada);
+	void harness.prompts().questionnaire?.("Set", set);
+	// A fresh `ready` (as after reauth) re-sends the open prompts the connection can show.
+	harness.chat.opened(ada);
+	expect(seen(ada, "questionnaire")).toHaveLength(2);
+	const old = harness.connect("ada");
+	harness.chat.opened(old);
+	neverQuestionnaire(old);
 });

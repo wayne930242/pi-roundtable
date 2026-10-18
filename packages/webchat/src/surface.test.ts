@@ -121,6 +121,9 @@ describe("a held call that names approvers", () => {
 		const frames: ServerFrame[] = [];
 		const desk = new PromptDesk({
 			send: (_principal, frame) => void frames.push(frame),
+			sendWhere: () => undefined,
+			sendOne: () => undefined,
+			supports: () => [],
 			timeoutMs: 60_000,
 		});
 		const scope = promptScope(speakerOf("ann", "member"), "shared");
@@ -151,6 +154,9 @@ describe("an approval its plugin withdraws", () => {
 		const frames: ServerFrame[] = [];
 		const desk = new PromptDesk({
 			send: (_principal, frame) => void frames.push(frame),
+			sendWhere: () => undefined,
+			sendOne: () => undefined,
+			supports: () => [],
 			timeoutMs: 60_000,
 		});
 		const scope = promptScope(speakerOf("ann", "member"), "shared");
@@ -234,6 +240,9 @@ describe("the card that approved a call", () => {
 		const frames: ServerFrame[] = [];
 		const desk = new PromptDesk({
 			send: (_principal, frame) => void frames.push(frame),
+			sendWhere: () => undefined,
+			sendOne: () => undefined,
+			supports: () => [],
 			timeoutMs: 60_000,
 		});
 		const scope = promptScope(speakerOf("ann", "member"), "shared");

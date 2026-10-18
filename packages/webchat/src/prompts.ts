@@ -36,6 +36,10 @@ interface Open {
 	frame: PromptFrame;
 	/** The lowest tier that may approve; questions have none. */
 	minTier?: Tier;
+	/** A questionnaire: the connections it was sent to, which are the only ones told it closed. */
+	sentTo?: Set<Connection>;
+	/** A questionnaire no connection can show waits this long for one to, then expires. */
+	grace?: ReturnType<typeof setTimeout>;
 	settle(
 		outcome: PromptOutcome,
 		answer?: OwnerAnswer | QuestionnaireAnswer,
@@ -47,18 +51,22 @@ export interface PromptDeskOptions {
 	/** Sends a frame to every connection of a person. */
 	send(principal: string, frame: ServerFrame): void;
 	/** Sends a frame to the connections of a person that `where` accepts. */
-	sendWhere?(
+	sendWhere(
 		principal: string,
 		frame: ServerFrame,
 		where: (connection: Connection) => boolean,
 	): void;
 	/** What the open connections of a person declared they can show of a questionnaire. */
-	supports?(principal: string): AskSupport[];
+	supports(principal: string): AskSupport[];
 	/** Sends a frame on one connection. */
-	sendOne?(connection: Connection, frame: ServerFrame): void;
+	sendOne(connection: Connection, frame: ServerFrame): void;
 	/** An unanswered prompt expires after this long. */
 	timeoutMs: number;
+	/** How long a questionnaire that no connection can show waits for one (default 60 seconds). */
+	graceMs?: number;
 }
+
+const GRACE_MS = 60_000;
 
 const atLeast = (tier: Tier, least: Tier) =>
 	TIERS.indexOf(tier) >= TIERS.indexOf(least);
@@ -156,7 +164,7 @@ export class PromptDesk {
 
 	/** The field-wise minimum of the person's declared supports; undefined when none declared. */
 	#asksFor(principal: string): AskSupport | undefined {
-		const supports = this.#options.supports?.(principal) ?? [];
+		const supports = this.#options.supports(principal);
 		const [first, ...rest] = supports;
 		if (!first) return undefined;
 		return rest.reduce<AskSupport>(
@@ -183,6 +191,34 @@ export class PromptDesk {
 				conversation: open.conversation,
 				prompt: open.frame,
 			}));
+	}
+
+	/**
+	 * A connection of the person closed. A questionnaire that no remaining connection can show
+	 * would leave the turn waiting for an answer no one can give, so it gets a grace period for a
+	 * panel to reconnect and declare, then expires and the model is told it went unanswered.
+	 */
+	closed(principal: string): void {
+		this.#regrace(principal);
+	}
+
+	/** Starts or cancels the grace timer of each open questionnaire of a person. */
+	#regrace(principal: string): void {
+		const supports = this.#options.supports(principal);
+		for (const open of this.#open.values()) {
+			if (open.principal !== principal || open.frame.kind !== "questionnaire")
+				continue;
+			const frame = open.frame;
+			if (supports.some((s) => showable(frame, s))) {
+				clearTimeout(open.grace);
+				open.grace = undefined;
+			} else if (!open.grace) {
+				open.grace = setTimeout(
+					() => open.settle("expired"),
+					this.#options.graceMs ?? GRACE_MS,
+				);
+			}
+		}
 	}
 
 	/** Approves or declines; an error code when the prompt is not an approval this person may answer. */
@@ -233,9 +269,21 @@ export class PromptDesk {
 			before.note !== frame.ask.note;
 		// A repeated declaration (each `ready` asks for one) does not send what is already shown.
 		if (changed)
-			for (const shown of this.openFor(from.principalId, frame.ask))
-				if (shown.type === "prompt" && shown.prompt.kind === "questionnaire")
-					this.#options.sendOne?.(connection, shown);
+			for (const open of this.#open.values())
+				if (
+					open.principal === from.principalId &&
+					open.sentTo &&
+					showable(open.frame, frame.ask) &&
+					!open.sentTo.has(connection)
+				) {
+					open.sentTo.add(connection);
+					this.#options.sendOne(connection, {
+						type: "prompt",
+						conversation: open.conversation,
+						prompt: open.frame,
+					});
+				}
+		this.#regrace(from.principalId);
 		return undefined;
 	}
 
@@ -279,10 +327,14 @@ export class PromptDesk {
 			const id = crypto.randomUUID();
 			const frame = frameOf(id);
 			// A questionnaire reaches only the connections that declared support covering it.
+			const sentTo = new Set<Connection>();
 			const sendQuestionnaire = (out: ServerFrame) =>
-				this.#options.sendWhere?.(principal, out, (connection) =>
-					showable(frame, connection.askSupport),
-				);
+				this.#options.sendWhere(principal, out, (connection) => {
+					if (out.type === "prompt_closed") return sentTo.has(connection);
+					const shows = showable(frame, connection.askSupport);
+					if (shows) sentTo.add(connection);
+					return shows;
+				});
 			const onAbort = () => settle("cancelled");
 			const timer = setTimeout(() => settle("expired"), timeoutMs);
 			const onSupersede = () =>
@@ -294,7 +346,9 @@ export class PromptDesk {
 				note?: string,
 			) => {
 				// Whichever of an answer and a withdrawal comes first settles the prompt.
-				if (!this.#open.delete(id)) return;
+				const open = this.#open.get(id);
+				if (!open || !this.#open.delete(id)) return;
+				clearTimeout(open.grace);
 				// Heard before the approval resolves, so the call that runs on it can say which card it was.
 				if (outcome === "approved") approvedPrompt?.(id);
 				clearTimeout(timer);
@@ -316,6 +370,7 @@ export class PromptDesk {
 				principal,
 				frame,
 				...(minTier ? { minTier } : {}),
+				...(frame.kind === "questionnaire" ? { sentTo } : {}),
 				settle,
 			});
 			signal?.addEventListener("abort", onAbort, { once: true });
@@ -325,8 +380,12 @@ export class PromptDesk {
 				conversation,
 				prompt: frame,
 			};
-			if (frame.kind === "questionnaire") sendQuestionnaire(shown);
-			else send(principal, shown);
+			if (frame.kind === "questionnaire") {
+				sendQuestionnaire(shown);
+				// Sent to no one: wait the grace for a panel that can show it, never the full timeout.
+				// With no tab connected at all this waits too, so a reconnect can still rescue it.
+				this.#regrace(principal);
+			} else send(principal, shown);
 		});
 	}
 }
