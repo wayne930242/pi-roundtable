@@ -83,7 +83,6 @@ export class PromptDesk {
 	 * a private conversation, so the call stays held, as an unanswered card leaves it.
 	 */
 	prompts(conversation: string, scope: PromptScope): Prompts {
-		// biome-ignore lint/complexity/noUselessThisAlias: the getters below are their own `this`
 		const desk = this;
 		return {
 			confirm: async (
