@@ -1,8 +1,12 @@
-import type {
-	ApprovalDetails,
-	AskOption,
-	Tier,
-	TurnProgress,
+import {
+	type ApprovalDetails,
+	type AskOption,
+	type AskSupport,
+	type OwnerAnswer,
+	type OwnerQuestion,
+	QUESTIONNAIRE_LIMITS,
+	type Tier,
+	type TurnProgress,
 } from "pi-roundtable";
 import type { Notice } from "./notices.ts";
 
@@ -70,7 +74,21 @@ export type PromptFrame =
 			options: readonly AskOption[];
 			multi: boolean;
 			allowOther: boolean;
+	  }
+	| {
+			id: string;
+			kind: "questionnaire";
+			title: string;
+			/** The core's questions, verbatim; sent only to connections that declared `prompt_features` covering them. */
+			questions: readonly OwnerQuestion[];
 	  };
+
+/** What a server that takes `prompt_features` advertises in `ready.prompts` and can send. */
+export const ADVERTISED_ASK: AskSupport = Object.freeze({
+	questions: QUESTIONNAIRE_LIMITS.questions,
+	previews: true,
+	note: true,
+});
 
 /**
  * How a prompt closed. `withdrawn` is an approval the plugin that asked for it took back; the
@@ -164,6 +182,21 @@ export type ClientFrame =
 	/** Answers a question prompt: the chosen options' labels and, where allowed, their own text. */
 	| { type: "answer"; prompt: string; choices: string[]; text?: string }
 	/**
+	 * Answers a `questionnaire` prompt: one entry per question in order, `null` for a question left
+	 * blank, and an optional note on the whole set.
+	 */
+	| {
+			type: "answers";
+			prompt: string;
+			answers: (OwnerAnswer | null)[];
+			note?: string;
+	  }
+	/**
+	 * Declares what this connection can show of a questionnaire. Send it only after a `ready` that
+	 * has `prompts`; a connection that never declares is never sent a `questionnaire` prompt.
+	 */
+	| { type: "prompt_features"; ask: AskSupport }
+	/**
 	 * Declares the functions this connection can run for the assistant's tools, such as reading the
 	 * page the person has open. Send it after each `ready`. A connection that declares none is never
 	 * asked to run anything, and its turns carry no client.
@@ -214,6 +247,11 @@ export type ServerFrame =
 			 * `client_call`: show no feature that needs the page's help then.
 			 */
 			clientCalls?: ClientCallsAdvertised;
+			/**
+			 * What questionnaires this server can send. Absent from a server before 0.20: never send
+			 * `prompt_features` then. A client that sees it may declare what it shows.
+			 */
+			prompts?: { ask: AskSupport };
 	  }
 	/** The message `id` was taken into `conversation`, a new one when the client named none. */
 	| { type: "accepted"; id: string; conversation: string }
@@ -354,6 +392,10 @@ export function parseClientFrame(
 				...(text === undefined ? {} : { text }),
 			};
 		}
+		case "answers":
+			return parseAnswers(value);
+		case "prompt_features":
+			return parseFeatures(value);
 		case "client_hello":
 			return parseHello(value);
 		case "client_result":
@@ -361,6 +403,56 @@ export function parseClientFrame(
 		default:
 			return undefined;
 	}
+}
+
+function parseAnswers(value: Record<string, unknown>): ClientFrame | undefined {
+	const { prompt, answers, note } = value;
+	if (!isId(prompt) || !Array.isArray(answers)) return undefined;
+	if (answers.length < 1 || answers.length > QUESTIONNAIRE_LIMITS.questions)
+		return undefined;
+	if (!optional(note, (n): n is string => typeof n === "string"))
+		return undefined;
+	const parsed: (OwnerAnswer | null)[] = [];
+	for (const answer of answers as unknown[]) {
+		if (answer === null) {
+			parsed.push(null);
+			continue;
+		}
+		if (!isRecord(answer) || !Array.isArray(answer.choices)) return undefined;
+		const { choices, text } = answer;
+		if (!choices.every((choice) => typeof choice === "string"))
+			return undefined;
+		if (!optional(text, (t): t is string => typeof t === "string"))
+			return undefined;
+		parsed.push({
+			choices: choices as string[],
+			...(text === undefined ? {} : { text }),
+		});
+	}
+	return {
+		type: "answers",
+		prompt,
+		answers: parsed,
+		...(note === undefined ? {} : { note }),
+	};
+}
+
+function parseFeatures(
+	value: Record<string, unknown>,
+): ClientFrame | undefined {
+	const { ask } = value;
+	if (!isRecord(ask)) return undefined;
+	const { questions, previews, note } = ask;
+	if (
+		typeof questions !== "number" ||
+		!Number.isInteger(questions) ||
+		questions < 1 ||
+		questions > QUESTIONNAIRE_LIMITS.questions ||
+		typeof previews !== "boolean" ||
+		typeof note !== "boolean"
+	)
+		return undefined;
+	return { type: "prompt_features", ask: { questions, previews, note } };
 }
 
 function parseHello(value: Record<string, unknown>): ClientFrame | undefined {

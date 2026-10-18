@@ -5,6 +5,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Questionnaires: `ready.prompts` advertises them, a client that sees it may send `prompt_features`, and a `questionnaire` prompt is sent only to connections that declared support covering it. The client answers with a new `answers` frame (`bad_frame` for a malformed or non-fitting answer, `forbidden` from another person). The protocol name and `ready.protocol` stay v1, so old clients and old servers keep working; a person whose tabs have not declared is asked one question at a time. This needs the core questionnaire model (next core release).
+
+### Changed
+
+- An `answer` is checked by the core's shared `checkAnswer`; its behaviour is unchanged.
+
 ## [0.19.2] - 2026-10-18
 
 - Release in lockstep with pi-roundtable 0.19.2. The core peer range stays `>=0.19.0 <0.20.0`.

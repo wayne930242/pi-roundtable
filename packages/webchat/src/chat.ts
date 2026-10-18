@@ -32,6 +32,7 @@ import {
 } from "./oidc.ts";
 import { PromptDesk } from "./prompts.ts";
 import {
+	ADVERTISED_ASK,
 	CLOSE_CODES,
 	type ClientFrame,
 	type ErrorCode,
@@ -240,6 +241,10 @@ export class WebChat {
 			this.connections.sendTo(principal, frame);
 		this.desk = new PromptDesk({
 			send,
+			sendWhere: (principal, frame, where) =>
+				this.connections.sendTo(principal, frame, where),
+			supports: (principal) => this.connections.askSupports(principal),
+			sendOne: (connection, frame) => this.connections.send(connection, frame),
 			timeoutMs: deps.limits.promptTimeoutMs,
 		});
 		this.clients = new ClientDesk({
@@ -436,9 +441,13 @@ export class WebChat {
 			personas: this.personasFor(speaker),
 			attachments: this.uploads.advertised,
 			clientCalls: this.clients.advertised,
+			prompts: { ask: ADVERTISED_ASK },
 			expiresAt: identity.expiresAt.toISOString(),
 		});
-		for (const frame of this.desk.openFor(speaker.principalId))
+		for (const frame of this.desk.openFor(
+			speaker.principalId,
+			connection.askSupport,
+		))
 			this.connections.send(connection, frame);
 		this.#watchToken(connection);
 	}
@@ -497,7 +506,9 @@ export class WebChat {
 			const ref =
 				frame.type === "send"
 					? frame.id
-					: frame.type === "approval" || frame.type === "answer"
+					: frame.type === "approval" ||
+							frame.type === "answer" ||
+							frame.type === "answers"
 						? frame.prompt
 						: frame.type === "client_result"
 							? frame.call
@@ -547,6 +558,12 @@ export class WebChat {
 					frame.prompt,
 					frame.approved,
 				);
+				if (refused) throw new Refusal(refused);
+				return;
+			}
+			case "prompt_features":
+			case "answers": {
+				const refused = this.desk.receive(connection, speaker, frame);
 				if (refused) throw new Refusal(refused);
 				return;
 			}

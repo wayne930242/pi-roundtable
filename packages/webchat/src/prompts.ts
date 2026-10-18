@@ -1,16 +1,23 @@
 import {
 	type Approval,
 	type ApprovalDetails,
+	type AskSupport,
+	checkAnswer,
+	checkQuestionnaireAnswer,
 	type OwnerAnswer,
 	type OwnerQuestion,
 	type PromptScope,
 	type Prompts,
+	type Questionnaire,
+	type QuestionnaireAnswer,
 	TIERS,
 	type Tier,
 	withdrawalNote,
 } from "pi-roundtable";
+import type { Connection } from "./connections.ts";
 import {
 	APPROVAL_MAX_BYTES,
+	type ClientFrame,
 	type ErrorCode,
 	type PromptFrame,
 	type PromptOutcome,
@@ -29,12 +36,26 @@ interface Open {
 	frame: PromptFrame;
 	/** The lowest tier that may approve; questions have none. */
 	minTier?: Tier;
-	settle(outcome: PromptOutcome, answer?: OwnerAnswer, note?: string): void;
+	settle(
+		outcome: PromptOutcome,
+		answer?: OwnerAnswer | QuestionnaireAnswer,
+		note?: string,
+	): void;
 }
 
 export interface PromptDeskOptions {
 	/** Sends a frame to every connection of a person. */
 	send(principal: string, frame: ServerFrame): void;
+	/** Sends a frame to the connections of a person that `where` accepts. */
+	sendWhere?(
+		principal: string,
+		frame: ServerFrame,
+		where: (connection: Connection) => boolean,
+	): void;
+	/** What the open connections of a person declared they can show of a questionnaire. */
+	supports?(principal: string): AskSupport[];
+	/** Sends a frame on one connection. */
+	sendOne?(connection: Connection, frame: ServerFrame): void;
 	/** An unanswered prompt expires after this long. */
 	timeoutMs: number;
 }
@@ -62,6 +83,8 @@ export class PromptDesk {
 	 * a private conversation, so the call stays held, as an unanswered card leaves it.
 	 */
 	prompts(conversation: string, scope: PromptScope): Prompts {
+		// biome-ignore lint/complexity/noUselessThisAlias: the getters below are their own `this`
+		const desk = this;
 		return {
 			confirm: async (
 				title,
@@ -91,7 +114,7 @@ export class PromptDesk {
 				return toApproval(outcome.outcome);
 			},
 			ask: async (title, question, signal) => {
-				const { outcome, answer } = await this.#ask(
+				const { outcome, answer } = await this.#ask<OwnerAnswer>(
 					conversation,
 					scope.principalId,
 					(id) => questionFrame(id, title, question),
@@ -99,13 +122,63 @@ export class PromptDesk {
 				);
 				return outcome === "answered" ? answer : undefined;
 			},
+			// The minimum of what the person's declaring panels show; read when asked, so a panel
+			// that connects mid-turn counts. None declared means the 0.19 contract.
+			get asks() {
+				return desk.#asksFor(scope.principalId);
+			},
+			get questionnaire() {
+				const asks = desk.#asksFor(scope.principalId);
+				if (!asks || (asks.questions < 2 && !asks.previews)) return undefined;
+				return async (
+					title: string,
+					questionnaire: Questionnaire,
+					signal?: AbortSignal,
+				) => {
+					const { outcome, answer } = await desk.#ask<QuestionnaireAnswer>(
+						conversation,
+						scope.principalId,
+						(id) => ({
+							id,
+							kind: "questionnaire",
+							title,
+							questions: questionnaire.questions.map((q) => ({
+								...q,
+								options: q.options.map((option) => ({ ...option })),
+							})),
+						}),
+						signal,
+					);
+					return outcome === "answered" ? answer : undefined;
+				};
+			},
 		};
 	}
 
-	/** The open prompts of a person, as frames to send again when they connect. */
-	openFor(principal: string): ServerFrame[] {
+	/** The field-wise minimum of the person's declared supports; undefined when none declared. */
+	#asksFor(principal: string): AskSupport | undefined {
+		const supports = this.#options.supports?.(principal) ?? [];
+		const [first, ...rest] = supports;
+		if (!first) return undefined;
+		return rest.reduce<AskSupport>(
+			(least, s) => ({
+				questions: Math.min(least.questions, s.questions),
+				previews: least.previews && s.previews,
+				note: least.note && s.note,
+			}),
+			first,
+		);
+	}
+
+	/**
+	 * The open prompts of a person, as frames to send again when they connect. A questionnaire is
+	 * left out unless the connection declared `support` that covers it.
+	 */
+	openFor(principal: string, support?: AskSupport): ServerFrame[] {
 		return [...this.#open.values()]
-			.filter((open) => open.principal === principal)
+			.filter(
+				(open) => open.principal === principal && showable(open.frame, support),
+			)
 			.map((open) => ({
 				type: "prompt",
 				conversation: open.conversation,
@@ -136,12 +209,62 @@ export class PromptDesk {
 		const open = this.#open.get(prompt);
 		if (open?.frame.kind !== "ask") return "unknown_prompt";
 		if (open.principal !== from.principalId) return "forbidden";
-		if (!fits(open.frame, answer)) return "bad_frame";
+		if (!checkAnswer(open.frame, answer)) return "bad_frame";
 		open.settle("answered", answer);
 		return undefined;
 	}
 
-	#ask(
+	/**
+	 * Takes the frames that concern questionnaires: `prompt_features` declares what the connection
+	 * shows and sends it the open questionnaires it can now show, and `answers` answers one.
+	 * An error code when the frame is refused.
+	 */
+	receive(
+		connection: Connection,
+		from: Answerer,
+		frame: Extract<ClientFrame, { type: "prompt_features" | "answers" }>,
+	): ErrorCode | undefined {
+		if (frame.type === "answers") return this.#answers(from, frame);
+		const before = connection.askSupport;
+		connection.askSupport = frame.ask;
+		const changed =
+			!before ||
+			before.questions !== frame.ask.questions ||
+			before.previews !== frame.ask.previews ||
+			before.note !== frame.ask.note;
+		// A repeated declaration (each `ready` asks for one) does not send what is already shown.
+		if (changed)
+			for (const shown of this.openFor(from.principalId, frame.ask))
+				if (shown.type === "prompt" && shown.prompt.kind === "questionnaire")
+					this.#options.sendOne?.(connection, shown);
+		return undefined;
+	}
+
+	#answers(
+		from: Answerer,
+		frame: Extract<ClientFrame, { type: "answers" }>,
+	): ErrorCode | undefined {
+		const open = this.#open.get(frame.prompt);
+		if (open?.frame.kind !== "questionnaire") return "unknown_prompt";
+		if (open.principal !== from.principalId) return "forbidden";
+		const answer: QuestionnaireAnswer = {
+			answers: frame.answers.map((a) =>
+				a === null || !(a.choices.length > 0 || a.text?.trim())
+					? undefined
+					: {
+							choices: a.choices,
+							...(a.text?.trim() ? { text: a.text.trim() } : {}),
+						},
+			),
+			...(frame.note?.trim() ? { note: frame.note.trim() } : {}),
+		};
+		if (!checkQuestionnaireAnswer({ questions: open.frame.questions }, answer))
+			return "bad_frame";
+		open.settle("answered", answer);
+		return undefined;
+	}
+
+	#ask<A extends OwnerAnswer | QuestionnaireAnswer = OwnerAnswer>(
 		conversation: string,
 		principal: string,
 		frameOf: (id: string) => PromptFrame,
@@ -149,13 +272,18 @@ export class PromptDesk {
 		minTier?: Tier,
 		supersede?: AbortSignal,
 		approvedPrompt?: (prompt: string) => void,
-	): Promise<{ outcome: PromptOutcome; answer?: OwnerAnswer }> {
+	): Promise<{ outcome: PromptOutcome; answer?: A }> {
 		const { send, timeoutMs } = this.#options;
 		if (signal?.aborted || supersede?.aborted)
 			return Promise.resolve({ outcome: "cancelled" });
 		return new Promise((resolve) => {
 			const id = crypto.randomUUID();
 			const frame = frameOf(id);
+			// A questionnaire reaches only the connections that declared support covering it.
+			const sendQuestionnaire = (out: ServerFrame) =>
+				this.#options.sendWhere?.(principal, out, (connection) =>
+					showable(frame, connection.askSupport),
+				);
 			const onAbort = () => settle("cancelled");
 			const timer = setTimeout(() => settle("expired"), timeoutMs);
 			const onSupersede = () =>
@@ -163,7 +291,7 @@ export class PromptDesk {
 				settle("withdrawn", undefined, withdrawalNote(supersede, ""));
 			const settle = (
 				outcome: PromptOutcome,
-				answer?: OwnerAnswer,
+				answer?: OwnerAnswer | QuestionnaireAnswer,
 				note?: string,
 			) => {
 				// Whichever of an answer and a withdrawal comes first settles the prompt.
@@ -173,14 +301,16 @@ export class PromptDesk {
 				clearTimeout(timer);
 				signal?.removeEventListener("abort", onAbort);
 				supersede?.removeEventListener("abort", onSupersede);
-				send(principal, {
+				const closed: ServerFrame = {
 					type: "prompt_closed",
 					conversation,
 					prompt: id,
 					outcome,
 					...(note ? { note } : {}),
-				});
-				resolve(answer ? { outcome, answer } : { outcome });
+				};
+				if (frame.kind === "questionnaire") sendQuestionnaire(closed);
+				else send(principal, closed);
+				resolve(answer ? { outcome, answer: answer as A } : { outcome });
 			};
 			this.#open.set(id, {
 				conversation,
@@ -191,7 +321,13 @@ export class PromptDesk {
 			});
 			signal?.addEventListener("abort", onAbort, { once: true });
 			supersede?.addEventListener("abort", onSupersede, { once: true });
-			send(principal, { type: "prompt", conversation, prompt: frame });
+			const shown: ServerFrame = {
+				type: "prompt",
+				conversation,
+				prompt: frame,
+			};
+			if (frame.kind === "questionnaire") sendQuestionnaire(shown);
+			else send(principal, shown);
 		});
 	}
 }
@@ -308,17 +444,19 @@ function questionFrame(
 	};
 }
 
-/** Whether an answer is one the question allows: offered labels, one unless multi, own text only where allowed. */
-function fits(
-	frame: Extract<PromptFrame, { kind: "ask" }>,
-	answer: OwnerAnswer,
+/**
+ * Whether a connection with `support` may be sent the prompt: every prompt but a questionnaire,
+ * which only a connection that declared support covering its questions and previews may have.
+ */
+function showable(
+	frame: PromptFrame,
+	support: AskSupport | undefined,
 ): boolean {
-	const labels = frame.options.map((option) => option.label);
-	const text = answer.text?.trim();
-	if (!answer.choices.every((choice) => labels.includes(choice))) return false;
-	if (new Set(answer.choices).size !== answer.choices.length) return false;
-	if (!frame.multi && answer.choices.length > 1) return false;
-	if (labels.length === 0) return answer.choices.length === 0 && Boolean(text);
-	if (text && !frame.allowOther) return false;
-	return answer.choices.length > 0 || Boolean(text);
+	if (frame.kind !== "questionnaire") return true;
+	if (!support) return false;
+	if (frame.questions.length > support.questions) return false;
+	const previews = frame.questions.some((q) =>
+		q.options.some((o) => o.preview),
+	);
+	return support.previews || !previews;
 }

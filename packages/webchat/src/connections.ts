@@ -1,4 +1,4 @@
-import type { Logger, RouteSocket, Speaker } from "pi-roundtable";
+import type { AskSupport, Logger, RouteSocket, Speaker } from "pi-roundtable";
 import type { WebIdentity } from "./oidc.ts";
 import type { ServerFrame } from "./protocol.ts";
 
@@ -18,6 +18,11 @@ export interface Connection {
 	 * never asked to run anything.
 	 */
 	clientTools?: readonly string[];
+	/**
+	 * What the client declared with `prompt_features` it can show of a questionnaire; undefined
+	 * until it declares. Such a connection is never sent a `questionnaire` prompt.
+	 */
+	askSupport?: AskSupport;
 	socket?: RouteSocket<Connection>;
 	/** Asks for a fresh token, then closes the socket when the token expires. */
 	timers: ReturnType<typeof setTimeout>[];
@@ -103,9 +108,20 @@ export class Connections {
 			);
 	}
 
-	/** Sends a frame to every connection of a person; none open is not an error. */
-	sendTo(principal: string, frame: ServerFrame): void {
+	/** Sends a frame to every connection of a person, or those `where` accepts; none open is not an error. */
+	sendTo(
+		principal: string,
+		frame: ServerFrame,
+		where?: (connection: Connection) => boolean,
+	): void {
 		for (const connection of this.#byPrincipal.get(principal) ?? [])
-			this.send(connection, frame);
+			if (!where || where(connection)) this.send(connection, frame);
+	}
+
+	/** What each open connection of a person declared it can show of a questionnaire; connections that declared nothing are left out. */
+	askSupports(principal: string): AskSupport[] {
+		return [...(this.#byPrincipal.get(principal) ?? [])].flatMap((c) =>
+			c.askSupport ? [c.askSupport] : [],
+		);
 	}
 }

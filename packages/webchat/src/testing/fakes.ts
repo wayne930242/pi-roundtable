@@ -1,4 +1,5 @@
 import type {
+	AskSupport,
 	ChannelKey,
 	ConversationPort,
 	ConversationRecord,
@@ -209,7 +210,12 @@ export function testChat(overrides: Partial<WebChatDeps> = {}) {
 	};
 	const say = (socket: FakeSocket, frame: Record<string, unknown>) =>
 		chat.message(socket, JSON.stringify(frame));
-	return { chat, registry, stopped, connect, say, attachments };
+	/** Declares what a socket shows of a questionnaire, as a client does after a `ready` that has `prompts`. */
+	const declare = (
+		socket: FakeSocket,
+		ask: AskSupport = { questions: 4, previews: true, note: true },
+	) => say(socket, { type: "prompt_features", ask });
+	return { chat, registry, stopped, connect, say, declare, attachments };
 }
 
 export const speakerOf = (id: string, tier: Tier = "member"): Speaker => ({
