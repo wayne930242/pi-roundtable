@@ -37,6 +37,16 @@ export function cardsEn(ctx: CatalogContext) {
 		cardQuote: (text: string) => `“${text}”`,
 		cardAnswered: (parts: readonly string[]) =>
 			`Answered: ${parts.join(", ").slice(0, 300)}`,
+		cardSubmitLabel: "Submit",
+		cardWriteLabel: "Write answers / note…",
+		cardPreviewsLabel: "Previews",
+		cardQuestionName: (n: number) => `Question ${n}`,
+		cardNoteField: "Note on all answers",
+		cardNothingYet: "Choose or write at least one answer first.",
+		cardQuestionnaireFooter: (answered: number, total: number) =>
+			`${answered} of ${total} answered; submit when you are ready.`,
+		cardUnanswered: "not answered",
+		cardNoteLine: (note: string) => `Note: ${note}`,
 	};
 }
 
@@ -72,5 +82,15 @@ export function cardsZhTW(ctx: CatalogContext): ReturnType<typeof cardsEn> {
 		cardQuote: (text: string) => `「${text}」`,
 		cardAnswered: (parts: readonly string[]) =>
 			`已回答：${parts.join("、").slice(0, 300)}`,
+		cardSubmitLabel: "送出",
+		cardWriteLabel: "寫答案／備註…",
+		cardPreviewsLabel: "預覽",
+		cardQuestionName: (n: number) => `問題 ${n}`,
+		cardNoteField: "給全部答案的備註",
+		cardNothingYet: "請先選或寫至少一個答案。",
+		cardQuestionnaireFooter: (answered: number, total: number) =>
+			`已回答 ${answered}／${total} 題；準備好再送出。`,
+		cardUnanswered: "未回答",
+		cardNoteLine: (note: string) => `備註：${note}`,
 	};
 }
