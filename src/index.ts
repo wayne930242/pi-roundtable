@@ -195,6 +195,7 @@ export type {
 	ApprovalOptions,
 	ApprovedBy,
 	AskOption,
+	AskSupport,
 	LateAnswer,
 	OwnerAnswer,
 	OwnerPrompts,
@@ -202,8 +203,18 @@ export type {
 	PromptScope,
 	Prompts,
 	PromptWait,
+	Questionnaire,
+	QuestionnaireAnswer,
 } from "./core/interactions/prompts.ts";
 export { promptScope, withdrawalNote } from "./core/interactions/prompts.ts";
+export {
+	checkAnswer,
+	checkQuestionnaireAnswer,
+	QUESTIONNAIRE_LIMITS,
+	SINGLE_QUESTION,
+	shapeFor,
+	validateQuestionnaire,
+} from "./core/interactions/questionnaire.ts";
 export type { JudgeModel } from "./core/judging/model-judge.ts";
 export type { LogEntry, LogFn, Logger } from "./core/log.ts";
 export type { ThinkingLevel, ThinkingSetting } from "./core/models.ts";

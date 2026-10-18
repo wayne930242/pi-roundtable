@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- The core model for asking several questions in one `ask_user` call (`pi-roundtable`): `Questionnaire` (one to four `OwnerQuestion`s), `QuestionnaireAnswer` (`answers` aligned with the questions, each undefined when left blank, and an optional `note`), `AskSupport` (`{ questions, previews, note }`, what a surface can show) and `SINGLE_QUESTION` (the 0.19 contract). `AskOption` gains `preview` and `OwnerQuestion` gains `header`. `Prompts` gains two optional members, `asks` and `questionnaire(title, questionnaire, signal?, wait?)`; a `Prompts` without them type-checks and behaves as before. `LateAnswer` gains `{ kind: "questionnaire"; answer: QuestionnaireAnswer }`, which only a `questionnaire` call produces, so a consumer that switches on `kind` exhaustively needs a case for it. `QUESTIONNAIRE_LIMITS` is the one table of limits; `validateQuestionnaire` returns the model-facing reason a set is refused; `checkAnswer` and `checkQuestionnaireAnswer` check an answer against its questions; `shapeFor` (`shapeFor(questionnaire, support)`) degrades a set to what a surface shows, folding previews into the question text as fenced blocks for a surface without previews and dropping headers for one that takes a single question.
+
 ## [0.19.2] - 2026-10-18
 
 ### Changed

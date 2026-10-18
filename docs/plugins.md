@@ -3665,6 +3665,7 @@ Import from the entries listed below; source area files are internal.
 | `ApprovalOptions` | `pi-roundtable` | type |
 | `ApprovedBy` | `pi-roundtable` | type |
 | `AskOption` | `pi-roundtable` | type |
+| `AskSupport` | `pi-roundtable` | type |
 | `AttachmentFailure` | `pi-roundtable` | type |
 | `AttachmentPort` | `pi-roundtable` | type |
 | `AttachmentRef` | `pi-roundtable` | type |
@@ -3793,6 +3794,9 @@ Import from the entries listed below; source area files are internal.
 | `Provisioning` | `pi-roundtable` | type |
 | `ProvisioningRule` | `pi-roundtable` | type |
 | `QueuePort` | `pi-roundtable` | type |
+| `QUESTIONNAIRE_LIMITS` | `pi-roundtable` | value |
+| `Questionnaire` | `pi-roundtable` | type |
+| `QuestionnaireAnswer` | `pi-roundtable` | type |
 | `Recurrence` | `pi-roundtable` | type |
 | `ReferenceImage` | `pi-roundtable` | type |
 | `ResolvedProviders` | `pi-roundtable` | type |
@@ -3825,6 +3829,7 @@ Import from the entries listed below; source area files are internal.
 | `PrecheckTool` | `pi-roundtable` | type |
 | `PRECHECK_SCRIPT_CHARS` | `pi-roundtable` | value |
 | `SKILLS` | `pi-roundtable` | value |
+| `SINGLE_QUESTION` | `pi-roundtable` | value |
 | `Schedule` | `pi-roundtable` | type |
 | `ScheduleChange` | `pi-roundtable` | type |
 | `ScheduleError` | `pi-roundtable` | value |
@@ -3886,6 +3891,7 @@ Import from the entries listed below; source area files are internal.
 | `Weekday` | `pi-roundtable` | type |
 | `attachReplyFile` | `pi-roundtable` | value |
 | `promptScope` | `pi-roundtable` | value |
+| `validateQuestionnaire` | `pi-roundtable` | value |
 | `withReplyFiles` | `pi-roundtable` | value |
 | `withdrawalNote` | `pi-roundtable` | value |
 | `prepareImageBytes` | `pi-roundtable/kit` | value |
@@ -3895,12 +3901,15 @@ Import from the entries listed below; source area files are internal.
 | `SquarePngOptions` | `pi-roundtable/kit` | type |
 | `scrubDiagnostic` | `pi-roundtable/kit` | value |
 | `channelKey` | `pi-roundtable` | value |
+| `checkAnswer` | `pi-roundtable` | value |
+| `checkQuestionnaireAnswer` | `pi-roundtable` | value |
 | `definePlugin` | `pi-roundtable` | value |
 | `defineRoundtable` | `pi-roundtable` | value |
 | `defineTool` | `pi-roundtable` | value |
 | `migrateDatabase` | `pi-roundtable` | value |
 | `parseChannelKey` | `pi-roundtable` | value |
 | `serviceKey` | `pi-roundtable` | value |
+| `shapeFor` | `pi-roundtable` | value |
 | `FakeDiscord` | `pi-roundtable/testing` | type |
 | `FakeThreadHost` | `pi-roundtable/testing` | type |
 | `OWNER_SPEAKER` | `pi-roundtable/testing` | value |

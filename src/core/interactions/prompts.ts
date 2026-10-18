@@ -1,6 +1,22 @@
 import type { ConversationVisibility } from "../conversations/conversation-registry.ts";
 import type { TurnRequest } from "../domain/ports.ts";
 import type { Speaker, Tier } from "../speakers.ts";
+import type {
+	AskSupport,
+	OwnerAnswer,
+	OwnerQuestion,
+	Questionnaire,
+	QuestionnaireAnswer,
+} from "./questionnaire.ts";
+
+export type {
+	AskOption,
+	AskSupport,
+	OwnerAnswer,
+	OwnerQuestion,
+	Questionnaire,
+	QuestionnaireAnswer,
+} from "./questionnaire.ts";
 
 /**
  * How a prompt ended: answered yes or no; `expired` when the card was shown and no one answered
@@ -135,6 +151,7 @@ export type LateAnswer = { by: string } & (
 			prompt?: string;
 	  }
 	| { kind: "question"; answer: OwnerAnswer }
+	| { kind: "questionnaire"; answer: QuestionnaireAnswer }
 );
 
 /**
@@ -146,28 +163,6 @@ export type LateAnswer = { by: string } & (
  */
 export interface PromptWait {
 	late(answer: LateAnswer): string | undefined;
-}
-
-export interface AskOption {
-	label: string;
-	description?: string;
-}
-
-export interface OwnerQuestion {
-	question: string;
-	/** Up to 25; none means a free-text answer. */
-	options: readonly AskOption[];
-	/** More than one option may be chosen. */
-	multi: boolean;
-	/** They may write an answer of their own besides the options. */
-	allowOther: boolean;
-}
-
-export interface OwnerAnswer {
-	/** The chosen options' labels, in the order they were offered. */
-	choices: string[];
-	/** What they wrote themselves, if anything. */
-	text?: string;
 }
 
 /**
@@ -235,6 +230,22 @@ export interface Prompts {
 		signal?: AbortSignal,
 		wait?: PromptWait,
 	): Promise<OwnerAnswer | "pending" | undefined>;
+	/**
+	 * What `questionnaire` can show; absent means the 0.19 contract (one question, no previews,
+	 * no note), and `ask` is the only way to ask.
+	 */
+	asks?: AskSupport;
+	/**
+	 * Asks several questions on one card, shaped for `asks` (see `shapeFor`); the answer is
+	 * index-aligned with the questions. Results are as for `ask`; a late answer is a
+	 * `questionnaire` `LateAnswer`. Present only on a surface that declares `asks`.
+	 */
+	questionnaire?(
+		title: string,
+		questionnaire: Questionnaire,
+		signal?: AbortSignal,
+		wait?: PromptWait,
+	): Promise<QuestionnaireAnswer | "pending" | undefined>;
 }
 
 /** @deprecated Since 0.9 the prompts are `Prompts`, answered by those their `PromptScope` names; this name goes away in 1.0. */
