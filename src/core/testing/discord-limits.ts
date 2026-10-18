@@ -46,14 +46,22 @@ function count(node: Json): number {
 
 function textOf(node: Json): number {
 	return (
-		(node.type === TEXT_DISPLAY ? Array.from(node.content ?? "").length : 0) +
+		(node.type === TEXT_DISPLAY
+			? Math.max(
+					Array.from(node.content ?? "").length,
+					(node.content ?? "").length,
+				)
+			: 0) +
 		(node.components ?? []).reduce((sum, child) => sum + textOf(child), 0)
 	);
 }
 
 function check(node: Json, found: string[]): void {
 	const over = (what: string, value: string | undefined, max: number) => {
-		if (value !== undefined && Array.from(value).length > max)
+		if (
+			value !== undefined &&
+			Math.max(Array.from(value).length, value.length) > max
+		)
 			found.push(`${what} is over ${max} characters`);
 	};
 	over("custom_id", node.custom_id, L.customId);
@@ -113,7 +121,10 @@ export function modalViolations(input: unknown): string[] {
 	const found: string[] = [];
 	if ((modal.components?.length ?? 0) > L.modalComponents)
 		found.push(`a modal has ${modal.components?.length} components`);
-	if (Array.from(modal.title ?? "").length > L.modalTitle)
+	if (
+		Math.max(Array.from(modal.title ?? "").length, (modal.title ?? "").length) >
+		L.modalTitle
+	)
 		found.push(`the modal title is over ${L.modalTitle} characters`);
 	for (const child of modal.components ?? []) check(child, found);
 	return found;

@@ -70,8 +70,9 @@ export async function showPreviews(
 	card: OpenCard,
 	interaction: Interaction,
 ): Promise<void> {
-	if (!interaction.isButton() || !card.form) return;
-	const [first, ...rest] = previewReplies(card.form.questionnaire);
+	const source = card.form?.questionnaire ?? card.previews;
+	if (!interaction.isButton() || !source) return;
+	const [first, ...rest] = previewReplies(source);
 	if (first) await interaction.reply(first);
 	for (const page of rest) await interaction.followUp(page);
 }
@@ -100,9 +101,9 @@ const endedFooter = (card: OpenCard) => {
 };
 
 /**
- * A menu pick or Submit on a questionnaire card. A menu cannot answer the three-second limit
- * after an identity lookup, so the press is deferred first; the audience is checked then, and a
- * refusal changes nothing.
+ * A menu pick, Submit or the submitted form of a questionnaire card. The press is deferred first
+ * (the audience lookup may take a while), then the audience and the card are checked: a refusal
+ * or a closed card changes nothing, and a refused pick re-draws the card so their menu resets.
  */
 export async function answerDeferred(
 	card: OpenCard,
@@ -112,30 +113,46 @@ export async function answerDeferred(
 	by: Answerer,
 ): Promise<void> {
 	const form = card.form;
-	if (!form || !(interaction.isStringSelectMenu() || interaction.isButton()))
-		return;
+	if (!form) return;
+	const picks = interaction.isStringSelectMenu() && action === "qpick";
+	const submits = interaction.isButton() && action === "submit";
+	const writes = interaction.isModalSubmit() && action === "qtext";
+	if (!picks && !submits && !writes) return;
 	await interaction.deferUpdate();
+	const fromMessage =
+		!interaction.isModalSubmit() || interaction.isFromMessage();
 	if (!(await card.audience.allows(by.user))) {
 		await interaction.followUp(ephemeral(card.audience.refusal));
+		if (picks && card.isOpen())
+			await interaction.editReply(card.view("", false));
+		return;
+	}
+	// Stopped, withdrawn or answered meanwhile: the closed card must not be drawn open again.
+	if (!card.isOpen()) {
+		await interaction.followUp(ephemeral(messages().cardInactive));
 		return;
 	}
 	const { questions } = form.questionnaire;
-	let answer: QuestionnaireAnswer;
-	if (interaction.isStringSelectMenu() && action === "qpick") {
+	if (picks) {
 		const question = questions[index];
 		if (!question) return;
 		form.draft.choices[index] = question.options.flatMap((option, n) =>
 			interaction.values.includes(String(n)) ? [option.label] : [],
 		);
-		if (!form.immediate) {
-			card.touch();
-			await interaction.editReply(card.view("", false));
-			return;
-		}
-		answer = answerOf(form.draft);
-	} else if (interaction.isButton() && action === "submit") {
-		answer = answerOf(form.draft);
-	} else return;
+	} else if (writes) {
+		const { texts, note } = formFields(form, (field) =>
+			interaction.fields.getTextInputValue(field),
+		);
+		for (const [i, value] of texts)
+			form.draft.texts[i] = value.trim() || undefined;
+		form.draft.note = note.trim() || undefined;
+	}
+	if (!submits) {
+		card.touch();
+		if (fromMessage) await interaction.editReply(card.view("", false));
+		return;
+	}
+	const answer = answerOf(form.draft);
 	if (!checkQuestionnaireAnswer(form.questionnaire, answer)) {
 		await interaction.followUp(ephemeral(messages().cardNothingYet));
 		return;
@@ -147,42 +164,17 @@ export async function answerDeferred(
 	await interaction.editReply(card.view(endedFooter(card)));
 }
 
-/** "Write answers / note…" and its form, after the audience was checked. */
+/** "Write answers / note…": opens the form, which a modal cannot defer; the audience was checked. */
 export async function answerForm(
 	card: OpenCard,
 	id: string,
 	action: string,
 	interaction: Interaction,
-	by: Answerer,
 ): Promise<void> {
-	const form = card.form;
-	if (!form) return;
-	if (interaction.isButton() && action === "notes") {
-		await interaction.showModal(questionnaireModal(id, form));
+	if (!card.form || !interaction.isButton() || action !== "notes") return;
+	if (!card.isOpen()) {
+		await interaction.reply(ephemeral(messages().cardInactive));
 		return;
 	}
-	if (!interaction.isModalSubmit() || action !== "qtext") return;
-	const { texts, note } = formFields(form, (field) =>
-		interaction.fields.getTextInputValue(field),
-	);
-	for (const [i, value] of texts)
-		form.draft.texts[i] = value.trim() || undefined;
-	form.draft.note = note.trim() || undefined;
-	const fromMessage = interaction.isFromMessage();
-	if (form.immediate) {
-		const answer = answerOf(form.draft);
-		if (!checkQuestionnaireAnswer(form.questionnaire, answer)) {
-			await interaction.reply(ephemeral(messages().cardNothingYet));
-			return;
-		}
-		const accepted = finish(card, answer, by);
-		if (!accepted) await interaction.reply(ephemeral(messages().cardInactive));
-		else if (fromMessage)
-			await interaction.update(card.view(endedFooter(card)));
-		else await interaction.deferUpdate();
-		return;
-	}
-	card.touch();
-	if (fromMessage) await interaction.update(card.view("", false));
-	else await interaction.deferUpdate();
+	await interaction.showModal(questionnaireModal(id, card.form));
 }

@@ -15,6 +15,7 @@ import {
 	withdrawalNote,
 } from "../interactions/prompts.ts";
 import { type ownerPanel, plain } from "./owner-panel.ts";
+import { clip } from "./utf16.ts";
 
 /** The prefix of every card control's custom id. */
 export const CARD_PREFIX = "roundtable:card:";
@@ -46,10 +47,10 @@ export function askRows(
 	const roomForOther = question.allowOther && question.options.length < 25;
 	const options: { label: string; value: string; description?: string }[] =
 		question.options.map((option, i) => ({
-			label: option.label.slice(0, 100),
+			label: clip(option.label, 100),
 			value: String(i),
 			...(option.description
-				? { description: option.description.slice(0, 100) }
+				? { description: clip(option.description, 100) }
 				: {}),
 		}));
 	if (roomForOther)
@@ -82,6 +83,17 @@ export function askRows(
 				.setDisabled(disabled),
 		),
 	];
+}
+
+/** The Previews button of a single-question card: it shows the options' previews and answers nothing. */
+export function previewsRow(id: string, disabled: boolean) {
+	return new ActionRowBuilder<ButtonBuilder>().addComponents(
+		new ButtonBuilder()
+			.setCustomId(`${CARD_PREFIX}${id}:previews`)
+			.setLabel(messages().cardPreviewsLabel)
+			.setStyle(ButtonStyle.Secondary)
+			.setDisabled(disabled),
+	);
 }
 
 export function answerModal(id: string): ModalBuilder {

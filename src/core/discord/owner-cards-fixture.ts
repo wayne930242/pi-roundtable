@@ -46,6 +46,8 @@ export function press(
 		text?: string;
 		/** A form's fields by custom id; when given, a field not named reads empty. */
 		fields?: Record<string, string>;
+		/** Holds `deferUpdate` until it resolves, so the card can change while the press is in flight. */
+		gate?: Promise<void>;
 	} = {},
 ) {
 	const replies: string[] = [];
@@ -91,6 +93,7 @@ export function press(
 			modals.push(modal);
 		},
 		deferUpdate: async () => {
+			await options.gate;
 			deferred.push("update");
 		},
 		editReply: async (payload: CardPayload) => {

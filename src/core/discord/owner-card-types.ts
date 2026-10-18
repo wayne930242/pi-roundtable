@@ -4,6 +4,7 @@ import type {
 	OwnerQuestion,
 	PromptWait,
 } from "../interactions/prompts.ts";
+import type { Questionnaire } from "../interactions/questionnaire.ts";
 import type { Audience } from "./card-audience.ts";
 import type { DiscordUser } from "./discord-owners.ts";
 import type { QuestionnaireForm } from "./owner-card-questionnaire.ts";
@@ -63,6 +64,8 @@ export interface OpenCard {
 	view(footer: string, disabled?: boolean): CardPayload;
 	/** Restarts the grace period of a turn that waits on the card; a draft edit is someone at work on it. */
 	touch(): void;
+	/** Whether the card is still open: not answered, stopped or withdrawn. */
+	isOpen(): boolean;
 	/**
 	 * Ends the card with its answer; the answering interaction shows the outcome. A card whose
 	 * turn stopped waiting starts a turn with the answer instead. False when the card had ended
@@ -72,6 +75,8 @@ export interface OpenCard {
 	question?: OwnerQuestion;
 	/** A questionnaire card's questions and its shared draft. */
 	form?: QuestionnaireForm;
+	/** The questions whose previews the Previews button shows, on a card that is not a questionnaire card. */
+	previews?: Questionnaire;
 	/** Options chosen together with "Other…", kept while its form is open. */
 	picked?: string[];
 	/** Posted in a thread, so it leads with the mention of who may answer. */
@@ -91,6 +96,7 @@ export interface CardSpec<T> {
 	supersede?: AbortSignal;
 	question?: OwnerQuestion;
 	form?: QuestionnaireForm;
+	previews?: Questionnaire;
 	/** Draws the card itself, as a questionnaire does; without it the card is the title, sections and rows. */
 	build?(id: string, footer: string, disabled: boolean): CardPayload;
 	rows?(id: string, disabled: boolean): Rows;

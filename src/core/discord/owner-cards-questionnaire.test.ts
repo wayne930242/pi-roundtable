@@ -168,7 +168,7 @@ describe("the Discord questionnaire card", () => {
 			fields: { t0: " on a rainy day ", note: "thanks" },
 		});
 		await cards.handle(form.interaction);
-		expect(json(form.updates[0])).toContain(
+		expect(json(form.edited[0])).toContain(
 			messages().cardQuestionnaireFooter(2, 2),
 		);
 		const submit = press("button", custom(id, "submit"));
@@ -223,7 +223,9 @@ describe("the Discord questionnaire card", () => {
 		});
 		await cards.handle(stranger.interaction);
 		expect(stranger.followUps[0]?.content).toBe(messages().cardOwnerOnly);
-		expect(stranger.edited).toEqual([]);
+		// Their own menu is reset by re-drawing the card, which still holds no pick.
+		expect(stranger.edited).toHaveLength(1);
+		expect(json(stranger.edited[0])).not.toContain('"default":true');
 		const noSubmit = press("button", custom(id, "submit"), { user: "1" });
 		await cards.handle(noSubmit.interaction);
 		expect(noSubmit.followUps[0]?.content).toBe(messages().cardOwnerOnly);
@@ -290,7 +292,7 @@ describe("the Discord questionnaire card", () => {
 		expect(open.replied[0]?.files).toHaveLength(1);
 	});
 
-	test("one question with previews answers on the first pick, with no Submit", async () => {
+	test("one question with previews is the single-question card plus a Previews button", async () => {
 		const { fake, cards, ask } = setup();
 		const answer = ask("Questions", {
 			questions: [
@@ -304,10 +306,15 @@ describe("the Discord questionnaire card", () => {
 		await tick();
 		const id = fake.cardId();
 		expect(json(fake.sent[0])).not.toContain(":submit");
-		const pick = press("select", custom(id, "qpick:0"), { values: ["1"] });
+		expect(json(fake.sent[0])).not.toContain(":notes");
+		expect(json(fake.sent[0])).toContain(custom(id, "previews"));
+		const preview = press("button", custom(id, "previews"), { user: "1" });
+		await cards.handle(preview.interaction);
+		expect(JSON.stringify(preview.replied)).toContain("P");
+		const pick = press("select", custom(id, "pick"), { values: ["1"] });
 		await cards.handle(pick.interaction);
 		expect(await answer).toEqual({ answers: [{ choices: ["Sunday"] }] });
-		expect(json(pick.edited[0])).toContain('"disabled":true');
+		expect(json(pick.updates[0])).toContain('"disabled":true');
 	});
 
 	test("a draft edit restarts the grace period of a turn that waits on the card", async () => {
@@ -456,7 +463,7 @@ describe("the worst case fits Discord's limits", () => {
 			fields: { t0: full, t1: full, t2: full, t3: full, note: full },
 		});
 		await cards.handle(form.interaction);
-		expect(messageViolations(all(form.updates[0]))).toEqual([]);
+		expect(messageViolations(all(form.edited[0]))).toEqual([]);
 		// With the filled draft the form opens prefilled, still within its limits.
 		const again = press("button", custom(id, "notes"));
 		await cards.handle(again.interaction);

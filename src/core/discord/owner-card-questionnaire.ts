@@ -22,6 +22,7 @@ import {
 import { CARD_PREFIX } from "./owner-card-rows.ts";
 import type { CardPayload } from "./owner-card-types.ts";
 import { ephemeralPanel, ownerPanels, plain } from "./owner-panel.ts";
+import { clip } from "./utf16.ts";
 
 /** What has been chosen and written on a questionnaire card so far; one per card, shared by all who may answer. */
 export interface Draft {
@@ -34,8 +35,6 @@ export interface Draft {
 export interface QuestionnaireForm {
 	questionnaire: Questionnaire;
 	draft: Draft;
-	/** One question: a choice or a written answer ends the card at once, with no Submit. */
-	immediate: boolean;
 }
 
 export const newDraft = (questions: number): Draft => ({
@@ -43,10 +42,7 @@ export const newDraft = (questions: number): Draft => ({
 	texts: Array.from({ length: questions }, () => undefined),
 });
 
-const cut = (text: string, max: number) => {
-	const chars = Array.from(text);
-	return chars.length <= max ? text : `${chars.slice(0, max - 1).join("")}…`;
-};
+const cut = (text: string, max: number) => clip(text, max, true);
 
 const text = (content: string) => new TextDisplayBuilder().setContent(content);
 
@@ -105,14 +101,16 @@ function select(
 					? messages().cardPickManyPlaceholder
 					: messages().cardPickOnePlaceholder,
 			)
-			.setMinValues(form.immediate ? 1 : 0)
+			.setMinValues(0)
 			.setMaxValues(question.multi ? question.options.length : 1)
 			.addOptions(
 				question.options.map((option, n) => ({
-					label: option.label,
+					label: clip(option.label, 100),
 					value: String(n),
 					default: chosen.includes(option.label),
-					...(option.description ? { description: option.description } : {}),
+					...(option.description
+						? { description: clip(option.description, 100) }
+						: {}),
 				})),
 			)
 			.setDisabled(disabled),
@@ -128,18 +126,10 @@ function buttons(id: string, form: QuestionnaireForm, disabled: boolean) {
 			.setLabel(label)
 			.setStyle(style)
 			.setDisabled(disabled);
-	if (!form.immediate)
-		row.addComponents(
-			button("submit", messages().cardSubmitLabel, ButtonStyle.Primary),
-		);
-	if (!form.immediate || questions.some(takesText))
-		row.addComponents(
-			button(
-				"notes",
-				form.immediate ? messages().cardAnswerLabel : messages().cardWriteLabel,
-				ButtonStyle.Secondary,
-			),
-		);
+	row.addComponents(
+		button("submit", messages().cardSubmitLabel, ButtonStyle.Primary),
+		button("notes", messages().cardWriteLabel, ButtonStyle.Secondary),
+	);
 	if (questions.some((q) => q.options.some((o) => o.preview !== undefined)))
 		row.addComponents(
 			button("previews", messages().cardPreviewsLabel, ButtonStyle.Secondary),
@@ -186,12 +176,10 @@ export function questionnaireCard(args: {
 	container.addActionRowComponents(...buttons(id, form, disabled));
 	const footer = disabled
 		? args.footer
-		: form.immediate
-			? messages().cardQuestionFooter
-			: messages().cardQuestionnaireFooter(
-					answeredCount(draft),
-					questions.length,
-				);
+		: messages().cardQuestionnaireFooter(
+				answeredCount(draft),
+				questions.length,
+			);
 	return {
 		components: [container, ...(footer ? [text(`-# ${footer}`)] : [])],
 		flags: MessageFlags.IsComponentsV2,
@@ -277,7 +265,7 @@ export function previewReplies(questionnaire: Questionnaire) {
 	if (raw.includes("```"))
 		return [
 			{
-				content: messages().cardCopyFile,
+				content: messages().cardPreviewsFile,
 				files: [
 					new AttachmentBuilder(Buffer.from(raw, "utf8"), {
 						name: "previews.md",

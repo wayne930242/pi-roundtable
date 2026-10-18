@@ -37,6 +37,8 @@ export function cardsEn(ctx: CatalogContext) {
 		cardQuote: (text: string) => `“${text}”`,
 		cardAnswered: (parts: readonly string[]) =>
 			`Answered: ${parts.join(", ").slice(0, 300)}`,
+		cardPreviewsFile:
+			"The previews contain code blocks, so they are attached as a file.",
 		cardSubmitLabel: "Submit",
 		cardWriteLabel: "Write answers / note…",
 		cardPreviewsLabel: "Previews",
@@ -82,6 +84,7 @@ export function cardsZhTW(ctx: CatalogContext): ReturnType<typeof cardsEn> {
 		cardQuote: (text: string) => `「${text}」`,
 		cardAnswered: (parts: readonly string[]) =>
 			`已回答：${parts.join("、").slice(0, 300)}`,
+		cardPreviewsFile: "預覽裡有程式碼區塊，所以用檔案附上。",
 		cardSubmitLabel: "送出",
 		cardWriteLabel: "寫答案／備註…",
 		cardPreviewsLabel: "預覽",

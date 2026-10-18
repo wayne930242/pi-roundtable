@@ -11,7 +11,7 @@ import type {
 import type { CardAudiences } from "./card-audience.ts";
 import type { QuestionnaireForm } from "./owner-card-questionnaire.ts";
 import { newDraft, questionnaireCard } from "./owner-card-questionnaire.ts";
-import { askRows } from "./owner-card-rows.ts";
+import { askRows, previewsRow } from "./owner-card-rows.ts";
 import type { PostCard } from "./owner-card-types.ts";
 
 /** What the Discord card shows of a questionnaire: four questions, previews, and a note. */
@@ -65,11 +65,47 @@ export function askPrompts(args: {
 		questionnaire: async (title, questionnaire, signal, wait) => {
 			const audience = await audiences.question(scope);
 			if (!audience) return undefined;
-			const n = questionnaire.questions.length;
+			const [only] = questionnaire.questions;
+			if (only && questionnaire.questions.length === 1) {
+				// One question is the 0.19 card, answered by one click, with a Previews button.
+				const answer = await post<OwnerAnswer | "pending" | undefined>(
+					channelId,
+					signal,
+					undefined,
+					undefined,
+					{
+						audience,
+						...(wait
+							? {
+									wait: {
+										pending: "pending",
+										late: (value, by) =>
+											wait.late({
+												kind: "questionnaire",
+												answer: { answers: [value as OwnerAnswer] },
+												by: by.user.name,
+											}),
+									},
+								}
+							: {}),
+						title,
+						sections: [only.question],
+						question: only,
+						previews: questionnaire,
+						rows: (id, disabled) => [
+							...askRows(id, only, disabled),
+							previewsRow(id, disabled),
+						],
+						footer: messages().cardQuestionFooter,
+					},
+				);
+				return answer === "pending" || answer === undefined
+					? answer
+					: { answers: [answer] };
+			}
 			const form: QuestionnaireForm = {
 				questionnaire,
-				draft: newDraft(n),
-				immediate: n === 1,
+				draft: newDraft(questionnaire.questions.length),
 			};
 			return post<QuestionnaireAnswer | "pending" | undefined>(
 				channelId,

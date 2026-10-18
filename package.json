@@ -26,6 +26,7 @@
 		"src",
 		"!src/**/*.test.ts",
 		"!src/core/testing/file-size.ts",
+		"!src/core/testing/discord-limits.ts",
 		"!src/core/testing/prompt-capture*.ts",
 		"!src/core/testing/discord-api-emulator*.ts",
 		"!src/core/discord/poster/poster-contract*.ts",

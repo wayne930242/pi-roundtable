@@ -262,6 +262,7 @@ export class OwnerCards implements InteractionModule {
 			card.supersede?.addEventListener("abort", withdraw, { once: true });
 			const open: OpenCard = {
 				view,
+				isOpen: () => this.#open.has(id),
 				touch: () => {
 					if (late || !this.#open.has(id)) return;
 					clearTimeout(timer);
@@ -293,6 +294,7 @@ export class OwnerCards implements InteractionModule {
 				},
 				...(card.question ? { question: card.question } : {}),
 				...(card.form ? { form: card.form } : {}),
+				...(card.previews ? { previews: card.previews } : {}),
 			};
 			this.#open.set(id, open);
 			this.#options
@@ -376,7 +378,10 @@ export class OwnerCards implements InteractionModule {
 			isDirect: !interaction.inGuild(),
 		};
 		// A menu pick or Submit is deferred before the audience is looked up, which may take a while.
-		if (card.form && (action === "qpick" || action === "submit")) {
+		if (
+			card.form &&
+			(action === "qpick" || action === "submit" || action === "qtext")
+		) {
 			await answerDeferred(card, action, Number(index), interaction, by);
 			return true;
 		}
@@ -415,7 +420,7 @@ export class OwnerCards implements InteractionModule {
 			);
 			return true;
 		}
-		if (card.form) await answerForm(card, id, action, interaction, by);
+		if (card.form) await answerForm(card, id, action, interaction);
 		else await answerSingle(card, id, action, interaction, by);
 		return true;
 	}
