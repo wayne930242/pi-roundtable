@@ -36,6 +36,7 @@ Docker Desktop on macOS is not an execution substitute because it does not share
 
 These are owner actions, not part of the migration.
 Use Node 24 and npm 11.15 or newer, enable account 2FA, and log in with browser/security-key authentication using `npm login`.
+Run `npm login --auth-type=web && npm whoami` before a manual publication: a logged-out `npm publish` fails with a misleading `E404 PUT Not found`.
 Core `0.7.0` and its original `v0.7.0` tag already exist; this migration leaves that release commit unchanged.
 Drawing, coding, and web `0.7.0` are already published and trust this repository's `publish.yml`.
 The core's existing trust stays on `publish.yml`.
@@ -110,12 +111,15 @@ Until that next tag publishes, npm's MCP `0.4.1` does not support core 0.7.x; th
 
 ## Subsequent lockstep releases
 
+Before choosing the version, run `git fetch --tags origin` and compare the local tags with `git ls-remote --tags origin` and `npm view pi-roundtable dist-tags`: a checkout behind origin once picked versions that were already published.
 Update the root version and every workspace version together.
 Update every workspace's core development dependency to that version and its peer range to the matching minor, for example `>=0.8.0 <0.9.0` for `0.8.0`.
 Update changelogs, regenerate `bun.lock`, and run the clean-install checks and packing checks.
+The version bump changes the lockfile's workspace entries, so commit `bun.lock` with the bump and confirm `bun install --frozen-lockfile` passes locally before pushing.
 Run `bun scripts/check-release.ts v0.8.0` before committing: it refuses mismatched versions, core peer ranges, development pins, and repository directories.
 Run `bun scripts/preflight-release.ts v0.8.0`: it packs every workspace, checks required files (including the web HTML/JS/CSS, drawing fonts, and sandbox worker sources), and requires each package to exist on npm before the core can publish.
 Use `--local` only for CI or pre-first-publish checks, where a new package need not yet exist on npm.
+Run preflight with the npm that `publish.yml` installs (`npm@latest`), for example from `npm install --prefix <tmp> npm@latest` placed first on `PATH`: npm 12 changed the JSON shape of `npm pack --json` and `npm view --json`, and an older local npm does not exercise it.
 For `v0.8.0`, pi-roundtable-webchat needs [its first publication](#webchats-first-publication) first.
 Verify every workspace's trusted publisher is configured against this repository's `publish.yml` before pushing a release tag; package existence alone does not prove OIDC authorization.
 Commit and push, wait for CI for that exact commit, then have the owner push the single `v0.8.0` tag.
