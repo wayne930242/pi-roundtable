@@ -5,30 +5,24 @@ import type { ChannelKey } from "../domain/conversation.ts";
 import { messages } from "../i18n/index.ts";
 import type {
 	Approval,
-	OwnerAnswer,
-	OwnerQuestion,
 	PromptScope,
 	Prompts,
-	PromptWait,
 } from "../interactions/prompts.ts";
 import type { Logger } from "../log.ts";
-import {
-	type Audience,
-	type CardAudienceOptions,
-	CardAudiences,
-} from "./card-audience.ts";
+import { type CardAudienceOptions, CardAudiences } from "./card-audience.ts";
 import { CardCopies, copyReply, offeredCopy } from "./card-copies.ts";
 import { DiscordOwners, discordUser } from "./discord-owners.ts";
 import type { InteractionModule } from "./interaction-module.ts";
 import {
-	answeredLine,
-	answerModal,
+	answerDeferred,
+	answerForm,
+	answerSingle,
+	showPreviews,
+} from "./owner-card-answers.ts";
+import { askPrompts } from "./owner-card-asks.ts";
+import {
 	approvalRows,
-	askRows,
 	CARD_PREFIX,
-	OTHER,
-	type Rows,
-	TEXT_FIELD,
 	withdrawnFooter,
 } from "./owner-card-rows.ts";
 import type {
@@ -36,10 +30,11 @@ import type {
 	CardChannel,
 	CardMessage,
 	CardPayload,
+	CardSpec,
 	LateTurn,
 	OpenCard,
 } from "./owner-card-types.ts";
-import { ownerPanel, type PanelContent } from "./owner-panel.ts";
+import { ownerPanel } from "./owner-panel.ts";
 
 export type {
 	CardChannel,
@@ -47,6 +42,7 @@ export type {
 	LateTurn,
 } from "./owner-card-types.ts";
 export { CARD_PREFIX };
+
 /** How long a turn that can be resumed waits on its card before it goes on without the answer. */
 export const CARD_GRACE_MS = 2 * 60_000;
 
@@ -120,6 +116,12 @@ export class OwnerCards implements InteractionModule {
 	prompts(channel: ChannelKey, scope?: PromptScope): Prompts | undefined {
 		const channelId = parseChannelKey(channel).id;
 		return {
+			...askPrompts({
+				channelId,
+				scope,
+				audiences: this.#audiences,
+				post: (c, s, u, x, card) => this.#post(c, s, u, x, card),
+			}),
 			confirm: async (
 				title,
 				message,
@@ -177,37 +179,6 @@ export class OwnerCards implements InteractionModule {
 					},
 				);
 			},
-			ask: async (title, question, signal, wait) => {
-				const audience = await this.#audiences.question(scope);
-				if (!audience) return undefined;
-				return this.#post<OwnerAnswer | "pending" | undefined>(
-					channelId,
-					signal,
-					undefined,
-					undefined,
-					{
-						audience,
-						...(wait
-							? {
-									wait: {
-										pending: "pending",
-										late: (value, by) =>
-											wait.late({
-												kind: "question",
-												answer: value as OwnerAnswer,
-												by: by.user.name,
-											}),
-									},
-								}
-							: {}),
-						title,
-						sections: [question.question],
-						question,
-						rows: (id, disabled) => askRows(id, question, disabled),
-						footer: messages().cardQuestionFooter,
-					},
-				);
-			},
 		};
 	}
 
@@ -220,28 +191,7 @@ export class OwnerCards implements InteractionModule {
 		signal: AbortSignal | undefined,
 		unposted: T,
 		cancelled: T,
-		card: {
-			audience: Audience;
-			title: string;
-			sections: string[];
-			/** The text behind the card's copy button, kept under the card's id. */
-			copy?: string;
-			/** Closes the card, also after its turn stopped waiting, when it aborts; see `ApprovalOptions.supersede`. */
-			supersede?: AbortSignal;
-			question?: OwnerQuestion;
-			rows(id: string, disabled: boolean): Rows;
-			footer: string;
-			wait?: {
-				pending: T;
-				late(
-					value: unknown,
-					by: Answerer,
-					prompt: string,
-				): ReturnType<PromptWait["late"]>;
-			};
-			/** Hears who approved the card, before it resolves approved in its turn. */
-			approved?(by: Answerer, prompt: string): void;
-		},
+		card: CardSpec<T>,
 	): Promise<T> {
 		const { logger, graceMs = CARD_GRACE_MS, resume } = this.#options;
 		if (signal?.aborted || card.supersede?.aborted)
@@ -279,12 +229,13 @@ export class OwnerCards implements InteractionModule {
 			};
 			const view = (footer: string, disabled = true) =>
 				this.#panel(
-					{
-						title: card.title,
-						sections,
-						rows: card.rows(id, disabled),
-						footer,
-					},
+					card.build?.(id, footer, disabled) ??
+						ownerPanel({
+							title: card.title,
+							sections,
+							rows: card.rows?.(id, disabled) ?? [],
+							footer,
+						}),
 					open.mention === true,
 					card.audience.mentions,
 				);
@@ -297,20 +248,26 @@ export class OwnerCards implements InteractionModule {
 				close(withdrawnFooter(card.supersede));
 				if (!late) resolve(cancelled);
 			};
-			const timer = wait
-				? setTimeout(() => {
-						if (!this.#open.has(id)) return;
-						late = true;
-						signal?.removeEventListener("abort", abort);
-						resolve(wait.pending);
-					}, graceMs)
-				: undefined;
+			const arm = () =>
+				wait
+					? setTimeout(() => {
+							if (!this.#open.has(id)) return;
+							late = true;
+							signal?.removeEventListener("abort", abort);
+							resolve(wait.pending);
+						}, graceMs)
+					: undefined;
+			let timer = arm();
 			signal?.addEventListener("abort", abort, { once: true });
 			card.supersede?.addEventListener("abort", withdraw, { once: true });
 			const open: OpenCard = {
-				title: card.title,
-				sections,
-				rows: (disabled) => card.rows(id, disabled),
+				view,
+				isOpen: () => this.#open.has(id),
+				touch: () => {
+					if (late || !this.#open.has(id)) return;
+					clearTimeout(timer);
+					timer = arm();
+				},
 				audience: card.audience,
 				end: (value, by) => {
 					// Withdrawn or answered already: this answer changes nothing.
@@ -336,6 +293,8 @@ export class OwnerCards implements InteractionModule {
 					return true;
 				},
 				...(card.question ? { question: card.question } : {}),
+				...(card.form ? { form: card.form } : {}),
+				...(card.previews ? { previews: card.previews } : {}),
 			};
 			this.#open.set(id, open);
 			this.#options
@@ -358,11 +317,10 @@ export class OwnerCards implements InteractionModule {
 
 	/** The card's panel; in a thread it leads with the mention of who may answer. */
 	#panel(
-		content: PanelContent,
+		panel: CardPayload,
 		mention: boolean,
 		userIds: readonly string[],
 	): CardPayload {
-		const panel = ownerPanel(content);
 		if (!mention) return panel;
 		return {
 			...panel,
@@ -386,7 +344,7 @@ export class OwnerCards implements InteractionModule {
 			!interaction.customId.startsWith(CARD_PREFIX)
 		)
 			return false;
-		const [id = "", action = ""] = interaction.customId
+		const [id = "", action = "", index = ""] = interaction.customId
 			.slice(CARD_PREFIX.length)
 			.split(":");
 		// Copying answers nothing: anyone who sees the card may copy, as often as they like, also
@@ -408,6 +366,10 @@ export class OwnerCards implements InteractionModule {
 			});
 			return true;
 		}
+		if (action === "previews") {
+			await showPreviews(card, interaction);
+			return true;
+		}
 		const user = discordUser(interaction);
 		const by: Answerer = {
 			user,
@@ -415,6 +377,14 @@ export class OwnerCards implements InteractionModule {
 			...(interaction.guildId ? { guildId: interaction.guildId } : {}),
 			isDirect: !interaction.inGuild(),
 		};
+		// A menu pick or Submit is deferred before the audience is looked up, which may take a while.
+		if (
+			card.form &&
+			(action === "qpick" || action === "submit" || action === "qtext")
+		) {
+			await answerDeferred(card, action, Number(index), interaction, by);
+			return true;
+		}
 		if (!(await card.audience.allows(user))) {
 			await interaction.reply({
 				content: card.audience.refusal,
@@ -422,17 +392,6 @@ export class OwnerCards implements InteractionModule {
 			});
 			return true;
 		}
-		const closed = (outcome: string) =>
-			this.#panel(
-				{
-					title: card.title,
-					sections: card.sections,
-					rows: card.rows(true),
-					footer: outcome,
-				},
-				card.mention === true,
-				card.audience.mentions,
-			);
 		if (interaction.isButton() && (action === "yes" || action === "no")) {
 			const approved = action === "yes";
 			const approver = approved
@@ -457,43 +416,12 @@ export class OwnerCards implements InteractionModule {
 				return true;
 			}
 			await interaction.update(
-				closed(approved ? messages().cardApproved : messages().cardDeclined),
+				card.view(approved ? messages().cardApproved : messages().cardDeclined),
 			);
 			return true;
 		}
-		const question = card.question;
-		if (!question) return true;
-		if (interaction.isButton() && action === "write") {
-			card.picked = [];
-			await interaction.showModal(answerModal(id));
-			return true;
-		}
-		if (interaction.isStringSelectMenu() && action === "pick") {
-			const values = interaction.values;
-			const choices = question.options.flatMap((option, i) =>
-				values.includes(String(i)) ? [option.label] : [],
-			);
-			if (values.includes(OTHER)) {
-				card.picked = choices;
-				await interaction.showModal(answerModal(id));
-				return true;
-			}
-			const answer = { choices };
-			card.end(answer, by);
-			await interaction.update(closed(answeredLine(answer)));
-			return true;
-		}
-		if (interaction.isModalSubmit() && action === "text") {
-			const answer = {
-				choices: card.picked ?? [],
-				text: interaction.fields.getTextInputValue(TEXT_FIELD),
-			};
-			card.end(answer, by);
-			if (interaction.isFromMessage())
-				await interaction.update(closed(answeredLine(answer)));
-			else await interaction.deferUpdate();
-			return true;
-		}
+		if (card.form) await answerForm(card, id, action, interaction);
+		else await answerSingle(card, id, action, interaction, by);
 		return true;
 	}
 }

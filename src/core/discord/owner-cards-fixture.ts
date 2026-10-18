@@ -44,6 +44,10 @@ export function press(
 		roles?: string[];
 		values?: string[];
 		text?: string;
+		/** A form's fields by custom id; when given, a field not named reads empty. */
+		fields?: Record<string, string>;
+		/** Holds `deferUpdate` until it resolves, so the card can change while the press is in flight. */
+		gate?: Promise<void>;
 	} = {},
 ) {
 	const replies: string[] = [];
@@ -51,6 +55,10 @@ export function press(
 	const replied: { files?: unknown[]; flags?: unknown }[] = [];
 	const updates: CardPayload[] = [];
 	const modals: unknown[] = [];
+	/** What the press answered after deferring: edits of the card, and follow-ups. */
+	const edited: CardPayload[] = [];
+	const followUps: { content?: string; flags?: unknown }[] = [];
+	const deferred: string[] = [];
 	// SAFETY: the cards read only these members of an interaction.
 	const interaction = {
 		isButton: () => kind === "button",
@@ -66,7 +74,10 @@ export function press(
 			roles: { cache: new Map((options.roles ?? []).map((r) => [r, r])) },
 		},
 		values: options.values ?? [],
-		fields: { getTextInputValue: () => options.text ?? "" },
+		fields: {
+			getTextInputValue: (name: string) =>
+				options.fields ? (options.fields[name] ?? "") : (options.text ?? ""),
+		},
 		reply: async (answer: {
 			content: string;
 			files?: unknown[];
@@ -81,9 +92,27 @@ export function press(
 		showModal: async (modal: unknown) => {
 			modals.push(modal);
 		},
-		deferUpdate: async () => undefined,
+		deferUpdate: async () => {
+			await options.gate;
+			deferred.push("update");
+		},
+		editReply: async (payload: CardPayload) => {
+			edited.push(payload);
+		},
+		followUp: async (answer: { content?: string; flags?: unknown }) => {
+			followUps.push(answer);
+		},
 	} as unknown as Interaction;
-	return { interaction, replies, replied, updates, modals };
+	return {
+		interaction,
+		replies,
+		replied,
+		updates,
+		modals,
+		edited,
+		followUps,
+		deferred,
+	};
 }
 
 /** Lets a posted card settle. */

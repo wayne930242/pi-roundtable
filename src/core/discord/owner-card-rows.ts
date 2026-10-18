@@ -15,6 +15,7 @@ import {
 	withdrawalNote,
 } from "../interactions/prompts.ts";
 import { type ownerPanel, plain } from "./owner-panel.ts";
+import { clip } from "./utf16.ts";
 
 /** The prefix of every card control's custom id. */
 export const CARD_PREFIX = "roundtable:card:";
@@ -41,37 +42,58 @@ export function askRows(
 					.setDisabled(disabled),
 			),
 		];
-	// Discord menus take 25 options; "Other…" takes the last place when the options fill it.
-	const options = question.options
-		.slice(0, question.allowOther ? 24 : 25)
-		.map((option, i) => ({
-			label: option.label.slice(0, 100),
+	// Discord menus take 25 options. With 24 or fewer, "Other…" is the last entry; with 25 it
+	// would push one out, so the menu keeps all of them and "Answer…" opens the form instead.
+	const roomForOther = question.allowOther && question.options.length < 25;
+	const options: { label: string; value: string; description?: string }[] =
+		question.options.map((option, i) => ({
+			label: clip(option.label, 100),
 			value: String(i),
 			...(option.description
-				? { description: option.description.slice(0, 100) }
+				? { description: clip(option.description, 100) }
 				: {}),
 		}));
-	if (question.allowOther)
+	if (roomForOther)
 		options.push({
 			label: messages().cardOtherLabel,
 			value: OTHER,
 			description: messages().cardOtherDescription,
 		});
+	const menu = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
+		new StringSelectMenuBuilder()
+			.setCustomId(`${CARD_PREFIX}${id}:pick`)
+			.setPlaceholder(
+				question.multi
+					? messages().cardPickManyPlaceholder
+					: messages().cardPickOnePlaceholder,
+			)
+			.setMinValues(1)
+			.setMaxValues(question.multi ? options.length : 1)
+			.addOptions(options)
+			.setDisabled(disabled),
+	);
+	if (!question.allowOther || roomForOther) return [menu];
 	return [
-		new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
-			new StringSelectMenuBuilder()
-				.setCustomId(`${CARD_PREFIX}${id}:pick`)
-				.setPlaceholder(
-					question.multi
-						? messages().cardPickManyPlaceholder
-						: messages().cardPickOnePlaceholder,
-				)
-				.setMinValues(1)
-				.setMaxValues(question.multi ? options.length : 1)
-				.addOptions(options)
+		menu,
+		new ActionRowBuilder<ButtonBuilder>().addComponents(
+			new ButtonBuilder()
+				.setCustomId(`${CARD_PREFIX}${id}:write`)
+				.setLabel(messages().cardAnswerLabel)
+				.setStyle(ButtonStyle.Secondary)
 				.setDisabled(disabled),
 		),
 	];
+}
+
+/** The Previews button of a single-question card: it shows the options' previews and answers nothing. */
+export function previewsRow(id: string, disabled: boolean) {
+	return new ActionRowBuilder<ButtonBuilder>().addComponents(
+		new ButtonBuilder()
+			.setCustomId(`${CARD_PREFIX}${id}:previews`)
+			.setLabel(messages().cardPreviewsLabel)
+			.setStyle(ButtonStyle.Secondary)
+			.setDisabled(disabled),
+	);
 }
 
 export function answerModal(id: string): ModalBuilder {

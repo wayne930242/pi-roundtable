@@ -78,6 +78,7 @@ export const QUESTIONNAIRE_LIMITS = {
 const L = QUESTIONNAIRE_LIMITS;
 
 const pointsOf = (text: string) => Array.from(text).length;
+const units = (text: string) => Math.max(pointsOf(text), text.length);
 
 function duplicate(values: readonly string[]): string | undefined {
 	return values.find((v, i) => values.indexOf(v) !== i);
@@ -102,7 +103,8 @@ export function validateQuestionnaire(q: Questionnaire): string | undefined {
 			pointsOf(question.header) > L.headerChars
 		)
 			return `${at}the header is over ${L.headerChars} characters.`;
-		setChars += pointsOf(question.question) + pointsOf(question.header ?? "");
+		// Discord counts UTF-16 units, so an emoji or rare character weighs two here.
+		setChars += units(question.question) + units(question.header ?? "");
 		if (question.options.length > L.options)
 			return `${at}offer at most ${L.options} options.`;
 		for (const option of question.options) {
@@ -121,7 +123,7 @@ export function validateQuestionnaire(q: Questionnaire): string | undefined {
 			return `${at}the option "${same}" is offered twice.`;
 	}
 	if (many && setChars > L.setChars)
-		return `The questions and headers together are over ${L.setChars} characters; shorten them or ask fewer.`;
+		return `The questions and headers together are over ${L.setChars} characters (an emoji or rare character counts as two); shorten them or ask fewer.`;
 	if (previews > L.previewTotalChars)
 		return `The previews together are over ${L.previewTotalChars} characters.`;
 	const twice = duplicate(q.questions.map((x) => x.question.trim()));
