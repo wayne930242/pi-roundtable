@@ -57,18 +57,29 @@ describe("a card answered after its turn stopped waiting", () => {
 					params: unknown,
 			  ) => Promise<{ content: { text: string }[] }>)
 			| undefined;
+		let prepare: ((args: unknown) => unknown) | undefined;
 		askUserExtension(
 			slot,
 			TEST_OWNER,
 		)({
-			registerTool: (tool: { name: string; execute: typeof execute }) => {
-				if (tool.name === ASK_USER_TOOL) execute = tool.execute;
+			registerTool: (tool: {
+				name: string;
+				execute: typeof execute;
+				prepareArguments: typeof prepare;
+			}) => {
+				if (tool.name === ASK_USER_TOOL) {
+					execute = tool.execute;
+					prepare = tool.prepareArguments;
+				}
 			},
 		} as unknown as ExtensionAPI);
-		const result = await execute?.("call-1", {
-			question: "Which day?",
-			options: [{ label: "Saturday" }, { label: "Sunday" }],
-		});
+		const result = await execute?.(
+			"call-1",
+			prepare?.({
+				question: "Which day?",
+				options: [{ label: "Saturday" }, { label: "Sunday" }],
+			}),
+		);
 		expect(result?.content[0]?.text).toContain("has not answered yet");
 		const pick = press("select", `${CARD_PREFIX}${fake.cardId()}:pick`, {
 			values: ["1"],

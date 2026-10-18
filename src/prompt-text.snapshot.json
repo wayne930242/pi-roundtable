@@ -201,47 +201,71 @@
 			},
 			{
 				"name": "ask_user",
-				"description": "Ask the speaker a question on a card with buttons in this channel and wait for the speaker's answer, within this turn. Use it when you need the speaker's decision to continue, instead of ending your turn with a question. The card should read on its own, so put the context the speaker needs in the question too. Offer options when the choices are known; set multi when several may apply and allow_other to let the speaker write the speaker's own answer. If the speaker does not answer soon, the result says so and the card stays open: then end your turn saying you are waiting, and the speaker's answer comes in a new turn.",
+				"description": "Ask the speaker a question, or up to four related ones, on a card with buttons in this channel and wait for the speaker's answer, within this turn. Use it when you need the speaker's decision to continue, instead of ending your turn with a question. The card should read on its own, so put the context the speaker needs in the question too. Put every question you have into one call as questions. Offer options when the choices are known, each with a short description, and a preview (markdown) when seeing the option helps; set multi when several may apply, and allow_other to false for a closed choice (otherwise the speaker may write the speaker's own answer). Give each question a short header when you ask several. If the speaker does not answer soon, the result says so and the card stays open: then end your turn saying you are waiting, and the speaker's answer comes in a new turn.",
 				"parameters": {
 					"type": "object",
 					"required": [
-						"question"
+						"questions"
 					],
 					"properties": {
-						"question": {
-							"type": "string",
-							"minLength": 1,
-							"maxLength": 1500
-						},
-						"options": {
+						"questions": {
 							"type": "array",
 							"items": {
 								"type": "object",
 								"required": [
-									"label"
+									"question"
 								],
 								"properties": {
-									"label": {
+									"question": {
 										"type": "string",
 										"minLength": 1,
-										"maxLength": 100
+										"maxLength": 1500
 									},
-									"description": {
+									"header": {
 										"type": "string",
-										"maxLength": 100
+										"maxLength": 30,
+										"description": "A short name for the question in a set."
+									},
+									"options": {
+										"type": "array",
+										"items": {
+											"type": "object",
+											"required": [
+												"label"
+											],
+											"properties": {
+												"label": {
+													"type": "string",
+													"minLength": 1,
+													"maxLength": 100
+												},
+												"description": {
+													"type": "string",
+													"maxLength": 100
+												},
+												"preview": {
+													"type": "string",
+													"maxLength": 1200,
+													"description": "A markdown mock-up or snippet shown with the option."
+												}
+											},
+											"additionalProperties": false
+										},
+										"maxItems": 25
+									},
+									"multi": {
+										"type": "boolean",
+										"description": "Several options may be chosen."
+									},
+									"allow_other": {
+										"type": "boolean",
+										"description": "The speaker may write an answer besides the options (default true; false for a closed choice)."
 									}
 								},
 								"additionalProperties": false
 							},
-							"maxItems": 25
-						},
-						"multi": {
-							"type": "boolean",
-							"description": "Several options may be chosen."
-						},
-						"allow_other": {
-							"type": "boolean",
-							"description": "The speaker may write an answer besides the options."
+							"minItems": 1,
+							"maxItems": 4
 						}
 					},
 					"additionalProperties": false
@@ -2331,47 +2355,71 @@
 			},
 			{
 				"name": "ask_user",
-				"description": "Ask the speaker a question on a card with buttons in this channel and wait for the speaker's answer, within this turn. Use it when you need the speaker's decision to continue, instead of ending your turn with a question. The card should read on its own, so put the context the speaker needs in the question too. Offer options when the choices are known; set multi when several may apply and allow_other to let the speaker write the speaker's own answer. If the speaker does not answer soon, the result says so and the card stays open: then end your turn saying you are waiting, and the speaker's answer comes in a new turn.",
+				"description": "Ask the speaker a question, or up to four related ones, on a card with buttons in this channel and wait for the speaker's answer, within this turn. Use it when you need the speaker's decision to continue, instead of ending your turn with a question. The card should read on its own, so put the context the speaker needs in the question too. Put every question you have into one call as questions. Offer options when the choices are known, each with a short description, and a preview (markdown) when seeing the option helps; set multi when several may apply, and allow_other to false for a closed choice (otherwise the speaker may write the speaker's own answer). Give each question a short header when you ask several. If the speaker does not answer soon, the result says so and the card stays open: then end your turn saying you are waiting, and the speaker's answer comes in a new turn.",
 				"parameters": {
 					"type": "object",
 					"required": [
-						"question"
+						"questions"
 					],
 					"properties": {
-						"question": {
-							"type": "string",
-							"minLength": 1,
-							"maxLength": 1500
-						},
-						"options": {
+						"questions": {
 							"type": "array",
 							"items": {
 								"type": "object",
 								"required": [
-									"label"
+									"question"
 								],
 								"properties": {
-									"label": {
+									"question": {
 										"type": "string",
 										"minLength": 1,
-										"maxLength": 100
+										"maxLength": 1500
 									},
-									"description": {
+									"header": {
 										"type": "string",
-										"maxLength": 100
+										"maxLength": 30,
+										"description": "A short name for the question in a set."
+									},
+									"options": {
+										"type": "array",
+										"items": {
+											"type": "object",
+											"required": [
+												"label"
+											],
+											"properties": {
+												"label": {
+													"type": "string",
+													"minLength": 1,
+													"maxLength": 100
+												},
+												"description": {
+													"type": "string",
+													"maxLength": 100
+												},
+												"preview": {
+													"type": "string",
+													"maxLength": 1200,
+													"description": "A markdown mock-up or snippet shown with the option."
+												}
+											},
+											"additionalProperties": false
+										},
+										"maxItems": 25
+									},
+									"multi": {
+										"type": "boolean",
+										"description": "Several options may be chosen."
+									},
+									"allow_other": {
+										"type": "boolean",
+										"description": "The speaker may write an answer besides the options (default true; false for a closed choice)."
 									}
 								},
 								"additionalProperties": false
 							},
-							"maxItems": 25
-						},
-						"multi": {
-							"type": "boolean",
-							"description": "Several options may be chosen."
-						},
-						"allow_other": {
-							"type": "boolean",
-							"description": "The speaker may write an answer besides the options."
+							"minItems": 1,
+							"maxItems": 4
 						}
 					},
 					"additionalProperties": false
@@ -4254,47 +4302,71 @@
 		"tools": [
 			{
 				"name": "ask_user",
-				"description": "Ask Ada a question on a card with buttons in this channel and wait for her answer, within this turn. Use it when you need her decision to continue, instead of ending your turn with a question. The card should read on its own, so put the context she needs in the question too. Offer options when the choices are known; set multi when several may apply and allow_other to let her write her own answer. If she does not answer soon, the result says so and the card stays open: then end your turn saying you are waiting, and her answer comes in a new turn.",
+				"description": "Ask Ada a question, or up to four related ones, on a card with buttons in this channel and wait for her answer, within this turn. Use it when you need her decision to continue, instead of ending your turn with a question. The card should read on its own, so put the context she needs in the question too. Put every question you have into one call as questions. Offer options when the choices are known, each with a short description, and a preview (markdown) when seeing the option helps; set multi when several may apply, and allow_other to false for a closed choice (otherwise she may write her own answer). Give each question a short header when you ask several. If she does not answer soon, the result says so and the card stays open: then end your turn saying you are waiting, and her answer comes in a new turn.",
 				"parameters": {
 					"type": "object",
 					"required": [
-						"question"
+						"questions"
 					],
 					"properties": {
-						"question": {
-							"type": "string",
-							"minLength": 1,
-							"maxLength": 1500
-						},
-						"options": {
+						"questions": {
 							"type": "array",
 							"items": {
 								"type": "object",
 								"required": [
-									"label"
+									"question"
 								],
 								"properties": {
-									"label": {
+									"question": {
 										"type": "string",
 										"minLength": 1,
-										"maxLength": 100
+										"maxLength": 1500
 									},
-									"description": {
+									"header": {
 										"type": "string",
-										"maxLength": 100
+										"maxLength": 30,
+										"description": "A short name for the question in a set."
+									},
+									"options": {
+										"type": "array",
+										"items": {
+											"type": "object",
+											"required": [
+												"label"
+											],
+											"properties": {
+												"label": {
+													"type": "string",
+													"minLength": 1,
+													"maxLength": 100
+												},
+												"description": {
+													"type": "string",
+													"maxLength": 100
+												},
+												"preview": {
+													"type": "string",
+													"maxLength": 1200,
+													"description": "A markdown mock-up or snippet shown with the option."
+												}
+											},
+											"additionalProperties": false
+										},
+										"maxItems": 25
+									},
+									"multi": {
+										"type": "boolean",
+										"description": "Several options may be chosen."
+									},
+									"allow_other": {
+										"type": "boolean",
+										"description": "She may write an answer besides the options (default true; false for a closed choice)."
 									}
 								},
 								"additionalProperties": false
 							},
-							"maxItems": 25
-						},
-						"multi": {
-							"type": "boolean",
-							"description": "Several options may be chosen."
-						},
-						"allow_other": {
-							"type": "boolean",
-							"description": "She may write an answer besides the options."
+							"minItems": 1,
+							"maxItems": 4
 						}
 					},
 					"additionalProperties": false
@@ -5731,47 +5803,71 @@
 		"tools": [
 			{
 				"name": "ask_user",
-				"description": "Ask the speaker a question on a card with buttons in this channel and wait for the speaker's answer, within this turn. Use it when you need the speaker's decision to continue, instead of ending your turn with a question. The card should read on its own, so put the context the speaker needs in the question too. Offer options when the choices are known; set multi when several may apply and allow_other to let the speaker write the speaker's own answer. If the speaker does not answer soon, the result says so and the card stays open: then end your turn saying you are waiting, and the speaker's answer comes in a new turn.",
+				"description": "Ask the speaker a question, or up to four related ones, on a card with buttons in this channel and wait for the speaker's answer, within this turn. Use it when you need the speaker's decision to continue, instead of ending your turn with a question. The card should read on its own, so put the context the speaker needs in the question too. Put every question you have into one call as questions. Offer options when the choices are known, each with a short description, and a preview (markdown) when seeing the option helps; set multi when several may apply, and allow_other to false for a closed choice (otherwise the speaker may write the speaker's own answer). Give each question a short header when you ask several. If the speaker does not answer soon, the result says so and the card stays open: then end your turn saying you are waiting, and the speaker's answer comes in a new turn.",
 				"parameters": {
 					"type": "object",
 					"required": [
-						"question"
+						"questions"
 					],
 					"properties": {
-						"question": {
-							"type": "string",
-							"minLength": 1,
-							"maxLength": 1500
-						},
-						"options": {
+						"questions": {
 							"type": "array",
 							"items": {
 								"type": "object",
 								"required": [
-									"label"
+									"question"
 								],
 								"properties": {
-									"label": {
+									"question": {
 										"type": "string",
 										"minLength": 1,
-										"maxLength": 100
+										"maxLength": 1500
 									},
-									"description": {
+									"header": {
 										"type": "string",
-										"maxLength": 100
+										"maxLength": 30,
+										"description": "A short name for the question in a set."
+									},
+									"options": {
+										"type": "array",
+										"items": {
+											"type": "object",
+											"required": [
+												"label"
+											],
+											"properties": {
+												"label": {
+													"type": "string",
+													"minLength": 1,
+													"maxLength": 100
+												},
+												"description": {
+													"type": "string",
+													"maxLength": 100
+												},
+												"preview": {
+													"type": "string",
+													"maxLength": 1200,
+													"description": "A markdown mock-up or snippet shown with the option."
+												}
+											},
+											"additionalProperties": false
+										},
+										"maxItems": 25
+									},
+									"multi": {
+										"type": "boolean",
+										"description": "Several options may be chosen."
+									},
+									"allow_other": {
+										"type": "boolean",
+										"description": "The speaker may write an answer besides the options (default true; false for a closed choice)."
 									}
 								},
 								"additionalProperties": false
 							},
-							"maxItems": 25
-						},
-						"multi": {
-							"type": "boolean",
-							"description": "Several options may be chosen."
-						},
-						"allow_other": {
-							"type": "boolean",
-							"description": "The speaker may write an answer besides the options."
+							"minItems": 1,
+							"maxItems": 4
 						}
 					},
 					"additionalProperties": false
@@ -6081,47 +6177,71 @@
 			},
 			{
 				"name": "ask_user",
-				"description": "Ask the speaker a question on a card with buttons in this channel and wait for the speaker's answer, within this turn. Use it when you need the speaker's decision to continue, instead of ending your turn with a question. The card should read on its own, so put the context the speaker needs in the question too. Offer options when the choices are known; set multi when several may apply and allow_other to let the speaker write the speaker's own answer. If the speaker does not answer soon, the result says so and the card stays open: then end your turn saying you are waiting, and the speaker's answer comes in a new turn.",
+				"description": "Ask the speaker a question, or up to four related ones, on a card with buttons in this channel and wait for the speaker's answer, within this turn. Use it when you need the speaker's decision to continue, instead of ending your turn with a question. The card should read on its own, so put the context the speaker needs in the question too. Put every question you have into one call as questions. Offer options when the choices are known, each with a short description, and a preview (markdown) when seeing the option helps; set multi when several may apply, and allow_other to false for a closed choice (otherwise the speaker may write the speaker's own answer). Give each question a short header when you ask several. If the speaker does not answer soon, the result says so and the card stays open: then end your turn saying you are waiting, and the speaker's answer comes in a new turn.",
 				"parameters": {
 					"type": "object",
 					"required": [
-						"question"
+						"questions"
 					],
 					"properties": {
-						"question": {
-							"type": "string",
-							"minLength": 1,
-							"maxLength": 1500
-						},
-						"options": {
+						"questions": {
 							"type": "array",
 							"items": {
 								"type": "object",
 								"required": [
-									"label"
+									"question"
 								],
 								"properties": {
-									"label": {
+									"question": {
 										"type": "string",
 										"minLength": 1,
-										"maxLength": 100
+										"maxLength": 1500
 									},
-									"description": {
+									"header": {
 										"type": "string",
-										"maxLength": 100
+										"maxLength": 30,
+										"description": "A short name for the question in a set."
+									},
+									"options": {
+										"type": "array",
+										"items": {
+											"type": "object",
+											"required": [
+												"label"
+											],
+											"properties": {
+												"label": {
+													"type": "string",
+													"minLength": 1,
+													"maxLength": 100
+												},
+												"description": {
+													"type": "string",
+													"maxLength": 100
+												},
+												"preview": {
+													"type": "string",
+													"maxLength": 1200,
+													"description": "A markdown mock-up or snippet shown with the option."
+												}
+											},
+											"additionalProperties": false
+										},
+										"maxItems": 25
+									},
+									"multi": {
+										"type": "boolean",
+										"description": "Several options may be chosen."
+									},
+									"allow_other": {
+										"type": "boolean",
+										"description": "The speaker may write an answer besides the options (default true; false for a closed choice)."
 									}
 								},
 								"additionalProperties": false
 							},
-							"maxItems": 25
-						},
-						"multi": {
-							"type": "boolean",
-							"description": "Several options may be chosen."
-						},
-						"allow_other": {
-							"type": "boolean",
-							"description": "The speaker may write an answer besides the options."
+							"minItems": 1,
+							"maxItems": 4
 						}
 					},
 					"additionalProperties": false
@@ -8035,47 +8155,71 @@
 		"tools": [
 			{
 				"name": "ask_user",
-				"description": "Ask Ada a question on a card with buttons in this channel and wait for her answer, within this turn. Use it when you need her decision to continue, instead of ending your turn with a question. The card should read on its own, so put the context she needs in the question too. Offer options when the choices are known; set multi when several may apply and allow_other to let her write her own answer. If she does not answer soon, the result says so and the card stays open: then end your turn saying you are waiting, and her answer comes in a new turn.",
+				"description": "Ask Ada a question, or up to four related ones, on a card with buttons in this channel and wait for her answer, within this turn. Use it when you need her decision to continue, instead of ending your turn with a question. The card should read on its own, so put the context she needs in the question too. Put every question you have into one call as questions. Offer options when the choices are known, each with a short description, and a preview (markdown) when seeing the option helps; set multi when several may apply, and allow_other to false for a closed choice (otherwise she may write her own answer). Give each question a short header when you ask several. If she does not answer soon, the result says so and the card stays open: then end your turn saying you are waiting, and her answer comes in a new turn.",
 				"parameters": {
 					"type": "object",
 					"required": [
-						"question"
+						"questions"
 					],
 					"properties": {
-						"question": {
-							"type": "string",
-							"minLength": 1,
-							"maxLength": 1500
-						},
-						"options": {
+						"questions": {
 							"type": "array",
 							"items": {
 								"type": "object",
 								"required": [
-									"label"
+									"question"
 								],
 								"properties": {
-									"label": {
+									"question": {
 										"type": "string",
 										"minLength": 1,
-										"maxLength": 100
+										"maxLength": 1500
 									},
-									"description": {
+									"header": {
 										"type": "string",
-										"maxLength": 100
+										"maxLength": 30,
+										"description": "A short name for the question in a set."
+									},
+									"options": {
+										"type": "array",
+										"items": {
+											"type": "object",
+											"required": [
+												"label"
+											],
+											"properties": {
+												"label": {
+													"type": "string",
+													"minLength": 1,
+													"maxLength": 100
+												},
+												"description": {
+													"type": "string",
+													"maxLength": 100
+												},
+												"preview": {
+													"type": "string",
+													"maxLength": 1200,
+													"description": "A markdown mock-up or snippet shown with the option."
+												}
+											},
+											"additionalProperties": false
+										},
+										"maxItems": 25
+									},
+									"multi": {
+										"type": "boolean",
+										"description": "Several options may be chosen."
+									},
+									"allow_other": {
+										"type": "boolean",
+										"description": "She may write an answer besides the options (default true; false for a closed choice)."
 									}
 								},
 								"additionalProperties": false
 							},
-							"maxItems": 25
-						},
-						"multi": {
-							"type": "boolean",
-							"description": "Several options may be chosen."
-						},
-						"allow_other": {
-							"type": "boolean",
-							"description": "She may write an answer besides the options."
+							"minItems": 1,
+							"maxItems": 4
 						}
 					},
 					"additionalProperties": false
@@ -8187,47 +8331,71 @@
 		"tools": [
 			{
 				"name": "ask_user",
-				"description": "Ask the speaker a question on a card with buttons in this channel and wait for the speaker's answer, within this turn. Use it when you need the speaker's decision to continue, instead of ending your turn with a question. The card should read on its own, so put the context the speaker needs in the question too. Offer options when the choices are known; set multi when several may apply and allow_other to let the speaker write the speaker's own answer. If the speaker does not answer soon, the result says so and the card stays open: then end your turn saying you are waiting, and the speaker's answer comes in a new turn.",
+				"description": "Ask the speaker a question, or up to four related ones, on a card with buttons in this channel and wait for the speaker's answer, within this turn. Use it when you need the speaker's decision to continue, instead of ending your turn with a question. The card should read on its own, so put the context the speaker needs in the question too. Put every question you have into one call as questions. Offer options when the choices are known, each with a short description, and a preview (markdown) when seeing the option helps; set multi when several may apply, and allow_other to false for a closed choice (otherwise the speaker may write the speaker's own answer). Give each question a short header when you ask several. If the speaker does not answer soon, the result says so and the card stays open: then end your turn saying you are waiting, and the speaker's answer comes in a new turn.",
 				"parameters": {
 					"type": "object",
 					"required": [
-						"question"
+						"questions"
 					],
 					"properties": {
-						"question": {
-							"type": "string",
-							"minLength": 1,
-							"maxLength": 1500
-						},
-						"options": {
+						"questions": {
 							"type": "array",
 							"items": {
 								"type": "object",
 								"required": [
-									"label"
+									"question"
 								],
 								"properties": {
-									"label": {
+									"question": {
 										"type": "string",
 										"minLength": 1,
-										"maxLength": 100
+										"maxLength": 1500
 									},
-									"description": {
+									"header": {
 										"type": "string",
-										"maxLength": 100
+										"maxLength": 30,
+										"description": "A short name for the question in a set."
+									},
+									"options": {
+										"type": "array",
+										"items": {
+											"type": "object",
+											"required": [
+												"label"
+											],
+											"properties": {
+												"label": {
+													"type": "string",
+													"minLength": 1,
+													"maxLength": 100
+												},
+												"description": {
+													"type": "string",
+													"maxLength": 100
+												},
+												"preview": {
+													"type": "string",
+													"maxLength": 1200,
+													"description": "A markdown mock-up or snippet shown with the option."
+												}
+											},
+											"additionalProperties": false
+										},
+										"maxItems": 25
+									},
+									"multi": {
+										"type": "boolean",
+										"description": "Several options may be chosen."
+									},
+									"allow_other": {
+										"type": "boolean",
+										"description": "The speaker may write an answer besides the options (default true; false for a closed choice)."
 									}
 								},
 								"additionalProperties": false
 							},
-							"maxItems": 25
-						},
-						"multi": {
-							"type": "boolean",
-							"description": "Several options may be chosen."
-						},
-						"allow_other": {
-							"type": "boolean",
-							"description": "The speaker may write an answer besides the options."
+							"minItems": 1,
+							"maxItems": 4
 						}
 					},
 					"additionalProperties": false

@@ -1,6 +1,11 @@
 import type { HoldRefusal } from "../domain/progress.ts";
 import { assistantName } from "../i18n/index.ts";
-import type { OwnerQuestion, Prompts } from "../interactions/prompts.ts";
+import type {
+	OwnerQuestion,
+	Prompts,
+	PromptWait,
+	Questionnaire,
+} from "../interactions/prompts.ts";
 import { turnBudget } from "./turn-budget.ts";
 
 /**
@@ -61,7 +66,22 @@ export class PromptSlot {
 	get prompts(): Prompts | undefined {
 		const prompts = this.#prompts;
 		if (!prompts) return undefined;
+		const { questionnaire } = prompts;
 		return {
+			...(prompts.asks && questionnaire
+				? {
+						asks: prompts.asks,
+						questionnaire: (
+							title: string,
+							asked: Questionnaire,
+							signal?: AbortSignal,
+							wait?: PromptWait,
+						) =>
+							this.#waiting(() =>
+								questionnaire.call(prompts, title, asked, signal, wait),
+							),
+					}
+				: {}),
 			confirm: (title, message, signal, minTier, wait, details, options) =>
 				this.#waiting(() =>
 					prompts.confirm(

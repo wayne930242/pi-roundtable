@@ -12,6 +12,7 @@ import { ASK_USER_TOOL, askUserExtension } from "./ask-user.ts";
 
 interface Tool {
 	name: string;
+	prepareArguments?: (args: unknown) => unknown;
 	execute: (
 		id: string,
 		params: unknown,
@@ -52,7 +53,8 @@ function askUser(answer: OwnerAnswer | "pending" | undefined, bound = true) {
 		asked,
 		waits,
 		call: async (params: unknown) =>
-			(await t.execute("call-1", params)).content[0]?.text ?? "",
+			(await t.execute("call-1", t.prepareArguments?.(params) ?? params))
+				.content[0]?.text ?? "",
 	};
 }
 
@@ -136,5 +138,102 @@ describe("ask_user", () => {
 			"Ask him in your reply instead",
 		);
 		expect(asked).toHaveLength(0);
+	});
+});
+
+describe("ask_user, a single question keeps its 0.19 text", () => {
+	test("the pending and late texts are exactly 0.19's", async () => {
+		const { waits, call } = askUser("pending");
+		expect(await call({ question: "Which day?" })).toBe(
+			"Riley has not answered yet. The card stays open, so do not ask again and do not wait for it. End your turn now: say briefly that you are waiting for his answer on the card. When he answers, a new turn brings you the answer and you continue from there.",
+		);
+		expect(
+			waits[0]?.late({
+				kind: "question",
+				answer: { choices: ["Sunday"], text: "after lunch" },
+				by: "Ada",
+			}),
+		).toBe(
+			"(Ada answered your earlier ask_user question on its card, after your turn had ended. Continue from where you stopped, with this answer.)\nQuestion: Which day?\nAda chose: Sunday\nAda wrote: after lunch",
+		);
+	});
+
+	test("the questions form with one question asks the same card, headers dropped", async () => {
+		const legacy = askUser({ choices: ["Sunday"] });
+		const modern = askUser({ choices: ["Sunday"] });
+		const options = [{ label: "Saturday" }, { label: "Sunday" }];
+		const a = await legacy.call({
+			question: "Which day?",
+			options,
+			allow_other: true,
+		});
+		const b = await modern.call({
+			questions: [{ question: "Which day?", header: "Day", options }],
+		});
+		expect(b).toBe(a);
+		expect(modern.asked).toEqual(legacy.asked);
+	});
+});
+
+describe("ask_user, the questions form", () => {
+	test("allow_other defaults to true in the questions form and to false in the legacy form", async () => {
+		const modern = askUser({ choices: ["a"] });
+		await modern.call({
+			questions: [{ question: "?", options: [{ label: "a" }] }],
+		});
+		expect(modern.asked[0]?.question.allowOther).toBe(true);
+		const closed = askUser({ choices: ["a"] });
+		await closed.call({
+			questions: [
+				{ question: "?", options: [{ label: "a" }], allow_other: false },
+			],
+		});
+		expect(closed.asked[0]?.question.allowOther).toBe(false);
+		const legacy = askUser({ choices: ["a"] });
+		await legacy.call({ question: "?", options: [{ label: "a" }] });
+		expect(legacy.asked[0]?.question.allowOther).toBe(false);
+	});
+
+	test("double-encoded questions and options are decoded", async () => {
+		const { asked, call } = askUser({ choices: ["a"] });
+		await call({
+			questions: JSON.stringify([
+				{ question: "?", options: JSON.stringify([{ label: "a" }]) },
+			]),
+		});
+		expect(asked[0]?.question.options).toEqual([{ label: "a" }]);
+		await call({ question: "?", options: JSON.stringify([{ label: "b" }]) });
+		expect(asked[1]?.question.options).toEqual([{ label: "b" }]);
+	});
+
+	test("a refused set posts no card and says why", async () => {
+		const { asked, call } = askUser({ choices: ["a"] });
+		const text = await call({
+			questions: [{ question: "?", options: [{ label: "a" }, { label: "a" }] }],
+		});
+		expect(text).toContain("offered twice");
+		expect(asked).toHaveLength(0);
+	});
+
+	test("a v1 surface is asked one question at a time, previews folded and headers dropped", async () => {
+		const { asked, call } = askUser({ choices: ["a"] });
+		const text = await call({
+			questions: [
+				{
+					question: "First?",
+					header: "One",
+					options: [{ label: "a", preview: "mock" }],
+				},
+				{ question: "Second?", header: "Two", options: [{ label: "a" }] },
+			],
+		});
+		expect(asked.map((a) => a.question.question)).toEqual([
+			"First?\n\n**a**\n```\nmock\n```",
+			"Second?",
+		]);
+		expect(asked[0]?.question).not.toHaveProperty("header");
+		expect(text).toBe(
+			"Riley answered your questions on the card:\n1. One: chose a\n2. Two: chose a",
+		);
 	});
 });
