@@ -918,7 +918,7 @@ defineTool({
 
 `shellHoldRule` in `pi-roundtable/kit` judges the agents' `bash`, `write` and `edit` calls; the agent server links it, and a session without a workspace has no shell.
 Its scratch roots are the shared workspace (`HoldContext.workspace`) and the scratch dir (`HoldContext.scratchDir`).
-The scratch dir is the config's `scratchDir`, by default `<os temp dir>/<discord.rootCommand>-scratch` (such as `/tmp/roundtable-scratch`); the agent server creates it with mode 0700 at startup and refuses one that is a symlink or another user's, and the agents' `bash` runs with `TMPDIR` pointing to it, so tools that read `TMPDIR` and GNU `mktemp` write there. macOS's BSD `mktemp` ignores `TMPDIR` for a bare `mktemp`; `mktemp -p "$TMPDIR"` works with both.
+The scratch dir is the config's `scratchDir`, by default `<os temp dir>/<discord.rootCommand>-scratch` (such as `/tmp/roundtable-scratch`); the agent server creates it with mode 0700 at startup and refuses one that is a symlink or another user's, and the agents' `bash` runs with `TMPDIR` pointing to it, so tools that read `TMPDIR` and GNU `mktemp` write there. macOS's BSD `mktemp` ignores `TMPDIR` for a bare `mktemp`; `mktemp -p "$TMPDIR"` works with both, and the agents' prompt tells them to use it.
 `AgentSessions.scratchDir` carries it to a runtime, and the agents' prompt tells them to write temporary files there, and to show a file with `attach_file` or a `discord_send_message` file `path` rather than reading an image or base64-encoding it.
 
 - A `>`, `>>` or `tee` target, and a `write` or `edit` path, inside a scratch root run; anything else, the rest of `/tmp` included, is held.

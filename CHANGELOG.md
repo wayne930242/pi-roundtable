@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.19.2] - 2026-10-18
+
+### Changed
+
+- The agents' prompt now tells them to make temporary files with `mktemp -p "$TMPDIR"`, since a bare `mktemp` ignores `$TMPDIR` on some systems (macOS's BSD `mktemp`) and lands outside the scratch dir, where the next write is held for the owner. The sentence appears only when a scratch dir is set.
+
 ## [0.19.1] - 2026-10-18
 
 ### Fixed
