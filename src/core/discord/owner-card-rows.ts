@@ -41,34 +41,44 @@ export function askRows(
 					.setDisabled(disabled),
 			),
 		];
-	// Discord menus take 25 options; "Other…" takes the last place when the options fill it.
-	const options = question.options
-		.slice(0, question.allowOther ? 24 : 25)
-		.map((option, i) => ({
+	// Discord menus take 25 options. With 24 or fewer, "Other…" is the last entry; with 25 it
+	// would push one out, so the menu keeps all of them and "Answer…" opens the form instead.
+	const roomForOther = question.allowOther && question.options.length < 25;
+	const options: { label: string; value: string; description?: string }[] =
+		question.options.map((option, i) => ({
 			label: option.label.slice(0, 100),
 			value: String(i),
 			...(option.description
 				? { description: option.description.slice(0, 100) }
 				: {}),
 		}));
-	if (question.allowOther)
+	if (roomForOther)
 		options.push({
 			label: messages().cardOtherLabel,
 			value: OTHER,
 			description: messages().cardOtherDescription,
 		});
+	const menu = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
+		new StringSelectMenuBuilder()
+			.setCustomId(`${CARD_PREFIX}${id}:pick`)
+			.setPlaceholder(
+				question.multi
+					? messages().cardPickManyPlaceholder
+					: messages().cardPickOnePlaceholder,
+			)
+			.setMinValues(1)
+			.setMaxValues(question.multi ? options.length : 1)
+			.addOptions(options)
+			.setDisabled(disabled),
+	);
+	if (!question.allowOther || roomForOther) return [menu];
 	return [
-		new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
-			new StringSelectMenuBuilder()
-				.setCustomId(`${CARD_PREFIX}${id}:pick`)
-				.setPlaceholder(
-					question.multi
-						? messages().cardPickManyPlaceholder
-						: messages().cardPickOnePlaceholder,
-				)
-				.setMinValues(1)
-				.setMaxValues(question.multi ? options.length : 1)
-				.addOptions(options)
+		menu,
+		new ActionRowBuilder<ButtonBuilder>().addComponents(
+			new ButtonBuilder()
+				.setCustomId(`${CARD_PREFIX}${id}:write`)
+				.setLabel(messages().cardAnswerLabel)
+				.setStyle(ButtonStyle.Secondary)
 				.setDisabled(disabled),
 		),
 	];
