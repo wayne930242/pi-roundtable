@@ -484,7 +484,7 @@ test("own text and the note are taken at 1000 characters and refused at 1001", a
 	expect(await asked).toMatchObject({ note: "n".repeat(1000) });
 });
 
-test("a reauth greeting on a declaring connection re-sends the open questionnaire only if it was not sent", async () => {
+test("a reauth greeting re-sends the open questionnaire to a declaring connection even if it was already sent", async () => {
 	const harness = await setup();
 	const ada = harness.connect("ada");
 	await client(harness, ada);
@@ -495,4 +495,32 @@ test("a reauth greeting on a declaring connection re-sends the open questionnair
 	const old = harness.connect("ada");
 	harness.chat.opened(old);
 	neverQuestionnaire(old);
+});
+
+test("a tab that narrows its declaration and widens again is sent the questionnaire again and can answer it", async () => {
+	const harness = await setup(60);
+	const ada = harness.connect("ada");
+	await client(harness, ada);
+	const asked = harness.prompts().questionnaire?.("Set", set);
+	const id = questionnaireId(ada);
+	await harness.declare(ada, { questions: 1, previews: false, note: false });
+	await harness.declare(ada);
+	expect(seen(ada, "questionnaire")).toHaveLength(2);
+	await harness.say(ada, {
+		type: "answers",
+		prompt: id,
+		answers: [{ choices: ["A"] }, null],
+	});
+	expect(await asked).toEqual({ answers: [{ choices: ["A"] }, undefined] });
+});
+
+test("a questionnaire obtained while a declaring tab was open expires after the grace when it closes before the call, and a v1 tab sees nothing", async () => {
+	const harness = await setup(30);
+	const old = harness.connect("ada");
+	const fresh = harness.connect("ada");
+	await client(harness, fresh);
+	const questionnaire = harness.prompts().questionnaire;
+	harness.chat.closed(fresh);
+	expect(await questionnaire?.("Set", set)).toBeUndefined();
+	expect(old.frames.map((f) => f.type)).toEqual(["ready"]);
 });

@@ -274,7 +274,7 @@ export class PromptDesk {
 					open.principal === from.principalId &&
 					open.sentTo &&
 					showable(open.frame, frame.ask) &&
-					!open.sentTo.has(connection)
+					!(open.sentTo.has(connection) && showable(open.frame, before))
 				) {
 					open.sentTo.add(connection);
 					this.#options.sendOne(connection, {

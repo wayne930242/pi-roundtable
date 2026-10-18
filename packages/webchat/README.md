@@ -234,7 +234,7 @@ The TypeScript types are `ClientFrame` and `ServerFrame`.
 
 | Frame | Meaning |
 |---|---|
-| `{ type: "ready", protocol, speaker, personas, attachments, clientCalls, prompts?, expiresAt }` | Sent first, and again after a fresh token: who you are (`{ id, name, tier, principalId }`), the personas you may open (`{ kind, label }`), what an upload may be (`attachments`: `{ maxBytes, perMessage, types }`), what a client call may take (`clientCalls`, below; absent from a server before 0.9.11, which never sends calls), what questionnaires it can send (`prompts`: `{ ask: { questions, previews, note } }`; absent from a server before 0.20, so send no `prompt_features` then), and when the token expires. Open prompts follow it, except a `questionnaire`, which waits for `prompt_features`. |
+| `{ type: "ready", protocol, speaker, personas, attachments, clientCalls, prompts?, expiresAt }` | Sent first, and again after a fresh token: who you are (`{ id, name, tier, principalId }`), the personas you may open (`{ kind, label }`), what an upload may be (`attachments`: `{ maxBytes, perMessage, types }`), what a client call may take (`clientCalls`, below; absent from a server before 0.9.11, which never sends calls), what questionnaires it can send (`prompts`: `{ ask: { questions, previews, note } }`; absent from a server before 0.20, so send no `prompt_features` then), and when the token expires. Open prompts follow it; a `questionnaire` follows only to a connection that already declared (on a reauth `ready`), and a fresh connection gets it after its `prompt_features`. |
 | `{ type: "accepted", id, conversation }` | Your message `id` was taken into `conversation`, a new one when you named none. |
 | `{ type: "typing", conversation, on }` | The assistant is, or is no longer, working in the conversation. |
 | `{ type: "stoppable", conversation, on }` | A stop applies, or no longer applies. |
@@ -346,6 +346,7 @@ A turn may ask up to four related questions on one card. The protocol name and `
 2. The server sends a `prompt` with `kind: "questionnaire"`, `title`, and `questions` (each `{ question, header?, options, multi, allowOther }`, an option being `{ label, description?, preview? }`), **only to connections that declared support covering it**. A client that never declared never receives one, while connected, after a reconnect, or beside a tab that did declare. On a reconnect the open questionnaire is sent after the declaration, not with the other open prompts.
 3. What the assistant may ask is the least of the person's declaring tabs. When no tab declared, the assistant asks one question at a time through the `ask` prompt, as before.
 4. The client answers with `answers`. `bad_frame` for a frame that does not parse or an answer the questions do not allow, `forbidden` from someone other than the conversation's person.
+5. A questionnaire that no open connection can show settles `expired` (a `prompt_closed` to the connections it was sent to) after 60 seconds without a covering declaration; the assistant then asks one question at a time.
 
 A client must ignore a prompt `kind` it does not know.
 
