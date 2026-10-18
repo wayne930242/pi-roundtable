@@ -66,7 +66,7 @@ The [agent tools reference](/reference/agent-tools/) lists every tool with its t
 - A held action, such as a destructive shell command, waits for approval on a card.
   By default only the owner can answer it.
   If you lower the tool's tier with `toolTiers`, speakers at that tier or above can approve it as well, and the card says `Who can approve: <tier> and above`.
-- A question an agent asks with `ask_user` can be answered by the speaker whose turn asks it, and by the owner.
+- A question an agent asks with `ask_user` can be answered by the speaker whose turn asks it, and by the owner. A set of questions is one card with the same rule; its `Previews` button only shows the previews, so anyone who sees the card may press it.
 
 ## Changing a tool's tier
 

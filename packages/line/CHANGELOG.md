@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- No change in behaviour. LINE has no prompts, so it asks no questionnaire, and the questionnaire checks of the surface contract do not apply to it.
+
 ## [0.19.2] - 2026-10-18
 
 - Release in lockstep with pi-roundtable 0.19.2. The core peer range stays `>=0.19.0 <0.20.0`.

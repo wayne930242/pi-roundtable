@@ -89,6 +89,7 @@ Set `formatting: "…"` to replace the text for a client that renders less, or `
 - **Origins.** `origins` is required and checked on every upgrade and every browser request.
 - **Limits.** Each person has bounded sockets, tickets, conversations opened per hour, and turns running or queued at once.
 - **Approvals.** A held call's card goes to the conversation's person only, at the tier the call needs.
+- **Questions.** The assistant can ask up to four related questions on one card, but only to a client that has declared it can show them; any other client is asked one question at a time. The package README lists the frames.
 - **Owner.** No token claim makes anyone the owner: list owners by speaker id, `oidc:<base64url(issuer)>:<subject>`.
 
 The verifier is generic; what makes it safe is how you point it at your provider.

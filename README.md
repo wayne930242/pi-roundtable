@@ -201,7 +201,7 @@ When a conversation is started over in a server channel or thread, the assistant
 | text | Markdown renders except tables | What the model is told, in English, about how a reply renders in Discord; appended to the system prompt of every turn that replies there |
 | `false` | | Tell the model nothing |
 
-An approval card or an `ask_user` question holds its turn for `discord.cardGraceSeconds` (default `120`).
+An approval card or an `ask_user` question (a set of up to four questions is one card) holds its turn for `discord.cardGraceSeconds` (default `120`).
 The files of a message in an agent's channel download within `discord.attachmentDownload.deadlineMs` (default 60,000) for the message and the one it replies to together, and a file that sends no byte for `discord.attachmentDownload.idleMs` (default 10,000) is given up; the turn goes on without a file it could not get.
 The copy button of an approval card keeps its text in `card-copies.json` under the data directory, the newest 100 for 30 days; `discord.cardCopies` (`{ keepDays?, keep? }`) changes that, and `false` keeps them in memory only.
 Answered within it, the turn goes on with the answer; otherwise the turn ends saying it is waiting, the card stays open with no deadline, and answering it later starts a new turn in that conversation with the answer, or with the result of the approved action.

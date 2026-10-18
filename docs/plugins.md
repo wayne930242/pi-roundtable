@@ -2608,7 +2608,7 @@ The agent server claims only `discord:` keys, so claims on your surface's channe
 | `startTyping(channel)` | Shows a typing indicator until the returned function is called | none is shown |
 | `showStop(channel)` | Shows the owner a stop control until the returned function is called; using it calls `conversations.stop(channel)` | none is shown |
 | `react`, `unreact` | Adds or removes the bot's reaction on a message | no marks on queued or steered messages |
-| `prompts(channel, scope?)` | How those the turn's `PromptScope` names approve a held action or answer `ask_user` inside a running turn, as `Prompts`: `confirm` and `ask`; without a scope, the owners | the action is held until a message approves it |
+| `prompts(channel, scope?)` | How those the turn's `PromptScope` names approve a held action or answer `ask_user` inside a running turn, as `Prompts`: `confirm` and `ask`, and, where the surface declares `asks`, `questionnaire` ([several questions on one card](#several-questions-on-one-card-questionnaire-and-asksupport)); without a scope, the owners | the action is held until a message approves it |
 | `interim(channel)` | Where a running turn posts the text it writes before its final answer, as `InterimPosts`: `post(text)` sends one message of at most 2000 characters and resolves to an `InterimMessage` whose `edit(text)` changes it in place | only the final reply is posted |
 | `progress(channel, event)` | Shows a turn run through `context.turns` as it goes, such as a live preview in a web chat. `event` is a `TurnProgress`: `{ type: "text", delta }` (the reply's text, joined over 250 ms and always sent before a tool event, never the thinking), `{ type: "tool_start", id, tool, preview? }` (a one-line preview of the arguments, at most 80 characters, never their full text), or `{ type: "tool_end", id, tool, ok, refused? }` (`refused`, only on a failed end that a hold refused, says how: `declined` on its approval card, `expired` when a card was shown and went unanswered, `pending` while the card stays open, or `held` when no card could be shown (no one may approve it, or it could not be posted); it is absent for a success and for a real failure). The final reply still comes through `sendReply`; a rejection is logged and the turn goes on | only the final reply is shown |
 
@@ -2668,7 +2668,7 @@ Because anyone who can see the card can copy the text, it holds nothing they may
 
 #### A prompt that outlives its turn: `PromptWait`
 
-`confirm(title, message, signal?, minTier?, wait?)` and `ask(title, question, signal?, wait?)` take an optional `PromptWait`, whose `late(answer)` hears a `LateAnswer` (`{ kind: "approval", approved, by, approvedBy?, prompt? }`, `approvedBy` naming the approver where the surface knows them and `prompt` the id of the card that was answered, or `{ kind: "question", answer, by }`, `by` naming who answered) and returns the text of the turn that tells the conversation, or undefined for none.
+`confirm(title, message, signal?, minTier?, wait?)` and `ask(title, question, signal?, wait?)` take an optional `PromptWait`, whose `late(answer)` hears a `LateAnswer` (`{ kind: "approval", approved, by, approvedBy?, prompt? }`, `approvedBy` naming the approver where the surface knows them and `prompt` the id of the card that was answered, `{ kind: "question", answer, by }`, or `{ kind: "questionnaire", answer: QuestionnaireAnswer, by }`, `by` naming who answered; only a `questionnaire` call can produce the last) and returns the text of the turn that tells the conversation, or undefined for none.
 Given one, a surface may stop the turn's wait after a grace period: `confirm` then resolves `pending` and `ask` resolves `"pending"`, the prompt stays open, and when it is answered later the surface starts a turn in the prompt's conversation with that text, as a message from whoever answered, so the conversation's claim answers it as theirs.
 Without one, a prompt waits for its answer, or for its turn's stop; a surface that cannot start a turn ignores `wait` and waits too.
 A stop cancels a prompt only while its turn still waits on it; after that the prompt belongs to the conversation.
@@ -2681,6 +2681,25 @@ A coding worker's cards give no `wait`, since nothing could resume a worker: it 
 On Discord the grace period is `discord.cardGraceSeconds` (default 120), and the cards carry no countdown.
 A card answered late is edited to show the answer with its controls disabled, as one answered in time is; a second press finds it answered.
 Open cards live in memory: after a restart, pressing one replies, to the presser alone, that it is no longer valid and to ask again.
+
+#### Several questions on one card: `questionnaire` and `AskSupport`
+
+`ask_user` takes one to four questions in one call (`questions`), each with an optional short `header`, options with an optional `description` and markdown `preview`, `multi`, and `allow_other` (true by default in this form, so every question takes a written answer too), and the person may add a note on the whole set. The older single-question arguments (`question`, `options`, `multi`, `allow_other`) still work and read as one question with `allow_other` false; double-encoded `questions` and `options` values are decoded. A call that breaks `QUESTIONNAIRE_LIMITS` (the table of every limit: four questions, 25 options, 100 characters for a label or description, 1,500 characters for a lone question and 3,000 for the questions and headers of a set, 1,200 characters per preview and 10,000 in all, 1,000 for an answer of their own or the note) is refused to the model with the reason and posts no card. `validateQuestionnaire` gives the reason. Since 0.20 the same option label twice in a question, or the same question twice in a call, is refused for every call; 0.19 accepted both.
+
+A surface says what it can show with `Prompts.asks` (`AskSupport`: `{ questions, previews, note }`) and, when it declares it, implements `Prompts.questionnaire(title, questionnaire, signal?, wait?)`, which resolves with a `QuestionnaireAnswer` (`answers`, one per question in order and `undefined` for one left blank, and `note`), `"pending"`, or `undefined` as `ask` does. Both members are optional: a `Prompts` without them is the 0.19 contract (`SINGLE_QUESTION`: one question, no previews, no note) and keeps working unchanged. The runtime gives `questionnaire` a set already shaped for `asks` (`shapeFor`), so a surface renders only what it declared:
+
+| The surface lacks | What the core does |
+|---|---|
+| room for the questions (`asks.questions`, or no `asks` at all) | asks them one at a time through `ask` and stops at the first one that does not come back answered; the model is told which were not asked |
+| `previews` | appends each preview to its question as `**label**` and a fenced block (a longer fence when the preview holds one), cut to the question limit with `…` |
+| a `header` (a surface that takes one question) | drops it; the tool description already asks that each question read on its own |
+| `note` | shows no note control, and the answer carries no `note` |
+
+One question without previews always goes through `ask` and returns the same text as 0.19. `checkAnswer` and `checkQuestionnaireAnswer` check that an answer is one the questions allow (offered labels only, one unless `multi`, text of their own only where `allowOther`); a surface that takes answers from a network uses them rather than its own rules. `describeSurfaceContract` runs the questionnaire checks (answered, blank question kept blank, closed on stop, a stranger's answer ignored) for a subject that gives `answerQuestionnaire(prompt, answer, questionnaire)`, and only where the surface's `prompts` declare `asks`; `describeQuestionnaireContract` runs just those for a surface that cannot run the rest.
+
+On Discord the whole set is one card (`asks` is four questions, previews and a note): a menu per question with its options (an option can be cleared again, and the menus show the draft), `Submit`, a button that opens one form with a field per question that takes written text plus the note, and, when an option has a preview, a `Previews` button that replies ephemerally to whoever presses it and answers nothing. A short footer outside the container says how many questions are answered. The draft is one per card, shared by everyone who may answer and visible to everyone who sees the card; the last write wins and the submitter is reported. Presses are checked against the same audience as any question each time (menus, form and Submit). `Submit` needs at least one answer or the note, and a partial answer is allowed. Every limit Discord enforces is counted in UTF-16 units, so an emoji weighs two: the core's refusal of an over-long set counts them too. With a `wait`, each draft edit restarts the grace period, and a `Submit` after the turn stopped waiting starts the late turn with a `questionnaire` `LateAnswer`. A single question keeps its 0.19 card (a menu answers at once; "Other…" opens the form), with a `Previews` button when an option has a preview. Open cards live in memory, as before.
+
+On the web chat the support is the least of the person's connections that declared theirs (`prompt_features`), so the assistant only sends a set a tab can show, and a person whose tabs all lack it is asked one question at a time. A questionnaire that no connection can show expires after 60 seconds; the assistant then asks one question at a time. See the web chat package's README for the frames.
 
 #### Interim text: what a turn writes before its final answer
 
@@ -3405,6 +3424,7 @@ The contract starts the surface, calls the subject's `join()`, and stops the sur
 It checks that the surface names a prefix and owns its channel, delivers what the person writes, and shows every chunk of a reply; and, for the parts the surface offers, that it delivers files when `supportsFiles` is set, ends typing and stop controls idempotently, shows progress, and resolves an approval as the person approves or declines it, or `cancelled` when the turn stops or its plugin withdraws it (`ApprovalOptions.supersede`; one answered first stays answered), with a `stranger`, that the stranger's answer leaves the person's approval open, and with an `owner`, that an owner's answer leaves it open in a private conversation; with an `approver` and a `stranger`, that an approval naming the approver is answered by the approver and not by the person or the stranger, unless the surface is `privateOnly`, and, with an `approver`, that a private conversation ignores the names; and, for a speaker below the owner tier, that a private conversation's approval above their tier resolves `unavailable` (or `expired`, as older surfaces answer) at once and is not shown.
 A check for a part the surface does not offer passes.
 The contract has no check for `ApprovalDetails.copy`: a surface that shows it keeps it informational, so using it never resolves, approves or declines the prompt, whoever uses it.
+A surface whose `prompts` declare `asks` also keeps the questionnaire checks, for a subject that gives `answerQuestionnaire` (and a `stranger` that gives its own); `describeQuestionnaireContract(name, make)` registers only those, for a card layer that is not a whole chat.
 `checkSurfaceContract(make)` runs the same checks and returns the ones that failed, as `SurfaceContractFailure`s.
 
 ## What happens when the bot starts and stops
@@ -3925,6 +3945,7 @@ Import from the entries listed below; source area files are internal.
 | `TestStore` | `pi-roundtable/testing` | type |
 | `UsePostgresOptions` | `pi-roundtable/testing` | type |
 | `describeDb` | `pi-roundtable/testing` | value |
+| `describeQuestionnaireContract` | `pi-roundtable/testing` | value |
 | `describeSurfaceContract` | `pi-roundtable/testing` | value |
 | `checkSurfaceContract` | `pi-roundtable/testing` | value |
 | `SurfaceContractFailure` | `pi-roundtable/testing` | type |
