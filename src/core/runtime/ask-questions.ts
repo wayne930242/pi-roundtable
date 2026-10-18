@@ -49,10 +49,23 @@ export async function askQuestions(
 			{
 				late: (late) =>
 					late.kind === "questionnaire"
-						? lateQuestionnaireText(questionnaire, late.answer, late.by)
+						? n === 1
+							? lateAnswerText(
+									questionnaire.questions[0]?.question ?? "",
+									late.answer.answers[0] ?? { choices: [] },
+									late.by,
+								)
+							: lateQuestionnaireText(questionnaire, late.answer, late.by)
 						: undefined,
 			},
 		);
+		if (n === 1)
+			return answerText(
+				answer === "pending" || answer === undefined
+					? answer
+					: (answer.answers[0] ?? { choices: [] }),
+				owner,
+			);
 		return questionnaireText(answer, questionnaire, owner);
 	}
 	const shaped = shapeFor(questionnaire, SINGLE_QUESTION);

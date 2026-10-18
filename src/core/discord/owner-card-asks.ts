@@ -94,7 +94,9 @@ export function askPrompts(args: {
 						previews: questionnaire,
 						rows: (id, disabled) => [
 							...askRows(id, only, disabled),
-							previewsRow(id, disabled),
+							...(only.options.some((o) => o.preview !== undefined)
+								? [previewsRow(id, disabled)]
+								: []),
 						],
 						footer: messages().cardQuestionFooter,
 					},

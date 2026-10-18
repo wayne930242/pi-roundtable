@@ -3,6 +3,7 @@ import { messages } from "../i18n/index.ts";
 import {
 	QUESTIONNAIRE_LIMITS as L,
 	type Questionnaire,
+	validateQuestionnaire,
 } from "../interactions/questionnaire.ts";
 import { silentLogger } from "../log.ts";
 import {
@@ -207,5 +208,31 @@ describe("the previews attachment", () => {
 		const open = press("button", custom(fake.cardId(), "previews"));
 		await cards.handle(open.interaction);
 		expect(open.replies[0]).toBe(messages().cardPreviewsFile);
+	});
+});
+
+describe("the set budget counts UTF-16 units", () => {
+	const set = (emojis: number): Questionnaire => ({
+		questions: Array.from({ length: 4 }, (_, i) => ({
+			question: `${i}${"😀".repeat(emojis)}`,
+			options: [{ label: "a" }, { label: "b" }],
+			multi: false,
+			allowOther: false,
+		})),
+	});
+
+	test("an emoji-heavy set at the budget is refused, telling the model an emoji counts as two", () => {
+		// 4 × 375 code points = 1500 points, but 3000 units plus the digits: over 3000.
+		const refused = validateQuestionnaire(set(375));
+		expect(refused).toContain("counts as two");
+	});
+
+	test("a set just under the budget posts within Discord's limits", async () => {
+		expect(validateQuestionnaire(set(370))).toBeUndefined();
+		const { fake, ask } = setup();
+		void ask("T", set(370));
+		await tick();
+		expect(fake.sent).toHaveLength(1);
+		expect(messageViolations(all(fake.sent[0]))).toEqual([]);
 	});
 });

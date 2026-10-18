@@ -308,6 +308,18 @@ describe("the Discord questionnaire card", () => {
 		expect(json(fake.sent[0])).not.toContain(":submit");
 		expect(json(fake.sent[0])).not.toContain(":notes");
 		expect(json(fake.sent[0])).toContain(custom(id, "previews"));
+		const plainOne = fakeChannel();
+		void new OwnerCards({
+			ownerId: OWNER,
+			channel: plainOne.channel,
+			logger: silentLogger(),
+		})
+			.prompts("discord:555")
+			?.questionnaire?.("t", {
+				questions: [{ ...day, options: [{ label: "x" }], allowOther: false }],
+			});
+		await tick();
+		expect(json(plainOne.sent[0])).not.toContain(":previews");
 		const preview = press("button", custom(id, "previews"), { user: "1" });
 		await cards.handle(preview.interaction);
 		expect(JSON.stringify(preview.replied)).toContain("P");

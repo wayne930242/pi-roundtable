@@ -18,6 +18,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 
 - A single-question Discord card with 25 options and an answer of their own (`allow_other`) dropped the 25th option, because "Other…" took its place in the menu. The menu now keeps all 25 options and an "Answer…" button under it opens the form. A card with fewer options is unchanged.
+- A set's questions and headers are measured against the 3,000-character budget in UTF-16 units, as Discord counts them, so an emoji or rare character counts as two (the refusal says so); a card of emoji-heavy questions no longer passes validation and then fails to post. A single question with previews reads to the model exactly as a 0.19 single question.
 
 ## [0.19.2] - 2026-10-18
 

@@ -1,5 +1,12 @@
 import type { CatalogContext } from "./types.ts";
 
+/** `text` cut to at most 300 UTF-16 units without splitting a surrogate pair. */
+function clip(text: string, max: number): string {
+	if (text.length <= max) return text;
+	const last = text.charCodeAt(max - 1);
+	return text.slice(0, last >= 0xd800 && last <= 0xdbff ? max - 1 : max);
+}
+
 /** The owner's approval and question cards. */
 export function cardsEn(ctx: CatalogContext) {
 	return {
@@ -36,7 +43,7 @@ export function cardsEn(ctx: CatalogContext) {
 		cardModalField: "Your answer",
 		cardQuote: (text: string) => `“${text}”`,
 		cardAnswered: (parts: readonly string[]) =>
-			`Answered: ${parts.join(", ").slice(0, 300)}`,
+			`Answered: ${clip(parts.join(", "), 300)}`,
 		cardPreviewsFile:
 			"The previews contain code blocks, so they are attached as a file.",
 		cardSubmitLabel: "Submit",
@@ -83,7 +90,7 @@ export function cardsZhTW(ctx: CatalogContext): ReturnType<typeof cardsEn> {
 		cardModalField: "你的回答",
 		cardQuote: (text: string) => `「${text}」`,
 		cardAnswered: (parts: readonly string[]) =>
-			`已回答：${parts.join("、").slice(0, 300)}`,
+			`已回答：${clip(parts.join("、"), 300)}`,
 		cardPreviewsFile: "預覽裡有程式碼區塊，所以用檔案附上。",
 		cardSubmitLabel: "送出",
 		cardWriteLabel: "寫答案／備註…",

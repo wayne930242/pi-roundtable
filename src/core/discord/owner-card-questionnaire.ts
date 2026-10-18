@@ -89,7 +89,6 @@ function select(
 	i: number,
 	question: OwnerQuestion,
 	draft: Draft,
-	form: QuestionnaireForm,
 	disabled: boolean,
 ) {
 	const chosen = draft.choices[i] ?? [];
@@ -170,7 +169,7 @@ export function questionnaireCard(args: {
 		container.addTextDisplayComponents(text(body));
 		if (question.options.length > 0)
 			container.addActionRowComponents(
-				select(id, i, question, draft, form, disabled),
+				select(id, i, question, draft, disabled),
 			);
 	}
 	container.addActionRowComponents(...buttons(id, form, disabled));

@@ -131,9 +131,8 @@ describe("askQuestions", () => {
 			],
 		};
 		const withPreviews = v2({ answers: [{ choices: ["a"] }] });
-		expect(await run(withPreviews.prompts, one)).toContain(
-			"answered your questions",
-		);
+		// The same text as a 0.19 single-question answer.
+		expect(await run(withPreviews.prompts, one)).toBe("Riley chose: a");
 		const noPreviews = v1([{ choices: ["a"] }]);
 		const prompts: Prompts = {
 			...noPreviews.prompts,
