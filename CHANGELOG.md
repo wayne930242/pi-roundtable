@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-10-20
+
+### Added
+
+- A held call's approval card can be its speaker's alone (`pi-roundtable`). A hold answers `{ text, approval: "speaker" }` (`HoldDescription.approval`, beside `copy` and `supersede`; a tool's `hold` and a rule's `describeInTurn` both may) and the card reaches the surface as `ApprovalOptions.speakerOnly`. Only the speaker whose turn made the call answers it, on any of their identities the surface knows and at the call's tier, checked again when they press: in a shared conversation no owner does, and an owner's press or decline is refused with the card's own line while the card stays open for the speaker. A speaker below the tier, a turn with no speaker and a speaker with no Discord identity get `unavailable` at once, shown to no one, so the call stays held. With `approvers` the card is still the speaker's alone, and the runtime accepts their press only when the approvers name them or they are an owner. The option governs the card only; a message that confirms the held call is judged as before, so a tool that must act on the speaker's press alone checks `ToolTurn.approvedPrompt` and `ToolTurn.approvedBy` in `run`. Without it every card behaves as before. The Discord cards and the web chat honour it, and `SurfaceContractSubject.speakerOnly` makes `describeSurfaceContract` check, with an `owner`, that an owner's answer leaves such an approval open in a shared conversation; a subject that does not declare it skips the check.
+
 ## [0.20.0] - 2026-10-18
 
 ### Added

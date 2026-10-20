@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-10-20
+
+- Release in lockstep with pi-roundtable 0.21.0. The core peer range moves to `>=0.21.0 <0.22.0`. The web chat honours `ApprovalOptions.speakerOnly` without further change: it shows prompts to the conversation's person only, and no owner is on it.
+
 ## [0.20.0] - 2026-10-18
 
 ### Added
