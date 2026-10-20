@@ -95,6 +95,7 @@ export async function answeredOnlyByThem(
 	other: SurfaceContractAnswerer | undefined,
 	visibility: "private" | "shared",
 	approvers?: readonly string[],
+	speakerOnly = false,
 ): Promise<void> {
 	const { surface, channel, answer } = running.subject;
 	const prompts = surface.prompts?.(
@@ -114,7 +115,12 @@ export async function answeredOnlyByThem(
 			speakerOf(running.subject).tier,
 			undefined,
 			undefined,
-			approvers ? { approvers } : undefined,
+			approvers || speakerOnly
+				? {
+						...(approvers ? { approvers } : {}),
+						...(speakerOnly ? { speakerOnly } : {}),
+					}
+				: undefined,
 		)
 		.then((value) => {
 			settled = value;

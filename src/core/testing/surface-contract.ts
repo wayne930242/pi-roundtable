@@ -84,6 +84,12 @@ export interface SurfaceContractSubject {
 	 */
 	approver?: SurfaceContractAnswerer & { principalId: string };
 	/**
+	 * Set by a surface that honours `ApprovalOptions.speakerOnly` in a shared conversation, where
+	 * `owner` is on the network and could otherwise answer: the owner's answer to such an approval
+	 * settles nothing, the person's does. Without it, or without `owner`, the check is skipped.
+	 */
+	speakerOnly?: boolean;
+	/**
 	 * Set by a surface that serves only conversations private to one person, such as the web chat:
 	 * it has no shared conversation in which an approval is the named approvers', so it skips that
 	 * check and keeps the one that its person alone answers a private conversation's.
@@ -370,6 +376,23 @@ const CHECKS: readonly Check[] = [
 			answeredOnlyByThem(running, running.subject.owner, "private"),
 	},
 	{
+		name: "an approval that is the speaker's alone is not answered by an owner in a shared conversation",
+		applies: (subject) =>
+			subject.surface.prompts !== undefined &&
+			subject.answer !== undefined &&
+			subject.owner !== undefined &&
+			subject.speakerOnly === true &&
+			subject.privateOnly !== true,
+		run: (running) =>
+			answeredOnlyByThem(
+				running,
+				running.subject.owner,
+				"shared",
+				undefined,
+				true,
+			),
+	},
+	{
 		name: "a named approver answers an approval instead of the person; the person and another person cannot",
 		applies: (subject) =>
 			subject.surface.prompts !== undefined &&
@@ -448,7 +471,8 @@ export async function checkSurfaceContract(
  * one its plugin withdraws (`ApprovalOptions.supersede`) as cancelled, ignores
  * another person's answer to the person's approval, and, in a private conversation, an owner's
  * too, and lets an approval above the person's tier there come back at once, shown to no one.
- * Where it can name approvers, an approval that does is answered by them, reported as the
+ * Where `speakerOnly` is declared, an approval that is the speaker's alone is not settled by an
+ * owner's answer in a shared conversation. Where it can name approvers, an approval that does is answered by them, reported as the
  * approver, and not by the person or another person, and a private conversation's is answered by
  * its person alone, whoever the call names besides them. A subject that gives
  * `answerQuestionnaire` must declare `asks`, and then questionnaires keep the same rules. Each

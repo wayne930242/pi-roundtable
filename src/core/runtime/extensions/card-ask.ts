@@ -18,6 +18,8 @@ export interface CardAsk {
 	wait: PromptWait;
 	details: ApprovalDetails;
 	approvers: readonly string[] | undefined;
+	/** Only the speaker may answer the card; see `HoldDescription`. */
+	speakerOnly: boolean;
 	/** The call's watch, when its plugin may withdraw it. */
 	watch: Watch | undefined;
 }
@@ -41,6 +43,7 @@ export async function askOnCard(
 	const found: Omit<CardAnswer, "answer"> = {};
 	const options: ApprovalOptions = {
 		...(ask.approvers ? { approvers: ask.approvers } : {}),
+		...(ask.speakerOnly ? { speakerOnly: true } : {}),
 		approvedBy: (by) => {
 			found.approvedBy = by;
 		},

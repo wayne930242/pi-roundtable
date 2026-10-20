@@ -34,6 +34,8 @@ export type Needing =
 			copy?: NonNullable<ApprovalDetails["copy"]>;
 			/** Aborts when the plugin withdraws the call; see `HoldDescription`. */
 			supersede?: AbortSignal;
+			/** The card is the speaker's alone; see `HoldDescription`. */
+			speakerOnly?: true;
 	  }
 	| { released: Release };
 

@@ -58,7 +58,9 @@ export class CardAudiences {
 		scope: PromptScope | undefined,
 		minTier: Tier,
 		named?: readonly string[],
+		speakerOnly = false,
 	): Promise<Audience | undefined> {
+		if (speakerOnly) return this.#speakers(scope, minTier);
 		let approvers = named;
 		// A private conversation's person is the only one who answers, so a call naming others is theirs only if named or an owner.
 		if (approvers && scope?.escalate === "none") {
@@ -76,6 +78,51 @@ export class CardAudiences {
 			},
 			approvers,
 		);
+	}
+
+	/**
+	 * The card of a call that is its speaker's alone (`ApprovalOptions.speakerOnly`): the scope's
+	 * principal on any of their Discord identities still theirs when they press, at the tier the
+	 * call needs, checked again then, and no owner as such, whatever the scope escalates to. The
+	 * primary owner answers their own card, and where there is no identity service the primary owner
+	 * is the only speaker who has one. Undefined, so the call is unavailable at once, when there is
+	 * no scope, or the speaker is below the tier or has no Discord identity.
+	 */
+	async #speakers(
+		scope: PromptScope | undefined,
+		minTier: Tier,
+	): Promise<Audience | undefined> {
+		if (!scope) return undefined;
+		const { ownerId, identity } = this.#options;
+		if (!identity) {
+			// Without an identity service the primary owner is the only one who answers, and the only speaker who can.
+			if (scope.speakerId !== ownerId) return undefined;
+			return {
+				allows: async (user) => user.id === ownerId,
+				mentions: [ownerId],
+				note: "",
+				refusal: messages().cardOwnerOnly,
+				approver: (user) => this.#approver(user),
+			};
+		}
+		const own = await this.#ownIdentities(scope, minTier);
+		if (!own) return undefined;
+		const mentions = own.includes(scope.speakerId) ? [scope.speakerId] : own;
+		const primary = own.includes(ownerId);
+		return {
+			allows: async (user) =>
+				own.includes(user.id) &&
+				// Read the links again: one moved or unlinked since the card was posted is no longer theirs.
+				(await this.#stillOwn(scope.principalId, user.id)) &&
+				((primary && user.id === ownerId) ||
+					(await this.#owners.holds(user, minTier, scope.principalId))),
+			mentions,
+			note: primary ? "" : messages().cardApproversNote(...mentions),
+			refusal: primary
+				? messages().cardOwnerOnly
+				: messages().cardApproversRefusal,
+			approver: (user) => this.#approver(user),
+		};
 	}
 
 	/** Who may answer a question; undefined when no one may. */

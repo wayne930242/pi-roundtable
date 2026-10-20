@@ -141,6 +141,7 @@ export class OwnerCards implements InteractionModule {
 					scope,
 					minTier,
 					options?.approvers,
+					options?.speakerOnly === true,
 				);
 				// A private conversation's call above its person's tier is no one's to approve.
 				if (!audience) return "unavailable";

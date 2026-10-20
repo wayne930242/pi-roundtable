@@ -19,8 +19,20 @@ export interface HoldContext {
 
 /**
  * What a hold that runs in a turn answers with: the description of the call, or the description
- * as `text` with a `copy` the owner's approval card offers beside it (see `ApprovalDetails.copy`)
- * and a `supersede` signal to withdraw the call by.
+ * as `text` with a `copy` the owner's approval card offers beside it (see `ApprovalDetails.copy`),
+ * a `supersede` signal to withdraw the call by, and `approval: "speaker"` to make the card the
+ * speaker's alone.
+ *
+ * With `approval: "speaker"` only the speaker whose turn made the call may answer its card, on
+ * any of their identities the surface knows and at the call's tier; no owner may answer it as an
+ * owner (an owner who is the speaker answers as the speaker). A speaker below the call's tier, a
+ * turn with no speaker, or a surface that cannot tell who the speaker is gets `unavailable` at
+ * once and the call stays held. Combined with approvers the card is still the speaker's alone,
+ * and the runtime accepts their press only when the approvers name them or they are an owner;
+ * otherwise the call stays held. It governs the card only: a message that confirms the held call
+ * is judged as for any call, so a tool that must act on the speaker's press alone checks
+ * `ToolTurn.approvedPrompt` and `ToolTurn.approvedBy` in `run`. Anything but `"speaker"` leaves
+ * the card as every card is.
  *
  * Aborting `supersede` withdraws the call the hold held, when the plugin no longer wants it
  * (a newer request replaced it, its subject is gone): its approval card is closed, also after
@@ -39,6 +51,7 @@ export type HoldDescription =
 			text: string;
 			copy?: NonNullable<ApprovalDetails["copy"]>;
 			supersede?: AbortSignal;
+			approval?: "speaker";
 	  };
 
 /**

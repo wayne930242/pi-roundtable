@@ -32,6 +32,8 @@ export interface Judgment {
 	/** Aborts when the plugin withdraws the call; see `HoldDescription`. */
 	supersede?: AbortSignal;
 	approvers?: readonly string[];
+	/** The card is the speaker's alone; see `HoldDescription`. */
+	speakerOnly?: true;
 }
 
 export type Judged = Judgment | undefined | typeof STOPPED;
@@ -55,13 +57,16 @@ function isSignal(value: unknown): value is AbortSignal {
 export function described(
 	answer: HoldDescription,
 	tool: string,
-): Pick<Judgment, "action" | "copy" | "supersede"> {
+): Pick<Judgment, "action" | "copy" | "supersede" | "speakerOnly"> {
 	if (typeof answer === "string") return { action: answer };
 	if (typeof answer !== "object" || answer === null)
 		return { action: messages().holdGeneric(tool) };
-	const { text, copy, supersede } = answer;
+	const { text, copy, supersede, approval } = answer;
 	if (typeof text !== "string") return { action: messages().holdGeneric(tool) };
-	const withdrawal = isSignal(supersede) ? { supersede } : {};
+	const withdrawal = {
+		...(isSignal(supersede) ? { supersede } : {}),
+		...(approval === "speaker" ? { speakerOnly: true as const } : {}),
+	};
 	if (
 		!copy ||
 		typeof copy !== "object" ||
@@ -125,7 +130,12 @@ export function joinApprovers(
 	if (!lookup) return withoutApprovers(answer, tool);
 	const join = (action: Described): Judged | Promise<Judged> => {
 		if (action === STOPPED || action === undefined) return action;
-		const { action: text, copy, supersede } = described(action, tool);
+		const {
+			action: text,
+			copy,
+			supersede,
+			speakerOnly,
+		} = described(action, tool);
 		const controller = new AbortController();
 		if (turn.signal?.aborted) controller.abort();
 		let named:
@@ -149,6 +159,7 @@ export function joinApprovers(
 				action: text,
 				...(copy ? { copy } : {}),
 				...(supersede ? { supersede } : {}),
+				...(speakerOnly ? { speakerOnly } : {}),
 				...(named ? { approvers: named } : {}),
 			};
 		}
@@ -159,6 +170,7 @@ export function joinApprovers(
 					action: text,
 					...(copy ? { copy } : {}),
 					...(supersede ? { supersede } : {}),
+					...(speakerOnly ? { speakerOnly } : {}),
 					...(approvers ? { approvers } : {}),
 				};
 			},

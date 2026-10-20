@@ -32,6 +32,8 @@ function memoryChat(
 		approversInPrivate?: boolean;
 		/** Does not report who approved an approval that names approvers. */
 		silentApprovers?: boolean;
+		/** Lets an owner answer an approval that is the speaker's alone, as any approval. */
+		ignoresSpeakerOnly?: boolean;
 	} = {},
 ): SurfaceContractSubject {
 	const seen: SurfaceObservation[] = [];
@@ -111,7 +113,8 @@ function memoryChat(
 					const shared = scope?.escalate !== "none";
 					open.set(id, {
 						settle,
-						owners: shared,
+						owners:
+							shared && !(given?.speakerOnly && !options.ignoresSpeakerOnly),
 						...(given?.approvers && (shared || options.approversInPrivate)
 							? { approvers: given.approvers }
 							: {}),
@@ -156,6 +159,7 @@ function memoryChat(
 		},
 		stranger: { answer: async (id, approved) => answerAs("2", id, approved) },
 		owner: { answer: async (id, approved) => answerAs("0", id, approved) },
+		speakerOnly: true,
 		approver: {
 			principalId: "3",
 			answer: async (id, approved) => answerAs("3", id, approved),
@@ -196,6 +200,7 @@ test("the contract catches a surface that lets another person answer an approval
 	expect(failures.map((failure) => failure.name)).toEqual([
 		"another person cannot answer the person's approval",
 		"another principal cannot answer for the person in their private conversation, even an owner",
+		"an approval that is the speaker's alone is not answered by an owner in a shared conversation",
 		"a named approver answers an approval instead of the person; the person and another person cannot",
 		"a private conversation is answered by its person alone, whoever else a call names",
 	]);
@@ -207,6 +212,7 @@ test("the contract catches a surface where an owner answers for the person in th
 	);
 	expect(failures.map((failure) => failure.name)).toEqual([
 		"another principal cannot answer for the person in their private conversation, even an owner",
+		"an approval that is the speaker's alone is not answered by an owner in a shared conversation",
 	]);
 });
 
@@ -226,6 +232,24 @@ test("the contract catches a surface where a named approver answers in a private
 	expect(failures.map((failure) => failure.name)).toEqual([
 		"a private conversation is answered by its person alone, whoever else a call names",
 	]);
+});
+
+test("the contract catches a surface where an owner answers an approval that is the speaker's alone", async () => {
+	const failures = await checkSurfaceContract(async () =>
+		memoryChat({ ignoresSpeakerOnly: true }),
+	);
+	expect(failures.map((failure) => failure.name)).toEqual([
+		"an approval that is the speaker's alone is not answered by an owner in a shared conversation",
+	]);
+});
+
+test("the contract skips the speaker-only check for a surface that does not declare it", async () => {
+	expect(
+		await checkSurfaceContract(async () => ({
+			...memoryChat({ ignoresSpeakerOnly: true }),
+			speakerOnly: false,
+		})),
+	).toEqual([]);
 });
 
 test("the contract catches a surface that does not report the named approver who answered", async () => {

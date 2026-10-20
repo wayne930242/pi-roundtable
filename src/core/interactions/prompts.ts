@@ -96,6 +96,16 @@ export interface ApprovalOptions {
 	 */
 	approvers?: readonly string[];
 	/**
+	 * When true the card is the scope's speaker's alone: they answer it on any of their identities
+	 * the surface knows, at the call's `minTier` checked again when they answer, and the owners do
+	 * not, whatever the scope escalates to. Without a speaker, below the tier, or on a surface that
+	 * cannot tell, it resolves `unavailable` at once. With `approvers`, the speaker's press is
+	 * accepted only if they are named (the runtime refuses the rest). A surface that cannot honour
+	 * it must resolve `unavailable` rather than show the card to the owners. Absent or false leaves
+	 * the card as every card is.
+	 */
+	speakerOnly?: boolean;
+	/**
 	 * Called with who approved the call, before the approval resolves `approved`; not called for a
 	 * refusal, or by a surface that does not know who answered.
 	 */

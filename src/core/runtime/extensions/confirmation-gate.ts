@@ -334,6 +334,7 @@ export class ConfirmationGate {
 				wait: { late: (late) => this.#late(call, late, watch) },
 				details: approvalDetails(call, this.#fileRoot, needing.copy),
 				approvers: call.approverIds,
+				speakerOnly: needing.speakerOnly === true,
 				watch,
 			},
 		);
@@ -446,6 +447,7 @@ export class ConfirmationGate {
 			held: call,
 			...(judged.copy ? { copy: judged.copy } : {}),
 			...(judged.supersede ? { supersede: judged.supersede } : {}),
+			...(judged.speakerOnly ? { speakerOnly: judged.speakerOnly } : {}),
 		};
 	}
 
