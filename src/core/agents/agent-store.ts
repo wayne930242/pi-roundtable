@@ -58,6 +58,8 @@ export class PgAgentStore implements AgentDirectory {
 	readonly #sql: SQL;
 	readonly #agents = new Map<string, Agent>();
 	readonly #groups = new Map<string, AgentGroup>();
+	/** The tail of the agent and group writes, which run one at a time so none reads a map another is about to change. */
+	#queue: Promise<unknown> = Promise.resolve();
 
 	readonly #guild: string;
 	readonly #messages: GroupMessages;
@@ -97,18 +99,27 @@ export class PgAgentStore implements AgentDirectory {
 
 	/** Inserts seed agents that do not exist yet; existing rows, edited or not, are left alone. */
 	async seed(seeds: readonly AgentSeed[]): Promise<string[]> {
-		const added: string[] = [];
-		for (const seed of seeds) {
-			const rows: unknown[] = await this.#sql`
+		return this.#serial(async () => {
+			const added: string[] = [];
+			for (const seed of seeds) {
+				const rows: AgentRow[] = await this.#sql`
 				INSERT INTO agents (guild_id, name, display_name, prompt, avatar_prompt, channel_id)
 				VALUES (${this.#guild}, ${seed.name}, ${seed.displayName}, ${seed.prompt}, ${seed.avatarPrompt},
 					${seed.channelId ?? null})
 				ON CONFLICT DO NOTHING
-				RETURNING name`;
-			if (rows.length > 0) added.push(seed.name);
-		}
-		await this.#reload();
-		return added;
+				RETURNING *`;
+				// Only the inserted rows join the map: reloading it whole would drop a write that
+				// committed after its SELECT.
+				if (rows[0]) added.push(this.#keepAgent(rows[0]).name);
+			}
+			return added;
+		});
+	}
+
+	#serial<T>(write: () => Promise<T>): Promise<T> {
+		const run = this.#queue.then(write);
+		this.#queue = run.catch(() => undefined);
+		return run;
 	}
 
 	agents(): Agent[] {
@@ -178,18 +189,20 @@ export class PgAgentStore implements AgentDirectory {
 		avatarPrompt: string;
 		channelId: string;
 	}): Promise<Agent> {
-		checkAgentName(agent.name);
-		checkDisplayName(agent.displayName);
-		checkPrompt(agent.prompt);
-		// An agent of a host without an image provider has no avatar prompt.
-		if (agent.avatarPrompt !== "") checkAvatarPrompt(agent.avatarPrompt);
-		this.#checkFree(agent.name);
-		const rows: AgentRow[] = await this.#sql`
+		return this.#serial(async () => {
+			checkAgentName(agent.name);
+			checkDisplayName(agent.displayName);
+			checkPrompt(agent.prompt);
+			// An agent of a host without an image provider has no avatar prompt.
+			if (agent.avatarPrompt !== "") checkAvatarPrompt(agent.avatarPrompt);
+			this.#checkFree(agent.name);
+			const rows: AgentRow[] = await this.#sql`
 			INSERT INTO agents (guild_id, name, display_name, prompt, avatar_prompt, channel_id)
 			VALUES (${this.#guild}, ${agent.name}, ${agent.displayName.trim()}, ${agent.prompt}, ${agent.avatarPrompt},
 				${agent.channelId})
 			RETURNING *`;
-		return this.#keepAgent(rows[0]);
+			return this.#keepAgent(rows[0]);
+		});
 	}
 
 	/** A name that createAgent would accept, checked before its channel is made. */
@@ -211,20 +224,22 @@ export class PgAgentStore implements AgentDirectory {
 			thinking?: ThinkingLevel | null;
 		},
 	): Promise<Agent> {
-		const current = this.activeAgent(name);
-		if (change.displayName !== undefined) checkDisplayName(change.displayName);
-		if (change.prompt !== undefined) checkPrompt(change.prompt);
-		if (change.avatarPrompt !== undefined)
-			checkAvatarPrompt(change.avatarPrompt);
-		if (change.model) checkModelRef(change.model);
-		if (change.thinking) checkThinking(change.thinking);
-		const model =
-			change.model === undefined ? (current.model ?? null) : change.model;
-		const thinking =
-			change.thinking === undefined
-				? (current.thinking ?? null)
-				: change.thinking;
-		const rows: AgentRow[] = await this.#sql`
+		return this.#serial(async () => {
+			const current = this.activeAgent(name);
+			if (change.displayName !== undefined)
+				checkDisplayName(change.displayName);
+			if (change.prompt !== undefined) checkPrompt(change.prompt);
+			if (change.avatarPrompt !== undefined)
+				checkAvatarPrompt(change.avatarPrompt);
+			if (change.model) checkModelRef(change.model);
+			if (change.thinking) checkThinking(change.thinking);
+			const model =
+				change.model === undefined ? (current.model ?? null) : change.model;
+			const thinking =
+				change.thinking === undefined
+					? (current.thinking ?? null)
+					: change.thinking;
+			const rows: AgentRow[] = await this.#sql`
 			UPDATE agents SET
 				display_name = ${change.displayName?.trim() ?? current.displayName},
 				prompt = ${change.prompt ?? current.prompt},
@@ -236,29 +251,33 @@ export class PgAgentStore implements AgentDirectory {
 				updated_at = now()
 			WHERE guild_id = ${this.#guild} AND name = ${name}
 			RETURNING *`;
-		return this.#keepAgent(rows[0]);
+			return this.#keepAgent(rows[0]);
+		});
 	}
 
 	/** Archives an agent and takes it out of every group; says which groups it left. */
 	async archiveAgent(name: string): Promise<AgentGroup[]> {
-		const rows: AgentRow[] = await this.#sql`
+		return this.#serial(async () => {
+			const rows: AgentRow[] = await this.#sql`
 			UPDATE agents SET status = 'archived', updated_at = now()
 			WHERE guild_id = ${this.#guild} AND name = ${name} RETURNING *`;
-		this.#keepAgent(rows[0]);
-		const left: AgentGroup[] = [];
-		for (const group of this.groups()) {
-			if (group.status !== "active" || !group.members.includes(name)) continue;
-			const members = group.members.filter((m) => m !== name);
-			const host = group.host === name ? (members[0] ?? name) : group.host;
-			left.push(
-				await this.#writeGroup(group.name, {
-					members,
-					host,
-					status: members.length < MIN_GROUP_MEMBERS ? "archived" : "active",
-				}),
-			);
-		}
-		return left;
+			this.#keepAgent(rows[0]);
+			const left: AgentGroup[] = [];
+			for (const group of this.groups()) {
+				if (group.status !== "active" || !group.members.includes(name))
+					continue;
+				const members = group.members.filter((m) => m !== name);
+				const host = group.host === name ? (members[0] ?? name) : group.host;
+				left.push(
+					await this.#writeGroup(group.name, {
+						members,
+						host,
+						status: members.length < MIN_GROUP_MEMBERS ? "archived" : "active",
+					}),
+				);
+			}
+			return left;
+		});
 	}
 
 	#keepAgent(row: AgentRow | undefined): Agent {
@@ -296,39 +315,44 @@ export class PgAgentStore implements AgentDirectory {
 		members: string[];
 		host: string;
 	}): Promise<AgentGroup> {
-		this.checkNewGroup(group.name, group.members, group.host);
-		checkDisplayName(group.displayName);
-		const rows: GroupRow[] = await this.#sql`
+		return this.#serial(async () => {
+			this.checkNewGroup(group.name, group.members, group.host);
+			checkDisplayName(group.displayName);
+			const rows: GroupRow[] = await this.#sql`
 			INSERT INTO agent_groups (guild_id, name, display_name, channel_id, members, host)
 			VALUES (${this.#guild}, ${group.name}, ${group.displayName.trim()}, ${group.channelId},
 				${group.members.join(",")}, ${group.host})
 			RETURNING *`;
-		return this.#keepGroup(rows[0]);
+			return this.#keepGroup(rows[0]);
+		});
 	}
 
 	async updateGroup(
 		name: string,
 		change: { displayName?: string; members?: string[]; host?: string },
 	): Promise<AgentGroup> {
-		const current = this.#groups.get(name);
-		if (current?.status !== "active")
-			throw new AgentError(`There is no active group "${name}".`);
-		if (change.displayName !== undefined) checkDisplayName(change.displayName);
-		const members = change.members ?? current.members;
-		const host =
-			change.host ??
-			(members.includes(current.host) ? current.host : (members[0] ?? ""));
-		this.#checkMembers(members, host);
-		return this.#writeGroup(name, {
-			displayName: change.displayName?.trim() ?? current.displayName,
-			members,
-			host,
-			status: "active",
+		return this.#serial(async () => {
+			const current = this.#groups.get(name);
+			if (current?.status !== "active")
+				throw new AgentError(`There is no active group "${name}".`);
+			if (change.displayName !== undefined)
+				checkDisplayName(change.displayName);
+			const members = change.members ?? current.members;
+			const host =
+				change.host ??
+				(members.includes(current.host) ? current.host : (members[0] ?? ""));
+			this.#checkMembers(members, host);
+			return this.#writeGroup(name, {
+				displayName: change.displayName?.trim() ?? current.displayName,
+				members,
+				host,
+				status: "active",
+			});
 		});
 	}
 
 	async archiveGroup(name: string): Promise<AgentGroup> {
-		return this.#writeGroup(name, { status: "archived" });
+		return this.#serial(() => this.#writeGroup(name, { status: "archived" }));
 	}
 
 	async #writeGroup(

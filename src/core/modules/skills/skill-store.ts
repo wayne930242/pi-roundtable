@@ -70,6 +70,11 @@ export class SkillStore {
 	readonly #skills = new Map<string, SkillEntry>();
 	readonly #groups = new Map<string, SkillGroup>();
 	readonly #carried = new Map<string, string[]>();
+	/**
+	 * The tail of the mutations, which run one at a time: each checks the maps, writes, then
+	 * updates the maps from what it committed, and none may interleave with another.
+	 */
+	#queue: Promise<unknown> = Promise.resolve();
 
 	readonly #guild: string;
 
@@ -152,6 +157,12 @@ export class SkillStore {
 			]);
 	}
 
+	#serial<T>(write: () => Promise<T>): Promise<T> {
+		const run = this.#queue.then(write);
+		this.#queue = run.catch(() => undefined);
+		return run;
+	}
+
 	skills(): SkillEntry[] {
 		return [...this.#skills.values()].sort((a, b) =>
 			a.name.localeCompare(b.name),
@@ -189,19 +200,29 @@ export class SkillStore {
 	async addLinked(
 		entries: readonly { name: string; repo: string; path: string }[],
 	): Promise<void> {
-		const taken = entries.filter((entry) => this.#skills.has(entry.name));
-		if (taken.length > 0)
-			throw new AgentError(
-				`Already registered: ${taken.map((entry) => entry.name).join(", ")}. Nothing was linked.`,
-			);
-		await this.#sql.begin(async (tx) => {
+		return this.#serial(async () => {
+			const taken = entries.filter((entry) => this.#skills.has(entry.name));
+			const refuse = (names: string[]) =>
+				new AgentError(
+					`Already registered: ${names.join(", ")}. Nothing was linked.`,
+				);
+			if (taken.length > 0) throw refuse(taken.map((entry) => entry.name));
+			try {
+				await this.#sql.begin(async (tx) => {
+					for (const entry of entries)
+						await tx`
+							INSERT INTO skills (name, kind, repo, path)
+							VALUES (${entry.name}, 'linked', ${entry.repo}, ${entry.path})`;
+				});
+			} catch (error) {
+				// A row the maps do not hold, such as a duplicate within `entries`.
+				if (isUniqueViolation(error))
+					throw refuse(entries.map((entry) => entry.name));
+				throw error;
+			}
 			for (const entry of entries)
-				await tx`
-					INSERT INTO skills (name, kind, repo, path)
-					VALUES (${entry.name}, 'linked', ${entry.repo}, ${entry.path})`;
+				this.#skills.set(entry.name, { kind: "linked", ...entry });
 		});
-		for (const entry of entries)
-			this.#skills.set(entry.name, { kind: "linked", ...entry });
 	}
 
 	async addWritten(skill: {
@@ -209,12 +230,14 @@ export class SkillStore {
 		description: string;
 		body: string;
 	}): Promise<void> {
-		if (this.#skills.has(skill.name))
-			throw new AgentError(`A skill named "${skill.name}" already exists.`);
-		await this.#sql`
-			INSERT INTO skills (name, kind, description, body)
-			VALUES (${skill.name}, 'written', ${skill.description}, ${skill.body})`;
-		this.#skills.set(skill.name, { kind: "written", ...skill });
+		return this.#serial(async () => {
+			if (this.#skills.has(skill.name))
+				throw new AgentError(`A skill named "${skill.name}" already exists.`);
+			await this.#sql`
+				INSERT INTO skills (name, kind, description, body)
+				VALUES (${skill.name}, 'written', ${skill.description}, ${skill.body})`;
+			this.#skills.set(skill.name, { kind: "written", ...skill });
+		});
 	}
 
 	async updateWritten(skill: {
@@ -222,54 +245,84 @@ export class SkillStore {
 		description: string;
 		body: string;
 	}): Promise<void> {
-		await this.#sql`
-			UPDATE skills SET description = ${skill.description}, body = ${skill.body},
-				updated_at = now()
-			WHERE name = ${skill.name} AND kind = 'written'`;
-		this.#skills.set(skill.name, { kind: "written", ...skill });
+		return this.#serial(async () => {
+			await this.#sql`
+				UPDATE skills SET description = ${skill.description}, body = ${skill.body},
+					updated_at = now()
+				WHERE name = ${skill.name} AND kind = 'written'`;
+			this.#skills.set(skill.name, { kind: "written", ...skill });
+		});
 	}
 
 	/** Removes a skill and detaches it from every agent and group. */
 	async remove(name: string): Promise<Detached> {
-		const agents = this.carriers(name);
-		const groups = this.groups().filter((group) => group.skills.includes(name));
-		await this.#sql.begin(async (tx) => {
-			await tx`DELETE FROM skills WHERE name = ${name}`;
-			await tx`DELETE FROM agent_skills WHERE guild_id = ${this.#guild} AND skill = ${name}`;
+		return this.#serial(async () => {
+			const agents = this.carriers(name);
+			const groups = this.groups().filter((group) =>
+				group.skills.includes(name),
+			);
+			await this.#sql.begin(async (tx) => {
+				await tx`DELETE FROM skills WHERE name = ${name}`;
+				await tx`DELETE FROM agent_skills WHERE guild_id = ${this.#guild} AND skill = ${name}`;
+				for (const group of groups)
+					await tx`
+						UPDATE skill_groups
+						SET skills = ${group.skills.filter((s) => s !== name).join(",")}
+						WHERE name = ${group.name}`;
+			});
+			// The maps follow the transaction; reloading them all here would drop a write that
+			// committed after its SELECT.
+			this.#skills.delete(name);
+			for (const agent of agents) {
+				const left = this.carriedBy(agent).filter((s) => s !== name);
+				if (left.length > 0) this.#carried.set(agent, left);
+				else this.#carried.delete(agent);
+			}
 			for (const group of groups)
-				await tx`
-					UPDATE skill_groups
-					SET skills = ${group.skills.filter((s) => s !== name).join(",")}
-					WHERE name = ${group.name}`;
+				this.#groups.set(group.name, {
+					...group,
+					skills: group.skills.filter((s) => s !== name),
+				});
+			return { agents, groups: groups.map((group) => group.name) };
 		});
-		await this.#reload();
-		return { agents, groups: groups.map((group) => group.name) };
 	}
 
 	async setGroup(group: SkillGroup): Promise<void> {
-		await this.#sql`
-			INSERT INTO skill_groups (name, description, skills)
-			VALUES (${group.name}, ${group.description}, ${group.skills.join(",")})
-			ON CONFLICT (name) DO UPDATE
-			SET description = EXCLUDED.description, skills = EXCLUDED.skills`;
-		this.#groups.set(group.name, { ...group, skills: [...group.skills] });
+		return this.#serial(async () => {
+			await this.#sql`
+				INSERT INTO skill_groups (name, description, skills)
+				VALUES (${group.name}, ${group.description}, ${group.skills.join(",")})
+				ON CONFLICT (name) DO UPDATE
+				SET description = EXCLUDED.description, skills = EXCLUDED.skills`;
+			this.#groups.set(group.name, { ...group, skills: [...group.skills] });
+		});
 	}
 
 	async removeGroup(name: string): Promise<void> {
-		await this.#sql`DELETE FROM skill_groups WHERE name = ${name}`;
-		this.#groups.delete(name);
+		return this.#serial(async () => {
+			await this.#sql`DELETE FROM skill_groups WHERE name = ${name}`;
+			this.#groups.delete(name);
+		});
 	}
 
 	/** Replaces the registered skills an agent carries. */
 	async setCarried(agent: string, skills: readonly string[]): Promise<void> {
 		// pi-lens-ignore: no-sort-without-comparator — skill names sort by code unit, the same order on every machine
 		const sorted = [...new Set(skills)].sort();
-		await this.#sql.begin(async (tx) => {
-			await tx`DELETE FROM agent_skills WHERE guild_id = ${this.#guild} AND agent = ${agent}`;
-			for (const skill of sorted)
-				await tx`INSERT INTO agent_skills (guild_id, agent, skill) VALUES (${this.#guild}, ${agent}, ${skill})`;
+		return this.#serial(async () => {
+			await this.#sql.begin(async (tx) => {
+				await tx`DELETE FROM agent_skills WHERE guild_id = ${this.#guild} AND agent = ${agent}`;
+				for (const skill of sorted)
+					await tx`INSERT INTO agent_skills (guild_id, agent, skill) VALUES (${this.#guild}, ${agent}, ${skill})`;
+			});
+			if (sorted.length > 0) this.#carried.set(agent, sorted);
+			else this.#carried.delete(agent);
 		});
-		if (sorted.length > 0) this.#carried.set(agent, sorted);
-		else this.#carried.delete(agent);
 	}
+}
+
+/** PostgreSQL's unique_violation, as Bun's driver reports it. */
+function isUniqueViolation(error: unknown): boolean {
+	const fields = error as { errno?: unknown; code?: unknown } | null;
+	return fields?.errno === "23505" || fields?.code === "23505";
 }

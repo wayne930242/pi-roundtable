@@ -202,4 +202,47 @@ describeDb("PostgreSQL", () => {
 				expect((await store.backlog("ops", member, 40)).messages).toEqual([]);
 		});
 	});
+
+	describe("writes running together", () => {
+		test("an agent created while seeding stays, and a fresh store agrees", async () => {
+			const [added, created] = await Promise.all([
+				store.seed([seed("new-seed")]),
+				store.createAgent({
+					...seed("made"),
+					channelId: "300",
+				}),
+			]);
+			expect(added).toEqual(["new-seed"]);
+			expect(created.name).toBe("made");
+			expect(store.agent("made")).toBeDefined();
+			expect(store.agent("new-seed")).toBeDefined();
+			const reopened = await openTestStore(PgAgentStore, TEST_GUILD);
+			const names = (s: PgAgentStore) =>
+				s
+					.agents()
+					.map((a) => a.name)
+					.sort();
+			expect(names(reopened)).toEqual(names(store));
+			await reopened.close();
+		});
+
+		test("an archived agent does not return to a group updated meanwhile", async () => {
+			await store.seed([seed("fourth")]);
+			await store.createGroup({
+				name: "ops",
+				displayName: "Ops",
+				channelId: "200",
+				members: ["coordinator", "infra", "doctor"],
+				host: "coordinator",
+			});
+			const updated = store.updateGroup("ops", { displayName: "Ops 2" });
+			const archived = store.archiveAgent("doctor");
+			await Promise.all([updated, archived]);
+			expect(store.group("ops")?.members).toEqual(["coordinator", "infra"]);
+			expect(store.group("ops")?.displayName).toBe("Ops 2");
+			const reopened = await openTestStore(PgAgentStore, TEST_GUILD);
+			expect(reopened.group("ops")).toEqual(store.group("ops"));
+			await reopened.close();
+		});
+	});
 });
