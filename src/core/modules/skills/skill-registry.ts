@@ -44,7 +44,7 @@ export class StoredSkillRegistry implements SkillRegistry {
 			const stored = options.store.skill(skill.name);
 			if (stored)
 				throw new PluginError(
-					`The skill "${skill.name}" of the package "${skill.package}" clashes with a ${stored.kind} skill of the same name. Remove the ${stored.kind} skill (${stored.kind === "linked" ? "skill_unlink" : "skill_delete"}), or drop the package from skills.packages.`,
+					`The skill "${skill.name}" of the package "${skill.package}" clashes with a ${stored.kind} skill of the same name. Drop the package from skills.packages and start, remove the ${stored.kind} skill (${stored.kind === "linked" ? "skill_unlink" : "skill_delete"}), then list the package again.`,
 				);
 			this.#packageSkills.set(skill.name, skill);
 		}

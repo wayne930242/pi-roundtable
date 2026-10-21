@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.22.0
+
+- Release in lockstep with pi-roundtable 0.22.0. The core peer range moves to `>=0.22.0 <0.23.0`.
+
 ## 0.21.0
 
 - Release in lockstep with pi-roundtable 0.21.0. The core peer range moves to `>=0.21.0 <0.22.0`.

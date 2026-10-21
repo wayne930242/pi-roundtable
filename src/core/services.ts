@@ -94,7 +94,7 @@ export const DELEGATION: ServiceKey<Delegator> = serviceKey<Delegator>(
 );
 /**
  * Worker sessions on the host's models: a fresh, unsaved Pi session that has only the tools a
- * plugin gives it. Provided by the modules plugin.
+ * plugin gives it. Provided by the `worker-sessions` plugin.
  */
 export const WORKER_SESSIONS: ServiceKey<WorkerSessions> =
 	serviceKey<WorkerSessions>("roundtable.worker-sessions");

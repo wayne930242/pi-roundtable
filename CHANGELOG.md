@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.22.0] - 2026-10-21
+
 ### Added
 
 - Worker sessions for plugins (`pi-roundtable`). A new built-in plugin, `worker-sessions` (after `modules`), provides `WORKER_SESSIONS`, a `WorkerSessions`: `run(request)` runs a `WorkerSessionRequest` (`task`, `signal`, `prompt`, `extensions`, `toolNames`, and optionally `model`, `thinking` and `aborted`) in a fresh, unsaved Pi session on the host's model login and resolves to the worker's final answer, rejecting with an `AgentRunError` when it ends without one and with the signal's reason when it is aborted; the session is disposed either way. The session has no built-in tool, skill, context file, memory or agent tool, and only the tools its `extensions` register and `toolNames` names are active, even if an extension activates another. `model` and `thinking` default to the host's `delegation` settings, shown as `WorkerSessions.delegation`. The delegation worker for web research now runs on the same code. It is a separate plugin, not part of `modules`, so a host that replaces `BACKGROUND_TURNS` and `DELEGATION` still replaces that plugin whole. The built-in plugin names gain `worker-sessions`, so a plugin of that name is now refused. See [Workers of your own](docs/plugins.md#workers-of-your-own).
