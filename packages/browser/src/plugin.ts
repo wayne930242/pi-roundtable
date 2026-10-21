@@ -104,7 +104,18 @@ export function browserAgent(options: BrowserAgentOptions = {}) {
 		name: "browser",
 		requires: [WORKER_SESSIONS],
 		async setup(context) {
-			const driver = options.driver ?? agentBrowserDriver(options.docker);
+			const driver =
+				options.driver ??
+				agentBrowserDriver({
+					...options.docker,
+					onRefused: (destination, reason) => {
+						context.logger.info(
+							{ destination, reason },
+							"the browser's request was refused",
+						);
+						options.docker?.onRefused?.(destination, reason);
+					},
+				});
 			await driver.check?.();
 			const sessions = context.services.get(WORKER_SESSIONS);
 			const running = new Set<{

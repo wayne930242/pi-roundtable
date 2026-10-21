@@ -201,10 +201,12 @@ test.skipIf(!enabled)(
 				...privates.map((address) => `http://${address}:${port}/`),
 				`http://${METADATA}/`,
 			];
+			// A refused request is answered by the proxy itself, which a no-cors fetch cannot tell from a page's
+			// answer: what matters is that the host's server never sees one and the proxy logs the refusal.
 			const fetched = await run(["eval", "--stdin"], {
 				stdin: script(targets),
 			});
-			expect(fetched).not.toContain("reached");
+			expect(fetched).toContain(`http://127.0.0.1:${port}/`);
 			const socket = await run(["eval", "--stdin"], {
 				stdin: `new Promise(r=>{const w=new WebSocket("ws://127.0.0.1:${port}/");w.onopen=()=>r("OPEN");w.onerror=()=>r("blocked");setTimeout(()=>r("timeout"),10000)})`,
 			});
@@ -216,10 +218,24 @@ test.skipIf(!enabled)(
 			for (const address of privates) expect(rtc).not.toContain(address);
 
 			expect(requests).toEqual([]);
+			// Chromium never sends loopback and link-local destinations to a proxy: they stay in the
+			// container, which has no route for them. Private addresses and a public name that
+			// resolves to loopback go to the proxy, which refuses them by what they resolve to.
+			for (const address of privates)
+				expect(
+					refused.some((entry) =>
+						entry.startsWith(
+							`${address}:${port} the destination is not a public address`,
+						),
+					),
+				).toBe(true);
 			expect(
-				refused.some((entry) => entry.startsWith(`127.0.0.1:${port} `)),
+				refused.some((entry) =>
+					entry.startsWith(
+						`localtest.me:${port} the destination is not a public address`,
+					),
+				),
 			).toBe(true);
-			expect(refused.some((entry) => entry.includes(METADATA))).toBe(true);
 
 			// What the command policy refuses never reaches the browser.
 			expect(await run(["download", "@e1", "/tmp/x"])).toContain(
@@ -346,10 +362,10 @@ test.skipIf(!enabled)(
 		const sessions = scriptedSessions(async (worker) => {
 			await worker.call("agent_browser", { args: ["open", PUBLIC_PAGE] });
 			const text = await worker.call("agent_browser", {
-				args: ["get", "text", "h1"],
+				args: ["snapshot"],
 			});
 			await worker.call("agent_browser", { args: ["screenshot"], keep: true });
-			return `The page heading is: ${text.text}`;
+			return `The page shows: ${text.text}`;
 		});
 		const harness = await testPlugin(browserAgent({ driver: driver() }), {
 			services: [servicePair(WORKER_SESSIONS, sessions)],

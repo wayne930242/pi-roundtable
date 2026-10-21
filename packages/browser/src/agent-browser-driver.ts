@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { PluginError } from "pi-roundtable";
@@ -302,7 +302,6 @@ export function agentBrowserDriver(
 				if (failures.length > 0) throw new Error(failures.join("; "));
 			};
 			try {
-				mkdirSync(dir, { recursive: true, mode: 0o700 });
 				proxy = await EgressProxy.listen({
 					socketPath: join(dir, "proxy.sock"),
 					...(options.ports ? { ports: options.ports } : {}),
