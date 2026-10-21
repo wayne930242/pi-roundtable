@@ -184,7 +184,8 @@ Codex 拒絕提示詞時會丟出 `ImageNotGeneratedError`，同一個提示詞�
 | Discord 管理 | `discord: { admin: false }` | 讀取和管理伺服器、給 owner 用的 `discord_*` 工具 | 沒有 `discord_*` 工具 |
 
 關掉的 addon，它的資料表和資料列都不會被動到，所以再打開時會看到原樣。
-`skills` 開著的時候，還接受 `skills: { builtinDir, reposDir }` 這兩個目錄。
+`skills` 開著的時候，還接受兩個目錄和技能套件：`skills: { builtinDir, reposDir, packages }`。
+`packages` 列出已安裝的 npm 套件，它們 `pi.skills` 資料夾裡的每個技能都以唯讀方式提供，在目錄裡是 `{ kind: "package", package }`；套件沒裝、套件沒有技能，或技能名稱和別的技能重複時，啟動會以 `PluginError` 失敗，訊息會指出該怎麼改。
 
 你的外掛如果沒有某個 addon 也能運作，就用 `find` 讀它的服務；addon 關著時會得到 `undefined`。
 沒有它就不能運作的外掛用 `get`，失敗時的訊息會指出是哪個開關：

@@ -137,7 +137,7 @@ export default {
 
 | 鍵 | 型別 | 預設值 | 作用 |
 | --- | --- | --- | --- |
-| `skills` | `false`，或 `{ builtinDir?, reposDir? }` | 開啟，`builtinDir` 是套件附帶的技能，`reposDir` 是 `<dataDir>/repos` | `false` 會讓 `skills` addon 不載入：agent 不帶技能，也沒有技能工具。已存的技能仍留在資料表裡。 |
+| `skills` | `false`，或 `{ builtinDir?, reposDir?, packages? }` | 開啟，`builtinDir` 是套件附帶的技能，`reposDir` 是 `<dataDir>/repos` | `false` 會讓 `skills` addon 不載入：agent 不帶技能，也沒有技能工具。已存的技能仍留在資料表裡。`packages` 列出主機安裝的 npm 套件：它們 `pi.skills` 資料夾裡的每個技能都會以唯讀方式提供，可以像其他技能一樣被帶著、放進群組。套件沒裝、套件沒有技能，或技能名稱和別的技能重複時，啟動會失敗，訊息會指出該怎麼改。 |
 | `memory` | boolean | `true` | `false` 會讓 `memory` addon 不載入：沒有記憶工具，也沒有記憶的提示詞區塊。資料表維持原樣。 |
 | `ops.agent` | string | 無 | 負責調查行程自身錯誤的 agent 名稱。需要 Discord。 |
 | `ops.conversation` | string | 無 | 不交給 agent，而是回報到一段對話，寫它的 key `<surface>:<id>`。這段對話要有 chat surface 服務、要由一個接收背景回合的外掛 claim 擁有，還要有外掛提供 `owner` 背景目標（有 Discord 時由 agent server 提供），否則 host 不會啟動；網頁聊天不接收錯誤回報。`ops.agent` 和 `ops.conversation` 擇一設定。 |

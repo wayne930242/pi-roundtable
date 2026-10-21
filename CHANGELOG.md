@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Skills from an npm package (`pi-roundtable`, `pi-roundtable-web`). `skills: { packages: ["pi-aaaav"] }` (the new type `SkillsConfig`) names packages the host installed; at startup the registry reads each package's `pi.skills` folders and offers every skill found as a fourth kind, `package` (`SkillSource` gains `{ kind: "package"; package }`; `SkillCatalogEntry.source` and the web console's skill list show the package). A package skill is read-only, named by its frontmatter and resolved to the installed file on every read, so upgrading the package changes the skill with no database write. Agents carry package skills and groups include them exactly like linked or written ones (`agent_skills`, `agent_create`, `skill_group_set`, `repo_task`); `skill_unlink`, `skill_update` and `skill_delete` refuse a package skill with a message saying it comes from the package, and `skill_link` and `skill_create` refuse a name a package skill holds. A package that is not installed, a package without `pi.skills`, two packages offering one name, or a package skill named like a built-in, linked or written skill stops startup with a `PluginError` naming the fix. A carried package skill that an upgrade removed is reported missing and skipped, as a vanished linked skill is.
+
 ## [0.21.0] - 2026-10-20
 
 ### Added

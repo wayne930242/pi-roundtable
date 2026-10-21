@@ -185,7 +185,8 @@ All three are on by default.
 
 Switching an addon off leaves its tables and rows untouched.
 Turning it on again finds them as they were.
-When it is on, `skills` also takes the two directories `skills: { builtinDir, reposDir }`.
+When it is on, `skills` also takes the two directories and the skill packages: `skills: { builtinDir, reposDir, packages }`.
+`packages` names installed npm packages; every skill in their `pi.skills` folders is offered read-only, as `{ kind: "package", package }` in the catalog, and startup fails with a `PluginError` naming the fix when a package is missing, ships no skills, or holds a name another skill already has.
 
 A plugin of yours that can work without an addon reads its service with `find`, which is `undefined` while the addon is off.
 A plugin that cannot work without it uses `get`, which fails with a message that names the switch:

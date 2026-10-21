@@ -366,7 +366,16 @@ You can switch them off in the configuration.
 | Discord administration | `discord-admin` | `discord: { admin: false }` | The `discord_*` tools that read and manage the server, for the owner; they check what the primary owner may do on the server, whichever owner's turn calls them | No `discord_*` tools; the channel executor that remote MCP uses is the connection's, so it stays |
 
 Switching an addon off leaves its tables and rows unchanged, ready for when you turn it on again.
-`skills` also takes the two directories (`skills: { builtinDir, reposDir }`) when it is on.
+`skills` also takes the two directories and the skill packages (`skills: { builtinDir, reposDir, packages }`) when it is on.
+
+`skills.packages` lists npm packages the host installed, for example `["pi-aaaav"]`.
+At startup the registry reads each package's `pi.skills` folders (Pi's package manifest) and offers every skill it finds there as a fourth kind, `package`, beside the built-in, linked and written ones.
+A package skill is named by its frontmatter and resolved to the installed file on every read, so upgrading the package changes the skill and nothing is written to the database.
+Agents carry package skills and groups include them exactly like the others: `agent_skills`, `agent_create`'s `skills` field, `skill_group_set` and `repo_task` accept their names.
+`skill_unlink`, `skill_update` and `skill_delete` refuse a package skill, naming the package, and `skill_link` and `skill_create` refuse a name a package skill already holds.
+`SkillCatalogEntry.source` is `{ kind: "package", package }` for them, and the web console's skill list shows the package.
+A package that is not installed, a package with no `pi.skills` (or none that holds a `SKILL.md`), two packages offering one name, a package skill with the name of a built-in, linked or written skill: each stops startup with a `PluginError` naming the fix.
+A carried package skill that an upgrade removed is reported missing and skipped, as a linked skill whose file vanished is.
 
 Use `find` for an optional addon service; it returns `undefined` while the addon is off.
 Use `get` if your plugin needs the addon; it fails with a message naming the switch:
@@ -3887,6 +3896,7 @@ Import from the entries listed below; source area files are internal.
 | `SkillRegistry` | `pi-roundtable` | type |
 | `SkillSet` | `pi-roundtable` | type |
 | `SkillSource` | `pi-roundtable` | type |
+| `SkillsConfig` | `pi-roundtable` | type |
 | `Speaker` | `pi-roundtable` | type |
 | `SpeakerMemory` | `pi-roundtable` | type |
 | `StoredAttachment` | `pi-roundtable` | type |
