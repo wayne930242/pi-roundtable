@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.22.2] - 2026-10-21
+
 ### Fixed
 
 - A skill linked while another was removed no longer vanishes from the registry (`pi-roundtable`). `skill_unlink` reloaded the whole skill cache from the database after its delete, so a `skill_link` running at the same time, as two tool calls of one model message do, could commit its row after the reload had read the table and then be dropped from memory: the skill was missing from `skill_list`, unknown to `agent_skills` and `skill_group_set`, and could be neither unlinked nor linked again until a restart. The skill store now updates its memory from what each write committed and runs its writes one at a time, and a link that meets an existing row says "Already registered" instead of PostgreSQL's duplicate-key error. The agent store's seeding no longer reloads its cache either, and its agent and group writes also run one at a time, so an agent archived while its group is updated cannot come back as a member.
