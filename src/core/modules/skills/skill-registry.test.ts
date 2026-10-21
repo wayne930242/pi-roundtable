@@ -12,6 +12,7 @@ import { join } from "node:path";
 import { parseFrontmatter } from "@earendil-works/pi-coding-agent";
 import { SQL } from "bun";
 import { AgentError } from "../../domain/errors.ts";
+import { PluginError } from "../../errors.ts";
 import { silentLogger } from "../../log.ts";
 import {
 	describeDb,
@@ -20,6 +21,8 @@ import {
 	type TestStore,
 	testDatabaseUrl,
 } from "../../testing/database.ts";
+import { discoverPackageSkills } from "./package-skills.ts";
+import { installPackage, packageDirIn } from "./package-skills-fixture.ts";
 import { StoredSkillRegistry } from "./skill-registry.ts";
 import { SkillStore } from "./skill-store.ts";
 
@@ -371,6 +374,148 @@ describeDb("PostgreSQL", () => {
 				async () => registry.list({ group: "nope" }),
 				"no skill group",
 			);
+		});
+	});
+
+	describe("package skills", () => {
+		const reopen = (packages: string[]) => {
+			registry = new StoredSkillRegistry({
+				store,
+				reposDir: join(dir, "repos"),
+				writtenDir: join(dir, "skills"),
+				builtinDir: BUILTIN,
+				packageSkills: discoverPackageSkills(packages, packageDirIn(dir)),
+				logger: silentLogger(),
+			});
+			registry.init();
+		};
+
+		beforeEach(() => {
+			installPackage(dir, "pi-aaaav", {
+				coding: "Use when changing code.",
+				grilling: "Use when deciding.",
+			});
+			reopen(["pi-aaaav"]);
+		});
+
+		test("are offered next to the others, with the package as source and no database row", () => {
+			expect(registry.catalog().map((c) => [c.name, c.source.kind])).toEqual([
+				["writing-skills", "builtin"],
+				["coding", "package"],
+				["grilling", "package"],
+			]);
+			expect(registry.catalog()[1]).toMatchObject({
+				name: "coding",
+				source: { kind: "package", package: "pi-aaaav" },
+				description: "Use when changing code.",
+				file: join(dir, "node_modules/pi-aaaav/skills/coding/SKILL.md"),
+			});
+			expect(store.skill("coding")).toBeUndefined();
+			expect(registry.list()).toContain("- coding [from the package pi-aaaav]");
+		});
+
+		test("an agent carries them, a group holds them, and they resolve to the installed file", async () => {
+			await registry.attach("infra", ["coding", "grilling"], []);
+			await registry.setGroup("workflow", "Workflow skills.", ["coding"]);
+			expect(registry.carriedNames("infra")).toEqual(["coding", "grilling"]);
+			expect(registry.describeCarried("infra")).toBe(
+				"writing-skills (built in), coding, grilling",
+			);
+			const set = registry.carried("infra");
+			expect(set.missing).toEqual([]);
+			expect(set.skills.map((skill) => skill.name)).toEqual([
+				"writing-skills",
+				"coding",
+				"grilling",
+			]);
+			expect(set.skills[1]?.file).toBe(
+				join(dir, "node_modules/pi-aaaav/skills/coding/SKILL.md"),
+			);
+			expect(registry.list({ group: "workflow" })).toContain("- coding");
+			expect(registry.catalog()[1]).toMatchObject({
+				groups: ["workflow"],
+				carriers: ["infra"],
+			});
+		});
+
+		test("a package upgrade changes the skill with no database write", async () => {
+			await registry.attach("infra", ["coding"], []);
+			installPackage(dir, "pi-aaaav", {
+				coding: "Use when upgraded.",
+				grilling: "Use when deciding.",
+			});
+			expect(registry.carried("infra").skills[1]?.description).toBe(
+				"Use when upgraded.",
+			);
+		});
+
+		test("cannot be unlinked, updated, or deleted", async () => {
+			for (const run of [
+				() => registry.unlink("coding"),
+				() => registry.update("coding", { body: "x" }),
+				() => registry.delete("coding"),
+			])
+				await refuses(run, "comes from the package pi-aaaav");
+		});
+
+		test("hold their name against linking and creating", async () => {
+			await refuses(
+				() =>
+					registry.create({
+						name: "coding",
+						description: "Use when x.",
+						body: "x",
+					}),
+				"comes from the package pi-aaaav",
+			);
+			repoSkill("acme/skills", "skills/coding", "coding");
+			await refuses(
+				() => registry.link("acme/skills", "skills/coding"),
+				"comes from the package pi-aaaav",
+			);
+			expect(store.skill("coding")).toBeUndefined();
+		});
+
+		test("a skill gone after an upgrade is reported missing and skipped, like a vanished linked one", async () => {
+			await registry.attach("infra", ["coding", "grilling"], []);
+			rmSync(join(dir, "node_modules/pi-aaaav/skills/grilling"), {
+				recursive: true,
+			});
+			const set = registry.carried("infra");
+			expect(set.skills.map((skill) => skill.name)).toEqual([
+				"writing-skills",
+				"coding",
+			]);
+			expect(set.missing).toEqual([
+				{ name: "grilling", reason: "file not found" },
+			]);
+			reopen([]);
+			expect(registry.carried("infra").missing.map((m) => m.name)).toEqual([
+				"coding",
+				"grilling",
+			]);
+			expect(registry.describeCarried("infra")).toContain(
+				"coding (missing: not registered)",
+			);
+		});
+
+		test("a linked or written skill with a package skill's name stops startup", async () => {
+			await registry.attach("infra", [], []);
+			repoSkill("acme/skills", "skills/other", "other");
+			await registry.link("acme/skills", "skills/other");
+			await registry.create({
+				name: "memo",
+				description: "Use when memo.",
+				body: "memo",
+			});
+			for (const clashing of ["other", "memo"]) {
+				const name = `pi-clash-${clashing}`;
+				installPackage(dir, name, { [clashing]: "Use when x." });
+				expect(() => reopen([name])).toThrow(PluginError);
+				expect(() => reopen([name])).toThrow(
+					`The skill "${clashing}" of the package "${name}" clashes`,
+				);
+			}
 		});
 	});
 });

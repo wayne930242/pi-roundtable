@@ -252,6 +252,9 @@ describe("the addon switches", () => {
 		expect(
 			resolveConfig({ ...minimal, skills: { reposDir: "/repos" } }).skills,
 		).toEqual({ reposDir: "/repos" });
+		expect(
+			resolveConfig({ ...minimal, skills: { packages: ["pi-aaaav"] } }).skills,
+		).toEqual({ packages: ["pi-aaaav"] });
 	});
 
 	test("refuse anything else, naming the key", () => {

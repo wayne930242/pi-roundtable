@@ -187,6 +187,7 @@ function discordAssembly(
 						reposDir: config.skills.reposDir ?? join(config.dataDir, "repos"),
 						writtenDir: join(config.dataDir, "skills"),
 						builtinDir: config.skills.builtinDir ?? join(ASSETS, "skills"),
+						packages: config.skills.packages ?? [],
 					}),
 				]
 			: [],

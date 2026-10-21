@@ -1,6 +1,7 @@
 import { mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { AgentError } from "../../domain/errors.ts";
+import { PluginError } from "../../errors.ts";
 import type { SkillRegistry } from "../../services.ts";
 import { planLinkedSkills } from "./skill-link.ts";
 import { skillCatalog, skillListText } from "./skill-listing.ts";
@@ -9,6 +10,7 @@ import {
 	checkBody,
 	checkDescription,
 	checkSkillName,
+	type PackageSkill,
 	type ResolvedSkill,
 	readSkillFile,
 	type SkillCatalogEntry,
@@ -22,6 +24,7 @@ export {
 	BUILTIN_SKILLS,
 	checkSkillName,
 	MAX_SKILL_BODY_CHARS,
+	type PackageSkill,
 	type ResolvedSkill,
 	type SkillCatalogEntry,
 	type SkillRegistryOptions,
@@ -32,9 +35,19 @@ export {
 /** The skill registry and what each agent carries. */
 export class StoredSkillRegistry implements SkillRegistry {
 	readonly #options: SkillRegistryOptions;
+	readonly #packageSkills = new Map<string, PackageSkill>();
 
+	/** Throws a PluginError when a package skill has the name of a linked or written one. */
 	constructor(options: SkillRegistryOptions) {
 		this.#options = options;
+		for (const skill of options.packageSkills ?? []) {
+			const stored = options.store.skill(skill.name);
+			if (stored)
+				throw new PluginError(
+					`The skill "${skill.name}" of the package "${skill.package}" clashes with a ${stored.kind} skill of the same name. Remove the ${stored.kind} skill (${stored.kind === "linked" ? "skill_unlink" : "skill_delete"}), or drop the package from skills.packages.`,
+				);
+			this.#packageSkills.set(skill.name, skill);
+		}
 	}
 
 	/** Writes every agent-written skill for Pi and removes folders left by deleted ones. */
@@ -105,13 +118,18 @@ export class StoredSkillRegistry implements SkillRegistry {
 
 	/** Every skill, built-in ones first, with what `list` shows as text (web app spec behavior 15). */
 	catalog(): SkillCatalogEntry[] {
-		return skillCatalog(this.#options.store, (name) => this.#resolveOne(name));
+		return skillCatalog(
+			this.#options.store,
+			[...this.#packageSkills.values()],
+			(name) => this.#resolveOne(name),
+		);
 	}
 
 	/** Every skill, or those of a group or matching a query (behavior 14). */
 	list(filter: { group?: string; query?: string } = {}): string {
 		return skillListText(
 			this.#options.store,
+			[...this.#packageSkills.values()],
 			(name) => this.#resolveOne(name),
 			filter,
 		);
@@ -119,7 +137,7 @@ export class StoredSkillRegistry implements SkillRegistry {
 
 	/** Throws when a name is not registered; built-in names are carried already. */
 	checkRegistered(names: readonly string[]): void {
-		const unknown = names.filter((name) => !this.#options.store.skill(name));
+		const unknown = names.filter((name) => !this.#registered(name));
 		if (unknown.length > 0)
 			throw new AgentError(
 				`Unknown skills: ${unknown.join(", ")}. Find names with skill_list.${unknown.some((n) => (BUILTIN_SKILLS as readonly string[]).includes(n)) ? " Built-in skills are always carried." : ""}`,
@@ -142,6 +160,7 @@ export class StoredSkillRegistry implements SkillRegistry {
 	}
 
 	async unlink(name: string): Promise<string> {
+		this.#refusePackage(name);
 		const entry = this.#entry(name);
 		if (entry.kind !== "linked")
 			throw new AgentError(
@@ -206,7 +225,7 @@ export class StoredSkillRegistry implements SkillRegistry {
 			throw new AgentError("A skill group needs a description.");
 		const unknown = skills.filter(
 			(skill) =>
-				!this.#options.store.skill(skill) &&
+				!this.#registered(skill) &&
 				!(BUILTIN_SKILLS as readonly string[]).includes(skill),
 		);
 		if (unknown.length > 0)
@@ -270,6 +289,8 @@ export class StoredSkillRegistry implements SkillRegistry {
 		const { store, reposDir, writtenDir, builtinDir } = this.#options;
 		if ((BUILTIN_SKILLS as readonly string[]).includes(name))
 			return join(builtinDir, name, "SKILL.md");
+		const fromPackage = this.#packageSkills.get(name);
+		if (fromPackage) return fromPackage.file;
 		const entry = store.skill(name);
 		if (!entry) return undefined;
 		return entry.kind === "linked"
@@ -288,7 +309,24 @@ export class StoredSkillRegistry implements SkillRegistry {
 		return entry;
 	}
 
+	#registered(name: string): boolean {
+		return (
+			this.#packageSkills.has(name) ||
+			this.#options.store.skill(name) !== undefined
+		);
+	}
+
+	/** Package skills change with their package, never here. */
+	#refusePackage(name: string): void {
+		const fromPackage = this.#packageSkills.get(name);
+		if (fromPackage)
+			throw new AgentError(
+				`${name} comes from the package ${fromPackage.package} and is read-only here. It changes when the package is upgraded.`,
+			);
+	}
+
 	#writable(name: string): Extract<SkillEntry, { kind: "written" }> {
+		this.#refusePackage(name);
 		const entry = this.#entry(name);
 		if (entry.kind !== "written")
 			throw new AgentError(
@@ -298,8 +336,14 @@ export class StoredSkillRegistry implements SkillRegistry {
 	}
 
 	#checkFreeName(name: string): void {
+		const fromPackage = this.#packageSkills.get(name);
+		if (fromPackage)
+			throw new AgentError(
+				`A skill named "${name}" already exists: it comes from the package ${fromPackage.package}.`,
+			);
 		if (
 			(BUILTIN_SKILLS as readonly string[]).includes(name) ||
+			this.#packageSkills.has(name) ||
 			this.#options.store.skill(name)
 		)
 			throw new AgentError(`A skill named "${name}" already exists.`);

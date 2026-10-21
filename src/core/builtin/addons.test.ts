@@ -1,9 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { agentDetails } from "../agents/team-text.ts";
 import { serviceKey } from "../contract/services.ts";
+import { PluginError } from "../errors.ts";
+import type { SkillStore } from "../modules/skills/skill-store.ts";
 import { ServiceRegistry } from "../registry/services.ts";
 import { MEMORY, SKILLS } from "../services.ts";
 import { setUpAddons } from "../testing/modules.ts";
+import { skillsPlugin } from "./skills.ts";
 
 describe("the memory addon", () => {
 	test("adds the owner-memory session tool and declares its three tools for every speaker", async () => {
@@ -42,6 +45,27 @@ describe("the skills addon", () => {
 			agent_skills: "admin",
 			skill_list: "member",
 		});
+	});
+});
+
+describe("the skills addon with packages", () => {
+	test("stops setup with a PluginError when a package is not installed", async () => {
+		const plugin = skillsPlugin(
+			{
+				guildId: "g1",
+				reposDir: "/tmp/repos",
+				writtenDir: "/tmp/written",
+				builtinDir: "/tmp/builtin",
+				packages: ["pi-not-installed"],
+			},
+			// SAFETY: setup fails on the package before it reads the store.
+			async () => ({}) as unknown as SkillStore,
+		);
+		// SAFETY: setup fails on the package before it reads anything from its context.
+		const context = {} as unknown as Parameters<typeof plugin.setup>[0];
+		const setUp = async () => plugin.setup(context);
+		await expect(setUp()).rejects.toBeInstanceOf(PluginError);
+		await expect(setUp()).rejects.toThrow("pi-not-installed");
 	});
 });
 

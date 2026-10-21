@@ -238,6 +238,7 @@
 			"SkillRegistry",
 			"SkillSet",
 			"SkillSource",
+			"SkillsConfig",
 			"Speaker",
 			"SpeakerMemory",
 			"StoredAttachment",

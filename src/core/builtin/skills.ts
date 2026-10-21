@@ -1,4 +1,5 @@
 import type { SQL } from "bun";
+import { discoverPackageSkills } from "../modules/skills/package-skills.ts";
 import { StoredSkillRegistry } from "../modules/skills/skill-registry.ts";
 import { SkillStore } from "../modules/skills/skill-store.ts";
 import {
@@ -19,6 +20,10 @@ export interface SkillsOptions {
 	reposDir: string;
 	writtenDir: string;
 	builtinDir: string;
+	/** npm packages whose `pi.skills` folders offer read-only skills; the host installed them. */
+	packages?: readonly string[];
+	/** Where a package is found; default the installed package's folder. */
+	packageDir?: (name: string) => string;
 }
 
 /** Admins manage skills; every speaker may look one up. */
@@ -47,11 +52,17 @@ export function skillsPlugin(
 		// The skills are read once every plugin is set up, so a plugin may still place some in setup.
 		preflight: () => registry?.init(),
 		setup: async ({ database, services, logger }) => {
+			// Read before the store opens, so a missing package stops startup at once.
+			const packageSkills = discoverPackageSkills(
+				options.packages ?? [],
+				options.packageDir,
+			);
 			const built = new StoredSkillRegistry({
 				store: await openStore(database(), options.guildId),
 				reposDir: options.reposDir,
 				writtenDir: options.writtenDir,
 				builtinDir: options.builtinDir,
+				packageSkills,
 				logger,
 			});
 			registry = built;
