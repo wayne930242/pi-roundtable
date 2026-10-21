@@ -28,7 +28,8 @@ export interface SkillSet {
 export type SkillSource =
 	| { kind: "builtin" }
 	| { kind: "linked"; repo: string; path: string }
-	| { kind: "written" };
+	| { kind: "written" }
+	| { kind: "package"; package: string };
 
 /** One skill as the web app lists it; a skill whose file cannot be read has `missing` instead. */
 export interface SkillCatalogEntry {
@@ -43,6 +44,15 @@ export interface SkillCatalogEntry {
 	carriers: string[];
 }
 
+/** A skill an installed npm package offers through its `pi.skills` folders. */
+export interface PackageSkill {
+	name: string;
+	/** The npm package that holds it. */
+	package: string;
+	/** Its SKILL.md in the installed package. */
+	file: string;
+}
+
 export interface SkillRegistryOptions {
 	store: SkillStore;
 	/** Managed repositories, as `<dir>/<owner>/<repo>`. */
@@ -51,6 +61,8 @@ export interface SkillRegistryOptions {
 	writtenDir: string;
 	/** The release's built-in skills, as `<dir>/<name>/SKILL.md`. */
 	builtinDir: string;
+	/** Skills of installed packages, as `discoverPackageSkills` found them at startup. */
+	packageSkills?: readonly PackageSkill[];
 	logger: Logger;
 }
 

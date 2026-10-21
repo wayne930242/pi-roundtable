@@ -14,7 +14,7 @@ A skill is a Markdown file, `SKILL.md`, with a name, a description, and a body t
 The description starts with "Use when" and says only when the skill applies.
 The bot passes each skill an agent carries to its session as a Pi skill file.
 
-There are three kinds of skill:
+There are four kinds of skill:
 
 - **Built in.**
   `writing-skills` ships with pi-roundtable as a permanent skill on every agent.
@@ -24,6 +24,9 @@ There are three kinds of skill:
 - **Linked from a repository.**
   The skill lives in a repository the host manages.
   It is read-only here and changes in its repository.
+- **From an installed package.**
+  The host lists npm packages in `skills.packages`, such as `pi-aaaav`, and every skill in their `pi.skills` folders is offered.
+  It is read-only here, and upgrading the package changes it.
 
 ### Ask for a skill
 
@@ -47,7 +50,7 @@ Every speaker can use `skill_list`.
 | `skill_update` | Replaces the description or the body of a skill an agent wrote. The agents that carry it read the new version from their next turn. |
 | `skill_delete` | Deletes a skill an agent wrote, and takes it off every agent. |
 | `skill_link` | Registers the skill in a repository folder, or every skill in the folders under it. Name and description come from each file. |
-| `skill_unlink` | Removes a linked skill from the registry and from every agent. The repository is untouched. |
+| `skill_unlink` | Removes a linked skill from the registry and from every agent. The repository is untouched. A package skill is refused, with the package named. |
 | `skill_group_set` | Creates or replaces a skill group. |
 | `skill_group_delete` | Deletes a skill group. Its skills stay. |
 | `agent_skills` | Adds and removes the skills an agent carries, from `add` and `remove` lists. |
@@ -126,6 +129,6 @@ export default {
 | `memory: false` | No memory tools and no memory block in the prompt. The stored memory stays in its table. |
 
 Turning an addon back on finds its data as it was.
-When `skills` is on, it also accepts `{ builtinDir, reposDir }` to change where built-in skills and linked repositories live; see [Configure](/configure/settings/).
+When `skills` is on, it also accepts `{ builtinDir, reposDir }` to change where built-in skills and linked repositories live, and `packages` to offer the skills of installed npm packages; see [Configure](/configure/settings/).
 
 {/* Sources: src/core/modules/skills/skill-tools.ts:17-196, src/core/modules/skills/skill-rules.ts:7-11, src/core/modules/skills/skill-listing.ts:60-90, src/core/builtin/skills.ts:20-70, src/core/assets/skills/writing-skills/SKILL.md, src/core/modules/skills/skill-registry.ts:58-65, src/core/modules/skills/skill-registry.ts:124, src/core/define-roundtable.ts:180-195, src/core/config/config.ts:102-119, src/core/modules/memory/owner-memory.ts:12-175, src/core/builtin/stores.ts:14-55, docs/plugins.md:282-294 */}

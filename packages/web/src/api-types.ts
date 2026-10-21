@@ -194,7 +194,8 @@ export interface SkillView {
 	source:
 		| { kind: "builtin" }
 		| { kind: "linked"; repo: string; path: string }
-		| { kind: "written" };
+		| { kind: "written" }
+		| { kind: "package"; package: string };
 	description?: string;
 	missing?: string;
 	groups: string[];

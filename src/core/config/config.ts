@@ -36,11 +36,11 @@ import {
 	number,
 	oneOf,
 	optional,
-	orOff,
 	record,
 	shape,
 	text,
 } from "./schema.ts";
+import { type SkillsConfig, skillsField } from "./skills-config.ts";
 
 export type { DiscordConfig };
 
@@ -168,7 +168,7 @@ export interface RoundtableConfig {
 	 * the `skills` addon out: agents carry no skills, and no skill tools exist. Stored skills stay
 	 * in their tables. Without `discord` there are no agents, so the addon is off.
 	 */
-	skills?: false | { builtinDir?: string; reposDir?: string };
+	skills?: false | SkillsConfig;
 	/**
 	 * Whether each speaker's memory is kept and offered as tools; default true. `false` leaves the
 	 * `memory` addon out: no memory tools, no memory prompt block, and the table stays as it is.
@@ -284,9 +284,7 @@ const schema = shape({
 	avatar: optional(text),
 	workDir: optional(text),
 	scratchDir: optional(text),
-	skills: optional(
-		orOff(shape({ builtinDir: optional(text), reposDir: optional(text) })),
-	),
+	skills: optional(skillsField),
 	memory: optional(bool),
 	ops: optional(shape({ agent: optional(text), conversation: optional(text) })),
 	drainSeconds: optional(integer(1, 3_600)),
@@ -352,7 +350,7 @@ export interface ResolvedConfig {
 	workDir: string;
 	scratchDir: string;
 	/** `false` when the skills addon is off. */
-	skills: false | { builtinDir?: string; reposDir?: string };
+	skills: false | SkillsConfig;
 	memory: boolean;
 	ops?: { agent: string } | { conversation: ChannelKey };
 	drainMs: number;

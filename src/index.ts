@@ -39,6 +39,7 @@ export type {
 	RoundtableConfig,
 	TierConfig,
 } from "./core/config/config.ts";
+export type { SkillsConfig } from "./core/config/skills-config.ts";
 export type {
 	AttachmentPort,
 	AttachmentRefusalCode,

@@ -14,11 +14,12 @@ sidebar:
 描述以「Use when」開頭，只說明這個技能在什麼情況下適用。
 agent 帶著的技能，會以 Pi skill 檔的形式交給它的 session。
 
-技能有三種：
+技能有四種：
 
 - **內建。** `writing-skills` 隨 pi-roundtable 一起發佈，每個 agent 都帶著。不能從 agent 身上移除。
 - **agent 寫的。** 由 agent 用工具建立，存在資料目錄底下，agent 能更新或刪除。
 - **連結自 repository。** 技能放在主機管理的 repository 裡。在這裡是唯讀的，要改得去它的 repository 改。
+- **來自已安裝的套件。** 主機把 npm 套件（例如 `pi-aaaav`）列在 `skills.packages`，套件 `pi.skills` 資料夾裡的每個技能都會提供出來。在這裡是唯讀的，升級套件才會改變它。
 
 ### 要一個技能
 
@@ -117,6 +118,6 @@ export default {
 | `memory: false` | 沒有記憶工具，提示詞裡也沒有記憶那一段。已存的記憶仍留在資料表裡。 |
 
 再把 addon 打開，會找回原來的資料。
-`skills` 開著的時候，也可以傳 `{ builtinDir, reposDir }`，改變內建技能和連結 repository 的位置；見[設定](/zh-tw/configure/settings/)。
+`skills` 開著的時候，也可以傳 `{ builtinDir, reposDir }`，改變內建技能和連結 repository 的位置，並用 `packages` 提供已安裝 npm 套件的技能；見[設定](/zh-tw/configure/settings/)。
 
 {/* Sources: src/core/modules/skills/skill-tools.ts:17-196, src/core/modules/skills/skill-rules.ts:7-11, src/core/modules/skills/skill-listing.ts:60-90, src/core/builtin/skills.ts:20-70, src/core/assets/skills/writing-skills/SKILL.md, src/core/modules/skills/skill-registry.ts:58-65, src/core/modules/skills/skill-registry.ts:124, src/core/define-roundtable.ts:180-195, src/core/config/config.ts:102-119, src/core/modules/memory/owner-memory.ts:12-175, src/core/builtin/stores.ts:14-55, docs/plugins.md:282-294 */}

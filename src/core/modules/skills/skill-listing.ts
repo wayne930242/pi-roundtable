@@ -3,6 +3,7 @@ import {
 	BUILTIN_SKILLS,
 	cut,
 	MAX_LIST_DESCRIPTION_CHARS,
+	type PackageSkill,
 	type ResolvedSkill,
 	type SkillCatalogEntry,
 	type SkillSource,
@@ -17,12 +18,17 @@ export type SkillResolver = (
 /** Every skill, built-in ones first, with what `list` shows as text (web app spec behavior 15). */
 export function skillCatalog(
 	store: SkillStore,
+	packageSkills: readonly PackageSkill[],
 	resolveOne: SkillResolver,
 ): SkillCatalogEntry[] {
 	const sources: { name: string; source: SkillSource }[] = [
 		...BUILTIN_SKILLS.map((name) => ({
 			name,
 			source: { kind: "builtin" } as const,
+		})),
+		...packageSkills.map((skill) => ({
+			name: skill.name,
+			source: { kind: "package", package: skill.package } as const,
 		})),
 		...store.skills().map((entry) => ({
 			name: entry.name,
@@ -51,6 +57,7 @@ export function skillCatalog(
 /** Every skill, or those of a group or matching a query (behavior 14). */
 export function skillListText(
 	store: SkillStore,
+	packageSkills: readonly PackageSkill[],
 	resolveOne: SkillResolver,
 	filter: { group?: string; query?: string } = {},
 ): string {
@@ -72,6 +79,10 @@ export function skillListText(
 	}));
 	const entries = [
 		...builtins,
+		...packageSkills.map((skill) => ({
+			name: skill.name,
+			source: `from the package ${skill.package}`,
+		})),
 		...store.skills().map((entry) => ({
 			name: entry.name,
 			source:

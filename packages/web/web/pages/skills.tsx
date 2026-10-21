@@ -36,7 +36,9 @@ function SkillCard({ skill }: { skill: SkillView }) {
 			? t("Built-in")
 			: skill.source.kind === "written"
 				? t("Assistant-written")
-				: `${skill.source.repo}:${skill.source.path}`;
+				: skill.source.kind === "package"
+					? skill.source.package
+					: `${skill.source.repo}:${skill.source.path}`;
 	return (
 		<article className="card">
 			<div className="card-head">
