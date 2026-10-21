@@ -43,6 +43,7 @@
 			"THE_SPEAKER",
 			"TIERS",
 			"ToolRefusal",
+			"WORKER_SESSIONS",
 			"attachReplyFile",
 			"channelKey",
 			"checkAnswer",
@@ -272,7 +273,9 @@
 			"WebSocketAccept",
 			"WebSocketRoute",
 			"WebSocketSendResult",
-			"Weekday"
+			"Weekday",
+			"WorkerSessionRequest",
+			"WorkerSessions"
 		]
 	},
 	"testing": {

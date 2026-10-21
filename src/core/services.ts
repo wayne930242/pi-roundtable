@@ -1,3 +1,4 @@
+import type { ExtensionFactory } from "@earendil-works/pi-coding-agent";
 import type { Agent, AgentGroup } from "./agents/agent-rules.ts";
 import type { AvatarMode } from "./agents/agent-tools.ts";
 import type { TeamStatus } from "./agents/team-status.ts";
@@ -12,7 +13,7 @@ import type { PendingConfirmation } from "./domain/conversation.ts";
 import type { HttpRoute } from "./http/listeners.ts";
 import type { IdentityLinks } from "./identity/identity-links.ts";
 import type { IdentityService } from "./identity/identity-service.ts";
-import type { ThinkingSetting } from "./models.ts";
+import type { ThinkingLevel, ThinkingSetting } from "./models.ts";
 import type {
 	DelegationJob,
 	DelegationOutcome,
@@ -91,6 +92,12 @@ export const BACKGROUND_TURNS: ServiceKey<BackgroundTurns> =
 export const DELEGATION: ServiceKey<Delegator> = serviceKey<Delegator>(
 	"roundtable.delegation",
 );
+/**
+ * Worker sessions on the host's models: a fresh, unsaved Pi session that has only the tools a
+ * plugin gives it. Provided by the modules plugin.
+ */
+export const WORKER_SESSIONS: ServiceKey<WorkerSessions> =
+	serviceKey<WorkerSessions>("roundtable.worker-sessions");
 /**
  * The remembered facts of each speaker. Provided by the `memory` plugin, an addon: read it with
  * `find` when your plugin works without memory, and with `get` when it cannot.
@@ -265,6 +272,42 @@ export interface Delegator {
 	runningChannels(): ChannelKey[];
 	/** Resolves once every started job has reported. */
 	idle(): Promise<void>;
+}
+
+/** One task for a worker session. */
+export interface WorkerSessionRequest {
+	/** What the worker is asked to do, as its one prompt. */
+	task: string;
+	/** Aborting it stops the worker; `run` then rejects. */
+	signal: AbortSignal;
+	/** Appended to the worker's system prompt: its role, its rules, and any instructions it should follow. */
+	prompt: string;
+	/** Extensions that register the worker's tools with `pi.registerTool`. */
+	extensions: readonly ExtensionFactory[];
+	/** The only tools active in the session. The session has no built-in tool, skill, context file or other extension. */
+	toolNames: readonly string[];
+	/** `<provider>/<id>`; default: the host's delegation model. */
+	model?: string;
+	/** Default: the host's delegation thinking level. */
+	thinking?: ThinkingLevel;
+	/** Why an aborted run stopped, as the rejection's message; default "the worker ran out of time". */
+	aborted?: string;
+}
+
+/**
+ * Runs one task in a fresh, unsaved Pi session on the host's model login and returns the worker's
+ * final answer. The session is disposed of either way. It has no access to the conversation, the
+ * owner's memory or the agents' tools: it can do only what `toolNames` lets it, and the tools a
+ * plugin registers for it are that plugin's to bound.
+ */
+export interface WorkerSessions {
+	/** The model and thinking level a request without its own uses: the host's `delegation` settings. */
+	readonly delegation: {
+		readonly model: string;
+		readonly thinking: ThinkingLevel;
+	};
+	/** Rejects with an `AgentRunError` when the worker ends without an answer. */
+	run(request: WorkerSessionRequest): Promise<string>;
 }
 
 /** Remembered facts, each speaker's own; every agent shares the memory of whoever is speaking. */

@@ -1,20 +1,12 @@
-import { mkdirSync } from "node:fs";
-import {
-	createAgentSession,
-	DefaultResourceLoader,
-	type ModelRuntime,
-	SessionManager,
-	SettingsManager,
-} from "@earendil-works/pi-coding-agent";
+import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { PluginError } from "../../errors.ts";
 import {
 	formatModelRef,
 	type ModelRef,
 	type ThinkingLevel,
 } from "../../models.ts";
-import { runWorkerTask } from "../../runtime/worker-task.ts";
-import { activeToolsExtension } from "../../shared/active-tools.ts";
 import { packageDir } from "../../shared/package-dir.ts";
+import { runWorkerSession } from "./worker-session.ts";
 
 const WEB_TOOLS = ["web_search", "fetch_content", "get_search_content"];
 
@@ -50,39 +42,19 @@ export class WebResearchWorker {
 	constructor(options: WebResearchWorkerOptions) {
 		this.#options = options;
 		this.#webAccessPath = webAccessDir();
-		mkdirSync(options.workDir, { recursive: true });
 	}
 
-	async run(task: string, signal: AbortSignal): Promise<string> {
+	run(task: string, signal: AbortSignal): Promise<string> {
 		const { modelRuntime, agentDir, workDir, model, thinking } = this.#options;
-		const resourceLoader = new DefaultResourceLoader({
-			cwd: workDir,
-			agentDir,
-			noExtensions: true,
-			noSkills: true,
-			noPromptTemplates: true,
-			noThemes: true,
-			noContextFiles: true,
-			additionalExtensionPaths: [this.#webAccessPath],
-			extensionFactories: [
-				{ name: "web-only", factory: activeToolsExtension(() => WEB_TOOLS) },
-			],
-			appendSystemPrompt: [WORKER_PROMPT],
-		});
-		await resourceLoader.reload();
-		const { session } = await createAgentSession({
-			cwd: workDir,
-			agentDir,
-			thinkingLevel: thinking,
+		return runWorkerSession({
 			modelRuntime,
-			resourceLoader,
-			sessionManager: SessionManager.inMemory(workDir),
-			settingsManager: SettingsManager.inMemory({}),
-			noTools: "builtin",
-		});
-		return runWorkerTask(session, {
-			modelRuntime,
+			agentDir,
+			workDir,
 			model: formatModelRef(model),
+			thinking,
+			prompt: WORKER_PROMPT,
+			extensionPaths: [this.#webAccessPath],
+			toolNames: WEB_TOOLS,
 			task,
 			signal,
 			aborted: "the worker ran out of time",

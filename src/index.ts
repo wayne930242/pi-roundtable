@@ -309,6 +309,8 @@ export type {
 	ScheduleStore,
 	SkillRegistry,
 	SpeakerMemory,
+	WorkerSessionRequest,
+	WorkerSessions,
 } from "./core/services.ts";
 export {
 	AGENTS,
@@ -322,6 +324,7 @@ export {
 	RUNTIME,
 	SCHEDULES,
 	SKILLS,
+	WORKER_SESSIONS,
 } from "./core/services.ts";
 export type {
 	AgentTurnScope,

@@ -37,7 +37,7 @@ import { Steps } from "@astrojs/starlight/components";
 
 ### 外掛順序
 
-setup 的順序是先內建外掛：`memory`、`schedule-store`、`discord`、`modules`、`discord-admin`、`skills`、`agent-server`、`seeds`。
+setup 的順序是先內建外掛：`memory`、`schedule-store`、`discord`、`modules`、`worker-sessions`、`discord-admin`、`skills`、`agent-server`、`seeds`。
 關掉的 addon 不在名單裡。
 接著是你的外掛，順序依 `roundtable.config.ts` 裡 `plugins` 的排列。
 內建的 `schedules` 外掛排在最後，所以到期的排程要等它能用到的東西都跑起來之後，才會觸發。

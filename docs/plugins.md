@@ -50,6 +50,29 @@ Their exported names are grouped by area in the source, with one entry for each;
 The [changelog](../CHANGELOG.md) lists every exported name, including type-only contracts.
 Import fixtures and fake threads from `pi-roundtable/testing` for tests.
 
+#### Workers of your own
+
+A plugin that gives a model its own small set of tools, such as a worker that drives a browser, asks the host for a worker session instead of building one from Pi's parts:
+
+```ts
+const sessions = context.services.get(WORKER_SESSIONS);
+const report = await sessions.run({
+	task: "What the worker is asked to do.",
+	signal: turn.signal,
+	prompt: "You are a ... worker. Report in the task's language.",
+	extensions: [registersTheWorkersTools],
+	toolNames: ["my_tool"],
+});
+```
+
+`run` starts a fresh session that is never saved, on the host's model login (the same credentials and refreshes the agents use), with the `model` and `thinking` of the host's `delegation` settings unless the request names its own (`model` is `<provider>/<id>`; `sessions.delegation` shows the defaults).
+The session has no built-in tool, no skills, no context files, no memory and none of the agents' tools: only the tools the `extensions` register with `pi.registerTool` and `toolNames` lists are active, and an extension that activates another tool is undone.
+`prompt` is added to its system prompt, so the standing rules and any instructions the worker should follow, such as a tool's usage guide, go there.
+`run` resolves to the worker's final answer, rejects with an `AgentRunError` when it ends without one, and rejects when `signal` aborts (`aborted` is the message of that rejection, default "the worker ran out of time"); the session is disposed either way.
+The tools are the plugin's to bound: the worker has no tier, no hold and no conversation, so a tool checks what the worker asks for, limits its work, and cleans up in a `finally` around `run`.
+A file a tool produces reaches the person only through the tool that called `run`: collect it and call `turn.attachFile` after `run` returns, as the [browser package source][browser-source] does with screenshots.
+The `worker-sessions` plugin provides the service on every host.
+
 #### Helpers for a Pi session of your own
 
 Use the kit's building blocks for a plugin that runs Pi itself, such as a coding worker:
@@ -218,6 +241,7 @@ The built-in plugins provide these, from the main entry:
 | `MEMORY` | `MemoryStore` | `memory` (an addon) | `forSpeaker(principalId)` gives that principal's `SpeakerMemory`: `list`, `forPrompt`, `add`, `search`, `update`, `removeById`, `remove`; `MEMORY_KINDS` is `core`, `note`, `event` |
 | `BACKGROUND_TURNS` | `BackgroundTurns` | `modules` | Turns nobody wrote: `runScheduled`, `runDelegated`, `runErrorReport` |
 | `DELEGATION` | `Delegator` | `modules` | `start(request)` a background task, `runningChannels()`, `idle()` |
+| `WORKER_SESSIONS` | `WorkerSessions` | `worker-sessions` | Fresh Pi sessions for a plugin's own workers, on the host's model login: `delegation` is the host's delegation `model` and `thinking`, and `run({ task, signal, prompt, extensions, toolNames, model?, thinking?, aborted? })` runs the task in a session that has only the tools `extensions` register and `toolNames` names (no built-in tool, skill, context file, memory or agent tool) and returns the worker's final answer; see [Workers of your own](#workers-of-your-own) |
 
 The data types the ports use (`Schedule`, `NewSchedule`, `Agent`, `AgentGroup`, `TeamStatus`, `Memory`, `SkillSet`, `DelegationJob`, and so on) are in the main entry too.
 Your plugins run after the built-ins, so they can read every key above.
@@ -3162,7 +3186,7 @@ The [pi-roundtable-mcp][mcp-package] workspace, published separately on npm, add
 The first lets the owner add MCP servers such as Notion or a calendar from Discord and gives your code the list; the second lets an agent outside Discord reach your agent.
 Install it with `bun add pi-roundtable-mcp`.
 
-Six official packages live in this repository as Bun workspaces and publish as separate npm packages, versioned in lockstep with the core.
+Seven official packages live in this repository as Bun workspaces and publish as separate npm packages, versioned in lockstep with the core.
 The [site guide source files][package-guides] describe installation, requirements, configuration, and security considerations:
 
 - [pi-roundtable-drawing][drawing-package]: [site guide source][drawing-guide] · local relationship maps, magic circles, sigils, sacred geometry, and card spreads.
@@ -3170,6 +3194,7 @@ The [site guide source files][package-guides] describe installation, requirement
 - [pi-roundtable-web][web-package]: [site guide source][web-guide] · an owner-only console for conversations, transcripts, and memory notes with live updates.
 - [pi-roundtable-sandbox][sandbox-package]: [site guide source][sandbox-guide] · sealed guest channels on native Linux Docker with a host-only credential broker and allow-listed tools.
 - [pi-roundtable-mcp][mcp-package]: [site guide source][mcp-guide] · MCP connectors through a gateway and remote MCP endpoints for agent turns and owner-granted Discord channel tools.
+- [pi-roundtable-browser][browser-package]: [site guide source][browser-guide] · `browser_task`, a worker that drives agent-browser in a Docker container with no route to the host's private networks, and a `BrowserDriver` for another browser.
 - [pi-roundtable-webchat][webchat-package]: [site guide source][webchat-guide] · a WebSocket chat for people an OpenID Connect provider signs in, with private conversations, live progress, and approval cards; see [web chat](#web-chat-pi-roundtable-webchat).
 
 [drawing-package]: https://github.com/wayne930242/pi-roundtable/blob/master/packages/drawing/README.md
@@ -3177,17 +3202,20 @@ The [site guide source files][package-guides] describe installation, requirement
 [web-package]: https://github.com/wayne930242/pi-roundtable/blob/master/packages/web/README.md
 [sandbox-package]: https://github.com/wayne930242/pi-roundtable/blob/master/packages/sandbox/README.md
 [mcp-package]: https://github.com/wayne930242/pi-roundtable/blob/master/packages/mcp/README.md
+[browser-package]: https://github.com/wayne930242/pi-roundtable/blob/master/packages/browser/README.md
 [package-guides]: https://github.com/wayne930242/pi-roundtable/tree/master/site/src/content/docs/plugins/
 [drawing-guide]: https://github.com/wayne930242/pi-roundtable/blob/master/site/src/content/docs/plugins/drawing-package.mdx
 [coding-guide]: https://github.com/wayne930242/pi-roundtable/blob/master/site/src/content/docs/plugins/coding-package.mdx
 [web-guide]: https://github.com/wayne930242/pi-roundtable/blob/master/site/src/content/docs/plugins/web-package.mdx
 [sandbox-guide]: https://github.com/wayne930242/pi-roundtable/blob/master/site/src/content/docs/plugins/sandbox-package.mdx
 [mcp-guide]: https://github.com/wayne930242/pi-roundtable/blob/master/site/src/content/docs/plugins/mcp-package.mdx
+[browser-guide]: https://github.com/wayne930242/pi-roundtable/blob/master/site/src/content/docs/plugins/browser-package.mdx
 [webchat-guide]: https://github.com/wayne930242/pi-roundtable/blob/master/site/src/content/docs/plugins/webchat-package.mdx
 [coding-source]: https://github.com/wayne930242/pi-roundtable/tree/master/packages/coding
 [sandbox-source]: https://github.com/wayne930242/pi-roundtable/tree/master/packages/sandbox
 [web-source]: https://github.com/wayne930242/pi-roundtable/tree/master/packages/web
 [drawing-source]: https://github.com/wayne930242/pi-roundtable/tree/master/packages/drawing
+[browser-source]: https://github.com/wayne930242/pi-roundtable/tree/master/packages/browser
 [mcp-source]: https://github.com/wayne930242/pi-roundtable/tree/master/packages/mcp
 [codex-images-template]: https://github.com/wayne930242/pi-roundtable/blob/master/templates/official/codex-images/plugin.ts
 [dice-template]: https://github.com/wayne930242/pi-roundtable/blob/master/templates/official/dice/plugin.ts
@@ -3455,7 +3483,7 @@ The host's `run()` handles startup:
    The runtime plugin builds the runtime later, in its own setup: from the `runtime` slot when a plugin fills it, else the Pi runtime.
 2. The database is opened and every plugin's migrations run, in plugin order.
 3. Every plugin's `setup` runs, in plugin order.
-   The order is the built-ins (`memory`, `schedule-store`, `prechecks`, `discord`, `modules`, `discord-admin`, `skills`, `conversations`, `runtime`, `agent-server`, `seeds`; an addon that is switched off is not there, and without Discord neither are `discord`, `discord-admin`, `skills`, `agent-server`, or `seeds`), then yours in the order of `plugins` in `roundtable.config.ts`, then the built-in `schedules`, so a due schedule fires only once everything it can reach is running.
+   The order is the built-ins (`memory`, `schedule-store`, `prechecks`, `discord`, `modules`, `worker-sessions`, `discord-admin`, `skills`, `conversations`, `runtime`, `agent-server`, `seeds`; an addon that is switched off is not there, and without Discord neither are `discord`, `discord-admin`, `skills`, `agent-server`, or `seeds`), then yours in the order of `plugins` in `roundtable.config.ts`, then the built-in `schedules`, so a due schedule fires only once everything it can reach is running.
 4. The contributions are linked: tool tiers, hold rules, the session plan, the channel router, and the events.
    From here `sessions()`, `conversations`, `surfaces`, `turns`, and `dashboard()` work.
 5. Every plugin's `preflight` runs, in plugin order.
@@ -3543,7 +3571,7 @@ These are the messages as the code writes them, with `<...>` where your names go
 | `no runtime provider is configured: the runtime plugin builds the Pi runtime when no plugin fills the runtime slot; read the running one from services.get(RUNTIME)` | Only a plugin that calls `providers.runtime` without `providers.filled.has("runtime")` sees it; read `services.get(RUNTIME)` instead |
 | `session tool <name> takes a core extension name. Rename it.` | Pick a name other than the core's |
 | `plugin <name>: setup failed: the database was queried during setup…` (from `Roundtable.check()`, `roundtable doctor` or `start`) | A plugin's `setup` ran a query. Take `database()` in setup and query from a service's `start` or from a handler |
-| `two plugins are named <name>.` (from `roundtable doctor`) | Rename yours; the built-in plugins are `memory`, `schedule-store`, `prechecks`, `discord`, `modules`, `discord-admin`, `skills`, `conversations`, `runtime`, `agent-server`, `seeds`, and `schedules` |
+| `two plugins are named <name>.` (from `roundtable doctor`) | Rename yours; the built-in plugins are `memory`, `schedule-store`, `prechecks`, `discord`, `modules`, `worker-sessions`, `discord-admin`, `skills`, `conversations`, `runtime`, `agent-server`, `seeds`, and `schedules` |
 | `migration <plugin>/<name> is declared twice` | A plugin declares two migrations with one name: rename one (the same name in two plugins is fine) |
 | `/<root> <name> is added twice`, `/<name> is registered twice` | Give each slash command and subcommand its own name |
 | `route <name> is registered twice`, `routes <a> and <b> overlap on listener <id>` | Give each route its own name and a path no other route can take |
@@ -3885,6 +3913,9 @@ Import from the entries listed below; source area files are internal.
 | `SessionToolSnapshot` | `pi-roundtable` | type |
 | `SkillCatalogEntry` | `pi-roundtable` | type |
 | `SkillRegistry` | `pi-roundtable` | type |
+| `WorkerSessions` | `pi-roundtable` | type |
+| `WorkerSessionRequest` | `pi-roundtable` | type |
+| `WORKER_SESSIONS` | `pi-roundtable` | value |
 | `SkillSet` | `pi-roundtable` | type |
 | `SkillSource` | `pi-roundtable` | type |
 | `Speaker` | `pi-roundtable` | type |

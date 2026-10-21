@@ -13,6 +13,7 @@ import {
 	precheckPlugin,
 	scheduleStorePlugin,
 } from "./builtin/stores.ts";
+import { workerSessionsPlugin } from "./builtin/worker-sessions.ts";
 import { warnDeprecations } from "./config/access.ts";
 import {
 	type ResolvedConfig,
@@ -320,6 +321,12 @@ export async function defineRoundtable(
 				...(errorReporter && "conversation" in errorReporter.destination
 					? { errorReporter }
 					: {}),
+			}),
+			workerSessionsPlugin({
+				modelRuntime,
+				agentDir: config.agentDir,
+				dataDir: config.dataDir,
+				delegation: config.delegation,
 			}),
 			...(assembly?.admin ?? []),
 			...(assembly?.skills ?? []),

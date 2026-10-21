@@ -41,7 +41,7 @@ Discord connects and the listener opens after steps 1 to 5 succeed.
 
 ### Plugin order
 
-Setup order is the built-in plugins first: `memory`, `schedule-store`, `discord`, `modules`, `discord-admin`, `skills`, `agent-server`, `seeds`.
+Setup order is the built-in plugins first: `memory`, `schedule-store`, `discord`, `modules`, `worker-sessions`, `discord-admin`, `skills`, `agent-server`, `seeds`.
 An addon that is switched off is not in the list.
 Your plugins follow in the order of `plugins` in `roundtable.config.ts`.
 The built-in `schedules` plugin comes last, so a due schedule fires only once everything it can reach is running.
