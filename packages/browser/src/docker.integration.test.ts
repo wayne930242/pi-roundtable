@@ -375,7 +375,7 @@ test.skipIf(!enabled)(
 			const report = await harness.runTool("browser_task", {
 				task: "Read the heading",
 			});
-			expect(report).toContain("Example Domain");
+			expect(report).toContain("documentation examples");
 			expect(report).toContain("1 screenshot is attached");
 			expect(harness.files).toHaveLength(1);
 			const png = harness.files[0]?.file.data ?? new Uint8Array();
