@@ -56,14 +56,15 @@ test("package tests run one workspace at a time, in CI and in check:packages", (
 	]);
 });
 
-test("coding and core share the same Pi instances, including in the canary", () => {
-	for (const name of [
-		"@earendil-works/pi-coding-agent",
-		"@earendil-works/pi-ai",
-	])
-		expect(
-			realpathSync(Bun.resolveSync(name, resolve(root, "packages/coding"))),
-		).toBe(realpathSync(Bun.resolveSync(name, root)));
+test("coding, browser and core share the same Pi instances, including in the canary", () => {
+	for (const pkg of ["coding", "browser"])
+		for (const name of [
+			"@earendil-works/pi-coding-agent",
+			"@earendil-works/pi-ai",
+		])
+			expect(
+				realpathSync(Bun.resolveSync(name, resolve(root, "packages", pkg))),
+			).toBe(realpathSync(Bun.resolveSync(name, root)));
 });
 
 test("drawing ships the declarations required to compile its published source", () => {
