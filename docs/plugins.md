@@ -392,7 +392,7 @@ You can switch them off in the configuration.
 Switching an addon off leaves its tables and rows unchanged, ready for when you turn it on again.
 `skills` also takes the two directories and the skill packages (`skills: { builtinDir, reposDir, packages }`) when it is on.
 
-`skills.packages` lists npm packages the host installed, for example `["pi-aaaav"]`.
+`skills.packages` lists npm packages the host installed, for example `["pi-workflow-skills"]`.
 At startup the registry reads each package's `pi.skills` folders (Pi's package manifest) and offers every skill it finds there as a fourth kind, `package`, beside the built-in, linked and written ones.
 A package skill is named by its frontmatter and resolved to the installed file on every read, so upgrading the package changes the skill and nothing is written to the database.
 Agents carry package skills and groups include them exactly like the others: `agent_skills`, `agent_create`'s `skills` field, `skill_group_set` and `repo_task` accept their names.

@@ -253,8 +253,11 @@ describe("the addon switches", () => {
 			resolveConfig({ ...minimal, skills: { reposDir: "/repos" } }).skills,
 		).toEqual({ reposDir: "/repos" });
 		expect(
-			resolveConfig({ ...minimal, skills: { packages: ["pi-aaaav"] } }).skills,
-		).toEqual({ packages: ["pi-aaaav"] });
+			resolveConfig({
+				...minimal,
+				skills: { packages: ["pi-workflow-skills"] },
+			}).skills,
+		).toEqual({ packages: ["pi-workflow-skills"] });
 	});
 
 	test("refuse anything else, naming the key", () => {

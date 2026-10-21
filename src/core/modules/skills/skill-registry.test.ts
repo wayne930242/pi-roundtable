@@ -391,11 +391,11 @@ describeDb("PostgreSQL", () => {
 		};
 
 		beforeEach(() => {
-			installPackage(dir, "pi-aaaav", {
+			installPackage(dir, "pi-workflow-skills", {
 				coding: "Use when changing code.",
 				grilling: "Use when deciding.",
 			});
-			reopen(["pi-aaaav"]);
+			reopen(["pi-workflow-skills"]);
 		});
 
 		test("are offered next to the others, with the package as source and no database row", () => {
@@ -406,12 +406,17 @@ describeDb("PostgreSQL", () => {
 			]);
 			expect(registry.catalog()[1]).toMatchObject({
 				name: "coding",
-				source: { kind: "package", package: "pi-aaaav" },
+				source: { kind: "package", package: "pi-workflow-skills" },
 				description: "Use when changing code.",
-				file: join(dir, "node_modules/pi-aaaav/skills/coding/SKILL.md"),
+				file: join(
+					dir,
+					"node_modules/pi-workflow-skills/skills/coding/SKILL.md",
+				),
 			});
 			expect(store.skill("coding")).toBeUndefined();
-			expect(registry.list()).toContain("- coding [from the package pi-aaaav]");
+			expect(registry.list()).toContain(
+				"- coding [from the package pi-workflow-skills]",
+			);
 		});
 
 		test("an agent carries them, a group holds them, and they resolve to the installed file", async () => {
@@ -429,7 +434,7 @@ describeDb("PostgreSQL", () => {
 				"grilling",
 			]);
 			expect(set.skills[1]?.file).toBe(
-				join(dir, "node_modules/pi-aaaav/skills/coding/SKILL.md"),
+				join(dir, "node_modules/pi-workflow-skills/skills/coding/SKILL.md"),
 			);
 			expect(registry.list({ group: "workflow" })).toContain("- coding");
 			expect(registry.catalog()[1]).toMatchObject({
@@ -440,7 +445,7 @@ describeDb("PostgreSQL", () => {
 
 		test("a package upgrade changes the skill with no database write", async () => {
 			await registry.attach("infra", ["coding"], []);
-			installPackage(dir, "pi-aaaav", {
+			installPackage(dir, "pi-workflow-skills", {
 				coding: "Use when upgraded.",
 				grilling: "Use when deciding.",
 			});
@@ -455,7 +460,7 @@ describeDb("PostgreSQL", () => {
 				() => registry.update("coding", { body: "x" }),
 				() => registry.delete("coding"),
 			])
-				await refuses(run, "comes from the package pi-aaaav");
+				await refuses(run, "comes from the package pi-workflow-skills");
 		});
 
 		test("hold their name against linking and creating", async () => {
@@ -466,19 +471,19 @@ describeDb("PostgreSQL", () => {
 						description: "Use when x.",
 						body: "x",
 					}),
-				"comes from the package pi-aaaav",
+				"comes from the package pi-workflow-skills",
 			);
 			repoSkill("acme/skills", "skills/coding", "coding");
 			await refuses(
 				() => registry.link("acme/skills", "skills/coding"),
-				"comes from the package pi-aaaav",
+				"comes from the package pi-workflow-skills",
 			);
 			expect(store.skill("coding")).toBeUndefined();
 		});
 
 		test("a skill gone after an upgrade is reported missing and skipped, like a vanished linked one", async () => {
 			await registry.attach("infra", ["coding", "grilling"], []);
-			rmSync(join(dir, "node_modules/pi-aaaav/skills/grilling"), {
+			rmSync(join(dir, "node_modules/pi-workflow-skills/skills/grilling"), {
 				recursive: true,
 			});
 			const set = registry.carried("infra");

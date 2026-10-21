@@ -4,7 +4,7 @@ import { pathToFileURL } from "node:url";
 import { packageDir } from "../../shared/package-dir.ts";
 
 /**
- * Installs a fake npm package under `<root>/node_modules` with the layout of `pi-aaaav`:
+ * Installs a fake npm package under `<root>/node_modules` with the layout of `pi-workflow-skills`:
  * `"pi": { "skills": ["./skills"] }` and one folder with a SKILL.md per skill.
  */
 export function installPackage(

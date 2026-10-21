@@ -29,17 +29,26 @@ const failure = (run: () => unknown): string => {
 describe("discoverPackageSkills", () => {
 	test("reads every skill under the pi.skills folders, named by its frontmatter and sorted", () => {
 		const root = host();
-		installPackage(root, "pi-aaaav", {
+		installPackage(root, "pi-workflow-skills", {
 			coding: "Use when changing code.",
 			grilling: "Use when deciding.",
 		});
-		const found = discoverPackageSkills(["pi-aaaav"], packageDirIn(root));
+		const found = discoverPackageSkills(
+			["pi-workflow-skills"],
+			packageDirIn(root),
+		);
 		expect(found.map((s) => [s.name, s.package])).toEqual([
-			["coding", "pi-aaaav"],
-			["grilling", "pi-aaaav"],
+			["coding", "pi-workflow-skills"],
+			["grilling", "pi-workflow-skills"],
 		]);
 		expect(found[0]?.file).toEndWith(
-			join("node_modules", "pi-aaaav", "skills", "coding", "SKILL.md"),
+			join(
+				"node_modules",
+				"pi-workflow-skills",
+				"skills",
+				"coding",
+				"SKILL.md",
+			),
 		);
 	});
 
