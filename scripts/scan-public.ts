@@ -51,15 +51,23 @@ export const PUBLIC_NAME_ALLOWLIST: NameAllowlist = {
 	".github/PACKAGE-RELEASES.md": [OWNER_HANDLE],
 	// Workspace metadata keeps the same public attribution as the root package.
 	...Object.fromEntries(
-		["drawing", "coding", "web", "webchat", "sandbox", "mcp", "line"].flatMap(
-			(name) =>
-				["LICENSE", "README.md", "package.json"].map((file) => [
-					`packages/${name}/${file}`,
-					// The sandbox README points to the kit's compactor for the judging service.
-					name === "sandbox" && file === "README.md"
-						? [OWNER_HANDLE, spell("j", "ev")]
-						: [OWNER_HANDLE],
-				]),
+		[
+			"drawing",
+			"coding",
+			"web",
+			"webchat",
+			"sandbox",
+			"mcp",
+			"line",
+			"browser",
+		].flatMap((name) =>
+			["LICENSE", "README.md", "package.json"].map((file) => [
+				`packages/${name}/${file}`,
+				// The sandbox README points to the kit's compactor for the judging service.
+				name === "sandbox" && file === "README.md"
+					? [OWNER_HANDLE, spell("j", "ev")]
+					: [OWNER_HANDLE],
+			]),
 		),
 	),
 	// The imported MCP API publicly integrates with IBM's gateway. Only these files

@@ -52,6 +52,14 @@ export function checkPack(
 			"worker/memory.ts",
 			"worker/transport.ts",
 		);
+	if (pkg.name === "pi-roundtable-browser")
+		required.push(
+			"src/agent-browser-driver.ts",
+			"src/egress-proxy.ts",
+			"docker/Dockerfile",
+			"docker/entrypoint.sh",
+			"docker/policies.json",
+		);
 	if (pkg.name === "pi-roundtable-web") required.push("dist/index.html");
 	if (pkg.name === "pi-roundtable-drawing")
 		required.push("fonts/NotoSansTC-Bold.otf", "fonts/OFL.txt");
@@ -102,7 +110,9 @@ export function firstPublicationNeeded(name: string): ReleaseContractError {
 			? "webchats-first-publication"
 			: name === "pi-roundtable-line"
 				? "lines-first-publication"
-				: "first-publication-and-trust";
+				: name === "pi-roundtable-browser"
+					? "browsers-first-publication"
+					: "first-publication-and-trust";
 	return new ReleaseContractError(
 		`${name} needs its manual first publication before a lockstep tag; see .github/PACKAGE-RELEASES.md#${section}`,
 	);

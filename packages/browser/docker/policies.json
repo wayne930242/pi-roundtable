@@ -1,0 +1,20 @@
+{
+	"DownloadRestrictions": 3,
+	"AllowFileSelectionDialogs": false,
+	"URLBlocklist": [
+		"file://*",
+		"chrome://*",
+		"chrome-extension://*",
+		"view-source:*",
+		"devtools://*",
+		"ftp://*"
+	],
+	"WebRtcIPHandling": "disable_non_proxied_udp",
+	"PasswordManagerEnabled": false,
+	"AutofillAddressEnabled": false,
+	"AutofillCreditCardEnabled": false,
+	"BrowserSignin": 0,
+	"SyncDisabled": true,
+	"DefaultBrowserSettingEnabled": false,
+	"MetricsReportingEnabled": false
+}

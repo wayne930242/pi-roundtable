@@ -87,8 +87,8 @@ test("drawing must pack its font and font license", () => {
 	).toThrow("fonts/OFL.txt");
 });
 
-for (const name of ["mcp", "sandbox"]) {
-	test(`${name} must pack its entry and sandbox must pack its complete worker`, () => {
+for (const name of ["mcp", "sandbox", "browser"]) {
+	test(`${name} must pack its entry, sandbox its complete worker and browser its image files`, () => {
 		const pkg = { name: `pi-roundtable-${name}`, path: `packages/${name}` };
 		const files = ["package.json", "README.md", "LICENSE", "src/index.ts"];
 		if (name === "sandbox")
@@ -99,6 +99,14 @@ for (const name of ["mcp", "sandbox"]) {
 				"worker/agent.ts",
 				"worker/memory.ts",
 				"worker/transport.ts",
+			);
+		if (name === "browser")
+			files.push(
+				"src/agent-browser-driver.ts",
+				"src/egress-proxy.ts",
+				"docker/Dockerfile",
+				"docker/entrypoint.sh",
+				"docker/policies.json",
 			);
 		expect(() =>
 			checkPack(report(files, pkg.name), pkg, "0.8.0"),
@@ -131,5 +139,11 @@ test("a package missing from npm is refused with the steps of its manual first p
 test("the line package is pointed at its own first-publication steps", () => {
 	expect(firstPublicationNeeded("pi-roundtable-line").message).toContain(
 		".github/PACKAGE-RELEASES.md#lines-first-publication",
+	);
+});
+
+test("the browser package is pointed at its own first-publication steps", () => {
+	expect(firstPublicationNeeded("pi-roundtable-browser").message).toContain(
+		".github/PACKAGE-RELEASES.md#browsers-first-publication",
 	);
 });

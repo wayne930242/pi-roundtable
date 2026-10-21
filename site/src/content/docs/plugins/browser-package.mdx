@@ -1,0 +1,79 @@
+---
+title: Browser package
+description: Give agents a browser worker that reads pages, clicks and takes screenshots in a Docker container with no route to the host's private networks.
+sidebar:
+  order: 16
+---
+
+`pi-roundtable-browser` adds one tool, `browser_task`, to agents and the owner's sessions.
+A call hands a task to a fresh worker session whose only tools drive a real browser.
+The worker works alone for a few minutes and returns a written report; the screenshots it chose to keep are attached to the agent's reply.
+Source lives in [`packages/browser`](https://github.com/wayne930242/pi-roundtable/tree/master/packages/browser), and the [package README](https://github.com/wayne930242/pi-roundtable/blob/master/packages/browser/README.md) documents every option.
+
+## Install and requirements
+
+```sh
+bun add pi-roundtable-browser pi-roundtable
+```
+
+Use Bun 1.4.2 or newer, pi-roundtable `>=0.21.0 <0.22.0`, a native Linux host, and a local Docker daemon.
+The service account must be allowed to use Docker, and the container runs as that account, never as root.
+macOS supports the offline tests and image builds, but not browsing, because Docker Desktop does not share host Unix sockets into its Linux VM.
+
+The host builds the browser image once from the installed package, under the package's version as its tag:
+
+```sh
+docker build -t pi-roundtable-browser:<version> \
+  -f node_modules/pi-roundtable-browser/docker/Dockerfile \
+  node_modules/pi-roundtable-browser/docker
+```
+
+Setup stops with a `PluginError` that names the fix when Docker is missing, its daemon does not answer, or the image is not built.
+
+## Add it to a host
+
+```ts
+import { browserAgent } from "pi-roundtable-browser";
+
+export default {
+  // ...your roundtable settings...
+  plugins: [
+    browserAgent({
+      model: "anthropic/claude-sonnet-5-5", // default: delegation.model
+      thinking: "medium",                    // default: delegation.thinking
+      limits: { timeoutMs: 5 * 60_000, maxSteps: 40, maxScreenshots: 4 },
+    }),
+  ],
+};
+```
+
+The tool needs the owner tier by default; lower it with `toolTiers`.
+It holds nothing for approval, and every task starts from a clean browser profile with no stored logins.
+Time, steps, kept screenshots, screenshot size and output size are limited, each with a safe default and an option.
+Cancelling the turn or stopping the host aborts the worker and removes its container.
+
+## What keeps the browser away from the host
+
+The container is started with `--network none`: it has a loopback interface and nothing else.
+Its browser reaches the web only through a Unix socket, mounted from a private folder, that a proxy on the host listens on.
+That proxy resolves every destination itself and refuses it unless every address in the answer is a public one, then connects to a vetted address.
+So loopback, private and link-local addresses (cloud metadata included) are unreachable, whether a page links to them, redirects to them, fetches them, opens a WebSocket to them, or uses a name that resolves there only on the second lookup.
+WebRTC is limited to the proxy, downloads and local files are refused by the browser's policy, and the container is read-only, unprivileged and limited in memory, CPU and processes.
+The package's integration test proves the loopback, private-address and metadata cases against a real container on CI.
+
+## The default driver
+
+The default driver runs agent-browser, Vercel's browser CLI for agents, in the container.
+The worker gets one tool, `agent_browser`, that runs a single command as an argument list (never a shell), and the guide of the agent-browser version in the image, so its instructions always match the binary.
+A command policy refuses downloads, uploads, installs, cookies and saved state, logins, plugins and changes to the browser's launch or network settings.
+`keep: true` on a `screenshot` call attaches that image to the reply.
+
+## Use another browser
+
+A `BrowserDriver` builds one task's tools, skills and instructions, and cleans up after it:
+
+```ts
+browserAgent({ driver: myDriver });
+```
+
+The package counts the tool calls, cuts long output, scrubs unexpected errors and enforces the screenshot limits for any driver; keeping its browser away from what the host should not expose is the driver's job.

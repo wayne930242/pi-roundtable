@@ -53,6 +53,15 @@ jobs:
           [[ "$(uname -s)" == Linux ]]
           [[ "$(id -u)" != 0 ]]
           bun test src/docker.integration.test.ts
+      - name: Run the opt-in browser Docker integration on native Linux
+        working-directory: packages/browser
+        env:
+          BROWSER_DOCKER_TEST: "1"
+        run: |
+          [[ "$BROWSER_DOCKER_TEST" == 1 ]]
+          [[ "$(uname -s)" == Linux ]]
+          [[ "$(id -u)" != 0 ]]
+          bun test src/docker.integration.test.ts
       - name: Pack every workspace without requiring unpublished packages on npm
         run: bun scripts/preflight-release.ts "v$(node -p 'require("./package.json").version')" --local
       - name: Scan the built bundles too

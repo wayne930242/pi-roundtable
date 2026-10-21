@@ -1,0 +1,79 @@
+---
+title: Browser 套件
+description: 給 agent 一個瀏覽器 worker，在 Docker container 裡讀網頁、點擊、截圖，而且連不到 host 的私有網路。
+sidebar:
+  order: 16
+---
+
+`pi-roundtable-browser` 為 agent 和 owner 的 session 加上一個工具 `browser_task`。
+每次呼叫都把任務交給一個全新的 worker session，這個 session 唯一的工具就是操作真實瀏覽器。
+worker 會獨自工作幾分鐘，然後交回一份書面報告；它決定保留的截圖會附在 agent 的回覆上。
+原始碼在 [`packages/browser`](https://github.com/wayne930242/pi-roundtable/tree/master/packages/browser)，每個選項見[套件 README](https://github.com/wayne930242/pi-roundtable/blob/master/packages/browser/README.md)。
+
+## 安裝與需求
+
+```sh
+bun add pi-roundtable-browser pi-roundtable
+```
+
+需要 Bun 1.4.2 以上、`>=0.21.0 <0.22.0` 的 pi-roundtable、原生 Linux host，以及本機 Docker daemon。
+服務帳號必須能使用 Docker；container 以這個帳號執行，絕不用 root。
+macOS 可用於離線測試和建置 image，但不能實際瀏覽，因為 Docker Desktop 不會把 host Unix socket 分享進 Linux VM。
+
+由 host 從安裝好的套件建置一次 image，tag 用套件的版本：
+
+```sh
+docker build -t pi-roundtable-browser:<version> \
+  -f node_modules/pi-roundtable-browser/docker/Dockerfile \
+  node_modules/pi-roundtable-browser/docker
+```
+
+Docker 不存在、daemon 沒有回應或 image 還沒建置時，啟動會以 `PluginError` 停下，訊息會指出該怎麼修。
+
+## 加進 host
+
+```ts
+import { browserAgent } from "pi-roundtable-browser";
+
+export default {
+  // ...你的 roundtable 設定...
+  plugins: [
+    browserAgent({
+      model: "anthropic/claude-sonnet-5-5", // 預設：delegation.model
+      thinking: "medium",                    // 預設：delegation.thinking
+      limits: { timeoutMs: 5 * 60_000, maxSteps: 40, maxScreenshots: 4 },
+    }),
+  ],
+};
+```
+
+這個工具預設需要 owner 層級；要降低可用 `toolTiers`。
+它不會等待核准，而且每個任務都從乾淨的瀏覽器 profile 開始，沒有任何已儲存的登入。
+任務時間、步驟數、保留的截圖數、截圖大小和輸出大小都有上限，各有安全的預設值和選項。
+取消這一輪或停止 host，都會中止 worker 並移除它的 container。
+
+## 瀏覽器為什麼碰不到 host
+
+container 以 `--network none` 啟動：只有 loopback 介面，沒有別的。
+瀏覽器只能經由一個 Unix socket 上網，這個 socket 從私有資料夾掛進去，另一端是 host 上的 proxy。
+proxy 自己解析每個目的地，只有答案裡每個位址都是公開位址才放行，然後連到驗證過的位址。
+所以 loopback、私有位址和 link-local 位址（包括雲端 metadata）都連不到，不論是網頁連結過去、重新導向、用 `fetch` 或 WebSocket 連過去，還是用一個第二次查詢才解析到那裡的名稱。
+WebRTC 只能走 proxy，下載和本機檔案由瀏覽器的 policy 拒絕，container 唯讀、沒有特權，記憶體、CPU 和行程數都有上限。
+套件的整合測試會在 CI 上用真的 container 證明 loopback、私有位址和 metadata 都連不到。
+
+## 預設 driver
+
+預設 driver 在 container 裡執行 agent-browser，也就是 Vercel 給 agent 用的瀏覽器 CLI。
+worker 拿到一個工具 `agent_browser`，一次執行一個指令，指令是引數清單（不是 shell），另外還有 image 裡那個 agent-browser 版本自己的使用指南，所以指引永遠和它操作的程式一致。
+指令政策會拒絕下載、上傳、安裝、cookie 與已存狀態、登入、外掛，以及改變瀏覽器啟動或網路設定的指令。
+在 `screenshot` 上設 `keep: true`，就把那張圖附到回覆。
+
+## 換一個瀏覽器
+
+`BrowserDriver` 為一個任務建立工具、skill 和指示，並在任務結束後清理：
+
+```ts
+browserAgent({ driver: myDriver });
+```
+
+不論哪種 driver，套件都會計算工具呼叫次數、截斷過長的輸出、清掉意外錯誤裡的敏感內容，並執行截圖上限；讓它的瀏覽器碰不到 host 不該開放的東西，是 driver 自己的責任。
