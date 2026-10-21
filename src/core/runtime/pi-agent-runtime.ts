@@ -48,7 +48,8 @@ import { promptImages, SteerableRun } from "./steerable-run.ts";
 import { thinkingLevel } from "./thinking-level.ts";
 import { runningCalls } from "./tool-call-scope.ts";
 import { transcriptOf, turnAnswer, unspokenTurn } from "./turn-answer.ts";
-import { runtimeTurnBudget, type TurnBudget } from "./turn-budget.ts";
+import type { TurnBudget } from "./turn-budget.ts";
+import { promptFailed, turnLimits } from "./turn-limits.ts";
 import { progressReporter } from "./turn-progress.ts";
 import { wrapUpTurn } from "./turn-wrapup.ts";
 import { workerReport } from "./worker-task.ts";
@@ -240,6 +241,10 @@ export class PiAgentRuntime implements AgentRuntime {
 		const interim = interimPoster(request, this.#options);
 		// The caller's live view: the text as it streams and each tool, never the thinking.
 		const slot = this.#sessions.slot(key);
+		// Its time limit, not counting time waiting on the owner's cards, follows what it does to say why it fired.
+		const limits = turnLimits(this.#options, slot, request.channel, () =>
+			guard.abort(),
+		);
 		const progress = request.progress
 			? progressReporter(request.progress, {
 					refusalOf: (id) => slot.refusalOf(id),
@@ -247,6 +252,7 @@ export class PiAgentRuntime implements AgentRuntime {
 			: undefined;
 		const unsubscribe = session.subscribe((event) => {
 			progress?.observe(event);
+			limits.observe(event);
 			if (event.type === "tool_execution_start") {
 				toolCalls.push(event.toolName);
 				interim?.toolStart(event.toolName);
@@ -275,10 +281,7 @@ export class PiAgentRuntime implements AgentRuntime {
 				this.#sessions.drop(key, channelSession);
 			},
 		});
-		// Time spent waiting on the owner's cards does not count towards the timeout or the cap.
-		const budget = runtimeTurnBudget(this.#options, slot, request.channel, () =>
-			guard.abort(),
-		);
+		const { budget } = limits;
 		this.#budgets.set(key, budget);
 		const running = new SteerableRun(
 			session,
@@ -307,10 +310,7 @@ export class PiAgentRuntime implements AgentRuntime {
 		} catch (error) {
 			if (running.stopped)
 				return { ok: false, error: new AgentRunError(STOPPED), stopped: true };
-			return {
-				ok: false,
-				error: new AgentRunError(`prompt failed: ${String(error)}`),
-			};
+			return limits.failure() ?? promptFailed(error);
 		} finally {
 			this.#running.delete(key);
 			this.#budgets.delete(key);
@@ -335,7 +335,7 @@ export class PiAgentRuntime implements AgentRuntime {
 
 		if (running.stopped)
 			return { ok: false, error: new AgentRunError(STOPPED), stopped: true };
-		return turnAnswer(turnMessages, running.steered);
+		return limits.failure() ?? turnAnswer(turnMessages, running.steered);
 	}
 
 	async steer(

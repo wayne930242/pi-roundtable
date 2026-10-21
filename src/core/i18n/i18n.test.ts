@@ -10,11 +10,23 @@ import { createZhTW } from "./zh-tw.ts";
 const CTX = { assistant: "Roundtable", root: "roundtable" };
 const CJK = /[\u3400-\u9fff\u3000-\u303f\uff00-\uffef]/;
 
+/** A timed-out turn, the one argument shape the turn-timeout entries take. */
+const TIMEOUT = {
+	limit: "turn",
+	limitMs: 600_000,
+	workedMs: 612_000,
+	running: [{ tool: "x", ms: 192_000 }],
+	compacting: false,
+	tools: [["x", 2]],
+	graceMs: 300_000,
+	end: "timeout",
+};
+
 type Entry = string | ((...args: never[]) => unknown);
 
 /** Calls a message function with plain arguments of one shape; the first shape it accepts wins. */
 function render(entry: (...values: unknown[]) => unknown): string {
-	for (const arg of ["x", ["x"], 1, { x: "x" }]) {
+	for (const arg of ["x", ["x"], 1, { x: "x" }, TIMEOUT]) {
 		try {
 			return JSON.stringify(
 				entry(...Array.from({ length: entry.length }, () => arg)),

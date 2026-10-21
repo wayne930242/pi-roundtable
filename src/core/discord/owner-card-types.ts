@@ -83,6 +83,8 @@ export interface OpenCard {
 	mention?: boolean;
 	/** Who may answer, and what to tell someone else who presses it. */
 	audience: Audience;
+	/** An approval card's footers once approved or declined, where its wording gives them. */
+	outcomes?: { approved: string; declined: string };
 }
 
 /** What `#post` needs to post one card; `T` is what the card resolves with. */
@@ -101,6 +103,8 @@ export interface CardSpec<T> {
 	build?(id: string, footer: string, disabled: boolean): CardPayload;
 	rows?(id: string, disabled: boolean): Rows;
 	footer: string;
+	/** An approval card's footers once approved or declined, where its wording gives them. */
+	outcomes?: { approved: string; declined: string };
 	wait?: {
 		pending: T;
 		late(

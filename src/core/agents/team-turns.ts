@@ -8,7 +8,7 @@ import type {
 import { AgentError } from "../domain/errors.ts";
 import type { InterimPosts } from "../domain/interim.ts";
 import type { AgentTurnScope } from "../domain/ports.ts";
-import { messages } from "../i18n/index.ts";
+import { failureNotice } from "../presentation/failure-notice.ts";
 import { splitReply } from "../presentation/reply-splitter.ts";
 import { thinkingLine } from "../presentation/thinking-line.ts";
 import { withReplyFiles } from "../reply-files.ts";
@@ -34,11 +34,6 @@ import {
 } from "./team-turn-types.ts";
 
 export { MAX_CHAIN_MESSAGES, type TeamTurnsOptions };
-
-/** What a failed turn posts: the stopped notice for a stop, the failure notice otherwise. */
-function noticeOf(result: { stopped?: true }): string {
-	return result.stopped ? messages().stoppedNotice : messages().failureNotice;
-}
 
 /**
  * The agent team's turns: owner messages, background turns, group rounds, and messages between
@@ -246,7 +241,7 @@ export class TeamTurns {
 					: undefined;
 			await this.#post(postTo, this.#current(agent), {
 				...(thinking ? { thinking } : {}),
-				chunks: result.ok ? splitReply(result.text) : [noticeOf(result)],
+				chunks: result.ok ? splitReply(result.text) : [failureNotice(result)],
 				...(result.ok && result.files?.length ? { files: result.files } : {}),
 			});
 		} catch (error) {

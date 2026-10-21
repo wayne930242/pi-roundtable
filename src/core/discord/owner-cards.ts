@@ -175,8 +175,10 @@ export class OwnerCards implements InteractionModule {
 						sections: [message],
 						...(options?.supersede ? { supersede: options.supersede } : {}),
 						...(copy ? { copy: copy.text } : {}),
-						rows: (id, disabled) => approvalRows(id, disabled, copy),
-						footer: messages().cardApprovalFooter,
+						rows: (id, disabled) =>
+							approvalRows(id, disabled, copy, options?.wording),
+						footer: options?.wording?.footer ?? messages().cardApprovalFooter,
+						...(options?.wording ? { outcomes: options.wording } : {}),
 					},
 				);
 			},
@@ -296,6 +298,7 @@ export class OwnerCards implements InteractionModule {
 				...(card.question ? { question: card.question } : {}),
 				...(card.form ? { form: card.form } : {}),
 				...(card.previews ? { previews: card.previews } : {}),
+				...(card.outcomes ? { outcomes: card.outcomes } : {}),
 			};
 			this.#open.set(id, open);
 			this.#options
@@ -417,7 +420,11 @@ export class OwnerCards implements InteractionModule {
 				return true;
 			}
 			await interaction.update(
-				card.view(approved ? messages().cardApproved : messages().cardDeclined),
+				card.view(
+					approved
+						? (card.outcomes?.approved ?? messages().cardApproved)
+						: (card.outcomes?.declined ?? messages().cardDeclined),
+				),
 			);
 			return true;
 		}

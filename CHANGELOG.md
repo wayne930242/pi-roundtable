@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- A turn that reaches its time limit asks before it ends (`pi-roundtable`). When the built-in runtime's 10-minute budget or 30-minute cap fires on a turn that can show the owner a card, the turn keeps working and a card names the limit, the work time, what the turn is doing (the running tool and for how long, waiting on the model, or compacting) and the tools so far, with **Continue** (another full budget from the answer; at the cap the cap moves too) and **Cancel**. No answer within 5 minutes aborts the turn; a turn that finishes first closes the card and replies as usual. A turn that cannot show a card is aborted as before. An aborted turn now fails with `TurnTimeoutError` (an `AgentRunError`, with the reason as `TurnTimeout`: its `TurnLimit`, work time, running tools, tools so far and `TurnTimeoutEnd`), its log warning carries the same fields, and the posted failure says why instead of the generic notice. `ApprovalOptions` gains `wording` (`ApprovalWording`: the buttons' labels and the footers) for a card that is not an approval; the Discord cards honour it. `PiAgentRuntimeOptions` gains `turnTimeoutCardMs`, the card's grace period; the runtime plugin still passes none of the limits, so they stay fixed. See [the turn limits](docs/plugins.md#what-happens-when-the-bot-starts-and-stops).
+
 ## [0.22.0] - 2026-10-21
 
 ### Added

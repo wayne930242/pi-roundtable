@@ -7,6 +7,7 @@ import { discordEn } from "./discord.ts";
 import { ownerEn } from "./owner.ts";
 import { schedulesEn } from "./schedules.ts";
 import { timeZonesEn } from "./time-zones.ts";
+import { turnTimeoutEn } from "./turn-timeout.ts";
 import type { CatalogContext } from "./types.ts";
 
 export type Messages = ReturnType<typeof createEn>;
@@ -23,5 +24,6 @@ export function createEn(ctx: CatalogContext) {
 		...dashboardEn(ctx),
 		...channelsEn(ctx),
 		...discordEn(ctx),
+		...turnTimeoutEn(),
 	};
 }

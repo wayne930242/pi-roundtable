@@ -89,17 +89,25 @@ export interface PiAgentRuntimeOptions {
 	/** The lowest tier that may use each tool; the default names the core's tools and leaves the rest to the owner. */
 	toolTiers?: ToolTiers;
 	/**
-	 * A run that works longer, not counting time spent waiting on the owner's cards, is aborted and
-	 * reported as failed; default 10 minutes. Each message steered into the turn gives it this
+	 * A run that works longer, not counting time spent waiting on the owner's cards, asks the owner
+	 * on a card whether to go on (see `turnTimeoutCardMs`), or, when it cannot show one, is aborted
+	 * and reported as failed with the reason; default 10 minutes. Each message steered into the turn gives it this
 	 * budget again from that moment, up to `turnMaxMs`.
 	 */
 	turnTimeoutMs?: number;
 	/**
 	 * The most one turn may work in all, however often it is steered, not counting time spent
 	 * waiting on the owner's cards; default three times `turnTimeoutMs`. Once it is reached the turn
-	 * takes no more steering (the message waits for the next turn) and is aborted as on its timeout.
+	 * takes no more steering (the message waits for the next turn) and asks or is aborted as on its
+	 * timeout; the owner's Continue moves the cap to a full `turnTimeoutMs` from then.
 	 */
 	turnMaxMs?: number;
+	/**
+	 * How long the card a turn posts when it reaches `turnTimeoutMs` or `turnMaxMs` waits for the
+	 * owner's Continue or Cancel, in wall time, while the turn keeps working; default 5 minutes. With
+	 * no answer by then the turn is aborted. A turn that cannot show a card is aborted at once.
+	 */
+	turnTimeoutCardMs?: number;
 	/**
 	 * How long a turn that was aborted, by its timeout or a stop, gets to end before its session is
 	 * disposed of and the turn is reported failed; default 15 seconds. A model that ignores the

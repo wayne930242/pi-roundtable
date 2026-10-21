@@ -99,6 +99,14 @@ export class PromptSlot {
 		};
 	}
 
+	/**
+	 * The turn's prompts as bound, an open card not counted as waiting; for a card the turn keeps
+	 * working beside, such as the one its time limit posts.
+	 */
+	get cards(): Prompts | undefined {
+		return this.#prompts;
+	}
+
 	/** Time this turn has spent with at least one card open. */
 	waitedMs(now = Date.now()): number {
 		return this.#waited + (this.#open > 0 ? now - this.#openSince : 0);

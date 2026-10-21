@@ -128,6 +128,23 @@ export interface ApprovalOptions {
 	 * withdrawn call whatever the card answers.
 	 */
 	supersede?: AbortSignal;
+	/**
+	 * The card's own words, for a card that asks something other than whether to run an action,
+	 * such as a turn's timeout card; a surface that cannot show them keeps its own.
+	 */
+	wording?: ApprovalWording;
+}
+
+/** A card's words in place of an approval's; see `ApprovalOptions.wording`. */
+export interface ApprovalWording {
+	/** The labels of the controls that answer approved and declined. */
+	approve: string;
+	decline: string;
+	/** The footer while the card is open. */
+	footer: string;
+	/** The footer once it was answered approved, or declined. */
+	approved: string;
+	declined: string;
 }
 
 /** The longest footer a withdrawn card shows, in characters. */

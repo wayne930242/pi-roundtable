@@ -3526,7 +3526,10 @@ On `SIGTERM` or `SIGINT` the bot takes no new work at once, finishes what runs, 
 `shutdown()` returns exit code `0`, or `1` if a listener, service, or pool failed to stop.
 Every call shares the same shutdown.
 Give the service manager a stop timeout longer than the drain limit plus about a minute for the steps after it, such as systemd's `TimeoutStopSec=5min` with the default three-minute drain; a shorter one has the manager kill the process in the middle of the drain.
-The built-in runtime aborts a turn that works 10 minutes, not counting time spent waiting on the owner's cards. Each message steered into the running turn gives it the full 10 minutes again from that moment, up to a cap of 30 minutes of work for the whole turn; once the cap is reached the turn takes no more steering, so a message waits for the next turn, and the turn is aborted as on its timeout. Both limits are fixed: the runtime plugin passes no option for them, so a host cannot change them, and a limit that waiting on an owner's card pushed back can fire up to a second late. The log says `steer renewed the turn's time budget` with `deadlineMs`, the work time left, and the timeout warning names the limit that fired (`limit: "turn"` or `"turnMax"`). Task workers (`task.timeoutMs`), coding workers (`workTimeout`) and sandbox guests (their own `turnTimeoutMs`) keep their own limits, which steering does not renew.
+The built-in runtime limits a turn to 10 minutes of work, not counting time spent waiting on the owner's cards. Each message steered into the running turn gives it the full 10 minutes again from that moment, up to a cap of 30 minutes of work for the whole turn; once the cap is reached the turn takes no more steering, so a message waits for the next turn.
+When a limit fires on a turn that can show a card (an owner's turn or a report turn on a surface with cards, the same turns that can ask with `ask_user` or an approval card), the turn is not aborted: it keeps working and a card asks the owner whether to go on. The card names the limit, how long the turn has worked, what it is doing now (the tool running and for how long, or waiting on the model, or compacting the conversation) and the tools it called so far, by name and count, never their inputs. **Continue** gives the turn another full 10 minutes from the answer; at the cap it moves the cap too, to 10 minutes from the answer, so the owner can keep going in steps. **Cancel** aborts the turn. With no answer within 5 minutes of wall time the turn is aborted. The time the card is open counts as work, unlike an `ask_user` or approval card, because the turn keeps working; while it is open the turn takes no steering. If the turn finishes first, the card closes saying so and the reply is posted as usual; a press after that gets the usual "no longer valid" reply. The card's buttons come from `ApprovalOptions.wording` on `Prompts.confirm`, with `supersede` closing it, so a surface that shows approvals shows it; one that ignores `wording` shows its own approve and decline labels.
+A turn that cannot show a card (a schedule's turn, a member's turn, a turn without a surface) is aborted at once, as before. Either way an aborted turn fails with a `TurnTimeoutError` (an `AgentRunError`) whose `timeout` (`TurnTimeout`) holds the limit, the work time, the running tools, whether it was compacting, the tools so far, and how it ended (`end`: `"timeout"`, `"cancelled"` by the owner, or `"unanswered"`); its message says the same in English, and the failure the conversation posts says it in the host's language instead of the generic failure notice.
+The limits are fixed: the runtime plugin passes no option for them, nor for the card's grace period (`turnTimeoutMs`, `turnMaxMs` and `turnTimeoutCardMs` of `PiAgentRuntimeOptions`, for a host that builds the runtime itself), and a limit that waiting on an owner's card pushed back can fire up to a second late. The log says `steer renewed the turn's time budget` with `deadlineMs`, the work time left; `turn reached its time limit; asking the owner` when the card is posted; `owner continued the turn past its time limit` on Continue; and the warning `turn timed out; aborting` names the limit that fired (`limit: "turn"` or `"turnMax"`) with `workedMs`, `running`, `compacting`, `tools` and `end`. Task workers (`task.timeoutMs`), coding workers (`workTimeout`) and sandbox guests (their own `turnTimeoutMs`) keep their own limits, which steering does not renew and which post no card.
 A turn whose model ignores its abort (a subprocess that does not exit) is given up on too: a turn that outlives its timeout, or is stopped, gets `turnAbortGraceMs` (15 seconds by default) to end, and then its session is disposed of and the turn is reported failed, so it cannot hold the queue.
 `listen()`, called by the command line and a host's own entry point, exits the process with that code.
 
@@ -3737,6 +3740,7 @@ Import from the entries listed below; source area files are internal.
 | `ApprovalDetails` | `pi-roundtable` | type |
 | `ApprovalFile` | `pi-roundtable` | type |
 | `ApprovalOptions` | `pi-roundtable` | type |
+| `ApprovalWording` | `pi-roundtable` | type |
 | `ApprovedBy` | `pi-roundtable` | type |
 | `AskOption` | `pi-roundtable` | type |
 | `AskSupport` | `pi-roundtable` | type |
@@ -3963,6 +3967,10 @@ Import from the entries listed below; source area files are internal.
 | `TurnRequest` | `pi-roundtable` | type |
 | `TurnResult` | `pi-roundtable` | type |
 | `TurnSelection` | `pi-roundtable` | type |
+| `TurnLimit` | `pi-roundtable` | type |
+| `TurnTimeout` | `pi-roundtable` | type |
+| `TurnTimeoutEnd` | `pi-roundtable` | type |
+| `TurnTimeoutError` | `pi-roundtable` | value |
 | `WebSocketAccept` | `pi-roundtable` | type |
 | `WebSocketRoute` | `pi-roundtable` | type |
 | `WebSocketSendResult` | `pi-roundtable` | type |

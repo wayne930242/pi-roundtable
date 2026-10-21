@@ -123,23 +123,27 @@ export function answeredLine(answer: OwnerAnswer): string {
 	return messages().cardAnswered(parts);
 }
 
-/** An approval's controls: run, cancel, and, when the card offers a copy, a copy button that stays usable once it ended. */
+/**
+ * An approval's controls: run, cancel, or the labels its wording gives, and, when the card offers
+ * a copy, a copy button that stays usable once it ended.
+ */
 export function approvalRows(
 	id: string,
 	disabled: boolean,
 	copy: { label: string } | undefined,
+	labels?: { approve: string; decline: string },
 ): Rows {
 	return [
 		new ActionRowBuilder<ButtonBuilder>().addComponents(
 			new ButtonBuilder()
 				.setCustomId(`${CARD_PREFIX}${id}:yes`)
-				.setLabel(messages().cardRunLabel)
+				.setLabel(labels?.approve ?? messages().cardRunLabel)
 				.setEmoji("✅")
 				.setStyle(ButtonStyle.Success)
 				.setDisabled(disabled),
 			new ButtonBuilder()
 				.setCustomId(`${CARD_PREFIX}${id}:no`)
-				.setLabel(messages().cardCancelLabel)
+				.setLabel(labels?.decline ?? messages().cardCancelLabel)
 				.setEmoji("❌")
 				.setStyle(ButtonStyle.Secondary)
 				.setDisabled(disabled),

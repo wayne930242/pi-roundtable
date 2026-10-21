@@ -147,6 +147,8 @@ test("a turn that outlives its timeout and its abort grace ends as failed, so it
 		const started = Date.now();
 		const first = await f.run();
 		expect(first.ok).toBe(false);
+		if (!first.ok)
+			expect(first.error.message).toContain("while waiting on the model");
 		expect(Date.now() - started).toBeLessThan(5_000);
 		expect(await f.run()).toMatchObject({ ok: true, text: "back again" });
 		expect(f.requests.count).toBe(2);

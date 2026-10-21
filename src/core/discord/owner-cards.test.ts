@@ -145,6 +145,63 @@ describe("OwnerCards", () => {
 		expect(json(fake.edits[0])).toContain(messages().cardStopped);
 	});
 
+	test("a card with its own wording shows its labels and footers, closes with its turn's text, and a late press is no longer valid", async () => {
+		const { fake, cards, prompts } = setup();
+		const wording = {
+			approve: "Continue",
+			decline: "Halt",
+			footer: "Still working.",
+			approved: "Went on.",
+			declined: "Halted.",
+		};
+		const close = new AbortController();
+		const first = prompts.confirm(
+			"t",
+			"m",
+			undefined,
+			"owner",
+			undefined,
+			undefined,
+			{
+				wording,
+				supersede: close.signal,
+			},
+		);
+		await tick();
+		const card = json(fake.sent[0]);
+		expect(card).toContain("Continue");
+		expect(card).toContain("Halt");
+		expect(card).toContain("Still working.");
+		expect(card).not.toContain(messages().cardRunLabel);
+		const id = fake.cardId();
+		const yes = press("button", `${CARD_PREFIX}${id}:yes`);
+		await cards.handle(yes.interaction);
+		expect(await first).toBe("approved");
+		expect(json(yes.updates[0])).toContain("Went on.");
+
+		const second = prompts.confirm(
+			"t",
+			"m",
+			undefined,
+			"owner",
+			undefined,
+			undefined,
+			{
+				wording,
+				supersede: close.signal,
+			},
+		);
+		await tick();
+		const secondId = fake.cardId();
+		close.abort("The turn finished.");
+		expect(await second).toBe("cancelled");
+		await tick();
+		expect(json(fake.edits.at(-1))).toContain("The turn finished.");
+		const late = press("button", `${CARD_PREFIX}${secondId}:yes`);
+		await cards.handle(late.interaction);
+		expect(late.replies).toEqual([messages().cardInactive]);
+	});
+
 	test("a card that cannot be posted is unavailable", async () => {
 		const { prompts } = setup({
 			channel: async () => {

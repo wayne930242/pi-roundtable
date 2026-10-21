@@ -139,6 +139,12 @@ export type {
 } from "./core/domain/interim.ts";
 export type { TurnConversation, TurnRequest } from "./core/domain/ports.ts";
 export type { HoldRefusal, TurnProgress } from "./core/domain/progress.ts";
+export {
+	type TurnLimit,
+	type TurnTimeout,
+	type TurnTimeoutEnd,
+	TurnTimeoutError,
+} from "./core/domain/turn-timeout.ts";
 export type { DrainOptions } from "./core/drain.ts";
 export {
 	HostStoppingError,
@@ -194,6 +200,7 @@ export type {
 	ApprovalDetails,
 	ApprovalFile,
 	ApprovalOptions,
+	ApprovalWording,
 	ApprovedBy,
 	AskOption,
 	AskSupport,

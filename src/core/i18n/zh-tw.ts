@@ -8,6 +8,7 @@ import type { Messages } from "./en.ts";
 import { ownerZhTW } from "./owner.ts";
 import { schedulesZhTW } from "./schedules.ts";
 import { timeZonesZhTW } from "./time-zones.ts";
+import { turnTimeoutZhTW } from "./turn-timeout.ts";
 import type { CatalogContext } from "./types.ts";
 
 /** The Traditional Chinese catalog. */
@@ -22,5 +23,6 @@ export function createZhTW(ctx: CatalogContext): Messages {
 		...dashboardZhTW(ctx),
 		...channelsZhTW(ctx),
 		...discordZhTW(ctx),
+		...turnTimeoutZhTW(),
 	};
 }

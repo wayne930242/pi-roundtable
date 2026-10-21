@@ -10,10 +10,10 @@ import type { TurnResult } from "../domain/conversation.ts";
 import type { TurnConversation } from "../domain/ports.ts";
 import type { TurnProgress } from "../domain/progress.ts";
 import { HostStoppingError, PluginError } from "../errors.ts";
-import { messages } from "../i18n/index.ts";
 import { SYSTEM_PRINCIPAL } from "../identity/principal-store.ts";
 import type { Logger } from "../log.ts";
 import type { EventSink } from "../plugin.ts";
+import { failureNotice } from "../presentation/failure-notice.ts";
 import { splitReply } from "../presentation/reply-splitter.ts";
 import { thinkingLine } from "../presentation/thinking-line.ts";
 import { withReplyFiles } from "../reply-files.ts";
@@ -239,12 +239,7 @@ export function conversationTurns(
 
 /** The default post: the answer with its thinking line, or the failure or stopped notice. */
 function replyOf(result: TurnResult) {
-	if (!result.ok)
-		return {
-			chunks: [
-				result.stopped ? messages().stoppedNotice : messages().failureNotice,
-			],
-		};
+	if (!result.ok) return { chunks: [failureNotice(result)] };
 	const thinking = result.thinking ? thinkingLine(result.thinking) : undefined;
 	return {
 		...(thinking ? { thinking } : {}),
