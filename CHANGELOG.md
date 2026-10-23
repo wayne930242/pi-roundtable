@@ -5,9 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.22.3] - 2026-10-23
+
 ### Changed
 
-- Question cards can be cancelled (`pi-roundtable`). Every Discord `ask_user` card, single or several questions, has a **Cancel** button beside Submit, for those who may answer it. Pressed while the turn still waits, `Prompts.ask` and `Prompts.questionnaire` resolve the new `"declined"`, and the `ask_user` result tells the model the owner cancelled the question without answering, not to ask it again, and to continue without the answer or end the turn if it cannot. Pressed after the grace period, it only closes the card and starts no turn. The card shows "❌ Cancelled, not answered." (zh-TW "❌ 已取消，沒有回答。") with its controls disabled. A surface that implements `Prompts` need not return `"declined"`; code that reads `ask` or `questionnaire` results should handle it. See [a prompt that outlives its turn](docs/plugins.md#a-prompt-that-outlives-its-turn-promptwait).
+- Question cards can be cancelled (`pi-roundtable`). Every Discord `ask_user` card, single or several questions, has a **Cancel** button beside Submit, for those who may answer it. Pressed while the turn still waits, `Prompts.ask` and `Prompts.questionnaire` resolve the new `"declined"`, and the `ask_user` result tells the model the owner cancelled the question without answering, not to ask it again, and to continue without the answer or end the turn if it cannot. Pressed after the grace period, it only closes the card and starts no turn. The card shows "❌ Cancelled, not answered." with its controls disabled. A surface that implements `Prompts` need not return `"declined"`; code that reads `ask` or `questionnaire` results should handle it. See [a prompt that outlives its turn](docs/plugins.md#a-prompt-that-outlives-its-turn-promptwait).
 
 ## [0.22.2] - 2026-10-21
 
