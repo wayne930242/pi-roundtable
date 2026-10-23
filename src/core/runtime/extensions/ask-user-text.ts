@@ -11,10 +11,12 @@ const NAME_CHARS = 120;
 
 /** The tool's result: what the owner chose and wrote. */
 export function answerText(
-	answer: OwnerAnswer | "pending" | undefined,
+	answer: OwnerAnswer | "pending" | "declined" | undefined,
 	owner: OwnerIdentity,
 ): string {
 	const o = ownerWords(owner);
+	if (answer === "declined")
+		return `${o.name} cancelled the question on its card without answering. Do not ask the same question again. Continue without the answer, or, if you cannot go on without it, end your turn saying so.`;
 	if (answer === "pending")
 		return `${o.name} has not answered yet. The card stays open, so do not ask again and do not wait for it. End your turn now: say briefly that you are waiting for ${o.his} answer on the card. When ${o.he} answers, a new turn brings you the answer and you continue from there.`;
 	if (!answer)
@@ -72,11 +74,12 @@ function listOf(
 
 /** The tool's result for a questionnaire: each question's answer, and the note. */
 export function questionnaireText(
-	answer: QuestionnaireAnswer | "pending" | undefined,
+	answer: QuestionnaireAnswer | "pending" | "declined" | undefined,
 	questionnaire: Questionnaire,
 	owner: OwnerIdentity,
 ): string {
-	if (answer === "pending" || !answer) return answerText(answer, owner);
+	if (answer === "pending" || answer === "declined" || !answer)
+		return answerText(answer, owner);
 	return [
 		`${owner.name} answered your questions on the card:`,
 		...listOf(questionnaire, answer),
@@ -102,7 +105,7 @@ export function lateQuestionnaireText(
 export function sequentialText(
 	asked: Questionnaire,
 	answers: readonly OwnerAnswer[],
-	stopped: "pending" | "unanswered" | undefined,
+	stopped: "pending" | "declined" | "unanswered" | undefined,
 	owner: OwnerIdentity,
 	stoppedText: string,
 ): string {

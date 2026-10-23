@@ -2730,6 +2730,7 @@ A coding worker's cards give no `wait`, since nothing could resume a worker: it 
 
 On Discord the grace period is `discord.cardGraceSeconds` (default 120), and the cards carry no countdown.
 A card answered late is edited to show the answer with its controls disabled, as one answered in time is; a second press finds it answered.
+Every question card, single or several questions, has a **Cancel** button beside its answer controls, for the same audience as the answers. Pressed while the turn still waits, `ask` and `questionnaire` resolve `"declined"`, and `ask_user` tells the model the person cancelled the question without answering, not to ask it again, and to go on without the answer or end its turn if it cannot. Pressed after the turn stopped waiting, it only closes the card: no turn starts and nothing stays pending. Either way the card shows "❌ Cancelled, not answered." with its controls disabled, and a second press finds it ended.
 Open cards live in memory: after a restart, pressing one replies, to the presser alone, that it is no longer valid and to ask again.
 
 #### Several questions on one card: `questionnaire` and `AskSupport`

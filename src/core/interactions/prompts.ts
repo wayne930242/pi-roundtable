@@ -248,15 +248,17 @@ export interface Prompts {
 		options?: ApprovalOptions,
 	): Promise<Approval>;
 	/**
-	 * Asks a question; undefined when no one answered it or it was cancelled, and `pending`, only
-	 * with a `wait`, when the turn stopped waiting and the question stays open.
+	 * Asks a question; undefined when no one answered it or it was cancelled, `declined` when the
+	 * one asked cancelled the question on its card instead of answering, and `pending`, only with
+	 * a `wait`, when the turn stopped waiting and the question stays open. A question cancelled
+	 * after the turn stopped waiting only closes: it starts no turn.
 	 */
 	ask(
 		title: string,
 		question: OwnerQuestion,
 		signal?: AbortSignal,
 		wait?: PromptWait,
-	): Promise<OwnerAnswer | "pending" | undefined>;
+	): Promise<OwnerAnswer | "pending" | "declined" | undefined>;
 	/**
 	 * What `questionnaire` can show; absent means the 0.19 contract (one question, no previews,
 	 * no note), and `ask` is the only way to ask.
@@ -272,7 +274,7 @@ export interface Prompts {
 		questionnaire: Questionnaire,
 		signal?: AbortSignal,
 		wait?: PromptWait,
-	): Promise<QuestionnaireAnswer | "pending" | undefined>;
+	): Promise<QuestionnaireAnswer | "pending" | "declined" | undefined>;
 }
 
 /** @deprecated Since 0.9 the prompts are `Prompts`, answered by those their `PromptScope` names; this name goes away in 1.0. */

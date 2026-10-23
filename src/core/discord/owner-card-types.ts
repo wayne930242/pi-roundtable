@@ -72,6 +72,12 @@ export interface OpenCard {
 	 * already, answered by another press or withdrawn by its plugin, and this answer changed nothing.
 	 */
 	end(value: unknown, by: Answerer): boolean;
+	/**
+	 * Ends a question card declined, its Cancel button: a turn still waiting gets `declined`, and
+	 * a card whose turn stopped waiting only closes, starting no turn. False when the card had
+	 * ended already or is not a question.
+	 */
+	decline(): boolean;
 	question?: OwnerQuestion;
 	/** A questionnaire card's questions and its shared draft. */
 	form?: QuestionnaireForm;
@@ -99,6 +105,8 @@ export interface CardSpec<T> {
 	question?: OwnerQuestion;
 	form?: QuestionnaireForm;
 	previews?: Questionnaire;
+	/** What a question card resolves with when it is cancelled; without it the card has no Cancel. */
+	declined?: T;
 	/** Draws the card itself, as a questionnaire does; without it the card is the title, sections and rows. */
 	build?(id: string, footer: string, disabled: boolean): CardPayload;
 	rows?(id: string, disabled: boolean): Rows;

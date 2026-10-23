@@ -93,7 +93,7 @@ export const QUESTIONNAIRE_CHECKS: readonly QuestionnaireCheck[] = [
 			const given = answerOf(set, found.asks);
 			await answer(id, given, set);
 			const got = await result;
-			if (got === "pending" || got === undefined)
+			if (got === "pending" || got === "declined" || got === undefined)
 				throw new ContractBroken(`the person's answers came back ${got}`);
 			expectThat(
 				JSON.stringify(got.answers.map((a) => a ?? null)) ===

@@ -85,7 +85,7 @@ export function askRows(
 	];
 }
 
-/** The Previews button of a single-question card: it shows the options' previews and answers nothing. */
+/** The Previews button of a single-question card, which answers nothing, beside its Cancel button. */
 export function previewsRow(id: string, disabled: boolean) {
 	return new ActionRowBuilder<ButtonBuilder>().addComponents(
 		new ButtonBuilder()
@@ -93,6 +93,24 @@ export function previewsRow(id: string, disabled: boolean) {
 			.setLabel(messages().cardPreviewsLabel)
 			.setStyle(ButtonStyle.Secondary)
 			.setDisabled(disabled),
+		cancelButton(id, disabled),
+	);
+}
+
+/** A question card's Cancel button: the question is declined, not answered. */
+export function cancelButton(id: string, disabled: boolean): ButtonBuilder {
+	return new ButtonBuilder()
+		.setCustomId(`${CARD_PREFIX}${id}:cancel`)
+		.setLabel(messages().cardCancelLabel)
+		.setEmoji("❌")
+		.setStyle(ButtonStyle.Secondary)
+		.setDisabled(disabled);
+}
+
+/** A single-question card's row with only its Cancel button. */
+export function cancelRow(id: string, disabled: boolean) {
+	return new ActionRowBuilder<ButtonBuilder>().addComponents(
+		cancelButton(id, disabled),
 	);
 }
 

@@ -61,7 +61,7 @@ export async function askQuestions(
 		);
 		if (n === 1)
 			return answerText(
-				answer === "pending" || answer === undefined
+				answer === "pending" || answer === "declined" || answer === undefined
 					? answer
 					: (answer.answers[0] ?? { choices: [] }),
 				owner,
@@ -79,11 +79,11 @@ export async function askQuestions(
 					: undefined,
 		});
 		if (n === 1) return answerText(answer, owner);
-		if (answer === "pending" || answer === undefined)
+		if (answer === "pending" || answer === "declined" || answer === undefined)
 			return sequentialText(
 				questionnaire,
 				answers,
-				answer === "pending" ? "pending" : "unanswered",
+				answer ?? "unanswered",
 				owner,
 				answerText(answer, owner),
 			);

@@ -295,6 +295,12 @@ export class OwnerCards implements InteractionModule {
 					}
 					return true;
 				},
+				decline: () => {
+					if (!this.#open.has(id) || !("declined" in card)) return false;
+					// After the grace period settling only closes the card: no turn starts.
+					settle(card.declined as T, undefined);
+					return true;
+				},
 				...(card.question ? { question: card.question } : {}),
 				...(card.form ? { form: card.form } : {}),
 				...(card.previews ? { previews: card.previews } : {}),
@@ -426,6 +432,18 @@ export class OwnerCards implements InteractionModule {
 						: (card.outcomes?.declined ?? messages().cardDeclined),
 				),
 			);
+			return true;
+		}
+		if (interaction.isButton() && action === "cancel") {
+			// Another press, a stop or a withdrawal ended it while this one was being checked.
+			if (!card.decline()) {
+				await interaction.reply({
+					content: messages().cardInactive,
+					flags: MessageFlags.Ephemeral,
+				});
+				return true;
+			}
+			await interaction.update(card.view(messages().cardQuestionCancelled));
 			return true;
 		}
 		if (card.form) await answerForm(card, id, action, interaction);

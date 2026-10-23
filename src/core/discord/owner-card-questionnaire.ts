@@ -19,7 +19,7 @@ import {
 	type Questionnaire,
 	type QuestionnaireAnswer,
 } from "../interactions/questionnaire.ts";
-import { CARD_PREFIX } from "./owner-card-rows.ts";
+import { CARD_PREFIX, cancelButton } from "./owner-card-rows.ts";
 import type { CardPayload } from "./owner-card-types.ts";
 import { ephemeralPanel, ownerPanels, plain } from "./owner-panel.ts";
 import { clip } from "./utf16.ts";
@@ -127,6 +127,7 @@ function buttons(id: string, form: QuestionnaireForm, disabled: boolean) {
 			.setDisabled(disabled);
 	row.addComponents(
 		button("submit", messages().cardSubmitLabel, ButtonStyle.Primary),
+		cancelButton(id, disabled),
 		button("notes", messages().cardWriteLabel, ButtonStyle.Secondary),
 	);
 	if (questions.some((q) => q.options.some((o) => o.preview !== undefined)))
