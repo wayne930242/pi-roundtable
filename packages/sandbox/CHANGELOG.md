@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.22.4
+
+- Release in lockstep with pi-roundtable 0.22.4. The core peer range stays `>=0.22.0 <0.23.0`.
+- The worker images build on `oven/bun:1.4.4` (was 1.4.2), the first Bun with the Brotli decoder fix (CVE-2026-111497). Rebuild the worker and deps images.
+
 ## 0.22.3
 
 - Release in lockstep with pi-roundtable 0.22.3; no package-specific behavior changes. The core peer range stays `>=0.22.0 <0.23.0`.

@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.22.4] - 2026-10-25
+
+### Security
+
+- The Bun and Node runtimes the repository pins carry the Brotli decoder fix (CVE-2026-111497, GHSA-9v8h-qqgm-4m35): CI and the publish workflow run Bun 1.4.4 (was 1.4.2), the sandbox worker images build on `oven/bun:1.4.4` and the browser image on `node:24.22.1-bookworm-slim` (was the floating `node:24-bookworm-slim`). Run pi-roundtable on Bun 1.4.4 or newer, and rebuild the sandbox and browser images. The `engines` floors are unchanged.
+
 ## [0.22.3] - 2026-10-23
 
 ### Changed

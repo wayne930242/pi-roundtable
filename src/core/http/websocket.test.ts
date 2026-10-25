@@ -402,11 +402,12 @@ describe("a WebSocket route", () => {
 		expect(await wide.opened).toBe(true);
 		wide.socket.send("\u4f60\u597d\u55ce");
 		expect(await wide.closed).toBe(1009);
-		// Far over the limit, the server drops the connection before reading the message.
+		// Far over the limit, the server drops the connection before reading the message: Bun before
+		// 1.4.4 cuts it (1006), Bun 1.4.4 and newer send the 1009 close frame first.
 		const huge = connect(port);
 		expect(await huge.opened).toBe(true);
 		huge.socket.send("x".repeat(17));
-		expect(await huge.closed).toBe(1006);
+		expect([1006, 1009]).toContain(await huge.closed);
 		const fine = connect(port);
 		expect(await fine.opened).toBe(true);
 		fine.socket.send("12345678");
@@ -466,7 +467,8 @@ describe("a WebSocket route", () => {
 		expect(await client.next(3)).toEqual(["", "", "after"]);
 		expect(results).toEqual(["sent", "sent", "sent"]);
 		client.socket.close();
-		expect(await client.closed).toBe(1000);
+		// A close without a status: Bun before 1.4.4 echoes 1000, Bun 1.4.4 and newer report 1005.
+		expect([1000, 1005]).toContain(await client.closed);
 	});
 
 	test("delivers one message larger than maxBufferedBytes to a client that reads", async () => {
@@ -490,7 +492,8 @@ describe("a WebSocket route", () => {
 		client.socket.send("still open");
 		expect(await client.next(2)).toEqual([big, "still open"]);
 		client.socket.close();
-		expect(await client.closed).toBe(1000);
+		// A close without a status: Bun before 1.4.4 echoes 1000, Bun 1.4.4 and newer report 1005.
+		expect([1000, 1005]).toContain(await client.closed);
 	});
 
 	test("queues one oversized message for a client that stops reading, then drops the next send", async () => {

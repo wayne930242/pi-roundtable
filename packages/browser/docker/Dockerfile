@@ -1,6 +1,6 @@
 # The browser worker's image: agent-browser and the distribution's Chromium, nothing else of use.
 # The host runs it with no network at all; see packages/browser/README.md.
-FROM node:24-bookworm-slim
+FROM node:24.22.1-bookworm-slim
 
 ARG AGENT_BROWSER_VERSION=0.39.1
 

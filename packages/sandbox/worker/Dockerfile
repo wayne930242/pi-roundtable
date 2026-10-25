@@ -1,4 +1,4 @@
-FROM oven/bun:1.4.2-alpine
+FROM oven/bun:1.4.4-alpine
 WORKDIR /app
 COPY src/protocol.ts /app/src/protocol.ts
 COPY worker/main.ts worker/agent.ts worker/memory.ts worker/transport.ts worker/precheck-main.ts /app/worker/

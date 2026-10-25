@@ -30,7 +30,7 @@
     },
     "packages/browser": {
       "name": "pi-roundtable-browser",
-      "version": "0.22.3",
+      "version": "0.22.4",
       "dependencies": {
         "@earendil-works/pi-coding-agent": ">=1.0.0 <2",
         "typebox": "1.3.37",
@@ -38,7 +38,7 @@
       "devDependencies": {
         "@biomejs/biome": "2.5.15",
         "@types/bun": "1.4.3",
-        "pi-roundtable": "0.22.3",
+        "pi-roundtable": "0.22.4",
         "typescript": "7.0.2",
       },
       "peerDependencies": {
@@ -47,7 +47,7 @@
     },
     "packages/coding": {
       "name": "pi-roundtable-coding",
-      "version": "0.22.3",
+      "version": "0.22.4",
       "dependencies": {
         "@earendil-works/pi-coding-agent": ">=1.0.0 <2",
         "typebox": "1.3.37",
@@ -56,7 +56,7 @@
         "@biomejs/biome": "2.5.15",
         "@earendil-works/pi-ai": ">=1.0.0 <2",
         "@types/bun": "1.4.3",
-        "pi-roundtable": "0.22.3",
+        "pi-roundtable": "0.22.4",
         "typescript": "7.0.2",
       },
       "peerDependencies": {
@@ -65,7 +65,7 @@
     },
     "packages/drawing": {
       "name": "pi-roundtable-drawing",
-      "version": "0.22.3",
+      "version": "0.22.4",
       "dependencies": {
         "@types/d3-force": "3.0.10",
         "canvas": "3.2.3",
@@ -76,7 +76,7 @@
       "devDependencies": {
         "@biomejs/biome": "2.5.15",
         "@types/bun": "1.4.3",
-        "pi-roundtable": "0.22.3",
+        "pi-roundtable": "0.22.4",
         "typescript": "7.0.2",
       },
       "peerDependencies": {
@@ -85,13 +85,13 @@
     },
     "packages/line": {
       "name": "pi-roundtable-line",
-      "version": "0.22.3",
+      "version": "0.22.4",
       "devDependencies": {
         "@biomejs/biome": "2.5.15",
         "@earendil-works/pi-ai": ">=1.0.0 <2",
         "@earendil-works/pi-coding-agent": ">=1.0.0 <2",
         "@types/bun": "1.4.3",
-        "pi-roundtable": "0.22.3",
+        "pi-roundtable": "0.22.4",
         "typebox": "1.3.37",
         "typescript": "7.0.2",
       },
@@ -101,7 +101,7 @@
     },
     "packages/mcp": {
       "name": "pi-roundtable-mcp",
-      "version": "0.22.3",
+      "version": "0.22.4",
       "dependencies": {
         "@modelcontextprotocol/sdk": "1.32.1",
         "discord.js": "14.27.0",
@@ -110,7 +110,7 @@
       "devDependencies": {
         "@biomejs/biome": "2.5.15",
         "@types/bun": "1.4.3",
-        "pi-roundtable": "0.22.3",
+        "pi-roundtable": "0.22.4",
         "typescript": "7.0.2",
       },
       "peerDependencies": {
@@ -119,13 +119,13 @@
     },
     "packages/sandbox": {
       "name": "pi-roundtable-sandbox",
-      "version": "0.22.3",
+      "version": "0.22.4",
       "devDependencies": {
         "@biomejs/biome": "2.5.15",
         "@earendil-works/pi-coding-agent": "1.3.0",
         "@types/bun": "1.4.3",
         "discord.js": "14.27.0",
-        "pi-roundtable": "0.22.3",
+        "pi-roundtable": "0.22.4",
         "typebox": "1.3.37",
         "typescript": "7.0.2",
       },
@@ -141,7 +141,7 @@
     },
     "packages/web": {
       "name": "pi-roundtable-web",
-      "version": "0.22.3",
+      "version": "0.22.4",
       "dependencies": {
         "jose": "6.2.12",
       },
@@ -150,7 +150,7 @@
         "@types/bun": "1.4.3",
         "@types/react": "19.3.0",
         "@types/react-dom": "19.3.0",
-        "pi-roundtable": "0.22.3",
+        "pi-roundtable": "0.22.4",
         "react": "19.3.0",
         "react-dom": "19.3.0",
         "react-markdown": "10.1.0",
@@ -163,7 +163,7 @@
     },
     "packages/webchat": {
       "name": "pi-roundtable-webchat",
-      "version": "0.22.3",
+      "version": "0.22.4",
       "dependencies": {
         "jose": "6.2.12",
       },
@@ -172,7 +172,7 @@
         "@earendil-works/pi-ai": ">=1.0.0 <2",
         "@earendil-works/pi-coding-agent": ">=1.0.0 <2",
         "@types/bun": "1.4.3",
-        "pi-roundtable": "0.22.3",
+        "pi-roundtable": "0.22.4",
         "typebox": "1.3.37",
         "typescript": "7.0.2",
       },
@@ -1009,7 +1009,7 @@
 
     "pi-mcp-adapter": ["pi-mcp-adapter@5.3.0", "", { "dependencies": { "@modelcontextprotocol/client": "2.3.1", "@modelcontextprotocol/core": "2.3.1", "@modelcontextprotocol/ext-tasks": "^0.1.0", "@napi-rs/keyring": "^2.1.0", "@typesafe-ai/sdk": "0.6.0", "ajv": "^8.17.1", "ajv-formats": "^3.0.1", "cross-spawn": "^7.0.6", "open": "^10.2.0", "quickjs-wasi": "3.6.2", "recheck": "4.6.0-beta.3", "smol-toml": "^1.9.0", "strip-json-comments": "^5.0.3", "undici": "^6.28.1", "zod": "^3.25.0 || ^4.0.0" }, "peerDependencies": { "@earendil-works/pi-ai": "^0.84.1 || ^0.85.0 || ^0.86.0 || ^0.87.0 || ^0.99.0 || ^1.0.0", "@earendil-works/pi-tui": "*", "typebox": "*" }, "optionalPeers": ["@earendil-works/pi-ai"], "bin": { "pi-mcp-adapter": "cli.js" } }, "sha512-+3mspyQLeXpCImPJLV3zoVJS+X+x6oOBFeOm+o4m0uUvfiHAYUIQLAG+pBzj+eA8xAKpujIT01txvgMsf4QjjQ=="],
 
-    "pi-roundtable": ["pi-roundtable@root:", {}],
+    "pi-roundtable": ["pi-roundtable@link:.", { "bin": { "roundtable": "src/cli/roundtable.mjs" } }],
 
     "pi-roundtable-browser": ["pi-roundtable-browser@workspace:packages/browser"],
 
