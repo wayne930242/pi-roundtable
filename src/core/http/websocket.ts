@@ -211,7 +211,8 @@ export class SocketSet {
 
 	/**
 	 * The Bun handler for one listener's sockets, given its largest route limits. Bun drops a frame
-	 * over twice the message limit unread; up to there each route's own limit closes with 1009.
+	 * over twice the message limit unread, after sending 1009 (Bun 1.4.4 and newer); up to there each
+	 * route's own limit closes with 1009.
 	 * Bun drops a message only when the largest buffered limit already waits, which each route's
 	 * `send` checks first at its own limit, so a single message larger than any limit still goes out.
 	 */

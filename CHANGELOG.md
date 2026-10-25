@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.22.5] - 2026-10-25
+
+### Security
+
+- Every supported setup now runs a Bun with the Brotli decoder fix (CVE-2026-111497, GHSA-9v8h-qqgm-4m35): `engines.bun` is `>=1.4.4` (was `>=1.3.0`) in the core, every workspace package and the project templates, so `roundtable init`, `roundtable doctor` and a package manager refuse an older Bun. Upgrade with `bun upgrade`. The WebSocket route tests now expect Bun 1.4.4's behavior only: a frame far over the limit closes with 1009, and a close without a status reports 1005.
+
 ## [0.22.4] - 2026-10-25
 
 ### Security

@@ -13,7 +13,7 @@ MIT licensed.
 
 ## What you need
 
-- [Bun](https://bun.sh/docs/installation) 1.3 or newer.
+- [Bun](https://bun.sh/docs/installation) 1.4.4 or newer.
 - A running pi-roundtable host, version 0.8 (`pi-roundtable` is a peer dependency, `>=0.8.0 <0.9.0`). Versions before 0.7.0 cannot attach files to an agent's reply, which these tools rely on.
 - The native [canvas](#the-native-canvas-dependency) package, which comes with this one.
 - For `draw_cards`, a deck directory of your own; see [the deck directory](#the-deck-directory).

@@ -18,7 +18,7 @@ You can extend the bot with TypeScript plugins.
 
 ## What you need
 
-- [Bun](https://bun.sh/docs/installation) 1.3 or newer.
+- [Bun](https://bun.sh/docs/installation) 1.4.4 or newer.
 - PostgreSQL.
   The project `init` creates has a `docker-compose.yml` that runs one.
 - A model login: the API key of the provider of the model you choose (`ANTHROPIC_API_KEY` for `anthropic/...`), or a login made with Pi.
