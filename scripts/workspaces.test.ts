@@ -117,6 +117,32 @@ const trackedFindings = () => {
 	return scanTree(root).filter((finding) => tracked.has(finding.file));
 };
 
+test("built web bundles skip the Chinese and snowflake checks, but not credentials", () => {
+	const dir = mkdtempSync(resolve(tmpdir(), "roundtable-scan-"));
+	// Built at run time, so this file does not trip the scan it tests.
+	const word = String.fromCodePoint(0x90e8, 0x7f72);
+	const digits = ["1591549", "4309189535"].join("");
+	try {
+		mkdirSync(resolve(dir, "packages/web/dist"), { recursive: true });
+		writeFileSync(
+			resolve(dir, "packages/web/dist/chunk.js"),
+			`const words=["${word}"],k=0.${digits};\n`,
+		);
+		expect(scanTree(dir)).toEqual([]);
+		writeFileSync(resolve(dir, "chunk.js"), `const k=${digits};\n`);
+		writeFileSync(
+			resolve(dir, "packages/web/dist/leak.js"),
+			`const key = "sk-${"x".repeat(24)}";\n`,
+		);
+		expect(scanTree(dir).map(({ file, kind }) => ({ file, kind }))).toEqual([
+			{ file: "chunk.js", kind: "snowflake" },
+			{ file: "packages/web/dist/leak.js", kind: "credential" },
+		]);
+	} finally {
+		rmSync(dir, { recursive: true, force: true });
+	}
+});
+
 test("the whole tree passes the public scan CI runs", () => {
 	expect(trackedFindings()).toEqual([]);
 });

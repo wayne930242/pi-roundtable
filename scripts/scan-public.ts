@@ -179,6 +179,13 @@ const CJK_FILES = [
 	"src/characters/characters.test.ts",
 ];
 
+/**
+ * Built web bundles: their own text comes from sources this scan already passed, and the rest is
+ * third-party code (three.js keeps long float constants), so only the leak detectors that cannot
+ * come from a library (addresses, credentials, names) run over them.
+ */
+const BUILT_DIRECTORIES = ["packages/web/dist/"];
+
 // pi-lens-ignore: high-complexity — one flat list of the documentation and private address ranges a public tree may name
 function allowedIp(ip: string): boolean {
 	const octets = ip.split(".").map(Number);
@@ -216,6 +223,9 @@ export function scanTree(
 		const bytes = readFileSync(path);
 		if (bytes.includes(0)) continue;
 		const lines = bytes.toString("utf8").split("\n");
+		const built = BUILT_DIRECTORIES.some((directory) =>
+			file.startsWith(directory),
+		);
 		for (const [index, line] of lines.entries()) {
 			const add = (kind: FindingKind, text: string) =>
 				findings.push({
@@ -226,7 +236,7 @@ export function scanTree(
 				});
 			for (const match of line.matchAll(IPV4))
 				if (match[0] && !allowedIp(match[0])) add("ipv4", match[0]);
-			for (const match of line.matchAll(SNOWFLAKE))
+			for (const match of built ? [] : line.matchAll(SNOWFLAKE))
 				if (
 					match[0] &&
 					!match[0].startsWith("9") &&
@@ -248,6 +258,7 @@ export function scanTree(
 				)
 					add("name", match[0]);
 			if (
+				!built &&
 				!CJK_DIRECTORIES.some((directory) => file.startsWith(directory)) &&
 				!CJK_FILES.includes(file)
 			)
