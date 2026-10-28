@@ -49,6 +49,11 @@
 	box-shadow: var(--shadow-2);
 }
 
+.room-row[aria-current="page"] {
+	border-color: var(--accent);
+	background: var(--accent-soft);
+}
+
 .room-row:active {
 	transform: scale(0.99);
 }
@@ -110,6 +115,8 @@
 .room-row-badges:empty {
 	display: none;
 }
+
+/* A row keeps its height when an agent starts working: the badges it adds are in the preview line. */
 
 .room-row-chevron {
 	flex: none;
@@ -237,7 +244,7 @@
 	display: flex;
 	align-items: center;
 	gap: var(--space-2);
-	padding: var(--space-2) var(--space-4);
+	padding: 0 var(--space-2) 0 var(--space-4);
 	font-size: var(--text-sm);
 	font-weight: var(--weight-medium);
 }
@@ -272,8 +279,11 @@
 }
 
 .room-scroll {
-	/* The page follows the end of the list itself; the browser's anchoring would move it too. */
-	overflow-anchor: none;
+	/*
+	 * Rows far from the screen are drawn at an estimated height until they near it. Where the
+	 * browser anchors the scroll (not Safari), it keeps what is read in place as they settle.
+	 */
+	overflow-anchor: auto;
 	flex: 1;
 	min-height: 0;
 	overflow-y: auto;
@@ -312,7 +322,14 @@
 	gap: var(--space-2);
 	/* Rows far from the screen are not laid out until they near it. */
 	content-visibility: auto;
-	contain-intrinsic-size: auto 3.5rem;
+	contain-intrinsic-size: auto 6rem;
+}
+
+/* Without scroll anchoring the estimate would shift the page as rows settle, so every row is drawn. */
+@supports not (overflow-anchor: auto) {
+	.message {
+		content-visibility: visible;
+	}
 }
 
 .message[data-header] {
@@ -692,16 +709,45 @@
 	border-top: 1px solid var(--border);
 }
 
-.offline-note {
-	position: absolute;
-	top: calc(3.6rem + var(--safe-top));
-	left: 50%;
-	transform: translateX(-50%);
-	padding: var(--space-1) var(--space-3);
-	border: 1px solid var(--border);
+/* A full-width strip under the header: the room's content moves down for it rather than sitting under a pill. */
+.offline-banner {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: var(--space-2);
+	padding: var(--space-2) var(--space-4);
+	background: var(--warn-soft);
+	color: var(--warn);
+	font-size: var(--text-sm);
+	font-weight: var(--weight-medium);
+	animation: banner-in var(--dur-slow) var(--ease-out) both;
+}
+
+@keyframes banner-in {
+	from {
+		opacity: 0;
+		transform: translate3d(0, -6px, 0);
+	}
+}
+
+.spinner {
+	flex: none;
+	width: 0.9rem;
+	height: 0.9rem;
+	border: 2px solid currentColor;
+	border-right-color: transparent;
 	border-radius: var(--radius-full);
-	box-shadow: var(--shadow-2);
-	z-index: 4;
+	animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+.pending-note {
+	color: var(--muted);
 }
 
 /* ── Composer ──────────────────────────────────────────────────────────────────────────────────── */
@@ -722,7 +768,7 @@
 	align-items: flex-end;
 	gap: var(--space-1);
 	padding: var(--space-1);
-	border: 1px solid var(--border-strong);
+	border: 1px solid var(--control-border);
 	border-radius: 1.5rem;
 	background: var(--surface);
 	box-shadow: var(--shadow-1);
@@ -992,6 +1038,19 @@
 	gap: var(--space-2);
 }
 
+.prompt textarea {
+	resize: none;
+}
+
+.prompt-answer {
+	margin: 0;
+	padding: var(--space-2) var(--space-3);
+	border-radius: var(--radius);
+	background: var(--surface-2);
+	font-size: var(--text-sm);
+	list-style: none;
+}
+
 .option {
 	flex-direction: row;
 	align-items: flex-start;
@@ -1190,4 +1249,40 @@ dialog.palette .sheet-body {
 	-webkit-box-orient: vertical;
 	color: var(--text);
 	overflow-wrap: anywhere;
+}
+
+/* ── Wide screens: the room list stands beside the open room ───────────────────────────────────── */
+
+.split {
+	display: grid;
+	flex: 1;
+	min-height: 0;
+	grid-template-columns: minmax(18rem, 22rem) minmax(0, 1fr);
+}
+
+.split-list {
+	min-height: 0;
+	overflow-y: auto;
+	border-right: 1px solid var(--border);
+	background: var(--bg);
+}
+
+.split-list .page[data-column] {
+	max-width: none;
+	padding: var(--space-4);
+	gap: var(--space-4);
+}
+
+.split-list .search-button span {
+	display: none;
+}
+
+.split-detail {
+	display: flex;
+	min-width: 0;
+	min-height: 0;
+}
+
+.split-detail .room {
+	min-width: 0;
 }

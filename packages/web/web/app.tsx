@@ -8,6 +8,8 @@ import {
 	useState,
 } from "react";
 import type { ConfigView, PaneName } from "../src/api-types.ts";
+import { ErrorBoundary } from "./components/boundary.tsx";
+import { ConnectionGate } from "./components/connection-gate.tsx";
 import { Icon, type IconName } from "./components/icons.tsx";
 import { Palette } from "./components/palette.tsx";
 import { Failure, Loading } from "./components/states.tsx";
@@ -16,9 +18,9 @@ import { api, messageOf } from "./lib/api.ts";
 import { store, useSelector } from "./lib/app-store.ts";
 import { ConfigContext } from "./lib/config.ts";
 import { LiveContext, useLiveSource } from "./lib/live.ts";
+import { useMedia } from "./lib/media.ts";
 import { setPresentation, translate as t } from "./lib/messages.ts";
 import { hrefFor, setRouting, useRoute } from "./lib/router.ts";
-import { startConnection } from "./lib/socket.ts";
 import { setTheme, useTheme } from "./lib/theme.ts";
 import { AgentPage } from "./pages/agent.tsx";
 import { MorePage, PANE_ICONS } from "./pages/more.tsx";
@@ -82,9 +84,15 @@ export function App() {
 				{error ? <Failure message={error} /> : <Loading />}
 			</div>
 		);
+	const shell = <Console config={config} />;
 	return (
 		<ConfigContext.Provider value={config}>
-			<Console config={config} />
+			{/* The connection opens before the first render under it, which a room reloaded in place asks for. */}
+			{config.app && config.panes.includes("rooms") ? (
+				<ConnectionGate protocol={config.app.protocol}>{shell}</ConnectionGate>
+			) : (
+				shell
+			)}
 		</ConfigContext.Provider>
 	);
 }
@@ -168,12 +176,11 @@ function Console({ config }: { config: ConfigView }) {
 	const app = config.app;
 	const hasApp = app !== undefined && config.panes.includes("rooms");
 	const [palette, setPalette] = useState(false);
+	// Wide enough, the room list stands beside the open room.
+	const wide = useMedia("(min-width: 1024px)");
 	const stage = useRef<HTMLDivElement>(null);
 	useViewportSize();
 	useRoomsSync(hasApp, live.version);
-	useEffect(() => {
-		if (hasApp && app) startConnection(app.protocol);
-	}, [hasApp, app]);
 
 	const connection = useSelector((state) => state.connection);
 	const forbidden = useSelector((state) => state.forbidden);
@@ -260,10 +267,18 @@ function Console({ config }: { config: ConfigView }) {
 			case "rooms":
 				return <RoomsPage onSearch={() => setPalette(true)} />;
 			case "room":
-				return route.key ? (
-					<RoomPage key={route.key} roomKey={route.key} />
+				if (!route.key) return <RoomsPage onSearch={() => setPalette(true)} />;
+				return wide ? (
+					<div className="split">
+						<div className="split-list">
+							<RoomsPage onSearch={() => setPalette(true)} active={route.key} />
+						</div>
+						<div className="split-detail">
+							<RoomPage key={route.key} roomKey={route.key} />
+						</div>
+					</div>
 				) : (
-					<RoomsPage onSearch={() => setPalette(true)} />
+					<RoomPage key={route.key} roomKey={route.key} />
 				);
 			case "agent":
 				return route.key ? (
@@ -379,16 +394,24 @@ function Console({ config }: { config: ConfigView }) {
 							<ThemeButton />
 						</div>
 					</header>
-					<main className="route" key={`${pane}/${route.key ?? ""}`}>
-						<Suspense
-							fallback={
-								<div className="page">
-									<Loading />
-								</div>
-							}
-						>
-							{body}
-						</Suspense>
+					<main
+						className="route"
+						// Beside the list the room changes under it; the list stays where it is.
+						key={
+							wide && pane === "room" ? "room" : `${pane}/${route.key ?? ""}`
+						}
+					>
+						<ErrorBoundary>
+							<Suspense
+								fallback={
+									<div className="page">
+										<Loading />
+									</div>
+								}
+							>
+								{body}
+							</Suspense>
+						</ErrorBoundary>
 					</main>
 				</div>
 				<nav className="tabbar" aria-label={t("Panes")}>

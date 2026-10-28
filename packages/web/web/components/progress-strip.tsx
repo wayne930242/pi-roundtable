@@ -1,15 +1,9 @@
 import { useState } from "react";
 import { translate as t } from "../lib/messages.ts";
 import type { Progress } from "../lib/rooms.ts";
-import { Icon } from "./icons.tsx";
 
 /** What the running turn shows: a shimmering bar, its streamed words with a caret, and the tools it runs. */
-export function ProgressStrip(props: {
-	name: string;
-	progress: Progress;
-	stoppable: boolean;
-	onStop(): void;
-}) {
+export function ProgressStrip(props: { name: string; progress: Progress }) {
 	const [expanded, setExpanded] = useState(false);
 	const { text, tools } = props.progress;
 	return (
@@ -19,12 +13,6 @@ export function ProgressStrip(props: {
 				<span className="progress-label">
 					{t("{name} is working…", { name: props.name })}
 				</span>
-				{props.stoppable ? (
-					<button type="button" className="link-button" onClick={props.onStop}>
-						<Icon name="stop" size={14} />
-						{t("Stop")}
-					</button>
-				) : null}
 			</div>
 			{tools.length ? (
 				<ul className="chips">

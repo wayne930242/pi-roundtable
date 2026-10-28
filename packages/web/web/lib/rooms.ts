@@ -17,6 +17,8 @@ import type {
 const PROGRESS_TEXT_CHARS = 6000;
 /** The most tool chips kept for a turn. */
 const PROGRESS_TOOLS = 20;
+/** The page of history fetched at a time, and the most a room the page does not show keeps. */
+export const ROOM_PAGE = 50;
 /** The most ended cards kept as records, across all rooms. */
 const KEPT_RESOLVED_CARDS = 30;
 
@@ -52,6 +54,8 @@ export interface CardState {
 	after: number;
 	outcome?: PromptOutcome;
 	note?: string;
+	/** How many answers to this card the server refused; a card offers its buttons again when it moves. */
+	refused?: number;
 }
 
 export interface RoomState {
@@ -170,6 +174,18 @@ function merged(
 	messages: readonly RoomMessage[],
 	incoming: readonly RoomMessage[],
 ): RoomMessage[] {
+	// The usual case, a message newer than all held: no lookup and no sort.
+	let last = messages.at(-1)?.id ?? Number.NEGATIVE_INFINITY;
+	if (
+		incoming.every((message) => {
+			const newer = message.id > last;
+			last = message.id;
+			return newer;
+		})
+	)
+		return incoming.length === 0
+			? (messages as RoomMessage[])
+			: [...messages, ...incoming];
 	const known = new Set(messages.map((message) => message.id));
 	const added = incoming.filter((message) => {
 		if (known.has(message.id)) return false;
@@ -178,6 +194,12 @@ function merged(
 	});
 	if (added.length === 0) return messages as RoomMessage[];
 	return [...messages, ...added].sort((a, b) => a.id - b.id);
+}
+
+/** A room trimmed to its latest page, with the rest left to be fetched when the page opens it again. */
+function trimmed(room: RoomState): RoomState {
+	if (room.messages.length <= ROOM_PAGE) return room;
+	return { ...room, messages: room.messages.slice(-ROOM_PAGE), more: true };
 }
 
 function resolvedPruned(state: RoomsState): RoomsState {
@@ -271,7 +293,7 @@ function onMessage(
 			return { ...room, live, pending };
 		}
 		const replies = message.kind === "agent";
-		return {
+		const next = {
 			...room,
 			messages: merged(room.messages, [message]),
 			// The agent's final reply stands in for what it showed live.
@@ -281,6 +303,7 @@ function onMessage(
 			progress: replies ? NO_PROGRESS : room.progress,
 			pending,
 		};
+		return state.focus === roomKey ? next : trimmed(next);
 	});
 }
 
@@ -348,8 +371,22 @@ export function reduce(state: RoomsState, action: Action): RoomsState {
 		case "accepted":
 			return onMessage(state, action.room, action.message, action.id);
 		case "refused": {
-			const { id } = action;
-			if (id === undefined) return { ...state, refusal: action.code };
+			const { id, prompt } = action;
+			if (id === undefined) {
+				const card = prompt === undefined ? undefined : state.cards[prompt];
+				return {
+					...state,
+					refusal: action.code,
+					...(prompt !== undefined && card
+						? {
+								cards: {
+									...state.cards,
+									[prompt]: { ...card, refused: (card.refused ?? 0) + 1 },
+								},
+							}
+						: {}),
+				};
+			}
 			return {
 				...state,
 				rooms: Object.fromEntries(
@@ -431,22 +468,20 @@ export function reduce(state: RoomsState, action: Action): RoomsState {
 			return onRooms(state, action.rooms);
 		case "history_loaded":
 			return onHistory(state, action);
-		case "focused":
-			return {
-				...state,
-				focus: action.room,
-				// What the turn streamed before the page looked at the room is not shown.
-				rooms:
-					action.room && state.rooms[action.room]
-						? {
-								...state.rooms,
-								[action.room]: {
-									...(state.rooms[action.room] as RoomState),
-									progress: NO_PROGRESS,
-								},
-							}
-						: state.rooms,
-			};
+		case "focused": {
+			const left = state.focus;
+			const rooms = { ...state.rooms };
+			// What the page stops showing goes back to its latest page.
+			if (left && left !== action.room && rooms[left])
+				rooms[left] = trimmed(rooms[left] as RoomState);
+			// What the turn streamed before the page looked at the room is not shown.
+			if (action.room && rooms[action.room])
+				rooms[action.room] = {
+					...(rooms[action.room] as RoomState),
+					progress: NO_PROGRESS,
+				};
+			return { ...state, focus: action.room, rooms };
+		}
 		case "queued":
 			return withRoom(state, action.room, (room) => ({
 				...room,
@@ -509,6 +544,18 @@ export function lastMessage(
 		: (seen ?? listed);
 }
 
+/**
+ * Whether a card opened before a message was stored. Both carry the server's clock, which is what
+ * places a card the server sent again after a reload; a card without a time stands after the
+ * message that was last when it opened.
+ */
+function opensBefore(card: CardState, message: RoomMessage): boolean {
+	const opened = Date.parse(card.frame.at ?? "");
+	const stored = Date.parse(message.at);
+	if (!Number.isNaN(opened) && !Number.isNaN(stored)) return opened < stored;
+	return card.after < message.id;
+}
+
 export type TimelineItem =
 	| { kind: "message"; message: RoomMessage }
 	| { kind: "card"; card: CardState; id: string }
@@ -530,23 +577,22 @@ export function timeline(
 		);
 	const items: TimelineItem[] = [];
 	let placed = 0;
-	const cardsUpTo = (id: number) => {
+	/** Cards that opened before `next` (or all, at the end) stand here. */
+	const cardsBefore = (next: RoomMessage | undefined) => {
 		while (placed < cards.length) {
 			const entry = cards[placed];
-			if (!entry || entry.card.after > id) break;
+			if (!entry || (next && !opensBefore(entry.card, next))) break;
 			items.push({ kind: "card", card: entry.card, id: entry.id });
 			placed += 1;
 		}
 	};
-	// Cards that opened before the first message we hold stand first.
-	cardsUpTo(
-		room.messages[0] ? room.messages[0].id - 1 : Number.POSITIVE_INFINITY,
-	);
-	for (const message of room.messages) {
+	const shown = room.messages;
+	cardsBefore(shown[0]);
+	shown.forEach((message, index) => {
 		items.push({ kind: "message", message });
-		cardsUpTo(message.id);
-	}
-	cardsUpTo(Number.POSITIVE_INFINITY);
+		cardsBefore(shown[index + 1]);
+	});
+	cardsBefore(undefined);
 	for (const pending of room.pending) items.push({ kind: "pending", pending });
 	for (const message of room.live) items.push({ kind: "live", message });
 	return items;

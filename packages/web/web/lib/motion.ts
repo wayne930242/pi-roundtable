@@ -14,5 +14,9 @@ export function transition(update: () => void): void {
 		update();
 		return;
 	}
-	document.startViewTransition(() => flushSync(update));
+	const running = document.startViewTransition(() => flushSync(update));
+	// A transition that a newer one skips rejects these; nothing waits on them.
+	running.ready.catch(() => undefined);
+	running.updateCallbackDone.catch(() => undefined);
+	running.finished.catch(() => undefined);
 }

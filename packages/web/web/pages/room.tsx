@@ -24,15 +24,14 @@ import { dayKey, dayLabel } from "../lib/format.ts";
 import { useLive } from "../lib/live.ts";
 import { translate as t } from "../lib/messages.ts";
 import { reducedMotion } from "../lib/motion.ts";
-import { type TimelineItem, timeline } from "../lib/rooms.ts";
+import { ROOM_PAGE, type TimelineItem, timeline } from "../lib/rooms.ts";
 import { hrefFor } from "../lib/router.ts";
 import { useConnection } from "../lib/socket.ts";
 import { toast } from "../lib/toast.ts";
 
 /** A pause this long between two messages of one author shows the author again. */
 const PAUSE_MS = 5 * 60_000;
-/** The page of history fetched at a time. */
-const PAGE = 50;
+const PAGE = ROOM_PAGE;
 
 /** The picture of each agent, by name, from the room list. */
 function useAvatars(): Record<string, string> {
@@ -114,6 +113,7 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 	const [menu, setMenu] = useState(false);
 	const [confirm, setConfirm] = useState<"yolo" | "start-over">();
 	const [dropped, setDropped] = useState<File[]>();
+	const menuButton = useRef<HTMLButtonElement>(null);
 	const scroller = useRef<HTMLDivElement>(null);
 	const content = useRef<HTMLDivElement>(null);
 	const { away, onScroll, onGrow, toEnd } = useStickToEnd(scroller);
@@ -270,6 +270,7 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 					</span>
 				</div>
 				<button
+					ref={menuButton}
 					type="button"
 					className="icon-button"
 					aria-label={t("Room menu")}
@@ -279,6 +280,12 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 					<Icon name="menu" />
 				</button>
 			</header>
+			{!open ? (
+				<div className="offline-banner" role="status">
+					<span className="spinner" aria-hidden="true" />
+					{t("Reconnecting… messages wait here until it is back.")}
+				</div>
+			) : null}
 			<ModeBanner
 				room={roomKey}
 				mode={mine && (mine.yolo || mine.longRunning) ? mine : undefined}
@@ -362,8 +369,6 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 						<ProgressStrip
 							name={lastAgent?.author ?? name}
 							progress={room.progress}
-							stoppable={room.stoppable}
-							onStop={() => connection.send({ type: "stop", room: roomKey })}
 						/>
 					) : null}
 				</div>
@@ -399,7 +404,6 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 						: {})}
 				/>
 			)}
-			{!open ? <p className="offline-note">{t("Reconnecting…")}</p> : null}
 			<RoomMenu
 				open={menu}
 				room={roomKey}
@@ -419,6 +423,8 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 				open={confirm === "yolo"}
 				title={t("Turn on yolo mode?")}
 				confirmLabel={t("Turn on yolo mode")}
+				tone="yolo"
+				restoreFocus={() => menuButton.current}
 				onClose={() => setConfirm(undefined)}
 				onConfirm={async () => {
 					await api.setMode(roomKey, { yolo: true });
@@ -445,6 +451,7 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 				title={t("Start over {name}?", { name })}
 				confirmLabel={t("Start over")}
 				tone="danger"
+				restoreFocus={() => menuButton.current}
 				onClose={() => setConfirm(undefined)}
 				onConfirm={async () => {
 					await api.startRoomOver(roomKey);

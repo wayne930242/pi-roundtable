@@ -17,13 +17,22 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Light and dark color schemes, from one token file (`web/tokens.css`): the page follows the system until the person picks one in Settings or with the header button, which is kept in `localStorage` and applied before the first paint; the switch grows as a circle from the button where the browser has view transitions. Motion is limited to `transform` and `opacity` and stops under `prefers-reduced-motion`.
 - `bun run fixture:app`: a host over a scratch PostgreSQL database with scripted agents (`approve`, `ask`, `quiz`, `timeout`, `late`, `stream`) for trying the app in a browser.
 
+- Above 1024 px the room list stands beside the open room, with the open one marked. A failed update of the page (code that a release replaced while it was open) reloads once by itself and otherwise shows a card with Reload; any other failure shows the same card instead of a blank page. A message that cannot go says "Not sent" with Try again and Discard, a lost connection shows a banner under the room's header, and answered cards show the answer given.
+- `ServerFrame` `refused` carries `prompt` when the refused frame answered a card, and `PromptFrame` carries `at` (when the card opened), which places a card sent again after a reload among the messages by time.
+
 ### Changed
 
+- The theme colour follows the page's scheme (a `<meta name="theme-color">` for each, and `<script src="theme-init.js">` in the head applies a stored scheme before the first paint, as a file because the page's policy allows scripts from itself only); the manifest's colours are the light page's. Buttons, inputs and switches are at least 44 px high on a phone or with a coarse pointer, and control borders and the off switch meet 3:1 contrast. The progress strip has no Stop of its own (the composer's replaces Send while a turn runs), and a time-limit card without its own wording says "Stop turn".
 - The default `panes` are `rooms`, `overview`, `schedules`, `conversations`, `notes`. An explicit list is kept as written; `schedules` needs `rooms`.
 - The fixture host (`bun run fixture`) takes `FIXTURE_AUTH=cloudflare|none|password`, and serves the `overview`, `conversations` and `notes` panes only.
 
 ### Fixed
 
+- Opening or reloading a room in place (a link, a notification, an installed page restoring its route) showed a blank page: the page's connection opened after the first render that asked for it.
+- Enter that committed an input method's text sent the message in Safari (the room's composer and the room switcher): both ignore key code 229 as well as `isComposing`.
+- A socket's `hello`, `visibility` and `focus` frames could be applied out of order, because each waited on the owner lookup; they apply as they arrive, then the owner is checked.
+- A late card answered by a visitor with no actor closed the card for nothing: the answer is refused up front, with the card named, so it stays open and its buttons come back. Card buttons also stayed disabled after an answer that was not sent or was refused.
+- A room's messages grew without bound in a page left open: a room the page does not show keeps its latest page, and a message newer than the last is added without a sort.
 - An open owner-app socket outlived a logout or a new password under `password` auth: it now closes with 4401 after an hour at most, and its reconnect carries the cookie again.
 - A demoted or disabled owner kept receiving the owners' frames on an open socket: every frame from the socket, and a check every 30 seconds, read the person's tier again, and a socket whose person is no owner is closed with 4403.
 - A visitor a verifier admitted without an actor could send messages that reached the host as nobody's: they are refused with `forbidden`.

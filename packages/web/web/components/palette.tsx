@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSelector } from "../lib/app-store.ts";
 import { fuzzyScore } from "../lib/fuzzy.ts";
+import { composingKey } from "../lib/ime.ts";
 import { translate as t } from "../lib/messages.ts";
 import { hrefFor, navigate } from "../lib/router.ts";
 import { Avatar } from "./avatar.tsx";
@@ -110,6 +111,8 @@ export function Palette(props: {
 						}
 						onChange={(event) => setQuery(event.target.value)}
 						onKeyDown={(event) => {
+							// Keys that belong to an input method's candidate list are not the palette's.
+							if (composingKey(event.nativeEvent)) return;
 							if (event.key === "ArrowDown") {
 								event.preventDefault();
 								setActive((value) => Math.min(list.length - 1, value + 1));

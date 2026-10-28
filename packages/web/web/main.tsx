@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./app.tsx";
+import { ErrorBoundary } from "./components/boundary.tsx";
 import { initTheme } from "./lib/theme.ts";
 
 // The stored color scheme goes on before React draws, so the first paint is already the right one.
@@ -13,7 +14,9 @@ const root = document.getElementById("root");
 if (!root) throw new Error("the page has no #root");
 createRoot(root).render(
 	<StrictMode>
-		<App />
+		<ErrorBoundary>
+			<App />
+		</ErrorBoundary>
 	</StrictMode>,
 );
 

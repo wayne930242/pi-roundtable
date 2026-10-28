@@ -15,6 +15,8 @@
 	--raised: light-dark(#ffffff, #1c2027);
 	--border: light-dark(#dfe2e8, #2a2f39);
 	--border-strong: light-dark(#c4cad6, #3b414d);
+	/* The edge of a control (input, switch, outlined button): 3:1 against the surfaces it sits on, as WCAG 1.4.11 asks. */
+	--control-border: light-dark(#7f8797, #69717f);
 	--scrim: light-dark(rgb(15 17 21 / 0.42), rgb(0 0 0 / 0.62));
 
 	/* Text */

@@ -202,10 +202,13 @@ export class AppConnection {
 
 let connection: AppConnection | undefined;
 
-/** Opens the page's connection, once. */
-export function startConnection(protocol: string): AppConnection {
+/** Opens the page's connection, once; `make` builds it where the page's own is not wanted. */
+export function startConnection(
+	protocol: string,
+	make: (protocol: string) => AppConnection = (p) => new AppConnection(p),
+): AppConnection {
 	if (!connection) {
-		connection = new AppConnection(protocol);
+		connection = make(protocol);
 		connection.start();
 	}
 	return connection;

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { AgentPatch, AgentProfileView } from "../../src/api-types.ts";
 import { Avatar } from "../components/avatar.tsx";
+import { Icon } from "../components/icons.tsx";
 import { Sheet } from "../components/sheet.tsx";
 import { Empty, Failure, Loading } from "../components/states.tsx";
 import { api, messageOf } from "../lib/api.ts";
@@ -106,9 +107,16 @@ export function AgentPage({ name }: { name: string }) {
 
 	return (
 		<div className="page">
-			<a className="back" href={hrefFor("room", profile.room)}>
-				{t("Back to the room")}
-			</a>
+			<header className="page-bar">
+				<a
+					className="icon-button"
+					href={hrefFor("room", profile.room)}
+					aria-label={t("Back to the room")}
+				>
+					<Icon name="back" />
+				</a>
+				<strong>{t("Profile")}</strong>
+			</header>
 			<header className="profile-head">
 				<Avatar name={profile.displayName} src={profile.avatar} size={72} />
 				<div>

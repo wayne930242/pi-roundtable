@@ -10,6 +10,7 @@ import {
 	banner,
 	initialState,
 	lastMessage,
+	ROOM_PAGE,
 	type RoomsState,
 	reduce,
 	timeline,
@@ -441,5 +442,148 @@ describe("the room list", () => {
 		expect(state.connects).toBe(connects + 1);
 		expect(state.connection).toBe("open");
 		expect(state.principal).toEqual({ id: "ada", name: "Ada" });
+	});
+});
+
+describe("the order of a reloaded room", () => {
+	test("a card that opened before the page loaded the history stands among the messages by its time", () => {
+		// After a reload the server sends the open card before the history arrives.
+		let state = run([
+			READY,
+			{
+				type: "prompt",
+				room: SCOUT,
+				prompt: approval("p1", { at: "2026-10-28T10:02:30.000Z" }),
+			},
+		]);
+		state = reduce(state, {
+			type: "history_loaded",
+			room: SCOUT,
+			messages: [
+				message(1, SCOUT, { at: "2026-10-28T10:00:00.000Z" }),
+				message(2, SCOUT, { at: "2026-10-28T10:02:00.000Z" }),
+				message(3, SCOUT, { at: "2026-10-28T10:03:00.000Z" }),
+			],
+			more: false,
+			older: false,
+		});
+		expect(
+			timeline(state, SCOUT).map((item) =>
+				item.kind === "message" ? item.message.id : item.kind,
+			),
+		).toEqual([1, 2, "card", 3]);
+	});
+
+	test("a card older than every message shown stands first, and one newer stands last", () => {
+		const state = run([
+			READY,
+			{
+				type: "prompt",
+				room: SCOUT,
+				prompt: approval("old", { at: "2026-10-28T09:00:00.000Z" }),
+			},
+			{
+				type: "prompt",
+				room: SCOUT,
+				prompt: approval("new", { at: "2026-10-28T11:00:00.000Z" }),
+			},
+			{
+				type: "history_loaded",
+				room: SCOUT,
+				messages: [message(1, SCOUT), message(2, SCOUT)],
+				more: false,
+				older: false,
+			},
+		]);
+		expect(
+			timeline(state, SCOUT).map((item) =>
+				item.kind === "message" ? item.message.id : item.kind,
+			),
+		).toEqual(["card", 1, 2, "card"]);
+	});
+});
+
+describe("a refused answer", () => {
+	test("is counted on its card, so the card can offer its buttons again", () => {
+		let state = run([
+			READY,
+			{ type: "prompt", room: SCOUT, prompt: approval("p1") },
+		]);
+		expect(state.cards.p1?.refused).toBeUndefined();
+		state = reduce(state, {
+			type: "refused",
+			prompt: "p1",
+			code: "bad_frame",
+		});
+		expect(state.cards.p1?.refused).toBe(1);
+		expect(state.refusal).toBe("bad_frame");
+		state = reduce(state, { type: "refused", prompt: "p1", code: "forbidden" });
+		expect(state.cards.p1?.refused).toBe(2);
+		// A refusal of a card that is gone changes no card.
+		const gone = reduce(state, {
+			type: "refused",
+			prompt: "gone",
+			code: "unknown_prompt",
+		});
+		expect(gone.cards).toEqual(state.cards);
+		expect(gone.refusal).toBe("unknown_prompt");
+	});
+});
+
+describe("how much of a room is kept", () => {
+	const many = (room: string, from: number, count: number) =>
+		Array.from({ length: count }, (_, i) => message(from + i, room));
+
+	test("a room the page does not show keeps only its latest page as messages arrive", () => {
+		let state = run([
+			READY,
+			{ type: "focused", room: SCOUT },
+			{
+				type: "history_loaded",
+				room: SCOUT,
+				messages: many(SCOUT, 1, 120),
+				more: false,
+				older: false,
+			},
+			{ type: "focused", room: GUIDE },
+		]);
+		// Leaving the room trims what it held.
+		expect(state.rooms[SCOUT]?.messages).toHaveLength(ROOM_PAGE);
+		expect(state.rooms[SCOUT]?.messages[0]?.id).toBe(71);
+		expect(state.rooms[SCOUT]?.more).toBe(true);
+		for (let id = 121; id <= 200; id++)
+			state = reduce(state, {
+				type: "message",
+				room: SCOUT,
+				message: message(id, SCOUT),
+			});
+		expect(state.rooms[SCOUT]?.messages).toHaveLength(ROOM_PAGE);
+		expect(state.rooms[SCOUT]?.messages.at(-1)?.id).toBe(200);
+		expect(state.rooms[SCOUT]?.more).toBe(true);
+	});
+
+	test("the room the page shows keeps everything loaded, in order, however messages arrive", () => {
+		let state = run([
+			READY,
+			{ type: "focused", room: SCOUT },
+			{
+				type: "history_loaded",
+				room: SCOUT,
+				messages: many(SCOUT, 1, 120),
+				more: false,
+				older: false,
+			},
+			{ type: "message", room: SCOUT, message: message(122, SCOUT) },
+			{ type: "message", room: SCOUT, message: message(121, SCOUT) },
+		]);
+		expect(state.rooms[SCOUT]?.messages.map((m) => m.id)).toEqual(
+			Array.from({ length: 122 }, (_, i) => i + 1),
+		);
+		state = reduce(state, {
+			type: "message",
+			room: SCOUT,
+			message: message(122, SCOUT),
+		});
+		expect(state.rooms[SCOUT]?.messages).toHaveLength(122);
 	});
 });

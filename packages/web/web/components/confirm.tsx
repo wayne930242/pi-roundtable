@@ -9,7 +9,9 @@ export function Confirm(props: {
 	open: boolean;
 	title: string;
 	confirmLabel: string;
-	tone?: "danger" | "primary";
+	tone?: "danger" | "yolo" | "primary";
+	/** Where focus goes when the sheet is gone, for a caller whose trigger is not in the page any more. */
+	restoreFocus?(): HTMLElement | null;
 	onConfirm(): Promise<void>;
 	onClose(): void;
 	children: ReactNode;
@@ -22,7 +24,12 @@ export function Confirm(props: {
 		props.onClose();
 	};
 	return (
-		<Sheet open={props.open} title={props.title} onClose={close}>
+		<Sheet
+			open={props.open}
+			title={props.title}
+			onClose={close}
+			{...(props.restoreFocus ? { restoreFocus: props.restoreFocus } : {})}
+		>
 			<div className="stack">
 				<div className="prose">{props.children}</div>
 				{error ? <Failure message={error} /> : null}
@@ -37,7 +44,13 @@ export function Confirm(props: {
 					</button>
 					<button
 						type="button"
-						className={props.tone === "danger" ? "danger" : ""}
+						className={
+							props.tone === "danger"
+								? "danger"
+								: props.tone === "yolo"
+									? "yolo-action"
+									: ""
+						}
 						disabled={running}
 						onClick={async () => {
 							setRunning(true);

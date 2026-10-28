@@ -31,14 +31,18 @@ export function ModeBanner(props: {
 			<div className="mode-banner-inner">
 				<div className="mode-lines">
 					{mode?.yolo ? (
-						<div className="mode-line" data-mode="yolo">
+						<div
+							className="mode-line"
+							data-mode="yolo"
+							title={t(
+								"Yolo mode is on: held actions are approved without asking.",
+							)}
+						>
 							<Icon name="bolt" size={16} />
 							<span>
-								{t(
-									"Yolo mode is on: held actions are approved without asking.",
-								)}
+								{t("Yolo mode on")}
 								{props.approved > 0
-									? ` ${t("{count} approved so far.", { count: props.approved })}`
+									? ` · ${t("{count} approved", { count: props.approved })}`
 									: ""}
 							</span>
 							<button
@@ -52,13 +56,15 @@ export function ModeBanner(props: {
 						</div>
 					) : null}
 					{mode?.longRunning ? (
-						<div className="mode-line" data-mode="long">
+						<div
+							className="mode-line"
+							data-mode="long"
+							title={t(
+								"Long-running mode is on: turns go on past their time limit.",
+							)}
+						>
 							<Icon name="timer" size={16} />
-							<span>
-								{t(
-									"Long-running mode is on: turns go on past their time limit.",
-								)}
-							</span>
+							<span>{t("Long-running on")}</span>
 							<button
 								type="button"
 								className="link-button"

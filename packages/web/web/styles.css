@@ -328,6 +328,11 @@ kbd {
 		position: static;
 		margin-left: auto;
 	}
+
+	/* The foot lines up with the links above it. */
+	.rail-foot {
+		padding-left: var(--space-3);
+	}
 }
 
 /* ── Pages ─────────────────────────────────────────────────────────────────────────────────────── */
@@ -350,6 +355,7 @@ kbd {
 }
 
 .page-head {
+	min-height: var(--touch);
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
@@ -555,14 +561,14 @@ button:active:not(:disabled) {
 button.secondary,
 .tabs button {
 	background: transparent;
-	border-color: var(--border-strong);
+	border-color: var(--control-border);
 	color: var(--text);
 }
 
 button.secondary:hover:not(:disabled),
 .tabs button:hover:not(:disabled) {
 	background: var(--surface-2);
-	border-color: var(--border-strong);
+	border-color: var(--control-border);
 }
 
 .tabs button[aria-selected="true"],
@@ -588,6 +594,10 @@ button:disabled {
 }
 
 .icon-button {
+	/* A link wears this class too, and a link does not centre its content by itself. */
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
 	width: var(--touch);
 	min-width: var(--touch);
 	height: var(--touch);
@@ -628,7 +638,7 @@ textarea {
 	width: 100%;
 	min-height: 2.5rem;
 	padding: var(--space-2) var(--space-3);
-	border: 1px solid var(--border-strong);
+	border: 1px solid var(--control-border);
 	border-radius: var(--radius);
 	background: var(--surface);
 	transition: border-color var(--dur-fast) var(--ease-out);
@@ -730,6 +740,59 @@ legend {
 	text-decoration: none;
 }
 
+/* A page without the top bar names itself and offers the way back, as a room does. */
+.page-bar {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	margin: calc(var(--space-2) * -1) calc(var(--space-2) * -1) 0;
+}
+
+.page-bar strong {
+	font-size: var(--text-md);
+}
+
+.crash {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: var(--space-3);
+	margin: var(--space-10) auto 0;
+	max-width: 24rem;
+	padding: var(--space-6);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-lg);
+	background: var(--surface);
+	box-shadow: var(--shadow-2);
+	text-align: center;
+}
+
+.crash p {
+	margin: 0;
+	color: var(--muted);
+}
+
+.crash-icon {
+	display: grid;
+	place-items: center;
+	width: 2.75rem;
+	height: 2.75rem;
+	border-radius: var(--radius-full);
+	background: var(--warn-soft);
+	color: var(--warn);
+}
+
+button.yolo-action {
+	border-color: var(--yolo);
+	background: var(--yolo);
+	color: var(--bg);
+}
+
+button.yolo-action:hover:not(:disabled) {
+	border-color: var(--yolo);
+	background: color-mix(in srgb, var(--yolo) 88%, var(--text));
+}
+
 .switch {
 	position: relative;
 	flex: none;
@@ -738,7 +801,7 @@ legend {
 	height: 1.65rem;
 	min-height: 1.65rem;
 	padding: 0;
-	border-color: var(--border-strong);
+	border-color: var(--control-border);
 	border-radius: var(--radius-full);
 	background: var(--surface-3);
 	transition:
@@ -748,7 +811,7 @@ legend {
 
 .switch:hover:not(:disabled) {
 	background: var(--border-strong);
-	border-color: var(--border-strong);
+	border-color: var(--control-border);
 }
 
 .switch-thumb {
@@ -759,7 +822,8 @@ legend {
 	height: 1.2rem;
 	margin-top: -0.6rem;
 	border-radius: var(--radius-full);
-	background: light-dark(#ffffff, #cdd2dd);
+	/* Off, the thumb is as dark as the edge, so the state reads without the colour of the track. */
+	background: var(--control-border);
 	box-shadow: var(--shadow-1);
 	transition:
 		transform var(--dur) var(--ease-spring),
@@ -814,7 +878,9 @@ legend {
 .segmented label[data-checked="true"] {
 	background: var(--surface);
 	color: var(--text);
-	box-shadow: var(--shadow-1);
+	box-shadow:
+		var(--shadow-1),
+		inset 0 0 0 1px var(--border-strong);
 }
 
 .segmented input {
@@ -984,6 +1050,11 @@ dialog.sheet[data-dragging] {
 	align-items: center;
 	justify-content: space-between;
 	gap: var(--space-3);
+	touch-action: none;
+}
+
+.sheet-head button {
+	touch-action: manipulation;
 }
 
 @media (max-width: 719px) {
@@ -1035,8 +1106,18 @@ dialog.sheet[data-dragging] {
 	font-weight: inherit;
 }
 
-.menu-link:hover {
+.menu-link:hover,
+.menu-toggle:hover {
 	background: var(--surface-2);
+}
+
+/* The whole row is the switch's label, so a tap anywhere on it flips the switch. */
+.menu-toggle {
+	flex-direction: row;
+	gap: var(--space-3);
+	color: var(--text);
+	font-size: var(--text-base);
+	cursor: pointer;
 }
 
 .menu-icon {
@@ -1285,4 +1366,58 @@ dialog.sheet[data-dragging] {
 ::view-transition-new(root) {
 	animation-duration: var(--dur-slow);
 	animation-timing-function: var(--ease-out);
+}
+
+/* ── Touch: every target is at least 44px, on a phone or with a coarse pointer ─────────────────── */
+
+@media (max-width: 719px), (pointer: coarse) {
+	button,
+	input,
+	select,
+	textarea {
+		min-height: var(--touch);
+	}
+
+	input[type="radio"],
+	input[type="checkbox"] {
+		min-height: 0;
+	}
+
+	.switch {
+		min-height: 1.65rem;
+	}
+
+	.link-button,
+	.segmented label,
+	.to-end,
+	.prompt-details summary,
+	.rail-link {
+		min-height: var(--touch);
+	}
+
+	.prompt-details summary {
+		display: flex;
+		align-items: center;
+	}
+
+	.code-copy,
+	.toast .icon-button,
+	.attached-chip .icon-button {
+		width: var(--touch);
+		min-width: var(--touch);
+		height: var(--touch);
+		min-height: var(--touch);
+	}
+
+	.back,
+	.schedule a,
+	.meta a {
+		display: inline-flex;
+		align-items: center;
+		min-height: var(--touch);
+	}
+
+	kbd {
+		display: none;
+	}
 }

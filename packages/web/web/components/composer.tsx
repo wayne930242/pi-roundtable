@@ -9,6 +9,7 @@ import {
 import type { UploadView } from "../../src/api-types.ts";
 import { api, messageOf } from "../lib/api.ts";
 import { size as bytes } from "../lib/format.ts";
+import { composingKey } from "../lib/ime.ts";
 import { translate as t } from "../lib/messages.ts";
 import type { RoomsState } from "../lib/rooms.ts";
 import { toast } from "../lib/toast.ts";
@@ -119,7 +120,7 @@ export function Composer(props: {
 		if (
 			event.key === "Enter" &&
 			!event.shiftKey &&
-			!event.nativeEvent.isComposing &&
+			!composingKey(event.nativeEvent) &&
 			!touchPrimary()
 		) {
 			event.preventDefault();

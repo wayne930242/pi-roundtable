@@ -26,6 +26,10 @@ export function translate(
 		(token, name: string) => String(values[name] ?? token),
 	);
 }
+/** `one` for a count of 1 and `many` otherwise, each its own message so a host can word both; both may use `{count}`. */
+export function plural(count: number, one: string, many: string): string {
+	return translate(count === 1 ? one : many, { count });
+}
 export function locale(): string {
 	return presentation.locale ?? "en-GB";
 }

@@ -7,7 +7,7 @@ import { useSelector } from "../lib/app-store.ts";
 import { useConfig } from "../lib/config.ts";
 import { ago } from "../lib/format.ts";
 import { useLive } from "../lib/live.ts";
-import { translate as t } from "../lib/messages.ts";
+import { plural, translate as t } from "../lib/messages.ts";
 import { lastMessage, waitingCards } from "../lib/rooms.ts";
 import { hrefFor } from "../lib/router.ts";
 
@@ -21,7 +21,7 @@ function previewOf(text: string, files: number): string {
 		.replace(/\s+/g, " ")
 		.trim();
 	if (flat) return flat.slice(0, 140);
-	return files ? t("{count} file(s)", { count: files }) : "";
+	return files ? plural(files, "{count} file", "{count} files") : "";
 }
 
 const RoomRow = memo(function RoomRow(props: {
@@ -30,6 +30,7 @@ const RoomRow = memo(function RoomRow(props: {
 	yolo: boolean;
 	longRunning: boolean;
 	waiting: number;
+	active: boolean;
 	preview: string;
 	at: string | undefined;
 	now: number;
@@ -42,6 +43,7 @@ const RoomRow = memo(function RoomRow(props: {
 				className="room-row"
 				href={hrefFor("room", view.key)}
 				data-home={view.home || undefined}
+				aria-current={props.active ? "page" : undefined}
 			>
 				<Avatar
 					name={view.displayName}
@@ -77,11 +79,12 @@ const RoomRow = memo(function RoomRow(props: {
 					<span className="room-row-badges">
 						{props.waiting ? (
 							<span className="badge badge-warn">
-								{t("{count} card(s) waiting", { count: props.waiting })}
+								{plural(
+									props.waiting,
+									"{count} card waiting",
+									"{count} cards waiting",
+								)}
 							</span>
-						) : null}
-						{props.typing ? (
-							<span className="badge badge-busy">{t("Working")}</span>
 						) : null}
 						{props.yolo ? (
 							<span className="badge badge-yolo">
@@ -103,7 +106,11 @@ const RoomRow = memo(function RoomRow(props: {
 	);
 });
 
-function Section(props: { title: string; rooms: string[] }) {
+function Section(props: {
+	title: string;
+	rooms: string[];
+	active: string | undefined;
+}) {
 	const { now } = useLive();
 	const { timeZone } = useConfig();
 	const rows = useSelector(
@@ -133,7 +140,13 @@ function Section(props: { title: string; rooms: string[] }) {
 			<h2 className="section-title">{props.title}</h2>
 			<ul className="room-list">
 				{shown.map(({ key, ...row }) => (
-					<RoomRow key={key} {...row} now={now} timeZone={timeZone} />
+					<RoomRow
+						key={key}
+						{...row}
+						active={key === props.active}
+						now={now}
+						timeZone={timeZone}
+					/>
 				))}
 			</ul>
 		</section>
@@ -141,7 +154,11 @@ function Section(props: { title: string; rooms: string[] }) {
 }
 
 /** Home first, then the agents, the groups, and the dispatch threads, with what each is doing. */
-export function RoomsPage(props: { onSearch(): void }) {
+export function RoomsPage(props: {
+	onSearch(): void;
+	/** The room open beside the list, marked in it; the list is then a column, not a page. */
+	active?: string | undefined;
+}) {
 	// One string, so the page redraws only when the grouping changes, not on every message.
 	const shape = useSelector((state) => {
 		const groups: Record<"home" | "agents" | "groups" | "threads", string[]> = {
@@ -170,7 +187,7 @@ export function RoomsPage(props: { onSearch(): void }) {
 	);
 	const none = Object.values(groups).every((list) => list.length === 0);
 	return (
-		<div className="page">
+		<div className="page" data-column={props.active ? "" : undefined}>
 			<header className="page-head">
 				<h1>{t("Rooms")}</h1>
 				<button
@@ -195,10 +212,22 @@ export function RoomsPage(props: { onSearch(): void }) {
 					<div className="skeleton" />
 				</div>
 			) : null}
-			<Section title={t("Home")} rooms={groups.home} />
-			<Section title={t("Agents")} rooms={groups.agents} />
-			<Section title={t("Groups")} rooms={groups.groups} />
-			<Section title={t("Dispatch threads")} rooms={groups.threads} />
+			<Section title={t("Home")} rooms={groups.home} active={props.active} />
+			<Section
+				title={t("Agents")}
+				rooms={groups.agents}
+				active={props.active}
+			/>
+			<Section
+				title={t("Groups")}
+				rooms={groups.groups}
+				active={props.active}
+			/>
+			<Section
+				title={t("Dispatch threads")}
+				rooms={groups.threads}
+				active={props.active}
+			/>
 		</div>
 	);
 }

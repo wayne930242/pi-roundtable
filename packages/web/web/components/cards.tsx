@@ -1,5 +1,6 @@
-import { memo, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import type {
+	ClientFrame,
 	PromptAnswer,
 	PromptFrame,
 	PromptOption,
@@ -9,6 +10,7 @@ import type {
 import { translate as t } from "../lib/messages.ts";
 import type { CardState } from "../lib/rooms.ts";
 import { useConnection } from "../lib/socket.ts";
+import { toast } from "../lib/toast.ts";
 import { Icon } from "./icons.tsx";
 import { MessageMarkdown } from "./message-markdown.tsx";
 
@@ -31,6 +33,38 @@ function outcomeText(card: CardState): string {
 	}
 	const base = t(OUTCOMES[outcome]);
 	return card.note ? `${base}: ${card.note}` : base;
+}
+
+/**
+ * What a card sends and whether it waits for the server. The buttons lock only once the frame
+ * was sent; a frame that could not go says so and leaves them as they were, and a refusal of the
+ * answer (counted on the card) gives them back.
+ */
+function useAnswering(card: CardState) {
+	const connection = useConnection();
+	const [sent, setSent] = useState(false);
+	const refused = card.refused ?? 0;
+	useEffect(() => {
+		if (refused > 0) setSent(false);
+	}, [refused]);
+	const send = (frame: ClientFrame): boolean => {
+		if (!connection.send(frame)) {
+			toast(
+				t("Not connected right now. Try again when the connection is back."),
+				"danger",
+			);
+			return false;
+		}
+		setSent(true);
+		return true;
+	};
+	return { sent, send };
+}
+
+/** The answer as the card shows it after it ended: the options picked, then the person's own words. */
+export function describeAnswer(answer: PromptAnswer): string {
+	const text = answer.text?.trim();
+	return [...answer.choices, ...(text ? [text] : [])].join(", ");
 }
 
 /** Shows or hides the card's buttons with a height change that follows the card's end. */
@@ -99,13 +133,10 @@ function ApprovalCard({
 	card: CardState;
 	frame: Extract<PromptFrame, { kind: "approval" }>;
 }) {
-	const connection = useConnection();
-	const [sent, setSent] = useState(false);
+	const { sent, send } = useAnswering(card);
 	const timeout = frame.purpose === "turn-timeout";
-	const answer = (approved: boolean) => {
-		setSent(true);
-		connection.send({ type: "approval", prompt: frame.id, approved });
-	};
+	const answer = (approved: boolean) =>
+		send({ type: "approval", prompt: frame.id, approved });
 	const { approval } = frame;
 	return (
 		<Shell
@@ -155,7 +186,9 @@ function ApprovalCard({
 					) : null}
 				</details>
 			) : null}
-			{approval?.copy ? <CopyButton copy={approval.copy} /> : null}
+			{approval?.copy && !card.outcome ? (
+				<CopyButton copy={approval.copy} />
+			) : null}
 			{frame.speakerOnly ? (
 				<p className="hint">
 					{t("Only the person this turn answers can approve it.")}
@@ -183,7 +216,8 @@ function ApprovalCard({
 						disabled={sent}
 						onClick={() => answer(false)}
 					>
-						{frame.wording?.decline ?? (timeout ? t("Stop") : t("Decline"))}
+						{frame.wording?.decline ??
+							(timeout ? t("Stop turn") : t("Decline"))}
 					</button>
 					<button type="button" disabled={sent} onClick={() => answer(true)}>
 						{frame.wording?.approve ?? (timeout ? t("Continue") : t("Approve"))}
@@ -358,9 +392,9 @@ function AskCard({
 	card: CardState;
 	frame: Extract<PromptFrame, { kind: "ask" }>;
 }) {
-	const connection = useConnection();
+	const { sent, send } = useAnswering(card);
 	const [pick, setPick] = useState<Chosen>(NO_PICK);
-	const [sent, setSent] = useState(false);
+	const [given, setGiven] = useState<PromptAnswer>();
 	const question: PromptQuestion = {
 		question: frame.question,
 		options: frame.options,
@@ -383,10 +417,7 @@ function AskCard({
 						type="button"
 						className="secondary"
 						disabled={sent}
-						onClick={() => {
-							setSent(true);
-							connection.send({ type: "cancel", prompt: frame.id });
-						}}
+						onClick={() => send({ type: "cancel", prompt: frame.id })}
 					>
 						{t("Cancel")}
 					</button>
@@ -394,15 +425,17 @@ function AskCard({
 						type="button"
 						disabled={sent || !answer}
 						onClick={() => {
-							if (!answer) return;
-							setSent(true);
-							connection.send({ type: "answer", prompt: frame.id, answer });
+							if (answer && send({ type: "answer", prompt: frame.id, answer }))
+								setGiven(answer);
 						}}
 					>
 						{t("Send answer")}
 					</button>
 				</div>
 			</Collapse>
+			{card.outcome === "answered" && given ? (
+				<p className="prompt-answer">{describeAnswer(given)}</p>
+			) : null}
 		</Shell>
 	);
 }
@@ -414,12 +447,12 @@ function QuestionnaireCard({
 	card: CardState;
 	frame: Extract<PromptFrame, { kind: "questionnaire" }>;
 }) {
-	const connection = useConnection();
+	const { sent, send } = useAnswering(card);
+	const [given, setGiven] = useState<string[]>();
 	const [picks, setPicks] = useState<Chosen[]>(() =>
 		frame.questions.map(() => NO_PICK),
 	);
 	const [note, setNote] = useState("");
-	const [sent, setSent] = useState(false);
 	const answers = frame.questions.map((question, index) =>
 		answerOf(question, picks[index] ?? NO_PICK),
 	);
@@ -441,24 +474,23 @@ function QuestionnaireCard({
 						disabled={sent}
 					/>
 				))}
-				<label>
-					{t("Add a note")}
-					<textarea
-						rows={2}
-						value={note}
-						disabled={sent}
-						onChange={(event) => setNote(event.target.value)}
-					/>
-				</label>
+				{frame.questions.some((question) => question.options.length > 0) ? (
+					<label>
+						{t("Add a note")}
+						<textarea
+							rows={2}
+							value={note}
+							disabled={sent}
+							onChange={(event) => setNote(event.target.value)}
+						/>
+					</label>
+				) : null}
 				<div className="actions">
 					<button
 						type="button"
 						className="secondary"
 						disabled={sent}
-						onClick={() => {
-							setSent(true);
-							connection.send({ type: "cancel", prompt: frame.id });
-						}}
+						onClick={() => send({ type: "cancel", prompt: frame.id })}
 					>
 						{t("Cancel")}
 					</button>
@@ -466,19 +498,31 @@ function QuestionnaireCard({
 						type="button"
 						disabled={sent || answers.every((one) => !one)}
 						onClick={() => {
-							setSent(true);
-							connection.send({
+							const sentNote = note.trim();
+							const sentOk = send({
 								type: "answers",
 								prompt: frame.id,
 								answers: answers.map((one) => one ?? null),
-								...(note.trim() ? { note: note.trim() } : {}),
+								...(sentNote ? { note: sentNote } : {}),
 							});
+							if (sentOk)
+								setGiven(
+									answers.map((one) => (one ? describeAnswer(one) : "—")),
+								);
 						}}
 					>
 						{t("Send answers")}
 					</button>
 				</div>
 			</Collapse>
+			{card.outcome === "answered" && given ? (
+				<ul className="prompt-answer">
+					{given.map((line, index) => (
+						// biome-ignore lint/suspicious/noArrayIndexKey: the lines follow the card's fixed questions
+						<li key={index}>{line}</li>
+					))}
+				</ul>
+			) : null}
 		</Shell>
 	);
 }

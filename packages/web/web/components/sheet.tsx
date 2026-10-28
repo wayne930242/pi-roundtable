@@ -29,12 +29,16 @@ export function Sheet(props: {
 	children: ReactNode;
 	/** `palette` is a wide, top-aligned panel for the room switcher. */
 	variant?: "sheet" | "palette";
+	/** Where focus goes once the sheet is gone, when the browser's own return would land on nothing. */
+	restoreFocus?(): HTMLElement | null;
 }) {
 	const ref = useRef<HTMLDialogElement>(null);
 	const drag = useRef<{ y: number; at: number; dy: number } | undefined>(
 		undefined,
 	);
 	const { open, onClose } = props;
+	const restoreFocus = useRef(props.restoreFocus);
+	restoreFocus.current = props.restoreFocus;
 	const closing = useRef(false);
 	/** The parent closed it already, so the closing animation reports nothing back. */
 	const quiet = useRef(false);
@@ -42,6 +46,7 @@ export function Sheet(props: {
 	const finish = useCallback(() => {
 		const dialog = ref.current;
 		if (dialog?.open) dialog.close();
+		restoreFocus.current?.()?.focus();
 		closing.current = false;
 		if (quiet.current) quiet.current = false;
 		else onClose();
@@ -83,6 +88,9 @@ export function Sheet(props: {
 
 	const onPointerDown = (event: ReactPointerEvent<HTMLElement>) => {
 		if (!compact()) return;
+		// A button in the header is pressed, not dragged.
+		if (event.target instanceof Element && event.target.closest("button, a"))
+			return;
 		drag.current = { y: event.clientY, at: event.timeStamp, dy: 0 };
 		event.currentTarget.setPointerCapture(event.pointerId);
 		const dialog = ref.current;
@@ -143,7 +151,13 @@ export function Sheet(props: {
 			</div>
 			<div className="sheet-body">
 				{props.variant === "palette" ? null : (
-					<div className="sheet-head">
+					<div
+						className="sheet-head"
+						onPointerDown={onPointerDown}
+						onPointerMove={onPointerMove}
+						onPointerUp={onPointerUp}
+						onPointerCancel={onPointerUp}
+					>
 						<h2>{props.title}</h2>
 						<button
 							type="button"

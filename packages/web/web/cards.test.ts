@@ -3,7 +3,12 @@ import { partial } from "pi-roundtable/testing";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { PromptFrame } from "../src/api-types.ts";
-import { answerOf, NO_PICK, PromptCard } from "./components/cards.tsx";
+import {
+	answerOf,
+	describeAnswer,
+	NO_PICK,
+	PromptCard,
+} from "./components/cards.tsx";
 import { systemLine } from "./components/message-row.tsx";
 import { fuzzyScore } from "./lib/fuzzy.ts";
 import { setPresentation } from "./lib/messages.ts";
@@ -75,7 +80,7 @@ test("a turn's time-limit card uses its own words, and an unworded one says Cont
 	expect(worded).toContain("prompt-timeout");
 	const plain = render(card(base));
 	expect(plain).toContain(">Continue<");
-	expect(plain).toContain(">Stop<");
+	expect(plain).toContain(">Stop turn<");
 	// Ended, the card says so in the card's own words.
 	const ended = render(card({ ...base, wording }, { outcome: "approved" }));
 	expect(ended).toContain("Going on");
@@ -253,4 +258,12 @@ test("a schedule's recurrence reads as words", () => {
 		describeRecurrence({ kind: "once", date: "2026-11-02", time: "10:00" }),
 	).toBe("Once on 2026-11-02 at 10:00");
 	expect(describeRecurrence(null)).toBe("");
+});
+
+test("an answered card is described by the options picked and the person's own words", () => {
+	expect(describeAnswer({ choices: ["Blue", "Green"] })).toBe("Blue, Green");
+	expect(describeAnswer({ choices: ["Blue"], text: " warm  " })).toBe(
+		"Blue, warm",
+	);
+	expect(describeAnswer({ choices: [], text: "both" })).toBe("both");
 });

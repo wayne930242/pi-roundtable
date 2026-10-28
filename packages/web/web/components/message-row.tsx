@@ -1,6 +1,6 @@
-import { memo } from "react";
+import { memo, useEffect, useState } from "react";
 import type { RoomFile, RoomMessage } from "../../src/api-types.ts";
-import { store } from "../lib/app-store.ts";
+import { store, useSelector } from "../lib/app-store.ts";
 import { clock } from "../lib/format.ts";
 import { translate as t } from "../lib/messages.ts";
 import type { PendingSend } from "../lib/rooms.ts";
@@ -134,12 +134,23 @@ export const LiveRow = memo(function LiveRow(props: {
 	);
 });
 
+/** How long a message may wait for the server before the page says it is not sent yet. */
+const SLOW_SEND_MS = 10_000;
+
 /** A message the person just sent that the server has not taken yet, or refused. */
 export const PendingRow = memo(function PendingRow(props: {
 	pending: PendingSend;
 }) {
 	const { pending } = props;
 	const connection = useConnection();
+	const offline = useSelector((state) => state.connection !== "open");
+	const [slow, setSlow] = useState(false);
+	useEffect(() => {
+		if (pending.failed) return;
+		const timer = setTimeout(() => setSlow(true), SLOW_SEND_MS);
+		return () => clearTimeout(timer);
+	}, [pending.failed]);
+	const stuck = Boolean(pending.failed) || slow;
 	return (
 		<li
 			className="message"
@@ -163,9 +174,11 @@ export const PendingRow = memo(function PendingRow(props: {
 						</ul>
 					) : null}
 				</div>
-				{pending.failed ? (
+				{stuck ? (
 					<div className="message-meta pending-actions">
-						<span className="failure-text">{t("Not sent")}</span>
+						<span className="failure-text">
+							{pending.failed ? t("Not sent") : t("Not sent yet")}
+						</span>
 						<button
 							type="button"
 							className="link-button"
@@ -183,7 +196,13 @@ export const PendingRow = memo(function PendingRow(props: {
 							{t("Discard")}
 						</button>
 					</div>
-				) : null}
+				) : (
+					<div className="message-meta pending-actions">
+						<span className="pending-note">
+							{offline ? t("Waiting to send…") : t("Sending…")}
+						</span>
+					</div>
+				)}
 			</div>
 		</li>
 	);
