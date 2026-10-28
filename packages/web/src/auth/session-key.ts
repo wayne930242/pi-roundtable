@@ -1,9 +1,11 @@
 import { randomBytes } from "node:crypto";
 import {
 	chmodSync,
+	linkSync,
 	mkdirSync,
 	readFileSync,
 	statSync,
+	unlinkSync,
 	writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
@@ -35,12 +37,20 @@ export function loadSessionKey(dataDir: string, logger: Logger): Buffer {
 		key = readKey(file);
 	} catch (error) {
 		if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+		// Written whole under a temporary name, then linked into place: a second start never
+		// reads a half-written key, and the first link wins.
+		const temp = join(
+			dir,
+			`.session.key.${process.pid}.${randomBytes(4).toString("hex")}`,
+		);
+		writeFileSync(temp, randomBytes(KEY_BYTES), { flag: "wx", mode: 0o600 });
 		try {
-			writeFileSync(file, randomBytes(KEY_BYTES), { flag: "wx", mode: 0o600 });
-		} catch (writeError) {
-			// A second start made it between the read and the write; that key is the one.
-			if ((writeError as NodeJS.ErrnoException).code !== "EEXIST")
-				throw writeError;
+			linkSync(temp, file);
+		} catch (linkError) {
+			if ((linkError as NodeJS.ErrnoException).code !== "EEXIST")
+				throw linkError;
+		} finally {
+			unlinkSync(temp);
 		}
 		key = readKey(file);
 	}
