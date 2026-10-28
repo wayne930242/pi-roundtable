@@ -989,7 +989,7 @@ defineTool({
 
 #### Hold classes and yolo mode
 
-Every held call carries its **hold classes**: ids of the form `<rule>.<class>` that name why it is held. They are what yolo mode (below) judges, and they are recorded with the call as `HeldCall.holdClasses`, so they survive a restart. A rule reports them with `holdClasses(tool, input, context)`, which lists every reason the call is held, not only the first; a rule that reports none has its calls classed by the rule's name (`mail` for a rule called `mail`). A rule that describes a call in a turn may name the classes in the description instead: `{ text, classes: ["repo.push"] }` (`HoldDescription.classes`). `holdChain(rules)` reports them as `classesOf(tool, input, context)` and, with the description, as `inTurnWithClasses(...)` (`ClassedHold`); a hold check built without `holdChain` has none.
+Every held call carries its **hold classes**: ids of the form `<rule>.<class>` that name why it is held. They are what yolo mode (below) judges, and they are recorded with the call as `HeldCall.holdClasses`, so they survive a restart. A rule reports them with `holdClasses(tool, input, context)`, which lists every reason the call is held, not only the first. **Report only classes that are safe to approve with no one looking: a rule that reports classes has opted its calls in to yolo mode**, which approves them unless the config cards them. A rule that reports none leaves its calls **unclassed**: they carry the rule's bare name (`mail` for a rule called `mail`) and yolo cards them, unless `autonomy.yolo.allow` lists that name. A tool's own `hold` is a rule named `tool:<name>`, so it is unclassed, and `autonomy.yolo.allow: ["tool:repo_push"]` approves a `repo_push` tool's calls. Every reported id must start with the rule's name and a dot; one that does not leaves the call unclassed, as does a `holdClasses` that throws. A rule that stands for other rules' calls, as the one that holds saving a precheck script does, may list their ids instead, and a rule name has no dot. A rule that describes a call in a turn may name the classes in the description instead: `{ text, classes: ["repo.push"] }` (`HoldDescription.classes`). When several rules hold one call, its classes are all of theirs, so one unclassed or carded rule cards it. `holdChain(rules)` reports them as `classesOf(tool, input, context)` and, with the description, as `inTurnWithClasses(...)` (`ClassedHold`), which also asks the rules after the first that holds the call; a hold check built without `holdChain` has none.
 
 **Yolo mode.** In a conversation whose `yolo` mode an owner switched on ([`MODES`](#conversation-modes-modes)), the server decides a held call before any card opens, and approves it without one only when **all** of these hold at that moment:
 
@@ -998,14 +998,16 @@ Every held call carries its **hold classes**: ids of the form `<rule>.<class>` t
 - the call names no approvers and its card is not [the speaker's alone](#a-hold-that-makes-its-card-the-speakers-alone);
 - the call has hold classes (a call held before this existed, or by a check without classes, is unknown and always asks), and none of them is carded.
 
-A class is carded when it is listed in `autonomy.yolo.card`, when its rule's name is, or when it is in `YOLO_CARDED_SHELL_CLASSES` (`pi-roundtable/kit`) and `autonomy.yolo.allow` does not list it. A class in both lists stays carded. Everything else is approved, **including the hold of any plugin rule that reports no classes** (it is classed by its rule name): to keep such a rule behind a card in yolo conversations, list its name in `autonomy.yolo.card`.
+A class is carded when it is listed in `autonomy.yolo.card`, when its rule's name is, when it is in `YOLO_CARDED_SHELL_CLASSES` (`pi-roundtable/kit`) and `autonomy.yolo.allow` does not list it, or when it is a rule's bare name (the call is unclassed) and `autonomy.yolo.allow` does not list that name. A class in both lists stays carded. Everything else is approved. So a plugin rule that reports no classes, such as Merlin's `google`, `discord` and `mc` rules or a tool's own `tool:repo_push` hold, asks on a card in yolo conversations until the config allows it by name.
+
+Yolo approves only where there is a turn: a call decided outside one (none of the host's own paths does) is held as before. It covers every owner-attributed turn in that conversation, including turns another agent starts with `message_agent` and turns a schedule starts for an owner's conversation; only turns the host's own principal speaks (webhooks, reports) always ask. Saving a precheck script through a schedule tool is classed by every held call the script makes, so yolo approves the save only if it would approve each of them (an inner call that is unclassed counts as its rule's bare name); `autonomy.yolo.allow` listing `precheck-scripts` does not cover them.
 
 ```ts
 export default {
 	autonomy: {
 		yolo: {
 			allow: ["shell.rm"], // yolo may also approve an rm outside the scratch roots
-			card: ["shell.push", "repo-push"], // never approve these, whatever the mode
+			card: ["shell.push", "tool:repo_push"], // never approve these, whatever the mode
 		},
 	},
 } satisfies RoundtableConfig;
@@ -1032,7 +1034,7 @@ The rule reports the class of **every** held command in the line, including thos
 | Class | Held for |
 |---|---|
 | `shell.privilege` | `sudo`, `su`, `doas` |
-| `shell.disk` | `dd`, `mkfs*` |
+| `shell.disk` | `dd`, `mkfs*`, a redirect or `tee` to a device node such as `/dev/sda` (`/dev/null` runs) |
 | `shell.power` | `shutdown`, `reboot`, `poweroff`, `halt` |
 | `shell.kill` | `kill` and the name-matching killers |
 | `shell.rm` | an `rm` outside the scratch roots, or one the line cannot resolve |
@@ -1042,7 +1044,7 @@ The rule reports the class of **every** held command in the line, including thos
 | `shell.firewall` | `ufw`, `iptables`, `ip6tables`, `nft` changes |
 | `shell.packages` | `apt`, `apt-get`, `snap`, `dpkg` installs and removals |
 | `shell.push` | a plain `git push` the push policy holds |
-| `shell.force-push` | a forced push, and a push that deletes or mirrors refs (`+` or `:` refspec, `--delete`, `--mirror`) |
+| `shell.force-push` | a forced push, and a push that deletes, mirrors or prunes refs (`+` or `:` refspec, `--delete`, `--mirror`, `--prune`) |
 | `shell.reset-hard` | `git reset --hard` |
 | `shell.gh` | `gh` writes |
 | `shell.crontab` | `crontab -r` |

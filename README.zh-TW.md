@@ -184,7 +184,7 @@ export default {
 | `turnLimits.maxSeconds` | `timeoutSeconds` 的三倍 | 一輪總共最多工作多久，不得小於 `timeoutSeconds` |
 | `turnLimits.cardSeconds` | `300` | 那張卡片等你回答多久，30 到 3600；時間到沒回答，這一輪就停止 |
 | `autonomy.longRunning.maxSeconds` | `14400`（4 小時） | 長時間執行對話的一輪，工作到這個上限才會詢問或停止，600 到 604800 |
-| `autonomy.yolo.allow`、`autonomy.yolo.card` | 無 | yolo 模式在預設之外可以核准的 hold 類別（例如 `shell.rm`），以及它永遠不核准的類別或規則名稱（例如 `shell.push`）。預設下 yolo 會核准一般的 `git push` 和工作區以外的寫入，其餘破壞性的 shell 類別仍然出卡；見[外掛指南](docs/plugins.md#hold-classes-and-yolo-mode) |
+| `autonomy.yolo.allow`、`autonomy.yolo.card` | 無 | yolo 模式在預設之外可以核准的 hold 類別（例如 `shell.rm`），以及它也核准其呼叫的規則名稱（該規則沒有回報類別，例如 `tool:repo_push`），以及它永遠不核准的類別或規則名稱（例如 `shell.push`）。預設下 yolo 會核准一般的 `git push` 和工作區以外的寫入，其餘破壞性的 shell 類別仍然出卡；見[外掛指南](docs/plugins.md#hold-classes-and-yolo-mode) |
 
 有人在 agent 的頻道對助理說話時，那一輪也會讀進助理上次在該頻道發言之後的頻道訊息（頻道脈絡；見[外掛指南](docs/plugins.md#channel-context-what-was-said-around-an-addressed-message)）。
 用 `discord.channelContext` 調整，或設 `channelContext: false` 關閉：

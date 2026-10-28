@@ -20,9 +20,12 @@ export interface LimitsConfig {
 	autonomy?: {
 		/** Yolo mode: the server approves held calls instead of asking, within these limits. */
 		yolo?: {
-			/** Hold classes yolo approves although it cards them by default, such as `shell.rm`. */
+			/**
+			 * Hold classes yolo approves although it cards them by default, such as `shell.rm`, and the
+			 * names of rules that report no classes, such as `tool:repo_push`, whose calls it then approves.
+			 */
 			allow?: readonly string[];
-			/** Hold classes or rule names yolo never approves, such as `shell.push` or `repo-push`. */
+			/** Hold classes or rule names yolo never approves, such as `shell.push` or `tool:repo_push`. */
 			card?: readonly string[];
 		};
 		/** Long-running mode: a turn that reaches its time limit goes on by itself, up to this. */

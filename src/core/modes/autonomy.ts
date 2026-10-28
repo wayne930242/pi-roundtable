@@ -1,9 +1,12 @@
 /** How far the host lets a conversation run without a person: the limits behind its modes. */
 export interface Autonomy {
 	yolo: {
-		/** Hold classes yolo may approve although it cards them by default, such as `shell.rm`. */
+		/**
+		 * Hold classes yolo may approve although it cards them by default, such as `shell.rm`, and the
+		 * names of rules that report no classes, such as `tool:repo_push`, whose calls it then approves.
+		 */
 		allow: readonly string[];
-		/** Hold classes or rule names yolo never approves, such as `shell.push` or `repo-push`. */
+		/** Hold classes or rule names yolo never approves, such as `shell.push` or `tool:repo_push`. */
 		card: readonly string[];
 	};
 	/** The most one long-running turn works in all before it asks or stops, in ms. */

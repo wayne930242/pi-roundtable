@@ -622,12 +622,12 @@ describe("turn limits and autonomy", () => {
 			resolveConfig({
 				...minimal,
 				autonomy: {
-					yolo: { allow: ["shell.rm"], card: ["shell.push", "repo-push"] },
+					yolo: { allow: ["shell.rm"], card: ["shell.push", "tool:repo_push"] },
 					longRunning: { maxSeconds: 7_200 },
 				},
 			}).autonomy,
 		).toEqual({
-			yolo: { allow: ["shell.rm"], card: ["shell.push", "repo-push"] },
+			yolo: { allow: ["shell.rm"], card: ["shell.push", "tool:repo_push"] },
 			longRunningMaxMs: 7_200_000,
 		});
 		expect(
