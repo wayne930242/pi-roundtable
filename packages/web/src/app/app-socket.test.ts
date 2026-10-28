@@ -611,8 +611,9 @@ describeDb("the owner app over a real host", () => {
 			Date.parse(mine[1]?.frame.at ?? ""),
 		);
 		// They stand where they opened: after the owner's message, before the agent's reply.
-		const owner = page.messages.find((m) => m.text === "keep-cards");
-		const reply = page.messages.find((m) => m.text === "cards kept");
+		// The database is shared by runs, so the newest of each is this run's.
+		const owner = page.messages.findLast((m) => m.text === "keep-cards");
+		const reply = page.messages.findLast((m) => m.text === "cards kept");
 		expect(Date.parse(mine[0]?.frame.at ?? "")).toBeGreaterThanOrEqual(
 			Date.parse(owner?.at ?? ""),
 		);
@@ -664,6 +665,7 @@ describeDb("the owner app over a real host", () => {
 		const all = await get("limit=100");
 		const reply = all.messages.at(-1);
 		expect(reply?.text).toBe("page done");
+		const start = all.messages.findLast((m) => m.text === "page-cards");
 		// The latest page of one message: the agent's reply, after the card.
 		const latest = await get("limit=1");
 		expect(latest.more).toBe(true);
@@ -680,7 +682,8 @@ describeDb("the owner app over a real host", () => {
 			const page = await get(`limit=1${before ? `&before=${before}` : ""}`);
 			once.push(...page.cards.map((c) => c.frame.id));
 			before = page.messages[0]?.id;
-			if (!page.more) break;
+			// Down to this run's own first message; the database holds the earlier runs' too.
+			if (!page.more || (before ?? 0) <= (start?.id ?? 0)) break;
 		}
 		expect(once.filter((id) => id === card.prompt.id)).toHaveLength(1);
 		expect(new Set(once).size).toBe(once.length);
