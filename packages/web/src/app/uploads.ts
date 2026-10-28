@@ -1,5 +1,5 @@
 import { extname } from "node:path";
-import type { AttachmentRef } from "pi-roundtable";
+import type { AttachmentFile, AttachmentRef } from "pi-roundtable";
 import type { RoomFile, UploadView } from "../api-types.ts";
 import { FILE_RETENTION_MS, type FileDir, safeName } from "./files.ts";
 import {
@@ -12,14 +12,8 @@ import {
 
 /** The most bytes of one uploaded file when the options say nothing else: 100 MiB. */
 export const DEFAULT_UPLOAD_MAX_BYTES = 100 * 1024 * 1024;
-/**
- * The most the `uploadMaxBytes` option may be: 120 MiB. The host's HTTP server (Bun) refuses a
- * body over its own limit, 128 MiB unless the host set another, and a form's framing adds to the
- * file; a limit above this could never be met.
- */
-export const UPLOAD_MAX_BYTES_CEILING = 120 * 1024 * 1024;
 /** What the multipart framing of one file may add to a body: 64 KiB. */
-const FRAMING_BYTES = 64 * 1024;
+export const UPLOAD_FRAMING_BYTES = 64 * 1024;
 /** How long an upload no message used waits: 24 hours. */
 export const UPLOAD_WAIT_MS = 24 * 3_600_000;
 /** The most files one person may have waiting for a message, or on their way. */
@@ -197,7 +191,7 @@ export class Uploads {
 		const length = Number(request.headers.get("content-length"));
 		if (!Number.isFinite(length) || length <= 0)
 			throw new UploadRefusal(400, "The upload has no length.");
-		if (length > this.maxBytes + FRAMING_BYTES)
+		if (length > this.maxBytes + UPLOAD_FRAMING_BYTES)
 			throw new UploadRefusal(413, "The file is too large.");
 		const waiting = this.#waitingOf(principalId);
 		if (waiting.files >= PENDING_PER_PRINCIPAL)
@@ -327,14 +321,17 @@ export class Uploads {
 		};
 	}
 
-	/** The bytes of a reference this store made; rejects for any other reference. */
-	async read(ref: AttachmentRef): Promise<Uint8Array> {
+	/**
+	 * The file behind a reference this store made, as its path: the host copies it from there, so
+	 * a large file is never held in memory. Rejects for any other reference.
+	 */
+	async read(ref: AttachmentRef): Promise<AttachmentFile> {
 		if (!ref.url.startsWith(REF_PREFIX))
 			throw new Error("not a file of this app");
 		const id = ref.url.slice(REF_PREFIX.length);
-		const bytes = this.#stored.bytes(id) ?? this.#waiting.bytes(id);
-		if (!bytes) throw new Error("the file is gone");
-		return bytes;
+		const path = this.#stored.pathOf(id) ?? this.#waiting.pathOf(id);
+		if (!path) throw new Error("the file is gone");
+		return { path };
 	}
 
 	/** Deletes the waiting uploads older than a day and the stored files older than 30 days; returns how many. */

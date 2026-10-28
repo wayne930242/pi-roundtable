@@ -879,6 +879,46 @@ describeDb("the owner app over a real host", () => {
 		tab.close();
 	});
 
+	test("a 30 MiB upload reaches the agent's turn as a file of its own, which its tools can open", async () => {
+		const big = new Uint8Array(30 * 1024 * 1024).map((_, i) => (i * 7) % 251);
+		big[0] = 0;
+		const form = new FormData();
+		form.set(
+			"file",
+			new File([big], "data.bin", { type: "application/octet-stream" }),
+		);
+		const uploaded = await fetch("http://localhost/console/api/uploads", {
+			method: "POST",
+			body: form,
+			headers: { "x-actor": "owner", origin: ORIGIN },
+			unix: app.socket,
+		} as never);
+		expect(uploaded.status).toBe(200);
+		const view = (await uploaded.json()) as { id: string };
+		const tab = await Client.open(app, { "x-actor": "owner" });
+		if (!tab) throw new Error("the owner was refused");
+		tab.send({
+			type: "send",
+			id: "huge",
+			room: SCOUT,
+			text: "open the thirty",
+			uploads: [view.id],
+		});
+		await tab.take(ofType("accepted"));
+		await tab.take(agentReply("scout"));
+		const turn = app.seen.find((r) => r.text.includes("open the thirty"));
+		const files = turn?.attachments?.files ?? [];
+		expect(files.map((f) => [f.name, f.size])).toEqual([
+			["data.bin", big.byteLength],
+		]);
+		// Over 25 MiB the turn's text says it is kept for tools; the tool opens the very bytes.
+		expect(turn?.text).not.toContain("larger than");
+		expect(
+			new Uint8Array(await Bun.file(files[0]?.path ?? "").arrayBuffer()),
+		).toEqual(big);
+		tab.close();
+	});
+
 	test("RV-F003: a waiting upload is deleted over REST by its owner, and a message cannot name it afterwards", async () => {
 		const form = new FormData();
 		form.set("file", new File(["scrap"], "scrap.txt", { type: "text/plain" }));

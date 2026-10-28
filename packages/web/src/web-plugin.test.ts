@@ -196,8 +196,8 @@ describe("refuses to start", () => {
 		["a day of card grace", { cardGraceSeconds: 86_400 }, "cardGraceSeconds"],
 		["no upload at all", { uploadMaxBytes: 0 }, "uploadMaxBytes"],
 		[
-			"an upload limit the host's server could not take",
-			{ uploadMaxBytes: 130 * 1024 * 1024 },
+			"an upload limit the listener could not be asked for",
+			{ uploadMaxBytes: Number.MAX_SAFE_INTEGER },
 			"uploadMaxBytes",
 		],
 		["a fractional upload limit", { uploadMaxBytes: 1.5 }, "uploadMaxBytes"],
@@ -215,12 +215,13 @@ describe("refuses to start", () => {
 		).toEqual(["rooms", "overview", "schedules", "conversations", "notes"]);
 		const settings = resolveOptions(base());
 		expect([settings.surface, settings.cardGraceSeconds]).toEqual(["app", 120]);
-		// A file may be 100 MiB by default, and an operator may raise it to what the host's server takes.
+		// A file may be 100 MiB by default, and an operator may raise it past what the listener takes
+		// by default: the upload route asks the listener for the room.
 		expect(settings.uploadMaxBytes).toBe(100 * 1024 * 1024);
 		expect(
-			resolveOptions({ ...base(), uploadMaxBytes: 120 * 1024 * 1024 })
+			resolveOptions({ ...base(), uploadMaxBytes: 1024 * 1024 * 1024 })
 				.uploadMaxBytes,
-		).toBe(120 * 1024 * 1024);
+		).toBe(1024 * 1024 * 1024);
 	});
 
 	test("a notes-less console needs no owner id", () => {

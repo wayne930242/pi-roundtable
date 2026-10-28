@@ -86,7 +86,11 @@ export class ConsoleServer {
 		options.subscribe(() => this.#changed());
 	}
 
-	routes(listener: string): HttpRoute[] {
+	/**
+	 * The routes on `listener`. `maxRequestBodyBytes` is the largest body the console takes, for
+	 * the owner app's uploads; without it the listener's default stands.
+	 */
+	routes(listener: string, maxRequestBodyBytes?: number): HttpRoute[] {
 		const handle = (request: Request) => this.handle(request);
 		return [
 			{
@@ -100,6 +104,7 @@ export class ConsoleServer {
 				listener,
 				path: { prefix: this.#base },
 				handle,
+				...(maxRequestBodyBytes === undefined ? {} : { maxRequestBodyBytes }),
 				...(this.#options.app
 					? { websocket: this.#options.app.websocket }
 					: {}),

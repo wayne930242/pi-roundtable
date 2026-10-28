@@ -1,4 +1,5 @@
 import {
+	type AttachmentContent,
 	type AttachmentRef,
 	type ChannelKey,
 	type ChatSurface,
@@ -66,6 +67,8 @@ export class AppSurface implements ChatSurface {
 	readonly agentRooms = true;
 	readonly supportsFiles = true;
 	readonly formatting = APP_FORMATTING;
+	/** The turn takes an upload up to the most the app lets a person upload. */
+	readonly maxAttachmentBytes: number;
 	readonly threads: AppSurfaceThreads;
 	readonly #options: AppSurfaceOptions;
 	readonly #activity = new Map<ChannelKey, Activity>();
@@ -73,6 +76,7 @@ export class AppSurface implements ChatSurface {
 
 	constructor(options: AppSurfaceOptions) {
 		this.surface = options.surface;
+		this.maxAttachmentBytes = options.uploads.maxBytes;
 		this.#options = options;
 		this.threads = new AppSurfaceThreads({
 			surface: options.surface,
@@ -225,7 +229,7 @@ export class AppSurface implements ChatSurface {
 	readAttachment(
 		_channel: ChannelKey,
 		ref: AttachmentRef,
-	): Promise<Uint8Array> {
+	): Promise<AttachmentContent> {
 		return this.#options.uploads.read(ref);
 	}
 

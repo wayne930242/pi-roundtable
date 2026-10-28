@@ -1,5 +1,6 @@
 import {
 	existsSync,
+	lstatSync,
 	mkdirSync,
 	readdirSync,
 	readFileSync,
@@ -9,7 +10,7 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { open } from "node:fs/promises";
-import { basename, extname, join } from "node:path";
+import { basename, extname, join, resolve } from "node:path";
 import type { RoomFile } from "../api-types.ts";
 
 /** A stored file's id: the uuid the store made. */
@@ -166,6 +167,17 @@ export class FileDir {
 				readFileSync(`${this.#path(id)}.json`, "utf8"),
 			) as Meta;
 			return { id, name: meta.name, type: meta.type, size: meta.size };
+		} catch {
+			return undefined;
+		}
+	}
+
+	/** The absolute path of the file, or undefined when there is no regular file under the id. */
+	pathOf(id: string): string | undefined {
+		if (!isFileId(id)) return undefined;
+		const path = resolve(this.#path(id));
+		try {
+			return lstatSync(path).isFile() ? path : undefined;
 		} catch {
 			return undefined;
 		}

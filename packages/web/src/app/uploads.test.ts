@@ -7,7 +7,7 @@ import {
 	statSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import { FileDir } from "./files.ts";
 import { UploadRefusal, Uploads } from "./uploads.ts";
 
@@ -325,10 +325,11 @@ test("an upload a message uses moves to the stored files and is read from there,
 	uploads.use([view.id]);
 	expect(filesIn(waiting)).toEqual([]);
 	expect(filesIn(stored).sort()).toEqual([view.id, `${view.id}.json`].sort());
-	const text = new TextDecoder().decode(
-		await uploads.read(uploads.refOf(file)),
-	);
-	expect(text).toBe("# hello\nworld");
+	// The host copies the file from where it is; the store hands over its path, not its bytes.
+	const content = await uploads.read(uploads.refOf(file));
+	if (!("path" in content)) throw new Error("expected a path");
+	expect(isAbsolute(content.path)).toBe(true);
+	expect(await Bun.file(content.path).text()).toBe("# hello\nworld");
 });
 
 test("RV-F001: a file part that finished before the body was cut short leaves nothing on disk and counts for nothing", async () => {

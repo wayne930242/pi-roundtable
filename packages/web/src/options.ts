@@ -4,7 +4,7 @@ import { PluginError } from "pi-roundtable";
 import { PANES, type PaneName } from "./api-types.ts";
 import {
 	DEFAULT_UPLOAD_MAX_BYTES,
-	UPLOAD_MAX_BYTES_CEILING,
+	UPLOAD_FRAMING_BYTES,
 } from "./app/uploads.ts";
 import type { ConsoleFeatures, ConsolePresentation } from "./features.ts";
 import type { RequestVerifier } from "./verifier.ts";
@@ -135,10 +135,11 @@ export interface WebConsoleOptions {
 	 */
 	cardGraceSeconds?: number;
 	/**
-	 * The most bytes of one file a person may upload in the app, 100 MiB by default and at most
-	 * 120 MiB: the host's HTTP server refuses bodies over its own limit (Bun's is 128 MiB). A reverse
-	 * proxy in front has a limit of its own, and Cloudflare's free plan caps request bodies at
-	 * 100 MB. Files are streamed to disk, not held in memory.
+	 * The most bytes of one file a person may upload in the app, 100 MiB by default. The upload
+	 * route raises the listener's request body limit to this plus the form's framing, and the
+	 * agent reads files up to it. A reverse proxy in front has a limit of its own, and
+	 * Cloudflare's free plan caps request bodies at 100 MB. Files are streamed to disk, not held
+	 * in memory.
 	 */
 	uploadMaxBytes?: number;
 	/** The page's title and heading; default `Roundtable`. */
@@ -323,12 +324,11 @@ function checkUploadMax(bytes: number | undefined): number {
 	if (bytes === undefined) return DEFAULT_UPLOAD_MAX_BYTES;
 	if (
 		typeof bytes !== "number" ||
-		!Number.isInteger(bytes) ||
-		bytes < 1 ||
-		bytes > UPLOAD_MAX_BYTES_CEILING
+		!Number.isSafeInteger(bytes + UPLOAD_FRAMING_BYTES) ||
+		bytes < 1
 	)
 		fail(
-			`uploadMaxBytes must be a whole number of bytes from 1 to ${UPLOAD_MAX_BYTES_CEILING} (120 MiB), which is what the host's HTTP server takes in one request`,
+			"uploadMaxBytes must be a whole number of bytes, at least 1, that the upload route can ask the listener to take with the form's framing added",
 		);
 	return bytes;
 }

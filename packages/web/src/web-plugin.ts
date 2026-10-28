@@ -11,6 +11,7 @@ import {
 import { DISCORD } from "pi-roundtable/discord";
 import { APP_MIGRATIONS, OwnerApp } from "./app/app.ts";
 import { APP_PROTOCOL } from "./app/protocol.ts";
+import { UPLOAD_FRAMING_BYTES } from "./app/uploads.ts";
 import { loadAssets } from "./assets.ts";
 import {
 	createAuthenticator,
@@ -194,7 +195,11 @@ async function build(settings: ResolvedOptions, context: Context) {
 			},
 		],
 		...(app ? { surfaces: [app.surface] } : {}),
-		http: server.routes(settings.listener),
+		// An upload is a form with one file in it: the limit of the file and its framing.
+		http: server.routes(
+			settings.listener,
+			rooms ? settings.uploadMaxBytes + UPLOAD_FRAMING_BYTES : undefined,
+		),
 		dashboard: [`Web console: ${settings.origin}${settings.mount}/`],
 	};
 }

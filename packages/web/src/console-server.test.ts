@@ -77,6 +77,21 @@ describe("ConsoleServer", () => {
 		]);
 	});
 
+	test("asks the listener for the body limit of the owner app's uploads on the console's routes under the mount only", () => {
+		const { server } = setup();
+		expect(
+			server
+				.routes("admin", 150 * 1024 * 1024)
+				.map(({ name, maxRequestBodyBytes }) => [name, maxRequestBodyBytes]),
+		).toEqual([
+			["web-console-redirect", undefined],
+			["web-console", 150 * 1024 * 1024],
+		]);
+		expect(
+			server.routes("admin").map((route) => route.maxRequestBodyBytes),
+		).toEqual([undefined, undefined]);
+	});
+
 	test("the mount authenticates before redirecting to its slash", async () => {
 		expect(
 			(await get(setup(() => refuse("no")).server, "/console")).status,
