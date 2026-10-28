@@ -32,7 +32,15 @@ const env = (name: string): string => process.env[name] ?? "";
 
 export default {
 	name: "Roundtable",
-	owner: { id: env("OWNER_ID"), name: env("OWNER_NAME") },
+	access: {
+		owners: [
+			{
+				name: env("OWNER_NAME"),
+				principal: env("OWNER_ID"),
+				identities: [`discord:${env("OWNER_ID")}`],
+			},
+		],
+	},
 	discord: {
 		token: env("DISCORD_TOKEN"),
 		guild: env("DISCORD_GUILD_ID"),
@@ -54,9 +62,6 @@ export default {
 | Key | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `name` | string | `"Roundtable"` | The assistant's display name in the text the bot shows. |
-| `owner.id` | string, required | none | The id of the one owner: their Discord user id with Discord. |
-| `owner.name` | string, required | none | The owner's name, as prompts and refusals use it. |
-| `owner.pronouns` | `"he"`, `"she"`, or `"they"` | `"they"` | How prompts refer back to the owner. |
 
 ## Discord
 
@@ -72,6 +77,14 @@ The same settings may also come as an adapter, `adapters: [discord({ ... })]` wi
 | `discord.rootCommand` | string | the lowercase `name`, with each run of characters other than `a-z`, `0-9`, and `-` replaced by `-` | The root slash command, without the slash. See [Slash commands](/reference/slash-commands/). |
 | `discord.admin` | boolean | `true` | Whether the owner's conversations get the `discord_*` administration tools. `false` leaves the `discord-admin` addon out. |
 | `discord.refusalHint` | string | none | Text added as it is to the refusal a non-owner gets from the root command. Include the space or punctuation your language needs before it. |
+| `discord.agentMemory` | `"everyone"` or `"owners"` | `"everyone"` | `"owners"` gives the memory block and the memory tools only to owner-tier turns in the agents' channels. |
+| `discord.agentSpeakers` | `"everyone"` or `"owners"` | `"everyone"` | `"owners"` lets only an owner-tier speaker start a turn in the agents' and groups' channels; `doctor` warns when admins or members are admitted on Discord with this unset. |
+| `discord.channelContext` | object, or `false` | `{}` | What a turn reads of the channel around the message addressed to the assistant: `fetch` (default 50, at most 100), `keep` (15), `similarity` (0.8), `messageChars` (500), `botMessageChars` (80), `foreignWebhook` (code only) and `attachments` (`{ images: 0, maxBytes: 10 MiB }`). `false` turns it off. |
+| `discord.freshMarker` | string, or `false` | `─── new conversation ───` | The divider the assistant posts in a server channel or thread when its conversation starts over. `false` posts none. |
+| `discord.formatting` | string, or `false` | Markdown renders except tables | What the model is told, in English, about how a reply renders in Discord. `false` tells it nothing. |
+| `discord.cardGraceSeconds` | integer from 1 to 86400 | `120` | How long a turn waits for an approval card or an `ask_user` card before it ends and leaves the card open. |
+| `discord.cardCopies` | `{ keepDays?, keep? }`, or `false` | 30 days, newest 100 | How long the text behind an approval card's copy button is kept in `card-copies.json` under the data directory. `false` keeps it in memory only. |
+| `discord.attachmentDownload` | `{ deadlineMs?, idleMs? }` | `60000` and `10000` | The time the files of one message (and the one it replies to) have to download, and how long a file may send no byte before it is given up. Each is from 1000 to 600000. |
 | `adapters` | list of adapters | none | The chat networks the host talks through, each made by its factory. A Discord adapter takes the `discord` settings above. A chat network that comes as a plugin, such as the web chat, stays in `plugins`. |
 
 ## Storage and files
@@ -82,6 +95,8 @@ The same settings may also come as an adapter, `adapters: [discord({ ... })]` wi
 | `dataDir` | string, required | none | Where the process keeps its files, such as pictures, attachments, and skills. |
 | `workDir` | string | `<dataDir>/work` | The agents' shared working directory. |
 | `agentDir` | string | `<dataDir>/pi` | Pi's agent directory, which holds the model logins. See [Models](/configure/models/). |
+| `scratchDir` | string | `<os temp dir>/<slug>-scratch`, the slug being `discord.rootCommand`, or the lowercase `name` without Discord | The agents' scratch directory: their shell runs with `TMPDIR` pointing to it, and writes and removals inside it run without a hold. |
+| `attachments.retention` | `{ maxAgeMs, sweepEveryMs? }` | none | Removes the files turns used once they are `maxAgeMs` old, and sweeps at start and every `sweepEveryMs` (default one hour). Left out, used files live as long as their conversation. |
 
 ## Models
 
@@ -93,6 +108,7 @@ The same settings may also come as an adapter, `adapters: [discord({ ... })]` wi
 | `judge.threshold` | number from 0 to 1 | `0.6` | How sure a judge must be before its answer is used. |
 | `delegation.model` | string | the value of `model` | The model that runs delegated tasks. |
 | `delegation.thinking` | same levels as `thinking` | `"medium"` | The thinking level of delegated tasks. |
+| `effortPolicy` | function from a turn to its effort rule | none | Decides how each turn that thinks at the judge's choice is decided, instead of the default. Code only. |
 
 The [Models](/configure/models/) page explains each one.
 
@@ -109,13 +125,18 @@ See [Language and time](/configure/language-and-time/).
 
 | Key | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `speakers.admins` | `{ users?, roles?, everyone? }` | none | Who holds the admin tier. |
-| `speakers.members` | `{ users?, roles?, everyone? }` | none | Who holds the member tier. |
+| `access.owners` | list of `{ name, pronouns?, principal?, identities? }`, required | none | The people who run this host. The first is the primary owner and needs a `principal`, their principal id (their Discord user id works); with Discord they also need a `discord:<user id>` identity. `pronouns` is `"he"`, `"she"`, or `"they"` (default `"they"`): how prompts refer back to the owner. |
+| `access.admins`, `access.members` | `{ identities?, roles?, everyone? }` | none | Who holds the tier. `identities` are `<provider>:<subject>` strings such as `discord:<user id>`. `roles` are written `<surface>:role:<name>`, such as `discord:role:<role id>`. `everyone` is `true` for every surface, or a list of surfaces. |
+| `access.provisioning` | `"admitted"`, `"linked"`, or an object of those by surface | `"admitted"` | `admitted`: someone the rules admit gets a principal at their first message. `linked`: only identities linked with `roundtable principal link`, and the owners' configured ones, are served. In an object, a surface left out is `linked`. |
+| `access.backgroundStaleDays` | integer from 1 to 36500 | `30` | How many days someone whose tier comes only from the rules may go unseen before their background turns are refused. |
+| `access.selfLink.providers` | list of strings | none | Identity providers, such as `["discord"]`, whose accounts people may link to their own principal through a plugin. |
+| `owner`, `speakers` | the 0.8 forms | none | Deprecated: `owner: { id, name, pronouns? }` and `speakers: { admins?, members? }` by Discord user and role ids. They still work with a warning, but never together with `access`; `roundtable upgrade` rewrites them. |
+| `background.perPrincipal` | `{ schedules?, delegations? }` | none | Each person's limits across all their conversations: how many schedules they may keep (1 to 10000) and how many delegations run at once (1 to 1000). Left out, only each conversation's own limit applies. |
 | `toolTiers` | object of `"owner"`, `"admin"`, or `"member"` by tool name | `{}` | The lowest tier that may use each named tool. It overrides what the core and plugins chose. |
 | `prompts.shared` | string, required inside `prompts` | the prompt bundled with the package | The path of the file that starts every agent's prompt. Read once at start. |
 | `prompts.guest` | string | a guest prompt bundled with the package | The path of the file that replaces the shared prompt for speakers other than the owner. |
 
-With no `speakers` setting only the owner can talk to the agents.
+With no `admins` or `members`, only the owners can talk to the agents.
 See [Access tiers](/configure/access-tiers/).
 
 ## Agents and avatars
@@ -141,6 +162,9 @@ The web chat needs it.
 | `memory` | boolean | `true` | `false` leaves the `memory` addon out: no memory tools and no memory prompt block. The table stays as it is. |
 | `ops.agent` | string | none | The name of the agent that investigates the process's own errors. Needs Discord. |
 | `ops.conversation` | string | none | Instead of an agent, the key `<surface>:<id>` of a conversation the errors are reported to. A chat surface must serve it, a plugin's claim that takes background turns must own it, and a plugin must contribute the `owner` background target (the agent server does, with Discord), or the host does not start; the web chat takes no error reports. Set one of `ops.agent` and `ops.conversation`. |
+| `drainSeconds` | integer from 1 to 3600 | `180` | How many seconds a shutdown waits for running turns before it stops them. Give the service manager a stop timeout a minute longer, such as systemd's `TimeoutStopSec`. |
+| `interimText` | `"on"` or `"off"` | `"on"` | Whether a turn posts the text it writes before its final answer as it goes. `"off"` posts only the final reply. |
+| `interimPrimaryChars` | integer from 1 to 100000 | `400` | An intermediate text this long or longer is posted as an ordinary message; shorter narration goes into one small progress message. |
 | `plugins` | list of plugin objects | `[]` | Your plugins. They start in the order listed, after the built-in ones. |
 
 With `ops.agent` set, each `error` and `fatal` log entry is reported to that agent as a message and a report turn in its channel; with `ops.conversation`, to that conversation, whose claim answers the report turn.

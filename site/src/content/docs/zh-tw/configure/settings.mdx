@@ -32,7 +32,15 @@ const env = (name: string): string => process.env[name] ?? "";
 
 export default {
 	name: "Roundtable",
-	owner: { id: env("OWNER_ID"), name: env("OWNER_NAME") },
+	access: {
+		owners: [
+			{
+				name: env("OWNER_NAME"),
+				principal: env("OWNER_ID"),
+				identities: [`discord:${env("OWNER_ID")}`],
+			},
+		],
+	},
 	discord: {
 		token: env("DISCORD_TOKEN"),
 		guild: env("DISCORD_GUILD_ID"),
@@ -54,9 +62,6 @@ export default {
 | 鍵 | 型別 | 預設值 | 作用 |
 | --- | --- | --- | --- |
 | `name` | string | `"Roundtable"` | bot 所顯示文字裡，助理的顯示名稱。 |
-| `owner.id` | string，必填 | 無 | 唯一一位 owner 的 id；使用 Discord 時是 owner 的 Discord 使用者 id。 |
-| `owner.name` | string，必填 | 無 | owner 的名字，提示詞和拒絕訊息會用它。 |
-| `owner.pronouns` | `"he"`、`"she"` 或 `"they"` | `"they"` | 提示詞回頭提到 owner 時使用的人稱。 |
 
 ## Discord
 
@@ -72,6 +77,14 @@ export default {
 | `discord.rootCommand` | string | 小寫的 `name`，其中每一段 `a-z`、`0-9`、`-` 以外的字元換成 `-` | 根斜線指令，不含斜線。見[斜線指令](/zh-tw/reference/slash-commands/)。 |
 | `discord.admin` | boolean | `true` | owner 的對話是否有 `discord_*` 管理工具。設成 `false` 會讓 `discord-admin` addon 不載入。 |
 | `discord.refusalHint` | string | 無 | 附加在根指令拒絕非 owner 時的訊息後面的文字，原樣加上。你的語言需要的空格或標點，要自己放進去。 |
+| `discord.agentMemory` | `"everyone"` 或 `"owners"` | `"everyone"` | `"owners"` 只讓 agent 頻道裡 owner 層級的回合有記憶區塊和記憶工具。 |
+| `discord.agentSpeakers` | `"everyone"` 或 `"owners"` | `"everyone"` | `"owners"` 只讓 owner 層級的 speaker 能在 agent 和群組頻道開始一輪；admin 或 member 在 Discord 獲准、而這項沒設時，`doctor` 會警告。 |
+| `discord.channelContext` | 物件，或 `false` | `{}` | 一輪會讀進多少被呼叫的訊息周圍的頻道內容：`fetch`（預設 50，最多 100）、`keep`（15）、`similarity`（0.8）、`messageChars`（500）、`botMessageChars`（80）、`foreignWebhook`（只能用程式碼設定）和 `attachments`（`{ images: 0, maxBytes: 10 MiB }`）。`false` 關閉。 |
+| `discord.freshMarker` | string，或 `false` | `─── new conversation ───` | 在伺服器頻道或討論串重新開始對話時，助理貼出的分隔線。`false` 不貼。 |
+| `discord.formatting` | string，或 `false` | Markdown 會轉成排版，表格除外 | 以英文告訴模型回覆在 Discord 裡怎麼呈現。`false` 不告訴模型任何事。 |
+| `discord.cardGraceSeconds` | 1 到 86400 的整數 | `120` | 一輪為了核准卡或 `ask_user` 卡片等多久，之後這一輪結束、卡片繼續開著。 |
+| `discord.cardCopies` | `{ keepDays?, keep? }`，或 `false` | 30 天、最新 100 張 | 核准卡「複製」按鈕背後的文字，在資料目錄的 `card-copies.json` 保留多久。`false` 只留在記憶體。 |
+| `discord.attachmentDownload` | `{ deadlineMs?, idleMs? }` | `60000` 與 `10000` | 一則訊息（連同它回覆的那則）的附件要在多久內下載完，以及單一檔案多久沒收到任何位元組就放棄。各為 1000 到 600000。 |
 | `adapters` | adapter 的清單 | 無 | host 使用的聊天管道，各由自己的工廠函式產生。Discord adapter 接受上面這些 `discord` 設定。以外掛形式提供的聊天管道（例如網頁聊天）仍放在 `plugins`。 |
 
 ## 儲存與檔案
@@ -82,6 +95,8 @@ export default {
 | `dataDir` | string，必填 | 無 | 行程存放檔案的位置，例如圖片、附件和技能。 |
 | `workDir` | string | `<dataDir>/work` | agent 共用的工作目錄。 |
 | `agentDir` | string | `<dataDir>/pi` | Pi 的 agent 目錄，放模型登入。見[模型](/zh-tw/configure/models/)。 |
+| `scratchDir` | string | `<作業系統暫存目錄>/<slug>-scratch`，slug 是 `discord.rootCommand`，沒有 Discord 時是小寫的 `name` | agent 的暫存目錄：它們的 shell 以 `TMPDIR` 指向這裡，在裡面寫入和刪除不需要核准。 |
+| `attachments.retention` | `{ maxAgeMs, sweepEveryMs? }` | 無 | 檔案被某一輪用過、滿 `maxAgeMs` 之後就移除，並在啟動時以及每隔 `sweepEveryMs`（預設一小時）清一次。沒設的話，用過的檔案跟著它的對話保留。 |
 
 ## 模型
 
@@ -93,6 +108,7 @@ export default {
 | `judge.threshold` | 0 到 1 的數字 | `0.6` | judge 要多有把握，它的答案才會被採用。 |
 | `delegation.model` | string | `model` 的值 | 執行委派任務的模型。 |
 | `delegation.thinking` | 跟 `thinking` 相同的等級 | `"medium"` | 委派任務的 thinking level。 |
+| `effortPolicy` | 從一輪映射到它的 effort 規則的函式 | 無 | 取代預設做法，決定由 judge 挑選 thinking 等級的每一輪怎麼判斷。只能用程式碼設定。 |
 
 每一項的說明見[模型](/zh-tw/configure/models/)。
 
@@ -109,13 +125,18 @@ export default {
 
 | 鍵 | 型別 | 預設值 | 作用 |
 | --- | --- | --- | --- |
-| `speakers.admins` | `{ users?, roles?, everyone? }` | 無 | 誰擁有 admin 層級。 |
-| `speakers.members` | `{ users?, roles?, everyone? }` | 無 | 誰擁有 member 層級。 |
+| `access.owners` | `{ name, pronouns?, principal?, identities? }` 的清單，必填 | 無 | 經營這個 host 的人。第一位是主要 owner，需要 `principal`（他的 principal id，用他的 Discord 使用者 id 即可）；使用 Discord 時還要有一個 `discord:<user id>` 身分。`pronouns` 是 `"he"`、`"she"` 或 `"they"`（預設 `"they"`），提示詞回頭提到 owner 時使用。 |
+| `access.admins`、`access.members` | `{ identities?, roles?, everyone? }` | 無 | 誰擁有這個層級。`identities` 是 `<provider>:<subject>` 字串，例如 `discord:<user id>`。`roles` 寫成 `<surface>:role:<name>`，例如 `discord:role:<role id>`。`everyone` 是 `true`（所有 surface），或 surface 的清單。 |
+| `access.provisioning` | `"admitted"`、`"linked"`，或依 surface 列出這兩者的物件 | `"admitted"` | `admitted`：規則放行的人在第一次說話時得到 principal。`linked`：只服務用 `roundtable principal link` 連結的身分，以及 owner 設定裡的身分。物件裡沒列的 surface 視為 `linked`。 |
+| `access.backgroundStaleDays` | 1 到 36500 的整數 | `30` | 層級只來自規則的人，最多可以多少天沒出現，超過後他的背景回合會被拒絕。 |
+| `access.selfLink.providers` | string 清單 | 無 | 允許人們透過外掛把自己的帳號連到自己 principal 的身分提供者，例如 `["discord"]`。 |
+| `owner`、`speakers` | 0.8 的寫法 | 無 | 已棄用：`owner: { id, name, pronouns? }` 和以 Discord 使用者與身分組 id 寫的 `speakers: { admins?, members? }`。它們仍可使用，但會印出警告，也不能和 `access` 同時出現；`roundtable upgrade` 會把它們改寫掉。 |
+| `background.perPrincipal` | `{ schedules?, delegations? }` | 無 | 每個人跨所有對話的上限：最多保留幾個排程（1 到 10000），以及同時執行幾個委派（1 到 1000）。沒設的話，只套用各對話自己的上限。 |
 | `toolTiers` | 以工具名稱為鍵、值為 `"owner"`、`"admin"` 或 `"member"` 的物件 | `{}` | 每個指定工具最低需要的層級。它會蓋過核心和外掛原本決定的層級。 |
 | `prompts.shared` | string，在 `prompts` 裡必填 | 套件附帶的提示詞 | 檔案路徑，這份檔案是每個 agent 提示詞的開頭。啟動時讀一次。 |
 | `prompts.guest` | string | 套件附帶的 guest prompt | 檔案路徑，對 owner 以外的說話者，這份檔案取代共用提示詞。 |
 
-沒有 `speakers` 設定時，只有 owner 能跟 agent 說話。
+沒有 `admins` 或 `members` 時，只有 owner 能跟 agent 說話。
 見[存取層級](/zh-tw/configure/access-tiers/)。
 
 ## agent 與頭像
@@ -141,6 +162,9 @@ export default {
 | `memory` | boolean | `true` | `false` 會讓 `memory` addon 不載入：沒有記憶工具，也沒有記憶的提示詞區塊。資料表維持原樣。 |
 | `ops.agent` | string | 無 | 負責調查行程自身錯誤的 agent 名稱。需要 Discord。 |
 | `ops.conversation` | string | 無 | 不交給 agent，而是回報到一段對話，寫它的 key `<surface>:<id>`。這段對話要有 chat surface 服務、要由一個接收背景回合的外掛 claim 擁有，還要有外掛提供 `owner` 背景目標（有 Discord 時由 agent server 提供），否則 host 不會啟動；網頁聊天不接收錯誤回報。`ops.agent` 和 `ops.conversation` 擇一設定。 |
+| `drainSeconds` | 1 到 3600 的整數 | `180` | 關機時，等執行中的回合多少秒才把它們停掉。給服務管理員（如 systemd 的 `TimeoutStopSec`）的停止逾時要多一分鐘。 |
+| `interimText` | `"on"` 或 `"off"` | `"on"` | 一輪是否邊做邊貼出它在最終答案之前寫的文字。`"off"` 只貼最終回覆。 |
+| `interimPrimaryChars` | 1 到 100000 的整數 | `400` | 中間文字達到這個長度就當作一般訊息貼出；較短的敘述放進一則小小的進度訊息。 |
 | `plugins` | 外掛物件的清單 | `[]` | 你的外掛。它們在內建外掛之後，依列出的順序啟動。 |
 
 設了 `ops.agent` 之後，每一筆 `error` 和 `fatal` 的 log 都會回報給那個 agent，成為它頻道裡的一則訊息和一輪回報；設了 `ops.conversation` 則回報到那段對話，由認領它的 claim 執行回報那一輪。
