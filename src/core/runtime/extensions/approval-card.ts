@@ -5,6 +5,7 @@ import { messages } from "../../i18n/index.ts";
 import type { ApprovalDetails } from "../../interactions/prompts.ts";
 import { fieldList, schemaFields } from "./approval-fields.ts";
 import { countPoints, firstPoints, prefix } from "./card-text.ts";
+import { isPlainObject } from "./held-calls.ts";
 
 /** The fewest characters of a long string value in a held call's input its approval card keeps, when the input does not fit whole. */
 const CARD_VALUE_CHARS = 200;
@@ -192,9 +193,4 @@ function fileSize(path: string, workspace: string | undefined) {
 	} catch {
 		return undefined;
 	}
-}
-
-// pi-lens-ignore: no-unknown-parameters — tool input is untyped model JSON; this is where it is read
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-	return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }

@@ -51,7 +51,9 @@ export function canonicalJson(value: unknown): string {
 }
 
 // pi-lens-ignore: no-unknown-parameters — tool input is untyped model JSON; this is where it is read
-function isPlainObject(value: unknown): value is Record<string, unknown> {
+export function isPlainObject(
+	value: unknown,
+): value is Record<string, unknown> {
 	return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 

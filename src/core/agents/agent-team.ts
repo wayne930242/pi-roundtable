@@ -7,7 +7,7 @@ import type { AgentTurnScope } from "../domain/ports.ts";
 import type { ThinkingSetting } from "../models.ts";
 import { SHELL_TOOLS } from "../modules/host-shell/shell-policy.ts";
 import type { ResolvedSkill } from "../modules/skills/skill-rules.ts";
-import type { AgentTeam } from "../services.ts";
+import type { AgentChange, AgentTeam } from "../services.ts";
 import type { TurnSelection } from "../sessions.ts";
 import { type Speaker, THE_SPEAKER } from "../speakers.ts";
 import { agentSystemPrompt } from "./agent-prompt.ts";
@@ -437,15 +437,7 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 	 * Changes an agent's display name, prompt, model, or thinking level; `default` returns the
 	 * model or thinking level to the assistant's. A model must be one the host runs.
 	 */
-	update(
-		name: string,
-		change: {
-			displayName?: string;
-			prompt?: string;
-			model?: string;
-			thinking?: string;
-		},
-	): Promise<string> {
+	update(name: string, change: AgentChange): Promise<string> {
 		return this.#editing.update(name, change);
 	}
 

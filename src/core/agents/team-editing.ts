@@ -7,6 +7,7 @@ import {
 } from "../../characters/index.ts";
 import { AgentError } from "../domain/errors.ts";
 import type { AgentTurnScope } from "../domain/ports.ts";
+import type { AgentChange } from "../services.ts";
 import { addressee } from "../speakers.ts";
 import { openingTaskText } from "./agent-prompt.ts";
 import { characterOf, overBase } from "./agent-rules.ts";
@@ -33,15 +34,7 @@ export class TeamEditing {
 	 * Changes an agent's display name, prompt, model, or thinking level; `default` returns the
 	 * model or thinking level to the assistant's. A model must be one the host runs.
 	 */
-	async update(
-		name: string,
-		change: {
-			displayName?: string;
-			prompt?: string;
-			model?: string;
-			thinking?: string;
-		},
-	): Promise<string> {
+	async update(name: string, change: AgentChange): Promise<string> {
 		const { store, logger } = this.#ctx.options;
 		if (Object.values(change).every((value) => value === undefined))
 			throw new AgentError(

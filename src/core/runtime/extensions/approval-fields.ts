@@ -1,5 +1,6 @@
 import { messages } from "../../i18n/index.ts";
 import { countPoints, firstPoints } from "./card-text.ts";
+import { isPlainObject } from "./held-calls.ts";
 
 /** The longest label a card shows for a field, in code points. */
 const LABEL_CHARS = 40;
@@ -27,11 +28,6 @@ export interface FieldLimits {
 	totalChars: number;
 }
 
-// pi-lens-ignore: no-unknown-parameters — a tool's parameter schema is untyped JSON
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
-
 /**
  * The arguments of a call in the order its tool's parameter schema lists them, each labelled by
  * its property's `title` or else its name; absent arguments are left out, and an argument the
@@ -43,7 +39,7 @@ export function schemaFields(
 	// pi-lens-ignore: no-unknown-parameters — a tool's parameter schema is untyped JSON
 	schema: unknown,
 ): CardField[] | undefined {
-	if (!input || !isRecord(schema) || !isRecord(schema.properties))
+	if (!input || !isPlainObject(schema) || !isPlainObject(schema.properties))
 		return undefined;
 	const properties = schema.properties;
 	const fields: CardField[] = [];
@@ -53,7 +49,7 @@ export function schemaFields(
 		const value = input[name];
 		if (value === undefined) continue;
 		const title =
-			isRecord(property) && typeof property.title === "string"
+			isPlainObject(property) && typeof property.title === "string"
 				? property.title.trim()
 				: "";
 		fields.push({ label: title || name, value });
