@@ -239,7 +239,11 @@ export function conversationTurns(
 
 /** The default post: the answer with its thinking line, or the failure or stopped notice. */
 function replyOf(result: TurnResult) {
-	if (!result.ok) return { chunks: [failureNotice(result)] };
+	if (!result.ok)
+		return {
+			chunks: [failureNotice(result)],
+			...(result.stopped ? {} : { failed: true as const }),
+		};
 	const thinking = result.thinking ? thinkingLine(result.thinking) : undefined;
 	return {
 		...(thinking ? { thinking } : {}),

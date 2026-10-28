@@ -86,4 +86,6 @@ export interface OutboundReply {
 	 * assistant. Discord posts agents through webhooks and ignores it.
 	 */
 	author?: PostAuthor;
+	/** Set only on the reply for a turn that ended in an error. A surface may show it; Discord ignores it. */
+	failed?: true;
 }

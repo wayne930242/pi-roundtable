@@ -426,6 +426,8 @@ describe("conversation turns", () => {
 		expect(events.at(-1)).toMatchObject({ result: "failed" });
 		expect(log.at(-2)).toContain("reply fake:room");
 		expect(log.at(-2)).toContain("this reply did not go through");
+		// The reply for a turn that ended in an error carries `failed`.
+		expect(log.at(-2)).toContain('"failed":true');
 		// The controls are hidden and typing stops even though the turn failed.
 		expect(log).toContain("stop done fake:room");
 		expect(log.at(-1)).toBe("typing done fake:room");

@@ -283,6 +283,7 @@ export class TeamTurns {
 				...(thinking ? { thinking } : {}),
 				chunks: result.ok ? splitReply(result.text) : [failureNotice(result)],
 				...(result.ok && result.files?.length ? { files: result.files } : {}),
+				...(!result.ok && !result.stopped ? { failed: true as const } : {}),
 			});
 		} catch (error) {
 			logger.error({ agent: agent.name, err: error }, "agent reply not posted");
@@ -382,6 +383,7 @@ export class TeamTurns {
 			chunks: string[];
 			files?: ReplyFile[];
 			threadId?: string;
+			failed?: true;
 		},
 	): Promise<void> {
 		const { store, channels, studio, surfaces, logger } = this.#options;
@@ -395,7 +397,7 @@ export class TeamTurns {
 		if (discordIdOf(channel) === undefined) {
 			if (!surfaces)
 				throw new AgentError(`no surface serves the room ${channel}`);
-			const { thinking, chunks, files, threadId } = body;
+			const { thinking, chunks, files, threadId, failed } = body;
 			// A thread of the room's surface is a channel of that surface, and speaks there.
 			return surfaces.sendReply(
 				threadId === undefined
@@ -406,14 +408,17 @@ export class TeamTurns {
 					chunks,
 					...(files?.length ? { files } : {}),
 					author: this.#author(as),
+					...(failed ? { failed } : {}),
 				},
 			);
 		}
 		if (!channels) throw new AgentError(`no Discord channels serve ${channel}`);
+		// Discord ignores `failed`.
+		const { failed: _failed, ...post } = body;
 		return channels.post(channelIdOf(channel), {
 			name: as.displayName,
 			avatarUrl: studio.url(as.avatarHash),
-			...body,
+			...post,
 		});
 	}
 
