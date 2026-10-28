@@ -1,5 +1,7 @@
 import type {
 	ActivityPhase,
+	CardAnswer,
+	ClosedCard,
 	PromptFrame,
 	PromptOutcome,
 	RefusalCode,
@@ -20,7 +22,7 @@ const PROGRESS_TEXT_CHARS = 6000;
 const PROGRESS_TOOLS = 20;
 /** The page of history fetched at a time, and the most a room the page does not show keeps. */
 export const ROOM_PAGE = 50;
-/** The most ended cards kept as records, across all rooms. */
+/** The most ended cards kept for a room whose messages the page holds none of; the history brings the rest. */
 const KEPT_RESOLVED_CARDS = 30;
 
 export interface ToolChip {
@@ -55,6 +57,12 @@ export interface CardState {
 	after: number;
 	outcome?: PromptOutcome;
 	note?: string;
+	/** Who answered the card, by display name. */
+	by?: string;
+	/** What was answered, for the question cards. */
+	answer?: CardAnswer;
+	/** When it ended (ISO 8601, the server's clock). */
+	closedAt?: string;
 	/** How many answers to this card the server refused; a card offers its buttons again when it moves. */
 	refused?: number;
 }
@@ -126,6 +134,8 @@ export type LocalAction =
 			more: boolean;
 			/** A page of older messages, to go before the ones shown. */
 			older: boolean;
+			/** The cards of the room that ended within the page's span, which stand among its messages. */
+			cards?: ClosedCard[];
 	  }
 	| { type: "focused"; room: string | undefined }
 	| {
@@ -224,11 +234,26 @@ function trimmed(room: RoomState): RoomState {
 	return { ...room, messages: room.messages.slice(-ROOM_PAGE), more: true };
 }
 
+/**
+ * The state without the ended cards the page need not hold: those of a room whose older messages
+ * it left out and that opened before the first one it keeps (the history brings them back with
+ * those messages), and all but the newest few of a room it holds no message of.
+ */
 function resolvedPruned(state: RoomsState): RoomsState {
-	const resolved = state.cardOrder.filter((id) => state.cards[id]?.outcome);
-	const drop = new Set(
-		resolved.slice(0, resolved.length - KEPT_RESOLVED_CARDS),
-	);
+	const drop = new Set<string>();
+	const without = new Map<string, string[]>();
+	for (const id of state.cardOrder) {
+		const card = state.cards[id];
+		if (!card?.outcome) continue;
+		const room = state.rooms[card.room];
+		const first = room?.messages[0];
+		if (first) {
+			if (room.more && opensBefore(card, first)) drop.add(id);
+		} else without.set(card.room, [...(without.get(card.room) ?? []), id]);
+	}
+	for (const ids of without.values())
+		for (const id of ids.slice(0, ids.length - KEPT_RESOLVED_CARDS))
+			drop.add(id);
 	if (drop.size === 0) return state;
 	return {
 		...state,
@@ -237,6 +262,43 @@ function resolvedPruned(state: RoomsState): RoomsState {
 			Object.entries(state.cards).filter(([id]) => !drop.has(id)),
 		),
 	};
+}
+
+/** The state with the cards the history brought, each in place by the time it opened and as it ended. */
+function withClosedCards(
+	state: RoomsState,
+	room: string,
+	closed: readonly ClosedCard[],
+): RoomsState {
+	if (closed.length === 0) return state;
+	const held = state.rooms[room]?.messages ?? [];
+	const cards = { ...state.cards };
+	const order = [...state.cardOrder];
+	for (const one of closed) {
+		const id = one.frame.id;
+		const opened = Date.parse(one.frame.at ?? "");
+		const known = cards[id];
+		cards[id] = {
+			room: one.room,
+			frame: one.frame,
+			after: known
+				? known.after
+				: (held.findLast((m) => Date.parse(m.at) <= opened)?.id ?? 0),
+			outcome: one.outcome,
+			...(one.note ? { note: one.note } : {}),
+			...(one.by ? { by: one.by } : {}),
+			...(one.answer ? { answer: one.answer } : {}),
+			closedAt: one.closedAt,
+		};
+		if (known) continue;
+		const at = order.findIndex((other) => {
+			const time = Date.parse(cards[other]?.frame.at ?? "");
+			return !Number.isNaN(opened) && time > opened;
+		});
+		if (at < 0) order.push(id);
+		else order.splice(at, 0, id);
+	}
+	return { ...state, cards, cardOrder: order };
 }
 
 function onProgress(
@@ -303,7 +365,7 @@ function onMessage(
 	message: RoomMessage,
 	accepted?: string,
 ): RoomsState {
-	return withRoom(state, roomKey, (room) => {
+	const updated = withRoom(state, roomKey, (room) => {
 		const pending = accepted
 			? room.pending.filter((one) => one.id !== accepted)
 			: room.pending;
@@ -327,6 +389,8 @@ function onMessage(
 		};
 		return state.focus === roomKey ? next : trimmed(next);
 	});
+	// A room the page left trimmed gives up the cards that stood before what it kept.
+	return state.focus === roomKey ? updated : resolvedPruned(updated);
 }
 
 function onHistory(
@@ -510,6 +574,9 @@ export function reduce(state: RoomsState, action: Action): RoomsState {
 						...card,
 						outcome: action.outcome,
 						...(action.note ? { note: action.note } : {}),
+						...(action.by ? { by: action.by } : {}),
+						...(action.answer ? { answer: action.answer } : {}),
+						...(action.closedAt ? { closedAt: action.closedAt } : {}),
 					},
 				},
 			});
@@ -531,7 +598,13 @@ export function reduce(state: RoomsState, action: Action): RoomsState {
 		case "rooms_loaded":
 			return onRooms(state, action.rooms);
 		case "history_loaded":
-			return onHistory(state, action);
+			return resolvedPruned(
+				withClosedCards(
+					onHistory(state, action),
+					action.room,
+					action.cards ?? [],
+				),
+			);
 		case "focused": {
 			const left = state.focus;
 			const rooms = { ...state.rooms };
@@ -548,7 +621,7 @@ export function reduce(state: RoomsState, action: Action): RoomsState {
 				} = rooms[action.room] as RoomState;
 				rooms[action.room] = { ...kept, progress: NO_PROGRESS };
 			}
-			return { ...state, focus: action.room, rooms };
+			return resolvedPruned({ ...state, focus: action.room, rooms });
 		}
 		case "queued":
 			return withRoom(state, action.room, (room) => ({

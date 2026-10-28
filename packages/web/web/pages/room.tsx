@@ -138,6 +138,7 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 					room: roomKey,
 					messages: page.messages,
 					more: page.more,
+					cards: page.cards,
 					older: false,
 				});
 				setError(undefined);
@@ -195,6 +196,7 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 				room: roomKey,
 				messages: page.messages,
 				more: page.more,
+				cards: page.cards,
 				older: true,
 			});
 		} catch (failure) {
@@ -386,7 +388,10 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 								case "card":
 									return (
 										<li key={`c${row.item.id}`} className="slot" data-enter>
-											<PromptCard card={row.item.card} />
+											<PromptCard
+												card={row.item.card}
+												timeZone={config.timeZone}
+											/>
 										</li>
 									);
 								case "pending":

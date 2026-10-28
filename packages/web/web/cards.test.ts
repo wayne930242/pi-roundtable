@@ -36,7 +36,12 @@ const card = (
 });
 
 const render = (state: CardState) =>
-	renderToStaticMarkup(createElement(PromptCard, { card: state }));
+	renderToStaticMarkup(
+		createElement(PromptCard, {
+			timeZone: "UTC",
+			card: state,
+		}),
+	);
 
 test("an approval card shows its text, its details and a button for each answer", () => {
 	const html = render(
@@ -333,7 +338,12 @@ test("under Camelot an approved approval card keeps a wax seal in the room agent
 	const kit = await loadKit();
 	await onPage("camelot", async (page) => {
 		const approved = card(approval, { outcome: "approved" });
-		await page.render(createElement(PromptCard, { card: approved }));
+		await page.render(
+			createElement(PromptCard, {
+				timeZone: "UTC",
+				card: approved,
+			}),
+		);
 		const seal = page.container.querySelector<HTMLElement>(".wax-seal");
 		expect(seal).not.toBeNull();
 		expect(seal?.style.getPropertyValue("--agent-accent")).toBe(
@@ -341,7 +351,10 @@ test("under Camelot an approved approval card keeps a wax seal in the room agent
 		);
 		// It stays on the closed card: the card is ended and still carries it after another render.
 		await page.render(
-			createElement(PromptCard, { card: { ...approved, note: "ok" } }),
+			createElement(PromptCard, {
+				timeZone: "UTC",
+				card: { ...approved, note: "ok" },
+			}),
 		);
 		expect(page.container.querySelectorAll(".wax-seal")).toHaveLength(1);
 		// A card that is open, declined or not an approval gets none.
@@ -361,13 +374,19 @@ test("under Camelot an approved approval card keeps a wax seal in the room agent
 				{ outcome: "answered" },
 			),
 		]) {
-			await page.render(createElement(PromptCard, { card: other }));
+			await page.render(
+				createElement(PromptCard, {
+					timeZone: "UTC",
+					card: other,
+				}),
+			);
 			expect(page.container.querySelector(".wax-seal")).toBeNull();
 		}
 	});
 	await onPage("modern", async (page) => {
 		await page.render(
 			createElement(PromptCard, {
+				timeZone: "UTC",
 				card: card(approval, { outcome: "approved" }),
 			}),
 		);
@@ -412,8 +431,12 @@ const withMotion = async (
 test("the wax seal stamps in when its card turns approved on the page, and under reduced motion it has none", async () => {
 	await onPage("camelot", async (page) => {
 		const style = camelotCss();
-		const pending = createElement(PromptCard, { card: card(approval) });
+		const pending = createElement(PromptCard, {
+			timeZone: "UTC",
+			card: card(approval),
+		});
 		const approved = createElement(PromptCard, {
+			timeZone: "UTC",
 			card: card(approval, { outcome: "approved" }),
 		});
 		// The card is open, then the owner approves it while the page shows it.
@@ -423,6 +446,7 @@ test("the wax seal stamps in when its card turns approved on the page, and under
 		// A later render of the same card does not stamp it again: the element stays as it is.
 		await page.render(
 			createElement(PromptCard, {
+				timeZone: "UTC",
 				card: card(approval, { outcome: "approved", note: "ok" }),
 			}),
 		);
@@ -442,6 +466,7 @@ test("a card that is already approved when its room shows it keeps a still seal:
 	await onPage("camelot", async (page) => {
 		const style = camelotCss();
 		const approved = createElement(PromptCard, {
+			timeZone: "UTC",
 			card: card(approval, { outcome: "approved" }),
 		});
 		await page.render(approved);
@@ -452,7 +477,12 @@ test("a card that is already approved when its room shows it keeps a still seal:
 		expect(sealAnimation(page)).not.toBe("seal-stamp");
 		// Even a card that did stamp on this page is still when it mounts anew.
 		await page.render(null);
-		await page.render(createElement(PromptCard, { card: card(approval) }));
+		await page.render(
+			createElement(PromptCard, {
+				timeZone: "UTC",
+				card: card(approval),
+			}),
+		);
 		await page.render(approved);
 		expect(sealAnimation(page)).toBe("seal-stamp");
 		await page.render(null);
@@ -488,4 +518,81 @@ test("an approved card keeps no empty band for the seal: the seal hangs on the c
 	expect(Number(out?.[1]) + Number(inside?.[1])).toBeGreaterThanOrEqual(
 		Number(size?.[1]) * 0.5,
 	);
+});
+
+test("a card the history brought back shows who ended it and when, and keeps its seal still", async () => {
+	await onPage("camelot", async (page) => {
+		const style = camelotCss();
+		await page.render(
+			createElement(PromptCard, {
+				timeZone: "UTC",
+				card: card(approval, {
+					outcome: "approved",
+					by: "Ada",
+					closedAt: "2026-10-28T09:05:00.000Z",
+				}),
+			}),
+		);
+		// The page mounted it already approved, so the seal is there and does not stamp.
+		expect(page.container.querySelector(".wax-seal")).not.toBeNull();
+		expect(
+			page.container.querySelector(".wax-seal")?.hasAttribute("data-stamp"),
+		).toBe(false);
+		expect(sealAnimation(page)).not.toBe("seal-stamp");
+		expect(page.container.querySelector(".prompt-meta")?.textContent).toBe(
+			"Ada · 28 Oct at 09:05",
+		);
+		style.remove();
+	});
+});
+
+test("an answered question shows the answer the server kept, who gave it and when", () => {
+	const ask: PromptFrame = {
+		id: "q-kept",
+		kind: "ask",
+		title: "Which?",
+		question: "Which colour?",
+		options: [{ label: "red" }],
+		multi: false,
+		allowOther: true,
+	};
+	const html = render(
+		card(ask, {
+			outcome: "answered",
+			by: "Mel",
+			closedAt: "2026-10-28T09:05:00.000Z",
+			answer: { kind: "ask", answer: { choices: ["red"], text: "a dark one" } },
+		}),
+	);
+	expect(html).toContain("red, a dark one");
+	expect(html).toContain("Mel · 28 Oct at 09:05");
+	const questionnaire: PromptFrame = {
+		id: "qq-kept",
+		kind: "questionnaire",
+		title: "A few",
+		questions: [
+			{
+				question: "a?",
+				options: [{ label: "x" }],
+				multi: false,
+				allowOther: false,
+			},
+			{ question: "b?", options: [], multi: false, allowOther: true },
+		],
+	};
+	const several = render(
+		card(questionnaire, {
+			outcome: "answered",
+			answer: {
+				kind: "questionnaire",
+				answers: [{ choices: ["x"] }, null],
+				note: "thanks",
+			},
+		}),
+	);
+	expect(several).toContain("<li>x</li>");
+	expect(several).toContain("<li>—</li>");
+	expect(several).toContain("<li>thanks</li>");
+	// An open card shows no such line.
+	expect(render(card(ask))).not.toContain("prompt-meta");
 });

@@ -8,6 +8,7 @@ import type {
 	PromptQuestion,
 } from "../../src/api-types.ts";
 import { useRoomAccent } from "../lib/characters.ts";
+import { when } from "../lib/format.ts";
 import { useLook } from "../lib/look.ts";
 import { translate as t } from "../lib/messages.ts";
 import type { CardState } from "../lib/rooms.ts";
@@ -115,6 +116,7 @@ function WaxSeal({ room, stamp }: { room: string; stamp: boolean }) {
 
 function Shell(props: {
 	card: CardState;
+	timeZone: string;
 	tone: "action" | "timeout" | "ask";
 	icon: "shield" | "timer" | "sparkle";
 	title: string;
@@ -122,6 +124,11 @@ function Shell(props: {
 }) {
 	const { card } = props;
 	const late = "late" in card.frame && card.frame.late;
+	const { timeZone } = props;
+	const ended = [
+		card.by,
+		card.closedAt ? when(card.closedAt, timeZone) : undefined,
+	].filter(Boolean);
 	const sealed =
 		useLook() === "camelot" &&
 		card.frame.kind === "approval" &&
@@ -157,6 +164,9 @@ function Shell(props: {
 					</span>
 				) : null}
 			</header>
+			{card.outcome && ended.length > 0 ? (
+				<p className="prompt-meta">{ended.join(" · ")}</p>
+			) : null}
 			{props.children}
 			{sealed ? (
 				<WaxSeal room={card.room} stamp={!approvedOnMount.current} />
@@ -167,9 +177,11 @@ function Shell(props: {
 
 function ApprovalCard({
 	card,
+	timeZone,
 	frame,
 }: {
 	card: CardState;
+	timeZone: string;
 	frame: Extract<PromptFrame, { kind: "approval" }>;
 }) {
 	const { sent, send } = useAnswering(card);
@@ -180,6 +192,7 @@ function ApprovalCard({
 	return (
 		<Shell
 			card={card}
+			timeZone={timeZone}
 			tone={timeout ? "timeout" : "action"}
 			icon={timeout ? "timer" : "shield"}
 			title={frame.title}
@@ -426,9 +439,11 @@ function Field(props: {
 
 function AskCard({
 	card,
+	timeZone,
 	frame,
 }: {
 	card: CardState;
+	timeZone: string;
 	frame: Extract<PromptFrame, { kind: "ask" }>;
 }) {
 	const { sent, send } = useAnswering(card);
@@ -441,8 +456,16 @@ function AskCard({
 		allowOther: frame.allowOther,
 	};
 	const answer = answerOf(question, pick);
+	// What the server kept of the answer, which a reloaded page has; the page's own is shown before it arrives.
+	const shown = card.answer?.kind === "ask" ? card.answer.answer : given;
 	return (
-		<Shell card={card} tone="ask" icon="sparkle" title={frame.title}>
+		<Shell
+			card={card}
+			timeZone={timeZone}
+			tone="ask"
+			icon="sparkle"
+			title={frame.title}
+		>
 			<Collapse open={!card.outcome}>
 				<Field
 					name={frame.id}
@@ -472,8 +495,8 @@ function AskCard({
 					</button>
 				</div>
 			</Collapse>
-			{card.outcome === "answered" && given ? (
-				<p className="prompt-answer">{describeAnswer(given)}</p>
+			{card.outcome === "answered" && shown ? (
+				<p className="prompt-answer">{describeAnswer(shown)}</p>
 			) : null}
 		</Shell>
 	);
@@ -481,9 +504,11 @@ function AskCard({
 
 function QuestionnaireCard({
 	card,
+	timeZone,
 	frame,
 }: {
 	card: CardState;
+	timeZone: string;
 	frame: Extract<PromptFrame, { kind: "questionnaire" }>;
 }) {
 	const { sent, send } = useAnswering(card);
@@ -495,8 +520,22 @@ function QuestionnaireCard({
 	const answers = frame.questions.map((question, index) =>
 		answerOf(question, picks[index] ?? NO_PICK),
 	);
+	// What the server kept of the answers, which a reloaded page has; the page's own are shown before they arrive.
+	const kept = card.answer?.kind === "questionnaire" ? card.answer : undefined;
+	const lines = kept
+		? [
+				...kept.answers.map((one) => (one ? describeAnswer(one) : "—")),
+				...(kept.note ? [kept.note] : []),
+			]
+		: given;
 	return (
-		<Shell card={card} tone="ask" icon="sparkle" title={frame.title}>
+		<Shell
+			card={card}
+			timeZone={timeZone}
+			tone="ask"
+			icon="sparkle"
+			title={frame.title}
+		>
 			<Collapse open={!card.outcome}>
 				{frame.questions.map((question, index) => (
 					<Field
@@ -554,9 +593,9 @@ function QuestionnaireCard({
 					</button>
 				</div>
 			</Collapse>
-			{card.outcome === "answered" && given ? (
+			{card.outcome === "answered" && lines ? (
 				<ul className="prompt-answer">
-					{given.map((line, index) => (
+					{lines.map((line, index) => (
 						// biome-ignore lint/suspicious/noArrayIndexKey: the lines follow the card's fixed questions
 						<li key={index}>{line}</li>
 					))}
@@ -569,16 +608,21 @@ function QuestionnaireCard({
 /** One card of a room: open, waiting for the person, or ended and kept as a record. */
 export const PromptCard = memo(function PromptCard({
 	card,
+	timeZone,
 }: {
 	card: CardState;
+	/** The zone the time it ended is shown in. */
+	timeZone: string;
 }) {
 	const { frame } = card;
 	switch (frame.kind) {
 		case "approval":
-			return <ApprovalCard card={card} frame={frame} />;
+			return <ApprovalCard card={card} timeZone={timeZone} frame={frame} />;
 		case "ask":
-			return <AskCard card={card} frame={frame} />;
+			return <AskCard card={card} timeZone={timeZone} frame={frame} />;
 		case "questionnaire":
-			return <QuestionnaireCard card={card} frame={frame} />;
+			return (
+				<QuestionnaireCard card={card} timeZone={timeZone} frame={frame} />
+			);
 	}
 });

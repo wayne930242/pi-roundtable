@@ -20,6 +20,7 @@ import { PushSender } from "../push/sender.ts";
 import { PushSubscriptions } from "../push/subscriptions.ts";
 import { PushService } from "../push/triggers.ts";
 import type { Vapid } from "../push/vapid.ts";
+import { CardLog } from "./card-log.ts";
 import { OwnerDesk } from "./desk.ts";
 import { FileDir } from "./files.ts";
 import { Presence } from "./presence.ts";
@@ -48,6 +49,7 @@ function pathParts(path: string): string[] | undefined {
 /** The tables the app keeps; the plugin lists them as its own migrations. */
 export const APP_MIGRATIONS: readonly Migration[] = [
 	RoomLog.migration,
+	CardLog.migration,
 	WebThreads.migration,
 	PushSubscriptions.migration,
 ];
@@ -121,6 +123,7 @@ export class OwnerApp {
 		const { agents, modes, identity, logger } = options;
 		const sockets = new Sockets(logger);
 		const log = new RoomLog(options.database);
+		const cards = new CardLog(options.database);
 		const stored = new FileDir(join(options.dataDir, "web", "files"));
 		const waiting = new FileDir(join(options.dataDir, "web", "uploads"));
 		const uploads = new Uploads(waiting, stored, {
@@ -156,6 +159,7 @@ export class OwnerApp {
 		const desk = new OwnerDesk({
 			broadcast: (frame) => sockets.broadcast(frame),
 			graceMs: options.cardGraceSeconds * 1000,
+			closed: (card) => cards.record(card),
 			opened: (room, frame) => {
 				const cap =
 					frame.kind === "approval" &&
@@ -248,6 +252,7 @@ export class OwnerApp {
 			surface,
 			rooms,
 			log,
+			cards,
 			uploads,
 			files: stored,
 			modes,

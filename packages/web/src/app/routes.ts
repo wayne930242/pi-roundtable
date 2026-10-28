@@ -29,6 +29,7 @@ import type {
 } from "../api-types.ts";
 import type { Authenticated } from "../auth/authenticator.ts";
 import { json } from "../http.ts";
+import type { CardLog } from "./card-log.ts";
 import { type FileDir, fileResponse, isFileId } from "./files.ts";
 import { PAGE_LIMIT, type RoomLog } from "./room-log.ts";
 import type { Rooms } from "./rooms.ts";
@@ -44,6 +45,7 @@ export interface AppApiOptions {
 	surface: AppSurface;
 	rooms: Rooms;
 	log: RoomLog;
+	cards: CardLog;
 	uploads: Uploads;
 	/** Where stored files are read from. */
 	files: FileDir;
@@ -260,7 +262,7 @@ export class AppApi {
 	): Promise<Response> {
 		const { method } = request;
 		const [, , key, action] = parts;
-		const { rooms, log, modes, conversations } = this.#options;
+		const { rooms, log, cards, modes, conversations } = this.#options;
 		if (!key) {
 			if (method !== "GET") throw new HttpError(405, "Method not allowed.");
 			return json({ rooms: await rooms.list() } satisfies RoomsView);
@@ -279,9 +281,17 @@ export class AppApi {
 				count < 1
 			)
 				throw bad("before and limit must be whole numbers.");
-			return json(
-				(await log.page(room.key, beforeId, count)) satisfies MessagesView,
-			);
+			const page = await log.page(room.key, beforeId, count);
+			// The cards stand among the messages by the time they opened; a page that has older
+			// messages leaves the cards before its first one to the older page.
+			const first = page.messages[0];
+			return json({
+				...page,
+				cards: await cards.during(room.key, {
+					...(page.more && first ? { from: first.at } : {}),
+					...(beforeId === undefined ? {} : { before: beforeId }),
+				}),
+			} satisfies MessagesView);
 		}
 		if (action === "mode" && method === "PUT" && parts.length === 4) {
 			// Only an agent's or group's room has modes; a thread runs no turn of the owner's.

@@ -18,6 +18,8 @@ import {
 	withdrawalNote,
 } from "pi-roundtable";
 import type {
+	CardAnswer,
+	ClosedCard,
 	PromptAnswer,
 	PromptFrame,
 	PromptOutcome,
@@ -64,6 +66,11 @@ export interface OwnerDeskOptions {
 	 * rejection is logged.
 	 */
 	resume(room: ChannelKey, by: Answerer, text: string): void | Promise<void>;
+	/**
+	 * Keeps a card that ended, for the room's history; called once per card, as it closes. A throw
+	 * or a rejection is logged and never reaches the turn.
+	 */
+	closed?(card: ClosedCard): void | Promise<void>;
 	/** Hears of a card when it opens, once; the late re-send of a card does not call it again. Never throws into the turn. */
 	opened?(room: ChannelKey, frame: PromptFrame): void;
 	/** Display names of principals, for a card that names who may approve it. */
@@ -116,6 +123,18 @@ const outcomeOf = (ended: Ended): PromptOutcome => {
 		return ended.approved ? "approved" : "declined";
 	return ended.type === "cancel" ? "declined" : "answered";
 };
+
+/** What a question card was answered, in the shape the history keeps. */
+function answerOf(ended: Ended): CardAnswer | undefined {
+	if (ended.type === "answer") return { kind: "ask", answer: ended.answer };
+	if (ended.type === "answers")
+		return {
+			kind: "questionnaire",
+			answers: ended.answer.answers.map((one) => one ?? null),
+			...(ended.answer.note ? { note: ended.answer.note } : {}),
+		};
+	return undefined;
+}
 
 /**
  * The cards open in the app's rooms: approvals of held actions and questions the turn asks. Every
@@ -407,7 +426,7 @@ export class OwnerDesk {
 					const answeredLate = late;
 					if (!answeredLate && ended.type === "approval" && ended.approved)
 						card.approved?.(by, id);
-					close(outcomeOf(ended));
+					close(outcomeOf(ended), undefined, by, answerOf(ended));
 					if (!answeredLate) {
 						resolve(card.valueOf(ended));
 						return;
@@ -424,18 +443,27 @@ export class OwnerDesk {
 					}
 				},
 			};
-			const close = (outcome: PromptOutcome, note?: string) => {
+			const close = (
+				outcome: PromptOutcome,
+				note?: string,
+				by?: Answerer,
+				answer?: CardAnswer,
+			) => {
 				if (!this.#open.delete(id)) return;
 				clearTimeout(grace);
 				clearTimeout(ttl);
 				signal?.removeEventListener("abort", onAbort);
 				supersede?.removeEventListener("abort", onWithdraw);
-				broadcast({
-					type: "prompt_closed",
-					prompt: id,
+				const closedAt = new Date().toISOString();
+				const ended = {
 					outcome,
 					...(note ? { note } : {}),
-				});
+					...(by ? { by: by.name } : {}),
+					...(answer ? { answer } : {}),
+				};
+				// Kept before the sockets are told, so a page that reloads on the news finds it.
+				this.#keep({ room, frame: open.frame, ...ended, closedAt });
+				broadcast({ type: "prompt_closed", prompt: id, ...ended, closedAt });
 			};
 			const onAbort = () => {
 				if (!this.#open.has(id)) return;
@@ -473,6 +501,18 @@ export class OwnerDesk {
 				logger.warn({ room, err: error }, "a card's listener failed");
 			}
 		});
+	}
+
+	#keep(card: ClosedCard): void {
+		const { closed, logger } = this.#options;
+		if (!closed) return;
+		const failed = (error: unknown) =>
+			logger.warn({ room: card.room, err: error }, "a card was not kept");
+		try {
+			Promise.resolve(closed(card)).catch(failed);
+		} catch (error) {
+			failed(error);
+		}
 	}
 
 	/** Closes every open card as cancelled and clears their timers, when the app stops. */

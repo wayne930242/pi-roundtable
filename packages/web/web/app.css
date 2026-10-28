@@ -1111,6 +1111,12 @@
 	color: var(--danger);
 }
 
+.prompt-meta {
+	margin: 0;
+	color: var(--muted);
+	font-size: var(--text-xs);
+}
+
 .collapse {
 	display: grid;
 	grid-template-rows: 0fr;

@@ -5,7 +5,7 @@ import {
 	SYSTEM_PRINCIPAL,
 } from "pi-roundtable";
 import { silentLogger } from "pi-roundtable/testing";
-import type { ServerFrame } from "../api-types.ts";
+import type { ClosedCard, ServerFrame } from "../api-types.ts";
 import { type Answerer, OwnerDesk } from "./desk.ts";
 
 const ROOM = "app:agent.guide" as ChannelKey;
@@ -26,8 +26,12 @@ const SCOPE: PromptScope = {
 function desk(options: { graceMs?: number; ttlMs?: number } = {}) {
 	const frames: ServerFrame[] = [];
 	const resumed: string[] = [];
+	const kept: ClosedCard[] = [];
 	const instance = new OwnerDesk({
 		broadcast: (frame) => frames.push(frame),
+		closed: (card) => {
+			kept.push(card);
+		},
 		graceMs: options.graceMs ?? 10_000,
 		...(options.ttlMs ? { ttlMs: options.ttlMs } : {}),
 		resume: (_room, by, text) => {
@@ -41,7 +45,7 @@ function desk(options: { graceMs?: number; ttlMs?: number } = {}) {
 		if (shown?.type !== "prompt") throw new Error("no card was shown");
 		return shown.prompt.id;
 	};
-	return { instance, frames, resumed, promptId };
+	return { instance, frames, resumed, promptId, kept };
 }
 
 const tick = () => Bun.sleep(5);
@@ -300,5 +304,165 @@ describe("when a card opened", () => {
 		expect(again.prompt).toMatchObject({ id: promptId(), late: true });
 		expect(again.prompt.at).toBe(shown.prompt.at);
 		expect(instance.isLate(promptId())).toBe(true);
+	});
+});
+
+describe("the cards kept when they end", () => {
+	test("an approval is kept with its outcome, who answered and when", async () => {
+		const before = Date.now();
+		const { instance, promptId, kept, frames } = desk();
+		const result = instance
+			.prompts(ROOM, SCOPE)
+			.confirm("Send?", "the note", undefined, "owner", undefined, {
+				action: "send",
+				tool: "note_send",
+				input: { to: "team" },
+			});
+		await tick();
+		const id = promptId();
+		instance.approve(BEA, id, true);
+		expect(await result).toBe("approved");
+		expect(kept).toHaveLength(1);
+		expect(kept[0]).toMatchObject({
+			room: ROOM,
+			outcome: "approved",
+			by: "Bea",
+			frame: {
+				id,
+				kind: "approval",
+				title: "Send?",
+				approval: { tool: "note_send" },
+			},
+		});
+		expect(kept[0]).not.toHaveProperty("answer");
+		expect(Date.parse(kept[0]?.closedAt ?? "")).toBeGreaterThanOrEqual(before);
+		// The closing frame says the same, so a page that watched it live shows what a reload does.
+		expect(frames.at(-1)).toEqual({
+			type: "prompt_closed",
+			prompt: id,
+			outcome: "approved",
+			by: "Bea",
+			closedAt: kept[0]?.closedAt,
+		});
+	});
+
+	test("a declined approval and a cancelled question are kept as declined", async () => {
+		const { instance, promptId, kept } = desk();
+		const prompts = instance.prompts(ROOM, SCOPE);
+		const approval = prompts.confirm("t", "m");
+		await tick();
+		instance.approve(ADA, promptId(), false);
+		await approval;
+		expect(kept.at(-1)).toMatchObject({ outcome: "declined", by: "Ada" });
+	});
+
+	test("a question keeps the answer given, text included", async () => {
+		const { instance, promptId, kept } = desk();
+		const result = instance.prompts(ROOM, SCOPE).ask("t", {
+			question: "q",
+			options: [{ label: "x" }],
+			multi: false,
+			allowOther: true,
+		});
+		await tick();
+		instance.answer(ADA, promptId(), { choices: ["x"], text: " why " });
+		await result;
+		expect(kept[0]).toMatchObject({
+			outcome: "answered",
+			by: "Ada",
+			answer: { kind: "ask", answer: { choices: ["x"], text: "why" } },
+		});
+	});
+
+	test("a questionnaire keeps each answer, a blank one as null, and the note", async () => {
+		const { instance, promptId, kept } = desk();
+		const result = instance.prompts(ROOM, SCOPE).questionnaire?.("t", {
+			questions: [
+				{
+					question: "a?",
+					options: [{ label: "x" }],
+					multi: false,
+					allowOther: false,
+				},
+				{ question: "b?", options: [], multi: false, allowOther: true },
+			],
+		});
+		await tick();
+		instance.answers(ADA, promptId(), [{ choices: ["x"] }, null], " note ");
+		await result;
+		expect(kept[0]).toMatchObject({
+			outcome: "answered",
+			answer: {
+				kind: "questionnaire",
+				answers: [{ choices: ["x"] }, null],
+				note: "note",
+			},
+		});
+	});
+
+	test("a card nobody answered names no one: cancelled, expired, withdrawn with its reason", async () => {
+		const { instance, kept } = desk({ ttlMs: 40 });
+		const stop = new AbortController();
+		const stopped = instance
+			.prompts(ROOM, SCOPE)
+			.confirm("a", "m", stop.signal);
+		const withdraw = new AbortController();
+		const withdrawn = instance
+			.prompts(ROOM, SCOPE)
+			.confirm("b", "m", undefined, "owner", undefined, undefined, {
+				supersede: withdraw.signal,
+			});
+		await tick();
+		stop.abort();
+		withdraw.abort("replaced by a newer request");
+		await Promise.all([stopped, withdrawn]);
+		expect(
+			kept.map((c) => [
+				c.frame.kind === "approval" && c.frame.title,
+				c.outcome,
+			]),
+		).toEqual([
+			["a", "cancelled"],
+			["b", "withdrawn"],
+		]);
+		expect(kept[1]).toMatchObject({ note: "replaced by a newer request" });
+		expect(kept.every((c) => c.by === undefined)).toBe(true);
+		await instance.prompts(ROOM, SCOPE).confirm("c", "m");
+		expect(kept.at(-1)).toMatchObject({ outcome: "expired" });
+	});
+
+	test("a late card that is answered is kept once, with its late flag", async () => {
+		const { instance, promptId, kept } = desk({ graceMs: 20 });
+		await instance
+			.prompts(ROOM, SCOPE)
+			.confirm("t", "m", undefined, "owner", { late: () => "go" });
+		instance.approve(ADA, promptId(), true);
+		instance.approve(ADA, promptId(), true);
+		expect(kept).toHaveLength(1);
+		expect(kept[0]).toMatchObject({
+			outcome: "approved",
+			frame: { late: true },
+		});
+	});
+
+	test("a log that fails does not fail the turn", async () => {
+		const frames: ServerFrame[] = [];
+		const instance = new OwnerDesk({
+			broadcast: (frame) => frames.push(frame),
+			graceMs: 10_000,
+			closed: () => {
+				throw new Error("disk full");
+			},
+			resume: () => undefined,
+			namesOf: async (ids) => [...ids],
+			logger: silentLogger(),
+		});
+		const result = instance.prompts(ROOM, SCOPE).confirm("t", "m");
+		await tick();
+		const shown = frames.find((f) => f.type === "prompt");
+		if (shown?.type !== "prompt") throw new Error("no card was shown");
+		instance.approve(ADA, shown.prompt.id, true);
+		expect(await result).toBe("approved");
+		expect(frames.at(-1)).toMatchObject({ outcome: "approved" });
 	});
 });

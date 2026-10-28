@@ -521,6 +521,171 @@ describeDb("the owner app over a real host", () => {
 		tab.close();
 	});
 
+	test("answered cards stay in the room's history after a reload, with who answered and what", async () => {
+		const seenAnswers: unknown[] = [];
+		app.scripts.set("keep-cards", async (request, signal) => {
+			const prompts = app.host.context.surfaces.prompts(
+				request.channel,
+				promptScope(request.speaker),
+			);
+			const approved = await prompts?.confirm(
+				"Keep it?",
+				"Keep the card",
+				signal,
+				"owner",
+				undefined,
+				{ action: "keep", tool: "note_send", input: { to: "team" } },
+			);
+			const answer = await prompts?.ask(
+				"Which?",
+				{
+					question: "Which colour?",
+					options: [{ label: "red" }, { label: "blue" }],
+					multi: false,
+					allowOther: true,
+				},
+				signal,
+			);
+			seenAnswers.push(approved, answer);
+			return { ok: true, text: "cards kept" };
+		});
+		const tab = await Client.open(app, { "x-actor": "owner" });
+		if (!tab) throw new Error("the owner was refused");
+		tab.send({ type: "send", id: "k1", room: SCOUT, text: "keep-cards" });
+		const approval = await tab.take(ofType("prompt"));
+		tab.send({
+			type: "approval",
+			prompt: approval.prompt.id,
+			approved: true,
+		});
+		const approvalClosed = await tab.take(ofType("prompt_closed"));
+		// The closing frame says who and when, as a page that was not watching will read it.
+		expect(approvalClosed).toMatchObject({
+			outcome: "approved",
+			by: "Ada",
+		});
+		expect(Date.parse(approvalClosed.closedAt ?? "")).toBeGreaterThan(0);
+		const question = await tab.take(ofType("prompt"));
+		tab.send({
+			type: "answer",
+			prompt: question.prompt.id,
+			answer: { choices: ["red"], text: "a dark one" },
+		});
+		await tab.take(ofType("prompt_closed"));
+		await tab.take(agentReply("scout"));
+		tab.close();
+
+		// A new socket is shown nothing open, but the history holds both cards.
+		const fresh = await Client.open(app, { "x-actor": "owner" });
+		if (!fresh) throw new Error("the owner was refused");
+		await fresh.take(ofType("ready"));
+		expect(await fresh.sees(ofType("prompt"))).toBe(false);
+		fresh.close();
+		const page = (await (
+			await rest(app, `rooms/${encodeURIComponent(SCOUT)}/messages`)
+		).json()) as MessagesView;
+		const mine = page.cards.filter((card) =>
+			[approval.prompt.id, question.prompt.id].includes(card.frame.id),
+		);
+		expect(mine.map((card) => card.frame.id)).toEqual([
+			approval.prompt.id,
+			question.prompt.id,
+		]);
+		expect(mine[0]).toMatchObject({
+			room: SCOUT,
+			outcome: "approved",
+			by: "Ada",
+			frame: {
+				kind: "approval",
+				title: "Keep it?",
+				approval: { tool: "note_send" },
+			},
+		});
+		expect(mine[1]).toMatchObject({
+			outcome: "answered",
+			by: "Ada",
+			answer: { kind: "ask", answer: { choices: ["red"], text: "a dark one" } },
+			frame: { kind: "ask", question: "Which colour?" },
+		});
+		expect(Date.parse(mine[1]?.closedAt ?? "")).toBeGreaterThanOrEqual(
+			Date.parse(mine[1]?.frame.at ?? ""),
+		);
+		// They stand where they opened: after the owner's message, before the agent's reply.
+		const owner = page.messages.find((m) => m.text === "keep-cards");
+		const reply = page.messages.find((m) => m.text === "cards kept");
+		expect(Date.parse(mine[0]?.frame.at ?? "")).toBeGreaterThanOrEqual(
+			Date.parse(owner?.at ?? ""),
+		);
+		expect(Date.parse(mine[1]?.frame.at ?? "")).toBeLessThanOrEqual(
+			Date.parse(reply?.at ?? ""),
+		);
+		// Another room's history holds neither.
+		const guide = (await (
+			await rest(app, `rooms/${encodeURIComponent(GUIDE)}/messages`)
+		).json()) as MessagesView;
+		expect(guide.cards.map((card) => card.frame.id)).not.toContain(
+			approval.prompt.id,
+		);
+		// The history is the owner's; a member reads none of it.
+		expect(
+			(
+				await rest(app, `rooms/${encodeURIComponent(SCOUT)}/messages`, {
+					who: "member",
+				})
+			).status,
+		).toBe(403);
+		expect(seenAnswers).toEqual([
+			"approved",
+			{ choices: ["red"], text: "a dark one" },
+		]);
+	});
+
+	test("a page of history holds the cards from its first message on, and the older page the rest", async () => {
+		app.scripts.set("page-cards", async (request, signal) => {
+			const prompts = app.host.context.surfaces.prompts(
+				request.channel,
+				promptScope(request.speaker),
+			);
+			await prompts?.confirm("Page it?", "Page the card", signal);
+			return { ok: true, text: "page done" };
+		});
+		const tab = await Client.open(app, { "x-actor": "owner" });
+		if (!tab) throw new Error("the owner was refused");
+		tab.send({ type: "send", id: "pg1", room: GUIDE, text: "page-cards" });
+		const card = await tab.take(ofType("prompt"));
+		tab.send({ type: "approval", prompt: card.prompt.id, approved: false });
+		await tab.take(ofType("prompt_closed"));
+		await tab.take(agentReply("guide"));
+		tab.close();
+		const get = async (query: string) =>
+			(await (
+				await rest(app, `rooms/${encodeURIComponent(GUIDE)}/messages?${query}`)
+			).json()) as MessagesView;
+		const all = await get("limit=100");
+		const reply = all.messages.at(-1);
+		expect(reply?.text).toBe("page done");
+		// The latest page of one message: the agent's reply, after the card.
+		const latest = await get("limit=1");
+		expect(latest.more).toBe(true);
+		expect(latest.cards.map((c) => c.frame.id)).not.toContain(card.prompt.id);
+		// The page before the reply, which reaches back to the owner's message, holds the card.
+		const older = await get(`limit=100&before=${reply?.id}`);
+		expect(older.more).toBe(false);
+		const found = older.cards.find((c) => c.frame.id === card.prompt.id);
+		expect(found).toMatchObject({ outcome: "declined", by: "Ada" });
+		// Page by page, every card is on exactly one page.
+		const once: string[] = [];
+		let before: number | undefined;
+		for (;;) {
+			const page = await get(`limit=1${before ? `&before=${before}` : ""}`);
+			once.push(...page.cards.map((c) => c.frame.id));
+			before = page.messages[0]?.id;
+			if (!page.more) break;
+		}
+		expect(once.filter((id) => id === card.prompt.id)).toHaveLength(1);
+		expect(new Set(once).size).toBe(once.length);
+	});
+
 	test("after the grace the card stays open and a late approval starts a turn in the room", async () => {
 		const waits: unknown[] = [];
 		const results: unknown[] = [];

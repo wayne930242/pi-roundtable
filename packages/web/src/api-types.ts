@@ -338,11 +338,17 @@ export interface RoomsView {
 	rooms: RoomView[];
 }
 
-/** A page of a room's stored messages, oldest first. */
+/** A page of a room's stored messages, oldest first, and the cards that ended among them. */
 export interface MessagesView {
 	messages: RoomMessage[];
 	/** There are older messages than the first one here. */
 	more: boolean;
+	/**
+	 * The cards of the room that opened within this page's span (from the first message's time,
+	 * or from the beginning when `more` is false, up to the next page's first message), oldest
+	 * first; the page places each among the messages by `frame.at`.
+	 */
+	cards: ClosedCard[];
 }
 
 /** Who the page is signed in as. */
@@ -536,6 +542,27 @@ export type PromptOutcome =
 	| "cancelled"
 	| "withdrawn";
 
+/** What a person gave a question card: one answer, or one per question with the note beside them. */
+export type CardAnswer =
+	| { kind: "ask"; answer: PromptAnswer }
+	| { kind: "questionnaire"; answers: (PromptAnswer | null)[]; note?: string };
+
+/** A card that ended and is kept in its room's history, with how it ended. */
+export interface ClosedCard {
+	room: string;
+	/** The card as it was shown, `at` being when it opened. */
+	frame: PromptFrame;
+	outcome: PromptOutcome;
+	/** Why a `withdrawn` card was taken back. */
+	note?: string;
+	/** Who answered it, by display name; absent for a card nobody answered. */
+	by?: string;
+	/** What was answered, for the question cards. */
+	answer?: CardAnswer;
+	/** When it ended (ISO 8601, the server's clock). */
+	closedAt: string;
+}
+
 /** Why the server refused a frame. */
 export type RefusalCode =
 	| "bad_frame"
@@ -618,6 +645,12 @@ export type ServerFrame =
 			outcome: PromptOutcome;
 			/** Why a `withdrawn` card was taken back. */
 			note?: string;
+			/** Who answered the card, by display name. */
+			by?: string;
+			/** What was answered, for the question cards. */
+			answer?: CardAnswer;
+			/** When it ended (ISO 8601, the server's clock). */
+			closedAt?: string;
 	  }
 	| { type: "mode"; room: string; yolo: boolean; longRunning: boolean }
 	/** Yolo mode approved a held call by itself. */
