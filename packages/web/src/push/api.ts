@@ -6,7 +6,7 @@ import type {
 	PushKeyView,
 } from "../api-types.ts";
 import type { Authenticated } from "../auth/authenticator.ts";
-import { json } from "../http.ts";
+import { ConsoleHttpError as HttpError, json } from "../http.ts";
 import { readLimited } from "../request-body.ts";
 import type { EndpointPolicy } from "./endpoint.ts";
 import type { PushSubscriptions } from "./subscriptions.ts";
@@ -30,39 +30,30 @@ export interface PushApiOptions {
 	enabled: boolean;
 }
 
-class Refusal extends Error {
-	constructor(
-		readonly status: number,
-		message: string,
-	) {
-		super(message);
-	}
-}
-
 /** What identifies a device in a list without handing its endpoint around: the endpoint's SHA-256, hex. */
 export const deviceId = (endpoint: string): string =>
 	createHash("sha256").update(endpoint).digest("hex");
 
 const decode = (value: unknown, bytes: number, name: string): string => {
 	if (typeof value !== "string" || !/^[A-Za-z0-9_-]+$/.test(value))
-		throw new Refusal(400, `${name} must be base64url.`);
+		throw new HttpError(400, `${name} must be base64url.`);
 	const raw = Buffer.from(value, "base64url");
 	if (raw.byteLength !== bytes || (bytes === P256DH_BYTES && raw[0] !== 4))
-		throw new Refusal(400, `${name} is not a valid key.`);
+		throw new HttpError(400, `${name} is not a valid key.`);
 	return value;
 };
 
 async function bodyOf(request: Request): Promise<Record<string, unknown>> {
 	const raw = await readLimited(request, MAX_BODY_BYTES);
-	if (!raw) throw new Refusal(413, "The body is too large.");
+	if (!raw) throw new HttpError(413, "The body is too large.");
 	let value: unknown;
 	try {
 		value = JSON.parse(raw.toString("utf8"));
 	} catch {
-		throw new Refusal(400, "The body is not JSON.");
+		throw new HttpError(400, "The body is not JSON.");
 	}
 	if (typeof value !== "object" || value === null || Array.isArray(value))
-		throw new Refusal(400, "The body is not an object.");
+		throw new HttpError(400, "The body is not an object.");
 	return value as Record<string, unknown>;
 }
 
@@ -94,7 +85,7 @@ export class PushApi {
 					key: this.#options.vapid.publicKey,
 				} satisfies PushKeyView);
 			if (name !== "subscriptions")
-				throw new Refusal(404, "There is no such API.");
+				throw new HttpError(404, "There is no such API.");
 			if (!id && method === "GET")
 				return json(await this.#devices(principalId));
 			if (!id && method === "POST")
@@ -103,9 +94,9 @@ export class PushApi {
 				return await this.#removeEndpoint(request, principalId);
 			if (id && method === "DELETE")
 				return await this.#removeId(id, principalId);
-			throw new Refusal(405, "Method not allowed.");
+			throw new HttpError(405, "Method not allowed.");
 		} catch (error) {
-			if (error instanceof Refusal)
+			if (error instanceof HttpError)
 				return json({ error: error.message }, error.status);
 			throw error;
 		}
@@ -114,7 +105,7 @@ export class PushApi {
 	async #owner(admission: Authenticated): Promise<string> {
 		const { principal } = admission.visitor;
 		if ((await this.#options.identity.tierOf(principal.id)) !== "owner")
-			throw new Refusal(403, "Only an owner may do this.");
+			throw new HttpError(403, "Only an owner may do this.");
 		return principal.id;
 	}
 
@@ -136,20 +127,20 @@ export class PushApi {
 
 	async #add(request: Request, principalId: string): Promise<Response> {
 		if (!this.#options.enabled)
-			throw new Refusal(
+			throw new HttpError(
 				503,
 				"Push is not set up: set push.subject on the server.",
 			);
 		const body = await bodyOf(request);
 		const checked = this.#options.policy.check(body.endpoint);
-		if ("refusal" in checked) throw new Refusal(400, checked.refusal);
+		if ("refusal" in checked) throw new HttpError(400, checked.refusal);
 		const keys = body.keys;
 		if (typeof keys !== "object" || keys === null)
-			throw new Refusal(400, "keys must hold p256dh and auth.");
+			throw new HttpError(400, "keys must hold p256dh and auth.");
 		const { p256dh, auth } = keys as Record<string, unknown>;
 		const label = body.label;
 		if (label !== undefined && typeof label !== "string")
-			throw new Refusal(400, "label must be text.");
+			throw new HttpError(400, "label must be text.");
 		const endpoint = checked.url.href;
 		const saved = await this.#options.subscriptions.save(
 			{
@@ -164,12 +155,12 @@ export class PushApi {
 			MAX_DEVICES,
 		);
 		if (saved === "taken")
-			throw new Refusal(
+			throw new HttpError(
 				409,
 				"That device is already subscribed by someone else.",
 			);
 		if (saved === "full")
-			throw new Refusal(
+			throw new HttpError(
 				400,
 				"Too many devices. Remove one in the settings first.",
 			);
@@ -182,7 +173,7 @@ export class PushApi {
 	): Promise<Response> {
 		const body = await bodyOf(request);
 		const checked = this.#options.policy.check(body.endpoint);
-		if ("refusal" in checked) throw new Refusal(400, checked.refusal);
+		if ("refusal" in checked) throw new HttpError(400, checked.refusal);
 		// Removing a device that is already gone is as good as removing it.
 		await this.#options.subscriptions.remove(checked.url.href, principalId);
 		return json({ ok: true });
@@ -192,7 +183,7 @@ export class PushApi {
 		const device = (await this.#options.subscriptions.of(principalId)).find(
 			(candidate) => deviceId(candidate.endpoint) === id,
 		);
-		if (!device) throw new Refusal(404, "There is no such device.");
+		if (!device) throw new HttpError(404, "There is no such device.");
 		await this.#options.subscriptions.remove(device.endpoint, principalId);
 		return json({ ok: true });
 	}
