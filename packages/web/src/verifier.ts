@@ -10,6 +10,11 @@ export type Verdict =
 			 * owner's, as before 0.9, and the console warns once.
 			 */
 			actor?: ActorFacts;
+			/**
+			 * When the proxy's assertion lapses, such as the `exp` of a Cloudflare Access token. A
+			 * connection that outlives requests, such as a WebSocket, ends then and signs in again.
+			 */
+			expiresAt?: Date;
 	  }
 	| {
 			admitted: false;
@@ -30,9 +35,10 @@ export type RequestVerifier = (request: Request) => Verdict | Promise<Verdict>;
 /** Admits the request without saying who it is from, as a verifier before 0.9 did. */
 export const admit = (): Verdict => ({ admitted: true });
 /** Admits the request as coming from the person these facts describe. */
-export const admitAs = (actor: ActorFacts): Verdict => ({
+export const admitAs = (actor: ActorFacts, expiresAt?: Date): Verdict => ({
 	admitted: true,
 	actor,
+	...(expiresAt ? { expiresAt } : {}),
 });
 export const refuse = (reason: string): Verdict => ({
 	admitted: false,

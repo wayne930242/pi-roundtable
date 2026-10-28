@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { ActorFacts } from "pi-roundtable";
 import { recordingLogger } from "pi-roundtable/testing";
 import type { AssetBundle } from "./assets.ts";
+import { createAuthenticator } from "./auth/authenticator.ts";
 import { ConsoleServer } from "./console-server.ts";
 import { ORIGIN } from "./testing/fixtures.ts";
 import { admit, admitAs, type RequestVerifier, refuse } from "./verifier.ts";
@@ -38,9 +39,16 @@ function setup(
 	const server = new ConsoleServer({
 		mount: "/console",
 		assets,
-		verifier,
-		identify,
-		origin: ORIGIN,
+		authenticator: createAuthenticator({
+			auth: { mode: "verifier", verifier },
+			identify,
+			origin: ORIGIN,
+			mount: "/console",
+			title: "Console",
+			logger: recorder.logger,
+			dataDir: "unused",
+			listener: { id: "public", address: undefined },
+		}),
 		api: {
 			handle: async (_request, path, visitor) => {
 				apiPaths.push(path);

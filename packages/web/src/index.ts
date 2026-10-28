@@ -35,7 +35,7 @@ export {
 /** Summary for a trusted host's separately stored party sessions. */
 export { conversationFiles as sessionSummary } from "./conversations.ts";
 export type { ConsoleFeatures, ConsolePresentation } from "./features.ts";
-export type { WebConsoleOptions } from "./options.ts";
+export type { WebAuthOptions, WebConsoleOptions } from "./options.ts";
 export { DEFAULT_RELAY_NOTE } from "./options.ts";
 export type { RequestVerifier, Verdict } from "./verifier.ts";
 export { admit, admitAs, refuse } from "./verifier.ts";

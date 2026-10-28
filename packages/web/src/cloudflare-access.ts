@@ -39,7 +39,7 @@ export function cloudflareAccessIdentity(
  * for this application, naming that email and a user. The token is checked on every request, so
  * the console stays closed to a client that reaches it without passing through Access. It reports
  * the user as an OpenID identity of the team's issuer, their `sub` as the subject and their email
- * as the name.
+ * as the name, and the token's expiry as when the admission lapses.
  */
 export function cloudflareAccess(
 	options: CloudflareAccessOptions,
@@ -66,6 +66,7 @@ export function cloudflareAccess(
 		if (!token) return refuse("no Access token");
 		let email: string;
 		let subject: string;
+		let expiresAt: Date | undefined;
 		try {
 			const { payload } = await jwtVerify(token, keys, { issuer, audience });
 			if (
@@ -77,9 +78,11 @@ export function cloudflareAccess(
 				return refuse("Access token names no user");
 			email = payload.email.toLowerCase();
 			subject = payload.sub;
+			if (typeof payload.exp === "number")
+				expiresAt = new Date(payload.exp * 1000);
 		} catch {
 			return refuse("invalid Access token");
 		}
-		return admitAs({ provider, subject, name: email });
+		return admitAs({ provider, subject, name: email }, expiresAt);
 	};
 }

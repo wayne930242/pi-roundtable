@@ -12,14 +12,74 @@ import type { RequestVerifier } from "./verifier.ts";
 export const DEFAULT_RELAY_NOTE =
 	"(The owner wrote this in a personal agent that relays it over MCP, not on Discord. Answer the owner directly, just as you would on Discord; the agent passes your reply back.)";
 
+/** The default environment variable `auth: { mode: "password" }` reads the password from. */
+export const DEFAULT_PASSWORD_ENV = "ROUNDTABLE_WEB_PASSWORD";
+/** How many days a password session lasts by default. */
+export const DEFAULT_SESSION_DAYS = 30;
+/** The shortest password the console accepts, in characters. */
+export const MIN_PASSWORD_LENGTH = 12;
+
+/**
+ * How the console knows who is asking. Every mode but `verifier` speaks for one principal through
+ * the plugin identity `token:web-console`, which the plugin declares; read "Authentication" and
+ * "Threat model" in the README before choosing `none` or `password`.
+ */
+export type WebAuthOptions =
+	| {
+			/**
+			 * No authentication: whoever reaches the listener is the owner. Written explicitly, never
+			 * a default, and only for a listener a person cannot reach but the owner: a unix socket,
+			 * or TCP on `127.0.0.1`, `::1` or `localhost`.
+			 */
+			mode: "none";
+			/** Allows `none` on a TCP listener that reaches beyond this machine, when a network in front of it keeps everyone else out. */
+			trustNetwork?: boolean;
+			/** The principal it speaks for; default the primary owner (the first of `access.owners`). */
+			principal?: string;
+	  }
+	| {
+			/**
+			 * A password from the environment, asked on a login page, then a signed session cookie.
+			 * It resists the network, not an agent whose shell runs as the same user.
+			 */
+			mode: "password";
+			/** The environment variable that holds the password, at least 12 characters; default `ROUNDTABLE_WEB_PASSWORD`. */
+			passwordEnv?: string;
+			/** How long a login lasts, 1 to 365 days; default 30. */
+			sessionDays?: number;
+			/** The principal it speaks for; default the primary owner. */
+			principal?: string;
+	  }
+	| {
+			/** A request verifier, such as `cloudflareAccess(...)`; the same as the `verifier` option. */
+			mode: "verifier";
+			verifier: RequestVerifier;
+	  };
+
+/** `auth` checked and filled in. */
+export type ResolvedAuth =
+	| { mode: "none"; trustNetwork: boolean; principal?: string }
+	| {
+			mode: "password";
+			passwordEnv: string;
+			sessionDays: number;
+			principal?: string;
+	  }
+	| { mode: "verifier"; verifier: RequestVerifier };
+
 export interface WebConsoleOptions {
 	/**
-	 * Decides whether a request comes from someone the operator's proxy authenticated, and reports
-	 * who; required. `cloudflareAccess(...)` is the built-in one. Without it the plugin refuses to
-	 * start rather than serve without authentication. Only a person whose principal holds the owner
-	 * role gets in.
+	 * How requests are authenticated; one of `auth` or `verifier` is required, and without either
+	 * the plugin refuses to start rather than serve without authentication. Only a person whose
+	 * principal holds the owner role gets in.
 	 */
-	verifier: RequestVerifier;
+	auth?: WebAuthOptions;
+	/**
+	 * Decides whether a request comes from someone the operator's proxy authenticated, and reports
+	 * who; the same as `auth: { mode: "verifier", verifier }`, and giving both throws.
+	 * `cloudflareAccess(...)` is the built-in one.
+	 */
+	verifier?: RequestVerifier;
 	/** Host-specific data and actions, resolved against public plugin setup context. */
 	features?:
 		| ConsoleFeatures
@@ -61,9 +121,10 @@ export interface WebConsoleOptions {
 
 /** Options checked and filled in. */
 export interface ResolvedOptions {
-	verifier: RequestVerifier;
+	auth: ResolvedAuth;
 	origin: string;
 	ownerId: string | undefined;
+	dataDir: string;
 	sessionsDir: string;
 	mount: string;
 	listener: string;
@@ -130,12 +191,76 @@ function checkPanes(panes: readonly PaneName[] | undefined): PaneName[] {
 	return [...panes];
 }
 
+function checkAuth(options: WebConsoleOptions): ResolvedAuth {
+	const { auth, verifier } = options;
+	if (auth !== undefined && verifier !== undefined)
+		fail(
+			'both auth and verifier are given. `verifier` is shorthand for `auth: { mode: "verifier", verifier }`; pass one',
+		);
+	if (auth === undefined) {
+		if (typeof verifier !== "function")
+			fail(
+				'no verifier or auth. The console serves the owner\'s conversations and notes, so it will not start without a way to authenticate every request; pass `auth: { mode: "password" }`, `auth: { mode: "none" }` for a listener only the owner reaches, or `verifier: cloudflareAccess({...})` or your own',
+			);
+		return { mode: "verifier", verifier };
+	}
+	const mode = (auth as { mode?: unknown } | null)?.mode;
+	const principal = (auth as { principal?: unknown }).principal;
+	if (
+		principal !== undefined &&
+		(typeof principal !== "string" || !principal.trim())
+	)
+		fail(
+			"auth.principal is empty. Leave it out to speak for the primary owner",
+		);
+	const named =
+		typeof principal === "string" ? { principal: principal.trim() } : {};
+	switch (mode) {
+		case "none": {
+			const { trustNetwork } = auth as { trustNetwork?: unknown };
+			if (trustNetwork !== undefined && typeof trustNetwork !== "boolean")
+				fail("auth.trustNetwork must be true or false");
+			return { mode, trustNetwork: trustNetwork === true, ...named };
+		}
+		case "password": {
+			const {
+				passwordEnv = DEFAULT_PASSWORD_ENV,
+				sessionDays = DEFAULT_SESSION_DAYS,
+			} = auth as { passwordEnv?: unknown; sessionDays?: unknown };
+			if (typeof passwordEnv !== "string" || !passwordEnv.trim())
+				fail("auth.passwordEnv is empty");
+			if (
+				typeof sessionDays !== "number" ||
+				!Number.isInteger(sessionDays) ||
+				sessionDays < 1 ||
+				sessionDays > 365
+			)
+				fail("auth.sessionDays must be a whole number of days from 1 to 365");
+			return {
+				mode,
+				passwordEnv: passwordEnv.trim(),
+				sessionDays,
+				...named,
+			};
+		}
+		case "verifier": {
+			const given = (auth as { verifier?: unknown }).verifier;
+			if (typeof given !== "function")
+				fail(
+					"auth.verifier is not a function; pass `cloudflareAccess({...})` or your own",
+				);
+			return { mode, verifier: given as RequestVerifier };
+		}
+		default:
+			fail(
+				`auth.mode ${JSON.stringify(mode)} is unknown; the modes are none, password and verifier`,
+			);
+	}
+}
+
 /** Checks the options at the point the plugin is created, so a bad setting stops the host before anything starts. */
 export function resolveOptions(options: WebConsoleOptions): ResolvedOptions {
-	if (typeof options.verifier !== "function")
-		fail(
-			"no verifier. The console serves the owner's conversations and notes, so it will not start without one that authenticates every request; pass `verifier: cloudflareAccess({...})` or your own",
-		);
+	const auth = checkAuth(options);
 	if (
 		options.routing !== undefined &&
 		options.routing !== "path" &&
@@ -158,9 +283,10 @@ export function resolveOptions(options: WebConsoleOptions): ResolvedOptions {
 	const title = options.title?.trim() ?? "Roundtable";
 	if (!title) fail("title is empty");
 	return {
-		verifier: options.verifier,
+		auth,
 		origin: checkOrigin(options.origin),
 		ownerId,
+		dataDir: options.dataDir ?? "data",
 		sessionsDir: join(options.dataDir ?? "data", "sessions"),
 		mount: checkMount(options.mountPath ?? "/console"),
 		listener: options.listener ?? "public",

@@ -1,10 +1,9 @@
-import type { ActorFacts, HttpRoute, Logger } from "pi-roundtable";
+import type { HttpRoute, Logger } from "pi-roundtable";
 import type { AssetBundle } from "./assets.ts";
+import type { Authenticator, Unauthenticated } from "./auth/authenticator.ts";
 import type { ConsoleApi } from "./console-api.ts";
 import type { ConsolePresentation } from "./features.ts";
 import { presentPage } from "./page-presentation.ts";
-import type { RequestVerifier } from "./verifier.ts";
-import type { Identified, Visitor } from "./visitors.ts";
 
 const encoder = new TextEncoder();
 /** Changes closer together than this reach the page as one event. */
@@ -33,11 +32,8 @@ export interface ConsoleServerOptions {
 	/** The path the console is served under, without a trailing slash: `/console`. */
 	mount: string;
 	assets: AssetBundle;
-	verifier: RequestVerifier;
-	/** Who a request the verifier admitted comes from, by the actor it reported; only an owner is a visitor. */
-	identify(actor: ActorFacts | undefined): Promise<Identified>;
-	/** The console's own origin; requests that change data must come from it. */
-	origin: string;
+	/** Checks every request under the mount, and answers the few paths that need no session. */
+	authenticator: Authenticator;
 	api: Pick<ConsoleApi, "handle">;
 	/** Registers the listener with every source whose change the console shows. */
 	subscribe(listener: () => void): void;
@@ -51,8 +47,9 @@ export interface ConsoleServerOptions {
 
 /**
  * The console on the host's listener: `<mount>` redirects to `<mount>/`, and everything under
- * it needs the verifier to vouch for the person and that person to be an owner. A request that
- * changes data must also carry the console's own `Origin`.
+ * it needs the authenticator to admit the request as an owner's, apart from what it answers
+ * openly, such as a login page. A request that changes data must also carry the console's own
+ * `Origin`.
  */
 export class ConsoleServer {
 	readonly #options: ConsoleServerOptions;
@@ -116,23 +113,16 @@ export class ConsoleServer {
 		const path = new URL(request.url).pathname;
 		if (path !== this.#options.mount && !path.startsWith(this.#base))
 			return new Response("Not found", { status: 404 });
-		const admission = await this.#admission(request);
-		if ("refusal" in admission) {
-			this.#options.logger.warn(
-				{ refusal: admission.refusal },
-				"console request refused",
-			);
-			return new Response("Forbidden", {
-				status: 403,
-				headers: { "cache-control": "no-store" },
-			});
-		}
+		const rest = path.slice(this.#base.length);
+		const open = await this.#options.authenticator.open?.(request, rest);
+		if (open) return open;
+		const admission = await this.#options.authenticator.authenticate(request);
+		if ("refusal" in admission) return this.#refused(request, rest, admission);
 		if (path === this.#options.mount)
 			return new Response(null, {
 				status: 302,
 				headers: { location: this.#base },
 			});
-		const rest = path.slice(this.#base.length);
 		if (rest === "api/events" && request.method === "GET")
 			return this.#events();
 		if (rest.startsWith("api/"))
@@ -177,33 +167,32 @@ export class ConsoleServer {
 		return new Response("Not found", { status: 404 });
 	}
 
-	/** The owner the request comes from when it may pass, otherwise why not; never throws. */
-	async #admission(
-		request: Request,
-	): Promise<{ visitor: Visitor } | { refusal: string }> {
-		let actor: ActorFacts | undefined;
-		try {
-			const verdict = await this.#options.verifier(request);
-			if (!verdict.admitted) return { refusal: String(verdict.reason) };
-			actor = verdict.actor;
-		} catch {
-			// A verifier that fails admits no one.
-			return { refusal: "verifier failed" };
-		}
-		let identified: Identified;
-		try {
-			identified = await this.#options.identify(actor);
-		} catch {
-			// Nor does a lookup of who they are that fails.
-			return { refusal: "identity failed" };
-		}
-		if ("refusal" in identified) return { refusal: String(identified.refusal) };
+	/**
+	 * The answer to a request the authenticator refused: a page navigation that signing in would
+	 * fix goes to the login page, everything else gets the status and a fixed body.
+	 */
+	#refused(request: Request, rest: string, refusal: Unauthenticated): Response {
 		if (
-			!READ_METHODS.has(request.method) &&
-			request.headers.get("origin") !== this.#options.origin
+			refusal.login &&
+			READ_METHODS.has(request.method) &&
+			!rest.startsWith("api/")
 		)
-			return { refusal: "foreign origin" };
-		return identified;
+			return new Response(null, {
+				status: 303,
+				headers: {
+					location: `${this.#options.mount}/login`,
+					"cache-control": "no-store",
+				},
+			});
+		// A missing session is the normal way to meet a login page, not worth a line each time.
+		const { logger } = this.#options;
+		const fields = { refusal: refusal.refusal };
+		if (refusal.login) logger.debug(fields, "console request refused");
+		else logger.warn(fields, "console request refused");
+		return new Response(refusal.status === 401 ? "Unauthorized" : "Forbidden", {
+			status: refusal.status,
+			headers: { "cache-control": "no-store" },
+		});
 	}
 
 	/** A server-sent event stream that says `changed` whenever the console may differ. */

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { decodeJwt } from "jose";
 import {
 	cloudflareAccess,
 	cloudflareAccessIdentity,
@@ -20,6 +21,9 @@ const verify = cloudflareAccess({
 	keys,
 });
 
+const expiryOf = (token: string) =>
+	new Date((decodeJwt(token).exp ?? 0) * 1000);
+
 const request = (jwt?: string) =>
 	new Request("http://console/console/api/config", {
 		headers: jwt ? { "cf-access-jwt-assertion": jwt } : {},
@@ -35,13 +39,31 @@ describe("cloudflareAccess", () => {
 				name: OWNER_EMAIL,
 			},
 		};
-		expect(await verify(request(await sign()))).toEqual(owner);
-		expect(
-			await verify(request(await sign({ email: "Owner@Example.Test" }))),
-		).toEqual({
+		const token = await sign();
+		expect(await verify(request(token))).toEqual({
+			...owner,
+			expiresAt: expiryOf(token),
+		});
+		const mixed = await sign({ email: "Owner@Example.Test" });
+		expect(await verify(request(mixed))).toEqual({
 			...owner,
 			actor: { ...owner.actor, name: "owner@example.test" },
+			expiresAt: expiryOf(mixed),
 		});
+	});
+
+	test("reports when the admission lapses: the token's exp", async () => {
+		const token = await sign();
+		const verdict = await verify(request(token));
+		const exp = decodeJwt(token).exp;
+		expect(exp).toBeNumber();
+		expect(verdict).toMatchObject({
+			admitted: true,
+			expiresAt: new Date((exp ?? 0) * 1000),
+		});
+		expect(
+			(verdict as { expiresAt: Date }).expiresAt.getTime() - Date.now(),
+		).toBeGreaterThan(50 * 60 * 1000);
 	});
 
 	test("reports the Access user id as the subject, under the team's issuer, as an OpenID identity", async () => {

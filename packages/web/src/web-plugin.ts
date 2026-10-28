@@ -8,6 +8,10 @@ import {
 } from "pi-roundtable";
 import { DISCORD } from "pi-roundtable/discord";
 import { loadAssets } from "./assets.ts";
+import {
+	createAuthenticator,
+	WEB_CONSOLE_IDENTITY,
+} from "./auth/authenticator.ts";
 import { ConsoleApi } from "./console-api.ts";
 import { ConsoleServer } from "./console-server.ts";
 import {
@@ -19,14 +23,27 @@ import { consoleVisitors } from "./visitors.ts";
 
 /**
  * The owners' web console: conversations, transcripts, memory notes, and the agent team, served
- * on a route of the host's listener and updated live. Every request needs the verifier to vouch
- * for the person and `IDENTITY` to name them an owner. The options are checked here, so a missing
- * verifier or a bad setting throws when the config is loaded.
+ * on a route of the host's listener and updated live. Every request needs the configured `auth`
+ * to vouch for the person and `IDENTITY` to name them an owner. The options are checked here, so
+ * missing authentication or a bad setting throws when the config is loaded; whether `none` fits
+ * the listener and whether the password is long enough are checked when the host sets up.
  */
 export function webConsole(options: WebConsoleOptions): RoundtablePlugin {
 	const settings = resolveOptions(options);
+	const { auth } = settings;
 	return definePlugin({
 		name: "web-console",
+		// `none` and `password` speak for one principal through this identity; a verifier brings its own.
+		...(auth.mode === "verifier"
+			? {}
+			: {
+					identities: [
+						{
+							identity: WEB_CONSOLE_IDENTITY,
+							...(auth.principal ? { principal: auth.principal } : {}),
+						},
+					],
+				}),
 		requires: [
 			IDENTITY,
 			...(settings.panes.includes("overview") ? [AGENTS] : []),
@@ -85,15 +102,27 @@ async function build(settings: ResolvedOptions, context: Context) {
 		...(settings.routing === "path" ? { mountPath: settings.mount } : {}),
 		...(settings.presentation ? { presentation: settings.presentation } : {}),
 	});
-	const server = new ConsoleServer({
-		mount: settings.mount,
-		assets,
-		verifier: settings.verifier,
+	const authenticator = createAuthenticator({
+		auth: settings.auth,
 		identify: consoleVisitors(identity, {
 			logger,
 			...(settings.ownerId ? { ownerId: settings.ownerId } : {}),
 		}),
 		origin: settings.origin,
+		mount: settings.mount,
+		title: settings.title,
+		...(settings.presentation ? { presentation: settings.presentation } : {}),
+		logger,
+		dataDir: settings.dataDir,
+		listener: {
+			id: settings.listener,
+			address: context.listener(settings.listener),
+		},
+	});
+	const server = new ConsoleServer({
+		mount: settings.mount,
+		assets,
+		authenticator,
 		pathRouting: settings.routing === "path",
 		...(settings.presentation ? { presentation: settings.presentation } : {}),
 		api,

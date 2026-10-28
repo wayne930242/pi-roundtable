@@ -5,6 +5,9 @@
 //   PORT      stands in for the proxy that authenticates the owner: it signs a test Access token and adds
 //             it to every request, so the built-in Cloudflare Access verifier runs for real;
 //   PORT + 1  is the same listener reached directly, with no assertion, which the console must refuse.
+// FIXTURE_AUTH picks how the console authenticates: `cloudflare` (the default, as above), `none` (the
+// listener is a unix socket under the data directory, reached through the same two ports), or
+// `password` (the password is `fixture-password-1`; open PORT and sign in on the login page).
 // `/fixture/message` appends a message to the owner's conversation and `/fixture/work` toggles the
 // agent between working and idle, so the live updates can be watched.
 import { appendFileSync, readdirSync } from "node:fs";
@@ -70,20 +73,37 @@ function memoryOf(id: string) {
 	return found;
 }
 
+const authMode = process.env.FIXTURE_AUTH ?? "cloudflare";
+if (!["cloudflare", "none", "password"].includes(authMode))
+	throw new Error("FIXTURE_AUTH is cloudflare, none or password");
+const PASSWORD_ENV = "FIXTURE_WEB_PASSWORD";
+process.env[PASSWORD_ENV] = "fixture-password-1";
+const auth: Partial<Parameters<typeof webConsole>[0]> =
+	authMode === "none"
+		? { auth: { mode: "none" } }
+		: authMode === "password"
+			? { auth: { mode: "password", passwordEnv: PASSWORD_ENV } }
+			: {
+					verifier: cloudflareAccess({
+						teamDomain: TEAM,
+						audience: AUDIENCE,
+						email: OWNER_EMAIL,
+						keys,
+					}),
+				};
+
 const harness = await testPlugin(
 	webConsole({
-		verifier: cloudflareAccess({
-			teamDomain: TEAM,
-			audience: AUDIENCE,
-			email: OWNER_EMAIL,
-			keys,
-		}),
+		...auth,
 		origin,
 		dataDir,
 		title: "Fixture console",
 	}),
 	{
 		env: { timeZone: "Europe/Paris" },
+		listeners: [
+			{ id: "public", socketPath: join(dataDir, "fixture-web.sock") },
+		],
 		services: [
 			servicePair(AGENTS, {
 				team: partial({
@@ -131,7 +151,7 @@ const harness = await testPlugin(
 						id: "owner",
 						name: "Owner",
 						tier: "owner",
-						identities: [accessIdentity(OWNER_SUB)],
+						identities: [accessIdentity(OWNER_SUB), "token:web-console"],
 					},
 					{ id: "p_fixture_second", name: "Second owner", tier: "owner" },
 				]),
@@ -215,7 +235,8 @@ function serve(listenPort: number, signed: boolean) {
 			const route = routeFor(url.pathname);
 			if (!route) return new Response("Not found", { status: 404 });
 			const headers = new Headers(request.headers);
-			if (signed) headers.set("cf-access-jwt-assertion", await sign());
+			if (signed && authMode === "cloudflare")
+				headers.set("cf-access-jwt-assertion", await sign());
 			return route.handle(new Request(request, { headers }));
 		},
 	});
