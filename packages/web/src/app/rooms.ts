@@ -30,7 +30,7 @@ export interface RoomsOptions {
 	directory: Pick<AgentDirectory, "agents" | "agent" | "groups" | "group">;
 	team: Pick<AgentTeam, "coordinator">;
 	avatars: Pick<AvatarStudio, "url">;
-	threads: Pick<WebThreads, "get" | "listOpen">;
+	threads: Pick<WebThreads, "get" | "list">;
 	log: Pick<RoomLog, "lastOf">;
 	modes: Pick<ConversationModes, "peek">;
 	activity(room: ChannelKey): { typing: boolean; stoppable: boolean };
@@ -40,7 +40,7 @@ const THREAD_ID = /^thread\.[0-9a-f-]{36}$/;
 
 /**
  * The rooms of the app: Home (the coordinator's), one per active agent, one per active group,
- * and the open dispatch threads. A key a client names is a room only when it is one of these on
+ * and the dispatch threads: the open ones and the latest closed ones. A key a client names is a room only when it is one of these on
  * this surface, whose agent or group exists; no other surface's key ever is.
  */
 export class Rooms {
@@ -88,7 +88,8 @@ export class Rooms {
 		const id = key.slice(surface.length + 1);
 		if (!THREAD_ID.test(id)) return undefined;
 		const thread = await threads.get(id);
-		return thread?.open
+		// A closed thread stays a room the page can read; nobody can write in it.
+		return thread
 			? {
 					key: room,
 					kind: "thread",
@@ -125,7 +126,7 @@ export class Rooms {
 		const home = this.homeKey();
 		const agents = directory.agents().filter((a) => a.status === "active");
 		const groups = directory.groups().filter((g) => g.status === "active");
-		const open = await threads.listOpen();
+		const shown = await threads.list();
 		const view = (
 			key: ChannelKey,
 			rest: Pick<RoomView, "kind" | "name" | "displayName"> & Partial<RoomView>,
@@ -157,13 +158,14 @@ export class Rooms {
 					members: [...group.members],
 				}),
 			),
-			...open.map((thread) =>
+			...shown.map((thread) =>
 				view(channelKey(surface, thread.id), {
 					kind: "thread",
 					name: thread.id,
 					displayName: thread.title,
 					parent: thread.parent,
 					readOnly: true,
+					...(thread.open ? {} : { closed: true }),
 				}),
 			),
 		];

@@ -117,6 +117,12 @@ export class OwnerApp {
 			log,
 			files: stored,
 			uploads,
+			threads,
+			canHost: async (parent) => {
+				const room = await rooms.resolve(parent);
+				return room !== undefined && room.kind !== "thread";
+			},
+			changed: () => this.changed(),
 			logger,
 		});
 		const rooms = new Rooms({

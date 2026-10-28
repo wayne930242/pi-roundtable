@@ -361,10 +361,16 @@ The console is for the owners of one host; members talk to the host through its 
 The `rooms` pane is the owner app: the same agent team as on Discord, in rooms of its own (`<surface>:agent.<name>`, `<surface>:group.<name>`, surface `app` by default; Home is the coordinator's room). A page opens one WebSocket at `<mount>/api/socket` with the subprotocol `roundtable.app.v1`. The upgrade passes the same authenticator as every request and must come from the console's own origin; the socket closes with `4401` when the credential lapses.
 
 - Page to server: `hello {visible, focus?}`, `visibility`, `focus {room?}`, `send {id, room, text, uploads?}`, `stop {room}`, `approval {prompt, approved}`, `answer {prompt, answer}`, `answers {prompt, answers, note?}`, `cancel {prompt}`.
-- Server to page: `ready {protocol, principal, name, uploads: {perMessage, maxBytes}}` (then every open card), `accepted`, `refused {id?, prompt?, code}` (`id` names a refused `send`, `prompt` a refused answer to a card), `message`, `progress` (only for the focused room), `activity`, `prompt`, `prompt_closed`, `mode`, `auto_approved`, `changed`.
+- Server to page: `ready {protocol, principal, name, uploads: {perMessage, maxBytes}}` (then every open card), `accepted`, `refused {id?, prompt?, code}` (`id` names a refused `send`, `prompt` a refused answer to a card), `message`, `progress` (only for the focused room), `activity`, `edited` (a stored message changed its text, such as a thread's start line once the thread exists), `prompt`, `prompt_closed`, `mode`, `auto_approved`, `changed`.
 - REST under `<mount>/api/`: `session`, `rooms`, `rooms/<key>/messages?before=&limit=`, `PUT rooms/<key>/mode`, `POST rooms/<key>/start-over`, `POST uploads`, `DELETE uploads/<id>`, `files/<id>`, `schedules`, `agents/<name>`, `POST agents/<name>/avatar`, `models`; the agents' pictures are at `<mount>/avatars/<hash>.png`.
 
 A room key from a page must be one of the app's rooms whose agent or group exists; every other key, Discord's included, is refused. Every write needs an owner, whose tier is read again, and REST writes also need the console's `Origin`. A card can be answered by any owner, except a card that is the speaker's alone, which only the speaker's principal answers. After `cardGraceSeconds` (default 120) a turn goes on without the answer and the card stays open for a day; an answer then starts a new turn in the room. The types are in `src/api-types.ts`.
+
+### Dispatch threads
+
+The app hosts the core's dispatch threads (`ChatSurface.threads`). A background dispatch started from a room (a coding task, a delegated task, `message_agent` between agents) puts one start line in that room and opens a thread, `<surface>:thread.<uuid>`, whose room holds the dispatch's progress and report. The start line links the thread, and the room list nests each thread under the room that started it, with the finished ones folded away. Only an agent's or group's room can host a thread, never a thread itself.
+
+A thread's room is read only: a `send` to it is refused with `read_only`, and it has no modes. Its cards are the dispatch's own, such as a coding job's approvals, and any owner answers them there as in any room. Agents post in it under their own names. A closed thread stays readable (the list keeps the 30 newest closed ones), and the host closes the threads a restart left open, with a restart notice. `GET api/rooms` lists a thread with `parent` and, once closed, `closed: true`; opening and closing one sends `changed`.
 
 ### Uploads
 

@@ -17,6 +17,8 @@ import type { OwnerDesk } from "./desk.ts";
 import { type FileDir, typeByName } from "./files.ts";
 import type { NewRoomMessage, RoomLog } from "./room-log.ts";
 import type { AppSocket, Sockets } from "./sockets.ts";
+import { AppSurfaceThreads } from "./surface-threads.ts";
+import type { WebThreads } from "./threads.ts";
 import type { Uploads } from "./uploads.ts";
 
 /**
@@ -38,6 +40,11 @@ export interface AppSurfaceOptions {
 	/** Where the files agents attach to replies are kept. */
 	files: FileDir;
 	uploads: Uploads;
+	threads: Pick<WebThreads, "open" | "close">;
+	/** Whether a room can host a thread: an agent's or group's room that exists. */
+	canHost(parent: ChannelKey): Promise<boolean>;
+	/** Tells the sockets the room list differs, once changes settle. */
+	changed(): void;
 	logger: Logger;
 }
 
@@ -59,6 +66,7 @@ export class AppSurface implements ChatSurface {
 	readonly agentRooms = true;
 	readonly supportsFiles = true;
 	readonly formatting = APP_FORMATTING;
+	readonly threads: AppSurfaceThreads;
 	readonly #options: AppSurfaceOptions;
 	readonly #activity = new Map<ChannelKey, Activity>();
 	#deliver: ((message: InboundMessage) => void) | undefined;
@@ -66,6 +74,14 @@ export class AppSurface implements ChatSurface {
 	constructor(options: AppSurfaceOptions) {
 		this.surface = options.surface;
 		this.#options = options;
+		this.threads = new AppSurfaceThreads({
+			surface: options.surface,
+			threads: options.threads,
+			publish: (row) => this.publish(row),
+			edit: (room, id, text) => this.edit(room, id, text),
+			changed: options.changed,
+			canHost: options.canHost,
+		});
 	}
 
 	async start(deliver: (message: InboundMessage) => void): Promise<void> {
@@ -99,6 +115,13 @@ export class AppSurface implements ChatSurface {
 			except,
 		);
 		return message;
+	}
+
+	/** Changes the text of a stored message and shows the change to every open socket. */
+	async edit(room: ChannelKey, id: number, text: string): Promise<void> {
+		const message = await this.#options.log.edit(id, text);
+		if (!message) return;
+		this.#options.sockets.broadcast({ type: "edited", room, message });
 	}
 
 	/** Whether a turn works in the room and whether Stop applies, as `activity` frames say. */

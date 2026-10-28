@@ -25,15 +25,17 @@ describeDb("dispatch threads of the app", () => {
 			title: "Ask the scout",
 			open: true,
 		});
-		expect((await threads.listOpen()).map((t) => t.id)).toContain(thread.id);
+		expect((await threads.list()).map((t) => t.id)).toContain(thread.id);
 		await threads.close(thread.id);
 		expect((await threads.get(thread.id))?.open).toBe(false);
-		expect((await threads.listOpen()).map((t) => t.id)).not.toContain(
-			thread.id,
+		// A closed thread is still listed, among the latest closed ones only.
+		expect((await threads.list()).find((t) => t.id === thread.id)?.open).toBe(
+			false,
 		);
+		expect((await threads.list(0)).map((t) => t.id)).not.toContain(thread.id);
 	});
 
-	test("an open thread is a read-only room of the app and nothing else's", async () => {
+	test("a thread is a read-only room of the app and nothing else's, open or closed", async () => {
 		const thread = await threads.open("app:agent.guide", "Look");
 		const rooms = new Rooms({
 			surface: "app",
@@ -59,9 +61,15 @@ describeDb("dispatch threads of the app", () => {
 		expect(await rooms.resolve(`other:${thread.id}`)).toBeUndefined();
 		expect(await rooms.resolve("app:thread.not-a-uuid")).toBeUndefined();
 		await threads.close(thread.id);
-		expect(await rooms.resolve(`app:${thread.id}`)).toBeUndefined();
-		expect((await rooms.list()).map((r) => r.key)).not.toContain(
-			`app:${thread.id}`,
-		);
+		expect(await rooms.resolve(`app:${thread.id}`)).toMatchObject({
+			kind: "thread",
+			readOnly: true,
+		});
+		expect(
+			(await rooms.list()).find((r) => r.key === `app:${thread.id}`),
+		).toMatchObject({
+			parent: "app:agent.guide",
+			closed: true,
+		});
 	});
 });

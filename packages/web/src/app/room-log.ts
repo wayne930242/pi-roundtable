@@ -90,6 +90,13 @@ export class RoomLog {
 		return messageOf(row);
 	}
 
+	/** Changes the text of a stored message; undefined when there is no such message. */
+	async edit(id: number, text: string): Promise<RoomMessage | undefined> {
+		const [row]: Row[] = await this.#sql`
+			UPDATE web_room_messages SET text = ${text} WHERE id = ${id} RETURNING *`;
+		return row && messageOf(row);
+	}
+
 	/** The newest `limit` messages older than `before` (all of them when absent), oldest first. */
 	async page(
 		room: string,

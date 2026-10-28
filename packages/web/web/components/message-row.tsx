@@ -8,7 +8,7 @@ import { fileUrl } from "../lib/rooms.ts";
 import { useConnection } from "../lib/socket.ts";
 import { Avatar } from "./avatar.tsx";
 import { Icon } from "./icons.tsx";
-import { MessageMarkdown } from "./message-markdown.tsx";
+import { hasThreadLink, MessageMarkdown } from "./message-markdown.tsx";
 
 const YOLO_LINE = /^Yolo mode approved: ([\s\S]*)$/;
 
@@ -71,10 +71,16 @@ export const MessageRow = memo(function MessageRow(props: {
 	const { message } = props;
 	if (message.kind === "system") {
 		const line = systemLine(message.text);
+		// The start line of a dispatch thread links the thread's room.
+		const linked = hasThreadLink(message.text);
 		return (
 			<li className="line" data-enter={props.enter || undefined}>
-				<Icon name={line.icon} size={14} />
-				<span>{line.text}</span>
+				<Icon name={linked ? "conversations" : line.icon} size={14} />
+				{linked ? (
+					<MessageMarkdown source={message.text} />
+				) : (
+					<span>{line.text}</span>
+				)}
 			</li>
 		);
 	}

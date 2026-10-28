@@ -1,4 +1,4 @@
-import { memo, useMemo } from "react";
+import { memo, type ReactNode, useMemo } from "react";
 import type { RoomView } from "../../src/api-types.ts";
 import { Avatar } from "../components/avatar.tsx";
 import { Icon } from "../components/icons.tsx";
@@ -24,18 +24,26 @@ function previewOf(text: string, files: number): string {
 	return files ? plural(files, "{count} file", "{count} files") : "";
 }
 
-const RoomRow = memo(function RoomRow(props: {
+interface RowData {
+	key: string;
 	view: RoomView;
 	typing: boolean;
 	yolo: boolean;
 	longRunning: boolean;
 	waiting: number;
-	active: boolean;
 	preview: string;
 	at: string | undefined;
-	now: number;
-	timeZone: string;
-}) {
+}
+
+const RoomRow = memo(function RoomRow(
+	props: Omit<RowData, "key"> & {
+		active: boolean;
+		now: number;
+		timeZone: string;
+		/** The dispatch threads of this room, nested under it. */
+		threads?: ReactNode;
+	},
+) {
 	const { view } = props;
 	return (
 		<li>
@@ -58,9 +66,6 @@ const RoomRow = memo(function RoomRow(props: {
 						) : null}
 						{view.kind === "group" ? (
 							<span className="badge">{t("Group")}</span>
-						) : null}
-						{view.kind === "thread" ? (
-							<span className="badge">{t("Thread")}</span>
 						) : null}
 						<span className="room-row-time">
 							{props.at ? ago(props.at, props.now, props.timeZone) : ""}
@@ -102,20 +107,59 @@ const RoomRow = memo(function RoomRow(props: {
 				</span>
 				<Icon name="chevron" size={16} className="room-row-chevron" />
 			</a>
+			{props.threads}
 		</li>
 	);
 });
 
-function Section(props: {
-	title: string;
-	rooms: string[];
-	active: string | undefined;
-}) {
-	const { now } = useLive();
-	const { timeZone } = useConfig();
+/** A dispatch thread under its room: one line with its title, what it is doing, and when it last said something. */
+const ThreadRow = memo(function ThreadRow(
+	props: Omit<RowData, "key"> & {
+		active: boolean;
+		now: number;
+		timeZone: string;
+	},
+) {
+	const { view } = props;
+	return (
+		<li>
+			<a
+				className="thread-row"
+				href={hrefFor("room", view.key)}
+				data-closed={view.closed || undefined}
+				aria-current={props.active ? "page" : undefined}
+			>
+				<Icon name="conversations" size={16} className="thread-row-icon" />
+				<span className="thread-row-title">{view.displayName}</span>
+				{props.typing ? (
+					<span className="typing" role="img" aria-label={t("Working")}>
+						<i />
+						<i />
+						<i />
+					</span>
+				) : null}
+				{props.waiting ? (
+					<span className="badge badge-warn">
+						{plural(
+							props.waiting,
+							"{count} card waiting",
+							"{count} cards waiting",
+						)}
+					</span>
+				) : null}
+				<span className="room-row-time">
+					{props.at ? ago(props.at, props.now, props.timeZone) : ""}
+				</span>
+			</a>
+		</li>
+	);
+});
+
+/** The rows for rooms, each with what the list shows of it; rooms the list does not know are left out. */
+function useRowData(keys: readonly string[]): RowData[] {
 	const rows = useSelector(
 		(state) =>
-			props.rooms.map((key) => {
+			keys.map((key) => {
 				const room = state.rooms[key];
 				const last = lastMessage(state, key);
 				return {
@@ -129,31 +173,108 @@ function Section(props: {
 					at: last?.at,
 				};
 			}),
-		props.rooms.join(","),
+		keys.join(","),
 	);
-	const shown = rows.flatMap((row) =>
-		row.view ? [{ ...row, view: row.view }] : [],
+	return rows.flatMap((row) => (row.view ? [{ ...row, view: row.view }] : []));
+}
+
+/** The threads of a room: the open ones, then the finished ones folded away until asked for. */
+function ThreadList(props: {
+	open: string[];
+	closed: string[];
+	active: string | undefined;
+}) {
+	const { now } = useLive();
+	const { timeZone } = useConfig();
+	const open = useRowData(props.open);
+	const closed = useRowData(props.closed);
+	if (open.length === 0 && closed.length === 0) return null;
+	const row = ({ key, ...rest }: RowData) => (
+		<ThreadRow
+			key={key}
+			{...rest}
+			active={key === props.active}
+			now={now}
+			timeZone={timeZone}
+		/>
 	);
+	return (
+		<div className="thread-group">
+			{open.length ? (
+				<ul className="thread-list" aria-label={t("Dispatch threads")}>
+					{open.map(row)}
+				</ul>
+			) : null}
+			{closed.length ? (
+				<details
+					className="thread-closed"
+					{...(closed.some((one) => one.key === props.active)
+						? { open: true }
+						: {})}
+				>
+					<summary>
+						{plural(
+							closed.length,
+							"{count} finished thread",
+							"{count} finished threads",
+						)}
+					</summary>
+					<ul className="thread-list">{closed.map(row)}</ul>
+				</details>
+			) : null}
+		</div>
+	);
+}
+
+function Section(props: {
+	title: string;
+	rooms: string[];
+	threads: Record<string, ThreadKeys>;
+	active: string | undefined;
+}) {
+	const { now } = useLive();
+	const { timeZone } = useConfig();
+	const shown = useRowData(props.rooms);
 	if (shown.length === 0) return null;
 	return (
 		<section className="stack">
 			<h2 className="section-title">{props.title}</h2>
 			<ul className="room-list">
-				{shown.map(({ key, ...row }) => (
-					<RoomRow
-						key={key}
-						{...row}
-						active={key === props.active}
-						now={now}
-						timeZone={timeZone}
-					/>
-				))}
+				{shown.map(({ key, ...row }) => {
+					const threads = props.threads[key];
+					return (
+						<RoomRow
+							key={key}
+							{...row}
+							active={key === props.active}
+							now={now}
+							timeZone={timeZone}
+							{...(threads
+								? {
+										threads: (
+											<ThreadList
+												open={threads.open}
+												closed={threads.closed}
+												active={props.active}
+											/>
+										),
+									}
+								: {})}
+						/>
+					);
+				})}
 			</ul>
 		</section>
 	);
 }
 
-/** Home first, then the agents, the groups, and the dispatch threads, with what each is doing. */
+/** A room's dispatch threads by key, open and finished. */
+interface ThreadKeys {
+	open: string[];
+	closed: string[];
+}
+
+/** Home first, then the agents and the groups, each with its dispatch threads under it, and what each is doing. */
 export function RoomsPage(props: {
 	onSearch(): void;
 	/** The room open beside the list, marked in it; the list is then a column, not a page. */
@@ -161,31 +282,48 @@ export function RoomsPage(props: {
 }) {
 	// One string, so the page redraws only when the grouping changes, not on every message.
 	const shape = useSelector((state) => {
-		const groups: Record<"home" | "agents" | "groups" | "threads", string[]> = {
+		const groups: Record<"home" | "agents" | "groups", string[]> = {
 			home: [],
 			agents: [],
 			groups: [],
-			threads: [],
 		};
+		const threads: Record<string, ThreadKeys> = {};
+		const known = new Set(
+			state.order.filter((key) => state.rooms[key]?.view?.kind !== "thread"),
+		);
+		/** Threads whose room the list no longer has still show, apart. */
+		const orphans: ThreadKeys = { open: [], closed: [] };
 		for (const key of state.order) {
 			const view = state.rooms[key]?.view;
 			if (!view) continue;
-			if (view.home) groups.home.push(key);
+			if (view.kind === "thread") {
+				const parentKeys =
+					view.parent && known.has(view.parent) ? view.parent : undefined;
+				let into = orphans;
+				if (parentKeys) {
+					into = threads[parentKeys] ?? { open: [], closed: [] };
+					threads[parentKeys] = into;
+				}
+				(view.closed ? into.closed : into.open).push(key);
+			} else if (view.home) groups.home.push(key);
 			else if (view.kind === "agent") groups.agents.push(key);
-			else if (view.kind === "group") groups.groups.push(key);
-			else groups.threads.push(key);
+			else groups.groups.push(key);
 		}
-		return JSON.stringify({ listed: state.listed, groups });
+		return JSON.stringify({ listed: state.listed, groups, threads, orphans });
 	});
-	const { listed, groups } = useMemo(
+	const { listed, groups, threads, orphans } = useMemo(
 		() =>
 			JSON.parse(shape) as {
 				listed: boolean;
-				groups: Record<"home" | "agents" | "groups" | "threads", string[]>;
+				groups: Record<"home" | "agents" | "groups", string[]>;
+				threads: Record<string, ThreadKeys>;
+				orphans: ThreadKeys;
 			},
 		[shape],
 	);
-	const none = Object.values(groups).every((list) => list.length === 0);
+	const none =
+		Object.values(groups).every((list) => list.length === 0) &&
+		orphans.open.length + orphans.closed.length === 0;
 	return (
 		<div className="page" data-column={props.active ? "" : undefined}>
 			<header className="page-head">
@@ -212,22 +350,34 @@ export function RoomsPage(props: {
 					<div className="skeleton" />
 				</div>
 			) : null}
-			<Section title={t("Home")} rooms={groups.home} active={props.active} />
+			<Section
+				title={t("Home")}
+				rooms={groups.home}
+				threads={threads}
+				active={props.active}
+			/>
 			<Section
 				title={t("Agents")}
 				rooms={groups.agents}
+				threads={threads}
 				active={props.active}
 			/>
 			<Section
 				title={t("Groups")}
 				rooms={groups.groups}
+				threads={threads}
 				active={props.active}
 			/>
-			<Section
-				title={t("Dispatch threads")}
-				rooms={groups.threads}
-				active={props.active}
-			/>
+			{orphans.open.length + orphans.closed.length > 0 ? (
+				<section className="stack">
+					<h2 className="section-title">{t("Dispatch threads")}</h2>
+					<ThreadList
+						open={orphans.open}
+						closed={orphans.closed}
+						active={props.active}
+					/>
+				</section>
+			) : null}
 		</div>
 	);
 }

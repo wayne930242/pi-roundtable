@@ -309,6 +309,8 @@ export interface RoomView {
 	parent?: string;
 	/** A thread's room takes no messages from the page. */
 	readOnly: boolean;
+	/** A thread whose dispatch has ended; its room stays readable. */
+	closed?: boolean;
 	mode: RoomMode;
 	/** The room's agent is working now. */
 	typing: boolean;
@@ -555,6 +557,8 @@ export type ServerFrame =
 	| { type: "refused"; id?: string; prompt?: string; code: RefusalCode }
 	/** A message of a room, stored or live; see `RoomMessage`. */
 	| { type: "message"; room: string; message: RoomMessage }
+	/** A stored message changed its text in place, such as a thread's start line once the thread exists. */
+	| { type: "edited"; room: string; message: RoomMessage }
 	/** What the running turn writes and which tools it runs; sent to the sockets that focus the room. */
 	| { type: "progress"; room: string; event: AppProgress }
 	/** The room's agent is, or is no longer, working, and whether Stop applies. */

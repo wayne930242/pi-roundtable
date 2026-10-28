@@ -8,9 +8,11 @@ import {
 	type ApprovedBy,
 	IDENTITY,
 	MODES,
+	type PromptScope,
 	type PromptWait,
 	promptScope,
 	SCHEDULES,
+	THREADS,
 	type TurnRequest,
 	type TurnResult,
 } from "pi-roundtable";
@@ -339,7 +341,12 @@ describeDb("the owner app over a real host", () => {
 			"agent",
 		]);
 		const rooms = (await (await rest(app, "rooms")).json()) as RoomsView;
-		expect(rooms.rooms.map((r) => [r.key, r.home])).toEqual([
+		// Threads of the other suites stay in the shared database; they are not what this asks.
+		expect(
+			rooms.rooms
+				.filter((r) => r.kind !== "thread")
+				.map((r) => [r.key, r.home]),
+		).toEqual([
 			[GUIDE, true],
 			[SCOUT, false],
 		]);
@@ -1187,4 +1194,208 @@ describeDb("the owner app with a small upload limit", () => {
 		);
 		tab.close();
 	});
+});
+
+const OWNER_SCOPE: PromptScope = {
+	principalId: ADA_DISCORD,
+	speakerId: `discord:${ADA_DISCORD}`,
+	tier: "owner",
+	escalate: "owners",
+};
+
+const isThreadKey = (key: string) => /^app:thread\.[0-9a-f-]{36}$/.test(key);
+
+/** The messages of a room as the REST serves them. */
+async function messagesOf(booted: Booted, room: string) {
+	return (
+		(await (
+			await rest(booted, `rooms/${encodeURIComponent(room)}/messages`)
+		).json()) as MessagesView
+	).messages;
+}
+
+/** The room list as the REST serves it. */
+async function roomList(booted: Booted) {
+	return ((await (await rest(booted, "rooms")).json()) as RoomsView).rooms;
+}
+
+/** Waits until `check` returns a value, polling for up to `ms`. */
+async function until<T>(
+	check: () => Promise<T | undefined>,
+	ms = 4000,
+): Promise<T> {
+	const deadline = Date.now() + ms;
+	for (;;) {
+		const found = await check();
+		if (found !== undefined) return found;
+		if (Date.now() > deadline) throw new Error("the condition never held");
+		await Bun.sleep(20);
+	}
+}
+
+describeDb("dispatch threads of the app over a real host", () => {
+	let app: Booted;
+	beforeAll(async () => {
+		app = await boot({ auth: "verifier", graceSeconds: 0.4 });
+	}, 30_000);
+	afterAll(async () => {
+		await app.stop();
+	});
+
+	test("message_agent from a web room opens its exchange in a thread there, under each agent's name", async () => {
+		app.scripts.set("ask-the-scout", async (request) => {
+			// The team's `message_agent` entry is the host's own; the public type leaves it out.
+			const team = app.host.context.services.get(AGENTS).team as unknown as {
+				message(
+					caller: { name: string; session: string; home: string },
+					to: string,
+					text: string,
+				): string;
+			};
+			if (request.agent?.name === "guide")
+				team.message(
+					{ name: "guide", session: GUIDE, home: GUIDE },
+					"scout",
+					"check the disk",
+				);
+			return { ok: true, text: "asked" };
+		});
+		const tab = await Client.open(app, { "x-actor": "owner" });
+		if (!tab) throw new Error("the owner was refused");
+		tab.send({ type: "send", id: "t1", room: GUIDE, text: "ask-the-scout" });
+		// The start line lands in the sender's room, then is edited to link the thread.
+		const start = await tab.take(
+			(f): f is Extract<ServerFrame, { type: "message" }> =>
+				f.type === "message" &&
+				f.room === GUIDE &&
+				f.message.kind === "system" &&
+				f.message.text.startsWith("🧵"),
+		);
+		const linked = await tab.take(ofType("edited"));
+		expect(linked.message.id).toBe(start.message.id);
+		expect(linked.room).toBe(GUIDE);
+		const key = /\]\((app:thread\.[0-9a-f-]{36})\)/.exec(
+			linked.message.text,
+		)?.[1];
+		if (!key)
+			throw new Error(`the start line links no thread: ${linked.message.text}`);
+		await tab.take(ofType("changed"));
+		// The request and the answer are in the thread, under each agent's name.
+		const rows = await until(async () => {
+			const found = await messagesOf(app, key);
+			return found.length >= 2 ? found : undefined;
+		});
+		expect(rows.map((m) => [m.kind, m.agent, m.author])).toEqual([
+			["agent", "guide", "Guide"],
+			["agent", "scout", "Scout"],
+		]);
+		expect(rows[0]?.text).toContain("check the disk");
+		expect(rows[1]?.text).toContain("check the disk");
+		// Once the exchange ends the thread is closed, nested under its parent, and still readable.
+		const closed = await until(async () =>
+			(await roomList(app)).find((r) => r.key === key && r.closed),
+		);
+		expect(closed).toMatchObject({
+			kind: "thread",
+			parent: GUIDE,
+			readOnly: true,
+		});
+		tab.close();
+	});
+
+	test("a thread takes no message from the page, has no modes, and cannot itself host a thread", async () => {
+		const threads = app.host.context.services.get(THREADS);
+		const thread = await threads.open(GUIDE, "Read only");
+		if (!thread) throw new Error("the thread was not opened");
+		const tab = await Client.open(app, { "x-actor": "owner" });
+		if (!tab) throw new Error("the owner was refused");
+		tab.send({ type: "send", id: "ro", room: thread.channel, text: "hi" });
+		expect(await tab.take(ofType("refused"))).toMatchObject({
+			id: "ro",
+			code: "read_only",
+		});
+		const mode = await rest(
+			app,
+			`rooms/${encodeURIComponent(thread.channel)}/mode`,
+			{ method: "PUT", body: JSON.stringify({ yolo: true }) },
+		);
+		expect(mode.status).toBe(404);
+		expect(await threads.open(thread.channel, "Nested")).toBeUndefined();
+		expect(await threads.open("app:agent.nobody", "Nowhere")).toBeUndefined();
+		await thread.close();
+		tab.close();
+	});
+
+	test("a card of a coding job in a thread reaches the owner there and is answered there", async () => {
+		const threads = app.host.context.services.get(THREADS);
+		const thread = await threads.open(GUIDE, "Coding #7", "📋 Task: tidy");
+		if (!thread) throw new Error("the thread was not opened");
+		expect(isThreadKey(thread.channel)).toBe(true);
+		expect(thread.mention).toContain(thread.channel);
+		const one = await Client.open(app, { "x-actor": "owner" });
+		const two = await Client.open(app, { "x-actor": "owner" });
+		if (!one || !two) throw new Error("the owner was refused");
+		await one.take(ofType("ready"));
+		const prompts = app.host.context.surfaces.prompts(
+			thread.channel,
+			OWNER_SCOPE,
+		);
+		const answer = prompts?.confirm(
+			"Push it?",
+			"Push the branch",
+			undefined,
+			"owner",
+			undefined,
+			{ action: "git push", tool: "bash", input: { command: "git push" } },
+		);
+		const shown = await one.take(ofType("prompt"));
+		expect(shown.room).toBe(thread.channel);
+		expect((await two.take(ofType("prompt"))).prompt.id).toBe(shown.prompt.id);
+		// The card is answered from the thread's room, which is read only for messages.
+		two.send({ type: "approval", prompt: shown.prompt.id, approved: true });
+		expect(await one.take(ofType("prompt_closed"))).toMatchObject({
+			prompt: shown.prompt.id,
+			outcome: "approved",
+		});
+		expect(await answer).toBe("approved");
+		// The task intro and the report are in the thread, then it closes.
+		await thread.close("✅ Done");
+		const rows = await messagesOf(app, thread.channel);
+		expect(rows.map((m) => m.text)).toEqual(["📋 Task: tidy", "✅ Done"]);
+		expect(
+			(await roomList(app)).find((r) => r.key === thread.channel),
+		).toMatchObject({ closed: true, parent: GUIDE });
+		one.close();
+		two.close();
+	});
+});
+
+describeDb("dispatch threads left open by a host that stopped", () => {
+	test("the next start closes them with a restart notice, and the thread stays readable", async () => {
+		const first = await boot({ auth: "verifier" });
+		const { dataDir } = first;
+		const thread = await first.host.context.services
+			.get(THREADS)
+			.open(GUIDE, "Left open", "📋 Task: long job");
+		if (!thread) throw new Error("the thread was not opened");
+		expect(
+			(await roomList(first)).find((r) => r.key === thread.channel)?.closed,
+		).toBeUndefined();
+		await first.stop();
+		const second = await boot({ auth: "verifier", dataDir });
+		try {
+			const closed = await until(async () =>
+				(await roomList(second)).find(
+					(r) => r.key === thread.channel && r.closed,
+				),
+			);
+			expect(closed.parent).toBe(GUIDE);
+			const rows = await messagesOf(second, thread.channel);
+			expect(rows.map((m) => m.kind)).toEqual(["agent", "system"]);
+			expect(rows[1]?.text).toContain("restarted before this job finished");
+			expect(rows[1]?.text.startsWith("-#")).toBe(false);
+		} finally {
+			await second.stop();
+		}
+	}, 30_000);
 });

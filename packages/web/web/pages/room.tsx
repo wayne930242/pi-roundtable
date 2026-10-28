@@ -212,7 +212,27 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 		Date.parse(message.at) - Date.parse(before.at) > PAUSE_MS;
 	const rows = useRows(items, config.timeZone, now, headerOf);
 
-	if (listed && !view)
+	// A thread's link can arrive before the room list does; ask for the list once before giving up.
+	const [rechecked, setRechecked] = useState(false);
+	const unknown = listed && !view;
+	useEffect(() => {
+		if (!unknown || rechecked) return;
+		let current = true;
+		api.rooms().then(
+			(listing) => {
+				store.dispatch({ type: "rooms_loaded", rooms: listing.rooms });
+				if (current) setRechecked(true);
+			},
+			() => {
+				if (current) setRechecked(true);
+			},
+		);
+		return () => {
+			current = false;
+		};
+	}, [unknown, rechecked]);
+
+	if (unknown && rechecked)
 		return (
 			<section className="room">
 				<div className="page">
@@ -230,6 +250,7 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 		.find((m) => m.kind === "agent");
 	const mine = room?.mode;
 	const agentName = view?.kind === "agent" ? view.name : undefined;
+	const parent = view?.kind === "thread" ? view.parent : undefined;
 	return (
 		// biome-ignore lint/a11y/noStaticElementInteractions: dropping files on the room attaches them; the paperclip is the keyboard path
 		<section
@@ -258,15 +279,21 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 						className="room-status"
 						data-working={room?.typing || undefined}
 					>
-						{view?.readOnly
-							? t("Read-only")
-							: room?.typing
-								? t("Working…")
-								: view?.kind === "group"
-									? t("Group")
-									: view?.home
-										? t("Home")
-										: t("Idle")}
+						{view?.kind === "thread"
+							? view.closed
+								? t("Thread · finished")
+								: room?.typing
+									? t("Working…")
+									: t("Thread · read-only")
+							: view?.readOnly
+								? t("Read-only")
+								: room?.typing
+									? t("Working…")
+									: view?.kind === "group"
+										? t("Group")
+										: view?.home
+											? t("Home")
+											: t("Idle")}
 					</span>
 				</div>
 				<button
@@ -383,7 +410,10 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 				<p className="room-note">
 					{t(
 						"This is a dispatch thread. It shows what was sent and answered; reply in its parent room.",
-					)}
+					)}{" "}
+					{parent ? (
+						<a href={hrefFor("room", parent)}>{t("Open the parent room")}</a>
+					) : null}
 				</p>
 			) : (
 				<Composer
@@ -409,6 +439,8 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 				room={roomKey}
 				mode={mine}
 				agent={agentName}
+				readOnly={view?.readOnly ?? false}
+				parent={parent}
 				onClose={() => setMenu(false)}
 				onAskYolo={() => {
 					setMenu(false);

@@ -1,8 +1,16 @@
 import { memo, useState } from "react";
-import Markdown from "react-markdown";
+import Markdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { translate as t } from "../lib/messages.ts";
+import { hrefFor } from "../lib/router.ts";
 import { Icon } from "./icons.tsx";
+
+/** What a message names a dispatch thread's room by: `<surface>:thread.<uuid>`, as a link's address. */
+export const THREAD_LINK = /^[^\s:()]+:thread\.[0-9a-f-]{36}$/;
+
+/** Whether Markdown text links a dispatch thread's room. */
+export const hasThreadLink = (text: string): boolean =>
+	/\]\([^\s:()]+:thread\.[0-9a-f-]{36}\)/.test(text);
 
 /** A fenced code block with a button that copies it. */
 function Pre({ children }: { children?: React.ReactNode }) {
@@ -39,7 +47,8 @@ function Pre({ children }: { children?: React.ReactNode }) {
 
 /**
  * An agent's or owner's message as Markdown. Raw HTML in it stays text, links open only if they
- * are web addresses, and an image is shown as its description, so a message can load nothing.
+ * are web addresses or name a dispatch thread's room (which opens in the app), and an image is
+ * shown as its description, so a message can load nothing.
  */
 export const MessageMarkdown = memo(function MessageMarkdown({
 	source,
@@ -50,9 +59,16 @@ export const MessageMarkdown = memo(function MessageMarkdown({
 		<div className="prose">
 			<Markdown
 				remarkPlugins={[remarkGfm]}
+				urlTransform={(url) =>
+					THREAD_LINK.test(url) ? url : defaultUrlTransform(url)
+				}
 				components={{
 					a: ({ href, children }) =>
-						href && /^https?:\/\//.test(href) ? (
+						href && THREAD_LINK.test(href) ? (
+							<a className="thread-link" href={hrefFor("room", href)}>
+								{children}
+							</a>
+						) : href && /^https?:\/\//.test(href) ? (
 							<a href={href} target="_blank" rel="noreferrer noopener">
 								{children}
 							</a>

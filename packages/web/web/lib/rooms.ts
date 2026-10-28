@@ -406,6 +406,14 @@ export function reduce(state: RoomsState, action: Action): RoomsState {
 		}
 		case "message":
 			return onMessage(state, action.room, action.message);
+		case "edited":
+			// A message not held (older than the page) is fetched with its new text when it is needed.
+			return withRoom(state, action.room, (room) => ({
+				...room,
+				messages: room.messages.map((one) =>
+					one.id === action.message.id ? action.message : one,
+				),
+			}));
 		case "progress":
 			return onProgress(state, action);
 		case "activity":

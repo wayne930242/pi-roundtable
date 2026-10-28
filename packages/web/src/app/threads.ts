@@ -27,13 +27,17 @@ const threadOf = (row: Row): WebThread => ({
 	createdAt: row.created_at,
 });
 
+/** The most closed threads the room list still shows. */
+const CLOSED_LISTED = 30;
+
 /** The most characters of a thread's title. */
 const TITLE_CHARS = 80;
 
 /**
  * The threads of the app in `web_threads`. A thread is a room the page can read and nobody can
- * write in. `open` makes one under a parent room and returns its id; `close` ends it. Posting
- * into a thread and showing it in the page are the app's; this is only the record.
+ * write in. `open` makes one under a parent room and returns its id; `close` ends it, and a
+ * closed thread stays readable. Posting into a thread and showing it in the page are the app's;
+ * this is only the record.
  */
 export class WebThreads {
 	readonly #sql: SQL;
@@ -78,10 +82,18 @@ export class WebThreads {
 		return row && threadOf(row);
 	}
 
-	/** The threads still open, newest first. */
-	async listOpen(): Promise<WebThread[]> {
+	/**
+	 * The threads the room list shows, newest first: every open one, and the `closedLimit` newest
+	 * closed ones, which stay readable but are not kept in view for ever.
+	 */
+	async list(closedLimit = CLOSED_LISTED): Promise<WebThread[]> {
 		const rows: Row[] = await this.#sql`
-			SELECT * FROM web_threads WHERE open ORDER BY created_at DESC, id`;
+			SELECT * FROM (
+				SELECT * FROM web_threads WHERE open
+				UNION ALL
+				(SELECT * FROM web_threads WHERE NOT open
+					ORDER BY created_at DESC, id LIMIT ${closedLimit})
+			) shown ORDER BY created_at DESC, id`;
 		return rows.map(threadOf);
 	}
 }

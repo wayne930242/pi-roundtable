@@ -5,10 +5,11 @@
 //                                 makes `fixture_<time>` there and drops it when it stops
 //   PORT                          the app (default 4180); PORT + 1 is the control port below
 //
-// The agents are scripts: write a keyword in a room and the agent acts it out.
+// The agents are scripts: start a message with a keyword and the agent acts it out.
 //   approve  a held action with details          timeout  a turn's time-limit card
 //   ask      a question with options             quiz     a questionnaire
 //   late     a card the turn stops waiting on    stream   streamed text and tool chips, then a reply
+//   dispatch a coding job in a thread, with a card there     exchange  the agent asks the scout in a thread
 // Anything else gets a reply in Markdown. The control port sends a message as the owner:
 //   curl 'http://127.0.0.1:4181/say?room=app:agent.guide&text=approve'
 // `GET /control/mode?room=...&yolo=1&long=1` sets a room's modes. The page is at http://127.0.0.1:PORT/console/.
@@ -28,7 +29,9 @@ url.pathname = `/${databaseName}`;
 process.env.ROUNDTABLE_TEST_DATABASE_URL = url.toString();
 
 // Loaded after the variable is set: the test host reads the database address when it is imported.
-const { AGENTS, MODES, promptScope, SCHEDULES } = await import("pi-roundtable");
+const { AGENTS, MODES, promptScope, SCHEDULES, THREADS } = await import(
+	"pi-roundtable"
+);
 const { testHost } = await import("pi-roundtable/testing");
 const { webConsole } = await import("../src/web-plugin.ts");
 type TurnProgress = import("pi-roundtable").TurnProgress;
@@ -63,6 +66,7 @@ type Script = (
 ) => Promise<{ ok: true; text: string }>;
 
 let host: Awaited<ReturnType<typeof testHost>> | undefined;
+let teamForScripts: unknown;
 const promptsOf = (request: TurnRequest) => {
 	const prompts = host?.context.surfaces.prompts(
 		request.channel,
@@ -180,6 +184,61 @@ const scripts: Record<string, Script> = {
 		);
 		return { ok: true, text: `The card ended ${result}.` };
 	},
+	dispatch: async (request) => {
+		const thread = await host?.context.services
+			.get(THREADS)
+			.open(
+				request.channel,
+				"Coding #12 · tidy imports",
+				"📋 Task: tidy the imports in `src/`",
+			);
+		if (!thread) return { ok: true, text: "No thread could open here." };
+		// The job goes on in its thread after the turn has answered.
+		void (async () => {
+			await sleep(800);
+			await thread.post(
+				"Reading `src/` …\n\nFound **14** files with unused imports.",
+			);
+			const prompts = host?.context.surfaces.prompts(
+				thread.channel,
+				promptScope(request.speaker),
+			);
+			const result = await prompts?.confirm(
+				"Commit the changes?",
+				"The worker wants to commit **31 removed imports** on `tidy-imports`.",
+				undefined,
+				"owner",
+				undefined,
+				{
+					action: "git commit",
+					tool: "bash",
+					input: { command: "git commit -am 'chore: remove unused imports'" },
+				},
+			);
+			await thread.close(
+				result === "approved"
+					? "✅ Done\n\nRemoved 31 unused imports and committed them on `tidy-imports`."
+					: "❌ Stopped; nothing was committed.",
+			);
+		})();
+		return {
+			ok: true,
+			text: `Started ${thread.mention}. I will report when it is done.`,
+		};
+	},
+	exchange: async (request) => {
+		if (request.agent?.name === "guide")
+			(
+				teamForScripts as {
+					message(
+						caller: NonNullable<TurnRequest["agent"]>,
+						to: string,
+						text: string,
+					): string;
+				}
+			).message(request.agent, "scout", "How large is the repository?");
+		return { ok: true, text: "Asked the scout; the exchange is in a thread." };
+	},
 	stream: async (request) => {
 		const progress = async (event: TurnProgress) => {
 			await host?.context.surfaces.progress?.(request.channel, event);
@@ -229,7 +288,9 @@ const scripts: Record<string, Script> = {
 const runtime = {
 	runTurn: async (request: TurnRequest) => {
 		const text = request.text.toLowerCase();
-		const key = Object.keys(scripts).find((marker) => text.includes(marker));
+		const key = Object.keys(scripts).find((marker) =>
+			text.trim().startsWith(marker),
+		);
 		const script = key ? scripts[key] : undefined;
 		if (script) return script(request, new AbortController().signal);
 		await sleep(400);
@@ -285,6 +346,7 @@ host = await testHost({
 
 const services = host.context.services;
 const { team } = services.get(AGENTS);
+teamForScripts = team;
 const deadline = Date.now() + 15_000;
 while (team.coordinator() === undefined && Date.now() < deadline)
 	await sleep(50);

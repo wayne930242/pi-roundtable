@@ -128,6 +128,114 @@
 	transform: translate3d(3px, 0, 0);
 }
 
+/* ── Dispatch threads under their room ────────────────────────────────────────────────────────── */
+
+.thread-group {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-1);
+	margin: var(--space-1) 0 var(--space-2) var(--space-5);
+	padding-left: var(--space-3);
+	border-left: 2px solid var(--border);
+}
+
+.thread-list {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-1);
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.thread-row {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	min-height: var(--touch);
+	padding: var(--space-1) var(--space-3);
+	border: 1px solid transparent;
+	border-radius: var(--radius);
+	color: inherit;
+	font-size: var(--text-sm);
+	text-decoration: none;
+	transition:
+		background var(--dur-fast) var(--ease-out),
+		border-color var(--dur-fast) var(--ease-out);
+}
+
+.thread-row:hover {
+	background: var(--surface);
+	border-color: var(--border);
+}
+
+.thread-row[aria-current="page"] {
+	background: var(--accent-soft);
+	border-color: var(--accent);
+}
+
+.thread-row[data-closed] {
+	color: var(--muted);
+}
+
+.thread-row-icon {
+	flex: none;
+	color: var(--muted);
+}
+
+.thread-row-title {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.thread-closed > summary {
+	display: flex;
+	align-items: center;
+	min-height: var(--touch);
+	padding: 0 var(--space-3);
+	color: var(--muted);
+	font-size: var(--text-xs);
+	cursor: pointer;
+	list-style: none;
+}
+
+.thread-closed > summary::-webkit-details-marker {
+	display: none;
+}
+
+.thread-closed > summary::before {
+	content: "▸";
+	margin-right: var(--space-2);
+}
+
+.thread-closed[open] > summary::before {
+	content: "▾";
+}
+
+.thread-closed > summary:hover {
+	color: var(--text);
+}
+
+.thread-closed[open] > summary {
+	margin-bottom: var(--space-1);
+}
+
+.thread-link {
+	font-weight: 600;
+}
+
+.line .prose {
+	flex: 0 1 auto;
+	text-align: center;
+}
+
+.line .prose p {
+	margin: 0;
+}
+
 .typing {
 	display: inline-flex;
 	gap: 3px;
