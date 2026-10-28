@@ -243,11 +243,12 @@ The built-in plugins provide these, from the main entry:
 | `MEMORY` | `MemoryStore` | `memory` (an addon) | `forSpeaker(principalId)` gives that principal's `SpeakerMemory`: `list`, `forPrompt`, `add`, `search`, `update`, `removeById`, `remove`; `MEMORY_KINDS` is `core`, `note`, `event` |
 | `BACKGROUND_TURNS` | `BackgroundTurns` | `modules` | Turns nobody wrote: `runScheduled`, `runDelegated`, `runErrorReport` |
 | `DELEGATION` | `Delegator` | `modules` | `start(request)` a background task, `runningChannels()`, `idle()` |
+| `THREADS` | `DispatchThreads` | `threads` | The threads of background dispatches (coding tasks, delegated tasks, messages between agents), on any surface that hosts them: `open(origin, title, intro?)` opens the thread under the channel `origin` through the `threads` of the surface that serves its prefix and resolves to a `DispatchThread`, or `undefined` when that surface hosts none or the channel cannot. See [Dispatch threads on any surface](#dispatch-threads-on-any-surface) |
 | `WORKER_SESSIONS` | `WorkerSessions` | `worker-sessions` | Fresh Pi sessions for a plugin's own workers, on the host's model login: `delegation` is the host's delegation `model` and `thinking`, and `run({ task, signal, prompt, extensions, toolNames, model?, thinking?, aborted? })` runs the task in a session that has only the tools `extensions` register and `toolNames` names (no built-in tool, skill, context file, memory or agent tool) and returns the worker's final answer; see [Workers of your own](#workers-of-your-own) |
 
 The data types the ports use (`Schedule`, `NewSchedule`, `Agent`, `AgentGroup`, `TeamStatus`, `Memory`, `SkillSet`, `DelegationJob`, and so on) are in the main entry too.
 Your plugins run after the built-ins, so they can read every key above.
-The Discord connection's key, `DISCORD`, is in the Discord entry, because its port names discord.js types: `DiscordServices` has `connection`, `commands`, `guard`, `threads`, `poster` (see [Posting through `DISCORD.poster`](#posting-through-discordposter)) and `channelContext`; commands are in [`commands.add`](#slash-commands-commandsadd). A plugin's own stand-in for `DISCORD` (such as one written with `as unknown as DiscordServices`) needs a `poster` too before code that posts runs under it; `fakeDiscord()` and `testHost` give one.
+The Discord connection's key, `DISCORD`, is in the Discord entry, because its port names discord.js types: `DiscordServices` has `connection`, `commands`, `guard`, `threads` (the same instance as `THREADS`), `poster` (see [Posting through `DISCORD.poster`](#posting-through-discordposter)) and `channelContext`; commands are in [`commands.add`](#slash-commands-commandsadd). A plugin's own stand-in for `DISCORD` (such as one written with `as unknown as DiscordServices`) needs a `poster` too before code that posts runs under it; `fakeDiscord()` and `testHost` give one.
 
 To share your own service, export its key as a constant and its port as an interface.
 Plugins registered after yours can read it during setup.
@@ -2731,6 +2732,7 @@ The agent server claims `discord:` keys, and, only on a surface that declares `a
 | `sendReply(channel, reply)` | Posts an `OutboundReply`: a thinking line, a card, text chunks, then files | (required) |
 | `stop()` | Disconnects when the host stops | nothing to stop |
 | `agentRooms` | `true` makes the surface host [agent rooms](#agent-rooms-on-any-surface): a conversation with each agent and group of the team, as `<surface>:agent.<name>` and `<surface>:group.<name>` | no rooms; the agent team answers only in Discord |
+| `threads` | A `SurfaceThreads` that hosts [dispatch threads](#dispatch-threads-on-any-surface): a background dispatch started in one of the surface's channels opens its thread there, and the thread is the conversation `<surface>:<id>` | the dispatch posts in the channel as before |
 | `readAttachment(channel, ref)` | Returns the bytes of an attachment this surface made, such as an upload to a room, as `Promise<Uint8Array>`; the agent server's claim reads the refs of the surface's messages here and never fetches them over the network, and a rejection fails that file. A claim of your own passes the same function as `read` to `attachmentsOf`, or its refs are downloaded | the refs' URLs are downloaded, up to 25 MB each |
 | `formatting` | A short English text on how a reply renders here, such as "no Markdown tables"; the runtime appends it to the system prompt of every turn that replies on this surface, after the persona | nothing is appended |
 | `startTyping(channel)` | Shows a typing indicator until the returned function is called | none is shown |
@@ -2747,7 +2749,7 @@ A room is a conversation of its own, apart from the agent's or group's Discord c
 A room has its own session and held actions, so a card or an approving message in the web room does not touch the Discord channel's.
 A group's room keeps its own log, `<group>@<surface>`, with the seats `agentgroup:<surface>.group.<group>.<agent>`; the Discord channel's log and seats are untouched.
 A schedule an agent sets from a room belongs to the room.
-`message_agent` from a room talks to the other agent's room on the same surface and returns the answer to the sender's room; it opens no thread there.
+`message_agent` from a room talks to the other agent's room on the same surface; when the surface hosts [dispatch threads](#dispatch-threads-on-any-surface) it opens the exchange's thread in the sender's room, as it does in a Discord channel, and the request and the answer go there under each agent's name, and otherwise the answer returns to the sender's room.
 Starting a room over resets that room's session (or a group room's seats) alone.
 Archiving an agent or group clears the schedules and sessions of every key `AGENTS.team.roomsOf(name)` lists: its Discord channel, when it has one, then its room on each surface, and the room stops being owned: `AGENTS.team.owns(room)` is `undefined`, the agent server's claim no longer takes its messages, and a surface should refuse them (the web disables the composer) instead of delivering them to a room nobody answers in.
 
@@ -2760,6 +2762,30 @@ A surface shows the author as it likes; Discord's own surface ignores `author`.
 Messages in a room are admitted by the agent server's claim like those in a Discord channel: an owner's message runs a turn, a group's round follows, and `speakers: "owners"` still applies.
 The claim reads the attachments of a room's message through the surface's `readAttachment`, so a ref the surface made is never fetched over the network; a surface without it has its refs downloaded from their URLs.
 `AGENTS.team.owns(key)` answers for a room too, only while its agent or group is active, and `AGENTS.team.coordinator()` names the coordinator, the agent in the entry channel, or on a host without Discord the one `coordinator` names.
+
+#### Dispatch threads on any surface
+
+A background dispatch (a coding task, a delegated task, a message between agents) gets a thread beside the channel that started it: one start line in the channel, then the dispatch's progress and report inside the thread.
+A surface hosts them with `threads`, a `SurfaceThreads`:
+
+| Method | What the surface does |
+|---|---|
+| `open(parent, name, line)` | Posts the start line in `parent` and opens a thread from it. `line(mention?)` gives the start line's text: call it with no argument for the first post and with the thread's `mention` once the thread exists, so a surface that can edit its post shows the link. Resolves to `{ id, mention }`, or `undefined` when `parent` cannot host a thread, such as a direct message or a thread; rejects when the surface refuses, and no thread is made. The `id` is the surface's own and unique among its threads (the web's are `thread.<uuid>`); `mention` is how text names the thread (`<#id>` on Discord) |
+| `post(thread, text)` | Posts text in the thread |
+| `send(thread, text)` | Optional. Posts one message of at most 2000 characters and resolves to an `InterimMessage` whose `edit(text)` changes it in place; the dispatch's `DispatchThread` then carries `interim`, so a coding worker's progress edits in place. Without it the thread has none |
+| `close(thread)` | Archives the thread, and locks it where the surface allows |
+
+The thread is the conversation `channelKey(surface, id)` (`app:thread.<uuid>` on a surface `app`): its owner cards, held actions and posts through `sendReply` use that key.
+`THREADS.open(origin, title, intro?)` picks the surface by the prefix of `origin`, and the thread lives on that surface; a channel whose surface has no `threads`, a channel that cannot host one, a failed creation, and a channel whose claim keeps reports in place (`postsInPlace`, such as an open channel) get none, and the dispatch posts in the channel as before.
+The `DispatchThread` it returns has `id`, `channel`, `mention`, `post(text)`, `interim?` and `close(report?)`, which posts the report and archives the thread once.
+
+The host keeps a ledger of the threads still open, `dispatch-threads.json` in the data directory, keyed by each thread's channel key.
+Once every service has started after a restart, it closes the threads the last run left open through their surfaces, with a restart notice; a thread whose surface no longer hosts threads is dropped with a warning.
+A ledger written before 0.23, keyed by Discord thread id, is read as `discord:` threads.
+
+The Discord surface implements `SurfaceThreads` through its current connection, and `DISCORD.threads` is the same instance as `THREADS`, so a plugin that reads either sees no change.
+`ThreadHost`, the Discord-only port `DispatchThreads` took before 0.23, is deprecated until 1.0: pass `surfaces` instead of `host` to `new DispatchThreads(...)`.
+`fakeThreads()` from `pi-roundtable/testing` is dispatch threads over a fake Discord host.
 
 A surface tells the model how its replies render with `formatting`: a short English text, kept under about 400 characters, which the runtime appends to the system prompt of every turn that replies on the surface, after the persona and everything appended before it, for the channel the turn replies in.
 One persona can answer on several surfaces, so the guidance comes from the surface and never from the persona.
@@ -2865,7 +2891,7 @@ Before any card, an `ask_user` question or an approval, the host posts the pendi
 The final reply is posted at the end as before, with its thinking line; an intermediate message is never the final one, so nothing is posted twice, and a steered run keeps its final text.
 A failed interim post or edit is logged and never fails the turn.
 Turns with nowhere to post, such as transient tasks and turns of a claim that passes its own `reply` to `context.turns.run`, post only their final reply.
-A coding worker posts the same way into its dispatch thread, under the name its report uses, when the thread's host can edit its posts (`ThreadHost.send`, which the Discord thread host has; a `DispatchThread` then carries `interim`): its approval cards come after the text it wrote before them, and its report is posted once, at the end.
+A coding worker posts the same way into its dispatch thread, under the name its report uses, when the thread's surface can edit its posts (`SurfaceThreads.send`, which the Discord surface has; a `DispatchThread` then carries `interim`): its approval cards come after the text it wrote before them, and its report is posted once, at the end.
 A runtime that fills [the `runtime` slot](#the-runtime-slot-replace-pi) receives the place to post as `TurnRequest.interim` and may use it or not.
 
 The config's `interimText: "off"` posts only the final reply (default `"on"`), and `interimPrimaryChars` sets the length of primary text (default 400).
@@ -4085,8 +4111,10 @@ Import from the entries listed below; source area files are internal.
 | `SpeakerMemory` | `pi-roundtable` | type |
 | `StoredAttachment` | `pi-roundtable` | type |
 | `SurfacePort` | `pi-roundtable` | type |
+| `SurfaceThreads` | `pi-roundtable` | type |
 | `SYSTEM_PRINCIPAL` | `pi-roundtable` | value |
 | `THE_SPEAKER` | `pi-roundtable` | value |
+| `THREADS` | `pi-roundtable` | value |
 | `TIERS` | `pi-roundtable` | value |
 | `TeamAgentStatus` | `pi-roundtable` | type |
 | `TeamStatus` | `pi-roundtable` | type |

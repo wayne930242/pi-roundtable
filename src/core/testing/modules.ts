@@ -31,8 +31,10 @@ import {
 	IDENTITY,
 	MEMORY,
 	SCHEDULES,
+	THREADS,
 } from "../services.ts";
 import type { Tier } from "../speakers.ts";
+import type { DispatchThreads } from "../threads/dispatch-threads.ts";
 import { toolTiers } from "../tool-tiers.ts";
 
 /** What the modules' tools did, for a test to read. */
@@ -170,8 +172,8 @@ export async function setUpModules(
 		services.preset(AGENTS, {
 			team: { channelOf: options.agentChannelOf },
 		} as unknown as AgentServer);
-	if (options.discord !== false)
-		// SAFETY: the tools under test use the connection's owner channel and the threads' open only.
+	if (options.discord !== false) {
+		// SAFETY: the tools under test use the connection's owner channel only.
 		services.preset(DISCORD, {
 			connection: {
 				ownerChannel: async () => {
@@ -180,15 +182,17 @@ export async function setUpModules(
 				},
 				ownerOperations: () => ({}),
 			},
-			threads: {
-				open: async (origin: ChannelKey | undefined) => {
-					record.threadOrigins.push(origin);
-					return undefined;
-				},
-			},
 			guard: {},
 			commands: { add: () => undefined },
 		} as unknown as DiscordServices);
+		// SAFETY: the modules use the threads' open only, which records where each opens.
+		services.preset(THREADS, {
+			open: async (origin: ChannelKey | undefined) => {
+				record.threadOrigins.push(origin);
+				return undefined;
+			},
+		} as unknown as DispatchThreads);
+	}
 	const owns =
 		options.owns ?? ((channel: ChannelKey) => channel.startsWith("discord:"));
 	// Only Discord's channels have a surface; any other conversation has none to report in.

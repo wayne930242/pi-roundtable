@@ -13,6 +13,7 @@ import {
 	precheckPlugin,
 	scheduleStorePlugin,
 } from "./builtin/stores.ts";
+import { threadsPlugin } from "./builtin/threads.ts";
 import { workerSessionsPlugin } from "./builtin/worker-sessions.ts";
 import { warnDeprecations } from "./config/access.ts";
 import {
@@ -329,6 +330,8 @@ export async function defineRoundtable(
 			...(config.memory ? [memoryPlugin({ owner })] : []),
 			scheduleStorePlugin(),
 			precheckPlugin(),
+			// Before Discord, whose services hand out its instance, and the modules and agent server that use it.
+			threadsPlugin({ dataDir: config.dataDir }),
 			...(assembly ? [assembly.discord] : []),
 			modulesPlugin({
 				owner,

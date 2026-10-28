@@ -1,8 +1,8 @@
 import type { AgentChannels, DashboardBoard } from "../agents/agent-ports.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
 import type { OwnerOperations } from "../modules/discord-admin/discord-admin.ts";
+import type { ThreadHost } from "../threads/dispatch-threads.ts";
 import type { ChannelExecutor } from "./channel-operations.ts";
-import type { ThreadHost } from "./dispatch-threads.ts";
 
 /** What Discord calls a channel, for the web app's lists. */
 export type ChannelInfo =

@@ -6,7 +6,7 @@ import {
 } from "discord.js";
 import type { InterimMessage } from "../domain/interim.ts";
 import { splitReply } from "../presentation/reply-splitter.ts";
-import type { ThreadHost } from "./dispatch-threads.ts";
+import type { ThreadHost } from "../threads/dispatch-threads.ts";
 
 /** Parents a dispatch thread may start in; DMs, threads, forums, and voice chats keep posting in place. */
 const HOSTS: readonly ChannelType[] = [

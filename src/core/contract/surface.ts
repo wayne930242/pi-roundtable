@@ -1,5 +1,5 @@
 import type { OutboundReply, PostAuthor } from "../domain/conversation.ts";
-import type { InterimPosts } from "../domain/interim.ts";
+import type { InterimMessage, InterimPosts } from "../domain/interim.ts";
 import type { TurnProgress } from "../domain/progress.ts";
 import { PluginError } from "../errors.ts";
 import type { PromptScope, Prompts } from "../interactions/prompts.ts";
@@ -34,6 +34,36 @@ export function channelKey(surface: string, id: string): ChannelKey {
 }
 
 /**
+ * The threads a surface hosts for background dispatches (coding tasks, delegated tasks, messages
+ * between agents): a place beside a channel where one dispatch posts its progress and report. A
+ * thread's id is the surface's own and unique among its threads; the thread as a conversation
+ * channel is `channelKey(surface, id)`.
+ */
+export interface SurfaceThreads {
+	/**
+	 * Posts the start line in `parent` and opens a thread from it. `line` gives the start line's
+	 * text: called with no argument for the first post, and with the thread's `mention` once the
+	 * thread exists, so a surface that can edit its post shows the link. Resolves to undefined when
+	 * `parent` cannot host a thread, such as a direct message or a thread; rejects when the surface
+	 * refuses. `mention` is how the thread is named in text, such as `<#id>` on Discord.
+	 */
+	open(
+		parent: ChannelKey,
+		name: string,
+		line: (mention?: string) => string,
+	): Promise<{ id: string; mention: string } | undefined>;
+	/** Posts text in the thread. */
+	post(thread: string, text: string): Promise<void>;
+	/**
+	 * Posts one message of at most 2000 characters and resolves to it, so it can be edited in
+	 * place; without it a thread has no `interim` posts.
+	 */
+	send?(thread: string, text: string): Promise<InterimMessage>;
+	/** Archives the thread, and locks it when the surface allows. */
+	close(thread: string): Promise<void>;
+}
+
+/**
  * One chat network the host talks through. The host ships Discord's; a plugin may contribute
  * another with `surfaces`. A surface serves the channels whose key starts with its `surface`
  * prefix, and only those reach its methods.
@@ -50,6 +80,12 @@ export interface ChatSurface {
 	 * room through `sendReply` with `OutboundReply.author`. Absent or false = no rooms.
 	 */
 	readonly agentRooms?: boolean;
+	/**
+	 * Hosts dispatch threads: a background dispatch started in one of this surface's channels
+	 * opens its thread here, and the thread is the conversation `<surface>:<id>`. Absent = the
+	 * dispatch posts in the channel as before.
+	 */
+	readonly threads?: SurfaceThreads;
 	/**
 	 * Short English guidance on how a reply renders here, such as "no Markdown tables", which the
 	 * runtime appends to the system prompt of every turn that replies on this surface, after the

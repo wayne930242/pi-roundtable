@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { ChatSurface } from "../contract/surface.ts";
 import { NO_ATTACHMENTS } from "../domain/attachment.ts";
 import type { OutboundReply, TurnResult } from "../domain/conversation.ts";
@@ -8,8 +11,11 @@ import { messages } from "../i18n/index.ts";
 import { silentLogger } from "../log.ts";
 import { attachReplyFile } from "../reply-files.ts";
 import { ChannelQueue } from "../routing/channel-queue.ts";
+import { surfacePort } from "../routing/surface-port.ts";
 import { TEST_OWNER as OWNER, OWNER_SPEAKER } from "../testing/owner.ts";
+import { FakeSurfaceThreads } from "../testing/surface-threads.ts";
 import { FakeThreadHost, fakeThreads } from "../testing/thread-host.ts";
+import { DispatchThreads } from "../threads/dispatch-threads.ts";
 import type { AgentPost } from "./agent-ports.ts";
 import type { Agent, PgAgentStore } from "./agent-store.ts";
 import { agentRoomKey } from "./team-keys.ts";
@@ -86,11 +92,12 @@ function setup(
 	answer: (request: TurnRequest) => TurnResult | Promise<TurnResult>,
 	surfaces: TeamTurnsOptions["surfaces"],
 	host = new FakeThreadHost(),
+	given?: DispatchThreads,
 ) {
 	const posts: { channelId: string; post: AgentPost }[] = [];
 	const discordInterims: string[] = [];
 	const turns: TurnRequest[] = [];
-	const { threads } = fakeThreads(host);
+	const threads = given ?? fakeThreads(host).threads;
 	const team = new TeamTurns({
 		owner: OWNER,
 		entryChannelId: "4000",
@@ -286,7 +293,7 @@ describe("agent rooms", () => {
 		}
 	});
 
-	test("message_agent from a room stays among the surface's rooms: no Discord post, no thread, the answer returns to the sender's room", async () => {
+	test("message_agent from a room whose surface hosts no threads stays among the surface's rooms: no Discord post, no thread, the answer returns to the sender's room", async () => {
 		const { port, replies } = roomSurface();
 		const host = new FakeThreadHost();
 		const sender: AgentTurnScope = { name: "coder", session: room, home: room };
@@ -330,5 +337,73 @@ describe("agent rooms", () => {
 			["infra", messages().answerReturned("disk 80%")],
 			["coder", "ok"],
 		]);
+	});
+
+	test("message_agent from a room whose surface hosts threads opens the exchange's thread there and the answer goes into it", async () => {
+		const { port, replies } = roomSurface();
+		const appThreads = new FakeSurfaceThreads();
+		const app: ChatSurface = {
+			surface: "app",
+			agentRooms: true,
+			start: async () => undefined,
+			sendReply: async () => undefined,
+			threads: appThreads,
+		};
+		const threads = new DispatchThreads({
+			surfaces: surfacePort(() => [app]),
+			ledgerPath: join(
+				mkdtempSync(join(tmpdir(), "roundtable-room-threads-")),
+				"ledger.json",
+			),
+			logger: silentLogger(),
+		});
+		const sender: AgentTurnScope = { name: "coder", session: room, home: room };
+		const { team, turns, posts } = setup(
+			(request) => {
+				if (request.agent?.name === "coder" && turns.length === 1)
+					team.message(sender, "infra", "check the disk");
+				return {
+					ok: true,
+					text: request.agent?.name === "infra" ? "disk 80%" : "ok",
+				};
+			},
+			port,
+			undefined,
+			threads,
+		);
+		await ask(team);
+		for (let i = 0; i < 30; i++) await Bun.sleep(2);
+		const infraRoom = agentRoomKey("app", "infra");
+		const thread = "app:thread.1";
+		expect(appThreads.opened).toEqual([
+			{ parent: room, name: "→ Infrastructure", id: "thread.1" },
+		]);
+		expect(appThreads.closed).toEqual(["thread.1"]);
+		expect(posts).toEqual([]);
+		const said = (channel: string) =>
+			replies
+				.filter((r) => r.channel === channel)
+				.map((r) => [r.reply.author?.agent, r.reply.chunks.join("")]);
+		// The request and the answer are in the thread, each under its speaker's name.
+		expect(said(thread)).toEqual([
+			[
+				"coder",
+				messages().messageDelivered("Infrastructure", "check the disk"),
+			],
+			["infra", messages().answerReturned("disk 80%")],
+		]);
+		expect(said(infraRoom)).toEqual([
+			[
+				"coder",
+				messages().messageDelivered("Infrastructure", "check the disk"),
+			],
+			["infra", "disk 80%"],
+		]);
+		// The sender's room keeps its own replies; the answer woke its next turn with the thread named.
+		expect(said(room)).toEqual([
+			["coder", "ok"],
+			["coder", "ok"],
+		]);
+		expect(turns[2]?.text).toContain("→ Infrastructure");
 	});
 });

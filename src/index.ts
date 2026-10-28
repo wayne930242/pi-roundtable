@@ -87,7 +87,11 @@ export type {
 } from "./core/contract/runtime.ts";
 export type { ServiceKey, Services } from "./core/contract/services.ts";
 export { serviceKey } from "./core/contract/services.ts";
-export type { ChatSurface, SurfacePort } from "./core/contract/surface.ts";
+export type {
+	ChatSurface,
+	SurfacePort,
+	SurfaceThreads,
+} from "./core/contract/surface.ts";
 export { channelKey, parseChannelKey } from "./core/contract/surface.ts";
 export type {
 	ConversationRecord,
@@ -348,6 +352,7 @@ export {
 	RUNTIME,
 	SCHEDULES,
 	SKILLS,
+	THREADS,
 	WORKER_SESSIONS,
 } from "./core/services.ts";
 export type {

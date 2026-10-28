@@ -11,7 +11,6 @@ import type { DiscordConnection } from "../discord/connection.ts";
 import { discordDirectChannel } from "../discord/direct-channel.ts";
 import { DiscordOwners } from "../discord/discord-owners.ts";
 import { DiscordSurface } from "../discord/discord-surface.ts";
-import { DispatchThreads } from "../discord/dispatch-threads.ts";
 import type {
 	CommandGuard,
 	CommandRegistrar,
@@ -23,7 +22,8 @@ import { restOf, restPoster } from "../discord/poster/rest-poster.ts";
 import { stopButtonModule } from "../discord/stop-button.ts";
 import type { InboundMessage } from "../domain/conversation.ts";
 import type { RoundtablePlugin } from "../plugin.ts";
-import { IDENTITY } from "../services.ts";
+import { IDENTITY, THREADS } from "../services.ts";
+import type { DispatchThreads } from "../threads/dispatch-threads.ts";
 
 /** The Discord connection and what stands on it, as plugins use it. Provided by the Discord plugin. */
 export interface DiscordServices {
@@ -161,19 +161,8 @@ export function discordPlugin(options: DiscordOptions): RoundtablePlugin {
 					? {}
 					: { refusalHint: options.refusalHint }),
 			});
-			// A channel whose claim keeps reports in place, such as an open channel, opens no thread.
-			const threads = new DispatchThreads({
-				host: {
-					open: (parentId, name, line) =>
-						connected.threadHost().open(parentId, name, line),
-					post: (threadId, text) => connected.threadHost().post(threadId, text),
-					send: (threadId, text) => connected.threadHost().send(threadId, text),
-					close: (threadId) => connected.threadHost().close(threadId),
-				},
-				ledgerPath: join(options.dataDir, "dispatch-threads.json"),
-				excluded: (channel) => conversations.postsInPlace(channel),
-				logger,
-			});
+			// The host's dispatch threads, which reach Discord's through its surface.
+			const threads = services.get(THREADS);
 			// The cards answer the interactions of held actions, and core posts the stop button, so
 			// core answers both; they come first, as they always have.
 			collection.registrar.add({ module: cards });
@@ -215,8 +204,6 @@ export function discordPlugin(options: DiscordOptions): RoundtablePlugin {
 					}),
 				],
 				services: [
-					// The sweep reads threads through the connection, so it follows the surface's start.
-					{ name: "threads", start: () => void threads.sweep() },
 					// The copy texts of the last cards are on disk before the host exits.
 					{
 						name: "card-copies",

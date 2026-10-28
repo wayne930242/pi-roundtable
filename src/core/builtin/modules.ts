@@ -39,6 +39,7 @@ import {
 	IDENTITY,
 	PRECHECKS,
 	SCHEDULES,
+	THREADS,
 } from "../services.ts";
 import type { SessionContext } from "../sessions.ts";
 import { DELEGATE_TOOL } from "../shared/delegate-tool.ts";
@@ -119,8 +120,8 @@ export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 			const schedules = services.get(SCHEDULES);
 			// Absent when a plugin list leaves the prechecks plugin out: then none can be attached.
 			const prechecks = services.find(PRECHECKS);
-			// Absent on a host without Discord: then there are no threads.
-			const discord = services.find(DISCORD);
+			// Absent when a plugin list leaves the threads plugin out: then no dispatch opens a thread.
+			const threads = services.find(THREADS);
 			// Another agent's channel, for schedule_list; asked when a tool runs, after the agent server set up.
 			const agentChannelOf = (agent: string, near: ChannelKey) =>
 				services.get(AGENTS).team.channelOf(agent, near);
@@ -166,7 +167,7 @@ export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 					}),
 				targets: (name) => conversations.target(name),
 				deliver: (job, outcome) => background.runDelegated(job, outcome),
-				...(discord ? { threads: discord.threads } : {}),
+				...(threads ? { threads } : {}),
 				logger,
 			});
 			services.provide(BACKGROUND_TURNS, background);

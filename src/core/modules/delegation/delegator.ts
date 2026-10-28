@@ -1,14 +1,14 @@
 import type { BackgroundTarget } from "../../contract/channels.ts";
-import type {
-	DispatchThread,
-	DispatchThreads,
-} from "../../discord/dispatch-threads.ts";
 import type { ChannelKey } from "../../domain/conversation.ts";
 import { DelegationError } from "../../domain/errors.ts";
 import { messages } from "../../i18n/index.ts";
 import type { Logger } from "../../log.ts";
 import type { Delegator } from "../../services.ts";
 import type { Tier } from "../../speakers.ts";
+import type {
+	DispatchThread,
+	DispatchThreads,
+} from "../../threads/dispatch-threads.ts";
 import { timeZone } from "../../time.ts";
 
 export interface DelegationJob {

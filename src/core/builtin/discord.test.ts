@@ -16,11 +16,29 @@ import { STOP_BUTTON_ID } from "../discord/stop-button.ts";
 import { PluginError } from "../errors.ts";
 import { silentLogger } from "../log.ts";
 import type { PluginContext } from "../plugin.ts";
-import { IDENTITY } from "../services.ts";
+import { IDENTITY, THREADS } from "../services.ts";
 import { speakerPolicy } from "../speakers.ts";
 import { DiscordEmulator } from "../testing/discord-api-emulator.ts";
 import { mapIdentity } from "../testing/map-identity.ts";
+import type { DispatchThreads } from "../threads/dispatch-threads.ts";
 import { DISCORD, type DiscordServices, discordPlugin } from "./discord.ts";
+
+/** The host's dispatch threads, which the Discord plugin hands out as its own. */
+const HOST_THREADS = {
+	open: async () => undefined,
+	sweep: async () => undefined,
+} as unknown as DispatchThreads;
+
+/** The services of a host that has the threads plugin and, when given, the identity service. */
+const hostServices = (identity?: ReturnType<typeof mapIdentity>) => ({
+	provide: () => undefined,
+	find: (key: { id: string }) =>
+		key.id === IDENTITY.id ? identity : undefined,
+	get: (key: { id: string }) => {
+		if (key.id === THREADS.id) return HOST_THREADS;
+		throw new Error(`unexpected service ${key.id}`);
+	},
+});
 
 const OPTIONS = {
 	token: "token",
@@ -60,11 +78,10 @@ async function setUp(
 		queue: {},
 		conversations,
 		services: {
+			...hostServices(identity),
 			provide: (key: { id: string }, value: DiscordServices) => {
 				if (key.id === DISCORD.id) provided = value;
 			},
-			find: (key: { id: string }) =>
-				key.id === IDENTITY.id ? identity : undefined,
 		},
 	} as unknown as PluginContext);
 	if (!provided) throw new Error("the discord plugin provided no DISCORD");
@@ -85,10 +102,12 @@ async function setUp(
 	};
 }
 
-test("the plugin contributes the Discord surface, and its threads service only sweeps threads once the surface is up", async () => {
-	const { services, surfaces } = await setUp();
+test("the plugin contributes the Discord surface, which hosts dispatch threads, and no threads service of its own", async () => {
+	const { services, surfaces, surface } = await setUp();
 	expect(surfaces).toEqual(["discord"]);
-	expect(services).toEqual(["threads", "card-copies"]);
+	expect(services).toEqual(["card-copies"]);
+	expect(typeof surface.threads?.open).toBe("function");
+	expect(typeof surface.threads?.send).toBe("function");
 });
 
 test("the Discord surface tells the model that tables do not render, unless the host says otherwise", async () => {
@@ -126,6 +145,8 @@ test("the plugin provides the connection, the registrar, the guard and the threa
 		"poster",
 		"threads",
 	]);
+	// The host's instance, so a plugin that reads either service sees the same threads.
+	expect(provided.threads).toBe(HOST_THREADS);
 	expect(provided.guard.root).toBe("bot");
 	expect(provided.guard.isOwner({ user: { id: "1" } })).toBe(true);
 	expect(provided.guard.isOwner({ user: { id: "2" } })).toBe(false);
@@ -310,7 +331,7 @@ test("the copy text of a card is on disk once the host has stopped the plugin's 
 			logger: silentLogger(),
 			queue: {},
 			conversations: {},
-			services: { provide: () => undefined, find: () => undefined },
+			services: hostServices(),
 		} as unknown as PluginContext);
 		const surface = contribution.surfaces?.[0] as ChatSurface;
 		void surface
@@ -339,7 +360,7 @@ test("cardCopies false removes the file an earlier run left, and its temporary f
 		logger: silentLogger(),
 		queue: {},
 		conversations: {},
-		services: { provide: () => undefined, find: () => undefined },
+		services: hostServices(),
 	} as unknown as PluginContext);
 	expect(existsSync(join(dataDir, "card-copies.json"))).toBe(false);
 	expect(existsSync(join(dataDir, "card-copies.json.tmp"))).toBe(false);

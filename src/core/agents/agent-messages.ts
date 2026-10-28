@@ -59,11 +59,9 @@ export class AgentMessages {
 			);
 		chain.messages += 1;
 		const targetChannel = this.#home(target, via);
-		// Rooms have no threads yet; the answer returns to the sender's room.
-		const exchange =
-			via === undefined
-				? this.#openExchange(parent, sender, target, text)
-				: Promise.resolve(undefined);
+		// The thread opens in the sender's turn channel, on its surface when that hosts threads; a
+		// surface that hosts none leaves the answer returning to the sender's room.
+		const exchange = this.#openExchange(parent, sender, target, text);
 		void queue
 			.run(targetChannel, async () =>
 				this.#deliver(sender, target, text, chain, await exchange, via),
@@ -89,8 +87,9 @@ export class AgentMessages {
 	}
 
 	/**
-	 * Opens the message's thread in the sender's turn channel and posts the request there under
-	 * the sender's name; undefined where no thread opens. Never rejects.
+	 * Opens the message's thread in the sender's turn channel, a Discord channel or a room, and
+	 * posts the request there under the sender's name; undefined where no thread opens. Never
+	 * rejects.
 	 */
 	async #openExchange(
 		parent: ChannelKey,

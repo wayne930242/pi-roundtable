@@ -4,4 +4,4 @@ export type {
 	DispatchThread,
 	DispatchThreads,
 	DispatchThreadsOptions,
-} from "../core/discord/dispatch-threads.ts";
+} from "../core/threads/dispatch-threads.ts";

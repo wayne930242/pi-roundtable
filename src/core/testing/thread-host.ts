@@ -1,12 +1,15 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { ChatSurface } from "../contract/surface.ts";
+import type { InterimMessage } from "../domain/interim.ts";
+import { silentLogger } from "../log.ts";
+import { surfacePort } from "../routing/surface-port.ts";
 import {
 	DispatchThreads,
 	type ThreadHost,
-} from "../discord/dispatch-threads.ts";
-import type { InterimMessage } from "../domain/interim.ts";
-import { silentLogger } from "../log.ts";
+} from "../threads/dispatch-threads.ts";
+import { threadsOfHost } from "../threads/host-threads.ts";
 
 /** A ThreadHost that records what happens; parents in `hostless` cannot host threads. */
 export class FakeThreadHost implements ThreadHost {
@@ -59,14 +62,23 @@ export class FakeThreadHost implements ThreadHost {
 	}
 }
 
-/** Dispatch threads over a fake host, with a ledger in a fresh temporary directory. */
+/**
+ * Dispatch threads over a fake host, as the `discord` surface hosts them, with a ledger in a
+ * fresh temporary directory.
+ */
 export function fakeThreads(host = new FakeThreadHost()) {
 	const ledgerPath = join(
 		mkdtempSync(join(tmpdir(), "roundtable-threads-")),
 		"dispatch-threads.json",
 	);
+	const discord: ChatSurface = {
+		surface: "discord",
+		start: async () => undefined,
+		sendReply: async () => undefined,
+		threads: threadsOfHost(host),
+	};
 	const threads = new DispatchThreads({
-		host,
+		surfaces: surfacePort(() => [discord]),
 		ledgerPath,
 		logger: silentLogger(),
 	});

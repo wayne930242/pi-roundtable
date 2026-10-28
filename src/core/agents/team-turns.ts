@@ -1,3 +1,4 @@
+import { channelKey, parseChannelKey } from "../contract/surface.ts";
 import type { TurnAttachments } from "../domain/attachment.ts";
 import type {
 	ChannelKey,
@@ -394,13 +395,19 @@ export class TeamTurns {
 		if (discordIdOf(channel) === undefined) {
 			if (!surfaces)
 				throw new AgentError(`no surface serves the room ${channel}`);
-			const { thinking, chunks, files } = body;
-			return surfaces.sendReply(channel, {
-				...(thinking ? { thinking } : {}),
-				chunks,
-				...(files?.length ? { files } : {}),
-				author: this.#author(as),
-			});
+			const { thinking, chunks, files, threadId } = body;
+			// A thread of the room's surface is a channel of that surface, and speaks there.
+			return surfaces.sendReply(
+				threadId === undefined
+					? channel
+					: channelKey(parseChannelKey(channel).surface, threadId),
+				{
+					...(thinking ? { thinking } : {}),
+					chunks,
+					...(files?.length ? { files } : {}),
+					author: this.#author(as),
+				},
+			);
 		}
 		if (!channels) throw new AgentError(`no Discord channels serve ${channel}`);
 		return channels.post(channelIdOf(channel), {

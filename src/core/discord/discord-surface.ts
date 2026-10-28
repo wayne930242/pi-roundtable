@@ -12,7 +12,7 @@ import {
 	type REST,
 } from "discord.js";
 import type { AgentChannels, DashboardBoard } from "../agents/agent-ports.ts";
-import type { ChatSurface } from "../contract/surface.ts";
+import type { ChatSurface, SurfaceThreads } from "../contract/surface.ts";
 import type {
 	ChannelKey,
 	InboundMessage,
@@ -25,6 +25,7 @@ import type { PromptScope, Prompts } from "../interactions/prompts.ts";
 import type { Logger } from "../log.ts";
 import type { OwnerOperations } from "../modules/discord-admin/discord-admin.ts";
 import { splitReply } from "../presentation/reply-splitter.ts";
+import { threadsOfHost } from "../threads/host-threads.ts";
 import { DiscordAgentChannels, DiscordDashboard } from "./agent-discord.ts";
 import {
 	type ContextSourceMessage,
@@ -77,6 +78,14 @@ export class DiscordSurface
 	readonly surface = "discord";
 	readonly supportsFiles = true;
 	readonly formatting: string | undefined;
+	/** Dispatch threads, through the client as it is when each call is made. */
+	readonly threads: SurfaceThreads = threadsOfHost({
+		open: (parentId, name, line) =>
+			this.threadHost().open(parentId, name, line),
+		post: (threadId, text) => this.threadHost().post(threadId, text),
+		send: (threadId, text) => this.threadHost().send(threadId, text),
+		close: (threadId) => this.threadHost().close(threadId),
+	});
 	readonly #options: DiscordSurfaceOptions;
 	readonly #client = new Client({
 		intents: [

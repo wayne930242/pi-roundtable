@@ -38,6 +38,7 @@ import type {
 	SkillSet,
 } from "./modules/skills/skill-rules.ts";
 import type { AgentTurnScope, ChannelKey } from "./sessions.ts";
+import type { DispatchThreads } from "./threads/dispatch-threads.ts";
 
 // The services the built-in plugins provide, and the ports they keep to. Each port is an
 // interface, so an object with the same methods satisfies it without being one of the built-in
@@ -79,6 +80,15 @@ export const CONVERSATIONS: ServiceKey<ConversationRegistry> =
  */
 export const MODES: ServiceKey<ConversationModes> =
 	serviceKey<ConversationModes>("roundtable.modes");
+/**
+ * The dispatch threads of the host: a background dispatch (a coding task, a delegated task, a
+ * message between agents) opens its thread beside the channel that started it, on the surface
+ * that serves the channel, when that surface hosts threads (`ChatSurface.threads`). One instance
+ * serves every surface; `DISCORD.threads` is the same instance. Provided by the `threads` plugin,
+ * which every host registers.
+ */
+export const THREADS: ServiceKey<DispatchThreads> =
+	serviceKey<DispatchThreads>("roundtable.threads");
 /** The agent server: its team, its directory, the runtime that runs every agent turn. Provided by the agent-server plugin. */
 export const AGENTS: ServiceKey<AgentServer> =
 	serviceKey<AgentServer>("roundtable.agents");

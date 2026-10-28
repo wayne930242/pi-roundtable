@@ -1,9 +1,5 @@
 import type { QueuePort } from "../contract/channels.ts";
 import type { SurfacePort } from "../contract/surface.ts";
-import type {
-	DispatchThread,
-	DispatchThreads,
-} from "../discord/dispatch-threads.ts";
 import type { TurnAttachments } from "../domain/attachment.ts";
 import type {
 	ChannelKey,
@@ -17,6 +13,10 @@ import type { EventSink } from "../plugin.ts";
 import type { AvatarStudio } from "../services.ts";
 import type { TurnSelection } from "../sessions.ts";
 import type { Speaker } from "../speakers.ts";
+import type {
+	DispatchThread,
+	DispatchThreads,
+} from "../threads/dispatch-threads.ts";
 import type { ToolTiers } from "../tool-tiers.ts";
 import type { AgentChannels, AgentTurnRunner } from "./agent-ports.ts";
 import type { Agent, PgAgentStore } from "./agent-store.ts";
