@@ -1,6 +1,6 @@
 # pi-roundtable-sandbox
 
-Sealed guest channels for pi-roundtable 0.7.
+Sealed guest channels for pi-roundtable.
 Source lives in [`packages/sandbox`][source] in the pi-roundtable repository and releases in lockstep with the core.
 Each addressed message runs a small tool-using agent in a new Docker container with no network and no real credentials.
 A host-side Unix-socket broker is its only way out.
@@ -10,7 +10,7 @@ Channel memory and recent conversation text persist in the channel's dedicated w
 
 ## Requirements
 
-- Bun 1.4.4 or later and pi-roundtable `>=0.8.0 <0.9.0`.
+- Bun 1.4.4 or later and pi-roundtable `>=0.22.0 <0.23.0`.
 - A native Linux host with a local Docker daemon and a non-root service account permitted to run Docker.
 - The worker UID/GID match that account; root workers are refused.
 - A trusted OpenAI-compatible, non-streaming Chat Completions endpoint supporting function tools and `max_tokens`.
@@ -429,7 +429,7 @@ These hooks broaden the sealed threat model: review every adapter, apply provide
 
 ## Precheck scripts
 
-`precheckScriptRunner` lets agents write a schedule's precheck themselves (pi-roundtable 0.7.11 or later): a short JavaScript module that decides, before the scheduled turn, whether the agent is woken at all.
+`precheckScriptRunner` lets agents write a schedule's precheck themselves: a short JavaScript module that decides, before the scheduled turn, whether the agent is woken at all.
 The core stores and parses the script but never runs it; this runner runs it in a sealed container, one per run.
 Register it from a trusted plugin of your own:
 

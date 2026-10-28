@@ -14,7 +14,7 @@ MIT licensed.
 ## What you need
 
 - [Bun](https://bun.sh/docs/installation) 1.4.4 or newer.
-- A running pi-roundtable host, version 0.8 (`pi-roundtable` is a peer dependency, `>=0.8.0 <0.9.0`). Versions before 0.7.0 cannot attach files to an agent's reply, which these tools rely on.
+- A running pi-roundtable host (`pi-roundtable` is a peer dependency, `>=0.22.0 <0.23.0`).
 - The native [canvas](#the-native-canvas-dependency) package, which comes with this one.
 - For `draw_cards`, a deck directory of your own; see [the deck directory](#the-deck-directory).
 
@@ -22,7 +22,6 @@ MIT licensed.
 
 The drawing tools need no principal-specific migration: they keep the calling turn's speaker, tier gate, and reply attachments.
 Use the matching lockstep core release and follow [Migrating to 0.9](../../docs/migration-0.9.md) for configuration changes.
-The legacy `owner` example below remains accepted with a warning; new hosts use top-level `access`.
 Drawn captions and replies are public in a shared conversation, not private memory exchanges.
 
 ## Install
@@ -64,7 +63,15 @@ const env = (name: string): string => process.env[name] ?? "";
 
 export default {
 	name: "Roundtable",
-	owner: { id: env("OWNER_ID"), name: env("OWNER_NAME") },
+	access: {
+		owners: [
+			{
+				name: env("OWNER_NAME"),
+				principal: env("OWNER_ID"),
+				identities: [`discord:${env("OWNER_ID")}`],
+			},
+		],
+	},
 	discord: {
 		token: env("DISCORD_TOKEN"),
 		guild: env("DISCORD_GUILD_ID"),
