@@ -62,7 +62,7 @@ export function createTable2D(
 			seats.some((s) => states.get(s.id) === "speaking"),
 		);
 		const W = Math.max(container.clientWidth, 200);
-		const H = Math.max(container.clientHeight, 200);
+		const H = Math.max(container.clientHeight, opts.variant === "compact" ? 60 : 200);
 		svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
 		svg.replaceChildren();
 		const n = Math.max(seats.length, 1);
