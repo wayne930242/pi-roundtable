@@ -59,7 +59,7 @@ Three kinds of Discord buttons handle clicks:
   See [Access tiers](/configure/access-tiers/) for who may answer.
 - The card of a turn that reached its time limit: the built-in runtime's budget (10 minutes by default) or cap (30 by default), set by `turnLimits`.
   It names the limit, what the turn is doing and the tools so far, with `Continue` (another full budget) and `Cancel`.
-  With no answer within 5 minutes the turn is aborted.
+  With no answer within `turnLimits.cardSeconds` (5 minutes by default) the turn is aborted.
 - The `Stop` button on a long turn.
   Only the owner can press it.
   It answers `Stopped.`, or `Nothing is running right now.` when the turn has already ended, or `Only <name>'s owner can stop it.` to anyone else.

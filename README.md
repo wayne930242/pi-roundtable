@@ -220,7 +220,7 @@ An approval card or an `ask_user` question (a set of up to four questions is one
 Answered within it, the turn goes on with the answer; otherwise the turn ends saying it is waiting, the card stays open with no deadline, and answering it later starts a new turn in that conversation with the answer, or with the result of the approved action.
 A coding worker's cards keep the worker waiting instead.
 Every `ask_user` card has a **Cancel** button beside Submit: pressed while the turn waits, the model is told you cancelled the question and does not ask it again.
-A turn that reaches its time limit (the built-in runtime's budget, 10 minutes by default, or its cap, 30 by default; see `turnLimits`) asks before it ends, on a card that names the limit and what the turn is doing, with **Continue** and **Cancel**; no answer within 5 minutes aborts the turn.
+A turn that reaches its time limit (the built-in runtime's budget, 10 minutes by default, or its cap, 30 by default; see `turnLimits`) asks before it ends, on a card that names the limit and what the turn is doing, with **Continue** and **Cancel**; with no answer within `turnLimits.cardSeconds` (5 minutes by default) the turn is aborted.
 The copy button of an approval card keeps its text in `card-copies.json` under the data directory, the newest 100 for 30 days; `discord.cardCopies` (`{ keepDays?, keep? }`) changes that, and `false` keeps them in memory only.
 The files of a message in an agent's channel download within `discord.attachmentDownload.deadlineMs` (default 60,000) for the message and the one it replies to together, and a file that sends no byte for `discord.attachmentDownload.idleMs` (default 10,000) is given up; the turn goes on without a file it could not get.
 
