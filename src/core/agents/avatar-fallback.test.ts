@@ -217,7 +217,10 @@ describe("agent_create and avatars", () => {
 		await editing.redrawAvatar("scout", "edit", "add a hat");
 		await editing.redrawAvatar("scout", "new_prompt", "A fox.");
 		expect(drawn.store.agent("scout")?.avatarPrompt).toBe("A fox.");
-		expect(drawn.studio.calls.length).toBe(3);
+		expect(drawn.studio.calls.filter((c) => c.startsWith("draw")).length).toBe(
+			2,
+		);
+		expect(drawn.store.agent("scout")?.avatarHash).toBe("d".repeat(64));
 		const none = context("none", [agent("scout")]);
 		const refusal = new TeamEditing(none.ctx).redrawAvatar("scout", "redraw");
 		expect(refusal).rejects.toThrow("No image provider is configured");
