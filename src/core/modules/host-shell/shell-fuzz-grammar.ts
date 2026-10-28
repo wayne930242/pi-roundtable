@@ -40,8 +40,8 @@ function boundaries(line: string): number[] {
 
 /** One random line of the given kind. */
 export function fuzzLine(seed: number, kind: FuzzKind): string {
-	const profile = new Rng(seed ^ 0xa5a5a5a5);
-	const maxDepth = profile.weighted(
+	const dice = new Rng(seed ^ 0xa5a5a5a5);
+	const maxDepth = dice.weighted(
 		kind === "everyday"
 			? [
 					[5, 1],
@@ -67,13 +67,13 @@ export function fuzzLine(seed: number, kind: FuzzKind): string {
 	const dry = build(new Set());
 	dry.top();
 	const planted = new Set<number>();
-	for (let i = profile.chance(0.2) ? 2 : 1; i > 0; i--)
-		planted.add(profile.int(Math.max(1, dry.slots)));
+	for (let i = dice.chance(0.2) ? 2 : 1; i > 0; i--)
+		planted.add(dice.int(Math.max(1, dry.slots)));
 	let line = build(planted).top();
 	// Bash splits words at a blank or a newline only; other white space (a no-break space, a form
 	// feed) is part of a word, though a script's own reader may treat it as a separator.
-	if (profile.chance(0.1)) {
-		const blank = profile.pick([
+	if (dice.chance(0.1)) {
+		const blank = dice.pick([
 			"\u00a0",
 			"\f",
 			"\v",
@@ -82,24 +82,24 @@ export function fuzzLine(seed: number, kind: FuzzKind): string {
 			"\u200b",
 		]);
 		const at = [...line.matchAll(/ /g)].map((match) => match.index as number);
-		for (let i = profile.int(3) + 1; i > 0 && at.length > 0; i--) {
-			const place = profile.pick(at);
+		for (let i = dice.int(3) + 1; i > 0 && at.length > 0; i--) {
+			const place = dice.pick(at);
 			line = `${line.slice(0, place)}${blank}${line.slice(place + 1)}`;
 		}
 	}
-	if (profile.chance(0.2)) {
-		const at = profile.pick(boundaries(line));
-		line = `${line.slice(0, at)}${profile.pick(PASTES)}${line.slice(at)}`;
+	if (dice.chance(0.2)) {
+		const at = dice.pick(boundaries(line));
+		line = `${line.slice(0, at)}${dice.pick(PASTES)}${line.slice(at)}`;
 	}
 	// Bash joins a backslash and a newline, wherever they stand outside single quotes and comments.
-	if (profile.chance(0.1)) {
-		for (let i = profile.int(2) + 1; i > 0; i--) {
-			const at = profile.int(line.length + 1);
+	if (dice.chance(0.1)) {
+		for (let i = dice.int(2) + 1; i > 0; i--) {
+			const at = dice.int(line.length + 1);
 			line = `${line.slice(0, at)}\\\n${line.slice(at)}`;
 		}
 	}
 	// Damage that bash may put up with: a character dropped, doubled, or swapped for an operator.
-	if (profile.chance(0.12)) {
+	if (dice.chance(0.12)) {
 		const punctuation = [
 			"'",
 			'"',
@@ -120,15 +120,15 @@ export function fuzzLine(seed: number, kind: FuzzKind): string {
 			"[",
 			"]",
 		];
-		for (let i = profile.int(2) + 1; i > 0 && line.length > 0; i--) {
-			const at = profile.int(line.length);
-			const edit = profile.int(3);
+		for (let i = dice.int(2) + 1; i > 0 && line.length > 0; i--) {
+			const at = dice.int(line.length);
+			const edit = dice.int(3);
 			line =
 				edit === 0
 					? `${line.slice(0, at)}${line.slice(at + 1)}`
 					: edit === 1
 						? `${line.slice(0, at)}${line[at]}${line.slice(at)}`
-						: `${line.slice(0, at)}${profile.pick(punctuation)}${line.slice(at + 1)}`;
+						: `${line.slice(0, at)}${dice.pick(punctuation)}${line.slice(at + 1)}`;
 		}
 	}
 	return line;

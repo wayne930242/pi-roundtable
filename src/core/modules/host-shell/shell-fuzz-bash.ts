@@ -142,6 +142,9 @@ export class BashRunner {
 	async runs(bash: string, line: string, timeoutMs = 5_000): Promise<boolean> {
 		const worker = await this.#acquire();
 		try {
+			// A line starts in an empty directory: a file an earlier line wrote (`tee f; bash f`) is no part of this one.
+			rmSync(worker.cwd, { recursive: true, force: true });
+			mkdirSync(worker.cwd);
 			// A marker of its own for every run: a job a line left behind may still write after the next line has started.
 			const marker = join(this.#root, `marker${this.#runs++}`);
 			// A NUL byte cannot be an argument, so such a line is the script on standard input.
