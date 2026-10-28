@@ -110,6 +110,7 @@ async function fixture(options: {
 							? {
 									modes: {
 										peek: () => ({ yolo: false, longRunning: true }),
+										autoApproved: () => undefined,
 									},
 									autonomy: {
 										yolo: { allow: [], card: [] },

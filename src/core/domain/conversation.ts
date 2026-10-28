@@ -26,6 +26,12 @@ export interface HeldCall {
 	 * a restart honors them; a private conversation ignores them.
 	 */
 	approverIds?: string[];
+	/**
+	 * The hold classes of the rules that held it, as `<rule>.<class>` ids (see `HoldRule.holdClasses`),
+	 * kept with the call across a restart. Absent for a call held before 0.23 or by a check that
+	 * has no classes: its classes are unknown, and yolo mode always asks a card for it.
+	 */
+	holdClasses?: string[];
 }
 
 export interface PendingConfirmation {

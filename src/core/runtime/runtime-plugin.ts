@@ -194,6 +194,8 @@ export function runtimePlugin(
 						modes: {
 							peek: (channel) =>
 								services.find(MODES)?.peek(channel) ?? NO_MODES,
+							autoApproved: (entry) =>
+								services.find(MODES)?.autoApproved(entry),
 						},
 						...turnPolicy(options),
 						sessions: context.sessions,

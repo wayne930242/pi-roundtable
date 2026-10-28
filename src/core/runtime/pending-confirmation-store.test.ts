@@ -162,4 +162,27 @@ describeDb("PendingConfirmationStore", () => {
 		expect((await store.load("discord:3"))?.selectionId).toBe("tools:web");
 		await store.save("discord:3", undefined);
 	});
+
+	test("the hold classes of a call come back with it, and a call held without any still has none", async () => {
+		const classed: PendingConfirmation = {
+			...held,
+			calls: [
+				{
+					tool: "bash",
+					input: "{}",
+					action: "run it",
+					holdClasses: ["shell.write", "shell.privilege"],
+				},
+				{ tool: "bash", input: '{"a":1}', action: "run it too" },
+			],
+		};
+		await store.save("discord:5", classed);
+		const loaded = await store.load("discord:5");
+		expect(loaded?.calls[0]?.holdClasses).toEqual([
+			"shell.write",
+			"shell.privilege",
+		]);
+		expect(loaded?.calls[1]?.holdClasses).toBeUndefined();
+		await store.save("discord:5", undefined);
+	});
 });

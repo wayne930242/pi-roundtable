@@ -112,10 +112,11 @@ export interface PiAgentRuntimeOptions {
 	turnTimeoutCardMs?: number;
 	/**
 	 * The conversations' modes, read at each turn: a turn in a long-running conversation goes on
-	 * past its time limit without a card, up to `autonomy.longRunningMaxMs` of work. Without it no
-	 * conversation is long-running.
+	 * past its time limit without a card, up to `autonomy.longRunningMaxMs` of work, and a turn in
+	 * a yolo conversation has the held calls `autonomy.yolo` allows approved without a card
+	 * (`autoApproved` is told of each). Without it no conversation has either mode.
 	 */
-	modes?: Pick<ConversationModes, "peek">;
+	modes?: Pick<ConversationModes, "peek" | "autoApproved">;
 	/** How far the modes reach; default `DEFAULT_AUTONOMY`. */
 	autonomy?: Autonomy;
 	/**

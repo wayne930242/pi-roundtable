@@ -34,6 +34,8 @@ export interface Judgment {
 	approvers?: readonly string[];
 	/** The card is the speaker's alone; see `HoldDescription`. */
 	speakerOnly?: true;
+	/** The hold classes of the call; see `HoldRule.holdClasses`. Absent when the holds gave none. */
+	classes?: readonly string[];
 }
 
 export type Judged = Judgment | undefined | typeof STOPPED;
@@ -57,15 +59,19 @@ function isSignal(value: unknown): value is AbortSignal {
 export function described(
 	answer: HoldDescription,
 	tool: string,
-): Pick<Judgment, "action" | "copy" | "supersede" | "speakerOnly"> {
+): Pick<Judgment, "action" | "copy" | "supersede" | "speakerOnly" | "classes"> {
 	if (typeof answer === "string") return { action: answer };
 	if (typeof answer !== "object" || answer === null)
 		return { action: messages().holdGeneric(tool) };
-	const { text, copy, supersede, approval } = answer;
+	const { text, copy, supersede, approval, classes } = answer;
 	if (typeof text !== "string") return { action: messages().holdGeneric(tool) };
+	const named = Array.isArray(classes)
+		? classes.filter((id): id is string => typeof id === "string" && id !== "")
+		: [];
 	const withdrawal = {
 		...(isSignal(supersede) ? { supersede } : {}),
 		...(approval === "speaker" ? { speakerOnly: true as const } : {}),
+		...(named.length > 0 ? { classes: named } : {}),
 	};
 	if (
 		!copy ||
@@ -135,6 +141,7 @@ export function joinApprovers(
 			copy,
 			supersede,
 			speakerOnly,
+			classes,
 		} = described(action, tool);
 		const controller = new AbortController();
 		if (turn.signal?.aborted) controller.abort();
@@ -160,6 +167,7 @@ export function joinApprovers(
 				...(copy ? { copy } : {}),
 				...(supersede ? { supersede } : {}),
 				...(speakerOnly ? { speakerOnly } : {}),
+				...(classes ? { classes } : {}),
 				...(named ? { approvers: named } : {}),
 			};
 		}
@@ -171,6 +179,7 @@ export function joinApprovers(
 					...(copy ? { copy } : {}),
 					...(supersede ? { supersede } : {}),
 					...(speakerOnly ? { speakerOnly } : {}),
+					...(classes ? { classes } : {}),
 					...(approvers ? { approvers } : {}),
 				};
 			},

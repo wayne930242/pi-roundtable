@@ -66,6 +66,16 @@ export type { HoldTurn } from "./hold-lookups.ts";
  * owner's next message either confirms them, which lets each identical call run once in that
  * turn, or drops them.
  */
+/**
+ * Decides for a held call whether the server approves it without a card, and says who approved
+ * it when it does; see `yoloApprover`. `card.speakerOnly` is true when the call's card is the
+ * speaker's alone. It must change nothing but its own record of the approval.
+ */
+export type AutoApprover = (
+	call: HeldCall,
+	card: { speakerOnly: boolean },
+) => ApprovedBy | undefined;
+
 // pi-lens-ignore: large-class — one gate per conversation; its state is the held calls and their approvals
 export class ConfirmationGate {
 	#selectionId: string | undefined;
@@ -73,6 +83,8 @@ export class ConfirmationGate {
 	#speaker: SpeakerRef | undefined;
 	/** Whether the running turn's conversation is private to its speaker, who then alone answers its cards. */
 	#private = false;
+	/** The running turn's auto-approver, asked about each held call before any card opens. */
+	#auto: AutoApprover | undefined;
 	#pending: PendingConfirmation | undefined;
 	#approved: Release[] = [];
 	/** Calls approved on their cards after the turn that asked stopped waiting; each runs once, in any turn. */
@@ -160,7 +172,8 @@ export class ConfirmationGate {
 	 * approve them. When `confirmed`, the speaker's message approved the held calls, and they are
 	 * the approver the calls' `run` sees; a call that named approvers is released only when the
 	 * speaker is one of them or an owner, and otherwise stays held. `isPrivate` says the turn's
-	 * conversation is private to its speaker: they alone then answer its cards.
+	 * conversation is private to its speaker: they alone then answer its cards. `auto` may approve
+	 * a call the turn makes without a card (yolo mode); it does not change a message's approval.
 	 */
 	beginTurn(
 		selectionId: string,
@@ -168,10 +181,12 @@ export class ConfirmationGate {
 		addressee?: OwnerIdentity,
 		speaker?: SpeakerRef,
 		isPrivate = false,
+		auto?: AutoApprover,
 	): void {
 		this.#selectionId = selectionId;
 		this.#speaker = speaker;
 		this.#private = isPrivate;
+		this.#auto = auto;
 		this.#addressee = addressee ?? this.#owner;
 		const by = approverOf(speaker);
 		const held = this.pending();
@@ -320,6 +335,14 @@ export class ConfirmationGate {
 			if (watch) watch.card = false;
 			return { reason: await this.#held(call), refused };
 		};
+		// A call the server approves opens no card; one that names approvers or is the speaker's alone never is.
+		const auto = this.#auto?.(call, {
+			speakerOnly: needing.speakerOnly === true,
+		});
+		if (auto) {
+			watch?.end();
+			return { approvedBy: auto };
+		}
 		if (!ask) return held("held");
 		// In a private conversation only its person answers: a call that names others is not theirs.
 		if (this.#private && !mayApproveNamed(this.#speaker, call))
@@ -391,7 +414,12 @@ export class ConfirmationGate {
 	/** What a call needs when a rule holds it; undefined when none does. */
 	#needing(tool: string, input: Record<string, unknown>): Needing | undefined {
 		const action = this.#holds(tool, input, this.#context);
-		return action ? this.#unlessApproved(tool, input, { action }) : undefined;
+		if (!action) return undefined;
+		const classes = this.#holds.classesOf?.(tool, input, this.#context);
+		return this.#unlessApproved(tool, input, {
+			action,
+			...(classes ? { classes } : {}),
+		});
 	}
 
 	/**
@@ -431,6 +459,9 @@ export class ConfirmationGate {
 			action: judged.action,
 			...(minTier ? { minTier } : {}),
 			...(judged.approvers ? { approverIds: [...judged.approvers] } : {}),
+			...(judged.classes && judged.classes.length > 0
+				? { holdClasses: [...judged.classes] }
+				: {}),
 		};
 		// A plugin that already withdrew the call lets no approval of it release it.
 		for (const released of judged.supersede?.aborted

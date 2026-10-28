@@ -1,4 +1,11 @@
-import { type HoldCheck, type HoldContext, isPromise } from "../../holds.ts";
+import type { ToolTurn } from "../../define.ts";
+import {
+	type ClassedHold,
+	type HoldCheck,
+	type HoldContext,
+	type HoldDescription,
+	isPromise,
+} from "../../holds.ts";
 import { messages } from "../../i18n/index.ts";
 import {
 	awaited,
@@ -7,6 +14,17 @@ import {
 	type Judged,
 	joinApprovers,
 } from "./hold-lookups.ts";
+
+/** A held call's description with its classes inside, for the gate to record with the call. */
+function withClasses(
+	held: ClassedHold | undefined,
+): HoldDescription | undefined {
+	if (!held) return undefined;
+	const { description, classes } = held;
+	return typeof description === "string"
+		? { text: description, classes }
+		: { ...description, classes };
+}
 
 /**
  * Asks a conversation's holds to describe a call a turn makes, and hands each description on in
@@ -44,13 +62,7 @@ export class HoldDescriber {
 		if (turn.signal?.aborted) controller.abort();
 		let answer: ReturnType<NonNullable<HoldCheck["inTurn"]>>;
 		try {
-			answer = this.#holds.inTurn?.call(
-				this.#holds,
-				tool,
-				input,
-				this.#context,
-				turn.toolTurn(controller.signal),
-			);
+			answer = this.#ask(tool, input, turn.toolTurn(controller.signal));
 		} catch {
 			answer = messages().holdGeneric(tool);
 		}
@@ -77,6 +89,31 @@ export class HoldDescriber {
 			),
 			use,
 		);
+	}
+
+	/** The holds' answer for the call, with its classes in the description when the holds report them. */
+	#ask(
+		tool: string,
+		input: Record<string, unknown>,
+		toolTurn: ToolTurn,
+	): HoldDescription | undefined | Promise<HoldDescription | undefined> {
+		const classed = this.#holds.inTurnWithClasses;
+		if (!classed)
+			return this.#holds.inTurn?.call(
+				this.#holds,
+				tool,
+				input,
+				this.#context,
+				toolTurn,
+			);
+		const answer = classed.call(
+			this.#holds,
+			tool,
+			input,
+			this.#context,
+			toolTurn,
+		);
+		return isPromise(answer) ? answer.then(withClasses) : withClasses(answer);
 	}
 
 	#inOrder<T, R>(
