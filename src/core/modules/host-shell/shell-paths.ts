@@ -179,6 +179,8 @@ function targetPath(word: string, state: LineState): string {
 
 /** Whether a write to the word reaches a device node, such as a disk, rather than `/dev/null`. */
 export function deviceTarget(word: string, state: LineState): boolean {
+	// A target the line cannot expand may be any device, so it is read as one.
+	if (/[$`]/.test(word) && resolvePath(word, state) === undefined) return true;
 	const path = targetPath(word, state);
 	return path !== "/dev/null" && under(path, "/dev");
 }

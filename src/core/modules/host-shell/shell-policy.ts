@@ -75,10 +75,16 @@ export function simpleCommands(command: string): string[][] {
 			else endWord();
 		} else if (";&|()`{}".includes(ch)) {
 			// A word cut by a command substitution keeps its mark, so its value counts as unknown.
-			if (ch === "`" && inWord) word += ch;
+			if (ch === "`" && (inWord || writesTo(words))) {
+				word += ch;
+				inWord = true;
+			}
 			endCommand();
 		} else if (ch === "$" && command[i + 1] === "(") {
-			if (inWord) word += "$(";
+			if (inWord || writesTo(words)) {
+				word += "$(";
+				inWord = true;
+			}
 			endCommand();
 			i++;
 		} else if (ch === ">" || ch === "<") {
@@ -99,6 +105,15 @@ export function simpleCommands(command: string): string[][] {
 	}
 	endCommand();
 	return commands;
+}
+
+/**
+ * Whether the next word of a command is a file it writes: a redirect target, or an operand of
+ * `tee`. A substitution there keeps its mark, so the target counts as unknown.
+ */
+function writesTo(words: readonly string[]): boolean {
+	const last = words[words.length - 1];
+	return last === ">" || last === ">>" || words[0] === "tee";
 }
 
 /**

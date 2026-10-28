@@ -326,6 +326,15 @@ describe("the classes of a held shell call", () => {
 		for (const [command, expected] of table)
 			expect([command, classes(command)]).toEqual([command, [expected]]);
 		expect(classes("echo x > /dev/null")).toBeUndefined();
+	});
+
+	test("a redirect or tee target that cannot be expanded is shell.disk", () => {
+		for (const command of [
+			"echo x > $(printf /dev/sda)",
+			"echo x > $DISK",
+			"echo x | tee $(printf /dev/sda)",
+		])
+			expect([command, classes(command)]).toEqual([command, ["shell.disk"]]);
 		expect(classes("echo x | tee /dev/null")).toBeUndefined();
 	});
 
