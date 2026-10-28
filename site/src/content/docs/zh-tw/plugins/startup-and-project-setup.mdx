@@ -23,7 +23,7 @@ import { Steps } from "@astrojs/starlight/components";
 
 4. **Linking。** 連結工具層級、hold rule、session plan、頻道 router 和事件。從這一步起，`sessions()`、`conversations`、`surfaces`、`turns` 和 `dashboard()` 才能用。
 
-5. **Preflight。** 執行每個外掛的 `preflight`。Discord 外掛在這裡組出斜線指令，所以名稱衝突會在這一步讓啟動停下來。
+5. **Preflight。** 依外掛順序執行每個外掛的 `preflight`，全部結束後才執行 runtime 自己的 preflight，讓它對模型與必要工具的檢查看得到其他外掛填入的工具。Discord 外掛在這裡組出斜線指令，所以名稱衝突會在這一步讓啟動停下來。
 
 6. **服務。** 啟動每個服務，依外掛順序一個外掛接一個外掛啟動。外掛的聊天 surface 會比它自己的服務先啟動。
 
@@ -37,8 +37,8 @@ import { Steps } from "@astrojs/starlight/components";
 
 ### 外掛順序
 
-setup 的順序是先內建外掛：`memory`、`schedule-store`、`discord`、`modules`、`worker-sessions`、`discord-admin`、`skills`、`agent-server`、`seeds`。
-關掉的 addon 不在名單裡。
+setup 的順序是先內建外掛：`identity`、`memory`、`schedule-store`、`prechecks`、`discord`、`modules`、`worker-sessions`、`discord-admin`、`skills`、`conversations`、`runtime`、`agent-server`、`seeds`。
+關掉的 addon 不在名單裡；沒有 Discord 時，`discord`、`discord-admin`、`skills`、`agent-server` 和 `seeds` 也不在。
 接著是你的外掛，順序依 `roundtable.config.ts` 裡 `plugins` 的排列。
 內建的 `schedules` 外掛排在最後，所以到期的排程要等它能用到的東西都跑起來之後，才會觸發。
 
@@ -58,7 +58,8 @@ setup 的順序是先內建外掛：`memory`、`schedule-store`、`discord`、`m
 
 <Steps>
 
-1. 它繼續服務，直到頻道佇列清空，而且沒有任何服務回報 `busy()` 的工作，最久一小時。剩下的會寫進 log，然後放棄。
+1. 它立刻不再接新的工作：頻道佇列關閉，這時進來的訊息只會收到一句簡短的「重新啟動中，請稍後再試」。
+   接著等到佇列清空、而且沒有任何服務回報 `busy()` 的工作，預設最久三分鐘（設定裡的 `drainSeconds`）。剩下的會先停止、給十秒結束，然後寫進 log 並放棄。
 
 2. 每個外掛收到 `shutdown(left)`，此時每個服務都還在執行。
 

@@ -25,7 +25,7 @@ The host proceeds in this order:
 4. **Linking.** The host links tool tiers, hold rules, the session plan, the channel router, and the events.
    From here `sessions()`, `conversations`, `surfaces`, `turns` and `dashboard()` work.
 
-5. **Preflight.** Every plugin's `preflight` runs.
+5. **Preflight.** Every plugin's `preflight` runs, in plugin order, and then the runtime's own, so its check of the model and the required tools sees the tools other plugins filled in.
    The Discord plugin composes the slash commands here, so a clash stops startup at this step.
 
 6. **Services.** Every service starts, plugin by plugin in plugin order.
@@ -41,8 +41,8 @@ Discord connects and the listener opens after steps 1 to 5 succeed.
 
 ### Plugin order
 
-Setup order is the built-in plugins first: `memory`, `schedule-store`, `discord`, `modules`, `worker-sessions`, `discord-admin`, `skills`, `agent-server`, `seeds`.
-An addon that is switched off is not in the list.
+Setup order is the built-in plugins first: `identity`, `memory`, `schedule-store`, `prechecks`, `discord`, `modules`, `worker-sessions`, `discord-admin`, `skills`, `conversations`, `runtime`, `agent-server`, `seeds`.
+An addon that is switched off is not in the list, and without Discord neither are `discord`, `discord-admin`, `skills`, `agent-server` or `seeds`.
 Your plugins follow in the order of `plugins` in `roundtable.config.ts`.
 The built-in `schedules` plugin comes last, so a due schedule fires only once everything it can reach is running.
 
@@ -62,8 +62,9 @@ On `SIGTERM` or `SIGINT` the bot stops serving new work last:
 
 <Steps>
 
-1. It keeps serving until the channel queue is empty and no service reports `busy()` work, for at most an hour.
-   Whatever is left is logged and given up on.
+1. It takes no new work at once: the channel queue closes, and a message that arrives gets one short "restarting, try again shortly" reply.
+   It then waits until the queue is empty and no service reports `busy()` work, for at most three minutes by default (`drainSeconds` in the configuration).
+   Whatever is left is stopped, given ten seconds to end, logged and given up on.
 
 2. Every plugin hears `shutdown(left)`, while every service is still running.
 

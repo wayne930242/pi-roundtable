@@ -1,6 +1,6 @@
 ---
 title: Official plugins and packages
-description: "Three copy-in plugins and guides for seven official packages, with their requirements and configuration."
+description: "Three copy-in plugins and guides for eight official packages, with their requirements and configuration."
 sidebar:
   order: 8
 ---
@@ -102,7 +102,7 @@ It posts in the coordinator's channel, once, after the agent server's channels a
 
 - When the running release is not the one last announced, it posts the new `sha` and the commits the release added.
 - When the previous shutdown cut work short, it also names those channels.
-  A shutdown waits an hour for running work before it gives up on it.
+  A shutdown waits three minutes by default (`drainSeconds`) for running work before it gives up on it.
 - A restart of the same release with nothing cut short posts nothing, and so does a start with no `release.json`.
 
 It needs your deploy to write `release.json` into the directory the bot runs in, before the bot starts.

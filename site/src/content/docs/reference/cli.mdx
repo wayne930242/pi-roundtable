@@ -107,7 +107,7 @@ A wrong database address or a rejected token stops the process with a message an
 Run `doctor` first to find those problems with their fixes.
 
 On `SIGTERM` or `SIGINT` the bot finishes running work before it stops.
-It waits for at most an hour; whatever is still running after that is logged and given up on.
+It waits for at most three minutes by default (`drainSeconds` in the configuration); whatever is still running after that is logged and given up on.
 See [Startup and project setup](/plugins/startup-and-project-setup/) for the order in which things start and stop.
 
 ## `add plugin`

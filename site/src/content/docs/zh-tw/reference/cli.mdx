@@ -105,7 +105,7 @@ PostgreSQL 和 Discord 不會事先檢查。
 先跑 `doctor`，就能連同修正方式一起找出這些問題。
 
 收到 `SIGTERM` 或 `SIGINT` 時，bot 會先讓執行中的工作做完才停止。
-它最多等一小時；那之後仍在執行的，會寫進 log 並放棄。
+它預設最多等三分鐘（設定裡的 `drainSeconds`）；那之後仍在執行的，會寫進 log 並放棄。
 啟動和停止的順序，見[啟動流程與專案設定](/zh-tw/plugins/startup-and-project-setup/)。
 
 ## `add plugin`
