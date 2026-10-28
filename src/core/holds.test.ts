@@ -131,3 +131,96 @@ describe("holdChain in a turn", () => {
 		await expect(holds.inTurn?.("x", {}, {}, turn)).rejects.toThrow("down");
 	});
 });
+
+describe("hold classes", () => {
+	const inTurn = { toolTurn: undefined } as unknown as ToolTurn;
+
+	test("a rule without classes classes its call by its name", () => {
+		const holds = holdChain([rule("mail", "send", "send mail")]);
+		expect(holds.classesOf?.("send", {}, {})).toEqual(["mail"]);
+		expect(holds.classesOf?.("other", {}, {})).toBeUndefined();
+	});
+
+	test("a rule's own classes replace its name, once each and without blanks", () => {
+		const holds = holdChain([
+			{
+				...rule("shell", "bash", "run it"),
+				holdClasses: () => ["shell.rm", "shell.rm", "", "shell.write"],
+			},
+		]);
+		expect(holds.classesOf?.("bash", {}, {})).toEqual([
+			"shell.rm",
+			"shell.write",
+		]);
+	});
+
+	test("a rule whose classes are empty, absent or throw is classed by its name", () => {
+		for (const holdClasses of [
+			() => [],
+			() => undefined,
+			() => {
+				throw new Error("broken");
+			},
+		]) {
+			const holds = holdChain([{ ...rule("r", "x", "x"), holdClasses }]);
+			expect(holds.classesOf?.("x", {}, {})).toEqual(["r"]);
+		}
+	});
+
+	test("the classes are those of the rule that held the call, not of an earlier one that did not", () => {
+		const holds = holdChain([
+			{ ...rule("a", "y", "a says y"), holdClasses: () => ["a.one"] },
+			{ ...rule("b", "x", "b says x"), holdClasses: () => ["b.two"] },
+		]);
+		expect(holds.classesOf?.("x", {}, {})).toEqual(["b.two"]);
+		expect(holds.inTurnWithClasses?.("x", {}, {}, inTurn)).toEqual({
+			description: "b says x",
+			classes: ["b.two"],
+		});
+	});
+
+	test("in a turn the classes come with the description, and inTurn still answers the description alone", async () => {
+		const holds = holdChain([
+			{
+				name: "lookup",
+				describe: () => undefined,
+				describeInTurn: async () => "looked up",
+			},
+		]);
+		expect(await holds.inTurn?.("x", {}, {}, inTurn)).toBe("looked up");
+		expect(await holds.inTurnWithClasses?.("x", {}, {}, inTurn)).toEqual({
+			description: "looked up",
+			classes: ["lookup"],
+		});
+	});
+
+	test("classes a description names itself win over the rule's", () => {
+		const holds = holdChain([
+			{
+				name: "repo",
+				describe: () => undefined,
+				describeInTurn: () => ({ text: "push", classes: ["repo.push"] }),
+				holdClasses: () => ["repo.other"],
+			},
+		]);
+		expect(holds.inTurnWithClasses?.("x", {}, {}, inTurn)).toEqual({
+			description: { text: "push", classes: ["repo.push"] },
+			classes: ["repo.push"],
+		});
+	});
+
+	test("a call no rule holds has none", async () => {
+		const holds = holdChain([rule("a", "x", "x")]);
+		expect(holds.inTurnWithClasses?.("y", {}, {}, inTurn)).toBeUndefined();
+		const later = holdChain([
+			{
+				name: "l",
+				describe: () => undefined,
+				describeInTurn: async () => undefined,
+			},
+		]);
+		expect(
+			await later.inTurnWithClasses?.("y", {}, {}, inTurn),
+		).toBeUndefined();
+	});
+});

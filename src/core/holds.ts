@@ -44,6 +44,9 @@ export interface HoldContext {
  * signal that is already aborted when the hold answers refuses the call without a card, and
  * drops a confirmation of it, which is how a hold withdraws what a restart left held: the
  * signals do not survive a restart, but a repeated call is described again.
+ *
+ * `classes` are the hold classes of the call, for a rule that describes it in a turn (see
+ * `HoldRule.holdClasses`); a rule that leaves them out has its call classed by its name.
  */
 export type HoldDescription =
 	| string
@@ -52,6 +55,7 @@ export type HoldDescription =
 			copy?: NonNullable<ApprovalDetails["copy"]>;
 			supersede?: AbortSignal;
 			approval?: "speaker";
+			classes?: readonly string[];
 	  };
 
 /**
@@ -65,6 +69,18 @@ export interface HoldRule {
 		input: Record<string, unknown>,
 		context: HoldContext,
 	): string | undefined;
+	/**
+	 * The classes of a call this rule holds, as `<rule>.<class>` ids such as `shell.rm`, for yolo
+	 * mode to tell a call it may approve from one it never does (see `autonomy.yolo`). List every
+	 * reason the call is held, not only the first: yolo approves only a call whose classes it all
+	 * allows. Asked for a call `describe` held; undefined or an empty list classes the call by the
+	 * rule's name. It must change nothing.
+	 */
+	holdClasses?(
+		tool: string,
+		input: Record<string, unknown>,
+		context: HoldContext,
+	): readonly string[] | undefined;
 	/**
 	 * Whether this rule may hold some call of `tool`, for a rule whose verdict depends on the input
 	 * (such as an action argument). Asked when the input is not known yet, as for a precheck
@@ -119,6 +135,12 @@ export interface HoldRule {
 	mayName?(tool: string): boolean;
 }
 
+/** The description of a held call with its hold classes. */
+export interface ClassedHold {
+	description: HoldDescription;
+	classes: readonly string[];
+}
+
 /** The description of a call that must be approved first, or undefined to let it run. */
 export type HoldCheck = ((
 	tool: string,
@@ -127,6 +149,17 @@ export type HoldCheck = ((
 ) => string | undefined) & {
 	/** The name of a rule that may hold some call of `tool` whatever its input; see `HoldRule.mayHold`. */
 	mayHold?(tool: string): string | undefined;
+	/**
+	 * The classes of the call, from the first rule whose `describe` holds it; see
+	 * `HoldRule.holdClasses`. A rule without its own classes classes the call by its name.
+	 * Undefined when no rule holds the call. A check made without `holdChain` has none, and yolo
+	 * mode then never approves its calls.
+	 */
+	classesOf?(
+		tool: string,
+		input: Record<string, unknown>,
+		context: HoldContext,
+	): readonly string[] | undefined;
 	/**
 	 * The check as a turn runs it: each rule's `describeInTurn`, or its `describe` for a rule
 	 * without one, asked in order until one describes the call. It answers at once when every rule
@@ -138,6 +171,17 @@ export type HoldCheck = ((
 		context: HoldContext,
 		turn: ToolTurn,
 	): HoldDescription | undefined | Promise<HoldDescription | undefined>;
+	/**
+	 * `inTurn`, with the classes of the rule that held the call, as the confirmation gate records
+	 * them with it; see `HoldRule.holdClasses`. A description that names its own `classes` keeps
+	 * them. A check without it has no classes for its calls.
+	 */
+	inTurnWithClasses?(
+		tool: string,
+		input: Record<string, unknown>,
+		context: HoldContext,
+		turn: ToolTurn,
+	): ClassedHold | undefined | Promise<ClassedHold | undefined>;
 	/** The highest tier any rule requires to approve the call; see `HoldRule.approvalTier`. */
 	approvalTier?(
 		tool: string,
@@ -186,25 +230,50 @@ export function holdChain(rules: readonly HoldRule[]): HoldCheck {
 		}
 		return undefined;
 	};
+	check.classesOf = (tool, input, context) => {
+		const rule = rules.find(
+			(r) => r.describe(tool, input, context) !== undefined,
+		);
+		return rule && classesFor(rule, tool, input, context);
+	};
+	/** Asks the rules from `from` in order; the first description holds the call, with the rule that gave it. */
+	const ask = (
+		tool: string,
+		input: Record<string, unknown>,
+		context: HoldContext,
+		turn: ToolTurn,
+		from: number,
+	): Holding | undefined | Promise<Holding | undefined> => {
+		for (let at = from; at < rules.length; at++) {
+			const rule = rules[at];
+			if (!rule) continue;
+			const description = rule.describeInTurn
+				? rule.describeInTurn(tool, input, context, turn)
+				: rule.describe(tool, input, context);
+			if (isPromise(description))
+				return description.then((found) =>
+					found !== undefined
+						? { description: found, rule }
+						: ask(tool, input, context, turn, at + 1),
+				);
+			if (description !== undefined) return { description, rule };
+		}
+		return undefined;
+	};
 	check.inTurn = (tool, input, context, turn) => {
-		const ask = (
-			from: number,
-		): HoldDescription | undefined | Promise<HoldDescription | undefined> => {
-			for (let at = from; at < rules.length; at++) {
-				const rule = rules[at];
-				if (!rule) continue;
-				const description = rule.describeInTurn
-					? rule.describeInTurn(tool, input, context, turn)
-					: rule.describe(tool, input, context);
-				if (isPromise(description))
-					return description.then((found) =>
-						found !== undefined ? found : ask(at + 1),
-					);
-				if (description !== undefined) return description;
-			}
-			return undefined;
-		};
-		return ask(0);
+		const found = ask(tool, input, context, turn, 0);
+		return isPromise(found)
+			? found.then((holding) => holding?.description)
+			: found?.description;
+	};
+	check.inTurnWithClasses = (tool, input, context, turn) => {
+		const classed = (holding: Holding | undefined) =>
+			holding && {
+				description: holding.description,
+				classes: classesIn(holding, tool, input, context),
+			};
+		const found = ask(tool, input, context, turn, 0);
+		return isPromise(found) ? found.then(classed) : classed(found);
 	};
 	check.mayHold = (tool) => rules.find((rule) => rule.mayHold?.(tool))?.name;
 	check.approvalTier = (tool, input, context) =>
@@ -230,6 +299,49 @@ export function holdChain(rules: readonly HoldRule[]): HoldCheck {
 		};
 	}
 	return check;
+}
+
+/** The classes of a call a rule holds: its own, or the rule's name. */
+function classesFor(
+	rule: HoldRule,
+	tool: string,
+	input: Record<string, unknown>,
+	context: HoldContext,
+): readonly string[] {
+	let own: readonly string[] | undefined;
+	try {
+		own = rule.holdClasses?.(tool, input, context);
+	} catch {
+		// A rule whose classes fail classes its call by its name, which yolo mode treats as unknown.
+		own = undefined;
+	}
+	const named = Array.isArray(own) ? own.filter(isClass) : [];
+	return named.length > 0 ? [...new Set(named)] : [rule.name];
+}
+
+/** A description and the rule that gave it. */
+interface Holding {
+	description: HoldDescription;
+	rule: HoldRule;
+}
+
+/** The classes of a held call: those its description names, else its rule's. */
+function classesIn(
+	{ description, rule }: Holding,
+	tool: string,
+	input: Record<string, unknown>,
+	context: HoldContext,
+): readonly string[] {
+	if (typeof description === "object" && description !== null) {
+		const named = description.classes;
+		if (Array.isArray(named) && named.length > 0 && named.every(isClass))
+			return [...new Set(named)];
+	}
+	return classesFor(rule, tool, input, context);
+}
+
+function isClass(id: unknown): id is string {
+	return typeof id === "string" && id !== "";
 }
 
 /** The principals every list names, in the first list's order; undefined when there are no lists. */

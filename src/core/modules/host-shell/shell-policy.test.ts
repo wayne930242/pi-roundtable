@@ -14,6 +14,7 @@ import {
 	shellHoldRule,
 	shellHoldRuleFor,
 	simpleCommands,
+	YOLO_CARDED_SHELL_CLASSES,
 } from "./shell-policy.ts";
 
 describe("simpleCommands", () => {
@@ -233,5 +234,163 @@ describe("git push", () => {
 		expect(held(`${prep()}git push -f origin main`, shellHoldRule)).toContain(
 			"force-pushes",
 		);
+	});
+});
+
+function classes(
+	command: string,
+	rule: Readonly<HoldRule> = shellHoldRule,
+): readonly string[] | undefined {
+	return rule.holdClasses?.(
+		"bash",
+		{ command },
+		{ workspace: work, scratchDir: scratch },
+	);
+}
+
+describe("the classes of a held shell call", () => {
+	const prep = () => `cd ${work}/tmp/kb-prep && `;
+
+	test("a call that runs has none", () => {
+		expect(classes("ls -la && echo hi")).toBeUndefined();
+		expect(classes(`echo x > ${scratch}/o.txt`)).toBeUndefined();
+		expect(classes("rm -rf $TMPDIR/x")).toBeUndefined();
+	});
+
+	test("each destructive program has its own class", () => {
+		const table: [string, string][] = [
+			["sudo ls", "shell.privilege"],
+			["su -c ls", "shell.privilege"],
+			["doas ls", "shell.privilege"],
+			["dd if=/dev/zero of=/dev/sda", "shell.disk"],
+			["mkfs.ext4 /dev/sda1", "shell.disk"],
+			["shutdown -h now", "shell.power"],
+			["reboot", "shell.power"],
+			["kill -9 1", "shell.kill"],
+			["pkill node", "shell.kill"],
+			["rm -rf /var/x", "shell.rm"],
+			["systemctl restart nginx", "shell.service"],
+			["service nginx stop", "shell.service"],
+			["docker rm web", "shell.docker"],
+			["docker compose down", "shell.docker"],
+			["ufw allow 22", "shell.firewall"],
+			["iptables -F", "shell.firewall"],
+			["apt-get install jq", "shell.packages"],
+			["dpkg -i x.deb", "shell.packages"],
+			["git reset --hard HEAD~1", "shell.reset-hard"],
+			["gh pr merge 3", "shell.gh"],
+			["gh api -X DELETE /repos/a/b", "shell.gh"],
+			["crontab -r", "shell.crontab"],
+			["echo x > /etc/f", "shell.write"],
+			["echo x | tee /etc/f", "shell.write"],
+		];
+		for (const [command, expected] of table)
+			expect([command, classes(command)]).toEqual([command, [expected]]);
+	});
+
+	test("a plain push is shell.push, a forced one shell.force-push", () => {
+		expect(classes(`${prep()}git push origin HEAD:main`)).toEqual([
+			"shell.push",
+		]);
+		expect(classes(`${prep()}git push --force origin main`)).toEqual([
+			"shell.force-push",
+		]);
+		expect(classes(`${prep()}git push -f origin main`)).toEqual([
+			"shell.force-push",
+		]);
+		expect(classes(`${prep()}git push origin +main`)).toEqual([
+			"shell.force-push",
+		]);
+		expect(classes(`${prep()}git push origin --delete main`)).toEqual([
+			"shell.force-push",
+		]);
+	});
+
+	test("a push the policy lets run has no class", () => {
+		expect(classes(`${prep()}git push origin HEAD:main`, OWN)).toBeUndefined();
+	});
+
+	test("every held command of a line counts, not only the first", () => {
+		expect(classes("echo x > /etc/f; sudo ls")).toEqual([
+			"shell.write",
+			"shell.privilege",
+		]);
+		expect(classes("sudo ls && rm -rf /var/x")).toEqual([
+			"shell.privilege",
+			"shell.rm",
+		]);
+	});
+
+	test("one command can be held for two reasons", () => {
+		expect(classes("sudo tee /etc/f > /etc/g")).toEqual([
+			"shell.write",
+			"shell.privilege",
+		]);
+	});
+
+	test("commands inside bash -c count, at any depth", () => {
+		expect(classes(`bash -c "rm -rf /x"`)).toEqual(["shell.rm"]);
+		expect(classes(`sh -c 'echo > /etc/x; sudo ls'`)).toEqual([
+			"shell.write",
+			"shell.privilege",
+		]);
+		expect(classes(`bash -c "bash -c 'sudo ls'"`)).toEqual(["shell.privilege"]);
+		expect(classes(`echo hi > /etc/x; bash -c "git reset --hard"`)).toEqual([
+			"shell.write",
+			"shell.reset-hard",
+		]);
+	});
+
+	test("wrappers and substitutions do not hide a class", () => {
+		expect(classes("env FOO=1 sudo ls")).toEqual(["shell.privilege"]);
+		expect(classes("echo $(sudo ls)")).toEqual(["shell.privilege"]);
+		expect(classes("ls | xargs rm")).toEqual(["shell.rm"]);
+	});
+
+	test("a class is listed once", () => {
+		expect(classes("sudo ls; sudo ls")).toEqual(["shell.privilege"]);
+	});
+
+	test("write and edit outside the roots are shell.write", () => {
+		const context = { workspace: work, scratchDir: scratch };
+		expect(
+			shellHoldRule.holdClasses?.("write", { path: "/etc/x" }, context),
+		).toEqual(["shell.write"]);
+		expect(
+			shellHoldRule.holdClasses?.("edit", { path: "/etc/x" }, context),
+		).toEqual(["shell.write"]);
+		expect(
+			shellHoldRule.holdClasses?.("write", { path: `${scratch}/x` }, context),
+		).toBeUndefined();
+	});
+
+	test("the descriptions stay as they were", () => {
+		expect(held("echo x > /etc/f; sudo ls", shellHoldRule)).toContain(
+			"writes to /etc/f",
+		);
+	});
+});
+
+describe("YOLO_CARDED_SHELL_CLASSES", () => {
+	test("is every shell class except write and push", () => {
+		expect([...YOLO_CARDED_SHELL_CLASSES].map(String).sort()).toEqual(
+			[
+				"shell.crontab",
+				"shell.disk",
+				"shell.docker",
+				"shell.firewall",
+				"shell.force-push",
+				"shell.gh",
+				"shell.kill",
+				"shell.packages",
+				"shell.power",
+				"shell.privilege",
+				"shell.reset-hard",
+				"shell.rm",
+				"shell.service",
+			].sort(),
+		);
+		expect(YOLO_CARDED_SHELL_CLASSES).not.toContain("shell.write");
+		expect(YOLO_CARDED_SHELL_CLASSES).not.toContain("shell.push");
 	});
 });

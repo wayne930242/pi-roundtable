@@ -23,20 +23,6 @@ export const SHELL_TOOLS = Object.freeze([
 	"write",
 ] as const);
 
-/** Programs that are held whatever their arguments. */
-const ALWAYS_HELD = new Set([
-	"sudo",
-	"su",
-	"doas",
-	"dd",
-	"shutdown",
-	"reboot",
-	"poweroff",
-	"halt",
-	"kill",
-	"pkill",
-	"killall",
-]);
 const SYSTEMD_VERBS = new Set([
 	"start",
 	"stop",
@@ -192,19 +178,86 @@ function program(words: string[], prefix: string[] = []): string[] {
 	}
 }
 
-/** Why one simple command is held, or undefined; reads the line's state as it is before it. */
-function heldReason(
+/**
+ * The hold classes of the shell rule, as `shell.<class>` ids that `HoldRule.holdClasses` lists for
+ * every command a call holds. Yolo mode approves `shell.write` (a write outside the scratch roots)
+ * and `shell.push` (a plain `git push` the push policy holds), and cards the rest unless
+ * `autonomy.yolo.allow` lists them.
+ */
+export const SHELL_CLASSES = Object.freeze([
+	"shell.privilege",
+	"shell.disk",
+	"shell.power",
+	"shell.kill",
+	"shell.rm",
+	"shell.write",
+	"shell.service",
+	"shell.docker",
+	"shell.firewall",
+	"shell.packages",
+	"shell.push",
+	"shell.force-push",
+	"shell.reset-hard",
+	"shell.gh",
+	"shell.crontab",
+] as const);
+
+export type ShellClass = (typeof SHELL_CLASSES)[number];
+
+/**
+ * The shell classes yolo mode never approves unless `autonomy.yolo.allow` lists them: all of them
+ * but `shell.write` and `shell.push`, the non-destructive ones. A plain push to `main` deploys, so
+ * list `shell.push` in `autonomy.yolo.card` to keep it behind a card.
+ */
+export const YOLO_CARDED_SHELL_CLASSES: readonly ShellClass[] = Object.freeze(
+	SHELL_CLASSES.filter((id) => id !== "shell.write" && id !== "shell.push"),
+);
+
+/** Why a command is held, and the class of that reason. */
+interface Held {
+	reason: string;
+	class: ShellClass;
+}
+
+/** The class of each program that is held whatever its arguments. */
+const ALWAYS_HELD_CLASS: ReadonlyMap<string, ShellClass> = new Map([
+	["sudo", "shell.privilege"],
+	["su", "shell.privilege"],
+	["doas", "shell.privilege"],
+	["dd", "shell.disk"],
+	["shutdown", "shell.power"],
+	["reboot", "shell.power"],
+	["poweroff", "shell.power"],
+	["halt", "shell.power"],
+	["kill", "shell.kill"],
+	["pkill", "shell.kill"],
+	["killall", "shell.kill"],
+]);
+
+/** Every reason one simple command is held, the redirections first; reads the line's state as it is before it. */
+function heldReasons(
 	words: string[],
 	state: LineState,
 	policy: PushPolicy,
-): string | undefined {
+): Held[] {
+	const found: Held[] = [];
 	for (let i = 0; i < words.length; i++) {
 		const op = words[i];
 		if (op === ">" || op === ">>") {
 			const target = words[i + 1];
-			if (target && !writable(target, state)) return `writes to ${target}`;
+			if (target && !writable(target, state))
+				found.push({ reason: `writes to ${target}`, class: "shell.write" });
 		}
 	}
+	return [...found, ...programHeld(words, state, policy)];
+}
+
+/** Why the program a simple command runs is held, apart from its redirections. */
+function programHeld(
+	words: string[],
+	state: LineState,
+	policy: PushPolicy,
+): Held[] {
 	const prefix: string[] = [];
 	const argv = program(
 		words.filter(
@@ -215,94 +268,167 @@ function heldReason(
 		prefix,
 	);
 	const [head, ...args] = argv;
-	if (!head) return undefined;
+	if (!head) return [];
 	const name = basename(head);
-	if (ALWAYS_HELD.has(name) || /^mkfs(\..+)?$/.test(name)) return name;
-	if (name === "rm")
+	const always = ALWAYS_HELD_CLASS.get(name);
+	if (always) return [{ reason: name, class: always }];
+	if (/^mkfs(\..+)?$/.test(name))
+		return [{ reason: name, class: "shell.disk" }];
+	if (name === "rm") {
 		// xargs adds operands nobody can see here.
-		return prefix.includes("xargs") ? "rm" : rmHeld(args, state);
+		const reason = prefix.includes("xargs") ? "rm" : rmHeld(args, state);
+		return reason ? [{ reason, class: "shell.rm" }] : [];
+	}
 	if ((name === "bash" || name === "sh" || name === "zsh") && args[0] === "-c")
 		return commandHeld(args[1] ?? "", state, policy);
+	const held = verbHeld(name, args, prefix, state, policy);
+	return held ? [held] : [];
+}
+
+/** Whether a push argument forces, deletes or mirrors refs rather than adding commits to them. */
+function rewritesRemote(arg: string): boolean {
+	return (
+		arg === "--mirror" ||
+		arg === "--delete" ||
+		arg === "-d" ||
+		arg.startsWith("+") ||
+		arg.startsWith(":")
+	);
+}
+
+/** Why a program that is held only with some arguments is, when it is; each has a single reason. */
+function verbHeld(
+	name: string,
+	args: string[],
+	prefix: string[],
+	state: LineState,
+	policy: PushPolicy,
+): Held | undefined {
 	const verbs = args.filter((a) => !a.startsWith("-"));
+	const because = (
+		held: boolean,
+		reason: string,
+		heldClass: ShellClass,
+	): Held | undefined => (held ? { reason, class: heldClass } : undefined);
 	switch (name) {
 		case "systemctl":
-			return verbs.some((v) => SYSTEMD_VERBS.has(v))
-				? "changes a systemd unit"
-				: undefined;
+			return because(
+				verbs.some((v) => SYSTEMD_VERBS.has(v)),
+				"changes a systemd unit",
+				"shell.service",
+			);
 		case "service":
-			return verbs.some((v) =>
-				["start", "stop", "restart", "reload"].includes(v),
-			)
-				? "changes a service"
-				: undefined;
+			return because(
+				verbs.some((v) => ["start", "stop", "restart", "reload"].includes(v)),
+				"changes a service",
+				"shell.service",
+			);
 		case "docker": {
 			const [first, second] = verbs;
 			if (first === "compose")
-				return second && COMPOSE_VERBS.has(second)
-					? `docker compose ${second}`
-					: undefined;
-			if (first && DOCKER_VERBS.has(first)) return `docker ${first}`;
-			if (
-				first &&
-				DOCKER_OBJECTS.has(first) &&
-				second &&
-				(DOCKER_VERBS.has(second) || second === "remove")
-			)
-				return `docker ${first} ${second}`;
-			return undefined;
+				return because(
+					second !== undefined && COMPOSE_VERBS.has(second),
+					`docker compose ${second}`,
+					"shell.docker",
+				);
+			if (first && DOCKER_VERBS.has(first))
+				return { reason: `docker ${first}`, class: "shell.docker" };
+			return because(
+				first !== undefined &&
+					DOCKER_OBJECTS.has(first) &&
+					second !== undefined &&
+					(DOCKER_VERBS.has(second) || second === "remove"),
+				`docker ${first} ${second}`,
+				"shell.docker",
+			);
 		}
 		case "docker-compose":
-			return verbs[0] && COMPOSE_VERBS.has(verbs[0])
-				? `docker-compose ${verbs[0]}`
-				: undefined;
+			return because(
+				verbs[0] !== undefined && COMPOSE_VERBS.has(verbs[0]),
+				`docker-compose ${verbs[0]}`,
+				"shell.docker",
+			);
 		case "ufw":
-			return verbs[0] === "status" || verbs.length === 0
-				? undefined
-				: "changes the firewall";
+			return because(
+				!(verbs[0] === "status" || verbs.length === 0),
+				"changes the firewall",
+				"shell.firewall",
+			);
 		case "iptables":
 		case "ip6tables":
 		case "nft":
-			return args.some((a) => ["-L", "--list", "-S", "list"].includes(a))
-				? undefined
-				: "changes the firewall";
+			return because(
+				!args.some((a) => ["-L", "--list", "-S", "list"].includes(a)),
+				"changes the firewall",
+				"shell.firewall",
+			);
 		case "apt":
 		case "apt-get":
 		case "snap":
-			return verbs.some((v) => PACKAGE_VERBS.has(v))
-				? "installs or removes packages"
-				: undefined;
+			return because(
+				verbs.some((v) => PACKAGE_VERBS.has(v)),
+				"installs or removes packages",
+				"shell.packages",
+			);
 		case "dpkg":
-			return args.some((a) =>
-				["-i", "-r", "-P", "--install", "--remove", "--purge"].includes(a),
-			)
-				? "installs or removes packages"
-				: undefined;
-		case "git": {
-			const [globals, [verb, ...rest]] = gitCommand(args);
-			if (verb === "push") {
-				const plain = !prefix.some((w) => w.startsWith("GIT_"));
-				if (plain && ownPush(globals, rest, state, policy)) return undefined;
-				return rest.some((a) => a === "-f" || a.startsWith("--force"))
-					? "force-pushes"
-					: `pushes to GitHub, which deploys ${assistantName()} when the branch is main`;
-			}
-			if (verb === "reset" && rest.includes("--hard"))
-				return "git reset --hard";
-			return undefined;
+			return because(
+				args.some((a) =>
+					["-i", "-r", "-P", "--install", "--remove", "--purge"].includes(a),
+				),
+				"installs or removes packages",
+				"shell.packages",
+			);
+		case "git":
+			return gitHeld(args, prefix, state, policy);
+		case "gh": {
+			const reason = ghHeld(args);
+			return reason ? { reason, class: "shell.gh" } : undefined;
 		}
-		case "gh":
-			return ghHeld(args);
 		case "crontab":
-			return args.includes("-r") ? "removes a crontab" : undefined;
+			return because(args.includes("-r"), "removes a crontab", "shell.crontab");
 		case "tee": {
 			const target = args.find(
 				(a) => !a.startsWith("-") && !writable(a, state),
 			);
-			return target ? `writes to ${target}` : undefined;
+			return target
+				? { reason: `writes to ${target}`, class: "shell.write" }
+				: undefined;
 		}
 		default:
 			return undefined;
 	}
+}
+
+/** Why a `git` command is held: a push the policy does not let run, or a hard reset. */
+function gitHeld(
+	args: string[],
+	prefix: string[],
+	state: LineState,
+	policy: PushPolicy,
+): Held | undefined {
+	const [globals, [verb, ...rest]] = gitCommand(args);
+	if (verb === "push") {
+		const plain = !prefix.some((w) => w.startsWith("GIT_"));
+		if (plain && ownPush(globals, rest, state, policy)) return undefined;
+		if (
+			rest.some(
+				(a) => /^-[A-Za-z]*f[A-Za-z]*$/.test(a) || a.startsWith("--force"),
+			)
+		)
+			return { reason: "force-pushes", class: "shell.force-push" };
+		if (rest.some(rewritesRemote))
+			return {
+				reason: "rewrites or deletes remote refs",
+				class: "shell.force-push",
+			};
+		return {
+			reason: `pushes to GitHub, which deploys ${assistantName()} when the branch is main`,
+			class: "shell.push",
+		};
+	}
+	if (verb === "reset" && rest.includes("--hard"))
+		return { reason: "git reset --hard", class: "shell.reset-hard" };
+	return undefined;
 }
 
 /** Git's global options that take a value, as separate words. */
@@ -372,27 +498,27 @@ function ghHeld(args: string[]): string | undefined {
 	}
 }
 
-/** Why a command line is held; a `bash -c` inside one starts from the outer line's state. */
+/** Every reason a command line is held, command by command; a `bash -c` inside one starts from the outer line's state. */
 function commandHeld(
 	command: string,
 	outer: LineState,
 	policy: PushPolicy,
-): string | undefined {
+): Held[] {
 	const state: LineState = {
 		...lineState(command, outer.workspace, undefined),
 		roots: outer.roots,
 		vars: new Map(outer.vars),
 		cwd: outer.cwd,
 	};
+	const found: Held[] = [];
 	for (const words of simpleCommands(command)) {
-		const reason = heldReason(words, state, policy);
-		if (reason) return reason;
+		found.push(...heldReasons(words, state, policy));
 		follow(program(words), state);
 		// `export` and `cd` are kept by program(); bare assignments are dropped by it.
 		if (words.every((w) => /^[A-Za-z_][A-Za-z0-9_]*=/.test(w)))
 			follow(words, state);
 	}
-	return undefined;
+	return found;
 }
 
 /**
@@ -406,6 +532,16 @@ export function shellActionNeedingConfirmation(
 	context: HoldContext & { workspace: string },
 	policy: PushPolicy = {},
 ): string | undefined {
+	return shellHold(toolName, input, context, policy)?.action;
+}
+
+/** What a shell call is held for, in words, and the class of every command it is held for. */
+function shellHold(
+	toolName: string,
+	input: Record<string, unknown>,
+	context: HoldContext & { workspace: string },
+	policy: PushPolicy,
+): { action: string; classes: ShellClass[] } | undefined {
 	const state = lineState(
 		typeof input.command === "string" ? input.command : "",
 		context.workspace,
@@ -413,16 +549,23 @@ export function shellActionNeedingConfirmation(
 	);
 	if (toolName === "bash") {
 		const command = typeof input.command === "string" ? input.command : "";
-		const reason = commandHeld(command, state, policy);
-		return reason
-			? `run the shell command \`${command.slice(0, MAX_SHOWN_COMMAND)}\` on the host (${reason})`
+		const found = commandHeld(command, state, policy);
+		const [first] = found;
+		return first
+			? {
+					action: `run the shell command \`${command.slice(0, MAX_SHOWN_COMMAND)}\` on the host (${first.reason})`,
+					classes: [...new Set(found.map((held) => held.class))],
+				}
 			: undefined;
 	}
 	if (toolName === "write" || toolName === "edit") {
 		const path = typeof input.path === "string" ? input.path : "";
 		return writable(path.replace(/^@/, ""), state)
 			? undefined
-			: `${toolName} the file ${path} on the host`;
+			: {
+					action: `${toolName} the file ${path} on the host`,
+					classes: ["shell.write"],
+				};
 	}
 	return undefined;
 }
@@ -447,6 +590,15 @@ export function shellHoldRuleFor(policy: PushPolicy = {}): Readonly<HoldRule> {
 						{ ...context, workspace: context.workspace },
 						frozen,
 					),
+		holdClasses: (tool, input, context) =>
+			context.workspace === undefined
+				? undefined
+				: shellHold(
+						tool,
+						input,
+						{ ...context, workspace: context.workspace },
+						frozen,
+					)?.classes,
 	});
 }
 
