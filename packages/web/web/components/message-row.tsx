@@ -1,6 +1,7 @@
-import { memo, useEffect, useState } from "react";
+import { memo, useContext, useEffect, useState } from "react";
 import type { RoomFile, RoomMessage } from "../../src/api-types.ts";
 import { store, useSelector } from "../lib/app-store.ts";
+import { ConfigContext } from "../lib/config.ts";
 import { clock } from "../lib/format.ts";
 import { translate as t } from "../lib/messages.ts";
 import type { PendingSend } from "../lib/rooms.ts";
@@ -69,10 +70,11 @@ export const MessageRow = memo(function MessageRow(props: {
 	timeZone: string;
 }) {
 	const { message } = props;
+	const surface = useContext(ConfigContext)?.app?.surface;
 	if (message.kind === "system") {
 		const line = systemLine(message.text);
 		// The start line of a dispatch thread links the thread's room.
-		const linked = hasThreadLink(message.text);
+		const linked = hasThreadLink(message.text, surface);
 		return (
 			<li className="line" data-enter={props.enter || undefined}>
 				<Icon name={linked ? "conversations" : line.icon} size={14} />

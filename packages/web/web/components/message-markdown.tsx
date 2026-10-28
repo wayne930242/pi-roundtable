@@ -1,16 +1,29 @@
-import { memo, useState } from "react";
+import { memo, useContext, useState } from "react";
 import Markdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { ConfigContext } from "../lib/config.ts";
 import { translate as t } from "../lib/messages.ts";
 import { hrefFor } from "../lib/router.ts";
 import { Icon } from "./icons.tsx";
 
-/** What a message names a dispatch thread's room by: `<surface>:thread.<uuid>`, as a link's address. */
-export const THREAD_LINK = /^[^\s:()]+:thread\.[0-9a-f-]{36}$/;
+const escapeRegExp = (text: string): string =>
+	text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-/** Whether Markdown text links a dispatch thread's room. */
-export const hasThreadLink = (text: string): boolean =>
-	/\]\([^\s:()]+:thread\.[0-9a-f-]{36}\)/.test(text);
+/** What a message names a dispatch thread's room by: `<surface>:thread.<uuid>`, as a link's address. */
+const threadLinkOf = (surface: string | undefined): RegExp =>
+	new RegExp(
+		surface ? `^${escapeRegExp(surface)}:thread\\.[0-9a-f-]{36}$` : "(?!)",
+	);
+
+/** Whether Markdown text links a dispatch thread's room of the surface. */
+export const hasThreadLink = (
+	text: string,
+	surface: string | undefined,
+): boolean =>
+	surface !== undefined &&
+	new RegExp(`\\]\\(${escapeRegExp(surface)}:thread\\.[0-9a-f-]{36}\\)`).test(
+		text,
+	);
 
 /** A fenced code block with a button that copies it. */
 function Pre({ children }: { children?: React.ReactNode }) {
@@ -55,16 +68,17 @@ export const MessageMarkdown = memo(function MessageMarkdown({
 }: {
 	source: string;
 }) {
+	const threadLink = threadLinkOf(useContext(ConfigContext)?.app?.surface);
 	return (
 		<div className="prose">
 			<Markdown
 				remarkPlugins={[remarkGfm]}
 				urlTransform={(url) =>
-					THREAD_LINK.test(url) ? url : defaultUrlTransform(url)
+					threadLink.test(url) ? url : defaultUrlTransform(url)
 				}
 				components={{
 					a: ({ href, children }) =>
-						href && THREAD_LINK.test(href) ? (
+						href && threadLink.test(href) ? (
 							<a className="thread-link" href={hrefFor("room", href)}>
 								{children}
 							</a>

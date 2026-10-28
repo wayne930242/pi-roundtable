@@ -53,13 +53,17 @@ const line = (text: string): RoomMessage => ({
 
 const row = (message: RoomMessage) =>
 	renderToStaticMarkup(
-		<MessageRow
-			message={message}
-			avatar={undefined}
-			header
-			enter={false}
-			timeZone="UTC"
-		/>,
+		<ConfigContext.Provider
+			value={{ ...config, app: { surface: "app", protocol: "p" } }}
+		>
+			<MessageRow
+				message={message}
+				avatar={undefined}
+				header
+				enter={false}
+				timeZone="UTC"
+			/>
+		</ConfigContext.Provider>,
 	);
 
 afterEach(() => {
@@ -79,6 +83,16 @@ test("the start line of a thread links its room, and no other address becomes a 
 	expect(html).not.toContain('href="app:agent.guide"');
 	// A plain system line stays one line of text.
 	expect(row(line("Conversation started over"))).not.toContain("<a ");
+});
+
+test("a thread link of another surface is no link", () => {
+	const html = row(
+		line(
+			"🧵 Started: [Scout](other:thread.0b5e7c1a-0000-4000-8000-000000000001)",
+		),
+	);
+	expect(html).not.toContain("<a ");
+	expect(html).not.toContain("thread-link");
 });
 
 test("an edited message takes its new text in place, and one the page does not hold stays unheld", () => {

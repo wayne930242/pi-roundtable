@@ -102,10 +102,10 @@ test("pasted text files are numbered from the first free number, and the chip pr
 });
 
 test("a text file is UTF-8, so the server keeps it as text and its size is the bytes", async () => {
-	const made = textFile("pasted-text-1.txt", "你好 hello");
+	const made = textFile("pasted-text-1.txt", "\u4f60\u597d hello");
 	expect(made.type).toStartWith("text/plain");
-	expect(made.size).toBe(new TextEncoder().encode("你好 hello").length);
-	expect(await made.text()).toBe("你好 hello");
+	expect(made.size).toBe(new TextEncoder().encode("\u4f60\u597d hello").length);
+	expect(await made.text()).toBe("\u4f60\u597d hello");
 });
 
 test("RV-F004: only chips that can be sent take a slot, so a failed upload does not block a long message", () => {

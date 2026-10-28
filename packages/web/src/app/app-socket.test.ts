@@ -804,7 +804,7 @@ describeDb("the owner app over a real host", () => {
 				unix: app.socket,
 			} as never);
 		};
-		const notes = "# Notes\n\n- one\n- 二\n";
+		const notes = "# Notes\n\n- one\n- \u4e8c\n";
 		const text = await upload(new File([notes], "notes.md", { type: "" }));
 		expect(text.status).toBe(200);
 		const textView = (await text.json()) as { id: string; type: string };

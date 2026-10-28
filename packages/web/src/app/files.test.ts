@@ -11,9 +11,10 @@ test("RV-F006: a file name in the download header is percent-encoded to the char
 		expect(header.slice(header.indexOf("''") + 2)).not.toContain(char);
 	// Non-ASCII stays encoded as before.
 	expect(
-		fileResponse({ ...meta, name: "檔案.md" }, new Blob(["x"])).headers.get(
-			"content-disposition",
-		),
+		fileResponse(
+			{ ...meta, name: "\u6a94\u6848.md" },
+			new Blob(["x"]),
+		).headers.get("content-disposition"),
 	).toBe("attachment; filename*=UTF-8''%E6%AA%94%E6%A1%88.md");
 });
 

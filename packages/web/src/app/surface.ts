@@ -123,9 +123,13 @@ export class AppSurface implements ChatSurface {
 
 	/** Changes the text of a stored message and shows the change to every open socket. */
 	async edit(room: ChannelKey, id: number, text: string): Promise<void> {
-		const message = await this.#options.log.edit(id, text);
+		const message = await this.#options.log.edit(room, id, text);
 		if (!message) return;
-		this.#options.sockets.broadcast({ type: "edited", room, message });
+		this.#options.sockets.broadcast({
+			type: "edited",
+			room: message.room,
+			message,
+		});
 	}
 
 	/** Whether a turn works in the room and whether Stop applies, as `activity` frames say. */

@@ -109,10 +109,13 @@ test("a body that contains the boundary's start inside the file is not cut there
 
 test("file names keep their characters, quotes and non-ASCII included", async () => {
 	const { bytes, boundary } = await formOf([
-		["file", new File(["x"], 'quote"d 檔案.txt', { type: "text/plain" })],
+		[
+			"file",
+			new File(["x"], 'quote"d \u6a94\u6848.txt', { type: "text/plain" }),
+		],
 	]);
 	const [part] = await parse(bytes, boundary, 16);
-	expect(part?.headers.filename).toBe('quote"d 檔案.txt');
+	expect(part?.headers.filename).toBe('quote"d \u6a94\u6848.txt');
 });
 
 test("a part nobody takes is read past and dropped", async () => {

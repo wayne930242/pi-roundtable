@@ -90,10 +90,15 @@ export class RoomLog {
 		return messageOf(row);
 	}
 
-	/** Changes the text of a stored message; undefined when there is no such message. */
-	async edit(id: number, text: string): Promise<RoomMessage | undefined> {
+	/** Changes the text of a message stored in the room; undefined when the room holds no such message. */
+	async edit(
+		room: string,
+		id: number,
+		text: string,
+	): Promise<RoomMessage | undefined> {
 		const [row]: Row[] = await this.#sql`
-			UPDATE web_room_messages SET text = ${text} WHERE id = ${id} RETURNING *`;
+			UPDATE web_room_messages SET text = ${text}
+			WHERE id = ${id} AND room = ${room} RETURNING *`;
 		return row && messageOf(row);
 	}
 

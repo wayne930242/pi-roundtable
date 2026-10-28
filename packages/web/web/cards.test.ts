@@ -207,9 +207,14 @@ test("the server's own lines in a room are shown in the page's words", () => {
 		title: "Console",
 		panes: ["rooms"],
 		timeZone: "UTC",
-		messages: { "Yolo mode approved: {action}": "Yolo 模式已核准：{action}" },
+		messages: {
+			"Yolo mode approved: {action}":
+				"Yolo \u6a21\u5f0f\u5df2\u6838\u51c6\uff1a{action}",
+		},
 	});
-	expect(systemLine("Yolo mode approved: ls").text).toBe("Yolo 模式已核准：ls");
+	expect(systemLine("Yolo mode approved: ls").text).toBe(
+		"Yolo \u6a21\u5f0f\u5df2\u6838\u51c6\uff1als",
+	);
 	setPresentation({ title: "Console", panes: ["rooms"], timeZone: "UTC" });
 });
 

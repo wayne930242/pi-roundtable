@@ -200,6 +200,11 @@ describe("refuses to start", () => {
 			{ uploadMaxBytes: Number.MAX_SAFE_INTEGER },
 			"uploadMaxBytes",
 		],
+		[
+			"an upload limit above 4 GiB",
+			{ uploadMaxBytes: 4 * 1024 ** 3 + 1 },
+			"uploadMaxBytes",
+		],
 		["a fractional upload limit", { uploadMaxBytes: 1.5 }, "uploadMaxBytes"],
 		["notes with no owner id", { ownerId: " " }, "ownerId"],
 		["an empty title", { title: " " }, "title"],

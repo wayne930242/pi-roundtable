@@ -201,7 +201,12 @@ test("any ordinary file is accepted: images by their bytes, text as text, the re
 		["notes.md", "# Title\n\ntext", "", "text/markdown"],
 		["table.csv", "a,b\n1,2\n", "application/vnd.ms-excel", "text/csv"],
 		["index.ts", "export const a = 1;\n", "video/mp2t", "text/plain"],
-		["中文筆記.txt", "你好，世界\n", "text/plain", "text/plain"],
+		[
+			"\u4e2d\u6587\u7b46\u8a18.txt",
+			"\u4f60\u597d\uff0c\u4e16\u754c\n",
+			"text/plain",
+			"text/plain",
+		],
 		["data.json", '{"a":1}', "", "application/json"],
 		["Makefile", "all:\n\techo hi\n", "", "text/plain"],
 		[

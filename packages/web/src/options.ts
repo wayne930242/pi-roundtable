@@ -137,7 +137,8 @@ export interface WebConsoleOptions {
 	/**
 	 * The most bytes of one file a person may upload in the app, 100 MiB by default. The upload
 	 * route raises the listener's request body limit to this plus the form's framing, and the
-	 * agent reads files up to it. A reverse proxy in front has a limit of its own, and
+	 * agent reads files up to it. At most 4 GiB. The listener has one body limit, so this raises
+	 * it for every route on the listener, not only the upload route. A reverse proxy in front has a limit of its own, and
 	 * Cloudflare's free plan caps request bodies at 100 MB. Files are streamed to disk, not held
 	 * in memory.
 	 */
@@ -320,15 +321,19 @@ function checkGrace(seconds: number | undefined): number {
 	return seconds;
 }
 
+/** The largest `uploadMaxBytes`: the limit is also the listener's body limit. */
+const MAX_UPLOAD_MAX_BYTES = 4 * 1024 ** 3;
+
 function checkUploadMax(bytes: number | undefined): number {
 	if (bytes === undefined) return DEFAULT_UPLOAD_MAX_BYTES;
 	if (
 		typeof bytes !== "number" ||
 		!Number.isSafeInteger(bytes + UPLOAD_FRAMING_BYTES) ||
-		bytes < 1
+		bytes < 1 ||
+		bytes > MAX_UPLOAD_MAX_BYTES
 	)
 		fail(
-			"uploadMaxBytes must be a whole number of bytes, at least 1, that the upload route can ask the listener to take with the form's framing added",
+			"uploadMaxBytes must be a whole number of bytes, from 1 to 4 GiB, that the upload route can ask the listener to take with the form's framing added",
 		);
 	return bytes;
 }

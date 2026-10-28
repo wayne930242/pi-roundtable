@@ -29,7 +29,7 @@ describeDb("the app surface's dispatch threads", () => {
 			threads,
 			publish: (row) => log.append(row),
 			edit: async (room: string, id: number, text: string) => {
-				const message = await log.edit(id, text);
+				const message = await log.edit(room, id, text);
 				events.push(`edited ${room} ${message?.text}`);
 			},
 			changed: () => void events.push("changed"),
@@ -42,6 +42,19 @@ describeDb("the app surface's dispatch threads", () => {
 
 	const textsOf = async (room: string): Promise<RoomMessage[]> =>
 		(await log.page(room, undefined, 50)).messages;
+
+	test("an edit changes only a message of its own room", async () => {
+		const stored = await log.append({
+			room: PARENT,
+			kind: "system",
+			author: "Assistant",
+			text: "before",
+		});
+		expect(
+			await log.edit("app:agent.other", stored.id, "after"),
+		).toBeUndefined();
+		expect((await log.edit(PARENT, stored.id, "after"))?.text).toBe("after");
+	});
 
 	test("open posts the start line in the parent, makes the thread, and edits the line to link it", async () => {
 		events.length = 0;
