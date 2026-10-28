@@ -156,6 +156,13 @@ kbd {
 	background: var(--accent);
 	color: var(--on-accent);
 	flex: none;
+	overflow: hidden;
+}
+
+.brand-mark img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
 }
 
 .brand h1 {

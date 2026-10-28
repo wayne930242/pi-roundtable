@@ -9,6 +9,7 @@ import {
 } from "react";
 import type { ConfigView, PaneName } from "../src/api-types.ts";
 import { ErrorBoundary } from "./components/boundary.tsx";
+import { BrandMark } from "./components/brand-mark.tsx";
 import { ConnectionGate } from "./components/connection-gate.tsx";
 import { Icon, type IconName } from "./components/icons.tsx";
 import { Palette } from "./components/palette.tsx";
@@ -354,9 +355,7 @@ function Console({ config }: { config: ConfigView }) {
 			<div className="app" data-fill={fill || undefined}>
 				<aside className="rail">
 					<div className="brand">
-						<span className="brand-mark">
-							<Icon name="sparkle" size={16} />
-						</span>
+						<BrandMark />
 						<h1>{config.title}</h1>
 					</div>
 					<nav className="rail-nav" aria-label={t("Panes")}>
@@ -393,9 +392,7 @@ function Console({ config }: { config: ConfigView }) {
 				<div className="stage" ref={stage} data-fill={fill || undefined}>
 					<header className="topbar">
 						<div className="brand">
-							<span className="brand-mark">
-								<Icon name="sparkle" size={16} />
-							</span>
+							<BrandMark />
 							<h1>{config.title}</h1>
 						</div>
 						<div className="topbar-end">

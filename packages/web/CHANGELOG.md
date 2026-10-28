@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.23.1] - 2026-10-29
+
+### Fixed
+
+- The header's brand mark shows the served install icon (`<mount>/icons/192.png`, so `icons.dir` changes it too) instead of a fixed sparkle.
+
 ## [0.23.0] - 2026-10-29
 
 The package becomes the owner app of a host, and keeps the console that came first.
