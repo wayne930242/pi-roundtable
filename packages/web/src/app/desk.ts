@@ -64,6 +64,8 @@ export interface OwnerDeskOptions {
 	 * rejection is logged.
 	 */
 	resume(room: ChannelKey, by: Answerer, text: string): void | Promise<void>;
+	/** Hears of a card when it opens, once; the late re-send of a card does not call it again. Never throws into the turn. */
+	opened?(room: ChannelKey, frame: PromptFrame): void;
 	/** Display names of principals, for a card that names who may approve it. */
 	namesOf(principalIds: readonly string[]): Promise<string[]>;
 	logger: Logger;
@@ -465,6 +467,11 @@ export class OwnerDesk {
 			supersede?.addEventListener("abort", onWithdraw, { once: true });
 			this.#open.set(id, open);
 			broadcast({ type: "prompt", room, prompt: open.frame });
+			try {
+				this.#options.opened?.(room, open.frame);
+			} catch (error) {
+				logger.warn({ room, err: error }, "a card's listener failed");
+			}
 		});
 	}
 

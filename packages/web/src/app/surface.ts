@@ -46,8 +46,18 @@ export interface AppSurfaceOptions {
 	canHost(parent: ChannelKey): Promise<boolean>;
 	/** Tells the sockets the room list differs, once changes settle. */
 	changed(): void;
+	/**
+	 * Hears of an agent's reply in a room that no message from a page started, such as a
+	 * schedule's, a report's or a late answer's. Never throws into the turn.
+	 */
+	unprompted?(room: ChannelKey, author: string, text: string): void;
+	/** The clock, in milliseconds; default `Date.now`. */
+	now?: () => number;
 	logger: Logger;
 }
+
+/** A turn that starts this soon after a page's message in its room is that message's. */
+const ASKED_WINDOW_MS = 30_000;
 
 /** The counts behind a room's `activity`. */
 interface Activity {
@@ -72,6 +82,10 @@ export class AppSurface implements ChatSurface {
 	readonly threads: AppSurfaceThreads;
 	readonly #options: AppSurfaceOptions;
 	readonly #activity = new Map<ChannelKey, Activity>();
+	/** When a page last sent a message to each room. */
+	readonly #askedAt = new Map<ChannelKey, number>();
+	/** The turns running in each room that a page's message started. */
+	readonly #asked = new Map<ChannelKey, number>();
 	#deliver: ((message: InboundMessage) => void) | undefined;
 
 	constructor(options: AppSurfaceOptions) {
@@ -102,6 +116,7 @@ export class AppSurface implements ChatSurface {
 			throw new PluginError(
 				"the web app surface has not started; messages are taken once the host runs",
 			);
+		this.#askedAt.set(message.channel, this.#now());
 		this.#deliver(message);
 	}
 
@@ -166,7 +181,24 @@ export class AppSurface implements ChatSurface {
 	}
 
 	startTyping(channel: ChannelKey): () => void {
-		return this.#count(channel, "typing");
+		const stop = this.#count(channel, "typing");
+		const askedAt = this.#askedAt.get(channel);
+		if (askedAt === undefined || this.#now() - askedAt > ASKED_WINDOW_MS)
+			return stop;
+		this.#asked.set(channel, (this.#asked.get(channel) ?? 0) + 1);
+		let on = true;
+		return () => {
+			stop();
+			if (!on) return;
+			on = false;
+			const left = (this.#asked.get(channel) ?? 1) - 1;
+			if (left > 0) this.#asked.set(channel, left);
+			else this.#asked.delete(channel);
+		};
+	}
+
+	#now(): number {
+		return (this.#options.now ?? Date.now)();
 	}
 
 	showStop(channel: ChannelKey): () => void {
@@ -185,6 +217,20 @@ export class AppSurface implements ChatSurface {
 			text: reply.chunks.join("\n"),
 			files,
 		});
+		if ((this.#asked.get(channel) ?? 0) === 0) {
+			try {
+				this.#options.unprompted?.(
+					channel,
+					reply.author?.name ?? ASSISTANT,
+					reply.chunks.join("\n"),
+				);
+			} catch (error) {
+				this.#options.logger.warn(
+					{ room: channel, err: error },
+					"a reply's listener failed",
+				);
+			}
+		}
 	}
 
 	async markFresh(channel: ChannelKey): Promise<void> {

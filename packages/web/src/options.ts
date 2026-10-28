@@ -7,6 +7,7 @@ import {
 	UPLOAD_FRAMING_BYTES,
 } from "./app/uploads.ts";
 import type { ConsoleFeatures, ConsolePresentation } from "./features.ts";
+import { isHostPattern } from "./push/endpoint.ts";
 import type { RequestVerifier } from "./verifier.ts";
 
 /**
@@ -143,6 +144,28 @@ export interface WebConsoleOptions {
 	 * in memory.
 	 */
 	uploadMaxBytes?: number;
+	/**
+	 * Web Push to the owner's devices, sent when a card waits, a long-running cap is reached, an
+	 * agent replies on its own, or a notice is sent, and no page of the owner is in view. The
+	 * payload is encrypted for the device. Only the `rooms` pane has push.
+	 */
+	push?: {
+		/**
+		 * Whether a notification shows the start of the message (the first 120 characters); default
+		 * true. With `false` it says only that something is waiting and where.
+		 */
+		preview?: boolean;
+		/**
+		 * Push services the server may post to besides the browsers' own (Google, Mozilla, Apple,
+		 * Microsoft), as host names; a leading `*.` allows every subdomain. Their endpoints must
+		 * still be `https`.
+		 */
+		endpointHosts?: readonly string[];
+		/**
+		 * The HTTP client the posts go through; default `fetch`. Set it only in tests.
+		 */
+		fetch?: typeof fetch;
+	};
 	/** The page's title and heading; default `Roundtable`. */
 	title?: string;
 	/** Where the install icons come from; default the ones this package ships. */
@@ -169,6 +192,11 @@ export interface ResolvedOptions {
 	surface: string;
 	cardGraceSeconds: number;
 	uploadMaxBytes: number;
+	push: {
+		preview: boolean;
+		endpointHosts: readonly string[];
+		fetch: typeof fetch | undefined;
+	};
 	title: string;
 	iconsDir: string | undefined;
 	relayNotes: readonly string[];
@@ -321,6 +349,24 @@ function checkGrace(seconds: number | undefined): number {
 	return seconds;
 }
 
+function checkPush(push: WebConsoleOptions["push"]): ResolvedOptions["push"] {
+	if (push?.preview !== undefined && typeof push.preview !== "boolean")
+		fail("push.preview must be true or false");
+	const hosts = push?.endpointHosts ?? [];
+	if (!Array.isArray(hosts))
+		fail("push.endpointHosts must be a list of host names");
+	for (const host of hosts)
+		if (typeof host !== "string" || !isHostPattern(host))
+			fail(
+				`push.endpointHosts has ${JSON.stringify(host)}, which is not a host name such as push.example.com or *.push.example.com`,
+			);
+	return {
+		preview: push?.preview ?? true,
+		endpointHosts: [...hosts],
+		fetch: push?.fetch,
+	};
+}
+
 /** The largest `uploadMaxBytes`: the limit is also the listener's body limit. */
 const MAX_UPLOAD_MAX_BYTES = 4 * 1024 ** 3;
 
@@ -375,6 +421,7 @@ export function resolveOptions(options: WebConsoleOptions): ResolvedOptions {
 		surface: checkSurface(options.surface),
 		cardGraceSeconds: checkGrace(options.cardGraceSeconds),
 		uploadMaxBytes: checkUploadMax(options.uploadMaxBytes),
+		push: checkPush(options.push),
 		title,
 		iconsDir: options.icons?.dir,
 		relayNotes: options.relayNotes ?? [DEFAULT_RELAY_NOTE],

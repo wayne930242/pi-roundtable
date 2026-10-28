@@ -61,9 +61,14 @@ export class Sockets {
 				this.send(connection, frame);
 	}
 
-	/** Whether a page of an owner is in view now. */
-	anyVisible(): boolean {
-		for (const connection of this.#open) if (connection.visible) return true;
+	/** Whether a page of this person is in view now; of any owner when no one is named. */
+	anyVisible(principalId?: string): boolean {
+		for (const connection of this.#open)
+			if (
+				connection.visible &&
+				(principalId === undefined || connection.principal.id === principalId)
+			)
+				return true;
 		return false;
 	}
 

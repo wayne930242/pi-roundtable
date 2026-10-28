@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import {
 	AGENTS,
 	CONVERSATIONS,
@@ -24,6 +25,7 @@ import {
 	resolveOptions,
 	type WebConsoleOptions,
 } from "./options.ts";
+import { loadVapid } from "./push/vapid.ts";
 import { consoleVisitors } from "./visitors.ts";
 
 /** The longest a WebSocket stays open under `password` auth: the session cookie is looked at again after this. */
@@ -136,32 +138,47 @@ async function build(settings: ResolvedOptions, context: Context) {
 			address: context.listener(settings.listener),
 		},
 	});
-	const app = rooms
-		? new OwnerApp({
-				surface: settings.surface,
-				mount: settings.mount,
-				origin: settings.origin,
-				dataDir: settings.dataDir,
-				cardGraceSeconds: settings.cardGraceSeconds,
-				uploadMaxBytes: settings.uploadMaxBytes,
-				authenticator,
-				authMode: settings.auth.mode,
-				// A password session outlives a logout or a new password on an open socket, so the socket is capped.
-				...(settings.auth.mode === "password"
-					? { socketLifeMs: PASSWORD_SOCKET_LIFE_MS }
-					: {}),
-				database: context.database(),
-				agents: services.get(AGENTS),
-				modes: services.get(MODES),
-				identity,
-				...(settings.panes.includes("schedules")
-					? { schedules: services.get(SCHEDULES) }
-					: {}),
-				conversations: context.conversations,
-				changed,
-				logger,
-			})
+	const vapid = rooms
+		? await loadVapid(join(settings.dataDir, "web", "vapid.json"))
 		: undefined;
+	const app =
+		rooms && vapid
+			? new OwnerApp({
+					push: {
+						vapid,
+						subject: settings.origin,
+						preview: settings.push.preview,
+						endpointHosts: settings.push.endpointHosts,
+						...(settings.push.fetch ? { fetch: settings.push.fetch } : {}),
+						urlOf: (room) =>
+							settings.routing === "path"
+								? `${settings.mount}/room/${encodeURIComponent(room)}`
+								: `${settings.mount}/#/room/${encodeURIComponent(room)}`,
+					},
+					surface: settings.surface,
+					mount: settings.mount,
+					origin: settings.origin,
+					dataDir: settings.dataDir,
+					cardGraceSeconds: settings.cardGraceSeconds,
+					uploadMaxBytes: settings.uploadMaxBytes,
+					authenticator,
+					authMode: settings.auth.mode,
+					// A password session outlives a logout or a new password on an open socket, so the socket is capped.
+					...(settings.auth.mode === "password"
+						? { socketLifeMs: PASSWORD_SOCKET_LIFE_MS }
+						: {}),
+					database: context.database(),
+					agents: services.get(AGENTS),
+					modes: services.get(MODES),
+					identity,
+					...(settings.panes.includes("schedules")
+						? { schedules: services.get(SCHEDULES) }
+						: {}),
+					conversations: context.conversations,
+					changed,
+					logger,
+				})
+			: undefined;
 	if (app) listeners.push(() => app.changed());
 	const server = new ConsoleServer({
 		mount: settings.mount,
@@ -194,7 +211,9 @@ async function build(settings: ResolvedOptions, context: Context) {
 				},
 			},
 		],
-		...(app ? { surfaces: [app.surface] } : {}),
+		...(app
+			? { surfaces: [app.surface], directChannels: [app.directChannel] }
+			: {}),
 		// An upload is a form with one file in it: the limit of the file and its framing.
 		http: server.routes(
 			settings.listener,

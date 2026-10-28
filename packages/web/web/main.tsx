@@ -26,4 +26,23 @@ if ("serviceWorker" in navigator) {
 	navigator.serviceWorker
 		.register(new URL("sw.js", base), { scope: base.href })
 		.catch((error: unknown) => console.warn("service worker failed", error));
+	// A tap on a notification while the app is open: the worker asks the page to go there.
+	navigator.serviceWorker.addEventListener("message", (event) => {
+		const data: unknown = event.data;
+		if (
+			typeof data !== "object" ||
+			data === null ||
+			(data as { type?: unknown }).type !== "roundtable:open"
+		)
+			return;
+		const url = URL.parse(String((data as { url?: unknown }).url), base);
+		if (url && url.origin === window.location.origin) {
+			if (
+				url.pathname === window.location.pathname &&
+				url.search === window.location.search
+			)
+				window.location.hash = url.hash;
+			else window.location.assign(url);
+		}
+	});
 }

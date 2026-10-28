@@ -1,6 +1,6 @@
 // The service worker: it makes the console installable and keeps the shell available offline.
 // `bun run build` compiles this file to dist/sw.js and defines the two constants below.
-// Event handlers sit side by side at the bottom; a new capability, such as push, adds its own
+// Event handlers sit side by side at the bottom; a new capability adds its own
 // `scope.addEventListener(...)` there and leaves the fetch handler alone.
 
 declare const __PRECACHE__: readonly string[];
@@ -13,9 +13,27 @@ interface WorkerFetchEvent extends WorkerEvent {
 	request: Request;
 	respondWith(response: Promise<Response> | Response): void;
 }
+interface WorkerPushEvent extends WorkerEvent {
+	data: { json(): unknown } | null;
+}
+interface WorkerNotificationEvent extends WorkerEvent {
+	notification: { close(): void; data: unknown };
+}
+interface WorkerWindow {
+	url: string;
+	focus(): Promise<unknown>;
+	postMessage(message: unknown): void;
+}
 interface WorkerScope {
-	registration: { scope: string };
-	clients: { claim(): Promise<void> };
+	registration: {
+		scope: string;
+		showNotification(title: string, options: object): Promise<void>;
+	};
+	clients: {
+		claim(): Promise<void>;
+		matchAll(options: object): Promise<WorkerWindow[]>;
+		openWindow(url: string): Promise<unknown>;
+	};
 	skipWaiting(): Promise<void>;
 	addEventListener(type: string, listener: (event: never) => void): void;
 }
@@ -58,6 +76,71 @@ async function asset(request: Request): Promise<Response> {
 	return response;
 }
 
+/** What a push carries; every field is checked before it is shown. */
+interface PushMessage {
+	title?: unknown;
+	body?: unknown;
+	tag?: unknown;
+	url?: unknown;
+}
+
+const text = (value: unknown, max: number): string | undefined =>
+	typeof value === "string" && value ? value.slice(0, max) : undefined;
+
+/** A link the notification opens: a path under the app's scope on this origin, else the app itself. */
+function openTarget(value: unknown): string {
+	if (typeof value !== "string") return base.href;
+	const url = URL.parse(value, base);
+	return url &&
+		url.origin === base.origin &&
+		url.pathname.startsWith(base.pathname)
+		? url.href
+		: base.href;
+}
+
+// A browser that lets the page subscribe only with `userVisibleOnly` expects a notification for
+// every push, so a message that cannot be read still shows a generic one.
+async function showPush(event: WorkerPushEvent): Promise<void> {
+	let message: PushMessage = {};
+	try {
+		const data = event.data?.json();
+		if (typeof data === "object" && data !== null)
+			message = data as PushMessage;
+	} catch {
+		// An unreadable payload shows the generic notification.
+	}
+	const tag = text(message.tag, 200);
+	await scope.registration.showNotification(
+		text(message.title, 120) ?? "Roundtable",
+		{
+			body: text(message.body, 240),
+			icon: new URL("icons/192.png", base).href,
+			badge: new URL("icons/badge-96.png", base).href,
+			...(tag ? { tag, renotify: true } : {}),
+			data: { url: openTarget(message.url) },
+		},
+	);
+}
+
+async function openFromNotification(
+	event: WorkerNotificationEvent,
+): Promise<void> {
+	event.notification.close();
+	const data = event.notification.data as { url?: unknown } | null;
+	const url = openTarget(data?.url);
+	const windows = await scope.clients.matchAll({
+		type: "window",
+		includeUncontrolled: true,
+	});
+	const open = windows.find((window) => window.url.startsWith(base.href));
+	if (open) {
+		await open.focus();
+		open.postMessage({ type: "roundtable:open", url });
+		return;
+	}
+	await scope.clients.openWindow(url);
+}
+
 scope.addEventListener("install", (event: WorkerEvent) => {
 	event.waitUntil(
 		caches
@@ -96,3 +179,14 @@ scope.addEventListener("fetch", (event: WorkerFetchEvent) => {
 	else if (precached.has(url.origin + url.pathname))
 		event.respondWith(asset(request));
 });
+
+scope.addEventListener("push", (event: WorkerPushEvent) => {
+	event.waitUntil(showPush(event));
+});
+
+scope.addEventListener(
+	"notificationclick",
+	(event: WorkerNotificationEvent) => {
+		event.waitUntil(openFromNotification(event));
+	},
+);

@@ -206,6 +206,21 @@ describe("refuses to start", () => {
 			"uploadMaxBytes",
 		],
 		["a fractional upload limit", { uploadMaxBytes: 1.5 }, "uploadMaxBytes"],
+		[
+			"a push host that is a URL",
+			{ push: { endpointHosts: ["https://push.example.com"] } },
+			"push.endpointHosts",
+		],
+		[
+			"a push host that is an address",
+			{ push: { endpointHosts: ["10.0.0.1"] } },
+			"push.endpointHosts",
+		],
+		[
+			"a preview that is not a switch",
+			{ push: { preview: "yes" } },
+			"push.preview",
+		],
 		["notes with no owner id", { ownerId: " " }, "ownerId"],
 		["an empty title", { title: " " }, "title"],
 	])("with %s", (_name, change, message) => {
@@ -223,6 +238,16 @@ describe("refuses to start", () => {
 		// A file may be 100 MiB by default, and an operator may raise it past what the listener takes
 		// by default: the upload route asks the listener for the room.
 		expect(settings.uploadMaxBytes).toBe(100 * 1024 * 1024);
+		expect([settings.push.preview, settings.push.endpointHosts]).toEqual([
+			true,
+			[],
+		]);
+		expect(
+			resolveOptions({
+				...base(),
+				push: { preview: false, endpointHosts: ["*.push.example.com"] },
+			}).push,
+		).toMatchObject({ preview: false, endpointHosts: ["*.push.example.com"] });
 		expect(
 			resolveOptions({ ...base(), uploadMaxBytes: 1024 * 1024 * 1024 })
 				.uploadMaxBytes,

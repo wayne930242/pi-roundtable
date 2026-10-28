@@ -5,6 +5,7 @@ import type {
 	ChannelKey,
 	ConversationModes,
 	ConversationPort,
+	DirectChannelProvider,
 	IdentityService,
 	Logger,
 	Migration,
@@ -12,6 +13,13 @@ import type {
 	WebSocketRoute,
 } from "pi-roundtable";
 import type { Authenticated, Authenticator } from "../auth/authenticator.ts";
+import { PushApi } from "../push/api.ts";
+import { webPushChannel } from "../push/channel.ts";
+import { EndpointPolicy } from "../push/endpoint.ts";
+import { PushSender } from "../push/sender.ts";
+import { PushSubscriptions } from "../push/subscriptions.ts";
+import { PushService } from "../push/triggers.ts";
+import type { Vapid } from "../push/vapid.ts";
 import { OwnerDesk } from "./desk.ts";
 import { FileDir } from "./files.ts";
 import { RoomLog } from "./room-log.ts";
@@ -28,10 +36,19 @@ const CHANGED_COALESCE_MS = 250;
 /** How often old files are swept: hourly. */
 const SWEEP_EVERY_MS = 3_600_000;
 
+function pathParts(path: string): string[] | undefined {
+	try {
+		return path.split("/").filter(Boolean).map(decodeURIComponent);
+	} catch {
+		return undefined;
+	}
+}
+
 /** The tables the app keeps; the plugin lists them as its own migrations. */
 export const APP_MIGRATIONS: readonly Migration[] = [
 	RoomLog.migration,
 	WebThreads.migration,
+	PushSubscriptions.migration,
 ];
 
 export interface OwnerAppOptions {
@@ -52,6 +69,18 @@ export interface OwnerAppOptions {
 	authMode: "none" | "password" | "verifier";
 	/** The longest an open socket lives; for a credential that logout or a new password does not reach. */
 	socketLifeMs?: number;
+	/** Web Push: the server's key, and how notifications read. */
+	push: {
+		vapid: Vapid;
+		/** The `sub` of the VAPID token. */
+		subject: string;
+		preview: boolean;
+		endpointHosts: readonly string[];
+		/** The HTTP client the posts go through. */
+		fetch?: typeof fetch;
+		/** The path a tap on a room's notification opens, under the origin. */
+		urlOf(room: string): string;
+	};
 	database: SQL;
 	agents: AgentServer;
 	modes: ConversationModes;
@@ -73,7 +102,10 @@ export interface OwnerAppOptions {
 export class OwnerApp {
 	readonly surface: AppSurface;
 	readonly websocket: WebSocketRoute<AppSocket>;
+	/** Reaches an owner through the app: a line in the home room, and a push to their devices. */
+	readonly directChannel: DirectChannelProvider;
 	readonly #api: AppApi;
+	readonly #push: PushApi;
 	readonly #sockets: Sockets;
 	readonly #desk: OwnerDesk;
 	readonly #uploads: Uploads;
@@ -93,11 +125,41 @@ export class OwnerApp {
 			maxBytes: options.uploadMaxBytes,
 		});
 		const threads = new WebThreads(options.database);
+		const subscriptions = new PushSubscriptions(options.database);
+		const policy = new EndpointPolicy(options.push.endpointHosts);
+		const push = new PushService({
+			subscriptions,
+			sender: new PushSender({
+				vapid: options.push.vapid,
+				subject: options.push.subject,
+				policy,
+				...(options.push.fetch ? { fetch: options.push.fetch } : {}),
+				logger,
+			}),
+			identity,
+			visible: (principalId) => sockets.anyVisible(principalId),
+			preview: options.push.preview,
+			urlOf: options.push.urlOf,
+			logger,
+		});
+		this.#push = new PushApi({
+			vapid: options.push.vapid,
+			policy,
+			subscriptions,
+			identity,
+		});
 		// The desk starts a late answer's turn through the socket route, which is made after it.
 		let route: SocketRoute | undefined;
 		const desk = new OwnerDesk({
 			broadcast: (frame) => sockets.broadcast(frame),
 			graceMs: options.cardGraceSeconds * 1000,
+			opened: (room, frame) => {
+				const cap =
+					frame.kind === "approval" &&
+					frame.purpose === "turn-timeout" &&
+					modes.peek(room).longRunning;
+				push.card(room, frame.title, cap).catch(() => undefined);
+			},
 			resume: async (room, by, text) => {
 				if (!route) throw new Error("the app socket route is not ready");
 				await route.say(room, by, text, []);
@@ -123,6 +185,9 @@ export class OwnerApp {
 				return room !== undefined && room.kind !== "thread";
 			},
 			changed: () => this.changed(),
+			unprompted: (room, author, text) => {
+				push.reply(room, author, text).catch(() => undefined);
+			},
 			logger,
 		});
 		const rooms = new Rooms({
@@ -153,6 +218,20 @@ export class OwnerApp {
 			logger,
 		});
 		this.websocket = route.route();
+		this.directChannel = webPushChannel({
+			surface: options.surface,
+			identity,
+			home: () => rooms.homeKey(),
+			post: async (room, text) => {
+				await surface.publish({
+					room,
+					kind: "system",
+					author: "Notice",
+					text,
+				});
+			},
+			push,
+		});
 		this.#api = new AppApi({
 			surface,
 			rooms,
@@ -196,12 +275,16 @@ export class OwnerApp {
 	}
 
 	/** Answers a path under the mount that is the app's; undefined for any other. */
-	handle(
+	async handle(
 		request: Request,
 		rest: string,
 		admission: Authenticated,
 	): Promise<Response | undefined> {
-		return this.#api.handle(request, rest, admission);
+		const parts = pathParts(rest);
+		const pushed = parts
+			? await this.#push.handle(request, parts, admission)
+			: undefined;
+		return pushed ?? this.#api.handle(request, rest, admission);
 	}
 
 	/** Tells every open socket the team or the room list may differ, once changes settle. */

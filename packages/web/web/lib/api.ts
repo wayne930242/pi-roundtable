@@ -12,6 +12,8 @@ import type {
 	NoteView,
 	OverviewView,
 	PrincipalsView,
+	PushDevicesView,
+	PushKeyView,
 	RoomMode,
 	RoomsView,
 	SchedulesView,
@@ -125,6 +127,26 @@ export const api = {
 	/** Deletes an upload no message has used, so it stops counting against what the person may have waiting. */
 	discardUpload: (id: string) =>
 		request<{ ok: true }>(`uploads/${encodeURIComponent(id)}`, {
+			method: "DELETE",
+		}),
+	pushKey: () => request<PushKeyView>("push/key"),
+	pushDevices: () => request<PushDevicesView>("push/subscriptions"),
+	addPushDevice: (subscription: {
+		endpoint: string;
+		keys: { p256dh: string; auth: string };
+		label: string;
+	}) =>
+		request<{ id: string }>("push/subscriptions", {
+			method: "POST",
+			body: JSON.stringify(subscription),
+		}),
+	removePushEndpoint: (endpoint: string) =>
+		request<{ ok: true }>("push/subscriptions", {
+			method: "DELETE",
+			body: JSON.stringify({ endpoint }),
+		}),
+	removePushDevice: (id: string) =>
+		request<{ ok: true }>(`push/subscriptions/${encodeURIComponent(id)}`, {
 			method: "DELETE",
 		}),
 	schedules: () => request<SchedulesView>("schedules"),

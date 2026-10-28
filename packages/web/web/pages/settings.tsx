@@ -1,10 +1,18 @@
-import { useEffect, useState } from "react";
-import type { SessionView } from "../../src/api-types.ts";
+import { useCallback, useEffect, useState } from "react";
+import type { PushDeviceView, SessionView } from "../../src/api-types.ts";
 import { Icon, type IconName } from "../components/icons.tsx";
-import { api } from "../lib/api.ts";
+import { api, messageOf } from "../lib/api.ts";
 import { useSelector } from "../lib/app-store.ts";
 import { translate as t } from "../lib/messages.ts";
+import {
+	disablePush,
+	enablePush,
+	type PushState,
+	pushState,
+	thisDevice,
+} from "../lib/push.ts";
 import { setTheme, type ThemePreference, useTheme } from "../lib/theme.ts";
+import { toast } from "../lib/toast.ts";
 
 /** The browser's offer to install the page, kept until the person asks for it. */
 interface InstallPrompt extends Event {
@@ -29,7 +37,99 @@ const THEMES: { value: ThemePreference; label: string; icon: IconName }[] = [
 	{ value: "dark", label: "Dark", icon: "moon" },
 ];
 
-/** How the page looks, how to put it on a home screen, and who is signed in. */
+/** Push on this device, and the devices that get it. */
+function Notifications({ enabled }: { enabled: boolean }) {
+	const [state, setState] = useState<PushState>();
+	const [devices, setDevices] = useState<PushDeviceView[]>([]);
+	const [current, setCurrent] = useState<string>();
+	const [busy, setBusy] = useState(false);
+	const refresh = useCallback(async () => {
+		setState(await pushState());
+		setCurrent(await thisDevice());
+		setDevices((await api.pushDevices()).devices);
+	}, []);
+	useEffect(() => {
+		if (enabled) refresh().catch(() => setState("unsupported"));
+	}, [enabled, refresh]);
+	if (!enabled) return null;
+	const change = async (work: () => Promise<void>) => {
+		setBusy(true);
+		try {
+			await work();
+		} catch (failure) {
+			toast(
+				failure instanceof Error && failure.message === "permission"
+					? t(
+							"Notifications were not allowed. Allow them in the browser's site settings.",
+						)
+					: messageOf(failure),
+				"danger",
+			);
+		} finally {
+			await refresh().catch(() => undefined);
+			setBusy(false);
+		}
+	};
+	return (
+		<section className="card stack">
+			<h2>{t("Notifications")}</h2>
+			<p className="meta">
+				{state === "unsupported"
+					? t(
+							"This browser cannot get push notifications. On iPhone and iPad, install the app from Share, Add to Home Screen, and open it from there.",
+						)
+					: state === "blocked"
+						? t(
+								"Notifications are blocked for this site. Allow them in the browser's site settings.",
+							)
+						: t(
+								"Get a notification on this device when a card waits for you or an agent reports on its own, while the app is not open.",
+							)}
+			</p>
+			{state === "off" || state === "on" ? (
+				<div className="actions">
+					<button
+						type="button"
+						className={state === "on" ? "secondary" : undefined}
+						disabled={busy}
+						onClick={() => change(state === "on" ? disablePush : enablePush)}
+					>
+						{state === "on"
+							? t("Turn off on this device")
+							: t("Turn on for this device")}
+					</button>
+				</div>
+			) : null}
+			{devices.length > 0 ? (
+				<ul className="stack">
+					{devices.map((device) => (
+						<li key={device.id} className="card-head">
+							<span>
+								{device.label ?? t("Device")}
+								{device.id === current ? ` (${t("this device")})` : ""}
+							</span>
+							<button
+								type="button"
+								className="secondary"
+								disabled={busy}
+								onClick={() =>
+									change(async () => {
+										if (device.id === current) await disablePush();
+										else await api.removePushDevice(device.id);
+									})
+								}
+							>
+								{t("Remove")}
+							</button>
+						</li>
+					))}
+				</ul>
+			) : null}
+		</section>
+	);
+}
+
+/** How the page looks, how to put it on a home screen, which devices get push, and who is signed in. */
 export function SettingsPage() {
 	const { preference } = useTheme();
 	const principal = useSelector((state) => state.principal);
@@ -105,6 +205,7 @@ export function SettingsPage() {
 					</p>
 				)}
 			</section>
+			<Notifications enabled={session?.push === true} />
 			<section className="card stack">
 				<h2>{t("Account")}</h2>
 				<p className="meta">
@@ -115,7 +216,18 @@ export function SettingsPage() {
 							: ""}
 				</p>
 				{session?.auth === "password" ? (
-					<form method="post" action="auth/logout">
+					<form
+						method="post"
+						action="auth/logout"
+						onSubmit={(event) => {
+							// A shared device must stop getting this person's pushes once they log out.
+							event.preventDefault();
+							const form = event.currentTarget;
+							disablePush()
+								.catch(() => undefined)
+								.finally(() => form.submit());
+						}}
+					>
 						<div className="actions">
 							<button type="submit" className="secondary">
 								<Icon name="logout" size={16} />

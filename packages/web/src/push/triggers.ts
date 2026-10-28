@@ -1,0 +1,155 @@
+import type { IdentityService, Logger } from "pi-roundtable";
+import type { PushPayload, PushSender, SendResult } from "./sender.ts";
+import type { PushSubscriptions, Subscription } from "./subscriptions.ts";
+
+/** The most characters of a message a notification shows. */
+export const PREVIEW_CHARS = 120;
+/** Replies in one room closer together than this share a notification. */
+const REPLY_QUIET_MS = 15_000;
+
+export interface PushServiceOptions {
+	subscriptions: Pick<
+		PushSubscriptions,
+		"all" | "delivered" | "forget" | "failed"
+	>;
+	sender: Pick<PushSender, "send">;
+	identity: Pick<IdentityService, "tierOf">;
+	/** Whether a page of this person is in view now; their devices are not pushed while one is. */
+	visible(principalId: string): boolean;
+	/** Whether a notification shows the start of the message; false sends titles only. */
+	preview: boolean;
+	/** The path a tap on a room's notification opens, under the origin. */
+	urlOf(room: string): string;
+	logger: Logger;
+	/** The clock, in milliseconds; default `Date.now`. */
+	now?: () => number;
+}
+
+/** What a trigger says; the service shapes it into a notification. */
+interface Event {
+	kind: PushPayload["kind"];
+	title: string;
+	/** The text a notification shows when previews are on. */
+	text?: string;
+	room?: string;
+	tag: string;
+	/** Only this person's devices; default every owner's. */
+	principalId?: string;
+}
+
+/** The start of a message, on one line and cut at `PREVIEW_CHARS`. */
+export function previewOf(text: string): string {
+	const flat = text.replaceAll(/\s+/g, " ").trim();
+	const letters = Array.from(flat);
+	return letters.length > PREVIEW_CHARS
+		? `${letters.slice(0, PREVIEW_CHARS).join("")}…`
+		: flat;
+}
+
+/**
+ * Decides when an owner's devices are pushed and what is said. Each trigger pushes only while no
+ * page of an owner is in view, and only to owners: a device whose person is no owner any more is
+ * skipped. Delivery never throws into the code that raised the trigger.
+ */
+export class PushService {
+	readonly #options: PushServiceOptions;
+	readonly #repliedAt = new Map<string, number>();
+
+	constructor(options: PushServiceOptions) {
+		this.#options = options;
+	}
+
+	/** A card opened in a room: an approval or a question waits for an owner. */
+	card(room: string, title: string, longRunningCap: boolean): Promise<void> {
+		return this.#push({
+			kind: longRunningCap ? "cap" : "card",
+			title: longRunningCap ? "Long-running cap reached" : "Card waiting",
+			text: title,
+			room,
+			tag: room,
+		});
+	}
+
+	/** An agent posted in a room, such as a finished job's report or an answer nobody was watching for. */
+	reply(room: string, author: string, text: string): Promise<void> {
+		const now = (this.#options.now ?? Date.now)();
+		const last = this.#repliedAt.get(room);
+		if (last !== undefined && now - last < REPLY_QUIET_MS)
+			return Promise.resolve();
+		this.#repliedAt.set(room, now);
+		return this.#push({
+			kind: "reply",
+			title: this.#options.preview ? author : "New reply",
+			text,
+			room,
+			tag: room,
+		});
+	}
+
+	/** A notice for one person, from the `notify` tool. */
+	notice(principalId: string, text: string, room?: string): Promise<void> {
+		return this.#push({
+			kind: "notice",
+			title: "Notice",
+			text,
+			...(room ? { room } : {}),
+			tag: room ?? "notice",
+			principalId,
+		});
+	}
+
+	async #push(event: Event): Promise<void> {
+		const { logger, preview } = this.#options;
+		try {
+			const payload: PushPayload = {
+				kind: event.kind,
+				title: event.title,
+				tag: event.tag,
+				...(event.room
+					? { room: event.room, url: this.#options.urlOf(event.room) }
+					: {}),
+				...(preview && event.text ? { body: previewOf(event.text) } : {}),
+			};
+			const targets = await this.#targets(event.principalId);
+			await Promise.all(
+				targets.map(async (target) =>
+					this.#settle(
+						target,
+						await this.#options.sender.send(target, payload),
+					),
+				),
+			);
+		} catch (error) {
+			logger.warn({ err: error, kind: event.kind }, "a push was not sent");
+		}
+	}
+
+	async #targets(principalId?: string): Promise<Subscription[]> {
+		const owners = new Map<string, boolean>();
+		const isOwner = async (id: string): Promise<boolean> => {
+			const known = owners.get(id);
+			if (known !== undefined) return known;
+			const owner = (await this.#options.identity.tierOf(id)) === "owner";
+			owners.set(id, owner);
+			return owner;
+		};
+		const all = await this.#options.subscriptions.all();
+		const chosen: Subscription[] = [];
+		for (const subscription of all)
+			if (
+				(principalId === undefined ||
+					subscription.principalId === principalId) &&
+				!this.#options.visible(subscription.principalId) &&
+				(await isOwner(subscription.principalId))
+			)
+				chosen.push(subscription);
+		return chosen;
+	}
+
+	async #settle(target: Subscription, result: SendResult): Promise<void> {
+		const { subscriptions } = this.#options;
+		if (result === "sent") await subscriptions.delivered(target.endpoint);
+		else if (result === "gone") await subscriptions.forget(target.endpoint);
+		else await subscriptions.failed(target.endpoint);
+	}
+}

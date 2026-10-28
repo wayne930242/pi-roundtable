@@ -233,6 +233,7 @@ export class AppApi {
 			principal: { id: principal.id, name: principal.displayName },
 			surface: this.#options.surface.surface,
 			auth: this.#options.authMode,
+			push: true,
 			...(admission.expiresAt
 				? { expiresAt: admission.expiresAt.toISOString() }
 				: {}),

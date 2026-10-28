@@ -339,6 +339,25 @@ export interface SessionView {
 	auth: "none" | "password" | "verifier";
 	/** When the credential lapses, if it does. */
 	expiresAt?: string;
+	/** Web Push is available: the app serves the rooms and a key for it. */
+	push?: true;
+}
+
+/** The key a browser subscribes to push against. */
+export interface PushKeyView {
+	key: string;
+}
+
+/** One device of the person that gets push; the id is not the endpoint. */
+export interface PushDeviceView {
+	id: string;
+	label?: string;
+	createdAt: string;
+	lastOkAt?: string;
+}
+
+export interface PushDevicesView {
+	devices: PushDeviceView[];
 }
 
 /** A schedule, labelled by the room it belongs to or else its channel. */
