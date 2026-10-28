@@ -80,6 +80,7 @@ describe("defineRoundtable", () => {
 			"memory",
 			"schedule-store",
 			"prechecks",
+			"threads",
 			"discord",
 			"modules",
 			"worker-sessions",
@@ -128,6 +129,7 @@ describe("defineRoundtable", () => {
 			"memory",
 			"schedule-store",
 			"prechecks",
+			"threads",
 			"modules",
 			"worker-sessions",
 			"conversations",
@@ -156,6 +158,7 @@ describe("defineRoundtable", () => {
 			"identity",
 			"schedule-store",
 			"prechecks",
+			"threads",
 			"discord",
 			"modules",
 			"worker-sessions",
@@ -185,6 +188,7 @@ describe("defineRoundtable", () => {
 	});
 
 	test("discord.formatting reaches the Discord surface, and is the built-in guidance when left out", async () => {
+		const none = () => undefined;
 		const surfaceOf = async (formatting?: string | false) => {
 			const { plugins } = await defineRoundtable({
 				...config,
@@ -197,9 +201,8 @@ describe("defineRoundtable", () => {
 				.find((plugin) => plugin.name === "discord")
 				?.setup({
 					logger: silentLogger(),
-					queue: {},
 					conversations: {},
-					services: { provide: () => undefined, find: () => undefined },
+					services: { provide: none, find: none, get: () => ({}) },
 				} as unknown as PluginContext);
 			return contribution?.surfaces?.[0]?.formatting;
 		};
@@ -220,6 +223,7 @@ describe("defineRoundtable", () => {
 			"roundtable.memory": "memory",
 			"roundtable.schedules": "schedule-store",
 			"roundtable.prechecks": "prechecks",
+			"roundtable.threads": "threads",
 			"roundtable.discord": "discord",
 			"roundtable.background-turns": "modules",
 			"roundtable.delegation": "modules",
@@ -246,6 +250,7 @@ describe("defineRoundtable", () => {
 			"memory",
 			"my-schedules",
 			"prechecks",
+			"threads",
 			"discord",
 			"modules",
 			"worker-sessions",
