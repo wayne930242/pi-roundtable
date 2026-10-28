@@ -367,6 +367,23 @@ test("the harness says which provider slots are filled, by the plugin or by the 
 	expect(seen).toEqual([[], ["images"], ["images"]]);
 });
 
+test("listener reads the addresses the test gives, by id", async () => {
+	const seen: unknown[] = [];
+	const reader = definePlugin({
+		name: "where",
+		setup: ({ listener }) => {
+			seen.push(listener("web"), listener("other"));
+			return { events: {} };
+		},
+	});
+	await (
+		await testPlugin(reader, {
+			listeners: [{ id: "web", port: 8080, hostname: "localhost" }],
+		})
+	).stop();
+	expect(seen).toEqual([{ port: 8080, hostname: "localhost" }, undefined]);
+});
+
 test("apiKey reads as no credential by default, and returns the keys the test gives, by provider", async () => {
 	const seen: Record<string, string | undefined> = {};
 	const reader = definePlugin({

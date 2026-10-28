@@ -40,6 +40,17 @@ export type ListenerAddress =
 /** An address the host serves HTTP on, with the id routes name it by. */
 export type ListenerConfig = { id: string } & ListenerAddress;
 
+/** The address of the listener `id`, without the id, as a copy a plugin cannot use to change the host's. */
+export function listenerAddress(
+	listeners: readonly ListenerConfig[],
+	id: string,
+): Readonly<ListenerAddress> | undefined {
+	const found = listeners.find((listener) => listener.id === id);
+	if (!found) return undefined;
+	const { id: _id, ...address } = found;
+	return Object.freeze(address);
+}
+
 const pathOf = (route: HttpRoute) =>
 	"exact" in route.path ? route.path.exact : route.path.prefix;
 

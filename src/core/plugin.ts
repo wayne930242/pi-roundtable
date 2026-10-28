@@ -17,6 +17,7 @@ import { PluginError } from "./errors.ts";
 import type { HoldCheck, HoldRule } from "./holds.ts";
 import type { HttpRoute } from "./http/listeners.ts";
 import type { Locale } from "./i18n/index.ts";
+import type { ListenerAddress } from "./http/listeners.ts";
 import type { Logger } from "./log.ts";
 import type {
 	DirectChannelProvider,
@@ -321,6 +322,13 @@ export interface PluginContext {
 	 * never throws for that. The value is a secret: keep it out of logs and error messages.
 	 */
 	apiKey(provider: string): Promise<string | undefined>;
+	/**
+	 * Where the host's listener `id` serves, as configured: a unix socket (with its mode) or a TCP
+	 * port (with its hostname, absent when the host did not set one). `undefined` for an id the
+	 * host has no listener for. A plugin that serves without authentication reads it to refuse an
+	 * address that reaches beyond the machine.
+	 */
+	listener(id: string): Readonly<ListenerAddress> | undefined;
 }
 
 /**

@@ -8,7 +8,7 @@ import type { SurfacePort } from "./contract/surface.ts";
 import { NotLinkedError } from "./errors.ts";
 import { EventBus } from "./events.ts";
 import type { RoundtableOptions } from "./host.ts";
-import { HttpListeners } from "./http/listeners.ts";
+import { HttpListeners, listenerAddress } from "./http/listeners.ts";
 import { setLocale } from "./i18n/index.ts";
 import { contactsOf } from "./identity/identity-view.ts";
 import type {
@@ -178,6 +178,7 @@ export class Linkage {
 					return this.registry.dashboard;
 				},
 				apiKey: async (provider) => this.#options.apiKey?.(provider),
+				listener: (id) => listenerAddress(listeners, id),
 			},
 			this.tiers,
 			services,

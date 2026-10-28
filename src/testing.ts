@@ -37,6 +37,7 @@ import type {
 } from "./core/domain/conversation.ts";
 import { NotLinkedError, PluginError } from "./core/errors.ts";
 import { EventBus } from "./core/events.ts";
+import { type ListenerConfig, listenerAddress } from "./core/http/listeners.ts";
 import type { HoldCheck } from "./core/holds.ts";
 import { contactsOf } from "./core/identity/identity-view.ts";
 import type { OwnerIdentity } from "./core/identity.ts";
@@ -256,6 +257,8 @@ export interface TestPluginOptions {
 	apiKeys?: Readonly<Record<string, string>>;
 	/** How long the router holds a bare forward for the message that follows it; the host option `conversations.forwardJoinMs`. */
 	forwardJoinMs?: number;
+	/** The addresses `context.listener(id)` reports; a plugin that reads one gets `undefined` for any not listed. */
+	listeners?: readonly ListenerConfig[];
 }
 
 export interface RecordedEvent {
@@ -542,6 +545,7 @@ export async function testPlugin(
 			Object.hasOwn(options.apiKeys ?? {}, provider)
 				? options.apiKeys?.[provider]
 				: undefined,
+		listener: (id) => listenerAddress(options.listeners ?? [], id),
 	};
 	const registry = await collectContributions(
 		[plugin],

@@ -460,6 +460,36 @@ describe("Roundtable", () => {
 		expect(bare).toEqual({ known: undefined });
 	});
 
+	test("gives a plugin the address a configured listener serves, without its id, and none for an unknown id", async () => {
+		const seen: Record<string, unknown> = {};
+		const { roundtable } = host(
+			[
+				{
+					name: "reader",
+					setup: ({ listener }) => {
+						seen.unix = listener("web");
+						seen.tcp = listener("api");
+						seen.unknown = listener("nobody");
+						return { dashboard: ["listeners"] };
+					},
+				},
+			],
+			{
+				listeners: [
+					{ id: "web", socketPath: "/tmp/web.sock", mode: 0o666 },
+					{ id: "api", port: 8080, hostname: "127.0.0.1" },
+				],
+			},
+		);
+		await roundtable.run();
+		expect(seen).toEqual({
+			unix: { socketPath: "/tmp/web.sock", mode: 0o666 },
+			tcp: { port: 8080, hostname: "127.0.0.1" },
+			unknown: undefined,
+		});
+		expect(Object.isFrozen(seen.unix)).toBe(true);
+	});
+
 	test("refuses clashing session parts before any service starts", async () => {
 		const log: string[] = [];
 		const rule: HoldRule = { name: "shell", describe: () => undefined };
