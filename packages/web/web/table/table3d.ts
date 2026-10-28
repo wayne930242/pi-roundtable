@@ -1363,9 +1363,10 @@ export function createTable3D(
 					z: proj.z,
 				};
 			};
-			const top = toScreen(AV_Y + AV * K);
+			const lift = rearLift((s.x * vF.x + s.z * vF.z) / seatR, LIFT_MAX * K);
+			const top = toScreen(AV_Y + lift + AV * K);
 			const bot = toScreen(0.12);
-			const mid = toScreen(AV_Y + 0.7);
+			const mid = toScreen(AV_Y + lift * 0.5 + 0.7);
 			const hgt = bot.y - top.y;
 			const half = Math.max(hgt * 0.34, 24);
 			if (
