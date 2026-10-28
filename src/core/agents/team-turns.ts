@@ -235,7 +235,7 @@ export class TeamTurns {
 		try {
 			result = await settleTurn(
 				() =>
-					withReplyFiles(true, () =>
+					withReplyFiles(this.#carriesFiles(postTo), () =>
 						this.#options.runtime().runTurn({
 							channel: postTo,
 							selection: this.#options.selection(scope),
@@ -284,6 +284,17 @@ export class TeamTurns {
 			stopTyping();
 		}
 		return result;
+	}
+
+	/**
+	 * Whether a reply in the channel may carry files: Discord's webhook posts do; a room only when
+	 * its surface declares `supportsFiles`, since a reply with files that surface refuses is lost whole.
+	 */
+	#carriesFiles(channel: ChannelKey): boolean {
+		return (
+			discordIdOf(channel) !== undefined ||
+			this.#options.surfaces?.of(channel)?.supportsFiles === true
+		);
 	}
 
 	#active(agent: string, group: string | undefined): void {

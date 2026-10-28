@@ -49,9 +49,10 @@ export interface TeamTurnsOptions {
 	/**
 	 * The surfaces that host agent rooms. A reply in a room goes through `sendReply` with the
 	 * agent as author, and its interim posts through `interim`, never through the Discord
-	 * channels; without it no key but Discord's is the team's.
+	 * channels; without it no key but Discord's is the team's. `of` tells whether the room's
+	 * surface carries reply files.
 	 */
-	surfaces?: Pick<SurfacePort, "sendReply" | "interim" | "roomSurfaces">;
+	surfaces?: Pick<SurfacePort, "sendReply" | "interim" | "roomSurfaces" | "of">;
 	studio: Pick<AvatarStudio, "url">;
 	/** Set once the runtime exists, which itself needs the team's tools. */
 	runtime: () => AgentTurnRunner;

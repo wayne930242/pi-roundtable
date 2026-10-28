@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SQL } from "bun";
 import type { ContextUse } from "../contract/runtime.ts";
+import type { ChatSurface } from "../contract/surface.ts";
 import { NO_ATTACHMENTS } from "../domain/attachment.ts";
 import type {
 	ChannelKey,
@@ -137,6 +138,10 @@ class FakeSurfaces {
 	interims: string[] = [];
 	roomSurfaces() {
 		return this.rooms;
+	}
+	/** A room's surface carries no files, as a surface that does not declare `supportsFiles`. */
+	of(_channel: ChannelKey): ChatSurface | undefined {
+		return undefined;
 	}
 	async sendReply(channel: ChannelKey, reply: OutboundReply) {
 		this.replies.push({ channel, reply });

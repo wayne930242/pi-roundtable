@@ -1,10 +1,12 @@
 import { describe, expect, test } from "bun:test";
+import type { ChatSurface } from "../contract/surface.ts";
 import { NO_ATTACHMENTS } from "../domain/attachment.ts";
 import type { OutboundReply, TurnResult } from "../domain/conversation.ts";
 import { AgentRunError } from "../domain/errors.ts";
 import type { AgentTurnScope, TurnRequest } from "../domain/ports.ts";
 import { messages } from "../i18n/index.ts";
 import { silentLogger } from "../log.ts";
+import { attachReplyFile } from "../reply-files.ts";
 import { ChannelQueue } from "../routing/channel-queue.ts";
 import { TEST_OWNER as OWNER, OWNER_SPEAKER } from "../testing/owner.ts";
 import { FakeThreadHost, fakeThreads } from "../testing/thread-host.ts";
@@ -46,13 +48,22 @@ const store = {
 } as unknown as PgAgentStore;
 
 /** A surface that hosts rooms and records what is sent to it. */
-function roomSurface(rooms: readonly string[] = ["app"]) {
+function roomSurface(
+	rooms: readonly string[] = ["app"],
+	supportsFiles = false,
+) {
 	const replies: { channel: string; reply: OutboundReply }[] = [];
 	/** Interim posts as `channel name/agent: text`, edits included. */
 	const interims: string[] = [];
 	const port: NonNullable<TeamTurnsOptions["surfaces"]> = {
 		roomSurfaces: () => rooms,
-		sendReply: async (channel, reply) => void replies.push({ channel, reply }),
+		// Like the surface port: a surface that does not declare files refuses a reply that has them.
+		sendReply: async (channel, reply) => {
+			if (reply.files?.length && !supportsFiles)
+				throw new Error("the surface does not support reply files");
+			replies.push({ channel, reply });
+		},
+		of: () => ({ supportsFiles }) as ChatSurface,
 		interim: (channel, as) =>
 			as === undefined
 				? undefined
@@ -146,6 +157,32 @@ describe("agent rooms", () => {
 		]);
 		// Never the Discord channel's webhook, the agent's own or any other.
 		expect(posts).toEqual([]);
+	});
+
+	test("a room on a surface without files is not offered reply files, so its reply is not lost", async () => {
+		const { port, replies } = roomSurface();
+		let refused = "";
+		const { team } = setup(() => {
+			try {
+				attachReplyFile({ name: "a.txt", data: new Uint8Array([1]) });
+			} catch (error) {
+				refused = error instanceof Error ? error.message : String(error);
+			}
+			return { ok: true, text: "done" };
+		}, port);
+		await ask(team);
+		expect(refused).toContain("does not support reply files");
+		expect(replies.map((r) => r.reply.chunks)).toEqual([["done"]]);
+	});
+
+	test("a room on a surface that supports files may attach reply files", async () => {
+		const { port, replies } = roomSurface(["app"], true);
+		const { team } = setup(() => {
+			attachReplyFile({ name: "a.txt", data: new Uint8Array([1]) });
+			return { ok: true, text: "done" };
+		}, port);
+		await ask(team);
+		expect(replies[0]?.reply.files?.map((f) => f.name)).toEqual(["a.txt"]);
 	});
 
 	test("a failed room turn tells the room, not Discord", async () => {
