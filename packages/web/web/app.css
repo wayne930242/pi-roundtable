@@ -841,17 +841,51 @@
 	max-width: 100%;
 	padding: 0 0 0 var(--space-3);
 	border: 1px solid var(--border);
-	border-radius: var(--radius-full);
+	border-radius: var(--radius-lg);
 	background: var(--surface);
 	font-size: var(--text-sm);
 	animation: chip-in var(--dur) var(--ease-spring) both;
 }
 
-.attached-chip span {
+.chip-body {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	text-align: left;
+}
+
+.chip-name {
 	overflow: hidden;
-	max-width: 12rem;
+	max-width: 14rem;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+}
+
+.chip-body .meta {
+	overflow: hidden;
+	max-width: 14rem;
+	font-size: var(--text-xs);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* A long text waiting as a file: the whole chip takes it back into the box. */
+.chip-take {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--space-2);
+	min-height: 0;
+	padding: var(--space-1) 0;
+	border: 0;
+	background: transparent;
+	color: inherit;
+	font-weight: 400;
+}
+
+.chip-take:hover:not(:disabled) {
+	background: transparent;
+	border: 0;
+	color: var(--accent);
 }
 
 .attached-chip[data-state="uploading"] {

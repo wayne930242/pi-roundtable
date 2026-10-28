@@ -80,7 +80,7 @@ export interface RoomState {
 export interface RoomsState {
 	connection: "connecting" | "open" | "reconnecting" | "closed";
 	principal?: { id: string; name: string };
-	limits?: { perMessage: number; maxBytes: number; types: string[] };
+	limits?: { perMessage: number; maxBytes: number };
 	rooms: Record<string, RoomState>;
 	/** The room keys as the server listed them: Home first. */
 	order: string[];

@@ -25,7 +25,7 @@ const READY: ServerFrame = {
 	protocol: 1,
 	principal: "ada",
 	name: "Ada",
-	uploads: { perMessage: 4, maxBytes: 10 * 1024 * 1024, types: ["image/png"] },
+	uploads: { perMessage: 4, maxBytes: 100 * 1024 * 1024 },
 };
 
 const message = (
