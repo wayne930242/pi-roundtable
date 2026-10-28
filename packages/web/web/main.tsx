@@ -3,10 +3,13 @@ import { createRoot } from "react-dom/client";
 import { App } from "./app.tsx";
 import { ErrorBoundary } from "./components/boundary.tsx";
 import { loadKit } from "./lib/kit.ts";
+import { initLook } from "./lib/look.ts";
 import { initTheme } from "./lib/theme.ts";
 
 // The stored color scheme goes on before React draws, so the first paint is already the right one.
 initTheme();
+// The device's stored look goes on too; the host's look replaces the default once the config is in.
+initLook(undefined);
 // The character kit is a chunk of its own; it starts loading now, beside the config and the room list.
 loadKit().catch((failure: unknown) =>
 	console.warn("the character kit failed to load", failure),

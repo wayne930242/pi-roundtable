@@ -30,6 +30,7 @@ import {
 import { useAccentStyle } from "../lib/characters.ts";
 import { useMedia } from "../lib/media.ts";
 import { translate as t } from "../lib/messages.ts";
+import { blockNavigation } from "../lib/router.ts";
 import { toast } from "../lib/toast.ts";
 import { PageCharacter } from "./character.tsx";
 import { Confirm } from "./confirm.tsx";
@@ -54,6 +55,17 @@ const PARTS: {
 		ids: ["none", ...CATALOG.accessories],
 	},
 ];
+
+/** The fields the form renders an error under; any other field a server names is reported in the general slot. */
+const RENDERED_FIELDS: ReadonlySet<string> = new Set([
+	"class",
+	"colors",
+	"palette",
+	"build",
+	"skin",
+	"hairColor",
+	...PARTS.map((part) => part.field),
+]);
 
 const PALETTES = Object.keys(CATALOG.palettes) as PaletteName[];
 
@@ -219,7 +231,10 @@ function Field(props: {
 }
 
 /** What the person is trying to leave with unsaved changes: the form itself, or by a link. */
-type Leaving = { kind: "cancel" } | { kind: "link"; anchor: HTMLAnchorElement };
+type Leaving =
+	| { kind: "cancel" }
+	| { kind: "link"; anchor: HTMLAnchorElement }
+	| { kind: "navigate"; proceed(): void };
 
 /**
  * The creator and re-dress form of an agent's character: a live preview, the 24 classes, the
@@ -270,9 +285,14 @@ export function CharacterCreator(props: {
 			event.stopPropagation();
 			setLeaving({ kind: "link", anchor });
 		};
+		// Navigation by code (the room switcher) and the browser's back or a swipe.
+		const release = blockNavigation((proceed) =>
+			setLeaving({ kind: "navigate", proceed }),
+		);
 		window.addEventListener("beforeunload", beforeUnload);
 		document.addEventListener("click", onClick, true);
 		return () => {
+			release();
 			window.removeEventListener("beforeunload", beforeUnload);
 			document.removeEventListener("click", onClick, true);
 		};
@@ -291,10 +311,12 @@ export function CharacterCreator(props: {
 			props.onSaved(profile);
 			toast(t("Saved."));
 		} catch (failure) {
-			const field =
+			const named =
 				failure instanceof ApiFailure && failure.field
-					? (failure.field.split(".")[0] ?? "*")
-					: "*";
+					? failure.field.split(".")[0]
+					: undefined;
+			// A field the form does not show has no place to carry its message but the general one.
+			const field = named && RENDERED_FIELDS.has(named) ? named : "*";
 			setErrors({ [field]: messageOf(failure) });
 		} finally {
 			setSaving(false);
@@ -308,7 +330,7 @@ export function CharacterCreator(props: {
 		if (target?.kind === "link") {
 			// The draft is the saved look again, so the link is no longer held back.
 			setTimeout(() => target.anchor.click(), 0);
-		}
+		} else if (target?.kind === "navigate") target.proceed();
 	};
 
 	const classGrid = (
@@ -424,11 +446,11 @@ export function CharacterCreator(props: {
 			<Field field="hairColor" title={t("Hair color")} error={errors.hairColor}>
 				<fieldset className="creator-swatches">
 					<legend className="visually-hidden">{t("Hair color")}</legend>
-					{CATALOG.hairColors.map((hex) => (
+					{CATALOG.hairColors.map((hex, index) => (
 						<Swatch
 							key={hex}
 							data={{ "data-hair-color": hex }}
-							label={hex}
+							label={t("Hair color {n}", { n: index + 1 })}
 							pressed={draft.hairColor === hex}
 							background={hex}
 							onPick={() => change({ hairColor: hex })}
@@ -452,12 +474,15 @@ export function CharacterCreator(props: {
 		id: string;
 		title: string;
 		summary: string;
+		/** The message of a rejected field in this group; the sheet is shut on a phone, so the list carries it. */
+		error?: string | undefined;
 		node: ReactNode;
 	}[] = [
 		{
 			id: "class",
 			title: t("Class"),
 			summary: characterLabel("class", draft.class),
+			error: errors.class,
 			node: classGrid,
 		},
 		{
@@ -466,18 +491,21 @@ export function CharacterCreator(props: {
 			summary: draft.palette
 				? characterLabel("palette", draft.palette)
 				: draft.colors.primary,
+			error: errors.colors ?? errors.palette,
 			node: colors,
 		},
 		...PARTS.map((part, index) => ({
 			id: part.field,
 			title: t(part.title),
 			summary: characterLabel(part.field as LabelKind, draft[part.field]),
+			error: errors[part.field],
 			node: parts[index],
 		})),
 		{
 			id: "body",
 			title: t("Body"),
 			summary: characterLabelBuild(draft.build),
+			error: errors.build ?? errors.skin ?? errors.hairColor,
 			node: body,
 		},
 	];
@@ -543,6 +571,11 @@ export function CharacterCreator(props: {
 								>
 									<strong>{group.title}</strong>
 									<span className="meta">{group.summary}</span>
+									{group.error ? (
+										<span className="field-error" role="alert">
+											{group.error}
+										</span>
+									) : null}
 								</button>
 							</li>
 						))}

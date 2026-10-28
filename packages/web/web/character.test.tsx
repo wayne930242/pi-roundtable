@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { CATALOG, type CharacterSpec } from "pi-roundtable/characters";
-import { Character } from "./components/character.tsx";
+import { Character, checked } from "./components/character.tsx";
 import { openPage, releaseDom, type TestPage } from "./dom.ts";
 import { loadKit } from "./lib/kit.ts";
 
@@ -143,4 +143,24 @@ test("the character component is the only place that injects HTML", () => {
 	};
 	walk(root);
 	expect(found).toEqual(["components/character.tsx"]);
+});
+
+test("a drawing with an element the kit never emits renders an empty host and logs, never throws", () => {
+	const errors: unknown[] = [];
+	const error = console.error;
+	console.error = (...args: unknown[]) => errors.push(args);
+	try {
+		expect(checked('<svg><g><path d="M0 0"/></g></svg>')).toContain("<path");
+		for (const bad of [
+			"<svg><div>x</div></svg>",
+			"<svg><script>1</script></svg>",
+			'<svg><path onclick="x"/></svg>',
+			'<svg><a href="x"/></svg>',
+			"<svg><use/></svg>",
+		])
+			expect(checked(bad)).toBe("");
+	} finally {
+		console.error = error;
+	}
+	expect(errors).toHaveLength(5);
 });

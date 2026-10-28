@@ -8,6 +8,7 @@ import type { AgentProfileView } from "../src/api-types.ts";
 import { CharacterCreator } from "./components/character-creator.tsx";
 import { openPage, releaseDom, type TestPage } from "./dom.ts";
 import { loadKit } from "./lib/kit.ts";
+import { navigate } from "./lib/router.ts";
 
 const specOf = (id: "knight" | "wizard" | "healer"): CharacterSpec => ({
 	v: 1,
@@ -203,4 +204,67 @@ test("Suggest from role picks the class the role points to, and Preview states c
 	expect(host()?.getAttribute("data-state")).toBe("idle");
 	await page.click(query('[data-action="cycle"]'));
 	expect(host()?.getAttribute("data-state")).toBe("thinking");
+});
+
+const button = (label: string) =>
+	[...page.container.querySelectorAll("button")].find(
+		(one) => one.textContent === label,
+	) ?? null;
+
+test("navigating by code while the draft is unsaved asks first; Discard carries on", async () => {
+	await open();
+	await page.click(query('[data-class="wizard"]'));
+	await page.act(() => navigate("rooms"));
+	expect(asking()).toContain("Discard your changes?");
+	expect(window.location.hash).not.toContain("rooms");
+	await page.click(button("Keep editing"));
+	await settle();
+	expect(pressed('[data-class="wizard"]')).toBe(true);
+	await page.act(() => navigate("rooms"));
+	await page.click(button("Discard"));
+	await settle();
+	expect(window.location.hash).toContain("rooms");
+});
+
+test("the browser's back while the draft is unsaved asks first and keeps the page", async () => {
+	await open();
+	await page.click(query('[data-class="wizard"]'));
+	const before = window.history.length;
+	await page.act(() => {
+		window.dispatchEvent(new PopStateEvent("popstate", { state: null }));
+	});
+	expect(asking()).toContain("Discard your changes?");
+	// The sentinel was pushed again, so the page's own entry is still behind it.
+	expect(window.history.length).toBeGreaterThanOrEqual(before);
+	await page.click(button("Keep editing"));
+	await settle();
+	expect(pressed('[data-class="wizard"]')).toBe(true);
+});
+
+test("a field the form does not render is reported in the general slot", async () => {
+	answer = () =>
+		new Response(JSON.stringify({ error: "v: unsupported", field: "v" }), {
+			status: 400,
+			headers: { "content-type": "application/json" },
+		});
+	try {
+		await open();
+		await page.click(query('[data-class="wizard"]'));
+		await page.click(query('[data-action="save"]'));
+	} finally {
+		answer = () =>
+			new Response(JSON.stringify(profileOf(specOf("wizard"))), {
+				status: 200,
+				headers: { "content-type": "application/json" },
+			});
+	}
+	expect(query('[data-field="*"]')?.textContent).toContain("unsupported");
+});
+
+test("hair color swatches are labelled like skin tones", async () => {
+	await open();
+	const labels = [...page.container.querySelectorAll("[data-hair-color]")].map(
+		(one) => one.getAttribute("aria-label") ?? one.textContent,
+	);
+	expect(labels[0]).toBe("Hair color 1");
 });

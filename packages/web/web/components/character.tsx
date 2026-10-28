@@ -31,14 +31,29 @@ export interface CharacterProps {
 	name?: string | undefined;
 }
 
-/** What the kit's invariants say its output never contains; a drawing that does is not injected. */
-const FORBIDDEN =
-	/<script|<style|<foreignObject|<image|<text|\bhref\s*=|\bstyle\s*=|\bon[a-z]+\s*=|var\(/i;
+/** The elements the kit's output is made of; a drawing with any other element is not injected. */
+const ELEMENTS = new Set([
+	"svg",
+	"g",
+	"path",
+	"circle",
+	"ellipse",
+	"rect",
+	"clipPath",
+]);
+/** Attributes the kit never emits: links, inline styles, event handlers, and CSS variables. */
+const FORBIDDEN_ATTRIBUTES = /\bhref\s*=|\bstyle\s*=|\bon[a-z]+\s*=|var\(/i;
 
-function checked(svg: string): string {
-	if (FORBIDDEN.test(svg))
-		throw new Error("the drawing holds markup the page does not inject");
-	return svg;
+/** The drawing when it holds only the kit's elements; otherwise an empty host and a console error, never a throw. */
+export function checked(svg: string): string {
+	const names = [...svg.matchAll(/<\/?([^\s/>]*)/g)].map((m) => m[1] ?? "");
+	if (
+		names.every((name) => ELEMENTS.has(name)) &&
+		!FORBIDDEN_ATTRIBUTES.test(svg)
+	)
+		return svg;
+	console.error("the drawing holds markup the page does not inject");
+	return "";
 }
 
 function draw(

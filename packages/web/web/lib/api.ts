@@ -27,7 +27,7 @@ import type {
 } from "../../src/api-types.ts";
 
 import { receivedCharacter } from "./character-spec.ts";
-import { loadKit } from "./kit.ts";
+import { type Kit, loadKit } from "./kit.ts";
 import { translate as t } from "./messages.ts";
 
 // The page is served at `<mount>/`, so these relative URLs reach `<mount>/api/`.
@@ -121,20 +121,22 @@ export const api = {
 	rooms: async () => {
 		const [view, kit] = await Promise.all([
 			request<RoomsView>("rooms"),
-			loadKit(),
+			loadKitOrNone(),
 		]);
 		return {
 			...view,
 			rooms: view.rooms.map((room) =>
 				room.character === undefined
 					? room
-					: {
-							...room,
-							character: receivedCharacter(kit, room.character, {
-								name: room.name,
-								displayName: room.displayName,
-							}),
-						},
+					: kit === undefined
+						? withoutCharacter(room)
+						: {
+								...room,
+								character: receivedCharacter(kit, room.character, {
+									name: room.name,
+									displayName: room.displayName,
+								}),
+							},
 			),
 		};
 	},
@@ -209,11 +211,31 @@ export const api = {
 		),
 };
 
+/** The kit, or none when its chunk failed to load: rooms and profiles then arrive without characters. */
+async function loadKitOrNone(): Promise<Kit | undefined> {
+	try {
+		return await loadKit();
+	} catch (failure) {
+		console.warn("the character kit failed to load", failure);
+		return undefined;
+	}
+}
+
+/** A room as it arrives when characters cannot be checked: without one. */
+function withoutCharacter<T extends { character?: unknown }>(
+	room: T,
+): Omit<T, "character"> {
+	const { character: _character, ...rest } = room;
+	return rest;
+}
+
 /** A profile whose character has been checked. */
 async function profile(
 	answer: Promise<AgentProfileView>,
 ): Promise<AgentProfileView> {
-	const [loaded, kit] = await Promise.all([answer, loadKit()]);
+	const [loaded, kit] = await Promise.all([answer, loadKitOrNone()]);
+	// Without the kit the profile still loads; its character is then drawn as the fallback disc.
+	if (kit === undefined) return loaded;
 	return {
 		...loaded,
 		character: receivedCharacter(kit, loaded.character, {

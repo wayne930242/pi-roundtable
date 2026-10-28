@@ -5,7 +5,7 @@ import { useKit } from "./kit.ts";
 import { useLive } from "./live.ts";
 import { useCharacterStyle } from "./look.ts";
 import { type PresenceInput, presenceOf, stateChangesIn } from "./presence.ts";
-import { lastMessage, type RoomsState, waitingCards } from "./rooms.ts";
+import { type RoomsState, waitingCards } from "./rooms.ts";
 
 /** The custom property the stylesheet reads for an agent's accent, from its character; none until the kit has loaded. */
 export function useAccentStyle(
@@ -32,17 +32,14 @@ export function useCharacters(): Record<string, CharacterSpec> {
 function presenceInputOf(state: RoomsState, key: string): PresenceInput {
 	const room = state.rooms[key];
 	const view = room?.view;
-	const last = lastMessage(state, key);
-	const lastAt = last ? Date.parse(last.at) : Number.NaN;
-	const times = [Number.isNaN(lastAt) ? undefined : lastAt, room?.activityAt];
-	const known = times.filter((time): time is number => time !== undefined);
 	return {
 		typing: room?.typing ?? false,
 		phase: room?.phase,
 		prompts: waitingCards(state, key),
 		outcome: room?.outcome,
 		outcomeAt: room?.outcomeAt,
-		lastActivityAt: known.length ? Math.max(...known) : undefined,
+		// The page's own clock only: a message's server timestamp would skew the quiet time.
+		lastActivityAt: room?.activityAt,
 		busyElsewhere:
 			view?.kind === "agent" && state.presence[view.name]?.busy === true,
 	};

@@ -29,9 +29,61 @@ function current(): Route {
 export const hrefFor = (pane: string, key?: string): string =>
 	`${mountPath ? `${mountPath}/` : "#/"}${pane === homePane && mountPath && !key ? "" : pane}${key ? `/${encodeURIComponent(key)}` : ""}`;
 
+/** Asked before the page is left; `proceed` carries on with the navigation, dropping the block. */
+export type NavigationBlocker = (proceed: () => void) => void;
+
+let blocker: NavigationBlocker | undefined;
+let releaseGuard: (() => void) | undefined;
+
+/**
+ * Holds navigation back until the blocker lets it through: `navigate()` asks it first, and
+ * the browser's back (or a swipe) is caught by a sentinel history entry pushed while the block
+ * stands. Returns the release; call it once there is nothing to protect any more.
+ */
+export function blockNavigation(ask: NavigationBlocker): () => void {
+	blocker = ask;
+	const href = window.location.href;
+	window.history.pushState({ rtGuard: true }, "", href);
+	const onPop = (event: PopStateEvent) => {
+		// Landing on a sentinel (forward) is not leaving; only a step out of it is.
+		if ((event.state as { rtGuard?: boolean } | null)?.rtGuard) return;
+		event.stopImmediatePropagation();
+		// Stand back on the sentinel so the page stays where it is until the person decides.
+		window.history.pushState({ rtGuard: true }, "", href);
+		ask(() => {
+			release();
+			// The sentinel and the page's own entry are both behind the destination.
+			window.history.go(-2);
+		});
+	};
+	window.addEventListener("popstate", onPop, true);
+	const release = () => {
+		if (blocker !== ask) return;
+		blocker = undefined;
+		releaseGuard = undefined;
+		window.removeEventListener("popstate", onPop, true);
+		// The sentinel stays in the history as a copy of the page; it is no longer a guard.
+		if ((window.history.state as { rtGuard?: boolean } | null)?.rtGuard)
+			window.history.replaceState(null, "", window.location.href);
+	};
+	releaseGuard = release;
+	return release;
+}
+
 /** Goes to a pane (and key) as the browser's own navigation would, with a view transition. */
 export function navigate(pane: string, key?: string): void {
 	const href = hrefFor(pane, key);
+	if (blocker) {
+		blocker(() => {
+			releaseGuard?.();
+			go(href);
+		});
+		return;
+	}
+	go(href);
+}
+
+function go(href: string): void {
 	if (mountPath) {
 		window.history.pushState(null, "", href);
 		window.dispatchEvent(new PopStateEvent("popstate"));
