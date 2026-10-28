@@ -14,6 +14,7 @@ import type { HttpRoute } from "./http/listeners.ts";
 import type { IdentityLinks } from "./identity/identity-links.ts";
 import type { IdentityService } from "./identity/identity-service.ts";
 import type { ThinkingLevel, ThinkingSetting } from "./models.ts";
+import type { ConversationModes } from "./modes/conversation-modes.ts";
 import type {
 	DelegationJob,
 	DelegationOutcome,
@@ -71,6 +72,13 @@ export const RUNTIME: ServiceKey<AgentRuntime> =
  */
 export const CONVERSATIONS: ServiceKey<ConversationRegistry> =
 	serviceKey<ConversationRegistry>("roundtable.conversations");
+/**
+ * The per-conversation modes, yolo and long-running: read a conversation's with `peek`, set them
+ * with `set` as an owner. They are stored per conversation key and survive a restart. Provided by
+ * the `modes` plugin, which every host registers.
+ */
+export const MODES: ServiceKey<ConversationModes> =
+	serviceKey<ConversationModes>("roundtable.modes");
 /** The agent server: its team, its directory, the runtime that runs every agent turn. Provided by the agent-server plugin. */
 export const AGENTS: ServiceKey<AgentServer> =
 	serviceKey<AgentServer>("roundtable.agents");

@@ -559,3 +559,88 @@ describe("the adapters key", () => {
 		);
 	});
 });
+
+describe("turn limits and autonomy", () => {
+	test("the turn limits are the old fixed ones unless the config says otherwise", () => {
+		expect(resolveConfig(minimal).turnLimits).toEqual({
+			timeoutMs: 600_000,
+			maxMs: 1_800_000,
+			cardMs: 300_000,
+		});
+		const given = resolveConfig({
+			...minimal,
+			turnLimits: { timeoutSeconds: 1200 },
+		});
+		expect(given.turnLimits).toEqual({
+			timeoutMs: 1_200_000,
+			// The cap follows the timeout, three times as long, unless it is given.
+			maxMs: 3_600_000,
+			cardMs: 300_000,
+		});
+		expect(
+			resolveConfig({
+				...minimal,
+				turnLimits: { timeoutSeconds: 900, maxSeconds: 1000, cardSeconds: 60 },
+			}).turnLimits,
+		).toEqual({ timeoutMs: 900_000, maxMs: 1_000_000, cardMs: 60_000 });
+	});
+
+	test("a turn limit outside its range, or a cap below the timeout, is refused naming the key", () => {
+		expect(
+			refused({ ...minimal, turnLimits: { timeoutSeconds: 59 } }),
+		).toContain("config turnLimits.timeoutSeconds");
+		expect(
+			refused({ ...minimal, turnLimits: { timeoutSeconds: 86_401 } }),
+		).toContain("config turnLimits.timeoutSeconds");
+		expect(refused({ ...minimal, turnLimits: { cardSeconds: 29 } })).toContain(
+			"config turnLimits.cardSeconds",
+		);
+		expect(
+			refused({ ...minimal, turnLimits: { cardSeconds: 3_601 } }),
+		).toContain("config turnLimits.cardSeconds");
+		expect(
+			refused({
+				...minimal,
+				turnLimits: { timeoutSeconds: 900, maxSeconds: 600 },
+			}),
+		).toContain("config turnLimits.maxSeconds: expected at least");
+		// A timeout above the default cap's third raises the default cap with it.
+		expect(
+			refused({ ...minimal, turnLimits: { timeoutSeconds: 86_400 } }),
+		).toBe("");
+		expect(refused({ ...minimal, turnLimits: { quick: 1 } })).toContain(
+			"turnLimits",
+		);
+	});
+
+	test("long-running work stops at four hours and yolo allows and cards nothing extra unless the config says so", () => {
+		expect(resolveConfig(minimal).autonomy).toEqual({
+			yolo: { allow: [], card: [] },
+			longRunningMaxMs: 14_400_000,
+		});
+		expect(
+			resolveConfig({
+				...minimal,
+				autonomy: {
+					yolo: { allow: ["shell.rm"], card: ["shell.push", "repo-push"] },
+					longRunning: { maxSeconds: 7_200 },
+				},
+			}).autonomy,
+		).toEqual({
+			yolo: { allow: ["shell.rm"], card: ["shell.push", "repo-push"] },
+			longRunningMaxMs: 7_200_000,
+		});
+		expect(
+			refused({ ...minimal, autonomy: { longRunning: { maxSeconds: 599 } } }),
+		).toContain("config autonomy.longRunning.maxSeconds");
+		expect(
+			refused({
+				...minimal,
+				autonomy: { longRunning: { maxSeconds: 604_801 } },
+			}),
+		).toContain("config autonomy.longRunning.maxSeconds");
+		expect(
+			refused({ ...minimal, autonomy: { yolo: { allow: "shell.rm" } } }),
+		).toContain("config autonomy.yolo.allow");
+	});
+});

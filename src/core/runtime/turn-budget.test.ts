@@ -1,5 +1,17 @@
 import { describe, expect, test } from "bun:test";
-import { type BudgetClock, type TurnLimit, turnBudget } from "./turn-budget.ts";
+import type { TurnTimeout } from "../domain/turn-timeout.ts";
+import type {
+	Approval,
+	ApprovalOptions,
+	Prompts,
+} from "../interactions/prompts.ts";
+import type { Logger } from "../log.ts";
+import {
+	type BudgetClock,
+	runtimeTurnBudget,
+	type TurnLimit,
+	turnBudget,
+} from "./turn-budget.ts";
 
 const MIN = 60_000;
 
@@ -152,5 +164,113 @@ describe("turnBudget", () => {
 		advanceTo(20 * MIN);
 		expect(fired).toEqual([{ at: 15 * MIN, limit: "turn" }]);
 		expect(scheduled()).toBe(2);
+	});
+});
+
+/** The runtime's budget over a fake clock, with a recording logger and a card surface that records each ask. */
+function longRunning(options: {
+	keepGoing?: (workedMs: number) => boolean;
+	cards?: boolean;
+	turnMaxMs?: number;
+}) {
+	const { clock, advanceTo } = fakeClock();
+	const asked: ApprovalOptions[] = [];
+	const logged: string[] = [];
+	const aborted: TurnTimeout[] = [];
+	const prompts: Prompts = {
+		confirm: (_title, _message, _signal, _minTier, _wait, _details, opts) =>
+			new Promise<Approval>(() => {
+				if (opts) asked.push(opts);
+			}),
+		ask: async () => undefined,
+	};
+	const info = (_fields: unknown, message: string) => logged.push(message);
+	const logger = {
+		info,
+		warn: () => {},
+		error: () => {},
+		debug: () => {},
+		child: () => logger,
+	} as unknown as Logger;
+	const budget = runtimeTurnBudget(
+		{
+			logger,
+			turnTimeoutMs: 10 * MIN,
+			...(options.turnMaxMs ? { turnMaxMs: options.turnMaxMs } : {}),
+		},
+		{
+			waitedMs: () => 0,
+			cards: options.cards === false ? undefined : prompts,
+		},
+		"app:agent.guide",
+		(timeout) => aborted.push(timeout),
+		{
+			activity: { now: () => ({ running: [], compacting: false, tools: [] }) },
+			clock,
+			...(options.keepGoing ? { keepGoing: options.keepGoing } : {}),
+		},
+	);
+	return { budget, asked, logged, aborted, advanceTo };
+}
+
+describe("a turn in long-running mode", () => {
+	const CAP = 60 * MIN;
+	const keepGoing = (workedMs: number) => workedMs < CAP;
+
+	test("keeps going below the cap without asking, limit after limit, and cards at the cap with purpose turn-timeout", () => {
+		const { asked, logged, aborted, advanceTo, budget } = longRunning({
+			keepGoing,
+		});
+		advanceTo(10 * MIN);
+		expect(asked).toEqual([]);
+		expect(budget.capped()).toBe(false);
+		// The turn's own 30-minute cap is raised as it goes, not hit.
+		advanceTo(59 * MIN);
+		expect(asked).toEqual([]);
+		expect(aborted).toEqual([]);
+		expect(
+			logged.filter((line) => line === "long-running mode continued the turn"),
+		).toHaveLength(5);
+		advanceTo(60 * MIN);
+		expect(asked).toHaveLength(1);
+		expect(asked[0]?.purpose).toBe("turn-timeout");
+		expect(aborted).toEqual([]);
+	});
+
+	test("the turn's own cap is raised as it goes, so steering stays possible", () => {
+		const { advanceTo, budget } = longRunning({
+			keepGoing,
+			turnMaxMs: 15 * MIN,
+		});
+		advanceTo(15 * MIN);
+		// Past the 15-minute cap the turn went on instead of stopping.
+		expect(budget.capped()).toBe(false);
+		advanceTo(16 * MIN);
+		// Raised at minute 15 to a full budget from then, so 9 minutes remain of it.
+		expect(budget.renew()).toBe(9 * MIN);
+	});
+
+	test("without a card surface it goes on to the cap and is then aborted as before", () => {
+		const { asked, aborted, advanceTo } = longRunning({
+			keepGoing,
+			cards: false,
+		});
+		advanceTo(59 * MIN);
+		expect(aborted).toEqual([]);
+		advanceTo(60 * MIN);
+		expect(asked).toEqual([]);
+		expect(aborted).toHaveLength(1);
+		expect(aborted[0]).toMatchObject({ end: "timeout", workedMs: 60 * MIN });
+	});
+
+	test("with no keepGoing, or when it says no, the limit asks as it always did", () => {
+		for (const given of [undefined, () => false]) {
+			const { asked, advanceTo } = longRunning(
+				given ? { keepGoing: given } : {},
+			);
+			advanceTo(10 * MIN);
+			expect(asked).toHaveLength(1);
+			expect(asked[0]?.purpose).toBe("turn-timeout");
+		}
 	});
 });

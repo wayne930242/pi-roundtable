@@ -36,6 +36,7 @@ import {
 	RUNTIME_PLUGIN,
 	type RuntimePluginOptions,
 	runtimePlugin,
+	turnPolicy,
 } from "./runtime-plugin.ts";
 
 const dirs: string[] = [];
@@ -121,6 +122,31 @@ const quiet: AgentRuntime = {
 	heldActions: async () => undefined,
 	recentTranscript: async () => [],
 };
+
+describe("the runtime plugin's turn policy", () => {
+	test("hands the runtime the limits and autonomy it was given, and nothing it was not", () => {
+		const autonomy = {
+			yolo: { allow: ["shell.rm"], card: ["shell.push"] },
+			longRunningMaxMs: 7_200_000,
+		};
+		expect(
+			turnPolicy(
+				options({
+					turnTimeoutMs: 1_200_000,
+					turnMaxMs: 3_600_000,
+					turnTimeoutCardMs: 60_000,
+					autonomy,
+				}),
+			),
+		).toEqual({
+			turnTimeoutMs: 1_200_000,
+			turnMaxMs: 3_600_000,
+			turnTimeoutCardMs: 60_000,
+			autonomy,
+		});
+		expect(turnPolicy(options())).toEqual({});
+	});
+});
 
 describe("the runtime plugin", () => {
 	test("is named runtime, migrates the held actions, and provides the runtime", () => {

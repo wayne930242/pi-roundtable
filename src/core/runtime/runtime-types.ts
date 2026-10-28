@@ -14,6 +14,8 @@ import type { OwnerIdentity } from "../identity.ts";
 import type { PromptScope, Prompts } from "../interactions/prompts.ts";
 import type { Logger } from "../log.ts";
 import type { EffortPolicy, ThinkingLevel, ThinkingPicker } from "../models.ts";
+import type { Autonomy } from "../modes/autonomy.ts";
+import type { ConversationModes } from "../modes/conversation-modes.ts";
 import type { LinkedSessions } from "../plugin.ts";
 import {
 	planOrder,
@@ -108,6 +110,14 @@ export interface PiAgentRuntimeOptions {
 	 * no answer by then the turn is aborted. A turn that cannot show a card is aborted at once.
 	 */
 	turnTimeoutCardMs?: number;
+	/**
+	 * The conversations' modes, read at each turn: a turn in a long-running conversation goes on
+	 * past its time limit without a card, up to `autonomy.longRunningMaxMs` of work. Without it no
+	 * conversation is long-running.
+	 */
+	modes?: Pick<ConversationModes, "peek">;
+	/** How far the modes reach; default `DEFAULT_AUTONOMY`. */
+	autonomy?: Autonomy;
 	/**
 	 * How long a turn that was aborted, by its timeout or a stop, gets to end before its session is
 	 * disposed of and the turn is reported failed; default 15 seconds. A model that ignores the

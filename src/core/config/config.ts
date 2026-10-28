@@ -17,7 +17,6 @@ import {
 import type { PerPrincipalLimits } from "../modules/background/personal-target.ts";
 import type { RoundtablePlugin } from "../plugin.ts";
 import { PRIMARY_CHARS } from "../runtime/interim-text.ts";
-import type { ChannelKey } from "../sessions.ts";
 import type { Tier, TierMembers } from "../speakers.ts";
 import { type AccessConfig, accessOf, accessShape } from "./access.ts";
 import {
@@ -28,6 +27,13 @@ import {
 	resolvedDiscord,
 } from "./adapters.ts";
 import { type AttachmentsConfig, attachmentsShape } from "./attachments.ts";
+import {
+	type LimitsConfig,
+	limitsOf,
+	limitsShape,
+	type ResolvedLimits,
+} from "./limits.ts";
+import { opsOf, type ResolvedOps } from "./ops.ts";
 import {
 	bool,
 	guarded,
@@ -74,7 +80,7 @@ export interface BackgroundConfig {
 }
 
 /** What `roundtable.config.ts` gives `defineRoundtable`. */
-export interface RoundtableConfig {
+export interface RoundtableConfig extends LimitsConfig {
 	/** The assistant's display name; default "Roundtable". */
 	name?: string;
 	/**
@@ -288,6 +294,7 @@ const schema = shape({
 	memory: optional(bool),
 	ops: optional(shape({ agent: optional(text), conversation: optional(text) })),
 	drainSeconds: optional(integer(1, 3_600)),
+	...limitsShape,
 	interimText: optional(oneOf<InterimTextMode>("on", "off")),
 	interimPrimaryChars: optional(integer(1, 100_000)),
 	plugins: optional(
@@ -298,7 +305,7 @@ const schema = shape({
 });
 
 /** The configuration with every default filled in. */
-export interface ResolvedConfig {
+export interface ResolvedConfig extends ResolvedLimits {
 	name: string;
 	/**
 	 * The process's short name: the logger's and the scratch dir's, and the root slash command's
@@ -352,7 +359,7 @@ export interface ResolvedConfig {
 	/** `false` when the skills addon is off. */
 	skills: false | SkillsConfig;
 	memory: boolean;
-	ops?: { agent: string } | { conversation: ChannelKey };
+	ops?: ResolvedOps;
 	drainMs: number;
 	interimText: InterimTextMode;
 	interimPrimaryChars: number;
@@ -366,35 +373,6 @@ function modelOf(value: string, path: string): ModelRef {
 			`config ${path}: expected <provider>/<id>, got ${JSON.stringify(value)}. Write it like anthropic/claude-sonnet-5-5.`,
 		);
 	return parsed;
-}
-
-/** Where the errors go: one of an agent or a conversation; an agent only where the agents live. */
-function opsOf(
-	ops: { agent?: string; conversation?: string } | undefined,
-	withDiscord: boolean,
-): ResolvedConfig["ops"] {
-	if (!ops) return undefined;
-	const { agent, conversation } = ops;
-	if (agent !== undefined && conversation !== undefined)
-		throw new ConfigError(
-			"config ops: name an agent or a conversation, not both. Keep the one the reports go to.",
-		);
-	if (agent !== undefined) {
-		if (!withDiscord)
-			throw new ConfigError(
-				'config ops.agent: the agents live in Discord, which is not configured. Report to a conversation a plugin\'s chat surface serves instead, with ops: { conversation: "<surface>:<id>" }; the web chat takes no error reports.',
-			);
-		return { agent };
-	}
-	if (conversation === undefined)
-		throw new ConfigError(
-			'config ops: name an agent or a conversation, such as ops: { agent: "infra" } or ops: { conversation: "<surface>:<id>" }.',
-		);
-	if (!/^[^:]+:.+$/.test(conversation))
-		throw new ConfigError(
-			`config ops.conversation: expected a conversation key <surface>:<id>, got ${JSON.stringify(conversation)}. Write the surface's prefix, a colon, and the conversation's id.`,
-		);
-	return { conversation: conversation as ChannelKey };
 }
 
 /** Refuses what only the agent server serves on a host without Discord, naming the key. */
@@ -488,6 +466,7 @@ export function resolveConfig(input: unknown): ResolvedConfig {
 		memory: config.memory ?? true,
 		...(ops ? { ops } : {}),
 		drainMs: (config.drainSeconds ?? DRAIN_LIMIT_MS / 1_000) * 1_000,
+		...limitsOf(config),
 		interimText: config.interimText ?? "on",
 		interimPrimaryChars: config.interimPrimaryChars ?? PRIMARY_CHARS,
 		plugins: config.plugins ?? [],

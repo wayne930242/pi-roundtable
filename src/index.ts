@@ -39,6 +39,7 @@ export type {
 	RoundtableConfig,
 	TierConfig,
 } from "./core/config/config.ts";
+export type { LimitsConfig } from "./core/config/limits.ts";
 export type { SkillsConfig } from "./core/config/skills-config.ts";
 export type {
 	AttachmentPort,
@@ -226,6 +227,12 @@ export {
 export type { JudgeModel } from "./core/judging/model-judge.ts";
 export type { LogEntry, LogFn, Logger } from "./core/log.ts";
 export type { ThinkingLevel, ThinkingSetting } from "./core/models.ts";
+export type {
+	AutoApproval,
+	ConversationMode,
+	ConversationModes,
+	ModeChange,
+} from "./core/modes/conversation-modes.ts";
 export {
 	PERSONAL_TARGET,
 	type PerPrincipalLimits,
@@ -328,6 +335,7 @@ export {
 	IDENTITY,
 	IDENTITY_LINKS,
 	MEMORY,
+	MODES,
 	PRECHECKS,
 	RUNTIME,
 	SCHEDULES,

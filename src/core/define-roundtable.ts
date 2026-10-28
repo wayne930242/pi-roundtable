@@ -29,6 +29,7 @@ import { identityPlugin } from "./identity/identity-plugin.ts";
 import { type JudgeModel, piJudgeModel } from "./judging/model-judge.ts";
 import { createLogger, type LogEntry, type Logger } from "./log.ts";
 import { formatModelRef, type ModelRef } from "./models.ts";
+import { modesPlugin } from "./modes/modes-plugin.ts";
 import { ErrorReporter } from "./ops/error-reporter.ts";
 import type { RoundtablePlugin } from "./plugin.ts";
 import {
@@ -332,6 +333,7 @@ export async function defineRoundtable(
 			...(assembly?.admin ?? []),
 			...(assembly?.skills ?? []),
 			conversationsPlugin(),
+			modesPlugin(),
 			runtimePlugin({
 				owner,
 				modelRuntime,
@@ -344,6 +346,10 @@ export async function defineRoundtable(
 				agents: agentSessions,
 				interimText: config.interimText,
 				interimPrimaryChars: config.interimPrimaryChars,
+				turnTimeoutMs: config.turnLimits.timeoutMs,
+				turnMaxMs: config.turnLimits.maxMs,
+				turnTimeoutCardMs: config.turnLimits.cardMs,
+				autonomy: config.autonomy,
 				memory: config.memory,
 				...(crowd ? { crowd } : {}),
 			}),

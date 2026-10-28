@@ -78,6 +78,12 @@ export interface ApprovedBy {
 	 * approval without it, from anyone else, is not accepted.
 	 */
 	owner?: true;
+	/**
+	 * Set only when the server approved the call itself and no person answered: `"yolo"` is the
+	 * conversation's yolo mode. A surface that reports an answer from a person never sets it;
+	 * `ToolTurn.approvedBy` shows it to the tool.
+	 */
+	auto?: "yolo";
 }
 
 /**
@@ -133,6 +139,12 @@ export interface ApprovalOptions {
 	 * such as a turn's timeout card; a surface that cannot show them keeps its own.
 	 */
 	wording?: ApprovalWording;
+	/**
+	 * What the card asks: `"action"` (the default, also when absent) whether to run a held call,
+	 * `"turn-timeout"` whether to let a turn that reached its time limit go on. A surface may show
+	 * the two differently or notify on the second; Discord ignores it.
+	 */
+	purpose?: "action" | "turn-timeout";
 }
 
 /** A card's words in place of an approval's; see `ApprovalOptions.wording`. */

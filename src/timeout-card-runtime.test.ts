@@ -32,6 +32,8 @@ async function fixture(options: {
 	turnTimeoutMs: number;
 	turnTimeoutCardMs?: number;
 	cards: boolean;
+	/** The conversation is long-running, with this cap on a turn's work. */
+	longRunningMaxMs?: number;
 }) {
 	const dir = mkdtempSync(join(tmpdir(), "roundtable-timeout-card-"));
 	const core = createFauxCore({ provider: "faux", models: [{ id: "faux-1" }] });
@@ -104,6 +106,17 @@ async function fixture(options: {
 						prompts: deps.prompts,
 						turnTimeoutMs: options.turnTimeoutMs,
 						turnAbortGraceMs: 200,
+						...(options.longRunningMaxMs
+							? {
+									modes: {
+										peek: () => ({ yolo: false, longRunning: true }),
+									},
+									autonomy: {
+										yolo: { allow: [], card: [] },
+										longRunningMaxMs: options.longRunningMaxMs,
+									},
+								}
+							: {}),
 						...(options.turnTimeoutCardMs
 							? { turnTimeoutCardMs: options.turnTimeoutCardMs }
 							: {}),
@@ -237,6 +250,64 @@ test("a turn with no card surface aborts at its limit, and its error and posted 
 		expect(result.error.message).toContain("Tools so far: slow_task.");
 		expect(f.sent.at(-1)?.[0]).toContain("reached its time limit");
 		expect(f.cards).toEqual([]);
+	} finally {
+		await f.close();
+	}
+});
+
+test("a long-running conversation's turn goes on past its limit without a card and replies as usual", async () => {
+	const f = await fixture({
+		toolMs: 450,
+		turnTimeoutMs: 150,
+		cards: true,
+		longRunningMaxMs: 10_000,
+	});
+	try {
+		const result = await f.run();
+		expect(result).toMatchObject({ ok: true, text: "done" });
+		expect(f.cards).toEqual([]);
+		expect(f.sent.at(-1)).toEqual(["done"]);
+	} finally {
+		await f.close();
+	}
+});
+
+test("a long-running turn that reaches its cap asks on a timeout card as an ordinary turn does", async () => {
+	const f = await fixture({
+		toolMs: 5_000,
+		turnTimeoutMs: 150,
+		cards: true,
+		longRunningMaxMs: 500,
+	});
+	try {
+		const turn = f.run();
+		while (f.cards.length === 0) await sleep(10);
+		expect(f.cards[0]?.options?.purpose).toBe("turn-timeout");
+		f.cards[0]?.answer("declined");
+		const result = await turn;
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect((result.error as TurnTimeoutError).timeout.end).toBe("cancelled");
+	} finally {
+		await f.close();
+	}
+});
+
+test("a long-running turn that cannot show a card is aborted at its cap", async () => {
+	const f = await fixture({
+		toolMs: 5_000,
+		turnTimeoutMs: 150,
+		cards: false,
+		longRunningMaxMs: 500,
+	});
+	try {
+		const result = await f.run();
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.error).toBeInstanceOf(TurnTimeoutError);
+		expect(
+			(result.error as TurnTimeoutError).timeout.workedMs,
+		).toBeGreaterThanOrEqual(500);
 	} finally {
 		await f.close();
 	}

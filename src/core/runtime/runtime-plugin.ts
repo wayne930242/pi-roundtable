@@ -17,8 +17,9 @@ import {
 	type ModelRef,
 	type ThinkingLevel,
 } from "../models.ts";
+import type { Autonomy } from "../modes/autonomy.ts";
 import type { PluginContext, RoundtablePlugin } from "../plugin.ts";
-import { CONVERSATIONS, IDENTITY, RUNTIME } from "../services.ts";
+import { CONVERSATIONS, IDENTITY, MODES, RUNTIME } from "../services.ts";
 import type { Speaker } from "../speakers.ts";
 import {
 	BRIDGE_MEMORY_FIX,
@@ -28,6 +29,9 @@ import {
 } from "./bridge-guard.ts";
 import { PendingConfirmationStore } from "./pending-confirmation-store.ts";
 import { PiAgentRuntime } from "./pi-agent-runtime.ts";
+import type { PiAgentRuntimeOptions } from "./runtime-types.ts";
+
+const NO_MODES = { yolo: false, longRunning: false } as const;
 
 /** The name of the runtime plugin, as `serviceStarted` events and the migration ledger name it. */
 export const RUNTIME_PLUGIN = "runtime";
@@ -82,6 +86,35 @@ export interface RuntimePluginOptions {
 	memory?: boolean;
 	/** Why the configuration lets several people speak in a shared conversation, as `configuredCrowd` says. */
 	crowd?: string;
+	/** A turn's budget, in ms; see `PiAgentRuntimeOptions.turnTimeoutMs`. */
+	turnTimeoutMs?: number;
+	/** The most one turn works in all, in ms; see `PiAgentRuntimeOptions.turnMaxMs`. */
+	turnMaxMs?: number;
+	/** How long the card at a turn's limit waits, in ms; see `PiAgentRuntimeOptions.turnTimeoutCardMs`. */
+	turnTimeoutCardMs?: number;
+	/** How far yolo and long-running reach; the modes themselves are the `MODES` service's. */
+	autonomy?: Autonomy;
+}
+
+/** The turn limits and autonomy the plugin's options set, as the runtime's options name them. */
+export function turnPolicy(
+	options: RuntimePluginOptions,
+): Pick<
+	PiAgentRuntimeOptions,
+	"turnTimeoutMs" | "turnMaxMs" | "turnTimeoutCardMs" | "autonomy"
+> {
+	return {
+		...(options.turnTimeoutMs === undefined
+			? {}
+			: { turnTimeoutMs: options.turnTimeoutMs }),
+		...(options.turnMaxMs === undefined
+			? {}
+			: { turnMaxMs: options.turnMaxMs }),
+		...(options.turnTimeoutCardMs === undefined
+			? {}
+			: { turnTimeoutCardMs: options.turnTimeoutCardMs }),
+		...(options.autonomy ? { autonomy: options.autonomy } : {}),
+	};
 }
 
 /**
@@ -157,6 +190,12 @@ export function runtimePlugin(
 						},
 						principalOf: async (id) => services.find(IDENTITY)?.principal(id),
 						memory: options.memory === true,
+						// Read at every turn, after every plugin set up; a host without the modes has none on.
+						modes: {
+							peek: (channel) =>
+								services.find(MODES)?.peek(channel) ?? NO_MODES,
+						},
+						...turnPolicy(options),
 						sessions: context.sessions,
 						agentDir: options.agentDir,
 						modelRuntime: options.modelRuntime,

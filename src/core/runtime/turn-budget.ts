@@ -112,6 +112,12 @@ export function turnBudget(
 export interface TurnBudgetSeams {
 	activity: Pick<ActivityTracker, "now">;
 	clock?: BudgetClock;
+	/**
+	 * Asked when a limit fires, with the turn's work so far: true goes on without a card, as the
+	 * owner's Continue would (a long-running conversation, up to its own cap); false takes the
+	 * limit's usual path, a card or an abort. It also answers for a turn that cannot show a card.
+	 */
+	keepGoing?: (workedMs: number) => boolean;
 }
 
 /**
@@ -121,6 +127,7 @@ export interface TurnBudgetSeams {
  * to go on: Continue extends the limit that fired by a full budget from then, Cancel aborts, and
  * no answer within `turnTimeoutCardMs` (default 5 minutes, wall time) aborts. The card closes
  * when the turn ends first. Without a card the turn is aborted at once. `abort` is told why.
+ * When `seams.keepGoing` says so, the limit is extended server-side first and neither happens.
  */
 export function runtimeTurnBudget(
 	options: Pick<
@@ -172,6 +179,14 @@ export function runtimeTurnBudget(
 		turnMaxMs,
 		slot,
 		(limit, limitMs) => {
+			if (seams.keepGoing?.(budget.workedMs())) {
+				budget.extend(limit === "turnMax");
+				logger.info(
+					{ channel, limit, workedMs: budget.workedMs() },
+					"long-running mode continued the turn",
+				);
+				return;
+			}
 			const prompts = slot.cards;
 			if (!prompts) return stop(reason(limit, limitMs, "timeout"));
 			const m = messages();
@@ -230,6 +245,7 @@ export function runtimeTurnBudget(
 					undefined,
 					{
 						supersede: controller.signal,
+						purpose: "turn-timeout",
 						wording: {
 							approve: m.turnTimeoutContinue,
 							decline: m.turnTimeoutCancel,

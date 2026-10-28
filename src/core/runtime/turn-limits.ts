@@ -3,8 +3,10 @@ import type { TurnResult } from "../domain/conversation.ts";
 import { AgentRunError } from "../domain/errors.ts";
 import { type TurnTimeout, TurnTimeoutError } from "../domain/turn-timeout.ts";
 import { catalogFor } from "../i18n/index.ts";
+import { DEFAULT_AUTONOMY } from "../modes/autonomy.ts";
 import type { ChannelKey } from "../sessions.ts";
 import type { PromptSlot } from "./prompt-slot.ts";
+import type { PiAgentRuntimeOptions } from "./runtime-types.ts";
 import { activityTracker } from "./turn-activity.ts";
 import { runtimeTurnBudget, type TurnBudget } from "./turn-budget.ts";
 
@@ -30,13 +32,22 @@ export function timeoutMessage(timeout: TurnTimeout): string {
 	return catalogFor("en").turnTimedOutNotice(timeout);
 }
 
-/** The time limit of a turn of the built-in runtime; see `runtimeTurnBudget`. `abort` aborts the turn. */
+/**
+ * The time limit of a turn of the built-in runtime; see `runtimeTurnBudget`. `abort` aborts the
+ * turn. In a long-running conversation (`options.modes`) a limit extends the turn instead of
+ * asking or aborting, until the turn has worked `options.autonomy.longRunningMaxMs`.
+ */
 export function turnLimits(
-	options: Parameters<typeof runtimeTurnBudget>[0],
+	options: Parameters<typeof runtimeTurnBudget>[0] &
+		Pick<PiAgentRuntimeOptions, "modes" | "autonomy">,
 	slot: Pick<PromptSlot, "waitedMs" | "cards">,
 	channel: ChannelKey,
 	abort: () => void,
 ): TurnLimits {
+	const { longRunningMaxMs } = options.autonomy ?? DEFAULT_AUTONOMY;
+	const keepGoing = (workedMs: number) =>
+		workedMs < longRunningMaxMs &&
+		options.modes?.peek(channel).longRunning === true;
 	const activity = activityTracker();
 	let timedOut: TurnTimeout | undefined;
 	const budget = runtimeTurnBudget(
@@ -47,7 +58,7 @@ export function turnLimits(
 			timedOut = timeout;
 			abort();
 		},
-		{ activity },
+		{ activity, keepGoing },
 	);
 	return {
 		budget,
