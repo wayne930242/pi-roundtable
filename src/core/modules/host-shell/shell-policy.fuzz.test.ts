@@ -58,6 +58,14 @@ describe("the generator", () => {
 				expect(fuzzLine(seed, kind)).toBe(fuzzLine(seed, kind));
 	});
 
+	test("never reaches the real sudo past the stub PATH, over the default seed range", () => {
+		const bypass =
+			/\bcommand\s+-\w*p|\benv\s+(-\w*i|-\S*\bPATH=)|\benv\s+-P|\/(usr\/)?s?bin\/|\bPATH=|\bhash\b|\b(?:ba)?sh\s+(?:-\S*l\S*|--login)\b/;
+		for (const kind of ["attack", "everyday", "benign"] as const)
+			for (let seed = 1; seed <= 2000; seed++)
+				expect(fuzzLine(seed, kind)).not.toMatch(bypass);
+	});
+
 	test("never writes a destructive command or a change to the directory or the PATH", () => {
 		for (let seed = 1; seed <= 400; seed++) {
 			const line = fuzzLine(seed, "attack");

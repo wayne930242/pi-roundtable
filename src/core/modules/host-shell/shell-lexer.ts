@@ -264,8 +264,8 @@ class Lexer {
 				this.#paren(out);
 				quoted(`${ch}(${EXPANDED}`);
 			} else if (ch === ">" || ch === "<") {
-				// A number right before the operator is its descriptor (`3>&1`), no word of the command.
-				if (inWord && plain && /^\d+$/.test(word)) {
+				// A number or a bash 5 `{name}` right before the operator is its descriptor (`3>&1`, `{fd}>f`), no word of the command.
+				if (inWord && plain && /^(?:\d+|\{[A-Za-z_]\w*\})$/.test(word)) {
 					word = "";
 					inWord = false;
 				} else endWord();

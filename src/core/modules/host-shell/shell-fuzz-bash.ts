@@ -103,6 +103,7 @@ export class BashRunner {
 		for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const)
 			process.once(signal, () => {
 				this.#killAll();
+				rmSync(this.#root, { recursive: true, force: true });
 				process.exit(1);
 			});
 		const running = Number(

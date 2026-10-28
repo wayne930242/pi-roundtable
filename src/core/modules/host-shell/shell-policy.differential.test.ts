@@ -236,7 +236,6 @@ const RUNS: readonly string[] = [
 	"timeout -k 1 5 X",
 	"timeout 0.5 X",
 	"nice -n 5 timeout -s KILL 5 X",
-	"command -p env -u FOO X",
 	"stdbuf -o L X",
 	"echo a | xargs -I {} X",
 	"echo a | xargs -n 1 X",
@@ -244,8 +243,12 @@ const RUNS: readonly string[] = [
 	"ionice -c 3 X",
 	// A descriptor duplicated or closed for reading.
 	"<&0 X",
+	"<& 0 X",
+	"0<& 0 X",
 	"0<&- X",
 	"3<&0 X",
+	"{fd}>/dev/null X",
+	"{fd}<&0 X",
 	"2>&1 0<&- X",
 	"3>&-X",
 	"2>&- X",
@@ -450,7 +453,6 @@ const WIDE: readonly string[] = [
 	"exec 3>/dev/null 4>&1 X",
 	"time -p X",
 	"time -p -- X",
-	"command -p X",
 	"command -- X",
 	"builtin command X",
 	"env -i X",
@@ -527,6 +529,15 @@ const INERT: readonly string[] = [
 	"x=1; echo $((x))",
 ];
 
+/**
+ * Held by the classifier but never run: bash's `command -p` searches the system default PATH, not
+ * the stub PATH, so running these would run the real sudo.
+ */
+const CLASSIFIER_ONLY: readonly string[] = [
+	"command -p X",
+	"command -p env -u FOO X",
+];
+
 const runner = new BashRunner();
 afterAll(() => runner.close());
 
@@ -578,6 +589,10 @@ describe.skipIf(BASHES.length === 0)("sudo run by bash is held", () => {
 		// A corpus whose lines bash does not run proves nothing.
 		expect(executed).toBeGreaterThan(ALL.length * BASHES.length * 0.85);
 		expect(missed).toEqual([]);
+	});
+
+	test("lines bash would resolve outside the stub PATH are held without running", () => {
+		for (const line of lines(CLASSIFIER_ONLY)) expect(held(line)).toBe(true);
 	});
 
 	test("lines that hide sudo from bash are read without error", () => {

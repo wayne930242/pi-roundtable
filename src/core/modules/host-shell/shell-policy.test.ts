@@ -599,6 +599,12 @@ describe("a command line the lexer must read to the end", () => {
 		expect(performance.now() - started).toBeLessThan(2000);
 	});
 
+	test("a heredoc body of 200k continuation characters is read in linear time", () => {
+		const started = performance.now();
+		classes(`cat <<EOF\n${"a\\\n".repeat(100_000)}EOF\n`);
+		expect(performance.now() - started).toBeLessThan(2000);
+	});
+
 	test("a rule that throws holds the call", () => {
 		const context = { workspace: work, scratchDir: scratch };
 		// An input whose command cannot be read makes the classifier fail.

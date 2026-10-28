@@ -142,6 +142,10 @@ export function heredocBody(
 	here: { delimiter: string; quoted: boolean; stripTabs: boolean },
 ): { bodyEnd: number; next: number; terminated: boolean } {
 	let at = start;
+	// Joining continuation lines is bounded by the delimiter length per start and by a total step
+	// budget; a body that exhausts it is unreadable (held) instead of quadratic.
+	let budget = 4 * src.length + 1000;
+	const limit = here.delimiter.length;
 	while (at < src.length) {
 		const nl = src.indexOf("\n", at);
 		const lineEnd = nl === -1 ? src.length : nl;
@@ -157,10 +161,14 @@ export function heredocBody(
 			let joined = line;
 			let end = lineEnd;
 			while (/(?:^|[^\\])(?:\\\\)*\\$/.test(joined) && end < src.length) {
+				if (--budget < 0) throw new Unreadable();
 				const stop = src.indexOf("\n", end + 1);
 				const nextEnd = stop === -1 ? src.length : stop;
 				joined = joined.slice(0, -1) + src.slice(end + 1, nextEnd);
 				end = nextEnd;
+				// Leading tabs are stripped only for `<<-`; past the delimiter length no join can match.
+				const kept = here.stripTabs ? joined.replace(/^\t+/, "") : joined;
+				if (kept.length - (kept.endsWith("\\") ? 1 : 0) > limit) break;
 				if (
 					(here.stripTabs ? joined.replace(/^\t+/, "") : joined) ===
 					here.delimiter
@@ -210,13 +218,14 @@ export function redirectOperator(
 	}
 	if (op === "<>") op = ">"; // opens the file for writing too
 	if (op === ">" && src[end] === "|") end++; // `>|` forces the overwrite
-	if (
-		src[end] === "&" &&
-		(op !== "<" || !" \t\n".includes(src[end + 1] ?? "\n"))
-	) {
+	if (src[end] === "&") {
+		const digit = /\s*[0-9-]/y.test(src.slice(end + 1, end + 65));
+		const blank = " \t\n".includes(src[end + 1] ?? "\n");
+		// `<& file` names no descriptor; `<& 0` and `<& -` do, as `<&0` does.
+		if (op === "<" && blank && !digit) return { op, end, closes };
 		end++;
 		// `>&2`, `>&-` and `<&0` duplicate or close a descriptor; `>& file` names a file.
-		if (op === "<" || /\s*[0-9-]/y.test(src.slice(end, end + 64))) op = "dup";
+		if (op === "<" || digit) op = "dup";
 		// `>&-` closes the descriptor: the `-` is its whole operand, and what follows it directly is the next word.
 		if (op === "dup" && src[end] === "-") {
 			end++;

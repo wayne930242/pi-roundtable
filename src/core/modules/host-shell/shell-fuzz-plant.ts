@@ -59,7 +59,6 @@ const NAMES: readonly string[] = [
 	"s`:`udo",
 	"s$(:)udo",
 	"$(:)sudo",
-	"/usr/bin/../../../sudo",
 	"./../sudo",
 ];
 
@@ -101,10 +100,8 @@ export class Planter {
 		const run = (word: string) => `${word} ${command}`;
 		const choices: ReadonlyArray<readonly [number, () => string]> = [
 			[2, () => run("command")],
-			[1, () => run("command -p")],
 			[1, () => run("command --")],
 			[3, () => run("env")],
-			[1, () => run("env -i")],
 			[1, () => run("env -u FOO")],
 			[1, () => run("env FOO=1")],
 			[2, () => run("exec")],

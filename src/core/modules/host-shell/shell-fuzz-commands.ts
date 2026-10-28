@@ -226,7 +226,7 @@ export class CommandGen extends ListGen {
 			[
 				3,
 				() =>
-					`${this.rng.pick(["bash", "sh"])} ${this.rng.pick(["-c", "-ec", "-lc", "-o pipefail -c", "--norc -c", "-e -c"])} ${this.scriptWord(script)}`,
+					`${this.rng.pick(["bash", "sh"])} ${this.rng.pick(["-c", "-ec", "-o pipefail -c", "--norc -c", "-e -c"])} ${this.scriptWord(script)}`,
 			],
 			[1, () => `bash -c ${this.dq(depth)}`],
 			[
@@ -263,7 +263,6 @@ export class CommandGen extends ListGen {
 			"builtin",
 			"stdbuf -oL",
 			"env FOO=1",
-			"command -p",
 			"nice -n 5",
 		]);
 		return `${prefix} ${this.leaf(depth)}`;
