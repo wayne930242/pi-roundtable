@@ -125,3 +125,81 @@ test("the built worker precaches index.html and hashed files only, and bypasses 
 		expect(text).toContain(`"${prefix}"`);
 	expect(text).toContain("navigate");
 });
+
+test("the page names a theme colour for each scheme and loads the stored scheme before it paints", async () => {
+	const { presentPage } = await import("./page-presentation.ts");
+	const html = String(
+		presentPage(
+			new TextEncoder().encode("<html><head></head></html>"),
+			"/app",
+			undefined,
+		),
+	);
+	expect(html).toContain(
+		'content="#f5f6f8" media="(prefers-color-scheme: light)"',
+	);
+	expect(html).toContain(
+		'content="#0f1115" media="(prefers-color-scheme: dark)"',
+	);
+	// A script of the page's own origin, after the base so it resolves under the mount.
+	expect(html).toContain('<script src="./theme-init.js"></script>');
+	expect(html.indexOf("<base")).toBeLessThan(html.indexOf("theme-init.js"));
+	const response = await get(serverOver(real), "/app/theme-init.js");
+	expect(response.status).toBe(200);
+	expect(response.headers.get("content-type")).toContain("javascript");
+	const manifest = (await (
+		await get(serverOver(real), "/app/manifest.webmanifest")
+	).json()) as { theme_color: string; background_color: string };
+	expect(manifest.background_color).toBe("#f5f6f8");
+	expect(manifest.theme_color).toBe("#f5f6f8");
+});
+
+test("the pre-paint script sets an explicit scheme and its toolbar colours, and leaves a system choice to the page", async () => {
+	const { THEME_INIT_SCRIPT } = await import("./pwa.ts");
+	const run = (stored: string | null) => {
+		const metas = [{ content: "#f5f6f8" }, { content: "#0f1115" }].map(
+			(meta) => ({
+				...meta,
+				setAttribute(_name: string, value: string) {
+					this.content = value;
+				},
+			}),
+		);
+		const root = { dataset: {} as Record<string, string> };
+		new Function("localStorage", "document", THEME_INIT_SCRIPT)(
+			{ getItem: () => stored },
+			{
+				documentElement: root,
+				querySelectorAll: () => metas,
+			},
+		);
+		return {
+			theme: root.dataset.theme,
+			colours: metas.map((meta) => meta.content),
+		};
+	};
+	expect(run("dark")).toEqual({
+		theme: "dark",
+		colours: ["#0f1115", "#0f1115"],
+	});
+	expect(run("light")).toEqual({
+		theme: "light",
+		colours: ["#f5f6f8", "#f5f6f8"],
+	});
+	for (const stored of [null, "system", "junk"])
+		expect(run(stored)).toEqual({
+			theme: undefined,
+			colours: ["#f5f6f8", "#0f1115"],
+		});
+	// Storage that throws changes nothing and throws nothing.
+	expect(() =>
+		new Function("localStorage", "document", THEME_INIT_SCRIPT)(
+			{
+				getItem: () => {
+					throw new Error("off");
+				},
+			},
+			{},
+		),
+	).not.toThrow();
+});

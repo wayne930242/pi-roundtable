@@ -31,17 +31,25 @@ export function resolvedTheme(): "light" | "dark" {
 }
 
 function paintMeta(): void {
-	// The browser bar takes the page's own background once the scheme has been applied.
+	// The browser bar takes the page's own background once the scheme has been applied. With the
+	// system's scheme each tag keeps the colour the server gave its media query; a pick of the
+	// other scheme sets them all.
 	requestAnimationFrame(() => {
-		let meta = document.querySelector<HTMLMetaElement>(
+		const metas = document.querySelectorAll<HTMLMetaElement>(
 			'meta[name="theme-color"]',
 		);
-		if (!meta) {
-			meta = document.createElement("meta");
+		if (metas.length === 0) {
+			const meta = document.createElement("meta");
 			meta.name = "theme-color";
 			document.head.append(meta);
+			meta.content = getComputedStyle(document.body).backgroundColor;
+			return;
 		}
-		meta.content = getComputedStyle(document.body).backgroundColor;
+		const explicit = getComputedStyle(document.body).backgroundColor;
+		for (const meta of metas) {
+			meta.dataset.system ??= meta.content;
+			meta.content = preference === "system" ? meta.dataset.system : explicit;
+		}
 	});
 }
 
@@ -114,7 +122,10 @@ export function setTheme(
 				),
 			)
 			.catch(() => undefined);
-		transition.finished.finally(() => root.classList.remove("theme-reveal"));
+		transition.updateCallbackDone.catch(() => undefined);
+		transition.finished
+			.catch(() => undefined)
+			.finally(() => root.classList.remove("theme-reveal"));
 		return;
 	}
 	root.classList.add("theme-fade");

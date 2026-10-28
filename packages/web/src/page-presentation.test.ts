@@ -23,7 +23,10 @@ test("localized HTML bootstrap is inert and attribute escaped, including replace
 test("default HTML only gains the install tags, and path routing/locales fail fast on invalid settings", () => {
 	const plain = String(presentPage(page, undefined, undefined));
 	expect(
-		plain.replace(/<link rel="manifest"[^>]*>(<meta[^>]*>|<link[^>]*>)*/, ""),
+		plain.replace(
+			/<link rel="manifest"[^>]*>(<meta[^>]*>|<link[^>]*>)*<script[^>]*><\/script>/,
+			"",
+		),
 	).toBe(new TextDecoder().decode(page));
 	const base = {
 		verifier: admit,
