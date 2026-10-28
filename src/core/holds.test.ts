@@ -190,10 +190,24 @@ describe("hold classes", () => {
 			rule("a", "never", "n"),
 			{
 				...rule("relay", "x", "x"),
+				relay: true,
 				holdClasses: () => ["a.one", "a", "relay.two"],
 			},
 		]);
-		expect(holds.classesOf?.("x", {}, {})).toEqual(["a.one", "a", "relay.two"]);
+		expect(holds.classesOf?.("x", {}, {})).toEqual([
+			"a.one",
+			"a",
+			"relay.two",
+			"relay.relay",
+		]);
+	});
+
+	test("a rule that is not a relay cannot report another rule's ids", () => {
+		const holds = holdChain([
+			rule("shell", "never", "n"),
+			{ ...rule("mail", "x", "x"), holdClasses: () => ["shell.write"] },
+		]);
+		expect(holds.classesOf?.("x", {}, {})).toEqual(["mail"]);
 	});
 
 	test("a rule name with a dot is refused", () => {

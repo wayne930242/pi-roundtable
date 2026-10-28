@@ -64,6 +64,13 @@ export type HoldDescription =
  */
 export interface HoldRule {
 	name: string;
+	/**
+	 * Whether the rule stands for other rules' calls, as the precheck scripts' does, and may report
+	 * their ids in `holdClasses`. Any other rule may report only ids that start with its own name
+	 * and a dot. A relay's calls also carry `<name>.relay`, so `autonomy.yolo.card` naming the relay
+	 * cards them.
+	 */
+	relay?: true;
 	describe(
 		tool: string,
 		input: Record<string, unknown>,
@@ -75,8 +82,8 @@ export interface HoldRule {
 	 * classes that are safe to approve with no person looking: listing a class opts the call in, and
 	 * yolo then approves it unless `autonomy.yolo.card` names the class or the rule. List every
 	 * reason the call is held, not only the first: yolo approves only a call whose classes it all
-	 * allows. Every id starts with the rule's name and a dot; a rule that stands for other rules'
-	 * calls, as the precheck scripts' does, may list their ids instead. A rule that reports none,
+	 * allows. Every id starts with the rule's name and a dot; a `relay` rule, which stands for other
+	 * rules' calls, may list their ids instead. A rule that reports none,
 	 * or an id that is not so named, leaves the call unclassed: yolo cards it unless
 	 * `autonomy.yolo.allow` names the rule. Asked for a call `describe` held. It must change nothing.
 	 */
@@ -380,9 +387,11 @@ function validClasses(
 ): readonly string[] {
 	if (!Array.isArray(reported) || reported.length === 0) return [rule.name];
 	const ids = reported as unknown[];
-	if (!ids.every((id): id is string => isClassOf(id, names)))
+	if (!ids.every((id): id is string => isClassOf(id, rule, names)))
 		return [rule.name];
-	return [...new Set(ids)];
+	return [
+		...new Set(rule.relay ? [...ids, `${rule.name}.relay`] : ids),
+	] as string[];
 }
 
 /** A rule's description, if it gave one, and the rule; a rule whose lookup failed has none. */
@@ -409,11 +418,19 @@ function classesIn(
 	return classesFor(rule, names, tool, input, context);
 }
 
-/** Whether an id is a rule of the chain, or one of that rule's classes. */
-function isClassOf(id: unknown, names: ReadonlySet<string>): id is string {
+/**
+ * Whether a rule may report the id: it is the rule's own name or one of its classes, or the rule
+ * is a relay and the id is a rule of the chain or one of that rule's classes.
+ */
+function isClassOf(
+	id: unknown,
+	rule: HoldRule,
+	names: ReadonlySet<string>,
+): id is string {
 	if (typeof id !== "string") return false;
 	const dot = id.indexOf(".");
-	return names.has(dot === -1 ? id : id.slice(0, dot));
+	const owner = dot === -1 ? id : id.slice(0, dot);
+	return rule.relay ? names.has(owner) : owner === rule.name;
 }
 
 /** The ids of the lists once each, in order. */

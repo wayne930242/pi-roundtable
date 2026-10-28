@@ -26,6 +26,16 @@ function withClasses(
 		: { ...description, classes };
 }
 
+/** A description without the classes it names. */
+function unclassed(
+	description: HoldDescription | undefined,
+): HoldDescription | undefined {
+	if (typeof description !== "object" || description === null)
+		return description;
+	const { classes: _classes, ...rest } = description;
+	return rest;
+}
+
 /**
  * Asks a conversation's holds to describe a call a turn makes, and hands each description on in
  * the order the calls were made, whichever comes back first, so calls made together are held,
@@ -98,14 +108,17 @@ export class HoldDescriber {
 		toolTurn: ToolTurn,
 	): HoldDescription | undefined | Promise<HoldDescription | undefined> {
 		const classed = this.#holds.inTurnWithClasses;
-		if (!classed)
-			return this.#holds.inTurn?.call(
+		if (!classed) {
+			// A check that does not vouch for its classes has none: yolo mode cards its calls.
+			const answer = this.#holds.inTurn?.call(
 				this.#holds,
 				tool,
 				input,
 				this.#context,
 				toolTurn,
 			);
+			return isPromise(answer) ? answer.then(unclassed) : unclassed(answer);
+		}
 		const answer = classed.call(
 			this.#holds,
 			tool,

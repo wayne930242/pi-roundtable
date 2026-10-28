@@ -423,6 +423,21 @@ describe("yolo still asks on a card", () => {
 		expect(card.asked).toBe(1);
 	});
 
+	test("a custom check that names classes in its description is not believed", async () => {
+		const description = { text: "run it", classes: ["shell.write"] };
+		const custom: HoldCheck = Object.assign(
+			(tool: string) => (tool === "bash" ? "run it" : undefined),
+			{
+				inTurn: (tool: string) => (tool === "bash" ? description : undefined),
+			},
+		);
+		const { gate, mode } = room({ holds: custom });
+		const { result, card } = await bash(gate, "ls");
+		expect(mode.approvals).toEqual([]);
+		expect(result.approvedBy).toBeUndefined();
+		expect(card.asked).toBe(1);
+	});
+
 	test("a hold that lookup waits for does not skip the classes of its rule", async () => {
 		const slow: HoldRule = {
 			name: "slow",
@@ -620,7 +635,10 @@ describe("yolo and a precheck script saved by a schedule tool", () => {
 		const { result, mode, card } = await save(holds, SEND, {});
 		expect(result.approvedBy?.auto).toBe("yolo");
 		expect(card.asked).toBe(0);
-		expect(mode.approvals[0]?.classes).toEqual(["google.send"]);
+		expect(mode.approvals[0]?.classes).toEqual([
+			"google.send",
+			"precheck-scripts.relay",
+		]);
 	});
 
 	test("a script whose inner call is unclassed is carded until the config allows that rule, not the precheck rule", async () => {
@@ -634,7 +652,10 @@ describe("yolo and a precheck script saved by a schedule tool", () => {
 			}
 			const allowed = await save(holds, script, { allow: ["google"] });
 			expect(allowed.result.approvedBy?.auto).toBe("yolo");
-			expect(allowed.mode.approvals[0]?.classes).toEqual(["google"]);
+			expect(allowed.mode.approvals[0]?.classes).toEqual([
+				"google",
+				"precheck-scripts.relay",
+			]);
 		}
 	});
 
@@ -649,5 +670,22 @@ describe("yolo and a precheck script saved by a schedule tool", () => {
 		});
 		expect(result.approvedBy).toBeUndefined();
 		expect(card.asked).toBe(1);
+	});
+
+	test("card naming the precheck rule cards a script whose inner calls are classed", async () => {
+		const holds = scripts({ holdClasses: () => ["google.send"] });
+		const { result, card } = await save(holds, SEND, {
+			card: ["precheck-scripts"],
+		});
+		expect(result.approvedBy).toBeUndefined();
+		expect(card.asked).toBe(1);
+	});
+
+	test("a computed inner call is also unclassed, so it is carded unless its rule is allowed", async () => {
+		const holds = scripts({ holdClasses: () => ["google.label"] });
+		const carded = await save(holds, COMPUTED, {});
+		expect(carded.result.approvedBy).toBeUndefined();
+		const allowed = await save(holds, COMPUTED, { allow: ["google"] });
+		expect(allowed.result.approvedBy?.auto).toBe("yolo");
 	});
 });
