@@ -195,11 +195,17 @@ export class SocketRoute {
 		};
 	}
 
-	#refuse(connection: AppSocket, code: RefusalCode, id?: string): void {
+	#refuse(
+		connection: AppSocket,
+		code: RefusalCode,
+		id?: string,
+		prompt?: string,
+	): void {
 		this.#options.sockets.send(connection, {
 			type: "refused",
 			code,
 			...(id === undefined ? {} : { id }),
+			...(prompt === undefined ? {} : { prompt }),
 		});
 	}
 
@@ -213,6 +219,22 @@ export class SocketRoute {
 			this.#refuse(connection, "bad_frame");
 			return;
 		}
+		// What a socket shows or watches applies the moment its frame arrives: the owner lookup
+		// below awaits, and frames that waited on it could land out of order.
+		switch (frame.type) {
+			case "hello":
+				connection.visible = frame.visible;
+				connection.focus = frame.focus;
+				break;
+			case "visibility":
+				connection.visible = frame.visible;
+				break;
+			case "focus":
+				connection.focus = frame.room;
+				break;
+			default:
+				break;
+		}
 		// Every frame comes from an owner, at their tier now; a socket whose person is no owner
 		// any more is closed rather than left to receive what the owners are shown.
 		const who = await this.#owner(connection);
@@ -225,20 +247,12 @@ export class SocketRoute {
 			socket.close(APP_CLOSE_FORBIDDEN, "forbidden");
 			return;
 		}
-		switch (frame.type) {
-			case "hello":
-				connection.visible = frame.visible;
-				connection.focus = frame.focus;
-				return;
-			case "visibility":
-				connection.visible = frame.visible;
-				return;
-			case "focus":
-				connection.focus = frame.room;
-				return;
-			default:
-				break;
-		}
+		if (
+			frame.type === "hello" ||
+			frame.type === "visibility" ||
+			frame.type === "focus"
+		)
+			return;
 		await this.#write(connection, who, frame);
 	}
 
@@ -260,19 +274,40 @@ export class SocketRoute {
 				break;
 			}
 			case "approval":
-				refused = desk.approve(who, frame.prompt, frame.approved);
+				refused = this.#needsActor(who, frame.prompt)
+					? "forbidden"
+					: desk.approve(who, frame.prompt, frame.approved);
 				break;
 			case "answer":
-				refused = desk.answer(who, frame.prompt, frame.answer);
+				refused = this.#needsActor(who, frame.prompt)
+					? "forbidden"
+					: desk.answer(who, frame.prompt, frame.answer);
 				break;
 			case "answers":
-				refused = desk.answers(who, frame.prompt, frame.answers, frame.note);
+				refused = this.#needsActor(who, frame.prompt)
+					? "forbidden"
+					: desk.answers(who, frame.prompt, frame.answers, frame.note);
 				break;
 			case "cancel":
 				refused = desk.cancel(who, frame.prompt);
 				break;
 		}
-		if (refused) this.#refuse(connection, refused);
+		if (refused)
+			this.#refuse(
+				connection,
+				refused,
+				undefined,
+				"prompt" in frame ? frame.prompt : undefined,
+			);
+	}
+
+	/**
+	 * Whether this answer cannot be taken: a late card's answer starts a turn written as the
+	 * answerer, which needs the actor their credential vouched for. Refused up front, the card
+	 * stays open for someone who has one rather than closing on an answer that goes nowhere.
+	 */
+	#needsActor(who: Answerer, prompt: string): boolean {
+		return !who.actor && this.#options.desk.isLate(prompt);
 	}
 
 	async #send(

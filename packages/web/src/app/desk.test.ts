@@ -280,3 +280,25 @@ describe("questions", () => {
 		expect(instance.openFrames()).toEqual([]);
 	});
 });
+
+describe("when a card opened", () => {
+	test("its frame carries the server's time, and a late frame keeps it", async () => {
+		const before = Date.now();
+		const { instance, frames, promptId } = desk({ graceMs: 20 });
+		instance.prompts(ROOM, SCOPE).confirm("t", "m", undefined, "owner", {
+			late: () => undefined,
+		} as never);
+		await tick();
+		const shown = frames.find((f) => f.type === "prompt");
+		if (shown?.type !== "prompt") throw new Error("no card was shown");
+		const opened = Date.parse(shown.prompt.at ?? "");
+		expect(opened).toBeGreaterThanOrEqual(before);
+		expect(opened).toBeLessThanOrEqual(Date.now());
+		await Bun.sleep(60);
+		const again = frames.filter((f) => f.type === "prompt").at(-1);
+		if (again?.type !== "prompt") throw new Error("no late frame");
+		expect(again.prompt).toMatchObject({ id: promptId(), late: true });
+		expect(again.prompt.at).toBe(shown.prompt.at);
+		expect(instance.isLate(promptId())).toBe(true);
+	});
+});

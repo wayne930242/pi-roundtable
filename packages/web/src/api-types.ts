@@ -452,6 +452,8 @@ export interface PromptAnswer {
 export type PromptFrame =
 	| {
 			id: string;
+			/** When the card opened (ISO 8601, the server's clock), which places it among the room's messages. */
+			at?: string;
 			kind: "approval";
 			title: string;
 			/** The card as markdown text. */
@@ -469,6 +471,7 @@ export type PromptFrame =
 	  }
 	| {
 			id: string;
+			at?: string;
 			kind: "ask";
 			title: string;
 			question: string;
@@ -479,6 +482,7 @@ export type PromptFrame =
 	  }
 	| {
 			id: string;
+			at?: string;
 			kind: "questionnaire";
 			title: string;
 			questions: readonly PromptQuestion[];
@@ -547,7 +551,8 @@ export type ServerFrame =
 	  }
 	/** The message `id` was taken into `room`; `message` is how it was stored. */
 	| { type: "accepted"; id: string; room: string; message: RoomMessage }
-	| { type: "refused"; id?: string; code: RefusalCode }
+	/** `id` names the refused `send`; `prompt` names the card whose answer was refused. */
+	| { type: "refused"; id?: string; prompt?: string; code: RefusalCode }
 	/** A message of a room, stored or live; see `RoomMessage`. */
 	| { type: "message"; room: string; message: RoomMessage }
 	/** What the running turn writes and which tools it runs; sent to the sockets that focus the room. */

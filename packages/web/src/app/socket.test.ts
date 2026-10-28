@@ -163,11 +163,14 @@ test("RV-F002: an owner who is demoted is dropped on the next check and gets no 
 
 test("RV-F002: a frame from a demoted owner closes the socket, even one that only moves focus", async () => {
 	const h = harness({ recheckMs: 60_000 });
-	const { socket, closed } = h.open("ada");
+	const { socket, sent, closed } = h.open("ada");
 	h.tiers.set("ada", undefined);
 	await h.route.message(socket, JSON.stringify({ type: "focus", room: ROOM }));
 	expect(closed.code).toBe(4403);
-	expect(socket.data.focus).toBeUndefined();
+	// The socket is out of the set, so the focus it named reaches nothing.
+	const before = sent.length;
+	h.sockets.broadcast({ type: "changed" }, (c) => c.focus === ROOM);
+	expect(sent.length).toBe(before);
 });
 
 test("RV-F003: a visitor admitted with no actor is refused when they send, and nothing is delivered", async () => {
@@ -194,4 +197,63 @@ test("RV-F003: a visitor with an actor sends as that actor", async () => {
 	);
 	expect(sent.some((f) => f.type === "accepted")).toBe(true);
 	expect(h.delivered[0]?.actor).toEqual(ACTOR);
+});
+
+test("RV-F001: state frames apply in the order they arrive, however long each owner lookup takes", async () => {
+	let lookups = 0;
+	const h = harness({
+		identity: {
+			// The first lookup is slow, the later ones are not.
+			tierOf: async () => {
+				lookups += 1;
+				if (lookups === 1) await wait(40);
+				return "owner" as never;
+			},
+		},
+	});
+	const { socket } = h.open("ada", { visible: false, focus: undefined });
+	const first = h.route.message(
+		socket,
+		JSON.stringify({ type: "hello", visible: true, focus: ROOM }),
+	);
+	const second = h.route.message(
+		socket,
+		JSON.stringify({ type: "visibility", visible: false }),
+	);
+	const third = h.route.message(socket, JSON.stringify({ type: "focus" }));
+	await Promise.all([first, second, third]);
+	expect(socket.data.visible).toBe(false);
+	expect(socket.data.focus).toBeUndefined();
+});
+
+test("RV-F007: a late card answered by a socket with no actor is refused and the card stays open", async () => {
+	const answered: string[] = [];
+	const h = harness({
+		desk: partial<OwnerDesk>({
+			openFrames: () => [],
+			isLate: (prompt: string) => prompt === "late-1",
+			approve: (_who, prompt) => {
+				answered.push(prompt);
+				return undefined;
+			},
+		}),
+	});
+	const { socket, sent } = h.open("ada", { actor: undefined });
+	await h.route.message(
+		socket,
+		JSON.stringify({ type: "approval", prompt: "late-1", approved: true }),
+	);
+	expect(answered).toEqual([]);
+	// The refusal names the card, so its page can enable the buttons again.
+	expect(sent.find((f) => f.type === "refused")).toEqual({
+		type: "refused",
+		code: "forbidden",
+		prompt: "late-1",
+	});
+	// A card still being waited on needs no actor to be answered.
+	await h.route.message(
+		socket,
+		JSON.stringify({ type: "approval", prompt: "live-1", approved: true }),
+	);
+	expect(answered).toEqual(["live-1"]);
 });

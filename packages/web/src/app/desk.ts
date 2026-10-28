@@ -261,6 +261,12 @@ export class OwnerDesk {
 		}));
 	}
 
+	/** Whether the card is open and past its grace, so an answer to it starts a turn. */
+	isLate(prompt: string): boolean {
+		const frame = this.#open.get(prompt)?.frame;
+		return frame !== undefined && "late" in frame && frame.late === true;
+	}
+
 	/** Approves or declines; a code when the card is not an approval this person may answer. */
 	approve(
 		from: Answerer,
@@ -385,12 +391,13 @@ export class OwnerDesk {
 		if (signal?.aborted || supersede?.aborted)
 			return Promise.resolve(card.cancelled);
 		const id = card.frame.id;
+		const frame = { ...card.frame, at: new Date().toISOString() };
 		return new Promise<T>((resolve) => {
 			let late = false;
 			let grace: ReturnType<typeof setTimeout> | undefined;
 			const open: Open = {
 				room,
-				frame: card.frame,
+				frame,
 				admits: card.admits,
 				abandon: () => onAbort(),
 				end: (ended, by) => {
