@@ -3,6 +3,14 @@
 All notable changes to this project will be documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.23.1] - 2026-10-29
+
+### Added
+
+- A built-in Traditional Chinese (Taiwan) catalog, used when `presentation.locale` is `zh-TW`, `zh-Hant-TW` or `zh-Hant` (any case, `_` or `-`). It covers every string the page translates, the character creator's classes (`character.class.<id>`), what each suits (`character.jobs.<id>`), parts and palettes, the sign-in page and the fixed wording of the server's refusals. A key in `presentation.messages` wins over the catalog, and every other locale stays in English. A test fails when a string in the page's code has no entry.
+- The round table words its screen-reader labels (the table and each seat's state) through the page's dictionary instead of in English only.
+- The page translates the app API's refusals (`There is no such room, agent or file.` and the like) through the same dictionary.
+
 ## [0.23.0] - 2026-10-29
 
 The package becomes the owner app of a host, and keeps the console that came first.

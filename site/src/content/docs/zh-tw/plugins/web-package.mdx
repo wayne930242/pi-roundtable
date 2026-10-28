@@ -107,7 +107,7 @@ Web Push 會在 owner 沒有任何頁面開著、看得到的時候喚醒裝置�
 | `icons` | 內建圖示 | `{ dir }`：放五個安裝圖示的目錄。 |
 | `appearance` | `{ look: "modern" }` | `{ look }`：`modern` 或 `camelot`。 |
 | `title` | `Roundtable` | 頁面標題，也是安裝後 app 的名稱。 |
-| `presentation` | 英文 | `{ locale, messages }` 設定語言、日期格式與在地化文字；dictionary key 是英文原文。 |
+| `presentation` | 英文 | `{ locale, messages }` 設定語言、日期格式與在地化文字；dictionary key 是英文原文。`zh-TW` 會使用內建的繁體中文（臺灣）文字，`messages` 可逐個 key 覆寫。 |
 | `features` | 無 | 物件或接收公開 setup context 的 factory，提供 party 狀態、排程數、對話清理、skills 與 connectors。 |
 | `relayNotes` | remote MCP relay note | 顯示訊息前要移除的 relay 前綴。 |
 | `exclude` | 無 | 指定哪些 conversation key 不得列出或讀取的 predicate。 |

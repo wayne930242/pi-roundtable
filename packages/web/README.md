@@ -472,7 +472,7 @@ Every option is checked when the plugin is created, so a bad setting stops the h
 | `icons` | the package's own | `{ dir }`: a directory of the five install icons, see [Install on a device](#install-on-a-device). |
 | `appearance` | `{ look: "modern" }` | `{ look }`: `modern` or `camelot`. The page's default look and the manifest's splash colors; the owner can switch it in the app. |
 | `title` | `Roundtable` | The page's heading, title and the installed app's name. |
-| `presentation` | English | `{ locale, messages }`: locale controls dates and document language; English source strings are dictionary keys for labels, descriptions, confirmations, and API errors. |
+| `presentation` | English | `{ locale, messages }`: locale controls dates and document language, and `zh-TW` also selects the [built-in Traditional Chinese wording](#presentation-and-built-in-zh-tw); English source strings are dictionary keys for labels, descriptions, confirmations, and API errors. |
 | `features` | none | Trusted host integrations, or a factory receiving public plugin setup context; see [Host feature ports](#host-feature-ports). |
 | `relayNotes` | the remote MCP note | Text that an outside agent's relayed message begins with, taken off before the owner's words are shown. Set it to the same value as the `relayNote` of [pi-roundtable-mcp][mcp] when you changed that one. |
 | `exclude` | none | A function from a channel key to `true` for conversations the console must neither list nor read, such as the channels of another plugin that keeps its own sessions in the same directory. |
@@ -554,6 +554,23 @@ It reports live bytes, archive count and last activity without revealing message
 Generic source and defaults are English; keep application names and localized wording in the host's presentation dictionary.
 Authenticated HTML carries inert, escaped presentation metadata so the first API failure is localized too, without inline scripts.
 The page ships prebuilt, so application adapters do not need their own React build or a second server implementation.
+
+### Presentation and built-in zh-TW
+
+Every string the page shows is an English key, and `presentation.messages` maps a key to the host's wording.
+The package also ships a complete Traditional Chinese (Taiwan) catalog: when `presentation.locale` is `zh-TW`, `zh-Hant-TW` or `zh-Hant` (any case, and `zh_TW`), the console, the owner app, the sign-in page and the server's fixed refusals use it, so a host needs no dictionary of its own.
+A key the host words in `messages` wins over the catalog, key by key, and an empty string counts as the host's wording; every other locale stays in English until the host words it.
+Character names go through the same dictionary: `character.class.<id>`, `character.jobs.<id>` (what a class suits), `character.palette.<name>` and `character.<outfit|hat|prop|hair|beard|accessory>.<id>`, so a host can reword a class such as `character.class.wizard`.
+The catalog is a chunk of its own that the page fetches only for that locale, and the service worker caches it with the rest.
+A test fails when a string in the page's code has no catalog entry, so a new string cannot ship untranslated.
+Wording that comes from the core (an agent's validation errors, a character's field errors) is not part of the catalog and shows as the core wrote it.
+
+```ts
+webConsole({
+  // ...
+  presentation: { locale: "zh-TW", messages: { "Round table": "My own name" } },
+});
+```
 
 ```ts
 webConsole({

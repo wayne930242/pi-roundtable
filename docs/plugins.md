@@ -3346,6 +3346,7 @@ Leave out `web_search` and `fetch_content` unless people may make the host fetch
 `webConsole(options)` adds a chat surface (prefix `app` unless `surface` says otherwise), a page, a WebSocket and a REST API under `/console` on the host's `public` listener, an installable manifest and service worker, and Web Push.
 It needs no Discord: with `agents` in the configuration and no `discord`, the team lives in the app's rooms (see [an agent team without Discord](#an-agent-team-without-discord)), and Home is the coordinator's room.
 Its README documents the app, every option, the protocol and the threat model; this section says which seams of the core it stands on, for a plugin that wants the same from another network.
+The page is in English, and `presentation: { locale: "zh-TW" }` switches it to the package's built-in Traditional Chinese (Taiwan) wording; `presentation.messages` words individual keys over it, and any other locale is worded entirely by the host.
 
 | The app uses | For |
 |---|---|

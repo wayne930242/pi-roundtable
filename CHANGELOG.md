@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.23.1] - 2026-10-29
+
+### Added
+
+- `pi-roundtable-web`: a built-in Traditional Chinese (Taiwan) catalog. With `presentation.locale` of `zh-TW`, `zh-Hant-TW` or `zh-Hant`, the console, the owner app, the sign-in page and the server's fixed refusals read in Chinese, including the character creator's 24 classes, parts and palettes; a host's `presentation.messages` still wins key by key. The package's changelog has the detail.
+
 ## [0.23.0] - 2026-10-29
 
 Agents can live on the web alone, and the web is an owner app: rooms for the agent team, approval cards, yolo and long-running modes, an installable PWA with push.
