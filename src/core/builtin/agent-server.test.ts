@@ -187,8 +187,12 @@ describe("the agent server without Discord", () => {
 	}
 
 	/** The plugin set up with no Discord service, as a host without Discord has none. */
-	async function setUpLocal(plugin: RoundtablePlugin, rooms: string[]) {
-		const plugins = [plugin];
+	async function setUpLocal(
+		plugin: RoundtablePlugin,
+		rooms: string[],
+		filling: RoundtablePlugin[] = [],
+	) {
+		const plugins = [...filling, plugin];
 		const services = new ServiceRegistry([...plugins]);
 		services.preset(SCHEDULES, {} as ScheduleStore);
 		services.preset(BACKGROUND_TURNS, {} as BackgroundTurns);
@@ -261,6 +265,43 @@ describe("the agent server without Discord", () => {
 		const hosted = agentServerPlugin(local(), async () => stores);
 		await setUpLocal(hosted, ["app"]);
 		expect(() => hosted.preflight?.()).not.toThrow();
+	});
+
+	test("names the first seed the coordinator when the options name none, and the named one otherwise", async () => {
+		const active = (name: string) => ({
+			name,
+			displayName: name,
+			prompt: "",
+			avatarPrompt: "",
+			status: "active",
+		});
+		const roster = {
+			agents: { agent: (name: string) => active(name) },
+		} as unknown as AgentServerStores;
+		const seeded = (names: string[]): RoundtablePlugin => ({
+			name: "seeded",
+			setup: () => ({
+				seeds: names.map((name) => ({ ...active(name), channelId: undefined })),
+			}),
+		});
+		const { coordinator: _named, ...unnamed } = local();
+		const coordinatorOf = async (
+			given: AgentServerOptions,
+			names: string[],
+		) => {
+			const { services } = await setUpLocal(
+				agentServerPlugin(given, async () => roster),
+				["app"],
+				// A plugin that seeds nothing adds nothing, which the registry refuses.
+				names.length > 0 ? [seeded(names)] : [],
+			);
+			return services.get(AGENTS).team.coordinator();
+		};
+		expect(await coordinatorOf(unnamed, ["guide", "scout"])).toBe("guide");
+		expect(
+			await coordinatorOf(local({ coordinator: "scout" }), ["guide", "scout"]),
+		).toBe("scout");
+		expect(await coordinatorOf(unnamed, [])).toBeUndefined();
 	});
 
 	test("refuses an entry channel and a coordinator together", () => {

@@ -44,9 +44,10 @@ export interface TeamTurnsOptions {
 	entryChannelId?: string;
 	/**
 	 * The coordinator's name on a host without Discord, where there is no entry channel to find it
-	 * by. Ignored when `entryChannelId` is set.
+	 * by; a function is asked each time, for a name that is only known once the plugins linked.
+	 * Ignored when `entryChannelId` is set.
 	 */
-	coordinator?: string;
+	coordinator?: string | (() => string | undefined);
 	/** Who the agents work for, as their prompts and group history name them. */
 	owner: OwnerIdentity;
 	store: PgAgentStore;

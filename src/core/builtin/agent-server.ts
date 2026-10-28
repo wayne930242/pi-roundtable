@@ -231,8 +231,12 @@ export function agentServerPlugin(
 				...(options.entryChannelId !== undefined
 					? { entryChannelId: options.entryChannelId }
 					: {}),
-				...(options.coordinator !== undefined
-					? { coordinator: options.coordinator }
+				// Without an entry channel the coordinator is the named agent, else the first seed.
+				...(options.entryChannelId === undefined
+					? {
+							coordinator: () =>
+								options.coordinator ?? context.sessions().seeds[0]?.name,
+						}
 					: {}),
 				seeds: () => context.sessions().seeds,
 				promptSections: () => context.sessions().prompt,

@@ -92,11 +92,18 @@ export function groupLogName(group: AgentGroup, room: ChannelKey): string {
  */
 export function coordinatorOf(
 	store: Pick<AgentDirectory, "agent" | "agentByChannel">,
-	team: { entryChannelId?: string; coordinator?: string },
+	team: {
+		entryChannelId?: string;
+		coordinator?: string | (() => string | undefined);
+	},
 ): Agent | undefined {
 	if (team.entryChannelId !== undefined)
 		return store.agentByChannel(team.entryChannelId);
-	const named = team.coordinator ? store.agent(team.coordinator) : undefined;
+	const name =
+		typeof team.coordinator === "function"
+			? team.coordinator()
+			: team.coordinator;
+	const named = name ? store.agent(name) : undefined;
 	return named?.status === "active" ? named : undefined;
 }
 
