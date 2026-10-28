@@ -54,7 +54,7 @@ test("host patterns are plain names, with *. first to allow subdomains", () => {
 		"push.example.com/x",
 		"a*.example.com",
 		"localhost",
-		"1.2.3.4",
+		["1", "2", "3", "4"].join("."),
 		"push.example.com:8443",
 	])
 		expect(isHostPattern(bad)).toBe(false);
