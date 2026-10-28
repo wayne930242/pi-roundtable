@@ -54,9 +54,7 @@ test("every peer range a doc states is one a manifest declares", () => {
 	for (const file of docs()) {
 		const lines = read(file).split("\n");
 		lines.forEach((line, index) => {
-			for (const match of line.matchAll(
-				/>=\d+\.\d+\.\d+ ?<\d+\.\d+\.\d+/g,
-			))
+			for (const match of line.matchAll(/>=\d+\.\d+\.\d+ ?<\d+\.\d+\.\d+/g))
 				if (!allowed.has(match[0]))
 					stale.push(`${file}:${index + 1} ${match[0]}`);
 		});
@@ -86,7 +84,10 @@ test("every doc that counts the official packages counts the workspaces", () => 
 			for (const match of line.matchAll(
 				new RegExp(`\\b(${words.join("|")}) official packages\\b`, "gi"),
 			))
-				if (words.indexOf(match[1]?.toLowerCase() ?? "") + 1 !== workspaces.length)
+				if (
+					words.indexOf(match[1]?.toLowerCase() ?? "") + 1 !==
+					workspaces.length
+				)
 					wrong.push(`${file}:${index + 1} ${match[0]}`);
 		});
 	}
