@@ -5,14 +5,6 @@ import { resolve } from "node:path";
 const root = resolve(import.meta.dir, "..");
 const read = (path: string) => readFileSync(resolve(root, path), "utf8");
 
-// The web console is being redesigned on another branch; its README and site pages are brought up to date there.
-// Remove these entries when that branch lands.
-const SKIPPED = new Set([
-	"packages/web/README.md",
-	"site/src/content/docs/plugins/web-package.mdx",
-	"site/src/content/docs/zh-tw/plugins/web-package.mdx",
-]);
-
 function docs(): string[] {
 	const files = [
 		"README.md",
@@ -22,7 +14,7 @@ function docs(): string[] {
 		...new Bun.Glob("packages/*/README.md").scanSync({ cwd: root }),
 		...new Bun.Glob("site/src/content/docs/**/*.mdx").scanSync({ cwd: root }),
 	];
-	return files.filter((file) => !SKIPPED.has(file)).sort();
+	return files.sort();
 }
 
 const workspaces = readdirSync(resolve(root, "packages"), {
