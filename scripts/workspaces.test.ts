@@ -107,8 +107,22 @@ test("a public compactor environment name is allowed only in its integration tes
 	}
 });
 
+// CI scans a fresh checkout; locally only tracked files count, so build output and scratch notes do not.
+const trackedFindings = () => {
+	const tracked = new Set(
+		Bun.spawnSync(["git", "ls-files"], { cwd: root })
+			.stdout.toString()
+			.split("\n"),
+	);
+	return scanTree(root).filter((finding) => tracked.has(finding.file));
+};
+
+test("the whole tree passes the public scan CI runs", () => {
+	expect(trackedFindings()).toEqual([]);
+});
+
 test("public scan covers all workspaces and allows only explicit public metadata", () => {
-	const findings = scanTree(root).filter((finding) =>
+	const findings = trackedFindings().filter((finding) =>
 		finding.file.startsWith("packages/"),
 	);
 	expect(findings).toEqual([]);

@@ -298,9 +298,9 @@ test("the layers keep the lab's order and a still carries only its state's overl
 	// A figure with no label is hidden from assistive technology.
 	expect(svg).toContain(`aria-hidden="true"`);
 	const labelled = composeSvg(resolveCharacter({ class: "wizard" }), {
-		label: "Merlin",
+		label: "Wizard",
 	});
-	expect(labelled).toContain(`role="img" aria-label="Merlin"`);
+	expect(labelled).toContain(`role="img" aria-label="Wizard"`);
 	// An error bakes the red ring in, as the stylesheet does for a live one.
 	expect(
 		composeSvg(resolveCharacter({ class: "wizard" }), {

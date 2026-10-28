@@ -171,7 +171,13 @@ const CJK_DIRECTORIES = [
 	"src/i18n/",
 	"site/src/content/docs/zh-tw/",
 ];
-const CJK_FILES = ["README.zh-TW.md", "site/astro.config.mjs"];
+// The character catalog matches Chinese role words when it suggests a look, and its test checks that matching.
+const CJK_FILES = [
+	"README.zh-TW.md",
+	"site/astro.config.mjs",
+	"src/characters/catalog.ts",
+	"src/characters/characters.test.ts",
+];
 
 // pi-lens-ignore: high-complexity — one flat list of the documentation and private address ranges a public tree may name
 function allowedIp(ip: string): boolean {

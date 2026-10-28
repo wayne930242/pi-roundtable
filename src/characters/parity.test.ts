@@ -80,7 +80,7 @@ test("every expression of the wizard draws what the lab drew", async () => {
 	for (const expr of EXPRESSIONS)
 		expectParity(
 			await compare(
-				`merlin-${expr}.svg`,
+				`wizard-${expr}.svg`,
 				composeSvg(wizard, { ...STILL, expr }),
 			),
 		);
@@ -90,7 +90,7 @@ test("the shield frame draws what the lab drew", async () => {
 	const wizard = resolveCharacter({ class: "wizard" });
 	expectParity(
 		await compare(
-			"billboard-merlin-shield.svg",
+			"billboard-wizard-shield.svg",
 			composeSvg(wizard, { ...STILL, frame: "shield" }),
 		),
 	);
