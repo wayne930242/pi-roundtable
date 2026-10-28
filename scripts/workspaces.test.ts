@@ -134,10 +134,12 @@ test("built web bundles skip the Chinese and snowflake checks, but not credentia
 			resolve(dir, "packages/web/dist/leak.js"),
 			`const key = "sk-${"x".repeat(24)}";\n`,
 		);
-		expect(scanTree(dir).map(({ file, kind }) => ({ file, kind }))).toEqual([
-			{ file: "chunk.js", kind: "snowflake" },
-			{ file: "packages/web/dist/leak.js", kind: "credential" },
-		]);
+		// The directory walk follows the file system's order, which differs between macOS and Linux.
+		expect(
+			scanTree(dir)
+				.map(({ file, kind }) => `${file} ${kind}`)
+				.sort(),
+		).toEqual(["chunk.js snowflake", "packages/web/dist/leak.js credential"]);
 	} finally {
 		rmSync(dir, { recursive: true, force: true });
 	}
