@@ -11,6 +11,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The round table words its screen-reader labels (the table and each seat's state) through the page's dictionary instead of in English only.
 - The page translates the app API's refusals (`There is no such room, agent or file.` and the like) through the same dictionary.
 
+### Fixed
+
+- The header's brand mark shows the served install icon (`<mount>/icons/192.png`, so `icons.dir` changes it too) instead of a fixed sparkle.
+
 ## [0.23.0] - 2026-10-29
 
 The package becomes the owner app of a host, and keeps the console that came first.

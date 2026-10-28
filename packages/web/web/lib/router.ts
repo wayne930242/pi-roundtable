@@ -26,6 +26,10 @@ function current(): Route {
 	}
 }
 
+/** An asset the server ships under the mount (the install icons); relative when the page is not mounted. */
+export const assetHref = (path: string): string =>
+	`${mountPath ? `${mountPath}/` : "./"}${path}`;
+
 export const hrefFor = (pane: string, key?: string): string =>
 	`${mountPath ? `${mountPath}/` : "#/"}${pane === homePane && mountPath && !key ? "" : pane}${key ? `/${encodeURIComponent(key)}` : ""}`;
 
