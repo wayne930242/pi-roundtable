@@ -1,12 +1,5 @@
 import { type ConsolePresentation, message } from "../features.ts";
-
-const html = (value: string): string =>
-	value
-		.replaceAll("&", "&amp;")
-		.replaceAll('"', "&quot;")
-		.replaceAll("<", "&lt;")
-		.replaceAll(">", "&gt;")
-		.replaceAll("'", "&#39;");
+import { escapeHtml } from "../http.ts";
 
 /** The login page's CSP: no script at all, one inline style, and the form posts only to this origin. */
 export const LOGIN_CSP =
@@ -19,14 +12,14 @@ export function loginPage(
 	presentation: ConsolePresentation | undefined,
 	note?: string,
 ): string {
-	const say = (source: string) => html(message(presentation, source));
+	const say = (source: string) => escapeHtml(message(presentation, source));
 	return `<!doctype html>
-<html lang="${html(presentation?.locale ?? "en")}">
+<html lang="${escapeHtml(presentation?.locale ?? "en")}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>${html(title)}</title>
+<title>${escapeHtml(title)}</title>
 <style>
 body{font:16px/1.5 system-ui,sans-serif;margin:0;min-height:100vh;display:grid;place-items:center;background:#f6f6f4;color:#1c1c1a}
 @media(prefers-color-scheme:dark){body{background:#151514;color:#ecece8}input{background:#222220;color:inherit}}
@@ -39,9 +32,9 @@ button{cursor:pointer;background:#2d5be3;color:#fff;border-color:transparent}
 </style>
 </head>
 <body>
-<form method="post" action="${html(mount)}/auth/login">
-<h1>${html(title)}</h1>
-${note ? `<p class="note" role="alert">${html(note)}</p>` : ""}
+<form method="post" action="${escapeHtml(mount)}/auth/login">
+<h1>${escapeHtml(title)}</h1>
+${note ? `<p class="note" role="alert">${escapeHtml(note)}</p>` : ""}
 <label>${say("Password")}<input type="password" name="password" autocomplete="current-password" autofocus required></label>
 <button type="submit">${say("Sign in")}</button>
 </form>

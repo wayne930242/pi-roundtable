@@ -84,7 +84,7 @@ const notFound = () =>
 	new HttpError(404, "There is no such room, agent or file.");
 
 /** The parts of a path under the mount, each decoded; undefined for one that is not valid. */
-function partsOf(path: string): string[] | undefined {
+export function partsOf(path: string): string[] | undefined {
 	try {
 		return path.split("/").filter(Boolean).map(decodeURIComponent);
 	} catch {

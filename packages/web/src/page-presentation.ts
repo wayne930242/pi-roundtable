@@ -1,13 +1,6 @@
 import type { ConsolePresentation } from "./features.ts";
+import { escapeHtml } from "./http.ts";
 import { PAGE_COLORS } from "./page-colors.ts";
-
-const attribute = (value: string): string =>
-	value
-		.replaceAll("&", "&amp;")
-		.replaceAll('"', "&quot;")
-		.replaceAll("<", "&lt;")
-		.replaceAll(">", "&gt;")
-		.replaceAll("'", "&#39;");
 
 /** The tags that make the page installable; the URLs resolve against the page, so the mount does not matter. */
 const pwaTags = (look: "modern" | "camelot"): string =>
@@ -26,9 +19,9 @@ export function presentPage(
 ): Uint8Array<ArrayBuffer> | string {
 	// Not in web/index.html: the bundler would try to resolve and rewrite these URLs.
 	let head = `<head>${pwaTags(look)}`;
-	if (mount) head += `<base href="${attribute(`${mount}/`)}">`;
+	if (mount) head += `<base href="${escapeHtml(`${mount}/`)}">`;
 	if (presentation)
-		head += `<meta name="roundtable-console-presentation" content="${attribute(JSON.stringify(presentation))}">`;
+		head += `<meta name="roundtable-console-presentation" content="${escapeHtml(JSON.stringify(presentation))}">`;
 	// After the base, so it resolves under the mount; a script of the page's own origin, which its policy allows.
 	head += '<script src="./theme-init.js"></script>';
 	let html = new TextDecoder().decode(body).replace("<head>", () => head);
@@ -36,7 +29,7 @@ export function presentPage(
 		html = html.replace(
 			/(<html[^>]*lang=")[^"]*(")/,
 			(_all, prefix: string, suffix: string) =>
-				`${prefix}${attribute(presentation.locale ?? "en")}${suffix}`,
+				`${prefix}${escapeHtml(presentation.locale ?? "en")}${suffix}`,
 		);
 	return html;
 }

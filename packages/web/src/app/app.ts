@@ -26,7 +26,7 @@ import { FileDir } from "./files.ts";
 import { Presence } from "./presence.ts";
 import { RoomLog } from "./room-log.ts";
 import { Rooms } from "./rooms.ts";
-import { AppApi } from "./routes.ts";
+import { AppApi, partsOf } from "./routes.ts";
 import { SocketRoute } from "./socket.ts";
 import { type AppSocket, Sockets } from "./sockets.ts";
 import { AppSurface } from "./surface.ts";
@@ -37,14 +37,6 @@ import { Uploads } from "./uploads.ts";
 const CHANGED_COALESCE_MS = 250;
 /** How often old files are swept: hourly. */
 const SWEEP_EVERY_MS = 3_600_000;
-
-function pathParts(path: string): string[] | undefined {
-	try {
-		return path.split("/").filter(Boolean).map(decodeURIComponent);
-	} catch {
-		return undefined;
-	}
-}
 
 /** The tables the app keeps; the plugin lists them as its own migrations. */
 export const APP_MIGRATIONS: readonly Migration[] = [
@@ -298,7 +290,7 @@ export class OwnerApp {
 		rest: string,
 		admission: Authenticated,
 	): Promise<Response | undefined> {
-		const parts = pathParts(rest);
+		const parts = partsOf(rest);
 		const pushed = parts
 			? await this.#push.handle(request, parts, admission)
 			: undefined;
