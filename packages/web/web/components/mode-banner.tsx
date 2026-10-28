@@ -1,8 +1,7 @@
 import { useState } from "react";
 import type { RoomMode } from "../../src/api-types.ts";
-import { api, messageOf } from "../lib/api.ts";
 import { translate as t } from "../lib/messages.ts";
-import { toast } from "../lib/toast.ts";
+import { changeMode } from "../lib/modes.ts";
 import { Icon } from "./icons.tsx";
 
 /**
@@ -18,13 +17,8 @@ export function ModeBanner(props: {
 	const [busy, setBusy] = useState<"yolo" | "longRunning">();
 	const turnOff = async (which: "yolo" | "longRunning") => {
 		setBusy(which);
-		try {
-			await api.setMode(props.room, { [which]: false });
-		} catch (failure) {
-			toast(messageOf(failure), "danger");
-		} finally {
-			setBusy(undefined);
-		}
+		await changeMode(props.room, { [which]: false });
+		setBusy(undefined);
 	};
 	return (
 		<div className="mode-banner" data-open={Boolean(mode)}>

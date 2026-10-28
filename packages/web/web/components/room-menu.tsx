@@ -1,9 +1,8 @@
 import { useState } from "react";
 import type { RoomMode } from "../../src/api-types.ts";
-import { api, messageOf } from "../lib/api.ts";
 import { translate as t } from "../lib/messages.ts";
+import { changeMode } from "../lib/modes.ts";
 import { hrefFor } from "../lib/router.ts";
-import { toast } from "../lib/toast.ts";
 import { Icon } from "./icons.tsx";
 import { Sheet } from "./sheet.tsx";
 import { Switch } from "./switch.tsx";
@@ -30,13 +29,8 @@ export function RoomMenu(props: {
 	const mode = props.mode ?? { yolo: false, longRunning: false };
 	const setLong = async (next: boolean) => {
 		setBusy(true);
-		try {
-			await api.setMode(props.room, { longRunning: next });
-		} catch (failure) {
-			toast(messageOf(failure), "danger");
-		} finally {
-			setBusy(false);
-		}
+		await changeMode(props.room, { longRunning: next });
+		setBusy(false);
 	};
 	return (
 		<Sheet open={props.open} title={t("Room menu")} onClose={props.onClose}>
@@ -87,10 +81,9 @@ export function RoomMenu(props: {
 									if (next) props.onAskYolo();
 									else {
 										setBusy(true);
-										api
-											.setMode(props.room, { yolo: false })
-											.catch((failure) => toast(messageOf(failure), "danger"))
-											.finally(() => setBusy(false));
+										changeMode(props.room, { yolo: false }).then(() =>
+											setBusy(false),
+										);
 									}
 								}}
 								busy={busy}
