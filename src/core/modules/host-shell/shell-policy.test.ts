@@ -605,6 +605,23 @@ describe("a command line the lexer must read to the end", () => {
 		expect(performance.now() - started).toBeLessThan(2000);
 	});
 
+	test("continuation-heavy heredoc bodies are read in linear time", () => {
+		const timed = (command: string) => {
+			const started = performance.now();
+			const result = classes(command);
+			return { result, ms: performance.now() - started };
+		};
+		const tabs = timed(`cat <<-EOF\n${"\t\t\\\n".repeat(50_000)}EOF\n`);
+		expect(tabs.ms).toBeLessThan(50);
+		const long = "D".repeat(500);
+		const ab = timed(`cat <<${long}\n${"ab\\\n".repeat(10_000)}${long}\n`);
+		expect(ab.ms).toBeLessThan(50);
+		const message = `git commit -m "$(cat <<'EOF'\n${"line\n".repeat(5000)}EOF\n)"`;
+		expect(classes(message)).toBeUndefined();
+		const script = `cat <<-EOF\n${"\techo hi\n".repeat(5000)}\tEOF\n`;
+		expect(classes(script)).toBeUndefined();
+	});
+
 	test("a rule that throws holds the call", () => {
 		const context = { workspace: work, scratchDir: scratch };
 		// An input whose command cannot be read makes the classifier fail.

@@ -158,22 +158,23 @@ export function heredocBody(
 			};
 		// A continued line may join the delimiter line; bash and this lexer might disagree.
 		if (!here.quoted) {
-			let joined = line;
+			// `kept` is the joined text as the delimiter compares it (leading tabs dropped for `<<-`),
+			// grown by appending, so each join costs only the new piece.
+			const strip = (t: string) => (here.stripTabs ? t.replace(/^\t+/, "") : t);
+			let kept = strip(line);
 			let end = lineEnd;
-			while (/(?:^|[^\\])(?:\\\\)*\\$/.test(joined) && end < src.length) {
+			while (/(?:^|[^\\])(?:\\\\)*\\$/.test(kept) && end < src.length) {
 				if (--budget < 0) throw new Unreadable();
 				const stop = src.indexOf("\n", end + 1);
 				const nextEnd = stop === -1 ? src.length : stop;
-				joined = joined.slice(0, -1) + src.slice(end + 1, nextEnd);
+				const piece = src.slice(end + 1, nextEnd);
+				kept = kept.slice(0, -1) + (kept.length === 1 ? strip(piece) : piece);
 				end = nextEnd;
-				// Leading tabs are stripped only for `<<-`; past the delimiter length no join can match.
-				const kept = here.stripTabs ? joined.replace(/^\t+/, "") : joined;
-				if (kept.length - (kept.endsWith("\\") ? 1 : 0) > limit) break;
-				if (
-					(here.stripTabs ? joined.replace(/^\t+/, "") : joined) ===
-					here.delimiter
-				)
-					throw new Unreadable();
+				// Past the delimiter length, or once the text before a continuing backslash is no
+				// longer a prefix of the delimiter, no join can match.
+				const base = kept.endsWith("\\") ? kept.slice(0, -1) : kept;
+				if (base.length > limit || !here.delimiter.startsWith(base)) break;
+				if (kept === here.delimiter) throw new Unreadable();
 			}
 		}
 		if (nl === -1) break;
