@@ -2710,6 +2710,7 @@ setup: ({ services }) => ({
 | `reaches(principalId)` | The person's own conversation here, as a channel key, or `undefined` when they have none here. It may reach the network and throw |
 | `knows(principalId)` | Optional: whether the person has a conversation here, from the host's own records such as their linked identities, without the network. A session asks it when it decides whether to offer `notify` or the schedule and delegation tools, so an outage then does not take them away; without it the host asks `reaches` |
 | `deliver(principalId, text)` | Optional: sends the notice itself. Without it the host posts the text in the channel `reaches` names, through the surface that serves it |
+| `mirror(principalId, text)` | Optional: echoes a notice another provider delivered, such as a web app pushing to a phone that Discord's direct message already reached. `notify` calls it on every provider but the one that delivered, only after a delivery; a failure is logged and never changes the result |
 
 The host reaches a person through the first provider, in contribution order, that reaches them.
 `context.directChannels.reach(principalId)` resolves that provider and channel, or `undefined`; `known(principalId)` resolves the first provider that knows the person without the network; `notify(principalId, text)` sends a notice there and resolves `false` when no provider reaches the person.

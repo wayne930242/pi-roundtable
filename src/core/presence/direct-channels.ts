@@ -1,6 +1,7 @@
 import type { SurfacePort } from "../contract/surface.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
 import type { Notifier } from "../domain/ports.ts";
+import type { Logger } from "../log.ts";
 import { splitReply } from "../presentation/reply-splitter.ts";
 
 /**
@@ -34,6 +35,13 @@ export interface DirectChannelProvider {
 	 * names, through the surface that serves it.
 	 */
 	deliver?(principalId: string, text: string): Promise<void>;
+	/**
+	 * Called with the notice after another provider delivered it, so this one can echo it, such as
+	 * a web app pushing a prompt to a phone that Discord's direct message already reached. It runs
+	 * only after a delivery, on every provider but the one that delivered; its failure is logged
+	 * and never changes what `notify` returns.
+	 */
+	mirror?(principalId: string, text: string): Promise<void>;
 }
 
 /** Where a person was reached: the provider, and their conversation on it. */
@@ -67,6 +75,7 @@ export interface DirectChannels extends Notifier {
 export function directChannelsPort(
 	providers: () => readonly DirectChannelProvider[],
 	surfaces: Pick<SurfacePort, "sendReply">,
+	logger?: Pick<Logger, "warn">,
 ): DirectChannels {
 	const reach = async (
 		principalId: string,
@@ -76,6 +85,26 @@ export function directChannelsPort(
 			if (channel !== undefined) return { provider, channel };
 		}
 		return undefined;
+	};
+	const mirrored = async (
+		delivered: DirectChannelProvider,
+		principalId: string,
+		text: string,
+	): Promise<void> => {
+		await Promise.all(
+			providers()
+				.filter((provider) => provider !== delivered && provider.mirror)
+				.map(async (provider) => {
+					try {
+						await provider.mirror?.(principalId, text);
+					} catch (error) {
+						logger?.warn(
+							{ err: error, provider: provider.name },
+							"a direct channel did not mirror a notice",
+						);
+					}
+				}),
+		);
 	};
 	return {
 		providers: () => providers(),
@@ -98,6 +127,7 @@ export function directChannelsPort(
 				await surfaces.sendReply(reached.channel, {
 					chunks: splitReply(text),
 				});
+			await mirrored(reached.provider, principalId, text);
 			return true;
 		},
 	};

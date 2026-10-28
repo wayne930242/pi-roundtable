@@ -77,4 +77,35 @@ describe("the direct channels", () => {
 		]);
 		expect(posted).toEqual([{ channel: "posted:bo", chunks: ["two"] }]);
 	});
+
+	test("mirror a delivered notice to every other provider once, and never let a mirror change the result", async () => {
+		const mirrored: { name: string; principalId: string; text: string }[] = [];
+		const warned: unknown[] = [];
+		const mirroring = (name: string): DirectChannelProvider => ({
+			...inbox(name, { ada: `${name}:ada` }, []),
+			mirror: async (principalId, text) =>
+				void mirrored.push({ name, principalId, text }),
+		});
+		const a = mirroring("a");
+		const b = mirroring("b");
+		const broken: DirectChannelProvider = {
+			...inbox("broken", {}),
+			mirror: async () => {
+				throw new Error("push service is down");
+			},
+		};
+		const port = directChannelsPort(
+			() => [a, b, broken],
+			{ sendReply: async () => undefined },
+			{ warn: (...args: unknown[]) => void warned.push(args) },
+		);
+		expect(await port.notify("ada", "ping")).toBe(true);
+		// A delivered, so only B is mirrored (A is not echoed its own delivery); the rejecting mirror is only logged.
+		expect(mirrored).toEqual([{ name: "b", principalId: "ada", text: "ping" }]);
+		expect(warned).toHaveLength(1);
+		// Nobody reached: nothing delivered, nothing mirrored.
+		mirrored.length = 0;
+		expect(await port.notify("kai", "ping")).toBe(false);
+		expect(mirrored).toEqual([]);
+	});
 });
