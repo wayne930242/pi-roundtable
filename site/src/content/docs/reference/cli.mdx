@@ -1,6 +1,6 @@
 ---
 title: CLI
-description: The roundtable commands init, doctor, start, add plugin, and add package, with setup checks, exit codes, and reasons a command can fail.
+description: The roundtable commands init, doctor, start, add plugin, add package, upgrade, and principal, with setup checks, exit codes, and reasons a command can fail.
 sidebar:
   order: 1
 ---
@@ -16,6 +16,8 @@ Inside a project, run it with `bunx roundtable <command>`.
 | `roundtable start` | Runs the checks that need no network, then the bot. |
 | `roundtable add plugin <name>` | Adds `plugins/<name>.ts` and its test, and lists the plugin in the config. `codex-images`, `dice`, and `release-notice` are reserved for the official plugins. |
 | `roundtable add package <spec>` | Installs a Pi package with `bun add`, and adds a plugin that loads it and gives its tools to every agent turn. |
+| `roundtable upgrade [--write [--unchecked]]` | Shows `roundtable.config.ts` rewritten in the 0.9 form (`owner` and `speakers` as `access`, `discord` as an adapter) as a diff; `--write` writes it once it is checked to serve the same people. |
+| `roundtable principal list\|show\|create\|link\|unlink\|grant\|revoke\|disable\|enable` | Lists and changes the principals, their identities, and their roles in the database. |
 
 `roundtable help` and `roundtable --help` print this list.
 `roundtable --version` prints the package version.
@@ -48,7 +50,7 @@ npx pi-roundtable init my-desk --adapter web
 
 `--adapter web` writes a project without Discord around [pi-roundtable-webchat](/plugins/webchat-package/).
 It leaves out `agents.ts` and `persona/shared.md`, and writes `persona/assistant.md` instead.
-Its `roundtable.config.ts` has no `discord`, listens on `127.0.0.1:3000`, and lists `webChat({ ... })` with an OpenID Connect verifier, an access map whose members and admins come from the token's roles, and one persona whose `selection` names its tools.
+Its `roundtable.config.ts` has no `discord`, listens on `127.0.0.1:3000`, and lists `webChat({ ... })` with an OpenID Connect verifier, a top-level `access` whose members and admins come from the token's roles, and one persona whose `selection` names its tools.
 Its `package.json` also pins pi-roundtable-webchat at the core's version, and its `.env.example` asks for `OWNER_NAME`, `DATABASE_URL`, `MODEL`, `OIDC_ISSUER`, `OIDC_AUDIENCE`, `OIDC_JWKS_URL`, `CHAT_MEMBER_ROLES`, and `CHAT_ORIGINS`.
 `--adapter discord` is the default; any other value is a usage error that lists `discord, web` and writes nothing.
 
@@ -74,31 +76,33 @@ A skipped check does not fail the run.
 | 1 | Bun | The running Bun's version against the package's `engines.bun` range. |
 | 2 | environment | Every uncommented variable in `.env.example` has a value. |
 | 3 | configuration | `roundtable.config.ts` loads, passes its schema, and assembles. The failing key is named. |
-| 4 | plugins | No two plugins share a name, the built-in ones included. |
-| 5 | image provider | Whether a plugin fills the `images` slot. Having none is not a failure: agents get avatars generated from their display names. |
-| 6 | PostgreSQL | The database answers, and every plugin's migrations run. They run inside a transaction that is always rolled back, so the database is left as it was. |
-| 7 | Discord token | Discord accepts the bot token. |
-| 8 | Discord guild | The bot is a member of `discord.guild`. |
-| 9 | Discord intents | The Message Content intent is on. |
-| 10 | Discord channel | The entry channel exists in the guild, and the bot holds the permissions below in it. |
-| 11 | model login | A login exists for the provider of `model`. |
-| 12 | public URL | `http.publicUrl` is a well-formed `http://` or `https://` address. |
+| 4 | plugins | Every plugin loads, no two share a name (the built-in ones included), and the registration is valid. |
+| 5 | access | Whom `access` serves: the owners, and a warning when `everyone: true` admits everyone on every surface of a host with more than one. |
+| 6 | image provider | Whether a plugin fills the `images` slot. Having none is not a failure: agents get avatars generated from their display names. |
+| 7 | PostgreSQL | The database answers, and every plugin's migrations run. They run inside a transaction that is always rolled back, so the database is left as it was. |
+| 8 | principals | A dry run of the principals the next start makes from the people the database already knows; a configured owner's identity linked to someone else fails, and a disabled owner is a warning. |
+| 9 | Discord token | Discord accepts the bot token. |
+| 10 | Discord guild | The bot is a member of `discord.guild`. |
+| 11 | Discord intents | The Message Content intent is on. |
+| 12 | Discord channel | The entry channel exists in the guild, and the bot holds the permissions below in it. |
+| 13 | model login | A login exists for the provider of `model`. |
+| 14 | public URL | `http.publicUrl` is a well-formed `http://` or `https://` address. |
 
-A project without Discord skips checks 7 to 10, with the reason `no Discord is configured`, and check 12 when `http.publicUrl` has no value; a Discord adapter in `adapters` is checked as the top-level `discord` is.
+A project without Discord skips checks 9 to 12, with the reason `no Discord is configured`, and check 14 when `http.publicUrl` has no value; a Discord adapter in `adapters` is checked as the top-level `discord` is.
 
-The permissions that check 10 requires in the entry channel are View Channel, Send Messages, Send Messages in Threads, Read Message History, Embed Links, Attach Files, Pin Messages, Create Public Threads, Manage Channels, and Manage Webhooks.
+The permissions that check 12 requires in the entry channel are View Channel, Send Messages, Send Messages in Threads, Read Message History, Embed Links, Attach Files, Pin Messages, Create Public Threads, Manage Channels, and Manage Webhooks.
 When the bot is not in the guild, the fix is an invitation link that asks for exactly these permissions.
 
 ### The `--reachable` flag
 
 `doctor --reachable` also requests the public URL, which fails unless the bot is running and the tunnel or proxy that publishes the address works.
-Without the flag, check 12 only confirms that the address is well formed.
+Without the flag, check 14 only confirms that the address is well formed.
 `--reachable` is the only flag, and only `doctor` accepts it.
 Any other argument is a usage error.
 
 ## `start`
 
-`start` runs the checks that need no network: Bun, environment, configuration, plugins, image provider, model login, and public URL.
+`start` runs the checks that need no network: Bun, environment, configuration, plugins, access, image provider, model login, and public URL.
 If one fails, it prints the same lines `doctor` prints, to standard error, and exits with code 1 before anything reaches Discord.
 Otherwise it starts the bot.
 
@@ -165,6 +169,32 @@ It refuses before installing, leaving the project untouched, if:
 Every refusal says how to do it by hand: install with `bun add` and list the package in a plugin's `piPackages`.
 After installing, it writes no plugin and names the `bun remove` command when `bun add` fails, when the package's `package.json` lists no extensions under `pi` and the package has no `extensions` folder, or when an extension fails to load.
 It finds only the tools an extension registers as it loads; a tool registered later, such as after a connection, has to be added to the list by hand.
+
+## `upgrade`
+
+```sh
+bunx roundtable upgrade
+bunx roundtable upgrade --write
+```
+
+`upgrade` prints `roundtable.config.ts` rewritten in the 0.9 form as a diff: `owner` and `speakers` become `access`, and `discord` becomes an adapter.
+It changes nothing without `--write`.
+`--write` first checks that the rewritten configuration serves the same people, which needs the environment the host runs with, and refuses when it cannot check.
+`--write --unchecked` writes it without that check, with a warning.
+
+## `principal`
+
+```sh
+bunx roundtable principal list
+bunx roundtable principal create --name Ada
+bunx roundtable principal link <principal> discord:<user id>
+bunx roundtable principal grant <principal> admin
+```
+
+`principal` lists and changes the people the host serves, in the database: `list`, `show <principal>`, `create --name <name> [--pronouns he|she|they]`, `link <principal> <provider>:<subject>`, `unlink <provider>:<subject>`, `grant` and `revoke <principal> member|admin|owner`, and `disable` and `enable <principal>`.
+A `<principal>` is a principal id or an identity linked to it.
+`list` prints identities as `access` in `roundtable.config.ts` takes them.
+A running host sees a change within 30 seconds; a host that starts sees it at once.
 
 ## Exit codes
 
