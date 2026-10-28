@@ -15,9 +15,8 @@ import type { ToolContribution } from "./define.ts";
 import type { TurnProgress } from "./domain/progress.ts";
 import { PluginError } from "./errors.ts";
 import type { HoldCheck, HoldRule } from "./holds.ts";
-import type { HttpRoute } from "./http/listeners.ts";
+import type { HttpRoute, ListenerAddress } from "./http/listeners.ts";
 import type { Locale } from "./i18n/index.ts";
-import type { ListenerAddress } from "./http/listeners.ts";
 import type { Logger } from "./log.ts";
 import type {
 	DirectChannelProvider,

@@ -37,8 +37,8 @@ import type {
 } from "./core/domain/conversation.ts";
 import { NotLinkedError, PluginError } from "./core/errors.ts";
 import { EventBus } from "./core/events.ts";
-import { type ListenerConfig, listenerAddress } from "./core/http/listeners.ts";
 import type { HoldCheck } from "./core/holds.ts";
+import { type ListenerConfig, listenerAddress } from "./core/http/listeners.ts";
 import { contactsOf } from "./core/identity/identity-view.ts";
 import type { OwnerIdentity } from "./core/identity.ts";
 import { ConfirmationJudge } from "./core/judging/confirmation-judge.ts";
