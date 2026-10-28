@@ -3367,7 +3367,7 @@ A class is a preset of parts, not a body, so a new class is an outfit and gear: 
 | `readCharacter(value)` | A spec from a stored row, read leniently and never throwing: a field this version does not know (written by a newer one) takes the class preset's value, an unknown key is ignored, and `undefined` comes back only when the value is not an object or names no known class |
 | `suggestCharacter(agent, taken?)` | A look for an agent that has none. Each class is scored by its keywords: the display name and the name count 3 each, the first 600 characters of the prompt 1. A tie or no hit is broken by a hash of the name among the classes `taken` does not use. `skin` and `build` come from separate hashes of the name, so a skin implies no body type, and the palette is the one `taken` uses least |
 | `composeSvg(spec, options?)` | The picture as an SVG string, see below |
-| `accentOf(spec, scheme)` | `colors.primary` as a UI accent: shaded until it reads at 3:1 on the scheme's page (white in `light`, `#0d1018` in `dark`) |
+| `accentOf(spec, on)` | `colors.primary` as a UI accent: shaded until it reads at 3:1 on the page. `on` is a scheme (`light`: white, `dark`: `#0d1018`) or a look (`modern-light`, `modern-dark` as the schemes; `camelot-light`: the darkest parchment `#e3d2a9`, `camelot-dark`: the lightest night blue `#243557`) |
 | `characterCss()` | The text of `characters.css` |
 
 `CharacterError.field` is the path of the offending field (`hat`, `colors.primary`).

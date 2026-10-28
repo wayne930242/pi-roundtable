@@ -1,3 +1,4 @@
+import type { CharacterLook } from "./compose.ts";
 import type { Hex } from "./spec.ts";
 
 type Rgb = readonly [number, number, number];
@@ -49,16 +50,30 @@ export function contrast(a: string, b: string): number {
 	return (light + 0.05) / (dark + 0.05);
 }
 
-/** The surface the accent sits on in each scheme (the app's page background). */
-const SURFACE = { light: "#ffffff", dark: "#0d1018" } as const;
+/**
+ * The surface the accent sits on, per scheme and per look: the app's page background, and for
+ * Camelot the hardest of its surfaces (the darkest parchment, the lightest night blue), so a
+ * shade that reads on that one reads on the rest.
+ */
+const SURFACE = {
+	light: "#ffffff",
+	dark: "#0d1018",
+	"modern-light": "#ffffff",
+	"modern-dark": "#0d1018",
+	"camelot-light": "#e3d2a9",
+	"camelot-dark": "#243557",
+} as const;
 
 /**
- * `primary` itself when it reads at 3:1 on the scheme's surface, else the first shade toward
- * the opposite end (darker on light, lighter on dark) that does.
+ * `primary` itself when it reads at 3:1 on the surface, else the first shade toward the opposite
+ * end (darker on a light surface, lighter on a dark one) that does.
  */
-export function accentColor(primary: Hex, scheme: "light" | "dark"): Hex {
-	const surface = SURFACE[scheme];
-	const toward = scheme === "light" ? "#1a1330" : "#ffffff";
+export function accentColor(
+	primary: Hex,
+	on: "light" | "dark" | CharacterLook,
+): Hex {
+	const surface = SURFACE[on];
+	const toward = on.endsWith("light") ? "#1a1330" : "#ffffff";
 	for (let step = 0; step <= 20; step++) {
 		const shade = step === 0 ? primary : mix(primary, toward, step / 20);
 		if (contrast(shade, surface) >= 3) return shade;

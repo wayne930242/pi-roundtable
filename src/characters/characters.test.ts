@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { contrast as contrastRatio } from "./colors.ts";
 import {
 	AVATAR_STATES,
 	accentOf,
@@ -554,6 +555,28 @@ test("accentOf keeps a readable color on both schemes", () => {
 	});
 	expect(accentOf(pale, "light")).not.toBe("#ffee88");
 	expect(accentOf(pale, "dark")).toBe("#ffee88");
+});
+
+test("accentOf reads at 3:1 on Camelot's parchment and night castle too", () => {
+	const looks = {
+		"camelot-light": ["#f4ead5", "#fbf5e6", "#eee1c3", "#e3d2a9", "#f2e4bd"],
+		"camelot-dark": ["#0f1726", "#16213a", "#1c2a47", "#243557", "#222f4d"],
+	} as const;
+	for (const palette of Object.keys(CATALOG.palettes)) {
+		const spec = resolveCharacter({
+			class: "wizard",
+			palette: palette as never,
+		});
+		for (const [look, surfaces] of Object.entries(looks))
+			for (const surface of surfaces)
+				expect(
+					contrastRatio(accentOf(spec, look as never), surface),
+				).toBeGreaterThanOrEqual(3);
+	}
+	// The plain schemes are the modern looks, unchanged.
+	const wizard = resolveCharacter({ class: "wizard", palette: "azure" });
+	expect(accentOf(wizard, "modern-light")).toBe(accentOf(wizard, "light"));
+	expect(accentOf(wizard, "modern-dark")).toBe(accentOf(wizard, "dark"));
 });
 
 test("characters.css is exactly what characterCss() makes, and it carries every state and pivot", () => {

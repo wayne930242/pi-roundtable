@@ -269,7 +269,13 @@ export function composeSvg(
 	);
 }
 
-/** The agent's accent as a UI color: `colors.primary`, shaded until it reads at 3:1 on the scheme's page. */
-export function accentOf(spec: CharacterSpec, scheme: "light" | "dark"): Hex {
-	return accentColor(spec.colors.primary, scheme);
+/**
+ * The agent's accent as a UI color: `colors.primary`, shaded until it reads at 3:1 on the page. A
+ * scheme means the modern page; a look (`camelot-light`) means that look's hardest surface.
+ */
+export function accentOf(
+	spec: CharacterSpec,
+	on: "light" | "dark" | CharacterLook,
+): Hex {
+	return accentColor(spec.colors.primary, on);
 }

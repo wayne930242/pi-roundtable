@@ -635,7 +635,7 @@
 		"src/characters/catalog.d.ts#OutfitId": "type OutfitId = \"robe\" | \"scholar\" | \"armor\" | \"plate\" | \"apron\" | \"chef\" | \"cloak\" | \"tunic\" | \"coat\" | \"overalls\" | \"vest\" | \"habit\" | \"surplice\" | \"motley\" | \"sailor\";",
 		"src/characters/catalog.d.ts#PropId": "type PropId = \"staff\" | \"shield\" | \"scroll\" | \"hammer\" | \"bow\" | \"lute\" | \"flask\" | \"quill\" | \"tome\" | \"bell\" | \"keys\" | \"map\" | \"telescope\" | \"wrench\" | \"spade\" | \"ladle\" | \"lantern\" | \"seal\" | \"dagger\" | \"beads\" | \"bird\" | \"anchor\" | \"marotte\" | \"sword\";",
 		"src/characters/catalog.d.ts#STATE_EXPRESSION": "declare const STATE_EXPRESSION: Readonly<Record<AvatarState, Expression>>;",
-		"src/characters/compose.d.ts#accentOf": "declare function accentOf(spec: CharacterSpec, scheme: \"light\" | \"dark\"): Hex;",
+		"src/characters/compose.d.ts#accentOf": "declare function accentOf(spec: CharacterSpec, on: \"light\" | \"dark\" | CharacterLook): Hex;",
 		"src/characters/compose.d.ts#CharacterLook": "type CharacterLook = \"modern-light\" | \"modern-dark\" | \"camelot-light\" | \"camelot-dark\";",
 		"src/characters/compose.d.ts#ComposeOptions": "interface ComposeOptions {\n    \n    expr?: Expression;\n    \n    state?: AvatarState;\n    \n    look?: CharacterLook;\n    \n    frame?: \"disc\" | \"shield\";\n    \n    bare?: boolean;\n    \n    still?: boolean;\n    \n    uid?: string;\n    \n    size?: number;\n    \n    label?: string;\n}",
 		"src/characters/compose.d.ts#composeSvg": "declare function composeSvg(spec: CharacterSpec, options?: ComposeOptions): string;",

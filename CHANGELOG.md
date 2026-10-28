@@ -7,6 +7,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- `accentOf(spec, on)` (`pi-roundtable/characters`) also takes a look (`camelot-light`, `camelot-dark`, `modern-light`, `modern-dark`) and shades the accent for that look's surfaces, so a ring reads at 3:1 on Camelot's parchment and night blue; a scheme still means the modern page.
 - `OutboundReply.failed` (`pi-roundtable`). The reply for a turn that ended in an error, not a stopped one, carries `failed: true`, so a surface can show the turn as failed; Discord ignores it.
 - Doctor check `characters` (`roundtable doctor`, `roundtable start`): rasterizes one composed character with `canvas`, the probe the agent server runs at start, and fails with the reason and the librsvg fix when it cannot.
 - `DirectChannelProvider.mirror?(principalId, text)` (`pi-roundtable`). After `notify` delivers a notice through one provider, it calls `mirror` on every other provider that has one, so a channel such as Web Push can echo what a direct message already carried. It runs only after a delivery, its failures are logged and never thrown, and it never changes what `notify` returns. See [`directChannels`](docs/plugins.md#directchannels-reaching-a-person-on-their-own).
