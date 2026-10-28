@@ -230,9 +230,9 @@ describe("agent_create and avatars", () => {
 		const root = new URL("../../../", import.meta.url);
 		const read = (path: string) => Bun.file(new URL(path, root)).text();
 		const services = await read("src/core/services.ts");
-		expect(services).toMatch(/@deprecated[^]*?\n\tredrawAvatar\(/);
+		expect(services).toMatch(/@deprecated[\s\S]*?\n\tredrawAvatar\(/);
 		expect(await read("src/core/agents/agent-tools.ts")).toMatch(
-			/@deprecated[^]*?export type AvatarMode/,
+			/@deprecated[\s\S]*?export type AvatarMode/,
 		);
 		expect(await read("CHANGELOG.md")).toContain(
 			"`AgentTeam.redrawAvatar` and the `AvatarMode` type (`pi-roundtable`) still work",
