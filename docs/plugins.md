@@ -2000,7 +2000,7 @@ The plugin it writes lists every tool the package registers when it loads, gives
 A tool a package registers later, such as after a connection, is not found; add it to the list by hand.
 
 The built-in delegation worker also loads `pi-web-access` to search and read the web.
-`pi-roundtable` lists it as a peer dependency (`>=0.35.0 <0.36.0`), so `bun add pi-roundtable` installs it for you.
+`pi-roundtable` lists it as a peer dependency (`>=0.35.0 <0.41.0`), so `bun add pi-roundtable` installs it for you.
 If your project depends on its own build, such as a fork, both the worker and `piPackages` use that copy without an `overrides` entry.
 A project that has none installed stops at the `modules` plugin's setup with a `PluginError` that names the command to run.
 
@@ -2387,7 +2387,7 @@ A plugin's claim opts in by calling `DISCORD.channelContext(message, options?)` 
 
 It reads Discord, not the host's history, so it survives restarts:
 
-- It fetches the `fetch` messages before the addressed one (default 50, at most 100) and keeps those after the assistant's latest post there: its bot user's, or one of its application's webhooks, such as an agent's voice. Any post of the assistant ends the window, including a notice that a conversation started over; the core posts no marker of its own, so a fresh-start reply must be a public post, not an ephemeral one, to cut the window.
+- It fetches the `fetch` messages before the addressed one (default 50, at most 100) and keeps those after the assistant's latest post there: its bot user's, or one of its application's webhooks, such as an agent's voice. Any post of the assistant ends the window, including the divider the core posts when a conversation starts over (see `discord.freshMarker`) and a notice that it did; a fresh-start reply must be a public post, not an ephemeral one, to cut the window.
 - It leaves out the assistant's own posts, the addressed message, empty messages, and every message it handed over before or that addressed it before in that channel, remembered in memory per channel, so a restart can repeat at most what came since the assistant's last post.
 - Other bots and integrations are kept and marked as bots; the host's owners (the primary owner and every other owner's Discord identities) are marked as owners.
 - Consecutive messages of one author at least `similarity` alike (default 0.8, by their longest common run of text) count as one, the later kept.
@@ -3020,7 +3020,7 @@ A test boots a host with the plugin, writes through the surface, and reads what 
 ### `adapters`: the chat networks the host talks through
 
 `adapters` lists the chat networks the host talks through, each made by its adapter's factory.
-In 0.8 the one adapter is Discord: `discord()` from `pi-roundtable/discord` takes the same settings as the top-level `discord`, and a host configured either way assembles the same plugins in the same order.
+Today the one adapter is Discord: `discord()` from `pi-roundtable/discord` takes the same settings as the top-level `discord`, and a host configured either way assembles the same plugins in the same order.
 The top-level `discord` stays the form `roundtable init` writes; configure Discord once, in one place or the other.
 A chat network that comes as a plugin, such as pi-roundtable-webchat's `webChat()`, stays in `plugins`.
 
@@ -3038,7 +3038,15 @@ export function withDiscordAdapter(
 	dataDir: string,
 ): RoundtableConfig {
 	return {
-		owner: { id: env("OWNER_ID"), name: env("OWNER_NAME") },
+		access: {
+			owners: [
+				{
+					name: env("OWNER_NAME"),
+					principal: env("OWNER_ID"),
+					identities: [`discord:${env("OWNER_ID")}`],
+				},
+			],
+		},
 		adapters: [
 			discord({
 				token: env("DISCORD_TOKEN"),
@@ -3138,7 +3146,7 @@ The host listens on `127.0.0.1:3000`; serve it over HTTPS through a reverse prox
 
 A browser asks for a one-time ticket with `POST /chat/tickets` and `Authorization: Bearer <token>`, then opens `/chat/socket` offering the subprotocols `roundtable.webchat.v1` and `ticket.<ticket>`; another client sends the bearer token on the upgrade.
 The token never travels in a URL.
-Each WebSocket message is one JSON object with a `type`: the client sends `send`, `stop`, `approval`, `answer`, and `auth`; the server answers with `ready`, `accepted`, `typing`, `stoppable`, `progress`, `reply`, `failed`, `prompt`, `prompt_closed`, `notice`, `reauth`, and `error`.
+Each WebSocket message is one JSON object with a `type`: the client sends `auth`, `send`, `stop`, `approval`, `answer`, `answers`, `prompt_features`, `client_hello`, and `client_result`; the server answers with `ready`, `accepted`, `typing`, `stoppable`, `progress`, `reply`, `failed`, `prompt`, `prompt_closed`, `notice`, `reauth`, `client_call`, `client_cancel`, and `error`. The [package README](https://github.com/wayne930242/pi-roundtable/blob/master/packages/webchat/README.md) lists each frame with its fields.
 `progress` carries the turn's [`TurnProgress`](#surfaces-a-chat-network-of-your-own) events, never the thinking and never a tool's full arguments; `reply` carries the answer in full markdown.
 The REST API lists a person's conversations, opens one, reads its messages, and lists and acknowledges private inbox notices from `notify`.
 Tickets, quotas, connections, and approvals follow `principalId`; refreshing a token to another principal closes the socket with 4403.
@@ -3196,7 +3204,7 @@ The [pi-roundtable-mcp][mcp-package] workspace, published separately on npm, add
 The first lets the owner add MCP servers such as Notion or a calendar from Discord and gives your code the list; the second lets an agent outside Discord reach your agent.
 Install it with `bun add pi-roundtable-mcp`.
 
-Seven official packages live in this repository as Bun workspaces and publish as separate npm packages, versioned in lockstep with the core.
+Eight official packages live in this repository as Bun workspaces and publish as separate npm packages, versioned in lockstep with the core.
 The [site guide source files][package-guides] describe installation, requirements, configuration, and security considerations:
 
 - [pi-roundtable-drawing][drawing-package]: [site guide source][drawing-guide] · local relationship maps, magic circles, sigils, sacred geometry, and card spreads.
@@ -3206,6 +3214,7 @@ The [site guide source files][package-guides] describe installation, requirement
 - [pi-roundtable-mcp][mcp-package]: [site guide source][mcp-guide] · MCP connectors through a gateway and remote MCP endpoints for agent turns and owner-granted Discord channel tools.
 - [pi-roundtable-browser][browser-package]: [site guide source][browser-guide] · `browser_task`, a worker that drives agent-browser in a Docker container with no route to the host's private networks, and a `BrowserDriver` for another browser.
 - [pi-roundtable-webchat][webchat-package]: [site guide source][webchat-guide] · a WebSocket chat for people an OpenID Connect provider signs in, with private conversations, live progress, and approval cards; see [web chat](#web-chat-pi-roundtable-webchat).
+- [pi-roundtable-line][line-package]: [site guide source][line-guide] · a LINE Messaging API transport: a signed webhook, an allowlist of chats, one consumer, and pushes sent under a sender name, a retry key, and a quota check.
 
 [drawing-package]: https://github.com/wayne930242/pi-roundtable/blob/master/packages/drawing/README.md
 [coding-package]: https://github.com/wayne930242/pi-roundtable/blob/master/packages/coding/README.md
@@ -3213,6 +3222,7 @@ The [site guide source files][package-guides] describe installation, requirement
 [sandbox-package]: https://github.com/wayne930242/pi-roundtable/blob/master/packages/sandbox/README.md
 [mcp-package]: https://github.com/wayne930242/pi-roundtable/blob/master/packages/mcp/README.md
 [browser-package]: https://github.com/wayne930242/pi-roundtable/blob/master/packages/browser/README.md
+[line-package]: https://github.com/wayne930242/pi-roundtable/blob/master/packages/line/README.md
 [package-guides]: https://github.com/wayne930242/pi-roundtable/tree/master/site/src/content/docs/plugins/
 [drawing-guide]: https://github.com/wayne930242/pi-roundtable/blob/master/site/src/content/docs/plugins/drawing-package.mdx
 [coding-guide]: https://github.com/wayne930242/pi-roundtable/blob/master/site/src/content/docs/plugins/coding-package.mdx
@@ -3220,6 +3230,7 @@ The [site guide source files][package-guides] describe installation, requirement
 [sandbox-guide]: https://github.com/wayne930242/pi-roundtable/blob/master/site/src/content/docs/plugins/sandbox-package.mdx
 [mcp-guide]: https://github.com/wayne930242/pi-roundtable/blob/master/site/src/content/docs/plugins/mcp-package.mdx
 [browser-guide]: https://github.com/wayne930242/pi-roundtable/blob/master/site/src/content/docs/plugins/browser-package.mdx
+[line-guide]: https://github.com/wayne930242/pi-roundtable/blob/master/site/src/content/docs/plugins/line-package.mdx
 [webchat-guide]: https://github.com/wayne930242/pi-roundtable/blob/master/site/src/content/docs/plugins/webchat-package.mdx
 [coding-source]: https://github.com/wayne930242/pi-roundtable/tree/master/packages/coding
 [sandbox-source]: https://github.com/wayne930242/pi-roundtable/tree/master/packages/sandbox
@@ -3493,7 +3504,7 @@ The host's `run()` handles startup:
    The runtime plugin builds the runtime later, in its own setup: from the `runtime` slot when a plugin fills it, else the Pi runtime.
 2. The database is opened and every plugin's migrations run, in plugin order.
 3. Every plugin's `setup` runs, in plugin order.
-   The order is the built-ins (`memory`, `schedule-store`, `prechecks`, `discord`, `modules`, `worker-sessions`, `discord-admin`, `skills`, `conversations`, `runtime`, `agent-server`, `seeds`; an addon that is switched off is not there, and without Discord neither are `discord`, `discord-admin`, `skills`, `agent-server`, or `seeds`), then yours in the order of `plugins` in `roundtable.config.ts`, then the built-in `schedules`, so a due schedule fires only once everything it can reach is running.
+   The order is the built-ins (`identity`, `memory`, `schedule-store`, `prechecks`, `discord`, `modules`, `worker-sessions`, `discord-admin`, `skills`, `conversations`, `runtime`, `agent-server`, `seeds`; an addon that is switched off is not there, and without Discord neither are `discord`, `discord-admin`, `skills`, `agent-server`, or `seeds`), then yours in the order of `plugins` in `roundtable.config.ts`, then the built-in `schedules`, so a due schedule fires only once everything it can reach is running.
 4. The contributions are linked: tool tiers, hold rules, the session plan, the channel router, and the events.
    From here `sessions()`, `conversations`, `surfaces`, `turns`, and `dashboard()` work.
 5. Every plugin's `preflight` runs, in plugin order.
@@ -3584,7 +3595,7 @@ These are the messages as the code writes them, with `<...>` where your names go
 | `no runtime provider is configured: the runtime plugin builds the Pi runtime when no plugin fills the runtime slot; read the running one from services.get(RUNTIME)` | Only a plugin that calls `providers.runtime` without `providers.filled.has("runtime")` sees it; read `services.get(RUNTIME)` instead |
 | `session tool <name> takes a core extension name. Rename it.` | Pick a name other than the core's |
 | `plugin <name>: setup failed: the database was queried during setup…` (from `Roundtable.check()`, `roundtable doctor` or `start`) | A plugin's `setup` ran a query. Take `database()` in setup and query from a service's `start` or from a handler |
-| `two plugins are named <name>.` (from `roundtable doctor`) | Rename yours; the built-in plugins are `memory`, `schedule-store`, `prechecks`, `discord`, `modules`, `worker-sessions`, `discord-admin`, `skills`, `conversations`, `runtime`, `agent-server`, `seeds`, and `schedules` |
+| `two plugins are named <name>.` (from `roundtable doctor`) | Rename yours; the built-in plugins are `identity`, `memory`, `schedule-store`, `prechecks`, `discord`, `modules`, `worker-sessions`, `discord-admin`, `skills`, `conversations`, `runtime`, `agent-server`, `seeds`, and `schedules` |
 | `migration <plugin>/<name> is declared twice` | A plugin declares two migrations with one name: rename one (the same name in two plugins is fine) |
 | `/<root> <name> is added twice`, `/<name> is registered twice` | Give each slash command and subcommand its own name |
 | `route <name> is registered twice`, `routes <a> and <b> overlap on listener <id>` | Give each route its own name and a path no other route can take |

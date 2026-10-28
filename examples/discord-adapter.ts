@@ -10,7 +10,15 @@ export function withDiscordAdapter(
 	dataDir: string,
 ): RoundtableConfig {
 	return {
-		owner: { id: env("OWNER_ID"), name: env("OWNER_NAME") },
+		access: {
+			owners: [
+				{
+					name: env("OWNER_NAME"),
+					principal: env("OWNER_ID"),
+					identities: [`discord:${env("OWNER_ID")}`],
+				},
+			],
+		},
 		adapters: [
 			discord({
 				token: env("DISCORD_TOKEN"),
