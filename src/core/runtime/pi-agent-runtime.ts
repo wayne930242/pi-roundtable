@@ -21,7 +21,6 @@ import type { TurnRequest } from "../domain/ports.ts";
 import { HostStoppingError } from "../errors.ts";
 import { assistantName } from "../i18n/index.ts";
 import { promptScopeOf } from "../interactions/prompts.ts";
-import { DEFAULT_AUTONOMY } from "../modes/autonomy.ts";
 import { MEMORY_TOOLS } from "../modules/memory/owner-memory.ts";
 import { withoutReplyFiles } from "../reply-files.ts";
 import type { TransientTask } from "../sessions.ts";
@@ -32,7 +31,7 @@ import { ConversationSessions } from "./conversation-sessions.ts";
 import { confirmedTurnText } from "./extensions/confirmation-gate.ts";
 import { loadsMemory } from "./extensions/private-memory.ts";
 import { missingToolsError } from "./extensions/self-compact-guard.ts";
-import { yoloApprover } from "./extensions/yolo.ts";
+import { turnYolo } from "./extensions/yolo.ts";
 import { interimPoster } from "./interim-text.ts";
 import { preflightTools } from "./preflight-tools.ts";
 import { PromptSlot } from "./prompt-slot.ts";
@@ -209,11 +208,7 @@ export class PiAgentRuntime implements AgentRuntime {
 		const missing = wanted.filter((name) => !registered.has(name));
 		if (missing.length > 0) {
 			logger.warn(
-				{
-					channel: request.channel,
-					selection: request.selection.id,
-					missing,
-				},
+				{ channel: request.channel, selection: request.selection.id, missing },
 				"selected tools missing; running without them",
 			);
 		}
@@ -225,14 +220,7 @@ export class PiAgentRuntime implements AgentRuntime {
 			who,
 			request.speaker,
 			conversation.visibility === "private",
-			this.#options.modes
-				? yoloApprover({
-						modes: this.#options.modes,
-						autonomy: this.#options.autonomy ?? DEFAULT_AUTONOMY,
-						channel: request.channel,
-						speaker: request.speaker,
-					})
-				: undefined,
+			turnYolo(this.#options, request),
 		);
 		if (request.confirmed && pending && pending.calls.length > 0) {
 			logger.info(

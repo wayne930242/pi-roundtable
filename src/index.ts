@@ -162,6 +162,7 @@ export {
 	ProviderError,
 } from "./core/errors.ts";
 export type {
+	ClassedHold,
 	HoldCheck,
 	HoldContext,
 	HoldDescription,

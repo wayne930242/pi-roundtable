@@ -119,7 +119,7 @@ function realPath(path: string): string {
 }
 
 /** Whether a write to `path` stays inside a root, as written. */
-export function insideRoots(path: string, state: LineState): boolean {
+function insideRoots(path: string, state: LineState): boolean {
 	return state.roots.some((root) => under(path, root));
 }
 
@@ -157,4 +157,17 @@ export function rmHeld(
 		if (!inside) return "rm";
 	}
 	return undefined;
+}
+
+/**
+ * Whether a write to the word stays inside a scratch root. A word the line cannot resolve is read
+ * as written from the workspace, as before variables were followed.
+ */
+export function writable(word: string, state: LineState): boolean {
+	if (word === "/dev/null") return true;
+	const path =
+		resolvePath(word, state) ??
+		resolvePath(word, { ...state, vars: new Map(), cwd: state.workspace }) ??
+		word;
+	return insideRoots(path, state);
 }

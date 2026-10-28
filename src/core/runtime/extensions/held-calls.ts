@@ -28,6 +28,19 @@ export function sameCall(
 	return a.tool === b.tool && a.input === b.input;
 }
 
+/** Takes the first approval of `call` out of the lists, in order; undefined when none approves it. */
+export function spendApproval<R extends { call: HeldCall }>(
+	lists: readonly R[][],
+	call: Pick<HeldCall, "tool" | "input">,
+): R | undefined {
+	for (const list of lists) {
+		const at = list.findIndex((r) => sameCall(r.call, call));
+		const [spent] = at === -1 ? [] : list.splice(at, 1);
+		if (spent) return spent;
+	}
+	return undefined;
+}
+
 /** JSON with object keys sorted at every level, so equal inputs compare equal. */
 // pi-lens-ignore: no-unknown-parameters — tool input is untyped model JSON; this is where it is read
 export function canonicalJson(value: unknown): string {

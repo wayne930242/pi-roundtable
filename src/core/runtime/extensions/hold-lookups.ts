@@ -35,7 +35,7 @@ export interface Judgment {
 	/** The card is the speaker's alone; see `HoldDescription`. */
 	speakerOnly?: true;
 	/** The hold classes of the call; see `HoldRule.holdClasses`. Absent when the holds gave none. */
-	classes?: readonly string[];
+	classes?: readonly string[] | undefined;
 }
 
 export type Judged = Judgment | undefined | typeof STOPPED;

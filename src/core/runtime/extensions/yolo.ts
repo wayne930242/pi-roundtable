@@ -1,10 +1,12 @@
 import type { HeldCall } from "../../domain/conversation.ts";
+import type { TurnRequest } from "../../domain/ports.ts";
 import { SYSTEM_PRINCIPAL } from "../../identity/principal-store.ts";
 import type { ApprovedBy } from "../../interactions/prompts.ts";
-import type { Autonomy } from "../../modes/autonomy.ts";
+import { type Autonomy, DEFAULT_AUTONOMY } from "../../modes/autonomy.ts";
 import type { ConversationModes } from "../../modes/conversation-modes.ts";
 import { YOLO_CARDED_SHELL_CLASSES } from "../../modules/host-shell/shell-policy.ts";
 import type { ChannelKey } from "../../sessions.ts";
+import type { PiAgentRuntimeOptions } from "../runtime-types.ts";
 import type { AutoApprover } from "./confirmation-gate.ts";
 import type { SpeakerRef } from "./gate-refusals.ts";
 
@@ -28,6 +30,22 @@ function ruleOf(id: string): string {
 	return dot === -1 ? id : id.slice(0, dot);
 }
 
+/** The auto-approver of a turn on a runtime built with `options.modes`; undefined without them. */
+export function turnYolo(
+	options: Pick<PiAgentRuntimeOptions, "modes" | "autonomy">,
+	request: Pick<TurnRequest, "channel" | "speaker">,
+): AutoApprover | undefined {
+	const { modes } = options;
+	return modes
+		? yoloApprover({
+				modes,
+				autonomy: options.autonomy ?? DEFAULT_AUTONOMY,
+				channel: request.channel,
+				speaker: request.speaker,
+			})
+		: undefined;
+}
+
 /**
  * The auto-approver of one turn in a yolo conversation: it answers for a held call, so that no
  * card opens, only when all of these hold at the time of the call:
@@ -44,7 +62,7 @@ export function yoloApprover(seams: YoloSeams): AutoApprover {
 	const { modes, autonomy, channel, speaker } = seams;
 	const allow = new Set(autonomy.yolo.allow);
 	const card = new Set(autonomy.yolo.card);
-	const carded = new Set(YOLO_CARDED_SHELL_CLASSES as readonly string[]);
+	const carded = new Set(YOLO_CARDED_SHELL_CLASSES);
 	const approves = (id: string) =>
 		!card.has(id) &&
 		!card.has(ruleOf(id)) &&

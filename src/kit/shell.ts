@@ -6,4 +6,5 @@ export {
 	SHELL_TOOLS,
 	shellHoldRule,
 	shellHoldRuleFor,
+	YOLO_CARDED_SHELL_CLASSES,
 } from "../core/modules/host-shell/shell-policy.ts";

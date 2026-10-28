@@ -2,6 +2,7 @@ import type {
 	HeldCall,
 	PendingConfirmation,
 } from "../../domain/conversation.ts";
+import type { HoldRefusal } from "../../domain/progress.ts";
 import { type OwnerIdentity, ownerWords } from "../../identity.ts";
 import type {
 	ApprovalDetails,
@@ -180,4 +181,26 @@ function orList(items: readonly string[]): string {
 	const last = items.at(-1);
 	if (items.length < 2 || last === undefined) return items.join("");
 	return `${items.slice(0, -1).join(", ")} or ${last}`;
+}
+
+/**
+ * Decides for a held call whether the server approves it without a card, and says who approved
+ * it when it does; see `yoloApprover`. `card.speakerOnly` is true when the call's card is the
+ * speaker's alone. It must change nothing but its own record of the approval.
+ */
+export type AutoApprover = (
+	call: HeldCall,
+	card: { speakerOnly: boolean },
+) => ApprovedBy | undefined;
+
+/** What `ConfirmationGate.decide` answers for a call; an empty answer lets the call run. */
+export interface GateDecision {
+	reason?: string;
+	approvedOnCard?: true;
+	/** Who approved the call, when it was held and a surface or a confirming message said who. */
+	approvedBy?: ApprovedBy;
+	/** The id of the card whose approval released the call, in this turn or answered late; absent for a call a message confirmed. */
+	approvedPrompt?: string;
+	/** Why a hold refused the call, for a surface that tells that from a failure; absent when it ran or the turn stopped. */
+	refused?: HoldRefusal;
 }

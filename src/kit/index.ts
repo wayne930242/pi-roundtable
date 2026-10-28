@@ -134,6 +134,7 @@ export {
 	SHELL_TOOLS,
 	shellHoldRule,
 	shellHoldRuleFor,
+	YOLO_CARDED_SHELL_CLASSES,
 } from "./shell.ts";
 export {
 	checkRepoName,
