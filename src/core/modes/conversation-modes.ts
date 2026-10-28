@@ -125,8 +125,10 @@ export class PgConversationModes implements ConversationModes {
 	/** Reads every stored row into memory; until then every conversation reads as both modes off. */
 	async load(): Promise<void> {
 		const rows: Row[] = await this.#sql`SELECT * FROM conversation_modes`;
+		// A mode `set` wrote while the rows were read is newer than its row here.
 		for (const row of rows)
-			this.#modes.set(row.channel as ChannelKey, modeOf(row));
+			if (!this.#modes.has(row.channel as ChannelKey))
+				this.#modes.set(row.channel as ChannelKey, modeOf(row));
 	}
 
 	peek(channel: ChannelKey): ConversationMode {

@@ -61,6 +61,31 @@ describeDb("PgConversationModes", () => {
 		expect(restarted.peek(other)).toEqual({ yolo: false, longRunning: false });
 	});
 
+	test("a mode set while the rows are being read is not overwritten by the older row", async () => {
+		const stale = `app:agent.late-${run}` as ChannelKey;
+		await (await attach()).set(stale, { yolo: false }, owner);
+		// The rows are read at once, but handed on only after the release.
+		const release = Promise.withResolvers<void>();
+		const slow = new Proxy(sql, {
+			apply(target, thisArg, args) {
+				const result = Reflect.apply(target, thisArg, args);
+				const text = String((args[0] as readonly string[])[0]);
+				if (!text.includes("SELECT * FROM conversation_modes")) return result;
+				return result.then(async (rows: unknown) => {
+					await release.promise;
+					return rows;
+				});
+			},
+		});
+		const modes = PgConversationModes.attach(slow, silentLogger());
+		const loading = modes.load();
+		await Bun.sleep(50);
+		await modes.set(stale, { yolo: true }, owner);
+		release.resolve();
+		await loading;
+		expect(modes.peek(stale).yolo).toBe(true);
+	});
+
 	test("a change names only what it sets: the other mode and other conversations stay", async () => {
 		const modes = await attach();
 		await modes.set(room, { yolo: true, longRunning: true }, owner);
