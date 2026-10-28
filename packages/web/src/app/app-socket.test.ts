@@ -28,7 +28,9 @@ import { APP_PROTOCOL } from "./protocol.ts";
 const ORIGIN = "https://app.example.test";
 const ADA_DISCORD = "100000000000000001";
 const MEL_DISCORD = "200000000000000002";
-const ENTRY_CHANNEL = "900000000000000002";
+/** A guild of this suite's own, so the agents other suites stored in the shared database are not on this team. */
+const GUILD = "900000000000000731";
+const ENTRY_CHANNEL = "900000000000000732";
 const ADA: ActorFacts = {
 	provider: "discord",
 	subject: ADA_DISCORD,
@@ -116,6 +118,7 @@ async function boot(options: {
 	const host = await testHost({
 		config: {
 			dataDir,
+			discord: { token: "token", guild: GUILD, entryChannel: ENTRY_CHANNEL },
 			http: { publicUrl: "https://bot.example.com", socketPath: socket },
 			access: {
 				owners: [
