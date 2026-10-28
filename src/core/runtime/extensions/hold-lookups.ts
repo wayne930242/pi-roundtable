@@ -143,6 +143,14 @@ export function joinApprovers(
 			speakerOnly,
 			classes,
 		} = described(action, tool);
+		const joined = (approvers: readonly string[] | undefined): Judgment => ({
+			action: text,
+			...(copy ? { copy } : {}),
+			...(supersede ? { supersede } : {}),
+			...(speakerOnly ? { speakerOnly } : {}),
+			...(classes ? { classes } : {}),
+			...(approvers ? { approvers } : {}),
+		});
 		const controller = new AbortController();
 		if (turn.signal?.aborted) controller.abort();
 		let named:
@@ -162,27 +170,10 @@ export function joinApprovers(
 		}
 		if (!isPromise(named)) {
 			controller.abort();
-			return {
-				action: text,
-				...(copy ? { copy } : {}),
-				...(supersede ? { supersede } : {}),
-				...(speakerOnly ? { speakerOnly } : {}),
-				...(classes ? { classes } : {}),
-				...(named ? { approvers: named } : {}),
-			};
+			return joined(named);
 		}
 		return awaited(named, [], controller, turn.signal, from.timeoutMs).then(
-			(approvers) => {
-				if (approvers === STOPPED) return STOPPED;
-				return {
-					action: text,
-					...(copy ? { copy } : {}),
-					...(supersede ? { supersede } : {}),
-					...(speakerOnly ? { speakerOnly } : {}),
-					...(classes ? { classes } : {}),
-					...(approvers ? { approvers } : {}),
-				};
-			},
+			(approvers) => (approvers === STOPPED ? STOPPED : joined(approvers)),
 		);
 	};
 	return isPromise(answer) ? answer.then(join) : join(answer);
