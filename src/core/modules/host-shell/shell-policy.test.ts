@@ -306,6 +306,29 @@ describe("the classes of a held shell call", () => {
 		]);
 	});
 
+	test("a push that prunes remote refs is shell.force-push", () => {
+		expect(classes(`${prep()}git push --prune origin`)).toEqual([
+			"shell.force-push",
+		]);
+		expect(classes(`${prep()}git push origin --prune refs/heads/*`)).toEqual([
+			"shell.force-push",
+		]);
+	});
+
+	test("a redirect or tee to a device other than /dev/null is shell.disk", () => {
+		const table: [string, string][] = [
+			["echo x > /dev/sda", "shell.disk"],
+			["cat img >> /dev/nvme0n1", "shell.disk"],
+			["echo x | tee /dev/sda", "shell.disk"],
+			["echo x | tee -a /dev/disk0", "shell.disk"],
+			["echo x 2> /dev/sda", "shell.disk"],
+		];
+		for (const [command, expected] of table)
+			expect([command, classes(command)]).toEqual([command, [expected]]);
+		expect(classes("echo x > /dev/null")).toBeUndefined();
+		expect(classes("echo x | tee /dev/null")).toBeUndefined();
+	});
+
 	test("a push the policy lets run has no class", () => {
 		expect(classes(`${prep()}git push origin HEAD:main`, OWN)).toBeUndefined();
 	});

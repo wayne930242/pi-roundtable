@@ -2,6 +2,7 @@ import { basename } from "node:path";
 import type { HoldContext, HoldRule } from "../../holds.ts";
 import type { PushPolicy } from "./git-push.ts";
 import {
+	deviceTarget,
 	follow,
 	type LineState,
 	lineState,
@@ -158,7 +159,10 @@ function heldReasons(
 		if (op === ">" || op === ">>") {
 			const target = words[i + 1];
 			if (target && !writable(target, state))
-				found.push({ reason: `writes to ${target}`, class: "shell.write" });
+				found.push({
+					reason: `writes to ${target}`,
+					class: deviceTarget(target, state) ? "shell.disk" : "shell.write",
+				});
 		}
 	}
 	return [...found, ...programHeld(words, state, policy)];

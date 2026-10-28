@@ -165,9 +165,20 @@ export function rmHeld(
  */
 export function writable(word: string, state: LineState): boolean {
 	if (word === "/dev/null") return true;
-	const path =
+	return insideRoots(targetPath(word, state), state);
+}
+
+/** Where a write to the word lands: the word resolved from the line, else from the workspace, else as written. */
+function targetPath(word: string, state: LineState): string {
+	return (
 		resolvePath(word, state) ??
 		resolvePath(word, { ...state, vars: new Map(), cwd: state.workspace }) ??
-		word;
-	return insideRoots(path, state);
+		word
+	);
+}
+
+/** Whether a write to the word reaches a device node, such as a disk, rather than `/dev/null`. */
+export function deviceTarget(word: string, state: LineState): boolean {
+	const path = targetPath(word, state);
+	return path !== "/dev/null" && under(path, "/dev");
 }

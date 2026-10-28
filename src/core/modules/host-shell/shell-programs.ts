@@ -1,6 +1,6 @@
 import { assistantName } from "../../i18n/index.ts";
 import { ownPush, type PushPolicy } from "./git-push.ts";
-import { type LineState, writable } from "./shell-paths.ts";
+import { deviceTarget, type LineState, writable } from "./shell-paths.ts";
 
 /**
  * The hold classes of the shell rule, as `shell.<class>` ids that `HoldRule.holdClasses` lists for
@@ -82,6 +82,7 @@ const PACKAGE_VERBS = new Set([
 function rewritesRemote(arg: string): boolean {
 	return (
 		arg === "--mirror" ||
+		arg === "--prune" ||
 		arg === "--delete" ||
 		arg === "-d" ||
 		arg.startsWith("+") ||
@@ -184,7 +185,10 @@ export function verbHeld(
 				(a) => !a.startsWith("-") && !writable(a, state),
 			);
 			return target
-				? { reason: `writes to ${target}`, class: "shell.write" }
+				? {
+						reason: `writes to ${target}`,
+						class: deviceTarget(target, state) ? "shell.disk" : "shell.write",
+					}
 				: undefined;
 		}
 		default:
