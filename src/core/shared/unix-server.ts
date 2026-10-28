@@ -6,6 +6,7 @@ import type { Server, WebSocketHandler } from "bun";
  * turns and quiet model streams. Bun 1.4.2 honors `idleTimeout` on unix sockets, but its
  * types reject the option there, hence the cast. A stale socket file is removed first.
  * `error` answers a failure raised outside the fetch handler; without it Bun's own page is sent.
+ * `maxRequestBodySize` is the most bytes of request body, 413 over it; without it Bun's default.
  */
 export function serveUnix(
 	socketPath: string,
@@ -13,7 +14,10 @@ export function serveUnix(
 		request: Request,
 		server: Server<undefined>,
 	) => Response | Promise<Response>,
-	options?: { error?: (error: Error) => Response | Promise<Response> },
+	options?: {
+		error?: (error: Error) => Response | Promise<Response>;
+		maxRequestBodySize?: number;
+	},
 ): Server<undefined>;
 /**
  * Serves HTTP and WebSockets on a unix socket: `websocket` serves the sockets `fetch` upgrades
@@ -27,6 +31,7 @@ export function serveUnix<WebSocketData>(
 	) => Response | undefined | Promise<Response | undefined>,
 	options: {
 		error?: (error: Error) => Response | Promise<Response>;
+		maxRequestBodySize?: number;
 		websocket: WebSocketHandler<WebSocketData>;
 	},
 ): Server<WebSocketData>;
@@ -38,6 +43,7 @@ export function serveUnix<WebSocketData>(
 	) => Response | undefined | Promise<Response | undefined>,
 	options: {
 		error?: (error: Error) => Response | Promise<Response>;
+		maxRequestBodySize?: number;
 		websocket?: WebSocketHandler<WebSocketData>;
 	} = {},
 ): Server<WebSocketData> {
@@ -47,6 +53,9 @@ export function serveUnix<WebSocketData>(
 		idleTimeout: 0,
 		fetch,
 		...(options.error ? { error: options.error } : {}),
+		...(options.maxRequestBodySize === undefined
+			? {}
+			: { maxRequestBodySize: options.maxRequestBodySize }),
 		...(options.websocket ? { websocket: options.websocket } : {}),
 	};
 	// SAFETY: these are Bun's unix-socket options; only `idleTimeout` is missing from its types.

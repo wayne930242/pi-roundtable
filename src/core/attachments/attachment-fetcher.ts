@@ -1,10 +1,13 @@
 import { mkdirSync } from "node:fs";
+import { open, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
+import type { AttachmentContent } from "../contract/channels.ts";
 import type {
 	AttachmentFailure,
 	AttachmentRef,
 	StoredAttachment,
 } from "../domain/attachment.ts";
+import { PluginError } from "../errors.ts";
 import { plainText } from "./attachment-name.ts";
 
 export const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
@@ -23,12 +26,16 @@ export interface FetchRequest {
 	signal?: AbortSignal;
 	/** Gives up on a file that sends no byte for this long, and goes on to the next; default 10 s. */
 	idleMs?: number;
+	/** The most bytes of one file; default `MAX_ATTACHMENT_BYTES`. Holds a ref, a file, a stream and a download alike. */
+	maxBytes?: number;
 	/**
 	 * Reads a ref through the surface that made it. A function that answers a promise is the ref's
 	 * only source: the ref is never fetched over the network, and a rejection fails that file.
-	 * `undefined` = the surface has no reader, and the ref's URL is downloaded.
+	 * The answer is the bytes, the path of a file to copy or a stream to store; the last two are
+	 * never held whole in memory. `undefined` = the surface has no reader, and the ref's URL is
+	 * downloaded.
 	 */
-	read?: (ref: AttachmentRef) => Promise<Uint8Array> | undefined;
+	read?: (ref: AttachmentRef) => Promise<AttachmentContent> | undefined;
 }
 
 export interface FetchResult {
@@ -133,6 +140,79 @@ function untilAborted<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
 	});
 }
 
+/** The refusal for a file over the limit, such as `larger than 25 MB (26214401 bytes)`. */
+function tooLarge(limit: number, size: number): string {
+	return `larger than ${Number((limit / 1024 / 1024).toFixed(1))} MB (${size} bytes)`;
+}
+
+/**
+ * Writes a stream to `path` as it comes, never holding more than a chunk. Returns the bytes
+ * written, or the observed size once the stream passes `limit`, in which case nothing is left
+ * behind; a failure or an abort removes the partial file too.
+ */
+async function storeStream(
+	stream: ReadableStream<Uint8Array>,
+	path: string,
+	limit: number,
+	watch: IdleWatch,
+): Promise<number | { tooLarge: number }> {
+	const { signal } = watch;
+	const reader = stream.getReader();
+	// A body that stalls ends with the signal, also when the fetch itself ignores it.
+	const stop = () => void reader.cancel(signal.reason).catch(() => {});
+	signal.addEventListener("abort", stop, { once: true });
+	let size = 0;
+	let handle: Awaited<ReturnType<typeof open>> | undefined;
+	let kept = false;
+	try {
+		if (signal.aborted) throw signal.reason ?? new Error("aborted");
+		handle = await open(path, "w");
+		for (;;) {
+			const { done, value } = await reader.read();
+			if (done) break;
+			watch.touch();
+			size += value.byteLength;
+			if (size > limit) {
+				await reader.cancel();
+				return { tooLarge: size };
+			}
+			await handle.write(value);
+		}
+		// A cancelled reader reads as the end of the body, so a cut-short body is not a whole file.
+		if (signal.aborted) throw signal.reason ?? new Error("aborted");
+		await handle.close();
+		handle = undefined;
+		kept = true;
+		return size;
+	} finally {
+		signal.removeEventListener("abort", stop);
+		reader.releaseLock();
+		await handle?.close().catch(() => {});
+		if (!kept) await rm(path, { force: true });
+	}
+}
+
+/** Stores what a surface handed over at `path`; the size, or the observed size once it is over `limit`. */
+async function storeContent(
+	content: AttachmentContent,
+	path: string,
+	limit: number,
+	watch: IdleWatch,
+): Promise<number | { tooLarge: number }> {
+	if (content instanceof Uint8Array) {
+		if (content.byteLength > limit) return { tooLarge: content.byteLength };
+		await Bun.write(path, content);
+		return content.byteLength;
+	}
+	if (content instanceof ReadableStream)
+		return storeStream(content, path, limit, watch);
+	const info = await stat(content.path);
+	if (!info.isFile()) throw new Error("not a regular file");
+	if (info.size > limit) return { tooLarge: info.size };
+	// The count in `storeStream` also holds a file that grows while it is copied.
+	return storeStream(Bun.file(content.path).stream(), path, limit, watch);
+}
+
 /** Downloads attachments one by one; a failed file is reported without stopping the others. */
 export async function fetchAttachments(
 	request: FetchRequest,
@@ -142,6 +222,11 @@ export async function fetchAttachments(
 	const failures: AttachmentFailure[] = [];
 	const { refs, dir, prefix, fromReference, signal } = request;
 	const idleMs = request.idleMs ?? DEFAULT_IDLE_MS;
+	const limit = request.maxBytes ?? MAX_ATTACHMENT_BYTES;
+	if (!Number.isSafeInteger(limit) || limit <= 0)
+		throw new PluginError(
+			`the attachment size limit (maxAttachmentBytes) must be a positive integer of bytes, not ${limit}`,
+		);
 	if (refs.length === 0) return { files, failures };
 
 	for (const [index, ref] of refs.entries()) {
@@ -151,60 +236,54 @@ export async function fetchAttachments(
 			fail("download failed: deadline passed or download aborted");
 			continue;
 		}
-		if (ref.size > MAX_ATTACHMENT_BYTES) {
-			fail(`larger than 25 MB (${ref.size} bytes)`);
+		if (ref.size > limit) {
+			fail(tooLarge(limit, ref.size));
 			continue;
 		}
 		const watch = new IdleWatch(idleMs, signal);
 		try {
 			// A directory that cannot be made fails the file, not the turn.
 			mkdirSync(dir, { recursive: true, mode: 0o700 });
-			const read = request.read?.(ref);
-			if (read) {
-				const data = await untilAborted(read, watch.signal);
-				if (data.byteLength > MAX_ATTACHMENT_BYTES) {
-					fail(`larger than 25 MB (${data.byteLength} bytes)`);
-					continue;
-				}
-				const file = `${prefix}-${index}-${safeFileName(ref.name)}`;
-				const path = join(dir, file);
-				await Bun.write(path, data);
-				files.push({
-					name: ref.name,
-					file,
-					path,
-					contentType: ref.contentType || "application/octet-stream",
-					size: data.byteLength,
-					fromReference,
-				});
-				continue;
-			}
-			const response = await untilAborted(
-				fetchImpl(ref.url, { signal: watch.signal }),
-				watch.signal,
-			);
-			if (!response.ok) {
-				await response.body?.cancel();
-				fail(`download failed with HTTP ${response.status}`);
-				continue;
-			}
-			const data = await readAttachmentBody(response, watch);
-			if (typeof data === "number") {
-				fail(`larger than 25 MB (${data} bytes)`);
-				continue;
-			}
 			const file = `${prefix}-${index}-${safeFileName(ref.name)}`;
 			const path = join(dir, file);
-			await Bun.write(path, data);
+			let contentType = ref.contentType || "application/octet-stream";
+			let stored: number | { tooLarge: number };
+			const read = request.read?.(ref);
+			if (read) {
+				stored = await storeContent(
+					await untilAborted(read, watch.signal),
+					path,
+					limit,
+					watch,
+				);
+			} else {
+				const response = await untilAborted(
+					fetchImpl(ref.url, { signal: watch.signal }),
+					watch.signal,
+				);
+				if (!response.ok) {
+					await response.body?.cancel();
+					fail(`download failed with HTTP ${response.status}`);
+					continue;
+				}
+				contentType =
+					ref.contentType ||
+					response.headers.get("content-type") ||
+					"application/octet-stream";
+				stored = response.body
+					? await storeStream(response.body, path, limit, watch)
+					: await Bun.write(path, new Uint8Array());
+			}
+			if (typeof stored === "object") {
+				fail(tooLarge(limit, stored.tooLarge));
+				continue;
+			}
 			files.push({
 				name: ref.name,
 				file,
 				path,
-				contentType:
-					ref.contentType ||
-					response.headers.get("content-type") ||
-					"application/octet-stream",
-				size: data.byteLength,
+				contentType,
+				size: stored,
 				fromReference,
 			});
 		} catch (error) {
@@ -216,45 +295,4 @@ export async function fetchAttachments(
 		}
 	}
 	return { files, failures };
-}
-
-/** Returns the bytes, or the observed size once the stream exceeds the limit. */
-async function readAttachmentBody(
-	response: Response,
-	watch: IdleWatch,
-): Promise<Uint8Array | number> {
-	if (!response.body) return new Uint8Array();
-	const { signal } = watch;
-	const reader = response.body.getReader();
-	const chunks: Uint8Array[] = [];
-	let size = 0;
-	// A body that stalls ends with the signal, also when the fetch itself ignores it.
-	const stop = () => void reader.cancel(signal.reason).catch(() => {});
-	signal.addEventListener("abort", stop, { once: true });
-	try {
-		if (signal.aborted) throw signal.reason ?? new Error("aborted");
-		for (;;) {
-			const { done, value } = await reader.read();
-			if (done) break;
-			watch.touch();
-			size += value.byteLength;
-			if (size > MAX_ATTACHMENT_BYTES) {
-				await reader.cancel();
-				return size;
-			}
-			chunks.push(value);
-		}
-		// A cancelled reader reads as the end of the body, so a cut-short body is not a whole file.
-		if (signal.aborted) throw signal.reason ?? new Error("aborted");
-	} finally {
-		signal.removeEventListener("abort", stop);
-		reader.releaseLock();
-	}
-	const data = new Uint8Array(size);
-	let offset = 0;
-	for (const chunk of chunks) {
-		data.set(chunk, offset);
-		offset += chunk.byteLength;
-	}
-	return data;
 }

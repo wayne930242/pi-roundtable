@@ -20,6 +20,14 @@ export interface HttpRoute {
 	path: { exact: string } | { prefix: string };
 	/** Omitted: every method, for a handler that answers the rest itself. */
 	methods?: readonly string[];
+	/**
+	 * The most bytes of request body this route takes, such as a plugin's upload limit plus its
+	 * multipart overhead. The listener serves the largest value among its routes (a route that
+	 * says nothing counts as `DEFAULT_MAX_REQUEST_BODY_BYTES`) unless the host set the listener's
+	 * own `maxRequestBodyBytes`, which decides; a request over it is answered 413 before the
+	 * handler runs. A positive integer.
+	 */
+	maxRequestBodyBytes?: number;
 	handle(request: Request): Response | Promise<Response>;
 	/**
 	 * Takes the route's WebSocket upgrade requests (GET with `Upgrade: websocket`); every other
@@ -37,8 +45,33 @@ export type ListenerAddress =
 	  }
 	| { port: number; hostname?: string };
 
-/** An address the host serves HTTP on, with the id routes name it by. */
-export type ListenerConfig = { id: string } & ListenerAddress;
+/**
+ * An address the host serves HTTP on, with the id routes name it by. `maxRequestBodyBytes` is the
+ * most bytes of request body the listener takes (a positive integer); without it the listener
+ * takes what its routes ask for, see `HttpRoute.maxRequestBodyBytes`.
+ */
+export type ListenerConfig = {
+	id: string;
+	maxRequestBodyBytes?: number;
+} & ListenerAddress;
+
+/** Bun's own default request body limit, 128 MiB, which a listener sets explicitly. */
+export const DEFAULT_MAX_REQUEST_BODY_BYTES = 128 * 1024 * 1024;
+
+/** The request body limit a listener is opened with: its own option, else its routes' largest ask, else the default. */
+export function requestBodyLimit(
+	listener: ListenerConfig,
+	routes: readonly HttpRoute[],
+): number {
+	if (listener.maxRequestBodyBytes !== undefined)
+		return listener.maxRequestBodyBytes;
+	const asked = routes.map(
+		(route) => route.maxRequestBodyBytes ?? DEFAULT_MAX_REQUEST_BODY_BYTES,
+	);
+	return asked.length === 0
+		? DEFAULT_MAX_REQUEST_BODY_BYTES
+		: Math.max(...asked);
+}
 
 /** The address of the listener `id`, without the id, as a copy a plugin cannot use to change the host's. */
 export function listenerAddress(
@@ -47,7 +80,7 @@ export function listenerAddress(
 ): Readonly<ListenerAddress> | undefined {
 	const found = listeners.find((listener) => listener.id === id);
 	if (!found) return undefined;
-	const { id: _id, ...address } = found;
+	const { id: _id, maxRequestBodyBytes: _limit, ...address } = found;
 	return Object.freeze(address);
 }
 
@@ -99,6 +132,14 @@ function validateLimits(name: string, websocket: WebSocketRoute): void {
 			);
 }
 
+/** Refuses a request body limit that is not a positive integer, naming what set it. */
+function validateBodyLimit(owner: string, value: number | undefined): void {
+	if (value !== undefined && !(Number.isSafeInteger(value) && value > 0))
+		throw new PluginError(
+			`${owner} sets maxRequestBodyBytes to ${value}, which is not a positive integer`,
+		);
+}
+
 /** Refuses routes on unknown listeners, reused names, and any request two routes could both take. */
 function validate(
 	listeners: readonly ListenerConfig[],
@@ -107,7 +148,10 @@ function validate(
 	const ids = new Set(listeners.map((l) => l.id));
 	if (ids.size !== listeners.length)
 		throw new PluginError("a listener is configured twice");
+	for (const listener of listeners)
+		validateBodyLimit(`listener ${listener.id}`, listener.maxRequestBodyBytes);
 	routes.forEach((route, index) => {
+		validateBodyLimit(`route ${route.name}`, route.maxRequestBodyBytes);
 		if (route.websocket && route.methods && !route.methods.includes("GET"))
 			throw new PluginError(
 				`route ${route.name} takes WebSockets, so its methods must include GET`,
@@ -209,11 +253,13 @@ function serveTcp(
 	hostname: string | undefined,
 	fetch: Fetch,
 	websocket: WebSocketHandler<Connection> | undefined,
+	maxRequestBodySize: number,
 ): Server<Connection> {
 	const options = {
 		port,
 		...(hostname ? { hostname } : {}),
 		idleTimeout: 0,
+		maxRequestBodySize,
 		fetch,
 		error: serverError,
 		...(websocket ? { websocket } : {}),
@@ -267,18 +313,20 @@ export class HttpListeners {
 						sockets: this.#sockets,
 					});
 				const websocket = this.#websocketHandler(listener.id, routes);
+				const maxRequestBodySize = requestBodyLimit(listener, routes);
 				if ("socketPath" in listener) {
 					this.#servers.push(
 						websocket
 							? serveUnix(listener.socketPath, handle, {
 									error: serverError,
+									maxRequestBodySize,
 									websocket,
 								})
 							: serveUnix(
 									listener.socketPath,
 									(request) =>
 										routeRequest(routes, request, listener.id, this.#logger),
-									{ error: serverError },
+									{ error: serverError, maxRequestBodySize },
 								),
 					);
 					chmodSync(listener.socketPath, listener.mode ?? 0o660);
@@ -288,6 +336,7 @@ export class HttpListeners {
 						listener.hostname,
 						handle,
 						websocket,
+						maxRequestBodySize,
 					);
 					this.#servers.push(server);
 					if (server.port !== undefined)

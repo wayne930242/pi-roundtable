@@ -1,4 +1,5 @@
 import type { TurnAttachments } from "../domain/attachment.ts";
+import { MAX_ATTACHMENT_BYTES } from "./attachment-fetcher.ts";
 import { plainContentType, plainText } from "./attachment-name.ts";
 
 /** A name a prompt can quote: no control or bidi characters, and no quote to close it early. */
@@ -22,8 +23,13 @@ export function withAttachmentsBlock(
 	const lines: string[] = [];
 	for (const file of attachments.files) {
 		const origin = file.fromReference ? ", from the replied-to message" : "";
+		// read_attachment reads no file over the size every surface takes; tools that take files can.
+		const large =
+			file.size > MAX_ATTACHMENT_BYTES
+				? ", too large for read_attachment; kept as a file for tools"
+				: "";
 		lines.push(
-			`- ${plainText(file.file)} (original name "${quotable(file.name)}", ${plainContentType(file.contentType)}, ${formatSize(file.size)}${origin})`,
+			`- ${plainText(file.file)} (original name "${quotable(file.name)}", ${plainContentType(file.contentType)}, ${formatSize(file.size)}${origin}${large})`,
 		);
 	}
 	for (const failure of attachments.failures) {

@@ -57,6 +57,15 @@ describe("openAttachment", () => {
 		);
 	});
 
+	test("stream() hands the file's bytes without reading it whole", async () => {
+		const dir = scratch();
+		await Bun.write(join(dir, "m1-0-notes.txt"), "hello");
+		const opened = await openAttachment(dir, "m1-0-notes.txt");
+		const chunks: Uint8Array[] = [];
+		for await (const chunk of opened.stream()) chunks.push(chunk);
+		expect(new TextDecoder().decode(Buffer.concat(chunks))).toBe("hello");
+	});
+
 	test("a file the core fetched without a record is named by its file name and typed by its extension", async () => {
 		const dir = scratch();
 		await Bun.write(join(dir, "m1-0-notes.txt"), "hello");

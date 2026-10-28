@@ -21,6 +21,7 @@ export type {
 	GroupStatus,
 	TeamStatus,
 } from "./core/agents/team-status.ts";
+export { MAX_ATTACHMENT_BYTES } from "./core/attachments/attachment-fetcher.ts";
 export type { AttachmentRetention } from "./core/attachments/attachment-retention.ts";
 export type {
 	ToolAttachment,
@@ -58,6 +59,8 @@ export type {
 export { AttachmentRefusal } from "./core/contract/attachments.ts";
 export type {
 	Admission,
+	AttachmentContent,
+	AttachmentFile,
 	AttachmentRef,
 	BackgroundRunsAs,
 	BackgroundTarget,
@@ -181,6 +184,7 @@ export type {
 	ListenerAddress,
 	ListenerConfig,
 } from "./core/http/listeners.ts";
+export { DEFAULT_MAX_REQUEST_BODY_BYTES } from "./core/http/listeners.ts";
 export type {
 	RouteSocket,
 	WebSocketAccept,

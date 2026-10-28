@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { extractText, getDocumentProxy } from "unpdf";
 import { wasExpired } from "../attachments/attachment-expiry.ts";
+import { MAX_ATTACHMENT_BYTES } from "../attachments/attachment-fetcher.ts";
 import { isAttachmentName, plainText } from "../attachments/attachment-name.ts";
 import { AttachmentExpiredError } from "../attachments/tool-attachment.ts";
 
@@ -78,6 +79,11 @@ export async function readAttachment(
 			throw new AttachmentExpiredError(plainText(file));
 		throw new Error(`no attachment named "${file}" in this channel`);
 	}
+	// A file a surface took past the default limit is for tools that take files, not for reading whole.
+	if (handle.size > MAX_ATTACHMENT_BYTES)
+		throw new Error(
+			`"${plainText(file)}" is too large to read as text (${handle.size} bytes); it is kept as a file for tools that take files.`,
+		);
 	let bytes: Uint8Array;
 	try {
 		bytes = new Uint8Array(await handle.arrayBuffer());

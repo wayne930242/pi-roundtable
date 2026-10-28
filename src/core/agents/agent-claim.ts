@@ -99,6 +99,9 @@ export function agentClaim(options: AgentClaimOptions): ChannelClaim {
 			fetchImpl,
 			{
 				...options.attachmentDownload,
+				...(surfaceOf?.maxAttachmentBytes === undefined
+					? {}
+					: { maxBytes: surfaceOf.maxAttachmentBytes }),
 				...(reader ? { read: (ref) => reader(message.channel, ref) } : {}),
 			},
 		);

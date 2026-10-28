@@ -394,3 +394,164 @@ describe("refs a surface reads itself", () => {
 		expect(result.files[0]?.size).toBe(4);
 	});
 });
+
+describe("attachments over the default limit", () => {
+	const MIB = 1024 * 1024;
+	const neverFetched: typeof fetch = Object.assign(
+		async () => {
+			throw new Error("fetched");
+		},
+		{ preconnect: fetch.preconnect },
+	);
+
+	/** A file of `size` bytes outside the store, with a known first and last byte. */
+	async function sourceFile(size: number): Promise<string> {
+		const dir = mkdtempSync(join(tmpdir(), "roundtable-source-"));
+		dirs.push(dir);
+		const path = join(dir, "big.bin");
+		const data = new Uint8Array(size);
+		data[0] = 7;
+		data[size - 1] = 9;
+		await Bun.write(path, data);
+		return path;
+	}
+
+	test("a file handed by path is stored past 25 MiB when the surface allows it", async () => {
+		const input = request();
+		const path = await sourceFile(30 * MIB);
+		const first = input.refs[0];
+		if (!first) throw new Error("no ref");
+		const result = await fetchAttachments(
+			{
+				...input,
+				refs: [{ ...first, size: 30 * MIB }],
+				maxBytes: 100 * MIB,
+				read: () => Promise.resolve({ path }),
+			},
+			neverFetched,
+		);
+		expect(result.failures).toEqual([]);
+		const stored = result.files[0];
+		expect(stored?.size).toBe(30 * MIB);
+		const copy = Bun.file(stored?.path ?? "");
+		expect(copy.size).toBe(30 * MIB);
+		const bytes = new Uint8Array(await copy.arrayBuffer());
+		expect([bytes[0], bytes[30 * MIB - 1]]).toEqual([7, 9]);
+		// The source stays where the surface keeps it.
+		expect(await Bun.file(path).exists()).toBe(true);
+	});
+
+	test("the same file is refused with the default limit", async () => {
+		const input = request();
+		const path = await sourceFile(26 * MIB);
+		const result = await fetchAttachments(
+			{ ...input, read: () => Promise.resolve({ path }) },
+			neverFetched,
+		);
+		expect(result.files).toEqual([]);
+		expect(result.failures[0]?.reason).toBe(
+			`larger than 25 MB (${26 * MIB} bytes)`,
+		);
+		expect(readdirSync(input.dir)).toEqual([]);
+	});
+
+	test("the refusal names the surface's own limit", async () => {
+		const input = request();
+		const path = await sourceFile(3 * MIB);
+		const result = await fetchAttachments(
+			{ ...input, maxBytes: 2 * MIB, read: () => Promise.resolve({ path }) },
+			neverFetched,
+		);
+		expect(result.failures[0]?.reason).toBe(
+			`larger than 2 MB (${3 * MIB} bytes)`,
+		);
+		expect(readdirSync(input.dir)).toEqual([]);
+	});
+
+	test("the size the ref reports is checked against the surface's limit", async () => {
+		const input = request();
+		const first = input.refs[0];
+		if (!first) throw new Error("no ref");
+		const result = await fetchAttachments(
+			{
+				...input,
+				refs: [{ ...first, size: 101 * MIB }],
+				maxBytes: 100 * MIB,
+				read: () => Promise.reject(new Error("not read")),
+			},
+			neverFetched,
+		);
+		expect(result.failures[0]?.reason).toBe(
+			`larger than 100 MB (${101 * MIB} bytes)`,
+		);
+	});
+
+	test("a path that is not a file fails that file only", async () => {
+		const input = request();
+		const result = await fetchAttachments(
+			{
+				...input,
+				read: () => Promise.resolve({ path: join(input.dir, "missing") }),
+			},
+			neverFetched,
+		);
+		expect(result.files).toEqual([]);
+		expect(result.failures[0]?.reason).toBe("download failed: ENOENT");
+		expect(readdirSync(input.dir)).toEqual([]);
+	});
+
+	test("a stream is stored as it comes and cut off at the limit", async () => {
+		const input = request();
+		const source = streamingResponse(5 * MIB);
+		const result = await fetchAttachments(
+			{
+				...input,
+				maxBytes: 2 * MIB,
+				read: () => Promise.resolve(source.response.body as ReadableStream),
+			},
+			neverFetched,
+		);
+		expect(result.files).toEqual([]);
+		expect(result.failures[0]?.reason).toContain("larger than 2 MB");
+		expect(source.pulled()).toBeLessThanOrEqual(3 * MIB);
+		expect(source.cancelled()).toBe(true);
+		expect(readdirSync(input.dir)).toEqual([]);
+	});
+
+	test("a stream within the limit is stored", async () => {
+		const input = request();
+		const source = streamingResponse(3 * MIB);
+		const result = await fetchAttachments(
+			{
+				...input,
+				maxBytes: 4 * MIB,
+				read: () => Promise.resolve(source.response.body as ReadableStream),
+			},
+			neverFetched,
+		);
+		expect(result.failures).toEqual([]);
+		expect(Bun.file(result.files[0]?.path ?? "").size).toBe(3 * MIB);
+	});
+
+	test("a download is also held to the surface's limit", async () => {
+		const input = request();
+		const over = await fetchAttachments(
+			{ ...input, maxBytes: 2 * MIB },
+			fetcher(streamingResponse(3 * MIB).response),
+		);
+		expect(over.failures[0]?.reason).toContain("larger than 2 MB");
+		const within = await fetchAttachments(
+			{ ...input, maxBytes: 30 * MIB },
+			fetcher(streamingResponse(26 * MIB).response),
+		);
+		expect(within.failures).toEqual([]);
+		expect(within.files[0]?.size).toBe(26 * MIB);
+	});
+
+	test("a limit that is not a positive integer is a programming error", async () => {
+		for (const maxBytes of [0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY])
+			await expect(
+				fetchAttachments({ ...request(), maxBytes }, neverFetched),
+			).rejects.toThrow("maxAttachmentBytes");
+	});
+});

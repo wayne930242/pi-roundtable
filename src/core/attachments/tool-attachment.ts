@@ -12,8 +12,10 @@ export interface ToolAttachment {
 	name: string;
 	contentType: string;
 	size: number;
-	/** The file's whole content. */
+	/** The file's whole content, in memory; for a large file prefer `stream()`. */
 	bytes(): Promise<Uint8Array>;
+	/** The file's content as a stream, for a file too large to hold in memory, such as a video. */
+	stream(): ReadableStream<Uint8Array>;
 }
 
 /** A file someone attached to the conversation, as a tool lists it. */
@@ -82,6 +84,23 @@ export async function openAttachment(
 			} catch {
 				throw new AttachmentLookupError(`"${shown}" could not be read`);
 			}
+		},
+		stream: () => {
+			const source = handle.stream().getReader();
+			return new ReadableStream<Uint8Array>({
+				async pull(controller) {
+					try {
+						const next = await source.read();
+						if (next.done) controller.close();
+						else controller.enqueue(next.value);
+					} catch {
+						controller.error(
+							new AttachmentLookupError(`"${shown}" could not be read`),
+						);
+					}
+				},
+				cancel: (reason) => source.cancel(reason),
+			});
 		},
 	};
 }

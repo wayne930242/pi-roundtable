@@ -5,7 +5,11 @@ import { PluginError } from "../errors.ts";
 import type { PromptScope, Prompts } from "../interactions/prompts.ts";
 import type { ChannelKey } from "../sessions.ts";
 import type { Speaker } from "../speakers.ts";
-import type { AttachmentRef, InboundMessage } from "./channels.ts";
+import type {
+	AttachmentContent,
+	AttachmentRef,
+	InboundMessage,
+} from "./channels.ts";
 
 /**
  * Splits a channel key, `<surface>:<id>`, at its first colon: the surface names the chat network
@@ -136,11 +140,25 @@ export interface ChatSurface {
 	 */
 	interim?(channel: ChannelKey, as?: PostAuthor): InterimPosts | undefined;
 	/**
-	 * The bytes of an attachment this surface made, such as a file the owner uploaded to a room.
-	 * A ref of a message on this surface is read here and never fetched over the network; a
-	 * rejection fails that file. Absent = the refs of its messages are downloaded from their URLs.
+	 * The content of an attachment this surface made, such as a file the owner uploaded to a room:
+	 * its bytes, or, for a file too large to hold in memory, `{ path }` of a file on the host or a
+	 * stream, which the core stores without buffering the whole. A ref of a message on this
+	 * surface is read here and never fetched over the network; a rejection fails that file. Absent
+	 * = the refs of its messages are downloaded from their URLs.
 	 */
-	readAttachment?(channel: ChannelKey, ref: AttachmentRef): Promise<Uint8Array>;
+	readAttachment?(
+		channel: ChannelKey,
+		ref: AttachmentRef,
+	): Promise<AttachmentContent>;
+	/**
+	 * The most bytes of one attachment a turn takes from this surface, for a ref, a file, a stream
+	 * or a download alike; default 25 MiB (`MAX_ATTACHMENT_BYTES`), which Discord keeps. A larger
+	 * file is refused as `larger than <n> MB`; a smaller value than the default is allowed.
+	 * An image over 25 MiB is still not shown to the model, and a text or PDF file over 25 MiB is
+	 * not read by `read_attachment`: both stay in the conversation's store, named in the turn's
+	 * `## Attachments` block, for tools that take files.
+	 */
+	readonly maxAttachmentBytes?: number;
 	/**
 	 * Shows what a running turn writes and which tools it runs, as it goes, such as a live preview
 	 * in a web chat. Called between the turn's start and its reply; a rejection is logged and the

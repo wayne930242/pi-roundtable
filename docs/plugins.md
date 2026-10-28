@@ -634,6 +634,8 @@ A key the contract does not have stops the start and names the closest one.
 A surface that takes a file as it arrives, such as Discord, hands the core a link, and the core downloads it into the conversation's attachment directory.
 The downloads of one message and of the message it replies to share a 60 second deadline, and a file that sends no byte for 10 seconds (the wait for its headers counts) is given up at once, so a stalled download costs 10 seconds, not the whole deadline. A file still to come when the deadline passes, a file that went quiet (`download failed: idle_timeout`), or one whose directory cannot be made, is reported as `download failed` and the turn goes on without it. `attachmentsOf(message, dir, logger, fetch?, { deadlineMs?, idleMs?, signal?, prepareImages? })` takes both limits; on the agent server they are `discord.attachmentDownload: { deadlineMs?, idleMs? }` (each 1,000 to 600,000 ms; defaults 60,000 and 10,000), for a host on a slow link or with large files. A failure reason carries a code only (`download failed: ENOTDIR`, `download failed: TimeoutError`, `download failed: error`), never the error's text, which could quote a path of the host.
 `prepareImages: false` (default `true`) downloads the files only: `images` is empty and an image that cannot be decoded is not reported, for a host that hands the files to the attachment store, which prepares the images itself, so they are not decoded twice and a failure is not reported twice.
+
+A surface may take files larger than the 25 MiB every surface has by default. It declares `maxAttachmentBytes` (a positive integer of bytes) on its `ChatSurface`, and `attachmentsOf` takes the same number as `maxBytes`; the limit holds a ref's reported `size`, a file, a stream and a download alike, and a file over it is reported as `larger than <n> MB (<bytes> bytes)` (`larger than 25 MB` by default, which is what Discord keeps). A surface that stored the file itself hands it over without reading it into memory: `readAttachment(channel, ref)` (and `read` for `attachmentsOf`) may answer an `AttachmentContent`, which is the bytes, `{ path }` (an `AttachmentFile`: the absolute path of a regular file the surface owns, copied into the conversation's attachment directory and left where it is) or a `ReadableStream<Uint8Array>` (stored as it comes). Neither is held whole in memory, and the count is kept while they are copied, so a file that grows is cut off at the limit; a failed or cut-off copy leaves nothing behind, and a path that is not a file fails that file with `download failed: ENOENT` (or the error's code). A stored file over 25 MiB is not inlined: an image is not shown to the model (it is reported as an image that could not be decoded) and `read_attachment` refuses a text or PDF file that large, saying it is too large to read as text; the `## Attachments` block marks the file `too large for read_attachment; kept as a file for tools`, and a tool takes it through `turn.attachment(file)` (`stream()` reads it without buffering it). Smaller text, PDF and image files behave as before.
 A plugin whose clients upload a file themselves, over HTTP for instance, has the file before any turn exists.
 `context.attachments` keeps such a file for the conversation until a turn uses it:
 
@@ -694,7 +696,7 @@ It returns the text the model reads, or `{ text, images? }` (`ToolOutput`) to sh
 Only a channel's transport sets it, never the message text or the model, so a tool may write it on a record it creates, such as an issue's source line; a tool that needs it fails closed when it is undefined.
 A claim passes it to `context.turns.run` as `origin`, and the hold of the same call sees it too, since `hold` receives the same `ToolTurn`.
 
-`turn.attachment(file)` opens a file someone attached to the conversation, by the name the turn's `## Attachments` block lists, and returns `{ file, name, contentType, size, bytes() }`: a tool passes a user's file on without the model carrying its bytes.
+`turn.attachment(file)` opens a file someone attached to the conversation, by the name the turn's `## Attachments` block lists, and returns `{ file, name, contentType, size, bytes(), stream() }` (`stream()` is the content as a `ReadableStream<Uint8Array>`, for a file too large to hold in memory): a tool passes a user's file on without the model carrying its bytes.
 Only the conversation's own files open; a path, a hidden name, or a missing file throws a `ToolRefusal` the model reads, and so does a file the host's [retention period](#retention-removing-used-files-after-a-period) removed, which says so.
 `turn.attachments?.()` lists those files, the newest first, as `{ file, name, contentType, size, addedAt }` (`ToolAttachmentInfo`): the names `attachment` opens and nothing else; a session that keeps no attachments lists none. The turns the core builds always have it; it is optional on the type for code that builds a turn by hand.
 Throw `ToolRefusal` for a call the model should correct; any other error fails the call.
@@ -1948,6 +1950,8 @@ The socket file's permission bits are `http.socketMode`, `0o660` by default: onl
 Widen it (`0o666`) only when the proxy runs as a user outside that group.
 More listeners than `public` come from `defineRoundtable`'s `listeners` override, each `{ id, socketPath, mode? }` or `{ id, port, hostname? }`, and a route attaches to one by its `id`.
 
+A listener takes request bodies up to 128 MiB (`DEFAULT_MAX_REQUEST_BODY_BYTES`, Bun's own default, set explicitly); a larger body is answered `413` before any handler runs. A route that takes bigger bodies, such as an upload endpoint, sets `maxRequestBodyBytes` on the `HttpRoute` (a positive integer: its upload limit plus the multipart overhead), and the listener opens with the largest value among its routes, a route that says nothing counting as the default. The host can fix the limit itself with `maxRequestBodyBytes` on a `ListenerConfig`, which then decides over the routes. The limit is per listener, not per route: a request to another route of the same listener may be as large. The same value holds a unix socket listener. A value that is not a positive integer is refused when the host starts, naming the route or listener.
+
 A route that also declares `websocket` takes WebSocket upgrades on its path; every other request still reaches `handle`, and its `methods`, when listed, must include `GET`.
 An upgrade is a `GET` with `Upgrade: websocket`; one without `Sec-WebSocket-Key` or with a `Sec-WebSocket-Version` other than `13` gets `400`, and any other method goes to `handle` as usual.
 An upgrade request first passes the Origin check: `origins` lists the `scheme://host[:port]` values a browser may connect from, exactly as a browser sends them, such as `https://chat.example.com` or `chrome-extension://<id>` (a lowercase scheme and no path, trailing slash, query, fragment, or user; another form, and `"null"`, is refused at startup), and a request with another Origin, or none, gets `403` without reaching the route. `"any"` skips the check, for clients that are not browsers.
@@ -2738,7 +2742,8 @@ The agent server claims `discord:` keys, and, only on a surface that declares `a
 | `stop()` | Disconnects when the host stops | nothing to stop |
 | `agentRooms` | `true` makes the surface host [agent rooms](#agent-rooms-on-any-surface): a conversation with each agent and group of the team, as `<surface>:agent.<name>` and `<surface>:group.<name>` | no rooms; the agent team answers only in Discord |
 | `threads` | A `SurfaceThreads` that hosts [dispatch threads](#dispatch-threads-on-any-surface): a background dispatch started in one of the surface's channels opens its thread there, and the thread is the conversation `<surface>:<id>` | the dispatch posts in the channel as before |
-| `readAttachment(channel, ref)` | Returns the bytes of an attachment this surface made, such as an upload to a room, as `Promise<Uint8Array>`; the agent server's claim reads the refs of the surface's messages here and never fetches them over the network, and a rejection fails that file. A claim of your own passes the same function as `read` to `attachmentsOf`, or its refs are downloaded | the refs' URLs are downloaded, up to 25 MB each |
+| `readAttachment(channel, ref)` | Returns the content of an attachment this surface made, such as an upload to a room, as `Promise<AttachmentContent>`: the bytes, `{ path }` of a file on the host, or a stream, the last two stored without holding them whole; the agent server's claim reads the refs of the surface's messages here and never fetches them over the network, and a rejection fails that file. A claim of your own passes the same function as `read` to `attachmentsOf`, or its refs are downloaded | the refs' URLs are downloaded, up to 25 MB each |
+| `maxAttachmentBytes` | The most bytes of one attachment a turn takes from this surface, for a ref, a file, a stream or a download alike; a positive integer, so a surface that keeps large uploads can raise it past 25 MiB. See [files from outside a turn](#contextattachments-files-from-outside-a-turn) | 25 MiB, as Discord's |
 | `formatting` | A short English text on how a reply renders here, such as "no Markdown tables"; the runtime appends it to the system prompt of every turn that replies on this surface, after the persona | nothing is appended |
 | `startTyping(channel)` | Shows a typing indicator until the returned function is called | none is shown |
 | `showStop(channel)` | Shows the owner a stop control until the returned function is called; using it calls `conversations.stop(channel)` | none is shown |
@@ -3958,7 +3963,9 @@ Import from the entries listed below; source area files are internal.
 | `ApprovedBy` | `pi-roundtable` | type |
 | `AskOption` | `pi-roundtable` | type |
 | `AskSupport` | `pi-roundtable` | type |
+| `AttachmentContent` | `pi-roundtable` | type |
 | `AttachmentFailure` | `pi-roundtable` | type |
+| `AttachmentFile` | `pi-roundtable` | type |
 | `AttachmentPort` | `pi-roundtable` | type |
 | `AttachmentRef` | `pi-roundtable` | type |
 | `AttachmentRefusal` | `pi-roundtable` | value |
@@ -3999,6 +4006,7 @@ Import from the entries listed below; source area files are internal.
 | `ConversationTurnInput` | `pi-roundtable` | type |
 | `ConversationTurns` | `pi-roundtable` | type |
 | `DELEGATION` | `pi-roundtable` | value |
+| `DEFAULT_MAX_REQUEST_BODY_BYTES` | `pi-roundtable` | value |
 | `DefineOverrides` | `pi-roundtable` | type |
 | `DirectChannelProvider` | `pi-roundtable` | type |
 | `DirectChannels` | `pi-roundtable` | type |
@@ -4055,6 +4063,7 @@ Import from the entries listed below; source area files are internal.
 | `Logger` | `pi-roundtable` | type |
 | `LOCAL_TEAM_ID` | `pi-roundtable` | value |
 | `MEMORY` | `pi-roundtable` | value |
+| `MAX_ATTACHMENT_BYTES` | `pi-roundtable` | value |
 | `MODES` | `pi-roundtable` | value |
 | `MEMORY_KINDS` | `pi-roundtable` | value |
 | `Memory` | `pi-roundtable` | type |

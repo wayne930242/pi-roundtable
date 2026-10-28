@@ -12,6 +12,26 @@ export interface AttachmentRef {
 	size: number;
 }
 
+/**
+ * A file on the host's disk that a surface hands the core in place of its bytes, such as an upload
+ * the surface stored. The core copies it into the conversation's attachment store as a stream and
+ * leaves the original where it is.
+ */
+export interface AttachmentFile {
+	/** Absolute path of a regular file the surface owns. */
+	path: string;
+}
+
+/**
+ * What a surface hands the core for an attachment it made: the bytes, or, for a file too large to
+ * hold in memory, a file on disk or a stream the core stores as it comes. A file or stream is
+ * held to the surface's `maxAttachmentBytes`, and never buffered whole.
+ */
+export type AttachmentContent =
+	| Uint8Array
+	| AttachmentFile
+	| ReadableStream<Uint8Array>;
+
 /** The facts a surface reports about one incoming message; it never decides who may talk. */
 export interface InboundMessage {
 	channel: ChannelKey;

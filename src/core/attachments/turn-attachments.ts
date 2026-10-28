@@ -1,3 +1,4 @@
+import type { AttachmentContent } from "../contract/channels.ts";
 import type { AttachmentRef, TurnAttachments } from "../domain/attachment.ts";
 import type { InboundMessage } from "../domain/conversation.ts";
 import type { Logger } from "../log.ts";
@@ -29,12 +30,15 @@ export async function collectAttachments(
 		 * the files on to something that prepares them itself.
 		 */
 		prepareImages?: boolean;
+		/** The most bytes of one file; default 25 MiB (`MAX_ATTACHMENT_BYTES`). */
+		maxBytes?: number;
 		/**
 		 * Reads a ref through the surface that made it. A function that answers a promise is the
-		 * ref's only source: it is never fetched, and a rejection fails that file. `undefined` = the
-		 * surface has no reader, and the ref's URL is downloaded.
+		 * ref's only source: it is never fetched, and a rejection fails that file. The answer is the
+		 * bytes, `{ path }` of a file or a stream, the last two stored without holding them whole.
+		 * `undefined` = the surface has no reader, and the ref's URL is downloaded.
 		 */
-		read?: (ref: AttachmentRef) => Promise<Uint8Array> | undefined;
+		read?: (ref: AttachmentRef) => Promise<AttachmentContent> | undefined;
 	},
 ): Promise<TurnAttachments> {
 	const { fetchImpl, logger } = options;
@@ -46,6 +50,7 @@ export async function collectAttachments(
 		: deadline;
 	const idle = {
 		...(options.idleMs === undefined ? {} : { idleMs: options.idleMs }),
+		...(options.maxBytes === undefined ? {} : { maxBytes: options.maxBytes }),
 		...(options.read ? { read: options.read } : {}),
 	};
 	const own = await fetchAttachments(
@@ -106,7 +111,8 @@ export function attachmentsOf(
 		idleMs?: number;
 		signal?: AbortSignal;
 		prepareImages?: boolean;
-		read?: (ref: AttachmentRef) => Promise<Uint8Array> | undefined;
+		maxBytes?: number;
+		read?: (ref: AttachmentRef) => Promise<AttachmentContent> | undefined;
 	} = {},
 ): Promise<TurnAttachments> {
 	return collectAttachments(message, dir, {

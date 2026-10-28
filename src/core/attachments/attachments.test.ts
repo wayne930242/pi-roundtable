@@ -52,6 +52,62 @@ describe("prepareImage", () => {
 	});
 });
 
+describe("files over 25 MiB", () => {
+	const big = 26 * 1024 * 1024;
+
+	test("read_attachment refuses a text file too large to read whole, and says where it is kept", async () => {
+		await Bun.write(join(dir, "huge.txt"), "a".repeat(big));
+		const error = await readAttachment(dir, "huge.txt").catch(
+			(e: unknown) => e,
+		);
+		expect(error).toBeInstanceOf(Error);
+		expect((error as Error).message).toContain("too large to read");
+		expect((error as Error).message).toContain(`${big} bytes`);
+		expect((error as Error).message).not.toContain(dir);
+	});
+
+	test("an image over 25 MiB is no model image, and its file stays", async () => {
+		const path = join(dir, "huge.png");
+		await Bun.write(path, new Uint8Array(big));
+		await expect(
+			prepareImage({ path, contentType: "image/png" }),
+		).rejects.toMatchObject({ reason: "byte-limit" });
+		expect(await Bun.file(path).exists()).toBe(true);
+	});
+
+	test("the Attachments block tells the model a large file is for tools, not read_attachment", () => {
+		const text = withAttachmentsBlock("hi", {
+			files: [
+				{
+					name: "movie.mov",
+					file: "m-0-movie.mov",
+					path: "/data/m-0-movie.mov",
+					contentType: "video/quicktime",
+					size: 60 * 1024 * 1024,
+					fromReference: false,
+				},
+				{
+					name: "small.txt",
+					file: "m-1-small.txt",
+					path: "/data/m-1-small.txt",
+					contentType: "text/plain",
+					size: 10,
+					fromReference: false,
+				},
+			],
+			images: [],
+			failures: [],
+		});
+		const lines = text.split("\n");
+		expect(lines.find((l) => l.includes("m-0-movie.mov"))).toContain(
+			"too large for read_attachment",
+		);
+		expect(lines.find((l) => l.includes("m-1-small.txt"))).not.toContain(
+			"too large",
+		);
+	});
+});
+
 describe("readAttachment", () => {
 	test("reads text in pieces and refuses paths and binaries", async () => {
 		await Bun.write(join(dir, "a.txt"), "x".repeat(70_000));

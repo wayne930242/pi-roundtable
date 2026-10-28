@@ -4,7 +4,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PluginError } from "../errors.ts";
 import { type Logger, silentLogger } from "../log.ts";
-import { HttpListeners, type HttpRoute, routeRequest } from "./listeners.ts";
+import {
+	DEFAULT_MAX_REQUEST_BODY_BYTES,
+	HttpListeners,
+	type HttpRoute,
+	requestBodyLimit,
+	routeRequest,
+} from "./listeners.ts";
 
 const answer =
 	(text: string, listener = "public", methods?: string[]) =>
@@ -282,5 +288,122 @@ describe("a route that fails", () => {
 		} finally {
 			http.stop();
 		}
+	});
+});
+
+describe("the request body limit", () => {
+	const takes = (limit?: number, name = "upload"): HttpRoute => ({
+		name,
+		listener: "public",
+		path: { prefix: `/${name}/` },
+		...(limit === undefined ? {} : { maxRequestBodyBytes: limit }),
+		handle: async (request) =>
+			new Response(String((await request.arrayBuffer()).byteLength)),
+	});
+
+	test("is Bun's 128 MiB, set explicitly, unless a route or the listener says otherwise", () => {
+		const listener = { id: "public", port: 0 } as const;
+		expect(DEFAULT_MAX_REQUEST_BODY_BYTES).toBe(128 * 1024 * 1024);
+		expect(requestBodyLimit(listener, [])).toBe(DEFAULT_MAX_REQUEST_BODY_BYTES);
+		expect(requestBodyLimit(listener, [takes()])).toBe(
+			DEFAULT_MAX_REQUEST_BODY_BYTES,
+		);
+		// The largest a route asks for, and a route that says nothing keeps the default.
+		expect(
+			requestBodyLimit(listener, [
+				takes(300 * 1024 * 1024, "a"),
+				takes(5, "b"),
+			]),
+		).toBe(300 * 1024 * 1024);
+		expect(
+			requestBodyLimit(listener, [takes(5, "a"), takes(undefined, "b")]),
+		).toBe(DEFAULT_MAX_REQUEST_BODY_BYTES);
+		// The host's own limit on the listener decides over its routes.
+		expect(
+			requestBodyLimit({ ...listener, maxRequestBodyBytes: 1000 }, [
+				takes(300 * 1024 * 1024),
+			]),
+		).toBe(1000);
+	});
+
+	test("a TCP listener answers 413 to a body over it and serves one within it", async () => {
+		const http = new HttpListeners(
+			[{ id: "public", port: 0, hostname: "127.0.0.1" }],
+			[takes(1024)],
+			silentLogger(),
+		);
+		http.start();
+		try {
+			const url = `http://127.0.0.1:${http.portOf("public")}/upload/x`;
+			const post = (size: number) =>
+				fetch(url, { method: "POST", body: new Uint8Array(size) });
+			const within = await post(1000);
+			expect([within.status, await within.text()]).toEqual([200, "1000"]);
+			expect((await post(4096)).status).toBe(413);
+		} finally {
+			await http.stop();
+		}
+	});
+
+	test("the host's listener option holds a unix socket to its limit too", async () => {
+		const dir = mkdtempSync(join(tmpdir(), "listeners-body-"));
+		const socket = join(dir, "public.sock");
+		const http = new HttpListeners(
+			[{ id: "public", socketPath: socket, maxRequestBodyBytes: 1024 }],
+			[takes(10 * 1024 * 1024)],
+			silentLogger(),
+		);
+		http.start();
+		try {
+			const post = (size: number) =>
+				fetch("http://localhost/upload/x", {
+					method: "POST",
+					body: new Uint8Array(size),
+					unix: socket,
+				});
+			const within = await post(1000);
+			expect([within.status, await within.text()]).toEqual([200, "1000"]);
+			expect((await post(4096)).status).toBe(413);
+		} finally {
+			await http.stop();
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	test("a limit that is not a positive integer is refused, naming the route or listener", () => {
+		for (const bad of [0, -1, 1.5, Number.NaN]) {
+			expect(
+				refused(
+					() =>
+						new HttpListeners(
+							[{ id: "public", port: 0 }],
+							[takes(bad)],
+							silentLogger(),
+						),
+				),
+			).toBeInstanceOf(PluginError);
+			expect(
+				refused(
+					() =>
+						new HttpListeners(
+							[{ id: "public", port: 0, maxRequestBodyBytes: bad }],
+							[],
+							silentLogger(),
+						),
+				),
+			).toBeInstanceOf(PluginError);
+		}
+		expect(
+			String(
+				refused(
+					() =>
+						new HttpListeners(
+							[{ id: "public", port: 0 }],
+							[takes(0, "avatars")],
+							silentLogger(),
+						),
+				),
+			),
+		).toContain("avatars");
 	});
 });
