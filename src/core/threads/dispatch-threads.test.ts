@@ -286,7 +286,7 @@ describe("dispatch threads on a surface other than Discord", () => {
 		expect(ledgerOf(ledgerPath)).toEqual({});
 	});
 
-	test("the sweep drops, with a warning, a thread whose surface no longer hosts threads", async () => {
+	test("the sweep keeps, with a warning, a thread whose surface hosts no threads at this start, and closes it once the surface is back", async () => {
 		const app = new FakeSurfaceThreads();
 		const ledgerPath = newLedger();
 		await overSurfaces([surfaceOf("app", app)], ledgerPath).threads.open(
@@ -298,12 +298,82 @@ describe("dispatch threads on a surface other than Discord", () => {
 			.build(recorded.logger)
 			.sweep();
 		expect(app.closed).toEqual([]);
-		expect(ledgerOf(ledgerPath)).toEqual({});
+		expect(Object.keys(ledgerOf(ledgerPath))).toEqual(["app:thread.1"]);
 		expect(
 			recorded.lines
 				.filter((line) => line.level === "warn")
 				.map((line) => line.message),
-		).toEqual(["dispatch thread dropped: its surface hosts no threads"]);
+		).toEqual([
+			"dispatch thread kept: its surface hosts no threads at this start",
+		]);
+		await overSurfaces([surfaceOf("app", app)], ledgerPath).threads.sweep();
+		expect(app.closed).toEqual(["thread.1"]);
+		expect(ledgerOf(ledgerPath)).toEqual({});
+	});
+
+	test("the sweep leaves a thread opened in this run open", async () => {
+		const app = new FakeSurfaceThreads();
+		const { threads, ledgerPath } = overSurfaces([surfaceOf("app", app)]);
+		const live = await threads.open("app:agent.x", "t");
+		await threads.sweep();
+		expect(app.closed).toEqual([]);
+		expect(Object.keys(ledgerOf(ledgerPath))).toEqual(["app:thread.1"]);
+		await live?.close();
+		expect(app.closed).toEqual(["thread.1"]);
+	});
+
+	test("a ledger entry that is not an object or has no parent is skipped with a warning, and the rest are swept", async () => {
+		const app = new FakeSurfaceThreads();
+		const ledgerPath = newLedger();
+		const entry = {
+			title: "t",
+			parent: "app:agent.x",
+			startedAt: new Date().toISOString(),
+		};
+		writeFileSync(
+			ledgerPath,
+			JSON.stringify({
+				"app:1": entry,
+				"app:2": null,
+				"app:3": entry,
+				"900": {},
+				"app:4": { parent: 5 },
+			}),
+		);
+		const recorded = recordingLogger();
+		const { build } = overSurfaces([surfaceOf("app", app)], ledgerPath);
+		await build(recorded.logger).sweep();
+		expect(app.closed).toEqual(["1", "3"]);
+		expect(recorded.lines.filter((line) => line.level === "warn").length).toBe(
+			3,
+		);
+	});
+
+	test("one thread that fails to close does not stop the sweep", async () => {
+		const app = new FakeSurfaceThreads();
+		const ledgerPath = newLedger();
+		const entry = {
+			title: "t",
+			parent: "app:agent.x",
+			startedAt: new Date().toISOString(),
+		};
+		writeFileSync(
+			ledgerPath,
+			JSON.stringify({ "app:1": entry, "app:2": entry }),
+		);
+		const failing: ChatSurface["threads"] = {
+			open: app.open.bind(app),
+			post: async (id, text) => {
+				if (id === "1") throw new Error("gone");
+				return app.post(id, text);
+			},
+			close: async (id) => {
+				if (id === "1") throw new Error("gone");
+				return app.close(id);
+			},
+		};
+		await overSurfaces([surfaceOf("app", failing)], ledgerPath).threads.sweep();
+		expect(app.closed).toEqual(["2"]);
 	});
 
 	test("options name the surfaces or the deprecated host, and exactly one", () => {

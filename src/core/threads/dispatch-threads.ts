@@ -116,6 +116,8 @@ export class DispatchThreads {
 	readonly #threadsOf: (channel: ChannelKey) => SurfaceThreads | undefined;
 	/** The threads still open, by their channel key, `<surface>:<id>`. */
 	readonly #open = new Map<ChannelKey, LedgerEntry>();
+	/** The keys the ledger held at construction: the threads of an earlier run, which `sweep` closes. */
+	readonly #left = new Set<ChannelKey>();
 
 	constructor(options: DispatchThreadsOptions) {
 		this.#options = options;
@@ -144,23 +146,32 @@ export class DispatchThreads {
 		}
 		if (typeof parsed !== "object" || parsed === null)
 			throw new Error(`${ledgerPath} must hold a JSON object`);
-		for (const [key, entry] of Object.entries(parsed))
-			this.#open.set(this.#keyed(key, entry as LedgerEntry), entry);
+		for (const [key, entry] of Object.entries(parsed)) {
+			const channel = this.#keyed(key, entry);
+			if (!channel) continue;
+			this.#open.set(channel, entry as LedgerEntry);
+			this.#left.add(channel);
+		}
 	}
 
 	/**
-	 * The channel key of a ledger entry. Before 0.23 the ledger was keyed by the Discord thread's
-	 * bare id; the surface then follows from the entry's parent.
+	 * The channel key of a ledger entry, or undefined (with a warning) for one that cannot be
+	 * read. Before 0.23 the ledger was keyed by the Discord thread's bare id; the surface then
+	 * follows from the entry's parent, and an entry with no usable parent is skipped.
 	 */
-	#keyed(key: string, entry: LedgerEntry): ChannelKey {
+	#keyed(key: string, entry: unknown): ChannelKey | undefined {
+		const { logger, ledgerPath } = this.#options;
+		const parent = (entry as { parent?: unknown } | null)?.parent;
+		if (typeof parent !== "string" || !parent.includes(":")) {
+			logger.warn(
+				{ ledgerPath, thread: key },
+				"dispatch thread skipped: its ledger entry has no parent channel",
+			);
+			return undefined;
+		}
 		const at = key.indexOf(":");
 		if (at > 0) return channelKey(key.slice(0, at), key.slice(at + 1));
-		const { ledgerPath } = this.#options;
-		if (typeof entry?.parent !== "string" || !entry.parent.includes(":"))
-			throw new Error(
-				`${ledgerPath}: the thread ${key} has no parent channel to find its surface by`,
-			);
-		return channelKey(parseChannelKey(entry.parent).surface, key);
+		return channelKey(parseChannelKey(parent as ChannelKey).surface, key);
 	}
 
 	/** Opens the dispatch's thread under `origin`, posting `intro` first; never rejects. */
@@ -196,21 +207,34 @@ export class DispatchThreads {
 		return thread;
 	}
 
-	/** Closes the threads a restart left open; their dispatches never report. */
+	/**
+	 * Closes the threads an earlier run left open, those the ledger held at construction; their
+	 * dispatches never report. A thread opened since is live and stays. One whose surface is
+	 * absent stays in the ledger for the next start, and one failure does not stop the rest.
+	 */
 	async sweep(): Promise<void> {
-		for (const [channel, entry] of [...this.#open]) {
-			const threads = this.#threadsOf(entry.parent);
-			if (threads) {
+		const { logger } = this.#options;
+		for (const channel of [...this.#left]) {
+			this.#left.delete(channel);
+			const entry = this.#open.get(channel);
+			if (!entry) continue;
+			try {
+				const threads = this.#threadsOf(entry.parent);
+				if (!threads) {
+					logger.warn(
+						{ thread: channel, parent: entry.parent },
+						"dispatch thread kept: its surface hosts no threads at this start",
+					);
+					continue;
+				}
+				// The thread is closed, never mentioned, so its mention stays empty.
 				await this.#thread(channel, threads).close(messages().restartNotice);
-				continue;
+			} catch (error) {
+				logger.warn(
+					{ thread: channel, err: error },
+					"dispatch thread not swept",
+				);
 			}
-			// Its surface is no longer installed or hosts no threads, so nothing can close it.
-			this.#options.logger.warn(
-				{ thread: channel, parent: entry.parent },
-				"dispatch thread dropped: its surface hosts no threads",
-			);
-			this.#open.delete(channel);
-			this.#write();
 		}
 	}
 

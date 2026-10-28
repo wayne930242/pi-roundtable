@@ -2780,7 +2780,7 @@ The thread is the conversation `channelKey(surface, id)` (`app:thread.<uuid>` on
 The `DispatchThread` it returns has `id`, `channel`, `mention`, `post(text)`, `interim?` and `close(report?)`, which posts the report and archives the thread once.
 
 The host keeps a ledger of the threads still open, `dispatch-threads.json` in the data directory, keyed by each thread's channel key.
-Once every service has started after a restart, it closes the threads the last run left open through their surfaces, with a restart notice; a thread whose surface no longer hosts threads is dropped with a warning.
+Once every service has started after a restart, it closes the threads the last run left open through their surfaces, with a restart notice; a thread whose surface no longer hosts threads stays in the ledger with a warning and is retried at the next start.
 A ledger written before 0.23, keyed by Discord thread id, is read as `discord:` threads.
 
 The Discord surface implements `SurfaceThreads` through its current connection, and `DISCORD.threads` is the same instance as `THREADS`, so a plugin that reads either sees no change.
