@@ -1,3 +1,8 @@
+import {
+	type CharacterSpec,
+	resolveCharacter,
+	suggestCharacter,
+} from "../../characters/index.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
 import { AgentError } from "../domain/errors.ts";
 import type { AgentTurnScope } from "../domain/ports.ts";
@@ -29,8 +34,8 @@ export class TeamLifecycle {
 
 	/**
 	 * Inserts the seed agents, gives every active agent a channel, archives agents and groups
-	 * whose channels were deleted while the assistant was down, and draws missing avatars in the
-	 * background. Without Discord channels the agents live in rooms, which need no setup, so
+	 * whose channels were deleted while the assistant was down, and dresses agents without a
+	 * character in the background. Without Discord channels the agents live in rooms, which need no setup, so
 	 * none is made or checked.
 	 */
 	async start(): Promise<void> {
@@ -39,7 +44,7 @@ export class TeamLifecycle {
 		if (added.length > 0) logger.info({ added }, "seed agents added");
 		if (channels) await this.#startChannels(channels);
 		this.#ctx.changed();
-		void this.#drawMissingAvatars();
+		void this.#dressMissing();
 	}
 
 	async #startChannels(channels: AgentChannels): Promise<void> {
@@ -78,44 +83,44 @@ export class TeamLifecycle {
 		}
 	}
 
-	async #drawMissingAvatars(): Promise<void> {
-		const { store, studio, logger } = this.#ctx.options;
-		if (studio.canDraw === false) return this.#generateMissingAvatars();
-		for (const agent of store.agents()) {
-			if (agent.status !== "active" || agent.avatarHash) continue;
-			try {
-				const hash = await studio.draw(agent.avatarPrompt);
-				await store.updateAgent(agent.name, { avatarHash: hash });
-				logger.info({ agent: agent.name }, "avatar drawn");
-			} catch (error) {
-				logger.warn({ agent: agent.name, err: error }, "avatar not drawn");
-			}
-		}
-	}
-
 	/**
-	 * Without an image provider, gives each active agent that has no picture the one made from
-	 * its display name, and says so once instead of once per agent on every boot.
+	 * Dresses every active agent that has no character: the seed of that name gives it (its fields
+	 * over what the role suggests), otherwise the suggestion for the role, spread over the looks
+	 * already worn. The picture is rendered and replaces the old hash. A failure is logged for that
+	 * agent, which keeps its picture until the next start; a second pass finds nothing to do.
 	 */
-	async #generateMissingAvatars(): Promise<void> {
-		const { store, studio, logger } = this.#ctx.options;
-		if (!studio.fallback) return;
-		let generated = 0;
+	async #dressMissing(): Promise<void> {
+		const { store, studio, seeds, logger } = this.#ctx.options;
+		const seeded = new Map(seeds().map((seed) => [seed.name, seed]));
+		const worn: CharacterSpec[] = store
+			.agents()
+			.flatMap((agent) =>
+				agent.status === "active" && agent.character ? [agent.character] : [],
+			);
 		for (const agent of store.agents()) {
-			if (agent.status !== "active" || agent.avatarHash) continue;
+			if (agent.status !== "active" || agent.character) continue;
 			try {
-				const avatarHash = await studio.fallback(agent.displayName, agent.name);
-				await store.updateAgent(agent.name, { avatarHash });
-				generated++;
+				const suggested = suggestCharacter(agent, worn);
+				const wanted = seeded.get(agent.name)?.character;
+				const character = wanted
+					? resolveCharacter(
+							wanted.class !== undefined && !wanted.palette && !wanted.colors
+								? { ...wanted, colors: suggested.colors }
+								: wanted,
+							suggested,
+						)
+					: suggested;
+				const avatarHash = await studio.render(character);
+				await store.updateAgent(agent.name, { character, avatarHash });
+				worn.push(character);
+				logger.info(
+					{ agent: agent.name, class: character.class },
+					"agent dressed",
+				);
 			} catch (error) {
-				logger.warn({ agent: agent.name, err: error }, "avatar not generated");
+				logger.warn({ agent: agent.name, err: error }, "agent not dressed");
 			}
 		}
-		if (generated > 0)
-			logger.info(
-				{ generated },
-				"no image provider is configured; agents without a picture got one generated from their display name",
-			);
 	}
 
 	/** Starts an agent's or every group member's conversation over; call inside the channel's queue. */

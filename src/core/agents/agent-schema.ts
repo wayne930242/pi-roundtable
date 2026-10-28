@@ -1,3 +1,4 @@
+import { readCharacter } from "../../characters/index.ts";
 import { scopeToGuild } from "../db/guild-scope.ts";
 import type { Migration } from "../db/migrations.ts";
 import type { ThinkingLevel } from "../models.ts";
@@ -9,6 +10,8 @@ export interface AgentRow {
 	prompt: string;
 	avatar_prompt: string;
 	avatar_hash: string | null;
+	/** jsonb: the stored spec, an object, or null before the team dressed the agent. */
+	character: unknown | null;
 	channel_id: string | null;
 	model: string | null;
 	thinking: ThinkingLevel | null;
@@ -24,17 +27,21 @@ export interface GroupRow {
 	status: AgentStatus;
 }
 
-export const toAgent = (row: AgentRow): Agent => ({
-	name: row.name,
-	displayName: row.display_name,
-	prompt: row.prompt,
-	avatarPrompt: row.avatar_prompt,
-	...(row.avatar_hash ? { avatarHash: row.avatar_hash } : {}),
-	...(row.channel_id ? { channelId: row.channel_id } : {}),
-	...(row.model ? { model: row.model } : {}),
-	...(row.thinking ? { thinking: row.thinking } : {}),
-	status: row.status,
-});
+export const toAgent = (row: AgentRow): Agent => {
+	const character = readCharacter(row.character);
+	return {
+		name: row.name,
+		displayName: row.display_name,
+		prompt: row.prompt,
+		avatarPrompt: row.avatar_prompt,
+		...(character ? { character } : {}),
+		...(row.avatar_hash ? { avatarHash: row.avatar_hash } : {}),
+		...(row.channel_id ? { channelId: row.channel_id } : {}),
+		...(row.model ? { model: row.model } : {}),
+		...(row.thinking ? { thinking: row.thinking } : {}),
+		status: row.status,
+	};
+};
 
 export const toGroup = (row: GroupRow): AgentGroup => ({
 	name: row.name,
@@ -117,6 +124,13 @@ export function agentMigrations(guildId: string): Migration[] {
 			name: "agent-groups-channel-optional",
 			up: async (sql) => {
 				await sql`ALTER TABLE agent_groups ALTER COLUMN channel_id DROP NOT NULL`;
+			},
+		},
+		// The composed look, dressed in code at the team's start; rows keep their drawn picture until then.
+		{
+			name: "agents-character",
+			up: async (sql) => {
+				await sql`ALTER TABLE agents ADD COLUMN IF NOT EXISTS character jsonb`;
 			},
 		},
 	];

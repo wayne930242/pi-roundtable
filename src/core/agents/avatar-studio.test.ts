@@ -3,6 +3,8 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createCanvas, loadImage } from "canvas";
+import { resolveCharacter } from "../../characters/index.ts";
+import { ConfigError } from "../domain/errors.ts";
 import { ProviderError } from "../errors.ts";
 import { FileAvatarStudio, type ImageDrawer } from "./avatar-studio.ts";
 
@@ -154,5 +156,35 @@ describe("FileAvatarStudio", () => {
 		await s.init();
 		expect(failures).toEqual(["invalid-image"]);
 		expect(s.serve(new URL(s.url(undefined)).pathname)?.status).toBe(200);
+	});
+});
+
+describe("FileAvatarStudio.render", () => {
+	test("renders a 512 px PNG by content hash, the same hash for the same spec", async () => {
+		const s = await studio();
+		const spec = resolveCharacter({ class: "knight" });
+		const hash = await s.render(spec);
+		expect(await s.render(spec)).toBe(hash);
+		expect(await s.render(resolveCharacter({ class: "healer" }))).not.toBe(
+			hash,
+		);
+		const served = s.serve(`/avatars/${hash}.png`);
+		if (!served) throw new Error("not served");
+		const image = await loadImage(Buffer.from(await served.arrayBuffer()));
+		expect([image.width, image.height]).toEqual([512, 512]);
+	});
+
+	test("refuses to start when the rasterizer cannot draw SVG", async () => {
+		const failing = new FileAvatarStudio({
+			dir: mkdtempSync(join(tmpdir(), "roundtable-avatars-")),
+			referencePath: REFERENCE,
+			rasterize: async () => {
+				throw new Error("no librsvg");
+			},
+		});
+		const error = await failing.init().catch((e: unknown) => e);
+		expect(error).toBeInstanceOf(ConfigError);
+		expect((error as Error).message).toContain("SVG support");
+		expect((error as Error).message).toContain("no librsvg");
 	});
 });

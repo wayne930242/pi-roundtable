@@ -10,8 +10,7 @@ export const library = definePlugin({
 				displayName: "Librarian",
 				prompt:
 					"You keep the team's reading list. Answer briefly and cite what you were given.",
-				avatarPrompt:
-					"A calm librarian with round glasses and a stack of books",
+				character: { class: "scholar", palette: "azure" },
 			},
 		],
 	}),

@@ -37,6 +37,7 @@ import {
 import { opsOf, type ResolvedOps } from "./ops.ts";
 import {
 	bool,
+	characterInput,
 	guarded,
 	integer,
 	list,
@@ -285,7 +286,8 @@ const schema = shape({
 				name: text,
 				displayName: text,
 				prompt: text,
-				avatarPrompt: text,
+				character: optional(characterInput),
+				avatarPrompt: optional(text),
 				channelId: optional(text),
 			}),
 		),

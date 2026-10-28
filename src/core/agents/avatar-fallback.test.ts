@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import pino from "pino";
+import { resolveCharacter } from "../../characters/index.ts";
 import { AgentError } from "../domain/errors.ts";
 import { silentLogger } from "../log.ts";
 import type { AgentTurnScope } from "../sessions.ts";
@@ -51,10 +52,13 @@ function memoryStore(initial: Agent[]) {
 			name: string;
 			displayName: string;
 			prompt: string;
-			avatarPrompt: string;
+			avatarPrompt?: string;
 			channelId: string;
 		}) => {
-			const created = agent(input.name, input);
+			const created = agent(input.name, {
+				...input,
+				avatarPrompt: input.avatarPrompt ?? "",
+			});
 			rows.set(input.name, created);
 			return created;
 		},
@@ -72,6 +76,11 @@ function recordingStudio(kind: "none" | "draws" | "fails") {
 	return {
 		calls,
 		url: (hash: string | undefined) => `https://x/${hash ?? "default"}.png`,
+		render: async (spec: { class: string }) => {
+			calls.push(`render ${spec.class}`);
+			if (kind === "fails") throw new Error("the renderer is down");
+			return "r".repeat(64);
+		},
 		draw: async (prompt: string) => {
 			calls.push(`draw ${prompt}`);
 			if (kind === "fails") throw new Error("the provider is down");
@@ -148,29 +157,39 @@ const NEW_AGENT = {
 	task: "Look around.",
 };
 
-describe("agent_create and avatars, by whether an image provider is configured", () => {
-	test("with a provider it needs an avatar prompt and draws from it", async () => {
-		const { ctx, store, studio } = context("draws", [agent("coordinator")]);
-		const editing = new TeamEditing(ctx);
-		expect(editing.create(SCOPE, NEW_AGENT)).rejects.toThrow("avatar_prompt");
-		const said = await editing.create(SCOPE, {
-			...NEW_AGENT,
-			avatarPrompt: "a fox scout",
-		});
-		expect(said).toContain("its avatar is drawn");
-		expect(studio.calls).toEqual(["draw a fox scout"]);
-		expect(store.agent("scout")?.avatarHash).toBe("d".repeat(64));
+describe("agent_create and avatars", () => {
+	test("a new agent is dressed from its role and rendered, whether or not a provider is configured", async () => {
+		for (const kind of ["draws", "none"] as const) {
+			const { ctx, store, studio } = context(kind, [agent("coordinator")]);
+			const said = await new TeamEditing(ctx).create(SCOPE, {
+				...NEW_AGENT,
+				name: "researcher",
+				displayName: "Researcher",
+				prompt: "You research the literature.",
+			});
+			expect(said).toContain("its picture is the scholar look");
+			expect(studio.calls).toEqual(["render scholar"]);
+			expect(store.agent("researcher")).toMatchObject({
+				avatarPrompt: "",
+				avatarHash: "r".repeat(64),
+			});
+			expect(store.agent("researcher")?.character?.class).toBe("scholar");
+		}
 	});
 
-	test("without one it needs no avatar prompt and generates the picture from the display name", async () => {
-		const { ctx, store, studio } = context("none", [agent("coordinator")]);
-		const said = await new TeamEditing(ctx).create(SCOPE, NEW_AGENT);
-		expect(said).toContain("its avatar is generated from its display name");
-		expect(studio.calls).toEqual(["fallback Scout"]);
-		expect(store.agent("scout")).toMatchObject({
-			avatarPrompt: "",
-			avatarHash: "f".repeat(64),
+	test("the character given to the tool wins over the role", async () => {
+		const { ctx, store, studio } = context("draws", [agent("coordinator")]);
+		await new TeamEditing(ctx).create(SCOPE, {
+			...NEW_AGENT,
+			avatarPrompt: "ignored",
+			character: { class: "ranger", palette: "vert" },
 		});
+		expect(studio.calls).toEqual(["render ranger"]);
+		expect(store.agent("scout")?.character).toMatchObject({
+			class: "ranger",
+			palette: "vert",
+		});
+		expect(store.agent("scout")?.avatarPrompt).toBe("");
 	});
 
 	test("without one, redrawing refuses clearly and the picture stays", async () => {
@@ -191,68 +210,58 @@ describe("agent_create and avatars, by whether an image provider is configured",
 		);
 	});
 
-	test("with a provider that fails, a new agent keeps the neutral avatar and the error is reported", async () => {
-		const { ctx, store } = context("fails", [agent("coordinator")]);
-		const said = await new TeamEditing(ctx).create(SCOPE, {
-			...NEW_AGENT,
-			avatarPrompt: "a fox scout",
-		});
-		expect(said).toContain("its avatar could not be drawn (");
-		expect(said).toContain("the provider is down");
-		expect(store.agent("scout")?.avatarHash).toBeUndefined();
+	test("a render failure fails the create: no channel, no row", async () => {
+		const { ctx, store, created } = context("fails", [agent("coordinator")]);
+		const failure = new TeamEditing(ctx).create(SCOPE, NEW_AGENT);
+		expect(failure).rejects.toThrow("the renderer is down");
+		await failure.catch(() => undefined);
+		expect(store.agent("scout")).toBeUndefined();
+		expect(created).toEqual([]);
 	});
 });
 
-describe("startup avatars", () => {
+describe("startup dressing", () => {
 	const flush = () => Bun.sleep(20);
+	const worn = resolveCharacter({ class: "monk", palette: "sable" });
 	const missing = () => [
 		agent("coordinator"),
 		agent("infra"),
-		agent("done", { avatarHash: "c".repeat(64) }),
+		agent("done", { avatarHash: "c".repeat(64), character: worn }),
 	];
 
-	test("without a provider it generates the missing pictures and logs one info line", async () => {
+	test("each active agent without a character is dressed and rendered, the others left alone", async () => {
 		const { lines, logger } = capturedLog();
-		const { ctx, store, studio } = context("none", missing(), logger);
+		const { ctx, store, studio } = context("draws", missing(), logger);
 		await new TeamLifecycle(ctx).start();
 		await flush();
-		expect(studio.calls).toEqual(["fallback COORDINATOR", "fallback INFRA"]);
-		expect(store.agent("infra")?.avatarHash).toBe("f".repeat(64));
-		expect(lines).toEqual([
-			"info no image provider is configured; agents without a picture got one generated from their display name",
-		]);
+		expect(studio.calls).toHaveLength(2);
+		expect(store.agent("infra")?.avatarHash).toBe("r".repeat(64));
+		expect(store.agent("infra")?.character).toBeDefined();
+		expect(store.agent("done")?.character).toEqual(worn);
+		expect(store.agent("done")?.avatarHash).toBe("c".repeat(64));
+		expect(lines).toEqual(["info agent dressed", "info agent dressed"]);
 	});
 
-	test("without a provider and nothing missing it logs nothing", async () => {
+	test("with nothing missing it renders and logs nothing", async () => {
 		const { lines, logger } = capturedLog();
-		const { ctx } = context(
+		const { ctx, studio } = context(
 			"none",
-			[agent("coordinator", { avatarHash: "c".repeat(64) })],
+			[agent("coordinator", { avatarHash: "c".repeat(64), character: worn })],
 			logger,
 		);
 		await new TeamLifecycle(ctx).start();
 		await flush();
+		expect(studio.calls).toEqual([]);
 		expect(lines).toEqual([]);
 	});
 
-	test("with a provider it draws each one and logs each, as before", async () => {
+	test("a render that fails warns once per agent and leaves the old picture", async () => {
 		const { lines, logger } = capturedLog();
-		const { ctx, studio } = context("draws", missing(), logger);
+		const { ctx, store } = context("fails", missing(), logger);
 		await new TeamLifecycle(ctx).start();
 		await flush();
-		expect(studio.calls).toEqual([
-			"draw A portrait of coordinator.",
-			"draw A portrait of infra.",
-		]);
-		expect(lines).toEqual(["info avatar drawn", "info avatar drawn"]);
-	});
-
-	test("with a provider that fails it warns once per agent, as before", async () => {
-		const { lines, logger } = capturedLog();
-		const { ctx } = context("fails", missing(), logger);
-		await new TeamLifecycle(ctx).start();
-		await flush();
-		expect(lines).toEqual(["warn avatar not drawn", "warn avatar not drawn"]);
+		expect(lines).toEqual(["warn agent not dressed", "warn agent not dressed"]);
+		expect(store.agent("infra")?.character).toBeUndefined();
 	});
 });
 

@@ -111,6 +111,9 @@ const team: AgentTeam = {
 	postAs: async () => undefined,
 	announce: async () => undefined,
 	update: async () => "updated",
+	dress: async () => {
+		throw new Error("unused");
+	},
 	redrawAvatar: async () => {
 		throw new Error("unused");
 	},
@@ -119,6 +122,7 @@ const team: AgentTeam = {
 const avatars: AvatarStudio = {
 	canDraw: false,
 	url: () => "https://example.com/avatar.png",
+	render: async () => "hash",
 	draw: async () => "hash",
 	edit: async () => "hash",
 	fallback: async () => "hash",

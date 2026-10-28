@@ -39,7 +39,10 @@ import type {
 } from "./agent-ports.ts";
 import type { AgentSeed } from "./agent-rules.ts";
 import { PgAgentStore as AgentStore } from "./agent-store.ts";
-import { DiscordAgentTeam as AgentTeam } from "./agent-team.ts";
+import {
+	DiscordAgentTeam as AgentTeam,
+	type AgentTeamOptions,
+} from "./agent-team.ts";
 import { discordKey } from "./team-keys.ts";
 
 export const ENTRY = "1000";
@@ -263,21 +266,21 @@ function seeds(entryChannelId: string | undefined): AgentSeed[] {
 			...(entryChannelId ? { channelId: entryChannelId } : {}),
 			prompt:
 				"You are the chief of staff of the owner's agent team. You hand work that belongs to a specialist to that agent with message_agent, one owner per task, and propose a new agent when a lasting responsibility has no owner.",
-			avatarPrompt: "A chief of staff mid-command, pointing the way.",
+			character: { class: "navigator", palette: "amber" },
 		},
 		{
 			name: "doctor",
 			displayName: "Doctor",
 			prompt:
 				"You keep the owner's agents healthy: read an agent's prompt with agent_get, find the instruction that caused a misbehavior, and fix it with agent_update.",
-			avatarPrompt: "A bot doctor holding up a giant stethoscope.",
+			character: { class: "healer", palette: "rose" },
 		},
 		{
 			name: "infra",
 			displayName: "Infra",
 			prompt:
 				"You manage the owner's servers. Check before you change: read state first, state what you will change and why, then act.",
-			avatarPrompt: "An infra engineer battling a server rack.",
+			character: { class: "engineer", palette: "purpure" },
 		},
 	];
 }
@@ -301,7 +304,13 @@ export async function settle(): Promise<void> {
  * runs as on a host without Discord: no channels and no entry channel, the coordinator named by
  * the configuration, and the rooms of surface `app`.
  */
-export function useTeamFixture(options: { local?: boolean } = {}): void {
+export function useTeamFixture(
+	options: {
+		local?: boolean;
+		/** The studio the team renders with, called each test; the default fakes pictures. */
+		studio?: () => AgentTeamOptions["studio"];
+	} = {},
+): void {
 	const { local = false } = options;
 	beforeEach(async () => {
 		// The expected texts are the neutral English catalog's.
@@ -367,8 +376,12 @@ export function useTeamFixture(options: { local?: boolean } = {}): void {
 			seeds: () => seeds(local ? undefined : ENTRY),
 			store,
 			surfaces,
-			studio: {
+			studio: options.studio?.() ?? {
 				url: (hash) => `https://x/avatars/${hash ?? "default"}.png`,
+				render: async (spec) =>
+					new Bun.CryptoHasher("sha256")
+						.update(JSON.stringify(spec))
+						.digest("hex"),
 				draw: async () => "a".repeat(64),
 				edit: async () => "b".repeat(64),
 			},

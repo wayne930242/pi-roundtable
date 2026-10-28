@@ -1,8 +1,15 @@
+import {
+	CharacterError,
+	type CharacterInput,
+	type CharacterSpec,
+	resolveCharacter,
+	suggestCharacter,
+} from "../../characters/index.ts";
 import { AgentError } from "../domain/errors.ts";
 import type { AgentTurnScope } from "../domain/ports.ts";
-import { assistantName } from "../i18n/index.ts";
 import { addressee } from "../speakers.ts";
 import { openingTaskText } from "./agent-prompt.ts";
+import { characterOf } from "./agent-rules.ts";
 import { modelSetting, thinkingSetting } from "./agent-settings.ts";
 import type { Agent } from "./agent-store.ts";
 import type { AvatarMode } from "./agent-tools.ts";
@@ -78,8 +85,10 @@ export class TeamEditing {
 			name: string;
 			displayName: string;
 			prompt: string;
-			/** Required when an image provider is configured, ignored otherwise. */
+			/** @deprecated Ignored: agents are composed characters. */
 			avatarPrompt?: string;
+			/** Fields of its look; any left out come from the look its role suggests. */
+			character?: CharacterInput;
 			task: string;
 			category?: string;
 			skills?: string[];
@@ -96,18 +105,25 @@ export class TeamEditing {
 			throw new AgentError(
 				"agent_create can only be used during an agent turn.",
 			);
-		const drawing = studio.canDraw !== false;
 		const {
 			category,
 			skills: carried = [],
-			avatarPrompt = "",
+			character: wanted,
+			avatarPrompt: _ignored,
 			...fields
 		} = input;
-		if (drawing && avatarPrompt.trim() === "")
-			throw new AgentError("Give avatar_prompt: the avatar is drawn from it.");
 		const parent = teamCategory(category, "Agents");
 		store.checkNewName(input.name);
 		skills?.checkRegistered(carried);
+		// The picture comes before the row and the channel: a render failure fails the create.
+		const taken = store
+			.agents()
+			.flatMap((other) =>
+				other.status === "active" && other.character ? [other.character] : [],
+			);
+		const suggested = suggestCharacter(input, taken);
+		const character = this.#resolve(wanted ?? {}, suggested);
+		const avatarHash = await studio.render(character);
 		// Without Discord channels the agent lives in its rooms, which exist as soon as it does.
 		const channelId = await channels?.createChannel(
 			input.name,
@@ -116,24 +132,18 @@ export class TeamEditing {
 		);
 		const agent = await store.createAgent({
 			...fields,
-			avatarPrompt: drawing ? avatarPrompt : "",
+			character,
+			avatarHash,
 			...(channelId ? { channelId } : {}),
 		});
 		if (skills && carried.length > 0)
 			await skills.attach(agent.name, carried, []);
-		logger.info({ agent: agent.name, by: caller.name }, "agent created");
-		this.#ctx.changed();
-		const avatar = await (drawing
-			? this.#redraw(agent.name, "redraw")
-			: this.#generate(agent)
-		).then(
-			() =>
-				drawing
-					? "its avatar is drawn"
-					: "its avatar is generated from its display name",
-			(error: unknown) =>
-				`its avatar could not be drawn (${error instanceof Error ? error.message : String(error)}), so it uses ${assistantName()}'s for now`,
+		logger.info(
+			{ agent: agent.name, by: caller.name, class: character.class },
+			"agent created",
 		);
+		this.#ctx.changed();
+		const avatar = `its picture is the ${character.class} look`;
 		// The opening task runs where the agent is first reached: its channel, else its first room.
 		const home = channelId
 			? discordKey(channelId)
@@ -179,13 +189,51 @@ export class TeamEditing {
 		return this.#redraw(name, mode, text);
 	}
 
-	/** Gives an agent the picture made from its display name; a host without an image provider has no other. */
-	async #generate(agent: Agent): Promise<Agent> {
-		const { store, studio } = this.#ctx.options;
-		if (!studio.fallback)
-			throw new AgentError("The avatar studio has no generated avatars.");
-		const avatarHash = await studio.fallback(agent.displayName, agent.name);
-		return store.updateAgent(agent.name, { avatarHash });
+	/**
+	 * Changes an agent's look. The input is resolved over the agent's current character; a new
+	 * class keeps the agent's colors unless the input names a palette or colors. The picture is
+	 * rendered before anything is stored, and the character and picture are stored together.
+	 */
+	async dress(name: string, input: CharacterInput): Promise<Agent> {
+		const { store, studio, logger } = this.#ctx.options;
+		const agent = store.activeAgent(name);
+		const base = characterOf(agent);
+		const character = this.#resolve(input, base);
+		let avatarHash: string;
+		try {
+			avatarHash = await studio.render(character);
+		} catch (error) {
+			throw new AgentError(
+				`The picture could not be rendered: ${error instanceof Error ? error.message : String(error)}. The previous look stays.`,
+			);
+		}
+		const dressed = await store.updateAgent(name, { character, avatarHash });
+		logger.info({ agent: name, class: character.class }, "agent dressed");
+		this.#ctx.changed();
+		return dressed;
+	}
+
+	/**
+	 * An input over a base look. A new class alone keeps the base's colors, since the agent's
+	 * colors are its own; a bad field is an AgentError that names it.
+	 */
+	#resolve(input: CharacterInput, base: CharacterSpec): CharacterSpec {
+		const keepColors =
+			input !== null &&
+			typeof input === "object" &&
+			input.class !== undefined &&
+			input.palette === undefined &&
+			input.colors === undefined;
+		try {
+			return resolveCharacter(
+				keepColors ? { ...input, colors: base.colors } : input,
+				base,
+			);
+		} catch (error) {
+			if (error instanceof CharacterError)
+				throw new AgentError(`The look is not usable: ${error.message}.`);
+			throw error;
+		}
 	}
 
 	async #redraw(name: string, mode: AvatarMode, text?: string): Promise<Agent> {

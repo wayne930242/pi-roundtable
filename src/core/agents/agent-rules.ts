@@ -1,3 +1,8 @@
+import {
+	type CharacterInput,
+	type CharacterSpec,
+	suggestCharacter,
+} from "../../characters/index.ts";
 import { AgentError } from "../domain/errors.ts";
 import { THINKING_LEVELS, type ThinkingLevel } from "../models.ts";
 
@@ -14,7 +19,9 @@ export interface Agent {
 	displayName: string;
 	prompt: string;
 	avatarPrompt: string;
-	/** The drawn picture's content hash, when one exists. */
+	/** What the agent looks like; absent only on a row read before the team assigned one. */
+	character?: CharacterSpec;
+	/** The rendered picture's content hash, when one exists. */
 	avatarHash?: string;
 	/** Its channel in the agent server; a seed agent has none until one is created. */
 	channelId?: string;
@@ -40,7 +47,10 @@ export interface AgentSeed {
 	name: string;
 	displayName: string;
 	prompt: string;
-	avatarPrompt: string;
+	/** The agent's look, resolved over the class preset; without one the team suggests it from the role. */
+	character?: CharacterInput;
+	/** @deprecated Agents are composed characters; this is ignored and removed in 1.0. */
+	avatarPrompt?: string;
 	channelId?: string;
 }
 
@@ -104,4 +114,11 @@ export function checkAvatarPrompt(prompt: string): void {
 		throw new AgentError(
 			`An avatar prompt must have 1 to ${MAX_AVATAR_PROMPT_CHARS} characters; this one has ${prompt.length}.`,
 		);
+}
+
+/** An agent's look: the one it was dressed in, otherwise the one its role suggests. */
+export function characterOf(
+	agent: Pick<Agent, "name" | "displayName" | "prompt" | "character">,
+): CharacterSpec {
+	return agent.character ?? suggestCharacter(agent);
 }

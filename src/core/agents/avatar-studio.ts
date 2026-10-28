@@ -1,11 +1,15 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import type { CharacterSpec } from "../../characters/index.ts";
+import { resolveCharacter } from "../../characters/index.ts";
 import { squarePng } from "../attachments/square-png.ts";
 import type { ImageDrawer } from "../contract/providers.ts";
+import { ConfigError } from "../domain/errors.ts";
 import { ProviderError } from "../errors.ts";
 import type { HttpRoute } from "../http/listeners.ts";
 import type { AvatarStudio } from "../services.ts";
+import { characterPng } from "./character-png.ts";
 import { fallbackAvatar } from "./fallback-avatar.ts";
 
 const AVATAR_SIDE = 512;
@@ -31,6 +35,8 @@ export interface AvatarStudioOptions {
 	neutralPath?: string;
 	/** Told the error code of a reference that was replaced by `neutralPath`. */
 	onReferenceFailed?: (code: string) => void;
+	/** Rasterizes a character to a PNG; canvas with librsvg by default. A seam for tests. */
+	rasterize?: typeof characterPng;
 	/** Draws the pictures. Without one, the studio only makes each agent a picture from its name. */
 	draw?: ImageDrawer;
 }
@@ -44,15 +50,30 @@ export class FileAvatarStudio implements AvatarStudio {
 	readonly #options: AvatarStudioOptions;
 	#defaultHash: string | undefined;
 	#referencePath: string;
+	readonly #rasterize: typeof characterPng;
 
 	constructor(options: AvatarStudioOptions) {
 		this.#options = options;
+		this.#rasterize = options.rasterize ?? characterPng;
 		this.#referencePath = options.referencePath;
 		mkdirSync(options.dir, { recursive: true });
 	}
 
-	/** Stores the assistant's neutral avatar, the picture of an agent that has none yet. */
+	/**
+	 * Stores the assistant's neutral avatar, the picture of an agent that has none yet. First
+	 * rasterizes a probe character: the agents' pictures need canvas with SVG support (librsvg),
+	 * and a host without it refuses to start instead of failing on the first agent.
+	 */
 	async init(): Promise<void> {
+		try {
+			await this.#rasterize(resolveCharacter({ class: "wizard" }), {
+				size: 32,
+			});
+		} catch (error) {
+			throw new ConfigError(
+				`the agent server needs canvas with SVG support (librsvg) to draw the agents' pictures: ${error instanceof Error ? error.message : String(error)}`,
+			);
+		}
 		try {
 			this.#defaultHash = await this.#referenceStore();
 		} catch (error) {
@@ -88,7 +109,14 @@ export class FileAvatarStudio implements AvatarStudio {
 		return `${this.#options.publicUrl ?? ""}/avatars/${chosen}.png`;
 	}
 
+	/** Renders a character as the agent's picture and stores it by content hash; the same spec gives the same hash. */
+	async render(spec: CharacterSpec): Promise<string> {
+		return this.#keep(await this.#rasterize(spec, { size: AVATAR_SIDE }));
+	}
+
 	/**
+	 * @deprecated Agents are composed characters and no longer drawn; removed in 1.0.
+	 *
 	 * Draws a new picture from an avatar prompt: the assistant's face as an anime character in the
 	 * role's pose; returns its hash. Outfit and background colours come from the avatar prompt,
 	 * so agents stay easy to tell apart.
@@ -184,6 +212,10 @@ export class FileAvatarStudio implements AvatarStudio {
 			size: AVATAR_SIDE,
 			...(maxSide === undefined ? {} : { maxSide }),
 		});
+		return this.#keep(png);
+	}
+
+	#keep(png: Uint8Array): string {
 		const hash = createHash("sha256").update(png).digest("hex");
 		const path = this.#path(hash);
 		if (!existsSync(path)) writeFileSync(path, png);

@@ -1160,8 +1160,7 @@ export const library = definePlugin({
 				displayName: "Librarian",
 				prompt:
 					"You keep the team's reading list. Answer briefly and cite what you were given.",
-				avatarPrompt:
-					"A calm librarian with round glasses and a stack of books",
+				character: { class: "scholar", palette: "azure" },
 			},
 		],
 	}),
@@ -3365,7 +3364,7 @@ A class is a preset of parts, not a body, so a new class is an outfit and gear: 
 | `resolveCharacter(input, base?)` | The look an input describes. It starts from `base`, or from the class preset when there is no `base` or the input names another class, then applies the fields: `palette` sets all three colors, `colors` changes some, and the result's `palette` is set exactly when the colors equal a preset. Throws `CharacterError` for an unknown field or id or a bad color |
 | `parseCharacter(value)` | A complete spec from outside the process, checked strictly: an unknown key or id, a missing field, `skin: 6`, or a color that is not `#rrggbb` throws `CharacterError`. Colors are lowercased. Use it for an API body and for what a page receives |
 | `readCharacter(value)` | A spec from a stored row, read leniently and never throwing: a field this version does not know (written by a newer one) takes the class preset's value, an unknown key is ignored, and `undefined` comes back only when the value is not an object or names no known class |
-| `suggestCharacter(agent, taken?)` | A look for an agent that has none. Each class is scored by its keywords: the display name and the name count 3 each, the first 600 characters of the prompt 1. A tie or no hit is broken by a hash of the name among the classes `taken` does not use. `skin` and `build` come from the same hash, and the palette is the one `taken` uses least |
+| `suggestCharacter(agent, taken?)` | A look for an agent that has none. Each class is scored by its keywords: the display name and the name count 3 each, the first 600 characters of the prompt 1. A tie or no hit is broken by a hash of the name among the classes `taken` does not use. `skin` and `build` come from separate hashes of the name, so a skin implies no body type, and the palette is the one `taken` uses least |
 | `composeSvg(spec, options?)` | The picture as an SVG string, see below |
 | `accentOf(spec, scheme)` | `colors.primary` as a UI accent: shaded until it reads at 3:1 on the scheme's page (white in `light`, `#0d1018` in `dark`) |
 | `characterCss()` | The text of `characters.css` |
@@ -3377,12 +3376,24 @@ A class is a preset of parts, not a body, so a new class is an outfit and gear: 
 `ComposeOptions` are all optional: `expr` (one of the 13 `EXPRESSIONS`, by default the one `STATE_EXPRESSION` gives the state), `state` (one of the seven `AVATAR_STATES`: `idle`, `thinking`, `working`, `waiting`, `done`, `error`, `sleepy`), `look` (`modern-light` by default, `modern-dark`, `camelot-light` or `camelot-dark`, which change only the background and ring), `frame` (`disc` or `shield`), `bare` (no frame or background), `still`, `uid`, `size` and `label`.
 
 - The output has literal colors only. It has no `style` attribute, variable, `<style>`, script, text, image, link, event handler or `<foreignObject>`, so a page whose content security policy forbids inline styles can inject it, and `canvas` rasterizes it as it is. It is at most 8 KB and the same for the same input. The root is `<svg class="av" data-expr>` and the layers are `<g class="NAME" data-part="NAME">` in a fixed order (`frame`, `ch` holding `back`, `body`, `head`, `hat`, `eyes-brows`, `mouth`, `fx`, `acc`, `prop`, then `state`); the prop group carries `data-prop`.
-- `composeSvg` checks the spec again with `parseCharacter`, so a spec cast from untrusted data throws instead of reaching the markup. `uid` (`/^[a-z0-9]{1,16}$/`, default `a`) ends every clip path id, so pass a different one for each figure on a page. `size` (an integer up to 4096) adds `width` and `height`, which `canvas` needs. `label` (at most 200 characters) becomes `aria-label` with `<>"'=()&` written as entities; without it the figure is `aria-hidden`.
+- `composeSvg` checks the spec again with `parseCharacter`, so a spec cast from untrusted data throws instead of reaching the markup. `uid` (`/^[a-z0-9]{1,16}$/`, default `a`) ends every clip path id, so each avatar on a page needs its own `uid`: two with the same one share clip path ids and one clips the other. The server-side renders pass an explicit one. `size` (an integer up to 4096) adds `width` and `height`, which `canvas` needs. `label` (at most 200 characters) becomes `aria-label` with `<>"'=()&` written as entities; without it the figure is `aria-hidden`.
 - A live figure carries every state overlay and leaves the motion to the stylesheet. With `still: true` only the `state`'s overlay is drawn and the figure has class `av static`, for files, PNGs and 3D textures; an `error` state turns the ring red in both.
 
 ### Motion: `characters.css`
 
 Import `pi-roundtable/characters.css` once. It breathes, tilts, bobs, leans, pops and shakes the figure by `data-state`, which you set on the `<svg>` or, so the markup does not change with the state, on a wrapper with class `av-host`. It moves only `transform` and `opacity`, keeps the pivots in selectors (`.ch`, `.eyes`, the badges and one rule per `[data-prop=<id>]`) since the markup carries no inline style, stops for `prefers-reduced-motion`, and stops on `.av.static`. The file is generated from `characterCss()` by `bun scripts/build-character-css.ts`, and a test fails when they differ.
+
+### Agent characters
+
+Every agent of the agent server is a composed character. `Agent.character` is its resolved `CharacterSpec`, absent only on a row read before the team dressed it; `characterOf(agent)` returns it, or the look `suggestCharacter` gives its role. The spec is stored in the nullable `agents.character` jsonb column, which a migration of the agent server adds (`agents-character`), and `avatarHash` points at the PNG rendered from it, so Discord shows the character at `/avatars/<hash>.png`.
+
+- `AgentSeed.character` (and `agents[].character` in the configuration) is a `CharacterInput` resolved over the look the role suggests: `{ class: "navigator", palette: "amber" }`. A bad field is a `ConfigError` that names it. `avatarPrompt` is optional, deprecated and ignored; it is removed in 1.0.
+- At every start the team dresses each active agent that has no character: the seed of that name gives it, otherwise the suggestion for its role, spread over the palettes the team already wears. The picture is rendered and replaces the agent's old one, so **every existing agent's Discord picture changes at the first start of this version**. A failure is logged for that agent, which keeps its picture until the next start. A second start changes nothing.
+- A new agent's character is the `character` of its `agent_create` call over the suggestion for its role, and it is rendered before the agent is stored, so a render failure fails the create.
+- `AgentTeam.dress(name, input)` changes a look: the input is resolved over the agent's current character, rendered, and stored with the new picture in one update. A new `class` alone keeps the agent's colors; give a `palette` or `colors` to change them. A bad field is an `AgentError` that names it, as is an unknown or archived agent.
+- `AvatarStudio.render(spec)` renders a character as a 512 px PNG (the idle face on the modern light disc), stores it by content hash and returns the hash; the same spec gives the same hash. A plugin that implements `AvatarStudio` adds it. `draw`, `edit`, `fallback` and `canDraw` are deprecated until 1.0.
+- `renderCharacterPng(spec, options?)` (`pi-roundtable/kit`) does the same rasterization and returns the bytes. It needs `canvas` with SVG support (librsvg); the agent server renders a probe character at start and refuses to start with a `ConfigError` ("the agent server needs canvas with SVG support") when it cannot.
+- Each avatar on one page needs its own `uid` in `composeSvg`; the server renders pass an explicit one.
 
 ## Official plugins
 
@@ -3976,6 +3987,7 @@ Import from the entries listed below; source area files are internal.
 | `AutoApproval` | `pi-roundtable` | type |
 | `AvatarMode` | `pi-roundtable` | type |
 | `AvatarStudio` | `pi-roundtable` | type |
+| `characterOf` | `pi-roundtable` | value |
 | `BACKGROUND_TURNS` | `pi-roundtable` | value |
 | `CONVERSATIONS` | `pi-roundtable` | value |
 | `BackgroundConfig` | `pi-roundtable` | type |
@@ -4220,6 +4232,7 @@ Import from the entries listed below; source area files are internal.
 | `prepareImageBytes` | `pi-roundtable/kit` | value |
 | `ImagePreparationError` | `pi-roundtable/kit` | value |
 | `squarePng` | `pi-roundtable/kit` | value |
+| `renderCharacterPng` | `pi-roundtable/kit` | value |
 | `SQUARE_PNG_MAX_SIDE` | `pi-roundtable/kit` | value |
 | `SquarePngOptions` | `pi-roundtable/kit` | type |
 | `scrubDiagnostic` | `pi-roundtable/kit` | value |

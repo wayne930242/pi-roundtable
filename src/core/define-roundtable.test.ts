@@ -67,10 +67,8 @@ function markedText(value: unknown, seen = new Set<unknown>()): string[] {
 	return Object.values(value).flatMap((child) => markedText(child, seen));
 }
 
-afterEach(() => {
-	// Other suites read the text through the catalog; leave it as the tests expect.
-	useTestLocale();
-});
+// Other suites read the text through the catalog; leave it as the tests expect.
+afterEach(() => useTestLocale());
 
 describe("defineRoundtable", () => {
 	test("returns the built-in plugins in their fixed order, the operator's, then the scheduler", async () => {
@@ -298,6 +296,7 @@ describe("defineRoundtable", () => {
 			"agents",
 			"agents-guild",
 			"agent-groups-channel-optional",
+			"agents-character",
 		]);
 	});
 

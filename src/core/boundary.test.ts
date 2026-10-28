@@ -25,7 +25,12 @@ describe("core boundary", () => {
 	test("the core imports only itself", () => {
 		const outside = coreFiles(CORE).flatMap((file) =>
 			localImports(file)
-				.filter((path) => !path.startsWith("src/core/"))
+				// The characters kit is a browser-safe library the core builds on; a test keeps it free of core imports.
+				.filter(
+					(path) =>
+						!path.startsWith("src/core/") &&
+						!path.startsWith("src/characters/"),
+				)
 				.map((path) => `${relative(ROOT, file)} -> ${path}`),
 		);
 		expect(outside).toEqual([]);
@@ -33,7 +38,12 @@ describe("core boundary", () => {
 
 	test("the core never imports a consumer's plugins", () => {
 		const consumers = readdirSync(join(ROOT, "src"), { withFileTypes: true })
-			.filter((entry) => entry.isDirectory() && entry.name !== "core")
+			.filter(
+				(entry) =>
+					entry.isDirectory() &&
+					entry.name !== "core" &&
+					entry.name !== "characters",
+			)
 			.map((entry) => `src/${entry.name}/`);
 		const found = coreFiles(CORE).flatMap((file) =>
 			localImports(file).filter((path) =>

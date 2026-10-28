@@ -19,10 +19,11 @@ describeDb("PostgreSQL", () => {
 	useTeamFixture();
 
 	describe("startup", () => {
-		test("seeds the team, gives each agent a channel, and draws avatars", () => {
+		test("seeds the team, gives each agent a channel, and dresses them", () => {
 			expect(fx.store.agent("coordinator")?.channelId).toBe(ENTRY);
 			expect(fx.channels.created).toEqual(["doctor", "infra"]);
-			expect(fx.store.agent("infra")?.avatarHash).toBe("a".repeat(64));
+			expect(fx.store.agent("infra")?.character?.class).toBe("engineer");
+			expect(fx.store.agent("infra")?.avatarHash).toMatch(/^[0-9a-f]{64}$/);
 		});
 
 		test("agent turns have the plugins' tools, the shell, and the agent tools", () => {

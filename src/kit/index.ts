@@ -17,6 +17,7 @@ export {
 	withAttachmentsBlock,
 	withReference,
 } from "./channels.ts";
+export { renderCharacterPng } from "./characters.ts";
 export type {
 	CompactionEngine,
 	CompactionHistory,

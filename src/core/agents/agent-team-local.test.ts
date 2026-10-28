@@ -36,8 +36,9 @@ describeDb("a team without Discord", () => {
 		expect(fx.team.owns(room("infra"))).toBe("agent");
 		// A key of Discord is nobody's: no agent has a channel.
 		expect(fx.team.owns(discordKey(ENTRY))).toBeUndefined();
-		// Pictures are made at startup as on a host with Discord.
-		expect(fx.store.agent("infra")?.avatarHash).toBe("a".repeat(64));
+		// Characters are rendered at startup as on a host with Discord.
+		expect(fx.store.agent("infra")?.character?.class).toBe("engineer");
+		expect(fx.store.agent("infra")?.avatarHash).toMatch(/^[0-9a-f]{64}$/);
 	});
 
 	test("an owner message in a room runs in the room and the reply goes to its surface", async () => {

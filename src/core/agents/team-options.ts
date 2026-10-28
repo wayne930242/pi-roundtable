@@ -26,10 +26,10 @@ export interface AgentTeamOptions
 	 */
 	channels?: AgentChannels;
 	/**
-	 * `canDraw: false` marks a host without an image provider: agents are offered no drawing and
-	 * get `fallback` pictures. A studio that leaves `canDraw` out draws.
+	 * Agents are composed characters, rendered by `render`. `canDraw: false` marks a host without
+	 * an image provider, which is offered no drawing tool; a studio that leaves `canDraw` out draws.
 	 */
-	studio: Pick<AvatarStudio, "url" | "draw" | "edit"> &
+	studio: Pick<AvatarStudio, "url" | "render" | "draw" | "edit"> &
 		Partial<Pick<AvatarStudio, "canDraw" | "fallback">>;
 	/** The tools and groups the plugins give every agent, read before each agent turn. */
 	pluginSelection: () => ToolSelection;

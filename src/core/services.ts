@@ -1,4 +1,5 @@
 import type { ExtensionFactory } from "@earendil-works/pi-coding-agent";
+import type { CharacterInput, CharacterSpec } from "../characters/index.ts";
 import type { Agent, AgentGroup } from "./agents/agent-rules.ts";
 import type { AvatarMode } from "./agents/agent-tools.ts";
 import type { TeamStatus } from "./agents/team-status.ts";
@@ -160,11 +161,16 @@ export interface AvatarStudio {
 	readonly canDraw: boolean;
 	/** The public URL of a picture, or of the default when there is none. */
 	url(hash: string | undefined): string;
-	/** Draws a new picture from an avatar prompt; returns its hash. */
+	/**
+	 * Renders a character as the agent's picture (512 px PNG, modern light disc, idle face), stores
+	 * it by content hash, and returns the hash; the same spec gives the same hash.
+	 */
+	render(spec: CharacterSpec): Promise<string>;
+	/** @deprecated Agents are composed characters and no longer drawn; removed in 1.0. Draws a new picture from an avatar prompt; returns its hash. */
 	draw(avatarPrompt: string): Promise<string>;
-	/** Edits a stored picture by an instruction; returns the new picture's hash. */
+	/** @deprecated Removed in 1.0. Edits a stored picture by an instruction; returns the new picture's hash. */
 	edit(hash: string | undefined, instruction: string): Promise<string>;
-	/** A picture made from an agent's display name and name, for a host without an image provider; returns its hash. */
+	/** @deprecated Removed in 1.0. A picture made from an agent's display name and name, for a host without an image provider; returns its hash. */
 	fallback(displayName: string, name: string): Promise<string>;
 	/** The pictures, public on the named listener. */
 	route(listener: string): HttpRoute;
@@ -236,6 +242,12 @@ export interface AgentTeam {
 	announce(text: string): Promise<void>;
 	/** Changes an agent's display name, prompt, model, or thinking level; a model must be one the host runs. */
 	update(name: string, change: AgentChange): Promise<string>;
+	/**
+	 * Changes an agent's look: `input` is resolved over its current character (a new class keeps
+	 * its colors unless the input gives a palette or colors), rendered, and stored with the new
+	 * picture. Throws AgentError naming the field of a bad input, and for an unknown or archived agent.
+	 */
+	dress(name: string, input: CharacterInput): Promise<Agent>;
 	/** Draws and stores a new picture for an agent. */
 	redrawAvatar(name: string, mode: AvatarMode, text?: string): Promise<Agent>;
 }

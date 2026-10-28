@@ -1,4 +1,5 @@
 import type { SQL } from "bun";
+import type { CharacterSpec } from "../../characters/index.ts";
 import type { Migration } from "../db/migrations.ts";
 import { AgentError } from "../domain/errors.ts";
 import type { ThinkingLevel } from "../models.ts";
@@ -104,7 +105,7 @@ export class PgAgentStore implements AgentDirectory {
 			for (const seed of seeds) {
 				const rows: AgentRow[] = await this.#sql`
 				INSERT INTO agents (guild_id, name, display_name, prompt, avatar_prompt, channel_id)
-				VALUES (${this.#guild}, ${seed.name}, ${seed.displayName}, ${seed.prompt}, ${seed.avatarPrompt},
+				VALUES (${this.#guild}, ${seed.name}, ${seed.displayName}, ${seed.prompt}, ${seed.avatarPrompt ?? ""},
 					${seed.channelId ?? null})
 				ON CONFLICT DO NOTHING
 				RETURNING *`;
@@ -186,7 +187,10 @@ export class PgAgentStore implements AgentDirectory {
 		name: string;
 		displayName: string;
 		prompt: string;
-		avatarPrompt: string;
+		/** @deprecated Ignored by the team; kept for a store written by an older host. */
+		avatarPrompt?: string;
+		character?: CharacterSpec;
+		avatarHash?: string;
 		/** Absent in a team without Discord, whose agents live in rooms. */
 		channelId?: string;
 	}): Promise<Agent> {
@@ -194,13 +198,14 @@ export class PgAgentStore implements AgentDirectory {
 			checkAgentName(agent.name);
 			checkDisplayName(agent.displayName);
 			checkPrompt(agent.prompt);
-			// An agent of a host without an image provider has no avatar prompt.
-			if (agent.avatarPrompt !== "") checkAvatarPrompt(agent.avatarPrompt);
+			const avatarPrompt = agent.avatarPrompt ?? "";
+			if (avatarPrompt !== "") checkAvatarPrompt(avatarPrompt);
 			this.#checkFree(agent.name);
 			const rows: AgentRow[] = await this.#sql`
-			INSERT INTO agents (guild_id, name, display_name, prompt, avatar_prompt, channel_id)
-			VALUES (${this.#guild}, ${agent.name}, ${agent.displayName.trim()}, ${agent.prompt}, ${agent.avatarPrompt},
-				${agent.channelId ?? null})
+			INSERT INTO agents (guild_id, name, display_name, prompt, avatar_prompt, channel_id, avatar_hash, character)
+			VALUES (${this.#guild}, ${agent.name}, ${agent.displayName.trim()}, ${agent.prompt}, ${avatarPrompt},
+				${agent.channelId ?? null}, ${agent.avatarHash ?? null},
+				${agent.character ?? null}::jsonb)
 			RETURNING *`;
 			return this.#keepAgent(rows[0]);
 		});
@@ -219,6 +224,7 @@ export class PgAgentStore implements AgentDirectory {
 			prompt?: string;
 			avatarPrompt?: string;
 			avatarHash?: string;
+			character?: CharacterSpec;
 			channelId?: string;
 			/** `null` returns it to the assistant's. */
 			model?: string | null;
@@ -240,12 +246,14 @@ export class PgAgentStore implements AgentDirectory {
 				change.thinking === undefined
 					? (current.thinking ?? null)
 					: change.thinking;
+			const character = change.character ?? current.character;
 			const rows: AgentRow[] = await this.#sql`
 			UPDATE agents SET
 				display_name = ${change.displayName?.trim() ?? current.displayName},
 				prompt = ${change.prompt ?? current.prompt},
 				avatar_prompt = ${change.avatarPrompt ?? current.avatarPrompt},
 				avatar_hash = ${change.avatarHash ?? current.avatarHash ?? null},
+				character = ${character ?? null}::jsonb,
 				channel_id = ${change.channelId ?? current.channelId ?? null},
 				model = ${model},
 				thinking = ${thinking},

@@ -1,5 +1,6 @@
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import { SQL } from "bun";
+import { resolveCharacter } from "../../characters/index.ts";
 import { AgentError } from "../domain/errors.ts";
 import {
 	describeDb,
@@ -114,6 +115,58 @@ describeDb("PostgreSQL", () => {
 				// @ts-expect-error: an unknown level from outside the type system
 				store.updateAgent("infra", { thinking: "extreme" }),
 			).rejects.toThrow(/thinking level/);
+		});
+	});
+
+	describe("characters", () => {
+		test("an agent created with a character reads it back equal, after a reload too", async () => {
+			const character = resolveCharacter({ class: "knight", palette: "vert" });
+			const hash = "c".repeat(64);
+			const created = await store.createAgent({
+				name: "rev",
+				displayName: "Rev",
+				prompt: "You review.",
+				character,
+				avatarHash: hash,
+			});
+			expect(created.character).toEqual(character);
+			expect(created.avatarHash).toBe(hash);
+			const reopened = await openTestStore(PgAgentStore, TEST_GUILD);
+			expect(reopened.agent("rev")?.character).toEqual(character);
+			expect(reopened.agent("infra")?.character).toBeUndefined();
+			await reopened.close();
+		});
+
+		test("a stored row with a partial character reads through the lenient path", async () => {
+			const admin = new SQL(testDatabaseUrl);
+			await admin.unsafe(
+				`UPDATE agents SET character = '{"v":1,"class":"knight","hat":"crown"}'::jsonb WHERE name = 'infra'`,
+			);
+			await admin.close();
+			const reopened = await openTestStore(PgAgentStore, TEST_GUILD);
+			const read = reopened.agent("infra")?.character;
+			expect(read?.class).toBe("knight");
+			// "crown" is not a hat of this version, so the class preset's hat stands.
+			expect(read?.hat).toBe(resolveCharacter({ class: "knight" }).hat);
+			await reopened.close();
+		});
+
+		test("updateAgent writes the character and the picture in one update", async () => {
+			const character = resolveCharacter({ class: "healer" });
+			const hash = "d".repeat(64);
+			const updated = await store.updateAgent("doctor", {
+				character,
+				avatarHash: hash,
+			});
+			expect(updated.character).toEqual(character);
+			expect(updated.avatarHash).toBe(hash);
+			const reopened = await openTestStore(PgAgentStore, TEST_GUILD);
+			expect(reopened.agent("doctor")?.character).toEqual(character);
+			expect(reopened.agent("doctor")?.avatarHash).toBe(hash);
+			// A later change that gives neither leaves both.
+			await reopened.updateAgent("doctor", { prompt: "Edited." });
+			expect(reopened.agent("doctor")?.character).toEqual(character);
+			await reopened.close();
 		});
 	});
 

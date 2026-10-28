@@ -30,6 +30,7 @@ function fakeDatabase() {
 				prompt: v[3] ?? "",
 				avatar_prompt: v[4] ?? "",
 				avatar_hash: null,
+				character: null,
 				channel_id: v[5] ?? null,
 				model: null,
 				thinking: null,

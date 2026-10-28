@@ -1,4 +1,5 @@
 import type { ExtensionFactory } from "@earendil-works/pi-coding-agent";
+import type { CharacterInput } from "../../characters/index.ts";
 import type { TurnAttachments } from "../domain/attachment.ts";
 import type { ChannelKey, TurnResult } from "../domain/conversation.ts";
 import { AgentError, ScheduleError } from "../domain/errors.ts";
@@ -274,8 +275,8 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 
 	/**
 	 * Inserts the seed agents, gives every active agent a channel, archives agents and groups
-	 * whose channels were deleted while the assistant was down, and draws missing avatars in the
-	 * background.
+	 * whose channels were deleted while the assistant was down, and dresses agents without a
+	 * character in the background.
 	 */
 	start(): Promise<void> {
 		return this.#lifecycle.start();
@@ -456,17 +457,14 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 
 	create(
 		caller: AgentTurnScope,
-		input: {
-			name: string;
-			displayName: string;
-			prompt: string;
-			avatarPrompt?: string;
-			task: string;
-			category?: string;
-			skills?: string[];
-		},
+		input: Parameters<TeamEditing["create"]>[1],
 	): Promise<string> {
 		return this.#editing.create(caller, input);
+	}
+
+	/** Changes an agent's look; see `AgentTeam.dress`. */
+	dress(name: string, input: CharacterInput): Promise<Agent> {
+		return this.#editing.dress(name, input);
 	}
 
 	avatar(name: string, mode: AvatarMode, text?: string): Promise<string> {

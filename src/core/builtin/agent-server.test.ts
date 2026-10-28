@@ -169,6 +169,7 @@ describe("the agent server's runtime", () => {
 			"agents",
 			"agents-guild",
 			"agent-groups-channel-optional",
+			"agents-character",
 		]);
 	});
 });

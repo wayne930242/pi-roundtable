@@ -1,3 +1,8 @@
+import {
+	CharacterError,
+	type CharacterInput,
+	resolveCharacter,
+} from "../../characters/index.ts";
 import { ConfigError } from "../domain/errors.ts";
 import { nearest } from "../registry/contributions.ts";
 
@@ -128,6 +133,27 @@ export const guarded = <T>(
 		return value;
 	},
 });
+
+/** The fields of an agent's look, checked as `resolveCharacter` does; a bad field is named in the error. */
+export const characterInput: Field<CharacterInput> = {
+	describe: "an object of character fields, such as { class: 'knight' }",
+	check: (value, path) => {
+		try {
+			// Over a base so that a look without `class` is checked too.
+			resolveCharacter(
+				value as CharacterInput,
+				resolveCharacter({ class: "wizard" }),
+			);
+		} catch (error) {
+			if (error instanceof CharacterError)
+				throw new ConfigError(
+					`config ${path}.${error.field}: ${error.message}. Fix the character in roundtable.config.ts.`,
+				);
+			throw error;
+		}
+		return value as CharacterInput;
+	},
+};
 
 /** `false`, or whatever `item` accepts: a feature that is switched off, or configured. */
 export const orOff = <T>(item: Field<T>): Field<T | false> => ({
