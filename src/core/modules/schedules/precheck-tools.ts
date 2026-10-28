@@ -441,9 +441,10 @@ export function precheckScriptHoldRule(options: {
 				// A call computed when the script runs may be held for more than its rules say now, so it
 				// is also unclassed: under its own rules' bare names, or the rule that may hold it.
 				if (own.length > 0 && call.literal) return own;
+				const may = holds.mayHold?.(call.name);
 				const bare = own.map((id) => id.split(".")[0] as string);
-				if (bare.length > 0) return [...own, ...new Set(bare)];
-				return [holds.mayHold?.(call.name) ?? "precheck-scripts"];
+				if (own.length > 0) return [...own, ...new Set(bare.concat(may ?? []))];
+				return [may ?? "precheck-scripts"];
 			});
 		},
 		// Whoever approves must be able to approve each held call the script makes.

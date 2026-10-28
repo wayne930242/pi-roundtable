@@ -220,6 +220,37 @@ describe("reading a precheck script's MCP calls", () => {
 	});
 });
 
+describe("the hold classes of a saved script", () => {
+	test("a computed call is also unclassed under another rule that may hold the tool (RV4-F007)", () => {
+		const registry = runnerRegistry();
+		let holds: HoldCheck = () => undefined;
+		holds = holdChain([
+			// Holds the mail call only for some arguments, which a computed call does not show.
+			{ name: "audit", describe: () => undefined, mayHold: (t) => t === GMAIL },
+			{ ...MAIL_RULE, holdClasses: () => ["mail.send"] },
+			precheckScriptHoldRule({ prechecks: () => registry, holds: () => holds }),
+		]);
+		const save = (script: string) => ({
+			title: "mail",
+			prompt: "send it",
+			time: "09:30",
+			precheck_script: script,
+		});
+		const classes = (script: string) =>
+			holds.classesOf?.("schedule_create", save(script), {});
+		// Written out, the call has the classes its rule gives it.
+		const written = `export default async ({ mcp }) => { await mcp.call("google", "send-gmail-message", { to: "a@b.c" }); return { wake: false }; };`;
+		expect(classes(written)).toEqual(["mail.send", "precheck-scripts.relay"]);
+		// Computed, it is unclassed under its own rule and under the one that may hold it.
+		expect(classes(MAILS_COMPUTED)).toEqual([
+			"mail.send",
+			"mail",
+			"audit",
+			"precheck-scripts.relay",
+		]);
+	});
+});
+
 describe("saving a script through the confirmation gate", () => {
 	const registry = runnerRegistry();
 	const holds = chain(() => registry);
