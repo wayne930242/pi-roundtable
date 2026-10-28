@@ -1,7 +1,6 @@
 import { constants, mkdirSync } from "node:fs";
 import { lstat, open, rm } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
-import { Readable } from "node:stream";
 import type { AttachmentContent } from "../contract/channels.ts";
 import type {
 	AttachmentFailure,
@@ -234,9 +233,14 @@ async function storeFile(
 			throw codedError("EINVAL", "attachment path is not a regular file");
 		if (info.size > limit) return { tooLarge: info.size };
 		// The count in `storeStream` also holds a file that grows while it is copied.
-		const stream = Readable.toWeb(
-			handle.createReadStream({ autoClose: true }),
-		) as ReadableStream<Uint8Array>;
+		const stream = new ReadableStream<Uint8Array>({
+			async pull(controller) {
+				const chunk = new Uint8Array(64 * 1024);
+				const { bytesRead } = await handle.read(chunk, 0, chunk.length, null);
+				if (bytesRead === 0) controller.close();
+				else controller.enqueue(chunk.subarray(0, bytesRead));
+			},
+		});
 		return await storeStream(stream, path, limit, watch);
 	} finally {
 		await handle.close().catch(() => {});
