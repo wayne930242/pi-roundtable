@@ -55,7 +55,7 @@ const pick = (hash: number, length: number): number => hash % length;
  * A look for an agent that has none, chosen from its role: the class whose keywords its display
  * name, name and the start of its prompt hit most, with the name's hash settling a tie or no hit
  * among the classes `taken` does not use, so two agents of one role still differ. Skin and build
- * come from the name's hash too, and the palette is the one `taken` uses least.
+ * come from separate hashes of the name, and the palette is the one `taken` uses least.
  */
 export function suggestCharacter(
 	agent: { name: string; displayName: string; prompt: string },
@@ -84,7 +84,7 @@ export function suggestCharacter(
 
 	const spec = presetSpec(chosen);
 	spec.skin = (hash % 6) as CharacterSpec["skin"];
-	spec.build = BUILDS[hash % 3] as CharacterSpec["build"];
+	spec.build = BUILDS[fnv(`build:${agent.name}`) % 3] as CharacterSpec["build"];
 
 	const names = Object.keys(CATALOG.palettes) as PaletteName[];
 	const count = new Map<PaletteName, number>(names.map((name) => [name, 0]));

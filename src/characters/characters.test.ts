@@ -435,7 +435,7 @@ test("hostile input is refused or escaped, never reaches the markup", () => {
 	}
 });
 
-test("suggestCharacter picks a class from the role, a skin and build from the name, and a palette no one has", () => {
+test("suggestCharacter picks a class from the role, a skin and an independent build from the name, and a palette no one has", () => {
 	const suggest = (
 		displayName: string,
 		prompt = "",
@@ -472,6 +472,16 @@ test("suggestCharacter picks a class from the role, a skin and build from the na
 		}),
 	);
 	expect(looks.size).toBeGreaterThan(5);
+	// Build is its own draw: no skin implies a body type.
+	const buildsBySkin = new Map<number, Set<string>>();
+	for (let i = 0; i < 200; i++) {
+		const spec = suggest("Reviewer", "", `reviewer-${i}`);
+		const seen = buildsBySkin.get(spec.skin) ?? new Set<string>();
+		seen.add(spec.build);
+		buildsBySkin.set(spec.skin, seen);
+	}
+	for (const builds of buildsBySkin.values())
+		expect(builds.size).toBeGreaterThan(1);
 	// With no role to go by, the name's hash picks, among the classes not taken.
 	const bland = (name: string, taken: CharacterSpec[] = []) =>
 		suggestCharacter({ name, displayName: name, prompt: "Be helpful." }, taken);
