@@ -63,7 +63,8 @@ export interface AgentView {
 export interface GroupView {
 	name: string;
 	displayName: string;
-	channelId: string;
+	/** The group's Discord channel; a team without Discord has none. */
+	channelId?: string;
 	members: string[];
 	host: string;
 	busy: number;
@@ -240,6 +241,8 @@ export const APP_PROTOCOL = "roundtable.app.v1";
 export const APP_PROTOCOL_VERSION = 1;
 /** The close code that says the credential lapsed: reconnect, and reload the page when the reconnect is refused. */
 export const APP_CLOSE_EXPIRED = 4401;
+/** The close code that says the person is no owner (any more): do not reconnect. */
+export const APP_CLOSE_FORBIDDEN = 4403;
 /** The most bytes (UTF-8, as JSON) an approval frame's `approval` carries before its long values are cut: 256 KiB. */
 export const APPROVAL_MAX_BYTES = 256 * 1024;
 /** The most files one message carries. */

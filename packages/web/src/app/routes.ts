@@ -86,12 +86,21 @@ function partsOf(path: string): string[] | undefined {
 }
 
 async function bodyOf(request: Request): Promise<Record<string, unknown>> {
-	const length = Number(request.headers.get("content-length") ?? 0);
-	if (length > MAX_BODY_BYTES)
-		throw new HttpError(413, "The body is too large.");
+	const tooLarge = () => new HttpError(413, "The body is too large.");
+	if (Number(request.headers.get("content-length") ?? 0) > MAX_BODY_BYTES)
+		throw tooLarge();
+	// Read in chunks, so a body that declares no length is refused past the limit without being held whole.
+	const chunks: Uint8Array[] = [];
+	let size = 0;
+	if (request.body)
+		for await (const chunk of request.body) {
+			size += chunk.byteLength;
+			if (size > MAX_BODY_BYTES) throw tooLarge();
+			chunks.push(chunk);
+		}
 	let value: unknown;
 	try {
-		value = JSON.parse(await request.text());
+		value = JSON.parse(Buffer.concat(chunks).toString("utf8"));
 	} catch {
 		throw bad("The body is not JSON.");
 	}

@@ -12,8 +12,10 @@ export interface AppSocket {
 	/** The room the page shows, whose progress streams to it. */
 	focus: string | undefined;
 	socket?: RouteSocket<AppSocket>;
-	/** Closes the socket when its credential lapses. */
+	/** Closes the socket when its credential lapses or the cap on its life is reached. */
 	expiry?: ReturnType<typeof setTimeout>;
+	/** Looks again at whether the person is still an owner. */
+	recheck?: ReturnType<typeof setInterval>;
 }
 
 /** The open sockets. Every one belongs to an owner, so a frame for the owners goes to them all. */
@@ -33,6 +35,8 @@ export class Sockets {
 	remove(connection: AppSocket): void {
 		clearTimeout(connection.expiry);
 		connection.expiry = undefined;
+		clearInterval(connection.recheck);
+		connection.recheck = undefined;
 		this.#open.delete(connection);
 	}
 

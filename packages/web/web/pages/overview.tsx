@@ -57,34 +57,14 @@ export function OverviewPage() {
 					/>
 				))}
 				{view.groups.map((group) => (
-					<article key={group.name} className="card">
-						<div className="card-head">
-							<a
-								href={discordUrl(group.channelId, view.guildId)}
-								target="_blank"
-								rel="noreferrer"
-							>
-								{group.displayName}
-							</a>
-							<Badge>{t("Group")}</Badge>
-							<Busy busy={group.busy} />
-						</div>
-						<p>
-							{t("Members: {members} | Host: {host}", {
-								members: group.members.join(", "),
-								host: group.host,
-							})}
-						</p>
-						<p className="hint">
-							{t("Last active")} {ago(group.lastActive, now, config.timeZone)}
-						</p>
-						<Cleanup
-							channel={`discord:${group.channelId}`}
-							title={group.displayName}
-							busy={group.busy > 0}
-							refresh={refresh}
-						/>
-					</article>
+					<GroupCard
+						key={group.name}
+						group={group}
+						guildId={view.guildId}
+						now={now}
+						timeZone={config.timeZone}
+						refresh={refresh}
+					/>
 				))}
 			</section>
 			<section className="stack">
@@ -161,6 +141,53 @@ function Busy({ busy }: { busy: number }) {
 					? t("Working")
 					: t("Working, {count} waiting", { count: busy - 1 })}
 		</Badge>
+	);
+}
+
+/** A group's card. A group of a team without Discord has no channel, so it links none and offers no cleanup. */
+export function GroupCard(props: {
+	group: GroupView;
+	guildId: string;
+	now: number;
+	timeZone: string;
+	refresh(): void;
+}) {
+	const { group, now, timeZone } = props;
+	return (
+		<article className="card">
+			<div className="card-head">
+				{group.channelId ? (
+					<a
+						href={discordUrl(group.channelId, props.guildId)}
+						target="_blank"
+						rel="noreferrer"
+					>
+						{group.displayName}
+					</a>
+				) : (
+					<strong>{group.displayName}</strong>
+				)}
+				<Badge>{t("Group")}</Badge>
+				<Busy busy={group.busy} />
+			</div>
+			<p>
+				{t("Members: {members} | Host: {host}", {
+					members: group.members.join(", "),
+					host: group.host,
+				})}
+			</p>
+			<p className="hint">
+				{t("Last active")} {ago(group.lastActive, now, timeZone)}
+			</p>
+			{group.channelId ? (
+				<Cleanup
+					channel={`discord:${group.channelId}`}
+					title={group.displayName}
+					busy={group.busy > 0}
+					refresh={props.refresh}
+				/>
+			) : null}
+		</article>
 	);
 }
 

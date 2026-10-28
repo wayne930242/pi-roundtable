@@ -46,6 +46,8 @@ export interface OwnerAppOptions {
 	/** How long a turn waits on its card before it goes on without the answer, in seconds. */
 	cardGraceSeconds: number;
 	authenticator: Pick<Authenticator, "authenticate">;
+	/** The longest an open socket lives; for a credential that logout or a new password does not reach. */
+	socketLifeMs?: number;
 	database: SQL;
 	agents: AgentServer;
 	modes: ConversationModes;
@@ -126,6 +128,9 @@ export class OwnerApp {
 			path: `${options.mount}/api/socket`,
 			origin: options.origin,
 			authenticator: options.authenticator,
+			...(options.socketLifeMs === undefined
+				? {}
+				: { maxLifeMs: options.socketLifeMs }),
 			sockets,
 			surface,
 			desk,

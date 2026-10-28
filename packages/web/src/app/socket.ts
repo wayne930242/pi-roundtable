@@ -9,8 +9,10 @@ import type {
 	WebSocketAccept,
 	WebSocketRoute,
 } from "pi-roundtable";
+import { PluginError } from "pi-roundtable";
 import {
 	APP_CLOSE_EXPIRED,
+	APP_CLOSE_FORBIDDEN,
 	APP_PROTOCOL,
 	APP_PROTOCOL_VERSION,
 	type ClientFrame,
@@ -33,6 +35,8 @@ const MAX_TIMER_MS = 2 ** 31 - 1;
 
 /** The most sockets the route holds open at once. */
 const MAX_SOCKETS = 32;
+/** How often an open socket's person is looked up again, when the options say nothing else. */
+const RECHECK_MS = 30_000;
 /** The largest frame in bytes; a `send` carries text only, so this is far above `MAX_MESSAGE_CHARS`. */
 const MAX_FRAME_BYTES = 192 * 1024;
 
@@ -50,6 +54,14 @@ export interface SocketRouteOptions {
 	identity: Pick<IdentityService, "tierOf">;
 	conversations: Pick<ConversationPort, "stop">;
 	logger: Logger;
+	/**
+	 * The longest a socket stays open, whatever its credential says. A password session lives for
+	 * days and a logout or a new password does not reach an open socket, so the socket is closed
+	 * with 4401 after this long and its reconnect carries the cookie again. Absent: no cap.
+	 */
+	maxLifeMs?: number;
+	/** How often an open socket's person is looked up again; default 30 s. */
+	recheckMs?: number;
 	/** The clock, in milliseconds; default `Date.now`. */
 	now?: () => number;
 }
@@ -126,8 +138,15 @@ export class SocketRoute {
 		const connection = socket.data;
 		const { sockets, desk } = this.#options;
 		sockets.add(connection, socket);
-		if (connection.expiresAt) {
-			const wait = connection.expiresAt.getTime() - this.#now();
+		const now = this.#now();
+		const lapses = [
+			connection.expiresAt?.getTime(),
+			this.#options.maxLifeMs === undefined
+				? undefined
+				: now + this.#options.maxLifeMs,
+		].filter((at): at is number => at !== undefined);
+		if (lapses.length > 0) {
+			const wait = Math.min(...lapses) - now;
 			if (wait <= 0) {
 				socket.close(APP_CLOSE_EXPIRED, "expired");
 				return;
@@ -137,6 +156,18 @@ export class SocketRoute {
 				Math.min(wait, MAX_TIMER_MS),
 			);
 		}
+		connection.recheck = setInterval(() => {
+			this.#owner(connection).then(
+				(who) => {
+					if (!who) socket.close(APP_CLOSE_FORBIDDEN, "forbidden");
+				},
+				(error: unknown) =>
+					this.#options.logger.warn(
+						{ err: error },
+						"an app socket's person was not looked up",
+					),
+			);
+		}, this.#options.recheckMs ?? RECHECK_MS);
 		sockets.send(connection, {
 			type: "ready",
 			protocol: APP_PROTOCOL_VERSION,
@@ -182,6 +213,18 @@ export class SocketRoute {
 			this.#refuse(connection, "bad_frame");
 			return;
 		}
+		// Every frame comes from an owner, at their tier now; a socket whose person is no owner
+		// any more is closed rather than left to receive what the owners are shown.
+		const who = await this.#owner(connection);
+		if (!who) {
+			this.#refuse(
+				connection,
+				"forbidden",
+				frame.type === "send" ? frame.id : undefined,
+			);
+			socket.close(APP_CLOSE_FORBIDDEN, "forbidden");
+			return;
+		}
 		switch (frame.type) {
 			case "hello":
 				connection.visible = frame.visible;
@@ -195,16 +238,6 @@ export class SocketRoute {
 				return;
 			default:
 				break;
-		}
-		// Everything else changes something: an owner, at their tier now.
-		const who = await this.#owner(connection);
-		if (!who) {
-			this.#refuse(
-				connection,
-				"forbidden",
-				frame.type === "send" ? frame.id : undefined,
-			);
-			return;
 		}
 		await this.#write(connection, who, frame);
 	}
@@ -257,6 +290,8 @@ export class SocketRoute {
 		if (text.length > MAX_MESSAGE_CHARS) return refuse("too_long");
 		const ids = frame.uploads ?? [];
 		if (text === "" && ids.length === 0) return refuse("empty");
+		// Without the actor the credential vouched for, the router cannot tell whose message it is.
+		if (!who.actor) return refuse("forbidden");
 		const files = uploads.claim(ids, who.principalId);
 		if (!files) return refuse("unknown_upload");
 		if (!surface.started) return refuse("not_accepted");
@@ -293,6 +328,10 @@ export class SocketRoute {
 		stored?: (message: RoomMessage) => void,
 	): Promise<void> {
 		const { surface, uploads } = this.#options;
+		if (!who.actor)
+			throw new PluginError(
+				"a message needs the actor its sender's credential vouched for",
+			);
 		const message = await surface.publish(
 			{
 				room,
@@ -309,7 +348,7 @@ export class SocketRoute {
 		const inbound: InboundMessage = {
 			channel: room,
 			messageId: `app-${message.id}`,
-			...(who.actor ? { actor: who.actor } : {}),
+			actor: who.actor,
 			authorId: who.principalId,
 			authorName: who.name,
 			authorIsBot: false,

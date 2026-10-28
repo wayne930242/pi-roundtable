@@ -6,6 +6,7 @@ import { MarkdownDocument } from "./components/markdown.tsx";
 import { ConfigContext } from "./lib/config.ts";
 import { setPresentation, translate } from "./lib/messages.ts";
 import { Whose } from "./pages/notes.tsx";
+import { GroupCard } from "./pages/overview.tsx";
 
 test("skill Markdown renders headings/emphasis/GFM tables and escapes HTML, scripts, local links and image fetches", () => {
 	const html = renderToStaticMarkup(
@@ -84,4 +85,44 @@ test("the notes pane names whose notes it shows, the visitor's own by default", 
 		createElement(Whose, { people, shown: "owner", choose: () => {} }),
 	);
 	expect(theirs).toContain('<option value="owner" selected="">Owner</option>');
+});
+
+test("a group with no Discord channel shows no Discord link and no cleanup", () => {
+	setPresentation({ title: "Console", panes: ["overview"], timeZone: "UTC" });
+	const config = {
+		title: "Console",
+		panes: ["overview" as const],
+		timeZone: "UTC",
+		cleanup: true,
+	};
+	const card = (channelId?: string) =>
+		renderToStaticMarkup(
+			createElement(
+				ConfigContext.Provider,
+				{ value: config },
+				createElement(GroupCard, {
+					group: {
+						name: "crew",
+						displayName: "Crew",
+						members: ["Scout"],
+						host: "Scout",
+						busy: 0,
+						...(channelId ? { channelId } : {}),
+					},
+					guildId: "900000000000000099",
+					now: Date.now(),
+					timeZone: "UTC",
+					refresh: () => undefined,
+				}),
+			),
+		);
+	const bare = card();
+	expect(bare).toContain("Crew");
+	expect(bare).not.toContain("discord.com");
+	expect(bare).not.toContain("Start over");
+	const linked = card("900000000000000123");
+	expect(linked).toContain(
+		"discord.com/channels/900000000000000099/900000000000000123",
+	);
+	expect(linked).toContain("Start over");
 });

@@ -287,7 +287,7 @@ export class ConsoleApi {
 				name: group.name,
 				displayName: group.displayName,
 				// A group of a team without Discord has no channel; the pane then links none.
-				channelId: group.channelId ?? "",
+				...(group.channelId ? { channelId: group.channelId } : {}),
 				members: group.members,
 				host: group.host,
 				busy: group.busy,

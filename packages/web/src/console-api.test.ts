@@ -180,6 +180,40 @@ describe("overview", () => {
 	});
 });
 
+describe("overview of a team without Discord", () => {
+	test("a group with no channel is reported without a channelId", async () => {
+		const bare = partial<Pick<AgentTeam, "status" | "owns" | "guildId">>({
+			guildId: "local",
+			owns: () => undefined,
+			status: async () => ({
+				agents: [],
+				groups: [
+					{
+						name: "crew",
+						displayName: "Crew",
+						members: ["Scout"],
+						host: "Scout",
+						busy: 0,
+					},
+				],
+			}),
+		});
+		const { body } = await call<OverviewView>(
+			api({ team: bare }).api,
+			"overview",
+		);
+		expect(body.groups).toEqual([
+			{
+				name: "crew",
+				displayName: "Crew",
+				members: ["Scout"],
+				host: "Scout",
+				busy: 0,
+			},
+		]);
+	});
+});
+
 describe("conversations", () => {
 	test("lists each stored conversation with its kind, name, and busy count; hidden and foreign directories stay out", async () => {
 		const { body } = await call<ConversationsView>(api().api, "conversations");

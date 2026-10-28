@@ -634,6 +634,33 @@ describeDb("the owner app over a real host", () => {
 		tab.close();
 	});
 
+	test("a JSON body that streams past 64 KiB without a length is refused, not held whole", async () => {
+		const chunk = new TextEncoder().encode(" ".repeat(16 * 1024));
+		const body = new ReadableStream<Uint8Array>({
+			start(controller) {
+				for (let i = 0; i < 6; i++) controller.enqueue(chunk);
+				controller.enqueue(new TextEncoder().encode('{"yolo":true}'));
+				controller.close();
+			},
+		});
+		const response = await fetch(
+			`http://localhost/console/api/rooms/${encodeURIComponent(GUIDE)}/mode`,
+			{
+				method: "PUT",
+				body,
+				duplex: "half",
+				headers: {
+					"x-actor": "owner",
+					origin: ORIGIN,
+					"content-type": "application/json",
+				},
+				unix: app.socket,
+			} as never,
+		);
+		expect(response.status).toBe(413);
+		expect(app.host.context.services.get(MODES).peek(GUIDE).yolo).toBe(false);
+	});
+
 	test("yolo approvals are shown in the room", async () => {
 		const tab = await Client.open(app, { "x-actor": "owner" });
 		if (!tab) throw new Error("the owner was refused");

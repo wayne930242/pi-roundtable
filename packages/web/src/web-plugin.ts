@@ -25,6 +25,9 @@ import {
 } from "./options.ts";
 import { consoleVisitors } from "./visitors.ts";
 
+/** The longest a WebSocket stays open under `password` auth: the session cookie is looked at again after this. */
+const PASSWORD_SOCKET_LIFE_MS = 3_600_000;
+
 /**
  * The owners' web console: conversations, transcripts, memory notes, and the agent team, served
  * on a route of the host's listener and updated live. Every request needs the configured `auth`
@@ -140,6 +143,10 @@ async function build(settings: ResolvedOptions, context: Context) {
 				dataDir: settings.dataDir,
 				cardGraceSeconds: settings.cardGraceSeconds,
 				authenticator,
+				// A password session outlives a logout or a new password on an open socket, so the socket is capped.
+				...(settings.auth.mode === "password"
+					? { socketLifeMs: PASSWORD_SOCKET_LIFE_MS }
+					: {}),
 				database: context.database(),
 				agents: services.get(AGENTS),
 				modes: services.get(MODES),
