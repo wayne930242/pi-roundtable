@@ -2731,7 +2731,7 @@ The agent server claims `discord:` keys, and, only on a surface that declares `a
 | `sendReply(channel, reply)` | Posts an `OutboundReply`: a thinking line, a card, text chunks, then files | (required) |
 | `stop()` | Disconnects when the host stops | nothing to stop |
 | `agentRooms` | `true` makes the surface host [agent rooms](#agent-rooms-on-any-surface): a conversation with each agent and group of the team, as `<surface>:agent.<name>` and `<surface>:group.<name>` | no rooms; the agent team answers only in Discord |
-| `readAttachment(channel, ref)` | Returns the bytes of an attachment this surface made, such as an upload to a room, as `Promise<Uint8Array>`; the refs of the surface's messages are read here and never fetched over the network, and a rejection fails that file | the refs' URLs are downloaded, up to 25 MB each |
+| `readAttachment(channel, ref)` | Returns the bytes of an attachment this surface made, such as an upload to a room, as `Promise<Uint8Array>`; the agent server's claim reads the refs of the surface's messages here and never fetches them over the network, and a rejection fails that file. A claim of your own passes the same function as `read` to `attachmentsOf`, or its refs are downloaded | the refs' URLs are downloaded, up to 25 MB each |
 | `formatting` | A short English text on how a reply renders here, such as "no Markdown tables"; the runtime appends it to the system prompt of every turn that replies on this surface, after the persona | nothing is appended |
 | `startTyping(channel)` | Shows a typing indicator until the returned function is called | none is shown |
 | `showStop(channel)` | Shows the owner a stop control until the returned function is called; using it calls `conversations.stop(channel)` | none is shown |
@@ -2749,7 +2749,7 @@ A group's room keeps its own log, `<group>@<surface>`, with the seats `agentgrou
 A schedule an agent sets from a room belongs to the room.
 `message_agent` from a room talks to the other agent's room on the same surface and returns the answer to the sender's room; it opens no thread there.
 Starting a room over resets that room's session (or a group room's seats) alone.
-Archiving an agent or group clears the schedules and sessions of every key `AGENTS.team.roomsOf(name)` lists: its Discord channel, when it has one, then its room on each surface, and the room stops being owned, so messages there are dropped.
+Archiving an agent or group clears the schedules and sessions of every key `AGENTS.team.roomsOf(name)` lists: its Discord channel, when it has one, then its room on each surface, and the room stops being owned: `AGENTS.team.owns(room)` is `undefined`, the agent server's claim no longer takes its messages, and a surface should refuse them (the web disables the composer) instead of delivering them to a room nobody answers in.
 
 The team replies in a room through `context.surfaces.sendReply(room, reply)` with `OutboundReply.author` set to a `PostAuthor`, `{ name, agent? }`: the agent's display name and its stable name.
 Its interim posts go through `surfaces.interim(room, author)`.
@@ -2759,7 +2759,7 @@ A surface shows the author as it likes; Discord's own surface ignores `author`.
 
 Messages in a room are admitted by the agent server's claim like those in a Discord channel: an owner's message runs a turn, a group's round follows, and `speakers: "owners"` still applies.
 The claim reads the attachments of a room's message through the surface's `readAttachment`, so a ref the surface made is never fetched over the network; a surface without it has its refs downloaded from their URLs.
-`AGENTS.team.owns(key)` answers for a room too, only while its agent or group is active, and `AGENTS.team.coordinator()` names the coordinator, the agent in the entry channel.
+`AGENTS.team.owns(key)` answers for a room too, only while its agent or group is active, and `AGENTS.team.coordinator()` names the coordinator, the agent in the entry channel, or on a host without Discord the one `coordinator` names.
 
 A surface tells the model how its replies render with `formatting`: a short English text, kept under about 400 characters, which the runtime appends to the system prompt of every turn that replies on the surface, after the persona and everything appended before it, for the channel the turn replies in.
 One persona can answer on several surfaces, so the guidance comes from the surface and never from the persona.
@@ -3170,13 +3170,13 @@ The types are `AdapterConfig` and `DiscordConfig` from `pi-roundtable`, and `Dis
 
 ### A host without Discord
 
-Leave `discord` out of `roundtable.config.ts` and the host runs without it: no Discord plugin, no agent server, no agents, and no skills.
+Leave `discord` out of `roundtable.config.ts` and the host runs without it: no Discord plugin, and no tool that needs Discord. With no `agents` there is no agent server, no agent and no skills either; with `agents`, [the team runs without Discord](#an-agent-team-without-discord).
 The runtime plugin still builds the runtime, so every claim that runs turns through `context.turns` works, over the surfaces your plugins bring.
 `http` is optional too; without it the host opens no listener, and a route then names a listener that is not configured.
 
 What needs Discord is refused or left out rather than failing later:
 
-- `agents`, `skills` (anything but `false`), and `ops.agent` are configuration errors. `ops: { conversation: "<surface>:<id>" }` needs a chat surface that serves it and a claim that owns it and takes background turns, or the host does not start. Webchat declares `takesSystemReports: false` and takes no system error reports.
+- `ops.agent` is a configuration error, and so are `skills` (anything but `false`) without `agents`, and an agent seed's `channelId`. `ops: { conversation: "<surface>:<id>" }` needs a chat surface that serves it and a claim that owns it and takes background turns, or the host does not start. Webchat declares `takesSystemReports: false` and takes no system error reports.
 - `notify` is not registered unless a plugin contributes a [direct channel](#directchannels-reaching-a-person-on-their-own), since there is nowhere to send a notice.
 - `schedule_*` and `delegate_task` are registered only in a conversation whose claim takes background turns: their runs are turns of the [background target](#backgroundtargets-whose-turn-a-schedule-or-delegated-task-is) `PERSONAL_TARGET`, named `owner`, which the core contributes on every host. A conversation of a claim without `background` has neither; a no-surface conversation needs a registered private principal known to a direct channel, as [background targets](#backgroundtargets-whose-turn-a-schedule-or-delegated-task-is) describes.
 - `roundtable doctor` skips the Discord checks.
@@ -3184,6 +3184,18 @@ What needs Discord is refused or left out rather than failing later:
 Pi's runtime still needs the `compact_session` tool in every session, from the Pi package pi-self-compact: load it from a plugin with `piPackages: ["pi-self-compact"]`, as the `plugins/self-compact.ts` of a project `roundtable init` creates does, or the preflight stops the start and says so.
 `roundtable init --adapter web` creates a host without Discord around the [web chat](#web-chat-pi-roundtable-webchat).
 A host that keeps Discord may write it as an adapter instead, as [`adapters`](#adapters-the-chat-networks-the-host-talks-through) describes.
+
+#### An agent team without Discord
+
+`agents` and `skills` work without `discord`. The host then assembles the agent server and the skills addon whenever `agents` is not empty: the same team, with the same prompts, models, notes, schedules and skills, whose agents and groups have no Discord channel and are reached only through [rooms](#agent-rooms-on-any-surface) of a surface that declares `agentRooms: true`, such as `pi-roundtable-web`.
+
+- `coordinator` names the agent that coordinates the team; it must be one of `agents` and defaults to the first. With `discord` the agent in `discord.entryChannel` is the coordinator, and `coordinator` is a `ConfigError`. The coordinator cannot be archived. `AGENTS.team.coordinator()` answers with either.
+- The team's id is `LOCAL_TEAM_ID`, `"local"`, where Discord's is the guild's id; the rows are stored under it as under the guild's, and `AGENTS.team.guildId` is it.
+- The start fails, naming the fix ("agents need a surface that hosts their rooms, such as pi-roundtable-web"), when no installed surface declares `agentRooms`: without Discord channels the agents could never be spoken to. The check runs when the plugins are linked, so a surface added by any plugin counts.
+- No channel is made, checked or arranged, and the dashboard (a Discord message) does not exist. `channel_arrange` and `channel_read` answer that the host has no Discord channels. `agent_create` and `group_create` make no channel, and a new agent starts its opening task in its room on the first surface that hosts rooms. Archiving an agent or group stops its rooms from answering.
+- An agent's pictures have no public address unless `http.publicUrl` is set: `AGENTS.avatars.url(hash)` is then the path `/avatars/<hash>.png`, which the surface serves itself through `AGENTS.avatars.serve(pathname)` under its own origin, as the web console does. With `http.publicUrl` they are served on the `public` listener as with Discord.
+- `AgentTeam.channelOf(name, near?)` answers with the agent's room on the surface of `near` (the asker's own conversation) when that surface hosts rooms, so `schedule_list` from a room reads the room's schedules; for an agent with no Discord channel it falls back to its room on the first surface that hosts rooms. The status the dashboard and the web read counts an agent's schedules, waiting turns and context use across its Discord channel and its rooms.
+- Breaking: `AgentGroup.channelId` is optional (`string | undefined`), and so is `GroupStatus.channelId`; a plugin that reads them handles a group without a Discord channel. The `agent_groups.channel_id` column drops its `NOT NULL` in a migration of the agent server (`agent-groups-channel-optional`), and `AgentServerOptions.guildId` and `entryChannelId` are optional, with `coordinator` added. `AvatarStudioOptions.publicUrl` is optional.
 
 <!-- example: examples/headless.ts -->
 ```ts
@@ -3526,7 +3538,7 @@ It boots `defineRoundtable` over `ROUNDTABLE_TEST_DATABASE_URL`, with stand-ins 
 | `plugins` | Your plugins, placed after the built-in ones as `defineRoundtable` places them |
 | `runtime` | The runtime every turn runs on; by default one that answers `""` and builds no Pi session |
 | `apiKeys` | The credentials `context.apiKey(provider)` returns, by provider name; a provider not listed reads as having none, whatever login the machine holds |
-| `discord` | What the stand-in Discord hands out: `agentChannels(guildId)`, `ownerChannel()`, `channelInfo(channelId)` and `poster` (what `DISCORD.poster` is; by default a `fakeDiscordPoster()`); `false` boots a [host without Discord](#a-host-without-discord), with no `discord`, `http`, or `agents` in the test configuration |
+| `discord` | What the stand-in Discord hands out: `agentChannels(guildId)`, `ownerChannel()`, `channelInfo(channelId)` and `poster` (what `DISCORD.poster` is; by default a `fakeDiscordPoster()`); `false` boots a [host without Discord](#a-host-without-discord), with no `discord`, `http`, or `agents` in the test configuration; give `config: { agents }` and a plugin whose surface declares `agentRooms` to boot an [agent team without Discord](#an-agent-team-without-discord) |
 
 It returns:
 
@@ -3606,7 +3618,7 @@ The host's `run()` handles startup:
    The runtime plugin builds the runtime later, in its own setup: from the `runtime` slot when a plugin fills it, else the Pi runtime.
 2. The database is opened and every plugin's migrations run, in plugin order.
 3. Every plugin's `setup` runs, in plugin order.
-   The order is the built-ins (`identity`, `memory`, `schedule-store`, `prechecks`, `discord`, `modules`, `worker-sessions`, `discord-admin`, `skills`, `conversations`, `runtime`, `agent-server`, `seeds`; an addon that is switched off is not there, and without Discord neither are `discord`, `discord-admin`, `skills`, `agent-server`, or `seeds`), then yours in the order of `plugins` in `roundtable.config.ts`, then the built-in `schedules`, so a due schedule fires only once everything it can reach is running.
+   The order is the built-ins (`identity`, `memory`, `schedule-store`, `prechecks`, `discord`, `modules`, `worker-sessions`, `discord-admin`, `skills`, `conversations`, `runtime`, `agent-server`, `seeds`; an addon that is switched off is not there, and without Discord neither are `discord` or `discord-admin`, nor, without `agents`, `skills`, `agent-server` or `seeds`), then yours in the order of `plugins` in `roundtable.config.ts`, then the built-in `schedules`, so a due schedule fires only once everything it can reach is running.
 4. The contributions are linked: tool tiers, hold rules, the session plan, the channel router, and the events.
    From here `sessions()`, `conversations`, `surfaces`, `turns`, and `dashboard()` work.
 5. Every plugin's `preflight` runs, in plugin order.
@@ -3967,6 +3979,7 @@ Import from the entries listed below; source area files are internal.
 | `LogEntry` | `pi-roundtable` | type |
 | `LogFn` | `pi-roundtable` | type |
 | `Logger` | `pi-roundtable` | type |
+| `LOCAL_TEAM_ID` | `pi-roundtable` | value |
 | `MEMORY` | `pi-roundtable` | value |
 | `MODES` | `pi-roundtable` | value |
 | `MEMORY_KINDS` | `pi-roundtable` | value |

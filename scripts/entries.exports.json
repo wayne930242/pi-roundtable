@@ -17,6 +17,7 @@
 			"IDENTITY_LINKS",
 			"IdentityError",
 			"JudgeError",
+			"LOCAL_TEAM_ID",
 			"MEMORY",
 			"MEMORY_KINDS",
 			"MODES",

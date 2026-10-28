@@ -26,6 +26,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The conversation modes no longer lose a mode set while they load their rows at start: the stored row used to overwrite it in memory.
 - The documentation says the time-limit card waits `turnLimits.cardSeconds` (5 minutes by default), not a flat 5 minutes.
 
+- Agent team without Discord (`pi-roundtable`). `agents` and `skills` are allowed without `discord`: the host assembles the agent server and the skills addon whenever `agents` is not empty, and the team lives in the rooms of a surface that declares `agentRooms`. The new `coordinator` key names the coordinating agent (default the first seed; a `ConfigError` together with `discord`, where the entry channel's agent coordinates). The team's id is `LOCAL_TEAM_ID` (`"local"`) in place of the guild's id. The start fails when no installed surface hosts rooms ("agents need a surface that hosts their rooms, such as pi-roundtable-web"). Without Discord channels no channel is made, arranged or read (`channel_arrange` and `channel_read` say so) and there is no dashboard; the agents' pictures are the path `/avatars/<hash>.png` unless `http.publicUrl` is set, and the surface serves them through `AGENTS.avatars.serve`. `AgentServerOptions.guildId` and `entryChannelId` are optional, `AgentServerOptions.coordinator`, `avatarListener` and `avatarUrl` are optional additions, `AvatarStudioOptions.publicUrl` is optional, and `AgentTeam.channelOf(name, near?)` answers with the agent's room on the asker's surface. See [an agent team without Discord](docs/plugins.md#an-agent-team-without-discord).
+
+### Changed
+
+- **Breaking:** `AgentGroup.channelId` and `GroupStatus.channelId` are optional (`pi-roundtable`), because a group of a team without Discord has no Discord channel; a plugin that reads them handles `undefined`. The agent server's tables gain the migration `agent-groups-channel-optional` (`agent_groups.channel_id` drops `NOT NULL`). On a host without Discord but with `agents`, the agent server now runs where 0.22 refused the configuration, and it needs a surface that hosts rooms. `AgentChannelLookup` takes the asker's conversation as a second argument.
+
+### Fixed
+
+- A reply in an agent room on a surface that does not declare `supportsFiles` is no longer lost whole (`pi-roundtable`). The room's turns were always offered reply files, and the surface port refused a reply that carried one; they are offered only where the surface supports files, as in other conversations.
+- `schedule_list` from an agent room reads the other agent's room, and the dashboard's status counts an agent's schedules, waiting turns and context use across its rooms (`pi-roundtable`); before, both looked at the Discord channel alone, and the schedule lookup threw for an agent with none.
+
 ## [0.22.5] - 2026-10-25
 
 ### Security

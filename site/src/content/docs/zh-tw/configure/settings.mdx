@@ -65,7 +65,8 @@ export default {
 
 ## Discord
 
-不設 `discord`，host 就在沒有 Discord 的情況下執行：沒有 Discord 外掛、agent server、agent 和技能，但外掛透過 `context.turns` 執行的對話照常運作。
+不設 `discord`，host 就在沒有 Discord 的情況下執行：沒有 Discord 外掛；沒有 `agents` 時也沒有 agent server 和技能，但外掛透過 `context.turns` 執行的對話照常運作。
+設了 `agents`，團隊就在支援房間的 surface（例如網頁主控台）裡運作，沒有任何 surface 支援房間時 host 拒絕啟動；見 [agent 與頭像](#agent-與頭像)。
 `roundtable init --adapter web` 會以[網頁聊天](/zh-tw/plugins/webchat-package/)為中心建立這種專案。
 同樣的設定也可以寫成 adapter：`adapters: [discord({ ... })]`，其中 `discord` 來自 `pi-roundtable/discord`。Discord 只能在其中一處設定，不能兩處都設。
 
@@ -143,7 +144,8 @@ export default {
 
 | 鍵 | 型別 | 預設值 | 作用 |
 | --- | --- | --- | --- |
-| `agents` | `{ name, displayName, prompt, avatarPrompt, channelId? }` 的清單 | `[]` | 第一批團隊，只建立一次。已經存下來的 agent 不會被覆寫，所以之後請在 Discord 裡修改 agent。 |
+| `agents` | `{ name, displayName, prompt, avatarPrompt, channelId? }` 的清單 | `[]` | 第一批團隊，只建立一次。已經存下來的 agent 不會被覆寫，所以之後請在 Discord 裡修改 agent。沒有 Discord 時，種子 agent 沒有 `channelId`。 |
+| `coordinator` | string | `agents` 的第一位 | 沒有 Discord 時，接手主人一般請求的 agent；必須是 `agents` 之一，也不能被封存。有 Discord 時設它會出錯，因為 `discord.entryChannel` 裡的 agent 就是協調者。 |
 | `avatar` | string | 套件附帶的一張簡單 bot 圖片 | 你自己的圖片：中性頭像，也是繪製頭像時參考風格的圖。 |
 | `http.publicUrl` | string，使用 Discord 時必填 | 無 | 能從網際網路連到這個行程的位址。Discord 從這裡取頭像。 |
 | `http.port` | 1 到 65535 的整數 | `3000` | 行程監聽的 TCP port。 |

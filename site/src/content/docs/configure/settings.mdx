@@ -65,7 +65,8 @@ export default {
 
 ## Discord
 
-Leave `discord` out for a host without Discord: no Discord plugin, no agent server, no agents, and no skills, while every conversation a plugin runs through `context.turns` still works.
+Leave `discord` out for a host without Discord: no Discord plugin, and with no `agents`, no agent server and no skills, while every conversation a plugin runs through `context.turns` still works.
+With `agents`, the team runs without Discord in the rooms of a surface that hosts them, such as the web console, and the host refuses to start when none does; see [Agents and avatars](#agents-and-avatars).
 `roundtable init --adapter web` creates such a project around the [web chat](/plugins/webchat-package/).
 The same settings may also come as an adapter, `adapters: [discord({ ... })]` with `discord` from `pi-roundtable/discord`; configure Discord in one place, not both.
 
@@ -143,7 +144,8 @@ See [Access tiers](/configure/access-tiers/).
 
 | Key | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `agents` | list of `{ name, displayName, prompt, avatarPrompt, channelId? }` | `[]` | The first team, created once. An agent that is already stored is never overwritten, so edit agents in Discord afterwards. |
+| `agents` | list of `{ name, displayName, prompt, avatarPrompt, channelId? }` | `[]` | The first team, created once. An agent that is already stored is never overwritten, so edit agents in Discord afterwards. Without Discord a seed has no `channelId`. |
+| `coordinator` | string | the first of `agents` | Without Discord, the agent the owner's general requests come to; it must be one of `agents` and cannot be archived. With Discord it is an error, because the agent in `discord.entryChannel` coordinates. |
 | `avatar` | string | a plain bot picture bundled with the package | A picture of your own: the neutral avatar and the style reference for drawing avatars. |
 | `http.publicUrl` | string, required with Discord | none | The address that reaches this process from the internet. Discord fetches the avatars from it. |
 | `http.port` | integer from 1 to 65535 | `3000` | The TCP port the process listens on. |

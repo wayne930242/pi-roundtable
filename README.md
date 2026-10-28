@@ -191,6 +191,14 @@ A turn works 10 minutes by default before it asks you whether to go on, and 30 m
 | `autonomy.longRunning.maxSeconds` | `14400` (4 h) | The most a long-running conversation's turn works before it asks or stops, 600 to 604800 |
 | `autonomy.yolo.allow`, `autonomy.yolo.card` | none | Hold classes yolo mode may approve beyond its defaults (`shell.rm`, say), and rule names whose calls it approves although the rule reports no classes (`tool:repo_push`, say), and classes or rule names it never approves (`shell.push`, say). By default yolo approves a plain `git push` and writes outside the workspace and cards the other destructive shell classes; see the [plugin guide](docs/plugins.md#hold-classes-and-yolo-mode) |
 
+Without `discord` the agents still run when `agents` lists them, in the rooms of a surface that hosts them, such as pi-roundtable-web; the host refuses to start when none does:
+
+| Setting | Default | What it is |
+| --- | --- | --- |
+| `agents` | none | The first team, created once. Without `discord`, a seed has no `channelId` and the team's rows are kept under the id `local` |
+| `coordinator` | the first of `agents` | Without `discord`, the agent the owner's general requests come to; it cannot be archived. With `discord` it is an error: the entry channel's agent coordinates |
+| `skills` | on with `agents` | The skills addon; without `discord` it is on only when `agents` lists some |
+
 When someone addresses the assistant in an agent's channel, the turn also reads the channel messages posted since the assistant's last post there (channel context; see the [plugin guide](docs/plugins.md#channel-context-what-was-said-around-an-addressed-message)).
 Tune it under `discord.channelContext`, or set `channelContext: false` to turn it off:
 

@@ -186,6 +186,14 @@ export default {
 | `autonomy.longRunning.maxSeconds` | `14400`（4 小時） | 長時間執行對話的一輪，工作到這個上限才會詢問或停止，600 到 604800 |
 | `autonomy.yolo.allow`、`autonomy.yolo.card` | 無 | yolo 模式在預設之外可以核准的 hold 類別（例如 `shell.rm`），以及它也核准其呼叫的規則名稱（該規則沒有回報類別，例如 `tool:repo_push`），以及它永遠不核准的類別或規則名稱（例如 `shell.push`）。預設下 yolo 會核准一般的 `git push` 和工作區以外的寫入，其餘破壞性的 shell 類別仍然出卡；見[外掛指南](docs/plugins.md#hold-classes-and-yolo-mode) |
 
+沒有 `discord` 時，只要 `agents` 列了 agent，它們就在支援房間的 surface（例如 pi-roundtable-web）裡運作；沒有任何 surface 支援房間時 host 拒絕啟動：
+
+| 設定 | 預設 | 說明 |
+| --- | --- | --- |
+| `agents` | 無 | 第一批團隊，只建立一次。沒有 `discord` 時，種子沒有 `channelId`，團隊的資料列記在 id `local` 之下 |
+| `coordinator` | `agents` 的第一位 | 沒有 `discord` 時，接手主人一般請求的 agent，不能被封存。有 `discord` 時設它會出錯：由入口頻道的 agent 協調 |
+| `skills` | 有 `agents` 時開啟 | 技能 addon；沒有 `discord` 時，只有 `agents` 列了 agent 才會開 |
+
 有人在 agent 的頻道對助理說話時，那一輪也會讀進助理上次在該頻道發言之後的頻道訊息（頻道脈絡；見[外掛指南](docs/plugins.md#channel-context-what-was-said-around-an-addressed-message)）。
 用 `discord.channelContext` 調整，或設 `channelContext: false` 關閉：
 
