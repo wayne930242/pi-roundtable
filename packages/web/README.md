@@ -27,7 +27,7 @@ Then only a person whose principal holds the owner role gets in.
 
 ## Requirements
 
-- Bun 1.4.4 or later, and pi-roundtable `>=0.22.0 <0.23.0` as a peer dependency.
+- Bun 1.4.4 or later, and pi-roundtable `>=0.23.0 <0.24.0` as a peer dependency.
 - The host must run on the machine that holds its data directory: the console reads `<dataDir>/sessions` from disk, and the app keeps its files and keys under `<dataDir>/web/`.
 - An agent team: `agents` in the configuration, with or without `discord`. Without Discord the host also needs a surface that hosts rooms, and this plugin is one; the start fails otherwise, naming the fix.
 - A way to authenticate the owners (see [Authentication](#authentication)): a password, Cloudflare Access or a verifier of your own in front of the listener, or `none` on a listener only the owner reaches.

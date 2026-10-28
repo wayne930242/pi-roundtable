@@ -3,7 +3,7 @@
 All notable changes to this project will be documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [0.23.0] - Unreleased
+## [0.23.0] - 2026-10-29
 
 The package becomes the owner app of a host, and keeps the console that came first.
 
@@ -38,6 +38,7 @@ The package becomes the owner app of a host, and keeps the console that came fir
 - The theme colour follows the page's scheme (a `<meta name="theme-color">` for each, and `<script src="theme-init.js">` in the head applies a stored scheme before the first paint, as a file because the page's policy allows scripts from itself only); the manifest's colours are the light page's. Buttons, inputs and switches are at least 44 px high on a phone or with a coarse pointer, and control borders and the off switch meet 3:1 contrast. The progress strip has no Stop of its own (the composer's replaces Send while a turn runs), and a time-limit card without its own wording says "Stop turn".
 - The fixture host (`bun run fixture`) takes `FIXTURE_AUTH=cloudflare|none|password`, and serves the `overview`, `conversations` and `notes` panes only.
 - The Discord link and Cleanup are not offered for an agent group that has no channel: `GroupView.channelId` is optional and the overview card shows neither without it.
+- The push subscription routes cap the body at 8 KiB of bytes (the declared length and what streams in) and refuse a body that starts with a byte order mark.
 
 ### Security
 

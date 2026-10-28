@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.23.0
+
+- Release in lockstep with pi-roundtable 0.23.0; no package-specific behavior changes. The core peer range is now `>=0.23.0 <0.24.0`.
+
 ## 0.22.5
 
 - Release in lockstep with pi-roundtable 0.22.5. `engines.bun` is now `>=1.4.4` (was `1.4.2`). The core peer range stays `>=0.22.0 <0.23.0`.

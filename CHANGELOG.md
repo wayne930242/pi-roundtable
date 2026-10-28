@@ -3,7 +3,7 @@
 All notable changes to this project will be documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [0.23.0] - Unreleased
+## [0.23.0] - 2026-10-29
 
 Agents can live on the web alone, and the web is an owner app: rooms for the agent team, approval cards, yolo and long-running modes, an installable PWA with push.
 Entries marked **Breaking** need a change from a host or plugin that uses the thing they name.
