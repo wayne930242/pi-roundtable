@@ -50,6 +50,35 @@ export function roomOf(
 	return { kind: match[1] as "agent" | "group", name: match[2] as string };
 }
 
+/** What the surfaces say of rooms: which of them host agent rooms, asked only for a key that is not a Discord one. */
+interface RoomHosts {
+	roomSurfaces(): readonly string[];
+}
+
+/** The agent whose Discord channel or room the key is; an archived one is returned too. */
+export function agentOfChannel(
+	store: Pick<AgentDirectory, "agent" | "agentByChannel">,
+	hosts: RoomHosts | undefined,
+	channel: ChannelKey,
+): Agent | undefined {
+	const id = discordIdOf(channel);
+	if (id !== undefined) return store.agentByChannel(id);
+	const room = roomOf(channel, hosts?.roomSurfaces() ?? []);
+	return room?.kind === "agent" ? store.agent(room.name) : undefined;
+}
+
+/** The group whose Discord channel or room the key is; an archived one is returned too. */
+export function groupOfChannel(
+	store: Pick<AgentDirectory, "group" | "groupByChannel">,
+	hosts: RoomHosts | undefined,
+	channel: ChannelKey,
+): AgentGroup | undefined {
+	const id = discordIdOf(channel);
+	if (id !== undefined) return store.groupByChannel(id);
+	const room = roomOf(channel, hosts?.roomSurfaces() ?? []);
+	return room?.kind === "group" ? store.group(room.name) : undefined;
+}
+
 /** The surface of a key that is not a Discord channel's; undefined for a Discord channel. */
 export const roomSurfaceOf = (room: ChannelKey): string | undefined => {
 	const at = typeof room === "string" ? room.indexOf(":") : -1;

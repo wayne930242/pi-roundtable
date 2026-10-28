@@ -10,14 +10,15 @@ import type { AgentChannels } from "./agent-ports.ts";
 import { overBase } from "./agent-rules.ts";
 import type { Agent, AgentGroup } from "./agent-store.ts";
 import {
+	agentOfChannel,
 	coordinatorOf,
 	discordIdOf,
 	groupLogName,
+	groupOfChannel,
 	groupRoomKey,
 	groupSessionKey,
 	homeScope,
 	keysOf,
-	roomOf,
 	roomScope,
 } from "./team-keys.ts";
 import { categoryKind, groupTopic } from "./team-layout.ts";
@@ -134,33 +135,18 @@ export class TeamLifecycle {
 	async startFresh(channel: ChannelKey): Promise<void> {
 		const { store, surfaces } = this.#ctx.options;
 		const runtime = this.#ctx.options.runtime();
-		const id = discordIdOf(channel);
 		// A Discord channel and each room are conversations of their own: a room starts over alone.
-		const room =
-			id === undefined
-				? roomOf(channel, surfaces?.roomSurfaces() ?? [])
-				: undefined;
-		const agent =
-			id !== undefined
-				? store.agentByChannel(id)
-				: room?.kind === "agent"
-					? store.agent(room.name)
-					: undefined;
+		const agent = agentOfChannel(store, surfaces, channel);
 		if (agent?.status === "active") {
 			await runtime.startFresh(
-				id === undefined
+				discordIdOf(channel) === undefined
 					? roomScope(agent, channel).session
 					: homeScope(agent).session,
 			);
 			this.#ctx.changed();
 			return;
 		}
-		const group =
-			id !== undefined
-				? store.groupByChannel(id)
-				: room?.kind === "group"
-					? store.group(room.name)
-					: undefined;
+		const group = groupOfChannel(store, surfaces, channel);
 		if (group?.status !== "active") return;
 		for (const member of group.members)
 			await runtime.startFresh(groupSessionKey(group, member, channel));

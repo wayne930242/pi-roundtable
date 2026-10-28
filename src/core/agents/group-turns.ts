@@ -12,11 +12,10 @@ import {
 	RECENT_FOR_SCORING,
 } from "./group-round.ts";
 import {
-	discordIdOf,
 	groupLogName,
+	groupOfChannel,
 	groupScope,
 	groupSessionKey,
-	roomOf,
 } from "./team-keys.ts";
 import {
 	BACKLOG_LIMIT,
@@ -36,17 +35,7 @@ export class GroupTurns {
 	/** The active group whose Discord channel or room the key is. */
 	#groupOf(channel: ChannelKey): AgentGroup {
 		const { store, surfaces } = this.#host.options;
-		const id = discordIdOf(channel);
-		const room =
-			id === undefined
-				? roomOf(channel, surfaces?.roomSurfaces() ?? [])
-				: undefined;
-		const group =
-			id !== undefined
-				? store.groupByChannel(id)
-				: room?.kind === "group"
-					? store.group(room.name)
-					: undefined;
+		const group = groupOfChannel(store, surfaces, channel);
 		if (group?.status !== "active")
 			throw new AgentError(`no group owns ${channel}`);
 		return group;

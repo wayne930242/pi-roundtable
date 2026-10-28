@@ -21,6 +21,7 @@ import { AgentMessages } from "./agent-messages.ts";
 import type { Agent } from "./agent-store.ts";
 import { GroupTurns } from "./group-turns.ts";
 import {
+	agentOfChannel,
 	channelIdOf,
 	channelOwner,
 	coordinatorOf,
@@ -28,7 +29,6 @@ import {
 	discordKey,
 	homeScope,
 	keysOf,
-	roomOf,
 	roomScope,
 } from "./team-keys.ts";
 import { replyBody } from "./team-reply.ts";
@@ -183,16 +183,8 @@ export class TeamTurns {
 
 	/** The agent whose channel or room it is. */
 	#agentOf(channel: ChannelKey): Agent {
-		const { store } = this.#options;
-		const id = discordIdOf(channel);
-		const room =
-			id === undefined ? roomOf(channel, this.#rooms(channel)) : undefined;
-		const agent =
-			id !== undefined
-				? store.agentByChannel(id)
-				: room?.kind === "agent"
-					? store.agent(room.name)
-					: undefined;
+		const { store, surfaces } = this.#options;
+		const agent = agentOfChannel(store, surfaces, channel);
 		if (agent?.status !== "active")
 			throw new AgentError(`no agent owns ${channel}`);
 		return agent;
