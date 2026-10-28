@@ -8,7 +8,7 @@ beforeAll(() => GlobalRegistrator.register({ width: 390, height: 844 }));
 afterAll(() => GlobalRegistrator.unregister());
 
 const seats = (): SeatInit[] =>
-	["merlin", "lancelot", "gawain"].map((id, index) => ({
+	["arthur", "lancelot", "gawain"].map((id, index) => ({
 		id,
 		name: id,
 		color: ["#1f7a72", "#b8872b", "#a5435f"][index] ?? "#000000",
@@ -67,7 +67,7 @@ test("listBelow shows a visible button per seat that opens the seat", async () =
 		...container.querySelectorAll<HTMLButtonElement>(".rt-table-list button"),
 	];
 	expect(buttons.map((button) => button.textContent)).toEqual([
-		"merlin (idle)",
+		"arthur (idle)",
 		"lancelot (idle)",
 		"gawain (idle)",
 	]);
@@ -96,9 +96,9 @@ test("composed shield characters, each with its own uid, go in as data URIs", as
 			size: 256,
 			uid,
 		});
-	const [first, second] = [svg("merlin"), svg("lancelot")];
+	const [first, second] = [svg("arthur"), svg("lancelot")];
 	expect(first).not.toBe(second);
-	await table.setAvatar("merlin", first);
+	await table.setAvatar("arthur", first);
 	await table.setAvatar("lancelot", second);
 	const hrefs = [...container.querySelectorAll("image")].map((image) =>
 		image.getAttribute("href"),
