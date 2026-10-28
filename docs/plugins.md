@@ -3393,7 +3393,7 @@ Every agent of the agent server is a composed character. `Agent.character` is it
 - `AgentTeam.dress(name, input)` changes a look: the input is resolved over the agent's current character, rendered, and stored with the new picture in one update. A new `class` alone keeps the agent's colors; give a `palette` or `colors` to change them. A bad field is an `AgentError` that names it, as is an unknown or archived agent.
 - `AvatarStudio.render(spec)` renders a character as a 512 px PNG (the idle face on the modern light disc), stores it by content hash and returns the hash; the same spec gives the same hash. A plugin that implements `AvatarStudio` adds it. `draw`, `edit`, `fallback` and `canDraw` are deprecated until 1.0.
 - `renderCharacterPng(spec, options?)` (`pi-roundtable/kit`) does the same rasterization and returns the bytes. It needs `canvas` with SVG support (librsvg); the agent server renders a probe character at start and refuses to start when it cannot: the start fails as a `PluginError` whose `cause` is a `ConfigError` ("the agent server needs canvas with SVG support").
-- The agent tools and the Discord profile panel choose looks: `agent_create` takes `class` and `color`, `agent_avatar { name, class?, color?, parts? }` calls `AgentTeam.dress` on every host, and `/profile` has a class select (24) and a color select (8). `AgentTeam.redrawAvatar` and `AvatarMode` are removed; use `dress`. An old panel's redraw buttons answer that the panel is out of date.
+- The agent tools and the Discord profile panel choose looks: `agent_create` takes `class` and `color`, `agent_avatar { name, class?, color?, parts? }` calls `AgentTeam.dress` on every host, and `/profile` has a class select (24) and a color select (8). `AgentTeam.redrawAvatar` and `AvatarMode` are deprecated, not removed; use `dress`. An old panel's redraw buttons answer that the panel is out of date.
 - Each avatar on one page needs its own `uid` in `composeSvg`; the server renders pass an explicit one.
 
 ## Official plugins
@@ -3986,6 +3986,7 @@ Import from the entries listed below; source area files are internal.
 | `AttachmentUpload` | `pi-roundtable` | type |
 | `AttachmentsConfig` | `pi-roundtable` | type |
 | `AutoApproval` | `pi-roundtable` | type |
+| `AvatarMode` | `pi-roundtable` | type |
 | `AvatarStudio` | `pi-roundtable` | type |
 | `characterOf` | `pi-roundtable` | value |
 | `BACKGROUND_TURNS` | `pi-roundtable` | value |
