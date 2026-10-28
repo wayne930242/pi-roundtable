@@ -75,6 +75,21 @@ function RoomPicture(props: { view: RoomView; size: number }) {
 	);
 }
 
+/** The dots that show an agent is working in the room. */
+const Typing = () => (
+	<span className="typing" role="img" aria-label={t("Working")}>
+		<i />
+		<i />
+		<i />
+	</span>
+);
+
+const WaitingBadge = ({ count }: { count: number }) => (
+	<span className="badge badge-warn">
+		{plural(count, "{count} card waiting", "{count} cards waiting")}
+	</span>
+);
+
 const RoomRow = memo(function RoomRow(
 	props: Omit<RowData, "key"> & {
 		active: boolean;
@@ -110,25 +125,11 @@ const RoomRow = memo(function RoomRow(
 						</span>
 					</span>
 					<span className="room-row-preview">
-						{props.typing ? (
-							<span className="typing" role="img" aria-label={t("Working")}>
-								<i />
-								<i />
-								<i />
-							</span>
-						) : null}
+						{props.typing ? <Typing /> : null}
 						<span>{props.preview || t("No messages yet")}</span>
 					</span>
 					<span className="room-row-badges">
-						{props.waiting ? (
-							<span className="badge badge-warn">
-								{plural(
-									props.waiting,
-									"{count} card waiting",
-									"{count} cards waiting",
-								)}
-							</span>
-						) : null}
+						{props.waiting ? <WaitingBadge count={props.waiting} /> : null}
 						{props.yolo ? (
 							<span className="badge badge-yolo">
 								<Icon name="bolt" size={12} />
@@ -169,22 +170,8 @@ const ThreadRow = memo(function ThreadRow(
 			>
 				<Icon name="conversations" size={16} className="thread-row-icon" />
 				<span className="thread-row-title">{view.displayName}</span>
-				{props.typing ? (
-					<span className="typing" role="img" aria-label={t("Working")}>
-						<i />
-						<i />
-						<i />
-					</span>
-				) : null}
-				{props.waiting ? (
-					<span className="badge badge-warn">
-						{plural(
-							props.waiting,
-							"{count} card waiting",
-							"{count} cards waiting",
-						)}
-					</span>
-				) : null}
+				{props.typing ? <Typing /> : null}
+				{props.waiting ? <WaitingBadge count={props.waiting} /> : null}
 				<span className="room-row-time">
 					{props.at ? ago(props.at, props.now, props.timeZone) : ""}
 				</span>

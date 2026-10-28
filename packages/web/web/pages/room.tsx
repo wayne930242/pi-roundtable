@@ -17,7 +17,7 @@ import { LiveRow, MessageRow, PendingRow } from "../components/message-row.tsx";
 import { ModeBanner } from "../components/mode-banner.tsx";
 import { ProgressStrip } from "../components/progress-strip.tsx";
 import { RoomMenu } from "../components/room-menu.tsx";
-import { Empty, Failure } from "../components/states.tsx";
+import { Empty, Failure, Loading } from "../components/states.tsx";
 import { api, messageOf } from "../lib/api.ts";
 import { store, useSelector } from "../lib/app-store.ts";
 import {
@@ -344,12 +344,7 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 			<div className="room-scroll" ref={scroller} onScroll={onScroll}>
 				<div className="room-content" ref={content}>
 					{error ? <Failure message={error} /> : null}
-					{!loaded && !error ? (
-						<div className="stack" aria-busy="true">
-							<div className="skeleton" />
-							<div className="skeleton" />
-						</div>
-					) : null}
+					{!loaded && !error ? <Loading /> : null}
 					{room?.more ? (
 						<button
 							type="button"
