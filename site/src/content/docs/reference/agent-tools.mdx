@@ -45,7 +45,7 @@ See [Skills and memory](/agents/skills-and-memory/).
 | `skill_update` | Replaces an agent-written skill's description or body. | admin |
 | `skill_delete` | Deletes an agent-written skill and detaches it from every agent. | admin |
 | `skill_link` | Registers the skills in a folder of a managed repository. Linked skills are read-only. | admin |
-| `skill_unlink` | Removes a linked skill from the registry. | admin |
+| `skill_unlink` | Removes a linked skill from the registry. A skill that comes from a package is refused, with the package named. | admin |
 | `skill_group_set` | Creates or replaces a skill group, a named list of skills. Agents carry skills, not groups. | admin |
 | `skill_group_delete` | Deletes a skill group. Its skills are untouched. | admin |
 | `memory_add` | Remembers a fact as `core`, `note`, or `event`. | member |
@@ -67,7 +67,7 @@ See [Schedules and background work](/agents/schedules-and-background/).
 | `schedule_update` | Changes a schedule's title, prompt, or timing. | admin |
 | `schedule_cancel` | Deletes a schedule. | admin |
 | `delegate_task` | Hands web research to a cheaper worker model in the background. Its report comes back as a new turn. | admin |
-| `notify_owner` | Sends the owner a direct message on Discord. | owner |
+| `notify` | Sends the person the conversation serves a direct message. Older configurations that name it `notify_owner` keep working until 1.0. | owner |
 
 ## Shell and files
 

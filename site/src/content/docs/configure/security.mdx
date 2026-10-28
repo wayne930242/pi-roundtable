@@ -12,8 +12,8 @@ It does not yet isolate those people from each other the way a multi-user servic
 ## Who is trusted
 
 - The operator controls the host, its configuration, and its credentials.
-- The owner (`owner.id`) may use every tool.
-- Everyone else is admitted at a tier, `member` or `admin`: in Discord from the user and role ids in `speakers`, on the web from the access map over the token's roles. See [Access tiers](/configure/access-tiers/).
+- An owner, one listed in `access.owners`, may use every tool.
+- Everyone else is admitted at a tier, `member` or `admin`, by the `access` rules over verified identities and roles, such as a Discord user id or a role of the web chat's token. See [Access tiers](/configure/access-tiers/).
 - No token claim makes anyone the owner.
 
 ## What a turn may do
@@ -24,7 +24,7 @@ It does not yet isolate those people from each other the way a multi-user servic
 
 ## Approvals
 
-A held call is approved only by the speaker whose turn held it, at a tier that still holds the call, or by the owner.
+A held call is approved only by the speaker whose turn held it, at a tier that still holds the call, or, in a shared conversation, by an owner.
 That holds for the approval card and for a confirming message.
 A call that someone above the speaker should approve needs a higher `minTier`, or a hold rule's `approvalTier`.
 

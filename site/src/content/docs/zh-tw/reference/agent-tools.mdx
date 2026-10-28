@@ -45,7 +45,7 @@ agent 透過工具行動。
 | `skill_update` | 取代 agent 自己寫的技能的描述或內容。 | `admin` |
 | `skill_delete` | 刪除 agent 自己寫的技能，並從每個 agent 身上卸下。 | `admin` |
 | `skill_link` | 註冊受管理的儲存庫某個資料夾裡的技能。連結進來的技能是唯讀的。 | `admin` |
-| `skill_unlink` | 把連結進來的技能從 registry 移除。 | `admin` |
+| `skill_unlink` | 把連結進來的技能從 registry 移除。來自套件的技能會被拒絕，訊息會指出套件名稱。 | `admin` |
 | `skill_group_set` | 建立或取代技能群組，也就是一份有名稱的技能清單。agent 帶的只有技能本身。 | `admin` |
 | `skill_group_delete` | 刪除技能群組。裡面的技能不受影響。 | `admin` |
 | `memory_add` | 把一項事實記成 `core`、`note` 或 `event`。 | `member` |
@@ -67,7 +67,7 @@ member 的記憶工具讀寫的是那位 member 的記憶，不是 owner 的。
 | `schedule_update` | 修改排程的標題、提示詞或時間。 | `admin` |
 | `schedule_cancel` | 刪除排程。 | `admin` |
 | `delegate_task` | 把網路研究在背景交給比較便宜的 worker 模型。報告會以新的一輪回來。 | `admin` |
-| `notify_owner` | 在 Discord 私訊 owner。 | `owner` |
+| `notify` | 私訊這個對話服務的人。舊設定裡寫 `notify_owner` 的仍可使用，直到 1.0。 | `owner` |
 
 ## Shell 和檔案
 

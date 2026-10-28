@@ -23,8 +23,8 @@ The `.gitignore` that `init` writes lists `.env`, so the file stays out of Git.
 | `DISCORD_TOKEN` | The Bot page of your application at the Discord developer portal. | `discord.token` |
 | `DISCORD_GUILD_ID` | Turn on Developer Mode in Discord, then right-click the server and copy its id. | `discord.guild` |
 | `DISCORD_ENTRY_CHANNEL_ID` | The same way: right-click the channel the coordinator should live in and copy its id. | `discord.entryChannel` |
-| `OWNER_ID` | You, the one owner who can change everything: right-click your name and choose Copy User ID. | `owner.id` |
-| `OWNER_NAME` | Your name, as the agents should use it. | `owner.name` |
+| `OWNER_ID` | You, the one owner who can change everything: right-click your name and choose Copy User ID. | `access.owners[0].principal`, and the `discord:` identity beside it |
+| `OWNER_NAME` | Your name, as the agents should use it. | `access.owners[0].name` |
 | `DATABASE_URL` | PostgreSQL. The default in the file matches the `docker-compose.yml` that `init` writes: `postgres://roundtable:roundtable@localhost:5432/roundtable`. | `database.url` |
 | `MODEL` | The agents' model, written `<provider>/<id>`. The file suggests `anthropic/claude-sonnet-5-5`. | `model` |
 | `PUBLIC_URL` | The address that reaches this process from the internet. It serves the agents' avatars. | `http.publicUrl` |
@@ -61,7 +61,7 @@ The config file turns an unset variable into an empty string, and every required
 The configuration check also catches blank values in `.env`:
 
 ```text
-config owner.id: expected a non-empty string, got "". Fix the value in roundtable.config.ts.
+config access.owners[0].principal: expected a non-empty string, got "". Fix the value in roundtable.config.ts.
 ```
 
 ## The public address

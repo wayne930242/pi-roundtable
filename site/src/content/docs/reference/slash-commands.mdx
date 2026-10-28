@@ -41,7 +41,7 @@ To create or change a schedule, ask an agent; see [Schedules and background work
 
 ## Who may use them
 
-The bot checks the Discord user id and allows only the owner to use `/roundtable`.
+The bot checks the Discord user id and allows only an owner to use `/roundtable`.
 Every answer is visible only to the person who ran the command.
 Anyone else gets a panel titled `Owner only` that says `/roundtable` is the control panel of the assistant's owner, followed by whatever you set in `discord.refusalHint`.
 Autocomplete returns no choices for non-owners.
@@ -50,12 +50,16 @@ See [Access tiers](/configure/access-tiers/).
 
 ## Buttons that are not commands
 
-Two kinds of Discord buttons handle clicks:
+Three kinds of Discord buttons handle clicks:
 
 - The cards for held actions and `ask_user` questions.
   Their buttons are `Run` and `Cancel`, or the answer options.
-  A set of questions is one card: a menu for each question, a button that opens a form for written answers and a note, `Submit`, and `Previews` when an option has a preview.
+  A set of questions is one card: a menu for each question, a button that opens a form for written answers and a note, `Submit` with a `Cancel` beside it, and `Previews` when an option has a preview.
+  `Cancel` tells the agent you declined the question, so it does not ask again.
   See [Access tiers](/configure/access-tiers/) for who may answer.
+- The card of a turn that reached its time limit: the built-in runtime's 10-minute budget or 30-minute cap.
+  It names the limit, what the turn is doing and the tools so far, with `Continue` (another full budget) and `Cancel`.
+  With no answer within 5 minutes the turn is aborted.
 - The `Stop` button on a long turn.
   Only the owner can press it.
   It answers `Stopped.`, or `Nothing is running right now.` when the turn has already ended, or `Only <name>'s owner can stop it.` to anyone else.

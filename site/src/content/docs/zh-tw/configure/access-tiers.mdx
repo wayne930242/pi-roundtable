@@ -19,35 +19,45 @@ pi-roundtable 是為一位 owner 和一個 Discord 伺服器設計的。
 
 ## 預設：只有 owner
 
-沒有 `speakers` 設定時，只有 owner 能跟 agent 說話。
-owner 是 Discord 使用者 id 等於 `owner.id` 的人，而且只有一位。
+`access` 底下沒有 `admins` 或 `members` 時，只有 owner 能跟 agent 說話。
+owner 是列在 `access.owners` 的人；`roundtable init` 會把你寫成第一位，用你的 Discord 使用者 id。
 其他 bot 的訊息會被忽略。agent 伺服器不擁有的頻道也一樣：只有 agent 和群組的頻道會得到回答。
 
 ## 給其他人一個層級
 
-在 `roundtable.config.ts` 的 `speakers` 底下列出人。
-每個層級可以填使用者 id、身分組 id，或所有人：
+在 `roundtable.config.ts` 的 `access` 底下列出人。
+每個層級可以填身分、角色，或所有人：
 
 ```ts
 export default {
 	// ...
-	owner: { id: env("OWNER_ID"), name: "Ada" },
-	speakers: {
-		admins: { users: ["<user id>"] },
-		members: { roles: ["<role id>"] },
+	access: {
+		owners: [
+			{
+				name: "Ada",
+				principal: env("OWNER_ID"),
+				identities: [`discord:${env("OWNER_ID")}`],
+			},
+		],
+		admins: { identities: ["discord:<user id>"] },
+		members: { roles: ["discord:role:<role id>"] },
 	},
 } satisfies RoundtableConfig;
 ```
 
 | 欄位 | 型別 | 作用 |
 | --- | --- | --- |
-| `users` | 字串清單 | Discord 使用者 id。 |
-| `roles` | 字串清單 | Discord 身分組 id。在伺服器裡擁有其中一個身分組的人都符合。 |
-| `everyone` | boolean | 設成 `true` 時，每個人都符合。 |
+| `identities` | 字串清單 | 寫成 `<provider>:<subject>` 的帳號，例如 `discord:<user id>`。 |
+| `roles` | 字串清單 | 寫成 `<surface>:role:<name>` 的角色，例如 `discord:role:<role id>`。擁有其中一個角色的人都符合。 |
+| `everyone` | `true`、`false`，或 surface 的清單 | `true` 讓每個 surface 上的每個人都符合；清單（例如 `["discord"]`）則只限那些 surface。 |
 
 一個人會得到他符合的最高層級：先看 owner，再看 `admins`，最後是 `members`。
-程式碼在 `admins` 和 `members` 底下都接受 `everyone`。
+`everyone` 在 `admins` 和 `members` 底下都能用。
 放在 `admins` 底下，會讓每個在 agent 頻道裡寫字的人都成為 admin，所以最多只放在 `members`。
+用 `roundtable principal link` 把幾個帳號連到同一個 principal，它們就是同一個人，只有一個層級。
+
+0.8 的寫法，也就是 `owner` 加上以 Discord 使用者與身分組 id 寫的 `speakers`，仍然可用，但會印出棄用警告。
+`roundtable upgrade` 會把它改寫成 `access`；兩種寫法不能混用。
 
 ## 每個層級能做什麼
 
@@ -59,14 +69,14 @@ export default {
 | --- | --- |
 | `member` | 跟 agent 說話，並回答它們提出的問題。讀附件。列出和讀取 agent（`agent_list`、`agent_get`）、讀取頻道（`channel_read`）、傳訊息給 agent（`message_agent`）。使用記憶（`memory_add`、`memory_search`、`memory_remove`），以及列出排程（`schedule_list`）。 |
 | `admin` | member 能做的一切，加上建立與修改 agent 和群組、封存它們、整理頻道、修改技能與 agent 的技能、建立與修改排程，以及委派任務。 |
-| `owner` | 其餘的一切：shell 和檔案工具、`notify_owner`、`discord_*` 管理工具、所有沒有宣告較低層級的外掛工具，以及 `/roundtable` 斜線指令。 |
+| `owner` | 其餘的一切：shell 和檔案工具、`notify`、`discord_*` 管理工具、所有沒有宣告較低層級的外掛工具，以及 `/roundtable` 斜線指令。 |
 
 另外有幾點：
 
 - 每位 speaker 有自己的記憶，由所有 agent 共用。member 的 `memory_add` 不會寫進 owner 的記憶。
 - 執行很久的那一輪會出現停止按鈕，只有 owner 按了有效。
-- 被擱置的動作，例如具破壞性的 shell 指令，會在一張卡片上等待核准。預設只有 owner 能回應。用 `toolTiers` 降低了工具的層級，該層級以上的 speaker 也能核准，卡片上會寫 `Who can approve: <tier> and above`。
-- agent 用 `ask_user` 提出的問題，那一輪的 speaker 和 owner 都可以回答。一組問題放在同一張卡片上，誰能回答也一樣；卡片上的「預覽」按鈕只是顯示預覽，所以看得到卡片的人都能按。
+- 被擱置的動作，例如具破壞性的 shell 指令，會在一張卡片上等待核准。預設由讓它暫緩的那一輪的 speaker 核准，只要他的層級仍足以執行這個呼叫；在共用對話裡，owner 也可以在卡片上或用確認訊息核准。私人對話裡別人都不能核准，高於 speaker 層級的呼叫在那裡也不會被核准。
+- agent 用 `ask_user` 提出的問題，那一輪的 speaker 可以回答，在共用對話裡 owner 也可以。一組問題放在同一張卡片上，誰能回答也一樣；卡片上的「預覽」按鈕只是顯示預覽，所以看得到卡片的人都能按。送出旁邊的**取消**按鈕讓能回答的人取消這個問題：agent 會被告知它被取消了，不會再問。
 
 ## 修改工具的層級
 

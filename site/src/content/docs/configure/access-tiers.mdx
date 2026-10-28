@@ -16,37 +16,47 @@ pi-roundtable is built for one owner and one Discord server.
 You can allow others to talk to the agents by giving them a tier, but that setup and its risks are yours.
 </Aside>
 
-## The default: only the owner
+## The default: only the owners
 
-With no `speakers` setting, only the owner can talk to the agents.
-The owner is the person whose Discord user id is `owner.id`, and there is exactly one.
+With no `admins` or `members` under `access`, only the owners can talk to the agents.
+An owner is a person listed in `access.owners`; `roundtable init` writes you as the first one, under your Discord user id.
 The bot ignores other bots and answers only in agents' and groups' channels.
 
 ## Giving other people a tier
 
-List people under `speakers` in `roundtable.config.ts`.
-Each tier takes user ids, role ids, or everyone:
+List people under `access` in `roundtable.config.ts`.
+Each tier takes identities, roles, or everyone:
 
 ```ts
 export default {
 	// ...
-	owner: { id: env("OWNER_ID"), name: "Ada" },
-	speakers: {
-		admins: { users: ["<user id>"] },
-		members: { roles: ["<role id>"] },
+	access: {
+		owners: [
+			{
+				name: "Ada",
+				principal: env("OWNER_ID"),
+				identities: [`discord:${env("OWNER_ID")}`],
+			},
+		],
+		admins: { identities: ["discord:<user id>"] },
+		members: { roles: ["discord:role:<role id>"] },
 	},
 } satisfies RoundtableConfig;
 ```
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `users` | list of strings | Discord user ids. |
-| `roles` | list of strings | Discord role ids. Anyone who holds one of these roles in the server qualifies. |
-| `everyone` | boolean | When `true`, every person qualifies. |
+| `identities` | list of strings | Accounts written `<provider>:<subject>`, such as `discord:<user id>`. |
+| `roles` | list of strings | Roles written `<surface>:role:<name>`, such as `discord:role:<role id>`. Anyone who holds one of these roles qualifies. |
+| `everyone` | `true`, `false`, or a list of surfaces | `true` admits every person on every surface; a list, such as `["discord"]`, only on those surfaces. |
 
-A person gets the highest tier they qualify for: the owner first, then `admins`, then `members`.
-The code accepts `everyone` under both `admins` and `members`.
+A person gets the highest tier they qualify for: an owner first, then `admins`, then `members`.
+`everyone` works under both `admins` and `members`.
 Under `admins` it would make every person who writes in an agent channel an admin, so use it under `members` at most.
+Linking accounts to one principal, with `roundtable principal link`, makes them one person with one tier.
+
+A configuration written in the 0.8 form, `owner` and `speakers` with Discord user and role ids, still works and prints a deprecation warning.
+`roundtable upgrade` rewrites it as `access`; the two forms cannot be mixed.
 
 ## What each tier can do
 
@@ -58,15 +68,15 @@ The [agent tools reference](/reference/agent-tools/) lists every tool with its t
 | --- | --- |
 | `member` | Talk to the agents and answer their own questions. Read attachments. List and read agents (`agent_list`, `agent_get`), read channels (`channel_read`), and message agents (`message_agent`). Use memory (`memory_add`, `memory_search`, `memory_remove`) and list schedules (`schedule_list`). |
 | `admin` | Everything a member can, plus create and edit agents and groups, archive them, arrange channels, change skills and agent skills, create and change schedules, and delegate tasks. |
-| `owner` | Everything else: the shell and file tools, `notify_owner`, the `discord_*` administration tools, every plugin tool that does not declare a lower tier, and the `/roundtable` slash command. |
+| `owner` | Everything else: the shell and file tools, `notify`, the `discord_*` administration tools, every plugin tool that does not declare a lower tier, and the `/roundtable` slash command. |
 
 - Each speaker has a memory of their own, shared by all agents.
   A member's `memory_add` writes to that member's memory.
 - The stop button on a long turn answers only the owner.
 - A held action, such as a destructive shell command, waits for approval on a card.
-  By default only the owner can answer it.
-  If you lower the tool's tier with `toolTiers`, speakers at that tier or above can approve it as well, and the card says `Who can approve: <tier> and above`.
-- A question an agent asks with `ask_user` can be answered by the speaker whose turn asks it, and by the owner. A set of questions is one card with the same rule; its `Previews` button only shows the previews, so anyone who sees the card may press it.
+  By default the speaker whose turn held it approves it, as long as their tier still holds the call; in a shared conversation an owner can approve too, on the card or by a confirming message.
+  In a private conversation nobody else can, and a call above the speaker's tier is not approved there.
+- A question an agent asks with `ask_user` can be answered by the speaker whose turn asks it, and in a shared conversation by an owner. A set of questions is one card with the same rule; its `Previews` button only shows the previews, so anyone who sees the card may press it. A **Cancel** button beside `Submit` lets whoever may answer cancel the question: the agent is told it was cancelled and does not ask again.
 
 ## Changing a tool's tier
 

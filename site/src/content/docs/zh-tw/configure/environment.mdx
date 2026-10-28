@@ -23,8 +23,8 @@ Bun 會自己載入 `.env`，所以不需要 `dotenv` 這一步。
 | `DISCORD_TOKEN` | Discord developer portal 上，你的應用程式的 Bot 頁面。 | `discord.token` |
 | `DISCORD_GUILD_ID` | 在 Discord 開啟開發者模式，在伺服器上按右鍵，複製它的 id。 | `discord.guild` |
 | `DISCORD_ENTRY_CHANNEL_ID` | 同樣的做法：在協調者要住的頻道上按右鍵，複製它的 id。 | `discord.entryChannel` |
-| `OWNER_ID` | 你自己，也就是唯一能改動一切的 owner：在你的名字上按右鍵，選 Copy User ID。 | `owner.id` |
-| `OWNER_NAME` | 你的名字，agent 會這樣稱呼你。 | `owner.name` |
+| `OWNER_ID` | 你自己，也就是唯一能改動一切的 owner：在你的名字上按右鍵，選 Copy User ID。 | `access.owners[0].principal`，以及它旁邊的 `discord:` 身分 |
+| `OWNER_NAME` | 你的名字，agent 會這樣稱呼你。 | `access.owners[0].name` |
 | `DATABASE_URL` | PostgreSQL。檔案裡的預設值跟 `init` 寫出的 `docker-compose.yml` 一致：`postgres://roundtable:roundtable@localhost:5432/roundtable`。 | `database.url` |
 | `MODEL` | agent 使用的模型，寫成 `<provider>/<id>`。檔案裡建議的是 `anthropic/claude-sonnet-5-5`。 | `model` |
 | `PUBLIC_URL` | 能從網際網路連到這個行程的位址。agent 的頭像從這裡提供。 | `http.publicUrl` |
@@ -61,7 +61,7 @@ Discord 的值一步一步怎麼拿，見[設定 Discord bot](/zh-tw/start/disco
 所以 `.env` 裡留空的值，在檢查設定時也會被抓到：
 
 ```text
-config owner.id: expected a non-empty string, got "". Fix the value in roundtable.config.ts.
+config access.owners[0].principal: expected a non-empty string, got "". Fix the value in roundtable.config.ts.
 ```
 
 ## 公開位址
