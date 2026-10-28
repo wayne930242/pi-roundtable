@@ -33,6 +33,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- `ChatSurface.readAttachment` now returns `Promise<AttachmentContent>` instead of `Promise<Uint8Array>` (`pi-roundtable`). A caller that read the result as bytes checks for the other two forms (`{ path }` and a stream); a surface that returns bytes needs no change. `context.attachments.save` stays capped at 25 MiB.
 - The shell hold rule reports the class of every held command in a line, including those inside `bash -c`, instead of stopping at the first. A push that deletes, mirrors or prunes refs (`--delete`, `-d`, `--mirror`, `--prune`, a `:ref` refspec) or uses a `+` refspec, and a combined short flag such as `-fu`, are now `shell.force-push`; a redirect or `tee` to a device node other than `/dev/null` is `shell.disk`; the held reasons of other commands are unchanged.
 - `DispatchThreadsOptions` takes `surfaces` (any surface that declares `threads`) instead of `host`; `host`, a `ThreadHost`, is optional and serves `discord:` channels only. A thread's `DispatchThread.id` is its id on its surface and `channel` is `channelKey(surface, id)`; `mention` comes from the surface (`<#id>` on Discord). The threads' sweep after a restart runs once every service has started, as the `threads` plugin's background start, rather than inside the Discord plugin's service start.
 

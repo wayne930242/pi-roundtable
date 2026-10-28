@@ -18,7 +18,7 @@ export interface AttachmentRef {
  * leaves the original where it is.
  */
 export interface AttachmentFile {
-	/** Absolute path of a regular file the surface owns. */
+	/** Absolute path of a regular file the surface owns; a relative path, a symlink or another kind of file is refused with `EINVAL`. */
 	path: string;
 }
 
