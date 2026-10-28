@@ -5,6 +5,10 @@ import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const HASHED = /-[a-z0-9]{6,}\.[a-z0-9]+$/;
+// The round table's WebGL scene (three, about 150 KB gzip) is fetched when a table first opens and
+// cached by the worker then, so a fresh install does not download it. The standalone `entry-*` files
+// exist only until a page imports `table/entry.ts`; nothing loads them.
+const NOT_PRECACHED = /^(chunk-table3d-|entry-|chunk-entry-)/;
 
 /**
  * Builds `web/index.html` and everything it imports into `outdir`, which it empties first, then
@@ -12,9 +16,13 @@ const HASHED = /-[a-z0-9]{6,}\.[a-z0-9]+$/;
  */
 export async function buildPage(outdir: string): Promise<string[]> {
 	rmSync(outdir, { recursive: true, force: true });
-	const result = await Bun.build({
-		entrypoints: [`${root}web/index.html`],
+	const common = {
 		outdir,
+		// Named chunks, so the worker can tell the table's scene from the rest.
+		naming: {
+			chunk: "chunk-[name]-[hash].[ext]",
+			entry: "[dir]/[name]-[hash].[ext]",
+		},
 		// Relative URLs, so the page works under whatever mount path the operator picks.
 		publicPath: "./",
 		minify: true,
@@ -23,7 +31,23 @@ export async function buildPage(outdir: string): Promise<string[]> {
 		target: "browser",
 		define: { "process.env.NODE_ENV": JSON.stringify("production") },
 		throw: false,
+	} satisfies Partial<Bun.BuildConfig>;
+	const page = await Bun.build({
+		...common,
+		entrypoints: [`${root}web/index.html`],
+		// The page keeps its own file names; only `index.html` must stay unhashed.
+		naming: { chunk: common.naming.chunk },
 	});
+	// No page imports the round table yet, so it builds on its own to ship its two chunks.
+	const table = await Bun.build({
+		...common,
+		entrypoints: [`${root}web/table/entry.ts`],
+	});
+	const result = {
+		success: page.success && table.success,
+		logs: [...page.logs, ...table.logs],
+		outputs: [...page.outputs, ...table.outputs],
+	};
 	if (!result.success)
 		throw new Error(
 			`the console page did not build: ${result.logs.map((log) => log.message).join("; ")}`,
@@ -37,7 +61,10 @@ export async function buildPage(outdir: string): Promise<string[]> {
 		throw new Error(
 			`the console page has files without a content hash, which the service worker cannot cache safely: ${unhashed.join(", ")}`,
 		);
-	const precache = ["index.html", ...assets.sort()];
+	const precache = [
+		"index.html",
+		...assets.filter((file) => !NOT_PRECACHED.test(file)).sort(),
+	];
 	const worker = await Bun.build({
 		entrypoints: [`${root}web/sw.ts`],
 		outdir,

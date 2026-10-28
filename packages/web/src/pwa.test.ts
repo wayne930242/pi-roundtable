@@ -128,6 +128,15 @@ test("the built worker precaches index.html and hashed files only, and bypasses 
 	expect(text).toContain("navigate");
 });
 
+test("the built worker leaves the round table's WebGL chunk out of the precache and caches it when it is fetched", () => {
+	const text = readFileSync(join(built, "sw.js"), "utf8");
+	const list = /\["index\.html"[^\]]*\]/.exec(text)?.[0] ?? "";
+	expect(list).toContain("chunk-table2d-");
+	expect(list).not.toContain("chunk-table3d-");
+	expect(text).toContain("chunk-table3d-");
+	expect(text).toContain('"api/"');
+});
+
 test("the page names a theme colour for each scheme and loads the stored scheme before it paints", async () => {
 	const { presentPage } = await import("./page-presentation.ts");
 	const html = String(

@@ -1,0 +1,239 @@
+/* The round table (web/table/): the wrapper the entry module builds, the visible seat list, and the 2D fallback. */
+.rt-table {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	aspect-ratio: 10 / 11;
+	max-height: 100%;
+	min-height: 0;
+}
+.rt-table[data-variant="compact"] {
+	height: 120px;
+	aspect-ratio: auto;
+	flex: none;
+}
+.rt-table-stage {
+	position: relative;
+	flex: 1 1 0;
+	min-height: 0;
+}
+.rt-table[data-list] {
+	height: 100%;
+	aspect-ratio: auto;
+}
+.rt-table[data-list] .rt-table-stage {
+	flex: 0 0 auto;
+	aspect-ratio: 10 / 11;
+	max-height: 60%;
+}
+.rt-table-list {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow: auto;
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+	gap: 0.4rem;
+	margin: 0;
+	padding: 0.5rem;
+	list-style: none;
+}
+.rt-table-list button {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	width: 100%;
+	min-height: 2.75rem;
+	padding: 0.4rem 0.6rem;
+	border: 1px solid currentColor;
+	border-radius: 0.5rem;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	text-align: start;
+	cursor: pointer;
+}
+.rt-table-list button::before {
+	content: "";
+	flex: none;
+	width: 0.75rem;
+	height: 0.75rem;
+	border-radius: 50%;
+	background: var(--seat);
+}
+.t2d {
+	position: relative;
+	width: 100%;
+	height: 100%;
+	overflow: hidden;
+	user-select: none;
+	-webkit-user-select: none;
+}
+.t2d svg {
+	display: block;
+	width: 100%;
+	height: 100%;
+}
+.t2d .seat {
+	cursor: pointer;
+	outline: none;
+}
+.t2d .seat:focus-visible .plate {
+	stroke: currentColor;
+	stroke-width: 3;
+}
+.t2d .seat .lift,
+.t2d .seat .halo,
+.t2d .seat .badge,
+.t2d .seat .orbit,
+.t2d .seat .beam {
+	transform-box: fill-box;
+	transform-origin: center;
+}
+.t2d .seat .halo {
+	opacity: 0;
+	transition: opacity 0.35s;
+}
+.t2d .seat .badge {
+	opacity: 0;
+	transform: scale(0.4);
+	transition:
+		opacity 0.25s,
+		transform 0.35s cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+.t2d .seat .orbit {
+	opacity: 0;
+	transition: opacity 0.3s;
+}
+.t2d .seat .beam {
+	opacity: 0;
+	transition: opacity 0.35s;
+}
+.t2d .seat:hover .halo {
+	opacity: 0.35;
+}
+.t2d.dim .seat:not([data-state="speaking"]) .lift {
+	opacity: 0.78;
+}
+.t2d .seat[data-state="idle"] .lift {
+	animation: t2d-breathe 3.4s ease-in-out infinite;
+}
+.t2d .seat[data-state="thinking"] .halo {
+	opacity: 0.25;
+}
+.t2d .seat[data-state="thinking"] .orbit {
+	opacity: 1;
+	animation: t2d-spin 2.6s linear infinite;
+}
+.t2d .seat[data-state="working"] .halo {
+	opacity: 0.7;
+	animation: t2d-pulse 1.1s ease-in-out infinite;
+}
+.t2d .seat[data-state="working"] .lift {
+	animation: t2d-bob 0.55s ease-in-out infinite;
+}
+.t2d .seat[data-state="waiting"] .halo {
+	opacity: 0.8;
+	animation: t2d-pulse 1.7s ease-in-out infinite;
+}
+.t2d .seat[data-state="waiting"] .badge {
+	opacity: 1;
+	transform: scale(1);
+	animation: t2d-wave 1.6s ease-in-out infinite;
+}
+.t2d .seat[data-state="waiting"] .lift {
+	transform: translateY(2px);
+}
+.t2d .seat[data-state="speaking"] .halo {
+	opacity: 0.85;
+}
+.t2d .seat[data-state="speaking"] .beam {
+	opacity: 1;
+}
+.t2d .seat[data-state="speaking"] .lift {
+	animation: t2d-talk 0.5s ease-in-out infinite;
+}
+.t2d .seat[data-state="done"] .badge {
+	opacity: 1;
+	transform: scale(1);
+}
+.t2d .seat[data-state="done"] .lift {
+	animation: t2d-pop 0.6s ease-out 1;
+}
+.t2d .seat[data-state="done"] .halo {
+	opacity: 0.4;
+}
+.t2d .seat[data-state="error"] .badge {
+	opacity: 1;
+	transform: scale(1);
+}
+.t2d .seat[data-state="error"] .lift {
+	animation: t2d-shake 0.45s linear 1;
+}
+.t2d .seat[data-state="error"] .halo {
+	opacity: 0.85;
+	animation: t2d-flicker 0.9s steps(2, end) 2 both;
+}
+@keyframes t2d-breathe {
+	50% {
+		transform: scaleY(1.02);
+	}
+}
+@keyframes t2d-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+@keyframes t2d-pulse {
+	50% {
+		opacity: 0.35;
+		transform: scale(1.08);
+	}
+}
+@keyframes t2d-bob {
+	50% {
+		transform: translateY(-3px);
+	}
+}
+@keyframes t2d-wave {
+	50% {
+		transform: scale(1.12) rotate(6deg);
+	}
+}
+@keyframes t2d-talk {
+	50% {
+		transform: scale(1.025);
+	}
+}
+@keyframes t2d-pop {
+	40% {
+		transform: scale(1.14);
+	}
+}
+@keyframes t2d-shake {
+	20% {
+		transform: translateX(-4px);
+	}
+	40% {
+		transform: translateX(4px);
+	}
+	60% {
+		transform: translateX(-3px);
+	}
+	80% {
+		transform: translateX(2px);
+	}
+}
+@keyframes t2d-flicker {
+	50% {
+		opacity: 0.25;
+	}
+}
+.t2d.reduced .seat * {
+	animation: none !important;
+	transition: none !important;
+}
+.t2d.reduced .seat[data-state="waiting"] .halo,
+.t2d.reduced .seat[data-state="working"] .halo {
+	opacity: 0.6;
+}

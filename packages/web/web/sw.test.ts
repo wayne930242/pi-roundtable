@@ -59,7 +59,7 @@ async function worker(windows: { url: string }[] = []) {
 		});
 		await Promise.all(pending);
 	};
-	return { fire, shown, opened, focused, told };
+	return { fire, shown, opened, focused, told, listeners };
 }
 
 const push = (payload: unknown) => ({
@@ -123,4 +123,49 @@ test("a tap opens the room in the open window, or in a new one", async () => {
 		notification: { close: () => undefined, data: { url } },
 	});
 	expect(none.opened).toEqual([url]);
+});
+
+/** Runs one GET through the worker's fetch handler over stand-ins for the cache and the network. */
+async function fetched(path: string) {
+	const stored = new Map<string, Response>();
+	const globals = globalThis as Record<string, unknown>;
+	const before = ["caches", "fetch"].map(
+		(name) => [name, name in globals, globals[name]] as const,
+	);
+	const cache = {
+		match: async (request: Request) => stored.get(request.url),
+		put: async (request: Request, response: Response) =>
+			void stored.set(request.url, response),
+	};
+	globals.caches = { open: async () => cache };
+	globals.fetch = async () => new Response("body");
+	try {
+		const sw = await worker();
+		let answered: Promise<Response> | undefined;
+		sw.listeners.get("fetch")?.({
+			request: new Request(`https://app.example.test/console/${path}`),
+			respondWith: (response: Promise<Response>) => {
+				answered = response;
+			},
+		});
+		await answered;
+		return { answered: answered !== undefined, stored };
+	} finally {
+		for (const [name, had, value] of before)
+			if (had) globals[name] = value;
+			else delete globals[name];
+	}
+}
+
+test("the round table's WebGL chunk is cached when it is first fetched, while the API still bypasses the worker", async () => {
+	const chunk = await fetched("chunk-table3d-m7wew621.js");
+	expect(chunk.answered).toBe(true);
+	expect([...chunk.stored.keys()]).toEqual([
+		"https://app.example.test/console/chunk-table3d-m7wew621.js",
+	]);
+	const api = await fetched("api/rooms");
+	expect(api.answered).toBe(false);
+	expect(api.stored.size).toBe(0);
+	const other = await fetched("chunk-other-m7wew621.js");
+	expect(other.answered).toBe(false);
 });

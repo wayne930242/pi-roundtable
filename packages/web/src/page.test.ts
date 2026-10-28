@@ -1,7 +1,8 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { gzipSync } from "node:zlib";
 import { buildPage } from "../scripts/build-page.ts";
 import { loadAssets } from "./assets.ts";
 
@@ -55,4 +56,25 @@ test("a served page links the manifest with credentials, a theme colour and the 
 		),
 	);
 	expect(plain).toContain('crossorigin="use-credentials"');
+});
+
+test("the round table ships as two lazy chunks: the WebGL scene stays small enough, and nothing else carries three", async () => {
+	const dir = mkdtempSync(join(tmpdir(), "web-console-table-"));
+	await buildPage(dir);
+	const scripts = readdirSync(dir).filter((name) => name.endsWith(".js"));
+	const only = (prefix: string) => {
+		const found = scripts.filter((name) => name.startsWith(prefix));
+		expect(found).toHaveLength(1);
+		return found[0] ?? "";
+	};
+	const gzipped = (name: string) =>
+		gzipSync(readFileSync(join(dir, name)), { level: 9 }).length;
+	expect(gzipped(only("chunk-table3d-"))).toBeLessThanOrEqual(160 * 1024);
+	expect(gzipped(only("chunk-table2d-"))).toBeLessThanOrEqual(5 * 1024);
+	for (const name of scripts) {
+		const carries = readFileSync(join(dir, name), "utf8").includes(
+			"WebGLRenderer",
+		);
+		expect(carries).toBe(name.startsWith("chunk-table3d-"));
+	}
 });
