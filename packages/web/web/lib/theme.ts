@@ -1,5 +1,5 @@
-import { useSyncExternalStore } from "react";
 import { PAGE_COLORS } from "../../src/page-colors.ts";
+import { signal } from "./signal.ts";
 
 /** What the person picked: a scheme, or whatever the system prefers. */
 export type ThemePreference = "system" | "light" | "dark";
@@ -7,7 +7,7 @@ export type ThemePreference = "system" | "light" | "dark";
 const KEY = "rt-theme";
 const PREFERENCES: readonly ThemePreference[] = ["system", "light", "dark"];
 
-const listeners = new Set<() => void>();
+const { emit, use } = signal();
 let preference: ThemePreference = read();
 
 function read(): ThemePreference {
@@ -72,7 +72,7 @@ function apply(): void {
 	if (preference === "system") delete root.dataset.theme;
 	else root.dataset.theme = preference;
 	paintThemeColor();
-	for (const listener of listeners) listener();
+	emit();
 }
 
 /**
@@ -147,20 +147,10 @@ export function setTheme(
 	setTimeout(() => root.classList.remove("theme-fade"), 260);
 }
 
-const subscribe = (listener: () => void) => {
-	listeners.add(listener);
-	return () => listeners.delete(listener);
-};
-
 /** The person's pick and the scheme it comes to now. */
 export function useTheme(): {
 	preference: ThemePreference;
 	resolved: "light" | "dark";
 } {
-	const current = useSyncExternalStore(
-		subscribe,
-		() => preference,
-		() => preference,
-	);
-	return { preference: current, resolved: resolvedTheme() };
+	return { preference: use(() => preference), resolved: resolvedTheme() };
 }

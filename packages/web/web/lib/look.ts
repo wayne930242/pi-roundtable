@@ -1,5 +1,5 @@
 import type { CharacterLook } from "pi-roundtable/characters";
-import { useSyncExternalStore } from "react";
+import { signal } from "./signal.ts";
 import { paintThemeColor, useTheme } from "./theme.ts";
 
 /** The page's look: the plain `modern` one, or the fantasy `camelot` one. */
@@ -8,7 +8,7 @@ export type PageLook = "modern" | "camelot";
 const KEY = "rt-look";
 export const LOOKS: readonly PageLook[] = ["modern", "camelot"];
 
-const listeners = new Set<() => void>();
+const { emit, use } = signal();
 /** What the host chose; a device's own pick wins over it. */
 let fallback: PageLook = "modern";
 let stored: PageLook | undefined = read();
@@ -29,7 +29,7 @@ function apply(): void {
 	// `data-look` is what the stylesheets read; the Camelot theme keys on it.
 	document.documentElement.dataset.look = current;
 	paintThemeColor();
-	for (const listener of listeners) listener();
+	emit();
 }
 
 /** Puts the look on the page: the device's own pick if it has one, else the host's. Called once the config is in. */
@@ -51,18 +51,9 @@ export function setLook(next: PageLook | undefined): void {
 	apply();
 }
 
-const subscribe = (listener: () => void) => {
-	listeners.add(listener);
-	return () => listeners.delete(listener);
-};
-
 /** The look the page shows now. */
 export function useLook(): PageLook {
-	return useSyncExternalStore(
-		subscribe,
-		() => current,
-		() => current,
-	);
+	return use(() => current);
 }
 
 /** The character look for a page look and a color scheme. */

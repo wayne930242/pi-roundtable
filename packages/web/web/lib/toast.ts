@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from "react";
+import { signal } from "./signal.ts";
 
 /** A short notice that fades away by itself. */
 export interface Toast {
@@ -9,12 +9,8 @@ export interface Toast {
 
 let toasts: readonly Toast[] = [];
 let next = 1;
-const listeners = new Set<() => void>();
+const { emit, use } = signal();
 const TOAST_MS = 5200;
-
-const emit = () => {
-	for (const listener of listeners) listener();
-};
 
 /** Shows a notice. */
 export function toast(text: string, tone: Toast["tone"] = "info"): void {
@@ -29,14 +25,4 @@ export function dismissToast(id: number): void {
 	emit();
 }
 
-const subscribe = (listener: () => void) => {
-	listeners.add(listener);
-	return () => listeners.delete(listener);
-};
-
-export const useToasts = (): readonly Toast[] =>
-	useSyncExternalStore(
-		subscribe,
-		() => toasts,
-		() => toasts,
-	);
+export const useToasts = (): readonly Toast[] => use(() => toasts);
