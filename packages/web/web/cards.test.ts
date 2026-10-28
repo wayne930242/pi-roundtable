@@ -14,6 +14,8 @@ import {
 import { systemLine } from "./components/message-row.tsx";
 import { openPage, releaseDom } from "./dom.ts";
 import { store } from "./lib/app-store.ts";
+// Intl spells a date differently across ICU versions, so the expected time comes from the same formatter.
+import { when } from "./lib/format.ts";
 import { fuzzyScore } from "./lib/fuzzy.ts";
 import { loadKit } from "./lib/kit.ts";
 import { initLook } from "./lib/look.ts";
@@ -540,7 +542,7 @@ test("a card the history brought back shows who ended it and when, and keeps its
 		).toBe(false);
 		expect(sealAnimation(page)).not.toBe("seal-stamp");
 		expect(page.container.querySelector(".prompt-meta")?.textContent).toBe(
-			"Ada · 28 Oct at 09:05",
+			`Ada · ${when("2026-10-28T09:05:00.000Z", "UTC")}`,
 		);
 		style.remove();
 	});
@@ -565,7 +567,7 @@ test("an answered question shows the answer the server kept, who gave it and whe
 		}),
 	);
 	expect(html).toContain("red, a dark one");
-	expect(html).toContain("Mel · 28 Oct at 09:05");
+	expect(html).toContain(`Mel · ${when("2026-10-28T09:05:00.000Z", "UTC")}`);
 	const questionnaire: PromptFrame = {
 		id: "qq-kept",
 		kind: "questionnaire",
