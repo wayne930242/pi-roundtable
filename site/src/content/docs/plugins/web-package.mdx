@@ -1,13 +1,16 @@
 ---
 title: Web package
-description: Serve an authenticated, owner-only console for conversations, team status, and memory notes.
+description: The owner app for a roundtable host, installable and mobile first, plus the console for conversations, team status, and memory notes.
 sidebar:
   order: 11
 ---
 
-`pi-roundtable-web` adds a web console to the host's HTTP listener.
-The owner can browse conversations and transcripts, watch the agent team update, and view or edit memory notes.
-It reads the host's existing data and does not add a database, cookie, or account system.
+`pi-roundtable-web` is the owner app of a host: a page on the host's HTTP listener where the owner talks to the agent team, answers its approval cards, stops a turn, sends files, switches yolo and long-running mode, and is notified on the phone when something waits.
+It is also the console that came first, with conversation transcripts, memory notes and team status.
+
+The plugin is a chat surface of its own, so a team of agents can live in the web alone: **a host with no Discord works fully**.
+Each active agent and group has a room, and Home is the coordinator's.
+A room is its own conversation, apart from the same agent's Discord channel.
 
 ## Install and requirements
 
@@ -15,49 +18,132 @@ It reads the host's existing data and does not add a database, cookie, or accoun
 bun add pi-roundtable-web pi-roundtable
 ```
 
-Use Bun 1.4.4 or newer and pi-roundtable `>=0.8.0 <0.9.0`.
-The console runs on the machine that owns the host data directory.
-The Notes pane needs the memory addon and an `ownerId`; Overview needs the agent server.
-Authentication is mandatory: use Cloudflare Access or provide a verifier for your authenticating proxy.
+Use Bun 1.4.4 or newer and pi-roundtable `>=0.22.0 <0.23.0`.
+The app runs on the machine that owns the host data directory, and keeps its keys and files under `<dataDir>/web/`.
+It needs an agent team (`agents` in the configuration), and authentication is mandatory: choose `none`, `password`, or a verifier such as Cloudflare Access.
+Install the app and receive notifications over HTTPS.
 
 ```ts
 import { cloudflareAccess, webConsole } from "pi-roundtable-web";
 
 export default {
-  // ...your roundtable settings...
+  // ...your roundtable settings, with `agents` and no `discord` if you like...
   plugins: [webConsole({
     verifier: cloudflareAccess({
       teamDomain: "example.cloudflareaccess.com",
       audience: process.env.CONSOLE_ACCESS_AUD ?? "",
       email: "owner@example.com",
     }),
-    origin: "https://console.example.com",
-    ownerId: "<the owner's Discord user id>",
+    origin: "https://app.example.com",
   })],
 };
 ```
+
+Open `https://app.example.com/console/`; the page is the app.
+
+## The owner app
+
+| Where | What it does |
+| --- | --- |
+| Rooms | Home first, then agents, groups, and dispatch threads, with badges for working, a card waiting, yolo, and long-running. |
+| A room | Messages with the author's character, Markdown, files, a live progress strip, a composer with upload and Stop. |
+| Cards | Approvals with details, questions, questionnaires, and the card at a turn's time limit, answered in the room by any owner. |
+| Agent profile | Name, prompt, model, thinking level, and the character creator. |
+| Schedules | The team's schedules, with a confirmed cancel. |
+| Table | A round table that seats every agent, and opens its room on a click. |
+| Settings | Color scheme and look, install, notifications for this device, and Log out. |
+
+A turn waits `cardGraceSeconds` (120 by default) for a card; then it goes on without the answer, and the card stays open for a day.
+An answer given later starts a new turn in the room.
+Files of any kind up to `uploadMaxBytes` (100 MiB by default) are streamed to disk and given to the agent; a Cloudflare free plan caps a request body at 100 MB.
+
+### Yolo and long-running mode
+
+The room menu has two switches, kept per room and across restarts.
+**Yolo** approves the held calls a rule allows, without a card, and writes a line in the room for each.
+It never approves for a webhook or report turn, a call with named approvers, or a card that is the speaker's alone, and the destructive classes (`sudo`, `rm`, disk, power, services, docker, firewall, packages, force push, hard reset, `gh`, `crontab`) still ask.
+A plain `git push` and a write outside the workspace are approved, and a push to `main` may deploy; list `shell.push` in `autonomy.yolo.card` of the host configuration to make it ask.
+**Long-running** lets a turn go past its time limit, up to `autonomy.longRunning.maxSeconds` (four hours by default), then it asks on a card or aborts.
+A banner shows while either is on.
+The [core guide](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#hold-classes-and-yolo-mode) lists the classes and the guardrails.
+
+### Looks
+
+Agents are drawn as composed characters.
+The page has a Modern look and a Camelot look (parchment by day, a night castle by night, gold rules, shield frames, wax seals), each in light and dark, picked per device in Settings.
+`appearance.look` sets the host's default.
+
+## Install on a device and notifications
+
+The app is a PWA: a manifest scoped to the mount, a service worker that keeps the shell and never data, and icons (`icons.dir` replaces the shipped set).
+Install it from the browser's Install option or Settings; on iPhone and iPad use Share, then Add to Home Screen, and open it from there.
+
+Web Push wakes a device while no page of that owner is in view: when a card opens ("Card waiting", or "Long-running cap reached"), when an agent posts on its own, and for a notice the host sends.
+Each owner turns it on per device in Settings, and can remove a device there.
+Set `push.subject` (a `mailto:` address or an `https:` URL) unless `origin` is https; the VAPID keys are made at the first start in `<dataDir>/web/vapid.json`, and the file must outlive restarts.
+Endpoints must be https on an allowed push service, and `push.endpointHosts` adds more.
+With `push.preview` off a notification carries no message text.
 
 ## Configuration
 
 | Option | Default | Purpose |
 | --- | --- | --- |
-| `verifier` | required | Authenticates each request; use `cloudflareAccess(...)` or a custom function. |
+| `auth` | required, or `verifier` | `{ mode: "none" }`, `{ mode: "password" }`, or `{ mode: "verifier", verifier }`. |
+| `verifier` | none | Shorthand for the verifier mode: `cloudflareAccess(...)` or a custom function. Giving both throws. |
 | `origin` | required | Browser-visible scheme and host. Writes must send this exact `Origin`. |
-| `ownerId` | none | Owner memory id; required when serving Notes. |
-| `dataDir` | `./data` | Host data directory containing `sessions/`. |
-| `mountPath` | `/console` | Console route prefix. |
-| `listener` | `public` | HTTP listener that serves the console. |
-| `panes` | `overview`, `conversations`, `notes` | Ordered subset of the default panes plus `skills` and `connectors`; those two require feature ports. |
+| `ownerId` | primary owner | Deprecated: the principal a verifier that reports no actor stands for. |
+| `dataDir` | `./data` | Host data directory: `sessions/` and `web/`. |
+| `mountPath` | `/console` | Route prefix. |
+| `listener` | `public` | HTTP listener that serves the app. |
 | `routing` | `hash` | `path` preserves mount-relative page links and history navigation. |
-| `features` | none | Object or public setup-context factory for party status, schedule counts, cleanup, skills and connectors. |
-| `presentation` | English | `{ locale, messages }` controls language, date formatting and localized UI/API wording; English source strings are dictionary keys. |
-| `title` | `Roundtable` | Page heading and title. |
+| `panes` | `rooms`, `table`, `overview`, `schedules`, `conversations`, `notes` | Ordered subset of those panes plus `skills` and `connectors`; `schedules` and `table` need `rooms`. An explicit list is kept as written. |
+| `surface` | `app` | Key prefix of the app's rooms. Changing it starts every room over. |
+| `cardGraceSeconds` | `120` | How long a turn waits on a card, above 0 and at most 3600. |
+| `uploadMaxBytes` | 100 MiB | Largest file one person uploads, 1 byte to 4 GiB. |
+| `push` | on with an https origin | Web Push; keys below. |
+| `icons` | shipped icons | `{ dir }`: a directory of the five install icons. |
+| `appearance` | `{ look: "modern" }` | `{ look }`: `modern` or `camelot`. |
+| `title` | `Roundtable` | Page heading, title, and installed app name. |
+| `presentation` | English | `{ locale, messages }` controls language, date formatting, and wording; English source strings are dictionary keys. |
+| `features` | none | Object or public setup-context factory for party status, schedule counts, cleanup, skills, and connectors. |
 | `relayNotes` | remote MCP relay note | Prefixes removed from relayed messages before display. |
 | `exclude` | none | Predicate for conversation keys the console must not list or read. |
 | `assetDir` | package `dist/` | Built page directory; set this only in tests. |
 
+| Key | Default | Purpose |
+| --- | --- | --- |
+| `auth.mode` | required | `none`, `password`, or `verifier`. |
+| `auth.trustNetwork` | `false` | `none` only: allow a TCP listener that reaches beyond this machine. |
+| `auth.passwordEnv` | `ROUNDTABLE_WEB_PASSWORD` | `password` only: the variable that holds the password, at least 12 characters. |
+| `auth.sessionDays` | `30` | `password` only: how long a login lasts, 1 to 365. |
+| `auth.principal` | primary owner | `none` and `password`: the principal the session speaks for. |
+| `auth.verifier` | required for the mode | `verifier` only: the request verifier. |
+| `push.preview` | `true` | Whether a notification shows the first 120 characters. |
+| `push.endpointHosts` | none | Extra push-service hosts; a leading `*.` allows subdomains. |
+| `push.subject` | `origin` if https | The VAPID contact: a `mailto:` or `https:` URL. Push is off without one. |
+
+## Authentication and the threat model
+
+| Mode | Who is the owner | Use it when |
+| --- | --- | --- |
+| `verifier` | The person the verifier reports, linked to an owner. | A proxy such as Cloudflare Access signs people in. The only mode an agent on the host cannot forge. |
+| `password` | The primary owner, after the password. | The app is reachable from the internet with no signing proxy. |
+| `none` | The primary owner, whoever reaches the listener. | Only the owner reaches the listener: a unix socket, or loopback TCP. |
+
+`password` serves a login page with no script, waits a second after each failure, locks every login for the rest of 15 minutes after ten failures (a global limit, because a client address behind a proxy is not trustworthy), and sets a signed `HttpOnly`, `SameSite=Strict` cookie that a new password invalidates.
+`none` must be written out, warns at every start, and refuses a TCP listener that is not loopback unless `trustNetwork` is true.
+
+**An agent whose shell runs as the host's user can reach whatever that user reaches.**
+With `none` it can call the app as the owner over the socket, approve its own held actions, and turn yolo on; with `password` it can read the password and the session key.
+Both resist the network, and neither resists a compromised agent.
+Only a verifier does, because the agent cannot forge a signed token.
+On a host whose agents run commands, keep Cloudflare Access (or another signing proxy).
+
 The built-in `cloudflareAccess` verifier checks the signed Access token, team, audience, and allowed email.
 A custom verifier that trusts a proxy header is only safe if clients cannot reach the listener directly and the proxy strips client-supplied copies of that header.
+Every API, SSE, WebSocket, page, and static asset is authenticated before data is read, writes need the exact `Origin`, and the page sends no CORS headers.
+Agent output is Markdown without raw HTML, and stored files are served as downloads under a sandbox policy.
+Transcripts contain tool arguments and results, so secrets handled by tools may appear there; use `panes` or `exclude` to narrow what is exposed.
 
 ## Host integrations
 
@@ -67,34 +153,17 @@ Overview also lists stored owner workspaces and outside-agent conversations.
 `features.cleanup` supplies `startFresh(key)` and `deleteConversation(key)`; the latter returns `deleted` or `busy`.
 The package validates key shape, ownership, exclusions and stored existence before invoking cleanup, shows confirmation dialogs, and returns 409 for a busy delete.
 Without the cleanup hook, conversation data remains read-only.
-`api/dashboard` preserves a compatibility shape with channel keys and guild/channel/session ID aliases for existing clients.
 
 `features.skills.catalog()` supplies source, description, groups, carriers and missing-file status.
 `read(name)` returns the selected catalog entry's `{ frontmatter, body }`, never a request-selected path.
-The host bounds its read; the API caps the body at 1 MB and frontmatter at 64 KB, preserving metadata order and rendering the body as safe Markdown.
-Set `errorDetail: true` to show the missing-file text or read error in the API response (cut at 300 characters) when the host's reasons are safe to show; by default errors are fixed messages.
+Set `errorDetail: true` to show the missing-file text or read error in the API response (cut at 300 characters) when the host's reasons are safe to show.
 `features.connectors` supplies `gateways()`, `servers()`, `usedBy(server)` and an optional safe `adminUrl`.
-The page shows gateway health, enabled state, tool counts, virtual-server tools and usage.
 Skills and Connectors fail startup when enabled without their hooks.
 
 A feature factory receives public plugin setup context so the host can bind existing stores without renaming tables, grants or session paths.
 Declare any extra service dependencies on the host wrapper's `requires`.
-`sessionSummary(directory)` summarizes trusted host party-session directories without reading transcript content.
 Application-specific wording belongs in `presentation`, not a cloned server or React page.
-Escaped, inert presentation metadata in the authenticated HTML localizes the first API failure without inline scripts.
 
-## Security model
+For the full threat model, the Cloudflare setup steps, the custom-verifier example, the WebSocket protocol, and option validation, see the [pi-roundtable-web README](https://github.com/wayne930242/pi-roundtable/blob/master/packages/web/README.md).
 
-Every API, SSE, page, static asset and mount redirect is authenticated before data is read.
-Path routing retains the same authentication and exact write-Origin checks.
-Skill Markdown escapes raw HTML, does not fetch images, and only opens HTTP(S) links.
-Session symlinks are ignored, note bodies are bounded to 64 KB, and private model reasoning is never shown.
-The console has no roles or per-user views; it is for one owner.
-Writes also require an exact matching `Origin`, and the page sends no CORS headers.
-Transcripts contain tool arguments and results, so secrets handled by tools may appear there; use `panes` or `exclude` to narrow what is exposed.
-The console does not rate-limit failed requests.
-Put it behind a trusted authentication proxy and terminate TLS there.
-
-For the full threat model, Cloudflare setup steps, custom-verifier example, and option validation, see the [pi-roundtable-web README](https://github.com/wayne930242/pi-roundtable/blob/master/packages/web/README.md).
-
-{/* Sources: packages/web/README.md:1-17, packages/web/README.md:37-105, packages/web/README.md:140-190, packages/web/src/options.ts:14-44 */}
+{/* Sources: packages/web/README.md, packages/web/src/options.ts, packages/web/src/push/, packages/web/src/pwa.ts */}

@@ -3325,6 +3325,32 @@ Leave out `web_search` and `fetch_content` unless people may make the host fetch
 [webchat-provider-settings]: https://github.com/wayne930242/pi-roundtable/blob/master/packages/webchat/README.md#provider-settings
 [webchat-attachments]: https://github.com/wayne930242/pi-roundtable/blob/master/packages/webchat/README.md#attachments
 
+### The owner app: pi-roundtable-web
+
+[pi-roundtable-web][web-package] is the owner's web app, and the reference surface for [agent rooms](#agent-rooms-on-any-surface).
+`webConsole(options)` adds a chat surface (prefix `app` unless `surface` says otherwise), a page, a WebSocket and a REST API under `/console` on the host's `public` listener, an installable manifest and service worker, and Web Push.
+It needs no Discord: with `agents` in the configuration and no `discord`, the team lives in the app's rooms (see [an agent team without Discord](#an-agent-team-without-discord)), and Home is the coordinator's room.
+Its README documents the app, every option, the protocol and the threat model; this section says which seams of the core it stands on, for a plugin that wants the same from another network.
+
+| The app uses | For |
+|---|---|
+| `ChatSurface.agentRooms`, `agentRoomKey`, `groupRoomKey`, `OutboundReply.author`, `surfaces.interim(room, author)` | A room for each agent and group, with replies and live text shown under the agent's own name |
+| `ChatSurface.prompts` (its owner desk), `PromptScope`, `PromptWait`, `ApprovalOptions.purpose` | Approval, question, questionnaire and time-limit cards in the room, visible to every open page of every owner; a card the turn stopped waiting on stays open for a day and a late answer starts a turn |
+| `ChatSurface.threads` | Dispatch threads as read-only rooms nested under the room that started them |
+| `ChatSurface.readAttachment`, `maxAttachmentBytes`, `AttachmentContent` | Uploads of any kind up to `uploadMaxBytes`, handed to the agent as a stored file's path, never held whole in memory |
+| `MODES`, `autonomy`, `ApprovedBy.auto`, `MODES.onAutoApproved` | The yolo and long-running switches of a room, and the line in the room for each call yolo approved |
+| `DirectChannelProvider` with `mirror` | A notice to the owner lands in Home and is pushed to their devices; a notice another channel delivered is pushed too |
+| `context.listener(id)` | `auth: { mode: "none" }` refuses a listener that reaches beyond the machine |
+| `identities` with `token:web-console` | `none` and `password` speak for the primary owner (or `auth.principal`) without an `access.owners` entry |
+
+The app has three ways to know who is asking, chosen with `auth`: `{ mode: "verifier" }` (a request verifier such as `cloudflareAccess(...)`), `{ mode: "password" }` (a login page and a signed cookie) and `{ mode: "none" }` (whoever reaches the listener).
+**Only a verifier resists an agent on the host.**
+The agents' shell runs as the service user and inherits its environment, so with `none` an agent can call the app's socket as the owner, approve its own held actions and turn yolo on, and with `password` it can read the password and the session key.
+Choose `none` or `password` for a host whose agents have no shell or run as another user, and keep a signing proxy for one whose agents run commands; the README's threat model has the details.
+
+The app requires `AGENTS` for the panes that show the team, `MODES` for Rooms and `SCHEDULES` for Schedules, and the `memory` addon for Notes.
+A host that lists a pane the services cannot back does not start, and says which service is missing.
+
 ### What plugins do not extend
 
 A plugin adds slash commands through the Discord plugin's registrar and never receives the composed commands (see [slash commands](#slash-commands-commandsadd)).
@@ -3414,7 +3440,7 @@ The [site guide source files][package-guides] describe installation, requirement
 
 - [pi-roundtable-drawing][drawing-package]: [site guide source][drawing-guide] · local relationship maps, magic circles, sigils, sacred geometry, and card spreads.
 - [pi-roundtable-coding][coding-package]: [site guide source][coding-guide] · repository shelves and owner-approved Pi coding workers.
-- [pi-roundtable-web][web-package]: [site guide source][web-guide] · an owner-only console for conversations, transcripts, and memory notes with live updates.
+- [pi-roundtable-web][web-package]: [site guide source][web-guide] · the owner app: rooms with the agent team on the web, approval cards, yolo and long-running modes, an installable PWA with Web Push, and a console for conversations, transcripts, and memory notes; see [the owner app](#the-owner-app-pi-roundtable-web).
 - [pi-roundtable-sandbox][sandbox-package]: [site guide source][sandbox-guide] · sealed guest channels on native Linux Docker with a host-only credential broker and allow-listed tools.
 - [pi-roundtable-mcp][mcp-package]: [site guide source][mcp-guide] · MCP connectors through a gateway and remote MCP endpoints for agent turns and owner-granted Discord channel tools.
 - [pi-roundtable-browser][browser-package]: [site guide source][browser-guide] · `browser_task`, a worker that drives agent-browser in a Docker container with no route to the host's private networks, and a `BrowserDriver` for another browser.

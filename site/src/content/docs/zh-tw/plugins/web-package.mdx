@@ -1,13 +1,16 @@
 ---
 title: Web 套件
-description: 提供經過驗證、僅供 owner 使用的 console，查看對話、團隊狀態和記憶筆記。
+description: owner 的網頁 app：手機優先、可安裝，能跟 agent 團隊對話、回答核准卡，也保留看對話、團隊狀態和記憶筆記的 console。
 sidebar:
   order: 11
 ---
 
-`pi-roundtable-web` 會在 host 的 HTTP listener 提供 web console。
-owner 能瀏覽對話和 transcript、查看 agent team 的即時狀態，也能讀寫 memory note。
-它讀取 host 已有的資料，不會新增資料庫、cookie 或帳號系統。
+`pi-roundtable-web` 是 host 的 owner app：在 host 的 HTTP listener 上提供一個網頁，owner 可以在這裡跟 agent 團隊對話、回答核准卡、中止一輪執行、傳檔案、切換 yolo 與長時間執行模式，有事等著處理時，手機也會收到通知。
+最早的 console 功能也還在：查看對話 transcript、讀寫記憶筆記、看團隊狀態。
+
+這個外掛本身就是一個聊天管道，所以 agent 團隊可以只活在網頁裡：**沒有 Discord 的 host 也能完整運作**。
+每個啟用中的 agent 和群組都有自己的房間，Home 是協調者的房間。
+房間是獨立的對話，跟同一個 agent 在 Discord 頻道裡的對話分開。
 
 ## 安裝與需求
 
@@ -15,48 +18,132 @@ owner 能瀏覽對話和 transcript、查看 agent team 的即時狀態，也能
 bun add pi-roundtable-web pi-roundtable
 ```
 
-需要 Bun 1.4.4 以上、`>=0.8.0 <0.9.0` 的 pi-roundtable，而且 host 必須在資料目錄所在的機器上執行。
-Notes pane 需要 memory addon 和 `ownerId`；Overview pane 需要 agent server。
-每個 request 都必須通過驗證：使用 Cloudflare Access，或為負責驗證身分的 proxy 提供自己的 verifier。
+需要 Bun 1.4.4 以上、`>=0.22.0 <0.23.0` 的 pi-roundtable。
+app 必須跟 host 的資料目錄在同一台機器上執行，金鑰和檔案放在 `<dataDir>/web/`。
+host 要有 agent 團隊（設定裡的 `agents`）。驗證不能省略：選 `none`、`password`，或像 Cloudflare Access 這樣的 verifier。
+要安裝成 app、收通知，網址必須是 HTTPS。
 
 ```ts
 import { cloudflareAccess, webConsole } from "pi-roundtable-web";
 
 export default {
-  // ...其他 roundtable 設定...
+  // ...其他 roundtable 設定，有 `agents`，不寫 `discord` 也可以...
   plugins: [webConsole({
     verifier: cloudflareAccess({
       teamDomain: "example.cloudflareaccess.com",
       audience: process.env.CONSOLE_ACCESS_AUD ?? "",
       email: "owner@example.com",
     }),
-    origin: "https://console.example.com",
-    ownerId: "<the owner's Discord user id>",
+    origin: "https://app.example.com",
   })],
 };
 ```
+
+打開 `https://app.example.com/console/`，看到的就是 app。
+
+## Owner app
+
+| 位置 | 功能 |
+| --- | --- |
+| Rooms | 先是 Home，接著是 agent、群組和派工 thread，並以徽章標出執行中、有卡片等待、yolo 與長時間執行。 |
+| 房間 | 訊息帶作者的角色圖，支援 Markdown 和檔案，有即時進度列，輸入框可上傳檔案、按 Stop 中止。 |
+| 卡片 | 附細節的核准、問題、問卷，以及一輪執行碰到時間上限時的卡片，任何一位 owner 都能在房間裡回答。 |
+| Agent 檔案 | 名稱、提示詞、模型、思考程度，以及角色編輯器。 |
+| Schedules | 團隊的排程，取消前會先確認。 |
+| Table | 圓桌，讓每個 agent 入座，點一下就進它的房間。 |
+| Settings | 色彩模式與外觀、安裝、這台裝置的通知，以及登出。 |
+
+一輪執行會等卡片 `cardGraceSeconds` 秒（預設 120）；時間到就不等答案繼續往下，卡片仍保留一天。
+之後才給的答案，會在該房間開啟新的一輪。
+檔案不限類型，大小上限是 `uploadMaxBytes`（預設 100 MiB），以串流寫入磁碟再交給 agent；Cloudflare 免費方案限制 request body 為 100 MB。
+
+### Yolo 與長時間執行模式
+
+房間選單有兩個開關，按房間記錄，重啟後仍然有效。
+**Yolo** 會直接核准規則允許的暫緩呼叫，不開卡片，並在房間裡為每一次核准留一行紀錄。
+它不會核准 webhook 或報告觸發的那輪、指定了核准人的呼叫，以及只有發言者本人能回答的卡片；破壞性的類別（`sudo`、`rm`、磁碟、電源、服務、docker、防火牆、套件、強制推送、hard reset、`gh`、`crontab`）一律照問。
+單純的 `git push` 和工作區外的寫入會被核准，而推到 `main` 可能就是部署；要讓它也詢問，就把 `shell.push` 列進 host 設定的 `autonomy.yolo.card`。
+**長時間執行**讓一輪執行超過時間上限後自動繼續，最多做到 `autonomy.longRunning.maxSeconds`（預設四小時），之後開卡片詢問，無法顯示卡片時就中止。
+任一模式開著時，畫面上會有橫幅提示。
+類別清單和防護規則見[核心指南](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#hold-classes-and-yolo-mode)。
+
+### 外觀
+
+agent 都以組合出來的角色呈現。
+頁面有 Modern 與 Camelot 兩種外觀（Camelot 白天是羊皮紙、夜晚是夜間城堡，配上金色線條、盾形外框和蠟封），各有淺色與深色，在 Settings 依裝置選擇。
+`appearance.look` 設定 host 的預設外觀。
+
+## 安裝到裝置與通知
+
+app 是 PWA：manifest 的範圍限於 mount 路徑，service worker 只快取頁面外殼、不快取資料，圖示可用 `icons.dir` 換掉內建的一組。
+從瀏覽器的安裝選項或 Settings 安裝；iPhone 和 iPad 要用「分享」再「加入主畫面」，並從主畫面開啟。
+
+Web Push 會在 owner 沒有任何頁面開著、看得到的時候喚醒裝置：卡片開啟時（「Card waiting」，或「Long-running cap reached」）、agent 自己在房間發話時，以及 host 發出的通知。
+每位 owner 在 Settings 按裝置開啟推播，也能在那裡移除裝置。
+除非 `origin` 是 https，否則要設定 `push.subject`（`mailto:` 位址或 `https:` 網址）；VAPID 金鑰在第一次啟動時產生，放在 `<dataDir>/web/vapid.json`，這個檔案必須在重啟後保留。
+推播的 endpoint 必須是 https，且屬於允許的推播服務；`push.endpointHosts` 可以加入更多。
+`push.preview` 關閉時，通知不帶任何訊息內容。
 
 ## 設定
 
 | 選項 | 預設值 | 用途 |
 | --- | --- | --- |
-| `verifier` | 必填 | 驗證每個 request；使用 `cloudflareAccess(...)` 或自訂函式。 |
+| `auth` | 必填，或用 `verifier` | `{ mode: "none" }`、`{ mode: "password" }` 或 `{ mode: "verifier", verifier }`。 |
+| `verifier` | 無 | verifier 模式的簡寫：`cloudflareAccess(...)` 或自訂函式。兩者同時給會出錯。 |
 | `origin` | 必填 | 瀏覽器看到的 scheme 和 host。寫入操作必須帶上完全相同的 `Origin`。 |
-| `ownerId` | 無 | owner memory 的 id；提供 Notes pane 時必填。 |
-| `dataDir` | `./data` | host 資料目錄，其中包含 `sessions/`。 |
-| `mountPath` | `/console` | console 的 route prefix。 |
-| `listener` | `public` | 提供 console 的 HTTP listener。 |
-| `panes` | `overview`、`conversations`、`notes` | 可再選 `skills`、`connectors` 並指定順序；這兩個 pane 需要 feature port。 |
+| `ownerId` | 主要 owner | 已棄用：沒有回報身分的 verifier 所代表的 principal。 |
+| `dataDir` | `./data` | host 資料目錄，其中有 `sessions/` 和 `web/`。 |
+| `mountPath` | `/console` | route prefix。 |
+| `listener` | `public` | 提供 app 的 HTTP listener。 |
 | `routing` | `hash` | `path` 保留 mount 下的頁面路徑與 history 導航。 |
+| `panes` | `rooms`、`table`、`overview`、`schedules`、`conversations`、`notes` | 可再選 `skills`、`connectors` 並指定順序；`schedules` 和 `table` 需要 `rooms`。明確列出的清單照寫的為準。 |
+| `surface` | `app` | app 房間的 key 前綴。改了它，所有房間都會重新開始。 |
+| `cardGraceSeconds` | `120` | 一輪執行等卡片的秒數，大於 0、最多 3600。 |
+| `uploadMaxBytes` | 100 MiB | 一個人能上傳的單檔上限，1 byte 到 4 GiB。 |
+| `push` | https origin 時開啟 | Web Push；金鑰見下表。 |
+| `icons` | 內建圖示 | `{ dir }`：放五個安裝圖示的目錄。 |
+| `appearance` | `{ look: "modern" }` | `{ look }`：`modern` 或 `camelot`。 |
+| `title` | `Roundtable` | 頁面標題，也是安裝後 app 的名稱。 |
+| `presentation` | 英文 | `{ locale, messages }` 設定語言、日期格式與在地化文字；dictionary key 是英文原文。 |
 | `features` | 無 | 物件或接收公開 setup context 的 factory，提供 party 狀態、排程數、對話清理、skills 與 connectors。 |
-| `presentation` | 英文 | `{ locale, messages }` 設定文件語言、日期格式，以及 UI／API 的在地化文字；dictionary key 是英文原文。 |
-| `title` | `Roundtable` | 頁面標題。 |
 | `relayNotes` | remote MCP relay note | 顯示訊息前要移除的 relay 前綴。 |
 | `exclude` | 無 | 指定哪些 conversation key 不得列出或讀取的 predicate。 |
 | `assetDir` | 套件的 `dist/` | 已建置頁面的目錄；只應在測試時設定。 |
 
+| 欄位 | 預設值 | 用途 |
+| --- | --- | --- |
+| `auth.mode` | 必填 | `none`、`password` 或 `verifier`。 |
+| `auth.trustNetwork` | `false` | 只用於 `none`：允許對本機以外開放的 TCP listener。 |
+| `auth.passwordEnv` | `ROUNDTABLE_WEB_PASSWORD` | 只用於 `password`：存放密碼的環境變數，至少 12 個字元。 |
+| `auth.sessionDays` | `30` | 只用於 `password`：登入有效幾天，1 到 365。 |
+| `auth.principal` | 主要 owner | 用於 `none` 與 `password`：session 代表的 principal。 |
+| `auth.verifier` | verifier 模式必填 | 只用於 `verifier`：request verifier。 |
+| `push.preview` | `true` | 通知是否顯示訊息的前 120 個字元。 |
+| `push.endpointHosts` | 無 | 額外允許的推播服務主機；開頭的 `*.` 代表所有子網域。 |
+| `push.subject` | https 時為 `origin` | VAPID 聯絡資訊：`mailto:` 或 `https:` 網址。沒有的話推播關閉。 |
+
+## 驗證與威脅模型
+
+| 模式 | owner 是誰 | 適用情況 |
+| --- | --- | --- |
+| `verifier` | verifier 回報的那個人，且已連結到某位 owner。 | 由 Cloudflare Access 之類的 proxy 負責登入。這是唯一一個 host 上的 agent 偽造不了的模式。 |
+| `password` | 輸入密碼後的主要 owner。 | app 對網際網路開放，前面沒有負責登入的 proxy。 |
+| `none` | 主要 owner，誰連得到 listener 誰就是。 | 只有 owner 連得到 listener：unix socket 或 loopback TCP。 |
+
+`password` 提供不需要 script 的登入頁；每次失敗要多等一秒，15 分鐘內失敗十次，這段時間內所有登入都會被鎖住（這是全域限制，因為 proxy 後面看不到可信的 client 位址）；成功後設定簽署過的 `HttpOnly`、`SameSite=Strict` cookie，換密碼會讓舊 cookie 全部失效。
+`none` 必須明確寫出來，每次啟動都會警告，而且除非設了 `trustNetwork`，否則會拒絕不是 loopback 的 TCP listener。
+
+**以 host 使用者身分執行 shell 的 agent，能碰到那位使用者碰得到的一切。**
+用 `none` 時，它可以經由 socket 以 owner 身分呼叫 app，核准自己被暫緩的動作，甚至打開 yolo；用 `password` 時，它可以讀到密碼和 session 金鑰。
+兩者都擋得住來自網路的攻擊，但擋不住 host 上被攻陷的 agent。
+只有 verifier 擋得住，因為 agent 偽造不出簽署過的 token。
+host 上的 agent 會執行指令時，請繼續用 Cloudflare Access（或其他會簽署的 proxy）。
+
 內建的 `cloudflareAccess` verifier 會驗證 Access 簽署的 token、team、audience 和允許的 email。
 若自訂 verifier 信任 proxy header，只有在 client 無法直接連上 listener，而且 proxy 會移除 client 自帶的同名 header 時才安全。
+API、SSE、WebSocket、頁面和靜態資源都先驗證，再讀取資料；寫入操作要有完全相符的 `Origin`，頁面也不會送出 CORS header。
+agent 的輸出是不含 raw HTML 的 Markdown，儲存的檔案一律以下載方式提供，並套用 sandbox 政策。
+Transcript 會顯示 tool arguments 和結果，工具處理過的 secret 可能出現在裡面；可以用 `panes` 或 `exclude` 限縮資料。
 
 ## Host 整合
 
@@ -66,34 +153,17 @@ Overview 也會列出既有的 owner 工作區與外部 agent 對話。
 `features.cleanup` 提供 `startFresh(key)` 和回傳 `deleted`／`busy` 的 `deleteConversation(key)`。
 套件先驗證 key 格式、歸屬、排除條件及既有檔案，再呼叫清理 hook；頁面會先確認，忙碌時的刪除回 409。
 沒有 cleanup hook 時，對話仍是唯讀。
-`api/dashboard` 保留既有 client 的相容格式，包含 channel key 及 guild／channel／session ID 別名。
 
 `features.skills.catalog()` 提供來源、描述、群組、使用者與檔案遺失狀態。
 `read(name)` 只能讀 catalog 選出的項目，回傳 `{ frontmatter, body }`，不能接受 request 指定的檔案路徑。
-host 應限制讀檔大小；API 限制 body 為 1 MB、frontmatter 為 64 KB，保留 metadata 順序並安全呈現 Markdown。
 設 `errorDetail: true` 時，API 會在回應中列出 missing 文字或讀取錯誤（最多 300 字符）；不設時則只回傳固定訊息。
 `features.connectors` 提供 `gateways()`、`servers()`、`usedBy(server)` 和選用的安全 `adminUrl`。
-頁面保留 gateway 連線與啟用狀態、工具數、virtual server 工具清單及使用者。
 啟用 Skills／Connectors 卻沒有對應 hook 時，啟動會失敗。
 
 Feature factory 接收公開 plugin setup context，可直接綁定既有 stores，不改 table、grant 或 session 路徑。
 額外的 service 依賴應列在 host wrapper 的 `requires`。
-`sessionSummary(directory)` 只摘要可信任的 party session 目錄，不讀 transcript 內容。
 應用程式專屬名稱與文字放在 `presentation`，不需複製 server 或 React 頁面。
-已驗證的 HTML 帶有跳脫過的 inert presentation metadata，首次 API 失敗也能顯示在地化文字，不需 inline script。
 
-## 安全模型
+完整的威脅模型、Cloudflare 設定步驟、自訂 verifier 範例、WebSocket 通訊協定和選項驗證方式，見 [pi-roundtable-web README](https://github.com/wayne930242/pi-roundtable/blob/master/packages/web/README.md)（英文）。
 
-API、SSE、頁面、靜態資源與 mount redirect 都先驗證，再讀取資料。
-Path routing 保留相同的驗證與完全相符的 write-Origin 檢查。
-Skill Markdown 不執行 raw HTML、不抓取圖片，只開啟 HTTP(S) 連結。
-console 忽略 session symlink，note body 限制為 64 KB，而且不顯示模型私有推理。
-console 沒有角色或個別使用者檢視權限，只適用於一位 owner。
-寫入操作還要通過完全相符的 `Origin` 檢查，頁面不會送出 CORS header。
-Transcript 會顯示 tool arguments 和結果，工具處理過的 secret 可能出現在裡面；可以用 `panes` 或 `exclude` 限縮資料。
-console 不會限制驗證失敗的請求頻率。
-請放在可信任的 authentication proxy 後面，並在 proxy 終止 TLS。
-
-Cloudflare 設定、自訂 verifier 範例、完整威脅模型和選項驗證方式，見[pi-roundtable-web README](https://github.com/wayne930242/pi-roundtable/blob/master/packages/web/README.md)（英文）。
-
-{/* Sources: packages/web/README.md:1-17, packages/web/README.md:37-105, packages/web/README.md:140-190, packages/web/src/options.ts:14-44 */}
+{/* Sources: packages/web/README.md, packages/web/src/options.ts, packages/web/src/push/, packages/web/src/pwa.ts */}
