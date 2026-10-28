@@ -58,6 +58,8 @@ import { isCheckDatabase } from "../db/check-database.ts";
 export class PgAgentStore implements AgentDirectory {
 	readonly #sql: SQL;
 	readonly #agents = new Map<string, Agent>();
+	/** Agents whose character column holds a value, readable or not. */
+	readonly #dressed = new Set<string>();
 	readonly #groups = new Map<string, AgentGroup>();
 	/** The tail of the agent and group writes, which run one at a time so none reads a map another is about to change. */
 	#queue: Promise<unknown> = Promise.resolve();
@@ -94,7 +96,8 @@ export class PgAgentStore implements AgentDirectory {
 			.#sql`SELECT * FROM agent_groups WHERE guild_id = ${this.#guild}`;
 		this.#agents.clear();
 		this.#groups.clear();
-		for (const row of agents) this.#agents.set(row.name, toAgent(row));
+		this.#dressed.clear();
+		for (const row of agents) this.#keepAgentRow(row);
 		for (const row of groups) this.#groups.set(row.name, toGroup(row));
 	}
 
@@ -246,14 +249,13 @@ export class PgAgentStore implements AgentDirectory {
 				change.thinking === undefined
 					? (current.thinking ?? null)
 					: change.thinking;
-			const character = change.character ?? current.character;
 			const rows: AgentRow[] = await this.#sql`
 			UPDATE agents SET
 				display_name = ${change.displayName?.trim() ?? current.displayName},
 				prompt = ${change.prompt ?? current.prompt},
 				avatar_prompt = ${change.avatarPrompt ?? current.avatarPrompt},
 				avatar_hash = ${change.avatarHash ?? current.avatarHash ?? null},
-				character = ${character ?? null}::jsonb,
+				character = CASE WHEN ${change.character !== undefined} THEN ${change.character ?? null}::jsonb ELSE character END,
 				channel_id = ${change.channelId ?? current.channelId ?? null},
 				model = ${model},
 				thinking = ${thinking},
@@ -291,9 +293,41 @@ export class PgAgentStore implements AgentDirectory {
 
 	#keepAgent(row: AgentRow | undefined): Agent {
 		if (!row) throw new AgentError("the agent was not found");
+		return this.#keepAgentRow(row);
+	}
+
+	#keepAgentRow(row: AgentRow): Agent {
 		const agent = toAgent(row);
 		this.#agents.set(agent.name, agent);
+		if (row.character !== null && row.character !== undefined)
+			this.#dressed.add(agent.name);
+		else this.#dressed.delete(agent.name);
 		return agent;
+	}
+
+	/** Whether the stored column holds a character, even one this version cannot read. */
+	hasStoredCharacter(name: string): boolean {
+		return this.#dressed.has(name);
+	}
+
+	/**
+	 * Stores a character and picture only while the agent still has none, so a look chosen in the
+	 * meantime wins. Returns whether it was written.
+	 */
+	async dressIfUndressed(
+		name: string,
+		character: CharacterSpec,
+		avatarHash: string,
+	): Promise<boolean> {
+		return this.#serial(async () => {
+			const rows: AgentRow[] = await this.#sql`
+			UPDATE agents SET character = ${character}::jsonb, avatar_hash = ${avatarHash}, updated_at = now()
+			WHERE guild_id = ${this.#guild} AND name = ${name} AND character IS NULL
+			RETURNING *`;
+			if (!rows[0]) return false;
+			this.#keepAgentRow(rows[0]);
+			return true;
+		});
 	}
 
 	#checkMembers(members: readonly string[], host: string): void {

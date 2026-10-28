@@ -9,7 +9,7 @@ import { AgentError } from "../domain/errors.ts";
 import type { AgentTurnScope } from "../domain/ports.ts";
 import { addressee } from "../speakers.ts";
 import { openingTaskText } from "./agent-prompt.ts";
-import { characterOf } from "./agent-rules.ts";
+import { characterOf, overBase } from "./agent-rules.ts";
 import { modelSetting, thinkingSetting } from "./agent-settings.ts";
 import type { Agent } from "./agent-store.ts";
 import type { AvatarMode } from "./agent-tools.ts";
@@ -214,21 +214,11 @@ export class TeamEditing {
 	}
 
 	/**
-	 * An input over a base look. A new class alone keeps the base's colors, since the agent's
-	 * colors are its own; a bad field is an AgentError that names it.
+	 * An input over a base look (see overBase); a bad field is an AgentError that names it.
 	 */
 	#resolve(input: CharacterInput, base: CharacterSpec): CharacterSpec {
-		const keepColors =
-			input !== null &&
-			typeof input === "object" &&
-			input.class !== undefined &&
-			input.palette === undefined &&
-			input.colors === undefined;
 		try {
-			return resolveCharacter(
-				keepColors ? { ...input, colors: base.colors } : input,
-				base,
-			);
+			return resolveCharacter(overBase(input, base), base);
 		} catch (error) {
 			if (error instanceof CharacterError)
 				throw new AgentError(`The look is not usable: ${error.message}.`);

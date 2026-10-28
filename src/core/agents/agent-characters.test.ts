@@ -135,8 +135,15 @@ describeDb("agent characters", () => {
 	test("at start a pre-migration row gets its seed's character, or a suggestion, and a second start changes nothing", async () => {
 		// The seeds were dressed at the fixture's start: the coordinator took its seed's look.
 		const coordinator = fx.store.agent("coordinator");
+		// The seed names a class, so skin and build stay the name's own.
+		const own = coordinator ? suggestCharacter(coordinator) : undefined;
 		expect(coordinator?.character).toEqual(
-			resolveCharacter({ class: "navigator", palette: "amber" }),
+			resolveCharacter({
+				class: "navigator",
+				palette: "amber",
+				skin: own?.skin,
+				build: own?.build,
+			}),
 		);
 		expect(pictureExists(coordinator?.avatarHash)).toBe(true);
 		// A row from before the migration: a drawn hash and no character.
@@ -175,5 +182,57 @@ describeDb("agent characters", () => {
 		const bare = { name: "x", displayName: "Reviewer", prompt: "review code" };
 		expect(characterOf(bare)).toEqual(suggestCharacter(bare));
 		if (old?.character) expect(characterOf(old)).toEqual(old.character);
+	});
+
+	test("an explicit class keeps the name-hash skin and build, so two agents of a class differ", async () => {
+		await create("alpha", "Alpha", "p");
+		await create("omega", "Omega", "p");
+		await fx.team.dress("alpha", { class: "monk" });
+		await fx.team.dress("omega", { class: "monk" });
+		const a = fx.store.agent("alpha")?.character;
+		const b = fx.store.agent("omega")?.character;
+		expect(a?.class).toBe("monk");
+		expect(a?.skin !== b?.skin || a?.build !== b?.build).toBe(true);
+		const alpha = fx.store.agent("alpha");
+		if (alpha) {
+			const was = suggestCharacter(alpha);
+			expect(a?.skin).toBe(was.skin);
+			expect(a?.build).toBe(was.build);
+		}
+	});
+
+	test("the start pass does not overwrite a look chosen while it rendered", async () => {
+		await fx.store.createAgent({
+			name: "late",
+			displayName: "Reviewer",
+			prompt: "review code",
+		});
+		const chosen = resolveCharacter({ class: "monk" });
+		await fx.store.updateAgent("late", {
+			character: chosen,
+			avatarHash: "c".repeat(64),
+		});
+		await fx.team.start();
+		await settle();
+		expect(fx.store.agent("late")?.character).toEqual(chosen);
+	});
+
+	test("a row with a stored character is not dressed again by the start", async () => {
+		await fx.store.createAgent({
+			name: "future",
+			displayName: "Reviewer",
+			prompt: "review code",
+		});
+		const renders = rendered.length;
+		const dressed = await fx.store.dressIfUndressed(
+			"future",
+			resolveCharacter({ class: "knight" }),
+			"e".repeat(64),
+		);
+		expect(dressed).toBe(true);
+		await fx.team.start();
+		await settle();
+		expect(fx.store.hasStoredCharacter("future")).toBe(true);
+		expect(rendered.length).toBe(renders);
 	});
 });

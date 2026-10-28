@@ -122,3 +122,24 @@ export function characterOf(
 ): CharacterSpec {
 	return agent.character ?? suggestCharacter(agent);
 }
+
+/**
+ * An input read over a base look. A new class alone keeps the base's colors, since the agent's
+ * colors are its own, and a class keeps the base's skin and build unless the input names them, so
+ * two agents of one class still differ.
+ */
+export function overBase(
+	input: CharacterInput,
+	base: CharacterSpec,
+): CharacterInput {
+	if (input === null || typeof input !== "object" || input.class === undefined)
+		return input;
+	return {
+		skin: base.skin,
+		build: base.build,
+		...(input.palette === undefined && input.colors === undefined
+			? { colors: base.colors }
+			: {}),
+		...input,
+	};
+}

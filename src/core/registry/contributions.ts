@@ -1,3 +1,4 @@
+import { CharacterError, resolveCharacter } from "../../characters/index.ts";
 import type { AgentSeed } from "../agents/agent-store.ts";
 import type { BackgroundTarget, ChannelClaim } from "../contract/channels.ts";
 import type { ChatSurface } from "../contract/surface.ts";
@@ -123,6 +124,21 @@ function checkKeys(plugin: string, contribution: Contribution): void {
 				meant ? ` Did you mean "${meant}"?` : ""
 			} The parts are ${CONTRIBUTION_KEYS.join(", ")}.`,
 		);
+	}
+}
+
+/** Refuses a seed whose `character` the characters module would not resolve. */
+function checkSeedCharacters(plugin: string, seeds: readonly AgentSeed[]): void {
+	for (const seed of seeds) {
+		if (seed.character === undefined) continue;
+		try {
+			resolveCharacter(seed.character);
+		} catch (error) {
+			if (!(error instanceof CharacterError)) throw error;
+			throw new PluginError(
+				`plugin ${plugin}: seed "${seed.name}" has a bad character, field "${error.field}": ${error.message}.`,
+			);
+		}
 	}
 }
 
@@ -439,6 +455,7 @@ export async function collectContributions(
 		registry.backgroundTargets.push(...backgroundTargets);
 		registry.directChannels.push(...directChannels);
 		registry.dashboard.push(...dashboard);
+		checkSeedCharacters(plugin.name, seeds);
 		registry.seeds.push(...seeds);
 		registry.prompt.push(...prompt);
 		registry.requiredTools.push(...requiredTools);

@@ -202,6 +202,24 @@ describe("collectContributions", () => {
 		expect(linked.holds("note_add", {}, {})).toBeUndefined();
 	});
 
+	test("a seed with a bad character is a PluginError naming plugin, seed and field", async () => {
+		const error = await collect([
+			plugin("p", {
+				seeds: [
+					{
+						name: "x",
+						displayName: "X",
+						prompt: "p",
+						character: { hat: "crown" } as never,
+					},
+				],
+			}),
+		]).catch((e: unknown) => e);
+		expect(error).toBeInstanceOf(PluginError);
+		for (const part of ["plugin p", '"x"', "class"])
+			expect((error as Error).message).toContain(part);
+	});
+
 	test("seeds and prompt sections are collected in contribution order", async () => {
 		const seed = (name: string) => ({
 			name,

@@ -62,6 +62,17 @@ function memoryStore(initial: Agent[]) {
 			rows.set(input.name, created);
 			return created;
 		},
+		hasStoredCharacter: (name: string) => rows.get(name)?.character !== undefined,
+		dressIfUndressed: async (
+			name: string,
+			character: Agent["character"],
+			avatarHash: string,
+		) => {
+			const current = rows.get(name) as Agent;
+			if (current.character) return false;
+			rows.set(name, { ...current, character, avatarHash });
+			return true;
+		},
 		updateAgent: async (name: string, change: Partial<Agent>) => {
 			const updated = { ...(rows.get(name) as Agent), ...change };
 			rows.set(name, updated);
@@ -119,6 +130,7 @@ function context(
 	agents: Agent[],
 	logger = silentLogger(),
 ) {
+	const changes = { count: 0 };
 	const store = memoryStore(agents);
 	const studio = recordingStudio(kind);
 	const created: string[] = [];
@@ -145,9 +157,11 @@ function context(
 			speakerOf: () => ({ id: "1", name: "Riley", tier: "owner" as const }),
 			answerBackground: async () => undefined,
 		},
-		changed: () => undefined,
+		changed: () => {
+			changes.count++;
+		},
 	} as unknown as TeamContext;
-	return { ctx, store, studio, created };
+	return { ctx, store, studio, created, changes };
 }
 
 const NEW_AGENT = {
@@ -231,9 +245,12 @@ describe("startup dressing", () => {
 
 	test("each active agent without a character is dressed and rendered, the others left alone", async () => {
 		const { lines, logger } = capturedLog();
-		const { ctx, store, studio } = context("draws", missing(), logger);
+		const c = context("draws", missing(), logger);
+		const { ctx, store, studio, changes } = c;
 		await new TeamLifecycle(ctx).start();
 		await flush();
+		// One change after the seeds and channels, one after the whole dressing pass.
+		expect(changes.count).toBe(2);
 		expect(studio.calls).toHaveLength(2);
 		expect(store.agent("infra")?.avatarHash).toBe("r".repeat(64));
 		expect(store.agent("infra")?.character).toBeDefined();

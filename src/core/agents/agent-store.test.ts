@@ -151,6 +151,43 @@ describeDb("PostgreSQL", () => {
 			await reopened.close();
 		});
 
+		test("updateAgent without a character leaves an unreadable stored one as it is", async () => {
+			const raw = '{"v":2,"class":"future-class","hat":"crown"}';
+			const admin = new SQL(testDatabaseUrl);
+			await admin.unsafe(
+				`UPDATE agents SET character = '${raw}'::jsonb WHERE name = 'infra'`,
+			);
+			await admin.close();
+			const reopened = await openTestStore(PgAgentStore, TEST_GUILD);
+			expect(reopened.hasStoredCharacter("infra")).toBe(true);
+			await reopened.updateAgent("infra", { prompt: "Edited." });
+			const check = new SQL(testDatabaseUrl);
+			const rows = await check.unsafe(
+				"SELECT character FROM agents WHERE name = 'infra'",
+			);
+			await check.close();
+			expect(rows[0].character).toEqual(JSON.parse(raw));
+			await reopened.close();
+		});
+
+		test("dressIfUndressed writes only while the column is null", async () => {
+			const first = resolveCharacter({ class: "knight" });
+			const second = resolveCharacter({ class: "healer" });
+			await store.createAgent({
+				name: "bare",
+				displayName: "Bare",
+				prompt: "p",
+			});
+			expect(await store.dressIfUndressed("bare", first, "a".repeat(64))).toBe(
+				true,
+			);
+			expect(await store.dressIfUndressed("bare", second, "b".repeat(64))).toBe(
+				false,
+			);
+			expect(store.agent("bare")?.character).toEqual(first);
+			expect(store.agent("bare")?.avatarHash).toBe("a".repeat(64));
+		});
+
 		test("updateAgent writes the character and the picture in one update", async () => {
 			const character = resolveCharacter({ class: "healer" });
 			const hash = "d".repeat(64);

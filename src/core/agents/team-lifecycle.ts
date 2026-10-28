@@ -6,6 +6,7 @@ import {
 import type { ChannelKey } from "../domain/conversation.ts";
 import { AgentError } from "../domain/errors.ts";
 import type { AgentTurnScope } from "../domain/ports.ts";
+import { overBase } from "./agent-rules.ts";
 import type { AgentChannels } from "./agent-ports.ts";
 import type { Agent, AgentGroup } from "./agent-store.ts";
 import {
@@ -44,7 +45,9 @@ export class TeamLifecycle {
 		if (added.length > 0) logger.info({ added }, "seed agents added");
 		if (channels) await this.#startChannels(channels);
 		this.#ctx.changed();
-		void this.#dressMissing();
+		void this.#dressMissing().then((dressed) => {
+			if (dressed) this.#ctx.changed();
+		});
 	}
 
 	async #startChannels(channels: AgentChannels): Promise<void> {
@@ -89,7 +92,7 @@ export class TeamLifecycle {
 	 * already worn. The picture is rendered and replaces the old hash. A failure is logged for that
 	 * agent, which keeps its picture until the next start; a second pass finds nothing to do.
 	 */
-	async #dressMissing(): Promise<void> {
+	async #dressMissing(): Promise<boolean> {
 		const { store, studio, seeds, logger } = this.#ctx.options;
 		const seeded = new Map(seeds().map((seed) => [seed.name, seed]));
 		const worn: CharacterSpec[] = store
@@ -97,21 +100,24 @@ export class TeamLifecycle {
 			.flatMap((agent) =>
 				agent.status === "active" && agent.character ? [agent.character] : [],
 			);
+		let dressed = false;
 		for (const agent of store.agents()) {
-			if (agent.status !== "active" || agent.character) continue;
+			if (
+				agent.status !== "active" ||
+				agent.character ||
+				store.hasStoredCharacter(agent.name)
+			)
+				continue;
 			try {
 				const suggested = suggestCharacter(agent, worn);
 				const wanted = seeded.get(agent.name)?.character;
 				const character = wanted
-					? resolveCharacter(
-							wanted.class !== undefined && !wanted.palette && !wanted.colors
-								? { ...wanted, colors: suggested.colors }
-								: wanted,
-							suggested,
-						)
+					? resolveCharacter(overBase(wanted, suggested), suggested)
 					: suggested;
 				const avatarHash = await studio.render(character);
-				await store.updateAgent(agent.name, { character, avatarHash });
+				if (!(await store.dressIfUndressed(agent.name, character, avatarHash)))
+					continue;
+				dressed = true;
 				worn.push(character);
 				logger.info(
 					{ agent: agent.name, class: character.class },
@@ -121,6 +127,7 @@ export class TeamLifecycle {
 				logger.warn({ agent: agent.name, err: error }, "agent not dressed");
 			}
 		}
+		return dressed;
 	}
 
 	/** Starts an agent's or every group member's conversation over; call inside the channel's queue. */
