@@ -34,6 +34,7 @@ function recordingSurface(log: string[]): SurfacePort {
 		react: async () => undefined,
 		unreact: async () => undefined,
 		prompts: () => undefined,
+		roomSurfaces: () => [],
 		interim: () => undefined,
 		progress: async (channel, event) =>
 			void log.push(`progress ${channel} ${JSON.stringify(event)}`),

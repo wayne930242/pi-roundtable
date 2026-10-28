@@ -223,6 +223,7 @@ export function agentServerPlugin(
 				},
 				schedules,
 				queue: context.queue,
+				surfaces,
 				startTyping: (channel) => surfaces.startTyping(channel),
 				showStop: (channel) => surfaces.showStop(channel),
 				workDir: options.workDir,

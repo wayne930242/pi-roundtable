@@ -2,6 +2,7 @@ import type { TurnAttachments } from "../domain/attachment.ts";
 import type {
 	ChannelKey,
 	PendingConfirmation,
+	PostAuthor,
 	ReplyFile,
 	TurnResult,
 } from "../domain/conversation.ts";
@@ -22,8 +23,11 @@ import { GroupTurns } from "./group-turns.ts";
 import {
 	channelIdOf,
 	channelOwner,
+	discordIdOf,
 	discordKey,
 	homeScope,
+	roomOf,
+	roomScope,
 } from "./team-keys.ts";
 import {
 	type Chain,
@@ -45,6 +49,8 @@ export class TeamTurns {
 	readonly #chains = new Map<ChannelKey, Chain>();
 	/** The channel each working agent's turn posts in. */
 	readonly #working = new Map<string, ChannelKey>();
+	/** The channel each running turn posts in, by session key; a seat's turns run in its group's room. */
+	readonly #posting = new Map<ChannelKey, ChannelKey>();
 	/** When each agent or group (by `group:<name>`) last started or ended a turn. */
 	readonly #lastActive = new Map<string, Date>();
 
@@ -97,7 +103,7 @@ export class TeamTurns {
 		attachments: TurnAttachments,
 	): Promise<TurnResult> {
 		const agent = this.#agentOf(channel);
-		const scope = homeScope(agent);
+		const scope = this.#scopeOf(agent, channel);
 		const pending = await this.#options.runtime().heldActions(scope.session);
 		const confirmed =
 			pending !== undefined &&
@@ -131,7 +137,7 @@ export class TeamTurns {
 		const agent = this.#agentOf(channel);
 		return this.#turn(
 			agent,
-			homeScope(agent),
+			this.#scopeOf(agent, channel),
 			channel,
 			text,
 			{ messages: 0, speaker },
@@ -164,10 +170,36 @@ export class TeamTurns {
 		);
 	}
 
+	/** The surfaces that host rooms; none for a team without a surface port. */
+	#rooms(channel: ChannelKey): readonly string[] {
+		// Only a room key needs the list, which a surface port gives once the hosts are linked.
+		return discordIdOf(channel) === undefined
+			? (this.#options.surfaces?.roomSurfaces() ?? [])
+			: [];
+	}
+
+	/** The agent whose channel or room it is. */
 	#agentOf(channel: ChannelKey): Agent {
-		const agent = this.#options.store.agentByChannel(channelIdOf(channel));
-		if (!agent) throw new AgentError(`no agent owns ${channel}`);
+		const { store } = this.#options;
+		const id = discordIdOf(channel);
+		const room =
+			id === undefined ? roomOf(channel, this.#rooms(channel)) : undefined;
+		const agent =
+			id !== undefined
+				? store.agentByChannel(id)
+				: room?.kind === "agent"
+					? store.agent(room.name)
+					: undefined;
+		if (agent?.status !== "active")
+			throw new AgentError(`no agent owns ${channel}`);
 		return agent;
+	}
+
+	/** The agent's own conversation in the channel: its Discord channel's, or its room's. */
+	#scopeOf(agent: Agent, channel: ChannelKey): AgentTurnScope {
+		return discordIdOf(channel) === undefined
+			? roomScope(agent, channel)
+			: homeScope(agent);
 	}
 
 	/**
@@ -187,6 +219,7 @@ export class TeamTurns {
 		// A group round has several sessions; only an agent's own channel maps to one.
 		const hideStop = scope.group ? undefined : showStop(postTo);
 		this.#chains.set(scope.session, chain);
+		this.#posting.set(scope.session, postTo);
 		this.#working.set(agent.name, postTo);
 		this.#active(agent.name, scope.group);
 		const turn = {
@@ -221,6 +254,7 @@ export class TeamTurns {
 		} finally {
 			hideStop?.();
 			this.#chains.delete(scope.session);
+			this.#posting.delete(scope.session);
 			this.#working.delete(agent.name);
 			this.#active(agent.name, scope.group);
 		}
@@ -269,7 +303,23 @@ export class TeamTurns {
 	 * during the turn shows; none in a channel no agent or group owns any more.
 	 */
 	#interim(channel: ChannelKey, agent: Agent): InterimPosts | undefined {
-		const { store, channels, studio } = this.#options;
+		const { store, channels, studio, surfaces } = this.#options;
+		if (discordIdOf(channel) === undefined) {
+			// A room's interim posts are its surface's, under the agent as author.
+			if (!surfaces?.interim(channel, this.#author(agent))) return undefined;
+			return {
+				post: async (text) => {
+					if (!channelOwner(store, channel, this.#rooms(channel)))
+						throw new AgentError(`${channel} is archived`);
+					const posts = surfaces.interim(
+						channel,
+						this.#author(this.#current(agent)),
+					);
+					if (!posts) throw new AgentError(`${channel} shows no interim posts`);
+					return posts.post(text);
+				},
+			};
+		}
 		if (!channels.interim) return undefined;
 		const interim = channels.interim.bind(channels);
 		return {
@@ -299,19 +349,35 @@ export class TeamTurns {
 			threadId?: string;
 		},
 	): Promise<void> {
-		const { store, channels, studio, logger } = this.#options;
-		if (!channelOwner(store, channel)) {
+		const { store, channels, studio, surfaces, logger } = this.#options;
+		if (!channelOwner(store, channel, this.#rooms(channel))) {
 			logger.info(
 				{ channel, agent: as.name },
 				"post to an archived channel dropped",
 			);
 			return;
 		}
+		if (discordIdOf(channel) === undefined) {
+			if (!surfaces)
+				throw new AgentError(`no surface serves the room ${channel}`);
+			const { thinking, chunks, files } = body;
+			return surfaces.sendReply(channel, {
+				...(thinking ? { thinking } : {}),
+				chunks,
+				...(files?.length ? { files } : {}),
+				author: this.#author(as),
+			});
+		}
 		return channels.post(channelIdOf(channel), {
 			name: as.displayName,
 			avatarUrl: studio.url(as.avatarHash),
 			...body,
 		});
+	}
+
+	/** Who speaks for the agent on a surface that shows authors. */
+	#author(agent: Agent): PostAuthor {
+		return { name: agent.displayName, agent: agent.name };
 	}
 
 	/**
@@ -330,7 +396,9 @@ export class TeamTurns {
 		const group = scope.group
 			? this.#options.store.group(scope.group)
 			: undefined;
-		return group ? discordKey(group.channelId) : scope.home;
+		if (!group) return scope.home;
+		// A seat of a room's group runs in that room; its running turn knows which.
+		return this.#posting.get(scope.session) ?? discordKey(group.channelId);
 	}
 
 	/** The assistant's own notice, such as a new release, posted in the coordinator's channel under its name. */

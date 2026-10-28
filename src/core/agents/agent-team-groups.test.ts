@@ -14,7 +14,12 @@ import {
 	stops,
 	useTeamFixture,
 } from "./agent-team-fixture.ts";
-import { discordKey, groupSessionKey } from "./team-keys.ts";
+import {
+	agentRoomKey,
+	discordKey,
+	groupRoomKey,
+	groupSessionKey,
+} from "./team-keys.ts";
 
 // Runs against a real PostgreSQL, only when ROUNDTABLE_TEST_DATABASE_URL is set.
 describeDb("PostgreSQL", () => {
@@ -461,6 +466,231 @@ describeDb("PostgreSQL", () => {
 				undefined,
 			);
 			expect(stops).toEqual([]);
+		});
+	});
+
+	describe("rooms", () => {
+		const agentRoom = (name: string) => agentRoomKey("app", name);
+		const groupRoom = groupRoomKey("app", "g");
+		let discordGroup: ChannelKey;
+
+		beforeEach(async () => {
+			fx.surfaces.rooms = ["app"];
+			await fx.team.createGroup({
+				name: "g",
+				displayName: "G",
+				members: ["coordinator", "infra", "doctor"],
+			});
+			discordGroup = discordKey(fx.store.group("g")?.channelId ?? "");
+			script.scores = { coordinator: 0.1, infra: 0.9, doctor: 0.1 };
+		});
+
+		const group = () => {
+			const found = fx.store.group("g");
+			if (!found) throw new Error("no group g");
+			return found;
+		};
+		const inRoom = (text: string) =>
+			fx.team.answerGroup(
+				groupRoom,
+				OWNER_SPEAKER,
+				text,
+				text,
+				NO_ATTACHMENTS,
+				undefined,
+			);
+		const inDiscord = (text: string) =>
+			fx.team.answerGroup(
+				discordGroup,
+				OWNER_SPEAKER,
+				text,
+				text,
+				NO_ATTACHMENTS,
+				undefined,
+			);
+
+		test("a round in a group's room logs under group@surface, runs the room's seats, and replies through the surface", async () => {
+			await inRoom("from the web");
+			const turn = fx.runtime.turns[0];
+			expect(turn?.channel).toBe(groupRoom);
+			expect(turn?.agent).toEqual({
+				name: "infra",
+				session: "agentgroup:app.group.g.infra",
+				home: agentRoom("infra"),
+				group: "g",
+			});
+			expect(
+				(await fx.store.recentGroupMessages("g@app", 10)).map((m) => m.text),
+			).toEqual(["from the web", "infra ok"]);
+			// The Discord conversation of the same group is untouched.
+			expect(await fx.store.recentGroupMessages("g", 10)).toEqual([]);
+			expect(fx.surfaces.texts(groupRoom)).toEqual(["infra: infra ok"]);
+			expect(fx.channels.posts).toEqual([]);
+		});
+
+		test("the room and the Discord channel keep separate seats, logs and cursors", async () => {
+			await inRoom("web one");
+			fx.runtime.turns = [];
+			await inDiscord("discord one");
+			const turn = fx.runtime.turns[0];
+			expect(turn?.agent?.session).toBe(groupSessionKey(group(), "infra"));
+			// The Discord seat has not seen what was said in the room.
+			expect(turn?.text).toContain("discord one");
+			expect(turn?.text).not.toContain("web one");
+			expect(
+				(await fx.store.recentGroupMessages("g", 10)).map((m) => m.text),
+			).toEqual(["discord one", "infra ok"]);
+			expect(fx.channels.texts(discordGroup.slice(8))).toEqual([
+				"Infra: infra ok",
+			]);
+			expect(fx.surfaces.texts(groupRoom)).toEqual(["infra: infra ok"]);
+		});
+
+		test("held actions of a room's seat are the room's: a confirming message there approves them", async () => {
+			script.scores = { coordinator: 0.1, infra: 0.1, doctor: 0.1 };
+			fx.runtime.held.set("agentgroup:app.group.g.infra", {
+				selectionId: "agent",
+				heldAt: new Date(),
+				calls: [{ tool: "bash", input: "{}", action: "restart" }],
+			});
+			await inRoom("yes, restart it");
+			expect(fx.runtime.turns[0]?.confirmed).toBe(true);
+			// The Discord seat held nothing, so the same words there approve nothing.
+			fx.runtime.turns = [];
+			await inDiscord("yes, restart it");
+			expect(fx.runtime.turns.map((t) => t.confirmed)).toEqual([undefined]);
+		});
+
+		test("starting a room over resets its seats and log cursor only", async () => {
+			await inRoom("one");
+			await inDiscord("one");
+			fx.runtime.fresh = [];
+			await fx.team.startFresh(groupRoom);
+			expect(fx.runtime.fresh).toEqual([
+				"agentgroup:app.group.g.coordinator",
+				"agentgroup:app.group.g.infra",
+				"agentgroup:app.group.g.doctor",
+			]);
+			fx.runtime.turns = [];
+			await inRoom("two");
+			expect(fx.runtime.turns[0]?.text).not.toContain("one");
+			// A Discord round still sees what it had not yet.
+			expect(groupSessionKey(group(), "infra")).not.toBe(
+				fx.runtime.turns[0]?.agent?.session,
+			);
+		});
+
+		test("an agent's room is its own conversation beside its Discord channel", async () => {
+			await fx.team.answerOwner(
+				agentRoom("doctor"),
+				OWNER_SPEAKER,
+				"hi",
+				"hi",
+				NO_ATTACHMENTS,
+			);
+			const turn = fx.runtime.turns[0];
+			expect(turn?.agent?.session).toBe(agentRoom("doctor"));
+			expect(turn?.channel).toBe(agentRoom("doctor"));
+			expect(fx.surfaces.texts(agentRoom("doctor"))).toEqual([
+				"doctor: doctor ok",
+			]);
+			expect(fx.channels.posts).toEqual([]);
+			// A room of an agent the team does not know, or of a surface that hosts none, is refused.
+			await expect(
+				fx.team.answerOwner(
+					agentRoom("nobody"),
+					OWNER_SPEAKER,
+					"hi",
+					"hi",
+					NO_ATTACHMENTS,
+				),
+			).rejects.toThrow(/no agent owns/);
+			await expect(
+				fx.team.answerOwner(
+					agentRoomKey("other", "doctor"),
+					OWNER_SPEAKER,
+					"hi",
+					"hi",
+					NO_ATTACHMENTS,
+				),
+			).rejects.toThrow(/no agent owns/);
+		});
+
+		test("the dashboard links no channel for a turn in a room", async () => {
+			let during: Awaited<ReturnType<typeof fx.team.status>> | undefined;
+			fx.runtime.during = async () => {
+				fx.runtime.during = undefined;
+				during = await fx.team.status();
+			};
+			await fx.team.answerOwner(
+				agentRoom("doctor"),
+				OWNER_SPEAKER,
+				"hi",
+				"hi",
+				NO_ATTACHMENTS,
+			);
+			const doctor = during?.agents.find((a) => a.name === "doctor");
+			expect(doctor).toBeDefined();
+			expect(doctor?.workingIn).toBeUndefined();
+		});
+
+		test("the team names its coordinator and every key of an agent or group", () => {
+			expect(fx.team.coordinator()).toBe("coordinator");
+			expect(fx.team.roomsOf("doctor")).toEqual([
+				discordKey("2000"),
+				agentRoom("doctor"),
+			]);
+			expect(fx.team.roomsOf("g")).toEqual([discordGroup, groupRoom]);
+			expect(fx.team.roomsOf("nobody")).toEqual([]);
+			fx.surfaces.rooms = [];
+			expect(fx.team.roomsOf("doctor")).toEqual([discordKey("2000")]);
+		});
+
+		test("the team owns a room by name and only while the agent or group is active", async () => {
+			expect(fx.team.owns(agentRoom("doctor"))).toBe("agent");
+			expect(fx.team.owns(groupRoom)).toBe("group");
+			expect(fx.team.owns(agentRoom("nobody"))).toBeUndefined();
+			expect(fx.team.owns(agentRoomKey("other", "doctor"))).toBeUndefined();
+			await fx.team.channelDeleted(fx.store.agent("doctor")?.channelId ?? "");
+			expect(fx.team.owns(agentRoom("doctor"))).toBeUndefined();
+			// The group stays while it has members left.
+			expect(fx.team.owns(groupRoom)).toBe("group");
+			await fx.team.channelDeleted(group().channelId);
+			expect(fx.team.owns(groupRoom)).toBeUndefined();
+		});
+
+		test("archiving an agent clears the schedules and sessions of every one of its rooms", async () => {
+			await fx.team.channelDeleted(fx.store.agent("doctor")?.channelId ?? "");
+			expect(removedSchedules.toSorted()).toEqual([7, 8]);
+			expect(fx.runtime.fresh).toContain(discordKey("2000"));
+			expect(fx.runtime.fresh).toContain(agentRoom("doctor"));
+			// Its seats in groups, Discord's and the room's.
+			expect(fx.runtime.fresh).toContain("agentgroup:app.group.g.doctor");
+			expect(fx.runtime.fresh).toContain(groupSessionKey(group(), "doctor"));
+		});
+
+		test("archiving a group clears the seats of every one of its conversations", async () => {
+			await fx.team.channelDeleted(group().channelId);
+			expect(fx.store.group("g")?.status).toBe("archived");
+			for (const member of ["coordinator", "infra", "doctor"]) {
+				expect(fx.runtime.fresh).toContain(groupSessionKey(group(), member));
+				expect(fx.runtime.fresh).toContain(`agentgroup:app.group.g.${member}`);
+			}
+		});
+
+		test("a room's turn is posted nowhere after its agent was archived", async () => {
+			fx.runtime.during = async () => {
+				fx.runtime.during = undefined;
+				await fx.team.channelDeleted(fx.store.agent("doctor")?.channelId ?? "");
+			};
+			await fx.team.answerOwner(
+				agentRoom("doctor"),
+				OWNER_SPEAKER,
+				"hi",
+				"hi",
+				NO_ATTACHMENTS,
+			);
+			expect(fx.surfaces.replies).toEqual([]);
 		});
 	});
 });

@@ -55,6 +55,17 @@ export type TurnResult =
 	| { ok: true; text: string; thinking?: string; files?: ReplyFile[] }
 	| { ok: false; error: Error; stopped?: true };
 
+/**
+ * Who a reply speaks as on a surface that shows authors, such as an agent in a room: the name to
+ * show and, for an agent of the agent team, its stable name.
+ */
+export interface PostAuthor {
+	/** The name to show, such as an agent's display name. */
+	name: string;
+	/** The agent's name, when an agent of the agent team speaks. */
+	agent?: string;
+}
+
 export interface OutboundReply {
 	/** The assistant's thinking for this turn, posted as a quiet line before the card. */
 	thinking?: string;
@@ -64,4 +75,9 @@ export interface OutboundReply {
 	chunks: string[];
 	/** Files the run produced, posted after the text. */
 	files?: ReplyFile[];
+	/**
+	 * Who speaks, for a surface that shows authors, such as a room of an agent. Absent = the
+	 * assistant. Discord posts agents through webhooks and ignores it.
+	 */
+	author?: PostAuthor;
 }

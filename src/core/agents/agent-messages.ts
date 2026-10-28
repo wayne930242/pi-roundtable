@@ -1,3 +1,4 @@
+import type { ChannelKey } from "../domain/conversation.ts";
 import { AgentError } from "../domain/errors.ts";
 import type { AgentTurnScope } from "../domain/ports.ts";
 import { messages } from "../i18n/index.ts";
@@ -12,7 +13,13 @@ import {
 	returnedAnswerPost,
 } from "./agent-prompt.ts";
 import type { Agent } from "./agent-store.ts";
-import { discordKey, homeScope } from "./team-keys.ts";
+import {
+	agentRoomKey,
+	discordKey,
+	homeScope,
+	roomScope,
+	roomSurfaceOf,
+} from "./team-keys.ts";
 import {
 	type Chain,
 	type Exchange,
@@ -34,7 +41,11 @@ export class AgentMessages {
 			throw new AgentError("message_agent is for other agents, not yourself.");
 		const target = store.activeAgent(to);
 		const sender = store.activeAgent(caller.name);
-		if (!target.channelId) throw new AgentError(`${to} has no channel yet.`);
+		// A turn in a room of another surface talks to the other agents' rooms there, never in Discord.
+		const parent = this.#host.turnChannel(caller);
+		const via = roomSurfaceOf(parent);
+		if (via === undefined && !target.channelId)
+			throw new AgentError(`${to} has no channel yet.`);
 		// Every agent turn runs through #turn, which registers its chain; a message from anywhere
 		// else would start an uncounted chain, so it is refused.
 		const chain = this.#host.chains.get(caller.session);
@@ -47,11 +58,15 @@ export class AgentMessages {
 				chainLimitReason(addressee(chain.speaker, this.#host.options.owner)),
 			);
 		chain.messages += 1;
-		const targetChannel = discordKey(target.channelId);
-		const exchange = this.#openExchange(caller, sender, target, text);
+		const targetChannel = this.#home(target, via);
+		// Rooms have no threads yet; the answer returns to the sender's room.
+		const exchange =
+			via === undefined
+				? this.#openExchange(parent, sender, target, text)
+				: Promise.resolve(undefined);
 		void queue
 			.run(targetChannel, async () =>
-				this.#deliver(sender, target, text, chain, await exchange),
+				this.#deliver(sender, target, text, chain, await exchange, via),
 			)
 			.catch((error: unknown) =>
 				logger.error(
@@ -66,17 +81,23 @@ export class AgentMessages {
 		return `Sent to "${target.displayName}". It works in its own channel; its answer comes back to you as a new turn.`;
 	}
 
+	/** The agent's own channel: its Discord channel, or its room on the surface of a room turn. */
+	#home(agent: Agent, via: string | undefined): ChannelKey {
+		return via === undefined
+			? discordKey(agent.channelId ?? "")
+			: agentRoomKey(via, agent.name);
+	}
+
 	/**
 	 * Opens the message's thread in the sender's turn channel and posts the request there under
 	 * the sender's name; undefined where no thread opens. Never rejects.
 	 */
 	async #openExchange(
-		caller: AgentTurnScope,
+		parent: ChannelKey,
 		sender: Agent,
 		target: Agent,
 		text: string,
 	): Promise<Exchange | undefined> {
-		const parent = this.#host.turnChannel(caller);
 		const thread = await this.#host.options.threads?.open(
 			parent,
 			`→ ${target.displayName}`,
@@ -105,9 +126,10 @@ export class AgentMessages {
 		text: string,
 		chain: Chain,
 		exchange: Exchange | undefined,
+		via: string | undefined,
 	): Promise<void> {
 		try {
-			await this.#exchange(sender, target, text, chain, exchange);
+			await this.#exchange(sender, target, text, chain, exchange, via);
 		} finally {
 			await exchange?.thread.close();
 		}
@@ -119,9 +141,10 @@ export class AgentMessages {
 		text: string,
 		chain: Chain,
 		exchange: Exchange | undefined,
+		via: string | undefined,
 	): Promise<void> {
 		const { queue, logger } = this.#host.options;
-		const targetChannel = discordKey(target.channelId ?? "");
+		const targetChannel = this.#home(target, via);
 		await this.#host.post(targetChannel, this.#host.current(sender), {
 			chunks: splitReply(
 				deliveredMessagePost(this.#host.current(target), text),
@@ -129,7 +152,7 @@ export class AgentMessages {
 		});
 		const result = await this.#host.turn(
 			target,
-			homeScope(target),
+			via === undefined ? homeScope(target) : roomScope(target, targetChannel),
 			targetChannel,
 			agentMessageText(
 				this.#host.current(sender),
@@ -142,8 +165,12 @@ export class AgentMessages {
 		if (thread && !result.ok)
 			await thread.close(messages().agentNoReply(result.error.message));
 		const current = this.#host.options.store.agent(sender.name);
-		if (current?.status !== "active" || !current.channelId) return;
-		const senderChannel = discordKey(current.channelId);
+		if (
+			current?.status !== "active" ||
+			(via === undefined && !current.channelId)
+		)
+			return;
+		const senderChannel = this.#home(current, via);
 		// With a thread the answer goes there, leaving the sender's channel its own reply.
 		if (result.ok)
 			await this.#host
@@ -173,7 +200,9 @@ export class AgentMessages {
 			.run(senderChannel, () =>
 				this.#host.turn(
 					current,
-					homeScope(current),
+					via === undefined
+						? homeScope(current)
+						: roomScope(current, senderChannel),
 					senderChannel,
 					followUp,
 					chain,

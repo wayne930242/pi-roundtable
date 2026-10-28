@@ -11,6 +11,11 @@ export type {
 	AgentStatus,
 } from "./core/agents/agent-store.ts";
 export type { AvatarMode } from "./core/agents/agent-tools.ts";
+export {
+	agentRoomKey,
+	groupRoomKey,
+	roomOf,
+} from "./core/agents/team-keys.ts";
 export type {
 	AgentStatus as TeamAgentStatus,
 	GroupStatus,
@@ -121,6 +126,7 @@ export type {
 	HeldCall,
 	OutboundReply,
 	PendingConfirmation,
+	PostAuthor,
 	ReplyFile,
 	TranscriptEntry,
 	TurnResult,

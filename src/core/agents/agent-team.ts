@@ -20,7 +20,7 @@ import {
 	MESSAGE_AGENT_TOOL,
 } from "./agent-tools.ts";
 import { TeamEditing } from "./team-editing.ts";
-import { channelOwner, discordKey } from "./team-keys.ts";
+import { channelOwner, discordIdOf, discordKey, keysOf } from "./team-keys.ts";
 import {
 	layoutText,
 	planArrangement,
@@ -94,9 +94,34 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 		return teamStatus(this.#context);
 	}
 
-	/** The agent or group that owns a channel of the agent server. */
+	/**
+	 * The agent or group that owns a channel of the agent server: by Discord channel, or by room on
+	 * a surface that hosts rooms.
+	 */
 	owns(channel: ChannelKey): "agent" | "group" | undefined {
-		return channelOwner(this.#options.store, channel);
+		const { store, surfaces } = this.#options;
+		return channelOwner(
+			store,
+			channel,
+			discordIdOf(channel) === undefined
+				? (surfaces?.roomSurfaces() ?? [])
+				: [],
+		);
+	}
+
+	/** The name of the coordinator, the agent in the entry channel; undefined while none is active. */
+	coordinator(): string | undefined {
+		const { store, entryChannelId } = this.#options;
+		return store.agentByChannel(entryChannelId)?.name;
+	}
+
+	/**
+	 * Every key an agent or group is addressed by: its Discord channel when it has one, then its
+	 * room on each surface that hosts rooms; empty for an unknown name.
+	 */
+	roomsOf(name: string): ChannelKey[] {
+		const { store, surfaces } = this.#options;
+		return keysOf(store, name, surfaces?.roomSurfaces() ?? []);
 	}
 
 	/** The tools every agent turn runs with: the plugins', plus the shell and agent tools. */

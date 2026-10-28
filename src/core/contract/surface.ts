@@ -1,11 +1,11 @@
-import type { OutboundReply } from "../domain/conversation.ts";
+import type { OutboundReply, PostAuthor } from "../domain/conversation.ts";
 import type { InterimPosts } from "../domain/interim.ts";
 import type { TurnProgress } from "../domain/progress.ts";
 import { PluginError } from "../errors.ts";
 import type { PromptScope, Prompts } from "../interactions/prompts.ts";
 import type { ChannelKey } from "../sessions.ts";
 import type { Speaker } from "../speakers.ts";
-import type { InboundMessage } from "./channels.ts";
+import type { AttachmentRef, InboundMessage } from "./channels.ts";
 
 /**
  * Splits a channel key, `<surface>:<id>`, at its first colon: the surface names the chat network
@@ -43,6 +43,13 @@ export interface ChatSurface {
 	readonly surface: string;
 	/** Explicit opt-in to delivering OutboundReply.files; absent or false refuses turn attachments. */
 	readonly supportsFiles?: boolean;
+	/**
+	 * Serves a room for each agent and group of the agent team, `<surface>:agent.<name>` and
+	 * `<surface>:group.<name>`: separate conversations from the agents' Discord channels, with
+	 * their own session, held actions and group log, run by the same team. The team replies in a
+	 * room through `sendReply` with `OutboundReply.author`. Absent or false = no rooms.
+	 */
+	readonly agentRooms?: boolean;
 	/**
 	 * Short English guidance on how a reply renders here, such as "no Markdown tables", which the
 	 * runtime appends to the system prompt of every turn that replies on this surface, after the
@@ -88,9 +95,16 @@ export interface ChatSurface {
 	prompts?(channel: ChannelKey, scope?: PromptScope): Prompts | undefined;
 	/**
 	 * Where a running turn posts the text it writes before its final answer: ordinary messages it
-	 * may edit in place. Absent, or undefined, = only the final reply is posted.
+	 * may edit in place. `as` names who speaks when an agent of the team does, as `author` does in
+	 * `sendReply`. Absent, or undefined, = only the final reply is posted.
 	 */
-	interim?(channel: ChannelKey): InterimPosts | undefined;
+	interim?(channel: ChannelKey, as?: PostAuthor): InterimPosts | undefined;
+	/**
+	 * The bytes of an attachment this surface made, such as a file the owner uploaded to a room.
+	 * A ref of a message on this surface is read here and never fetched over the network; a
+	 * rejection fails that file. Absent = the refs of its messages are downloaded from their URLs.
+	 */
+	readAttachment?(channel: ChannelKey, ref: AttachmentRef): Promise<Uint8Array>;
 	/**
 	 * Shows what a running turn writes and which tools it runs, as it goes, such as a live preview
 	 * in a web chat. Called between the turn's start and its reply; a rejection is logged and the
@@ -123,8 +137,10 @@ export interface SurfacePort {
 		channel: ChannelKey,
 		scope?: PromptScope | Speaker,
 	): Prompts | undefined;
-	/** The channel's interim posts; undefined when its surface has none. */
-	interim(channel: ChannelKey): InterimPosts | undefined;
+	/** The surfaces that serve agent rooms (`agentRooms: true`); read after link. */
+	roomSurfaces(): readonly string[];
+	/** The channel's interim posts, under `as` when given; undefined when its surface has none. */
+	interim(channel: ChannelKey, as?: PostAuthor): InterimPosts | undefined;
 	/**
 	 * Shows a running turn's progress; a no-op when no surface serves the channel or its surface
 	 * shows none. The host's port always has it; it is optional so a port written before 0.8 still

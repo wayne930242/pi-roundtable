@@ -4,14 +4,20 @@ import { AgentError } from "../domain/errors.ts";
 import { messages } from "../i18n/index.ts";
 import type { Speaker } from "../speakers.ts";
 import { groupTurnText } from "./agent-prompt.ts";
-import type { Agent } from "./agent-store.ts";
+import type { Agent, AgentGroup } from "./agent-store.ts";
 import {
 	MAX_ROUND_REPLIES,
 	mentionedMembers,
 	planRound,
 	RECENT_FOR_SCORING,
 } from "./group-round.ts";
-import { channelIdOf, groupScope, groupSessionKey } from "./team-keys.ts";
+import {
+	discordIdOf,
+	groupLogName,
+	groupScope,
+	groupSessionKey,
+	roomOf,
+} from "./team-keys.ts";
 import {
 	BACKLOG_LIMIT,
 	type Chain,
@@ -25,6 +31,25 @@ export class GroupTurns {
 
 	constructor(host: TurnHost) {
 		this.#host = host;
+	}
+
+	/** The active group whose Discord channel or room the key is. */
+	#groupOf(channel: ChannelKey): AgentGroup {
+		const { store, surfaces } = this.#host.options;
+		const id = discordIdOf(channel);
+		const room =
+			id === undefined
+				? roomOf(channel, surfaces?.roomSurfaces() ?? [])
+				: undefined;
+		const group =
+			id !== undefined
+				? store.groupByChannel(id)
+				: room?.kind === "group"
+					? store.group(room.name)
+					: undefined;
+		if (group?.status !== "active")
+			throw new AgentError(`no group owns ${channel}`);
+		return group;
 	}
 
 	/**
@@ -41,16 +66,15 @@ export class GroupTurns {
 	): Promise<void> {
 		const { store, scorer, confirmations, logger } = this.#host.options;
 		const runtime = this.#host.options.runtime();
-		const group = store.groupByChannel(channelIdOf(channel));
-		if (!group) throw new AgentError(`no group owns ${channel}`);
+		const group = this.#groupOf(channel);
+		// Each conversation of a group keeps its own log: the Discord channel's under the group's
+		// name, a room's under `<group>@<surface>`.
+		const log = groupLogName(group, channel);
 		const members = group.members
 			.map((name) => store.agent(name))
 			.filter((m): m is Agent => m?.status === "active");
-		const recent = await store.recentGroupMessages(
-			group.name,
-			RECENT_FOR_SCORING,
-		);
-		await store.appendGroupMessage(group.name, {
+		const recent = await store.recentGroupMessages(log, RECENT_FOR_SCORING);
+		await store.appendGroupMessage(log, {
 			author: speaker.tier === "owner" ? "owner" : `human:${speaker.id}`,
 			authorName:
 				speaker.tier === "owner" ? this.#host.options.owner.name : speaker.name,
@@ -63,7 +87,7 @@ export class GroupTurns {
 		const approvals = new Map<string, boolean>();
 		for (const member of members) {
 			const pending = await runtime.heldActions(
-				groupSessionKey(group, member.name),
+				groupSessionKey(group, member.name, channel),
 			);
 			// Only a speaker whose tier holds the held tools may approve or wake a seat for them.
 			if (!pending || !this.#host.mayApprove(speaker, pending)) continue;
@@ -100,10 +124,10 @@ export class GroupTurns {
 			if (member?.status !== "active") continue;
 			const first = !spoken.has(name);
 			spoken.add(name);
-			const backlog = await store.backlog(group.name, name, BACKLOG_LIMIT);
+			const backlog = await store.backlog(log, name, BACKLOG_LIMIT);
 			// Delivered once the session has the text, so a message never comes twice.
 			if (backlog.lastId !== undefined)
-				await store.advanceCursor(group.name, name, backlog.lastId);
+				await store.advanceCursor(log, name, backlog.lastId);
 			// Attachments and a confirmation belong to a member's first turn of the round only.
 			const extra: TurnExtra = { interactive: true };
 			if (first) {
@@ -112,7 +136,7 @@ export class GroupTurns {
 			}
 			const result = await this.#host.turn(
 				member,
-				groupScope(member, group),
+				groupScope(member, group, channel),
 				channel,
 				groupTurnText(group, member, backlog),
 				chain,
@@ -121,7 +145,7 @@ export class GroupTurns {
 			replies += 1;
 			last = member;
 			if (!result.ok) continue;
-			await store.appendGroupMessage(group.name, {
+			await store.appendGroupMessage(log, {
 				author: name,
 				authorName: this.#host.current(member).displayName,
 				text: result.text,

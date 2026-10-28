@@ -2149,6 +2149,7 @@ Use `parseChannelKey` to read a key, and check the surface in `owns`: `parseChan
 The built-in agent server claims `discord:` keys with `AGENT_SERVER_PRIORITY` (100), the highest claim priority.
 It owns the agents' channels and every other channel in its Discord guild.
 It leaves those other channels silent for the owner's notes, preventing other claims from answering there.
+Of any other surface it claims only the [agent rooms](#agent-rooms-on-any-surface) of a surface that declares `agentRooms: true`, `<surface>:agent.<name>` and `<surface>:group.<name>` for an agent or group the team has; every other key of that surface stays for your own claims.
 Your Discord claim won't receive messages from that guild at any priority below 100, including `priority: 10`.
 Claims on other surfaces, such as the example's `echo:` keys, don't compete with the agent server.
 
@@ -2669,7 +2670,7 @@ The surface delivers messages; the channel's owning claim decides what happens t
 
 A surface serves the channels whose key starts with its `surface` prefix: `surface = "fake"` serves `fake:<id>` keys, and only those reach its methods.
 The prefix is one non-empty word without a colon or a space, unique per host: two surfaces with one prefix stop the start, naming both plugins.
-The agent server claims only `discord:` keys, so claims on your surface's channels don't compete with it.
+The agent server claims `discord:` keys, and, only on a surface that declares `agentRooms: true`, the `<surface>:agent.<name>` and `<surface>:group.<name>` rooms of agents and groups the team has; it claims no other key of your surface, so claims on your surface's other channels don't compete with it.
 
 | Method | What the surface does | Without it |
 |---|---|---|
@@ -2677,13 +2678,36 @@ The agent server claims only `discord:` keys, so claims on your surface's channe
 | `start(deliver)` | Connects, and calls `deliver(message)` for every incoming message; the host passes its conversation router | (required) |
 | `sendReply(channel, reply)` | Posts an `OutboundReply`: a thinking line, a card, text chunks, then files | (required) |
 | `stop()` | Disconnects when the host stops | nothing to stop |
+| `agentRooms` | `true` makes the surface host [agent rooms](#agent-rooms-on-any-surface): a conversation with each agent and group of the team, as `<surface>:agent.<name>` and `<surface>:group.<name>` | no rooms; the agent team answers only in Discord |
+| `readAttachment(channel, ref)` | Returns the bytes of an attachment this surface made, such as an upload to a room, as `Promise<Uint8Array>`; the refs of the surface's messages are read here and never fetched over the network, and a rejection fails that file | the refs' URLs are downloaded, up to 25 MB each |
 | `formatting` | A short English text on how a reply renders here, such as "no Markdown tables"; the runtime appends it to the system prompt of every turn that replies on this surface, after the persona | nothing is appended |
 | `startTyping(channel)` | Shows a typing indicator until the returned function is called | none is shown |
 | `showStop(channel)` | Shows the owner a stop control until the returned function is called; using it calls `conversations.stop(channel)` | none is shown |
 | `react`, `unreact` | Adds or removes the bot's reaction on a message | no marks on queued or steered messages |
 | `prompts(channel, scope?)` | How those the turn's `PromptScope` names approve a held action or answer `ask_user` inside a running turn, as `Prompts`: `confirm` and `ask`, and, where the surface declares `asks`, `questionnaire` ([several questions on one card](#several-questions-on-one-card-questionnaire-and-asksupport)); without a scope, the owners | the action is held until a message approves it |
-| `interim(channel)` | Where a running turn posts the text it writes before its final answer, as `InterimPosts`: `post(text)` sends one message of at most 2000 characters and resolves to an `InterimMessage` whose `edit(text)` changes it in place | only the final reply is posted |
+| `interim(channel, as?)` | Where a running turn posts the text it writes before its final answer, as `InterimPosts`: `post(text)` sends one message of at most 2000 characters and resolves to an `InterimMessage` whose `edit(text)` changes it in place. `as` is a `PostAuthor` (`{ name, agent? }`) when an agent of the team speaks, as `OutboundReply.author` is for the final reply | only the final reply is posted |
 | `progress(channel, event)` | Shows a turn run through `context.turns` as it goes, such as a live preview in a web chat. `event` is a `TurnProgress`: `{ type: "text", delta }` (the reply's text, joined over 250 ms and always sent before a tool event, never the thinking), `{ type: "tool_start", id, tool, preview? }` (a one-line preview of the arguments, at most 80 characters, never their full text), or `{ type: "tool_end", id, tool, ok, refused? }` (`refused`, only on a failed end that a hold refused, says how: `declined` on its approval card, `expired` when a card was shown and went unanswered, `pending` while the card stays open, or `held` when no card could be shown (no one may approve it, or it could not be posted); it is absent for a success and for a real failure). The final reply still comes through `sendReply`; a rejection is logged and the turn goes on | only the final reply is shown |
+
+#### Agent rooms on any surface
+
+A surface that declares `agentRooms: true` hosts a room for each agent and group of the agent team: `<surface>:agent.<name>` and `<surface>:group.<name>`, built with `agentRoomKey(surface, agent)` and `groupRoomKey(surface, group)` and read with `roomOf(key, roomSurfaces)`, which answers `{ kind, name }` for a key of that exact shape on one of the surfaces and `undefined` for any other, Discord's keys included.
+A room is a conversation of its own, apart from the agent's or group's Discord channel, and the same team answers in it: the same agents with the same prompt, model, notes and schedules.
+A room has its own session and held actions, so a card or an approving message in the web room does not touch the Discord channel's.
+A group's room keeps its own log, `<group>@<surface>`, with the seats `agentgroup:<surface>.group.<group>.<agent>`; the Discord channel's log and seats are untouched.
+A schedule an agent sets from a room belongs to the room.
+`message_agent` from a room talks to the other agent's room on the same surface and returns the answer to the sender's room; it opens no thread there.
+Starting a room over resets that room's session (or a group room's seats) alone.
+Archiving an agent or group clears the schedules and sessions of every key `AGENTS.team.roomsOf(name)` lists: its Discord channel, when it has one, then its room on each surface, and the room stops being owned, so messages there are dropped.
+
+The team replies in a room through `context.surfaces.sendReply(room, reply)` with `OutboundReply.author` set to a `PostAuthor`, `{ name, agent? }`: the agent's display name and its stable name.
+Its interim posts go through `surfaces.interim(room, author)`.
+Neither goes through a Discord webhook.
+A surface shows the author as it likes; Discord's own surface ignores `author`.
+`context.surfaces.roomSurfaces()` lists the surfaces that declare `agentRooms`, once the plugins are linked.
+
+Messages in a room are admitted by the agent server's claim like those in a Discord channel: an owner's message runs a turn, a group's round follows, and `speakers: "owners"` still applies.
+The claim reads the attachments of a room's message through the surface's `readAttachment`, so a ref the surface made is never fetched over the network; a surface without it has its refs downloaded from their URLs.
+`AGENTS.team.owns(key)` answers for a room too, only while its agent or group is active, and `AGENTS.team.coordinator()` names the coordinator, the agent in the entry channel.
 
 A surface tells the model how its replies render with `formatting`: a short English text, kept under about 400 characters, which the runtime appends to the system prompt of every turn that replies on the surface, after the persona and everything appended before it, for the channel the turn replies in.
 One persona can answer on several surfaces, so the guidance comes from the surface and never from the persona.
@@ -3908,6 +3932,7 @@ Import from the entries listed below; source area files are internal.
 | `OWNER_TARGET` | `pi-roundtable` | value |
 | `PERSONAL_TARGET` | `pi-roundtable` | value |
 | `OutboundReply` | `pi-roundtable` | type |
+| `PostAuthor` | `pi-roundtable` | type |
 | `OwnerAnswer` | `pi-roundtable` | type |
 | `OwnerPrompts` | `pi-roundtable` | type |
 | `OwnerQuestion` | `pi-roundtable` | type |
@@ -4034,6 +4059,9 @@ Import from the entries listed below; source area files are internal.
 | `WebSocketSendResult` | `pi-roundtable` | type |
 | `Weekday` | `pi-roundtable` | type |
 | `attachReplyFile` | `pi-roundtable` | value |
+| `agentRoomKey` | `pi-roundtable` | value |
+| `groupRoomKey` | `pi-roundtable` | value |
+| `roomOf` | `pi-roundtable` | value |
 | `promptScope` | `pi-roundtable` | value |
 | `validateQuestionnaire` | `pi-roundtable` | value |
 | `withReplyFiles` | `pi-roundtable` | value |

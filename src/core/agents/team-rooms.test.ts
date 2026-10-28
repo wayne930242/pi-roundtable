@@ -1,0 +1,270 @@
+import { describe, expect, test } from "bun:test";
+import { NO_ATTACHMENTS } from "../domain/attachment.ts";
+import type { OutboundReply, TurnResult } from "../domain/conversation.ts";
+import { AgentRunError } from "../domain/errors.ts";
+import type { AgentTurnScope, TurnRequest } from "../domain/ports.ts";
+import { messages } from "../i18n/index.ts";
+import { silentLogger } from "../log.ts";
+import { ChannelQueue } from "../routing/channel-queue.ts";
+import { TEST_OWNER as OWNER, OWNER_SPEAKER } from "../testing/owner.ts";
+import { FakeThreadHost, fakeThreads } from "../testing/thread-host.ts";
+import type { AgentPost } from "./agent-ports.ts";
+import type { Agent, PgAgentStore } from "./agent-store.ts";
+import { agentRoomKey } from "./team-keys.ts";
+import type { TeamTurnsOptions } from "./team-turn-types.ts";
+import { TeamTurns } from "./team-turns.ts";
+
+const agent = (
+	name: string,
+	displayName: string,
+	channelId: string,
+): Agent => ({
+	name,
+	displayName,
+	prompt: "",
+	avatarPrompt: "",
+	channelId,
+	status: "active",
+});
+
+const AGENTS = [
+	agent("coder", "Coder", "4000"),
+	agent("infra", "Infrastructure", "2000"),
+];
+
+/** The store methods turns in rooms read, over two agents. */
+const store = {
+	agent: (name: string) => AGENTS.find((a) => a.name === name),
+	activeAgent: (name: string) => {
+		const found = AGENTS.find((a) => a.name === name);
+		if (!found) throw new Error(`no agent ${name}`);
+		return found;
+	},
+	agentByChannel: (id: string) => AGENTS.find((a) => a.channelId === id),
+	group: () => undefined,
+	groupByChannel: () => undefined,
+} as unknown as PgAgentStore;
+
+/** A surface that hosts rooms and records what is sent to it. */
+function roomSurface(rooms: readonly string[] = ["app"]) {
+	const replies: { channel: string; reply: OutboundReply }[] = [];
+	/** Interim posts as `channel name/agent: text`, edits included. */
+	const interims: string[] = [];
+	const port: NonNullable<TeamTurnsOptions["surfaces"]> = {
+		roomSurfaces: () => rooms,
+		sendReply: async (channel, reply) => void replies.push({ channel, reply }),
+		interim: (channel, as) =>
+			as === undefined
+				? undefined
+				: {
+						post: async (text) => {
+							interims.push(`${channel} ${as.name}/${as.agent}: ${text}`);
+							return {
+								edit: async (change) =>
+									void interims.push(
+										`${channel} ${as.name}/${as.agent}: edit ${change}`,
+									),
+							};
+						},
+					},
+	};
+	return { port, replies, interims };
+}
+
+function setup(
+	answer: (request: TurnRequest) => TurnResult | Promise<TurnResult>,
+	surfaces: TeamTurnsOptions["surfaces"],
+	host = new FakeThreadHost(),
+) {
+	const posts: { channelId: string; post: AgentPost }[] = [];
+	const discordInterims: string[] = [];
+	const turns: TurnRequest[] = [];
+	const { threads } = fakeThreads(host);
+	const team = new TeamTurns({
+		owner: OWNER,
+		entryChannelId: "4000",
+		store,
+		channels: {
+			post: async (channelId, post) => {
+				posts.push({ channelId, post });
+			},
+			interim: (channelId, as) => ({
+				post: async (text) => {
+					discordInterims.push(`${channelId} ${as.name}: ${text}`);
+					return { edit: async () => undefined };
+				},
+			}),
+		},
+		studio: { url: () => "https://x/a.png" },
+		runtime: () => ({
+			runTurn: async (request) => {
+				turns.push(request);
+				return answer(request);
+			},
+			heldActions: async () => undefined,
+			startFresh: async () => undefined,
+			contextUsage: () => undefined,
+		}),
+		selection: () => ({ id: "agent", tools: [], groups: [] }),
+		confirmations: { approves: async () => true },
+		scorer: { score: async () => undefined },
+		queue: new ChannelQueue(),
+		startTyping: () => () => undefined,
+		showStop: () => () => undefined,
+		logger: silentLogger(),
+		changed: () => undefined,
+		threads,
+		...(surfaces ? { surfaces } : {}),
+	});
+	return { team, host, posts, discordInterims, turns };
+}
+
+describe("agent rooms", () => {
+	const room = agentRoomKey("app", "coder");
+	const ask = (team: TeamTurns) =>
+		team.answerOwner(room, OWNER_SPEAKER, "hi", "hi", NO_ATTACHMENTS);
+
+	test("an owner message in a room runs in the room's own conversation and replies through the surface under the agent's name", async () => {
+		const { port, replies } = roomSurface();
+		const { team, turns, posts } = setup(
+			() => ({ ok: true, text: "done" }),
+			port,
+		);
+		await ask(team);
+		expect(turns).toHaveLength(1);
+		expect(turns[0]?.channel).toBe(room);
+		expect(turns[0]?.agent).toEqual({
+			name: "coder",
+			session: room,
+			home: room,
+		});
+		expect(replies).toEqual([
+			{
+				channel: room,
+				reply: { chunks: ["done"], author: { name: "Coder", agent: "coder" } },
+			},
+		]);
+		// Never the Discord channel's webhook, the agent's own or any other.
+		expect(posts).toEqual([]);
+	});
+
+	test("a failed room turn tells the room, not Discord", async () => {
+		const { port, replies } = roomSurface();
+		const { team, posts } = setup(
+			() => ({ ok: false, error: new AgentRunError("boom") }),
+			port,
+		);
+		await ask(team);
+		expect(replies).toHaveLength(1);
+		expect(replies[0]?.reply.author?.agent).toBe("coder");
+		expect(posts).toEqual([]);
+	});
+
+	test("interim posts of a room turn go through the surface with the agent as author", async () => {
+		const { port, replies, interims } = roomSurface();
+		const { team, discordInterims } = setup(async (request) => {
+			const message = await request.interim?.post("a proposal");
+			await message?.edit("-# bash");
+			expect(replies).toEqual([]);
+			return { ok: true, text: "done" };
+		}, port);
+		await ask(team);
+		expect(interims).toEqual([
+			`${room} Coder/coder: a proposal`,
+			`${room} Coder/coder: edit -# bash`,
+		]);
+		expect(discordInterims).toEqual([]);
+	});
+
+	test("a surface without interim posts leaves the room turn with none", async () => {
+		const { port } = roomSurface();
+		let seen: unknown = "unset";
+		const { team } = setup(
+			(request) => {
+				seen = request.interim;
+				return { ok: true, text: "done" };
+			},
+			{ ...port, interim: () => undefined },
+		);
+		await ask(team);
+		expect(seen).toBeUndefined();
+	});
+
+	test("a background turn in a room replies in the room", async () => {
+		const { port, replies } = roomSurface();
+		const { team, turns } = setup(() => ({ ok: true, text: "tick" }), port);
+		await team.answerBackground(room, OWNER_SPEAKER, "scheduled");
+		expect(turns[0]?.agent?.session).toBe(room);
+		expect(replies.map((r) => [r.channel, r.reply.chunks])).toEqual([
+			[room, ["tick"]],
+		]);
+	});
+
+	test("a reply finishing after its agent was archived is dropped", async () => {
+		const { port, replies } = roomSurface();
+		const coder = AGENTS.find((a) => a.name === "coder") as Agent;
+		const { team } = setup(() => {
+			coder.status = "archived";
+			return { ok: true, text: "late" };
+		}, port);
+		try {
+			await ask(team);
+		} finally {
+			coder.status = "active";
+		}
+		expect(replies).toEqual([]);
+	});
+
+	test("a room key of a surface that hosts no rooms, or of no surface port, is not an agent's", async () => {
+		for (const surfaces of [roomSurface([]).port, undefined]) {
+			const { team } = setup(() => ({ ok: true, text: "x" }), surfaces);
+			await expect(ask(team)).rejects.toThrow(/no agent owns/);
+		}
+	});
+
+	test("message_agent from a room stays among the surface's rooms: no Discord post, no thread, the answer returns to the sender's room", async () => {
+		const { port, replies } = roomSurface();
+		const host = new FakeThreadHost();
+		const sender: AgentTurnScope = { name: "coder", session: room, home: room };
+		const { team, turns, posts } = setup(
+			(request) => {
+				if (request.agent?.name === "coder" && turns.length === 1)
+					team.message(sender, "infra", "check the disk");
+				return {
+					ok: true,
+					text: request.agent?.name === "infra" ? "disk 80%" : "ok",
+				};
+			},
+			port,
+			host,
+		);
+		await ask(team);
+		for (let i = 0; i < 30; i++) await Bun.sleep(2);
+		const infraRoom = agentRoomKey("app", "infra");
+		expect(
+			turns.map((t) => [t.agent?.name, t.channel, t.agent?.session]),
+		).toEqual([
+			["coder", room, room],
+			["infra", infraRoom, infraRoom],
+			["coder", room, room],
+		]);
+		expect(posts).toEqual([]);
+		expect(host.opened).toEqual([]);
+		const said = (channel: string) =>
+			replies
+				.filter((r) => r.channel === channel)
+				.map((r) => [r.reply.author?.agent, r.reply.chunks.join("")]);
+		expect(said(infraRoom)).toEqual([
+			[
+				"coder",
+				messages().messageDelivered("Infrastructure", "check the disk"),
+			],
+			["infra", "disk 80%"],
+		]);
+		expect(said(room)).toEqual([
+			["coder", "ok"],
+			["infra", messages().answerReturned("disk 80%")],
+			["coder", "ok"],
+		]);
+	});
+});

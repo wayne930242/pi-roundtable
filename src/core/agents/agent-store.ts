@@ -406,7 +406,7 @@ export class PgAgentStore implements AgentDirectory {
 	}
 
 	/** Marks every message so far as received by every member, for a group started over. */
-	catchUp(group: AgentGroup): Promise<void> {
-		return this.#messages.catchUp(group);
+	catchUp(group: AgentGroup, log?: string): Promise<void> {
+		return this.#messages.catchUp(group, log);
 	}
 }

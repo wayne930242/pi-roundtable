@@ -309,3 +309,88 @@ describe("attachment idle timeout", () => {
 		expect(result.failures[0]?.reason).toBe("download failed: TimeoutError");
 	});
 });
+
+describe("refs a surface reads itself", () => {
+	const neverFetched = Object.assign(
+		async () => {
+			throw new Error("fetched over the network");
+		},
+		{ preconnect: fetch.preconnect },
+	) as unknown as typeof fetch;
+
+	test("a ref the surface reads is saved from its bytes and never fetched", async () => {
+		const input = request();
+		const asked: string[] = [];
+		const result = await fetchAttachments(
+			{
+				...input,
+				refs: [
+					{
+						url: "app-upload:u1",
+						name: "note.txt",
+						size: 5,
+						contentType: "text/plain",
+					},
+				],
+				read: (ref) => {
+					asked.push(ref.url);
+					return Promise.resolve(new TextEncoder().encode("hello"));
+				},
+			},
+			neverFetched,
+		);
+		expect(asked).toEqual(["app-upload:u1"]);
+		expect(result.failures).toEqual([]);
+		expect(result.files).toHaveLength(1);
+		expect(result.files[0]).toMatchObject({
+			name: "note.txt",
+			contentType: "text/plain",
+			size: 5,
+			fromReference: false,
+		});
+		expect(await Bun.file(result.files[0]?.path ?? "").text()).toBe("hello");
+	});
+
+	test("a read that fails fails the file and is not retried over the network", async () => {
+		const input = request();
+		const result = await fetchAttachments(
+			{
+				...input,
+				read: () => Promise.reject(new Error("unknown upload")),
+			},
+			neverFetched,
+		);
+		expect(result.files).toEqual([]);
+		expect(result.failures).toEqual([
+			{
+				name: "file.bin",
+				reason: "download failed: error",
+				fromReference: false,
+			},
+		]);
+		expect(readdirSync(input.dir)).toEqual([]);
+	});
+
+	test("bytes over the limit are refused like a download's", async () => {
+		const input = request();
+		const result = await fetchAttachments(
+			{
+				...input,
+				read: () => Promise.resolve(new Uint8Array(MAX_ATTACHMENT_BYTES + 1)),
+			},
+			neverFetched,
+		);
+		expect(result.files).toEqual([]);
+		expect(result.failures[0]?.reason).toContain("larger than 25 MB");
+	});
+
+	test("a surface without a reader leaves the ref to be downloaded", async () => {
+		const input = request();
+		const result = await fetchAttachments(
+			{ ...input, read: () => undefined },
+			fetcher(new Response("body")),
+		);
+		expect(result.files).toHaveLength(1);
+		expect(result.files[0]?.size).toBe(4);
+	});
+});

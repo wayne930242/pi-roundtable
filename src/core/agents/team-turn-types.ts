@@ -1,4 +1,5 @@
 import type { QueuePort } from "../contract/channels.ts";
+import type { SurfacePort } from "../contract/surface.ts";
 import type {
 	DispatchThread,
 	DispatchThreads,
@@ -45,6 +46,12 @@ export interface TeamTurnsOptions {
 	owner: OwnerIdentity;
 	store: PgAgentStore;
 	channels: Pick<AgentChannels, "post" | "interim">;
+	/**
+	 * The surfaces that host agent rooms. A reply in a room goes through `sendReply` with the
+	 * agent as author, and its interim posts through `interim`, never through the Discord
+	 * channels; without it no key but Discord's is the team's.
+	 */
+	surfaces?: Pick<SurfacePort, "sendReply" | "interim" | "roomSurfaces">;
 	studio: Pick<AvatarStudio, "url">;
 	/** Set once the runtime exists, which itself needs the team's tools. */
 	runtime: () => AgentTurnRunner;

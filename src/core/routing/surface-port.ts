@@ -56,7 +56,11 @@ export function surfacePort(
 			of(channel)?.unreact?.(channel, messageId, emoji),
 		prompts: (channel, scope) =>
 			of(channel)?.prompts?.(channel, scopeOf(scope, options)),
-		interim: (channel) => of(channel)?.interim?.(channel),
+		roomSurfaces: () =>
+			linked()
+				.filter((surface) => surface.agentRooms === true)
+				.map((surface) => surface.surface),
+		interim: (channel, as) => of(channel)?.interim?.(channel, as),
 		progress: async (channel, event) => {
 			await of(channel)?.progress?.(channel, event);
 		},

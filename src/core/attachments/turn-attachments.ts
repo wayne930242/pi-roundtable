@@ -1,4 +1,4 @@
-import type { TurnAttachments } from "../domain/attachment.ts";
+import type { AttachmentRef, TurnAttachments } from "../domain/attachment.ts";
 import type { InboundMessage } from "../domain/conversation.ts";
 import type { Logger } from "../log.ts";
 import { fetchAttachments } from "./attachment-fetcher.ts";
@@ -29,6 +29,12 @@ export async function collectAttachments(
 		 * the files on to something that prepares them itself.
 		 */
 		prepareImages?: boolean;
+		/**
+		 * Reads a ref through the surface that made it. A function that answers a promise is the
+		 * ref's only source: it is never fetched, and a rejection fails that file. `undefined` = the
+		 * surface has no reader, and the ref's URL is downloaded.
+		 */
+		read?: (ref: AttachmentRef) => Promise<Uint8Array> | undefined;
 	},
 ): Promise<TurnAttachments> {
 	const { fetchImpl, logger } = options;
@@ -38,7 +44,10 @@ export async function collectAttachments(
 	const signal = options.signal
 		? AbortSignal.any([deadline, options.signal])
 		: deadline;
-	const idle = options.idleMs === undefined ? {} : { idleMs: options.idleMs };
+	const idle = {
+		...(options.idleMs === undefined ? {} : { idleMs: options.idleMs }),
+		...(options.read ? { read: options.read } : {}),
+	};
 	const own = await fetchAttachments(
 		{
 			refs: message.attachments,
@@ -97,6 +106,7 @@ export function attachmentsOf(
 		idleMs?: number;
 		signal?: AbortSignal;
 		prepareImages?: boolean;
+		read?: (ref: AttachmentRef) => Promise<Uint8Array> | undefined;
 	} = {},
 ): Promise<TurnAttachments> {
 	return collectAttachments(message, dir, {

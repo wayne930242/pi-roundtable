@@ -75,15 +75,18 @@ export class GroupMessages {
 			DO UPDATE SET last_id = GREATEST(agent_group_cursors.last_id, EXCLUDED.last_id)`;
 	}
 
-	/** Marks every message so far as received by every member, for a group started over. */
-	async catchUp(group: AgentGroup): Promise<void> {
+	/**
+	 * Marks every message so far as received by every member, for a group started over; `log` is
+	 * the conversation's log, the group's own name unless it is a room's.
+	 */
+	async catchUp(group: AgentGroup, log: string = group.name): Promise<void> {
 		const rows: { id: string | number | null }[] = await this.#sql`
 			SELECT max(id) AS id FROM agent_group_messages
-			WHERE guild_id = ${this.#guild} AND group_name = ${group.name}`;
+			WHERE guild_id = ${this.#guild} AND group_name = ${log}`;
 		const last = rows[0]?.id;
 		if (last === null || last === undefined) return;
 		for (const member of group.members)
-			await this.advanceCursor(group.name, member, Number(last));
+			await this.advanceCursor(log, member, Number(last));
 	}
 
 	/**

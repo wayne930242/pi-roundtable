@@ -23,6 +23,12 @@ export interface FetchRequest {
 	signal?: AbortSignal;
 	/** Gives up on a file that sends no byte for this long, and goes on to the next; default 10 s. */
 	idleMs?: number;
+	/**
+	 * Reads a ref through the surface that made it. A function that answers a promise is the ref's
+	 * only source: the ref is never fetched over the network, and a rejection fails that file.
+	 * `undefined` = the surface has no reader, and the ref's URL is downloaded.
+	 */
+	read?: (ref: AttachmentRef) => Promise<Uint8Array> | undefined;
 }
 
 export interface FetchResult {
@@ -153,6 +159,26 @@ export async function fetchAttachments(
 		try {
 			// A directory that cannot be made fails the file, not the turn.
 			mkdirSync(dir, { recursive: true, mode: 0o700 });
+			const read = request.read?.(ref);
+			if (read) {
+				const data = await untilAborted(read, watch.signal);
+				if (data.byteLength > MAX_ATTACHMENT_BYTES) {
+					fail(`larger than 25 MB (${data.byteLength} bytes)`);
+					continue;
+				}
+				const file = `${prefix}-${index}-${safeFileName(ref.name)}`;
+				const path = join(dir, file);
+				await Bun.write(path, data);
+				files.push({
+					name: ref.name,
+					file,
+					path,
+					contentType: ref.contentType || "application/octet-stream",
+					size: data.byteLength,
+					fromReference,
+				});
+				continue;
+			}
 			const response = await untilAborted(
 				fetchImpl(ref.url, { signal: watch.signal }),
 				watch.signal,

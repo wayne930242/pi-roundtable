@@ -189,8 +189,18 @@ export interface AgentTeam {
 	onChange(listener: () => void): void;
 	/** Every active agent and group, with what each is doing now. */
 	status(): Promise<TeamStatus>;
-	/** The agent or group that owns a channel of the agent server. */
+	/**
+	 * The agent or group that owns a channel of the agent server: a Discord channel, or a room
+	 * (`<surface>:agent.<name>`, `<surface>:group.<name>`) on a surface that declares `agentRooms`.
+	 */
 	owns(channel: ChannelKey): "agent" | "group" | undefined;
+	/** The name of the coordinator, the agent that answers in the entry channel; undefined while none is active. */
+	coordinator(): string | undefined;
+	/**
+	 * Every key an agent or group is addressed by: its Discord channel when it has one, then its
+	 * room on each surface with `agentRooms`; empty for an unknown name.
+	 */
+	roomsOf(name: string): ChannelKey[];
 	/** The model and thinking setting of an agent's next run: its own, or the assistant's. */
 	modelOf(name: string): { model: string; thinking: ThinkingSetting };
 	/** The assistant's model and thinking setting, which agents without their own follow. */

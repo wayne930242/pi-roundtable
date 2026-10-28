@@ -7,7 +7,9 @@ import type { ContextUse } from "../contract/runtime.ts";
 import { NO_ATTACHMENTS } from "../domain/attachment.ts";
 import type {
 	ChannelKey,
+	OutboundReply,
 	PendingConfirmation,
+	PostAuthor,
 	TurnResult,
 } from "../domain/conversation.ts";
 import { AgentRunError } from "../domain/errors.ts";
@@ -124,6 +126,46 @@ export class FakeChannels implements AgentChannels {
 	}
 }
 
+/**
+ * The surfaces a team replies through in rooms. `rooms` names the surfaces that host rooms and
+ * starts empty, so the Discord suites run as if no surface did; a room suite sets it.
+ */
+class FakeSurfaces {
+	rooms: string[] = [];
+	replies: { channel: ChannelKey; reply: OutboundReply }[] = [];
+	/** Interim posts as `channel name/agent: text`, edits included. */
+	interims: string[] = [];
+	roomSurfaces() {
+		return this.rooms;
+	}
+	async sendReply(channel: ChannelKey, reply: OutboundReply) {
+		this.replies.push({ channel, reply });
+	}
+	interim(channel: ChannelKey, as?: PostAuthor) {
+		if (!as) return undefined;
+		return {
+			post: async (text: string) => {
+				this.interims.push(`${channel} ${as.name}/${as.agent}: ${text}`);
+				return {
+					edit: async (change: string) => {
+						this.interims.push(
+							`${channel} ${as.name}/${as.agent}: edit ${change}`,
+						);
+					},
+				};
+			},
+		};
+	}
+	/** What the room was told, as `agent: text`. */
+	texts(channel: ChannelKey) {
+		return this.replies.flatMap((r) =>
+			r.channel === channel
+				? [`${r.reply.author?.agent}: ${r.reply.chunks.join("")}`]
+				: [],
+		);
+	}
+}
+
 /** Answers every turn with a scripted reply; records what each turn received. */
 export class FakeRuntime implements AgentTurnRunner {
 	turns: TurnRequest[] = [];
@@ -166,10 +208,12 @@ export const HOOK_TIMEOUT_MS = 30_000;
 // Runs against a real PostgreSQL, only when ROUNDTABLE_TEST_DATABASE_URL is set.
 let store: TestStore<AgentStore>;
 let channels: FakeChannels;
+let surfaces: FakeSurfaces;
 let runtime: FakeRuntime;
 export interface TeamFixture {
 	store: TestStore<AgentStore>;
 	channels: FakeChannels;
+	surfaces: FakeSurfaces;
 	runtime: FakeRuntime;
 	queue: ChannelQueue;
 	team: AgentTeam;
@@ -292,6 +336,7 @@ export function useTeamFixture(): void {
 		skills.init();
 		await skills.link("acme/kit", "skills");
 		channels = new FakeChannels();
+		surfaces = new FakeSurfaces();
 		runtime = new FakeRuntime();
 		script.scores = undefined;
 		script.prompt = [];
@@ -309,6 +354,7 @@ export function useTeamFixture(): void {
 			seeds: () => seeds(ENTRY),
 			store,
 			channels,
+			surfaces,
 			studio: {
 				url: (hash) => `https://x/avatars/${hash ?? "default"}.png`,
 				draw: async () => "a".repeat(64),
@@ -335,7 +381,11 @@ export function useTeamFixture(): void {
 			},
 			schedules: {
 				forChannel: async (channel) =>
-					channel === discordKey("2000") ? [{ id: 7 }] : [],
+					channel === discordKey("2000")
+						? [{ id: 7 }]
+						: channel === "app:agent.doctor"
+							? [{ id: 8 }]
+							: [],
 				remove: async (id) => removedSchedules.push(id),
 			},
 			queue,
@@ -353,6 +403,7 @@ export function useTeamFixture(): void {
 		Object.assign(fx, {
 			store,
 			channels,
+			surfaces,
 			runtime,
 			queue,
 			team,

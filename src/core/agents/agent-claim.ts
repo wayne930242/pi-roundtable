@@ -22,13 +22,14 @@ import { outcome } from "../routing/settle-turn.ts";
 import { systemTurn } from "../routing/system-turns.ts";
 import { addressee, attributed, type Speaker } from "../speakers.ts";
 import type { DiscordAgentTeam } from "./agent-team.ts";
-import { discordIdOf } from "./team-keys.ts";
+import { discordIdOf, roomOf } from "./team-keys.ts";
 
 /**
  * The agent server outranks every other claim on the Discord channels it owns, and its guild's
  * other channels stay silent even when another plugin's mode or a mention would answer there; a claim of a
- * plugin must use a higher priority to answer in that guild. It owns no channel of another
- * surface. It becomes the core's reserved branch once the team moves into the core
+ * plugin must use a higher priority to answer in that guild. Of another surface it owns only
+ * the rooms of an agent or group of the team on a surface that declares `agentRooms`, never
+ * another of its keys. It becomes the core's reserved branch once the team moves into the core
  * (pi-roundtable batch 7).
  */
 export const AGENT_SERVER_PRIORITY = 100;
@@ -58,7 +59,12 @@ export interface AgentClaimOptions {
 		| "startFresh"
 	>;
 	runtime: Pick<AgentRuntime, "steer" | "stop">;
-	surface: Pick<SurfacePort, "react" | "unreact">;
+	/**
+	 * `roomSurfaces` names the surfaces whose agent and group rooms the claim may own, and `of`
+	 * finds the surface that reads a message's attachments; without them the claim is Discord's alone.
+	 */
+	surface: Pick<SurfacePort, "react" | "unreact"> &
+		Partial<Pick<SurfacePort, "roomSurfaces" | "of">>;
 	/** Where a channel's attachments are saved. */
 	attachmentDir: (channel: ChannelKey) => string;
 	/** The downloads' limits: all of a message's files together (default 60 s), and one file without a byte (default 10 s). */
@@ -82,14 +88,21 @@ export interface AgentClaimOptions {
  */
 export function agentClaim(options: AgentClaimOptions): ChannelClaim {
 	const { team, runtime, surface, attachmentDir, logger, fetchImpl } = options;
-	const attachments = (message: InboundMessage) =>
-		attachmentsOf(
+	const attachments = (message: InboundMessage) => {
+		// A surface that made a message's attachments reads them itself; they are never fetched.
+		const surfaceOf = surface.of?.(message.channel);
+		const reader = surfaceOf?.readAttachment?.bind(surfaceOf);
+		return attachmentsOf(
 			message,
 			attachmentDir(message.channel),
 			logger,
 			fetchImpl,
-			options.attachmentDownload,
+			{
+				...options.attachmentDownload,
+				...(reader ? { read: (ref) => reader(message.channel, ref) } : {}),
+			},
 		);
+	};
 	/** The channel context of a message in an agent's channel; none, logged, when it cannot be read. */
 	const around = async (
 		message: InboundMessage,
@@ -148,11 +161,14 @@ export function agentClaim(options: AgentClaimOptions): ChannelClaim {
 	return {
 		name: "agent-server",
 		priority: AGENT_SERVER_PRIORITY,
-		// Only Discord keys: another surface's channel is never the agent server's, whatever its id.
+		// Discord's channels, or the room of an agent or group on a surface that hosts rooms: another
+		// surface's key is never the agent server's, whatever its id, and a room needs a known name.
 		owns: (channel, space) =>
-			discordIdOf(channel) !== undefined &&
-			(team.owns(channel) !== undefined ||
-				(space !== undefined && space === team.guildId)),
+			discordIdOf(channel) !== undefined
+				? team.owns(channel) !== undefined ||
+					(space !== undefined && space === team.guildId)
+				: roomOf(channel, surface.roomSurfaces?.() ?? []) !== undefined &&
+					team.owns(channel) !== undefined,
 		admit: (message) => {
 			const owned = team.owns(message.channel);
 			// The agent server's other channels are the owner's notes: nothing there is answered.

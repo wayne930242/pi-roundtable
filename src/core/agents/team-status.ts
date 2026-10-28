@@ -1,6 +1,6 @@
 import type { ThinkingSetting } from "../models.ts";
 import type { ContextUse } from "./agent-ports.ts";
-import { channelIdOf, discordKey } from "./team-keys.ts";
+import { discordIdOf, discordKey } from "./team-keys.ts";
 import type { TeamContext } from "./team-options.ts";
 
 /** An active agent as the dashboard shows it. */
@@ -45,7 +45,9 @@ export async function teamStatus(ctx: TeamContext): Promise<TeamStatus> {
 	for (const agent of store.agents()) {
 		if (agent.status !== "active") continue;
 		const home = agent.channelId ? discordKey(agent.channelId) : undefined;
-		const workingIn = turns.workingIn(agent.name);
+		const working = turns.workingIn(agent.name);
+		// The board links Discord channels; a turn in a room has none to link.
+		const workingIn = working === undefined ? undefined : discordIdOf(working);
 		const queued = home ? queue.size(home) : 0;
 		const context = home ? runtime.contextUsage?.(home) : undefined;
 		const lastActive = turns.lastActive(agent.name);
@@ -54,8 +56,8 @@ export async function teamStatus(ctx: TeamContext): Promise<TeamStatus> {
 			displayName: agent.displayName,
 			...(agent.channelId ? { channelId: agent.channelId } : {}),
 			...ctx.modelOf(agent.name),
-			...(workingIn ? { workingIn: channelIdOf(workingIn) } : {}),
-			waiting: Math.max(0, queued - (workingIn === home ? 1 : 0)),
+			...(workingIn ? { workingIn } : {}),
+			waiting: Math.max(0, queued - (working === home ? 1 : 0)),
 			...(context ? { context } : {}),
 			...(lastActive ? { lastActive } : {}),
 			schedules: home ? (await schedules.forChannel(home)).length : 0,

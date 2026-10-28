@@ -3,10 +3,14 @@ import { AgentError } from "../domain/errors.ts";
 import type { AgentTurnScope } from "../domain/ports.ts";
 import type { AgentGroup } from "./agent-store.ts";
 import {
-	channelIdOf,
-	discordKey,
+	discordIdOf,
+	groupLogName,
+	groupRoomKey,
 	groupSessionKey,
 	homeScope,
+	keysOf,
+	roomOf,
+	roomScope,
 } from "./team-keys.ts";
 import { categoryKind, groupTopic } from "./team-layout.ts";
 import type { TeamContext } from "./team-options.ts";
@@ -106,20 +110,39 @@ export class TeamLifecycle {
 
 	/** Starts an agent's or every group member's conversation over; call inside the channel's queue. */
 	async startFresh(channel: ChannelKey): Promise<void> {
-		const { store } = this.#ctx.options;
+		const { store, surfaces } = this.#ctx.options;
 		const runtime = this.#ctx.options.runtime();
-		const id = channelIdOf(channel);
-		const agent = store.agentByChannel(id);
-		if (agent) {
-			await runtime.startFresh(homeScope(agent).session);
+		const id = discordIdOf(channel);
+		// A Discord channel and each room are conversations of their own: a room starts over alone.
+		const room =
+			id === undefined
+				? roomOf(channel, surfaces?.roomSurfaces() ?? [])
+				: undefined;
+		const agent =
+			id !== undefined
+				? store.agentByChannel(id)
+				: room?.kind === "agent"
+					? store.agent(room.name)
+					: undefined;
+		if (agent?.status === "active") {
+			await runtime.startFresh(
+				id === undefined
+					? roomScope(agent, channel).session
+					: homeScope(agent).session,
+			);
 			this.#ctx.changed();
 			return;
 		}
-		const group = store.groupByChannel(id);
-		if (!group) return;
+		const group =
+			id !== undefined
+				? store.groupByChannel(id)
+				: room?.kind === "group"
+					? store.group(room.name)
+					: undefined;
+		if (group?.status !== "active") return;
 		for (const member of group.members)
-			await runtime.startFresh(groupSessionKey(group, member));
-		await store.catchUp(group);
+			await runtime.startFresh(groupSessionKey(group, member, channel));
+		await store.catchUp(group, groupLogName(group, channel));
 	}
 
 	// ── Archive ────────────────────────────────────────────────────────────
@@ -172,15 +195,19 @@ export class TeamLifecycle {
 	async #archive(channelId: string): Promise<void> {
 		const { store, schedules, logger } = this.#ctx.options;
 		const runtime = this.#ctx.options.runtime();
+		const rooms = this.#rooms();
 		const agent = store.agentByChannel(channelId);
 		if (agent) {
 			const left = await store.archiveAgent(agent.name);
-			const home = discordKey(channelId);
-			for (const schedule of await schedules.forChannel(home))
-				await schedules.remove(schedule.id, home);
-			await runtime.startFresh(home);
+			// The agent's Discord channel and each of its rooms are conversations of their own.
+			for (const key of keysOf(store, agent.name, rooms)) {
+				for (const schedule of await schedules.forChannel(key))
+					await schedules.remove(schedule.id, key);
+				await runtime.startFresh(key);
+			}
 			for (const group of left) {
-				await runtime.startFresh(groupSessionKey(group, agent.name));
+				for (const seat of this.#seats(group, agent.name, rooms))
+					await runtime.startFresh(seat);
 				if (group.status === "active") this.retitle(group);
 			}
 			logger.info(
@@ -194,9 +221,29 @@ export class TeamLifecycle {
 		if (!group) return;
 		await store.archiveGroup(group.name);
 		for (const member of group.members)
-			await runtime.startFresh(groupSessionKey(group, member));
+			for (const seat of this.#seats(group, member, rooms))
+				await runtime.startFresh(seat);
 		logger.info({ group: group.name }, "group archived");
 		this.#ctx.changed();
+	}
+
+	/** The surfaces that host rooms; none for a team without a surface port. */
+	#rooms(): readonly string[] {
+		return this.#ctx.options.surfaces?.roomSurfaces() ?? [];
+	}
+
+	/** Every conversation of an agent's seat in a group: the Discord channel's, then each room's. */
+	#seats(
+		group: AgentGroup,
+		agent: string,
+		rooms: readonly string[],
+	): ChannelKey[] {
+		return [
+			groupSessionKey(group, agent),
+			...rooms.map((surface) =>
+				groupSessionKey(group, agent, groupRoomKey(surface, group.name)),
+			),
+		];
 	}
 
 	/** Writes a group's members and host into its channel topic, without waiting on Discord. */

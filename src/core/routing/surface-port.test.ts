@@ -163,3 +163,31 @@ test("prompts take a scope as given, and 0.8's speaker as theirs in a shared con
 		expect.stringContaining("prompts(channel, speaker) takes a PromptScope"),
 	]);
 });
+
+test("roomSurfaces lists the linked surfaces that declare agentRooms, and nothing else", () => {
+	const log: string[] = [];
+	const port = surfacePort(() => [
+		recording("a", log),
+		{ ...recording("rooms", log), agentRooms: true },
+		{ ...recording("no", log), agentRooms: false },
+	]);
+	expect(port.roomSurfaces()).toEqual(["rooms"]);
+});
+
+test("interim passes who speaks to the surface, and is undefined for a surface without it", () => {
+	const seen: unknown[] = [];
+	const port = surfacePort(() => [
+		{
+			...recording("a", []),
+			interim: (_channel, as) => {
+				seen.push(as);
+				return { post: async () => ({ edit: async () => undefined }) };
+			},
+		},
+		recording("b", []),
+	]);
+	expect(port.interim("a:1", { name: "Coder", agent: "coder" })).toBeDefined();
+	expect(port.interim("a:1")).toBeDefined();
+	expect(seen).toEqual([{ name: "Coder", agent: "coder" }, undefined]);
+	expect(port.interim("b:1", { name: "Coder" })).toBeUndefined();
+});
