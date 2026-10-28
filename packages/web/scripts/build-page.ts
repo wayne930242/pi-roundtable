@@ -18,6 +18,8 @@ export async function buildPage(outdir: string): Promise<string[]> {
 		// Relative URLs, so the page works under whatever mount path the operator picks.
 		publicPath: "./",
 		minify: true,
+		// The older panes load when first opened, as chunks of their own.
+		splitting: true,
 		target: "browser",
 		define: { "process.env.NODE_ENV": JSON.stringify("production") },
 		throw: false,

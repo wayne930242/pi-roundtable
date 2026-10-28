@@ -1,19 +1,55 @@
-import { useEffect, useState } from "react";
+import {
+	lazy,
+	type ReactNode,
+	Suspense,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import type { ConfigView, PaneName } from "../src/api-types.ts";
+import { Icon, type IconName } from "./components/icons.tsx";
+import { Palette } from "./components/palette.tsx";
 import { Failure, Loading } from "./components/states.tsx";
+import { Toaster } from "./components/toaster.tsx";
 import { api, messageOf } from "./lib/api.ts";
+import { store, useSelector } from "./lib/app-store.ts";
 import { ConfigContext } from "./lib/config.ts";
 import { LiveContext, useLiveSource } from "./lib/live.ts";
 import { setPresentation, translate as t } from "./lib/messages.ts";
 import { hrefFor, setRouting, useRoute } from "./lib/router.ts";
-import { ConnectorsPage } from "./pages/connectors.tsx";
-import { ConversationsPage } from "./pages/conversations.tsx";
-import { NotesPage } from "./pages/notes.tsx";
-import { OverviewPage } from "./pages/overview.tsx";
-import { SkillsPage } from "./pages/skills.tsx";
-import { TranscriptPage } from "./pages/transcript.tsx";
+import { startConnection } from "./lib/socket.ts";
+import { setTheme, useTheme } from "./lib/theme.ts";
+import { AgentPage } from "./pages/agent.tsx";
+import { MorePage, PANE_ICONS } from "./pages/more.tsx";
+import { RoomPage } from "./pages/room.tsx";
+import { RoomsPage } from "./pages/rooms.tsx";
+import { SchedulesPage } from "./pages/schedules.tsx";
+import { SettingsPage } from "./pages/settings.tsx";
 
-const LABELS: Record<PaneName, string> = {
+// The older panes are read less often than the rooms, so they load when first opened.
+const OverviewPage = lazy(() =>
+	import("./pages/overview.tsx").then((m) => ({ default: m.OverviewPage })),
+);
+const ConversationsPage = lazy(() =>
+	import("./pages/conversations.tsx").then((m) => ({
+		default: m.ConversationsPage,
+	})),
+);
+const TranscriptPage = lazy(() =>
+	import("./pages/transcript.tsx").then((m) => ({ default: m.TranscriptPage })),
+);
+const NotesPage = lazy(() =>
+	import("./pages/notes.tsx").then((m) => ({ default: m.NotesPage })),
+);
+const SkillsPage = lazy(() =>
+	import("./pages/skills.tsx").then((m) => ({ default: m.SkillsPage })),
+);
+const ConnectorsPage = lazy(() =>
+	import("./pages/connectors.tsx").then((m) => ({ default: m.ConnectorsPage })),
+);
+
+const LABELS: Record<PaneName | "settings" | "more", string> = {
 	overview: "Overview",
 	conversations: "Conversations",
 	notes: "Notes",
@@ -21,6 +57,8 @@ const LABELS: Record<PaneName, string> = {
 	connectors: "Connectors",
 	rooms: "Rooms",
 	schedules: "Schedules",
+	settings: "Settings",
+	more: "More",
 };
 
 export function App() {
@@ -31,7 +69,7 @@ export function App() {
 			.config()
 			.then((loaded) => {
 				setPresentation(loaded);
-				setRouting(loaded.mountPath);
+				setRouting(loaded.mountPath, loaded.panes[0]);
 				document.documentElement.lang = loaded.locale ?? "en";
 				setConfig(loaded);
 				document.title = loaded.title;
@@ -40,7 +78,7 @@ export function App() {
 	}, []);
 	if (!config)
 		return (
-			<div className="shell">
+			<div className="page">
 				{error ? <Failure message={error} /> : <Loading />}
 			</div>
 		);
@@ -51,51 +89,343 @@ export function App() {
 	);
 }
 
+interface NavItem {
+	pane: string;
+	label: string;
+	icon: IconName;
+}
+
+/** Keeps the layout the size of what the person can see: the visible area shrinks when the on-screen keyboard rises. */
+function useViewportSize(): void {
+	useEffect(() => {
+		const viewport = window.visualViewport;
+		const root = document.documentElement;
+		const apply = () => {
+			root.style.setProperty(
+				"--app-height",
+				`${viewport?.height ?? window.innerHeight}px`,
+			);
+			root.style.setProperty("--app-top", `${viewport?.offsetTop ?? 0}px`);
+		};
+		apply();
+		viewport?.addEventListener("resize", apply);
+		viewport?.addEventListener("scroll", apply);
+		window.addEventListener("resize", apply);
+		return () => {
+			viewport?.removeEventListener("resize", apply);
+			viewport?.removeEventListener("scroll", apply);
+			window.removeEventListener("resize", apply);
+		};
+	}, []);
+}
+
+/** Fetches the room list at the start, after every `changed` and after every reconnect. */
+function useRoomsSync(enabled: boolean, version: number): void {
+	const revision = useSelector((state) => state.revision);
+	const connects = useSelector((state) => state.connects);
+	// biome-ignore lint/correctness/useExhaustiveDependencies: the counters say when to fetch
+	useEffect(() => {
+		if (!enabled) return;
+		let current = true;
+		api.rooms().then(
+			(view) => {
+				if (current)
+					store.dispatch({ type: "rooms_loaded", rooms: view.rooms });
+			},
+			() => undefined,
+		);
+		return () => {
+			current = false;
+		};
+	}, [enabled, revision, connects, version]);
+}
+
+function ThemeButton() {
+	const { resolved } = useTheme();
+	return (
+		<button
+			type="button"
+			className="icon-button"
+			aria-label={
+				resolved === "dark" ? t("Switch to light") : t("Switch to dark")
+			}
+			onClick={(event) => {
+				const box = event.currentTarget.getBoundingClientRect();
+				setTheme(resolved === "dark" ? "light" : "dark", {
+					x: box.left + box.width / 2,
+					y: box.top + box.height / 2,
+				});
+			}}
+		>
+			<Icon name={resolved === "dark" ? "sun" : "moon"} />
+		</button>
+	);
+}
+
 function Console({ config }: { config: ConfigView }) {
 	const live = useLiveSource();
 	const route = useRoute();
+	const app = config.app;
+	const hasApp = app !== undefined && config.panes.includes("rooms");
+	const [palette, setPalette] = useState(false);
+	const stage = useRef<HTMLDivElement>(null);
+	useViewportSize();
+	useRoomsSync(hasApp, live.version);
+	useEffect(() => {
+		if (hasApp && app) startConnection(app.protocol);
+	}, [hasApp, app]);
+
+	const connection = useSelector((state) => state.connection);
+	const forbidden = useSelector((state) => state.forbidden);
+	const waiting = useSelector(
+		(state) => state.cardOrder.filter((id) => !state.cards[id]?.outcome).length,
+	);
+
+	useEffect(() => {
+		document.title = waiting ? `(${waiting}) ${config.title}` : config.title;
+	}, [waiting, config.title]);
+
+	// Ctrl+K or ⌘K opens the room switcher from anywhere.
+	useEffect(() => {
+		if (!hasApp) return;
+		const onKey = (event: KeyboardEvent) => {
+			if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+				event.preventDefault();
+				setPalette((open) => !open);
+			}
+		};
+		window.addEventListener("keydown", onKey);
+		return () => window.removeEventListener("keydown", onKey);
+	}, [hasApp]);
+
+	const items: NavItem[] = useMemo(
+		() => [
+			...config.panes.map((pane) => ({
+				pane,
+				label: t(LABELS[pane]),
+				icon: PANE_ICONS[pane],
+			})),
+			...(hasApp
+				? [
+						{
+							pane: "settings",
+							label: t("Settings"),
+							icon: PANE_ICONS.settings,
+						},
+					]
+				: []),
+		],
+		[config.panes, hasApp],
+	);
+
 	const first = config.panes[0] ?? "conversations";
-	const pane = config.panes.find((name) => name === route.pane) ?? first;
-	return (
-		<LiveContext.Provider value={live}>
-			<div className="shell">
-				<header className="bar">
-					<div className="bar-start">
-						<h1>{config.title}</h1>
-						<nav aria-label={t("Panes")}>
-							{config.panes.map((name) => (
-								<a
-									key={name}
-									href={hrefFor(name)}
-									aria-current={name === pane ? "page" : undefined}
-								>
-									{t(LABELS[name])}
-								</a>
-							))}
-						</nav>
-					</div>
-					<span
-						className={live.connected ? "live live-on" : "live"}
-						title={
-							live.connected ? t("Receiving live updates") : t("Reconnecting")
-						}
-					>
-						{live.connected ? t("Live") : t("Reconnecting…")}
-					</span>
-				</header>
-				<main>
-					{pane === "overview" && <OverviewPage />}
-					{pane === "conversations" &&
-						(route.key ? (
+	const known = (name: string) =>
+		config.panes.includes(name as PaneName) ||
+		(hasApp && ["room", "agent", "settings", "more"].includes(name)) ||
+		name === "more";
+	const pane = known(route.pane) ? route.pane : first;
+	// The room and the profile fill the screen; everything else is a page in a column.
+	const fill =
+		hasApp && (pane === "room" || pane === "agent") && Boolean(route.key);
+	const current = pane === "room" || pane === "agent" ? "rooms" : pane;
+
+	// A page opens at its top.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: the route changing is the trigger
+	useEffect(() => {
+		stage.current?.scrollTo(0, 0);
+	}, [pane, route.key]);
+
+	const tabs: NavItem[] = (() => {
+		const lead = items.slice(0, 3);
+		return items.length > 4
+			? [...lead, { pane: "more", label: t("More"), icon: PANE_ICONS.more }]
+			: items;
+	})();
+	const moreItems = items.filter(
+		(item) => !tabs.some((tab) => tab.pane === item.pane),
+	);
+
+	const body: ReactNode = (() => {
+		if (forbidden)
+			return (
+				<div className="page">
+					<Failure
+						message={t(
+							"This account is not an owner of this host, so the app stays closed. Reload the page to try again.",
+						)}
+					/>
+				</div>
+			);
+		switch (pane) {
+			case "rooms":
+				return <RoomsPage onSearch={() => setPalette(true)} />;
+			case "room":
+				return route.key ? (
+					<RoomPage key={route.key} roomKey={route.key} />
+				) : (
+					<RoomsPage onSearch={() => setPalette(true)} />
+				);
+			case "agent":
+				return route.key ? (
+					<AgentPage key={route.key} name={route.key} />
+				) : null;
+			case "schedules":
+				return <SchedulesPage />;
+			case "settings":
+				return <SettingsPage />;
+			case "more":
+				return <MorePage items={moreItems} />;
+			case "overview":
+				return (
+					<Legacy>
+						<OverviewPage />
+					</Legacy>
+				);
+			case "conversations":
+				return (
+					<Legacy>
+						{route.key ? (
 							<TranscriptPage key={route.key} conversationKey={route.key} />
 						) : (
 							<ConversationsPage />
+						)}
+					</Legacy>
+				);
+			case "notes":
+				return (
+					<Legacy>
+						<NotesPage />
+					</Legacy>
+				);
+			case "skills":
+				return (
+					<Legacy>
+						<SkillsPage />
+					</Legacy>
+				);
+			case "connectors":
+				return (
+					<Legacy>
+						<ConnectorsPage />
+					</Legacy>
+				);
+			default:
+				return null;
+		}
+	})();
+
+	const online = hasApp ? connection === "open" : live.connected;
+	const chip = (
+		<span
+			className="live-chip"
+			data-on={online || undefined}
+			title={online ? t("Receiving live updates") : t("Reconnecting")}
+		>
+			{online ? t("Live") : t("Reconnecting…")}
+		</span>
+	);
+
+	return (
+		<LiveContext.Provider value={live}>
+			<div className="app" data-fill={fill || undefined}>
+				<aside className="rail">
+					<div className="brand">
+						<span className="brand-mark">
+							<Icon name="sparkle" size={16} />
+						</span>
+						<h1>{config.title}</h1>
+					</div>
+					<nav className="rail-nav" aria-label={t("Panes")}>
+						{items.map((item) => (
+							<a
+								key={item.pane}
+								className="rail-link"
+								href={hrefFor(item.pane)}
+								aria-current={item.pane === current ? "page" : undefined}
+							>
+								<Icon name={item.icon} />
+								{item.label}
+								{item.pane === "rooms" && waiting ? (
+									<span className="tab-badge">{waiting}</span>
+								) : null}
+							</a>
 						))}
-					{pane === "notes" && <NotesPage />}
-					{pane === "skills" && <SkillsPage />}
-					{pane === "connectors" && <ConnectorsPage />}
-				</main>
+					</nav>
+					<div className="rail-foot">
+						{chip}
+						{hasApp ? (
+							<button
+								type="button"
+								className="icon-button"
+								aria-label={t("Find a room")}
+								onClick={() => setPalette(true)}
+							>
+								<Icon name="search" />
+							</button>
+						) : null}
+						<ThemeButton />
+					</div>
+				</aside>
+				<div className="stage" ref={stage} data-fill={fill || undefined}>
+					<header className="topbar">
+						<div className="brand">
+							<span className="brand-mark">
+								<Icon name="sparkle" size={16} />
+							</span>
+							<h1>{config.title}</h1>
+						</div>
+						<div className="topbar-end">
+							{chip}
+							<ThemeButton />
+						</div>
+					</header>
+					<div className="route" key={`${pane}/${route.key ?? ""}`}>
+						<Suspense
+							fallback={
+								<div className="page">
+									<Loading />
+								</div>
+							}
+						>
+							{body}
+						</Suspense>
+					</div>
+				</div>
+				<nav className="tabbar" aria-label={t("Panes")}>
+					{tabs.map((item) => (
+						<a
+							key={item.pane}
+							className="tab"
+							href={hrefFor(item.pane)}
+							aria-current={
+								item.pane === current ||
+								(item.pane === "more" &&
+									moreItems.some((m) => m.pane === current))
+									? "page"
+									: undefined
+							}
+						>
+							<Icon name={item.icon} size={22} />
+							<span>{item.label}</span>
+							{item.pane === "rooms" && waiting ? (
+								<span className="tab-badge">{waiting}</span>
+							) : null}
+						</a>
+					))}
+				</nav>
 			</div>
+			<Toaster />
+			{hasApp ? (
+				<Palette
+					open={palette}
+					onClose={() => setPalette(false)}
+					pages={items}
+				/>
+			) : null}
 		</LiveContext.Provider>
 	);
+}
+
+function Legacy({ children }: { children: ReactNode }) {
+	return <div className="page">{children}</div>;
 }

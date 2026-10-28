@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { transition } from "./motion.ts";
 
 /** The page's route: a pane, and for conversations optionally one conversation's key. */
 export interface Route {
@@ -7,8 +8,11 @@ export interface Route {
 }
 
 let mountPath: string | undefined;
-export function setRouting(mount: string | undefined): void {
+/** The pane the root path shows. */
+let homePane = "";
+export function setRouting(mount: string | undefined, home = ""): void {
 	mountPath = mount;
+	homePane = home;
 }
 function current(): Route {
 	try {
@@ -23,13 +27,22 @@ function current(): Route {
 }
 
 export const hrefFor = (pane: string, key?: string): string =>
-	`${mountPath ? `${mountPath}/` : "#/"}${pane === "overview" && mountPath ? "" : pane}${key ? `/${encodeURIComponent(key)}` : ""}`;
+	`${mountPath ? `${mountPath}/` : "#/"}${pane === homePane && mountPath && !key ? "" : pane}${key ? `/${encodeURIComponent(key)}` : ""}`;
+
+/** Goes to a pane (and key) as the browser's own navigation would, with a view transition. */
+export function navigate(pane: string, key?: string): void {
+	const href = hrefFor(pane, key);
+	if (mountPath) {
+		window.history.pushState(null, "", href);
+		window.dispatchEvent(new PopStateEvent("popstate"));
+	} else window.location.hash = href.slice(1);
+}
 
 export function useRoute(): Route {
 	const [route, setRoute] = useState<Route>(current);
 	useEffect(() => {
 		const onChange = () => {
-			setRoute(current());
+			transition(() => setRoute(current()));
 			window.scrollTo(0, 0);
 		};
 		window.addEventListener("hashchange", onChange);

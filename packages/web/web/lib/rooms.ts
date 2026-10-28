@@ -1,0 +1,557 @@
+import type {
+	PromptFrame,
+	PromptOutcome,
+	RefusalCode,
+	RoomFile,
+	RoomMessage,
+	RoomMode,
+	RoomView,
+	ServerFrame,
+	UploadView,
+} from "../../src/api-types.ts";
+
+// The owner app's state: a pure reducer over the socket's frames and the page's own actions, so
+// what the page shows can be tested without a browser. Nothing here touches the DOM or the clock.
+
+/** The most streamed text kept for a turn; older text scrolls out of the progress strip. */
+const PROGRESS_TEXT_CHARS = 6000;
+/** The most tool chips kept for a turn. */
+const PROGRESS_TOOLS = 20;
+/** The most ended cards kept as records, across all rooms. */
+const KEPT_RESOLVED_CARDS = 30;
+
+export interface ToolChip {
+	id: string;
+	tool: string;
+	preview?: string;
+	status: "running" | "ok" | "failed" | "refused";
+	refused?: "declined" | "expired" | "pending" | "held" | "withdrawn";
+}
+
+/** What the running turn shows: the text it streams and the tools it runs. */
+export interface Progress {
+	text: string;
+	tools: ToolChip[];
+}
+
+/** A message the person sent that the server has not accepted yet, or refused. */
+export interface PendingSend {
+	/** The page's own reference, which `accepted` and `refused` echo. */
+	id: string;
+	room: string;
+	text: string;
+	files: UploadView[];
+	failed?: RefusalCode;
+}
+
+/** A card of a room: open until `prompt_closed` ends it, then kept as a record. */
+export interface CardState {
+	room: string;
+	frame: PromptFrame;
+	/** The id of the room's newest stored message when it opened, which it stands after. */
+	after: number;
+	outcome?: PromptOutcome;
+	note?: string;
+}
+
+export interface RoomState {
+	key: string;
+	/** From the room list; absent for a room only frames have mentioned so far. */
+	view?: RoomView;
+	/** Stored messages, oldest first. */
+	messages: RoomMessage[];
+	/** Interim messages of agents, shown until the final reply replaces them. */
+	live: RoomMessage[];
+	/** Older messages than the first one shown exist. */
+	more: boolean;
+	progress: Progress;
+	typing: boolean;
+	stoppable: boolean;
+	mode: RoomMode;
+	/** Yolo approvals seen in this room since the page opened. */
+	autoApproved: number;
+	pending: PendingSend[];
+}
+
+export interface RoomsState {
+	connection: "connecting" | "open" | "reconnecting" | "closed";
+	principal?: { id: string; name: string };
+	limits?: { perMessage: number; maxBytes: number; types: string[] };
+	rooms: Record<string, RoomState>;
+	/** The room keys as the server listed them: Home first. */
+	order: string[];
+	/** Whether the list was fetched at least once. */
+	listed: boolean;
+	cards: Record<string, CardState>;
+	/** Card ids in the order they opened. */
+	cardOrder: string[];
+	/** The room the page shows, whose progress streams to it. */
+	focus: string | undefined;
+	/** Counts `changed` frames: the room list is fetched again when it moves. */
+	revision: number;
+	/** Counts `ready` frames: a room's latest page is fetched again when it moves. */
+	connects: number;
+	/** The last refusal that belongs to no send, to be shown once. */
+	refusal: RefusalCode | undefined;
+	/** The socket was closed because the person is no owner (any more). */
+	forbidden: boolean;
+}
+
+/** What the page does itself, beside the server's frames. */
+export type LocalAction =
+	| { type: "connection"; status: RoomsState["connection"] }
+	| { type: "forbidden" }
+	| { type: "rooms_loaded"; rooms: RoomView[] }
+	| {
+			type: "history_loaded";
+			room: string;
+			messages: RoomMessage[];
+			more: boolean;
+			/** A page of older messages, to go before the ones shown. */
+			older: boolean;
+	  }
+	| { type: "focused"; room: string | undefined }
+	| {
+			type: "queued";
+			id: string;
+			room: string;
+			text: string;
+			files: UploadView[];
+	  }
+	| { type: "pending_dropped"; id: string }
+	| { type: "refusal_dismissed" };
+
+export type Action = ServerFrame | LocalAction;
+
+const NO_MODE: RoomMode = { yolo: false, longRunning: false };
+const NO_PROGRESS: Progress = { text: "", tools: [] };
+
+export function initialState(): RoomsState {
+	return {
+		connection: "connecting",
+		rooms: {},
+		order: [],
+		listed: false,
+		cards: {},
+		cardOrder: [],
+		focus: undefined,
+		revision: 0,
+		connects: 0,
+		refusal: undefined,
+		forbidden: false,
+	};
+}
+
+const blank = (key: string): RoomState => ({
+	key,
+	messages: [],
+	live: [],
+	more: false,
+	progress: NO_PROGRESS,
+	typing: false,
+	stoppable: false,
+	mode: NO_MODE,
+	autoApproved: 0,
+	pending: [],
+});
+
+/** The state with one room changed; the room is made if it is new. */
+function withRoom(
+	state: RoomsState,
+	key: string,
+	change: (room: RoomState) => RoomState,
+): RoomsState {
+	const room = state.rooms[key] ?? blank(key);
+	return { ...state, rooms: { ...state.rooms, [key]: change(room) } };
+}
+
+/** `messages` with `incoming` added in id order, once each. */
+function merged(
+	messages: readonly RoomMessage[],
+	incoming: readonly RoomMessage[],
+): RoomMessage[] {
+	const known = new Set(messages.map((message) => message.id));
+	const added = incoming.filter((message) => {
+		if (known.has(message.id)) return false;
+		known.add(message.id);
+		return true;
+	});
+	if (added.length === 0) return messages as RoomMessage[];
+	return [...messages, ...added].sort((a, b) => a.id - b.id);
+}
+
+function resolvedPruned(state: RoomsState): RoomsState {
+	const resolved = state.cardOrder.filter((id) => state.cards[id]?.outcome);
+	const drop = new Set(
+		resolved.slice(0, resolved.length - KEPT_RESOLVED_CARDS),
+	);
+	if (drop.size === 0) return state;
+	return {
+		...state,
+		cardOrder: state.cardOrder.filter((id) => !drop.has(id)),
+		cards: Object.fromEntries(
+			Object.entries(state.cards).filter(([id]) => !drop.has(id)),
+		),
+	};
+}
+
+function onProgress(
+	state: RoomsState,
+	frame: Extract<ServerFrame, { type: "progress" }>,
+): RoomsState {
+	// The server streams only to the focused room; a frame from before a switch is ignored too.
+	if (state.focus !== frame.room) return state;
+	return withRoom(state, frame.room, (room) => {
+		const { event } = frame;
+		const { text, tools } = room.progress;
+		switch (event.type) {
+			case "text":
+				return {
+					...room,
+					progress: {
+						text: (text + event.delta).slice(-PROGRESS_TEXT_CHARS),
+						tools,
+					},
+				};
+			case "tool_start":
+				return {
+					...room,
+					progress: {
+						text,
+						tools: [
+							...tools.filter((chip) => chip.id !== event.id),
+							{
+								id: event.id,
+								tool: event.tool,
+								...(event.preview ? { preview: event.preview } : {}),
+								status: "running" as const,
+							},
+						].slice(-PROGRESS_TOOLS),
+					},
+				};
+			case "tool_end":
+				return {
+					...room,
+					progress: {
+						text,
+						tools: tools.map((chip) =>
+							chip.id === event.id
+								? {
+										...chip,
+										status: event.refused
+											? ("refused" as const)
+											: event.ok
+												? ("ok" as const)
+												: ("failed" as const),
+										...(event.refused ? { refused: event.refused } : {}),
+									}
+								: chip,
+						),
+					},
+				};
+		}
+	});
+}
+
+function onMessage(
+	state: RoomsState,
+	roomKey: string,
+	message: RoomMessage,
+	accepted?: string,
+): RoomsState {
+	return withRoom(state, roomKey, (room) => {
+		const pending = accepted
+			? room.pending.filter((one) => one.id !== accepted)
+			: room.pending;
+		// A live message has no stored id; a later frame with its token replaces it.
+		if (message.id === 0 && message.live) {
+			const live = room.live.some((one) => one.live === message.live)
+				? room.live.map((one) => (one.live === message.live ? message : one))
+				: [...room.live, message];
+			return { ...room, live, pending };
+		}
+		const replies = message.kind === "agent";
+		return {
+			...room,
+			messages: merged(room.messages, [message]),
+			// The agent's final reply stands in for what it showed live.
+			live: replies
+				? room.live.filter((one) => one.agent !== message.agent)
+				: room.live,
+			progress: replies ? NO_PROGRESS : room.progress,
+			pending,
+		};
+	});
+}
+
+function onHistory(
+	state: RoomsState,
+	frame: Extract<LocalAction, { type: "history_loaded" }>,
+): RoomsState {
+	return withRoom(state, frame.room, (room) => {
+		if (frame.older)
+			return {
+				...room,
+				messages: merged(room.messages, frame.messages),
+				more: frame.more,
+			};
+		const first = frame.messages[0];
+		const newest = room.messages.at(-1);
+		// A latest page that starts after everything we hold leaves a gap that would hide messages.
+		if (first && newest && first.id > newest.id)
+			return { ...room, messages: [...frame.messages], more: frame.more };
+		return {
+			...room,
+			messages: merged(room.messages, frame.messages),
+			more: first && newest ? room.more || frame.more : frame.more,
+		};
+	});
+}
+
+function onRooms(state: RoomsState, rooms: readonly RoomView[]): RoomsState {
+	let next: RoomsState = { ...state, listed: true };
+	for (const view of rooms)
+		next = withRoom(next, view.key, (room) => ({
+			...room,
+			view,
+			mode: view.mode,
+			typing: view.typing,
+			stoppable: view.stoppable,
+		}));
+	return { ...next, order: rooms.map((view) => view.key) };
+}
+
+/** The next state for a frame of the server or an action of the page. */
+export function reduce(state: RoomsState, action: Action): RoomsState {
+	switch (action.type) {
+		case "connection":
+			return { ...state, connection: action.status };
+		case "forbidden":
+			return { ...state, forbidden: true, connection: "closed" };
+		case "ready": {
+			// The server sends every open card again right after `ready`, so the open ones go.
+			const gone = new Set(
+				state.cardOrder.filter((id) => !state.cards[id]?.outcome),
+			);
+			return {
+				...state,
+				connection: "open",
+				principal: { id: action.principal, name: action.name },
+				limits: action.uploads,
+				connects: state.connects + 1,
+				cardOrder: state.cardOrder.filter((id) => !gone.has(id)),
+				cards: Object.fromEntries(
+					Object.entries(state.cards).filter(([id]) => !gone.has(id)),
+				),
+			};
+		}
+		case "accepted":
+			return onMessage(state, action.room, action.message, action.id);
+		case "refused": {
+			const { id } = action;
+			if (id === undefined) return { ...state, refusal: action.code };
+			return {
+				...state,
+				rooms: Object.fromEntries(
+					Object.entries(state.rooms).map(([key, room]) => [
+						key,
+						room.pending.some((one) => one.id === id)
+							? {
+									...room,
+									pending: room.pending.map((one) =>
+										one.id === id ? { ...one, failed: action.code } : one,
+									),
+								}
+							: room,
+					]),
+				),
+			};
+		}
+		case "message":
+			return onMessage(state, action.room, action.message);
+		case "progress":
+			return onProgress(state, action);
+		case "activity":
+			return withRoom(state, action.room, (room) => ({
+				...room,
+				typing: action.typing,
+				stoppable: action.stoppable,
+				...(action.typing
+					? {}
+					: { progress: NO_PROGRESS, live: [] as RoomMessage[] }),
+			}));
+		case "prompt": {
+			const known = state.cards[action.prompt.id];
+			const after = known
+				? known.after
+				: (state.rooms[action.room]?.messages.at(-1)?.id ?? 0);
+			return {
+				...withRoom(state, action.room, (room) => room),
+				cards: {
+					...state.cards,
+					[action.prompt.id]: {
+						room: action.room,
+						frame: action.prompt,
+						after,
+					},
+				},
+				cardOrder: known
+					? state.cardOrder
+					: [...state.cardOrder, action.prompt.id],
+			};
+		}
+		case "prompt_closed": {
+			const card = state.cards[action.prompt];
+			if (!card) return state;
+			return resolvedPruned({
+				...state,
+				cards: {
+					...state.cards,
+					[action.prompt]: {
+						...card,
+						outcome: action.outcome,
+						...(action.note ? { note: action.note } : {}),
+					},
+				},
+			});
+		}
+		case "mode":
+			return withRoom(state, action.room, (room) => ({
+				...room,
+				mode: { yolo: action.yolo, longRunning: action.longRunning },
+			}));
+		case "auto_approved":
+			return withRoom(state, action.room, (room) => ({
+				...room,
+				autoApproved: room.autoApproved + 1,
+			}));
+		case "changed":
+			return { ...state, revision: state.revision + 1 };
+		case "rooms_loaded":
+			return onRooms(state, action.rooms);
+		case "history_loaded":
+			return onHistory(state, action);
+		case "focused":
+			return {
+				...state,
+				focus: action.room,
+				// What the turn streamed before the page looked at the room is not shown.
+				rooms:
+					action.room && state.rooms[action.room]
+						? {
+								...state.rooms,
+								[action.room]: {
+									...(state.rooms[action.room] as RoomState),
+									progress: NO_PROGRESS,
+								},
+							}
+						: state.rooms,
+			};
+		case "queued":
+			return withRoom(state, action.room, (room) => ({
+				...room,
+				pending: [
+					...room.pending.filter((one) => one.id !== action.id),
+					{
+						id: action.id,
+						room: action.room,
+						text: action.text,
+						files: action.files,
+					},
+				],
+			}));
+		case "pending_dropped":
+			return {
+				...state,
+				rooms: Object.fromEntries(
+					Object.entries(state.rooms).map(([key, room]) => [
+						key,
+						{
+							...room,
+							pending: room.pending.filter((one) => one.id !== action.id),
+						},
+					]),
+				),
+			};
+		case "refusal_dismissed":
+			return { ...state, refusal: undefined };
+	}
+}
+
+// ── What the pages read ──────────────────────────────────────────────────────────────────────────
+
+/** How many cards of the room wait for an answer. */
+export function waitingCards(state: RoomsState, room: string): number {
+	return state.cardOrder.filter((id) => {
+		const card = state.cards[id];
+		return card?.room === room && !card.outcome;
+	}).length;
+}
+
+/** The banner a room shows while a mode is on; none when both are off. */
+export function banner(state: RoomsState, room: string): RoomMode | undefined {
+	const mode = state.rooms[room]?.mode;
+	return mode && (mode.yolo || mode.longRunning) ? mode : undefined;
+}
+
+/** The room's newest message: the newer of what frames brought and what the list says. */
+export function lastMessage(
+	state: RoomsState,
+	room: string,
+): RoomMessage | undefined {
+	const state_ = state.rooms[room];
+	const seen = state_?.messages.at(-1);
+	const listed = state_?.view?.last;
+	return seen && listed
+		? seen.id >= listed.id
+			? seen
+			: listed
+		: (seen ?? listed);
+}
+
+export type TimelineItem =
+	| { kind: "message"; message: RoomMessage }
+	| { kind: "card"; card: CardState; id: string }
+	| { kind: "pending"; pending: PendingSend }
+	| { kind: "live"; message: RoomMessage };
+
+/** What the room shows top to bottom: stored messages with cards in place, then what is on its way. */
+export function timeline(
+	state: Pick<RoomsState, "rooms" | "cards" | "cardOrder">,
+	key: string,
+): TimelineItem[] {
+	const room = state.rooms[key];
+	if (!room) return [];
+	const cards = state.cardOrder
+		.map((id) => ({ id, card: state.cards[id] }))
+		.filter(
+			(entry): entry is { id: string; card: CardState } =>
+				entry.card?.room === key,
+		);
+	const items: TimelineItem[] = [];
+	let placed = 0;
+	const cardsUpTo = (id: number) => {
+		while (placed < cards.length) {
+			const entry = cards[placed];
+			if (!entry || entry.card.after > id) break;
+			items.push({ kind: "card", card: entry.card, id: entry.id });
+			placed += 1;
+		}
+	};
+	// Cards that opened before the first message we hold stand first.
+	cardsUpTo(
+		room.messages[0] ? room.messages[0].id - 1 : Number.POSITIVE_INFINITY,
+	);
+	for (const message of room.messages) {
+		items.push({ kind: "message", message });
+		cardsUpTo(message.id);
+	}
+	cardsUpTo(Number.POSITIVE_INFINITY);
+	for (const pending of room.pending) items.push({ kind: "pending", pending });
+	for (const message of room.live) items.push({ kind: "live", message });
+	return items;
+}
+
+/** A file's address under the mount, for a link or an image. */
+export const fileUrl = (file: Pick<RoomFile, "id">): string =>
+	`api/files/${encodeURIComponent(file.id)}`;

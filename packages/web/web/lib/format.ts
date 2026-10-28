@@ -91,3 +91,32 @@ export function conversationTitle(conversation: ConversationView): string {
 	const { title } = channelTitle(conversation.channel, conversation.id);
 	return conversation.member ? `${title} · ${conversation.member}` : title;
 }
+
+/** The time of day in the host's zone, such as `14:05`. */
+export function clock(iso: string, timeZone: string): string {
+	return new Intl.DateTimeFormat(locale(), {
+		timeZone,
+		hour: "2-digit",
+		minute: "2-digit",
+		hour12: false,
+	}).format(new Date(iso));
+}
+
+/** The day in the host's zone, such as `28 Oct`, or `Today` and `Yesterday`. */
+export function dayLabel(iso: string, now: number, timeZone: string): string {
+	const key = (ms: number) =>
+		new Intl.DateTimeFormat("en-CA", { timeZone }).format(new Date(ms));
+	const day = key(Date.parse(iso));
+	if (day === key(now)) return t("Today");
+	if (day === key(now - 86_400_000)) return t("Yesterday");
+	return new Intl.DateTimeFormat(locale(), {
+		timeZone,
+		day: "numeric",
+		month: "short",
+	}).format(new Date(iso));
+}
+
+/** The calendar day of a time in the host's zone, to tell whether two messages share one. */
+export function dayKey(iso: string, timeZone: string): string {
+	return new Intl.DateTimeFormat("en-CA", { timeZone }).format(new Date(iso));
+}

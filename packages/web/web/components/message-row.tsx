@@ -1,0 +1,190 @@
+import { memo } from "react";
+import type { RoomFile, RoomMessage } from "../../src/api-types.ts";
+import { store } from "../lib/app-store.ts";
+import { clock } from "../lib/format.ts";
+import { translate as t } from "../lib/messages.ts";
+import type { PendingSend } from "../lib/rooms.ts";
+import { fileUrl } from "../lib/rooms.ts";
+import { useConnection } from "../lib/socket.ts";
+import { Avatar } from "./avatar.tsx";
+import { Icon } from "./icons.tsx";
+import { MessageMarkdown } from "./message-markdown.tsx";
+
+const YOLO_LINE = /^Yolo mode approved: ([\s\S]*)$/;
+
+/** A line the server wrote into the room, in the page's words. */
+export function systemLine(text: string): {
+	icon: "bolt" | "reset" | "list";
+	text: string;
+} {
+	if (text === "Conversation started over")
+		return { icon: "reset", text: t("Conversation started over") };
+	const yolo = YOLO_LINE.exec(text);
+	if (yolo)
+		return {
+			icon: "bolt",
+			text: t("Yolo mode approved: {action}", { action: yolo[1] ?? "" }),
+		};
+	return { icon: "list", text };
+}
+
+function Files({ files }: { files: readonly RoomFile[] }) {
+	if (files.length === 0) return null;
+	return (
+		<ul className="files">
+			{files.map((file) =>
+				file.type.startsWith("image/") ? (
+					<li key={file.id}>
+						<a href={fileUrl(file)} target="_blank" rel="noreferrer noopener">
+							<img
+								src={fileUrl(file)}
+								alt={file.name}
+								loading="lazy"
+								decoding="async"
+								className="file-image"
+							/>
+						</a>
+					</li>
+				) : (
+					<li key={file.id}>
+						<a className="file-chip" href={fileUrl(file)} download={file.name}>
+							<Icon name="file" size={16} />
+							<span>{file.name}</span>
+						</a>
+					</li>
+				),
+			)}
+		</ul>
+	);
+}
+
+/** One stored message of a room. Memoized: it redraws only when the message or its look changes. */
+export const MessageRow = memo(function MessageRow(props: {
+	message: RoomMessage;
+	avatar: string | undefined;
+	/** Show the author's name and picture: the author changed, or a pause came. */
+	header: boolean;
+	/** The message arrived while the room was open, so it slides in. */
+	enter: boolean;
+	timeZone: string;
+}) {
+	const { message } = props;
+	if (message.kind === "system") {
+		const line = systemLine(message.text);
+		return (
+			<li className="line" data-enter={props.enter || undefined}>
+				<Icon name={line.icon} size={14} />
+				<span>{line.text}</span>
+			</li>
+		);
+	}
+	const mine = message.kind === "owner";
+	return (
+		<li
+			className="message"
+			data-mine={mine || undefined}
+			data-header={props.header || undefined}
+			data-enter={props.enter || undefined}
+		>
+			{mine ? null : (
+				<span className="message-avatar">
+					{props.header ? (
+						<Avatar name={message.author} src={props.avatar} size={32} />
+					) : null}
+				</span>
+			)}
+			<div className="message-main">
+				{props.header ? (
+					<div className="message-meta">
+						<strong>{message.author}</strong>
+						<time dateTime={message.at}>
+							{clock(message.at, props.timeZone)}
+						</time>
+					</div>
+				) : null}
+				<div className="bubble">
+					{message.text ? <MessageMarkdown source={message.text} /> : null}
+					<Files files={message.files} />
+				</div>
+			</div>
+		</li>
+	);
+});
+
+/** A message of an agent still being written; the final reply replaces it. */
+export const LiveRow = memo(function LiveRow(props: {
+	message: RoomMessage;
+	avatar: string | undefined;
+}) {
+	const { message } = props;
+	return (
+		<li className="message" data-header="true" data-live="true">
+			<span className="message-avatar">
+				<Avatar name={message.author} src={props.avatar} size={32} />
+			</span>
+			<div className="message-main">
+				<div className="message-meta">
+					<strong>{message.author}</strong>
+				</div>
+				<div className="bubble">
+					<MessageMarkdown source={message.text} />
+				</div>
+			</div>
+		</li>
+	);
+});
+
+/** A message the person just sent that the server has not taken yet, or refused. */
+export const PendingRow = memo(function PendingRow(props: {
+	pending: PendingSend;
+}) {
+	const { pending } = props;
+	const connection = useConnection();
+	return (
+		<li
+			className="message"
+			data-mine="true"
+			data-header="true"
+			data-pending={pending.failed ? "failed" : "sending"}
+		>
+			<div className="message-main">
+				<div className="bubble">
+					{pending.text ? <MessageMarkdown source={pending.text} /> : null}
+					{pending.files.length ? (
+						<ul className="files">
+							{pending.files.map((file) => (
+								<li key={file.id}>
+									<span className="file-chip">
+										<Icon name="file" size={16} />
+										<span>{file.name}</span>
+									</span>
+								</li>
+							))}
+						</ul>
+					) : null}
+				</div>
+				{pending.failed ? (
+					<div className="message-meta pending-actions">
+						<span className="failure-text">{t("Not sent")}</span>
+						<button
+							type="button"
+							className="link-button"
+							onClick={() => connection.retry(pending)}
+						>
+							{t("Try again")}
+						</button>
+						<button
+							type="button"
+							className="link-button"
+							onClick={() =>
+								store.dispatch({ type: "pending_dropped", id: pending.id })
+							}
+						>
+							{t("Discard")}
+						</button>
+					</div>
+				) : null}
+			</div>
+		</li>
+	);
+});

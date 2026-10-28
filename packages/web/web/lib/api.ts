@@ -1,15 +1,25 @@
 import type {
+	AgentPatch,
+	AgentProfileView,
 	ApiError,
+	AvatarRequest,
 	ConfigView,
 	ConnectorsView,
 	ConversationsView,
+	MessagesView,
+	ModelsView,
 	NoteInput,
 	NoteView,
 	OverviewView,
 	PrincipalsView,
+	RoomMode,
+	RoomsView,
+	SchedulesView,
+	SessionView,
 	SkillDetailView,
 	SkillView,
 	TranscriptView,
+	UploadView,
 } from "../../src/api-types.ts";
 
 import { translate as t } from "./messages.ts";
@@ -23,7 +33,10 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 		response = await fetch(`${API}${path}`, {
 			...init,
 			headers: {
-				...(init.body ? { "content-type": "application/json" } : {}),
+				// A form sets its own content type, with the boundary.
+				...(init.body && !(init.body instanceof FormData)
+					? { "content-type": "application/json" }
+					: {}),
 				...init.headers,
 			},
 		});
@@ -85,6 +98,45 @@ export const api = {
 	deleteNote: (id: number, principal?: string) =>
 		request<{ deleted: number }>(`notes/${id}${whose(principal)}`, {
 			method: "DELETE",
+		}),
+	// The owner app
+	session: () => request<SessionView>("session"),
+	rooms: () => request<RoomsView>("rooms"),
+	messages: (room: string, before?: number, limit = 50) =>
+		request<MessagesView>(
+			`rooms/${encodeURIComponent(room)}/messages?limit=${limit}${
+				before === undefined ? "" : `&before=${before}`
+			}`,
+		),
+	setMode: (room: string, change: Partial<RoomMode>) =>
+		request<{ mode: RoomMode }>(`rooms/${encodeURIComponent(room)}/mode`, {
+			method: "PUT",
+			body: JSON.stringify(change),
+		}),
+	startRoomOver: (room: string) =>
+		request<{ ok: true }>(`rooms/${encodeURIComponent(room)}/start-over`, {
+			method: "POST",
+		}),
+	upload: (file: File) => {
+		const form = new FormData();
+		form.set("file", file);
+		return request<UploadView>("uploads", { method: "POST", body: form });
+	},
+	schedules: () => request<SchedulesView>("schedules"),
+	cancelSchedule: (id: number) =>
+		request<{ ok: true }>(`schedules/${id}`, { method: "DELETE" }),
+	models: () => request<ModelsView>("models"),
+	agent: (name: string) =>
+		request<AgentProfileView>(`agents/${encodeURIComponent(name)}`),
+	updateAgent: (name: string, patch: AgentPatch) =>
+		request<AgentProfileView>(`agents/${encodeURIComponent(name)}`, {
+			method: "PATCH",
+			body: JSON.stringify(patch),
+		}),
+	redrawAvatar: (name: string, body: AvatarRequest) =>
+		request<AgentProfileView>(`agents/${encodeURIComponent(name)}/avatar`, {
+			method: "POST",
+			body: JSON.stringify(body),
 		}),
 };
 
