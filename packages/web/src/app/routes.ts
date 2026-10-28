@@ -2,7 +2,6 @@ import type {
 	AgentChange,
 	AgentDirectory,
 	AgentTeam,
-	AvatarMode,
 	AvatarStudio,
 	ConversationModes,
 	ConversationPort,
@@ -12,13 +11,15 @@ import type {
 	ScheduleStore,
 	Speaker,
 } from "pi-roundtable";
-import { PluginError } from "pi-roundtable";
+import { characterOf, PluginError } from "pi-roundtable";
+import { CharacterError, resolveCharacter } from "pi-roundtable/characters";
 import { AgentError } from "pi-roundtable/kit";
 import type {
 	AgentPatch,
 	AgentProfileView,
 	ApiError,
-	AvatarRequest,
+	CharacterRefusal,
+	CharacterRequest,
 	MessagesView,
 	ModelsView,
 	RoomsView,
@@ -36,7 +37,8 @@ import { UploadRefusal, type Uploads } from "./uploads.ts";
 
 /** The largest JSON body a write reads: 64 KiB. */
 const MAX_BODY_BYTES = 64 * 1024;
-const AVATAR_MODES: readonly string[] = ["redraw", "new_prompt", "edit"];
+/** The largest body of a character write: 4 KiB. */
+const MAX_CHARACTER_BYTES = 4 * 1024;
 
 export interface AppApiOptions {
 	surface: AppSurface;
@@ -53,9 +55,9 @@ export interface AppApiOptions {
 	directory: Pick<AgentDirectory, "agent">;
 	team: Pick<
 		AgentTeam,
-		"update" | "redrawAvatar" | "usableModels" | "modelOf" | "defaultModel"
+		"update" | "dress" | "usableModels" | "modelOf" | "defaultModel"
 	>;
-	avatars: Pick<AvatarStudio, "serve" | "canDraw">;
+	avatars: Pick<AvatarStudio, "serve">;
 	/** The mount, which a room's agent picture hangs under. */
 	mount: string;
 	/** How the console signs the person in, as the session reports it. */
@@ -87,9 +89,12 @@ function partsOf(path: string): string[] | undefined {
 	}
 }
 
-async function bodyOf(request: Request): Promise<Record<string, unknown>> {
+async function bodyOf(
+	request: Request,
+	limit = MAX_BODY_BYTES,
+): Promise<Record<string, unknown>> {
 	const tooLarge = () => new HttpError(413, "The body is too large.");
-	if (Number(request.headers.get("content-length") ?? 0) > MAX_BODY_BYTES)
+	if (Number(request.headers.get("content-length") ?? 0) > limit)
 		throw tooLarge();
 	// Read in chunks, so a body that declares no length is refused past the limit without being held whole.
 	const chunks: Uint8Array[] = [];
@@ -97,7 +102,7 @@ async function bodyOf(request: Request): Promise<Record<string, unknown>> {
 	if (request.body)
 		for await (const chunk of request.body) {
 			size += chunk.byteLength;
-			if (size > MAX_BODY_BYTES) throw tooLarge();
+			if (size > limit) throw tooLarge();
 			chunks.push(chunk);
 		}
 	let value: unknown;
@@ -161,6 +166,14 @@ export class AppApi {
 		} catch (error) {
 			if (error instanceof HttpError || error instanceof UploadRefusal)
 				return json({ error: error.message } satisfies ApiError, error.status);
+			if (error instanceof CharacterError)
+				return json(
+					{
+						error: error.message,
+						field: error.field,
+					} satisfies CharacterRefusal,
+					400,
+				);
 			if (error instanceof AgentError || error instanceof PluginError)
 				return json({ error: error.message } satisfies ApiError, 400);
 			this.#options.logger.error({ err: error }, "app api failed");
@@ -375,15 +388,22 @@ export class AppApi {
 			this.#options.changed();
 			return json(this.#profile(name));
 		}
-		if (action === "avatar" && request.method === "POST") {
+		if (action === "character" && request.method === "PUT") {
 			await this.#owner(admission);
-			const body = await bodyOf(request);
-			const mode = optionalText(body, "mode");
-			if (!mode || !AVATAR_MODES.includes(mode))
-				throw bad("mode is redraw, new_prompt or edit.");
-			const text = optionalText(body, "text");
-			const asked: AvatarRequest = { mode, ...(text ? { text } : {}) };
-			await team.redrawAvatar(name, asked.mode as AvatarMode, asked.text);
+			const body = await bodyOf(request, MAX_CHARACTER_BYTES);
+			const { character } = body;
+			if (
+				typeof character !== "object" ||
+				character === null ||
+				Array.isArray(character)
+			)
+				throw bad("character must be an object.");
+			const asked: CharacterRequest = {
+				character: character as CharacterRequest["character"],
+			};
+			// `dress` words a refusal as an agent error; checking here first names the field.
+			resolveCharacter(asked.character, characterOf(agent));
+			await team.dress(name, asked.character);
 			this.#options.changed();
 			return json(this.#profile(name));
 		}
@@ -391,7 +411,7 @@ export class AppApi {
 	}
 
 	#profile(name: string): AgentProfileView {
-		const { directory, team, avatars, rooms, surface } = this.#options;
+		const { directory, team, rooms, surface } = this.#options;
 		const agent = directory.agent(name);
 		if (!agent) throw notFound();
 		const effective = team.modelOf(name);
@@ -406,8 +426,8 @@ export class AppApi {
 				thinking: String(effective.thinking),
 			},
 			avatar: rooms.avatarOf(agent),
+			character: characterOf(agent),
 			room: `${surface.surface}:agent.${agent.name}`,
-			canDraw: avatars.canDraw,
 		};
 	}
 }

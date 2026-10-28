@@ -7,7 +7,13 @@ import type {
 	ChannelKey,
 	ConversationModes,
 } from "pi-roundtable";
-import { agentRoomKey, channelKey, groupRoomKey, roomOf } from "pi-roundtable";
+import {
+	agentRoomKey,
+	channelKey,
+	characterOf,
+	groupRoomKey,
+	roomOf,
+} from "pi-roundtable";
 import type { RoomKind, RoomView } from "../api-types.ts";
 import type { RoomLog } from "./room-log.ts";
 import type { WebThreads } from "./threads.ts";
@@ -33,7 +39,9 @@ export interface RoomsOptions {
 	threads: Pick<WebThreads, "get" | "list">;
 	log: Pick<RoomLog, "lastOf">;
 	modes: Pick<ConversationModes, "peek">;
-	activity(room: ChannelKey): { typing: boolean; stoppable: boolean };
+	activity(
+		room: ChannelKey,
+	): Pick<RoomView, "typing" | "stoppable" | "phase" | "agent">;
 }
 
 const THREAD_ID = /^thread\.[0-9a-f-]{36}$/;
@@ -148,6 +156,7 @@ export class Rooms {
 					name: agent.name,
 					displayName: agent.displayName,
 					avatar: this.avatarOf(agent),
+					character: characterOf(agent),
 				}),
 			),
 			...groups.map((group: AgentGroup) =>

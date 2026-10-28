@@ -22,6 +22,7 @@ import { PushService } from "../push/triggers.ts";
 import type { Vapid } from "../push/vapid.ts";
 import { OwnerDesk } from "./desk.ts";
 import { FileDir } from "./files.ts";
+import { Presence } from "./presence.ts";
 import { RoomLog } from "./room-log.ts";
 import { Rooms } from "./rooms.ts";
 import { AppApi } from "./routes.ts";
@@ -108,6 +109,7 @@ export class OwnerApp {
 	readonly #push: PushApi;
 	readonly #sockets: Sockets;
 	readonly #desk: OwnerDesk;
+	readonly #presence: Presence;
 	readonly #uploads: Uploads;
 	readonly #options: OwnerAppOptions;
 	readonly #unsubscribe: (() => void)[] = [];
@@ -173,6 +175,7 @@ export class OwnerApp {
 				),
 			logger,
 		});
+		let presence: Presence | undefined;
 		const surface = new AppSurface({
 			surface: options.surface,
 			sockets,
@@ -189,6 +192,13 @@ export class OwnerApp {
 			unprompted: (room, author, text) => {
 				push.reply(room, author, text).catch(() => undefined);
 			},
+			activity: () => presence?.schedule(),
+			logger,
+		});
+		presence = new Presence({
+			team: agents.team,
+			sockets,
+			working: () => surface.workingAgents(),
 			logger,
 		});
 		const rooms = new Rooms({
@@ -214,6 +224,7 @@ export class OwnerApp {
 			desk,
 			rooms,
 			uploads,
+			presence,
 			identity,
 			conversations: options.conversations,
 			logger,
@@ -254,6 +265,7 @@ export class OwnerApp {
 		this.surface = surface;
 		this.#sockets = sockets;
 		this.#desk = desk;
+		this.#presence = presence;
 		this.#uploads = uploads;
 		this.#unsubscribe.push(
 			modes.onChange((channel, mode) => {
@@ -311,6 +323,7 @@ export class OwnerApp {
 		this.#pending = undefined;
 		for (const unsubscribe of this.#unsubscribe.splice(0)) unsubscribe();
 		this.#desk.stop();
+		this.#presence.stop();
 		this.#sockets.closeAll(1001, "stopping");
 	}
 

@@ -24,6 +24,7 @@ import {
 } from "../api-types.ts";
 import type { Authenticator } from "../auth/authenticator.ts";
 import type { Answerer, OwnerDesk } from "./desk.ts";
+import type { Presence } from "./presence.ts";
 import { parseClientFrame } from "./protocol.ts";
 import type { Rooms } from "./rooms.ts";
 import type { AppSocket, Sockets } from "./sockets.ts";
@@ -50,6 +51,8 @@ export interface SocketRouteOptions {
 	surface: AppSurface;
 	desk: OwnerDesk;
 	rooms: Rooms;
+	/** The table of who is busy, sent after `ready`; absent in a route built without one. */
+	presence?: Pick<Presence, "frame" | "sent">;
 	uploads: Uploads;
 	identity: Pick<IdentityService, "tierOf">;
 	conversations: Pick<ConversationPort, "stop">;
@@ -179,6 +182,15 @@ export class SocketRoute {
 			},
 		});
 		for (const frame of desk.openFrames()) sockets.send(connection, frame);
+		const { presence } = this.#options;
+		presence?.frame().then(
+			(frame) => {
+				presence.sent(frame);
+				sockets.send(connection, frame);
+			},
+			(error: unknown) =>
+				this.#options.logger.warn({ err: error }, "presence was not sent"),
+		);
 	}
 
 	/** The person behind a socket as an answerer at their tier now; undefined when they are no owner any more. */

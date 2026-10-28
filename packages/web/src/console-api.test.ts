@@ -159,6 +159,7 @@ describe("config", () => {
 			title: "Test console",
 			panes: ["overview", "conversations", "notes"],
 			timeZone: "Europe/Paris",
+			look: "modern",
 		});
 	});
 });

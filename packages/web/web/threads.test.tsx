@@ -16,6 +16,7 @@ const config: ConfigView = {
 	title: "Console",
 	panes: ["rooms"],
 	timeZone: "UTC",
+	look: "modern",
 };
 
 const view = (key: string, over: Partial<RoomView> = {}): RoomView => ({

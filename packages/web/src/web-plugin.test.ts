@@ -324,6 +324,7 @@ describe("webConsole on a plugin harness", () => {
 			title: "Ops",
 			panes: ["conversations"],
 			timeZone: "UTC",
+			look: "modern",
 		});
 		expect((await call("/ops/web/api/notes", {}, await sign())).status).toBe(
 			404,

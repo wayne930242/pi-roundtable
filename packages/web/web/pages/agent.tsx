@@ -2,8 +2,7 @@ import { useEffect, useState } from "react";
 import type { AgentPatch, AgentProfileView } from "../../src/api-types.ts";
 import { Avatar } from "../components/avatar.tsx";
 import { Icon } from "../components/icons.tsx";
-import { Sheet } from "../components/sheet.tsx";
-import { Empty, Failure, Loading } from "../components/states.tsx";
+import { Failure, Loading } from "../components/states.tsx";
 import { api, messageOf } from "../lib/api.ts";
 import { translate as t } from "../lib/messages.ts";
 import { hrefFor } from "../lib/router.ts";
@@ -21,8 +20,6 @@ const THINKING = [
 ];
 const DEFAULT = "default";
 
-type AvatarMode = "redraw" | "new_prompt" | "edit";
-
 /** One agent's profile: its name, prompt, model and thinking, and its picture. */
 export function AgentPage({ name }: { name: string }) {
 	const [profile, setProfile] = useState<AgentProfileView>();
@@ -35,7 +32,6 @@ export function AgentPage({ name }: { name: string }) {
 		thinking: string;
 	}>();
 	const [saving, setSaving] = useState(false);
-	const [drawing, setDrawing] = useState(false);
 
 	useEffect(() => {
 		let current = true;
@@ -127,19 +123,6 @@ export function AgentPage({ name }: { name: string }) {
 							thinking: profile.effective.thinking,
 						})}
 					</p>
-					<button
-						type="button"
-						className="secondary"
-						disabled={!profile.canDraw}
-						title={
-							profile.canDraw
-								? undefined
-								: t("No image provider is set on this host.")
-						}
-						onClick={() => setDrawing(true)}
-					>
-						{t("Redraw picture")}
-					</button>
 				</div>
 			</header>
 			<form
@@ -208,103 +191,6 @@ export function AgentPage({ name }: { name: string }) {
 					</button>
 				</div>
 			</form>
-			<RedrawSheet
-				open={drawing}
-				name={name}
-				onClose={() => setDrawing(false)}
-				onDone={(next) => setProfile(next)}
-			/>
 		</div>
-	);
-}
-
-function RedrawSheet(props: {
-	open: boolean;
-	name: string;
-	onClose(): void;
-	onDone(profile: AgentProfileView): void;
-}) {
-	const [mode, setMode] = useState<AvatarMode>("redraw");
-	const [text, setText] = useState("");
-	const [busy, setBusy] = useState(false);
-	const needsText = mode !== "redraw";
-	return (
-		<Sheet
-			open={props.open}
-			title={t("Redraw picture")}
-			onClose={props.onClose}
-		>
-			<div className="stack">
-				<fieldset className="segmented" disabled={busy}>
-					<legend className="visually-hidden">{t("How to draw")}</legend>
-					{(
-						[
-							["redraw", t("Same prompt")],
-							["new_prompt", t("New prompt")],
-							["edit", t("Edit")],
-						] as const
-					).map(([value, label]) => (
-						<label key={value} data-checked={mode === value}>
-							<input
-								type="radio"
-								name="avatar-mode"
-								checked={mode === value}
-								onChange={() => setMode(value)}
-							/>
-							{label}
-						</label>
-					))}
-				</fieldset>
-				{needsText ? (
-					<label>
-						{mode === "new_prompt"
-							? t("Describe the picture")
-							: t("What to change")}
-						<textarea
-							rows={3}
-							value={text}
-							onChange={(event) => setText(event.target.value)}
-						/>
-					</label>
-				) : (
-					<Empty>
-						{t("Draws the picture again from the same description.")}
-					</Empty>
-				)}
-				<div className="actions">
-					<button
-						type="button"
-						className="secondary"
-						disabled={busy}
-						onClick={props.onClose}
-					>
-						{t("Cancel")}
-					</button>
-					<button
-						type="button"
-						disabled={busy || (needsText && !text.trim())}
-						onClick={async () => {
-							setBusy(true);
-							try {
-								props.onDone(
-									await api.redrawAvatar(props.name, {
-										mode,
-										...(needsText ? { text: text.trim() } : {}),
-									}),
-								);
-								toast(t("The picture was drawn again."));
-								props.onClose();
-							} catch (failure) {
-								toast(messageOf(failure), "danger");
-							} finally {
-								setBusy(false);
-							}
-						}}
-					>
-						{busy ? t("Drawing…") : t("Draw")}
-					</button>
-				</div>
-			</div>
-		</Sheet>
 	);
 }

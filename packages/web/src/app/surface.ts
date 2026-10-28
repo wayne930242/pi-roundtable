@@ -11,6 +11,7 @@ import {
 	type PostAuthor,
 	type PromptScope,
 	type Prompts,
+	roomOf,
 	type TurnProgress,
 } from "pi-roundtable";
 import type { RoomFile, RoomMessage } from "../api-types.ts";
@@ -51,6 +52,8 @@ export interface AppSurfaceOptions {
 	 * schedule's, a report's or a late answer's. Never throws into the turn.
 	 */
 	unprompted?(room: ChannelKey, author: string, text: string): void;
+	/** Called when a room's activity changes, so the presence table can follow. */
+	activity?(): void;
 	/** The clock, in milliseconds; default `Date.now`. */
 	now?: () => number;
 	logger: Logger;
@@ -64,10 +67,24 @@ export interface AppSurfaceOptions {
  */
 const ASKED_WINDOW_MS = 30_000;
 
-/** The counts behind a room's `activity`. */
+/** The counts and marks behind a room's `activity`. */
 interface Activity {
 	typing: number;
 	stoppable: number;
+	/** The tool calls that have started and not ended. */
+	tools: Set<string>;
+	/** The latest author of an interim text or reply: the member speaking in a group round. */
+	agent?: string;
+	/** How the turn's last reply went, once it posted one. */
+	outcome?: "done" | "failed";
+}
+
+/** What a room's `activity` says apart from its counts. */
+export interface RoomActivity {
+	typing: boolean;
+	stoppable: boolean;
+	phase?: "thinking" | "working";
+	agent?: string;
 }
 
 /**
@@ -153,17 +170,44 @@ export class AppSurface implements ChatSurface {
 	}
 
 	/** Whether a turn works in the room and whether Stop applies, as `activity` frames say. */
-	activityOf(room: ChannelKey): { typing: boolean; stoppable: boolean } {
+	activityOf(room: ChannelKey): RoomActivity {
 		const found = this.#activity.get(room);
+		const typing = (found?.typing ?? 0) > 0;
 		return {
-			typing: (found?.typing ?? 0) > 0,
+			typing,
 			stoppable: (found?.stoppable ?? 0) > 0,
+			...(typing ? { phase: found?.tools.size ? "working" : "thinking" } : {}),
+			...(typing && found?.agent ? { agent: found.agent } : {}),
 		};
 	}
 
-	#count(room: ChannelKey, key: keyof Activity): () => void {
-		const entry = this.#activity.get(room) ?? { typing: 0, stoppable: 0 };
+	/** The agents with a turn working in an app room now: a room's own agent, or a group's speaker. */
+	workingAgents(): Set<string> {
+		const names = new Set<string>();
+		for (const [room, entry] of this.#activity) {
+			if (entry.typing === 0) continue;
+			const named = roomOf(room, [this.surface]);
+			if (named?.kind === "agent") names.add(named.name);
+			if (entry.agent) names.add(entry.agent);
+		}
+		return names;
+	}
+
+	#entry(room: ChannelKey): Activity {
+		const found = this.#activity.get(room);
+		if (found) return found;
+		const entry: Activity = { typing: 0, stoppable: 0, tools: new Set() };
 		this.#activity.set(room, entry);
+		return entry;
+	}
+
+	#count(room: ChannelKey, key: "typing" | "stoppable"): () => void {
+		const entry = this.#entry(room);
+		// A new turn forgets how the last one ended.
+		if (key === "typing" && entry.typing === 0) {
+			delete entry.outcome;
+			delete entry.agent;
+		}
 		entry[key] += 1;
 		this.#announce(room);
 		let on = true;
@@ -171,18 +215,31 @@ export class AppSurface implements ChatSurface {
 			if (!on) return;
 			on = false;
 			entry[key] -= 1;
-			if (entry.typing === 0 && entry.stoppable === 0)
-				this.#activity.delete(room);
-			this.#announce(room);
+			const idle = entry.typing === 0;
+			if (idle) entry.tools.clear();
+			// The outcome rides the frame on which typing turns false, and is read before the entry goes.
+			const outcome = key === "typing" && idle ? entry.outcome : undefined;
+			if (idle && entry.stoppable === 0) this.#activity.delete(room);
+			this.#announce(room, outcome);
 		};
 	}
 
-	#announce(room: ChannelKey): void {
+	#announce(room: ChannelKey, outcome?: "done" | "failed"): void {
 		this.#options.sockets.broadcast({
 			type: "activity",
 			room,
 			...this.activityOf(room),
+			...(outcome ? { outcome } : {}),
 		});
+		this.#options.activity?.();
+	}
+
+	/** Names the member speaking in the room; a changed speaker is shown at once. */
+	#speaks(room: ChannelKey, agent: string | undefined): void {
+		const entry = this.#activity.get(room);
+		if (!entry || entry.typing === 0 || !agent || entry.agent === agent) return;
+		entry.agent = agent;
+		this.#announce(room);
 	}
 
 	startTyping(channel: ChannelKey): () => void {
@@ -222,6 +279,9 @@ export class AppSurface implements ChatSurface {
 	}
 
 	async sendReply(channel: ChannelKey, reply: OutboundReply): Promise<void> {
+		this.#speaks(channel, reply.author?.agent);
+		const entry = this.#activity.get(channel);
+		if (entry) entry.outcome = reply.failed ? "failed" : "done";
 		const files: RoomFile[] = (reply.files ?? []).map((file) =>
 			this.#options.files.put(file.name, typeByName(file.name), file.data),
 		);
@@ -265,6 +325,7 @@ export class AppSurface implements ChatSurface {
 	interim(channel: ChannelKey, as?: PostAuthor): InterimPosts {
 		return {
 			post: async (text) => {
+				this.#speaks(channel, as?.agent);
 				const live = crypto.randomUUID();
 				const show = (current: string) =>
 					this.#options.sockets.broadcast({
@@ -300,9 +361,24 @@ export class AppSurface implements ChatSurface {
 	}
 
 	progress(channel: ChannelKey, event: TurnProgress): void {
+		this.#toolEvent(channel, event);
 		this.#options.sockets.broadcast(
 			{ type: "progress", room: channel, event },
 			(connection) => connection.focus === channel,
 		);
+	}
+
+	/** A tool call that starts moves the room to `working`; the last one that ends moves it back. */
+	#toolEvent(channel: ChannelKey, event: TurnProgress): void {
+		const entry = this.#activity.get(channel);
+		if (!entry || entry.typing === 0) return;
+		if (event.type === "tool_start") {
+			const was = entry.tools.size;
+			entry.tools.add(event.id);
+			if (was === 0) this.#announce(channel);
+		} else if (event.type === "tool_end") {
+			if (entry.tools.delete(event.id) && entry.tools.size === 0)
+				this.#announce(channel);
+		}
 	}
 }

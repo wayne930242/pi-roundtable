@@ -11,9 +11,7 @@ import { AgentError } from "../domain/errors.ts";
 import type { InterimPosts } from "../domain/interim.ts";
 import type { AgentTurnScope } from "../domain/ports.ts";
 import type { TurnProgress } from "../domain/progress.ts";
-import { failureNotice } from "../presentation/failure-notice.ts";
 import { splitReply } from "../presentation/reply-splitter.ts";
-import { thinkingLine } from "../presentation/thinking-line.ts";
 import { withReplyFiles } from "../reply-files.ts";
 import { endOf, settleTurn } from "../routing/settle-turn.ts";
 import { mayApproveNamed } from "../runtime/extensions/held-calls.ts";
@@ -33,6 +31,7 @@ import {
 	roomOf,
 	roomScope,
 } from "./team-keys.ts";
+import { replyBody } from "./team-reply.ts";
 import {
 	type Chain,
 	MAX_CHAIN_MESSAGES,
@@ -275,16 +274,7 @@ export class TeamTurns {
 					"agent turn failed",
 				);
 			}
-			const thinking =
-				result.ok && result.thinking
-					? thinkingLine(result.thinking)
-					: undefined;
-			await this.#post(postTo, this.#current(agent), {
-				...(thinking ? { thinking } : {}),
-				chunks: result.ok ? splitReply(result.text) : [failureNotice(result)],
-				...(result.ok && result.files?.length ? { files: result.files } : {}),
-				...(!result.ok && !result.stopped ? { failed: true as const } : {}),
-			});
+			await this.#post(postTo, this.#current(agent), replyBody(result));
 		} catch (error) {
 			logger.error({ agent: agent.name, err: error }, "agent reply not posted");
 		} finally {
@@ -394,10 +384,12 @@ export class TeamTurns {
 			);
 			return;
 		}
+		// Discord ignores `failed`.
+		const { failed, ...rest } = body;
 		if (discordIdOf(channel) === undefined) {
 			if (!surfaces)
 				throw new AgentError(`no surface serves the room ${channel}`);
-			const { thinking, chunks, files, threadId, failed } = body;
+			const { thinking, chunks, files, threadId } = rest;
 			// A thread of the room's surface is a channel of that surface, and speaks there.
 			return surfaces.sendReply(
 				threadId === undefined
@@ -413,12 +405,10 @@ export class TeamTurns {
 			);
 		}
 		if (!channels) throw new AgentError(`no Discord channels serve ${channel}`);
-		// Discord ignores `failed`.
-		const { failed: _failed, ...post } = body;
 		return channels.post(channelIdOf(channel), {
 			name: as.displayName,
 			avatarUrl: studio.url(as.avatarHash),
-			...post,
+			...rest,
 		});
 	}
 

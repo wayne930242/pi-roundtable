@@ -65,6 +65,7 @@ export interface ConsoleServerOptions {
 	title?: string;
 	/** Where the install icons come from; default the ones this package ships. */
 	iconsDir?: string;
+	look?: "modern" | "camelot";
 }
 
 /**

@@ -19,6 +19,7 @@ function serverOver(
 	assets: AssetBundle,
 	allow = true,
 	iconsDir?: string,
+	look?: "modern" | "camelot",
 ): ConsoleServer {
 	const { logger } = recordingLogger();
 	return new ConsoleServer({
@@ -26,6 +27,7 @@ function serverOver(
 		title: "Team",
 		assets,
 		...(iconsDir ? { iconsDir } : {}),
+		...(look ? { look } : {}),
 		authenticator: createAuthenticator({
 			auth: {
 				mode: "verifier",
@@ -202,4 +204,15 @@ test("the pre-paint script sets an explicit scheme and its toolbar colours, and 
 			{},
 		),
 	).not.toThrow();
+});
+
+test("appearance.look camelot changes the manifest colours", async () => {
+	const manifest = (await (
+		await get(
+			serverOver(real, true, undefined, "camelot"),
+			"/app/manifest.webmanifest",
+		)
+	).json()) as { theme_color: string; background_color: string };
+	expect(manifest.theme_color).toBe("#f4ead5");
+	expect(manifest.background_color).toBe("#0f1726");
 });

@@ -472,6 +472,9 @@ export function reduce(state: RoomsState, action: Action): RoomsState {
 			}));
 		case "changed":
 			return { ...state, revision: state.revision + 1 };
+		// The page does not show who is busy yet.
+		case "presence":
+			return state;
 		case "rooms_loaded":
 			return onRooms(state, action.rooms);
 		case "history_loaded":

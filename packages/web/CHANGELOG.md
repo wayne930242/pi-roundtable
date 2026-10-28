@@ -7,6 +7,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Characters on the server (`rooms` pane). An agent room's `RoomView.character` and `AgentProfileView.character` carry its composed character, and `PUT api/agents/<name>/character` changes it (owner only, at most 4 KiB; `400 {error, field}` for a look that is not a character). `activity` frames gain `phase`, `agent` and `outcome`, a `presence` frame says which agents are busy, even in Discord, and `appearance: { look: "modern" | "camelot" }` sets the default look and the manifest colors (`ConfigView.look`).
+
 - Web Push for the owner app (`rooms` pane). An owner turns it on per device in Settings, where every device is listed and can be removed; logging out unsubscribes the device. The server pushes only when no page of that owner is in view: when a card opens in an app room ("Card waiting", or "Long-running cap reached" for a time-limit card in a long-running room), when an agent posts in a room that no message from a page started (a schedule's or report's reply, or a late one), and for a `notify` notice, through a new `DirectChannelProvider` named `web:<surface>` (`deliver` writes the notice in the Home room and pushes it, `mirror` only pushes when another channel such as Discord delivered). The payload is sealed for the device with RFC 8291 `aes128gcm` and posted with an RFC 8292 VAPID token, using WebCrypto and the existing `jose`, with no new dependency; it carries a title, the room key and, unless `push.preview` is `false`, the first 120 characters. The VAPID key is made on first start in `<dataDir>/web/vapid.json` (0600) and a file that cannot be read stops startup. A subscription's endpoint must be `https` on a known push service (Google, Mozilla, Apple, Microsoft, or `push.endpointHosts`), or the request answers 400; a 404 or 410, or five failures in a row, drops the device. New routes `GET api/push/key`, `GET/POST/DELETE api/push/subscriptions` and `DELETE api/push/subscriptions/<id>`, table `web_push_subscriptions`, option `push`, and the service worker's `push` and `notificationclick` handlers. `SessionView.push`, `PushKeyView`, `PushDevicesView` and `PushDeviceView` are new.
 - The `auth` option: `{ mode: "none" }`, `{ mode: "password" }` or `{ mode: "verifier", verifier }`. The `verifier` option stays as shorthand for the last, giving both throws, and giving neither still refuses to start. One authenticator now checks every request, page, API and event stream, in place of the server's own admission step, and the owner app's WebSocket upgrade will use it too.
   - `none` must be written out. It serves only on a unix socket or TCP on `127.0.0.1`, `::1` or `localhost`, unless `trustNetwork: true`; it warns at every start, and speaks for the primary owner (or `principal`) through the plugin identity `token:web-console`.
@@ -45,6 +47,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - A visitor a verifier admitted without an actor could send messages that reached the host as nobody's: they are refused with `forbidden`.
 - A JSON body sent without a length was read whole before the 64 KiB limit applied: the owner app's writes now count it as it streams.
 - The Discord link and Cleanup were offered for an agent group that has no channel: `GroupView.channelId` is optional and the overview card shows neither without it.
+
+### Removed
+
+- `POST api/agents/<name>/avatar` and the page's Redraw picture button; drawn avatars are replaced by composed characters. `AgentProfileView.canDraw` and `AvatarRequest` are gone.
 
 ## [0.22.5] - 2026-10-25
 

@@ -115,6 +115,7 @@ async function build(settings: ResolvedOptions, context: Context) {
 		changed,
 		logger,
 		...(features ? { features } : {}),
+		look: settings.look,
 		...(settings.routing === "path" ? { mountPath: settings.mount } : {}),
 		...(rooms
 			? { app: { surface: settings.surface, protocol: APP_PROTOCOL } }
@@ -191,6 +192,7 @@ async function build(settings: ResolvedOptions, context: Context) {
 		pathRouting: settings.routing === "path",
 		title: settings.title,
 		...(settings.iconsDir ? { iconsDir: settings.iconsDir } : {}),
+		look: settings.look,
 		...(settings.presentation ? { presentation: settings.presentation } : {}),
 		api,
 		...(app ? { app } : {}),

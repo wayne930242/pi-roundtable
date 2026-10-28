@@ -2,7 +2,6 @@ import type {
 	AgentPatch,
 	AgentProfileView,
 	ApiError,
-	AvatarRequest,
 	ConfigView,
 	ConnectorsView,
 	ConversationsView,
@@ -159,11 +158,6 @@ export const api = {
 		request<AgentProfileView>(`agents/${encodeURIComponent(name)}`, {
 			method: "PATCH",
 			body: JSON.stringify(patch),
-		}),
-	redrawAvatar: (name: string, body: AvatarRequest) =>
-		request<AgentProfileView>(`agents/${encodeURIComponent(name)}/avatar`, {
-			method: "POST",
-			body: JSON.stringify(body),
 		}),
 };
 

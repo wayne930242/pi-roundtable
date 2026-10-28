@@ -1,5 +1,10 @@
 // The console's API shapes, shared by the server (`src/`) and the page (`web/`). Times are ISO strings.
 
+import type { CharacterInput, CharacterSpec } from "pi-roundtable/characters";
+
+/** What an agent is doing in a room, while it works. */
+export type ActivityPhase = "thinking" | "working";
+
 /** The panes the console can show; the options choose which ones a host serves. */
 export const PANES = [
 	"overview",
@@ -18,6 +23,8 @@ export interface ConfigView {
 	panes: PaneName[];
 	/** The IANA zone the page formats times and event dates in: the host's `env.timeZone`. */
 	timeZone: string;
+	/** The page's look unless the owner picked one in the app; the server always sends it. */
+	look?: "modern" | "camelot";
 	locale?: string;
 	messages?: Readonly<Record<string, string>>;
 	cleanup?: boolean;
@@ -301,8 +308,10 @@ export interface RoomView {
 	displayName: string;
 	/** The coordinator's room, where the page opens. */
 	home: boolean;
-	/** The agent's picture, a path under the mount; absent for groups and threads. */
+	/** The agent's picture, a path under the mount, for notification icons; absent for groups and threads. */
 	avatar?: string;
+	/** An agent room's character; a group page looks its members' up in the agent rooms. */
+	character?: CharacterSpec;
 	/** A group's members, by agent name. */
 	members?: string[];
 	/** A thread's parent room. */
@@ -314,6 +323,10 @@ export interface RoomView {
 	mode: RoomMode;
 	/** The room's agent is working now. */
 	typing: boolean;
+	/** While typing: `working` during a tool call, `thinking` otherwise. */
+	phase?: ActivityPhase;
+	/** While typing: the member speaking, in a group round. */
+	agent?: string;
 	/** A turn runs that Stop would end. */
 	stoppable: boolean;
 	/** The newest stored message, if any. */
@@ -395,9 +408,8 @@ export interface AgentProfileView {
 	/** What its next turn runs on. */
 	effective: { model: string; thinking: string };
 	avatar: string;
+	character: CharacterSpec;
 	room: string;
-	/** An image provider is set, so the picture can be drawn again. */
-	canDraw: boolean;
 }
 
 export interface ModelsView {
@@ -412,10 +424,14 @@ export interface AgentPatch {
 	thinking?: string;
 }
 
-/** The body of `POST api/agents/<name>/avatar`. */
-export interface AvatarRequest {
-	mode: string;
-	text?: string;
+/** The body of `PUT api/agents/<name>/character`: at most 4 KiB. */
+export interface CharacterRequest {
+	character: CharacterInput;
+}
+
+/** The 400 of `PUT api/agents/<name>/character`: `field` is the path of the offending field. */
+export interface CharacterRefusal extends ApiError {
+	field: string;
 }
 
 /** A file waiting for the message that uses it. */
@@ -581,7 +597,19 @@ export type ServerFrame =
 	/** What the running turn writes and which tools it runs; sent to the sockets that focus the room. */
 	| { type: "progress"; room: string; event: AppProgress }
 	/** The room's agent is, or is no longer, working, and whether Stop applies. */
-	| { type: "activity"; room: string; typing: boolean; stoppable: boolean }
+	| {
+			type: "activity";
+			room: string;
+			typing: boolean;
+			stoppable: boolean;
+			phase?: ActivityPhase;
+			/** The member speaking, in a group round. */
+			agent?: string;
+			/** Only on the frame where `typing` turns false. */
+			outcome?: "done" | "failed";
+	  }
+	/** Which agents work now, anywhere (Discord included); sent after `ready` and when it changes. */
+	| { type: "presence"; agents: Record<string, { busy: boolean }> }
 	| { type: "prompt"; room: string; prompt: PromptFrame }
 	| {
 			type: "prompt_closed";

@@ -173,6 +173,8 @@ export interface WebConsoleOptions {
 	title?: string;
 	/** Where the install icons come from; default the ones this package ships. */
 	icons?: { dir: string };
+	/** How the page looks: `modern` (default) or `camelot`. The page's owner can switch it in the app. */
+	appearance?: { look?: "modern" | "camelot" };
 	/** Text a relayed message begins with, taken off the owner's words; default the remote MCP note. */
 	relayNotes?: readonly string[];
 	/** Conversations the console neither lists nor reads. */
@@ -204,6 +206,7 @@ export interface ResolvedOptions {
 	};
 	title: string;
 	iconsDir: string | undefined;
+	look: "modern" | "camelot";
 	relayNotes: readonly string[];
 	exclude: ((key: ChannelKey) => boolean) | undefined;
 	assetDir: string | undefined;
@@ -428,6 +431,9 @@ export function resolveOptions(options: WebConsoleOptions): ResolvedOptions {
 		fail(
 			"ownerId is empty. Leave it out: the console finds each visitor's principal, and a verifier that reports no actor speaks for the primary owner",
 		);
+	const look = options.appearance?.look ?? "modern";
+	if (look !== "modern" && look !== "camelot")
+		fail("appearance.look must be modern or camelot");
 	const title = options.title?.trim() ?? "Roundtable";
 	if (!title) fail("title is empty");
 	return {
@@ -446,6 +452,7 @@ export function resolveOptions(options: WebConsoleOptions): ResolvedOptions {
 		push: checkPush(options, checkOrigin(options.origin)),
 		title,
 		iconsDir: options.icons?.dir,
+		look,
 		relayNotes: options.relayNotes ?? [DEFAULT_RELAY_NOTE],
 		exclude: options.exclude,
 		assetDir: options.assetDir,

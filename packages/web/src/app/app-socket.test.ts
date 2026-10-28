@@ -81,6 +81,8 @@ async function boot(options: {
 	dataDir?: string;
 	graceSeconds?: number;
 	uploadMaxBytes?: number;
+	/** A team without Discord channels, whose agents live in the app's rooms. */
+	local?: boolean;
 }): Promise<Booted> {
 	const dataDir = options.dataDir ?? mkdtempSync(join(tmpdir(), "app-socket-"));
 	const socket = join(dataDir, "public.sock");
@@ -119,9 +121,18 @@ async function boot(options: {
 		recentTranscript: async () => [],
 	};
 	const host = await testHost({
+		...(options.local ? { discord: false as const } : {}),
 		config: {
 			dataDir,
-			discord: { token: "token", guild: GUILD, entryChannel: ENTRY_CHANNEL },
+			...(options.local
+				? {}
+				: {
+						discord: {
+							token: "token",
+							guild: GUILD,
+							entryChannel: ENTRY_CHANNEL,
+						},
+					}),
 			http: { publicUrl: "https://bot.example.com", socketPath: socket },
 			access: {
 				owners: [
@@ -139,7 +150,7 @@ async function boot(options: {
 					displayName: "Guide",
 					prompt: "You guide.",
 					avatarPrompt: "A guide",
-					channelId: ENTRY_CHANNEL,
+					...(options.local ? {} : { channelId: ENTRY_CHANNEL }),
 				},
 				{
 					name: "scout",
@@ -272,6 +283,14 @@ const ofType =
 
 const agentReply = (agent: string) => (frame: ServerFrame) =>
 	frame.type === "message" && frame.message.agent === agent;
+
+/** Matches the `activity` frame of a room that has these fields. */
+const activity = (room: string, over: object) => (frame: ServerFrame) =>
+	frame.type === "activity" &&
+	frame.room === room &&
+	Object.entries(over).every(
+		([key, value]) => (frame as Record<string, unknown>)[key] === value,
+	);
 
 /** A request to the app's REST over the host's unix socket. */
 function rest(
@@ -1116,17 +1135,12 @@ describeDb("the owner app over a real host", () => {
 		expect(refused.status).toBe(403);
 	});
 
-	test("a picture cannot be redrawn on a host with no image provider", async () => {
+	test("the avatar route is gone: a picture is no longer redrawn over REST", async () => {
 		const redraw = await rest(app, "agents/scout/avatar", {
 			method: "POST",
 			body: JSON.stringify({ mode: "redraw" }),
 		});
-		expect(redraw.status).toBe(400);
-		const bad = await rest(app, "agents/scout/avatar", {
-			method: "POST",
-			body: JSON.stringify({ mode: "scribble" }),
-		});
-		expect(bad.status).toBe(400);
+		expect(redraw.status).toBe(404);
 	});
 
 	test("a socket closes with 4401 when its credential lapses", async () => {
@@ -1438,4 +1452,219 @@ describeDb("dispatch threads left open by a host that stopped", () => {
 			await second.stop();
 		}
 	}, 30_000);
+});
+
+describeDb("characters and presence over a real host", () => {
+	let app: Booted;
+	beforeAll(async () => {
+		app = await boot({ auth: "verifier", graceSeconds: 0.4 });
+	}, 30_000);
+	afterAll(async () => {
+		await app.stop();
+	});
+
+	const open = async () => {
+		const tab = await Client.open(app, { "x-actor": "owner" });
+		if (!tab) throw new Error("the owner was refused");
+		await tab.take(ofType("ready"));
+		return tab;
+	};
+	const put = (who: string, body: unknown, origin: string | null = ORIGIN) =>
+		rest(app, "agents/guide/character", {
+			method: "PUT",
+			who,
+			origin,
+			body: JSON.stringify(body),
+		});
+
+	test("the room list gives an agent room its character", async () => {
+		const rooms = await roomList(app);
+		const room = rooms.find((r) => r.key === GUIDE);
+		expect(room?.character?.class).toBeString();
+		expect(room?.character?.v).toBe(1);
+		const profile = (await (await rest(app, "agents/guide")).json()) as {
+			character: { class: string };
+		};
+		expect(profile.character.class).toBe(room?.character?.class as string);
+	});
+
+	test("PUT character dresses the agent, shows a changed frame, and refuses what it must", async () => {
+		const tab = await open();
+		const ok = await put("owner", { character: { palette: "teal" } });
+		expect(ok.status).toBe(200);
+		const profile = (await ok.json()) as {
+			character: { palette?: string; colors: { primary: string } };
+		};
+		expect(profile.character.palette).toBe("teal");
+		await tab.take(ofType("changed"));
+		const room = (await roomList(app)).find((r) => r.key === GUIDE);
+		expect(room?.character?.palette).toBe("teal");
+		const bad = await put("owner", { character: { hat: "no-such-hat" } });
+		expect(bad.status).toBe(400);
+		expect(await bad.json()).toMatchObject({ field: "hat" });
+		expect((await put("owner", { character: [] })).status).toBe(400);
+		expect((await put("owner", { palette: "teal" })).status).toBe(400);
+		expect(
+			(await put("owner", { character: {} }, "https://evil.test")).status,
+		).toBe(403);
+		expect((await put("owner", { character: {} }, null)).status).toBe(403);
+		// The verifier's refusal is a 403, as for every route of the app.
+		expect(
+			(await put("nobody", { character: { palette: "rose" } })).status,
+		).toBe(403);
+		expect(
+			(await put("member", { character: { palette: "rose" } })).status,
+		).toBe(403);
+		const big = await put("owner", {
+			character: { palette: "rose" },
+			pad: "x".repeat(5000),
+		});
+		expect(big.status).toBe(413);
+		expect(
+			(
+				await rest(app, "agents/nobody/character", {
+					method: "PUT",
+					body: JSON.stringify({ character: { palette: "rose" } }),
+				})
+			).status,
+		).toBe(404);
+		const still = (await (await rest(app, "agents/guide")).json()) as {
+			character: { palette?: string };
+		};
+		expect(still.character.palette).toBe("teal");
+		tab.close();
+	});
+
+	test("a turn that calls a tool is working, then thinking, and ends done", async () => {
+		app.scripts.set("use-a-tool", async (request) => {
+			request.progress?.({ type: "tool_start", id: "u1", tool: "bash" });
+			await Bun.sleep(30);
+			request.progress?.({
+				type: "tool_end",
+				id: "u1",
+				tool: "bash",
+				ok: true,
+			});
+			await Bun.sleep(30);
+			return { ok: true, text: "used it" };
+		});
+		const tab = await open();
+		tab.send({ type: "send", id: "w1", room: SCOUT, text: "use-a-tool" });
+		const first = await tab.take(activity(SCOUT, { typing: true }));
+		expect(first).toMatchObject({ phase: "thinking" });
+		await tab.take(activity(SCOUT, { typing: true, phase: "working" }));
+		await tab.take(activity(SCOUT, { typing: true, phase: "thinking" }));
+		const last = await tab.take(activity(SCOUT, { typing: false }));
+		expect(last).toMatchObject({ outcome: "done" });
+		expect(last).not.toHaveProperty("phase");
+		tab.close();
+	});
+
+	test("a turn that throws ends failed", async () => {
+		app.scripts.set("fall-over", async () => {
+			throw new Error("the model fell over");
+		});
+		const tab = await open();
+		tab.send({ type: "send", id: "f1", room: SCOUT, text: "fall-over" });
+		const last = await tab.take(activity(SCOUT, { typing: false }));
+		expect(last).toMatchObject({ outcome: "failed" });
+		const rows = await messagesOf(app, SCOUT);
+		expect(rows.at(-1)?.text).toContain("did not go through");
+		tab.close();
+	});
+
+	test("presence follows an agent working in a Discord channel", async () => {
+		let release: () => void = () => undefined;
+		const held = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		app.scripts.set("discord-work", async () => {
+			await held;
+			return { ok: true, text: "done over there" };
+		});
+		const tab = await open();
+		const table = (frame: ServerFrame) =>
+			frame.type === "presence" ? frame.agents : undefined;
+		const first = await tab.take(ofType("presence"));
+		expect(first.agents.guide?.busy).toBe(false);
+		const handled = app.host.conversations.handle({
+			channel: `discord:${ENTRY_CHANNEL}`,
+			messageId: "d1",
+			actor: ADA,
+			authorId: ADA_DISCORD,
+			authorName: "Ada",
+			authorIsBot: false,
+			space: GUILD,
+			isDirect: false,
+			mentionsBot: true,
+			repliesToBot: false,
+			text: "discord-work",
+			attachments: [],
+		});
+		await tab.take((frame) => table(frame)?.guide?.busy === true, 6000);
+		release();
+		await handled;
+		await tab.take((frame) => table(frame)?.guide?.busy === false, 6000);
+		tab.close();
+	});
+});
+
+describeDb("a group round of the app over a team without Discord", () => {
+	let local: Booted;
+	beforeAll(async () => {
+		local = await boot({ auth: "verifier", local: true });
+	}, 30_000);
+	afterAll(async () => {
+		await local.stop();
+	});
+
+	test("a group round names the member speaking", async () => {
+		const { directory, team } = local.host.context.services.get(AGENTS);
+		// The team starts in the background and seeds its agents as it goes.
+		await until(async () =>
+			directory.agent("scout")?.status === "active" ? true : undefined,
+		);
+		if (!directory.group("duo"))
+			// The group tool's entry is the host's own; the public type leaves it out.
+			await (
+				team as unknown as {
+					createGroup(input: {
+						name: string;
+						displayName: string;
+						members: string[];
+						host: string;
+					}): Promise<string>;
+				}
+			).createGroup({
+				name: "duo",
+				displayName: "Duo",
+				members: ["guide", "scout"],
+				host: "guide",
+			});
+		local.scripts.set("round-table", async (request) => {
+			request.progress?.({ type: "text", delta: "thinking" });
+			await Bun.sleep(30);
+			return { ok: true, text: `${request.agent?.name} speaks` };
+		});
+		const tab = await Client.open(local, { "x-actor": "owner" });
+		if (!tab) throw new Error("the owner was refused");
+		await tab.take(ofType("ready"));
+		tab.send({
+			type: "send",
+			id: "g1",
+			room: "app:group.duo",
+			text: "round-table",
+		});
+		const named = await tab.take(
+			(frame) =>
+				frame.type === "activity" &&
+				frame.room === "app:group.duo" &&
+				frame.agent !== undefined,
+		);
+		expect(["guide", "scout"]).toContain(
+			(named as { agent?: string }).agent as string,
+		);
+		await tab.take(activity("app:group.duo", { typing: false }));
+		tab.close();
+	});
 });

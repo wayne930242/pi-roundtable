@@ -80,6 +80,7 @@ export interface ConsolePorts {
 	features?: ConsoleFeatures;
 	presentation?: ConsolePresentation;
 	mountPath?: string;
+	look?: "modern" | "camelot";
 	/** Present when the owner app is served: its rooms' key prefix, for the page. */
 	app?: { surface: string; protocol: string };
 }
@@ -242,6 +243,7 @@ export class ConsoleApi {
 			...(presentation?.messages ? { messages: presentation.messages } : {}),
 			...(features?.cleanup ? { cleanup: true } : {}),
 			...(connectorAdminUrl ? { connectorAdminUrl } : {}),
+			look: this.#ports.look ?? "modern",
 			...(this.#ports.mountPath ? { mountPath: this.#ports.mountPath } : {}),
 			...(this.#ports.app ? { app: this.#ports.app } : {}),
 		};
