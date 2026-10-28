@@ -184,6 +184,7 @@ export interface AgentChange {
 
 /** The agent team as plugins use it: who is in it, what model they run, and their channels. */
 export interface AgentTeam {
+	/** The team's id: the Discord guild, or `"local"` on a host without Discord. */
 	readonly guildId: string;
 	/** Called when a turn starts or ends and when an agent or group changes. */
 	onChange(listener: () => void): void;
@@ -194,7 +195,10 @@ export interface AgentTeam {
 	 * (`<surface>:agent.<name>`, `<surface>:group.<name>`) on a surface that declares `agentRooms`.
 	 */
 	owns(channel: ChannelKey): "agent" | "group" | undefined;
-	/** The name of the coordinator, the agent that answers in the entry channel; undefined while none is active. */
+	/**
+	 * The name of the coordinator: the agent that answers in the entry channel, or, on a host without
+	 * Discord, the one `coordinator` names (the first seed by default); undefined while none is active.
+	 */
 	coordinator(): string | undefined;
 	/**
 	 * Every key an agent or group is addressed by: its Discord channel when it has one, then its
@@ -207,8 +211,13 @@ export interface AgentTeam {
 	defaultModel(): { model: string; thinking: ThinkingSetting };
 	/** Models an agent can be set to: every one the host runs, `current` first when given. */
 	usableModels(current?: string): Promise<string[]>;
-	/** An active agent's channel; throws ScheduleError for an unknown agent, as the schedule tools catch it. */
-	channelOf(name: string): ChannelKey;
+	/**
+	 * An active agent's conversation, for reading its schedules: its room on the surface `near`
+	 * (the asker's own conversation) is on when that surface hosts rooms, otherwise its Discord
+	 * channel, otherwise its room on the first surface that hosts rooms. Throws ScheduleError for an
+	 * unknown agent or one with none, as the schedule tools catch it.
+	 */
+	channelOf(name: string, near?: ChannelKey): ChannelKey;
 	/** The channel the scope's turns run in: the group's in a group round, otherwise its own. */
 	turnChannel(scope: AgentTurnScope): ChannelKey;
 	/** Posts text under the caller's name in the channel of its turn. */

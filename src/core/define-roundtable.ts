@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { userInfo } from "node:os";
 import { join } from "node:path";
 import { ModelRegistry, ModelRuntime } from "@earendil-works/pi-coding-agent";
-import { agentServerPlugin } from "./builtin/agent-server.ts";
+import { agentServerPlugin, LOCAL_TEAM_ID } from "./builtin/agent-server.ts";
 import { discordPlugin } from "./builtin/discord.ts";
 import { discordAdminPlugin } from "./builtin/discord-admin.ts";
 import { modulesPlugin, schedulerPlugin } from "./builtin/modules.ts";
@@ -133,34 +133,17 @@ export function discordOwnerOf(
 	};
 }
 
-/** The Discord bot and the agent server that lives there, each in its place in the plugin list. */
+/** The Discord bot and its administration, each in its place in the plugin list. */
 interface DiscordAssembly {
 	discord: RoundtablePlugin;
 	admin: RoundtablePlugin[];
-	skills: RoundtablePlugin[];
-	agentServer: RoundtablePlugin;
-	/** Absent when no agent is configured: a plugin that adds nothing is refused by the registry. */
-	seeds?: RoundtablePlugin;
 }
 
 function discordAssembly(
 	config: ResolvedConfig,
 	discord: NonNullable<ResolvedConfig["discord"]>,
-	shared: {
-		modelRuntime: ModelRuntime;
-		agentSessions: AgentSessionsSlot;
-		errorReporter: ErrorReporter | undefined;
-	},
 ): DiscordAssembly {
-	const { name } = config;
 	const owner = discordOwnerOf(config);
-	const sharedPrompt = config.prompts.shared
-		? readPrompt(config.prompts.shared, "prompts.shared")
-		: readPrompt(join(ASSETS, "prompts", "shared.md"), "prompts.shared");
-	const guest = config.prompts.guest
-		? readPrompt(config.prompts.guest, "prompts.guest")
-		: readPrompt(join(ASSETS, "prompts", "shared-guest.md"), "prompts.guest");
-	const { errorReporter } = shared;
 	return {
 		discord: discordPlugin({
 			token: discord.token,
@@ -182,10 +165,43 @@ function discordAssembly(
 			cardCopies: discord.cardCopies,
 		}),
 		admin: discord.admin ? [discordAdminPlugin({ owner })] : [],
+	};
+}
+
+/**
+ * The agent server and what only it uses, each in its place in the plugin list: the skills addon
+ * and the seed agents. Its team lives in the Discord guild when there is one, and otherwise in
+ * the rooms of the surfaces that host them.
+ */
+interface AgentAssembly {
+	skills: RoundtablePlugin[];
+	agentServer: RoundtablePlugin;
+	/** Absent when no agent is configured: a plugin that adds nothing is refused by the registry. */
+	seeds?: RoundtablePlugin;
+}
+
+function agentAssembly(
+	config: ResolvedConfig,
+	shared: {
+		modelRuntime: ModelRuntime;
+		agentSessions: AgentSessionsSlot;
+		errorReporter: ErrorReporter | undefined;
+	},
+): AgentAssembly {
+	const { name, discord } = config;
+	const owner = discordOwnerOf(config);
+	const sharedPrompt = config.prompts.shared
+		? readPrompt(config.prompts.shared, "prompts.shared")
+		: readPrompt(join(ASSETS, "prompts", "shared.md"), "prompts.shared");
+	const guest = config.prompts.guest
+		? readPrompt(config.prompts.guest, "prompts.guest")
+		: readPrompt(join(ASSETS, "prompts", "shared-guest.md"), "prompts.guest");
+	const { errorReporter } = shared;
+	return {
 		skills: config.skills
 			? [
 					skillsPlugin({
-						guildId: discord.guild,
+						guildId: discord?.guild ?? LOCAL_TEAM_ID,
 						reposDir: config.skills.reposDir ?? join(config.dataDir, "repos"),
 						writtenDir: join(config.dataDir, "skills"),
 						builtinDir: config.skills.builtinDir ?? join(ASSETS, "skills"),
@@ -194,8 +210,11 @@ function discordAssembly(
 				]
 			: [],
 		agentServer: agentServerPlugin({
-			guildId: discord.guild,
-			entryChannelId: discord.entryChannel,
+			...(discord
+				? { guildId: discord.guild, entryChannelId: discord.entryChannel }
+				: config.coordinator
+					? { coordinator: config.coordinator }
+					: {}),
 			owner,
 			assistant: name,
 			modelRuntime: shared.modelRuntime,
@@ -207,14 +226,14 @@ function discordAssembly(
 			scratchDir: config.scratchDir,
 			shellUser: userInfo().username,
 			prompts: { shared: sharedPrompt, guest },
-			...(discord.agentMemory ? { memory: discord.agentMemory } : {}),
-			...(discord.agentSpeakers ? { speakers: discord.agentSpeakers } : {}),
-			...(discord.attachmentDownload
+			...(discord?.agentMemory ? { memory: discord.agentMemory } : {}),
+			...(discord?.agentSpeakers ? { speakers: discord.agentSpeakers } : {}),
+			...(discord?.attachmentDownload
 				? { attachmentDownload: discord.attachmentDownload }
 				: {}),
-			avatarListener: "public",
-			// resolveConfig refuses Discord without a public address.
-			avatarUrl: config.http?.publicUrl ?? "",
+			// The pictures are public on the listener only where a public address reaches it.
+			...(config.http ? { avatarListener: "public" } : {}),
+			...(config.http?.publicUrl ? { avatarUrl: config.http.publicUrl } : {}),
 			avatarReference: config.avatar ?? join(ASSETS, "neutral.png"),
 			avatarNeutral: join(ASSETS, "neutral.png"),
 			// An ops agent's reports are the agent server's to deliver.
@@ -230,9 +249,10 @@ function discordAssembly(
  * The host's options and the plugin list of a configured bot: the built-in plugins in their
  * fixed order (each service one provides is read by the ones after it), then the operator's, then the scheduler, so a due schedule fires only once
  * everything it reaches runs. The memory, Discord administration, and skills addons are left out
- * when the configuration switches them off. Without `discord` the Discord plugins, the skills,
- * the agent server and its seeds are left out, and the runtime still runs every turn of
- * `context.turns`. Configuration mistakes stop here, naming the key and the fix.
+ * when the configuration switches them off. Without `discord` the Discord plugins are left out,
+ * and the skills, the agent server and its seeds stay only when `agents` are configured: their
+ * team then lives in the rooms of the surfaces that host them, and the runtime still runs every
+ * turn of `context.turns`. Configuration mistakes stop here, naming the key and the fix.
  */
 export async function defineRoundtable(
 	input: RoundtableConfig,
@@ -272,13 +292,12 @@ export async function defineRoundtable(
 	warnDeprecations(logger, config.deprecations);
 	// The agent server hands the runtime its per-agent settings once it sets up.
 	const agentSessions = agentSessionsSlot();
-	const assembly = discord
-		? discordAssembly(config, discord, {
-				modelRuntime,
-				agentSessions,
-				errorReporter,
-			})
-		: undefined;
+	const assembly = discord ? discordAssembly(config, discord) : undefined;
+	// The agent server runs with Discord, and without it whenever agents are configured.
+	const agentTeam =
+		discord || config.agents.length > 0
+			? agentAssembly(config, { modelRuntime, agentSessions, errorReporter })
+			: undefined;
 	return {
 		options: {
 			logger,
@@ -331,7 +350,7 @@ export async function defineRoundtable(
 				delegation: config.delegation,
 			}),
 			...(assembly?.admin ?? []),
-			...(assembly?.skills ?? []),
+			...(agentTeam?.skills ?? []),
 			conversationsPlugin(),
 			modesPlugin(),
 			runtimePlugin({
@@ -353,8 +372,8 @@ export async function defineRoundtable(
 				memory: config.memory,
 				...(crowd ? { crowd } : {}),
 			}),
-			...(assembly
-				? [assembly.agentServer, ...(assembly.seeds ? [assembly.seeds] : [])]
+			...(agentTeam
+				? [agentTeam.agentServer, ...(agentTeam.seeds ? [agentTeam.seeds] : [])]
 				: []),
 			...config.plugins,
 			schedulerPlugin(),

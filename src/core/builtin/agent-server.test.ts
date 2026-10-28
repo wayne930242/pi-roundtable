@@ -31,6 +31,7 @@ import {
 	type AgentServerOptions,
 	type AgentServerStores,
 	agentServerPlugin,
+	LOCAL_TEAM_ID,
 } from "./agent-server.ts";
 import { DISCORD, type DiscordServices } from "./discord.ts";
 
@@ -167,7 +168,105 @@ describe("the agent server's runtime", () => {
 		expect(plugin.migrations?.map((m) => m.name)).toEqual([
 			"agents",
 			"agents-guild",
+			"agent-groups-channel-optional",
 		]);
+	});
+});
+
+describe("the agent server without Discord", () => {
+	/** The options of a host without Discord: no guild, entry channel or public address, and a named coordinator. */
+	function local(extra: Partial<AgentServerOptions> = {}) {
+		const {
+			guildId: _guild,
+			entryChannelId: _entry,
+			avatarListener: _listener,
+			avatarUrl: _url,
+			...rest
+		} = options();
+		return { ...rest, coordinator: "guide", ...extra };
+	}
+
+	/** The plugin set up with no Discord service, as a host without Discord has none. */
+	async function setUpLocal(plugin: RoundtablePlugin, rooms: string[]) {
+		const plugins = [plugin];
+		const services = new ServiceRegistry([...plugins]);
+		services.preset(SCHEDULES, {} as ScheduleStore);
+		services.preset(BACKGROUND_TURNS, {} as BackgroundTurns);
+		services.preset(RUNTIME, runtime);
+		let linked: LinkedSessions | undefined;
+		const context = {
+			logger: silentLogger(),
+			env: { locale: "en", timeZone: "UTC", now: () => new Date() },
+			sessions: () => {
+				if (!linked) throw new Error("not linked");
+				return linked;
+			},
+			queue: {},
+			toolTiers: toolTiers(),
+			events: {},
+			conversations: {},
+			surfaces: {
+				roomSurfaces: () => rooms,
+				prompts: () => undefined,
+				react: async () => undefined,
+				startTyping: () => () => undefined,
+				showStop: () => () => undefined,
+				sendReply: async () => undefined,
+			},
+			turns: {},
+			database: () => {
+				throw new PluginError("no database");
+			},
+			providers: resolveProviders(plugins),
+			dashboard: () => [],
+		} as unknown as Omit<PluginContext, "services">;
+		const registry = await collectContributions(
+			plugins,
+			context,
+			toolTiers(),
+			services,
+		);
+		linked = linkSessions(registry);
+		return { services, registry };
+	}
+
+	test("keeps its rows under the local team and sets up with no channel, dashboard or avatar route", async () => {
+		const opened: string[] = [];
+		const plugin = agentServerPlugin(local(), async (_context, teamId) => {
+			opened.push(teamId);
+			return stores;
+		});
+		expect(plugin.migrations?.map((m) => m.name)).toContain(
+			"agent-groups-channel-optional",
+		);
+		const { services, registry } = await setUpLocal(plugin, ["app"]);
+		expect(opened).toEqual([LOCAL_TEAM_ID]);
+		expect(services.get(AGENTS).team.guildId).toBe(LOCAL_TEAM_ID);
+		// The dashboard is a Discord message, and the pictures have no public address to be served at.
+		expect(registry.services.map((service) => service.name)).not.toContain(
+			"dashboard",
+		);
+		expect(registry.routes).toEqual([]);
+		expect(services.get(AGENTS).avatars.url("a".repeat(64))).toBe(
+			`/avatars/${"a".repeat(64)}.png`,
+		);
+	});
+
+	test("refuses to start when no surface hosts the agents' rooms, and starts when one does", async () => {
+		const bare = agentServerPlugin(local(), async () => stores);
+		await setUpLocal(bare, []);
+		expect(() => bare.preflight?.()).toThrow(
+			"agents need a surface that hosts their rooms, such as pi-roundtable-web",
+		);
+		const hosted = agentServerPlugin(local(), async () => stores);
+		await setUpLocal(hosted, ["app"]);
+		expect(() => hosted.preflight?.()).not.toThrow();
+	});
+
+	test("refuses an entry channel and a coordinator together", () => {
+		expect(() =>
+			agentServerPlugin({ ...options(), coordinator: "guide" }),
+		).toThrow(/both name the coordinator/);
 	});
 });
 

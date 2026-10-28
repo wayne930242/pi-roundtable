@@ -23,9 +23,11 @@ import { GroupTurns } from "./group-turns.ts";
 import {
 	channelIdOf,
 	channelOwner,
+	coordinatorOf,
 	discordIdOf,
 	discordKey,
 	homeScope,
+	keysOf,
 	roomOf,
 	roomScope,
 } from "./team-keys.ts";
@@ -331,7 +333,7 @@ export class TeamTurns {
 				},
 			};
 		}
-		if (!channels.interim) return undefined;
+		if (!channels?.interim) return undefined;
 		const interim = channels.interim.bind(channels);
 		return {
 			post: async (text) => {
@@ -379,6 +381,7 @@ export class TeamTurns {
 				author: this.#author(as),
 			});
 		}
+		if (!channels) throw new AgentError(`no Discord channels serve ${channel}`);
 		return channels.post(channelIdOf(channel), {
 			name: as.displayName,
 			avatarUrl: studio.url(as.avatarHash),
@@ -409,18 +412,36 @@ export class TeamTurns {
 			: undefined;
 		if (!group) return scope.home;
 		// A seat of a room's group runs in that room; its running turn knows which.
-		return this.#posting.get(scope.session) ?? discordKey(group.channelId);
+		return (
+			this.#posting.get(scope.session) ??
+			(group.channelId ? discordKey(group.channelId) : scope.home)
+		);
 	}
 
-	/** The assistant's own notice, such as a new release, posted in the coordinator's channel under its name. */
+	/**
+	 * The assistant's own notice, such as a new release, posted in the coordinator's channel under
+	 * its name: the entry channel, or, without Discord, its room on the first surface that hosts rooms.
+	 */
 	async announce(text: string): Promise<void> {
 		const { store, entryChannelId } = this.#options;
-		const coordinator = store.agentByChannel(entryChannelId);
+		const coordinator = coordinatorOf(store, this.#options);
 		if (!coordinator)
-			throw new AgentError("no active agent in the entry channel");
-		await this.#post(discordKey(entryChannelId), coordinator, {
-			chunks: splitReply(text),
-		});
+			throw new AgentError(
+				entryChannelId === undefined
+					? "no active coordinator"
+					: "no active agent in the entry channel",
+			);
+		const home =
+			entryChannelId !== undefined
+				? discordKey(entryChannelId)
+				: keysOf(
+						store,
+						coordinator.name,
+						this.#options.surfaces?.roomSurfaces() ?? [],
+					)[0];
+		if (!home)
+			throw new AgentError(`${coordinator.name} has no room to post in`);
+		await this.#post(home, coordinator, { chunks: splitReply(text) });
 	}
 
 	message(caller: AgentTurnScope, to: string, text: string): string {

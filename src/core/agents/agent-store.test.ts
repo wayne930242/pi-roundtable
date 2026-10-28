@@ -127,6 +127,38 @@ describeDb("PostgreSQL", () => {
 				host: "coordinator",
 			});
 
+		test("a group of a team without Discord has no channel, and archives and reloads without one", async () => {
+			const group = await store.createGroup({
+				name: "ops",
+				displayName: "Ops",
+				members: ["coordinator", "infra"],
+				host: "coordinator",
+			});
+			expect(group.channelId).toBeUndefined();
+			expect(store.group("ops")?.channelId).toBeUndefined();
+			// A second group without a channel does not clash with the first on the channel's unique index.
+			await store.createGroup({
+				name: "ops2",
+				displayName: "Ops 2",
+				members: ["infra", "doctor"],
+				host: "infra",
+			});
+			expect(store.groupByChannel("")).toBeUndefined();
+			const reloaded = await openTestStore(PgAgentStore, TEST_GUILD);
+			try {
+				expect(reloaded.group("ops")).toMatchObject({
+					name: "ops",
+					members: ["coordinator", "infra"],
+					status: "active",
+				});
+				expect(reloaded.group("ops")?.channelId).toBeUndefined();
+				await reloaded.archiveGroup("ops");
+				expect(reloaded.group("ops")?.status).toBe("archived");
+			} finally {
+				await reloaded.close();
+			}
+		});
+
 		test("a group needs 2 to 6 distinct active members and a member host", async () => {
 			expect(() => store.checkNewGroup("g", ["infra"], "infra")).toThrow(
 				AgentError,

@@ -28,7 +28,8 @@ export interface Agent {
 export interface AgentGroup {
 	name: string;
 	displayName: string;
-	channelId: string;
+	/** Its Discord channel; absent in a team without Discord, whose groups live in rooms only. */
+	channelId?: string;
 	/** Agent names in the group's order. */
 	members: string[];
 	host: string;

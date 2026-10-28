@@ -292,6 +292,7 @@ describe("defineRoundtable", () => {
 			"held-actions-principal",
 			"agents",
 			"agents-guild",
+			"agent-groups-channel-optional",
 		]);
 	});
 

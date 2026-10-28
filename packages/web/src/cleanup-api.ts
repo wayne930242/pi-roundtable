@@ -28,7 +28,7 @@ export async function cleanupConversation(
 		Boolean(team?.owns(key)) || Boolean(features?.party?.contains(key));
 	const group =
 		(await team?.status())?.groups.some(
-			(g) => `discord:${g.channelId}` === key,
+			(g) => g.channelId !== undefined && `discord:${g.channelId}` === key,
 		) ?? false;
 	const stored =
 		!owned &&

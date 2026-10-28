@@ -184,7 +184,7 @@ export class ConsoleApi {
 				})),
 				groups: view.groups.map((group) => ({
 					...group,
-					key: `discord:${group.channelId}`,
+					key: group.channelId ? `discord:${group.channelId}` : "",
 				})),
 				workspaces: (view.workspaces ?? []).map((c) => ({
 					...c,
@@ -283,7 +283,8 @@ export class ConsoleApi {
 			groups: status.groups.map((group) => ({
 				name: group.name,
 				displayName: group.displayName,
-				channelId: group.channelId,
+				// A group of a team without Discord has no channel; the pane then links none.
+				channelId: group.channelId ?? "",
 				members: group.members,
 				host: group.host,
 				busy: group.busy,

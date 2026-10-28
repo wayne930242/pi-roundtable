@@ -9,7 +9,10 @@ import type { TeamTurns, TeamTurnsOptions } from "./team-turns.ts";
 
 export interface AgentTeamOptions
 	extends Omit<TeamTurnsOptions, "selection" | "changed"> {
-	/** The agent server; its entry channel is where the coordinator lives. */
+	/**
+	 * The team's id: the Discord guild, or `LOCAL_TEAM_ID` on a host without Discord. It scopes the
+	 * rows the team keeps.
+	 */
 	guildId: string;
 	/** The first team, read and inserted once on start; an agent already stored is never overwritten. */
 	seeds: () => readonly AgentSeed[];
@@ -17,7 +20,11 @@ export interface AgentTeamOptions
 	promptSections?: () => readonly PromptSection[];
 	/** The tools plugins defined for agents, read before each agent turn. */
 	pluginTools?: () => readonly string[];
-	channels: AgentChannels;
+	/**
+	 * The Discord channels the agents live in; absent on a host without Discord. Then no channel is
+	 * made, arranged or read, and the agents live in the rooms of the surfaces that host them.
+	 */
+	channels?: AgentChannels;
 	/**
 	 * `canDraw: false` marks a host without an image provider: agents are offered no drawing and
 	 * get `fallback` pictures. A studio that leaves `canDraw` out draws.

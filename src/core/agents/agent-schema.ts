@@ -18,7 +18,7 @@ export interface AgentRow {
 export interface GroupRow {
 	name: string;
 	display_name: string;
-	channel_id: string;
+	channel_id: string | null;
 	members: string;
 	host: string;
 	status: AgentStatus;
@@ -39,7 +39,7 @@ export const toAgent = (row: AgentRow): Agent => ({
 export const toGroup = (row: GroupRow): AgentGroup => ({
 	name: row.name,
 	displayName: row.display_name,
-	channelId: row.channel_id,
+	...(row.channel_id ? { channelId: row.channel_id } : {}),
 	members: row.members.split(",").filter(Boolean),
 	host: row.host,
 	status: row.status,
@@ -95,8 +95,9 @@ export const agentsMigration: Migration = {
 };
 
 /**
- * The migrations of the store's tables for the guild the process serves: the tables, then
- * each row's guild, with existing rows given `guildId`.
+ * The migrations of the store's tables for the guild the process serves, or the local team
+ * without Discord: the tables, then each row's guild, with existing rows given `guildId`, then
+ * the group channel made optional.
  */
 export function agentMigrations(guildId: string): Migration[] {
 	return [
@@ -110,6 +111,13 @@ export function agentMigrations(guildId: string): Migration[] {
 					{ table: "agent_group_messages", key: ["id"] },
 					{ table: "agent_group_cursors", key: ["group_name", "agent_name"] },
 				]),
+		},
+		// A team without Discord has groups that live in rooms only, with no channel.
+		{
+			name: "agent-groups-channel-optional",
+			up: async (sql) => {
+				await sql`ALTER TABLE agent_groups ALTER COLUMN channel_id DROP NOT NULL`;
+			},
 		},
 	];
 }

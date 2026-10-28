@@ -29,6 +29,7 @@ export type {
 export {
 	AGENT_SERVER_PLUGIN,
 	AGENT_TEAM_SERVICE,
+	LOCAL_TEAM_ID,
 } from "./core/builtin/agent-server.ts";
 export type {
 	AccessConfig,

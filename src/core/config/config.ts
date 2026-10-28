@@ -26,6 +26,7 @@ import {
 	type ResolvedDiscord,
 	resolvedDiscord,
 } from "./adapters.ts";
+import { checkAgentTeamKeys } from "./agent-team.ts";
 import { type AttachmentsConfig, attachmentsShape } from "./attachments.ts";
 import {
 	type LimitsConfig,
@@ -91,9 +92,11 @@ export interface RoundtableConfig extends LimitsConfig {
 	owner?: { id: string; name: string; pronouns?: Pronouns };
 	/**
 	 * The Discord bot, its guild, and the agent server that lives there. Leave it out for a host
-	 * without Discord: no Discord plugins, no agent server or agents, no skills, and no tool that
-	 * messages the owner on Discord; conversations come through the plugins' own surfaces. The same
-	 * settings may come as `adapters: [discord({...})]` instead, never both.
+	 * without Discord: no Discord plugins and no tool that messages the owner on Discord;
+	 * conversations come through the plugins' own surfaces. The agent team (`agents`, `skills`) then
+	 * lives in the rooms of a surface that hosts them, such as pi-roundtable-web, and the host
+	 * refuses to start without one. The same settings may come as `adapters: [discord({...})]`
+	 * instead, never both.
 	 */
 	discord?: DiscordConfig;
 	/**
@@ -139,8 +142,17 @@ export interface RoundtableConfig extends LimitsConfig {
 	toolTiers?: Record<string, Tier>;
 	/** Prompt files, read once at start; `shared` starts every agent's prompt. */
 	prompts?: { shared: string; guest?: string };
-	/** The first team, created once; an agent already stored is never overwritten. Needs `discord`. */
+	/**
+	 * The first team, created once; an agent already stored is never overwritten. Without `discord`
+	 * the team lives in the rooms of a surface that hosts them, so a seed has no `channelId`.
+	 */
 	agents?: AgentSeed[];
+	/**
+	 * Without `discord`, the name of the agent that coordinates the team: the one the owner's
+	 * general requests come to, which cannot be archived. It must be one of `agents`; default the
+	 * first. With `discord` the agent in `discord.entryChannel` is the coordinator, and this key is refused.
+	 */
+	coordinator?: string;
 	/**
 	 * The `public` listener: the public address that reaches it, and the TCP port (default 3000) or
 	 * unix socket the process listens on. `socketMode` is the socket file's permission bits
@@ -172,7 +184,7 @@ export interface RoundtableConfig extends LimitsConfig {
 	/**
 	 * Where the skill registry reads built-in skills and keeps linked repositories. `false` leaves
 	 * the `skills` addon out: agents carry no skills, and no skill tools exist. Stored skills stay
-	 * in their tables. Without `discord` there are no agents, so the addon is off.
+	 * in their tables. Without `discord` and `agents` there is no one to carry skills, so the addon is off.
 	 */
 	skills?: false | SkillsConfig;
 	/**
@@ -278,6 +290,7 @@ const schema = shape({
 			}),
 		),
 	),
+	coordinator: optional(text),
 	http: optional(
 		shape({
 			publicUrl: optional(text),
@@ -344,6 +357,8 @@ export interface ResolvedConfig extends ResolvedLimits {
 	toolTiers: Record<string, Tier>;
 	prompts: { shared?: string; guest?: string };
 	agents: AgentSeed[];
+	/** The coordinator's name; set only without `discord` and with `agents`: the configured one, else the first seed. */
+	coordinator?: string;
 	/** Undefined when no `http` is configured, and the host opens no `public` listener. */
 	http?: {
 		/** Always set with Discord. */
@@ -375,18 +390,6 @@ function modelOf(value: string, path: string): ModelRef {
 	return parsed;
 }
 
-/** Refuses what only the agent server serves on a host without Discord, naming the key. */
-function refuseAgentServerKeys(config: RoundtableConfig): void {
-	if (config.agents && config.agents.length > 0)
-		throw new ConfigError(
-			"config agents: the agents live in Discord, which is not configured. Configure discord, or remove agents.",
-		);
-	if (config.skills)
-		throw new ConfigError(
-			"config skills: the skills are the agents', and the agents live in Discord, which is not configured. Configure discord, or remove skills.",
-		);
-}
-
 /** The configuration checked against its schema, defaults filled; throws a ConfigError naming the key and the fix. */
 export function resolveConfig(input: unknown): ResolvedConfig {
 	const config = schema.check(liftAdapters(input), "") as RoundtableConfig;
@@ -398,7 +401,7 @@ export function resolveConfig(input: unknown): ResolvedConfig {
 		throw new ConfigError(
 			"config http.publicUrl: required with discord, expected the public address that reaches the bot; Discord fetches the agents' avatars from it. Add it to roundtable.config.ts.",
 		);
-	if (!discord) refuseAgentServerKeys(config);
+	checkAgentTeamKeys(config, discord !== undefined);
 	const slug =
 		discord?.rootCommand ?? name.toLowerCase().replace(/[^a-z0-9-]+/g, "-");
 	const ops = opsOf(config.ops, discord !== undefined);
@@ -445,6 +448,9 @@ export function resolveConfig(input: unknown): ResolvedConfig {
 		toolTiers: config.toolTiers ?? {},
 		prompts: config.prompts ?? {},
 		agents: config.agents ?? [],
+		...(!discord && config.agents?.[0]
+			? { coordinator: config.coordinator ?? config.agents[0].name }
+			: {}),
 		...(http
 			? {
 					http: {
@@ -461,8 +467,8 @@ export function resolveConfig(input: unknown): ResolvedConfig {
 		...(config.avatar ? { avatar: config.avatar } : {}),
 		workDir: config.workDir ?? `${config.dataDir}/work`,
 		scratchDir: config.scratchDir ?? join(tmpdir(), `${slug}-scratch`),
-		// Without Discord there are no agents to carry skills, so the addon is off.
-		skills: config.skills ?? (discord ? {} : false),
+		// Without Discord and without agents there is no one to carry skills, so the addon is off.
+		skills: config.skills ?? (discord || config.agents?.length ? {} : false),
 		memory: config.memory ?? true,
 		...(ops ? { ops } : {}),
 		drainMs: (config.drainSeconds ?? DRAIN_LIMIT_MS / 1_000) * 1_000,

@@ -1,5 +1,6 @@
 import { channelKey, parseChannelKey } from "../contract/surface.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
+import { AgentError } from "../domain/errors.ts";
 import type { AgentTurnScope } from "../domain/ports.ts";
 import type { AgentDirectory } from "../services.ts";
 import type { Agent, AgentGroup } from "./agent-store.ts";
@@ -68,9 +69,12 @@ export function groupSessionKey(
 	room?: ChannelKey,
 ): ChannelKey {
 	const surface = room === undefined ? undefined : roomSurfaceOf(room);
-	return surface === undefined
-		? `agentgroup:${group.channelId}.${agent}`
-		: `agentgroup:${surface}.group.${group.name}.${agent}`;
+	if (surface !== undefined)
+		return `agentgroup:${surface}.group.${group.name}.${agent}`;
+	// A group of a team without Discord has rooms only, so it never has a seat of its own to key.
+	if (!group.channelId)
+		throw new AgentError(`the group ${group.name} has no Discord channel`);
+	return `agentgroup:${group.channelId}.${agent}`;
 }
 
 /**
@@ -80,6 +84,20 @@ export function groupSessionKey(
 export function groupLogName(group: AgentGroup, room: ChannelKey): string {
 	const surface = roomSurfaceOf(room);
 	return surface === undefined ? group.name : `${group.name}@${surface}`;
+}
+
+/**
+ * The coordinator: with Discord, the agent in the entry channel; without it, the agent the
+ * configuration names. Undefined while none is active.
+ */
+export function coordinatorOf(
+	store: Pick<AgentDirectory, "agent" | "agentByChannel">,
+	team: { entryChannelId?: string; coordinator?: string },
+): Agent | undefined {
+	if (team.entryChannelId !== undefined)
+		return store.agentByChannel(team.entryChannelId);
+	const named = team.coordinator ? store.agent(team.coordinator) : undefined;
+	return named?.status === "active" ? named : undefined;
 }
 
 /** An agent's own channel conversation. */

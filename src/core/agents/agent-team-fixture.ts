@@ -255,12 +255,12 @@ export const eventLog: string[] = [];
 const PLUGIN_SELECTION = { tools: ["memory_add"], groups: ["workspace"] };
 
 /** The team a fresh database starts with: a coordinator in the entry channel, then two specialists. */
-function seeds(entryChannelId: string): AgentSeed[] {
+function seeds(entryChannelId: string | undefined): AgentSeed[] {
 	return [
 		{
 			name: "coordinator",
 			displayName: "Coordinator",
-			channelId: entryChannelId,
+			...(entryChannelId ? { channelId: entryChannelId } : {}),
 			prompt:
 				"You are the chief of staff of the owner's agent team. You hand work that belongs to a specialist to that agent with message_agent, one owner per task, and propose a new agent when a lasting responsibility has no owner.",
 			avatarPrompt: "A chief of staff mid-command, pointing the way.",
@@ -296,8 +296,13 @@ export async function settle(): Promise<void> {
 	await Bun.sleep(20);
 }
 
-/** Registers the fixture's per-test setup in the describe it is called from. */
-export function useTeamFixture(): void {
+/**
+ * Registers the fixture's per-test setup in the describe it is called from. With `local`, the team
+ * runs as on a host without Discord: no channels and no entry channel, the coordinator named by
+ * the configuration, and the rooms of surface `app`.
+ */
+export function useTeamFixture(options: { local?: boolean } = {}): void {
+	const { local = false } = options;
 	beforeEach(async () => {
 		// The expected texts are the neutral English catalog's.
 		useTestLocale();
@@ -342,6 +347,7 @@ export function useTeamFixture(): void {
 		await skills.link("acme/kit", "skills");
 		channels = new FakeChannels();
 		surfaces = new FakeSurfaces();
+		if (local) surfaces.rooms = ["app"];
 		runtime = new FakeRuntime();
 		script.scores = undefined;
 		script.prompt = [];
@@ -354,11 +360,12 @@ export function useTeamFixture(): void {
 			owner: TEST_OWNER,
 			toolTiers: FIXTURE_TIERS,
 			shellUser: "mcops",
-			guildId: "1",
-			entryChannelId: ENTRY,
-			seeds: () => seeds(ENTRY),
+			guildId: local ? "local" : "1",
+			...(local
+				? { coordinator: "coordinator" }
+				: { entryChannelId: ENTRY, channels }),
+			seeds: () => seeds(local ? undefined : ENTRY),
 			store,
-			channels,
 			surfaces,
 			studio: {
 				url: (hash) => `https://x/avatars/${hash ?? "default"}.png`,

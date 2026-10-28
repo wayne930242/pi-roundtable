@@ -19,8 +19,12 @@ export type { ImageDrawer };
 export interface AvatarStudioOptions {
 	/** Where pictures are kept, one `<sha256>.png` each. */
 	dir: string;
-	/** Origin the pictures are served from, such as https://assistant.example.com. */
-	publicUrl: string;
+	/**
+	 * Origin the pictures are served from, such as https://assistant.example.com. Without one a
+	 * picture's URL is the path `/avatars/<hash>.png`, which a surface that serves the pictures
+	 * itself, through `serve`, resolves against its own origin.
+	 */
+	publicUrl?: string;
 	/** The assistant's neutral avatar: the style reference and the picture of an agent without one. */
 	referencePath: string;
 	/** The neutral avatar shipped with the package; the reference is replaced by it when the reference cannot be read as a picture. */
@@ -81,7 +85,7 @@ export class FileAvatarStudio implements AvatarStudio {
 	url(hash: string | undefined): string {
 		const chosen = hash ?? this.#defaultHash;
 		if (!chosen) throw new Error("the avatar studio was not initialized");
-		return `${this.#options.publicUrl}/avatars/${chosen}.png`;
+		return `${this.#options.publicUrl ?? ""}/avatars/${chosen}.png`;
 	}
 
 	/**

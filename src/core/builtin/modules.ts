@@ -122,8 +122,8 @@ export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 			// Absent on a host without Discord: then there are no threads.
 			const discord = services.find(DISCORD);
 			// Another agent's channel, for schedule_list; asked when a tool runs, after the agent server set up.
-			const agentChannelOf = (agent: string) =>
-				services.get(AGENTS).team.channelOf(agent);
+			const agentChannelOf = (agent: string, near: ChannelKey) =>
+				services.get(AGENTS).team.channelOf(agent, near);
 			// A conversation no chat surface carries keeps its runs in the creator's direct messages, where
 			// a claim must take them; anyone's elsewhere would run in a conversation that is not theirs.
 			const channelFor = async (

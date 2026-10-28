@@ -6,7 +6,7 @@ import { openingTaskText } from "./agent-prompt.ts";
 import { modelSetting, thinkingSetting } from "./agent-settings.ts";
 import type { Agent } from "./agent-store.ts";
 import type { AvatarMode } from "./agent-tools.ts";
-import { discordKey } from "./team-keys.ts";
+import { discordKey, keysOf } from "./team-keys.ts";
 import { groupTopic, teamCategory } from "./team-layout.ts";
 import type { TeamContext } from "./team-options.ts";
 
@@ -85,7 +85,7 @@ export class TeamEditing {
 			skills?: string[];
 		},
 	): Promise<string> {
-		const { store, studio, channels, queue, skills, logger } =
+		const { store, studio, channels, queue, skills, surfaces, logger } =
 			this.#ctx.options;
 		if (input.skills && input.skills.length > 0 && !skills)
 			throw new AgentError(
@@ -108,7 +108,8 @@ export class TeamEditing {
 		const parent = teamCategory(category, "Agents");
 		store.checkNewName(input.name);
 		skills?.checkRegistered(carried);
-		const channelId = await channels.createChannel(
+		// Without Discord channels the agent lives in its rooms, which exist as soon as it does.
+		const channelId = await channels?.createChannel(
 			input.name,
 			input.displayName,
 			parent,
@@ -116,7 +117,7 @@ export class TeamEditing {
 		const agent = await store.createAgent({
 			...fields,
 			avatarPrompt: drawing ? avatarPrompt : "",
-			channelId,
+			...(channelId ? { channelId } : {}),
 		});
 		if (skills && carried.length > 0)
 			await skills.attach(agent.name, carried, []);
@@ -133,8 +134,19 @@ export class TeamEditing {
 			(error: unknown) =>
 				`its avatar could not be drawn (${error instanceof Error ? error.message : String(error)}), so it uses ${assistantName()}'s for now`,
 		);
-		const home = discordKey(channelId);
+		// The opening task runs where the agent is first reached: its channel, else its first room.
+		const home = channelId
+			? discordKey(channelId)
+			: keysOf(store, agent.name, surfaces?.roomSurfaces() ?? [])[0];
 		const creator = store.agent(caller.name);
+		const where = channelId ? ` in <#${channelId}>` : "";
+		if (!home) {
+			logger.warn(
+				{ agent: agent.name },
+				"opening turn skipped: the agent has no channel or room",
+			);
+			return `Created "${agent.displayName}" (${agent.name})${where}; ${avatar}. It has no room to start its opening task in yet.`;
+		}
 		void queue
 			.run(home, () =>
 				this.#ctx.turns.answerBackground(
@@ -150,7 +162,7 @@ export class TeamEditing {
 			.catch((error: unknown) =>
 				logger.error({ agent: agent.name, err: error }, "opening turn failed"),
 			);
-		return `Created "${agent.displayName}" (${agent.name}) in <#${channelId}>; ${avatar}. It is starting on its opening task now.`;
+		return `Created "${agent.displayName}" (${agent.name})${where}; ${avatar}. It is starting on its opening task now.`;
 	}
 
 	async avatar(name: string, mode: AvatarMode, text?: string): Promise<string> {
@@ -221,15 +233,16 @@ export class TeamEditing {
 				? "coordinator"
 				: (input.members[0] ?? ""));
 		store.checkNewGroup(input.name, input.members, host);
-		const topic = groupTopic(
-			{ ...fields, host, channelId: "", status: "active" },
-			store,
-		);
-		const channelId = await channels.createChannel(input.name, topic, parent);
-		const group = await store.createGroup({ ...fields, host, channelId });
+		const topic = groupTopic({ ...fields, host, status: "active" }, store);
+		const channelId = await channels?.createChannel(input.name, topic, parent);
+		const group = await store.createGroup({
+			...fields,
+			host,
+			...(channelId ? { channelId } : {}),
+		});
 		logger.info({ group: group.name, members: group.members }, "group created");
 		this.#ctx.changed();
-		return `Created the group "${group.displayName}" in <#${channelId}> with ${group.members.join(", ")}; host ${group.host}.`;
+		return `Created the group "${group.displayName}"${channelId ? ` in <#${channelId}>` : ""} with ${group.members.join(", ")}; host ${group.host}.`;
 	}
 
 	async updateGroup(

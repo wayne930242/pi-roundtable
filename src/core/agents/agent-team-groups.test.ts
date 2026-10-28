@@ -283,14 +283,14 @@ describeDb("PostgreSQL", () => {
 			});
 			const pair = fx.store.group("pair");
 			if (!pair) throw new Error("no pair group");
-			await fx.team.channelDeleted(pair.channelId);
+			await fx.team.channelDeleted(pair.channelId ?? "");
 			expect(fx.store.group("pair")?.status).toBe("archived");
 			expect(fx.runtime.fresh).toEqual([
 				groupSessionKey(pair, "infra"),
 				groupSessionKey(pair, "doctor"),
 			]);
 			expect(fx.store.agent("infra")?.status).toBe("active");
-			expect(fx.team.owns(discordKey(pair.channelId))).toBeUndefined();
+			expect(fx.team.owns(discordKey(pair.channelId ?? ""))).toBeUndefined();
 		});
 
 		test("the archive tool archives a group and keeps its channel under Archive", async () => {
@@ -304,13 +304,13 @@ describeDb("PostgreSQL", () => {
 			const said = await fx.team.archive(coordinator, "pair");
 			expect(said).toContain("Archive");
 			expect(fx.store.group("pair")?.status).toBe("archived");
-			expect(fx.channels.categoryOf(pair.channelId)).toBe("Archive");
-			expect(fx.channels.webhooksRemoved).toEqual([pair.channelId]);
+			expect(fx.channels.categoryOf(pair.channelId ?? "")).toBe("Archive");
+			expect(fx.channels.webhooksRemoved).toEqual([pair.channelId ?? ""]);
 			expect(fx.runtime.fresh).toEqual([
 				groupSessionKey(pair, "infra"),
 				groupSessionKey(pair, "doctor"),
 			]);
-			expect(fx.team.owns(discordKey(pair.channelId))).toBeUndefined();
+			expect(fx.team.owns(discordKey(pair.channelId ?? ""))).toBeUndefined();
 			await expect(fx.team.archive(coordinator, "pair")).rejects.toThrow(
 				/already archived/,
 			);
@@ -354,7 +354,7 @@ describeDb("PostgreSQL", () => {
 					return fx.team.archive(request.agent, "pair");
 			};
 			await fx.team.answerGroup(
-				discordKey(pair.channelId),
+				discordKey(pair.channelId ?? ""),
 				OWNER_SPEAKER,
 				"close this group",
 				"close this group",
@@ -458,7 +458,7 @@ describeDb("PostgreSQL", () => {
 			if (!pair) throw new Error("no pair group");
 			script.scores = { infra: 0.9, doctor: 0.1 };
 			await fx.team.answerGroup(
-				discordKey(pair.channelId),
+				discordKey(pair.channelId ?? ""),
 				OWNER_SPEAKER,
 				"hello all",
 				"hello all",
@@ -655,7 +655,7 @@ describeDb("PostgreSQL", () => {
 			expect(fx.team.owns(agentRoom("doctor"))).toBeUndefined();
 			// The group stays while it has members left.
 			expect(fx.team.owns(groupRoom)).toBe("group");
-			await fx.team.channelDeleted(group().channelId);
+			await fx.team.channelDeleted(group().channelId ?? "");
 			expect(fx.team.owns(groupRoom)).toBeUndefined();
 		});
 
@@ -670,7 +670,7 @@ describeDb("PostgreSQL", () => {
 		});
 
 		test("archiving a group clears the seats of every one of its conversations", async () => {
-			await fx.team.channelDeleted(group().channelId);
+			await fx.team.channelDeleted(group().channelId ?? "");
 			expect(fx.store.group("g")?.status).toBe("archived");
 			for (const member of ["coordinator", "infra", "doctor"]) {
 				expect(fx.runtime.fresh).toContain(groupSessionKey(group(), member));

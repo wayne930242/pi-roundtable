@@ -79,7 +79,7 @@ function roleText(
 	if (coordinator?.name === agent.name)
 		return `You are the team's coordinator: ${o.name}'s general requests come to you, and you hand specialist work to the agent that owns it.`;
 	const who = coordinator
-		? `The team's coordinator is "${coordinator.displayName}" (\`${coordinator.name}\`) in <#${coordinator.channelId}>.`
+		? `The team's coordinator is "${coordinator.displayName}" (\`${coordinator.name}\`)${coordinator.channelId ? ` in <#${coordinator.channelId}>` : ""}.`
 		: "The team's coordinator is the agent in the server's entry channel.";
 	return `${who} You are a specialist: speak of yourself only as "${agent.displayName}", never as the coordinator. Team work ${o.name} asks of you directly, such as creating agents or groups, archiving, or arranging channels, you do in your own name. When your role below is empty or only a placeholder, ask ${o.him} what your job is before taking on other work.`;
 }

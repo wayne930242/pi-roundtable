@@ -40,12 +40,18 @@ export interface Exchange {
 }
 
 export interface TeamTurnsOptions {
-	/** The agent server's entry channel, where the coordinator lives. */
-	entryChannelId: string;
+	/** The agent server's entry channel, where the coordinator lives; absent on a host without Discord. */
+	entryChannelId?: string;
+	/**
+	 * The coordinator's name on a host without Discord, where there is no entry channel to find it
+	 * by. Ignored when `entryChannelId` is set.
+	 */
+	coordinator?: string;
 	/** Who the agents work for, as their prompts and group history name them. */
 	owner: OwnerIdentity;
 	store: PgAgentStore;
-	channels: Pick<AgentChannels, "post" | "interim">;
+	/** The Discord channels the agents post in; absent on a host without Discord, where every reply goes through a room's surface. */
+	channels?: Pick<AgentChannels, "post" | "interim">;
 	/**
 	 * The surfaces that host agent rooms. A reply in a room goes through `sendReply` with the
 	 * agent as author, and its interim posts through `interim`, never through the Discord

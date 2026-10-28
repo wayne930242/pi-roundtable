@@ -20,7 +20,15 @@ import {
 	MESSAGE_AGENT_TOOL,
 } from "./agent-tools.ts";
 import { TeamEditing } from "./team-editing.ts";
-import { channelOwner, discordIdOf, discordKey, keysOf } from "./team-keys.ts";
+import {
+	agentRoomKey,
+	channelOwner,
+	coordinatorOf,
+	discordIdOf,
+	discordKey,
+	keysOf,
+	roomSurfaceOf,
+} from "./team-keys.ts";
 import {
 	layoutText,
 	planArrangement,
@@ -33,6 +41,7 @@ import {
 	agentDetails,
 	channelIdFromRef,
 	messageLine,
+	NO_CHANNELS,
 	teamListText,
 } from "./team-text.ts";
 import { TeamTurns } from "./team-turns.ts";
@@ -109,10 +118,12 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 		);
 	}
 
-	/** The name of the coordinator, the agent in the entry channel; undefined while none is active. */
+	/**
+	 * The name of the coordinator: the agent in the entry channel, or, on a host without Discord,
+	 * the one the configuration names; undefined while none is active.
+	 */
 	coordinator(): string | undefined {
-		const { store, entryChannelId } = this.#options;
-		return store.agentByChannel(entryChannelId)?.name;
+		return coordinatorOf(this.#options.store, this.#options)?.name;
 	}
 
 	/**
@@ -153,7 +164,6 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 			workDir,
 			sharedPrompt,
 			guestPrompt,
-			entryChannelId,
 			owner,
 			shellUser,
 			scratchDir,
@@ -161,7 +171,7 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 		const agent = store.agent(scope.name);
 		if (!agent) throw new AgentError(`no agent ${scope.name}`);
 		const group = scope.group ? store.group(scope.group) : undefined;
-		const coordinator = store.agentByChannel(entryChannelId);
+		const coordinator = coordinatorOf(store, this.#options);
 		const speaker = this.#turns.speakerOf(scope);
 		const base = agentSystemPrompt({
 			agent,
@@ -236,12 +246,23 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 		return this.#options.skills?.carried(name).skills ?? [];
 	}
 
-	/** Another active agent's channel, for schedule_list. */
-	channelOf(name: string): ChannelKey {
+	/**
+	 * Another active agent's channel, for schedule_list: its room on the surface `near` is on when
+	 * that surface hosts rooms, otherwise its Discord channel, otherwise its room on the first
+	 * surface that hosts rooms.
+	 */
+	channelOf(name: string, near?: ChannelKey): ChannelKey {
 		try {
 			const agent = this.#options.store.activeAgent(name);
-			if (!agent.channelId) throw new AgentError(`${name} has no channel yet`);
-			return discordKey(agent.channelId);
+			const rooms = this.#options.surfaces?.roomSurfaces() ?? [];
+			const surface = near === undefined ? undefined : roomSurfaceOf(near);
+			if (surface !== undefined && rooms.includes(surface))
+				return agentRoomKey(surface, name);
+			if (agent.channelId) return discordKey(agent.channelId);
+			const room = rooms[0];
+			if (room === undefined)
+				throw new AgentError(`${name} has no channel yet`);
+			return agentRoomKey(room, name);
 		} catch (error) {
 			throw new ScheduleError(
 				error instanceof Error ? error.message : String(error),
@@ -356,8 +377,10 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 		around: string | undefined,
 		limit: number | undefined,
 	): Promise<string> {
+		const { channels } = this.#options;
+		if (!channels) throw new AgentError(NO_CHANNELS);
 		const id = channelIdFromRef(channel);
-		const messages = await this.#options.channels.read(id, {
+		const messages = await channels.read(id, {
 			limit: Math.min(Math.max(limit ?? 20, 1), READ_LIMIT),
 			...(around ? { around } : {}),
 		});
@@ -369,12 +392,11 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 	// ── AgentOps ───────────────────────────────────────────────────────────
 
 	async list(): Promise<string> {
-		return `${teamListText(this.#options.store)}\n\n${await this.#layoutText()}`;
-	}
-
-	async #layoutText(): Promise<string> {
 		const { store, channels } = this.#options;
-		return layoutText(await channels.layout(), store);
+		const list = teamListText(store);
+		return channels
+			? `${list}\n\n${layoutText(await channels.layout(), store)}`
+			: list;
 	}
 
 	/**
@@ -386,6 +408,7 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 		entries: { category: string; names: string[] }[],
 	): Promise<string> {
 		const { store, channels, logger } = this.#options;
+		if (!channels) throw new AgentError(NO_CHANNELS);
 		const listed = resolveArrangement(entries, store);
 		const { layout, remove } = planArrangement(listed, await channels.layout());
 		await channels.arrange(layout, remove);
@@ -397,7 +420,7 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 			remove.length > 0
 				? ` ${remove.length} empty team categories were deleted.`
 				: "";
-		return `Arranged the channels.${removed}\n\n${await this.#layoutText()}`;
+		return `Arranged the channels.${removed}\n\n${layoutText(await channels.layout(), store)}`;
 	}
 
 	get(name: string): string {

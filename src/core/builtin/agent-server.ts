@@ -34,10 +34,26 @@ import type { Tier } from "../speakers.ts";
 import { DISCORD } from "./discord.ts";
 import { agentOnly } from "./session-tool.ts";
 
+/**
+ * The id of the team on a host without Discord, in place of the Discord guild: the rows the team
+ * keeps are stored under it, as under the guild's id on a host with Discord.
+ */
+export const LOCAL_TEAM_ID = "local";
+
 export interface AgentServerOptions {
-	guildId: string;
-	/** The channel the coordinator lives in. */
-	entryChannelId: string;
+	/**
+	 * The Discord guild the team lives in. Absent on a host without Discord: the team is then
+	 * `LOCAL_TEAM_ID`, it has no channels, and its agents live in the rooms of the surfaces that
+	 * host them.
+	 */
+	guildId?: string;
+	/** The channel the coordinator lives in; set with `guildId`, never with `coordinator`. */
+	entryChannelId?: string;
+	/**
+	 * The coordinator's name on a host without Discord, where no entry channel names it; the first
+	 * seed when absent. Refused with `entryChannelId`.
+	 */
+	coordinator?: string;
 	owner: OwnerIdentity & { id: string };
 	/** The assistant's display name, as the confirmation judge names it. */
 	assistant: string;
@@ -77,10 +93,13 @@ export interface AgentServerOptions {
 	attachmentDownload?: { deadlineMs?: number; idleMs?: number };
 	/** The prompt every agent starts with, and the one for speakers other than the owner. */
 	prompts: { shared: string; guest?: string };
-	/** The listener the avatar pictures are served on. */
-	avatarListener: string;
-	/** The origin the agents' pictures are served from. */
-	avatarUrl: string;
+	/** The listener the avatar pictures are served on; none mounts no route, and a surface serves them through `AGENTS.avatars.serve`. */
+	avatarListener?: string;
+	/**
+	 * The origin the agents' pictures are served from. Without one a picture's URL is
+	 * `/avatars/<hash>.png`, which the surface that serves the pictures resolves against its origin.
+	 */
+	avatarUrl?: string;
 	/** The assistant's neutral avatar: the style reference and the picture of an agent without one. */
 	avatarReference: string;
 	/** The picture used instead when `avatarReference` cannot be read as one; the failure is logged. */
@@ -127,41 +146,60 @@ export interface AgentServerStores {
 /** Attaches the agent server's stores over the host's migrated pool. */
 async function attachStores(
 	sql: SQL,
-	guildId: string,
+	teamId: string,
 ): Promise<AgentServerStores> {
-	return { agents: await PgAgentStore.attach(sql, guildId) };
+	return { agents: await PgAgentStore.attach(sql, teamId) };
 }
 
 /**
  * The agent server: the team with its channels and dashboard, run on the runtime plugin's runtime,
  * which it hands its per-agent settings. The skills the agents carry come from the skills addon
  * when it is on. It claims the agent channels, starts the team in the background, and hands what
- * it built to the plugins after it.
+ * it built to the plugins after it. On a host without Discord the team has no channels or
+ * dashboard: its agents live in the rooms of the surfaces that host them, and the host refuses to
+ * start when no surface does.
  */
 export function agentServerPlugin(
 	options: AgentServerOptions,
 	/** Opens the stores; a test hands stand-ins, so the plugin can be set up without a database. */
 	openStores: (
 		context: Pick<PluginContext, "database">,
-		guildId: string,
-	) => Promise<AgentServerStores> = (context, guildId) =>
-		attachStores(context.database(), guildId),
+		teamId: string,
+	) => Promise<AgentServerStores> = (context, teamId) =>
+		attachStores(context.database(), teamId),
 ): RoundtablePlugin {
+	if (options.entryChannelId !== undefined && options.coordinator !== undefined)
+		throw new ConfigError(
+			"the agent server: entryChannelId and coordinator both name the coordinator. Set the entry channel with Discord, the coordinator without it.",
+		);
+	const teamId = options.guildId ?? LOCAL_TEAM_ID;
+	/** Set once the plugin has set up; the preflight reads it after every plugin linked. */
+	let hostsRooms: (() => boolean) | undefined;
 	return {
 		name: AGENT_SERVER_PLUGIN,
 		// The agent server's own tables; the host runs them before any setup, in this order. The
 		// held actions' table is the runtime plugin's.
-		migrations: PgAgentStore.migrations(options.guildId),
+		migrations: PgAgentStore.migrations(teamId),
 		provides: [AGENTS],
 		requires: [RUNTIME],
+		// A team with no Discord channels is reached through rooms only; without a surface that
+		// hosts them its agents could never be spoken to.
+		preflight: () => {
+			if (hostsRooms && !hostsRooms())
+				throw new ConfigError(
+					"the agents need a surface that hosts their rooms, such as pi-roundtable-web, and none is installed. Without Discord channels there is nowhere to talk to them; add a plugin whose chat surface declares agentRooms: true, or configure discord.",
+				);
+		},
 		setup: async (context) => {
-			const discord = context.services.get(DISCORD);
+			// Absent on a host without Discord: then the team has no channels, dashboard or threads.
+			const discord = context.services.find(DISCORD);
 			const schedules = context.services.get(SCHEDULES);
-			const { connection } = discord;
+			const connection = discord?.connection;
 			const { logger, providers, surfaces } = context;
+			if (!connection) hostsRooms = () => surfaces.roomSurfaces().length > 0;
 			const studio = new FileAvatarStudio({
 				dir: join(options.dataDir, "avatars"),
-				publicUrl: options.avatarUrl,
+				...(options.avatarUrl ? { publicUrl: options.avatarUrl } : {}),
 				referencePath: options.avatarReference,
 				...(options.avatarNeutral
 					? {
@@ -179,7 +217,7 @@ export function agentServerPlugin(
 			await studio.init();
 			// Absent when the skills addon is off: the agents then carry none.
 			const skills = context.services.find(SKILLS);
-			const { agents: store } = await openStores(context, options.guildId);
+			const { agents: store } = await openStores(context, teamId);
 			const running = context.services.get(RUNTIME);
 			const judge = providers.judge;
 			const confirmations = new ConfirmationJudge({
@@ -189,8 +227,13 @@ export function agentServerPlugin(
 				logger,
 			});
 			const built: DiscordAgentTeam = new DiscordAgentTeam({
-				guildId: options.guildId,
-				entryChannelId: options.entryChannelId,
+				guildId: teamId,
+				...(options.entryChannelId !== undefined
+					? { entryChannelId: options.entryChannelId }
+					: {}),
+				...(options.coordinator !== undefined
+					? { coordinator: options.coordinator }
+					: {}),
 				seeds: () => context.sessions().seeds,
 				promptSections: () => context.sessions().prompt,
 				pluginTools: () => context.sessions().agentTools,
@@ -201,7 +244,9 @@ export function agentServerPlugin(
 				shellUser: options.shellUser,
 				...(options.scratchDir ? { scratchDir: options.scratchDir } : {}),
 				store,
-				channels: connection.agentChannels(options.guildId),
+				...(connection && options.guildId
+					? { channels: connection.agentChannels(options.guildId) }
+					: {}),
 				studio,
 				runtime: () => running,
 				confirmations,
@@ -232,10 +277,10 @@ export function agentServerPlugin(
 					? { guestPrompt: options.prompts.guest }
 					: {}),
 				...(skills ? { skills } : {}),
-				threads: discord.threads,
+				...(discord ? { threads: discord.threads } : {}),
 				logger,
 			});
-			connection.onChannelDeleted((channelId) => {
+			connection?.onChannelDeleted((channelId) => {
 				if (!built.owns(discordKey(channelId))) return;
 				void context.queue
 					.run(discordKey(channelId), () => built.channelDeleted(channelId))
@@ -264,21 +309,23 @@ export function agentServerPlugin(
 			});
 			const attachmentDir = (channel: ChannelKey) =>
 				ownerAttachmentDir(options.dataDir, channel);
-			const dashboard = new AgentDashboard({
-				status: () => built.status(),
-				board: connection.agentDashboard(options.guildId),
-				lines: () => context.dashboard(),
-				logger,
-			});
-			built.onChange(() => dashboard.changed());
+			// The dashboard is a Discord message; a team without Discord has none.
+			const dashboard =
+				connection && options.guildId
+					? new AgentDashboard({
+							status: () => built.status(),
+							board: connection.agentDashboard(options.guildId),
+							lines: () => context.dashboard(),
+							logger,
+						})
+					: undefined;
+			if (dashboard) built.onChange(() => dashboard.changed());
 			const connectErrorReporter = () =>
 				options.errorReporter?.connect({
-					channelOf: (name) => {
-						const agent = store.agent(name);
-						return agent?.status === "active" && agent.channelId
-							? discordKey(agent.channelId)
-							: undefined;
-					},
+					channelOf: (name) =>
+						store.agent(name)?.status === "active"
+							? built.roomsOf(name)[0]
+							: undefined,
 					post: (channel, text) =>
 						surfaces.sendReply(channel, { chunks: splitReply(text) }),
 					turn: (channel, text) =>
@@ -289,7 +336,9 @@ export function agentServerPlugin(
 				});
 			return {
 				services: [
-					{ name: "dashboard", stop: () => dashboard.stop() },
+					...(dashboard
+						? [{ name: "dashboard", stop: () => dashboard.stop() }]
+						: []),
 					{
 						name: AGENT_TEAM_SERVICE,
 						// The dashboard shows the team, so it starts once the team has; the error
@@ -297,7 +346,7 @@ export function agentServerPlugin(
 						startInBackground: async () => {
 							try {
 								await built.start();
-								dashboard.start();
+								dashboard?.start();
 							} finally {
 								connectErrorReporter();
 							}
@@ -316,10 +365,16 @@ export function agentServerPlugin(
 							? { attachmentDownload: options.attachmentDownload }
 							: {}),
 						logger,
-						channelContext: (message) => discord.channelContext(message),
+						...(discord
+							? { channelContext: (message) => discord.channelContext(message) }
+							: {}),
 					}),
 				],
-				http: [studio.route(options.avatarListener)],
+				// The pictures are public on a listener only where a public address reaches it.
+				http:
+					options.avatarListener && options.avatarUrl
+						? [studio.route(options.avatarListener)]
+						: [],
 				sessionTools: agentSessionTools(built),
 				toolTiers: AGENT_TIERS,
 			};

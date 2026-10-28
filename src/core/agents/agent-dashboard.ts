@@ -61,7 +61,7 @@ function groupBlock(group: GroupStatus, now: Date): string {
 		? text.dashLastActive(when(group.lastActive, now))
 		: text.dashNotActive;
 	return [
-		`**${group.displayName}** <#${group.channelId}>`,
+		`**${group.displayName}**${group.channelId ? ` <#${group.channelId}>` : ""}`,
 		text.dashGroupMembers(group.members, group.host),
 		state,
 		`-# ${last}`,

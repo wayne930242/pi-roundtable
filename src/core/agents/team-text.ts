@@ -7,6 +7,10 @@ import type { ChannelMessage } from "./agent-ports.ts";
 import { describeThinking } from "./agent-settings.ts";
 import type { Agent } from "./agent-store.ts";
 
+/** Said by the tools that work on Discord channels when the team has none. */
+export const NO_CHANNELS =
+	"This host has no Discord channels: the agents live in rooms of a chat surface, so there is nothing to arrange or read here.";
+
 /** One message as channel_read shows it: id, local time, author, text, attachments. */
 export function messageLine(message: ChannelMessage): string {
 	const files =
@@ -36,7 +40,7 @@ export function teamListText(store: Pick<AgentDirectory, "agents" | "groups">) {
 		.groups()
 		.map(
 			(g) =>
-				`- ${g.name} "${g.displayName}" — <#${g.channelId}>, ${g.status}; members ${g.members.join(", ")}; host ${g.host}`,
+				`- ${g.name} "${g.displayName}" — ${g.channelId ? `<#${g.channelId}>` : "no channel"}, ${g.status}; members ${g.members.join(", ")}; host ${g.host}`,
 		);
 	return `Agents:\n${agents.join("\n") || "none"}\n\nGroups:\n${groups.join("\n") || "none"}`;
 }

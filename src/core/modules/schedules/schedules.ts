@@ -44,8 +44,14 @@ export interface OwnerSchedules {
 	target?: BackgroundTarget;
 }
 
-/** Finds another agent's channel, for reading its schedules; throws ScheduleError when there is none. */
-export type AgentChannelLookup = (agent: string) => ChannelKey;
+/**
+ * Finds another agent's channel, for reading its schedules, on the asker's surface when that one
+ * hosts agent rooms (`near` is the asker's own conversation); throws ScheduleError when there is none.
+ */
+export type AgentChannelLookup = (
+	agent: string,
+	near: ChannelKey,
+) => ChannelKey;
 
 /** schedule_list for agents: an optional agent name reads that agent's schedules instead. */
 function withAgentOption(spec: ScheduleToolSpec): ScheduleToolSpec {
@@ -99,7 +105,7 @@ export function schedulesExtension(
 					);
 				const peer =
 					agents && typeof input.agent === "string" && input.agent
-						? agents(input.agent)
+						? agents(input.agent, channel)
 						: undefined;
 				const target = peer ?? (await channelFor(channel, author.principalId));
 				const answer = await callScheduleTool(

@@ -468,17 +468,63 @@ describe("a host without Discord", () => {
 		);
 	});
 
-	test("what only the agent server serves is refused without Discord, naming the key", () => {
+	const seed = (name: string) => ({
+		name,
+		displayName: name.toUpperCase(),
+		prompt: "p",
+		avatarPrompt: "q",
+	});
+
+	test("agents and skills are allowed without Discord, and agents turn the skills addon on", () => {
+		const config = resolveConfig({
+			...headless,
+			agents: [seed("guide"), seed("scribe")],
+		});
+		expect(config.agents.map((agent) => agent.name)).toEqual([
+			"guide",
+			"scribe",
+		]);
+		expect(config.skills).toEqual({});
 		expect(
-			refused({
+			resolveConfig({
 				...headless,
-				agents: [
-					{ name: "a", displayName: "A", prompt: "p", avatarPrompt: "q" },
-				],
-			}),
-		).toContain("config agents: the agents live in Discord");
+				agents: [seed("guide")],
+				skills: { reposDir: "/repos" },
+			}).skills,
+		).toEqual({ reposDir: "/repos" });
+		expect(
+			resolveConfig({ ...headless, agents: [seed("guide")], skills: false })
+				.skills,
+		).toBe(false);
+	});
+
+	test("the coordinator is the first seed unless the configuration names another", () => {
+		const agents = [seed("guide"), seed("scribe")];
+		expect(resolveConfig({ ...headless, agents }).coordinator).toBe("guide");
+		expect(
+			resolveConfig({ ...headless, agents, coordinator: "scribe" }).coordinator,
+		).toBe("scribe");
+		expect(resolveConfig(headless).coordinator).toBeUndefined();
+		// The entry channel's agent is the coordinator with Discord, so the key has no meaning there.
+		expect(resolveConfig({ ...minimal, agents }).coordinator).toBeUndefined();
+	});
+
+	test("a coordinator needs a host without Discord, and names one of its agents", () => {
+		const agents = [seed("guide")];
+		expect(refused({ ...minimal, agents, coordinator: "guide" })).toContain(
+			"config coordinator: the entry channel's agent is the coordinator with discord",
+		);
+		expect(refused({ ...headless, agents, coordinator: "nobody" })).toContain(
+			'config coordinator: "nobody" is not one of agents',
+		);
+		expect(refused({ ...headless, coordinator: "guide" })).toContain(
+			"config coordinator: needs agents",
+		);
+	});
+
+	test("what needs agents or Discord is refused without them, naming the key", () => {
 		expect(refused({ ...headless, skills: {} })).toContain(
-			"config skills: the skills are the agents'",
+			"config skills: the skills are the agents', and this host has none",
 		);
 		expect(refused({ ...headless, ops: { agent: "infra" } })).toContain(
 			"config ops.agent: the agents live in Discord",

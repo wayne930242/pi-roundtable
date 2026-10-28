@@ -187,7 +187,8 @@ export class PgAgentStore implements AgentDirectory {
 		displayName: string;
 		prompt: string;
 		avatarPrompt: string;
-		channelId: string;
+		/** Absent in a team without Discord, whose agents live in rooms. */
+		channelId?: string;
 	}): Promise<Agent> {
 		return this.#serial(async () => {
 			checkAgentName(agent.name);
@@ -199,7 +200,7 @@ export class PgAgentStore implements AgentDirectory {
 			const rows: AgentRow[] = await this.#sql`
 			INSERT INTO agents (guild_id, name, display_name, prompt, avatar_prompt, channel_id)
 			VALUES (${this.#guild}, ${agent.name}, ${agent.displayName.trim()}, ${agent.prompt}, ${agent.avatarPrompt},
-				${agent.channelId})
+				${agent.channelId ?? null})
 			RETURNING *`;
 			return this.#keepAgent(rows[0]);
 		});
@@ -311,7 +312,8 @@ export class PgAgentStore implements AgentDirectory {
 	async createGroup(group: {
 		name: string;
 		displayName: string;
-		channelId: string;
+		/** Absent in a team without Discord, whose groups live in rooms. */
+		channelId?: string;
 		members: string[];
 		host: string;
 	}): Promise<AgentGroup> {
@@ -320,7 +322,7 @@ export class PgAgentStore implements AgentDirectory {
 			checkDisplayName(group.displayName);
 			const rows: GroupRow[] = await this.#sql`
 			INSERT INTO agent_groups (guild_id, name, display_name, channel_id, members, host)
-			VALUES (${this.#guild}, ${group.name}, ${group.displayName.trim()}, ${group.channelId},
+			VALUES (${this.#guild}, ${group.name}, ${group.displayName.trim()}, ${group.channelId ?? null},
 				${group.members.join(",")}, ${group.host})
 			RETURNING *`;
 			return this.#keepGroup(rows[0]);
