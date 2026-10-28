@@ -61,6 +61,16 @@ export function simpleCommands(command: string): string[][] {
 			if (ch === quote) quote = undefined;
 			else if (ch === "\\" && quote === '"' && i + 1 < command.length) {
 				word += command[++i];
+			} else if (
+				quote === '"' &&
+				(ch === "`" || (ch === "$" && command[i + 1] === "("))
+			) {
+				// A substitution inside double quotes runs; its commands are judged, and the word keeps the
+				// text so a target built from it still counts as unknown.
+				const found = substitution(command, i);
+				commands.push(...simpleCommands(found.inner));
+				word += command.slice(i, found.end);
+				i = found.end - 1;
 			} else word += ch;
 			continue;
 		}
@@ -92,10 +102,12 @@ export function simpleCommands(command: string): string[][] {
 			endWord();
 			let op = ch;
 			if (command[i + 1] === ">") op += command[++i];
-			if (command[i + 1] === "&") {
-				// `>&2` duplicates a descriptor rather than naming a file.
+			if (op === "<>") op = ">"; // opens the file for writing too
+			if (op === ">" && command[i + 1] === "|") i++; // `>|` forces the overwrite
+			if (op !== "<" && command[i + 1] === "&") {
 				i++;
-				op = "dup";
+				// `>&2` and `>&-` duplicate or close a descriptor; `>& file` names a file.
+				if (/^\s*[0-9-]/.test(command.slice(i + 1))) op = "dup";
 			}
 			words.push(op);
 		} else {
@@ -108,12 +120,53 @@ export function simpleCommands(command: string): string[][] {
 }
 
 /**
+ * The text of the command substitution that starts at `start` (`$(` or a backtick) and the index
+ * after it. An unterminated one runs to the end, so it is judged whole.
+ */
+function substitution(
+	command: string,
+	start: number,
+): { inner: string; end: number } {
+	if (command[start] === "`") {
+		let inner = "";
+		let i = start + 1;
+		for (; i < command.length && command[i] !== "`"; i++) {
+			const next = command[i + 1];
+			if (command[i] === "\\" && next && "`\\$".includes(next)) i++;
+			inner += command[i];
+		}
+		return { inner, end: Math.min(i + 1, command.length) };
+	}
+	let depth = 1;
+	let i = start + 2;
+	for (; i < command.length; i++) {
+		const ch = command[i] as string;
+		if (ch === "\\") i++;
+		else if (ch === "'") {
+			const close = command.indexOf("'", i + 1);
+			i = close === -1 ? command.length : close;
+		} else if (ch === '"') {
+			for (i++; i < command.length && command[i] !== '"'; i++)
+				if (command[i] === "\\") i++;
+		} else if (ch === "(") depth++;
+		else if (ch === ")" && --depth === 0) {
+			return { inner: command.slice(start + 2, i), end: i + 1 };
+		}
+	}
+	return { inner: command.slice(start + 2), end: command.length };
+}
+
+/**
  * Whether the next word of a command is a file it writes: a redirect target, or an operand of
  * `tee`. A substitution there keeps its mark, so the target counts as unknown.
  */
 function writesTo(words: readonly string[]): boolean {
 	const last = words[words.length - 1];
-	return last === ">" || last === ">>" || words[0] === "tee";
+	return (
+		last === ">" ||
+		last === ">>" ||
+		basename(program([...words])[0] ?? "") === "tee"
+	);
 }
 
 /**

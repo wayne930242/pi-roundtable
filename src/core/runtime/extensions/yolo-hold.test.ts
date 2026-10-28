@@ -681,6 +681,15 @@ describe("yolo and a precheck script saved by a schedule tool", () => {
 		expect(card.asked).toBe(1);
 	});
 
+	test("a computed call of a classed tool is also unclassed under its own rule, not the precheck rule", async () => {
+		const holds = scripts({ holdClasses: () => ["google.send"] });
+		const computed = `export default async ({ mcp, today }) => { await mcp.call("google", "send-gmail-message", { to: today }); return { wake: false }; };`;
+		const carded = await save(holds, computed, { allow: ["precheck-scripts"] });
+		expect(carded.card.asked).toBe(1);
+		const allowed = await save(holds, computed, { allow: ["google"] });
+		expect(allowed.result.approvedBy?.auto).toBe("yolo");
+	});
+
 	test("a computed inner call is also unclassed, so it is carded unless its rule is allowed", async () => {
 		const holds = scripts({ holdClasses: () => ["google.label"] });
 		const carded = await save(holds, COMPUTED, {});

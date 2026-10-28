@@ -333,9 +333,32 @@ describe("the classes of a held shell call", () => {
 			"echo x > $(printf /dev/sda)",
 			"echo x > $DISK",
 			"echo x | tee $(printf /dev/sda)",
+			"echo x | /usr/bin/tee $(printf /dev/sda)",
+			"echo x | env tee $(printf /dev/sda)",
+			"echo x >| /dev/sda",
+			"echo x >& /dev/sda",
+			"1<>/dev/sda",
+			"echo x <> /dev/sda",
 		])
 			expect([command, classes(command)]).toEqual([command, ["shell.disk"]]);
 		expect(classes("echo x | tee /dev/null")).toBeUndefined();
+	});
+
+	test("a substitution inside double quotes is judged like an unquoted one", () => {
+		expect(classes(`echo "$(rm -rf ~)"`)).toEqual(["shell.rm"]);
+		expect(classes(`x="$(dd if=/dev/zero of=/dev/sda)"`)).toEqual([
+			"shell.disk",
+		]);
+		expect(classes('echo "`sudo reboot`"')).toEqual(["shell.privilege"]);
+		expect(classes(`echo "a $(echo "$(sudo ls)") b"`)).toEqual([
+			"shell.privilege",
+		]);
+		expect(classes(`echo "$(sudo ls`)).toEqual(["shell.privilege"]);
+		expect(classes(`echo '$(rm -rf ~)'`)).toBeUndefined();
+		expect(classes(`echo "$(date)" > ${scratch}/out.txt`)).toBeUndefined();
+		expect(classes(`echo "$(date)" > /etc/out.txt`)).toEqual(["shell.write"]);
+		expect(classes("echo x 2>&1")).toBeUndefined();
+		expect(classes("echo x >&2")).toBeUndefined();
 	});
 
 	test("a push the policy lets run has no class", () => {
