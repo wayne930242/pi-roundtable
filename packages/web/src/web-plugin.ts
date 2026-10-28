@@ -143,6 +143,7 @@ async function build(settings: ResolvedOptions, context: Context) {
 				dataDir: settings.dataDir,
 				cardGraceSeconds: settings.cardGraceSeconds,
 				authenticator,
+				authMode: settings.auth.mode,
 				// A password session outlives a logout or a new password on an open socket, so the socket is capped.
 				...(settings.auth.mode === "password"
 					? { socketLifeMs: PASSWORD_SOCKET_LIFE_MS }

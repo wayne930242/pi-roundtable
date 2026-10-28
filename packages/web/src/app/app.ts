@@ -46,6 +46,8 @@ export interface OwnerAppOptions {
 	/** How long a turn waits on its card before it goes on without the answer, in seconds. */
 	cardGraceSeconds: number;
 	authenticator: Pick<Authenticator, "authenticate">;
+	/** How the console signs the person in. */
+	authMode: "none" | "password" | "verifier";
 	/** The longest an open socket lives; for a credential that logout or a new password does not reach. */
 	socketLifeMs?: number;
 	database: SQL;
@@ -155,6 +157,7 @@ export class OwnerApp {
 			team: agents.team,
 			avatars: agents.avatars,
 			mount: options.mount,
+			authMode: options.authMode,
 			changed: options.changed,
 			logger,
 		});

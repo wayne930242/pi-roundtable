@@ -919,6 +919,7 @@ describeDb("the owner app over a real host", () => {
 		expect(session).toMatchObject({
 			principal: { id: ADA_DISCORD },
 			surface: "app",
+			auth: "verifier",
 		});
 		const config = (await (await rest(app, "config")).json()) as {
 			panes: string[];

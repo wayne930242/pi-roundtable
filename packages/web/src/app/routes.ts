@@ -58,6 +58,8 @@ export interface AppApiOptions {
 	avatars: Pick<AvatarStudio, "serve" | "canDraw">;
 	/** The mount, which a room's agent picture hangs under. */
 	mount: string;
+	/** How the console signs the person in, as the session reports it. */
+	authMode: SessionView["auth"];
 	/** Called after a change the other pages should refetch. */
 	changed(): void;
 	logger: Logger;
@@ -224,6 +226,7 @@ export class AppApi {
 		return json({
 			principal: { id: principal.id, name: principal.displayName },
 			surface: this.#options.surface.surface,
+			auth: this.#options.authMode,
 			...(admission.expiresAt
 				? { expiresAt: admission.expiresAt.toISOString() }
 				: {}),

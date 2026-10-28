@@ -333,6 +333,8 @@ export interface MessagesView {
 export interface SessionView {
 	principal: PrincipalName;
 	surface: string;
+	/** How the console signs the person in; the page offers Log out under `password`. */
+	auth: "none" | "password" | "verifier";
 	/** When the credential lapses, if it does. */
 	expiresAt?: string;
 }
