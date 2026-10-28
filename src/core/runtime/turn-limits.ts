@@ -58,7 +58,7 @@ export function turnLimits(
 			timedOut = timeout;
 			abort();
 		},
-		{ activity, keepGoing },
+		{ activity, keepGoing, ceilingMs: longRunningMaxMs },
 	);
 	return {
 		budget,

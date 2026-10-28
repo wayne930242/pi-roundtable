@@ -172,6 +172,8 @@ function longRunning(options: {
 	keepGoing?: (workedMs: number) => boolean;
 	cards?: boolean;
 	turnMaxMs?: number;
+	turnTimeoutMs?: number;
+	ceilingMs?: number;
 }) {
 	const { clock, advanceTo } = fakeClock();
 	const asked: ApprovalOptions[] = [];
@@ -195,7 +197,7 @@ function longRunning(options: {
 	const budget = runtimeTurnBudget(
 		{
 			logger,
-			turnTimeoutMs: 10 * MIN,
+			turnTimeoutMs: options.turnTimeoutMs ?? 10 * MIN,
 			...(options.turnMaxMs ? { turnMaxMs: options.turnMaxMs } : {}),
 		},
 		{
@@ -208,6 +210,7 @@ function longRunning(options: {
 			activity: { now: () => ({ running: [], compacting: false, tools: [] }) },
 			clock,
 			...(options.keepGoing ? { keepGoing: options.keepGoing } : {}),
+			...(options.ceilingMs ? { ceilingMs: options.ceilingMs } : {}),
 		},
 	);
 	return { budget, asked, logged, aborted, advanceTo };
@@ -248,6 +251,39 @@ describe("a turn in long-running mode", () => {
 		advanceTo(16 * MIN);
 		// Raised at minute 15 to a full budget from then, so 9 minutes remain of it.
 		expect(budget.renew()).toBe(9 * MIN);
+	});
+
+	test("a time limit longer than what is left of the cap does not carry the turn past the cap", () => {
+		const HOUR = 60 * MIN;
+		// A 3-hour limit and the default three-times cap of 9 hours, in a conversation capped at 4 hours.
+		const { asked, aborted, advanceTo } = longRunning({
+			turnTimeoutMs: 3 * HOUR,
+			keepGoing: (workedMs) => workedMs < 4 * HOUR,
+			ceilingMs: 4 * HOUR,
+		});
+		advanceTo(3 * HOUR);
+		expect(asked).toEqual([]);
+		advanceTo(4 * HOUR - 1);
+		expect(asked).toEqual([]);
+		advanceTo(4 * HOUR);
+		expect(asked).toHaveLength(1);
+		expect(asked[0]?.purpose).toBe("turn-timeout");
+		expect(aborted).toEqual([]);
+	});
+
+	test("the owner's Continue at the cap gives the turn a full budget again, past the cap", () => {
+		const { asked, advanceTo, budget } = longRunning({
+			keepGoing,
+			ceilingMs: CAP,
+		});
+		advanceTo(CAP);
+		expect(asked).toHaveLength(1);
+		budget.extend(true);
+		expect(budget.capped()).toBe(false);
+		advanceTo(CAP + 9 * MIN);
+		expect(asked).toHaveLength(1);
+		advanceTo(CAP + 10 * MIN);
+		expect(asked).toHaveLength(2);
 	});
 
 	test("without a card surface it goes on to the cap and is then aborted as before", () => {

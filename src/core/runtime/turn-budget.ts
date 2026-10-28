@@ -21,9 +21,11 @@ export interface TurnBudget {
 	renew(): number | undefined;
 	/**
 	 * After a limit fired, gives the turn its full budget again from now, as the owner's Continue
-	 * does; with `raiseCap` the cap moves too, to a full budget from now.
+	 * does; with `raiseCap` the cap moves too, to a full budget from now. With `ceilingMs`
+	 * the limit never lands past that much work: a turn that reaches it fires there, as at its cap,
+	 * whatever is left of its budget. A later `extend` without one lifts the ceiling.
 	 */
-	extend(raiseCap: boolean): void;
+	extend(raiseCap: boolean, ceilingMs?: number): void;
 	/** Whether the turn has worked up to its cap, or a limit fired and was not extended. */
 	capped(): boolean;
 	/** The turn's work so far, not counting time the slot spent waiting on cards. */
@@ -72,6 +74,8 @@ export function turnBudget(
 		return now - started - slot.waitedMs(now);
 	};
 	let cap = maxMs;
+	// The work time an extension was told not to pass; none until one is.
+	let ceiling = Number.POSITIVE_INFINITY;
 	let deadline = Math.min(ms, cap);
 	let cancelTimer: (() => void) | undefined;
 	let expired = false;
@@ -81,6 +85,7 @@ export function turnBudget(
 			if (left > 0) return arm(Math.max(left, REARM_FLOOR_MS));
 			expired = true;
 			if (deadline >= cap) expire("turnMax", cap);
+			else if (deadline >= ceiling) expire("turnMax", ceiling);
 			else expire("turn", ms);
 		}, delay);
 	};
@@ -89,15 +94,16 @@ export function turnBudget(
 		renew() {
 			const now = worked();
 			if (expired || now >= cap) return undefined;
-			deadline = Math.min(now + ms, cap);
+			deadline = Math.min(now + ms, cap, ceiling);
 			cancelTimer?.();
 			arm(deadline - now);
 			return deadline - now;
 		},
-		extend(raiseCap) {
+		extend(raiseCap, ceilingMs) {
 			const now = worked();
 			if (raiseCap) cap = Math.max(cap, now + ms);
-			deadline = Math.min(now + ms, cap);
+			ceiling = ceilingMs ?? Number.POSITIVE_INFINITY;
+			deadline = Math.min(now + ms, cap, ceiling);
 			expired = false;
 			cancelTimer?.();
 			arm(Math.max(deadline - now, REARM_FLOOR_MS));
@@ -118,6 +124,11 @@ export interface TurnBudgetSeams {
 	 * limit's usual path, a card or an abort. It also answers for a turn that cannot show a card.
 	 */
 	keepGoing?: (workedMs: number) => boolean;
+	/**
+	 * The work time, in ms, a `keepGoing` extension never carries the turn past: the limit then
+	 * fires at it, as the turn's cap, so a long time limit cannot overshoot the long-running cap.
+	 */
+	ceilingMs?: number;
 }
 
 /**
@@ -180,7 +191,7 @@ export function runtimeTurnBudget(
 		slot,
 		(limit, limitMs) => {
 			if (seams.keepGoing?.(budget.workedMs())) {
-				budget.extend(limit === "turnMax");
+				budget.extend(limit === "turnMax", seams.ceilingMs);
 				logger.info(
 					{ channel, limit, workedMs: budget.workedMs() },
 					"long-running mode continued the turn",
