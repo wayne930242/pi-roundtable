@@ -13,35 +13,39 @@ import {
 	when,
 } from "../lib/format.ts";
 import { useLive } from "../lib/live.ts";
-import { translate as t } from "../lib/messages.ts";
+import { translate as t, wording } from "../lib/messages.ts";
 import { hrefFor } from "../lib/router.ts";
 import { useFetched } from "../lib/use-fetched.ts";
 
 const SECTIONS: { kind: ConversationKind; title: string; note: string }[] = [
 	{
 		kind: "owner",
-		title: "Owner channels",
-		note: "Direct messages and channels where the owner talks to the assistant.",
+		title: wording("Owner channels"),
+		note: wording(
+			"Direct messages and channels where the owner talks to the assistant.",
+		),
 	},
 	{
 		kind: "agent",
-		title: "Agent channels",
-		note: "The agent server's one-to-one channels.",
+		title: wording("Agent channels"),
+		note: wording("The agent server's one-to-one channels."),
 	},
 	{
 		kind: "group",
-		title: "Group channels",
-		note: "The agent server's group channels.",
+		title: wording("Group channels"),
+		note: wording("The agent server's group channels."),
 	},
 	{
 		kind: "outside",
-		title: "Outside agents",
-		note: "Conversations an agent outside Discord holds over MCP.",
+		title: wording("Outside agents"),
+		note: wording("Conversations an agent outside Discord holds over MCP."),
 	},
 	{
 		kind: "plugin",
-		title: "Plugin conversations",
-		note: "Conversations a plugin runs, such as a web chat, as the host recorded them.",
+		title: wording("Plugin conversations"),
+		note: wording(
+			"Conversations a plugin runs, such as a web chat, as the host recorded them.",
+		),
 	},
 ];
 
@@ -93,12 +97,11 @@ function Row(props: { item: ConversationView; now: number; timeZone: string }) {
 						? `${named.detail} · `
 						: ""}
 				{item.principal
-					? `${t(
+					? `${
 							item.visibility === "private"
-								? "Private to {name}"
-								: "Shared · {name}",
-							{ name: item.principal.name },
-						)} · `
+								? t("Private to {name}", { name: item.principal.name })
+								: t("Shared · {name}", { name: item.principal.name })
+						} · `
 					: ""}
 				{t("Last active")} {ago(item.lastActive, props.now, props.timeZone)} ·{" "}
 				{size(item.liveBytes)} ·{" "}

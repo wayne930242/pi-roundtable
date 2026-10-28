@@ -1,4 +1,5 @@
 import { MAX_MESSAGE_CHARS, type UploadView } from "../../src/api-types.ts";
+import { wording } from "./messages.ts";
 
 // What the composer decides about files and long text, as plain functions so it can be tested
 // without a browser: the composer only carries the decisions out.
@@ -6,7 +7,7 @@ import { MAX_MESSAGE_CHARS, type UploadView } from "../../src/api-types.ts";
 /** A paste at least this long becomes a text file in the message instead of filling the box. */
 export const PASTE_AS_FILE_CHARS = 4000;
 /** What a message says when its text was too long and went as a file. */
-export const LONG_TEXT_NOTE = "(long text attached)";
+export const LONG_TEXT_NOTE = wording("(long text attached)");
 /** The name of the file a too-long message goes as. */
 const OVERFLOW_FILE_NAME = "message.txt";
 

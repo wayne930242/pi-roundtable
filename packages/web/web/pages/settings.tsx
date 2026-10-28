@@ -5,7 +5,7 @@ import { api, messageOf } from "../lib/api.ts";
 import { useSelector } from "../lib/app-store.ts";
 import { useConfig } from "../lib/config.ts";
 import { type PageLook, setLook, useLook } from "../lib/look.ts";
-import { translate as t } from "../lib/messages.ts";
+import { translate as t, wording } from "../lib/messages.ts";
 import {
 	disablePush,
 	enablePush,
@@ -34,21 +34,23 @@ const standalone = () =>
 		(navigator as Navigator & { standalone?: boolean }).standalone === true);
 
 const THEMES: { value: ThemePreference; label: string; icon: IconName }[] = [
-	{ value: "system", label: "System", icon: "system" },
-	{ value: "light", label: "Light", icon: "sun" },
-	{ value: "dark", label: "Dark", icon: "moon" },
+	{ value: "system", label: wording("System"), icon: "system" },
+	{ value: "light", label: wording("Light"), icon: "sun" },
+	{ value: "dark", label: wording("Dark"), icon: "moon" },
 ];
 
 const LOOKS: { value: PageLook; label: string; hint: string }[] = [
 	{
 		value: "modern",
-		label: "Modern",
-		hint: "Plain and neutral, with round avatars.",
+		label: wording("Modern"),
+		hint: wording("Plain and neutral, with round avatars."),
 	},
 	{
 		value: "camelot",
-		label: "Camelot",
-		hint: "Parchment by day, night castle by night, gold rules, shield avatars and wax seals.",
+		label: wording("Camelot"),
+		hint: wording(
+			"Parchment by day, night castle by night, gold rules, shield avatars and wax seals.",
+		),
 	},
 ];
 

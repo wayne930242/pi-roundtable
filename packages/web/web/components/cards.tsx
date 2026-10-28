@@ -10,7 +10,7 @@ import type {
 import { useRoomAccent } from "../lib/characters.ts";
 import { when } from "../lib/format.ts";
 import { useLook } from "../lib/look.ts";
-import { translate as t } from "../lib/messages.ts";
+import { translate as t, wording } from "../lib/messages.ts";
 import type { CardState } from "../lib/rooms.ts";
 import { useConnection } from "../lib/socket.ts";
 import { toast } from "../lib/toast.ts";
@@ -18,12 +18,12 @@ import { Icon } from "./icons.tsx";
 import { MessageMarkdown } from "./message-markdown.tsx";
 
 const OUTCOMES: Record<PromptOutcome, string> = {
-	approved: "Approved",
-	declined: "Declined",
-	answered: "Answered",
-	expired: "Expired",
-	cancelled: "Cancelled",
-	withdrawn: "Withdrawn",
+	approved: wording("Approved"),
+	declined: wording("Declined"),
+	answered: wording("Answered"),
+	expired: wording("Expired"),
+	cancelled: wording("Cancelled"),
+	withdrawn: wording("Withdrawn"),
 };
 
 /** What the card says after it ended. */

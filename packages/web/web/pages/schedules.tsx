@@ -6,19 +6,19 @@ import { Badge, Empty, Failure, Loading } from "../components/states.tsx";
 import { api } from "../lib/api.ts";
 import { useConfig } from "../lib/config.ts";
 import { when } from "../lib/format.ts";
-import { translate as t } from "../lib/messages.ts";
+import { translate as t, wording } from "../lib/messages.ts";
 import { hrefFor } from "../lib/router.ts";
 import { toast } from "../lib/toast.ts";
 import { useFetched } from "../lib/use-fetched.ts";
 
 const WEEKDAYS: Record<string, string> = {
-	mon: "Mon",
-	tue: "Tue",
-	wed: "Wed",
-	thu: "Thu",
-	fri: "Fri",
-	sat: "Sat",
-	sun: "Sun",
+	mon: wording("Mon"),
+	tue: wording("Tue"),
+	wed: wording("Wed"),
+	thu: wording("Thu"),
+	fri: wording("Fri"),
+	sat: wording("Sat"),
+	sun: wording("Sun"),
 };
 
 /** The recurrence the core stores, in words. */
@@ -43,7 +43,7 @@ export function describeRecurrence(recurrence: unknown): string {
 			const days = Array.isArray(r.weekdays)
 				? r.weekdays
 						.map((day) => t(WEEKDAYS[String(day)] ?? String(day)))
-						.join(", ")
+						.join(t(", "))
 				: "";
 			return t("{days} at {time}", { days, time });
 		}

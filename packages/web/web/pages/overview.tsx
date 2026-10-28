@@ -18,7 +18,7 @@ import {
 	when,
 } from "../lib/format.ts";
 import { useLive } from "../lib/live.ts";
-import { translate as t } from "../lib/messages.ts";
+import { translate as t, wording } from "../lib/messages.ts";
 import { hrefFor } from "../lib/router.ts";
 import { useFetched } from "../lib/use-fetched.ts";
 
@@ -368,10 +368,10 @@ function PartyRow({
 	const { timeZone } = useConfig();
 	const { title, detail } = channelTitle(p.channel, p.channelId);
 	const labels = {
-		running: "Container running",
-		stopped: "Container stopped",
-		missing: "No container yet",
-		unknown: "Container status unknown",
+		running: wording("Container running"),
+		stopped: wording("Container stopped"),
+		missing: wording("No container yet"),
+		unknown: wording("Container status unknown"),
 	};
 	return (
 		<article className="card">

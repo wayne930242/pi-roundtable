@@ -4,7 +4,7 @@ import { Badge, Empty, Failure, Loading } from "../components/states.tsx";
 import { api } from "../lib/api.ts";
 import { useConfig } from "../lib/config.ts";
 import { conversationTitle, when } from "../lib/format.ts";
-import { translate as t } from "../lib/messages.ts";
+import { translate as t, wording } from "../lib/messages.ts";
 import { hrefFor } from "../lib/router.ts";
 import { useFetched } from "../lib/use-fetched.ts";
 
@@ -130,8 +130,8 @@ function Entry({ entry }: { entry: TranscriptEntry }) {
 }
 
 const LABELS: Record<TranscriptEntry["role"], string> = {
-	user: "User",
-	assistant: "Assistant",
-	tool: "Tool",
-	compaction: "Summary of earlier conversation",
+	user: wording("User"),
+	assistant: wording("Assistant"),
+	tool: wording("Tool"),
+	compaction: wording("Summary of earlier conversation"),
 };

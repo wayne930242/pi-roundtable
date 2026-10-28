@@ -11,20 +11,24 @@ import { api, messageOf } from "../lib/api.ts";
 import { useConfig } from "../lib/config.ts";
 import { today } from "../lib/format.ts";
 import { useLive } from "../lib/live.ts";
-import { translate as t } from "../lib/messages.ts";
+import { translate as t, wording } from "../lib/messages.ts";
 import { useFetched } from "../lib/use-fetched.ts";
 
 const KINDS: { kind: NoteKind; label: string; hint: string }[] = [
-	{ kind: "core", label: "Core", hint: "Carried into every turn." },
+	{
+		kind: "core",
+		label: wording("Core"),
+		hint: wording("Carried into every turn."),
+	},
 	{
 		kind: "note",
-		label: "Note",
-		hint: "Searched when the assistant needs them.",
+		label: wording("Note"),
+		hint: wording("Searched when the assistant needs them."),
 	},
 	{
 		kind: "event",
-		label: "Events",
-		hint: "Carried into every turn until their date.",
+		label: wording("Events"),
+		hint: wording("Carried into every turn until their date."),
 	},
 ];
 

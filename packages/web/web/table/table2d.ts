@@ -9,6 +9,7 @@ import type {
 	TableStats,
 	ThemeName,
 } from "./types";
+import { ENGLISH_TABLE_LABELS } from "./types";
 
 /** 2D SVG round table: same contract as the WebGL view. State motion is CSS transform/opacity only (web/styles/table.css), and reduced-motion drops it. */
 
@@ -45,6 +46,7 @@ export function createTable2D(
 		opts.reducedMotion === "auto" || opts.reducedMotion === undefined
 			? mq.matches
 			: opts.reducedMotion;
+	const labels = opts.labels ?? ENGLISH_TABLE_LABELS;
 	let theme: ThemeName = opts.theme;
 	let scheme: Scheme = opts.scheme;
 	let seats: SeatInit[] = [];
@@ -53,7 +55,7 @@ export function createTable2D(
 
 	const root = document.createElement("div");
 	root.className = "t2d";
-	const svg = el("svg", { role: "group", "aria-label": "Round table" });
+	const svg = el("svg", { role: "group", "aria-label": labels.table });
 	root.appendChild(svg);
 	if (getComputedStyle(container).position === "static")
 		container.style.position = "relative";
@@ -188,7 +190,7 @@ export function createTable2D(
 					transform: `translate(${x.toFixed(1)} ${y.toFixed(1)})`,
 					tabindex: opts.listBelow ? -1 : 0,
 					role: "button",
-					"aria-label": `${s.name} (${st})`,
+					"aria-label": labels.seat(s.name, st),
 					color: pal.css.text,
 					...(opts.listBelow ? { "aria-hidden": "true" } : {}),
 				},

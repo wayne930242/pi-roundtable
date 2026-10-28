@@ -1,5 +1,6 @@
 import type { ChannelKey } from "pi-roundtable";
 import type { ConnectorsView, PartyView, SkillView } from "./api-types.ts";
+import { builtInMessages } from "./i18n/index.ts";
 
 /** Trusted host integrations. They receive validated keys, never request-selected file paths. */
 export interface ConsoleFeatures {
@@ -47,7 +48,11 @@ export function message(
 	presentation: ConsolePresentation | undefined,
 	source: string,
 ): string {
-	return presentation?.messages?.[source] ?? source;
+	return (
+		presentation?.messages?.[source] ??
+		builtInMessages(presentation?.locale)?.[source] ??
+		source
+	);
 }
 
 export function safeAdminUrl(url: string | undefined): string | undefined {

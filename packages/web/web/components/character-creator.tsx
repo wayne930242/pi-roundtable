@@ -29,7 +29,7 @@ import {
 } from "../lib/character-labels.ts";
 import { useAccentStyle } from "../lib/characters.ts";
 import { useMedia } from "../lib/media.ts";
-import { translate as t } from "../lib/messages.ts";
+import { translate as t, wording } from "../lib/messages.ts";
 import { blockNavigation } from "../lib/router.ts";
 import { toast } from "../lib/toast.ts";
 import { PageCharacter } from "./character.tsx";
@@ -44,14 +44,14 @@ const PARTS: {
 	title: string;
 	ids: readonly string[];
 }[] = [
-	{ field: "hat", title: "Hat", ids: CATALOG.hats },
-	{ field: "outfit", title: "Outfit", ids: CATALOG.outfits },
-	{ field: "prop", title: "Prop", ids: CATALOG.props },
-	{ field: "hair", title: "Hair", ids: CATALOG.hair },
-	{ field: "beard", title: "Beard", ids: ["none", ...CATALOG.beards] },
+	{ field: "hat", title: wording("Hat"), ids: CATALOG.hats },
+	{ field: "outfit", title: wording("Outfit"), ids: CATALOG.outfits },
+	{ field: "prop", title: wording("Prop"), ids: CATALOG.props },
+	{ field: "hair", title: wording("Hair"), ids: CATALOG.hair },
+	{ field: "beard", title: wording("Beard"), ids: ["none", ...CATALOG.beards] },
 	{
 		field: "accessory",
-		title: "Accessory",
+		title: wording("Accessory"),
 		ids: ["none", ...CATALOG.accessories],
 	},
 ];
@@ -70,19 +70,19 @@ const RENDERED_FIELDS: ReadonlySet<string> = new Set([
 const PALETTES = Object.keys(CATALOG.palettes) as PaletteName[];
 
 const STATE_LABELS: Record<AvatarState, string> = {
-	idle: "Idle",
-	thinking: "Thinking",
-	working: "Working",
-	waiting: "Waiting for you",
-	done: "Done",
-	error: "Error",
-	sleepy: "Sleepy",
+	idle: wording("Idle"),
+	thinking: wording("Thinking"),
+	working: wording("Working"),
+	waiting: wording("Waiting for you"),
+	done: wording("Done"),
+	error: wording("Error"),
+	sleepy: wording("Sleepy"),
 };
 
 const BUILD_LABELS: Record<CharacterSpec["build"], string> = {
-	slim: "Slim",
-	regular: "Regular",
-	stout: "Stout",
+	slim: wording("Slim"),
+	regular: wording("Regular"),
+	stout: wording("Stout"),
 };
 
 /** The fields the server takes, from a spec; `palette` is left to the server to work out from the colors. */

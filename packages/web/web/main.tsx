@@ -4,6 +4,7 @@ import { App } from "./app.tsx";
 import { ErrorBoundary } from "./components/boundary.tsx";
 import { loadKit } from "./lib/kit.ts";
 import { initLook } from "./lib/look.ts";
+import { bootstrapLocale, loadBuiltInMessages } from "./lib/messages.ts";
 import { initTheme } from "./lib/theme.ts";
 
 // The stored color scheme goes on before React draws, so the first paint is already the right one.
@@ -20,13 +21,20 @@ if (typeof document.startViewTransition !== "function")
 
 const root = document.getElementById("root");
 if (!root) throw new Error("the page has no #root");
-createRoot(root).render(
-	<StrictMode>
-		<ErrorBoundary>
-			<App />
-		</ErrorBoundary>
-	</StrictMode>,
-);
+// The page draws once the built-in wording its locale asks for is here, so it never shows English first.
+loadBuiltInMessages(bootstrapLocale())
+	.catch((failure: unknown) =>
+		console.warn("the built-in wording failed to load", failure),
+	)
+	.finally(() =>
+		createRoot(root).render(
+			<StrictMode>
+				<ErrorBoundary>
+					<App />
+				</ErrorBoundary>
+			</StrictMode>,
+		),
+	);
 
 // The worker makes the console installable; the page works without one, so a failure only logs.
 if ("serviceWorker" in navigator) {

@@ -62,6 +62,7 @@ import type {
 	TableStats,
 	ThemeName,
 } from "./types";
+import { ENGLISH_TABLE_LABELS } from "./types";
 
 const MAXS = 32;
 const AV = 1.6; // avatar quad size
@@ -1479,10 +1480,11 @@ export function createTable3D(
 	);
 
 	/* ----- a11y: a real button per seat, mirrored from the scene ----- */
+	const labels = opts.labels ?? ENGLISH_TABLE_LABELS;
 	const sr = document.createElement("ul");
 	sr.style.cssText =
 		"position:absolute;inset:auto auto 0 0;width:1px;height:1px;overflow:hidden;margin:0;padding:0;list-style:none";
-	sr.setAttribute("aria-label", "Round table");
+	sr.setAttribute("aria-label", labels.table);
 	if (!opts.listBelow) container.appendChild(sr);
 	function syncSr() {
 		sr.replaceChildren(
@@ -1490,7 +1492,7 @@ export function createTable3D(
 				const li = document.createElement("li");
 				const b = document.createElement("button");
 				b.type = "button";
-				b.textContent = `${s.name} (${s.state})`;
+				b.textContent = labels.seat(s.name, s.state);
 				b.addEventListener("click", () =>
 					opts.onSeatClick({ id: s.id, name: s.name }),
 				);

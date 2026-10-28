@@ -20,7 +20,12 @@ import { ConfigContext } from "./lib/config.ts";
 import { LiveContext, useLiveSource } from "./lib/live.ts";
 import { initLook } from "./lib/look.ts";
 import { useMedia } from "./lib/media.ts";
-import { setPresentation, translate as t } from "./lib/messages.ts";
+import {
+	loadBuiltInMessages,
+	setPresentation,
+	translate as t,
+	wording,
+} from "./lib/messages.ts";
 import { hrefFor, setRouting, useRoute } from "./lib/router.ts";
 import { setTheme, useTheme } from "./lib/theme.ts";
 import { AgentPage } from "./pages/agent.tsx";
@@ -57,16 +62,16 @@ const TablePage = lazy(() =>
 );
 
 const LABELS: Record<PaneName | "settings" | "more", string> = {
-	overview: "Overview",
-	conversations: "Conversations",
-	notes: "Notes",
-	skills: "Skills",
-	connectors: "Connectors",
-	rooms: "Rooms",
-	schedules: "Schedules",
-	table: "Round table",
-	settings: "Settings",
-	more: "More",
+	overview: wording("Overview"),
+	conversations: wording("Conversations"),
+	notes: wording("Notes"),
+	skills: wording("Skills"),
+	connectors: wording("Connectors"),
+	rooms: wording("Rooms"),
+	schedules: wording("Schedules"),
+	table: wording("Round table"),
+	settings: wording("Settings"),
+	more: wording("More"),
 };
 
 export function App() {
@@ -75,7 +80,9 @@ export function App() {
 	useEffect(() => {
 		api
 			.config()
-			.then((loaded) => {
+			.then(async (loaded) => {
+				// The locale the bootstrap named is usually the same; a host with none in the page names it here.
+				await loadBuiltInMessages(loaded.locale);
 				setPresentation(loaded);
 				initLook(loaded.look);
 				setRouting(loaded.mountPath, loaded.panes[0]);

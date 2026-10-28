@@ -29,6 +29,19 @@ export interface SeatInit {
 	state?: SeatState;
 }
 
+/** What the table says to a screen reader, as the page words it. */
+export interface TableLabels {
+	/** The name of the table itself. */
+	table: string;
+	/** A seat as a button: its name and what it is doing. */
+	seat(name: string, state: SeatState): string;
+}
+
+export const ENGLISH_TABLE_LABELS: TableLabels = {
+	table: "Round table",
+	seat: (name, state) => `${name} (${state})`,
+};
+
 export interface TableOptions {
 	theme: ThemeName;
 	scheme: Scheme;
@@ -44,6 +57,8 @@ export interface TableOptions {
 	listBelow?: boolean;
 	/** Told whether the canvas can carry names a person reads (11 px or more); the page lists the seats when it cannot. */
 	onNames?: (readable: boolean) => void;
+	/** The screen-reader words; English when absent. */
+	labels?: TableLabels;
 }
 
 export interface TableStats {

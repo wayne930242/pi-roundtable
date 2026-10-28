@@ -43,6 +43,9 @@ export class ApiFailure extends Error {
 	}
 }
 
+const serverText = (text: string | undefined): string | undefined =>
+	text === undefined ? undefined : t(text);
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 	let response: Response;
 	try {
@@ -69,7 +72,8 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 	const body: unknown = await response.json().catch(() => undefined);
 	if (!response.ok)
 		throw new ApiFailure(
-			(body as ApiError | undefined)?.error ??
+			// The app's API words its refusals in English; the console's arrive in the host's wording already.
+			serverText((body as ApiError | undefined)?.error) ??
 				t("The console answered {status}.", { status: response.status }),
 			(body as Partial<CharacterRefusal> | undefined)?.field,
 		);

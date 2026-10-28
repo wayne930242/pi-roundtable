@@ -7,7 +7,7 @@ import { useCharacters, useRoomStates } from "../lib/characters.ts";
 import { useKit } from "../lib/kit.ts";
 import { useCharacterStyle, useLook } from "../lib/look.ts";
 import { useMedia } from "../lib/media.ts";
-import { translate as t } from "../lib/messages.ts";
+import { translate as t, wording } from "../lib/messages.ts";
 import { navigate } from "../lib/router.ts";
 import {
 	createExpressionSwaps,
@@ -17,7 +17,29 @@ import {
 	seatStates,
 	seatUid,
 } from "../lib/seats.ts";
-import type { SeatInit, TableHandle } from "../table/entry.ts";
+import type {
+	SeatInit,
+	SeatState,
+	TableHandle,
+	TableLabels,
+} from "../table/entry.ts";
+
+const SEAT_STATE_LABELS: Record<SeatState, string> = {
+	idle: wording("idle"),
+	thinking: wording("thinking"),
+	working: wording("working"),
+	waiting: wording("waiting"),
+	speaking: wording("speaking"),
+	done: wording("done"),
+	error: wording("error"),
+};
+
+/** What the table says to a screen reader, in the page's words. */
+const tableLabels = (): TableLabels => ({
+	table: t("Round table"),
+	seat: (name, state) =>
+		t("{name} ({state})", { name, state: t(SEAT_STATE_LABELS[state]) }),
+});
 
 /** More seats than this on a phone held upright are also listed as buttons: the pictures get small. */
 const LIST_ABOVE = 10;
@@ -190,6 +212,7 @@ export function RoundTable(props: RoundTableProps) {
 				lowPower: "auto",
 				variant,
 				listBelow,
+				labels: tableLabels(),
 			});
 			if (!current) {
 				made.dispose();

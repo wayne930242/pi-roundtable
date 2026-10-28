@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { gzipSync } from "node:zlib";
 import { buildPage } from "../scripts/build-page.ts";
 import { loadAssets } from "./assets.ts";
+import { ZH_TW } from "./i18n/zh-tw.ts";
 
 // The browser page is compiled here, so a broken front end fails the tests and not only the build.
 test("the page builds with relative URLs only, and every file it names is in the bundle", async () => {
@@ -121,4 +122,24 @@ test("the round table ships as two lazy chunks: the WebGL scene stays small enou
 		expect(
 			readFileSync(join(dir, name), "utf8").includes("rt-table-stage"),
 		).toBe(name === entry);
+});
+
+test("the zh-TW catalog is a chunk of its own, which the page loads only for that locale and the worker still caches", async () => {
+	const dir = mkdtempSync(join(tmpdir(), "web-console-catalog-"));
+	await buildPage(dir);
+	const assets = loadAssets(dir);
+	const text = (name: string) =>
+		new TextDecoder().decode(assets.get(name)?.body);
+	const html = text("index.html");
+	const first = [...html.matchAll(/(?:src|href)="\.\/([^"]+\.js)"/g)].map(
+		(match) => match[1] ?? "",
+	);
+	const sample = ZH_TW["character.jobs.archivist"] as string;
+	for (const name of first) expect(text(name)).not.toContain(sample);
+	const holders = [...assets.keys()].filter(
+		(name) => name.endsWith(".js") && text(name).includes(sample),
+	);
+	expect(holders).toHaveLength(1);
+	expect(holders[0]).toMatch(/^chunk-zh-tw-/);
+	expect(text("sw.js")).toContain(holders[0] as string);
 });

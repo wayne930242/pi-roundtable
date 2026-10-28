@@ -1,6 +1,13 @@
 import type { SeatInit, SeatState, TableHandle, TableOptions } from "./types";
+import { ENGLISH_TABLE_LABELS } from "./types";
 
-export type { SeatInit, SeatState, TableHandle, TableOptions } from "./types";
+export type {
+	SeatInit,
+	SeatState,
+	TableHandle,
+	TableLabels,
+	TableOptions,
+} from "./types";
 export { SEAT_STATES } from "./types";
 
 /**
@@ -37,6 +44,7 @@ export async function mountRoundTable(
 	force?: "svg" | "webgl",
 ): Promise<TableHandle> {
 	const compact = opts.variant === "compact";
+	const labels = opts.labels ?? ENGLISH_TABLE_LABELS;
 	const seats = new Map<string, SeatInit>();
 	const mirror = (list: SeatInit[]) => {
 		seats.clear();
@@ -72,7 +80,7 @@ export async function mountRoundTable(
 		if (!list) {
 			list = document.createElement("ul");
 			list.className = "rt-table-list";
-			list.setAttribute("aria-label", "Round table");
+			list.setAttribute("aria-label", labels.table);
 			root.appendChild(list);
 			root.dataset.list = "";
 		}
@@ -90,7 +98,7 @@ export async function mountRoundTable(
 				});
 				buttons.set(s.id, b);
 			}
-			b.textContent = `${s.name} (${s.state ?? "idle"})`;
+			b.textContent = labels.seat(s.name, s.state ?? "idle");
 			b.style.setProperty("--seat", s.color);
 		}
 		list.replaceChildren(
