@@ -22,7 +22,7 @@ bunx roundtable doctor
 bunx roundtable start
 ```
 
-The project lists `webChat({ ... })` in `plugins` with an OpenID Connect verifier, an access map whose members and admins come from the token's roles, and one persona, `assistant`, whose prompt is `persona/assistant.md`.
+The project lists `webChat({ ... })` in `plugins` with an OpenID Connect verifier, a top-level `access` whose members and admins come from the token's roles, and one persona, `assistant`, whose prompt is `persona/assistant.md`.
 The persona's `selection` names its tools, so tools a later plugin adds stay out until you name them.
 The host listens on `127.0.0.1:3000`; serve it over HTTPS through a reverse proxy, and set `CHAT_ORIGINS` to the pages that open the chat.
 See [`init --adapter web`](/reference/cli/#--adapter-web) for every file it writes.
@@ -39,6 +39,10 @@ import { oidcJwtVerifier, webChat } from "pi-roundtable-webchat";
 
 export default {
   // ...your roundtable settings, with http: { port: 3000, hostname: "127.0.0.1" }...
+  access: {
+    admins: { roles: ["web:role:Helpdesk.Admin"] },
+    members: { roles: ["web:role:Helpdesk.User"] },
+  },
   plugins: [
     webChat({
       verifier: oidcJwtVerifier({
@@ -46,10 +50,6 @@ export default {
         issuers: ["https://login.example.com/"],
         audiences: ["api://helpdesk"],
       }),
-      access: {
-        admins: { roles: ["Helpdesk.Admin"] },
-        members: { roles: ["Helpdesk.User"] },
-      },
       origins: ["https://chat.example.com"],
       personas: [
         {
