@@ -15,8 +15,6 @@ import type { Agent } from "./agent-store.ts";
 import {
 	AGENT_TOOLS,
 	type AgentOps,
-	AVATAR_TOOL,
-	type AvatarMode,
 	agentToolsExtension,
 	MESSAGE_AGENT_TOOL,
 } from "./agent-tools.ts";
@@ -147,9 +145,7 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 					...SHELL_TOOLS,
 					// Group members hand off by mentioning each other, so a group seat has no message_agent.
 					...AGENT_TOOLS.filter(
-						(tool) =>
-							!(scope?.group && tool === MESSAGE_AGENT_TOOL) &&
-							!(tool === AVATAR_TOOL && !this.#avatars()),
+						(tool) => !(scope?.group && tool === MESSAGE_AGENT_TOOL),
 					),
 					...(this.#options.pluginTools?.() ?? []),
 				]),
@@ -184,8 +180,7 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 			owner,
 			shellUser,
 			...(scratchDir ? { scratchDir } : {}),
-			avatars: this.#avatars(),
-			images: this.#avatars(),
+			images: this.#images(),
 			...(group
 				? {
 						group: {
@@ -229,15 +224,14 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 		return current ? [current, ...usable.filter((m) => m !== current)] : usable;
 	}
 
-	/** Whether agents can be offered drawing: an image provider is configured. */
-	#avatars(): boolean {
+	/** Whether agents can be offered generate_image: an image provider is configured. */
+	#images(): boolean {
 		return this.#options.studio.canDraw !== false;
 	}
 
 	/** The agent tools of one agent session. */
 	extension(scope: AgentTurnScope): ExtensionFactory {
 		return agentToolsExtension(this, scope, THE_SPEAKER, {
-			avatars: this.#avatars(),
 			skills: this.#options.skills !== undefined,
 		});
 	}
@@ -433,7 +427,6 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 			agent,
 			models.defaults,
 			skills?.describeCarried(agent.name),
-			this.#avatars(),
 		);
 	}
 
@@ -467,13 +460,9 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 		return this.#editing.dress(name, input);
 	}
 
-	avatar(name: string, mode: AvatarMode, text?: string): Promise<string> {
-		return this.#editing.avatar(name, mode, text);
-	}
-
-	/** Draws and stores a new picture; the owner's panel and the agent tool both use it. */
-	redrawAvatar(name: string, mode: AvatarMode, text?: string): Promise<Agent> {
-		return this.#editing.redrawAvatar(name, mode, text);
+	/** The agent tool that changes a look; see `AgentTeam.dress`. */
+	avatar(name: string, look: CharacterInput): Promise<string> {
+		return this.#editing.avatar(name, look);
 	}
 
 	createGroup(input: {

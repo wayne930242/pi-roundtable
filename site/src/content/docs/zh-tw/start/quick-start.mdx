@@ -81,7 +81,7 @@ import { Steps } from "@astrojs/starlight/components";
 3. `roundtable.config.ts` 符合其 schema，失敗時指出是哪個鍵。
 4. 每個外掛都能載入、沒有兩個外掛同名，而且註冊內容有效。
 5. `access` 服務哪些人：列出 owner；主機有不只一個 surface、又寫了 `everyone: true` 時提出警告，因為它會讓每個 surface 上的所有人都能對話。
-6. 有沒有外掛填了 `images` 槽位。沒有也不算失敗，agent 會用顯示名稱產生頭像。
+6. 有沒有外掛填了 `images` 槽位。沒有也不算失敗，agent 的頭像是組合出來的角色，不再靠它繪製。
 7. PostgreSQL 連得上，且能執行 migration。
 8. principal：預演下次啟動會從資料庫已知的人建立哪些 principal；設定裡 owner 的身分若連到別的 principal 就判定失敗（主機會因此無法啟動）；owner 被停用時提出警告。
 9. Discord token 有效、bot 已在你的伺服器裡、Message Content intent 已開啟，而且 bot 在入口頻道有它需要的權限（包含 Pin Messages）。

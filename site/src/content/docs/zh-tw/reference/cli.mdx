@@ -77,17 +77,18 @@ npx pi-roundtable init my-desk --adapter web
 | 3 | configuration | `roundtable.config.ts` 能載入、通過 schema，也能組裝。失敗時會指出是哪個 key。 |
 | 4 | plugins | 每個外掛都能載入，沒有兩個外掛同名（包括內建的外掛），而且註冊內容有效。 |
 | 5 | access | `access` 服務哪些人：列出 owner；主機有不只一個 surface、又寫了 `everyone: true` 時提出警告，因為它會讓每個 surface 上的所有人都能對話。 |
-| 6 | image provider | 有沒有外掛填入 `images` 槽位。沒有也不算失敗，agent 會用顯示名稱產生頭像。 |
-| 7 | PostgreSQL | 資料庫有回應，而且每個外掛的 migration 都能執行。migration 在一個一定會 rollback 的 transaction 裡執行，所以資料庫維持原樣。 |
-| 8 | principals | 預演下次啟動會從資料庫已知的人建立哪些 principal；設定裡 owner 的身分若連到別的 principal 就判定失敗，owner 被停用時提出警告。 |
-| 9 | Discord token | Discord 接受這個 bot token。 |
-| 10 | Discord guild | bot 是 `discord.guild` 的成員。 |
-| 11 | Discord intents | Message Content intent 已開啟。 |
-| 12 | Discord channel | 入口頻道存在於這個 guild，而且 bot 在裡面擁有下列權限。 |
-| 13 | model login | `model` 的 provider 有登入資料。 |
-| 14 | public URL | `http.publicUrl` 是格式正確的 `http://` 或 `https://` 位址。 |
+| 6 | image provider | 有沒有外掛填入 `images` 槽位。沒有也不算失敗，agent 的頭像是組合出來的角色，不再靠它繪製。 |
+| 7 | characters | `canvas` 能不能把 SVG 轉成圖片；agent 伺服器畫 agent 的圖片需要它。 |
+| 8 | PostgreSQL | 資料庫有回應，而且每個外掛的 migration 都能執行。migration 在一個一定會 rollback 的 transaction 裡執行，所以資料庫維持原樣。 |
+| 9 | principals | 預演下次啟動會從資料庫已知的人建立哪些 principal；設定裡 owner 的身分若連到別的 principal 就判定失敗，owner 被停用時提出警告。 |
+| 10 | Discord token | Discord 接受這個 bot token。 |
+| 11 | Discord guild | bot 是 `discord.guild` 的成員。 |
+| 12 | Discord intents | Message Content intent 已開啟。 |
+| 13 | Discord channel | 入口頻道存在於這個 guild，而且 bot 在裡面擁有下列權限。 |
+| 14 | model login | `model` 的 provider 有登入資料。 |
+| 15 | public URL | `http.publicUrl` 是格式正確的 `http://` 或 `https://` 位址。 |
 
-沒有 Discord 的專案會略過檢查 9 到 12，理由是 `no Discord is configured`；`http.publicUrl` 沒有值時也會略過檢查 14。寫在 `adapters` 裡的 Discord adapter，檢查方式與最上層的 `discord` 相同。
+沒有 Discord 的專案會略過檢查 10 到 13，理由是 `no Discord is configured`；`http.publicUrl` 沒有值時也會略過檢查 15。寫在 `adapters` 裡的 Discord adapter，檢查方式與最上層的 `discord` 相同。
 
 檢查 12 要求 bot 在入口頻道擁有的權限是 View Channel、Send Messages、Send Messages in Threads、Read Message History、Embed Links、Attach Files、Pin Messages、Create Public Threads、Manage Channels 和 Manage Webhooks。
 bot 還不在 guild 裡的話，會給你一個邀請連結，連結已經帶好這些權限。
@@ -95,12 +96,12 @@ bot 還不在 guild 裡的話，會給你一個邀請連結，連結已經帶好
 ### `--reachable` 旗標
 
 `doctor --reachable` 會再向 public URL 發出請求。除非 bot 正在執行，而且發佈這個位址的通道或 proxy 正常，否則這個請求會失敗。
-沒有這個旗標時，檢查 14 只確認位址的格式正確。
+沒有這個旗標時，檢查 15 只確認位址的格式正確。
 這是唯一的旗標，也只有 `doctor` 接受它；任何其他引數都是用法錯誤。
 
 ## `start`
 
-`start` 執行不需要網路的檢查：Bun、environment、configuration、plugins、access、image provider、model login 和 public URL。
+`start` 執行不需要網路的檢查：Bun、environment、configuration、plugins、access、image provider、characters、model login 和 public URL。
 其中一項失敗時，它把和 `doctor` 一樣的行印到標準錯誤輸出，並在任何東西連到 Discord 之前，以代碼 1 結束。
 否則就啟動 bot。
 

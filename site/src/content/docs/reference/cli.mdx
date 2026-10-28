@@ -78,17 +78,18 @@ A skipped check does not fail the run.
 | 3 | configuration | `roundtable.config.ts` loads, passes its schema, and assembles. The failing key is named. |
 | 4 | plugins | Every plugin loads, no two share a name (the built-in ones included), and the registration is valid. |
 | 5 | access | Whom `access` serves: the owners, and a warning when `everyone: true` admits everyone on every surface of a host with more than one. |
-| 6 | image provider | Whether a plugin fills the `images` slot. Having none is not a failure: agents get avatars generated from their display names. |
-| 7 | PostgreSQL | The database answers, and every plugin's migrations run. They run inside a transaction that is always rolled back, so the database is left as it was. |
-| 8 | principals | A dry run of the principals the next start makes from the people the database already knows; a configured owner's identity linked to someone else fails, and a disabled owner is a warning. |
-| 9 | Discord token | Discord accepts the bot token. |
-| 10 | Discord guild | The bot is a member of `discord.guild`. |
-| 11 | Discord intents | The Message Content intent is on. |
-| 12 | Discord channel | The entry channel exists in the guild, and the bot holds the permissions below in it. |
-| 13 | model login | A login exists for the provider of `model`. |
-| 14 | public URL | `http.publicUrl` is a well-formed `http://` or `https://` address. |
+| 6 | image provider | Whether a plugin fills the `images` slot. Having none is not a failure: agents' avatars are composed characters and no longer drawn with it. |
+| 7 | characters | Whether `canvas` can rasterize SVG, which the agent server needs for the agents' pictures. |
+| 8 | PostgreSQL | The database answers, and every plugin's migrations run. They run inside a transaction that is always rolled back, so the database is left as it was. |
+| 9 | principals | A dry run of the principals the next start makes from the people the database already knows; a configured owner's identity linked to someone else fails, and a disabled owner is a warning. |
+| 10 | Discord token | Discord accepts the bot token. |
+| 11 | Discord guild | The bot is a member of `discord.guild`. |
+| 12 | Discord intents | The Message Content intent is on. |
+| 13 | Discord channel | The entry channel exists in the guild, and the bot holds the permissions below in it. |
+| 14 | model login | A login exists for the provider of `model`. |
+| 15 | public URL | `http.publicUrl` is a well-formed `http://` or `https://` address. |
 
-A project without Discord skips checks 9 to 12, with the reason `no Discord is configured`, and check 14 when `http.publicUrl` has no value; a Discord adapter in `adapters` is checked as the top-level `discord` is.
+A project without Discord skips checks 10 to 13, with the reason `no Discord is configured`, and check 15 when `http.publicUrl` has no value; a Discord adapter in `adapters` is checked as the top-level `discord` is.
 
 The permissions that check 12 requires in the entry channel are View Channel, Send Messages, Send Messages in Threads, Read Message History, Embed Links, Attach Files, Pin Messages, Create Public Threads, Manage Channels, and Manage Webhooks.
 When the bot is not in the guild, the fix is an invitation link that asks for exactly these permissions.
@@ -96,13 +97,13 @@ When the bot is not in the guild, the fix is an invitation link that asks for ex
 ### The `--reachable` flag
 
 `doctor --reachable` also requests the public URL, which fails unless the bot is running and the tunnel or proxy that publishes the address works.
-Without the flag, check 14 only confirms that the address is well formed.
+Without the flag, check 15 only confirms that the address is well formed.
 `--reachable` is the only flag, and only `doctor` accepts it.
 Any other argument is a usage error.
 
 ## `start`
 
-`start` runs the checks that need no network: Bun, environment, configuration, plugins, access, image provider, model login, and public URL.
+`start` runs the checks that need no network: Bun, environment, configuration, plugins, access, image provider, characters, model login, and public URL.
 If one fails, it prints the same lines `doctor` prints, to standard error, and exits with code 1 before anything reaches Discord.
 Otherwise it starts the bot.
 

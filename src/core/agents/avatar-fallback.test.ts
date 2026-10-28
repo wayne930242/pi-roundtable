@@ -8,6 +8,7 @@ import type { AgentTurnScope } from "../sessions.ts";
 import { TEST_OWNER } from "../testing/owner.ts";
 import type { Agent } from "./agent-store.ts";
 import { type AgentTeamOptions, DiscordAgentTeam } from "./agent-team.ts";
+import { type AgentOps, agentToolsExtension } from "./agent-tools.ts";
 import { TeamEditing } from "./team-editing.ts";
 import { discordKey } from "./team-keys.ts";
 import { TeamLifecycle } from "./team-lifecycle.ts";
@@ -207,22 +208,24 @@ describe("agent_create and avatars", () => {
 		expect(store.agent("scout")?.avatarPrompt).toBe("");
 	});
 
-	test("without one, redrawing refuses clearly and the picture stays", async () => {
-		const { ctx, store, studio } = context("none", [
-			agent("coordinator", { avatarHash: "a".repeat(64) }),
-		]);
-		const editing = new TeamEditing(ctx);
-		for (const mode of ["redraw", "new_prompt", "edit"] as const) {
-			const refusal = editing.redrawAvatar("coordinator", mode, "x");
-			expect(refusal).rejects.toThrow("No image provider is configured");
-			expect(refusal).rejects.toBeInstanceOf(AgentError);
-			await refusal.catch(() => undefined);
+	test("redrawing is gone: the team has dress and no redrawAvatar", () => {
+		expect("redrawAvatar" in DiscordAgentTeam.prototype).toBe(false);
+		expect("dress" in DiscordAgentTeam.prototype).toBe(true);
+	});
+
+	test("dressing a part changes only that part, whether or not a provider is configured", async () => {
+		for (const kind of ["draws", "none"] as const) {
+			const worn = resolveCharacter({ class: "scholar", palette: "teal" });
+			const { ctx, store, studio } = context(kind, [
+				agent("scout", { character: worn }),
+			]);
+			await new TeamEditing(ctx).dress("scout", { hat: "beret" });
+			expect(store.agent("scout")?.character).toEqual({
+				...worn,
+				hat: "beret",
+			});
+			expect(studio.calls).toEqual(["render scholar"]);
 		}
-		expect(studio.calls).toEqual([]);
-		expect(store.agent("coordinator")?.avatarHash).toBe("a".repeat(64));
-		expect(store.agent("coordinator")?.avatarPrompt).toBe(
-			"A portrait of coordinator.",
-		);
 	});
 
 	test("a render failure fails the create: no channel, no row", async () => {
@@ -283,9 +286,13 @@ describe("startup dressing", () => {
 	});
 });
 
-describe("the tools agents are offered, by whether an image provider is configured", () => {
+describe("the agent tools, with and without an image provider", () => {
 	function team(kind: "none" | "draws") {
-		const store = memoryStore([agent("coordinator")]);
+		const store = memoryStore([
+			agent("coordinator", {
+				character: resolveCharacter({ class: "bard", palette: "rose" }),
+			}),
+		]);
 		return new DiscordAgentTeam({
 			guildId: "1",
 			entryChannelId: "ch-coordinator",
@@ -321,50 +328,106 @@ describe("the tools agents are offered, by whether an image provider is configur
 		return tools;
 	}
 
-	test("with a provider: agent_avatar is registered and agent_create takes avatar_prompt", async () => {
-		const tools = await registered("draws");
-		expect([...tools.keys()]).toEqual([
-			"agent_list",
-			"agent_get",
-			"agent_update",
-			"agent_create",
-			"agent_avatar",
-			"group_create",
-			"group_update",
-			"archive",
-			"channel_arrange",
-			"channel_read",
-			"message_agent",
-		]);
-		expect(tools.get("agent_create")).toContain("avatar_prompt");
-		expect(tools.get("agent_avatar")).toEqual(["name", "mode", "text"]);
-	});
-
-	test("without one: no agent_avatar and no avatar_prompt, everything else the same", async () => {
+	test("agent_avatar is listed on a host without an image provider, and agent_create has class and color but no avatar_prompt", async () => {
 		const withProvider = await registered("draws");
 		const tools = await registered("none");
-		expect([...tools.keys()]).toEqual(
-			[...withProvider.keys()].filter((name) => name !== "agent_avatar"),
-		);
-		expect(tools.get("agent_create")).toEqual([
-			"name",
-			"display_name",
-			"prompt",
-			"task",
-			"category",
-			"skills",
-		]);
+		expect([...tools.keys()]).toEqual([...withProvider.keys()]);
+		expect(tools.has("agent_avatar")).toBe(true);
+		for (const each of [withProvider, tools]) {
+			expect(each.get("agent_create")).toEqual([
+				"name",
+				"display_name",
+				"prompt",
+				"class",
+				"color",
+				"task",
+				"category",
+				"skills",
+			]);
+			expect(each.get("agent_avatar")).toEqual([
+				"name",
+				"class",
+				"color",
+				"parts",
+			]);
+		}
 	});
 
-	test("the tool selection, the prompt, and agent_get follow", () => {
-		const draws = team("draws");
-		const none = team("none");
-		expect(draws.selection().tools).toContain("agent_avatar");
-		expect(none.selection().tools).not.toContain("agent_avatar");
-		expect(none.selection().tools).toContain("agent_create");
-		expect(draws.systemPrompt(SCOPE)).toContain("agent_avatar redraws");
-		expect(none.systemPrompt(SCOPE)).not.toContain("agent_avatar");
-		expect(draws.get("coordinator")).toContain("Avatar prompt:");
-		expect(none.get("coordinator")).not.toContain("Avatar prompt:");
+	test("the selection offers agent_avatar either way, and the prompt says it changes a look", () => {
+		for (const kind of ["draws", "none"] as const) {
+			const t = team(kind);
+			expect(t.selection().tools).toContain("agent_avatar");
+			expect(t.systemPrompt(SCOPE)).toContain(
+				"agent_avatar changes an agent's look (class, colors, parts)",
+			);
+		}
+	});
+
+	test("agent_get shows the look and no avatar prompt", () => {
+		const text = team("none").get("coordinator");
+		expect(text).toContain("Look: Bard, rose");
+		expect(text).not.toContain("Avatar prompt");
+	});
+});
+
+describe("the agent_create and agent_avatar tools pass looks to the team", () => {
+	/** The tools registered over stub ops, each callable by name. */
+	function tools() {
+		const calls: [string, unknown[]][] = [];
+		const ops = new Proxy(
+			{},
+			{
+				get:
+					(_t, key: string) =>
+					async (...args: unknown[]) => {
+						calls.push([key, args]);
+						return "ok";
+					},
+			},
+		) as unknown as AgentOps;
+		const run = new Map<
+			string,
+			(params: Record<string, unknown>) => Promise<unknown>
+		>();
+		const pi = {
+			registerTool: (tool: {
+				name: string;
+				execute: (
+					id: string,
+					params: Record<string, unknown>,
+				) => Promise<unknown>;
+			}) => run.set(tool.name, (params) => tool.execute("id", params)),
+		} as unknown as ExtensionAPI;
+		agentToolsExtension(ops, SCOPE, TEST_OWNER, { skills: false })(pi);
+		return { calls, run };
+	}
+
+	test("agent_create sends class and color as the character", async () => {
+		const { calls, run } = tools();
+		await run.get("agent_create")?.({
+			name: "bob",
+			display_name: "Bob",
+			prompt: "p",
+			class: "bard",
+			color: "rose",
+			task: "t",
+		});
+		expect(calls[0]?.[0]).toBe("create");
+		expect(calls[0]?.[1][1]).toMatchObject({
+			character: { class: "bard", palette: "rose" },
+		});
+		expect(calls[0]?.[1][1]).not.toHaveProperty("avatarPrompt");
+	});
+
+	test("agent_avatar sends only what it is given, parts named in camel case", async () => {
+		const { calls, run } = tools();
+		await run.get("agent_avatar")?.({
+			name: "bob",
+			parts: { hat: "beret", hair_color: "#112233" },
+		});
+		expect(calls[0]).toEqual([
+			"avatar",
+			["bob", { hat: "beret", hairColor: "#112233" }],
+		]);
 	});
 });

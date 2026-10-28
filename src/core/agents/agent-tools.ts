@@ -1,5 +1,11 @@
 import type { ExtensionFactory } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import {
+	CATALOG,
+	type CharacterInput,
+	CLASS_IDS,
+	type PaletteName,
+} from "../../characters/index.ts";
 import { AgentError } from "../domain/errors.ts";
 import type { AgentTurnScope } from "../domain/ports.ts";
 import { assistantName, messages } from "../i18n/index.ts";
@@ -14,16 +20,17 @@ import {
 } from "../runtime/text-tools.ts";
 import { timeZone } from "../time.ts";
 import {
-	MAX_AVATAR_PROMPT_CHARS,
 	MAX_GROUP_MEMBERS,
 	MAX_PROMPT_CHARS,
 	MIN_GROUP_MEMBERS,
 } from "./agent-store.ts";
 
+const PALETTE_NAMES = Object.keys(CATALOG.palettes) as PaletteName[];
+
 /** The tool that hands a request to another agent; a group seat has none. */
 export const MESSAGE_AGENT_TOOL = "message_agent";
 
-/** The tool that redraws an avatar; a host without an image provider does not offer it. */
+/** The tool that changes an agent's look; every host offers it. */
 export const AVATAR_TOOL = "agent_avatar";
 
 export const AGENT_TOOLS = [
@@ -39,8 +46,6 @@ export const AGENT_TOOLS = [
 	"channel_arrange",
 	"channel_read",
 ] as const;
-
-export type AvatarMode = "redraw" | "new_prompt" | "edit";
 
 /** What the agent tools do; the agent team implements it. Each returns text for the model. */
 export interface AgentOps {
@@ -61,14 +66,15 @@ export interface AgentOps {
 			name: string;
 			displayName: string;
 			prompt: string;
-			/** Absent on a host without an image provider. */
-			avatarPrompt?: string;
+			/** Fields of its look; any left out come from the look its role suggests. */
+			character?: CharacterInput;
 			task: string;
 			category?: string;
 			skills?: string[];
 		},
 	): Promise<string>;
-	avatar(name: string, mode: AvatarMode, text?: string): Promise<string>;
+	/** Changes an agent's look; a field left out stays as it is. */
+	avatar(name: string, look: CharacterInput): Promise<string>;
 	/** Queues the message and returns at once. */
 	message(caller: AgentTurnScope, to: string, text: string): string;
 	createGroup(input: {
@@ -106,12 +112,35 @@ const PROMPT = Type.String({
 	description:
 		"The agent's role prompt, in English: its job, sources, boundaries, and how it reports. Short and stated positively.",
 });
-const avatarPrompt = () =>
-	Type.String({
-		minLength: 1,
-		maxLength: MAX_AVATAR_PROMPT_CHARS,
-		description: `The avatar is ${assistantName()}'s face drawn as an anime character; describe the role's exaggerated pose and expression, one telling prop, the outfit colours, and the background colour. Pick outfit and background colours unlike the other agents' (their avatar prompts are in agent_get).`,
-	});
+const enumOf = (ids: readonly string[], description?: string) =>
+	Type.String({ enum: [...ids], ...(description ? { description } : {}) });
+const CLASS = enumOf(
+	CLASS_IDS,
+	`The agent's character class, which sets its outfit, hat, and prop. ${CLASS_IDS.map((id) => `${id}: ${CATALOG.classes[id].jobs}`).join("; ")}.`,
+);
+const COLOR = enumOf(
+	PALETTE_NAMES,
+	"The agent's color palette. Pick one unlike the other agents' (agent_get shows each look).",
+);
+const PARTS = Type.Object(
+	{
+		outfit: Type.Optional(enumOf(CATALOG.outfits)),
+		hat: Type.Optional(enumOf(CATALOG.hats)),
+		prop: Type.Optional(enumOf(CATALOG.props)),
+		hair: Type.Optional(enumOf(CATALOG.hair)),
+		beard: Type.Optional(enumOf([...CATALOG.beards, "none"])),
+		accessory: Type.Optional(enumOf([...CATALOG.accessories, "none"])),
+		build: Type.Optional(enumOf(["slim", "regular", "stout"])),
+		skin: Type.Optional(Type.Integer({ minimum: 0, maximum: 5 })),
+		hair_color: Type.Optional(
+			Type.String({
+				pattern: "^#[0-9a-fA-F]{6}$",
+				description: "A hex color such as #3b2a1a.",
+			}),
+		),
+	},
+	{ description: "Single parts to change; any left out stay as they are." },
+);
 const category = (kind: "Agents" | "Groups") =>
 	Type.String({
 		description: `The category its channel opens under: ${kind} (the default) or ${kind}-<suffix>, such as ${kind}-work; made when missing. Keep to the categories agent_list shows unless a new one fits better.`,
@@ -122,12 +151,38 @@ const MEMBERS = Type.Array(Type.String(), {
 	description: "Agent names in speaking-tie order.",
 });
 
+const PART_FIELDS = {
+	outfit: "outfit",
+	hat: "hat",
+	prop: "prop",
+	hair: "hair",
+	beard: "beard",
+	accessory: "accessory",
+	build: "build",
+	skin: "skin",
+	hair_color: "hairColor",
+} as const;
+
+/** The look a tool call names: class, color as palette, and parts; nothing it leaves out. */
+function lookOf(input: Record<string, unknown>): CharacterInput {
+	const look: Record<string, unknown> = {};
+	const klass = optionalString(input, "class");
+	const color = optionalString(input, "color");
+	if (klass) look.class = klass;
+	if (color) look.palette = color;
+	const parts = input.parts;
+	if (parts !== null && typeof parts === "object")
+		for (const [key, field] of Object.entries(PART_FIELDS)) {
+			const value = (parts as Record<string, unknown>)[key];
+			if (value !== undefined) look[field] = value;
+		}
+	return look as CharacterInput;
+}
+
 type AgentToolDef = TextToolDef<(typeof AGENT_TOOLS)[number]>;
 
 /** What the agent tools offer, by what the host can do. */
 export interface AgentToolOptions {
-	/** Whether an image provider is configured; without one there is no avatar prompt and no agent_avatar. */
-	avatars: boolean;
 	/** Whether the skills addon is on; without it agent_create takes no skills. */
 	skills: boolean;
 }
@@ -136,7 +191,7 @@ function toolDefs(
 	ops: AgentOps,
 	scope: AgentTurnScope,
 	owner: OwnerIdentity,
-	{ avatars, skills: skillsOn }: AgentToolOptions,
+	{ skills: skillsOn }: AgentToolOptions,
 ): AgentToolDef[] {
 	const o = ownerWords(owner);
 	const defs: AgentToolDef[] = [
@@ -152,7 +207,7 @@ function toolDefs(
 			name: "agent_get",
 			label: "Read agent",
 			description:
-				"Read an agent's display name, status, channel, model, thinking level, skills, prompt, and avatar prompt.",
+				"Read an agent's display name, status, channel, model, thinking level, skills, look, and prompt.",
 			parameters: Type.Object({ name: NAME }),
 			run: (i) => ops.get(requiredString(i, "name")),
 		},
@@ -195,7 +250,8 @@ function toolDefs(
 		{
 			name: "agent_create",
 			label: "Create agent",
-			description: `Create a new agent with its own channel and ${avatars ? "a drawn avatar" : "an avatar generated from its display name"}; it starts at once on the opening task in its channel. Its name is permanent.`,
+			description:
+				"Create a new agent with its own channel and a character picture; its look follows its role unless class and color are given. It starts at once on the opening task in its channel. Its name is permanent.",
 			parameters: Type.Object({
 				name: Type.String({
 					pattern: "^[a-z0-9-]{1,32}$",
@@ -204,7 +260,8 @@ function toolDefs(
 				}),
 				display_name: DISPLAY,
 				prompt: PROMPT,
-				...(avatars ? { avatar_prompt: avatarPrompt() } : {}),
+				class: Type.Optional(CLASS),
+				color: Type.Optional(COLOR),
 				task: Type.String({
 					minLength: 1,
 					maxLength: 4000,
@@ -225,13 +282,12 @@ function toolDefs(
 			run: (i) => {
 				const category = optionalString(i, "category");
 				const skills = stringList(i, "skills");
+				const look = lookOf(i);
 				return ops.create(scope, {
 					name: requiredString(i, "name"),
 					displayName: requiredString(i, "display_name"),
 					prompt: requiredString(i, "prompt"),
-					...(avatars
-						? { avatarPrompt: requiredString(i, "avatar_prompt") }
-						: {}),
+					...(Object.keys(look).length > 0 ? { character: look } : {}),
 					task: requiredString(i, "task"),
 					...(category ? { category } : {}),
 					...(skills && skills.length > 0 ? { skills } : {}),
@@ -240,30 +296,21 @@ function toolDefs(
 		},
 		{
 			name: AVATAR_TOOL,
-			label: "Redraw avatar",
+			label: "Change look",
 			description:
-				"Redraw an agent's avatar: redraw from its stored avatar prompt; new_prompt with a new avatar prompt, which replaces the stored one; or edit the current picture by an instruction.",
+				"Change an agent's look: its class, color, or single parts. What you leave out stays as it is; a new class keeps the agent's colors unless you give a color. The new picture shows from its next message.",
 			parameters: Type.Object({
 				name: NAME,
-				mode: Type.Union([
-					Type.Literal("redraw"),
-					Type.Literal("new_prompt"),
-					Type.Literal("edit"),
-				]),
-				text: Type.Optional(
-					Type.String({
-						maxLength: MAX_AVATAR_PROMPT_CHARS,
-						description:
-							"The new avatar prompt for new_prompt, or the instruction for edit.",
-					}),
-				),
+				class: Type.Optional(CLASS),
+				color: Type.Optional(COLOR),
+				parts: Type.Optional(PARTS),
 			}),
-			run: (i) =>
-				ops.avatar(
-					requiredString(i, "name"),
-					requiredString(i, "mode") as AvatarMode,
-					optionalString(i, "text"),
-				),
+			run: (i) => {
+				const look = lookOf(i);
+				if (Object.keys(look).length === 0)
+					throw new AgentError("Give a class, a color, or parts to change.");
+				return ops.avatar(requiredString(i, "name"), look);
+			},
 		},
 		{
 			name: "group_create",
@@ -391,7 +438,7 @@ function toolDefs(
 			run: (i) =>
 				ops.message(scope, requiredString(i, "to"), requiredString(i, "text")),
 		});
-	return avatars ? defs : defs.filter((def) => def.name !== AVATAR_TOOL);
+	return defs;
 }
 
 /** Registers the agent tools for one agent session. */

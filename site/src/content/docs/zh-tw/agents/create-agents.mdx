@@ -42,7 +42,8 @@ import agentCreate from "../../../../assets/scenes/agent-create.png";
 | `name` | 永久的名字：1 到 32 個小寫字母、數字和連字號。它同時是頻道名稱。不能包含 `discord` 或 `clyde`，也不能跟任何 agent 或群組同名，已封存的也算。 |
 | `display_name` | 顯示在它訊息上的名字，1 到 32 個字元，任何語言都行。 |
 | `prompt` | 它的角色：工作內容、資料來源、限制，以及怎麼回報。最多 4,000 個字元。 |
-| `avatar_prompt` | 它的圖片描述，最多 1,000 個字元。只有設定了圖片 provider 時才會要求；見[狀態與頭像](/zh-tw/agents/status-and-avatars/)。 |
+| `class` | 選填。它的職業，例如 `knight` 或 `bard`；預設依它的職務。見[狀態與頭像](/zh-tw/agents/status-and-avatars/)。 |
+| `color` | 選填。它的配色：`azure`、`gules`、`vert`、`purpure`、`amber`、`sable`、`teal` 或 `rose`。 |
 | `task` | 它的第一份工作，最多 4,000 個字元，要寫成單獨看也能懂。 |
 | `category` | 選填。它的頻道放哪裡：預設是 `Agents`，也可以是 `Agents-<suffix>`。類別不存在就會建立。 |
 | `skills` | 選填。它要帶的技能名稱，從技能清單裡挑。只有 skills addon 開著時才提供；見[技能與記憶](/zh-tw/agents/skills-and-memory/)。 |
@@ -55,7 +56,7 @@ import agentCreate from "../../../../assets/scenes/agent-create.png";
 ## 新 agent 會拿到什麼
 
 - **一個頻道**，用它的名字，放在你指定的類別下。
-- **一張頭像。** 有圖片 provider 填了 `images` 槽位時，依 avatar prompt 繪製；沒有的話，用顯示名稱產生。
+- **一張頭像。** 由 bot 依職業和顏色組合出來的角色；預設依它的職務。
 - **它的提示詞**，接在每個 agent 開頭都有的共用提示詞後面。
 - **第一份工作。** 它馬上在自己的頻道開工，先用一兩句話自我介紹，再處理這份工作。
 - **它的技能**，如果你指定了的話。
@@ -85,7 +86,7 @@ import agentCreate from "../../../../assets/scenes/agent-create.png";
 
 有兩樣東西有自己的工具：
 
-- **頭像：** `agent_avatar` 重畫頭像。只有設定了圖片 provider 才有這個工具。
+- **外觀：** `agent_avatar` 改它的職業、顏色或單一零件。
 - **技能：** `agent_skills` 增減它帶的技能。
 
 用 `agent_list` 看所有 agent 和群組，以及它們的頻道；用 `agent_get` 讀單一 agent 的提示詞、模型、thinking level 和技能。

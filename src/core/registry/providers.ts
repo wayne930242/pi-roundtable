@@ -30,7 +30,7 @@ function defaults(judgeModel: JudgeModel | undefined): Providers {
 		judge: judgeModel ? new ModelJudge(judgeModel) : unconfiguredJudge(),
 		images: async () => {
 			throw new ProviderError(
-				"no image provider is configured; agents use generated avatars",
+				"no image provider is configured: a plugin fills the images slot to let agents make pictures",
 			);
 		},
 		runtime: () => {

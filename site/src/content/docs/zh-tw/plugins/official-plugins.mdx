@@ -70,8 +70,7 @@ agent 會呼叫這個工具，再把結果回報給你。
 ## `codex-images`
 
 `codex-images` 填入 `images` 槽位，也就是核心用來畫圖的那個部分。
-有了它，`agent_create` 能接受頭像提示詞，agent 會有一個 `agent_avatar` 工具，owner 的個人檔案面板也能提供重畫。
-沒有 `images` 外掛時，每個 agent 的頭像，是用它的顯示名稱產生的圖片。
+它供 `generate_image` 使用；0.23 起 agent 自己的頭像是組合出來的角色，不再經過它。
 `roundtable doctor` 會回報有沒有外掛填入這個槽位。
 它的[複製式來源範本](https://github.com/wayne930242/pi-roundtable/blob/master/templates/official/codex-images/plugin.ts)是一個很短的檔案：用 `pi-roundtable/kit` 的 `createCodexImages` 建出外掛，畫圖則由 kit 的 `drawCodexImage` 負責。
 通訊協定的修正會隨套件升級而來，不必重新複製。

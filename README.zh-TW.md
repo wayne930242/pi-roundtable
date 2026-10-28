@@ -64,13 +64,14 @@ Bun 會自己讀 `.env`，`.gitignore` 也已經擋掉它。
 3. `roundtable.config.ts` 符合其 schema，失敗時指出是哪個鍵。
 4. 每個外掛都能載入、沒有兩個外掛同名，而且註冊內容有效（`Roundtable.check()`）。
 5. `access` 服務哪些人：列出 owner；主機有不只一個 surface、又寫了 `everyone: true` 時提出警告，因為它會讓每個 surface 上的所有人都能對話。
-6. 有沒有外掛填了 `images` 槽位。沒有也不算失敗，智慧體會用顯示名稱產生頭像。
-7. PostgreSQL 連得上，且能執行 migration。
-8. principal：預演下次啟動會從資料庫已知的人建立哪些 principal，印出的文字和啟動時的 log 相同；設定裡 owner 的身分若連到別的 principal 就判定失敗，因為主機會因此無法啟動；owner 被停用時提出警告。
-9. 有設定 Discord 時：Discord token 有效、bot 已在你的伺服器裡、Message Content intent 已開啟，而且 bot 在入口頻道有它需要的權限（包含 Pin Messages）。
+6. 有沒有外掛填了 `images` 槽位。沒有也不算失敗，智慧體的頭像是組合出來的角色，不再靠它繪製。
+7. `canvas` 能不能把 SVG 轉成圖片；agent 伺服器畫智慧體的圖片需要它。
+8. PostgreSQL 連得上，且能執行 migration。
+9. principal：預演下次啟動會從資料庫已知的人建立哪些 principal，印出的文字和啟動時的 log 相同；設定裡 owner 的身分若連到別的 principal 就判定失敗，因為主機會因此無法啟動；owner 被停用時提出警告。
+10. 有設定 Discord 時：Discord token 有效、bot 已在你的伺服器裡、Message Content intent 已開啟，而且 bot 在入口頻道有它需要的權限（包含 Pin Messages）。
    bot 還不在伺服器裡的話，它會給你一個邀請連結，連結已經帶好這些權限。
-10. 模型登入存在。
-11. 設了 `http.publicUrl` 時：`PUBLIC_URL` 的格式正確；加上 `--reachable` 還要求它有回應，所以 bot 得先跑起來。
+11. 模型登入存在。
+12. 設了 `http.publicUrl` 時：`PUBLIC_URL` 的格式正確；加上 `--reachable` 還要求它有回應，所以 bot 得先跑起來。
 
 只要有一項失敗就以非零狀態結束，警告不算失敗；檢查過程不會改動任何東西。
 全新的專案只會卡在還沒填的憑證，它會列出是哪幾個。

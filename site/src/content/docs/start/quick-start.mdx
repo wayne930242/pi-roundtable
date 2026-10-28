@@ -85,7 +85,7 @@ Upgrading from 0.7? See [Migrating to 0.8](https://github.com/wayne930242/pi-rou
 4. Every plugin loads, no two share a name, and the registration is valid.
 5. Whom `access` serves: the owners, and a warning when `everyone: true` admits everyone on every surface of a host with more than one.
 6. Whether a plugin fills the `images` slot.
-   The check passes with or without one; agents without an image provider get avatars generated from their display names.
+   The check passes with or without one; agents' avatars are composed characters and do not use an image provider.
 7. PostgreSQL is reachable and migratable.
 8. The principals: a dry run of what the next start makes from the people the database already knows, a configured owner's identity linked to someone else (which stops the start), and a disabled owner.
 9. The Discord token is valid, the bot is in your server, the Message Content intent is on, and the bot has the permissions it needs in the entry channel (including Pin Messages).

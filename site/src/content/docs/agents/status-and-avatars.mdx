@@ -48,27 +48,23 @@ It also refreshes every 5 minutes, so the last-activity times and the context fi
 ## Avatars
 
 Each agent speaks in Discord under its own name and picture.
-Where the picture comes from depends on whether a plugin fills the `images` slot.
+Each picture is the agent's character, composed from parts and drawn by the bot itself: no image provider is involved.
 
-### With an image provider
-
-A plugin that fills the `images` slot draws the pictures; see [What plugins can add](/plugins/what-plugins-can-add/).
-
-- `agent_create` asks for an `avatar_prompt`, a description of the picture, and draws the avatar from it.
-- The `agent_avatar` tool changes it later, in one of three modes: `redraw` draws again from the stored prompt, `new_prompt` stores a new prompt and draws from it, and `edit` changes the current picture by an instruction such as "give it a blue scarf".
+- A new agent gets the look its role suggests: a class (wizard, knight, scholar, ranger and 20 more) in one of eight colors.
+  `agent_create` accepts a `class` and a `color` to choose them.
+- The `agent_avatar` tool changes the look later: a class, a color, or single parts such as the hat, prop, hair, build, or skin.
+  What it leaves out stays as it is, and a new class keeps the agent's colors.
+- The owner's profile panel (`/profile`) has a class dropdown and a color dropdown that do the same.
 - The new picture shows from the agent's next message.
-- The `avatar` setting in `roundtable.config.ts` is a picture of your own for agents without one, and the style reference for drawing.
-  It defaults to a plain bot picture that ships with pi-roundtable.
+- Every agent present before 0.23 gets a character at its first start, so its Discord picture changes once.
 
-If drawing fails when an agent is created, the agent uses the assistant's neutral picture for the time being.
-At startup, agents that have no picture yet are drawn in the background.
+The bot needs `canvas` with SVG support (librsvg) to draw the pictures, and refuses to start the agent server without it.
+`bunx roundtable doctor` runs the `characters` check for this.
 
-### Without one
-
-The bot generates each agent's picture from its display name, using a background colour taken from the name, the assistant's icon, and a badge with the first letter of the agent's name.
-The same names always give the same picture, so agents stay easy to tell apart.
-`agent_create` takes no `avatar_prompt` in this setup, and there is no `agent_avatar` tool.
-`bunx roundtable doctor` reports whether the slot is filled, and a missing provider is not a failure.
+<Aside type="note" title="Drawn avatars are deprecated">
+Drawing agents' pictures with an `images` provider, the `avatar` setting, and `avatarPrompt` are deprecated and ignored; they are removed in 1.0.
+The `images` slot still powers `generate_image`.
+</Aside>
 
 ### Where the pictures are served
 

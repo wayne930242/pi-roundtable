@@ -1,7 +1,6 @@
 import type { ExtensionFactory } from "@earendil-works/pi-coding-agent";
 import type { CharacterInput, CharacterSpec } from "../characters/index.ts";
 import type { Agent, AgentGroup } from "./agents/agent-rules.ts";
-import type { AvatarMode } from "./agents/agent-tools.ts";
 import type { TeamStatus } from "./agents/team-status.ts";
 import type {
 	BackgroundRunsAs,
@@ -155,9 +154,9 @@ export interface AgentServer {
 	avatars: AvatarStudio;
 }
 
-/** Agent pictures: drawn by an image provider, or made from the agent's name, kept and served by content hash. */
+/** Agent pictures: rendered from the agent's character, kept and served by content hash. */
 export interface AvatarStudio {
-	/** Whether an image provider is configured; without one, only `fallback` makes pictures. */
+	/** @deprecated Agents are no longer drawn, so this only tells whether an image provider is configured (it gates the generate_image hint); removed in 1.0. */
 	readonly canDraw: boolean;
 	/** The public URL of a picture, or of the default when there is none. */
 	url(hash: string | undefined): string;
@@ -248,8 +247,6 @@ export interface AgentTeam {
 	 * picture. Throws AgentError naming the field of a bad input, and for an unknown or archived agent.
 	 */
 	dress(name: string, input: CharacterInput): Promise<Agent>;
-	/** Draws and stores a new picture for an agent. */
-	redrawAvatar(name: string, mode: AvatarMode, text?: string): Promise<Agent>;
 }
 
 /** Scheduled turns, stored. A one-time schedule is deleted once it fires. */

@@ -12,14 +12,9 @@ import { openingTaskText } from "./agent-prompt.ts";
 import { characterOf, overBase } from "./agent-rules.ts";
 import { modelSetting, thinkingSetting } from "./agent-settings.ts";
 import type { Agent } from "./agent-store.ts";
-import type { AvatarMode } from "./agent-tools.ts";
 import { discordKey, keysOf } from "./team-keys.ts";
 import { groupTopic, teamCategory } from "./team-layout.ts";
 import type { TeamContext } from "./team-options.ts";
-
-/** Said when an avatar is to be redrawn on a host without an image provider. */
-const NO_IMAGE_PROVIDER =
-	"No image provider is configured, so avatars cannot be redrawn; the current picture stays. A plugin fills the images slot to draw them.";
 
 /** Creating and changing agents, their avatars, and groups. */
 export class TeamEditing {
@@ -175,18 +170,10 @@ export class TeamEditing {
 		return `Created "${agent.displayName}" (${agent.name})${where}; ${avatar}. It is starting on its opening task now.`;
 	}
 
-	async avatar(name: string, mode: AvatarMode, text?: string): Promise<string> {
-		await this.#redraw(name, mode, text);
-		return `The new avatar of "${this.#ctx.options.store.agent(name)?.displayName ?? name}" shows from its next message.`;
-	}
-
-	/** Draws and stores a new picture; the owner's panel and the agent tool both use it. */
-	async redrawAvatar(
-		name: string,
-		mode: AvatarMode,
-		text?: string,
-	): Promise<Agent> {
-		return this.#redraw(name, mode, text);
+	/** The agent tool: changes a look, then says what the owner sees. */
+	async avatar(name: string, look: CharacterInput): Promise<string> {
+		const agent = await this.dress(name, look);
+		return `"${agent.displayName}" now looks like a ${characterOf(agent).class}; the new picture shows from its next message.`;
 	}
 
 	/**
@@ -224,35 +211,6 @@ export class TeamEditing {
 				throw new AgentError(`The look is not usable: ${error.message}.`);
 			throw error;
 		}
-	}
-
-	async #redraw(name: string, mode: AvatarMode, text?: string): Promise<Agent> {
-		const { store, studio, logger } = this.#ctx.options;
-		const agent = store.activeAgent(name);
-		if (studio.canDraw === false) throw new AgentError(NO_IMAGE_PROVIDER);
-		if (mode !== "redraw" && !text?.trim())
-			throw new AgentError(
-				mode === "edit"
-					? "Give the edit instruction as text."
-					: "Give the new avatar prompt as text.",
-			);
-		const avatarPrompt =
-			mode === "new_prompt" ? (text as string) : agent.avatarPrompt;
-		if (mode === "new_prompt") await store.updateAgent(name, { avatarPrompt });
-		let hash: string;
-		try {
-			hash =
-				mode === "edit"
-					? await studio.edit(agent.avatarHash, text as string)
-					: await studio.draw(avatarPrompt);
-		} catch (error) {
-			logger.warn({ agent: name, mode, err: error }, "avatar drawing failed");
-			throw new AgentError(
-				`The avatar could not be drawn: ${error instanceof Error ? error.message : String(error)}. The previous picture stays.`,
-			);
-		}
-		logger.info({ agent: name, mode }, "avatar redrawn");
-		return store.updateAgent(name, { avatarHash: hash });
 	}
 
 	async createGroup(input: {

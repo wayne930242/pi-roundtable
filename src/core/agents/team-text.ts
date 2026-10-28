@@ -1,9 +1,11 @@
+import { CATALOG, type CharacterSpec } from "../../characters/index.ts";
 import { AgentError } from "../domain/errors.ts";
 import { assistantName } from "../i18n/index.ts";
 import type { ThinkingSetting } from "../models.ts";
 import type { AgentDirectory } from "../services.ts";
 import { zonedStamp } from "../time.ts";
 import type { ChannelMessage } from "./agent-ports.ts";
+import { characterOf } from "./agent-rules.ts";
 import { describeThinking } from "./agent-settings.ts";
 import type { Agent } from "./agent-store.ts";
 
@@ -45,12 +47,16 @@ export function teamListText(store: Pick<AgentDirectory, "agents" | "groups">) {
 	return `Agents:\n${agents.join("\n") || "none"}\n\nGroups:\n${groups.join("\n") || "none"}`;
 }
 
+/** A look in a few words: the class label, then the palette or the primary color. */
+export function lookText(character: CharacterSpec): string {
+	return `${CATALOG.classes[character.class].label}, ${character.palette ?? character.colors.primary}`;
+}
+
 /** One agent as agent_get shows it; unset settings name the assistant's, and no skills line while the skills addon is off. */
 export function agentDetails(
 	agent: Agent,
 	defaults: { model: string; thinking: ThinkingSetting },
 	skills: string | undefined,
-	avatars = true,
 ): string {
 	return [
 		`Name: ${agent.name}`,
@@ -60,7 +66,7 @@ export function agentDetails(
 		`Model: ${agent.model ?? `${assistantName()}'s (${defaults.model})`}`,
 		`Thinking: ${agent.thinking ?? `${assistantName()}'s (${describeThinking(defaults.thinking)})`}`,
 		...(skills === undefined ? [] : [`Skills: ${skills}`]),
-		...(avatars ? [`Avatar prompt: ${agent.avatarPrompt}`] : []),
+		`Look: ${lookText(characterOf(agent))}`,
 		`Prompt:\n${agent.prompt}`,
 	].join("\n");
 }

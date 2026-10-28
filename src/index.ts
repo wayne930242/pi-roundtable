@@ -11,7 +11,6 @@ export type {
 	AgentSeed,
 	AgentStatus,
 } from "./core/agents/agent-store.ts";
-export type { AvatarMode } from "./core/agents/agent-tools.ts";
 export {
 	agentRoomKey,
 	groupRoomKey,

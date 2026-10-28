@@ -1530,13 +1530,12 @@ An unknown or misspelled slot stops startup with an error listing the valid name
 | Slot | The core's default | Your replacement |
 |---|---|---|
 | `judge` | Asks the configured model small questions: does this reply approve the held actions, how hard is this turn, which agents does this group message concern | An object with `askYesNo`, `askChoice`, and `askScore` |
-| `images` | No drawing; each agent gets an avatar generated from its display name, and no session offers `generate_image` | `async (prompt, references, options?) => bytes` returning PNG, JPEG, WebP or GIF bytes; `options.signal` aborts with the turn that asked |
+| `images` | No drawing; no session offers `generate_image` | `async (prompt, references, options?) => bytes` returning PNG, JPEG, WebP or GIF bytes; `options.signal` aborts with the turn that asked |
 | `runtime` | None: the runtime plugin builds the Pi runtime itself | `(deps) => runtime`, an [`AgentRuntime`](#the-runtime-slot-replace-pi) that runs every conversation |
 
-A filled `images` slot draws agents' avatars and also powers the core's [`generate_image`](#attach-files-to-the-agents-reply) tool.
-When no `images` provider is configured, `agent_create` has no `avatar_prompt` parameter, `agent_avatar` is unavailable, and no session offers `generate_image`.
-The owner's profile panel reports the missing provider and offers no redraw option.
-Each agent gets a picture generated from its display name and the assistant's icon, so you can tell agents apart.
+A filled `images` slot powers the core's [`generate_image`](#attach-files-to-the-agents-reply) tool.
+Agents' avatars are composed characters since 0.23 and do not use it; drawing them with the slot, `AvatarStudio.draw`, `edit`, `fallback` and `canDraw`, `config.avatar` (a warning is logged when it is set) and `AgentSeed.avatarPrompt` are deprecated, ignored, and removed in 1.0.
+When no `images` provider is configured, no session offers `generate_image`; `agent_create`, `agent_avatar` and the profile panel are the same either way.
 `bunx roundtable doctor` reports whether the slot is filled.
 The copy-in [`codex-images` provider template][codex-images-template] fills the `images` slot with `createCodexImages` from `pi-roundtable/kit`, which also exports the client it is built on, `drawCodexImage`.
 
@@ -3393,6 +3392,7 @@ Every agent of the agent server is a composed character. `Agent.character` is it
 - `AgentTeam.dress(name, input)` changes a look: the input is resolved over the agent's current character, rendered, and stored with the new picture in one update. A new `class` alone keeps the agent's colors; give a `palette` or `colors` to change them. A bad field is an `AgentError` that names it, as is an unknown or archived agent.
 - `AvatarStudio.render(spec)` renders a character as a 512 px PNG (the idle face on the modern light disc), stores it by content hash and returns the hash; the same spec gives the same hash. A plugin that implements `AvatarStudio` adds it. `draw`, `edit`, `fallback` and `canDraw` are deprecated until 1.0.
 - `renderCharacterPng(spec, options?)` (`pi-roundtable/kit`) does the same rasterization and returns the bytes. It needs `canvas` with SVG support (librsvg); the agent server renders a probe character at start and refuses to start when it cannot: the start fails as a `PluginError` whose `cause` is a `ConfigError` ("the agent server needs canvas with SVG support").
+- The agent tools and the Discord profile panel choose looks: `agent_create` takes `class` and `color`, `agent_avatar { name, class?, color?, parts? }` calls `AgentTeam.dress` on every host, and `/profile` has a class select (24) and a color select (8). `AgentTeam.redrawAvatar` and `AvatarMode` are removed; use `dress`. An old panel's redraw buttons answer that the panel is out of date.
 - Each avatar on one page needs its own `uid` in `composeSvg`; the server renders pass an explicit one.
 
 ## Official plugins
@@ -3985,7 +3985,6 @@ Import from the entries listed below; source area files are internal.
 | `AttachmentUpload` | `pi-roundtable` | type |
 | `AttachmentsConfig` | `pi-roundtable` | type |
 | `AutoApproval` | `pi-roundtable` | type |
-| `AvatarMode` | `pi-roundtable` | type |
 | `AvatarStudio` | `pi-roundtable` | type |
 | `characterOf` | `pi-roundtable` | value |
 | `BACKGROUND_TURNS` | `pi-roundtable` | value |

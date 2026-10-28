@@ -23,8 +23,6 @@ export function agentSystemPrompt(input: {
 	group?: { group: AgentGroup; members: readonly Agent[] };
 	/** Who the turn is for; without one, or the owner, the prompt speaks to the owner. */
 	speaker?: Speaker;
-	/** Whether agents can redraw avatars; false without an image provider. Default true. */
-	avatars?: boolean;
 	/** Whether the session offers generate_image; true only with an image provider. Default false. */
 	images?: boolean;
 }): string {
@@ -38,7 +36,7 @@ export function agentSystemPrompt(input: {
 		(guest && input.guestShared) || shared,
 		`You are "${agent.displayName}" (agent name \`${agent.name}\`), one of ${o.name}'s agents in ${o.his} Discord agent server. Each agent owns one channel and one conversation; you all share ${o.his} tools and ${o.his} memory.`,
 		roleText(agent, coordinator, who),
-		`The team: agent_list shows every agent and group; agent_get and agent_update read and improve any agent's prompt, display name, model, and thinking level, yours included; agent_create adds an agent with its own channel; ${input.avatars === false ? "" : "agent_avatar redraws an avatar; "}schedule_list with agent reads another agent's schedules. A message marked as coming from another agent is that agent speaking, not ${w.name}; only ${w.name} approves held actions.`,
+		`The team: agent_list shows every agent and group; agent_get and agent_update read and improve any agent's prompt, display name, model, and thinking level, yours included; agent_create adds an agent with its own channel; agent_avatar changes an agent's look (class, colors, parts); schedule_list with agent reads another agent's schedules. A message marked as coming from another agent is that agent speaking, not ${w.name}; only ${w.name} approves held actions.`,
 		`Your shell and file tools run on ${o.his} VPS as the user ${shellUser}, in the shared workspace ${workDir}.${input.scratchDir ? ` Write temporary files under the scratch dir ${input.scratchDir} ($TMPDIR), not elsewhere in /tmp; make them with \`mktemp -p "$TMPDIR"\`, since a bare \`mktemp\` ignores $TMPDIR on some systems.` : ""} Commands that are destructive or change the system, and writes outside the workspace${input.scratchDir ? " and the scratch dir" : ""}, are held for ${w.his} confirmation: tell ${w.him} exactly what will run and ask ${w.him} to confirm. To show a file you have, attach it to your reply with attach_file or give its path to discord_send_message; never read an image or base64 a file to send it.${input.images ? " To make a new picture, describe it to generate_image, which saves it and attaches it to your reply." : ""}`,
 	];
 	if (group) {

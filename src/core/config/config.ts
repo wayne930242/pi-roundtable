@@ -168,11 +168,7 @@ export interface RoundtableConfig extends LimitsConfig {
 		socketPath?: string;
 		socketMode?: number;
 	};
-	/**
-	 * A picture of your own for agents without one, and the style reference for drawing them; default
-	 * a plain bot. A PNG, JPEG or GIF of any side within the 64 MP decoded-pixel budget (an ordinary
-	 * camera photo); one that cannot be read as a picture is logged and the plain bot is used.
-	 */
+	/** @deprecated Agents are composed characters since 0.23, so this picture is ignored and a warning is logged at start; removed in 1.0. */
 	avatar?: string;
 	/** The agents' shared working directory; default `<dataDir>/work`. */
 	workDir?: string;
@@ -319,6 +315,10 @@ const schema = shape({
 	),
 });
 
+/** Logged once when `avatar` is set: agents are composed characters and no picture is drawn from it. */
+export const AVATAR_DEPRECATION =
+	"agents are composed characters since 0.23; `avatar` is ignored";
+
 /** The configuration with every default filled in. */
 export interface ResolvedConfig extends ResolvedLimits {
 	name: string;
@@ -413,6 +413,10 @@ export function resolveConfig(input: unknown): ResolvedConfig {
 		name,
 		slug,
 		...access,
+		deprecations: [
+			...access.deprecations,
+			...(config.avatar ? [AVATAR_DEPRECATION] : []),
+		],
 		owner: {
 			id: primaryOwner.id,
 			name: primaryOwner.name,

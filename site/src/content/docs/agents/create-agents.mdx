@@ -43,7 +43,8 @@ The agent calls `agent_create` with these fields filled in from your request:
 | `name` | The permanent name: 1 to 32 lowercase letters, digits, and dashes. It is also the channel name. It cannot contain `discord` or `clyde`, and no agent or group may share it, archived ones included. |
 | `display_name` | The name shown on its messages, 1 to 32 characters, in any language. |
 | `prompt` | Its role: the job, the sources, the limits, and how it reports. Up to 4,000 characters. |
-| `avatar_prompt` | A description of its picture, up to 1,000 characters. Asked for only when an image provider is set up; see [Status and avatars](/agents/status-and-avatars/). |
+| `class` | Optional. Its character class, such as `knight` or `bard`; the default follows its role. See [Status and avatars](/agents/status-and-avatars/). |
+| `color` | Optional. Its color palette: `azure`, `gules`, `vert`, `purpure`, `amber`, `sable`, `teal`, or `rose`. |
 | `task` | Its opening task, up to 4,000 characters, written so it makes sense on its own. |
 | `category` | Optional. Where its channel goes: `Agents`, which is the default, or `Agents-<suffix>`. A missing category is created. |
 | `skills` | Optional. Names of skills it carries, from the skill list. Only offered while the skills addon is on; see [Skills and memory](/agents/skills-and-memory/). |
@@ -57,8 +58,7 @@ You can change the display name, prompt, model, and thinking level.
 
 - **A channel** with its name, under the category you asked for.
 - **An avatar.**
-  An image provider in the `images` slot draws it from the avatar prompt.
-  Without a provider, the bot generates it from the display name.
+  A character the bot composes from its class and color; the default follows its role.
 - **Its prompt**, which comes after the shared prompt every agent starts with.
 - **An opening task.**
   It starts working in its channel at once, introducing itself in one or two sentences before beginning the task.
@@ -89,11 +89,10 @@ A change applies from the agent's next turn, and its conversation stays.
 
 Two things have their own tools:
 
-- **Avatar:** `agent_avatar` redraws it.
-  The tool exists only with an image provider.
+- **Look:** `agent_avatar` changes its class, color, or single parts.
 - **Skills:** `agent_skills` adds and removes the skills it carries.
 
-Use `agent_list` to see every agent and group with their channels, and `agent_get` to read one agent's prompt, model, thinking level, and skills.
+Use `agent_list` to see every agent and group with their channels, and `agent_get` to read one agent's prompt, model, thinking level, skills, and look.
 
 ## Seed agents
 

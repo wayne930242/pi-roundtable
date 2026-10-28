@@ -382,8 +382,6 @@ export function useTeamFixture(
 					new Bun.CryptoHasher("sha256")
 						.update(JSON.stringify(spec))
 						.digest("hex"),
-				draw: async () => "a".repeat(64),
-				edit: async () => "b".repeat(64),
 			},
 			runtime: () => runtime,
 			pluginSelection: () => PLUGIN_SELECTION,

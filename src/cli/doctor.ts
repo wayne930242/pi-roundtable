@@ -1,4 +1,5 @@
 import { type BunFacts, checkBun } from "./checks/bun.ts";
+import { checkCharacters } from "./checks/characters.ts";
 import { checkConfiguration, checkPlugins } from "./checks/configuration.ts";
 import { checkDatabase, type DatabasePort } from "./checks/database.ts";
 import {
@@ -71,6 +72,7 @@ export function buildChecks(
 			offline: true,
 			run: () => checkImageProvider(project),
 		},
+		{ name: "characters", offline: true, run: () => checkCharacters() },
 		{
 			name: "PostgreSQL",
 			offline: false,

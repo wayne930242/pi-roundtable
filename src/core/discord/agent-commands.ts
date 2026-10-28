@@ -15,17 +15,20 @@ import {
 	SeparatorBuilder,
 	SeparatorSpacingSize,
 	StringSelectMenuBuilder,
+	type StringSelectMenuInteraction,
 	StringSelectMenuOptionBuilder,
 	TextDisplayBuilder,
 	TextInputBuilder,
 	TextInputStyle,
 } from "discord.js";
 import {
-	type Agent,
-	MAX_AVATAR_PROMPT_CHARS,
-	MAX_PROMPT_CHARS,
-} from "../agents/agent-store.ts";
-import type { AvatarMode } from "../agents/agent-tools.ts";
+	CATALOG,
+	type CharacterInput,
+	CLASS_IDS,
+	type PaletteName,
+} from "../../characters/index.ts";
+import { characterOf } from "../agents/agent-rules.ts";
+import { type Agent, MAX_PROMPT_CHARS } from "../agents/agent-store.ts";
 import { AgentError } from "../domain/errors.ts";
 import { messages } from "../i18n/index.ts";
 import { THINKING_LEVELS, thinkingLabel } from "../models.ts";
@@ -68,22 +71,18 @@ export function formModels(
 		: offered;
 }
 
-type Action = "edit" | "redraw" | "newprompt" | "editavatar" | "model";
-const ACTIONS: readonly Action[] = [
-	"edit",
-	"redraw",
-	"newprompt",
-	"editavatar",
-	"model",
-];
+type Action = "edit" | "model";
+/** The buttons of the panel; the look is chosen with the two selects, `class` and `color`. */
+const ACTIONS: readonly Action[] = ["edit", "model"];
+type LookAction = "class" | "color";
 
 export interface AgentCommandsOptions {
 	store: Pick<AgentDirectory, "agentByChannel" | "groupByChannel" | "agent">;
 	team: Pick<
 		AgentTeam,
-		"redrawAvatar" | "update" | "modelOf" | "usableModels" | "defaultModel"
+		"dress" | "update" | "modelOf" | "usableModels" | "defaultModel"
 	>;
-	studio: Pick<AvatarStudio, "url" | "canDraw">;
+	studio: Pick<AvatarStudio, "url">;
 	/** The skills an agent carries; without the skills addon the panel lists none. */
 	skills?: Pick<SkillRegistry, "carried">;
 }
@@ -133,8 +132,7 @@ export class AgentCommands {
 
 	#panel(agent: Agent, note?: string): AgentPanelMessage {
 		const text = messages();
-		// Without an image provider nothing can be drawn, so the avatar buttons are not offered.
-		const drawing = this.#options.studio.canDraw;
+		const look = characterOf(agent);
 		const inline = agent.prompt.length <= INLINE_PROMPT_CHARS;
 		const { model, thinking } = this.#options.team.modelOf(agent.name);
 		const follows =
@@ -168,9 +166,10 @@ export class AgentCommands {
 			)
 			.addTextDisplayComponents(
 				new TextDisplayBuilder().setContent(
-					drawing
-						? text.agentAvatarPromptText(agent.avatarPrompt)
-						: text.agentNoImageProvider,
+					text.agentLook(
+						CATALOG.classes[look.class].label,
+						look.palette ?? look.colors.primary,
+					),
 				),
 				new TextDisplayBuilder().setContent(
 					inline
@@ -196,15 +195,14 @@ export class AgentCommands {
 				new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small),
 			)
 			.addActionRowComponents(
+				new ActionRowBuilder<StringSelectMenuBuilder>()
+					.addComponents(this.#lookMenu("class", agent.name, look.class))
+					.toJSON(),
+				new ActionRowBuilder<StringSelectMenuBuilder>()
+					.addComponents(this.#lookMenu("color", agent.name, look.palette))
+					.toJSON(),
 				new ActionRowBuilder<ButtonBuilder>().addComponents(
 					button("edit", text.agentEditPromptLabel, ButtonStyle.Primary),
-					...(drawing
-						? [
-								button("redraw", text.agentRedrawLabel),
-								button("newprompt", text.agentNewAvatarPromptLabel),
-								button("editavatar", text.agentEditAvatarLabel),
-							]
-						: []),
 					button("model", text.agentModelLabel),
 				),
 			)
@@ -227,23 +225,54 @@ export class AgentCommands {
 		};
 	}
 
-	/** A panel button: a form opens, or a redraw starts. */
+	/** A dropdown of the look: the 24 classes or the 8 colors, the agent's own chosen. */
+	#lookMenu(
+		action: LookAction,
+		name: string,
+		current: string | undefined,
+	): StringSelectMenuBuilder {
+		const text = messages();
+		const option = (label: string, value: string, description?: string) => {
+			const built = new StringSelectMenuOptionBuilder()
+				.setLabel(label)
+				.setValue(value)
+				.setDefault(value === current);
+			return description
+				? built.setDescription(description.slice(0, 100))
+				: built;
+		};
+		return new StringSelectMenuBuilder()
+			.setCustomId(`${AGENT_BUTTON_PREFIX}${action}:${name}`)
+			.setPlaceholder(
+				action === "class"
+					? text.agentClassPlaceholder
+					: text.agentColorPlaceholder,
+			)
+			.addOptions(
+				action === "class"
+					? CLASS_IDS.map((id) =>
+							option(CATALOG.classes[id].label, id, CATALOG.classes[id].jobs),
+						)
+					: (Object.keys(CATALOG.palettes) as PaletteName[]).map((id) =>
+							option(id.charAt(0).toUpperCase() + id.slice(1), id),
+						),
+			);
+	}
+
+	/** A panel button: a form opens. */
 	async button(interaction: ButtonInteraction): Promise<void> {
 		const [action, name] = interaction.customId
 			.slice(AGENT_BUTTON_PREFIX.length)
 			.split(":");
 		const agent = name ? this.#options.store.agent(name) : undefined;
-		if (!agent || !ACTIONS.includes(action as Action))
-			throw new OwnerFacingError(messages().agentNotFound);
-		if (action === "redraw") {
-			await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-			await interaction.editReply(await this.#avatar(agent.name, "redraw"));
-			return;
-		}
+		if (!agent) throw new OwnerFacingError(messages().agentNotFound);
+		// A panel posted before 0.23 still carries the redraw buttons.
+		if (!ACTIONS.includes(action as Action))
+			throw new OwnerFacingError(messages().agentPanelOutdated);
 		await interaction.showModal(
 			action === "model"
 				? await this.#modelModal(agent)
-				: this.#modal(action as Action, agent),
+				: this.#editModal(agent),
 		);
 	}
 
@@ -292,7 +321,7 @@ export class AgentCommands {
 			);
 	}
 
-	#modal(action: Action, agent: Agent): ModalBuilder {
+	#editModal(agent: Agent): ModalBuilder {
 		const field = (
 			id: string,
 			label: string,
@@ -308,50 +337,23 @@ export class AgentCommands {
 			if (value) input.setValue(value);
 			return new LabelBuilder().setLabel(label).setTextInputComponent(input);
 		};
-		const modal = new ModalBuilder().setCustomId(
-			`${AGENT_MODAL_PREFIX}${action}:${agent.name}`,
-		);
-		if (action === "edit")
-			return modal
-				.setTitle(
-					messages().agentEditModalTitle(agent.displayName).slice(0, 45),
-				)
-				.addLabelComponents(
-					field(
-						"display",
-						messages().agentDisplayNameLabel,
-						TextInputStyle.Short,
-						32,
-						agent.displayName,
-					),
-					field(
-						"prompt",
-						messages().agentPromptLabel,
-						TextInputStyle.Paragraph,
-						MAX_PROMPT_CHARS,
-						agent.prompt,
-					),
-				);
-		if (action === "newprompt")
-			return modal
-				.setTitle(messages().agentNewAvatarPromptLabel)
-				.addLabelComponents(
-					field(
-						"text",
-						messages().agentAvatarPromptLabel,
-						TextInputStyle.Paragraph,
-						MAX_AVATAR_PROMPT_CHARS,
-						agent.avatarPrompt,
-					),
-				);
-		return modal
-			.setTitle(messages().agentEditAvatarLabel)
+		return new ModalBuilder()
+			.setCustomId(`${AGENT_MODAL_PREFIX}edit:${agent.name}`)
+			.setTitle(messages().agentEditModalTitle(agent.displayName).slice(0, 45))
 			.addLabelComponents(
 				field(
-					"text",
-					messages().agentEditAvatarField,
+					"display",
+					messages().agentDisplayNameLabel,
+					TextInputStyle.Short,
+					32,
+					agent.displayName,
+				),
+				field(
+					"prompt",
+					messages().agentPromptLabel,
 					TextInputStyle.Paragraph,
-					MAX_AVATAR_PROMPT_CHARS,
+					MAX_PROMPT_CHARS,
+					agent.prompt,
 				),
 			);
 	}
@@ -383,23 +385,43 @@ export class AgentCommands {
 			await interaction.editReply(this.#panel(updated, messages().agentSaved));
 			return;
 		}
-		const mode: AvatarMode = action === "newprompt" ? "new_prompt" : "edit";
-		await interaction.editReply(
-			await this.#avatar(agent.name, mode, value("text")),
-		);
+		throw new OwnerFacingError(messages().agentPanelOutdated);
 	}
 
-	async #avatar(name: string, mode: AvatarMode, text?: string) {
+	/**
+	 * A choice in one of the panel's two dropdowns, class or color; the reply is deferred by the
+	 * caller. The choice goes through `dress`, which keeps the colors on a new class and the
+	 * class on a new color.
+	 */
+	async select(interaction: StringSelectMenuInteraction): Promise<void> {
+		const [action, name] = interaction.customId
+			.slice(AGENT_BUTTON_PREFIX.length)
+			.split(":");
+		const chosen = interaction.values[0];
+		if (
+			!name ||
+			chosen === undefined ||
+			(action !== "class" && action !== "color")
+		)
+			throw new OwnerFacingError(messages().agentNotFound);
+		const input: CharacterInput =
+			action === "class"
+				? { class: chosen as CharacterInput["class"] }
+				: { palette: chosen as PaletteName };
+		await interaction.editReply(await this.#dress(name, input));
+	}
+
+	async #dress(name: string, input: CharacterInput) {
 		try {
-			const agent = await this.#options.team.redrawAvatar(name, mode, text);
-			return this.#panel(agent, messages().agentAvatarRedrawn);
+			const agent = await this.#options.team.dress(name, input);
+			return this.#panel(agent, messages().agentLookChanged);
 		} catch (error) {
 			if (!(error instanceof AgentError)) throw error;
 			const agent = this.#options.store.agent(name);
 			return agent
 				? this.#panel(
 						agent,
-						messages().agentAvatarFailed(error.message).slice(0, 300),
+						messages().agentLookFailed(error.message).slice(0, 300),
 					)
 				: ownerPanel({
 						title: messages().ownerFailedTitle,

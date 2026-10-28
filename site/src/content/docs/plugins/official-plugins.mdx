@@ -69,9 +69,8 @@ Its [copy-in source template](https://github.com/wayne930242/pi-roundtable/blob/
 
 ## `codex-images`
 
-`codex-images` fills the `images` slot, the part the core uses to draw.
-With it, `agent_create` accepts an avatar prompt, agents get an `agent_avatar` tool, and the owner's profile panel offers to redraw.
-Without an `images` plugin, each agent gets a generated picture from its display name instead.
+`codex-images` fills the `images` slot, the part the core uses to draw pictures for `generate_image`.
+Agents' own avatars are composed characters since 0.23 and do not use it.
 `roundtable doctor` reports whether a plugin fills the slot.
 Its [copy-in source template](https://github.com/wayne930242/pi-roundtable/blob/master/templates/official/codex-images/plugin.ts) is a short file: it builds the plugin with `createCodexImages` from `pi-roundtable/kit`, which draws through the kit's `drawCodexImage`.
 A fix to the protocol arrives with an upgrade of the package, not with a new copy.

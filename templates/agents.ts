@@ -10,7 +10,7 @@ export const agents: AgentSeed[] = [
 		displayName: "Guide",
 		prompt:
 			"You are Guide, a friendly assistant. Answer briefly and ask when a request is unclear.",
-		avatarPrompt: "A friendly lighthouse keeper with a warm lantern",
+		character: { class: "wizard", palette: "teal" },
 		// The agent in the entry channel is the coordinator: it answers there and can create the others.
 		channelId: env("DISCORD_ENTRY_CHANNEL_ID"),
 	},

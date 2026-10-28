@@ -53,6 +53,7 @@ describe("doctor", () => {
 			"plugins",
 			"access",
 			"image provider",
+			"characters",
 			"PostgreSQL",
 			"principals",
 			"Discord token",
@@ -257,6 +258,7 @@ describe("start", () => {
 			"plugins",
 			"access",
 			"image provider",
+			"characters",
 			"model login",
 			"public URL",
 		]);

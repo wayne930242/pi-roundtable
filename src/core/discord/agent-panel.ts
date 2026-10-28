@@ -17,7 +17,7 @@ export interface AgentPanelOptions {
 	skills?: Pick<SkillRegistry, "carried">;
 }
 
-/** An agent's panel: its prompt, picture, model, and skills, with buttons and forms to change them. */
+/** An agent's panel: its prompt, look, model, and skills, with dropdowns, buttons and forms to change them. */
 export interface AgentPanel {
 	/**
 	 * The panel of the agent whose channel this is. Throws OwnerFacingError, which a command run
@@ -25,7 +25,7 @@ export interface AgentPanel {
 	 */
 	open(channelId: string): AgentPanelMessage;
 	/**
-	 * Answers the panel's own buttons and form, for the owner only and deferred as Discord needs;
+	 * Answers the panel's own buttons, dropdowns and form, for the owner only and deferred as Discord needs;
 	 * true when it handled the interaction. The custom ids are fixed, so panels already posted keep working.
 	 */
 	handles(interaction: Interaction): Promise<boolean>;
@@ -49,6 +49,15 @@ export function agentPanel(options: AgentPanelOptions): AgentPanel {
 			) {
 				if (!(await guard.allows(interaction))) return true;
 				await guard.run(interaction, () => commands.button(interaction));
+				return true;
+			}
+			if (
+				interaction.isStringSelectMenu() &&
+				interaction.customId.startsWith(AGENT_BUTTON_PREFIX)
+			) {
+				if (!(await guard.allows(interaction))) return true;
+				await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+				await guard.run(interaction, () => commands.select(interaction));
 				return true;
 			}
 			if (

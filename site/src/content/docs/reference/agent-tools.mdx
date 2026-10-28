@@ -21,10 +21,10 @@ For how they work in practice, see [Create agents](/agents/create-agents/), [Gro
 | Tool | What it does | Minimum tier |
 | --- | --- | --- |
 | `agent_list` | Lists every agent and group with channel and status, and the Agents and Groups categories in server order. | member |
-| `agent_get` | Reads an agent's display name, status, channel, model, thinking level, skills, prompt, and avatar prompt. | member |
-| `agent_create` | Creates an agent with its own channel and an avatar, and starts it on an opening task. The name is permanent. | admin |
+| `agent_get` | Reads an agent's display name, status, channel, model, thinking level, skills, look, and prompt. | member |
+| `agent_create` | Creates an agent with its own channel and a character picture (`class` and `color` optional), and starts it on an opening task. The name is permanent. | admin |
 | `agent_update` | Changes an agent's display name, prompt, model, or thinking level. The change applies from its next turn. | admin |
-| `agent_avatar` | Redraws an agent's avatar: from its stored prompt, from a new prompt, or by an edit instruction. Offered only when a plugin fills the `images` slot. | admin |
+| `agent_avatar` | Changes an agent's look: its `class`, `color`, or single `parts`. What is left out stays as it is. | admin |
 | `message_agent` | Sends a self-contained request to another agent. The answer comes back as a new turn. A seat in a group does not have it. | member |
 | `group_create` | Creates a group channel with 2 to 6 agents and an optional host. | admin |
 | `group_update` | Changes a group's display name, members, or host. | admin |

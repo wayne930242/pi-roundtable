@@ -1,4 +1,9 @@
 import { describe, expect, test } from "bun:test";
+import {
+	CATALOG,
+	CLASS_IDS,
+	resolveCharacter,
+} from "../../characters/index.ts";
 import type { Agent } from "../agents/agent-store.ts";
 import { messages } from "../i18n/index.ts";
 import { AgentCommands, formModels, skillsText } from "./agent-commands.ts";
@@ -63,12 +68,15 @@ describe("the agent panel", () => {
 		name: "scout",
 		displayName: "Scout",
 		prompt: "You scout.",
-		avatarPrompt: "a fox in a green scarf",
+		avatarPrompt: "",
+		avatarHash: "a".repeat(64),
 		channelId: "10",
 		status: "active",
+		character: resolveCharacter({ class: "ranger", palette: "vert" }),
 	};
-	const panel = (canDraw: boolean) => {
-		const commands = new AgentCommands({
+	const dressed: string[] = [];
+	const commands = () =>
+		new AgentCommands({
 			store: {
 				agentByChannel: () => agent,
 				groupByChannel: () => undefined,
@@ -76,27 +84,78 @@ describe("the agent panel", () => {
 			},
 			team: {
 				modelOf: () => ({ model: "a/b", thinking: "auto" }),
+				dress: async (name: string, input: unknown) => {
+					dressed.push(`${name} ${JSON.stringify(input)}`);
+					return { ...agent, avatarHash: "b".repeat(64) };
+				},
 			} as never,
-			studio: { url: () => "https://x/a.png", canDraw },
+			studio: {
+				url: (hash: string | undefined) => `https://x/${hash}.png`,
+			},
 			skills: { carried: () => ({ skills: [], missing: [] }) },
 		});
-		return JSON.stringify(commands.panel("10").components[0]?.toJSON());
-	};
+	const panel = () =>
+		JSON.parse(
+			JSON.stringify(commands().panel("10").components[0]?.toJSON()),
+		) as { components: Array<Record<string, unknown>> };
 
-	test("with an image provider it shows the avatar prompt and the three avatar buttons", () => {
-		const json = panel(true);
-		expect(json).toContain("a fox in a green scarf");
-		for (const action of ["redraw", "newprompt", "editavatar"])
-			expect(json).toContain(`${action}:scout`);
-	});
+	/** The select menus of the panel, by custom id. */
+	function selects() {
+		const found: Array<{ custom_id: string; options: { value: string }[] }> =
+			[];
+		const walk = (node: unknown) => {
+			if (Array.isArray(node)) return node.forEach(walk);
+			if (node === null || typeof node !== "object") return;
+			const object = node as Record<string, unknown>;
+			if (object.type === 3) found.push(object as never);
+			Object.values(object).forEach(walk);
+		};
+		walk(panel());
+		return found;
+	}
 
-	test("without one it says so instead of the avatar prompt and offers only the other buttons", () => {
-		const json = panel(false);
-		expect(json).toContain("No image provider is configured");
-		expect(json).not.toContain("a fox in a green scarf");
+	test("it shows a class select of 24 and a color select of 8, and no avatar prompt or redraw button", () => {
+		const menus = selects();
+		expect(menus.map((m) => m.custom_id)).toEqual([
+			"roundtable:agent:class:scout",
+			"roundtable:agent:color:scout",
+		]);
+		expect(menus[0]?.options.map((o) => o.value)).toEqual([...CLASS_IDS]);
+		expect(menus[1]?.options.map((o) => o.value)).toEqual(
+			Object.keys(CATALOG.palettes),
+		);
+		const json = JSON.stringify(panel());
 		for (const action of ["redraw", "newprompt", "editavatar"])
 			expect(json).not.toContain(`${action}:scout`);
+		expect(json).not.toContain("Avatar prompt");
 		for (const action of ["edit", "model"])
 			expect(json).toContain(`:${action}:scout`);
+	});
+
+	test("the select that matches the agent's look is the default", () => {
+		const [classes, colors] = selects() as unknown as Array<{
+			options: { value: string; default?: boolean }[];
+		}>;
+		expect(classes?.options.find((o) => o.default)?.value).toBe("ranger");
+		expect(colors?.options.find((o) => o.default)?.value).toBe("vert");
+	});
+
+	test("choosing a class or a color dresses the agent and edits the reply with the new picture", async () => {
+		for (const [action, value, input] of [
+			["class", "monk", { class: "monk" }],
+			["color", "rose", { palette: "rose" }],
+		] as const) {
+			dressed.length = 0;
+			const edits: unknown[] = [];
+			await commands().select({
+				customId: `roundtable:agent:${action}:scout`,
+				values: [value],
+				editReply: async (reply: unknown) => void edits.push(reply),
+			} as never);
+			expect(dressed).toEqual([`scout ${JSON.stringify(input)}`]);
+			expect(JSON.stringify(edits)).toContain(
+				`https://x/${"b".repeat(64)}.png`,
+			);
+		}
 	});
 });

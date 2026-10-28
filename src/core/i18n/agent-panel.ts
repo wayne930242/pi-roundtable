@@ -20,17 +20,11 @@ export function agentPanelEn(ctx: CatalogContext) {
 			skills: string;
 		}) =>
 			`### ${v.displayName}\n-# agent name \`${v.name}\`, cannot be changed\n**Model** · \`${v.model}\` · thinking \`${v.thinking}\`${v.follows}\n${v.skills}\n-# To add or remove a skill, ask any agent to use agent_skills.`,
-		agentAvatarPromptText: (prompt: string) => `**Avatar prompt**\n${prompt}`,
-		agentNoImageProvider:
-			"**Avatar** · No image provider is configured, so this avatar is generated from the agent's display name and cannot be redrawn or edited. A plugin that fills the `images` slot adds drawing.",
 		agentPromptInline: (prompt: string) =>
 			`**Prompt**\n\`\`\`\n${prompt}\n\`\`\``,
 		agentPromptFile: (length: number) =>
 			`**Prompt** · ${length} characters, the full text is in the file below.`,
 		agentEditPromptLabel: "Edit prompt",
-		agentRedrawLabel: "Redraw avatar",
-		agentNewAvatarPromptLabel: "New avatar prompt",
-		agentEditAvatarLabel: "Edit avatar",
 		agentModelLabel: "Model",
 		agentDefaultNote:
 			"A changed prompt takes effect from this agent's next turn; the conversation history is kept.",
@@ -41,12 +35,15 @@ export function agentPanelEn(ctx: CatalogContext) {
 		agentEditModalTitle: (displayName: string) => `Edit ${displayName}`,
 		agentDisplayNameLabel: "Display name",
 		agentPromptLabel: "Prompt",
-		agentAvatarPromptLabel: "Avatar prompt (state the background colour)",
-		agentEditAvatarField: "How to change it (for example: add a hat)",
+		agentLook: (label: string, color: string) =>
+			`**Look** · ${label}, ${color}`,
+		agentClassPlaceholder: "Class",
+		agentColorPlaceholder: "Color",
+		agentLookChanged: "The new picture shows from this agent's next message.",
+		agentLookFailed: (message: string) =>
+			`The look was not changed: ${message}`,
+		agentPanelOutdated: `This panel is out of date; open it again with \`/${ctx.root} profile\`.`,
 		agentSaved: "Saved; it takes effect from the next turn.",
-		agentAvatarRedrawn: "The new avatar shows from this agent's next message.",
-		agentAvatarFailed: (message: string) =>
-			`The avatar was not drawn: ${message}`,
 	};
 }
 
@@ -70,17 +67,11 @@ export function agentPanelZhTW(
 			skills: string;
 		}) =>
 			`### ${v.displayName}\n-# agent 名稱 \`${v.name}\`，不能更改\n**模型**　\`${v.model}\`　thinking \`${v.thinking}\`${v.follows}\n${v.skills}\n-# 要增減 skill，請任一個 agent 用 agent_skills。`,
-		agentAvatarPromptText: (prompt: string) => `**頭像提示詞**\n${prompt}`,
-		agentNoImageProvider:
-			"**頭像**　尚未設定圖像提供者，所以這個頭像由 agent 的顯示名自動產生，不能重畫或修改。要能畫頭像，需要一個填入 `images` 槽位的外掛。",
 		agentPromptInline: (prompt: string) =>
 			`**提示詞**\n\`\`\`\n${prompt}\n\`\`\``,
 		agentPromptFile: (length: number) =>
 			`**提示詞**　${length} 字，完整內容在下面的檔案。`,
 		agentEditPromptLabel: "編輯提示詞",
-		agentRedrawLabel: "重畫頭像",
-		agentNewAvatarPromptLabel: "新頭像提示詞",
-		agentEditAvatarLabel: "修改頭像",
 		agentModelLabel: "模型",
 		agentDefaultNote:
 			"提示詞改完，從這個 agent 的下一回合開始生效；對話紀錄保留。",
@@ -91,10 +82,12 @@ export function agentPanelZhTW(
 		agentEditModalTitle: (displayName: string) => `編輯 ${displayName}`,
 		agentDisplayNameLabel: "顯示名",
 		agentPromptLabel: "提示詞",
-		agentAvatarPromptLabel: "頭像提示詞（寫明背景色）",
-		agentEditAvatarField: "要怎麼改（例如：加一頂帽子）",
+		agentLook: (label: string, color: string) => `**外觀**　${label}，${color}`,
+		agentClassPlaceholder: "職業",
+		agentColorPlaceholder: "顏色",
+		agentLookChanged: "新的頭像從這個 agent 的下一則訊息開始顯示。",
+		agentLookFailed: (message: string) => `外觀沒有改成：${message}`,
+		agentPanelOutdated: `這個面板已經過期，請重新用 \`/${ctx.root} profile\` 開啟。`,
 		agentSaved: "已儲存，從下一回合開始生效。",
-		agentAvatarRedrawn: "新頭像從這個 agent 的下一則訊息開始顯示。",
-		agentAvatarFailed: (message: string) => `頭像沒有畫成：${message}`,
 	};
 }

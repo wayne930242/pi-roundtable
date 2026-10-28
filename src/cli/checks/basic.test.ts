@@ -9,6 +9,7 @@ import {
 	validConfig,
 } from "../testing/fixtures.ts";
 import { checkBun } from "./bun.ts";
+import { checkCharacters } from "./characters.ts";
 import { checkConfiguration, checkPlugins } from "./configuration.ts";
 import { checkEnvironment } from "./environment.ts";
 import { checkImageProvider } from "./images.ts";
@@ -226,6 +227,21 @@ describe("plugins", () => {
 	});
 });
 
+describe("characters", () => {
+	test("passes when canvas rasterizes the composer's SVG", async () => {
+		expect((await checkCharacters()).status).toBe("ok");
+	});
+	test("fails with the reason when the probe cannot rasterize", async () => {
+		const text = failure(
+			await checkCharacters(async () => {
+				throw new Error("no librsvg");
+			}),
+		);
+		expect(text).toContain("no librsvg");
+		expect(text).toContain("librsvg");
+	});
+});
+
 describe("image provider", () => {
 	const project = (plugins: RoundtablePlugin[]) =>
 		new Project(
@@ -239,12 +255,12 @@ describe("image provider", () => {
 		);
 	const detail = (result: Result) =>
 		result.status === "ok" ? (result.detail ?? "") : "";
-	test("passes without a provider and says agents get generated avatars, with the guide to fill the slot", async () => {
+	test("passes without a provider and says agents are composed characters, with the guide to fill the slot", async () => {
 		const result = await checkImageProvider(
 			project([{ name: "database", setup: () => ({}) }]),
 		);
 		expect(result.status).toBe("ok");
-		expect(detail(result)).toContain("generated from their display names");
+		expect(detail(result)).toContain("no longer draws");
 		expect(detail(result)).toContain(
 			"docs/plugins.md#providers-replace-a-part-the-core-runs-on",
 		);

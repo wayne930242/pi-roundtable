@@ -144,9 +144,9 @@ export default {
 
 | 鍵 | 型別 | 預設值 | 作用 |
 | --- | --- | --- | --- |
-| `agents` | `{ name, displayName, prompt, avatarPrompt, channelId? }` 的清單 | `[]` | 第一批團隊，只建立一次。已經存下來的 agent 不會被覆寫，所以之後請在 Discord 裡修改 agent。沒有 Discord 時，種子 agent 沒有 `channelId`。 |
+| `agents` | `{ name, displayName, prompt, character?, channelId? }` 的清單 | `[]` | 第一批團隊，只建立一次。已經存下來的 agent 不會被覆寫，所以之後請在 Discord 裡修改 agent。沒有 Discord 時，種子 agent 沒有 `channelId`。 |
 | `coordinator` | string | `agents` 的第一位 | 沒有 Discord 時，接手主人一般請求的 agent；必須是 `agents` 之一，也不能被封存。有 Discord 時設它會出錯，因為 `discord.entryChannel` 裡的 agent 就是協調者。 |
-| `avatar` | string | 套件附帶的一張簡單 bot 圖片 | 你自己的圖片：中性頭像，也是繪製頭像時參考風格的圖。 |
+| `avatar` | string | 套件附帶的一張簡單 bot 圖片 | 0.23 起已棄用且被忽略：agent 是組合出來的角色。設了它啟動時會記一則警告，1.0 移除。 |
 | `http.publicUrl` | string，使用 Discord 時必填 | 無 | 能從網際網路連到這個行程的位址。Discord 從這裡取頭像。 |
 | `http.port` | 1 到 65535 的整數 | `3000` | 行程監聽的 TCP port。 |
 | `http.hostname` | string | 無 | 監聽綁定的 hostname。 |

@@ -41,11 +41,17 @@ const panel = (identity?: ReturnType<typeof mapIdentity>) =>
 	});
 
 /** A press of a button or a form, recording how it was answered. */
-function interaction(kind: "button" | "modal", user: string, customId: string) {
+function interaction(
+	kind: "button" | "modal" | "select",
+	user: string,
+	customId: string,
+) {
 	const log: string[] = [];
 	const value = {
 		isButton: () => kind === "button",
+		values: ["monk"],
 		isModalSubmit: () => kind === "modal",
+		isStringSelectMenu: () => kind === "select",
 		customId,
 		user: { id: user },
 		isRepliable: () => true,
@@ -62,7 +68,7 @@ function interaction(kind: "button" | "modal", user: string, customId: string) {
 describe("agentPanel", () => {
 	test("opens the panel of the agent whose channel it is, with the custom ids posted panels already carry", () => {
 		const json = JSON.stringify(panel().open("10").components[0]?.toJSON());
-		for (const action of ["edit", "redraw", "newprompt", "editavatar", "model"])
+		for (const action of ["edit", "class", "color", "model"])
 			expect(json).toContain(`"roundtable:agent:${action}:scout"`);
 	});
 
@@ -118,6 +124,17 @@ describe("agentPanel", () => {
 		);
 		expect(await panel().handles(stranger.value)).toBe(true);
 		expect(stranger.log).toEqual([]);
+	});
+
+	test("answers its selects for the owner only, deferred before the look is dressed", async () => {
+		const owner = interaction("select", OWNER, "roundtable:agent:class:scout");
+		expect(await panel().handles(owner.value)).toBe(true);
+		expect(owner.log[0]).toBe("defer");
+		const stranger = interaction("select", "2", "roundtable:agent:class:scout");
+		expect(await panel().handles(stranger.value)).toBe(true);
+		expect(stranger.log).toEqual([]);
+		const other = interaction("select", OWNER, "roundtable:card:x");
+		expect(await panel().handles(other.value)).toBe(false);
 	});
 
 	test("leaves other buttons and forms to the modules that own them", async () => {

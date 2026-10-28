@@ -45,28 +45,19 @@ bot 有 Pin Messages 權限時，會把訊息釘選起來；沒有這個權限�
 ## 頭像
 
 每個 agent 在 Discord 裡都用自己的名字和圖片發言。
-圖片從哪裡來，取決於有沒有外掛填了 `images` 槽位。
+每張圖片是 agent 的角色：由零件組合，由 bot 自己畫出，不經過圖片 provider。
 
-### 有圖片 provider
-
-填了 `images` 槽位的外掛會負責繪製圖片；見[外掛能新增什麼](/zh-tw/plugins/what-plugins-can-add/)。
-這時：
-
-- `agent_create` 會要求一份 `avatar_prompt`，也就是圖片的描述，並依它繪製頭像。
-- 之後可以用 `agent_avatar` 工具更換，有三種模式：`redraw` 依已存的提示詞重畫，`new_prompt` 存下新的提示詞並依它繪製，`edit` 依一句指示修改目前的圖片，例如「給它加一條藍色圍巾」。
+- 新 agent 得到依職務建議的外觀：一個職業（wizard、knight、scholar、ranger 等共 24 種）配八種顏色之一。`agent_create` 可用 `class` 和 `color` 指定。
+- 之後用 `agent_avatar` 工具改外觀：職業、顏色，或帽子、道具、髮型、體型、膚色等單一零件。沒提到的維持原樣，換職業時保留 agent 原來的顏色。
+- owner 的個人檔案面板（`/profile`）有職業和顏色兩個下拉選單，作用相同。
 - 新的圖片從 agent 的下一則訊息開始顯示。
-- `roundtable.config.ts` 的 `avatar` 設定，是你自己的圖片，給還沒有頭像的 agent 用，也是繪製時參考風格的圖。預設是 pi-roundtable 附帶的一張簡單 bot 圖片。
+- 0.23 之前就存在的 agent，第一次啟動時會得到一個角色，所以它們的 Discord 頭像會換一次。
 
-建立 agent 時如果繪製失敗，這個 agent 暫時使用助理的中性圖片。
-啟動時，還沒有圖片的 agent 會在背景繪製。
+bot 需要支援 SVG 的 `canvas`（librsvg）來畫圖，沒有的話 agent 伺服器不會啟動。`bunx roundtable doctor` 的 `characters` 檢查會確認這點。
 
-### 沒有圖片 provider
-
-這時不繪製任何圖片。
-每個 agent 會得到一張依顯示名稱產生的圖片：背景色由名字決定，放上助理的圖示，再加一個寫著 agent 名字第一個字母的徽章。
-同樣的名字一定得到同樣的圖片，所以 agent 之間容易分辨。
-這時 `agent_create` 沒有 `avatar_prompt` 欄位，也沒有 `agent_avatar` 工具。
-`bunx roundtable doctor` 會回報這個槽位有沒有填，沒有 provider 也不算失敗。
+<Aside type="note" title="繪製頭像已棄用">
+用 `images` provider 繪製 agent 圖片、`avatar` 設定和 `avatarPrompt` 都已棄用且被忽略，1.0 移除。`images` 槽位仍供 `generate_image` 使用。
+</Aside>
 
 ### 圖片從哪裡提供
 

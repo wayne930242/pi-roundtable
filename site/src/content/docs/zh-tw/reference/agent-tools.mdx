@@ -21,10 +21,10 @@ agent 透過工具行動。
 | 工具 | 作用 | 最低層級 |
 | --- | --- | --- |
 | `agent_list` | 列出每個 agent 和群組的頻道與狀態，以及依伺服器順序排列的 `Agents` 和 `Groups` 類別。 | `member` |
-| `agent_get` | 讀取 agent 的顯示名稱、狀態、頻道、模型、thinking level、技能、提示詞和頭像提示詞。 | `member` |
-| `agent_create` | 建立一個有自己頻道和頭像的 agent，並讓它從一個開場任務開始。名稱建立後不能改。 | `admin` |
+| `agent_get` | 讀取 agent 的顯示名稱、狀態、頻道、模型、thinking level、技能、外觀和提示詞。 | `member` |
+| `agent_create` | 建立一個有自己頻道和角色頭像（`class`、`color` 選填）的 agent，並讓它從一個開場任務開始。名稱建立後不能改。 | `admin` |
 | `agent_update` | 修改 agent 的顯示名稱、提示詞、模型或 thinking level。修改從它的下一輪起生效。 | `admin` |
-| `agent_avatar` | 重畫 agent 的頭像：用已存的提示詞、用新的提示詞，或用修改指示。只有在外掛填入 `images` 槽位時才提供。 | `admin` |
+| `agent_avatar` | 改 agent 的外觀：`class`、`color` 或單一 `parts`；沒提到的維持原樣。 | `admin` |
 | `message_agent` | 傳一個自成一體的請求給另一個 agent。回答會以新的一輪回來。群組裡的席位沒有這個工具。 | `member` |
 | `group_create` | 建立一個有 2 到 6 個 agent、可以指定主持人的群組頻道。 | `admin` |
 | `group_update` | 修改群組的顯示名稱、成員或主持人。 | `admin` |

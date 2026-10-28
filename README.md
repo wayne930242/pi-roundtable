@@ -68,13 +68,14 @@ A web chat project asks for `OWNER_NAME`, `DATABASE_URL`, and `MODEL`, and for t
 4. Every plugin loads, no two share a name, and the registration is valid (`Roundtable.check()`).
 5. Whom `access` serves: the owners, and a warning when `everyone: true` admits everyone on every surface of a host with more than one.
 6. Whether a plugin fills the `images` slot.
-   The check passes with or without one; agents without an image provider get avatars generated from their display names.
-7. PostgreSQL is reachable and migratable.
-8. The principals: a dry run of what the next start makes from the people the database already knows, printed as the start logs it; a configured owner's identity linked to someone else, which stops the start; and a disabled owner.
-9. With Discord configured: the Discord token is valid, the bot is in your server, the Message Content intent is on, and the bot has the permissions it needs in the entry channel (including Pin Messages).
+   The check passes with or without one; agents' avatars are composed characters and no longer drawn with it.
+7. Whether `canvas` can rasterize SVG, which the agent server needs for the agents' pictures.
+8. PostgreSQL is reachable and migratable.
+9. The principals: a dry run of what the next start makes from the people the database already knows, printed as the start logs it; a configured owner's identity linked to someone else, which stops the start; and a disabled owner.
+10. With Discord configured: the Discord token is valid, the bot is in your server, the Message Content intent is on, and the bot has the permissions it needs in the entry channel (including Pin Messages).
    When the bot is not in the server, the fix is an invitation link that asks for exactly those permissions.
-10. The model login exists.
-11. When `http.publicUrl` is set: `PUBLIC_URL` is a well-formed address; with `--reachable` it also has to answer, which is only true while the bot runs.
+11. The model login exists.
+12. When `http.publicUrl` is set: `PUBLIC_URL` is a well-formed address; with `--reachable` it also has to answer, which is only true while the bot runs.
 
 It exits non-zero on any failure, not on a warning, and changes nothing it checked.
 A fresh project fails only on the credentials you have not entered yet, and says which.
