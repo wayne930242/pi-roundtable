@@ -1512,6 +1512,40 @@ dialog.palette .sheet-body {
 	scroll-snap-type: x proximity;
 }
 
+/* The row fades toward the side where more of it lies, so a cut-off tile reads as "scroll" and not as the end. */
+.creator-strip[data-more="end"] {
+	-webkit-mask-image: linear-gradient(
+		to right,
+		#000 calc(100% - 2.5rem),
+		transparent
+	);
+	mask-image: linear-gradient(to right, #000 calc(100% - 2.5rem), transparent);
+}
+.creator-strip[data-more="start"] {
+	-webkit-mask-image: linear-gradient(
+		to left,
+		#000 calc(100% - 2.5rem),
+		transparent
+	);
+	mask-image: linear-gradient(to left, #000 calc(100% - 2.5rem), transparent);
+}
+.creator-strip[data-more="both"] {
+	-webkit-mask-image: linear-gradient(
+		to right,
+		transparent,
+		#000 2.5rem,
+		#000 calc(100% - 2.5rem),
+		transparent
+	);
+	mask-image: linear-gradient(
+		to right,
+		transparent,
+		#000 2.5rem,
+		#000 calc(100% - 2.5rem),
+		transparent
+	);
+}
+
 .creator-tile {
 	display: flex;
 	flex: none;

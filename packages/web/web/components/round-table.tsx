@@ -61,6 +61,8 @@ export interface RoundTableProps {
 	/** The group room whose speaker is lit; any group's when absent. */
 	groupRoom?: string;
 	variant?: "full" | "compact";
+	/** List the seats as buttons under the table, as a table in a narrow panel or sheet does. */
+	list?: boolean;
 	/** Receives the table's handle once it is mounted, and `undefined` when it goes. */
 	onHandle?(handle: TableHandle | undefined): void;
 }
@@ -80,7 +82,9 @@ export function RoundTable(props: RoundTableProps) {
 	const agentStates = useRoomStates(roster.map((view) => view.key));
 	const rounds = useRounds(props.groupRoom);
 	const upright = useMedia("(orientation: portrait)");
-	const listBelow = variant === "full" && upright && roster.length > LIST_ABOVE;
+	const listBelow =
+		variant === "full" &&
+		(props.list === true || (upright && roster.length > LIST_ABOVE));
 
 	const states = useMemo(
 		() =>

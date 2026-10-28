@@ -16,6 +16,21 @@ export function webglAvailable(): boolean {
 	}
 }
 
+/**
+ * Whether the address asks for the 2D table (`?nogl`, in the query or after the hash), to try it on a
+ * machine that has WebGL. `nogl=0` and `nogl=false` leave the choice to the browser.
+ */
+export function glDisabled(search: string, hash: string): boolean {
+	const queries = [
+		search,
+		hash.includes("?") ? hash.slice(hash.indexOf("?")) : "",
+	];
+	return queries.some((query) => {
+		const value = new URLSearchParams(query).get("nogl");
+		return value !== null && value !== "0" && value !== "false";
+	});
+}
+
 export async function mountRoundTable(
 	container: HTMLElement,
 	opts: TableOptions,
@@ -38,19 +53,29 @@ export async function mountRoundTable(
 	stage.className = "rt-table-stage";
 	root.appendChild(stage);
 	let list: HTMLUListElement | null = null;
-	if (opts.listBelow && !compact) {
-		root.dataset.list = "";
-		list = document.createElement("ul");
-		list.className = "rt-table-list";
-		list.setAttribute("aria-label", "Round table");
-		root.appendChild(list);
-	}
+	/** The canvas reported it cannot carry names a person reads: the seats are listed under it. */
+	let unreadable = false;
+	/** Whether the seats are listed as buttons under the canvas; the list is made when it first is. */
+	const listed = () => !compact && (Boolean(opts.listBelow) || unreadable);
 	container.appendChild(root);
 
 	// Buttons are kept while the seats stay the same, so a state change does not drop keyboard focus.
 	const buttons = new Map<string, HTMLButtonElement>();
 	const syncList = () => {
-		if (!list) return;
+		if (!listed()) {
+			list?.remove();
+			list = null;
+			buttons.clear();
+			delete root.dataset.list;
+			return;
+		}
+		if (!list) {
+			list = document.createElement("ul");
+			list.className = "rt-table-list";
+			list.setAttribute("aria-label", "Round table");
+			root.appendChild(list);
+			root.dataset.list = "";
+		}
 		for (const id of [...buttons.keys()])
 			if (!seats.has(id)) buttons.delete(id);
 		for (const s of seats.values()) {
@@ -79,6 +104,12 @@ export async function mountRoundTable(
 	};
 	syncList();
 
+	const reading = (readable: boolean) => {
+		unreadable = !readable;
+		syncList();
+		opts.onNames?.(readable);
+	};
+
 	const mountSvg = async () => {
 		const { createTable2D } = await import("./table2d");
 		inner = createTable2D(stage, {
@@ -87,12 +118,20 @@ export async function mountRoundTable(
 			scheme: theme.s,
 			seats: [...seats.values()],
 		});
+		// The 2D table draws every name at 11 px or more by its own sizing.
+		reading(true);
 	};
 	const mountGl = async () => {
 		const { createTable3D } = await import("./table3d");
 		inner = createTable3D(
 			stage,
-			{ ...opts, theme: theme.t, scheme: theme.s, seats: [...seats.values()] },
+			{
+				...opts,
+				theme: theme.t,
+				scheme: theme.s,
+				seats: [...seats.values()],
+				onNames: reading,
+			},
 			() => {
 				// context lost: swap to the SVG table with the current seats/states, never leave a dead canvas
 				inner?.dispose();
@@ -101,7 +140,12 @@ export async function mountRoundTable(
 		);
 	};
 
-	if (compact || force === "svg" || (force !== "webgl" && !webglAvailable()))
+	if (
+		compact ||
+		force === "svg" ||
+		(force !== "webgl" &&
+			(glDisabled(location.search, location.hash) || !webglAvailable()))
+	)
 		await mountSvg();
 	else {
 		try {

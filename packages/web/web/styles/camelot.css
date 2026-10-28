@@ -157,22 +157,35 @@
 
 [data-look="camelot"] .prompt {
 	position: relative;
+	/* How much of the 2.5rem seal hangs below the card's edge, and how much of it is inside, over the padding. */
+	--seal-out: 0.9rem;
+	--seal-in: 0.6rem;
 }
 
-/* The seal sits under the card's content, in a strip of its own, like a signature. */
+/*
+ * The seal presses on the card's lower corner and hangs over its edge, like a seal on a letter, so the
+ * card keeps its own height. The padding under the content grows only by what the seal's inner part
+ * would cover, and the space under the card by what hangs outside.
+ */
 [data-look="camelot"] .prompt[data-sealed] {
-	padding-bottom: calc(2.75rem + var(--space-4));
+	padding-bottom: calc(var(--space-4) + var(--seal-in));
+	margin-bottom: var(--seal-out);
 }
 
 .wax-seal {
+	--seal-size: 2.5rem;
 	position: absolute;
 	right: var(--space-4);
-	bottom: var(--space-3);
-	width: 2.75rem;
-	height: 2.75rem;
+	bottom: calc(var(--seal-out) * -1);
+	width: var(--seal-size);
+	height: var(--seal-size);
 	pointer-events: none;
 	filter: drop-shadow(0 2px 2px rgb(0 0 0 / 0.28));
 	transform: rotate(-9deg);
+}
+
+/* Only a seal that is stamped on the page moves; one on a card the room shows already approved sits still. */
+.wax-seal[data-stamp] {
 	animation-name: seal-stamp;
 	animation-duration: 450ms;
 	animation-timing-function: var(--ease-spring);
@@ -324,7 +337,7 @@
 /* ── Reduced motion: the seal sits in place, the candle burns steady, the runes glow evenly ───── */
 
 @media (prefers-reduced-motion: reduce) {
-	.wax-seal,
+	.wax-seal[data-stamp],
 	.candle .candle-flame,
 	.rune {
 		animation-name: none;

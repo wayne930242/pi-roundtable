@@ -164,6 +164,42 @@ function usePreviews(
 	);
 }
 
+/**
+ * Which ends of a row that scrolls sideways have more of it beyond them, so the row can fade there and
+ * a person sees that it goes on: `start` (more to the left), `end`, `both`, or nothing when it fits.
+ */
+function useScrollCue(): [
+	React.RefObject<HTMLDivElement | null>,
+	"start" | "end" | "both" | undefined,
+] {
+	const row = useRef<HTMLDivElement>(null);
+	const [cue, setCue] = useState<"start" | "end" | "both" | undefined>();
+	useEffect(() => {
+		const element = row.current;
+		if (!element) return;
+		const measure = () => {
+			const before = element.scrollLeft > 1;
+			const after =
+				element.scrollLeft + element.clientWidth < element.scrollWidth - 1;
+			setCue(
+				before && after ? "both" : after ? "end" : before ? "start" : undefined,
+			);
+		};
+		measure();
+		element.addEventListener("scroll", measure, { passive: true });
+		const watch =
+			typeof ResizeObserver === "undefined"
+				? undefined
+				: new ResizeObserver(measure);
+		watch?.observe(element);
+		return () => {
+			element.removeEventListener("scroll", measure);
+			watch?.disconnect();
+		};
+	}, []);
+	return [row, cue];
+}
+
 function Strip(props: {
 	part: (typeof PARTS)[number];
 	draft: CharacterSpec;
@@ -172,8 +208,9 @@ function Strip(props: {
 }) {
 	const { part } = props;
 	const previews = usePreviews(props.shown, part.field, part.ids);
+	const [row, cue] = useScrollCue();
 	return (
-		<div className="creator-strip">
+		<div className="creator-strip" ref={row} data-more={cue}>
 			{part.ids.map((id, index) => (
 				<Tile
 					key={id}

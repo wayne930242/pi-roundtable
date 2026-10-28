@@ -194,6 +194,12 @@ test("under modern the strip is collapsed, and the Table button opens only the m
 	await settle();
 	expect(query('[data-variant="full"]')).not.toBeNull();
 	expect(all("g.seat")).toHaveLength(2);
+	// The panel is narrow: its members are also listed by name under the table.
+	expect(
+		all<HTMLButtonElement>(".rt-table-list button").map((button) =>
+			button.textContent?.replace(/ \(.*$/, ""),
+		),
+	).toEqual(["scout", "mason"]);
 });
 
 test("a seat's picture is drawn again once its face changes, and not before 300 ms", async () => {

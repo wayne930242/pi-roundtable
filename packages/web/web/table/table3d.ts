@@ -34,7 +34,14 @@ import {
 	Vector3,
 	WebGLRenderer,
 } from "three";
-import { ellipsize } from "./label";
+import {
+	ellipsize,
+	MIN_NAME_PX,
+	type PlatePlan,
+	planPlates,
+	plateOrder,
+	rearLift,
+} from "./label";
 import {
 	glowCanvas,
 	iconsCanvas,
@@ -66,6 +73,8 @@ const TABLE_Y = 1.0;
 const AMBIENT_MS = 12000;
 const G = 7; // glow instances per seat: halo, ring, pool, flame, 3 motes
 const ICON_CELLS = 3;
+const LABEL_FONT = 36; // a name's font size in the plate texture when it fits whole
+const LIFT_MAX = 0.42; // how far the seat across the table is raised so its head clears the table's far edge
 
 /* ---------- instanced layer: one draw call for every seat ---------- */
 
@@ -229,11 +238,31 @@ class Atlas {
 		}
 		this.tex.needsUpdate = true;
 	}
-	drawLabel(i: number, name: string, color: string, p: Palette): void {
+	/**
+	 * The plate of seat `i`. `minSize` is the smallest the name's font may get before it is cut with an
+	 * ellipsis (the size that is still `MIN_NAME_PX` on the screen); without `names` the plate is only
+	 * its colour bar, for a canvas where no name could be read.
+	 */
+	drawLabel(
+		i: number,
+		name: string,
+		color: string,
+		p: Palette,
+		names: boolean,
+		minSize: number,
+	): void {
 		const [x, y0] = this.origin(i);
 		const y = y0 + CELL_W;
 		const g = this.ctx;
 		g.clearRect(x, y, CELL_W, CELL_H - CELL_W);
+		if (!names) {
+			g.fillStyle = color;
+			g.beginPath();
+			g.roundRect(x + 6, y + 18, CELL_W - 12, 26, 13);
+			g.fill();
+			this.tex.needsUpdate = true;
+			return;
+		}
 		g.fillStyle = p.labelBg;
 		g.beginPath();
 		g.roundRect(x + 6, y + 8, CELL_W - 12, 46, 14);
@@ -243,9 +272,10 @@ class Atlas {
 		g.roundRect(x + 6, y + 44, CELL_W - 12, 10, [0, 0, 14, 14]);
 		g.fill();
 		g.fillStyle = p.labelFg;
-		let size = 28;
+		let size = LABEL_FONT;
+		const floor = Math.min(LABEL_FONT, Math.max(14, minSize));
 		g.font = `700 ${size}px system-ui, "Noto Sans TC", sans-serif`;
-		while (g.measureText(name).width > CELL_W - 40 && size > 14) {
+		while (g.measureText(name).width > CELL_W - 40 && size > floor) {
 			size -= 2;
 			g.font = `700 ${size}px system-ui, "Noto Sans TC", sans-serif`;
 		}
@@ -400,6 +430,7 @@ export function createTable3D(
 	const matLabel = new MeshBasicMaterial({
 		map: atlas.tex,
 		alphaTest: 0.45,
+		transparent: true,
 		fog: false,
 		depthTest: false,
 		depthWrite: false,
@@ -516,7 +547,7 @@ export function createTable3D(
 	};
 	const lShadow = new Layer(quad(), matShadow, MAXS + 1, 1);
 	const lAvatar = new Layer(baseQuad(), matAvatar, MAXS, 2);
-	const lLabel = new Layer(quad(), matLabel, MAXS, 3);
+	const lLabel = new Layer(quad(), matLabel, MAXS, 7);
 	const lIcon = new Layer(quad(), matIcon, MAXS, 4);
 	const lGlow = new Layer(quad(), matGlow, MAXS * G + 3, 6);
 	const lShaft = new Layer(baseQuad(), matShaft, MAXS, 5);
@@ -533,6 +564,12 @@ export function createTable3D(
 	let seatR = 3.1;
 	let K = 1; // avatar scale: shrinks as the table fills so neighbours do not overlap
 	let tableR = 2.3;
+	/** How the name plates stand: how much larger than their base size, and whether they carry names. */
+	let plan: PlatePlan = { scale: 1, names: true, px: MIN_NAME_PX };
+	let planKey = "";
+	/** The seat each plate slot shows, far to near; a plate of a nearer seat is drawn after a farther one's. */
+	let slotOf: number[] = [];
+	let slotKey = "";
 	let width = 1;
 	let height = 1;
 	let disposed = false;
@@ -634,18 +671,52 @@ export function createTable3D(
 		seats.forEach((_, i) => {
 			const [u, v, w, h] = atlas.avatarRect(i);
 			lAvatar.uv(i, u, v, w, h);
-			const [lu, lv, lw, lh] = atlas.labelRect(i);
-			lLabel.uv(i, lu, lv, lw, lh);
 		});
+		// The plates' slots are given again by the next frame.
+		slotKey = "";
 		fit = fitDistance();
+		planPlatesForCanvas();
 		sizeFloor();
 		wake();
+	}
+
+	/** The font size a name may shrink to on the plates as they stand now. */
+	const minNameSize = () =>
+		plan.px > 0 ? Math.ceil((MIN_NAME_PX * LABEL_FONT) / plan.px) : LABEL_FONT;
+
+	function redrawLabel(s: Seat, i: number) {
+		atlas.drawLabel(i, s.name, s.hex, pal, plan.names, minNameSize());
 	}
 
 	function redrawSeat(s: Seat, i: number) {
 		const img = imgCache.get(s.id) ?? null;
 		atlas.drawAvatar(i, img, s.name, s.hex);
-		atlas.drawLabel(i, s.name, s.hex, pal);
+		redrawLabel(s, i);
+	}
+
+	/**
+	 * Works out how large the plates must stand for their names to be at least `MIN_NAME_PX` on this
+	 * canvas, and redraws them when that changed. The page hears whether the names are readable at all:
+	 * where they are not, it lists the seats under the table.
+	 */
+	function planPlatesForCanvas() {
+		const n = Math.max(seats.length, 1);
+		const tanV = Math.tan((camera.fov * Math.PI) / 360);
+		// The far side of the ring is the smallest on the screen: a name readable there is readable everywhere.
+		const far = fit + seatR * Math.cos(tgt.el);
+		plan = planPlates({
+			pxPerUnit: height / 2 / (far * tanV),
+			plateWidth: 1.6 * K,
+			gap: n === 1 ? 2 * seatR : 2 * seatR * Math.sin(Math.PI / n),
+			fontCell: LABEL_FONT,
+			cellWidth: CELL_W,
+		});
+		const key = `${plan.names}|${plan.scale.toFixed(2)}|${minNameSize()}`;
+		if (key !== planKey) {
+			planKey = key;
+			seats.forEach(redrawLabel);
+		}
+		opts.onNames?.(plan.names);
 	}
 
 	function sizeFloor() {
@@ -731,9 +802,7 @@ export function createTable3D(
 		}
 		matShadow.opacity = 1;
 		applyMarkers();
-		seats.forEach((s, i) => {
-			atlas.drawLabel(i, s.name, s.hex, pal);
-		});
+		seats.forEach(redrawLabel);
 		applyMarkers();
 	}
 
@@ -751,7 +820,11 @@ export function createTable3D(
 			const a = (k / 24) * Math.PI * 2;
 			pts.push(
 				new Vector3(Math.sin(a) * R, 0, Math.cos(a) * R),
-				new Vector3(Math.sin(a) * R, AV_Y + AV + 0.75, Math.cos(a) * R),
+				new Vector3(
+					Math.sin(a) * R,
+					AV_Y + AV + 0.75 + LIFT_MAX,
+					Math.cos(a) * R,
+				),
 			);
 		}
 		const cam2 = new PerspectiveCamera(camera.fov, width / height, 0.5, 80);
@@ -885,6 +958,18 @@ export function createTable3D(
 			pal.pointI *
 			(reduced ? 1 : 0.94 + 0.06 * Math.sin(t * 9) * Math.sin(t * 4.1));
 		const n = seats.length;
+		// Plates are drawn far to near, in slots of the instanced layer; the slots change when the view turns.
+		const order = plateOrder(seats.map((s) => s.x * vF.x + s.z * vF.z));
+		const orderKey = order.join(",");
+		if (orderKey !== slotKey) {
+			slotKey = orderKey;
+			slotOf = [];
+			order.forEach((seat, slot) => {
+				slotOf[seat] = slot;
+				const [lu, lv, lw, lh] = atlas.labelRect(seat);
+				lLabel.uv(slot, lu, lv, lw, lh);
+			});
+		}
 
 		for (let i = 0; i < n; i++) {
 			const s = seats[i]!;
@@ -970,7 +1055,9 @@ export function createTable3D(
 
 			/* avatar */
 			const hs = 1 + s.hover * 0.05;
-			vP.set(ax + vR.x * sx, AV_Y + bob, az2 + vR.z * sx);
+			// A seat across the table stands a little higher, so the table's far edge does not cut its head.
+			const lift = rearLift((s.x * vF.x + s.z * vF.z) / seatR, LIFT_MAX * K);
+			vP.set(ax + vR.x * sx, AV_Y + lift + bob, az2 + vR.z * sx);
 			qTmp.setFromAxisAngle(zAxis, 0);
 			eul.set(
 				-cam.el * 0.45 + lean,
@@ -995,9 +1082,20 @@ export function createTable3D(
 			);
 
 			/* name plate, nudged toward the camera so it sits on the stool front */
-			vP.set(ax + vF.x * 0.2, 0.2, az2 + vF.z * 0.2);
-			lLabel.put(i, vP, qBill, 1.6 * K * hs, 0.4 * K * hs, 1);
-			lLabel.col(i, 1, 1, 1);
+			vP.set(
+				ax + vF.x * 0.2,
+				0.2 + (plan.scale - 1) * 0.2 * K,
+				az2 + vF.z * 0.2,
+			);
+			lLabel.put(
+				slotOf[i] ?? i,
+				vP,
+				qBill,
+				1.6 * K * hs * plan.scale,
+				0.4 * K * hs * plan.scale,
+				1,
+			);
+			lLabel.col(slotOf[i] ?? i, 1, 1, 1);
 
 			/* icon badge: raised banner (waiting) / check (done) / cross (error) */
 			if (s.icon > 0.02) {
@@ -1007,6 +1105,7 @@ export function createTable3D(
 				vP.set(
 					ax + vR.x * 0.66 * K + vF.x * 0.05,
 					AV_Y +
+						lift +
 						(s.kind === 0 ? 1.2 + rise * 0.5 : 1.3 + rise * 0.15) * K +
 						(sp === "waiting" && !reduced ? 0.04 * Math.sin(t * 3.3 + ph) : 0),
 					az2 + vR.z * 0.66 * K + vF.z * 0.05,
@@ -1033,7 +1132,7 @@ export function createTable3D(
 			const gain = pal.glowGain;
 			const base = i * G;
 			// halo behind the avatar
-			vP.set(ax - vF.x * 0.12, AV_Y + 0.85 * K, az2 - vF.z * 0.12);
+			vP.set(ax - vF.x * 0.12, AV_Y + lift + 0.85 * K, az2 - vF.z * 0.12);
 			lGlow.put(base, vP, camera.quaternion, (3.0 + s.hover * 0.3) * K);
 			lGlow.col(base, ringC.r, ringC.g, ringC.b);
 			lGlow.a(base, clamp((s.halo + s.hover * 0.28) * gain, 0, 1));
@@ -1070,7 +1169,7 @@ export function createTable3D(
 				const a = (reduced ? 0 : t * 2.3) + j * 2.1 + ph;
 				vP.set(
 					ax + Math.cos(a) * 0.74 * K,
-					AV_Y + 1.55 * K + Math.sin(a * 2) * 0.07 + j * 0.05,
+					AV_Y + lift + 1.55 * K + Math.sin(a * 2) * 0.07 + j * 0.05,
 					az2 + Math.sin(a) * 0.74 * K,
 				);
 				lGlow.put(base + 4 + j, vP, camera.quaternion, (0.36 - j * 0.07) * K);
@@ -1197,6 +1296,7 @@ export function createTable3D(
 		if (wasDefault && Math.abs(tgt.az) < 1e-3) tgt.el = defaultElevation();
 		if (reduced) cam.el = tgt.el;
 		fit = fitDistance();
+		planPlatesForCanvas();
 		sizeFloor();
 		wake(1500);
 	}

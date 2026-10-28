@@ -375,38 +375,117 @@ test("under Camelot an approved approval card keeps a wax seal in the room agent
 	});
 });
 
-test("the wax seal stamps in with an animation, and under reduced motion it has none", async () => {
+const camelotCss = () => {
+	const style = document.createElement("style");
+	style.textContent = readFileSync(
+		new URL("./styles/camelot.css", import.meta.url),
+		"utf8",
+	);
+	document.head.append(style);
+	return style;
+};
+
+const sealAnimation = (page: Awaited<ReturnType<typeof openPage>>) => {
+	const seal = page.container.querySelector(".wax-seal");
+	if (!seal) throw new Error("no seal");
+	return getComputedStyle(seal).animationName;
+};
+
+const withMotion = async (
+	reduced: "reduce" | "no-preference",
+	work: () => Promise<void>,
+) => {
+	const device = (
+		window as unknown as {
+			happyDOM?: { settings: { device: { prefersReducedMotion: string } } };
+		}
+	).happyDOM?.settings.device;
+	if (!device) throw new Error("no happy-dom settings");
+	device.prefersReducedMotion = reduced;
+	try {
+		await work();
+	} finally {
+		device.prefersReducedMotion = "no-preference";
+	}
+};
+
+test("the wax seal stamps in when its card turns approved on the page, and under reduced motion it has none", async () => {
 	await onPage("camelot", async (page) => {
-		const sealed = createElement(PromptCard, {
+		const style = camelotCss();
+		const pending = createElement(PromptCard, { card: card(approval) });
+		const approved = createElement(PromptCard, {
 			card: card(approval, { outcome: "approved" }),
 		});
-		const style = document.createElement("style");
-		style.textContent = readFileSync(
-			new URL("./styles/camelot.css", import.meta.url),
-			"utf8",
+		// The card is open, then the owner approves it while the page shows it.
+		await page.render(pending);
+		await page.render(approved);
+		expect(sealAnimation(page)).toBe("seal-stamp");
+		// A later render of the same card does not stamp it again: the element stays as it is.
+		await page.render(
+			createElement(PromptCard, {
+				card: card(approval, { outcome: "approved", note: "ok" }),
+			}),
 		);
-		document.head.append(style);
-		const animation = () => {
-			const seal = page.container.querySelector(".wax-seal");
-			if (!seal) throw new Error("no seal");
-			return getComputedStyle(seal).animationName;
-		};
-		await page.render(sealed);
-		expect(animation()).toBe("seal-stamp");
-		const device = (
-			window as unknown as {
-				happyDOM?: { settings: { device: { prefersReducedMotion: string } } };
-			}
-		).happyDOM?.settings.device;
-		if (!device) throw new Error("no happy-dom settings");
-		device.prefersReducedMotion = "reduce";
-		try {
+		expect(sealAnimation(page)).toBe("seal-stamp");
+		await withMotion("reduce", async () => {
 			// A computed style is kept per element, so the seal is drawn anew.
 			await page.render(null);
-			await page.render(sealed);
-			expect(animation()).toBe("none");
-		} finally {
-			device.prefersReducedMotion = "no-preference";
-		}
+			await page.render(pending);
+			await page.render(approved);
+			expect(sealAnimation(page)).toBe("none");
+		});
+		style.remove();
 	});
+});
+
+test("a card that is already approved when its room shows it keeps a still seal: leaving a room and coming back does not stamp again", async () => {
+	await onPage("camelot", async (page) => {
+		const style = camelotCss();
+		const approved = createElement(PromptCard, {
+			card: card(approval, { outcome: "approved" }),
+		});
+		await page.render(approved);
+		expect(sealAnimation(page)).not.toBe("seal-stamp");
+		// The room is left (the card unmounts) and entered again.
+		await page.render(null);
+		await page.render(approved);
+		expect(sealAnimation(page)).not.toBe("seal-stamp");
+		// Even a card that did stamp on this page is still when it mounts anew.
+		await page.render(null);
+		await page.render(createElement(PromptCard, { card: card(approval) }));
+		await page.render(approved);
+		expect(sealAnimation(page)).toBe("seal-stamp");
+		await page.render(null);
+		await page.render(approved);
+		expect(sealAnimation(page)).not.toBe("seal-stamp");
+		style.remove();
+	});
+});
+
+test("an approved card keeps no empty band for the seal: the seal hangs on the card's corner and the padding stays", () => {
+	const css = readFileSync(
+		new URL("./styles/camelot.css", import.meta.url),
+		"utf8",
+	);
+	const block = (selector: string) => {
+		const start = css.indexOf(`${selector} {`);
+		if (start < 0) throw new Error(`no rule for ${selector}`);
+		return css.slice(start, css.indexOf("}", start));
+	};
+	const sealed = block('[data-look="camelot"] .prompt[data-sealed]');
+	// The old rule reserved the seal's own height (2.75rem) under the content as an empty band.
+	expect(sealed).not.toContain("2.75rem");
+	const inside = /--seal-in:\s*([\d.]+)rem/.exec(css);
+	// What the seal may cover of the content's padding is a fraction of a line, not a band.
+	expect(Number(inside?.[1])).toBeLessThanOrEqual(0.75);
+	// The seal presses on the lower edge and hangs over it.
+	expect(block(".wax-seal")).toMatch(
+		/bottom:\s*calc\(var\(--seal-out\) \* -1\)/,
+	);
+	const size = /--seal-size:\s*([\d.]+)rem/.exec(css);
+	const out = /--seal-out:\s*([\d.]+)rem/.exec(css);
+	// Most of the seal is outside the content: what is inside plus what is outside is the seal.
+	expect(Number(out?.[1]) + Number(inside?.[1])).toBeGreaterThanOrEqual(
+		Number(size?.[1]) * 0.5,
+	);
 });

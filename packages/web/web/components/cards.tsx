@@ -1,4 +1,4 @@
-import { memo, useEffect, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import type {
 	ClientFrame,
 	PromptAnswer,
@@ -87,14 +87,20 @@ function Collapse({
 }
 
 /**
- * The wax seal an approved approval card keeps under the Camelot look: stamped in the room
- * agent's accent, with the agent's own mark pressed into it. The card says "Approved" in words,
- * so the seal is decoration.
+ * The wax seal an approved approval card keeps under the Camelot look: in the room agent's
+ * accent, with the agent's own mark pressed into it. It is stamped in (`stamp`) only when the card
+ * turns approved while the page shows it; a card the room shows already approved keeps the seal
+ * still. The card says "Approved" in words, so the seal is decoration.
  */
-function WaxSeal({ room }: { room: string }) {
+function WaxSeal({ room, stamp }: { room: string; stamp: boolean }) {
 	const accent = useRoomAccent(room);
 	return (
-		<span className="wax-seal" style={accent} aria-hidden="true">
+		<span
+			className="wax-seal"
+			data-stamp={stamp ? "true" : undefined}
+			style={accent}
+			aria-hidden="true"
+		>
 			<svg viewBox="0 0 40 40" aria-hidden="true" focusable="false">
 				<path
 					className="seal-body"
@@ -120,6 +126,8 @@ function Shell(props: {
 		useLook() === "camelot" &&
 		card.frame.kind === "approval" &&
 		card.outcome === "approved";
+	// Whether the card was approved already when this one mounted (a room entered again, a pane switched back to).
+	const approvedOnMount = useRef(card.outcome === "approved");
 	return (
 		<article
 			className={`prompt prompt-${props.tone}`}
@@ -150,7 +158,9 @@ function Shell(props: {
 				) : null}
 			</header>
 			{props.children}
-			{sealed ? <WaxSeal room={card.room} /> : null}
+			{sealed ? (
+				<WaxSeal room={card.room} stamp={!approvedOnMount.current} />
+			) : null}
 		</article>
 	);
 }

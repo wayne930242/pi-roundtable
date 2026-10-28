@@ -53,6 +53,9 @@ Open `https://app.example.com/console/`; the page is the app.
 | Table | A round table that seats every agent, and opens its room on a click. |
 | Settings | Color scheme and look, install, notifications for this device, and Log out. |
 
+The table is a 3D scene where the browser has WebGL and an SVG table where it has not; add `?nogl` to the page address to see the SVG one.
+Seat names are drawn at 11 px or more; where a canvas is too small for that, the seats are listed as buttons under it.
+
 A turn waits `cardGraceSeconds` (120 by default) for a card; then it goes on without the answer, and the card stays open for a day.
 An answer given later starts a new turn in the room.
 Files of any kind up to `uploadMaxBytes` (100 MiB by default) are streamed to disk and given to the agent; a Cloudflare free plan caps a request body at 100 MB.

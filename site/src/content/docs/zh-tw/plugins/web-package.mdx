@@ -53,6 +53,9 @@ export default {
 | Table | 圓桌，讓每個 agent 入座，點一下就進它的房間。 |
 | Settings | 色彩模式與外觀、安裝、這台裝置的通知，以及登出。 |
 
+圓桌在有 WebGL 的瀏覽器上是 3D 場景，沒有時是 SVG 圓桌；在頁面網址加上 `?nogl` 就能看 SVG 版。
+座位名稱至少畫成 11 px；畫布小到做不到時，圓桌下方會把座位列成按鈕。
+
 一輪執行會等卡片 `cardGraceSeconds` 秒（預設 120）；時間到就不等答案繼續往下，卡片仍保留一天。
 之後才給的答案，會在該房間開啟新的一輪。
 檔案不限類型，大小上限是 `uploadMaxBytes`（預設 100 MiB），以串流寫入磁碟再交給 agent；Cloudflare 免費方案限制 request body 為 100 MB。

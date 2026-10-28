@@ -268,3 +268,45 @@ test("hair color swatches are labelled like skin tones", async () => {
 	);
 	expect(labels[0]).toBe("Hair color 1");
 });
+
+test("a part row wider than its box fades where more of it lies beyond, and shows no fade when it fits", async () => {
+	const sized = (name: "scrollWidth" | "clientWidth", value: number) => {
+		const own = Object.getOwnPropertyDescriptor(HTMLElement.prototype, name);
+		Object.defineProperty(HTMLElement.prototype, name, {
+			configurable: true,
+			get: () => value,
+		});
+		return () => {
+			if (own) Object.defineProperty(HTMLElement.prototype, name, own);
+			else
+				delete (HTMLElement.prototype as unknown as Record<string, unknown>)[
+					name
+				];
+		};
+	};
+	const undo = [sized("scrollWidth", 500), sized("clientWidth", 200)];
+	try {
+		await open();
+		const row = query<HTMLElement>(".creator-strip");
+		if (!row) throw new Error("no part row");
+		// At its start the rest lies to the right.
+		expect(row.dataset.more).toBe("end");
+		// In the middle there is more on both sides, and at the end only on the left.
+		await page.act(async () => {
+			row.scrollLeft = 100;
+			row.dispatchEvent(new Event("scroll"));
+		});
+		expect(row.dataset.more).toBe("both");
+		await page.act(async () => {
+			row.scrollLeft = 300;
+			row.dispatchEvent(new Event("scroll"));
+		});
+		expect(row.dataset.more).toBe("start");
+	} finally {
+		for (const restore of undo) restore();
+	}
+	// A row that fits has none.
+	await page.render(<></>);
+	await open();
+	expect(query<HTMLElement>(".creator-strip")?.dataset.more).toBeUndefined();
+});

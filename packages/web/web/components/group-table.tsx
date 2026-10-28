@@ -14,7 +14,8 @@ const placed = (node: ReactNode, slot: HTMLElement | null | undefined) =>
 
 /**
  * A group room's table. A "Table" button in the header opens the members' round table, in a sheet
- * on a phone and in a panel beside the room elsewhere. Under Camelot a compact strip of the
+ * on a phone and in a panel beside the room elsewhere, with its members also listed as buttons
+ * under it: the panel is narrow, and the list names every seat in full. Under Camelot a compact strip of the
  * members also stands under the header, lit on whoever speaks; under modern it stays collapsed.
  * `slot` is the element under the header the strip and the panel go into.
  */
@@ -30,7 +31,12 @@ export function GroupTable(props: {
 	const members = view.members ?? [];
 	const close = () => setOpen(false);
 	const table = (
-		<RoundTable members={members} groupRoom={props.roomKey} variant="full" />
+		<RoundTable
+			members={members}
+			groupRoom={props.roomKey}
+			variant="full"
+			list
+		/>
 	);
 	return (
 		<>

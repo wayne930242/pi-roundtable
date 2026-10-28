@@ -42,6 +42,8 @@ export interface TableOptions {
 	variant?: "full" | "compact";
 	/** show the seats as visible buttons under a shorter canvas (phones with many seats) */
 	listBelow?: boolean;
+	/** Told whether the canvas can carry names a person reads (11 px or more); the page lists the seats when it cannot. */
+	onNames?: (readable: boolean) => void;
 }
 
 export interface TableStats {

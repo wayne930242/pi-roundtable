@@ -87,7 +87,15 @@ export function createTable2D(
 			),
 		);
 		const Ry = Math.min(H / 2 - av * 1.15, portrait ? W * 0.5 : H);
-		const Rx = Math.min(W / 2 - av * 0.65, portrait ? W : Ry * 1.75);
+		// The widest a seat's plate gets, so the seats at the left and right edge keep theirs and the rug inside the box.
+		const widest = Math.max(
+			av * 1.5,
+			Math.max(11, Math.min(15, av * 0.2)) * 5.5 + 14,
+		);
+		const Rx = Math.min(
+			W / 2 - Math.max(av * 0.8, widest / 2) - 1,
+			portrait ? W : Ry * 1.75,
+		);
 		const tx = Math.max(Rx - av * 0.85, 30);
 		const ty = Math.max(Ry - av * 0.8, 24);
 
