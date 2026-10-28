@@ -11,6 +11,7 @@ import { AgentError } from "../domain/errors.ts";
 import type { InterimPosts } from "../domain/interim.ts";
 import type { AgentTurnScope } from "../domain/ports.ts";
 import type { TurnProgress } from "../domain/progress.ts";
+import { replyBody } from "../presentation/reply-body.ts";
 import { splitReply } from "../presentation/reply-splitter.ts";
 import { withReplyFiles } from "../reply-files.ts";
 import { endOf, settleTurn } from "../routing/settle-turn.ts";
@@ -31,7 +32,6 @@ import {
 	keysOf,
 	roomScope,
 } from "./team-keys.ts";
-import { replyBody } from "./team-reply.ts";
 import {
 	type Chain,
 	MAX_CHAIN_MESSAGES,

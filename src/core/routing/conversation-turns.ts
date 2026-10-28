@@ -13,9 +13,7 @@ import { HostStoppingError, PluginError } from "../errors.ts";
 import { SYSTEM_PRINCIPAL } from "../identity/principal-store.ts";
 import type { Logger } from "../log.ts";
 import type { EventSink } from "../plugin.ts";
-import { failureNotice } from "../presentation/failure-notice.ts";
-import { splitReply } from "../presentation/reply-splitter.ts";
-import { thinkingLine } from "../presentation/thinking-line.ts";
+import { replyBody } from "../presentation/reply-body.ts";
 import { withReplyFiles } from "../reply-files.ts";
 import type { ChannelKey, ToolSelection, TurnSelection } from "../sessions.ts";
 import type { Speaker } from "../speakers.ts";
@@ -226,7 +224,7 @@ export function conversationTurns(
 				if (!result.ok && !result.stopped)
 					logger.error({ channel, kind, err: result.error }, "turn failed");
 				if (input.reply) await input.reply(result);
-				else await surfaces.sendReply(channel, replyOf(result));
+				else await surfaces.sendReply(channel, replyBody(result));
 			} catch (error) {
 				logger.error({ channel, kind, err: error }, "reply not posted");
 			} finally {
@@ -234,20 +232,5 @@ export function conversationTurns(
 			}
 			return result;
 		},
-	};
-}
-
-/** The default post: the answer with its thinking line, or the failure or stopped notice. */
-function replyOf(result: TurnResult) {
-	if (!result.ok)
-		return {
-			chunks: [failureNotice(result)],
-			...(result.stopped ? {} : { failed: true as const }),
-		};
-	const thinking = result.thinking ? thinkingLine(result.thinking) : undefined;
-	return {
-		...(thinking ? { thinking } : {}),
-		chunks: splitReply(result.text),
-		...(result.files?.length ? { files: result.files } : {}),
 	};
 }

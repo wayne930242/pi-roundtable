@@ -1,9 +1,9 @@
 import type { ReplyFile, TurnResult } from "../domain/conversation.ts";
-import { failureNotice } from "../presentation/failure-notice.ts";
-import { splitReply } from "../presentation/reply-splitter.ts";
-import { thinkingLine } from "../presentation/thinking-line.ts";
+import { failureNotice } from "./failure-notice.ts";
+import { splitReply } from "./reply-splitter.ts";
+import { thinkingLine } from "./thinking-line.ts";
 
-/** What an agent's turn posts: its answer with a thinking line, or the failure or stopped notice. */
+/** What a turn posts: its answer with a thinking line, or the failure or stopped notice. */
 export function replyBody(result: TurnResult): {
 	thinking?: string;
 	chunks: string[];
@@ -16,8 +16,9 @@ export function replyBody(result: TurnResult): {
 			chunks: [failureNotice(result)],
 			...(result.stopped ? {} : { failed: true as const }),
 		};
+	const thinking = result.thinking ? thinkingLine(result.thinking) : undefined;
 	return {
-		...(result.thinking ? { thinking: thinkingLine(result.thinking) } : {}),
+		...(thinking ? { thinking } : {}),
 		chunks: splitReply(result.text),
 		...(result.files?.length ? { files: result.files } : {}),
 	};
