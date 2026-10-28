@@ -12,9 +12,22 @@ export function useAccentStyle(
 	spec: CharacterSpec | undefined,
 ): CSSProperties | undefined {
 	const kit = useKit();
-	const { scheme } = useCharacterStyle();
+	// Shaded for the look's own surfaces: Camelot's parchment is darker than the modern page.
+	const { look } = useCharacterStyle();
 	if (!kit || !spec) return undefined;
-	return { ["--agent-accent" as string]: kit.accentOf(spec, scheme) };
+	return { ["--agent-accent" as string]: kit.accentOf(spec, look) };
+}
+
+/** A room's accent: its agent's, and a thread wears its parent room's. For the pieces that sit in a room but not in its page. */
+export function useRoomAccent(key: string): CSSProperties | undefined {
+	const spec = useSelector((state) => {
+		const view = state.rooms[key]?.view;
+		return (
+			view?.character ??
+			(view?.parent ? state.rooms[view.parent]?.view?.character : undefined)
+		);
+	}, key);
+	return useAccentStyle(spec);
 }
 
 /** Each agent's character, by name, from the agent rooms of the list. */

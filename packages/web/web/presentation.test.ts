@@ -5,6 +5,7 @@ import { Cleanup } from "./components/cleanup.tsx";
 import { MarkdownDocument } from "./components/markdown.tsx";
 import { ConfigContext } from "./lib/config.ts";
 import { setPresentation, translate } from "./lib/messages.ts";
+import { themeColorOf } from "./lib/theme.ts";
 import { Whose } from "./pages/notes.tsx";
 import { GroupCard } from "./pages/overview.tsx";
 
@@ -125,4 +126,11 @@ test("a group with no Discord channel shows no Discord link and no cleanup", () 
 		"discord.com/channels/900000000000000099/900000000000000123",
 	);
 	expect(linked).toContain("Start over");
+});
+
+test("the toolbar colour is parchment under camelot light and the night castle under camelot dark, and modern keeps its own", () => {
+	expect(themeColorOf("camelot", "light")).toBe("#f4ead5");
+	expect(themeColorOf("camelot", "dark")).toBe("#0f1726");
+	expect(themeColorOf("modern", "light")).toBe("#f5f6f8");
+	expect(themeColorOf("modern", "dark")).toBe("#0f1115");
 });

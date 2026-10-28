@@ -2,26 +2,35 @@ import { readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AssetBundle } from "./assets.ts";
+import { PAGE_COLORS } from "./page-colors.ts";
 
-/** The page's background in each scheme, which the browser's toolbar takes (these are `--bg` in tokens.css). */
-export const THEME_COLORS = { light: "#f5f6f8", dark: "#0f1115" } as const;
+/** The modern page's background in each scheme, which the browser's toolbar takes (`--bg` in tokens.css). */
+export const THEME_COLORS = PAGE_COLORS.modern;
 
 /** The manifest's splash colours under each look; modern keeps the page's own. */
 export const LOOK_COLORS = {
 	modern: {
-		theme: THEME_COLORS.light,
-		background: THEME_COLORS.light,
+		theme: PAGE_COLORS.modern.light,
+		background: PAGE_COLORS.modern.light,
 	},
-	camelot: { theme: "#f4ead5", background: "#0f1726" },
+	camelot: {
+		theme: PAGE_COLORS.camelot.light,
+		background: PAGE_COLORS.camelot.dark,
+	},
 } as const;
 
 /**
- * Applies the stored colour scheme before the page paints. It is a file of its own, not an inline
- * script, because the page's policy allows scripts from itself only; the page loads it in the
- * head, where it blocks the first paint for the few bytes it is. It does what `initTheme` does
- * once the bundle runs (`rt-theme` in `web/lib/theme.ts`), and the toolbar colour follows.
+ * Applies the stored look and colour scheme before the page paints. It is a file of its own, not
+ * an inline script, because the page's policy allows scripts from itself only; the page loads it
+ * in the head, where it blocks the first paint for the few bytes it is. It does what `initLook`
+ * and `initTheme` do once the bundle runs (`rt-look` and `rt-theme`, in `web/lib`): the device's
+ * own look wins over the host's, and the toolbar colour follows the look and the scheme.
  */
-export const THEME_INIT_SCRIPT = `(function(){try{var t=localStorage.getItem("rt-theme");if(t!=="light"&&t!=="dark")return;document.documentElement.dataset.theme=t;var c={light:"${THEME_COLORS.light}",dark:"${THEME_COLORS.dark}"}[t];var m=document.querySelectorAll('meta[name="theme-color"]');for(var i=0;i<m.length;i++)m[i].setAttribute("content",c)}catch(e){}})();\n`;
+export const themeInitScript = (host: "modern" | "camelot"): string =>
+	`(function(){try{var C=${JSON.stringify(PAGE_COLORS)};var l=localStorage.getItem("rt-look");if(l!=="modern"&&l!=="camelot")l="${host}";var t=localStorage.getItem("rt-theme");var r=document.documentElement;r.dataset.look=l;var x=t==="light"||t==="dark";if(x)r.dataset.theme=t;var m=document.querySelectorAll('meta[name="theme-color"]');for(var i=0;i<m.length;i++){var s=x?t:(m[i].getAttribute("media")||"").indexOf("dark")>-1?"dark":"light";m[i].setAttribute("content",C[l][s])}}catch(e){}})();\n`;
+
+/** The script for a modern host. */
+export const THEME_INIT_SCRIPT = themeInitScript("modern");
 
 /** The icons this package ships, which `options.icons.dir` replaces. */
 export const DEFAULT_ICONS_DIR = fileURLToPath(
@@ -87,7 +96,7 @@ export function servePwa(
 			},
 		);
 	if (rest === "theme-init.js")
-		return new Response(THEME_INIT_SCRIPT, {
+		return new Response(themeInitScript(options.look ?? "modern"), {
 			headers: {
 				"content-type": "text/javascript;charset=utf-8",
 				"cache-control": "no-cache",

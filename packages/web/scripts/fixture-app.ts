@@ -4,6 +4,7 @@
 //   ROUNDTABLE_TEST_DATABASE_URL  a PostgreSQL URL whose server may create a database; the fixture
 //                                 makes `fixture_<time>` there and drops it when it stops
 //   PORT                          the app (default 4180); PORT + 1 is the control port below
+//   LOOK                          the host's look, `modern` (default) or `camelot`
 //
 // The agents are scripts: start a message with a keyword and the agent acts it out.
 //   approve  a held action with details          timeout  a turn's time-limit card
@@ -340,6 +341,9 @@ host = await testHost({
 			title: "Roundtable",
 			cardGraceSeconds: 5,
 			panes: ["rooms", "overview", "schedules", "conversations"],
+			...(process.env.LOOK === "camelot"
+				? { appearance: { look: "camelot" as const } }
+				: {}),
 		}),
 	],
 });

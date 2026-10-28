@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { PAGE_COLORS } from "../../src/page-colors.ts";
 
 /** What the person picked: a scheme, or whatever the system prefers. */
 export type ThemePreference = "system" | "light" | "dark";
@@ -30,25 +31,38 @@ export function resolvedTheme(): "light" | "dark" {
 	return systemDark()?.matches ? "dark" : "light";
 }
 
-function paintMeta(): void {
-	// The browser bar takes the page's own background once the scheme has been applied. With the
-	// system's scheme each tag keeps the colour the server gave its media query; a pick of the
-	// other scheme sets them all.
+/** The page's background in a look and scheme, which the browser's toolbar takes. */
+export const themeColorOf = (
+	look: "modern" | "camelot",
+	scheme: "light" | "dark",
+): string => PAGE_COLORS[look][scheme];
+
+/**
+ * Puts the toolbar colour for the page's look and scheme on the `theme-color` tags. With the
+ * system's scheme each tag keeps the scheme its media query names; a pick sets them all.
+ */
+export function paintThemeColor(): void {
 	requestAnimationFrame(() => {
-		const metas = document.querySelectorAll<HTMLMetaElement>(
-			'meta[name="theme-color"]',
-		);
+		const look =
+			document.documentElement.dataset.look === "camelot"
+				? "camelot"
+				: "modern";
+		let metas = [
+			...document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]'),
+		];
 		if (metas.length === 0) {
 			const meta = document.createElement("meta");
 			meta.name = "theme-color";
 			document.head.append(meta);
-			meta.content = getComputedStyle(document.body).backgroundColor;
-			return;
+			metas = [meta];
 		}
-		const explicit = getComputedStyle(document.body).backgroundColor;
 		for (const meta of metas) {
-			meta.dataset.system ??= meta.content;
-			meta.content = preference === "system" ? meta.dataset.system : explicit;
+			const media = meta.getAttribute("media") ?? "";
+			const named = media.includes("dark") ? "dark" : "light";
+			meta.content = themeColorOf(
+				look,
+				preference === "system" && media ? named : resolvedTheme(),
+			);
 		}
 	});
 }
@@ -57,7 +71,7 @@ function apply(): void {
 	const root = document.documentElement;
 	if (preference === "system") delete root.dataset.theme;
 	else root.dataset.theme = preference;
-	paintMeta();
+	paintThemeColor();
 	for (const listener of listeners) listener();
 }
 

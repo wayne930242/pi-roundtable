@@ -7,6 +7,8 @@ import type {
 	PromptOutcome,
 	PromptQuestion,
 } from "../../src/api-types.ts";
+import { useRoomAccent } from "../lib/characters.ts";
+import { useLook } from "../lib/look.ts";
 import { translate as t } from "../lib/messages.ts";
 import type { CardState } from "../lib/rooms.ts";
 import { useConnection } from "../lib/socket.ts";
@@ -84,6 +86,27 @@ function Collapse({
 	);
 }
 
+/**
+ * The wax seal an approved approval card keeps under the Camelot look: stamped in the room
+ * agent's accent, with the agent's own mark pressed into it. The card says "Approved" in words,
+ * so the seal is decoration.
+ */
+function WaxSeal({ room }: { room: string }) {
+	const accent = useRoomAccent(room);
+	return (
+		<span className="wax-seal" style={accent} aria-hidden="true">
+			<svg viewBox="0 0 40 40" aria-hidden="true" focusable="false">
+				<path
+					className="seal-body"
+					d="M37.4 21.9Q36.3 23.7 36.6 25.9Q37.0 28.2 35.0 29.3Q33.0 30.4 32.4 32.5Q31.7 34.6 29.5 34.9Q27.3 35.2 25.7 36.6Q24.1 37.9 22.0 37.4Q20.0 37.0 18.0 37.4Q15.9 37.9 14.3 36.6Q12.6 35.3 10.6 34.8Q8.6 34.4 7.8 32.4Q7.0 30.4 5.1 29.2Q3.2 28.1 3.2 26.0Q3.2 23.8 2.4 21.9Q1.6 20.0 2.6 18.1Q3.6 16.3 3.4 14.1Q3.1 11.8 4.7 10.5Q6.4 9.2 7.4 7.3Q8.3 5.3 10.5 5.0Q12.7 4.8 14.2 3.1Q15.8 1.4 17.9 2.4Q20.0 3.4 22.1 2.4Q24.2 1.5 25.8 3.2Q27.3 4.8 29.4 5.2Q31.5 5.6 32.3 7.6Q33.1 9.6 34.9 10.8Q36.7 12.0 36.8 14.1Q36.8 16.2 37.7 18.1Q38.6 20.0 37.4 21.9Z"
+				/>
+				<circle className="seal-ring" cx="20" cy="20" r="12.5" />
+				<path className="seal-mark" d="M13.5 20.5l4.6 4.6 8.6-9.6" />
+			</svg>
+		</span>
+	);
+}
+
 function Shell(props: {
 	card: CardState;
 	tone: "action" | "timeout" | "ask";
@@ -93,10 +116,15 @@ function Shell(props: {
 }) {
 	const { card } = props;
 	const late = "late" in card.frame && card.frame.late;
+	const sealed =
+		useLook() === "camelot" &&
+		card.frame.kind === "approval" &&
+		card.outcome === "approved";
 	return (
 		<article
 			className={`prompt prompt-${props.tone}`}
 			data-ended={card.outcome ? "true" : undefined}
+			data-sealed={sealed ? "true" : undefined}
 			aria-label={props.title}
 		>
 			<header className="prompt-head">
@@ -122,6 +150,7 @@ function Shell(props: {
 				) : null}
 			</header>
 			{props.children}
+			{sealed ? <WaxSeal room={card.room} /> : null}
 		</article>
 	);
 }

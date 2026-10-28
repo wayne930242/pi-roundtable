@@ -3,6 +3,9 @@
 /* Composed characters: the motion of each state, keyed on data-state of .av-host. */
 @import "pi-roundtable/characters.css";
 
+/* The optional Camelot look, which re-colours the tokens and adds its details under [data-look="camelot"]. */
+@import "./styles/camelot.css";
+
 * {
 	box-sizing: border-box;
 }
@@ -897,6 +900,43 @@ button.yolo-action:hover:not(:disabled) {
 
 .segmented label:has(:focus-visible) {
 	outline: 2px solid var(--accent);
+}
+
+/* The look picker's swatches: each look in its own page, surface and accent colours, whatever look is on. */
+
+.look-swatch {
+	display: inline-flex;
+	gap: 2px;
+	padding: 2px;
+	border: 1px solid var(--control-border);
+	border-radius: var(--radius-sm);
+}
+
+.look-swatch i {
+	display: block;
+	width: 0.7rem;
+	height: 0.9rem;
+	border-radius: 2px;
+}
+
+.look-swatch[data-swatch="modern"] i:nth-child(1) {
+	background: light-dark(#f5f6f8, #0f1115);
+}
+.look-swatch[data-swatch="modern"] i:nth-child(2) {
+	background: light-dark(#ffffff, #171a20);
+}
+.look-swatch[data-swatch="modern"] i:nth-child(3) {
+	background: light-dark(#3a5bd9, #8ea4ff);
+}
+
+.look-swatch[data-swatch="camelot"] i:nth-child(1) {
+	background: light-dark(#f4ead5, #0f1726);
+}
+.look-swatch[data-swatch="camelot"] i:nth-child(2) {
+	background: light-dark(#fbf5e6, #16213a);
+}
+.look-swatch[data-swatch="camelot"] i:nth-child(3) {
+	background: light-dark(#b98a2c, #e6b94c);
 }
 
 /* A composed character. Its size comes from the style prop (CSSOM, so the CSP stays as it is). */

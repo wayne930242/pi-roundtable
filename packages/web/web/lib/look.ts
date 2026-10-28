@@ -1,6 +1,6 @@
 import type { CharacterLook } from "pi-roundtable/characters";
 import { useSyncExternalStore } from "react";
-import { useTheme } from "./theme.ts";
+import { paintThemeColor, useTheme } from "./theme.ts";
 
 /** The page's look: the plain `modern` one, or the fantasy `camelot` one. */
 export type PageLook = "modern" | "camelot";
@@ -28,6 +28,7 @@ function apply(): void {
 	current = stored ?? fallback;
 	// `data-look` is what the stylesheets read; the Camelot theme keys on it.
 	document.documentElement.dataset.look = current;
+	paintThemeColor();
 	for (const listener of listeners) listener();
 }
 

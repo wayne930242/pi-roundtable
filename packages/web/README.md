@@ -377,6 +377,16 @@ Every agent is drawn as its composed character (`pi-roundtable/characters`). The
 - **Creator.** The profile's "Look" section edits a draft of the character: the 24 classes, eight palettes and custom primary, secondary and trim colors, and strips for hat, outfit, prop, hair, beard, accessory, build, skin and hair color, each drawn on the current look. "Suggest from role" and "Randomize" fill the draft, Save sends `PUT api/agents/<name>/character` and shows a refused field under its strip, and leaving with unsaved changes asks first. Every label is a message key, `character.class.<id>`, `character.<kind>.<id>` and `character.palette.<name>`, with the English name as the default.
 - **Look.** `ConfigView.look` (the `appearance.look` option) goes on the page as `data-look` on `<html>`; Settings picks Modern or Camelot per device (`localStorage` `rt-look`), and the characters take the shield frame under Camelot.
 
+### The Camelot look
+
+`appearance.look: "camelot"` (or a device's own pick in Settings) dresses the page's details and leaves its skeleton alone. It is CSS and a few small elements: no image, no web font, and nothing new for the content security policy.
+
+- **Colors.** Parchment (`#f4ead5`, surfaces `#fbf5e6`) by day and a night castle (`#0f1726`, surfaces `#16213a`) by night, with gold and a bronze accent that reads on parchment. Every text color meets 4.5:1 and every accent and control edge 3:1 on the surfaces it sits on; an agent's accent is shaded for Camelot's own surfaces (`accentOf(spec, "camelot-light")`). The scheme still follows the system or the person's pick.
+- **Type.** Headings use the system serif stack (`Iowan Old Style`, Palatino, `Songti TC`, `Noto Serif TC`, Georgia); nothing is fetched.
+- **Details.** Gold rules under page titles and the room header, with corner marks on the header; the shield frame on every character; a wax seal in the agent's accent that is stamped on an approval card when it is approved and stays on the closed card; and a candle and a row of runes on the progress strip, the candle flickering and the runes shimmering while the turn works. Each moves with `transform` or `opacity` only and stands still under `prefers-reduced-motion`.
+- **Toolbar color.** The `theme-color` tags follow the look and the scheme: parchment or night castle under Camelot, the plain page's colors under Modern. The pre-paint script (`theme-init.js`) also puts `data-look` on the page, so a Camelot host never flashes the Modern look first.
+
+
 ### Dispatch threads
 
 The app hosts the core's dispatch threads (`ChatSurface.threads`). A background dispatch started from a room (a coding task, a delegated task, `message_agent` between agents) puts one start line in that room and opens a thread, `<surface>:thread.<uuid>`, whose room holds the dispatch's progress and report. The start line links the thread, and the room list nests each thread under the room that started it, with the finished ones folded away. Only an agent's or group's room can host a thread, never a thread itself.

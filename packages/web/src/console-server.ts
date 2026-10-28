@@ -187,6 +187,7 @@ export class ConsoleServer {
 						page.body,
 						this.#options.pathRouting ? this.#options.mount : undefined,
 						this.#options.presentation,
+						this.#options.look,
 					),
 					{
 						headers: {

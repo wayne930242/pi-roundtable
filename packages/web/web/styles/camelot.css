@@ -1,0 +1,336 @@
+/*
+ * The Camelot look: the modern page with a fantasy dress on its details. The skeleton, spacing
+ * and components stay as styles.css and app.css make them; this file re-colours the tokens
+ * (parchment by day, night castle by night, gold either way), sets headings in the system serif,
+ * and adds the few details: gold rules and corners, the wax seal and the candle-and-rune strip.
+ *
+ * Costs nothing at run time: gradients and borders, no images, no web fonts, and every motion is a
+ * transform or an opacity change that stands still under reduced motion. Each text colour meets
+ * 4.5:1 and each accent 3:1 on the surfaces it sits on (web/camelot.test.ts checks the tokens).
+ */
+
+/* ── Tokens ─────────────────────────────────────────────────────────────────────────────────────── */
+
+:root[data-look="camelot"] {
+	/* Parchment by day, the night castle by night */
+	--bg: light-dark(#f4ead5, #0f1726);
+	--surface: light-dark(#fbf5e6, #16213a);
+	--surface-2: light-dark(#eee1c3, #1c2a47);
+	--surface-3: light-dark(#e3d2a9, #243557);
+	--raised: light-dark(#fffaf0, #1b2744);
+	--border: light-dark(#dccb9f, #2c3c61);
+	--border-strong: light-dark(#c2ad78, #41537f);
+	--control-border: light-dark(#8a7650, #7e8db2);
+	--scrim: light-dark(rgb(43 33 24 / 0.45), rgb(3 6 14 / 0.7));
+
+	--text: light-dark(#2b2118, #efe6d2);
+	--muted: light-dark(#66543c, #bcb8ab);
+	--on-accent: light-dark(#fff9ea, #1a1405);
+
+	/* The interactive accent is a bronze by day, since gold alone does not read on parchment. */
+	--accent: light-dark(#7a500a, #e6b94c);
+	--accent-strong: light-dark(#5f3e07, #f2cd6c);
+	--accent-soft: light-dark(#f0deb0, #2d3045);
+	--accent-ink: light-dark(#553705, #f0cd78);
+
+	/* Gold for the ornaments, which carry no text */
+	--gold: light-dark(#b98a2c, #e6b94c);
+	--gold-soft: light-dark(#e9d29a, #3b4256);
+	/* A wash for the rows and panels the agent's own colour would otherwise tint. */
+	--gold-wash: light-dark(#f2e4bd, #222f4d);
+
+	--success: light-dark(#26602d, #6fd49b);
+	--success-soft: light-dark(#dfe9c9, #153027);
+	--warn: light-dark(#764a07, #f0b95b);
+	--warn-soft: light-dark(#f6e2b0, #3a2d12);
+	--danger: light-dark(#a3281e, #ff9a8f);
+	--danger-soft: light-dark(#f3d6cb, #3d1f2a);
+	--yolo: light-dark(#96400a, #ffae72);
+	--yolo-soft: light-dark(#f3dcc2, #3b2616);
+	--long: light-dark(#5f3d94, #c3a7f5);
+	--long-soft: light-dark(#e8ddee, #2c2547);
+
+	--shadow-1: 0 1px 2px light-dark(rgb(74 52 14 / 0.1), rgb(0 0 0 / 0.45));
+	--shadow-2: 0 4px 14px light-dark(rgb(74 52 14 / 0.14), rgb(0 0 0 / 0.5));
+	--shadow-3: 0 18px 48px light-dark(rgb(74 52 14 / 0.26), rgb(0 0 0 / 0.65));
+
+	/* System serif for the headings; nothing is fetched, so the page's policy needs no change. */
+	--font-heading:
+		"Iowan Old Style", Palatino, "Songti TC", "Noto Serif TC", Georgia, serif;
+}
+
+[data-look="camelot"] h1,
+[data-look="camelot"] h2,
+[data-look="camelot"] h3,
+[data-look="camelot"] .page-bar strong,
+[data-look="camelot"] .prompt-head strong {
+	font-family: var(--font-heading);
+	letter-spacing: 0;
+}
+
+/* ── Ground ─────────────────────────────────────────────────────────────────────────────────────── */
+
+/* Parchment grain: faint blotches of warmer and paler paper, painted once. The night is a vignette. */
+[data-look="camelot"] body {
+	background:
+		radial-gradient(
+			60rem 36rem at 12% -8%,
+			light-dark(rgb(255 252 240 / 0.55), rgb(70 96 160 / 0.16)),
+			transparent 70%
+		),
+		radial-gradient(
+			48rem 30rem at 96% 108%,
+			light-dark(rgb(200 160 90 / 0.2), rgb(230 185 76 / 0.06)),
+			transparent 70%
+		),
+		radial-gradient(
+			22rem 14rem at 70% 24%,
+			light-dark(rgb(185 138 44 / 0.08), rgb(120 140 210 / 0.05)),
+			transparent 70%
+		),
+		var(--bg);
+}
+
+/* ── Gold rules and corners ─────────────────────────────────────────────────────────────────────── */
+
+[data-look="camelot"] .topbar,
+[data-look="camelot"] .tabbar {
+	border-color: var(--gold-soft);
+}
+
+[data-look="camelot"] .page-head {
+	padding-bottom: var(--space-2);
+	background:
+		linear-gradient(90deg, var(--gold), transparent 70%) bottom / 100% 1px
+		no-repeat;
+}
+
+[data-look="camelot"] .room-head {
+	position: relative;
+	border-bottom-color: var(--gold-soft);
+	box-shadow: 0 1px 0 color-mix(in srgb, var(--gold) 38%, transparent);
+}
+
+/* The header's corners: a pair of short gold strokes at each lower corner. */
+[data-look="camelot"] .room-head::before,
+[data-look="camelot"] .room-head::after {
+	content: "";
+	position: absolute;
+	bottom: -1px;
+	width: 0.75rem;
+	height: 0.75rem;
+	pointer-events: none;
+	background:
+		linear-gradient(var(--gold), var(--gold)) bottom / 100% 2px no-repeat,
+		linear-gradient(var(--gold), var(--gold)) var(--side) / 2px 100% no-repeat;
+}
+
+[data-look="camelot"] .room-head::before {
+	--side: left;
+	left: 0;
+}
+
+[data-look="camelot"] .room-head::after {
+	--side: right;
+	right: 0;
+}
+
+[data-look="camelot"] .card,
+[data-look="camelot"] .prompt,
+[data-look="camelot"] .progress,
+[data-look="camelot"] .bubble {
+	border-color: color-mix(in srgb, var(--gold) 34%, var(--border));
+}
+
+[data-look="camelot"] .message[data-mine] .bubble {
+	border-color: transparent;
+}
+
+/* The agent's own colour is already on its shield, so a row is washed in gold rather than in a second hue. */
+[data-look="camelot"] .room-row[data-home],
+[data-look="camelot"] .room-row[aria-current="page"],
+[data-look="camelot"] .creator-preview {
+	background: var(--gold-wash);
+}
+
+/* ── The wax seal of an approved card ───────────────────────────────────────────────────────────── */
+
+[data-look="camelot"] .prompt {
+	position: relative;
+}
+
+/* The seal sits under the card's content, in a strip of its own, like a signature. */
+[data-look="camelot"] .prompt[data-sealed] {
+	padding-bottom: calc(2.75rem + var(--space-4));
+}
+
+.wax-seal {
+	position: absolute;
+	right: var(--space-4);
+	bottom: var(--space-3);
+	width: 2.75rem;
+	height: 2.75rem;
+	pointer-events: none;
+	filter: drop-shadow(0 2px 2px rgb(0 0 0 / 0.28));
+	transform: rotate(-9deg);
+	animation-name: seal-stamp;
+	animation-duration: 450ms;
+	animation-timing-function: var(--ease-spring);
+	animation-fill-mode: both;
+}
+
+.wax-seal svg {
+	display: block;
+	width: 100%;
+	height: 100%;
+	overflow: visible;
+}
+
+.wax-seal .seal-body {
+	fill: var(--agent-accent, var(--accent));
+}
+
+.wax-seal .seal-ring {
+	fill: none;
+	stroke: color-mix(in srgb, var(--agent-accent, var(--accent)) 62%, #000);
+	stroke-width: 1.6;
+}
+
+.wax-seal .seal-mark {
+	fill: none;
+	stroke: color-mix(in srgb, var(--agent-accent, var(--accent)) 62%, #000);
+	stroke-width: 3;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+}
+
+/* The stamp lands from above: larger and see-through first, then pressed into the card. */
+@keyframes seal-stamp {
+	from {
+		opacity: 0;
+		transform: rotate(-9deg) scale(1.7);
+	}
+	60% {
+		opacity: 1;
+		transform: rotate(-9deg) scale(0.92);
+	}
+	to {
+		opacity: 1;
+		transform: rotate(-9deg) scale(1);
+	}
+}
+
+/* ── The candle-and-rune progress strip ─────────────────────────────────────────────────────────── */
+
+[data-look="camelot"] .progress-bar {
+	display: none;
+}
+
+.candle-runes {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--space-2);
+	flex: none;
+}
+
+.candle {
+	width: 0.85rem;
+	height: 1.55rem;
+	overflow: visible;
+}
+
+.candle .candle-wax {
+	fill: light-dark(#f3e3b6, #d9cdb0);
+	stroke: var(--gold);
+	stroke-width: 0.6;
+}
+
+.candle .candle-wick {
+	stroke: light-dark(#4a3a28, #1a1405);
+	stroke-width: 0.9;
+}
+
+.candle .candle-flame {
+	fill: var(--gold);
+	transform-box: fill-box;
+	transform-origin: 50% 100%;
+	animation: candle-flicker 1.7s ease-in-out infinite;
+}
+
+.runes {
+	display: inline-flex;
+	gap: 0.3rem;
+}
+
+.rune {
+	width: 0.55rem;
+	height: 0.9rem;
+}
+
+.rune path {
+	fill: none;
+	stroke: color-mix(in srgb, var(--gold) 80%, var(--text));
+	stroke-width: 1.5;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+}
+
+.rune {
+	animation: rune-shimmer 2.4s ease-in-out infinite;
+}
+
+.rune[data-rune="1"] {
+	animation-delay: 0.3s;
+}
+.rune[data-rune="2"] {
+	animation-delay: 0.6s;
+}
+.rune[data-rune="3"] {
+	animation-delay: 0.9s;
+}
+.rune[data-rune="4"] {
+	animation-delay: 1.2s;
+}
+.rune[data-rune="5"] {
+	animation-delay: 1.5s;
+}
+
+@keyframes rune-shimmer {
+	0%,
+	100% {
+		opacity: 0.4;
+	}
+	45% {
+		opacity: 1;
+	}
+}
+
+@keyframes candle-flicker {
+	0%,
+	100% {
+		opacity: 1;
+		transform: scale(1, 1) rotate(0deg);
+	}
+	30% {
+		opacity: 0.82;
+		transform: scale(0.92, 1.08) rotate(-2deg);
+	}
+	65% {
+		opacity: 0.94;
+		transform: scale(1.06, 0.95) rotate(2deg);
+	}
+}
+
+/* ── Reduced motion: the seal sits in place, the candle burns steady, the runes glow evenly ───── */
+
+@media (prefers-reduced-motion: reduce) {
+	.wax-seal,
+	.candle .candle-flame,
+	.rune {
+		animation-name: none;
+	}
+
+	.rune {
+		opacity: 0.85;
+	}
+}

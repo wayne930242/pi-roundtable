@@ -39,9 +39,17 @@ const THEMES: { value: ThemePreference; label: string; icon: IconName }[] = [
 	{ value: "dark", label: "Dark", icon: "moon" },
 ];
 
-const LOOKS: { value: PageLook; label: string }[] = [
-	{ value: "modern", label: "Modern" },
-	{ value: "camelot", label: "Camelot" },
+const LOOKS: { value: PageLook; label: string; hint: string }[] = [
+	{
+		value: "modern",
+		label: "Modern",
+		hint: "Plain and neutral, with round avatars.",
+	},
+	{
+		value: "camelot",
+		label: "Camelot",
+		hint: "Parchment by day, night castle by night, gold rules, shield avatars and wax seals.",
+	},
 ];
 
 /** Push on this device, and the devices that get it. */
@@ -193,10 +201,22 @@ export function SettingsPage() {
 									setLook(option.value === hostLook ? undefined : option.value)
 								}
 							/>
+							<span
+								className="look-swatch"
+								data-swatch={option.value}
+								aria-hidden="true"
+							>
+								<i />
+								<i />
+								<i />
+							</span>
 							{t(option.label)}
 						</label>
 					))}
 				</fieldset>
+				<p className="meta">
+					{t(LOOKS.find((option) => option.value === look)?.hint ?? "")}
+				</p>
 			</section>
 			<section className="card stack">
 				<h2>{t("Install")}</h2>

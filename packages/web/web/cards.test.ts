@@ -1,4 +1,6 @@
 import { expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { CATALOG, type CharacterSpec } from "pi-roundtable/characters";
 import { partial } from "pi-roundtable/testing";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -10,7 +12,11 @@ import {
 	PromptCard,
 } from "./components/cards.tsx";
 import { systemLine } from "./components/message-row.tsx";
+import { openPage, releaseDom } from "./dom.ts";
+import { store } from "./lib/app-store.ts";
 import { fuzzyScore } from "./lib/fuzzy.ts";
+import { loadKit } from "./lib/kit.ts";
+import { initLook } from "./lib/look.ts";
 import { setPresentation } from "./lib/messages.ts";
 import type { CardState } from "./lib/rooms.ts";
 import { type AppConnection, setConnection } from "./lib/socket.ts";
@@ -271,4 +277,136 @@ test("an answered card is described by the options picked and the person's own w
 		"Blue, warm",
 	);
 	expect(describeAnswer({ choices: [], text: "both" })).toBe("both");
+});
+
+const knight: CharacterSpec = {
+	v: 1,
+	class: "knight",
+	...CATALOG.classes.knight.preset,
+};
+
+/** Runs `work` on a page of its own, with the kit loaded and the guide's room holding the knight. */
+async function onPage(
+	look: "modern" | "camelot",
+	work: (page: Awaited<ReturnType<typeof openPage>>) => Promise<void>,
+): Promise<void> {
+	const kit = await loadKit();
+	const page = await openPage();
+	try {
+		localStorage.clear();
+		initLook(look);
+		store.dispatch({
+			type: "rooms_loaded",
+			rooms: [
+				{
+					key: "app:agent.guide",
+					kind: "agent",
+					name: "guide",
+					displayName: "Guide",
+					home: true,
+					readOnly: false,
+					mode: { yolo: false, longRunning: false },
+					typing: false,
+					stoppable: false,
+					character: knight,
+				},
+			],
+		});
+		expect(kit).toBeDefined();
+		await work(page);
+	} finally {
+		await page.unmount();
+		initLook("modern");
+		await releaseDom();
+	}
+}
+
+const approval: PromptFrame = {
+	id: "seal1",
+	kind: "approval",
+	title: "Run the deploy?",
+	message: "Deploy.",
+	purpose: "action",
+};
+
+test("under Camelot an approved approval card keeps a wax seal in the room agent's accent, and under modern it has none", async () => {
+	const kit = await loadKit();
+	await onPage("camelot", async (page) => {
+		const approved = card(approval, { outcome: "approved" });
+		await page.render(createElement(PromptCard, { card: approved }));
+		const seal = page.container.querySelector<HTMLElement>(".wax-seal");
+		expect(seal).not.toBeNull();
+		expect(seal?.style.getPropertyValue("--agent-accent")).toBe(
+			kit.accentOf(knight, "camelot-light"),
+		);
+		// It stays on the closed card: the card is ended and still carries it after another render.
+		await page.render(
+			createElement(PromptCard, { card: { ...approved, note: "ok" } }),
+		);
+		expect(page.container.querySelectorAll(".wax-seal")).toHaveLength(1);
+		// A card that is open, declined or not an approval gets none.
+		for (const other of [
+			card(approval),
+			card(approval, { outcome: "declined" }),
+			card(
+				{
+					id: "q1",
+					kind: "ask",
+					title: "Which?",
+					question: "Which region?",
+					options: [{ label: "eu" }],
+					multi: false,
+					allowOther: false,
+				},
+				{ outcome: "answered" },
+			),
+		]) {
+			await page.render(createElement(PromptCard, { card: other }));
+			expect(page.container.querySelector(".wax-seal")).toBeNull();
+		}
+	});
+	await onPage("modern", async (page) => {
+		await page.render(
+			createElement(PromptCard, {
+				card: card(approval, { outcome: "approved" }),
+			}),
+		);
+		expect(page.container.querySelector(".wax-seal")).toBeNull();
+	});
+});
+
+test("the wax seal stamps in with an animation, and under reduced motion it has none", async () => {
+	await onPage("camelot", async (page) => {
+		const sealed = createElement(PromptCard, {
+			card: card(approval, { outcome: "approved" }),
+		});
+		const style = document.createElement("style");
+		style.textContent = readFileSync(
+			new URL("./styles/camelot.css", import.meta.url),
+			"utf8",
+		);
+		document.head.append(style);
+		const animation = () => {
+			const seal = page.container.querySelector(".wax-seal");
+			if (!seal) throw new Error("no seal");
+			return getComputedStyle(seal).animationName;
+		};
+		await page.render(sealed);
+		expect(animation()).toBe("seal-stamp");
+		const device = (
+			window as unknown as {
+				happyDOM?: { settings: { device: { prefersReducedMotion: string } } };
+			}
+		).happyDOM?.settings.device;
+		if (!device) throw new Error("no happy-dom settings");
+		device.prefersReducedMotion = "reduce";
+		try {
+			// A computed style is kept per element, so the seal is drawn anew.
+			await page.render(null);
+			await page.render(sealed);
+			expect(animation()).toBe("none");
+		} finally {
+			device.prefersReducedMotion = "no-preference";
+		}
+	});
 });

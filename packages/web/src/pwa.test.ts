@@ -168,17 +168,21 @@ test("the page names a theme colour for each scheme and loads the stored scheme 
 test("the pre-paint script sets an explicit scheme and its toolbar colours, and leaves a system choice to the page", async () => {
 	const { THEME_INIT_SCRIPT } = await import("./pwa.ts");
 	const run = (stored: string | null) => {
-		const metas = [{ content: "#f5f6f8" }, { content: "#0f1115" }].map(
-			(meta) => ({
-				...meta,
-				setAttribute(_name: string, value: string) {
-					this.content = value;
-				},
-			}),
-		);
+		const metas = [
+			{ content: "#f5f6f8", media: "(prefers-color-scheme: light)" },
+			{ content: "#0f1115", media: "(prefers-color-scheme: dark)" },
+		].map((meta) => ({
+			...meta,
+			getAttribute(_name: string) {
+				return this.media;
+			},
+			setAttribute(_name: string, value: string) {
+				this.content = value;
+			},
+		}));
 		const root = { dataset: {} as Record<string, string> };
 		new Function("localStorage", "document", THEME_INIT_SCRIPT)(
-			{ getItem: () => stored },
+			{ getItem: (key: string) => (key === "rt-theme" ? stored : null) },
 			{
 				documentElement: root,
 				querySelectorAll: () => metas,
@@ -224,4 +228,69 @@ test("appearance.look camelot changes the manifest colours", async () => {
 	).json()) as { theme_color: string; background_color: string };
 	expect(manifest.theme_color).toBe("#f4ead5");
 	expect(manifest.background_color).toBe("#0f1726");
+});
+
+test("under camelot the page names the look's toolbar colours, and the pre-paint script puts on the look and its colours", async () => {
+	const { presentPage } = await import("./page-presentation.ts");
+	const { themeInitScript } = await import("./pwa.ts");
+	const html = String(
+		presentPage(
+			new TextEncoder().encode("<html><head></head></html>"),
+			"/app",
+			undefined,
+			"camelot",
+		),
+	);
+	expect(html).toContain(
+		'content="#f4ead5" media="(prefers-color-scheme: light)"',
+	);
+	expect(html).toContain(
+		'content="#0f1726" media="(prefers-color-scheme: dark)"',
+	);
+	const run = (
+		host: "modern" | "camelot",
+		stored: { theme?: string; look?: string },
+	) => {
+		const metas = ["light", "dark"].map((scheme) => ({
+			content: "",
+			getAttribute: () => `(prefers-color-scheme: ${scheme})`,
+			setAttribute(_name: string, value: string) {
+				this.content = value;
+			},
+		}));
+		const root = { dataset: {} as Record<string, string> };
+		new Function("localStorage", "document", themeInitScript(host))(
+			{
+				getItem: (key: string) =>
+					(key === "rt-theme" ? stored.theme : stored.look) ?? null,
+			},
+			{ documentElement: root, querySelectorAll: () => metas },
+		);
+		return {
+			look: root.dataset.look,
+			theme: root.dataset.theme,
+			colours: metas.map((meta) => meta.content),
+		};
+	};
+	// The host's look, until the device picked its own.
+	expect(run("camelot", {})).toEqual({
+		look: "camelot",
+		theme: undefined,
+		colours: ["#f4ead5", "#0f1726"],
+	});
+	expect(run("camelot", { look: "modern" })).toEqual({
+		look: "modern",
+		theme: undefined,
+		colours: ["#f5f6f8", "#0f1115"],
+	});
+	expect(run("modern", { look: "camelot", theme: "dark" })).toEqual({
+		look: "camelot",
+		theme: "dark",
+		colours: ["#0f1726", "#0f1726"],
+	});
+	expect(run("camelot", { theme: "light", look: "junk" })).toEqual({
+		look: "camelot",
+		theme: "light",
+		colours: ["#f4ead5", "#f4ead5"],
+	});
 });
