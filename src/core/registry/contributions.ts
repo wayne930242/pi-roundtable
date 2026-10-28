@@ -314,13 +314,17 @@ export async function collectContributions(
 	let collected = false;
 	const context: Omit<PluginContext, "services"> = {
 		...base,
-		directChannels: directChannelsPort(() => {
-			if (!collected)
-				throw new NotLinkedError(
-					"direct channels are linked once every plugin is set up. Use them from a service's start, a handler, or a session tool, not during setup.",
-				);
-			return registry.directChannels;
-		}, base.surfaces, base.logger),
+		directChannels: directChannelsPort(
+			() => {
+				if (!collected)
+					throw new NotLinkedError(
+						"direct channels are linked once every plugin is set up. Use them from a service's start, a handler, or a session tool, not during setup.",
+					);
+				return registry.directChannels;
+			},
+			base.surfaces,
+			base.logger,
+		),
 	};
 	const serviceNames = new Names("service");
 	const sessionTools = new Names("session tool");
