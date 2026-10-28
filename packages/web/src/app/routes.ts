@@ -29,6 +29,7 @@ import type {
 } from "../api-types.ts";
 import type { Authenticated } from "../auth/authenticator.ts";
 import { json } from "../http.ts";
+import { readLimited } from "../request-body.ts";
 import type { CardLog } from "./card-log.ts";
 import { type FileDir, fileResponse, isFileId } from "./files.ts";
 import { PAGE_LIMIT, type RoomLog } from "./room-log.ts";
@@ -95,21 +96,11 @@ async function bodyOf(
 	request: Request,
 	limit = MAX_BODY_BYTES,
 ): Promise<Record<string, unknown>> {
-	const tooLarge = () => new HttpError(413, "The body is too large.");
-	if (Number(request.headers.get("content-length") ?? 0) > limit)
-		throw tooLarge();
-	// Read in chunks, so a body that declares no length is refused past the limit without being held whole.
-	const chunks: Uint8Array[] = [];
-	let size = 0;
-	if (request.body)
-		for await (const chunk of request.body) {
-			size += chunk.byteLength;
-			if (size > limit) throw tooLarge();
-			chunks.push(chunk);
-		}
+	const raw = await readLimited(request, limit);
+	if (!raw) throw new HttpError(413, "The body is too large.");
 	let value: unknown;
 	try {
-		value = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+		value = JSON.parse(raw.toString("utf8"));
 	} catch {
 		throw bad("The body is not JSON.");
 	}

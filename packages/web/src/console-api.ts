@@ -88,6 +88,7 @@ export interface ConsolePorts {
 import { cleanupConversation } from "./cleanup-api.ts";
 import { connectorsView } from "./connectors-api.ts";
 import { ConsoleHttpError as HttpError, json } from "./http.ts";
+import { readLimited } from "./request-body.ts";
 import { skillCatalog, skillDetail } from "./skills-api.ts";
 
 /** Memory refusals as the Notes pane shows them. */
@@ -519,21 +520,12 @@ export class ConsoleApi {
 	}
 }
 
-/** The JSON body, read in chunks so a body past the limit is refused without being held whole. */
+/** The JSON body; undefined when it is not JSON. */
 async function readBody(request: Request): Promise<unknown> {
-	const tooLarge = () => new HttpError(413, "The request is too large.");
-	if (Number(request.headers.get("content-length") ?? 0) > MAX_BODY_BYTES)
-		throw tooLarge();
-	const chunks: Uint8Array[] = [];
-	let size = 0;
-	if (request.body)
-		for await (const chunk of request.body) {
-			size += chunk.byteLength;
-			if (size > MAX_BODY_BYTES) throw tooLarge();
-			chunks.push(chunk);
-		}
+	const raw = await readLimited(request, MAX_BODY_BYTES);
+	if (!raw) throw new HttpError(413, "The request is too large.");
 	try {
-		return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+		return JSON.parse(raw.toString("utf8"));
 	} catch {
 		return undefined;
 	}

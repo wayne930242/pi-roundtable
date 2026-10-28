@@ -7,6 +7,7 @@ import type {
 } from "../api-types.ts";
 import type { Authenticated } from "../auth/authenticator.ts";
 import { json } from "../http.ts";
+import { readLimited } from "../request-body.ts";
 import type { EndpointPolicy } from "./endpoint.ts";
 import type { PushSubscriptions } from "./subscriptions.ts";
 import type { Vapid } from "./vapid.ts";
@@ -52,12 +53,11 @@ const decode = (value: unknown, bytes: number, name: string): string => {
 };
 
 async function bodyOf(request: Request): Promise<Record<string, unknown>> {
-	const text = await request.text();
-	if (text.length > MAX_BODY_BYTES)
-		throw new Refusal(413, "The body is too large.");
+	const raw = await readLimited(request, MAX_BODY_BYTES);
+	if (!raw) throw new Refusal(413, "The body is too large.");
 	let value: unknown;
 	try {
-		value = JSON.parse(text);
+		value = JSON.parse(raw.toString("utf8"));
 	} catch {
 		throw new Refusal(400, "The body is not JSON.");
 	}

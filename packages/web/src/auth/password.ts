@@ -3,6 +3,7 @@ import type { ActorFacts, Logger } from "pi-roundtable";
 import { PluginError } from "pi-roundtable";
 import { type ConsolePresentation, message } from "../features.ts";
 import { MIN_PASSWORD_LENGTH } from "../options.ts";
+import { readLimited } from "../request-body.ts";
 import { LOGIN_CSP, loginPage } from "./login-page.ts";
 
 /** The session cookie's name. */
@@ -83,25 +84,8 @@ const cookieValue = (
 async function readForm(
 	request: Request,
 ): Promise<URLSearchParams | undefined> {
-	const declared = Number(request.headers.get("content-length") ?? 0);
-	if (declared > MAX_BODY_BYTES || !request.body) {
-		if (declared > MAX_BODY_BYTES) return undefined;
-		return new URLSearchParams();
-	}
-	const reader = request.body.getReader();
-	const chunks: Uint8Array[] = [];
-	let size = 0;
-	for (;;) {
-		const { done, value } = await reader.read();
-		if (done) break;
-		size += value.length;
-		if (size > MAX_BODY_BYTES) {
-			await reader.cancel();
-			return undefined;
-		}
-		chunks.push(value);
-	}
-	return new URLSearchParams(Buffer.concat(chunks).toString("utf8"));
+	const raw = await readLimited(request, MAX_BODY_BYTES);
+	return raw && new URLSearchParams(raw.toString("utf8"));
 }
 
 /**
