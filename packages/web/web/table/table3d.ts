@@ -56,7 +56,6 @@ import {
 import { type Palette, palette, STATE_COLOR } from "./themes";
 import type {
 	Scheme,
-	SeatInit,
 	SeatState,
 	TableHandle,
 	TableOptions,
@@ -975,7 +974,6 @@ export function createTable3D(
 			const s = seats[i]!;
 			const age = t - s.since;
 			const sp = s.state;
-			const live = LIVE.has(sp);
 			const ph = s.phase;
 			const ax = s.x + vF.x * ANCH;
 			const az2 = s.z + vF.z * ANCH;

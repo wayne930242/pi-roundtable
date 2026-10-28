@@ -7,5 +7,3 @@ export const PAGE_COLORS = {
 	modern: { light: "#f5f6f8", dark: "#0f1115" },
 	camelot: { light: "#f4ead5", dark: "#0f1726" },
 } as const;
-
-export type PageLookName = keyof typeof PAGE_COLORS;

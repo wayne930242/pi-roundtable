@@ -4,9 +4,6 @@ import { fileURLToPath } from "node:url";
 import type { AssetBundle } from "./assets.ts";
 import { PAGE_COLORS } from "./page-colors.ts";
 
-/** The modern page's background in each scheme, which the browser's toolbar takes (`--bg` in tokens.css). */
-export const THEME_COLORS = PAGE_COLORS.modern;
-
 /** The manifest's splash colours under each look; modern keeps the page's own. */
 export const LOOK_COLORS = {
 	modern: {

@@ -16,7 +16,6 @@ import {
 	planFiles,
 	planPaste,
 	planSend,
-	textFile,
 	uploadForSend,
 	usedSlots,
 } from "../lib/attach.ts";
