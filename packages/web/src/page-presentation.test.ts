@@ -20,8 +20,11 @@ test("localized HTML bootstrap is inert and attribute escaped, including replace
 	expect(html).toContain("$&");
 	expect(html).not.toContain("<script>");
 });
-test("default HTML remains byte-identical and path routing/locales fail fast on invalid settings", () => {
-	expect(presentPage(page, undefined, undefined)).toEqual(page);
+test("default HTML only gains the install tags, and path routing/locales fail fast on invalid settings", () => {
+	const plain = String(presentPage(page, undefined, undefined));
+	expect(
+		plain.replace(/<link rel="manifest"[^>]*>(<meta[^>]*>|<link[^>]*>)*/, ""),
+	).toBe(new TextDecoder().decode(page));
 	const base = {
 		verifier: admit,
 		origin: "https://console.example.test",

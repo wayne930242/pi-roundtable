@@ -15,6 +15,12 @@ const paths = [
 	"dist/index.html",
 	"dist/page.js",
 	"dist/page.css",
+	"dist/sw.js",
+	"assets/icons/192.png",
+	"assets/icons/512.png",
+	"assets/icons/maskable-512.png",
+	"assets/icons/apple-180.png",
+	"assets/icons/badge-96.png",
 ];
 
 function report(files = paths, name = pkg.name): string {
@@ -56,8 +62,15 @@ test("reads the registry name from npm 11's string and npm 12's one-element arra
 	expect(() => registryName("not-json", pkg)).toThrow(ReleaseContractError);
 });
 
-test("refuses a web tarball missing the page or either bundle", () => {
-	for (const missing of ["dist/index.html", "dist/page.js", "dist/page.css"])
+test("refuses a web tarball missing the page, either bundle, the worker or an icon", () => {
+	for (const missing of [
+		"dist/index.html",
+		"dist/page.js",
+		"dist/page.css",
+		"dist/sw.js",
+		"assets/icons/192.png",
+		"assets/icons/badge-96.png",
+	])
 		expect(() =>
 			checkPack(report(paths.filter((path) => path !== missing)), pkg, "0.8.0"),
 		).toThrow(ReleaseContractError);

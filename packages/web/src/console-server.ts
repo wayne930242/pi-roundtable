@@ -4,6 +4,7 @@ import type { Authenticator, Unauthenticated } from "./auth/authenticator.ts";
 import type { ConsoleApi } from "./console-api.ts";
 import type { ConsolePresentation } from "./features.ts";
 import { presentPage } from "./page-presentation.ts";
+import { servePwa } from "./pwa.ts";
 
 const encoder = new TextEncoder();
 /** Changes closer together than this reach the page as one event. */
@@ -43,6 +44,10 @@ export interface ConsoleServerOptions {
 	/** Serve client page paths as the same authenticated document. */
 	pathRouting?: boolean;
 	presentation?: ConsolePresentation;
+	/** The manifest's name; default `Roundtable`. */
+	title?: string;
+	/** Where the install icons come from; default the ones this package ships. */
+	iconsDir?: string;
 }
 
 /**
@@ -133,8 +138,13 @@ export class ConsoleServer {
 			);
 		if (!READ_METHODS.has(request.method))
 			return new Response("Method not allowed", { status: 405 });
+		const installable = servePwa(rest, {
+			...this.#options,
+			title: this.#options.title ?? "Roundtable",
+		});
+		if (installable) return installable;
 		const asset = this.#options.assets.get(rest);
-		if (asset && rest !== "index.html")
+		if (asset && rest !== "index.html" && rest !== "sw.js")
 			return new Response(new Uint8Array(asset.body), {
 				headers: {
 					"content-type": asset.type,

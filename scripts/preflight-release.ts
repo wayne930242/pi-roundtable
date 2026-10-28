@@ -60,7 +60,14 @@ export function checkPack(
 			"docker/entrypoint.sh",
 			"docker/policies.json",
 		);
-	if (pkg.name === "pi-roundtable-web") required.push("dist/index.html");
+	if (pkg.name === "pi-roundtable-web")
+		required.push(
+			"dist/index.html",
+			"dist/sw.js",
+			...["192", "512", "maskable-512", "apple-180", "badge-96"].map(
+				(name) => `assets/icons/${name}.png`,
+			),
+		);
 	if (pkg.name === "pi-roundtable-drawing")
 		required.push("fonts/NotoSansTC-Bold.otf", "fonts/OFL.txt");
 	for (const path of required) {
@@ -70,7 +77,10 @@ export function checkPack(
 	if (
 		pkg.name === "pi-roundtable-web" &&
 		(![...paths].some(
-			(path) => path.startsWith("dist/") && path.endsWith(".js"),
+			(path) =>
+				path.startsWith("dist/") &&
+				path.endsWith(".js") &&
+				path !== "dist/sw.js",
 		) ||
 			![...paths].some(
 				(path) => path.startsWith("dist/") && path.endsWith(".css"),

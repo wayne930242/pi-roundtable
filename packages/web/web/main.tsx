@@ -9,3 +9,11 @@ createRoot(root).render(
 		<App />
 	</StrictMode>,
 );
+
+// The worker makes the console installable; the page works without one, so a failure only logs.
+if ("serviceWorker" in navigator) {
+	const base = new URL("./", document.baseURI);
+	navigator.serviceWorker
+		.register(new URL("sw.js", base), { scope: base.href })
+		.catch((error: unknown) => console.warn("service worker failed", error));
+}

@@ -32,3 +32,27 @@ test("a directory with no page is refused with the fix", () => {
 	const empty = mkdtempSync(join(tmpdir(), "web-console-empty-"));
 	expect(() => loadAssets(empty)).toThrow("no index.html");
 });
+
+test("a served page links the manifest with credentials, a theme colour and the apple icon", async () => {
+	const { presentPage } = await import("./page-presentation.ts");
+	const html = String(
+		presentPage(
+			new TextEncoder().encode("<html><head></head></html>"),
+			"/app",
+			undefined,
+		),
+	);
+	expect(html).toContain(
+		'rel="manifest" href="./manifest.webmanifest" crossorigin="use-credentials"',
+	);
+	expect(html).toContain('name="theme-color"');
+	expect(html).toContain('rel="apple-touch-icon"');
+	const plain = String(
+		presentPage(
+			new TextEncoder().encode("<html><head></head></html>"),
+			undefined,
+			undefined,
+		),
+	);
+	expect(plain).toContain('crossorigin="use-credentials"');
+});

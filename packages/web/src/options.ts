@@ -111,6 +111,8 @@ export interface WebConsoleOptions {
 	panes?: readonly PaneName[];
 	/** The page's title and heading; default `Roundtable`. */
 	title?: string;
+	/** Where the install icons come from; default the ones this package ships. */
+	icons?: { dir: string };
 	/** Text a relayed message begins with, taken off the owner's words; default the remote MCP note. */
 	relayNotes?: readonly string[];
 	/** Conversations the console neither lists nor reads. */
@@ -131,6 +133,7 @@ export interface ResolvedOptions {
 	routing: "hash" | "path";
 	panes: PaneName[];
 	title: string;
+	iconsDir: string | undefined;
 	relayNotes: readonly string[];
 	exclude: ((key: ChannelKey) => boolean) | undefined;
 	assetDir: string | undefined;
@@ -293,6 +296,7 @@ export function resolveOptions(options: WebConsoleOptions): ResolvedOptions {
 		routing: options.routing ?? "hash",
 		panes,
 		title,
+		iconsDir: options.icons?.dir,
 		relayNotes: options.relayNotes ?? [DEFAULT_RELAY_NOTE],
 		exclude: options.exclude,
 		assetDir: options.assetDir,

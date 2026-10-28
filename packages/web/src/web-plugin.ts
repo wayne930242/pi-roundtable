@@ -124,6 +124,8 @@ async function build(settings: ResolvedOptions, context: Context) {
 		assets,
 		authenticator,
 		pathRouting: settings.routing === "path",
+		title: settings.title,
+		...(settings.iconsDir ? { iconsDir: settings.iconsDir } : {}),
 		...(settings.presentation ? { presentation: settings.presentation } : {}),
 		api,
 		subscribe: (listener) => {
