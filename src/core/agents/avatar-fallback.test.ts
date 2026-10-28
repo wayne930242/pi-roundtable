@@ -62,7 +62,8 @@ function memoryStore(initial: Agent[]) {
 			rows.set(input.name, created);
 			return created;
 		},
-		hasStoredCharacter: (name: string) => rows.get(name)?.character !== undefined,
+		hasStoredCharacter: (name: string) =>
+			rows.get(name)?.character !== undefined,
 		dressIfUndressed: async (
 			name: string,
 			character: Agent["character"],

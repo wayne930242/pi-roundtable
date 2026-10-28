@@ -6,8 +6,8 @@ import {
 import type { ChannelKey } from "../domain/conversation.ts";
 import { AgentError } from "../domain/errors.ts";
 import type { AgentTurnScope } from "../domain/ports.ts";
-import { overBase } from "./agent-rules.ts";
 import type { AgentChannels } from "./agent-ports.ts";
+import { overBase } from "./agent-rules.ts";
 import type { Agent, AgentGroup } from "./agent-store.ts";
 import {
 	coordinatorOf,

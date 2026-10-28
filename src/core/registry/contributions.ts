@@ -128,7 +128,10 @@ function checkKeys(plugin: string, contribution: Contribution): void {
 }
 
 /** Refuses a seed whose `character` the characters module would not resolve. */
-function checkSeedCharacters(plugin: string, seeds: readonly AgentSeed[]): void {
+function checkSeedCharacters(
+	plugin: string,
+	seeds: readonly AgentSeed[],
+): void {
 	for (const seed of seeds) {
 		if (seed.character === undefined) continue;
 		try {
