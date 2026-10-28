@@ -65,11 +65,6 @@ export class Presence {
 		this.#options.sockets.broadcast(frame);
 	}
 
-	/** Notes the table a new socket was sent, so the next change is measured against it. */
-	sent(frame: PresenceFrame): void {
-		this.#last = JSON.stringify(frame.agents);
-	}
-
 	stop(): void {
 		this.#stopped = true;
 		clearTimeout(this.#pending);

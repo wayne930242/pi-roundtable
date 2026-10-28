@@ -52,7 +52,7 @@ export interface SocketRouteOptions {
 	desk: OwnerDesk;
 	rooms: Rooms;
 	/** The table of who is busy, sent after `ready`; absent in a route built without one. */
-	presence?: Pick<Presence, "frame" | "sent">;
+	presence?: Pick<Presence, "frame">;
 	uploads: Uploads;
 	identity: Pick<IdentityService, "tierOf">;
 	conversations: Pick<ConversationPort, "stop">;
@@ -184,10 +184,7 @@ export class SocketRoute {
 		for (const frame of desk.openFrames()) sockets.send(connection, frame);
 		const { presence } = this.#options;
 		presence?.frame().then(
-			(frame) => {
-				presence.sent(frame);
-				sockets.send(connection, frame);
-			},
+			(frame) => sockets.send(connection, frame),
 			(error: unknown) =>
 				this.#options.logger.warn({ err: error }, "presence was not sent"),
 		);
