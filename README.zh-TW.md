@@ -176,6 +176,16 @@ export default {
 } satisfies RoundtableConfig;
 ```
 
+一輪預設工作 10 分鐘後會問你要不要繼續，總共最多 30 分鐘；用 `turnLimits` 與 `autonomy` 調整。切到長時間執行模式的對話，會自己繼續，直到 `autonomy.longRunning.maxSeconds`：
+
+| 設定 | 預設 | 說明 |
+| --- | --- | --- |
+| `turnLimits.timeoutSeconds` | `600` | 一輪在卡片詢問是否繼續之前的工作時間，60 到 86400；插入這一輪的每則訊息都會重新計時 |
+| `turnLimits.maxSeconds` | `timeoutSeconds` 的三倍 | 一輪總共最多工作多久，不得小於 `timeoutSeconds` |
+| `turnLimits.cardSeconds` | `300` | 那張卡片等你回答多久，30 到 3600；時間到沒回答，這一輪就停止 |
+| `autonomy.longRunning.maxSeconds` | `14400`（4 小時） | 長時間執行對話的一輪，工作到這個上限才會詢問或停止，600 到 604800 |
+| `autonomy.yolo.allow`、`autonomy.yolo.card` | 無 | yolo 模式在預設之外可以核准的 hold 類別，以及它永遠不核准的類別 |
+
 有人在 agent 的頻道對助理說話時，那一輪也會讀進助理上次在該頻道發言之後的頻道訊息（頻道脈絡；見[外掛指南](docs/plugins.md#channel-context-what-was-said-around-an-addressed-message)）。
 用 `discord.channelContext` 調整，或設 `channelContext: false` 關閉：
 
@@ -205,7 +215,7 @@ export default {
 在這段時間內回答，這一輪就帶著答案繼續；沒回答的話，這一輪會說它在等你，然後結束，卡片繼續開著、沒有期限，之後再回答就會在同一個對話開新的一輪，帶上你的答案，或核准後那個動作的結果。
 coding worker 的卡片則會讓 worker 一直等下去。
 每張 `ask_user` 卡片在送出旁邊都有**取消**按鈕：在這一輪還在等的時候按下，模型會被告知你取消了這個問題、不要再問一次。
-一輪執行到時間上限（內建 runtime 的 10 分鐘預算或 30 分鐘上限）時，會先問再結束：卡片寫出是哪個上限與這一輪正在做什麼，附**繼續**和**取消**；5 分鐘內沒回答就中止這一輪。
+一輪執行到時間上限（內建 runtime 的預算，預設 10 分鐘，或上限，預設 30 分鐘；見 `turnLimits`）時，會先問再結束：卡片寫出是哪個上限與這一輪正在做什麼，附**繼續**和**取消**；5 分鐘內沒回答就中止這一輪。
 核准卡「複製」按鈕的文字存在資料目錄的 `card-copies.json`，預設留最新 100 張、30 天；`discord.cardCopies`（`{ keepDays?, keep? }`）可以調整，設成 `false` 則只留在記憶體。
 agent 頻道裡訊息的附件，整則訊息（連同它回覆的那則）要在 `discord.attachmentDownload.deadlineMs`（預設 60,000）毫秒內下載完；單一檔案連續 `discord.attachmentDownload.idleMs`（預設 10,000）毫秒沒收到任何位元組就放棄，這一輪會略過收不到的檔案繼續。
 

@@ -181,6 +181,16 @@ export default {
 } satisfies RoundtableConfig;
 ```
 
+A turn works 10 minutes by default before it asks you whether to go on, and 30 minutes at most in all; `turnLimits` and `autonomy` change that, and a conversation you switch to long-running mode goes on by itself up to `autonomy.longRunning.maxSeconds`:
+
+| Setting | Default | What it is |
+| --- | --- | --- |
+| `turnLimits.timeoutSeconds` | `600` | A turn's budget before the card asks to continue, 60 to 86400; each message steered into the turn renews it |
+| `turnLimits.maxSeconds` | three times `timeoutSeconds` | The most one turn works in all, at least `timeoutSeconds` |
+| `turnLimits.cardSeconds` | `300` | How long that card waits for an answer, 30 to 3600; with none, the turn stops |
+| `autonomy.longRunning.maxSeconds` | `14400` (4 h) | The most a long-running conversation's turn works before it asks or stops, 600 to 604800 |
+| `autonomy.yolo.allow`, `autonomy.yolo.card` | none | Hold classes yolo mode may approve beyond its defaults, and classes it never approves |
+
 When someone addresses the assistant in an agent's channel, the turn also reads the channel messages posted since the assistant's last post there (channel context; see the [plugin guide](docs/plugins.md#channel-context-what-was-said-around-an-addressed-message)).
 Tune it under `discord.channelContext`, or set `channelContext: false` to turn it off:
 
@@ -210,7 +220,7 @@ An approval card or an `ask_user` question (a set of up to four questions is one
 Answered within it, the turn goes on with the answer; otherwise the turn ends saying it is waiting, the card stays open with no deadline, and answering it later starts a new turn in that conversation with the answer, or with the result of the approved action.
 A coding worker's cards keep the worker waiting instead.
 Every `ask_user` card has a **Cancel** button beside Submit: pressed while the turn waits, the model is told you cancelled the question and does not ask it again.
-A turn that reaches its time limit (the built-in runtime's 10-minute budget or 30-minute cap) asks before it ends, on a card that names the limit and what the turn is doing, with **Continue** and **Cancel**; no answer within 5 minutes aborts the turn.
+A turn that reaches its time limit (the built-in runtime's budget, 10 minutes by default, or its cap, 30 by default; see `turnLimits`) asks before it ends, on a card that names the limit and what the turn is doing, with **Continue** and **Cancel**; no answer within 5 minutes aborts the turn.
 The copy button of an approval card keeps its text in `card-copies.json` under the data directory, the newest 100 for 30 days; `discord.cardCopies` (`{ keepDays?, keep? }`) changes that, and `false` keeps them in memory only.
 The files of a message in an agent's channel download within `discord.attachmentDownload.deadlineMs` (default 60,000) for the message and the one it replies to together, and a file that sends no byte for `discord.attachmentDownload.idleMs` (default 10,000) is given up; the turn goes on without a file it could not get.
 

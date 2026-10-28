@@ -234,6 +234,7 @@ The built-in plugins provide these, from the main entry:
 | `IDENTITY` | `IdentityService` | `identity` | Who the host serves, read-only: `resolve(facts, { conversation }?)` gives the `Speaker` with its `principalId` behind a surface's `ActorFacts`, or undefined; `principal(id)`, `list()`, `identities(principalId)`, `roles(principalId)`, `tierOf(principalId)` (the lasting roles' tier), `speakerFor(principalId, tier?)` for a turn on someone's behalf, `owners()`, and `principalOf(identity)`, the principal an identity written `<provider>:<subject>` is linked to, such as one a plugin declares in `identities`. Principals are written only by the configuration and `roundtable principal`. `SYSTEM_PRINCIPAL` is the host's own, which no plugin speaks as |
 | `IDENTITY_LINKS` | `IdentityLinks` | `identity`, only with `access.selfLink` | Lets a plugin link a person's own account to their principal, which `IDENTITY` cannot: `link(principalId, identity)` and `unlink(identity)`, identities written `<provider>:<subject>`. See [Self-linking](#self-linking). Absent unless the configuration lists the providers; read it with `find` |
 | `CONVERSATIONS` | `ConversationRegistry` | `conversations` | The conversations run through `context.turns`: `register`, `get(key)`, `list({ principal }?)`, `setTitle(key, title)`, and `adopt(key, principalId)` only for migrating a conversation recorded before 0.9; each a `ConversationRecord` of `key`, `surface`, `kind`, `visibility` (`"private"` or `"shared"`), `principalId?`, `title?`, `createdAt`, `lastActiveAt` |
+| `MODES` | `ConversationModes` | `modes` | Each conversation's modes, stored per key and kept across restarts: `peek(channel)` gives its `ConversationMode` (`yolo` and `longRunning`, both off by default; `changedBy?`, `changedAt?`) from memory, `set(channel, { yolo?, longRunning? }, speaker)` changes them and throws `PluginError` unless the speaker is an owner other than `SYSTEM_PRINCIPAL`, `onChange(listener)` hears each change, and `autoApproved(entry)` with `onAutoApproved(listener)` report a held call that yolo mode approved. See [Conversation modes](#conversation-modes-modes) |
 | `RUNTIME` | `AgentRuntime` | `runtime` | The runtime every conversation turn runs on, the agent server's and `context.turns`': the `runtime` slot's when a plugin fills it, Pi's otherwise |
 | `AGENTS` | `AgentServer` | `agent-server` | The `team` (`AgentTeam`), the read-only `directory` (`AgentDirectory`), the `runtime` every agent turn runs on (the same one `RUNTIME` provides), `approvals` (whether the owner's reply approves held actions), and `avatars` (`AvatarStudio`) |
 | `SKILLS` | `SkillRegistry` | `skills` (an addon) | What agents carry: `carried`, `carriedNames`, `describeCarried`, `catalog`, `list`, `linkedFrom`, `checkRegistered`, `link`, `attach` |
@@ -422,6 +423,29 @@ It applies to the agents' channels and groups only; other conversations keep dec
 The default `"everyone"` is the 0.8 and 0.9 behavior.
 
 `discord: { agentSpeakers: "owners" }` (or the same key in `discord({ ... })`) limits who the agents answer: in the agents' and groups' channels only an owner-tier speaker starts a turn, and a message from an admin or member gets no reply and no turn. The default `"everyone"` answers every speaker the access rules admit. An outside webhook's post in an agent's channel is a report turn either way. Scheduled turns and delegated-work reports started for a non-owner are skipped the same way. Under `"owners"` a member's message can still reach an owner's turn as channel context. Use it on a host whose `access.admins` or `access.members` admit Discord: a non-owner turn runs in the agent's home session, shared with the owners, so it can read earlier owner conversation and shell output and leaves history that owner turns inherit. `roundtable doctor` warns about that combination.
+
+#### Conversation modes: `MODES`
+
+A conversation can run with less supervision when its owner switches a mode on. There are two:
+
+| Mode | Effect |
+|---|---|
+| `longRunning` | A turn that reaches its time limit goes on by itself, up to `autonomy.longRunning.maxSeconds` of work, instead of asking on a card. See [long-running conversations](#long-running-conversations) |
+| `yolo` | The server may approve some held calls itself, before a card is posted. The mode and its limits (`autonomy.yolo.allow` and `autonomy.yolo.card` in the config) are stored here; the approver itself ships separately |
+
+Both are off for a conversation nobody has set. `MODES` stores them in the `conversation_modes` table, one row per conversation key, so they survive a restart, and works for any key; a surface decides who may toggle them. Read a mode where you act on it, with `peek`, which never waits on the database. Change it with `set`, which writes first and updates the memory afterwards:
+
+```ts
+import { MODES } from "pi-roundtable";
+
+const modes = context.services.get(MODES);
+await modes.set(channel, { longRunning: true }, speaker); // speaker: an owner's Speaker
+modes.peek(channel).longRunning; // true
+```
+
+`set` throws `PluginError` for anyone but an owner, and for the host's own principal (`SYSTEM_PRINCIPAL`), so a webhook or a report turn cannot switch a conversation to run unattended. A change names only the modes it sets. It logs `conversation modes changed` with the channel, both modes and who changed them. `onChange(listener)` hears every change until the function it returns is called; a listener that throws is logged and the rest still hear it.
+
+When a held call is approved by yolo mode, `ApprovedBy.auto` is `"yolo"` (a person's answer never sets it), and the approver reports it with `autoApproved(entry)`, which logs `held call approved by yolo mode` and tells the `onAutoApproved` listeners, so a surface can show it.
 
 ## Principals and access
 
@@ -3540,12 +3564,26 @@ On `SIGTERM` or `SIGINT` the bot takes no new work at once, finishes what runs, 
 `shutdown()` returns exit code `0`, or `1` if a listener, service, or pool failed to stop.
 Every call shares the same shutdown.
 Give the service manager a stop timeout longer than the drain limit plus about a minute for the steps after it, such as systemd's `TimeoutStopSec=5min` with the default three-minute drain; a shorter one has the manager kill the process in the middle of the drain.
-The built-in runtime limits a turn to 10 minutes of work, not counting time spent waiting on the owner's cards. Each message steered into the running turn gives it the full 10 minutes again from that moment, up to a cap of 30 minutes of work for the whole turn; once the cap is reached the turn takes no more steering, so a message waits for the next turn.
-When a limit fires on a turn that can show a card (an owner's turn or a report turn on a surface with cards, the same turns that can ask with `ask_user` or an approval card), the turn is not aborted: it keeps working and a card asks the owner whether to go on. The card names the limit, how long the turn has worked, what it is doing now (the tool running and for how long, or waiting on the model, or compacting the conversation) and the tools it called so far, by name and count, never their inputs. **Continue** gives the turn another full 10 minutes from the answer; at the cap it moves the cap too, to 10 minutes from the answer, so the owner can keep going in steps. **Cancel** aborts the turn. With no answer within 5 minutes of wall time the turn is aborted. The time the card is open counts as work, unlike an `ask_user` or approval card, because the turn keeps working; while it is open the turn takes no steering. If the turn finishes first, the card closes saying so and the reply is posted as usual; a press after that gets the usual "no longer valid" reply. The card's buttons come from `ApprovalOptions.wording` on `Prompts.confirm`, with `supersede` closing it, so a surface that shows approvals shows it; one that ignores `wording` shows its own approve and decline labels.
+The built-in runtime limits a turn to 10 minutes of work by default (`turnLimits.timeoutSeconds`), not counting time spent waiting on the owner's cards. Each message steered into the running turn gives it the full budget again from that moment, up to a cap of 30 minutes of work for the whole turn by default (`turnLimits.maxSeconds`); once the cap is reached the turn takes no more steering, so a message waits for the next turn.
+When a limit fires on a turn that can show a card (an owner's turn or a report turn on a surface with cards, the same turns that can ask with `ask_user` or an approval card), the turn is not aborted: it keeps working and a card asks the owner whether to go on. The card names the limit, how long the turn has worked, what it is doing now (the tool running and for how long, or waiting on the model, or compacting the conversation) and the tools it called so far, by name and count, never their inputs. **Continue** gives the turn another full budget from the answer; at the cap it moves the cap too, to a full budget from the answer, so the owner can keep going in steps. **Cancel** aborts the turn. With no answer within 5 minutes of wall time (`turnLimits.cardSeconds`) the turn is aborted. The time the card is open counts as work, unlike an `ask_user` or approval card, because the turn keeps working; while it is open the turn takes no steering. If the turn finishes first, the card closes saying so and the reply is posted as usual; a press after that gets the usual "no longer valid" reply. The card's buttons come from `ApprovalOptions.wording` on `Prompts.confirm`, with `supersede` closing it, and `ApprovalOptions.purpose` is `"turn-timeout"` on it (`"action"` or absent on a held call's approval), so a surface can tell the two apart and notify on the first; Discord ignores `purpose`. A surface that shows approvals shows it; one that ignores `wording` shows its own approve and decline labels.
 A turn that cannot show a card (a schedule's turn, a member's turn, a turn without a surface) is aborted at once, as before. Either way an aborted turn fails with a `TurnTimeoutError` (an `AgentRunError`) whose `timeout` (`TurnTimeout`) holds the limit, the work time, the running tools, whether it was compacting, the tools so far, and how it ended (`end`: `"timeout"`, `"cancelled"` by the owner, or `"unanswered"`); its message says the same in English, and the failure the conversation posts says it in the host's language instead of the generic failure notice.
-The limits are fixed: the runtime plugin passes no option for them, nor for the card's grace period (`turnTimeoutMs`, `turnMaxMs` and `turnTimeoutCardMs` of `PiAgentRuntimeOptions`, for a host that builds the runtime itself), and a limit that waiting on an owner's card pushed back can fire up to a second late. The log says `steer renewed the turn's time budget` with `deadlineMs`, the work time left; `turn reached its time limit; asking the owner` when the card is posted; `owner continued the turn past its time limit` on Continue; and the warning `turn timed out; aborting` names the limit that fired (`limit: "turn"` or `"turnMax"`) with `workedMs`, `running`, `compacting`, `tools` and `end`. Task workers (`task.timeoutMs`), coding workers (`workTimeout`) and sandbox guests (their own `turnTimeoutMs`) keep their own limits, which steering does not renew and which post no card.
+The limits are the config's `turnLimits`, which the runtime plugin passes on to `turnTimeoutMs`, `turnMaxMs` and `turnTimeoutCardMs` of `PiAgentRuntimeOptions` (a host that builds the runtime itself sets those directly):
+
+| Key | Default | What it is |
+|---|---|---|
+| `turnLimits.timeoutSeconds` | `600` | A turn's budget, 60 to 86400; each steered message renews it |
+| `turnLimits.maxSeconds` | three times `timeoutSeconds` | The most one turn works in all, at least `timeoutSeconds` |
+| `turnLimits.cardSeconds` | `300` | How long the card at a limit waits for an answer, 30 to 3600, in wall time |
+
+A limit that waiting on an owner's card pushed back can fire up to a second late. The log says `steer renewed the turn's time budget` with `deadlineMs`, the work time left; `turn reached its time limit; asking the owner` when the card is posted; `owner continued the turn past its time limit` on Continue; and the warning `turn timed out; aborting` names the limit that fired (`limit: "turn"` or `"turnMax"`) with `workedMs`, `running`, `compacting`, `tools` and `end`. Task workers (`task.timeoutMs`), coding workers (`workTimeout`) and sandbox guests (their own `turnTimeoutMs`) keep their own limits, which steering does not renew and which post no card.
 A turn whose model ignores its abort (a subprocess that does not exit) is given up on too: a turn that outlives its timeout, or is stopped, gets `turnAbortGraceMs` (15 seconds by default) to end, and then its session is disposed of and the turn is reported failed, so it cannot hold the queue.
 `listen()`, called by the command line and a host's own entry point, exits the process with that code.
+
+### Long-running conversations
+
+An owner can switch a conversation to long-running mode, so a turn that reaches its limit goes on by itself instead of asking, or aborting when it cannot show a card. The server extends the limit exactly as **Continue** would, and logs `long-running mode continued the turn`. The cap is per turn: it counts the turn's work since it started, not the time spent on cards, and is `autonomy.longRunning.maxSeconds` in the config (`600` to `604800`, default `14400`, four hours). At the cap the turn behaves as an ordinary one: a card whose `ApprovalOptions.purpose` is `"turn-timeout"`, so a surface can push it, or an abort. `ask_user` and approval cards are never answered automatically.
+
+The mode is the conversation's, set with `MODES.set(channel, { longRunning: true }, speaker)` and read with `MODES.peek(channel)`; see [the `MODES` service](#conversation-modes-modes). A surface decides who may toggle it.
 
 ## Errors and their fixes
 
@@ -3766,6 +3804,7 @@ Import from the entries listed below; source area files are internal.
 | `AttachmentRetention` | `pi-roundtable` | type |
 | `AttachmentUpload` | `pi-roundtable` | type |
 | `AttachmentsConfig` | `pi-roundtable` | type |
+| `AutoApproval` | `pi-roundtable` | type |
 | `AvatarMode` | `pi-roundtable` | type |
 | `AvatarStudio` | `pi-roundtable` | type |
 | `BACKGROUND_TURNS` | `pi-roundtable` | value |
@@ -3787,6 +3826,8 @@ Import from the entries listed below; source area files are internal.
 | `ContextUse` | `pi-roundtable` | type |
 | `Contribution` | `pi-roundtable` | type |
 | `ConversationKind` | `pi-roundtable` | type |
+| `ConversationMode` | `pi-roundtable` | type |
+| `ConversationModes` | `pi-roundtable` | type |
 | `ConversationPort` | `pi-roundtable` | type |
 | `ConversationRecord` | `pi-roundtable` | type |
 | `ConversationRegistration` | `pi-roundtable` | type |
@@ -3845,10 +3886,12 @@ Import from the entries listed below; source area files are internal.
 | `ListenerConfig` | `pi-roundtable` | type |
 | `LoadedSkill` | `pi-roundtable` | type |
 | `Locale` | `pi-roundtable` | type |
+| `LimitsConfig` | `pi-roundtable` | type |
 | `LogEntry` | `pi-roundtable` | type |
 | `LogFn` | `pi-roundtable` | type |
 | `Logger` | `pi-roundtable` | type |
 | `MEMORY` | `pi-roundtable` | value |
+| `MODES` | `pi-roundtable` | value |
 | `MEMORY_KINDS` | `pi-roundtable` | value |
 | `Memory` | `pi-roundtable` | type |
 | `MemoryError` | `pi-roundtable` | value |
@@ -3857,6 +3900,7 @@ Import from the entries listed below; source area files are internal.
 | `Migration` | `pi-roundtable` | type |
 | `MigrationError` | `pi-roundtable` | value |
 | `MigrationReport` | `pi-roundtable` | type |
+| `ModeChange` | `pi-roundtable` | type |
 | `ModelImage` | `pi-roundtable` | type |
 | `NO_ATTACHMENTS` | `pi-roundtable` | value |
 | `NewSchedule` | `pi-roundtable` | type |
