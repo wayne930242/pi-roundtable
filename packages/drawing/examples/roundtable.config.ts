@@ -6,7 +6,15 @@ const env = (name: string): string => process.env[name] ?? "";
 
 export default {
 	name: "Roundtable",
-	owner: { id: env("OWNER_ID"), name: env("OWNER_NAME") },
+	access: {
+		owners: [
+			{
+				name: env("OWNER_NAME"),
+				principal: env("OWNER_ID"),
+				identities: [`discord:${env("OWNER_ID")}`],
+			},
+		],
+	},
 	discord: {
 		token: env("DISCORD_TOKEN"),
 		guild: env("DISCORD_GUILD_ID"),
