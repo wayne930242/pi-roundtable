@@ -16,7 +16,7 @@
 
 ## 你需要準備
 
-- [Bun](https://bun.sh/docs/installation) 1.3 以上。
+- [Bun](https://bun.sh/docs/installation) 1.4.4 以上。
 - PostgreSQL。`init` 建立的專案附有 `docker-compose.yml`，可以直接啟動一個。
 - 模型登入：你選的模型的供應商 API key（`anthropic/...` 用 `ANTHROPIC_API_KEY`），或之前用 Pi 登入過的帳號。
 - 用 Discord 的話：一個 Discord bot（有 bot 使用者、開了 Message Content intent，也已經邀請進你的伺服器），以及一個從網際網路連得到這個行程的位址，例如通道（tunnel）。Discord 要從這個位址抓智慧體的頭像。
@@ -62,7 +62,7 @@ Bun 會自己讀 `.env`，`.gitignore` 也已經擋掉它。
 1. Bun 的版本。
 2. `.env` 對 `.env.example` 列出的每個變數都有值。
 3. `roundtable.config.ts` 符合其 schema，失敗時指出是哪個鍵。
-4. 每個外掛都能載入，且沒有兩個外掛同名。
+4. 每個外掛都能載入、沒有兩個外掛同名，而且註冊內容有效（`Roundtable.check()`）。
 5. `access` 服務哪些人：列出 owner；主機有不只一個 surface、又寫了 `everyone: true` 時提出警告，因為它會讓每個 surface 上的所有人都能對話。
 6. 有沒有外掛填了 `images` 槽位。沒有也不算失敗，智慧體會用顯示名稱產生頭像。
 7. PostgreSQL 連得上，且能執行 migration。
@@ -70,7 +70,7 @@ Bun 會自己讀 `.env`，`.gitignore` 也已經擋掉它。
 9. 有設定 Discord 時：Discord token 有效、bot 已在你的伺服器裡、Message Content intent 已開啟，而且 bot 在入口頻道有它需要的權限（包含 Pin Messages）。
    bot 還不在伺服器裡的話，它會給你一個邀請連結，連結已經帶好這些權限。
 10. 模型登入存在。
-11. 有設定 Discord 時：`PUBLIC_URL` 的格式正確；加上 `--reachable` 還要求它有回應，所以 bot 得先跑起來。
+11. 設了 `http.publicUrl` 時：`PUBLIC_URL` 的格式正確；加上 `--reachable` 還要求它有回應，所以 bot 得先跑起來。
 
 只要有一項失敗就以非零狀態結束，警告不算失敗；檢查過程不會改動任何東西。
 全新的專案只會卡在還沒填的憑證，它會列出是哪幾個。
@@ -155,6 +155,11 @@ bun add pi-roundtable-mcp
 
 它與 pi-roundtable 同步發版，每個選項都列在它的 README。
 
+## 官方套件
+
+這個 repository 裡有八個套件與核心同步發版：上面的 webchat 和 mcp，加上 [browser](packages/browser)、[coding](packages/coding)、[drawing](packages/drawing)、[line](packages/line)、[sandbox](packages/sandbox) 和 [web](packages/web)。
+[外掛指南](docs/plugins.md#official-plugins)（英文）說明每一個套件和它需要什麼。
+
 ## 設定
 
 `roundtable.config.ts` 放設定和外掛清單。
@@ -184,11 +189,25 @@ export default {
 | `foreignWebhook` | 無 | `(webhookId) => boolean \| "skip"`：回傳 true 的 webhook 所發的貼文視為別人的訊息，不是助理自己的；回傳 `"skip"` 則把該 webhook 的貼文當作不存在，不納入也不截斷範圍（只能用程式碼設定） |
 | `attachments` | `{ images: 0, maxBytes: 10 MiB }` | `images`：替這一輪抓取保留訊息中的幾張圖片，最多 4 張 |
 
+在伺服器頻道或討論串裡重新開始對話時，助理會在那裡貼一條簡短的分隔線，讓下一輪不讀之前的內容；私訊不貼。
+
+| `discord.freshMarker` | 預設 | 說明 |
+| --- | --- | --- |
+| 文字 | `─── new conversation ───` | 分隔線的文字 |
+| `false` | | 不貼分隔線 |
+
+| `discord.formatting` | 預設 | 說明 |
+| --- | --- | --- |
+| 文字 | Markdown 會轉成排版，表格除外 | 以英文告訴模型回覆在 Discord 裡怎麼呈現；附加在每個在那裡回覆的回合的系統提示後面 |
+| `false` | | 不告訴模型任何事 |
+
 核准卡和 `ask_user` 問題（一次最多四題的一組問題放在同一張卡片上）會讓這一輪等 `discord.cardGraceSeconds` 秒（預設 `120`）。
-agent 頻道裡訊息的附件，整則訊息（連同它回覆的那則）要在 `discord.attachmentDownload.deadlineMs`（預設 60,000）毫秒內下載完；單一檔案連續 `discord.attachmentDownload.idleMs`（預設 10,000）毫秒沒收到任何位元組就放棄，這一輪會略過收不到的檔案繼續。
-核准卡「複製」按鈕的文字存在資料目錄的 `card-copies.json`，預設留最新 100 張、30 天；`discord.cardCopies`（`{ keepDays?, keep? }`）可以調整，設成 `false` 則只留在記憶體。
 在這段時間內回答，這一輪就帶著答案繼續；沒回答的話，這一輪會說它在等你，然後結束，卡片繼續開著、沒有期限，之後再回答就會在同一個對話開新的一輪，帶上你的答案，或核准後那個動作的結果。
 coding worker 的卡片則會讓 worker 一直等下去。
+每張 `ask_user` 卡片在送出旁邊都有**取消**按鈕：在這一輪還在等的時候按下，模型會被告知你取消了這個問題、不要再問一次。
+一輪執行到時間上限（內建 runtime 的 10 分鐘預算或 30 分鐘上限）時，會先問再結束：卡片寫出是哪個上限與這一輪正在做什麼，附**繼續**和**取消**；5 分鐘內沒回答就中止這一輪。
+核准卡「複製」按鈕的文字存在資料目錄的 `card-copies.json`，預設留最新 100 張、30 天；`discord.cardCopies`（`{ keepDays?, keep? }`）可以調整，設成 `false` 則只留在記憶體。
+agent 頻道裡訊息的附件，整則訊息（連同它回覆的那則）要在 `discord.attachmentDownload.deadlineMs`（預設 60,000）毫秒內下載完；單一檔案連續 `discord.attachmentDownload.idleMs`（預設 10,000）毫秒沒收到任何位元組就放棄，這一輪會略過收不到的檔案繼續。
 
 ## 威脅模型
 
@@ -197,9 +216,9 @@ pi-roundtable 為一位擁有者執行一個助理。
 
 - **信任誰。** 營運者掌控主機、設定和憑證。principal 代表主機服務的人，identity 是連到這個人的帳號或憑證。擁有者只能由 `access.owners` 或 `roundtable principal` 授予，不能來自 token claim。其他人的 `member` 或 `admin` tier 由核心 `access` 依驗證過的身分與帶 surface 前綴的角色判斷；外掛不能自行指定發言者的權限。
 - **一輪能做什麼。** 一輪只拿得到發言者的 tier 允許的工具；沒有外掛給 tier 的工具只有擁有者能用。工具在主機的行程裡執行，用的是主機的檔案和網路：`web_search` 和 `fetch_content` 連得到內部位址，所以網頁人格要在 `selection` 裡寫明它的工具。外掛也在同一個行程裡執行，權限一樣。
-- **核准。** 暫緩的呼叫由當事 principal 的任一已連結身分核准，而且當下 tier 仍要足夠。共用對話可以升級給擁有者核准，私人對話則只有本人能答；高於本人 tier 的呼叫會直接過期，不顯示卡片。核准卡和確認訊息都適用這條規則。
+- **核准。** 暫緩的呼叫只由當輪暫緩它的發言者核准，而且當下 tier 仍要足夠；在共用對話裡，擁有者也可以在卡片上或用確認訊息核准。私人對話裡別人都不能核准，高於發言者 tier 的呼叫在那裡也不會被核准。
 - **對話。** Discord 裡智慧體的頻道和群組房間是共用的：在那裡發言的每個人，都會寫進智慧體讀取的同一段對話。網頁聊天的對話屬於開啟它的人：在網頁聊天裡只有開啟者本人能讀、能發言、能回答它的提問，但擁有者可以透過擁有者主控台（[pi-roundtable-web](packages/web)）讀取，營運者也能從資料庫和資料目錄讀到。
-- **記憶隔離。** 記憶依 principal 分開，不依擁有者 tier 判斷。私人對話讀本人的，共用對話讀當輪發言者的；連結 Discord 與網頁身分後，同一個人共用一份記憶。共用對話送給模型的請求和摘要會成對隱藏其他人的記憶工具與載入記憶的 worker 呼叫參數、結果，並依 provider 清除先前回合的 reasoning。其他工具參數和公開回覆仍是公開內容，即使模型在裡面重述私人記憶，也不在這項隔離保證內。第三方摘要器必須先使用 `privateCompaction`。記憶開啟時，若多位 principal 可在共用對話發言，`claude-bridge` 會在開機與每輪送出前被拒絕，因為它重播未過濾的歷史；請改用其他 provider、設 `memory: false`，或限制只有一位 principal。
+- **記憶隔離。** 記憶依 principal 分開，不依擁有者 tier 判斷。私人對話讀本人的，共用對話讀當輪發言者的；連結 Discord 與網頁身分後，同一個人共用一份記憶。在共用對話送給模型的請求和摘要裡，記憶工具與載入記憶的 worker 的呼叫（參數和結果成對）會對其他發言者隱藏，先前回合的 reasoning 則依 provider 清除。其他工具的參數和公開的助理回覆仍是公開內容，即使模型在裡面重述私人記憶；這不是一般的秘密流向防護。第三方摘要器必須先使用 `privateCompaction`，才能摘要共用歷史。`claude-bridge` 的共用回合只在原始讀者紀錄（含已壓縮的回合）顯示另一位讀者的私人記憶（連只放進 prompt 的記憶與其 reasoning 也算），或某個呼叫已對當前讀者隱藏時才被拒絕。沒有私人記憶的回合不會擋其他讀者，關掉之後的記憶也繞不過先前的私人歷史；開放其他人進來只會在開機和 doctor 裡警告。SYSTEM 只在這項核心防護裡算作主要擁有者，所以它能讀取並公開重述擁有者保留的呼叫與 reasoning；0.9 之前、第一筆範圍紀錄之前未標記的內建記憶結果，仍歸屬擁有者。沙盒的全場共用 prompt 區塊必須明確使用 `memory.visibility: "shared"`，私人回合需要 worker 能力。Bridge 會在這些投影之外重播未過濾的歷史；見[確切規則與剩餘風險](docs/migration-0.9.md#claude-bridge-guard)。
 - **模型憑證。** 每一輪不論誰發言，都用主機的模型登入執行、由它計費。每個人自己的憑證預計在之後的版本加入。
 - **資料。** 對話、記憶和排程以未加密的形式存在 PostgreSQL 和資料目錄裡。
 
@@ -218,7 +237,7 @@ pi-roundtable 為一位擁有者執行一個助理。
 | `roundtable start` | 先執行不需要網路的檢查，再啟動 bot |
 | `roundtable add plugin <name>` | 新增 `plugins/<name>.ts` 和它的測試，並列進設定 |
 | `roundtable add package <spec>` | 用 `bun add` 安裝 Pi package，並新增一個載入它、把它的工具交給每一輪 agent 的外掛 |
-| `roundtable upgrade [--write]` | 以 diff 顯示改寫成 0.9 寫法的 `roundtable.config.ts`（`owner` 與 `speakers` 改成 `access`，`discord` 改成 adapter）；加上 `--write` 時，先確認改寫後服務的人不變，再寫入 |
+| `roundtable upgrade [--write [--unchecked]]` | 以 diff 顯示改寫成 0.9 寫法的 `roundtable.config.ts`（`owner` 與 `speakers` 改成 `access`，`discord` 改成 adapter）；加上 `--write` 時，先確認改寫後服務的人不變（這需要主機執行時的環境變數），無法確認就拒絕寫入；`--unchecked` 不確認直接寫入，並印出警告 |
 | `roundtable principal list\|show\|create\|link\|unlink\|grant\|revoke\|disable\|enable` | 列出並修改資料庫裡的 principal、它們的身分與角色；執行中的主機在 30 秒內看到變更 |
 
 ## 變更與授權

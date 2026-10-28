@@ -65,7 +65,7 @@ A web chat project asks for `OWNER_NAME`, `DATABASE_URL`, and `MODEL`, and for t
 1. Bun's version.
 2. `.env` has a value for every variable `.env.example` lists.
 3. `roundtable.config.ts` against its schema, naming the failing key.
-4. Every plugin loads, and no two share a name.
+4. Every plugin loads, no two share a name, and the registration is valid (`Roundtable.check()`).
 5. Whom `access` serves: the owners, and a warning when `everyone: true` admits everyone on every surface of a host with more than one.
 6. Whether a plugin fills the `images` slot.
    The check passes with or without one; agents without an image provider get avatars generated from their display names.
@@ -74,7 +74,7 @@ A web chat project asks for `OWNER_NAME`, `DATABASE_URL`, and `MODEL`, and for t
 9. With Discord configured: the Discord token is valid, the bot is in your server, the Message Content intent is on, and the bot has the permissions it needs in the entry channel (including Pin Messages).
    When the bot is not in the server, the fix is an invitation link that asks for exactly those permissions.
 10. The model login exists.
-11. With Discord configured: `PUBLIC_URL` is a well-formed address; with `--reachable` it also has to answer, which is only true while the bot runs.
+11. When `http.publicUrl` is set: `PUBLIC_URL` is a well-formed address; with `--reachable` it also has to answer, which is only true while the bot runs.
 
 It exits non-zero on any failure, not on a warning, and changes nothing it checked.
 A fresh project fails only on the credentials you have not entered yet, and says which.
@@ -160,6 +160,11 @@ bun add pi-roundtable-mcp
 
 It releases in lockstep with pi-roundtable, and its README lists every option.
 
+## Official packages
+
+Eight packages in this repository release in lockstep with the core: webchat and mcp above, plus [browser](packages/browser), [coding](packages/coding), [drawing](packages/drawing), [line](packages/line), [sandbox](packages/sandbox) and [web](packages/web).
+The [plugin guide](docs/plugins.md#official-plugins) describes each and what it needs.
+
 ## Settings
 
 `roundtable.config.ts` holds the settings and the list of plugins.
@@ -202,10 +207,12 @@ When a conversation is started over in a server channel or thread, the assistant
 | `false` | | Tell the model nothing |
 
 An approval card or an `ask_user` question (a set of up to four questions is one card) holds its turn for `discord.cardGraceSeconds` (default `120`).
-The files of a message in an agent's channel download within `discord.attachmentDownload.deadlineMs` (default 60,000) for the message and the one it replies to together, and a file that sends no byte for `discord.attachmentDownload.idleMs` (default 10,000) is given up; the turn goes on without a file it could not get.
-The copy button of an approval card keeps its text in `card-copies.json` under the data directory, the newest 100 for 30 days; `discord.cardCopies` (`{ keepDays?, keep? }`) changes that, and `false` keeps them in memory only.
 Answered within it, the turn goes on with the answer; otherwise the turn ends saying it is waiting, the card stays open with no deadline, and answering it later starts a new turn in that conversation with the answer, or with the result of the approved action.
 A coding worker's cards keep the worker waiting instead.
+Every `ask_user` card has a **Cancel** button beside Submit: pressed while the turn waits, the model is told you cancelled the question and does not ask it again.
+A turn that reaches its time limit (the built-in runtime's 10-minute budget or 30-minute cap) asks before it ends, on a card that names the limit and what the turn is doing, with **Continue** and **Cancel**; no answer within 5 minutes aborts the turn.
+The copy button of an approval card keeps its text in `card-copies.json` under the data directory, the newest 100 for 30 days; `discord.cardCopies` (`{ keepDays?, keep? }`) changes that, and `false` keeps them in memory only.
+The files of a message in an agent's channel download within `discord.attachmentDownload.deadlineMs` (default 60,000) for the message and the one it replies to together, and a file that sends no byte for `discord.attachmentDownload.idleMs` (default 10,000) is given up; the turn goes on without a file it could not get.
 
 ## Threat model
 
