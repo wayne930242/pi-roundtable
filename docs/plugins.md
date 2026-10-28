@@ -1049,8 +1049,11 @@ The rule reports the class of **every** held command in the line, including thos
 | `shell.reset-hard` | `git reset --hard` |
 | `shell.gh` | `gh` writes |
 | `shell.crontab` | `crontab -r` |
+| `shell.unreadable` | a line the rule cannot read to the end, so it cannot rule out a destructive command: longer than 200,000 characters, nested deeper than 48 levels, a here-document or `case` it cannot place, a script built at run time (`eval`, `bash -c` of a variable or a substitution), or a rule that failed while judging |
 
-Yolo mode never approves these unless `autonomy.yolo.allow` lists them: `YOLO_CARDED_SHELL_CLASSES` is every class above except `shell.write` and `shell.push`.
+The rule reads a line the way bash does, so text that only looks like a command stays unheld and text that runs is judged: quotes (`'…'`, `"…"`, `$'…'`, where a backslash escapes the next character), `$(…)` and backticks at any depth, `${…}`, comments (a `)` or a quote in one means nothing), here-document bodies up to their delimiter line (an unquoted body is still searched for substitutions, a quoted one is not), `case` patterns, arithmetic (`$((1<<2))` is a shift), line continuations, leading keywords (`then sudo ls`, `do rm -rf /x`), a descriptor before the command (`3>&1 sudo ls`), `eval`, `bash -c` (also `-ec`), and `find -exec`. Where it cannot tell, it holds the whole line as `shell.unreadable` instead of guessing; an error inside the rule also holds the call. So does a command whose name is a brace expansion, a pattern or a variable the line did not set to a literal (`{sudo,ls}`, `/usr/bin/su*`, `$cmd args`). The rule names programs it knows; a wrapper it does not list (`flock`, `chroot`, `ssh host`) runs its command unjudged.
+
+Yolo mode never approves these unless `autonomy.yolo.allow` lists them: `YOLO_CARDED_SHELL_CLASSES` is every class above except `shell.write` and `shell.push`; that includes `shell.unreadable`.
 
 `shellHoldRuleFor({ ownPushOwners?, heldPushRepos? })` (its options are the type `PushPolicy`) is the same rule with plain pushes to the owner's own repositories let through; `shellHoldRule` is `shellHoldRuleFor()`, which holds every push.
 A push runs without a hold when all of these hold:

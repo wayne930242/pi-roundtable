@@ -1,8 +1,10 @@
 import { basename } from "node:path";
 import type { HoldContext, HoldRule } from "../../holds.ts";
 import type { PushPolicy } from "./git-push.ts";
+import { COMMAND_PREFIX_WORDS, lexShell } from "./shell-lexer.ts";
 import {
 	deviceTarget,
+	expand,
 	follow,
 	type LineState,
 	lineState,
@@ -12,6 +14,7 @@ import {
 import { type Held, type ShellClass, verbHeld } from "./shell-programs.ts";
 
 export type { PushPolicy } from "./git-push.ts";
+export { simpleCommands } from "./shell-lexer.ts";
 export { YOLO_CARDED_SHELL_CLASSES } from "./shell-programs.ts";
 
 const MAX_SHOWN_COMMAND = 600;
@@ -35,139 +38,12 @@ const WRAPPERS = new Set([
 	"stdbuf",
 	"exec",
 	"command",
+	"builtin",
 	"xargs",
+	"setsid",
+	"unbuffer",
+	"caffeinate",
 ]);
-
-/** Splits a command line into simple commands of words; quotes are removed, operators separate. */
-export function simpleCommands(command: string): string[][] {
-	const commands: string[][] = [];
-	let words: string[] = [];
-	let word = "";
-	let inWord = false;
-	let quote: "'" | '"' | undefined;
-	const endWord = () => {
-		if (inWord) words.push(word);
-		word = "";
-		inWord = false;
-	};
-	const endCommand = () => {
-		endWord();
-		if (words.length > 0) commands.push(words);
-		words = [];
-	};
-	for (let i = 0; i < command.length; i++) {
-		const ch = command[i] as string;
-		if (quote) {
-			if (ch === quote) quote = undefined;
-			else if (ch === "\\" && quote === '"' && i + 1 < command.length) {
-				word += command[++i];
-			} else if (
-				quote === '"' &&
-				(ch === "`" || (ch === "$" && command[i + 1] === "("))
-			) {
-				// A substitution inside double quotes runs; its commands are judged, and the word keeps the
-				// text so a target built from it still counts as unknown.
-				const found = substitution(command, i);
-				commands.push(...simpleCommands(found.inner));
-				word += command.slice(i, found.end);
-				i = found.end - 1;
-			} else word += ch;
-			continue;
-		}
-		if (ch === "'" || ch === '"') {
-			quote = ch;
-			inWord = true;
-		} else if (ch === "\\" && i + 1 < command.length) {
-			word += command[++i];
-			inWord = true;
-		} else if (/\s/.test(ch)) {
-			if (ch === "\n") endCommand();
-			else endWord();
-		} else if (";&|()`{}".includes(ch)) {
-			// A word cut by a command substitution keeps its mark, so its value counts as unknown.
-			if (ch === "`" && (inWord || writesTo(words))) {
-				word += ch;
-				inWord = true;
-			}
-			endCommand();
-		} else if (ch === "$" && command[i + 1] === "(") {
-			if (inWord || writesTo(words)) {
-				word += "$(";
-				inWord = true;
-			}
-			endCommand();
-			i++;
-		} else if (ch === ">" || ch === "<") {
-			// Redirections become their own words, so their targets can be checked.
-			endWord();
-			let op = ch;
-			if (command[i + 1] === ">") op += command[++i];
-			if (op === "<>") op = ">"; // opens the file for writing too
-			if (op === ">" && command[i + 1] === "|") i++; // `>|` forces the overwrite
-			if (op !== "<" && command[i + 1] === "&") {
-				i++;
-				// `>&2` and `>&-` duplicate or close a descriptor; `>& file` names a file.
-				if (/^\s*[0-9-]/.test(command.slice(i + 1))) op = "dup";
-			}
-			words.push(op);
-		} else {
-			word += ch;
-			inWord = true;
-		}
-	}
-	endCommand();
-	return commands;
-}
-
-/**
- * The text of the command substitution that starts at `start` (`$(` or a backtick) and the index
- * after it. An unterminated one runs to the end, so it is judged whole.
- */
-function substitution(
-	command: string,
-	start: number,
-): { inner: string; end: number } {
-	if (command[start] === "`") {
-		let inner = "";
-		let i = start + 1;
-		for (; i < command.length && command[i] !== "`"; i++) {
-			const next = command[i + 1];
-			if (command[i] === "\\" && next && "`\\$".includes(next)) i++;
-			inner += command[i];
-		}
-		return { inner, end: Math.min(i + 1, command.length) };
-	}
-	let depth = 1;
-	let i = start + 2;
-	for (; i < command.length; i++) {
-		const ch = command[i] as string;
-		if (ch === "\\") i++;
-		else if (ch === "'") {
-			const close = command.indexOf("'", i + 1);
-			i = close === -1 ? command.length : close;
-		} else if (ch === '"') {
-			for (i++; i < command.length && command[i] !== '"'; i++)
-				if (command[i] === "\\") i++;
-		} else if (ch === "(") depth++;
-		else if (ch === ")" && --depth === 0) {
-			return { inner: command.slice(start + 2, i), end: i + 1 };
-		}
-	}
-	return { inner: command.slice(start + 2), end: command.length };
-}
-
-/**
- * Whether the next word of a command is a file it writes: a redirect target, or an operand of
- * `tee`. A substitution there keeps its mark, so the target counts as unknown.
- */
-function writesTo(words: readonly string[]): boolean {
-	const last = words[words.length - 1];
-	return (
-		last === ">" ||
-		last === ">>" ||
-		basename(program([...words])[0] ?? "") === "tee"
-	);
-}
 
 /**
  * Drops leading variable assignments, wrappers, and their options, leaving the real program;
@@ -178,6 +54,10 @@ function program(words: string[], prefix: string[] = []): string[] {
 	for (;;) {
 		const [first] = rest;
 		if (first === undefined) return rest;
+		if (COMMAND_PREFIX_WORDS.has(first)) {
+			rest = rest.slice(1);
+			continue;
+		}
 		if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(first)) {
 			prefix.push(first);
 			rest = rest.slice(1);
@@ -198,6 +78,50 @@ function program(words: string[], prefix: string[] = []): string[] {
 		}
 		return rest;
 	}
+}
+
+/** The words the lexer gives a redirection operator. */
+const REDIRECTS: ReadonlySet<string> = new Set(["<", ">", ">>", "dup"]);
+
+/** Why a command whose name is not known until it runs is held. */
+const DYNAMIC_NAME: Held = {
+	reason: "a command whose name is built at run time",
+	class: "shell.unreadable",
+};
+
+/**
+ * The program a command word names, or undefined when the word expands to more than the line says:
+ * a variable not known, a substitution, a brace expansion or a pattern (`$cmd`, `{sudo,ls}`,
+ * `/usr/bin/sud*`).
+ */
+function commandName(word: string, state: LineState): string | undefined {
+	// `[` and `[[` are the test commands, not patterns.
+	if (word !== "[" && word !== "[[" && /[*?[]/.test(word)) return undefined;
+	if (/\{[^{}]*(?:,|\.\.)[^{}]*\}/.test(word)) return undefined;
+	return word.includes("$") || word.includes("`") ? expand(word, state) : word;
+}
+
+/** Shells that run the command given with `-c`. */
+const SHELLS = new Set(["bash", "sh", "zsh", "dash", "ksh", "ash"]);
+
+/** The command a shell runs from its arguments (`-c`, also in a cluster such as `-ec`), if it is given one. */
+function shellScript(args: readonly string[]): string | undefined {
+	for (let i = 0; i < args.length; i++) {
+		const arg = args[i] as string;
+		if (arg === "-o" || arg === "+o" || arg === "-O" || arg === "+O") i++;
+		else if (/^-[A-Za-z]*c[A-Za-z]*$/.test(arg)) return args[i + 1] ?? "";
+		else if (!/^[-+]/.test(arg) || arg === "--") return undefined;
+	}
+	return undefined;
+}
+
+/** The command `find` runs for each match (`-exec`, `-execdir`, `-ok`, `-okdir`), up to its `;` or `+`. */
+function findExec(args: readonly string[]): string[] | undefined {
+	const at = args.findIndex((arg) => /^-(exec|execdir|ok|okdir)$/.test(arg));
+	if (at === -1) return undefined;
+	const rest = args.slice(at + 1);
+	const stop = rest.findIndex((arg) => arg === ";" || arg === "+");
+	return stop === -1 ? rest : rest.slice(0, stop);
 }
 
 /** The class of each program that is held whatever its arguments. */
@@ -244,15 +168,20 @@ function programHeld(
 ): Held[] {
 	const prefix: string[] = [];
 	const argv = program(
+		// A redirection is no part of the command: not its operator, its target, nor the descriptor
+		// number in front (`3>&1 sudo ls` runs `sudo`).
 		words.filter(
 			(w, i) =>
-				!["<", ">", ">>", "dup"].includes(w) &&
-				!["<", ">", ">>"].includes(words[i - 1] ?? ""),
+				!REDIRECTS.has(w) &&
+				!REDIRECTS.has(words[i - 1] ?? "") &&
+				!(/^\d+$/.test(w) && REDIRECTS.has(words[i + 1] ?? "")),
 		),
 		prefix,
 	);
-	const [head, ...args] = argv;
-	if (!head) return [];
+	const [word, ...args] = argv;
+	if (!word) return [];
+	const head = commandName(word, state);
+	if (head === undefined) return [DYNAMIC_NAME];
 	const name = basename(head);
 	const always = ALWAYS_HELD_CLASS.get(name);
 	if (always) return [{ reason: name, class: always }];
@@ -263,11 +192,54 @@ function programHeld(
 		const reason = prefix.includes("xargs") ? "rm" : rmHeld(args, state);
 		return reason ? [{ reason, class: "shell.rm" }] : [];
 	}
-	if ((name === "bash" || name === "sh" || name === "zsh") && args[0] === "-c")
-		return commandHeld(args[1] ?? "", state, policy);
+	if (name === "eval") {
+		// What eval runs is its arguments after expansion: all of them must be known.
+		const known = args.map((arg) => expand(arg, state));
+		return known.includes(undefined)
+			? [DYNAMIC_SCRIPT]
+			: commandHeld(known.join(" "), state, policy);
+	}
+	if (SHELLS.has(name)) {
+		const script = shellScript(args);
+		if (script !== undefined) return scriptHeld(script, state, policy);
+	}
+	if (name === "find") {
+		const exec = findExec(args);
+		if (exec) return programHeld(exec, state, policy);
+	}
 	const held = verbHeld(name, args, prefix, state, policy);
 	return held ? [held] : [];
 }
+
+/** Why a line the lexer could not read is held. */
+const UNREADABLE: Held = {
+	reason: "the command line is too long or too nested to check",
+	class: "shell.unreadable",
+};
+
+/**
+ * Why a script another shell runs (`bash -c`) is held. A script with a substitution, or one that
+ * is a variable, is built from output not known here, so it is held whole.
+ */
+function scriptHeld(
+	script: string,
+	state: LineState,
+	policy: PushPolicy,
+): Held[] {
+	if (/\$\(|`/.test(script)) return [DYNAMIC_SCRIPT];
+	if (script.trimStart().startsWith("$")) {
+		const known = expand(script, state);
+		return known === undefined
+			? [DYNAMIC_SCRIPT]
+			: commandHeld(known, state, policy);
+	}
+	return commandHeld(script, state, policy);
+}
+
+const DYNAMIC_SCRIPT: Held = {
+	reason: "a script built at run time",
+	class: "shell.unreadable",
+};
 
 /** Every reason a command line is held, command by command; a `bash -c` inside one starts from the outer line's state. */
 function commandHeld(
@@ -281,8 +253,11 @@ function commandHeld(
 		vars: new Map(outer.vars),
 		cwd: outer.cwd,
 	};
+	const lexed = lexShell(command);
+	// A line the lexer cannot read could run anything.
+	if (lexed.unreadable) return [UNREADABLE];
 	const found: Held[] = [];
-	for (const words of simpleCommands(command)) {
+	for (const words of lexed.commands) {
 		found.push(...heldReasons(words, state, policy));
 		follow(program(words), state);
 		// `export` and `cd` are kept by program(); bare assignments are dropped by it.
@@ -306,8 +281,36 @@ export function shellActionNeedingConfirmation(
 	return shellHold(toolName, input, context, policy)?.action;
 }
 
-/** What a shell call is held for, in words, and the class of every command it is held for. */
+/**
+ * What a shell call is held for, in words, and the class of every command it is held for. A
+ * classifier that fails holds the call: no error lets a command run unjudged.
+ */
 function shellHold(
+	toolName: string,
+	input: Record<string, unknown>,
+	context: HoldContext & { workspace: string },
+	policy: PushPolicy,
+): { action: string; classes: ShellClass[] } | undefined {
+	try {
+		return judge(toolName, input, context, policy);
+	} catch {
+		if (!SHELL_TOOLS.includes(toolName as (typeof SHELL_TOOLS)[number]))
+			return undefined;
+		let detail = `the ${toolName} call`;
+		try {
+			if (toolName === "bash" && typeof input.command === "string")
+				detail = `the shell command \`${input.command.slice(0, MAX_SHOWN_COMMAND)}\``;
+		} catch {
+			// The input itself cannot be read; the call is held without showing it.
+		}
+		return {
+			action: `run ${detail} on the host (it could not be checked)`,
+			classes: ["shell.unreadable"],
+		};
+	}
+}
+
+function judge(
 	toolName: string,
 	input: Record<string, unknown>,
 	context: HoldContext & { workspace: string },

@@ -1,3 +1,4 @@
+// biome-ignore-all lint/suspicious/noTemplateCurlyInString: the strings are shell text, where ${...} is bash syntax
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
 import {
@@ -426,6 +427,187 @@ describe("the classes of a held shell call", () => {
 	});
 });
 
+describe("a command line the lexer must read to the end", () => {
+	const rm = ["shell.rm"];
+	const cases: [string, string, string[]][] = [
+		[
+			"RV4-F001: a quote closed inside a nested substitution",
+			`echo "$(echo "x$(echo ")")" ; rm -rf ~)"`,
+			rm,
+		],
+		[
+			"RV4-F002: a comment in a quoted substitution hides its )",
+			'echo "$(echo hi # )\nrm -rf ~)"',
+			rm,
+		],
+		[
+			"RV4-F003: a case pattern's ) does not close the substitution",
+			'echo "$(case x in x) rm -rf ~;; esac)"',
+			rm,
+		],
+		[
+			"RV4-F003: nested cases and a leading parenthesis",
+			'echo "$(case x in (x) case y in y) :;; esac;; esac; rm -rf ~)"',
+			rm,
+		],
+		["RV4-F004: \\' closes nothing in $'...'", "echo $'\\'' ; rm -rf ~", rm],
+		[
+			"RV4-F005: an apostrophe in a here-document body",
+			"cat <<EOF\nit's\nEOF\nrm -rf ~",
+			rm,
+		],
+		[
+			"RV4-F005: and inside a substitution",
+			'git commit -m "$(cat <<EOF\nit\'s\nEOF\n)" ; rm -rf ~',
+			rm,
+		],
+		[
+			"a substitution in an unquoted here-document runs",
+			"cat <<EOF\n$(rm -rf ~)\nEOF",
+			rm,
+		],
+		[
+			"a quoted delimiter is a literal body, and the line after it still runs",
+			"cat <<'EOF'\n$(rm -rf ~)\nEOF\nsudo ls",
+			["shell.privilege"],
+		],
+		[
+			"a hash inside ${} is not a comment",
+			"echo ${#x}; sudo ls",
+			["shell.privilege"],
+		],
+		[
+			"a hash behind a brace is not a comment",
+			"echo {#}; sudo ls",
+			["shell.privilege"],
+		],
+		[
+			"an escaped space keeps the word going",
+			"echo a\\ #b; sudo ls",
+			["shell.privilege"],
+		],
+		["a line continuation joins a word", "su\\\ndo ls", ["shell.privilege"]],
+		[
+			"a keyword before the command",
+			"if true; then sudo ls; fi",
+			["shell.privilege"],
+		],
+		["a loop body", "for i in 1; do rm -rf /x; done", rm],
+		["a descriptor before the command", "3>&1 sudo ls", ["shell.privilege"]],
+		["eval", "eval 'sudo ls'", ["shell.privilege"]],
+		["eval of a variable", "x=$(echo sudo ls); eval $x", ["shell.unreadable"]],
+		[
+			"a shell with clustered options",
+			"bash -ec 'sudo ls'",
+			["shell.privilege"],
+		],
+		["find -exec", "find . -exec sudo ls {} \\;", ["shell.privilege"]],
+		[
+			"a brace expansion builds the command",
+			"{sudo,ls} -l",
+			["shell.unreadable"],
+		],
+		[
+			"a brace expansion in the middle of the name",
+			"s{u,}do ls",
+			["shell.unreadable"],
+		],
+		[
+			"an ANSI-C escape spells the command",
+			"$'\\x73udo' ls",
+			["shell.privilege"],
+		],
+		[
+			"an octal escape spells the command",
+			"$'\\163udo' ls",
+			["shell.privilege"],
+		],
+		["a variable holds the command", "x=sudo; $x ls", ["shell.privilege"]],
+		["a variable not known names the command", "$cmd ls", ["shell.unreadable"]],
+		["a pattern names the command", "/usr/bin/su* ls", ["shell.unreadable"]],
+		[
+			"an rm operand that is a brace expansion",
+			"rm -rf /etc/{a,b}",
+			["shell.rm"],
+		],
+		[
+			"a shift is not a here-document",
+			"echo $((1<<2)); sudo ls",
+			["shell.privilege"],
+		],
+	];
+	for (const [name, command, expected] of cases)
+		test(name, () => expect(classes(command)).toEqual(expected));
+
+	test("lines that look like these but run nothing stay unheld", () => {
+		for (const command of [
+			'git commit -m "fix: $(date)"',
+			'echo "$HOME"',
+			'printf "%s" "$(git rev-parse HEAD)"',
+			`echo "$(git log --format='%h %s' -1)"`,
+			'echo "today: `date`"',
+			'x="$(ls | wc -l)"',
+			"git commit -m \"$(cat <<'EOF'\nit's fine\nEOF\n)\"",
+			"echo x 2>&1",
+			"[ -f x ] && echo yes",
+			"[[ -f x ]] && echo yes",
+			"echo {a,b} ${HOME}/x",
+			"ls $HOME",
+			"$HOME/bin/tool --version",
+			"{ echo a; echo b; }",
+			"echo '$(rm -rf ~)'",
+			"echo $'it\\'s'",
+			"echo $(( 1 << 2 ))",
+			"echo ${x:-default} # sudo ls",
+			"cat <<'EOF'\nsudo ls\nEOF",
+			"case $1 in start) echo go;; stop|halt) echo no;; esac",
+			'echo "$(case x in x) echo a;; esac)"',
+			"cat <<EOF\nplain text with 'quotes' and (parens\nEOF",
+		])
+			expect([command, classes(command)]).toEqual([command, undefined]);
+	});
+
+	test("a line too long or too deep to read is held as unreadable", () => {
+		const deep = `echo ${'"$('.repeat(20_000)}date${')"'.repeat(20_000)}`;
+		expect(classes(deep)).toEqual(["shell.unreadable"]);
+		expect(held(deep)).toContain("too long or too nested");
+		const nested = `echo ${'"$(echo '.repeat(60)}hi${')"'.repeat(60)}`;
+		expect(classes(nested)).toEqual(["shell.unreadable"]);
+		expect(classes(`echo ${"a".repeat(300_000)}`)).toEqual([
+			"shell.unreadable",
+		]);
+		expect(
+			classes(`echo ${'"$(echo '.repeat(30)}hi${')"'.repeat(30)}`),
+		).toBeUndefined();
+	});
+
+	test("a long line of plain commands is read in linear time", () => {
+		const started = performance.now();
+		expect(
+			classes(
+				`echo ${Array.from({ length: 5000 }, () => '"$(date)"').join(" ")}`,
+			),
+		).toBeUndefined();
+		expect(performance.now() - started).toBeLessThan(2000);
+	});
+
+	test("a rule that throws holds the call", () => {
+		const context = { workspace: work, scratchDir: scratch };
+		// An input whose command cannot be read makes the classifier fail.
+		const input = {
+			get command(): string {
+				throw new Error("boom");
+			},
+		};
+		expect(shellHoldRule.describe("bash", input, context)).toContain(
+			"could not be checked",
+		);
+		expect(shellHoldRule.holdClasses?.("bash", input, context)).toEqual([
+			"shell.unreadable",
+		]);
+	});
+});
+
 describe("YOLO_CARDED_SHELL_CLASSES", () => {
 	test("is every shell class except write and push", () => {
 		expect([...YOLO_CARDED_SHELL_CLASSES].map(String).sort()).toEqual(
@@ -443,6 +625,7 @@ describe("YOLO_CARDED_SHELL_CLASSES", () => {
 				"shell.reset-hard",
 				"shell.rm",
 				"shell.service",
+				"shell.unreadable",
 			].sort(),
 		);
 		expect(YOLO_CARDED_SHELL_CLASSES).not.toContain("shell.write");

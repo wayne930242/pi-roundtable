@@ -38,8 +38,9 @@ export function confirmationGateExtension(
 			const turn: HoldTurn | undefined = turnOf
 				? { toolTurn: turnOf, ...(ctx.signal ? { signal: ctx.signal } : {}) }
 				: undefined;
-			const { reason, approvedOnCard, approvedBy, approvedPrompt, refused } =
-				await gate.decide(
+			let decision: Awaited<ReturnType<ConfirmationGate["decide"]>>;
+			try {
+				decision = await gate.decide(
 					event.toolName,
 					event.input as Record<string, unknown>,
 					ask,
@@ -48,6 +49,16 @@ export function confirmationGateExtension(
 					pi.getAllTools?.().find((tool) => tool.name === event.toolName)
 						?.parameters,
 				);
+			} catch (error) {
+				// A hold rule that fails must not let the call run unjudged.
+				if (ctx.signal?.aborted) throw error;
+				return {
+					block: true,
+					reason: `The call was blocked because its safety check failed (${error instanceof Error ? error.message : String(error)}). It was not run.`,
+				};
+			}
+			const { reason, approvedOnCard, approvedBy, approvedPrompt, refused } =
+				decision;
 			if (approvedOnCard) approved.add(event.toolCallId);
 			if (!reason && (approvedBy || approvedPrompt))
 				gate.grant(event.toolCallId, {

@@ -46,7 +46,7 @@ const ASSIGNMENT = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/s;
 
 /**
  * The word with the line's variables substituted and `~` expanded, or undefined when it holds a
- * command substitution, an unknown variable or `~user`.
+ * command substitution, an unknown variable, a brace expansion or `~user`.
  */
 export function expand(word: string, state: LineState): string | undefined {
 	if (word.includes("`") || word.includes("$(")) return undefined;
@@ -60,6 +60,8 @@ export function expand(word: string, state: LineState): string | undefined {
 		},
 	);
 	if (unknown || substituted.includes("$")) return undefined;
+	// A brace expansion (`{a,b}`, `{1..3}`) names several words.
+	if (/\{[^{}]*(?:,|\.\.)[^{}]*\}/.test(substituted)) return undefined;
 	if (substituted === "~" || substituted.startsWith("~/"))
 		return `${homedir()}${substituted.slice(1)}`;
 	return substituted.startsWith("~") ? undefined : substituted;

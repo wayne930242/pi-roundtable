@@ -6,7 +6,8 @@ import { deviceTarget, type LineState, writable } from "./shell-paths.ts";
  * The hold classes of the shell rule, as `shell.<class>` ids that `HoldRule.holdClasses` lists for
  * every command a call holds. Yolo mode approves `shell.write` (a write outside the scratch roots)
  * and `shell.push` (a plain `git push` the push policy holds), and cards the rest unless
- * `autonomy.yolo.allow` lists them.
+ * `autonomy.yolo.allow` lists them. `shell.unreadable` is a line the rule could not read to the
+ * end, so it holds what it cannot tell apart from a destructive command.
  */
 export const SHELL_CLASSES = Object.freeze([
 	"shell.privilege",
@@ -24,6 +25,7 @@ export const SHELL_CLASSES = Object.freeze([
 	"shell.reset-hard",
 	"shell.gh",
 	"shell.crontab",
+	"shell.unreadable",
 ] as const);
 
 export type ShellClass = (typeof SHELL_CLASSES)[number];
