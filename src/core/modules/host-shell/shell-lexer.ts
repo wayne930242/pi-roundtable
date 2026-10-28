@@ -9,6 +9,15 @@
  * patterns.
  */
 
+import { ArithGroups } from "./shell-arithmetic.ts";
+import {
+	COMMAND_PREFIX_WORDS,
+	EXPANDED,
+	KEYWORDS_BEFORE_CASE,
+	type Lexed,
+	type Pending,
+	type Shared,
+} from "./shell-lexer-types.ts";
 import {
 	ansiQuoted,
 	heredocBody,
@@ -16,57 +25,38 @@ import {
 	Unreadable,
 } from "./shell-quoting.ts";
 
+export { COMMAND_PREFIX_WORDS, EXPANDED, type Lexed };
+
 /** A line longer than this is not read. */
 const MAX_LENGTH = 200_000;
 /** Nested substitutions deeper than this are not read. */
 const MAX_DEPTH = 48;
 
-/** Words that can start a command line before the command itself: `then sudo ls` runs `sudo`. */
-export const COMMAND_PREFIX_WORDS: ReadonlySet<string> = new Set([
-	"if",
-	"then",
-	"elif",
-	"else",
-	"do",
-	"while",
-	"until",
-	"!",
-	"coproc",
-	"function",
-]);
-
-/** Words that can come before `case` or `esac` in a command that is still at its start. */
-const KEYWORDS_BEFORE_CASE: ReadonlySet<string> = new Set([
-	...COMMAND_PREFIX_WORDS,
-	"time",
-]);
-
-/** The commands of a line, or `unreadable` when the lexer could not tell what bash would run. */
-export interface Lexed {
-	commands: string[][];
-	unreadable: boolean;
-}
-
-/** A here-document waiting for the end of its line. */
-interface Pending {
-	owner: number;
-	delimiter: string;
-	quoted: boolean;
-	stripTabs: boolean;
-}
-
 const isSpace = (ch: string) => /\s/.test(ch);
 
 /** Splits a command line into simple commands of words; quotes are removed, operators separate. */
 export function lexShell(command: string): Lexed {
-	if (command.length > MAX_LENGTH) return { commands: [], unreadable: true };
+	const gone = {
+		commands: [],
+		unreadable: true,
+		arithmetic: false,
+		literalSubstitution: false,
+	};
+	if (command.length > MAX_LENGTH) return gone;
+	const shared = { depth: 0, arithmetic: false, literalSubstitution: false };
 	try {
-		const lexer = new Lexer(command, { depth: 0 }, false);
-		return { commands: lexer.list("eof"), unreadable: false };
+		// Bash drops a NUL byte from the script it reads.
+		const lexer = new Lexer(command.replaceAll("\0", ""), shared, false);
+		const commands = lexer.list("eof");
+		return {
+			commands,
+			unreadable: false,
+			arithmetic: shared.arithmetic,
+			literalSubstitution: shared.literalSubstitution,
+		};
 	} catch (error) {
 		// A stack that ran out is a line too deep to read, whatever the cap says.
-		if (error instanceof Unreadable || error instanceof RangeError)
-			return { commands: [], unreadable: true };
+		if (error instanceof Unreadable || error instanceof RangeError) return gone;
 		throw error;
 	}
 }
@@ -84,7 +74,7 @@ class Lexer {
 
 	constructor(
 		readonly src: string,
-		readonly shared: { depth: number },
+		readonly shared: Shared,
 		/** Whether `<<` is a shift: the text is arithmetic, where there are no here-documents. */
 		readonly arithmetic: boolean,
 	) {}
@@ -116,8 +106,7 @@ class Lexer {
 		let expectPattern = false;
 		/** How many words of the current command come before a `case` pattern (`case x in`). */
 		let patternBase = 0;
-		/** The paren depths of the open `((` groups, which are arithmetic. */
-		const arith: number[] = [];
+		const arith = new ArithGroups(out, s, this.pos, end === "paren");
 		let sawShift = false;
 		const endWord = () => {
 			if (!inWord) return;
@@ -144,7 +133,7 @@ class Lexer {
 		};
 		const endCommand = () => {
 			endWord();
-			if (words.length > 0) out.push(words);
+			if (words.length > 0) arith.add(words);
 			words = [];
 			patternBase = 0;
 		};
@@ -160,13 +149,16 @@ class Lexer {
 				if (next === undefined) this.pos++;
 				else if (next === "\n") this.pos += 2;
 				else {
+					this.#literal(next, s[this.pos + 2]);
 					quoted(next);
 					this.pos += 2;
 				}
 			} else if (ch === "'") {
 				const close = s.indexOf("'", this.pos + 1);
 				const stop = close === -1 ? s.length : close;
-				quoted(s.slice(this.pos + 1, stop));
+				const literal = s.slice(this.pos + 1, stop);
+				this.#literal(literal);
+				quoted(literal);
 				this.pos = stop + 1;
 			} else if (ch === '"') {
 				this.pos++;
@@ -179,7 +171,7 @@ class Lexer {
 				} else if (next === "(") {
 					// The text is dropped and the word keeps the mark, so a value built from it counts as unknown.
 					this.#paren(out);
-					quoted("$(");
+					quoted(`$(${EXPANDED}`);
 				} else if (next === "{") quoted(this.#param(out, false));
 				else if (next === "[") quoted(this.#bracket(out));
 				else {
@@ -189,12 +181,11 @@ class Lexer {
 				}
 			} else if (ch === "`") {
 				this.#backtick(out);
-				quoted("`");
+				quoted(`\`${EXPANDED}`);
 			} else if (ch === "\n") {
 				endCommand();
 				this.pos++;
-				if ((this.arithmetic || arith.length > 0) && sawShift)
-					throw new Unreadable();
+				if ((this.arithmetic || arith.open) && sawShift) throw new Unreadable();
 				this.#drain(id, out);
 			} else if (isSpace(ch)) {
 				endWord();
@@ -217,16 +208,17 @@ class Lexer {
 			} else if (ch === "(") {
 				endCommand();
 				parenDepth++;
-				if (next === "(" || s[this.pos - 1] === "(") arith.push(parenDepth);
+				if (next === "(" || s[this.pos - 1] === "(")
+					arith.push(parenDepth, this.pos);
 				this.pos++;
 			} else if (ch === ")") {
 				endWord();
 				this.pos++;
 				if (parenDepth > 0) {
-					if (arith[arith.length - 1] === parenDepth) arith.pop();
-					if (arith.length === 0 && !this.arithmetic) sawShift = false;
-					parenDepth--;
 					endCommand();
+					if (arith.close(parenDepth, this.pos)) this.shared.arithmetic = true;
+					if (!arith.open && !this.arithmetic) sawShift = false;
+					parenDepth--;
 				} else if (caseOpen > 0) {
 					// The `)` that ends a `case` pattern; the pattern runs nothing. Any other `)` there is
 					// one that bash versions place differently, so the line is not read.
@@ -240,6 +232,7 @@ class Lexer {
 					if (end === "paren") {
 						if (this.pending.some((p) => p.owner === id))
 							throw new Unreadable();
+						arith.flush();
 						return out;
 					}
 				}
@@ -255,8 +248,7 @@ class Lexer {
 			} else if (ch === ">" || ch === "<") {
 				endWord();
 				if (ch === "<" && next === "<") {
-					if (this.#shiftOrHeredoc(id, words, arith.length > 0))
-						sawShift = true;
+					if (this.#shiftOrHeredoc(id, words, arith.open)) sawShift = true;
 					continue;
 				}
 				// Redirections become their own words, so their targets can be checked.
@@ -281,6 +273,8 @@ class Lexer {
 			}
 		}
 		endCommand();
+		// A group left open is not known to be arithmetic.
+		arith.flush();
 		return out;
 	}
 
@@ -378,11 +372,18 @@ class Lexer {
 			}
 			if (ch === "\\") {
 				// A backslash before a newline joins the lines.
-				if (next !== undefined && next !== "\n") text += next;
+				if (next !== undefined && next !== "\n") {
+					this.#literal(next, s[this.pos + 2]);
+					text += next;
+				}
 				this.pos += 2;
-			} else if (ch === "`") text += this.#backtick(out);
-			else if (ch === "$" && next === "(") text += this.#paren(out);
-			else if (ch === "$" && next === "{") text += this.#param(out, true);
+			} else if (ch === "`") {
+				this.#backtick(out);
+				text += `\`${EXPANDED}`;
+			} else if (ch === "$" && next === "(") {
+				this.#paren(out);
+				text += `$(${EXPANDED}`;
+			} else if (ch === "$" && next === "{") text += this.#param(out, true);
 			else if (ch === "$" && next === "[") text += this.#bracket(out);
 			else {
 				text += ch;
@@ -392,9 +393,20 @@ class Lexer {
 		return text;
 	}
 
+	/** Notes text that holds a `$(` or a backtick no shell expands where it is written; `after` follows a lone character. */
+	#literal(text: string, after?: string) {
+		if (
+			text.includes("`") ||
+			text.includes("$(") ||
+			(text === "$" && after === "(")
+		)
+			this.shared.literalSubstitution = true;
+	}
+
 	/** The text of a `$'…'` string that starts here, with its escapes decoded. */
 	#ansiQuoted(): string {
 		const found = ansiQuoted(this.src, this.pos);
+		this.#literal(found.text);
 		this.pos = found.end;
 		return found.text;
 	}
@@ -438,6 +450,7 @@ class Lexer {
 
 	/** A `$[…]` that starts here: arithmetic, where there are no here-documents. Returns its text. */
 	#bracket(out: string[][]): string {
+		this.shared.arithmetic = true;
 		return this.#braced(out, "]", "[", false);
 	}
 
@@ -477,6 +490,9 @@ class Lexer {
 		}
 		this.#leave();
 		this.pos = Math.min(this.pos, s.length);
-		return s.slice(start, this.pos);
+		const text = s.slice(start, this.pos);
+		// `${x@P}` expands the prompt escapes in the value of x, and that runs a `$(` in it.
+		if (close === "}" && /@P\}$/.test(text)) throw new Unreadable();
+		return text;
 	}
 }

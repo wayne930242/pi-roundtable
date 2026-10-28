@@ -1,7 +1,7 @@
 import { basename } from "node:path";
 import type { HoldContext, HoldRule } from "../../holds.ts";
 import type { PushPolicy } from "./git-push.ts";
-import { COMMAND_PREFIX_WORDS, lexShell } from "./shell-lexer.ts";
+import { COMMAND_PREFIX_WORDS, EXPANDED, lexShell } from "./shell-lexer.ts";
 import {
 	deviceTarget,
 	expand,
@@ -101,6 +101,49 @@ function commandName(word: string, state: LineState): string | undefined {
 	return word.includes("$") || word.includes("`") ? expand(word, state) : word;
 }
 
+/** Variables whose value bash runs as a command or expands with substitutions on its own. */
+const SELF_RUNNING_VARIABLE =
+	/^(?:PROMPT_COMMAND|PS[0124]|BASH_ENV|ENV|SHELLOPTS|BASH_ALIASES\[.*\])\+?=/;
+
+/** Builtins whose arguments can be assignments. */
+const ASSIGNING = new Set([
+	"export",
+	"declare",
+	"typeset",
+	"local",
+	"readonly",
+	"env",
+]);
+
+/**
+ * Whether the command sets a variable that makes a shell run something later: before the command
+ * (`PS4='$(x)' bash -x`) or as an argument of `export`, `declare` and the like.
+ */
+function setsSelfRunningVariable(words: readonly string[]): boolean {
+	for (const word of words) {
+		if (SELF_RUNNING_VARIABLE.test(word)) return true;
+		const name = basename(word);
+		if (
+			!/^[A-Za-z_][A-Za-z0-9_]*(?:\[.*\])?\+?=/.test(word) &&
+			!word.startsWith("-") &&
+			!WRAPPERS.has(name) &&
+			!ASSIGNING.has(name)
+		)
+			return false;
+	}
+	return false;
+}
+
+/** The script a `trap` command installs, or undefined when it only lists or clears traps. */
+function trapScript(args: readonly string[]): string | undefined {
+	const rest = [...args];
+	while (rest[0]?.startsWith("-")) if (rest.shift() === "--") break;
+	const [script] = rest;
+	return rest.length > 1 && script !== "" && script !== "-"
+		? script
+		: undefined;
+}
+
 /** Shells that run the command given with `-c`. */
 const SHELLS = new Set(["bash", "sh", "zsh", "dash", "ksh", "ash"]);
 
@@ -183,6 +226,14 @@ function programHeld(
 	const head = commandName(word, state);
 	if (head === undefined) return [DYNAMIC_NAME];
 	const name = basename(head);
+	if (setsSelfRunningVariable(words)) return [DYNAMIC_SCRIPT];
+	// An alias names a command at run time; `expand_aliases` is what lets a script use one.
+	if (name === "alias" && args.some((arg) => arg.includes("=")))
+		return [DYNAMIC_NAME];
+	if (name === "trap") {
+		const script = trapScript(args);
+		if (script !== undefined) return scriptHeld(script, state, policy);
+	}
 	const always = ALWAYS_HELD_CLASS.get(name);
 	if (always) return [{ reason: name, class: always }];
 	if (/^mkfs(\..+)?$/.test(name))
@@ -211,6 +262,18 @@ function programHeld(
 	return held ? [held] : [];
 }
 
+/** Whether a simple command evaluates arithmetic without `(( ))`: `let`, `declare -i`, `[[ a -eq b ]]`. */
+function evaluatesArithmetic(words: readonly string[]): boolean {
+	const [first] = words;
+	if (first === "let") return true;
+	if (first === "declare" || first === "typeset" || first === "local")
+		return words.some((word) => /^-[A-Za-z]*i/.test(word));
+	return (
+		first === "[[" &&
+		words.some((word) => /^-(?:eq|ne|lt|gt|le|ge)$/.test(word))
+	);
+}
+
 /** Why a line the lexer could not read is held. */
 const UNREADABLE: Held = {
 	reason: "the command line is too long or too nested to check",
@@ -218,15 +281,16 @@ const UNREADABLE: Held = {
 };
 
 /**
- * Why a script another shell runs (`bash -c`) is held. A script with a substitution, or one that
- * is a variable, is built from output not known here, so it is held whole.
+ * Why a script another shell runs (`bash -c`) is held. A script with a substitution the outer shell
+ * expands, or one that is a variable, is built from output not known here, so it is held whole. A
+ * substitution the outer shell leaves alone (single quotes) is the inner shell's, and judged as one.
  */
 function scriptHeld(
 	script: string,
 	state: LineState,
 	policy: PushPolicy,
 ): Held[] {
-	if (/\$\(|`/.test(script)) return [DYNAMIC_SCRIPT];
+	if (script.includes(EXPANDED)) return [DYNAMIC_SCRIPT];
 	if (script.trimStart().startsWith("$")) {
 		const known = expand(script, state);
 		return known === undefined
@@ -257,6 +321,12 @@ function commandHeld(
 	// A line the lexer cannot read could run anything.
 	if (lexed.unreadable) return [UNREADABLE];
 	const found: Held[] = [];
+	// Arithmetic evaluates a `$(` in the value of a variable, text this rule cannot follow.
+	if (
+		lexed.literalSubstitution &&
+		(lexed.arithmetic || lexed.commands.some(evaluatesArithmetic))
+	)
+		found.push(DYNAMIC_SCRIPT);
 	for (const words of lexed.commands) {
 		found.push(...heldReasons(words, state, policy));
 		follow(program(words), state);

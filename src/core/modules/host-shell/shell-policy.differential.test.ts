@@ -238,6 +238,136 @@ const RUNS: readonly string[] = [
 	`echo ${'"$('.repeat(60)}X${')"'.repeat(60)}`,
 ];
 
+/** Lines that run `X` through the less common ways bash has of running a command. */
+const WIDE: readonly string[] = [
+	// Here-strings and here-documents.
+	'cat <<< "$(X)"',
+	"cat <<<$(X)",
+	"cat <<< `X`",
+	"cat <<-EOF\n\t$(X)\n\tEOF",
+	"cat <<-EOF\n\tit's\n\tEOF\nX",
+	"cat <<-'EOF'\n\t$(X)\n\tEOF\nX",
+	'cat <<E"O"F\nit\'s\nEOF\nX',
+	"cat <<E\\OF\nit's\nEOF\nX",
+	"cat <<EOF <<EOF2\n$(X)\nEOF\nb\nEOF2",
+	"cat <<A; cat <<B\n$(X)\nA\nb\nB",
+	"cat <<A <<B\na\nA\n$(X)\nB",
+	"cat <<A <<'B'\n$(X)\nA\nb\nB",
+	"cat <<A | cat <<B\na\nA\nb\nB\nX",
+	"echo `cat <<EOF\n$(X)\nEOF\n`",
+	"echo $(cat <<EOF\n`X`\nEOF\n)",
+	"echo $(echo `cat <<EOF\n$(X)\nEOF\n`)",
+	"echo $(cat <<EOF\nit's\nEOF\n; X)",
+	"cat <<EOF\n$(cat <<IN\n$(X)\nIN\n)\nEOF",
+	"cat <<EOF\r\n$(X)\r\nEOF\r\n",
+	// Functions, coprocesses, aliases, select, traps.
+	"coproc X; wait",
+	"coproc NAME { X; }; wait",
+	"f() (X); f",
+	"f() ( X ); f",
+	"f () { X; }; f",
+	"function f() { X; }; f",
+	"function f { X; }\nf",
+	"f() { g; }; g() { X; }; f",
+	"shopt -s expand_aliases\nalias s='X'\ns",
+	"shopt -s expand_aliases; alias s='X'\ns",
+	"shopt -s expand_aliases\nalias s=sudo\ns marker",
+	"shopt -s expand_aliases\nalias echo='X;'\necho hi",
+	"select i in a; do X; break; done <<< 1",
+	"echo 1 | { select i in a; do X; break; done; }",
+	"trap 'X' EXIT",
+	'trap "X" EXIT',
+	"trap -- 'X' EXIT",
+	"trap 'X' ERR; false",
+	"trap 'echo hi; X' EXIT",
+	'trap "X" DEBUG; true',
+	// Tests, arithmetic and expansions that run commands.
+	"[[ $(X) ]]",
+	"[[ -n $(X) ]]",
+	'[ -z "$(X)" ]',
+	"(( $(X) ))",
+	"(( x = $(X) + 1 ))",
+	"echo $(( $(X) + 1 ))",
+	"echo $(( `X` + 1 ))",
+	'echo "$(( $(X) + 1 ))"',
+	"for ((i=0; i<$(X)+1; i++)); do :; done",
+	"echo $[ $(X) ]",
+	"(((X)))",
+	"((X); (true))",
+	"echo $((X); (true))",
+	"echo $( (X) )",
+	"echo $( (X); true )",
+	"echo $( ((X); (true)) )",
+	"echo $(( 1 )); X",
+	"(( 1 )); X",
+	"x='a[$(X)]'; echo $((x))",
+	"x='a[$(X)]'; (( x ))",
+	"x='a[$(X)]'; [[ $x -eq 1 ]]",
+	"x='a[$(X)]'; let x",
+	"x='a[$(X)]'; declare -i y; y=$x",
+	"x='$(X)'; echo ${x@P}",
+	"x='$(X)'; echo \"${x@P}\"",
+	"PS4='$(X)' bash -xc true",
+	"PS4='$(X) ' bash -xc 'true'",
+	"cat <(X)",
+	"diff <(X) <(X)",
+	"echo hi > >(X); wait",
+	"echo hi | tee >(X) > /dev/null; wait",
+	// Redirections and execution wrappers.
+	"exec 3>&1; X",
+	"exec >/dev/null; X",
+	"exec 3</dev/null; X",
+	"exec 2>&1\nX",
+	"exec 3>/dev/null 4>&1 X",
+	"time -p X",
+	"time -p -- X",
+	"command -p X",
+	"command -- X",
+	"builtin command X",
+	"env -i X",
+	"env -u FOO X",
+	"nohup X",
+	"nice -n 5 X",
+	"timeout 5 X",
+	"timeout -s KILL 5 X",
+	"stdbuf -oL X",
+	"xargs -n1 X <<< 1",
+	// Environment that makes a shell run something.
+	"BASH_ENV=/dev/null bash -c 'X'",
+	"PROMPT_COMMAND='X'; true",
+	"PS1='$(X)'; true",
+	"export PROMPT_COMMAND='X'",
+	// Escapes, line endings and unusual characters.
+	"echo $'a\\nb'; X",
+	"echo $'a\\nX'",
+	"x=$'\\n'; X",
+	"echo hi\r\nX",
+	"X\r\necho hi\r\n",
+	"echo hi\r\n\r\nX\r\n",
+	"echo ‘hi’; X",
+	"echo “hi”; X",
+	"echo “$(X)”",
+	"echo ‘$(X)’",
+	"echo ＄(X)",
+	"echo hi # ‘\nX",
+	"echo \\\r\nX",
+	"echo hi;\nX",
+	"echo hi;;\nX",
+	"echo a\u00a0b; X",
+	"echo\u00a0hi; X",
+	"echo hi\u2028X",
+];
+
+/** Lines that carry a NUL byte, which cannot be an argument; bash reads them from standard input. */
+const NUL: readonly string[] = [
+	"echo a\u0000b; X",
+	"echo a\u0000\nX",
+	"X\u0000",
+	"\u0000X",
+	"echo '\u0000'; X",
+	"echo $'\\0'; X",
+];
+
 /** Lines whose `X` bash does not run; they only have to be handled without error. */
 const INERT: readonly string[] = [
 	"echo '$(X)'",
@@ -258,6 +388,14 @@ const INERT: readonly string[] = [
 	"false && X",
 	"true || X",
 	"echo 'it''s' ; echo \"X\"",
+	'cat <<E"O"F\n$(X)\nEOF',
+	"cat <<-'EOF'\n\t$(X)\n\tEOF",
+	"cat <<A <<'B'\na\nA\n$(X)\nB",
+	"echo ＄(X)",
+	"echo ‘$(X)’",
+	"builtin X",
+	"echo $((1 + 2)) '$(X)'",
+	"x=1; echo $((x))",
 ];
 
 const BASHES = [
@@ -307,13 +445,20 @@ afterAll(() => rmSync(box.root, { recursive: true, force: true }));
 /** Whether bash ran `sudo` for this line. */
 function runs(bash: string, line: string): boolean {
 	rmSync(box.marker, { force: true });
-	spawnSync(bash, ["--norc", "--noprofile", "-c", line], {
+	const options = {
 		cwd: box.cwd,
 		env: { PATH: box.stubs, MARKER: box.marker, HOME: box.cwd },
-		input: "",
 		timeout: 10_000,
-		stdio: ["pipe", "ignore", "ignore"],
-	});
+		stdio: ["pipe", "ignore", "ignore"] as ["pipe", "ignore", "ignore"],
+	};
+	// A NUL byte cannot be an argument, so such a line is the script on standard input.
+	if (line.includes("\u0000"))
+		spawnSync(bash, ["--norc", "--noprofile"], { ...options, input: line });
+	else
+		spawnSync(bash, ["--norc", "--noprofile", "-c", line], {
+			...options,
+			input: "",
+		});
 	return existsSync(box.marker);
 }
 
@@ -326,6 +471,8 @@ function held(line: string): boolean {
 		) !== undefined
 	);
 }
+
+const ALL = [...RUNS, ...WIDE, ...NUL];
 
 const lines = (corpus: readonly string[]) =>
 	corpus.map((template) => template.replaceAll("X", SUDO));
@@ -343,7 +490,7 @@ describe.skipIf(BASHES.length === 0)("sudo run by bash is held", () => {
 	}, () => {
 		const missed: string[] = [];
 		let executed = 0;
-		for (const line of lines(RUNS)) {
+		for (const line of lines(ALL)) {
 			for (const bash of BASHES) {
 				if (!runs(bash, line)) continue;
 				executed++;
@@ -351,7 +498,7 @@ describe.skipIf(BASHES.length === 0)("sudo run by bash is held", () => {
 			}
 		}
 		// A corpus whose lines bash does not run proves nothing.
-		expect(executed).toBeGreaterThan(RUNS.length * BASHES.length * 0.85);
+		expect(executed).toBeGreaterThan(ALL.length * BASHES.length * 0.85);
 		expect(missed).toEqual([]);
 	});
 
@@ -362,7 +509,7 @@ describe.skipIf(BASHES.length === 0)("sudo run by bash is held", () => {
 
 describe("the corpus", () => {
 	test("never runs anything but stubs", () => {
-		for (const line of lines(RUNS))
+		for (const line of lines(ALL))
 			expect(line).not.toMatch(/\/(usr|bin|sbin)\/|\brm\b|\bdd\b|\bkill/);
 	});
 });
