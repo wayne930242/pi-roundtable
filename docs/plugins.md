@@ -431,7 +431,7 @@ A conversation can run with less supervision when its owner switches a mode on. 
 | Mode | Effect |
 |---|---|
 | `longRunning` | A turn that reaches its time limit goes on by itself, up to `autonomy.longRunning.maxSeconds` of work, instead of asking on a card. See [long-running conversations](#long-running-conversations) |
-| `yolo` | The server may approve some held calls itself, before a card is posted. The mode and its limits (`autonomy.yolo.allow` and `autonomy.yolo.card` in the config) are stored here; the approver itself ships separately |
+| `yolo` | The server approves the held calls whose [hold classes](#hold-classes-and-yolo-mode) it allows itself, before a card is posted, and logs each one. What it allows is `autonomy.yolo.allow` and `autonomy.yolo.card` in the config |
 
 Both are off for a conversation nobody has set. `MODES` stores them in the `conversation_modes` table, one row per conversation key, so they survive a restart, and works for any key; a surface decides who may toggle them. Read a mode where you act on it, with `peek`, which never waits on the database. Change it with `set`, which writes first and updates the memory afterwards:
 
@@ -445,7 +445,7 @@ modes.peek(channel).longRunning; // true
 
 `set` throws `PluginError` for anyone but an owner, and for the host's own principal (`SYSTEM_PRINCIPAL`), so a webhook or a report turn cannot switch a conversation to run unattended. A change names only the modes it sets. It logs `conversation modes changed` with the channel, both modes and who changed them. `onChange(listener)` hears every change until the function it returns is called; a listener that throws is logged and the rest still hear it.
 
-When a held call is approved by yolo mode, `ApprovedBy.auto` is `"yolo"` (a person's answer never sets it), and the approver reports it with `autoApproved(entry)`, which logs `held call approved by yolo mode` and tells the `onAutoApproved` listeners, so a surface can show it.
+When a held call is approved by yolo mode, `ApprovedBy.auto` is `"yolo"` (a person's answer never sets it; `ToolTurn.approvedBy` shows it to the tool), and the approver reports it with `autoApproved(entry)`, which logs `held call approved by yolo mode` and tells the `onAutoApproved` listeners, so a surface can show it. What yolo approves, and what it never does, is under [hold classes and yolo mode](#hold-classes-and-yolo-mode).
 
 ## Principals and access
 
@@ -987,6 +987,34 @@ defineTool({
 
 `run` also learns which card approved: `turn.approvedPrompt` is the id of the approval card whose answer released the call, for a tool that must show a client which approval it acts on (it passes it as `approval: { prompt }` in the options of `turn.client.call`). It is set when the person approved the held call on its card, in the turn that asked, or, for a card answered after that turn stopped waiting, in the later turn whose call that approval releases. It is undefined for a call that was not held; for one a message confirmed (no card was involved, and a restart keeps no cards); for one a surface released without a card id; and in a host with no turn, such as a precheck script's call. Discord's id is the one in the custom ids of its card buttons (`roundtable:card:<id>:yes`), the web chat's is the `id` of the `prompt` frame, and a surface reports it through `ApprovalOptions.approvedPrompt` of `Prompts.confirm` and `LateAnswer.prompt`. It comes from the surface, never from the model or the message text; a tool that needs it fails closed when it is undefined.
 
+#### Hold classes and yolo mode
+
+Every held call carries its **hold classes**: ids of the form `<rule>.<class>` that name why it is held. They are what yolo mode (below) judges, and they are recorded with the call as `HeldCall.holdClasses`, so they survive a restart. A rule reports them with `holdClasses(tool, input, context)`, which lists every reason the call is held, not only the first; a rule that reports none has its calls classed by the rule's name (`mail` for a rule called `mail`). A rule that describes a call in a turn may name the classes in the description instead: `{ text, classes: ["repo.push"] }` (`HoldDescription.classes`). `holdChain(rules)` reports them as `classesOf(tool, input, context)` and, with the description, as `inTurnWithClasses(...)` (`ClassedHold`); a hold check built without `holdChain` has none.
+
+**Yolo mode.** In a conversation whose `yolo` mode an owner switched on ([`MODES`](#conversation-modes-modes)), the server decides a held call before any card opens, and approves it without one only when **all** of these hold at that moment:
+
+- the conversation's `yolo` mode is on (read when the call is held, so a card opened before the toggle stays open for a person to answer);
+- the turn's speaker is an owner, and not the host's own principal (`SYSTEM_PRINCIPAL`), which webhook and report turns speak as;
+- the call names no approvers and its card is not [the speaker's alone](#a-hold-that-makes-its-card-the-speakers-alone);
+- the call has hold classes (a call held before this existed, or by a check without classes, is unknown and always asks), and none of them is carded.
+
+A class is carded when it is listed in `autonomy.yolo.card`, when its rule's name is, or when it is in `YOLO_CARDED_SHELL_CLASSES` (`pi-roundtable/kit`) and `autonomy.yolo.allow` does not list it. A class in both lists stays carded. Everything else is approved, **including the hold of any plugin rule that reports no classes** (it is classed by its rule name): to keep such a rule behind a card in yolo conversations, list its name in `autonomy.yolo.card`.
+
+```ts
+export default {
+	autonomy: {
+		yolo: {
+			allow: ["shell.rm"], // yolo may also approve an rm outside the scratch roots
+			card: ["shell.push", "repo-push"], // never approve these, whatever the mode
+		},
+	},
+} satisfies RoundtableConfig;
+```
+
+An approved call runs in the same turn. It is reported as approved by the speaker with `ApprovedBy.auto: "yolo"`, logged as `held call approved by yolo mode` (channel, tool, classes, principal) and told to `MODES.onAutoApproved` listeners. A message that confirms a held call works as before. A turn with no card surface is decided the same way, so an owner's own turn there goes on instead of holding the call.
+
+**Plain `git push` and writes outside the workspace are approved under yolo**, because they are the non-destructive shell classes (`shell.push`, `shell.write`). A plain push to `main` deploys wherever a push to `main` deploys. To keep it behind a card, put `shell.push` in `autonomy.yolo.card`; to keep every write outside the roots behind one, put `shell.write` there.
+
 #### The shell rule
 
 `shellHoldRule` in `pi-roundtable/kit` judges the agents' `bash`, `write` and `edit` calls; the agent server links it, and a session without a workspace has no shell.
@@ -998,6 +1026,28 @@ The scratch dir is the config's `scratchDir`, by default `<os temp dir>/<discord
 - An `rm` runs when every operand resolves inside a scratch root and none is a root itself or `/`. Operands resolve after the variables assigned earlier in the same command line (`NAME=value` and `export NAME=value` with literal values; `$TMPDIR` is the scratch dir and `$HOME` the service user's home), from the directory of the last `cd`, through `..` and, for paths that exist, symlinks, so a link out of a root is held. A glob is judged by its directory part. A command substitution, an unknown variable, `~user`, an `rm` without operands, and `xargs rm` are held.
 - `sudo`, `kill`, `dd`, `mkfs` and the other programs held whatever their arguments stay held, as do service, container, firewall and package changes, `git reset --hard`, and `gh` writes.
 - `git push` is held, `force-pushes` for a force push and otherwise as a push to GitHub.
+
+The rule reports the class of **every** held command in the line, including those inside `bash -c`, so a harmless write cannot hide a `sudo` behind it (`echo x > /etc/f; sudo ls` is `shell.write` and `shell.privilege`):
+
+| Class | Held for |
+|---|---|
+| `shell.privilege` | `sudo`, `su`, `doas` |
+| `shell.disk` | `dd`, `mkfs*` |
+| `shell.power` | `shutdown`, `reboot`, `poweroff`, `halt` |
+| `shell.kill` | `kill` and the name-matching killers |
+| `shell.rm` | an `rm` outside the scratch roots, or one the line cannot resolve |
+| `shell.write` | a redirect, `tee`, `write` or `edit` outside the scratch roots |
+| `shell.service` | `systemctl` and `service` changes |
+| `shell.docker` | stopping, removing or pruning containers, images and volumes; `docker compose down` |
+| `shell.firewall` | `ufw`, `iptables`, `ip6tables`, `nft` changes |
+| `shell.packages` | `apt`, `apt-get`, `snap`, `dpkg` installs and removals |
+| `shell.push` | a plain `git push` the push policy holds |
+| `shell.force-push` | a forced push, and a push that deletes or mirrors refs (`+` or `:` refspec, `--delete`, `--mirror`) |
+| `shell.reset-hard` | `git reset --hard` |
+| `shell.gh` | `gh` writes |
+| `shell.crontab` | `crontab -r` |
+
+Yolo mode never approves these unless `autonomy.yolo.allow` lists them: `YOLO_CARDED_SHELL_CLASSES` is every class above except `shell.write` and `shell.push`.
 
 `shellHoldRuleFor({ ownPushOwners?, heldPushRepos? })` (its options are the type `PushPolicy`) is the same rule with plain pushes to the owner's own repositories let through; `shellHoldRule` is `shellHoldRuleFor()`, which holds every push.
 A push runs without a hold when all of these hold:
@@ -3605,7 +3655,7 @@ A turn whose model ignores its abort (a subprocess that does not exit) is given 
 
 ### Long-running conversations
 
-An owner can switch a conversation to long-running mode, so a turn that reaches its limit goes on by itself instead of asking, or aborting when it cannot show a card. The server extends the limit exactly as **Continue** would, and logs `long-running mode continued the turn`. The cap is per turn: it counts the turn's work since it started, not the time spent on cards, and is `autonomy.longRunning.maxSeconds` in the config (`600` to `604800`, default `14400`, four hours). At the cap the turn behaves as an ordinary one: a card whose `ApprovalOptions.purpose` is `"turn-timeout"`, so a surface can push it, or an abort. `ask_user` and approval cards are never answered automatically.
+An owner can switch a conversation to long-running mode, so a turn that reaches its limit goes on by itself instead of asking, or aborting when it cannot show a card. The server extends the limit exactly as **Continue** would, and logs `long-running mode continued the turn`. The cap is per turn: it counts the turn's work since it started, not the time spent on cards, and the extensions stop exactly at it (a `turnLimits.timeoutSeconds` of 3 hours with a 4-hour cap asks or aborts at 4 hours of work, not at 6). It is `autonomy.longRunning.maxSeconds` in the config (`600` to `604800`, default `14400`, four hours). At the cap the turn behaves as an ordinary one: a card whose `ApprovalOptions.purpose` is `"turn-timeout"`, so a surface can push it, or an abort. `ask_user` and approval cards are never answered automatically.
 
 The mode is the conversation's, set with `MODES.set(channel, { longRunning: true }, speaker)` and read with `MODES.peek(channel)`; see [the `MODES` service](#conversation-modes-modes). A surface decides who may toggle it.
 
@@ -3841,6 +3891,7 @@ Import from the entries listed below; source area files are internal.
 | `ChannelClaim` | `pi-roundtable` | type |
 | `ChannelKey` | `pi-roundtable` | type |
 | `ChatSurface` | `pi-roundtable` | type |
+| `ClassedHold` | `pi-roundtable` | type |
 | `ClientCallError` | `pi-roundtable` | type |
 | `ClientCallOptions` | `pi-roundtable` | type |
 | `ClientCallResult` | `pi-roundtable` | type |
@@ -4195,6 +4246,7 @@ Import from the entries listed below; source area files are internal.
 | `SpeakerFacts` | `pi-roundtable/kit` | type |
 | `SpeakerPolicy` | `pi-roundtable/kit` | type |
 | `THINKING_LEVELS` | `pi-roundtable/kit` | value |
+| `YOLO_CARDED_SHELL_CLASSES` | `pi-roundtable/kit` | value |
 | `TextToolDef` | `pi-roundtable/kit` | type |
 | `ThinkingPicker` | `pi-roundtable/kit` | type |
 | `ThreadHost` | `pi-roundtable/kit` | type |
