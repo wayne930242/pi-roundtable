@@ -224,6 +224,8 @@ export class Uploads {
 				});
 			});
 		} catch (error) {
+			// A file part may have finished before the body failed; the form as a whole did not arrive.
+			if (kept) this.#waiting.remove(kept.id);
 			if (error instanceof MultipartError)
 				throw new UploadRefusal(400, "The upload is not a form.");
 			throw error;
@@ -279,6 +281,15 @@ export class Uploads {
 				await writer?.abort();
 			},
 		};
+	}
+
+	/** Deletes a waiting upload of the person's own; false when there is none such, or a message already took it. */
+	discard(id: string, principalId: string): boolean {
+		const waiting = this.#pending.get(id);
+		if (!waiting || waiting.principalId !== principalId) return false;
+		this.#pending.delete(id);
+		this.#waiting.remove(id);
+		return true;
 	}
 
 	/**

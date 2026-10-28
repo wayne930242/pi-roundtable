@@ -52,7 +52,13 @@ export function safeName(name: string): string {
 	const cleaned = Array.from(basename(name.replaceAll("\\", "/")))
 		.filter((char) => {
 			const code = char.codePointAt(0) ?? 0;
-			return code > 0x1f && code !== 0x7f;
+			// Controls, and the bidirectional overrides that make a name read as another one.
+			return (
+				code > 0x1f &&
+				code !== 0x7f &&
+				!(code >= 0x202a && code <= 0x202e) &&
+				!(code >= 0x2066 && code <= 0x2069)
+			);
 		})
 		.join("")
 		.trim();
@@ -224,7 +230,11 @@ export class FileDir {
  */
 export function fileResponse(meta: RoomFile, body: Blob): Response {
 	const inline = INLINE_TYPES.has(meta.type);
-	const encoded = encodeURIComponent(meta.name);
+	// RFC 5987 leaves `'`, `(`, `)` and `*` out of a value's characters; encodeURIComponent keeps them.
+	const encoded = encodeURIComponent(meta.name).replace(
+		/['()*]/g,
+		(char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`,
+	);
 	return new Response(body, {
 		headers: {
 			"content-type": inline ? meta.type : "application/octet-stream",

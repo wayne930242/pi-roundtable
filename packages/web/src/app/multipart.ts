@@ -104,7 +104,8 @@ export async function readMultipart(
 	try {
 		for (;;) {
 			const { done, value } = await reader.read();
-			if (value) buffer = join(buffer, value);
+			// After the closing boundary what follows (the epilogue) is read and dropped, never gathered.
+			if (value && state !== "done") buffer = join(buffer, value);
 			// Everything the buffer can settle is settled before the next chunk is read.
 			for (let progressed = true; progressed && state !== "done"; ) {
 				progressed = false;
@@ -122,6 +123,7 @@ export async function readMultipart(
 						const head = String.fromCharCode(buffer[0] ?? 0, buffer[1] ?? 0);
 						if (head === "--") {
 							state = "done";
+							buffer = new Uint8Array(0);
 						} else if (head === "\r\n") {
 							buffer = buffer.subarray(2);
 							state = "headers";

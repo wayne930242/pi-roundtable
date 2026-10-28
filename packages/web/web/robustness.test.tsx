@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import { partial } from "pi-roundtable/testing";
 import { renderToStaticMarkup } from "react-dom/server";
-import { CrashCard } from "./components/boundary.tsx";
+import { CrashCard, ErrorBoundary } from "./components/boundary.tsx";
 import { ConnectionGate } from "./components/connection-gate.tsx";
 import {
 	isChunkError,
@@ -104,4 +104,18 @@ test("the card that replaces a failed page says why and offers Reload", () => {
 		<CrashCard error={new Error("boom")} onReload={() => undefined} />,
 	);
 	expect(other).toContain("This page stopped working");
+});
+
+test("RV-F005: a failed page's error card is cleared when the route it stood for changes, and kept while the route is the same", () => {
+	const failed = {
+		...ErrorBoundary.getDerivedStateFromError(new Error("boom")),
+		key: "room/a",
+	};
+	const props = (resetKey: string) => ({ children: null, resetKey });
+	expect(ErrorBoundary.getDerivedStateFromProps(props("room/a"), failed)).toBe(
+		null,
+	);
+	expect(
+		ErrorBoundary.getDerivedStateFromProps(props("room/b"), failed),
+	).toEqual({ error: undefined, key: "room/b" });
 });

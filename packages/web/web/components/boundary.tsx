@@ -29,7 +29,9 @@ export function CrashCard(props: { error: unknown; onReload(): void }) {
 }
 
 interface State {
-	error?: { value: unknown };
+	error?: { value: unknown } | undefined;
+	/** The `resetKey` the state was made for. */
+	key?: string | undefined;
 }
 
 /**
@@ -37,8 +39,24 @@ interface State {
  * blank page. A chunk that failed to load, which is what a release does to a page opened before
  * it, reloads the page once by itself.
  */
-export class ErrorBoundary extends Component<{ children: ReactNode }, State> {
+export class ErrorBoundary extends Component<
+	{
+		children: ReactNode;
+		/** A change of this clears a shown failure: the route the boundary stands for is another one. */
+		resetKey?: string;
+	},
+	State
+> {
 	override state: State = {};
+
+	static getDerivedStateFromProps(
+		props: { resetKey?: string },
+		state: State,
+	): State | null {
+		return props.resetKey === state.key
+			? null
+			: { error: undefined, key: props.resetKey };
+	}
 
 	static getDerivedStateFromError(error: unknown): State {
 		return { error: { value: error } };

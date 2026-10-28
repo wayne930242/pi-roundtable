@@ -330,3 +330,42 @@ test("an upload a message uses moves to the stored files and is read from there,
 	);
 	expect(text).toBe("# hello\nworld");
 });
+
+test("RV-F001: a file part that finished before the body was cut short leaves nothing on disk and counts for nothing", async () => {
+	const { uploads, waiting } = store({ pendingBytes: 2 * MiB });
+	const data = new Uint8Array(MiB / 2).fill(5);
+	data[0] = 0;
+	const whole = await formBytes("cut.bin", data);
+	// Without the closing "--\r\n" the file is complete and the form is not.
+	const cut = {
+		bytes: whole.bytes.slice(0, whole.bytes.byteLength - 4),
+		contentType: whole.contentType,
+	};
+	expect(await refusalOf(uploads.receive(requestOf(cut), "ada"))).toBe(400);
+	expect(filesIn(waiting)).toEqual([]);
+	// And it took none of the person's allowance: three of this size still fit.
+	for (let i = 0; i < 3; i += 1) await upload(uploads, `ok${i}.bin`, data);
+});
+
+test("RV-F003: a waiting upload is discarded by its owner only, and gives its place back", async () => {
+	const { uploads, waiting } = store({ pendingBytes: MiB });
+	const data = new Uint8Array(MiB / 2 + 1).fill(6);
+	data[0] = 0;
+	const view = await upload(uploads, "gone.bin", data);
+	expect(await uploads.discard(view.id, "bea")).toBe(false);
+	expect(filesIn(waiting)).toHaveLength(2);
+	expect(await refusalOf(upload(uploads, "again.bin", data))).toBe(429);
+	expect(await uploads.discard(view.id, "ada")).toBe(true);
+	expect(filesIn(waiting)).toEqual([]);
+	expect(uploads.claim([view.id], "ada")).toBeUndefined();
+	expect(await uploads.discard(view.id, "ada")).toBe(false);
+	await upload(uploads, "again.bin", data);
+});
+
+test("RV-F003: an upload a message already used cannot be discarded", async () => {
+	const { uploads, stored } = store();
+	const view = await upload(uploads, "used.txt", "x");
+	uploads.use([view.id]);
+	expect(await uploads.discard(view.id, "ada")).toBe(false);
+	expect(filesIn(stored)).toHaveLength(2);
+});

@@ -11,6 +11,8 @@ import {
 	planPaste,
 	planSend,
 	textFile,
+	uploadForSend,
+	usedSlots,
 } from "./lib/attach.ts";
 
 const LIMITS = { perMessage: 4, maxBytes: 100 * 1024 * 1024 };
@@ -104,4 +106,95 @@ test("a text file is UTF-8, so the server keeps it as text and its size is the b
 	expect(made.type).toStartWith("text/plain");
 	expect(made.size).toBe(new TextEncoder().encode("你好 hello").length);
 	expect(await made.text()).toBe("你好 hello");
+});
+
+test("RV-F004: only chips that can be sent take a slot, so a failed upload does not block a long message", () => {
+	expect(
+		usedSlots([{ failed: "x" }, {}, { failed: undefined }, { failed: "y" }]),
+	).toBe(2);
+	expect(usedSlots([])).toBe(0);
+	// With three failed chips and one good one, a message over the limit still fits as a file.
+	const used = usedSlots([
+		{ failed: "a" },
+		{ failed: "b" },
+		{ failed: "c" },
+		{},
+	]);
+	expect(planSend("z".repeat(MAX_MESSAGE_CHARS + 1), used, LIMITS).ok).toBe(
+		true,
+	);
+});
+
+const view = (id: string, name: string) => ({
+	id,
+	name,
+	type: "text/plain",
+	size: 1,
+});
+
+test("RV-F003/F004: a send uploads held texts in order, skips failed chips, and puts the overflow last", async () => {
+	const uploaded: string[] = [];
+	const io = {
+		upload: async (file: File) => {
+			uploaded.push(file.name);
+			return view(`id-${uploaded.length}`, file.name);
+		},
+		discard: async () => undefined,
+	};
+	const result = await uploadForSend(
+		[
+			{ name: "a.png", upload: view("have-a", "a.png") },
+			{ name: "pasted-text-1.txt", text: "long" },
+			{ name: "bad.bin", failed: "nope" },
+		],
+		"overflow",
+		io,
+	);
+	expect(result.map((r) => r.id)).toEqual(["have-a", "id-1", "id-2"]);
+	expect(uploaded).toEqual(["pasted-text-1.txt", "message.txt"]);
+});
+
+test("RV-F003: when a send fails midway, the files it made are deleted again and the chips' own uploads are kept", async () => {
+	const discarded: string[] = [];
+	let calls = 0;
+	const io = {
+		upload: async (file: File) => {
+			calls += 1;
+			if (calls === 2) throw new Error("too much is waiting");
+			return view(`made-${calls}`, file.name);
+		},
+		discard: async (id: string) => {
+			discarded.push(id);
+		},
+	};
+	await expect(
+		uploadForSend(
+			[
+				{ name: "keep.png", upload: view("kept", "keep.png") },
+				{ name: "pasted-text-1.txt", text: "one" },
+				{ name: "pasted-text-2.txt", text: "two" },
+			],
+			undefined,
+			io,
+		),
+	).rejects.toThrow("too much is waiting");
+	expect(discarded).toEqual(["made-1"]);
+	// A failing discard does not hide the error that matters.
+	calls = 0;
+	const flaky = {
+		...io,
+		discard: async () => {
+			throw new Error("offline");
+		},
+	};
+	await expect(
+		uploadForSend(
+			[
+				{ name: "pasted-text-1.txt", text: "one" },
+				{ name: "pasted-text-2.txt", text: "two" },
+			],
+			undefined,
+			flaky,
+		),
+	).rejects.toThrow("too much is waiting");
 });

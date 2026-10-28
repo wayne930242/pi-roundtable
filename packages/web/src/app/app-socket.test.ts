@@ -872,6 +872,42 @@ describeDb("the owner app over a real host", () => {
 		tab.close();
 	});
 
+	test("RV-F003: a waiting upload is deleted over REST by its owner, and a message cannot name it afterwards", async () => {
+		const form = new FormData();
+		form.set("file", new File(["scrap"], "scrap.txt", { type: "text/plain" }));
+		const uploaded = await fetch("http://localhost/console/api/uploads", {
+			method: "POST",
+			body: form,
+			headers: { "x-actor": "owner", origin: ORIGIN },
+			unix: app.socket,
+		} as never);
+		const { id } = (await uploaded.json()) as { id: string };
+		// Without the console's Origin, and for a member, nothing is deleted.
+		expect(
+			(await rest(app, `uploads/${id}`, { method: "DELETE", origin: null }))
+				.status,
+		).toBe(403);
+		expect(
+			(await rest(app, `uploads/${id}`, { method: "DELETE", who: "member" }))
+				.status,
+		).toBe(403);
+		expect(
+			(await rest(app, `uploads/${crypto.randomUUID()}`, { method: "DELETE" }))
+				.status,
+		).toBe(404);
+		expect(
+			(await rest(app, `uploads/${id}`, { method: "DELETE" })).status,
+		).toBe(200);
+		expect(
+			(await rest(app, `uploads/${id}`, { method: "DELETE" })).status,
+		).toBe(404);
+		const tab = await Client.open(app, { "x-actor": "owner" });
+		if (!tab) throw new Error("the owner was refused");
+		tab.send({ type: "send", id: "d1", room: SCOUT, text: "x", uploads: [id] });
+		expect((await tab.take(ofType("refused"))).code).toBe("unknown_upload");
+		tab.close();
+	});
+
 	test("a reply's files are kept and served as downloads", async () => {
 		app.scripts.set("make-file", async () => ({
 			ok: true,

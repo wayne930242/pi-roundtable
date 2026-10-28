@@ -170,3 +170,36 @@ test("what is not a form is refused, and a sink that throws aborts its part and 
 		readMultipart(streamOf(huge, 1000), "b", () => undefined),
 	).rejects.toBeInstanceOf(MultipartError);
 });
+
+test("RV-F002: bytes after the closing boundary are drained without being gathered, however many there are", async () => {
+	const { bytes, boundary } = await formOf([
+		["file", new File(["keep"], "k.txt")],
+	]);
+	// 24 MiB of epilogue in 1 KiB pieces: joined one by one it would copy gigabytes.
+	const piece = new Uint8Array(1024).fill(65);
+	let sent = 0;
+	const body = new ReadableStream<Uint8Array>({
+		start(controller) {
+			controller.enqueue(bytes);
+		},
+		pull(controller) {
+			if (sent >= 24 * 1024) controller.close();
+			else {
+				controller.enqueue(piece);
+				sent += 1;
+			}
+		},
+	});
+	const started = performance.now();
+	const seen: string[] = [];
+	await readMultipart(body, boundary, () => ({
+		write: (chunk) => {
+			seen.push(new TextDecoder().decode(chunk));
+		},
+		end: () => undefined,
+		abort: () => undefined,
+	}));
+	expect(seen.join("")).toBe("keep");
+	expect(sent).toBe(24 * 1024);
+	expect(performance.now() - started).toBeLessThan(3000);
+});

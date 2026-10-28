@@ -122,6 +122,11 @@ export const api = {
 		form.set("file", file);
 		return request<UploadView>("uploads", { method: "POST", body: form });
 	},
+	/** Deletes an upload no message has used, so it stops counting against what the person may have waiting. */
+	discardUpload: (id: string) =>
+		request<{ ok: true }>(`uploads/${encodeURIComponent(id)}`, {
+			method: "DELETE",
+		}),
 	schedules: () => request<SchedulesView>("schedules"),
 	cancelSchedule: (id: number) =>
 		request<{ ok: true }>(`schedules/${id}`, { method: "DELETE" }),

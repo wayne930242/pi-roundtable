@@ -401,7 +401,7 @@ function Console({ config }: { config: ConfigView }) {
 							wide && pane === "room" ? "room" : `${pane}/${route.key ?? ""}`
 						}
 					>
-						<ErrorBoundary>
+						<ErrorBoundary resetKey={`${pane}/${route.key ?? ""}`}>
 							<Suspense
 								fallback={
 									<div className="page">

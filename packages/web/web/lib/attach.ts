@@ -1,4 +1,4 @@
-import { MAX_MESSAGE_CHARS } from "../../src/api-types.ts";
+import { MAX_MESSAGE_CHARS, type UploadView } from "../../src/api-types.ts";
 
 // What the composer decides about files and long text, as plain functions so it can be tested
 // without a browser: the composer only carries the decisions out.
@@ -107,4 +107,52 @@ export function fitsBack(box: string, chipText: string): boolean {
 export function joinBack(box: string, chipText: string): string {
 	if (box === "") return chipText;
 	return `${box}${box.endsWith("\n") ? "" : "\n"}${chipText}`;
+}
+
+/** How many of the message's slots the chips take: a failed upload is not sent, so it takes none. */
+export const usedSlots = (
+	chips: readonly { failed?: string | undefined }[],
+): number => chips.filter((chip) => !chip.failed).length;
+
+/** A chip as a send sees it: an upload that is ready, a long text still to upload, or a failure. */
+export interface SendChip {
+	name: string;
+	upload?: UploadView | undefined;
+	text?: string | undefined;
+	failed?: string | undefined;
+}
+
+/**
+ * The uploads a message goes with: the chips' own, long texts uploaded now in order, and the
+ * overflow text last. When one upload fails, the files this call made are deleted again so they
+ * do not sit in the person's waiting allowance, and the failure is thrown; the chips' own
+ * uploads are left for another try.
+ */
+export async function uploadForSend(
+	chips: readonly SendChip[],
+	overflow: string | undefined,
+	io: {
+		upload(file: File): Promise<UploadView>;
+		discard(id: string): Promise<unknown>;
+	},
+): Promise<UploadView[]> {
+	const uploads: UploadView[] = [];
+	const made: string[] = [];
+	const make = async (name: string, text: string) => {
+		const view = await io.upload(textFile(name, text));
+		made.push(view.id);
+		uploads.push(view);
+	};
+	try {
+		for (const chip of chips) {
+			if (chip.failed) continue;
+			if (chip.upload) uploads.push(chip.upload);
+			else if (chip.text !== undefined) await make(chip.name, chip.text);
+		}
+		if (overflow !== undefined) await make(OVERFLOW_FILE_NAME, overflow);
+	} catch (error) {
+		await Promise.all(made.map((id) => io.discard(id).catch(() => undefined)));
+		throw error;
+	}
+	return uploads;
 }

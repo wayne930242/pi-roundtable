@@ -213,6 +213,12 @@ export class AppApi {
 				await this.#options.uploads.receive(request, owner.principalId),
 			);
 		}
+		if (area === "uploads" && method === "DELETE" && id && !action) {
+			const owner = await this.#owner(admission);
+			if (!this.#options.uploads.discard(id, owner.principalId))
+				throw notFound();
+			return json({ ok: true });
+		}
 		if (area === "files" && method === "GET" && id && !action)
 			return this.#file(id);
 		if (area === "schedules") return this.#schedules(method, id, admission);

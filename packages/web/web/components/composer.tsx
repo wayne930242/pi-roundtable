@@ -12,12 +12,13 @@ import {
 	firstLine,
 	fitsBack,
 	joinBack,
-	OVERFLOW_FILE_NAME,
 	pastedTextName,
 	planFiles,
 	planPaste,
 	planSend,
 	textFile,
+	uploadForSend,
+	usedSlots,
 } from "../lib/attach.ts";
 import { size as bytes } from "../lib/format.ts";
 import { composingKey } from "../lib/ime.ts";
@@ -63,6 +64,8 @@ export function Composer(props: {
 		setFilesState(latest.current);
 	};
 	const [sending, setSending] = useState(false);
+	// While a send uploads, the box and the chips stay as they are: what it clears is what it sent.
+	const sendingNow = useRef(false);
 	const area = useRef<HTMLTextAreaElement>(null);
 	const picker = useRef<HTMLInputElement>(null);
 	const counter = useRef(0);
@@ -79,7 +82,8 @@ export function Composer(props: {
 	}, [text]);
 
 	const attach = (list: File[]) => {
-		const plan = planFiles(list, latest.current.length, limits);
+		if (sendingNow.current) return;
+		const plan = planFiles(list, usedSlots(latest.current), limits);
 		for (const file of plan.tooLarge)
 			toast(
 				t("{name} is over the {limit} limit.", {
@@ -119,6 +123,7 @@ export function Composer(props: {
 
 	/** A long text waits as a file chip, to be uploaded with the message. */
 	const attachText = (long: string) => {
+		if (sendingNow.current) return;
 		counter.current += 1;
 		const key = counter.current;
 		setFiles((current) => [
@@ -150,8 +155,8 @@ export function Composer(props: {
 		(text.trim() !== "" || ready.length > 0 || held.length > 0);
 
 	const send = async () => {
-		if (!canSend) return;
-		const plan = planSend(text, files.length, limits);
+		if (!canSend || sendingNow.current) return;
+		const plan = planSend(text, usedSlots(files), limits);
 		if (!plan.ok) {
 			toast(
 				t(
@@ -161,31 +166,34 @@ export function Composer(props: {
 			);
 			return;
 		}
+		sendingNow.current = true;
 		setSending(true);
 		try {
 			// Long texts become files now, in the order they were added, the overflow last.
-			const uploads: UploadView[] = [];
-			for (const one of files) {
-				if (one.upload) uploads.push(one.upload);
-				else if (one.text !== undefined)
-					uploads.push(await api.upload(textFile(one.name, one.text)));
-			}
-			if (plan.overflow !== undefined)
-				uploads.push(
-					await api.upload(textFile(OVERFLOW_FILE_NAME, plan.overflow)),
-				);
+			const uploads = await uploadForSend(files, plan.overflow, {
+				upload: api.upload,
+				discard: api.discardUpload,
+			});
 			props.onSend(
 				plan.overflow !== undefined ? t(plan.text) : plan.text,
 				uploads,
 			);
 			setText("");
 			setFiles(() => []);
-			area.current?.focus();
 		} catch (failure) {
 			toast(messageOf(failure), "danger");
 		} finally {
+			sendingNow.current = false;
 			setSending(false);
+			area.current?.focus();
 		}
+	};
+
+	/** Takes a chip away; a file already on the server is deleted there, so it stops counting against what is waiting. */
+	const removeChip = (one: Attached) => {
+		if (sendingNow.current) return;
+		setFiles((current) => current.filter((x) => x.key !== one.key));
+		if (one.upload) api.discardUpload(one.upload.id).catch(() => undefined);
 	};
 
 	const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -201,6 +209,10 @@ export function Composer(props: {
 	};
 
 	const onPaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
+		if (sendingNow.current) {
+			event.preventDefault();
+			return;
+		}
 		const plan = planPaste(
 			{
 				files: [...event.clipboardData.files],
@@ -235,7 +247,7 @@ export function Composer(props: {
 
 	/** A long text chip goes back into the box, when it fits there. */
 	const takeBack = (one: Attached) => {
-		if (one.text === undefined) return;
+		if (one.text === undefined || sendingNow.current) return;
 		if (!fitsBack(text, one.text)) {
 			toast(t("It is too long to put back into the message box."), "danger");
 			return;
@@ -281,6 +293,7 @@ export function Composer(props: {
 								<button
 									type="button"
 									className="chip-take"
+									disabled={sending}
 									aria-label={t("Put {name} back into the message", {
 										name: one.name,
 									})}
@@ -299,11 +312,8 @@ export function Composer(props: {
 								type="button"
 								className="icon-button"
 								aria-label={t("Remove {name}", { name: one.name })}
-								onClick={() =>
-									setFiles((current) =>
-										current.filter((x) => x.key !== one.key),
-									)
-								}
+								disabled={sending}
+								onClick={() => removeChip(one)}
 							>
 								<Icon name="close" size={14} />
 							</button>
@@ -327,6 +337,7 @@ export function Composer(props: {
 					type="button"
 					className="icon-button composer-attach"
 					aria-label={t("Attach a file")}
+					disabled={sending}
 					onClick={() => picker.current?.click()}
 				>
 					<Icon name="attach" />
@@ -338,6 +349,7 @@ export function Composer(props: {
 					placeholder={t("Message {name}", { name: props.name })}
 					aria-label={t("Message {name}", { name: props.name })}
 					enterKeyHint="send"
+					readOnly={sending}
 					onChange={(event) => setText(event.target.value)}
 					onKeyDown={onKeyDown}
 					onPaste={onPaste}
