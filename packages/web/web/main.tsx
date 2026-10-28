@@ -2,10 +2,15 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./app.tsx";
 import { ErrorBoundary } from "./components/boundary.tsx";
+import { loadKit } from "./lib/kit.ts";
 import { initTheme } from "./lib/theme.ts";
 
 // The stored color scheme goes on before React draws, so the first paint is already the right one.
 initTheme();
+// The character kit is a chunk of its own; it starts loading now, beside the config and the room list.
+loadKit().catch((failure: unknown) =>
+	console.warn("the character kit failed to load", failure),
+);
 // Where view transitions are missing, a page change fades in by a stylesheet animation instead.
 if (typeof document.startViewTransition !== "function")
 	document.documentElement.classList.add("no-vt");

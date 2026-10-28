@@ -1,9 +1,15 @@
 import { memo, type ReactNode, useMemo } from "react";
 import type { RoomView } from "../../src/api-types.ts";
-import { Avatar } from "../components/avatar.tsx";
+import { CharacterStack, PageCharacter } from "../components/character.tsx";
 import { Icon } from "../components/icons.tsx";
 import { Empty } from "../components/states.tsx";
 import { useSelector } from "../lib/app-store.ts";
+import {
+	movesIn,
+	useAccentStyle,
+	useCharacters,
+	useRoomState,
+} from "../lib/characters.ts";
 import { useConfig } from "../lib/config.ts";
 import { ago } from "../lib/format.ts";
 import { useLive } from "../lib/live.ts";
@@ -35,6 +41,40 @@ interface RowData {
 	at: string | undefined;
 }
 
+/** A group's members' characters stacked, standing still. */
+function GroupPicture(props: { members: readonly string[]; size: number }) {
+	const characters = useCharacters();
+	return (
+		<CharacterStack
+			size={props.size}
+			members={props.members.map((name) => ({ name, spec: characters[name] }))}
+		/>
+	);
+}
+
+/** An agent's character, live while it is doing something. */
+function AgentPicture(props: { view: RoomView; size: number }) {
+	const state = useRoomState(props.view.key);
+	return (
+		<PageCharacter
+			spec={props.view.character}
+			name={props.view.name}
+			size={props.size}
+			state={state}
+			live={movesIn(state)}
+		/>
+	);
+}
+
+/** A room's picture: an agent's character, or a group's members. */
+function RoomPicture(props: { view: RoomView; size: number }) {
+	return props.view.kind === "group" ? (
+		<GroupPicture members={props.view.members ?? []} size={props.size} />
+	) : (
+		<AgentPicture view={props.view} size={props.size} />
+	);
+}
+
 const RoomRow = memo(function RoomRow(
 	props: Omit<RowData, "key"> & {
 		active: boolean;
@@ -45,6 +85,7 @@ const RoomRow = memo(function RoomRow(
 	},
 ) {
 	const { view } = props;
+	const accent = useAccentStyle(view.character);
 	return (
 		<li>
 			<a
@@ -52,12 +93,9 @@ const RoomRow = memo(function RoomRow(
 				href={hrefFor("room", view.key)}
 				data-home={view.home || undefined}
 				aria-current={props.active ? "page" : undefined}
+				style={accent}
 			>
-				<Avatar
-					name={view.displayName}
-					src={view.avatar}
-					size={view.home ? 52 : 44}
-				/>
+				<RoomPicture view={view} size={view.home ? 52 : 44} />
 				<span className="room-row-main">
 					<span className="room-row-top">
 						<strong>{view.displayName}</strong>

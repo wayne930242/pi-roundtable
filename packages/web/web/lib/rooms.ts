@@ -1,4 +1,5 @@
 import type {
+	ActivityPhase,
 	PromptFrame,
 	PromptOutcome,
 	RefusalCode,
@@ -70,6 +71,16 @@ export interface RoomState {
 	more: boolean;
 	progress: Progress;
 	typing: boolean;
+	/** While typing: `working` during a tool call, `thinking` otherwise. */
+	phase?: ActivityPhase;
+	/** While typing: the member speaking, in a group round. */
+	agent?: string;
+	/** How the last turn ended, until the next turn starts or the page opens the room. */
+	outcome?: "done" | "failed";
+	/** When the page saw the outcome (its clock, epoch ms). */
+	outcomeAt?: number;
+	/** When the page last saw an activity frame of the room (epoch ms). */
+	activityAt?: number;
 	stoppable: boolean;
 	mode: RoomMode;
 	/** Yolo approvals seen in this room since the page opened. */
@@ -84,6 +95,8 @@ export interface RoomsState {
 	rooms: Record<string, RoomState>;
 	/** The room keys as the server listed them: Home first. */
 	order: string[];
+	/** Which agents work now, anywhere, as the last `presence` frame said. */
+	presence: Record<string, { busy: boolean }>;
 	/** Whether the list was fetched at least once. */
 	listed: boolean;
 	cards: Record<string, CardState>;
@@ -125,7 +138,15 @@ export type LocalAction =
 	| { type: "pending_dropped"; id: string }
 	| { type: "refusal_dismissed" };
 
-export type Action = ServerFrame | LocalAction;
+/** An `activity` frame stamped with the page's clock (epoch ms), which the reducer has none of. */
+export type ActivityFrame = Extract<ServerFrame, { type: "activity" }> & {
+	at?: number;
+};
+
+export type Action =
+	| Exclude<ServerFrame, { type: "activity" }>
+	| ActivityFrame
+	| LocalAction;
 
 const NO_MODE: RoomMode = { yolo: false, longRunning: false };
 const NO_PROGRESS: Progress = { text: "", tools: [] };
@@ -135,6 +156,7 @@ export function initialState(): RoomsState {
 		connection: "connecting",
 		rooms: {},
 		order: [],
+		presence: {},
 		listed: false,
 		cards: {},
 		cardOrder: [],
@@ -331,14 +353,31 @@ function onHistory(
 	});
 }
 
+/** The room with its turn set: the phase and the speaker are kept only while the turn runs. */
+function withTurn(
+	room: RoomState,
+	turn: {
+		typing: boolean;
+		phase?: ActivityPhase | undefined;
+		agent?: string | undefined;
+	},
+): RoomState {
+	const { phase: _phase, agent: _agent, ...rest } = room;
+	return {
+		...rest,
+		typing: turn.typing,
+		...(turn.typing && turn.phase ? { phase: turn.phase } : {}),
+		...(turn.typing && turn.agent ? { agent: turn.agent } : {}),
+	};
+}
+
 function onRooms(state: RoomsState, rooms: readonly RoomView[]): RoomsState {
 	let next: RoomsState = { ...state, listed: true };
 	for (const view of rooms)
 		next = withRoom(next, view.key, (room) => ({
-			...room,
+			...withTurn(room, view),
 			view,
 			mode: view.mode,
-			typing: view.typing,
 			stoppable: view.stoppable,
 		}));
 	return { ...next, order: rooms.map((view) => view.key) };
@@ -417,14 +456,29 @@ export function reduce(state: RoomsState, action: Action): RoomsState {
 		case "progress":
 			return onProgress(state, action);
 		case "activity":
-			return withRoom(state, action.room, (room) => ({
-				...room,
-				typing: action.typing,
-				stoppable: action.stoppable,
-				...(action.typing
-					? {}
-					: { progress: NO_PROGRESS, live: [] as RoomMessage[] }),
-			}));
+			return withRoom(state, action.room, (room) => {
+				const next: RoomState = {
+					...withTurn(room, action),
+					stoppable: action.stoppable,
+					...(action.at === undefined ? {} : { activityAt: action.at }),
+				};
+				if (action.typing) {
+					// A new turn ends the story of the last one.
+					const { outcome: _outcome, outcomeAt: _at, ...running } = next;
+					return running;
+				}
+				return {
+					...next,
+					progress: NO_PROGRESS,
+					live: [],
+					...(action.outcome
+						? {
+								outcome: action.outcome,
+								...(action.at === undefined ? {} : { outcomeAt: action.at }),
+							}
+						: {}),
+				};
+			});
 		case "prompt": {
 			const known = state.cards[action.prompt.id];
 			const after = known
@@ -472,9 +526,8 @@ export function reduce(state: RoomsState, action: Action): RoomsState {
 			}));
 		case "changed":
 			return { ...state, revision: state.revision + 1 };
-		// The page does not show who is busy yet.
 		case "presence":
-			return state;
+			return { ...state, presence: action.agents };
 		case "rooms_loaded":
 			return onRooms(state, action.rooms);
 		case "history_loaded":
@@ -486,11 +539,15 @@ export function reduce(state: RoomsState, action: Action): RoomsState {
 			if (left && left !== action.room && rooms[left])
 				rooms[left] = trimmed(rooms[left] as RoomState);
 			// What the turn streamed before the page looked at the room is not shown.
-			if (action.room && rooms[action.room])
-				rooms[action.room] = {
-					...(rooms[action.room] as RoomState),
-					progress: NO_PROGRESS,
-				};
+			// A failure the person has now seen is over.
+			if (action.room && rooms[action.room]) {
+				const {
+					outcome: _outcome,
+					outcomeAt: _at,
+					...kept
+				} = rooms[action.room] as RoomState;
+				rooms[action.room] = { ...kept, progress: NO_PROGRESS };
+			}
 			return { ...state, focus: action.room, rooms };
 		}
 		case "queued":

@@ -1,3 +1,4 @@
+import type { CharacterSpec } from "pi-roundtable/characters";
 import { memo, useContext, useEffect, useState } from "react";
 import type { RoomFile, RoomMessage } from "../../src/api-types.ts";
 import { store, useSelector } from "../lib/app-store.ts";
@@ -7,7 +8,7 @@ import { translate as t } from "../lib/messages.ts";
 import type { PendingSend } from "../lib/rooms.ts";
 import { fileUrl } from "../lib/rooms.ts";
 import { useConnection } from "../lib/socket.ts";
-import { Avatar } from "./avatar.tsx";
+import { PageCharacter } from "./character.tsx";
 import { Icon } from "./icons.tsx";
 import { hasThreadLink, MessageMarkdown } from "./message-markdown.tsx";
 
@@ -62,7 +63,8 @@ function Files({ files }: { files: readonly RoomFile[] }) {
 /** One stored message of a room. Memoized: it redraws only when the message or its look changes. */
 export const MessageRow = memo(function MessageRow(props: {
 	message: RoomMessage;
-	avatar: string | undefined;
+	/** The author's character, from the room list; none for an agent the list does not have. */
+	character: CharacterSpec | undefined;
 	/** Show the author's name and picture: the author changed, or a pause came. */
 	header: boolean;
 	/** The message arrived while the room was open, so it slides in. */
@@ -97,7 +99,12 @@ export const MessageRow = memo(function MessageRow(props: {
 			{mine ? null : (
 				<span className="message-avatar">
 					{props.header ? (
-						<Avatar name={message.author} src={props.avatar} size={32} />
+						<PageCharacter
+							spec={props.character}
+							name={message.agent ?? message.author}
+							size={32}
+							live={false}
+						/>
 					) : null}
 				</span>
 			)}
@@ -122,13 +129,18 @@ export const MessageRow = memo(function MessageRow(props: {
 /** A message of an agent still being written; the final reply replaces it. */
 export const LiveRow = memo(function LiveRow(props: {
 	message: RoomMessage;
-	avatar: string | undefined;
+	character: CharacterSpec | undefined;
 }) {
 	const { message } = props;
 	return (
 		<li className="message" data-header="true" data-live="true">
 			<span className="message-avatar">
-				<Avatar name={message.author} src={props.avatar} size={32} />
+				<PageCharacter
+					spec={props.character}
+					name={message.agent ?? message.author}
+					size={32}
+					live={false}
+				/>
 			</span>
 			<div className="message-main">
 				<div className="message-meta">

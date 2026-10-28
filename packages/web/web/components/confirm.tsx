@@ -9,6 +9,8 @@ export function Confirm(props: {
 	open: boolean;
 	title: string;
 	confirmLabel: string;
+	/** The button that closes without confirming; "Cancel" unless the question reads better with other words. */
+	cancelLabel?: string;
 	tone?: "danger" | "yolo" | "primary";
 	/** Where focus goes when the sheet is gone, for a caller whose trigger is not in the page any more. */
 	restoreFocus?(): HTMLElement | null;
@@ -40,7 +42,7 @@ export function Confirm(props: {
 						disabled={running}
 						onClick={close}
 					>
-						{t("Cancel")}
+						{props.cancelLabel ?? t("Cancel")}
 					</button>
 					<button
 						type="button"

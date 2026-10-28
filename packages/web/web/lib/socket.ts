@@ -165,7 +165,10 @@ export class AppConnection {
 		}
 		// Anything else keeps its place after the text that came before it.
 		this.#flush();
-		store.dispatch(frame);
+		// The reducer has no clock; an activity frame carries the page's.
+		store.dispatch(
+			frame.type === "activity" ? { ...frame, at: Date.now() } : frame,
+		);
 		if (frame.type === "ready") {
 			this.send({
 				type: "hello",

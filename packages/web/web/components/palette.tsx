@@ -1,10 +1,11 @@
+import type { CharacterSpec } from "pi-roundtable/characters";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSelector } from "../lib/app-store.ts";
 import { fuzzyScore } from "../lib/fuzzy.ts";
 import { composingKey } from "../lib/ime.ts";
 import { translate as t } from "../lib/messages.ts";
 import { hrefFor, navigate } from "../lib/router.ts";
-import { Avatar } from "./avatar.tsx";
+import { PageCharacter } from "./character.tsx";
 import { Icon, type IconName } from "./icons.tsx";
 import { Sheet } from "./sheet.tsx";
 
@@ -12,7 +13,9 @@ interface Target {
 	id: string;
 	label: string;
 	hint: string;
-	avatar?: { name: string; src: string | undefined };
+	avatar?: { name: string; character: CharacterSpec | undefined };
+	/** A room, not a page. */
+	room?: true;
 	icon?: IconName;
 	go(): void;
 }
@@ -34,7 +37,8 @@ export function Palette(props: {
 						{
 							key,
 							name: view.displayName,
-							avatar: view.avatar,
+							agent: view.name,
+							character: view.character,
 							kind: view.kind,
 						},
 					]
@@ -52,7 +56,10 @@ export function Palette(props: {
 						: room.kind === "group"
 							? t("Group")
 							: t("Thread"),
-				avatar: { name: room.name, src: room.avatar },
+				room: true as const,
+				...(room.kind === "agent"
+					? { avatar: { name: room.agent, character: room.character } }
+					: { icon: "conversations" as const }),
 				go: () => navigate("room", room.key),
 			})),
 			...props.pages.map((page) => ({
@@ -135,9 +142,7 @@ export function Palette(props: {
 						<li key={target.id} data-active={index === active || undefined}>
 							<a
 								href={
-									target.avatar
-										? hrefFor("room", target.id)
-										: hrefFor(target.id)
+									target.room ? hrefFor("room", target.id) : hrefFor(target.id)
 								}
 								onClick={(event) => {
 									event.preventDefault();
@@ -147,10 +152,11 @@ export function Palette(props: {
 								aria-current={index === active ? "true" : undefined}
 							>
 								{target.avatar ? (
-									<Avatar
+									<PageCharacter
+										spec={target.avatar.character}
 										name={target.avatar.name}
-										src={target.avatar.src}
 										size={28}
+										live={false}
 									/>
 								) : (
 									<span className="palette-icon">

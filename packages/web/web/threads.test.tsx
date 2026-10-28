@@ -59,7 +59,7 @@ const row = (message: RoomMessage) =>
 		>
 			<MessageRow
 				message={message}
-				avatar={undefined}
+				character={undefined}
 				header
 				enter={false}
 				timeZone="UTC"

@@ -26,6 +26,43 @@ test("the page builds with relative URLs only, and every file it names is in the
 	expect(script?.[1].type).toContain("javascript");
 });
 
+/**
+ * What the page loads before it draws, gzipped, at master b54b4ed before the characters: the entry
+ * script (145,612 bytes) and the stylesheet (8,707 bytes).
+ */
+const FIRST_LOAD_BASELINE = 145_612 + 8_707;
+const CHARACTER_BUDGET = 15 * 1024;
+
+test("the characters add at most 15 KB gzipped to what the page loads first, and the kit stays out of it", async () => {
+	const dir = mkdtempSync(join(tmpdir(), "web-console-budget-"));
+	await buildPage(dir);
+	const assets = loadAssets(dir);
+	const html = new TextDecoder().decode(assets.get("index.html")?.body);
+	const first = [
+		...html.matchAll(/(?:src|href)="\.\/([^"]+\.(?:js|css))"/g),
+	].map((match) => match[1] ?? "");
+	expect(first.length).toBeGreaterThanOrEqual(2);
+	const gzipped = (name: string) =>
+		gzipSync(assets.get(name)?.body ?? new Uint8Array()).length;
+	const total = first.reduce((sum, name) => sum + gzipped(name), 0);
+	expect(total - FIRST_LOAD_BASELINE).toBeLessThanOrEqual(CHARACTER_BUDGET);
+	// The state motion of the characters is in the stylesheet; the composer is a chunk of its own.
+	const style = new TextDecoder().decode(
+		assets.get(first.find((name) => name.endsWith(".css")) ?? "")?.body,
+	);
+	expect(style).toContain("av-breathe");
+	const entry = new TextDecoder().decode(
+		assets.get(first.find((name) => name.endsWith(".js")) ?? "")?.body,
+	);
+	expect(entry).not.toContain("data-part");
+	const kitChunk = [...assets.entries()].find(
+		([name, asset]) =>
+			name.endsWith(".js") &&
+			new TextDecoder().decode(asset.body).includes("data-part"),
+	);
+	expect(kitChunk).toBeDefined();
+});
+
 test("a directory with no page is refused with the fix", () => {
 	expect(() => loadAssets(join(tmpdir(), "no-such-page-dir"))).toThrow(
 		"bun run build",

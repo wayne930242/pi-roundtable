@@ -1,7 +1,10 @@
+import type { CharacterInput } from "pi-roundtable/characters";
 import type {
 	AgentPatch,
 	AgentProfileView,
 	ApiError,
+	CharacterRefusal,
+	CharacterRequest,
 	ConfigView,
 	ConnectorsView,
 	ConversationsView,
@@ -23,10 +26,22 @@ import type {
 	UploadView,
 } from "../../src/api-types.ts";
 
+import { receivedCharacter } from "./character-spec.ts";
+import { loadKit } from "./kit.ts";
 import { translate as t } from "./messages.ts";
 
 // The page is served at `<mount>/`, so these relative URLs reach `<mount>/api/`.
 const API = "api/";
+
+/** An error the API answered, with the field it names when the refusal is about one. */
+export class ApiFailure extends Error {
+	readonly field: string | undefined;
+	constructor(message: string, field?: string) {
+		super(message);
+		this.name = "ApiFailure";
+		this.field = field;
+	}
+}
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 	let response: Response;
@@ -53,9 +68,10 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 		);
 	const body: unknown = await response.json().catch(() => undefined);
 	if (!response.ok)
-		throw new Error(
+		throw new ApiFailure(
 			(body as ApiError | undefined)?.error ??
 				t("The console answered {status}.", { status: response.status }),
+			(body as Partial<CharacterRefusal> | undefined)?.field,
 		);
 	return body as T;
 }
@@ -102,7 +118,26 @@ export const api = {
 		}),
 	// The owner app
 	session: () => request<SessionView>("session"),
-	rooms: () => request<RoomsView>("rooms"),
+	rooms: async () => {
+		const [view, kit] = await Promise.all([
+			request<RoomsView>("rooms"),
+			loadKit(),
+		]);
+		return {
+			...view,
+			rooms: view.rooms.map((room) =>
+				room.character === undefined
+					? room
+					: {
+							...room,
+							character: receivedCharacter(kit, room.character, {
+								name: room.name,
+								displayName: room.displayName,
+							}),
+						},
+			),
+		};
+	},
 	messages: (room: string, before?: number, limit = 50) =>
 		request<MessagesView>(
 			`rooms/${encodeURIComponent(room)}/messages?limit=${limit}${
@@ -153,13 +188,40 @@ export const api = {
 		request<{ ok: true }>(`schedules/${id}`, { method: "DELETE" }),
 	models: () => request<ModelsView>("models"),
 	agent: (name: string) =>
-		request<AgentProfileView>(`agents/${encodeURIComponent(name)}`),
+		profile(request<AgentProfileView>(`agents/${encodeURIComponent(name)}`)),
 	updateAgent: (name: string, patch: AgentPatch) =>
-		request<AgentProfileView>(`agents/${encodeURIComponent(name)}`, {
-			method: "PATCH",
-			body: JSON.stringify(patch),
-		}),
+		profile(
+			request<AgentProfileView>(`agents/${encodeURIComponent(name)}`, {
+				method: "PATCH",
+				body: JSON.stringify(patch),
+			}),
+		),
+	/** Dresses the agent; the answer is its profile with the saved character. */
+	setCharacter: (name: string, character: CharacterInput) =>
+		profile(
+			request<AgentProfileView>(
+				`agents/${encodeURIComponent(name)}/character`,
+				{
+					method: "PUT",
+					body: JSON.stringify({ character } satisfies CharacterRequest),
+				},
+			),
+		),
 };
+
+/** A profile whose character has been checked. */
+async function profile(
+	answer: Promise<AgentProfileView>,
+): Promise<AgentProfileView> {
+	const [loaded, kit] = await Promise.all([answer, loadKit()]);
+	return {
+		...loaded,
+		character: receivedCharacter(kit, loaded.character, {
+			name: loaded.name,
+			displayName: loaded.displayName,
+		}),
+	};
+}
 
 /** The query naming whose notes a request is about, with any other parameters; none for the visitor's own. */
 function whose(

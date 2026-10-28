@@ -3,6 +3,8 @@ import type { PushDeviceView, SessionView } from "../../src/api-types.ts";
 import { Icon, type IconName } from "../components/icons.tsx";
 import { api, messageOf } from "../lib/api.ts";
 import { useSelector } from "../lib/app-store.ts";
+import { useConfig } from "../lib/config.ts";
+import { type PageLook, setLook, useLook } from "../lib/look.ts";
 import { translate as t } from "../lib/messages.ts";
 import {
 	disablePush,
@@ -35,6 +37,11 @@ const THEMES: { value: ThemePreference; label: string; icon: IconName }[] = [
 	{ value: "system", label: "System", icon: "system" },
 	{ value: "light", label: "Light", icon: "sun" },
 	{ value: "dark", label: "Dark", icon: "moon" },
+];
+
+const LOOKS: { value: PageLook; label: string }[] = [
+	{ value: "modern", label: "Modern" },
+	{ value: "camelot", label: "Camelot" },
 ];
 
 /** Push on this device, and the devices that get it. */
@@ -132,6 +139,8 @@ function Notifications({ enabled }: { enabled: boolean }) {
 /** How the page looks, how to put it on a home screen, which devices get push, and who is signed in. */
 export function SettingsPage() {
 	const { preference } = useTheme();
+	const look = useLook();
+	const hostLook = useConfig().look ?? "modern";
 	const principal = useSelector((state) => state.principal);
 	const [session, setSession] = useState<SessionView>();
 	const [canInstall, setCanInstall] = useState(deferred !== undefined);
@@ -168,6 +177,23 @@ export function SettingsPage() {
 							/>
 							<Icon name={theme.icon} size={18} />
 							{t(theme.label)}
+						</label>
+					))}
+				</fieldset>
+				<fieldset className="segmented segmented-wide">
+					<legend className="visually-hidden">{t("Look")}</legend>
+					{LOOKS.map((option) => (
+						<label key={option.value} data-checked={look === option.value}>
+							<input
+								type="radio"
+								name="look"
+								checked={look === option.value}
+								// Choosing the look the host sets goes back to following the host.
+								onChange={() =>
+									setLook(option.value === hostLook ? undefined : option.value)
+								}
+							/>
+							{t(option.label)}
 						</label>
 					))}
 				</fieldset>

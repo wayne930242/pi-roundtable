@@ -45,13 +45,17 @@
 }
 
 .room-row:hover {
-	border-color: var(--accent);
+	border-color: var(--agent-accent, var(--accent));
 	box-shadow: var(--shadow-2);
 }
 
 .room-row[aria-current="page"] {
-	border-color: var(--accent);
-	background: var(--accent-soft);
+	border-color: var(--agent-accent, var(--accent));
+	background: color-mix(
+		in srgb,
+		var(--agent-accent, var(--accent)) 14%,
+		var(--surface)
+	);
 }
 
 .room-row:active {
@@ -60,7 +64,11 @@
 
 .room-row[data-home] {
 	padding: var(--space-4);
-	background: color-mix(in srgb, var(--accent-soft) 55%, var(--surface));
+	background: color-mix(
+		in srgb,
+		var(--agent-accent, var(--accent)) 9%,
+		var(--surface)
+	);
 }
 
 .room-row-main {
@@ -659,7 +667,7 @@
 	inset: 0;
 	width: 60%;
 	border-radius: inherit;
-	background: var(--accent);
+	background: var(--agent-accent, var(--accent));
 	animation: sweep 1.3s var(--ease-in-out) infinite;
 }
 
@@ -886,8 +894,9 @@
 }
 
 .composer-row:focus-within {
-	border-color: var(--accent);
-	box-shadow: 0 0 0 3px var(--accent-soft);
+	border-color: var(--agent-accent, var(--accent));
+	box-shadow: 0 0 0 3px
+		color-mix(in srgb, var(--agent-accent, var(--accent)) 24%, transparent);
 }
 
 .composer textarea {
@@ -1427,4 +1436,193 @@ dialog.palette .sheet-body {
 
 .split-detail .room {
 	min-width: 0;
+}
+
+/* ── The character creator on an agent's profile ─────────────────────────────────────────────── */
+
+.creator {
+	display: grid;
+	gap: var(--space-5);
+	align-items: start;
+}
+
+@media (min-width: 720px) {
+	.creator {
+		grid-template-columns: 13rem minmax(0, 1fr);
+	}
+
+	.creator-preview {
+		position: sticky;
+		top: var(--space-4);
+	}
+}
+
+.creator-preview {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: var(--space-3);
+	padding: var(--space-4);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-lg);
+	background: color-mix(
+		in srgb,
+		var(--agent-accent, var(--accent)) 8%,
+		var(--surface)
+	);
+}
+
+.creator-body {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-4);
+	min-width: 0;
+}
+
+.creator-field {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-2);
+	min-width: 0;
+}
+
+.creator-field h3 {
+	font-size: var(--text-sm);
+	color: var(--muted);
+	font-weight: var(--weight-medium);
+}
+
+/* In the phone's sheet the sheet's own title says what the group is. */
+.sheet .creator-field > h3 {
+	display: none;
+}
+
+.creator-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(4.5rem, 1fr));
+	gap: var(--space-2);
+}
+
+.creator-strip {
+	display: flex;
+	gap: var(--space-2);
+	/* Room for the chosen tile's ring, which the scrolling strip would otherwise clip. */
+	padding: 3px 3px var(--space-1);
+	overflow-x: auto;
+	scroll-snap-type: x proximity;
+}
+
+.creator-tile {
+	display: flex;
+	flex: none;
+	flex-direction: column;
+	align-items: center;
+	gap: 2px;
+	min-width: 4.25rem;
+	padding: var(--space-2) var(--space-1);
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+	background: var(--surface);
+	color: var(--text);
+	font-size: var(--text-xs);
+	scroll-snap-align: start;
+}
+
+.creator-grid .creator-tile {
+	min-width: 0;
+}
+
+.creator-tile span {
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.creator-tile:hover {
+	border-color: var(--control-border);
+}
+
+.creator-tile[aria-pressed="true"],
+.creator-swatch[aria-pressed="true"] {
+	border-color: var(--agent-accent, var(--accent));
+	background: color-mix(
+		in srgb,
+		var(--agent-accent, var(--accent)) 14%,
+		var(--surface)
+	);
+	box-shadow: 0 0 0 2px var(--agent-accent, var(--accent));
+}
+
+.creator-swatches {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--space-2);
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+
+.creator-swatch {
+	width: 2.25rem;
+	height: 2.25rem;
+	min-height: 0;
+	padding: 0;
+	border: 2px solid var(--surface);
+	border-radius: var(--radius-full);
+	box-shadow: 0 0 0 1px var(--control-border);
+}
+
+.creator-custom {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-4);
+}
+
+.creator-custom label {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: var(--space-1);
+	font-size: var(--text-sm);
+	color: var(--muted);
+}
+
+.creator-custom input[type="color"],
+.creator-swatches input[type="color"] {
+	width: 2.25rem;
+	height: 2.25rem;
+	padding: 0;
+	border: 1px solid var(--control-border);
+	border-radius: var(--radius-sm);
+	background: transparent;
+}
+
+.field-error {
+	margin: 0;
+	color: var(--danger);
+	font-size: var(--text-sm);
+}
+
+.creator-sections {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-2);
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.creator-section {
+	display: flex;
+	width: 100%;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-3);
+	text-align: left;
+}
+
+.creator-actions {
+	flex-wrap: wrap;
 }

@@ -18,6 +18,7 @@ import { api, messageOf } from "./lib/api.ts";
 import { store, useSelector } from "./lib/app-store.ts";
 import { ConfigContext } from "./lib/config.ts";
 import { LiveContext, useLiveSource } from "./lib/live.ts";
+import { initLook } from "./lib/look.ts";
 import { useMedia } from "./lib/media.ts";
 import { setPresentation, translate as t } from "./lib/messages.ts";
 import { hrefFor, setRouting, useRoute } from "./lib/router.ts";
@@ -71,6 +72,7 @@ export function App() {
 			.config()
 			.then((loaded) => {
 				setPresentation(loaded);
+				initLook(loaded.look);
 				setRouting(loaded.mountPath, loaded.panes[0]);
 				document.documentElement.lang = loaded.locale ?? "en";
 				setConfig(loaded);

@@ -7,8 +7,8 @@ import {
 	useState,
 } from "react";
 import type { RoomMessage } from "../../src/api-types.ts";
-import { Avatar } from "../components/avatar.tsx";
 import { PromptCard } from "../components/cards.tsx";
+import { CharacterStack, PageCharacter } from "../components/character.tsx";
 import { Composer } from "../components/composer.tsx";
 import { Confirm } from "../components/confirm.tsx";
 import { Icon } from "../components/icons.tsx";
@@ -19,6 +19,11 @@ import { RoomMenu } from "../components/room-menu.tsx";
 import { Empty, Failure } from "../components/states.tsx";
 import { api, messageOf } from "../lib/api.ts";
 import { store, useSelector } from "../lib/app-store.ts";
+import {
+	useAccentStyle,
+	useCharacters,
+	useRoomState,
+} from "../lib/characters.ts";
 import { useConfig } from "../lib/config.ts";
 import { dayKey, dayLabel } from "../lib/format.ts";
 import { useLive } from "../lib/live.ts";
@@ -32,19 +37,6 @@ import { toast } from "../lib/toast.ts";
 /** A pause this long between two messages of one author shows the author again. */
 const PAUSE_MS = 5 * 60_000;
 const PAGE = ROOM_PAGE;
-
-/** The picture of each agent, by name, from the room list. */
-function useAvatars(): Record<string, string> {
-	return useSelector((state) =>
-		Object.fromEntries(
-			Object.values(state.rooms).flatMap((room) =>
-				room.view?.kind === "agent" && room.view.avatar
-					? [[room.view.name, room.view.avatar]]
-					: [],
-			),
-		),
-	);
-}
 
 /**
  * Keeps the end of the list in view while the person is at the end, and says when more arrived
@@ -105,8 +97,13 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 		cards: state.cards,
 		cardOrder: state.cardOrder,
 	}));
-	const avatars = useAvatars();
+	const characters = useCharacters();
+	const state = useRoomState(roomKey);
 	const view = room?.view;
+	// A dispatch thread has no character of its own; it wears its parent room's.
+	const parentView = view?.parent ? parts.rooms[view.parent]?.view : undefined;
+	const character = view?.character ?? parentView?.character;
+	const accent = useAccentStyle(character);
 	const [error, setError] = useState<string>();
 	const [loaded, setLoaded] = useState(false);
 	const [loadingOlder, setLoadingOlder] = useState(false);
@@ -255,6 +252,7 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 		// biome-ignore lint/a11y/noStaticElementInteractions: dropping files on the room attaches them; the paperclip is the keyboard path
 		<section
 			className="room"
+			style={accent}
 			onDragOver={(event) => {
 				if (event.dataTransfer.types.includes("Files")) event.preventDefault();
 			}}
@@ -272,7 +270,23 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 				>
 					<Icon name="back" />
 				</a>
-				<Avatar name={name} src={view?.avatar} size={36} />
+				{view?.kind === "group" ? (
+					<CharacterStack
+						size={36}
+						members={(view.members ?? []).map((member) => ({
+							name: member,
+							spec: characters[member],
+						}))}
+					/>
+				) : (
+					<PageCharacter
+						spec={character}
+						name={parentView?.name ?? view?.name ?? name}
+						size={44}
+						state={state}
+						label={name}
+					/>
+				)}
 				<div className="room-title">
 					<h1>{name}</h1>
 					<span
@@ -348,9 +362,9 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 										<RowFragment key={`m${row.item.message.id}`} day={row.day}>
 											<MessageRow
 												message={row.item.message}
-												avatar={
+												character={
 													row.item.message.agent
-														? avatars[row.item.message.agent]
+														? characters[row.item.message.agent]
 														: undefined
 												}
 												header={row.header}
@@ -380,9 +394,9 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 										<LiveRow
 											key={`l${row.item.message.live}`}
 											message={row.item.message}
-											avatar={
+											character={
 												row.item.message.agent
-													? avatars[row.item.message.agent]
+													? characters[row.item.message.agent]
 													: undefined
 											}
 										/>

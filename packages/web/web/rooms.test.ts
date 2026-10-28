@@ -587,3 +587,137 @@ describe("how much of a room is kept", () => {
 		expect(state.rooms[SCOUT]?.messages).toHaveLength(122);
 	});
 });
+
+describe("presence", () => {
+	test("activity keeps the phase, the speaker and the outcome per room", () => {
+		let state = run([
+			READY,
+			{ type: "rooms_loaded", rooms: [view(GUIDE), view(SCOUT)] },
+			{
+				type: "activity",
+				room: GUIDE,
+				typing: true,
+				stoppable: true,
+				phase: "working",
+				agent: "scout",
+			},
+		]);
+		expect(state.rooms[GUIDE]?.phase).toBe("working");
+		expect(state.rooms[GUIDE]?.agent).toBe("scout");
+		expect(state.rooms[SCOUT]?.phase).toBeUndefined();
+		state = reduce(state, {
+			type: "activity",
+			room: GUIDE,
+			typing: true,
+			stoppable: true,
+			phase: "thinking",
+			agent: "scout",
+		});
+		expect(state.rooms[GUIDE]?.phase).toBe("thinking");
+		state = reduce(state, {
+			type: "activity",
+			room: GUIDE,
+			typing: false,
+			stoppable: false,
+			outcome: "done",
+			at: 1000,
+		});
+		const room = state.rooms[GUIDE];
+		expect(room?.typing).toBe(false);
+		expect(room?.phase).toBeUndefined();
+		expect(room?.agent).toBeUndefined();
+		expect(room?.outcome).toBe("done");
+		expect(room?.outcomeAt).toBe(1000);
+		expect(room?.activityAt).toBe(1000);
+		// The other room has none of it.
+		expect(state.rooms[SCOUT]?.outcome).toBeUndefined();
+	});
+
+	test("a new turn clears the old outcome, and a failure stays until then", () => {
+		let state = run([
+			READY,
+			{
+				type: "activity",
+				room: GUIDE,
+				typing: false,
+				stoppable: false,
+				outcome: "failed",
+				at: 5,
+			},
+		]);
+		expect(state.rooms[GUIDE]?.outcome).toBe("failed");
+		// An activity frame that is not an ending leaves it.
+		state = reduce(state, {
+			type: "activity",
+			room: GUIDE,
+			typing: false,
+			stoppable: false,
+		});
+		expect(state.rooms[GUIDE]?.outcome).toBe("failed");
+		state = reduce(state, {
+			type: "activity",
+			room: GUIDE,
+			typing: true,
+			stoppable: true,
+			phase: "thinking",
+		});
+		expect(state.rooms[GUIDE]?.outcome).toBeUndefined();
+		expect(state.rooms[GUIDE]?.outcomeAt).toBeUndefined();
+	});
+
+	test("opening a room dismisses its failure", () => {
+		const state = run([
+			READY,
+			{
+				type: "activity",
+				room: GUIDE,
+				typing: false,
+				stoppable: false,
+				outcome: "failed",
+				at: 5,
+			},
+			{ type: "focused", room: GUIDE },
+		]);
+		expect(state.rooms[GUIDE]?.outcome).toBeUndefined();
+	});
+
+	test("the room list brings the phase and the speaker of a turn already running", () => {
+		const state = run([
+			READY,
+			{
+				type: "rooms_loaded",
+				rooms: [
+					view(GUIDE, { typing: true, phase: "working", agent: "scout" }),
+				],
+			},
+		]);
+		expect(state.rooms[GUIDE]?.phase).toBe("working");
+		expect(state.rooms[GUIDE]?.agent).toBe("scout");
+	});
+
+	test("a presence frame replaces who is busy, per agent", () => {
+		let state = run([
+			READY,
+			{
+				type: "presence",
+				agents: { guide: { busy: true }, scout: { busy: false } },
+			},
+		]);
+		expect(state.presence.guide?.busy).toBe(true);
+		expect(state.presence.scout?.busy).toBe(false);
+		state = reduce(state, {
+			type: "presence",
+			agents: { scout: { busy: true } },
+		});
+		expect(state.presence).toEqual({ scout: { busy: true } });
+	});
+
+	test("rooms keep the character the list gave them", () => {
+		const character = { v: 1 } as unknown as NonNullable<RoomView["character"]>;
+		const state = run([
+			READY,
+			{ type: "rooms_loaded", rooms: [view(GUIDE, { character })] },
+		]);
+		expect(state.rooms[GUIDE]?.view?.character).toBe(character);
+	});
+});

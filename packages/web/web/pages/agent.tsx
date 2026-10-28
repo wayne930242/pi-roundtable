@@ -1,12 +1,20 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import type { AgentPatch, AgentProfileView } from "../../src/api-types.ts";
-import { Avatar } from "../components/avatar.tsx";
+import { PageCharacter } from "../components/character.tsx";
 import { Icon } from "../components/icons.tsx";
 import { Failure, Loading } from "../components/states.tsx";
 import { api, messageOf } from "../lib/api.ts";
+import { useRoomState } from "../lib/characters.ts";
 import { translate as t } from "../lib/messages.ts";
 import { hrefFor } from "../lib/router.ts";
 import { toast } from "../lib/toast.ts";
+
+// The creator is a page's worth of picking; it loads when the profile opens.
+const CharacterCreator = lazy(() =>
+	import("../components/character-creator.tsx").then((m) => ({
+		default: m.CharacterCreator,
+	})),
+);
 
 /** What a thinking setting may be. `default` follows the assistant's, which is automatic. */
 const THINKING = [
@@ -32,6 +40,8 @@ export function AgentPage({ name }: { name: string }) {
 		thinking: string;
 	}>();
 	const [saving, setSaving] = useState(false);
+	// The profile's own picture shows what its room shows.
+	const state = useRoomState(profile?.room ?? "");
 
 	useEffect(() => {
 		let current = true;
@@ -114,7 +124,13 @@ export function AgentPage({ name }: { name: string }) {
 				<strong>{t("Profile")}</strong>
 			</header>
 			<header className="profile-head">
-				<Avatar name={profile.displayName} src={profile.avatar} size={72} />
+				<PageCharacter
+					spec={profile.character}
+					name={profile.name}
+					size={72}
+					state={state}
+					label={profile.displayName}
+				/>
 				<div>
 					<h1>{profile.displayName}</h1>
 					<p className="meta">
@@ -125,6 +141,23 @@ export function AgentPage({ name }: { name: string }) {
 					</p>
 				</div>
 			</header>
+			<section className="card stack">
+				<h2>{t("Look")}</h2>
+				<p className="meta">
+					{t(
+						"Class, colors and parts. The picture here, in the rooms and in Discord all follow it.",
+					)}
+				</p>
+				<Suspense fallback={<Loading />}>
+					<CharacterCreator
+						name={profile.name}
+						displayName={profile.displayName}
+						prompt={profile.prompt}
+						character={profile.character}
+						onSaved={(saved) => setProfile(saved)}
+					/>
+				</Suspense>
+			</section>
 			<form
 				className="stack form"
 				onSubmit={(event) => {
