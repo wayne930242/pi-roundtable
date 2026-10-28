@@ -6,9 +6,9 @@ import { fileURLToPath } from "node:url";
 const root = fileURLToPath(new URL("..", import.meta.url));
 const HASHED = /-[a-z0-9]{6,}\.[a-z0-9]+$/;
 // The round table's WebGL scene (three, about 150 KB gzip) is fetched when a table first opens and
-// cached by the worker then, so a fresh install does not download it. The standalone `entry-*` files
-// exist only until a page imports `table/entry.ts`; nothing loads them.
-const NOT_PRECACHED = /^(chunk-table3d-|entry-|chunk-entry-)/;
+// cached by the worker then, so a fresh install does not download it. The 2D table and the module
+// that picks between the two are small and are precached.
+const NOT_PRECACHED = /^chunk-table3d-/;
 
 /**
  * Builds `web/index.html` and everything it imports into `outdir`, which it empties first, then
@@ -38,16 +38,8 @@ export async function buildPage(outdir: string): Promise<string[]> {
 		// The page keeps its own file names; only `index.html` must stay unhashed.
 		naming: { chunk: common.naming.chunk },
 	});
-	// No page imports the round table yet, so it builds on its own to ship its two chunks.
-	const table = await Bun.build({
-		...common,
-		entrypoints: [`${root}web/table/entry.ts`],
-	});
-	const result = {
-		success: page.success && table.success,
-		logs: [...page.logs, ...table.logs],
-		outputs: [...page.outputs, ...table.outputs],
-	};
+	// The table's pages import `table/entry.ts` lazily, which splits out its two scenes as chunks.
+	const result = page;
 	if (!result.success)
 		throw new Error(
 			`the console page did not build: ${result.logs.map((log) => log.message).join("; ")}`,

@@ -10,6 +10,7 @@ import type {
 } from "./api-types.ts";
 import { ConsoleApi } from "./console-api.ts";
 import type { ConsoleFeatures } from "./features.ts";
+import { resolveOptions } from "./options.ts";
 import {
 	AGENT_CHANNEL,
 	fakeMemory,
@@ -339,5 +340,30 @@ describe("host feature ports", () => {
 			OWNER,
 		);
 		expect(response.status).toBe(404);
+	});
+});
+
+describe("default panes", () => {
+	const options = {
+		auth: { mode: "none" as const },
+		origin: "http://localhost:4180",
+		ownerId: "owner",
+		dataDir: "/tmp/console-data",
+		assetDir: "/tmp/console-assets",
+	};
+
+	test("include the round table, right after the rooms it needs", () => {
+		const { panes } = resolveOptions(options as never);
+		expect(panes).toContain("table");
+		expect(panes.indexOf("table")).toBe(panes.indexOf("rooms") + 1);
+	});
+
+	test("the table pane without the rooms pane is refused", () => {
+		expect(() =>
+			resolveOptions({ ...options, panes: ["overview", "table"] } as never),
+		).toThrow("the table pane needs the rooms pane");
+		expect(
+			resolveOptions({ ...options, panes: ["rooms", "table"] } as never).panes,
+		).toEqual(["rooms", "table"]);
 	});
 });

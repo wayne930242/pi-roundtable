@@ -5,6 +5,7 @@
 //                                 makes `fixture_<time>` there and drops it when it stops
 //   PORT                          the app (default 4180); PORT + 1 is the control port below
 //   LOOK                          the host's look, `modern` (default) or `camelot`
+//   FIXTURE_AGENTS                how many agents sit at the round table, 3 to 12 (default 3)
 //
 // The agents are scripts: start a message with a keyword and the agent acts it out.
 //   approve  a held action with details          timeout  a turn's time-limit card
@@ -41,6 +42,22 @@ type TurnRequest = Parameters<
 >[0];
 
 const origin = `http://127.0.0.1:${port}`;
+const seats = Math.min(
+	12,
+	Math.max(3, Number(process.env.FIXTURE_AGENTS ?? 3)),
+);
+// The first three are the scripted agents; the rest only sit, so the table can be seen full.
+const EXTRA = [
+	["mason", "Mason", "A patient stonemason"],
+	["cook", "Cook", "A cheerful cook"],
+	["nurse", "Nurse", "A calm nurse"],
+	["pilot", "Pilot", "A steady pilot"],
+	["smith", "Smith", "A strong smith"],
+	["baker", "Baker", "A warm baker"],
+	["clerk", "Clerk", "A careful clerk"],
+	["diver", "Diver", "A brave diver"],
+	["actor", "Actor", "A dramatic actor"],
+].slice(0, seats - 3);
 const dataDir = mkdtempSync(join(tmpdir(), "fixture-app-"));
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -288,13 +305,21 @@ const scripts: Record<string, Script> = {
 
 const runtime = {
 	runTurn: async (request: TurnRequest) => {
-		const text = request.text.toLowerCase();
-		const key = Object.keys(scripts).find((marker) =>
-			text.trim().startsWith(marker),
+		const text = request.text.toLowerCase().trim();
+		// A group round hands each member the chat as `[Name] message` lines; the keyword is the newest line's.
+		const said =
+			[...text.matchAll(/^\[[^\]\n]+\] (.*)$/gm)].at(-1)?.[1] ?? text;
+		const key = Object.keys(scripts).find(
+			(marker) => text.startsWith(marker) || said.startsWith(marker),
 		);
 		const script = key ? scripts[key] : undefined;
 		if (script) return script(request, new AbortController().signal);
-		await sleep(400);
+		// A member of a group round shows an interim line, which names it the speaker, and takes its
+		// time, so the round table can be seen with the speaker lit.
+		if (request.agent?.group && request.interim) {
+			await request.interim.post("Looking into it…");
+			await sleep(7000);
+		} else await sleep(400);
 		return { ok: true as const, text: SAMPLE };
 	},
 	steer: async () => false,
@@ -331,6 +356,12 @@ host = await testHost({
 				prompt: "You keep the notes.",
 				avatarPrompt: "A quiet archivist",
 			},
+			...EXTRA.map(([name, displayName, avatarPrompt]) => ({
+				name,
+				displayName,
+				prompt: `You are the ${name}.`,
+				avatarPrompt,
+			})),
 		],
 	} as never,
 	plugins: [
@@ -340,7 +371,7 @@ host = await testHost({
 			dataDir,
 			title: "Roundtable",
 			cardGraceSeconds: 5,
-			panes: ["rooms", "overview", "schedules", "conversations"],
+			panes: ["rooms", "table", "overview", "schedules", "conversations"],
 			...(process.env.LOOK === "camelot"
 				? { appearance: { look: "camelot" as const } }
 				: {}),

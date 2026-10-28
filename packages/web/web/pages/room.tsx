@@ -11,6 +11,7 @@ import { PromptCard } from "../components/cards.tsx";
 import { CharacterStack, PageCharacter } from "../components/character.tsx";
 import { Composer } from "../components/composer.tsx";
 import { Confirm } from "../components/confirm.tsx";
+import { GroupTable } from "../components/group-table.tsx";
 import { Icon } from "../components/icons.tsx";
 import { LiveRow, MessageRow, PendingRow } from "../components/message-row.tsx";
 import { ModeBanner } from "../components/mode-banner.tsx";
@@ -108,6 +109,8 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 	const [loaded, setLoaded] = useState(false);
 	const [loadingOlder, setLoadingOlder] = useState(false);
 	const [menu, setMenu] = useState(false);
+	/** Under the header: where a group's table strip and panel go. */
+	const [tableSlot, setTableSlot] = useState<HTMLDivElement | null>(null);
 	const [confirm, setConfirm] = useState<"yolo" | "start-over">();
 	const [dropped, setDropped] = useState<File[]>();
 	const menuButton = useRef<HTMLButtonElement>(null);
@@ -310,6 +313,9 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 											: t("Idle")}
 					</span>
 				</div>
+				{view?.kind === "group" ? (
+					<GroupTable roomKey={roomKey} slot={tableSlot} />
+				) : null}
 				<button
 					ref={menuButton}
 					type="button"
@@ -321,6 +327,7 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 					<Icon name="menu" />
 				</button>
 			</header>
+			<div className="room-table-slot" ref={setTableSlot} />
 			{!open ? (
 				<div className="offline-banner" role="status">
 					<span className="spinner" aria-hidden="true" />

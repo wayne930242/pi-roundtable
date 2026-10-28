@@ -6,6 +6,7 @@ import { hrefFor } from "../lib/router.ts";
 export const PANE_ICONS: Record<PaneName | "settings" | "more", IconName> = {
 	rooms: "rooms",
 	schedules: "schedules",
+	table: "table",
 	overview: "overview",
 	conversations: "conversations",
 	notes: "notes",

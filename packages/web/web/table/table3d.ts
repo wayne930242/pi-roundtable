@@ -34,6 +34,7 @@ import {
 	Vector3,
 	WebGLRenderer,
 } from "three";
+import { ellipsize } from "./label";
 import {
 	glowCanvas,
 	iconsCanvas,
@@ -248,9 +249,14 @@ class Atlas {
 			size -= 2;
 			g.font = `700 ${size}px system-ui, "Noto Sans TC", sans-serif`;
 		}
+		// Cut with an ellipsis only once the smallest size no longer fits the plate.
+		const shown = ellipsize(
+			name,
+			(text) => g.measureText(text).width <= CELL_W - 40,
+		);
 		g.textAlign = "center";
 		g.textBaseline = "middle";
-		g.fillText(name, x + CELL_W / 2, y + 28);
+		g.fillText(shown, x + CELL_W / 2, y + 28);
 		this.tex.needsUpdate = true;
 	}
 }
@@ -390,10 +396,13 @@ export function createTable3D(
 		side: 2,
 		fog: false,
 	});
+	// The plate is a billboard in front of the scene: the tabletop must not cut the names of the seats behind it.
 	const matLabel = new MeshBasicMaterial({
 		map: atlas.tex,
 		alphaTest: 0.45,
 		fog: false,
+		depthTest: false,
+		depthWrite: false,
 	});
 	const matIcon = new MeshBasicMaterial({
 		map: texIcons,
@@ -730,9 +739,12 @@ export function createTable3D(
 
 	/* ----- camera ----- */
 	let pan = 0;
-	/** Fit the whole ring (stools to floating icons) inside the viewport at the current elevation; also solves a view-space pan so near/far margins balance. */
-	function fitDistance(): number {
-		const el = tgt.el;
+	/**
+	 * Fits the whole ring (stools to floating icons) inside the viewport at elevation `el`: the
+	 * distance, a view-space pan that balances the near and far margins, and how much of the height
+	 * the ring then fills (1 = all of it).
+	 */
+	function solveFit(el: number): { d: number; pz: number; fill: number } {
 		const R = seatR + 0.5;
 		const pts: Vector3[] = [];
 		for (let k = 0; k < 24; k++) {
@@ -768,7 +780,7 @@ export function createTable3D(
 		const tanV = Math.tan((camera.fov * Math.PI) / 360);
 		let lo = 4;
 		let hi = 70;
-		let best = { d: hi, pz: 0 };
+		let best = { d: hi, pz: 0, fill: 0 };
 		for (let it = 0; it < 22; it++) {
 			const d = (lo + hi) / 2;
 			let pz = 0;
@@ -779,16 +791,35 @@ export function createTable3D(
 			}
 			if (e.x <= lim && (e.y1 - e.y0) / 2 <= lim) {
 				hi = d;
-				best = { d, pz };
+				best = { d, pz, fill: (e.y1 - e.y0) / 2 };
 			} else lo = d;
 		}
+		return best;
+	}
+
+	/** The distance that fits the ring at the current elevation; also sets the pan. */
+	function fitDistance(): number {
+		const best = solveFit(tgt.el);
 		pan = best.pz;
 		return best.d;
 	}
 
+	/**
+	 * The elevation a fresh view starts at. A wide canvas keeps the low, wide view; a squarer or
+	 * taller one is looked at from higher up, only as high as it takes for the ring (with the
+	 * avatars standing on it) to fill its height, so no empty band is left above the far seats.
+	 */
+	function defaultElevation(): number {
+		if (width / height >= 1.3) return 0.68;
+		// The icons float above the avatars, so the fitted ring is taller than what shows: ask for more than the band needs.
+		for (let el = 0.68; el < 1.3; el += 0.04)
+			if (solveFit(el).fill >= 0.88) return el;
+		return 1.3;
+	}
+
 	function resetCamera() {
 		tgt.az = 0;
-		tgt.el = width / height < 0.8 ? 0.95 : 0.68;
+		tgt.el = defaultElevation();
 		tgt.zoom = 1;
 		vel.az = 0;
 		fit = fitDistance();
@@ -1163,8 +1194,7 @@ export function createTable3D(
 		camera.updateProjectionMatrix();
 		const wasDefault = Math.abs(tgt.zoom - 1) < 1e-3;
 		fit = fitDistance();
-		if (wasDefault && Math.abs(tgt.az) < 1e-3)
-			tgt.el = w / h < 0.8 ? 0.95 : 0.68;
+		if (wasDefault && Math.abs(tgt.az) < 1e-3) tgt.el = defaultElevation();
 		if (reduced) cam.el = tgt.el;
 		fit = fitDistance();
 		sizeFloor();
@@ -1525,7 +1555,7 @@ export function createTable3D(
 	};
 
 	resize();
-	tgt.el = cam.el = width / height < 0.8 ? 0.95 : 0.68;
+	tgt.el = cam.el = defaultElevation();
 	fit = fitDistance();
 	applyTheme();
 	api.setSeats(opts.seats);

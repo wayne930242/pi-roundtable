@@ -14,6 +14,7 @@ export const PANES = [
 	"connectors",
 	"rooms",
 	"schedules",
+	"table",
 ] as const;
 export type PaneName = (typeof PANES)[number];
 

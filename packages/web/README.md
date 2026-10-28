@@ -9,7 +9,7 @@ Every request must pass an authentication check that you configure, and the plug
 
 ## What the console shows
 
-The console has five optional panes; the original three remain the default.
+The console has six optional panes; the original three remain the default.
 The `panes` option chooses which ones a host serves.
 
 | Pane | What it shows |
@@ -19,6 +19,7 @@ The `panes` option chooses which ones a host serves.
 | Notes | A principal's memory in three tabs, core, notes, and events, with search: the signed-in owner's own by default, and any principal's the host knows through a picker that appears when there is more than one. The owner can add a note, edit its text, kind, and date, and delete it after a confirmation, in whichever memory is shown. The memory addon's own validation applies, so a refusal shows its reason and saves nothing. |
 | Skills | The full host catalog, source, groups and carriers; each available skill opens its ordered frontmatter and Markdown body. |
 | Connectors | Upstream gateway enabled/reachable/tool status, virtual-server tool lists, and the agents or profiles that use them; an optional administration link. |
+| Round table | Every active agent seated at one round table, the coordinator first, each in the state its room is in; a seat opens that agent's room (see [The round table](#the-round-table)). Needs `rooms`. |
 
 Opening a conversation shows its **transcript**: the user's and the assistant's messages, the tools the assistant called with a short preview of their arguments, and each tool's result (collapsed).
 A conversation that was started over keeps its archives, and the page can show any of them.
@@ -93,7 +94,7 @@ The plugin adds the route `/console` (a redirect to `/console/`) and `/console/â
 | `dataDir` | `./data` | The host's data directory; the console reads `<dataDir>/sessions`. Set it to the `dataDir` of your configuration. |
 | `mountPath` | `/console` | The path the console is served under: one or more segments of letters, digits, `.`, `_`, `~`, and `-`. |
 | `listener` | `public` | The id of the listener whose address serves the console. |
-| `panes` | `rooms`, `overview`, `schedules`, `conversations`, `notes` | Ordered subset of those panes plus `skills` and `connectors`. `rooms` is the owner app (see [App protocol](#app-protocol)); `schedules` needs it. Disabled panes answer 404. Skills/connectors require their feature ports at setup. An explicit list is kept as written. |
+| `panes` | `rooms`, `table`, `overview`, `schedules`, `conversations`, `notes` | Ordered subset of those panes plus `skills` and `connectors`. `rooms` is the owner app (see [App protocol](#app-protocol)); `schedules` and `table` need it. Disabled panes answer 404. Skills/connectors require their feature ports at setup. An explicit list is kept as written. |
 | `surface` | `app` | The key prefix of the app's rooms, a lower-case word that is not `discord`. |
 | `cardGraceSeconds` | `120` | How long a turn waits on an approval or question card before it goes on without the answer; the card stays open. |
 | `uploadMaxBytes` | `104857600` (100 MiB) | The most bytes of one file a person may upload in the app, and the most the agent takes from the app. See [Uploads](#uploads). |
@@ -386,6 +387,13 @@ Every agent is drawn as its composed character (`pi-roundtable/characters`). The
 - **Details.** Gold rules under page titles and the room header, with corner marks on the header; the shield frame on every character; a wax seal in the agent's accent that is stamped on an approval card when it is approved and stays on the closed card; and a candle and a row of runes on the progress strip, the candle flickering and the runes shimmering while the turn works. Each moves with `transform` or `opacity` only and stands still under `prefers-reduced-motion`.
 - **Toolbar color.** The `theme-color` tags follow the look and the scheme: parchment or night castle under Camelot, the plain page's colors under Modern. The pre-paint script (`theme-init.js`) also puts `data-look` on the page, so a Camelot host never flashes the Modern look first.
 
+### The round table
+
+The `table` pane seats every active agent at a round table, the coordinator first, in every look. Each seat shows the agent's character in the shield frame and takes its accent color; a seat's state comes from the same rules as the room list (`sleepy` sits as `idle`), and the member a group round names as `agent` is lit as `speaking`. A change of state moves the seat at once; a change of face redraws that one picture once it has stood for 300 ms. A click, or Enter on a focused seat, opens the agent's room. The drawing is a WebGL scene where the browser has one and an SVG table otherwise (or after a lost context); the scene is a chunk of its own, fetched when the view first opens and cached by the service worker, never precached. It stops drawing when nothing moves, when the tab is hidden and when it is off screen, and under `prefers-reduced-motion` it is one still frame.
+
+- **Names.** A seat's name is drawn in front of the table, never under it, and is cut with an ellipsis only when it is longer than its plate; the seat's full name is its accessible name.
+- **Phones.** On a phone held upright the canvas is as tall as it is wide plus a tenth; with more than ten seats the agents are also listed as buttons under it. The camera starts high enough for the ring to fill the canvas and pinch zooms; "Reset view" brings it back.
+- **Group rooms.** A group room's header has a "Table" button that opens the table of its members only, in a sheet on a phone and in a panel beside the room elsewhere. Under the Camelot look a compact strip of the members also stands under the header with the speaker lit; under Modern it stays collapsed.
 
 ### Dispatch threads
 

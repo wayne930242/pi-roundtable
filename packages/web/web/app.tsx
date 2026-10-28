@@ -51,6 +51,10 @@ const SkillsPage = lazy(() =>
 const ConnectorsPage = lazy(() =>
 	import("./pages/connectors.tsx").then((m) => ({ default: m.ConnectorsPage })),
 );
+// The table's page is light, and the scene it mounts is a chunk of its own that waits for the view to open.
+const TablePage = lazy(() =>
+	import("./pages/table.tsx").then((m) => ({ default: m.TablePage })),
+);
 
 const LABELS: Record<PaneName | "settings" | "more", string> = {
 	overview: "Overview",
@@ -60,6 +64,7 @@ const LABELS: Record<PaneName | "settings" | "more", string> = {
 	connectors: "Connectors",
 	rooms: "Rooms",
 	schedules: "Schedules",
+	table: "Round table",
 	settings: "Settings",
 	more: "More",
 };
@@ -288,6 +293,8 @@ function Console({ config }: { config: ConfigView }) {
 				) : null;
 			case "schedules":
 				return <SchedulesPage />;
+			case "table":
+				return <TablePage />;
 			case "settings":
 				return <SettingsPage />;
 			case "more":

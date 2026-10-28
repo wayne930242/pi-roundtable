@@ -237,7 +237,14 @@ describe("refuses to start", () => {
 	test("without a list of panes the console serves the owner app first", () => {
 		expect(
 			resolveOptions({ ...base(), panes: undefined } as never).panes,
-		).toEqual(["rooms", "overview", "schedules", "conversations", "notes"]);
+		).toEqual([
+			"rooms",
+			"table",
+			"overview",
+			"schedules",
+			"conversations",
+			"notes",
+		]);
 		const settings = resolveOptions(base());
 		expect([settings.surface, settings.cardGraceSeconds]).toEqual(["app", 120]);
 		// A file may be 100 MiB by default, and an operator may raise it past what the listener takes

@@ -73,6 +73,34 @@ export function useRoomState(key: string): AvatarState {
 	return presenceOf(input, Date.now());
 }
 
+/**
+ * The state of each of several rooms at once, by room key, redrawn when `done` or an old failure
+ * lapses in any of them. The round table reads every seat's state through this.
+ */
+export function useRoomStates(
+	keys: readonly string[],
+): Record<string, AvatarState> {
+	useLive();
+	const state = useSelector((current) => current);
+	const [, redraw] = useReducer((count: number) => count + 1, 0);
+	const now = Date.now();
+	const inputs = keys.map((key) => [key, presenceInputOf(state, key)] as const);
+	const wait = inputs.reduce<number | undefined>((soonest, [, input]) => {
+		const left = stateChangesIn(input, now);
+		return left === undefined || (soonest !== undefined && soonest <= left)
+			? soonest
+			: left;
+	}, undefined);
+	useEffect(() => {
+		if (wait === undefined) return;
+		const timer = setTimeout(redraw, wait + 20);
+		return () => clearTimeout(timer);
+	}, [wait]);
+	return Object.fromEntries(
+		inputs.map(([key, input]) => [key, presenceOf(input, now)]),
+	);
+}
+
 /** Whether a state moves the character; the idle and sleepy ones stand still in a list. */
 export const movesIn = (state: AvatarState): boolean =>
 	state !== "idle" && state !== "sleepy";

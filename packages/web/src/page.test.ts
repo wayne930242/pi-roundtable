@@ -114,4 +114,11 @@ test("the round table ships as two lazy chunks: the WebGL scene stays small enou
 		);
 		expect(carries).toBe(name.startsWith("chunk-table3d-"));
 	}
+	// The round table's own code is reached through the page's lazy imports only: its entry module is
+	// a chunk, and no other file carries the wrapper it builds.
+	const entry = only("chunk-entry-");
+	for (const name of scripts)
+		expect(
+			readFileSync(join(dir, name), "utf8").includes("rt-table-stage"),
+		).toBe(name === entry);
 });

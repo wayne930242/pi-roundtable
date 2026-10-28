@@ -118,10 +118,11 @@ export interface WebConsoleOptions {
 	/** Hash routes by default; path routes retain links such as /console/skills. */
 	routing?: "hash" | "path";
 	/**
-	 * The panes to serve, in the order the page lists them; default `rooms`, `overview`,
+	 * The panes to serve, in the order the page lists them; default `rooms`, `table`, `overview`,
 	 * `schedules`, `conversations`, `notes`. `rooms` is the owner app: the same agent team as on
-	 * Discord, in rooms of its own. An explicit list is kept as written, so a host that listed the
-	 * panes before 0.23 adds `rooms` and `schedules` by hand.
+	 * Discord, in rooms of its own; `table` seats its agents at the round table and needs `rooms`.
+	 * An explicit list is kept as written, so a host that listed the panes before 0.23 adds
+	 * `rooms`, `table` and `schedules` by hand.
 	 */
 	panes?: readonly PaneName[];
 	/**
@@ -257,7 +258,14 @@ function checkOrigin(origin: string): string {
 
 function checkPanes(panes: readonly PaneName[] | undefined): PaneName[] {
 	if (panes === undefined)
-		return ["rooms", "overview", "schedules", "conversations", "notes"];
+		return [
+			"rooms",
+			"table",
+			"overview",
+			"schedules",
+			"conversations",
+			"notes",
+		];
 	if (panes.length === 0) fail("panes is empty; serve at least one pane");
 	for (const pane of panes)
 		if (!PANES.includes(pane))
@@ -267,6 +275,8 @@ function checkPanes(panes: readonly PaneName[] | undefined): PaneName[] {
 	if (new Set(panes).size !== panes.length) fail("panes lists a pane twice");
 	if (panes.includes("schedules") && !panes.includes("rooms"))
 		fail("the schedules pane needs the rooms pane, which serves its API");
+	if (panes.includes("table") && !panes.includes("rooms"))
+		fail("the table pane needs the rooms pane, whose agents it seats");
 	return [...panes];
 }
 

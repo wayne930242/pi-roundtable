@@ -1,3 +1,4 @@
+import { fitLabel } from "./label";
 import { palette, STATE_COLOR } from "./themes";
 import type {
 	Scheme,
@@ -31,10 +32,14 @@ const dataUri = (svg: string) => {
 	return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(sized)}`;
 };
 
+/** Counts tables, so the ids one table's gradients carry are not the next table's: two tables share a page (the strip and the panel). */
+let tables = 0;
+
 export function createTable2D(
 	container: HTMLElement,
 	opts: TableOptions,
 ): TableHandle {
+	const uid = `t2d${++tables}`;
 	const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
 	let reduced =
 		opts.reducedMotion === "auto" || opts.reducedMotion === undefined
@@ -88,7 +93,7 @@ export function createTable2D(
 
 		el("rect", { width: W, height: H, fill: pal.bg }, svg);
 		const defs = el("defs", {}, svg);
-		const fl = el("radialGradient", { id: "t2d-floor" }, defs);
+		const fl = el("radialGradient", { id: `${uid}-floor` }, defs);
 		el("stop", { offset: 0, "stop-color": pal.rug }, fl);
 		el("stop", { offset: 0.9, "stop-color": pal.rug }, fl);
 		el("stop", { offset: 1, "stop-color": pal.rugEdge }, fl);
@@ -99,7 +104,7 @@ export function createTable2D(
 				cy: cy + 10,
 				rx: Rx + av * 0.75,
 				ry: Ry + av * 0.5,
-				fill: "url(#t2d-floor)",
+				fill: `url(#${uid}-floor)`,
 			},
 			svg,
 		);
@@ -135,7 +140,7 @@ export function createTable2D(
 		if (pal.candles)
 			el("circle", { cx, cy: cy - 4, r: 5, fill: pal.flame }, svg);
 		seats.forEach((s2, i) => {
-			const gid = `t2d-h${i}`;
+			const gid = `${uid}-h${i}`;
 			const rg = el("radialGradient", { id: gid }, defs);
 			el(
 				"stop",
@@ -201,7 +206,7 @@ export function createTable2D(
 					cy: -size * 0.5,
 					rx: size * 0.85,
 					ry: size * 0.85,
-					fill: `url(#t2d-h${seats.indexOf(s)})`,
+					fill: `url(#${uid}-h${seats.indexOf(s)})`,
 				},
 				g,
 			);
@@ -250,8 +255,9 @@ export function createTable2D(
 				t.textContent = s.name.slice(0, 1).toUpperCase();
 			}
 			const fs = Math.max(11, Math.min(15, size * 0.2));
+			// Room for about eight Latin letters even on a small seat, so a short name is never cut.
 			const pw = Math.min(
-				size * 1.5,
+				Math.max(size * 1.5, fs * 5.5 + 14),
 				Math.max(size * 0.9, s.name.length * fs * 0.62 + 18),
 			);
 			el(
@@ -292,7 +298,8 @@ export function createTable2D(
 				},
 				g,
 			);
-			label.textContent = s.name;
+			// Whole while it fits the plate, an ellipsis only when it is longer than the plate.
+			label.textContent = fitLabel(s.name, (pw - 14) / fs);
 			// badges
 			const badge = el(
 				"g",
@@ -418,6 +425,5 @@ export function createTable2D(
 		},
 	};
 	api.setSeats(opts.seats);
-	Object.assign(window, { __t3d: api });
 	return api;
 }
