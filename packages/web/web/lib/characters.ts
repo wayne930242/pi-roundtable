@@ -58,18 +58,22 @@ function presenceInputOf(state: RoomsState, key: string): PresenceInput {
 	};
 }
 
-/** The state a room's character shows now, redrawn when `done` or an old failure lapses. */
-export function useRoomState(key: string): AvatarState {
-	// The page's 30 s tick redraws the rules that depend on the hour.
-	useLive();
-	const input = useSelector((state) => presenceInputOf(state, key), key);
+/** Draws the component again just after `wait` ms, when a state it shows changes by then. */
+function useRedrawIn(wait: number | undefined): void {
 	const [, redraw] = useReducer((count: number) => count + 1, 0);
-	const wait = stateChangesIn(input, Date.now());
 	useEffect(() => {
 		if (wait === undefined) return;
 		const timer = setTimeout(redraw, wait + 20);
 		return () => clearTimeout(timer);
 	}, [wait]);
+}
+
+/** The state a room's character shows now, redrawn when `done` or an old failure lapses. */
+export function useRoomState(key: string): AvatarState {
+	// The page's 30 s tick redraws the rules that depend on the hour.
+	useLive();
+	const input = useSelector((state) => presenceInputOf(state, key), key);
+	useRedrawIn(stateChangesIn(input, Date.now()));
 	return presenceOf(input, Date.now());
 }
 
@@ -82,20 +86,16 @@ export function useRoomStates(
 ): Record<string, AvatarState> {
 	useLive();
 	const state = useSelector((current) => current);
-	const [, redraw] = useReducer((count: number) => count + 1, 0);
 	const now = Date.now();
 	const inputs = keys.map((key) => [key, presenceInputOf(state, key)] as const);
-	const wait = inputs.reduce<number | undefined>((soonest, [, input]) => {
-		const left = stateChangesIn(input, now);
-		return left === undefined || (soonest !== undefined && soonest <= left)
-			? soonest
-			: left;
-	}, undefined);
-	useEffect(() => {
-		if (wait === undefined) return;
-		const timer = setTimeout(redraw, wait + 20);
-		return () => clearTimeout(timer);
-	}, [wait]);
+	useRedrawIn(
+		inputs.reduce<number | undefined>((soonest, [, input]) => {
+			const left = stateChangesIn(input, now);
+			return left === undefined || (soonest !== undefined && soonest <= left)
+				? soonest
+				: left;
+		}, undefined),
+	);
 	return Object.fromEntries(
 		inputs.map(([key, input]) => [key, presenceOf(input, now)]),
 	);
