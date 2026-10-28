@@ -19,15 +19,15 @@ export const DEFAULT_RELAY_NOTE =
 	"(The owner wrote this in a personal agent that relays it over MCP, not on Discord. Answer the owner directly, just as you would on Discord; the agent passes your reply back.)";
 
 /** The default environment variable `auth: { mode: "password" }` reads the password from. */
-export const DEFAULT_PASSWORD_ENV = "ROUNDTABLE_WEB_PASSWORD";
+const DEFAULT_PASSWORD_ENV = "ROUNDTABLE_WEB_PASSWORD";
 /** How many days a password session lasts by default. */
-export const DEFAULT_SESSION_DAYS = 30;
+const DEFAULT_SESSION_DAYS = 30;
 /** The shortest password the console accepts, in characters. */
 export const MIN_PASSWORD_LENGTH = 12;
 /** The key prefix of the app's rooms by default. */
-export const DEFAULT_SURFACE = "app";
+const DEFAULT_SURFACE = "app";
 /** How many seconds a turn waits on its card before it goes on without the answer, by default. */
-export const DEFAULT_CARD_GRACE_SECONDS = 120;
+const DEFAULT_CARD_GRACE_SECONDS = 120;
 
 /**
  * How the console knows who is asking. Every mode but `verifier` speaks for one principal through

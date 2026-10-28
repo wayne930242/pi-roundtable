@@ -8,7 +8,7 @@ export const PASTE_AS_FILE_CHARS = 4000;
 /** What a message says when its text was too long and went as a file. */
 export const LONG_TEXT_NOTE = "(long text attached)";
 /** The name of the file a too-long message goes as. */
-export const OVERFLOW_FILE_NAME = "message.txt";
+const OVERFLOW_FILE_NAME = "message.txt";
 
 /** How many files a message may carry, and how large each may be. */
 export interface AttachLimits {

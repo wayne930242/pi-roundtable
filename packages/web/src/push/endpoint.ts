@@ -1,5 +1,5 @@
 /** The push services of the browsers that support Web Push; `push.endpointHosts` adds to them. */
-export const PUSH_HOSTS: readonly string[] = [
+const PUSH_HOSTS: readonly string[] = [
 	"fcm.googleapis.com",
 	"updates.push.services.mozilla.com",
 	"*.push.apple.com",

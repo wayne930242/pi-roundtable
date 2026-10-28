@@ -7,7 +7,7 @@ export { SEAT_STATES } from "./types";
  * The only module the React app imports eagerly (it is tiny). It decides between the
  * WebGL scene and the SVG fallback and loads exactly one of them as a lazy chunk.
  */
-export function webglAvailable(): boolean {
+function webglAvailable(): boolean {
 	try {
 		const c = document.createElement("canvas");
 		return !!(c.getContext("webgl2") || c.getContext("webgl"));

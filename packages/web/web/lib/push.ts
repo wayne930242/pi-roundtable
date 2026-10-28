@@ -3,7 +3,7 @@ import { api } from "./api.ts";
 /** Whether this device can get push, and whether it does now. */
 export type PushState = "unsupported" | "blocked" | "off" | "on";
 
-export const pushSupported = (): boolean =>
+const pushSupported = (): boolean =>
 	typeof navigator !== "undefined" &&
 	"serviceWorker" in navigator &&
 	typeof window !== "undefined" &&
@@ -40,7 +40,7 @@ const sameKey = (
 };
 
 /** A short name for this device in the list, such as "Chrome on macOS". */
-export function deviceLabel(): string {
+function deviceLabel(): string {
 	const agent = navigator.userAgent;
 	const browser = /Edg\//.test(agent)
 		? "Edge"

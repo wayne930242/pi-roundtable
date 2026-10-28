@@ -6,7 +6,7 @@ import { dismissToast, toast, useToasts } from "../lib/toast.ts";
 import { Icon } from "./icons.tsx";
 
 /** What a refusal of the server says to the person. */
-export function refusalText(code: RefusalCode): string {
+function refusalText(code: RefusalCode): string {
 	switch (code) {
 		case "bad_frame":
 			return t("The app could not read that. Reload the page and try again.");

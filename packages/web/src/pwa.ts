@@ -5,7 +5,7 @@ import type { AssetBundle } from "./assets.ts";
 import { PAGE_COLORS } from "./page-colors.ts";
 
 /** The manifest's splash colours under each look; modern keeps the page's own. */
-export const LOOK_COLORS = {
+const LOOK_COLORS = {
 	modern: {
 		theme: PAGE_COLORS.modern.light,
 		background: PAGE_COLORS.modern.light,
@@ -45,7 +45,7 @@ export interface PwaOptions {
 }
 
 /** The web app manifest for a console served under `mount`; its icon URLs are relative to it. */
-export function manifestFor(
+function manifestFor(
 	mount: string,
 	title: string,
 	look: "modern" | "camelot" = "modern",

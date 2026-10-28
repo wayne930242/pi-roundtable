@@ -8,12 +8,12 @@ const channel = (value: number): string =>
 		.toString(16)
 		.padStart(2, "0");
 
-export function rgbOf(color: string): Rgb {
+function rgbOf(color: string): Rgb {
 	const part = (at: number) => Number.parseInt(color.slice(at, at + 2), 16);
 	return [part(1), part(3), part(5)];
 }
 
-export function hexOf([r, g, b]: Rgb): Hex {
+function hexOf([r, g, b]: Rgb): Hex {
 	return `#${channel(r)}${channel(g)}${channel(b)}`;
 }
 

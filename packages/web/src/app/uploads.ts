@@ -15,7 +15,7 @@ export const DEFAULT_UPLOAD_MAX_BYTES = 100 * 1024 * 1024;
 /** What the multipart framing of one file may add to a body: 64 KiB. */
 export const UPLOAD_FRAMING_BYTES = 64 * 1024;
 /** How long an upload no message used waits: 24 hours. */
-export const UPLOAD_WAIT_MS = 24 * 3_600_000;
+const UPLOAD_WAIT_MS = 24 * 3_600_000;
 /** The most files one person may have waiting for a message, or on their way. */
 const PENDING_PER_PRINCIPAL = 16;
 /** The most bytes one person may have waiting for a message, or on their way: 400 MiB. */

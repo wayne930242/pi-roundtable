@@ -34,7 +34,7 @@ import {
 } from "./frames.ts";
 
 /** How long a card stays open when no one answers it: 24 hours, as a held action does. */
-export const CARD_TTL_MS = 24 * 3_600_000;
+const CARD_TTL_MS = 24 * 3_600_000;
 
 /** What the app's cards show of a questionnaire: every question, previews and a note. */
 const APP_ASKS = Object.freeze({

@@ -7,7 +7,7 @@ import { readLimited } from "../request-body.ts";
 import { LOGIN_CSP, loginPage } from "./login-page.ts";
 
 /** The session cookie's name. */
-export const SESSION_COOKIE = "rt_session";
+const SESSION_COOKIE = "rt_session";
 /** How many failed logins in the window lock the login page. */
 const MAX_FAILURES = 10;
 const WINDOW_MS = 15 * 60 * 1000;

@@ -12,9 +12,7 @@ export interface Asset {
 export type AssetBundle = ReadonlyMap<string, Asset>;
 
 /** Where `bun run build` leaves the page; the published package ships it ready-made. */
-export const BUILT_PAGE_DIR = fileURLToPath(
-	new URL("../dist/", import.meta.url),
-);
+const BUILT_PAGE_DIR = fileURLToPath(new URL("../dist/", import.meta.url));
 
 /**
  * Reads the built page into memory. A missing page throws, so a checkout that was never built

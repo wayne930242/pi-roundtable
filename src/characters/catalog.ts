@@ -201,18 +201,14 @@ export const HAIR_IDS: readonly HairId[] = [
 ];
 
 export type BeardId = "full" | "mustache" | "goatee";
-export const BEARD_IDS: readonly BeardId[] = ["full", "mustache", "goatee"];
+const BEARD_IDS: readonly BeardId[] = ["full", "mustache", "goatee"];
 export const BEARD_CHOICES: readonly (BeardId | "none")[] = [
 	...BEARD_IDS,
 	"none",
 ];
 
 export type AccessoryId = "glasses" | "freckles" | "scar";
-export const ACCESSORY_IDS: readonly AccessoryId[] = [
-	"glasses",
-	"freckles",
-	"scar",
-];
+const ACCESSORY_IDS: readonly AccessoryId[] = ["glasses", "freckles", "scar"];
 export const ACCESSORY_CHOICES: readonly (AccessoryId | "none")[] = [
 	...ACCESSORY_IDS,
 	"none",

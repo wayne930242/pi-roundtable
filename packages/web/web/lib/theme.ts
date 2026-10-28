@@ -26,7 +26,7 @@ const systemDark = (): MediaQueryList | undefined =>
 		: undefined;
 
 /** The scheme the page shows now. */
-export function resolvedTheme(): "light" | "dark" {
+function resolvedTheme(): "light" | "dark" {
 	if (preference !== "system") return preference;
 	return systemDark()?.matches ? "dark" : "light";
 }

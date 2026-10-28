@@ -31,7 +31,7 @@ export interface PushApiOptions {
 }
 
 /** What identifies a device in a list without handing its endpoint around: the endpoint's SHA-256, hex. */
-export const deviceId = (endpoint: string): string =>
+const deviceId = (endpoint: string): string =>
 	createHash("sha256").update(endpoint).digest("hex");
 
 const decode = (value: unknown, bytes: number, name: string): string => {
