@@ -48,8 +48,10 @@ export function ProgressStrip(props: {
 					aria-label={t("Show the whole stream")}
 					onClick={() => setExpanded((value) => !value)}
 				>
-					{text}
-					<span className="caret" aria-hidden="true" />
+					<span className="progress-flow">
+						{text}
+						<span className="caret" aria-hidden="true" />
+					</span>
 				</button>
 			) : null}
 		</div>

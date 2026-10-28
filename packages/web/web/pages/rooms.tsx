@@ -16,6 +16,7 @@ function previewOf(text: string, files: number): string {
 	// Markdown marks would show as stray symbols in one line.
 	const flat = text
 		.replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
+		.replace(/(^|\s)([-*+]|\d+\.)\s/g, "$1")
 		.replace(/[*_`#>~]+/g, "")
 		.replace(/\s+/g, " ")
 		.trim();
@@ -105,21 +106,23 @@ const RoomRow = memo(function RoomRow(props: {
 function Section(props: { title: string; rooms: string[] }) {
 	const { now } = useLive();
 	const { timeZone } = useConfig();
-	const rows = useSelector((state) =>
-		props.rooms.map((key) => {
-			const room = state.rooms[key];
-			const last = lastMessage(state, key);
-			return {
-				key,
-				view: room?.view,
-				typing: room?.typing ?? false,
-				yolo: room?.mode.yolo ?? false,
-				longRunning: room?.mode.longRunning ?? false,
-				waiting: waitingCards(state, key),
-				preview: last ? previewOf(last.text, last.files.length) : "",
-				at: last?.at,
-			};
-		}),
+	const rows = useSelector(
+		(state) =>
+			props.rooms.map((key) => {
+				const room = state.rooms[key];
+				const last = lastMessage(state, key);
+				return {
+					key,
+					view: room?.view,
+					typing: room?.typing ?? false,
+					yolo: room?.mode.yolo ?? false,
+					longRunning: room?.mode.longRunning ?? false,
+					waiting: waitingCards(state, key),
+					preview: last ? previewOf(last.text, last.files.length) : "",
+					at: last?.at,
+				};
+			}),
+		props.rooms.join(","),
 	);
 	const shown = rows.flatMap((row) =>
 		row.view ? [{ ...row, view: row.view }] : [],

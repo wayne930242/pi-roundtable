@@ -36,12 +36,15 @@ export function Sheet(props: {
 	);
 	const { open, onClose } = props;
 	const closing = useRef(false);
+	/** The parent closed it already, so the closing animation reports nothing back. */
+	const quiet = useRef(false);
 
 	const finish = useCallback(() => {
 		const dialog = ref.current;
 		if (dialog?.open) dialog.close();
 		closing.current = false;
-		onClose();
+		if (quiet.current) quiet.current = false;
+		else onClose();
 	}, [onClose]);
 
 	/** Animates out, then closes. */
@@ -71,10 +74,12 @@ export function Sheet(props: {
 				}),
 			);
 		}
+		// Closed from outside, for instance after Confirm: it still slides away rather than vanishing.
 		if (!open && dialog.open && !closing.current) {
-			dialog.close();
+			quiet.current = true;
+			dismiss();
 		}
-	}, [open]);
+	}, [open, dismiss]);
 
 	const onPointerDown = (event: ReactPointerEvent<HTMLElement>) => {
 		if (!compact()) return;

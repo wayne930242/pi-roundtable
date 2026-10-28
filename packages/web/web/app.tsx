@@ -379,7 +379,7 @@ function Console({ config }: { config: ConfigView }) {
 							<ThemeButton />
 						</div>
 					</header>
-					<div className="route" key={`${pane}/${route.key ?? ""}`}>
+					<main className="route" key={`${pane}/${route.key ?? ""}`}>
 						<Suspense
 							fallback={
 								<div className="page">
@@ -389,7 +389,7 @@ function Console({ config }: { config: ConfigView }) {
 						>
 							{body}
 						</Suspense>
-					</div>
+					</main>
 				</div>
 				<nav className="tabbar" aria-label={t("Panes")}>
 					{tabs.map((item) => (

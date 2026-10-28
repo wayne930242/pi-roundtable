@@ -98,6 +98,8 @@ const harness = await testPlugin(
 		origin,
 		dataDir,
 		title: "Fixture console",
+		// The owner app's panes need services this host does not have; `fixture-app.ts` serves them.
+		panes: ["overview", "conversations", "notes"],
 	}),
 	{
 		env: { timeZone: "Europe/Paris" },

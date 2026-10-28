@@ -211,6 +211,11 @@ export function startConnection(protocol: string): AppConnection {
 	return connection;
 }
 
+/** Puts a connection in place without opening a socket, for tests that render what talks to it. */
+export function setConnection(next: AppConnection | undefined): void {
+	connection = next;
+}
+
 /** The connection the page opened; throws before `startConnection`. */
 export function useConnection(): AppConnection {
 	if (!connection) throw new Error("the owner app is not connected");

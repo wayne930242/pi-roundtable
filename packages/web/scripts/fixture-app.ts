@@ -176,7 +176,7 @@ const scripts: Record<string, Script> = {
 			"The draft is ready. Publish it to the blog?",
 			signal,
 			"owner",
-			{ late: () => "Publish the post, I approve." },
+			{ late: () => "Publish the post, go ahead." },
 		);
 		return { ok: true, text: `The card ended ${result}.` };
 	},
@@ -288,20 +288,25 @@ const { team } = services.get(AGENTS);
 const deadline = Date.now() + 15_000;
 while (team.coordinator() === undefined && Date.now() < deadline)
 	await sleep(50);
-try {
-	// SAFETY: the agent team behind the service is the class that has createGroup; the service type leaves it out.
-	await (
-		team as unknown as {
-			createGroup(input: Record<string, unknown>): Promise<string>;
-		}
-	).createGroup({
-		name: "crew",
-		displayName: "Crew",
-		members: ["scout", "archivist"],
-		host: "scout",
-	});
-} catch (error) {
-	console.warn("no group:", error instanceof Error ? error.message : error);
+// The seed agents are made one after another; the group needs all of them.
+for (let attempt = 0; ; attempt += 1) {
+	try {
+		// SAFETY: the agent team behind the service is the class that has createGroup; the service type leaves it out.
+		await (
+			team as unknown as {
+				createGroup(input: Record<string, unknown>): Promise<string>;
+			}
+		).createGroup({
+			name: "crew",
+			displayName: "Crew",
+			members: ["scout", "archivist"],
+			host: "scout",
+		});
+		break;
+	} catch (error) {
+		if (attempt >= 40) throw error;
+		await sleep(250);
+	}
 }
 const nextWeek = new Date(Date.now() + 86_400_000);
 await services.get(SCHEDULES).create({
@@ -409,7 +414,8 @@ async function stop(): Promise<void> {
 	if (stopping) return;
 	stopping = true;
 	control.stop(true);
-	await host?.stop();
+	// A host that is slow to stop must not keep the database: the process is killed soon after SIGTERM.
+	await Promise.race([host?.stop(), sleep(2500)]);
 	try {
 		await admin.unsafe(`DROP DATABASE IF EXISTS ${databaseName} WITH (FORCE)`);
 	} catch (error) {

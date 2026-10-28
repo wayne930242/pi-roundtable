@@ -46,16 +46,23 @@ const shallow = (a: unknown, b: unknown): boolean => {
  * What `select` picks out of the state; the component renders again only when the pick changes
  * (compared one level deep), so a streamed word in one room does not redraw the others.
  */
-export function useSelector<T>(select: (state: RoomsState) => T): T {
-	const last = useRef<{ state: RoomsState; value: T }>(undefined);
+export function useSelector<T>(
+	select: (state: RoomsState) => T,
+	/** Names what `select` closes over, so a change of it picks again even when the state did not change. */
+	inputs = "",
+): T {
+	const last = useRef<{ state: RoomsState; inputs: string; value: T }>(
+		undefined,
+	);
 	const snapshot = (): T => {
 		const state = store.getState();
 		const previous = last.current;
-		if (previous && previous.state === state) return previous.value;
+		if (previous && previous.state === state && previous.inputs === inputs)
+			return previous.value;
 		const value = select(state);
 		const kept =
 			previous && shallow(previous.value, value) ? previous.value : value;
-		last.current = { state, value: kept };
+		last.current = { state, inputs, value: kept };
 		return kept;
 	};
 	return useSyncExternalStore(store.subscribe, snapshot, snapshot);

@@ -33,6 +33,7 @@
 		"build": "bun scripts/build.ts",
 		"prepack": "bun scripts/build.ts",
 		"fixture": "bun scripts/fixture-host.ts",
+		"fixture:app": "bun scripts/fixture-app.ts",
 		"typecheck": "tsc --noEmit && tsc --noEmit -p web",
 		"lint": "biome check .",
 		"test": "bun test"

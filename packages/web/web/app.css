@@ -55,7 +55,7 @@
 
 .room-row[data-home] {
 	padding: var(--space-4);
-	background: linear-gradient(135deg, var(--accent-soft), var(--surface) 70%);
+	background: color-mix(in srgb, var(--accent-soft) 55%, var(--surface));
 }
 
 .room-row-main {
@@ -612,6 +612,11 @@
 	color: var(--muted);
 	text-overflow: ellipsis;
 	white-space: nowrap;
+}
+
+.progress-flow {
+	display: block;
+	text-align: left;
 }
 
 .progress-text {
