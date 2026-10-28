@@ -45,6 +45,8 @@ export interface OwnerAppOptions {
 	dataDir: string;
 	/** How long a turn waits on its card before it goes on without the answer, in seconds. */
 	cardGraceSeconds: number;
+	/** The most bytes of one uploaded file. */
+	uploadMaxBytes: number;
 	authenticator: Pick<Authenticator, "authenticate">;
 	/** How the console signs the person in. */
 	authMode: "none" | "password" | "verifier";
@@ -87,7 +89,9 @@ export class OwnerApp {
 		const log = new RoomLog(options.database);
 		const stored = new FileDir(join(options.dataDir, "web", "files"));
 		const waiting = new FileDir(join(options.dataDir, "web", "uploads"));
-		const uploads = new Uploads(waiting, stored);
+		const uploads = new Uploads(waiting, stored, {
+			maxBytes: options.uploadMaxBytes,
+		});
 		const threads = new WebThreads(options.database);
 		// The desk starts a late answer's turn through the socket route, which is made after it.
 		let route: SocketRoute | undefined;

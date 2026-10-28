@@ -194,6 +194,13 @@ describe("refuses to start", () => {
 		["a surface that is not a word", { surface: "My App" }, "surface"],
 		["no card grace", { cardGraceSeconds: 0 }, "cardGraceSeconds"],
 		["a day of card grace", { cardGraceSeconds: 86_400 }, "cardGraceSeconds"],
+		["no upload at all", { uploadMaxBytes: 0 }, "uploadMaxBytes"],
+		[
+			"an upload limit the host's server could not take",
+			{ uploadMaxBytes: 130 * 1024 * 1024 },
+			"uploadMaxBytes",
+		],
+		["a fractional upload limit", { uploadMaxBytes: 1.5 }, "uploadMaxBytes"],
 		["notes with no owner id", { ownerId: " " }, "ownerId"],
 		["an empty title", { title: " " }, "title"],
 	])("with %s", (_name, change, message) => {
@@ -208,6 +215,12 @@ describe("refuses to start", () => {
 		).toEqual(["rooms", "overview", "schedules", "conversations", "notes"]);
 		const settings = resolveOptions(base());
 		expect([settings.surface, settings.cardGraceSeconds]).toEqual(["app", 120]);
+		// A file may be 100 MiB by default, and an operator may raise it to what the host's server takes.
+		expect(settings.uploadMaxBytes).toBe(100 * 1024 * 1024);
+		expect(
+			resolveOptions({ ...base(), uploadMaxBytes: 120 * 1024 * 1024 })
+				.uploadMaxBytes,
+		).toBe(120 * 1024 * 1024);
 	});
 
 	test("a notes-less console needs no owner id", () => {

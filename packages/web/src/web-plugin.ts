@@ -142,6 +142,7 @@ async function build(settings: ResolvedOptions, context: Context) {
 				origin: settings.origin,
 				dataDir: settings.dataDir,
 				cardGraceSeconds: settings.cardGraceSeconds,
+				uploadMaxBytes: settings.uploadMaxBytes,
 				authenticator,
 				authMode: settings.auth.mode,
 				// A password session outlives a logout or a new password on an open socket, so the socket is capped.

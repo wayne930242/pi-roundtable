@@ -96,6 +96,7 @@ The plugin adds the route `/console` (a redirect to `/console/`) and `/console/â
 | `panes` | `rooms`, `overview`, `schedules`, `conversations`, `notes` | Ordered subset of those panes plus `skills` and `connectors`. `rooms` is the owner app (see [App protocol](#app-protocol)); `schedules` needs it. Disabled panes answer 404. Skills/connectors require their feature ports at setup. An explicit list is kept as written. |
 | `surface` | `app` | The key prefix of the app's rooms, a lower-case word that is not `discord`. |
 | `cardGraceSeconds` | `120` | How long a turn waits on an approval or question card before it goes on without the answer; the card stays open. |
+| `uploadMaxBytes` | `104857600` (100 MiB) | The most bytes of one file a person may upload in the app; at most 120 MiB. See [Uploads](#uploads). |
 | `routing` | `hash` | `path` retains links such as `/console/skills`, with history navigation and an authenticated page fallback. |
 | `features` | none | Trusted host integrations, or a factory receiving public plugin setup context; see below. |
 | `presentation` | English | `{ locale, messages }`: locale controls dates and document language; English source strings are dictionary keys for labels, descriptions, confirmations, and API errors. |
@@ -360,10 +361,21 @@ The console is for the owners of one host; members talk to the host through its 
 The `rooms` pane is the owner app: the same agent team as on Discord, in rooms of its own (`<surface>:agent.<name>`, `<surface>:group.<name>`, surface `app` by default; Home is the coordinator's room). A page opens one WebSocket at `<mount>/api/socket` with the subprotocol `roundtable.app.v1`. The upgrade passes the same authenticator as every request and must come from the console's own origin; the socket closes with `4401` when the credential lapses.
 
 - Page to server: `hello {visible, focus?}`, `visibility`, `focus {room?}`, `send {id, room, text, uploads?}`, `stop {room}`, `approval {prompt, approved}`, `answer {prompt, answer}`, `answers {prompt, answers, note?}`, `cancel {prompt}`.
-- Server to page: `ready` (then every open card), `accepted`, `refused {id?, prompt?, code}` (`id` names a refused `send`, `prompt` a refused answer to a card), `message`, `progress` (only for the focused room), `activity`, `prompt`, `prompt_closed`, `mode`, `auto_approved`, `changed`.
+- Server to page: `ready {protocol, principal, name, uploads: {perMessage, maxBytes}}` (then every open card), `accepted`, `refused {id?, prompt?, code}` (`id` names a refused `send`, `prompt` a refused answer to a card), `message`, `progress` (only for the focused room), `activity`, `prompt`, `prompt_closed`, `mode`, `auto_approved`, `changed`.
 - REST under `<mount>/api/`: `session`, `rooms`, `rooms/<key>/messages?before=&limit=`, `PUT rooms/<key>/mode`, `POST rooms/<key>/start-over`, `POST uploads`, `files/<id>`, `schedules`, `agents/<name>`, `POST agents/<name>/avatar`, `models`; the agents' pictures are at `<mount>/avatars/<hash>.png`.
 
 A room key from a page must be one of the app's rooms whose agent or group exists; every other key, Discord's included, is refused. Every write needs an owner, whose tier is read again, and REST writes also need the console's `Origin`. A card can be answered by any owner, except a card that is the speaker's alone, which only the speaker's principal answers. After `cardGraceSeconds` (default 120) a turn goes on without the answer and the card stays open for a day; an answer then starts a new turn in the room. The types are in `src/api-types.ts`.
+
+### Uploads
+
+An owner may send a file of any kind in a room, up to four to a message: the button, a paste (a copied image, say) or a drop. `POST <mount>/api/uploads` takes one file as `multipart/form-data` (field `file`) and answers `{id, name, type, size}`; the message then names it in `uploads`. A long text goes as a file too: the page turns a paste of 4,000 characters or more into a `pasted-text-<n>.txt` chip, and a message over 32,000 characters into `message.txt` with the line "(long text attached)"; the server still refuses a text over 32,000 characters.
+
+- **Streamed, not buffered.** The body is read as a stream and written to disk as it arrives, so a large file costs disk, not memory. Only the first bytes are kept to tell what the file is. A file over `uploadMaxBytes` is refused with `413` (before it is read when the length says so, as it passes the limit otherwise), and nothing is left on disk.
+- **Any type.** Images are checked by their first bytes (a file that says it is a PNG but is not one is refused with `415`); a file that is valid UTF-8 without NUL bytes is kept as text (`text/markdown`, `text/csv` or `application/json` by its name, else `text/plain`); a PDF by its first bytes keeps `application/pdf`; everything else is kept as `application/octet-stream` under the name it came with. What the browser said the type was (often empty, or `video/mp2t` for a `.ts` file) does not decide.
+- **Bounded.** A person may have 16 files and 400 MiB waiting for a message, counting uploads on their way (`429` beyond that); a waiting file is deleted after a day, a sent one after 30.
+- **Served safely.** A stored file is a download, never a page (`content-disposition: attachment`, `content-security-policy: sandbox`, `nosniff`); only the four image types are shown inline.
+- **What the agent gets.** The turn's message names each file, and the host saves it for the agent's tools; images (four at most) are also shown to the model. The host's attachment store reads files up to 25 MiB for a turn: a larger file is in the room and can be downloaded, but the turn is told it was "larger than 25 MB" and does not get it.
+- **Limits in front of the app.** The host's HTTP server (Bun) refuses a request body over 128 MiB unless the host raised it, which is why `uploadMaxBytes` stops at 120 MiB. A reverse proxy has its own limit; Cloudflare's free plan caps request bodies at 100 MB, so a larger file needs a paid plan or an upload path that skips the proxy.
 
 ## Development
 

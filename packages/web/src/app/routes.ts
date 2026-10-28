@@ -293,9 +293,9 @@ export class AppApi {
 	#file(id: string): Response {
 		if (!isFileId(id)) throw notFound();
 		const meta = this.#options.files.meta(id);
-		const bytes = this.#options.files.bytes(id);
-		if (!meta || !bytes) throw notFound();
-		return fileResponse(meta, bytes);
+		const blob = this.#options.files.blob(id);
+		if (!meta || !blob) throw notFound();
+		return fileResponse(meta, blob);
 	}
 
 	async #schedules(

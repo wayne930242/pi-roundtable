@@ -8,6 +8,7 @@ import {
 	statSync,
 	writeFileSync,
 } from "node:fs";
+import { open } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
 import type { RoomFile } from "../api-types.ts";
 
@@ -67,6 +68,16 @@ interface Meta {
 	size: number;
 }
 
+/** A file being written as its bytes arrive; `finish` makes it a stored file, `abort` leaves nothing. */
+export interface FileWriter {
+	readonly id: string;
+	/** Bytes written so far. */
+	readonly size: number;
+	write(chunk: Uint8Array): Promise<void>;
+	finish(name: string, type: string): Promise<RoomFile>;
+	abort(): Promise<void>;
+}
+
 /**
  * A directory of files kept by id, each with a small record of its name and type beside it.
  * Both stores of the app, the files of replies and sent messages and the uploads waiting for a
@@ -97,6 +108,49 @@ export class FileDir {
 			mode: 0o600,
 		});
 		return { id, ...meta };
+	}
+
+	/** Starts a file under a new id whose bytes arrive in pieces, so it is never held whole. */
+	async begin(): Promise<FileWriter> {
+		mkdirSync(this.dir, { recursive: true, mode: 0o700 });
+		const id = crypto.randomUUID();
+		const path = this.#path(id);
+		const handle = await open(path, "wx", 0o600);
+		let size = 0;
+		let ended = false;
+		const close = async () => {
+			if (ended) return false;
+			ended = true;
+			await handle.close();
+			return true;
+		};
+		return {
+			id,
+			get size() {
+				return size;
+			},
+			write: async (chunk) => {
+				await handle.write(chunk);
+				size += chunk.byteLength;
+			},
+			finish: async (name, type) => {
+				await close();
+				const meta: Meta = { name: safeName(name), type, size };
+				writeFileSync(`${path}.json`, JSON.stringify(meta), { mode: 0o600 });
+				return { id, ...meta };
+			},
+			abort: async () => {
+				await close().catch(() => undefined);
+				rmSync(path, { force: true });
+				rmSync(`${path}.json`, { force: true });
+			},
+		};
+	}
+
+	/** The file as a blob that is read as it is sent, or undefined when there is none. */
+	blob(id: string): Blob | undefined {
+		if (!isFileId(id) || !existsSync(this.#path(id))) return undefined;
+		return Bun.file(this.#path(id));
 	}
 
 	meta(id: string): RoomFile | undefined {
@@ -168,10 +222,10 @@ export class FileDir {
  * The response for a stored file: a download, except for the four image types the page shows,
  * never interpreted as a page (`sandbox`, `nosniff`).
  */
-export function fileResponse(meta: RoomFile, bytes: Uint8Array): Response {
+export function fileResponse(meta: RoomFile, body: Blob): Response {
 	const inline = INLINE_TYPES.has(meta.type);
 	const encoded = encodeURIComponent(meta.name);
-	return new Response(new Uint8Array(bytes), {
+	return new Response(body, {
 		headers: {
 			"content-type": inline ? meta.type : "application/octet-stream",
 			"content-disposition": inline
@@ -180,7 +234,7 @@ export function fileResponse(meta: RoomFile, bytes: Uint8Array): Response {
 			"content-security-policy": "sandbox",
 			"x-content-type-options": "nosniff",
 			"cache-control": "private, max-age=3600",
-			"content-length": String(bytes.byteLength),
+			"content-length": String(body.size),
 		},
 	});
 }

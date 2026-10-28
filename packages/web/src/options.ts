@@ -2,6 +2,10 @@ import { join } from "node:path";
 import type { ChannelKey, RoundtablePlugin } from "pi-roundtable";
 import { PluginError } from "pi-roundtable";
 import { PANES, type PaneName } from "./api-types.ts";
+import {
+	DEFAULT_UPLOAD_MAX_BYTES,
+	UPLOAD_MAX_BYTES_CEILING,
+} from "./app/uploads.ts";
 import type { ConsoleFeatures, ConsolePresentation } from "./features.ts";
 import type { RequestVerifier } from "./verifier.ts";
 
@@ -130,6 +134,13 @@ export interface WebConsoleOptions {
 	 * then starts a new turn in the room.
 	 */
 	cardGraceSeconds?: number;
+	/**
+	 * The most bytes of one file a person may upload in the app, 100 MiB by default and at most
+	 * 120 MiB: the host's HTTP server refuses bodies over its own limit (Bun's is 128 MiB). A reverse
+	 * proxy in front has a limit of its own, and Cloudflare's free plan caps request bodies at
+	 * 100 MB. Files are streamed to disk, not held in memory.
+	 */
+	uploadMaxBytes?: number;
 	/** The page's title and heading; default `Roundtable`. */
 	title?: string;
 	/** Where the install icons come from; default the ones this package ships. */
@@ -155,6 +166,7 @@ export interface ResolvedOptions {
 	panes: PaneName[];
 	surface: string;
 	cardGraceSeconds: number;
+	uploadMaxBytes: number;
 	title: string;
 	iconsDir: string | undefined;
 	relayNotes: readonly string[];
@@ -307,6 +319,20 @@ function checkGrace(seconds: number | undefined): number {
 	return seconds;
 }
 
+function checkUploadMax(bytes: number | undefined): number {
+	if (bytes === undefined) return DEFAULT_UPLOAD_MAX_BYTES;
+	if (
+		typeof bytes !== "number" ||
+		!Number.isInteger(bytes) ||
+		bytes < 1 ||
+		bytes > UPLOAD_MAX_BYTES_CEILING
+	)
+		fail(
+			`uploadMaxBytes must be a whole number of bytes from 1 to ${UPLOAD_MAX_BYTES_CEILING} (120 MiB), which is what the host's HTTP server takes in one request`,
+		);
+	return bytes;
+}
+
 /** Checks the options at the point the plugin is created, so a bad setting stops the host before anything starts. */
 export function resolveOptions(options: WebConsoleOptions): ResolvedOptions {
 	const auth = checkAuth(options);
@@ -343,6 +369,7 @@ export function resolveOptions(options: WebConsoleOptions): ResolvedOptions {
 		panes,
 		surface: checkSurface(options.surface),
 		cardGraceSeconds: checkGrace(options.cardGraceSeconds),
+		uploadMaxBytes: checkUploadMax(options.uploadMaxBytes),
 		title,
 		iconsDir: options.icons?.dir,
 		relayNotes: options.relayNotes ?? [DEFAULT_RELAY_NOTE],

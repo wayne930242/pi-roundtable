@@ -28,7 +28,7 @@ import { parseClientFrame } from "./protocol.ts";
 import type { Rooms } from "./rooms.ts";
 import type { AppSocket, Sockets } from "./sockets.ts";
 import type { AppSurface } from "./surface.ts";
-import { UPLOAD_MAX_BYTES, UPLOAD_TYPES, type Uploads } from "./uploads.ts";
+import type { Uploads } from "./uploads.ts";
 
 /** The longest delay a timer keeps; a longer one fires at once. */
 const MAX_TIMER_MS = 2 ** 31 - 1;
@@ -136,7 +136,7 @@ export class SocketRoute {
 
 	#open(socket: RouteSocket<AppSocket>): void {
 		const connection = socket.data;
-		const { sockets, desk } = this.#options;
+		const { sockets, desk, uploads } = this.#options;
 		sockets.add(connection, socket);
 		const now = this.#now();
 		const lapses = [
@@ -175,8 +175,7 @@ export class SocketRoute {
 			name: connection.principal.name,
 			uploads: {
 				perMessage: MAX_MESSAGE_FILES,
-				maxBytes: UPLOAD_MAX_BYTES,
-				types: [...UPLOAD_TYPES],
+				maxBytes: uploads.maxBytes,
 			},
 		});
 		for (const frame of desk.openFrames()) sockets.send(connection, frame);

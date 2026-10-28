@@ -547,7 +547,7 @@ export type ServerFrame =
 			principal: string;
 			name: string;
 			/** The most files one message carries and the most bytes of one. */
-			uploads: { perMessage: number; maxBytes: number; types: string[] };
+			uploads: { perMessage: number; maxBytes: number };
 	  }
 	/** The message `id` was taken into `room`; `message` is how it was stored. */
 	| { type: "accepted"; id: string; room: string; message: RoomMessage }

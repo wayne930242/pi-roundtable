@@ -78,6 +78,7 @@ async function boot(options: {
 	auth: "verifier" | "none";
 	dataDir?: string;
 	graceSeconds?: number;
+	uploadMaxBytes?: number;
 }): Promise<Booted> {
 	const dataDir = options.dataDir ?? mkdtempSync(join(tmpdir(), "app-socket-"));
 	const socket = join(dataDir, "public.sock");
@@ -156,6 +157,9 @@ async function boot(options: {
 				dataDir,
 				assetDir: assets,
 				cardGraceSeconds: options.graceSeconds ?? 120,
+				...(options.uploadMaxBytes
+					? { uploadMaxBytes: options.uploadMaxBytes }
+					: {}),
 				panes: ["rooms", "schedules", "overview"],
 			}),
 		],
@@ -782,6 +786,92 @@ describeDb("the owner app over a real host", () => {
 		tab.close();
 	});
 
+	test("an ordinary file of any kind goes with a message, and the agent turn gets it saved as it was", async () => {
+		const upload = async (file: File) => {
+			const form = new FormData();
+			form.set("file", file);
+			return fetch("http://localhost/console/api/uploads", {
+				method: "POST",
+				body: form,
+				headers: { "x-actor": "owner", origin: ORIGIN },
+				unix: app.socket,
+			} as never);
+		};
+		const notes = "# Notes\n\n- one\n- 二\n";
+		const text = await upload(new File([notes], "notes.md", { type: "" }));
+		expect(text.status).toBe(200);
+		const textView = (await text.json()) as { id: string; type: string };
+		expect(textView.type).toBe("text/markdown");
+		const zipBytes = new Uint8Array([0x50, 0x4b, 3, 4, 0, 0, 0xff, 0, 1]);
+		const zip = await upload(
+			new File([zipBytes], "bundle.zip", { type: "application/zip" }),
+		);
+		expect(zip.status).toBe(200);
+		const zipView = (await zip.json()) as { id: string; type: string };
+		expect(zipView.type).toBe("application/octet-stream");
+		const tab = await Client.open(app, { "x-actor": "owner" });
+		if (!tab) throw new Error("the owner was refused");
+		tab.send({
+			type: "send",
+			id: "t1",
+			room: SCOUT,
+			text: "read the notes",
+			uploads: [textView.id, zipView.id],
+		});
+		await tab.take(ofType("accepted"));
+		await tab.take(agentReply("scout"));
+		const turn = app.seen.find((r) => r.text.includes("read the notes"));
+		const files = turn?.attachments?.files ?? [];
+		expect(files.map((f) => f.name)).toEqual(["notes.md", "bundle.zip"]);
+		// The agent can open what the owner sent, byte for byte.
+		expect(await Bun.file(files[0]?.path ?? "").text()).toBe(notes);
+		expect(
+			new Uint8Array(await Bun.file(files[1]?.path ?? "").arrayBuffer()),
+		).toEqual(zipBytes);
+		// Served back as downloads, never as pages.
+		const served = await rest(app, `files/${textView.id}`);
+		expect(served.headers.get("content-type")).toBe("application/octet-stream");
+		expect(served.headers.get("content-disposition")).toContain("attachment");
+		expect(await served.text()).toBe(notes);
+		tab.close();
+	});
+
+	test("a file over the old limit of 10 MiB goes through, as a stream", async () => {
+		const big = new Uint8Array(12 * 1024 * 1024).map((_, i) => (i * 13) % 253);
+		big[0] = 0;
+		const form = new FormData();
+		form.set(
+			"file",
+			new File([big], "big.bin", { type: "application/octet-stream" }),
+		);
+		const uploaded = await fetch("http://localhost/console/api/uploads", {
+			method: "POST",
+			body: form,
+			headers: { "x-actor": "owner", origin: ORIGIN },
+			unix: app.socket,
+		} as never);
+		expect(uploaded.status).toBe(200);
+		const view = (await uploaded.json()) as { id: string; size: number };
+		expect(view.size).toBe(big.byteLength);
+		const tab = await Client.open(app, { "x-actor": "owner" });
+		if (!tab) throw new Error("the owner was refused");
+		const ready = await tab.take(ofType("ready"));
+		expect(ready.uploads.maxBytes).toBe(100 * 1024 * 1024);
+		expect(ready.uploads).not.toHaveProperty("types");
+		tab.send({
+			type: "send",
+			id: "b1",
+			room: SCOUT,
+			text: "big file",
+			uploads: [view.id],
+		});
+		await tab.take(ofType("accepted"));
+		const served = await rest(app, `files/${view.id}`);
+		expect(served.headers.get("content-length")).toBe(String(big.byteLength));
+		expect(new Uint8Array(await served.arrayBuffer())).toEqual(big);
+		tab.close();
+	});
+
 	test("a reply's files are kept and served as downloads", async () => {
 		app.scripts.set("make-file", async () => ({
 			ok: true,
@@ -991,7 +1081,14 @@ describeDb("the owner app over a real host", () => {
 		).json()) as MessagesView;
 		expect(older.messages).toHaveLength(1);
 		expect(older.messages[0]?.id).toBe(after.messages[0]?.id);
-		expect(older.more).toBe(false);
+		// `more` says whether anything is older than that page; the shared test database keeps rooms from earlier runs.
+		const beyond = (await (
+			await rest(
+				app,
+				`rooms/${encodeURIComponent(GUIDE)}/messages?before=${after.messages[0]?.id}&limit=1`,
+			)
+		).json()) as MessagesView;
+		expect(older.more).toBe(beyond.messages.length > 0);
 		// The mode it was left in survives too.
 		expect(app.host.context.services.get(MODES).peek(GUIDE).longRunning).toBe(
 			false,
@@ -1017,4 +1114,41 @@ describeDb("the app on a host with no authentication of its own", () => {
 			await none.stop();
 		}
 	}, 30_000);
+});
+
+describeDb("the owner app with a small upload limit", () => {
+	let small: Booted;
+	beforeAll(async () => {
+		small = await boot({ auth: "verifier", uploadMaxBytes: 1024 * 1024 });
+	});
+	afterAll(async () => {
+		await small.stop();
+	});
+
+	test("a file over the limit is refused with 413 and the page is told the limit", async () => {
+		const send = (bytes: number) => {
+			const data = new Uint8Array(bytes).fill(9);
+			data[0] = 0;
+			const form = new FormData();
+			form.set("file", new File([data], "x.bin", { type: "application/zip" }));
+			return fetch("http://localhost/console/api/uploads", {
+				method: "POST",
+				body: form,
+				headers: { "x-actor": "owner", origin: ORIGIN },
+				unix: small.socket,
+			} as never);
+		};
+		const over = await send(2 * 1024 * 1024);
+		expect(over.status).toBe(413);
+		expect(((await over.json()) as { error: string }).error).toContain(
+			"too large",
+		);
+		expect((await send(1024 * 1024)).status).toBe(200);
+		const tab = await Client.open(small, { "x-actor": "owner" });
+		if (!tab) throw new Error("the owner was refused");
+		expect((await tab.take(ofType("ready"))).uploads.maxBytes).toBe(
+			1024 * 1024,
+		);
+		tab.close();
+	});
 });

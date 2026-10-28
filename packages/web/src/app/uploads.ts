@@ -1,68 +1,127 @@
+import { extname } from "node:path";
 import type { AttachmentRef } from "pi-roundtable";
 import type { RoomFile, UploadView } from "../api-types.ts";
 import { FILE_RETENTION_MS, type FileDir, safeName } from "./files.ts";
+import {
+	boundaryOf,
+	MultipartError,
+	type PartHeaders,
+	type PartSink,
+	readMultipart,
+} from "./multipart.ts";
 
-/** The most bytes of one uploaded file: 10 MiB. */
-export const UPLOAD_MAX_BYTES = 10 * 1024 * 1024;
+/** The most bytes of one uploaded file when the options say nothing else: 100 MiB. */
+export const DEFAULT_UPLOAD_MAX_BYTES = 100 * 1024 * 1024;
+/**
+ * The most the `uploadMaxBytes` option may be: 120 MiB. The host's HTTP server (Bun) refuses a
+ * body over its own limit, 128 MiB unless the host set another, and a form's framing adds to the
+ * file; a limit above this could never be met.
+ */
+export const UPLOAD_MAX_BYTES_CEILING = 120 * 1024 * 1024;
+/** What the multipart framing of one file may add to a body: 64 KiB. */
+const FRAMING_BYTES = 64 * 1024;
 /** How long an upload no message used waits: 24 hours. */
 export const UPLOAD_WAIT_MS = 24 * 3_600_000;
-/** The most files one person may have waiting for a message. */
+/** The most files one person may have waiting for a message, or on their way. */
 const PENDING_PER_PRINCIPAL = 16;
-
-/** The content types an upload may be, exactly. */
-export const UPLOAD_TYPES: readonly string[] = [
-	"image/png",
-	"image/jpeg",
-	"image/webp",
-	"image/gif",
-	"application/json",
-	"text/plain",
-	"application/pdf",
-];
+/** The most bytes one person may have waiting for a message, or on their way: 400 MiB. */
+const PENDING_BYTES_PER_PRINCIPAL = 400 * 1024 * 1024;
+/** How much of the start of a file is kept to tell what it is. */
+const HEAD_BYTES = 16;
 
 /** The scheme of the references a message carries to its uploads: `app-upload:<id>`. */
 const REF_PREFIX = "app-upload:";
 
 const startsWith = (bytes: Uint8Array, signature: readonly number[], at = 0) =>
+	bytes.byteLength >= at + signature.length &&
 	signature.every((byte, index) => bytes[at + index] === byte);
 const ascii = (text: string) => [...text].map((char) => char.charCodeAt(0));
 
-/** Whether the bytes are what the type says, for the types whose first bytes say so. */
-function bytesMatchType(type: string, bytes: Uint8Array): boolean {
-	switch (type) {
-		case "image/png":
-			return startsWith(
-				bytes,
-				[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a],
-			);
-		case "image/jpeg":
-			return startsWith(bytes, [0xff, 0xd8, 0xff]);
-		case "image/gif":
-			return (
-				startsWith(bytes, ascii("GIF87a")) || startsWith(bytes, ascii("GIF89a"))
-			);
-		case "image/webp":
-			return (
-				startsWith(bytes, ascii("RIFF")) && startsWith(bytes, ascii("WEBP"), 8)
-			);
-		case "application/pdf":
-			return startsWith(bytes, ascii("%PDF-"));
-		case "application/json":
-			try {
-				JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
-				return true;
-			} catch {
-				return false;
-			}
-		case "text/plain":
-			try {
-				new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-				return true;
-			} catch {
-				return false;
-			}
+/** The image type the first bytes say, if any; these four are the ones the page shows itself. */
+function imageTypeOf(head: Uint8Array): string | undefined {
+	if (startsWith(head, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+		return "image/png";
+	if (startsWith(head, [0xff, 0xd8, 0xff])) return "image/jpeg";
+	if (startsWith(head, ascii("GIF87a")) || startsWith(head, ascii("GIF89a")))
+		return "image/gif";
+	if (startsWith(head, ascii("RIFF")) && startsWith(head, ascii("WEBP"), 8))
+		return "image/webp";
+	return undefined;
+}
+
+/** The image types a file's declared type may name; any other declared type says nothing the bytes must match. */
+const CHECKED_IMAGE_TYPES = new Set([
+	"image/png",
+	"image/jpeg",
+	"image/gif",
+	"image/webp",
+]);
+
+/** The type kept for a text file: what its name says among the text types, otherwise plain text. */
+function textTypeOf(name: string, declared: string): string {
+	switch (extname(name).toLowerCase()) {
+		case ".md":
+		case ".markdown":
+			return "text/markdown";
+		case ".csv":
+			return "text/csv";
+		case ".json":
+			return "application/json";
 		default:
-			return false;
+			return declared === "application/json" ? declared : "text/plain";
+	}
+}
+
+/**
+ * What kind of file the bytes are, learned as they stream past: the first bytes, and whether
+ * everything so far is UTF-8 text without a NUL. Nothing is held but the first few bytes.
+ */
+class Sniffer {
+	#head: Uint8Array = new Uint8Array(0);
+	#text = true;
+	readonly #decoder = new TextDecoder("utf-8", { fatal: true });
+
+	feed(chunk: Uint8Array): void {
+		if (this.#head.byteLength < HEAD_BYTES) {
+			const kept = new Uint8Array(
+				Math.min(HEAD_BYTES, this.#head.byteLength + chunk.byteLength),
+			);
+			kept.set(this.#head, 0);
+			kept.set(
+				chunk.subarray(0, kept.byteLength - this.#head.byteLength),
+				this.#head.byteLength,
+			);
+			this.#head = kept;
+		}
+		if (!this.#text) return;
+		if (chunk.includes(0)) {
+			this.#text = false;
+			return;
+		}
+		try {
+			this.#decoder.decode(chunk, { stream: true });
+		} catch {
+			this.#text = false;
+		}
+	}
+
+	/** The verdict at the end of the file: the type it is kept as, or undefined when its declared image type is not what the bytes are. */
+	verdict(name: string, declared: string): string | undefined {
+		let complete = this.#text;
+		if (complete) {
+			try {
+				this.#decoder.decode();
+			} catch {
+				complete = false;
+			}
+		}
+		const image = imageTypeOf(this.#head);
+		if (CHECKED_IMAGE_TYPES.has(declared) && image !== declared)
+			return undefined;
+		if (image) return image;
+		if (complete) return textTypeOf(name, declared);
+		if (startsWith(this.#head, ascii("%PDF-"))) return "application/pdf";
+		return "application/octet-stream";
 	}
 }
 
@@ -80,6 +139,7 @@ export class UploadRefusal extends Error {
 interface Waiting {
 	principalId: string;
 	at: number;
+	size: number;
 }
 
 /**
@@ -87,51 +147,137 @@ interface Waiting {
  * its owner's alone: a message may only name uploads of its own sender. When a message takes
  * its uploads they move to the stored files, which keep 30 days, and the agent reads them
  * through the surface as `app-upload:<id>`; an upload no message uses is deleted after a day.
+ * An upload is read as a stream and written to disk as it arrives, so its size costs disk, not
+ * memory; what a person may have waiting is bounded in files and in bytes.
  */
 export class Uploads {
 	readonly #waiting: FileDir;
 	readonly #stored: FileDir;
 	readonly #pending = new Map<string, Waiting>();
+	/** What uploads under way will take at most, by person: their declared lengths. */
+	readonly #inflight = new Map<string, { files: number; bytes: number }>();
 	readonly #now: () => number;
+	readonly maxBytes: number;
+	readonly #pendingBytes: number;
 
-	constructor(waiting: FileDir, stored: FileDir, now: () => number = Date.now) {
+	constructor(
+		waiting: FileDir,
+		stored: FileDir,
+		options: {
+			maxBytes?: number;
+			/** The most bytes one person may have waiting; default 400 MiB. */
+			pendingBytes?: number;
+			now?: () => number;
+		} = {},
+	) {
 		this.#waiting = waiting;
 		this.#stored = stored;
-		this.#now = now;
+		this.#now = options.now ?? Date.now;
+		this.maxBytes = options.maxBytes ?? DEFAULT_UPLOAD_MAX_BYTES;
+		this.#pendingBytes = options.pendingBytes ?? PENDING_BYTES_PER_PRINCIPAL;
+	}
+
+	#waitingOf(principalId: string): { files: number; bytes: number } {
+		let files = 0;
+		let bytes = 0;
+		for (const w of this.#pending.values())
+			if (w.principalId === principalId) {
+				files += 1;
+				bytes += w.size;
+			}
+		const flying = this.#inflight.get(principalId);
+		return {
+			files: files + (flying?.files ?? 0),
+			bytes: bytes + (flying?.bytes ?? 0),
+		};
 	}
 
 	/** Takes one file from a multipart body (field `file`); throws `UploadRefusal` when it is not accepted. */
 	async receive(request: Request, principalId: string): Promise<UploadView> {
-		const mine = [...this.#pending.values()].filter(
-			(w) => w.principalId === principalId,
-		).length;
-		if (mine >= PENDING_PER_PRINCIPAL)
-			throw new UploadRefusal(429, "Too many files are waiting for a message.");
 		const length = Number(request.headers.get("content-length"));
 		if (!Number.isFinite(length) || length <= 0)
 			throw new UploadRefusal(400, "The upload has no length.");
-		if (length > UPLOAD_MAX_BYTES + 64 * 1024)
+		if (length > this.maxBytes + FRAMING_BYTES)
 			throw new UploadRefusal(413, "The file is too large.");
-		const form = await request.formData().catch(() => undefined);
-		if (!form) throw new UploadRefusal(400, "The upload is not a form.");
-		const file = form.get("file");
-		if (!(file instanceof File))
-			throw new UploadRefusal(400, "There is no file.");
-		if (file.size > UPLOAD_MAX_BYTES)
-			throw new UploadRefusal(413, "The file is too large.");
-		const type = file.type.split(";")[0]?.trim().toLowerCase() ?? "";
-		if (!UPLOAD_TYPES.includes(type))
-			throw new UploadRefusal(415, "This kind of file is not accepted.");
-		const bytes = new Uint8Array(await file.arrayBuffer());
-		if (bytes.byteLength === 0 || !bytesMatchType(type, bytes))
-			throw new UploadRefusal(415, "The file is not what its type says.");
-		const stored = this.#waiting.put(safeName(file.name), type, bytes);
-		this.#pending.set(stored.id, { principalId, at: this.#now() });
+		const waiting = this.#waitingOf(principalId);
+		if (waiting.files >= PENDING_PER_PRINCIPAL)
+			throw new UploadRefusal(429, "Too many files are waiting for a message.");
+		if (waiting.bytes + length > this.#pendingBytes)
+			throw new UploadRefusal(
+				429,
+				"Too much is waiting for a message. Send it, or wait a day for the rest to clear.",
+			);
+		const boundary = boundaryOf(request.headers.get("content-type"));
+		if (!boundary || !request.body)
+			throw new UploadRefusal(400, "The upload is not a form.");
+		this.#inflight.set(principalId, {
+			files: (this.#inflight.get(principalId)?.files ?? 0) + 1,
+			bytes: (this.#inflight.get(principalId)?.bytes ?? 0) + length,
+		});
+		let kept: RoomFile | undefined;
+		try {
+			await readMultipart(request.body, boundary, (part) => {
+				if (kept || part.name !== "file" || part.filename === undefined)
+					return undefined;
+				return this.#sink(part, (file) => {
+					kept = file;
+				});
+			});
+		} catch (error) {
+			if (error instanceof MultipartError)
+				throw new UploadRefusal(400, "The upload is not a form.");
+			throw error;
+		} finally {
+			const flying = this.#inflight.get(principalId);
+			if (flying && flying.files > 1)
+				this.#inflight.set(principalId, {
+					files: flying.files - 1,
+					bytes: flying.bytes - length,
+				});
+			else this.#inflight.delete(principalId);
+		}
+		if (!kept) throw new UploadRefusal(400, "There is no file.");
+		this.#pending.set(kept.id, {
+			principalId,
+			at: this.#now(),
+			size: kept.size,
+		});
 		return {
-			id: stored.id,
-			name: stored.name,
-			type: stored.type,
-			size: stored.size,
+			id: kept.id,
+			name: kept.name,
+			type: kept.type,
+			size: kept.size,
+		};
+	}
+
+	/** The sink that streams one file part to the waiting directory and decides what it is as it goes. */
+	#sink(part: PartHeaders, done: (file: RoomFile) => void): PartSink {
+		const sniffer = new Sniffer();
+		const name = safeName(part.filename ?? "file");
+		let writer: Awaited<ReturnType<FileDir["begin"]>> | undefined;
+		const open = async () => {
+			writer ??= await this.#waiting.begin();
+			return writer;
+		};
+		return {
+			write: async (chunk) => {
+				const file = await open();
+				if (file.size + chunk.byteLength > this.maxBytes)
+					throw new UploadRefusal(413, "The file is too large.");
+				sniffer.feed(chunk);
+				await file.write(chunk);
+			},
+			end: async () => {
+				const file = await open();
+				if (file.size === 0) throw new UploadRefusal(400, "The file is empty.");
+				const type = sniffer.verdict(name, part.contentType);
+				if (!type)
+					throw new UploadRefusal(415, "The file is not what its type says.");
+				done(await file.finish(name, type));
+			},
+			abort: async () => {
+				await writer?.abort();
+			},
 		};
 	}
 
@@ -200,6 +346,10 @@ export class Uploads {
 	adopt(): void {
 		for (const id of this.#waiting.ids())
 			if (!this.#pending.has(id))
-				this.#pending.set(id, { principalId: "", at: this.#now() });
+				this.#pending.set(id, {
+					principalId: "",
+					at: this.#now(),
+					size: 0,
+				});
 	}
 }

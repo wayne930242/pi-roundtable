@@ -75,6 +75,7 @@ function harness(
 					: undefined,
 		}),
 		uploads: partial<Uploads>({
+			maxBytes: 100 * 1024 * 1024,
 			claim: () => [],
 			use: () => undefined,
 			refOf: () => ({}) as never,
