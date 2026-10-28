@@ -1,0 +1,68 @@
+/* Generated from src/characters/css.ts by scripts/build-character-css.ts; do not edit. */
+/* State motion for composed characters. Put data-state on the <svg class="av"> or on an .av-host around it. */
+.av{overflow:visible}
+.av .ov{opacity:0}
+.av .glow{opacity:.28}
+.av .ch,.av .prop,.av .eyes,.av .ov{transform-box:view-box}
+.av .ch{transform-origin:50px 94px}
+.av .eyes{transform-origin:50px 52px;animation:av-blink 5.2s infinite}
+.av .o-wait,.av .o-done,.av .o-err{transform-origin:17px 19px}
+.av .o-think{transform-origin:50px 50px}
+.av [data-prop=staff]{transform-origin:73px 82px}
+.av [data-prop=shield]{transform-origin:27px 82px}
+.av [data-prop=scroll]{transform-origin:76px 76px}
+.av [data-prop=hammer]{transform-origin:79px 84px}
+.av [data-prop=bow]{transform-origin:78px 70px}
+.av [data-prop=lute]{transform-origin:75px 70px}
+.av [data-prop=flask]{transform-origin:73px 66px}
+.av [data-prop=quill]{transform-origin:72px 82px}
+.av [data-prop=tome]{transform-origin:78px 76px}
+.av [data-prop=bell]{transform-origin:76px 62px}
+.av [data-prop=keys]{transform-origin:78px 62px}
+.av [data-prop=map]{transform-origin:77px 58px}
+.av [data-prop=telescope]{transform-origin:76px 74px}
+.av [data-prop=wrench]{transform-origin:78px 86px}
+.av [data-prop=spade]{transform-origin:76px 60px}
+.av [data-prop=ladle]{transform-origin:78px 78px}
+.av [data-prop=lantern]{transform-origin:76px 62px}
+.av [data-prop=seal]{transform-origin:76px 66px}
+.av [data-prop=dagger]{transform-origin:78px 86px}
+.av [data-prop=beads]{transform-origin:78px 62px}
+.av [data-prop=bird]{transform-origin:78px 76px}
+.av [data-prop=anchor]{transform-origin:76px 76px}
+.av [data-prop=marotte]{transform-origin:76px 62px}
+.av [data-prop=sword]{transform-origin:76px 82px}
+:is(.av,.av-host)[data-state=idle] .ch{animation:av-breathe 3.8s ease-in-out infinite}
+:is(.av,.av-host)[data-state=thinking] .ch{animation:av-tilt 3.2s ease-in-out infinite}
+:is(.av,.av-host)[data-state=thinking] .o-think{opacity:1;animation:av-orbit 2.6s linear infinite}
+:is(.av,.av-host)[data-state=working] .ch{animation:av-bob .56s ease-in-out infinite}
+:is(.av,.av-host)[data-state=working] .prop{animation:av-sweep .56s ease-in-out infinite alternate}
+:is(.av,.av-host)[data-state=working] .glow{animation:av-glow .56s ease-in-out infinite alternate}
+:is(.av,.av-host)[data-state=waiting] .ch{animation:av-lean 1.6s ease-in-out infinite}
+:is(.av,.av-host)[data-state=waiting] .o-wait{opacity:1;animation:av-badge 1.2s ease-in-out infinite}
+:is(.av,.av-host)[data-state=waiting] .glow{animation:av-glow 1.2s ease-in-out infinite alternate}
+:is(.av,.av-host)[data-state=done] .ch{animation:av-pop .7s cubic-bezier(.3,1.6,.5,1) 1}
+:is(.av,.av-host)[data-state=done] .o-done{opacity:1;animation:av-badge-in .5s ease-out 1}
+:is(.av,.av-host)[data-state=done] .glow{opacity:.7}
+:is(.av,.av-host)[data-state=error] .ch{animation:av-shake .5s ease-in-out 2}
+:is(.av,.av-host)[data-state=error] .o-err{opacity:1;animation:av-badge-in .3s ease-out 1}
+:is(.av,.av-host)[data-state=error] .ring{stroke:#e5484d}
+:is(.av,.av-host)[data-state=error] .glow{opacity:0}
+:is(.av,.av-host)[data-state=sleepy] .ch{animation:av-breathe 6s ease-in-out infinite}
+:is(.av,.av-host)[data-state=sleepy] .o-zz{opacity:1;animation:av-float 3s ease-in-out infinite}
+:is(.av,.av-host)[data-state=sleepy] .glow{opacity:.08}
+@keyframes av-blink{0%,93%,100%{transform:scaleY(1)}96%{transform:scaleY(.08)}}
+@keyframes av-breathe{0%,100%{transform:scale(1,1)}50%{transform:scale(1.012,1.03)}}
+@keyframes av-tilt{0%,100%{transform:rotate(-3deg)}50%{transform:rotate(3deg)}}
+@keyframes av-orbit{to{transform:rotate(360deg)}}
+@keyframes av-bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-2.4px)}}
+@keyframes av-sweep{from{transform:rotate(-9deg)}to{transform:rotate(9deg)}}
+@keyframes av-glow{from{opacity:.2}to{opacity:.85}}
+@keyframes av-lean{0%,100%{transform:rotate(-1deg) translateY(0)}50%{transform:rotate(-6deg) translateY(1px)}}
+@keyframes av-badge{0%,100%{transform:scale(1)}50%{transform:scale(1.14)}}
+@keyframes av-badge-in{from{transform:scale(.2);opacity:0}to{transform:scale(1);opacity:1}}
+@keyframes av-pop{0%{transform:scale(1)}40%{transform:scale(1.1,.94)}70%{transform:scale(.97,1.05)}100%{transform:scale(1)}}
+@keyframes av-shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-2.4px)}40%{transform:translateX(2.4px)}60%{transform:translateX(-1.6px)}80%{transform:translateX(1.6px)}}
+@keyframes av-float{0%,100%{transform:translateY(0);opacity:.35}50%{transform:translateY(-4px);opacity:1}}
+@media (prefers-reduced-motion:reduce){.av *{animation:none!important}.av .o-think{opacity:0!important}}
+.av.static *{animation:none!important}

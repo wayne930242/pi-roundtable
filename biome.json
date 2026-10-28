@@ -12,7 +12,8 @@
 			"**",
 			"!!scratch",
 			"!!.metadata_cache",
-			"!src/prompt-text.snapshot.json"
+			"!src/prompt-text.snapshot.json",
+			"!src/characters/characters.css"
 		]
 	},
 	"formatter": {
