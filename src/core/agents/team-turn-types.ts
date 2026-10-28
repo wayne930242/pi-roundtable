@@ -58,7 +58,10 @@ export interface TeamTurnsOptions {
 	 * channels; without it no key but Discord's is the team's. `of` tells whether the room's
 	 * surface carries reply files.
 	 */
-	surfaces?: Pick<SurfacePort, "sendReply" | "interim" | "roomSurfaces" | "of">;
+	surfaces?: Pick<
+		SurfacePort,
+		"sendReply" | "interim" | "roomSurfaces" | "of" | "progress"
+	>;
 	studio: Pick<AvatarStudio, "url">;
 	/** Set once the runtime exists, which itself needs the team's tools. */
 	runtime: () => AgentTurnRunner;

@@ -9,6 +9,7 @@ import type {
 import { AgentError } from "../domain/errors.ts";
 import type { InterimPosts } from "../domain/interim.ts";
 import type { AgentTurnScope } from "../domain/ports.ts";
+import type { TurnProgress } from "../domain/progress.ts";
 import { failureNotice } from "../presentation/failure-notice.ts";
 import { splitReply } from "../presentation/reply-splitter.ts";
 import { thinkingLine } from "../presentation/thinking-line.ts";
@@ -233,6 +234,7 @@ export class TeamTurns {
 		};
 		this.#options.events?.turnStarted(turn);
 		const interim = this.#interim(postTo, agent);
+		const progress = this.#progress(postTo);
 		let result: TurnResult;
 		try {
 			result = await settleTurn(
@@ -249,6 +251,7 @@ export class TeamTurns {
 							agent: scope,
 							speaker: chain.speaker,
 							...(interim ? { interim } : {}),
+							...(progress ? { progress } : {}),
 						}),
 					),
 				"agent turn",
@@ -309,6 +312,24 @@ export class TeamTurns {
 	/** The agent's latest row, so a display name or avatar changed during the turn shows. */
 	#current(agent: Agent): Agent {
 		return this.#options.store.agent(agent.name) ?? agent;
+	}
+
+	/**
+	 * What a turn in a room shows as it goes, through the room's surface; none in a Discord
+	 * channel, which shows only the final reply, or on a surface that shows no progress.
+	 */
+	#progress(channel: ChannelKey): ((event: TurnProgress) => void) | undefined {
+		const { surfaces, logger } = this.#options;
+		if (discordIdOf(channel) !== undefined || !surfaces?.progress)
+			return undefined;
+		return (event) => {
+			// pi-lens-ignore: no-unknown-parameters — a rejection reason is unknown; it only reaches the logger
+			surfaces
+				.progress?.(channel, event)
+				.catch((error: unknown) =>
+					logger.warn({ channel, err: error }, "progress not shown"),
+				);
+		};
 	}
 
 	/**

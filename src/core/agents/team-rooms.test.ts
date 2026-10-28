@@ -227,6 +227,33 @@ describe("agent rooms", () => {
 		expect(seen).toBeUndefined();
 	});
 
+	test("a room turn's progress reaches the room's surface, and a Discord channel's turn gets none", async () => {
+		const { port } = roomSurface();
+		const shown: string[] = [];
+		const surfaces: TeamTurnsOptions["surfaces"] = {
+			...port,
+			progress: async (channel, event) => {
+				shown.push(`${channel} ${event.type}`);
+			},
+		};
+		const seen: unknown[] = [];
+		const { team } = setup((request) => {
+			seen.push(request.progress);
+			request.progress?.({ type: "text", delta: "so far" });
+			return { ok: true, text: "done" };
+		}, surfaces);
+		await ask(team);
+		await team.answerOwner(
+			"discord:4000",
+			OWNER_SPEAKER,
+			"hi",
+			"hi",
+			NO_ATTACHMENTS,
+		);
+		expect(shown).toEqual([`${room} text`]);
+		expect(seen[1]).toBeUndefined();
+	});
+
 	test("a background turn in a room replies in the room", async () => {
 		const { port, replies } = roomSurface();
 		const { team, turns } = setup(() => ({ ok: true, text: "tick" }), port);
