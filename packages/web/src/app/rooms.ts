@@ -1,0 +1,178 @@
+import type {
+	Agent,
+	AgentDirectory,
+	AgentGroup,
+	AgentTeam,
+	AvatarStudio,
+	ChannelKey,
+	ConversationModes,
+} from "pi-roundtable";
+import { agentRoomKey, channelKey, groupRoomKey, roomOf } from "pi-roundtable";
+import type { RoomKind, RoomView } from "../api-types.ts";
+import type { RoomLog } from "./room-log.ts";
+import type { WebThreads } from "./threads.ts";
+
+/** A room of the app that exists: what it is, and what it is called. */
+export interface ResolvedRoom {
+	key: ChannelKey;
+	kind: RoomKind;
+	/** The agent's or group's name; a thread's `thread.<uuid>`. */
+	name: string;
+	displayName: string;
+	/** A thread's room is read only. */
+	readOnly: boolean;
+}
+
+export interface RoomsOptions {
+	surface: string;
+	/** The mount, whose `avatars/` serves the pictures. */
+	mount: string;
+	directory: Pick<AgentDirectory, "agents" | "agent" | "groups" | "group">;
+	team: Pick<AgentTeam, "coordinator">;
+	avatars: Pick<AvatarStudio, "url">;
+	threads: Pick<WebThreads, "get" | "listOpen">;
+	log: Pick<RoomLog, "lastOf">;
+	modes: Pick<ConversationModes, "peek">;
+	activity(room: ChannelKey): { typing: boolean; stoppable: boolean };
+}
+
+const THREAD_ID = /^thread\.[0-9a-f-]{36}$/;
+
+/**
+ * The rooms of the app: Home (the coordinator's), one per active agent, one per active group,
+ * and the open dispatch threads. A key a client names is a room only when it is one of these on
+ * this surface, whose agent or group exists; no other surface's key ever is.
+ */
+export class Rooms {
+	readonly #options: RoomsOptions;
+
+	constructor(options: RoomsOptions) {
+		this.#options = options;
+	}
+
+	/** Whether the key is on this surface, whatever it names. */
+	ownsKey(key: string): boolean {
+		return key.startsWith(`${this.#options.surface}:`);
+	}
+
+	/** The room a key names, or undefined when it is none of the app's. */
+	async resolve(key: string): Promise<ResolvedRoom | undefined> {
+		if (!this.ownsKey(key)) return undefined;
+		const { surface, directory, threads } = this.#options;
+		const room = key as ChannelKey;
+		const named = roomOf(room, [surface]);
+		if (named?.kind === "agent") {
+			const agent = directory.agent(named.name);
+			return agent?.status === "active"
+				? {
+						key: room,
+						kind: "agent",
+						name: agent.name,
+						displayName: agent.displayName,
+						readOnly: false,
+					}
+				: undefined;
+		}
+		if (named?.kind === "group") {
+			const group = directory.group(named.name);
+			return group?.status === "active"
+				? {
+						key: room,
+						kind: "group",
+						name: group.name,
+						displayName: group.displayName,
+						readOnly: false,
+					}
+				: undefined;
+		}
+		const id = key.slice(surface.length + 1);
+		if (!THREAD_ID.test(id)) return undefined;
+		const thread = await threads.get(id);
+		return thread?.open
+			? {
+					key: room,
+					kind: "thread",
+					name: thread.id,
+					displayName: thread.title,
+					readOnly: true,
+				}
+			: undefined;
+	}
+
+	/** The home room: the coordinator's, else the first active agent's. */
+	homeKey(): ChannelKey | undefined {
+		const { directory, team, surface } = this.#options;
+		const coordinator = team.coordinator();
+		const home =
+			(coordinator ? directory.agent(coordinator) : undefined) ??
+			directory.agents().find((agent) => agent.status === "active");
+		return home?.status === "active"
+			? agentRoomKey(surface, home.name)
+			: undefined;
+	}
+
+	/** The agent whose avatar path to show, as a path under the mount. */
+	avatarOf(agent: Agent): string {
+		// The studio gives a full URL with a public address and a bare path without one.
+		const path = /\/avatars\/[^/?#]+$/.exec(
+			this.#options.avatars.url(agent.avatarHash),
+		)?.[0];
+		return `${this.#options.mount}${path ?? "/avatars/missing.png"}`;
+	}
+
+	async list(): Promise<RoomView[]> {
+		const { surface, directory, modes, activity, log, threads } = this.#options;
+		const home = this.homeKey();
+		const agents = directory.agents().filter((a) => a.status === "active");
+		const groups = directory.groups().filter((g) => g.status === "active");
+		const open = await threads.listOpen();
+		const view = (
+			key: ChannelKey,
+			rest: Pick<RoomView, "kind" | "name" | "displayName"> & Partial<RoomView>,
+		): RoomView => {
+			const { yolo, longRunning } = modes.peek(key);
+			return {
+				home: key === home,
+				readOnly: false,
+				mode: { yolo, longRunning },
+				...activity(key),
+				...rest,
+				key,
+			};
+		};
+		const rooms: RoomView[] = [
+			...agents.map((agent: Agent) =>
+				view(agentRoomKey(surface, agent.name), {
+					kind: "agent",
+					name: agent.name,
+					displayName: agent.displayName,
+					avatar: this.avatarOf(agent),
+				}),
+			),
+			...groups.map((group: AgentGroup) =>
+				view(groupRoomKey(surface, group.name), {
+					kind: "group",
+					name: group.name,
+					displayName: group.displayName,
+					members: [...group.members],
+				}),
+			),
+			...open.map((thread) =>
+				view(channelKey(surface, thread.id), {
+					kind: "thread",
+					name: thread.id,
+					displayName: thread.title,
+					parent: thread.parent,
+					readOnly: true,
+				}),
+			),
+		];
+		// Home first; the others keep the team's order.
+		rooms.sort((a, b) => Number(b.home) - Number(a.home));
+		const last = await log.lastOf(rooms.map((room) => room.key));
+		return rooms.map((room) => {
+			const message = last.get(room.key);
+			return message ? { ...room, last: message } : room;
+		});
+	}
+}

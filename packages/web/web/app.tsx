@@ -19,6 +19,8 @@ const LABELS: Record<PaneName, string> = {
 	notes: "Notes",
 	skills: "Skills",
 	connectors: "Connectors",
+	rooms: "Rooms",
+	schedules: "Schedules",
 };
 
 export function App() {

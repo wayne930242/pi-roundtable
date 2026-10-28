@@ -18,6 +18,7 @@ import type {
 	PrincipalsView,
 } from "./api-types.ts";
 import { cloudflareAccess } from "./cloudflare-access.ts";
+import { resolveOptions } from "./options.ts";
 import {
 	AUDIENCE,
 	accessIdentity,
@@ -111,12 +112,15 @@ const discord = servicePair(DISCORD, {
 	}) as never,
 });
 
+/** The panes of 0.22: the owner app (`rooms`) needs a database and the agent server, which a plugin harness does not have. */
+const PANES = ["overview", "conversations", "notes"] as const;
 const base = () => ({
 	verifier,
 	origin: ORIGIN,
 	ownerId: "owner",
 	dataDir: fixtureSessions(),
 	assetDir: assetDir(),
+	panes: PANES,
 });
 
 async function boot(
@@ -181,12 +185,29 @@ describe("refuses to start", () => {
 		["no panes", { panes: [] }, "panes"],
 		["an unknown pane", { panes: ["unknown"] }, "unknown pane"],
 		["a repeated pane", { panes: ["notes", "notes"] }, "twice"],
+		[
+			"schedules without rooms",
+			{ panes: ["schedules"] },
+			"needs the rooms pane",
+		],
+		["the discord surface", { surface: "discord" }, "surface"],
+		["a surface that is not a word", { surface: "My App" }, "surface"],
+		["no card grace", { cardGraceSeconds: 0 }, "cardGraceSeconds"],
+		["a day of card grace", { cardGraceSeconds: 86_400 }, "cardGraceSeconds"],
 		["notes with no owner id", { ownerId: " " }, "ownerId"],
 		["an empty title", { title: " " }, "title"],
 	])("with %s", (_name, change, message) => {
 		expect(() => webConsole({ ...base(), ...change } as never)).toThrow(
 			message,
 		);
+	});
+
+	test("without a list of panes the console serves the owner app first", () => {
+		expect(
+			resolveOptions({ ...base(), panes: undefined } as never).panes,
+		).toEqual(["rooms", "overview", "schedules", "conversations", "notes"]);
+		const settings = resolveOptions(base());
+		expect([settings.surface, settings.cardGraceSeconds]).toEqual(["app", 120]);
 	});
 
 	test("a notes-less console needs no owner id", () => {

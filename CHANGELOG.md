@@ -36,6 +36,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - A reply in an agent room on a surface that does not declare `supportsFiles` is no longer lost whole (`pi-roundtable`). The room's turns were always offered reply files, and the surface port refused a reply that carried one; they are offered only where the surface supports files, as in other conversations.
 - `schedule_list` from an agent room reads the other agent's room, and the dashboard's status counts an agent's schedules, waiting turns and context use across its rooms (`pi-roundtable`); before, both looked at the Discord channel alone, and the schedule lookup threw for an agent with none.
+- Agent-room turns report their progress (`pi-roundtable`). A turn the agent team runs in a room of a surface now passes `TurnRequest.progress` through `SurfacePort.progress`, as a turn run through `context.turns` does, so a surface such as the web app can show the text and tools as they go; a Discord channel's turn is unchanged.
+- `pi-roundtable-web`: the owner app's server, with rooms, cards, Stop, uploads, progress and modes over a WebSocket. See the package's changelog.
 
 ## [0.22.5] - 2026-10-25
 

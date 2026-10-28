@@ -4,9 +4,13 @@ import {
 	definePlugin,
 	IDENTITY,
 	MEMORY,
+	MODES,
 	type RoundtablePlugin,
+	SCHEDULES,
 } from "pi-roundtable";
 import { DISCORD } from "pi-roundtable/discord";
+import { APP_MIGRATIONS, OwnerApp } from "./app/app.ts";
+import { APP_PROTOCOL } from "./app/protocol.ts";
 import { loadAssets } from "./assets.ts";
 import {
 	createAuthenticator,
@@ -31,8 +35,11 @@ import { consoleVisitors } from "./visitors.ts";
 export function webConsole(options: WebConsoleOptions): RoundtablePlugin {
 	const settings = resolveOptions(options);
 	const { auth } = settings;
+	const rooms = settings.panes.includes("rooms");
+	const schedules = settings.panes.includes("schedules");
 	return definePlugin({
 		name: "web-console",
+		...(rooms ? { migrations: APP_MIGRATIONS } : {}),
 		// `none` and `password` speak for one principal through this identity; a verifier brings its own.
 		...(auth.mode === "verifier"
 			? {}
@@ -46,7 +53,9 @@ export function webConsole(options: WebConsoleOptions): RoundtablePlugin {
 				}),
 		requires: [
 			IDENTITY,
-			...(settings.panes.includes("overview") ? [AGENTS] : []),
+			...(settings.panes.includes("overview") || rooms ? [AGENTS] : []),
+			...(rooms ? [MODES] : []),
+			...(schedules ? [SCHEDULES] : []),
 			...(settings.panes.includes("notes") ? [MEMORY] : []),
 		],
 		setup: (context) => build(settings, context),
@@ -65,6 +74,7 @@ async function build(settings: ResolvedOptions, context: Context) {
 		if (settings.panes.includes(pane) && !features?.[pane])
 			throw new Error(`web-console: the ${pane} pane needs its feature port`);
 	}
+	const rooms = settings.panes.includes("rooms");
 	const team = services.find(AGENTS)?.team;
 	const connection = services.find(DISCORD)?.connection;
 	// Absent on a host without the registry: the console then lists conversations found by name only.
@@ -100,6 +110,9 @@ async function build(settings: ResolvedOptions, context: Context) {
 		logger,
 		...(features ? { features } : {}),
 		...(settings.routing === "path" ? { mountPath: settings.mount } : {}),
+		...(rooms
+			? { app: { surface: settings.surface, protocol: APP_PROTOCOL } }
+			: {}),
 		...(settings.presentation ? { presentation: settings.presentation } : {}),
 	});
 	const authenticator = createAuthenticator({
@@ -119,6 +132,27 @@ async function build(settings: ResolvedOptions, context: Context) {
 			address: context.listener(settings.listener),
 		},
 	});
+	const app = rooms
+		? new OwnerApp({
+				surface: settings.surface,
+				mount: settings.mount,
+				origin: settings.origin,
+				dataDir: settings.dataDir,
+				cardGraceSeconds: settings.cardGraceSeconds,
+				authenticator,
+				database: context.database(),
+				agents: services.get(AGENTS),
+				modes: services.get(MODES),
+				identity,
+				...(settings.panes.includes("schedules")
+					? { schedules: services.get(SCHEDULES) }
+					: {}),
+				conversations: context.conversations,
+				changed,
+				logger,
+			})
+		: undefined;
+	if (app) listeners.push(() => app.changed());
 	const server = new ConsoleServer({
 		mount: settings.mount,
 		assets,
@@ -128,6 +162,7 @@ async function build(settings: ResolvedOptions, context: Context) {
 		...(settings.iconsDir ? { iconsDir: settings.iconsDir } : {}),
 		...(settings.presentation ? { presentation: settings.presentation } : {}),
 		api,
+		...(app ? { app } : {}),
 		subscribe: (listener) => {
 			listeners.push(listener);
 			queue.onChange(listener);
@@ -139,10 +174,17 @@ async function build(settings: ResolvedOptions, context: Context) {
 		services: [
 			{
 				name: "web-console",
-				start: () => server.start(),
-				stop: () => server.stop(),
+				start: () => {
+					server.start();
+					app?.start();
+				},
+				stop: () => {
+					app?.stop();
+					server.stop();
+				},
 			},
 		],
+		...(app ? { surfaces: [app.surface] } : {}),
 		http: server.routes(settings.listener),
 		dashboard: [`Web console: ${settings.origin}${settings.mount}/`],
 	};

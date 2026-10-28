@@ -7,6 +7,8 @@ export const PANES = [
 	"notes",
 	"skills",
 	"connectors",
+	"rooms",
+	"schedules",
 ] as const;
 export type PaneName = (typeof PANES)[number];
 
@@ -22,6 +24,13 @@ export interface ConfigView {
 	connectorAdminUrl?: string;
 	/** Only supplied for path-based routing; also the base for page/API URLs. */
 	mountPath?: string;
+	/** Present when the `rooms` pane is served: how the page opens the owner app's socket. */
+	app?: {
+		/** The key prefix of the app's rooms, such as `app`. */
+		surface: string;
+		/** The WebSocket subprotocol to offer. */
+		protocol: string;
+	};
 }
 
 export type ChannelName =
@@ -222,3 +231,346 @@ export interface ConnectorsView {
 export interface ApiError {
 	error: string;
 }
+
+// ── The owner app: rooms, messages, cards, and the socket's frames ───────────────────────────────
+
+/** The WebSocket subprotocol of `<mount>/api/socket`; a later incompatible version gets a new name. */
+export const APP_PROTOCOL = "roundtable.app.v1";
+/** The version `ready` reports. */
+export const APP_PROTOCOL_VERSION = 1;
+/** The close code that says the credential lapsed: reconnect, and reload the page when the reconnect is refused. */
+export const APP_CLOSE_EXPIRED = 4401;
+/** The most bytes (UTF-8, as JSON) an approval frame's `approval` carries before its long values are cut: 256 KiB. */
+export const APPROVAL_MAX_BYTES = 256 * 1024;
+/** The most files one message carries. */
+export const MAX_MESSAGE_FILES = 4;
+/** The longest message text in characters. */
+export const MAX_MESSAGE_CHARS = 32_000;
+
+/** What a room is: an agent's, a group's, or a dispatch thread (read only). */
+export type RoomKind = "agent" | "group" | "thread";
+
+/** The conversation's modes, per room. */
+export interface RoomMode {
+	yolo: boolean;
+	longRunning: boolean;
+}
+
+/** A file in a message, served at `<mount>/api/files/<id>`. */
+export interface RoomFile {
+	id: string;
+	name: string;
+	type: string;
+	size: number;
+}
+
+/**
+ * One message of a room. `id` is the room log's own number, ascending; a live message (an
+ * agent's interim text, shown until its final reply arrives) has `id` 0 and a `live` token,
+ * and a later frame with the same token replaces it. It is never stored: the client drops a
+ * room's live messages when a stored message of that agent arrives or the agent stops working.
+ */
+export interface RoomMessage {
+	id: number;
+	room: string;
+	/** `owner` wrote it, `agent` is a reply, `system` is a line the server wrote: a divider, a yolo approval. */
+	kind: "owner" | "agent" | "system";
+	/** The principal of an `owner` message. */
+	principalId?: string;
+	/** The agent name of an `agent` message. */
+	agent?: string;
+	/** The name to show with it. */
+	author: string;
+	text: string;
+	files: RoomFile[];
+	/** ISO time. */
+	at: string;
+	live?: string;
+}
+
+/** One entry of the room list. */
+export interface RoomView {
+	/** The channel key: `<surface>:agent.<name>`, `<surface>:group.<name>` or `<surface>:thread.<id>`. */
+	key: string;
+	kind: RoomKind;
+	/** The agent's or group's name; a thread's id. */
+	name: string;
+	displayName: string;
+	/** The coordinator's room, where the page opens. */
+	home: boolean;
+	/** The agent's picture, a path under the mount; absent for groups and threads. */
+	avatar?: string;
+	/** A group's members, by agent name. */
+	members?: string[];
+	/** A thread's parent room. */
+	parent?: string;
+	/** A thread's room takes no messages from the page. */
+	readOnly: boolean;
+	mode: RoomMode;
+	/** The room's agent is working now. */
+	typing: boolean;
+	/** A turn runs that Stop would end. */
+	stoppable: boolean;
+	/** The newest stored message, if any. */
+	last?: RoomMessage;
+}
+
+export interface RoomsView {
+	rooms: RoomView[];
+}
+
+/** A page of a room's stored messages, oldest first. */
+export interface MessagesView {
+	messages: RoomMessage[];
+	/** There are older messages than the first one here. */
+	more: boolean;
+}
+
+/** Who the page is signed in as. */
+export interface SessionView {
+	principal: PrincipalName;
+	surface: string;
+	/** When the credential lapses, if it does. */
+	expiresAt?: string;
+}
+
+/** A schedule, labelled by the room it belongs to or else its channel. */
+export interface ScheduleView {
+	id: number;
+	/** The room it runs in, when it belongs to one of the app's. */
+	room?: string;
+	/** The channel key it runs in. */
+	channel: string;
+	/** What to call that place: the room's name or the channel key. */
+	label: string;
+	title: string;
+	prompt: string;
+	/** The schedule's recurrence as the core stores it. */
+	recurrence: unknown;
+	nextRun: string;
+	lastRun?: string;
+	lastStatus?: string;
+	createdBy: string;
+}
+
+export interface SchedulesView {
+	schedules: ScheduleView[];
+}
+
+/** An agent's profile as its page edits it. */
+export interface AgentProfileView {
+	name: string;
+	displayName: string;
+	prompt: string;
+	/** Its own model; absent when it follows the assistant's. */
+	model?: string;
+	/** Its own thinking level; absent when it follows the assistant's. */
+	thinking?: string;
+	/** What its next turn runs on. */
+	effective: { model: string; thinking: string };
+	avatar: string;
+	room: string;
+	/** An image provider is set, so the picture can be drawn again. */
+	canDraw: boolean;
+}
+
+export interface ModelsView {
+	models: string[];
+}
+
+/** What changes an agent: the same fields `AgentTeam.update` takes. */
+export interface AgentPatch {
+	displayName?: string;
+	prompt?: string;
+	model?: string;
+	thinking?: string;
+}
+
+/** The body of `POST api/agents/<name>/avatar`. */
+export interface AvatarRequest {
+	mode: string;
+	text?: string;
+}
+
+/** A file waiting for the message that uses it. */
+export interface UploadView {
+	id: string;
+	name: string;
+	type: string;
+	size: number;
+}
+
+/** An option of a question, as the core writes it. */
+export interface PromptOption {
+	label: string;
+	description?: string;
+	preview?: string;
+}
+
+/** One question of a card. */
+export interface PromptQuestion {
+	question: string;
+	header?: string;
+	/** None means a free-text answer. */
+	options: readonly PromptOption[];
+	multi: boolean;
+	allowOther: boolean;
+}
+
+/** What a held call is, as data beside its markdown text. */
+export interface PromptApproval {
+	action: string;
+	tool: string;
+	input: Record<string, unknown>;
+	files?: { path: string; bytes?: number }[];
+	copy?: { label?: string; text: string };
+	/** Set when long values of `input` were cut to fit `APPROVAL_MAX_BYTES`. */
+	truncated?: true;
+}
+
+/** The card's own words in place of an approval's. */
+export interface PromptWording {
+	approve: string;
+	decline: string;
+	footer: string;
+	approved: string;
+	declined: string;
+}
+
+/** An answer to a question: the chosen options' labels and the person's own text. */
+export interface PromptAnswer {
+	choices: string[];
+	text?: string;
+}
+
+/** A card the server asks the owner: an approval, a question, or several questions. */
+export type PromptFrame =
+	| {
+			id: string;
+			kind: "approval";
+			title: string;
+			/** The card as markdown text. */
+			message: string;
+			approval?: PromptApproval;
+			/** `turn-timeout` is a turn's time-limit card: continuing it lets the turn go on. */
+			purpose: "action" | "turn-timeout";
+			wording?: PromptWording;
+			/** Only the speaker whose turn asks may answer. */
+			speakerOnly?: true;
+			/** Display names of the people the call names to approve it; owners may still. */
+			approvers?: string[];
+			/** The turn stopped waiting; an answer starts a new turn in the room. */
+			late?: true;
+	  }
+	| {
+			id: string;
+			kind: "ask";
+			title: string;
+			question: string;
+			options: readonly PromptOption[];
+			multi: boolean;
+			allowOther: boolean;
+			late?: true;
+	  }
+	| {
+			id: string;
+			kind: "questionnaire";
+			title: string;
+			questions: readonly PromptQuestion[];
+			late?: true;
+	  };
+
+/** How a card ended. `withdrawn` is a card the plugin that asked for it took back. */
+export type PromptOutcome =
+	| "approved"
+	| "declined"
+	| "answered"
+	| "expired"
+	| "cancelled"
+	| "withdrawn";
+
+/** Why the server refused a frame. */
+export type RefusalCode =
+	| "bad_frame"
+	| "unknown_room"
+	| "read_only"
+	| "forbidden"
+	| "unknown_prompt"
+	| "unknown_upload"
+	| "empty"
+	| "too_long"
+	| "not_accepted";
+
+/** What the page sends: one JSON object per WebSocket text message. */
+export type ClientFrame =
+	/** Declares whether the page is in view and which room it shows. Sent after each `ready`. */
+	| { type: "hello"; visible: boolean; focus?: string }
+	| { type: "visibility"; visible: boolean }
+	/** The room the page shows now, or none: progress streams only for it. */
+	| { type: "focus"; room?: string }
+	| {
+			type: "send";
+			/** The page's own reference, echoed by `accepted` or `refused`. */
+			id: string;
+			room: string;
+			text: string;
+			/** Files uploaded with `POST api/uploads`, by the `id` each returned. */
+			uploads?: string[];
+	  }
+	| { type: "stop"; room: string }
+	| { type: "approval"; prompt: string; approved: boolean }
+	| { type: "answer"; prompt: string; answer: PromptAnswer }
+	| {
+			type: "answers";
+			prompt: string;
+			answers: (PromptAnswer | null)[];
+			note?: string;
+	  }
+	/** Cancels a question card instead of answering it. */
+	| { type: "cancel"; prompt: string };
+
+/** What the server sends: one JSON object per WebSocket text message. */
+export type ServerFrame =
+	/** The socket is authenticated; sent first, and followed by every open card. */
+	| {
+			type: "ready";
+			protocol: typeof APP_PROTOCOL_VERSION;
+			principal: string;
+			name: string;
+			/** The most files one message carries and the most bytes of one. */
+			uploads: { perMessage: number; maxBytes: number; types: string[] };
+	  }
+	/** The message `id` was taken into `room`; `message` is how it was stored. */
+	| { type: "accepted"; id: string; room: string; message: RoomMessage }
+	| { type: "refused"; id?: string; code: RefusalCode }
+	/** A message of a room, stored or live; see `RoomMessage`. */
+	| { type: "message"; room: string; message: RoomMessage }
+	/** What the running turn writes and which tools it runs; sent to the sockets that focus the room. */
+	| { type: "progress"; room: string; event: AppProgress }
+	/** The room's agent is, or is no longer, working, and whether Stop applies. */
+	| { type: "activity"; room: string; typing: boolean; stoppable: boolean }
+	| { type: "prompt"; room: string; prompt: PromptFrame }
+	| {
+			type: "prompt_closed";
+			prompt: string;
+			outcome: PromptOutcome;
+			/** Why a `withdrawn` card was taken back. */
+			note?: string;
+	  }
+	| { type: "mode"; room: string; yolo: boolean; longRunning: boolean }
+	/** Yolo mode approved a held call by itself. */
+	| { type: "auto_approved"; room: string; tool: string; action: string }
+	/** The team or the room list may differ: refetch. */
+	| { type: "changed" };
+
+/** A turn's live view, as the core reports it. */
+export type AppProgress =
+	| { type: "text"; delta: string }
+	| { type: "tool_start"; id: string; tool: string; preview?: string }
+	| {
+			type: "tool_end";
+			id: string;
+			tool: string;
+			ok: boolean;
+			refused?: "declined" | "expired" | "pending" | "held" | "withdrawn";
+	  };

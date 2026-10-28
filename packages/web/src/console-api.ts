@@ -80,6 +80,8 @@ export interface ConsolePorts {
 	features?: ConsoleFeatures;
 	presentation?: ConsolePresentation;
 	mountPath?: string;
+	/** Present when the owner app is served: its rooms' key prefix, for the page. */
+	app?: { surface: string; protocol: string };
 }
 
 import { cleanupConversation } from "./cleanup-api.ts";
@@ -241,6 +243,7 @@ export class ConsoleApi {
 			...(features?.cleanup ? { cleanup: true } : {}),
 			...(connectorAdminUrl ? { connectorAdminUrl } : {}),
 			...(this.#ports.mountPath ? { mountPath: this.#ports.mountPath } : {}),
+			...(this.#ports.app ? { app: this.#ports.app } : {}),
 		};
 	}
 

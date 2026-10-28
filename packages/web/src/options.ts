@@ -18,6 +18,10 @@ export const DEFAULT_PASSWORD_ENV = "ROUNDTABLE_WEB_PASSWORD";
 export const DEFAULT_SESSION_DAYS = 30;
 /** The shortest password the console accepts, in characters. */
 export const MIN_PASSWORD_LENGTH = 12;
+/** The key prefix of the app's rooms by default. */
+export const DEFAULT_SURFACE = "app";
+/** How many seconds a turn waits on its card before it goes on without the answer, by default. */
+export const DEFAULT_CARD_GRACE_SECONDS = 120;
 
 /**
  * How the console knows who is asking. Every mode but `verifier` speaks for one principal through
@@ -107,8 +111,25 @@ export interface WebConsoleOptions {
 	listener?: string;
 	/** Hash routes by default; path routes retain links such as /console/skills. */
 	routing?: "hash" | "path";
-	/** The panes to serve, in the order the page lists them; default all of `overview`, `conversations`, `notes`. */
+	/**
+	 * The panes to serve, in the order the page lists them; default `rooms`, `overview`,
+	 * `schedules`, `conversations`, `notes`. `rooms` is the owner app: the same agent team as on
+	 * Discord, in rooms of its own. An explicit list is kept as written, so a host that listed the
+	 * panes before 0.23 adds `rooms` and `schedules` by hand.
+	 */
 	panes?: readonly PaneName[];
+	/**
+	 * The key prefix of the app's rooms: `<surface>:agent.<name>` and `<surface>:group.<name>`.
+	 * A lower-case word that is not `discord`; default `app`. Rooms keep their conversations under
+	 * it, so changing it starts every room over.
+	 */
+	surface?: string;
+	/**
+	 * How long a turn waits on its approval or question card before it goes on without the answer,
+	 * in seconds; default 120, as on Discord. The card stays open for a day, and an answer given
+	 * then starts a new turn in the room.
+	 */
+	cardGraceSeconds?: number;
 	/** The page's title and heading; default `Roundtable`. */
 	title?: string;
 	/** Where the install icons come from; default the ones this package ships. */
@@ -132,6 +153,8 @@ export interface ResolvedOptions {
 	listener: string;
 	routing: "hash" | "path";
 	panes: PaneName[];
+	surface: string;
+	cardGraceSeconds: number;
 	title: string;
 	iconsDir: string | undefined;
 	relayNotes: readonly string[];
@@ -183,7 +206,8 @@ function checkOrigin(origin: string): string {
 }
 
 function checkPanes(panes: readonly PaneName[] | undefined): PaneName[] {
-	if (panes === undefined) return ["overview", "conversations", "notes"];
+	if (panes === undefined)
+		return ["rooms", "overview", "schedules", "conversations", "notes"];
 	if (panes.length === 0) fail("panes is empty; serve at least one pane");
 	for (const pane of panes)
 		if (!PANES.includes(pane))
@@ -191,6 +215,8 @@ function checkPanes(panes: readonly PaneName[] | undefined): PaneName[] {
 				`unknown pane ${JSON.stringify(pane)}; the panes are ${PANES.join(", ")}`,
 			);
 	if (new Set(panes).size !== panes.length) fail("panes lists a pane twice");
+	if (panes.includes("schedules") && !panes.includes("rooms"))
+		fail("the schedules pane needs the rooms pane, which serves its API");
 	return [...panes];
 }
 
@@ -261,6 +287,26 @@ function checkAuth(options: WebConsoleOptions): ResolvedAuth {
 	}
 }
 
+function checkSurface(surface: string | undefined): string {
+	if (surface === undefined) return DEFAULT_SURFACE;
+	if (typeof surface !== "string" || !/^[a-z][a-z0-9-]*$/.test(surface))
+		fail(
+			`surface ${JSON.stringify(surface)} must be a lower-case word such as app`,
+		);
+	if (surface === "discord")
+		fail("surface cannot be discord, whose channels the Discord plugin serves");
+	return surface;
+}
+
+function checkGrace(seconds: number | undefined): number {
+	if (seconds === undefined) return DEFAULT_CARD_GRACE_SECONDS;
+	if (typeof seconds !== "number" || !(seconds > 0) || seconds > 3600)
+		fail(
+			"cardGraceSeconds must be a number of seconds above 0 and at most 3600",
+		);
+	return seconds;
+}
+
 /** Checks the options at the point the plugin is created, so a bad setting stops the host before anything starts. */
 export function resolveOptions(options: WebConsoleOptions): ResolvedOptions {
 	const auth = checkAuth(options);
@@ -295,6 +341,8 @@ export function resolveOptions(options: WebConsoleOptions): ResolvedOptions {
 		listener: options.listener ?? "public",
 		routing: options.routing ?? "hash",
 		panes,
+		surface: checkSurface(options.surface),
+		cardGraceSeconds: checkGrace(options.cardGraceSeconds),
 		title,
 		iconsDir: options.icons?.dir,
 		relayNotes: options.relayNotes ?? [DEFAULT_RELAY_NOTE],

@@ -1,6 +1,11 @@
-import type { HttpRoute, Logger } from "pi-roundtable";
+import type { HttpRoute, Logger, WebSocketRoute } from "pi-roundtable";
+import type { AppSocket } from "./app/sockets.ts";
 import type { AssetBundle } from "./assets.ts";
-import type { Authenticator, Unauthenticated } from "./auth/authenticator.ts";
+import type {
+	Authenticated,
+	Authenticator,
+	Unauthenticated,
+} from "./auth/authenticator.ts";
 import type { ConsoleApi } from "./console-api.ts";
 import type { ConsolePresentation } from "./features.ts";
 import { presentPage } from "./page-presentation.ts";
@@ -36,6 +41,18 @@ export interface ConsoleServerOptions {
 	/** Checks every request under the mount, and answers the few paths that need no session. */
 	authenticator: Authenticator;
 	api: Pick<ConsoleApi, "handle">;
+	/**
+	 * The owner app, when the `rooms` pane is served: it answers its own paths below the mount
+	 * before the console's API does, and its WebSocket takes the upgrades of the console's route.
+	 */
+	app?: {
+		handle(
+			request: Request,
+			rest: string,
+			admission: Authenticated,
+		): Promise<Response | undefined>;
+		websocket: WebSocketRoute<AppSocket>;
+	};
 	/** Registers the listener with every source whose change the console shows. */
 	subscribe(listener: () => void): void;
 	logger: Logger;
@@ -83,6 +100,9 @@ export class ConsoleServer {
 				listener,
 				path: { prefix: this.#base },
 				handle,
+				...(this.#options.app
+					? { websocket: this.#options.app.websocket }
+					: {}),
 			},
 		];
 	}
@@ -130,6 +150,8 @@ export class ConsoleServer {
 			});
 		if (rest === "api/events" && request.method === "GET")
 			return this.#events();
+		const owned = await this.#options.app?.handle(request, rest, admission);
+		if (owned) return owned;
 		if (rest.startsWith("api/"))
 			return this.#options.api.handle(
 				request,
