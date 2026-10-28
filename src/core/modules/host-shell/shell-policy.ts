@@ -3,15 +3,31 @@ import type { HoldContext, HoldRule } from "../../holds.ts";
 import type { PushPolicy } from "./git-push.ts";
 import { COMMAND_PREFIX_WORDS, EXPANDED, lexShell } from "./shell-lexer.ts";
 import {
+	bindingCounts,
 	deviceTarget,
 	expand,
+	expandName,
 	follow,
+	forgetRebound,
 	type LineState,
 	lineState,
 	rmHeld,
 	writable,
 } from "./shell-paths.ts";
 import { type Held, type ShellClass, verbHeld } from "./shell-programs.ts";
+import {
+	readsUnseenScript,
+	recordWrites,
+	SHELLS,
+	shellScript,
+	teeOperands,
+} from "./shell-scripts.ts";
+import {
+	ASSIGNMENT_WORD,
+	program,
+	replaceString,
+	WRAPPERS,
+} from "./shell-wrappers.ts";
 
 export type { PushPolicy } from "./git-push.ts";
 export { simpleCommands } from "./shell-lexer.ts";
@@ -26,59 +42,6 @@ export const SHELL_TOOLS = Object.freeze([
 	"edit",
 	"write",
 ] as const);
-
-/** Words that run the next word as the command. */
-const WRAPPERS = new Set([
-	"env",
-	"nohup",
-	"time",
-	"nice",
-	"ionice",
-	"timeout",
-	"stdbuf",
-	"exec",
-	"command",
-	"builtin",
-	"xargs",
-	"setsid",
-	"unbuffer",
-	"caffeinate",
-]);
-
-/**
- * Drops leading variable assignments, wrappers, and their options, leaving the real program;
- * `prefix` collects what was dropped.
- */
-function program(words: string[], prefix: string[] = []): string[] {
-	let rest = words;
-	for (;;) {
-		const [first] = rest;
-		if (first === undefined) return rest;
-		if (COMMAND_PREFIX_WORDS.has(first)) {
-			rest = rest.slice(1);
-			continue;
-		}
-		if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(first)) {
-			prefix.push(first);
-			rest = rest.slice(1);
-			continue;
-		}
-		if (WRAPPERS.has(basename(first))) {
-			prefix.push(basename(first));
-			rest = rest.slice(1);
-			// Wrapper options and the timeout's duration.
-			while (
-				rest[0] !== undefined &&
-				(rest[0].startsWith("-") ||
-					/^\d+[smhd]?$/.test(rest[0]) ||
-					/^[A-Za-z_][A-Za-z0-9_]*=/.test(rest[0]))
-			)
-				rest = rest.slice(1);
-			continue;
-		}
-		return rest;
-	}
-}
 
 /** The words the lexer gives a redirection operator. */
 const REDIRECTS: ReadonlySet<string> = new Set(["<", ">", ">>", "dup"]);
@@ -98,7 +61,9 @@ function commandName(word: string, state: LineState): string | undefined {
 	// `[` and `[[` are the test commands, not patterns.
 	if (word !== "[" && word !== "[[" && /[*?[]/.test(word)) return undefined;
 	if (/\{[^{}]*(?:,|\.\.)[^{}]*\}/.test(word)) return undefined;
-	return word.includes("$") || word.includes("`") ? expand(word, state) : word;
+	return word.includes("$") || word.includes("`")
+		? expandName(word, state)
+		: word;
 }
 
 /** Variables whose value bash runs as a command or expands with substitutions on its own. */
@@ -126,6 +91,7 @@ function setsSelfRunningVariable(words: readonly string[]): boolean {
 		if (
 			!/^[A-Za-z_][A-Za-z0-9_]*(?:\[.*\])?\+?=/.test(word) &&
 			!word.startsWith("-") &&
+			!COMMAND_PREFIX_WORDS.has(word) &&
 			!WRAPPERS.has(name) &&
 			!ASSIGNING.has(name)
 		)
@@ -133,6 +99,26 @@ function setsSelfRunningVariable(words: readonly string[]): boolean {
 	}
 	return false;
 }
+
+/** Builtins whose arguments can name a variable with a subscript, such as `a[$(x)]`, which bash evaluates. */
+const SUBSCRIPT_EVALUATORS = new Set([
+	"declare",
+	"typeset",
+	"local",
+	"readonly",
+	"export",
+	"printf",
+	"read",
+	"unset",
+	"mapfile",
+	"readarray",
+	"getopts",
+	"wait",
+	"test",
+	"[",
+	"[[",
+	"let",
+]);
 
 /** The script a `trap` command installs, or undefined when it only lists or clears traps. */
 function trapScript(args: readonly string[]): string | undefined {
@@ -142,20 +128,6 @@ function trapScript(args: readonly string[]): string | undefined {
 	return rest.length > 1 && script !== "" && script !== "-"
 		? script
 		: undefined;
-}
-
-/** Shells that run the command given with `-c`. */
-const SHELLS = new Set(["bash", "sh", "zsh", "dash", "ksh", "ash"]);
-
-/** The command a shell runs from its arguments (`-c`, also in a cluster such as `-ec`), if it is given one. */
-function shellScript(args: readonly string[]): string | undefined {
-	for (let i = 0; i < args.length; i++) {
-		const arg = args[i] as string;
-		if (arg === "-o" || arg === "+o" || arg === "-O" || arg === "+O") i++;
-		else if (/^-[A-Za-z]*c[A-Za-z]*$/.test(arg)) return args[i + 1] ?? "";
-		else if (!/^[-+]/.test(arg) || arg === "--") return undefined;
-	}
-	return undefined;
 }
 
 /** The command `find` runs for each match (`-exec`, `-execdir`, `-ok`, `-okdir`), up to its `;` or `+`. */
@@ -210,23 +182,55 @@ function programHeld(
 	policy: PushPolicy,
 ): Held[] {
 	const prefix: string[] = [];
-	const argv = program(
-		// A redirection is no part of the command: not its operator, its target, nor the descriptor
-		// number in front (`3>&1 sudo ls` runs `sudo`).
-		words.filter(
-			(w, i) =>
-				!REDIRECTS.has(w) &&
-				!REDIRECTS.has(words[i - 1] ?? "") &&
-				!(/^\d+$/.test(w) && REDIRECTS.has(words[i + 1] ?? "")),
-		),
-		prefix,
+	// A redirection is no part of the command: not its operator nor its target.
+	const own = words.filter(
+		(w, i) => !REDIRECTS.has(w) && !REDIRECTS.has(words[i - 1] ?? ""),
 	);
+	const argv = program(own, prefix);
+	// A prompt or a startup file that runs a command needs no command word of its own
+	// (`PS4='$(x)'; set -x`), and `env -S` splits its argument into a command line.
+	if (setsSelfRunningVariable(own) || prefix.includes("env -S"))
+		return [DYNAMIC_SCRIPT];
 	const [word, ...args] = argv;
-	if (!word) return [];
+	// `xargs env` runs what its input says.
+	if (!word)
+		return prefix.includes("xargs") && prefix.at(-1) !== "xargs"
+			? [DYNAMIC_SCRIPT]
+			: [];
 	const head = commandName(word, state);
-	if (head === undefined) return [DYNAMIC_NAME];
+	if (head === undefined) {
+		// A variable the line binds may be empty when bash gets there, so the name is unknown; what
+		// the line gives it is still judged, so the card says what it would run.
+		const guess = word.includes("$") ? expand(word, state) : undefined;
+		return [
+			...(guess === undefined
+				? []
+				: programHeld([guess, ...args], state, policy)),
+			DYNAMIC_NAME,
+		];
+	}
 	const name = basename(head);
-	if (setsSelfRunningVariable(words)) return [DYNAMIC_SCRIPT];
+	// A command or a script `xargs` fills in from its input, or one the line does not show.
+	const replace = replaceString(prefix);
+	if (
+		(replace !== undefined &&
+			(word.includes(replace) ||
+				(SHELLS.has(name) && args.some((arg) => arg.includes(replace))))) ||
+		readsUnseenScript(word, name, args, prefix, state)
+	)
+		return [DYNAMIC_SCRIPT];
+	// `mapfile -C` runs a callback for every chunk it reads.
+	if (
+		(name === "mapfile" || name === "readarray") &&
+		args.some((arg) => /^-[A-Za-z]*C/.test(arg))
+	)
+		return [DYNAMIC_SCRIPT];
+	// A builtin that takes a name evaluates a subscript in it, and that runs a substitution.
+	if (
+		SUBSCRIPT_EVALUATORS.has(name) &&
+		args.some((arg) => /\[[^\]]*(?:\$\(|`)/.test(arg))
+	)
+		return [DYNAMIC_SCRIPT];
 	// An alias names a command at run time; `expand_aliases` is what lets a script use one.
 	if (name === "alias" && args.some((arg) => arg.includes("=")))
 		return [DYNAMIC_NAME];
@@ -245,7 +249,7 @@ function programHeld(
 	}
 	if (name === "eval") {
 		// What eval runs is its arguments after expansion: all of them must be known.
-		const known = args.map((arg) => expand(arg, state));
+		const known = args.map((arg) => expandName(arg, state));
 		return known.includes(undefined)
 			? [DYNAMIC_SCRIPT]
 			: commandHeld(known.join(" "), state, policy);
@@ -292,7 +296,7 @@ function scriptHeld(
 ): Held[] {
 	if (script.includes(EXPANDED)) return [DYNAMIC_SCRIPT];
 	if (script.trimStart().startsWith("$")) {
-		const known = expand(script, state);
+		const known = expandName(script, state);
 		return known === undefined
 			? [DYNAMIC_SCRIPT]
 			: commandHeld(known, state, policy);
@@ -313,6 +317,11 @@ function commandHeld(
 ): Held[] {
 	const state: LineState = {
 		...lineState(command, outer.workspace, undefined),
+		written: new Set(outer.written),
+		bound: new Set([
+			...outer.bound,
+			...lineState(command, outer.workspace, undefined).bound,
+		]),
 		roots: outer.roots,
 		vars: new Map(outer.vars),
 		cwd: outer.cwd,
@@ -327,12 +336,16 @@ function commandHeld(
 		(lexed.arithmetic || lexed.commands.some(evaluatesArithmetic))
 	)
 		found.push(DYNAMIC_SCRIPT);
+	let counts: Map<string, number> | undefined;
 	for (const words of lexed.commands) {
 		found.push(...heldReasons(words, state, policy));
+		const [first, ...rest] = program(words);
+		recordWrites(words, first ? teeOperands(first, rest) : [], state);
 		follow(program(words), state);
 		// `export` and `cd` are kept by program(); bare assignments are dropped by it.
-		if (words.every((w) => /^[A-Za-z_][A-Za-z0-9_]*=/.test(w)))
-			follow(words, state);
+		if (words.every((w) => ASSIGNMENT_WORD.test(w))) follow(words, state);
+		counts ??= bindingCounts(command);
+		forgetRebound(words, state, counts);
 	}
 	return found;
 }

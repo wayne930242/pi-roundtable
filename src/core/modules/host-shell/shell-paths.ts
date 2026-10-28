@@ -22,6 +22,10 @@ export interface LineState {
 	vars: Map<string, string | undefined>;
 	/** The working directory, or undefined once a `cd` went somewhere unknown. */
 	cwd: string | undefined;
+	/** The names the line itself writes anywhere, as a bare word: what it assigns, loops over or reads into. */
+	bound: ReadonlySet<string>;
+	/** The files the line has written so far with `>`, `>>` and `tee`, as it names them without a leading `./`. */
+	written: Set<string>;
 	/** Whether `cd` can be followed: false in a line with subshells or `||`, where the last `cd` may not apply. */
 	followsCd: boolean;
 }
@@ -38,11 +42,13 @@ export function lineState(
 		roots: scratchDir === undefined ? [workspace] : [workspace, scratchDir],
 		vars,
 		cwd: workspace,
+		written: new Set(),
+		bound: new Set(bindingCounts(command).keys()),
 		followsCd: !/(^|[^$])\(|\|\|/.test(command),
 	};
 }
 
-const ASSIGNMENT = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/s;
+const ASSIGNMENT = /^([A-Za-z_][A-Za-z0-9_]*)(\+?)=(.*)$/s;
 
 /**
  * The word with the line's variables substituted and `~` expanded, or undefined when it holds a
@@ -90,8 +96,12 @@ export function follow(argv: readonly string[], state: LineState): void {
 				: [];
 	for (const word of assignments) {
 		const match = ASSIGNMENT.exec(word);
+		// An append (`x+=y`) makes a value the line does not follow.
 		if (match)
-			state.vars.set(match[1] as string, expand(match[2] as string, state));
+			state.vars.set(
+				match[1] as string,
+				match[2] === "" ? expand(match[3] as string, state) : undefined,
+			);
 	}
 	if (head === "cd" || head === "pushd" || head === "popd") {
 		const target = args.find((a) => !a.startsWith("-"));
@@ -99,6 +109,49 @@ export function follow(argv: readonly string[], state: LineState): void {
 			state.followsCd && head === "cd" && target !== undefined
 				? resolvePath(target, state)
 				: undefined;
+	}
+}
+
+/**
+ * `expand` for a word that names a command or a script: a variable the line itself binds is
+ * unknown there, because the line is followed assignment by assignment and bash may skip the one
+ * that matters (`false && x=ls; $x sudo`, `(V=1); s${V}udo`), so the variable is empty. What the
+ * line does not bind, such as `$HOME`, keeps its value.
+ */
+export function expandName(word: string, state: LineState): string | undefined {
+	for (const match of word.matchAll(/\$\{?([A-Za-z_][A-Za-z0-9_]*)/g))
+		if (state.bound.has(match[1] as string)) return undefined;
+	return expand(word, state);
+}
+
+/** How many times a line writes each name where it could bind it: as a bare word, or in `${name:=…}`. */
+export function bindingCounts(command: string): Map<string, number> {
+	const counts = new Map<string, number>();
+	for (const match of command.matchAll(
+		/(?<![$\w{])([A-Za-z_]\w*)(?!\w)|\$\{([A-Za-z_]\w*):?=/g,
+	)) {
+		const name = (match[1] ?? match[2]) as string;
+		counts.set(name, (counts.get(name) ?? 0) + 1);
+	}
+	return counts;
+}
+
+/**
+ * Forgets the value of each variable a command assigns when the line names it more than once. The
+ * line is followed one assignment after another, but bash may bind a name by a loop, `read`,
+ * `declare`, `eval`, a function or a branch the rule does not follow, so a name written twice may
+ * hold either value (`x=ls; for x in sudo; do $x; done`); a name written once holds what it was
+ * given or is unset.
+ */
+export function forgetRebound(
+	words: readonly string[],
+	state: LineState,
+	counts: ReadonlyMap<string, number>,
+): void {
+	for (const word of words) {
+		const name = /^([A-Za-z_][A-Za-z0-9_]*)\+?=/.exec(word)?.[1];
+		if (name !== undefined && (counts.get(name) ?? 0) > 1)
+			state.vars.set(name, undefined);
 	}
 }
 

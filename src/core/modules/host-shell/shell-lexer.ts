@@ -20,8 +20,12 @@ import {
 } from "./shell-lexer-types.ts";
 import {
 	ansiQuoted,
+	backtickBody,
+	closesGroup,
+	continuedToken,
 	heredocBody,
 	readDelimiter,
+	redirectOperator,
 	Unreadable,
 } from "./shell-quoting.ts";
 
@@ -43,6 +47,8 @@ export function lexShell(command: string): Lexed {
 		literalSubstitution: false,
 	};
 	if (command.length > MAX_LENGTH) return gone;
+	// A line continuation inside a token is not read the way bash joins it.
+	if (continuedToken(command)) return gone;
 	const shared = { depth: 0, arithmetic: false, literalSubstitution: false };
 	try {
 		// Bash drops a NUL byte from the script it reads.
@@ -188,7 +194,10 @@ class Lexer {
 				if ((this.arithmetic || arith.open) && sawShift) throw new Unreadable();
 				this.#drain(id, out);
 			} else if (isSpace(ch)) {
+				// Bash 5 takes `then` or `do` right after `]]` as a new command.
+				const closes = inWord && plain && word === "]]" && words.includes("[[");
 				endWord();
+				if (closes) endCommand();
 				this.pos++;
 			} else if (
 				ch === "#" &&
@@ -239,33 +248,36 @@ class Lexer {
 			} else if (
 				";&|".includes(ch) ||
 				(ch === "{" && (next === undefined || isSpace(next))) ||
-				(ch === "}" && this.#closesGroup())
+				(ch === "}" && closesGroup(this.src, this.pos))
 			) {
 				endCommand();
 				if (ch === ";" && caseOpen > 0 && (next === ";" || next === "&"))
 					expectPattern = true;
 				this.pos++;
+			} else if (
+				(ch === "<" || ch === ">") &&
+				next === "(" &&
+				!this.arithmetic &&
+				!arith.open
+			) {
+				if (s[this.pos + 2] === "(") throw new Unreadable();
+				this.#paren(out);
+				quoted(`${ch}(${EXPANDED}`);
 			} else if (ch === ">" || ch === "<") {
-				endWord();
+				// A number right before the operator is its descriptor (`3>&1`), no word of the command.
+				if (inWord && plain && /^\d+$/.test(word)) {
+					word = "";
+					inWord = false;
+				} else endWord();
 				if (ch === "<" && next === "<") {
 					if (this.#shiftOrHeredoc(id, words, arith.open)) sawShift = true;
 					continue;
 				}
 				// Redirections become their own words, so their targets can be checked.
-				let op = ch;
-				this.pos++;
-				if (s[this.pos] === ">") {
-					op += ">";
-					this.pos++;
-				}
-				if (op === "<>") op = ">"; // opens the file for writing too
-				if (op === ">" && s[this.pos] === "|") this.pos++; // `>|` forces the overwrite
-				if (op !== "<" && s[this.pos] === "&") {
-					this.pos++;
-					// `>&2` and `>&-` duplicate or close a descriptor; `>& file` names a file.
-					if (/\s*[0-9-]/y.test(s.slice(this.pos, this.pos + 64))) op = "dup";
-				}
-				words.push(op);
+				const found = redirectOperator(s, this.pos);
+				words.push(found.op);
+				if (found.closes) words.push("-");
+				this.pos = found.end;
 			} else {
 				word += ch;
 				inWord = true;
@@ -276,19 +288,6 @@ class Lexer {
 		// A group left open is not known to be arithmetic.
 		arith.flush();
 		return out;
-	}
-
-	/**
-	 * Whether the `}` that starts here closes a group: a word of its own after a separator. Any
-	 * other `{` or `}` is part of a word, which may be a brace expansion such as `{sudo,ls}`.
-	 */
-	#closesGroup(): boolean {
-		const before = this.src[this.pos - 1];
-		const after = this.src[this.pos + 1];
-		return (
-			(before === undefined || isSpace(before) || ";&|()".includes(before)) &&
-			(after === undefined || isSpace(after) || ";&|()<>".includes(after))
-		);
 	}
 
 	/**
@@ -329,7 +328,9 @@ class Lexer {
 			// A line ended inside another substitution than the one that opened the here-document.
 			if (p.owner !== id) throw new Unreadable();
 			const start = this.pos;
-			const { bodyEnd, next } = heredocBody(s, start, p);
+			const { bodyEnd, next, terminated } = heredocBody(s, start, p);
+			// Unterminated inside a substitution: bash 3.2 closes it at the first `)`, and 5 does not.
+			if (!terminated && this.shared.depth > 0) throw new Unreadable();
 			if (!p.quoted) {
 				const body = new Lexer(
 					s.slice(start, bodyEnd),
@@ -378,7 +379,7 @@ class Lexer {
 				}
 				this.pos += 2;
 			} else if (ch === "`") {
-				this.#backtick(out);
+				this.#backtick(out, true);
 				text += `\`${EXPANDED}`;
 			} else if (ch === "$" && next === "(") {
 				this.#paren(out);
@@ -422,17 +423,11 @@ class Lexer {
 	}
 
 	/** A backtick substitution that starts here: its commands go to `out`; returns its text. */
-	#backtick(out: string[][]): string {
+	#backtick(out: string[][], inDouble = false): string {
 		const s = this.src;
 		const start = this.pos;
-		let inner = "";
-		let i = start + 1;
-		for (; i < s.length && s[i] !== "`"; i++) {
-			const next = s[i + 1];
-			if (s[i] === "\\" && next && "`\\$".includes(next)) i++;
-			inner += s[i];
-		}
-		this.pos = Math.min(i + 1, s.length);
+		const { inner, end } = backtickBody(s, start, inDouble);
+		this.pos = end;
 		this.#enter();
 		const body = new Lexer(inner, this.shared, this.arithmetic);
 		for (const command of body.list("eof")) out.push(command);
@@ -482,7 +477,7 @@ class Lexer {
 			} else if (ch === '"') {
 				this.pos++;
 				this.#doubleQuoted(out);
-			} else if (ch === "`") this.#backtick(out);
+			} else if (ch === "`") this.#backtick(out, inDouble);
 			else if (ch === "$" && next === "(") this.#paren(out);
 			else if (ch === "$" && next === "{") this.#param(out, inDouble);
 			else if (ch === "$" && next === "[") this.#bracket(out);

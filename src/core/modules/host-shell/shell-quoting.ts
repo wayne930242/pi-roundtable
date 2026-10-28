@@ -1,5 +1,24 @@
 /** Reading the quoted and delimited pieces of a command line that do not nest: `$'…'` and here-documents. */
 
+/** Whether a line continuation follows a character that starts a longer token (`$\⏎(`, `<<\⏎EOF`). */
+export function continuedToken(src: string): boolean {
+	return /[$<>{,(]\\\n/.test(src);
+}
+
+/**
+ * Whether the `}` at `pos` closes a group: a word of its own after a separator. Any other `{` or
+ * `}` is part of a word, which may be a brace expansion such as `{sudo,ls}`.
+ */
+export function closesGroup(src: string, pos: number): boolean {
+	const before = src[pos - 1];
+	const after = src[pos + 1];
+	const space = (ch: string) => /\s/.test(ch);
+	return (
+		(before === undefined || space(before) || ";&|()".includes(before)) &&
+		(after === undefined || space(after) || ";&|()<>".includes(after))
+	);
+}
+
 /** A line the lexer cannot place; the rule holds it whole. */
 export class Unreadable extends Error {}
 
@@ -48,9 +67,16 @@ export function ansiQuoted(
 			}
 		} else if (c === "c" && i < src.length)
 			text += String.fromCharCode((src.charCodeAt(i++) as number) & 0x1f);
-		else text += c;
+		else if ("\\'\"?".includes(c)) text += c;
+		// Any other escape stays as it is, backslash and all: `$'s\⏎udo'` is `s\⏎udo`, which `eval` joins.
+		else text += `\\${c}`;
 	}
-	return { text, end: Math.min(i + 1, src.length) };
+	// A NUL ends the string: `$'sudo\0x'` is `sudo`.
+	const nul = text.indexOf("\0");
+	return {
+		text: nul === -1 ? text : text.slice(0, nul),
+		end: Math.min(i + 1, src.length),
+	};
 }
 
 /** The here-document delimiter at `pos`, with its quotes removed, and where its word ends. */
@@ -73,6 +99,7 @@ export function readDelimiter(
 			quoted = true;
 		} else if (c === '"') {
 			for (i++; i < src.length && src[i] !== '"'; i++) {
+				if (src[i] === "\\" && src[i + 1] === "\n") throw new Unreadable();
 				if (
 					src[i] === "\\" &&
 					i + 1 < src.length &&
@@ -84,6 +111,8 @@ export function readDelimiter(
 			i++;
 			quoted = true;
 		} else if (c === "\\") {
+			// Bash joins a backslash and a newline out of the word; no one writes one in a delimiter.
+			if (src[i + 1] === "\n") throw new Unreadable();
 			if (i + 1 < src.length) text += src[i + 1];
 			i += 2;
 			quoted = true;
@@ -97,8 +126,9 @@ export function readDelimiter(
 			i++;
 		}
 	}
-	// `<<` followed by nothing, or by an operator, names no delimiter bash would accept.
-	if (text === "" && !quoted) throw new Unreadable();
+	// `<<` followed by nothing, by an operator, or by `""` names no delimiter: bash versions end
+	// such a body, and the substitution around it, in different places.
+	if (text === "") throw new Unreadable();
 	return { text, quoted, end: Math.min(i, src.length) };
 }
 
@@ -110,24 +140,88 @@ export function heredocBody(
 	src: string,
 	start: number,
 	here: { delimiter: string; quoted: boolean; stripTabs: boolean },
-): { bodyEnd: number; next: number } {
+): { bodyEnd: number; next: number; terminated: boolean } {
 	let at = start;
 	while (at < src.length) {
 		const nl = src.indexOf("\n", at);
 		const lineEnd = nl === -1 ? src.length : nl;
 		const line = src.slice(at, lineEnd);
 		if ((here.stripTabs ? line.replace(/^\t+/, "") : line) === here.delimiter)
-			return { bodyEnd: at, next: nl === -1 ? src.length : nl + 1 };
+			return {
+				bodyEnd: at,
+				next: nl === -1 ? src.length : nl + 1,
+				terminated: true,
+			};
 		// A continued line may join the delimiter line; bash and this lexer might disagree.
-		if (!here.quoted && /(?:^|[^\\])(?:\\\\)*\\$/.test(line)) {
-			const after = src.slice(
-				lineEnd + 1,
-				src.indexOf("\n", lineEnd + 1) + 1 || src.length,
-			);
-			if (after.replace(/\n$/, "") === here.delimiter) throw new Unreadable();
+		if (!here.quoted) {
+			let joined = line;
+			let end = lineEnd;
+			while (/(?:^|[^\\])(?:\\\\)*\\$/.test(joined) && end < src.length) {
+				const stop = src.indexOf("\n", end + 1);
+				const nextEnd = stop === -1 ? src.length : stop;
+				joined = joined.slice(0, -1) + src.slice(end + 1, nextEnd);
+				end = nextEnd;
+				if (
+					(here.stripTabs ? joined.replace(/^\t+/, "") : joined) ===
+					here.delimiter
+				)
+					throw new Unreadable();
+			}
 		}
 		if (nl === -1) break;
 		at = nl + 1;
 	}
-	return { bodyEnd: src.length, next: src.length };
+	return { bodyEnd: src.length, next: src.length, terminated: false };
+}
+
+/**
+ * The text of the backtick substitution at `start`, with the escapes bash takes out of it: a
+ * backslash before a backtick, a backslash or `$`, and, inside double quotes, before `"`.
+ */
+export function backtickBody(
+	src: string,
+	start: number,
+	inDouble: boolean,
+): { inner: string; end: number } {
+	const escapable = inDouble ? '`\\$"' : "`\\$";
+	let inner = "";
+	let i = start + 1;
+	for (; i < src.length && src[i] !== "`"; i++) {
+		const next = src[i + 1];
+		// Bash joins a backslash and a newline in a backtick body before it reads the body.
+		if (src[i] === "\\" && next === "\n") throw new Unreadable();
+		if (src[i] === "\\" && next && escapable.includes(next)) i++;
+		inner += src[i];
+	}
+	return { inner, end: Math.min(i + 1, src.length) };
+}
+
+/** The redirection operator at `pos` (`>`, `>>`, `<`, `<>`, `>|`, `>&2`, `<&0`) as the word the lexer gives it, where it ends, and whether it closes a descriptor (`>&-`). */
+export function redirectOperator(
+	src: string,
+	pos: number,
+): { op: string; end: number; closes: boolean } {
+	let op = src[pos] as string;
+	let closes = false;
+	let end = pos + 1;
+	if (src[end] === ">") {
+		op += ">";
+		end++;
+	}
+	if (op === "<>") op = ">"; // opens the file for writing too
+	if (op === ">" && src[end] === "|") end++; // `>|` forces the overwrite
+	if (
+		src[end] === "&" &&
+		(op !== "<" || !" \t\n".includes(src[end + 1] ?? "\n"))
+	) {
+		end++;
+		// `>&2`, `>&-` and `<&0` duplicate or close a descriptor; `>& file` names a file.
+		if (op === "<" || /\s*[0-9-]/y.test(src.slice(end, end + 64))) op = "dup";
+		// `>&-` closes the descriptor: the `-` is its whole operand, and what follows it directly is the next word.
+		if (op === "dup" && src[end] === "-") {
+			end++;
+			closes = true;
+		}
+	}
+	return { op, end, closes };
 }

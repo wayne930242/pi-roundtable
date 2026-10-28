@@ -28,6 +28,7 @@
 		"src",
 		"!src/**/*.test.ts",
 		"!src/core/testing/file-size.ts",
+		"!src/core/modules/host-shell/shell-fuzz-*.ts",
 		"!src/core/testing/discord-limits.ts",
 		"!src/core/testing/prompt-capture*.ts",
 		"!src/core/testing/discord-api-emulator*.ts",

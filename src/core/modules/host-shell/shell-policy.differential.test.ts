@@ -1,17 +1,6 @@
 // biome-ignore-all lint/suspicious/noTemplateCurlyInString: the strings are shell text, where ${...} is bash syntax
 import { afterAll, describe, expect, test } from "bun:test";
-import { spawnSync } from "node:child_process";
-import {
-	chmodSync,
-	existsSync,
-	mkdirSync,
-	mkdtempSync,
-	realpathSync,
-	rmSync,
-	writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { BASHES, BashRunner } from "./shell-fuzz-bash.ts";
 import { shellHoldRule } from "./shell-policy.ts";
 
 /**
@@ -236,6 +225,146 @@ const RUNS: readonly string[] = [
 	`echo ${'"$(echo '.repeat(8)}X${')"'.repeat(8)}`,
 	`echo ${"$(".repeat(30)}X${")".repeat(30)}`,
 	`echo ${'"$('.repeat(60)}X${')"'.repeat(60)}`,
+	// Found by the generated test (shell-policy.fuzz.test.ts): `+=` before the command.
+	"A+=b X",
+	"A+=b FOO=1 X",
+	"FOO=1 A+=b X",
+	// Wrapper options that take an argument.
+	"env -u FOO X",
+	"exec -a name X",
+	"timeout -s KILL 5 X",
+	"timeout -k 1 5 X",
+	"timeout 0.5 X",
+	"nice -n 5 timeout -s KILL 5 X",
+	"command -p env -u FOO X",
+	"stdbuf -o L X",
+	"echo a | xargs -I {} X",
+	"echo a | xargs -n 1 X",
+	"echo a | xargs -P 2 X",
+	"ionice -c 3 X",
+	// A descriptor duplicated or closed for reading.
+	"<&0 X",
+	"0<&- X",
+	"3<&0 X",
+	"2>&1 0<&- X",
+	"3>&-X",
+	"2>&- X",
+	"</dev/null 2>&- X",
+	"0<&- 2>&- s{u,}do marker",
+	"echo hi 2>&-; 0<&-X",
+	"FOO=1 <&0 env X",
+	// A subscript that a builtin evaluates, which runs a substitution in it.
+	"declare 'a[$(X)]=1'",
+	"declare 'a[`X`]=1'",
+	'declare "a[\\$(X)]=1"',
+	"typeset 'a[$(X)]'=1",
+	"read 'a[$(X)]' <<< 1",
+	"printf -v 'a[$(X)]' %s x",
+	// A prompt that runs a command when tracing is on.
+	"set -x; PS4='`X`'; true",
+	"PS4='$(X)'; set -x; true",
+	"PS4='$(X)'\nset -x\ntrue",
+	"! PS4='$(X) ' bash -xc true",
+	// A backtick substitution in double quotes unescapes `\"`.
+	'echo "`\\"sudo\\" marker`"',
+	'echo "`stdbuf -oL \\"sudo\\" -- marker`"',
+	'echo "`echo \\`\\"\\"sudo marker\\``"',
+	// A variable bound again where the rule does not follow it: a loop, `read`, a function, a branch.
+	"x=ls; for x in sudo; do $x marker; done",
+	"x=; : ${x:=sudo}; $x marker",
+	"x=ls; read x <<< sudo; $x marker",
+	"x=ls; printf -v x sudo; $x marker",
+	"x=ls; declare x=sudo; $x marker",
+	"x=ls; eval x=sudo; $x marker",
+	"x=sudo; f() { x=ls; }; $x marker; f",
+	"x=sudo; [ a = b ] && x=ls; $x marker",
+	"x=ls; select x in sudo; do $x marker; break; done <<< 1",
+	"c=ls; if true; then c=sudo; fi; $c marker",
+	"x=s; x+=udo; $x marker",
+	// A shell that reads its script from standard input: a pipe, a here-document, a here-string.
+	"echo 'X' | bash",
+	"echo X | sh",
+	"printf '%s\\n' 'X' | bash -s",
+	"cat <<< 'X' | bash",
+	"bash <<< 'X'",
+	"bash <<EOF\nX\nEOF",
+	"sh <<'EOF'\nX\nEOF",
+	"bash -s -- <<< 'X'",
+	"bash /dev/stdin <<< 'X'",
+	"exec bash <<< 'X'",
+	"env bash <<< 'X'",
+	"command bash <<< 'X'",
+	"bash < <(echo X)",
+	"source /dev/stdin <<< 'X'",
+	". /dev/stdin <<< 'X'",
+	"source <(echo 'X')",
+	// A script the line wrote itself.
+	"echo X > f; bash f",
+	"echo X > f; . ./f",
+	"echo X > f; source f",
+	"echo X >> ./f; sh f",
+	"echo X | tee f; bash ./f",
+	// The command name or the script comes from xargs's input.
+	"echo sudo | xargs -I{} {} marker",
+	"echo sudo | xargs -I % % marker",
+	"echo 'X' | xargs -I{} sh -c {}",
+	"echo X | xargs env",
+	"echo X | xargs nice",
+	"echo X | xargs timeout 5",
+	"echo '-c X' | xargs bash",
+	// A callback that `mapfile` runs.
+	"mapfile -C 'X' -c 1 a <<< x",
+	"readarray -C 'X' -c 1 a <<< x",
+	// A here-document that bash 3.2 and 5 end in different places inside a substitution.
+	'echo $(cat <<""\n)\nX',
+	'echo $(<<""\n)\nX',
+	'echo $(cat <<" "\n)\nX',
+	"echo $(cat <<EOF\nfoo)\nX",
+	"x=$(cat <<EOF\nbody\n)\nX",
+	// A variable the line binds where bash may skip it, so it is empty: the name is unknown.
+	"false && V=1; s${V}udo marker",
+	"[ a = b ] && x=ls; $x X",
+	"(V=1); s${V}udo marker",
+	"V=1 & s${V}udo marker",
+	"case a in b) V=1;; esac; s${V}udo marker",
+	'case a in $())export V=1""&esac\ns${V}udo marker',
+	"echo x | { V=1; }; s${V}udo marker",
+	'false && x=ls; eval "$x X"',
+	"f() { V=1; }; s${V}udo marker",
+	// A newline in a process substitution is not where the outer line's here-document starts.
+	"cat <<EOF; export <(\nX\n)\nbody\nEOF\nwait",
+	"cat <<EOF | cat <(\nX\n)\nbody\nEOF\nwait",
+	"cat <<EOF > >(\nX\n)\nbody\nEOF\nwait",
+	// A NUL ends a `$'…'` string.
+	"$'sudo\\0x' marker",
+	"$'sudo\\x00x' marker",
+	"$'sudo\\000x' marker",
+	"$'\\U00000073udo' marker",
+	"env -P /bin X",
+	"echo sudo | xargs -J % % marker",
+	// A line continuation inside a token or a here-document delimiter.
+	'echo "$\\\n(X)"',
+	"cat <<EOF\n$\\\n(X)\nEOF",
+	"cat <<\\\nEOF\nbody\nEOF\nX",
+	"cat <<EOF\nbody\nE\\\nOF\nX",
+	"{\\\n X; }",
+	// A keyword right after `]]`, where bash 5 starts a new command.
+	"if [[ -n 1 ]] then X; fi",
+	"while [[ -n 1 ]] do X; break; done",
+	"{su\\\ndo,\\\n}",
+	"eval $'s\\\nudo marker'",
+	"cat <<E\\\nND\nbody\nEND\nX",
+	'cat <<E"\\\nND"\nbody\nEND\nX',
+	// A number before a redirection is its descriptor only when nothing separates them.
+	"nice -n 5 </dev/null X",
+	"nice -n 5 </dev/null {sudo,} -- marker",
+	"nice -n 3>&1 X",
+	// `<((` is a process substitution around a subshell, never arithmetic.
+	"cat <((X))",
+	"cat <(( {sudo,} ))",
+	// A line continuation joins `((`, and is dropped inside a backtick body.
+	"x='a[$(X)]'; (\\\n( x ))",
+	"echo `$'su\\\ndo'` marker",
 ];
 
 /** Lines that run `X` through the less common ways bash has of running a command. */
@@ -398,76 +527,18 @@ const INERT: readonly string[] = [
 	"x=1; echo $((x))",
 ];
 
-const BASHES = [
-	...new Set(
-		[Bun.which("bash"), "/bin/bash"].filter(
-			(path): path is string => path !== null && existsSync(path),
-		),
-	),
-];
-
-/** The directory of stub programs, and a scratch directory to run in; nothing real is on the PATH. */
-function sandbox(): {
-	root: string;
-	stubs: string;
-	cwd: string;
-	marker: string;
-} {
-	const root = realpathSync(mkdtempSync(join(tmpdir(), "shell-diff-")));
-	const stubs = join(root, "bin");
-	const cwd = join(root, "cwd");
-	mkdirSync(stubs);
-	mkdirSync(cwd);
-	const stub = (name: string, body: string) => {
-		const file = join(stubs, name);
-		writeFileSync(file, `#!/bin/sh\n${body}\n`);
-		chmodSync(file, 0o755);
-	};
-	stub("sudo", `: >> "$MARKER"`);
-	stub("cat", `while IFS= read -r line; do echo "$line"; done`);
-	stub(
-		"env",
-		`for a; do case "$a" in *=*) shift;; *) break;; esac; done\nexec "$@"`,
-	);
-	stub("xargs", `exec "$@"`);
-	for (const shell of ["bash", "sh"])
-		if (BASHES[0]) stub(shell, `exec ${BASHES[0]} "$@"`);
-	stub(
-		"find",
-		`while [ "$#" -gt 0 ] && [ "$1" != "-exec" ]; do shift; done\nshift\nexec "$@"`,
-	);
-	return { root, stubs, cwd, marker: join(root, "marker") };
-}
-
-const box = sandbox();
-afterAll(() => rmSync(box.root, { recursive: true, force: true }));
-
-/** Whether bash ran `sudo` for this line. */
-function runs(bash: string, line: string): boolean {
-	rmSync(box.marker, { force: true });
-	const options = {
-		cwd: box.cwd,
-		env: { PATH: box.stubs, MARKER: box.marker, HOME: box.cwd },
-		timeout: 10_000,
-		stdio: ["pipe", "ignore", "ignore"] as ["pipe", "ignore", "ignore"],
-	};
-	// A NUL byte cannot be an argument, so such a line is the script on standard input.
-	if (line.includes("\u0000"))
-		spawnSync(bash, ["--norc", "--noprofile"], { ...options, input: line });
-	else
-		spawnSync(bash, ["--norc", "--noprofile", "-c", line], {
-			...options,
-			input: "",
-		});
-	return existsSync(box.marker);
-}
+const runner = new BashRunner();
+afterAll(() => runner.close());
 
 function held(line: string): boolean {
 	return (
 		shellHoldRule.describe(
 			"bash",
 			{ command: line },
-			{ workspace: box.cwd, scratchDir: join(box.cwd, "scratch") },
+			{
+				workspace: runner.workspace,
+				scratchDir: `${runner.workspace}/scratch`,
+			},
 		) !== undefined
 	);
 }
@@ -478,25 +549,32 @@ const lines = (corpus: readonly string[]) =>
 	corpus.map((template) => template.replaceAll("X", SUDO));
 
 describe.skipIf(BASHES.length === 0)("sudo run by bash is held", () => {
-	test("the harness sees bash run the stub", () => {
+	test("the harness sees bash run the stub", async () => {
 		for (const bash of BASHES) {
-			expect(runs(bash, SUDO)).toBe(true);
-			expect(runs(bash, `echo '${SUDO}'`)).toBe(false);
+			expect(await runner.runs(bash, SUDO)).toBe(true);
+			expect(await runner.runs(bash, `echo '${SUDO}'`)).toBe(false);
 		}
 	});
 
 	test("every line of the corpus that runs sudo is held", {
 		timeout: 300_000,
-	}, () => {
+	}, async () => {
 		const missed: string[] = [];
 		let executed = 0;
-		for (const line of lines(ALL)) {
-			for (const bash of BASHES) {
-				if (!runs(bash, line)) continue;
-				executed++;
-				if (!held(line)) missed.push(`${bash}: ${JSON.stringify(line)}`);
-			}
-		}
+		const jobs = lines(ALL).flatMap((line) =>
+			BASHES.map((bash) => ({ line, bash })),
+		);
+		let next = 0;
+		await Promise.all(
+			Array.from({ length: runner.size }, async () => {
+				while (next < jobs.length) {
+					const { line, bash } = jobs[next++] as (typeof jobs)[number];
+					if (!(await runner.runs(bash, line))) continue;
+					executed++;
+					if (!held(line)) missed.push(`${bash}: ${JSON.stringify(line)}`);
+				}
+			}),
+		);
 		// A corpus whose lines bash does not run proves nothing.
 		expect(executed).toBeGreaterThan(ALL.length * BASHES.length * 0.85);
 		expect(missed).toEqual([]);

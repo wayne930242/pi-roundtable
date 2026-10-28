@@ -30,7 +30,11 @@ describe("simpleCommands", () => {
 
 	test("keeps redirections as words", () => {
 		expect(simpleCommands("echo hi > /etc/x 2>&1")).toEqual([
-			["echo", "hi", ">", "/etc/x", "2", "dup", "1"],
+			["echo", "hi", ">", "/etc/x", "dup", "1"],
+		]);
+		// A number set apart from the operator is an argument, not the descriptor.
+		expect(simpleCommands("nice -n 5 </dev/null ls")).toEqual([
+			["nice", "-n", "5", "<", "/dev/null", "ls"],
 		]);
 	});
 });
@@ -522,7 +526,11 @@ describe("a command line the lexer must read to the end", () => {
 			"$'\\163udo' ls",
 			["shell.privilege"],
 		],
-		["a variable holds the command", "x=sudo; $x ls", ["shell.privilege"]],
+		[
+			"a variable the line binds holds the command, which bash may find empty",
+			"x=sudo; $x ls",
+			["shell.privilege", "shell.unreadable"],
+		],
 		["a variable not known names the command", "$cmd ls", ["shell.unreadable"]],
 		["a pattern names the command", "/usr/bin/su* ls", ["shell.unreadable"]],
 		[
