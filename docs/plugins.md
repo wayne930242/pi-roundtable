@@ -169,6 +169,7 @@ A plugin that replaces `IDENTITY` replaces this too: the declarations are the bu
 | `events` | Where the core reports turns and team changes to every plugin's handlers |
 | `providers` | Each provider slot, from the plugin that fills it or the core's default; `providers.filled` is the set of slots a plugin fills |
 | `apiKey(provider)` | The credential the host's model login holds for a provider such as `openai-codex`, the same login the agents use. It resolves to `undefined` when the host has none for that provider and never throws for that. The value is a secret: keep it out of logs and error messages. Read it when you use it rather than keeping it, since a login may refresh its token |
+| `listener(id)` | The address the host's listener `id` serves on, as configured: `{ socketPath, mode? }` for a unix socket or `{ port, hostname? }` for TCP (a frozen copy, without the id), or `undefined` for an id the host has no listener for. A plugin that serves without authentication reads it to refuse an address that reaches beyond the machine, as the web console's `auth: { mode: "none" }` does |
 | `queue` | The one channel queue that every conversation and channel operation shares |
 | `services` | The services plugins provide to each other, read by key: `services.get(SCHEDULES)`; see [services](#services-what-plugins-provide-to-each-other) |
 | `attachments` | Files a plugin takes from a person outside a turn, such as an upload, kept for a conversation until a turn uses them: [`attachments`](#contextattachments-files-from-outside-a-turn) |
@@ -3334,6 +3335,7 @@ After setup, `conversations` routes to the plugin's claims, `surfaces` contains 
 | `turns` | A `ConversationTurns` that replaces the default one |
 | `apiKeys` | The credentials `context.apiKey(provider)` returns, by provider name: `{ "openai-codex": "key" }`. A provider not listed reads as having none, as on a host that is not logged in |
 | `forwardJoinMs` | How long the router holds a bare forward for the message that follows it (the host option `conversations.forwardJoinMs`) |
+| `listeners` | The addresses `context.listener(id)` reports, each `{ id, socketPath, mode? }` or `{ id, port, hostname? }`; an id not listed reads as `undefined` |
 
 The harness supplies what the host would, so a claim or a background turn behaves as it does there:
 

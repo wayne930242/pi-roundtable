@@ -42,7 +42,7 @@ Without the cleanup hook, conversations remain read-only.
 - Bun 1.4.4 or later, and pi-roundtable `>=0.14.0 <0.15.0` as a peer dependency.
 - The host must run on the machine that holds its data directory: the console reads `<dataDir>/sessions` from disk.
 - The `memory` addon for the Notes pane (it is on by default; switch the pane off with `panes` when you run without memory).
-- A way to authenticate the owners in front of the listener, such as Cloudflare Access, or a verifier of your own (see [Authentication](#authentication)).
+- A way to authenticate the owners: a password, Cloudflare Access or a verifier of your own in front of the listener, or `none` on a listener only the owner reaches (see [Authentication](#authentication)).
 - Each person who uses the console is an owner in the host's `access` configuration, with the identity the verifier reports for them among their `identities` or linked to them with `roundtable principal link`.
   This holds on a host with a single owner too: the console refuses an identity linked to no one.
 - A Discord connection is optional: with the Discord entry's `DISCORD` service the console names channels, and without one it shows channel ids.
@@ -86,7 +86,8 @@ The plugin adds the route `/console` (a redirect to `/console/`) and `/console/â
 
 | Option | Default | What it does |
 |---|---|---|
-| `verifier` | none, required | Decides whether a request comes from someone your proxy authenticated, and reports who. `cloudflareAccess(...)` is built in; pass your own function to use another proxy. |
+| `auth` | none, `auth` or `verifier` required | How requests are authenticated: `{ mode: "none" }`, `{ mode: "password" }` or `{ mode: "verifier", verifier }`; see [Authentication](#authentication). |
+| `verifier` | none | Shorthand for `auth: { mode: "verifier", verifier }`: decides whether a request comes from someone your proxy authenticated, and reports who. `cloudflareAccess(...)` is built in; pass your own function to use another proxy. Giving both `auth` and `verifier` throws. |
 | `origin` | none, required | The console's own origin as the browser sees it, such as `https://console.example.com`: scheme and host (and port), no path. Requests that change data must carry it as their `Origin`, and the dashboard line links to it. |
 | `ownerId` | the primary owner | Deprecated. The owner's principal id that a request from a verifier reporting no actor stands for. The Notes pane no longer needs it: it shows each owner their own notes. |
 | `dataDir` | `./data` | The host's data directory; the console reads `<dataDir>/sessions`. Set it to the `dataDir` of your configuration. |
@@ -100,7 +101,7 @@ The plugin adds the route `/console` (a redirect to `/console/`) and `/console/â
 | `relayNotes` | the remote MCP note | Text that an outside agent's relayed message begins with, taken off before the owner's words are shown. Set it to the same value as the `relayNote` of [pi-roundtable-mcp][mcp] when you changed that one. |
 | `exclude` | none | A function from a channel key to `true` for conversations the console must neither list nor read, such as the channels of another plugin that keeps its own sessions in the same directory. |
 
-The options are checked when the plugin is created, so a bad setting stops the host at startup: no verifier, an `origin` with a path, a `mountPath` of `/` or with `..` in it, an unknown or repeated pane, or an empty `ownerId`.
+The options are checked when the plugin is created, so a bad setting stops the host at startup: no `auth` or `verifier`, both of them, an `origin` with a path, a `mountPath` of `/` or with `..` in it, an unknown or repeated pane, or an empty `ownerId`.
 
 The console also needs the agent server for the Overview pane and the memory addon for the Notes pane.
 The host refuses to start with a message naming the missing service when one of them is absent for a pane you serve.
@@ -145,15 +146,71 @@ When serving Skills and Connectors, provide those hooks as well; a missing port 
 
 ## Authentication
 
-The console never decides who someone is, and never makes an account.
-It asks the `verifier` about every request under its path, before it reads anything; the verifier says whether your proxy authenticated the person and reports who they are.
-Then the console looks them up in the host's `IDENTITY`, reading only, and admits them only when their principal holds the owner role.
+The console never makes an account.
+One authenticator checks every request under its path before anything is read, whether it is a page, the API or the event stream, and the WebSocket upgrade of the owner app uses the same one.
+You choose how with the `auth` option; the console then looks the person up in the host's `IDENTITY`, reading only, and admits them only when their principal holds the owner role.
+
+| `auth` | Who is the owner | Use it when |
+|---|---|---|
+| `{ mode: "verifier", verifier }`, or the `verifier` option as shorthand | The person the verifier reports, linked to an owner's principal. | A proxy such as Cloudflare Access authenticates people in front of the listener. This is the one mode whose proof an agent on the host cannot forge. |
+| `{ mode: "password" }` | The primary owner, once they give the password. | The console is reachable from the internet with no proxy that signs people in. |
+| `{ mode: "none" }` | The primary owner, whoever reaches the listener. | Only the owner can reach the listener: a unix socket, or loopback TCP. |
+
+Giving both `auth` and `verifier` throws, and so does giving neither: the plugin never starts without a way to authenticate.
+Whatever the mode, a request that changes data must carry the console's own `Origin`.
 It answers `403 Forbidden` with no detail when the verifier refuses, throws, or rejects, when the lookup fails, and when the person is no owner.
 
-A verifier is a function that receives the `Request` and returns `{ admitted: true, actor }` or `{ admitted: false, reason }`.
+### Password
+
+```ts
+webConsole({
+	auth: { mode: "password" }, // reads ROUNDTABLE_WEB_PASSWORD
+	origin: "https://console.example.com",
+	dataDir: "./data",
+});
+```
+
+| Setting | Default | What it does |
+|---|---|---|
+| `passwordEnv` | `ROUNDTABLE_WEB_PASSWORD` | The environment variable that holds the password. It must be set and at least 12 characters, or the host stops at startup, naming the variable and never the value. |
+| `sessionDays` | `30` | How long a login lasts, from 1 to 365 days. |
+| `principal` | the primary owner | The owner's principal id the session speaks for. |
+
+`<mount>/login` is a server-rendered form that needs no script.
+A wrong password answers `401` after one second.
+Ten wrong passwords in 15 minutes, counted for all visitors together, make every login answer `429` with `Retry-After` until the window passes, the right password included: behind a proxy the client's address is not trustworthy, so the limit is global.
+The right one sets the cookie `rt_session`: signed, `HttpOnly`, `SameSite=Strict`, `Secure` when `origin` is https, and `Path=<mount>/`, and answers `303` to the console.
+`POST <mount>/auth/logout` clears it.
+Without a session a page navigation answers `303` to the login page and the API answers `401`; only `login`, `auth/login` and `auth/logout` are public.
+The login and logout `POST`s need the console's own `Origin`.
+
+The cookie is signed with a key derived from `<dataDir>/web/session.key` (32 random bytes, mode `0600`, made at the first start) and from a hash of the password, so changing the password signs everyone out, and the key file alone signs nothing a host with another password accepts.
+A key file of the wrong size stops startup.
+
+### None
+
+```ts
+webConsole({
+	auth: { mode: "none" }, // the listener must be a unix socket, or TCP on 127.0.0.1, ::1 or localhost
+	origin: "https://console.example.com",
+});
+```
+
+`none` must be written out: it is never the default.
+It reads the listener's address from the host (`context.listener`) and refuses to start for TCP on any other hostname, or with no hostname, which binds every interface, unless `trustNetwork: true` says a network in front of it keeps everyone else out.
+A unix socket passes, with a warning when its mode lets other users write to it.
+The console warns at every start that whoever reaches the listener is the owner.
+It speaks for `principal` (default the primary owner) through the plugin identity `token:web-console`, which the plugin declares itself, so no `access.owners` entry is needed.
+
+Read [Threat model](#threat-model) before choosing `none` or `password` on a host whose agents run a shell.
+
+### Verifier
+
+A verifier is a function that receives the `Request` and returns `{ admitted: true, actor, expiresAt? }` or `{ admitted: false, reason }`.
 `actor` describes the person as an identity, `{ provider, subject, name }`, written `<provider>:<subject>` in `access.owners[].identities` and by `roundtable principal link`.
 The reason goes to the host's log and is never sent to the client, so keep secrets out of it.
-`admitAs(actor)` and `refuse(reason)` build the two answers.
+`expiresAt` says when the proxy's assertion lapses; `cloudflareAccess` fills it from the token's `exp`, and a connection that outlives requests, such as the owner app's WebSocket, ends then.
+`admitAs(actor, expiresAt?)` and `refuse(reason)` build the two answers.
 
 The console decides who the request comes from by what the verifier reported:
 
@@ -245,15 +302,25 @@ The conversations hold everything the host's people said to the assistant and wh
 The console serves that to the host's owners and nobody else.
 Every owner sees every conversation and can read and change every principal's notes; it has no per-user views for members, and no audit trail beyond the host's log, which records only that a request was refused and why.
 
-**Authentication is the verifier; authorization is the owner role.**
-Who holds the owner role is the host's `access` configuration or the `roundtable principal` CLI, never something a verifier reports, so a verifier that admits a member admits no one.
-The console sets no cookie and keeps no session.
+**Authentication is the `auth` mode; authorization is the owner role.**
+Who holds the owner role is the host's `access` configuration or the `roundtable principal` CLI, never something the authentication reports, so one that admits a member admits no one.
+With a verifier the console sets no cookie and keeps no session.
 The built-in Cloudflare Access verifier checks a signature, so a client that can reach the listener directly still cannot forge a token.
 A custom verifier that trusts a plain header is exactly as strong as the guarantee that clients cannot set that header: use a unix socket or a firewall rule so that only the proxy reaches the listener, and have the proxy strip the header from inbound requests.
-The console does not rate-limit failed requests; do that at the proxy.
+With a verifier the console does not rate-limit failed requests; do that at the proxy.
+
+**`none` trusts the listener, and `password` trusts the host's own user.**
+The agents' shell runs as the service user and inherits the host's environment, so anything that user can reach, a prompt-injected agent can reach too: the environment variable that holds the password, `<dataDir>/web/session.key` and the listener's socket.
+With `none`, an agent on the host can call the console as the owner with `curl --unix-socket`, approve its own held actions, and change modes: `Origin` is only a header to `curl`, and `curl` is not held.
+With `password`, an agent can read the password and the session key and sign in.
+Both resist the network, and neither resists a compromised agent on the host.
+Only a verifier does, because an agent cannot forge a signed token it has no key for.
+Choose `none` for a host whose agents have no shell, or whose listener a different user owns, and keep Cloudflare Access (or another signing proxy) for one whose agents run commands; the startup warning of `none` says so.
+Password mode adds a login that cannot be brute-forced from the network (a one-second wait per failure, a global limit of ten in 15 minutes, a constant-time comparison, a 12-character minimum), a cookie a script on the page cannot read and another site cannot send (`HttpOnly`, `SameSite=Strict`, `Secure` over https), a logout, and a key that changes with the password.
+The limit is global, so someone who guesses wrongly on purpose can keep the owner from signing in for 15 minutes; that is the price of not trusting a client's address.
 
 **Cross-site requests.**
-A request that changes data (`POST`, `PATCH`, `DELETE`) is refused unless its `Origin` header is exactly the configured `origin`, after the verifier has admitted it.
+A request that changes data (`POST`, `PATCH`, `DELETE`) is refused unless its `Origin` header is exactly the configured `origin`, after the authentication has admitted it.
 Reads change nothing.
 A page on another site that makes the owner's browser send a request therefore cannot write notes, and it cannot read the answers either, because the console sends no CORS headers.
 
@@ -267,7 +334,7 @@ Links to Discord are built by the page from channel ids, not taken from stored t
 
 **Errors reveal nothing to the client.**
 Every API error is a fixed message.
-It never repeats the request URL, a header, or a token, and a refusal answers `403 Forbidden` with that single word.
+It never repeats the request URL, a header, or a token, and a refusal answers `403 Forbidden` with that single word (`401 Unauthorized` for a request without a password session).
 The console logs a failure with the error that was thrown and nothing from the request: no URL, no headers.
 The text of an error that your own code throws, such as a memory store's, is logged as it is.
 

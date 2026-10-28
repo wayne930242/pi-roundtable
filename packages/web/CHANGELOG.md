@@ -5,6 +5,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- The `auth` option: `{ mode: "none" }`, `{ mode: "password" }` or `{ mode: "verifier", verifier }`. The `verifier` option stays as shorthand for the last, giving both throws, and giving neither still refuses to start. One authenticator now checks every request, page, API and event stream, in place of the server's own admission step, and the owner app's WebSocket upgrade will use it too.
+  - `none` must be written out. It serves only on a unix socket or TCP on `127.0.0.1`, `::1` or `localhost`, unless `trustNetwork: true`; it warns at every start, and speaks for the primary owner (or `principal`) through the plugin identity `token:web-console`.
+  - `password` reads a secret of at least 12 characters from the environment (`ROUNDTABLE_WEB_PASSWORD` by default), serves a login page with no script, and sets a signed `HttpOnly`, `SameSite=Strict` cookie (`Secure` over https) keyed from `<dataDir>/web/session.key` and the password, so a new password signs everyone out. A failed login waits one second, ten failures in 15 minutes lock every login with `429` and `Retry-After`, and `POST <mount>/auth/logout` clears the session.
+- `Verdict.admitted.expiresAt`: when a verifier's assertion lapses. `cloudflareAccess` fills it from the token's `exp`, and `admitAs(actor, expiresAt?)` takes it.
+- The README's Authentication section describes the modes, and its threat model says what `none` and `password` do not resist: an agent whose shell runs as the same user.
+
+### Changed
+
+- The fixture host (`bun run fixture`) takes `FIXTURE_AUTH=cloudflare|none|password`.
+
 ## [0.22.5] - 2026-10-25
 
 - Release in lockstep with pi-roundtable 0.22.5. `engines.bun` is now `>=1.4.4` (was `1.3.0`) so no supported setup runs a Bun with the Brotli decoder bug (CVE-2026-111497). The core peer range stays `>=0.22.0 <0.23.0`.

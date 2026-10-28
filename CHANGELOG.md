@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- A plugin can read where a listener serves (`pi-roundtable`). `context.listener(id)` returns the listener's configured address, `{ socketPath, mode? }` or `{ port, hostname? }`, as a frozen copy without the id, or `undefined` for an id the host has no listener for. A plugin that serves without authentication, such as the web console's `auth: { mode: "none" }`, reads it to refuse an address that reaches beyond the machine. The `testPlugin` harness takes the addresses as `listeners`. See [the context](docs/plugins.md#the-context).
+
 ## [0.22.5] - 2026-10-25
 
 ### Security
