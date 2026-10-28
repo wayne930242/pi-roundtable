@@ -496,9 +496,19 @@ describe("auth password login", () => {
 		const forged = Buffer.from(
 			JSON.stringify({ p: "web-console", e: 9_999_999_999, v: 1 }),
 		).toString("base64url");
-		const flipped = `${signature.slice(0, -1)}${signature.endsWith("A") ? "B" : "A"}`;
+		// The first character carries six signature bits; the last one's low bits are padding.
+		const flipped = `${signature.startsWith("A") ? "B" : "A"}${signature.slice(1)}`;
+		// Same bytes, other spelling: the last character's unused bits set.
+		const alphabet =
+			"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+		const last = alphabet.indexOf(signature.slice(-1));
+		const respelled = `${signature.slice(0, -1)}${alphabet[last ^ 1]}`;
+		expect(Buffer.from(respelled, "base64url")).toEqual(
+			Buffer.from(signature, "base64url"),
+		);
 		for (const bad of [
 			`${payload}.${flipped}`,
+			`${payload}.${respelled}`,
 			`${forged}.${signature}`,
 			`${payload}.`,
 			payload,

@@ -46,6 +46,10 @@ const sign = (key: Buffer, payload: string) =>
 const same = (a: Buffer, b: Buffer) =>
 	a.length === b.length && timingSafeEqual(a, b);
 
+/** Whether a cookie part is the one base64url spelling of its bytes; unused trailing bits would let several spellings pass. */
+const canonical = (part: string) =>
+	Buffer.from(part, "base64url").toString("base64url") === part;
+
 /** Checks the secret's length and returns it; the message never holds it. */
 export function checkPassword(
 	env: Readonly<Record<string, string | undefined>>,
@@ -129,7 +133,13 @@ export class PasswordCredential {
 		if (!value) return { valid: false, reason: "no session" };
 		const parts = value.split(".");
 		const [payload, signature] = parts;
-		if (parts.length !== 2 || !payload || !signature)
+		if (
+			parts.length !== 2 ||
+			!payload ||
+			!signature ||
+			!canonical(payload) ||
+			!canonical(signature)
+		)
 			return { valid: false, reason: "malformed session" };
 		if (
 			!same(sign(this.#signing, payload), Buffer.from(signature, "base64url"))
