@@ -30,6 +30,14 @@ function ruleOf(id: string): string {
 	return dot === -1 ? id : id.slice(0, dot);
 }
 
+/**
+ * Whether an id is a rule's bare name, which a call carries when its rule reports no classes for
+ * it: the call is unclassed. Rule names have no dot and every class id has one.
+ */
+function unclassed(id: string): boolean {
+	return !id.includes(".");
+}
+
 /** The auto-approver of a turn on a runtime built with `options.modes`; undefined without them. */
 export function turnYolo(
 	options: Pick<PiAgentRuntimeOptions, "modes" | "autonomy">,
@@ -54,8 +62,9 @@ export function turnYolo(
  *   turns speak as;
  * - the call names no approvers and its card is not the speaker's alone;
  * - the call has classes (a call without them is unknown, so a person decides), and none of them
- *   is carded: not `autonomy.yolo.card`, not one of its rules named there, and not a class in
- *   `YOLO_CARDED_SHELL_CLASSES` that `autonomy.yolo.allow` leaves out.
+ *   is carded: not `autonomy.yolo.card`, not one of its rules named there, not a class in
+ *   `YOLO_CARDED_SHELL_CLASSES` that `autonomy.yolo.allow` leaves out, and not a rule's bare name
+ *   (its call is unclassed) that `autonomy.yolo.allow` leaves out.
  * It reports who approved as the speaker, marked `auto: "yolo"`, and tells the modes, which log it.
  */
 export function yoloApprover(seams: YoloSeams): AutoApprover {
@@ -63,10 +72,12 @@ export function yoloApprover(seams: YoloSeams): AutoApprover {
 	const allow = new Set(autonomy.yolo.allow);
 	const card = new Set(autonomy.yolo.card);
 	const carded = new Set(YOLO_CARDED_SHELL_CLASSES);
-	const approves = (id: string) =>
-		!card.has(id) &&
-		!card.has(ruleOf(id)) &&
-		(!carded.has(id) || allow.has(id));
+	const approves = (id: string) => {
+		if (card.has(id) || card.has(ruleOf(id))) return false;
+		// A rule that reports classes has opted in; one that reports none is approved only by name.
+		if (unclassed(id)) return allow.has(id);
+		return !carded.has(id) || allow.has(id);
+	};
 	return (call: HeldCall, { speakerOnly }): ApprovedBy | undefined => {
 		if (!modes.peek(channel).yolo) return undefined;
 		if (speaker.tier !== "owner" || speaker.principalId === SYSTEM_PRINCIPAL)

@@ -12,10 +12,12 @@ import type {
 	ConversationMode,
 } from "../../modes/conversation-modes.ts";
 import { shellHoldRule } from "../../modules/host-shell/shell-policy.ts";
+import { precheckScriptHoldRule } from "../../modules/schedules/precheck-tools.ts";
 import type { ChannelKey } from "../../sessions.ts";
 import type { Speaker } from "../../speakers.ts";
 import { useTestLocale } from "../../testing/locale.ts";
 import { TEST_OWNER as OWNER, OWNER_SPEAKER } from "../../testing/owner.ts";
+import { fakePrechecks, fakeScriptRunner } from "../../testing/prechecks.ts";
 import { MAIL, MAIL_RULE } from "./confirmation-fixture.ts";
 import { ConfirmationGate } from "./confirmation-gate.ts";
 import { yoloApprover } from "./yolo.ts";
@@ -153,8 +155,25 @@ describe("yolo approves a held call without a card", () => {
 		]);
 	});
 
-	test("a call a rule holds without classes is classed by the rule's name, and approved", async () => {
-		const { gate, mode } = room();
+	test("a call a rule holds with classes of its own is approved, the rule having opted in", async () => {
+		const mc: HoldRule = {
+			name: "mc",
+			describe: (tool) => (tool === "mc_read" ? "read the world" : undefined),
+			holdClasses: () => ["mc.read"],
+		};
+		const { gate, mode } = room({ holds: holdChain([mc]) });
+		const result = await gate.decide(
+			"mc_read",
+			{},
+			{ prompts: cards().prompts, asker: "guide" },
+			inTurn,
+		);
+		expect(result.approvedBy?.auto).toBe("yolo");
+		expect(mode.approvals[0]?.classes).toEqual(["mc.read"]);
+	});
+
+	test("a rule the config allows by name has its unclassed calls approved", async () => {
+		const { gate, mode } = room({ autonomy: { allow: ["mail"] } });
 		const result = await gate.decide(
 			MAIL,
 			{ to: "a@b.c" },
@@ -177,12 +196,14 @@ describe("yolo approves a held call without a card", () => {
 		expect(result.approvedBy?.auto).toBe("yolo");
 	});
 
-	test("a call decided outside a turn is classed by its rule too", async () => {
-		const { gate } = room();
+	test("a call decided outside a turn is never auto-approved", async () => {
+		const { gate, mode } = room();
 		const result = await gate.decide("bash", {
 			command: "git push origin main",
 		});
-		expect(result.approvedBy?.auto).toBe("yolo");
+		expect(result.approvedBy).toBeUndefined();
+		expect(result.reason).toContain("git push origin main");
+		expect(mode.approvals).toEqual([]);
 	});
 
 	test("a class the config allows is approved", async () => {
@@ -229,6 +250,103 @@ describe("yolo still asks on a card", () => {
 		await carded({ autonomy: { card: ["shell.push"] } });
 		await carded({ autonomy: { card: ["shell"] } });
 		await carded({ autonomy: { card: ["shell.write"] } }, "echo x > /etc/f");
+	});
+
+	test("a rule that reports no classes is unclassed and carded, however safe it looks", async () => {
+		const { gate, mode } = room();
+		const card = cards();
+		const result = await gate.decide(
+			MAIL,
+			{ to: "a@b.c" },
+			{ prompts: card.prompts, asker: "guide" },
+			inTurn,
+		);
+		expect(mode.approvals).toEqual([]);
+		expect(result.approvedBy).toBeUndefined();
+		expect(card.asked).toBe(1);
+	});
+
+	test("a tool's own hold is unclassed too, until the config allows tool:<name>", async () => {
+		const own: HoldRule = {
+			name: "tool:repo_push",
+			describe: (tool) => (tool === "repo_push" ? "push the repo" : undefined),
+		};
+		for (const [allow, auto] of [
+			[[], undefined],
+			[["tool:repo_push"], "yolo"],
+		] as const) {
+			const { gate } = room({
+				holds: holdChain([own]),
+				autonomy: { allow: [...allow] },
+			});
+			const card = cards();
+			const result = await gate.decide(
+				"repo_push",
+				{},
+				{ prompts: card.prompts, asker: "guide" },
+				inTurn,
+			);
+			expect(result.approvedBy?.auto).toBe(auto);
+			expect(card.asked).toBe(auto ? 0 : 1);
+		}
+	});
+
+	test("a rule the config allows still cards a class it names, and one it cards by rule name", async () => {
+		for (const autonomy of [
+			{ allow: ["mc"], card: ["mc"] },
+			{ allow: ["mc"], card: ["mc.write"] },
+		]) {
+			const mc: HoldRule = {
+				name: "mc",
+				describe: (tool) => (tool === "mc_read" ? "act" : undefined),
+				holdClasses: () => ["mc.write"],
+			};
+			const { gate, mode } = room({ holds: holdChain([mc]), autonomy });
+			const card = cards();
+			const result = await gate.decide(
+				"mc_read",
+				{},
+				{ prompts: card.prompts, asker: "guide" },
+				inTurn,
+			);
+			expect(mode.approvals).toEqual([]);
+			expect(result.approvedBy).toBeUndefined();
+			expect(card.asked).toBe(1);
+		}
+	});
+
+	test("a call two rules hold is carded when either is unclassed or carded", async () => {
+		const safe: HoldRule = {
+			name: "safe",
+			describe: (tool) => (tool === "bash" ? "safe" : undefined),
+			holdClasses: () => ["safe.ok"],
+		};
+		const unclassed: HoldRule = {
+			name: "other",
+			describe: (tool) => (tool === "bash" ? "other" : undefined),
+		};
+		const danger: HoldRule = {
+			name: "danger",
+			describe: (tool) => (tool === "bash" ? "danger" : undefined),
+			holdClasses: () => ["danger.x"],
+		};
+		const cases: [HoldRule[], NonNullable<Setup["autonomy"]>][] = [
+			[[safe, unclassed], {}],
+			[[unclassed, safe], {}],
+			[[safe, danger], { card: ["danger"] }],
+		];
+		for (const [rules, autonomy] of cases) {
+			const { gate, mode } = room({
+				holds: holdChain(rules),
+				autonomy,
+			});
+			const { result, card } = await bash(gate, "ls");
+			expect(mode.approvals).toEqual([]);
+			expect(result.approvedBy).toBeUndefined();
+			expect(card.asked).toBe(1);
+		}
+		const { gate } = room({ holds: holdChain([safe, danger]) });
+		expect((await bash(gate, "ls")).result.approvedBy?.auto).toBe("yolo");
 	});
 
 	test("a rule without classes of its own is carded by its name", async () => {
@@ -405,6 +523,20 @@ describe("yoloApprover", () => {
 		expect(approver()(call([]), { speakerOnly: false })).toBeUndefined();
 	});
 
+	test("a bare rule name is unclassed: answered only when the config allows the rule", () => {
+		expect(approver()(call(["mc"]), { speakerOnly: false })).toBeUndefined();
+		const allowing = yoloApprover({
+			modes: modes(),
+			autonomy: { yolo: { allow: ["mc"], card: [] } },
+			channel: ROOM,
+			speaker: OWNER_SPEAKER,
+		});
+		expect(allowing(call(["mc"]), { speakerOnly: false })?.auto).toBe("yolo");
+		expect(
+			allowing(call(["mc", "shell.rm"]), { speakerOnly: false }),
+		).toBeUndefined();
+	});
+
 	test("a call that names approvers is never answered", () => {
 		expect(
 			approver()(
@@ -418,5 +550,104 @@ describe("yoloApprover", () => {
 		expect(
 			approver()(call(["shell.push"]), { speakerOnly: true }),
 		).toBeUndefined();
+	});
+});
+
+describe("yolo and a precheck script saved by a schedule tool", () => {
+	const GMAIL = "google-send-gmail-message";
+	const LABELS = "google-manage-label";
+	const send = (to: string) =>
+		`export default async ({ mcp }) => { await mcp.call("google", "send-gmail-message", { to: "${to}" }); return { wake: false }; };`;
+	const SEND = send("a@b.c");
+	/** A label call whose arguments are computed when the script runs, so only `mayHold` knows it may be held. */
+	const COMPUTED = `export default async ({ mcp, today }) => { await mcp.call("google", "manage-label", { action: today }); return { wake: false }; };`;
+	const create = (precheck_script: string) => ({
+		title: "mail",
+		prompt: "send it",
+		time: "09:30",
+		precheck_script,
+	});
+
+	/** The host's chain: google's rule beside the precheck rule, which judges scripts by the same chain. */
+	function scripts(google: Partial<HoldRule> = {}) {
+		const registry = fakePrechecks();
+		registry.useScriptRunner(fakeScriptRunner({ wake: false }));
+		let holds: HoldCheck = () => undefined;
+		holds = holdChain([
+			{
+				name: "google",
+				describe: (tool) => (tool === GMAIL ? "send an email" : undefined),
+				mayHold: (tool) => tool === LABELS,
+				...google,
+			},
+			precheckScriptHoldRule({ prechecks: () => registry, holds: () => holds }),
+		]);
+		return holds;
+	}
+
+	const save = async (
+		holds: HoldCheck,
+		script: string,
+		autonomy: Setup["autonomy"],
+	) => {
+		const { gate, mode } = room({ holds, autonomy });
+		const card = cards();
+		const result = await gate.decide(
+			"schedule_create",
+			create(script),
+			{ prompts: card.prompts, asker: "guide" },
+			inTurn,
+		);
+		return { result, mode, card };
+	};
+
+	test("a script whose inner call is carded is carded, whatever the rule name allows", async () => {
+		const holds = scripts({ holdClasses: () => ["google.send"] });
+		for (const autonomy of [
+			{ card: ["google"] },
+			{ card: ["google.send"] },
+			{ card: ["google"], allow: ["precheck-scripts"] },
+		]) {
+			const { result, mode, card } = await save(holds, SEND, autonomy);
+			expect(mode.approvals).toEqual([]);
+			expect(result.approvedBy).toBeUndefined();
+			expect(card.asked).toBe(1);
+		}
+	});
+
+	test("a script whose inner calls are all classed and not carded is approved, with their classes recorded", async () => {
+		const holds = scripts({ holdClasses: () => ["google.send"] });
+		const { result, mode, card } = await save(holds, SEND, {});
+		expect(result.approvedBy?.auto).toBe("yolo");
+		expect(card.asked).toBe(0);
+		expect(mode.approvals[0]?.classes).toEqual(["google.send"]);
+	});
+
+	test("a script whose inner call is unclassed is carded until the config allows that rule, not the precheck rule", async () => {
+		const holds = scripts();
+		for (const script of [SEND, COMPUTED]) {
+			for (const allow of [[], ["precheck-scripts"]]) {
+				const { result, mode, card } = await save(holds, script, { allow });
+				expect(mode.approvals).toEqual([]);
+				expect(result.approvedBy).toBeUndefined();
+				expect(card.asked).toBe(1);
+			}
+			const allowed = await save(holds, script, { allow: ["google"] });
+			expect(allowed.result.approvedBy?.auto).toBe("yolo");
+			expect(allowed.mode.approvals[0]?.classes).toEqual(["google"]);
+		}
+	});
+
+	test("one carded inner call among classed ones cards the script", async () => {
+		const holds = scripts({
+			holdClasses: (_tool, input) =>
+				input.to === "a@b.c" ? ["google.send"] : ["google.bulk"],
+		});
+		const both = `export default async ({ mcp }) => { await mcp.call("google", "send-gmail-message", { to: "a@b.c" }); await mcp.call("google", "send-gmail-message", { to: "x@y.z" }); return { wake: false }; };`;
+		const { result, card } = await save(holds, both, {
+			card: ["google.bulk"],
+		});
+		expect(result.approvedBy).toBeUndefined();
+		expect(card.asked).toBe(1);
 	});
 });

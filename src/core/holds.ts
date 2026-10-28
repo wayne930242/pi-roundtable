@@ -46,7 +46,7 @@ export interface HoldContext {
  * signals do not survive a restart, but a repeated call is described again.
  *
  * `classes` are the hold classes of the call, for a rule that describes it in a turn (see
- * `HoldRule.holdClasses`); a rule that leaves them out has its call classed by its name.
+ * `HoldRule.holdClasses`); a rule that leaves them out leaves its call unclassed.
  */
 export type HoldDescription =
 	| string
@@ -71,10 +71,14 @@ export interface HoldRule {
 	): string | undefined;
 	/**
 	 * The classes of a call this rule holds, as `<rule>.<class>` ids such as `shell.rm`, for yolo
-	 * mode to tell a call it may approve from one it never does (see `autonomy.yolo`). List every
+	 * mode to tell a call it may approve from one it never does (see `autonomy.yolo`). Report only
+	 * classes that are safe to approve with no person looking: listing a class opts the call in, and
+	 * yolo then approves it unless `autonomy.yolo.card` names the class or the rule. List every
 	 * reason the call is held, not only the first: yolo approves only a call whose classes it all
-	 * allows. Asked for a call `describe` held; undefined or an empty list classes the call by the
-	 * rule's name. It must change nothing.
+	 * allows. Every id starts with the rule's name and a dot; a rule that stands for other rules'
+	 * calls, as the precheck scripts' does, may list their ids instead. A rule that reports none,
+	 * or an id that is not so named, leaves the call unclassed: yolo cards it unless
+	 * `autonomy.yolo.allow` names the rule. Asked for a call `describe` held. It must change nothing.
 	 */
 	holdClasses?(
 		tool: string,
@@ -150,9 +154,9 @@ export type HoldCheck = ((
 	/** The name of a rule that may hold some call of `tool` whatever its input; see `HoldRule.mayHold`. */
 	mayHold?(tool: string): string | undefined;
 	/**
-	 * The classes of the call, from the first rule whose `describe` holds it; see
-	 * `HoldRule.holdClasses`. A rule without its own classes classes the call by its name.
-	 * Undefined when no rule holds the call. A check made without `holdChain` has none, and yolo
+	 * The classes of the call, from every rule whose `describe` holds it; see
+	 * `HoldRule.holdClasses`. A rule without valid classes of its own gives its bare name, which
+	 * marks the call unclassed. Undefined when no rule holds the call. A check made without `holdChain` has none, and yolo
 	 * mode then never approves its calls.
 	 */
 	classesOf?(
@@ -172,9 +176,10 @@ export type HoldCheck = ((
 		turn: ToolTurn,
 	): HoldDescription | undefined | Promise<HoldDescription | undefined>;
 	/**
-	 * `inTurn`, with the classes of the rule that held the call, as the confirmation gate records
-	 * them with it; see `HoldRule.holdClasses`. A description that names its own `classes` keeps
-	 * them. A check without it has no classes for its calls.
+	 * `inTurn`, with the classes of every rule that holds the call, as the confirmation gate records
+	 * them with it; see `HoldRule.holdClasses`. The rules after the first that holds the call are
+	 * asked too, and one whose lookup fails leaves its bare name. A description that names its own
+	 * `classes` keeps them. A check without it has no classes for its calls.
 	 */
 	inTurnWithClasses?(
 		tool: string,
@@ -217,6 +222,10 @@ export function higherTier(
 export function holdChain(rules: readonly HoldRule[]): HoldCheck {
 	const names = new Set<string>();
 	for (const rule of rules) {
+		if (rule.name.includes("."))
+			throw new PluginError(
+				`hold rule ${rule.name}: the name has a dot, which separates a rule from its hold classes. Rename it.`,
+			);
 		if (names.has(rule.name))
 			throw new PluginError(
 				`hold rule ${rule.name} is registered twice. Rename one of the two.`,
@@ -231,48 +240,88 @@ export function holdChain(rules: readonly HoldRule[]): HoldCheck {
 		return undefined;
 	};
 	check.classesOf = (tool, input, context) => {
-		const rule = rules.find(
+		const holding = rules.filter(
 			(r) => r.describe(tool, input, context) !== undefined,
 		);
-		return rule && classesFor(rule, tool, input, context);
+		return holding.length === 0
+			? undefined
+			: unionOf(
+					holding.map((rule) => classesFor(rule, names, tool, input, context)),
+				);
 	};
-	/** Asks the rules from `from` in order; the first description holds the call, with the rule that gave it. */
+	/**
+	 * Asks the rules from `from` in order, each holding rule joining `found`. Stops at the first
+	 * holding rule unless `all`; then a later rule whose lookup fails holds the call undescribed.
+	 */
 	const ask = (
 		tool: string,
 		input: Record<string, unknown>,
 		context: HoldContext,
 		turn: ToolTurn,
 		from: number,
-	): Holding | undefined | Promise<Holding | undefined> => {
+		all: boolean,
+		found: readonly Holding[] = [],
+	): readonly Holding[] | Promise<readonly Holding[]> => {
+		let holding = found;
 		for (let at = from; at < rules.length; at++) {
 			const rule = rules[at];
 			if (!rule) continue;
-			const description = rule.describeInTurn
-				? rule.describeInTurn(tool, input, context, turn)
-				: rule.describe(tool, input, context);
-			if (isPromise(description))
-				return description.then((found) =>
-					found !== undefined
-						? { description: found, rule }
-						: ask(tool, input, context, turn, at + 1),
+			let description: ReturnType<NonNullable<HoldRule["describeInTurn"]>>;
+			try {
+				description = rule.describeInTurn
+					? rule.describeInTurn(tool, input, context, turn)
+					: rule.describe(tool, input, context);
+			} catch (error) {
+				if (holding.length === 0) throw error;
+				holding = [...holding, { description: undefined, rule }];
+				continue;
+			}
+			if (isPromise(description)) {
+				const before = holding;
+				return description.then(
+					(answer) => {
+						const next =
+							answer === undefined
+								? before
+								: [...before, { description: answer, rule }];
+						return all || next.length === 0
+							? ask(tool, input, context, turn, at + 1, all, next)
+							: next;
+					},
+					(error) => {
+						if (before.length === 0) throw error;
+						return ask(tool, input, context, turn, at + 1, all, [
+							...before,
+							{ description: undefined, rule },
+						]);
+					},
 				);
-			if (description !== undefined) return { description, rule };
+			}
+			if (description !== undefined) {
+				holding = [...holding, { description, rule }];
+				if (!all) return holding;
+			}
 		}
-		return undefined;
+		return holding;
 	};
 	check.inTurn = (tool, input, context, turn) => {
-		const found = ask(tool, input, context, turn, 0);
+		const found = ask(tool, input, context, turn, 0, false);
 		return isPromise(found)
-			? found.then((holding) => holding?.description)
-			: found?.description;
+			? found.then((holding) => holding[0]?.description)
+			: found[0]?.description;
 	};
 	check.inTurnWithClasses = (tool, input, context, turn) => {
-		const classed = (holding: Holding | undefined) =>
-			holding && {
-				description: holding.description,
-				classes: classesIn(holding, tool, input, context),
+		const classed = (holding: readonly Holding[]) => {
+			const first = holding.find((held) => held.description !== undefined);
+			if (first?.description === undefined) return undefined;
+			return {
+				description: first.description,
+				classes: unionOf(
+					holding.map((held) => classesIn(held, names, tool, input, context)),
+				),
 			};
-		const found = ask(tool, input, context, turn, 0);
+		};
+		const found = ask(tool, input, context, turn, 0, true);
 		return isPromise(found) ? found.then(classed) : classed(found);
 	};
 	check.mayHold = (tool) => rules.find((rule) => rule.mayHold?.(tool))?.name;
@@ -301,47 +350,75 @@ export function holdChain(rules: readonly HoldRule[]): HoldCheck {
 	return check;
 }
 
-/** The classes of a call a rule holds: its own, or the rule's name. */
+/** The classes of a call a rule holds: its own, or the rule's bare name, which leaves the call unclassed. */
 function classesFor(
 	rule: HoldRule,
+	names: ReadonlySet<string>,
 	tool: string,
 	input: Record<string, unknown>,
 	context: HoldContext,
 ): readonly string[] {
-	let own: readonly string[] | undefined;
+	let own: unknown;
 	try {
 		own = rule.holdClasses?.(tool, input, context);
 	} catch {
-		// A rule whose classes fail classes its call by its name, which yolo mode treats as unknown.
+		// A rule whose classes fail leaves its call unclassed.
 		own = undefined;
 	}
-	const named = Array.isArray(own) ? own.filter(isClass) : [];
-	return named.length > 0 ? [...new Set(named)] : [rule.name];
+	return validClasses(own, rule, names);
 }
 
-/** A description and the rule that gave it. */
+/**
+ * The ids a rule reports once each, when it reports some and every one starts with the name of a
+ * rule of the chain and a dot or is that name; otherwise the rule's bare name, which yolo mode
+ * treats as unclassed and cards.
+ */
+function validClasses(
+	reported: unknown,
+	rule: HoldRule,
+	names: ReadonlySet<string>,
+): readonly string[] {
+	if (!Array.isArray(reported) || reported.length === 0) return [rule.name];
+	const ids = reported as unknown[];
+	if (!ids.every((id): id is string => isClassOf(id, names)))
+		return [rule.name];
+	return [...new Set(ids)];
+}
+
+/** A rule's description, if it gave one, and the rule; a rule whose lookup failed has none. */
 interface Holding {
-	description: HoldDescription;
+	description: HoldDescription | undefined;
 	rule: HoldRule;
 }
 
 /** The classes of a held call: those its description names, else its rule's. */
 function classesIn(
 	{ description, rule }: Holding,
+	names: ReadonlySet<string>,
 	tool: string,
 	input: Record<string, unknown>,
 	context: HoldContext,
 ): readonly string[] {
+	// A rule whose lookup failed could not say what the call is.
+	if (description === undefined) return [rule.name];
 	if (typeof description === "object" && description !== null) {
 		const named = description.classes;
-		if (Array.isArray(named) && named.length > 0 && named.every(isClass))
-			return [...new Set(named)];
+		if (Array.isArray(named) && named.length > 0)
+			return validClasses(named, rule, names);
 	}
-	return classesFor(rule, tool, input, context);
+	return classesFor(rule, names, tool, input, context);
 }
 
-function isClass(id: unknown): id is string {
-	return typeof id === "string" && id !== "";
+/** Whether an id is a rule of the chain, or one of that rule's classes. */
+function isClassOf(id: unknown, names: ReadonlySet<string>): id is string {
+	if (typeof id !== "string") return false;
+	const dot = id.indexOf(".");
+	return names.has(dot === -1 ? id : id.slice(0, dot));
+}
+
+/** The ids of the lists once each, in order. */
+function unionOf(lists: readonly (readonly string[])[]): readonly string[] {
+	return [...new Set(lists.flat())];
 }
 
 /** The principals every list names, in the first list's order; undefined when there are no lists. */

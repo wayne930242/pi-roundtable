@@ -27,6 +27,8 @@ async function fixture(options: {
 	yolo: boolean;
 	card?: readonly string[];
 	answer?: Approval;
+	/** Whether the hold rule reports a class for its call; a rule that does not leaves it unclassed. */
+	classed?: boolean;
 }) {
 	const dir = mkdtempSync(join(tmpdir(), "roundtable-yolo-"));
 	const core = createFauxCore({ provider: "faux", models: [{ id: "faux-1" }] });
@@ -109,6 +111,9 @@ async function fixture(options: {
 						name: "deploy",
 						describe: (tool: string) =>
 							tool === "deploy_it" ? "deploy it" : undefined,
+						...(options.classed === false
+							? {}
+							: { holdClasses: () => ["deploy.run"] }),
 					},
 				],
 				sessionTools: [
@@ -199,9 +204,21 @@ test("in a yolo conversation an owner's held call runs without a card and is rep
 			channel: "fake:room",
 			tool: "deploy_it",
 			action: "deploy it",
-			classes: ["deploy"],
+			classes: ["deploy.run"],
 			principalId: OWNER_SPEAKER.principalId,
 		});
+	} finally {
+		await f.close();
+	}
+});
+
+test("a rule that reports no classes leaves its call unclassed, so a yolo conversation asks on a card", async () => {
+	const f = await fixture({ yolo: true, classed: false });
+	try {
+		expect(await f.run()).toMatchObject({ ok: true });
+		expect(f.asked).toBe(1);
+		expect(f.ran).toEqual([]);
+		expect(f.approvals).toEqual([]);
 	} finally {
 		await f.close();
 	}

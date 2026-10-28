@@ -430,6 +430,17 @@ export function precheckScriptHoldRule(options: {
 				held.map((call) => call.held),
 			);
 		},
+		// The classes of every held call the script makes, so yolo mode approves saving it only when it
+		// would approve each of them: a scheduled run makes them with no one to ask. A call no rule
+		// classes gives the name of the rule that holds it, or of this rule when none is known.
+		holdClasses(tool, input, context) {
+			const holds = options.holds();
+			return scriptCalls(tool, input, context).flatMap((call) => {
+				const own = holds.classesOf?.(call.name, call.input, context);
+				if (own && own.length > 0) return own;
+				return [holds.mayHold?.(call.name) ?? "precheck-scripts"];
+			});
+		},
 		// Whoever approves must be able to approve each held call the script makes.
 		approvalTier(tool, input, context) {
 			const tiers = options.tiers?.();

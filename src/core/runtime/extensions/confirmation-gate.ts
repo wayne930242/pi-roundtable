@@ -315,9 +315,10 @@ export class ConfirmationGate {
 			if (watch) watch.card = false;
 			return { reason: await this.#held(call), refused };
 		};
-		const auto = this.#auto?.(call, {
-			speakerOnly: needing.speakerOnly === true,
-		});
+		// Outside a turn there is no speaker whose conversation could be in yolo mode.
+		const auto = turn
+			? this.#auto?.(call, { speakerOnly: needing.speakerOnly === true })
+			: undefined;
 		if (auto) {
 			watch?.end();
 			return { approvedBy: auto };

@@ -135,17 +135,17 @@ describe("holdChain in a turn", () => {
 describe("hold classes", () => {
 	const inTurn = { toolTurn: undefined } as unknown as ToolTurn;
 
-	test("a rule without classes classes its call by its name", () => {
+	test("a rule without classes leaves its call unclassed: its bare name", () => {
 		const holds = holdChain([rule("mail", "send", "send mail")]);
 		expect(holds.classesOf?.("send", {}, {})).toEqual(["mail"]);
 		expect(holds.classesOf?.("other", {}, {})).toBeUndefined();
 	});
 
-	test("a rule's own classes replace its name, once each and without blanks", () => {
+	test("a rule's own classes replace its name, once each", () => {
 		const holds = holdChain([
 			{
 				...rule("shell", "bash", "run it"),
-				holdClasses: () => ["shell.rm", "shell.rm", "", "shell.write"],
+				holdClasses: () => ["shell.rm", "shell.rm", "shell.write"],
 			},
 		]);
 		expect(holds.classesOf?.("bash", {}, {})).toEqual([
@@ -154,7 +154,7 @@ describe("hold classes", () => {
 		]);
 	});
 
-	test("a rule whose classes are empty, absent or throw is classed by its name", () => {
+	test("a rule whose classes are empty, absent or throw leaves its call unclassed", () => {
 		for (const holdClasses of [
 			() => [],
 			() => undefined,
@@ -167,15 +167,79 @@ describe("hold classes", () => {
 		}
 	});
 
-	test("the classes are those of the rule that held the call, not of an earlier one that did not", () => {
+	test("a class id outside the rule's name leaves the whole call unclassed", () => {
+		for (const ids of [
+			["other.rm"],
+			["shell.rm", "other.rm"],
+			["shellrm"],
+			["shell.rm", ""],
+			["shell.rm", 3],
+		]) {
+			const holds = holdChain([
+				{
+					...rule("shell", "x", "x"),
+					holdClasses: () => ids as unknown as string[],
+				},
+			]);
+			expect([ids, holds.classesOf?.("x", {}, {})]).toEqual([ids, ["shell"]]);
+		}
+	});
+
+	test("a rule may relay the classes of another rule of the chain", () => {
+		const holds = holdChain([
+			rule("a", "never", "n"),
+			{
+				...rule("relay", "x", "x"),
+				holdClasses: () => ["a.one", "a", "relay.two"],
+			},
+		]);
+		expect(holds.classesOf?.("x", {}, {})).toEqual(["a.one", "a", "relay.two"]);
+	});
+
+	test("a rule name with a dot is refused", () => {
+		expect(() => holdChain([rule("a.b", "x", "x")])).toThrow("a.b");
+	});
+
+	test("the classes are those of every rule that holds the call", () => {
 		const holds = holdChain([
 			{ ...rule("a", "y", "a says y"), holdClasses: () => ["a.one"] },
 			{ ...rule("b", "x", "b says x"), holdClasses: () => ["b.two"] },
+			{ ...rule("c", "x", "c says x"), holdClasses: () => ["c.three"] },
+			rule("d", "x", "d says x"),
 		]);
-		expect(holds.classesOf?.("x", {}, {})).toEqual(["b.two"]);
+		expect(holds.classesOf?.("x", {}, {})).toEqual(["b.two", "c.three", "d"]);
 		expect(holds.inTurnWithClasses?.("x", {}, {}, inTurn)).toEqual({
 			description: "b says x",
-			classes: ["b.two"],
+			classes: ["b.two", "c.three", "d"],
+		});
+	});
+
+	test("in a turn a later rule's lookup counts too, and one that fails leaves its rule's name", async () => {
+		const holds = holdChain([
+			{ ...rule("a", "x", "a says x"), holdClasses: () => ["a.one"] },
+			{
+				name: "slow",
+				describe: () => undefined,
+				describeInTurn: async () => ({ text: "slow", classes: ["slow.x"] }),
+			},
+			{
+				name: "broken",
+				describe: () => undefined,
+				describeInTurn: async () => {
+					throw new Error("down");
+				},
+			},
+			{
+				name: "sync",
+				describe: () => undefined,
+				describeInTurn: () => {
+					throw new Error("down");
+				},
+			},
+		]);
+		expect(await holds.inTurnWithClasses?.("x", {}, {}, inTurn)).toEqual({
+			description: "a says x",
+			classes: ["a.one", "slow.x", "broken", "sync"],
 		});
 	});
 
@@ -209,6 +273,20 @@ describe("hold classes", () => {
 		});
 	});
 
+	test("classes a description names outside its rule leave the call unclassed, whatever the rule says", () => {
+		const holds = holdChain([
+			{
+				name: "repo",
+				describe: () => undefined,
+				describeInTurn: () => ({ text: "push", classes: ["push"] }),
+				holdClasses: () => ["repo.safe"],
+			},
+		]);
+		expect(holds.inTurnWithClasses?.("x", {}, {}, inTurn)).toMatchObject({
+			classes: ["repo"],
+		});
+	});
+
 	test("a call no rule holds has none", async () => {
 		const holds = holdChain([rule("a", "x", "x")]);
 		expect(holds.inTurnWithClasses?.("y", {}, {}, inTurn)).toBeUndefined();
@@ -222,5 +300,20 @@ describe("hold classes", () => {
 		expect(
 			await later.inTurnWithClasses?.("y", {}, {}, inTurn),
 		).toBeUndefined();
+	});
+
+	test("a lookup that fails before any rule held the call still rejects", async () => {
+		const holds = holdChain([
+			{
+				name: "l",
+				describe: () => undefined,
+				describeInTurn: async () => {
+					throw new Error("down");
+				},
+			},
+		]);
+		await expect(
+			holds.inTurnWithClasses?.("x", {}, {}, inTurn),
+		).rejects.toThrow("down");
 	});
 });
