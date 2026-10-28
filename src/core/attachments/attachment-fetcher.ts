@@ -1,6 +1,7 @@
-import { mkdirSync } from "node:fs";
-import { open, rm, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { constants, mkdirSync } from "node:fs";
+import { lstat, open, rm } from "node:fs/promises";
+import { isAbsolute, join } from "node:path";
+import { Readable } from "node:stream";
 import type { AttachmentContent } from "../contract/channels.ts";
 import type {
 	AttachmentFailure,
@@ -206,11 +207,40 @@ async function storeContent(
 	}
 	if (content instanceof ReadableStream)
 		return storeStream(content, path, limit, watch);
-	const info = await stat(content.path);
-	if (!info.isFile()) throw new Error("not a regular file");
-	if (info.size > limit) return { tooLarge: info.size };
-	// The count in `storeStream` also holds a file that grows while it is copied.
-	return storeStream(Bun.file(content.path).stream(), path, limit, watch);
+	return storeFile(content.path, path, limit, watch);
+}
+
+/** An error that carries a code, so the failure reports the code and never a message that may quote a path. */
+function codedError(code: string, message: string): Error {
+	return Object.assign(new Error(message), { code });
+}
+
+/** Copies a regular file the surface owns: absolute, not a symlink, opened once and read from that handle. */
+async function storeFile(
+	source: string,
+	path: string,
+	limit: number,
+	watch: IdleWatch,
+): Promise<number | { tooLarge: number }> {
+	if (!isAbsolute(source))
+		throw codedError("EINVAL", "attachment path is not absolute");
+	if ((await lstat(source)).isSymbolicLink())
+		throw codedError("EINVAL", "attachment path is a symlink");
+	// O_NOFOLLOW closes the gap between the check above and the open.
+	const handle = await open(source, constants.O_RDONLY | constants.O_NOFOLLOW);
+	try {
+		const info = await handle.stat();
+		if (!info.isFile())
+			throw codedError("EINVAL", "attachment path is not a regular file");
+		if (info.size > limit) return { tooLarge: info.size };
+		// The count in `storeStream` also holds a file that grows while it is copied.
+		const stream = Readable.toWeb(
+			handle.createReadStream({ autoClose: true }),
+		) as ReadableStream<Uint8Array>;
+		return await storeStream(stream, path, limit, watch);
+	} finally {
+		await handle.close().catch(() => {});
+	}
 }
 
 /** Downloads attachments one by one; a failed file is reported without stopping the others. */

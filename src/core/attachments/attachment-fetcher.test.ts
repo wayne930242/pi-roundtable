@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { mkdtempSync, readdirSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -498,6 +498,26 @@ describe("attachments over the default limit", () => {
 		expect(result.files).toEqual([]);
 		expect(result.failures[0]?.reason).toBe("download failed: ENOENT");
 		expect(readdirSync(input.dir)).toEqual([]);
+	});
+
+	test("a relative path, a symlink and a directory each fail that file with a code", async () => {
+		const target = await sourceFile(MIB);
+		const link = join(dirs[dirs.length - 1] ?? "", "link.bin");
+		symlinkSync(target, link);
+		for (const [path, code] of [
+			["big.bin", "EINVAL"],
+			[link, "EINVAL"],
+			[dirs[dirs.length - 1] ?? "", "EINVAL"],
+		] as const) {
+			const input = request();
+			const result = await fetchAttachments(
+				{ ...input, read: () => Promise.resolve({ path }) },
+				neverFetched,
+			);
+			expect(result.files).toEqual([]);
+			expect(result.failures[0]?.reason).toBe(`download failed: ${code}`);
+			expect(readdirSync(input.dir)).toEqual([]);
+		}
 	});
 
 	test("a stream is stored as it comes and cut off at the limit", async () => {
