@@ -83,7 +83,10 @@ export function App() {
 			.config()
 			.then(async (loaded) => {
 				// The locale the bootstrap named is usually the same; a host with none in the page names it here.
-				await loadBuiltInMessages(loaded.locale);
+				// Wording that fails to load leaves the page in English rather than unusable.
+				await loadBuiltInMessages(loaded.locale).catch((failure) =>
+					console.warn("the built-in wording failed to load", failure),
+				);
 				setPresentation(loaded);
 				initLook(loaded.look);
 				setRouting(loaded.mountPath, loaded.panes[0]);
