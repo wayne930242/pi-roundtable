@@ -8,6 +8,7 @@ import {
 } from "./app/uploads.ts";
 import type { ConsoleFeatures, ConsolePresentation } from "./features.ts";
 import { isHostPattern } from "./push/endpoint.ts";
+import { pushFetchOf } from "./push/test-fetch.ts";
 import type { RequestVerifier } from "./verifier.ts";
 
 /**
@@ -162,9 +163,11 @@ export interface WebConsoleOptions {
 		 */
 		endpointHosts?: readonly string[];
 		/**
-		 * The HTTP client the posts go through; default `fetch`. Set it only in tests.
+		 * Who a push service may contact about this server (the VAPID `sub`): a `mailto:` or
+		 * `https:` URL. Default `origin` when that is `https`; with an `http` origin push stays off
+		 * until this is set.
 		 */
-		fetch?: typeof fetch;
+		subject?: string;
 	};
 	/** The page's title and heading; default `Roundtable`. */
 	title?: string;
@@ -195,6 +198,8 @@ export interface ResolvedOptions {
 	push: {
 		preview: boolean;
 		endpointHosts: readonly string[];
+		/** The VAPID contact; undefined = push is off. */
+		subject: string | undefined;
 		fetch: typeof fetch | undefined;
 	};
 	title: string;
@@ -349,7 +354,11 @@ function checkGrace(seconds: number | undefined): number {
 	return seconds;
 }
 
-function checkPush(push: WebConsoleOptions["push"]): ResolvedOptions["push"] {
+function checkPush(
+	options: WebConsoleOptions,
+	origin: string,
+): ResolvedOptions["push"] {
+	const push = options.push;
 	if (push?.preview !== undefined && typeof push.preview !== "boolean")
 		fail("push.preview must be true or false");
 	const hosts = push?.endpointHosts ?? [];
@@ -360,10 +369,23 @@ function checkPush(push: WebConsoleOptions["push"]): ResolvedOptions["push"] {
 			fail(
 				`push.endpointHosts has ${JSON.stringify(host)}, which is not a host name such as push.example.com or *.push.example.com`,
 			);
+	const given = push?.subject;
+	if (
+		given !== undefined &&
+		!(
+			typeof given === "string" &&
+			(/^mailto:[^\s@]+@[^\s@]+$/.test(given) ||
+				(URL.parse(given)?.protocol === "https:" && !/\s/.test(given)))
+		)
+	)
+		fail(
+			"push.subject must be a mailto: address or an https: URL, such as mailto:ops@example.com",
+		);
 	return {
 		preview: push?.preview ?? true,
 		endpointHosts: [...hosts],
-		fetch: push?.fetch,
+		subject: given ?? (origin.startsWith("https:") ? origin : undefined),
+		fetch: pushFetchOf(options),
 	};
 }
 
@@ -421,7 +443,7 @@ export function resolveOptions(options: WebConsoleOptions): ResolvedOptions {
 		surface: checkSurface(options.surface),
 		cardGraceSeconds: checkGrace(options.cardGraceSeconds),
 		uploadMaxBytes: checkUploadMax(options.uploadMaxBytes),
-		push: checkPush(options.push),
+		push: checkPush(options, checkOrigin(options.origin)),
 		title,
 		iconsDir: options.icons?.dir,
 		relayNotes: options.relayNotes ?? [DEFAULT_RELAY_NOTE],

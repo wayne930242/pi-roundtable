@@ -1,5 +1,7 @@
 import type { Bytes } from "../push/encrypt.ts";
 
+export { withPushFetch } from "../push/test-fetch.ts";
+
 /** A browser's side of a push subscription: the keys it gives the server, and the means to open what is sent. */
 export interface Receiver {
 	/** The body of `POST api/push/subscriptions`. */

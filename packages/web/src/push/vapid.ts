@@ -54,6 +54,20 @@ async function importStored(stored: Stored, path: string): Promise<Vapid> {
 			`${path} does not hold a P-256 key; delete it to make a new one (every device must subscribe again)`,
 		);
 	}
+	// The header's `k=` must be the key that signs, or every push service refuses the token.
+	const { x, y } = stored.privateKey;
+	const point =
+		typeof x === "string" && typeof y === "string"
+			? Buffer.concat([
+					Buffer.from([4]),
+					Buffer.from(x, "base64url"),
+					Buffer.from(y, "base64url"),
+				]).toString("base64url")
+			: undefined;
+	if (point !== stored.publicKey)
+		throw new Error(
+			`${path} holds a public key that does not belong to its private key; delete it to make a new one (every device must subscribe again)`,
+		);
 	return { publicKey: stored.publicKey, privateKey };
 }
 

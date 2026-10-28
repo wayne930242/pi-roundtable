@@ -33,8 +33,11 @@ export type SendResult = "sent" | "gone" | "failed";
 
 export interface PushSenderOptions {
 	vapid: Vapid;
-	/** The `sub` of the VAPID token: a `mailto:` or `https:` contact for the push service. */
-	subject: string;
+	/**
+	 * The `sub` of the VAPID token: a `mailto:` or `https:` contact for the push service. Without
+	 * one nothing is posted.
+	 */
+	subject: string | undefined;
 	policy: EndpointPolicy;
 	/** The HTTP client; default `fetch`. */
 	fetch?: typeof fetch;
@@ -51,6 +54,7 @@ export class PushSender {
 
 	async send(target: Target, payload: PushPayload): Promise<SendResult> {
 		const { vapid, subject, policy, logger } = this.#options;
+		if (subject === undefined) return "failed";
 		// Checked again at the post: the allowlist may have changed since the device subscribed.
 		const checked = policy.check(target.endpoint);
 		if ("refusal" in checked) {

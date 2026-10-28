@@ -63,17 +63,32 @@ export class PushSubscriptions {
 		},
 	};
 
-	/** Stores a device's subscription; a browser that subscribes again replaces its row and starts clean. */
+	/**
+	 * Stores a device's subscription; a browser that subscribes again replaces its row and starts
+	 * clean. An endpoint that is another person's is refused (`"taken"`), and a person who already
+	 * has `cap` other devices is refused (`"full"`); the count and the insert share one lock.
+	 */
 	async save(
 		subscription: Omit<Subscription, "createdAt" | "lastOkAt">,
-	): Promise<void> {
-		await this.#sql`
-			INSERT INTO web_push_subscriptions (endpoint, principal_id, p256dh, auth, label)
-			VALUES (${subscription.endpoint}, ${subscription.principalId}, ${subscription.p256dh},
-				${subscription.auth}, ${subscription.label ?? null})
-			ON CONFLICT (endpoint) DO UPDATE SET
-				principal_id = EXCLUDED.principal_id, p256dh = EXCLUDED.p256dh, auth = EXCLUDED.auth,
-				label = EXCLUDED.label, failures = 0`;
+		cap = Number.POSITIVE_INFINITY,
+	): Promise<"saved" | "taken" | "full"> {
+		return this.#sql.begin(async (tx) => {
+			await tx`SELECT pg_advisory_xact_lock(hashtextextended(${`web-push:${subscription.principalId}`}, 0))`;
+			const [counted]: { n: number }[] = await tx`
+				SELECT count(*)::int AS n FROM web_push_subscriptions
+				WHERE principal_id = ${subscription.principalId} AND endpoint <> ${subscription.endpoint}`;
+			if ((counted?.n ?? 0) >= cap) return "full";
+			const rows: unknown[] = await tx`
+				INSERT INTO web_push_subscriptions (endpoint, principal_id, p256dh, auth, label)
+				VALUES (${subscription.endpoint}, ${subscription.principalId}, ${subscription.p256dh},
+					${subscription.auth}, ${subscription.label ?? null})
+				ON CONFLICT (endpoint) DO UPDATE SET
+					p256dh = EXCLUDED.p256dh, auth = EXCLUDED.auth,
+					label = EXCLUDED.label, failures = 0
+				WHERE web_push_subscriptions.principal_id = EXCLUDED.principal_id
+				RETURNING endpoint`;
+			return rows.length > 0 ? "saved" : "taken";
+		});
 	}
 
 	/** Every device, oldest first. */

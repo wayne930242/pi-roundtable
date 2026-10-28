@@ -12,7 +12,8 @@ import {
 import { describeDb, type TestHost, testHost } from "pi-roundtable/testing";
 import type { PushDevicesView, ServerFrame } from "../api-types.ts";
 import { APP_PROTOCOL } from "../app/protocol.ts";
-import { fakePushService, receiver } from "../testing/push.ts";
+import { MAX_DEVICES } from "../push/api.ts";
+import { fakePushService, receiver, withPushFetch } from "../testing/push.ts";
 import { admitAs, refuse, type Verdict } from "../verifier.ts";
 import { webConsole } from "../web-plugin.ts";
 
@@ -134,15 +135,19 @@ async function boot(options: {
 		},
 		runtime,
 		plugins: [
-			webConsole({
-				verifier,
-				push: { fetch: options.fetch },
-				origin: ORIGIN,
-				dataDir,
-				assetDir: assets,
-				cardGraceSeconds: options.graceSeconds ?? 120,
-				panes: ["rooms", "schedules", "overview"],
-			}),
+			webConsole(
+				withPushFetch(
+					{
+						verifier,
+						origin: ORIGIN,
+						dataDir,
+						assetDir: assets,
+						cardGraceSeconds: options.graceSeconds ?? 120,
+						panes: ["rooms", "schedules", "overview"],
+					},
+					options.fetch,
+				),
+			),
 		],
 	});
 	return {
@@ -452,6 +457,73 @@ describeDb("push over a real host", () => {
 		tab.send({ type: "approval", prompt: card.prompt.id, approved: false });
 		tab.close();
 		status = 201;
+	});
+
+	test("the device cap holds when many are added at once, and a re-subscribe is not counted", async () => {
+		await app.host.context.database()`DELETE FROM web_push_subscriptions`;
+		const statuses = await Promise.all(
+			Array.from({ length: 30 }, async (_, n) => {
+				const device = await receiver();
+				return (
+					await rest(app, "push/subscriptions", {
+						method: "POST",
+						body: JSON.stringify(device.subscription(`${FCM}cap${n}`)),
+					})
+				).status;
+			}),
+		);
+		expect(statuses.filter((s) => s === 200)).toHaveLength(MAX_DEVICES);
+		expect(statuses.filter((s) => s === 400)).toHaveLength(10);
+		expect((await devices()).devices).toHaveLength(MAX_DEVICES);
+		const stored: { endpoint: string }[] = await app.host.context.database()`
+			SELECT endpoint FROM web_push_subscriptions LIMIT 1`;
+		const again = await receiver();
+		expect(
+			(
+				await rest(app, "push/subscriptions", {
+					method: "POST",
+					body: JSON.stringify(again.subscription(stored[0]?.endpoint ?? "")),
+				})
+			).status,
+		).toBe(200);
+		await app.host.context.database()`DELETE FROM web_push_subscriptions`;
+	});
+
+	test("an endpoint that is another person's is refused, not taken over", async () => {
+		await app.host.context.database()`DELETE FROM web_push_subscriptions`;
+		const endpoint = `${FCM}shared`;
+		await app.host.context.database()`
+			INSERT INTO web_push_subscriptions (endpoint, principal_id, p256dh, auth)
+			VALUES (${endpoint}, 'someone-else', 'x', 'y')`;
+		const device = await receiver();
+		const answer = await rest(app, "push/subscriptions", {
+			method: "POST",
+			body: JSON.stringify(device.subscription(endpoint)),
+		});
+		expect(answer.status).toBe(409);
+		const rows: { principal_id: string; p256dh: string }[] =
+			await app.host.context.database()`
+			SELECT principal_id, p256dh FROM web_push_subscriptions WHERE endpoint = ${endpoint}`;
+		expect(rows).toEqual([{ principal_id: "someone-else", p256dh: "x" }]);
+		await app.host.context.database()`DELETE FROM web_push_subscriptions`;
+	});
+
+	test("an endpoint is removed by its normalized form, and one the policy refuses is refused", async () => {
+		await subscribe(`${FCM}Norm`);
+		const refused = await rest(app, "push/subscriptions", {
+			method: "DELETE",
+			body: JSON.stringify({ endpoint: "https://evil.example.com/x" }),
+		});
+		expect(refused.status).toBe(400);
+		expect((await devices()).devices).toHaveLength(1);
+		const gone = await rest(app, "push/subscriptions", {
+			method: "DELETE",
+			body: JSON.stringify({
+				endpoint: "https://FCM.googleapis.com/fcm/send/Norm",
+			}),
+		});
+		expect(gone.status).toBe(200);
+		expect((await devices()).devices).toEqual([]);
 	});
 
 	test("an owner lists and removes their own devices, and no one else's", async () => {

@@ -138,6 +138,10 @@ async function build(settings: ResolvedOptions, context: Context) {
 			address: context.listener(settings.listener),
 		},
 	});
+	if (rooms && !settings.push.subject)
+		logger.warn(
+			"web push is off: the origin is not https, so set push.subject to a mailto: or https: contact",
+		);
 	const vapid = rooms
 		? await loadVapid(join(settings.dataDir, "web", "vapid.json"))
 		: undefined;
@@ -146,7 +150,7 @@ async function build(settings: ResolvedOptions, context: Context) {
 			? new OwnerApp({
 					push: {
 						vapid,
-						subject: settings.origin,
+						subject: settings.push.subject,
 						preview: settings.push.preview,
 						endpointHosts: settings.push.endpointHosts,
 						...(settings.push.fetch ? { fetch: settings.push.fetch } : {}),

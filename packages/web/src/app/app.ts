@@ -72,8 +72,8 @@ export interface OwnerAppOptions {
 	/** Web Push: the server's key, and how notifications read. */
 	push: {
 		vapid: Vapid;
-		/** The `sub` of the VAPID token. */
-		subject: string;
+		/** The `sub` of the VAPID token; absent = push is not set up and nothing is sent. */
+		subject: string | undefined;
 		preview: boolean;
 		endpointHosts: readonly string[];
 		/** The HTTP client the posts go through. */
@@ -147,6 +147,7 @@ export class OwnerApp {
 			policy,
 			subscriptions,
 			identity,
+			enabled: options.push.subject !== undefined,
 		});
 		// The desk starts a late answer's turn through the socket route, which is made after it.
 		let route: SocketRoute | undefined;

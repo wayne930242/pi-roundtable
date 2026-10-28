@@ -25,6 +25,8 @@ export interface PushApiOptions {
 	policy: EndpointPolicy;
 	subscriptions: Pick<PushSubscriptions, "of" | "save" | "remove">;
 	identity: Pick<IdentityService, "tierOf">;
+	/** False when the server has no VAPID contact: devices cannot be added, since nothing would reach them. */
+	enabled: boolean;
 }
 
 class Refusal extends Error {
@@ -133,6 +135,11 @@ export class PushApi {
 	}
 
 	async #add(request: Request, principalId: string): Promise<Response> {
+		if (!this.#options.enabled)
+			throw new Refusal(
+				503,
+				"Push is not set up: set push.subject on the server.",
+			);
 		const body = await bodyOf(request);
 		const checked = this.#options.policy.check(body.endpoint);
 		if ("refusal" in checked) throw new Refusal(400, checked.refusal);
@@ -144,24 +151,28 @@ export class PushApi {
 		if (label !== undefined && typeof label !== "string")
 			throw new Refusal(400, "label must be text.");
 		const endpoint = checked.url.href;
-		const mine = await this.#options.subscriptions.of(principalId);
-		if (
-			mine.length >= MAX_DEVICES &&
-			!mine.some((d) => d.endpoint === endpoint)
-		)
+		const saved = await this.#options.subscriptions.save(
+			{
+				endpoint,
+				principalId,
+				p256dh: decode(p256dh, P256DH_BYTES, "p256dh"),
+				auth: decode(auth, AUTH_BYTES, "auth"),
+				...(label?.trim()
+					? { label: label.trim().slice(0, MAX_LABEL_CHARS) }
+					: {}),
+			},
+			MAX_DEVICES,
+		);
+		if (saved === "taken")
+			throw new Refusal(
+				409,
+				"That device is already subscribed by someone else.",
+			);
+		if (saved === "full")
 			throw new Refusal(
 				400,
 				"Too many devices. Remove one in the settings first.",
 			);
-		await this.#options.subscriptions.save({
-			endpoint,
-			principalId,
-			p256dh: decode(p256dh, P256DH_BYTES, "p256dh"),
-			auth: decode(auth, AUTH_BYTES, "auth"),
-			...(label?.trim()
-				? { label: label.trim().slice(0, MAX_LABEL_CHARS) }
-				: {}),
-		});
 		return json({ id: deviceId(endpoint) });
 	}
 
@@ -170,10 +181,10 @@ export class PushApi {
 		principalId: string,
 	): Promise<Response> {
 		const body = await bodyOf(request);
-		if (typeof body.endpoint !== "string")
-			throw new Refusal(400, "endpoint must be text.");
+		const checked = this.#options.policy.check(body.endpoint);
+		if ("refusal" in checked) throw new Refusal(400, checked.refusal);
 		// Removing a device that is already gone is as good as removing it.
-		await this.#options.subscriptions.remove(body.endpoint, principalId);
+		await this.#options.subscriptions.remove(checked.url.href, principalId);
 		return json({ ok: true });
 	}
 

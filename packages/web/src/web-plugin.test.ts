@@ -221,6 +221,11 @@ describe("refuses to start", () => {
 			{ push: { preview: "yes" } },
 			"push.preview",
 		],
+		[
+			"a push subject that is neither mailto nor https",
+			{ push: { subject: "http://ops.example.com" } },
+			"push.subject",
+		],
 		["notes with no owner id", { ownerId: " " }, "ownerId"],
 		["an empty title", { title: " " }, "title"],
 	])("with %s", (_name, change, message) => {
@@ -248,6 +253,19 @@ describe("refuses to start", () => {
 				push: { preview: false, endpointHosts: ["*.push.example.com"] },
 			}).push,
 		).toMatchObject({ preview: false, endpointHosts: ["*.push.example.com"] });
+		// The VAPID contact defaults to an https origin only; a mailto: or https: subject overrides.
+		expect(resolveOptions(base()).push.subject).toBe(ORIGIN);
+		expect(
+			resolveOptions({ ...base(), origin: "http://localhost:8080" }).push
+				.subject,
+		).toBeUndefined();
+		expect(
+			resolveOptions({
+				...base(),
+				origin: "http://localhost:8080",
+				push: { subject: "mailto:ops@example.com" },
+			}).push.subject,
+		).toBe("mailto:ops@example.com");
 		expect(
 			resolveOptions({ ...base(), uploadMaxBytes: 1024 * 1024 * 1024 })
 				.uploadMaxBytes,

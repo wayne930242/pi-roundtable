@@ -1,5 +1,11 @@
 import { afterAll, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+	mkdtempSync,
+	readFileSync,
+	rmSync,
+	statSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { importJWK, jwtVerify } from "jose";
@@ -15,6 +21,17 @@ test("the key is made once, kept readable by this user alone, and read back the 
 	expect(statSync(path).mode & 0o777).toBe(0o600);
 	const again = await loadVapid(path);
 	expect(again.publicKey).toBe(first.publicKey);
+});
+
+test("a public key that is not the private key's stops startup", async () => {
+	const path = join(dir, "web", "mismatch.json");
+	const good = await loadVapid(join(dir, "web", "other.json"));
+	const other = await loadVapid(path);
+	const file = JSON.parse(readFileSync(path, "utf8"));
+	file.publicKey = good.publicKey;
+	writeFileSync(path, JSON.stringify(file));
+	expect(other.publicKey).not.toBe(good.publicKey);
+	await expect(loadVapid(path)).rejects.toThrow("does not belong");
 });
 
 test("a key file that cannot be read stops startup instead of being replaced", async () => {

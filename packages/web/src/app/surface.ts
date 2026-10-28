@@ -56,7 +56,12 @@ export interface AppSurfaceOptions {
 	logger: Logger;
 }
 
-/** A turn that starts this soon after a page's message in its room is that message's. */
+/**
+ * A turn that starts this soon after a page's message in its room is that message's. The core
+ * does not tell a surface what started a turn (`startTyping` carries only the channel), so this
+ * is a heuristic: a schedule's turn within the window of a page message in the same room reads as
+ * asked, and a slow reply is still taken for asked since its typing began in time.
+ */
 const ASKED_WINDOW_MS = 30_000;
 
 /** The counts behind a room's `activity`. */
@@ -116,7 +121,7 @@ export class AppSurface implements ChatSurface {
 			throw new PluginError(
 				"the web app surface has not started; messages are taken once the host runs",
 			);
-		this.#askedAt.set(message.channel, this.#now());
+		this.#noteAsked(message.channel);
 		this.#deliver(message);
 	}
 
@@ -183,8 +188,11 @@ export class AppSurface implements ChatSurface {
 	startTyping(channel: ChannelKey): () => void {
 		const stop = this.#count(channel, "typing");
 		const askedAt = this.#askedAt.get(channel);
-		if (askedAt === undefined || this.#now() - askedAt > ASKED_WINDOW_MS)
+		if (askedAt === undefined) return stop;
+		if (this.#now() - askedAt > ASKED_WINDOW_MS) {
+			this.#askedAt.delete(channel);
 			return stop;
+		}
 		this.#asked.set(channel, (this.#asked.get(channel) ?? 0) + 1);
 		let on = true;
 		return () => {
@@ -195,6 +203,14 @@ export class AppSurface implements ChatSurface {
 			if (left > 0) this.#asked.set(channel, left);
 			else this.#asked.delete(channel);
 		};
+	}
+
+	/** Notes a page's message, and forgets the rooms whose last message is past the window. */
+	#noteAsked(channel: ChannelKey): void {
+		const now = this.#now();
+		for (const [room, at] of this.#askedAt)
+			if (now - at > ASKED_WINDOW_MS) this.#askedAt.delete(room);
+		this.#askedAt.set(channel, now);
 	}
 
 	#now(): number {
