@@ -596,5 +596,40 @@
 			"ThreadState",
 			"WebhookPost"
 		]
+	},
+	"characters": {
+		"values": [
+			"AVATAR_STATES",
+			"CATALOG",
+			"CLASS_IDS",
+			"CharacterError",
+			"EXPRESSIONS",
+			"STATE_EXPRESSION",
+			"accentOf",
+			"characterCss",
+			"composeSvg",
+			"parseCharacter",
+			"readCharacter",
+			"resolveCharacter",
+			"suggestCharacter"
+		],
+		"types": [
+			"AccessoryId",
+			"AvatarState",
+			"BeardId",
+			"CharacterColors",
+			"CharacterInput",
+			"CharacterLook",
+			"CharacterSpec",
+			"ClassId",
+			"ComposeOptions",
+			"Expression",
+			"HairId",
+			"HatId",
+			"Hex",
+			"OutfitId",
+			"PaletteName",
+			"PropId"
+		]
 	}
 }

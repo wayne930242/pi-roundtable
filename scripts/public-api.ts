@@ -14,6 +14,7 @@ export const PUBLIC_ENTRIES = {
 	testing: "src/testing.ts",
 	kit: "src/kit/index.ts",
 	discord: "src/discord/index.ts",
+	characters: "src/characters/index.ts",
 } as const;
 
 /** The packages whose types only the Discord entry may name. */

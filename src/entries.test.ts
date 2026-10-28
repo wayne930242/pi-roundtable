@@ -6,6 +6,7 @@ import {
 	entryNames,
 	publicApi,
 } from "../scripts/public-api.ts";
+import * as characters from "./characters/index.ts";
 import * as discord from "./discord/index.ts";
 import * as main from "./index.ts";
 import * as kit from "./kit/index.ts";
@@ -17,6 +18,7 @@ const ENTRIES = {
 	testing: "src/testing.ts",
 	kit: "src/kit/index.ts",
 	discord: "src/discord/index.ts",
+	characters: "src/characters/index.ts",
 };
 const snapshot = JSON.parse(
 	readFileSync(resolve(ROOT, "scripts/entries.exports.json"), "utf8"),
@@ -33,6 +35,7 @@ test("entries have exactly the snapshotted runtime and type-only names, without 
 		testing,
 		kit,
 		discord,
+		characters,
 	})) {
 		const expected = snapshot[entry];
 		if (!expected) throw new Error(`Missing snapshot: ${entry}`);
@@ -76,7 +79,7 @@ test("every published name is recorded in the changelog and guide's entry index"
 		"utf8",
 	);
 	const guide = readFileSync(resolve(ROOT, "docs/plugins.md"), "utf8");
-	for (const entry of ["main", "testing", "kit", "discord"]) {
+	for (const entry of ["main", "testing", "kit", "discord", "characters"]) {
 		const found = snapshot[entry];
 		if (!found) throw new Error(`Missing ${entry}`);
 		for (const name of [...found.values, ...found.types]) {
@@ -86,7 +89,7 @@ test("every published name is recorded in the changelog and guide's entry index"
 	}
 });
 
-test("the npm export map names only the four published entries", () => {
+test("the npm export map names only the published entries and the characters stylesheet", () => {
 	const template = resolve(ROOT, "packaging/package.json.tmpl");
 	const manifest = JSON.parse(
 		readFileSync(
@@ -94,11 +97,14 @@ test("the npm export map names only the four published entries", () => {
 			"utf8",
 		),
 	) as { exports: Record<string, string>; files: string[] };
+	expect(manifest.files).toContain("!src/characters/fixtures");
 	expect(manifest.exports).toEqual({
 		".": "./src/index.ts",
 		"./testing": "./src/testing.ts",
 		"./kit": "./src/kit/index.ts",
 		"./discord": "./src/discord/index.ts",
+		"./characters": "./src/characters/index.ts",
+		"./characters.css": "./src/characters/characters.css",
 	});
 	for (const target of Object.values(manifest.exports))
 		expect(Bun.file(resolve(ROOT, target)).size).toBeGreaterThan(0);

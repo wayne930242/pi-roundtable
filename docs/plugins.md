@@ -28,7 +28,7 @@ export default {
 } satisfies RoundtableConfig;
 ```
 
-Everything a plugin author needs comes from four entries, and nothing else can be imported from the package:
+Everything a plugin author needs comes from five entries and one stylesheet, and nothing else can be imported from the package:
 
 | Entry | What it exports |
 |---|---|
@@ -36,6 +36,8 @@ Everything a plugin author needs comes from four entries, and nothing else can b
 | `pi-roundtable/testing` | Fixtures for testing plugins, without Discord or a database unless the test explicitly opens one; `testHost` names a few discord.js types (`ComposedCommands`, `CommandGuard`, `InteractionModule`, `RootOption`) so a test can drive the composed slash commands |
 | `pi-roundtable/kit` | Helpers for channel claims, tools, presentation, worker processes, and naming existing core parts |
 | `pi-roundtable/discord` | The entry built on discord.js types: the `DISCORD` service (slash commands, the owner guard), owner-command and panel helpers, the agent panel, and the channel-operation tables |
+| `pi-roundtable/characters` | The composed characters: the catalog of classes and parts, the checks on a look, `suggestCharacter`, and `composeSvg`, which runs in a browser as well as on the server; see [Characters](#characters-composed-pictures-for-agents) |
+| `pi-roundtable/characters.css` | The stylesheet that moves them (a file, not a module) |
 
 ### Advanced building blocks
 
@@ -3334,6 +3336,49 @@ The following fields and parts from 0.1.0 were removed because only built-in plu
 | `RoundtablePlugin.agentServer()` and the `agentServer(outcome)` event | A service with `startInBackground`, and the `serviceStarted` event handler |
 | `RoundtablePlugin.stopTurn(channel)` | `stop(channel)` on the `ChannelClaim` that owns the channel |
 
+## Characters: composed pictures for agents
+
+`pi-roundtable/characters` draws an agent as a small character built from parts, so a look is data (a few ids and three colors) instead of a picture that has to be generated.
+The entry has no dependencies and imports nothing from Node, `canvas` or the core, so the same code runs in the server, in a browser bundle and in a plugin; a test holds it to that.
+
+```ts
+import { composeSvg, resolveCharacter } from "pi-roundtable/characters";
+
+const look = resolveCharacter({ class: "knight", palette: "teal" });
+const svg = composeSvg(look, { look: "camelot-dark", frame: "shield", size: 256 });
+```
+
+### The look: `CharacterSpec`
+
+A `CharacterSpec` is a complete look: `v: 1`, a `class`, and the parts `outfit`, `hat`, `prop`, `hair`, `beard` (or `"none"`), `accessory` (or `"none"`), the `build` (`slim`, `regular` or `stout`), a `skin` tone `0`–`5`, a `hairColor`, and `colors` (`primary`, the agent's accent; `secondary`; `trim`), each a lowercase `#rrggbb`.
+`palette` names the preset the colors equal, and is absent when they are custom.
+A class is a preset of parts, not a body, so a new class is an outfit and gear: the 24 are `wizard`, `knight`, `scholar`, `smith`, `ranger`, `bard`, `alchemist`, `healer`, `steward`, `navigator`, `seer`, `scribe`, `engineer`, `druid`, `innkeeper`, `sentinel`, `envoy`, `rogue`, `monk`, `falconer`, `shipwright`, `jester`, `paladin` and `archivist`.
+`CATALOG` lists them with their `label`, the `jobs` they suit and the `keywords` that suggest them (English and zh-TW), and lists every outfit, hat, prop, hair, beard, accessory, the eight palettes (`azure`, `gules`, `vert`, `purpure`, `amber`, `sable`, `teal`, `rose`), the six skin tones and the hair swatches. The catalog is frozen.
+
+| Function | What it does |
+|---|---|
+| `resolveCharacter(input, base?)` | The look an input describes. It starts from `base`, or from the class preset when there is no `base` or the input names another class, then applies the fields: `palette` sets all three colors, `colors` changes some, and the result's `palette` is set exactly when the colors equal a preset. Throws `CharacterError` for an unknown field or id or a bad color |
+| `parseCharacter(value)` | A complete spec from outside the process, checked strictly: an unknown key or id, a missing field, `skin: 6`, or a color that is not `#rrggbb` throws `CharacterError`. Colors are lowercased. Use it for an API body and for what a page receives |
+| `readCharacter(value)` | A spec from a stored row, read leniently and never throwing: a field this version does not know (written by a newer one) takes the class preset's value, an unknown key is ignored, and `undefined` comes back only when the value is not an object or names no known class |
+| `suggestCharacter(agent, taken?)` | A look for an agent that has none. Each class is scored by its keywords: the display name and the name count 3 each, the first 600 characters of the prompt 1. A tie or no hit is broken by a hash of the name among the classes `taken` does not use. `skin` and `build` come from the same hash, and the palette is the one `taken` uses least |
+| `composeSvg(spec, options?)` | The picture as an SVG string, see below |
+| `accentOf(spec, scheme)` | `colors.primary` as a UI accent: shaded until it reads at 3:1 on the scheme's page (white in `light`, `#0d1018` in `dark`) |
+| `characterCss()` | The text of `characters.css` |
+
+`CharacterError.field` is the path of the offending field (`hat`, `colors.primary`).
+
+### The picture: `composeSvg`
+
+`ComposeOptions` are all optional: `expr` (one of the 13 `EXPRESSIONS`, by default the one `STATE_EXPRESSION` gives the state), `state` (one of the seven `AVATAR_STATES`: `idle`, `thinking`, `working`, `waiting`, `done`, `error`, `sleepy`), `look` (`modern-light` by default, `modern-dark`, `camelot-light` or `camelot-dark`, which change only the background and ring), `frame` (`disc` or `shield`), `bare` (no frame or background), `still`, `uid`, `size` and `label`.
+
+- The output has literal colors only. It has no `style` attribute, variable, `<style>`, script, text, image, link, event handler or `<foreignObject>`, so a page whose content security policy forbids inline styles can inject it, and `canvas` rasterizes it as it is. It is at most 8 KB and the same for the same input. The root is `<svg class="av" data-expr>` and the layers are `<g class="NAME" data-part="NAME">` in a fixed order (`frame`, `ch` holding `back`, `body`, `head`, `hat`, `eyes-brows`, `mouth`, `fx`, `acc`, `prop`, then `state`); the prop group carries `data-prop`.
+- `composeSvg` checks the spec again with `parseCharacter`, so a spec cast from untrusted data throws instead of reaching the markup. `uid` (`/^[a-z0-9]{1,16}$/`, default `a`) ends every clip path id, so pass a different one for each figure on a page. `size` (an integer up to 4096) adds `width` and `height`, which `canvas` needs. `label` (at most 200 characters) becomes `aria-label` with `<>"'=()&` written as entities; without it the figure is `aria-hidden`.
+- A live figure carries every state overlay and leaves the motion to the stylesheet. With `still: true` only the `state`'s overlay is drawn and the figure has class `av static`, for files, PNGs and 3D textures; an `error` state turns the ring red in both.
+
+### Motion: `characters.css`
+
+Import `pi-roundtable/characters.css` once. It breathes, tilts, bobs, leans, pops and shakes the figure by `data-state`, which you set on the `<svg>` or, so the markup does not change with the state, on a wrapper with class `av-host`. It moves only `transform` and `opacity`, keeps the pivots in selectors (`.ch`, `.eyes`, the badges and one rule per `[data-prop=<id>]`) since the markup carries no inline style, stops for `prefers-reduced-motion`, and stops on `.av.static`. The file is generated from `characterCss()` by `bun scripts/build-character-css.ts`, and a test fails when they differ.
+
 ## Official plugins
 
 The package ships three plugins you can copy into a project and change.
@@ -4454,3 +4499,32 @@ Import from the entries listed below; source area files are internal.
 | `replyWithPanels` | `pi-roundtable/discord` | value |
 | `withChannelContext` | `pi-roundtable/discord` | value |
 | `withChannelContextImages` | `pi-roundtable/discord` | value |
+| `AVATAR_STATES` | `pi-roundtable/characters` | value |
+| `CATALOG` | `pi-roundtable/characters` | value |
+| `CLASS_IDS` | `pi-roundtable/characters` | value |
+| `CharacterError` | `pi-roundtable/characters` | value |
+| `EXPRESSIONS` | `pi-roundtable/characters` | value |
+| `STATE_EXPRESSION` | `pi-roundtable/characters` | value |
+| `accentOf` | `pi-roundtable/characters` | value |
+| `characterCss` | `pi-roundtable/characters` | value |
+| `composeSvg` | `pi-roundtable/characters` | value |
+| `parseCharacter` | `pi-roundtable/characters` | value |
+| `readCharacter` | `pi-roundtable/characters` | value |
+| `resolveCharacter` | `pi-roundtable/characters` | value |
+| `suggestCharacter` | `pi-roundtable/characters` | value |
+| `AccessoryId` | `pi-roundtable/characters` | type |
+| `AvatarState` | `pi-roundtable/characters` | type |
+| `BeardId` | `pi-roundtable/characters` | type |
+| `CharacterColors` | `pi-roundtable/characters` | type |
+| `CharacterInput` | `pi-roundtable/characters` | type |
+| `CharacterLook` | `pi-roundtable/characters` | type |
+| `CharacterSpec` | `pi-roundtable/characters` | type |
+| `ClassId` | `pi-roundtable/characters` | type |
+| `ComposeOptions` | `pi-roundtable/characters` | type |
+| `Expression` | `pi-roundtable/characters` | type |
+| `HairId` | `pi-roundtable/characters` | type |
+| `HatId` | `pi-roundtable/characters` | type |
+| `Hex` | `pi-roundtable/characters` | type |
+| `OutfitId` | `pi-roundtable/characters` | type |
+| `PaletteName` | `pi-roundtable/characters` | type |
+| `PropId` | `pi-roundtable/characters` | type |
