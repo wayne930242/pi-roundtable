@@ -29,7 +29,7 @@ export interface AgentTeamOptions
 	 * Agents are composed characters, rendered by `render`. `canDraw: false` marks a host without
 	 * an image provider, which is not told about generate_image; a studio that leaves it out has one.
 	 */
-	studio: Pick<AvatarStudio, "url" | "render"> &
+	studio: Pick<AvatarStudio, "url" | "render" | "draw" | "edit"> &
 		Partial<Pick<AvatarStudio, "canDraw">>;
 	/** The tools and groups the plugins give every agent, read before each agent turn. */
 	pluginSelection: () => ToolSelection;

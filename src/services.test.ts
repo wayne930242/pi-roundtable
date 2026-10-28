@@ -114,6 +114,9 @@ const team: AgentTeam = {
 	dress: async () => {
 		throw new Error("unused");
 	},
+	redrawAvatar: async () => {
+		throw new Error("unused");
+	},
 };
 
 const avatars: AvatarStudio = {

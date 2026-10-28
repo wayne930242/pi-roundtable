@@ -15,6 +15,7 @@ import type { Agent } from "./agent-store.ts";
 import {
 	AGENT_TOOLS,
 	type AgentOps,
+	type AvatarMode,
 	agentToolsExtension,
 	MESSAGE_AGENT_TOOL,
 } from "./agent-tools.ts";
@@ -463,6 +464,11 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 	/** The agent tool that changes a look; see `AgentTeam.dress`. */
 	avatar(name: string, look: CharacterInput): Promise<string> {
 		return this.#editing.avatar(name, look);
+	}
+
+	/** @deprecated Use `dress`; removed in 1.0. Draws and stores a new picture. */
+	redrawAvatar(name: string, mode: AvatarMode, text?: string): Promise<Agent> {
+		return this.#editing.redrawAvatar(name, mode, text);
 	}
 
 	createGroup(input: {

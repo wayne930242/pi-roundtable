@@ -47,6 +47,12 @@ export const AGENT_TOOLS = [
 	"channel_read",
 ] as const;
 
+/**
+ * @deprecated Agents are composed characters and no longer drawn; use `AgentTeam.dress`.
+ * Removed in 1.0.
+ */
+export type AvatarMode = "redraw" | "new_prompt" | "edit";
+
 /** What the agent tools do; the agent team implements it. Each returns text for the model. */
 export interface AgentOps {
 	list(): Promise<string>;

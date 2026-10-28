@@ -1,6 +1,7 @@
 import type { ExtensionFactory } from "@earendil-works/pi-coding-agent";
 import type { CharacterInput, CharacterSpec } from "../characters/index.ts";
 import type { Agent, AgentGroup } from "./agents/agent-rules.ts";
+import type { AvatarMode } from "./agents/agent-tools.ts";
 import type { TeamStatus } from "./agents/team-status.ts";
 import type {
 	BackgroundRunsAs,
@@ -247,6 +248,11 @@ export interface AgentTeam {
 	 * picture. Throws AgentError naming the field of a bad input, and for an unknown or archived agent.
 	 */
 	dress(name: string, input: CharacterInput): Promise<Agent>;
+	/**
+	 * @deprecated Agents are composed characters and no longer drawn; use `dress`. Removed in 1.0.
+	 * Draws and stores a new picture for an agent; it still needs an image provider.
+	 */
+	redrawAvatar(name: string, mode: AvatarMode, text?: string): Promise<Agent>;
 }
 
 /** Scheduled turns, stored. A one-time schedule is deleted once it fires. */

@@ -208,9 +208,38 @@ describe("agent_create and avatars", () => {
 		expect(store.agent("scout")?.avatarPrompt).toBe("");
 	});
 
-	test("redrawing is gone: the team has dress and no redrawAvatar", () => {
-		expect("redrawAvatar" in DiscordAgentTeam.prototype).toBe(false);
-		expect("dress" in DiscordAgentTeam.prototype).toBe(true);
+	test("redrawAvatar is deprecated but still draws, edits and refuses without a provider", async () => {
+		const drawn = context("draws", [
+			agent("scout", { avatarHash: "a".repeat(64) }),
+		]);
+		const editing = new TeamEditing(drawn.ctx);
+		await editing.redrawAvatar("scout", "redraw");
+		await editing.redrawAvatar("scout", "edit", "add a hat");
+		await editing.redrawAvatar("scout", "new_prompt", "A fox.");
+		expect(drawn.store.agent("scout")?.avatarPrompt).toBe("A fox.");
+		expect(drawn.studio.calls.length).toBe(3);
+		const none = context("none", [agent("scout")]);
+		const refusal = new TeamEditing(none.ctx).redrawAvatar("scout", "redraw");
+		expect(refusal).rejects.toThrow("No image provider is configured");
+		expect(refusal).rejects.toBeInstanceOf(AgentError);
+		await refusal.catch(() => undefined);
+		expect("redrawAvatar" in DiscordAgentTeam.prototype).toBe(true);
+	});
+
+	test("the deprecation is stated in the source, the changelog and the plugin guide", async () => {
+		const root = new URL("../../../", import.meta.url);
+		const read = (path: string) => Bun.file(new URL(path, root)).text();
+		const services = await read("src/core/services.ts");
+		expect(services).toMatch(/@deprecated[^]*?\n\tredrawAvatar\(/);
+		expect(await read("src/core/agents/agent-tools.ts")).toMatch(
+			/@deprecated[^]*?export type AvatarMode/,
+		);
+		expect(await read("CHANGELOG.md")).toContain(
+			"`AgentTeam.redrawAvatar` and the `AvatarMode` type (`pi-roundtable`) still work",
+		);
+		expect(await read("docs/plugins.md")).toContain(
+			"`AgentTeam.redrawAvatar` and the `AvatarMode` type are deprecated",
+		);
 	});
 
 	test("dressing a part changes only that part, whether or not a provider is configured", async () => {

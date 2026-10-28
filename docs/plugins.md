@@ -1534,6 +1534,7 @@ An unknown or misspelled slot stops startup with an error listing the valid name
 | `runtime` | None: the runtime plugin builds the Pi runtime itself | `(deps) => runtime`, an [`AgentRuntime`](#the-runtime-slot-replace-pi) that runs every conversation |
 
 A filled `images` slot powers the core's [`generate_image`](#attach-files-to-the-agents-reply) tool.
+`AgentTeam.redrawAvatar` and the `AvatarMode` type are deprecated, still work (with an image provider), and are removed in 1.0; use `AgentTeam.dress`.
 Agents' avatars are composed characters since 0.23 and do not use it; drawing them with the slot, `AvatarStudio.draw`, `edit`, `fallback` and `canDraw`, `config.avatar` (a warning is logged when it is set) and `AgentSeed.avatarPrompt` are deprecated, ignored, and removed in 1.0.
 When no `images` provider is configured, no session offers `generate_image`; `agent_create`, `agent_avatar` and the profile panel are the same either way.
 `bunx roundtable doctor` reports whether the slot is filled.
