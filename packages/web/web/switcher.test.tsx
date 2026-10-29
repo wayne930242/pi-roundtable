@@ -441,3 +441,42 @@ test("pinned rooms and the owners' folders lead the drawer, each under its headi
 	).toBeNull();
 	store.dispatch({ type: "rooms_loaded", rooms: [], pins: [], folders: [] });
 });
+
+test("the pinned list and a folder with no room are places to drop, hidden until a row is lifted, and a search shows only what matches", async () => {
+	store.dispatch({
+		type: "rooms_loaded",
+		rooms: [view(GUIDE), view(SCOUT), view(BUILD)],
+		pins: [],
+		folders: [{ id: "folder.1", name: "Work", rooms: [] }],
+	});
+	await page.render(<Room />);
+	await page.click(element("avatar"));
+	const empties = [...page.container.querySelectorAll("[data-empty]")];
+	expect(empties.map((one) => one.getAttribute("data-drop-zone"))).toEqual([
+		"pinned",
+		"folder",
+	]);
+	expect(empties.map((one) => one.getAttribute("data-zone-id"))).toEqual([
+		"pinned",
+		"folder.1",
+	]);
+	// Named, so a lifted row knows where it lands; the rooms still have no headings of their own.
+	expect(empties.map((one) => one.querySelector("h2")?.textContent)).toEqual([
+		"Pinned",
+		"Work",
+	]);
+	expect(rowNames()).toEqual(["guide", "scout", "build"]);
+	// Searching drops the empty places.
+	const search = page.container.querySelector<HTMLInputElement>(
+		".switcher-search input",
+	);
+	await page.act(() => {
+		Object.getOwnPropertyDescriptor(
+			HTMLInputElement.prototype,
+			"value",
+		)?.set?.call(search, "sco");
+		search?.dispatchEvent(new Event("input", { bubbles: true }));
+	});
+	expect(page.container.querySelectorAll("[data-empty]").length).toBe(0);
+	store.dispatch({ type: "rooms_loaded", rooms: [], pins: [], folders: [] });
+});

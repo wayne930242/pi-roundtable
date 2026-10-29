@@ -109,6 +109,13 @@ export function lift(options: Lift): () => void {
 		const all = boxOf(root);
 		bounds = { top: all.top, bottom: all.top + all.height };
 	};
+	// The lift shows the places that wait empty (the pinned list); the lifted item stays under the
+	// finger when they push it down, and the places are measured with them there.
+	const shownAt = item.getBoundingClientRect().top;
+	item.setAttribute("data-lifted", "");
+	root.setAttribute("data-reordering", "");
+	const pushed = item.getBoundingClientRect().top - shownAt;
+	if (pushed) view.scrollTop += pushed;
 	measure();
 
 	const startContent = content(options.y);
@@ -119,8 +126,6 @@ export function lift(options: Lift): () => void {
 	let dwell: { zone: string; timer: ReturnType<typeof setTimeout> } | undefined;
 	let result: Outcome = { type: "cancel" };
 
-	item.setAttribute("data-lifted", "");
-	root.setAttribute("data-reordering", "");
 	try {
 		item.setPointerCapture(options.pointerId);
 	} catch {

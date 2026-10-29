@@ -190,6 +190,41 @@ test("a wobble as wide as the hold allows (10 px) is still a tap, a wider move i
 	expect(run.done[0]?.type).not.toBe("tap");
 });
 
+test("a place that waits empty shows once a row is lifted, and is a place to drop", async () => {
+	const { root, rows } = page5();
+	// An empty pinned list sits above the others, hidden until a row is lifted.
+	const empty = el("section", {
+		"data-empty": "",
+		"data-drop-zone": "pinned",
+		"data-zone-id": "pinned",
+	});
+	root.prepend(empty);
+	const visible = () => root.hasAttribute("data-reordering");
+	empty.getBoundingClientRect = () =>
+		({
+			top: 100,
+			bottom: visible() ? 144 : 100,
+			left: 0,
+			right: 300,
+			width: 300,
+			height: visible() ? 44 : 0,
+			x: 0,
+			y: 100,
+			toJSON: () => ({}),
+		}) as DOMRect;
+	// Pinned used to be rows A and B; here they are in the rest, so the strip is the only pinned zone.
+	for (const zoneEl of root.querySelectorAll("[data-zone-id='pinned']"))
+		if (zoneEl !== empty) zoneEl.setAttribute("data-zone-id", "was-pinned");
+	const run = start(rows.D as HTMLElement, root, 340);
+	pointer("pointermove", 120);
+	await frames();
+	pointer("pointerup", 120);
+	expect(run.done[0]).toMatchObject({
+		type: "room",
+		drop: { before: null, zone: { kind: "pinned", id: "pinned" } },
+	});
+});
+
 test("another finger's events are ignored, and stopping early cleans up", async () => {
 	const { root, rows } = page5();
 	const run = start(rows.A as HTMLElement, root, 120);

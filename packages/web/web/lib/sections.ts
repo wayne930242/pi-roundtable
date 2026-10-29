@@ -123,11 +123,13 @@ export interface DrawerGroup {
  * The rooms the switcher lists, in groups: those with a card waiting first, then the pinned rooms,
  * the folders, and the rest by latest activity (Home among them). Dispatch threads are reached
  * from their room and are not listed. A room shows once, in the first group that claims it.
+ * `keepEmpty` keeps the pinned list and the empty folders, which a lifted room can be dropped in.
  */
 export function drawerGroups(
 	state: SectionsInput,
 	at: (key: string) => number,
 	waiting: (key: string) => boolean,
+	keepEmpty = false,
 ): DrawerGroup[] {
 	const arrangement = sections(state, at);
 	const index = new Map(state.order.map((key, i) => [key, i]));
@@ -160,7 +162,11 @@ export function drawerGroups(
 			keys: left(newest([...arrangement.home, ...arrangement.rest])),
 		},
 	];
-	return groups.filter((group) => group.keys.length > 0);
+	return groups.filter(
+		(group) =>
+			group.keys.length > 0 ||
+			(keepEmpty && group.id !== "waiting" && group.id !== "rest"),
+	);
 }
 
 /** Where a room stands in the arrangement, with the rooms shown beside it in the order they can be moved in. */

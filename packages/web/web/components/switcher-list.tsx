@@ -38,6 +38,7 @@ function useGroups(): Group[] {
 				state,
 				(key) => activityAt(state, key),
 				(key) => waitingCards(state, key) > 0,
+				true,
 			).map((group) => ({
 				id: group.id,
 				...(group.title === undefined ? {} : { title: group.title }),
@@ -167,12 +168,13 @@ export function SwitcherList(props: {
 				(entry) => fuzzyScore(query, entry.name) !== undefined,
 			),
 		}))
-		.filter((group) => group.entries.length > 0);
+		// Empty groups wait, hidden, for a row to be lifted over them; a search shows only what matches.
+		.filter((group) => group.entries.length > 0 || query === "");
 	const pick = (key: string) =>
 		props.close(
 			key === props.current ? undefined : () => navigate("room", key),
 		);
-	const headed = shown.length > 1;
+	const headed = shown.filter((group) => group.entries.length > 0).length > 1;
 	return (
 		<>
 			<div className="switcher-search">
@@ -186,7 +188,7 @@ export function SwitcherList(props: {
 					autoComplete="off"
 					onChange={(event) => setQuery(event.target.value)}
 					onKeyDown={(event) => {
-						const first = shown[0]?.entries[0];
+						const first = shown.flatMap((group) => group.entries)[0];
 						if (
 							event.key === "Enter" &&
 							first &&
@@ -226,6 +228,7 @@ export function SwitcherList(props: {
 										? t("Pinned")
 										: (group.title ?? t("Rooms"))
 							}
+							{...(group.entries.length === 0 ? { "data-empty": "" } : {})}
 							{...(zone
 								? {
 										"data-drop-zone": zone,
@@ -238,7 +241,7 @@ export function SwitcherList(props: {
 								<h2 className="switcher-heading" data-waiting="">
 									{t("Waiting for you")}
 								</h2>
-							) : headed ? (
+							) : headed || group.entries.length === 0 ? (
 								<h2 className="switcher-heading">
 									{group.id === "pinned"
 										? t("Pinned")

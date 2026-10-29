@@ -135,21 +135,26 @@ function Section(props: {
 	zone?: { kind: "pinned" | "rest"; id: string };
 }) {
 	const shown = useRowData(props.rooms);
-	if (shown.length === 0) return null;
+	// The pinned list is a place to drop even before it holds a room: it shows while a row is lifted.
+	const empty = shown.length === 0;
+	if (empty && props.zone?.kind !== "pinned") return null;
 	return (
 		<section
 			className="stack"
+			{...(empty ? { "data-empty": "" } : {})}
 			{...(props.zone
 				? { "data-drop-zone": props.zone.kind, "data-zone-id": props.zone.id }
 				: {})}
 		>
 			<h2 className="section-title">{props.title}</h2>
-			<RoomList
-				rooms={props.rooms}
-				threads={props.threads}
-				active={props.active}
-				arranging={props.arranging}
-			/>
+			{empty ? null : (
+				<RoomList
+					rooms={props.rooms}
+					threads={props.threads}
+					active={props.active}
+					arranging={props.arranging}
+				/>
+			)}
 		</section>
 	);
 }

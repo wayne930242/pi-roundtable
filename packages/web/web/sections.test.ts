@@ -142,6 +142,16 @@ test("the drawer lists waiting rooms first, then pinned, folders and the rest, e
 	]);
 });
 
+test("the drawer can keep the pinned list and the empty folders, for a lifted room to be dropped in", () => {
+	const state = input(TEAMROOMS, [], [{ id: "f1", name: "One", rooms: [] }]);
+	expect(drawerGroups(state, at, () => false).map((one) => one.id)).toEqual([
+		"rest",
+	]);
+	expect(
+		drawerGroups(state, at, () => false, true).map((one) => one.id),
+	).toEqual(["pinned", "f1", "rest"]);
+});
+
 test("with no layout and nothing waiting the drawer is one run by latest activity, Home among them", () => {
 	expect(drawerGroups(input(TEAMROOMS), at, () => false)).toEqual([
 		{ id: "rest", keys: [C, A, TEAM, HOME, B] },

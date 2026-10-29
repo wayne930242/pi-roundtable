@@ -7,6 +7,16 @@ export const ARRANGED_CSS = `
 	display: none;
 }
 
+/* An empty place to drop (the pinned list, a folder of the drawer) shows only while a row is lifted. */
+[data-empty] {
+	display: none;
+}
+
+[data-reordering] [data-empty] {
+	display: block;
+	min-height: 2.75rem;
+}
+
 /* Folders of the room list, and the lifted row or folder while it is dragged. */
 .folder {
 	display: flex;

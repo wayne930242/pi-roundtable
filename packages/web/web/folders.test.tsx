@@ -615,6 +615,23 @@ test("a row can be lifted: it and its folder block carry what the drag looks for
 	expect(q("[data-drop-root]")).not.toBeNull();
 });
 
+test("the pinned list is a place to drop before it holds a room: hidden until a row is lifted, and gone once a room is pinned", async () => {
+	load({ folders: [WORK] });
+	await show(<List />);
+	const strip = q('[data-drop-zone="pinned"]');
+	expect(strip?.hasAttribute("data-empty")).toBe(true);
+	expect(strip?.getAttribute("data-zone-id")).toBe("pinned");
+	expect(strip?.querySelector("h2")?.textContent).toBe("Pinned");
+	expect(strip?.querySelector(".room-row")).toBeNull();
+	// The first pin fills it.
+	load({ pins: [BUILD], folders: [WORK] });
+	await show(<List />);
+	expect(q('[data-drop-zone="pinned"]')?.hasAttribute("data-empty")).toBe(
+		false,
+	);
+	expect(q('[data-drop-zone="pinned"] .room-row')).not.toBeNull();
+});
+
 // ── Lifting a row with a finger or a mouse ───────────────────────────────────────────────────
 
 function pointer(
