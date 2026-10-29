@@ -2,7 +2,7 @@ import { afterAll, beforeAll, beforeEach, expect, test } from "bun:test";
 import { runMigrations } from "../db/migrations.ts";
 import { ConfigError, IdentityError } from "../domain/errors.ts";
 import type { Logger } from "../log.ts";
-import { IDENTITY, IDENTITY_LINKS } from "../services.ts";
+import { IDENTITY, IDENTITY_LINKS, PROFILES } from "../services.ts";
 import { describeDb } from "../testing/database.ts";
 import {
 	type ScratchDatabase,
@@ -87,7 +87,7 @@ describeDb("IDENTITY_LINKS, the self-link service", () => {
 	});
 	beforeEach(async () => {
 		clock = Date.parse("2026-10-13T12:00:00Z");
-		await db.sql`TRUNCATE principal_roles, principal_identities, principals`;
+		await db.sql`TRUNCATE principal_roles, principal_identities, principals CASCADE`;
 		const recording = recordingLogger();
 		lines = recording.lines;
 		host = new PgIdentityService(store, RULES, {
@@ -315,11 +315,11 @@ describeDb("IDENTITY_LINKS, the self-link service", () => {
 	});
 });
 
-test("the service is provided only with access.selfLink", () => {
+test("IDENTITY_LINKS is provided only with access.selfLink, beside IDENTITY and PROFILES", () => {
 	const without = identityPlugin({ rules: { ...RULES, selfLink: undefined } });
-	expect(without.provides).toEqual([IDENTITY]);
+	expect(without.provides).toEqual([IDENTITY, PROFILES]);
 	const withLinks = identityPlugin({ rules: RULES });
-	expect(withLinks.provides).toEqual([IDENTITY, IDENTITY_LINKS]);
+	expect(withLinks.provides).toEqual([IDENTITY, PROFILES, IDENTITY_LINKS]);
 });
 
 test("the rules refuse an empty list of providers, a blank one, and credentials as providers", () => {

@@ -90,7 +90,7 @@ describeDb("the identity service", () => {
 	});
 	beforeEach(async () => {
 		clock = Date.parse("2026-10-07T12:00:00Z");
-		await db.sql`TRUNCATE principal_roles, principal_identities, principals`;
+		await db.sql`TRUNCATE principal_roles, principal_identities, principals CASCADE`;
 	});
 	afterAll(async () => {
 		await db.drop();

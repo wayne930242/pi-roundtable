@@ -291,7 +291,7 @@ describe("replaces", () => {
 		);
 	});
 
-	test("replacing IDENTITY without IDENTITY_LINKS is refused while access.selfLink is set", async () => {
+	test("replacing IDENTITY without PROFILES and IDENTITY_LINKS is refused while access.selfLink is set", async () => {
 		const rules = checkAccessRules({
 			owners: [],
 			members: { everyone: [] },
@@ -310,7 +310,7 @@ describe("replaces", () => {
 		]);
 		expect(error).toBeInstanceOf(PluginError);
 		expect(String(error)).toContain(
-			"replacing plugin identity would drop roundtable.identity-links too",
+			"replacing plugin identity would drop roundtable.profiles, roundtable.identity-links too",
 		);
 	});
 

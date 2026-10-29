@@ -70,7 +70,7 @@ describeDb("per-surface provisioning", () => {
 		store = await PgPrincipalStore.attach(db.sql);
 	});
 	beforeEach(async () => {
-		await db.sql`TRUNCATE principal_roles, principal_identities, principals`;
+		await db.sql`TRUNCATE principal_roles, principal_identities, principals CASCADE`;
 	});
 	afterAll(async () => {
 		await db.drop();

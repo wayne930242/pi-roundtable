@@ -234,6 +234,7 @@ describe("defineRoundtable", () => {
 		);
 		expect(providers).toEqual({
 			"roundtable.identity": "identity",
+			"roundtable.profiles": "identity",
 			"roundtable.memory": "memory",
 			"roundtable.schedules": "schedule-store",
 			"roundtable.prechecks": "prechecks",
@@ -296,6 +297,7 @@ describe("defineRoundtable", () => {
 			"principals-claimable",
 			"principals-plugin-links",
 			"principals-self-links",
+			"principal-profile-choices",
 			"backfill",
 			"owner-memory",
 			"owner-memory-speaker",

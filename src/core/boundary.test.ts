@@ -67,6 +67,31 @@ describe("core boundary", () => {
 			"src/core/i18n/agent-panel.ts":
 				"the agent panel's text names its `/<root> profile` command",
 		};
+		// Since 0.26 the core names people through `PROFILES`: a person's name and picture, one per
+		// linked account. That is a generic concept, not a consumer's profile catalogue, so these
+		// files may say "profile"; they still may not name the other concepts.
+		const personProfiles = new Set([
+			"src/core/config/config-schema.ts",
+			"src/core/config/config.ts",
+			"src/core/config/profiles.test.ts",
+			"src/core/config/profiles.ts",
+			"src/core/define-roundtable.test.ts",
+			"src/core/define-roundtable.ts",
+			"src/core/host-services.test.ts",
+			"src/core/identity/identity-links.test.ts",
+			"src/core/identity/identity-plugin.ts",
+			"src/core/identity/identity-profiles.test.ts",
+			"src/core/identity/identity-schema.ts",
+			"src/core/identity/identity-service.ts",
+			"src/core/identity/person-profiles.test.ts",
+			"src/core/identity/person-profiles.ts",
+			"src/core/identity/principal-tables.ts",
+			"src/core/identity/profile-choices.ts",
+			"src/core/identity/profiles-view.ts",
+			"src/core/identity/profiles.ts",
+			"src/core/services.ts",
+		]);
+		const otherConcept = /(?<![a-z])(party|connector|sol-?worker)/i;
 		const panelCommand = /`?\/\$\{[^}]+\} profile`?|\/<root> profile/;
 		const found = coreFiles(CORE).flatMap((file) => {
 			const path = relative(ROOT, file);
@@ -75,6 +100,7 @@ describe("core boundary", () => {
 				.split("\n")
 				.flatMap((text, index) => {
 					if (!concept.test(text)) return [];
+					if (personProfiles.has(path) && !otherConcept.test(text)) return [];
 					if (path in allowed && panelCommand.test(text)) return [];
 					return [`${path}:${index + 1}: ${text.trim()}`];
 				});

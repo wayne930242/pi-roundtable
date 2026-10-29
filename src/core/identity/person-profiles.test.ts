@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import type { SQL } from "bun";
 import { silentLogger } from "../log.ts";
 import { PersonDirectory } from "./person-profiles.ts";
+import { PRINCIPAL_PROFILE_CHOICES } from "./principal-tables.ts";
 import { cleanName } from "./profile-memory.ts";
 import { fetchPicture, PICTURE_MAX_BYTES } from "./profile-picture.ts";
 import type { ProfileRules, ProfileSource } from "./profiles.ts";
@@ -345,4 +346,12 @@ test("a picture that fails is not asked for again for ten minutes, and no pictur
 	fresh.clock.now += HOUR + 1;
 	await fresh.directory.picture(PERSON);
 	expect(fresh.fetches).toEqual([PICTURE_URL, PICTURE_URL]);
+});
+
+test("the profile migration stores a person's choice of provider and no name, address or picture", () => {
+	const source = PRINCIPAL_PROFILE_CHOICES.toString();
+	expect(source).toContain("principal_profile_choices");
+	expect(source).toContain("principal_id");
+	expect(source).toContain("provider");
+	expect(source).not.toMatch(/name|url|picture|address/i);
 });

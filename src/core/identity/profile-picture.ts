@@ -4,7 +4,7 @@ const PICTURE_BUDGET_MS = 5_000;
 
 /** A picture the proxy accepted: its bytes and the type they really are. */
 export interface Picture {
-	bytes: Uint8Array;
+	bytes: Uint8Array<ArrayBuffer>;
 	type: string;
 }
 
@@ -30,7 +30,9 @@ function sniff(bytes: Uint8Array): string | undefined {
 }
 
 /** Reads a body up to the cap; undefined when it is longer. */
-async function readCapped(response: Response): Promise<Uint8Array | undefined> {
+async function readCapped(
+	response: Response,
+): Promise<Uint8Array<ArrayBuffer> | undefined> {
 	const length = Number(response.headers.get("content-length"));
 	if (Number.isFinite(length) && length > PICTURE_MAX_BYTES) {
 		await response.body?.cancel().catch(() => undefined);
