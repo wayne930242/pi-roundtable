@@ -47,8 +47,8 @@ export type {
 	RoundtableConfig,
 	TierConfig,
 } from "./core/config/config.ts";
-export type { LimitsConfig } from "./core/config/limits.ts";
 export type { ConversationsConfig } from "./core/config/conversations.ts";
+export type { LimitsConfig } from "./core/config/limits.ts";
 export type { ProfilesConfig } from "./core/config/profiles.ts";
 export type { SkillsConfig } from "./core/config/skills-config.ts";
 export type {

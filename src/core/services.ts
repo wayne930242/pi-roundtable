@@ -55,10 +55,7 @@ import type { DispatchThreads } from "./threads/dispatch-threads.ts";
  */
 export const IDENTITY: ServiceKey<IdentityService> =
 	serviceKey<IdentityService>("roundtable.identity");
-/**
- * How the core names a person: the names and pictures of their linked accounts, the account they
- * chose to be shown by, and the sources a plugin adds. Provided by the `identity` plugin, always.
- */
+/** How the core names a person (linked accounts' names and pictures, the chosen one, plugin sources); from the `identity` plugin. */
 export const PROFILES: ServiceKey<PersonProfiles> = serviceKey<PersonProfiles>(
 	"roundtable.profiles",
 );
