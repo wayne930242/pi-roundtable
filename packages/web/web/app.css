@@ -1874,3 +1874,84 @@ dialog.palette .sheet-body {
 .creator-actions {
 	flex-wrap: wrap;
 }
+
+/* ── Long-press menus: a sheet on a phone, a popover at the pointer elsewhere ───────────────────── */
+
+/* A row that opens a menu on a hold gets neither the system callout nor a text selection from it. */
+[data-hold] {
+	-webkit-touch-callout: none;
+	-webkit-user-select: none;
+	user-select: none;
+}
+
+/* A message is a row too, but its words stay selectable. */
+[data-hold="text"] .bubble {
+	-webkit-user-select: text;
+	user-select: text;
+}
+
+.message[data-hold]:focus-visible {
+	outline: 2px solid var(--focus, var(--accent));
+	outline-offset: 2px;
+	border-radius: var(--radius-lg);
+}
+
+.action-popover {
+	position: fixed;
+	z-index: 60;
+	display: flex;
+	flex-direction: column;
+	min-width: 13rem;
+	max-width: min(22rem, calc(100vw - 16px));
+	max-height: calc(100dvh - 16px);
+	overflow-y: auto;
+	padding: var(--space-1);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-lg);
+	background: var(--surface);
+	box-shadow: var(--shadow-2);
+	outline: none;
+	animation: popover-in var(--dur) var(--ease-out) both;
+}
+
+@keyframes popover-in {
+	from {
+		opacity: 0;
+		transform: translate3d(0, -4px, 0) scale(0.98);
+	}
+}
+
+.action-popover .menu-item {
+	min-height: 2.5rem;
+	padding: var(--space-1) var(--space-2);
+	font-size: var(--text-sm);
+	cursor: pointer;
+}
+
+.action-popover .menu-icon {
+	width: 1.75rem;
+	height: 1.75rem;
+}
+
+.action-items .menu-item {
+	cursor: pointer;
+}
+
+.action-items .menu-item:hover,
+.action-items .menu-item:focus-visible {
+	background: var(--surface-2);
+}
+
+.action-items .menu-item[data-tone="danger"] strong {
+	color: var(--danger);
+}
+
+.action-items .menu-check {
+	flex: none;
+	margin-left: auto;
+	color: var(--accent);
+}
+
+.action-popover .menu-item[role] {
+	width: 100%;
+}
