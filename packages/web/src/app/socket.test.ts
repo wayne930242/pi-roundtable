@@ -295,3 +295,138 @@ test("RV-F007: a late card answered by a socket with no actor is refused and the
 	);
 	expect(answered).toEqual(["live-1"]);
 });
+
+const CARD = {
+	room: ROOM as never,
+	frame: {
+		type: "prompt" as const,
+		room: ROOM,
+		prompt: {
+			id: "card-1",
+			kind: "approval" as const,
+			title: "Run it?",
+			message: "Run the tool",
+			purpose: "action" as const,
+			at: "2026-10-29T10:00:00.000Z",
+		},
+	},
+};
+
+/** The frames of the agent rooms, as the surface, the desk and the presence table address them. */
+function agentRoomFrames(h: Harness) {
+	const { sockets } = h;
+	const owners = { owners: true as const };
+	sockets.deliver(
+		{
+			type: "message",
+			room: ROOM,
+			message: {
+				id: 1,
+				room: ROOM,
+				kind: "agent",
+				author: "guide",
+				text: "secret reply",
+				files: [],
+				at: "2026-10-29T10:00:00.000Z",
+			},
+		} as never,
+		owners,
+	);
+	sockets.deliver(CARD.frame as never, owners);
+	sockets.deliver(
+		{ type: "presence", agents: { guide: { busy: true } } },
+		owners,
+	);
+	sockets.deliver({ type: "changed" }, owners);
+	sockets.deliver(
+		{ type: "progress", room: ROOM, text: "thinking", tools: [] } as never,
+		{ owners: true, focus: ROOM },
+	);
+}
+
+test("a member socket gets nothing from the agent rooms while the owner works in them", async () => {
+	const h = harness();
+	h.tiers.set("mel", "member");
+	const member = await h.open("mel", { tier: "member" });
+	const owner = await h.open("ada");
+	// A member who focuses an agent room is not shown its progress.
+	member.socket.data.focus = ROOM;
+	owner.socket.data.focus = ROOM;
+	agentRoomFrames(h);
+	expect(member.sent.map((f) => f.type)).toEqual(["ready"]);
+	// The owner's own socket still gets all of it.
+	expect(owner.sent.map((f) => f.type)).toEqual([
+		"ready",
+		"message",
+		"prompt",
+		"presence",
+		"changed",
+		"progress",
+	]);
+});
+
+test("a member who connects while an owner's card is open and presence exists gets neither", async () => {
+	const h = harness({
+		desk: partial<OwnerDesk>({
+			openFrames: () => [CARD],
+			roomOf: () => undefined,
+		}),
+		presence: {
+			frame: async () => ({
+				type: "presence",
+				agents: { guide: { busy: true } },
+			}),
+		} as never,
+	});
+	h.tiers.set("mel", "member");
+	const member = await h.open("mel", { tier: "member" });
+	expect(member.sent.map((f) => f.type)).toEqual(["ready"]);
+	const owner = await h.open("ada");
+	expect(owner.sent.map((f) => f.type).sort()).toEqual([
+		"presence",
+		"prompt",
+		"ready",
+	]);
+});
+
+test("a member's send, stop and approval for an agent room are refused, and nothing reaches the surface", async () => {
+	let answered = 0;
+	const h = harness({
+		desk: partial<OwnerDesk>({
+			openFrames: () => [],
+			roomOf: (prompt) => (prompt === "card-1" ? (ROOM as never) : undefined),
+			approve: () => {
+				answered += 1;
+				return undefined;
+			},
+		}),
+	});
+	h.tiers.set("mel", "member");
+	const member = await h.open("mel", { tier: "member" });
+	for (const frame of [
+		{ type: "send", id: "m1", room: ROOM, text: "hello" },
+		{ type: "stop", room: ROOM },
+		{ type: "approval", prompt: "card-1", approved: true },
+	])
+		h.route.message?.(member.socket, JSON.stringify(frame));
+	await wait(30);
+	expect(h.delivered).toEqual([]);
+	expect(answered).toBe(0);
+	expect(
+		member.sent
+			.filter((f) => f.type === "refused")
+			.map((f) => (f as { code: string }).code),
+	).toContain("forbidden");
+});
+
+test("a person promoted to owner while connected starts getting the owners' frames from then on", async () => {
+	const h = harness({ recheckMs: 30 });
+	h.tiers.set("mel", "member");
+	const member = await h.open("mel", { tier: "member" });
+	h.sockets.deliver({ type: "changed" }, { owners: true });
+	expect(member.sent.map((f) => f.type)).toEqual(["ready"]);
+	h.tiers.set("mel", "owner");
+	await wait(120);
+	h.sockets.deliver({ type: "changed" }, { owners: true });
+	expect(member.sent.some((f) => f.type === "changed")).toBe(true);
+});

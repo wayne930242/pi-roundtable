@@ -95,7 +95,7 @@ Web Push 會在 owner 沒有任何頁面開著、看得到的時候喚醒裝置�
 
 | 選項 | 預設值 | 用途 |
 | --- | --- | --- |
-| `auth` | 必填，或用 `verifier` | `{ mode: "none" }`、`{ mode: "password" }` 或 `{ mode: "verifier", verifier }`。 |
+| `auth` | 必填，或用 `verifier` | `{ mode: "none" }`、`{ mode: "password" }`、`{ mode: "verifier", verifier }` 或 `{ mode: "oidc", ... }`。 |
 | `verifier` | 無 | verifier 模式的簡寫：`cloudflareAccess(...)` 或自訂函式。兩者同時給會出錯。 |
 | `origin` | 必填 | 瀏覽器看到的 scheme 和 host。寫入操作必須帶上完全相同的 `Origin`。 |
 | `ownerId` | 主要 owner | 已棄用：沒有回報身分的 verifier 所代表的 principal。 |
@@ -103,7 +103,9 @@ Web Push 會在 owner 沒有任何頁面開著、看得到的時候喚醒裝置�
 | `mountPath` | `/console` | route prefix。 |
 | `listener` | `public` | 提供 app 的 HTTP listener。 |
 | `routing` | `hash` | `path` 保留 mount 下的頁面路徑與 history 導航。 |
-| `panes` | `rooms`、`table`、`workspace`、`overview`、`schedules`、`conversations`、`notes` | 可再選 `skills`、`connectors` 並指定順序；`schedules`、`table` 和 `workspace` 需要 `rooms`，`workspace` 還要有可顯示的位置。明確列出的清單照寫的為準。 |
+| `admission` | `owners` | `owners` 只讓 owner 進入；`access` 讓 `IDENTITY` 在這個 surface 上接納的所有人進入（owner、admin、成員）。見「成員與關卡」。 |
+| `modes` | 開啟 | 設為 `false` 就不提供 yolo 與長時間執行開關；`PUT api/rooms/<key>/mode` 回 404。 |
+| `panes` | `rooms`、`table`、`workspace`、`overview`、`schedules`、`conversations`、`notes` | 可再選 `skills`、`connectors` 並指定順序；`schedules`、`table` 和 `workspace` 需要 `rooms`，`workspace` 還要有可顯示的位置。明確列出的清單照寫的為準。`admission: "access"` 時預設會加上 `profile`，也可以用 `{ owner, admin?, member }` 依身分層級分別設定。 |
 | `workspace` | 夥伴的目錄 | 檔案頁顯示什麼。`workspace.roots` 加入更多位置，每個有 `workspace.roots.id`、`workspace.roots.label`、`workspace.roots.dir` 和 `workspace.roots.writable`（沒設就是唯讀）；`workspace.agents`、`workspace.scratch` 設為 `false` 就不顯示夥伴的工作目錄或暫存目錄。`dir` 是 `dataDir` 或包含它時會無法啟動。 |
 | `surface` | `app` | app 房間的 key 前綴。改了它，所有房間都會重新開始。 |
 | `cardGraceSeconds` | `120` | 一輪執行等卡片的秒數，大於 0、最多 3600。 |
@@ -115,21 +117,48 @@ Web Push 會在 owner 沒有任何頁面開著、看得到的時候喚醒裝置�
 | `presentation` | 英文 | `{ locale, messages }` 設定語言、日期格式與在地化文字；dictionary key 是英文原文。`zh-TW` 會使用內建的繁體中文（臺灣）文字，`messages` 可逐個 key 覆寫。 |
 | `features` | 無 | 物件或接收公開 setup context 的 factory，提供 party 狀態、排程數、對話清理、skills 與 connectors。 |
 | `relayNotes` | remote MCP relay note | 顯示訊息前要移除的 relay 前綴。 |
-| `exclude` | 無 | 指定哪些 conversation key 不得列出或讀取的 predicate。 |
+| `exclude` | 無 | `(key, record?)` predicate，指定哪些對話不得列出或讀取；`record` 是 registry 對該對話的記錄。 |
 | `assetDir` | 套件的 `dist/` | 已建置頁面的目錄；只應在測試時設定。 |
 
 | 欄位 | 預設值 | 用途 |
 | --- | --- | --- |
-| `auth.mode` | 必填 | `none`、`password` 或 `verifier`。 |
+| `auth.mode` | 必填 | `none`、`password`、`verifier` 或 `oidc`。 |
 | `auth.trustNetwork` | `false` | 只用於 `none`：允許對本機以外開放的 TCP listener。 |
 | `auth.passwordEnv` | `ROUNDTABLE_WEB_PASSWORD` | 只用於 `password`：存放密碼的環境變數，至少 12 個字元。 |
 | `auth.sessionDays` | `30` | 只用於 `password`：登入有效幾天，1 到 365。 |
 | `auth.principal` | 主要 owner | 用於 `none` 與 `password`：session 代表的 principal。 |
 | `auth.verifier` | verifier 模式必填 | 只用於 `verifier`：request verifier。 |
+| `auth.issuer` | 必填 | 只用於 `oidc`：提供者確切的 `iss`，https 網址。 |
+| `auth.discoveryUrl` | `<issuer>/.well-known/openid-configuration` | 只用於 `oidc`：啟動時讀取各端點的位置。 |
+| `auth.clientId` | 必填 | 只用於 `oidc`：用戶端 id；redirect URI 是 `<origin><mountPath>/auth/callback`。 |
+| `auth.clientSecretEnv` | 無 | 只用於 `oidc`：存放用戶端密鑰的環境變數；不設就是使用 PKCE 的公開用戶端。 |
+| `auth.scopes` | `openid`、`profile` | 只用於 `oidc`；`offline_access` 會被拒絕。 |
+| `auth.subjectClaim` | `sub` | 只用於 `oidc`：指出這個人是誰的 claim。 |
+| `auth.nameClaim` | `name` | 只用於 `oidc`：名稱所用的 claim。 |
+| `auth.rolesClaim` | `roles` | 只用於 `oidc`：值會成為 `app:role:<name>` 的 claim；`false` 表示不讀。 |
+| `auth.check` | 無 | 只用於 `oidc`：依 claims 決定這個 token 能不能接受。 |
+| `auth.endSession` | `false` | 只用於 `oidc`：登出時是否一併登出提供者。 |
+| `auth.reauthHours` | 不會 | 只用於 `oidc`：過了這麼多小時就再向提供者確認。 |
+| `auth.storeClaims` | 無 | 只用於 `oidc`：隨 session 保存的 `id_token` claims。 |
 | `push.preview` | `true` | 通知是否顯示訊息的前 120 個字元。 |
 | `push.quietHours` | `{ start: "23:00", end: "08:00" }` | 不推播 agent 發話與通知的時段，以主控台時區的 `HH:MM` 表示；卡片一律推播。`false` 關閉勿擾時段。 |
 | `push.endpointHosts` | 無 | 額外允許的推播服務主機；開頭的 `*.` 代表所有子網域。 |
+| `push.tiers` | `["owner"]` | 哪些身分層級的人可以訂閱並收到推播。 |
 | `push.subject` | https 時為 `origin` | VAPID 聯絡資訊：`mailto:` 或 `https:` 網址。沒有的話推播關閉。 |
+
+## 成員與關卡
+
+`admission: "access"` 讓 host 的 `IDENTITY` 在這個 surface 上接納的所有人進入，`auth` 要用 `oidc`（或會回報是誰登入的 verifier）。
+已連結的人只會被讀取（`IDENTITY.peek`）；沒連結的人，只有在 `access.provisioning.app` 為 `admitted` 時才會當成新 principal 接納。
+回報的身分資料是局部的，所以在這裡登入不會調降別處記錄的層級。被停用的 principal，或規則沒有給任何層級的人，會得到 403。
+
+`src/authz.ts` 裡的一張表會在任何處理器看到請求之前先判定它，表裡沒有的路由對所有人都回 404。
+owner 能用夥伴房間、總覽與其他僅限 owner 的頁面；成員能用自己的對話、筆記與排程、host 的房間與頁面，以及自己的個人資料。
+成員的 socket 不會收到任何夥伴房間的內容，不論是即時發生的，還是連線當下補送的；卡片也只有它自己的對象能回應。
+還有必要的設定步驟沒做完時，app 會停在那些步驟上：只有個人資料、設定，以及完成步驟的頁面能用，直到最後一步完成。
+連結可以帶 `?next=`，值可以是 `profile`、`notices`、`settings`、`room:<key>` 或 `p:<page>`；其他值一律捨棄。
+
+OpenID Connect 用 authorization code 加 PKCE 登入，在 callback 只檢查一次 `id_token`，之後由 app 自己在 `web_sessions` 保存伺服器端的 session：`HttpOnly` cookie 裡是隨機 id，資料庫只存它的 SHA-256。`sessionDays` 天沒有來訪 session 就結束；登出會刪除它。`reauthHours` 會讓提供者再確認一次（能的話無聲完成），`storeClaims` 則把指定的 claims 跟 session 一起保存。
 
 ## 驗證與威脅模型
 
@@ -138,6 +167,7 @@ Web Push 會在 owner 沒有任何頁面開著、看得到的時候喚醒裝置�
 | `verifier` | verifier 回報的那個人，且已連結到某位 owner。 | 由 Cloudflare Access 之類的 proxy 負責登入。這是唯一一個 host 上的 agent 偽造不了的模式。 |
 | `password` | 輸入密碼後的主要 owner。 | app 對網際網路開放，前面沒有負責登入的 proxy。 |
 | `none` | 主要 owner，誰連得到 listener 誰就是。 | 只有 owner 連得到 listener：unix socket 或 loopback TCP。 |
+| `oidc` | 提供者回報的那個人，依 `IDENTITY` 連結到 principal 的身分而定；`admission: "access"` 時也包含成員與 admin。 | 人們用你自己的 OpenID Connect 提供者登入。 |
 
 `password` 提供不需要 script 的登入頁；每次失敗要多等一秒，15 分鐘內失敗十次，這段時間內所有登入都會被鎖住（這是全域限制，因為 proxy 後面看不到可信的 client 位址）；成功後設定簽署過的 `HttpOnly`、`SameSite=Strict` cookie，換密碼會讓舊 cookie 全部失效。
 `none` 必須明確寫出來，每次啟動都會警告，而且除非設了 `trustNetwork`，否則會拒絕不是 loopback 的 TCP listener。

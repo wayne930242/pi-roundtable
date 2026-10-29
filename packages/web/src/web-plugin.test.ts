@@ -378,6 +378,38 @@ describe("webConsole on a plugin harness", () => {
 		);
 	});
 
+	test("a cloudflareAccess owner is served the 0.25 console unchanged: the same config, and every 0.25 route answers", async () => {
+		const { call } = await boot();
+		const jwt = await sign();
+		const config = await call("/console/api/config", {}, jwt);
+		// Byte for byte what 0.25 sent: no tier, gate, pages or push, and no app section.
+		expect(await config.text()).toBe(
+			JSON.stringify({
+				title: "Roundtable",
+				panes: ["overview", "conversations", "notes"],
+				timeZone: "UTC",
+				look: "modern",
+				characterSkins: [...CATALOG.skins],
+			}),
+		);
+		for (const path of [
+			"overview",
+			"dashboard",
+			"conversations",
+			"notes",
+			"principals",
+		]) {
+			const answer = await call(`/console/api/${path}`, {}, jwt);
+			expect({
+				path,
+				status: answer.status < 500 && answer.status !== 404,
+			}).toEqual({ path, status: true });
+		}
+		// Routes that were never 0.25's stay closed to everyone, owner included.
+		for (const path of ["host/case", "notices", "profile", "pages/crm"])
+			expect((await call(`/console/api/${path}`, {}, jwt)).status).toBe(404);
+	});
+
 	test("the page is handed the host's skin tones, so every character it draws wears them", async () => {
 		const harness = await testPlugin(webConsole(base()), {
 			services: [agents, memory, discord, identity()],

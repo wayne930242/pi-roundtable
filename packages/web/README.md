@@ -21,6 +21,7 @@ Then only a person whose principal holds the owner role gets in.
 
 - [Requirements](#requirements) and [Install](#install)
 - [The owner app](#the-owner-app): rooms, cards, [modes](#modes-yolo-and-long-running), [dispatch threads](#dispatch-threads), [pins and folders](#pins-and-folders), [uploads](#uploads), [characters](#characters-in-the-page), [the Camelot look](#the-camelot-look), [the round table](#the-round-table), [the files pane](#the-files-pane)
+- [Members and the gate](#members-and-the-gate): [who is let in](#who-is-let-in), what each tier sees, and the steps owed before the app opens
 - [Install on a device](#install-on-a-device) and [Notifications](#notifications)
 - [Authentication](#authentication) and the [threat model](#threat-model)
 - [Options](#options), [the console's panes](#the-consoles-panes) and [host feature ports](#host-feature-ports)
@@ -287,6 +288,48 @@ A host that adds a root the agents cannot reach should authenticate with a verif
 The REST is `GET api/workspace`, `GET api/workspace/<place>/list?path=`, `file?path=` (the text, `hash`, `editable` and, when not, `reason`), `raw?path=` (bytes, `no-store`, `&download=1` forces a download), `PUT file?path=` (`{ text, baseHash }`), `POST new?path=` (`{ kind: "file" | "dir", text? }`), `POST rename` (`{ from, to }`), `DELETE entry?path=`, `GET trash`, `POST trash/<id>/restore` and `DELETE trash/<id>`.
 The service worker never caches `api/workspace`.
 
+## Members and the gate
+
+By default the app lets in only owners, as it always has. With `admission: "access"` it lets in everyone the host's `IDENTITY` admits on the app's surface: owners, admins and members. The app never makes a rule of its own about who that is; it asks `IDENTITY`, whose `access` configuration decides.
+
+### Who is let in
+
+`admission: "access"` needs a credential that names a person: `auth: { mode: "oidc", ... }` (below), or a verifier that reports who signed in. `none` and `password` speak for one shared actor and are refused with it.
+
+- A person whose identity is linked to a principal is looked up with `IDENTITY.peek`, which writes nothing. A person nobody has linked is admitted through `IDENTITY.resolve`, which makes a new principal only where `access.provisioning.app` is `admitted` for the surface; otherwise they are refused.
+- The facts the app reports are partial (`partial: true`): signing in here shows less than a person may hold elsewhere, and never lowers a tier recorded somewhere else. An admin in the app is a lasting admin grant, or a role named by the access rules as `app:role:<name>` that the provider's token carries.
+- A disabled principal, and a person the rules give no tier, are refused with `403`.
+- The tier is read again on every request and on a socket's every frame and once a minute. Losing admission closes the socket with 4403; a change of tier changes what it is sent from then on.
+
+### Deny by default
+
+One table decides every request before any handler sees it (`src/authz.ts`). A route that is not in it answers `404` to everyone, owners included. Each row says who it answers:
+
+| Who | Routes |
+|---|---|
+| Owner | the owners' agent rooms (`api/rooms*`, a `404` to anyone else), the overview, skills, connectors, folders, agents, groups, the archive, prompts, the files pane, and the event stream |
+| Any admitted person | their own conversations, notes and schedules, the host's rooms and pages, uploads, and pictures of agents |
+| Anyone admitted, gated or not | the page itself, `config`, `session`, their notices, push, profile, links and onboarding |
+
+A member's socket receives nothing from an agent room, neither as it happens nor when it connects: the owners' cards and the table of who is busy are sent only to sockets whose tier is owner now. A card is answered only by its own audience, the same rule as Discord's: for an approval that names approvers, the named ones who hold its tier now, and the owners; otherwise the turn's speaker and the owners where the scope escalates. A room's readers can never widen that.
+
+### What each tier is served
+
+`panes` takes a list for the owners and, with `admission: "access"`, `{ owner, admin?, member }` to choose per tier. The default gives a member `rooms` (the host's own rooms only), `conversations`, `notes`, `schedules` and `profile`, of those the host serves; an admin's list is the member's unless given. A member is never served `overview`, `table`, `workspace`, `skills` or `connectors`, and naming one for them stops the start.
+
+- **Conversations**: a member lists and reads only the private conversations the registry records as theirs, found by the registry; `exclude(key, record)` is asked on every list and every transcript read.
+- **Notes**: their own only. Asking for another person's is `403`. The pane is left out, with a warning, when the host keeps no memory (`MEMORY`); naming it with none is an error.
+- **Schedules**: their own, whichever of the 0.8 and the current id the schedule names them by; an owner sees every schedule.
+- **Profile**: who they are signed in as, and Log out.
+
+### The gate
+
+A required step the person still owes (see `onboarding`) closes the app on it: only their profile, settings and the pages that finish a step answer, the page shows the steps with a link to each, and the socket carries only the gate, their notices and refusals. When the last step is done the page loads again with everything the person may now see.
+
+### Deep links
+
+A link to a page can name where to go after signing in: `?next=profile`, `?next=notices`, `?next=settings`, `?next=room:<key>` for a room of the app's surface, or `?next=p:<page>` for a host page. Anything else, an address of another site included, is dropped.
+
 ## Install on a device
 
 The app is a progressive web app, installable on a phone, tablet or desktop and opened in its own window.
@@ -342,6 +385,7 @@ You choose how with the `auth` option; the console then looks the person up in t
 | `{ mode: "verifier", verifier }`, or the `verifier` option as shorthand | The person the verifier reports, linked to an owner's principal. | A proxy such as Cloudflare Access authenticates people in front of the listener. This is the one mode whose proof an agent on the host cannot forge. |
 | `{ mode: "password" }` | The primary owner, once they give the password. | The console is reachable from the internet with no proxy that signs people in. |
 | `{ mode: "none" }` | The primary owner, whoever reaches the listener. | Only the owner can reach the listener: a unix socket, or loopback TCP. |
+| `{ mode: "oidc", issuer, clientId }` | The person the provider reports, by the identity `IDENTITY` links to a principal. With `admission: "access"`, members and admins too. | People sign in with a provider of your own, without a proxy in front. See [OpenID Connect](#openid-connect). |
 
 Giving both `auth` and `verifier` throws, and so does giving neither: the plugin never starts without a way to authenticate.
 Whatever the mode, a request that changes data must carry the console's own `Origin`.
@@ -411,6 +455,18 @@ The console decides who the request comes from by what the verifier reported:
 The console never resolves an identity the way a chat surface does: a visitor is never admitted as a new principal and never claims a 0.8 one.
 It refuses an identity of the `legacy` provider too, as resolving refuses it: that is the alias 0.9 keeps for a 0.8 id, not anyone's sign-in.
 A verifier may vouch for members as well as owners, through a proxy that lets the whole company in or an allowlist that grows, so the console never guesses whose an identity is: only a link says so.
+
+### OpenID Connect
+
+`auth: { mode: "oidc", issuer, clientId }` signs people in with any OpenID Connect provider (Microsoft Entra, Google, Keycloak, Authentik and the like) by the authorization code flow with PKCE. The origin must be `https`: the session cookie is `Secure`.
+
+1. A person with no session is sent to the provider with a state, a nonce and a PKCE challenge, kept in a signed cookie that lives ten minutes and works once. The first visit asks silently (`prompt=none`), so a live single sign-on needs no click; when the provider answers `login_required` the person is asked once, normally.
+2. At the callback the code is exchanged, and the `id_token` is checked once: its signature against the provider's published keys, issuer, audience, expiry and nonce. A state that does not match or was used before, a callback with no pending cookie, and a token that fails any check are refused and make no session.
+3. `IDENTITY` admits the person (see [Who is let in](#who-is-let-in)); only then is a session made: a random 256-bit id in an `HttpOnly` cookie, of which the database keeps only the SHA-256, in the `web_sessions` table. No token, claim, code or session id is logged.
+4. The session slides: it ends after `sessionDays` (30) without a visit, and a visit moves the limit at most once an hour. Nothing the provider said is trusted again; the tier is read from `IDENTITY` on every request. Disabling the principal refuses the next request and closes the socket.
+5. Log out deletes the row, so the old cookie is refused afterwards, clears the cookie and, with `endSession`, also signs out at the provider. A person who just logged out is asked, not signed in silently again.
+
+`reauthHours` makes the provider vouch again: past it, the next page load does a silent round trip that refreshes the stored facts and roles, a provider that wants the person sends them through a normal sign-in, and a request to the API or the socket on such a session is answered `401` until then. `storeClaims` keeps the named `id_token` claims with the session, replaced at each sign-in, for a sender that needs, say, a mailbox address.
 
 ### Upgrading from 0.8
 
@@ -569,7 +625,7 @@ Every option is checked when the plugin is created, so a bad setting stops the h
 
 | Option | Default | What it does |
 |---|---|---|
-| `auth` | none, `auth` or `verifier` required | How requests are authenticated: `{ mode: "none" }`, `{ mode: "password" }` or `{ mode: "verifier", verifier }`; its keys are in the next table, and [Authentication](#authentication) explains the modes. |
+| `auth` | none, `auth` or `verifier` required | How requests are authenticated: `{ mode: "none" }`, `{ mode: "password" }`, `{ mode: "verifier", verifier }` or `{ mode: "oidc", ... }`; its keys are in the next table, and [Authentication](#authentication) explains the modes. |
 | `verifier` | none | Shorthand for `auth: { mode: "verifier", verifier }`: decides whether a request comes from someone your proxy authenticated, and reports who. `cloudflareAccess(...)` is built in; pass your own function to use another proxy. Giving both `auth` and `verifier` throws. |
 | `origin` | none, required | The app's own origin as the browser sees it, such as `https://app.example.com`: scheme and host (and port), no path. Requests that change data must carry it as their `Origin`, the dashboard line links to it, and push derives its default contact from it. |
 | `ownerId` | the primary owner | Deprecated. The owner's principal id that a request from a verifier reporting no actor stands for. The Notes pane no longer needs it: it shows each owner their own notes. |
@@ -577,7 +633,9 @@ Every option is checked when the plugin is created, so a bad setting stops the h
 | `mountPath` | `/console` | The path the app is served under: one or more segments of letters, digits, `.`, `_`, `~`, and `-`. |
 | `listener` | `public` | The id of the listener whose address serves the app. |
 | `routing` | `hash` | `path` retains links such as `/console/skills`, with history navigation and an authenticated page fallback. |
-| `panes` | `rooms`, `table`, `workspace`, `overview`, `schedules`, `conversations`, `notes` | Ordered subset of those panes plus `skills` and `connectors`. `schedules`, `table` and `workspace` need `rooms`, and `workspace` needs a place to show (below). Disabled panes answer 404. `skills` and `connectors` require their feature ports at setup. An explicit list is kept as written, so a host that listed its panes before 0.23 adds `rooms`, `table` and `schedules` by hand, and one that listed them before 0.24 adds `workspace`. |
+| `admission` | `owners` | `owners` lets in only people who hold the owner role; `access` lets in everyone `IDENTITY` admits on the surface. See [Members and the gate](#members-and-the-gate). |
+| `modes` | on | `false` leaves out the yolo and long-running switches: none is shown or set, and `PUT api/rooms/<key>/mode` answers 404. |
+| `panes` | `rooms`, `table`, `workspace`, `overview`, `schedules`, `conversations`, `notes` | Ordered subset of those panes plus `skills` and `connectors`. `schedules`, `table` and `workspace` need `rooms`, and `workspace` needs a place to show (below). With `admission: "access"` the default adds `profile`, and `{ owner, admin?, member }` chooses per tier. Disabled panes answer 404. `skills` and `connectors` require their feature ports at setup. An explicit list is kept as written, so a host that listed its panes before 0.23 adds `rooms`, `table` and `schedules` by hand, and one that listed them before 0.24 adds `workspace`. |
 | `workspace` | the agents' directories | What the [files pane](#the-files-pane) shows: `workspace.roots` adds places, each with an `id` (`workspace.roots.id`, a lower-case word other than `agents` and `scratch`), a `label` (`workspace.roots.label`), an absolute `dir` (`workspace.roots.dir`) and `writable` (`workspace.roots.writable`, false unless set), and `workspace.agents` / `workspace.scratch` set to `false` leave the agents' working directory or scratch directory out. A `dir` that is or contains `dataDir` stops the start. |
 | `surface` | `app` | The key prefix of the app's rooms, a lower-case word that is not `discord`. Rooms keep their conversations under it, so changing it starts every room over. |
 | `cardGraceSeconds` | `120` | How long a turn waits on an approval or question card before it goes on without the answer, above 0 and at most 3600. The card stays open for a day. |
@@ -589,19 +647,31 @@ Every option is checked when the plugin is created, so a bad setting stops the h
 | `presentation` | English | `{ locale, messages }`: locale controls dates and document language, and `zh-TW` also selects the [built-in Traditional Chinese wording](#presentation-and-built-in-zh-tw); English source strings are dictionary keys for labels, descriptions, confirmations, and API errors. |
 | `features` | none | Trusted host integrations, or a factory receiving public plugin setup context; see [Host feature ports](#host-feature-ports). |
 | `relayNotes` | the remote MCP note | Text that an outside agent's relayed message begins with, taken off before the owner's words are shown. Set it to the same value as the `relayNote` of [pi-roundtable-mcp][mcp] when you changed that one. |
-| `exclude` | none | A function from a channel key to `true` for conversations the console must neither list nor read, such as the channels of another plugin that keeps its own sessions in the same directory. |
+| `exclude` | none | A function from a channel key (and the registry's record of the conversation, when there is one) to `true` for conversations the console must neither list nor read, such as the channels of another plugin that keeps its own sessions in the same directory. |
 | `assetDir` | the package's `dist/` | The built page's directory. Set it only in tests. |
 
 The `auth` keys:
 
 | Key | Default | What it does |
 |---|---|---|
-| `auth.mode` | none, required | `none`, `password` or `verifier`. |
+| `auth.mode` | none, required | `none`, `password`, `verifier` or `oidc`. |
 | `auth.trustNetwork` | `false` | `none` only: allows a TCP listener that reaches beyond this machine, when a network in front of it keeps everyone else out. |
 | `auth.passwordEnv` | `ROUNDTABLE_WEB_PASSWORD` | `password` only: the environment variable that holds the password, which must be set and at least 12 characters. |
 | `auth.sessionDays` | `30` | `password` only: how long a login lasts, 1 to 365 days. |
 | `auth.principal` | the primary owner | `none` and `password`: the owner's principal id the session speaks for. |
 | `auth.verifier` | none | `verifier` only: the request verifier, as the `verifier` option. |
+| `auth.issuer` | none, required | `oidc` only: the provider's exact `iss`, an `https` URL. |
+| `auth.discoveryUrl` | `<issuer>/.well-known/openid-configuration` | `oidc` only: where the provider's endpoints are read at start; the start fails if they cannot be. |
+| `auth.clientId` | none, required | `oidc` only: the client id registered with the provider; the redirect URI is `<origin><mountPath>/auth/callback`. |
+| `auth.clientSecretEnv` | none | `oidc` only: the environment variable that holds the client secret; set means a confidential client, left out a public client with PKCE. |
+| `auth.scopes` | `openid`, `profile` | `oidc` only. `offline_access` is refused: the app keeps no refresh token. |
+| `auth.subjectClaim` | `sub` | `oidc` only: the claim that names the person (Entra: `oid`). |
+| `auth.nameClaim` | `name`, then `preferred_username` | `oidc` only: the claim for their name. |
+| `auth.rolesClaim` | `roles` | `oidc` only: the claim whose values become `app:role:<name>`; `false` reads none. |
+| `auth.check` | none | `oidc` only: a function from the token's claims to whether the token is acceptable at all. |
+| `auth.endSession` | `false` | `oidc` only: whether Log out also signs out at the provider. |
+| `auth.reauthHours` | never | `oidc` only: ask the provider again after this many hours of one session. |
+| `auth.storeClaims` | none | `oidc` only: `id_token` claims kept with the session. |
 
 The `push` keys:
 
@@ -610,6 +680,7 @@ The `push` keys:
 | `push.preview` | `true` | Whether a notification shows the first 120 characters of the message. With `false` it says only that something waits, and where. |
 | `push.quietHours` | `{ start: "23:00", end: "08:00" }` | The hours when an agent's post and a notice are not pushed, as two different `HH:MM` times on the console's time zone; an `end` before the `start` crosses midnight. Cards are always pushed. `false` turns quiet hours off. |
 | `push.endpointHosts` | none | Push services to post to besides the browsers' own (Google, Mozilla, Apple, Microsoft), as host names; a leading `*.` allows every subdomain. Endpoints must still be `https`. |
+| `push.tiers` | `["owner"]` | The tiers whose people may subscribe and receive push. |
 | `push.subject` | `origin`, when it is `https` | The contact a push service may use about this server (the VAPID `sub`): a `mailto:` or `https:` URL. With an `http` origin push stays off until it is set. |
 
 The bad settings that stop the host at startup are: no `auth` or `verifier`, both of them, an unknown `auth.mode`, a password shorter than 12 characters, `none` on a listener that reaches beyond the machine, an `origin` with a path, a `mountPath` of `/` or with `..` in it, an unknown or repeated pane, `schedules`, `table` or `workspace` without `rooms`, a `workspace` pane with no place to show, a `workspace.roots` entry that is malformed, reuses an id, or is or contains `dataDir`, a `surface` that is not a lower-case word or is `discord`, an empty `ownerId`, a `uploadMaxBytes` out of range, and a `push.subject` that is neither a `mailto:` address nor an `https:` URL, and a `push.quietHours` that is neither `false` nor two different `HH:MM` times.
@@ -619,7 +690,7 @@ The host refuses to start with a message naming the missing service when one of 
 
 ## The console's panes
 
-The page has nine panes; `panes` chooses which ones a host serves.
+The page has ten panes; `panes` chooses which ones a host serves.
 Rooms and Schedules belong to the [owner app](#the-owner-app), and the Round table to [its own section](#the-round-table); the rest are the console that came first, which reads what the host already stores: the conversation files under the data directory, the memory addon, and the agent team.
 
 | Pane | What it shows |
@@ -632,6 +703,7 @@ Rooms and Schedules belong to the [owner app](#the-owner-app), and the Round tab
 | Skills | The full host catalog, source, groups and carriers; each available skill opens its ordered frontmatter and Markdown body, and an owner edits an agent-written skill or makes a new one. |
 | Connectors | Upstream gateway enabled/reachable/tool status, virtual-server tool lists, and the agents or profiles that use them; an optional administration link. |
 | Files | The agents' workspace: a tree, highlighted files, an editor with conflict-checked saves, and a restorable trash (see [The files pane](#the-files-pane)). Needs `rooms` and a place to show. |
+| Profile | Who the person is signed in as, their tier, and Log out; it stays open while a step is owed. Part of the [members' app](#members-and-the-gate). |
 | Round table | Every active agent at a podium of one council hall, the coordinator first, each in the state its room is in; a seat turns the camera to its agent and opens a dialogue box on the agent's room (see [The round table](#the-round-table)). Needs `rooms`. |
 
 Opening a conversation shows its **transcript**: the user's and the assistant's messages, the tools the assistant called with a short preview of their arguments, and each tool's result (collapsed).

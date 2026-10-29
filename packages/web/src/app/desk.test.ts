@@ -469,3 +469,82 @@ describe("the cards kept when they end", () => {
 		expect(frames.at(-1)).toMatchObject({ outcome: "approved" });
 	});
 });
+
+describe("card(p): who a card's audience is, whatever room reads it", () => {
+	const MEMBER_SCOPE: PromptScope = {
+		principalId: "mel",
+		speakerId: "app:mel",
+		tier: "admin",
+		escalate: "owners",
+	};
+	const MEL: Answerer = {
+		principalId: "mel",
+		tier: "admin",
+		speakerId: "app:mel",
+		name: "Mel",
+	};
+	const NIA: Answerer = { ...MEL, principalId: "nia", name: "Nia" };
+
+	test("an approval naming approvers is answered by them and by owners, never by the speaker or a reader", async () => {
+		const { instance, promptId } = desk();
+		const result = instance
+			.prompts(ROOM, MEMBER_SCOPE)
+			.confirm("t", "m", undefined, "admin", undefined, undefined, {
+				approvers: ["dee"],
+			});
+		await tick();
+		// The speaker was not named, and neither was a reader of the room.
+		expect(instance.approve(MEL, promptId(), true)).toBe("forbidden");
+		expect(instance.approve(NIA, promptId(), false)).toBe("forbidden");
+		expect(instance.approve(ADA, promptId(), true)).toBeUndefined();
+		expect(await result).toBe("approved");
+	});
+
+	test("a named approver answers at the tier the call needs now, and below it does not", async () => {
+		const { instance, promptId } = desk();
+		void instance
+			.prompts(ROOM, MEMBER_SCOPE)
+			.confirm("t", "m", undefined, "admin", undefined, undefined, {
+				approvers: ["nia"],
+			});
+		await tick();
+		expect(instance.approve({ ...NIA, tier: "member" }, promptId(), true)).toBe(
+			"forbidden",
+		);
+		expect(instance.approve(NIA, promptId(), true)).toBeUndefined();
+	});
+
+	test("an approval naming no one is the speaker's at their tier, and the owners'", async () => {
+		const { instance, promptId } = desk();
+		void instance
+			.prompts(ROOM, MEMBER_SCOPE)
+			.confirm("t", "m", undefined, "admin");
+		await tick();
+		expect(instance.approve(NIA, promptId(), true)).toBe("forbidden");
+		expect(instance.approve(MEL, promptId(), true)).toBeUndefined();
+	});
+
+	test("a question is the speaker's and the owners', and no one else answers or cancels it", async () => {
+		const { instance, promptId } = desk();
+		const asked = instance
+			.prompts(ROOM, MEMBER_SCOPE)
+			.ask("t", { question: "Which?", options: [{ label: "x" }] } as never);
+		await tick();
+		expect(instance.answer(NIA, promptId(), { choices: ["x"] })).toBe(
+			"forbidden",
+		);
+		expect(instance.cancel(NIA, promptId())).toBe("forbidden");
+		expect(
+			instance.answer(MEL, promptId(), { choices: ["x"] }),
+		).toBeUndefined();
+		expect(await asked).toBeDefined();
+	});
+
+	test("a card with no scope is the owners' alone", async () => {
+		const { instance, promptId } = desk();
+		void instance.prompts(ROOM, undefined as never).confirm("t", "m");
+		await tick();
+		expect(instance.approve(MEL, promptId(), true)).toBe("forbidden");
+		expect(instance.approve(ADA, promptId(), true)).toBeUndefined();
+	});
+});

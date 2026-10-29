@@ -25,7 +25,11 @@ import {
 import { discoverProvider, OidcLogin } from "./auth/oidc.ts";
 import { loadSessionKey } from "./auth/session-key.ts";
 import { WebSessions } from "./auth/sessions.ts";
-import { type AccessView, ConsoleApi } from "./console-api.ts";
+import {
+	type AccessView,
+	ConsoleApi,
+	type ConsolePorts,
+} from "./console-api.ts";
 import { ConsoleServer } from "./console-server.ts";
 import { Gate } from "./gate.ts";
 import {
@@ -190,47 +194,47 @@ async function build(settings: ResolvedOptions, context: Context) {
 	// A broken page stops startup here, before anything connects.
 	const assets = loadAssets(settings.assetDir);
 	const gate = new Gate({ registry: webApp });
+	const hosted: ConsolePorts["hosted"] = async (visitor) => {
+		const viewer = viewerOf(visitor);
+		const pages: {
+			id: string;
+			label: string;
+			place: "main" | "settings" | "hidden";
+		}[] = [];
+		for (const page of webApp.pages()) {
+			try {
+				if (await page.visible(viewer))
+					pages.push({
+						id: page.id,
+						label: page.label,
+						place: page.place,
+					});
+			} catch (error) {
+				logger.warn(
+					{ page: page.id, err: error },
+					"a page's visibility was not read",
+				);
+			}
+		}
+		const kinds: { kind: string; label: string }[] = [];
+		for (const kind of webApp.kinds()) {
+			try {
+				if ((await kind.list(viewer, {})) !== undefined)
+					kinds.push({ kind: kind.kind, label: kind.label });
+			} catch (error) {
+				logger.warn(
+					{ kind: kind.kind, err: error },
+					"a kind of room was not listed",
+				);
+			}
+		}
+		return { pages, kinds };
+	};
 	const access: AccessView | undefined =
 		settings.admission === "access"
 			? {
 					push: { tiers: settings.push.tiers },
 					gate: (visitor) => gate.required(viewerOf(visitor)),
-					hosted: async (visitor) => {
-						const viewer = viewerOf(visitor);
-						const pages: {
-							id: string;
-							label: string;
-							place: "main" | "settings" | "hidden";
-						}[] = [];
-						for (const page of webApp.pages()) {
-							try {
-								if (await page.visible(viewer))
-									pages.push({
-										id: page.id,
-										label: page.label,
-										place: page.place,
-									});
-							} catch (error) {
-								logger.warn(
-									{ page: page.id, err: error },
-									"a page's visibility was not read",
-								);
-							}
-						}
-						const kinds: { kind: string; label: string }[] = [];
-						for (const kind of webApp.kinds()) {
-							try {
-								if ((await kind.list(viewer, {})) !== undefined)
-									kinds.push({ kind: kind.kind, label: kind.label });
-							} catch (error) {
-								logger.warn(
-									{ kind: kind.kind, err: error },
-									"a kind of room was not listed",
-								);
-							}
-						}
-						return { pages, kinds };
-					},
 				}
 			: undefined;
 	const api = new ConsoleApi({
@@ -239,6 +243,7 @@ async function build(settings: ResolvedOptions, context: Context) {
 		panes,
 		tierPanes,
 		...(access ? { access } : {}),
+		hosted,
 		sessionsDir: settings.sessionsDir,
 		...(team ? { team } : {}),
 		queue,
@@ -259,7 +264,13 @@ async function build(settings: ResolvedOptions, context: Context) {
 		characterSkins: env.characterSkins,
 		...(settings.routing === "path" ? { mountPath: settings.mount } : {}),
 		...(rooms
-			? { app: { surface: settings.surface, protocol: APP_PROTOCOL } }
+			? {
+					app: {
+						surface: settings.surface,
+						protocol: APP_PROTOCOL,
+						...(settings.modes ? {} : { modes: false as const }),
+					},
+				}
 			: {}),
 		...(settings.presentation ? { presentation: settings.presentation } : {}),
 	});
