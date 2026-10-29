@@ -1,6 +1,15 @@
 export const DUMMY_KEY = "sandbox-dummy-key";
 export const BROKER_PATH = "/broker/broker.sock";
 export const WORKSPACE_PATH = "/workspace";
+/** Where a channel's own state directory is mounted in `workspace: "server"` mode. */
+export const CHANNEL_PATH = "/channel";
+/** The image label naming the worker protocol version an image speaks. */
+export const SANDBOX_PROTOCOL_LABEL = "pi-roundtable-sandbox.protocol";
+/**
+ * The worker protocol this package speaks: 2 adds `historyDir`, `budgets` and the file and skill
+ * tools. An image labelled lower, or unlabelled, is an older worker.
+ */
+export const SANDBOX_PROTOCOL = 2;
 
 export interface ToolSpec {
 	name: string;
@@ -76,6 +85,8 @@ export interface SandboxTurn {
 	reset?: boolean;
 	/** Absent unless the operator set a budget; the worker then keeps its defaults. */
 	budgets?: SandboxBudgets;
+	/** Where the history file lives; absent means in the workspace, as before. */
+	historyDir?: typeof CHANNEL_PATH;
 	mcp: { server: string; tools: ToolSpec[] }[];
 }
 
@@ -111,6 +122,7 @@ export function isSandboxTurn(value: unknown): value is SandboxTurn {
 		(value.reset === undefined || typeof value.reset === "boolean") &&
 		(value.budgets === undefined ||
 			budgetsError(value.budgets) === undefined) &&
+		(value.historyDir === undefined || value.historyDir === CHANNEL_PATH) &&
 		Array.isArray(value.tools) &&
 		value.tools.every(isToolSpec) &&
 		Array.isArray(value.mcp) &&

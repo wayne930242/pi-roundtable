@@ -2,7 +2,9 @@ import { realpathSync } from "node:fs";
 import { isAbsolute } from "node:path";
 import {
 	boundedText,
+	CHANNEL_PATH,
 	isRecord,
+	SANDBOX_PROTOCOL_LABEL,
 	type SandboxReply,
 	type SandboxTurn,
 } from "./protocol.ts";
@@ -12,6 +14,8 @@ export interface ContainerSpec {
 	image: string;
 	runDir: string;
 	workspaceDir: string;
+	/** A third, read-write mount at `/channel` holding one channel's own state (`workspace: "server"`). */
+	channelDir?: string;
 	uid: number;
 	gid: number;
 	memoryMb?: number;
@@ -28,6 +32,12 @@ export interface ContainerDriver {
 		turn: SandboxTurn,
 		signal: AbortSignal,
 	): Promise<SandboxReply>;
+	/**
+	 * The worker protocol version the image's `pi-roundtable-sandbox.protocol` label names, or
+	 * undefined for an image without a readable one (an older worker). Asked at startup when an
+	 * option needs a newer worker; a driver that cannot answer stops that startup.
+	 */
+	imageProtocol?(image: string): Promise<number | undefined>;
 }
 
 /** Pure argument generation: no Docker daemon is required to test the isolation boundary. */
@@ -39,6 +49,8 @@ export function containerRunArgs(spec: ContainerSpec): string[] {
 		/\s/.test(spec.image)
 	)
 		throw new Error("invalid container name or image");
+	const mounts = [spec.runDir, spec.workspaceDir];
+	if (spec.channelDir !== undefined) mounts.push(spec.channelDir);
 	if (
 		!Number.isInteger(spec.uid) ||
 		spec.uid <= 0 ||
@@ -46,16 +58,20 @@ export function containerRunArgs(spec: ContainerSpec): string[] {
 		spec.gid <= 0
 	)
 		throw new Error("sandbox requires a non-root user and group");
-	for (const dir of [spec.runDir, spec.workspaceDir]) {
+	for (const dir of mounts) {
 		if (!isAbsolute(dir) || dir === "/" || /[,\n\r]/.test(dir))
 			throw new Error("mount paths must be absolute dedicated directories");
 	}
-	if (
-		spec.runDir === spec.workspaceDir ||
-		spec.runDir.startsWith(`${spec.workspaceDir}/`) ||
-		spec.workspaceDir.startsWith(`${spec.runDir}/`)
-	)
-		throw new Error("broker and workspace mounts must be separate");
+	for (const [index, dir] of mounts.entries())
+		for (const other of mounts.slice(index + 1))
+			if (
+				dir === other ||
+				dir.startsWith(`${other}/`) ||
+				other.startsWith(`${dir}/`)
+			)
+				throw new Error(
+					"broker, workspace and channel mounts must be separate",
+				);
 	const memory = spec.memoryMb ?? 512;
 	const cpus = spec.cpus ?? 1;
 	const pids = spec.pids ?? 64;
@@ -113,6 +129,12 @@ export function containerRunArgs(spec: ContainerSpec): string[] {
 		`type=bind,src=${spec.runDir},dst=/broker,readonly,bind-propagation=rprivate`,
 		"--mount",
 		`type=bind,src=${spec.workspaceDir},dst=/workspace,${spec.workspaceReadOnly ? "readonly," : ""}bind-propagation=rprivate`,
+		...(spec.channelDir === undefined
+			? []
+			: [
+					"--mount",
+					`type=bind,src=${spec.channelDir},dst=${CHANNEL_PATH},bind-propagation=rprivate`,
+				]),
 		"--env",
 		"HOME=/tmp/home",
 		...(command ? ["--entrypoint", command] : []),
@@ -125,6 +147,40 @@ export class DockerContainerDriver implements ContainerDriver {
 	readonly #binary: string;
 	constructor(binary = "docker") {
 		this.#binary = binary;
+	}
+
+	async imageProtocol(image: string): Promise<number | undefined> {
+		if (!image || image.startsWith("-") || /\s/.test(image))
+			throw new Error("invalid container name or image");
+		const child = Bun.spawn(
+			[
+				this.#binary,
+				"image",
+				"inspect",
+				"--format",
+				`{{ index .Config.Labels "${SANDBOX_PROTOCOL_LABEL}" }}`,
+				image,
+			],
+			{ stdout: "pipe", stderr: "pipe" },
+		);
+		const timer = setTimeout(() => child.kill("SIGKILL"), 30_000);
+		try {
+			const [output, , code] = await Promise.all([
+				boundedText(child.stdout, 4096),
+				boundedText(child.stderr, 16 * 1024),
+				child.exited,
+			]);
+			if (code !== 0)
+				throw new Error(
+					`cannot inspect sandbox image ${image}; build it before starting`,
+				);
+			const label = output.trim();
+			return /^\d{1,6}$/.test(label) ? Number(label) : undefined;
+		} finally {
+			clearTimeout(timer);
+			child.kill("SIGKILL");
+			await child.exited;
+		}
 	}
 
 	async run(
@@ -161,6 +217,9 @@ export class DockerContainerDriver implements ContainerDriver {
 			...spec,
 			runDir: realpathSync(spec.runDir),
 			workspaceDir: realpathSync(spec.workspaceDir),
+			...(spec.channelDir === undefined
+				? {}
+				: { channelDir: realpathSync(spec.channelDir) }),
 		});
 		signal.throwIfAborted();
 		const child = Bun.spawn([this.#binary, ...args], {

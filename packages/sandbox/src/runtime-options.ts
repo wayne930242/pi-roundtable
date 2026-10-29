@@ -1,5 +1,5 @@
 import { mkdirSync, realpathSync, statSync } from "node:fs";
-import { isAbsolute } from "node:path";
+import { isAbsolute, join } from "node:path";
 import {
 	type BrokerOptions,
 	type HostTool,
@@ -12,7 +12,11 @@ import {
 	containerRunArgs,
 	DockerContainerDriver,
 } from "./container-driver.ts";
-import { budgetsError, type SandboxBudgets } from "./protocol.ts";
+import {
+	budgetsError,
+	SANDBOX_PROTOCOL,
+	type SandboxBudgets,
+} from "./protocol.ts";
 
 export interface SandboxRuntimeOptions {
 	image: string;
@@ -20,6 +24,13 @@ export interface SandboxRuntimeOptions {
 	runRoot: string;
 	/** Private directory of channel workspaces. Its root is never mounted. */
 	workspaceRoot: string;
+	/**
+	 * `"channel"` (default): one workspace per channel. `"server"`: every sandbox channel of one
+	 * guild shares one workspace (memory notes, workspace files), while each channel keeps its own
+	 * conversation history in a state directory mounted at `/channel`. A channel whose message
+	 * carries no guild keeps its own workspace. Needs a worker image of protocol 2.
+	 */
+	workspace?: "channel" | "server";
 	model: string;
 	modelUrl: string;
 	apiKey: BrokerOptions["apiKey"];
@@ -67,6 +78,12 @@ export function resolveSandboxRuntimeOptions(
 			options.turnTimeoutMs > 600_000)
 	)
 		throw new Error("turnTimeoutMs must be 1000 to 600000");
+	if (
+		options.workspace !== undefined &&
+		options.workspace !== "channel" &&
+		options.workspace !== "server"
+	)
+		throw new Error('workspace must be "channel" or "server"');
 	if (options.budgets !== undefined) {
 		const error = budgetsError(options.budgets);
 		if (error) throw new Error(error);
@@ -116,6 +133,18 @@ export function resolveSandboxRuntimeOptions(
 		gid,
 		...options.limits,
 	});
+	// The directories of a "server" turn are siblings under the root; prove they stay separate.
+	if (options.workspace === "server")
+		containerRunArgs({
+			name: "sandbox-preflight",
+			image: options.image,
+			runDir: join(runRoot, "turn-x"),
+			workspaceDir: join(workspaceRoot, "guild-x"),
+			channelDir: join(workspaceRoot, "state-x"),
+			uid,
+			gid,
+			...options.limits,
+		});
 	const resolved = {
 		...options,
 		runRoot,
@@ -152,5 +181,42 @@ function checkPromptBudget(options: SandboxRuntimeOptions): void {
 	if (size > limit)
 		throw new Error(
 			`prompt is ${size} bytes, over budgets.promptBytes ${limit}; shorten it or raise the budget`,
+		);
+}
+
+/** The worker protocol the operator's options need, or undefined when any image will do. */
+export function requiredProtocol(
+	options: SandboxRuntimeOptions,
+): { version: number; because: string } | undefined {
+	const because = [
+		options.workspace === "server" ? 'workspace: "server"' : undefined,
+		options.budgets ? "budgets" : undefined,
+		(options as { files?: unknown }).files ? "files" : undefined,
+		(options as { skills?: readonly unknown[] }).skills?.length
+			? "skills"
+			: undefined,
+	].filter((name) => name !== undefined);
+	return because.length
+		? { version: SANDBOX_PROTOCOL, because: because.join(", ") }
+		: undefined;
+}
+
+/**
+ * Stops startup when an option needs a newer worker than the image is: an old worker would
+ * ignore the new turn fields, and could write a channel's history into a shared workspace.
+ */
+export async function checkImageProtocol(
+	options: ResolvedSandboxRuntimeOptions,
+): Promise<void> {
+	const required = requiredProtocol(options);
+	if (!required) return;
+	if (!options.driver.imageProtocol)
+		throw new Error(
+			`${required.because} needs a worker image of protocol ${required.version}, and this container driver cannot report the image's protocol`,
+		);
+	const found = await options.driver.imageProtocol(options.image);
+	if (found === undefined || found < required.version)
+		throw new Error(
+			`sandbox image ${options.image} is ${found === undefined ? "unlabelled (an older worker)" : `protocol ${found}`}, but ${required.because} needs protocol ${required.version}; rebuild the image from packages/sandbox/worker/Dockerfile`,
 		);
 }

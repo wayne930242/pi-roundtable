@@ -37,6 +37,20 @@ export {
 	DockerContainerDriver,
 } from "./container-driver.ts";
 export {
+	encodeHistory,
+	HISTORY_ENTRY_BYTES,
+	HISTORY_FILE,
+	HISTORY_MAX_ENTRIES,
+	type SandboxHistoryEntry,
+	userHistoryContent,
+} from "./history.ts";
+export {
+	channelStateDir,
+	channelWorkspaceDir,
+	guildWorkspaceDir,
+	historyFilePath,
+} from "./layout.ts";
+export {
 	collectPiAttachments,
 	type PiAttachmentOptions,
 } from "./pi-attachments.ts";
@@ -112,6 +126,8 @@ export {
 export {
 	BUDGET_DEFAULTS,
 	BUDGET_LIMITS,
+	SANDBOX_PROTOCOL,
+	SANDBOX_PROTOCOL_LABEL,
 	type SandboxBudgets,
 	type SandboxReply,
 	type SandboxTurn,
@@ -123,7 +139,11 @@ export {
 	type SandboxResearchOptions,
 	SandboxResearchWorker,
 } from "./research-worker.ts";
-export { SandboxRuntime, type SandboxRuntimeOptions } from "./runtime.ts";
+export {
+	SandboxRuntime,
+	type SandboxRuntimeOptions,
+	type SandboxTurnContext,
+} from "./runtime.ts";
 export {
 	assertPublicUrl,
 	isPublicAddress,

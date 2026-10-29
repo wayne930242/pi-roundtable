@@ -1,21 +1,58 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import type { ChannelKey } from "pi-roundtable";
+import { type ChannelKey, parseChannelKey } from "pi-roundtable";
 import {
 	type BrokerListener,
 	SandboxBroker,
 	type SandboxSpeaker,
 } from "./broker.ts";
-import type { SandboxReply, SandboxTurn } from "./protocol.ts";
+import {
+	channelStateName,
+	channelWorkspaceName,
+	guildWorkspaceName,
+} from "./layout.ts";
+import {
+	CHANNEL_PATH,
+	type SandboxReply,
+	type SandboxTurn,
+} from "./protocol.ts";
 import type { ResolvedSandboxRuntimeOptions } from "./runtime-options.ts";
 
 interface SandboxTurnRequest {
 	channel: ChannelKey;
+	/** The message's guild, when it has one. */
+	space?: string;
 	speaker: SandboxSpeaker;
 	text: string;
 	reset: boolean;
 	signal: AbortSignal;
+}
+
+/**
+ * The directory names of a turn: the guild's shared workspace and the channel's own state
+ * directory with `workspace: "server"` and a guild, the channel's own workspace otherwise.
+ */
+function directories(
+	options: Pick<ResolvedSandboxRuntimeOptions, "workspace">,
+	channel: ChannelKey,
+	space: string | undefined,
+): { workspace: string; state?: string } {
+	if (options.workspace === "server" && space !== undefined)
+		return {
+			workspace: guildWorkspaceName(parseChannelKey(channel).surface, space),
+			state: channelStateName(channel),
+		};
+	return { workspace: channelWorkspaceName(channel) };
+}
+
+/** What turns must not run alongside: the workspace they share. */
+export function workspaceKey(
+	options: Pick<ResolvedSandboxRuntimeOptions, "workspace">,
+	channel: ChannelKey,
+	space: string | undefined,
+): string {
+	return directories(options, channel, space).workspace;
 }
 
 /**
@@ -29,9 +66,16 @@ export async function runSandboxTurn(
 	onReply: (reply: SandboxReply) => void,
 ): Promise<SandboxReply> {
 	const { channel, speaker, text, reset, signal } = request;
-	const segment = createHash("sha256").update(channel).digest("hex");
-	const workspaceDir = join(options.workspaceRoot, segment);
+	// The container is named by its channel, which two turns of one workspace never share.
+	const segment = channelWorkspaceName(channel);
+	const names = directories(options, channel, request.space);
+	const workspaceDir = join(options.workspaceRoot, names.workspace);
 	mkdirSync(workspaceDir, { recursive: true, mode: 0o700 });
+	const channelDir =
+		names.state === undefined
+			? undefined
+			: join(options.workspaceRoot, names.state);
+	if (channelDir) mkdirSync(channelDir, { recursive: true, mode: 0o700 });
 	const runDir = mkdtempSync(join(options.runRoot, "turn-"));
 	const socket = join(runDir, "broker.sock");
 	if (socket.length > 100) {
@@ -56,6 +100,7 @@ export async function runSandboxTurn(
 			timeZone: options.timeZone ?? "UTC",
 			reset,
 			...(options.budgets ? { budgets: options.budgets } : {}),
+			...(channelDir ? { historyDir: CHANNEL_PATH } : {}),
 			tools: (options.tools ?? []).map(({ name, description, parameters }) => ({
 				name,
 				description,
@@ -72,6 +117,7 @@ export async function runSandboxTurn(
 				image: options.image,
 				runDir,
 				workspaceDir,
+				...(channelDir ? { channelDir } : {}),
 				uid: options.uid,
 				gid: options.gid,
 				...options.limits,

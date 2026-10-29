@@ -66,6 +66,7 @@ export function sandboxClaim(options: SandboxClaimOptions): ChannelClaim {
 								principalId: speaker.principalId,
 							},
 							text,
+							{ space: message.space },
 						);
 						await options.surfaces.sendReply(message.channel, {
 							chunks: splitReply(

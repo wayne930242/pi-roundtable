@@ -4,6 +4,7 @@ import {
 	mkdirSync,
 	mkdtempSync,
 	readFileSync,
+	realpathSync,
 	rmSync,
 	writeFileSync,
 } from "node:fs";
@@ -122,3 +123,88 @@ for (const override of [
 	test(`refuses unsafe container options ${JSON.stringify(override)}`, () =>
 		expect(() => containerRunArgs({ ...spec, ...override })).toThrow());
 }
+
+test("a channel directory adds a third read-write mount at /channel, and only then", () => {
+	const args = containerRunArgs({
+		...spec,
+		workspaceDir: "/srv/sandbox/work/guild-a",
+		channelDir: "/srv/sandbox/work/state-a",
+	});
+	expect(args.filter((arg) => arg.startsWith("type=bind,"))).toEqual([
+		"type=bind,src=/srv/sandbox/run/turn-a,dst=/broker,readonly,bind-propagation=rprivate",
+		"type=bind,src=/srv/sandbox/work/guild-a,dst=/workspace,bind-propagation=rprivate",
+		"type=bind,src=/srv/sandbox/work/state-a,dst=/channel,bind-propagation=rprivate",
+	]);
+	expect(
+		containerRunArgs(spec).filter((arg) => arg.startsWith("type=bind,")),
+	).toHaveLength(2);
+});
+
+for (const override of [
+	{ channelDir: spec.runDir },
+	{ channelDir: spec.workspaceDir },
+	{ channelDir: `${spec.workspaceDir}/state` },
+	{ channelDir: "/srv/sandbox" },
+	{ channelDir: "/" },
+	{ channelDir: "relative" },
+	{ channelDir: "/srv/sandbox/state,dst=/host" },
+	{ channelDir: `${spec.runDir}/channel` },
+]) {
+	test(`refuses an unsafe channel directory ${JSON.stringify(override)}`, () =>
+		expect(() => containerRunArgs({ ...spec, ...override })).toThrow());
+}
+
+test("the Docker driver resolves the channel directory like the others and reads an image's protocol label", async () => {
+	const root = mkdtempSync("/tmp/sb-driver-");
+	const log = join(root, "calls.jsonl");
+	const binary = join(root, "fake-docker");
+	writeFileSync(
+		binary,
+		`#!/usr/bin/env bun\nimport {appendFileSync} from "node:fs"; appendFileSync(${JSON.stringify(log)}, JSON.stringify(process.argv.slice(2))+"\\n"); if (process.argv[2] === "image") { const image = process.argv.at(-1); if (image === "missing:1") { process.stderr.write("No such image"); process.exit(1); } process.stdout.write(image === "labelled:1" ? "2\\n" : image === "odd:1" ? "two\\n" : "<no value>\\n"); } else if (process.argv[2] === "run") { await Bun.stdin.text(); process.stdout.write(JSON.stringify({ok:true,text:"done"})); }\n`,
+	);
+	chmodSync(binary, 0o700);
+	for (const name of ["run", "work", "state"]) mkdirSync(join(root, name));
+	try {
+		const driver = new DockerContainerDriver(binary);
+		expect(await driver.imageProtocol("labelled:1")).toBe(2);
+		expect(await driver.imageProtocol("old:1")).toBeUndefined();
+		expect(await driver.imageProtocol("odd:1")).toBeUndefined();
+		await expect(driver.imageProtocol("missing:1")).rejects.toThrow(
+			"missing:1",
+		);
+		const inspect = JSON.parse(readFileSync(log, "utf8").split("\n")[0] ?? "");
+		expect(inspect.slice(0, 2)).toEqual(["image", "inspect"]);
+		expect(inspect.join(" ")).toContain("pi-roundtable-sandbox.protocol");
+		await driver.run(
+			{
+				name: "sandbox-three",
+				image: "sandbox:fake",
+				runDir: join(root, "run"),
+				workspaceDir: join(root, "work"),
+				channelDir: join(root, "state"),
+				uid: 1000,
+				gid: 1000,
+			},
+			{
+				text: "hi",
+				speaker: { id: "g", name: "G" },
+				model: "fake",
+				prompt: "p",
+				timeZone: "UTC",
+				tools: [],
+				mcp: [],
+			},
+			new AbortController().signal,
+		);
+		const run = readFileSync(log, "utf8")
+			.trim()
+			.split("\n")
+			.map((line) => JSON.parse(line))
+			.find((line) => line[0] === "run");
+		expect(run.join(" ")).toContain(
+			`src=${realpathSync(join(root, "state"))},dst=/channel`,
+		);
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});

@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { userHistoryContent } from "../src/history.ts";
 import {
 	BUDGET_DEFAULTS,
 	isRecord,
@@ -15,6 +16,8 @@ import { unixBrokerRequest } from "./transport.ts";
 
 export interface WorkerOptions {
 	workspace?: string;
+	/** Where history lives when the turn names `historyDir`; production mounts it at `/channel`. */
+	historyDir?: string;
 	/** Replaceable in offline worker tests; production always uses the mounted Unix socket. */
 	broker?: (route: string, body: Record<string, unknown>) => Promise<unknown>;
 }
@@ -70,7 +73,13 @@ export async function runWorkerTurn(
 		turn.budgets?.requestBytes ?? BUDGET_DEFAULTS.requestBytes;
 	const callBroker = options.broker ?? brokerRequest;
 	const memory = new SandboxMemory(workspace);
-	const historyFile = join(workspace, "history.json");
+	// Memory stays in the workspace; history follows the turn's `historyDir`, one per channel.
+	const historyFile = join(
+		turn.historyDir === undefined
+			? workspace
+			: (options.historyDir ?? turn.historyDir),
+		"history.json",
+	);
 	let historyRaw: unknown = [];
 	if (!turn.reset && existsSync(historyFile)) {
 		try {
@@ -154,10 +163,7 @@ export async function runWorkerTurn(
 	);
 	const user: Message = {
 		role: "user",
-		content: promptText(
-			JSON.stringify({ speaker: turn.speaker, message: turn.text }),
-			48 * 1024,
-		),
+		content: promptText(userHistoryContent(turn.speaker, turn.text), 48 * 1024),
 	};
 	const currentUser: Record<string, unknown> = { ...user };
 	const modelTools = [...functions.values()].map(({ spec }) => ({

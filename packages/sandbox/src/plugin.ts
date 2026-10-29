@@ -34,7 +34,7 @@ export function sandbox(options: SandboxOptions) {
 	return definePlugin({
 		name: "sandbox",
 		provides: [SANDBOX],
-		setup: (context) => {
+		setup: async (context) => {
 			const runtime = new SandboxRuntime({
 				...options,
 				apiKey:
@@ -42,6 +42,7 @@ export function sandbox(options: SandboxOptions) {
 					(() => context.apiKey(options.provider ?? "openai")),
 				timeZone: context.env.timeZone,
 			});
+			await runtime.verifyImage();
 			if (!isAbsolute(options.stateFile))
 				throw new Error("stateFile must be absolute");
 			mkdirSync(dirname(options.stateFile), { recursive: true, mode: 0o700 });
