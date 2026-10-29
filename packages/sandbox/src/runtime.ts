@@ -17,6 +17,21 @@ export interface SandboxTurnContext {
 	space?: string;
 }
 
+/**
+ * A turn the runtime declined to run or ended before it ran: its workspace queue was full, or
+ * it was stopped while waiting. The caller answers it; it is not an infrastructure failure.
+ */
+export class SandboxTurnRefused extends Error {
+	constructor(readonly reason: "busy" | "stopped") {
+		super(
+			reason === "busy"
+				? "sandbox workspace is busy"
+				: "sandbox turn stopped while waiting for its workspace",
+		);
+		this.name = "SandboxTurnRefused";
+	}
+}
+
 /** Turns that may wait behind the running one in a server workspace. */
 const DEFAULT_MAX_WAITING = 4;
 
@@ -94,7 +109,7 @@ export class SandboxRuntime {
 			this.#options.workspace === "server" &&
 			queued > (this.#options.maxWaiting ?? DEFAULT_MAX_WAITING)
 		)
-			throw new Error("sandbox workspace is busy");
+			throw new SandboxTurnRefused("busy");
 		this.#queued.set(key, queued + 1);
 		const previous = this.#tails.get(key) ?? Promise.resolve();
 		const done = (async (): Promise<SandboxReply> => {
@@ -171,10 +186,7 @@ async function waitFor(
 		await Promise.race([
 			ahead,
 			new Promise<never>((_resolve, reject) => {
-				onAbort = () =>
-					reject(
-						new Error("sandbox turn stopped while waiting for its workspace"),
-					);
+				onAbort = () => reject(new SandboxTurnRefused("stopped"));
 				signal.addEventListener("abort", onAbort, { once: true });
 			}),
 		]);

@@ -147,6 +147,7 @@ export {
 	SandboxRuntime,
 	type SandboxRuntimeOptions,
 	type SandboxTurnContext,
+	SandboxTurnRefused,
 } from "./runtime.ts";
 export {
 	assertPublicUrl,

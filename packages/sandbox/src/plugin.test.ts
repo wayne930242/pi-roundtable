@@ -12,6 +12,7 @@ import { fakeDiscord, servicePair, testPlugin } from "pi-roundtable/testing";
 import { SandboxChannelStore } from "./channel-store.ts";
 import { sandboxClaim } from "./claim.ts";
 import { SANDBOX, sandbox } from "./plugin.ts";
+import { SandboxTurnRefused } from "./runtime.ts";
 
 /** Whom the host's access rules serve: Alice as a member, the owner as the owner; anyone else, no one. */
 const served = servicePair(IDENTITY, {
@@ -201,5 +202,54 @@ test("package plugin uses public API, contributes guarded commands, and sends no
 	} finally {
 		await harness.stop();
 		rmSync(root, { recursive: true, force: true });
+	}
+});
+
+test("a turn stopped or refused as busy while waiting is answered without an infra failure log; any other error is logged", async () => {
+	const failures: string[] = [];
+	const replies: string[] = [];
+	const errors: Error[] = [
+		new SandboxTurnRefused("stopped"),
+		new SandboxTurnRefused("busy"),
+		new Error("container cleanup failed"),
+	];
+	const plugin = definePlugin({
+		name: "claim-refusal",
+		setup: (context) => ({
+			channels: [
+				sandboxClaim({
+					channels: { has: (channel) => channel === "fake:guests" },
+					runtime: {
+						runTurn: async () => {
+							throw errors.shift();
+						},
+						stop: () => true,
+						startFresh: () => {},
+					},
+					surfaces: context.surfaces,
+					reportFailure: (channel) => failures.push(channel),
+				}),
+			],
+		}),
+	});
+	const harness = await testPlugin(plugin, {
+		services: [served],
+		surfaces: [
+			{
+				surface: "fake",
+				start: async () => {},
+				sendReply: async (_channel, reply) => {
+					replies.push(...reply.chunks);
+				},
+			},
+		],
+	});
+	try {
+		for (const id of ["a", "b", "c"])
+			await harness.conversations.handle({ ...message, messageId: id });
+		expect(replies).toHaveLength(3);
+		expect(failures).toEqual(["fake:guests"]);
+	} finally {
+		await harness.stop();
 	}
 });

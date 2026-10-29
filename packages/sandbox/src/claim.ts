@@ -6,7 +6,7 @@ import type {
 } from "pi-roundtable";
 import { splitReply } from "pi-roundtable/kit";
 import type { SandboxChannelStore } from "./channel-store.ts";
-import type { SandboxRuntime } from "./runtime.ts";
+import { type SandboxRuntime, SandboxTurnRefused } from "./runtime.ts";
 
 export interface SandboxClaimOptions {
 	/** `owns` adds channels in configured guilds; without it only `has` decides. */
@@ -73,8 +73,10 @@ export function sandboxClaim(options: SandboxClaimOptions): ChannelClaim {
 								reply.ok ? reply.text : "The sandbox turn failed.",
 							),
 						});
-					} catch {
-						options.reportFailure?.(message.channel);
+					} catch (error) {
+						// A stop or a full queue is the runtime working as designed, not a failure.
+						if (!(error instanceof SandboxTurnRefused))
+							options.reportFailure?.(message.channel);
 						await options.surfaces.sendReply(message.channel, {
 							chunks: ["The sandbox turn failed or was stopped."],
 						});
