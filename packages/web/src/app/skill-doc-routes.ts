@@ -64,14 +64,13 @@ export class SkillDocApi {
 				201,
 			);
 		}
+		// The tier is read before the name is looked up, so a person below the owner learns of no skill.
+		const speaker = await owner();
 		if (!this.#options.catalog().some((skill) => skill.name === name))
 			throw new HttpError(404, "There is no such skill.");
-		if (!action && method === "GET") {
-			await owner();
+		if (!action && method === "GET")
 			return json(viewOf(await skills.document(name)));
-		}
 		if (!action && method === "PUT") {
-			const speaker = await owner();
 			const body = await bodyOf(request, MAX_SKILL_BYTES);
 			const { text, baseHash } = body;
 			if (typeof text !== "string") throw bad("text must be text.");
@@ -108,7 +107,6 @@ export class SkillDocApi {
 			}
 		}
 		if (action === "history" && method === "GET" && parts.length === 4) {
-			await owner();
 			return json({
 				versions: (await skills.documentHistory(name)).map((version) => ({
 					id: version.id,

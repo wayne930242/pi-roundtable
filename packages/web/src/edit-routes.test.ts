@@ -365,6 +365,11 @@ function ownerOnly(label: string, write: Write) {
 		expect(((await asMember.json()) as ApiError).error).toBe(
 			"Only an owner may do this.",
 		);
+		// The tier answers before the target is looked up, so a member learns of no id or name.
+		const probed = await call(server, write.method, write.unknown, {
+			...(write.body !== undefined ? { body: write.body } : {}),
+		});
+		expect(probed.status).toBe(403);
 		who = { id: "owner", name: "Riley", tier: "owner" };
 		if (write.method !== "GET")
 			for (const origin of [null, "https://evil.example.test"]) {

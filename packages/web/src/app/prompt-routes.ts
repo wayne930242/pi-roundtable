@@ -126,14 +126,12 @@ export class PromptApi {
 					})),
 			} satisfies PromptsView);
 		}
+		// The tier is read before the id is looked up, so a person below the owner learns of no id.
+		const speaker = await owner();
 		const document = prompts.get(id);
 		if (!document) throw new HttpError(404, "There is no such prompt.");
-		if (!action && method === "GET") {
-			await owner();
-			return json(viewOf(document));
-		}
+		if (!action && method === "GET") return json(viewOf(document));
 		if (!action && method === "PUT") {
-			const speaker = await owner();
 			const body = await bodyOf(request, bodyLimit(document));
 			const { text, base } = body;
 			if (typeof text !== "string") throw bad("text must be text.");
@@ -144,7 +142,6 @@ export class PromptApi {
 			return changed(() => prompts.set(id, save.text, speaker.name, save.base));
 		}
 		if (action === "revert" && method === "POST" && parts.length === 4) {
-			const speaker = await owner();
 			const body = await bodyOf(request, bodyLimit(document));
 			if (typeof body.base !== "string")
 				throw bad("base must be the text the prompt was reverted from.");
@@ -152,7 +149,6 @@ export class PromptApi {
 			return changed(() => prompts.revert(id, speaker.name, revert.base));
 		}
 		if (action === "history" && method === "GET" && parts.length === 4) {
-			await owner();
 			return json({
 				versions: (await prompts.history(id)).map(promptVersionView),
 			} satisfies PromptHistoryView);
