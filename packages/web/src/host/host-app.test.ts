@@ -54,6 +54,9 @@ function verifier(request: Request): Verdict {
 const RUN = Math.random().toString(36).slice(2, 8);
 const ROOM_A_ID = `a${RUN}room`;
 const ROOM_B_ID = `b${RUN}room`;
+/** The agent of this run: its room, and every person's cursor in it, starts clean in the shared database. */
+const GUIDE = `guide${RUN}`;
+const AGENT_ROOM = `app:agent.${GUIDE}` as ChannelKey;
 const ROOM_A = `app:inbox.${ROOM_A_ID}` as ChannelKey;
 const ROOM_B = `app:inbox.${ROOM_B_ID}` as ChannelKey;
 
@@ -293,7 +296,7 @@ async function boot(): Promise<Booted> {
 			},
 			agents: [
 				{
-					name: "guide",
+					name: GUIDE,
 					displayName: "Guide",
 					prompt: "You guide.",
 					avatarPrompt: "A guide",
@@ -1102,7 +1105,7 @@ describeDb("the host rooms over a real host", () => {
 		const rooms = (await (await rest(app, "rooms", { who: "ada" })).json()) as {
 			rooms: { key: string; unread?: number }[];
 		};
-		const guide = rooms.rooms.find((room) => room.key === "app:agent.guide");
+		const guide = rooms.rooms.find((room) => room.key === AGENT_ROOM);
 		expect(guide).toBeDefined();
 		// A room a person never read starts at what it holds: the history is not unread.
 		expect(guide?.unread).toBeUndefined();
@@ -1110,7 +1113,7 @@ describeDb("the host rooms over a real host", () => {
 		sent.send({
 			type: "send",
 			id: "g1",
-			room: "app:agent.guide",
+			room: AGENT_ROOM,
 			text: "hello guide",
 		});
 		const answer = await sent.take(
@@ -1124,11 +1127,11 @@ describeDb("the host rooms over a real host", () => {
 			rooms: { key: string; unread?: number }[];
 		};
 		expect(
-			withUnread.rooms.find((room) => room.key === "app:agent.guide")?.unread,
+			withUnread.rooms.find((room) => room.key === AGENT_ROOM)?.unread,
 		).toBeGreaterThanOrEqual(1);
 		sent.send({
 			type: "read",
-			room: "app:agent.guide",
+			room: AGENT_ROOM,
 			upTo: answer.message.id,
 		});
 		await sent.take(ofType("read"));
@@ -1136,10 +1139,10 @@ describeDb("the host rooms over a real host", () => {
 			rooms: { key: string; unread?: number }[];
 		};
 		expect(
-			read.rooms.find((room) => room.key === "app:agent.guide")?.unread,
+			read.rooms.find((room) => room.key === AGENT_ROOM)?.unread,
 		).toBeUndefined();
 		const messages = (await (
-			await rest(app, "rooms/app%3Aagent.guide/messages?limit=5", {
+			await rest(app, `rooms/app%3Aagent.${GUIDE}/messages?limit=5`, {
 				who: "ada",
 			})
 		).json()) as {
@@ -1157,7 +1160,7 @@ describeDb("the host rooms over a real host", () => {
 		).toBe(false);
 		// A member has no agent rooms to read.
 		const mel = await Client.open(app, "mel");
-		mel.send({ type: "read", room: "app:agent.guide", upTo: 1 });
+		mel.send({ type: "read", room: AGENT_ROOM, upTo: 1 });
 		expect(await mel.take(ofType("refused"))).toMatchObject({
 			code: "unknown_room",
 		});
@@ -1318,7 +1321,7 @@ describeDb("the host rooms over a real host", () => {
 		ada.send({
 			type: "act",
 			id: "x1",
-			room: "app:agent.guide",
+			room: AGENT_ROOM,
 			action: "assign",
 		});
 		expect(await ada.take(ofType("refused"))).toMatchObject({
@@ -1327,7 +1330,7 @@ describeDb("the host rooms over a real host", () => {
 		});
 		ada.send({ type: "act", id: "x2", page: "nothing", action: "go" });
 		expect(await ada.take(ofType("refused"))).toMatchObject({ id: "x2" });
-		ada.send({ type: "subscribe", room: "app:agent.guide" });
+		ada.send({ type: "subscribe", room: AGENT_ROOM });
 		expect(await ada.take(ofType("refused"))).toMatchObject({
 			code: "unknown_room",
 		});
@@ -1486,7 +1489,7 @@ describeDb("the host rooms over a real host", () => {
 		expect(again).toBeUndefined();
 		// An agent room is one person's: no channel context.
 		const agent = await app.host.context.services.get(CHANNEL_CONTEXT).read({
-			channel: "app:agent.guide" as ChannelKey,
+			channel: AGENT_ROOM as ChannelKey,
 			messageId: "app-1",
 			authorId: "x",
 			authorName: "Ada",

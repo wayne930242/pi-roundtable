@@ -97,12 +97,29 @@ export class RoomReads {
 		const counts = new Map<string, number>();
 		if (rooms.length === 0) return counts;
 		const start = rooms.filter((room) => baseline.has(room));
-		if (start.length > 0)
+		if (start.length > 0) {
 			await this.#sql`
 				INSERT INTO web_room_reads (room, principal_id, last_read_id)
 				SELECT room, ${principalId}, max(id) FROM web_room_messages
 				WHERE room IN ${this.#sql(start)} GROUP BY room
 				ON CONFLICT (room, principal_id) DO NOTHING`;
+			// A room with nothing in it yet starts at the beginning, so what is first said there is unread.
+			const held: { room: string }[] = await this.#sql`
+				SELECT room FROM web_room_reads
+				WHERE principal_id = ${principalId} AND room IN ${this.#sql(start)}`;
+			const have = new Set(held.map((row) => row.room));
+			const empty = start
+				.filter((room) => !have.has(room))
+				.map((room) => ({
+					room,
+					principal_id: principalId,
+					last_read_id: 0,
+				}));
+			if (empty.length > 0)
+				await this.#sql`
+					INSERT INTO web_room_reads ${this.#sql(empty)}
+					ON CONFLICT (room, principal_id) DO NOTHING`;
+		}
 		const rows: { room: string; unread: string | number | bigint }[] =
 			await this.#sql`
 			SELECT m.room, count(*) AS unread

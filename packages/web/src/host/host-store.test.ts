@@ -236,6 +236,22 @@ describeDb("what the host rooms store", () => {
 		).toBe(1);
 	});
 
+	test("a baseline room with nothing in it yet starts at the beginning, so the first thing said there is unread", async () => {
+		const fresh = `${ELSEWHERE}-empty` as typeof ELSEWHERE;
+		const baseline = new Set([fresh]);
+		expect((await reads.unread("ada", [fresh], baseline)).has(fresh)).toBe(
+			false,
+		);
+		await log.appendOnce({
+			room: fresh,
+			kind: "agent",
+			author: "A",
+			text: "first",
+		});
+		// A second look at the room does not move the cursor on to the newest message.
+		expect((await reads.unread("ada", [fresh], baseline)).get(fresh)).toBe(1);
+	});
+
 	test("the reads of a room are everyone's cursors", async () => {
 		const marks = await reads.marks(OTHER);
 		expect(marks.map((mark) => mark.principalId)).toContain("ada");

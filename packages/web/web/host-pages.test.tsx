@@ -590,10 +590,13 @@ test("the list of a kind shows each room with its picture, what needs attention 
 		search?.dispatchEvent(new Event("input", { bubbles: true }));
 	});
 	// The search goes out once typing pauses; wait for it rather than for a fixed time.
-	for (let waited = 0; waited < 5000; waited += 50) {
+	// Each wait is inside `act`: React's scheduler may have been loaded under an earlier file's DOM, which is gone, so a state change outside `act` is never flushed.
+	for (let waited = 0; waited < 2000; waited += 50) {
 		if (fixture.requests.some((request) => request.url.includes("filter=dana")))
 			break;
-		await settle(50);
+		await page.act(async () => {
+			await settle(50);
+		});
 	}
 	expect(
 		fixture.requests.some((request) => request.url.includes("filter=dana")),
