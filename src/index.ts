@@ -333,6 +333,7 @@ export type {
 	AgentDirectory,
 	AgentServer,
 	AgentTeam,
+	AgentWorkspace,
 	AvatarStudio,
 	BackgroundTurns,
 	DelegationRequest,

@@ -23,8 +23,8 @@ export interface WorkspaceFile {
 	size: number;
 }
 
-/** Whether `child` is `parent` or inside it. */
-function within(parent: string, child: string): boolean {
+/** Whether `child` is `parent` or inside it, judged by the paths alone (resolve symlinks first). */
+export function within(parent: string, child: string): boolean {
 	const rel = relative(parent, child);
 	return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
 }

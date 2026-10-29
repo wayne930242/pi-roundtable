@@ -206,3 +206,4 @@ export {
 	runWorkerTask,
 	workTimeout,
 } from "./worker.ts";
+export { within } from "./workspace.ts";

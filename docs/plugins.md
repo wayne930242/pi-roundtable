@@ -238,7 +238,7 @@ The built-in plugins provide these, from the main entry:
 | `CONVERSATIONS` | `ConversationRegistry` | `conversations` | The conversations run through `context.turns`: `register`, `get(key)`, `list({ principal }?)`, `setTitle(key, title)`, and `adopt(key, principalId)` only for migrating a conversation recorded before 0.9; each a `ConversationRecord` of `key`, `surface`, `kind`, `visibility` (`"private"` or `"shared"`), `principalId?`, `title?`, `createdAt`, `lastActiveAt` |
 | `MODES` | `ConversationModes` | `modes` | Each conversation's modes, stored per key and kept across restarts: `peek(channel)` gives its `ConversationMode` (`yolo` and `longRunning`, both off by default; `changedBy?`, `changedAt?`) from memory, `set(channel, { yolo?, longRunning? }, speaker)` changes them and throws `PluginError` unless the speaker is an owner other than `SYSTEM_PRINCIPAL`, `onChange(listener)` hears each change, and `autoApproved(entry)` with `onAutoApproved(listener)` report a held call that yolo mode approved. See [Conversation modes](#conversation-modes-modes) |
 | `RUNTIME` | `AgentRuntime` | `runtime` | The runtime every conversation turn runs on, the agent server's and `context.turns`': the `runtime` slot's when a plugin fills it, Pi's otherwise |
-| `AGENTS` | `AgentServer` | `agent-server` | The `team` (`AgentTeam`), the read-only `directory` (`AgentDirectory`), the `runtime` every agent turn runs on (the same one `RUNTIME` provides), `approvals` (whether the owner's reply approves held actions), and `avatars` (`AvatarStudio`) |
+| `AGENTS` | `AgentServer` | `agent-server` | The `team` (`AgentTeam`), the read-only `directory` (`AgentDirectory`), the `runtime` every agent turn runs on (the same one `RUNTIME` provides), `approvals` (whether the owner's reply approves held actions), `avatars` (`AvatarStudio`), and `workspace` (`AgentWorkspace`: the agents' `workDir` and, when set, `scratchDir`) |
 | `SKILLS` | `SkillRegistry` | `skills` (an addon) | What agents carry: `carried`, `carriedNames`, `describeCarried`, `catalog`, `list`, `linkedFrom`, `checkRegistered`, `link`, `attach` |
 | `SCHEDULES` | `ScheduleStore` | `schedule-store` | The stored schedules: `create`, `createWithin`, `get`, `forChannel`, `all`, `update`, `remove`, `due`, `claim`, `recordStatus` |
 | `PRECHECKS` | `PrecheckRegistry` | `prechecks` | The host's named [prechecks](#prechecks-wake-a-schedule-only-when-it-has-work): `register`, `get`, `list`; and the runner of agents' precheck scripts: `useScriptRunner`, `scriptRunner` |
@@ -4058,6 +4058,7 @@ Import from the entries listed below; source area files are internal.
 | `AttachmentsConfig` | `pi-roundtable` | type |
 | `AutoApproval` | `pi-roundtable` | type |
 | `AvatarMode` | `pi-roundtable` | type |
+| `AgentWorkspace` | `pi-roundtable` | type |
 | `AvatarStudio` | `pi-roundtable` | type |
 | `characterOf` | `pi-roundtable` | value |
 | `BACKGROUND_TURNS` | `pi-roundtable` | value |
@@ -4519,6 +4520,7 @@ Import from the entries listed below; source area files are internal.
 | `toolText` | `pi-roundtable/kit` | value |
 | `withAttachmentsBlock` | `pi-roundtable/kit` | value |
 | `withReference` | `pi-roundtable/kit` | value |
+| `within` | `pi-roundtable/kit` | value |
 | `workTimeout` | `pi-roundtable/kit` | value |
 | `zonedStamp` | `pi-roundtable/kit` | value |
 | `AgentPanel` | `pi-roundtable/discord` | type |

@@ -312,6 +312,27 @@ describe("the agent server without Discord", () => {
 	});
 });
 
+describe("the agents' workspace", () => {
+	test("is the configured working directory, and the scratch dir when one is set", async () => {
+		const plainOptions = options();
+		const plain = await setUp(
+			agentServerPlugin(plainOptions, async () => stores),
+		);
+		expect(plain.services.get(AGENTS).workspace).toEqual({
+			workDir: plainOptions.workDir,
+		});
+		const scratchOptions = options();
+		const scratchDir = join(scratchOptions.workDir, "..", "scratch");
+		const scratch = await setUp(
+			agentServerPlugin({ ...scratchOptions, scratchDir }, async () => stores),
+		);
+		expect(scratch.services.get(AGENTS).workspace).toEqual({
+			workDir: scratchOptions.workDir,
+			scratchDir,
+		});
+	});
+});
+
 describe("the agents' pictures", () => {
 	test("are drawn only when a plugin fills the images slot, and the server publishes the studio", async () => {
 		const plain = await setUp(agentServerPlugin(options(), async () => stores));

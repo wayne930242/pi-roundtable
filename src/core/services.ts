@@ -158,6 +158,20 @@ export interface AgentServer {
 	};
 	/** Agents' pictures. */
 	avatars: AvatarStudio;
+	/** Where the agents' files are: the directories their shell and file tools run in. */
+	workspace: AgentWorkspace;
+}
+
+/**
+ * The directories the agents work in, as configured. Every agent shares them: the core has no
+ * workspace per agent. Read-only data, so a plugin that shows or serves the files can find them;
+ * the directories may not exist yet.
+ */
+export interface AgentWorkspace {
+	/** The shell's shared working directory (`config.workDir`), where agents write without a hold. */
+	readonly workDir: string;
+	/** The agents' scratch dir (TMPDIR), when the host sets one; writes there are unheld too. */
+	readonly scratchDir?: string;
 }
 
 /** Agent pictures: rendered from the agent's character, kept and served by content hash. */

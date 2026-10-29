@@ -151,6 +151,7 @@ const agents: AgentServer = {
 	},
 	approvals: { approves: async () => true },
 	avatars,
+	workspace: { workDir: "/work" },
 };
 
 test("objects that are not the built-in classes are what a plugin reads back for every port", async () => {

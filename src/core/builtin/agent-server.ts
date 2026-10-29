@@ -320,6 +320,12 @@ export function agentServerPlugin(
 				runtime: running,
 				approvals: confirmations,
 				avatars: studio,
+				workspace: {
+					workDir: options.workDir,
+					...(agentSessions.scratchDir
+						? { scratchDir: agentSessions.scratchDir }
+						: {}),
+				},
 			});
 			const attachmentDir = (channel: ChannelKey) =>
 				ownerAttachmentDir(options.dataDir, channel);
