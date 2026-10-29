@@ -1,8 +1,10 @@
 # Changelog
 
-## Unreleased
+## [Unreleased]
 
-Planned as 0.24.0. Every new option is optional; with none set, behavior, mounts, files on disk, the worker protocol and the public API are as in 0.23.x, and `PiSandboxRuntime` is unchanged.
+## [0.24.0] - 2026-10-29
+
+The core peer range is now `>=0.24.0 <0.25.0`. Every new option is optional; with none set, behavior, mounts, files on disk, the worker protocol and the public API are as in 0.23.x, and `PiSandboxRuntime` is unchanged.
 
 ### Added
 
