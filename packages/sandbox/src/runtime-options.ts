@@ -12,6 +12,7 @@ import {
 	containerRunArgs,
 	DockerContainerDriver,
 } from "./container-driver.ts";
+import { budgetsError, type SandboxBudgets } from "./protocol.ts";
 
 export interface SandboxRuntimeOptions {
 	image: string;
@@ -30,6 +31,15 @@ export interface SandboxRuntimeOptions {
 	gid?: number;
 	limits?: Pick<ContainerSpec, "memoryMb" | "cpus" | "pids">;
 	turnTimeoutMs?: number;
+	/**
+	 * Byte limits the worker enforces (see `SandboxBudgets`); each defaults to the worker's own:
+	 * 8,192 for the prompt, 4,096 for a tool result, 196,608 for a model request.
+	 */
+	budgets?: SandboxBudgets;
+	/** Broker calls (model and host tools together) one turn may make; default 48. */
+	maxCalls?: number;
+	/** Output tokens one model call may produce, thinking included; default 4,096. */
+	maxOutputTokens?: number;
 	driver?: ContainerDriver;
 	/** Offline tests only; production endpoints must use HTTPS. */
 	allowHttp?: boolean;
@@ -57,6 +67,11 @@ export function resolveSandboxRuntimeOptions(
 			options.turnTimeoutMs > 600_000)
 	)
 		throw new Error("turnTimeoutMs must be 1000 to 600000");
+	if (options.budgets !== undefined) {
+		const error = budgetsError(options.budgets);
+		if (error) throw new Error(error);
+	}
+	checkPromptBudget(options);
 	for (const root of [options.runRoot, options.workspaceRoot]) {
 		if (!isAbsolute(root) || root === "/")
 			throw new Error("sandbox roots must be absolute dedicated directories");
@@ -119,4 +134,23 @@ export function resolveSandboxRuntimeOptions(
 		},
 	});
 	return resolved;
+}
+
+/** The prompt's size as the worker measures it. */
+function promptSize(text: string): number {
+	return Buffer.byteLength(JSON.stringify(text));
+}
+
+/**
+ * Stops startup when an operator-set `promptBytes` is smaller than the prompt: the worker would
+ * cut it silently otherwise. Without that option the worker keeps its 8,192-byte cut as before.
+ */
+function checkPromptBudget(options: SandboxRuntimeOptions): void {
+	const limit = options.budgets?.promptBytes;
+	if (limit === undefined || options.prompt === undefined) return;
+	const size = promptSize(options.prompt);
+	if (size > limit)
+		throw new Error(
+			`prompt is ${size} bytes, over budgets.promptBytes ${limit}; shorten it or raise the budget`,
+		);
 }

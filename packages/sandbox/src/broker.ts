@@ -5,9 +5,11 @@ import { Readable } from "node:stream";
 import type { ChannelKey } from "pi-roundtable";
 import { modelInput } from "./model-input.ts";
 import {
+	BUDGET_DEFAULTS,
 	boundedText,
 	DUMMY_KEY,
 	isRecord,
+	TOOL_RESULT_WRAPPER_BYTES,
 	type ToolSpec,
 	validName,
 } from "./protocol.ts";
@@ -26,10 +28,19 @@ export interface SandboxSpeaker {
 	name: string;
 	principalId: string;
 }
-export interface HostToolContext {
+/** The turn a host tool or a broker serves, as the host fixed it. */
+export interface HostToolScope {
 	channel: ChannelKey;
 	speaker: SandboxSpeaker;
 	signal: AbortSignal;
+}
+export interface HostToolContext extends HostToolScope {
+	/**
+	 * How large the tool's result text may be before the worker cuts it, net of the broker's
+	 * `{"text":…}` wrapper, so a paging tool can fit its page. Measure a candidate with
+	 * `toolResultTextBytes` (newlines and quotes cost four bytes each, not two).
+	 */
+	resultBytes: number;
 }
 /**
  * Who a model call is made for; a credential hook can pick a token per channel, speaker or
@@ -54,7 +65,9 @@ export interface McpServer {
 	tools: ToolSpec[];
 }
 export interface BrokerOptions {
-	context: HostToolContext;
+	context: HostToolScope;
+	/** The worker's per-result cap (default 4,096); host tools are told what is left of it. */
+	toolResultBytes?: number;
 	model: string;
 	/** Fixed complete URL, not a guest-selected base URL. */
 	modelUrl: string;
@@ -221,6 +234,9 @@ export class SandboxBroker {
 				const result = await tool.run(body, {
 					...this.#options.context,
 					signal,
+					resultBytes:
+						(this.#options.toolResultBytes ?? BUDGET_DEFAULTS.toolResultBytes) -
+						TOOL_RESULT_WRAPPER_BYTES,
 				});
 				if (
 					typeof result !== "string" ||

@@ -17,6 +17,7 @@ export {
 	type BrokerOptions,
 	type HostTool,
 	type HostToolContext,
+	type HostToolScope,
 	type McpServer,
 	SandboxBroker,
 	type SandboxCredentialScope,
@@ -108,7 +109,15 @@ export {
 	precheckBroker,
 	precheckScriptRunner,
 } from "./precheck-runner.ts";
-export type { SandboxReply, SandboxTurn, ToolSpec } from "./protocol.ts";
+export {
+	BUDGET_DEFAULTS,
+	BUDGET_LIMITS,
+	type SandboxBudgets,
+	type SandboxReply,
+	type SandboxTurn,
+	type ToolSpec,
+	toolResultTextBytes,
+} from "./protocol.ts";
 export {
 	type ResearchTools,
 	type SandboxResearchOptions,

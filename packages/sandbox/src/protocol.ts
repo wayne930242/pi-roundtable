@@ -8,6 +8,64 @@ export interface ToolSpec {
 	parameters: Record<string, unknown>;
 }
 
+/**
+ * Byte budgets the sealed worker enforces, each measured as
+ * `Buffer.byteLength(JSON.stringify(text))`. An absent key means the worker's default.
+ */
+export interface SandboxBudgets {
+	/** The system prompt, including a skill index. */
+	promptBytes?: number;
+	/** One tool result, as the worker measures it after encoding. */
+	toolResultBytes?: number;
+	/** One model request; the oldest history and tool-call groups are dropped to fit. */
+	requestBytes?: number;
+}
+export const BUDGET_DEFAULTS = {
+	promptBytes: 8192,
+	toolResultBytes: 4096,
+	requestBytes: 196_608,
+} as const satisfies Required<SandboxBudgets>;
+export const BUDGET_LIMITS = {
+	promptBytes: { min: 256, max: 32_768 },
+	toolResultBytes: { min: 256, max: 32_768 },
+	requestBytes: { min: 4096, max: 196_608 },
+} as const;
+
+/** Why `value` is not a valid budgets object, or undefined when it is one. */
+export function budgetsError(value: unknown): string | undefined {
+	if (!isRecord(value)) return "budgets must be an object";
+	for (const name of Object.keys(value)) {
+		if (!(name in BUDGET_LIMITS)) return `unknown budget ${name}`;
+	}
+	for (const name of Object.keys(BUDGET_LIMITS) as (keyof SandboxBudgets)[]) {
+		const entry = value[name];
+		if (entry === undefined) continue;
+		const { min, max } = BUDGET_LIMITS[name];
+		if (
+			!Number.isSafeInteger(entry) ||
+			(entry as number) < min ||
+			(entry as number) > max
+		)
+			return `budgets.${name} must be an integer from ${min} to ${max}`;
+	}
+	return undefined;
+}
+
+/**
+ * What the broker's `{"text":…}` wrapper costs a host tool's result in the worker's measure:
+ * the wrapper is encoded twice, once into the broker's reply and once into the tool message.
+ */
+export const TOOL_RESULT_WRAPPER_BYTES = 17;
+
+/**
+ * The size of a host tool's result `text` in the worker's measure after the wrapper, to compare
+ * with `HostToolContext.resultBytes`: the bytes of its text encoded twice, so a newline or a
+ * quote costs four.
+ */
+export function toolResultTextBytes(text: string): number {
+	return Buffer.byteLength(JSON.stringify(JSON.stringify(text))) - 2;
+}
+
 export interface SandboxTurn {
 	text: string;
 	speaker: { id: string; name: string };
@@ -16,6 +74,8 @@ export interface SandboxTurn {
 	timeZone: string;
 	tools: ToolSpec[];
 	reset?: boolean;
+	/** Absent unless the operator set a budget; the worker then keeps its defaults. */
+	budgets?: SandboxBudgets;
 	mcp: { server: string; tools: ToolSpec[] }[];
 }
 
@@ -49,6 +109,8 @@ export function isSandboxTurn(value: unknown): value is SandboxTurn {
 		typeof value.prompt === "string" &&
 		typeof value.timeZone === "string" &&
 		(value.reset === undefined || typeof value.reset === "boolean") &&
+		(value.budgets === undefined ||
+			budgetsError(value.budgets) === undefined) &&
 		Array.isArray(value.tools) &&
 		value.tools.every(isToolSpec) &&
 		Array.isArray(value.mcp) &&
