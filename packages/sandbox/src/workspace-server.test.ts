@@ -210,6 +210,98 @@ test("a second turn for a channel with one running or waiting is still refused a
 	}
 });
 
+test("a server workspace queues at most maxWaiting turns behind the running one and refuses the rest as busy", async () => {
+	const g = gate();
+	const { root, runtime, seen } = setup(
+		{ workspace: "server", maxWaiting: 2 },
+		async () => {
+			await g.promise;
+			return { ok: true, text: "done" };
+		},
+	);
+	try {
+		const admitted = [1, 2, 3].map((id) =>
+			runtime.runTurn(`discord:${id}`, speaker, "q", { space: GUILD }),
+		);
+		await expect(
+			runtime.runTurn("discord:4", speaker, "q", { space: GUILD }),
+		).rejects.toThrow("busy");
+		// Another guild has its own queue.
+		const other = runtime.runTurn("discord:5", speaker, "q", { space: OTHER });
+		expect(runtime.busy().sort()).toEqual([
+			"discord:1",
+			"discord:2",
+			"discord:3",
+			"discord:5",
+		]);
+		g.open();
+		await Promise.all([...admitted, other]);
+		expect(seen).toHaveLength(4);
+		// The queue drains, so the refused channel can try again.
+		await expect(
+			runtime.runTurn("discord:4", speaker, "q", { space: GUILD }),
+		).resolves.toEqual({ ok: true, text: "done" });
+	} finally {
+		await runtime.dispose();
+		rmSync(root, { recursive: true, force: true });
+	}
+});
+
+test("maxWaiting defaults to 4 waiting turns and does not apply to the channel workspace mode", async () => {
+	const g = gate();
+	const server = setup({ workspace: "server" }, async () => {
+		await g.promise;
+		return { ok: true, text: "done" };
+	});
+	const channel = setup({}, async () => {
+		await g.promise;
+		return { ok: true, text: "done" };
+	});
+	try {
+		const turns = [1, 2, 3, 4, 5].map((id) =>
+			server.runtime.runTurn(`discord:${id}`, speaker, "q", { space: GUILD }),
+		);
+		await expect(
+			server.runtime.runTurn("discord:6", speaker, "q", { space: GUILD }),
+		).rejects.toThrow("busy");
+		const alone = [1, 2, 3, 4, 5, 6, 7].map((id) =>
+			channel.runtime.runTurn(`discord:${id}`, speaker, "q", { space: GUILD }),
+		);
+		g.open();
+		await Promise.all([...turns, ...alone]);
+	} finally {
+		await server.runtime.dispose();
+		await channel.runtime.dispose();
+		rmSync(server.root, { recursive: true, force: true });
+		rmSync(channel.root, { recursive: true, force: true });
+	}
+});
+
+test.each([[-1], [1.5], [101]])(
+	"maxWaiting %p is refused at startup",
+	(maxWaiting) => {
+		const root = mkdtempSync("/tmp/sb-server-");
+		try {
+			expect(
+				() =>
+					new SandboxRuntime({
+						image: "sandbox:fake",
+						runRoot: join(root, "run"),
+						workspaceRoot: join(root, "work"),
+						model: "fake",
+						modelUrl: "https://models.example/chat",
+						apiKey: () => "host-key",
+						driver: { run: async () => ({ ok: true, text: "done" }) },
+						workspace: "server",
+						maxWaiting,
+					}),
+			).toThrow("maxWaiting");
+		} finally {
+			rmSync(root, { recursive: true, force: true });
+		}
+	},
+);
+
 test("the turn timeout starts when a turn begins running, not while it waits", async () => {
 	const { root, runtime } = setup(
 		{ workspace: "server", turnTimeoutMs: 1000 },

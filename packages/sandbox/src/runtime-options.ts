@@ -68,6 +68,12 @@ export interface SandboxRuntimeOptions {
 	 * directory, bad frontmatter, two skills of one name, or a host tool named `read_skill`.
 	 */
 	skills?: readonly string[];
+	/**
+	 * With `workspace: "server"`, the most turns that may wait behind the running one in one
+	 * guild's queue; a turn past it is refused as busy, not queued. An integer from 0 to 100,
+	 * default 4. Without a server workspace a channel never has a second turn, so it is unused.
+	 */
+	maxWaiting?: number;
 	/** Broker calls (model and host tools together) one turn may make; default 48. */
 	maxCalls?: number;
 	/** Output tokens one model call may produce, thinking included; default 4,096. */
@@ -105,6 +111,13 @@ export function resolveSandboxRuntimeOptions(
 		options.workspace !== "server"
 	)
 		throw new Error('workspace must be "channel" or "server"');
+	if (
+		options.maxWaiting !== undefined &&
+		(!Number.isSafeInteger(options.maxWaiting) ||
+			options.maxWaiting < 0 ||
+			options.maxWaiting > 100)
+	)
+		throw new Error("maxWaiting must be an integer from 0 to 100");
 	if (options.budgets !== undefined) {
 		const error = budgetsError(options.budgets);
 		if (error) throw new Error(error);

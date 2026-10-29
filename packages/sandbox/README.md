@@ -129,6 +129,7 @@ Switching from `"channel"` to `"server"` migrates nothing: the old per-channel w
 Turns that share a workspace run one at a time, in arrival order, in a queue inside the runtime keyed by workspace.
 The turn timeout starts when a turn begins running, not while it waits; `stop` cancels a waiting turn as well as a running one; `busy()` lists both; the typing indicator shows while a turn waits.
 A second turn for the same channel still cannot start while one is running or waiting.
+At most `maxWaiting` turns (default 4, 0 to 100) wait behind the running one in a guild's queue; one past that is refused as busy and not queued, so one guest mentioning the bot in many channels or threads cannot hold the guild's workspace for N turns of the turn timeout.
 `SandboxRuntime.runTurn(channel, speaker, text, { space })` takes the guild as an optional fourth argument; callers that omit it get the per-channel workspace.
 
 ### `files`
@@ -296,7 +297,7 @@ A short second removal covers the local create/attach race.
 An unresponsive daemon or delayed create request may still leave a stopped orphan; treat daemon failures and host crashes as an operator cleanup condition.
 Containers use `--log-driver none` to avoid unbounded daemon log files and `--pull never` to run only the image the operator already built.
 Channel keys are hashed for workspace names and are not interpreted as paths.
-The channel queue prevents overlapping turns; other channels run independently, except that channels sharing a `"server"` workspace take turns.
+The channel queue prevents overlapping turns; other channels run independently, except that channels sharing a `"server"` workspace take turns, with at most `maxWaiting` (default 4) waiting behind the running one, so a guest cannot queue a guild behind N × the turn timeout.
 
 The broker accepts only POSTs to `/model`, explicitly listed `/tools/<name>`, and explicitly listed `/mcp/<server>`.
 Queries, extra path segments, unknown routes, hop headers, cookies, proxy headers, forwarded headers, unknown headers and non-dummy caller credentials are refused.

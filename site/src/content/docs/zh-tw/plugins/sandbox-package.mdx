@@ -73,7 +73,7 @@ Schema 是給模型看的提示，host 不會用它驗證輸入。
 | 選項 | 能力 |
 | --- | --- |
 | `guilds` | Discord guild id；該 guild 的每個頻道和討論串（含之後新建的）都是 sandbox 頻道，不必執行 `/roundtable sandbox on`。私訊和其他 guild 不受影響，該 guild 內 `/roundtable sandbox off` 會被拒絕。 |
-| `workspace: "server"` | Protocol 2。同一個 guild 的頻道共用一個 workspace（記憶筆記和檔案）；每個頻道的對話歷史放在自己的 state 目錄，掛載到 `/channel`。共用 workspace 的 turn 一次跑一個。預設 `"channel"`：每個頻道各自一個 workspace。 |
+| `workspace: "server"` | Protocol 2。同一個 guild 的頻道共用一個 workspace（記憶筆記和檔案）；每個頻道的對話歷史放在自己的 state 目錄，掛載到 `/channel`。共用 workspace 的 turn 一次跑一個，最多 `maxWaiting`（預設 4）個排隊等候，超過的直接以 busy 拒絕。預設 `"channel"`：每個頻道各自一個 workspace。 |
 | `files` | Protocol 2。在 workspace 的 `files/` 內提供 `files_list`、`files_read`、`files_write`、`files_delete`；`true` 表示每檔 256 KiB、全部 32 MiB。路徑任一段是 symlink 都會被拒絕。 |
 | `skills` | Protocol 2。放 skill 資料夾的目錄；system prompt 結尾附 skill 索引，`host_read_skill` 由 host 分頁讀取 skill 檔案。 |
 | `budgets` | Protocol 2。`promptBytes`（8,192，上限 32,768；prompt 加 skill 索引，超過會讓啟動停下）、`toolResultBytes`（4,096，上限 32,768）、`requestBytes`（196,608，上限 196,608）。若 `requestBytes` 容不下 prompt 預算加 8,192 bytes 的記憶筆記、49,152 bytes 的當前訊息與 8 KiB 的 tool 結果空間，啟動會停下；裁剪不會丟掉最新一組 tool call，放不下時改把該組的每個結果裁成均分的份額。host tool 會收到 `context.resultBytes`。 |

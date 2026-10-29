@@ -17,6 +17,9 @@ export interface SandboxTurnContext {
 	space?: string;
 }
 
+/** Turns that may wait behind the running one in a server workspace. */
+const DEFAULT_MAX_WAITING = 4;
+
 interface ActiveTurn {
 	controller: AbortController;
 	/** Settles with the turn; rejects if it was stopped while waiting for its workspace. */
@@ -30,6 +33,8 @@ export class SandboxRuntime {
 	readonly #active = new Map<ChannelKey, ActiveTurn>();
 	/** Per workspace, settles when the last turn queued on it has ended or been cancelled. */
 	readonly #tails = new Map<string, Promise<void>>();
+	/** Per workspace, the turns running or waiting on it. */
+	readonly #queued = new Map<string, number>();
 	readonly #fresh = new Map<ChannelKey, number>();
 	#closed = false;
 
@@ -82,6 +87,15 @@ export class SandboxRuntime {
 			principalId: speaker.principalId,
 		};
 		const key = workspaceKey(this.#options, channel, context.space);
+		// One turn runs and `maxWaiting` wait; a guest mentioning the bot in many channels or
+		// threads must not stall the guild for the whole queue, so the rest is refused.
+		const queued = this.#queued.get(key) ?? 0;
+		if (
+			this.#options.workspace === "server" &&
+			queued > (this.#options.maxWaiting ?? DEFAULT_MAX_WAITING)
+		)
+			throw new Error("sandbox workspace is busy");
+		this.#queued.set(key, queued + 1);
 		const previous = this.#tails.get(key) ?? Promise.resolve();
 		const done = (async (): Promise<SandboxReply> => {
 			await waitFor(previous, controller.signal);
@@ -111,6 +125,9 @@ export class SandboxRuntime {
 		})().finally(() => {
 			controller.abort();
 			this.#active.delete(channel);
+			const left = (this.#queued.get(key) ?? 1) - 1;
+			if (left > 0) this.#queued.set(key, left);
+			else this.#queued.delete(key);
 		});
 		// The next turn on this workspace starts after the one ahead of this has ended, even
 		// when this one is cancelled before it began.
