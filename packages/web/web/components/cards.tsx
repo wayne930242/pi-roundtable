@@ -10,8 +10,8 @@ import type {
 import { useRoomAccent } from "../lib/characters.ts";
 import { when } from "../lib/format.ts";
 import { useLook } from "../lib/look.ts";
-import { cardMenu } from "../lib/menu-items.ts";
 import { useMenuPress } from "../lib/menu-press.ts";
+import { cardMenuOf } from "../lib/menus.ts";
 import { translate as t, wording } from "../lib/messages.ts";
 import type { CardState } from "../lib/rooms.ts";
 import { useConnection } from "../lib/socket.ts";
@@ -137,7 +137,7 @@ function Shell(props: {
 		card.outcome === "approved";
 	// Whether the card was approved already when this one mounted (a room entered again, a pane switched back to).
 	const approvedOnMount = useRef(card.outcome === "approved");
-	const press = useMenuPress(() => cardMenu(card.frame));
+	const press = useMenuPress(() => cardMenuOf(card.frame));
 	return (
 		<article
 			{...press}

@@ -8,13 +8,11 @@ import {
 	useState,
 } from "react";
 import type { ConfigView, PaneName } from "../src/api-types.ts";
-import { ActionMenuHost } from "./components/action-menu.tsx";
 import { ErrorBoundary } from "./components/boundary.tsx";
 import { BrandMark } from "./components/brand-mark.tsx";
 import { ConnectionGate } from "./components/connection-gate.tsx";
 import { Icon, type IconName } from "./components/icons.tsx";
 import { Palette } from "./components/palette.tsx";
-import { RoomConfirmHost } from "./components/room-confirms.tsx";
 import { Failure, Loading } from "./components/states.tsx";
 import { Toaster } from "./components/toaster.tsx";
 import { api, messageOf } from "./lib/api.ts";
@@ -39,6 +37,17 @@ import { SchedulesPage } from "./pages/schedules.tsx";
 import { SettingsPage } from "./pages/settings.tsx";
 
 // The older panes are read less often than the rooms, so they load when first opened.
+// The menus' drawing loads once the page has: a long press is never the first thing a person does.
+const ActionMenuHost = lazy(() =>
+	import("./components/action-menu.tsx").then((m) => ({
+		default: m.ActionMenuHost,
+	})),
+);
+const RoomConfirmHost = lazy(() =>
+	import("./components/room-confirms.tsx").then((m) => ({
+		default: m.RoomConfirmHost,
+	})),
+);
 const OverviewPage = lazy(() =>
 	import("./pages/overview.tsx").then((m) => ({ default: m.OverviewPage })),
 );
@@ -457,10 +466,10 @@ function Console({ config }: { config: ConfigView }) {
 			</div>
 			<Toaster />
 			{hasApp ? (
-				<>
+				<Suspense fallback={null}>
 					<ActionMenuHost />
 					<RoomConfirmHost />
-				</>
+				</Suspense>
 			) : null}
 			{hasApp ? (
 				<Palette

@@ -114,7 +114,8 @@ afterEach(async () => {
 
 const rightClick = (target: Element | null) => {
 	if (!target) throw new Error("nothing to click");
-	return page.act(() => {
+	// The menu's builders load on demand, so the menu is there a moment after the click.
+	return page.act(async () => {
 		target.dispatchEvent(
 			new MouseEvent("contextmenu", {
 				bubbles: true,
@@ -123,6 +124,7 @@ const rightClick = (target: Element | null) => {
 				clientY: 80,
 			}),
 		);
+		await settle(30);
 	});
 };
 const menuItems = (): HTMLElement[] => [

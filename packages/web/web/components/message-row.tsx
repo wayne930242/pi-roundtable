@@ -4,8 +4,8 @@ import type { RoomFile, RoomMessage } from "../../src/api-types.ts";
 import { store, useSelector } from "../lib/app-store.ts";
 import { ConfigContext } from "../lib/config.ts";
 import { clock } from "../lib/format.ts";
-import { avatarMenu, fileMenu, messageMenu } from "../lib/menu-items.ts";
 import { useMenuPress } from "../lib/menu-press.ts";
+import { avatarMenuOf, fileMenuOf, messageMenuOf } from "../lib/menus.ts";
 import { translate as t } from "../lib/messages.ts";
 import type { PendingSend } from "../lib/rooms.ts";
 import { fileUrl } from "../lib/rooms.ts";
@@ -34,7 +34,7 @@ export function systemLine(text: string): {
 
 /** A file of a message: a picture that opens, or a chip that downloads; a long press offers both ways to keep it. */
 function FileItem({ file }: { file: RoomFile }) {
-	const press = useMenuPress(() => fileMenu(file));
+	const press = useMenuPress(() => fileMenuOf(file));
 	return file.type.startsWith("image/") ? (
 		<li>
 			<a
@@ -94,12 +94,12 @@ export const MessageRow = memo(function MessageRow(props: {
 	const { message } = props;
 	const surface = useContext(ConfigContext)?.app?.surface;
 	const press = useMenuPress(
-		(source) => messageMenu(message, source, props.quotable),
+		(source) => messageMenuOf(message, source, props.quotable),
 		{ selectable: true },
 	);
 	const agent = message.agent;
 	const avatarPress = useMenuPress(() =>
-		agent ? avatarMenu(agent, message.author) : undefined,
+		agent ? avatarMenuOf(agent, message.author) : Promise.resolve(undefined),
 	);
 	if (message.kind === "system") {
 		const line = systemLine(message.text);

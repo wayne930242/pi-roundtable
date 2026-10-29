@@ -12,8 +12,8 @@ import { useSelector } from "../lib/app-store.ts";
 import { useAccentStyle } from "../lib/characters.ts";
 import { fuzzyScore } from "../lib/fuzzy.ts";
 import { composingKey } from "../lib/ime.ts";
-import { roomMenu } from "../lib/menu-items.ts";
 import { useMenuPress } from "../lib/menu-press.ts";
+import { roomMenuOf } from "../lib/menus.ts";
 import { plural, translate as t } from "../lib/messages.ts";
 import { switcherOrder, waitingCards } from "../lib/rooms.ts";
 import { hrefFor, navigate } from "../lib/router.ts";
@@ -230,7 +230,7 @@ function Row(props: {
 	const waiting = useSelector((state) => waitingCards(state, key));
 	const view = room?.view;
 	const accent = useAccentStyle(view?.character);
-	const press = useMenuPress(() => roomMenu(key, props.onLeave));
+	const press = useMenuPress(() => roomMenuOf(key, props.onLeave));
 	if (!view) return null;
 	return (
 		<li>
