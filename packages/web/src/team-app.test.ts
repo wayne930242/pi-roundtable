@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SQL } from "bun";
-import { type ActorFacts, AGENTS, SKILLS } from "pi-roundtable";
+import { type ActorFacts, AGENTS, LOCAL_TEAM_ID, SKILLS } from "pi-roundtable";
 import {
 	describeDb,
 	type TestHost,
@@ -27,8 +27,6 @@ import { webConsole } from "./web-plugin.ts";
 const ORIGIN = "https://app.example.test";
 const ADA_DISCORD = "100000000000000051";
 const MEL_DISCORD = "200000000000000052";
-const GUILD = "900000000000000751";
-const ENTRY_CHANNEL = "900000000000000752";
 const ADA: ActorFacts = {
 	provider: "discord",
 	subject: ADA_DISCORD,
@@ -58,10 +56,12 @@ async function boot(): Promise<Booted> {
 	const socket = join(dataDir, "public.sock");
 	const assets = mkdtempSync(join(tmpdir(), "team-app-page-"));
 	writeFileSync(join(assets, "index.html"), "<html>app</html>");
+	// A host without Discord: the agents live in rooms, as in the app. The stand-in Discord a
+	// test host would boot hands the team channels that make none.
 	const host = await testHost({
+		discord: false,
 		config: {
 			dataDir,
-			discord: { token: "token", guild: GUILD, entryChannel: ENTRY_CHANNEL },
 			http: { publicUrl: "https://bot.example.com", socketPath: socket },
 			access: {
 				owners: [
@@ -79,7 +79,6 @@ async function boot(): Promise<Booted> {
 					displayName: "Guide",
 					prompt: "You guide.",
 					avatarPrompt: "A guide",
-					channelId: ENTRY_CHANNEL,
 				},
 				{
 					name: "scout",
@@ -155,13 +154,47 @@ const roomKeys = async (app: Booted): Promise<string[]> =>
 		(room) => room.key,
 	);
 
+const MADE_AGENTS = ["notes", "ghost"];
+const MADE_GROUPS = ["duo"];
+
+/**
+ * Removes what the tests below make in the host's local team, so the suite runs again on the
+ * same database: a name they create is permanent, and a leftover one is refused as taken. A
+ * database that has not been migrated by this app yet holds nothing to remove.
+ */
+async function forgetMadeRows(): Promise<void> {
+	const sql = new SQL(testDatabaseUrl, { max: 1 });
+	try {
+		const [found] = await sql`
+			SELECT to_regclass('web_threads') IS NOT NULL AS present`;
+		if (!found?.present) return;
+		const rooms = [
+			...MADE_AGENTS.map((name) => `app:agent.${name}`),
+			...MADE_GROUPS.map((name) => `app:group.${name}`),
+		];
+		const threads = sql`SELECT id FROM web_threads WHERE parent IN ${sql(rooms)}`;
+		await sql`DELETE FROM web_room_messages WHERE room IN ${sql(rooms)} OR room IN (SELECT 'app:' || id FROM (${threads}) AS t)`;
+		await sql`DELETE FROM web_room_cards WHERE room IN ${sql(rooms)}`;
+		await sql`DELETE FROM web_threads WHERE parent IN ${sql(rooms)}`;
+		await sql`DELETE FROM agent_skills WHERE guild_id = ${LOCAL_TEAM_ID} AND agent IN ${sql(MADE_AGENTS)}`;
+		await sql`DELETE FROM agent_group_cursors WHERE guild_id = ${LOCAL_TEAM_ID} AND (agent_name IN ${sql(MADE_AGENTS)} OR group_name IN ${sql(MADE_GROUPS)})`;
+		await sql`DELETE FROM agent_group_messages WHERE guild_id = ${LOCAL_TEAM_ID} AND group_name IN ${sql(MADE_GROUPS)}`;
+		await sql`DELETE FROM agent_groups WHERE guild_id = ${LOCAL_TEAM_ID} AND name IN ${sql(MADE_GROUPS)}`;
+		await sql`DELETE FROM agents WHERE guild_id = ${LOCAL_TEAM_ID} AND name IN ${sql(MADE_AGENTS)}`;
+	} finally {
+		await sql.close();
+	}
+}
+
 describeDb("making, archiving and grouping agents over a real host", () => {
 	let app: Booted;
 	beforeAll(async () => {
+		await forgetMadeRows();
 		app = await boot();
 	}, 30_000);
 	afterAll(async () => {
 		await app.stop();
+		await forgetMadeRows();
 	});
 
 	test("an owner makes an agent through the agent server, and its room appears; a member cannot", async () => {
