@@ -67,6 +67,20 @@ describeDb("the room list's layout in the database", () => {
 		]);
 	});
 
+	test("the foreign key drops a folder's rooms with the folder and refuses a room in none", async () => {
+		await layout.change(folderIn("Work"));
+		await layout.change((view) => placeRoom(view, A, "folder.Work", null));
+		await layout.change((view) => placeRoom(view, B, "folder.Work", null));
+		// Deleting the row itself, not through `write`, which empties the rooms first: the schema does it.
+		await sql`DELETE FROM web_room_folders WHERE id = ${"folder.Work"}`;
+		const left: unknown[] = await sql`SELECT 1 FROM web_room_folder_rooms`;
+		expect(left).toEqual([]);
+		await expect(
+			sql`INSERT INTO web_room_folder_rooms (room, folder, position)
+				VALUES (${A}, ${"folder.nobody"}, 0)`,
+		).rejects.toThrow();
+	});
+
 	test("a fresh store is an empty layout", async () => {
 		expect(await layout.view()).toEqual({ pins: [], folders: [] });
 	});

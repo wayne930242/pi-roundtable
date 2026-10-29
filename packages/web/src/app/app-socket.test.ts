@@ -1928,6 +1928,66 @@ describeDb("the room list's layout over a real host", () => {
 		).toEqual(before.folders);
 	});
 
+	test("a folder is renamed, moved and deleted over the real routes, a thread is not placed, and a refused edit changes nothing", async () => {
+		const made = async (name: string) => {
+			const answer = await write("folders", "POST", { name });
+			expect(answer.status).toBe(201);
+			const folders = ((await answer.json()) as RoomsView).folders;
+			return folders[folders.length - 1]?.id as string;
+		};
+		const one = await made("One");
+		const two = await made("Two");
+		const named = (view: RoomsView) => view.folders.map((one) => one.name);
+		const listed = async () =>
+			(await (await rest(app, "rooms")).json()) as RoomsView;
+
+		const renamed = await write(`folders/${one}`, "PATCH", { name: "First" });
+		expect(renamed.status).toBe(200);
+		expect(named((await renamed.json()) as RoomsView)).toContain("First");
+		// Before the other folder: Two leads.
+		const moved = await write(`folders/${two}`, "PATCH", { before: one });
+		expect(moved.status).toBe(200);
+		const order = named(await listed());
+		expect(order.indexOf("Two")).toBeLessThan(order.indexOf("First"));
+
+		// A name another folder has is refused, and nothing is stored.
+		const before = await listed();
+		const clash = await write(`folders/${one}`, "PATCH", { name: "two" });
+		expect(clash.status).toBe(409);
+		expect((await listed()).folders).toEqual(before.folders);
+
+		// A thread stays under its room: it can be neither pinned nor filed.
+		const threads = app.host.context.services.get(THREADS);
+		const thread = await threads.open(GUIDE, "Layout thread");
+		if (!thread) throw new Error("the thread was not opened");
+		for (const [action, body] of [
+			["pin", { pinned: true }],
+			["folder", { folder: one }],
+		] as const) {
+			const refused = await write(
+				`rooms/${encodeURIComponent(thread.channel)}/${action}`,
+				"PUT",
+				body,
+			);
+			expect(refused.status).toBe(400);
+		}
+		await thread.close();
+
+		// A room in a folder leaves with it: it is unplaced, not deleted.
+		await write(`rooms/${encodeURIComponent(SCOUT)}/folder`, "PUT", {
+			folder: one,
+		});
+		const deleted = await write(`folders/${one}`, "DELETE");
+		expect(deleted.status).toBe(200);
+		const after = await listed();
+		expect(after.folders.some((folder) => folder.id === one)).toBe(false);
+		expect(after.folders.flatMap((folder) => folder.rooms)).not.toContain(
+			SCOUT,
+		);
+		expect((await write(`folders/${one}`, "DELETE")).status).toBe(404);
+		await write(`folders/${two}`, "DELETE");
+	});
+
 	test("a room of another surface, and a deleted agent's key, are not placed", async () => {
 		const other = await write(
 			`rooms/${encodeURIComponent("discord:123")}/pin`,
