@@ -961,6 +961,8 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"There is no such prompt.": "沒有這份提示詞。",
 	"base must be the text the prompt was edited from.":
 		"base 必須是編輯所依據的提示詞文字。",
+	"base must be the text the prompt was reverted from.":
+		"base 必須是還原所依據的提示詞文字。",
 	"This prompt changed while you were editing it.":
 		"這份提示詞在你編輯時被更動了。",
 	"baseHash must be the hash the skill was read with.":
