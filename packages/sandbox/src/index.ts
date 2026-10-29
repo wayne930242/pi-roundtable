@@ -23,6 +23,7 @@ export {
 	type SandboxCredentialScope,
 	type SandboxSpeaker,
 } from "./broker.ts";
+export type { SandboxChannelContext } from "./channel-context.ts";
 export { SandboxChannelStore } from "./channel-store.ts";
 export {
 	isSandboxAddress,

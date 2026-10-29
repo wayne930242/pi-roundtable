@@ -5,6 +5,11 @@ import type {
 	SurfacePort,
 } from "pi-roundtable";
 import { splitReply } from "pi-roundtable/kit";
+import {
+	type ReadChannelContext,
+	readsChannelContext,
+	withSandboxChannelContext,
+} from "./channel-context.ts";
 import type { SandboxChannelStore } from "./channel-store.ts";
 import { type SandboxRuntime, SandboxTurnRefused } from "./runtime.ts";
 
@@ -27,6 +32,14 @@ export interface SandboxClaimOptions {
 	/** Told of a failed turn, with what failed (a sandbox error, or replyText's own throw). */
 	reportFailure?: (channel: ChannelKey, error: unknown) => void;
 	replyText?: SandboxReplyText;
+	/**
+	 * Reads the context of the channel a message was posted in; set to opt in. It is called only for
+	 * a Discord server message, with that message, and what it returns goes before the message in
+	 * the turn's text as untrusted public text.
+	 */
+	channelContext?: ReadChannelContext;
+	/** Told when the channel context could not be read; the turn then runs without it. */
+	reportContextFailure?: (channel: ChannelKey, error: unknown) => void;
 }
 
 export function isSandboxAddress(message: InboundMessage): boolean {
@@ -36,6 +49,23 @@ export function isSandboxAddress(message: InboundMessage): boolean {
 		!message.isDirect &&
 		(message.mentionsBot || message.repliesToBot)
 	);
+}
+
+async function contextualText(
+	options: Pick<SandboxClaimOptions, "channelContext" | "reportContextFailure">,
+	message: InboundMessage,
+	body: string,
+): Promise<string> {
+	if (!options.channelContext || !readsChannelContext(message)) return body;
+	try {
+		return withSandboxChannelContext(
+			body,
+			await options.channelContext(message),
+		);
+	} catch (error) {
+		options.reportContextFailure?.(message.channel, error);
+		return body;
+	}
 }
 
 async function rewriteReply(
@@ -84,7 +114,11 @@ export function sandboxClaim(options: SandboxClaimOptions): ChannelClaim {
 					if (!admits(message)) return;
 					const stopTyping = options.surfaces.startTyping(message.channel);
 					try {
-						const text = `${message.reference?.text ? `Quoted message (untrusted): ${message.reference.text}\n\n` : ""}${message.text}${message.attachments.length ? "\n[Attachments are not supported in this sandbox.]" : ""}`;
+						const text = await contextualText(
+							options,
+							message,
+							`${message.reference?.text ? `Quoted message (untrusted): ${message.reference.text}\n\n` : ""}${message.text}${message.attachments.length ? "\n[Attachments are not supported in this sandbox.]" : ""}`,
+						);
 						const reply = await options.runtime.runTurn(
 							message.channel,
 							{

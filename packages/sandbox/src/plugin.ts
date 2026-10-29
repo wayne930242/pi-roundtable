@@ -2,6 +2,10 @@ import { mkdirSync, realpathSync } from "node:fs";
 import { dirname, isAbsolute, resolve } from "node:path";
 import { type ChannelKey, definePlugin, serviceKey } from "pi-roundtable";
 import { DISCORD } from "pi-roundtable/discord";
+import {
+	resolveChannelContextOptions,
+	type SandboxChannelContext,
+} from "./channel-context.ts";
 import { SandboxChannelStore } from "./channel-store.ts";
 import { type SandboxReplyText, sandboxClaim } from "./claim.ts";
 import { sandboxCommands } from "./commands.ts";
@@ -29,6 +33,14 @@ export interface SandboxOptions
 	 * fails the turn.
 	 */
 	replyText?: SandboxReplyText;
+	/**
+	 * Off by default. On, a turn in a Discord server channel starts with what others said in that
+	 * channel since the assistant last posted, read through the Discord plugin's `channelContext`
+	 * (`true` for its defaults, or its `ChannelContextOptions`; images are never read). The text is
+	 * framed as untrusted public text and cut, oldest first, to fit the turn; a failed read runs the
+	 * turn without it. Needs the Discord plugin. Host-only: no worker or image change.
+	 */
+	channelContext?: SandboxChannelContext;
 }
 export interface SandboxService {
 	channels: SandboxChannelStore;
@@ -41,6 +53,13 @@ export function sandbox(options: SandboxOptions) {
 		name: "sandbox",
 		provides: [SANDBOX],
 		setup: async (context) => {
+			const contextOptions =
+				options.channelContext === undefined
+					? undefined
+					: resolveChannelContextOptions(options.channelContext);
+			const discord = context.services.find(DISCORD);
+			if (contextOptions && !discord)
+				throw new Error("sandbox channelContext needs the Discord plugin");
 			const runtime = new SandboxRuntime({
 				...options,
 				apiKey:
@@ -70,7 +89,6 @@ export function sandbox(options: SandboxOptions) {
 			// Last of the cheap checks: a typo above fails fast, without a `docker inspect`.
 			await runtime.verifyImage();
 			context.services.provide(SANDBOX, { channels, runtime });
-			const discord = context.services.find(DISCORD);
 			if (discord)
 				discord.commands.add(
 					sandboxCommands(discord.guard, channels, context.queue),
@@ -82,6 +100,17 @@ export function sandbox(options: SandboxOptions) {
 						runtime,
 						surfaces: context.surfaces,
 						...(options.replyText ? { replyText: options.replyText } : {}),
+						...(contextOptions && discord
+							? {
+									channelContext: (message) =>
+										discord.channelContext(message, contextOptions),
+									reportContextFailure: (channel, error) =>
+										context.logger.warn(
+											{ channel, err: error },
+											"sandbox channel context not read; the turn runs without it",
+										),
+								}
+							: {}),
 						reportFailure: (channel, error) =>
 							context.logger.error(
 								{ channel, err: error },
