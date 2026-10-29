@@ -164,6 +164,26 @@ describe("config", () => {
 	});
 });
 
+describe("config skins", () => {
+	test("hands the page the host's six skin tones, and only when the host has them", async () => {
+		const skins = [
+			"#f8dfcd",
+			"#f2d1ba",
+			"#ebc3a7",
+			"#e3b396",
+			"#d9a285",
+			"#cc9272",
+		];
+		const { body } = await call<ConfigView>(
+			api({ characterSkins: skins }).api,
+			"config",
+		);
+		expect(body.characterSkins).toEqual(skins);
+		const plain = await call<ConfigView>(api().api, "config");
+		expect("characterSkins" in plain.body).toBe(false);
+	});
+});
+
 describe("overview", () => {
 	test("reports agents and groups from the team", async () => {
 		const { body } = await call<OverviewView>(api().api, "overview");

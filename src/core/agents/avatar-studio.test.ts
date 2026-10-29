@@ -3,7 +3,11 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createCanvas, loadImage } from "canvas";
-import { resolveCharacter } from "../../characters/index.ts";
+import {
+	composeSvg,
+	EAST_ASIAN_SKINS,
+	resolveCharacter,
+} from "../../characters/index.ts";
 import { ConfigError } from "../domain/errors.ts";
 import { ProviderError } from "../errors.ts";
 import { FileAvatarStudio, type ImageDrawer } from "./avatar-studio.ts";
@@ -172,6 +176,44 @@ describe("FileAvatarStudio.render", () => {
 		if (!served) throw new Error("not served");
 		const image = await loadImage(Buffer.from(await served.arrayBuffer()));
 		expect([image.width, image.height]).toEqual([512, 512]);
+	});
+
+	test("draws the pictures with the host's skins, the probe too, and the package's own without", async () => {
+		const seen: unknown[] = [];
+		const rasterize: NonNullable<
+			ConstructorParameters<typeof FileAvatarStudio>[0]["rasterize"]
+		> = async (spec, options) => {
+			seen.push(options?.skins);
+			return new TextEncoder().encode(composeSvg(spec, options));
+		};
+		const make = async (skins?: readonly `#${string}`[]) => {
+			const s = new FileAvatarStudio({
+				dir: mkdtempSync(join(tmpdir(), "roundtable-avatars-")),
+				referencePath: REFERENCE,
+				rasterize,
+				...(skins ? { skins } : {}),
+			});
+			await s.init();
+			return s;
+		};
+		const own = await make(EAST_ASIAN_SKINS);
+		await own.render(resolveCharacter({ class: "knight" }));
+		expect(seen).toEqual([EAST_ASIAN_SKINS, EAST_ASIAN_SKINS]);
+		seen.length = 0;
+		const plain = await make();
+		await plain.render(resolveCharacter({ class: "knight" }));
+		expect(seen).toEqual([undefined, undefined]);
+	});
+
+	test("the same spec has another picture under other skins", async () => {
+		const spec = resolveCharacter({ class: "knight" });
+		const dir = mkdtempSync(join(tmpdir(), "roundtable-avatars-"));
+		const base = { dir, referencePath: REFERENCE };
+		const plain = new FileAvatarStudio(base);
+		const east = new FileAvatarStudio({ ...base, skins: EAST_ASIAN_SKINS });
+		await plain.init();
+		await east.init();
+		expect(await east.render(spec)).not.toBe(await plain.render(spec));
 	});
 
 	test("refuses to start when the rasterizer cannot draw SVG", async () => {

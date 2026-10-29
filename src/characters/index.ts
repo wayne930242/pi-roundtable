@@ -22,6 +22,7 @@ export type { CharacterLook, ComposeOptions } from "./compose.ts";
 export { accentOf, composeSvg } from "./compose.ts";
 export { characterCss } from "./css.ts";
 export { parseCharacter, readCharacter } from "./parse.ts";
+export { checkSkins, EAST_ASIAN_SKINS } from "./skins.ts";
 export type {
 	CharacterColors,
 	CharacterInput,

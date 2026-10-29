@@ -1,10 +1,17 @@
 import type { SQL } from "bun";
+import {
+	CATALOG,
+	CharacterError,
+	checkSkins,
+	type Hex,
+} from "../characters/index.ts";
 import { attachmentPort } from "./attachments/attachment-port.ts";
 import { retentionServices } from "./attachments/attachment-retention.ts";
 import type { AttachmentPort } from "./contract/attachments.ts";
 import type { ConversationPort } from "./contract/channels.ts";
 import type { ResolvedProviders } from "./contract/providers.ts";
 import type { SurfacePort } from "./contract/surface.ts";
+import { ConfigError } from "./domain/errors.ts";
 import { NotLinkedError } from "./errors.ts";
 import { EventBus } from "./events.ts";
 import type { RoundtableOptions } from "./host.ts";
@@ -36,6 +43,20 @@ import { surfacePort } from "./routing/surface-port.ts";
 import { CONVERSATIONS, IDENTITY, RUNTIME } from "./services.ts";
 import { setTimeZone } from "./time.ts";
 import { type ToolTierTable, toolTiers } from "./tool-tiers.ts";
+
+/** The skin tones the host's environment names, checked, or the package's own; a bad set refuses the start. */
+function characterSkinsOf(skins: readonly Hex[] | undefined): readonly Hex[] {
+	if (skins === undefined) return CATALOG.skins;
+	try {
+		return checkSkins(skins, "environment.characterSkins");
+	} catch (error) {
+		if (error instanceof CharacterError)
+			throw new ConfigError(
+				`${error.message}. Pass exactly six #rrggbb colors, such as EAST_ASIAN_SKINS from pi-roundtable/characters.`,
+			);
+		throw error;
+	}
+}
 
 /**
  * What `Roundtable.check()` found: the plugins that would run, the services and HTTP routes they
@@ -102,7 +123,10 @@ export class Linkage {
 			rootCommand = "roundtable",
 			agentDir,
 			scratchDir,
+			characterSkins,
 		} = this.#options.environment ?? {};
+		// Checked before anything is applied, so a bad set stops the start with the process untouched.
+		const skins = characterSkinsOf(characterSkins);
 		setLocale(locale, { assistant, root: rootCommand });
 		setTimeZone(timeZone);
 		// Pi packages such as pi-web-access read their config from the Pi agent directory.
@@ -112,6 +136,7 @@ export class Linkage {
 			timeZone,
 			now: () => new Date(),
 			...(scratchDir !== undefined ? { scratchDir } : {}),
+			characterSkins: skins,
 		};
 	}
 

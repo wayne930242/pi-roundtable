@@ -26,6 +26,8 @@ export interface ConfigView {
 	timeZone: string;
 	/** The page's look unless the owner picked one in the app; the server always sends it. */
 	look?: "modern" | "camelot";
+	/** The six `#rrggbb` skin tones every character is drawn with, which a look's `skin` index picks from: the host's `characters.skins`, the kit's own by default. */
+	characterSkins?: readonly string[];
 	locale?: string;
 	messages?: Readonly<Record<string, string>>;
 	cleanup?: boolean;

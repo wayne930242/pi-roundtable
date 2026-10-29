@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
+import { CATALOG, EAST_ASIAN_SKINS } from "../characters/index.ts";
 import type { RoundtableConfig } from "./config/config.ts";
 import { migrate, openPool } from "./db/migrations.ts";
 import { defineRoundtable } from "./define-roundtable.ts";
@@ -138,11 +139,23 @@ describe("defineRoundtable", () => {
 		]);
 		expect(options.listeners).toEqual([]);
 		expect(options.environment?.rootCommand).toBe("roundtable");
+		expect(options.environment?.characterSkins).toEqual(CATALOG.skins);
 		const withHttp = await defineRoundtable({
 			...headless,
 			http: { port: 8080 },
 		});
 		expect(withHttp.options.listeners).toEqual([{ id: "public", port: 8080 }]);
+	});
+
+	test("the host's character skins reach the environment every plugin reads", async () => {
+		const { options } = await defineRoundtable({
+			...config,
+			characters: { skins: EAST_ASIAN_SKINS },
+		});
+		expect(options.environment?.characterSkins).toEqual([...EAST_ASIAN_SKINS]);
+		await expect(
+			defineRoundtable({ ...config, characters: { skins: ["#ffffff"] } }),
+		).rejects.toBeInstanceOf(ConfigError);
 	});
 
 	test("an addon is left out when its switch is off, and its services with it", async () => {

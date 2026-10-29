@@ -116,6 +116,7 @@ async function build(settings: ResolvedOptions, context: Context) {
 		logger,
 		...(features ? { features } : {}),
 		look: settings.look,
+		characterSkins: env.characterSkins,
 		...(settings.routing === "path" ? { mountPath: settings.mount } : {}),
 		...(rooms
 			? { app: { surface: settings.surface, protocol: APP_PROTOCOL } }

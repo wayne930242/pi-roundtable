@@ -34,9 +34,10 @@ test("the page builds with relative URLs only, and every file it names is in the
  * props); the menus' drawing and their builders are lazy chunks and are not counted here.
  */
 const FIRST_LOAD_BASELINE = 145_612 + 8_707 + 2_000;
-const CHARACTER_BUDGET = 15 * 1024;
+// 16 KB since the host's skin tones (`characters.skins`) reach the entry: about 0.2 KB gzipped, on 0.17 KB of headroom.
+const CHARACTER_BUDGET = 16 * 1024;
 
-test("the characters add at most 15 KB gzipped to what the page loads first, and the kit stays out of it", async () => {
+test("the characters add at most 16 KB gzipped to what the page loads first, and the kit stays out of it", async () => {
 	const dir = mkdtempSync(join(tmpdir(), "web-console-budget-"));
 	await buildPage(dir);
 	const assets = loadAssets(dir);

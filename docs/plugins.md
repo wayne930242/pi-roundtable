@@ -165,7 +165,7 @@ A plugin that replaces `IDENTITY` replaces this too: the declarations are the bu
 | Field | What it is |
 |---|---|
 | `logger` | The host's logger with `plugin: <your name>` on every line; each line is JSON on stdout. Its type is `Logger` (`debug`, `info`, `warn`, `error`, `fatal`, `child(fields)`), which a pino logger satisfies |
-| `env` | The host's own environment for the run: `locale`, `timeZone` (an IANA zone), `now()`, and `scratchDir` when the host has one; read the zone from here rather than from the process, and give `scratchDir` to a shell the plugin runs itself |
+| `env` | The host's own environment for the run: `locale`, `timeZone` (an IANA zone), `now()`, `scratchDir` when the host has one, and `characterSkins`, the six skin tones the host draws its agents with ([host skins](#host-skins-the-charactersskins-option)); read the zone from here rather than from the process, give `scratchDir` to a shell the plugin runs itself, and pass `characterSkins` to `composeSvg` when the plugin draws a character |
 | `database()` | The host's one PostgreSQL connection (a Bun `SQL`), already migrated |
 | `toolTiers` | What each tool needs; ask it when a tool is used, not during setup |
 | `events` | Where the core reports turns and team changes to every plugin's handlers |
@@ -3399,7 +3399,7 @@ const svg = composeSvg(look, { look: "camelot-dark", frame: "shield", size: 256 
 
 A `CharacterSpec` is a complete look: `v: 1`, a `class`, and the parts `outfit`, `hat`, `prop`, `hair`, `beard` (or `"none"`), `accessory` (or `"none"`), the `build` (`slim`, `regular` or `stout`), a `skin` tone `0`–`5`, a `hairColor`, and `colors` (`primary`, the agent's accent; `secondary`; `trim`), each a lowercase `#rrggbb`.
 `palette` names the preset the colors equal, and is absent when they are custom.
-A class is a preset of parts, not a body, so a new class is an outfit and gear: the 24 are `wizard`, `knight`, `scholar`, `smith`, `ranger`, `bard`, `alchemist`, `healer`, `steward`, `navigator`, `seer`, `scribe`, `engineer`, `druid`, `innkeeper`, `sentinel`, `envoy`, `rogue`, `monk`, `falconer`, `shipwright`, `jester`, `paladin` and `archivist`.
+The parts are medieval: the clothes, hats and gear of an agent are what a late-medieval town or court would know, so a `goggles` hat is a pointed cap, `wrench` a pair of dividers and `telescope` an astrolabe, and the ids stay the same. A class is a preset of parts, not a body, so a new class is an outfit and gear: the 24 are `wizard`, `knight`, `scholar`, `smith`, `ranger`, `bard`, `alchemist`, `healer`, `steward`, `navigator`, `seer`, `scribe`, `engineer`, `druid`, `innkeeper`, `sentinel`, `envoy`, `rogue`, `monk`, `falconer`, `shipwright`, `jester`, `paladin` and `archivist`.
 `CATALOG` lists them with their `label`, the `jobs` they suit and the `keywords` that suggest them (English and zh-TW), and lists every outfit, hat, prop, hair, beard, accessory, the eight palettes (`azure`, `gules`, `vert`, `purpure`, `amber`, `sable`, `teal`, `rose`), the six skin tones and the hair swatches. The catalog is frozen.
 
 | Function | What it does |
@@ -3411,16 +3411,35 @@ A class is a preset of parts, not a body, so a new class is an outfit and gear: 
 | `composeSvg(spec, options?)` | The picture as an SVG string, see below |
 | `accentOf(spec, on)` | `colors.primary` as a UI accent: shaded until it reads at 3:1 on the page. `on` is a scheme (`light`: white, `dark`: `#0d1018`) or a look (`modern-light`, `modern-dark` as the schemes; `camelot-light`: the darkest parchment `#e3d2a9`, `camelot-dark`: the lightest night blue `#243557`) |
 | `characterCss()` | The text of `characters.css` |
+| `checkSkins(value, field?)` | A host's skin tones checked: exactly six `#rrggbb` colors, returned lower-cased and frozen; otherwise a `CharacterError` whose `field` is `field` (default `skins`) or the place in the list. The host's configuration and `composeSvg` call it |
+| `EAST_ASIAN_SKINS` | Six light East Asian skin tones, from very fair porcelain to light wheat (`#f8dfcd`, `#f2d1ba`, `#ebc3a7`, `#e3b396`, `#d9a285`, `#cc9272`), warm pink to peach and never green or yellow, with the face lines reading on each at 5:1 or better. A frozen constant for a host's `characters.skins` |
 
 `CharacterError.field` is the path of the offending field (`hat`, `colors.primary`).
 
 ### The picture: `composeSvg`
 
-`ComposeOptions` are all optional: `expr` (one of the 13 `EXPRESSIONS`, by default the one `STATE_EXPRESSION` gives the state), `state` (one of the seven `AVATAR_STATES`: `idle`, `thinking`, `working`, `waiting`, `done`, `error`, `sleepy`), `look` (`modern-light` by default, `modern-dark`, `camelot-light` or `camelot-dark`, which change only the background and ring), `frame` (`disc` or `shield`), `bare` (no frame or background), `still`, `uid`, `size` and `label`.
+`ComposeOptions` are all optional: `expr` (one of the 13 `EXPRESSIONS`, by default the one `STATE_EXPRESSION` gives the state), `state` (one of the seven `AVATAR_STATES`: `idle`, `thinking`, `working`, `waiting`, `done`, `error`, `sleepy`), `look` (`modern-light` by default, `modern-dark`, `camelot-light` or `camelot-dark`, which change only the background and ring), `frame` (`disc` or `shield`), `bare` (no frame or background), `still`, `uid`, `size`, `label` and `skins` (six `#rrggbb` skin tones that `CharacterSpec.skin` indexes, in place of `CATALOG.skins`; anything but six valid colors throws a `CharacterError` whose `field` is `skins` or `skins[3]`).
 
 - The output has literal colors only. It has no `style` attribute, variable, `<style>`, script, text, image, link, event handler or `<foreignObject>`, so a page whose content security policy forbids inline styles can inject it, and `canvas` rasterizes it as it is. It is at most 8 KB and the same for the same input. The root is `<svg class="av" data-expr>` and the layers are `<g class="NAME" data-part="NAME">` in a fixed order (`frame`, `ch` holding `back`, `body`, `head`, `hat`, `eyes-brows`, `mouth`, `fx`, `acc`, `prop`, then `state`); the prop group carries `data-prop`.
 - `composeSvg` checks the spec again with `parseCharacter`, so a spec cast from untrusted data throws instead of reaching the markup. `uid` (`/^[a-z0-9]{1,16}$/`, default `a`) ends every clip path id, so each avatar on a page needs its own `uid`: two with the same one share clip path ids and one clips the other. The server-side renders pass an explicit one. `size` (an integer up to 4096) adds `width` and `height`, which `canvas` needs. `label` (at most 200 characters) becomes `aria-label` with `<>"'=()&` written as entities; without it the figure is `aria-hidden`.
 - A live figure carries every state overlay and leaves the motion to the stylesheet. With `still: true` only the `state`'s overlay is drawn and the figure has class `av static`, for files, PNGs and 3D textures; an `error` state turns the ring red in both.
+
+### Host skins: the `characters.skins` option
+
+A host picks the six skin tones its agents are drawn with. The catalog's own (`CATALOG.skins`, light to dark) stay the default, so a host that says nothing sees no change.
+
+```ts
+import { EAST_ASIAN_SKINS } from "pi-roundtable/characters";
+
+export default defineRoundtable({
+  // ...
+  characters: { skins: EAST_ASIAN_SKINS },
+});
+```
+
+- `characters.skins` is exactly six `#rrggbb` colors, in the order a look's `skin` index (`0` to `5`) picks them. A list of another length or a color that is not `#rrggbb` is a `ConfigError` that names `config characters.skins` (or the place in the list), and the host does not start. A host that builds `RoundtableOptions` itself gives the same list as `environment.characterSkins`, which is checked at start the same way.
+- A stored look keeps its index, so existing agents wear the new tones with no migration. The Discord pictures are PNGs stored by content hash, and render again with the host's skins whenever an agent's look is saved.
+- Every render path follows it: plugins read `context.env.characterSkins` (always six colors, the catalog's when the host chose none) and pass it as `composeSvg`'s `skins`; the agent server's studio (`AvatarStudio.render`, so the Discord pictures) and `pi-roundtable-web`'s page (the characters, the creator's skin swatches and the round table) already do. The web console receives them as `characterSkins` in `GET api/config`.
 
 ### Motion: `characters.css`
 
@@ -4569,10 +4588,12 @@ Import from the entries listed below; source area files are internal.
 | `CATALOG` | `pi-roundtable/characters` | value |
 | `CLASS_IDS` | `pi-roundtable/characters` | value |
 | `CharacterError` | `pi-roundtable/characters` | value |
+| `EAST_ASIAN_SKINS` | `pi-roundtable/characters` | value |
 | `EXPRESSIONS` | `pi-roundtable/characters` | value |
 | `STATE_EXPRESSION` | `pi-roundtable/characters` | value |
 | `accentOf` | `pi-roundtable/characters` | value |
 | `characterCss` | `pi-roundtable/characters` | value |
+| `checkSkins` | `pi-roundtable/characters` | value |
 | `composeSvg` | `pi-roundtable/characters` | value |
 | `parseCharacter` | `pi-roundtable/characters` | value |
 | `readCharacter` | `pi-roundtable/characters` | value |

@@ -1,8 +1,14 @@
 import { describe, expect, test } from "bun:test";
-import { STATE_EXPRESSION } from "pi-roundtable/characters";
+import {
+	CATALOG,
+	EAST_ASIAN_SKINS,
+	STATE_EXPRESSION,
+} from "pi-roundtable/characters";
+import { loadKit } from "./lib/kit.ts";
 import {
 	createExpressionSwaps,
 	seatExpressionOf,
+	seatPicture,
 	seatStateOf,
 	seatStates,
 } from "./lib/seats.ts";
@@ -163,5 +169,30 @@ describe("createExpressionSwaps", () => {
 		swapper.dispose();
 		time.advance(1000);
 		expect(calls).toEqual([]);
+	});
+});
+
+describe("seatPicture", () => {
+	const knight = {
+		v: 1,
+		class: "knight",
+		...CATALOG.classes.knight.preset,
+	} as const;
+	const ear = (svg: string) =>
+		svg.match(/<circle cx="22.6" cy="54" r="4.2" fill="(#[0-9a-f]{6})"/)?.[1];
+
+	test("draws the seat with the host's skins when it has some, the kit's own when not", async () => {
+		const kit = await loadKit();
+		const own = seatPicture(kit, knight, "camelot-dark", "idle", "s0knight");
+		expect(ear(own)).toBe(CATALOG.skins[knight.skin] as string);
+		const host = seatPicture(
+			kit,
+			knight,
+			"camelot-dark",
+			"idle",
+			"s0knight",
+			EAST_ASIAN_SKINS,
+		);
+		expect(ear(host)).toBe(EAST_ASIAN_SKINS[knight.skin] as string);
 	});
 });

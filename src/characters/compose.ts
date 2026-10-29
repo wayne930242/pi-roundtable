@@ -13,6 +13,7 @@ import { ACCESSORIES, BEARDS, HAIR } from "./parts-hair.ts";
 import { HATS } from "./parts-hats.ts";
 import { OUTFITS } from "./parts-outfits.ts";
 import { PROPS } from "./parts-props.ts";
+import { checkSkins } from "./skins.ts";
 import {
 	CharacterError,
 	type CharacterSpec,
@@ -45,6 +46,11 @@ export interface ComposeOptions {
 	size?: number;
 	/** The accessible name, escaped into `aria-label`; without it the figure is `aria-hidden`. */
 	label?: string;
+	/**
+	 * Six `#rrggbb` skin tones that `CharacterSpec.skin` indexes, in place of `CATALOG.skins`; a
+	 * host's own set, such as `EAST_ASIAN_SKINS`. Anything but six valid colors throws.
+	 */
+	skins?: readonly Hex[] | undefined;
 }
 
 const LOOKS = ["modern-light", "modern-dark", "camelot-light", "camelot-dark"];
@@ -105,9 +111,14 @@ function escapeAttribute(text: string): string {
 		);
 }
 
-function tonesOf(spec: CharacterSpec, look: LookStyle, error: boolean) {
+function tonesOf(
+	spec: CharacterSpec,
+	look: LookStyle,
+	error: boolean,
+	skins: readonly Hex[],
+) {
 	const { primary, secondary, trim } = spec.colors;
-	const skin = CATALOG.skins[spec.skin] as Hex;
+	const skin = skins[spec.skin] as Hex;
 	const tones: Tones = {
 		p: primary,
 		pd: darken(primary, 0.3),
@@ -180,11 +191,15 @@ export function composeSvg(
 			"label",
 			`must be text of at most ${MAX_LABEL} characters`,
 		);
+	const skins =
+		options.skins === undefined
+			? CATALOG.skins
+			: checkSkins(options.skins, "skins");
 	const bare = options.bare === true;
 	const still = options.still === true;
 
 	const style = STYLES[lookName];
-	const { tones, bg, ring } = tonesOf(s, style, state === "error");
+	const { tones, bg, ring } = tonesOf(s, style, state === "error", skins);
 	const face = faceParts(
 		{ ink: INK, brow: mix(s.hairColor, INK, 0.5), dot: mix(tones.p, INK, 0.1) },
 		expr,

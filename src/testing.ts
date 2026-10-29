@@ -2,6 +2,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { SQL } from "bun";
+import { CATALOG } from "./characters/index.ts";
 import { agentClaim } from "./core/agents/agent-claim.ts";
 import { ownerAttachmentDir } from "./core/attachments/attachment-dir.ts";
 import { attachmentPort } from "./core/attachments/attachment-port.ts";
@@ -453,6 +454,7 @@ export async function testPlugin(
 		locale: "en",
 		timeZone: "UTC",
 		now: () => new Date(),
+		characterSkins: CATALOG.skins,
 		...options.env,
 	};
 	// What the agent server does with the slot: the provider's runtime serves `context.turns`.

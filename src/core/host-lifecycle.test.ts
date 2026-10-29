@@ -3,9 +3,11 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Type } from "typebox";
+import { CATALOG, EAST_ASIAN_SKINS } from "../characters/index.ts";
 import type { QueuePort } from "./contract/channels.ts";
 import type { AgentRuntime } from "./contract/runtime.ts";
 import { defineTool } from "./define.ts";
+import { ConfigError } from "./domain/errors.ts";
 import { PluginError } from "./errors.ts";
 import { Roundtable, type RoundtableOptions } from "./host.ts";
 import { assistantName } from "./i18n/index.ts";
@@ -132,6 +134,47 @@ describe("the host's environment", () => {
 			if (before === undefined) delete process.env.PI_CODING_AGENT_DIR;
 			else process.env.PI_CODING_AGENT_DIR = before;
 		}
+	});
+
+	test("plugins read the host's character skins, the package's own when it names none", async () => {
+		const seen: HostEnv[] = [];
+		const reader: RoundtablePlugin = {
+			name: "p",
+			setup: ({ env }) => {
+				seen.push(env);
+				return { events: {} };
+			},
+		};
+		await host([reader]).run();
+		expect(seen[0]?.characterSkins).toEqual(CATALOG.skins);
+		await hosts[0]?.shutdown("test");
+		await host([reader], {
+			environment: { characterSkins: EAST_ASIAN_SKINS },
+		}).run();
+		expect(seen[1]?.characterSkins).toEqual([...EAST_ASIAN_SKINS]);
+	});
+
+	test("a bad set of character skins refuses the start, before any plugin sets up", async () => {
+		let setups = 0;
+		const counter: RoundtablePlugin = {
+			name: "p",
+			setup: () => {
+				setups++;
+				return { events: {} };
+			},
+		};
+		const six = [...EAST_ASIAN_SKINS];
+		for (const bad of [six.slice(1), [...six.slice(0, 5), "pale"]]) {
+			const error = await host([counter], {
+				environment: { characterSkins: bad as never },
+			})
+				.run()
+				.catch((e: unknown) => e);
+			expect(error).toBeInstanceOf(ConfigError);
+			expect((error as Error).message).toContain("environment.characterSkins");
+			expect((error as Error).message).toContain("EAST_ASIAN_SKINS");
+		}
+		expect(setups).toBe(0);
 	});
 
 	test("an omitted environment is the neutral one", async () => {

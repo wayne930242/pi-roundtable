@@ -1,6 +1,8 @@
 import {
 	CharacterError,
 	type CharacterInput,
+	checkSkins,
+	type Hex,
 	resolveCharacter,
 } from "../../characters/index.ts";
 import { ConfigError } from "../domain/errors.ts";
@@ -152,6 +154,22 @@ export const characterInput: Field<CharacterInput> = {
 			throw error;
 		}
 		return value as CharacterInput;
+	},
+};
+
+/** The six skin tones of a host's agents, exactly six `#rrggbb` colors; a bad one is named by its place in the list. */
+export const skinTones: Field<readonly Hex[]> = {
+	describe: "a list of exactly 6 #rrggbb colors, such as EAST_ASIAN_SKINS",
+	check: (value, path) => {
+		try {
+			return checkSkins(value, path);
+		} catch (error) {
+			if (error instanceof CharacterError)
+				throw new ConfigError(
+					`config ${error.message}. Fix the skins in roundtable.config.ts.`,
+				);
+			throw error;
+		}
 	},
 };
 

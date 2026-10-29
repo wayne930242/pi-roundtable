@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { CharacterSpec } from "../../characters/index.ts";
+import type { CharacterSpec, Hex } from "../../characters/index.ts";
 import { resolveCharacter } from "../../characters/index.ts";
 import { squarePng } from "../attachments/square-png.ts";
 import type { ImageDrawer } from "../contract/providers.ts";
@@ -35,6 +35,8 @@ export interface AvatarStudioOptions {
 	neutralPath?: string;
 	/** Told the error code of a reference that was replaced by `neutralPath`. */
 	onReferenceFailed?: (code: string) => void;
+	/** The skin tones the pictures are drawn with; default the package's own. */
+	skins?: readonly Hex[];
 	/** Rasterizes a character to a PNG; canvas with librsvg by default. A seam for tests. */
 	rasterize?: typeof characterPng;
 	/** Draws the pictures. Without one, the studio only makes each agent a picture from its name. */
@@ -59,6 +61,12 @@ export class FileAvatarStudio implements AvatarStudio {
 		mkdirSync(options.dir, { recursive: true });
 	}
 
+	/** The host's skin tones as a compose option; nothing when it has none, which draws the package's own. */
+	#skins(): { skins?: readonly Hex[] } {
+		const { skins } = this.#options;
+		return skins ? { skins } : {};
+	}
+
 	/**
 	 * Stores the assistant's neutral avatar, the picture of an agent that has none yet. First
 	 * rasterizes a probe character: the agents' pictures need canvas with SVG support (librsvg),
@@ -68,6 +76,7 @@ export class FileAvatarStudio implements AvatarStudio {
 		try {
 			await this.#rasterize(resolveCharacter({ class: "wizard" }), {
 				size: 32,
+				...this.#skins(),
 			});
 		} catch (error) {
 			throw new ConfigError(
@@ -111,7 +120,9 @@ export class FileAvatarStudio implements AvatarStudio {
 
 	/** Renders a character as the agent's picture and stores it by content hash; the same spec gives the same hash. */
 	async render(spec: CharacterSpec): Promise<string> {
-		return this.#keep(await this.#rasterize(spec, { size: AVATAR_SIDE }));
+		return this.#keep(
+			await this.#rasterize(spec, { size: AVATAR_SIDE, ...this.#skins() }),
+		);
 	}
 
 	/**

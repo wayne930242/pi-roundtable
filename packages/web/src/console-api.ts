@@ -81,6 +81,8 @@ export interface ConsolePorts {
 	presentation?: ConsolePresentation;
 	mountPath?: string;
 	look?: "modern" | "camelot";
+	/** The host's six skin tones, which the page draws every character with. */
+	characterSkins?: readonly string[];
 	/** Present when the owner app is served: its rooms' key prefix, for the page. */
 	app?: { surface: string; protocol: string };
 }
@@ -245,6 +247,9 @@ export class ConsoleApi {
 			...(features?.cleanup ? { cleanup: true } : {}),
 			...(connectorAdminUrl ? { connectorAdminUrl } : {}),
 			look: this.#ports.look ?? "modern",
+			...(this.#ports.characterSkins
+				? { characterSkins: [...this.#ports.characterSkins] }
+				: {}),
 			...(this.#ports.mountPath ? { mountPath: this.#ports.mountPath } : {}),
 			...(this.#ports.app ? { app: this.#ports.app } : {}),
 		};

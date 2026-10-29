@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { CATALOG, EAST_ASIAN_SKINS } from "../../characters/index.ts";
 import type { AgentSeed } from "../agents/agent-rules.ts";
 import { ConfigError } from "../domain/errors.ts";
 import { type RoundtableConfig, resolveConfig } from "./config.ts";
@@ -55,5 +56,36 @@ describe("agent seeds' characters", () => {
 				agents: [{ ...base, character: { class: "dragon" } }],
 			}),
 		).toContain("config agents[0].character.class");
+	});
+});
+
+describe("characters.skins", () => {
+	test("is the package's own six when left out, and the host's six when given", () => {
+		expect(resolveConfig(minimal).characters.skins).toEqual(CATALOG.skins);
+		expect(
+			resolveConfig({ ...minimal, characters: {} }).characters.skins,
+		).toEqual(CATALOG.skins);
+		expect(
+			resolveConfig({ ...minimal, characters: { skins: EAST_ASIAN_SKINS } })
+				.characters.skins,
+		).toEqual([...EAST_ASIAN_SKINS]);
+	});
+
+	test("must be exactly six #rrggbb colors, and the error names the key and the fix", () => {
+		const five = [...EAST_ASIAN_SKINS].slice(0, 5);
+		const six = [...EAST_ASIAN_SKINS];
+		for (const bad of [five, [...six, "#ffffff"], "#ffffff", []]) {
+			const message = refused({ ...minimal, characters: { skins: bad } });
+			expect(message).toContain("config characters.skins");
+			expect(message).toContain("exactly 6");
+			expect(message).toContain("roundtable.config.ts");
+		}
+		const badSix = [...six.slice(0, 3), "peach", ...six.slice(4)];
+		expect(refused({ ...minimal, characters: { skins: badSix } })).toContain(
+			"config characters.skins[3]",
+		);
+		expect(refused({ ...minimal, characters: { skinTones: six } })).toContain(
+			"config characters.skinTones: unknown key",
+		);
 	});
 });

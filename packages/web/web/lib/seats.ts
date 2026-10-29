@@ -3,6 +3,7 @@ import type {
 	CharacterLook,
 	CharacterSpec,
 	Expression,
+	Hex,
 } from "pi-roundtable/characters";
 import type { SeatState } from "../table/types.ts";
 import type { Kit } from "./kit.ts";
@@ -78,6 +79,7 @@ export function seatPicture(
 	look: CharacterLook,
 	state: SeatState,
 	uid: string,
+	skins?: readonly Hex[],
 ): string {
 	return kit.composeSvg(spec, {
 		frame: "shield",
@@ -87,6 +89,7 @@ export function seatPicture(
 		still: true,
 		size: 256,
 		uid,
+		skins,
 	});
 }
 

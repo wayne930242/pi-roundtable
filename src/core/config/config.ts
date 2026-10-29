@@ -1,5 +1,6 @@
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { CATALOG, type Hex } from "../../characters/index.ts";
 import type { AgentSeed } from "../agents/agent-rules.ts";
 import { ConfigError } from "../domain/errors.ts";
 import type { InterimTextMode } from "../domain/interim.ts";
@@ -46,6 +47,7 @@ import {
 	optional,
 	record,
 	shape,
+	skinTones,
 	text,
 } from "./schema.ts";
 import { type SkillsConfig, skillsField } from "./skills-config.ts";
@@ -154,6 +156,14 @@ export interface RoundtableConfig extends LimitsConfig {
 	 * first. With `discord` the agent in `discord.entryChannel` is the coordinator, and this key is refused.
 	 */
 	coordinator?: string;
+	/**
+	 * How the agents' characters are drawn, everywhere the host draws them: the web console, its
+	 * round table and the agents' pictures on Discord. `skins` is exactly six `#rrggbb` skin tones
+	 * that a look's `skin` index (0 to 5) picks from, such as `EAST_ASIAN_SKINS` from
+	 * `pi-roundtable/characters`; default the six the package ships. Stored looks keep their index,
+	 * so they take the new tones with no migration. A bad list stops the start.
+	 */
+	characters?: { skins?: readonly string[] };
 	/**
 	 * The `public` listener: the public address that reaches it, and the TCP port (default 3000) or
 	 * unix socket the process listens on. `socketMode` is the socket file's permission bits
@@ -289,6 +299,7 @@ const schema = shape({
 		),
 	),
 	coordinator: optional(text),
+	characters: optional(shape({ skins: optional(skinTones) })),
 	http: optional(
 		shape({
 			publicUrl: optional(text),
@@ -361,6 +372,8 @@ export interface ResolvedConfig extends ResolvedLimits {
 	agents: AgentSeed[];
 	/** The coordinator's name; set only without `discord` and with `agents`: the configured one, else the first seed. */
 	coordinator?: string;
+	/** How the agents' characters are drawn: the six skin tones, the package's own unless `characters.skins` is set. */
+	characters: { skins: readonly Hex[] };
 	/** Undefined when no `http` is configured, and the host opens no `public` listener. */
 	http?: {
 		/** Always set with Discord. */
@@ -390,6 +403,11 @@ function modelOf(value: string, path: string): ModelRef {
 			`config ${path}: expected <provider>/<id>, got ${JSON.stringify(value)}. Write it like anthropic/claude-sonnet-5-5.`,
 		);
 	return parsed;
+}
+
+/** The skin tones the configuration chose, or the package's own. */
+function skinsOf(skins: readonly string[] | undefined): readonly Hex[] {
+	return (skins as readonly Hex[] | undefined) ?? CATALOG.skins;
 }
 
 /** The configuration checked against its schema, defaults filled; throws a ConfigError naming the key and the fix. */
@@ -457,6 +475,7 @@ export function resolveConfig(input: unknown): ResolvedConfig {
 		...(!discord && config.agents?.[0]
 			? { coordinator: config.coordinator ?? config.agents[0].name }
 			: {}),
+		characters: { skins: skinsOf(config.characters?.skins) },
 		...(http
 			? {
 					http: {

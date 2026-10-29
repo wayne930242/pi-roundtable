@@ -1,10 +1,15 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { CATALOG, type CharacterSpec } from "pi-roundtable/characters";
+import {
+	CATALOG,
+	type CharacterSpec,
+	EAST_ASIAN_SKINS,
+} from "pi-roundtable/characters";
 import { Character, checked } from "./components/character.tsx";
 import { openPage, releaseDom, type TestPage } from "./dom.ts";
 import { loadKit } from "./lib/kit.ts";
+import { initSkins, skinsNow } from "./lib/skins.ts";
 
 const knight: CharacterSpec = {
 	v: 1,
@@ -163,4 +168,51 @@ test("a drawing with an element the kit never emits renders an empty host and lo
 		console.error = error;
 	}
 	expect(errors).toHaveLength(5);
+});
+
+const earFill = (): string | null | undefined =>
+	page.container
+		.querySelector('svg.av circle[cx="22.6"][cy="54"]')
+		?.getAttribute("fill");
+
+test("a character wears the skin tones the host chose, and the index it stores stays", async () => {
+	try {
+		await page.render(<Character spec={knight} look="modern-light" />);
+		expect(earFill()).toBe(CATALOG.skins[knight.skin] as string);
+		await page.act(async () => initSkins(EAST_ASIAN_SKINS));
+		// The same mounted character draws again with no new props.
+		expect(earFill()).toBe(EAST_ASIAN_SKINS[knight.skin] as string);
+		await page.render(
+			<Character
+				spec={{ ...knight, skin: 5 }}
+				look="camelot-dark"
+				frame="shield"
+			/>,
+		);
+		expect(earFill()).toBe(EAST_ASIAN_SKINS[5] as string);
+	} finally {
+		initSkins(undefined);
+	}
+	expect(skinsNow()).toBeUndefined();
+});
+
+test("a list from the server that is not six #rrggbb colors leaves the kit's own skins", () => {
+	try {
+		initSkins(EAST_ASIAN_SKINS);
+		expect(skinsNow()).toEqual([...EAST_ASIAN_SKINS]);
+		for (const bad of [
+			undefined,
+			[],
+			[...EAST_ASIAN_SKINS].slice(1),
+			[...EAST_ASIAN_SKINS.slice(0, 5), "peach"],
+			[...EAST_ASIAN_SKINS.slice(0, 5), 7],
+			"#ffffff",
+		]) {
+			initSkins(bad as never);
+			expect(skinsNow()).toBeUndefined();
+			initSkins(EAST_ASIAN_SKINS);
+		}
+	} finally {
+		initSkins(undefined);
+	}
 });

@@ -2,6 +2,7 @@ import { afterAll, afterEach, beforeAll, expect, test } from "bun:test";
 import {
 	CATALOG,
 	type CharacterSpec,
+	EAST_ASIAN_SKINS,
 	suggestCharacter,
 } from "pi-roundtable/characters";
 import type { AgentProfileView } from "../src/api-types.ts";
@@ -9,6 +10,7 @@ import { CharacterCreator } from "./components/character-creator.tsx";
 import { openPage, releaseDom, type TestPage } from "./dom.ts";
 import { loadKit } from "./lib/kit.ts";
 import { navigate } from "./lib/router.ts";
+import { initSkins } from "./lib/skins.ts";
 
 const specOf = (id: "knight" | "wizard" | "healer"): CharacterSpec => ({
 	v: 1,
@@ -310,3 +312,28 @@ test("a part row wider than its box fades where more of it lies beyond, and show
 	await open();
 	expect(query<HTMLElement>(".creator-strip")?.dataset.more).toBeUndefined();
 });
+
+test("skin swatches are the host's tones, and picking one stores its index", async () => {
+	const background = (swatch: Element) =>
+		(swatch as HTMLElement).style.background.toLowerCase();
+	try {
+		await open();
+		const own = [...page.container.querySelectorAll("[data-skin]")];
+		expect(own.map(background).map(rgb)).toEqual([...CATALOG.skins].map(rgb));
+		await page.act(async () => initSkins(EAST_ASIAN_SKINS));
+		const swatches = [...page.container.querySelectorAll("[data-skin]")];
+		expect(swatches.map(background).map(rgb)).toEqual(
+			[...EAST_ASIAN_SKINS].map(rgb),
+		);
+		expect(swatches[2]?.getAttribute("data-skin")).toBe("2");
+	} finally {
+		initSkins(undefined);
+	}
+});
+
+/** A colour as the DOM reports it, `rgb(r, g, b)`, whatever way it was written. */
+function rgb(color: string): string {
+	if (color.startsWith("rgb")) return color.replace(/\s+/g, "");
+	const part = (at: number) => Number.parseInt(color.slice(at, at + 2), 16);
+	return `rgb(${part(1)},${part(3)},${part(5)})`;
+}

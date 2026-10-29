@@ -3,6 +3,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AGENTS, IDENTITY, MEMORY } from "pi-roundtable";
+import { CATALOG, EAST_ASIAN_SKINS } from "pi-roundtable/characters";
 import { DISCORD } from "pi-roundtable/discord";
 import {
 	partial,
@@ -369,10 +370,31 @@ describe("webConsole on a plugin harness", () => {
 			panes: ["conversations"],
 			timeZone: "UTC",
 			look: "modern",
+			characterSkins: [...CATALOG.skins],
 		});
 		expect((await call("/ops/web/api/notes", {}, await sign())).status).toBe(
 			404,
 		);
+	});
+
+	test("the page is handed the host's skin tones, so every character it draws wears them", async () => {
+		const harness = await testPlugin(webConsole(base()), {
+			services: [agents, memory, discord, identity()],
+			env: { characterSkins: EAST_ASIAN_SKINS },
+		});
+		harnesses.push(harness);
+		const route = harness.contribution.http?.find(
+			(r) => r.name === "web-console",
+		);
+		if (!route) throw new Error("no route");
+		const response = await route.handle(
+			new Request("http://host/console/api/config", {
+				headers: { "cf-access-jwt-assertion": await sign() },
+			}),
+		);
+		expect(
+			((await response.json()) as { characterSkins: string[] }).characterSkins,
+		).toEqual([...EAST_ASIAN_SKINS]);
 	});
 
 	test("a request without a valid assertion is refused; a valid one is admitted", async () => {

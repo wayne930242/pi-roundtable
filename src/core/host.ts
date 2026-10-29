@@ -1,4 +1,5 @@
 import type { SQL } from "bun";
+import type { Hex } from "../characters/index.ts";
 import type { AttachmentRetention } from "./attachments/attachment-retention.ts";
 import { checkDatabase } from "./db/check-database.ts";
 import { openPool, runMigrations } from "./db/migrations.ts";
@@ -33,6 +34,8 @@ export interface HostEnvironment {
 	agentDir?: string;
 	/** The host's scratch dir, which plugins read as `env.scratchDir`; unset gives them none. */
 	scratchDir?: string;
+	/** Six `#rrggbb` skin tones for the agents' characters, which plugins read as `env.characterSkins`; default the package's own. Anything but six valid colors stops the start. */
+	characterSkins?: readonly Hex[];
 }
 
 export interface RoundtableOptions {

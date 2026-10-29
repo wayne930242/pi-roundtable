@@ -3,11 +3,13 @@ import type {
 	CharacterLook,
 	CharacterSpec,
 	Expression,
+	Hex,
 } from "pi-roundtable/characters";
 import { memo, useId, useMemo } from "react";
 import { suggestionFor } from "../lib/character-spec.ts";
 import { type Kit, useKit } from "../lib/kit.ts";
 import { useCharacterStyle } from "../lib/look.ts";
+import { useSkins } from "../lib/skins.ts";
 
 /** The suffix that keeps one drawing's clip paths apart from the next one's: lower-case letters and digits only. */
 function uidOf(id: string): string {
@@ -63,12 +65,14 @@ function draw(
 		"spec" | "look" | "frame" | "state" | "expr" | "name" | "label"
 	>,
 	uid: string,
+	skins: readonly Hex[] | undefined,
 ): string {
 	const options = {
 		look: props.look,
 		frame: props.frame ?? "disc",
 		expr: props.expr ?? kit.STATE_EXPRESSION[props.state ?? "idle"],
 		uid,
+		skins,
 	} as const;
 	const owner = { name: props.name ?? props.label ?? "agent" };
 	if (props.spec === undefined)
@@ -93,14 +97,15 @@ function draw(
 export const Character = memo(function Character(props: CharacterProps) {
 	const uid = uidOf(useId());
 	const kit = useKit();
+	const skins = useSkins();
 	const { spec, look, frame, state, expr, name, label } = props;
 	// The kit loads as a chunk of its own; until it has, the host stands empty at its size.
 	const svg = useMemo(
 		() =>
 			kit
-				? draw(kit, { spec, look, frame, state, expr, name, label }, uid)
+				? draw(kit, { spec, look, frame, state, expr, name, label }, uid, skins)
 				: "",
-		[kit, spec, look, frame, state, expr, name, label, uid],
+		[kit, spec, look, frame, state, expr, name, label, uid, skins],
 	);
 	const size = props.size;
 	return (

@@ -1,4 +1,5 @@
 import type { SQL } from "bun";
+import type { Hex } from "../characters/index.ts";
 import type { AgentSeed } from "./agents/agent-store.ts";
 import type { AttachmentPort } from "./contract/attachments.ts";
 import type {
@@ -276,6 +277,13 @@ export interface HostEnv {
 	 * without a hold. Plugins that run shells of their own (coding workers) give it to them too.
 	 */
 	readonly scratchDir?: string;
+	/**
+	 * The six skin tones the host draws its agents' characters with, which `CharacterSpec.skin`
+	 * indexes: the package's own unless the host configured `characters.skins`. A plugin that
+	 * draws a character passes them as `composeSvg`'s `skins` option, so every picture of an
+	 * agent wears the same ones.
+	 */
+	readonly characterSkins: readonly Hex[];
 }
 
 /** What the host gives every plugin. */

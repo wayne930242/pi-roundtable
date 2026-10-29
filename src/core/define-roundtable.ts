@@ -309,6 +309,7 @@ export async function defineRoundtable(
 				rootCommand: config.slug,
 				agentDir: config.agentDir,
 				scratchDir: config.scratchDir,
+				characterSkins: config.characters.skins,
 			},
 			database: { url: config.databaseUrl },
 			dataDir: config.dataDir,

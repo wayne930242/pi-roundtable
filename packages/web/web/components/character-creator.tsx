@@ -31,6 +31,7 @@ import { useAccentStyle } from "../lib/characters.ts";
 import { useMedia } from "../lib/media.ts";
 import { translate as t, wording } from "../lib/messages.ts";
 import { blockNavigation } from "../lib/router.ts";
+import { useSkins } from "../lib/skins.ts";
 import { toast } from "../lib/toast.ts";
 import { PageCharacter } from "./character.tsx";
 import { Confirm } from "./confirm.tsx";
@@ -296,6 +297,7 @@ export function CharacterCreator(props: {
 	const root = useRef<HTMLFormElement>(null);
 	const titleId = useId();
 	const accent = useAccentStyle(draft);
+	const skins = useSkins();
 	const dirty = canon(draft) !== canon(props.character);
 
 	// A new saved character (after Save, or another tab's change) starts a fresh draft.
@@ -468,9 +470,10 @@ export function CharacterCreator(props: {
 			<Field field="skin" title={t("Skin tone")} error={errors.skin}>
 				<fieldset className="creator-swatches">
 					<legend className="visually-hidden">{t("Skin tone")}</legend>
-					{CATALOG.skins.map((hex, index) => (
+					{(skins ?? CATALOG.skins).map((hex, index) => (
 						<Swatch
-							key={hex}
+							// biome-ignore lint/suspicious/noArrayIndexKey: six fixed positions, and a host may repeat a tone
+							key={index}
 							data={{ "data-skin": String(index) }}
 							label={t("Skin tone {n}", { n: index + 1 })}
 							pressed={draft.skin === index}

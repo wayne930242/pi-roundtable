@@ -28,6 +28,7 @@ import {
 	wording,
 } from "./lib/messages.ts";
 import { hrefFor, setRouting, useRoute } from "./lib/router.ts";
+import { initSkins } from "./lib/skins.ts";
 import { setTheme, useTheme } from "./lib/theme.ts";
 import { AgentPage } from "./pages/agent.tsx";
 import { MorePage, PANE_ICONS } from "./pages/more.tsx";
@@ -100,6 +101,7 @@ export function App() {
 				);
 				setPresentation(loaded);
 				initLook(loaded.look);
+				initSkins(loaded.characterSkins);
 				setRouting(loaded.mountPath, loaded.panes[0]);
 				document.documentElement.lang = loaded.locale ?? "en";
 				setConfig(loaded);

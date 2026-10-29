@@ -17,6 +17,7 @@ import {
 	seatStates,
 	seatUid,
 } from "../lib/seats.ts";
+import { useSkins } from "../lib/skins.ts";
 import type {
 	SeatInit,
 	SeatState,
@@ -99,6 +100,7 @@ export function RoundTable(props: RoundTableProps) {
 	const kit = useKit();
 	const look = useLook();
 	const style = useCharacterStyle();
+	const skins = useSkins();
 	const characters = useCharacters();
 	const roster = useRoster(props.members);
 	const agentStates = useRoomStates(roster.map((view) => view.key));
@@ -137,10 +139,11 @@ export function RoundTable(props: RoundTableProps) {
 					style.look,
 					statesRef.current[view.name] ?? "idle",
 					seatUid(index, view.name),
+					skins,
 				),
 			};
 		});
-	}, [kit, roster, characters, style.look]);
+	}, [kit, roster, characters, style.look, skins]);
 	const seatsRef = useRef(seats);
 	seatsRef.current = seats;
 	const rosterRef = useRef(roster);
@@ -162,6 +165,8 @@ export function RoundTable(props: RoundTableProps) {
 	};
 	const styleRef = useRef(style);
 	styleRef.current = style;
+	const skinsRef = useRef(skins);
+	skinsRef.current = skins;
 	const kitRef = useRef(kit);
 	kitRef.current = kit;
 	const onHandleRef = useRef(onHandle);
@@ -169,7 +174,6 @@ export function RoundTable(props: RoundTableProps) {
 
 	const ready = kit !== undefined && seats.length > 0;
 	// The scene mounts once there is something to seat, and again when its shape changes.
-	// biome-ignore lint/correctness/useExhaustiveDependencies: only the shape of the table remounts it; the rest goes through the handle
 	useEffect(() => {
 		const element = host.current;
 		if (!ready || !element) return;
@@ -189,6 +193,7 @@ export function RoundTable(props: RoundTableProps) {
 						styleRef.current.look,
 						state,
 						seatUid(index, id),
+						skinsRef.current,
 					),
 				);
 			},

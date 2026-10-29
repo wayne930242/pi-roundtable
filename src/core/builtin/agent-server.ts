@@ -202,6 +202,7 @@ export function agentServerPlugin(
 			if (!connection) hostsRooms = () => surfaces.roomSurfaces().length > 0;
 			const studio = new FileAvatarStudio({
 				dir: join(options.dataDir, "avatars"),
+				skins: context.env.characterSkins,
 				...(options.avatarUrl ? { publicUrl: options.avatarUrl } : {}),
 				referencePath: options.avatarReference,
 				...(options.avatarNeutral
