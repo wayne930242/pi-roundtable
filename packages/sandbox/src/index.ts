@@ -49,7 +49,9 @@ export {
 	channelWorkspaceDir,
 	guildWorkspaceDir,
 	historyFilePath,
+	workspaceFilesDir,
 } from "./layout.ts";
+export { pageText, textBytes } from "./paging.ts";
 export {
 	collectPiAttachments,
 	type PiAttachmentOptions,
@@ -126,9 +128,11 @@ export {
 export {
 	BUDGET_DEFAULTS,
 	BUDGET_LIMITS,
+	FILES_DEFAULTS,
 	SANDBOX_PROTOCOL,
 	SANDBOX_PROTOCOL_LABEL,
 	type SandboxBudgets,
+	type SandboxFiles,
 	type SandboxReply,
 	type SandboxTurn,
 	type ToolSpec,

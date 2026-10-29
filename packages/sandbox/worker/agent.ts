@@ -11,6 +11,7 @@ import {
 	validFunctionName,
 	WORKSPACE_PATH,
 } from "../src/protocol.ts";
+import { FILE_TOOLS, WorkspaceFiles } from "./files.ts";
 import { MEMORY_TOOLS, SandboxMemory } from "./memory.ts";
 import { unixBrokerRequest } from "./transport.ts";
 
@@ -128,6 +129,14 @@ export async function runWorkerTurn(
 			spec,
 			run: (input) => memory.call(spec.name, input, turn.speaker.id),
 		});
+	if (turn.files) {
+		const files = new WorkspaceFiles(workspace, turn.files, toolResultBytes);
+		for (const spec of FILE_TOOLS)
+			functions.set(spec.name, {
+				spec,
+				run: (input) => files.call(spec.name, input),
+			});
+	}
 	for (const spec of turn.tools) {
 		const name = `host_${spec.name}`;
 		functions.set(name, {

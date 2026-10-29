@@ -17,7 +17,10 @@ import {
 	type SandboxReply,
 	type SandboxTurn,
 } from "./protocol.ts";
-import type { ResolvedSandboxRuntimeOptions } from "./runtime-options.ts";
+import {
+	type ResolvedSandboxRuntimeOptions,
+	resolveFiles,
+} from "./runtime-options.ts";
 
 interface SandboxTurnRequest {
 	channel: ChannelKey;
@@ -68,6 +71,7 @@ export async function runSandboxTurn(
 	const { channel, speaker, text, reset, signal } = request;
 	// The container is named by its channel, which two turns of one workspace never share.
 	const segment = channelWorkspaceName(channel);
+	const files = resolveFiles(options.files);
 	const names = directories(options, channel, request.space);
 	const workspaceDir = join(options.workspaceRoot, names.workspace);
 	mkdirSync(workspaceDir, { recursive: true, mode: 0o700 });
@@ -101,6 +105,7 @@ export async function runSandboxTurn(
 			reset,
 			...(options.budgets ? { budgets: options.budgets } : {}),
 			...(channelDir ? { historyDir: CHANNEL_PATH } : {}),
+			...(files ? { files } : {}),
 			tools: (options.tools ?? []).map(({ name, description, parameters }) => ({
 				name,
 				description,

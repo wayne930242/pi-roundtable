@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { join } from "node:path";
 import type { ChannelKey } from "pi-roundtable";
 import { HISTORY_FILE } from "./history.ts";
+import { FILES_DIR } from "./protocol.ts";
 
 const digest = (text: string): string =>
 	createHash("sha256").update(text).digest("hex");
@@ -50,4 +51,8 @@ export function channelStateDir(
 /** The history file inside a channel's state directory (or its workspace in `"channel"` mode). */
 export function historyFilePath(directory: string): string {
 	return join(directory, HISTORY_FILE);
+}
+/** Where the file tools keep a workspace's files; an import writes its files here. */
+export function workspaceFilesDir(workspaceDir: string): string {
+	return join(workspaceDir, FILES_DIR);
 }

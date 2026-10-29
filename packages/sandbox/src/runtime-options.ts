@@ -14,8 +14,11 @@ import {
 } from "./container-driver.ts";
 import {
 	budgetsError,
+	FILES_DEFAULTS,
+	filesError,
 	SANDBOX_PROTOCOL,
 	type SandboxBudgets,
+	type SandboxFiles,
 } from "./protocol.ts";
 
 export interface SandboxRuntimeOptions {
@@ -47,6 +50,13 @@ export interface SandboxRuntimeOptions {
 	 * 8,192 for the prompt, 4,096 for a tool result, 196,608 for a model request.
 	 */
 	budgets?: SandboxBudgets;
+	/**
+	 * Workspace file tools in the sealed worker (`files_list`, `files_read`, `files_write`,
+	 * `files_delete`) under `files/` of the workspace: `true` for the defaults, 256 KiB per file
+	 * and 32 MiB in all, or limits. Shared by every channel of a `"server"` workspace. They are
+	 * bounded in the worker only; keep a filesystem quota on the workspace root.
+	 */
+	files?: boolean | { maxFileBytes?: number; maxTotalBytes?: number };
 	/** Broker calls (model and host tools together) one turn may make; default 48. */
 	maxCalls?: number;
 	/** Output tokens one model call may produce, thinking included; default 4,096. */
@@ -89,6 +99,7 @@ export function resolveSandboxRuntimeOptions(
 		if (error) throw new Error(error);
 	}
 	checkPromptBudget(options);
+	resolveFiles(options.files);
 	for (const root of [options.runRoot, options.workspaceRoot]) {
 		if (!isAbsolute(root) || root === "/")
 			throw new Error("sandbox roots must be absolute dedicated directories");
@@ -191,7 +202,7 @@ export function requiredProtocol(
 	const because = [
 		options.workspace === "server" ? 'workspace: "server"' : undefined,
 		options.budgets ? "budgets" : undefined,
-		(options as { files?: unknown }).files ? "files" : undefined,
+		options.files ? "files" : undefined,
 		(options as { skills?: readonly unknown[] }).skills?.length
 			? "skills"
 			: undefined,
@@ -219,4 +230,15 @@ export async function checkImageProtocol(
 		throw new Error(
 			`sandbox image ${options.image} is ${found === undefined ? "unlabelled (an older worker)" : `protocol ${found}`}, but ${required.because} needs protocol ${required.version}; rebuild the image from packages/sandbox/worker/Dockerfile`,
 		);
+}
+
+/** The limits `files` asks for, or undefined when the file tools are off; throws on bad limits. */
+export function resolveFiles(
+	files: SandboxRuntimeOptions["files"],
+): SandboxFiles | undefined {
+	if (files === undefined || files === false) return undefined;
+	const limits = { ...FILES_DEFAULTS, ...(files === true ? {} : files) };
+	const error = filesError(limits);
+	if (error) throw new Error(error);
+	return limits;
 }

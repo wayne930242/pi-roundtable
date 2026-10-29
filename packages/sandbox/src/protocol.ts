@@ -75,6 +75,42 @@ export function toolResultTextBytes(text: string): number {
 	return Buffer.byteLength(JSON.stringify(JSON.stringify(text))) - 2;
 }
 
+/** The workspace file tools' limits, as the turn carries them. */
+export interface SandboxFiles {
+	/** The most UTF-8 bytes one file may hold. */
+	maxFileBytes: number;
+	/** The most bytes everything under `files/` may hold. */
+	maxTotalBytes: number;
+}
+export const FILES_DIR = "files";
+export const FILES_DEFAULTS = {
+	maxFileBytes: 256 * 1024,
+	maxTotalBytes: 32 * 1024 * 1024,
+} as const satisfies SandboxFiles;
+const FILES_FILE_CEILING = 16 * 1024 * 1024;
+const FILES_TOTAL_CEILING = 100 * 1024 ** 3;
+
+/** Why `value` is not a valid files limit pair, or undefined when it is one. */
+export function filesError(value: unknown): string | undefined {
+	if (!isRecord(value)) return "files must be an object of limits";
+	const { maxFileBytes, maxTotalBytes } = value;
+	if (
+		!Number.isSafeInteger(maxFileBytes) ||
+		(maxFileBytes as number) < 1 ||
+		(maxFileBytes as number) > FILES_FILE_CEILING
+	)
+		return `files.maxFileBytes must be an integer from 1 to ${FILES_FILE_CEILING}`;
+	if (
+		!Number.isSafeInteger(maxTotalBytes) ||
+		(maxTotalBytes as number) < 1 ||
+		(maxTotalBytes as number) > FILES_TOTAL_CEILING
+	)
+		return `files.maxTotalBytes must be an integer from 1 to ${FILES_TOTAL_CEILING}`;
+	if ((maxFileBytes as number) > (maxTotalBytes as number))
+		return "files.maxFileBytes must not exceed files.maxTotalBytes";
+	return undefined;
+}
+
 export interface SandboxTurn {
 	text: string;
 	speaker: { id: string; name: string };
@@ -85,6 +121,8 @@ export interface SandboxTurn {
 	reset?: boolean;
 	/** Absent unless the operator set a budget; the worker then keeps its defaults. */
 	budgets?: SandboxBudgets;
+	/** Present when the file tools are on; absent means the worker offers none. */
+	files?: SandboxFiles;
 	/** Where the history file lives; absent means in the workspace, as before. */
 	historyDir?: typeof CHANNEL_PATH;
 	mcp: { server: string; tools: ToolSpec[] }[];
@@ -123,6 +161,7 @@ export function isSandboxTurn(value: unknown): value is SandboxTurn {
 		(value.budgets === undefined ||
 			budgetsError(value.budgets) === undefined) &&
 		(value.historyDir === undefined || value.historyDir === CHANNEL_PATH) &&
+		(value.files === undefined || filesError(value.files) === undefined) &&
 		Array.isArray(value.tools) &&
 		value.tools.every(isToolSpec) &&
 		Array.isArray(value.mcp) &&
