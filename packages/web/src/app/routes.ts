@@ -37,6 +37,8 @@ import type { PushMutes } from "../push/mutes.ts";
 import { bad, bodyOf, HttpError, notFound } from "./api-http.ts";
 import type { CardLog } from "./card-log.ts";
 import { type FileDir, fileResponse, isFileId } from "./files.ts";
+import type { LayoutStore } from "./layout.ts";
+import { LayoutRoutes } from "./layout-routes.ts";
 import { PromptApi, type PromptApiOptions } from "./prompt-routes.ts";
 import { PAGE_LIMIT, type RoomLog } from "./room-log.ts";
 import type { Rooms } from "./rooms.ts";
@@ -65,6 +67,8 @@ export interface AppApiOptions {
 	mutes: Pick<PushMutes, "set">;
 	/** The dispatch threads, which go with the room they hang under. */
 	threads: Pick<WebThreads, "under" | "removeUnder">;
+	/** The owners' shared arrangement of the room list: pins and folders. */
+	layout: LayoutStore;
 	conversations: Pick<ConversationPort, "startFresh">;
 	identity: Pick<IdentityService, "tierOf">;
 	/** Present when the schedules pane is served. */
@@ -205,11 +209,19 @@ export function partsOf(path: string): string[] | undefined {
 export class AppApi {
 	readonly #options: AppApiOptions;
 	readonly #team: TeamApi;
+	readonly #layout: LayoutRoutes;
 	readonly #prompts: PromptApi | undefined;
 	readonly #skillDocs: SkillDocApi | undefined;
 
 	constructor(options: AppApiOptions) {
 		this.#options = options;
+		this.#layout = new LayoutRoutes({
+			layout: options.layout,
+			placeable: () => options.rooms.placeable(),
+			home: () => options.rooms.homeKey(),
+			owner: (admission) => this.#owner(admission),
+			changed: () => options.changed(),
+		});
 		this.#prompts = options.prompts
 			? new PromptApi({ prompts: options.prompts })
 			: undefined;
@@ -249,6 +261,7 @@ export class AppApi {
 				[
 					"session",
 					"rooms",
+					"folders",
 					"uploads",
 					"files",
 					"schedules",
@@ -320,6 +333,8 @@ export class AppApi {
 				models: await this.#options.team.usableModels(),
 			} satisfies ModelsView);
 		if (area === "rooms") return this.#rooms(request, parts, admission);
+		if (area === "folders")
+			return this.#layout.folders(request, parts, admission);
 		if (area === "uploads" && method === "POST" && !id) {
 			const owner = await this.#owner(admission);
 			return json(
@@ -382,7 +397,10 @@ export class AppApi {
 		const { rooms, log, cards, modes, mutes, conversations } = this.#options;
 		if (!key) {
 			if (method !== "GET") throw new HttpError(405, "Method not allowed.");
-			return json({ rooms: await rooms.list() } satisfies RoomsView);
+			return json({
+				rooms: await rooms.list(),
+				...(await this.#layout.view()),
+			} satisfies RoomsView);
 		}
 		const room = await rooms.resolve(key);
 		if (!room) throw notFound();
@@ -434,6 +452,12 @@ export class AppApi {
 			await conversations.startFresh(room.key);
 			return json({ ok: true });
 		}
+		if (
+			(action === "folder" || action === "pin") &&
+			method === "PUT" &&
+			parts.length === 4
+		)
+			return this.#layout.place(request, room, action, admission);
 		if (action === "mute" && method === "PUT" && parts.length === 4) {
 			// Only an agent's or group's room has a mute of its own; a thread's posts are its parent's business.
 			if (room.readOnly) throw notFound();

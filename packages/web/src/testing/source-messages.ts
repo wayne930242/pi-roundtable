@@ -173,6 +173,7 @@ export function serverMessages(): Map<string, string> {
 		const source = readFileSync(file, "utf8");
 		for (const call of calls(source, [
 			"HttpError",
+			"LayoutRefusal",
 			"UploadRefusal",
 			"bad",
 			"message",

@@ -26,6 +26,7 @@ import type { Vapid } from "../push/vapid.ts";
 import { CardLog } from "./card-log.ts";
 import { OwnerDesk } from "./desk.ts";
 import { FileDir } from "./files.ts";
+import { RoomLayout } from "./layout.ts";
 import { Presence } from "./presence.ts";
 import { RoomLog } from "./room-log.ts";
 import { Rooms } from "./rooms.ts";
@@ -49,6 +50,7 @@ export const APP_MIGRATIONS: readonly Migration[] = [
 	WebThreads.migration,
 	PushSubscriptions.migration,
 	PushMutes.migration,
+	RoomLayout.migration,
 ];
 
 export interface OwnerAppOptions {
@@ -275,6 +277,7 @@ export class OwnerApp {
 			modes,
 			mutes,
 			threads,
+			layout: new RoomLayout(options.database),
 			conversations: options.conversations,
 			identity,
 			...(options.schedules ? { schedules: options.schedules } : {}),

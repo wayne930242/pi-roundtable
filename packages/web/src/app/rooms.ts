@@ -123,6 +123,27 @@ export class Rooms {
 			: undefined;
 	}
 
+	/**
+	 * The keys of the rooms an owner can pin or put in a folder: the active agents' and groups' rooms,
+	 * without Home, which stays at the top, and without threads, which follow their room.
+	 */
+	placeable(): Set<string> {
+		const { surface, directory } = this.#options;
+		const home = this.homeKey();
+		return new Set<string>(
+			[
+				...directory
+					.agents()
+					.filter((agent) => agent.status === "active")
+					.map((agent) => agentRoomKey(surface, agent.name)),
+				...directory
+					.groups()
+					.filter((group) => group.status === "active")
+					.map((group) => groupRoomKey(surface, group.name)),
+			].filter((key) => key !== home),
+		);
+	}
+
 	/** The agent whose avatar path to show, as a path under the mount. */
 	avatarOf(agent: Agent): string {
 		// The studio gives a full URL with a public address and a bare path without one.

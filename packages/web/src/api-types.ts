@@ -341,7 +341,26 @@ export interface RoomView {
 	last?: RoomMessage;
 }
 
-export interface RoomsView {
+/** An owner-made folder of rooms (分組 in zh-TW), with its rooms in the owner's order. */
+export interface FolderView {
+	/** `folder.<uuid>`. */
+	id: string;
+	name: string;
+	/** Room keys in order. */
+	rooms: string[];
+}
+
+/**
+ * The owners' shared arrangement of the room list: pinned rooms in their order, then the folders
+ * in theirs. A room is pinned, in one folder, or in neither; the rest are listed by latest activity.
+ */
+export interface LayoutView {
+	/** The pinned rooms' keys, in order. */
+	pins: string[];
+	folders: FolderView[];
+}
+
+export interface RoomsView extends LayoutView {
 	rooms: RoomView[];
 }
 
