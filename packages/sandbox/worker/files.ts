@@ -8,6 +8,7 @@ import {
 	renameSync,
 	rmdirSync,
 	rmSync,
+	type Stats,
 	writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
@@ -147,11 +148,11 @@ export class WorkspaceFiles {
 	#resolve(segments: readonly string[]): {
 		path: string;
 		existing: number;
-		stat?: ReturnType<typeof lstatSync>;
+		stat?: Stats;
 	} {
 		let path = this.#root;
 		let existing = 0;
-		let stat: ReturnType<typeof lstatSync> | undefined;
+		let stat: Stats | undefined;
 		const chain = [undefined, ...segments];
 		for (const [index, segment] of chain.entries()) {
 			if (segment !== undefined) path = join(path, segment);

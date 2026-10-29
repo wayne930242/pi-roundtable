@@ -1,15 +1,24 @@
 import { expect, test } from "bun:test";
 import {
+	existsSync,
 	mkdirSync,
 	mkdtempSync,
 	readdirSync,
+	readFileSync,
 	rmSync,
 	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DockerContainerDriver } from "./container-driver.ts";
+import {
+	channelStateDir,
+	guildWorkspaceDir,
+	historyFilePath,
+	workspaceFilesDir,
+} from "./layout.ts";
 import { precheckScriptRunner } from "./precheck-runner.ts";
-import { isRecord } from "./protocol.ts";
+import { isRecord, SANDBOX_PROTOCOL } from "./protocol.ts";
 import { SandboxRuntime } from "./runtime.ts";
 
 /** Docker Desktop does not share host Unix sockets into Linux containers; run on a native Linux host. */
@@ -224,6 +233,108 @@ test.skipIf(
 			expect(readdirSync(runRoot)).toEqual([]);
 		} finally {
 			await mcp.stop(true);
+			rmSync(root, { recursive: true, force: true });
+			await Bun.spawn(["docker", "image", "rm", image], {
+				stdout: "ignore",
+				stderr: "ignore",
+			}).exited;
+		}
+	},
+	300_000,
+);
+
+/** A "server" workspace mounts the guild's files and the channel's own state, and the image says it speaks protocol 2. */
+test.skipIf(
+	process.env.SANDBOX_DOCKER_TEST !== "1" || process.platform !== "linux",
+)(
+	"Docker runs a server-workspace turn with three mounts and the protocol label",
+	async () => {
+		const root = mkdtempSync(join(tmpdir(), "sb-docker-server-"));
+		const image = "pi-roundtable-sandbox:server-test";
+		const guild = "900000000000000001";
+		let calls = 0;
+		const endpoint = Bun.serve({
+			hostname: "127.0.0.1",
+			port: 0,
+			fetch: async (request) => {
+				calls++;
+				const body: unknown = await request.json();
+				if (!isRecord(body) || !Array.isArray(body.messages))
+					throw new Error("invalid test request");
+				const wrote = body.messages.some(
+					(message) => isRecord(message) && message.role === "tool",
+				);
+				return Response.json({
+					choices: [
+						{
+							message: wrote
+								? { role: "assistant", content: "Saved." }
+								: {
+										role: "assistant",
+										content: "",
+										tool_calls: [
+											{
+												id: "w",
+												type: "function",
+												function: {
+													name: "files_write",
+													arguments: JSON.stringify({
+														path: "shared/note.txt",
+														content: "from the guild",
+													}),
+												},
+											},
+										],
+									},
+						},
+					],
+				});
+			},
+		});
+		const runtime = new SandboxRuntime({
+			image,
+			runRoot: join(root, "run"),
+			workspaceRoot: join(root, "work"),
+			model: "fake-model",
+			modelUrl: `http://127.0.0.1:${endpoint.port}/v1/chat/completions`,
+			apiKey: () => "integration-host-key",
+			workspace: "server",
+			files: true,
+		});
+		try {
+			const build = Bun.spawn(
+				["docker", "build", "-f", "worker/Dockerfile", "-t", image, "."],
+				{ stdout: "inherit", stderr: "inherit" },
+			);
+			expect(await build.exited).toBe(0);
+			const driver = new DockerContainerDriver();
+			expect(await driver.imageProtocol(image)).toBe(SANDBOX_PROTOCOL);
+			await runtime.verifyImage();
+			const speaker = { id: "guest", name: "Guest", principalId: "p_guest" };
+			expect(
+				await runtime.runTurn("discord:1", speaker, "Hello", { space: guild }),
+			).toEqual({ ok: true, text: "Saved." });
+			expect(calls).toBe(2);
+			const workspace = guildWorkspaceDir(join(root, "work"), "discord", guild);
+			expect(
+				readFileSync(
+					join(workspaceFilesDir(workspace), "shared/note.txt"),
+					"utf8",
+				),
+			).toBe("from the guild");
+			// History is in the channel's own state directory, never in the shared workspace.
+			expect(existsSync(historyFilePath(workspace))).toBe(false);
+			expect(
+				existsSync(
+					historyFilePath(channelStateDir(join(root, "work"), "discord:1")),
+				),
+			).toBe(true);
+			// A second channel sees the guild's file but starts with no history of its own.
+			await runtime.runTurn("discord:2", speaker, "Hi", { space: guild });
+			expect(readdirSync(join(root, "work")).length).toBe(3);
+		} finally {
+			await runtime.dispose();
+			await endpoint.stop(true);
 			rmSync(root, { recursive: true, force: true });
 			await Bun.spawn(["docker", "image", "rm", image], {
 				stdout: "ignore",
