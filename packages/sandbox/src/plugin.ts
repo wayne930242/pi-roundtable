@@ -3,7 +3,7 @@ import { dirname, isAbsolute, resolve } from "node:path";
 import { type ChannelKey, definePlugin, serviceKey } from "pi-roundtable";
 import { DISCORD } from "pi-roundtable/discord";
 import { SandboxChannelStore } from "./channel-store.ts";
-import { sandboxClaim } from "./claim.ts";
+import { type SandboxReplyText, sandboxClaim } from "./claim.ts";
 import { sandboxCommands } from "./commands.ts";
 import { SandboxRuntime, type SandboxRuntimeOptions } from "./runtime.ts";
 
@@ -23,6 +23,12 @@ export interface SandboxOptions
 	provider?: string;
 	/** Read before each model call with its channel and speaker; never falls back to the host login. */
 	apiKey?: SandboxRuntimeOptions["apiKey"];
+	/**
+	 * Rewrites each successful model reply on the host before it is posted, for example to
+	 * convert Simplified to Traditional Chinese. Failure texts are not passed to it; a throw
+	 * fails the turn.
+	 */
+	replyText?: SandboxReplyText;
 }
 export interface SandboxService {
 	channels: SandboxChannelStore;
@@ -75,6 +81,7 @@ export function sandbox(options: SandboxOptions) {
 						channels,
 						runtime,
 						surfaces: context.surfaces,
+						...(options.replyText ? { replyText: options.replyText } : {}),
 						reportFailure: (channel) =>
 							context.logger.error(
 								{ channel },

@@ -27,6 +27,7 @@ export { SandboxChannelStore } from "./channel-store.ts";
 export {
 	isSandboxAddress,
 	type SandboxClaimOptions,
+	type SandboxReplyText,
 	sandboxClaim,
 } from "./claim.ts";
 export { sandboxCommands } from "./commands.ts";

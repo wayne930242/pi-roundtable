@@ -8,6 +8,16 @@ import { splitReply } from "pi-roundtable/kit";
 import type { SandboxChannelStore } from "./channel-store.ts";
 import { type SandboxRuntime, SandboxTurnRefused } from "./runtime.ts";
 
+/**
+ * Rewrites a successful model reply before it is posted, such as converting script or stripping
+ * markup. It runs on the host, after the sealed turn and before the reply is split into chunks;
+ * failure texts never pass through it. A throw, or a value that is not a string, fails the turn.
+ */
+export type SandboxReplyText = (
+	text: string,
+	context: { channel: ChannelKey; space?: string },
+) => string | Promise<string>;
+
 export interface SandboxClaimOptions {
 	/** `owns` adds channels in configured guilds; without it only `has` decides. */
 	channels: Pick<SandboxChannelStore, "has"> &
@@ -15,6 +25,7 @@ export interface SandboxClaimOptions {
 	runtime: Pick<SandboxRuntime, "runTurn" | "stop" | "startFresh">;
 	surfaces: Pick<SurfacePort, "sendReply" | "startTyping">;
 	reportFailure?: (channel: ChannelKey) => void;
+	replyText?: SandboxReplyText;
 }
 
 export function isSandboxAddress(message: InboundMessage): boolean {
@@ -24,6 +35,21 @@ export function isSandboxAddress(message: InboundMessage): boolean {
 		!message.isDirect &&
 		(message.mentionsBot || message.repliesToBot)
 	);
+}
+
+async function rewriteReply(
+	replyText: SandboxReplyText | undefined,
+	text: string,
+	message: InboundMessage,
+): Promise<string> {
+	if (!replyText) return text;
+	const rewritten = await replyText(text, {
+		channel: message.channel,
+		...(message.space ? { space: message.space } : {}),
+	});
+	if (typeof rewritten !== "string")
+		throw new TypeError("replyText must return a string");
+	return rewritten;
 }
 
 /** Outranks the agent server's priority 100; ignored messages never fall through to host agents. */
@@ -68,10 +94,11 @@ export function sandboxClaim(options: SandboxClaimOptions): ChannelClaim {
 							text,
 							{ space: message.space },
 						);
+						const posted = reply.ok
+							? await rewriteReply(options.replyText, reply.text, message)
+							: "The sandbox turn failed.";
 						await options.surfaces.sendReply(message.channel, {
-							chunks: splitReply(
-								reply.ok ? reply.text : "The sandbox turn failed.",
-							),
+							chunks: splitReply(posted),
 						});
 					} catch (error) {
 						// A stop or a full queue is the runtime working as designed, not a failure.

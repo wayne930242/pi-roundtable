@@ -177,6 +177,14 @@ Without `budgets` and `skills`, an oversized `prompt` is still cut at 8,192 byte
 Any other cleartext URL still needs `allowHttp`, and credentials in the URL stay refused.
 This applies to `modelUrl` only, not to MCP servers.
 
+### Rewriting replies on the host
+
+`replyText(text, { channel, space })` rewrites each successful model reply on the host before it is split and posted, and may return a promise.
+Use it for what the prompt cannot guarantee, such as converting a model's stray Simplified Chinese to Traditional.
+It never sees failure texts, and the history the worker keeps holds the model's own words.
+A throw or a value that is not a string fails the turn like any other failure.
+It needs no new worker image.
+
 ### Worker image protocol
 
 The worker image carries the label `pi-roundtable-sandbox.protocol` with the worker protocol version (2 in this release, exported as `SANDBOX_PROTOCOL`).

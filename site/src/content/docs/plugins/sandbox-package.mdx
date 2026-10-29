@@ -78,6 +78,7 @@ Those marked protocol 2 need a worker image built from this release, and startup
 | `skills` | Protocol 2. Directories of skill folders; the prompt ends with a skill index and `host_read_skill` pages a skill's files from the host. |
 | `budgets` | Protocol 2. `promptBytes` (8,192, at most 32,768; prompt plus skill index, over it stops startup), `toolResultBytes` (4,096, at most 32,768) and `requestBytes` (196,608, at most 196,608). Startup stops when `requestBytes` cannot hold the prompt budget plus 8,192 bytes of memory notes, 49,152 bytes for the current message and 8 KiB of tool-result room; the trim never drops the newest tool-call group, it cuts that group's results to a share instead. Host tools receive `context.resultBytes`. |
 | `maxCalls`, `maxOutputTokens` | Broker calls per turn (48) and output tokens per model call (4,096; a thinking model's thinking counts). |
+| `replyText` | A host function `(text, { channel, space })` that rewrites each successful reply before it is posted, such as converting stray Simplified Chinese to Traditional. Failure texts skip it, the worker's history keeps the model's words, and a throw fails the turn. No image rebuild. |
 
 `modelUrl` may use `http://` on `127.0.0.1`, `::1` or `localhost`, because the broker runs on the host.
 Host tools reach the model as `host_<name>`, so a skill that names a tool writes `host_roll_dice`.

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- `sandbox({ replyText })`: rewrites each successful model reply on the host before it is split and posted (`(text, { channel, space }) => string | Promise<string>`), for example to convert stray Simplified Chinese to Traditional. Failure texts never pass through it, the worker's history keeps the model's own words, and a throw or a non-string fails the turn like any other failure. Host-only: no worker protocol change, no image rebuild.
+
 ## [0.24.0] - 2026-10-29
 
 The core peer range is now `>=0.24.0 <0.25.0`. Every new option is optional; with none set, behavior, mounts, files on disk, the worker protocol and the public API are as in 0.23.x, and `PiSandboxRuntime` is unchanged.
