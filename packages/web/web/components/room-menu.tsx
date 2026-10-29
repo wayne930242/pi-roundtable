@@ -1,6 +1,9 @@
 import { useState } from "react";
 import type { RoomMode } from "../../src/api-types.ts";
 import { openAgentSheet } from "../lib/agent-sheet.ts";
+import { useSelector } from "../lib/app-store.ts";
+import { askFolderDialog } from "../lib/folder-dialogs.ts";
+import "../lib/layout-icons.ts";
 import { translate as t } from "../lib/messages.ts";
 import { changeMode } from "../lib/modes.ts";
 import { setRoomMuted } from "../lib/mute.ts";
@@ -15,7 +18,7 @@ const YOLO_ID = "room-menu-yolo";
 const LONG_ID = "room-menu-long";
 const MUTE_ID = "room-menu-mute";
 
-/** The room's menu: the push, the two modes, the agent's sheet, and starting over; a thread's only links to its parent. */
+/** The room's menu: the push, the two modes, the agent's sheet, pinning and filing the room, and starting over; a thread's only links to its parent. */
 export function RoomMenu(props: {
 	open: boolean;
 	room: string;
@@ -39,6 +42,15 @@ export function RoomMenu(props: {
 	onAskStartOver(): void;
 }) {
 	const [busy, setBusy] = useState(false);
+	// Home stays at the top; every other room can be pinned or put in a folder.
+	const placeable = useSelector(
+		(state) => state.rooms[props.room]?.view?.home === false,
+		props.room,
+	);
+	const pinned = useSelector(
+		(state) => state.pins.includes(props.room),
+		props.room,
+	);
 	const mode = props.mode ?? { yolo: false, longRunning: false };
 	const setLong = async (next: boolean) => {
 		setBusy(true);
@@ -202,6 +214,54 @@ export function RoomMenu(props: {
 						</button>
 					</li>
 				) : null}
+				{props.readOnly || !placeable ? null : (
+					<>
+						<li>
+							<button
+								type="button"
+								className="menu-item menu-link"
+								onClick={() => {
+									props.onClose();
+									void import("../lib/layout-actions.ts").then((one) =>
+										one.pinRoom(props.room, !pinned),
+									);
+								}}
+							>
+								<span className="menu-icon">
+									<Icon name="pin" />
+								</span>
+								<span className="menu-text">
+									<strong>{pinned ? t("Unpin") : t("Pin")}</strong>
+									<span className="meta">
+										{t("Keep this room at the top of the list.")}
+									</span>
+								</span>
+							</button>
+						</li>
+						<li>
+							<button
+								type="button"
+								className="menu-item menu-link"
+								aria-haspopup="dialog"
+								onClick={() => {
+									props.onClose();
+									askFolderDialog({ kind: "move", room: props.room });
+								}}
+							>
+								<span className="menu-icon">
+									<Icon name="folder" />
+								</span>
+								<span className="menu-text">
+									<strong>{t("Move to folder…")}</strong>
+									<span className="meta">
+										{t("Put this room in a folder, or take it out.")}
+									</span>
+								</span>
+								<Icon name="chevron" size={16} />
+							</button>
+						</li>
+					</>
+				)}
 				{props.readOnly ? null : (
 					<li>
 						<button

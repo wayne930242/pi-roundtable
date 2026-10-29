@@ -15,7 +15,9 @@ import type {
 	RoomView,
 } from "../src/api-types.ts";
 import { ActionMenuHost } from "./components/action-menu.tsx";
+import { FolderDialogHost } from "./components/folder-dialogs.tsx";
 import { RoomConfirmHost } from "./components/room-confirms.tsx";
+import { RoomMenu } from "./components/room-menu.tsx";
 import { Toaster } from "./components/toaster.tsx";
 import { openPage, releaseDom, type TestPage } from "./dom.ts";
 import { closeMenu } from "./lib/action-menu.ts";
@@ -177,7 +179,9 @@ async function show(node: React.ReactNode): Promise<void> {
 	await page.render(node);
 	const want = store.getState().folders.length;
 	for (let i = 0; i < 160 && all("[data-folder-block]").length < want; i += 1)
-		await page.act(() => settle(25));
+		await page.act(async () => {
+			await settle(25);
+		});
 }
 
 const WORK = { id: F1, name: "Work", rooms: [SCOUT] };
@@ -632,6 +636,60 @@ test("the pinned list is a place to drop before it holds a room: hidden until a 
 	expect(q('[data-drop-zone="pinned"] .room-row')).not.toBeNull();
 });
 
+// ── The room's own menu ────────────────────────────────────────────────────────────────────
+
+const RoomMenuFor = (props: { room: string; onClose?: () => void }) => (
+	<>
+		<RoomMenu
+			open
+			room={props.room}
+			mode={{ yolo: false, longRunning: false }}
+			onClose={props.onClose ?? (() => undefined)}
+			onAskYolo={() => undefined}
+			onAskStartOver={() => undefined}
+		/>
+		<FolderDialogHost />
+	</>
+);
+
+const menuLabels = () => all(".menu-text strong").map((one) => one.textContent);
+
+test("a room's own menu pins it and opens Move to folder…, and Home's has neither", async () => {
+	load({ pins: [BUILD] });
+	await page.render(<RoomMenuFor room={SCOUT} />);
+	expect(menuLabels()).toContain("Pin");
+	expect(menuLabels()).toContain("Move to folder…");
+	const pin = spyOn(layoutApi, "pinRoom").mockResolvedValue({
+		pins: [BUILD, SCOUT],
+		folders: [],
+	});
+	try {
+		await page.click(
+			all(".menu-link").find((one) => one.textContent?.includes("Pin")) ?? null,
+		);
+		await settle(80);
+		expect(pin).toHaveBeenCalledWith(SCOUT, true, null);
+	} finally {
+		pin.mockRestore();
+	}
+	// A pinned room offers Unpin.
+	await page.render(<RoomMenuFor room={BUILD} />);
+	expect(menuLabels()).toContain("Unpin");
+	// Move to folder… asks the folder dialog.
+	await page.click(
+		all(".menu-link").find((one) =>
+			one.textContent?.includes("Move to folder"),
+		) ?? null,
+	);
+	await settle(80);
+	expect(dialog("Move to folder…")).toBeDefined();
+	await page.act(() => clearFolderDialog());
+	// Home cannot be pinned or filed.
+	await page.render(<RoomMenuFor room={HOME} />);
+	expect(menuLabels()).not.toContain("Pin");
+	expect(menuLabels()).not.toContain("Move to folder…");
+});
+
 // ── Lifting a row with a finger or a mouse ───────────────────────────────────────────────────
 
 function pointer(
@@ -731,7 +789,9 @@ test("Android's contextmenu while the finger is down is the hold: the row lifts,
 	expect(item.hasAttribute("data-lifted")).toBe(true);
 	expect(menuItems()).toEqual([]);
 	// The hold's own timer must not act on top of it.
-	await page.act(() => settle(500));
+	await page.act(async () => {
+		await settle(500);
+	});
 	expect(menuItems()).toEqual([]);
 	expect(item.hasAttribute("data-lifted")).toBe(true);
 	await page.act(() => pointer(row, "pointerup"));

@@ -741,6 +741,9 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	Pin: "置頂",
 	Unpin: "取消置頂",
 	Arrange: "整理",
+	"Keep this room at the top of the list.": "把這個聊天室固定在清單最上面。",
+	"Put this room in a folder, or take it out.":
+		"把這個聊天室放進分組，或移出分組。",
 	"Move up": "上移",
 	"Move down": "下移",
 	"Mute the whole folder": "靜音整個分組",
