@@ -5,6 +5,9 @@
 //                                 makes `fixture_<time>` there and drops it when it stops
 //   PORT                          the app (default 4180); PORT + 1 is the control port below
 //   LOOK                          the host's look, `modern` (default) or `camelot`
+//   LOCALE                       the presentation locale, for example `zh-TW` (default: none, English)
+//   FIXTURE_SKILLS               `registry` lists the host's real skill registry (the built-in skills, plus
+//                                 two written ones made at start) so the skill editor works; default: the fake catalog below
 //   FIXTURE_AGENTS                how many agents sit at the round table, 3 to 12 (default 3)
 //
 // The agents are scripts: start a message with a keyword and the agent acts it out.
@@ -38,7 +41,7 @@ url.pathname = `/${databaseName}`;
 process.env.ROUNDTABLE_TEST_DATABASE_URL = url.toString();
 
 // Loaded after the variable is set: the test host reads the database address when it is imported.
-const { AGENTS, MODES, promptScope, SCHEDULES, THREADS } = await import(
+const { AGENTS, MODES, promptScope, SCHEDULES, SKILLS, THREADS } = await import(
 	"pi-roundtable"
 );
 const { testHost } = await import("pi-roundtable/testing");
@@ -114,6 +117,8 @@ Finish with a one-line verdict.`,
 		body: "Group the merged changes by area, then write one line for each.\n\n- Fixes first\n- Then features",
 	},
 };
+
+const realSkills = process.env.FIXTURE_SKILLS === "registry";
 
 const origin = `http://127.0.0.1:${port}`;
 const seats = Math.min(
@@ -513,15 +518,22 @@ host = await testHost({
 				"notes",
 				"skills",
 			],
+			...(process.env.LOCALE
+				? { presentation: { locale: process.env.LOCALE } }
+				: {}),
 			features: {
-				skills: {
-					catalog: () => SKILL_CATALOG,
-					read: async (name) => {
-						const skill = SKILL_DOCUMENTS[name];
-						if (!skill) throw new Error("There is no such skill.");
-						return skill;
-					},
-				},
+				...(realSkills
+					? {}
+					: {
+							skills: {
+								catalog: () => SKILL_CATALOG,
+								read: async (name: string) => {
+									const skill = SKILL_DOCUMENTS[name];
+									if (!skill) throw new Error("There is no such skill.");
+									return skill;
+								},
+							},
+						}),
 				cleanup: {
 					startFresh: async () => "archived",
 					deleteConversation: async () => "deleted",
@@ -558,6 +570,17 @@ for (let attempt = 0; ; attempt += 1) {
 	} catch (error) {
 		if (attempt >= 40) throw error;
 		await sleep(250);
+	}
+}
+if (realSkills) {
+	// Written skills in the real registry, so the editor has something to open and save.
+	const registry = services.get(SKILLS);
+	for (const [name, skill] of Object.entries(SKILL_DOCUMENTS)) {
+		const description = String(skill.frontmatter.description ?? name);
+		await registry.createDocument(
+			`---\nname: ${name}\ndescription: ${JSON.stringify(description)}\n---\n\n${skill.body}\n`,
+			"Ada",
+		);
 	}
 }
 const nextWeek = new Date(Date.now() + 86_400_000);
