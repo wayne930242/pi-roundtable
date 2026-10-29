@@ -273,8 +273,9 @@ export class PgAgentStore extends AgentBook implements AgentDirectory {
 	}
 
 	/**
-	 * Deletes an archived agent and its group cursors, and takes it out of the archived groups that
-	 * still list it; its name is free again. An active agent is never deleted: archive it first.
+	 * Deletes an archived agent, its group cursors and its prompt history, and takes it out of the
+	 * archived groups that still list it; its name is free again, and a new agent of that name
+	 * starts with an empty history. An active agent is never deleted: archive it first.
 	 */
 	async deleteAgent(name: string): Promise<void> {
 		return this.#serial(async () => {

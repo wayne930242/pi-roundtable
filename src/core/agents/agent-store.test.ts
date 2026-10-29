@@ -80,6 +80,17 @@ describeDb("PostgreSQL", () => {
 			expect(await store.promptHistory("doctor")).toEqual([]);
 		});
 
+		test("deleting an agent drops its prompt history, so a new agent of that name starts with none", async () => {
+			await store.updateAgent("infra", { prompt: "First." }, "Riley");
+			await store.updateAgent("doctor", { prompt: "Other." }, "Riley");
+			expect(await store.promptHistory("infra")).toHaveLength(1);
+			await store.archiveAgent("infra");
+			await store.deleteAgent("infra");
+			await store.seed([seed("infra")]);
+			expect(await store.promptHistory("infra")).toEqual([]);
+			expect(await store.promptHistory("doctor")).toHaveLength(1);
+		});
+
 		test("seeding never overwrites an existing agent", async () => {
 			await store.updateAgent("infra", { prompt: "Edited." });
 			const added = await store.seed([seed("infra"), seed("new-one")]);

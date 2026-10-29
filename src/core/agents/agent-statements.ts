@@ -93,10 +93,11 @@ export class AgentStatements {
 			RETURNING *`;
 	}
 
-	/** Deletes the agent's row and its group cursors together. */
+	/** Deletes the agent's row, its group cursors and its prompt history together. */
 	async deleteAgent(name: string): Promise<void> {
 		await this.#sql.begin(async (tx) => {
 			await tx`DELETE FROM agent_group_cursors WHERE guild_id = ${this.#guild} AND agent_name = ${name}`;
+			await tx`DELETE FROM prompt_history WHERE guild_id = ${this.#guild} AND kind = 'agent' AND name = ${name}`;
 			await tx`DELETE FROM agents WHERE guild_id = ${this.#guild} AND name = ${name}`;
 		});
 	}
