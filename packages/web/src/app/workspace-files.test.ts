@@ -1348,6 +1348,68 @@ describe("previews of media", () => {
 		await dropped.arrayBuffer();
 	});
 
+	test("If-Range matches a strong ETag only, and the raw headers forbid framing and caching", async () => {
+		writeFileSync(
+			join(root, "a.mp3"),
+			bytesOf("ID3", [3, 0, 0, 0, 0, 0, 0], "0123456789"),
+		);
+		const service = files();
+		const first = await service.raw("agents", "a.mp3", false);
+		const etag = first.headers.get("etag") ?? "";
+		expect(etag).not.toStartWith("W/");
+		expect(first.headers.get("content-security-policy")).toContain(
+			"frame-ancestors 'self'",
+		);
+		expect(first.headers.get("cache-control")).toBe("no-store");
+		await first.arrayBuffer();
+		const weak = await service.raw("agents", "a.mp3", false, {
+			range: "bytes=0-1",
+			ifRange: `W/${etag}`,
+		});
+		expect(weak.status).toBe(200);
+		await weak.arrayBuffer();
+	});
+
+	test("the guards see ſ as s: .rt-traſh is the trash", async () => {
+		writeFileSync(join(root, "a.txt"), "a");
+		const service = files();
+		await service.remove("agents", "a.txt", OWNER);
+		writeFileSync(join(root, "b.txt"), "b");
+		expect(
+			(await refused(service.rename("agents", "b.txt", ".rt-traſh", OWNER)))
+				.reason,
+		).toBe("trash-dir");
+	});
+
+	test("a root missing at the start that appears as a link to the data directory is refused", async () => {
+		const data = join(base, "data");
+		mkdirSync(data);
+		writeFileSync(join(data, "auth.json"), "SECRET");
+		const later = join(base, "later");
+		const service = new WorkspaceFiles({
+			roots: [{ id: "scratch", label: "S", dir: later, writable: true }],
+			logger: log.logger,
+			protectedDirs: [data],
+		});
+		symlinkSync(data, later);
+		expect((await refused(service.read("scratch", "auth.json"))).reason).toBe(
+			"outside",
+		);
+		expect(
+			(
+				await refused(
+					service.save(
+						"scratch",
+						"auth.json",
+						{ text: "x", baseHash: sha("SECRET") },
+						OWNER,
+					),
+				)
+			).reason,
+		).toBe("outside");
+		expect(readFileSync(join(data, "auth.json"), "utf8")).toBe("SECRET");
+	});
+
 	test("the raw route has the read route's refusals: traversal, a link out of the place, a pipe, a folder", async () => {
 		symlinkSync(join(outside, "secret.txt"), join(root, "out.mp3"));
 		mkdirSync(join(root, "dir"));

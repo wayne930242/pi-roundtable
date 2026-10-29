@@ -232,7 +232,7 @@ A pipe, socket or device is listed as other and never opened; a file is opened w
 `.git` is read-only everywhere, because a hook or a config there runs code the next time an agent uses `git`; a place that is not writable refuses every change.
 A file over 2 MiB gives its metadata and a download only, over 1 MiB it is shown and not edited, a download is at most 50 MiB and streamed, a directory lists 2,000 entries and says so, and a saved text is at most 1 MiB (`413`).
 A file with a NUL byte in its first 8 KiB, or that is not valid UTF-8, is read-only.
-A PNG, JPEG, WebP or GIF (recognised by its bytes) previews as a picture; SVG, HTML and XML are always downloads and are never rendered, since they can carry script; text is served as `text/plain`.
+A picture, PDF, sound or video previews only when its extension is on the allowlist and its bytes agree (PNG, JPEG, GIF, WebP, SVG, PDF, MP3, WAV, OGG, MP4, WebM); it is served inline with its own type, `nosniff`, `frame-ancestors 'self'`, a strong ETag, byte ranges and `Cache-Control: no-store`, under a `sandbox` policy that loads nothing (a PDF has none, because a browser's viewer does not draw under one). An SVG is served inline and sandboxed, and the page shows it only through `<img>`; HTML and XML are always downloads. Text is served as `text/plain`.
 Each save and each rename, deletion, creation and restore is logged with who, the place, the path and short hashes, never the contents; each refused escape is logged as a warning.
 
 **Holds do not apply.** A hold asks the owner before an agent's tool call; here the owner is the one acting and is already authenticated, and the places are those where the agents may write without a hold.
