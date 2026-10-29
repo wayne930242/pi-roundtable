@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Added
+
+- `sandbox({ channelContext })`: opt-in, off by default (`true` or the Discord plugin's `ChannelContextOptions`). A guest turn in a Discord server channel starts with what others said in that channel since the assistant last posted, read through `DISCORD.channelContext` for the addressed message's own channel only (direct messages, messages without a guild and other surfaces read nothing). Core's defaults and caps apply (keep 15, 500 characters, other bots 80); images are never read. The block is prepended as untrusted public text, not instructions, cut oldest first to fit `runTurn`'s 32,000 characters and the worker's current-message budget, and the addressed message is never cut. A failed read is logged and the turn runs without it. Options are validated at startup, and the option needs the Discord plugin. Host-only: no worker protocol change, no image rebuild.
+- `SandboxClaimOptions.channelContext` and `reportContextFailure`, and the `SandboxChannelContext` type.
+
 ## [0.24.1] - 2026-10-29
 
 ### Added

@@ -185,6 +185,19 @@ It never sees failure texts, and the history the worker keeps holds the model's 
 A throw or a value that is not a string fails the turn like any other failure, and the error is logged with the channel; an empty string posts nothing, as an empty model reply does.
 It needs no new worker image.
 
+### Channel context for guests
+
+`channelContext: true` (or the Discord plugin's `ChannelContextOptions`) is off by default.
+On, a turn in a Discord server channel starts with what others said in that channel since the assistant last posted, so "can you see the messages above?" has an answer.
+The sandbox calls `DISCORD.channelContext` with the addressed message, which reads that message's own channel and no other; a direct message, a message without a guild, or another surface gets no context and no read.
+Core's defaults and caps apply (the newest 15 messages, 500 characters each, other bots 80); `attachments` is ignored, because the sealed worker has no image input.
+The block is prepended to the turn's text as untrusted public text, not instructions, and the addressed message and its quote follow it.
+It is cut oldest first so the whole stays within `runTurn`'s 32,000 characters and the worker's current-message budget; the addressed message is never cut, and when no context fits, the turn is sent as before.
+Options are validated at startup, and the option needs the Discord plugin.
+A failed read is logged as a warning and the turn runs without it.
+`replyText` works unchanged.
+It is host-only: no worker protocol change and no image rebuild.
+
 ### Worker image protocol
 
 The worker image carries the label `pi-roundtable-sandbox.protocol` with the worker protocol version (2 in this release, exported as `SANDBOX_PROTOCOL`).
