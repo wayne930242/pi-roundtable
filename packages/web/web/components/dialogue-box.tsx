@@ -187,15 +187,25 @@ export function DialogueBox(props: DialogueBoxProps) {
 	);
 	const characters = useCharacters();
 	const { room, view, line } = useRoomLine(roomKey);
-	const agent = line?.who === "agent" ? line.agent : undefined;
+	// An agent's own room is that agent's podium: the plate names them even while the newest line is the owner's, which would otherwise put the owner's name under the agent's standee.
+	const owned = view?.kind === "agent" ? view : undefined;
+	const agent = owned
+		? owned.name
+		: line?.who === "agent"
+			? line.agent
+			: undefined;
 	const accent = useAccentStyle(agent ? characters[agent] : undefined);
 
-	const speaker = line ? line.author : (view?.displayName ?? roomKey);
+	const speaker = owned
+		? owned.displayName
+		: line
+			? line.author
+			: (view?.displayName ?? roomKey);
 	const { shown, done, finish } = useReveal(line);
 	const [log, setLog] = useState(false);
 	const [collapsed, setCollapsed] = useState(false);
 	const style: CSSProperties | undefined =
-		line?.who === "owner"
+		line?.who === "owner" && !owned
 			? { ["--agent-accent" as string]: "var(--accent)" }
 			: accent;
 	const typing = Boolean(room?.typing);
@@ -211,11 +221,11 @@ export function DialogueBox(props: DialogueBoxProps) {
 			aria-label={t("Log")}
 		>
 			<header className="scene-tab">
-				{line?.who === "agent" ? (
+				{owned || line?.who === "agent" ? (
 					<span className="scene-chip">
 						<PageCharacter
 							spec={agent ? characters[agent] : undefined}
-							name={agent ?? line.author}
+							name={agent ?? speaker}
 							size={34}
 							live={false}
 						/>
@@ -278,6 +288,9 @@ export function DialogueBox(props: DialogueBoxProps) {
 				>
 					{line ? (
 						<>
+							{owned && line.who === "owner" ? (
+								<span className="scene-from">{line.author}</span>
+							) : null}
 							<MessageMarkdown source={shownText} />
 							{done ? <Files files={line.files} /> : null}
 						</>

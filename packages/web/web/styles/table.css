@@ -445,6 +445,12 @@
 .scene-line > :first-child {
 	margin-top: 0;
 }
+/* The owner's own words under the agent's plate: whose they are shows above them. */
+.scene-from {
+	display: block;
+	color: var(--muted);
+	font-size: var(--text-xs);
+}
 .scene-card {
 	margin-top: var(--space-2);
 }

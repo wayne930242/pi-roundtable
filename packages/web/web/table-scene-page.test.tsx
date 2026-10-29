@@ -173,6 +173,49 @@ test("the key of a room opens the same view as the agent's name", async () => {
 	expect(query(".scene-name")?.textContent).toBe("梅森");
 });
 
+const NOVA = "app:agent.nova";
+
+test("an agent's room keeps that agent's name on the plate and in the progress line while the newest line is the owner's", async () => {
+	store.dispatch({
+		type: "rooms_loaded",
+		rooms: [
+			agent("lena", "Lena"),
+			agent("otto", "梅森"),
+			agent("nova", "Nova"),
+		],
+	});
+	store.dispatch({
+		type: "message",
+		room: NOVA,
+		message: {
+			id: 2,
+			room: NOVA,
+			kind: "owner",
+			author: "Ada",
+			text: "stream",
+			files: [],
+			at: "2026-10-29T10:01:00.000Z",
+		},
+	});
+	await page.act(() =>
+		store.dispatch({
+			type: "activity",
+			room: NOVA,
+			typing: true,
+			stoppable: true,
+		}),
+	);
+	await render("nova");
+	await settle(380);
+	expect(query(".scene-name")?.textContent).toBe("Nova");
+	expect(query(".scene-chip")).not.toBeNull();
+	// the owner's words stay, marked as theirs
+	expect(query(".scene-from")?.textContent).toBe("Ada");
+	expect(query(".scene-line")?.textContent).toContain("stream");
+	expect(query(".scene-box")?.textContent).toContain("Nova");
+	expect(query(".scene-box")?.textContent).not.toContain("Ada is");
+});
+
 test("an address that names nobody seated goes back to the whole ring in place, adding no history entry", async () => {
 	window.location.hash = "#/table/ghost";
 	const before = window.history.length;

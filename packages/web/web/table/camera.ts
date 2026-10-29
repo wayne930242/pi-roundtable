@@ -107,10 +107,116 @@ export function seatAhead(az: number, slots: Slots): number | undefined {
 	return best;
 }
 
-/** The whole ring from a podium's side, raised: concept A's framing in concept B's palette. */
-export function overviewShot(az: number, count: number): Shot {
-	const ring = ringRadius(count);
+/** A standee board's half width and the top of its badge above the floor, in hall units: the extent a seat takes up in the picture. */
+export const SEAT_HALF_WIDTH = 1.45;
+export const SEAT_TOP = 4.8;
+/** The share of the picture's half width and half height left empty beyond the outermost seat. */
+export const FRAME_MARGIN = 0.07;
+/** The furthest the overview pulls back to fit a crowded ring, as a multiple of its resting distance. */
+export const MAX_PULLBACK = 3;
+
+/** A point in world coordinates. */
+export type Point3 = readonly [number, number, number];
+
+/**
+ * Where a world point lands in the picture of a shot at an aspect ratio (width / height), as normalised
+ * device coordinates: -1…1 across and up the picture; `depth` is how far in front of the camera it is.
+ * The picture's field of view is the shot's, widened for a narrow picture as the camera does.
+ */
+export function project(
+	shot: Shot,
+	aspect: number,
+	point: Point3,
+): { x: number; y: number; depth: number } {
+	const { position, target } = shotVectors(shot);
+	const forward = unit([
+		target[0] - position[0],
+		target[1] - position[1],
+		target[2] - position[2],
+	]);
+	const right = unit(cross(forward, [0, 1, 0]));
+	const up = cross(right, forward);
+	const d: Point3 = [
+		point[0] - position[0],
+		point[1] - position[1],
+		point[2] - position[2],
+	];
+	const depth = dot(d, forward);
+	const tanV = Math.tan((fitFov(shot.fov, aspect) * Math.PI) / 360);
+	const safe = depth > 1e-6 ? depth : Number.NaN;
 	return {
+		x: dot(d, right) / (safe * tanV * aspect),
+		y: dot(d, up) / (safe * tanV),
+		depth,
+	};
+}
+
+const dot = (a: Point3, b: Point3): number =>
+	a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const cross = (a: Point3, b: Point3): Point3 => [
+	a[1] * b[2] - a[2] * b[1],
+	a[2] * b[0] - a[0] * b[2],
+	a[0] * b[1] - a[1] * b[0],
+];
+const unit = (a: Point3): Point3 => {
+	const length = Math.hypot(a[0], a[1], a[2]) || 1;
+	return [a[0] / length, a[1] / length, a[2] / length];
+};
+
+/**
+ * The corners of every agent podium's standee and the +N podium's, which the overview must keep in the
+ * picture: the board's width across the podium's front, from the floor to the top of its badge.
+ */
+export function seatCorners(count: number): Point3[] {
+	const ring = ringRadius(count);
+	const corners: Point3[] = [];
+	for (let slot = 1; slot < count; slot += 1) {
+		const az = slotAngle(slot, count);
+		// the tangent of the ring at the podium: its width runs along it
+		const tx = Math.cos(az);
+		const tz = -Math.sin(az);
+		for (const side of [-1, 1])
+			for (const height of [0, SEAT_TOP])
+				corners.push([
+					Math.sin(az) * ring + tx * side * SEAT_HALF_WIDTH,
+					height,
+					Math.cos(az) * ring + tz * side * SEAT_HALF_WIDTH,
+				]);
+	}
+	return corners;
+}
+
+/** Whether every point lands inside the picture, a margin short of its edges. */
+export function fits(
+	shot: Shot,
+	aspect: number,
+	points: readonly Point3[],
+	margin = FRAME_MARGIN,
+): boolean {
+	const limit = 1 - margin;
+	return points.every((point) => {
+		const at = project(shot, aspect, point);
+		return Math.abs(at.x) <= limit && Math.abs(at.y) <= limit;
+	});
+}
+
+/** The shot moved back along its line of sight: `k` times as far from what it looks at. The camera and its target lie on one line through the hall's centre, so `az` stays. */
+function pulledBack(shot: Shot, k: number): Shot {
+	return {
+		...shot,
+		r: shot.lookR + (shot.r - shot.lookR) * k,
+		y: shot.lookY + (shot.y - shot.lookY) * k,
+	};
+}
+
+/**
+ * The whole ring from a podium's side, raised: concept A's framing in concept B's palette. It stands
+ * back as far as the ring needs, for the picture's aspect ratio (width / height), so that every seat
+ * and its plate stay in frame with a margin: a crowded ring or a tall, narrow picture pulls it back.
+ */
+export function overviewShot(az: number, count: number, aspect = 1.6): Shot {
+	const ring = ringRadius(count);
+	const rest: Shot = {
 		az,
 		r: ring + 4.4,
 		y: 4.4 + ring * 0.1,
@@ -120,6 +226,13 @@ export function overviewShot(az: number, count: number): Shot {
 		roll: 0,
 		fov: 46,
 	};
+	if (!(aspect > 0)) return rest;
+	const corners = seatCorners(count);
+	for (let k = 1; k <= MAX_PULLBACK; k += 0.02) {
+		const shot = pulledBack(rest, k);
+		if (fits(shot, aspect, corners)) return shot;
+	}
+	return pulledBack(rest, MAX_PULLBACK);
 }
 
 /** The speaker large in the frame from just inside the ring, a little low, off to a side, tilted. */

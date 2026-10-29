@@ -156,7 +156,7 @@ export function createTable3D(
 	const targetShot = (): Shot => {
 		const az = focusId ? seatAz(focusId) : undefined;
 		return az === undefined
-			? overviewShot(overviewAz, countNow())
+			? overviewShot(overviewAz, countNow(), camera.aspect)
 			: closeupShot(az, countNow());
 	};
 	const applyCamera = () => {
@@ -436,6 +436,9 @@ export function createTable3D(
 		renderer.setSize(w, h, false);
 		camera.aspect = w / h;
 		camera.updateProjectionMatrix();
+		// the overview stands as far back as the new picture's shape needs
+		if (focusId === null && !dragging && moveMs === 0 && world)
+			shot = targetShot();
 		names.size(w);
 		loop.wake();
 	};
@@ -538,7 +541,7 @@ export function createTable3D(
 		if (Math.abs(dx) < TAP_PX && !dragging) return;
 		const az = press.az + dragAngle(dx, canvasEl.clientWidth);
 		dragging = { az };
-		shot = overviewShot(az, countNow());
+		shot = overviewShot(az, countNow(), camera.aspect);
 		moveMs = 0;
 		loop.wake();
 	};
@@ -558,7 +561,7 @@ export function createTable3D(
 			// let go: settle on the nearest podium's place on the ring
 			overviewAz = snapAngle(dragging.az, countNow());
 			dragging = undefined;
-			moveTo(overviewShot(overviewAz, countNow()), false);
+			moveTo(overviewShot(overviewAz, countNow(), camera.aspect), false);
 			return;
 		}
 		if (Math.hypot(dx, dy) < TAP_PX) {
@@ -586,7 +589,7 @@ export function createTable3D(
 		if (dragging) {
 			overviewAz = snapAngle(dragging.az, countNow());
 			dragging = undefined;
-			moveTo(overviewShot(overviewAz, countNow()), false);
+			moveTo(overviewShot(overviewAz, countNow(), camera.aspect), false);
 		}
 		canvasEl.style.cursor = "grab";
 	};

@@ -1,11 +1,13 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
+import { PerspectiveCamera, Vector3 } from "three";
 import {
 	blendShot,
 	closeupShot,
 	dragAngle,
 	EDGE_PX,
 	fitFov,
+	fits,
 	MAX_SEATED,
 	MAX_TURN_MS,
 	MIN_TURN_MS,
@@ -13,8 +15,10 @@ import {
 	overviewShot,
 	planMove,
 	podiumPlace,
+	project,
 	ringRadius,
 	seatAhead,
+	seatCorners,
 	shortestArc,
 	shotVectors,
 	slotAngle,
@@ -129,6 +133,51 @@ describe("the camera planner", () => {
 			0.6,
 		);
 		expect(near.roll).not.toBe(0);
+	});
+
+	test("the overview keeps every seat and plate in frame, with a margin, for two to ten agents on a wide and a tall picture", () => {
+		// 1280×800, a phone's scene beside its box (390 × 55 % of 844), and a tall one
+		for (const aspect of [1280 / 800, 390 / (844 * 0.55), 390 / 844]) {
+			for (let agents = 1; agents <= MAX_SEATED + 1; agents += 1) {
+				const count = slotsFor(agents).count;
+				for (const az of [0, snapAngle(0.9, count), slotAngle(1, count)]) {
+					const shot = overviewShot(az, count, aspect);
+					// measured with three's own camera, not the planner's projection
+					const camera = new PerspectiveCamera(
+						fitFov(shot.fov, aspect),
+						aspect,
+						0.1,
+						90,
+					);
+					const { position, target } = shotVectors(shot);
+					camera.position.set(...position);
+					camera.lookAt(target[0], target[1], target[2]);
+					camera.updateMatrixWorld();
+					camera.updateProjectionMatrix();
+					for (const corner of seatCorners(count)) {
+						const at = new Vector3(...corner).project(camera);
+						expect(Math.abs(at.x)).toBeLessThan(1 - 0.05);
+						expect(Math.abs(at.y)).toBeLessThan(1 - 0.05);
+					}
+					expect(fits(shot, aspect, seatCorners(count))).toBe(true);
+				}
+			}
+		}
+	});
+
+	test("the overview pulls back for a crowded ring or a tall picture, and rests at its usual distance for a small table on a wide one", () => {
+		const rest = (count: number) => ringRadius(count) + 4.4;
+		expect(overviewShot(0, 3, 1.6).r).toBeCloseTo(rest(3), 9);
+		expect(overviewShot(0, 11, 1.6).r).toBeGreaterThan(rest(11));
+		expect(overviewShot(0, 4, 0.46).r).toBeGreaterThan(
+			overviewShot(0, 4, 1.6).r,
+		);
+		// what it looks at does not move, and a point there lands in the middle of the picture
+		const shot = overviewShot(0, 11, 0.46);
+		const { target } = shotVectors(shot);
+		const middle = project(shot, 0.46, target);
+		expect(middle.x).toBeCloseTo(0, 6);
+		expect(middle.y).toBeCloseTo(0, 6);
 	});
 
 	test("the ring seats twelve and a +N podium stands for the rest", () => {
