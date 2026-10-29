@@ -214,7 +214,7 @@ The hours are read on the console's time zone (`env.timeZone` of the host, the z
 `push.quietHours` sets them as `{ start: "22:30", end: "07:00" }` (two different `HH:MM` times on a 24-hour clock), or `false` to push at any hour; anything else stops the start.
 **Settings** shows the window and its time zone to every owner, read-only: only the server sets it.
 
-**Muting a room.** An owner turns a room's Notifications off in the agent sheet, the room's ⋯ menu or the long-press menu of its row. The mute belongs to the room: it holds for every owner and every device, and is kept in the database (`web_push_muted_rooms`). A muted room is held back like the quiet hours: an agent's post and a notice about it are not pushed, while a waiting card and the long-running cap still are. A bell-slash marks the room in the list, the drawer and the header.
+**Muting a room.** An owner turns a room's Notifications off in the agent sheet, the room's ⋯ menu or the long-press menu of its row. The mute belongs to the room: it holds for every owner and every device, and is kept in the database (`web_push_muted_rooms`). A muted room is held back like the quiet hours: an agent's post in it is not pushed, while a waiting card, the long-running cap and a notice still are; a thread under the room follows the room's mute. A bell-slash marks the room in the list, the drawer and the header.
 
 With `push.preview` on (the default) a notification shows the first 120 characters of the message; with `push.preview: false` it says only that something waits and where.
 Tapping a notification focuses the app or opens it at the room.

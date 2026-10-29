@@ -12,11 +12,12 @@ import type {
 	ScheduleStore,
 	WebSocketRoute,
 } from "pi-roundtable";
+import { channelKey } from "pi-roundtable";
 import type { Authenticated, Authenticator } from "../auth/authenticator.ts";
 import { PushApi } from "../push/api.ts";
 import { webPushChannel } from "../push/channel.ts";
 import { EndpointPolicy } from "../push/endpoint.ts";
-import { PushMutes } from "../push/mutes.ts";
+import { PushMutes, roomMuted } from "../push/mutes.ts";
 import { QuietClock, type QuietWindow } from "../push/quiet-hours.ts";
 import { PushSender } from "../push/sender.ts";
 import { PushSubscriptions } from "../push/subscriptions.ts";
@@ -148,7 +149,7 @@ export class OwnerApp {
 			visible: (principalId) => sockets.anyVisible(principalId),
 			preview: options.push.preview,
 			...(quietClock ? { quiet: (at: number) => quietClock.quietAt(at) } : {}),
-			muted: (room) => mutes.has(room),
+			muted: roomMuted(mutes, threads, channelKey(options.surface, "thread.")),
 			urlOf: options.push.urlOf,
 			logger,
 		});

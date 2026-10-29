@@ -347,6 +347,41 @@ test("Change look opens the sheet scrolled to the creator", async () => {
 	}
 });
 
+test("Change look after Edit agent for the same agent scrolls to the creator", async () => {
+	const scrolled: Element[] = [];
+	const original = Element.prototype.scrollIntoView;
+	Element.prototype.scrollIntoView = function (this: Element) {
+		scrolled.push(this);
+	};
+	try {
+		await open();
+		expect(scrolled).toHaveLength(0);
+		await page.act(() => openAgentSheet("scout", { look: true }));
+		await page.act(() => settle(80));
+		expect(scrolled).toHaveLength(1);
+		expect(scrolled[0]?.querySelector(".creator")).not.toBeNull();
+	} finally {
+		Element.prototype.scrollIntoView = original;
+	}
+});
+
+test("opening the sheet again for the same agent reads the profile again, and keeps an unsaved draft", async () => {
+	await open();
+	expect(agent).toHaveBeenCalledTimes(1);
+	agent.mockResolvedValue(profile({ displayName: "Scout Prime" }));
+	await page.act(() => openAgentSheet("scout"));
+	await page.act(() => settle(80));
+	expect(agent).toHaveBeenCalledTimes(2);
+	expect(q<HTMLInputElement>(".agent-sheet input")?.value).toBe("Scout Prime");
+	// An edit that is not saved survives the next ask.
+	await typeInto(q<HTMLInputElement>(".agent-sheet input"), "Scout Two");
+	agent.mockResolvedValue(profile({ displayName: "Scout Third" }));
+	await page.act(() => openAgentSheet("scout"));
+	await page.act(() => settle(80));
+	expect(agent).toHaveBeenCalledTimes(3);
+	expect(q<HTMLInputElement>(".agent-sheet input")?.value).toBe("Scout Two");
+});
+
 test("the system Back takes the sheet away with the page it was opened on", async () => {
 	await open();
 	expect(q<HTMLDialogElement>("dialog.sheet.wide")?.open).toBe(true);

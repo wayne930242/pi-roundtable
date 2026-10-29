@@ -207,14 +207,14 @@ test("Edit agent opens the agent sheet; Change look opens it at the character cr
 	await page.render(<List />);
 	await rightClick(rowOf("scout"));
 	await choose("Edit agent");
-	expect(currentAgentSheet()).toEqual({ name: "scout", look: false });
+	expect(currentAgentSheet()).toMatchObject({ name: "scout", look: false });
 	// The sheet is over the page, not a page of its own.
 	expect(window.location.hash).toBe("#/rooms");
 
 	closeAgentSheet();
 	await rightClick(rowOf("scout"));
 	await choose("Change look");
-	expect(currentAgentSheet()).toEqual({ name: "scout", look: true });
+	expect(currentAgentSheet()).toMatchObject({ name: "scout", look: true });
 	expect(window.location.hash).toBe("#/rooms");
 });
 
@@ -361,7 +361,7 @@ test("a row of the phone drawer opens the same menu as a sheet; an action that l
 	expect(labels()).toContain("Edit agent");
 	await choose("Edit agent");
 	await settle(300);
-	expect(currentAgentSheet()).toEqual({ name: "scout", look: false });
+	expect(currentAgentSheet()).toMatchObject({ name: "scout", look: false });
 	expect(q(".switcher")?.getAttribute("data-state")).toBe("closed");
 });
 
@@ -504,7 +504,7 @@ test("a message's avatar opens the agent sheet; the message's own menu does not 
 	await rightClick(q(".message-avatar"));
 	expect(labels()).toEqual(["Agent profile"]);
 	await choose("Agent profile");
-	expect(currentAgentSheet()).toEqual({ name: "scout", look: false });
+	expect(currentAgentSheet()).toMatchObject({ name: "scout", look: false });
 });
 
 // ── Cards and files ──────────────────────────────────────────────────────────────────────────

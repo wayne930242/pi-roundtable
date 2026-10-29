@@ -53,6 +53,8 @@ const THINKING_LABELS: Record<(typeof THINKING)[number], string> = {
 	xhigh: wording("Very high"),
 };
 const DEFAULT = "default";
+const thinkingOf = (value: string) =>
+	t(THINKING_LABELS[value as (typeof THINKING)[number]] ?? value);
 
 interface Draft {
 	displayName: string;
@@ -114,13 +116,13 @@ export function AgentSheetHost() {
 			size="wide"
 			onClose={closeAgentSheet}
 		>
-			<AgentEditor key={shown.name} name={shown.name} />
+			<AgentEditor key={shown.name} name={shown.name} opened={shown.id} />
 		</Sheet>
 	);
 }
 
 /** One agent's name, prompt, model, thinking and look, and whether its room is pushed. */
-function AgentEditor({ name }: { name: string }) {
+function AgentEditor({ name, opened }: { name: string; opened: number }) {
 	const [profile, setProfile] = useState<AgentProfileView>();
 	const [models, setModels] = useState<string[]>([]);
 	const [error, setError] = useState<string>();
@@ -142,27 +144,36 @@ function AgentEditor({ name }: { name: string }) {
 	const muteId = useId();
 
 	// "Change look" in a menu lands on the creator.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: `opened` is a new ask for the same agent
 	useEffect(() => {
 		if (!loaded || !currentAgentSheet()?.look) return;
 		look.current?.scrollIntoView({ block: "start" });
 		look.current?.focus({ preventScroll: true });
-	}, [loaded]);
+	}, [loaded, opened]);
 
+	// Each open reads the profile again, so a save made elsewhere is the base of the diff; a draft with
+	// unsaved edits is kept.
+	const held = useRef<{ profile?: AgentProfileView; draft?: Draft }>({});
+	held.current = { profile, draft };
+	// biome-ignore lint/correctness/useExhaustiveDependencies: `opened` is a new ask for the same agent
 	useEffect(() => {
 		let current = true;
 		Promise.all([api.agent(name), api.models()]).then(
 			([profileLoaded, available]) => {
 				if (!current) return;
+				const { profile: before, draft: edited } = held.current;
+				const keep =
+					before && edited && Object.keys(patchOf(before, edited)).length > 0;
 				setProfile(profileLoaded);
 				setModels(available.models);
-				setDraft(draftOf(profileLoaded));
+				setDraft(keep ? edited : draftOf(profileLoaded));
 			},
 			(failure) => current && setError(messageOf(failure)),
 		);
 		return () => {
 			current = false;
 		};
-	}, [name]);
+	}, [name, opened]);
 
 	const patch = useMemo(
 		() => (profile && draft ? patchOf(profile, draft) : {}),
@@ -205,7 +216,7 @@ function AgentEditor({ name }: { name: string }) {
 					<p className="meta">
 						{t("Runs on {model}, thinking {thinking}", {
 							model: profile.effective.model,
-							thinking: profile.effective.thinking,
+							thinking: thinkingOf(profile.effective.thinking),
 						})}
 					</p>
 				</div>
@@ -299,7 +310,7 @@ function AgentEditor({ name }: { name: string }) {
 						}))}
 					/>
 					<Chips
-						label={t("Thinking")}
+						label={t("Thinking level")}
 						value={draft.thinking}
 						onChange={(thinking) => setDraft({ ...draft, thinking })}
 						options={THINKING.map((level) => ({
@@ -437,11 +448,9 @@ function Review(props: {
 			before: modelOf(profile.model ?? DEFAULT),
 			after: modelOf(draft.model),
 		});
-	const thinkingOf = (value: string) =>
-		t(THINKING_LABELS[value as (typeof THINKING)[number]] ?? value);
 	if (draft.thinking !== (profile.thinking ?? DEFAULT))
 		changes.push({
-			label: t("Thinking"),
+			label: t("Thinking level"),
 			before: thinkingOf(profile.thinking ?? DEFAULT),
 			after: thinkingOf(draft.thinking),
 		});

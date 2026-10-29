@@ -219,14 +219,14 @@ describe("during quiet hours", () => {
 describe("in a muted room", () => {
 	const muted = async (room: string) => room === "app:agent.guide";
 
-	test("an agent's post and a notice about the room are not pushed, but a waiting card and the long-running cap are", async () => {
+	test("an agent's post is not pushed, but a waiting card, the long-running cap and a notice are", async () => {
 		const { instance, sent } = service({ muted });
 		await instance.reply("app:agent.guide", "Guide", "the report");
-		await instance.notice("ada", "hello", "app:agent.guide");
 		expect(sent).toEqual([]);
 		await instance.card("app:agent.guide", "Send the note?", false);
 		await instance.card("app:agent.guide", "Time limit", true);
-		expect(sent.map((s) => s.payload.kind)).toEqual(["card", "cap"]);
+		await instance.notice("ada", "hello", "app:agent.guide");
+		expect(sent.map((s) => s.payload.kind)).toEqual(["card", "cap", "notice"]);
 	});
 
 	test("another room, and a notice that names no room, are still pushed", async () => {

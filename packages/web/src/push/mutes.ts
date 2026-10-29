@@ -47,3 +47,22 @@ export class PushMutes {
 		else await this.#sql`DELETE FROM web_push_muted_rooms WHERE room = ${room}`;
 	}
 }
+
+/**
+ * Whether a room's push is held back. A dispatch thread has no mute of its own: it follows the room
+ * it was opened under, so `threadPrefix` (the keys of every thread start with it) maps a thread's key
+ * to its parent.
+ */
+export function roomMuted(
+	mutes: { has(room: string): Promise<boolean> },
+	threads: { get(id: string): Promise<{ parent: string } | undefined> },
+	threadPrefix: string,
+): (room: string) => Promise<boolean> {
+	return async (room) => {
+		if (!room.startsWith(threadPrefix)) return mutes.has(room);
+		const thread = await threads.get(
+			room.slice(threadPrefix.length - "thread.".length),
+		);
+		return mutes.has(thread?.parent ?? room);
+	};
+}

@@ -8,14 +8,18 @@ export interface AgentSheetRequest {
 	name: string;
 	/** The sheet opens scrolled to the character creator. */
 	look: boolean;
+	/** Counts the asks, so asking again for the same agent is a new open. */
+	id: number;
 }
 
 let current: AgentSheetRequest | undefined;
+let asks = 0;
 const { emit, use } = signal();
 
 /** Opens the sheet for an agent; one that is open changes to the agent asked for. */
 export function openAgentSheet(name: string, options: { look?: boolean } = {}) {
-	current = { name, look: options.look === true };
+	asks += 1;
+	current = { name, look: options.look === true, id: asks };
 	emit();
 }
 

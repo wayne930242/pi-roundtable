@@ -29,7 +29,7 @@ export interface PushServiceOptions {
 	 */
 	quiet?: (at: number) => boolean;
 	/**
-	 * Whether the owners muted a room: an agent's post and a notice about it are not pushed, while a
+	 * Whether the owners muted a room: an agent's post in it is not pushed, while a
 	 * card is. Default never.
 	 */
 	muted?: (room: string) => Promise<boolean>;
@@ -59,8 +59,8 @@ export function previewOf(text: string): string {
 /**
  * Decides when an owner's devices are pushed and what is said. Each trigger pushes only while no
  * page of an owner is in view, and only to owners: a device whose person is no owner any more is
- * skipped. In the quiet hours, and in a room the owners muted, an agent's post and a notice wait
- * for the owner to look; a card, which holds up work, is still pushed. Delivery never throws into the code that raised the trigger.
+ * skipped. In the quiet hours an agent's post and a notice wait for the owner to look; in a room the
+ * owners muted only the post does. A card, which holds up work, is still pushed. Delivery never throws into the code that raised the trigger.
  */
 export class PushService {
 	readonly #options: PushServiceOptions;
@@ -98,14 +98,13 @@ export class PushService {
 		});
 	}
 
-	/** A notice for one person, from the `notify` tool. */
+	/** A notice for one person, from the `notify` tool. A mute does not hold it back: a notice is addressed to the person, and it always names the home room. */
 	async notice(
 		principalId: string,
 		text: string,
 		room?: string,
 	): Promise<void> {
 		if (this.#options.quiet?.(this.#now())) return;
-		if (room && (await this.#muted(room))) return;
 		await this.#push({
 			kind: "notice",
 			title: "Notice",

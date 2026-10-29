@@ -103,6 +103,7 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	Accessory: "配件",
 	Idle: "閒置",
 	Thinking: "思考中",
+	"Thinking level": "思考強度",
 	Working: "工作中",
 	"Waiting for you": "等你回應",
 	Done: "完成",
