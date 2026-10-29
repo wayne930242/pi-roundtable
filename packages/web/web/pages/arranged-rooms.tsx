@@ -53,7 +53,10 @@ const RoomRow = memo(function RoomRow(
 		<RoomRowView
 			{...props}
 			press={press}
-			item={view.home ? {} : { "data-drop-item": "", "data-key": view.key }}
+			item={{
+				...(view.home ? {} : { "data-drop-item": "", "data-key": view.key }),
+				...(props.arranging ? { "data-arranging": "" } : {}),
+			}}
 			after={
 				props.arranging ? (
 					<button
@@ -209,7 +212,7 @@ export function ArrangedRoomsPage(props: RoomsPageProps) {
 				<div className="actions">
 					<button
 						type="button"
-						className="secondary search-button"
+						className="header-button search-button"
 						onClick={props.onSearch}
 					>
 						<Icon name="search" size={16} />
@@ -219,7 +222,7 @@ export function ArrangedRoomsPage(props: RoomsPageProps) {
 					{listed ? (
 						<button
 							type="button"
-							className="icon-button"
+							className="header-button icon-button"
 							aria-haspopup="menu"
 							aria-label={t("Folders and order")}
 							onClick={(event) => openRoomsMenu(event.currentTarget)}
@@ -229,7 +232,7 @@ export function ArrangedRoomsPage(props: RoomsPageProps) {
 					) : null}
 					<button
 						type="button"
-						className="icon-button"
+						className="header-button icon-button"
 						aria-label={t("Add")}
 						aria-haspopup="menu"
 						onClick={(event) => openAddMenu(event.currentTarget)}

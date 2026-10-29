@@ -88,6 +88,11 @@ export const ARRANGED_CSS = `
 	position: relative;
 }
 
+/* The menu button sits over the row's right edge: the row keeps that strip clear of its chevron and time. */
+.room-list > li[data-arranging] > .room-row {
+	padding-right: 3.75rem;
+}
+
 .room-list .row-more {
 	position: absolute;
 	top: var(--space-2);

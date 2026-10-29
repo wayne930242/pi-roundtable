@@ -470,3 +470,10 @@ test("Settings links to the main prompts only on a host that has them", async ()
 		asked.mockRestore();
 	}
 });
+
+test("the full-screen review lets the diff take the height left, not the 18rem the other sheets cap it at", async () => {
+	const css = await Bun.file(new URL("./app.css", import.meta.url)).text();
+	const rule = css.match(/\n\.sheet\.full \.review pre\.diff \{([^}]*)\}/)?.[1];
+	expect(rule).toContain("flex: 1");
+	expect(rule).toContain("max-height: none");
+});

@@ -11,7 +11,6 @@ import { navigate } from "../lib/router.ts";
 import { refreshRooms, teamApi } from "../lib/team-api.ts";
 import { toast } from "../lib/toast.ts";
 import { PageCharacter } from "./character.tsx";
-import { Chips } from "./chips.tsx";
 import { Failure, Loading } from "./states.tsx";
 
 // The creator is a page's worth of picking; it loads when the look is first chosen.
@@ -23,6 +22,23 @@ const CharacterCreator = lazy(() =>
 
 const NAME = /^[a-z0-9-]{1,32}$/;
 const DEFAULT = "default";
+
+/** The models by provider (the part before the first slash), in the order listed; those without a provider stand alone. */
+function modelGroups(
+	models: readonly string[],
+): { provider: string; models: string[] }[] {
+	const groups: { provider: string; models: string[] }[] = [];
+	for (const one of models) {
+		const slash = one.indexOf("/");
+		const provider = slash > 0 ? one.slice(0, slash) : "";
+		const group = groups.find(
+			(candidate) => candidate.provider === provider && provider !== "",
+		);
+		if (group) group.models.push(one);
+		else groups.push({ provider, models: [one] });
+	}
+	return groups;
+}
 
 /** A permanent name from a display name: its Latin letters and digits, joined by dashes. */
 const slugOf = (displayName: string): string =>
@@ -51,7 +67,7 @@ export function NewAgent({ onDone }: { onDone(): void }) {
 	const [models, setModels] = useState<string[]>([]);
 	const [error, setError] = useState<string>();
 	const [saving, setSaving] = useState(false);
-	const ids = [useId(), useId(), useId(), useId()] as const;
+	const ids = [useId(), useId(), useId(), useId(), useId()] as const;
 
 	useEffect(() => {
 		let current = true;
@@ -169,15 +185,33 @@ export function NewAgent({ onDone }: { onDone(): void }) {
 					{t("Its job, its sources, its limits and how it reports.")}
 				</span>
 			</label>
-			<Chips
-				label={t("Model")}
-				value={model}
-				onChange={setModel}
-				options={[DEFAULT, ...models].map((one) => ({
-					value: one,
-					label: one === DEFAULT ? t("Follow the assistant") : one,
-				}))}
-			/>
+			<label htmlFor={ids[4]}>
+				{t("Model")}
+				<select
+					id={ids[4]}
+					value={model}
+					onChange={(event) => setModel(event.target.value)}
+				>
+					<option value={DEFAULT}>{t("Follow the assistant")}</option>
+					{modelGroups(models).map((group) =>
+						group.provider === "" ? (
+							group.models.map((one) => (
+								<option key={one} value={one}>
+									{one}
+								</option>
+							))
+						) : (
+							<optgroup key={group.provider} label={group.provider}>
+								{group.models.map((one) => (
+									<option key={one} value={one}>
+										{one}
+									</option>
+								))}
+							</optgroup>
+						),
+					)}
+				</select>
+			</label>
 			<label htmlFor={ids[3]}>
 				{t("Opening task")}
 				<textarea

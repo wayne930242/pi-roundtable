@@ -377,7 +377,7 @@ function PlainRoomsPage(props: RoomsPageProps) {
 				<div className="actions">
 					<button
 						type="button"
-						className="secondary search-button"
+						className="header-button search-button"
 						onClick={props.onSearch}
 					>
 						<Icon name="search" size={16} />
@@ -389,7 +389,7 @@ function PlainRoomsPage(props: RoomsPageProps) {
 					</Suspense>
 					<button
 						type="button"
-						className="icon-button"
+						className="header-button icon-button"
 						aria-label={t("Add")}
 						aria-haspopup="menu"
 						onClick={(event) => openAddMenu(event.currentTarget)}

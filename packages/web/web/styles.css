@@ -1253,6 +1253,7 @@ dialog.sheet.full {
 
 .menu-item {
 	display: flex;
+	flex-direction: row;
 	align-items: center;
 	gap: var(--space-3);
 	width: 100%;

@@ -244,7 +244,23 @@ test("making an agent sends the form, shows its room and closes the sheet", asyn
 		await typeInto(field("Name"), "Notes Taker");
 		await typeInto(field("Prompt"), "Keep notes.");
 		await typeInto(field("Opening task"), "  Say hi.  ");
-		await page.click(chip("model-b"));
+		const select = all<HTMLSelectElement>("select").find(
+			(one) => one.closest("label")?.firstChild?.textContent === "Model",
+		);
+		// The default leads, then the listed models: one select, not a chip for each.
+		expect([...(select?.options ?? [])].map((one) => one.value)).toEqual([
+			"default",
+			"model-a",
+			"model-b",
+		]);
+		expect(
+			all("button.option-chip").map((one) => one.textContent),
+		).not.toContain("model-b");
+		await page.act(() => {
+			if (!select) throw new Error("no model select");
+			select.value = "model-b";
+			select.dispatchEvent(new Event("change", { bubbles: true }));
+		});
 		expect(models).toHaveBeenCalled();
 		await page.click(button("Make agent"));
 		await page.act(() => settle(60));

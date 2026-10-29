@@ -455,6 +455,8 @@ test("arrange mode shows a menu button on each row and a bar to add a folder; Do
 	await settle(40);
 	await choose("Arrange");
 	expect(all(".row-more").length).toBe(4);
+	// Each arranged row is marked, so its stylesheet keeps the button's strip clear of the chevron and time.
+	expect(all(".room-list > li[data-arranging]").length).toBe(4);
 	expect(q(".arrange-bar")?.textContent).toContain("Add a folder");
 	await page.click(
 		all("button").find((one) => one.textContent === "Done") ?? null,
@@ -905,4 +907,25 @@ test("a mouse lifts a row once it moves with the button down, and the click afte
 	expect(window.location.hash).toBe("#/rooms");
 	// The next click is an ordinary one again.
 	expect(item.hasAttribute("data-lifted")).toBe(false);
+});
+
+test("a menu row lays out as a row even when it is a label, which the form rules make a column", async () => {
+	const css = await Bun.file(new URL("./styles.css", import.meta.url)).text();
+	const rule = (selector: string) =>
+		css.match(new RegExp(`\\n${selector} \\{([^}]*)\\}`))?.[1] ?? "";
+	expect(rule("label")).toContain("flex-direction: column");
+	expect(rule("\\.menu-item")).toContain("flex-direction: row");
+});
+
+test("the room list's header buttons share one borderless style", async () => {
+	await show(<List />);
+	const css = await Bun.file(new URL("./app.css", import.meta.url)).text();
+	const rule = css.match(/\n\.header-button \{([^}]*)\}/)?.[1];
+	expect(rule).toContain("border-color: transparent");
+	expect(rule).toContain("color: var(--text)");
+	const buttons = all(".page-head .actions > button");
+	expect(buttons.length).toBeGreaterThanOrEqual(2);
+	expect(buttons.every((one) => one.classList.contains("header-button"))).toBe(
+		true,
+	);
 });

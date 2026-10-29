@@ -428,7 +428,7 @@ test("pinned rooms and the owners' folders lead the drawer, each under its headi
 	const headings = [
 		...page.container.querySelectorAll(".switcher-heading"),
 	].map((one) => one.textContent);
-	expect(headings).toEqual(["Pinned", "Work", "Rooms"]);
+	expect(headings).toEqual(["Pinned", "Work", "Ungrouped"]);
 	// A room that is not Home can be lifted; each list is a place to drop it.
 	const zones = [...page.container.querySelectorAll("[data-drop-zone]")].map(
 		(one) => one.getAttribute("data-drop-zone"),

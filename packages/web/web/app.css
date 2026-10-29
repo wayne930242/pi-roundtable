@@ -17,6 +17,18 @@
 	}
 }
 
+/* The room list's three header buttons, search, the menu and add, wear one style: no border, the full text colour. */
+.header-button {
+	border-color: transparent;
+	background: transparent;
+	color: var(--text);
+}
+
+.header-button:hover:not(:disabled) {
+	border-color: transparent;
+	background: var(--surface-2);
+}
+
 .switcher-search .switcher-add {
 	flex: none;
 	margin-right: calc(var(--space-2) * -1);
@@ -1835,6 +1847,20 @@ pre.diff {
 /* The editors of a main prompt and of a SKILL.md fill the full-screen sheet they stand in. */
 .sheet.full .field textarea.prompt-full {
 	min-height: 55vh;
+}
+
+/* The diff under review takes the height the window has left, so it does not stop short of the buttons below it. */
+.sheet.full .sheet-body > .stack,
+.sheet.full .review,
+.sheet.full .review > .field {
+	flex: 1;
+	min-height: 0;
+}
+
+.sheet.full .review pre.diff {
+	flex: 1;
+	min-height: 12rem;
+	max-height: none;
 }
 
 .skill-lock {

@@ -201,7 +201,7 @@ export function openAddMenu(button: HTMLElement, leave?: Leave): void {
  */
 export function seatMenu(key: string): MenuSpec | undefined {
 	const view = store.getState().rooms[key]?.view;
-	if (!view || view.kind !== "agent") return undefined;
+	if (view?.kind !== "agent") return undefined;
 	return {
 		title: view.displayName,
 		items: [

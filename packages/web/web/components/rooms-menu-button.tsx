@@ -10,7 +10,7 @@ export default function RoomsMenuButton() {
 	return (
 		<button
 			type="button"
-			className="icon-button"
+			className="header-button icon-button"
 			aria-haspopup="menu"
 			aria-label={t("Folders and order")}
 			onClick={(event) => openRoomsMenu(event.currentTarget)}

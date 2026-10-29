@@ -180,6 +180,16 @@ export function SwitcherList(props: {
 		props.close(
 			key === props.current ? undefined : () => navigate("room", key),
 		);
+	// Once rooms are pinned or in folders, the rest is the "Ungrouped" the room list calls it.
+	// The pinned list is always there to drop a room in; it counts once it holds one.
+	const restTitle = groups.some(
+		(group) =>
+			group.id !== "waiting" &&
+			group.id !== "rest" &&
+			(group.id !== "pinned" || group.entries.length > 0),
+	)
+		? t("Ungrouped")
+		: t("Rooms");
 	const headed = shown.filter((group) => group.entries.length > 0).length > 1;
 	return (
 		<>
@@ -232,7 +242,9 @@ export function SwitcherList(props: {
 									? t("Waiting for you")
 									: group.id === "pinned"
 										? t("Pinned")
-										: (group.title ?? t("Rooms"))
+										: group.id === "rest"
+											? restTitle
+											: (group.title ?? t("Rooms"))
 							}
 							{...(group.entries.length === 0 ? { "data-empty": "" } : {})}
 							{...(zone
@@ -252,7 +264,7 @@ export function SwitcherList(props: {
 									{group.id === "pinned"
 										? t("Pinned")
 										: group.id === "rest"
-											? t("Rooms")
+											? restTitle
 											: group.title}
 								</h2>
 							) : null}
