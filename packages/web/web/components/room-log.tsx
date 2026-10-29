@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import type { RoomMessage } from "../../src/api-types.ts";
 import { api, messageOf } from "../lib/api.ts";
 import { store, useSelector } from "../lib/app-store.ts";
@@ -74,6 +74,16 @@ export async function loadOlderMessages(roomKey: string): Promise<boolean> {
 	}
 }
 
+/** What a room's log adds around its messages: a divider before one, marks after one, or the message itself drawn another way. */
+export interface RowDecor {
+	before?(message: RoomMessage): ReactNode;
+	after?(message: RoomMessage): ReactNode;
+	message?(
+		message: RoomMessage,
+		look: { header: boolean; enter: boolean; timeZone: string },
+	): ReactNode;
+}
+
 interface Row {
 	item: TimelineItem;
 	header: boolean;
@@ -131,6 +141,7 @@ export function RoomLog(props: {
 	/** Messages with an id above this slide in; those present when the room opened do not. */
 	enterAfter: number | undefined;
 	quotable: boolean;
+	decor?: RowDecor;
 }) {
 	const config = useConfig();
 	const { now } = useLive();
@@ -152,21 +163,31 @@ export function RoomLog(props: {
 					case "message":
 						return (
 							<RowFragment key={`m${row.item.message.id}`} day={row.day}>
-								<MessageRow
-									message={row.item.message}
-									character={
-										row.item.message.agent
-											? characters[row.item.message.agent]
-											: undefined
-									}
-									header={row.header}
-									enter={
+								{props.decor?.before?.(row.item.message)}
+								{props.decor?.message?.(row.item.message, {
+									header: row.header,
+									enter:
 										props.enterAfter !== undefined &&
-										row.item.message.id > props.enterAfter
-									}
-									timeZone={config.timeZone}
-									quotable={props.quotable}
-								/>
+										row.item.message.id > props.enterAfter,
+									timeZone: config.timeZone,
+								}) ?? (
+									<MessageRow
+										message={row.item.message}
+										character={
+											row.item.message.agent
+												? characters[row.item.message.agent]
+												: undefined
+										}
+										header={row.header}
+										enter={
+											props.enterAfter !== undefined &&
+											row.item.message.id > props.enterAfter
+										}
+										timeZone={config.timeZone}
+										quotable={props.quotable}
+									/>
+								)}
+								{props.decor?.after?.(row.item.message)}
 							</RowFragment>
 						);
 					case "card":

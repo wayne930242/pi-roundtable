@@ -48,6 +48,8 @@ export interface PendingSend {
 	room: string;
 	text: string;
 	files: UploadView[];
+	/** A host room's message: a note only records, a turn also goes to the host's claim. */
+	mode?: "note" | "turn";
 	failed?: RefusalCode;
 }
 
@@ -162,6 +164,7 @@ export type LocalAction =
 			room: string;
 			text: string;
 			files: UploadView[];
+			mode?: "note" | "turn";
 	  }
 	| { type: "pending_dropped"; id: string }
 	| { type: "refusal_dismissed" };
@@ -539,8 +542,15 @@ export function reduce(state: RoomsState, action: Action): RoomsState {
 			};
 		}
 		case "message":
+		case "host_message":
 			return onMessage(state, action.room, action.message);
+		case "host_removed":
+			return withRoom(state, action.room, (room) => ({
+				...room,
+				messages: room.messages.filter((one) => one.id !== action.id),
+			}));
 		case "edited":
+		case "host_edited":
 			// A message not held (older than the page) is fetched with its new text when it is needed.
 			return withRoom(state, action.room, (room) => ({
 				...room,
@@ -675,6 +685,7 @@ export function reduce(state: RoomsState, action: Action): RoomsState {
 						room: action.room,
 						text: action.text,
 						files: action.files,
+						...(action.mode ? { mode: action.mode } : {}),
 					},
 				],
 			}));
@@ -695,10 +706,7 @@ export function reduce(state: RoomsState, action: Action): RoomsState {
 			return { ...state, refusal: undefined };
 		case "gate":
 			return { ...state, gate: action.steps };
-		// The host rooms, the notices and the read marks are handled by the pages that show them.
-		case "host_message":
-		case "host_edited":
-		case "host_removed":
+		// The host cards, the notices and the read marks are handled by the pages that show them.
 		case "host_card":
 		case "room_changed":
 		case "list_changed":

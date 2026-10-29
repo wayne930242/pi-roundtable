@@ -26,7 +26,7 @@ export const hasThreadLink = (
 	);
 
 /** A fenced code block with a button that copies it. */
-function Pre({ children }: { children?: React.ReactNode }) {
+export function Pre({ children }: { children?: React.ReactNode }) {
 	const [copied, setCopied] = useState(false);
 	const text = (node: React.ReactNode): string => {
 		if (typeof node === "string") return node;

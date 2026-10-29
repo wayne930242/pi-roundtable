@@ -17,6 +17,7 @@ import { Toaster } from "./components/toaster.tsx";
 import { api, messageOf, setPushSubscribe } from "./lib/api.ts";
 import { useSelector } from "./lib/app-store.ts";
 import { ConfigContext } from "./lib/config.ts";
+import { hostUi } from "./lib/frame-taps.ts";
 import { LiveContext, useLiveSource } from "./lib/live.ts";
 import { initLook } from "./lib/look.ts";
 import { useMedia } from "./lib/media.ts";
@@ -63,6 +64,10 @@ const GatePage = lazy(() =>
 );
 const AgentPage = lazy(() =>
 	import("./pages/agent.tsx").then((m) => ({ default: m.AgentPage })),
+);
+// A host's rooms load when the first one opens.
+const HostRoomPage = lazy(() =>
+	hostUi().then((ui) => ({ default: ui.HostRoomPage })),
 );
 const SchedulesPage = lazy(() =>
 	import("./pages/schedules.tsx").then((m) => ({ default: m.SchedulesPage })),
@@ -262,6 +267,14 @@ function Console({ config }: { config: ConfigView }) {
 				label: t(LABELS[pane]),
 				icon: PANE_ICONS[pane],
 			})),
+			// The host's own pages stand beside the panes, under `p/<id>`.
+			...(config.pages ?? [])
+				.filter((page) => page.place === "main")
+				.map((page) => ({
+					pane: `p/${page.id}`,
+					label: page.label,
+					icon: "list" as IconName,
+				})),
 			...(hasApp
 				? [
 						{
@@ -274,7 +287,7 @@ function Console({ config }: { config: ConfigView }) {
 		];
 		// While a step is owed only the person's own pages are offered.
 		return gated ? all.filter((item) => GATE_ROUTES.has(item.pane)) : all;
-	}, [config.panes, hasApp, gated]);
+	}, [config.panes, config.pages, hasApp, gated]);
 
 	const first = config.panes[0] ?? "conversations";
 	const known = (name: string) =>
@@ -285,7 +298,9 @@ function Console({ config }: { config: ConfigView }) {
 		(hasApp && name !== "profile" && name in PAGE_ROUTES);
 	const pane = known(route.pane) ? route.pane : first;
 	// The pages that finish an owed step, besides the person's own.
-	const opensOwed = owed.some((step) => step.open.page === pane);
+	const opensOwed = owed.some(
+		(step) => step.open.page === (pane === "p" ? route.key : pane),
+	);
 	const gateShown = gated && !GATE_ROUTES.has(pane) && !opensOwed;
 	// The room and the profile fill the screen; everything else is a page in a column.
 	const fill =
@@ -297,7 +312,9 @@ function Console({ config }: { config: ConfigView }) {
 			? "rooms"
 			: pane === "prompts"
 				? "settings"
-				: pane;
+				: pane === "p"
+					? `p/${route.key}`
+					: pane;
 
 	// A page opens at its top.
 	// biome-ignore lint/correctness/useExhaustiveDependencies: the route changing is the trigger
@@ -330,20 +347,26 @@ function Console({ config }: { config: ConfigView }) {
 		switch (pane) {
 			case "rooms":
 				return <RoomsPage onSearch={() => setPalette(true)} />;
-			case "room":
+			case "room": {
 				if (!route.key) return <RoomsPage onSearch={() => setPalette(true)} />;
+				const detail = (config.kinds ?? []).some((kind) =>
+					route.key?.startsWith(`${app?.surface}:${kind.kind}.`),
+				) ? (
+					<HostRoomPage key={route.key} roomKey={route.key} />
+				) : (
+					<RoomPage key={route.key} roomKey={route.key} />
+				);
 				return wide ? (
 					<div className="split">
 						<div className="split-list">
 							<RoomsPage onSearch={() => setPalette(true)} active={route.key} />
 						</div>
-						<div className="split-detail">
-							<RoomPage key={route.key} roomKey={route.key} />
-						</div>
+						<div className="split-detail">{detail}</div>
 					</div>
 				) : (
-					<RoomPage key={route.key} roomKey={route.key} />
+					detail
 				);
+			}
 			case "agent":
 				return route.key ? (
 					<AgentPage key={route.key} name={route.key} />

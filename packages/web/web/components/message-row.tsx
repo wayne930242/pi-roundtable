@@ -121,6 +121,7 @@ export const MessageRow = memo(function MessageRow(props: {
 		<li
 			{...press}
 			className="message"
+			data-mid={message.id}
 			// biome-ignore lint/a11y/noNoninteractiveTabindex: a message takes focus so the Menu key can open its menu
 			tabIndex={0}
 			data-mine={mine || undefined}

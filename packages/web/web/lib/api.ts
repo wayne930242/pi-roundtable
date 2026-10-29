@@ -27,6 +27,7 @@ import type {
 } from "../../src/api-types.ts";
 
 import { receivedCharacter } from "./character-spec.ts";
+import { hostState } from "./frame-taps.ts";
 import { type Kit, loadKit } from "./kit.ts";
 import { translate as t } from "./messages.ts";
 
@@ -172,12 +173,20 @@ export const api = {
 			),
 		};
 	},
-	messages: (room: string, before?: number, limit = 50) =>
-		request<MessagesView>(
+	messages: async (room: string, before?: number, limit = 50) => {
+		const page = await request<MessagesView>(
 			`rooms/${encodeURIComponent(room)}/messages?limit=${limit}${
 				before === undefined ? "" : `&before=${before}`
 			}`,
-		),
+		);
+		// Where the other readers are, for the code that shows it.
+		if (page.reads || page.cursor !== undefined)
+			hostState().then(
+				(state) => state.keepReads(room, page.reads, page.cursor),
+				() => undefined,
+			);
+		return page;
+	},
 	setMode: (room: string, change: Partial<RoomMode>) =>
 		request<{ mode: RoomMode }>(`rooms/${encodeURIComponent(room)}/mode`, {
 			method: "PUT",

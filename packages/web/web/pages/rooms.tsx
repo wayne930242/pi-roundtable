@@ -3,11 +3,13 @@ import type { RoomView } from "../../src/api-types.ts";
 import { Icon } from "../components/icons.tsx";
 import { RoomPicture } from "../components/room-picture.tsx";
 import { Empty } from "../components/states.tsx";
+import { Unread } from "../components/unread.tsx";
 import { useSelector } from "../lib/app-store.ts";
 import { useArranging } from "../lib/arrange.ts";
 import { useAccentStyle } from "../lib/characters.ts";
 import { useConfig } from "../lib/config.ts";
 import { ago } from "../lib/format.ts";
+import { hostUi } from "../lib/frame-taps.ts";
 import { useLive } from "../lib/live.ts";
 import type { PressProps } from "../lib/long-press.ts";
 import { useMenuPress } from "../lib/menu-press.ts";
@@ -101,6 +103,7 @@ export function RoomRowView(
 						{view.kind === "group" ? (
 							<span className="badge">{t("Group")}</span>
 						) : null}
+						<Unread room={view.key} />
 						<span className="room-row-time">
 							{props.at ? ago(props.at, props.now, props.timeZone) : ""}
 						</span>
@@ -299,6 +302,21 @@ export interface RoomsPageProps {
 	active?: string | undefined;
 }
 
+// The host's kinds of room are listed by code that loads only where a host has them.
+const HostKindList = lazy(() =>
+	hostUi().then((ui) => ({ default: ui.HostKinds })),
+);
+
+/** The sections of the host's rooms, one for each kind the person may list. */
+export function HostKinds({ active }: { active: string | undefined }) {
+	const { kinds } = useConfig();
+	return kinds?.length ? (
+		<Suspense fallback={null}>
+			<HostKindList kinds={kinds} active={active} />
+		</Suspense>
+	) : null;
+}
+
 const RoomsMenuButton = lazy(
 	() => import("../components/rooms-menu-button.tsx"),
 );
@@ -326,6 +344,7 @@ export function RoomsPage(props: RoomsPageProps) {
 }
 
 function PlainRoomsPage(props: RoomsPageProps) {
+	const hosted = Boolean(useConfig().kinds?.length);
 	// One string, so the page redraws only when the grouping changes, not on every message.
 	const shape = useSelector((state) => {
 		const groups: Record<"home" | "agents" | "groups", string[]> = {
@@ -398,7 +417,7 @@ function PlainRoomsPage(props: RoomsPageProps) {
 					</button>
 				</div>
 			</header>
-			{listed && none ? (
+			{listed && none && !hosted ? (
 				<Empty>
 					{t("No rooms yet. Rooms appear when the team has an agent.")}
 				</Empty>
@@ -438,6 +457,7 @@ function PlainRoomsPage(props: RoomsPageProps) {
 					/>
 				</section>
 			) : null}
+			<HostKinds active={props.active} />
 		</div>
 	);
 }

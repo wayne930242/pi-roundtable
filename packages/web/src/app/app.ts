@@ -6,6 +6,7 @@ import type {
 	ConversationModes,
 	ConversationPort,
 	DirectChannelProvider,
+	EventSink,
 	IdentityService,
 	Logger,
 	Migration,
@@ -17,6 +18,9 @@ import { APP_CLOSE_EXPIRED } from "../api-types.ts";
 import type { Authenticated, Authenticator } from "../auth/authenticator.ts";
 import type { ConsolePresentation } from "../features.ts";
 import type { Gate } from "../gate.ts";
+import { HostCardLog } from "../host/cards.ts";
+import { HostApp } from "../host/host-app.ts";
+import { RoomReads } from "../host/reads.ts";
 import {
 	mountNotices,
 	NOTICE_MIGRATIONS,
@@ -57,6 +61,9 @@ const SWEEP_EVERY_MS = 3_600_000;
 /** The tables the app keeps; the plugin lists them as its own migrations. */
 export const APP_MIGRATIONS: readonly Migration[] = [
 	RoomLog.migration,
+	RoomLog.hostMigration,
+	HostCardLog.migration,
+	RoomReads.migration,
 	CardLog.migration,
 	WebThreads.migration,
 	PushSubscriptions.migration,
@@ -80,6 +87,14 @@ export interface OwnerAppOptions {
 	cardGraceSeconds: number;
 	/** The most bytes of one uploaded file. */
 	uploadMaxBytes: number;
+	/** How many days a stored file of an agent room is kept; default 30. */
+	uploadKeepDays?: number;
+	/** The name the app shows for a person; default the principal's own. */
+	nameOf?(principalId: string): Promise<string>;
+	/** The same-origin URL of a room, and of one of its messages, for a host's links. */
+	roomUrl(room: ChannelKey, message?: number): string;
+	/** Where the app reports what people do in it (a press on a host's button). */
+	events?: Pick<EventSink, "action">;
 	authenticator: Pick<Authenticator, "authenticate" | "recheck">;
 	/** How the console signs the person in. */
 	authMode: ResolvedOptions["auth"]["mode"];
@@ -154,6 +169,7 @@ export class OwnerApp {
 	readonly #desk: OwnerDesk;
 	readonly #presence: Presence;
 	readonly #uploads: Uploads;
+	readonly #host: HostApp;
 	readonly #options: OwnerAppOptions;
 	readonly #unsubscribe: (() => void)[] = [];
 	#sweeper: ReturnType<typeof setInterval> | undefined;
@@ -169,7 +185,17 @@ export class OwnerApp {
 		const waiting = new FileDir(join(options.dataDir, "web", "uploads"));
 		const uploads = new Uploads(waiting, stored, {
 			maxBytes: options.uploadMaxBytes,
+			...(options.uploadKeepDays === undefined
+				? {}
+				: { keepDays: options.uploadKeepDays }),
 		});
+		const reads = new RoomReads(options.database);
+		const hostCards = new HostCardLog(options.database);
+		const nameOf =
+			options.nameOf ??
+			(async (id: string) => (await identity.principal(id))?.displayName ?? id);
+		// The host rooms read their context once the surface exists; the surface asks for it per turn.
+		let hostApp: HostApp | undefined;
 		const threads = new WebThreads(options.database);
 		const subscriptions = new PushSubscriptions(options.database);
 		const mutes = new PushMutes(options.database);
@@ -269,6 +295,9 @@ export class OwnerApp {
 			},
 			audienceOf,
 			isHostRoom: (room) => registry.isHostRoom(room),
+			channelContext: (message, contextOptions) =>
+				hostApp?.channelContext(message, contextOptions) ??
+				Promise.resolve(undefined),
 			changed: () => this.changed(),
 			unprompted: (room, author, text) => {
 				push.reply(room, author, text).catch(() => undefined);
@@ -294,6 +323,27 @@ export class OwnerApp {
 			mutes,
 			activity: (room) => surface.activityOf(room),
 		});
+		hostApp = new HostApp({
+			surface: options.surface,
+			registry,
+			sockets,
+			app: surface,
+			desk,
+			log,
+			cards: hostCards,
+			reads,
+			files: stored,
+			uploads,
+			rooms,
+			conversations: options.conversations,
+			nameOf,
+			roomUrl: options.roomUrl,
+			maxFileBytes: options.uploadMaxBytes,
+			...(options.events ? { events: options.events } : {}),
+			logger,
+		});
+		hostApp.install();
+		this.#host = hostApp;
 		route = new SocketRoute({
 			path: `${options.mount}/api/socket`,
 			origin: options.origin,
@@ -354,6 +404,9 @@ export class OwnerApp {
 			...(options.skills ? { skills: options.skills } : {}),
 			...(options.prompts ? { prompts: options.prompts } : {}),
 			avatars: agents.avatars,
+			reads,
+			host: hostApp,
+			nameOf,
 			mount: options.mount,
 			authMode: options.authMode,
 			admission: options.admission,
@@ -433,6 +486,7 @@ export class OwnerApp {
 
 	start(): void {
 		this.#uploads.adopt();
+		this.#host.start();
 		this.#mounted.start();
 		this.#sweep();
 		this.#sweeper = setInterval(() => this.#sweep(), SWEEP_EVERY_MS);
@@ -445,6 +499,7 @@ export class OwnerApp {
 		clearTimeout(this.#pending);
 		this.#pending = undefined;
 		for (const unsubscribe of this.#unsubscribe.splice(0)) unsubscribe();
+		this.#host.stop();
 		this.#mounted.stop().catch(() => undefined);
 		this.#desk.stop();
 		this.#presence.stop();
@@ -459,6 +514,20 @@ export class OwnerApp {
 		} catch (error) {
 			this.#options.logger.warn({ err: error }, "old app files not deleted");
 		}
+		this.#host.sweep().then(
+			(gone) => {
+				if (gone.messages + gone.cards + gone.files > 0)
+					this.#options.logger.info(
+						gone,
+						"host room history past retention deleted",
+					);
+			},
+			(error: unknown) =>
+				this.#options.logger.warn(
+					{ err: error },
+					"host room history not swept",
+				),
+		);
 	}
 
 	/** Records and shows that yolo mode approved a held call in a room. */

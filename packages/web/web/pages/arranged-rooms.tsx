@@ -17,6 +17,7 @@ import { openRoomsMenu } from "../lib/rooms-menu.ts";
 import { useRowPress } from "../lib/row-press.ts";
 import { type Sections, sections, type ThreadKeys } from "../lib/sections.ts";
 import {
+	HostKinds,
 	RoomRowView,
 	type RoomsPageProps,
 	type RowData,
@@ -169,6 +170,7 @@ function Section(props: {
  * it, and what each is doing. The page the room list becomes once anything is arranged.
  */
 export function ArrangedRoomsPage(props: RoomsPageProps) {
+	const hosted = Boolean(useConfig().kinds?.length);
 	// One string, so the page redraws only when the arrangement changes, not on every message.
 	const shape = useSelector((state) =>
 		JSON.stringify({
@@ -256,7 +258,7 @@ export function ArrangedRoomsPage(props: RoomsPageProps) {
 					</button>
 				</div>
 			) : null}
-			{listed && none ? (
+			{listed && none && !hosted ? (
 				<Empty>
 					{t("No rooms yet. Rooms appear when the team has an agent.")}
 				</Empty>
@@ -327,6 +329,7 @@ export function ArrangedRoomsPage(props: RoomsPageProps) {
 					/>
 				</section>
 			) : null}
+			<HostKinds active={props.active} />
 		</div>
 	);
 }

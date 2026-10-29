@@ -410,6 +410,10 @@ export type FormFieldView =
 			type: "select" | "multiselect";
 			required?: boolean;
 			options: { value: string; label: string }[];
+			/** The value or values chosen when the form opens; a `select` takes one. */
+			initial?: string | readonly string[];
+			/** The page offers a filter box over the options, for a long list. */
+			search?: boolean;
 	  };
 
 /** A card a host puts in its room; its buttons call the host's `act`. */
@@ -481,6 +485,18 @@ export interface RoomView {
 	stoppable: boolean;
 	/** The newest stored message, if any. */
 	last?: RoomMessage;
+	/** Messages past this person's read cursor; absent when none. */
+	unread?: number;
+}
+
+/** Where one person has read a room up to, with the name the page shows for them. */
+export interface ReadMarkView {
+	principal: string;
+	name: string;
+	/** The id of the newest message they have read. */
+	upTo: number;
+	/** ISO time. */
+	at: string;
 }
 
 /** An owner-made folder of rooms, with its rooms in the owner's order. */
@@ -517,6 +533,10 @@ export interface MessagesView {
 	 * first; the page places each among the messages by `frame.at`.
 	 */
 	cards: ClosedCard[];
+	/** The other readers' cursors: how far each has read the room (the viewer's own is `cursor`). */
+	reads?: ReadMarkView[];
+	/** The viewer's own read cursor before they opened the room; absent when they never read it. */
+	cursor?: number;
 }
 
 /** Who the page is signed in as. */
@@ -1150,8 +1170,16 @@ export type ServerFrame =
 	| { type: "badge"; count: number }
 	/** The steps still undone; empty when the gate opened. */
 	| { type: "gate"; steps: GateStepView[] }
-	/** Someone read a room up to a message. */
-	| { type: "read"; room: string; principal: string; upTo: number };
+	/** Someone read a room up to a message; `name` and `at` let the page show them without asking. */
+	| {
+			type: "read";
+			room: string;
+			principal: string;
+			name: string;
+			upTo: number;
+			/** ISO time. */
+			at: string;
+	  };
 
 /** A turn's live view, as the core reports it. */
 export type AppProgress =

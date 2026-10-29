@@ -70,12 +70,20 @@ export type FormSpec = FormSpecView;
 export type FormField = FormFieldView;
 export type FormValues = Readonly<Record<string, string | readonly string[]>>;
 export type ActionResult =
-	| { ok: true; notice?: string; open?: string }
+	| {
+			ok: true;
+			/** A short line shown to the person who acted. */
+			notice?: string;
+			/** Takes the person there after the action. */
+			open?: OpenTarget;
+			/** An external target, `https` or same-origin; `open` wins when both are given. */
+			url?: string;
+	  }
 	| { ok: false; error: string; field?: string };
 
 /**
- * Where a tap on a notice or a push goes: a room, scrolled to one message when `message` names
- * it, or a page with its query.
+ * Where a tap on a notice or a push goes, and where an action may take a person after it: a room,
+ * scrolled to one message when `message` names it, or a page with its query.
  */
 export type OpenTarget =
 	| { room: ChannelKey; message?: number }
@@ -145,6 +153,23 @@ export interface StoredHostCard extends HostCard {
 	updatedAt: Date;
 }
 
+/** What a host does with its pages once they are registered. */
+export interface HostPages {
+	/**
+	 * Tells the viewers a page is visible to (all pages when `id` is absent) that it may differ, so
+	 * their page fetches `view()` again. The frame carries no content.
+	 */
+	changed(id?: string): void;
+	/**
+	 * Keeps an image for a page's Markdown, shown as `![alt](file:<id>)` and served only to those
+	 * the page is visible to. PNG, JPEG or WebP; the bytes must be that image. Returns the file id.
+	 */
+	saveAsset(
+		page: string,
+		file: { name: string; type: string; bytes: Uint8Array | ReadableStream },
+	): Promise<string>;
+}
+
 /** Writes into the host's rooms. Author kinds are generic; the host supplies the label ("Customer"). */
 export interface HostRooms {
 	post(
@@ -178,6 +203,11 @@ export interface HostRooms {
 		room: ChannelKey,
 		file: { name: string; type: string; bytes: Uint8Array | ReadableStream },
 	): Promise<string>;
+	/**
+	 * A same-origin URL that opens the room, scrolled to and highlighting `message` when given.
+	 * Valid in a card's `links` and in assistant and notice Markdown.
+	 */
+	link(room: ChannelKey, message?: number): string;
 	/** Tells the room's viewers its header or list may differ, and drops the access memo. */
 	changed(room?: ChannelKey): void;
 	/** Drops the access memo, for one person or for all; the next frame re-asks the kind. */
@@ -335,6 +365,7 @@ export interface WebApp {
 	registerStep(step: OnboardingStep): void;
 	registerLinkProver(prover: LinkProver): void;
 	readonly rooms: HostRooms;
+	readonly pages: HostPages;
 	readonly notices: Notices;
 	readonly onboarding: {
 		status(principalId: string): Promise<StepStatus[]>;
@@ -370,6 +401,7 @@ const RESERVED_KINDS: ReadonlySet<string> = new Set([
 /** The services the pieces of the app provide once built; the registry hands them to the host. */
 export interface WebAppParts {
 	rooms: HostRooms;
+	pages: HostPages;
 	notices: Notices;
 	onboarding: WebApp["onboarding"];
 	push: WebApp["push"];
@@ -520,6 +552,9 @@ export class WebAppRegistry implements WebApp {
 	get rooms(): HostRooms {
 		return this.#parts.rooms ?? unbound("rooms");
 	}
+	get pages(): HostPages {
+		return this.#parts.pages ?? unbound("pages");
+	}
 	get notices(): Notices {
 		return this.#parts.notices ?? unbound("notices");
 	}
@@ -538,7 +573,7 @@ export class WebAppRegistry implements WebApp {
 	kind(name: string): HostRoomKind | undefined {
 		return this.#kinds.get(name);
 	}
-	pages(): readonly HostPage[] {
+	hostPages(): readonly HostPage[] {
 		return [...this.#pages.values()];
 	}
 	page(id: string): HostPage | undefined {
@@ -580,7 +615,7 @@ export class WebAppRegistry implements WebApp {
 	}
 
 	/** Replaces the deny-all room-access rule. */
-	useAccess(access: HostRoomAccess): void {
+	setAccess(access: HostRoomAccess): void {
 		this.#access = access;
 	}
 	get access(): HostRoomAccess {

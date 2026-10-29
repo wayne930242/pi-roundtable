@@ -211,7 +211,7 @@ async function build(settings: ResolvedOptions, context: Context) {
 			label: string;
 			place: "main" | "settings" | "hidden";
 		}[] = [];
-		for (const page of webApp.pages()) {
+		for (const page of webApp.hostPages()) {
 			try {
 				if (await page.visible(viewer))
 					pages.push({
@@ -374,6 +374,14 @@ async function build(settings: ResolvedOptions, context: Context) {
 					dataDir: settings.dataDir,
 					cardGraceSeconds: settings.cardGraceSeconds,
 					uploadMaxBytes: settings.uploadMaxBytes,
+					uploadKeepDays: settings.uploadKeepDays,
+					events: context.events,
+					// The name the person goes by in the app, as the profiles name them.
+					...(profiles
+						? { nameOf: async (id: string) => (await profiles.of(id)).name }
+						: {}),
+					roomUrl: (room, message) =>
+						`${settings.routing === "path" ? `${settings.mount}/room/` : `${settings.mount}/#/room/`}${encodeURIComponent(room)}${message === undefined ? "" : `?message=${message}`}`,
 					authenticator,
 					authMode: settings.auth.mode,
 					admission: settings.admission,

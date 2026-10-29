@@ -1,6 +1,7 @@
 import type { ClientFrame, ServerFrame } from "../../src/api-types.ts";
 import { APP_CLOSE_EXPIRED, APP_CLOSE_FORBIDDEN } from "../../src/api-types.ts";
 import { store } from "./app-store.ts";
+import { tapFrame } from "./frame-taps.ts";
 import type { PendingSend } from "./rooms.ts";
 
 /** The longest the wait before a reconnect grows to. */
@@ -79,15 +80,21 @@ export class AppConnection {
 	}
 
 	/** Sends a message of the person; it waits in the room as pending until the server answers. */
-	say(room: string, text: string, files: PendingSend["files"] = []): void {
+	say(
+		room: string,
+		text: string,
+		files: PendingSend["files"] = [],
+		mode?: "note" | "turn",
+	): void {
 		const id = crypto.randomUUID();
-		store.dispatch({ type: "queued", id, room, text, files });
+		store.dispatch({ type: "queued", id, room, text, files, mode });
 		const sent = this.send({
 			type: "send",
 			id,
 			room,
 			text,
 			...(files.length ? { uploads: files.map((file) => file.id) } : {}),
+			...(mode ? { mode } : {}),
 		});
 		if (!sent) store.dispatch({ type: "refused", id, code: "not_accepted" });
 	}
@@ -95,7 +102,7 @@ export class AppConnection {
 	/** Sends a message again that failed, as a new one. */
 	retry(pending: PendingSend): void {
 		store.dispatch({ type: "pending_dropped", id: pending.id });
-		this.say(pending.room, pending.text, pending.files);
+		this.say(pending.room, pending.text, pending.files, pending.mode);
 	}
 
 	readonly #visibility = () => {
@@ -173,6 +180,7 @@ export class AppConnection {
 		store.dispatch(
 			frame.type === "activity" ? { ...frame, at: Date.now() } : frame,
 		);
+		tapFrame(frame);
 		if (frame.type.startsWith("notice") || frame.type === "badge")
 			noticeSink.take ? noticeSink.take(frame) : noticeInbox.push(frame);
 		if (frame.type === "ready") {

@@ -1,4 +1,5 @@
 import { type ComponentType, type LazyExoticComponent, lazy } from "react";
+import { hostUi } from "./frame-taps.ts";
 
 /** What a page of the registry is given: the second part of its route, such as a host page's id. */
 export interface PageRouteProps {
@@ -17,7 +18,13 @@ const account = lazy(() => import("../pages/account.tsx"));
 export const PAGE_ROUTES: Record<
 	string,
 	LazyExoticComponent<ComponentType<PageRouteProps>>
-> = { profile: account, notices: account, onboarding: account };
+> = {
+	profile: account,
+	notices: account,
+	onboarding: account,
+	// The host's own pages, `p/<id>`.
+	p: lazy(() => hostUi().then((ui) => ({ default: ui.HostPage }))),
+};
 
 /**
  * The routes a person who owes a required step may still open: their profile and settings, and the
