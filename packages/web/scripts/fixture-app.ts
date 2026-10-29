@@ -8,6 +8,8 @@
 //   LOCALE                       the presentation locale, for example `zh-TW` (default: none, English)
 //   FIXTURE_SKILLS               `registry` lists the host's real skill registry (the built-in skills, plus
 //                                 two written ones made at start) so the skill editor works; default: the fake catalog below
+//
+// The page is built into dist/ at start when dist/ has none.
 //   FIXTURE_AGENTS                how many agents sit at the round table, 3 to 12 (default 3)
 //
 // The agents are scripts: start a message with a keyword and the agent acts it out.
@@ -20,6 +22,7 @@
 // `GET /control/mode?room=...&yolo=1&long=1` sets a room's modes. `GET /control/write?path=src/main.ts&text=...`
 // writes a file in the agents' workspace the way a partner would, to try the files pane's conflict check. The page is at http://127.0.0.1:PORT/console/.
 import {
+	existsSync,
 	mkdirSync,
 	mkdtempSync,
 	symlinkSync,
@@ -28,7 +31,17 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { parseFrontmatter } from "@earendil-works/pi-coding-agent";
 import { SQL } from "bun";
+import { buildPage } from "./build-page.ts";
+
+// The host serves the built page and stops at start-up without one: build it here when it is missing.
+const pageDir = fileURLToPath(new URL("../dist/", import.meta.url));
+if (!existsSync(join(pageDir, "index.html"))) {
+	console.log("the console page is not built: building it into dist/ first");
+	await buildPage(pageDir);
+}
 
 const port = Number(process.env.PORT ?? 4180);
 const base = process.env.ROUNDTABLE_TEST_DATABASE_URL;
@@ -46,6 +59,7 @@ const { AGENTS, MODES, promptScope, SCHEDULES, SKILLS, THREADS } = await import(
 );
 const { testHost } = await import("pi-roundtable/testing");
 const { webConsole } = await import("../src/web-plugin.ts");
+type SkillRegistry = import("pi-roundtable").SkillRegistry;
 type TurnProgress = import("pi-roundtable").TurnProgress;
 type TurnRequest = Parameters<
 	import("pi-roundtable").AgentRuntime["runTurn"]
@@ -113,12 +127,27 @@ export function report(findings: Finding[]): string { return findings.map((f) =>
 Finish with a one-line verdict.`,
 	},
 	"deploy-notes": {
-		frontmatter: { name: "deploy-notes", description: "Write release notes." },
+		frontmatter: {
+			name: "deploy-notes",
+			description:
+				"Use when writing release notes from the changes merged since the last release.",
+		},
 		body: "Group the merged changes by area, then write one line for each.\n\n- Fixes first\n- Then features",
 	},
 };
 
 const realSkills = process.env.FIXTURE_SKILLS === "registry";
+
+/** The Skills pane's feature port over the host's own registry, so what the pane lists is what the editor opens and saves. */
+const registrySkills = (registry: SkillRegistry) => ({
+	catalog: () => registry.catalog().map(({ file: _file, ...entry }) => entry),
+	read: async (name: string) => {
+		const { frontmatter, body } = parseFrontmatter<Record<string, unknown>>(
+			(await registry.document(name)).text,
+		);
+		return { frontmatter, body };
+	},
+});
 
 const origin = `http://127.0.0.1:${port}`;
 const seats = Math.min(
@@ -521,9 +550,9 @@ host = await testHost({
 			...(process.env.LOCALE
 				? { presentation: { locale: process.env.LOCALE } }
 				: {}),
-			features: {
+			features: (context) => ({
 				...(realSkills
-					? {}
+					? { skills: registrySkills(context.services.get(SKILLS)) }
 					: {
 							skills: {
 								catalog: () => SKILL_CATALOG,
@@ -538,7 +567,7 @@ host = await testHost({
 					startFresh: async () => "archived",
 					deleteConversation: async () => "deleted",
 				},
-			},
+			}),
 			...(process.env.LOOK === "camelot"
 				? { appearance: { look: "camelot" as const } }
 				: {}),
