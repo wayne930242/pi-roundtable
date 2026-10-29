@@ -239,7 +239,8 @@ The built-in plugins provide these, from the main entry:
 | `MODES` | `ConversationModes` | `modes` | Each conversation's modes, stored per key and kept across restarts: `peek(channel)` gives its `ConversationMode` (`yolo` and `longRunning`, both off by default; `changedBy?`, `changedAt?`) from memory, `set(channel, { yolo?, longRunning? }, speaker)` changes them and throws `PluginError` unless the speaker is an owner other than `SYSTEM_PRINCIPAL`, `onChange(listener)` hears each change, and `autoApproved(entry)` with `onAutoApproved(listener)` report a held call that yolo mode approved. See [Conversation modes](#conversation-modes-modes) |
 | `RUNTIME` | `AgentRuntime` | `runtime` | The runtime every conversation turn runs on, the agent server's and `context.turns`': the `runtime` slot's when a plugin fills it, Pi's otherwise |
 | `AGENTS` | `AgentServer` | `agent-server` | The `team` (`AgentTeam`), the read-only `directory` (`AgentDirectory`), the `runtime` every agent turn runs on (the same one `RUNTIME` provides), `approvals` (whether the owner's reply approves held actions), `avatars` (`AvatarStudio`), and `workspace` (`AgentWorkspace`: the agents' `workDir` and, when set, `scratchDir`) |
-| `SKILLS` | `SkillRegistry` | `skills` (an addon) | What agents carry: `carried`, `carriedNames`, `describeCarried`, `catalog`, `list`, `linkedFrom`, `checkRegistered`, `link`, `attach` |
+| `PROMPTS` | `PromptDocuments` | `prompts` | The prompt texts the owner edits in the app, each with a file version, an override and a history: `register`, `text`, `list`, `get`, `set`, `revert`, `history`. Always on; read it with `get`. See [`PROMPTS`: prompt texts the owner edits](#prompts-prompt-texts-the-owner-edits) |
+| `SKILLS` | `SkillRegistry` | `skills` (an addon) | What agents carry: `carried`, `carriedNames`, `describeCarried`, `catalog`, `list`, `linkedFrom`, `checkRegistered`, `link`, `attach`, and the owner's whole-SKILL.md edits `document`, `saveDocument`, `createDocument`, `documentHistory` |
 | `SCHEDULES` | `ScheduleStore` | `schedule-store` | The stored schedules: `create`, `createWithin`, `get`, `forChannel`, `all`, `update`, `remove`, `due`, `claim`, `recordStatus` |
 | `PRECHECKS` | `PrecheckRegistry` | `prechecks` | The host's named [prechecks](#prechecks-wake-a-schedule-only-when-it-has-work): `register`, `get`, `list`; and the runner of agents' precheck scripts: `useScriptRunner`, `scriptRunner` |
 | `MEMORY` | `MemoryStore` | `memory` (an addon) | `forSpeaker(principalId)` gives that principal's `SpeakerMemory`: `list`, `forPrompt`, `add`, `search`, `update`, `removeById`, `remove`; `MEMORY_KINDS` is `core`, `note`, `event` |
@@ -1092,6 +1093,35 @@ const shell = shellHoldRuleFor({
 	heldPushRepos: ["octocat/deployed-app"],
 });
 ```
+
+### `PROMPTS`: prompt texts the owner edits
+
+A prompt that comes from a file or the configuration can be made editable by the owner without touching the file.
+Register a document during `setup`; read its text with `text()` whenever you build a prompt:
+
+```ts
+import { definePlugin, PROMPTS } from "pi-roundtable";
+
+export const persona = definePlugin({
+	name: "persona",
+	setup: ({ services }) => {
+		const merlin = services.get(PROMPTS).register({
+			id: "merlin",
+			label: "Merlin's prompt",
+			description: "Who Merlin is in the owner's conversations.",
+			default: () => readFileSync("persona/merlin.md", "utf8"),
+		});
+		return { personas: [{ kind: "owner", prompt: () => merlin.text() }] };
+	},
+});
+```
+
+- `default` is the file version: a string, or a function called at each read so a default that follows a file is current. The id is 1 to 32 lowercase letters, digits and hyphens; a repeated or unusable id is an `AgentError`. `maxChars` defaults to 20,000.
+- The core registers `shared` (`prompts.shared`, the base every agent's prompt starts with) and `guest` (`prompts.guest`, used when the speaker is not the owner). A plugin's own documents are registered by that plugin; the plugin that registers them is set up after `prompts`, so it can `get` the service.
+- **The override.** `set(id, text, by)` stores the owner's text in PostgreSQL (`prompt_overrides`, with `prompt_history` beside it; both are additive migrations). While an override is set it wins over the file version, and it is read at every turn, so a change applies from the next turn without a restart. `revert(id, by)` drops it and the file version is back. Text equal to the file version reverts instead of storing a copy. A document has `text`, `fileText`, `overridden`, `differs` (set and not equal to the file) and `override: { by, at }`.
+- **History.** `history(id, limit?)` lists each change newest first: `action` (`set` or `revert`), `text`, the `previous` text, `by` and `at`. An agent's own prompt keeps the same kind of history through `AgentTeam.promptHistory(name)`; `AgentTeam.update(name, change, by?)` records `by`. A directory agent has no override layer: its stored row is the source, and a seed does not overwrite an existing row.
+- **On by default.** The override layer is always on, because nothing is overridden until the owner saves one and the file stays the default. The host logs one warning per document that differs from its file version when it starts, naming who set it and when, and the web app shows a "differs from the file version" badge. Deleting the rows (or using **Revert to the file version**) returns the host to its files.
+- `PromptDocuments.set` and `revert` do not check who calls: the owner-only check belongs to the caller, as the web app's routes do it.
 
 ### `prompt`: text added to every agent turn
 
@@ -4062,6 +4092,7 @@ Import from the entries listed below; source area files are internal.
 | `AvatarMode` | `pi-roundtable` | type |
 | `AgentWorkspace` | `pi-roundtable` | type |
 | `AvatarStudio` | `pi-roundtable` | type |
+| `PROMPTS` | `pi-roundtable` | value |
 | `characterOf` | `pi-roundtable` | value |
 | `BACKGROUND_TURNS` | `pi-roundtable` | value |
 | `CONVERSATIONS` | `pi-roundtable` | value |
@@ -4180,10 +4211,15 @@ Import from the entries listed below; source area files are internal.
 | `PluginIdentity` | `pi-roundtable` | type |
 | `PluginError` | `pi-roundtable` | value |
 | `Principal` | `pi-roundtable` | type |
+| `PromptDocumentSpec` | `pi-roundtable` | type |
+| `PromptDocuments` | `pi-roundtable` | type |
+| `PromptDocumentView` | `pi-roundtable` | type |
+| `PromptHandle` | `pi-roundtable` | type |
 | `PromptMemory` | `pi-roundtable` | type |
 | `PromptScope` | `pi-roundtable` | type |
 | `PromptSection` | `pi-roundtable` | type |
 | `PromptTurn` | `pi-roundtable` | type |
+| `PromptVersion` | `pi-roundtable` | type |
 | `PromptWait` | `pi-roundtable` | type |
 | `Prompts` | `pi-roundtable` | type |
 | `Pronouns` | `pi-roundtable` | type |
@@ -4226,6 +4262,8 @@ Import from the entries listed below; source area files are internal.
 | `PrecheckScriptRunner` | `pi-roundtable` | type |
 | `PrecheckTool` | `pi-roundtable` | type |
 | `PRECHECK_SCRIPT_CHARS` | `pi-roundtable` | value |
+| `SkillConflictError` | `pi-roundtable` | value |
+| `SkillDocument` | `pi-roundtable` | type |
 | `SKILLS` | `pi-roundtable` | value |
 | `SINGLE_QUESTION` | `pi-roundtable` | value |
 | `Schedule` | `pi-roundtable` | type |
@@ -4246,6 +4284,7 @@ Import from the entries listed below; source area files are internal.
 | `SessionToolSnapshot` | `pi-roundtable` | type |
 | `SkillCatalogEntry` | `pi-roundtable` | type |
 | `SkillRegistry` | `pi-roundtable` | type |
+| `SkillVersion` | `pi-roundtable` | type |
 | `WorkerSessions` | `pi-roundtable` | type |
 | `WorkerSessionRequest` | `pi-roundtable` | type |
 | `WORKER_SESSIONS` | `pi-roundtable` | value |
