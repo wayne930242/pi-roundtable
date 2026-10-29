@@ -114,7 +114,10 @@ test("a name inside another word is not the name, at a word's start it is", () =
 	try {
 		writeFileSync(resolve(dir, "keywords.js"), `const k="ber${name}li";\n`);
 		expect(scanTree(dir)).toEqual([]);
-		writeFileSync(resolve(dir, "person.js"), `const a="${name}",b="${name}Bot";\n`);
+		writeFileSync(
+			resolve(dir, "person.js"),
+			`const a="${name}",b="${name}Bot";\n`,
+		);
 		expect(scanTree(dir).map(({ file, kind }) => `${file} ${kind}`)).toEqual([
 			"person.js name",
 			"person.js name",
