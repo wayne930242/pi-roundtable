@@ -204,7 +204,8 @@ Cmd/Ctrl+S saves, Cmd/Ctrl+F finds, and Esc leaves the editor (and asks first wh
 `.git` and `node_modules` are listed but dimmed.
 
 **Highlighting and editing** are CodeMirror 6, one engine for both, so the read view and the editor look the same and switching is instant.
-The editor and each language are separate chunks that load the first time they are needed (the editor about 100 KB gzipped, a language 1 to 70 KB), so none of it is in the page's first download, and the service worker caches them when they are fetched and never precaches them.
+The editor and each language are separate chunks that load the first time they are needed (the editor about 100 KB gzipped, a language 1 to 70 KB), so none of it is in the page's first download. The service worker caches the editor's and each language's chunk when it is fetched and never precaches them; the code they share is left to the browser's own cache, which keeps a hashed file for good.
+The editor lives in a shadow root and takes its styles as constructed stylesheets, because the page's Content-Security-Policy (`default-src 'self'`) does not apply a `<style>` element a library adds; the policy is not loosened. A browser without constructed stylesheets (before Safari 16.4) shows the editor in the page, where it is unstyled.
 TypeScript and JavaScript, JSON, Markdown, CSS, HTML, Python, YAML, Go, Rust, SQL, XML, shell, TOML and Dockerfile are highlighted; any other file is plain text.
 The colors are CSS variables (`--code-*` in `tokens.css`, set again for Camelot), each at least 4.5:1 on the editor's background, so the Modern and Camelot looks and light and dark recolor an open editor with nothing rebuilt.
 There is no autocomplete and no auto-closing of brackets, which fight phone keyboards, and Tab inserts indentation.
@@ -215,7 +216,8 @@ The page then opens a dialog: Copy my text, Reload (discard my edits), and Save 
 While a file is open the page looks at it again on focus and every 5 seconds; in read mode it reloads silently, and in edit mode a banner says a partner is changing the file.
 A save writes a temporary file beside the original, with the original's mode, flushes it, checks again that the directory is still the one inside the root and the file is still a regular file, and renames it over the original.
 It keeps the file's line separator (`\r\n` or `\n`), a leading byte order mark and whether the file ends with a newline.
-A rename gives the file a new inode and the server's user as its owner, so a hard link to the old file keeps the old text, and agents that run as another user (`shellUser`) may need the directory's group to keep writing the file.
+A save gives the file a new inode and the server's user as its owner, so a hard link to the old file keeps the old text.
+The checks are made with the paths the host gives and resolve the path again for each call, as Node has no `openat`: a process that can rewrite a directory inside a place while a call runs can steer that call. Agents run as the server's own user, so they gain nothing from this, but the place is not a boundary against a separate hostile user.
 
 **Making and removing.** New file, New folder and Rename never replace something that exists (a clash is `409 exists`).
 Delete moves the file or folder into `.rt-trash` at the top of its place, which the tree does not list; Trash lists what is there with Restore, which never overwrites, and Delete for good.
@@ -223,7 +225,8 @@ A link is deleted as a link, never as what it points to.
 
 **What it refuses.** Every call, a read too, needs an owner, whose tier is read again, and a change needs the console's own `Origin` like every write.
 The client names a place by id and a path relative to it; a NUL byte, a leading `/`, a `.` or `..` or empty segment, or more than 4,096 bytes is `400`.
-Each directory on the way is resolved with `realpath` and must be inside the place's real directory.
+Each directory on the way is resolved with `realpath` and must be inside the place's real directory, and a place's own real directory is fixed where it is first seen: one that is later replaced by a link elsewhere is refused.
+`.git` and the trash are guarded by name without regard to case, as a volume that ignores case takes `.GIT` for `.git`.
 A symlink is listed with whether its target is inside; inside it opens as its target, outside it is shown and neither read nor written, and a save never writes through one.
 A pipe, socket or device is listed as other and never opened; a file is opened without following a link and its handle compared with what was checked.
 `.git` is read-only everywhere, because a hook or a config there runs code the next time an agent uses `git`; a place that is not writable refuses every change.
