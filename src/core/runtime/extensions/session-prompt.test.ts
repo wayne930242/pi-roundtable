@@ -333,7 +333,7 @@ describe("appended system prompt", () => {
 						name: "persona-prompt",
 						factory: personaPromptExtension(
 							"You are the assistant.",
-							() => "You are Merlin, edited.",
+							() => "You are Aria, edited.",
 							silentLogger(),
 							"owner",
 						),
@@ -346,7 +346,7 @@ describe("appended system prompt", () => {
 				["You are the assistant."],
 			);
 			expect(
-				prompt.startsWith("You are Merlin, edited.\n\n## Owner memory"),
+				prompt.startsWith("You are Aria, edited.\n\n## Owner memory"),
 			).toBe(true);
 			expect(prompt).not.toContain("You are the assistant.");
 		});

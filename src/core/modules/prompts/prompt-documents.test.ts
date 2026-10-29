@@ -324,7 +324,7 @@ describe("prompt documents", () => {
 				documents.register({
 					...spec(),
 					default: () => {
-						throw new Error("ENOENT: persona/merlin.md");
+						throw new Error("ENOENT: persona/aria.md");
 					},
 				}),
 			).toThrow(/"shared" has no readable file version: ENOENT/);
@@ -334,7 +334,7 @@ describe("prompt documents", () => {
 		test("reading the text fails with the document's id and logs an error, never the old text", async () => {
 			const documents = await withTwoDocuments();
 			expect(documents.text("shared")).toBe("File text.");
-			file = new Error("ENOENT: persona/merlin.md");
+			file = new Error("ENOENT: persona/aria.md");
 			expect(() => documents.text("shared")).toThrow(
 				/prompt document "shared" cannot be read: ENOENT/,
 			);
@@ -345,12 +345,12 @@ describe("prompt documents", () => {
 
 		test("the list shows the others and marks the broken document instead of failing for all", async () => {
 			const documents = await withTwoDocuments();
-			file = new Error("ENOENT: persona/merlin.md");
+			file = new Error("ENOENT: persona/aria.md");
 			const views = documents.list();
 			expect(views.map((view) => view.id)).toEqual(["shared", "guest"]);
 			expect(views[0]).toMatchObject({
 				id: "shared",
-				broken: "ENOENT: persona/merlin.md",
+				broken: "ENOENT: persona/aria.md",
 				fileText: "",
 				text: "",
 				differs: false,
@@ -364,11 +364,11 @@ describe("prompt documents", () => {
 			const db = fakeDatabase();
 			const documents = await withTwoDocuments(db);
 			await documents.set("shared", "Owner text.", "Riley");
-			file = new Error("ENOENT: persona/merlin.md");
+			file = new Error("ENOENT: persona/aria.md");
 			expect(documents.text("shared")).toBe("Owner text.");
 			expect(documents.get("shared")).toMatchObject({
 				text: "Owner text.",
-				broken: "ENOENT: persona/merlin.md",
+				broken: "ENOENT: persona/aria.md",
 			});
 			await expect(documents.set("shared", "Other.", "Riley")).rejects.toThrow(
 				/prompt document "shared" cannot be read/,
@@ -388,7 +388,7 @@ describe("prompt documents", () => {
 			const db = fakeDatabase();
 			const documents = await withTwoDocuments(db);
 			await documents.set("shared", "Owner text.", "Riley");
-			file = new Error("ENOENT: persona/merlin.md");
+			file = new Error("ENOENT: persona/aria.md");
 			errors.length = 0;
 			documents.logOverrides(logger);
 			expect(errors.map((line) => line.fields.document)).toEqual(["shared"]);

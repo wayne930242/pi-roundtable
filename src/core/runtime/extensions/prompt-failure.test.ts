@@ -48,11 +48,11 @@ describe("a prompt that cannot be read when a run starts", () => {
 	test("a persona that cannot be read is logged as an error and the run is stopped, not run with the old text", () => {
 		const { logger, errors } = recording();
 		const result = run(
-			personaPromptExtension("You are Merlin.", broken, logger, "owner"),
-			"You are Merlin.",
+			personaPromptExtension("You are Aria.", broken, logger, "owner"),
+			"You are Aria.",
 		);
 		expect(result.aborted).toBe(1);
-		expect(result.appended).toBe("You are Merlin.");
+		expect(result.appended).toBe("You are Aria.");
 		expect(errors).toHaveLength(1);
 		const [logged] = errors;
 		expect(logged?.message).toContain('persona of the "owner"');

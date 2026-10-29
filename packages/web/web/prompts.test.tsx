@@ -408,24 +408,24 @@ test("History marks a return to the file, and a version taken from it goes into 
 
 test("a document whose file version cannot be read is marked in the list and shows why instead of an editor, and the others stay editable", async () => {
 	documents.set(
-		"merlin",
+		"aria",
 		view({
-			id: "merlin",
-			label: "Merlin's prompt",
+			id: "aria",
+			label: "Aria's prompt",
 			description: undefined,
 			text: "",
 			fileText: "",
-			broken: "ENOENT: persona/merlin.md",
+			broken: "ENOENT: persona/aria.md",
 		}),
 	);
 	await show();
 	expect(
 		all("article.card").map((one) => one.querySelector("strong")?.textContent),
-	).toEqual(["Shared prompt", "Guest prompt", "Merlin's prompt"]);
+	).toEqual(["Shared prompt", "Guest prompt", "Aria's prompt"]);
 	expect(document.body.textContent).toContain("File version cannot be read");
-	await openEditor("Merlin's prompt");
+	await openEditor("Aria's prompt");
 	expect(q("dialog.sheet.full .failure")?.textContent).toContain(
-		"ENOENT: persona/merlin.md",
+		"ENOENT: persona/aria.md",
 	);
 	expect(q("textarea.prompt-full")).toBeNull();
 	expect(button("Review changes")).toBeNull();

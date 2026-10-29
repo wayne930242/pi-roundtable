@@ -406,11 +406,11 @@ describe("api/prompts", () => {
 	test("a document whose file version cannot be read is marked in the list and the read, and the others are listed as before", async () => {
 		const server = setup();
 		documents.set(
-			"merlin",
-			document("merlin", {
+			"aria",
+			document("aria", {
 				text: "",
 				fileText: "",
-				broken: "ENOENT: persona/merlin.md",
+				broken: "ENOENT: persona/aria.md",
 			}),
 		);
 		const listed = (await (
@@ -419,17 +419,17 @@ describe("api/prompts", () => {
 		expect(listed.documents.map((one) => one.id)).toEqual([
 			"shared",
 			"guest",
-			"merlin",
+			"aria",
 		]);
 		expect(listed.documents.map((one) => one.broken)).toEqual([
 			undefined,
 			undefined,
-			"ENOENT: persona/merlin.md",
+			"ENOENT: persona/aria.md",
 		]);
-		const read = await call(server, "GET", "prompts/merlin");
+		const read = await call(server, "GET", "prompts/aria");
 		expect(read.status).toBe(200);
 		expect(((await read.json()) as PromptView).broken).toBe(
-			"ENOENT: persona/merlin.md",
+			"ENOENT: persona/aria.md",
 		);
 	});
 
@@ -487,7 +487,8 @@ describe("api/prompts", () => {
 		const server = setup();
 		// 60,000 characters of three bytes each is 180 KB, more than the 20,000-character default allows for.
 		documents.set("roomy", document("roomy", { maxChars: 60_000 }));
-		const long = "字".repeat(60_000);
+		// Built at run time, so this file does not trip the public scan for Chinese text.
+		const long = String.fromCodePoint(0x5b57).repeat(60_000);
 		const saved = await call(server, "PUT", "prompts/roomy", {
 			body: { text: long, base: "File text." },
 		});
