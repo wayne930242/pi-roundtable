@@ -11,6 +11,7 @@ import {
 	testDatabaseUrl,
 } from "../../testing/database.ts";
 import { PgPromptDocuments, PromptConflictError } from "./prompt-documents.ts";
+import { PROMPT_HISTORY_KEEP } from "./prompt-history.ts";
 
 type Row = Record<string, unknown>;
 
@@ -53,10 +54,26 @@ function fakeDatabase() {
 			});
 			return [];
 		}
-		if (text.startsWith("DELETE FROM prompt_history")) return [];
+		if (text.startsWith("DELETE FROM prompt_history")) {
+			// The prune: a prompt keeps its newest `limit` versions; the guild, kind and name come twice.
+			const [guild, kind, name, , , , limit] = v;
+			const same = (row: Row) =>
+				row.guild === guild && row.kind === kind && row.name === name;
+			const kept = history
+				.filter(same)
+				.slice(-Number(limit))
+				.map((row) => row.id);
+			for (let i = history.length - 1; i >= 0; i--) {
+				const row = history[i] as Row;
+				if (same(row) && !kept.includes(row.id)) history.splice(i, 1);
+			}
+			return [];
+		}
 		if (text.startsWith("SELECT id, action, text, previous, by_name, at FROM"))
 			return history
-				.filter((row) => row.kind === v[1] && row.name === v[2])
+				.filter(
+					(row) => row.guild === v[0] && row.kind === v[1] && row.name === v[2],
+				)
 				.reverse()
 				.slice(0, Number(v[3]));
 		throw new Error(`the fake does not know: ${text}`);
@@ -378,6 +395,33 @@ describe("prompt documents", () => {
 		});
 	});
 
+	test("the history keeps the newest versions and drops the older ones", async () => {
+		const documents = await documentsOver(fakeDatabase());
+		const total = PROMPT_HISTORY_KEEP + 5;
+		for (let n = 1; n <= total; n++)
+			await documents.set("shared", `Version ${n}.`, "Riley");
+		const versions = await documents.history("shared", total);
+		expect(versions).toHaveLength(PROMPT_HISTORY_KEEP);
+		expect(versions[0]?.text).toBe(`Version ${total}.`);
+		expect(versions.at(-1)?.text).toBe("Version 6.");
+	});
+
+	test("one guild's history is neither read nor pruned by another's", async () => {
+		const db = fakeDatabase();
+		const mine = await documentsOver(db);
+		const theirs = await PgPromptDocuments.attach(db.sql, "900000000000000002");
+		theirs.register(spec());
+		await mine.set("shared", "Mine.", "Riley");
+		for (let n = 1; n <= PROMPT_HISTORY_KEEP + 3; n++)
+			await theirs.set("shared", `Theirs ${n}.`, "Sam");
+		expect((await mine.history("shared")).map((v) => v.text)).toEqual([
+			"Mine.",
+		]);
+		expect(
+			await theirs.history("shared", PROMPT_HISTORY_KEEP + 3),
+		).toHaveLength(PROMPT_HISTORY_KEEP);
+	});
+
 	test("a restart reads the overrides back", async () => {
 		const db = fakeDatabase();
 		const documents = await documentsOver(db);
@@ -459,6 +503,31 @@ describeDb("prompt documents in PostgreSQL", () => {
 		expect(last.text("shared")).toBe("File text.");
 		expect(last.get("shared")?.overridden).toBe(false);
 		await last.close();
+	});
+
+	test("the history keeps the newest versions in the database too", async () => {
+		const total = PROMPT_HISTORY_KEEP + 3;
+		for (let n = 1; n <= total; n++)
+			await store.set("shared", `Version ${n}.`, "Riley");
+		const versions = await store.history("shared", total);
+		expect(versions).toHaveLength(PROMPT_HISTORY_KEEP);
+		expect(versions[0]?.text).toBe(`Version ${total}.`);
+		expect(versions.at(-1)?.text).toBe("Version 4.");
+	});
+
+	test("another guild's history is neither read nor pruned by this one's", async () => {
+		const other = await openTestStore(documentsStore, "900000000000000002");
+		other.register(spec());
+		await store.set("shared", "Mine.", "Riley");
+		for (let n = 1; n <= PROMPT_HISTORY_KEEP + 3; n++)
+			await other.set("shared", `Theirs ${n}.`, "Sam");
+		expect((await store.history("shared")).map((v) => v.text)).toEqual([
+			"Mine.",
+		]);
+		expect(await other.history("shared", PROMPT_HISTORY_KEEP + 3)).toHaveLength(
+			PROMPT_HISTORY_KEEP,
+		);
+		await other.close();
 	});
 
 	test("another guild's overrides are not read", async () => {

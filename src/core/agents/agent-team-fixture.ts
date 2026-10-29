@@ -250,7 +250,15 @@ export const script: {
 	tools: string[];
 	/** The prompt every agent's starts with; read before each turn, so a test may change it. */
 	shared: string;
-} = { scores: undefined, prompt: [], tools: [], shared: "Shared rules." };
+	/** The one a speaker other than the owner gets instead; empty falls back to `shared`. */
+	guest: string;
+} = {
+	scores: undefined,
+	prompt: [],
+	tools: [],
+	shared: "Shared rules.",
+	guest: "",
+};
 let queue: ChannelQueue;
 let team: AgentTeam;
 let skillStore: TestStore<SkillStore>;
@@ -331,6 +339,7 @@ export function useTeamFixture(
 			"agent_group_cursors",
 			"prompt_history",
 			"skills",
+			"skill_versions",
 			"skill_groups",
 			"agent_skills",
 		])
@@ -369,6 +378,7 @@ export function useTeamFixture(
 		script.prompt = [];
 		script.tools = [];
 		script.shared = "Shared rules.";
+		script.guest = "";
 		queue = channelQueue();
 		removedSchedules.length = 0;
 		stops.length = 0;
@@ -429,6 +439,7 @@ export function useTeamFixture(
 			},
 			workDir: "/tmp/agents/work",
 			sharedPrompt: () => script.shared,
+			guestPrompt: () => script.guest,
 			skills,
 			logger: silentLogger(),
 		});

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { NO_ATTACHMENTS } from "../domain/attachment.ts";
+import type { Speaker } from "../speakers.ts";
 import { describeDb } from "../testing/database.ts";
 import { OWNER_SPEAKER } from "../testing/owner.ts";
 import {
@@ -156,6 +157,36 @@ describeDb("PostgreSQL", () => {
 			const prompt = fx.team.systemPrompt(scope);
 			expect(prompt.startsWith("Edited shared rules.")).toBe(true);
 			expect(prompt).not.toContain("Shared rules.\n");
+		});
+
+		test("a guest's turn reads the guest prompt again at every turn, and the owner's keeps the shared one", async () => {
+			const guest: Speaker = {
+				id: "100000000000000007",
+				name: "Bob",
+				tier: "member",
+				principalId: "100000000000000007",
+			};
+			const infra = agentChannel("infra");
+			const scope = { name: "infra", session: infra, home: infra };
+			/** The system prompt the agent has during a turn of this speaker. */
+			const promptDuring = async (speaker: Speaker) => {
+				let prompt = "";
+				fx.runtime.during = () => {
+					fx.runtime.during = undefined;
+					prompt = fx.team.systemPrompt(scope);
+				};
+				await fx.team.answerOwner(infra, speaker, "hi", "hi", NO_ATTACHMENTS);
+				return prompt;
+			};
+			script.guest = "Guest rules.";
+			expect((await promptDuring(guest)).startsWith("Guest rules.")).toBe(true);
+			script.guest = "Edited guest rules.";
+			expect(
+				(await promptDuring(guest)).startsWith("Edited guest rules."),
+			).toBe(true);
+			const owners = await promptDuring(OWNER_SPEAKER);
+			expect(owners.startsWith("Shared rules.")).toBe(true);
+			expect(owners).not.toContain("guest rules");
 		});
 
 		test("a prompt changed through the team is kept in the agent's history under the name given", async () => {
