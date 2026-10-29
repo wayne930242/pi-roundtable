@@ -147,3 +147,38 @@ test.each([
 		rmSync(root, { recursive: true, force: true });
 	}
 });
+
+test.each([
+	[
+		"a relative stateFile",
+		{ stateFile: "channels.json" },
+		/stateFile must be absolute/,
+	],
+	["a malformed guild id", { guilds: ["not-a-snowflake"] }, /guild/i],
+])(
+	"the plugin rejects %s before it inspects the image",
+	async (_name, extra, message) => {
+		const root = mkdtempSync("/tmp/sb-proto-");
+		const asked: string[] = [];
+		try {
+			const plugin = sandbox({
+				...base(root),
+				stateFile: join(root, "state", "channels.json"),
+				provider: "p",
+				workspace: "server",
+				driver: driver(2, asked),
+				...extra,
+			});
+			await expect(
+				testPlugin(plugin, {
+					services: [served],
+					apiKeys: { p: "k" },
+					surfaces: [],
+				}),
+			).rejects.toThrow(message);
+			expect(asked).toEqual([]);
+		} finally {
+			rmSync(root, { recursive: true, force: true });
+		}
+	},
+);

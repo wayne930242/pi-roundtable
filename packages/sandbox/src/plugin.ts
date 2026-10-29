@@ -42,7 +42,6 @@ export function sandbox(options: SandboxOptions) {
 					(() => context.apiKey(options.provider ?? "openai")),
 				timeZone: context.env.timeZone,
 			});
-			await runtime.verifyImage();
 			if (!isAbsolute(options.stateFile))
 				throw new Error("stateFile must be absolute");
 			mkdirSync(dirname(options.stateFile), { recursive: true, mode: 0o700 });
@@ -62,6 +61,8 @@ export function sandbox(options: SandboxOptions) {
 				options.initialChannels,
 				{ guilds: options.guilds },
 			);
+			// Last of the cheap checks: a typo above fails fast, without a `docker inspect`.
+			await runtime.verifyImage();
 			context.services.provide(SANDBOX, { channels, runtime });
 			const discord = context.services.find(DISCORD);
 			if (discord)
