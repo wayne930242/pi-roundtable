@@ -16,8 +16,21 @@ export const PANES = [
 	"schedules",
 	"table",
 	"workspace",
+	"profile",
 ] as const;
 export type PaneName = (typeof PANES)[number];
+
+/** The panes only an owner is served: they show the whole host, which a member's view never does. */
+export const OWNER_ONLY_PANES = [
+	"overview",
+	"skills",
+	"connectors",
+	"table",
+	"workspace",
+] as const satisfies readonly PaneName[];
+
+/** A person's tier in the app, as `IDENTITY` gives it. */
+export type AppTier = "owner" | "admin" | "member";
 
 /** What the page needs before it can draw anything. */
 export interface ConfigView {
@@ -42,6 +55,42 @@ export interface ConfigView {
 		/** The WebSocket subprotocol to offer. */
 		protocol: string;
 	};
+	/** The visitor's tier. Sent only where the host admits more than its owners (`admission: "access"`). */
+	tier?: AppTier;
+	/** The steps still undone before the app opens; present only while the gate is closed. */
+	gate?: GateStepView[];
+	/** The host's pages that are not rooms, as far as this visitor may see them. */
+	pages?: PageLinkView[];
+	/** The kinds of host room this visitor may list. */
+	kinds?: KindLinkView[];
+	/** Web Push for this visitor's tier: who may subscribe, and (for an external sender) where. */
+	push?: { tiers: AppTier[]; key?: string; subscribe?: string };
+}
+
+/** A step of onboarding the visitor still owes. */
+export interface GateStepView {
+	id: string;
+	label: string;
+	help?: string;
+	/** A required step gates the app; a nudge is shown and never gates. */
+	required: boolean;
+	/** The page where the person completes it. */
+	open: { page: string };
+	/** The person may waive it; the label and the confirmation are what they are shown. */
+	waiver?: { label: string; confirm: string };
+}
+
+/** A host page that is not a room, in the places the shell lists it. */
+export interface PageLinkView {
+	id: string;
+	label: string;
+	place: "main" | "settings" | "hidden";
+}
+
+/** A kind of host room, listed by its label. */
+export interface KindLinkView {
+	kind: string;
+	label: string;
 }
 
 export type ChannelName =
@@ -300,6 +349,90 @@ export interface RoomMessage {
 	/** ISO time. */
 	at: string;
 	live?: string;
+	/**
+	 * Host rooms: what kind of author wrote it (`external` text is untrusted and shown as plain
+	 * text) and the label the host gives that kind, such as "Customer". Absent on the app's own.
+	 */
+	authorKind?: HostAuthorKind;
+	authorLabel?: string;
+	/** Host rooms: the author's picture, never an outside URL. */
+	picture?: PictureRef;
+	/** The text was changed after it was stored. */
+	edited?: true;
+	/** Files of the message that were deleted by retention. */
+	expiredFiles?: number;
+}
+
+/** The kinds of author a host room's messages come from. */
+export type HostAuthorKind = "external" | "member" | "assistant" | "notice";
+
+/** A picture the page may draw: a stored file, a person's picture, or initials; never an outside URL. */
+export type PictureRef =
+	| { file: string }
+	| { principal: string }
+	| { initials: string; color: string };
+
+/** A button a host card or header offers, and the form it opens first. */
+export interface HostActionView {
+	id: string;
+	label: string;
+	style?: "primary" | "secondary" | "danger";
+	confirm?: string;
+	form?: FormSpecView;
+}
+
+export interface FormSpecView {
+	title: string;
+	submit: string;
+	fields: FormFieldView[];
+}
+
+export type FormFieldView =
+	| {
+			name: string;
+			label: string;
+			type: "text" | "textarea" | "url";
+			required?: boolean;
+			max?: number;
+			initial?: string;
+			hint?: string;
+	  }
+	| {
+			name: string;
+			label: string;
+			type: "select" | "multiselect";
+			required?: boolean;
+			options: { value: string; label: string }[];
+	  };
+
+/** A card a host puts in its room; its buttons call the host's `act`. */
+export interface HostCardView {
+	id: string;
+	room: string;
+	title: string;
+	body: string;
+	tone?: "note" | "ok" | "warn" | "risk";
+	state?: "open" | "working" | "done" | "superseded" | "expired";
+	links?: { label: string; url: string }[];
+	/** Only the buttons this viewer may press. */
+	buttons?: HostActionView[];
+	/** ISO times. */
+	at: string;
+	updatedAt: string;
+}
+
+/** A person-addressed notice, as the bell shows it. */
+export interface NoticeView {
+	tag: string;
+	title: string;
+	body?: string;
+	open?: { room: string } | { page: string; query?: Record<string, string> };
+	urgency: "normal" | "high";
+	ackable: boolean;
+	/** ISO time. */
+	raisedAt: string;
+	/** This person has handled it. */
+	acked?: true;
 }
 
 /** One entry of the room list. */
@@ -381,8 +514,12 @@ export interface MessagesView {
 export interface SessionView {
 	principal: PrincipalName;
 	surface: string;
-	/** How the console signs the person in; the page offers Log out under `password`. */
-	auth: "none" | "password" | "verifier";
+	/** How the console signs the person in; the page offers Log out under `password` and `oidc`. */
+	auth: "none" | "password" | "verifier" | "oidc";
+	/** The visitor's tier. Sent only where the host admits more than its owners (`admission: "access"`). */
+	tier?: AppTier;
+	/** The steps still undone before the app opens; present only while the gate is closed. */
+	gate?: GateStepView[];
 	/** When the credential lapses, if it does. */
 	expiresAt?: string;
 	/** Web Push is available: the app serves the rooms and a key for it. */
@@ -799,7 +936,12 @@ export type RefusalCode =
 	| "unknown_upload"
 	| "empty"
 	| "too_long"
-	| "not_accepted";
+	| "not_accepted"
+	/** A required onboarding step stands undone, so the frame is not taken yet. */
+	| "gated";
+
+/** The values of a form a host action opened. */
+export type FormInput = Readonly<Record<string, string | readonly string[]>>;
 
 /** What the page sends: one JSON object per WebSocket text message. */
 export type ClientFrame =
@@ -816,8 +958,27 @@ export type ClientFrame =
 			text: string;
 			/** Files uploaded with `POST api/uploads`, by the `id` each returned. */
 			uploads?: string[];
+			/** Host rooms: a `note` only records, a `turn` is also delivered to the host's claim. Default `turn`; an agent room takes only `turn`. */
+			mode?: "note" | "turn";
 	  }
 	| { type: "stop"; room: string }
+	/** Host rooms: follow a room's frames. At most 200 at once; the viewer must be able to read it. */
+	| { type: "subscribe"; room: string }
+	| { type: "unsubscribe"; room: string }
+	/** A host room's or page's action: a card's button, a header action, a form. */
+	| {
+			type: "act";
+			id: string;
+			room?: string;
+			page?: string;
+			action: string;
+			card?: string;
+			input?: FormInput;
+	  }
+	/** The person handled a notice. */
+	| { type: "ack"; tag: string }
+	/** The person has read a room up to this message (a cursor never moves back). */
+	| { type: "read"; room: string; upTo: number }
 	| { type: "approval"; prompt: string; approved: boolean }
 	| { type: "answer"; prompt: string; answer: PromptAnswer }
 	| {
@@ -839,6 +1000,8 @@ export type ServerFrame =
 			name: string;
 			/** The most files one message carries and the most bytes of one. */
 			uploads: { perMessage: number; maxBytes: number };
+			/** The required steps the person still owes, when there are any: the socket then carries only the gate and their notices. */
+			gate?: GateStepView[];
 	  }
 	/** The message `id` was taken into `room`; `message` is how it was stored. */
 	| { type: "accepted"; id: string; room: string; message: RoomMessage }
@@ -882,7 +1045,25 @@ export type ServerFrame =
 	/** Yolo mode approved a held call by itself. */
 	| { type: "auto_approved"; room: string; tool: string; action: string }
 	/** The team or the room list may differ: refetch. */
-	| { type: "changed" };
+	| { type: "changed" }
+	/** A host room's message, edit or removal, and its cards; sent to the sockets subscribed to the room. */
+	| { type: "host_message"; room: string; message: RoomMessage }
+	| { type: "host_edited"; room: string; message: RoomMessage }
+	| { type: "host_removed"; room: string; id: number }
+	| { type: "host_card"; room: string; card: HostCardView }
+	/** A host room's header or access may differ: refetch it. */
+	| { type: "room_changed"; room: string }
+	/** The list of a kind of host room may differ: refetch it. */
+	| { type: "list_changed"; kind: string }
+	| { type: "page_changed"; page: string }
+	| { type: "notice"; notice: NoticeView }
+	| { type: "notice_resolved"; tag: string }
+	/** The count the app icon shows: notices not handled. */
+	| { type: "badge"; count: number }
+	/** The steps still undone; empty when the gate opened. */
+	| { type: "gate"; steps: GateStepView[] }
+	/** Someone read a room up to a message. */
+	| { type: "read"; room: string; principal: string; upTo: number };
 
 /** A turn's live view, as the core reports it. */
 export type AppProgress =

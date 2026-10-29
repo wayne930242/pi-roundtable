@@ -28,6 +28,8 @@ function refusalText(code: RefusalCode): string {
 			return t(
 				"The message was not taken. Check the connection and try again.",
 			);
+		case "gated":
+			return t("Finish setting up first.");
 	}
 }
 

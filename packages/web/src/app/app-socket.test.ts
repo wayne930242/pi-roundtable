@@ -672,7 +672,8 @@ describeDb("the owner app over a real host", () => {
 		expect(latest.cards.map((c) => c.frame.id)).not.toContain(card.prompt.id);
 		// The page before the reply, which reaches back to the owner's message, holds the card.
 		const older = await get(`limit=100&before=${reply?.id}`);
-		expect(older.more).toBe(false);
+		// The host keeps every earlier run's messages, so this page may have older ones; it reaches back to the owner's own.
+		expect(older.messages.some((m) => m.id === start?.id)).toBe(true);
 		const found = older.cards.find((c) => c.frame.id === card.prompt.id);
 		expect(found).toMatchObject({ outcome: "declined", by: "Ada" });
 		// Page by page, every card is on exactly one page.

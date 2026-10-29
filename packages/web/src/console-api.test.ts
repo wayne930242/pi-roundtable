@@ -45,6 +45,9 @@ const RETIRED: FakePrincipal = {
 };
 const visitorOf = (person: FakePrincipal): Visitor => ({
 	principal: { id: person.id, displayName: person.name, disabled: false },
+	tier: "owner",
+	speakerId: person.id,
+	roles: [],
 });
 const AS_OWNER = visitorOf(OWNER);
 

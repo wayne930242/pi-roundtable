@@ -1,7 +1,12 @@
 import { join, resolve } from "node:path";
-import type { ChannelKey, RoundtablePlugin } from "pi-roundtable";
-import { PluginError } from "pi-roundtable";
-import { PANES, type PaneName } from "./api-types.ts";
+import type {
+	ChannelKey,
+	ConversationRecord,
+	RoundtablePlugin,
+	Tier,
+} from "pi-roundtable";
+import { PluginError, TIERS } from "pi-roundtable";
+import { OWNER_ONLY_PANES, PANES, type PaneName } from "./api-types.ts";
 import {
 	DEFAULT_UPLOAD_MAX_BYTES,
 	UPLOAD_FRAMING_BYTES,
@@ -70,7 +75,48 @@ export type WebAuthOptions =
 			/** A request verifier, such as `cloudflareAccess(...)`; the same as the `verifier` option. */
 			mode: "verifier";
 			verifier: RequestVerifier;
-	  };
+	  }
+	| OidcOptions;
+
+/**
+ * Sign-in with an OpenID Connect provider (authorization code with PKCE). The id_token is checked
+ * once, at the callback; the app then keeps its own server-side session, which slides: it ends
+ * after `sessionDays` without a visit. Who the person is, and the tier they hold, come from
+ * `IDENTITY` for every request. The origin must be https.
+ */
+export interface OidcOptions {
+	mode: "oidc";
+	/** The exact `iss` of the id_token. */
+	issuer: string;
+	/** Default `${issuer}/.well-known/openid-configuration`; read at start, which fails if it cannot be. */
+	discoveryUrl?: string;
+	clientId: string;
+	/** The environment variable that holds the client secret; set = a confidential client, left out = a public client with PKCE. */
+	clientSecretEnv?: string;
+	/** Default `openid`, `profile`. `offline_access` is refused: the app keeps no refresh token. */
+	scopes?: readonly string[];
+	/** The claim that names the person; default `sub` (Entra: `oid`). */
+	subjectClaim?: string;
+	/** The claim for their name; default `name`, then `preferred_username`, then the subject. */
+	nameClaim?: string;
+	/** The claim that carries app roles, each becoming `<surface>:role:<name>`; default `roles`; `false` reads none. */
+	rolesClaim?: string | false;
+	/** Decides at sign-in whether this token is acceptable at all. */
+	check?: (claims: Readonly<Record<string, unknown>>) => boolean;
+	/** How many days without a visit end a session, 1 to 365; default 30. */
+	sessionDays?: number;
+	/** Whether logging out also signs out at the provider (without `id_token_hint`); default false. */
+	endSession?: boolean;
+	/**
+	 * Asks the provider again after this many hours: the next page load goes through a silent
+	 * `prompt=none` round trip, which refreshes the stored facts and roles; when the provider wants
+	 * the person, they sign in as usual. Until then an API or socket request of that session is
+	 * answered 401. Default: never.
+	 */
+	reauthHours?: number;
+	/** The id_token claims to keep with the session (replaced at each sign-in and re-verify, never logged); default none. */
+	storeClaims?: readonly string[];
+}
 
 /** `auth` checked and filled in. */
 export type ResolvedAuth =
@@ -81,7 +127,33 @@ export type ResolvedAuth =
 			sessionDays: number;
 			principal?: string;
 	  }
-	| { mode: "verifier"; verifier: RequestVerifier };
+	| { mode: "verifier"; verifier: RequestVerifier }
+	| ResolvedOidc;
+
+export interface ResolvedOidc {
+	mode: "oidc";
+	issuer: string;
+	discoveryUrl: string;
+	clientId: string;
+	clientSecretEnv: string | undefined;
+	scopes: readonly string[];
+	subjectClaim: string;
+	nameClaim: string | undefined;
+	rolesClaim: string | false;
+	check: ((claims: Readonly<Record<string, unknown>>) => boolean) | undefined;
+	sessionDays: number;
+	endSession: boolean;
+	reauthHours: number | undefined;
+	storeClaims: readonly string[];
+}
+
+/** The panes each tier is served, when the list differs by tier. */
+export interface TierPanes {
+	owner: readonly PaneName[];
+	/** Default: the member's list. */
+	admin?: readonly PaneName[];
+	member: readonly PaneName[];
+}
 
 export interface WebConsoleOptions {
 	/**
@@ -124,6 +196,14 @@ export interface WebConsoleOptions {
 	/** Hash routes by default; path routes retain links such as /console/skills. */
 	routing?: "hash" | "path";
 	/**
+	 * Who the app admits: `owners` (default, as before 0.26) lets in only people who hold the owner
+	 * role; `access` lets in everyone `IDENTITY` admits on the app's surface, owners, admins and
+	 * members, and provisions a new principal at a first contact where `access.provisioning` says so
+	 * for the surface. `access` needs a credential that names a person (`oidc`, or a verifier that
+	 * reports an actor), not `none` or `password`.
+	 */
+	admission?: "owners" | "access";
+	/**
 	 * The panes to serve, in the order the page lists them; default `rooms`, `table`, `workspace`,
 	 * `overview`, `schedules`, `conversations`, `notes`. `rooms` is the owner app: the same agent
 	 * team as on Discord, in rooms of its own; `table` seats its agents at the round table and
@@ -132,9 +212,14 @@ export interface WebConsoleOptions {
 	 * `workspace` out when there is no directory; an explicit list that names it must have one.
 	 * An explicit list is kept as written, so a host that listed the panes before 0.23 adds
 	 * `rooms`, `table` and `schedules` by hand, and one that listed them before 0.24 adds
-	 * `workspace`.
+	 * `workspace`. With `admission: "access"` the default also has `profile`, and a member is
+	 * served `rooms` (the host's rooms only), `conversations`, `notes`, `schedules` and `profile`
+	 * of those the owners have; give `{ owner, admin?, member }` to choose per tier. A member is
+	 * never served `overview`, `table`, `workspace`, `skills` or `connectors`, and naming one for
+	 * them is an error. `notes` in the default list is dropped, with a warning, when the host keeps
+	 * no memory; naming it with no memory is an error.
 	 */
-	panes?: readonly PaneName[];
+	panes?: readonly PaneName[] | TierPanes;
 	/**
 	 * What the `workspace` pane shows. The agents' working directory (`agents`) and their scratch
 	 * directory (`scratch`, when the host has one) are shown without being named, from
@@ -205,7 +290,39 @@ export interface WebConsoleOptions {
 		 * until this is set.
 		 */
 		subject?: string;
+		/** The tiers whose people may subscribe and receive push; default `["owner"]`. */
+		tiers?: readonly Tier[];
+		/**
+		 * Where a push is signed and sent: `internal` (default), by this process with its own VAPID
+		 * key; or `external`, by a sender process the operator runs with the key, so this process
+		 * never holds it. `publicKey` is the key browsers subscribe against; `subscribePath` is where
+		 * the sender serves the subscription routes, when it does.
+		 */
+		sender?:
+			| "internal"
+			| { external: { publicKey: string; subscribePath?: string } };
+		/**
+		 * What leaves the app for a push: `full` (a title and a preview) or `none` (the kind, a tag and
+		 * a count only). Default `full` for an internal sender and `none` for an external one. A host
+		 * room never previews.
+		 */
+		content?: "full" | "none";
 	};
+	/**
+	 * What a person owes before the app opens. `links` names providers whose accounts they must
+	 * link (`required` gates the app, `nudge` only asks); each needs a `LinkProver` registered
+	 * through `WEB_APP`. `push` asks them to turn push on and receive a test; `pushWaiver` lets
+	 * them waive a required push step.
+	 */
+	onboarding?: {
+		links?: Readonly<Record<string, "required" | "nudge">>;
+		push?: "required" | "nudge" | "off";
+		pushWaiver?: boolean;
+	};
+	/** Leave out the yolo and long-running switches: no mode is shown or set, and `PUT api/rooms/<key>/mode` answers 404. */
+	modes?: false;
+	/** The files of the app's agent rooms; `keepDays` is how long stored files are kept, default 30. */
+	uploads?: { keepDays?: number };
 	/** The page's title and heading; default `Roundtable`. */
 	title?: string;
 	/** Where the install icons come from; default the ones this package ships. */
@@ -214,8 +331,11 @@ export interface WebConsoleOptions {
 	appearance?: { look?: "modern" | "camelot" };
 	/** Text a relayed message begins with, taken off the owner's words; default the remote MCP note. */
 	relayNotes?: readonly string[];
-	/** Conversations the console neither lists nor reads. */
-	exclude?: (key: ChannelKey) => boolean;
+	/**
+	 * Conversations the console neither lists nor reads. `record` is what the host's registry
+	 * holds of the conversation, if anything, so a host can decide by its kind or owner.
+	 */
+	exclude?: (key: ChannelKey, record?: ConversationRecord) => boolean;
 	/** The built page's directory; default the `dist/` this package ships. Set it only in tests. */
 	assetDir?: string;
 }
@@ -230,7 +350,11 @@ export interface ResolvedOptions {
 	mount: string;
 	listener: string;
 	routing: "hash" | "path";
+	admission: "owners" | "access";
+	/** The owners' panes: what `panes` named, or the default. */
 	panes: PaneName[];
+	/** The panes each tier is served. Admins and members are served none unless `admission` is `access`. */
+	tierPanes: Readonly<Record<Tier, readonly PaneName[]>>;
 	/** Whether `panes` was written out, which makes a missing directory for the workspace pane an error. */
 	panesGiven: boolean;
 	/** The `workspace` option checked and filled in. */
@@ -250,12 +374,27 @@ export interface ResolvedOptions {
 		/** The VAPID contact; undefined = push is off. */
 		subject: string | undefined;
 		fetch: typeof fetch | undefined;
+		tiers: readonly Tier[];
+		sender:
+			| "internal"
+			| { external: { publicKey: string; subscribePath?: string } };
+		content: "full" | "none";
 	};
+	onboarding: {
+		links: Readonly<Record<string, "required" | "nudge">>;
+		push: "required" | "nudge" | "off";
+		pushWaiver: boolean;
+	};
+	/** Whether the yolo and long-running switches are served. */
+	modes: boolean;
+	uploadKeepDays: number;
 	title: string;
 	iconsDir: string | undefined;
 	look: "modern" | "camelot";
 	relayNotes: readonly string[];
-	exclude: ((key: ChannelKey) => boolean) | undefined;
+	exclude:
+		| ((key: ChannelKey, record?: ConversationRecord) => boolean)
+		| undefined;
 	assetDir: string | undefined;
 	features: WebConsoleOptions["features"];
 	presentation: ConsolePresentation | undefined;
@@ -302,31 +441,105 @@ function checkOrigin(origin: string): string {
 	return url.origin;
 }
 
-function checkPanes(panes: readonly PaneName[] | undefined): PaneName[] {
-	if (panes === undefined)
-		return [
-			"rooms",
-			"table",
-			"workspace",
-			"overview",
-			"schedules",
-			"conversations",
-			"notes",
-		];
-	if (panes.length === 0) fail("panes is empty; serve at least one pane");
+const DEFAULT_OWNER_PANES: readonly PaneName[] = [
+	"rooms",
+	"table",
+	"workspace",
+	"overview",
+	"schedules",
+	"conversations",
+	"notes",
+];
+
+/** The panes a member is served by default, of those the owners have. */
+const DEFAULT_MEMBER_PANES: readonly PaneName[] = [
+	"rooms",
+	"conversations",
+	"notes",
+	"schedules",
+	"profile",
+];
+
+function checkPaneList(panes: readonly PaneName[], label: string): PaneName[] {
+	if (!Array.isArray(panes)) fail(`${label} must be a list of panes`);
+	if (panes.length === 0) fail(`${label} is empty; serve at least one pane`);
 	for (const pane of panes)
 		if (!PANES.includes(pane))
 			fail(
-				`unknown pane ${JSON.stringify(pane)}; the panes are ${PANES.join(", ")}`,
+				`unknown pane ${JSON.stringify(pane)} in ${label}; the panes are ${PANES.join(", ")}`,
 			);
-	if (new Set(panes).size !== panes.length) fail("panes lists a pane twice");
-	if (panes.includes("schedules") && !panes.includes("rooms"))
-		fail("the schedules pane needs the rooms pane, which serves its API");
-	if (panes.includes("table") && !panes.includes("rooms"))
-		fail("the table pane needs the rooms pane, whose agents it seats");
-	if (panes.includes("workspace") && !panes.includes("rooms"))
-		fail("the workspace pane needs the rooms pane, which serves its API");
+	if (new Set(panes).size !== panes.length) fail(`${label} lists a pane twice`);
 	return [...panes];
+}
+
+/** The panes of the owners, as before: what the other panes need of them is checked here. */
+function checkOwnerPanes(panes: readonly PaneName[]): PaneName[] {
+	const list = checkPaneList(panes, "panes");
+	if (list.includes("schedules") && !list.includes("rooms"))
+		fail("the schedules pane needs the rooms pane, which serves its API");
+	if (list.includes("table") && !list.includes("rooms"))
+		fail("the table pane needs the rooms pane, whose agents it seats");
+	if (list.includes("workspace") && !list.includes("rooms"))
+		fail("the workspace pane needs the rooms pane, which serves its API");
+	return list;
+}
+
+interface CheckedPanes {
+	owner: PaneName[];
+	admin: PaneName[];
+	member: PaneName[];
+	given: boolean;
+}
+
+function checkPanes(
+	panes: WebConsoleOptions["panes"],
+	admission: "owners" | "access",
+): CheckedPanes {
+	const tiered =
+		panes !== undefined && !Array.isArray(panes)
+			? (panes as TierPanes)
+			: undefined;
+	if (tiered && (typeof tiered !== "object" || tiered === null))
+		fail("panes must be a list, or { owner, admin?, member }");
+	const owner = checkOwnerPanes(
+		tiered
+			? tiered.owner
+			: ((panes as readonly PaneName[] | undefined) ?? [
+					...DEFAULT_OWNER_PANES,
+					...(admission === "access" ? (["profile"] as const) : []),
+				]),
+	);
+	if (!tiered || admission !== "access") {
+		if (tiered && admission === "owners")
+			fail(
+				'panes names panes per tier, but only admission "access" admits anyone but owners',
+			);
+		const member =
+			admission === "access"
+				? DEFAULT_MEMBER_PANES.filter((pane) => owner.includes(pane))
+				: [];
+		return { owner, admin: member, member, given: panes !== undefined };
+	}
+	const member = checkPaneList(tiered.member, "panes.member");
+	const admin = tiered.admin
+		? checkPaneList(tiered.admin, "panes.admin")
+		: [...member];
+	for (const [label, list] of [
+		["panes.member", member],
+		["panes.admin", admin],
+	] as const) {
+		for (const pane of list) {
+			if ((OWNER_ONLY_PANES as readonly string[]).includes(pane))
+				fail(
+					`${label} names the ${pane} pane, which only owners are served: it shows the whole host`,
+				);
+			if (!owner.includes(pane))
+				fail(
+					`${label} names the ${pane} pane, which the owners' panes do not have; the pane's API is served for the owners' list`,
+				);
+		}
+	}
+	return { owner, admin, member, given: true };
 }
 
 /**
@@ -443,11 +656,141 @@ function checkAuth(options: WebConsoleOptions): ResolvedAuth {
 				);
 			return { mode, verifier: given as RequestVerifier };
 		}
+		case "oidc":
+			return checkOidc(auth as OidcOptions);
 		default:
 			fail(
-				`auth.mode ${JSON.stringify(mode)} is unknown; the modes are none, password and verifier`,
+				`auth.mode ${JSON.stringify(mode)} is unknown; the modes are none, password, verifier and oidc`,
 			);
 	}
+}
+
+const isHttpsUrl = (value: unknown): value is string =>
+	typeof value === "string" && URL.parse(value)?.protocol === "https:";
+
+/** A provider on this machine, which a test or a local identity provider may use over plain http. */
+const isLoopbackHttp = (value: unknown): boolean => {
+	const url = typeof value === "string" ? URL.parse(value) : null;
+	return (
+		url?.protocol === "http:" &&
+		["127.0.0.1", "[::1]", "localhost"].includes(url.hostname)
+	);
+};
+
+const providerUrl = (value: unknown): value is string =>
+	isHttpsUrl(value) || isLoopbackHttp(value);
+
+function checkOidc(auth: OidcOptions): ResolvedOidc {
+	const known = new Set([
+		"mode",
+		"issuer",
+		"discoveryUrl",
+		"clientId",
+		"clientSecretEnv",
+		"scopes",
+		"subjectClaim",
+		"nameClaim",
+		"rolesClaim",
+		"check",
+		"sessionDays",
+		"endSession",
+		"reauthHours",
+		"storeClaims",
+	]);
+	for (const key of Object.keys(auth))
+		if (!known.has(key)) fail(`auth.${key} is not an oidc option`);
+	if (!providerUrl(auth.issuer))
+		fail("auth.issuer must be the provider's https URL, exactly its `iss`");
+	const { issuer } = auth;
+	const discoveryUrl =
+		auth.discoveryUrl ??
+		`${issuer.replace(/\/+$/, "")}/.well-known/openid-configuration`;
+	if (!providerUrl(discoveryUrl))
+		fail("auth.discoveryUrl must be an https URL");
+	if (typeof auth.clientId !== "string" || !auth.clientId.trim())
+		fail("auth.clientId is empty");
+	if (
+		auth.clientSecretEnv !== undefined &&
+		(typeof auth.clientSecretEnv !== "string" || !auth.clientSecretEnv.trim())
+	)
+		fail(
+			"auth.clientSecretEnv must name an environment variable; leave it out for a public client",
+		);
+	const scopes = auth.scopes ?? ["openid", "profile"];
+	if (
+		!Array.isArray(scopes) ||
+		scopes.length === 0 ||
+		!scopes.every(
+			(scope) =>
+				typeof scope === "string" && /^[\x21\x23-\x5b\x5d-\x7e]+$/.test(scope),
+		)
+	)
+		fail("auth.scopes must be a list of scope names");
+	if (scopes.includes("offline_access"))
+		fail(
+			"auth.scopes has offline_access, but the app keeps no refresh token: its own session is what lasts",
+		);
+	if (!scopes.includes("openid")) fail("auth.scopes must include openid");
+	const claim = (name: string, value: unknown) => {
+		if (value !== undefined && (typeof value !== "string" || !value.trim()))
+			fail(`auth.${name} must be the name of a claim`);
+	};
+	claim("subjectClaim", auth.subjectClaim);
+	claim("nameClaim", auth.nameClaim);
+	if (
+		auth.rolesClaim !== undefined &&
+		auth.rolesClaim !== false &&
+		(typeof auth.rolesClaim !== "string" || !auth.rolesClaim.trim())
+	)
+		fail("auth.rolesClaim must be the name of a claim, or false");
+	if (auth.check !== undefined && typeof auth.check !== "function")
+		fail("auth.check must be a function");
+	const sessionDays = auth.sessionDays ?? DEFAULT_SESSION_DAYS;
+	if (
+		typeof sessionDays !== "number" ||
+		!Number.isInteger(sessionDays) ||
+		sessionDays < 1 ||
+		sessionDays > 365
+	)
+		fail("auth.sessionDays must be a whole number of days from 1 to 365");
+	if (auth.endSession !== undefined && typeof auth.endSession !== "boolean")
+		fail("auth.endSession must be true or false");
+	if (
+		auth.reauthHours !== undefined &&
+		(typeof auth.reauthHours !== "number" ||
+			!(auth.reauthHours > 0) ||
+			auth.reauthHours > sessionDays * 24)
+	)
+		fail(
+			"auth.reauthHours must be a number of hours above 0 and within the session's own days",
+		);
+	const storeClaims = auth.storeClaims ?? [];
+	if (
+		!Array.isArray(storeClaims) ||
+		!storeClaims.every((name) => typeof name === "string" && name.trim())
+	)
+		fail("auth.storeClaims must be a list of claim names");
+	return {
+		mode: "oidc",
+		issuer,
+		discoveryUrl,
+		clientId: auth.clientId.trim(),
+		clientSecretEnv: auth.clientSecretEnv?.trim(),
+		scopes: [...scopes],
+		subjectClaim: auth.subjectClaim?.trim() ?? "sub",
+		nameClaim: auth.nameClaim?.trim(),
+		rolesClaim:
+			auth.rolesClaim === undefined
+				? "roles"
+				: typeof auth.rolesClaim === "string"
+					? auth.rolesClaim.trim()
+					: false,
+		check: auth.check,
+		sessionDays,
+		endSession: auth.endSession === true,
+		reauthHours: auth.reauthHours,
+		storeClaims: [...storeClaims],
+	};
 }
 
 function checkSurface(surface: string | undefined): string {
@@ -516,13 +859,94 @@ function checkPush(
 		fail(
 			"push.subject must be a mailto: address or an https: URL, such as mailto:ops@example.com",
 		);
+	const tiers = push?.tiers ?? ["owner"];
+	if (
+		!Array.isArray(tiers) ||
+		tiers.length === 0 ||
+		!tiers.every((tier) => TIERS.includes(tier))
+	)
+		fail(`push.tiers must be a list of ${TIERS.join(", ")}`);
+	const sender = push?.sender ?? "internal";
+	if (sender !== "internal") {
+		const external = (sender as { external?: unknown } | null)?.external as
+			| { publicKey?: unknown; subscribePath?: unknown }
+			| undefined;
+		if (
+			typeof external !== "object" ||
+			external === null ||
+			typeof external.publicKey !== "string" ||
+			!/^[A-Za-z0-9_-]{80,100}$/.test(external.publicKey) ||
+			(external.subscribePath !== undefined &&
+				(typeof external.subscribePath !== "string" ||
+					!external.subscribePath.startsWith("/")))
+		)
+			fail(
+				'push.sender must be "internal" or { external: { publicKey, subscribePath? } } with the VAPID public key (base64url) and, when the sender serves the subscription routes, their path',
+			);
+	}
+	const content = push?.content ?? (sender === "internal" ? "full" : "none");
+	if (content !== "full" && content !== "none")
+		fail('push.content must be "full" or "none"');
 	return {
 		preview: push?.preview ?? true,
 		quietHours,
 		endpointHosts: [...hosts],
 		subject: given ?? (origin.startsWith("https:") ? origin : undefined),
 		fetch: pushFetchOf(options),
+		tiers: [...new Set(tiers)],
+		sender:
+			sender === "internal"
+				? "internal"
+				: {
+						external: {
+							publicKey: (sender as { external: { publicKey: string } })
+								.external.publicKey,
+							...((sender as { external: { subscribePath?: string } }).external
+								.subscribePath
+								? {
+										subscribePath: (
+											sender as { external: { subscribePath: string } }
+										).external.subscribePath,
+									}
+								: {}),
+						},
+					},
+		content,
 	};
+}
+
+function checkOnboarding(
+	options: WebConsoleOptions,
+): ResolvedOptions["onboarding"] {
+	const given = options.onboarding;
+	if (given === undefined) return { links: {}, push: "off", pushWaiver: false };
+	if (typeof given !== "object" || given === null)
+		fail("onboarding must be an object such as { links: { line: 'nudge' } }");
+	const links = given.links ?? {};
+	if (typeof links !== "object" || links === null || Array.isArray(links))
+		fail("onboarding.links must map a provider to required or nudge");
+	for (const [provider, step] of Object.entries(links)) {
+		if (!provider.trim())
+			fail("onboarding.links names a provider with an empty name");
+		if (step !== "required" && step !== "nudge")
+			fail(
+				`onboarding.links.${provider} must be required or nudge, not ${JSON.stringify(step)}`,
+			);
+	}
+	const push = given.push ?? "off";
+	if (push !== "required" && push !== "nudge" && push !== "off")
+		fail("onboarding.push must be required, nudge or off");
+	if (given.pushWaiver !== undefined && typeof given.pushWaiver !== "boolean")
+		fail("onboarding.pushWaiver must be true or false");
+	return { links: { ...links }, push, pushWaiver: given.pushWaiver === true };
+}
+
+function checkUploads(options: WebConsoleOptions): number {
+	const days = options.uploads?.keepDays;
+	if (days === undefined) return 30;
+	if (!Number.isInteger(days) || days < 1 || days > 3650)
+		fail("uploads.keepDays must be a whole number of days from 1 to 3650");
+	return days;
 }
 
 /** The largest `uploadMaxBytes`: the limit is also the listener's body limit. */
@@ -558,7 +982,22 @@ export function resolveOptions(options: WebConsoleOptions): ResolvedOptions {
 			fail("presentation.locale is not a valid locale");
 		}
 	}
-	const panes = checkPanes(options.panes);
+	const admission = options.admission ?? "owners";
+	if (admission !== "owners" && admission !== "access")
+		fail('admission must be "owners" or "access"');
+	if (
+		admission === "access" &&
+		(auth.mode === "none" || auth.mode === "password")
+	)
+		fail(
+			`admission "access" needs a credential that names a person, but auth ${auth.mode} speaks for one shared actor; use auth oidc or a verifier that reports who signed in`,
+		);
+	const origin = checkOrigin(options.origin);
+	if (auth.mode === "oidc" && !origin.startsWith("https:"))
+		fail("auth oidc needs an https origin: the session cookie is Secure");
+	if (options.modes !== undefined && options.modes !== false)
+		fail("modes can only be false, to leave the mode switches out");
+	const panes = checkPanes(options.panes, admission);
 	const ownerId = options.ownerId?.trim();
 	if (options.ownerId !== undefined && !ownerId)
 		fail(
@@ -571,20 +1010,25 @@ export function resolveOptions(options: WebConsoleOptions): ResolvedOptions {
 	if (!title) fail("title is empty");
 	return {
 		auth,
-		origin: checkOrigin(options.origin),
+		origin,
 		ownerId,
 		dataDir: options.dataDir ?? "data",
 		sessionsDir: join(options.dataDir ?? "data", "sessions"),
 		mount: checkMount(options.mountPath ?? "/console"),
 		listener: options.listener ?? "public",
 		routing: options.routing ?? "hash",
-		panes,
-		panesGiven: options.panes !== undefined,
+		admission,
+		panes: panes.owner,
+		tierPanes: { owner: panes.owner, admin: panes.admin, member: panes.member },
+		panesGiven: panes.given,
 		workspace: checkWorkspace(options, options.dataDir ?? "data"),
 		surface: checkSurface(options.surface),
 		cardGraceSeconds: checkGrace(options.cardGraceSeconds),
 		uploadMaxBytes: checkUploadMax(options.uploadMaxBytes),
-		push: checkPush(options, checkOrigin(options.origin)),
+		push: checkPush(options, origin),
+		onboarding: checkOnboarding(options),
+		modes: options.modes !== false,
+		uploadKeepDays: checkUploads(options),
 		title,
 		iconsDir: options.icons?.dir,
 		look,

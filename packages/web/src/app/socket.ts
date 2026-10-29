@@ -1,8 +1,6 @@
 import type {
-	ActorFacts,
 	ChannelKey,
 	ConversationPort,
-	IdentityService,
 	InboundMessage,
 	Logger,
 	RouteSocket,
@@ -23,11 +21,13 @@ import {
 	type RoomMessage,
 } from "../api-types.ts";
 import type { Authenticator } from "../auth/authenticator.ts";
+import type { Gate } from "../gate.ts";
+import type { PluggedFrames, Viewer, WebAppRegistry } from "../web-app.ts";
 import type { Answerer, OwnerDesk } from "./desk.ts";
 import type { Presence } from "./presence.ts";
 import { parseClientFrame } from "./protocol.ts";
 import type { Rooms } from "./rooms.ts";
-import type { AppSocket, Sockets } from "./sockets.ts";
+import type { AppSocket, Audience, Sockets } from "./sockets.ts";
 import type { AppSurface } from "./surface.ts";
 import type { Uploads } from "./uploads.ts";
 
@@ -46,15 +46,20 @@ export interface SocketRouteOptions {
 	path: string;
 	/** The console's own origin, the only one a browser may open the socket from. */
 	origin: string;
-	authenticator: Pick<Authenticator, "authenticate">;
+	authenticator: Pick<Authenticator, "authenticate" | "recheck">;
 	sockets: Sockets;
 	surface: AppSurface;
 	desk: OwnerDesk;
 	rooms: Rooms;
-	/** The table of who is busy, sent after `ready`; absent in a route built without one. */
+	/** The table of who is busy, sent to the owners after `ready`; absent in a route built without one. */
 	presence?: Pick<Presence, "frame">;
 	uploads: Uploads;
-	identity: Pick<IdentityService, "tierOf">;
+	/** What the pieces of the app plug in: host rooms, their frame handlers and the rule for who reads them. */
+	registry: Pick<WebAppRegistry, "frameHandler" | "isHostRoom" | "access">;
+	/** The onboarding gate: a socket whose person owes a required step is gated. */
+	gate: Pick<Gate, "required" | "onChanged">;
+	/** Who has a room's frames. */
+	audienceOf(room: string): Audience;
 	conversations: Pick<ConversationPort, "stop">;
 	logger: Logger;
 	/**
@@ -69,16 +74,22 @@ export interface SocketRouteOptions {
 	now?: () => number;
 }
 
-/** The identity string a person's messages are written as: `<provider>:<subject>`. */
-const identityOf = (actor: ActorFacts | undefined, fallback: string) =>
-	actor ? `${actor.provider}:${actor.subject}` : fallback;
+/** The viewer behind a socket, at the tier it holds now. */
+export const viewerOfSocket = (connection: AppSocket): Viewer => ({
+	principalId: connection.principal.id,
+	speakerId: connection.speakerId,
+	tier: connection.tier,
+	roles: connection.roles,
+	name: connection.principal.name,
+});
 
 /**
- * The WebSocket of the owner app: the upgrade passes the console's authenticator, so it is the
- * same check as a page's and the API's, and every frame after it is a write by an owner whose
- * tier is read again. A frame is answered with a frame; a refused one says why, and nothing a
- * client names is taken on trust: a room must be one of the app's, an upload must be the
- * sender's own, a card must be open and answerable by them.
+ * The WebSocket of the app: the upgrade passes the console's authenticator, so it is the same
+ * check as a page's and the API's, and every frame after it asks again whether the person is still
+ * admitted and at which tier (a person who is not is refused and the socket closed). A frame is
+ * answered with a frame; a refused one says why, and nothing a client names is taken on trust: a
+ * room must be one of the app's and readable by the person, an upload must be the sender's own, a
+ * card must be open and answerable by them. What a socket receives is addressed: see `Audience`.
  */
 export class SocketRoute {
 	readonly #options: SocketRouteOptions;
@@ -124,14 +135,21 @@ export class SocketRoute {
 				{ status: admission.status },
 			);
 		}
-		const { principal } = admission.visitor;
+		const { visitor } = admission;
+		const { principal } = visitor;
 		return {
 			data: {
 				principal: { id: principal.id, name: principal.displayName },
 				actor: admission.actor,
 				expiresAt: admission.expiresAt,
+				tier: visitor.tier,
+				speakerId: visitor.speakerId,
+				roles: visitor.roles,
+				gated: false,
+				session: admission.session,
 				visible: false,
 				focus: undefined,
+				subscriptions: new Set<string>(),
 			},
 			headers: { "Sec-WebSocket-Protocol": APP_PROTOCOL },
 		};
@@ -139,7 +157,7 @@ export class SocketRoute {
 
 	#open(socket: RouteSocket<AppSocket>): void {
 		const connection = socket.data;
-		const { sockets, desk, uploads } = this.#options;
+		const { sockets } = this.#options;
 		sockets.add(connection, socket);
 		const now = this.#now();
 		const lapses = [
@@ -160,47 +178,141 @@ export class SocketRoute {
 			);
 		}
 		connection.recheck = setInterval(() => {
-			this.#owner(connection).then(
-				(who) => {
-					if (!who) socket.close(APP_CLOSE_FORBIDDEN, "forbidden");
-				},
-				(error: unknown) =>
-					this.#options.logger.warn(
-						{ err: error },
-						"an app socket's person was not looked up",
-					),
+			this.#state(connection).catch((error: unknown) =>
+				this.#options.logger.warn(
+					{ err: error },
+					"an app socket's person was not looked up",
+				),
 			);
 		}, this.#options.recheckMs ?? RECHECK_MS);
-		sockets.send(connection, {
-			type: "ready",
-			protocol: APP_PROTOCOL_VERSION,
-			principal: connection.principal.id,
-			name: connection.principal.name,
-			uploads: {
-				perMessage: MAX_MESSAGE_FILES,
-				maxBytes: uploads.maxBytes,
-			},
+		this.#begin(connection).catch((error: unknown) => {
+			this.#options.logger.warn({ err: error }, "an app socket did not start");
+			socket.close(APP_CLOSE_FORBIDDEN, "forbidden");
 		});
-		for (const frame of desk.openFrames()) sockets.send(connection, frame);
-		const { presence } = this.#options;
+	}
+
+	/**
+	 * Admits the socket again, reads its gate, and sends `ready`. Until it has, no frame but ones
+	 * addressed to the socket reach it, so nothing overtakes `ready`.
+	 */
+	async #begin(connection: AppSocket): Promise<void> {
+		const { sockets, uploads } = this.#options;
+		const who = await this.#state(connection, { announce: false });
+		if (!who) return;
+		const owed = connection.gated ? await this.#steps(connection) : [];
+		sockets.deliver(
+			{
+				type: "ready",
+				protocol: APP_PROTOCOL_VERSION,
+				principal: connection.principal.id,
+				name: connection.principal.name,
+				uploads: {
+					perMessage: MAX_MESSAGE_FILES,
+					maxBytes: uploads.maxBytes,
+				},
+				...(owed.length > 0 ? { gate: owed } : {}),
+			},
+			{ connection },
+		);
+		if (connection.gated) {
+			connection.started = true;
+			return;
+		}
+		this.#replay(connection);
+	}
+
+	/** Sends a socket the open cards it may have and the table of who is busy, and starts its live frames. */
+	#replay(connection: AppSocket): void {
+		const { sockets, desk, presence, audienceOf } = this.#options;
+		// The replay goes through the same audience filter as a live frame, which needs the socket started.
+		connection.started = true;
+		for (const { room, frame } of desk.openFrames())
+			sockets.deliver(frame, {
+				connection,
+				audience: audienceOf(room),
+			});
 		presence?.frame().then(
-			(frame) => sockets.send(connection, frame),
+			(frame) =>
+				sockets.deliver(frame, {
+					connection,
+					audience: { owners: true },
+				}),
 			(error: unknown) =>
 				this.#options.logger.warn({ err: error }, "presence was not sent"),
 		);
 	}
 
-	/** The person behind a socket as an answerer at their tier now; undefined when they are no owner any more. */
-	async #owner(connection: AppSocket): Promise<Answerer | undefined> {
-		const tier = await this.#options.identity.tierOf(connection.principal.id);
-		if (tier !== "owner") return undefined;
+	async #steps(connection: AppSocket) {
+		return this.#options.gate.required(viewerOfSocket(connection));
+	}
+
+	/**
+	 * Asks again whether the person behind a socket is still admitted and at which tier, and
+	 * whether a required step stands in the way. Loses the socket when they are not admitted; a
+	 * change of tier or of the gate takes effect on what the socket is sent from here on.
+	 */
+	async #state(
+		connection: AppSocket,
+		options: { announce: boolean } = { announce: true },
+	): Promise<Answerer | undefined> {
+		const { authenticator, sockets, gate } = this.#options;
+		const checked = await authenticator.recheck({
+			actor: connection.actor,
+			session: connection.session,
+		});
+		if ("refusal" in checked) {
+			connection.socket?.close(
+				checked.status === 401 ? APP_CLOSE_EXPIRED : APP_CLOSE_FORBIDDEN,
+				checked.status === 401 ? "expired" : "forbidden",
+			);
+			return undefined;
+		}
+		const { visitor } = checked;
+		connection.tier = visitor.tier;
+		connection.roles = visitor.roles;
+		connection.speakerId = visitor.speakerId;
+		connection.principal.name = visitor.principal.displayName;
+		// A page the person may not show is not shown: a focus on an agent room is the owners'.
+		if (
+			connection.focus !== undefined &&
+			!this.#mayFocus(connection, connection.focus)
+		)
+			connection.focus = undefined;
+		const steps = await gate.required(viewerOfSocket(connection));
+		const gated = steps.length > 0;
+		if (gated !== connection.gated) {
+			connection.gated = gated;
+			if (options.announce) {
+				sockets.deliver({ type: "gate", steps }, { connection });
+				if (!gated) this.#replay(connection);
+			}
+		}
 		return {
 			principalId: connection.principal.id,
-			tier,
-			speakerId: identityOf(connection.actor, connection.principal.id),
+			tier: connection.tier,
+			speakerId: connection.speakerId,
 			name: connection.principal.name,
 			...(connection.actor ? { actor: connection.actor } : {}),
 		};
+	}
+
+	/** Tells every open socket of a person what they now owe; the gate calls it when their steps change. */
+	refresh(principalId: string): void {
+		this.#options.sockets.each(
+			(c) => c.principal.id === principalId,
+			(c) => {
+				this.#state(c).catch((error: unknown) =>
+					this.#options.logger.warn({ err: error }, "a gate was not read"),
+				);
+			},
+		);
+	}
+
+	/** Whether a socket may show a room: an agent room to an owner, a host room it follows. */
+	#mayFocus(connection: AppSocket, room: string): boolean {
+		return this.#options.registry.isHostRoom(room)
+			? connection.subscriptions.has(room)
+			: connection.tier === "owner";
 	}
 
 	#refuse(
@@ -209,12 +321,15 @@ export class SocketRoute {
 		id?: string,
 		prompt?: string,
 	): void {
-		this.#options.sockets.send(connection, {
-			type: "refused",
-			code,
-			...(id === undefined ? {} : { id }),
-			...(prompt === undefined ? {} : { prompt }),
-		});
+		this.#options.sockets.deliver(
+			{
+				type: "refused",
+				code,
+				...(id === undefined ? {} : { id }),
+				...(prompt === undefined ? {} : { prompt }),
+			},
+			{ connection },
+		);
 	}
 
 	async #message(
@@ -227,32 +342,37 @@ export class SocketRoute {
 			this.#refuse(connection, "bad_frame");
 			return;
 		}
-		// What a socket shows or watches applies the moment its frame arrives: the owner lookup
-		// below awaits, and frames that waited on it could land out of order.
+		// What a socket shows applies the moment its frame arrives: the lookup below awaits, and
+		// frames that waited on it could land out of order.
 		switch (frame.type) {
 			case "hello":
 				connection.visible = frame.visible;
-				connection.focus = frame.focus;
+				connection.focus =
+					frame.focus !== undefined && this.#mayFocus(connection, frame.focus)
+						? frame.focus
+						: undefined;
 				break;
 			case "visibility":
 				connection.visible = frame.visible;
 				break;
 			case "focus":
-				connection.focus = frame.room;
+				connection.focus =
+					frame.room !== undefined && this.#mayFocus(connection, frame.room)
+						? frame.room
+						: undefined;
 				break;
 			default:
 				break;
 		}
-		// Every frame comes from an owner, at their tier now; a socket whose person is no owner
-		// any more is closed rather than left to receive what the owners are shown.
-		const who = await this.#owner(connection);
+		// Every frame comes from a person admitted now, at the tier they hold now; a socket whose
+		// person is no longer admitted is closed rather than left to receive what the room's readers are shown.
+		const who = await this.#state(connection);
 		if (!who) {
 			this.#refuse(
 				connection,
 				"forbidden",
 				frame.type === "send" ? frame.id : undefined,
 			);
-			socket.close(APP_CLOSE_FORBIDDEN, "forbidden");
 			return;
 		}
 		if (
@@ -261,6 +381,15 @@ export class SocketRoute {
 			frame.type === "focus"
 		)
 			return;
+		// While a required step stands undone a socket may only handle notices.
+		if (connection.gated && frame.type !== "ack") {
+			this.#refuse(
+				connection,
+				"gated",
+				frame.type === "send" || frame.type === "act" ? frame.id : undefined,
+			);
+			return;
+		}
 		await this.#write(connection, who, frame);
 	}
 
@@ -269,36 +398,44 @@ export class SocketRoute {
 		who: Answerer,
 		frame: Exclude<ClientFrame, { type: "hello" | "visibility" | "focus" }>,
 	): Promise<void> {
-		const { desk, rooms, conversations } = this.#options;
+		const { rooms, conversations, registry } = this.#options;
 		let refused: RefusalCode | undefined;
 		switch (frame.type) {
 			case "send":
+				if (registry.isHostRoom(frame.room)) {
+					await this.#plugged(connection, "hostSend", frame);
+					return;
+				}
 				await this.#send(connection, who, frame);
 				return;
 			case "stop": {
+				if (registry.isHostRoom(frame.room)) {
+					await this.#plugged(connection, "hostStop", frame);
+					return;
+				}
+				// The agent rooms are the owners'.
+				if (who.tier !== "owner") {
+					refused = "forbidden";
+					break;
+				}
 				const room = await rooms.resolve(frame.room);
 				if (!room || room.readOnly) refused = "unknown_room";
 				else conversations.stop(room.key);
 				break;
 			}
 			case "approval":
-				refused = this.#needsActor(who, frame.prompt)
-					? "forbidden"
-					: desk.approve(who, frame.prompt, frame.approved);
-				break;
 			case "answer":
-				refused = this.#needsActor(who, frame.prompt)
-					? "forbidden"
-					: desk.answer(who, frame.prompt, frame.answer);
-				break;
 			case "answers":
-				refused = this.#needsActor(who, frame.prompt)
-					? "forbidden"
-					: desk.answers(who, frame.prompt, frame.answers, frame.note);
-				break;
 			case "cancel":
-				refused = desk.cancel(who, frame.prompt);
+				refused = await this.#card(who, frame);
 				break;
+			case "subscribe":
+			case "unsubscribe":
+			case "act":
+			case "ack":
+			case "read":
+				await this.#plugged(connection, frame.type, frame);
+				return;
 		}
 		if (refused)
 			this.#refuse(
@@ -307,6 +444,80 @@ export class SocketRoute {
 				undefined,
 				"prompt" in frame ? frame.prompt : undefined,
 			);
+	}
+
+	/** Hands a frame to the piece of the app that handles it; a frame nobody handles is refused. */
+	async #plugged<K extends keyof PluggedFrames>(
+		connection: AppSocket,
+		type: K,
+		frame: PluggedFrames[K],
+	): Promise<void> {
+		const handler = this.#options.registry.frameHandler(type);
+		const id = "id" in frame ? frame.id : undefined;
+		if (!handler) {
+			this.#refuse(connection, "unknown_room", id);
+			return;
+		}
+		try {
+			await handler({
+				frame,
+				viewer: viewerOfSocket(connection),
+				connection,
+				refuse: (code, ref) => this.#refuse(connection, code, ref ?? id),
+			});
+		} catch (error) {
+			this.#options.logger.warn(
+				{ frame: type, err: error },
+				"an app frame was not handled",
+			);
+			this.#refuse(connection, "not_accepted", id);
+		}
+	}
+
+	/**
+	 * An answer to a card: who may give it is the card's own audience (the turn's speaker, the
+	 * named approvers, the owners where the scope escalates), which the room's access cannot widen.
+	 * A card of a host room is first something the person must be able to read; a card of an agent
+	 * room is the owners'.
+	 */
+	async #card(
+		who: Answerer,
+		frame: Extract<
+			ClientFrame,
+			{ type: "approval" | "answer" | "answers" | "cancel" }
+		>,
+	): Promise<RefusalCode | undefined> {
+		const { desk, registry } = this.#options;
+		const room = desk.roomOf(frame.prompt);
+		if (room !== undefined) {
+			if (registry.isHostRoom(room)) {
+				const viewer: Viewer = {
+					principalId: who.principalId,
+					speakerId: who.speakerId,
+					tier: who.tier,
+					roles: [],
+					name: who.name,
+				};
+				if (!(await registry.access.read(viewer, room as ChannelKey)))
+					return "unknown_prompt";
+			} else if (who.tier !== "owner") return "forbidden";
+		}
+		switch (frame.type) {
+			case "approval":
+				return this.#needsActor(who, frame.prompt)
+					? "forbidden"
+					: desk.approve(who, frame.prompt, frame.approved);
+			case "answer":
+				return this.#needsActor(who, frame.prompt)
+					? "forbidden"
+					: desk.answer(who, frame.prompt, frame.answer);
+			case "answers":
+				return this.#needsActor(who, frame.prompt)
+					? "forbidden"
+					: desk.answers(who, frame.prompt, frame.answers, frame.note);
+			case "cancel":
+				return desk.cancel(who, frame.prompt);
+		}
 	}
 
 	/**
@@ -326,6 +537,9 @@ export class SocketRoute {
 		const { rooms, uploads, surface, sockets, logger } = this.#options;
 		const refuse = (code: RefusalCode) =>
 			this.#refuse(connection, code, frame.id);
+		// The agent rooms are the owners', and they take only turns.
+		if (who.tier !== "owner") return refuse("forbidden");
+		if (frame.mode === "note") return refuse("bad_frame");
 		const room = await rooms.resolve(frame.room);
 		if (!room) return refuse("unknown_room");
 		if (room.readOnly) return refuse("read_only");
@@ -340,12 +554,10 @@ export class SocketRoute {
 		if (!surface.started) return refuse("not_accepted");
 		try {
 			await this.say(room.key, who, text, files, connection, (message) =>
-				sockets.send(connection, {
-					type: "accepted",
-					id: frame.id,
-					room: room.key,
-					message,
-				}),
+				sockets.deliver(
+					{ type: "accepted", id: frame.id, room: room.key, message },
+					{ connection },
+				),
 			);
 		} catch (error) {
 			logger.warn(

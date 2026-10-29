@@ -33,8 +33,11 @@ import type {
 } from "../api-types.ts";
 import type { Authenticated } from "../auth/authenticator.ts";
 import { type ConsolePresentation, message } from "../features.ts";
+import type { Gate } from "../gate.ts";
 import { json } from "../http.ts";
+import type { ResolvedOptions } from "../options.ts";
 import type { PushMutes } from "../push/mutes.ts";
+import { viewerOf, type WebAppRegistry } from "../web-app.ts";
 import { bad, bodyOf, HttpError, notFound } from "./api-http.ts";
 import type { CardLog } from "./card-log.ts";
 import { type FileDir, fileResponse, isFileId } from "./files.ts";
@@ -73,9 +76,9 @@ export interface AppApiOptions {
 	/** The owners' shared arrangement of the room list: pins and folders. */
 	layout: LayoutStore;
 	conversations: Pick<ConversationPort, "startFresh">;
-	identity: Pick<IdentityService, "tierOf">;
+	identity: Pick<IdentityService, "principal">;
 	/** Present when the schedules pane is served. */
-	schedules?: Pick<ScheduleStore, "all" | "remove">;
+	schedules?: Pick<ScheduleStore, "all" | "get" | "remove">;
 	directory: Pick<AgentDirectory, "agent" | "agents" | "group" | "groups">;
 	team: Pick<
 		AgentTeam,
@@ -115,6 +118,16 @@ export interface AppApiOptions {
 	mount: string;
 	/** How the console signs the person in, as the session reports it. */
 	authMode: SessionView["auth"];
+	/** Who the app admits; the session reports the person's tier only where it admits more than owners. */
+	admission?: ResolvedOptions["admission"];
+	/** The area handlers the pieces of the app plug in; without it the API is the owners' as in 0.25. */
+	registry?: Pick<WebAppRegistry, "areaFor">;
+	/** The onboarding gate; without it nobody is gated. */
+	gate?: Pick<Gate, "required">;
+	/** The tiers whose people may use push; default owners. */
+	pushTiers?: ResolvedOptions["push"]["tiers"];
+	/** Whether the yolo and long-running switches are served; `PUT rooms/<key>/mode` answers 404 without them. Default true. */
+	modeSwitches?: boolean;
 	/** The quiet hours of push, as the settings page shows them. */
 	quietHours?: NonNullable<SessionView["quietHours"]>;
 	/** Called after a change the other pages should refetch. */
@@ -296,7 +309,12 @@ export class AppApi {
 		const parts = partsOf(rest);
 		if (!parts) return undefined;
 		const [first, second] = parts;
+		const area =
+			first === "api" && second !== undefined
+				? this.#options.registry?.areaFor(second)
+				: undefined;
 		const mine =
+			area !== undefined ||
 			(first === "avatars" && parts.length === 2) ||
 			(first === "api" &&
 				[
@@ -316,6 +334,11 @@ export class AppApi {
 				].includes(second ?? ""));
 		if (!mine) return undefined;
 		try {
+			if (area)
+				return await area.handle(request, parts.slice(2), {
+					visitor: admission.visitor,
+					viewer: viewerOf(admission.visitor),
+				});
 			return await this.#route(request, parts, admission);
 		} catch (error) {
 			if (error instanceof HttpError || error instanceof UploadRefusal)
@@ -338,16 +361,13 @@ export class AppApi {
 		}
 	}
 
-	/** The owner who writes: their tier read again, as a speaker for the calls that need one. */
+	/** The owner who writes: the tier the request was admitted at, as a speaker for the calls that need one. */
 	async #owner(admission: Authenticated): Promise<Speaker> {
-		const { principal } = admission.visitor;
-		const tier = await this.#options.identity.tierOf(principal.id);
+		const { principal, tier, speakerId } = admission.visitor;
 		if (tier !== "owner")
 			throw new HttpError(403, "Only an owner may do this.");
 		return {
-			id: admission.actor
-				? `${admission.actor.provider}:${admission.actor.subject}`
-				: principal.id,
+			id: speakerId,
 			name: principal.displayName,
 			tier,
 			principalId: principal.id,
@@ -368,7 +388,8 @@ export class AppApi {
 				new Response("Not found", { status: 404 })
 			);
 		}
-		if (area === "session" && method === "GET") return this.#session(admission);
+		if (area === "session" && method === "GET")
+			return await this.#session(admission);
 		if (area === "models" && method === "GET")
 			return json({
 				models: await this.#options.team.usableModels(),
@@ -376,20 +397,21 @@ export class AppApi {
 		if (area === "rooms") return this.#rooms(request, parts, admission);
 		if (area === "folders")
 			return this.#layout.folders(request, parts, admission);
-		if (area === "uploads" && method === "POST" && !id) {
-			const owner = await this.#owner(admission);
+		// An upload is the sender's own, whoever they are; a file answers by the room it is bound to.
+		if (area === "uploads" && method === "POST" && !id)
 			return json(
-				await this.#options.uploads.receive(request, owner.principalId),
+				await this.#options.uploads.receive(
+					request,
+					admission.visitor.principal.id,
+				),
 			);
-		}
 		if (area === "uploads" && method === "DELETE" && id && !action) {
-			const owner = await this.#owner(admission);
-			if (!this.#options.uploads.discard(id, owner.principalId))
+			if (!this.#options.uploads.discard(id, admission.visitor.principal.id))
 				throw notFound();
 			return json({ ok: true });
 		}
 		if (area === "files" && method === "GET" && id && !action)
-			return this.#file(id);
+			return this.#file(id, admission);
 		if (area === "workspace") return this.#workspace(request, parts, admission);
 		if (area === "schedules") return this.#schedules(method, id, admission);
 		const owner = () => this.#owner(admission);
@@ -410,13 +432,21 @@ export class AppApi {
 		throw new HttpError(404, "There is no such API.");
 	}
 
-	#session(admission: Authenticated): Response {
-		const { principal } = admission.visitor;
+	async #session(admission: Authenticated): Promise<Response> {
+		const { principal, tier } = admission.visitor;
+		const { admission: admits = "owners", gate } = this.#options;
+		const pushTiers = this.#options.pushTiers ?? ["owner"];
+		const owed =
+			admits === "access" && gate
+				? await gate.required(viewerOf(admission.visitor))
+				: [];
 		return json({
 			principal: { id: principal.id, name: principal.displayName },
 			surface: this.#options.surface.surface,
 			auth: this.#options.authMode,
-			push: true,
+			...(admits === "access" ? { tier } : {}),
+			...(owed.length > 0 ? { gate: owed } : {}),
+			...(pushTiers.includes(tier) ? { push: true as const } : {}),
 			...(this.#options.prompts ? { prompts: true } : {}),
 			...(this.#options.skills ? { skillEdit: true } : {}),
 			...(this.#options.quietHours
@@ -436,6 +466,8 @@ export class AppApi {
 		const { method } = request;
 		const [, , key, action] = parts;
 		const { rooms, log, cards, modes, mutes, conversations } = this.#options;
+		// The agent rooms are the owners'; to anyone else this API does not exist.
+		if (admission.visitor.tier !== "owner") throw notFound();
 		if (!key) {
 			if (method !== "GET") throw new HttpError(405, "Method not allowed.");
 			return json({
@@ -471,7 +503,8 @@ export class AppApi {
 		}
 		if (action === "mode" && method === "PUT" && parts.length === 4) {
 			// Only an agent's or group's room has modes; a thread runs no turn of the owner's.
-			if (room.readOnly) throw notFound();
+			if (room.readOnly || this.#options.modeSwitches === false)
+				throw notFound();
 			const owner = await this.#owner(admission);
 			const body = await bodyOf(request);
 			const change: ModeChange = {};
@@ -513,7 +546,9 @@ export class AppApi {
 		throw new HttpError(404, "There is no such API.");
 	}
 
-	#file(id: string): Response {
+	#file(id: string, admission: Authenticated): Response {
+		// A stored file belongs to an agent room, which only owners read, until the file names a host room it is bound to.
+		if (admission.visitor.tier !== "owner") throw notFound();
 		if (!isFileId(id)) throw notFound();
 		const meta = this.#options.files.meta(id);
 		const blob = this.#options.files.blob(id);
@@ -636,6 +671,18 @@ export class AppApi {
 		throw new HttpError(404, "There is no such API.");
 	}
 
+	/** Whether a schedule is the visitor's own: its creator id names their principal. */
+	async #ownSchedule(
+		createdById: string,
+		principalId: string,
+	): Promise<boolean> {
+		if (createdById === principalId) return true;
+		// A schedule from 0.8 names its creator by a user id that the backfill made a principal's id.
+		return (
+			(await this.#options.identity.principal(createdById))?.id === principalId
+		);
+	}
+
 	async #schedules(
 		method: string,
 		id: string | undefined,
@@ -643,11 +690,19 @@ export class AppApi {
 	): Promise<Response> {
 		const { schedules, rooms } = this.#options;
 		if (!schedules) throw new HttpError(404, "This pane is not served.");
+		const { tier, principal } = admission.visitor;
+		const owner = tier === "owner";
 		if (method === "GET" && !id) {
 			const all = await schedules.all();
 			const views: ScheduleView[] = [];
 			for (const schedule of all) {
-				const room = await rooms.resolve(schedule.channel);
+				// The owners see every schedule; anyone else sees their own, and no room of the owners.
+				if (
+					!owner &&
+					!(await this.#ownSchedule(schedule.createdById, principal.id))
+				)
+					continue;
+				const room = owner ? await rooms.resolve(schedule.channel) : undefined;
 				views.push({
 					id: schedule.id,
 					...(room ? { room: room.key } : {}),
@@ -667,9 +722,17 @@ export class AppApi {
 			return json({ schedules: views } satisfies SchedulesView);
 		}
 		if (method === "DELETE" && id) {
-			await this.#owner(admission);
 			const number = Number(id);
 			if (!Number.isInteger(number)) throw bad("The schedule id is a number.");
+			// Another person's schedule is not there to remove, for anyone but the owners.
+			if (!owner) {
+				const found = await schedules.get(number);
+				if (
+					!found ||
+					!(await this.#ownSchedule(found.createdById, principal.id))
+				)
+					throw new HttpError(404, "There is no such schedule.");
+			}
 			const removed = await schedules.remove(number);
 			if (!removed) throw new HttpError(404, "There is no such schedule.");
 			this.#options.changed();

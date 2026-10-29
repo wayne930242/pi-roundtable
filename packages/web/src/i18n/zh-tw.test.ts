@@ -77,6 +77,7 @@ describe("the built-in zh-TW catalog", () => {
 				"web/pages/notes.tsx: t(entry.label)",
 				'web/pages/notes.tsx: t(KINDS.find((entry) => entry.kind === kind)?.hint ?? "")',
 				"web/pages/overview.tsx: t(labels[p.container])",
+				"web/pages/profile.tsx: t(TIER_LABELS[session.tier])",
 				"web/pages/schedules.tsx: t(WEEKDAYS[String(day)] ?? String(day))",
 				"web/pages/settings.tsx: t(option.label)",
 				'web/pages/settings.tsx: t(LOOKS.find((option) => option.value === look)?.hint ?? "")',

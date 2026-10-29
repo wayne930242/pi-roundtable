@@ -9,6 +9,7 @@ import type {
 	MemoryKind,
 	QueuePort,
 	SpeakerMemory,
+	Tier,
 } from "pi-roundtable";
 import { MemoryError, parseChannelKey, SYSTEM_PRINCIPAL } from "pi-roundtable";
 import { thinkingLabel } from "pi-roundtable/kit";
@@ -20,9 +21,12 @@ import type {
 	ConversationsView,
 	ConversationView,
 	DashboardView,
+	GateStepView,
+	KindLinkView,
 	NoteInput,
 	NoteView,
 	OverviewView,
+	PageLinkView,
 	PaneName,
 	PrincipalName,
 	PrincipalsView,
@@ -51,10 +55,28 @@ const NOTE_SEARCH_LIMIT = 500;
 /** The largest note body the console reads. */
 const MAX_BODY_BYTES = 64 * 1024;
 
+/** What the app adds to the page's config for one visitor, where it admits more than the owners. */
+export interface AccessView {
+	/** Who may use push, and the key browsers subscribe against when an external sender holds it. */
+	push: { tiers: readonly Tier[]; key?: string; subscribe?: string };
+	/** The pages and kinds of room the host registered, as far as this visitor may see them. */
+	hosted(visitor: Visitor): Promise<{
+		pages: PageLinkView[];
+		kinds: KindLinkView[];
+	}>;
+	/** The required steps the visitor still owes. */
+	gate(visitor: Visitor): Promise<GateStepView[]>;
+}
+
 export interface ConsolePorts {
 	title: string;
 	timeZone: string;
+	/** The owners' panes, which every host serves. */
 	panes: readonly PaneName[];
+	/** The panes of the other tiers, when the host admits more than its owners; absent = none. */
+	tierPanes?: Readonly<Record<Tier, readonly PaneName[]>>;
+	/** Present when the host admits more than its owners (`admission: "access"`). */
+	access?: AccessView;
 	/** The host's `sessions/` directory. */
 	sessionsDir: string;
 	/** Present when the overview pane is served, or the agent server is there to classify channels. */
@@ -68,8 +90,8 @@ export interface ConsolePorts {
 	) => Pick<SpeakerMemory, "list" | "search" | "add" | "update" | "removeById">;
 	/** The host's principals, read only: whose notes the pane may show, and the names of conversations' principals. */
 	people?: Pick<IdentityService, "principal" | "list">;
-	/** Conversations the console must not list or read. */
-	exclude?: (key: ChannelKey) => boolean;
+	/** Conversations the console must not list or read; `record` is what the registry holds of it, if anything. */
+	exclude?: (key: ChannelKey, record?: ConversationRecord) => boolean;
 	/** The host's conversation registry; without it only the conversations found by name are listed. */
 	registry?: Pick<ConversationRegistry, "list" | "get">;
 	/** Text a relayed message begins with, which is not the owner's words. */
@@ -154,8 +176,15 @@ export class ConsoleApi {
 		}
 	}
 
-	#pane(name: PaneName): void {
-		if (!this.#ports.panes.includes(name))
+	/** The panes this visitor is served: the owners' list, or their own tier's. */
+	#panesOf(visitor: Visitor): readonly PaneName[] {
+		return visitor.tier === "owner"
+			? this.#ports.panes
+			: (this.#ports.tierPanes?.[visitor.tier] ?? []);
+	}
+
+	#pane(name: PaneName, visitor: Visitor): void {
+		if (!this.#panesOf(visitor).includes(name))
 			throw new HttpError(404, "This pane is not served.");
 	}
 
@@ -173,13 +202,13 @@ export class ConsoleApi {
 		}
 		const [head, id] = parts;
 		if (method === "GET" && head === "config" && !id)
-			return json(this.config());
+			return json(await this.configFor(visitor));
 		if (
 			method === "GET" &&
 			(head === "overview" || head === "dashboard") &&
 			!id
 		) {
-			this.#pane("overview");
+			this.#pane("overview", visitor);
 			const view = await this.overview();
 			if (head === "overview") return json(view);
 			return json({
@@ -201,37 +230,65 @@ export class ConsoleApi {
 			} satisfies DashboardView);
 		}
 		if (method === "GET" && head === "conversations" && parts.length <= 2) {
-			this.#pane("conversations");
-			if (!id) return json(await this.conversations());
+			this.#pane("conversations", visitor);
+			if (!id) return json(await this.conversations(visitor));
 			const archive = new URL(request.url).searchParams.get("archive");
-			return json(await this.transcript(id, archive ?? undefined));
+			return json(await this.transcript(id, archive ?? undefined, visitor));
 		}
 		if (method === "POST" && head === "channels" && id && parts.length === 3) {
-			this.#pane("overview");
+			this.#pane("overview", visitor);
 			if (parts[2] === "start-over" || parts[2] === "delete")
 				return cleanupConversation(this.#ports, id, parts[2]);
 		}
 		if (method === "GET" && head === "skills" && parts.length <= 2) {
-			this.#pane("skills");
+			this.#pane("skills", visitor);
 			const skills = this.#ports.features?.skills;
 			if (!skills) throw new HttpError(404, "This pane is not served.");
 			return json(id ? await skillDetail(skills, id) : skillCatalog(skills));
 		}
 		if (method === "GET" && head === "connectors" && parts.length === 1) {
-			this.#pane("connectors");
+			this.#pane("connectors", visitor);
 			const connectors = this.#ports.features?.connectors;
 			if (!connectors) throw new HttpError(404, "This pane is not served.");
 			return json(await connectorsView(connectors));
 		}
 		if (head === "notes" && parts.length <= 2) {
-			this.#pane("notes");
+			this.#pane("notes", visitor);
 			return this.#notes(request, id, visitor);
 		}
 		if (method === "GET" && head === "principals" && !id) {
-			this.#pane("notes");
+			this.#pane("notes", visitor);
 			return json(await this.principals(visitor));
 		}
 		throw new HttpError(404, "There is no such API.");
+	}
+
+	/**
+	 * The page's config for a visitor: the owners' view as it was, and for another tier the panes
+	 * of that tier. Where the app admits more than its owners it also says the visitor's tier, the
+	 * steps they owe, the pages and kinds of room they may see, and who gets push.
+	 */
+	async configFor(visitor: Visitor): Promise<ConfigView> {
+		const view = this.config();
+		const { access } = this.#ports;
+		if (!access) return view;
+		const [owed, hosted] = await Promise.all([
+			access.gate(visitor),
+			access.hosted(visitor),
+		]);
+		return {
+			...view,
+			panes: [...this.#panesOf(visitor)],
+			tier: visitor.tier,
+			...(owed.length > 0 ? { gate: owed } : {}),
+			pages: hosted.pages,
+			kinds: hosted.kinds,
+			push: {
+				tiers: [...access.push.tiers],
+				...(access.push.key ? { key: access.push.key } : {}),
+				...(access.push.subscribe ? { subscribe: access.push.subscribe } : {}),
+			},
+		};
 	}
 
 	config(): ConfigView {
@@ -306,20 +363,33 @@ export class ConsoleApi {
 
 	// ── Conversations ──────────────────────────────────────────────────────
 
-	async conversations(): Promise<ConversationsView> {
+	async conversations(visitor?: Visitor): Promise<ConversationsView> {
 		const { sessionsDir, relayNotes, registry } = this.#ports;
+		const owner = visitor === undefined || visitor.tier === "owner";
+		// A visitor who is not an owner reads their own private conversations, found by the registry alone.
+		const records = registry
+			? await registry.list(
+					owner ? undefined : { principal: visitor.principal.id },
+				)
+			: [];
+		const byKey = new Map(records.map((record) => [record.key, record]));
 		const filter = {
-			excluded: (key: ChannelKey) => this.#hidden(key),
+			excluded: (key: ChannelKey) => this.#hidden(key, byKey.get(key)),
 			relayNotes,
 		};
-		const records = registry ? await registry.list() : [];
+		const mine = owner
+			? records
+			: records.filter(
+					(record) =>
+						record.visibility === "private" &&
+						record.principalId === visitor.principal.id,
+				);
 		// The registry first; the directory scan reads the conversations from before it, by name.
-		const recorded = registeredConversations(sessionsDir, records, filter);
+		const recorded = registeredConversations(sessionsDir, mine, filter);
 		const stored = [
 			...recorded,
-			...storedConversations(sessionsDir, filter),
+			...(owner ? storedConversations(sessionsDir, filter) : []),
 		].sort((a, b) => (b.lastActive ?? "").localeCompare(a.lastActive ?? ""));
-		const byKey = new Map(records.map((record) => [record.key, record]));
 		const names = new Map<string, Promise<PrincipalName>>();
 		return {
 			conversations: await Promise.all(
@@ -328,9 +398,9 @@ export class ConsoleApi {
 		};
 	}
 
-	#hidden(key: ChannelKey): boolean {
+	#hidden(key: ChannelKey, record?: ConversationRecord): boolean {
 		return (
-			(this.#ports.exclude?.(key) ?? false) ||
+			(this.#ports.exclude?.(key, record) ?? false) ||
 			(this.#ports.features?.party?.contains(key) ?? false)
 		);
 	}
@@ -356,10 +426,18 @@ export class ConsoleApi {
 	async transcript(
 		key: string,
 		archive: string | undefined,
+		visitor?: Visitor,
 	): Promise<TranscriptView> {
 		const { sessionsDir, relayNotes } = this.#ports;
+		const record = await this.#ports.registry?.get(key as ChannelKey);
 		const parsed = await this.#located(key);
-		if (!parsed || this.#hidden(key as ChannelKey))
+		// Anyone but an owner reads only a private conversation of their own, which the registry records.
+		const mayRead =
+			visitor === undefined ||
+			visitor.tier === "owner" ||
+			(record?.visibility === "private" &&
+				record.principalId === visitor.principal.id);
+		if (!parsed || !mayRead || this.#hidden(key as ChannelKey, record))
 			throw new HttpError(404, "There is no such conversation.");
 		const dir = join(sessionsDir, parsed.dir);
 		const files = conversationFiles(dir);
@@ -378,7 +456,7 @@ export class ConsoleApi {
 					...(parsed.member ? { member: parsed.member } : {}),
 					...files,
 				},
-				await this.#ports.registry?.get(key as ChannelKey),
+				record,
 			),
 			archives,
 			...(archive !== undefined ? { archive } : {}),
@@ -455,6 +533,12 @@ export class ConsoleApi {
 	/** The people whose notes the pane can show: every principal but the host's own, the visitor first. */
 	async principals(visitor: Visitor): Promise<PrincipalsView> {
 		const self = visitor.principal.id;
+		// Anyone but an owner has their own notes and no one else's to choose from.
+		if (visitor.tier !== "owner")
+			return {
+				self,
+				principals: [{ id: self, name: visitor.principal.displayName }],
+			};
 		const everyone = (await this.#ports.people?.list()) ?? [visitor.principal];
 		const listed = [
 			...everyone.filter((p) => p.id === self),
@@ -477,6 +561,9 @@ export class ConsoleApi {
 		const named = new URL(request.url).searchParams.get("principal");
 		if (named === null || named === visitor.principal.id)
 			return memoryOf(visitor.principal.id);
+		// Another person's notes are the owners' to read.
+		if (visitor.tier !== "owner")
+			throw new HttpError(403, "Only an owner may do this.");
 		// The host's own principal keeps no notes; anyone else must be a principal the host knows.
 		if (named === SYSTEM_PRINCIPAL || !(await people?.principal(named)))
 			throw new HttpError(404, "There is no such person.");

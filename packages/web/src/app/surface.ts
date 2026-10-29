@@ -18,7 +18,7 @@ import type { RoomFile, RoomMessage } from "../api-types.ts";
 import type { OwnerDesk } from "./desk.ts";
 import { type FileDir, typeByName } from "./files.ts";
 import type { NewRoomMessage, RoomLog } from "./room-log.ts";
-import type { AppSocket, Sockets } from "./sockets.ts";
+import type { AppSocket, Audience, Sockets } from "./sockets.ts";
 import { AppSurfaceThreads } from "./surface-threads.ts";
 import type { WebThreads } from "./threads.ts";
 import type { Uploads } from "./uploads.ts";
@@ -45,6 +45,10 @@ export interface AppSurfaceOptions {
 	threads: Pick<WebThreads, "open" | "close">;
 	/** Whether a room can host a thread: an agent's or group's room that exists. */
 	canHost(parent: ChannelKey): Promise<boolean>;
+	/** Who has a room's frames: the owners' sockets for an agent room, a host room's readers for a host room. */
+	audienceOf(room: string): Audience;
+	/** Whether the room is a host's (its frames are the `host_*` ones). */
+	isHostRoom(room: string): boolean;
 	/** Tells the sockets the room list differs, once changes settle. */
 	changed(): void;
 	/**
@@ -88,8 +92,8 @@ export interface RoomActivity {
 }
 
 /**
- * The owner app's rooms as a chat surface: what the host shows in a room reaches every socket of
- * every owner as a frame, and what a room says is stored in the room log. The agent team runs
+ * The owner app's rooms as a chat surface: what the host shows in a room reaches the sockets that
+ * may have it (the owners' for an agent room) as a frame, and what a room says is stored in the room log. The agent team runs
  * in the rooms (`agentRooms`) as it runs in its Discord channels, but each room is a
  * conversation of its own. A reply arrives whole, in Markdown, with its files stored, and an
  * agent's interim text is shown live until the final reply replaces it.
@@ -147,26 +151,29 @@ export class AppSurface implements ChatSurface {
 		return this.#deliver !== undefined;
 	}
 
-	/** Stores a message of a room and shows it to every open socket, except `except`. */
+	/** Stores a message of a room and shows it to the sockets that may have the room, except `except`. */
 	async publish(row: NewRoomMessage, except?: AppSocket): Promise<RoomMessage> {
 		const message = await this.#options.log.append(row);
-		this.#options.sockets.broadcast(
-			{ type: "message", room: row.room, message },
-			undefined,
+		this.#options.sockets.deliver(
+			this.#options.isHostRoom(row.room)
+				? { type: "host_message", room: row.room, message }
+				: { type: "message", room: row.room, message },
+			this.#options.audienceOf(row.room),
 			except,
 		);
 		return message;
 	}
 
-	/** Changes the text of a stored message and shows the change to every open socket. */
+	/** Changes the text of a stored message and shows the change to the sockets that may have the room. */
 	async edit(room: ChannelKey, id: number, text: string): Promise<void> {
 		const message = await this.#options.log.edit(room, id, text);
 		if (!message) return;
-		this.#options.sockets.broadcast({
-			type: "edited",
-			room: message.room,
-			message,
-		});
+		this.#options.sockets.deliver(
+			this.#options.isHostRoom(room)
+				? { type: "host_edited", room: message.room, message }
+				: { type: "edited", room: message.room, message },
+			this.#options.audienceOf(room),
+		);
 	}
 
 	/** Whether a turn works in the room and whether Stop applies, as `activity` frames say. */
@@ -225,12 +232,15 @@ export class AppSurface implements ChatSurface {
 	}
 
 	#announce(room: ChannelKey, outcome?: "done" | "failed"): void {
-		this.#options.sockets.broadcast({
-			type: "activity",
-			room,
-			...this.activityOf(room),
-			...(outcome ? { outcome } : {}),
-		});
+		this.#options.sockets.deliver(
+			{
+				type: "activity",
+				room,
+				...this.activityOf(room),
+				...(outcome ? { outcome } : {}),
+			},
+			this.#options.audienceOf(room),
+		);
 		this.#options.activity?.();
 	}
 
@@ -328,21 +338,26 @@ export class AppSurface implements ChatSurface {
 				this.#speaks(channel, as?.agent);
 				const live = crypto.randomUUID();
 				const show = (current: string) =>
-					this.#options.sockets.broadcast({
-						type: "message",
-						room: channel,
-						message: {
-							id: 0,
+					this.#options.sockets.deliver(
+						{
+							type: this.#options.isHostRoom(channel)
+								? "host_message"
+								: "message",
 							room: channel,
-							kind: "agent",
-							...(as?.agent ? { agent: as.agent } : {}),
-							author: as?.name ?? ASSISTANT,
-							text: current,
-							files: [],
-							at: new Date().toISOString(),
-							live,
+							message: {
+								id: 0,
+								room: channel,
+								kind: "agent",
+								...(as?.agent ? { agent: as.agent } : {}),
+								author: as?.name ?? ASSISTANT,
+								text: current,
+								files: [],
+								at: new Date().toISOString(),
+								live,
+							},
 						},
-					});
+						this.#options.audienceOf(channel),
+					);
 				show(text);
 				return {
 					edit: async (edited) => {
@@ -362,9 +377,15 @@ export class AppSurface implements ChatSurface {
 
 	progress(channel: ChannelKey, event: TurnProgress): void {
 		this.#toolEvent(channel, event);
-		this.#options.sockets.broadcast(
+		// Only the sockets showing the room get its progress, and only those that may have the room.
+		const audience = this.#options.audienceOf(channel);
+		this.#options.sockets.deliver(
 			{ type: "progress", room: channel, event },
-			(connection) => connection.focus === channel,
+			"owners" in audience
+				? { owners: true, focus: channel }
+				: "room" in audience
+					? { room: audience.room, focus: true }
+					: audience,
 		);
 	}
 

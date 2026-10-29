@@ -16,6 +16,7 @@ import {
 import { hrefFor } from "../lib/router.ts";
 import { setTheme, type ThemePreference, useTheme } from "../lib/theme.ts";
 import { toast } from "../lib/toast.ts";
+import { LogoutForm } from "./logout.tsx";
 
 /** The browser's offer to install the page, kept until the person asks for it. */
 interface InstallPrompt extends Event {
@@ -305,27 +306,7 @@ export function SettingsPage() {
 							? t("Signed in as {name}.", { name: session.principal.name })
 							: ""}
 				</p>
-				{session?.auth === "password" ? (
-					<form
-						method="post"
-						action="auth/logout"
-						onSubmit={(event) => {
-							// A shared device must stop getting this person's pushes once they log out.
-							event.preventDefault();
-							const form = event.currentTarget;
-							disablePush()
-								.catch(() => undefined)
-								.finally(() => form.submit());
-						}}
-					>
-						<div className="actions">
-							<button type="submit" className="secondary">
-								<Icon name="logout" size={16} />
-								{t("Log out")}
-							</button>
-						</div>
-					</form>
-				) : null}
+				{session ? <LogoutForm auth={session.auth} /> : null}
 			</section>
 		</div>
 	);

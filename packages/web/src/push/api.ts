@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { IdentityService } from "pi-roundtable";
+import type { Tier } from "pi-roundtable";
 import type {
 	PushDevicesView,
 	PushDeviceView,
@@ -25,7 +25,8 @@ export interface PushApiOptions {
 	vapid: Pick<Vapid, "publicKey">;
 	policy: EndpointPolicy;
 	subscriptions: Pick<PushSubscriptions, "of" | "save" | "remove">;
-	identity: Pick<IdentityService, "tierOf">;
+	/** The tiers whose people may use push. */
+	tiers: readonly Tier[];
 	/** False when the server has no VAPID contact: devices cannot be added, since nothing would reach them. */
 	enabled: boolean;
 }
@@ -78,7 +79,7 @@ export class PushApi {
 		const [head, area, name, id] = parts;
 		if (head !== "api" || area !== "push") return undefined;
 		try {
-			const principalId = await this.#owner(admission);
+			const principalId = this.#allowed(admission);
 			const { method } = request;
 			if (name === "key" && !id && method === "GET")
 				return json({
@@ -102,11 +103,13 @@ export class PushApi {
 		}
 	}
 
-	async #owner(admission: Authenticated): Promise<string> {
-		const { principal } = admission.visitor;
-		if ((await this.#options.identity.tierOf(principal.id)) !== "owner")
+	/** The person's own principal, when their tier may use push; the tier is the one this request was admitted at. */
+	#allowed(admission: Authenticated): string {
+		const { principal, tier } = admission.visitor;
+		if (this.#options.tiers.includes(tier)) return principal.id;
+		if (this.#options.tiers.length === 1 && this.#options.tiers[0] === "owner")
 			throw new HttpError(403, "Only an owner may do this.");
-		return principal.id;
+		throw new HttpError(403, "Push is not available to you.");
 	}
 
 	async #devices(principalId: string): Promise<PushDevicesView> {

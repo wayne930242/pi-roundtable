@@ -55,8 +55,8 @@ export interface Answerer {
 }
 
 export interface OwnerDeskOptions {
-	/** Sends a frame to every open socket of every owner. */
-	broadcast(frame: ServerFrame): void;
+	/** Puts a frame about a room on the sockets that may have it: the owners' for an agent room, the room's readers' for a host room. */
+	broadcast(frame: ServerFrame, room: ChannelKey): void;
 	/** How long a turn that can be resumed waits on its card before it goes on without the answer. */
 	graceMs: number;
 	/** A card nobody answers closes after this long; default 24 hours. */
@@ -143,9 +143,14 @@ function answerOf(ended: Ended): CardAnswer | undefined {
  * after a day. A turn that can be resumed stops waiting after the grace period while the card
  * stays open (`late`); answered then, the card starts a turn in its room with the answer.
  *
- * Who answers: any owner, except a card that is the speaker's alone (`speakerOnly`), which only
- * the speaker's principal answers, and a card in a private conversation, which only its person
- * does. An approval is answered at the tier it needs, read again when the answer comes.
+ * Who answers (the same rule as Discord's `CardAudiences`, so a room's readers cannot widen it):
+ * - an approval that names approvers: a named approver who holds its tier now, or an owner;
+ * - an approval that names none: the turn's speaker at its tier, and the owners when the scope
+ *   escalates;
+ * - a question: the speaker, and the owners when the scope escalates;
+ * - a card that is the speaker's alone (`speakerOnly`): only the speaker's principal;
+ * - without a scope: the owners.
+ * It applies to approve, decline, answer and cancel alike, and the tier is the answerer's now.
  */
 export class OwnerDesk {
 	readonly #open = new Map<string, Open>();
@@ -273,13 +278,17 @@ export class OwnerDesk {
 		};
 	}
 
-	/** The open cards as frames, to send again when a socket opens. */
-	openFrames(): ServerFrame[] {
+	/** The open cards as frames with their rooms, to send again when a socket opens; each goes only to those who may have its room. */
+	openFrames(): { room: ChannelKey; frame: ServerFrame }[] {
 		return [...this.#open.values()].map((open) => ({
-			type: "prompt",
 			room: open.room,
-			prompt: open.frame,
+			frame: { type: "prompt", room: open.room, prompt: open.frame },
 		}));
+	}
+
+	/** The room a card belongs to, while it is open. */
+	roomOf(prompt: string): ChannelKey | undefined {
+		return this.#open.get(prompt)?.room;
 	}
 
 	/** Whether the card is open and past its grace, so an answer to it starts a turn. */
@@ -357,7 +366,7 @@ export class OwnerDesk {
 
 	/**
 	 * Who may approve a call held at `minTier`, as a test of the person who answers; undefined when
-	 * no one may, so the call is unavailable at once. The primary audience is every owner.
+	 * no one may, so the call is unavailable at once.
 	 */
 	#approvalAudience(
 		scope: PromptScope | undefined,
@@ -366,6 +375,7 @@ export class OwnerDesk {
 		speakerOnly: boolean,
 	): ((from: Answerer) => boolean) | undefined {
 		const tierOk = (from: Answerer) => atLeast(from.tier, minTier);
+		const owner = (from: Answerer) => from.tier === "owner";
 		if (speakerOnly) {
 			// The speaker's alone: below the tier, or a speaker who is no person, no one answers.
 			if (
@@ -377,28 +387,38 @@ export class OwnerDesk {
 			const speaker = scope.principalId;
 			return (from) => from.principalId === speaker && tierOk(from);
 		}
-		if (scope?.escalate === "none") {
+		// Without a scope a card is the owners'.
+		if (!scope) return owner;
+		const person = scope.principalId;
+		if (scope.escalate === "none") {
 			// A private conversation's person is the only one who answers, and a call naming others is theirs only if named or an owner.
 			if (!atLeast(scope.tier, minTier)) return undefined;
 			if (
 				approvers?.length &&
-				!approvers.includes(scope.principalId) &&
+				!approvers.includes(person) &&
 				scope.tier !== "owner"
 			)
 				return undefined;
-			const person = scope.principalId;
 			return (from) => from.principalId === person && tierOk(from);
 		}
-		return tierOk;
+		if (approvers?.length) {
+			// Named approvers answer it, at the tier it needs now, and so do the owners; the speaker does not unless named.
+			const named = new Set(approvers);
+			return (from) =>
+				(named.has(from.principalId) && tierOk(from)) || owner(from);
+		}
+		return (from) =>
+			(from.principalId === person && tierOk(from)) || owner(from);
 	}
 
-	/** Who may answer a question: every owner, or a private conversation's person alone. */
+	/** Who may answer a question: the speaker, and the owners where the scope escalates; without a scope, the owners. */
 	#questionAudience(scope: PromptScope | undefined) {
-		if (scope?.escalate === "none") {
-			const person = scope.principalId;
+		if (!scope) return (from: Answerer) => from.tier === "owner";
+		const person = scope.principalId;
+		if (scope.escalate === "none")
 			return (from: Answerer) => from.principalId === person;
-		}
-		return (_from: Answerer) => true;
+		return (from: Answerer) =>
+			from.principalId === person || from.tier === "owner";
 	}
 
 	/**
@@ -463,7 +483,10 @@ export class OwnerDesk {
 				};
 				// Kept before the sockets are told, so a page that reloads on the news finds it.
 				this.#keep({ room, frame: open.frame, ...ended, closedAt });
-				broadcast({ type: "prompt_closed", prompt: id, ...ended, closedAt });
+				broadcast(
+					{ type: "prompt_closed", prompt: id, ...ended, closedAt },
+					room,
+				);
 			};
 			const onAbort = () => {
 				if (!this.#open.has(id)) return;
@@ -488,13 +511,13 @@ export class OwnerDesk {
 					late = true;
 					signal?.removeEventListener("abort", onAbort);
 					open.frame = { ...open.frame, late: true } as PromptFrame;
-					broadcast({ type: "prompt", room, prompt: open.frame });
+					broadcast({ type: "prompt", room, prompt: open.frame }, room);
 					resolve(card.pending as T);
 				}, graceMs);
 			signal?.addEventListener("abort", onAbort, { once: true });
 			supersede?.addEventListener("abort", onWithdraw, { once: true });
 			this.#open.set(id, open);
-			broadcast({ type: "prompt", room, prompt: open.frame });
+			broadcast({ type: "prompt", room, prompt: open.frame }, room);
 			try {
 				this.#options.opened?.(room, open.frame);
 			} catch (error) {

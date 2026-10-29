@@ -8,7 +8,9 @@ function surfaceAt(clock: { now: number }) {
 	const heard: string[] = [];
 	const surface = new AppSurface({
 		surface: "app",
-		sockets: { broadcast: () => undefined },
+		sockets: { deliver: () => undefined },
+		audienceOf: () => ({ owners: true }),
+		isHostRoom: () => false,
 		log: { append: async (row: object) => ({ id: 1, ...row }) },
 		files: {},
 		uploads: { maxBytes: 1 },
