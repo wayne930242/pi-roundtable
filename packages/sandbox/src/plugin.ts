@@ -82,10 +82,10 @@ export function sandbox(options: SandboxOptions) {
 						runtime,
 						surfaces: context.surfaces,
 						...(options.replyText ? { replyText: options.replyText } : {}),
-						reportFailure: (channel) =>
+						reportFailure: (channel, error) =>
 							context.logger.error(
-								{ channel },
-								"sandbox turn failed; inspect container cleanup and broker configuration",
+								{ channel, err: error },
+								"sandbox turn failed; inspect the error, then container cleanup, broker configuration and replyText",
 							),
 					}),
 				],

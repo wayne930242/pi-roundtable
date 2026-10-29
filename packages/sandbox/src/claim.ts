@@ -24,7 +24,8 @@ export interface SandboxClaimOptions {
 		Partial<Pick<SandboxChannelStore, "owns">>;
 	runtime: Pick<SandboxRuntime, "runTurn" | "stop" | "startFresh">;
 	surfaces: Pick<SurfacePort, "sendReply" | "startTyping">;
-	reportFailure?: (channel: ChannelKey) => void;
+	/** Told of a failed turn, with what failed (a sandbox error, or replyText's own throw). */
+	reportFailure?: (channel: ChannelKey, error: unknown) => void;
 	replyText?: SandboxReplyText;
 }
 
@@ -103,7 +104,7 @@ export function sandboxClaim(options: SandboxClaimOptions): ChannelClaim {
 					} catch (error) {
 						// A stop or a full queue is the runtime working as designed, not a failure.
 						if (!(error instanceof SandboxTurnRefused))
-							options.reportFailure?.(message.channel);
+							options.reportFailure?.(message.channel, error);
 						await options.surfaces.sendReply(message.channel, {
 							chunks: ["The sandbox turn failed or was stopped."],
 						});

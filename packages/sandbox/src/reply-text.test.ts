@@ -51,6 +51,7 @@ async function harness(
 	});
 	const replies: string[] = [];
 	const failures: ChannelKey[] = [];
+	const errors: unknown[] = [];
 	const host = await testPlugin(
 		definePlugin({
 			name: "reply-text-claim",
@@ -64,7 +65,10 @@ async function harness(
 							startFresh: () => {},
 						},
 						surfaces: context.surfaces,
-						reportFailure: (channel) => failures.push(channel),
+						reportFailure: (channel, error) => {
+							failures.push(channel);
+							errors.push(error);
+						},
 						...(replyText ? { replyText } : {}),
 					}),
 				],
@@ -87,6 +91,7 @@ async function harness(
 		host,
 		replies,
 		failures,
+		errors,
 		done: async () => {
 			await host.stop();
 			rmSync(root, { recursive: true, force: true });
@@ -152,6 +157,7 @@ test("a replyText that throws or returns no string fails the turn and is reporte
 			await run.host.conversations.handle(message);
 			expect(run.replies).toEqual(["The sandbox turn failed or was stopped."]);
 			expect(run.failures).toEqual(["discord:900"]);
+			expect(run.errors[0]).toBeInstanceOf(Error);
 		} finally {
 			await run.done();
 		}

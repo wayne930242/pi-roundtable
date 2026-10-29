@@ -182,7 +182,7 @@ This applies to `modelUrl` only, not to MCP servers.
 `replyText(text, { channel, space })` rewrites each successful model reply on the host before it is split and posted, and may return a promise.
 Use it for what the prompt cannot guarantee, such as converting a model's stray Simplified Chinese to Traditional.
 It never sees failure texts, and the history the worker keeps holds the model's own words.
-A throw or a value that is not a string fails the turn like any other failure.
+A throw or a value that is not a string fails the turn like any other failure, and the error is logged with the channel; an empty string posts nothing, as an empty model reply does.
 It needs no new worker image.
 
 ### Worker image protocol
