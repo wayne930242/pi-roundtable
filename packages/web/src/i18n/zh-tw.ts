@@ -522,6 +522,38 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"The body is not JSON.": "內容不是 JSON。",
 	"The body is not an object.": "內容不是物件。",
 	"Only an owner may do this.": "只有擁有者可以這麼做。",
+	"That path is not allowed.": "不允許這個路徑。",
+	"There is no such place.": "沒有這個位置。",
+	"There is no such file or folder.": "沒有這個檔案或資料夾。",
+	"That is not a folder.": "這不是資料夾。",
+	"That is a folder, not a file.": "這是資料夾，不是檔案。",
+	"That is the top folder, which cannot be changed.":
+		"這是最上層的資料夾，不能更動。",
+	"That points outside the workspace.": "這連到工作區外面。",
+	"That is not a regular file.": "這不是一般檔案。",
+	"That is a link; open the file it points to.":
+		"這是連結；請開啟它指向的檔案。",
+	"This place is read-only.": "這個位置是唯讀的。",
+	"Files inside .git are read-only.": ".git 內的檔案是唯讀的。",
+	"The trash cannot be changed this way.": "垃圾桶不能這樣更動。",
+	"This file is not text, so it cannot be edited.":
+		"這個檔案不是文字檔，無法編輯。",
+	"This file is not UTF-8 text, so it cannot be edited.":
+		"這個檔案不是 UTF-8 文字，無法編輯。",
+	"This file is too large.": "這個檔案太大了。",
+	"The text is too large to save (1 MiB at most).":
+		"文字太大，無法存檔（最多 1 MiB）。",
+	"A folder cannot be moved into itself.": "資料夾不能移進它自己裡面。",
+	"That cannot be moved to another disk.": "這不能移到另一個磁碟。",
+	"The server is not allowed to change that.": "伺服器沒有權限更動這個項目。",
+	"This file changed while you were editing.": "你編輯時，這個檔案被改了。",
+	"This file is gone.": "這個檔案已經不見了。",
+	"Something with that name is already there.": "已經有同名的項目了。",
+	"text must be text.": "text 必須是文字。",
+	"baseHash must be the hash the file was read with.":
+		"baseHash 必須是讀取檔案時取得的雜湊值。",
+	"kind must be file or dir.": "kind 必須是 file 或 dir。",
+	"from and to must be paths.": "from 與 to 必須是路徑。",
 	"Method not allowed.": "不允許使用這個方法。",
 	"There is no such API.": "沒有這個 API。",
 	"before and limit must be whole numbers.": "before 與 limit 必須是整數。",

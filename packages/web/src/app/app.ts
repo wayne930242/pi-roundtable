@@ -35,6 +35,7 @@ import { type AppSocket, Sockets } from "./sockets.ts";
 import { AppSurface } from "./surface.ts";
 import { WebThreads } from "./threads.ts";
 import { Uploads } from "./uploads.ts";
+import type { WorkspaceFiles } from "./workspace-files.ts";
 
 /** Changes closer together than this reach the sockets as one `changed` frame. */
 const CHANGED_COALESCE_MS = 250;
@@ -86,6 +87,8 @@ export interface OwnerAppOptions {
 	};
 	database: SQL;
 	agents: AgentServer;
+	/** Present when the workspace pane is served. */
+	workspace?: WorkspaceFiles;
 	modes: ConversationModes;
 	identity: IdentityService;
 	/** Present when the schedules pane is served. */
@@ -267,6 +270,7 @@ export class OwnerApp {
 			conversations: options.conversations,
 			identity,
 			...(options.schedules ? { schedules: options.schedules } : {}),
+			...(options.workspace ? { workspace: options.workspace } : {}),
 			directory: agents.directory,
 			team: agents.team,
 			avatars: agents.avatars,

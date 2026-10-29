@@ -266,6 +266,7 @@ describe("refuses to start", () => {
 		).toEqual([
 			"rooms",
 			"table",
+			"workspace",
 			"overview",
 			"schedules",
 			"conversations",

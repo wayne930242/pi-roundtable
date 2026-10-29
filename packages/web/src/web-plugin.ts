@@ -1,4 +1,4 @@
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import {
 	AGENTS,
 	CONVERSATIONS,
@@ -13,6 +13,7 @@ import { DISCORD } from "pi-roundtable/discord";
 import { APP_MIGRATIONS, OwnerApp } from "./app/app.ts";
 import { APP_PROTOCOL } from "./app/protocol.ts";
 import { UPLOAD_FRAMING_BYTES } from "./app/uploads.ts";
+import { checkRoots, WorkspaceFiles } from "./app/workspace-files.ts";
 import { loadAssets } from "./assets.ts";
 import {
 	createAuthenticator,
@@ -24,6 +25,7 @@ import {
 	type ResolvedOptions,
 	resolveOptions,
 	type WebConsoleOptions,
+	workspaceRootsOf,
 } from "./options.ts";
 import { loadVapid } from "./push/vapid.ts";
 import { consoleVisitors } from "./visitors.ts";
@@ -81,7 +83,28 @@ async function build(settings: ResolvedOptions, context: Context) {
 			throw new Error(`web-console: the ${pane} pane needs its feature port`);
 	}
 	const rooms = settings.panes.includes("rooms");
-	const team = services.find(AGENTS)?.team;
+	const agents = services.find(AGENTS);
+	const team = agents?.team;
+	const workspaceRoots = settings.panes.includes("workspace")
+		? workspaceRootsOf(settings, agents?.workspace)
+		: [];
+	// The default list shows the files pane only when there is something to show; a list that
+	// names it must have a directory.
+	if (settings.panes.includes("workspace") && workspaceRoots.length === 0) {
+		if (settings.panesGiven)
+			throw new Error(
+				"web-console: the workspace pane needs a directory to show: the agents' workspace (the agent server provides it) or workspace.roots",
+			);
+	}
+	const panes = settings.panes.filter(
+		(pane) => pane !== "workspace" || workspaceRoots.length > 0,
+	);
+	if (workspaceRoots.length > 0)
+		checkRoots(workspaceRoots, [resolve(settings.dataDir)]);
+	const workspace =
+		panes.includes("workspace") && rooms
+			? new WorkspaceFiles({ roots: workspaceRoots, logger })
+			: undefined;
 	const connection = services.find(DISCORD)?.connection;
 	// Absent on a host without the registry: the console then lists conversations found by name only.
 	const registry = services.find(CONVERSATIONS);
@@ -95,7 +118,7 @@ async function build(settings: ResolvedOptions, context: Context) {
 	const api = new ConsoleApi({
 		title: settings.title,
 		timeZone: env.timeZone,
-		panes: settings.panes,
+		panes,
 		sessionsDir: settings.sessionsDir,
 		...(team ? { team } : {}),
 		queue,
@@ -179,6 +202,7 @@ async function build(settings: ResolvedOptions, context: Context) {
 						: {}),
 					database: context.database(),
 					agents: services.get(AGENTS),
+					...(workspace ? { workspace } : {}),
 					modes: services.get(MODES),
 					identity,
 					...(settings.panes.includes("schedules")

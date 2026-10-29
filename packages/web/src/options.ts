@@ -1,4 +1,4 @@
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import type { ChannelKey, RoundtablePlugin } from "pi-roundtable";
 import { PluginError } from "pi-roundtable";
 import { PANES, type PaneName } from "./api-types.ts";
@@ -6,6 +6,7 @@ import {
 	DEFAULT_UPLOAD_MAX_BYTES,
 	UPLOAD_FRAMING_BYTES,
 } from "./app/uploads.ts";
+import { checkRoots, type WorkspaceRoot } from "./app/workspace-files.ts";
 import type { ConsoleFeatures, ConsolePresentation } from "./features.ts";
 import { isHostPattern } from "./push/endpoint.ts";
 import {
@@ -123,13 +124,36 @@ export interface WebConsoleOptions {
 	/** Hash routes by default; path routes retain links such as /console/skills. */
 	routing?: "hash" | "path";
 	/**
-	 * The panes to serve, in the order the page lists them; default `rooms`, `table`, `overview`,
-	 * `schedules`, `conversations`, `notes`. `rooms` is the owner app: the same agent team as on
-	 * Discord, in rooms of its own; `table` seats its agents at the round table and needs `rooms`.
+	 * The panes to serve, in the order the page lists them; default `rooms`, `table`, `workspace`,
+	 * `overview`, `schedules`, `conversations`, `notes`. `rooms` is the owner app: the same agent
+	 * team as on Discord, in rooms of its own; `table` seats its agents at the round table and
+	 * needs `rooms`; `workspace` browses and edits the agents' files and needs `rooms` and a
+	 * directory to show (the agents' own, or `workspace.roots`). The default list leaves
+	 * `workspace` out when there is no directory; an explicit list that names it must have one.
 	 * An explicit list is kept as written, so a host that listed the panes before 0.23 adds
-	 * `rooms`, `table` and `schedules` by hand.
+	 * `rooms`, `table` and `schedules` by hand, and one that listed them before 0.24 adds
+	 * `workspace`.
 	 */
 	panes?: readonly PaneName[];
+	/**
+	 * What the `workspace` pane shows. The agents' working directory (`agents`) and their scratch
+	 * directory (`scratch`, when the host has one) are shown without being named, from
+	 * `AGENTS.workspace`; `roots` adds more, or `agents: false` / `scratch: false` leaves one out.
+	 * A root must not be, or contain, the host's `dataDir`, which holds the sessions and keys.
+	 */
+	workspace?: {
+		/** More directories to show: an `id` (a lower-case word), a `label`, an absolute `dir`, and whether the owner may change files in it (default false). */
+		roots?: readonly {
+			id: string;
+			label: string;
+			dir: string;
+			writable?: boolean;
+		}[];
+		/** Leave the agents' working directory out of the pane; default shown. */
+		agents?: boolean;
+		/** Leave the agents' scratch directory out of the pane; default shown when the host has one. */
+		scratch?: boolean;
+	};
 	/**
 	 * The key prefix of the app's rooms: `<surface>:agent.<name>` and `<surface>:group.<name>`.
 	 * A lower-case word that is not `discord`; default `app`. Rooms keep their conversations under
@@ -207,6 +231,14 @@ export interface ResolvedOptions {
 	listener: string;
 	routing: "hash" | "path";
 	panes: PaneName[];
+	/** Whether `panes` was written out, which makes a missing directory for the workspace pane an error. */
+	panesGiven: boolean;
+	/** The `workspace` option checked and filled in. */
+	workspace: {
+		roots: readonly WorkspaceRoot[];
+		agents: boolean;
+		scratch: boolean;
+	};
 	surface: string;
 	cardGraceSeconds: number;
 	uploadMaxBytes: number;
@@ -275,6 +307,7 @@ function checkPanes(panes: readonly PaneName[] | undefined): PaneName[] {
 		return [
 			"rooms",
 			"table",
+			"workspace",
 			"overview",
 			"schedules",
 			"conversations",
@@ -291,7 +324,55 @@ function checkPanes(panes: readonly PaneName[] | undefined): PaneName[] {
 		fail("the schedules pane needs the rooms pane, which serves its API");
 	if (panes.includes("table") && !panes.includes("rooms"))
 		fail("the table pane needs the rooms pane, whose agents it seats");
+	if (panes.includes("workspace") && !panes.includes("rooms"))
+		fail("the workspace pane needs the rooms pane, which serves its API");
 	return [...panes];
+}
+
+function checkWorkspace(
+	options: WebConsoleOptions,
+	dataDir: string,
+): ResolvedOptions["workspace"] {
+	const given = options.workspace;
+	if (given === undefined) return { roots: [], agents: true, scratch: true };
+	if (typeof given !== "object" || given === null)
+		return fail("workspace must be an object such as { roots: [...] }");
+	for (const key of ["agents", "scratch"] as const)
+		if (given[key] !== undefined && typeof given[key] !== "boolean")
+			fail(`workspace.${key} must be true or false`);
+	const list = given.roots ?? [];
+	if (!Array.isArray(list)) fail("workspace.roots must be a list");
+	const roots: WorkspaceRoot[] = list.map((root, index) => {
+		if (
+			typeof root !== "object" ||
+			root === null ||
+			typeof root.id !== "string" ||
+			typeof root.label !== "string" ||
+			!root.label.trim() ||
+			typeof root.dir !== "string" ||
+			(root.writable !== undefined && typeof root.writable !== "boolean")
+		)
+			return fail(
+				`workspace.roots[${index}] must be { id, label, dir, writable? } with text for the first three`,
+			);
+		return {
+			id: root.id,
+			label: root.label.trim(),
+			dir: root.dir,
+			writable: root.writable === true,
+		};
+	});
+	for (const reserved of ["agents", "scratch"])
+		if (roots.some((root) => root.id === reserved))
+			fail(
+				`workspace.roots may not use the id ${reserved}, which names the agents' own directory`,
+			);
+	checkRoots(roots, [resolve(dataDir)]);
+	return {
+		roots,
+		agents: given.agents !== false,
+		scratch: given.scratch !== false,
+	};
 }
 
 function checkAuth(options: WebConsoleOptions): ResolvedAuth {
@@ -490,6 +571,8 @@ export function resolveOptions(options: WebConsoleOptions): ResolvedOptions {
 		listener: options.listener ?? "public",
 		routing: options.routing ?? "hash",
 		panes,
+		panesGiven: options.panes !== undefined,
+		workspace: checkWorkspace(options, options.dataDir ?? "data"),
 		surface: checkSurface(options.surface),
 		cardGraceSeconds: checkGrace(options.cardGraceSeconds),
 		uploadMaxBytes: checkUploadMax(options.uploadMaxBytes),
@@ -503,4 +586,27 @@ export function resolveOptions(options: WebConsoleOptions): ResolvedOptions {
 		features: options.features,
 		presentation: options.presentation,
 	};
+}
+
+/** The directories the workspace pane shows: the agents' own, then the host's `workspace.roots`. */
+export function workspaceRootsOf(
+	settings: ResolvedOptions,
+	agents: { workDir: string; scratchDir?: string } | undefined,
+): WorkspaceRoot[] {
+	const roots: WorkspaceRoot[] = [];
+	if (agents && settings.workspace.agents)
+		roots.push({
+			id: "agents",
+			label: "Agents' workspace",
+			dir: agents.workDir,
+			writable: true,
+		});
+	if (agents?.scratchDir && settings.workspace.scratch)
+		roots.push({
+			id: "scratch",
+			label: "Scratch",
+			dir: agents.scratchDir,
+			writable: true,
+		});
+	return [...roots, ...settings.workspace.roots];
 }
