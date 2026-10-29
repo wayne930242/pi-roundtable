@@ -15,6 +15,7 @@ import { useRowPress } from "../lib/row-press.ts";
 import { drawerGroups } from "../lib/sections.ts";
 import { Icon } from "./icons.tsx";
 import { RoomPicture } from "./room-picture.tsx";
+import { Unread } from "./unread.tsx";
 
 installArrangedStyle();
 
@@ -122,6 +123,7 @@ function Row(props: {
 						</span>
 					) : null}
 				</span>
+				<Unread room={key} />
 				{waiting ? (
 					<span className="badge badge-warn">
 						{plural(waiting, "{count} card waiting", "{count} cards waiting")}

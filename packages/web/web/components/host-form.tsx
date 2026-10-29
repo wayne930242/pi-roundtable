@@ -39,6 +39,84 @@ function inputOf(fields: readonly FormFieldView[], values: Values): FormInput {
 	return input;
 }
 
+type ChoiceField = Extract<FormFieldView, { options: unknown }>;
+
+/** A select, or a list of checkboxes; with `search` a box filters the options first. */
+function Choice(props: {
+	field: ChoiceField;
+	id: string;
+	value: string | string[];
+	described: string | undefined;
+	onChange(value: string | string[]): void;
+}) {
+	const { field, value } = props;
+	const [needle, setNeedle] = useState("");
+	const shown = field.search
+		? field.options.filter((option) =>
+				option.label.toLowerCase().includes(needle.trim().toLowerCase()),
+			)
+		: field.options;
+	const search = field.search ? (
+		<input
+			type="search"
+			value={needle}
+			placeholder={t("Search…")}
+			aria-label={t("Search {name}", { name: field.label })}
+			onChange={(event) => setNeedle(event.target.value)}
+		/>
+	) : null;
+	if (field.type === "select")
+		return (
+			<>
+				{search}
+				<select
+					id={props.id}
+					value={String(value)}
+					required={field.required === true}
+					aria-describedby={props.described}
+					{...(field.search ? { size: 6 } : {})}
+					onChange={(event) => props.onChange(event.target.value)}
+				>
+					{field.required && !field.search ? null : (
+						<option value="">{field.search ? "" : t("None")}</option>
+					)}
+					{shown.map((option) => (
+						<option key={option.value} value={option.value}>
+							{option.label}
+						</option>
+					))}
+				</select>
+			</>
+		);
+	const chosen = new Set(Array.isArray(value) ? value : []);
+	return (
+		<>
+			{search}
+			<fieldset aria-describedby={props.described}>
+				{shown.map((option) => (
+					<label key={option.value}>
+						<input
+							type="checkbox"
+							checked={chosen.has(option.value)}
+							onChange={(event) => {
+								const next = new Set(chosen);
+								if (event.target.checked) next.add(option.value);
+								else next.delete(option.value);
+								props.onChange(
+									field.options
+										.filter((one) => next.has(one.value))
+										.map((one) => one.value),
+								);
+							}}
+						/>
+						{option.label}
+					</label>
+				))}
+			</fieldset>
+		</>
+	);
+}
+
 function Field(props: {
 	field: FormFieldView;
 	value: string | string[];
@@ -47,23 +125,20 @@ function Field(props: {
 }) {
 	const { field, value } = props;
 	const id = useId();
-	const [needle, setNeedle] = useState("");
 	const hint = "hint" in field ? field.hint : undefined;
 	const described = props.error || hint ? `${id}-note` : undefined;
 	let control: React.ReactNode;
-	if (field.type === "text" || field.type === "url") {
+	if ("options" in field)
 		control = (
-			<input
+			<Choice
+				field={field}
 				id={id}
-				type={field.type === "url" ? "url" : "text"}
-				value={String(value)}
-				maxLength={field.max ?? 500}
-				required={field.required === true}
-				aria-describedby={described}
-				onChange={(event) => props.onChange(event.target.value)}
+				value={value}
+				described={described}
+				onChange={props.onChange}
 			/>
 		);
-	} else if (field.type === "textarea") {
+	else if (field.type === "textarea")
 		control = (
 			<textarea
 				id={id}
@@ -75,74 +150,18 @@ function Field(props: {
 				onChange={(event) => props.onChange(event.target.value)}
 			/>
 		);
-	} else {
-		const shown = field.search
-			? field.options.filter((option) =>
-					option.label.toLowerCase().includes(needle.trim().toLowerCase()),
-				)
-			: field.options;
-		const search = field.search ? (
+	else
+		control = (
 			<input
-				type="search"
-				value={needle}
-				placeholder={t("Search…")}
-				aria-label={t("Search {name}", { name: field.label })}
-				onChange={(event) => setNeedle(event.target.value)}
+				id={id}
+				type={field.type === "url" ? "url" : "text"}
+				value={String(value)}
+				maxLength={field.max ?? 500}
+				required={field.required === true}
+				aria-describedby={described}
+				onChange={(event) => props.onChange(event.target.value)}
 			/>
-		) : null;
-		if (field.type === "select") {
-			control = (
-				<>
-					{search}
-					<select
-						id={id}
-						value={String(value)}
-						required={field.required === true}
-						aria-describedby={described}
-						{...(field.search ? { size: 6 } : {})}
-						onChange={(event) => props.onChange(event.target.value)}
-					>
-						{field.required && !field.search ? null : (
-							<option value="">{field.search ? "" : t("None")}</option>
-						)}
-						{shown.map((option) => (
-							<option key={option.value} value={option.value}>
-								{option.label}
-							</option>
-						))}
-					</select>
-				</>
-			);
-		} else {
-			const chosen = new Set(Array.isArray(value) ? value : []);
-			control = (
-				<>
-					{search}
-					<fieldset aria-describedby={described}>
-						{shown.map((option) => (
-							<label key={option.value}>
-								<input
-									type="checkbox"
-									checked={chosen.has(option.value)}
-									onChange={(event) => {
-										const next = new Set(chosen);
-										if (event.target.checked) next.add(option.value);
-										else next.delete(option.value);
-										props.onChange(
-											field.options
-												.filter((one) => next.has(one.value))
-												.map((one) => one.value),
-										);
-									}}
-								/>
-								{option.label}
-							</label>
-						))}
-					</fieldset>
-				</>
-			);
-		}
-	}
+		);
 	return (
 		<div className="host-field">
 			{field.type === "multiselect" ? (

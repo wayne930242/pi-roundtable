@@ -1,4 +1,5 @@
 import { type ComponentType, type LazyExoticComponent, lazy } from "react";
+import { hostUi } from "./frame-taps.ts";
 
 /** What a page of the registry is given: the second part of its route, such as a host page's id. */
 export interface PageRouteProps {
@@ -17,6 +18,8 @@ export const PAGE_ROUTES: Record<
 	profile: lazy(() =>
 		import("../pages/profile.tsx").then((m) => ({ default: m.ProfilePage })),
 	),
+	// The host's own pages, `p/<id>`.
+	p: lazy(() => hostUi().then((ui) => ({ default: ui.HostPage }))),
 };
 
 /**

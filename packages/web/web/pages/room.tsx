@@ -10,7 +10,6 @@ import {
 } from "react";
 import { CharacterStack, PageCharacter } from "../components/character.tsx";
 import { Composer } from "../components/composer.tsx";
-import { GroupTable } from "../components/group-table.tsx";
 import { Icon } from "../components/icons.tsx";
 import { ModeBanner } from "../components/mode-banner.tsx";
 import { ProgressStrip } from "../components/progress-strip.tsx";
@@ -23,6 +22,7 @@ import { Empty, Failure, Loading } from "../components/states.tsx";
 import { RoomSwitcher, useSwitcher } from "../components/switcher.tsx";
 import { openAgentSheet } from "../lib/agent-sheet.ts";
 import { api } from "../lib/api.ts";
+import { hostUi } from "../lib/frame-taps.ts";
 import { store, useSelector } from "../lib/app-store.ts";
 import {
 	useAccentStyle,
@@ -39,12 +39,22 @@ import { useConnection } from "../lib/socket.ts";
 import { useTableMode } from "../lib/table-mode.ts";
 import { openTeamSheet } from "../lib/team-sheet.ts";
 
+// A group room's table strip is read only when a group room opens: it carries the round table's drawing.
+const GroupTable = lazy(() =>
+	import("../components/group-table.tsx").then((m) => ({
+		default: m.GroupTable,
+	})),
+);
+
 // The scene a group room can switch to is read only when it is first shown, with the dialogue box and the table.
 const GroupScene = lazy(() =>
 	import("../components/group-scene.tsx").then((m) => ({
 		default: m.GroupScene,
 	})),
 );
+
+// The read marks and the divider of new messages load beside the log; until they do the log shows as it is.
+const ReadLog = lazy(() => hostUi().then((ui) => ({ default: ui.ReadLog })));
 
 // The room's menu is read only when it is opened.
 const RoomMenu = lazy(() =>
@@ -56,7 +66,7 @@ const RoomMenu = lazy(() =>
  * while they were not. A scroll event caused by the content growing is not the person moving, so
  * only scrolls that leave the height as it was count as theirs.
  */
-function useStickToEnd(scroller: React.RefObject<HTMLDivElement | null>) {
+export function useStickToEnd(scroller: React.RefObject<HTMLDivElement | null>) {
 	const stuck = useRef(true);
 	const height = useRef(0);
 	const [away, setAway] = useState(false);
@@ -218,6 +228,11 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 		);
 
 	const name = view?.displayName ?? roomKey;
+	const log = {
+		roomKey,
+		enterAfter: mountedLast.current,
+		quotable: !view?.readOnly,
+	};
 	const lastAgent = [...(room?.messages ?? [])]
 		.reverse()
 		.find((m) => m.kind === "agent");
@@ -319,12 +334,14 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 					</span>
 				</div>
 				{view?.kind === "group" ? (
-					<GroupTable
-						roomKey={roomKey}
-						slot={tableSlot}
-						scene={scene}
-						onScene={setScene}
-					/>
+					<Suspense fallback={null}>
+						<GroupTable
+							roomKey={roomKey}
+							slot={tableSlot}
+							scene={scene}
+							onScene={setScene}
+						/>
+					</Suspense>
 				) : null}
 				<button
 					ref={menuButton}
@@ -380,11 +397,9 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 							{loaded && items.length === 0 ? (
 								<Empty>{t("No messages yet. Say hello.")}</Empty>
 							) : null}
-							<RoomLog
-								roomKey={roomKey}
-								enterAfter={mountedLast.current}
-								quotable={!view?.readOnly}
-							/>
+							<Suspense fallback={<RoomLog {...log} />}>
+								<ReadLog {...log} scroller={scroller} />
+							</Suspense>
 							{room?.typing ? (
 								<ProgressStrip
 									name={lastAgent?.author ?? name}

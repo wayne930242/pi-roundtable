@@ -299,6 +299,8 @@ export const HOST_CSS = `
 
 .mode-switch {
 	display: flex;
+	margin: 0;
+	border: 0;
 	gap: var(--space-1);
 	padding: var(--space-2) var(--space-4) 0;
 }
