@@ -162,6 +162,16 @@ export function clientMessages(): Pick<SourceMessages, "client" | "dynamic"> {
 	return { client, dynamic };
 }
 
+/** The string a file's `const <name> = "…"` holds, or undefined when there is no such constant. */
+function constantText(source: string, name: string): string | undefined {
+	const match = new RegExp(
+		`\\bconst\\s+${name}\\s*(?::[^=]+)?=\\s*(?=["'\`])`,
+	).exec(source);
+	return match
+		? literalAt(source, match.index + match[0].length)?.text
+		: undefined;
+}
+
 /** The literal wording the server puts in its refusals and on its login page. */
 export function serverMessages(): Map<string, string> {
 	const server = new Map<string, string>();
@@ -182,8 +192,13 @@ export function serverMessages(): Map<string, string> {
 			// The message is the second argument of an error built with a status, the first of `bad` and `say`.
 			const index = ["bad", "say"].includes(call.name) ? 0 : 1;
 			const arg = call.args[index];
-			if (arg?.literal !== undefined && /[A-Za-z]/.test(arg.literal))
-				server.set(arg.literal, name);
+			// A message held in a constant of the same file (`const notAllowed = "…"`) is as fixed as a literal one.
+			const text =
+				arg?.literal ??
+				(arg && /^[A-Za-z_$][\w$]*$/.test(arg.raw)
+					? constantText(source, arg.raw)
+					: undefined);
+			if (text !== undefined && /[A-Za-z]/.test(text)) server.set(text, name);
 		}
 		for (const match of source.matchAll(/\brefusal:\s*(?=["'`])/g)) {
 			const literal = literalAt(source, match.index + match[0].length);

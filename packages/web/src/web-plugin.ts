@@ -208,6 +208,9 @@ async function build(settings: ResolvedOptions, context: Context) {
 	const app =
 		rooms && vapid
 			? new OwnerApp({
+					...(settings.presentation
+						? { presentation: settings.presentation }
+						: {}),
 					push: {
 						vapid,
 						subject: settings.push.subject,

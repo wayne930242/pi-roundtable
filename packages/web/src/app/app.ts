@@ -14,6 +14,7 @@ import type {
 } from "pi-roundtable";
 import { channelKey } from "pi-roundtable";
 import type { Authenticated, Authenticator } from "../auth/authenticator.ts";
+import type { ConsolePresentation } from "../features.ts";
 import { PushApi } from "../push/api.ts";
 import { webPushChannel } from "../push/channel.ts";
 import { EndpointPolicy } from "../push/endpoint.ts";
@@ -54,6 +55,8 @@ export const APP_MIGRATIONS: readonly Migration[] = [
 ];
 
 export interface OwnerAppOptions {
+	/** The host's wording, for the refusals the API answers with. */
+	presentation?: ConsolePresentation;
 	/** The key prefix of the rooms, such as `app`. */
 	surface: string;
 	/** The path the console is served under, without a trailing slash. */
@@ -268,6 +271,7 @@ export class OwnerApp {
 			push,
 		});
 		this.#api = new AppApi({
+			...(options.presentation ? { presentation: options.presentation } : {}),
 			surface,
 			rooms,
 			log,

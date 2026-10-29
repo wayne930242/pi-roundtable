@@ -8,6 +8,7 @@ import { AppApi } from "./app/routes.ts";
 import type { AssetBundle } from "./assets.ts";
 import { createAuthenticator } from "./auth/authenticator.ts";
 import { ConsoleServer } from "./console-server.ts";
+import type { ConsolePresentation } from "./features.ts";
 import { EMPTY_LAYOUT, forgetRoom } from "./layout-order.ts";
 import { ORIGIN } from "./testing/fixtures.ts";
 import { admit } from "./verifier.ts";
@@ -60,12 +61,13 @@ let changes: number;
 /** The muted rooms, and who muted each. */
 let muted: Map<string, string>;
 
-function setup() {
+function setup(presentation?: ConsolePresentation) {
 	const recorder = recordingLogger();
 	const visitor = (): Visitor => ({
 		principal: { id: who.id, displayName: who.id, disabled: false },
 	});
 	const api = new AppApi({
+		...(presentation ? { presentation } : {}),
 		surface: {} as never,
 		rooms: {
 			resolve: async (key: string) => known.get(key),
@@ -352,6 +354,30 @@ describe("the room list's layout", () => {
 			404,
 		);
 		expect(store.stored.pins).toEqual([]);
+	});
+
+	test("under a host that words the console in zh-TW a refusal reaches the API's client in that wording, and in English without one", async () => {
+		const pin = (server: ReturnType<typeof setup>) =>
+			call(server, "PUT", `rooms/${encoded(HOME)}/pin`, {
+				body: { pinned: true },
+			});
+		const english = await pin(setup());
+		expect(await errorOf(english)).toBe("Home stays at the top.");
+		const worded = await pin(setup({ locale: "zh-TW" }));
+		expect(worded.status).toBe(400);
+		expect(await errorOf(worded)).toBe(
+			"\u9996\u9801\u56fa\u5b9a\u5728\u6700\u4e0a\u9762\u3002",
+		);
+		// the host's own wording wins over the catalog's, and an answer that is no refusal is left alone
+		const hosted = await pin(
+			setup({
+				locale: "zh-TW",
+				messages: { "Home stays at the top.": "Home first." },
+			}),
+		);
+		expect(await errorOf(hosted)).toBe("Home first.");
+		const ok = await call(setup({ locale: "zh-TW" }), "GET", "rooms");
+		expect(ok.status).toBe(200);
 	});
 
 	test("a bad name, a duplicate and the 51st folder are refused with their words", async () => {

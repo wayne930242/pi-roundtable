@@ -32,6 +32,7 @@ import type {
 	WorkspaceSave,
 } from "../api-types.ts";
 import type { Authenticated } from "../auth/authenticator.ts";
+import { type ConsolePresentation, message } from "../features.ts";
 import { json } from "../http.ts";
 import type { PushMutes } from "../push/mutes.ts";
 import { bad, bodyOf, HttpError, notFound } from "./api-http.ts";
@@ -55,6 +56,8 @@ import {
 } from "./workspace-files.ts";
 
 export interface AppApiOptions {
+	/** The host's wording: a refusal reaches a client of the API in this locale when the catalog has it. */
+	presentation?: ConsolePresentation;
 	surface: AppSurface;
 	rooms: Rooms;
 	log: Pick<RoomLog, "page" | "lastOf" | "removeRoom">;
@@ -250,6 +253,42 @@ export class AppApi {
 
 	/** Answers a path of the app's, or undefined for any other. `rest` is what follows the mount. */
 	async handle(
+		request: Request,
+		rest: string,
+		admission: Authenticated,
+	): Promise<Response | undefined> {
+		const response = await this.#answer(request, rest, admission);
+		return response && this.#options.presentation
+			? this.#worded(response, this.#options.presentation)
+			: response;
+	}
+
+	/** A refusal's `error` in the host's wording; the page words it again from the same catalog and finds the wording already there. */
+	async #worded(
+		response: Response,
+		presentation: ConsolePresentation,
+	): Promise<Response> {
+		if (response.status < 400) return response;
+		const body: unknown = await response
+			.clone()
+			.json()
+			.catch(() => undefined);
+		const error = (body as { error?: unknown } | undefined)?.error;
+		if (typeof error !== "string") return response;
+		const worded = message(presentation, error);
+		if (worded === error) return response;
+		const headers = new Headers(response.headers);
+		headers.delete("content-length");
+		return new Response(
+			JSON.stringify({ ...(body as object), error: worded }),
+			{
+				status: response.status,
+				headers,
+			},
+		);
+	}
+
+	async #answer(
 		request: Request,
 		rest: string,
 		admission: Authenticated,
