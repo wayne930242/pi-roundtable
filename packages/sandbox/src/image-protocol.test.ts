@@ -127,3 +127,23 @@ test("the plugin checks the image before it claims anything", async () => {
 		rmSync(root, { recursive: true, force: true });
 	}
 });
+
+test.each([
+	["an empty budgets object", {}],
+	["budgets whose keys are all undefined", { promptBytes: undefined }],
+])("%s asks nothing of the image", async (_name, budgets) => {
+	const root = mkdtempSync("/tmp/sb-proto-");
+	try {
+		const asked: string[] = [];
+		const runtime = new SandboxRuntime({
+			...base(root),
+			budgets,
+			driver: driver(undefined, asked),
+		});
+		await runtime.verifyImage();
+		expect(asked).toEqual([]);
+		await runtime.dispose();
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});

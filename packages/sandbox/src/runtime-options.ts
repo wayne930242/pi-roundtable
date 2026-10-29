@@ -259,7 +259,11 @@ export function requiredProtocol(
 ): { version: number; because: string } | undefined {
 	const because = [
 		options.workspace === "server" ? 'workspace: "server"' : undefined,
-		options.budgets ? "budgets" : undefined,
+		// An empty budgets object changes nothing, so it needs no newer worker.
+		options.budgets &&
+		Object.values(options.budgets).some((value) => value !== undefined)
+			? "budgets"
+			: undefined,
 		options.files ? "files" : undefined,
 		(options as { skills?: readonly unknown[] }).skills?.length
 			? "skills"
