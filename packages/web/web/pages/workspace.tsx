@@ -422,6 +422,8 @@ function FileView(props: {
 			const current = fileRef.current;
 			const editor = handle.current;
 			if (!current || !editor || saving) return;
+			// What is sent is what is marked saved: keys typed while the request is out stay unsaved.
+			const sent = text === undefined ? editor.snapshot() : undefined;
 			const body = text ?? editor.text();
 			setSaving(true);
 			try {
@@ -431,8 +433,8 @@ function FileView(props: {
 					body,
 					baseHash ?? current.hash,
 				);
-				editor.markSaved();
-				setDirty(false);
+				editor.markSaved(sent);
+				setDirty(editor.dirty());
 				setRemote(undefined);
 				setFile({
 					...current,
@@ -521,7 +523,11 @@ function FileView(props: {
 						close: t("close"),
 					},
 					onChange: () => setDirty(editor.dirty()),
-					onSave: () => void saveRef.current(),
+					// Ctrl+S saves what has changed; in read mode, or with nothing changed, it writes nothing.
+					onSave: () => {
+						if (modeRef.current === "edit" && editor.dirty())
+							void saveRef.current();
+					},
 					onEscape: () => {
 						if (modeRef.current === "edit") leaveEditRef.current();
 					},

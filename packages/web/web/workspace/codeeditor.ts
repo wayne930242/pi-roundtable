@@ -84,13 +84,18 @@ export interface EditorOptions {
 	onEscape(): void;
 }
 
+/** A document at a moment; opaque to the page. */
+export type Snapshot = Text;
+
 export interface EditorHandle {
 	/** The whole text with the file's line separator, as a save sends it. */
 	text(): string;
 	/** Whether the text differs from what was last loaded or saved. */
 	dirty(): boolean;
-	/** The text is the saved one now. */
-	markSaved(): void;
+	/** The document as it is now, to hand to `markSaved` once what it holds has been sent. */
+	snapshot(): Snapshot;
+	/** The text is the saved one now: the snapshot's when one is given, else what is in the editor. */
+	markSaved(snapshot?: Snapshot): void;
 	/** Replaces the whole document (a reload), keeping the scroll position. */
 	replace(text: string, eol: "\n" | "\r\n"): void;
 	setEditable(editable: boolean): void;
@@ -147,6 +152,12 @@ export async function createEditor(
 		EditorView.editable.of(on),
 	];
 
+	// What the editor is set to now, so a replaced document keeps it.
+	const now = {
+		editable: options.editable,
+		wrap: options.wrap,
+		language: initialLanguage ?? ([] as Extension),
+	};
 	let saved: Text | undefined;
 	const extensions = (eol: string): Extension[] => [
 		lineNumbers(),
@@ -182,9 +193,9 @@ export async function createEditor(
 			...defaultKeymap,
 		]),
 		EditorState.lineSeparator.of(eol),
-		editable.of(editableExtensions(options.editable)),
-		wrapping.of(options.wrap ? EditorView.lineWrapping : []),
-		lang.of(initialLanguage ?? []),
+		editable.of(editableExtensions(now.editable)),
+		wrapping.of(now.wrap ? EditorView.lineWrapping : []),
+		lang.of(now.language),
 		EditorView.updateListener.of((update) => {
 			if (update.docChanged) options.onChange();
 		}),
@@ -204,8 +215,9 @@ export async function createEditor(
 	return {
 		text: () => view.state.doc.sliceString(0, undefined, view.state.lineBreak),
 		dirty: () => saved === undefined || !view.state.doc.eq(saved),
-		markSaved: () => {
-			saved = view.state.doc;
+		snapshot: () => view.state.doc,
+		markSaved: (snapshot) => {
+			saved = snapshot ?? view.state.doc;
 		},
 		replace: (text, eol) => {
 			const top = view.scrollDOM.scrollTop;
@@ -215,18 +227,21 @@ export async function createEditor(
 			saved = view.state.doc;
 			view.scrollDOM.scrollTop = top;
 		},
-		setEditable: (on) =>
+		setEditable: (on) => {
+			now.editable = on;
 			view.dispatch({
 				effects: editable.reconfigure(editableExtensions(on)),
-			}),
-		setWrap: (wrap) =>
+			});
+		},
+		setWrap: (wrap) => {
+			now.wrap = wrap;
 			view.dispatch({
 				effects: wrapping.reconfigure(wrap ? EditorView.lineWrapping : []),
-			}),
-		setLanguage: async (id) => {
-			view.dispatch({
-				effects: lang.reconfigure((await languageExtension(id)) ?? []),
 			});
+		},
+		setLanguage: async (id) => {
+			now.language = (await languageExtension(id)) ?? [];
+			view.dispatch({ effects: lang.reconfigure(now.language) });
 		},
 		undo: () => {
 			undo(view);

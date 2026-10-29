@@ -27,6 +27,8 @@ let files: Map<string, Stored>;
 let calls: { method: string; url: string; body?: Record<string, unknown> }[];
 /** When set, a PUT answers this instead of saving. */
 let conflictOnSave: WorkspaceConflict | undefined;
+/** While set, a save waits for it: keys can be typed while the request is out. */
+let holdSave: Promise<void> | undefined;
 
 const config = {
 	title: "Test",
@@ -87,7 +89,10 @@ const answer = (body: unknown, status = 200) =>
 	});
 
 const realFetch = globalThis.fetch;
-function fakeFetch(input: string | URL | Request, init?: RequestInit) {
+function fakeFetch(
+	input: string | URL | Request,
+	init?: RequestInit,
+): Promise<Response> {
 	const url = new URL(String(input), "http://localhost/");
 	const method = init?.method ?? "GET";
 	const body = init?.body
@@ -119,6 +124,11 @@ function fakeFetch(input: string | URL | Request, init?: RequestInit) {
 		return Promise.resolve(
 			file ? answer(view(path, file)) : answer({ error: "no" }, 404),
 		);
+	}
+	if (action === "file" && method === "PUT" && holdSave) {
+		const held = holdSave;
+		holdSave = undefined;
+		return held.then(() => fakeFetch(input, init));
 	}
 	if (action === "file" && method === "PUT") {
 		if (conflictOnSave) return Promise.resolve(answer(conflictOnSave, 409));
@@ -212,6 +222,7 @@ async function show(hash: string, width = 1280) {
 	]);
 	calls = [];
 	conflictOnSave = undefined;
+	holdSave = undefined;
 	localStorage.clear();
 	viewport(width);
 	window.location.hash = hash;
@@ -389,6 +400,79 @@ test("Ctrl+S saves with the hash the file was read with, and the line separator 
 	expect(files.get("src/main.ts")?.text).toBe(
 		"// edited\r\nconst a = 1;\r\nconst b = 2;\r\n",
 	);
+});
+
+test("Ctrl+S writes nothing in read mode, or in edit mode with nothing changed", async () => {
+	await show("#/workspace/agents%3Asrc%2Fmain.ts");
+	await editorView();
+	const press = async () => {
+		await page.act(() => {
+			inEditor<HTMLElement>(".cm-content")?.dispatchEvent(
+				new KeyboardEvent("keydown", {
+					key: "s",
+					ctrlKey: true,
+					bubbles: true,
+				}),
+			);
+		});
+		await settle(50);
+	};
+	await press();
+	await page.click(query(".ws-actions button"));
+	await press();
+	expect(calls.filter((call) => call.method === "PUT")).toEqual([]);
+});
+
+test("keys typed while a save is out stay unsaved, and the page still asks before leaving with them", async () => {
+	await show("#/workspace/agents%3Asrc%2Fmain.ts");
+	const editor = await editorView();
+	await page.click(query(".ws-actions button"));
+	await page.act(() => {
+		editor.dispatch({ changes: { from: 0, insert: "// one\r\n" } });
+	});
+	let release: () => void = () => undefined;
+	holdSave = new Promise<void>((done) => {
+		release = done;
+	});
+	const save = all(".ws-actions button").find(
+		(button) => button.textContent === "Save",
+	);
+	await page.click(save ?? null);
+	await page.act(() => {
+		editor.dispatch({ changes: { from: 0, insert: "// two\r\n" } });
+	});
+	await page.act(async () => {
+		release();
+	});
+	await settle(80);
+	expect(files.get("src/main.ts")?.text).toBe(
+		"// one\r\nconst a = 1;\r\nconst b = 2;\r\n",
+	);
+	// The editor still differs from what was written, and the title says so.
+	expect(query(".ws-file-title")?.textContent).toContain("•");
+});
+
+test("after a reload in edit mode the editor still accepts typing, and keeps its wrapping", async () => {
+	await show("#/workspace/agents%3AREADME.md");
+	const editor = await editorView();
+	await page.click(query(".ws-actions button"));
+	await page.act(() => {
+		editor.dispatch({ changes: { from: 0, insert: "mine " } });
+	});
+	files.set("README.md", { text: "partner's text\n", mtimeMs: 9 });
+	const save = all(".ws-actions button").find(
+		(button) => button.textContent === "Save",
+	);
+	await page.click(save ?? null);
+	await settle(50);
+	const reload = all("dialog button").find(
+		(button) => button.textContent === "Reload (discard my edits)",
+	);
+	await page.click(reload ?? null);
+	await settle(80);
+	expect(editor.state.doc.toString()).toBe("partner's text\n");
+	expect(editor.state.readOnly).toBe(false);
+	expect(inEditor(".cm-content")?.getAttribute("contenteditable")).toBe("true");
 });
 
 test("a save that finds the file changed opens the conflict dialog: nothing is written, Reload takes the file as it is", async () => {
