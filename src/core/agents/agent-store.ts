@@ -313,8 +313,8 @@ export class PgAgentStore implements AgentDirectory {
 	}
 
 	/**
-	 * Deletes an archived agent and its group cursors; its name is free again. An active agent is
-	 * never deleted: archive it first.
+	 * Deletes an archived agent and its group cursors, and takes it out of the archived groups that
+	 * still list it; its name is free again. An active agent is never deleted: archive it first.
 	 */
 	async deleteAgent(name: string): Promise<void> {
 		return this.#serial(async () => {
@@ -330,6 +330,15 @@ export class PgAgentStore implements AgentDirectory {
 			});
 			this.#agents.delete(name);
 			this.#dressed.delete(name);
+			// An archived group still lists the agent; a new agent of this name must not join it unasked.
+			for (const group of this.groups()) {
+				if (!group.members.includes(name)) continue;
+				const members = group.members.filter((m) => m !== name);
+				await this.#writeGroup(group.name, {
+					members,
+					host: group.host === name ? (members[0] ?? "") : group.host,
+				});
+			}
 		});
 	}
 

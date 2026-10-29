@@ -302,6 +302,28 @@ describeDb("PostgreSQL", () => {
 			expect(store.group("ops")?.host).toBe("infra");
 		});
 
+		test("a deleted agent is taken out of the archived groups that still list it", async () => {
+			await makeGroup();
+			await store.archiveGroup("ops");
+			await store.archiveAgent("coordinator");
+			await store.archiveAgent("doctor");
+			// The group is archived with all its members, the host among them.
+			expect(store.group("ops")?.members).toEqual([
+				"coordinator",
+				"infra",
+				"doctor",
+			]);
+			await store.deleteAgent("coordinator");
+			expect(store.group("ops")).toMatchObject({
+				members: ["infra", "doctor"],
+				host: "infra",
+				status: "archived",
+			});
+			const reopened = await openTestStore(PgAgentStore, TEST_GUILD);
+			expect(reopened.group("ops")?.members).toEqual(["infra", "doctor"]);
+			await reopened.close();
+		});
+
 		test("each message reaches each member once, its own excluded", async () => {
 			await makeGroup();
 			const owner = await store.appendGroupMessage("ops", {
