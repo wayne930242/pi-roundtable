@@ -61,6 +61,7 @@ let portrait = false;
 let calm = false;
 const realMatchMedia = globalThis.matchMedia;
 let page: TestPage;
+let messages: ReturnType<typeof spyOn> | undefined;
 
 beforeAll(async () => {
 	await loadKit();
@@ -82,6 +83,9 @@ beforeAll(async () => {
 	})) as typeof window.matchMedia;
 });
 afterEach(async () => {
+	// whatever the test left in place, even when it failed half way
+	messages?.mockRestore();
+	messages = undefined;
 	await page.render(<></>);
 	portrait = false;
 	calm = false;
@@ -91,6 +95,7 @@ afterEach(async () => {
 });
 afterAll(async () => {
 	window.matchMedia = realMatchMedia;
+	setConnection(undefined);
 	await page.unmount();
 	await releaseDom();
 });
@@ -293,11 +298,11 @@ test("the seat pictures are frameless figures and carry no id that two of them c
 
 test("without WebGL the ring is the 2D hall: standees cut out with a rim, gold plates that letter Chinese, and the focused seat marked", async () => {
 	load([
-		agent("guide", { displayName: "騎士" }),
+		agent("guide", { displayName: "\u9a0e\u58eb" }),
 		agent("scout"),
 		agent("mason"),
 	]);
-	const messages = spyOn(api, "messages").mockResolvedValue({
+	messages = spyOn(api, "messages").mockResolvedValue({
 		messages: [],
 		more: false,
 		cards: [],
@@ -330,7 +335,7 @@ test("without WebGL the ring is the 2D hall: standees cut out with a rim, gold p
 	const plates = all<SVGTextElement>("g.seat text").map(
 		(text) => text.textContent,
 	);
-	expect(plates).toContain("騎士");
+	expect(plates).toContain("\u9a0e\u58eb");
 	expect(
 		all("g.seat text").every((text) =>
 			(text.getAttribute("font-family") ?? "").includes("PingFang TC"),
@@ -340,5 +345,4 @@ test("without WebGL the ring is the 2D hall: standees cut out with a rim, gold p
 		all("g.seat[data-focus]").map((seat) => seat.getAttribute("aria-label")),
 	).toEqual(["scout (idle)"]);
 	expect(query(".t2d")?.classList.contains("focus")).toBe(true);
-	messages.mockRestore();
 });

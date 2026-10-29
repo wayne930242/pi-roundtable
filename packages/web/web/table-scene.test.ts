@@ -377,11 +377,11 @@ describe("the nameplate lettering", () => {
 
 	test("a zh-TW name is drawn whole through a font stack that carries Chinese", () => {
 		const { g, calls } = recorder();
-		const text = drawPlate(g, "圓桌騎士", 512, 128, hall);
-		expect(text.text).toBe("圓桌騎士");
+		const text = drawPlate(g, "\u5713\u684c\u9a0e\u58eb", 512, 128, hall);
+		expect(text.text).toBe("\u5713\u684c\u9a0e\u58eb");
 		expect(calls).toHaveLength(1);
 		const [font, drawn] = (calls[0] ?? "").split("|");
-		expect(drawn).toBe("圓桌騎士");
+		expect(drawn).toBe("\u5713\u684c\u9a0e\u58eb");
 		for (const face of ["PingFang TC", "Noto Sans TC", "Microsoft JhengHei"])
 			expect(font).toContain(face);
 		expect(PLATE_FONT_STACK.startsWith("system-ui")).toBe(true);
@@ -391,12 +391,19 @@ describe("the nameplate lettering", () => {
 	test("a long name shrinks to fit, then is cut with an ellipsis, never past the plate", () => {
 		const { g } = recorder();
 		const room = 512 * 0.86;
-		const shrunk = fitPlateText(g, "亞瑟王的圓桌騎士", 512, 128);
-		expect(shrunk.text).toBe("亞瑟王的圓桌騎士");
+		const shrunk = fitPlateText(
+			g,
+			"\u4e9e\u745f\u738b\u7684\u5713\u684c\u9a0e\u58eb",
+			512,
+			128,
+		);
+		expect(shrunk.text).toBe(
+			"\u4e9e\u745f\u738b\u7684\u5713\u684c\u9a0e\u58eb",
+		);
 		expect(shrunk.px).toBeLessThan(128 * 0.56);
 		const cut = fitPlateText(
 			g,
-			"亞瑟王與他的圓桌騎士團的第一位騎士蘭斯洛特",
+			"\u4e9e\u745f\u738b\u8207\u4ed6\u7684\u5713\u684c\u9a0e\u58eb\u5718\u7684\u7b2c\u4e00\u4f4d\u9a0e\u58eb\u862d\u65af\u6d1b\u7279",
 			512,
 			128,
 		);

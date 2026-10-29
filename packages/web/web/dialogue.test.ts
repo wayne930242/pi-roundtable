@@ -156,12 +156,14 @@ test("a stream keeps what already showed, a new line starts again, and a tap sho
 
 test("characters are counted whole, so Chinese text and emoji are never cut in half", () => {
 	const reveal = createReveal();
-	reveal.feed("a", "圓桌😀騎士");
-	expect(Array.from("圓桌😀騎士")).toHaveLength(5);
+	reveal.feed("a", "\u5713\u684c😀\u9a0e\u58eb");
+	expect(Array.from("\u5713\u684c😀\u9a0e\u58eb")).toHaveLength(5);
 	reveal.step(1000 / REVEAL_CPS, false);
 	expect(reveal.shown).toBe(1);
-	expect(sliceChars("圓桌😀騎士", 3)).toBe("圓桌😀");
-	expect(sliceChars("圓桌😀騎士", 99)).toBe("圓桌😀騎士");
+	expect(sliceChars("\u5713\u684c😀\u9a0e\u58eb", 3)).toBe("\u5713\u684c😀");
+	expect(sliceChars("\u5713\u684c😀\u9a0e\u58eb", 99)).toBe(
+		"\u5713\u684c😀\u9a0e\u58eb",
+	);
 });
 
 test("the box answers the cards open now and the ones just answered, not the old ones", () => {

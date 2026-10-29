@@ -96,8 +96,50 @@ afterAll(async () => {
 	await releaseDom();
 });
 
+/**
+ * The box waits 300 ms for the camera before it slides up. A test holds that wait back and ends it with `arrive`, so
+ * "the camera has not arrived yet" lasts as long as the test says however long a render takes on a busy machine, and
+ * nothing waits for a clock. Every other timer runs as it would.
+ */
+const waiting = new Map<number, () => void>();
+let releaseTimers = () => {};
+
+function holdArrival() {
+	const realSet = globalThis.setTimeout;
+	const realClear = globalThis.clearTimeout;
+	let next = -1;
+	Reflect.set(
+		globalThis,
+		"setTimeout",
+		(callback: () => void, ms?: number, ...rest: unknown[]) => {
+			if (ms !== 300) return realSet(callback, ms, ...(rest as []));
+			waiting.set(next, callback);
+			return next--;
+		},
+	);
+	Reflect.set(globalThis, "clearTimeout", (id?: number) => {
+		if (id !== undefined && waiting.has(id)) waiting.delete(id);
+		else realClear(id);
+	});
+	releaseTimers = () => {
+		Reflect.set(globalThis, "setTimeout", realSet);
+		Reflect.set(globalThis, "clearTimeout", realClear);
+		waiting.clear();
+	};
+}
+
+/** The camera has arrived: the held waits end. */
+async function arrive() {
+	const due = [...waiting.values()];
+	waiting.clear();
+	await page.act(() => {
+		for (const callback of due) callback();
+	});
+}
+
 let fetched: ReturnType<typeof spyOn>;
 beforeEach(() => {
+	holdArrival();
 	// every test sets its own: another file of the same run may have put a different one in place
 	setConnection(
 		partial<AppConnection>({
@@ -114,11 +156,11 @@ beforeEach(() => {
 	window.location.hash = "#/table";
 	store.dispatch({
 		type: "rooms_loaded",
-		rooms: [agent("lena", "Lena"), agent("otto", "梅森")],
+		rooms: [agent("lena", "Lena"), agent("otto", "\u6885\u68ee")],
 	});
 	for (const [room, who, author, text] of [
 		[SCOUT, "lena", "Lena", "Found **three** leads."],
-		[MASON, "otto", "梅森", "牆已經砌好了。"],
+		[MASON, "otto", "\u6885\u68ee", "\u7246\u5df2\u7d93\u780c\u597d\u4e86。"],
 	] as const)
 		store.dispatch({
 			type: "history_loaded",
@@ -138,6 +180,7 @@ afterEach(async () => {
 	await page.render(null);
 	store.dispatch({ type: "rooms_loaded", rooms: [] });
 	clearDrafts();
+	releaseTimers();
 });
 
 const settle = (ms = 80) =>
@@ -170,7 +213,7 @@ test("the key of a room opens the same view as the agent's name", async () => {
 	await render(MASON);
 	await settle();
 	expect(query(".scene-box")).not.toBeNull();
-	expect(query(".scene-name")?.textContent).toBe("梅森");
+	expect(query(".scene-name")?.textContent).toBe("\u6885\u68ee");
 });
 
 const NOVA = "app:agent.nova";
@@ -180,7 +223,7 @@ test("an agent's room keeps that agent's name on the plate and in the progress l
 		type: "rooms_loaded",
 		rooms: [
 			agent("lena", "Lena"),
-			agent("otto", "梅森"),
+			agent("otto", "\u6885\u68ee"),
 			agent("nova", "Nova"),
 		],
 	});
@@ -206,7 +249,7 @@ test("an agent's room keeps that agent's name on the plate and in the progress l
 		}),
 	);
 	await render("nova");
-	await settle(380);
+	await arrive();
 	expect(query(".scene-name")?.textContent).toBe("Nova");
 	expect(query(".scene-chip")).not.toBeNull();
 	// the owner's words stay, marked as theirs
@@ -228,8 +271,9 @@ test("an address that names nobody seated goes back to the whole ring in place, 
 
 test("the box slides up after the camera has turned, at once under reduced motion", async () => {
 	await render("lena");
+	expect(waiting.size).toBeGreaterThan(0);
 	expect(query(".scene-box")?.hasAttribute("data-open")).toBe(false);
-	await settle(380);
+	await arrive();
 	expect(query(".scene-box")?.hasAttribute("data-open")).toBe(true);
 	await render();
 	reduced = true;
@@ -243,7 +287,8 @@ function manualFrames() {
 	const realFrame = window.requestAnimationFrame;
 	const realCancel = window.cancelAnimationFrame;
 	const realNow = performance.now.bind(performance);
-	let clock = realNow();
+	// a whole number, so that adding to it and subtracting it again gives back exactly what was added
+	let clock = Math.ceil(realNow());
 	let next = 1;
 	const queue = new Map<number, FrameRequestCallback>();
 	window.requestAnimationFrame = (callback) => {
@@ -274,7 +319,7 @@ test("a streaming reply types out, and a tap on it shows the whole text", async 
 	const frames = manualFrames();
 	try {
 		await render("lena");
-		await settle(380);
+		await arrive();
 		const words =
 			`Streaming along nicely ${"with a fairly long sentence ".repeat(30)}`.trim();
 		await page.act(() => {
@@ -319,7 +364,7 @@ test("under reduced motion the whole text shows at once", async () => {
 
 test("a card that waits shows in the box, and answering it there answers the room's card", async () => {
 	await render("lena");
-	await settle(380);
+	await arrive();
 	await page.act(() => {
 		store.dispatch({
 			type: "prompt",
@@ -350,7 +395,7 @@ test("a card that waits shows in the box, and answering it there answers the roo
 
 test("each room keeps what was typed and not sent while the table turns to another agent", async () => {
 	await render("lena");
-	await settle(380);
+	await arrive();
 	const type = async (value: string) => {
 		const box = query<HTMLTextAreaElement>(".scene-box textarea");
 		await page.act(() => {
@@ -368,8 +413,8 @@ test("each room keeps what was typed and not sent while the table turns to anoth
 	await render("otto");
 	await settle(30);
 	expect(query<HTMLTextAreaElement>(".scene-box textarea")?.value).toBe("");
-	await type("牆要再高一點");
-	expect(draftOf(MASON)).toBe("牆要再高一點");
+	await type("\u7246\u8981\u518d\u9ad8\u4e00\u9ede");
+	expect(draftOf(MASON)).toBe("\u7246\u8981\u518d\u9ad8\u4e00\u9ede");
 	await render("lena");
 	await settle(30);
 	expect(query<HTMLTextAreaElement>(".scene-box textarea")?.value).toBe(
@@ -379,7 +424,7 @@ test("each room keeps what was typed and not sent while the table turns to anoth
 
 test("the Log button opens the room's whole message list over the scene", async () => {
 	await render("lena");
-	await settle(380);
+	await arrive();
 	const open = query<HTMLButtonElement>(".scene-log-button");
 	await page.click(open);
 	await settle(40);
@@ -412,7 +457,7 @@ const heard = (
 	room: CREW,
 	kind: who === "owner" ? "owner" : "agent",
 	...(who === "owner" ? {} : { agent: who }),
-	author: who === "owner" ? "Ada" : who === "lena" ? "Lena" : "梅森",
+	author: who === "owner" ? "Ada" : who === "lena" ? "Lena" : "\u6885\u68ee",
 	text,
 	files: [],
 	at: "2026-10-29T10:00:00.000Z",
@@ -439,7 +484,7 @@ const lit = () =>
 test("a group scene turns the camera to whoever speaks, and rests on the whole ring while the owner does", async () => {
 	store.dispatch({
 		type: "rooms_loaded",
-		rooms: [agent("lena", "Lena"), agent("otto", "梅森"), crew()],
+		rooms: [agent("lena", "Lena"), agent("otto", "\u6885\u68ee"), crew()],
 	});
 	say(heard(nid(), "owner", "Who has the plan?"));
 	await page.render(
@@ -447,14 +492,16 @@ test("a group scene turns the camera to whoever speaks, and rests on the whole r
 			<GroupScene roomKey={CREW} members={["lena", "otto"]} />
 		</ConfigContext.Provider>,
 	);
-	await settle(380);
+	await arrive();
 	// the owner's line shows under the owner's name, and the camera is on the whole ring
 	expect(query(".scene-name")?.textContent).toBe("Ada");
 	expect(lit()).toEqual([]);
 	expect(query(".scene-box")?.hasAttribute("data-open")).toBe(true);
-	await page.act(() => say(heard(nid(), "otto", "牆已經砌好了。")));
-	expect(lit()).toEqual(["梅森"]);
-	expect(query(".scene-name")?.textContent).toBe("梅森");
+	await page.act(() =>
+		say(heard(nid(), "otto", "\u7246\u5df2\u7d93\u780c\u597d\u4e86。")),
+	);
+	expect(lit()).toEqual(["\u6885\u68ee"]);
+	expect(query(".scene-name")?.textContent).toBe("\u6885\u68ee");
 	await page.act(() => say(heard(nid(), "lena", "Then I take the roof.")));
 	expect(lit()).toEqual(["Lena"]);
 	await page.act(() => say(heard(nid(), "owner", "Thanks both.")));
@@ -465,7 +512,7 @@ test("a group scene turns the camera to whoever speaks, and rests on the whole r
 test("a seat the person taps turns the camera there until the next line comes", async () => {
 	store.dispatch({
 		type: "rooms_loaded",
-		rooms: [agent("lena", "Lena"), agent("otto", "梅森"), crew()],
+		rooms: [agent("lena", "Lena"), agent("otto", "\u6885\u68ee"), crew()],
 	});
 	say(heard(nid(), "lena", "I am here."));
 	await page.render(
@@ -476,12 +523,12 @@ test("a seat the person taps turns the camera there until the next line comes", 
 	await settle(160);
 	expect(lit()).toEqual(["Lena"]);
 	const otto = page.container.querySelector<SVGGElement>(
-		'g.seat[aria-label^="梅森"]',
+		'g.seat[aria-label^="\u6885\u68ee"]',
 	);
 	await page.act(() => {
 		otto?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 	});
-	expect(lit()).toEqual(["梅森"]);
+	expect(lit()).toEqual(["\u6885\u68ee"]);
 	await page.act(() => say(heard(nid(), "lena", "Back to me.")));
 	expect(lit()).toEqual(["Lena"]);
 });
@@ -489,7 +536,7 @@ test("a seat the person taps turns the camera there until the next line comes", 
 test("a speaker change while the owner is typing does not take the focus from the message box", async () => {
 	store.dispatch({
 		type: "rooms_loaded",
-		rooms: [agent("lena", "Lena"), agent("otto", "梅森"), crew()],
+		rooms: [agent("lena", "Lena"), agent("otto", "\u6885\u68ee"), crew()],
 	});
 	say(heard(nid(), "lena", "First."));
 	await page.render(
@@ -502,7 +549,7 @@ test("a speaker change while the owner is typing does not take the focus from th
 	box?.focus();
 	expect(document.activeElement).toBe(box);
 	await page.act(() => say(heard(nid(), "otto", "Second.")));
-	expect(lit()).toEqual(["梅森"]);
+	expect(lit()).toEqual(["\u6885\u68ee"]);
 	expect(document.activeElement).toBe(query(".scene-box textarea"));
 	expect(query<HTMLTextAreaElement>(".scene-box textarea")).toBe(box);
 });
