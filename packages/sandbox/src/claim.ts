@@ -61,6 +61,7 @@ async function contextualText(
 		return withSandboxChannelContext(
 			body,
 			await options.channelContext(message),
+			{ id: message.authorId, name: message.authorName },
 		);
 	} catch (error) {
 		options.reportContextFailure?.(message.channel, error);
