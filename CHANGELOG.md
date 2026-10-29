@@ -25,6 +25,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - `HostEnv.agentTools` is required: code that builds a `HostEnv` by hand sets it (`testHost` and `testPlugin` fill `"full"`).
 
+### Fixed
+
+- `agent_create` from an agent's turn in a web room started the new agent's opening task in its Discord channel. It now starts on the surface the caller's turn runs on, as the web app's new-agent form already did; a turn on Discord, or on a surface that hosts no rooms, keeps the Discord channel.
+
 ## [0.25.0] - 2026-10-29
 
 ### Added

@@ -158,6 +158,7 @@ function context(
 		turns: {
 			speakerOf: () => ({ id: "1", name: "Riley", tier: "owner" as const }),
 			answerBackground: async () => undefined,
+			workingIn: () => undefined,
 		},
 		changed: () => {
 			changes.count++;
