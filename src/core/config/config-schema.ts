@@ -108,7 +108,9 @@ export const configSchema = shape({
 		),
 	),
 	coordinator: optional(text),
-	characters: optional(shape({ skins: optional(skinTones) })),
+	characters: optional(
+		shape({ skins: optional(skinTones), refreshAvatars: optional(bool) }),
+	),
 	http: optional(
 		shape({
 			publicUrl: optional(text),

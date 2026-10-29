@@ -240,6 +240,7 @@ function agentAssembly(
 			// The pictures are public on the listener only where a public address reaches it.
 			...(config.http ? { avatarListener: "public" } : {}),
 			...(config.http?.publicUrl ? { avatarUrl: config.http.publicUrl } : {}),
+			...(config.characters.refreshAvatars ? { refreshAvatars: true } : {}),
 			avatarReference: join(ASSETS, "neutral.png"),
 			avatarNeutral: join(ASSETS, "neutral.png"),
 			// An ops agent's reports are the agent server's to deliver.

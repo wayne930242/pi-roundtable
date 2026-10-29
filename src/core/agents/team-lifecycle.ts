@@ -9,6 +9,7 @@ import type { AgentTurnScope } from "../domain/ports.ts";
 import type { AgentChannels } from "./agent-ports.ts";
 import { overBase } from "./agent-rules.ts";
 import type { Agent, AgentGroup } from "./agent-store.ts";
+import { refreshAvatars } from "./avatar-refresh.ts";
 import {
 	agentOfChannel,
 	coordinatorOf,
@@ -37,7 +38,8 @@ export class TeamLifecycle {
 	/**
 	 * Inserts the seed agents, gives every active agent a channel, archives agents and groups
 	 * whose channels were deleted while the assistant was down, and dresses agents without a
-	 * character in the background. Without Discord channels the agents live in rooms, which need no setup, so
+	 * character in the background, then, with `refreshAvatars`, renders every agent's picture
+	 * again. Without Discord channels the agents live in rooms, which need no setup, so
 	 * none is made or checked.
 	 */
 	async start(): Promise<void> {
@@ -46,8 +48,23 @@ export class TeamLifecycle {
 		if (added.length > 0) logger.info({ added }, "seed agents added");
 		if (channels) await this.#startChannels(channels);
 		this.#ctx.changed();
-		void this.#dressMissing().then((dressed) => {
+		void this.#dressMissing().then(async (dressed) => {
 			if (dressed) this.#ctx.changed();
+			if (!this.#ctx.options.refreshAvatars) return;
+			// Never throws: a failure is counted per agent, and the start has already finished.
+			const { store, studio, logger } = this.#ctx.options;
+			const result = await refreshAvatars({
+				agents: () => store.agents(),
+				render: (character) => studio.render(character),
+				agent: (name) => store.agent(name),
+				setAvatar: (name, avatarHash) =>
+					store.updateAgent(name, { avatarHash }),
+				logger,
+			}).catch((error: unknown) => {
+				logger.warn({ err: error }, "avatars not refreshed");
+				return undefined;
+			});
+			if (result && result.rendered > 0) this.#ctx.changed();
 		});
 	}
 

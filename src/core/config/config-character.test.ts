@@ -92,3 +92,25 @@ describe("characters.skins", () => {
 		);
 	});
 });
+
+describe("characters.refreshAvatars", () => {
+	test("is off unless the configuration turns it on", () => {
+		expect(resolveConfig(minimal).characters.refreshAvatars).toBe(false);
+		expect(
+			resolveConfig({
+				...minimal,
+				characters: { skins: [...EAST_ASIAN_SKINS] },
+			}).characters.refreshAvatars,
+		).toBe(false);
+		expect(
+			resolveConfig({ ...minimal, characters: { refreshAvatars: true } })
+				.characters,
+		).toEqual({ skins: CATALOG.skins, refreshAvatars: true });
+	});
+
+	test("anything but a boolean is refused, naming the key", () => {
+		expect(
+			refused({ ...minimal, characters: { refreshAvatars: "yes" } }),
+		).toContain("config characters.refreshAvatars");
+	});
+});

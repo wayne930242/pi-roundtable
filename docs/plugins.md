@@ -3438,8 +3438,17 @@ export default defineRoundtable({
 ```
 
 - `characters.skins` is exactly six `#rrggbb` colors, in the order a look's `skin` index (`0` to `5`) picks them. A list of another length or a color that is not `#rrggbb` is a `ConfigError` that names `config characters.skins` (or the place in the list), and the host does not start. A host that builds `RoundtableOptions` itself gives the same list as `environment.characterSkins`, which is checked at start the same way.
-- A stored look keeps its index, so existing agents wear the new tones with no migration. The Discord pictures are PNGs stored by content hash, and render again with the host's skins whenever an agent's look is saved.
+- A stored look keeps its index, so existing agents wear the new tones with no migration. The Discord pictures are PNGs stored by content hash, and render again with the host's skins whenever an agent's look is saved; to bring every agent up to date at once, turn on [`characters.refreshAvatars`](#refreshing-the-pictures-the-charactersrefreshavatars-option).
 - Every render path follows it: plugins read `context.env.characterSkins` (always six colors, the catalog's when the host chose none) and pass it as `composeSvg`'s `skins`; the agent server's studio (`AvatarStudio.render`, so the Discord pictures) and `pi-roundtable-web`'s page (the characters, the creator's skin swatches and the round table) already do. The web console receives them as `characterSkins` in `GET api/config`.
+
+### Refreshing the pictures: the `characters.refreshAvatars` option
+
+An agent's Discord picture is rendered when its look is saved, so an agent nobody saved since a redraw of the parts or a change of `characters.skins` keeps its old picture on Discord while the web console shows the new one. `characters: { refreshAvatars: true }` renders them all again when the agent server starts. It is `false` by default, and a host that says nothing sees no change.
+
+- After the team has started and its agents without a look are dressed, the agent server renders every active agent that has a character with the host's skins and stores the PNG by content hash. When the hash differs from the one stored for the agent, the agent's picture is set to it, and Discord shows the new one on the agent's next post; an agent whose hash is the same is skipped, so a restart with nothing changed sets nothing. Agents without a character are left alone.
+- It runs in the background, one agent at a time, and does not hold the start back or the team's readiness. It makes no Discord request of its own: the picture is the avatar URL of the agent's webhook posts, which go through the poster's usual rate limits.
+- One summary line is logged: `avatars refreshed: re-rendered n, unchanged m, failed k`, at warning level with the agents and reasons that failed when `k` is not 0. A failed agent keeps its picture and the others still render; a failure never stops the start. An agent whose look was saved while it rendered keeps the newer picture.
+- It overwrites the picture of an agent that still wears an old hand-drawn one (deprecated since 0.23), because the look decides the picture. A non-boolean value is a `ConfigError` that names `config characters.refreshAvatars`.
 
 ### Motion: `characters.css`
 

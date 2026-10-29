@@ -148,6 +148,7 @@ export default {
 | `agents` | `{ name, displayName, prompt, character?, channelId? }` 的清單 | `[]` | 第一批團隊，只建立一次。已經存下來的 agent 不會被覆寫，所以之後請在 Discord 裡修改 agent。沒有 Discord 時，種子 agent 沒有 `channelId`。 |
 | `coordinator` | string | `agents` 的第一位 | 沒有 Discord 時，接手主人一般請求的 agent；必須是 `agents` 之一，也不能被封存。有 Discord 時設它會出錯，因為 `discord.entryChannel` 裡的 agent 就是協調者。 |
 | `characters.skins` | 剛好 6 個 `#rrggbb` 顏色的清單 | 套件附帶的六個 | 所有 agent 角色使用的膚色，由角色的 `skin` 索引（0 到 5）挑選：網頁主控台、圓桌與 agent 在 Discord 的圖片都會套用。`pi-roundtable/characters` 的 `EAST_ASIAN_SKINS` 是一組現成的亞洲淺膚色。agent 保留已存的索引，換色不需要遷移。清單長度不對或顏色格式錯誤會讓啟動失敗。 |
+| `characters.refreshAvatars` | boolean | `false` | 每次 agent server 啟動時，用主機的膚色把每個 agent 在 Discord 的圖片重新畫一次，圖片不同才換上。適合在角色改版或更換 `characters.skins` 後，讓沒人儲存過的 agent 追上網頁主控台的樣子。它在啟動後於背景執行、不拖慢啟動，圖片沒變的 agent 會略過，並記錄一行摘要（重畫、未變、失敗各幾個）；單一 agent 失敗不影響其他。仍用舊手繪圖片的 agent 會被覆蓋。 |
 | `avatar` | string | 套件附帶的一張簡單 bot 圖片 | 0.23 起已棄用且被忽略：agent 是組合出來的角色。設了它啟動時會記一則警告，1.0 移除。 |
 | `http.publicUrl` | string，使用 Discord 時必填，`agentServer` 為 `false` 時除外 | 無 | 能從網際網路連到這個行程的位址。Discord 從這裡取頭像。 |
 | `http.port` | 1 到 65535 的整數 | `3000` | 行程監聽的 TCP port。 |

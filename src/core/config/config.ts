@@ -153,8 +153,14 @@ export interface RoundtableConfig extends LimitsConfig {
 	 * that a look's `skin` index (0 to 5) picks from, such as `EAST_ASIAN_SKINS` from
 	 * `pi-roundtable/characters`; default the six the package ships. Stored looks keep their index,
 	 * so they take the new tones with no migration. A bad list stops the start.
+	 *
+	 * `refreshAvatars` (default false) renders every agent's Discord picture again each time the
+	 * agent server starts, with the host's skins, and sets it where it differs from the stored one,
+	 * so an agent that was not saved since a redraw or a `skins` change catches up. It overwrites
+	 * an agent that still wears an old hand-drawn (deprecated) picture. It runs after the start
+	 * without holding it back; a restart with nothing changed sets nothing.
 	 */
-	characters?: { skins?: readonly string[] };
+	characters?: { skins?: readonly string[]; refreshAvatars?: boolean };
 	/**
 	 * The `public` listener: the public address that reaches it, and the TCP port (default 3000) or
 	 * unix socket the process listens on. `socketMode` is the socket file's permission bits
@@ -262,7 +268,7 @@ export interface ResolvedConfig extends ResolvedLimits {
 	/** The coordinator's name; set only without `discord` and with `agents`: the configured one, else the first seed. */
 	coordinator?: string;
 	/** How the agents' characters are drawn: the six skin tones, the package's own unless `characters.skins` is set. */
-	characters: { skins: readonly Hex[] };
+	characters: { skins: readonly Hex[]; refreshAvatars: boolean };
 	/** Undefined when no `http` is configured, and the host opens no `public` listener. */
 	http?: {
 		/** Always set with Discord, unless `agentServer` is false. */
@@ -376,7 +382,10 @@ export function resolveConfig(input: unknown): ResolvedConfig {
 		...(!discord && config.agents?.[0]
 			? { coordinator: config.coordinator ?? config.agents[0].name }
 			: {}),
-		characters: { skins: skinsOf(config.characters?.skins) },
+		characters: {
+			skins: skinsOf(config.characters?.skins),
+			refreshAvatars: config.characters?.refreshAvatars ?? false,
+		},
 		...(http
 			? {
 					http: {

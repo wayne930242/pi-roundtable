@@ -31,6 +31,12 @@ export interface AgentTeamOptions
 	 */
 	studio: Pick<AvatarStudio, "url" | "render" | "draw" | "edit"> &
 		Partial<Pick<AvatarStudio, "canDraw">>;
+	/**
+	 * Render every active agent that has a character again when the team starts, and set the
+	 * picture of those whose hash changed; default false. Runs in the background after the agents
+	 * are dressed.
+	 */
+	refreshAvatars?: boolean;
 	/** The tools and groups the plugins give every agent, read before each agent turn. */
 	pluginSelection: () => ToolSelection;
 	models: AgentModels;

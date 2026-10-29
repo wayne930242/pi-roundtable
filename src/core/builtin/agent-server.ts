@@ -101,6 +101,11 @@ export interface AgentServerOptions {
 	 * `/avatars/<hash>.png`, which the surface that serves the pictures resolves against its origin.
 	 */
 	avatarUrl?: string;
+	/**
+	 * Render every agent's picture again at start (`characters.refreshAvatars`) and set it where
+	 * its hash differs from the stored one; default false.
+	 */
+	refreshAvatars?: boolean;
 	/** The assistant's neutral avatar: the style reference and the picture of an agent without one. */
 	avatarReference: string;
 	/** The picture used instead when `avatarReference` cannot be read as one; the failure is logged. */
@@ -256,6 +261,7 @@ export function agentServerPlugin(
 					? { channels: connection.agentChannels(options.guildId) }
 					: {}),
 				studio,
+				...(options.refreshAvatars ? { refreshAvatars: true } : {}),
 				runtime: () => running,
 				confirmations,
 				scorer: new RelevanceScorer(judge, logger, options.owner),
