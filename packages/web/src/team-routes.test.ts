@@ -230,6 +230,7 @@ function setup(withSkills = true) {
 		...(withSkills
 			? {
 					skills: {
+						documents: {} as never,
 						catalog: () =>
 							CATALOG.map((entry) => ({
 								...entry,

@@ -8,6 +8,7 @@ import type {
 	Logger,
 	ModeChange,
 	ScheduleStore,
+	SkillRegistry,
 	Speaker,
 } from "pi-roundtable";
 import { PluginError } from "pi-roundtable";
@@ -36,8 +37,10 @@ import type { PushMutes } from "../push/mutes.ts";
 import { bad, bodyOf, HttpError, notFound } from "./api-http.ts";
 import type { CardLog } from "./card-log.ts";
 import { type FileDir, fileResponse, isFileId } from "./files.ts";
+import { PromptApi, type PromptApiOptions } from "./prompt-routes.ts";
 import { PAGE_LIMIT, type RoomLog } from "./room-log.ts";
 import type { Rooms } from "./rooms.ts";
+import { SkillDocApi } from "./skill-doc-routes.ts";
 import type { AppSurface } from "./surface.ts";
 import { TeamApi } from "./team-routes.ts";
 import type { WebThreads } from "./threads.ts";
@@ -70,6 +73,7 @@ export interface AppApiOptions {
 	team: Pick<
 		AgentTeam,
 		| "update"
+		| "promptHistory"
 		| "dress"
 		| "usableModels"
 		| "modelOf"
@@ -89,7 +93,14 @@ export interface AppApiOptions {
 			add: readonly string[],
 			remove: readonly string[],
 		): Promise<string[]>;
+		/** The registry's documents: a skill's SKILL.md read, saved and made, and its versions. */
+		documents: Pick<
+			SkillRegistry,
+			"document" | "saveDocument" | "createDocument" | "documentHistory"
+		>;
 	};
+	/** Present when the host has prompt documents (the prompts plugin): the main prompts the owner edits. */
+	prompts?: PromptApiOptions["prompts"];
 	avatars: Pick<AvatarStudio, "serve">;
 	/** Present when the workspace pane is served. */
 	workspace?: WorkspaceFiles;
@@ -194,9 +205,20 @@ export function partsOf(path: string): string[] | undefined {
 export class AppApi {
 	readonly #options: AppApiOptions;
 	readonly #team: TeamApi;
+	readonly #prompts: PromptApi | undefined;
+	readonly #skillDocs: SkillDocApi | undefined;
 
 	constructor(options: AppApiOptions) {
 		this.#options = options;
+		this.#prompts = options.prompts
+			? new PromptApi({ prompts: options.prompts })
+			: undefined;
+		this.#skillDocs = options.skills
+			? new SkillDocApi({
+					skills: options.skills.documents,
+					catalog: () => options.skills?.catalog() ?? [],
+				})
+			: undefined;
 		this.#team = new TeamApi({
 			surface: options.surface.surface,
 			rooms: options.rooms,
@@ -235,6 +257,8 @@ export class AppApi {
 					"archive",
 					"models",
 					"workspace",
+					"prompts",
+					"skill-docs",
 				].includes(second ?? ""));
 		if (!mine) return undefined;
 		try {
@@ -317,6 +341,16 @@ export class AppApi {
 		if (area === "groups") return this.#team.groups(request, parts, owner);
 		if (area === "archive" && method === "GET" && !id)
 			return this.#team.archived(owner);
+		if (area === "prompts") {
+			if (!this.#prompts)
+				throw new HttpError(404, "This host has no prompts to edit.");
+			return this.#prompts.handle(request, parts, owner);
+		}
+		if (area === "skill-docs") {
+			if (!this.#skillDocs)
+				throw new HttpError(404, "This host has no skills.");
+			return this.#skillDocs.handle(request, parts, owner);
+		}
 		throw new HttpError(404, "There is no such API.");
 	}
 
@@ -327,6 +361,8 @@ export class AppApi {
 			surface: this.#options.surface.surface,
 			auth: this.#options.authMode,
 			push: true,
+			...(this.#options.prompts ? { prompts: true } : {}),
+			...(this.#options.skills ? { skillEdit: true } : {}),
 			...(this.#options.quietHours
 				? { quietHours: this.#options.quietHours }
 				: {}),

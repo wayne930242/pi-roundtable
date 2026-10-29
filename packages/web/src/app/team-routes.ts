@@ -20,6 +20,7 @@ import type {
 	GroupCreate,
 	GroupPatch,
 	GroupProfileView,
+	PromptHistoryView,
 	SkillView,
 } from "../api-types.ts";
 import { json } from "../http.ts";
@@ -34,6 +35,7 @@ import {
 	requiredText,
 } from "./api-http.ts";
 import type { CardLog } from "./card-log.ts";
+import { promptVersionView } from "./prompt-routes.ts";
 import type { RoomLog } from "./room-log.ts";
 import type { Rooms } from "./rooms.ts";
 import type { WebThreads } from "./threads.ts";
@@ -49,6 +51,7 @@ export interface TeamApiOptions {
 	team: Pick<
 		AgentTeam,
 		| "update"
+		| "promptHistory"
 		| "dress"
 		| "modelOf"
 		| "createAgent"
@@ -136,6 +139,14 @@ export class TeamApi {
 		if (!action && method === "GET") return json(this.#profile(name));
 		if (!action && method === "PATCH")
 			return this.#patch(request, name, asOwner);
+		if (action === "prompt-history" && method === "GET" && parts.length === 4) {
+			await asOwner();
+			return json({
+				versions: (await this.#options.team.promptHistory(name)).map(
+					promptVersionView,
+				),
+			} satisfies PromptHistoryView);
+		}
 		if (action === "character" && method === "PUT")
 			return this.#dress(request, name, asOwner);
 		if (action === "archive" && method === "POST" && parts.length === 4) {
@@ -200,7 +211,7 @@ export class TeamApi {
 		name: string,
 		owner: OwnerOf,
 	): Promise<Response> {
-		await owner();
+		const speaker = await owner();
 		const body = await bodyOf(request);
 		const patch: AgentPatch = {};
 		for (const key of ["displayName", "prompt", "model", "thinking"] as const) {
@@ -208,7 +219,8 @@ export class TeamApi {
 			if (value !== undefined) patch[key] = value;
 		}
 		const change: AgentChange = patch;
-		await this.#options.team.update(name, change);
+		// A changed prompt is kept in the agent's history under the owner's name.
+		await this.#options.team.update(name, change, speaker.name);
 		this.#options.changed();
 		return json(this.#profile(name));
 	}

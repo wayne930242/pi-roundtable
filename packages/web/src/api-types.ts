@@ -368,6 +368,10 @@ export interface SessionView {
 	expiresAt?: string;
 	/** Web Push is available: the app serves the rooms and a key for it. */
 	push?: true;
+	/** The host has prompt documents the owner edits (`api/prompts`). */
+	prompts?: true;
+	/** The host has the skills addon, so an agent-written skill's SKILL.md can be edited and made here (`api/skill-docs`). */
+	skillEdit?: true;
 	/** When an agent's post and a notice are not pushed (a card still is); absent = at any hour. */
 	quietHours?: {
 		/** `HH:MM`, where the window begins. */
@@ -445,6 +449,102 @@ export interface AgentPatch {
 	prompt?: string;
 	model?: string;
 	thinking?: string;
+}
+
+/** One change of a prompt, as `GET api/agents/<name>/prompt-history` and `GET api/prompts/<id>/history` list them, newest first. */
+export interface PromptVersionView {
+	id: number;
+	/** `set` put new text in force; `revert` took a document back to its file version. */
+	action: "set" | "revert";
+	/** The text in force after the change; for a revert, the file version it went back to. */
+	text: string;
+	/** The text the change replaced. */
+	previous: string;
+	/** Who made it. */
+	by: string;
+	/** ISO time. */
+	at: string;
+}
+
+export interface PromptHistoryView {
+	versions: PromptVersionView[];
+}
+
+/** A prompt document in the list of `GET api/prompts`: the owner-editable texts the host registered. */
+export interface PromptSummary {
+	id: string;
+	label: string;
+	description?: string;
+	/** The owner's text is in force and is not the file version. */
+	differs: boolean;
+	/** Who set it and when (ISO), while an override is in force. */
+	override?: { by: string; at: string };
+}
+
+export interface PromptsView {
+	documents: PromptSummary[];
+}
+
+/** `GET api/prompts/<id>`: the document with its text in force and its file version. */
+export interface PromptView extends PromptSummary {
+	/** The text in force. */
+	text: string;
+	/** The file version, which `revert` returns to. */
+	fileText: string;
+	/** The most characters a save may have. */
+	maxChars: number;
+}
+
+/** The body of `PUT api/prompts/<id>`: the new text, and the text it was edited from. */
+export interface PromptSave {
+	text: string;
+	base: string;
+}
+
+/** A 409: the document is not as the writer saw it. */
+export interface PromptConflict extends ApiError {
+	conflict: "changed";
+	current: PromptView;
+}
+
+/** A skill's SKILL.md as `GET api/skill-docs/<name>` answers: the whole file, with the hash a save names. */
+export interface SkillDocView {
+	name: string;
+	source: SkillView["source"];
+	text: string;
+	hash: string;
+	/** An agent-written skill; the others are read-only here, for the reason their source gives. */
+	writable: boolean;
+}
+
+/** The body of `PUT api/skill-docs/<name>`: the whole file, and the hash it was edited from. */
+export interface SkillDocSave {
+	text: string;
+	baseHash: string;
+}
+
+/** The body of `POST api/skill-docs`, which makes a skill from a whole SKILL.md. */
+export interface SkillDocCreate {
+	text: string;
+}
+
+/** A 409: the skill is not as the writer saw it. */
+export interface SkillConflict extends ApiError {
+	conflict: "changed";
+	current: SkillDocView;
+}
+
+export interface SkillVersionView {
+	id: number;
+	text: string;
+	hash: string;
+	by: string;
+	/** ISO time. */
+	at: string;
+}
+
+export interface SkillHistoryView {
+	versions: SkillVersionView[];
 }
 
 /**

@@ -6,6 +6,7 @@ import {
 	IDENTITY,
 	MEMORY,
 	MODES,
+	PROMPTS,
 	type RoundtablePlugin,
 	SCHEDULES,
 	SKILLS,
@@ -138,8 +139,11 @@ async function build(settings: ResolvedOptions, context: Context) {
 					add: readonly string[],
 					remove: readonly string[],
 				) => skillRegistry.attach(agent, add, remove),
+				documents: skillRegistry,
 			}
 		: undefined;
+	// The prompts plugin is always on; a host that replaced it may leave it out.
+	const prompts = services.find(PROMPTS);
 	const listeners: (() => void)[] = [];
 	const changed = () => {
 		for (const listener of listeners) listener();
@@ -234,6 +238,7 @@ async function build(settings: ResolvedOptions, context: Context) {
 					database: context.database(),
 					agents: services.get(AGENTS),
 					...(skills ? { skills } : {}),
+					...(prompts ? { prompts } : {}),
 					...(workspace ? { workspace } : {}),
 					modes: services.get(MODES),
 					identity,

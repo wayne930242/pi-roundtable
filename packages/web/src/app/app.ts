@@ -13,7 +13,6 @@ import type {
 	WebSocketRoute,
 } from "pi-roundtable";
 import { channelKey } from "pi-roundtable";
-import type { SkillView } from "../api-types.ts";
 import type { Authenticated, Authenticator } from "../auth/authenticator.ts";
 import { PushApi } from "../push/api.ts";
 import { webPushChannel } from "../push/channel.ts";
@@ -30,7 +29,7 @@ import { FileDir } from "./files.ts";
 import { Presence } from "./presence.ts";
 import { RoomLog } from "./room-log.ts";
 import { Rooms } from "./rooms.ts";
-import { AppApi, partsOf } from "./routes.ts";
+import { AppApi, type AppApiOptions, partsOf } from "./routes.ts";
 import { SocketRoute } from "./socket.ts";
 import { type AppSocket, Sockets } from "./sockets.ts";
 import { AppSurface } from "./surface.ts";
@@ -88,15 +87,13 @@ export interface OwnerAppOptions {
 	};
 	database: SQL;
 	agents: AgentServer;
-	/** Present when the host has the skills addon: the catalog an agent's skills are chosen from, and how they change. */
-	skills?: {
-		catalog(): SkillView[];
-		attach(
-			agent: string,
-			add: readonly string[],
-			remove: readonly string[],
-		): Promise<string[]>;
-	};
+	/**
+	 * Present when the host has the skills addon: the catalog an agent's skills are chosen from,
+	 * how they change, and the registry's documents.
+	 */
+	skills?: AppApiOptions["skills"];
+	/** Present when the host has prompt documents: the main prompts the owner edits. */
+	prompts?: AppApiOptions["prompts"];
 	/** Present when the workspace pane is served. */
 	workspace?: WorkspaceFiles;
 	modes: ConversationModes;
@@ -285,6 +282,7 @@ export class OwnerApp {
 			directory: agents.directory,
 			team: agents.team,
 			...(options.skills ? { skills: options.skills } : {}),
+			...(options.prompts ? { prompts: options.prompts } : {}),
 			avatars: agents.avatars,
 			mount: options.mount,
 			authMode: options.authMode,
