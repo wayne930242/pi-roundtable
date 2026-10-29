@@ -361,6 +361,15 @@ export interface SessionView {
 	expiresAt?: string;
 	/** Web Push is available: the app serves the rooms and a key for it. */
 	push?: true;
+	/** When an agent's post and a notice are not pushed (a card still is); absent = at any hour. */
+	quietHours?: {
+		/** `HH:MM`, where the window begins. */
+		start: string;
+		/** `HH:MM`, where it ends; before `start` when it crosses midnight. */
+		end: string;
+		/** The IANA zone the times are on. */
+		timeZone: string;
+	};
 }
 
 /** The key a browser subscribes to push against. */

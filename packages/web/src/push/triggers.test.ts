@@ -19,6 +19,7 @@ function service(
 		preview?: boolean;
 		answer?: (target: Target) => SendResult;
 		tiers?: Record<string, "owner" | "member">;
+		quiet?: (at: number) => boolean;
 	} = {},
 ) {
 	const sent: { endpoint: string; payload: PushPayload }[] = [];
@@ -51,6 +52,7 @@ function service(
 		urlOf: (room) => `/console/#/room/${room}`,
 		logger: silentLogger(),
 		now: () => clock,
+		...(options.quiet ? { quiet: options.quiet } : {}),
 	});
 	return {
 		instance,
@@ -173,6 +175,42 @@ describe("when a device is pushed", () => {
 			logger: silentLogger(),
 		});
 		await instance.card("app:agent.guide", "t", false);
+	});
+});
+
+describe("during quiet hours", () => {
+	test("an agent's post and a notice are not pushed, but a waiting card and the long-running cap are", async () => {
+		const { instance, sent } = service({ quiet: () => true });
+		await instance.reply("app:agent.guide", "Guide", "the report");
+		await instance.notice("ada", "hello", "app:agent.guide");
+		expect(sent).toEqual([]);
+		await instance.card("app:agent.guide", "Send the note?", false);
+		await instance.card("app:agent.guide", "Time limit", true);
+		expect(sent.map((s) => s.payload.kind)).toEqual(["card", "cap"]);
+	});
+
+	test("the window is judged at the moment of the post, with the service's clock", async () => {
+		const asked: number[] = [];
+		const { instance, sent, advance } = service({
+			quiet: (at) => {
+				asked.push(at);
+				return at < 1_000_000 + 60_000;
+			},
+		});
+		await instance.reply("app:agent.guide", "Guide", "inside");
+		advance(120_000);
+		await instance.reply("app:agent.guide", "Guide", "outside");
+		expect(asked).toEqual([1_000_000, 1_120_000]);
+		expect(sent.map((s) => s.payload.body)).toEqual(["outside"]);
+	});
+
+	test("a post held back does not start the reply pause of its room", async () => {
+		let quiet = true;
+		const { instance, sent } = service({ quiet: () => quiet });
+		await instance.reply("app:agent.guide", "Guide", "held back");
+		quiet = false;
+		await instance.reply("app:agent.guide", "Guide", "heard");
+		expect(sent.map((s) => s.payload.body)).toEqual(["heard"]);
 	});
 });
 

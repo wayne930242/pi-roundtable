@@ -435,6 +435,8 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"Notifications were not allowed. Allow them in the browser's site settings.":
 		"通知未獲允許。請在瀏覽器的網站設定中允許通知。",
 	Notifications: "通知",
+	"Quiet hours, {start} to {end} ({zone}): no notification for an agent's report or a notice. A card waiting for you still notifies. The server sets the hours.":
+		"勿擾時段 {start} 至 {end}（{zone}）：這段時間內，夥伴的回報與通知不會推播；等你處理的卡片仍會通知。時段由伺服器設定。",
 	Remove: "移除",
 	"Signed in as {name}.": "目前登入身分：{name}。",
 	"This browser cannot get push notifications. On iPhone and iPad, install the app from Share, Add to Home Screen, and open it from there.":

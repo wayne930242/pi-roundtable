@@ -226,6 +226,31 @@ describe("refuses to start", () => {
 			{ push: { subject: "http://ops.example.com" } },
 			"push.subject",
 		],
+		[
+			"quiet hours that are not a window",
+			{ push: { quietHours: true } },
+			"push.quietHours",
+		],
+		[
+			"quiet hours with a time that is not HH:MM",
+			{ push: { quietHours: { start: "23", end: "08:00" } } },
+			"push.quietHours",
+		],
+		[
+			"quiet hours at an hour past 23",
+			{ push: { quietHours: { start: "24:00", end: "08:00" } } },
+			"push.quietHours",
+		],
+		[
+			"quiet hours with no end",
+			{ push: { quietHours: { start: "23:00" } } },
+			"push.quietHours",
+		],
+		[
+			"quiet hours that start when they end",
+			{ push: { quietHours: { start: "08:00", end: "08:00" } } },
+			"push.quietHours",
+		],
 		["notes with no owner id", { ownerId: " " }, "ownerId"],
 		["an empty title", { title: " " }, "title"],
 	])("with %s", (_name, change, message) => {
@@ -260,6 +285,18 @@ describe("refuses to start", () => {
 				push: { preview: false, endpointHosts: ["*.push.example.com"] },
 			}).push,
 		).toMatchObject({ preview: false, endpointHosts: ["*.push.example.com"] });
+		// Quiet hours default to 23:00 to 08:00; `false` turns them off.
+		expect(settings.push.quietHours).toEqual({ start: "23:00", end: "08:00" });
+		expect(
+			resolveOptions({
+				...base(),
+				push: { quietHours: { start: "22:30", end: "07:00" } },
+			}).push.quietHours,
+		).toEqual({ start: "22:30", end: "07:00" });
+		expect(
+			resolveOptions({ ...base(), push: { quietHours: false } }).push
+				.quietHours,
+		).toBeUndefined();
 		// The VAPID contact defaults to an https origin only; a mailto: or https: subject overrides.
 		expect(resolveOptions(base()).push.subject).toBe(ORIGIN);
 		expect(

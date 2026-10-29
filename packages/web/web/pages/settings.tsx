@@ -55,7 +55,13 @@ const LOOKS: { value: PageLook; label: string; hint: string }[] = [
 ];
 
 /** Push on this device, and the devices that get it. */
-function Notifications({ enabled }: { enabled: boolean }) {
+function Notifications({
+	enabled,
+	quietHours,
+}: {
+	enabled: boolean;
+	quietHours: SessionView["quietHours"];
+}) {
 	const [state, setState] = useState<PushState>();
 	const [devices, setDevices] = useState<PushDeviceView[]>([]);
 	const [current, setCurrent] = useState<string>();
@@ -103,6 +109,18 @@ function Notifications({ enabled }: { enabled: boolean }) {
 								"Get a notification on this device when a card waits for you or an agent reports on its own, while the app is not open.",
 							)}
 			</p>
+			{quietHours ? (
+				<p className="meta">
+					{t(
+						"Quiet hours, {start} to {end} ({zone}): no notification for an agent's report or a notice. A card waiting for you still notifies. The server sets the hours.",
+						{
+							start: quietHours.start,
+							end: quietHours.end,
+							zone: quietHours.timeZone,
+						},
+					)}
+				</p>
+			) : null}
 			{state === "off" || state === "on" ? (
 				<div className="actions">
 					<button
@@ -253,7 +271,10 @@ export function SettingsPage() {
 					</p>
 				)}
 			</section>
-			<Notifications enabled={session?.push === true} />
+			<Notifications
+				enabled={session?.push === true}
+				quietHours={session?.quietHours}
+			/>
 			<section className="card stack">
 				<h2>{t("Account")}</h2>
 				<p className="meta">

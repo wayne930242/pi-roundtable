@@ -207,6 +207,13 @@ A push goes out when:
 - a notice reaches the owner: `notify` through the app's direct channel writes a line in Home and pushes it, and a notice that Discord (or another channel) delivered is pushed too, through the core's `mirror` hook.
 
 Discord's own cards are not pushed.
+
+**Quiet hours.** From 23:00 to 08:00 by default, the second and third kinds of push are held back: an agent's post and a notice are not pushed, so a report that arrives at night waits in its room until the owner looks.
+A card (one waiting, or the long-running cap) is still pushed, since work stops until someone answers it.
+The hours are read on the console's time zone (`env.timeZone` of the host, the zone the page shows times in), and a window that ends before it starts crosses midnight.
+`push.quietHours` sets them as `{ start: "22:30", end: "07:00" }` (two different `HH:MM` times on a 24-hour clock), or `false` to push at any hour; anything else stops the start.
+**Settings** shows the window and its time zone to every owner, read-only: only the server sets it.
+
 With `push.preview` on (the default) a notification shows the first 120 characters of the message; with `push.preview: false` it says only that something waits and where.
 Tapping a notification focuses the app or opens it at the room.
 
@@ -494,10 +501,11 @@ The `push` keys:
 | Key | Default | What it does |
 |---|---|---|
 | `push.preview` | `true` | Whether a notification shows the first 120 characters of the message. With `false` it says only that something waits, and where. |
+| `push.quietHours` | `{ start: "23:00", end: "08:00" }` | The hours when an agent's post and a notice are not pushed, as two different `HH:MM` times on the console's time zone; an `end` before the `start` crosses midnight. Cards are always pushed. `false` turns quiet hours off. |
 | `push.endpointHosts` | none | Push services to post to besides the browsers' own (Google, Mozilla, Apple, Microsoft), as host names; a leading `*.` allows every subdomain. Endpoints must still be `https`. |
 | `push.subject` | `origin`, when it is `https` | The contact a push service may use about this server (the VAPID `sub`): a `mailto:` or `https:` URL. With an `http` origin push stays off until it is set. |
 
-The bad settings that stop the host at startup are: no `auth` or `verifier`, both of them, an unknown `auth.mode`, a password shorter than 12 characters, `none` on a listener that reaches beyond the machine, an `origin` with a path, a `mountPath` of `/` or with `..` in it, an unknown or repeated pane, `schedules` or `table` without `rooms`, a `surface` that is not a lower-case word or is `discord`, an empty `ownerId`, a `uploadMaxBytes` out of range, and a `push.subject` that is neither a `mailto:` address nor an `https:` URL.
+The bad settings that stop the host at startup are: no `auth` or `verifier`, both of them, an unknown `auth.mode`, a password shorter than 12 characters, `none` on a listener that reaches beyond the machine, an `origin` with a path, a `mountPath` of `/` or with `..` in it, an unknown or repeated pane, `schedules` or `table` without `rooms`, a `surface` that is not a lower-case word or is `discord`, an empty `ownerId`, a `uploadMaxBytes` out of range, and a `push.subject` that is neither a `mailto:` address nor an `https:` URL, and a `push.quietHours` that is neither `false` nor two different `HH:MM` times.
 
 The plugin needs, for the panes you serve: the agent server (`AGENTS`) for Overview and Rooms, the modes service (`MODES`) for Rooms, the schedule store (`SCHEDULES`) for Schedules, and the memory addon for Notes.
 The host refuses to start with a message naming the missing service when one of them is absent.

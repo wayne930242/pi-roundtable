@@ -8,6 +8,11 @@ import {
 } from "./app/uploads.ts";
 import type { ConsoleFeatures, ConsolePresentation } from "./features.ts";
 import { isHostPattern } from "./push/endpoint.ts";
+import {
+	DEFAULT_QUIET_HOURS,
+	minutesOfDay,
+	type QuietWindow,
+} from "./push/quiet-hours.ts";
 import { pushFetchOf } from "./push/test-fetch.ts";
 import type { RequestVerifier } from "./verifier.ts";
 
@@ -158,6 +163,13 @@ export interface WebConsoleOptions {
 		 */
 		preview?: boolean;
 		/**
+		 * The hours when an agent's post and a notice are not pushed, as `HH:MM` times on the
+		 * console's time zone (`timeZone` of the host); a window that ends before it starts crosses
+		 * midnight. A card (one waiting, or the long-running cap) is pushed all the same. Default
+		 * 23:00 to 08:00; `false` pushes at any hour. The two times must differ.
+		 */
+		quietHours?: QuietWindow | false;
+		/**
 		 * Push services the server may post to besides the browsers' own (Google, Mozilla, Apple,
 		 * Microsoft), as host names; a leading `*.` allows every subdomain. Their endpoints must
 		 * still be `https`.
@@ -200,6 +212,8 @@ export interface ResolvedOptions {
 	uploadMaxBytes: number;
 	push: {
 		preview: boolean;
+		/** The quiet hours; undefined = none. */
+		quietHours: QuietWindow | undefined;
 		endpointHosts: readonly string[];
 		/** The VAPID contact; undefined = push is off. */
 		subject: string | undefined;
@@ -367,6 +381,24 @@ function checkGrace(seconds: number | undefined): number {
 	return seconds;
 }
 
+function checkQuietHours(
+	value: QuietWindow | false | undefined,
+): QuietWindow | undefined {
+	if (value === undefined) return { ...DEFAULT_QUIET_HOURS };
+	if (value === false) return undefined;
+	const bad = () =>
+		fail(
+			'push.quietHours must be false or {start, end} as two different HH:MM times, such as {start: "23:00", end: "08:00"}',
+		);
+	if (typeof value !== "object" || value === null) return bad();
+	const { start, end } = value as Partial<QuietWindow>;
+	if (typeof start !== "string" || typeof end !== "string") return bad();
+	const from = minutesOfDay(start);
+	const to = minutesOfDay(end);
+	if (from === undefined || to === undefined || from === to) return bad();
+	return { start, end };
+}
+
 function checkPush(
 	options: WebConsoleOptions,
 	origin: string,
@@ -374,6 +406,7 @@ function checkPush(
 	const push = options.push;
 	if (push?.preview !== undefined && typeof push.preview !== "boolean")
 		fail("push.preview must be true or false");
+	const quietHours = checkQuietHours(push?.quietHours);
 	const hosts = push?.endpointHosts ?? [];
 	if (!Array.isArray(hosts))
 		fail("push.endpointHosts must be a list of host names");
@@ -396,6 +429,7 @@ function checkPush(
 		);
 	return {
 		preview: push?.preview ?? true,
+		quietHours,
 		endpointHosts: [...hosts],
 		subject: given ?? (origin.startsWith("https:") ? origin : undefined),
 		fetch: pushFetchOf(options),

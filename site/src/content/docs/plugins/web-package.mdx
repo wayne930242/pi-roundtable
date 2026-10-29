@@ -86,6 +86,7 @@ Each owner turns it on per device in Settings, and can remove a device there.
 Set `push.subject` (a `mailto:` address or an `https:` URL) unless `origin` is https; the VAPID keys are made at the first start in `<dataDir>/web/vapid.json`, and the file must outlive restarts.
 Endpoints must be https on an allowed push service, and `push.endpointHosts` adds more.
 With `push.preview` off a notification carries no message text.
+From 23:00 to 08:00 on the console's time zone an agent's post and a notice are not pushed, while a card still is; `push.quietHours` (`{ start, end }` as `HH:MM`, or `false`) changes the window, and Settings shows it read-only.
 
 ## Configuration
 
@@ -122,6 +123,7 @@ With `push.preview` off a notification carries no message text.
 | `auth.principal` | primary owner | `none` and `password`: the principal the session speaks for. |
 | `auth.verifier` | required for the mode | `verifier` only: the request verifier. |
 | `push.preview` | `true` | Whether a notification shows the first 120 characters. |
+| `push.quietHours` | `{ start: "23:00", end: "08:00" }` | When an agent's post and a notice are not pushed, as `HH:MM` times on the console's time zone; cards always are. `false` turns it off. |
 | `push.endpointHosts` | none | Extra push-service hosts; a leading `*.` allows subdomains. |
 | `push.subject` | `origin` if https | The VAPID contact: a `mailto:` or `https:` URL. Push is off without one. |
 

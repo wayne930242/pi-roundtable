@@ -65,6 +65,8 @@ export interface AppApiOptions {
 	mount: string;
 	/** How the console signs the person in, as the session reports it. */
 	authMode: SessionView["auth"];
+	/** The quiet hours of push, as the settings page shows them. */
+	quietHours?: NonNullable<SessionView["quietHours"]>;
 	/** Called after a change the other pages should refetch. */
 	changed(): void;
 	logger: Logger;
@@ -240,6 +242,9 @@ export class AppApi {
 			surface: this.#options.surface.surface,
 			auth: this.#options.authMode,
 			push: true,
+			...(this.#options.quietHours
+				? { quietHours: this.#options.quietHours }
+				: {}),
 			...(admission.expiresAt
 				? { expiresAt: admission.expiresAt.toISOString() }
 				: {}),

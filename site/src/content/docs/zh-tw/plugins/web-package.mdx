@@ -86,6 +86,7 @@ Web Push 會在 owner 沒有任何頁面開著、看得到的時候喚醒裝置�
 除非 `origin` 是 https，否則要設定 `push.subject`（`mailto:` 位址或 `https:` 網址）；VAPID 金鑰在第一次啟動時產生，放在 `<dataDir>/web/vapid.json`，這個檔案必須在重啟後保留。
 推播的 endpoint 必須是 https，且屬於允許的推播服務；`push.endpointHosts` 可以加入更多。
 `push.preview` 關閉時，通知不帶任何訊息內容。
+預設在主控台時區的 23:00 到 08:00 之間，agent 的發話與通知不會推播，卡片仍會；`push.quietHours`（`{ start, end }`，格式為 `HH:MM`，或 `false`）可以改這個時段，Settings 會以唯讀方式顯示。
 
 ## 設定
 
@@ -122,6 +123,7 @@ Web Push 會在 owner 沒有任何頁面開著、看得到的時候喚醒裝置�
 | `auth.principal` | 主要 owner | 用於 `none` 與 `password`：session 代表的 principal。 |
 | `auth.verifier` | verifier 模式必填 | 只用於 `verifier`：request verifier。 |
 | `push.preview` | `true` | 通知是否顯示訊息的前 120 個字元。 |
+| `push.quietHours` | `{ start: "23:00", end: "08:00" }` | 不推播 agent 發話與通知的時段，以主控台時區的 `HH:MM` 表示；卡片一律推播。`false` 關閉勿擾時段。 |
 | `push.endpointHosts` | 無 | 額外允許的推播服務主機；開頭的 `*.` 代表所有子網域。 |
 | `push.subject` | https 時為 `origin` | VAPID 聯絡資訊：`mailto:` 或 `https:` 網址。沒有的話推播關閉。 |
 

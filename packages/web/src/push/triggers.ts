@@ -23,6 +23,11 @@ export interface PushServiceOptions {
 	logger: Logger;
 	/** The clock, in milliseconds; default `Date.now`. */
 	now?: () => number;
+	/**
+	 * Whether a moment, in milliseconds, is in the quiet hours: an agent's post and a notice are
+	 * not pushed then, while a card is. Default never.
+	 */
+	quiet?: (at: number) => boolean;
 }
 
 /** What a trigger says; the service shapes it into a notification. */
@@ -49,7 +54,8 @@ export function previewOf(text: string): string {
 /**
  * Decides when an owner's devices are pushed and what is said. Each trigger pushes only while no
  * page of an owner is in view, and only to owners: a device whose person is no owner any more is
- * skipped. Delivery never throws into the code that raised the trigger.
+ * skipped. In the quiet hours an agent's post and a notice wait for the owner to look; a card,
+ * which holds up work, is still pushed. Delivery never throws into the code that raised the trigger.
  */
 export class PushService {
 	readonly #options: PushServiceOptions;
@@ -72,7 +78,8 @@ export class PushService {
 
 	/** An agent posted in a room, such as a finished job's report or an answer nobody was watching for. */
 	reply(room: string, author: string, text: string): Promise<void> {
-		const now = (this.#options.now ?? Date.now)();
+		const now = this.#now();
+		if (this.#options.quiet?.(now)) return Promise.resolve();
 		const last = this.#repliedAt.get(room);
 		if (last !== undefined && now - last < REPLY_QUIET_MS)
 			return Promise.resolve();
@@ -88,6 +95,7 @@ export class PushService {
 
 	/** A notice for one person, from the `notify` tool. */
 	notice(principalId: string, text: string, room?: string): Promise<void> {
+		if (this.#options.quiet?.(this.#now())) return Promise.resolve();
 		return this.#push({
 			kind: "notice",
 			title: "Notice",
@@ -96,6 +104,10 @@ export class PushService {
 			tag: room ?? "notice",
 			principalId,
 		});
+	}
+
+	#now(): number {
+		return (this.#options.now ?? Date.now)();
 	}
 
 	async #push(event: Event): Promise<void> {

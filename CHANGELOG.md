@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.23.2] - 2026-10-29
+
+### Added
+
+- `pi-roundtable-web`: quiet hours for Web Push. From 23:00 to 08:00 on the console's time zone, an agent's post and a notice are not pushed, while a card (waiting, or the long-running cap) still is. `push.quietHours` sets the window as `{ start, end }` in `HH:MM` (an `end` before the `start` crosses midnight) or `false` to push at any hour; a bad value stops the start. Settings shows the window read-only. The package's changelog has the detail.
+
 ## [0.23.1] - 2026-10-29
 
 ### Added

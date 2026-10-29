@@ -153,6 +153,10 @@ async function build(settings: ResolvedOptions, context: Context) {
 						vapid,
 						subject: settings.push.subject,
 						preview: settings.push.preview,
+						...(settings.push.quietHours
+							? { quietHours: settings.push.quietHours }
+							: {}),
+						timeZone: env.timeZone,
 						endpointHosts: settings.push.endpointHosts,
 						...(settings.push.fetch ? { fetch: settings.push.fetch } : {}),
 						urlOf: (room) =>

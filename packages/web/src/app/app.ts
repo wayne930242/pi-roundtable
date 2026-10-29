@@ -16,6 +16,7 @@ import type { Authenticated, Authenticator } from "../auth/authenticator.ts";
 import { PushApi } from "../push/api.ts";
 import { webPushChannel } from "../push/channel.ts";
 import { EndpointPolicy } from "../push/endpoint.ts";
+import { QuietClock, type QuietWindow } from "../push/quiet-hours.ts";
 import { PushSender } from "../push/sender.ts";
 import { PushSubscriptions } from "../push/subscriptions.ts";
 import { PushService } from "../push/triggers.ts";
@@ -70,6 +71,10 @@ export interface OwnerAppOptions {
 		/** The `sub` of the VAPID token; absent = push is not set up and nothing is sent. */
 		subject: string | undefined;
 		preview: boolean;
+		/** When an agent's post and a notice are not pushed, on the clock of `timeZone`; absent = any hour. */
+		quietHours?: QuietWindow;
+		/** The IANA zone the quiet hours are read in: the console's. */
+		timeZone: string;
 		endpointHosts: readonly string[];
 		/** The HTTP client the posts go through. */
 		fetch?: typeof fetch;
@@ -124,6 +129,9 @@ export class OwnerApp {
 		const threads = new WebThreads(options.database);
 		const subscriptions = new PushSubscriptions(options.database);
 		const policy = new EndpointPolicy(options.push.endpointHosts);
+		const quietClock = options.push.quietHours
+			? new QuietClock(options.push.quietHours, options.push.timeZone)
+			: undefined;
 		const push = new PushService({
 			subscriptions,
 			sender: new PushSender({
@@ -136,6 +144,7 @@ export class OwnerApp {
 			identity,
 			visible: (principalId) => sockets.anyVisible(principalId),
 			preview: options.push.preview,
+			...(quietClock ? { quiet: (at: number) => quietClock.quietAt(at) } : {}),
 			urlOf: options.push.urlOf,
 			logger,
 		});
@@ -256,6 +265,14 @@ export class OwnerApp {
 			avatars: agents.avatars,
 			mount: options.mount,
 			authMode: options.authMode,
+			...(options.push.quietHours
+				? {
+						quietHours: {
+							...options.push.quietHours,
+							timeZone: options.push.timeZone,
+						},
+					}
+				: {}),
 			changed: options.changed,
 			logger,
 		});

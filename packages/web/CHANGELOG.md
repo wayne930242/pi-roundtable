@@ -3,6 +3,14 @@
 All notable changes to this project will be documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.23.2] - 2026-10-29
+
+### Added
+
+- Quiet hours for Web Push, 23:00 to 08:00 by default. In the window an agent's post and a notice (the `notify` tool, and a notice another channel delivered) are not pushed, so a night report waits in its room; a card (one waiting, or "Long-running cap reached") is still pushed. The window is read on the console's time zone, through `Intl`, and may cross midnight.
+- The option `push.quietHours`: `{ start: "HH:MM", end: "HH:MM" }` (two different times on a 24-hour clock) or `false` for no quiet hours. Anything else stops the start, like the other options.
+- Settings shows the window and its time zone to the owner, read-only, in English and Traditional Chinese (`SessionView.quietHours`).
+
 ## [0.23.1] - 2026-10-29
 
 ### Added
