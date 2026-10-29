@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { runWorkerTurn } from "./agent.ts";
 import { SandboxMemory } from "./memory.ts";
 
 test("memory namespaces are speaker-bound, shared notes are channel-bound, and entries persist", () => {
@@ -80,4 +81,46 @@ test("memory values are data, never filesystem paths, and limits fail without de
 	} finally {
 		rmSync(root, { recursive: true, force: true });
 	}
+});
+
+test("in a server workspace the memory tools and the system line say the notes are shared by every channel of the server", async () => {
+	const turn = {
+		text: "hi",
+		speaker: { id: "alice", name: "Alice" },
+		model: "fake",
+		prompt: "Be helpful",
+		timeZone: "UTC",
+		tools: [],
+		mcp: [],
+	};
+	const seen: Record<"channel" | "server", { text: string; system: string }> = {
+		channel: { text: "", system: "" },
+		server: { text: "", system: "" },
+	};
+	for (const mode of ["channel", "server"] as const) {
+		const root = mkdtempSync(join(tmpdir(), "sandbox-memory-"));
+		try {
+			await runWorkerTurn(
+				mode === "server" ? { ...turn, historyDir: "/channel" } : turn,
+				{
+					workspace: root,
+					historyDir: root,
+					broker: async (_route, body) => {
+						seen[mode].text = JSON.stringify(body.tools);
+						seen[mode].system = String(
+							(body.messages as { content: string }[])[0]?.content,
+						);
+						return { choices: [{ message: { content: "ok" } }] };
+					},
+				},
+			);
+		} finally {
+			rmSync(root, { recursive: true, force: true });
+		}
+	}
+	expect(seen.server.text).toContain("every channel of the server");
+	expect(seen.server.system).toContain("every channel of the server");
+	expect(seen.server.system).not.toContain("Shared channel notes");
+	expect(seen.channel.text).not.toContain("server");
+	expect(seen.channel.system).toContain("Shared channel notes");
 });

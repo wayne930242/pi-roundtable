@@ -8,51 +8,60 @@ import {
 import { join } from "node:path";
 import { isRecord, type ToolSpec } from "../src/protocol.ts";
 
-export const MEMORY_TOOLS: ToolSpec[] = [
-	{
-		name: "memory_set",
-		description:
-			"Remember a speaker fact or a channel note. Speaker entries belong to the current speaker.",
-		parameters: {
-			type: "object",
-			properties: {
-				scope: { type: "string", enum: ["speaker", "channel"] },
-				key: { type: "string" },
-				text: { type: "string" },
+/** What the shared notes are called to the model; a server workspace shares them wider. */
+function notesOf(server: boolean): string {
+	return server
+		? "server note (shared by every channel of the server)"
+		: "channel note";
+}
+
+/** The memory tools; `server` says the notes belong to the whole server, not one channel. */
+export function memoryTools(server: boolean): ToolSpec[] {
+	const notes = notesOf(server);
+	return [
+		{
+			name: "memory_set",
+			description: `Remember a speaker fact or a ${notes}. Speaker entries belong to the current speaker.`,
+			parameters: {
+				type: "object",
+				properties: {
+					scope: { type: "string", enum: ["speaker", "channel"] },
+					key: { type: "string" },
+					text: { type: "string" },
+				},
+				required: ["scope", "key", "text"],
+				additionalProperties: false,
 			},
-			required: ["scope", "key", "text"],
-			additionalProperties: false,
 		},
-	},
-	{
-		name: "memory_get",
-		description:
-			"Read or search current-speaker facts or shared channel notes. Omit key to list entries.",
-		parameters: {
-			type: "object",
-			properties: {
-				scope: { type: "string", enum: ["speaker", "channel"] },
-				key: { type: "string" },
-				query: { type: "string" },
+		{
+			name: "memory_get",
+			description: `Read or search current-speaker facts or shared ${server ? "server notes (shared by every channel of the server)" : "channel notes"}. Omit key to list entries.`,
+			parameters: {
+				type: "object",
+				properties: {
+					scope: { type: "string", enum: ["speaker", "channel"] },
+					key: { type: "string" },
+					query: { type: "string" },
+				},
+				required: ["scope"],
+				additionalProperties: false,
 			},
-			required: ["scope"],
-			additionalProperties: false,
 		},
-	},
-	{
-		name: "memory_remove",
-		description: "Forget one current-speaker fact or shared channel note.",
-		parameters: {
-			type: "object",
-			properties: {
-				scope: { type: "string", enum: ["speaker", "channel"] },
-				key: { type: "string" },
+		{
+			name: "memory_remove",
+			description: `Forget one current-speaker fact or shared ${notes}.`,
+			parameters: {
+				type: "object",
+				properties: {
+					scope: { type: "string", enum: ["speaker", "channel"] },
+					key: { type: "string" },
+				},
+				required: ["scope", "key"],
+				additionalProperties: false,
 			},
-			required: ["scope", "key"],
-			additionalProperties: false,
 		},
-	},
-];
+	];
+}
 interface Entry {
 	scope: string;
 	key: string;
