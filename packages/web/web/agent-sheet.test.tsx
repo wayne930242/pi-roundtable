@@ -11,10 +11,12 @@ import { CATALOG, type CharacterSpec } from "pi-roundtable/characters";
 import { partial } from "pi-roundtable/testing";
 import type {
 	AgentProfileView,
+	AgentSkillsView,
 	ConfigView,
 	RoomView,
 } from "../src/api-types.ts";
 import { AgentSheetHost } from "./components/agent-sheet.tsx";
+import { RoomConfirmHost } from "./components/room-confirms.tsx";
 import { Toaster } from "./components/toaster.tsx";
 import { openPage, releaseDom, type TestPage } from "./dom.ts";
 import {
@@ -22,12 +24,15 @@ import {
 	currentAgentSheet,
 	openAgentSheet,
 } from "./lib/agent-sheet.ts";
-import { api } from "./lib/api.ts";
+import { ApiFailure, api } from "./lib/api.ts";
 import { store } from "./lib/app-store.ts";
 import { ConfigContext } from "./lib/config.ts";
 import { loadKit } from "./lib/kit.ts";
+import { clearRoomConfirm } from "./lib/room-confirm.ts";
 import { setRouting } from "./lib/router.ts";
 import { type AppConnection, setConnection } from "./lib/socket.ts";
+import { teamApi } from "./lib/team-api.ts";
+import { closeTeamSheet, currentTeamSheet } from "./lib/team-sheet.ts";
 import { AgentPage } from "./pages/agent.tsx";
 import { RoomPage } from "./pages/room.tsx";
 
@@ -132,6 +137,25 @@ const chip = (text: string) =>
 let agent: ReturnType<typeof spyOn>;
 let models: ReturnType<typeof spyOn>;
 let update: ReturnType<typeof spyOn>;
+let skills: ReturnType<typeof spyOn>;
+const skillList = (carried: string[] = []): AgentSkillsView => ({
+	skills: [
+		{
+			name: "writing-skills",
+			description: "Use when writing a skill.",
+			source: "builtin",
+			builtin: true,
+			carried: true,
+		},
+		{
+			name: "kit-do",
+			description: "Use when changing source.",
+			source: "linked",
+			builtin: false,
+			carried: carried.includes("kit-do"),
+		},
+	],
+});
 beforeEach(() => {
 	window.innerWidth = 1280;
 	window.location.hash = "#/room/app%3Aagent.scout";
@@ -143,6 +167,7 @@ beforeEach(() => {
 	update = spyOn(api, "updateAgent").mockImplementation(async (_name, patch) =>
 		profile(patch as Partial<AgentProfileView>),
 	);
+	skills = spyOn(teamApi, "skills").mockResolvedValue(skillList());
 });
 afterEach(async () => {
 	closeAgentSheet();
@@ -151,11 +176,15 @@ afterEach(async () => {
 	agent.mockRestore();
 	models.mockRestore();
 	update.mockRestore();
+	skills.mockRestore();
+	clearRoomConfirm();
+	closeTeamSheet();
 });
 
 const Host = () => (
 	<ConfigContext.Provider value={config}>
 		<AgentSheetHost />
+		<RoomConfirmHost />
 		<Toaster />
 	</ConfigContext.Provider>
 );
@@ -504,7 +533,7 @@ test("a muted room shows the bell-slash in its header, and the room menu has the
 	}
 });
 
-test("a group's header name is not a button: a group has no agent to edit", async () => {
+test("a group's header name is a button that opens the group's sheet, not an agent's", async () => {
 	const messages = spyOn(api, "messages").mockResolvedValue({
 		messages: [],
 		more: false,
@@ -529,9 +558,117 @@ test("a group's header name is not a button: a group has no agent to edit", asyn
 			</ConfigContext.Provider>,
 		);
 		await page.act(() => settle(60));
-		expect(q("button.room-name")).toBeNull();
-		expect(q(".room-title h1")?.textContent).toBe("Team");
+		const name = q<HTMLButtonElement>("button.room-name");
+		expect(name?.textContent).toBe("Team");
+		expect(name?.title).toBe("Edit group");
+		await page.click(name);
+		expect(currentTeamSheet()).toMatchObject({ kind: "group", name: "team" });
+		expect(currentAgentSheet()).toBeUndefined();
 	} finally {
 		messages.mockRestore();
 	}
+});
+
+test("the sheet lists the host's skills; the built-in one is on and cannot be turned off, another flips as the server says", async () => {
+	const set = spyOn(teamApi, "setSkills").mockResolvedValue(
+		skillList(["kit-do"]),
+	);
+	try {
+		await open();
+		expect(skills).toHaveBeenCalledWith("scout");
+		const switches = all<HTMLButtonElement>(
+			'section[aria-label="Skills"] button[role=switch]',
+		);
+		expect(switches.map((one) => one.getAttribute("aria-label"))).toEqual([
+			"writing-skills",
+			"kit-do",
+		]);
+		expect(switches[0]?.disabled).toBe(true);
+		expect(switches[0]?.getAttribute("aria-checked")).toBe("true");
+		expect(switches[1]?.getAttribute("aria-checked")).toBe("false");
+		await page.click(switches[1] ?? null);
+		await page.act(() => settle(40));
+		expect(set).toHaveBeenCalledWith("scout", { add: ["kit-do"] });
+		expect(
+			q(
+				'section[aria-label="Skills"] button[aria-label="kit-do"]',
+			)?.getAttribute("aria-checked"),
+		).toBe("true");
+		// Flipping it back asks for the removal.
+		set.mockResolvedValue(skillList());
+		await page.click(
+			q('section[aria-label="Skills"] button[aria-label="kit-do"]'),
+		);
+		await page.act(() => settle(40));
+		expect(set).toHaveBeenLastCalledWith("scout", { remove: ["kit-do"] });
+	} finally {
+		set.mockRestore();
+	}
+});
+
+test("a refused skill change shows the server's words and leaves the switch where it was", async () => {
+	const set = spyOn(teamApi, "setSkills").mockRejectedValue(
+		new Error("Unknown skills: kit-do."),
+	);
+	try {
+		await open();
+		await page.click(
+			q('section[aria-label="Skills"] button[aria-label="kit-do"]'),
+		);
+		await page.act(() => settle(40));
+		expect(document.body.textContent).toContain("Unknown skills: kit-do.");
+		expect(
+			q(
+				'section[aria-label="Skills"] button[aria-label="kit-do"]',
+			)?.getAttribute("aria-checked"),
+		).toBe("false");
+	} finally {
+		set.mockRestore();
+	}
+});
+
+test("a host without skills shows no skills section", async () => {
+	skills.mockRejectedValue(
+		new ApiFailure("This host has no skills.", undefined, 404),
+	);
+	await open();
+	expect(q('section[aria-label="Skills"]')).toBeNull();
+	expect(q(".agent-sheet .failure")).toBeNull();
+});
+
+test("Archive asks first, naming the agent, and archives it through the server", async () => {
+	const archive = spyOn(teamApi, "archiveAgent").mockResolvedValue({
+		ok: true,
+	});
+	const rooms = spyOn(api, "rooms").mockResolvedValue({ rooms: [] });
+	try {
+		await open();
+		await page.click(button("Archive Scout"));
+		// The sheet gives way to the question.
+		expect(currentAgentSheet()).toBeUndefined();
+		await page.act(() => settle(60));
+		const dialog = all<HTMLDialogElement>("dialog.sheet").find(
+			(one) => one.getAttribute("aria-label") === "Archive Scout?",
+		);
+		expect(dialog?.open).toBe(true);
+		expect(archive).not.toHaveBeenCalled();
+		await page.click(
+			[...(dialog?.querySelectorAll("button") ?? [])].find(
+				(one) => one.textContent === "Archive",
+			) ?? null,
+		);
+		await page.act(() => settle(60));
+		expect(archive).toHaveBeenCalledWith("scout");
+		// The room is gone from the list, so the page leaves it.
+		expect(window.location.hash).toBe("#/rooms");
+	} finally {
+		archive.mockRestore();
+		rooms.mockRestore();
+	}
+});
+
+test("the coordinator's sheet has no Archive button", async () => {
+	store.dispatch({ type: "rooms_loaded", rooms: [view({ home: true })] });
+	await open();
+	expect(button("Archive Scout")).toBeNull();
 });

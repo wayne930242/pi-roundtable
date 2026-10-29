@@ -184,6 +184,7 @@ test("an agent row's menu has the edit, look, notifications, mode and restart ac
 		"Yolo mode",
 		"Long-running mode",
 		"Start over",
+		"Archive agent",
 	]);
 	expect(q("[role=menu]")?.getAttribute("aria-label")).toBe("scout");
 	expect(rowOf("scout")?.getAttribute("data-hold")).toBe("row");
@@ -193,10 +194,12 @@ test("a group row has the modes and restart but no agent edit; a thread row has 
 	await page.render(<List />);
 	await rightClick(rowOf("team"));
 	expect(labels()).toEqual([
+		"Edit group",
 		"Notifications",
 		"Yolo mode",
 		"Long-running mode",
 		"Start over",
+		"Archive group",
 	]);
 	await page.act(() => closeMenu());
 	await rightClick(q(".thread-row"));

@@ -28,6 +28,8 @@ const PATHS = {
 		"M10 4a2 2 0 1 1 4 0v2h4v4h-2a2 2 0 1 0 0 4h2v4h-4v-2a2 2 0 1 0-4 0v2H6v-4h2a2 2 0 1 0 0-4H6V6h4V4Z",
 	connectors: "M9 3v5M15 3v5M6 8h12v4a6 6 0 0 1-12 0V8ZM12 18v3",
 	trash: "M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13",
+	plus: "M12 5v14M5 12h14",
+	archive: "M4 5h16v4H4zM6 9v10h12V9M10 13h4",
 	refresh:
 		"M20 11a8 8 0 0 0-14.5-3.5L4 9M4 4v5h5M4 13a8 8 0 0 0 14.5 3.5L20 15M20 20v-5h-5",
 	download: "M12 4v11M7 11l5 5 5-5M5 20h14",

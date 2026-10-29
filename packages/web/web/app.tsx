@@ -48,6 +48,11 @@ const AgentSheetHost = lazy(() =>
 		default: m.AgentSheetHost,
 	})),
 );
+const TeamSheetHost = lazy(() =>
+	import("./components/team-sheets.tsx").then((m) => ({
+		default: m.TeamSheetHost,
+	})),
+);
 const RoomConfirmHost = lazy(() =>
 	import("./components/room-confirms.tsx").then((m) => ({
 		default: m.RoomConfirmHost,
@@ -490,6 +495,7 @@ function Console({ config }: { config: ConfigView }) {
 					<ActionMenuHost />
 					<RoomConfirmHost />
 					<AgentSheetHost />
+					<TeamSheetHost />
 				</Suspense>
 			) : null}
 			{hasApp ? (

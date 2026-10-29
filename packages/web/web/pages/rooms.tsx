@@ -9,7 +9,7 @@ import { useConfig } from "../lib/config.ts";
 import { ago } from "../lib/format.ts";
 import { useLive } from "../lib/live.ts";
 import { useMenuPress } from "../lib/menu-press.ts";
-import { roomMenuOf } from "../lib/menus.ts";
+import { openAddMenu, roomMenuOf } from "../lib/menus.ts";
 import { plural, translate as t } from "../lib/messages.ts";
 import { lastMessage, waitingCards } from "../lib/rooms.ts";
 import { hrefFor } from "../lib/router.ts";
@@ -328,15 +328,26 @@ export function RoomsPage(props: {
 		<div className="page" data-column={props.active ? "" : undefined}>
 			<header className="page-head">
 				<h1>{t("Rooms")}</h1>
-				<button
-					type="button"
-					className="secondary search-button"
-					onClick={props.onSearch}
-				>
-					<Icon name="search" size={16} />
-					<span>{t("Find a room")}</span>
-					<kbd>⌘K</kbd>
-				</button>
+				<div className="page-head-end">
+					<button
+						type="button"
+						className="secondary search-button"
+						onClick={props.onSearch}
+					>
+						<Icon name="search" size={16} />
+						<span>{t("Find a room")}</span>
+						<kbd>⌘K</kbd>
+					</button>
+					<button
+						type="button"
+						className="icon-button"
+						aria-label={t("Add")}
+						aria-haspopup="menu"
+						onClick={(event) => openAddMenu(event.currentTarget)}
+					>
+						<Icon name="plus" />
+					</button>
+				</div>
 			</header>
 			{listed && none ? (
 				<Empty>

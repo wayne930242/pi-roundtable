@@ -2,7 +2,7 @@ import { signal } from "./signal.ts";
 
 /** A question the page asks before a room changes in a way that is hard to undo. */
 export interface RoomConfirm {
-	kind: "yolo" | "start-over";
+	kind: "yolo" | "start-over" | "archive";
 	room: string;
 	name: string;
 	/** Where focus goes once the question is gone, for an asker that is no longer in the page. */

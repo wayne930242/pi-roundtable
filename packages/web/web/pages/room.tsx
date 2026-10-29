@@ -37,6 +37,8 @@ import { timeline } from "../lib/rooms.ts";
 import { hrefFor } from "../lib/router.ts";
 import { useConnection } from "../lib/socket.ts";
 import { useTableMode } from "../lib/table-mode.ts";
+import { openTeamSheet } from "../lib/team-sheet.ts";
+import { toast } from "../lib/toast.ts";
 
 // The scene a group room can switch to is read only when it is first shown, with the dialogue box and the table.
 const GroupScene = lazy(() =>
@@ -271,6 +273,18 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 							>
 								{name}
 							</button>
+						) : view?.kind === "group" ? (
+							<button
+								type="button"
+								className="room-name"
+								aria-haspopup="dialog"
+								title={t("Edit group")}
+								onClick={() =>
+									openTeamSheet({ kind: "group", name: view.name })
+								}
+							>
+								{name}
+							</button>
 						) : (
 							name
 						)}
@@ -436,6 +450,9 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 						mode={mine}
 						muted={view?.muted === true}
 						agent={agentName}
+						group={view?.kind === "group" ? view.name : undefined}
+						home={view?.home === true}
+						displayName={name}
 						readOnly={view?.readOnly ?? false}
 						parent={parent}
 						onClose={() => setMenu(false)}

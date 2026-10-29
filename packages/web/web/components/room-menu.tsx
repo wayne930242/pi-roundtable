@@ -4,7 +4,9 @@ import { openAgentSheet } from "../lib/agent-sheet.ts";
 import { translate as t } from "../lib/messages.ts";
 import { changeMode } from "../lib/modes.ts";
 import { setRoomMuted } from "../lib/mute.ts";
+import { askRoomConfirm } from "../lib/room-confirm.ts";
 import { hrefFor } from "../lib/router.ts";
+import { openTeamSheet } from "../lib/team-sheet.ts";
 import { Icon } from "./icons.tsx";
 import { Sheet } from "./sheet.tsx";
 import { Switch } from "./switch.tsx";
@@ -22,6 +24,12 @@ export function RoomMenu(props: {
 	muted?: boolean;
 	/** The agent whose profile to link; absent for a group. */
 	agent?: string | undefined;
+	/** The group whose members and host to edit; absent for an agent. */
+	group?: string | undefined;
+	/** The coordinator's room: the team's entry, which cannot be archived. */
+	home?: boolean;
+	/** What the room is called, for the question before it is archived. */
+	displayName?: string;
 	/** A thread's room: it has no modes and cannot be started over. */
 	readOnly?: boolean;
 	/** The room a thread belongs to. */
@@ -172,6 +180,28 @@ export function RoomMenu(props: {
 						</button>
 					</li>
 				) : null}
+				{props.group ? (
+					<li>
+						<button
+							type="button"
+							className="menu-item menu-link"
+							aria-haspopup="dialog"
+							onClick={() => {
+								props.onClose();
+								openTeamSheet({ kind: "group", name: props.group as string });
+							}}
+						>
+							<span className="menu-icon">
+								<Icon name="profile" />
+							</span>
+							<span className="menu-text">
+								<strong>{t("Edit group")}</strong>
+								<span className="meta">{t("Name, members and host")}</span>
+							</span>
+							<Icon name="chevron" size={16} />
+						</button>
+					</li>
+				) : null}
 				{props.readOnly ? null : (
 					<li>
 						<button
@@ -187,6 +217,36 @@ export function RoomMenu(props: {
 								<span className="meta">
 									{t(
 										"Archive this conversation and begin a new one. Memory stays.",
+									)}
+								</span>
+							</span>
+						</button>
+					</li>
+				)}
+				{props.readOnly || props.home ? null : (
+					<li>
+						<button
+							type="button"
+							className="menu-item menu-link"
+							onClick={() => {
+								props.onClose();
+								askRoomConfirm({
+									kind: "archive",
+									room: props.room,
+									name: props.displayName ?? "",
+								});
+							}}
+						>
+							<span className="menu-icon" data-tone="danger">
+								<Icon name="archive" />
+							</span>
+							<span className="menu-text">
+								<strong>
+									{props.group ? t("Archive group") : t("Archive agent")}
+								</strong>
+								<span className="meta">
+									{t(
+										"It stops answering. The history is kept and it can be restored.",
 									)}
 								</span>
 							</span>

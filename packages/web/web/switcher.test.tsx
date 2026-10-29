@@ -7,13 +7,16 @@ import {
 	test,
 } from "bun:test";
 import type { PromptFrame, RoomMessage, RoomView } from "../src/api-types.ts";
+import { ActionMenuHost } from "./components/action-menu.tsx";
 import { Composer } from "./components/composer.tsx";
 import { RoomSwitcher, useSwitcher } from "./components/switcher.tsx";
 import { openPage, releaseDom, type TestPage } from "./dom.ts";
+import { closeMenu } from "./lib/action-menu.ts";
 import { store } from "./lib/app-store.ts";
 import { clearDrafts, draftOf } from "./lib/drafts.ts";
 import { loadKit } from "./lib/kit.ts";
 import { setRouting } from "./lib/router.ts";
+import { closeTeamSheet, currentTeamSheet } from "./lib/team-sheet.ts";
 
 const GUIDE = "app:agent.guide";
 const SCOUT = "app:agent.scout";
@@ -66,6 +69,7 @@ function Room(props: { current?: string }) {
 				<textarea id="box" />
 			</div>
 			<RoomSwitcher {...switcher.drawer} current={props.current ?? GUIDE} />
+			<ActionMenuHost />
 		</div>
 	);
 }
@@ -221,6 +225,34 @@ test("the header avatar opens the same drawer", async () => {
 	await page.click(element("avatar"));
 	expect(drawer()).toBe("open");
 	expect(page.container.querySelector(".switcher-panel")).not.toBeNull();
+});
+
+test("the drawer's + button offers the add menu; choosing New agent closes the drawer and asks for its sheet", async () => {
+	await page.render(<Room />);
+	await page.click(element("avatar"));
+	expect(drawer()).toBe("open");
+	await page.click(
+		page.container.querySelector('.switcher-search button[aria-label="Add"]'),
+	);
+	await page.act(async () => {
+		await settle(60);
+	});
+	const items = [
+		...document.querySelectorAll<HTMLElement>('[role^="menuitem"]'),
+	];
+	expect(items.map((one) => one.textContent)).toEqual([
+		"New agent",
+		"New group",
+		"Archived",
+	]);
+	await page.click(items[0] ?? null);
+	await page.act(async () => {
+		await settle(120);
+	});
+	expect(drawer()).toBe("closed");
+	expect(currentTeamSheet()).toMatchObject({ kind: "new-agent" });
+	closeTeamSheet();
+	await page.act(() => closeMenu());
 });
 
 test("the system Back closes the drawer before it leaves the room", async () => {

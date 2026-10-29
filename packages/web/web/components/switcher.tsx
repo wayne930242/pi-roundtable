@@ -13,7 +13,7 @@ import { useAccentStyle } from "../lib/characters.ts";
 import { fuzzyScore } from "../lib/fuzzy.ts";
 import { composingKey } from "../lib/ime.ts";
 import { useMenuPress } from "../lib/menu-press.ts";
-import { roomMenuOf } from "../lib/menus.ts";
+import { openAddMenu, roomMenuOf } from "../lib/menus.ts";
 import { plural, translate as t } from "../lib/messages.ts";
 import { switcherOrder, waitingCards } from "../lib/rooms.ts";
 import { hrefFor, navigate } from "../lib/router.ts";
@@ -357,6 +357,15 @@ function List(props: { current: string; close(then?: () => void): void }) {
 							pick(first.key);
 					}}
 				/>
+				<button
+					type="button"
+					className="icon-button switcher-add"
+					aria-label={t("Add")}
+					aria-haspopup="menu"
+					onClick={(event) => openAddMenu(event.currentTarget, props.close)}
+				>
+					<Icon name="plus" />
+				</button>
 			</div>
 			<div className="switcher-scroll">
 				{waiting.length > 0 ? (

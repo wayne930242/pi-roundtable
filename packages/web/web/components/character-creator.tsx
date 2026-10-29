@@ -282,9 +282,16 @@ export function CharacterCreator(props: {
 	name: string;
 	displayName: string;
 	prompt: string;
-	/** The saved character. */
+	/** The saved character; for an agent not made yet, the look it would be given. */
 	character: CharacterSpec;
-	onSaved(profile: AgentProfileView): void;
+	/** After a save: the agent's profile, with its new character. */
+	onSaved?(profile: AgentProfileView): void;
+	/**
+	 * For an agent that does not exist yet: nothing is saved, and the button hands the draft to this
+	 * instead (the look as input, and as the spec it resolves to). `onCancel` leaves without one.
+	 */
+	onPick?(look: CharacterInput, spec: CharacterSpec): void;
+	onCancel?(): void;
 }) {
 	const [draft, setDraft] = useState(props.character);
 	const shown = useDeferredValue(draft);
@@ -305,7 +312,8 @@ export function CharacterCreator(props: {
 
 	// Unsaved changes ask before the page is left: closing or reloading, and a link inside the app.
 	useEffect(() => {
-		if (!dirty) return;
+		// A look still to be picked for an agent not made yet is not a change to something saved.
+		if (!dirty || props.onPick) return;
 		const beforeUnload = (event: BeforeUnloadEvent) => event.preventDefault();
 		const onClick = (event: MouseEvent) => {
 			if (
@@ -335,7 +343,7 @@ export function CharacterCreator(props: {
 			window.removeEventListener("beforeunload", beforeUnload);
 			document.removeEventListener("click", onClick, true);
 		};
-	}, [dirty]);
+	}, [dirty, props.onPick]);
 
 	const change = (input: CharacterInput) => {
 		setErrors({});
@@ -343,11 +351,15 @@ export function CharacterCreator(props: {
 	};
 
 	const save = async () => {
+		if (props.onPick) {
+			props.onPick(inputOf(draft), draft);
+			return;
+		}
 		setSaving(true);
 		setErrors({});
 		try {
 			const profile = await api.setCharacter(props.name, inputOf(draft));
-			props.onSaved(profile);
+			props.onSaved?.(profile);
 			toast(t("Saved."));
 		} catch (failure) {
 			const named =
@@ -558,7 +570,7 @@ export function CharacterCreator(props: {
 			aria-labelledby={titleId}
 			onSubmit={(event) => {
 				event.preventDefault();
-				if (dirty && !saving) save();
+				if ((dirty || props.onPick) && !saving) save();
 			}}
 		>
 			<h2 id={titleId} className="visually-hidden">
@@ -659,13 +671,22 @@ export function CharacterCreator(props: {
 						className="secondary"
 						data-action="cancel"
 						onClick={() => {
-							if (dirty) setLeaving({ kind: "cancel" });
+							if (props.onCancel) props.onCancel();
+							else if (dirty) setLeaving({ kind: "cancel" });
 						}}
 					>
 						{t("Cancel")}
 					</button>
-					<button type="submit" data-action="save" disabled={!dirty || saving}>
-						{saving ? t("Saving…") : t("Save")}
+					<button
+						type="submit"
+						data-action="save"
+						disabled={(!dirty && !props.onPick) || saving}
+					>
+						{saving
+							? t("Saving…")
+							: props.onPick
+								? t("Use this look")
+								: t("Save")}
 					</button>
 				</div>
 			</div>

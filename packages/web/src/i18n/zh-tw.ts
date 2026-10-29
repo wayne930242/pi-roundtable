@@ -496,6 +496,61 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"Could not copy.": "無法複製。",
 	"Could not share.": "無法分享。",
 
+	// 新增、封存與群組
+	"New agent": "新增夥伴",
+	"New group": "新增群組",
+	Archived: "已封存",
+	Archive: "封存",
+	"Archive {name}": "封存{name}",
+	"Archive {name}?": "要封存{name}嗎？",
+	"Archive agent": "封存夥伴",
+	"Archive group": "封存群組",
+	"Archived {name}.": "已封存{name}。",
+	"Restored {name}.": "已還原{name}。",
+	"Deleted {name}.": "已刪除{name}。",
+	"Delete {name}?": "要刪除{name}嗎？",
+	"Made {name}.": "已建立{name}。",
+	"Make agent": "建立夥伴",
+	"Make group": "建立群組",
+	"Making…": "建立中…",
+	"Permanent name": "固定名稱",
+	"Lowercase letters, digits and dashes, up to 32. It names the room and cannot be changed.":
+		"小寫英文字母、數字與連字號，最多 32 個字元。它是聊天室的名稱，建立後無法更改。",
+	"Its job, its sources, its limits and how it reports.":
+		"它的工作、資料來源、限制，以及怎麼回報。",
+	"Opening task": "開場任務",
+	"Optional. The agent starts on it as soon as it is made.":
+		"可不填。夥伴建立後會立刻開始做。",
+	"Your look": "你選的外觀",
+	"Suggested from its role": "依角色建議的外觀",
+	"Choose a look": "選擇外觀",
+	"Use this look": "使用這個外觀",
+	"Edit group": "編輯群組",
+	"Name, members and host": "名稱、成員與主持人",
+	Members: "成員",
+	"Pick 2 to 6 agents. They take turns in the order picked.":
+		"選 2 到 6 位夥伴。他們依選取的順序輪流發言。",
+	Host: "主持人",
+	"It stops answering. The history is kept and it can be restored.":
+		"它會停止回應。歷史會保留，之後可以還原。",
+	"An archived agent stops answering and its schedules are cancelled. Its history is kept, and you can restore it from Archived.":
+		"封存後的夥伴不再回應，排程也會取消。歷史會保留，之後可以從「已封存」還原。",
+	"{name} stops answering and its schedules are cancelled. A group loses it as a member. The history is kept, and Archived in the room list restores it.":
+		"{name}會停止回應，排程也會取消；群組會少掉這位成員。歷史會保留，可以從聊天室列表的「已封存」還原。",
+	"Archived agents and groups no longer answer. Their history is kept until you delete them.":
+		"已封存的夥伴與群組不再回應。歷史會保留，直到你刪除它們。",
+	"Nothing is archived.": "沒有已封存的項目。",
+	"{name} and its messages in this app are deleted for good, and the name can be used again. This cannot be undone.":
+		"{name}和它在這個應用程式裡的訊息會永久刪除，名稱可以再使用。此動作無法復原。",
+	"What the agent can load when a task calls for it. It applies from its next turn.":
+		"夥伴在任務需要時可以載入的技能。下一輪對話起生效。",
+	"Its file cannot be read.": "讀不到它的檔案。",
+	"Built in: every agent carries it.": "內建：每位夥伴都有。",
+	"This host has no skills.": "這個主機沒有技能。",
+	"Give add or remove.": "請給 add 或 remove。",
+	"members must be a list of text.": "members 必須是文字清單。",
+	"Give displayName, members or host.": "請給 displayName、members 或 host。",
+
 	// 聊天室列表
 	Agents: "夥伴",
 	"Dispatch threads": "派工討論串",

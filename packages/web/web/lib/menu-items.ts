@@ -17,6 +17,7 @@ import { changeMode } from "./modes.ts";
 import { setRoomMuted } from "./mute.ts";
 import { askRoomConfirm } from "./room-confirm.ts";
 import { fileUrl } from "./rooms.ts";
+import { openTeamSheet } from "./team-sheet.ts";
 import { toast } from "./toast.ts";
 
 export interface MenuSpec {
@@ -80,6 +81,15 @@ export function roomMenu(
 			},
 		);
 	}
+	if (view.kind === "group") {
+		const name = view.name;
+		items.push({
+			id: "edit-group",
+			label: t("Edit group"),
+			icon: "profile",
+			run: () => leave(() => openTeamSheet({ kind: "group", name })),
+		});
+	}
 	items.push({
 		id: "notifications",
 		label: t("Notifications"),
@@ -129,7 +139,44 @@ export function roomMenu(
 					}),
 			},
 		);
+	// The coordinator is the team's entry and stays.
+	if (!view.readOnly && !view.home)
+		items.push({
+			id: "archive",
+			label: view.kind === "group" ? t("Archive group") : t("Archive agent"),
+			icon: "archive",
+			tone: "danger",
+			run: () =>
+				askRoomConfirm({ kind: "archive", room: key, name: view.displayName }),
+		});
 	return { title: view.displayName, items };
+}
+
+/** The "+" menu of the room list and the drawer: a new agent, a new group, and the archive. */
+export function addMenu(leave: Leave = now): MenuSpec {
+	return {
+		title: t("Add"),
+		items: [
+			{
+				id: "new-agent",
+				label: t("New agent"),
+				icon: "profile",
+				run: () => leave(() => openTeamSheet({ kind: "new-agent" })),
+			},
+			{
+				id: "new-group",
+				label: t("New group"),
+				icon: "rooms",
+				run: () => leave(() => openTeamSheet({ kind: "group" })),
+			},
+			{
+				id: "archive-list",
+				label: t("Archived"),
+				icon: "archive",
+				run: () => leave(() => openTeamSheet({ kind: "archive" })),
+			},
+		],
+	};
 }
 
 // ── A message ────────────────────────────────────────────────────────────────────────────────

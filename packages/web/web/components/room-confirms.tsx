@@ -1,4 +1,5 @@
 import { useRef } from "react";
+import { closeAgentSheet } from "../lib/agent-sheet.ts";
 import { api } from "../lib/api.ts";
 import { translate as t } from "../lib/messages.ts";
 import {
@@ -6,6 +7,9 @@ import {
 	type RoomConfirm,
 	useRoomConfirm,
 } from "../lib/room-confirm.ts";
+import { currentRoute, navigate } from "../lib/router.ts";
+import { refreshRooms, teamApi } from "../lib/team-api.ts";
+import { toast } from "../lib/toast.ts";
 import { Confirm } from "./confirm.tsx";
 
 interface ConfirmProps {
@@ -72,6 +76,40 @@ export function StartOverConfirm(props: ConfirmProps) {
 	);
 }
 
+/** Archiving an agent or group: it stops answering, and can be restored from the archive. */
+export function ArchiveConfirm(props: ConfirmProps) {
+	return (
+		<Confirm
+			open={props.open}
+			title={t("Archive {name}?", { name: props.name })}
+			confirmLabel={t("Archive")}
+			tone="danger"
+			{...(props.restoreFocus ? { restoreFocus: props.restoreFocus } : {})}
+			onClose={props.onClose}
+			onConfirm={async () => {
+				// The room key is `<surface>:agent.<name>` or `<surface>:group.<name>`.
+				const at = props.room.indexOf(".");
+				const name = props.room.slice(at + 1);
+				if (props.room.slice(0, at).endsWith(":group"))
+					await teamApi.archiveGroup(name);
+				else await teamApi.archiveAgent(name);
+				closeAgentSheet();
+				await refreshRooms();
+				toast(t("Archived {name}.", { name: props.name }));
+				// A room that is archived is no room to stay in.
+				if (currentRoute().key === props.room) navigate("rooms");
+			}}
+		>
+			<p>
+				{t(
+					"{name} stops answering and its schedules are cancelled. A group loses it as a member. The history is kept, and Archived in the room list restores it.",
+					{ name: props.name },
+				)}
+			</p>
+		</Confirm>
+	);
+}
+
 /** Draws the question that `askRoomConfirm` asks, wherever in the page it was asked. */
 export function RoomConfirmHost() {
 	const ask = useRoomConfirm();
@@ -89,6 +127,7 @@ export function RoomConfirmHost() {
 		<>
 			<YoloConfirm open={ask?.kind === "yolo"} {...common} />
 			<StartOverConfirm open={ask?.kind === "start-over"} {...common} />
+			<ArchiveConfirm open={ask?.kind === "archive"} {...common} />
 		</>
 	);
 }

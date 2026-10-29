@@ -7,20 +7,27 @@ import {
 	useRef,
 	useState,
 } from "react";
-import type { AgentPatch, AgentProfileView } from "../../src/api-types.ts";
+import type {
+	AgentPatch,
+	AgentProfileView,
+	AgentSkillsView,
+} from "../../src/api-types.ts";
 import {
 	closeAgentSheet,
 	currentAgentSheet,
 	useAgentSheet,
 } from "../lib/agent-sheet.ts";
-import { api, messageOf } from "../lib/api.ts";
+import { ApiFailure, api, messageOf } from "../lib/api.ts";
 import { useSelector } from "../lib/app-store.ts";
 import { useRoomState } from "../lib/characters.ts";
 import { type DiffLine, diffCounts, lineDiff } from "../lib/diff.ts";
 import { translate as t, wording } from "../lib/messages.ts";
 import { setRoomMuted } from "../lib/mute.ts";
+import { askRoomConfirm } from "../lib/room-confirm.ts";
+import { teamApi } from "../lib/team-api.ts";
 import { toast } from "../lib/toast.ts";
 import { PageCharacter } from "./character.tsx";
+import { Chips } from "./chips.tsx";
 import { Icon } from "./icons.tsx";
 import { Sheet } from "./sheet.tsx";
 import { Failure, Loading } from "./states.tsx";
@@ -139,6 +146,11 @@ function AgentEditor({ name, opened }: { name: string; opened: number }) {
 		profile?.room ?? "",
 	);
 	const [muting, setMuting] = useState(false);
+	// The coordinator is the team's entry and cannot be archived.
+	const home = useSelector(
+		(s) => (profile ? s.rooms[profile.room]?.view?.home === true : false),
+		profile?.room ?? "",
+	);
 	const promptId = useId();
 	const nameId = useId();
 	const muteId = useId();
@@ -329,6 +341,7 @@ function AgentEditor({ name, opened }: { name: string; opened: number }) {
 					</div>
 				</form>
 			)}
+			<Skills name={name} opened={opened} />
 			<section className="card stack" ref={look} tabIndex={-1}>
 				<h3>{t("Look")}</h3>
 				<p className="meta">
@@ -346,6 +359,32 @@ function AgentEditor({ name, opened }: { name: string; opened: number }) {
 					/>
 				</Suspense>
 			</section>
+			{home ? null : (
+				<section className="card stack">
+					<h3>{t("Archive")}</h3>
+					<p className="meta">
+						{t(
+							"An archived agent stops answering and its schedules are cancelled. Its history is kept, and you can restore it from Archived.",
+						)}
+					</p>
+					<div className="actions">
+						<button
+							type="button"
+							className="danger"
+							onClick={() => {
+								closeAgentSheet();
+								askRoomConfirm({
+									kind: "archive",
+									room: profile.room,
+									name: profile.displayName,
+								});
+							}}
+						>
+							{t("Archive {name}", { name: profile.displayName })}
+						</button>
+					</div>
+				</section>
+			)}
 			<Sheet
 				open={full}
 				title={t("Prompt")}
@@ -362,6 +401,91 @@ function AgentEditor({ name, opened }: { name: string; opened: number }) {
 				/>
 			</Sheet>
 		</div>
+	);
+}
+
+/**
+ * The skills the agent carries, from the host's catalog: a switch each, applied as it is flipped.
+ * The built-in ones are carried by every agent and stay on. A host without skills shows nothing.
+ */
+function Skills({ name, opened }: { name: string; opened: number }) {
+	const [view, setView] = useState<AgentSkillsView>();
+	const [busy, setBusy] = useState<string>();
+	const [error, setError] = useState<string>();
+	const prefix = useId();
+	// biome-ignore lint/correctness/useExhaustiveDependencies: `opened` is a new ask for the same agent
+	useEffect(() => {
+		let current = true;
+		teamApi.skills(name).then(
+			(loaded) => current && setView(loaded),
+			(failure) => {
+				// The host has no skills addon: there is nothing to choose.
+				if (
+					current &&
+					!(failure instanceof ApiFailure && failure.status === 404)
+				)
+					setError(messageOf(failure));
+			},
+		);
+		return () => {
+			current = false;
+		};
+	}, [name, opened]);
+	if (error) return <Failure message={error} />;
+	if (!view) return null;
+	const flip = async (skill: string, next: boolean) => {
+		setBusy(skill);
+		try {
+			setView(
+				await teamApi.setSkills(
+					name,
+					next ? { add: [skill] } : { remove: [skill] },
+				),
+			);
+		} catch (failure) {
+			toast(messageOf(failure), "danger");
+		} finally {
+			setBusy(undefined);
+		}
+	};
+	return (
+		<section className="card stack" aria-label={t("Skills")}>
+			<h3>{t("Skills")}</h3>
+			<p className="meta">
+				{t(
+					"What the agent can load when a task calls for it. It applies from its next turn.",
+				)}
+			</p>
+			<ul className="menu">
+				{view.skills.map((skill, index) => {
+					const id = `${prefix}-${index}`;
+					return (
+						<li key={skill.name}>
+							<label className="menu-item menu-toggle" htmlFor={id}>
+								<span className="menu-text">
+									<strong>{skill.name}</strong>
+									<span className="meta">
+										{skill.missing
+											? t("Its file cannot be read.")
+											: skill.builtin
+												? t("Built in: every agent carries it.")
+												: (skill.description ?? "")}
+									</span>
+								</span>
+								<Switch
+									id={id}
+									checked={skill.carried}
+									label={skill.name}
+									busy={busy === skill.name}
+									disabled={skill.builtin}
+									onChange={(next) => flip(skill.name, next)}
+								/>
+							</label>
+						</li>
+					);
+				})}
+			</ul>
+		</section>
 	);
 }
 
@@ -382,33 +506,6 @@ const Expand = () => (
 		<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />
 	</svg>
 );
-
-/** A choice among a few, as chips: the one that is on is pressed. */
-function Chips(props: {
-	label: string;
-	value: string;
-	options: readonly { value: string; label: string }[];
-	onChange(value: string): void;
-}) {
-	return (
-		<fieldset className="field">
-			<legend>{props.label}</legend>
-			<div className="option-chips">
-				{props.options.map((option) => (
-					<button
-						key={option.value}
-						type="button"
-						aria-pressed={option.value === props.value}
-						className="option-chip"
-						onClick={() => props.onChange(option.value)}
-					>
-						{option.label}
-					</button>
-				))}
-			</div>
-		</fieldset>
-	);
-}
 
 const DIFF_MARK: Record<DiffLine["kind"], string> = {
 	same: " ",
