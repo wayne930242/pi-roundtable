@@ -58,6 +58,8 @@ export interface AppSurfaceOptions {
 	unprompted?(room: ChannelKey, author: string, text: string): void;
 	/** Called when a room's activity changes, so the presence table can follow. */
 	activity?(): void;
+	/** What was said in a host room since the assistant last posted; the host rooms' reader. */
+	channelContext?: ChatSurface["channelContext"];
 	/** The clock, in milliseconds; default `Date.now`. */
 	now?: () => number;
 	logger: Logger;
@@ -105,6 +107,8 @@ export class AppSurface implements ChatSurface {
 	readonly formatting = APP_FORMATTING;
 	/** The turn takes an upload up to the most the app lets a person upload. */
 	readonly maxAttachmentBytes: number;
+	/** Present on a surface with host rooms: what was said in one since the assistant last posted. */
+	channelContext?: ChatSurface["channelContext"];
 	readonly threads: AppSurfaceThreads;
 	readonly #options: AppSurfaceOptions;
 	readonly #activity = new Map<ChannelKey, Activity>();
@@ -118,6 +122,7 @@ export class AppSurface implements ChatSurface {
 		this.surface = options.surface;
 		this.maxAttachmentBytes = options.uploads.maxBytes;
 		this.#options = options;
+		if (options.channelContext) this.channelContext = options.channelContext;
 		this.threads = new AppSurfaceThreads({
 			surface: options.surface,
 			threads: options.threads,

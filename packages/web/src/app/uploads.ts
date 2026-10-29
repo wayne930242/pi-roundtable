@@ -1,7 +1,12 @@
 import { extname } from "node:path";
 import type { AttachmentFile, AttachmentRef } from "pi-roundtable";
 import type { RoomFile, UploadView } from "../api-types.ts";
-import { FILE_RETENTION_MS, type FileDir, safeName } from "./files.ts";
+import {
+	FILE_RETENTION_MS,
+	type FileBinding,
+	type FileDir,
+	safeName,
+} from "./files.ts";
 import {
 	boundaryOf,
 	MultipartError,
@@ -32,7 +37,7 @@ const startsWith = (bytes: Uint8Array, signature: readonly number[], at = 0) =>
 const ascii = (text: string) => [...text].map((char) => char.charCodeAt(0));
 
 /** The image type the first bytes say, if any; these four are the ones the page shows itself. */
-function imageTypeOf(head: Uint8Array): string | undefined {
+export function imageTypeOf(head: Uint8Array): string | undefined {
 	if (startsWith(head, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
 		return "image/png";
 	if (startsWith(head, [0xff, 0xd8, 0xff])) return "image/jpeg";
@@ -153,6 +158,8 @@ export class Uploads {
 	readonly #now: () => number;
 	readonly maxBytes: number;
 	readonly #pendingBytes: number;
+	/** How long a stored file of an agent room is kept, in milliseconds. */
+	readonly #keepMs: number;
 
 	constructor(
 		waiting: FileDir,
@@ -161,6 +168,8 @@ export class Uploads {
 			maxBytes?: number;
 			/** The most bytes one person may have waiting; default 400 MiB. */
 			pendingBytes?: number;
+			/** How many days a stored file of an agent room is kept; default 30. */
+			keepDays?: number;
 			now?: () => number;
 		} = {},
 	) {
@@ -169,6 +178,10 @@ export class Uploads {
 		this.#now = options.now ?? Date.now;
 		this.maxBytes = options.maxBytes ?? DEFAULT_UPLOAD_MAX_BYTES;
 		this.#pendingBytes = options.pendingBytes ?? PENDING_BYTES_PER_PRINCIPAL;
+		this.#keepMs =
+			options.keepDays === undefined
+				? FILE_RETENTION_MS
+				: options.keepDays * 24 * 3_600_000;
 	}
 
 	#waitingOf(principalId: string): { files: number; bytes: number } {
@@ -303,11 +316,15 @@ export class Uploads {
 		return files;
 	}
 
-	/** Moves claimed uploads into the stored files, once their message is accepted. */
-	use(ids: readonly string[]): void {
+	/**
+	 * Moves claimed uploads into the stored files, once their message is accepted. `binding` ties
+	 * them to the host room the message is in, so only that room's readers are served them.
+	 */
+	use(ids: readonly string[], binding?: FileBinding): void {
 		for (const id of ids) {
 			this.#pending.delete(id);
-			this.#waiting.moveTo(id, this.#stored);
+			if (this.#waiting.moveTo(id, this.#stored) && binding)
+				this.#stored.bind(id, binding);
 		}
 	}
 
@@ -334,7 +351,11 @@ export class Uploads {
 		return { path };
 	}
 
-	/** Deletes the waiting uploads older than a day and the stored files older than 30 days; returns how many. */
+	/**
+	 * Deletes the waiting uploads older than a day and the stored files that are due; returns how
+	 * many. A file of an agent room is due after `keepDays` (default 30); a file bound to a host
+	 * room is due when its own expiry passes, and kept when it has none.
+	 */
 	sweep(): number {
 		const now = this.#now();
 		let dropped = 0;
@@ -343,7 +364,12 @@ export class Uploads {
 			this.#pending.delete(id);
 			dropped += 1;
 		}
-		for (const id of this.#stored.older(FILE_RETENTION_MS, now)) {
+		for (const id of this.#stored.ids()) {
+			const binding = this.#stored.binding(id);
+			const due = binding
+				? binding.expiresAt !== undefined && binding.expiresAt <= now
+				: (this.#stored.ageOf(id, now) ?? 0) > this.#keepMs;
+			if (!due) continue;
 			this.#stored.remove(id);
 			dropped += 1;
 		}

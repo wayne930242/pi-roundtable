@@ -69,8 +69,24 @@ export type HostAction = HostActionView;
 export type FormSpec = FormSpecView;
 export type FormField = FormFieldView;
 export type FormValues = Readonly<Record<string, string | readonly string[]>>;
+/**
+ * Where the app takes a person: a room, scrolled to and highlighting one of its messages, or a
+ * page with a query. The shape `Notices.open` and `ActionResult.open` share.
+ */
+export type OpenTarget =
+	| { room: ChannelKey; message?: number }
+	| { page: string; query?: Readonly<Record<string, string>> };
+
 export type ActionResult =
-	| { ok: true; notice?: string; open?: string }
+	| {
+			ok: true;
+			/** A short line shown to the person who acted. */
+			notice?: string;
+			/** Takes the person there after the action. */
+			open?: OpenTarget;
+			/** An external target, `https` or same-origin; `open` wins when both are given. */
+			url?: string;
+	  }
 	| { ok: false; error: string; field?: string };
 
 export interface RoomHeader {
@@ -137,6 +153,23 @@ export interface StoredHostCard extends HostCard {
 	updatedAt: Date;
 }
 
+/** What a host does with its pages once they are registered. */
+export interface HostPages {
+	/**
+	 * Tells the viewers a page is visible to (all pages when `id` is absent) that it may differ, so
+	 * their page fetches `view()` again. The frame carries no content.
+	 */
+	changed(id?: string): void;
+	/**
+	 * Keeps an image for a page's Markdown, shown as `![alt](file:<id>)` and served only to those
+	 * the page is visible to. PNG, JPEG or WebP; the bytes must be that image. Returns the file id.
+	 */
+	saveAsset(
+		page: string,
+		file: { name: string; type: string; bytes: Uint8Array | ReadableStream },
+	): Promise<string>;
+}
+
 /** Writes into the host's rooms. Author kinds are generic; the host supplies the label ("Customer"). */
 export interface HostRooms {
 	post(
@@ -170,6 +203,11 @@ export interface HostRooms {
 		room: ChannelKey,
 		file: { name: string; type: string; bytes: Uint8Array | ReadableStream },
 	): Promise<string>;
+	/**
+	 * A same-origin URL that opens the room, scrolled to and highlighting `message` when given.
+	 * Valid in a card's `links` and in assistant and notice Markdown.
+	 */
+	link(room: ChannelKey, message?: number): string;
 	/** Tells the room's viewers its header or list may differ, and drops the access memo. */
 	changed(room?: ChannelKey): void;
 	/** Drops the access memo, for one person or for all; the next frame re-asks the kind. */
@@ -223,9 +261,7 @@ export interface Notices {
 		to: readonly string[];
 		title: string;
 		body?: string;
-		open?:
-			| { room: ChannelKey }
-			| { page: string; query?: Readonly<Record<string, string>> };
+		open?: OpenTarget;
 		/** `high` requires interaction and ignores the person's quiet hours. */
 		urgency: "normal" | "high";
 		/** Shows "Handled", counted in the badge until acked or resolved. */
@@ -323,6 +359,7 @@ export interface WebApp {
 	registerStep(step: OnboardingStep): void;
 	registerLinkProver(prover: LinkProver): void;
 	readonly rooms: HostRooms;
+	readonly pages: HostPages;
 	readonly notices: Notices;
 	readonly onboarding: {
 		status(principalId: string): Promise<StepStatus[]>;
@@ -358,6 +395,7 @@ const RESERVED_KINDS: ReadonlySet<string> = new Set([
 /** The services the pieces of the app provide once built; the registry hands them to the host. */
 export interface WebAppParts {
 	rooms: HostRooms;
+	pages: HostPages;
 	notices: Notices;
 	onboarding: WebApp["onboarding"];
 	push: WebApp["push"];
@@ -437,7 +475,7 @@ export class WebAppRegistry implements WebApp {
 	readonly #frames = new Map<string, FrameHandler<never>>();
 	readonly #areas = new Map<string, RouteArea>();
 	readonly #listeners = new Set<() => void>();
-	#parts: WebAppParts | undefined;
+	#parts: Partial<WebAppParts> = {};
 	#waivers: WaiverRead | undefined;
 	#access: HostRoomAccess | undefined;
 	#started = false;
@@ -506,16 +544,19 @@ export class WebAppRegistry implements WebApp {
 	// ── What a host reaches ──
 
 	get rooms(): HostRooms {
-		return this.#parts?.rooms ?? unbound("rooms");
+		return this.#parts.rooms ?? unbound("rooms");
+	}
+	get pages(): HostPages {
+		return this.#parts.pages ?? unbound("pages");
 	}
 	get notices(): Notices {
-		return this.#parts?.notices ?? unbound("notices");
+		return this.#parts.notices ?? unbound("notices");
 	}
 	get onboarding(): WebApp["onboarding"] {
-		return this.#parts?.onboarding ?? unbound("onboarding");
+		return this.#parts.onboarding ?? unbound("onboarding");
 	}
 	get push(): WebApp["push"] {
-		return this.#parts?.push ?? unbound("push");
+		return this.#parts.push ?? unbound("push");
 	}
 
 	// ── What the pieces of the app read and plug in ──
@@ -526,7 +567,7 @@ export class WebAppRegistry implements WebApp {
 	kind(name: string): HostRoomKind | undefined {
 		return this.#kinds.get(name);
 	}
-	pages(): readonly HostPage[] {
+	hostPages(): readonly HostPage[] {
 		return [...this.#pages.values()];
 	}
 	page(id: string): HostPage | undefined {
@@ -551,10 +592,13 @@ export class WebAppRegistry implements WebApp {
 		return () => this.#listeners.delete(listener);
 	}
 
-	/** The service the pieces of the app provide, once. */
-	provide(parts: WebAppParts): void {
-		if (this.#parts) throw new PluginError("web app: parts are provided twice");
-		this.#parts = parts;
+	/** The services a piece of the app provides, each once; the pieces provide their own. */
+	provide(parts: Partial<WebAppParts>): void {
+		for (const name of Object.keys(parts) as (keyof WebAppParts)[]) {
+			if (this.#parts[name] !== undefined)
+				throw new PluginError(`web app: ${name} is provided twice`);
+		}
+		this.#parts = { ...this.#parts, ...parts };
 	}
 
 	/** Where the person's waivers are read from. */
@@ -566,7 +610,7 @@ export class WebAppRegistry implements WebApp {
 	}
 
 	/** Replaces the deny-all room-access rule. */
-	useAccess(access: HostRoomAccess): void {
+	setAccess(access: HostRoomAccess): void {
 		this.#access = access;
 	}
 	get access(): HostRoomAccess {

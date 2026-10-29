@@ -73,6 +73,16 @@ interface Meta {
 	name: string;
 	type: string;
 	size: number;
+	/** The host room the file is bound to: only someone who may read that room is served it. */
+	room?: string;
+	/** Epoch milliseconds after which the sweep deletes the file; absent = the file is kept. */
+	expiresAt?: number;
+}
+
+/** What binds a stored file to a host room. */
+export interface FileBinding {
+	room: string;
+	expiresAt?: number;
 }
 
 /** A file being written as its bytes arrive; `finish` makes it a stored file, `abort` leaves nothing. */
@@ -84,6 +94,13 @@ export interface FileWriter {
 	finish(name: string, type: string): Promise<RoomFile>;
 	abort(): Promise<void>;
 }
+
+const bindingFields = (
+	binding: FileBinding,
+): Pick<Meta, "room" | "expiresAt"> => ({
+	room: binding.room,
+	...(binding.expiresAt === undefined ? {} : { expiresAt: binding.expiresAt }),
+});
 
 /**
  * A directory of files kept by id, each with a small record of its name and type beside it.
@@ -101,20 +118,61 @@ export class FileDir {
 		return join(this.dir, id);
 	}
 
-	/** Keeps the bytes under a new id. */
+	/** Keeps the bytes under a new id, bound to a host room when `binding` is given. */
 	put(
 		name: string,
 		type: string,
 		bytes: Uint8Array,
 		id = crypto.randomUUID(),
+		binding?: FileBinding,
 	): RoomFile {
 		mkdirSync(this.dir, { recursive: true, mode: 0o700 });
-		const meta: Meta = { name: safeName(name), type, size: bytes.byteLength };
+		const meta: Meta = {
+			name: safeName(name),
+			type,
+			size: bytes.byteLength,
+			...(binding ? bindingFields(binding) : {}),
+		};
 		writeFileSync(this.#path(id), bytes, { mode: 0o600 });
 		writeFileSync(`${this.#path(id)}.json`, JSON.stringify(meta), {
 			mode: 0o600,
 		});
-		return { id, ...meta };
+		return { id, name: meta.name, type, size: meta.size };
+	}
+
+	#read(id: string): Meta | undefined {
+		if (!isFileId(id)) return undefined;
+		try {
+			return JSON.parse(readFileSync(`${this.#path(id)}.json`, "utf8")) as Meta;
+		} catch {
+			return undefined;
+		}
+	}
+
+	/** The room a file is bound to and when it expires; undefined for a file that is bound to none. */
+	binding(id: string): FileBinding | undefined {
+		const meta = this.#read(id);
+		return meta?.room === undefined
+			? undefined
+			: {
+					room: meta.room,
+					...(meta.expiresAt === undefined
+						? {}
+						: { expiresAt: meta.expiresAt }),
+				};
+	}
+
+	/** Binds a stored file to a host room, or changes its expiry; false when there is no such file. */
+	bind(id: string, binding: FileBinding): boolean {
+		const meta = this.#read(id);
+		if (!meta || !existsSync(this.#path(id))) return false;
+		const { room: _room, expiresAt: _expiresAt, ...plain } = meta;
+		writeFileSync(
+			`${this.#path(id)}.json`,
+			JSON.stringify({ ...plain, ...bindingFields(binding) }),
+			{ mode: 0o600 },
+		);
+		return true;
 	}
 
 	/** Starts a file under a new id whose bytes arrive in pieces, so it is never held whole. */
@@ -161,12 +219,20 @@ export class FileDir {
 	}
 
 	meta(id: string): RoomFile | undefined {
+		const meta = this.#read(id);
+		return meta && { id, name: meta.name, type: meta.type, size: meta.size };
+	}
+
+	/** Whether the file's bytes are still stored. */
+	has(id: string): boolean {
+		return isFileId(id) && existsSync(this.#path(id));
+	}
+
+	/** How long ago the file was written, in milliseconds; undefined when there is none. */
+	ageOf(id: string, now: number): number | undefined {
 		if (!isFileId(id)) return undefined;
 		try {
-			const meta = JSON.parse(
-				readFileSync(`${this.#path(id)}.json`, "utf8"),
-			) as Meta;
-			return { id, name: meta.name, type: meta.type, size: meta.size };
+			return now - statSync(this.#path(id)).mtimeMs;
 		} catch {
 			return undefined;
 		}

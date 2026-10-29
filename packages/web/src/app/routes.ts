@@ -34,6 +34,9 @@ import type {
 import type { Authenticated } from "../auth/authenticator.ts";
 import { type ConsolePresentation, message } from "../features.ts";
 import type { Gate } from "../gate.ts";
+import type { HostApp } from "../host/host-app.ts";
+import type { RoomReads } from "../host/reads.ts";
+import { readsOf, withExpiredFiles } from "../host/room-views.ts";
 import { json } from "../http.ts";
 import type { ResolvedOptions } from "../options.ts";
 import type { PushMutes } from "../push/mutes.ts";
@@ -112,6 +115,12 @@ export interface AppApiOptions {
 	/** Present when the host has prompt documents (the prompts plugin): the main prompts the owner edits. */
 	prompts?: PromptApiOptions["prompts"];
 	avatars: Pick<AvatarStudio, "serve">;
+	/** The read cursors, for each room's unread count and who has read what. */
+	reads?: Pick<RoomReads, "unread" | "cursorOf" | "marks">;
+	/** Who may be served a file bound to a host room or a page. */
+	host?: Pick<HostApp, "mayRead">;
+	/** The name the app shows for a person. */
+	nameOf?(principalId: string): Promise<string>;
 	/** Present when the workspace pane is served. */
 	workspace?: WorkspaceFiles;
 	/** The mount, which a room's agent picture hangs under. */
@@ -411,7 +420,7 @@ export class AppApi {
 			return json({ ok: true });
 		}
 		if (area === "files" && method === "GET" && id && !action)
-			return this.#file(id, admission);
+			return await this.#file(id, admission);
 		if (area === "workspace") return this.#workspace(request, parts, admission);
 		if (area === "schedules") return this.#schedules(method, id, admission);
 		const owner = () => this.#owner(admission);
@@ -470,8 +479,18 @@ export class AppApi {
 		if (admission.visitor.tier !== "owner") throw notFound();
 		if (!key) {
 			if (method !== "GET") throw new HttpError(405, "Method not allowed.");
+			const listed = await rooms.list();
+			// What each room holds past this person's cursor; a room they never read starts from what it has now.
+			const unread = await this.#options.reads?.unread(
+				admission.visitor.principal.id,
+				listed.map((one) => one.key),
+				new Set(listed.map((one) => one.key)),
+			);
 			return json({
-				rooms: await rooms.list(),
+				rooms: listed.map((one) => {
+					const count = unread?.get(one.key);
+					return count ? { ...one, unread: count } : one;
+				}),
 				...(await this.#layout.view()),
 			} satisfies RoomsView);
 		}
@@ -493,12 +512,20 @@ export class AppApi {
 			// The cards stand among the messages by the time they opened; a page that has older
 			// messages leaves the cards before its first one to the older page.
 			const first = page.messages[0];
+			const { reads, nameOf } = this.#options;
+			const self = admission.visitor.principal.id;
+			const cursor = await reads?.cursorOf(room.key, self);
 			return json({
 				...page,
+				messages: withExpiredFiles(page.messages, this.#options.files),
 				cards: await cards.during(room.key, {
 					...(page.more && first ? { from: first.at } : {}),
 					...(beforeId === undefined ? {} : { before: beforeId }),
 				}),
+				...(reads && nameOf
+					? { reads: await readsOf(reads, room.key, self, nameOf) }
+					: {}),
+				...(cursor === undefined ? {} : { cursor }),
 			} satisfies MessagesView);
 		}
 		if (action === "mode" && method === "PUT" && parts.length === 4) {
@@ -546,12 +573,20 @@ export class AppApi {
 		throw new HttpError(404, "There is no such API.");
 	}
 
-	#file(id: string, admission: Authenticated): Response {
-		// A stored file belongs to an agent room, which only owners read, until the file names a host room it is bound to.
-		if (admission.visitor.tier !== "owner") throw notFound();
+	async #file(id: string, admission: Authenticated): Promise<Response> {
 		if (!isFileId(id)) throw notFound();
-		const meta = this.#options.files.meta(id);
-		const blob = this.#options.files.blob(id);
+		const { files, host } = this.#options;
+		// A file bound to a host room or page is for the people it is open to, owners too; every other stored file belongs to an agent room, which only owners read.
+		const bound = files.binding(id)?.room;
+		if (bound === undefined) {
+			if (admission.visitor.tier !== "owner") throw notFound();
+		} else if (
+			!host ||
+			!(await host.mayRead(viewerOf(admission.visitor), bound))
+		)
+			throw notFound();
+		const meta = files.meta(id);
+		const blob = files.blob(id);
 		if (!meta || !blob) throw notFound();
 		return fileResponse(meta, blob);
 	}

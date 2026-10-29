@@ -6,6 +6,7 @@ import {
 	IDENTITY,
 	MEMORY,
 	MODES,
+	PROFILES,
 	PROMPTS,
 	type RoundtablePlugin,
 	SCHEDULES,
@@ -165,6 +166,7 @@ async function build(settings: ResolvedOptions, context: Context) {
 	// Absent on a host without the registry: the console then lists conversations found by name only.
 	const registry = services.find(CONVERSATIONS);
 	const identity = services.get(IDENTITY);
+	const profiles = services.find(PROFILES);
 	// An agent's skills are chosen from what the Skills pane lists when the host supplies it, else from the addon's own catalog.
 	const skillRegistry = services.find(SKILLS);
 	const skills = skillRegistry
@@ -202,7 +204,7 @@ async function build(settings: ResolvedOptions, context: Context) {
 							label: string;
 							place: "main" | "settings" | "hidden";
 						}[] = [];
-						for (const page of webApp.pages()) {
+						for (const page of webApp.hostPages()) {
 							try {
 								if (await page.visible(viewer))
 									pages.push({
@@ -337,6 +339,14 @@ async function build(settings: ResolvedOptions, context: Context) {
 					dataDir: settings.dataDir,
 					cardGraceSeconds: settings.cardGraceSeconds,
 					uploadMaxBytes: settings.uploadMaxBytes,
+					uploadKeepDays: settings.uploadKeepDays,
+					events: context.events,
+					// The name the person goes by in the app, as the profiles name them.
+					...(profiles
+						? { nameOf: async (id: string) => (await profiles.of(id)).name }
+						: {}),
+					roomUrl: (room, message) =>
+						`${settings.routing === "path" ? `${settings.mount}/room/` : `${settings.mount}/#/room/`}${encodeURIComponent(room)}${message === undefined ? "" : `?message=${message}`}`,
 					authenticator,
 					authMode: settings.auth.mode,
 					admission: settings.admission,
