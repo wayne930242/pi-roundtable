@@ -72,7 +72,8 @@ export class RoomLayout implements LayoutStore {
 	}
 
 	async view(): Promise<LayoutView> {
-		return this.#sql.begin(async (tx) => read(tx));
+		// The three SELECTs share one snapshot, so an edit that commits between them is seen whole or not at all.
+		return this.#sql.begin("isolation level repeatable read, read only", read);
 	}
 
 	async change(edit: (layout: LayoutView) => LayoutView): Promise<LayoutView> {
