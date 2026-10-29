@@ -9,6 +9,10 @@ const MAX_BACKOFF_MS = 15_000;
 /** Streamed text reaches the state at most this long after it arrived, even where frames do not paint. */
 const FLUSH_FALLBACK_MS = 120;
 
+/** Where the notices' frames wait until their module (loaded with the bell) takes them over. */
+export const noticeInbox: ServerFrame[] = [];
+export const noticeSink: { take?: (frame: ServerFrame) => void } = {};
+
 const isServerFrame = (value: unknown): value is ServerFrame =>
 	typeof value === "object" &&
 	value !== null &&
@@ -177,6 +181,8 @@ export class AppConnection {
 			frame.type === "activity" ? { ...frame, at: Date.now() } : frame,
 		);
 		tapFrame(frame);
+		if (frame.type.startsWith("notice") || frame.type === "badge")
+			noticeSink.take ? noticeSink.take(frame) : noticeInbox.push(frame);
 		if (frame.type === "ready") {
 			this.send({
 				type: "hello",

@@ -1,4 +1,5 @@
 import type { IdentityService, Logger } from "pi-roundtable";
+import type { NewOutboxRow, PushOutbox } from "./outbox.ts";
 import type { PushPayload, PushSender, SendResult } from "./sender.ts";
 import type { PushSubscriptions, Subscription } from "./subscriptions.ts";
 
@@ -7,12 +8,26 @@ export const PREVIEW_CHARS = 120;
 /** Replies in one room closer together than this share a notification. */
 const REPLY_QUIET_MS = 15_000;
 
+/**
+ * Where the push goes when the app does not sign it: the outbox an external sender empties. The
+ * app then holds no VAPID key and a row carries a title and a preview only with `content: "full"`.
+ */
+export interface OutboxRoute {
+	outbox: Pick<PushOutbox, "enqueue">;
+	content: "full" | "none";
+	/** The count the app icon shows for the person: their notices not handled. */
+	badge(principalId: string): Promise<number>;
+}
+
 export interface PushServiceOptions {
 	subscriptions: Pick<
 		PushSubscriptions,
 		"all" | "delivered" | "forget" | "failed"
 	>;
-	sender: Pick<PushSender, "send">;
+	/** Signs and sends in this process; absent when `route` queues the pushes for an external sender. */
+	sender?: Pick<PushSender, "send">;
+	/** Queue the pushes instead of signing them here; absent = sign and send in this process. */
+	route?: OutboxRoute;
 	identity: Pick<IdentityService, "tierOf">;
 	/** Whether a page of this person is in view now; their devices are not pushed while one is. */
 	visible(principalId: string): boolean;
@@ -142,17 +157,49 @@ export class PushService {
 				...(preview && event.text ? { body: previewOf(event.text) } : {}),
 			};
 			const targets = await this.#targets(event.principalId);
+			if (this.#options.route) {
+				await this.#queue(this.#options.route, event, payload, targets);
+				return;
+			}
+			const { sender } = this.#options;
+			if (!sender) return;
 			await Promise.all(
 				targets.map(async (target) =>
-					this.#settle(
-						target,
-						await this.#options.sender.send(target, payload),
-					),
+					this.#settle(target, await sender.send(target, payload)),
 				),
 			);
 		} catch (error) {
 			logger.warn({ err: error, kind: event.kind }, "a push was not sent");
 		}
+	}
+
+	/** One outbox row for each person the push reaches; the sender finds their devices. */
+	async #queue(
+		route: OutboxRoute,
+		event: Event,
+		payload: PushPayload,
+		targets: readonly Subscription[],
+	): Promise<void> {
+		const people = [...new Set(targets.map((target) => target.principalId))];
+		await Promise.all(
+			people.map(async (principalId) => {
+				const row: NewOutboxRow = {
+					kind: payload.kind === "cap" ? "card" : payload.kind,
+					tag: payload.tag,
+					principalId,
+					open: payload.url ?? "",
+					urgency: payload.kind === "reply" ? "normal" : "high",
+					badge: await route.badge(principalId),
+					...(route.content === "full"
+						? {
+								title: event.title,
+								...(payload.body ? { body: payload.body } : {}),
+							}
+						: {}),
+				};
+				await route.outbox.enqueue(row);
+			}),
+		);
 	}
 
 	async #targets(principalId?: string): Promise<Subscription[]> {

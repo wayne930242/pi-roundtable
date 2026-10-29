@@ -259,3 +259,67 @@ describe("in a muted room", () => {
 test("a preview is one line", () => {
 	expect(previewOf("a\n\n  b\tc")).toBe("a b c");
 });
+
+describe("when the app does not sign", () => {
+	/** A service that queues for an external sender instead of posting. */
+	function queued(
+		content: "full" | "none",
+		devices = [device("https://fcm.googleapis.com/a")],
+	) {
+		const rows: Record<string, unknown>[] = [];
+		const posted: string[] = [];
+		const instance = new PushService({
+			subscriptions: {
+				all: async () => devices,
+				delivered: async () => undefined,
+				forget: async () => undefined,
+				failed: async () => false,
+			},
+			route: {
+				outbox: {
+					enqueue: async (row) => {
+						rows.push(row as unknown as Record<string, unknown>);
+						return rows.length;
+					},
+				},
+				content,
+				badge: async () => 4,
+			},
+			identity: { tierOf: async () => "owner" },
+			visible: () => false,
+			preview: true,
+			urlOf: (room) => `/console/#/room/${room}`,
+			logger: silentLogger(),
+		});
+		return { instance, rows, posted };
+	}
+
+	test("an owner's card is queued once for the person, with no text when content is none", async () => {
+		const { instance, rows } = queued("none", [
+			device("https://fcm.googleapis.com/a"),
+			device("https://fcm.googleapis.com/b"),
+		]);
+		await instance.card("app:agent.guide", "Send the secret plan?", false);
+		expect(rows).toEqual([
+			{
+				kind: "card",
+				tag: "app:agent.guide",
+				principalId: "ada",
+				open: "/console/#/room/app:agent.guide",
+				urgency: "high",
+				badge: 4,
+			},
+		]);
+	});
+
+	test("with content full the row carries the title and the preview", async () => {
+		const { instance, rows } = queued("full");
+		await instance.reply("app:agent.guide", "Guide", "Done with the report");
+		expect(rows[0]).toMatchObject({
+			kind: "reply",
+			urgency: "normal",
+			title: "Guide",
+			body: "Done with the report",
+		});
+	});
+});

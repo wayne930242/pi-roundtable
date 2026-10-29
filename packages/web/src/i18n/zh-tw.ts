@@ -1080,4 +1080,77 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"This field is too long.": "這個欄位的內容太長。",
 	"Give a web address.": "請填入網址。",
 	"The action could not be done.": "無法執行這個操作。",
+	// 通知、設定步驟與帳號連結
+	Notices: "通知",
+	"Notices, {count} waiting": "通知，{count} 則待處理",
+	"Turn on notifications": "開啟通知",
+	"Link your {name} account": "連結你的 {name} 帳號",
+	"Prove which account is yours, so the app knows who you are there.":
+		"證明哪個帳號是你的，讓應用程式知道你在那裡是誰。",
+	"So that you hear when something needs you, even when the app is closed.":
+		"這樣即使應用程式關著，有事找你時你也聽得到。",
+	Urgent: "緊急",
+	Handled: "已處理",
+	"Nothing needs you.": "目前沒有需要你處理的事。",
+	Linked: "已連結",
+	Required: "必填",
+	Recommended: "建議",
+	"The server's configuration links this account.":
+		"這個帳號由伺服器設定連結，無法在這裡移除。",
+	Unlink: "解除連結",
+	"Unlink {name}?": "要解除連結 {name} 嗎？",
+	"The app will no longer know this account is yours. You can link it again later.":
+		"應用程式將不再知道這個帳號是你的。之後可以再連結。",
+	"Your code": "你的驗證碼",
+	"The code works until {time}.": "驗證碼的有效時間到 {time}。",
+	"A code is waiting to be used.": "有一組驗證碼等著被使用。",
+	"{name} used the code. Confirm that this is you.":
+		"{name} 使用了驗證碼。請確認那是你。",
+	"I did it": "我完成了",
+	"Link {name} first.": "請先連結 {name}。",
+	Link: "連結",
+	"In your quiet hours a normal notice waits in the bell instead of ringing your phone. An urgent one still rings.":
+		"勿擾時段內，一般通知只會留在通知鈴裡，不會響手機；緊急通知照常響。",
+	From: "從",
+	To: "到",
+	"Turn off quiet hours": "關閉勿擾時段",
+	"A test notification is on its way.": "測試通知已送出。",
+	"Send a test notification": "傳送測試通知",
+	"Shown as": "顯示為",
+	"The name and picture of this account are what others see in the app.":
+		"別人在應用程式裡看到的，是這個帳號的名稱與頭像。",
+	Automatic: "自動",
+	"Your accounts": "你的帳號",
+	"Put the app on your phone": "把應用程式放到手機上",
+	"On iPhone and iPad, open this page in Safari, tap Share, then Add to Home Screen, and open the app from there.":
+		"在 iPhone 與 iPad 上，用 Safari 開啟此頁，點「分享」，再點「加入主畫面」，之後從主畫面開啟。",
+	"On a phone, add it to the home screen from the browser's menu so notifications reach you when it is closed.":
+		"在手機上，請從瀏覽器選單加入主畫面，這樣應用程式關著時也收得到通知。",
+	"Allow notifications": "允許通知",
+	"This browser cannot get push notifications.": "這個瀏覽器無法接收推播通知。",
+	"Allowed on this device.": "這台裝置已允許。",
+	"Send a test": "傳送測試",
+	"It arrived. Notifications work on this device.":
+		"收到了。這台裝置的通知可以正常運作。",
+	"Waiting for it…": "等待通知中…",
+	"It has not arrived. Check that notifications are allowed for this app, then send another.":
+		"還沒收到。請確認這個應用程式已允許通知，再傳送一次。",
+	Skip: "略過",
+	"{count} device(s) will get notifications.": "{count} 台裝置會收到通知。",
+	Skipped: "已略過",
+	"There is nothing left to set up.": "沒有需要再設定的項目。",
+	"There is no such notice to handle.": "沒有這則可處理的通知。",
+	"This account has no device that gets push yet. Turn it on first.":
+		"這個帳號還沒有接收推播的裝置，請先開啟推播。",
+	"A receipt needs a tag and received or opened.":
+		"回報需要標籤，以及「已收到」或「已開啟」。",
+	"There is no such notification.": "沒有這則通知。",
+	"Send quiet: {start, end, timeZone} or null.":
+		"請傳入 quiet：{start, end, timeZone}，或 null。",
+	"Send provider: the account's provider, or null for the default.":
+		"請傳入 provider（帳號的提供者），或 null 使用預設。",
+	"There is no picture.": "沒有頭像。",
+	"Send request: the id the code came with.":
+		"請傳入 request：驗證碼附帶的代號。",
+	"That step cannot be waived.": "這個步驟不能略過。",
 };

@@ -69,14 +69,6 @@ export type HostAction = HostActionView;
 export type FormSpec = FormSpecView;
 export type FormField = FormFieldView;
 export type FormValues = Readonly<Record<string, string | readonly string[]>>;
-/**
- * Where the app takes a person: a room, scrolled to and highlighting one of its messages, or a
- * page with a query. The shape `Notices.open` and `ActionResult.open` share.
- */
-export type OpenTarget =
-	| { room: ChannelKey; message?: number }
-	| { page: string; query?: Readonly<Record<string, string>> };
-
 export type ActionResult =
 	| {
 			ok: true;
@@ -88,6 +80,14 @@ export type ActionResult =
 			url?: string;
 	  }
 	| { ok: false; error: string; field?: string };
+
+/**
+ * Where a tap on a notice or a push goes, and where an action may take a person after it: a room,
+ * scrolled to one message when `message` names it, or a page with its query.
+ */
+export type OpenTarget =
+	| { room: ChannelKey; message?: number }
+	| { page: string; query?: Readonly<Record<string, string>> };
 
 export interface RoomHeader {
 	title: string;
@@ -311,6 +311,8 @@ export interface OnboardingStep {
 	open: { page: string };
 	/** Required steps only; recorded with who and when. */
 	waiver?: { label: string; confirm: string };
+	/** Set by the app on the steps it makes itself; a host leaves it out. */
+	builtin?: "link" | "push";
 }
 
 export interface StepStatus {
@@ -321,6 +323,10 @@ export interface StepStatus {
 	done: boolean;
 	waived: boolean;
 	open: { page: string };
+	/** Present on a required step the person may waive. */
+	waiver?: { label: string; confirm: string };
+	/** Present on a step the app makes itself. */
+	builtin?: "link" | "push";
 }
 
 /** Proves an account and links it. The app shows it; the host proves and writes. */
@@ -592,17 +598,16 @@ export class WebAppRegistry implements WebApp {
 		return () => this.#listeners.delete(listener);
 	}
 
-	/** The services a piece of the app provides, each once; the pieces provide their own. */
+	/** The services the pieces of the app provide; each of `rooms`, `notices`, `onboarding` and `push` once. */
 	provide(parts: Partial<WebAppParts>): void {
-		for (const name of Object.keys(parts) as (keyof WebAppParts)[]) {
-			if (this.#parts[name] !== undefined)
+		for (const name of Object.keys(parts) as (keyof WebAppParts)[])
+			if (this.#parts[name])
 				throw new PluginError(`web app: ${name} is provided twice`);
-		}
 		this.#parts = { ...this.#parts, ...parts };
 	}
 
 	/** Where the person's waivers are read from. */
-	useWaivers(waivers: WaiverRead): void {
+	setWaivers(waivers: WaiverRead): void {
 		this.#waivers = waivers;
 	}
 	waived(principalId: string, step: string): Promise<boolean> {

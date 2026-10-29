@@ -8,9 +8,15 @@ interface Shown {
 }
 
 /** Loads the worker over a stand-in for its global scope and returns what it did. */
-async function worker(windows: { url: string }[] = []) {
+async function worker(
+	windows: { url: string }[] = [],
+	held: { tag: string }[] = [],
+) {
 	const listeners = new Map<string, Listener>();
 	const shown: Shown[] = [];
+	const closed: string[] = [];
+	const badges: (number | "clear")[] = [];
+	const receipts: { url: string; body: unknown; credentials?: string }[] = [];
 	const opened: string[] = [];
 	const focused: string[] = [];
 	const told: unknown[] = [];
@@ -21,6 +27,17 @@ async function worker(windows: { url: string }[] = []) {
 				title: string,
 				options: Record<string, unknown>,
 			) => void shown.push({ title, options }),
+			getNotifications: async (options?: { tag?: string }) =>
+				held
+					.filter((one) => !options?.tag || one.tag === options.tag)
+					.map((one) => ({
+						data: undefined,
+						close: () => void closed.push(one.tag),
+					})),
+		},
+		navigator: {
+			setAppBadge: async (count: number) => void badges.push(count),
+			clearAppBadge: async () => void badges.push("clear"),
 		},
 		clients: {
 			claim: async () => undefined,
@@ -53,13 +70,37 @@ async function worker(windows: { url: string }[] = []) {
 	}
 	const fire = async (type: string, event: object) => {
 		const pending: Promise<unknown>[] = [];
-		listeners.get(type)?.({
-			...event,
-			waitUntil: (work: Promise<unknown>) => void pending.push(work),
-		});
-		await Promise.all(pending);
+		// The worker posts its receipts with the global `fetch`.
+		const before = globals.fetch;
+		globals.fetch = async (input: URL | string, init?: RequestInit) => {
+			receipts.push({
+				url: String(input),
+				body: JSON.parse(String(init?.body)),
+				...(init?.credentials ? { credentials: init.credentials } : {}),
+			});
+			return new Response("{}");
+		};
+		try {
+			listeners.get(type)?.({
+				...event,
+				waitUntil: (work: Promise<unknown>) => void pending.push(work),
+			});
+			await Promise.all(pending);
+		} finally {
+			globals.fetch = before;
+		}
 	};
-	return { fire, shown, opened, focused, told, listeners };
+	return {
+		fire,
+		shown,
+		opened,
+		focused,
+		told,
+		listeners,
+		closed,
+		badges,
+		receipts,
+	};
 }
 
 const push = (payload: unknown) => ({
@@ -191,4 +232,153 @@ test("the files pane's editor and language chunks are cached when they are first
 		expect(file.answered).toBe(false);
 		expect(file.stored.size).toBe(0);
 	}
+});
+
+const ROOM =
+	"https://app.example.test/console/#/room/app%3Ainbox.abcdefgh?message=42";
+const RECEIPTS = "https://app.example.test/console/api/push/receipts";
+
+test("a notice push is shown until it is dealt with when urgent, replaces its own tag, sets the count and reports that it arrived", async () => {
+	const sw = await worker();
+	await sw.fire(
+		"push",
+		push({
+			kind: "notice",
+			title: "Customer is waiting",
+			tag: "thread:abc",
+			url: "/console/#/room/app%3Ainbox.abcdefgh?message=42",
+			badge: 3,
+			urgency: "high",
+		}),
+	);
+	expect(sw.shown).toHaveLength(1);
+	expect(sw.shown[0]?.options).toMatchObject({
+		tag: "thread:abc",
+		renotify: true,
+		requireInteraction: true,
+		data: { url: ROOM, tag: "thread:abc", kind: "notice" },
+	});
+	expect(sw.badges).toEqual([3]);
+	expect(sw.receipts).toEqual([
+		{
+			url: RECEIPTS,
+			body: { tag: "thread:abc", event: "received" },
+			credentials: "include",
+		},
+	]);
+	// A normal one does not insist, and a count of zero clears the icon.
+	await sw.fire(
+		"push",
+		push({ kind: "test", title: "T", tag: "test:1", badge: 0 }),
+	);
+	expect(sw.shown[1]?.options.requireInteraction).toBeUndefined();
+	expect(sw.badges).toEqual([3, "clear"]);
+	expect(sw.receipts[1]?.body).toEqual({ tag: "test:1", event: "received" });
+});
+
+test("the agent rooms' own pushes post no receipt and leave the count alone", async () => {
+	const sw = await worker();
+	await sw.fire(
+		"push",
+		push({ kind: "card", title: "Card waiting", tag: "app:agent.guide" }),
+	);
+	await sw.fire(
+		"push",
+		push({ kind: "reply", title: "Guide", tag: "app:agent.guide" }),
+	);
+	await sw.fire("push", push({ title: "Old", tag: "x" }));
+	expect(sw.shown).toHaveLength(3);
+	expect(sw.receipts).toEqual([]);
+	expect(sw.badges).toEqual([]);
+	// A badge that is not a count is ignored.
+	await sw.fire(
+		"push",
+		push({ kind: "notice", title: "N", tag: "n", badge: -1 }),
+	);
+	await sw.fire(
+		"push",
+		push({ kind: "notice", title: "N", tag: "n", badge: "3" }),
+	);
+	expect(sw.badges).toEqual([]);
+});
+
+test("a clear push closes the notification under its tag, sets the count and shows nothing", async () => {
+	const sw = await worker([], [{ tag: "thread:abc" }, { tag: "other" }]);
+	await sw.fire("push", push({ kind: "clear", tag: "thread:abc", badge: 1 }));
+	expect(sw.shown).toEqual([]);
+	expect(sw.closed).toEqual(["thread:abc"]);
+	expect(sw.badges).toEqual([1]);
+	expect(sw.receipts).toEqual([]);
+});
+
+test("a tap with the app open brings that window forward and sends it to exactly the room, message and all", async () => {
+	const open = await worker([
+		{ url: "https://app.example.test/console/#/rooms" },
+	]);
+	await open.fire("notificationclick", {
+		notification: {
+			close: () => undefined,
+			data: { url: ROOM, tag: "thread:abc", kind: "notice" },
+		},
+	});
+	expect(open.focused).toEqual(["https://app.example.test/console/#/rooms"]);
+	expect(open.told).toEqual([{ type: "roundtable:open", url: ROOM }]);
+	expect(open.opened).toEqual([]);
+	expect(open.receipts).toEqual([
+		{
+			url: RECEIPTS,
+			body: { tag: "thread:abc", event: "opened" },
+			credentials: "include",
+		},
+	]);
+});
+
+test("a tap from a cold start opens a window at exactly the room's address", async () => {
+	const cold = await worker([]);
+	await cold.fire("notificationclick", {
+		notification: {
+			close: () => undefined,
+			data: { url: ROOM, tag: "thread:abc", kind: "notice" },
+		},
+	});
+	expect(cold.opened).toEqual([ROOM]);
+	expect(cold.focused).toEqual([]);
+	expect(cold.receipts[0]?.body).toEqual({
+		tag: "thread:abc",
+		event: "opened",
+	});
+	// A page of the host opens the same way, with its query.
+	const page = "https://app.example.test/console/p/mailboxes?box=1";
+	const other = await worker([]);
+	await other.fire("notificationclick", {
+		notification: {
+			close: () => undefined,
+			data: { url: page, kind: "notice", tag: "t" },
+		},
+	});
+	expect(other.opened).toEqual([page]);
+});
+
+test("a tap on a card or reply push opens its room and posts no receipt", async () => {
+	const url = "https://app.example.test/console/#/room/app%3Aagent.guide";
+	const sw = await worker([]);
+	await sw.fire("notificationclick", {
+		notification: {
+			close: () => undefined,
+			data: { url, kind: "card", tag: "app:agent.guide" },
+		},
+	});
+	expect(sw.opened).toEqual([url]);
+	expect(sw.receipts).toEqual([]);
+});
+
+test("a tap whose address is outside the app opens the app, never the address", async () => {
+	const sw = await worker([]);
+	await sw.fire("notificationclick", {
+		notification: {
+			close: () => undefined,
+			data: { url: "https://evil.example/", kind: "notice", tag: "t" },
+		},
+	});
+	expect(sw.opened).toEqual(["https://app.example.test/console/"]);
 });

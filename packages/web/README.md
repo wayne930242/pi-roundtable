@@ -375,6 +375,37 @@ Setup:
 - **Delivery.** The payload is encrypted for the device (RFC 8291, `aes128gcm`) and signed with a VAPID token (RFC 8292, ES256 with `jose`); there is no push dependency. A `404` or `410` from the service removes the subscription, as do five failures in a row. A person has at most 20 devices.
 - **Who gets it.** Only a device of a person who is still an owner, and only while no open page of that owner reports itself visible.
 
+## Notices and the profile
+
+A notice is something that waits on one person, such as a customer's message or a card to approve. A host raises one with `Notices.raise({ tag, people, title, open, urgency?, via? })` and takes it back with `Notices.resolve(tag)`; `renotify` adds people to an open one. `open` names exactly where a tap goes: `{ room, message? }` (the room, scrolled to that message) or `{ page, query? }`. A notice appears in the bell, with a count on the app icon where the device allows it, and is pushed according to its `urgency`: a normal one waits in the bell during the person's quiet hours, an urgent one rings and stays on screen until dealt with. `via` narrows a notice to named transports (see `push.transports`).
+
+Tapping a notification or a bell row opens exactly that room or page, whether the app is open (its window comes forward and goes there) or closed (a new window opens at the address; a signed-out person signs in and lands there). A device reports when a notice arrived and when it was opened, which is how the app knows a test notification reached the device.
+
+The profile page (`profile`) shows the person's name, picture and tier, the accounts they linked and the ones they can link or unlink, **Shown as** (which linked account names them in the app, or Automatic), and their own quiet hours with a test notification. An account that the host's configuration links cannot be unlinked there.
+
+### An external push sender
+
+With `push.sender: { external: { publicKey } }` the app holds no VAPID key: it queues each push as a row in `web_push_outbox` and a separate process empties it. Run that process with `runPushSender` from `pi-roundtable-web/push-sender`:
+
+```ts
+import { runPushSender, webPushTransport } from "pi-roundtable-web/push-sender";
+
+runPushSender({
+  database,                         // a role that may SELECT the outbox, subscriptions, sessions and principals, UPDATE the outbox, and INSERT deliveries and subscriptions
+  transports: [webPushTransport({ /* the VAPID key pair and subject */ }), mySlackTransport],
+  render: (row) => ({ title: "Something needs you" }), // with push.content "none" the row carries no text
+  subscribe: {                      // omit when the app's own subscription routes are used
+    listener: { port: 8788 },
+    path: "/push/subscriptions",    // the app's push.sender.external.subscribePath
+    origin: "https://app.example.com",
+    authenticate: (request) => webSessionPrincipal(database, request),
+  },
+  logger,
+});
+```
+
+The sender tries its transports in order for each row until one says it was sent, narrowed by the row's `via`. Its subscription routes answer only with the app's session cookie, and every request other than a GET must carry exactly the console's `Origin`, or it is refused with `403`. `webSessionPrincipal` and `webSessionClaims` read the session cookie, the second giving the claims of a person's newest live session (set `auth.storeClaims` for them to be stored). Nothing in the app process can read the key.
+
 ## Authentication
 
 The app never makes an account.
@@ -684,6 +715,17 @@ The `push` keys:
 | `push.endpointHosts` | none | Push services to post to besides the browsers' own (Google, Mozilla, Apple, Microsoft), as host names; a leading `*.` allows every subdomain. Endpoints must still be `https`. |
 | `push.tiers` | `["owner"]` | The tiers whose people may subscribe and receive push. |
 | `push.subject` | `origin`, when it is `https` | The contact a push service may use about this server (the VAPID `sub`): a `mailto:` or `https:` URL. With an `http` origin push stays off until it is set. |
+| `push.sender` | `"internal"` | Who signs and sends a push. `"internal"`: this process, with its own VAPID key. `{ external: { publicKey, subscribePath? } }`: a sender process you run holds the key, and this app never does; `publicKey` (base64url) is what browsers subscribe against, and `subscribePath` (starting with `/`) is where the sender serves the subscription routes, when it does. See [An external push sender](#an-external-push-sender). |
+| `push.content` | `"full"` internal, `"none"` external | What leaves the app for a push: `"full"` is a title and a preview, `"none"` is the kind, a tag and a count only (the sender words it). A host room never previews. |
+| `push.transports` | none | Names of the transports besides `web-push` that the sender process carries, such as `slack`. A notice's `via` may name only these and `web-push`; any other name is a `ConfigError` when the notice is raised. The app loads no transport itself. |
+
+The `onboarding` keys (what a person owes before the app opens, see [The gate](#the-gate)):
+
+| Key | Default | What it does |
+|---|---|---|
+| `onboarding.links` | none | Maps a provider name to `"required"` (gates the app until the account is linked) or `"nudge"` (only asks). Each provider needs a `LinkProver` registered through `WEB_APP`; the person links it on their profile page. A prover's `requires` decides the order. |
+| `onboarding.push` | `"off"` | `"required"` or `"nudge"` asks the person to turn push on for a device and receive a test notification; `"off"` leaves it out. |
+| `onboarding.pushWaiver` | `false` | Lets a person skip a `"required"` push step, which then counts as done and is recorded as waived. |
 
 The bad settings that stop the host at startup are: no `auth` or `verifier`, both of them, an unknown `auth.mode`, a password shorter than 12 characters, `none` on a listener that reaches beyond the machine, an `origin` with a path, a `mountPath` of `/` or with `..` in it, an unknown or repeated pane, `schedules`, `table` or `workspace` without `rooms`, a `workspace` pane with no place to show, a `workspace.roots` entry that is malformed, reuses an id, or is or contains `dataDir`, a `surface` that is not a lower-case word or is `discord`, an empty `ownerId`, a `uploadMaxBytes` out of range, and a `push.subject` that is neither a `mailto:` address nor an `https:` URL, and a `push.quietHours` that is neither `false` nor two different `HH:MM` times.
 

@@ -21,8 +21,14 @@ import type { Gate } from "../gate.ts";
 import { HostCardLog } from "../host/cards.ts";
 import { HostApp } from "../host/host-app.ts";
 import { RoomReads } from "../host/reads.ts";
+import {
+	mountNotices,
+	NOTICE_MIGRATIONS,
+	type NoticesMount,
+	type NoticesMountOptions,
+} from "../notices/mount.ts";
 import type { ResolvedOptions } from "../options.ts";
-import { PushApi } from "../push/api.ts";
+import type { PushApi } from "../push/api.ts";
 import { webPushChannel } from "../push/channel.ts";
 import { EndpointPolicy } from "../push/endpoint.ts";
 import { PushMutes, roomMuted } from "../push/mutes.ts";
@@ -63,6 +69,7 @@ export const APP_MIGRATIONS: readonly Migration[] = [
 	PushSubscriptions.migration,
 	PushMutes.migration,
 	RoomLayout.migration,
+	...NOTICE_MIGRATIONS,
 ];
 
 export interface OwnerAppOptions {
@@ -103,9 +110,13 @@ export interface OwnerAppOptions {
 	modeSwitches: boolean;
 	/** The longest an open socket lives; for a credential that logout or a new password does not reach. */
 	socketLifeMs?: number;
-	/** Web Push: the server's key, and how notifications read. */
+	/** The notices, onboarding and profile pieces: what they read of the options. */
+	extras: Pick<NoticesMountOptions, "profiles" | "routing" | "onboarding"> & {
+		push: NoticesMountOptions["push"];
+	};
+	/** Web Push: the server's key (absent with an external sender, which holds it), and how notifications read. */
 	push: {
-		vapid: Vapid;
+		vapid?: Vapid;
 		/** The `sub` of the VAPID token; absent = push is not set up and nothing is sent. */
 		subject: string | undefined;
 		preview: boolean;
@@ -153,6 +164,7 @@ export class OwnerApp {
 	readonly directChannel: DirectChannelProvider;
 	readonly #api: AppApi;
 	readonly #push: PushApi;
+	readonly #mounted: NoticesMount;
 	readonly #sockets: Sockets;
 	readonly #desk: OwnerDesk;
 	readonly #presence: Presence;
@@ -191,30 +203,51 @@ export class OwnerApp {
 		const quietClock = options.push.quietHours
 			? new QuietClock(options.push.quietHours, options.push.timeZone)
 			: undefined;
+		const quiet = quietClock
+			? (at: number) => quietClock.quietAt(at)
+			: undefined;
+		const mounted = mountNotices({
+			database: options.database,
+			logger,
+			registry: options.registry,
+			gate: options.gate,
+			sockets,
+			identity,
+			...(options.extras.profiles ? { profiles: options.extras.profiles } : {}),
+			subscriptions,
+			policy,
+			mount: options.mount,
+			routing: options.extras.routing,
+			push: options.extras.push,
+			...(quiet ? { quiet } : {}),
+			...(options.push.vapid ? { vapid: options.push.vapid } : {}),
+			onboarding: options.extras.onboarding,
+		});
 		const push = new PushService({
 			subscriptions,
-			sender: new PushSender({
-				vapid: options.push.vapid,
-				subject: options.push.subject,
-				policy,
-				...(options.push.fetch ? { fetch: options.push.fetch } : {}),
-				logger,
-			}),
+			// The app signs only with its own key; with an external sender it queues for it instead.
+			...(options.push.vapid
+				? {
+						sender: new PushSender({
+							vapid: options.push.vapid,
+							subject: options.push.subject,
+							policy,
+							...(options.push.fetch ? { fetch: options.push.fetch } : {}),
+							logger,
+						}),
+					}
+				: {}),
+			...(mounted.route ? { route: mounted.route } : {}),
 			identity,
 			visible: (principalId) => sockets.anyVisible(principalId),
 			preview: options.push.preview,
-			...(quietClock ? { quiet: (at: number) => quietClock.quietAt(at) } : {}),
+			...(quiet ? { quiet } : {}),
 			muted: roomMuted(mutes, threads, channelKey(options.surface, "thread.")),
 			urlOf: options.push.urlOf,
 			logger,
 		});
-		this.#push = new PushApi({
-			vapid: options.push.vapid,
-			policy,
-			subscriptions,
-			tiers: options.pushTiers,
-			enabled: options.push.subject !== undefined,
-		});
+		this.#mounted = mounted;
+		this.#push = mounted.pushApi;
 		const { registry } = options;
 		sockets.setRoomReader((connection, room) =>
 			registry.access.readNow(connection, room),
@@ -327,6 +360,7 @@ export class OwnerApp {
 			registry,
 			gate: options.gate,
 			audienceOf,
+			opened: (connection) => mounted.opened(connection),
 			conversations: options.conversations,
 			logger,
 		});
@@ -453,6 +487,7 @@ export class OwnerApp {
 	start(): void {
 		this.#uploads.adopt();
 		this.#host.start();
+		this.#mounted.start();
 		this.#sweep();
 		this.#sweeper = setInterval(() => this.#sweep(), SWEEP_EVERY_MS);
 	}
@@ -465,6 +500,7 @@ export class OwnerApp {
 		this.#pending = undefined;
 		for (const unsubscribe of this.#unsubscribe.splice(0)) unsubscribe();
 		this.#host.stop();
+		this.#mounted.stop().catch(() => undefined);
 		this.#desk.stop();
 		this.#presence.stop();
 		this.#sockets.closeAll(1001, "stopping");
