@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useLook } from "../lib/look.ts";
-import { translate as t } from "../lib/messages.ts";
+import { plural, translate as t } from "../lib/messages.ts";
 import type { Progress } from "../lib/rooms.ts";
 
 // Six strokes read as runes; they are drawn, not typed, so no font has to carry them.
@@ -56,10 +56,27 @@ function Candle() {
 	);
 }
 
+/** How many of the newest tool calls a folded strip shows. */
+export const LATEST_TOOLS = 3;
+
+/** The tool calls a strip shows: the newest few while folded, every one when opened. */
+export function shownTools<T>(
+	tools: readonly T[],
+	all: boolean,
+): { shown: readonly T[]; hidden: number } {
+	if (all || tools.length <= LATEST_TOOLS) return { shown: tools, hidden: 0 };
+	return {
+		shown: tools.slice(-LATEST_TOOLS),
+		hidden: tools.length - LATEST_TOOLS,
+	};
+}
+
 /** What the running turn shows: a shimmering bar, its streamed words with a caret, and the tools it runs. */
 export function ProgressStrip(props: { name: string; progress: Progress }) {
 	const [expanded, setExpanded] = useState(false);
+	const [allTools, setAllTools] = useState(false);
 	const { text, tools } = props.progress;
+	const { shown, hidden } = shownTools(tools, allTools);
 	const camelot = useLook() === "camelot";
 	return (
 		<div className="progress" aria-live="off">
@@ -72,7 +89,25 @@ export function ProgressStrip(props: { name: string; progress: Progress }) {
 			</div>
 			{tools.length ? (
 				<ul className="chips">
-					{tools.map((chip) => (
+					{hidden > 0 || allTools ? (
+						<li className="chip-more-item">
+							<button
+								type="button"
+								className="chip chip-more"
+								aria-expanded={allTools}
+								onClick={() => setAllTools((value) => !value)}
+							>
+								{allTools
+									? t("Show fewer tools")
+									: plural(
+											hidden,
+											"{count} earlier tool",
+											"{count} earlier tools",
+										)}
+							</button>
+						</li>
+					) : null}
+					{shown.map((chip) => (
 						<li key={chip.id} className="chip" data-status={chip.status}>
 							<span className="chip-dot" aria-hidden="true" />
 							<span>{chip.tool}</span>
