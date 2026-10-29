@@ -77,25 +77,49 @@ function SkillCard({ skill }: { skill: SkillView }) {
 					{t("Groups")}: {skill.groups.join(", ")}
 				</p>
 			) : null}
-			<Dialog open={open} title={skill.name} onClose={() => setOpen(false)}>
+			<Dialog
+				open={open}
+				title={skill.name}
+				size="wide"
+				onClose={() => setOpen(false)}
+			>
 				{error ? (
 					<Failure message={error} />
 				) : !detail ? (
 					<Loading />
 				) : (
-					<div className="skill-document">
-						<dl className="facts">
-							{detail.metadata.map((entry) => (
-								<Fragment key={entry.key}>
-									<dt>{entry.key}</dt>
-									<dd className="text">{entry.value}</dd>
-								</Fragment>
-							))}
-						</dl>
-						<MarkdownDocument source={detail.body} />
-					</div>
+					<SkillDocument title={skill.name} detail={detail} />
 				)}
 			</Dialog>
 		</article>
+	);
+}
+
+/** A skill's frontmatter as a short list of keys and values, then its Markdown at a reading width. */
+export function SkillDocument({
+	title,
+	detail,
+}: {
+	/** The dialog's title; a `name` entry that repeats it says nothing new. */
+	title: string;
+	detail: SkillDetailView;
+}) {
+	const entries = detail.metadata.filter(
+		(entry) => !(entry.key === "name" && entry.value === title),
+	);
+	return (
+		<div className="skill-document">
+			{entries.length ? (
+				<dl className="skill-meta">
+					{entries.map((entry) => (
+						<Fragment key={entry.key}>
+							<dt>{entry.key}</dt>
+							<dd>{entry.value}</dd>
+						</Fragment>
+					))}
+				</dl>
+			) : null}
+			<MarkdownDocument source={detail.body} />
+		</div>
 	);
 }

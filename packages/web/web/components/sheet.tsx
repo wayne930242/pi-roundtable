@@ -29,6 +29,8 @@ export function Sheet(props: {
 	children: ReactNode;
 	/** `palette` is a wide, top-aligned panel for the room switcher. */
 	variant?: "sheet" | "palette";
+	/** `wide` is a reading width, for a document. */
+	size?: "default" | "wide";
 	/** Where focus goes once the sheet is gone, when the browser's own return would land on nothing. */
 	restoreFocus?(): HTMLElement | null;
 }) {
@@ -127,7 +129,13 @@ export function Sheet(props: {
 		// biome-ignore lint/a11y/useKeyWithClickEvents: a click on the backdrop is a pointer shortcut; Escape closes the dialog through onCancel
 		<dialog
 			ref={ref}
-			className={props.variant === "palette" ? "sheet palette" : "sheet"}
+			className={
+				props.variant === "palette"
+					? "sheet palette"
+					: props.size === "wide"
+						? "sheet wide"
+						: "sheet"
+			}
 			aria-label={props.title}
 			onCancel={(event) => {
 				event.preventDefault();
@@ -149,28 +157,26 @@ export function Sheet(props: {
 			>
 				<span className="sheet-handle" />
 			</div>
-			<div className="sheet-body">
-				{props.variant === "palette" ? null : (
-					<div
-						className="sheet-head"
-						onPointerDown={onPointerDown}
-						onPointerMove={onPointerMove}
-						onPointerUp={onPointerUp}
-						onPointerCancel={onPointerUp}
+			{props.variant === "palette" ? null : (
+				<div
+					className="sheet-head"
+					onPointerDown={onPointerDown}
+					onPointerMove={onPointerMove}
+					onPointerUp={onPointerUp}
+					onPointerCancel={onPointerUp}
+				>
+					<h2 title={props.title}>{props.title}</h2>
+					<button
+						type="button"
+						className="icon-button"
+						aria-label={t("Close")}
+						onClick={dismiss}
 					>
-						<h2>{props.title}</h2>
-						<button
-							type="button"
-							className="icon-button"
-							aria-label={t("Close")}
-							onClick={dismiss}
-						>
-							<Icon name="close" />
-						</button>
-					</div>
-				)}
-				{open ? props.children : null}
-			</div>
+						<Icon name="close" />
+					</button>
+				</div>
+			)}
+			<div className="sheet-body">{open ? props.children : null}</div>
 		</dialog>
 	);
 }

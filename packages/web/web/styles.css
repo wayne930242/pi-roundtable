@@ -435,6 +435,45 @@ kbd {
 	overflow-wrap: anywhere;
 }
 
+/* A skill's frontmatter: a label column that fits its longest key, and the values beside it. */
+.skill-meta {
+	display: grid;
+	grid-template-columns: max-content minmax(0, 1fr);
+	gap: var(--space-2) var(--space-4);
+	margin: 0;
+}
+
+.skill-meta dt {
+	padding-top: 0.15em;
+	font-size: var(--text-xs);
+	color: var(--muted);
+}
+
+.skill-meta dd {
+	margin: 0;
+	overflow-wrap: anywhere;
+}
+
+.skill-document {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-4);
+}
+
+.skill-meta {
+	padding-bottom: var(--space-4);
+	border-bottom: 1px solid var(--border);
+}
+
+/* Running text keeps a reading measure on a wide panel; code and tables may use the width. */
+.prose.document {
+	line-height: 1.65;
+}
+
+.prose.document > :is(p, ul, ol, blockquote, h1, h2, h3, h4) {
+	max-width: 72ch;
+}
+
 .meta,
 .hint,
 .empty {
@@ -1059,7 +1098,7 @@ dialog::backdrop {
 
 dialog.sheet {
 	width: min(32rem, calc(100vw - 2rem));
-	max-height: min(85dvh, 44rem);
+	max-height: min(85dvh, 48rem);
 	margin: auto;
 	overflow: hidden;
 	opacity: 0;
@@ -1067,6 +1106,12 @@ dialog.sheet {
 	transition:
 		transform var(--dur-slow) var(--ease-out),
 		opacity var(--dur) var(--ease-out);
+}
+
+/* The header stays put and the body scrolls, so the panel never grows past the window. */
+dialog.sheet[open] {
+	display: flex;
+	flex-direction: column;
 }
 
 dialog.sheet[data-state="open"] {
@@ -1105,25 +1150,51 @@ dialog.sheet[data-dragging] {
 
 .sheet-body {
 	display: flex;
+	flex: 1 1 auto;
 	flex-direction: column;
 	gap: var(--space-3);
-	max-height: inherit;
+	min-height: 0;
 	overflow-y: auto;
-	padding: var(--space-4) var(--space-4)
-		calc(var(--space-4) + var(--safe-bottom));
+	padding: var(--space-5) var(--space-5)
+		calc(var(--space-5) + var(--safe-bottom));
 	overscroll-behavior: contain;
 }
 
 .sheet-head {
 	display: flex;
+	flex: none;
 	align-items: center;
 	justify-content: space-between;
 	gap: var(--space-3);
+	padding: var(--space-4) var(--space-4) var(--space-4) var(--space-5);
+	border-bottom: 1px solid var(--border);
 	touch-action: none;
 }
 
+.sheet-head h2 {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
 .sheet-head button {
+	flex: none;
 	touch-action: manipulation;
+}
+
+.sheet-head .icon-button {
+	width: 2.5rem;
+	min-width: 2.5rem;
+	height: 2.5rem;
+	min-height: 2.5rem;
+}
+
+/* A document is read at length: wider than a form, never wider than the window. */
+@media (min-width: 720px) {
+	dialog.sheet.wide {
+		width: min(56rem, calc(100vw - 4rem));
+	}
 }
 
 @media (max-width: 719px) {
@@ -1132,7 +1203,6 @@ dialog.sheet[data-dragging] {
 		max-width: none;
 		margin: auto 0 0;
 		border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-		border-bottom: 0;
 		transform: translate3d(0, 100%, 0);
 		opacity: 1;
 	}
@@ -1148,6 +1218,15 @@ dialog.sheet[data-dragging] {
 
 	.sheet-grab {
 		display: flex;
+	}
+
+	.sheet-head {
+		padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
+	}
+
+	.sheet-body {
+		padding: var(--space-4) var(--space-4)
+			calc(var(--space-4) + var(--safe-bottom));
 	}
 }
 

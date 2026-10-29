@@ -11,6 +11,10 @@ Planned as 0.24.0.
 
 - `pi-roundtable-web`: a room switcher for phones. A swipe right anywhere over the messages, or a tap on the header picture, opens a drawer of rooms (those with a card waiting first, then by latest activity, with a search field); a tap on a row opens that room in place, and each room keeps its unsent text. A swipe that starts within 32 px of either screen edge is left to the system's Back gesture. The package's changelog has the detail.
 
+### Changed
+
+- `pi-roundtable-web`: the dialogs of the console (the SKILL.md view, the note editor, delete and start-over confirmations) now share the sheet's look: a padded header with the title and an icon close button, a divider, and a body that scrolls while the header stays put. The skill document opens in a wider panel, lists its frontmatter as keys and values beside each other, and reads at a comfortable line length with code blocks that scroll inside themselves.
+
 ## [0.23.2] - 2026-10-29
 
 ### Added

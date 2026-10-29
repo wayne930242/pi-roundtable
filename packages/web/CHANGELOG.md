@@ -18,6 +18,7 @@ Planned as 0.24.0.
 ### Changed
 
 - A history step that lands on the page already shown no longer redraws the page or scrolls it to the top.
+- `Dialog` is now a thin wrapper over `Sheet`, with an optional `size: "wide"` for documents. The panel has a padded header (title truncating with an ellipsis, an icon close button labelled "Close"), a hairline divider, a body that scrolls under a fixed header, and a uniform border; on phones it is a bottom sheet with a grab handle that can be dragged down. The Skills page's SKILL.md view uses the wide size and lists the frontmatter as a two-column key/value list (leaving out a `name` that repeats the title) above Markdown with a 72-character measure, where code blocks and tables scroll inside themselves. The fixture app now serves the Notes and Skills panes.
 
 ## [0.23.2] - 2026-10-29
 

@@ -1,37 +1,25 @@
-import { type ReactNode, useEffect, useRef } from "react";
-import { translate as t } from "../lib/messages.ts";
+import type { ReactNode } from "react";
+import { Sheet } from "./sheet.tsx";
 
-/** A modal built on the browser's own `<dialog>`: focus stays inside it and Escape closes it. */
+/**
+ * A modal for a form, a confirmation or a document: a sheet, so it has the same header, close
+ * button, scrolling body and phone behaviour as every other panel. `wide` suits a document.
+ */
 export function Dialog(props: {
 	open: boolean;
 	title: string;
 	onClose(): void;
 	children: ReactNode;
+	size?: "default" | "wide";
 }) {
-	const ref = useRef<HTMLDialogElement>(null);
-	const { open } = props;
-	useEffect(() => {
-		const dialog = ref.current;
-		if (!dialog) return;
-		if (open && !dialog.open) dialog.showModal();
-		if (!open && dialog.open) dialog.close();
-	}, [open]);
 	return (
-		<dialog ref={ref} onClose={props.onClose} aria-label={props.title}>
-			<div className="stack">
-				<div className="card-head">
-					<h2>{props.title}</h2>
-					<button
-						type="button"
-						className="secondary"
-						aria-label={t("Close")}
-						onClick={props.onClose}
-					>
-						{t("Close")}
-					</button>
-				</div>
-				{props.open ? props.children : null}
-			</div>
-		</dialog>
+		<Sheet
+			open={props.open}
+			title={props.title}
+			onClose={props.onClose}
+			{...(props.size === "wide" ? { size: "wide" as const } : {})}
+		>
+			{props.children}
+		</Sheet>
 	);
 }
