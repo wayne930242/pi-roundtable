@@ -259,7 +259,13 @@ async function build(settings: ResolvedOptions, context: Context) {
 		characterSkins: env.characterSkins,
 		...(settings.routing === "path" ? { mountPath: settings.mount } : {}),
 		...(rooms
-			? { app: { surface: settings.surface, protocol: APP_PROTOCOL } }
+			? {
+					app: {
+						surface: settings.surface,
+						protocol: APP_PROTOCOL,
+						...(settings.modes ? {} : { modes: false as const }),
+					},
+				}
 			: {}),
 		...(settings.presentation ? { presentation: settings.presentation } : {}),
 	});

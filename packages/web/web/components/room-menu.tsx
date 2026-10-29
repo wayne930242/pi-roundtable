@@ -4,6 +4,7 @@ import { openAgentSheet } from "../lib/agent-sheet.ts";
 import { useSelector } from "../lib/app-store.ts";
 import { askFolderDialog } from "../lib/folder-dialogs.ts";
 import "../lib/layout-icons.ts";
+import { useConfig } from "../lib/config.ts";
 import { translate as t } from "../lib/messages.ts";
 import { changeMode } from "../lib/modes.ts";
 import { setRoomMuted } from "../lib/mute.ts";
@@ -42,6 +43,8 @@ export function RoomMenu(props: {
 	onAskStartOver(): void;
 }) {
 	const [busy, setBusy] = useState(false);
+	// A host can leave the two switches out.
+	const switches = useConfig().app?.modes !== false;
 	// Home stays at the top; every other room can be pinned or put in a folder.
 	const placeable = useSelector(
 		(state) => state.rooms[props.room]?.view?.home === false,
@@ -112,7 +115,7 @@ export function RoomMenu(props: {
 						</label>
 					</li>
 				)}
-				{props.readOnly ? null : (
+				{props.readOnly || !switches ? null : (
 					<li>
 						<label className="menu-item menu-toggle" htmlFor={YOLO_ID}>
 							<span className="menu-icon" data-tone="yolo">
@@ -144,7 +147,7 @@ export function RoomMenu(props: {
 						</label>
 					</li>
 				)}
-				{props.readOnly ? null : (
+				{props.readOnly || !switches ? null : (
 					<li>
 						<label className="menu-item menu-toggle" htmlFor={LONG_ID}>
 							<span className="menu-icon" data-tone="long">

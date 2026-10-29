@@ -106,7 +106,7 @@ export interface ConsolePorts {
 	/** The host's six skin tones, which the page draws every character with. */
 	characterSkins?: readonly string[];
 	/** Present when the owner app is served: its rooms' key prefix, for the page. */
-	app?: { surface: string; protocol: string };
+	app?: { surface: string; protocol: string; modes?: false };
 }
 
 import { cleanupConversation } from "./cleanup-api.ts";
