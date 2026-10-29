@@ -77,6 +77,15 @@ describeDb("an owner's operations on the team (Discord)", () => {
 			);
 		});
 
+		test("only an owner may create an agent here, and nothing is made for anyone else", async () => {
+			const before = fx.channels.created.length;
+			await expect(
+				fx.team.createAgent({ ...OWNER_SPEAKER, tier: "member" }, NOTES),
+			).rejects.toThrow(/Only an owner/);
+			expect(fx.store.agent("notes")).toBeUndefined();
+			expect(fx.channels.created.length).toBe(before);
+		});
+
 		test("without a task the agent only exists", async () => {
 			await fx.team.createAgent(OWNER_SPEAKER, NOTES);
 			await settle();

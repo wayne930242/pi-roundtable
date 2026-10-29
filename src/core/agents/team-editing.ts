@@ -105,7 +105,8 @@ export class TeamEditing {
 	}
 
 	/**
-	 * An owner creates an agent from outside any agent turn (the web app's form): the same checks,
+	 * An owner creates an agent from outside any agent turn (the web app's form; any other tier is
+	 * refused, since the opening task runs as `speaker`): the same checks,
 	 * picture, channel and opening task as `create`, and the model and thinking level the owner
 	 * picked. Without a task the agent only exists, waiting in its room. Returns the new agent.
 	 */
@@ -124,6 +125,8 @@ export class TeamEditing {
 			thinking?: string;
 		},
 	): Promise<Agent> {
+		if (speaker.tier !== "owner")
+			throw new AgentError("Only an owner may create an agent here.");
 		const { model, thinking, task, openIn, ...rest } = input;
 		const made = await this.#create(
 			{ speaker, by: speaker.name, creator: undefined, openIn },
