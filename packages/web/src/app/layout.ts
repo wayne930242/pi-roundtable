@@ -1,6 +1,7 @@
 import type { SQL } from "bun";
 import type { Migration } from "pi-roundtable";
 import type { LayoutView } from "../api-types.ts";
+import { forgetRoom } from "../layout-order.ts";
 
 /** What the layout routes need of the stored arrangement; `RoomLayout` is the database's. */
 export interface LayoutStore {
@@ -11,6 +12,11 @@ export interface LayoutStore {
 	 * result. An edit that throws changes nothing.
 	 */
 	change(edit: (layout: LayoutView) => LayoutView): Promise<LayoutView>;
+	/**
+	 * Drops a room's pin and its place in a folder, for a room that is deleted for good (an archived
+	 * agent returns to its place when it comes back, so archiving does not call this).
+	 */
+	forget(room: string): Promise<void>;
 }
 
 interface FolderRow {
@@ -60,6 +66,10 @@ export class RoomLayout implements LayoutStore {
 				)`;
 		},
 	};
+
+	async forget(room: string): Promise<void> {
+		await this.change((layout) => forgetRoom(layout, room));
+	}
 
 	async view(): Promise<LayoutView> {
 		return this.#sql.begin(async (tx) => read(tx));

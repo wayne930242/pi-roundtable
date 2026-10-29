@@ -95,6 +95,11 @@ afterAll(async () => {
 });
 
 const settle = (ms = 40) => new Promise((resolve) => setTimeout(resolve, ms));
+/** Waits for something that needs a hold and a lazy chunk, which a busy machine takes longer over. */
+async function until(done: () => boolean, ms = 4000): Promise<void> {
+	const stop = Date.now() + ms;
+	while (!done() && Date.now() < stop) await settle(25);
+}
 
 beforeEach(() => {
 	window.innerWidth = 1280;
@@ -619,8 +624,10 @@ test("a finger that rests on a row lifts it, and letting go without moving opens
 	await page.render(<List />);
 	const row = rowOf("scout") as HTMLElement;
 	const item = row.closest("li") as HTMLElement;
-	await page.act(() => pointer(row, "pointerdown"));
-	await settle(600);
+	await page.act(async () => {
+		pointer(row, "pointerdown");
+		await until(() => item.hasAttribute("data-lifted"));
+	});
 	expect(item.hasAttribute("data-lifted")).toBe(true);
 	// The menu waits for the finger to lift: nothing is open while the row is held.
 	expect(menuItems()).toEqual([]);
@@ -633,8 +640,11 @@ test("a finger that rests on a row lifts it, and letting go without moving opens
 test("a finger that goes down within 32 px of a screen edge never lifts a row: the hold opens the menu as before", async () => {
 	await page.render(<List />);
 	const row = rowOf("scout") as HTMLElement;
-	await page.act(() => pointer(row, "pointerdown", { x: 10 }));
-	await settle(600);
+	// The menu opens from a timer, so the wait is inside `act` for React to draw it.
+	await page.act(async () => {
+		pointer(row, "pointerdown", { x: 10 });
+		await until(() => menuItems().length > 0);
+	});
 	expect((row.closest("li") as HTMLElement).hasAttribute("data-lifted")).toBe(
 		false,
 	);

@@ -8,7 +8,7 @@ import { AppApi } from "./app/routes.ts";
 import type { AssetBundle } from "./assets.ts";
 import { createAuthenticator } from "./auth/authenticator.ts";
 import { ConsoleServer } from "./console-server.ts";
-import { EMPTY_LAYOUT } from "./layout-order.ts";
+import { EMPTY_LAYOUT, forgetRoom } from "./layout-order.ts";
 import { ORIGIN } from "./testing/fixtures.ts";
 import { admit } from "./verifier.ts";
 import type { Visitor } from "./visitors.ts";
@@ -29,6 +29,9 @@ class MemoryLayout implements LayoutStore {
 	stored: LayoutView = structuredClone(EMPTY_LAYOUT);
 	async view() {
 		return structuredClone(this.stored);
+	}
+	async forget(room: string) {
+		this.stored = forgetRoom(this.stored, room);
 	}
 	async change(edit: (layout: LayoutView) => LayoutView) {
 		this.stored = edit(structuredClone(this.stored));

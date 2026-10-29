@@ -1,7 +1,7 @@
 import { nudgeBefore } from "../../src/layout-order.ts";
 import { useSelector } from "../lib/app-store.ts";
 import { askFolderDialog } from "../lib/folder-dialogs.ts";
-import { moveRoom, nudgeRoom } from "../lib/layout.ts";
+import { moveRoom, nudgeRoom } from "../lib/layout-actions.ts";
 import { translate as t } from "../lib/messages.ts";
 import { activityAt } from "../lib/rooms.ts";
 import { placeOf, sections } from "../lib/sections.ts";

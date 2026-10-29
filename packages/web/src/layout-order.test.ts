@@ -4,6 +4,7 @@ import {
 	createFolder,
 	EMPTY_LAYOUT,
 	FOLDER_NAME_MAX,
+	forgetRoom,
 	LayoutError,
 	MAX_FOLDERS,
 	moveBefore,
@@ -181,4 +182,16 @@ test("shown hides rooms that are gone and keeps their place in the stored layout
 		folders: [{ id: "f1", name: "One", rooms: [B, C] }],
 	});
 	expect(state.pins).toEqual([A, D]);
+});
+
+test("forgetting a room drops its pin and its place in a folder, and leaves everything else", () => {
+	let state = createFolder(createFolder(layout(), "f1", "One"), "f2", "Two");
+	state = placeRoom(placeRoom(state, A, "f1", null), B, "f1", null);
+	state = placeRoom(state, C, "f2", null);
+	state = setPinned(state, D, true, null);
+	expect(forgetRoom(state, A).folders.map((f) => f.rooms)).toEqual([[B], [C]]);
+	expect(forgetRoom(state, D).pins).toEqual([]);
+	expect(forgetRoom(state, D).folders).toEqual(state.folders);
+	// A room with no place changes nothing.
+	expect(forgetRoom(state, "app:agent.nobody")).toEqual(state);
 });

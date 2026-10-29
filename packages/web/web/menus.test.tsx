@@ -113,9 +113,10 @@ afterEach(async () => {
 	Reflect.deleteProperty(navigator, "canShare");
 });
 
-const rightClick = (target: Element | null) => {
+const rightClick = (target: Element | null, opens = true) => {
 	if (!target) throw new Error("nothing to click");
-	// The menu's builders load on demand, so the menu is there a moment after the click.
+	// The menu's builders load on demand, so the menu is there a moment after the click: the first
+	// one waits for the chunk, however busy the machine is.
 	return page.act(async () => {
 		target.dispatchEvent(
 			new MouseEvent("contextmenu", {
@@ -126,6 +127,13 @@ const rightClick = (target: Element | null) => {
 			}),
 		);
 		await settle(30);
+		const stop = Date.now() + 3000;
+		while (
+			opens &&
+			!document.querySelector('[role^="menuitem"]') &&
+			Date.now() < stop
+		)
+			await settle(20);
 	});
 };
 const menuItems = (): HTMLElement[] => [
@@ -206,7 +214,7 @@ test("a group row has the modes and restart but no agent edit; a thread row has 
 		"Archive group",
 	]);
 	await page.act(() => closeMenu());
-	await rightClick(q(".thread-row"));
+	await rightClick(q(".thread-row"), false);
 	expect(labels()).toEqual([]);
 });
 

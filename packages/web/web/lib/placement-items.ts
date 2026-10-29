@@ -5,18 +5,16 @@ import { nudgeBefore } from "../../src/layout-order.ts";
 import type { MenuItem } from "./action-menu.ts";
 import { store } from "./app-store.ts";
 import { askFolderDialog } from "./folder-dialogs.ts";
-import {
-	arrangementNow,
-	muteFolder,
-	nudgeFolder,
-	nudgeRoom,
-	pinRoom,
-} from "./layout.ts";
+import { arrangementNow } from "./layout.ts";
 import type { Leave, MenuSpec } from "./menu-items.ts";
 import { translate as t } from "./messages.ts";
 import { muteState, placeOf } from "./sections.ts";
 
 const now: Leave = (go) => go();
+
+/** The edits load when the first is made, not when a menu opens. */
+const edit = (): Promise<typeof import("./layout-actions.ts")> =>
+	import("./layout-actions.ts");
 
 /** Pin or unpin, move to a folder, and a step up or down within the room's list; for a room that is not Home. */
 export function placementItems(key: string, leave: Leave = now): MenuItem[] {
@@ -28,7 +26,7 @@ export function placementItems(key: string, leave: Leave = now): MenuItem[] {
 			label: pinned ? t("Unpin") : t("Pin"),
 			icon: "pin",
 			run: () => {
-				void pinRoom(key, !pinned);
+				void edit().then((one) => one.pinRoom(key, !pinned));
 			},
 		},
 		{
@@ -45,7 +43,7 @@ export function placementItems(key: string, leave: Leave = now): MenuItem[] {
 			label: t("Move up"),
 			icon: "up",
 			run: () => {
-				void nudgeRoom(key, "up");
+				void edit().then((one) => one.nudgeRoom(key, "up"));
 			},
 		});
 	if (nudgeBefore(place.siblings, key, "down"))
@@ -54,7 +52,7 @@ export function placementItems(key: string, leave: Leave = now): MenuItem[] {
 			label: t("Move down"),
 			icon: "down",
 			run: () => {
-				void nudgeRoom(key, "down");
+				void edit().then((one) => one.nudgeRoom(key, "down"));
 			},
 		});
 	return items;
@@ -87,7 +85,7 @@ export function folderMenu(id: string): MenuSpec | undefined {
 				: t("Mute the whole folder"),
 			icon: allMuted ? "bell" : "bell-off",
 			run: () => {
-				void muteFolder(id, !allMuted);
+				void edit().then((one) => one.muteFolder(id, !allMuted));
 			},
 		});
 	if (nudgeBefore(order, id, "up"))
@@ -96,7 +94,7 @@ export function folderMenu(id: string): MenuSpec | undefined {
 			label: t("Move up"),
 			icon: "up",
 			run: () => {
-				void nudgeFolder(id, "up");
+				void edit().then((one) => one.nudgeFolder(id, "up"));
 			},
 		});
 	if (nudgeBefore(order, id, "down"))
@@ -105,7 +103,7 @@ export function folderMenu(id: string): MenuSpec | undefined {
 			label: t("Move down"),
 			icon: "down",
 			run: () => {
-				void nudgeFolder(id, "down");
+				void edit().then((one) => one.nudgeFolder(id, "down"));
 			},
 		});
 	items.push({

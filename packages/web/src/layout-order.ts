@@ -143,7 +143,8 @@ export function removeFolder(layout: LayoutView, id: string): LayoutView {
 	);
 }
 
-const without = (layout: LayoutView, room: string): LayoutView => ({
+/** The layout without a room: not pinned and in no folder. For a room that is gone for good. */
+export const forgetRoom = (layout: LayoutView, room: string): LayoutView => ({
 	pins: layout.pins.filter((one) => one !== room),
 	folders: layout.folders.map((folder) =>
 		folder.rooms.includes(room)
@@ -163,7 +164,7 @@ export function placeRoom(
 	before: string | null,
 ): LayoutView {
 	if (folder !== null) folderIndex(layout, folder);
-	const clear = without(layout, room);
+	const clear = forgetRoom(layout, room);
 	if (folder === null) return clear;
 	return withFolders(
 		clear,
@@ -182,7 +183,7 @@ export function setPinned(
 	pinned: boolean,
 	before: string | null,
 ): LayoutView {
-	const clear = without(layout, room);
+	const clear = forgetRoom(layout, room);
 	if (!pinned) return clear;
 	return {
 		pins: moveBefore(

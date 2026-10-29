@@ -4,18 +4,20 @@ import { api } from "./lib/api.ts";
 import { store } from "./lib/app-store.ts";
 import {
 	COLLAPSED_KEY,
+	layoutNow,
+	pruneCollapsed,
+	reloadCollapsed,
+	toggleCollapsed,
+} from "./lib/layout.ts";
+import {
 	createFolder,
 	deleteFolder,
-	layoutNow,
 	moveRoom,
 	nudgeFolder,
 	nudgeRoom,
 	pinRoom,
-	pruneCollapsed,
-	reloadCollapsed,
 	renameFolderTo,
-	toggleCollapsed,
-} from "./lib/layout.ts";
+} from "./lib/layout-actions.ts";
 import { initialState, reduce } from "./lib/rooms.ts";
 
 const A = "app:agent.a";

@@ -10,7 +10,7 @@ import {
 	deleteFolder,
 	moveRoom,
 	renameFolderTo,
-} from "../lib/layout.ts";
+} from "../lib/layout-actions.ts";
 import { translate as t } from "../lib/messages.ts";
 import { Confirm } from "./confirm.tsx";
 import { Dialog } from "./dialog.tsx";

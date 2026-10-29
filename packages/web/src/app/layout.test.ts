@@ -120,6 +120,24 @@ describeDb("the room list's layout in the database", () => {
 		]);
 	});
 
+	test("forgetting a room removes its pin and its folder place and keeps the rest dense", async () => {
+		await layout.change(folderIn("Work"));
+		await layout.change((view) => placeRoom(view, A, "folder.Work", null));
+		await layout.change((view) => placeRoom(view, B, "folder.Work", null));
+		await layout.change((view) => placeRoom(view, C, "folder.Work", null));
+		await layout.change((view) =>
+			setPinned(view, "app:agent.layout-p", true, null),
+		);
+		await layout.forget(A);
+		await layout.forget("app:agent.layout-p");
+		await layout.forget("app:agent.layout-never");
+		expect(await layout.view()).toEqual({
+			pins: [],
+			folders: [{ id: "folder.Work", name: "Work", rooms: [B, C] }],
+		});
+		expect(dense((await positions()).rooms)).toBe(true);
+	});
+
 	test("ten concurrent edits leave unique, dense positions", async () => {
 		for (const name of ["F0", "F1", "F2", "F3", "F4"])
 			await layout.change(folderIn(name));
