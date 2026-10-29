@@ -555,7 +555,7 @@ const ACCEPTANCE: readonly Item[] = [
 				"the runtime plugin's preflight of claude-bridge with memory > warns without stopping boot when stored roles admit someone besides the owner",
 			),
 			t(
-				"src/core/define-roundtable.test.ts",
+				"src/core/define-roundtable-bridge.test.ts",
 				"claude-bridge in a host whose shared conversations several people speak in > boots with a warning that says why shared bridge history remains risky",
 			),
 			t(
