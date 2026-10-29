@@ -64,7 +64,10 @@ export interface BrokerOptions {
 	) => Promise<string | undefined> | string | undefined;
 	tools?: readonly HostTool[];
 	mcp?: readonly McpServer[];
-	/** Allow cleartext endpoints only for local testing. */
+	/**
+	 * Allow cleartext endpoints, for local testing. A model URL on `127.0.0.1`, `::1` or
+	 * `localhost` is cleartext-capable without it.
+	 */
 	allowHttp?: boolean;
 	fetchImpl?: (url: string, init: RequestInit) => Promise<Response>;
 	maxCalls?: number;
@@ -88,7 +91,13 @@ const FORBIDDEN_HEADERS = new Set([
 	"x-forwarded-proto",
 ]);
 
-function checkUrl(raw: string, allowHttp: boolean): void {
+const LOOPBACK_HOSTS = new Set(["127.0.0.1", "[::1]", "localhost"]);
+
+/**
+ * `loopbackHttp` lets the model URL use cleartext when it names the host's own loopback: the
+ * broker runs on the host, so that request never leaves it.
+ */
+function checkUrl(raw: string, allowHttp: boolean, loopbackHttp = false): void {
 	let url: URL;
 	try {
 		url = new URL(raw);
@@ -96,7 +105,13 @@ function checkUrl(raw: string, allowHttp: boolean): void {
 		throw new Error("invalid broker endpoint URL");
 	}
 	if (
-		(!allowHttp && url.protocol !== "https:") ||
+		(!allowHttp &&
+			url.protocol !== "https:" &&
+			!(
+				loopbackHttp &&
+				url.protocol === "http:" &&
+				LOOPBACK_HOSTS.has(url.hostname)
+			)) ||
 		(allowHttp && !["http:", "https:"].includes(url.protocol)) ||
 		url.username ||
 		url.password ||
@@ -114,7 +129,7 @@ export class SandboxBroker {
 	#active = false;
 
 	constructor(options: BrokerOptions) {
-		checkUrl(options.modelUrl, options.allowHttp ?? false);
+		checkUrl(options.modelUrl, options.allowHttp ?? false, true);
 		this.#options = options;
 		this.#remaining = options.maxCalls ?? 48;
 		if (

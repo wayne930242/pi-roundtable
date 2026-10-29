@@ -459,3 +459,58 @@ test("resolves the model credential per call from the bound channel and speaker"
 		},
 	]);
 });
+
+test.each([
+	"http://127.0.0.1:4000/v1/chat/completions",
+	"http://[::1]:4000/v1/chat/completions",
+	"http://localhost:4000/v1/chat/completions",
+])(
+	"a cleartext model URL on the host's loopback needs no allowHttp (%s)",
+	async (modelUrl) => {
+		let target = "";
+		const broker = new SandboxBroker(
+			options({
+				modelUrl,
+				fetchImpl: async (url) => {
+					target = String(url);
+					return Response.json({ choices: [] });
+				},
+			}),
+		);
+		expect((await broker.handle(request())).status).toBe(200);
+		expect(target).toBe(modelUrl);
+	},
+);
+
+test.each([
+	"http://example.com/v1/chat/completions",
+	"http://127.0.0.1.example.com/v1",
+	"http://10.0.0.5:4000/v1",
+	"http://user:pass@127.0.0.1:4000/v1",
+	"http://127.0.0.1:4000/v1#frag",
+	"ftp://127.0.0.1/v1",
+])(
+	"any other cleartext or credentialed model URL is still refused (%s)",
+	(modelUrl) => {
+		expect(() => new SandboxBroker(options({ modelUrl }))).toThrow(
+			"broker endpoints must be credential-free HTTPS URLs",
+		);
+	},
+);
+
+test("loopback cleartext applies to the model URL only, not to an MCP server", () => {
+	expect(
+		() =>
+			new SandboxBroker(
+				options({
+					mcp: [
+						{
+							name: "health",
+							url: "http://127.0.0.1:9000/mcp",
+							tools: [{ name: "ping", description: "Ping", parameters: {} }],
+						},
+					],
+				}),
+			),
+	).toThrow();
+});
