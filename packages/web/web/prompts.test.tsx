@@ -324,11 +324,55 @@ test("reverting asks first, names the document, and brings the file version back
 		) ?? null,
 	);
 	await page.act(() => settle(60));
-	expect(revert).toHaveBeenCalledWith("guest");
+	expect(revert).toHaveBeenCalledWith("guest", { base: "Owner's guest text." });
 	expect(q<HTMLTextAreaElement>("textarea.prompt-full")?.value).toBe(
 		"Guest file text.",
 	);
 	expect(button("Revert to the file version")).toBeNull();
+});
+
+test("a revert that lost to another save shows what is there now and keeps the draft, with the way back still on offer", async () => {
+	await show();
+	await openEditor("Guest prompt");
+	const theirs = view({
+		id: "guest",
+		label: "Guest prompt",
+		text: "Sam's guest text.",
+		fileText: "Guest file text.",
+		differs: true,
+		override: { by: "Sam", at: AT },
+	});
+	revert.mockRejectedValueOnce(
+		new ApiFailure(
+			"This prompt changed while you were editing it.",
+			undefined,
+			409,
+			{ conflict: "changed", current: theirs },
+		),
+	);
+	await page.click(button("Revert to the file version"));
+	await page.act(() => settle(60));
+	const confirm = all<HTMLDialogElement>("dialog.sheet").find(
+		(one) =>
+			one.getAttribute("aria-label") ===
+			"Revert Guest prompt to the file version?",
+	);
+	await page.click(
+		[...(confirm?.querySelectorAll<HTMLButtonElement>("button") ?? [])].find(
+			(one) => one.textContent === "Revert to the file version",
+		) ?? null,
+	);
+	await page.act(() => settle(60));
+	expect(revert).toHaveBeenCalledTimes(1);
+	expect(document.body.textContent).toContain(
+		"This prompt changed while you were editing it.",
+	);
+	// The draft is the text the owner had; the page now knows the text in force is Sam's.
+	expect(q<HTMLTextAreaElement>("textarea.prompt-full")?.value).toBe(
+		"Owner's guest text.",
+	);
+	expect(button("Review changes")?.disabled).toBe(false);
+	expect(button("Revert to the file version")).not.toBeNull();
 });
 
 test("Cancel in the revert question leaves the text alone", async () => {

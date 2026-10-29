@@ -501,6 +501,11 @@ export interface PromptSave {
 	base: string;
 }
 
+/** The body of `POST api/prompts/<id>/revert`: the text in force that the owner saw when they asked. */
+export interface PromptRevert {
+	base: string;
+}
+
 /** A 409: the document is not as the writer saw it. */
 export interface PromptConflict extends ApiError {
 	conflict: "changed";

@@ -58,6 +58,19 @@ export interface PromptDocumentView {
 }
 
 /**
+ * A change made from a text that is no longer the one in force: someone else changed the document
+ * meanwhile. Nothing was written; `current` is what is in force now.
+ */
+export class PromptConflictError extends Error {
+	override name = "PromptConflictError";
+	constructor(readonly current: PromptDocumentView) {
+		super(
+			`The prompt document "${current.id}" changed while it was being edited.`,
+		);
+	}
+}
+
+/**
  * Prompt texts the owner edits outside the files: each has a file version, an optional override
  * stored in the database, and a history. The override wins while it is set and is read at every
  * turn, so a change applies from the next turn without a restart.
@@ -74,10 +87,22 @@ export interface PromptDocuments {
 	/**
 	 * Sets the override. The text must have 1 to `maxChars` characters and differ from the text in
 	 * force; text equal to the file version reverts instead. Throws AgentError otherwise.
+	 *
+	 * `base` is the text the change was edited from. When it is given and is not the text in force
+	 * when the write comes up in the queue, nothing is written and PromptConflictError carries the
+	 * document as it is now.
 	 */
-	set(id: string, text: string, by: string): Promise<PromptDocumentView>;
-	/** Returns to the file version, dropping the override. Throws AgentError when none is set. */
-	revert(id: string, by: string): Promise<PromptDocumentView>;
+	set(
+		id: string,
+		text: string,
+		by: string,
+		base?: string,
+	): Promise<PromptDocumentView>;
+	/**
+	 * Returns to the file version, dropping the override. Throws AgentError when none is set, and
+	 * PromptConflictError as `set` does when `base` is not the text in force.
+	 */
+	revert(id: string, by: string, base?: string): Promise<PromptDocumentView>;
 	/** The changes of one document, newest first. */
 	history(id: string, limit?: number): Promise<PromptVersion[]>;
 }
@@ -214,16 +239,23 @@ export class PgPromptDocuments implements PromptDocuments {
 		return found ? this.#view(found.spec) : undefined;
 	}
 
-	set(id: string, text: string, by: string): Promise<PromptDocumentView> {
+	set(
+		id: string,
+		text: string,
+		by: string,
+		base?: string,
+	): Promise<PromptDocumentView> {
 		return this.#serial(async () => {
 			const spec = this.#registered(id);
+			const file = fileText(spec);
+			const now = this.#overrides.get(id)?.text ?? file;
+			if (base !== undefined && base !== now)
+				throw new PromptConflictError(this.#view(spec));
 			const max = spec.maxChars ?? DEFAULT_DOCUMENT_CHARS;
 			if (!text.trim() || text.length > max)
 				throw new AgentError(
 					`A prompt document must have 1 to ${max} characters; this one has ${text.length}.`,
 				);
-			const file = fileText(spec);
-			const now = this.#overrides.get(id)?.text ?? file;
 			if (text === now)
 				throw new AgentError("The text is the one already in force.");
 			if (text === file) return this.#revert(id, spec, by);
@@ -247,9 +279,14 @@ export class PgPromptDocuments implements PromptDocuments {
 		});
 	}
 
-	revert(id: string, by: string): Promise<PromptDocumentView> {
+	revert(id: string, by: string, base?: string): Promise<PromptDocumentView> {
 		return this.#serial(async () => {
 			const spec = this.#registered(id);
+			if (
+				base !== undefined &&
+				base !== (this.#overrides.get(id)?.text ?? fileText(spec))
+			)
+				throw new PromptConflictError(this.#view(spec));
 			if (!this.#overrides.has(id))
 				throw new AgentError(
 					`"${id}" has no override; the file version is in force.`,

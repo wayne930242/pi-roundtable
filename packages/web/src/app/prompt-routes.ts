@@ -3,9 +3,11 @@ import type {
 	PromptDocumentView,
 	PromptVersion,
 } from "pi-roundtable";
+import { PromptConflictError } from "pi-roundtable";
 import type {
 	PromptConflict,
 	PromptHistoryView,
+	PromptRevert,
 	PromptSave,
 	PromptsView,
 	PromptVersionView,
@@ -39,6 +41,29 @@ const viewOf = (document: PromptDocumentView): PromptView => ({
 	fileText: document.fileText,
 	maxChars: document.maxChars,
 });
+
+/** The answer to a write, or 409 with the document as it is now when it was not the text the writer saw. */
+async function changed(
+	write: () => Promise<PromptDocumentView>,
+): Promise<Response> {
+	try {
+		return json(viewOf(await write()));
+	} catch (error) {
+		if (!(error instanceof PromptConflictError)) throw error;
+		const refused = new HttpError(
+			409,
+			"This prompt changed while you were editing it.",
+		);
+		return json(
+			{
+				error: refused.message,
+				conflict: "changed",
+				current: viewOf(error.current),
+			} satisfies PromptConflict,
+			refused.status,
+		);
+	}
+}
 
 export const promptVersionView = (
 	version: PromptVersion,
@@ -103,25 +128,16 @@ export class PromptApi {
 			if (typeof base !== "string")
 				throw bad("base must be the text the prompt was edited from.");
 			const save: PromptSave = { text, base };
-			if (document.text !== save.base) {
-				const refused = new HttpError(
-					409,
-					"This prompt changed while you were editing it.",
-				);
-				return json(
-					{
-						error: refused.message,
-						conflict: "changed",
-						current: viewOf(document),
-					} satisfies PromptConflict,
-					refused.status,
-				);
-			}
-			return json(viewOf(await prompts.set(id, save.text, speaker.name)));
+			// The registry compares `base` where the write waits its turn, so two saves cannot both pass.
+			return changed(() => prompts.set(id, save.text, speaker.name, save.base));
 		}
 		if (action === "revert" && method === "POST" && parts.length === 4) {
 			const speaker = await owner();
-			return json(viewOf(await prompts.revert(id, speaker.name)));
+			const body = await bodyOf(request, MAX_PROMPT_BYTES);
+			if (typeof body.base !== "string")
+				throw bad("base must be the text the prompt was reverted from.");
+			const revert: PromptRevert = { base: body.base };
+			return changed(() => prompts.revert(id, speaker.name, revert.base));
 		}
 		if (action === "history" && method === "GET" && parts.length === 4) {
 			await owner();

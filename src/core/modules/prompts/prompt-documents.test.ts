@@ -10,7 +10,7 @@ import {
 	type TestStore,
 	testDatabaseUrl,
 } from "../../testing/database.ts";
-import { PgPromptDocuments } from "./prompt-documents.ts";
+import { PgPromptDocuments, PromptConflictError } from "./prompt-documents.ts";
 
 type Row = Record<string, unknown>;
 
@@ -221,6 +221,55 @@ describe("prompt documents", () => {
 			"File text.",
 		]);
 		expect(documents.text("shared")).toBe("B.");
+	});
+
+	test("two saves from the same base give one write and one conflict that carries what was written", async () => {
+		const db = fakeDatabase();
+		const documents = await documentsOver(db);
+		const [first, second] = await Promise.allSettled([
+			documents.set("shared", "A.", "Riley", "File text."),
+			documents.set("shared", "B.", "Sam", "File text."),
+		]);
+		expect(first.status).toBe("fulfilled");
+		expect(second.status).toBe("rejected");
+		const refused = (second as PromiseRejectedResult).reason;
+		expect(refused).toBeInstanceOf(PromptConflictError);
+		expect((refused as PromptConflictError).current).toMatchObject({
+			id: "shared",
+			text: "A.",
+			override: { by: "Riley" },
+		});
+		expect(documents.text("shared")).toBe("A.");
+		expect((await documents.history("shared")).map((v) => v.by)).toEqual([
+			"Riley",
+		]);
+	});
+
+	test("a revert from a base that is no longer in force is a conflict, and the override stays", async () => {
+		const documents = await documentsOver(fakeDatabase());
+		await documents.set("shared", "Mine.", "Riley");
+		const [saved, reverted] = await Promise.allSettled([
+			documents.set("shared", "Theirs.", "Sam", "Mine."),
+			documents.revert("shared", "Riley", "Mine."),
+		]);
+		expect(saved.status).toBe("fulfilled");
+		expect(reverted.status).toBe("rejected");
+		expect((reverted as PromiseRejectedResult).reason).toBeInstanceOf(
+			PromptConflictError,
+		);
+		expect(documents.text("shared")).toBe("Theirs.");
+		expect(documents.get("shared")?.overridden).toBe(true);
+		// With the base in force, the same revert goes through.
+		await documents.revert("shared", "Riley", "Theirs.");
+		expect(documents.text("shared")).toBe("File text.");
+	});
+
+	test("a call without a base writes as before", async () => {
+		const documents = await documentsOver(fakeDatabase());
+		await documents.set("shared", "A.", "Riley");
+		await documents.set("shared", "B.", "Sam");
+		await documents.revert("shared", "Riley");
+		expect(documents.text("shared")).toBe("File text.");
 	});
 
 	test("a restart reads the overrides back", async () => {

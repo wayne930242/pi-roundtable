@@ -6,7 +6,7 @@ import type {
 	SkillVersion,
 	Tier,
 } from "pi-roundtable";
-import { SkillConflictError } from "pi-roundtable";
+import { PromptConflictError, SkillConflictError } from "pi-roundtable";
 import { AgentError } from "pi-roundtable/kit";
 import { recordingLogger } from "pi-roundtable/testing";
 import type {
@@ -97,11 +97,13 @@ function setup(
 	const prompts = {
 		list: () => [...documents.values()],
 		get: (id: string) => documents.get(id),
-		set: async (id: string, text: string, by: string) => {
+		set: async (id: string, text: string, by: string, base?: string) => {
 			if (saveFails) throw saveFails;
 			const current = documents.get(id);
 			if (!current)
 				throw new AgentError(`There is no prompt document "${id}".`);
+			if (base !== undefined && base !== current.text)
+				throw new PromptConflictError(current);
 			if (!text.trim())
 				throw new AgentError(
 					"A prompt document must have 1 to 20000 characters.",
@@ -117,8 +119,10 @@ function setup(
 			documents.set(id, next);
 			return next;
 		},
-		revert: async (id: string, by: string) => {
+		revert: async (id: string, by: string, base?: string) => {
 			const current = documents.get(id);
+			if (current && base !== undefined && base !== current.text)
+				throw new PromptConflictError(current);
 			if (!current?.overridden)
 				throw new AgentError(`"${id}" has no override.`);
 			calls.push(`revert ${id} by ${by}`);
@@ -446,13 +450,40 @@ describe("api/prompts", () => {
 
 	test("reverting returns to the file version and is kept under the owner's name; a document without an override is a 400", async () => {
 		const server = setup();
-		const response = await call(server, "POST", "prompts/guest/revert");
+		const response = await call(server, "POST", "prompts/guest/revert", {
+			body: { base: "Owner's guest text." },
+		});
 		expect(response.status).toBe(200);
 		expect(((await response.json()) as PromptView).differs).toBe(false);
 		expect(calls).toEqual(["revert guest by Riley"]);
-		expect((await call(server, "POST", "prompts/shared/revert")).status).toBe(
-			400,
-		);
+		expect(
+			(
+				await call(server, "POST", "prompts/shared/revert", {
+					body: { base: "File text." },
+				})
+			).status,
+		).toBe(400);
+	});
+
+	test("a revert from text that is no longer the current one is a 409 that carries the current document, and writes nothing", async () => {
+		const server = setup();
+		const response = await call(server, "POST", "prompts/guest/revert", {
+			body: { base: "The text a tab loaded earlier." },
+		});
+		expect(response.status).toBe(409);
+		const body = (await response.json()) as PromptConflict;
+		expect(body.conflict).toBe("changed");
+		expect(body.current.text).toBe("Owner's guest text.");
+		expect(calls).toEqual([]);
+	});
+
+	test("a revert that does not name the text it was asked from is a 400", async () => {
+		const server = setup();
+		for (const body of [{}, { base: 1 }])
+			expect(
+				(await call(server, "POST", "prompts/guest/revert", { body })).status,
+			).toBe(400);
+		expect(calls).toEqual([]);
 	});
 
 	test("the history lists who changed it, when, and the text each change replaced", async () => {
@@ -491,6 +522,7 @@ describe("api/prompts", () => {
 	ownerOnly("a revert", {
 		method: "POST",
 		path: "prompts/guest/revert",
+		body: { base: "Owner's guest text." },
 		unknown: "prompts/nope/revert",
 	});
 	ownerOnly("a read", {

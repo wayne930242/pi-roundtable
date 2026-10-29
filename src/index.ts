@@ -271,6 +271,7 @@ export type {
 	PromptHandle,
 	PromptVersion,
 } from "./core/modules/prompts/prompt-documents.ts";
+export { PromptConflictError } from "./core/modules/prompts/prompt-documents.ts";
 export type { PrecheckTool } from "./core/modules/schedules/precheck-tools.ts";
 export type {
 	Precheck,

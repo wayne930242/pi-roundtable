@@ -3,6 +3,7 @@
 
 import type {
 	PromptHistoryView,
+	PromptRevert,
 	PromptSave,
 	PromptsView,
 	PromptView,
@@ -29,8 +30,8 @@ export const editApi = {
 	prompt: (id: string) => request<PromptView>(`prompts/${named(id)}`),
 	savePrompt: (id: string, save: PromptSave) =>
 		send<PromptView>(`prompts/${named(id)}`, "PUT", save),
-	revertPrompt: (id: string) =>
-		send<PromptView>(`prompts/${named(id)}/revert`, "POST"),
+	revertPrompt: (id: string, revert: PromptRevert) =>
+		send<PromptView>(`prompts/${named(id)}/revert`, "POST", revert),
 	promptHistory: (id: string) =>
 		request<PromptHistoryView>(`prompts/${named(id)}/history`),
 	skillDocument: (name: string) =>

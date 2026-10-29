@@ -252,11 +252,24 @@ function PromptEditor({ id, onClose }: { id: string; onClose(): void }) {
 								confirmLabel={t("Revert to the file version")}
 								tone="danger"
 								onConfirm={async () => {
-									const reverted = await editApi.revertPrompt(id);
-									setView(reverted);
-									setDraft(reverted.text);
-									setReviewing(false);
-									toast(t("Back to the file version."));
+									try {
+										const reverted = await editApi.revertPrompt(id, {
+											base: view.text,
+										});
+										setView(reverted);
+										setDraft(reverted.text);
+										setReviewing(false);
+										toast(t("Back to the file version."));
+									} catch (failure) {
+										if (
+											!(failure instanceof ApiFailure && failure.status === 409)
+										)
+											throw failure;
+										// Someone saved first: the page shows what is there now, and the revert is asked for again.
+										const { current } = failure.body as { current: PromptView };
+										setView(current);
+										toast(failure.message, "danger");
+									}
 								}}
 								onClose={() => setReverting(false)}
 							>

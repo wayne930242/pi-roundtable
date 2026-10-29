@@ -34,6 +34,7 @@
 			"PRECHECK_TIMEOUT_MS",
 			"PROMPTS",
 			"PluginError",
+			"PromptConflictError",
 			"ProviderError",
 			"QUESTIONNAIRE_LIMITS",
 			"REPLY_FILE_LIMITS",

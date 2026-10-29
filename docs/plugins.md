@@ -1118,7 +1118,8 @@ export const persona = definePlugin({
 
 - `default` is the file version: a string, or a function called at each read so a default that follows a file is current. The id is 1 to 32 lowercase letters, digits and hyphens; a repeated or unusable id is an `AgentError`. `maxChars` defaults to 20,000.
 - The core registers `shared` (`prompts.shared`, the base every agent's prompt starts with) and `guest` (`prompts.guest`, used when the speaker is not the owner). A plugin's own documents are registered by that plugin; the plugin that registers them is set up after `prompts`, so it can `get` the service.
-- **The override.** `set(id, text, by)` stores the owner's text in PostgreSQL (`prompt_overrides`, with `prompt_history` beside it; both are additive migrations). While an override is set it wins over the file version, and it is read at every turn, so a change applies from the next turn without a restart. `revert(id, by)` drops it and the file version is back. Text equal to the file version reverts instead of storing a copy. A document has `text`, `fileText`, `overridden`, `differs` (set and not equal to the file) and `override: { by, at }`.
+- **The override.** `set(id, text, by, base?)` stores the owner's text in PostgreSQL (`prompt_overrides`, with `prompt_history` beside it; both are additive migrations). While an override is set it wins over the file version, and it is read at every turn, so a change applies from the next turn without a restart. `revert(id, by, base?)` drops it and the file version is back. Text equal to the file version reverts instead of storing a copy. A document has `text`, `fileText`, `overridden`, `differs` (set and not equal to the file) and `override: { by, at }`.
+- **Edits from a stale view.** `base` is the text the change was edited from. When it is given, it is compared with the text in force inside the write queue, where the write takes its turn, so two saves from the same text give one write; the other is refused with `PromptConflictError`, whose `current` is the document as it is now. A call without `base` writes as before.
 - **History.** `history(id, limit?)` lists each change newest first: `action` (`set` or `revert`), `text`, the `previous` text, `by` and `at`. An agent's own prompt keeps the same kind of history through `AgentTeam.promptHistory(name)`; `AgentTeam.update(name, change, by?)` records `by`. A directory agent has no override layer: its stored row is the source, and a seed does not overwrite an existing row.
 - **On by default.** The override layer is always on, because nothing is overridden until the owner saves one and the file stays the default. The host logs one warning per document that differs from its file version when it starts, naming who set it and when, and the web app shows a "differs from the file version" badge. Deleting the rows (or using **Revert to the file version**) returns the host to its files.
 - `PromptDocuments.set` and `revert` do not check who calls: the owner-only check belongs to the caller, as the web app's routes do it.
@@ -4262,6 +4263,7 @@ Import from the entries listed below; source area files are internal.
 | `PrecheckScriptRunner` | `pi-roundtable` | type |
 | `PrecheckTool` | `pi-roundtable` | type |
 | `PRECHECK_SCRIPT_CHARS` | `pi-roundtable` | value |
+| `PromptConflictError` | `pi-roundtable` | value |
 | `SkillConflictError` | `pi-roundtable` | value |
 | `SkillDocument` | `pi-roundtable` | type |
 | `SKILLS` | `pi-roundtable` | value |
