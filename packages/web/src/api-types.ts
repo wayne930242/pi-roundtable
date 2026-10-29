@@ -1082,8 +1082,16 @@ export type ServerFrame =
 	| { type: "badge"; count: number }
 	/** The steps still undone; empty when the gate opened. */
 	| { type: "gate"; steps: GateStepView[] }
-	/** Someone read a room up to a message. */
-	| { type: "read"; room: string; principal: string; upTo: number };
+	/** Someone read a room up to a message; `name` and `at` let the page show them without asking. */
+	| {
+			type: "read";
+			room: string;
+			principal: string;
+			name: string;
+			upTo: number;
+			/** ISO time. */
+			at: string;
+	  };
 
 /** A turn's live view, as the core reports it. */
 export type AppProgress =

@@ -191,7 +191,9 @@ export function installFrames(ctx: HostContext): void {
 				type: "read",
 				room: frame.room,
 				principal: viewer.principalId,
+				name: viewer.name,
 				upTo: mark.upTo,
+				at: mark.at,
 			},
 			audience,
 		);
@@ -300,7 +302,9 @@ async function hostSend(
 				type: "read",
 				room: frame.room,
 				principal: viewer.principalId,
+				name: viewer.name,
 				upTo: mark.upTo,
+				at: mark.at,
 			},
 			{ room: frame.room },
 		);
