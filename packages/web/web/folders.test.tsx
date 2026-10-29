@@ -692,6 +692,56 @@ test("a lift whose chunk arrives after the finger has gone is a tap: nothing is 
 	}
 });
 
+test("Android's contextmenu while the finger is down is the hold: the row lifts, the browser keeps its menu away, and letting go opens ours once", async () => {
+	load({ folders: [WORK] });
+	await show(<List />);
+	const row = rowOf("scout") as HTMLElement;
+	const item = row.closest("li") as HTMLElement;
+	const system = new MouseEvent("contextmenu", {
+		bubbles: true,
+		cancelable: true,
+		clientX: 200,
+		clientY: 300,
+	});
+	await page.act(async () => {
+		pointer(row, "pointerdown");
+		// Android's own long press comes at about 400 ms, before the 450 ms hold.
+		await settle(120);
+		row.dispatchEvent(system);
+		await until(() => item.hasAttribute("data-lifted"));
+	});
+	expect(system.defaultPrevented).toBe(true);
+	expect(item.hasAttribute("data-lifted")).toBe(true);
+	expect(menuItems()).toEqual([]);
+	// The hold's own timer must not act on top of it.
+	await page.act(() => settle(500));
+	expect(menuItems()).toEqual([]);
+	expect(item.hasAttribute("data-lifted")).toBe(true);
+	await page.act(() => pointer(row, "pointerup"));
+	await settle(80);
+	expect(item.hasAttribute("data-lifted")).toBe(false);
+	expect(labels().slice(0, 2)).toEqual(["Pin", "Move to folder…"]);
+	expect(all('[role="menu"], dialog.sheet[open]').length).toBe(1);
+	// The click some browsers send after the lift does not open the room.
+	window.location.hash = "#/rooms";
+	await page.click(row);
+	expect(window.location.hash).toBe("#/rooms");
+});
+
+test("a mouse's right click is not a hold: it opens the menu at once, with no lift", async () => {
+	load({ folders: [WORK] });
+	await show(<List />);
+	const row = rowOf("scout") as HTMLElement;
+	await page.act(() =>
+		pointer(row, "pointerdown", { kind: "mouse", buttons: 2 }),
+	);
+	await rightClick(row);
+	expect(labels().slice(0, 2)).toEqual(["Pin", "Move to folder…"]);
+	expect((row.closest("li") as HTMLElement).hasAttribute("data-lifted")).toBe(
+		false,
+	);
+});
+
 test("a finger that goes down within 32 px of a screen edge never lifts a row: the hold opens the menu as before", async () => {
 	await show(<List />);
 	const row = rowOf("scout") as HTMLElement;

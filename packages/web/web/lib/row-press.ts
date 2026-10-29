@@ -49,7 +49,13 @@ export function useRowPress(
 ): RowPressProps {
 	const latest = useRef(lifting);
 	latest.current = lifting;
-	const finger = useRef<{ id: number; x: number; y: number }>(undefined);
+	const finger = useRef<{
+		id: number;
+		x: number;
+		y: number;
+		/** A touch or a pen, not a mouse. */
+		touch: boolean;
+	}>(undefined);
 	const chunk = useRef<ReturnType<typeof dragModule>>(undefined);
 	/** A mouse drag happened: the click that follows must not open the row. */
 	const dragged = useRef(false);
@@ -102,9 +108,16 @@ export function useRowPress(
 	const press = useLongPress((request) => {
 		const menu = () => menuFor(request.source, request.at, request.via);
 		const touch = finger.current;
-		if (request.via !== "hold" || !touch) return void menu();
-		const lifted = start(request.source, touch.id, () => touch.y, menu);
-		if (!lifted) void menu();
+		// Android reports its own long press as a `contextmenu` while the finger is still down, at
+		// about 400 ms and so before the 450 ms hold. That is the hold: the row lifts, the browser's
+		// menu stays away (the press prevents it), and the menu opens if the finger lets go in place.
+		const held =
+			request.via === "hold" || (request.via === "contextmenu" && touch?.touch);
+		if (!held || !touch) return void menu();
+		if (!start(request.source, touch.id, () => touch.y, menu))
+			return void menu();
+		// A click that follows the lift must not open the row.
+		if (request.via === "contextmenu") dragged.current = true;
 	});
 
 	return {
@@ -115,6 +128,7 @@ export function useRowPress(
 				id: event.pointerId,
 				x: event.clientX,
 				y: event.clientY,
+				touch: event.pointerType !== "mouse",
 			};
 			// A touch that begins at a screen edge belongs to the system; there the hold opens the menu only.
 			const edge =
