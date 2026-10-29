@@ -110,6 +110,7 @@ Web Push 會在 owner 沒有任何頁面開著、看得到的時候喚醒裝置�
 | `surface` | `app` | app 房間的 key 前綴。改了它，所有房間都會重新開始。 |
 | `cardGraceSeconds` | `120` | 一輪執行等卡片的秒數，大於 0、最多 3600。 |
 | `uploadMaxBytes` | 100 MiB | 一個人能上傳的單檔上限，1 byte 到 4 GiB。 |
+| `uploads` | `{ keepDays: 30 }` | `uploads.keepDays`：app 夥伴房間裡已儲存檔案的保留天數，1 到 3650。宿主房間種類自己的 `retention.fileDays` 管它自己的房間。 |
 | `push` | https origin 時開啟 | Web Push；金鑰見下表。 |
 | `icons` | 內建圖示 | `{ dir }`：放五個安裝圖示的目錄。 |
 | `appearance` | `{ look: "modern" }` | `{ look }`：`modern` 或 `camelot`。 |
@@ -183,6 +184,20 @@ host 上的 agent 會執行指令時，請繼續用 Cloudflare Access（或其�
 API、SSE、WebSocket、頁面和靜態資源都先驗證，再讀取資料；寫入操作要有完全相符的 `Origin`，頁面也不會送出 CORS header。
 agent 的輸出是不含 raw HTML 的 Markdown，儲存的檔案一律以下載方式提供，並套用 sandbox 政策。
 Transcript 會顯示 tool arguments 和結果，工具處理過的 secret 可能出現在裡面；可以用 `panes` 或 `exclude` 限縮資料。
+
+## 宿主房間、頁面與卡片
+
+不是夥伴的宿主外掛可以在 app 裡擁有自己的房間，例如客服信箱，一封信件串一個房間。外掛在 `requires` 列出 `WEB_APP`，並在 `setup` 呼叫 `registerRoomKind`、`registerPage`。
+
+- **存取權**由房間種類的 `access(viewer, id)` 決定，每次讀取、frame、傳訊、卡片回應、上傳與取檔都會重問；回傳 `undefined` 就是 `404`。它回答這個人能做什麼：讀、傳 `note` 或 `turn`、按按鈕。
+- **訊息**用 `app.rooms.post` 發出，作者種類有 `external`（純文字，附宿主給的標籤，例如「客戶」）、`member`、`assistant` 與 `notice`（Markdown）。`reference` 用來再找到同一則訊息，`edit` 與 `remove` 修改或刪除。
+- **卡片**有標題、內文、色調、狀態、連結與按鈕；按鈕可以開表單（文字、多行文字、網址、可設 `initial` 與 `search` 的單選、複選），伺服器會先檢查再交給房間種類的 `act`。只有卡片狀態是 `open` 時才顯示按鈕。夥伴的核准與提問卡片沿用夥伴自己的提示範圍。
+- **連結與圖片**：`app.rooms.link(room, messageId?)` 回傳開啟房間並標出該則訊息的網址；`![alt](file:<id>)` 顯示用 `saveFile` 或 `app.pages.saveAsset` 存下的 PNG、JPEG、WebP，只給有權看該房間或頁面的人。
+- **頁面**在 `<mount>/p/<id>`，由 Markdown、清單、表單與卡片區塊組成；`visible(viewer)` 每次都會重問，`app.pages.changed(id?)` 讓檢視者重新取得內容。
+- **保留期限**：房間種類的 `retention: { textDays, fileDays }` 會刪除過期的訊息、作者名稱、卡片與檔案，從每則訊息的時間起算。
+- **已讀標記**：app 記錄每個人在每個房間讀到哪裡（宿主房間與夥伴房間一樣）。清單與側欄顯示未讀數，進房間時在新訊息處出現「新訊息」分隔線，每則訊息下方顯示讀到這裡的人（「已讀 2」，附頭像）。
+
+房間、清單與頁面的程式碼在第一次開啟時才載入，app 的首次載入大小不變。
 
 ## Host 整合
 

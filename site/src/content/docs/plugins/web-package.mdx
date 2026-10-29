@@ -110,6 +110,7 @@ From 23:00 to 08:00 on the console's time zone an agent's post and a notice are 
 | `surface` | `app` | Key prefix of the app's rooms. Changing it starts every room over. |
 | `cardGraceSeconds` | `120` | How long a turn waits on a card, above 0 and at most 3600. |
 | `uploadMaxBytes` | 100 MiB | Largest file one person uploads, 1 byte to 4 GiB. |
+| `uploads` | `{ keepDays: 30 }` | `uploads.keepDays`: days a stored file of the app's agent rooms is kept, 1 to 3650. A host kind's own `retention.fileDays` decides for its rooms. |
 | `push` | on with an https origin | Web Push; keys below. |
 | `icons` | shipped icons | `{ dir }`: a directory of the five install icons. |
 | `appearance` | `{ look: "modern" }` | `{ look }`: `modern` or `camelot`. |
@@ -183,6 +184,20 @@ A custom verifier that trusts a proxy header is only safe if clients cannot reac
 Every API, SSE, WebSocket, page, and static asset is authenticated before data is read, writes need the exact `Origin`, and the page sends no CORS headers.
 Agent output is Markdown without raw HTML, and stored files are served as downloads under a sandbox policy.
 Transcripts contain tool arguments and results, so secrets handled by tools may appear there; use `panes` or `exclude` to narrow what is exposed.
+
+## Host rooms, pages and cards
+
+A host plugin that is not an agent can own rooms in the app, such as a support inbox with one room per email thread. It lists `WEB_APP` in `requires` and calls `registerRoomKind`, `registerPage` from `setup`.
+
+- **Access** is the kind's `access(viewer, id)`, asked on every read, frame, send, card answer, upload and file; `undefined` is a `404`. It answers what the person may do: read, send a `note` or a `turn`, press buttons.
+- **Messages** are posted with `app.rooms.post` by an author kind: `external` (plain text, shown with the host's label such as "Customer"), `member`, `assistant` or `notice` (Markdown). `reference` finds a message again; `edit` and `remove` change it.
+- **Cards** carry a title, body, tone, state, links and buttons; a button may open a form (text, textarea, url, select with `initial` and `search`, multiselect) checked on the server before the kind's `act` runs. Buttons show only while the card is `open`. Approval and question cards of an agent keep the agent's own prompt scope.
+- **Links and images**: `app.rooms.link(room, messageId?)` gives the address that opens a room and highlights a message; `![alt](file:<id>)` shows a PNG, JPEG or WebP saved with `saveFile` or `app.pages.saveAsset`, to those who may see the room or page.
+- **Pages** at `<mount>/p/<id>` are built from Markdown, list, form and card sections; `visible(viewer)` is asked every time and `app.pages.changed(id?)` makes viewers fetch again.
+- **Retention**: a kind's `retention: { textDays, fileDays }` deletes its messages, author names, cards and files, counted from each message's time.
+- **Read marks**: the app keeps how far each person has read in every room (host and agent rooms alike). The list and drawer show unread counts, a room opens with a "new messages" divider, and each message shows who has read up to it ("Seen by 2", with pictures).
+
+The room, list and page code loads when first opened; the app's first load does not grow.
 
 ## Host integrations
 
