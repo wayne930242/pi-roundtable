@@ -254,6 +254,9 @@ export class TeamLifecycle {
 		if (target.status === "active")
 			throw new AgentError(`"${name}" is not archived.`);
 		if (group) store.checkRestorableGroup(name);
+		// The store checks again when it restores. A member archived, or a second restore of the
+		// same name, between the two checks leaves the channel moved or made with no owner; it
+		// then waits under its category until the next restore claims it or an owner deletes it.
 		let { channelId } = target;
 		if (channels) {
 			const category = agent ? "Agents" : "Groups";

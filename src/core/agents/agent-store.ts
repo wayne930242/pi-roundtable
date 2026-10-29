@@ -417,9 +417,15 @@ export class PgAgentStore implements AgentDirectory {
 			throw new AgentError(`The host "${host}" must be one of the members.`);
 	}
 
-	/** Checks a new group before its channel is made. */
-	checkNewGroup(name: string, members: readonly string[], host: string): void {
+	/** Checks a new group before its channel is made; a `displayName` is checked too. */
+	checkNewGroup(
+		name: string,
+		members: readonly string[],
+		host: string,
+		displayName?: string,
+	): void {
 		checkAgentName(name);
+		if (displayName !== undefined) checkDisplayName(displayName);
 		this.#checkFree(name);
 		this.#checkMembers(members, host);
 	}

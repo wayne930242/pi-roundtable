@@ -115,6 +115,22 @@ describeDb("an owner's operations on the team (Discord)", () => {
 		});
 	});
 
+	describe("createGroup", () => {
+		test("a display name the store would refuse is refused before the channel is made", async () => {
+			const before = fx.channels.created.length;
+			for (const displayName of ["discord crew", "x".repeat(33)])
+				await expect(
+					fx.team.createGroup({
+						name: "pair",
+						displayName,
+						members: ["infra", "doctor"],
+					}),
+				).rejects.toThrow(AgentError);
+			expect(fx.channels.created.length).toBe(before);
+			expect(fx.store.group("pair")).toBeUndefined();
+		});
+	});
+
 	describe("editing a group's members", () => {
 		test("a member taken out starts its seat over, in the channel and in each room", async () => {
 			fx.surfaces.rooms = ["app"];

@@ -354,7 +354,7 @@ export class TeamEditing {
 			(input.members.includes("coordinator")
 				? "coordinator"
 				: (input.members[0] ?? ""));
-		store.checkNewGroup(input.name, input.members, host);
+		store.checkNewGroup(input.name, input.members, host, input.displayName);
 		const topic = groupTopic({ ...fields, host, status: "active" }, store);
 		const channelId = await channels?.createChannel(input.name, topic, parent);
 		const group = await store.createGroup({
