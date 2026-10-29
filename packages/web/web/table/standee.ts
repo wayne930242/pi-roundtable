@@ -40,7 +40,7 @@ function silhouette(
 /** Offsets round a circle of `radius`, enough of them that the edge has no gaps at the sizes used. */
 export function ringOffsets(
 	radius: number,
-	steps = 24,
+	steps = 48,
 ): Array<[number, number]> {
 	return Array.from({ length: steps }, (_, i) => {
 		const a = (Math.PI * 2 * i) / steps;

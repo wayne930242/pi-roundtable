@@ -86,7 +86,7 @@ export class PodiumKit {
 	readonly glowTexture: CanvasTexture;
 	readonly badgeTexture: CanvasTexture;
 	readonly marksTexture: CanvasTexture;
-	readonly marksPlane = this.own(new PlaneGeometry(1.5, 1.5));
+	readonly marksPlane = this.own(new PlaneGeometry(1.25, 1.25));
 
 	constructor(readonly hall: Hall) {
 		const frustum = new CylinderGeometry(
@@ -268,10 +268,12 @@ export class Podium {
 			map: kit.marksTexture,
 			transparent: true,
 			alphaTest: 0.2,
+			depthTest: false,
+			depthWrite: false,
 			fog: false,
 		});
 		this.marks = new Mesh(kit.marksPlane, this.marksMaterial);
-		this.marks.position.set(-1.25, BOARD_BASE + BOARD_W * 0.72, 0.08);
+		this.marks.position.set(-1.0, BOARD_BASE + BOARD_W * 0.76, 0.2);
 		this.marks.visible = false;
 		this.marks.renderOrder = 5;
 		if (init.kind === "agent") {

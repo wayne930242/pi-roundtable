@@ -132,7 +132,7 @@ export function closeupShot(seatAz: number, count: number): Shot {
 		y: 1.8,
 		aim: -side,
 		lookR: ring + 0.1,
-		lookY: 2.25,
+		lookY: 1.7,
 		roll: -0.16,
 		fov: 58,
 	};

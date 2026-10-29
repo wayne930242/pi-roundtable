@@ -121,7 +121,9 @@ describe("the camera planner", () => {
 		const near = closeupShot(az, 6);
 		const { position, target } = shotVectors(near);
 		expect(Math.hypot(position[0], position[2])).toBeLessThan(ringRadius(6));
-		expect(position[1]).toBeLessThan(target[1]);
+		// low: the eye is below head height, looking a little down so the speaker rides above the dialogue box
+		expect(position[1]).toBeLessThan(2.2);
+		expect(target[1]).toBeGreaterThan(1);
 		const podium = podiumPlace(2, 6);
 		expect(Math.hypot(target[0] - podium.x, target[2] - podium.z)).toBeLessThan(
 			0.6,
