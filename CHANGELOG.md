@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.24.1] - 2026-10-29
+
+### Added
+
+- pi-roundtable-sandbox: `replyText` rewrites each successful model reply on the host before it is posted, for example to convert stray Simplified Chinese to Traditional; see its changelog. Every other workspace releases in lockstep.
+
 ## [0.24.0] - 2026-10-29
 
 ### Added

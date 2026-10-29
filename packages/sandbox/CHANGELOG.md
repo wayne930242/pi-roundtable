@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.24.1] - 2026-10-29
+
 ### Added
 
 - `sandbox({ replyText })`: rewrites each successful model reply on the host before it is split and posted (`(text, { channel, space }) => string | Promise<string>`), for example to convert stray Simplified Chinese to Traditional. Failure texts never pass through it, the worker's history keeps the model's own words, and a throw or a non-string fails the turn like any other failure. Host-only: no worker protocol change, no image rebuild. An empty result posts nothing, as an empty model reply does.
