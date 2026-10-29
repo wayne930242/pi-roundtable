@@ -42,17 +42,20 @@ test("write creates parent directories, replaces, and keeps files private under 
 	const f = fixture();
 	try {
 		expect(
-			f.files.call("files_write", { path: "notes/a/b.md", content: "你好" }),
+			f.files.call("files_write", {
+				path: "notes/a/b.md",
+				content: "\u4f60\u597d",
+			}),
 		).toContain("Wrote");
 		expect(readFileSync(join(f.workspace, "files/notes/a/b.md"), "utf8")).toBe(
-			"你好",
+			"\u4f60\u597d",
 		);
 		expect(statSync(join(f.workspace, "files/notes/a/b.md")).mode & 0o777).toBe(
 			0o600,
 		);
 		expect(statSync(join(f.workspace, "files/notes")).mode & 0o777).toBe(0o700);
-		f.files.call("files_write", { path: "notes/a/b.md", content: "新" });
-		expect(f.files.call("files_read", { path: "notes/a/b.md" })).toBe("新");
+		f.files.call("files_write", { path: "notes/a/b.md", content: "\u65b0" });
+		expect(f.files.call("files_read", { path: "notes/a/b.md" })).toBe("\u65b0");
 		// No temporary file is left behind, and nothing outside files/ was touched.
 		expect(readdirSync(join(f.workspace, "files/notes/a"))).toEqual(["b.md"]);
 		expect(readdirSync(f.workspace)).toEqual(["files"]);
@@ -144,11 +147,11 @@ test("the per-file and total limits refuse a write whole, counting UTF-8 bytes a
 	const f = fixture({ maxFileBytes: 30, maxTotalBytes: 50 });
 	try {
 		expect(
-			f.files.call("files_write", { path: "a", content: "字".repeat(11) }),
+			f.files.call("files_write", { path: "a", content: "\u5b57".repeat(11) }),
 		).toContain("30 bytes");
 		expect(existsSync(join(f.workspace, "files/a"))).toBe(false);
 		expect(
-			f.files.call("files_write", { path: "a", content: "字".repeat(10) }),
+			f.files.call("files_write", { path: "a", content: "\u5b57".repeat(10) }),
 		).toContain("Wrote");
 		expect(
 			f.files.call("files_write", { path: "d/b", content: "x".repeat(20) }),
@@ -240,7 +243,7 @@ test("a listing also stops before it outgrows the result budget", () => {
 test("read pages by character offset and names the next offset on the first line", () => {
 	const f = fixture(FILES_DEFAULTS, 300);
 	try {
-		const text = "字".repeat(500);
+		const text = "\u5b57".repeat(500);
 		f.files.call("files_write", { path: "long.txt", content: text });
 		let offset = 0;
 		let rebuilt = "";

@@ -11,8 +11,8 @@ import { SandboxRuntime, type SandboxRuntimeOptions } from "./runtime.ts";
 import { resolveSandboxRuntimeOptions } from "./runtime-options.ts";
 
 const speaker = { id: "guest", name: "Guest", principalId: "p_guest" };
-const GUILD = "1479073413380440118";
-const OTHER = "1381283461167317085";
+const GUILD = "900000000000000001";
+const OTHER = "900000000000000002";
 
 interface Seen {
 	spec: ContainerSpec;

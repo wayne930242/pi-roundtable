@@ -367,7 +367,7 @@ test("host_read_skill refuses paths outside the skill's folder, links out of it,
 test("host_read_skill pages within the result allowance, first line naming the next offset", async () => {
 	const { root, dir } = tree();
 	try {
-		skill(dir, "long", "Long skill", "字".repeat(3000));
+		skill(dir, "long", "Long skill", "\u5b57".repeat(3000));
 		const budget = 1000;
 		let offset = 0;
 		let text = "";
@@ -380,7 +380,7 @@ test("host_read_skill pages within the result allowance, first line naming the n
 			if (!next) break;
 			offset = Number(next[1]);
 		}
-		expect(text).toContain("字".repeat(3000));
+		expect(text).toContain("\u5b57".repeat(3000));
 		expect(text.startsWith("---\nname: long")).toBe(true);
 	} finally {
 		rmSync(root, { recursive: true, force: true });

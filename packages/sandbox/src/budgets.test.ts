@@ -65,7 +65,7 @@ test("a prompt over promptBytes stops startup naming both sizes, measured as the
 	const root = mkdtempSync("/tmp/sb-budgets-");
 	try {
 		// 3 bytes per character plus the two quotes JSON.stringify adds.
-		const prompt = "字".repeat(1000);
+		const prompt = "\u5b57".repeat(1000);
 		expect(() =>
 			resolveSandboxRuntimeOptions(
 				options(root, { prompt, budgets: { promptBytes: 2999 } }),

@@ -16,8 +16,8 @@ import { sandboxClaim } from "./claim.ts";
 import { sandboxCommands } from "./commands.ts";
 import { SANDBOX, sandbox } from "./plugin.ts";
 
-const GUILD = "1479073413380440118";
-const OTHER = "1381283461167317085";
+const GUILD = "900000000000000001";
+const OTHER = "900000000000000002";
 
 function store(guilds?: readonly string[]): {
 	channels: SandboxChannelStore;
@@ -95,7 +95,7 @@ test.each([
 	"guild",
 	"123",
 	"12345678901234567890123",
-	"1479073413380440118 ",
+	"900000000000000001 ",
 ])("guild id %p stops startup naming the option", (id) => {
 	const root = mkdtempSync(join(tmpdir(), "sb-guilds-"));
 	try {
