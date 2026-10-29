@@ -41,6 +41,7 @@ const viewOf = (document: PromptDocumentView): PromptView => ({
 	label: document.label,
 	...(document.description ? { description: document.description } : {}),
 	differs: document.differs,
+	...(document.broken ? { broken: document.broken } : {}),
 	...(document.override
 		? {
 				override: {
@@ -115,15 +116,23 @@ export class PromptApi {
 			return json({
 				documents: prompts
 					.list()
-					.map(({ differs, id: key, label, description, override }) => ({
-						id: key,
-						label,
-						...(description ? { description } : {}),
-						differs,
-						...(override
-							? { override: { by: override.by, at: override.at.toISOString() } }
-							: {}),
-					})),
+					.map(
+						({ differs, id: key, label, description, override, broken }) => ({
+							id: key,
+							label,
+							...(description ? { description } : {}),
+							differs,
+							...(broken ? { broken } : {}),
+							...(override
+								? {
+										override: {
+											by: override.by,
+											at: override.at.toISOString(),
+										},
+									}
+								: {}),
+						}),
+					),
 			} satisfies PromptsView);
 		}
 		// The tier is read before the id is looked up, so a person below the owner learns of no id.

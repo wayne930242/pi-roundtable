@@ -403,6 +403,36 @@ describe("api/prompts", () => {
 		]);
 	});
 
+	test("a document whose file version cannot be read is marked in the list and the read, and the others are listed as before", async () => {
+		const server = setup();
+		documents.set(
+			"merlin",
+			document("merlin", {
+				text: "",
+				fileText: "",
+				broken: "ENOENT: persona/merlin.md",
+			}),
+		);
+		const listed = (await (
+			await call(server, "GET", "prompts")
+		).json()) as PromptsView;
+		expect(listed.documents.map((one) => one.id)).toEqual([
+			"shared",
+			"guest",
+			"merlin",
+		]);
+		expect(listed.documents.map((one) => one.broken)).toEqual([
+			undefined,
+			undefined,
+			"ENOENT: persona/merlin.md",
+		]);
+		const read = await call(server, "GET", "prompts/merlin");
+		expect(read.status).toBe(200);
+		expect(((await read.json()) as PromptView).broken).toBe(
+			"ENOENT: persona/merlin.md",
+		);
+	});
+
 	test("reads one document with its text and the file version", async () => {
 		const view = (await (
 			await call(setup(), "GET", "prompts/guest")

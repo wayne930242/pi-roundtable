@@ -925,6 +925,9 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 		"說話的人不是擁有者時，改用它取代共用提示詞。",
 	"No prompts to edit.": "沒有可編輯的提示詞。",
 	"Differs from the file version": "與檔案版本不同",
+	"File version cannot be read": "讀不到檔案版本",
+	"The file version of this prompt cannot be read, so it cannot be changed here until it can: {reason}":
+		"這份提示詞的檔案版本讀不到，在讀得到之前無法在這裡修改：{reason}",
 	"Set by {name}, {time}": "由{name}設定，{time}",
 	"Revert to the file version": "還原為檔案版本",
 	"Revert {name} to the file version?": "要把{name}還原為檔案版本嗎？",

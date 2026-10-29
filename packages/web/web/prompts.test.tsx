@@ -80,6 +80,7 @@ const summary = (document: PromptView): PromptSummary => ({
 	label: document.label,
 	...(document.description ? { description: document.description } : {}),
 	differs: document.differs,
+	...(document.broken ? { broken: document.broken } : {}),
 	...(document.override ? { override: document.override } : {}),
 });
 
@@ -403,6 +404,31 @@ test("History marks a return to the file, and a version taken from it goes into 
 	// The text in force, so nothing differs yet.
 	expect(button("Review changes")?.disabled).toBe(true);
 	expect(save).not.toHaveBeenCalled();
+});
+
+test("a document whose file version cannot be read is marked in the list and shows why instead of an editor, and the others stay editable", async () => {
+	documents.set(
+		"merlin",
+		view({
+			id: "merlin",
+			label: "Merlin's prompt",
+			description: undefined,
+			text: "",
+			fileText: "",
+			broken: "ENOENT: persona/merlin.md",
+		}),
+	);
+	await show();
+	expect(
+		all("article.card").map((one) => one.querySelector("strong")?.textContent),
+	).toEqual(["Shared prompt", "Guest prompt", "Merlin's prompt"]);
+	expect(document.body.textContent).toContain("File version cannot be read");
+	await openEditor("Merlin's prompt");
+	expect(q("dialog.sheet.full .failure")?.textContent).toContain(
+		"ENOENT: persona/merlin.md",
+	);
+	expect(q("textarea.prompt-full")).toBeNull();
+	expect(button("Review changes")).toBeNull();
 });
 
 test("a document that cannot be read shows why instead of an editor", async () => {

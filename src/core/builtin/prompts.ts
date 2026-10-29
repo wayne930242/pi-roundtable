@@ -17,10 +17,12 @@ export interface PromptsOptions {
 export function promptsPlugin(
 	options: PromptsOptions,
 	/** Opens the documents; a test hands stand-ins, so the plugin can be set up without a database. */
-	open: (sql: SQL, guildId: string) => Promise<PgPromptDocuments> = (
-		sql,
-		guildId,
-	) => PgPromptDocuments.attach(sql, guildId),
+	open: (
+		sql: SQL,
+		guildId: string,
+		logger: Logger,
+	) => Promise<PgPromptDocuments> = (sql, guildId, logger) =>
+		PgPromptDocuments.attach(sql, guildId, logger),
 ): RoundtablePlugin {
 	let opened: { documents: PgPromptDocuments; logger: Logger } | undefined;
 	return {
@@ -29,7 +31,7 @@ export function promptsPlugin(
 		provides: [PROMPTS],
 		preflight: () => opened?.documents.logOverrides(opened.logger),
 		setup: async ({ database, services, logger }) => {
-			const documents = await open(database(), options.guildId);
+			const documents = await open(database(), options.guildId, logger);
 			opened = { documents, logger };
 			services.provide(PROMPTS, documents);
 			return {};

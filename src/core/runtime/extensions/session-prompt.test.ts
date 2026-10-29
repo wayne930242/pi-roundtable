@@ -9,6 +9,7 @@ import {
 	ModelRuntime,
 	SessionManager,
 } from "@earendil-works/pi-coding-agent";
+import { silentLogger } from "../../log.ts";
 import { ownerMemoryExtension } from "../../modules/memory/owner-memory.ts";
 import type { MemoryStore, SpeakerMemory } from "../../services.ts";
 import type { Speaker } from "../../speakers.ts";
@@ -187,7 +188,11 @@ describe("appended system prompt", () => {
 				},
 				{
 					name: "agent-prompt",
-					factory: agentPromptExtension(() => "You are Infra."),
+					factory: agentPromptExtension(
+						() => "You are Infra.",
+						silentLogger(),
+						"infra",
+					),
 				},
 			],
 			[],
@@ -201,7 +206,11 @@ describe("appended system prompt", () => {
 			[
 				{
 					name: "agent-prompt",
-					factory: agentPromptExtension(() => "You are Infra."),
+					factory: agentPromptExtension(
+						() => "You are Infra.",
+						silentLogger(),
+						"infra",
+					),
 				},
 			],
 			[],
@@ -231,7 +240,11 @@ describe("appended system prompt", () => {
 			[
 				{
 					name: "agent-prompt",
-					factory: agentPromptExtension(() => "You are Infra."),
+					factory: agentPromptExtension(
+						() => "You are Infra.",
+						silentLogger(),
+						"infra",
+					),
 				},
 				{
 					name: "surface-formatting",
@@ -297,6 +310,8 @@ describe("appended system prompt", () => {
 						factory: personaPromptExtension(
 							"You are the assistant.",
 							() => "You are the assistant.",
+							silentLogger(),
+							"owner",
 						),
 					},
 					{
@@ -319,6 +334,8 @@ describe("appended system prompt", () => {
 						factory: personaPromptExtension(
 							"You are the assistant.",
 							() => "You are Merlin, edited.",
+							silentLogger(),
+							"owner",
 						),
 					},
 					{
@@ -339,7 +356,12 @@ describe("appended system prompt", () => {
 				[
 					{
 						name: "persona-prompt",
-						factory: personaPromptExtension("Old.", () => "Costs $& and $1."),
+						factory: personaPromptExtension(
+							"Old.",
+							() => "Costs $& and $1.",
+							silentLogger(),
+							"owner",
+						),
 					},
 				],
 				["Old."],
@@ -352,7 +374,12 @@ describe("appended system prompt", () => {
 				[
 					{
 						name: "persona-prompt",
-						factory: personaPromptExtension("", () => "Now there is one."),
+						factory: personaPromptExtension(
+							"",
+							() => "Now there is one.",
+							silentLogger(),
+							"owner",
+						),
 					},
 					{
 						name: "owner-memory",

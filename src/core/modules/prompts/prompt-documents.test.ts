@@ -272,6 +272,112 @@ describe("prompt documents", () => {
 		expect(documents.text("shared")).toBe("File text.");
 	});
 
+	describe("a file version that cannot be read", () => {
+		const errors: { fields: Record<string, unknown>; message: string }[] = [];
+		const logger = {
+			...silentLogger(),
+			error: (fields: Record<string, unknown>, message: string) =>
+				errors.push({ fields, message }),
+		} as unknown as Logger;
+		let file: string | Error;
+		const readable = () => {
+			if (file instanceof Error) throw file;
+			return file;
+		};
+
+		async function withTwoDocuments(db = fakeDatabase()) {
+			errors.length = 0;
+			file = "File text.";
+			const documents = await PgPromptDocuments.attach(
+				db.sql,
+				TEST_GUILD,
+				logger,
+			);
+			documents.register({ ...spec(), default: readable });
+			documents.register({ ...spec(), id: "guest", label: "Guest prompt" });
+			return documents;
+		}
+
+		test("a default that cannot be read when it is registered stops the host", async () => {
+			const documents = await PgPromptDocuments.attach(
+				fakeDatabase().sql,
+				TEST_GUILD,
+			);
+			expect(() =>
+				documents.register({
+					...spec(),
+					default: () => {
+						throw new Error("ENOENT: persona/merlin.md");
+					},
+				}),
+			).toThrow(/"shared" has no readable file version: ENOENT/);
+			expect(documents.get("shared")).toBeUndefined();
+		});
+
+		test("reading the text fails with the document's id and logs an error, never the old text", async () => {
+			const documents = await withTwoDocuments();
+			expect(documents.text("shared")).toBe("File text.");
+			file = new Error("ENOENT: persona/merlin.md");
+			expect(() => documents.text("shared")).toThrow(
+				/prompt document "shared" cannot be read: ENOENT/,
+			);
+			expect(errors.map((line) => line.fields.document)).toEqual(["shared"]);
+			// Another document is unaffected.
+			expect(documents.text("guest")).toBe("File text.");
+		});
+
+		test("the list shows the others and marks the broken document instead of failing for all", async () => {
+			const documents = await withTwoDocuments();
+			file = new Error("ENOENT: persona/merlin.md");
+			const views = documents.list();
+			expect(views.map((view) => view.id)).toEqual(["shared", "guest"]);
+			expect(views[0]).toMatchObject({
+				id: "shared",
+				broken: "ENOENT: persona/merlin.md",
+				fileText: "",
+				text: "",
+				differs: false,
+			});
+			expect(views[1]).toMatchObject({ id: "guest", text: "File text." });
+			expect(views[1]?.broken).toBeUndefined();
+			expect(documents.get("shared")?.broken).toContain("ENOENT");
+		});
+
+		test("an override still applies while the file cannot be read, but the document cannot be changed until it can", async () => {
+			const db = fakeDatabase();
+			const documents = await withTwoDocuments(db);
+			await documents.set("shared", "Owner text.", "Riley");
+			file = new Error("ENOENT: persona/merlin.md");
+			expect(documents.text("shared")).toBe("Owner text.");
+			expect(documents.get("shared")).toMatchObject({
+				text: "Owner text.",
+				broken: "ENOENT: persona/merlin.md",
+			});
+			await expect(documents.set("shared", "Other.", "Riley")).rejects.toThrow(
+				/prompt document "shared" cannot be read/,
+			);
+			await expect(documents.revert("shared", "Riley")).rejects.toThrow(
+				/prompt document "shared" cannot be read/,
+			);
+			expect(documents.text("shared")).toBe("Owner text.");
+			// The file is back: the document works again.
+			file = "File text.";
+			expect(documents.get("shared")?.broken).toBeUndefined();
+			await documents.revert("shared", "Riley");
+			expect(documents.text("shared")).toBe("File text.");
+		});
+
+		test("the start-up log reports it as an error naming the document", async () => {
+			const db = fakeDatabase();
+			const documents = await withTwoDocuments(db);
+			await documents.set("shared", "Owner text.", "Riley");
+			file = new Error("ENOENT: persona/merlin.md");
+			errors.length = 0;
+			documents.logOverrides(logger);
+			expect(errors.map((line) => line.fields.document)).toEqual(["shared"]);
+		});
+	});
+
 	test("a restart reads the overrides back", async () => {
 		const db = fakeDatabase();
 		const documents = await documentsOver(db);

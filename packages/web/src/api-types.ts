@@ -479,6 +479,8 @@ export interface PromptSummary {
 	differs: boolean;
 	/** Who set it and when (ISO), while an override is in force. */
 	override?: { by: string; at: string };
+	/** Why the file version cannot be read; the document cannot be changed until it can, and the others are unaffected. */
+	broken?: string;
 }
 
 export interface PromptsView {

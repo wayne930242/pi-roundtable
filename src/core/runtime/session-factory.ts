@@ -397,8 +397,11 @@ export class SessionFactory {
 					: [
 							{
 								name: "persona-prompt",
-								factory: personaPromptExtension(persona, () =>
-									this.personaOf(kind),
+								factory: personaPromptExtension(
+									persona,
+									() => this.personaOf(kind),
+									logger,
+									kind,
 								),
 							},
 						]),

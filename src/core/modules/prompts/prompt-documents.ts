@@ -2,7 +2,7 @@ import type { SQL } from "bun";
 import { isCheckDatabase } from "../../db/check-database.ts";
 import type { Migration } from "../../db/migrations.ts";
 import { AgentError } from "../../domain/errors.ts";
-import type { Logger } from "../../log.ts";
+import { type Logger, silentLogger } from "../../log.ts";
 import {
 	PromptHistory,
 	type PromptVersion,
@@ -55,6 +55,13 @@ export interface PromptDocumentView {
 	differs: boolean;
 	override?: { by: string; at: Date };
 	maxChars: number;
+	/**
+	 * Why the file version cannot be read, when its `default` throws. The document is then listed
+	 * with an empty `fileText`, `differs` false and the override as `text` (empty with none), and
+	 * `set` and `revert` refuse it until the file reads again. One broken document never blanks
+	 * the others.
+	 */
+	broken?: string;
 }
 
 /**
@@ -76,9 +83,15 @@ export class PromptConflictError extends Error {
  * turn, so a change applies from the next turn without a restart.
  */
 export interface PromptDocuments {
-	/** Registers a document during a plugin's setup. Throws AgentError for an unusable or repeated id. */
+	/**
+	 * Registers a document during a plugin's setup. Throws AgentError for an unusable or repeated
+	 * id, and for a `default` that cannot be read now: the host does not start with it.
+	 */
 	register(spec: PromptDocumentSpec): PromptHandle;
-	/** The text in force; throws AgentError for an unknown id. */
+	/**
+	 * The text in force; throws AgentError for an unknown id, and for a document with no override
+	 * whose file version cannot be read (logged as an error naming the document).
+	 */
 	text(id: string): string;
 	/** Every document, in the order they were registered. */
 	list(): PromptDocumentView[];
@@ -127,19 +140,35 @@ interface Registered {
 const fileText = (spec: PromptDocumentSpec): string =>
 	typeof spec.default === "function" ? spec.default() : spec.default;
 
+/** What reading a document's file version gave: its text, or why it could not be read. */
+type FileRead = { text: string } | { broken: string; error: unknown };
+
+const readFile = (spec: PromptDocumentSpec): FileRead => {
+	try {
+		return { text: fileText(spec) };
+	} catch (error) {
+		return {
+			broken: error instanceof Error ? error.message : String(error),
+			error,
+		};
+	}
+};
+
 /** The documents of one guild (or the local team), with their overrides in PostgreSQL. */
 export class PgPromptDocuments implements PromptDocuments {
 	readonly #sql: SQL;
 	readonly #guild: string;
 	readonly #history: PromptHistory;
+	readonly #logger: Logger;
 	readonly #documents = new Map<string, Registered>();
 	readonly #overrides = new Map<string, Override>();
 	/** The tail of the writes, which run one at a time so none reads an override another is about to change. */
 	#queue: Promise<unknown> = Promise.resolve();
 
-	private constructor(sql: SQL, guildId: string) {
+	private constructor(sql: SQL, guildId: string, logger: Logger) {
 		this.#sql = sql;
 		this.#guild = guildId;
+		this.#logger = logger;
 		this.#history = new PromptHistory(sql, guildId);
 	}
 
@@ -164,9 +193,16 @@ export class PgPromptDocuments implements PromptDocuments {
 		];
 	}
 
-	/** The documents over the host's migrated pool, holding the overrides of one guild. */
-	static async attach(sql: SQL, guildId: string): Promise<PgPromptDocuments> {
-		const documents = new PgPromptDocuments(sql, guildId);
+	/**
+	 * The documents over the host's migrated pool, holding the overrides of one guild. A file
+	 * version that cannot be read is logged to `logger` as an error naming the document.
+	 */
+	static async attach(
+		sql: SQL,
+		guildId: string,
+		logger: Logger = silentLogger(),
+	): Promise<PgPromptDocuments> {
+		const documents = new PgPromptDocuments(sql, guildId, logger);
 		// `Roundtable.check()` has no database to read the rows from: nothing is overridden.
 		if (!isCheckDatabase(sql)) await documents.#reload();
 		return documents;
@@ -199,6 +235,12 @@ export class PgPromptDocuments implements PromptDocuments {
 			throw new AgentError(`A prompt document "${spec.id}" already exists.`);
 		if (!spec.label.trim())
 			throw new AgentError(`The prompt document "${spec.id}" needs a label.`);
+		// A default that cannot be read now stops the host here, not at the first turn that needs it.
+		const read = readFile(spec);
+		if ("broken" in read)
+			throw new AgentError(
+				`The prompt document "${spec.id}" has no readable file version: ${read.broken}`,
+			);
 		this.#documents.set(spec.id, { spec });
 		return { id: spec.id, text: () => this.text(spec.id) };
 	}
@@ -209,24 +251,54 @@ export class PgPromptDocuments implements PromptDocuments {
 		return found.spec;
 	}
 
+	/** The file version, or an AgentError naming the document when it cannot be read; logged either way. */
+	#file(spec: PromptDocumentSpec): string {
+		const read = readFile(spec);
+		if (!("broken" in read)) return read.text;
+		this.#logUnreadable(spec, read.error);
+		throw new AgentError(
+			`The file version of the prompt document "${spec.id}" cannot be read: ${read.broken}`,
+		);
+	}
+
+	#logUnreadable(spec: PromptDocumentSpec, error: unknown): void {
+		this.#logger.error(
+			{ document: spec.id, err: error },
+			"the file version of a prompt document cannot be read",
+		);
+	}
+
 	text(id: string): string {
 		const spec = this.#registered(id);
-		return this.#overrides.get(id)?.text ?? fileText(spec);
+		return this.#overrides.get(id)?.text ?? this.#file(spec);
 	}
 
 	#view(spec: PromptDocumentSpec): PromptDocumentView {
-		const file = fileText(spec);
+		const read = readFile(spec);
 		const override = this.#overrides.get(spec.id);
-		return {
+		const common = {
 			id: spec.id,
 			label: spec.label,
 			...(spec.description ? { description: spec.description } : {}),
-			text: override?.text ?? file,
-			fileText: file,
 			overridden: override !== undefined,
-			differs: override !== undefined && override.text !== file,
 			...(override ? { override: { by: override.by, at: override.at } } : {}),
 			maxChars: spec.maxChars ?? DEFAULT_DOCUMENT_CHARS,
+		};
+		if ("broken" in read) {
+			this.#logUnreadable(spec, read.error);
+			return {
+				...common,
+				text: override?.text ?? "",
+				fileText: "",
+				differs: false,
+				broken: read.broken,
+			};
+		}
+		return {
+			...common,
+			text: override?.text ?? read.text,
+			fileText: read.text,
+			differs: override !== undefined && override.text !== read.text,
 		};
 	}
 
@@ -247,7 +319,7 @@ export class PgPromptDocuments implements PromptDocuments {
 	): Promise<PromptDocumentView> {
 		return this.#serial(async () => {
 			const spec = this.#registered(id);
-			const file = fileText(spec);
+			const file = this.#file(spec);
 			const now = this.#overrides.get(id)?.text ?? file;
 			if (base !== undefined && base !== now)
 				throw new PromptConflictError(this.#view(spec));
@@ -258,7 +330,7 @@ export class PgPromptDocuments implements PromptDocuments {
 				);
 			if (text === now)
 				throw new AgentError("The text is the one already in force.");
-			if (text === file) return this.#revert(id, spec, by);
+			if (text === file) return this.#revert(id, spec, file, by);
 			const at = new Date();
 			await this.#sql.begin(async (tx) => {
 				await tx`
@@ -282,25 +354,26 @@ export class PgPromptDocuments implements PromptDocuments {
 	revert(id: string, by: string, base?: string): Promise<PromptDocumentView> {
 		return this.#serial(async () => {
 			const spec = this.#registered(id);
+			const file = this.#file(spec);
 			if (
 				base !== undefined &&
-				base !== (this.#overrides.get(id)?.text ?? fileText(spec))
+				base !== (this.#overrides.get(id)?.text ?? file)
 			)
 				throw new PromptConflictError(this.#view(spec));
 			if (!this.#overrides.has(id))
 				throw new AgentError(
 					`"${id}" has no override; the file version is in force.`,
 				);
-			return this.#revert(id, spec, by);
+			return this.#revert(id, spec, file, by);
 		});
 	}
 
 	async #revert(
 		id: string,
 		spec: PromptDocumentSpec,
+		file: string,
 		by: string,
 	): Promise<PromptDocumentView> {
-		const file = fileText(spec);
 		const previous = this.#overrides.get(id)?.text ?? file;
 		await this.#sql.begin(async (tx) => {
 			await tx`DELETE FROM prompt_overrides WHERE guild_id = ${this.#guild} AND name = ${id}`;
@@ -334,7 +407,15 @@ export class PgPromptDocuments implements PromptDocuments {
 				);
 				continue;
 			}
-			if (override.text === fileText(found.spec)) continue;
+			const read = readFile(found.spec);
+			if ("broken" in read) {
+				logger.error(
+					{ document: id, err: read.error },
+					"the file version of a prompt document cannot be read",
+				);
+				continue;
+			}
+			if (override.text === read.text) continue;
 			logger.warn(
 				{ document: id, by: override.by, at: override.at.toISOString() },
 				"a prompt document differs from its file version: the owner's override is in force until it is reverted in the app",

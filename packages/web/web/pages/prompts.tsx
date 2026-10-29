@@ -57,6 +57,9 @@ export function PromptsPage() {
 						{document.differs ? (
 							<Badge tone="warn">{t("Differs from the file version")}</Badge>
 						) : null}
+						{document.broken ? (
+							<Badge tone="warn">{t("File version cannot be read")}</Badge>
+						) : null}
 					</div>
 					{document.description ? (
 						<p>{promptText(document.description)}</p>
@@ -148,7 +151,15 @@ function PromptEditor({ id, onClose }: { id: string; onClose(): void }) {
 		>
 			{error ? <Failure message={error} /> : null}
 			{!view && !error ? <Loading /> : null}
-			{view ? (
+			{view?.broken ? (
+				<Failure
+					message={t(
+						"The file version of this prompt cannot be read, so it cannot be changed here until it can: {reason}",
+						{ reason: view.broken },
+					)}
+				/>
+			) : null}
+			{view && !view.broken ? (
 				<div className="stack">
 					{view.differs ? (
 						<p className="hint">

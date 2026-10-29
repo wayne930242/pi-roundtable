@@ -16,6 +16,7 @@ import type { ChannelKey } from "../domain/conversation.ts";
 import { ConfigError } from "../domain/errors.ts";
 import type { OwnerIdentity } from "../identity.ts";
 import { ConfirmationJudge } from "../judging/confirmation-judge.ts";
+import type { Logger } from "../log.ts";
 import { AUTO_THINKING, formatModelRef, type ModelRef } from "../models.ts";
 import type { ErrorReporter } from "../ops/error-reporter.ts";
 import type { PluginContext, RoundtablePlugin } from "../plugin.ts";
@@ -127,11 +128,12 @@ export const AGENT_TEAM_SERVICE = "team";
 /** The agent tools and the agent's own prompt, which only agent sessions load. */
 export function agentSessionTools(
 	team: Pick<DiscordAgentTeam, "extension" | "systemPrompt">,
+	logger: Logger,
 ): SessionTool[] {
 	return [
 		agentOnly("agent-tools", (scope) => team.extension(scope)),
 		agentOnly("agent-prompt", (scope) =>
-			agentPromptExtension(() => team.systemPrompt(scope)),
+			agentPromptExtension(() => team.systemPrompt(scope), logger, scope.name),
 		),
 	];
 }
@@ -418,7 +420,7 @@ export function agentServerPlugin(
 					options.avatarListener && options.avatarUrl
 						? [studio.route(options.avatarListener)]
 						: [],
-				sessionTools: agentSessionTools(built),
+				sessionTools: agentSessionTools(built, logger),
 				toolTiers: AGENT_TIERS,
 			};
 		},
