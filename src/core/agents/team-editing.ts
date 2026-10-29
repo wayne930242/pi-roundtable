@@ -8,7 +8,7 @@ import {
 import { AgentError } from "../domain/errors.ts";
 import type { AgentTurnScope } from "../domain/ports.ts";
 import type { AgentChange } from "../services.ts";
-import { addressee } from "../speakers.ts";
+import { addressee, type Speaker } from "../speakers.ts";
 import { openingTaskText } from "./agent-prompt.ts";
 import { characterOf, overBase } from "./agent-rules.ts";
 import { modelSetting, thinkingSetting } from "./agent-settings.ts";
@@ -72,6 +72,7 @@ export class TeamEditing {
 		return `Updated "${agent.displayName}" (${agent.name}); it applies from its next turn. It runs ${runs} with thinking ${level}.`;
 	}
 
+	/** The agent tool: an agent creates another, which starts on the opening task at once. */
 	async create(
 		caller: AgentTurnScope,
 		input: {
@@ -87,27 +88,90 @@ export class TeamEditing {
 			skills?: string[];
 		},
 	): Promise<string> {
+		const speaker = this.#ctx.turns.speakerOf(caller);
+		if (!speaker)
+			throw new AgentError(
+				"agent_create can only be used during an agent turn.",
+			);
+		const made = await this.#create(
+			{
+				speaker,
+				by: caller.name,
+				creator: this.#ctx.options.store.agent(caller.name),
+			},
+			input,
+		);
+		return made.text;
+	}
+
+	/**
+	 * An owner creates an agent from outside any agent turn (the web app's form): the same checks,
+	 * picture, channel and opening task as `create`, and the model and thinking level the owner
+	 * picked. Without a task the agent only exists, waiting in its room. Returns the new agent.
+	 */
+	async createFor(
+		speaker: Speaker,
+		input: {
+			name: string;
+			displayName: string;
+			prompt: string;
+			character?: CharacterInput;
+			task?: string;
+			category?: string;
+			skills?: string[];
+			model?: string;
+			thinking?: string;
+		},
+	): Promise<Agent> {
+		const { model, thinking, task, ...rest } = input;
+		const made = await this.#create(
+			{ speaker, by: speaker.name, creator: undefined },
+			{ ...rest, ...(task ? { task } : {}) },
+			{ model, thinking },
+		);
+		return made.agent;
+	}
+
+	async #create(
+		who: { speaker: Speaker; by: string; creator: Agent | undefined },
+		input: {
+			name: string;
+			displayName: string;
+			prompt: string;
+			/** @deprecated Ignored: agents are composed characters. */
+			avatarPrompt?: string;
+			character?: CharacterInput;
+			task?: string;
+			category?: string;
+			skills?: string[];
+		},
+		settings: {
+			model?: string | undefined;
+			thinking?: string | undefined;
+		} = {},
+	): Promise<{ agent: Agent; text: string }> {
 		const { store, studio, channels, queue, skills, surfaces, logger } =
 			this.#ctx.options;
 		if (input.skills && input.skills.length > 0 && !skills)
 			throw new AgentError(
 				"Skills are off on this host, so an agent cannot carry any. Create it without skills.",
 			);
-		const speaker = this.#ctx.turns.speakerOf(caller);
-		if (!speaker)
-			throw new AgentError(
-				"agent_create can only be used during an agent turn.",
-			);
 		const {
 			category,
 			skills: carried = [],
 			character: wanted,
 			avatarPrompt: _ignored,
+			task,
 			...fields
 		} = input;
 		const parent = teamCategory(category, "Agents");
 		store.checkNewName(input.name);
 		skills?.checkRegistered(carried);
+		// A model or thinking level the host cannot run fails the create, before anything is made.
+		const model = await modelSetting(settings.model, () =>
+			this.#ctx.options.models.usable(),
+		);
+		const thinking = thinkingSetting(settings.thinking);
 		// The picture comes before the row and the channel: a render failure fails the create.
 		const taken = store
 			.agents()
@@ -123,49 +187,64 @@ export class TeamEditing {
 			input.displayName,
 			parent,
 		);
-		const agent = await store.createAgent({
+		let agent = await store.createAgent({
 			...fields,
 			character,
 			avatarHash,
 			...(channelId ? { channelId } : {}),
 		});
+		if (model || thinking)
+			agent = await store.updateAgent(agent.name, {
+				...(model ? { model } : {}),
+				...(thinking ? { thinking } : {}),
+			});
 		if (skills && carried.length > 0)
 			await skills.attach(agent.name, carried, []);
 		logger.info(
-			{ agent: agent.name, by: caller.name, class: character.class },
+			{ agent: agent.name, by: who.by, class: character.class },
 			"agent created",
 		);
 		this.#ctx.changed();
 		const avatar = `its picture is the ${character.class} look`;
+		const where = channelId ? ` in <#${channelId}>` : "";
+		if (!task)
+			return {
+				agent,
+				text: `Created "${agent.displayName}" (${agent.name})${where}; ${avatar}.`,
+			};
 		// The opening task runs where the agent is first reached: its channel, else its first room.
 		const home = channelId
 			? discordKey(channelId)
 			: keysOf(store, agent.name, surfaces?.roomSurfaces() ?? [])[0];
-		const creator = store.agent(caller.name);
-		const where = channelId ? ` in <#${channelId}>` : "";
 		if (!home) {
 			logger.warn(
 				{ agent: agent.name },
 				"opening turn skipped: the agent has no channel or room",
 			);
-			return `Created "${agent.displayName}" (${agent.name})${where}; ${avatar}. It has no room to start its opening task in yet.`;
+			return {
+				agent,
+				text: `Created "${agent.displayName}" (${agent.name})${where}; ${avatar}. It has no room to start its opening task in yet.`,
+			};
 		}
 		void queue
 			.run(home, () =>
 				this.#ctx.turns.answerBackground(
 					home,
-					speaker,
+					who.speaker,
 					openingTaskText(
-						creator,
-						input.task,
-						addressee(speaker, this.#ctx.options.owner),
+						who.creator,
+						task,
+						addressee(who.speaker, this.#ctx.options.owner),
 					),
 				),
 			)
 			.catch((error: unknown) =>
 				logger.error({ agent: agent.name, err: error }, "opening turn failed"),
 			);
-		return `Created "${agent.displayName}" (${agent.name})${where}; ${avatar}. It is starting on its opening task now.`;
+		return {
+			agent,
+			text: `Created "${agent.displayName}" (${agent.name})${where}; ${avatar}. It is starting on its opening task now.`,
+		};
 	}
 
 	/** The agent tool: changes a look, then says what the owner sees. */

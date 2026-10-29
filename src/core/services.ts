@@ -39,6 +39,7 @@ import type {
 	SkillSet,
 } from "./modules/skills/skill-rules.ts";
 import type { AgentTurnScope, ChannelKey } from "./sessions.ts";
+import type { Speaker } from "./speakers.ts";
 import type { DispatchThreads } from "./threads/dispatch-threads.ts";
 
 // The services the built-in plugins provide, and the ports they keep to. Each port is an
@@ -209,6 +210,23 @@ export interface AgentDirectory {
 	groupByChannel(channelId: string): AgentGroup | undefined;
 }
 
+/** What an owner gives to create an agent: the fields of `agent_create`, with the settings `update` takes. */
+export interface NewAgent {
+	/** Permanent: lowercase letters, digits and dashes, 1 to 32. */
+	name: string;
+	displayName: string;
+	prompt: string;
+	/** Fields of its look; any left out come from the look its role suggests. */
+	character?: CharacterInput;
+	/** Its opening task; without it the agent only exists. */
+	task?: string;
+	category?: string;
+	/** Skills it carries; refused when the skills addon is off. */
+	skills?: string[];
+	model?: string;
+	thinking?: string;
+}
+
 /** What an agent's settings may change, as `update` takes it. */
 export interface AgentChange {
 	displayName?: string;
@@ -261,6 +279,44 @@ export interface AgentTeam {
 	announce(text: string): Promise<void>;
 	/** Changes an agent's display name, prompt, model, or thinking level; a model must be one the host runs. */
 	update(name: string, change: AgentChange): Promise<string>;
+	/**
+	 * Creates an agent for an owner, outside any agent turn: the checks, picture, channel and
+	 * opening task of `agent_create`, with `speaker` as the one who asked. `model` and `thinking`
+	 * take what `update` takes and are checked before anything is made; `task` is optional, and
+	 * without it the agent waits in its room. Throws AgentError for a bad or taken name, an
+	 * unusable model or an unknown skill.
+	 */
+	createAgent(speaker: Speaker, input: NewAgent): Promise<Agent>;
+	/**
+	 * Archives an agent or group like the `archive` tool: it stops answering, its schedules are
+	 * cancelled, an agent leaves its groups, and its history is kept. `caller` is the agent that
+	 * asks, which cannot archive itself; an owner's request has none. The coordinator cannot be
+	 * archived.
+	 */
+	archive(caller: AgentTurnScope | undefined, name: string): Promise<string>;
+	/**
+	 * Returns an archived agent or group to the active ones. An agent rejoins no group; a group
+	 * needs all its members active. Throws AgentError for an unknown or active name.
+	 */
+	restore(name: string): Promise<string>;
+	/**
+	 * Deletes an archived agent or group for good and frees its name. Throws AgentError for an
+	 * unknown name and for an active one: archive it first.
+	 */
+	remove(name: string): Promise<string>;
+	/** Creates a group of 2 to 6 agents; the host is the first member unless given. */
+	createGroup(input: {
+		name: string;
+		displayName: string;
+		members: string[];
+		host?: string;
+		category?: string;
+	}): Promise<string>;
+	/** Changes a group's display name, members (all of them) or host. */
+	updateGroup(
+		name: string,
+		change: { displayName?: string; members?: string[]; host?: string },
+	): Promise<string>;
 	/**
 	 * Changes an agent's look: `input` is resolved over its current character (a new class keeps
 	 * its colors unless the input gives a palette or colors), rendered, and stored with the new

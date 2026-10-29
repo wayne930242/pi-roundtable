@@ -291,6 +291,46 @@ export class PgAgentStore implements AgentDirectory {
 		});
 	}
 
+	/**
+	 * Returns an archived agent to the active ones, on a new channel when its old one is gone. It
+	 * does not rejoin the groups it left.
+	 */
+	async restoreAgent(name: string, channelId?: string): Promise<Agent> {
+		return this.#serial(async () => {
+			const current = this.#agents.get(name);
+			if (!current) throw new AgentError(`There is no agent "${name}".`);
+			if (current.status === "active")
+				throw new AgentError(`"${name}" is not archived.`);
+			const rows: AgentRow[] = await this.#sql`
+			UPDATE agents SET status = 'active', channel_id = ${channelId ?? current.channelId ?? null},
+				updated_at = now()
+			WHERE guild_id = ${this.#guild} AND name = ${name}
+			RETURNING *`;
+			return this.#keepAgent(rows[0]);
+		});
+	}
+
+	/**
+	 * Deletes an archived agent and its group cursors; its name is free again. An active agent is
+	 * never deleted: archive it first.
+	 */
+	async deleteAgent(name: string): Promise<void> {
+		return this.#serial(async () => {
+			const current = this.#agents.get(name);
+			if (!current) throw new AgentError(`There is no agent "${name}".`);
+			if (current.status === "active")
+				throw new AgentError(
+					`"${name}" is active; archive it before deleting it.`,
+				);
+			await this.#sql.begin(async (tx) => {
+				await tx`DELETE FROM agent_group_cursors WHERE guild_id = ${this.#guild} AND agent_name = ${name}`;
+				await tx`DELETE FROM agents WHERE guild_id = ${this.#guild} AND name = ${name}`;
+			});
+			this.#agents.delete(name);
+			this.#dressed.delete(name);
+		});
+	}
+
 	#keepAgent(row: AgentRow | undefined): Agent {
 		if (!row) throw new AgentError("the agent was not found");
 		return this.#keepAgentRow(row);
@@ -419,6 +459,53 @@ export class PgAgentStore implements AgentDirectory {
 
 	async archiveGroup(name: string): Promise<AgentGroup> {
 		return this.#serial(() => this.#writeGroup(name, { status: "archived" }));
+	}
+
+	/** The archived group, when it could be restored now; otherwise the error that says why not. */
+	checkRestorableGroup(name: string): AgentGroup {
+		const current = this.#groups.get(name);
+		if (!current) throw new AgentError(`There is no group "${name}".`);
+		if (current.status === "active")
+			throw new AgentError(`"${name}" is not archived.`);
+		this.#checkMembers(current.members, current.host);
+		return current;
+	}
+
+	/**
+	 * Returns an archived group to the active ones, on a new channel when its old one is gone. Its
+	 * members must all be active still and number enough; otherwise it refuses and stays archived.
+	 */
+	async restoreGroup(name: string, channelId?: string): Promise<AgentGroup> {
+		return this.#serial(async () => {
+			const current = this.checkRestorableGroup(name);
+			const rows: GroupRow[] = await this.#sql`
+			UPDATE agent_groups SET status = 'active', channel_id = ${channelId ?? current.channelId ?? null}
+			WHERE guild_id = ${this.#guild} AND name = ${name}
+			RETURNING *`;
+			return this.#keepGroup(rows[0]);
+		});
+	}
+
+	/**
+	 * Deletes an archived group with its messages and cursors, in the Discord channel's log and in
+	 * each room's (`<group>@<surface>`); its name is free again. An active group is never deleted.
+	 */
+	async deleteGroup(name: string): Promise<void> {
+		return this.#serial(async () => {
+			const current = this.#groups.get(name);
+			if (!current) throw new AgentError(`There is no group "${name}".`);
+			if (current.status === "active")
+				throw new AgentError(
+					`"${name}" is active; archive it before deleting it.`,
+				);
+			const rooms = `${name}@%`;
+			await this.#sql.begin(async (tx) => {
+				await tx`DELETE FROM agent_group_cursors WHERE guild_id = ${this.#guild} AND (group_name = ${name} OR group_name LIKE ${rooms})`;
+				await tx`DELETE FROM agent_group_messages WHERE guild_id = ${this.#guild} AND (group_name = ${name} OR group_name LIKE ${rooms})`;
+				await tx`DELETE FROM agent_groups WHERE guild_id = ${this.#guild} AND name = ${name}`;
+			});
+			this.#groups.delete(name);
+		});
 	}
 
 	async #writeGroup(

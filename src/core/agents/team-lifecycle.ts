@@ -193,9 +193,13 @@ export class TeamLifecycle {
 	 * Archives an agent or group like a deleted channel, then keeps its channel under Archive,
 	 * where no one owns it and so nothing answers; an agent or group without a Discord channel
 	 * only stops answering in its rooms. Runs at once, not in the target's queue: the caller may be
-	 * a member of the group it archives, and the round stops at its next turn.
+	 * a member of the group it archives, and the round stops at its next turn. An owner's call from
+	 * outside any turn has no `caller`, so no agent is protected from archiving itself.
 	 */
-	async archive(caller: AgentTurnScope, name: string): Promise<string> {
+	async archive(
+		caller: AgentTurnScope | undefined,
+		name: string,
+	): Promise<string> {
 		const { store, channels, logger } = this.#ctx.options;
 		const agent = store.agent(name);
 		const group = agent ? undefined : store.group(name);
@@ -208,7 +212,7 @@ export class TeamLifecycle {
 			throw new AgentError(`"${name}" is already archived.`);
 		if (agent && coordinatorOf(store, this.#ctx.options)?.name === name)
 			throw new AgentError("The coordinator cannot be archived.");
-		if (agent && name === caller.name)
+		if (agent && name === caller?.name)
 			throw new AgentError("You cannot archive yourself; ask another agent.");
 		const { channelId } = target;
 		if (agent) await this.#archiveAgent(agent);
@@ -230,6 +234,73 @@ export class TeamLifecycle {
 			return `Archived "${target.displayName}", but its channel <#${channelId}> could not be moved to Archive (${error instanceof Error ? error.message : String(error)}); it stays silent where it is.`;
 		}
 		return `Archived "${target.displayName}"; its channel <#${channelId}> is kept under Archive.`;
+	}
+
+	/**
+	 * Returns an archived agent or group to the active ones: its channel leaves Archive for its
+	 * category (a new channel replaces one deleted meanwhile), and it answers again from its next
+	 * message. An agent does not rejoin the groups it left; a group needs all its members active.
+	 */
+	async restore(name: string): Promise<string> {
+		const { store, channels, logger } = this.#ctx.options;
+		const agent = store.agent(name);
+		const group = agent ? undefined : store.group(name);
+		const target = agent ?? group;
+		if (!target)
+			throw new AgentError(
+				`There is no agent or group "${name}"; see agent_list.`,
+			);
+		if (target.status === "active")
+			throw new AgentError(`"${name}" is not archived.`);
+		if (group) store.checkRestorableGroup(name);
+		let { channelId } = target;
+		if (channels) {
+			const category = agent ? "Agents" : "Groups";
+			if (channelId && (await channels.exists(channelId)))
+				await channels.placeIn(channelId, category);
+			else if (agent || channelId)
+				channelId = await channels.createChannel(
+					name,
+					agent ? agent.displayName : groupTopic(target as AgentGroup, store),
+					category,
+				);
+		}
+		if (agent) await store.restoreAgent(name, channelId);
+		else {
+			const restored = await store.restoreGroup(name, channelId);
+			this.retitle(restored);
+		}
+		logger.info({ name, kind: agent ? "agent" : "group" }, "restored");
+		this.#ctx.changed();
+		return `Restored "${target.displayName}"; it answers again.${agent ? " It is in no group until it is added to one." : ""}`;
+	}
+
+	/**
+	 * Deletes an archived agent or group for good, its name free again. Its carried skills are
+	 * detached; a Discord channel it had stays under Archive with its history, since Discord is
+	 * never asked to delete one. An active agent or group is refused: archive it first.
+	 */
+	async remove(name: string): Promise<string> {
+		const { store, skills, logger } = this.#ctx.options;
+		const agent = store.agent(name);
+		const group = agent ? undefined : store.group(name);
+		const target = agent ?? group;
+		if (!target)
+			throw new AgentError(
+				`There is no agent or group "${name}"; see agent_list.`,
+			);
+		if (target.status === "active")
+			throw new AgentError(
+				`"${name}" is active; archive it before deleting it.`,
+			);
+		if (agent) {
+			await store.deleteAgent(name);
+			const carried = skills?.carriedNames(name) ?? [];
+			if (skills && carried.length > 0) await skills.attach(name, [], carried);
+		} else await store.deleteGroup(name);
+		logger.info({ name, kind: agent ? "agent" : "group" }, "deleted");
+		this.#ctx.changed();
+		return `Deleted "${target.displayName}"; the name "${name}" is free again.`;
 	}
 
 	async #archiveAgent(agent: Agent): Promise<void> {

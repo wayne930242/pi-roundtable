@@ -296,8 +296,18 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 	 * Archives an agent or group like a deleted channel, then keeps its channel under Archive,
 	 * where no one owns it and so nothing answers.
 	 */
-	archive(caller: AgentTurnScope, name: string): Promise<string> {
+	archive(caller: AgentTurnScope | undefined, name: string): Promise<string> {
 		return this.#lifecycle.archive(caller, name);
+	}
+
+	/** Returns an archived agent or group to the active ones; see `AgentTeam.restore`. */
+	restore(name: string): Promise<string> {
+		return this.#lifecycle.restore(name);
+	}
+
+	/** Deletes an archived agent or group for good; see `AgentTeam.remove`. */
+	remove(name: string): Promise<string> {
+		return this.#lifecycle.remove(name);
 	}
 
 	// ── Turns, run by TeamTurns ────────────────────────────────────────────
@@ -451,6 +461,14 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 		input: Parameters<TeamEditing["create"]>[1],
 	): Promise<string> {
 		return this.#editing.create(caller, input);
+	}
+
+	/** An owner creates an agent outside any agent turn; see `AgentTeam.createAgent`. */
+	createAgent(
+		by: Speaker,
+		input: Parameters<TeamEditing["createFor"]>[1],
+	): Promise<Agent> {
+		return this.#editing.createFor(by, input);
 	}
 
 	/** Changes an agent's look; see `AgentTeam.dress`. */

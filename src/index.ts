@@ -339,6 +339,7 @@ export type {
 	DelegationRequest,
 	Delegator,
 	MemoryStore,
+	NewAgent,
 	ScheduleStore,
 	SkillRegistry,
 	SpeakerMemory,

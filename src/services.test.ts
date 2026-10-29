@@ -111,6 +111,14 @@ const team: AgentTeam = {
 	postAs: async () => undefined,
 	announce: async () => undefined,
 	update: async () => "updated",
+	createAgent: async () => {
+		throw new Error("unused");
+	},
+	archive: async () => "archived",
+	restore: async () => "restored",
+	remove: async () => "deleted",
+	createGroup: async () => "created",
+	updateGroup: async () => "updated",
 	dress: async () => {
 		throw new Error("unused");
 	},
