@@ -88,6 +88,7 @@ export class TeamEditing {
 			skills?: string[];
 		},
 	): Promise<string> {
+		this.#refuseSkillsOff(input.skills);
 		const speaker = this.#ctx.turns.speakerOf(caller);
 		if (!speaker)
 			throw new AgentError(
@@ -136,6 +137,14 @@ export class TeamEditing {
 		return made.agent;
 	}
 
+	/** An agent cannot carry skills on a host with skills switched off. */
+	#refuseSkillsOff(carried: string[] | undefined): void {
+		if (carried && carried.length > 0 && !this.#ctx.options.skills)
+			throw new AgentError(
+				"Skills are off on this host, so an agent cannot carry any. Create it without skills.",
+			);
+	}
+
 	async #create(
 		who: {
 			speaker: Speaker;
@@ -162,10 +171,7 @@ export class TeamEditing {
 	): Promise<{ agent: Agent; text: string }> {
 		const { store, studio, channels, queue, skills, surfaces, logger } =
 			this.#ctx.options;
-		if (input.skills && input.skills.length > 0 && !skills)
-			throw new AgentError(
-				"Skills are off on this host, so an agent cannot carry any. Create it without skills.",
-			);
+		this.#refuseSkillsOff(input.skills);
 		const {
 			category,
 			skills: carried = [],
