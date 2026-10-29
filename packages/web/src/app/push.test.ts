@@ -13,6 +13,7 @@ import { describeDb, type TestHost, testHost } from "pi-roundtable/testing";
 import type { PushDevicesView, RoomsView, ServerFrame } from "../api-types.ts";
 import { APP_PROTOCOL } from "../app/protocol.ts";
 import { MAX_DEVICES } from "../push/api.ts";
+import { PushMutes } from "../push/mutes.ts";
 import { fakePushService, receiver, withPushFetch } from "../testing/push.ts";
 import { admitAs, refuse, type Verdict } from "../verifier.ts";
 import { webConsole } from "../web-plugin.ts";
@@ -525,6 +526,18 @@ describeDb("push over a real host", () => {
 		});
 		await waitFor(() => service.posts.length === 1);
 		tab.close();
+	});
+
+	test("the mute table's migration can run again without touching a mute", async () => {
+		const database = app.host.context.database();
+		await database`DELETE FROM web_push_muted_rooms`;
+		await database`INSERT INTO web_push_muted_rooms (room, muted_by) VALUES (${SCOUT}, 'ada')`;
+		await PushMutes.migration.up(database);
+		await PushMutes.migration.up(database);
+		const rows: { room: string }[] =
+			await database`SELECT room FROM web_push_muted_rooms`;
+		expect(rows).toEqual([{ room: SCOUT }]);
+		await database`DELETE FROM web_push_muted_rooms`;
 	});
 
 	test("a push service that says the device is gone drops the subscription", async () => {
