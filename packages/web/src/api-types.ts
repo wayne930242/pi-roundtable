@@ -341,7 +341,7 @@ export interface RoomView {
 	last?: RoomMessage;
 }
 
-/** An owner-made folder of rooms (分組 in zh-TW), with its rooms in the owner's order. */
+/** An owner-made folder of rooms, with its rooms in the owner's order. */
 export interface FolderView {
 	/** `folder.<uuid>`. */
 	id: string;
