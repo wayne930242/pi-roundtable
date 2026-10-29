@@ -292,10 +292,7 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 		return this.#lifecycle.channelDeleted(channelId);
 	}
 
-	/**
-	 * Archives an agent or group like a deleted channel, then keeps its channel under Archive,
-	 * where no one owns it and so nothing answers.
-	 */
+	/** Archives an agent or group like a deleted channel, keeping its channel under Archive. */
 	archive(caller: AgentTurnScope | undefined, name: string): Promise<string> {
 		return this.#lifecycle.archive(caller, name);
 	}
@@ -486,19 +483,15 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 		return this.#editing.redrawAvatar(name, mode, text);
 	}
 
-	createGroup(input: {
-		name: string;
-		displayName: string;
-		members: string[];
-		host?: string;
-		category?: string;
-	}): Promise<string> {
+	createGroup(
+		input: Parameters<TeamEditing["createGroup"]>[0],
+	): Promise<string> {
 		return this.#editing.createGroup(input);
 	}
 
 	updateGroup(
 		name: string,
-		change: { displayName?: string; members?: string[]; host?: string },
+		change: Parameters<TeamEditing["updateGroup"]>[1],
 	): Promise<string> {
 		return this.#editing.updateGroup(name, change);
 	}
