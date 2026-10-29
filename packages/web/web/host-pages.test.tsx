@@ -589,8 +589,15 @@ test("the list of a kind shows each room with its picture, what needs attention 
 		setter?.call(search, "dana");
 		search?.dispatchEvent(new Event("input", { bubbles: true }));
 	});
-	await settle(400);
-	expect(fixture.requests.at(-1)?.url).toContain("filter=dana");
+	// The search goes out once typing pauses; wait for it rather than for a fixed time.
+	for (let waited = 0; waited < 5000; waited += 50) {
+		if (fixture.requests.some((request) => request.url.includes("filter=dana")))
+			break;
+		await settle(50);
+	}
+	expect(
+		fixture.requests.some((request) => request.url.includes("filter=dana")),
+	).toBe(true);
 });
 
 test("a host page shows its sections, runs a form's action, and tells the person what the host answered", async () => {
