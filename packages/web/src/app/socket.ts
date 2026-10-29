@@ -60,6 +60,11 @@ export interface SocketRouteOptions {
 	gate: Pick<Gate, "required" | "onChanged">;
 	/** Who has a room's frames. */
 	audienceOf(room: string): Audience;
+	/**
+	 * Called once the socket has had `ready` and before anything else is replayed to it, gated or
+	 * not: the pieces of the app send what is per person there, such as the notices and the badge.
+	 */
+	opened?(connection: AppSocket): Promise<void>;
 	conversations: Pick<ConversationPort, "stop">;
 	logger: Logger;
 	/**
@@ -214,10 +219,17 @@ export class SocketRoute {
 			},
 			{ connection },
 		);
-		if (connection.gated) {
-			connection.started = true;
-			return;
-		}
+		// The socket is started before the hook runs, so the frames it sends reach the socket.
+		connection.started = true;
+		await this.#options
+			.opened?.(connection)
+			.catch((error: unknown) =>
+				this.#options.logger.warn(
+					{ err: error },
+					"an app socket was not given its notices",
+				),
+			);
+		if (connection.gated) return;
 		this.#replay(connection);
 	}
 

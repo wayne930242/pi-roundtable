@@ -51,6 +51,7 @@ export class Gate {
 					id: step.id,
 					label: step.label,
 					...(step.help ? { help: step.help } : {}),
+					...(step.builtin ? { builtin: step.builtin } : {}),
 					required: step.required,
 					open: step.open,
 					...(step.required && step.waiver ? { waiver: step.waiver } : {}),
@@ -60,6 +61,7 @@ export class Gate {
 				steps.push({
 					id: step.id,
 					label: step.label,
+					...(step.builtin ? { builtin: step.builtin } : {}),
 					required: step.required,
 					open: step.open,
 				});

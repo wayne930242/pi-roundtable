@@ -307,6 +307,12 @@ export interface WebConsoleOptions {
 		 * room never previews.
 		 */
 		content?: "full" | "none";
+		/**
+		 * The names of the transports besides `web-push` that the sender carries, such as `slack`. A
+		 * notice's `via` may name only these and `web-push`; naming any other is a ConfigError when
+		 * the notice is raised. The app never loads a transport: the sender process does.
+		 */
+		transports?: readonly string[];
 	};
 	/**
 	 * What a person owes before the app opens. `links` names providers whose accounts they must
@@ -379,6 +385,8 @@ export interface ResolvedOptions {
 			| "internal"
 			| { external: { publicKey: string; subscribePath?: string } };
 		content: "full" | "none";
+		/** `web-push` and the host's own transports. */
+		transports: readonly string[];
 	};
 	onboarding: {
 		links: Readonly<Record<string, "required" | "nudge">>;
@@ -887,6 +895,14 @@ function checkPush(
 	const content = push?.content ?? (sender === "internal" ? "full" : "none");
 	if (content !== "full" && content !== "none")
 		fail('push.content must be "full" or "none"');
+	const extra = push?.transports ?? [];
+	if (
+		!Array.isArray(extra) ||
+		!extra.every(
+			(name) => typeof name === "string" && /^[a-z][a-z0-9-]{0,39}$/.test(name),
+		)
+	)
+		fail("push.transports must be a list of transport names such as slack");
 	return {
 		preview: push?.preview ?? true,
 		quietHours,
@@ -912,6 +928,10 @@ function checkPush(
 						},
 					},
 		content,
+		transports: [
+			"web-push",
+			...new Set(extra.filter((name) => name !== "web-push")),
+		],
 	};
 }
 

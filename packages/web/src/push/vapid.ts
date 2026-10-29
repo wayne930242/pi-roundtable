@@ -72,6 +72,25 @@ async function importStored(stored: Stored, path: string): Promise<Vapid> {
 }
 
 /**
+ * The VAPID keys in `path`, which must exist: for a sender process that holds the key the app
+ * never sees. A missing or unreadable file stops it, since a new key would not match the one the
+ * devices subscribed against.
+ */
+export async function readVapid(path: string): Promise<Vapid> {
+	let raw: string;
+	try {
+		raw = readFileSync(path, "utf8");
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code === "ENOENT")
+			throw new Error(
+				`${path} does not exist; the sender needs the VAPID key file the devices subscribed against`,
+			);
+		throw error;
+	}
+	return importStored(parse(raw, path), path);
+}
+
+/**
  * The VAPID keys in `path`, made on first use with WebCrypto and kept readable by this user
  * alone. Subscriptions are bound to the public key, so the file must outlive a restart; a file
  * that cannot be read stops startup rather than being replaced.

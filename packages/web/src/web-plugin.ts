@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import {
 	AGENTS,
@@ -6,6 +7,7 @@ import {
 	IDENTITY,
 	MEMORY,
 	MODES,
+	PROFILES,
 	PROMPTS,
 	type RoundtablePlugin,
 	SCHEDULES,
@@ -98,9 +100,12 @@ async function build(settings: ResolvedOptions, context: Context) {
 	// What the other plugins register their rooms, pages and steps in: sealed when the web service starts.
 	const webApp = new WebAppRegistry(settings.surface);
 	services.provide(WEB_APP, webApp);
-	if (settings.push.sender !== "internal")
+	const external = settings.push.sender !== "internal";
+	const vapidFile = join(settings.dataDir, "web", "vapid.json");
+	// An external sender holds the key: the app never makes or reads one, and a leftover file would say it does.
+	if (external && existsSync(vapidFile))
 		throw new Error(
-			"web-console: push.sender.external is not available in this build; leave push.sender at internal",
+			`web-console: push.sender is external, but ${vapidFile} exists. The app must not hold a push key: delete the file (devices subscribe again against the sender's key)`,
 		);
 	if (settings.admission === "access" && env.agentTools === "full")
 		logger.warn(
@@ -165,6 +170,11 @@ async function build(settings: ResolvedOptions, context: Context) {
 	// Absent on a host without the registry: the console then lists conversations found by name only.
 	const registry = services.find(CONVERSATIONS);
 	const identity = services.get(IDENTITY);
+	const profiles = services.find(PROFILES);
+	if (settings.admission === "access" && !profiles)
+		throw new Error(
+			"web-console: admission access needs the PROFILES service; a plugin that replaces IDENTITY must provide PROFILES too",
+		);
 	// An agent's skills are chosen from what the Skills pane lists when the host supplies it, else from the addon's own catalog.
 	const skillRegistry = services.find(SKILLS);
 	const skills = skillRegistry
@@ -193,7 +203,19 @@ async function build(settings: ResolvedOptions, context: Context) {
 	const access: AccessView | undefined =
 		settings.admission === "access"
 			? {
-					push: { tiers: settings.push.tiers },
+					push: {
+						tiers: settings.push.tiers,
+						...(settings.push.sender !== "internal"
+							? {
+									key: settings.push.sender.external.publicKey,
+									...(settings.push.sender.external.subscribePath
+										? {
+												subscribe: settings.push.sender.external.subscribePath,
+											}
+										: {}),
+								}
+							: {}),
+					},
 					gate: (visitor) => gate.required(viewerOf(visitor)),
 					hosted: async (visitor) => {
 						const viewer = viewerOf(visitor);
@@ -303,21 +325,25 @@ async function build(settings: ResolvedOptions, context: Context) {
 			address: context.listener(settings.listener),
 		},
 	});
-	if (rooms && !settings.push.subject)
+	if (rooms && !external && !settings.push.subject)
 		logger.warn(
 			"web push is off: the origin is not https, so set push.subject to a mailto: or https: contact",
 		);
-	const vapid = rooms
-		? await loadVapid(join(settings.dataDir, "web", "vapid.json"))
-		: undefined;
+	const vapid = rooms && !external ? await loadVapid(vapidFile) : undefined;
 	const app =
-		rooms && vapid
+		rooms && (vapid || external)
 			? new OwnerApp({
 					...(settings.presentation
 						? { presentation: settings.presentation }
 						: {}),
+					extras: {
+						...(profiles ? { profiles } : {}),
+						routing: settings.routing,
+						onboarding: settings.onboarding,
+						push: settings.push,
+					},
 					push: {
-						vapid,
+						...(vapid ? { vapid } : {}),
 						subject: settings.push.subject,
 						preview: settings.push.preview,
 						...(settings.push.quietHours
@@ -431,6 +457,14 @@ async function build(settings: ResolvedOptions, context: Context) {
 
 /** What the host registered, checked when the service starts: every provider onboarding names has its prover. */
 function checkRegistered(settings: ResolvedOptions, webApp: WebAppRegistry) {
+	if (
+		settings.onboarding.push !== "off" &&
+		(!settings.panes.includes("rooms") ||
+			(settings.push.sender === "internal" && !settings.push.subject))
+	)
+		throw new Error(
+			"web-console: onboarding.push asks people to turn push on, but push is off here. It needs the rooms pane and a push.subject (or an external sender)",
+		);
 	for (const provider of Object.keys(settings.onboarding.links))
 		if (!webApp.prover(provider))
 			throw new Error(

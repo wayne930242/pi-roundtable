@@ -8,7 +8,8 @@
 		"bun": ">=1.4.4"
 	},
 	"exports": {
-		".": "./src/index.ts"
+		".": "./src/index.ts",
+		"./push-sender": "./src/push-sender/index.ts"
 	},
 	"files": [
 		"src",
