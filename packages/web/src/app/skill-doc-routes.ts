@@ -90,15 +90,20 @@ export class SkillDocApi {
 					),
 				);
 			} catch (error) {
-				if (error instanceof SkillConflictError)
+				if (error instanceof SkillConflictError) {
+					const refused = new HttpError(
+						409,
+						"This skill changed while you were editing it.",
+					);
 					return json(
 						{
-							error: "This skill changed while you were editing it.",
+							error: refused.message,
 							conflict: "changed",
 							current: viewOf(error.current),
 						} satisfies SkillConflict,
-						409,
+						refused.status,
 					);
+				}
 				throw error;
 			}
 		}

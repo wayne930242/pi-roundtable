@@ -103,15 +103,20 @@ export class PromptApi {
 			if (typeof base !== "string")
 				throw bad("base must be the text the prompt was edited from.");
 			const save: PromptSave = { text, base };
-			if (document.text !== save.base)
+			if (document.text !== save.base) {
+				const refused = new HttpError(
+					409,
+					"This prompt changed while you were editing it.",
+				);
 				return json(
 					{
-						error: "This prompt changed while you were editing it.",
+						error: refused.message,
 						conflict: "changed",
 						current: viewOf(document),
 					} satisfies PromptConflict,
-					409,
+					refused.status,
 				);
+			}
 			return json(viewOf(await prompts.set(id, save.text, speaker.name)));
 		}
 		if (action === "revert" && method === "POST" && parts.length === 4) {
