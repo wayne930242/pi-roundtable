@@ -16,6 +16,7 @@ import {
 	type Texture,
 	type Vector3,
 } from "three";
+import { normalizeAngle } from "./camera";
 import {
 	badgeCanvas,
 	canvas,
@@ -36,6 +37,20 @@ import type { SeatState } from "./types";
 
 /** How far a standee may turn from facing the centre to face the camera, radians. */
 export const STANDEE_TURN = 0.62;
+
+/**
+ * How far a standee turns from facing the centre of the hall, given where the camera is in the
+ * podium's own frame (`x` across, `z` toward the centre). The board is one-sided, so a camera on
+ * the far side of the podium (the seats nearest the owner's, seen from outside the ring) gets the
+ * board turned right round to show its face, within the same limit of that view, and never its back.
+ */
+export function standeeTurn(x: number, z: number): number {
+	const angle = Math.atan2(x, z);
+	const limit = (turn: number) =>
+		Math.max(-STANDEE_TURN, Math.min(STANDEE_TURN, turn));
+	if (Math.abs(angle) <= Math.PI / 2) return limit(angle);
+	return Math.PI + limit(normalizeAngle(angle - Math.PI));
+}
 const BOARD_W = 2.9;
 /** Where the board's lower edge stands: just under the desk top, so the desk hides the cut. */
 const BOARD_BASE = 1.3;
@@ -333,14 +348,14 @@ export class Podium {
 		this.boardMaterial.color.set(dim ? "#7a7f8f" : "#ffffff");
 	}
 
-	/** Turns the standee toward the camera, but never far from facing the centre of the hall. */
+	/**
+	 * Turns the standee toward the camera, but never far from facing the centre of the hall, or from
+	 * the camera when it stands behind the podium. The camera is read in the podium's frame, not the
+	 * rig's: the rig's own turn would feed back into the angle it is set from, frame after frame.
+	 */
 	face(camera: Vector3): void {
-		const local = this.rig.worldToLocal(camera.clone());
-		const angle = Math.atan2(local.x, local.z);
-		this.rig.rotation.y = Math.max(
-			-STANDEE_TURN,
-			Math.min(STANDEE_TURN, angle),
-		);
+		const local = this.group.worldToLocal(camera.clone());
+		this.rig.rotation.y = standeeTurn(local.x, local.z);
 	}
 
 	dispose(): void {

@@ -1,5 +1,6 @@
 import { type PerspectiveCamera, Vector3 } from "three";
 import type { Hall } from "./hall";
+import { type NameSpot, spreadNames } from "./name-layout";
 import { PLATE_FONT_STACK } from "./plate";
 import type { Podium } from "./podium3d";
 import type { SeatState, TableLabels } from "./types";
@@ -18,17 +19,16 @@ const PLATE_LOCAL_Z = 0.68;
 const MIN_NAME_PX = 12;
 const MAX_NAME_PX = 16;
 
-export interface NameTarget {
-	podium: Podium;
-	state: SeatState;
+interface Item {
+	el: HTMLButtonElement;
+	x: number;
+	y: number;
+	shown: boolean;
 }
 
 export class Names {
 	readonly root = document.createElement("div");
-	private readonly items = new Map<
-		Podium,
-		{ el: HTMLButtonElement; x: number; y: number; shown: boolean }
-	>();
+	private readonly items = new Map<Podium, Item>();
 	private readonly point = new Vector3();
 	private readonly local = new Vector3();
 
@@ -91,7 +91,8 @@ export class Names {
 	}
 
 	/**
-	 * Lays every name over its plate for the camera as it stands. A seat the camera is on keeps its
+	 * Lays every name over its plate for the camera as it stands, and keeps the names clear of each
+	 * other: a crowded ring makes a name step up or down by a row. A seat the camera is on keeps its
 	 * plate's own lettering, which is large there. Returns whether the names stand clear of each other.
 	 */
 	place(
@@ -102,7 +103,7 @@ export class Names {
 		focused: Podium | undefined,
 	): boolean {
 		camera.updateMatrixWorld();
-		const seen: Array<{ x: number; y: number; w: number }> = [];
+		const shown: Array<NameSpot & { item: Item }> = [];
 		for (const [podium, item] of this.items) {
 			this.local.copy(eye);
 			podium.group.worldToLocal(this.local);
@@ -128,36 +129,32 @@ export class Names {
 				item.el.style.visibility = visible ? "visible" : "hidden";
 			}
 			if (!visible) continue;
-			if (Math.abs(x - item.x) > 0.25 || Math.abs(y - item.y) > 0.25) {
-				item.x = x;
-				item.y = y;
-				item.el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) translate(-50%, -50%)`;
-			}
-			seen.push({ x, y, w: item.el.offsetWidth });
+			shown.push({
+				item,
+				x,
+				y,
+				w: item.el.offsetWidth,
+				h: item.el.offsetHeight || MIN_NAME_PX * 1.8,
+			});
 		}
-		return !crowded(seen);
+		const layout = spreadNames(shown, { width, height });
+		shown.forEach(({ item }, i) => {
+			const spot = layout.spots[i];
+			if (!spot) return;
+			if (
+				Math.abs(spot.x - item.x) > 0.25 ||
+				Math.abs(spot.y - item.y) > 0.25
+			) {
+				item.x = spot.x;
+				item.y = spot.y;
+				item.el.style.transform = `translate(${spot.x.toFixed(1)}px, ${spot.y.toFixed(1)}px) translate(-50%, -50%)`;
+			}
+		});
+		return layout.clear;
 	}
 
 	dispose(): void {
 		this.root.remove();
 		this.items.clear();
 	}
-}
-
-/** Whether two names sit over each other: close in height and nearer than half their widths. */
-export function crowded(
-	names: ReadonlyArray<{ x: number; y: number; w: number }>,
-): boolean {
-	const sorted = [...names].sort((a, b) => a.x - b.x);
-	for (let i = 0; i < sorted.length; i += 1) {
-		const a = sorted[i];
-		if (!a) continue;
-		for (let j = i + 1; j < sorted.length; j += 1) {
-			const b = sorted[j];
-			if (!b) continue;
-			if (b.x - a.x >= (a.w + b.w) / 2) break;
-			if (Math.abs(b.y - a.y) < MIN_NAME_PX * 1.2) return true;
-		}
-	}
-	return false;
 }

@@ -32,14 +32,14 @@ import {
 } from "./table/camera.ts";
 import { hallOf } from "./table/hall.ts";
 import { createLoop, type LoopHost } from "./table/loop.ts";
-import { crowded } from "./table/names3d.ts";
+import { NAME_GAP, spreadNames } from "./table/name-layout.ts";
 import {
 	drawPlate,
 	fitPlateText,
 	PLATE_FONT_STACK,
 	type PlateContext,
 } from "./table/plate.ts";
-import { badgeOf, STANDEE_TURN } from "./table/podium3d.ts";
+import { badgeOf, STANDEE_TURN, standeeTurn } from "./table/podium3d.ts";
 import { createSpeedLines } from "./table/speed.ts";
 import { mixHex, ringOffsets } from "./table/standee.ts";
 import { layoutOf } from "./table/table2d.ts";
@@ -492,26 +492,145 @@ describe("the speed lines", () => {
 });
 
 describe("the names over the podiums", () => {
-	test("two names that sit over each other are crowded, and names side by side or one above the other are not", () => {
+	/** Where the names of ten agents land on the phone's 366 by 390 picture, as the page lays them over the plates. */
+	const phoneNames = () => {
+		const width = 366;
+		const height = 390;
+		const labels = [
+			"Atlas",
+			"Scout",
+			"Archivist",
+			"Mason",
+			"Cook",
+			"Nurse",
+			"Pilot",
+			"Smith",
+			"Baker",
+			"Clerk",
+		];
+		const shot = overviewShot(0, 11, width / height, width);
+		return namePoints(11).map((point, i) => {
+			const at = project(shot, width / height, point);
+			return {
+				x: (at.x * 0.5 + 0.5) * width,
+				y: (-at.y * 0.5 + 0.5) * height,
+				w: 21 + 5.6 * (labels[i]?.length ?? 5),
+				h: 22,
+			};
+		});
+	};
+	const touching = (
+		names: ReadonlyArray<{ x: number; y: number }>,
+		sizes: ReadonlyArray<{ w: number; h: number }>,
+	) => {
+		let count = 0;
+		for (let i = 0; i < names.length; i += 1)
+			for (let j = i + 1; j < names.length; j += 1) {
+				const a = names[i];
+				const b = names[j];
+				const sa = sizes[i];
+				const sb = sizes[j];
+				if (!a || !b || !sa || !sb) continue;
+				if (
+					Math.abs(a.x - b.x) < (sa.w + sb.w) / 2 &&
+					Math.abs(a.y - b.y) < (sa.h + sb.h) / 2
+				)
+					count += 1;
+			}
+		return count;
+	};
+
+	test("ten agents' plates on the phone stand closer than their names are wide: laid over the plates the names overlap, and the layout steps them clear without leaving the picture", () => {
+		const names = phoneNames();
+		expect(touching(names, names)).toBeGreaterThan(0);
+		const layout = spreadNames(names, { width: 366, height: 390 });
+		expect(layout.clear).toBe(true);
+		expect(touching(layout.spots, names)).toBe(0);
+		layout.spots.forEach((spot, i) => {
+			const name = names[i];
+			if (!name) throw new Error("a name is missing");
+			expect(spot.x - name.w / 2).toBeGreaterThanOrEqual(0);
+			expect(spot.x + name.w / 2).toBeLessThanOrEqual(366);
+			expect(spot.y - name.h / 2).toBeGreaterThanOrEqual(0);
+			expect(spot.y + name.h / 2).toBeLessThanOrEqual(390);
+			// a name stays in its own column and within a few rows of its plate
+			expect(Math.abs(spot.y - name.y)).toBeLessThanOrEqual(
+				4 * (name.h + NAME_GAP),
+			);
+		});
+	});
+
+	test("names that already stand clear stay on their plates, and the nearest name keeps its place when two collide", () => {
+		const apart = [
+			{ x: 100, y: 200, w: 80, h: 22 },
+			{ x: 250, y: 204, w: 80, h: 22 },
+			{ x: 110, y: 260, w: 80, h: 22 },
+		];
+		const same = spreadNames(apart, { width: 366, height: 390 });
+		expect(same.clear).toBe(true);
+		expect(same.spots).toEqual(apart.map(({ x, y }) => ({ x, y })));
+		const pair = spreadNames(
+			[
+				{ x: 150, y: 150, w: 80, h: 22 },
+				{ x: 170, y: 200, w: 80, h: 22 },
+				{ x: 160, y: 210, w: 80, h: 22 },
+			],
+			{ width: 366, height: 390 },
+		);
+		// the lowest (nearest) stays; the others make way a row at a time, each clear of the rest
+		expect(pair.spots[2]).toEqual({ x: 160, y: 210 });
+		expect(pair.spots[1]?.y).not.toBe(200);
+		expect(pair.clear).toBe(true);
+		expect(spreadNames([], { width: 366, height: 390 }).clear).toBe(true);
+	});
+
+	test("a name past the picture's side is brought in, and a pile too tall for the picture is reported as not clear", () => {
+		const edge = spreadNames([{ x: 5, y: 100, w: 80, h: 22 }], {
+			width: 366,
+			height: 390,
+		});
+		expect(edge.spots[0]?.x).toBeGreaterThanOrEqual(40);
+		const pile = Array.from({ length: 30 }, () => ({
+			x: 100,
+			y: 100,
+			w: 80,
+			h: 22,
+		}));
+		expect(spreadNames(pile, { width: 366, height: 390 }).clear).toBe(false);
+	});
+});
+
+describe("the standee's turn", () => {
+	/** How far a standee's face is from the camera, in radians, whichever side of the podium the camera is on. */
+	const off = (x: number, z: number) => {
+		const turn = standeeTurn(x, z);
+		const toCamera = Math.atan2(x, z);
+		return Math.abs(normalizeAngle(turn - toCamera));
+	};
+
+	test("a camera in front of the podium turns the board toward it, by no more than the limit", () => {
+		expect(standeeTurn(0, 5)).toBeCloseTo(0, 9);
+		expect(standeeTurn(1, 5)).toBeCloseTo(Math.atan2(1, 5), 9);
+		expect(standeeTurn(9, 3)).toBeCloseTo(STANDEE_TURN, 9);
+		expect(standeeTurn(-9, 3)).toBeCloseTo(-STANDEE_TURN, 9);
+	});
+
+	test("a camera behind the podium (the seats nearest the owner's, seen from outside the ring) gets the board's face, never its back", () => {
+		// the seat at the owner's side of the ring: the camera stands behind it and a little to one side
 		expect(
-			crowded([
-				{ x: 100, y: 200, w: 80 },
-				{ x: 130, y: 204, w: 80 },
-			]),
-		).toBe(true);
+			Math.cos(standeeTurn(2.5, -11) - Math.atan2(2.5, -11)),
+		).toBeGreaterThan(0.8);
 		expect(
-			crowded([
-				{ x: 100, y: 200, w: 80 },
-				{ x: 200, y: 204, w: 80 },
-			]),
-		).toBe(false);
-		expect(
-			crowded([
-				{ x: 100, y: 200, w: 80 },
-				{ x: 110, y: 240, w: 80 },
-			]),
-		).toBe(false);
-		expect(crowded([])).toBe(false);
+			Math.cos(standeeTurn(-2.5, -11) - Math.atan2(-2.5, -11)),
+		).toBeGreaterThan(0.8);
+		// at any angle round the podium the board's face is toward the camera
+		for (let step = 0; step < 72; step += 1) {
+			const angle = (step / 72) * TAU;
+			const x = Math.sin(angle) * 10;
+			const z = Math.cos(angle) * 10;
+			expect(off(x, z)).toBeLessThan(Math.PI / 2);
+			expect(off(x, z)).toBeLessThanOrEqual(Math.PI / 2 - 0.5);
+		}
 	});
 });
 

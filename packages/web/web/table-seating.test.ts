@@ -144,6 +144,26 @@ test("a joining seat waits out of sight, the circle glows first, then it rises p
 	expect(risePose(RISE_MS * 5).depth).toBeCloseTo(0, 5);
 });
 
+test("a joining seat's name follows its podium: none while the others glide or the podium is out of sight, and it stays once the podium is up", () => {
+	// the name is the page's, so it must never stand over a gap that no podium fills yet
+	for (const ms of [-GLIDE_MS, -1]) expect(risePose(ms).named).toBe(false);
+	let named = false;
+	for (let step = 0; step <= 200; step += 1) {
+		const pose = risePose((RISE_MS * 1.2 * step) / 200);
+		// a name is only ever shown over a podium that is shown, and most of the way up
+		if (pose.named) {
+			expect(pose.shown).toBe(true);
+			expect(pose.depth).toBeLessThanOrEqual(0.35);
+		}
+		// and once shown it stays, through the bounce and after
+		if (named) expect(pose.named).toBe(true);
+		named = named || pose.named;
+	}
+	expect(named).toBe(true);
+	expect(risePose(RISE_MS).named).toBe(true);
+	expect(risePose(RISE_MS * 0.25).named).toBe(false);
+});
+
 test("the glide is eased from 0 to 1, and a turn takes the shorter way round", () => {
 	expect(glideProgress(0)).toBe(0);
 	expect(glideProgress(GLIDE_MS)).toBe(1);

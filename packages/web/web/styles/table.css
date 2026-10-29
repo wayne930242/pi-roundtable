@@ -496,7 +496,9 @@
 	overflow: hidden;
 }
 .scene-name {
-	min-width: 0;
+	/* The name gives way before the tools do, but keeps a few letters. */
+	flex: 0 1 auto;
+	min-width: 4ch;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
@@ -505,6 +507,7 @@
 }
 .scene-tools {
 	display: flex;
+	flex: none;
 	align-items: center;
 	gap: 0.15rem;
 	margin-inline-start: var(--space-2);
@@ -514,9 +517,14 @@
 }
 .scene-log-button {
 	width: auto;
+	flex: none;
 	gap: var(--space-1);
 	padding-inline: var(--space-2);
 	font-size: var(--text-xs);
+}
+/* A short label is one line, however narrow the tab: it is the name that is cut. */
+.scene-log-button span {
+	white-space: nowrap;
 }
 .scene-body {
 	flex: 1 1 auto;
@@ -557,6 +565,21 @@
 	max-height: 70dvh;
 	overflow: auto;
 	padding: var(--space-2) var(--space-3);
+}
+
+/* On a phone the tab's tools are a little narrower, so the speaker's name keeps room. */
+@media (max-width: 719px) {
+	.scene-tools {
+		margin-inline-start: var(--space-1);
+	}
+	.scene-tools .icon-button {
+		width: 2.5rem;
+		min-width: 2.5rem;
+	}
+	.scene-tools .scene-log-button {
+		width: auto;
+		padding-inline: var(--space-1);
+	}
 }
 
 /* Phones held upright: the scene fills the top 55 %, and the box takes the rest. */

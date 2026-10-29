@@ -21,6 +21,8 @@ export const FADE_MS = 160;
 
 /** How far under the dais a podium waits before it rises, in scene units. */
 export const RISE_DEPTH = 4.2;
+/** A joining seat's name waits until the podium is this far up (its depth, 1 under the dais to 0 standing). */
+const NAME_DEPTH = 0.35;
 
 export type SeatingMode =
 	/** The ring changes at once: only a reorder or a rename. */
@@ -143,16 +145,28 @@ export interface RisePose {
 	light: number;
 	/** The circle's turn, radians. */
 	spin: number;
+	/** The name over the podium is shown: only once the podium is shown and has come most of the way up. */
+	named: boolean;
 }
 
 /** A joining seat `ms` after its rise began (negative while the others still glide). */
 export function risePose(ms: number): RisePose {
-	if (ms < 0) return { shown: false, depth: 1, circle: 0, light: 0, spin: 0 };
+	if (ms < 0)
+		return {
+			shown: false,
+			depth: 1,
+			circle: 0,
+			light: 0,
+			spin: 0,
+			named: false,
+		};
 	const t = clamp(ms / RISE_MS);
 	const lift = clamp((t - 0.25) / 0.6);
+	const depth = 1 - backOut(lift);
 	return {
 		shown: t >= 0.25,
-		depth: 1 - backOut(lift),
+		depth,
+		named: t >= 0.25 && depth <= NAME_DEPTH,
 		circle: clamp(t / 0.25) * clamp((1 - t) / 0.2),
 		light: Math.sin(Math.PI * clamp((t - 0.2) / 0.7)),
 		spin: t * Math.PI * 1.5,

@@ -532,7 +532,7 @@ export function createTable3D(
 			for (const p of s.risers) {
 				p.group.visible = rise.shown;
 				p.group.position.y = REST_Y - rise.depth * RISE_DEPTH;
-				p.labelHidden = rise.depth > 0.35;
+				p.labelHidden = !rise.named;
 			}
 		}
 		const running = s.fx?.step(ms) ?? false;
@@ -577,6 +577,8 @@ export function createTable3D(
 		const w = world;
 		if (w) {
 			const at = focusId === null ? undefined : w.slotOf.get(focusId);
+			// the names are laid over where the podiums stand now, not where the last frame drew them
+			for (const p of w.podiums) p.group.updateMatrixWorld(true);
 			const clear = names.place(
 				camera,
 				eye,
