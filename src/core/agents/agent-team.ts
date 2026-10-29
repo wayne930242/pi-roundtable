@@ -5,7 +5,6 @@ import type { ChannelKey, TurnResult } from "../domain/conversation.ts";
 import { AgentError, ScheduleError } from "../domain/errors.ts";
 import type { AgentTurnScope } from "../domain/ports.ts";
 import type { ThinkingSetting } from "../models.ts";
-import { SHELL_TOOLS } from "../modules/host-shell/shell-policy.ts";
 import type { PromptVersion } from "../modules/prompts/prompt-history.ts";
 import type { ResolvedSkill } from "../modules/skills/skill-rules.ts";
 import type { AgentChange, AgentTeam } from "../services.ts";
@@ -14,11 +13,9 @@ import { type Speaker, THE_SPEAKER } from "../speakers.ts";
 import { agentSystemPrompt } from "./agent-prompt.ts";
 import type { Agent } from "./agent-store.ts";
 import {
-	AGENT_TOOLS,
 	type AgentOps,
 	type AvatarMode,
 	agentToolsExtension,
-	MESSAGE_AGENT_TOOL,
 } from "./agent-tools.ts";
 import { TeamEditing } from "./team-editing.ts";
 import {
@@ -37,6 +34,7 @@ import {
 } from "./team-layout.ts";
 import { TeamLifecycle } from "./team-lifecycle.ts";
 import type { AgentTeamOptions, TeamContext } from "./team-options.ts";
+import { teamSelection } from "./team-selection.ts";
 import { type TeamStatus, teamStatus } from "./team-status.ts";
 import {
 	agentDetails,
@@ -138,22 +136,7 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 
 	/** The tools every agent turn runs with: the plugins', plus the shell and agent tools. */
 	selection(scope?: AgentTurnScope): TurnSelection {
-		const plugged = this.#options.pluginSelection();
-		return {
-			id: "agent",
-			tools: [
-				...new Set([
-					...plugged.tools,
-					...SHELL_TOOLS,
-					// Group members hand off by mentioning each other, so a group seat has no message_agent.
-					...AGENT_TOOLS.filter(
-						(tool) => !(scope?.group && tool === MESSAGE_AGENT_TOOL),
-					),
-					...(this.#options.pluginTools?.() ?? []),
-				]),
-			],
-			groups: plugged.groups,
-		};
+		return teamSelection(this.#options, scope);
 	}
 
 	/** The system prompt addition of an agent session, read before each of its runs. */

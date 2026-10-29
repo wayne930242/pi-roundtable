@@ -1,15 +1,13 @@
-import {
-	mkdirSync,
-	readdirSync,
-	readFileSync,
-	rmSync,
-	statSync,
-	writeFileSync,
-} from "node:fs";
+import { mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { AgentError } from "../../domain/errors.ts";
 import { PluginError } from "../../errors.ts";
 import type { SkillRegistry } from "../../services.ts";
+import {
+	readSkillDocument,
+	skillVersions,
+	writtenDocument,
+} from "./skill-document-files.ts";
 import { planLinkedSkills } from "./skill-link.ts";
 import { skillCatalog, skillListText } from "./skill-listing.ts";
 import {
@@ -17,8 +15,6 @@ import {
 	checkBody,
 	checkDescription,
 	checkSkillName,
-	hashOf,
-	MAX_DOCUMENT_BYTES,
 	type PackageSkill,
 	parseSkillDocument,
 	type ResolvedSkill,
@@ -261,10 +257,10 @@ export class StoredSkillRegistry implements SkillRegistry {
 	async document(name: string): Promise<SkillDocument> {
 		const source = this.#sourceOf(name);
 		const entry = this.#options.store.skill(name);
-		if (entry?.kind === "written") return this.#documentOf(entry);
+		if (entry?.kind === "written") return writtenDocument(entry);
 		const file = this.#fileOf(name);
 		if (!source || !file) throw new AgentError(`There is no skill "${name}".`);
-		return this.#readDocument(name, source, file);
+		return readSkillDocument(name, source, file);
 	}
 
 	/**
@@ -281,7 +277,7 @@ export class StoredSkillRegistry implements SkillRegistry {
 	): Promise<SkillDocument> {
 		return this.#inDocuments(async () => {
 			const entry = this.#writable(name);
-			const current = this.#documentOf(entry);
+			const current = writtenDocument(entry);
 			if (current.hash !== baseHash) throw new SkillConflictError(current);
 			const next = parseSkillDocument(text);
 			if (next.name !== name)
@@ -315,56 +311,13 @@ export class StoredSkillRegistry implements SkillRegistry {
 			this.#sourceOf(name);
 			return [];
 		}
-		return (await this.#options.store.versions(name)).map((version) => {
-			const text = skillFileContent({
-				name,
-				description: version.description,
-				body: version.body,
-			});
-			return {
-				id: version.id,
-				text,
-				hash: hashOf(text),
-				by: version.by,
-				at: version.at,
-			};
-		});
+		return skillVersions(name, await this.#options.store.versions(name));
 	}
 
 	#inDocuments<T>(write: () => Promise<T>): Promise<T> {
 		const run = this.#documents.then(write);
 		this.#documents = run.catch(() => undefined);
 		return run;
-	}
-
-	#documentOf(entry: Extract<SkillEntry, { kind: "written" }>): SkillDocument {
-		const text = skillFileContent(entry);
-		return {
-			name: entry.name,
-			source: { kind: "written" },
-			text,
-			hash: hashOf(text),
-			writable: true,
-		};
-	}
-
-	#readDocument(
-		name: string,
-		source: SkillSource,
-		file: string,
-	): SkillDocument {
-		let size: number;
-		try {
-			size = statSync(file).size;
-		} catch {
-			throw new AgentError(`The file of the skill "${name}" cannot be read.`);
-		}
-		if (size > MAX_DOCUMENT_BYTES)
-			throw new AgentError(
-				`The file of the skill "${name}" is too large to show.`,
-			);
-		const text = readFileSync(file, "utf8");
-		return { name, source, text, hash: hashOf(text), writable: false };
 	}
 
 	/** Where a skill comes from; throws AgentError for a name nobody registered. */
