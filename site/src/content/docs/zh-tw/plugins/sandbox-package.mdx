@@ -79,7 +79,7 @@ Schema 是給模型看的提示，host 不會用它驗證輸入。
 | `budgets` | Protocol 2。`promptBytes`（8,192，上限 32,768；prompt 加 skill 索引，超過會讓啟動停下）、`toolResultBytes`（4,096，上限 32,768）、`requestBytes`（196,608，上限 196,608）。若 `requestBytes` 容不下 prompt 預算加 8,192 bytes 的記憶筆記、49,152 bytes 的當前訊息與 8 KiB 的 tool 結果空間，啟動會停下；裁剪不會丟掉最新一組 tool call，放不下時改把該組的每個結果裁成均分的份額。host tool 會收到 `context.resultBytes`。 |
 | `maxCalls`、`maxOutputTokens` | 每個 turn 的 broker 呼叫數（48）與每次模型呼叫的輸出 token（4,096；推理模型的思考也算）。 |
 | `replyText` | host 端函式 `(text, { channel, space })`，在每則成功的回覆送出前改寫，例如把模型漏出的簡體字轉成繁體。失敗訊息不經過它，worker 保留的對話歷史仍是模型原文；它丟出錯誤時該 turn 算失敗。不必重建 image。 |
-| `channelContext` | 預設關閉。`true` 或 Discord plugin 的 `ChannelContextOptions`。Discord 伺服器頻道中的 turn 會先帶上助理上次發言之後別人在該頻道說的話（沿用 core 預設：最新 15 則、每則 500 字、其他 bot 80 字），透過 `DISCORD.channelContext` 只讀被提問那則訊息所在的頻道；私訊與其他 surface 不讀。內容放在訊息之前，標明是不可信的公開文字、不是指示，放不下時從最舊的開始裁。永遠不讀圖片，即使 `attachments` 要求也一樣。讀取失敗只記 log，turn 照常執行。需要 Discord plugin；只在 host 端，不必重建 image。 |
+| `channelContext` | 預設關閉。`true` 或 Discord plugin 的 `ChannelContextOptions`。Discord 伺服器頻道中的 turn 會另外帶上助理上次發言之後別人在該頻道說的話（沿用 core 預設：最新 15 則、每則 500 字、其他 bot 80 字；host 的 `discord.channelContext` 設定會併進來，此選項優先，host 設 `channelContext: false` 則整個關閉），透過 `DISCORD.channelContext` 只讀被提問那則訊息所在的頻道；私訊與其他 surface 不讀。內容附在被提問的訊息之後，標明是不可信的公開文字、不是指示，放不下時從最舊的開始裁。永遠不讀圖片，即使 `attachments` 要求也一樣。讀取失敗只記 log，turn 照常執行。需要 Discord plugin；只在 host 端，不必重建 image。 |
 
 `modelUrl` 在 `127.0.0.1`、`::1` 或 `localhost` 上可以用 `http://`，因為 broker 就跑在 host 上。
 host tool 對模型的名稱是 `host_<name>`，所以 skill 提到工具時要寫 `host_roll_dice`。
