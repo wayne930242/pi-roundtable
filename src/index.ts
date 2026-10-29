@@ -298,9 +298,12 @@ export type {
 export type {
 	ResolvedSkill,
 	SkillCatalogEntry,
+	SkillDocument,
 	SkillSet,
 	SkillSource,
+	SkillVersion,
 } from "./core/modules/skills/skill-rules.ts";
+export { SkillConflictError } from "./core/modules/skills/skill-rules.ts";
 export type {
 	Contribution,
 	EventHandlers,
