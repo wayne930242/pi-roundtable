@@ -20,6 +20,7 @@ import { Toaster } from "./components/toaster.tsx";
 import { openPage, releaseDom, type TestPage } from "./dom.ts";
 import { closeMenu } from "./lib/action-menu.ts";
 import { store } from "./lib/app-store.ts";
+import { ARRANGED_CSS } from "./lib/arranged-style.ts";
 import { ConfigContext } from "./lib/config.ts";
 import { clearFolderDialog } from "./lib/folder-dialogs.ts";
 import { COLLAPSED_KEY, reloadCollapsed } from "./lib/folds.ts";
@@ -220,14 +221,27 @@ test("a folder's header folds it, keeps the fold on this device, and counts its 
 	expect(toggle?.getAttribute("aria-expanded")).toBe("true");
 	expect(toggle?.textContent).toContain("1 room");
 	expect(q(".folder-body")?.hasAttribute("hidden")).toBe(false);
+	expect(all(".folder-body .room-row").length).toBe(1);
 	await page.click(toggle);
 	expect(toggle?.getAttribute("aria-expanded")).toBe("false");
 	expect(q(".folder-body")?.hasAttribute("hidden")).toBe(true);
+	// happy-dom does not apply the cascade, so a hidden body must also hold no rows: a browser
+	// would show them (an author `display` rule beats the `hidden` attribute).
+	expect(all(".folder-body .room-row").length).toBe(0);
+	expect(all(".folder-body *").length).toBe(0);
 	expect(toggle?.getAttribute("aria-controls")).toBe(q(".folder-body")?.id);
 	expect(JSON.parse(stored.get(COLLAPSED_KEY) ?? "[]")).toEqual([F1]);
 	await page.click(toggle);
 	expect(toggle?.getAttribute("aria-expanded")).toBe("true");
+	expect(all(".folder-body .room-row").length).toBe(1);
 	expect(JSON.parse(stored.get(COLLAPSED_KEY) ?? "[]")).toEqual([]);
+});
+
+test("the arranged styles hide a folded folder's body even though they set its display", () => {
+	// `.folder-body { display: flex }` would beat the `hidden` attribute's own rule.
+	expect(ARRANGED_CSS).toMatch(
+		/\.folder-body\[hidden\]\s*\{[^}]*display:\s*none/,
+	);
 });
 
 test("the folder that holds the open room shows open while its stored fold stays", async () => {

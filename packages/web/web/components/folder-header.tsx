@@ -126,13 +126,15 @@ export function FolderBlock(props: {
 				</button>
 			</header>
 			<div id={bodyId} className="folder-body" hidden={!open}>
-				{props.count === 0 ? (
-					<p className="meta folder-empty">
-						{t("No rooms in this folder yet.")}
-					</p>
-				) : (
-					props.children
-				)}
+				{open ? (
+					props.count === 0 ? (
+						<p className="meta folder-empty">
+							{t("No rooms in this folder yet.")}
+						</p>
+					) : (
+						props.children
+					)
+				) : null}
 			</div>
 		</section>
 	);

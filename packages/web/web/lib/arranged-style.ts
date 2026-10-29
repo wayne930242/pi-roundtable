@@ -2,7 +2,11 @@
 // They load with the arranged list, as a constructed stylesheet, so the page's own stylesheet (which
 // every visit downloads before it draws) stays as small as before pins and folders.
 
-const CSS = `
+export const ARRANGED_CSS = `
+.folder-body[hidden] {
+	display: none;
+}
+
 /* Folders of the room list, and the lifted row or folder while it is dragged. */
 .folder {
 	display: flex;
@@ -147,7 +151,7 @@ export function installArrangedStyle(): void {
 	) {
 		try {
 			const sheet = new CSSStyleSheet();
-			sheet.replaceSync(CSS);
+			sheet.replaceSync(ARRANGED_CSS);
 			document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
 			return;
 		} catch {
@@ -155,6 +159,6 @@ export function installArrangedStyle(): void {
 		}
 	}
 	const style = document.createElement("style");
-	style.textContent = CSS;
+	style.textContent = ARRANGED_CSS;
 	document.head.append(style);
 }
