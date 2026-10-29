@@ -382,19 +382,103 @@ a.ws-row-link:hover {
 	tab-size: 2;
 }
 
-.ws-image {
+.ws-media {
 	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+
+.ws-image {
 	display: grid;
 	place-items: center;
 	padding: var(--space-4);
 	overflow: auto;
-	background: var(--surface-2);
+	background-color: var(--surface-2);
+	background-image:
+		linear-gradient(
+			45deg,
+			var(--surface-3, var(--border)) 25%,
+			transparent 25%,
+			transparent 75%,
+			var(--surface-3, var(--border)) 75%
+		),
+		linear-gradient(
+			45deg,
+			var(--surface-3, var(--border)) 25%,
+			transparent 25%,
+			transparent 75%,
+			var(--surface-3, var(--border)) 75%
+		);
+	background-size: 16px 16px;
+	background-position:
+		0 0,
+		8px 8px;
+}
+
+.ws-image-toggle {
+	display: grid;
+	place-items: center;
+	max-width: 100%;
+	max-height: 100%;
+	padding: 0;
+	border: 0;
+	background: none;
+	cursor: zoom-in;
+}
+
+.ws-image[data-actual] .ws-image-toggle {
+	max-width: none;
+	max-height: none;
+	cursor: zoom-out;
 }
 
 .ws-image img {
 	max-width: 100%;
 	max-height: 100%;
 	object-fit: contain;
+}
+
+.ws-image[data-actual] img {
+	max-width: none;
+	max-height: none;
+}
+
+.ws-pdf-frame {
+	gap: var(--space-2);
+}
+
+.ws-pdf {
+	flex: 1;
+	min-height: 0;
+	width: 100%;
+	border: 0;
+	background: var(--surface-2);
+}
+
+.ws-media-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-3);
+	padding: var(--space-2) var(--space-4);
+}
+
+.ws-sound,
+.ws-film {
+	align-items: center;
+	justify-content: center;
+	padding: var(--space-4);
+	background: var(--surface-2);
+}
+
+.ws-sound audio,
+.ws-film video {
+	width: 100%;
+	max-height: 100%;
+}
+
+.ws-card-icon {
+	color: var(--muted, inherit);
 }
 
 .ws-card {

@@ -7,6 +7,7 @@ import type {
 	WorkspaceConflict,
 	WorkspaceEntry,
 	WorkspaceFileView,
+	WorkspaceMedia,
 } from "../src/api-types.ts";
 import { openPage, releaseDom, type TestPage } from "./dom.ts";
 import { ConfigContext } from "./lib/config.ts";
@@ -20,6 +21,9 @@ interface Stored {
 	/** Binary or too large: only the metadata. */
 	opaque?: "binary" | "too-large";
 	mtimeMs: number;
+	/** What the raw route can show of it. */
+	media?: WorkspaceMedia;
+	bytes?: number;
 }
 
 /** A workspace in memory, behind the same API the server answers. */
@@ -68,9 +72,10 @@ const view = (path: string, file: Stored): WorkspaceFileView => {
 	const crlf = text.includes("\r\n");
 	return {
 		path,
-		size: text.length,
+		size: file.bytes ?? text.length,
 		mtimeMs: file.mtimeMs,
 		hash: sha(text),
+		...(file.media ? { media: file.media } : {}),
 		editable: file.opaque === undefined,
 		...(file.opaque ? { reason: file.opaque } : {}),
 		binary: file.opaque === "binary",
@@ -212,6 +217,14 @@ const dialogs = () =>
 		.map((one) => one.textContent)
 		.join(" | ");
 
+const mediaFiles = (): [string, Stored][] => [
+	["pics/a.png", { opaque: "binary", media: "image", bytes: 2048, mtimeMs: 6 }],
+	["pics/logo.svg", { text: "<svg/>\n", media: "image", mtimeMs: 7 }],
+	["docs/a.pdf", { opaque: "binary", media: "pdf", bytes: 4096, mtimeMs: 8 }],
+	["av/a.mp3", { opaque: "binary", media: "audio", bytes: 10, mtimeMs: 9 }],
+	["av/a.mp4", { opaque: "binary", media: "video", bytes: 10, mtimeMs: 10 }],
+];
+
 async function show(hash: string, width = 1280) {
 	files = new Map([
 		["README.md", { text: "# Hello\n", mtimeMs: 1 }],
@@ -219,6 +232,7 @@ async function show(hash: string, width = 1280) {
 		["src/util.ts", { text: "export {};\n", mtimeMs: 3 }],
 		["data/blob.bin", { opaque: "binary", mtimeMs: 4 }],
 		["data/huge.log", { opaque: "too-large", mtimeMs: 5 }],
+		...(/pics|docs%2Fa|av%2F/.test(hash) ? mediaFiles() : []),
 	]);
 	calls = [];
 	conflictOnSave = undefined;
@@ -556,6 +570,71 @@ test("a binary or too large file is a card with Download, and no editor", async 
 	await show("#/workspace/agents%3Adata%2Fhuge.log");
 	await settle(50);
 	expect(query(".ws-card")?.textContent).toContain("too large");
+});
+
+test("a picture is shown from the raw route with a fit/full-size toggle, its size in the header, and no editor", async () => {
+	await show("#/workspace/agents%3Apics%2Fa.png");
+	await settle(50);
+	const img = query<HTMLImageElement>(".ws-image img");
+	expect(img?.getAttribute("src")).toBe(
+		"api/workspace/agents/raw?path=pics%2Fa.png",
+	);
+	expect(inEditor(".cm-editor")).toBeNull();
+	expect(query(".ws-file-title")?.textContent).toContain("2 KB");
+	const toggle = query<HTMLButtonElement>(".ws-image-toggle");
+	expect(query(".ws-image")?.hasAttribute("data-actual")).toBe(false);
+	await page.click(toggle);
+	expect(query(".ws-image")?.getAttribute("data-actual")).toBe("true");
+	img?.dispatchEvent(new Event("error"));
+	await settle(30);
+	expect(query(".ws-card")?.textContent).toContain(
+		"This browser cannot show this file.",
+	);
+	expect(query(".ws-card a[download]")).not.toBeNull();
+});
+
+test("a svg is a picture through <img>, and Edit opens its source", async () => {
+	await show("#/workspace/agents%3Apics%2Flogo.svg");
+	await settle(50);
+	expect(query(".ws-image img")).not.toBeNull();
+	expect(inEditor(".cm-editor")).toBeNull();
+	await page.click(query(".ws-actions button"));
+	await editorView();
+	expect(query(".ws-image img")).toBeNull();
+});
+
+test("a PDF is framed on a desktop, and on a phone is Open and Download", async () => {
+	await show("#/workspace/agents%3Adocs%2Fa.pdf");
+	await settle(50);
+	expect(query("iframe.ws-pdf")?.getAttribute("src")).toBe(
+		"api/workspace/agents/raw?path=docs%2Fa.pdf",
+	);
+	expect(query(".ws-media-actions a[target='_blank']")).not.toBeNull();
+	await show("#/workspace/agents%3Adocs%2Fa.pdf", 390);
+	await settle(50);
+	expect(query("iframe")).toBeNull();
+	expect(query(".ws-card")?.textContent).toContain("PDF");
+	expect(query(".ws-media-actions a[target='_blank']")).not.toBeNull();
+	expect(query(".ws-media-actions a[download]")).not.toBeNull();
+});
+
+test("a sound and a video get native controls on the raw route, and fall back to a card on error", async () => {
+	await show("#/workspace/agents%3Aav%2Fa.mp3");
+	await settle(50);
+	const audio = query<HTMLAudioElement>("audio");
+	expect(audio?.hasAttribute("controls")).toBe(true);
+	expect(audio?.getAttribute("src")).toBe(
+		"api/workspace/agents/raw?path=av%2Fa.mp3",
+	);
+	await show("#/workspace/agents%3Aav%2Fa.mp4");
+	await settle(50);
+	const video = query<HTMLVideoElement>("video");
+	expect(video?.hasAttribute("controls")).toBe(true);
+	expect(video?.hasAttribute("playsinline")).toBe(true);
+	video?.dispatchEvent(new Event("error"));
+	await settle(30);
+	expect(query("video")).toBeNull();
+	expect(query(".ws-card a[download]")).not.toBeNull();
 });
 
 test("a read-only root offers no Edit and no way to make, rename or delete", async () => {

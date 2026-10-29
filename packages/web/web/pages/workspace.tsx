@@ -41,6 +41,7 @@ import {
 } from "../lib/workspace-place.ts";
 import type { EditorHandle } from "../workspace/codeeditor.ts";
 import { Glyph } from "../workspace/icons.tsx";
+import { FileCard, MediaPreview } from "../workspace/preview.tsx";
 
 // The files pane: the roots the owner may see, a tree and breadcrumbs to move through them, a
 // file shown with highlighting, and for a file that can be changed an editor with Save. The editor
@@ -361,6 +362,10 @@ function FileView(props: {
 		stored<boolean>(WRAP_KEY, props.phone),
 	);
 	const [menu, setMenu] = useState(false);
+	/** What the preview learned from the file (a picture's size in pixels), for the header. */
+	const [facts, setFacts] = useState<string>();
+	/** A SVG is a picture first; its source is text the editor takes. */
+	const [source, setSource] = useState(false);
 	const [ready, setReady] = useState(false);
 	const [editorFailed, setEditorFailed] = useState(false);
 	const [remote, setRemote] = useState<"changed" | "gone">();
@@ -380,6 +385,8 @@ function FileView(props: {
 
 	const name = segmentsOf(path).at(-1) ?? path;
 	const canText = file?.text !== undefined;
+	/** The editor stands where there is text and no preview takes its place. */
+	const showEditor = canText && (file?.media === undefined || source);
 
 	const load = useCallback(async () => {
 		const loaded = await workspaceApi.file(root.id, path);
@@ -494,7 +501,7 @@ function FileView(props: {
 	// file; the wrap and the mode are applied to it by the effects below.
 	// biome-ignore lint/correctness/useExhaustiveDependencies: see above
 	useEffect(() => {
-		if (!canText || !host.current) return;
+		if (!showEditor || !host.current) return;
 		const first = fileRef.current;
 		if (!first || first.text === undefined) return;
 		let cancelled = false;
@@ -550,7 +557,7 @@ function FileView(props: {
 			handle.current = undefined;
 			setReady(false);
 		};
-	}, [canText, root.id, path]);
+	}, [showEditor, root.id, path]);
 
 	useEffect(() => {
 		if (!ready) return;
@@ -640,7 +647,13 @@ function FileView(props: {
 	const actions = (
 		<div className="ws-actions">
 			{file.editable && !editing ? (
-				<button type="button" onClick={() => setMode("edit")}>
+				<button
+					type="button"
+					onClick={() => {
+						setSource(true);
+						setMode("edit");
+					}}
+				>
 					{t("Edit")}
 				</button>
 			) : null}
@@ -678,7 +691,8 @@ function FileView(props: {
 						{name}
 					</strong>
 					<span className="meta">
-						{size(file.size)} ·{" "}
+						{size(file.size)}
+						{facts ? ` · ${facts}` : ""} ·{" "}
 						{when(new Date(file.mtimeMs).toISOString(), timeZone)}
 					</span>
 				</div>
@@ -713,16 +727,17 @@ function FileView(props: {
 				</div>
 			) : null}
 			<div className="ws-view">
-				{file.image ? (
-					<div className="ws-image">
-						<img
-							src={rawHref(root.id, path)}
-							alt={name}
-							width={undefined}
-							height={undefined}
-						/>
-					</div>
-				) : canText ? (
+				{file.media && !showEditor ? (
+					<MediaPreview
+						media={file.media}
+						root={root.id}
+						path={path}
+						name={name}
+						bytes={file.size}
+						phone={props.phone}
+						onFacts={setFacts}
+					/>
+				) : showEditor ? (
 					<div
 						ref={host}
 						className="ws-editor"
@@ -735,21 +750,17 @@ function FileView(props: {
 						) : null}
 					</div>
 				) : (
-					<div className="card ws-card">
-						<p>
-							{file.tooLarge
+					<FileCard
+						root={root.id}
+						path={path}
+						name={name}
+						bytes={file.size}
+						message={
+							file.tooLarge
 								? t("This file is too large to show here.")
-								: t("This file is not text, so it cannot be shown here.")}
-						</p>
-						<a
-							className="button-link"
-							href={rawHref(root.id, path, true)}
-							download={name}
-						>
-							<Icon name="download" size={18} />
-							{t("Download")}
-						</a>
-					</div>
+								: t("This file is not text, so it cannot be shown here.")
+						}
+					/>
 				)}
 			</div>
 			{props.phone && editing ? (
