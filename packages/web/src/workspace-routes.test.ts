@@ -24,11 +24,11 @@ import type {
 	WorkspaceTrashView,
 } from "./api-types.ts";
 import { AppApi, partsOf } from "./app/routes.ts";
-import { WorkspaceFiles } from "./app/workspace-files.ts";
+import { checkRoots, WorkspaceFiles } from "./app/workspace-files.ts";
 import type { AssetBundle } from "./assets.ts";
 import { createAuthenticator } from "./auth/authenticator.ts";
 import { ConsoleServer } from "./console-server.ts";
-import { resolveOptions, workspaceRootsOf } from "./options.ts";
+import { resolveOptions, showableRoots, workspaceRootsOf } from "./options.ts";
 import { ORIGIN } from "./testing/fixtures.ts";
 import { admit } from "./verifier.ts";
 import type { Visitor } from "./visitors.ts";
@@ -468,6 +468,19 @@ describe("the workspace options", () => {
 		} finally {
 			rmSync(dir, { recursive: true, force: true });
 		}
+	});
+
+	test("the default pane list leaves out an agents' directory that holds the host's data, and keeps the host's own roots for checkRoots to fail", () => {
+		const roots = [
+			{ id: "agents", label: "Agents", dir: "/srv", writable: true },
+			{ id: "scratch", label: "Scratch", dir: "/srv/scratch", writable: true },
+			{ id: "shelf", label: "Shelf", dir: "/srv", writable: false },
+		];
+		const shown = showableRoots(roots, ["/srv/data"]);
+		expect(shown.roots.map((root) => root.id)).toEqual(["scratch", "shelf"]);
+		expect(shown.left.map((one) => one.id)).toEqual(["agents"]);
+		expect(shown.left[0]?.reason).toContain("contains");
+		expect(() => checkRoots(shown.roots, ["/srv/data"])).toThrow(/shelf/);
 	});
 
 	test("the agents' directories come first, unless left out, then the host's roots", () => {

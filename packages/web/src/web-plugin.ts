@@ -25,6 +25,7 @@ import {
 	protectedDirs,
 	type ResolvedOptions,
 	resolveOptions,
+	showableRoots,
 	type WebConsoleOptions,
 	workspaceRootsOf,
 } from "./options.ts";
@@ -86,9 +87,19 @@ async function build(settings: ResolvedOptions, context: Context) {
 	const rooms = settings.panes.includes("rooms");
 	const agents = services.find(AGENTS);
 	const team = agents?.team;
-	const workspaceRoots = settings.panes.includes("workspace")
+	const guarded = protectedDirs(settings.dataDir);
+	let workspaceRoots = settings.panes.includes("workspace")
 		? workspaceRootsOf(settings, agents?.workspace)
 		: [];
+	if (!settings.panesGiven) {
+		const shown = showableRoots(workspaceRoots, guarded);
+		for (const { id, reason } of shown.left)
+			logger.warn(
+				{ root: id },
+				`the files pane leaves out the ${id} directory: ${reason}`,
+			);
+		workspaceRoots = shown.roots;
+	}
 	// The default list shows the files pane only when there is something to show; a list that
 	// names it must have a directory.
 	if (settings.panes.includes("workspace") && workspaceRoots.length === 0) {
@@ -100,8 +111,7 @@ async function build(settings: ResolvedOptions, context: Context) {
 	const panes = settings.panes.filter(
 		(pane) => pane !== "workspace" || workspaceRoots.length > 0,
 	);
-	if (workspaceRoots.length > 0)
-		checkRoots(workspaceRoots, protectedDirs(settings.dataDir));
+	if (workspaceRoots.length > 0) checkRoots(workspaceRoots, guarded);
 	const workspace =
 		panes.includes("workspace") && rooms
 			? new WorkspaceFiles({ roots: workspaceRoots, logger })
