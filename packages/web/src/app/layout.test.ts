@@ -10,6 +10,7 @@ import {
 	removeFolder,
 	setPinned,
 } from "../layout-order.ts";
+import { PushMutes } from "../push/mutes.ts";
 import { RoomLayout } from "./layout.ts";
 
 const A = "app:agent.layout-a";
@@ -149,5 +150,31 @@ describeDb("the room list's layout in the database", () => {
 		expect(dense(stored.pins)).toBe(true);
 		const byFolder = Map.groupBy(stored.rooms, (row) => row.folder);
 		for (const rows of byFolder.values()) expect(dense(rows)).toBe(true);
+	});
+
+	test("a folder's rooms are muted and unmuted in one step, each room once", async () => {
+		await PushMutes.migration.up(sql);
+		const mutes = new PushMutes(sql);
+		const rooms = [A, B, C];
+		await sql`DELETE FROM web_push_muted_rooms WHERE room IN ${sql(rooms)}`;
+		try {
+			await mutes.set(B, true, "ada");
+			await mutes.setMany(rooms, true, "owner");
+			await mutes.setMany([], true, "owner");
+			const on: { room: string; muted_by: string }[] = await sql`
+				SELECT room, muted_by FROM web_push_muted_rooms WHERE room IN ${sql(rooms)} ORDER BY room`;
+			// The room that was muted before keeps who muted it.
+			expect(on).toEqual([
+				{ room: A, muted_by: "owner" },
+				{ room: B, muted_by: "ada" },
+				{ room: C, muted_by: "owner" },
+			]);
+			await mutes.setMany([A, C], false, "owner");
+			expect(
+				[...(await mutes.all())].filter((room) => rooms.includes(room)),
+			).toEqual([B]);
+		} finally {
+			await sql`DELETE FROM web_push_muted_rooms WHERE room IN ${sql(rooms)}`;
+		}
 	});
 });

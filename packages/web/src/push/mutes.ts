@@ -38,6 +38,23 @@ export class PushMutes {
 		return new Set(rows.map((row) => row.room));
 	}
 
+	/** Mutes or unmutes every room in the list as one step; a room already so is left as it is. */
+	async setMany(
+		rooms: readonly string[],
+		muted: boolean,
+		by: string,
+	): Promise<void> {
+		if (rooms.length === 0) return;
+		await this.#sql.begin(async (tx) => {
+			if (muted)
+				await tx`
+					INSERT INTO web_push_muted_rooms ${tx(rooms.map((room) => ({ room, muted_by: by })))}
+					ON CONFLICT (room) DO NOTHING`;
+			else
+				await tx`DELETE FROM web_push_muted_rooms WHERE room IN ${tx(rooms)}`;
+		});
+	}
+
 	/** Mutes or unmutes a room; doing either twice leaves it as it is. */
 	async set(room: string, muted: boolean, by: string): Promise<void> {
 		if (muted)

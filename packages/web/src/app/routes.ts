@@ -64,7 +64,7 @@ export interface AppApiOptions {
 	files: FileDir;
 	modes: Pick<ConversationModes, "set" | "peek">;
 	/** The rooms whose push the owners muted. */
-	mutes: Pick<PushMutes, "set">;
+	mutes: Pick<PushMutes, "set" | "setMany">;
 	/** The dispatch threads, which go with the room they hang under. */
 	threads: Pick<WebThreads, "under" | "removeUnder">;
 	/** The owners' shared arrangement of the room list: pins and folders. */
@@ -217,6 +217,7 @@ export class AppApi {
 		this.#options = options;
 		this.#layout = new LayoutRoutes({
 			layout: options.layout,
+			mutes: options.mutes,
 			placeable: () => options.rooms.placeable(),
 			home: () => options.rooms.homeKey(),
 			owner: (admission) => this.#owner(admission),

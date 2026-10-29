@@ -54,6 +54,8 @@ const known = new Map([
 let who: { id: string; tier: Tier };
 let store: MemoryLayout;
 let changes: number;
+/** The muted rooms, and who muted each. */
+let muted: Map<string, string>;
 
 function setup() {
 	const recorder = recordingLogger();
@@ -78,7 +80,14 @@ function setup() {
 		directory: {} as never,
 		team: {} as never,
 		avatars: {} as never,
-		mutes: {} as never,
+		mutes: {
+			set: async () => undefined,
+			setMany: async (rooms: readonly string[], on: boolean, by: string) => {
+				for (const room of rooms)
+					if (on) muted.set(room, by);
+					else muted.delete(room);
+			},
+		},
 		layout: store,
 		mount: "/console",
 		authMode: "verifier",
@@ -115,6 +124,7 @@ beforeEach(() => {
 	who = { id: "owner", tier: "owner" };
 	store = new MemoryLayout();
 	changes = 0;
+	muted = new Map();
 });
 
 const call = (
@@ -407,5 +417,85 @@ describe("the room list's layout", () => {
 		expect(
 			(await call(server, "GET", `rooms/${encoded(SCOUT)}/pin`)).status,
 		).toBe(404);
+	});
+
+	test("muting a folder mutes every room in it through the rooms' own mutes, and unmuting lifts them", async () => {
+		const server = setup();
+		const work = await folder(server, "Work");
+		store.stored = {
+			pins: [],
+			folders: [{ id: work, name: "Work", rooms: [SCOUT, GONE, TEAM] }],
+		};
+		muted.set(BUILD, "ada");
+		changes = 0;
+		const on = await call(server, "PUT", `folders/${work}/mute`, {
+			body: { muted: true },
+		});
+		expect(on.status).toBe(200);
+		// The deleted agent's stored place is not a room to mute.
+		expect(await on.json()).toEqual({ muted: true, rooms: [SCOUT, TEAM] });
+		expect([...muted.keys()].sort()).toEqual([BUILD, SCOUT, TEAM]);
+		expect(muted.get(SCOUT)).toBe("owner");
+		expect(changes).toBe(1);
+		const off = await call(server, "PUT", `folders/${work}/mute`, {
+			body: { muted: false },
+		});
+		expect(await off.json()).toEqual({ muted: false, rooms: [SCOUT, TEAM] });
+		// A room outside the folder keeps its own mute.
+		expect([...muted.keys()]).toEqual([BUILD]);
+		// An empty folder is a quiet no-op.
+		store.stored = {
+			pins: [],
+			folders: [{ id: work, name: "Work", rooms: [] }],
+		};
+		const none = await call(server, "PUT", `folders/${work}/mute`, {
+			body: { muted: true },
+		});
+		expect(await none.json()).toEqual({ muted: true, rooms: [] });
+	});
+
+	test("a folder's mute is refused for a non-owner, another origin, an unknown folder, a wrong body or another method", async () => {
+		const server = setup();
+		const work = await folder(server, "Work");
+		store.stored = {
+			pins: [],
+			folders: [{ id: work, name: "Work", rooms: [SCOUT] }],
+		};
+		const path = `folders/${work}/mute`;
+		who = { id: "member", tier: "member" as Tier };
+		const member = await call(server, "PUT", path, { body: { muted: true } });
+		expect(member.status).toBe(403);
+		who = { id: "owner", tier: "owner" };
+		expect(
+			(await call(server, "PUT", path, { body: { muted: true }, origin: null }))
+				.status,
+		).toBe(403);
+		expect(
+			(
+				await call(server, "PUT", path, {
+					body: { muted: true },
+					origin: "https://evil.example.test",
+				})
+			).status,
+		).toBe(403);
+		const missing = "folders/folder.00000000-0000-4000-8000-000000000000/mute";
+		expect(
+			(await call(server, "PUT", missing, { body: { muted: true } })).status,
+		).toBe(404);
+		for (const init of [
+			{ body: { muted: "yes" } },
+			{ body: {} },
+			{ raw: "{nope" },
+			{ raw: "[]" },
+		])
+			expect((await call(server, "PUT", path, init)).status).toBe(400);
+		expect(
+			(await call(server, "POST", path, { body: { muted: true } })).status,
+		).toBe(405);
+		expect(
+			(await call(server, "PUT", `${path}/extra`, { body: { muted: true } }))
+				.status,
+		).toBe(404);
+		expect(muted.size).toBe(0);
 	});
 });

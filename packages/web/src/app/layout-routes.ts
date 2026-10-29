@@ -12,6 +12,7 @@ import {
 	setPinned,
 	shown,
 } from "../layout-order.ts";
+import type { PushMutes } from "../push/mutes.ts";
 import { readLimited } from "../request-body.ts";
 import type { LayoutStore } from "./layout.ts";
 import type { ResolvedRoom } from "./rooms.ts";
@@ -73,6 +74,8 @@ function beforeOf(body: Record<string, unknown>): string | null {
 
 export interface LayoutRoutesOptions {
 	layout: LayoutStore;
+	/** The rooms whose push the owners muted. */
+	mutes: Pick<PushMutes, "setMany">;
 	/** The keys of the rooms that may be placed: the active agents' and groups' rooms but Home. */
 	placeable(): ReadonlySet<string>;
 	/** Home's key, which stays at the top. */
@@ -110,8 +113,10 @@ export class LayoutRoutes {
 	): Promise<Response> {
 		return this.#guard(async () => {
 			const { method } = request;
-			const [, , id] = parts;
-			if (parts.length > 3) throw new LayoutRefusal(404, notAnApi);
+			const [, , id, action] = parts;
+			if (parts.length > 4 || (parts.length === 4 && action !== "mute"))
+				throw new LayoutRefusal(404, notAnApi);
+			if (action === "mute") return this.#muteFolder(request, id, admission);
 			if (!id) {
 				if (method !== "POST") throw new LayoutRefusal(405, notAllowed);
 				await this.#options.owner(admission);
@@ -150,6 +155,26 @@ export class LayoutRoutes {
 				}),
 			);
 		});
+	}
+
+	/**
+	 * `PUT api/folders/<id>/mute`: mutes or unmutes every room in the folder as one step, through the
+	 * rooms' own mutes. A room moved into the folder later keeps its own mute.
+	 */
+	async #muteFolder(
+		request: Request,
+		id: string | undefined,
+		admission: Authenticated,
+	): Promise<Response> {
+		if (request.method !== "PUT") throw new LayoutRefusal(405, notAllowed);
+		const owner = await this.#options.owner(admission);
+		const folder = (await this.view()).folders.find((one) => one.id === id);
+		if (!folder) throw new LayoutRefusal(404, "There is no such folder.");
+		const { muted } = await bodyOf(request);
+		if (typeof muted !== "boolean") throw bad("muted must be true or false.");
+		await this.#options.mutes.setMany(folder.rooms, muted, owner.principalId);
+		this.#options.changed();
+		return json({ muted, rooms: folder.rooms });
 	}
 
 	/** `PUT api/rooms/<key>/folder` and `…/pin`, for a room that resolved. */
