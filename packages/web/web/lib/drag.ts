@@ -2,6 +2,7 @@
 // scrolls near its edges, and the zone under the finger lights up. Loaded on the first lift only.
 // The decisions (where a drop lands) are `reorder.ts`; this file measures and paints.
 
+import { MOVE_LIMIT } from "./long-press.ts";
 import {
 	HOVER_OPEN_MS,
 	type ItemBox,
@@ -35,8 +36,8 @@ export interface Lift {
 	done(outcome: Outcome): void;
 }
 
-/** A finger that moves less than this (px) and lifts did not drag. */
-const TAP = 6;
+/** A finger that moves no more than the hold allows (px) and lifts did not drag. */
+const TAP = MOVE_LIMIT;
 
 const scroller = (from: HTMLElement): HTMLElement => {
 	for (let el: HTMLElement | null = from; el; el = el.parentElement) {
@@ -130,7 +131,7 @@ export function lift(options: Lift): () => void {
 		frame = 0;
 		const y = content(at.y);
 		const dy = y - startContent;
-		if (Math.abs(dy) >= TAP) moved = true;
+		if (Math.abs(dy) > TAP) moved = true;
 		item.style.transform = `translate3d(0, ${dy}px, 0)`;
 		let lit: HTMLElement | undefined;
 		if (mode === "room") {

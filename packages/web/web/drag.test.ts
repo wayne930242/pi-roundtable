@@ -176,6 +176,20 @@ test("a finger that lets go without moving is a tap, and Escape or a drop outsid
 	expect(run.done).toEqual([{ type: "cancel" }]);
 });
 
+test("a wobble as wide as the hold allows (10 px) is still a tap, a wider move is a drag", async () => {
+	const { root, rows } = page5();
+	let run = start(rows.A as HTMLElement, root, 120);
+	pointer("pointermove", 128);
+	await frames();
+	pointer("pointerup", 128);
+	expect(run.done).toEqual([{ type: "tap" }]);
+	run = start(rows.A as HTMLElement, root, 120);
+	pointer("pointermove", 134);
+	await frames();
+	pointer("pointerup", 134);
+	expect(run.done[0]?.type).not.toBe("tap");
+});
+
 test("another finger's events are ignored, and stopping early cleans up", async () => {
 	const { root, rows } = page5();
 	const run = start(rows.A as HTMLElement, root, 120);
