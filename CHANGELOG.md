@@ -27,6 +27,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- A held shell command's sentence on its approval card shows the command's first line, cut at 120 characters, instead of up to 600 characters of every line inside one code span: a multi-line script (a heredoc with `# comments`) broke the card's Markdown into headings. The card's code block still shows the whole command.
 - `agent_create` from an agent's turn in a web room started the new agent's opening task in its Discord channel. It now starts on the surface the caller's turn runs on, as the web app's new-agent form already did; a turn on Discord, or on a surface that hosts no rooms, keeps the Discord channel.
 
 ## [0.25.0] - 2026-10-29
