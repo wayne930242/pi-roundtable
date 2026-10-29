@@ -11,7 +11,10 @@ import type { SandboxChannelStore } from "./channel-store.ts";
 /** Owner-only /roundtable sandbox on|off|status; mode changes use the same channel queue as turns. */
 export function sandboxCommands(
 	guard: CommandGuard,
-	channels: SandboxChannelStore,
+	channels: Pick<
+		SandboxChannelStore,
+		"configured" | "disable" | "enable" | "has"
+	>,
 	queue: QueuePort,
 ): InteractionContribution {
 	return {
@@ -47,8 +50,21 @@ export function sandboxCommands(
 						"Sandbox commands require a guild channel.",
 					);
 				const channel = `discord:${interaction.channelId}` as const;
+				const configured = channels.configured(
+					interaction.guildId ?? undefined,
+				);
 				await queue.run(channel, async () => {
 					const action = interaction.options.getSubcommand(true);
+					if (configured) {
+						await interaction.editReply(
+							action === "off"
+								? "This server is sandboxed by configuration (`guilds`); change the configuration to turn it off."
+								: action === "on"
+									? "Sandbox routing is already on: this server is sandboxed by configuration (`guilds`)."
+									: "Sandbox routing is enabled: this server is sandboxed by configuration (`guilds`).",
+						);
+						return;
+					}
 					if (action === "on") channels.enable(channel);
 					else if (action === "off") channels.disable(channel);
 					await interaction.editReply(

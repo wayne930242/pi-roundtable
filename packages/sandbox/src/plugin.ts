@@ -13,6 +13,12 @@ export interface SandboxOptions
 	stateFile: string;
 	/** Used only when stateFile does not yet exist. */
 	initialChannels?: readonly ChannelKey[];
+	/**
+	 * Discord guild ids whose every channel and thread is a sandbox channel, with no
+	 * `/roundtable sandbox on`; ids are validated at startup. A configured guild cannot be turned
+	 * off by command. Direct messages and other guilds are not affected.
+	 */
+	guilds?: readonly string[];
 	/** Host login provider used for each model call, unless apiKey is supplied. */
 	provider?: string;
 	/** Read before each model call with its channel and speaker; never falls back to the host login. */
@@ -53,6 +59,7 @@ export function sandbox(options: SandboxOptions) {
 			const channels = new SandboxChannelStore(
 				stateFile,
 				options.initialChannels,
+				{ guilds: options.guilds },
 			);
 			context.services.provide(SANDBOX, { channels, runtime });
 			const discord = context.services.find(DISCORD);
