@@ -1,5 +1,5 @@
 import { readFile, realpath, stat } from "node:fs/promises";
-import { basename, isAbsolute, relative, resolve } from "node:path";
+import { basename, isAbsolute, relative, resolve, sep } from "node:path";
 
 /** Where a session may read files by path: its shared workspace and its scratch dir. */
 export interface WorkspaceRoots {
@@ -26,7 +26,10 @@ export interface WorkspaceFile {
 /** Whether `child` is `parent` or inside it, judged by the paths alone (resolve symlinks first). */
 export function within(parent: string, child: string): boolean {
 	const rel = relative(parent, child);
-	return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
+	return (
+		rel === "" ||
+		(rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel))
+	);
 }
 
 async function realRoot(root: string): Promise<string | undefined> {

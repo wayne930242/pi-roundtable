@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash, randomUUID } from "node:crypto";
 import { constants, realpathSync, type Stats } from "node:fs";
 import type { FileHandle } from "node:fs/promises";
@@ -58,6 +59,11 @@ const HEAD_BYTES = 8192;
 /** The directory of each root that holds what was deleted. */
 export const TRASH_DIR = ".rt-trash";
 const GIT_DIR = ".git";
+
+/** The guarded names are compared without case: a volume that ignores it takes `.GIT` for `.git`. */
+const isGitDir = (name: string): boolean => name.toLowerCase() === GIT_DIR;
+const isTrashDir = (name: string | undefined): boolean =>
+	name?.toLowerCase() === TRASH_DIR;
 const TRASH_ID =
 	/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const ROOT_ID = /^[a-z][a-z0-9-]{0,31}$/;
@@ -270,7 +276,8 @@ const IMAGE_TYPES = {
 	webp: "image/webp",
 } as const;
 
-const decoder = new TextDecoder("utf-8", { fatal: true });
+// The byte order mark is stripped by hand, once: a second one is text and stays.
+const decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 
 /** What a file's bytes are, for the view and for a save. */
 function classify(bytes: Uint8Array): {
@@ -380,11 +387,26 @@ export class WorkspaceFiles {
 	readonly #roots: Map<string, WorkspaceRoot>;
 	readonly #logger: Logger;
 	readonly #hooks: NonNullable<WorkspaceFilesOptions["hooks"]>;
+	/** Where each root really was when it was first seen; a root that resolves elsewhere later is refused. */
+	readonly #pinned = new Map<string, string>();
+	readonly #speaker = new AsyncLocalStorage<string>();
 
 	constructor(options: WorkspaceFilesOptions) {
 		this.#roots = new Map(options.roots.map((root) => [root.id, root]));
+		for (const root of options.roots) {
+			try {
+				this.#pinned.set(root.id, realpathSync(root.dir));
+			} catch {
+				// A root that is not there yet is pinned where it first appears.
+			}
+		}
 		this.#logger = options.logger;
 		this.#hooks = options.hooks ?? {};
+	}
+
+	/** Runs `run` so that what it refuses is logged with who asked. */
+	speaking<T>(by: string, run: () => Promise<T>): Promise<T> {
+		return this.#speaker.run(by, run);
 	}
 
 	roots(): WorkspaceRootView[] {
@@ -402,7 +424,12 @@ export class WorkspaceFiles {
 		reason: WorkspaceReason,
 	): WorkspaceRefusal {
 		this.#logger.warn(
-			{ root: rootId, path: path.slice(0, 200), reason },
+			{
+				by: this.#speaker.getStore(),
+				root: rootId,
+				path: path.slice(0, 200),
+				reason,
+			},
 			"workspace path refused",
 		);
 		return new WorkspaceRefusal(status, reason);
@@ -426,6 +453,9 @@ export class WorkspaceFiles {
 		} catch {
 			return "missing";
 		}
+		const pinned = this.#pinned.get(root.id);
+		if (pinned === undefined) this.#pinned.set(root.id, real);
+		else if (pinned !== real) throw this.#refuse(root.id, raw, 403, "outside");
 		return { root, real, segments };
 	}
 
@@ -460,9 +490,8 @@ export class WorkspaceFiles {
 		const { root, segments } = located;
 		if (!root.writable) throw this.#refuse(root.id, raw, 403, "read-only-root");
 		const names = [...segments, ...(parent?.relative ?? [])];
-		if (names.includes(GIT_DIR))
-			throw this.#refuse(root.id, raw, 403, "git-dir");
-		if (segments[0] === TRASH_DIR || parent?.relative[0] === TRASH_DIR)
+		if (names.some(isGitDir)) throw this.#refuse(root.id, raw, 403, "git-dir");
+		if (isTrashDir(segments[0]) || isTrashDir(parent?.relative[0]))
 			throw this.#refuse(root.id, raw, 403, "trash-dir");
 	}
 
@@ -548,7 +577,7 @@ export class WorkspaceFiles {
 		const directory = await opendir(target.path).catch(mapFs);
 		try {
 			for await (const item of directory) {
-				if (segments.length === 0 && item.name === TRASH_DIR) continue;
+				if (segments.length === 0 && isTrashDir(item.name)) continue;
 				if (entries.length >= LIST_MAX) {
 					truncated = true;
 					break;
@@ -699,8 +728,8 @@ export class WorkspaceFiles {
 		const { root, segments } = located;
 		if (viaLink) return "symlink";
 		if (!root.writable) return "read-only-root";
-		if (segments.includes(GIT_DIR)) return "git-dir";
-		if (segments[0] === TRASH_DIR) return "trash";
+		if (segments.some(isGitDir)) return "git-dir";
+		if (isTrashDir(segments[0])) return "trash";
 		return undefined;
 	}
 
@@ -1095,10 +1124,15 @@ export class WorkspaceFiles {
 				},
 			);
 		} catch (error) {
-			await rename(join(itemDir, "item"), parent.path).catch(() => undefined);
-			await rm(itemDir, { recursive: true, force: true }).catch(
-				() => undefined,
+			// The item goes back first; the folder is removed only when it did, or the only copy would be lost.
+			const back = await rename(join(itemDir, "item"), parent.path).then(
+				() => true,
+				() => false,
 			);
+			if (back)
+				await rm(itemDir, { recursive: true, force: true }).catch(
+					() => undefined,
+				);
 			return mapFs(error);
 		}
 		this.#logger.info(
@@ -1169,6 +1203,9 @@ export class WorkspaceFiles {
 		const dir = await this.#trashDir(located.real, false);
 		if (!dir) throw new WorkspaceRefusal(404, "not-found");
 		const itemDir = join(dir, id);
+		// The folder of an item is one this code made; a link in its place is something an agent planted.
+		const folder = await lstat(itemDir).catch(mapFs);
+		if (!folder.isDirectory()) throw this.#refuse(rootId, id, 403, "special");
 		let recorded: { path?: unknown };
 		try {
 			recorded = JSON.parse(await readFile(join(itemDir, "meta.json"), "utf8"));

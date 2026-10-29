@@ -967,3 +967,104 @@ describe("new, rename, delete and the trash", () => {
 		expect(existsSync(root)).toBe(true);
 	});
 });
+
+describe("what the review found", () => {
+	test("a root replaced by a link after the host started is refused, not followed", async () => {
+		mkdirSync(join(base, "second"));
+		writeFileSync(join(base, "second", "a.txt"), "a");
+		const service = files([
+			{ id: "second", dir: join(base, "second"), writable: true },
+		]);
+		expect((await service.read("second", "a.txt")).text).toBe("a");
+		rmSync(join(base, "second"), { recursive: true });
+		symlinkSync(outside, join(base, "second"));
+		for (const call of [
+			() => service.read("second", "secret.txt"),
+			() => service.list("second", ""),
+			() =>
+				service.save(
+					"second",
+					"secret.txt",
+					{ text: "pwned", baseHash: sha("TOP SECRET") },
+					OWNER,
+				),
+			() => service.create("second", "new.txt", { kind: "file" }, OWNER),
+		])
+			expect((await refused(call())).reason).toBe("outside");
+		untouched();
+	});
+
+	test("a root that did not exist at the start is pinned where it first appears", async () => {
+		const service = files([
+			{ id: "late", dir: join(base, "late"), writable: true },
+		]);
+		expect((await service.list("late", "")).entries).toEqual([]);
+		mkdirSync(join(base, "late"));
+		writeFileSync(join(base, "late", "a.txt"), "a");
+		expect((await service.read("late", "a.txt")).text).toBe("a");
+		rmSync(join(base, "late"), { recursive: true });
+		symlinkSync(outside, join(base, "late"));
+		expect((await refused(service.read("late", "secret.txt"))).reason).toBe(
+			"outside",
+		);
+		untouched();
+	});
+
+	test("the .git and trash guards ignore case, as a case-insensitive volume does", async () => {
+		mkdirSync(join(root, "repo"));
+		writeFileSync(join(root, "x.txt"), "x");
+		const service = files();
+		for (const call of [
+			() => service.create("agents", "repo/.GIT", { kind: "dir" }, OWNER),
+			() => service.rename("agents", "x.txt", "repo/.GIT", OWNER),
+			() => service.remove("agents", "repo/.GIT", OWNER),
+			() => service.rename("agents", ".RT-Trash", "gone", OWNER),
+			() => service.rename("agents", "x.txt", ".RT-TRASH", OWNER),
+		]) {
+			const refusal = await refused(call());
+			expect(["git-dir", "trash-dir"]).toContain(refusal.reason);
+		}
+		expect(readdirSync(join(root, "repo"))).toEqual([]);
+	});
+
+	test("a trashed item whose folder was replaced by a link is not restored", async () => {
+		const service = files();
+		writeFileSync(join(root, "a.txt"), "a");
+		const trashed = await service.remove("agents", "a.txt", OWNER);
+		const itemDir = join(root, ".rt-trash", trashed.id);
+		mkdirSync(join(outside, "planted"));
+		writeFileSync(join(outside, "planted", "item"), "FROM OUTSIDE");
+		writeFileSync(
+			join(outside, "planted", "meta.json"),
+			JSON.stringify({ v: 1, path: "b.txt" }),
+		);
+		rmSync(itemDir, { recursive: true });
+		symlinkSync(join(outside, "planted"), itemDir);
+		await refused(service.restore("agents", trashed.id, OWNER));
+		expect(existsSync(join(root, "b.txt"))).toBe(false);
+		expect(readFileSync(join(outside, "planted", "item"), "utf8")).toBe(
+			"FROM OUTSIDE",
+		);
+	});
+
+	test("a file that starts with two byte order marks keeps the second as text", async () => {
+		writeFileSync(
+			join(root, "bom.txt"),
+			Buffer.from([0xef, 0xbb, 0xbf, 0xef, 0xbb, 0xbf, 0x61]),
+		);
+		const view = await files().read("agents", "bom.txt");
+		expect(view.bom).toBe(true);
+		expect(view.text).toBe("\uFEFFa");
+	});
+
+	test("a refusal is logged with who asked", async () => {
+		const service = files();
+		await service.speaking(OWNER, async () => {
+			await refused(service.read("agents", "../outside/secret.txt"));
+		});
+		const line = log.lines.find(
+			(entry) => entry.message === "workspace path refused",
+		);
+		expect(line?.fields).toMatchObject({ by: OWNER, root: "agents" });
+	});
+});

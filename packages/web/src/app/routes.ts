@@ -435,7 +435,17 @@ export class AppApi {
 		const files = this.#options.workspace;
 		if (!files) throw new HttpError(404, "This pane is not served.");
 		const owner = await this.#owner(admission);
-		const by = owner.id;
+		return files.speaking(owner.id, () =>
+			this.#workspaceCall(request, parts, files, owner.id),
+		);
+	}
+
+	async #workspaceCall(
+		request: Request,
+		parts: string[],
+		files: WorkspaceFiles,
+		by: string,
+	): Promise<Response> {
 		const { method } = request;
 		const [, , rootId, action, trashId, trashAction] = parts;
 		const params = new URL(request.url).searchParams;
