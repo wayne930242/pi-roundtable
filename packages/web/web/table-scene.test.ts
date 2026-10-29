@@ -11,6 +11,7 @@ import {
 	MAX_SEATED,
 	MAX_TURN_MS,
 	MIN_TURN_MS,
+	namePoints,
 	normalizeAngle,
 	overviewShot,
 	planMove,
@@ -161,6 +162,37 @@ describe("the camera planner", () => {
 					}
 					expect(fits(shot, aspect, seatCorners(count))).toBe(true);
 				}
+			}
+		}
+	});
+
+	test("the overview keeps ten agents and their names inside the phone's real canvas, 366 by 390", () => {
+		const width = 366;
+		const height = 390;
+		const aspect = width / height;
+		const count = slotsFor(10).count;
+		for (const az of [0, snapAngle(0.9, count), slotAngle(1, count)]) {
+			const shot = overviewShot(az, count, aspect, width);
+			const camera = new PerspectiveCamera(
+				fitFov(shot.fov, aspect),
+				aspect,
+				0.1,
+				90,
+			);
+			const { position, target } = shotVectors(shot);
+			camera.position.set(...position);
+			camera.lookAt(target[0], target[1], target[2]);
+			camera.updateMatrixWorld();
+			camera.updateProjectionMatrix();
+			for (const corner of seatCorners(count)) {
+				const at = new Vector3(...corner).project(camera);
+				expect(Math.abs(at.x)).toBeLessThan(0.95);
+				expect(Math.abs(at.y)).toBeLessThan(0.95);
+			}
+			// a name button is about 88 px wide and must not cross the canvas's sides
+			for (const point of namePoints(count)) {
+				const at = new Vector3(...point).project(camera);
+				expect(Math.abs(at.x) * (width / 2) + 44).toBeLessThan(width / 2);
 			}
 		}
 	});

@@ -108,7 +108,12 @@ export function seatAhead(az: number, slots: Slots): number | undefined {
 }
 
 /** A standee board's half width and the top of its badge above the floor, in hall units: the extent a seat takes up in the picture. */
-export const SEAT_HALF_WIDTH = 1.45;
+export const SEAT_HALF_WIDTH = 1.65;
+/** Where a podium's name sits: its height above the floor, and half the width the name button takes on the screen, in CSS px (it is page text, not scene geometry, so it does not shrink with distance). */
+const NAME_HEIGHT = 1.06;
+const NAME_HALF_PX = 44;
+/** The canvas width assumed when a caller does not say, in CSS px. */
+const CANVAS_PX = 390;
 export const SEAT_TOP = 4.8;
 /** The share of the picture's half width and half height left empty beyond the outermost seat. */
 export const FRAME_MARGIN = 0.07;
@@ -192,12 +197,25 @@ export function fits(
 	aspect: number,
 	points: readonly Point3[],
 	margin = FRAME_MARGIN,
+	marginX = margin,
 ): boolean {
-	const limit = 1 - margin;
+	const limitX = 1 - marginX;
+	const limitY = 1 - margin;
 	return points.every((point) => {
 		const at = project(shot, aspect, point);
-		return Math.abs(at.x) <= limit && Math.abs(at.y) <= limit;
+		return Math.abs(at.x) <= limitX && Math.abs(at.y) <= limitY;
 	});
+}
+
+/** The centre of every agent podium's name, which the overview must keep clear of the picture's sides by half the name's width. */
+export function namePoints(count: number): Point3[] {
+	const ring = ringRadius(count);
+	const points: Point3[] = [];
+	for (let slot = 1; slot < count; slot += 1) {
+		const az = slotAngle(slot, count);
+		points.push([Math.sin(az) * ring, NAME_HEIGHT, Math.cos(az) * ring]);
+	}
+	return points;
 }
 
 /** The shot moved back along its line of sight: `k` times as far from what it looks at. The camera and its target lie on one line through the hall's centre, so `az` stays. */
@@ -212,9 +230,14 @@ function pulledBack(shot: Shot, k: number): Shot {
 /**
  * The whole ring from a podium's side, raised: concept A's framing in concept B's palette. It stands
  * back as far as the ring needs, for the picture's aspect ratio (width / height), so that every seat
- * and its plate stay in frame with a margin: a crowded ring or a tall, narrow picture pulls it back.
+ * and its name stay in frame with a margin (`width` is the picture's width in CSS px, which the names' size depends on): a crowded ring or a tall, narrow picture pulls it back.
  */
-export function overviewShot(az: number, count: number, aspect = 1.6): Shot {
+export function overviewShot(
+	az: number,
+	count: number,
+	aspect = 1.6,
+	width = CANVAS_PX,
+): Shot {
 	const ring = ringRadius(count);
 	const rest: Shot = {
 		az,
@@ -228,9 +251,15 @@ export function overviewShot(az: number, count: number, aspect = 1.6): Shot {
 	};
 	if (!(aspect > 0)) return rest;
 	const corners = seatCorners(count);
+	const names = namePoints(count);
+	const nameMarginX = FRAME_MARGIN + NAME_HALF_PX / (Math.max(width, 1) / 2);
 	for (let k = 1; k <= MAX_PULLBACK; k += 0.02) {
 		const shot = pulledBack(rest, k);
-		if (fits(shot, aspect, corners)) return shot;
+		if (
+			fits(shot, aspect, corners) &&
+			fits(shot, aspect, names, FRAME_MARGIN, nameMarginX)
+		)
+			return shot;
 	}
 	return pulledBack(rest, MAX_PULLBACK);
 }

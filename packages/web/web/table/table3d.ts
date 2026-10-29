@@ -203,7 +203,12 @@ export function createTable3D(
 	const targetShot = (): Shot => {
 		const az = focusId ? seatAz(focusId) : undefined;
 		return az === undefined
-			? overviewShot(overviewAz, countNow(), camera.aspect)
+			? overviewShot(
+					overviewAz,
+					countNow(),
+					camera.aspect,
+					canvasEl.clientWidth || undefined,
+				)
 			: closeupShot(az, countNow());
 	};
 	const applyCamera = () => {
@@ -668,8 +673,11 @@ export function createTable3D(
 		camera.aspect = w / h;
 		camera.updateProjectionMatrix();
 		// the overview stands as far back as the new picture's shape needs
-		if (focusId === null && !dragging && moveMs === 0 && world)
-			shot = targetShot();
+		if (focusId === null && !dragging && world) {
+			if (moveMs === 0) shot = targetShot();
+			// a turn under way ends on the new picture's overview, not the old one's
+			else to = targetShot();
+		}
 		names.size(w);
 		loop.wake();
 	};
@@ -792,7 +800,12 @@ export function createTable3D(
 		if (Math.abs(dx) < TAP_PX && !dragging) return;
 		const az = press.az + dragAngle(dx, canvasEl.clientWidth);
 		dragging = { az };
-		shot = overviewShot(az, countNow(), camera.aspect);
+		shot = overviewShot(
+			az,
+			countNow(),
+			camera.aspect,
+			canvasEl.clientWidth || undefined,
+		);
 		moveMs = 0;
 		loop.wake();
 	};
@@ -812,7 +825,15 @@ export function createTable3D(
 			// let go: settle on the nearest podium's place on the ring
 			overviewAz = snapAngle(dragging.az, countNow());
 			dragging = undefined;
-			moveTo(overviewShot(overviewAz, countNow(), camera.aspect), false);
+			moveTo(
+				overviewShot(
+					overviewAz,
+					countNow(),
+					camera.aspect,
+					canvasEl.clientWidth || undefined,
+				),
+				false,
+			);
 			return;
 		}
 		if (Math.hypot(dx, dy) < TAP_PX) {
@@ -841,7 +862,15 @@ export function createTable3D(
 		if (dragging) {
 			overviewAz = snapAngle(dragging.az, countNow());
 			dragging = undefined;
-			moveTo(overviewShot(overviewAz, countNow(), camera.aspect), false);
+			moveTo(
+				overviewShot(
+					overviewAz,
+					countNow(),
+					camera.aspect,
+					canvasEl.clientWidth || undefined,
+				),
+				false,
+			);
 		}
 		canvasEl.style.cursor = "grab";
 	};
