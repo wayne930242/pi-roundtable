@@ -336,3 +336,76 @@ describe("ConsoleServer", () => {
 		server.stop();
 	});
 });
+
+describe("a visitor who must sign in", () => {
+	function signedOut(pathRouting: boolean) {
+		const recorder = recordingLogger();
+		return new ConsoleServer({
+			mount: "/console",
+			assets,
+			authenticator: {
+				authenticate: async () => ({
+					refusal: "no session",
+					status: 401,
+					login: true,
+				}),
+			} as never,
+			api: { handle: async () => Response.json({ ok: true }) },
+			subscribe: () => undefined,
+			logger: recorder.logger,
+			surface: "app",
+			...(pathRouting ? { pathRouting: true } : {}),
+		});
+	}
+	const location = async (server: ConsoleServer, path: string) => {
+		const response = await get(server, path);
+		return [response.status, response.headers.get("location")];
+	};
+
+	test("a page navigation goes to the login page and carries a ?next the table allows", async () => {
+		const server = signedOut(false);
+		expect(await location(server, "/console/")).toEqual([
+			303,
+			"/console/login",
+		]);
+		expect(
+			await location(server, "/console/?next=room:app:thread.abc"),
+		).toEqual([
+			303,
+			`/console/login?next=${encodeURIComponent("room:app:thread.abc")}`,
+		]);
+		expect(await location(server, "/console/?next=p:crm-case")).toEqual([
+			303,
+			`/console/login?next=${encodeURIComponent("p:crm-case")}`,
+		]);
+	});
+
+	test("a ?next that names another site, or a room of another surface, is dropped", async () => {
+		const server = signedOut(false);
+		for (const hostile of [
+			"https://evil.example.test/",
+			"//evil.example.test",
+			"room:other:agent.x",
+			"p:../x",
+		])
+			expect(
+				await location(server, `/console/?next=${encodeURIComponent(hostile)}`),
+			).toEqual([303, "/console/login"]);
+	});
+
+	test("with path routing the page's own path is the way back", async () => {
+		const server = signedOut(true);
+		expect(await location(server, "/console/profile")).toEqual([
+			303,
+			`/console/login?next=${encodeURIComponent("profile")}`,
+		]);
+	});
+
+	test("an API call or a write is answered 401, not redirected", async () => {
+		const server = signedOut(false);
+		expect((await get(server, "/console/api/config")).status).toBe(401);
+		expect((await get(server, "/console/", { method: "POST" })).status).toBe(
+			401,
+		);
+	});
+});
