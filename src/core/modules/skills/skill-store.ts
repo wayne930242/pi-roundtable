@@ -18,6 +18,18 @@ export interface SkillGroup {
 	skills: string[];
 }
 
+/** One saved version of a written skill. */
+export interface StoredSkillVersion {
+	id: number;
+	description: string;
+	body: string;
+	by: string;
+	at: Date;
+}
+
+/** The newest versions of a written skill the store keeps. */
+export const SKILL_VERSIONS_KEEP = 50;
+
 /** Who lost a removed skill. */
 export interface Detached {
 	agents: string[];
@@ -37,6 +49,14 @@ interface GroupRow {
 	name: string;
 	description: string;
 	skills: string;
+}
+
+interface VersionRow {
+	id: string | number;
+	description: string;
+	body: string;
+	by_name: string;
+	at: Date;
 }
 
 const toEntry = (row: SkillRow): SkillEntry =>
@@ -121,6 +141,22 @@ export class SkillStore {
 	static migrations(guildId: string): Migration[] {
 		return [
 			SkillStore.migration,
+			// The versions of the written skills, kept for the web app's history.
+			{
+				name: "skill-versions",
+				up: async (sql) => {
+					await sql`
+						CREATE TABLE IF NOT EXISTS skill_versions (
+							id bigserial PRIMARY KEY,
+							name text NOT NULL,
+							description text NOT NULL,
+							body text NOT NULL,
+							by_name text NOT NULL,
+							at timestamptz NOT NULL DEFAULT now()
+						)`;
+					await sql`CREATE INDEX IF NOT EXISTS skill_versions_of ON skill_versions (name, id)`;
+				},
+			},
 			{
 				name: "skills-guild",
 				up: (sql) =>
@@ -225,33 +261,67 @@ export class SkillStore {
 		});
 	}
 
-	async addWritten(skill: {
-		name: string;
-		description: string;
-		body: string;
-	}): Promise<void> {
+	async addWritten(
+		skill: { name: string; description: string; body: string },
+		by = "agent",
+	): Promise<void> {
 		return this.#serial(async () => {
 			if (this.#skills.has(skill.name))
 				throw new AgentError(`A skill named "${skill.name}" already exists.`);
-			await this.#sql`
-				INSERT INTO skills (name, kind, description, body)
-				VALUES (${skill.name}, 'written', ${skill.description}, ${skill.body})`;
+			await this.#sql.begin(async (tx) => {
+				await tx`
+					INSERT INTO skills (name, kind, description, body)
+					VALUES (${skill.name}, 'written', ${skill.description}, ${skill.body})`;
+				await this.#keepVersion(tx, skill, by);
+			});
 			this.#skills.set(skill.name, { kind: "written", ...skill });
 		});
 	}
 
-	async updateWritten(skill: {
-		name: string;
-		description: string;
-		body: string;
-	}): Promise<void> {
+	async updateWritten(
+		skill: { name: string; description: string; body: string },
+		by = "agent",
+	): Promise<void> {
 		return this.#serial(async () => {
-			await this.#sql`
-				UPDATE skills SET description = ${skill.description}, body = ${skill.body},
-					updated_at = now()
-				WHERE name = ${skill.name} AND kind = 'written'`;
+			await this.#sql.begin(async (tx) => {
+				await tx`
+					UPDATE skills SET description = ${skill.description}, body = ${skill.body},
+						updated_at = now()
+					WHERE name = ${skill.name} AND kind = 'written'`;
+				await this.#keepVersion(tx, skill, by);
+			});
 			this.#skills.set(skill.name, { kind: "written", ...skill });
 		});
+	}
+
+	/** Writes a version of a skill and drops the ones beyond the newest `SKILL_VERSIONS_KEEP`. */
+	async #keepVersion(
+		tx: SQL,
+		skill: { name: string; description: string; body: string },
+		by: string,
+	): Promise<void> {
+		await tx`
+			INSERT INTO skill_versions (name, description, body, by_name)
+			VALUES (${skill.name}, ${skill.description}, ${skill.body}, ${by})`;
+		await tx`
+			DELETE FROM skill_versions
+			WHERE name = ${skill.name} AND id NOT IN (
+				SELECT id FROM skill_versions WHERE name = ${skill.name}
+				ORDER BY id DESC LIMIT ${SKILL_VERSIONS_KEEP})`;
+	}
+
+	/** The saved versions of a written skill, newest first. */
+	async versions(name: string): Promise<StoredSkillVersion[]> {
+		const rows: VersionRow[] = await this.#sql`
+			SELECT id, description, body, by_name, at FROM skill_versions
+			WHERE name = ${name} ORDER BY id DESC LIMIT ${SKILL_VERSIONS_KEEP}`;
+		return rows.map((row) => ({
+			id: Number(row.id),
+			description: row.description,
+			body: row.body,
+			by: row.by_name,
+			at: new Date(row.at),
+		}));
 	}
 
 	/** Removes a skill and detaches it from every agent and group. */
@@ -263,6 +333,7 @@ export class SkillStore {
 			);
 			await this.#sql.begin(async (tx) => {
 				await tx`DELETE FROM skills WHERE name = ${name}`;
+				await tx`DELETE FROM skill_versions WHERE name = ${name}`;
 				await tx`DELETE FROM agent_skills WHERE guild_id = ${this.#guild} AND skill = ${name}`;
 				for (const group of groups)
 					await tx`

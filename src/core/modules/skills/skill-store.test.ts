@@ -50,6 +50,8 @@ function fakeDatabase() {
 				description: null,
 				body: null,
 			});
+		} else if (text.startsWith("DELETE FROM skill_versions")) {
+			// The fake keeps no versions.
 		} else if (text.startsWith("DELETE FROM skills")) skills.delete(v[0] ?? "");
 		else if (text.startsWith("DELETE FROM agent_skills")) {
 			const column = text.includes("skill = ?") ? "skill" : "agent";

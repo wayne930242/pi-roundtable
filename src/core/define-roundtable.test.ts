@@ -306,6 +306,7 @@ describe("defineRoundtable", () => {
 			"prompt-overrides",
 			"prompt-history",
 			"skills",
+			"skill-versions",
 			"skills-guild",
 			"conversations",
 			"conversation-modes",

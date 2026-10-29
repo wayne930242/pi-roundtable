@@ -66,7 +66,12 @@ describeDb("PostgreSQL", () => {
 	beforeEach(async () => {
 		await store?.close();
 		const admin = new SQL(testDatabaseUrl);
-		for (const table of ["skills", "skill_groups", "agent_skills"])
+		for (const table of [
+			"skills",
+			"skill_groups",
+			"agent_skills",
+			"skill_versions",
+		])
 			await admin.unsafe(`DROP TABLE IF EXISTS ${table}`);
 		await admin.close();
 		if (dir) rmSync(dir, { recursive: true, force: true });
@@ -288,6 +293,44 @@ describeDb("PostgreSQL", () => {
 			await open();
 			expect(existsSync(join(dir, "skills/daily-notes/SKILL.md"))).toBe(true);
 			expect(existsSync(join(dir, "skills/stale"))).toBe(false);
+		});
+	});
+
+	describe("documents the owner edits", () => {
+		const text = (body: string) =>
+			`---\nname: daily-notes\ndescription: "Use when keeping notes."\n---\n\n${body}\n`;
+
+		test("a save is kept as a version that outlives a restart, and deleting the skill drops them", async () => {
+			const made = await registry.createDocument(text("One."), "Riley");
+			const saved = await registry.saveDocument(
+				"daily-notes",
+				text("Two."),
+				made.hash,
+				"Sam",
+			);
+			await store.close();
+			await open();
+			const history = await registry.documentHistory("daily-notes");
+			expect(history.map((v) => [v.by, v.hash])).toEqual([
+				["Sam", saved.hash],
+				["Riley", made.hash],
+			]);
+			expect((await registry.document("daily-notes")).hash).toBe(saved.hash);
+			await registry.delete("daily-notes");
+			await registry.createDocument(text("Three."), "Riley");
+			expect(await registry.documentHistory("daily-notes")).toHaveLength(1);
+		});
+
+		test("a linked skill's document is its file, and is read-only", async () => {
+			await registry.link("acme/skills", "skills/plan-work");
+			const document = await registry.document("plan-work");
+			expect(document.writable).toBe(false);
+			expect(document.source).toEqual({
+				kind: "linked",
+				repo: "acme/skills",
+				path: "skills/plan-work",
+			});
+			expect(document.text).toContain("name: plan-work");
 		});
 	});
 

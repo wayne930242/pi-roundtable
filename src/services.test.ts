@@ -81,6 +81,16 @@ const skills: SkillRegistry = {
 	linkedFrom: () => [],
 	checkRegistered: () => undefined,
 	link: async () => "linked",
+	document: async () => {
+		throw new Error("unused");
+	},
+	saveDocument: async () => {
+		throw new Error("unused");
+	},
+	createDocument: async () => {
+		throw new Error("unused");
+	},
+	documentHistory: async () => [],
 	attach: async () => [],
 };
 

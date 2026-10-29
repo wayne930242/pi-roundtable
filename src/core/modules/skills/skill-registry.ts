@@ -1,4 +1,11 @@
-import { mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+	mkdirSync,
+	readdirSync,
+	readFileSync,
+	rmSync,
+	statSync,
+	writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { AgentError } from "../../domain/errors.ts";
 import { PluginError } from "../../errors.ts";
@@ -10,12 +17,19 @@ import {
 	checkBody,
 	checkDescription,
 	checkSkillName,
+	hashOf,
+	MAX_DOCUMENT_BYTES,
 	type PackageSkill,
+	parseSkillDocument,
 	type ResolvedSkill,
 	readSkillFile,
 	type SkillCatalogEntry,
+	SkillConflictError,
+	type SkillDocument,
 	type SkillRegistryOptions,
 	type SkillSet,
+	type SkillSource,
+	type SkillVersion,
 	skillFileContent,
 } from "./skill-rules.ts";
 import type { SkillEntry } from "./skill-store.ts";
@@ -27,15 +41,20 @@ export {
 	type PackageSkill,
 	type ResolvedSkill,
 	type SkillCatalogEntry,
+	SkillConflictError,
+	type SkillDocument,
 	type SkillRegistryOptions,
 	type SkillSet,
 	type SkillSource,
+	type SkillVersion,
 } from "./skill-rules.ts";
 
 /** The skill registry and what each agent carries. */
 export class StoredSkillRegistry implements SkillRegistry {
 	readonly #options: SkillRegistryOptions;
 	readonly #packageSkills = new Map<string, PackageSkill>();
+	/** The tail of the document writes, so a hash is checked and the skill written without another save between. */
+	#documents: Promise<unknown> = Promise.resolve();
 
 	/** Throws a PluginError when a package skill has the name of a linked or written one. */
 	constructor(options: SkillRegistryOptions) {
@@ -169,11 +188,14 @@ export class StoredSkillRegistry implements SkillRegistry {
 		return this.#removed(name, await this.#options.store.remove(name));
 	}
 
-	async create(skill: {
-		name: string;
-		description: string;
-		body: string;
-	}): Promise<string> {
+	async create(
+		skill: {
+			name: string;
+			description: string;
+			body: string;
+		},
+		by = "agent",
+	): Promise<string> {
 		checkSkillName(skill.name);
 		this.#checkFreeName(skill.name);
 		checkDescription(skill.description);
@@ -183,7 +205,7 @@ export class StoredSkillRegistry implements SkillRegistry {
 			description: skill.description.trim(),
 			body: skill.body.trim(),
 		};
-		await this.#options.store.addWritten(entry);
+		await this.#options.store.addWritten(entry, by);
 		this.#write(entry);
 		return `Created skill ${skill.name}. Attach it with agent_skills; it loads from each carrier's next turn.`;
 	}
@@ -191,6 +213,7 @@ export class StoredSkillRegistry implements SkillRegistry {
 	async update(
 		name: string,
 		change: { description?: string; body?: string },
+		by = "agent",
 	): Promise<string> {
 		const entry = this.#writable(name);
 		if (change.description !== undefined) checkDescription(change.description);
@@ -200,9 +223,134 @@ export class StoredSkillRegistry implements SkillRegistry {
 			description: change.description?.trim() ?? entry.description,
 			body: change.body?.trim() ?? entry.body,
 		};
-		await this.#options.store.updateWritten(next);
+		await this.#options.store.updateWritten(next, by);
 		this.#write(next);
 		return `Updated skill ${name}; its carriers read the new version from their next turn.`;
+	}
+
+	// ── Documents: a SKILL.md as the owner edits it in the web app ─────────
+
+	/** A skill's SKILL.md; throws AgentError for an unknown skill or one whose file cannot be read. */
+	async document(name: string): Promise<SkillDocument> {
+		const source = this.#sourceOf(name);
+		const entry = this.#options.store.skill(name);
+		if (entry?.kind === "written") return this.#documentOf(entry);
+		const file = this.#fileOf(name);
+		if (!source || !file) throw new AgentError(`There is no skill "${name}".`);
+		return this.#readDocument(name, source, file);
+	}
+
+	/**
+	 * Saves an agent-written skill's whole SKILL.md as edited from the one with hash `baseHash`.
+	 * The name cannot change; the description and body are checked as the skill tools check them.
+	 * Throws SkillConflictError, carrying the current document, when the skill is no longer the
+	 * one that was edited, and AgentError for a read-only skill or a refused text.
+	 */
+	saveDocument(
+		name: string,
+		text: string,
+		baseHash: string,
+		by: string,
+	): Promise<SkillDocument> {
+		return this.#inDocuments(async () => {
+			const entry = this.#writable(name);
+			const current = this.#documentOf(entry);
+			if (current.hash !== baseHash) throw new SkillConflictError(current);
+			const next = parseSkillDocument(text);
+			if (next.name !== name)
+				throw new AgentError(
+					`The name of a skill cannot change (it is "${name}"). To use another name, create a new skill.`,
+				);
+			if (next.description === entry.description && next.body === entry.body)
+				return current;
+			await this.update(
+				name,
+				{ description: next.description, body: next.body },
+				by,
+			);
+			return this.document(name);
+		});
+	}
+
+	/** Makes a skill from a whole SKILL.md; it is attached to no one. Throws AgentError for a taken or refused name or text. */
+	createDocument(text: string, by: string): Promise<SkillDocument> {
+		return this.#inDocuments(async () => {
+			const made = parseSkillDocument(text);
+			await this.create(made, by);
+			return this.document(made.name);
+		});
+	}
+
+	/** The saved versions of an agent-written skill, newest first; none for any other skill. */
+	async documentHistory(name: string): Promise<SkillVersion[]> {
+		const entry = this.#options.store.skill(name);
+		if (entry?.kind !== "written") {
+			this.#sourceOf(name);
+			return [];
+		}
+		return (await this.#options.store.versions(name)).map((version) => {
+			const text = skillFileContent({
+				name,
+				description: version.description,
+				body: version.body,
+			});
+			return {
+				id: version.id,
+				text,
+				hash: hashOf(text),
+				by: version.by,
+				at: version.at,
+			};
+		});
+	}
+
+	#inDocuments<T>(write: () => Promise<T>): Promise<T> {
+		const run = this.#documents.then(write);
+		this.#documents = run.catch(() => undefined);
+		return run;
+	}
+
+	#documentOf(entry: Extract<SkillEntry, { kind: "written" }>): SkillDocument {
+		const text = skillFileContent(entry);
+		return {
+			name: entry.name,
+			source: { kind: "written" },
+			text,
+			hash: hashOf(text),
+			writable: true,
+		};
+	}
+
+	#readDocument(
+		name: string,
+		source: SkillSource,
+		file: string,
+	): SkillDocument {
+		let size: number;
+		try {
+			size = statSync(file).size;
+		} catch {
+			throw new AgentError(`The file of the skill "${name}" cannot be read.`);
+		}
+		if (size > MAX_DOCUMENT_BYTES)
+			throw new AgentError(
+				`The file of the skill "${name}" is too large to show.`,
+			);
+		const text = readFileSync(file, "utf8");
+		return { name, source, text, hash: hashOf(text), writable: false };
+	}
+
+	/** Where a skill comes from; throws AgentError for a name nobody registered. */
+	#sourceOf(name: string): SkillSource {
+		if ((BUILTIN_SKILLS as readonly string[]).includes(name))
+			return { kind: "builtin" };
+		const fromPackage = this.#packageSkills.get(name);
+		if (fromPackage) return { kind: "package", package: fromPackage.package };
+		const entry = this.#options.store.skill(name);
+		if (!entry) throw new AgentError(`There is no skill "${name}".`);
+		return entry.kind === "linked"
+			? { kind: "linked", repo: entry.repo, path: entry.path }
+			: { kind: "written" };
 	}
 
 	async delete(name: string): Promise<string> {
