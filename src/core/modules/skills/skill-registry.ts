@@ -188,13 +188,28 @@ export class StoredSkillRegistry implements SkillRegistry {
 		return this.#removed(name, await this.#options.store.remove(name));
 	}
 
-	async create(
+	/**
+	 * Writes a new skill. It takes its turn in the queue of the document writes, so it cannot
+	 * land between an owner's hash check and the write that follows it.
+	 */
+	create(
 		skill: {
 			name: string;
 			description: string;
 			body: string;
 		},
 		by = "agent",
+	): Promise<string> {
+		return this.#inDocuments(() => this.#create(skill, by));
+	}
+
+	async #create(
+		skill: {
+			name: string;
+			description: string;
+			body: string;
+		},
+		by: string,
 	): Promise<string> {
 		checkSkillName(skill.name);
 		this.#checkFreeName(skill.name);
@@ -210,10 +225,22 @@ export class StoredSkillRegistry implements SkillRegistry {
 		return `Created skill ${skill.name}. Attach it with agent_skills; it loads from each carrier's next turn.`;
 	}
 
-	async update(
+	/**
+	 * Replaces an agent-written skill's description or body. It takes its turn in the queue of the
+	 * document writes, so an owner's save from a hash it passed can never overwrite it unseen.
+	 */
+	update(
 		name: string,
 		change: { description?: string; body?: string },
 		by = "agent",
+	): Promise<string> {
+		return this.#inDocuments(() => this.#update(name, change, by));
+	}
+
+	async #update(
+		name: string,
+		change: { description?: string; body?: string },
+		by: string,
 	): Promise<string> {
 		const entry = this.#writable(name);
 		if (change.description !== undefined) checkDescription(change.description);
@@ -263,7 +290,7 @@ export class StoredSkillRegistry implements SkillRegistry {
 				);
 			if (next.description === entry.description && next.body === entry.body)
 				return current;
-			await this.update(
+			await this.#update(
 				name,
 				{ description: next.description, body: next.body },
 				by,
@@ -276,7 +303,7 @@ export class StoredSkillRegistry implements SkillRegistry {
 	createDocument(text: string, by: string): Promise<SkillDocument> {
 		return this.#inDocuments(async () => {
 			const made = parseSkillDocument(text);
-			await this.create(made, by);
+			await this.#create(made, by);
 			return this.document(made.name);
 		});
 	}

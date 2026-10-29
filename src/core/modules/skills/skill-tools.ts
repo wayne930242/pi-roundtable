@@ -81,11 +81,12 @@ export function skillListExtension(
 	);
 }
 
-/** The skill tools of an agent session. */
+/** The skill tools of an agent session; a skill the agent writes or edits is kept under `by`, the agent's name. */
 export function skillToolsExtension(
 	registry: StoredSkillRegistry,
 	/** Throws AgentError unless the name is an active agent. */
 	checkAgent: (name: string) => void,
+	by: string,
 ): ExtensionFactory {
 	return textToolsExtension(
 		[
@@ -127,11 +128,14 @@ export function skillToolsExtension(
 					body: BODY,
 				}),
 				run: (i) =>
-					registry.create({
-						name: requiredString(i, "name"),
-						description: requiredString(i, "description"),
-						body: requiredString(i, "body"),
-					}),
+					registry.create(
+						{
+							name: requiredString(i, "name"),
+							description: requiredString(i, "description"),
+							body: requiredString(i, "body"),
+						},
+						by,
+					),
 			},
 			{
 				name: "skill_update",
@@ -146,10 +150,14 @@ export function skillToolsExtension(
 				run: (i) => {
 					const description = optionalString(i, "description");
 					const body = optionalString(i, "body");
-					return registry.update(requiredString(i, "name"), {
-						...(description !== undefined ? { description } : {}),
-						...(body !== undefined ? { body } : {}),
-					});
+					return registry.update(
+						requiredString(i, "name"),
+						{
+							...(description !== undefined ? { description } : {}),
+							...(body !== undefined ? { body } : {}),
+						},
+						by,
+					);
 				},
 			},
 			{

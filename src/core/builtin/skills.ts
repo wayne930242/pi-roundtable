@@ -70,11 +70,15 @@ export function skillsPlugin(
 			return {
 				sessionTools: [
 					agentOnly("skill-list", () => skillListExtension(built)),
-					agentOnly("skill-tools", () =>
-						skillToolsExtension(built, (name) => {
-							// The agent server is set up after this plugin and read when a session is built.
-							services.get(AGENTS).directory.activeAgent(name);
-						}),
+					agentOnly("skill-tools", (scope) =>
+						skillToolsExtension(
+							built,
+							(name) => {
+								// The agent server is set up after this plugin and read when a session is built.
+								services.get(AGENTS).directory.activeAgent(name);
+							},
+							scope.name,
+						),
 					),
 				],
 				agentSelection: () => ({

@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { SQL } from "bun";
 import { AgentError } from "../../domain/errors.ts";
 import { silentLogger } from "../../log.ts";
@@ -16,6 +17,7 @@ import {
 	skillFileContent,
 } from "./skill-rules.ts";
 import { SkillStore } from "./skill-store.ts";
+import { skillToolsExtension } from "./skill-tools.ts";
 
 type Row = Record<string, unknown>;
 
@@ -229,6 +231,57 @@ describe("a SKILL.md the owner edits", () => {
 		expect((results[1] as PromiseRejectedResult).reason).toBeInstanceOf(
 			SkillConflictError,
 		);
+	});
+
+	test("an agent's skill_update and an owner's save from the same hash take turns: the save conflicts", async () => {
+		await open();
+		const made = await registry.createDocument(TEXT, "Riley");
+		const results = await Promise.allSettled([
+			registry.update("review-draft", { body: "Read it by day." }, "scout"),
+			registry.saveDocument(
+				"review-draft",
+				made.text.replace("twice", "never"),
+				made.hash,
+				"Riley",
+			),
+		]);
+		expect(results.map((r) => r.status)).toEqual(["fulfilled", "rejected"]);
+		expect((results[1] as PromiseRejectedResult).reason).toBeInstanceOf(
+			SkillConflictError,
+		);
+		expect((await registry.document("review-draft")).text).toContain(
+			"Read it by day.",
+		);
+	});
+
+	test("the skill tools keep an agent's edit under the agent's name", async () => {
+		await open();
+		const tools = new Map<
+			string,
+			{ execute(id: string, params: unknown): Promise<unknown> }
+		>();
+		skillToolsExtension(
+			registry,
+			() => undefined,
+			"scout",
+		)({
+			registerTool: (tool: {
+				name: string;
+				execute(id: string, params: unknown): Promise<unknown>;
+			}) => tools.set(tool.name, tool),
+		} as unknown as ExtensionAPI);
+		await tools.get("skill_create")?.execute("1", {
+			name: "review-draft",
+			description: DESCRIPTION,
+			body: "Read it twice.",
+		});
+		await tools.get("skill_update")?.execute("2", {
+			name: "review-draft",
+			body: "Read it three times.",
+		});
+		expect(
+			(await registry.documentHistory("review-draft")).map((v) => v.by),
+		).toEqual(["scout", "scout"]);
 	});
 
 	test("saving the same content writes no new version", async () => {
