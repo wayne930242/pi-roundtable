@@ -786,9 +786,9 @@ describe("a member of a host that admits more than its owners", () => {
 				},
 				access: {
 					push: { tiers: ["owner", "member"] },
-					hosted: async () => ({ pages: [], kinds: [] }),
 					gate: async () => [],
 				},
+				hosted: async () => ({ pages: [], kinds: [] }),
 				registry: {
 					list: async (filter?: { principal?: string }) => {
 						asked.push(filter);
@@ -928,5 +928,28 @@ describe("a member of a host that admits more than its owners", () => {
 		});
 		for (const visitor of [AS_MEMBER, AS_OWNER])
 			expect((await call(instance, "notes", {}, visitor)).status).toBe(404);
+	});
+});
+
+describe("the pages and kinds a host registered", () => {
+	const hosted = async () => ({
+		pages: [{ id: "crm", label: "CRM", place: "main" as const }],
+		kinds: [{ kind: "case", label: "Cases" }],
+	});
+
+	test("an owners-only host sends them too when it has any, and nothing extra when it has none", async () => {
+		const withAny = await call<ConfigView>(api({ hosted }).api, "config");
+		expect(withAny.body).toMatchObject({
+			pages: [{ id: "crm", label: "CRM", place: "main" }],
+			kinds: [{ kind: "case", label: "Cases" }],
+		});
+		expect(withAny.body).not.toHaveProperty("tier");
+		expect(withAny.body).not.toHaveProperty("push");
+		const none = await call<ConfigView>(
+			api({ hosted: async () => ({ pages: [], kinds: [] }) }).api,
+			"config",
+		);
+		const plain = await call<ConfigView>(api().api, "config");
+		expect(JSON.stringify(none.body)).toBe(JSON.stringify(plain.body));
 	});
 });

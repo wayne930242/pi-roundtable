@@ -59,11 +59,6 @@ const MAX_BODY_BYTES = 64 * 1024;
 export interface AccessView {
 	/** Who may use push, and the key browsers subscribe against when an external sender holds it. */
 	push: { tiers: readonly Tier[]; key?: string; subscribe?: string };
-	/** The pages and kinds of room the host registered, as far as this visitor may see them. */
-	hosted(visitor: Visitor): Promise<{
-		pages: PageLinkView[];
-		kinds: KindLinkView[];
-	}>;
 	/** The required steps the visitor still owes. */
 	gate(visitor: Visitor): Promise<GateStepView[]>;
 }
@@ -77,6 +72,15 @@ export interface ConsolePorts {
 	tierPanes?: Readonly<Record<Tier, readonly PaneName[]>>;
 	/** Present when the host admits more than its owners (`admission: "access"`). */
 	access?: AccessView;
+	/**
+	 * The pages and kinds of room the host registered, as far as this visitor may see them. The
+	 * config carries them whatever the admission, but only when there are any, so a host that
+	 * registers none sends the page exactly what it did before.
+	 */
+	hosted?: (visitor: Visitor) => Promise<{
+		pages: PageLinkView[];
+		kinds: KindLinkView[];
+	}>;
 	/** The host's `sessions/` directory. */
 	sessionsDir: string;
 	/** Present when the overview pane is served, or the agent server is there to classify channels. */
@@ -271,11 +275,17 @@ export class ConsoleApi {
 	async configFor(visitor: Visitor): Promise<ConfigView> {
 		const view = this.config();
 		const { access } = this.#ports;
-		if (!access) return view;
-		const [owed, hosted] = await Promise.all([
-			access.gate(visitor),
-			access.hosted(visitor),
-		]);
+		const hosted = (await this.#ports.hosted?.(visitor)) ?? {
+			pages: [],
+			kinds: [],
+		};
+		if (!access)
+			return {
+				...view,
+				...(hosted.pages.length > 0 ? { pages: hosted.pages } : {}),
+				...(hosted.kinds.length > 0 ? { kinds: hosted.kinds } : {}),
+			};
+		const owed = await access.gate(visitor);
 		return {
 			...view,
 			panes: [...this.#panesOf(visitor)],
