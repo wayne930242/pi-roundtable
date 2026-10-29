@@ -377,6 +377,19 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"Turn on yolo mode": "開啟 Yolo 模式",
 	"Working…": "處理中…",
 
+	// 長按與右鍵選單
+	"Edit agent": "編輯夥伴",
+	"Change look": "換外觀",
+	"Copy as Markdown": "複製為 Markdown",
+	"Quote reply": "引用回覆",
+	"Select text": "選取文字",
+	Share: "分享",
+	"Agent profile": "夥伴資料",
+	"Copy details": "複製細節",
+	Download: "下載",
+	"Could not copy.": "無法複製。",
+	"Could not share.": "無法分享。",
+
 	// 聊天室列表
 	Agents: "夥伴",
 	"Dispatch threads": "派工討論串",

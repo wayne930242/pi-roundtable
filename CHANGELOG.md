@@ -10,6 +10,7 @@ Planned as 0.24.0.
 ### Added
 
 - `pi-roundtable-web`: a room switcher for phones. A swipe right anywhere over the messages, or a tap on the header picture, opens a drawer of rooms (those with a card waiting first, then by latest activity, with a search field); a tap on a row opens that room in place, and each room keeps its unsent text. A swipe that starts within 32 px of either screen edge is left to the system's Back gesture. The package's changelog has the detail.
+- `pi-roundtable-web`: one action menu on a long press, a right click and the Menu key. It is a bottom sheet on a phone and a popover at the pointer elsewhere, and opens on an agent or group row (in the list and the drawer: edit, look, yolo, long-running, start over), a message (copy, quote, select, share), a message's picture, a card and a file. The package's changelog has the detail.
 
 ### Changed
 

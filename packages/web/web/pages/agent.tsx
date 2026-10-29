@@ -1,8 +1,9 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import type { AgentPatch, AgentProfileView } from "../../src/api-types.ts";
 import { PageCharacter } from "../components/character.tsx";
 import { Icon } from "../components/icons.tsx";
 import { Failure, Loading } from "../components/states.tsx";
+import { takeLook } from "../lib/agent-focus.ts";
 import { api, messageOf } from "../lib/api.ts";
 import { useRoomState } from "../lib/characters.ts";
 import { translate as t } from "../lib/messages.ts";
@@ -42,6 +43,15 @@ export function AgentPage({ name }: { name: string }) {
 	const [saving, setSaving] = useState(false);
 	// The profile's own picture shows what its room shows.
 	const state = useRoomState(profile?.room ?? "");
+	const look = useRef<HTMLElement>(null);
+	const loaded = profile !== undefined;
+
+	// "Change look" in a room's menu lands on the creator.
+	useEffect(() => {
+		if (!loaded || !takeLook()) return;
+		look.current?.scrollIntoView({ block: "start" });
+		look.current?.focus({ preventScroll: true });
+	}, [loaded]);
 
 	useEffect(() => {
 		let current = true;
@@ -141,7 +151,7 @@ export function AgentPage({ name }: { name: string }) {
 					</p>
 				</div>
 			</header>
-			<section className="card stack">
+			<section className="card stack" ref={look} tabIndex={-1}>
 				<h2>{t("Look")}</h2>
 				<p className="meta">
 					{t(

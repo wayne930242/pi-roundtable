@@ -63,6 +63,7 @@ const row = (message: RoomMessage) =>
 				header
 				enter={false}
 				timeZone="UTC"
+				quotable
 			/>
 		</ConfigContext.Provider>,
 	);

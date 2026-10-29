@@ -8,6 +8,8 @@ import { useAccentStyle } from "../lib/characters.ts";
 import { useConfig } from "../lib/config.ts";
 import { ago } from "../lib/format.ts";
 import { useLive } from "../lib/live.ts";
+import { roomMenu } from "../lib/menu-items.ts";
+import { useMenuPress } from "../lib/menu-press.ts";
 import { plural, translate as t } from "../lib/messages.ts";
 import { lastMessage, waitingCards } from "../lib/rooms.ts";
 import { hrefFor } from "../lib/router.ts";
@@ -62,10 +64,12 @@ const RoomRow = memo(function RoomRow(
 ) {
 	const { view } = props;
 	const accent = useAccentStyle(view.character);
+	const press = useMenuPress(() => roomMenu(view.key));
 	return (
 		<li>
 			<a
 				className="room-row"
+				{...press}
 				href={hrefFor("room", view.key)}
 				data-home={view.home || undefined}
 				aria-current={props.active ? "page" : undefined}

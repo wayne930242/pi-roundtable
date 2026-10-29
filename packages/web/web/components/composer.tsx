@@ -19,7 +19,7 @@ import {
 	uploadForSend,
 	usedSlots,
 } from "../lib/attach.ts";
-import { draftOf, keepDraft } from "../lib/drafts.ts";
+import { draftOf, keepDraft, onDraftInserted } from "../lib/drafts.ts";
 import { size as bytes } from "../lib/format.ts";
 import { composingKey } from "../lib/ime.ts";
 import { translate as t } from "../lib/messages.ts";
@@ -64,6 +64,15 @@ export function Composer(props: {
 	useEffect(() => {
 		if (draftKey !== undefined) keepDraft(draftKey, text);
 	}, [draftKey, text]);
+	/** A quote came in from outside: the caret goes to the end of the box once it shows the text. */
+	const caretToEnd = useRef(false);
+	useEffect(() => {
+		if (draftKey === undefined) return;
+		return onDraftInserted(draftKey, (next) => {
+			caretToEnd.current = true;
+			setText(next);
+		});
+	}, [draftKey]);
 	const [files, setFilesState] = useState<Attached[]>([]);
 	// The newest list, so two pastes before a redraw count each other's files.
 	const latest = useRef<Attached[]>([]);
@@ -79,6 +88,14 @@ export function Composer(props: {
 	const counter = useRef(0);
 	const inputId = useId();
 	const { limits } = props;
+
+	useEffect(() => {
+		const element = area.current;
+		if (!element || !caretToEnd.current) return;
+		caretToEnd.current = false;
+		element.focus();
+		element.setSelectionRange(text.length, text.length);
+	}, [text]);
 
 	// Grows with the text up to eight lines, then scrolls.
 	// biome-ignore lint/correctness/useExhaustiveDependencies: the text is what changes the height

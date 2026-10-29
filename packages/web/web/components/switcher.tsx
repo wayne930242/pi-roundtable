@@ -12,6 +12,8 @@ import { useSelector } from "../lib/app-store.ts";
 import { useAccentStyle } from "../lib/characters.ts";
 import { fuzzyScore } from "../lib/fuzzy.ts";
 import { composingKey } from "../lib/ime.ts";
+import { roomMenu } from "../lib/menu-items.ts";
+import { useMenuPress } from "../lib/menu-press.ts";
 import { plural, translate as t } from "../lib/messages.ts";
 import { switcherOrder, waitingCards } from "../lib/rooms.ts";
 import { hrefFor, navigate } from "../lib/router.ts";
@@ -220,17 +222,21 @@ function Row(props: {
 	entry: Entry;
 	current: string;
 	onPick(key: string): void;
+	/** Closes the drawer, then runs what leaves the room. */
+	onLeave(go: () => void): void;
 }) {
 	const { key, name } = props.entry;
 	const room = useSelector((state) => state.rooms[key]);
 	const waiting = useSelector((state) => waitingCards(state, key));
 	const view = room?.view;
 	const accent = useAccentStyle(view?.character);
+	const press = useMenuPress(() => roomMenu(key, props.onLeave));
 	if (!view) return null;
 	return (
 		<li>
 			<a
 				className="switcher-row"
+				{...press}
 				href={hrefFor("room", key)}
 				aria-current={key === props.current ? "page" : undefined}
 				style={accent}
@@ -312,6 +318,7 @@ function List(props: { current: string; close(then?: () => void): void }) {
 					entry={entry}
 					current={props.current}
 					onPick={pick}
+					onLeave={props.close}
 				/>
 			))}
 		</ul>

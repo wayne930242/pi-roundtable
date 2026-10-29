@@ -4,6 +4,8 @@ import type { RoomFile, RoomMessage } from "../../src/api-types.ts";
 import { store, useSelector } from "../lib/app-store.ts";
 import { ConfigContext } from "../lib/config.ts";
 import { clock } from "../lib/format.ts";
+import { avatarMenu, fileMenu, messageMenu } from "../lib/menu-items.ts";
+import { useMenuPress } from "../lib/menu-press.ts";
 import { translate as t } from "../lib/messages.ts";
 import type { PendingSend } from "../lib/rooms.ts";
 import { fileUrl } from "../lib/rooms.ts";
@@ -30,32 +32,48 @@ export function systemLine(text: string): {
 	return { icon: "list", text };
 }
 
+/** A file of a message: a picture that opens, or a chip that downloads; a long press offers both ways to keep it. */
+function FileItem({ file }: { file: RoomFile }) {
+	const press = useMenuPress(() => fileMenu(file));
+	return file.type.startsWith("image/") ? (
+		<li>
+			<a
+				{...press}
+				href={fileUrl(file)}
+				target="_blank"
+				rel="noreferrer noopener"
+			>
+				<img
+					src={fileUrl(file)}
+					alt={file.name}
+					loading="lazy"
+					decoding="async"
+					className="file-image"
+				/>
+			</a>
+		</li>
+	) : (
+		<li>
+			<a
+				{...press}
+				className="file-chip"
+				href={fileUrl(file)}
+				download={file.name}
+			>
+				<Icon name="file" size={16} />
+				<span>{file.name}</span>
+			</a>
+		</li>
+	);
+}
+
 function Files({ files }: { files: readonly RoomFile[] }) {
 	if (files.length === 0) return null;
 	return (
 		<ul className="files">
-			{files.map((file) =>
-				file.type.startsWith("image/") ? (
-					<li key={file.id}>
-						<a href={fileUrl(file)} target="_blank" rel="noreferrer noopener">
-							<img
-								src={fileUrl(file)}
-								alt={file.name}
-								loading="lazy"
-								decoding="async"
-								className="file-image"
-							/>
-						</a>
-					</li>
-				) : (
-					<li key={file.id}>
-						<a className="file-chip" href={fileUrl(file)} download={file.name}>
-							<Icon name="file" size={16} />
-							<span>{file.name}</span>
-						</a>
-					</li>
-				),
-			)}
+			{files.map((file) => (
+				<FileItem key={file.id} file={file} />
+			))}
 		</ul>
 	);
 }
@@ -70,9 +88,19 @@ export const MessageRow = memo(function MessageRow(props: {
 	/** The message arrived while the room was open, so it slides in. */
 	enter: boolean;
 	timeZone: string;
+	/** The room takes a reply, so a message can be quoted into its box. */
+	quotable: boolean;
 }) {
 	const { message } = props;
 	const surface = useContext(ConfigContext)?.app?.surface;
+	const press = useMenuPress(
+		(source) => messageMenu(message, source, props.quotable),
+		{ selectable: true },
+	);
+	const agent = message.agent;
+	const avatarPress = useMenuPress(() =>
+		agent ? avatarMenu(agent, message.author) : undefined,
+	);
 	if (message.kind === "system") {
 		const line = systemLine(message.text);
 		// The start line of a dispatch thread links the thread's room.
@@ -91,13 +119,19 @@ export const MessageRow = memo(function MessageRow(props: {
 	const mine = message.kind === "owner";
 	return (
 		<li
+			{...press}
 			className="message"
+			// biome-ignore lint/a11y/noNoninteractiveTabindex: a message takes focus so the Menu key can open its menu
+			tabIndex={0}
 			data-mine={mine || undefined}
 			data-header={props.header || undefined}
 			data-enter={props.enter || undefined}
 		>
 			{mine ? null : (
-				<span className="message-avatar">
+				<span
+					className="message-avatar"
+					{...(props.header && agent ? avatarPress : {})}
+				>
 					{props.header ? (
 						<PageCharacter
 							spec={props.character}

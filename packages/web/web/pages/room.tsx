@@ -10,7 +10,6 @@ import type { RoomMessage } from "../../src/api-types.ts";
 import { PromptCard } from "../components/cards.tsx";
 import { CharacterStack, PageCharacter } from "../components/character.tsx";
 import { Composer } from "../components/composer.tsx";
-import { Confirm } from "../components/confirm.tsx";
 import { GroupTable } from "../components/group-table.tsx";
 import { Icon } from "../components/icons.tsx";
 import { LiveRow, MessageRow, PendingRow } from "../components/message-row.tsx";
@@ -32,6 +31,7 @@ import { useLive } from "../lib/live.ts";
 import { useMedia } from "../lib/media.ts";
 import { translate as t } from "../lib/messages.ts";
 import { reducedMotion } from "../lib/motion.ts";
+import { askRoomConfirm } from "../lib/room-confirm.ts";
 import { ROOM_PAGE, type TimelineItem, timeline } from "../lib/rooms.ts";
 import { hrefFor } from "../lib/router.ts";
 import { useConnection } from "../lib/socket.ts";
@@ -113,7 +113,6 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 	const [menu, setMenu] = useState(false);
 	/** Under the header: where a group's table strip and panel go. */
 	const [tableSlot, setTableSlot] = useState<HTMLDivElement | null>(null);
-	const [confirm, setConfirm] = useState<"yolo" | "start-over">();
 	const [dropped, setDropped] = useState<File[]>();
 	const menuButton = useRef<HTMLButtonElement>(null);
 	const scroller = useRef<HTMLDivElement>(null);
@@ -388,6 +387,7 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 													row.item.message.id > mountedLast.current
 												}
 												timeZone={config.timeZone}
+												quotable={!view?.readOnly}
 											/>
 										</RowFragment>
 									);
@@ -477,58 +477,24 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 				onClose={() => setMenu(false)}
 				onAskYolo={() => {
 					setMenu(false);
-					setConfirm("yolo");
+					askRoomConfirm({
+						kind: "yolo",
+						room: roomKey,
+						name,
+						restoreFocus: () => menuButton.current,
+					});
 				}}
 				onAskStartOver={() => {
 					setMenu(false);
-					setConfirm("start-over");
+					askRoomConfirm({
+						kind: "start-over",
+						room: roomKey,
+						name,
+						restoreFocus: () => menuButton.current,
+					});
 				}}
 			/>
 			<RoomSwitcher {...switcher.drawer} current={roomKey} />
-			<Confirm
-				open={confirm === "yolo"}
-				title={t("Turn on yolo mode?")}
-				confirmLabel={t("Turn on yolo mode")}
-				tone="yolo"
-				restoreFocus={() => menuButton.current}
-				onClose={() => setConfirm(undefined)}
-				onConfirm={async () => {
-					await api.setMode(roomKey, { yolo: true });
-				}}
-			>
-				<p>
-					{t(
-						"In this room, the agent's held actions are approved for you, without a card, as soon as they come up.",
-					)}
-				</p>
-				<p>
-					{t(
-						"Risky classes still ask: running as another user, deleting files, force pushes, disk, service and firewall changes, and anything that names its own approvers. The host can add more.",
-					)}
-				</p>
-				<p>
-					{t(
-						"Every approval it makes is written into the conversation, and a banner stays up while yolo mode is on.",
-					)}
-				</p>
-			</Confirm>
-			<Confirm
-				open={confirm === "start-over"}
-				title={t("Start over {name}?", { name })}
-				confirmLabel={t("Start over")}
-				tone="danger"
-				restoreFocus={() => menuButton.current}
-				onClose={() => setConfirm(undefined)}
-				onConfirm={async () => {
-					await api.startRoomOver(roomKey);
-				}}
-			>
-				<p>
-					{t(
-						"The current conversation is archived and the next message begins a new one. Long-term memory is kept. A turn that is running finishes first.",
-					)}
-				</p>
-			</Confirm>
 		</section>
 	);
 }

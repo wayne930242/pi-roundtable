@@ -8,11 +8,13 @@ import {
 	useState,
 } from "react";
 import type { ConfigView, PaneName } from "../src/api-types.ts";
+import { ActionMenuHost } from "./components/action-menu.tsx";
 import { ErrorBoundary } from "./components/boundary.tsx";
 import { BrandMark } from "./components/brand-mark.tsx";
 import { ConnectionGate } from "./components/connection-gate.tsx";
 import { Icon, type IconName } from "./components/icons.tsx";
 import { Palette } from "./components/palette.tsx";
+import { RoomConfirmHost } from "./components/room-confirms.tsx";
 import { Failure, Loading } from "./components/states.tsx";
 import { Toaster } from "./components/toaster.tsx";
 import { api, messageOf } from "./lib/api.ts";
@@ -454,6 +456,12 @@ function Console({ config }: { config: ConfigView }) {
 				</nav>
 			</div>
 			<Toaster />
+			{hasApp ? (
+				<>
+					<ActionMenuHost />
+					<RoomConfirmHost />
+				</>
+			) : null}
 			{hasApp ? (
 				<Palette
 					open={palette}
