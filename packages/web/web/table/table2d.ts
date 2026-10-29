@@ -1,6 +1,7 @@
 import { type Hall, hallOf, STATE_COLOR } from "./hall";
 import { fitLabel } from "./label";
 import { PLATE_FONT_STACK } from "./plate";
+import { PUFF_MS, planSeating, RISE_MS } from "./seating";
 import type {
 	Scheme,
 	SeatInit,
@@ -201,6 +202,7 @@ export function createTable2D(
 				"g",
 				{
 					class: "seat",
+					"data-seat": s.id,
 					"data-state": st,
 					...(focusId === s.id ? { "data-focus": "" } : {}),
 					transform: `translate(${x.toFixed(1)} ${y.toFixed(1)})`,
@@ -466,6 +468,77 @@ export function createTable2D(
 		}
 	}
 
+	/** The pieces of a show that are in the picture only for a while. */
+	const ephemera = new Set<ReturnType<typeof setTimeout>>();
+	const showChange = (
+		plan: ReturnType<typeof planSeating>,
+		standing: ReadonlyMap<string, SVGGElement>,
+	) => {
+		if (plan.mode === "cut") return;
+		const hall = hallOf(theme, scheme);
+		const later = (run: () => void, ms: number) => {
+			const timer = setTimeout(() => {
+				ephemera.delete(timer);
+				run();
+			}, ms);
+			ephemera.add(timer);
+		};
+		for (const id of plan.joining) {
+			const seat = [
+				...svg.querySelectorAll<SVGGElement>("g.seat[data-seat]"),
+			].find((g) => g.getAttribute("data-seat") === id);
+			if (!seat) continue;
+			seat.classList.add("seat-in");
+			seat.prepend(
+				el("ellipse", {
+					class: "seat-ring",
+					rx: 44,
+					ry: 12,
+					cy: 4,
+					stroke: hall.css.ring,
+				}),
+			);
+			later(() => {
+				seat.classList.remove("seat-in");
+				seat.querySelector(".seat-ring")?.remove();
+			}, RISE_MS);
+		}
+		for (const id of plan.leaving) {
+			const old = standing.get(id);
+			if (!old) continue;
+			const ghost = old.cloneNode(true) as SVGGElement;
+			ghost.classList.add("seat-out");
+			for (const name of ["data-seat", "tabindex", "role", "aria-label"])
+				ghost.removeAttribute(name);
+			ghost.setAttribute("aria-hidden", "true");
+			for (const [i, [x, y, r]] of (
+				[
+					[-26, -24, 20],
+					[24, -20, 22],
+					[0, -52, 24],
+					[-4, -4, 26],
+				] as const
+			).entries()) {
+				const puff = el(
+					"circle",
+					{
+						class: "puff",
+						cx: x,
+						cy: y,
+						r,
+						fill: hall.paper,
+						stroke: hall.ink,
+						"stroke-width": 3,
+					},
+					ghost,
+				);
+				puff.style.animationDelay = `${i * 40}ms`;
+			}
+			svg.appendChild(ghost);
+			later(() => ghost.remove(), PUFF_MS);
+		}
+	};
+
 	const ro = new ResizeObserver(draw);
 	ro.observe(container);
 	const onMq = () => {
@@ -482,12 +555,29 @@ export function createTable2D(
 			draw();
 		},
 		setSeats(list) {
+			const before = seats.map((s) => s.id);
+			const standing = new Map(
+				[...svg.querySelectorAll<SVGGElement>("g.seat[data-seat]")].map((g) => [
+					g.getAttribute("data-seat") ?? "",
+					g,
+				]),
+			);
 			seats = list;
 			for (const s of list) {
 				states.set(s.id, s.state ?? "idle");
 				if (s.avatarSvg) svgs.set(s.id, s.avatarSvg);
 			}
 			draw();
+			// the first seats are not an arrival; a change of who sits plays a short show in CSS
+			if (before.length > 0 || standing.size > 0)
+				showChange(
+					planSeating(
+						before,
+						list.map((s) => s.id),
+						reduced,
+					),
+					standing,
+				);
 		},
 		setState(id, state) {
 			if (states.get(id) === state) return;
@@ -533,6 +623,8 @@ export function createTable2D(
 			};
 		},
 		dispose() {
+			for (const timer of ephemera) clearTimeout(timer);
+			ephemera.clear();
 			ro.disconnect();
 			mq.removeEventListener("change", onMq);
 			root.remove();

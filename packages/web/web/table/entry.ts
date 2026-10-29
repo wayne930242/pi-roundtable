@@ -3,6 +3,7 @@ import { ENGLISH_TABLE_LABELS } from "./types";
 
 export type {
 	SeatInit,
+	SeatMenuRequest,
 	SeatState,
 	TableHandle,
 	TableLabels,
@@ -91,6 +92,7 @@ export async function mountRoundTable(
 			if (!b) {
 				b = document.createElement("button");
 				b.type = "button";
+				b.dataset.seat = s.id;
 				const seat = s.id;
 				b.addEventListener("click", () => {
 					const current = seats.get(seat);
@@ -163,6 +165,25 @@ export async function mountRoundTable(
 		}
 	}
 
+	// The menu's gestures (a hold, a right click, the Menu key) are the page's; their code loads only when the page asks.
+	let detachMenu: (() => void) | undefined;
+	const onSeatMenu = opts.onSeatMenu;
+	if (onSeatMenu && !compact) {
+		const { attachSeatMenu } = await import("./seat-menu");
+		detachMenu = attachSeatMenu(
+			root,
+			(target, x, y) => {
+				const marked =
+					target instanceof Element
+						? target.closest<HTMLElement>("[data-seat]")?.dataset.seat
+						: undefined;
+				const seat = seats.get(marked ?? inner?.seatAt?.(x, y) ?? "");
+				return seat ? { id: seat.id, name: seat.name } : undefined;
+			},
+			onSeatMenu,
+		);
+	}
+
 	const proxy: TableHandle = {
 		get kind() {
 			return inner!.kind;
@@ -191,8 +212,10 @@ export async function mountRoundTable(
 		resetCamera: () => inner!.resetCamera(),
 		focus: (id, options) => inner!.focus(id, options),
 		focused: () => inner!.focused(),
+		seatAt: (x, y) => inner!.seatAt?.(x, y) ?? null,
 		getStats: () => inner!.getStats(),
 		dispose() {
+			detachMenu?.();
 			inner?.dispose();
 			root.remove();
 		},

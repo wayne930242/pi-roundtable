@@ -67,6 +67,7 @@ export class Names {
 					? this.labels.seat(podium.init.name, states(podium))
 					: podium.init.name,
 			);
+			if (podium.init.id) el.dataset.seat = podium.init.id;
 			el.addEventListener("click", () => this.click(podium));
 			this.root.appendChild(el);
 			this.items.set(podium, { el, x: 0, y: 0, shown: false });
@@ -117,7 +118,11 @@ export class Names {
 				x < width * 1.05 &&
 				y > -height * 0.05 &&
 				y < height * 1.05;
-			const visible = inside && podium !== focused;
+			const visible =
+				inside &&
+				podium !== focused &&
+				podium.group.visible &&
+				!podium.labelHidden;
 			if (visible !== item.shown) {
 				item.shown = visible;
 				item.el.style.visibility = visible ? "visible" : "hidden";

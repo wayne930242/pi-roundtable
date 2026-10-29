@@ -13,6 +13,7 @@ import {
 	createExpressionSwaps,
 	type ExpressionSwaps,
 	type GroupRound,
+	seatedAtTable,
 	seatPicture,
 	seatStates,
 	seatUid,
@@ -20,6 +21,7 @@ import {
 import { useSkins } from "../lib/skins.ts";
 import type {
 	SeatInit,
+	SeatMenuRequest,
 	SeatState,
 	TableHandle,
 	TableLabels,
@@ -45,22 +47,38 @@ const tableLabels = (): TableLabels => ({
 /** More seats than this on a phone held upright are also listed as buttons: the pictures get small. */
 const LIST_ABOVE = 10;
 
-/** The agents of the room list, the coordinator first; only `members` of them when the table is a group's. */
-export function useRoster(members: readonly string[] | undefined): RoomView[] {
-	return useSelector((state) => {
-		const agents = state.order
-			.map((key) => state.rooms[key]?.view)
-			.filter(
-				(view): view is RoomView => view !== undefined && view.kind === "agent",
-			);
-		const seated = members
-			? members
-					.map((name) => agents.find((view) => view.name === name))
-					.filter((view): view is RoomView => view !== undefined)
-			: agents;
-		return [...seated].sort((a, b) => Number(b.home) - Number(a.home));
-	}, members?.join("\n") ?? "");
+/**
+ * The agents of the room list, the coordinator first; only `members` of them when the table is a
+ * group's. The owner's own table seats the agents whose room is not muted; `all` lists the muted ones
+ * too, for the sheet that says who sits. A group's members sit whether muted or not.
+ */
+export function useRoster(
+	members: readonly string[] | undefined,
+	options: { all?: boolean } = {},
+): RoomView[] {
+	const all = options.all === true;
+	return useSelector(
+		(state) => {
+			const agents = state.order
+				.map((key) => state.rooms[key]?.view)
+				.filter(
+					(view): view is RoomView =>
+						view !== undefined && view.kind === "agent",
+				);
+			const seated = members
+				? members
+						.map((name) => agents.find((view) => view.name === name))
+						.filter((view): view is RoomView => view !== undefined)
+				: agents;
+			const sitting = members || all ? seated : seatedAtTable(seated);
+			return [...sitting].sort((a, b) => Number(b.home) - Number(a.home));
+		},
+		`${all}\n${members?.join("\n") ?? ""}`,
+	);
 }
+
+/** Every agent of the room list, seated or not. */
+export const useAgents = (): RoomView[] => useRoster(undefined, { all: true });
 
 /** The rounds of the group rooms that count for this table: one group's, or every group's. */
 function useRounds(groupRoom: string | undefined): GroupRound[] {
@@ -94,6 +112,8 @@ export interface RoundTableProps {
 	onFocus?(name: string | null): void;
 	/** A seat was tapped; by default the page opens the agent's room. */
 	onSeat?(name: string): void;
+	/** A seat was held, right-clicked or given the Menu key; by default it has no menu. */
+	onSeatMenu?(request: SeatMenuRequest): void;
 	/** The "+N" podium was tapped. */
 	onMore?(): void;
 	/** The owner's own podium carries this name. */
@@ -230,6 +250,9 @@ export function RoundTable(props: RoundTableProps) {
 					const view = rosterRef.current.find((one) => one.name === id);
 					if (view) navigate("room", view.key);
 				},
+				...(latest.current.onSeatMenu
+					? { onSeatMenu: (request) => latest.current.onSeatMenu?.(request) }
+					: {}),
 				ownerName: latest.current.ownerName ?? t("You"),
 				focus: latest.current.focus ?? null,
 				onFocus: (id) => latest.current.onFocus?.(id),

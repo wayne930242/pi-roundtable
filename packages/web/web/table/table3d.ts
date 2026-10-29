@@ -11,6 +11,7 @@ import {
 	Vector3,
 	WebGLRenderer,
 } from "three";
+import { HOLD_MS } from "../lib/long-press.ts";
 import {
 	blendShot,
 	closeupShot,
@@ -32,11 +33,22 @@ import {
 	startsAtEdge,
 	zoomIntent,
 } from "./camera";
+import { Effects } from "./fx3d";
 import { type Hall, hallOf } from "./hall";
 import { type Built, buildHall, flicker } from "./hall3d";
 import { createLoop, type Loop } from "./loop";
 import { Names } from "./names3d";
 import { badgeOf, Podium, PodiumKit } from "./podium3d";
+import {
+	FADE_MS,
+	glideProgress,
+	leavePose,
+	planSeating,
+	RISE_DEPTH,
+	risePose,
+	type SeatingPlan,
+	turnToward,
+} from "./seating";
 import { createSpeedLines, type SpeedLines } from "./speed";
 import { mixHex, stickerCanvas } from "./standee";
 import { Toon } from "./toon";
@@ -65,6 +77,34 @@ const PINCH_OUT = 0.82;
 
 const damp = (v: number, target: number, k: number, dt: number) =>
 	v + (target - v) * (1 - Math.exp(-k * dt));
+
+/** Where a podium stands on the floor. */
+interface Place {
+	x: number;
+	z: number;
+	yaw: number;
+}
+
+/** The height a podium rests at, on the dais. */
+const REST_Y = 0.2;
+/** Where the middle of the smoke hangs over a leaving seat. */
+const PUFF_Y = 2;
+
+/** A podium's identity across rings: an agent's id, or the owner's or the "+N" podium. */
+const keyOf = (p: Podium): string => p.init.id ?? p.init.kind;
+
+/** One change of the ring in progress: who goes, who comes, and the shows that carry them. */
+interface Show {
+	plan: SeatingPlan;
+	start: number;
+	next: SeatInit[];
+	leavers: Podium[];
+	swapped: boolean;
+	fx: Effects | undefined;
+	slides: Array<{ podium: Podium; from: Place; to: Place }>;
+	risers: Podium[];
+	timers: Array<ReturnType<typeof setTimeout>>;
+}
 
 interface World {
 	hall: Hall;
@@ -134,6 +174,13 @@ export function createTable3D(
 	const svgs = new Map<string, string>();
 	let world: World | undefined;
 	let building = 0;
+	/** The standees as drawn, so a new ring shows them at once and does not wait for them to be drawn again. */
+	const stickers = new Map<
+		string,
+		{ svg: string; tone: string; canvas: HTMLCanvasElement }
+	>();
+	const toneOf = () => `${theme}/${scheme}`;
+	let show: Show | undefined;
 
 	/* ---------- the camera ---------- */
 
@@ -215,6 +262,7 @@ export function createTable3D(
 				),
 			});
 			if (expected !== building || world !== w) return;
+			stickers.set(id, { svg, tone: toneOf(), canvas: made.canvas });
 			podium.setSticker(made.canvas);
 			loop.wake();
 		} catch {
@@ -226,7 +274,10 @@ export function createTable3D(
 		p.setBadge(badgeOf(state));
 	};
 
-	const build = () => {
+	const build = (glide?: {
+		from: ReadonlyMap<string, Place>;
+		joining: ReadonlySet<string>;
+	}) => {
 		const generation = ++building;
 		disposeWorld();
 		const hall = hallOf(theme, scheme);
@@ -274,6 +325,9 @@ export function createTable3D(
 			podium.setDim(seat.dim === true);
 			applyState(podium, states.get(seat.id) ?? seat.state ?? "idle");
 			place(slot, podium);
+			const kept = stickers.get(seat.id);
+			if (kept && kept.svg === svgs.get(seat.id) && kept.tone === toneOf())
+				podium.setSticker(kept.canvas);
 		});
 		if (slots.more > 0)
 			place(
@@ -290,6 +344,29 @@ export function createTable3D(
 				),
 			);
 		world = { hall, toon, kit, built, group, slots, podiums, slotOf, order };
+		if (glide && show) {
+			const joining = new Set<Podium>();
+			for (const p of podiums) {
+				const to = {
+					x: p.group.position.x,
+					z: p.group.position.z,
+					yaw: p.group.rotation.y,
+				};
+				const from = glide.from.get(keyOf(p));
+				if (from) {
+					show.slides.push({ podium: p, from, to });
+					p.group.position.x = from.x;
+					p.group.position.z = from.z;
+					p.group.rotation.y = from.yaw;
+				}
+				if (p.init.id && glide.joining.has(p.init.id)) {
+					p.group.visible = false;
+					p.labelHidden = true;
+					joining.add(p);
+				}
+			}
+			show.risers = [...joining];
+		}
 		scene.add(group);
 		group.updateMatrixWorld(true);
 		scene.background = new Color(hall.bg);
@@ -298,14 +375,167 @@ export function createTable3D(
 		ambient.intensity = hall.ambientI;
 		key.color.set(hall.key);
 		key.intensity = hall.keyI;
-		for (const seat of seats.slice(0, slots.seated))
+		for (const seat of seats.slice(0, slots.seated)) {
+			const kept = stickers.get(seat.id);
+			if (kept && kept.svg === svgs.get(seat.id) && kept.tone === toneOf())
+				continue;
 			void stickerOf(seat.id, generation);
+		}
 		if (focusId && !slotOf.has(focusId)) focusId = null;
 		// a new ring has new angles: the camera stays where it stands relative to what it looks at
-		moveTo(targetShot(), true);
+		moveTo(targetShot(), glide === undefined);
 		names.paint(hall);
 		names.set(podiums, (p) => states.get(p.init.id ?? "") ?? "idle");
 		loop.wake();
+	};
+
+	/* ---------- seats leaving and joining ---------- */
+
+	/** The ids of the seats the ring stands, in its order. */
+	const shownIds = (list: readonly SeatInit[]) =>
+		list.slice(0, slotsFor(list.length).seated).map((s) => s.id);
+
+	const placesOf = (): Map<string, Place> => {
+		const found = new Map<string, Place>();
+		for (const p of world?.podiums ?? [])
+			found.set(keyOf(p), {
+				x: p.group.position.x,
+				z: p.group.position.z,
+				yaw: p.group.rotation.y,
+			});
+		return found;
+	};
+
+	/** The ring is re-planned for the new seats: the others start to glide, and the ones that come wait out of sight. */
+	const swap = (s: Show) => {
+		s.swapped = true;
+		const from = placesOf();
+		seats = s.next;
+		s.slides = [];
+		build({ from, joining: new Set(s.plan.joining) });
+		for (const p of s.risers)
+			s.fx?.circle(
+				{ x: p.group.position.x, y: REST_Y, z: p.group.position.z },
+				s.plan.riseAt,
+			);
+	};
+
+	/** The show is over, or cut short: everything stands where the new ring puts it. */
+	const finish = (s: Show) => {
+		for (const t of s.timers) clearTimeout(t);
+		for (const slide of s.slides) {
+			slide.podium.group.position.x = slide.to.x;
+			slide.podium.group.position.z = slide.to.z;
+			slide.podium.group.rotation.y = slide.to.yaw;
+		}
+		for (const p of s.risers) {
+			p.group.visible = true;
+			p.group.position.y = REST_Y;
+			p.labelHidden = false;
+		}
+		s.fx?.dispose();
+		canvasEl.style.transition = "";
+		canvasEl.style.opacity = "";
+		names.root.style.transition = "";
+		names.root.style.opacity = "";
+		if (show === s) show = undefined;
+		loop.wake();
+	};
+
+	/** Brings a show to its end at once, for a change that cannot wait for it. */
+	const endShow = () => {
+		const s = show;
+		if (!s) return;
+		if (!s.swapped) {
+			s.swapped = true;
+			seats = s.next;
+			build();
+		}
+		finish(s);
+	};
+
+	/** Starts the puff, the glide and the rise for a new ring, or the quick dip under reduced motion. */
+	const startShow = (next: SeatInit[], plan: SeatingPlan) => {
+		const s: Show = {
+			plan,
+			start: performance.now(),
+			next,
+			leavers: [],
+			swapped: false,
+			fx: undefined,
+			slides: [],
+			risers: [],
+			timers: [],
+		};
+		show = s;
+		if (plan.mode === "fade") {
+			for (const el of [canvasEl, names.root]) {
+				el.style.transition = `opacity ${FADE_MS}ms linear`;
+				el.style.opacity = "0";
+			}
+			s.timers.push(
+				setTimeout(() => {
+					s.swapped = true;
+					seats = next;
+					build();
+					for (const el of [canvasEl, names.root]) el.style.opacity = "1";
+				}, FADE_MS),
+				setTimeout(() => finish(s), FADE_MS * 2),
+			);
+			return;
+		}
+		const w = world;
+		if (!w) return;
+		const fx = new Effects(w.hall);
+		s.fx = fx;
+		scene.add(fx.group);
+		for (const id of plan.leaving) {
+			const slot = w.slotOf.get(id);
+			const podium = slot === undefined ? undefined : w.podiums[slot];
+			if (!podium) continue;
+			s.leavers.push(podium);
+			fx.puff(
+				{ x: podium.group.position.x, y: PUFF_Y, z: podium.group.position.z },
+				0,
+			);
+		}
+		if (plan.swapAt === 0) swap(s);
+		loop.wake();
+	};
+
+	/** Moves the show to `now`; true while it is still going. */
+	const stepShow = (now: number): boolean => {
+		const s = show;
+		if (!s || s.plan.mode !== "play") return s !== undefined;
+		const ms = Math.max(0, now - s.start);
+		if (!s.swapped) {
+			const pose = leavePose(ms);
+			for (const p of s.leavers) {
+				p.group.scale.set(pose.scaleX, pose.scaleY, pose.scaleX);
+				if (pose.gone) p.group.visible = false;
+			}
+			if (ms >= s.plan.swapAt) swap(s);
+		}
+		if (s.swapped) {
+			const t = glideProgress(ms - s.plan.swapAt);
+			for (const { podium, from, to } of s.slides) {
+				podium.group.position.x = from.x + (to.x - from.x) * t;
+				podium.group.position.z = from.z + (to.z - from.z) * t;
+				podium.group.rotation.y = turnToward(from.yaw, to.yaw, t);
+			}
+			const rise = risePose(ms - s.plan.riseAt);
+			for (const p of s.risers) {
+				p.group.visible = rise.shown;
+				p.group.position.y = REST_Y - rise.depth * RISE_DEPTH;
+				p.labelHidden = rise.depth > 0.35;
+			}
+		}
+		const running = s.fx?.step(ms) ?? false;
+		if (ms >= s.plan.total && !running) {
+			finish(s);
+			return false;
+		}
+		return true;
 	};
 
 	/* ---------- one frame ---------- */
@@ -326,6 +556,7 @@ export function createTable3D(
 		const t0 = performance.now();
 		seconds += dt / 1000;
 		let moving = false;
+		if (stepShow(now)) moving = true;
 		if (moveMs > 0) {
 			const t = (now - moveStart) / moveMs;
 			if (t >= 1) {
@@ -481,7 +712,10 @@ export function createTable3D(
 		);
 		ray.setFromCamera(pointer, camera);
 		const found = ray.intersectObjects(
-			w.podiums.flatMap((p) => p.hits).filter((m) => m.visible),
+			w.podiums
+				.filter((p) => p.group.visible)
+				.flatMap((p) => p.hits)
+				.filter((m) => m.visible),
 			false,
 		)[0];
 		return found?.object.userData as
@@ -490,7 +724,16 @@ export function createTable3D(
 	};
 
 	const touches = new Map<number, { x: number; y: number }>();
-	let press: { x: number; y: number; az: number; ok: boolean } | undefined;
+	let press:
+		| {
+				x: number;
+				y: number;
+				az: number;
+				ok: boolean;
+				at: number;
+				hold: boolean;
+		  }
+		| undefined;
 	let pinchFrom = 0;
 	let pinched = false;
 	const spread = () => {
@@ -512,7 +755,15 @@ export function createTable3D(
 			width: innerWidth,
 			height: innerHeight,
 		});
-		press = { x: event.clientX, y: event.clientY, az: overviewAz, ok };
+		press = {
+			x: event.clientX,
+			y: event.clientY,
+			az: overviewAz,
+			ok,
+			at: performance.now(),
+			// a finger that rests on a seat asks for its menu, and is not tapping
+			hold: event.pointerType !== "mouse" && opts.onSeatMenu !== undefined,
+		};
 		if (ok) canvasEl.setPointerCapture?.(event.pointerId);
 		canvasEl.style.cursor = "grabbing";
 	};
@@ -565,6 +816,7 @@ export function createTable3D(
 			return;
 		}
 		if (Math.hypot(dx, dy) < TAP_PX) {
+			if (start.hold && performance.now() - start.at >= HOLD_MS) return;
 			const found = hit(event.clientX, event.clientY);
 			if (!found) return;
 			if (found.kind === "agent" && found.seat) {
@@ -656,18 +908,30 @@ export function createTable3D(
 		kind: "webgl",
 		setTheme(nextTheme, nextScheme) {
 			if (nextTheme === theme && nextScheme === scheme) return;
+			endShow();
 			theme = nextTheme;
 			scheme = nextScheme;
 			build();
 		},
 		setSeats(next) {
+			endShow();
 			const rebuild = !sameRing(next);
-			seats = next.map((s) => ({ ...s }));
-			for (const s of seats) {
+			const copy = next.map((s) => ({ ...s }));
+			const plan =
+				rebuild && primed && world
+					? planSeating(shownIds(seats), shownIds(copy), reduced)
+					: undefined;
+			for (const s of copy) {
 				if (s.state) states.set(s.id, s.state);
 				if (s.avatarSvg && s.avatarSvg !== svgs.get(s.id))
 					svgs.set(s.id, s.avatarSvg);
 			}
+			// the seats that come and go play out; the old ring stands until they have
+			if (plan && plan.mode !== "cut") {
+				startShow(copy, plan);
+				return;
+			}
+			seats = copy;
 			if (rebuild) build();
 			else {
 				const w = world;
@@ -709,6 +973,10 @@ export function createTable3D(
 			setFocus(id, options?.cut === true, false);
 		},
 		focused: () => focusId,
+		seatAt(x, y) {
+			const found = hit(x, y);
+			return found?.kind === "agent" ? found.seat : null;
+		},
 		getStats() {
 			const info = renderer.info;
 			return {
@@ -724,6 +992,11 @@ export function createTable3D(
 			};
 		},
 		dispose() {
+			if (show) {
+				for (const t of show.timers) clearTimeout(t);
+				show.fx?.dispose();
+				show = undefined;
+			}
 			loop.dispose();
 			observer.disconnect();
 			visibility.disconnect();

@@ -107,3 +107,93 @@ test("composed shield characters, each with its own uid, go in as data URIs", as
 	for (const href of hrefs) expect(href).toMatch(/^data:image\/svg\+xml/);
 	table.dispose();
 });
+
+const seatNames = (container: HTMLElement) =>
+	[...container.querySelectorAll("g.seat[data-seat]")].map((seat) =>
+		seat.getAttribute("data-seat"),
+	);
+
+test("a seat that leaves the 2D table fades out inside a puff while the others take their new places", async () => {
+	const { container, table } = await mount();
+	// the seats of the first draw are no arrival
+	expect(container.querySelector(".seat-in, .seat-out")).toBeNull();
+	table.setSeats(seats().filter((seat) => seat.id !== "lancelot"));
+	expect(seatNames(container)).toEqual(["arthur", "gawain"]);
+	const ghost = container.querySelector("g.seat-out");
+	expect(ghost).not.toBeNull();
+	// the leaver is only a picture now: not a button, not a menu target
+	expect(ghost?.getAttribute("data-seat")).toBeNull();
+	expect(ghost?.getAttribute("role")).toBeNull();
+	expect(ghost?.getAttribute("aria-hidden")).toBe("true");
+	expect(ghost?.querySelectorAll("circle.puff").length).toBeGreaterThan(2);
+	table.dispose();
+	// disposing puts the show away with the table
+	expect(container.querySelector("g.seat-out")).toBeNull();
+});
+
+test("a seat that joins the 2D table rises over a ring on the floor", async () => {
+	const { container, table } = await mount();
+	table.setSeats(seats().filter((seat) => seat.id !== "lancelot"));
+	container.querySelector("g.seat-out")?.remove();
+	table.setSeats(seats());
+	const joined = container.querySelector('g.seat[data-seat="lancelot"]');
+	expect(joined?.classList.contains("seat-in")).toBe(true);
+	expect(joined?.querySelector("ellipse.seat-ring")).not.toBeNull();
+	expect(container.querySelectorAll("g.seat-in")).toHaveLength(1);
+	table.dispose();
+});
+
+test("the same people in another order, or a state change, play no show", async () => {
+	const { container, table } = await mount();
+	table.setSeats([...seats()].reverse());
+	table.setState("arthur", "thinking");
+	expect(container.querySelector(".seat-in, .seat-out")).toBeNull();
+	table.dispose();
+});
+
+test("a right click and the Menu key on a seat ask the page for its menu", async () => {
+	const asked: Array<{ id: string; via: string }> = [];
+	const { container, table, clicked } = await mount({
+		listBelow: true,
+		onSeatMenu: (request) =>
+			void asked.push({ id: request.id, via: request.via }),
+	});
+	const seat = container.querySelector('g.seat[data-seat="lancelot"]');
+	seat?.dispatchEvent(
+		new MouseEvent("contextmenu", {
+			bubbles: true,
+			cancelable: true,
+			clientX: 40,
+			clientY: 50,
+		}),
+	);
+	const button = container.querySelector<HTMLButtonElement>(
+		'.rt-table-list button[data-seat="gawain"]',
+	);
+	button?.dispatchEvent(
+		new KeyboardEvent("keydown", {
+			key: "ContextMenu",
+			bubbles: true,
+			cancelable: true,
+		}),
+	);
+	expect(asked).toEqual([
+		{ id: "lancelot", via: "contextmenu" },
+		{ id: "gawain", via: "key" },
+	]);
+	// a click is still a click
+	button?.click();
+	expect(clicked).toEqual(["gawain"]);
+	table.dispose();
+});
+
+test("without a menu handler the table adds no menu gestures: a right click is the browser's own", async () => {
+	const { container, table } = await mount();
+	const event = new MouseEvent("contextmenu", {
+		bubbles: true,
+		cancelable: true,
+	});
+	container.querySelector('g.seat[data-seat="arthur"]')?.dispatchEvent(event);
+	expect(event.defaultPrevented).toBe(false);
+	table.dispose();
+});

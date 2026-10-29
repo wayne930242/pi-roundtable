@@ -1,12 +1,26 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { DialogueBox } from "../components/dialogue-box.tsx";
-import { RoundTable, useRoster } from "../components/round-table.tsx";
+import {
+	RoundTable,
+	useAgents,
+	useRoster,
+} from "../components/round-table.tsx";
+import { openMenu } from "../lib/action-menu.ts";
 import { useSelector } from "../lib/app-store.ts";
 import { resolveFocus } from "../lib/dialogue.ts";
+import type { Via } from "../lib/long-press.ts";
+import { seatMenuOf } from "../lib/menus.ts";
 import { translate as t } from "../lib/messages.ts";
 import { reducedMotion } from "../lib/motion.ts";
 import { navigate } from "../lib/router.ts";
-import type { TableHandle } from "../table/entry.ts";
+import type { SeatMenuRequest, TableHandle } from "../table/entry.ts";
+
+// Who sits is chosen in a sheet that loads when it is first asked for.
+const TableSeatsSheet = lazy(() =>
+	import("../components/table-seats.tsx").then((m) => ({
+		default: m.TableSeatsSheet,
+	})),
+);
 
 /** How long the box waits for the camera before it slides up: it arrives with the turn, not after it. */
 const ARRIVE_MS = 300;
@@ -29,8 +43,23 @@ function useArrived(on: boolean): boolean {
 	return arrived;
 }
 
+/** Opens the menu of an agent's seat; its builder loads with the first menu. */
+function openSeatMenu(
+	key: string,
+	at: SeatMenuRequest["at"],
+	via: Via,
+	source: HTMLElement | null,
+): void {
+	seatMenuOf(key).then(
+		(spec) => {
+			if (spec) openMenu({ ...spec, at, via, source });
+		},
+		() => undefined,
+	);
+}
+
 /**
- * Every agent of the room list at the round table, each in the state its room is in. A seat turns the
+ * Every agent of the room list whose room is not muted at the round table, each in the state its room is in. A seat turns the
  * camera to its agent and opens a dialogue box on the agent's own room; the address `#/table/<agent>`
  * is that view, so Back returns to the whole ring and a link opens the scene at an agent. `focus` is
  * the route's key: an agent's name or the key of its room.
@@ -38,6 +67,10 @@ function useArrived(on: boolean): boolean {
 export function TablePage({ focus }: { focus?: string | undefined }) {
 	const [table, setTable] = useState<TableHandle>();
 	const roster = useRoster(undefined);
+	const agents = useAgents();
+	const [choosing, setChoosing] = useState(false);
+	// Mounted when first asked for and kept, so the sheet can slide away.
+	const [asked, setAsked] = useState(false);
 	const listed = useSelector((state) => state.listed);
 	const target = resolveFocus(focus, roster);
 	const view = roster.find((seat) => seat.name === target);
@@ -52,32 +85,90 @@ export function TablePage({ focus }: { focus?: string | undefined }) {
 		// from the whole ring a push (Back returns to it); from one agent to another, or out, in place
 		navigate("table", name ?? undefined, { replace: target !== null });
 	};
+	const choose = () => {
+		setAsked(true);
+		setChoosing(true);
+	};
+	// Everyone is off the table, but there are agents to call back: say so, and offer the sheet.
+	const empty = roster.length === 0 && agents.length > 0;
 	return (
 		<div className="table-page" data-focused={target !== null || undefined}>
 			<header className="page-head">
 				<h1>{t("Round table")}</h1>
-				{table?.kind === "webgl" ? (
-					<button type="button" className="secondary" onClick={() => go(null)}>
-						{t("Reset view")}
-					</button>
-				) : null}
+				<div className="table-tools">
+					{table?.kind === "webgl" ? (
+						<button
+							type="button"
+							className="secondary"
+							onClick={() => go(null)}
+						>
+							{t("Reset view")}
+						</button>
+					) : null}
+					{agents.length > 0 ? (
+						<button
+							type="button"
+							className="secondary"
+							aria-haspopup="dialog"
+							onClick={choose}
+						>
+							{t("Who's at the table")}
+						</button>
+					) : null}
+				</div>
 			</header>
 			<div className="table-frame" data-focused={target !== null || undefined}>
-				<RoundTable
-					onHandle={setTable}
-					focus={target}
-					onFocus={go}
-					onSeat={go}
-				/>
+				{empty ? (
+					<div className="table-empty-state">
+						<strong>{t("The table is empty")}</strong>
+						<p className="meta">
+							{t("Every agent has left the table. Choose who sits down.")}
+						</p>
+						<button type="button" onClick={choose}>
+							{t("Who's at the table")}
+						</button>
+					</div>
+				) : (
+					<RoundTable
+						onHandle={setTable}
+						focus={target}
+						onFocus={go}
+						onSeat={go}
+						onSeatMenu={(request) => {
+							const seated = roster.find((one) => one.name === request.id);
+							if (seated)
+								openSeatMenu(
+									seated.key,
+									request.at,
+									request.via,
+									request.source,
+								);
+						}}
+					/>
+				)}
 				{view ? (
 					<DialogueBox
 						key={view.key}
 						roomKey={view.key}
 						open={arrived}
 						onBack={() => go(null)}
+						onMenu={(anchor) => {
+							const box = anchor.getBoundingClientRect();
+							openSeatMenu(
+								view.key,
+								{ x: box.left, y: box.bottom },
+								"key",
+								anchor,
+							);
+						}}
 					/>
 				) : null}
 			</div>
+			{asked ? (
+				<Suspense fallback={null}>
+					<TableSeatsSheet open={choosing} onClose={() => setChoosing(false)} />
+				</Suspense>
+			) : null}
 		</div>
 	);
 }

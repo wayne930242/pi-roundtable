@@ -16,6 +16,9 @@ export const roomMenuOf = (
 ): Promise<MenuSpec | undefined> =>
 	items().then((one) => one.roomMenu(key, leave));
 
+export const seatMenuOf = (key: string): Promise<MenuSpec | undefined> =>
+	items().then((one) => one.seatMenu(key));
+
 export const messageMenuOf = (
 	message: RoomMessage,
 	source: HTMLElement,

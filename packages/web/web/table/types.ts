@@ -44,11 +44,24 @@ export const ENGLISH_TABLE_LABELS: TableLabels = {
 	seat: (name, state) => `${name} (${state})`,
 };
 
+/** A seat's menu was asked for: a hold of a finger, a right click or the Menu key. */
+export interface SeatMenuRequest {
+	id: string;
+	name: string;
+	/** Where the press was, in viewport coordinates. */
+	at: { x: number; y: number };
+	via: "hold" | "contextmenu" | "key";
+	/** What was pressed; it gets focus back when the menu closes. */
+	source: HTMLElement;
+}
+
 export interface TableOptions {
 	theme: ThemeName;
 	scheme: Scheme;
 	seats: SeatInit[];
 	onSeatClick: (seat: { id: string; name: string }) => void;
+	/** A seat was held, right-clicked or given the Menu key; the page opens its menu. A press that long is no tap. */
+	onSeatMenu?: (request: SeatMenuRequest) => void;
 	/** 'auto' follows prefers-reduced-motion */
 	reducedMotion?: boolean | "auto";
 	/** 'auto' = coarse pointer / narrow viewport / few cores */
@@ -105,6 +118,8 @@ export interface TableHandle {
 	focus(id: string | null, options?: { cut?: boolean }): void;
 	/** The seat the camera is on, or null for the whole ring. */
 	focused(): string | null;
+	/** The seat under a point of the viewport, if the scene can say (the 3D hall can; the 2D table's seats are elements). */
+	seatAt?(x: number, y: number): string | null;
 	getStats(): TableStats;
 	dispose(): void;
 }

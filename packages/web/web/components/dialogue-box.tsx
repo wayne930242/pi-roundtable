@@ -161,6 +161,8 @@ export interface DialogueBoxProps {
 	streams?: boolean;
 	/** Goes back to the whole ring; the box offers it as a button when given. */
 	onBack?: (() => void) | undefined;
+	/** Opens the box's menu from its ⋯ button, given the button; no button when absent. */
+	onMenu?: ((anchor: HTMLElement) => void) | undefined;
 }
 
 /**
@@ -241,6 +243,17 @@ export function DialogueBox(props: DialogueBoxProps) {
 							onClick={props.onBack}
 						>
 							<Icon name="back" />
+						</button>
+					) : null}
+					{props.onMenu ? (
+						<button
+							type="button"
+							className="icon-button scene-more"
+							aria-label={t("More")}
+							aria-haspopup="menu"
+							onClick={(event) => props.onMenu?.(event.currentTarget)}
+						>
+							<Icon name="more" />
 						</button>
 					) : null}
 					<button

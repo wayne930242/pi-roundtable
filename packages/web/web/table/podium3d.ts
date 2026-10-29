@@ -175,6 +175,8 @@ export class Podium {
 	bob = 0;
 	/** Where the board rests, before the bob. */
 	boardY = 0;
+	/** The name over the podium waits while the podium is out of sight or still coming up. */
+	labelHidden = false;
 	phase = Math.random() * 6;
 
 	constructor(

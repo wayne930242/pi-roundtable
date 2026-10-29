@@ -280,6 +280,15 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"Reply to the agent that started this thread.": "回覆開啟這個討論串的夥伴。",
 	"Yolo mode": "Yolo 模式",
 	"No agents are seated yet.": "圓桌上還沒有夥伴入座。",
+	"Who's at the table": "誰上桌",
+	"Off the table": "離席中",
+	"Leave the table": "離席",
+	"{name} left the table": "{name}已離席",
+	"The table is empty": "圓桌空了",
+	"Every agent has left the table. Choose who sits down.":
+		"所有夥伴都離席了。選擇誰要上桌。",
+	"An agent who leaves the table is muted: its room stops pushing to you. A card that waits for you is always pushed.":
+		"離席的夥伴會被靜音：它的聊天室不再推播給你。等你回應的卡片仍會推播。",
 
 	// 通知
 	"A file is no longer available. Attach it again.":

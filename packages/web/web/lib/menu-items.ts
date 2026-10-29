@@ -192,6 +192,32 @@ export function openAddMenu(button: HTMLElement, leave?: Leave): void {
 	});
 }
 
+// ── A seat at the round table ────────────────────────────────────────────────────────────────
+
+/**
+ * The menu of a seat on the round table, and of the box that talks to it: the agent leaves the table,
+ * which is muting its room's push. Coming back is the sheet's switch, since an agent off the table has
+ * no seat to hold.
+ */
+export function seatMenu(key: string): MenuSpec | undefined {
+	const view = store.getState().rooms[key]?.view;
+	if (!view || view.kind !== "agent") return undefined;
+	return {
+		title: view.displayName,
+		items: [
+			{
+				id: "leave",
+				label: t("Leave the table"),
+				icon: "bell-off",
+				run: async () => {
+					if (!(await setRoomMuted(key, true))) return;
+					toast(t("{name} left the table", { name: view.displayName }));
+				},
+			},
+		],
+	};
+}
+
 // ── A message ────────────────────────────────────────────────────────────────────────────────
 
 /** The words of a message as they read on the page, without the Markdown marks and the file chips. */
