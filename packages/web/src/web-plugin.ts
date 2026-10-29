@@ -8,6 +8,7 @@ import {
 	MODES,
 	type RoundtablePlugin,
 	SCHEDULES,
+	SKILLS,
 } from "pi-roundtable";
 import { DISCORD } from "pi-roundtable/discord";
 import { APP_MIGRATIONS, OwnerApp } from "./app/app.ts";
@@ -124,6 +125,21 @@ async function build(settings: ResolvedOptions, context: Context) {
 	// Absent on a host without the registry: the console then lists conversations found by name only.
 	const registry = services.find(CONVERSATIONS);
 	const identity = services.get(IDENTITY);
+	// An agent's skills are chosen from what the Skills pane lists when the host supplies it, else from the addon's own catalog.
+	const skillRegistry = services.find(SKILLS);
+	const skills = skillRegistry
+		? {
+				catalog: () =>
+					features?.skills
+						? features.skills.catalog()
+						: skillRegistry.catalog(),
+				attach: (
+					agent: string,
+					add: readonly string[],
+					remove: readonly string[],
+				) => skillRegistry.attach(agent, add, remove),
+			}
+		: undefined;
 	const listeners: (() => void)[] = [];
 	const changed = () => {
 		for (const listener of listeners) listener();
@@ -217,6 +233,7 @@ async function build(settings: ResolvedOptions, context: Context) {
 						: {}),
 					database: context.database(),
 					agents: services.get(AGENTS),
+					...(skills ? { skills } : {}),
 					...(workspace ? { workspace } : {}),
 					modes: services.get(MODES),
 					identity,

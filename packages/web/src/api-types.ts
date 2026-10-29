@@ -445,6 +445,90 @@ export interface AgentPatch {
 	thinking?: string;
 }
 
+/**
+ * The body of `POST api/agents`, which makes an agent: the fields of the `agent_create` tool, with
+ * its model and thinking level. `name` is permanent (lowercase letters, digits and dashes, 1 to 32).
+ * `task` is its opening task; without it the agent only exists. The 201 answer is its profile.
+ */
+export interface AgentCreate {
+	name: string;
+	displayName: string;
+	prompt: string;
+	model?: string;
+	thinking?: string;
+	task?: string;
+	/** Fields of its look; any left out come from the look its role suggests. */
+	character?: CharacterInput;
+	/** Skills it carries, as the Skills pane names them. */
+	skills?: string[];
+}
+
+/** A skill as the agent sheet offers it: the host's catalog, and whether this agent carries it. */
+export interface SkillChoiceView {
+	name: string;
+	description?: string;
+	source: "builtin" | "linked" | "written" | "package";
+	/** Built-in skills are carried by every agent and cannot be taken off. */
+	builtin: boolean;
+	carried: boolean;
+	/** Why its file cannot be read, for a skill that is listed but broken. */
+	missing?: string;
+}
+
+/** `GET api/agents/<name>/skills` and the answer of `PUT`: every skill the host has. */
+export interface AgentSkillsView {
+	skills: SkillChoiceView[];
+}
+
+/** The body of `PUT api/agents/<name>/skills`: the same fields as the `agent_skills` tool. */
+export interface AgentSkillsChange {
+	add?: string[];
+	remove?: string[];
+}
+
+/** A group as the app edits it. */
+export interface GroupProfileView {
+	name: string;
+	displayName: string;
+	/** Its members, by agent name, in speaking-tie order. */
+	members: string[];
+	/** The member who answers when nobody else fits. */
+	host: string;
+	room: string;
+}
+
+/** The body of `POST api/groups`; the host is the first member unless given. The 201 answer is the group. */
+export interface GroupCreate {
+	name: string;
+	displayName: string;
+	members: string[];
+	host?: string;
+}
+
+/** The body of `PATCH api/groups/<name>`; `members` is the whole new list. */
+export interface GroupPatch {
+	displayName?: string;
+	members?: string[];
+	host?: string;
+}
+
+/** An archived agent or group, kept with its history until it is restored or deleted. */
+export interface ArchivedEntry {
+	kind: "agent" | "group";
+	name: string;
+	displayName: string;
+	/** An agent's picture, a path under the mount. */
+	avatar?: string;
+	character?: CharacterSpec;
+	/** A group's members that are still on the team. */
+	members?: string[];
+}
+
+/** `GET api/archive`. */
+export interface ArchiveView {
+	entries: ArchivedEntry[];
+}
+
 /** The body of `PUT api/agents/<name>/character`: at most 4 KiB. */
 export interface CharacterRequest {
 	character: CharacterInput;

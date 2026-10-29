@@ -13,6 +13,7 @@ import type {
 	WebSocketRoute,
 } from "pi-roundtable";
 import { channelKey } from "pi-roundtable";
+import type { SkillView } from "../api-types.ts";
 import type { Authenticated, Authenticator } from "../auth/authenticator.ts";
 import { PushApi } from "../push/api.ts";
 import { webPushChannel } from "../push/channel.ts";
@@ -87,6 +88,15 @@ export interface OwnerAppOptions {
 	};
 	database: SQL;
 	agents: AgentServer;
+	/** Present when the host has the skills addon: the catalog an agent's skills are chosen from, and how they change. */
+	skills?: {
+		catalog(): SkillView[];
+		attach(
+			agent: string,
+			add: readonly string[],
+			remove: readonly string[],
+		): Promise<string[]>;
+	};
 	/** Present when the workspace pane is served. */
 	workspace?: WorkspaceFiles;
 	modes: ConversationModes;
@@ -219,6 +229,7 @@ export class OwnerApp {
 			mount: options.mount,
 			directory: agents.directory,
 			team: agents.team,
+			...(options.skills ? { skills: options.skills } : {}),
 			avatars: agents.avatars,
 			threads,
 			log,

@@ -1,5 +1,4 @@
 import type {
-	AgentChange,
 	AgentDirectory,
 	AgentTeam,
 	AvatarStudio,
@@ -11,21 +10,19 @@ import type {
 	ScheduleStore,
 	Speaker,
 } from "pi-roundtable";
-import { characterOf, PluginError } from "pi-roundtable";
-import { CharacterError, resolveCharacter } from "pi-roundtable/characters";
+import { PluginError } from "pi-roundtable";
+import { CharacterError } from "pi-roundtable/characters";
 import { AgentError } from "pi-roundtable/kit";
 import type {
-	AgentPatch,
-	AgentProfileView,
 	ApiError,
 	CharacterRefusal,
-	CharacterRequest,
 	MessagesView,
 	ModelsView,
 	RoomsView,
 	SchedulesView,
 	ScheduleView,
 	SessionView,
+	SkillView,
 	WorkspaceConflict,
 	WorkspaceNew,
 	WorkspaceRefusalBody,
@@ -36,12 +33,13 @@ import type {
 import type { Authenticated } from "../auth/authenticator.ts";
 import { json } from "../http.ts";
 import type { PushMutes } from "../push/mutes.ts";
-import { readLimited } from "../request-body.ts";
+import { bad, bodyOf, HttpError, notFound } from "./api-http.ts";
 import type { CardLog } from "./card-log.ts";
 import { type FileDir, fileResponse, isFileId } from "./files.ts";
 import { PAGE_LIMIT, type RoomLog } from "./room-log.ts";
 import type { Rooms } from "./rooms.ts";
 import type { AppSurface } from "./surface.ts";
+import { TeamApi } from "./team-routes.ts";
 import { UploadRefusal, type Uploads } from "./uploads.ts";
 import {
 	EDIT_MAX_BYTES,
@@ -50,16 +48,11 @@ import {
 	WorkspaceRefusal,
 } from "./workspace-files.ts";
 
-/** The largest JSON body a write reads: 64 KiB. */
-const MAX_BODY_BYTES = 64 * 1024;
-/** The largest body of a character write: 4 KiB. */
-const MAX_CHARACTER_BYTES = 4 * 1024;
-
 export interface AppApiOptions {
 	surface: AppSurface;
 	rooms: Rooms;
-	log: RoomLog;
-	cards: CardLog;
+	log: Pick<RoomLog, "page" | "lastOf" | "removeRoom">;
+	cards: Pick<CardLog, "during" | "removeRoom">;
 	uploads: Uploads;
 	/** Where stored files are read from. */
 	files: FileDir;
@@ -70,11 +63,30 @@ export interface AppApiOptions {
 	identity: Pick<IdentityService, "tierOf">;
 	/** Present when the schedules pane is served. */
 	schedules?: Pick<ScheduleStore, "all" | "remove">;
-	directory: Pick<AgentDirectory, "agent">;
+	directory: Pick<AgentDirectory, "agent" | "agents" | "group" | "groups">;
 	team: Pick<
 		AgentTeam,
-		"update" | "dress" | "usableModels" | "modelOf" | "defaultModel"
+		| "update"
+		| "dress"
+		| "usableModels"
+		| "modelOf"
+		| "defaultModel"
+		| "createAgent"
+		| "archive"
+		| "restore"
+		| "remove"
+		| "createGroup"
+		| "updateGroup"
 	>;
+	/** Present when the host has the skills addon: the catalog an agent's skills are chosen from, and the change of what it carries. */
+	skills?: {
+		catalog(): SkillView[];
+		attach(
+			agent: string,
+			add: readonly string[],
+			remove: readonly string[],
+		): Promise<string[]>;
+	};
 	avatars: Pick<AvatarStudio, "serve">;
 	/** Present when the workspace pane is served. */
 	workspace?: WorkspaceFiles;
@@ -88,19 +100,6 @@ export interface AppApiOptions {
 	changed(): void;
 	logger: Logger;
 }
-
-class HttpError extends Error {
-	constructor(
-		readonly status: number,
-		message: string,
-	) {
-		super(message);
-	}
-}
-
-const bad = (message: string) => new HttpError(400, message);
-const notFound = () =>
-	new HttpError(404, "There is no such room, agent or file.");
 
 /** A refusal of the workspace pane as the HTTP error the owner reads. */
 function refusalOf(refusal: WorkspaceRefusal): HttpError {
@@ -183,33 +182,6 @@ export function partsOf(path: string): string[] | undefined {
 	}
 }
 
-async function bodyOf(
-	request: Request,
-	limit = MAX_BODY_BYTES,
-): Promise<Record<string, unknown>> {
-	const raw = await readLimited(request, limit);
-	if (!raw) throw new HttpError(413, "The body is too large.");
-	let value: unknown;
-	try {
-		value = JSON.parse(raw.toString("utf8"));
-	} catch {
-		throw bad("The body is not JSON.");
-	}
-	if (typeof value !== "object" || value === null || Array.isArray(value))
-		throw bad("The body is not an object.");
-	return value as Record<string, unknown>;
-}
-
-const optionalText = (
-	body: Record<string, unknown>,
-	key: string,
-): string | undefined => {
-	const value = body[key];
-	if (value === undefined) return undefined;
-	if (typeof value !== "string") throw bad(`${key} must be text.`);
-	return value;
-};
-
 /**
  * The owner app's REST under `<mount>/api/` and `<mount>/avatars/`. Every route is behind the
  * authenticator, which also checks the `Origin` of a write; a write also reads the person's tier
@@ -218,9 +190,22 @@ const optionalText = (
  */
 export class AppApi {
 	readonly #options: AppApiOptions;
+	readonly #team: TeamApi;
 
 	constructor(options: AppApiOptions) {
 		this.#options = options;
+		this.#team = new TeamApi({
+			surface: options.surface.surface,
+			rooms: options.rooms,
+			directory: options.directory,
+			team: options.team,
+			skills: options.skills,
+			log: options.log,
+			cards: options.cards,
+			mutes: options.mutes,
+			modes: options.modes,
+			changed: () => options.changed(),
+		});
 	}
 
 	/** Answers a path of the app's, or undefined for any other. `rest` is what follows the mount. */
@@ -242,6 +227,8 @@ export class AppApi {
 					"files",
 					"schedules",
 					"agents",
+					"groups",
+					"archive",
 					"models",
 					"workspace",
 				].includes(second ?? ""));
@@ -321,8 +308,11 @@ export class AppApi {
 			return this.#file(id);
 		if (area === "workspace") return this.#workspace(request, parts, admission);
 		if (area === "schedules") return this.#schedules(method, id, admission);
-		if (area === "agents" && id)
-			return this.#agent(request, id, action, admission);
+		const owner = () => this.#owner(admission);
+		if (area === "agents") return this.#team.agents(request, parts, owner);
+		if (area === "groups") return this.#team.groups(request, parts, owner);
+		if (area === "archive" && method === "GET" && !id)
+			return this.#team.archived(owner);
 		throw new HttpError(404, "There is no such API.");
 	}
 
@@ -581,76 +571,5 @@ export class AppApi {
 			return json({ ok: true });
 		}
 		throw new HttpError(405, "Method not allowed.");
-	}
-
-	async #agent(
-		request: Request,
-		name: string,
-		action: string | undefined,
-		admission: Authenticated,
-	): Promise<Response> {
-		const { directory, team } = this.#options;
-		const agent = directory.agent(name);
-		if (agent?.status !== "active") throw notFound();
-		if (!action && request.method === "GET") return json(this.#profile(name));
-		if (!action && request.method === "PATCH") {
-			await this.#owner(admission);
-			const body = await bodyOf(request);
-			const patch: AgentPatch = {};
-			for (const key of [
-				"displayName",
-				"prompt",
-				"model",
-				"thinking",
-			] as const) {
-				const value = optionalText(body, key);
-				if (value !== undefined) patch[key] = value;
-			}
-			const change: AgentChange = patch;
-			await team.update(name, change);
-			this.#options.changed();
-			return json(this.#profile(name));
-		}
-		if (action === "character" && request.method === "PUT") {
-			await this.#owner(admission);
-			const body = await bodyOf(request, MAX_CHARACTER_BYTES);
-			const { character } = body;
-			if (
-				typeof character !== "object" ||
-				character === null ||
-				Array.isArray(character)
-			)
-				throw bad("character must be an object.");
-			const asked: CharacterRequest = {
-				character: character as CharacterRequest["character"],
-			};
-			// `dress` words a refusal as an agent error; checking here first names the field.
-			resolveCharacter(asked.character, characterOf(agent));
-			await team.dress(name, asked.character);
-			this.#options.changed();
-			return json(this.#profile(name));
-		}
-		throw new HttpError(404, "There is no such API.");
-	}
-
-	#profile(name: string): AgentProfileView {
-		const { directory, team, rooms, surface } = this.#options;
-		const agent = directory.agent(name);
-		if (!agent) throw notFound();
-		const effective = team.modelOf(name);
-		return {
-			name: agent.name,
-			displayName: agent.displayName,
-			prompt: agent.prompt,
-			...(agent.model ? { model: agent.model } : {}),
-			...(agent.thinking ? { thinking: agent.thinking } : {}),
-			effective: {
-				model: effective.model,
-				thinking: String(effective.thinking),
-			},
-			avatar: rooms.avatarOf(agent),
-			character: characterOf(agent),
-			room: `${surface.surface}:agent.${agent.name}`,
-		};
 	}
 }

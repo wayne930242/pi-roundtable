@@ -123,6 +123,13 @@ export class RoomLog {
 		};
 	}
 
+	/** Deletes every message of a room that is gone for good; returns how many. */
+	async removeRoom(room: string): Promise<number> {
+		const rows: unknown[] = await this
+			.#sql`DELETE FROM web_room_messages WHERE room = ${room} RETURNING 1`;
+		return rows.length;
+	}
+
 	/** The newest message of each of the rooms that has one. */
 	async lastOf(rooms: readonly string[]): Promise<Map<string, RoomMessage>> {
 		const found = new Map<string, RoomMessage>();

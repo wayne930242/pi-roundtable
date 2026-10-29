@@ -95,6 +95,12 @@ export class CardLog {
 			ON CONFLICT (prompt_id) DO NOTHING`;
 	}
 
+	/** Deletes every ended card of a room that is gone for good, once the writes under way are in. */
+	async removeRoom(room: string): Promise<void> {
+		await Promise.allSettled([...this.#writing]);
+		await this.#sql`DELETE FROM web_room_cards WHERE room = ${room}`;
+	}
+
 	/**
 	 * The room's cards that opened at or after `from` (all of them when absent) and before the
 	 * stored message `before` of the same room was written (all of them when absent), oldest
