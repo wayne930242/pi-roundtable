@@ -16,7 +16,7 @@ import type { Logger } from "../log.ts";
 import type { EffortPolicy, ThinkingLevel, ThinkingPicker } from "../models.ts";
 import type { Autonomy } from "../modes/autonomy.ts";
 import type { ConversationModes } from "../modes/conversation-modes.ts";
-import type { LinkedSessions } from "../plugin.ts";
+import type { AgentTools, LinkedSessions } from "../plugin.ts";
 import {
 	planOrder,
 	type SessionContext,
@@ -75,6 +75,8 @@ export interface PiAgentRuntimeOptions {
 	sessions: () => LinkedSessions;
 	/** The agent server's sessions: their shared workspace, model, and skills. */
 	agents?: AgentSessions;
+	/** "chat-only": no turn carries the shell and file tools, and agent sessions have no workspace; default "full". */
+	agentTools?: AgentTools;
 	/**
 	 * The prompts of a channel for an interactive turn's scope, made from its speaker and its
 	 * conversation's visibility; undefined for a channel that cannot show them. Without it every

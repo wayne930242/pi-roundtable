@@ -19,6 +19,7 @@ function contextOver(attachments: PluginContext["attachments"] | undefined) {
 	return partial<PluginContext>({
 		logger: silentLogger(),
 		database: () => partial<SQL>({}),
+		env: partial<PluginContext["env"]>({ agentTools: "full" }),
 		...(attachments ? { attachments } : {}),
 	});
 }
@@ -143,5 +144,43 @@ describe("the formatting guidance of the web chat surface", () => {
 		expect(() => webChat({ ...base, formatting: " " })).toThrow(
 			"webChat: formatting is empty",
 		);
+	});
+});
+
+describe("on a chat-only host", () => {
+	const chatOnly = (personas: Parameters<typeof webChat>[0]["personas"]) =>
+		webChat({ ...base, personas }).setup(
+			partial<PluginContext>({
+				logger: silentLogger(),
+				database: () => partial<SQL>({}),
+				attachments: memoryAttachments(),
+				env: partial<PluginContext["env"]>({ agentTools: "chat-only" }),
+			}),
+		);
+
+	test("a persona that selects a shell or file tool stops setup, naming the persona and the tool", async () => {
+		await expect(
+			Promise.resolve().then(() =>
+				chatOnly([
+					{
+						kind: "ops",
+						prompt: () => "Ops.",
+						selection: { tools: ["memory_add", "bash"], groups: [] },
+					},
+				]),
+			),
+		).rejects.toThrow(/persona "ops" selects bash/);
+	});
+
+	test("a persona with the default selection, or one without shell tools, sets up", async () => {
+		const contribution = await chatOnly([
+			{ kind: "helpdesk", prompt: () => "Help." },
+			{
+				kind: "notes",
+				prompt: () => "Notes.",
+				selection: { tools: ["memory_add"], groups: [] },
+			},
+		]);
+		expect(contribution.services?.length).toBeGreaterThan(0);
 	});
 });

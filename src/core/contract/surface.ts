@@ -6,6 +6,10 @@ import type { PromptScope, Prompts } from "../interactions/prompts.ts";
 import type { ChannelKey } from "../sessions.ts";
 import type { Speaker } from "../speakers.ts";
 import type {
+	ChannelContext,
+	ChannelContextOptions,
+} from "./channel-context.ts";
+import type {
 	AttachmentContent,
 	AttachmentRef,
 	InboundMessage,
@@ -90,6 +94,18 @@ export interface ChatSurface {
 	 * dispatch posts in the channel as before.
 	 */
 	readonly threads?: SurfaceThreads;
+	/**
+	 * What was said in the message's channel since the assistant last posted there, before the
+	 * message that addressed it: public text around the message, for a claim to append to its turn
+	 * with `withChannelContext`. The host reads it through `CHANNEL_CONTEXT`, which picks the surface
+	 * by the message's channel key. Resolve to undefined when there is nothing new, when the
+	 * surface cannot read the channel, or for a channel that is not shared (a direct message);
+	 * never fail the turn over a read. Absent = this surface has no channel context.
+	 */
+	channelContext?(
+		message: InboundMessage,
+		options?: ChannelContextOptions,
+	): Promise<ChannelContext | undefined>;
 	/**
 	 * Short English guidance on how a reply renders here, such as "no Markdown tables", which the
 	 * runtime appends to the system prompt of every turn that replies on this surface, after the

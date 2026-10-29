@@ -79,4 +79,44 @@ describe("EventBus", () => {
 		await Bun.sleep(1);
 		expect(log).toEqual(["changed"]);
 	});
+
+	test("an action reported to the sink reaches every handler, and a throwing one is logged", async () => {
+		const logged: { plugin: string; event: string }[] = [];
+		const bus = new EventBus({
+			...silentLogger(),
+			error: (fields: unknown) => {
+				logged.push(fields as { plugin: string; event: string });
+			},
+		});
+		const heard: string[] = [];
+		bus.link([
+			{
+				plugin: "bad",
+				events: {
+					action: () => {
+						throw new Error("boom");
+					},
+				},
+			},
+			{
+				plugin: "good",
+				events: {
+					action: (event) => {
+						heard.push(`${event.kind} ${event.actor} ${event.ok}`);
+					},
+				},
+			},
+		]);
+		bus.sink.action?.({
+			kind: "assign",
+			actor: "discord:1",
+			principalId: "p1",
+			channel: "page:inbox",
+			ok: true,
+			at: new Date(0),
+		});
+		await Bun.sleep(1);
+		expect(heard).toEqual(["assign discord:1 true"]);
+		expect(logged).toMatchObject([{ plugin: "bad", event: "action" }]);
+	});
 });

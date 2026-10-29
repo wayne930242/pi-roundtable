@@ -107,8 +107,28 @@ export interface EventHandlers {
 	turnProgress?(event: TurnProgressEvent): Promise<void> | void;
 	/** The team changed: an agent or group was created, edited, arranged, archived, or started over. */
 	changed?(): Promise<void> | void;
+	/**
+	 * Something a person did through a plugin's surface, reported by any plugin through
+	 * `context.events.action`: for example a support inbox's "assign", "reply" or "close". It names
+	 * the kind, who did it and whether it worked, never the content.
+	 */
+	action?(event: ActionEvent): Promise<void> | void;
 	/** The shutdown drain ended, before any service stops; `left` is the work it gave up on. */
 	shutdown?(left: readonly string[]): Promise<void> | void;
+}
+
+/** One thing a person did through a plugin's surface, as a handler hears of it. */
+export interface ActionEvent {
+	/** What was done, in the reporting plugin's words, such as "assign" or "close". */
+	kind: string;
+	/** The `Speaker.id` of who did it. */
+	actor: string;
+	principalId: string;
+	/** The conversation or page it concerns, when there is one. */
+	channel?: ChannelKey | `page:${string}`;
+	/** Whether it worked. */
+	ok: boolean;
+	at: Date;
 }
 
 /** What the core reports to the plugins' handlers. */
@@ -118,6 +138,8 @@ export interface EventSink {
 	/** Optional, so a sink of your own written before it still fits. */
 	turnProgress?(event: TurnProgressEvent): void;
 	changed(): void;
+	/** Optional, as `turnProgress` is: a sink of your own written before it still fits. */
+	action?(event: ActionEvent): void;
 }
 
 /** What a prompt section is built for: one agent's turn. */
@@ -265,6 +287,12 @@ export interface LinkedSessions {
 	agentSelection(): ToolSelection;
 }
 
+/**
+ * What the agents' turns may use of the machine: "full" gives them the shell and file tools, and
+ * "chat-only" none of them, as `agentServer: { tools: "chat-only" }` configures.
+ */
+export type AgentTools = "full" | "chat-only";
+
 /** The host's own locale and time zone, as its plugins read them. */
 export interface HostEnv {
 	readonly locale: Locale;
@@ -284,6 +312,12 @@ export interface HostEnv {
 	 * agent wears the same ones.
 	 */
 	readonly characterSkins: readonly Hex[];
+	/**
+	 * Whether the agents' turns carry the shell and file tools. A plugin whose tools reach the host
+	 * checks it before it offers them to agents; under "chat-only" the host refuses to start with a
+	 * plugin that declares `hostAccess`.
+	 */
+	readonly agentTools: AgentTools;
 }
 
 /** What the host gives every plugin. */
@@ -391,6 +425,12 @@ export interface RoundtablePlugin {
 	 * dropped plugin provides a service this one does not replace.
 	 */
 	replaces?: readonly ServiceKey<unknown>[];
+	/**
+	 * Marks a plugin whose tools reach the host's machine, such as one that runs shells or edits
+	 * its files for the agents. A host that configures `agentServer: { tools: "chat-only" }`
+	 * refuses to start with one registered, with a ConfigError that names the plugin.
+	 */
+	hostAccess?: true;
 	setup(context: PluginContext): Promise<Contribution> | Contribution;
 	/**
 	 * Runs once every plugin is set up and linked, before any service starts; a failure stops the

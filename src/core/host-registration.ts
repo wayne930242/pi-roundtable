@@ -40,6 +40,7 @@ import {
 	conversationTurns,
 } from "./routing/conversation-turns.ts";
 import { surfacePort } from "./routing/surface-port.ts";
+import { refuseHostAccess } from "./runtime/chat-only.ts";
 import { CONVERSATIONS, IDENTITY, RUNTIME } from "./services.ts";
 import { setTimeZone } from "./time.ts";
 import { type ToolTierTable, toolTiers } from "./tool-tiers.ts";
@@ -124,6 +125,7 @@ export class Linkage {
 			agentDir,
 			scratchDir,
 			characterSkins,
+			agentTools = "full",
 		} = this.#options.environment ?? {};
 		// Checked before anything is applied, so a bad set stops the start with the process untouched.
 		const skins = characterSkinsOf(characterSkins);
@@ -137,6 +139,7 @@ export class Linkage {
 			now: () => new Date(),
 			...(scratchDir !== undefined ? { scratchDir } : {}),
 			characterSkins: skins,
+			agentTools,
 		};
 	}
 
@@ -147,6 +150,7 @@ export class Linkage {
 		const env = this.#applyEnvironment();
 		// A plugin that replaces a service takes the place of the one that provided it.
 		this.active = replaceServices(this.#plugins);
+		if (env.agentTools === "chat-only") refuseHostAccess(this.active);
 		this.services = new ServiceRegistry(this.active);
 		this.services.checkRequires();
 		const providers = resolveProviders(this.active, this.#options.judgeModel);

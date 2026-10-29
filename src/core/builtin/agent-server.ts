@@ -273,6 +273,7 @@ export function agentServerPlugin(
 					: {}),
 				seeds: () => context.sessions().seeds,
 				promptSections: () => context.sessions().prompt,
+				agentTools: context.env.agentTools,
 				pluginTools: () => context.sessions().agentTools,
 				pluginSelection: () => context.sessions().agentSelection(),
 				events: context.events,

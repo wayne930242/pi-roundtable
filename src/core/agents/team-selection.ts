@@ -6,7 +6,10 @@ import type { AgentTeamOptions } from "./team-options.ts";
 
 /** The tools every agent turn runs with: the plugins', plus the shell and agent tools. */
 export function teamSelection(
-	options: Pick<AgentTeamOptions, "pluginSelection" | "pluginTools">,
+	options: Pick<
+		AgentTeamOptions,
+		"pluginSelection" | "pluginTools" | "agentTools"
+	>,
 	scope?: AgentTurnScope,
 ): TurnSelection {
 	const plugged = options.pluginSelection();
@@ -15,7 +18,8 @@ export function teamSelection(
 		tools: [
 			...new Set([
 				...plugged.tools,
-				...SHELL_TOOLS,
+				// A chat-only host's agents carry no shell and no file tools.
+				...(options.agentTools === "chat-only" ? [] : SHELL_TOOLS),
 				// Group members hand off by mentioning each other, so a group seat has no message_agent.
 				...AGENT_TOOLS.filter(
 					(tool) => !(scope?.group && tool === MESSAGE_AGENT_TOOL),

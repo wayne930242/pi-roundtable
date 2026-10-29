@@ -16,7 +16,7 @@ import {
 	type ThinkingLevel,
 } from "../models.ts";
 import type { PerPrincipalLimits } from "../modules/background/personal-target.ts";
-import type { RoundtablePlugin } from "../plugin.ts";
+import type { AgentTools, RoundtablePlugin } from "../plugin.ts";
 import { PRIMARY_CHARS } from "../runtime/interim-text.ts";
 import type { Tier, TierMembers } from "../speakers.ts";
 import { type AccessConfig, accessOf } from "./access.ts";
@@ -29,6 +29,7 @@ import {
 import { checkAgentServerOff, checkAgentTeamKeys } from "./agent-team.ts";
 import type { AttachmentsConfig } from "./attachments.ts";
 import { configSchema } from "./config-schema.ts";
+import type { ConversationsConfig } from "./conversations.ts";
 import { type LimitsConfig, limitsOf, type ResolvedLimits } from "./limits.ts";
 import { opsOf, type ResolvedOps } from "./ops.ts";
 import { type ProfilesConfig, profileRulesOf } from "./profiles.ts";
@@ -93,8 +94,13 @@ export interface RoundtableConfig extends LimitsConfig {
 	 * `ops.agent`, `discord.agentMemory`, `discord.agentSpeakers`, `discord.attachmentDownload`.
 	 * Plugins that need the agent server (pi-roundtable-web, remote-mcp's default conversation)
 	 * stop startup. Left out, the agent server runs; there is no `true`.
+	 *
+	 * `{ tools: "chat-only" }` keeps the agent server and takes the machine away from its agents:
+	 * no shell, file or workspace tools in any turn, and no plugin whose tools reach the host
+	 * (`hostAccess`, such as pi-roundtable-coding). The agents talk, remember, schedule and use the
+	 * tools plugins add for them. Left out, the agents carry the shell and file tools.
 	 */
-	agentServer?: false;
+	agentServer?: false | { tools: "chat-only" };
 	/**
 	 * The chat networks the host talks through, each made by its adapter's factory, such as
 	 * `discord()` from `pi-roundtable/discord`. A Discord adapter is the same as the top-level
@@ -107,6 +113,8 @@ export interface RoundtableConfig extends LimitsConfig {
 	dataDir: string;
 	/** What the host does with the files people send, such as removing them after a retention period. */
 	attachments?: AttachmentsConfig;
+	/** What the host does with the conversations it has recorded, such as deleting idle ones of a kind. */
+	conversations?: ConversationsConfig;
 	/** Pi's agent directory, holding the model logins; default `<dataDir>/pi`. */
 	agentDir?: string;
 	/** The model of the agents, written `<provider>/<id>`. */
@@ -256,10 +264,14 @@ export interface ResolvedConfig extends ResolvedLimits {
 	discord?: ResolvedDiscord;
 	/** Whether the agent server runs: false when `agentServer: false`, and otherwise on a host with `discord` or `agents`. */
 	agentServer: boolean;
+	/** What the agents' turns may use of the machine: "chat-only" for `agentServer: { tools: "chat-only" }`, else "full". */
+	agentTools: AgentTools;
 	databaseUrl: string;
 	dataDir: string;
 	/** Absent `retention`: used files live as long as their conversation. */
 	attachments: AttachmentsConfig;
+	/** Days to keep each conversation kind after its last activity; a kind not listed is kept. */
+	conversations: { keepDays: Readonly<Record<string, number>> };
 	agentDir: string;
 	model: ModelRef;
 	thinking: ThinkingLevel;
@@ -361,6 +373,7 @@ export function resolveConfig(input: unknown): ResolvedConfig {
 		attachments: config.attachments?.retention
 			? { retention: config.attachments.retention }
 			: {},
+		conversations: { keepDays: { ...config.conversations?.keepDays } },
 		agentDir: config.agentDir ?? `${config.dataDir}/pi`,
 		model,
 		thinking,
@@ -390,6 +403,10 @@ export function resolveConfig(input: unknown): ResolvedConfig {
 		agentServer:
 			agentServer &&
 			(discord !== undefined || (config.agents?.length ?? 0) > 0),
+		agentTools:
+			typeof config.agentServer === "object"
+				? config.agentServer.tools
+				: "full",
 		...(!discord && config.agents?.[0]
 			? { coordinator: config.coordinator ?? config.agents[0].name }
 			: {}),

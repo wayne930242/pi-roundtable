@@ -12,6 +12,10 @@ import {
 	type REST,
 } from "discord.js";
 import type { AgentChannels, DashboardBoard } from "../agents/agent-ports.ts";
+import type {
+	ChannelContext,
+	ChannelContextOptions,
+} from "../contract/channel-context.ts";
 import type { ChatSurface, SurfaceThreads } from "../contract/surface.ts";
 import type {
 	ChannelKey,
@@ -64,6 +68,11 @@ export interface DiscordSurfaceOptions {
 	freshMarker?: string | false;
 	/** What the model is told about how replies render here; `false` tells it nothing. Default: `DISCORD_FORMATTING`. */
 	formatting?: string | false;
+	/** Reads the channel context of an addressed message; without it the surface has none. */
+	channelContext?: (
+		message: InboundMessage,
+		options?: ChannelContextOptions,
+	) => Promise<ChannelContext | undefined>;
 }
 
 /**
@@ -107,6 +116,13 @@ export class DiscordSurface
 		// REST works before the gateway logs in; `login` sets the same token again.
 		this.#client.rest.setToken(options.token);
 	}
+
+	/** See `ChatSurface.channelContext`. */
+	channelContext = async (
+		message: InboundMessage,
+		options?: ChannelContextOptions,
+	): Promise<ChannelContext | undefined> =>
+		this.#options.channelContext?.(message, options);
 
 	/** The client's REST queue, whose rate limits every request of this process shares. */
 	rest(): REST {

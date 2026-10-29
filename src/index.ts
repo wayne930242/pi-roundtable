@@ -48,6 +48,7 @@ export type {
 	TierConfig,
 } from "./core/config/config.ts";
 export type { LimitsConfig } from "./core/config/limits.ts";
+export type { ConversationsConfig } from "./core/config/conversations.ts";
 export type { ProfilesConfig } from "./core/config/profiles.ts";
 export type { SkillsConfig } from "./core/config/skills-config.ts";
 export type {
@@ -59,6 +60,12 @@ export type {
 	TurnAttachmentOptions,
 } from "./core/contract/attachments.ts";
 export { AttachmentRefusal } from "./core/contract/attachments.ts";
+export type {
+	ChannelContextSource,
+	ChannelContextSourceAttachment,
+	ChannelContexts,
+	ChannelContextVerdict,
+} from "./core/contract/channel-context.ts";
 export type {
 	Admission,
 	AttachmentContent,
@@ -313,6 +320,8 @@ export type {
 } from "./core/modules/skills/skill-rules.ts";
 export { SkillConflictError } from "./core/modules/skills/skill-rules.ts";
 export type {
+	ActionEvent,
+	AgentTools,
 	Contribution,
 	EventHandlers,
 	EventSink,
@@ -367,6 +376,7 @@ export type {
 export {
 	AGENTS,
 	BACKGROUND_TURNS,
+	CHANNEL_CONTEXT,
 	CONVERSATIONS,
 	DELEGATION,
 	IDENTITY,

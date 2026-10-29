@@ -48,6 +48,12 @@ export interface ConversationRegistry {
 		key: ChannelKey,
 		principalId: string,
 	): Promise<ConversationRecord | undefined>;
+	/**
+	 * Forgets a conversation's record; false when the key is unknown. The conversation itself is
+	 * deleted through `ConversationPort.deleteConversation`. Optional so a registry written before
+	 * it still fits; the retention sweep forgets a record only when the registry can.
+	 */
+	remove?(key: ChannelKey): Promise<boolean>;
 	/** Names a conversation, or clears its name; undefined when the key is unknown. */
 	setTitle(
 		key: ChannelKey,

@@ -8,6 +8,7 @@ import {
 	tempDir,
 	validConfig,
 } from "../testing/fixtures.ts";
+import { checkAgentTools } from "./agent-tools.ts";
 import { checkBun } from "./bun.ts";
 import { checkCharacters } from "./characters.ts";
 import { checkConfiguration, checkPlugins } from "./configuration.ts";
@@ -402,5 +403,51 @@ describe("public URL", () => {
 		);
 		expect(text).toContain("connection refused");
 		expect(text).toContain("roundtable start");
+	});
+});
+
+describe("agent tools", () => {
+	const project = (agentServer?: unknown, plugins: RoundtablePlugin[] = []) =>
+		new Project(
+			"/x",
+			fakePorts(
+				{
+					...validConfig,
+					...(agentServer === undefined ? {} : { agentServer }),
+				},
+				{
+					define: async () => ({
+						options: { logger: {} as never },
+						plugins,
+					}),
+				},
+			),
+		);
+	const detail = (result: Result) =>
+		result.status === "ok" ? (result.detail ?? "") : "";
+	test("says full when the agents carry the shell and file tools, as before", async () => {
+		expect(detail(await checkAgentTools(project()))).toContain("full");
+	});
+	test('prints chat-only for agentServer: { tools: "chat-only" }', async () => {
+		const result = await checkAgentTools(project({ tools: "chat-only" }));
+		expect(detail(result)).toBe(
+			"chat-only (no shell, file or workspace tools)",
+		);
+	});
+	test("fails a chat-only host with a plugin that declares hostAccess, naming it", async () => {
+		const result = await checkAgentTools(
+			project({ tools: "chat-only" }, [
+				{ name: "coding", hostAccess: true, setup: () => ({}) },
+			]),
+		);
+		expect(failure(result)).toContain("plugin coding declares hostAccess");
+	});
+	test("is skipped with the agent server off, and while the configuration is invalid", async () => {
+		const { discord: _, ...bare } = validConfig;
+		const off = new Project("/x", fakePorts({ ...bare, agentServer: false }));
+		expect((await checkAgentTools(off)).status).toBe("skipped");
+		expect(
+			(await checkAgentTools(new Project("/x", fakePorts({})))).status,
+		).toBe("skipped");
 	});
 });

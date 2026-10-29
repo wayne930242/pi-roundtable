@@ -136,6 +136,7 @@ definePlugin({
 	provides: [],              // optional: keys of the services setup provides to other plugins
 	replaces: [],              // optional: keys of built-in services this plugin takes over
 	identities: [],            // optional: identities the plugin's own credentials stand for
+	hostAccess: true,          // optional: its tools reach the host's machine (shell, files)
 	preflight() {},            // optional: a check that runs before anything starts
 	setup(context) {           // required: returns the parts the plugin adds
 		return { /* parts */ };
@@ -145,6 +146,9 @@ definePlugin({
 
 `definePlugin` checks the name and the presence of `setup`, then returns the typed object you gave it.
 Errors point to the plugin definition.
+
+`hostAccess: true` marks a plugin whose tools reach the host's machine, such as one whose workers run shells or edit files (`pi-roundtable-coding` declares it).
+A host that gives its agents [no shell](#chat-only-agents-no-shell-file-or-workspace-tools) refuses to start with such a plugin registered.
 
 A plugin whose `setup` returns `{}` and has no migrations, providers, or hooks stops startup (see [Errors](#errors-and-their-fixes)).
 
@@ -165,7 +169,7 @@ A plugin that replaces `IDENTITY` replaces this too: the declarations are the bu
 | Field | What it is |
 |---|---|
 | `logger` | The host's logger with `plugin: <your name>` on every line; each line is JSON on stdout. Its type is `Logger` (`debug`, `info`, `warn`, `error`, `fatal`, `child(fields)`), which a pino logger satisfies |
-| `env` | The host's own environment for the run: `locale`, `timeZone` (an IANA zone), `now()`, `scratchDir` when the host has one, and `characterSkins`, the six skin tones the host draws its agents with ([host skins](#host-skins-the-charactersskins-option)); read the zone from here rather than from the process, give `scratchDir` to a shell the plugin runs itself, and pass `characterSkins` to `composeSvg` when the plugin draws a character |
+| `env` | The host's own environment for the run: `locale`, `timeZone` (an IANA zone), `now()`, `scratchDir` when the host has one, `characterSkins`, the six skin tones the host draws its agents with ([host skins](#host-skins-the-charactersskins-option)), and `agentTools`, `"full"` or `"chat-only"` ([chat-only agents](#chat-only-agents-no-shell-file-or-workspace-tools)); read the zone from here rather than from the process, give `scratchDir` to a shell the plugin runs itself, and pass `characterSkins` to `composeSvg` when the plugin draws a character |
 | `database()` | The host's one PostgreSQL connection (a Bun `SQL`), already migrated |
 | `toolTiers` | What each tool needs; ask it when a tool is used, not during setup |
 | `events` | Where the core reports turns and team changes to every plugin's handlers |
@@ -246,8 +250,14 @@ The built-in plugins provide these, from the main entry:
 | `PRECHECKS` | `PrecheckRegistry` | `prechecks` | The host's named [prechecks](#prechecks-wake-a-schedule-only-when-it-has-work): `register`, `get`, `list`; and the runner of agents' precheck scripts: `useScriptRunner`, `scriptRunner` |
 | `MEMORY` | `MemoryStore` | `memory` (an addon) | `forSpeaker(principalId)` gives that principal's `SpeakerMemory`: `list`, `forPrompt`, `add`, `search`, `update`, `removeById`, `remove`; `MEMORY_KINDS` is `core`, `note`, `event` |
 | `BACKGROUND_TURNS` | `BackgroundTurns` | `modules` | Turns nobody wrote: `runScheduled`, `runDelegated`, `runErrorReport` |
+| `CHANNEL_CONTEXT` | `pi-roundtable` | value |
+| `ChannelContexts` | `pi-roundtable` | type |
+| `ChannelContextSource` | `pi-roundtable` | type |
+| `ChannelContextSourceAttachment` | `pi-roundtable` | type |
+| `ChannelContextVerdict` | `pi-roundtable` | type |
 | `DELEGATION` | `Delegator` | `modules` | `start(request)` a background task, `runningChannels()`, `idle()` |
 | `THREADS` | `DispatchThreads` | `threads` | The threads of background dispatches (coding tasks, delegated tasks, messages between agents), on any surface that hosts them: `open(origin, title, intro?)` opens the thread under the channel `origin` through the `threads` of the surface that serves its prefix and resolves to a `DispatchThread`, or `undefined` when that surface hosts none or the channel cannot. See [Dispatch threads on any surface](#dispatch-threads-on-any-surface) |
+| `CHANNEL_CONTEXT` | `ChannelContexts` | `channel-context` | `read(message, options?)` gives the context of one addressed message, from the surface whose key prefix its channel carries: the messages posted there since the assistant last posted, or `undefined` for a surface without `channelContext`, a channel that is not shared, and when nothing new was said. See [Channel context](#channel-context-what-was-said-around-an-addressed-message) |
 | `WORKER_SESSIONS` | `WorkerSessions` | `worker-sessions` | Fresh Pi sessions for a plugin's own workers, on the host's model login: `delegation` is the host's delegation `model` and `thinking`, and `run({ task, signal, prompt, extensions, toolNames, model?, thinking?, aborted? })` runs the task in a session that has only the tools `extensions` register and `toolNames` names (no built-in tool, skill, context file, memory or agent tool) and returns the worker's final answer; see [Workers of your own](#workers-of-your-own) |
 
 The data types the ports use (`Schedule`, `NewSchedule`, `Agent`, `AgentGroup`, `TeamStatus`, `Memory`, `SkillSet`, `DelegationJob`, and so on) are in the main entry too.
@@ -1280,6 +1290,7 @@ export const library = definePlugin({
 | `turnEnded(turn)` | The turn ended; `turn.result` is `"ok"`, `"failed"`, or `"stopped"` |
 | `turnProgress(event)` | A turn run through `context.turns` wrote text or ran a tool, between its start and its end: `event` is the turn's fields and `progress`, a `TurnProgress` (see the surface's `progress` below); a runtime without live progress reports none |
 | `changed()` | The team changed: an agent or group was created, edited, arranged, archived, or started over |
+| `action(event)` | A plugin reported something a person did through its surface with `context.events.action?.(...)`: `event` is `{ kind, actor, principalId, channel?, ok, at }`, with `kind` in the reporting plugin's own words (a support inbox says `"assign"`, `"reply"` or `"close"`), `actor` the `Speaker.id`, and `channel` a `ChannelKey` or a `page:<name>`. It carries no content. The core reports none itself; a plugin hears the others' |
 | `shutdown(left)` | The shutdown drain ended, before any service stops; `left` lists the work it gave up on |
 
 The host logs errors thrown by a handler and continues running the others.
@@ -2172,6 +2183,48 @@ export function alwaysOn(tools: () => string[]) {
 ```
 <!-- /example -->
 
+### Chat-only agents: no shell, file, or workspace tools
+
+By default an agent's turn carries Pi's shell and file tools (`bash`, `read`, `edit`, `write`) and works in a shared workspace on the host.
+A host whose agents only talk, such as one that serves a team through a web app and has no use for a shell, switches them off:
+
+```ts
+export default defineRoundtable({
+	// ...
+	agentServer: { tools: "chat-only" },
+});
+```
+
+The agent server stays, with its team, rooms, memory, schedules and the tools plugins add; `agentServer: false` still leaves it out, and a key left out keeps the full tools.
+Plugins read the mode as `context.env.agentTools` (`"full"` or `"chat-only"`), and `ResolvedConfig.agentTools` and `RoundtableOptions.environment.agentTools` carry it for a host that builds its own options.
+With `"chat-only"`:
+
+- No turn is offered `bash`, `read`, `edit` or `write`: the agent team's selection leaves them out, an agent's system prompt says it has no shell, file tools or workspace, its sessions get no workspace (no `attach_file`, no shell scratch dir) and its held-action gate judges none.
+- The host refuses to start with a plugin that declares `hostAccess: true` (`pi-roundtable-coding` does), with a `ConfigError` that names the plugin, and with a plugin whose `agentSelection` names one of the four tools. `roundtable doctor` prints `agent tools: chat-only (no shell, file or workspace tools)` and fails for a registered `hostAccess` plugin; with the full tools it prints `full`.
+- A selection that names one of the four tools anyway, whatever built it (a turn run through `context.turns` with its own `selection`, a plugin that grants tools at run time), is refused at the one place where `SessionFactory` turns a selection into active tools (`toolsFor` and `taskTools`): the turn fails closed with a `ConfigError`, which is logged as the turn's failure, and no session runs it.
+- `pi-roundtable-webchat` stops at start when a persona's own `selection` names one of the four tools.
+
+The mode is the host's decision, not a permission: it does not change who may use which tool (`toolTiers`), and an MCP server or other plugin that reaches the machine in a way it does not declare is outside what it can see.
+A plugin whose tools reach the host declares `hostAccess`, so that the one flag decides.
+
+### Conversation retention: `conversations.keepDays`
+
+The conversations run through `context.turns` are recorded (`CONVERSATIONS`).
+`conversations.keepDays` deletes the idle ones of a kind after a number of days, so a host that must not keep a kind of conversation for ever, such as support threads, does not:
+
+```ts
+export default defineRoundtable({
+	// ...
+	conversations: { keepDays: { support: 365, chat: 30 } },
+});
+```
+
+The key is a conversation's kind (`ConversationRecord.kind`) and the value a whole number of days from 1 up, counted from the conversation's last activity.
+A sweep runs when the host starts and once a day after: for each recorded conversation of a listed kind past its days, it calls `ConversationPort.deleteConversation`, which its claim carries out, and then forgets the record (`ConversationRegistry.remove`, optional on a hand-built registry).
+A conversation with a turn running or waiting (`"busy"`) is skipped and tried again at the next sweep; one whose claim cannot delete it is logged and kept.
+A kind not listed, and a host without the key, keeps its conversations as before.
+The agents' own channels are not recorded conversations and are not touched.
+
 ### `piPackages`: Pi extensions every session loads
 
 List npm packages whose Pi extensions every conversation session should load, and install them in your project (`bun add pi-web-access`).
@@ -2575,6 +2628,8 @@ Channel context lets the turn for an addressed message also read what was posted
 The agent server reads it for every turn in an agent's channel; a group's round does not, since it already carries what was said since the group's last turn.
 A plugin's claim opts in by calling `DISCORD.channelContext(message, options?)` from `pi-roundtable/discord` inside its turn's `run`, and appending the result with `withChannelContext(text, context, imagesKept?)`, as `withReference` adds the replied-to message.
 
+The same call works on any surface. A chat surface a plugin contributes implements the optional `ChatSurface.channelContext(message, options?)`, and `CHANNEL_CONTEXT.read(message, options?)` (from the main entry) picks the surface by the prefix of the message's channel key, as `THREADS` does, and returns what that surface returns; a surface without the method, a channel no surface serves and a message with nothing new all give `undefined`. A support inbox whose rooms are email threads, say, answers with the customer's messages since the assistant last replied, each marked `external: true` (see below). `DISCORD.channelContext` is the Discord surface's own answer to the same call, so a claim that reads either sees the same context. `ChannelContext`, `ChannelContextOptions`, `ChannelContextMessage`, `withChannelContext`, `withChannelContextImages` and `formatChannelContext` stay in the `pi-roundtable/discord` entry, which a plugin for another surface imports from too; `CHANNEL_CONTEXT`, `ChannelContexts`, `ChannelContextSource`, `ChannelContextSourceAttachment` and `ChannelContextVerdict` are in the main entry.
+
 It reads Discord, not the host's history, so it survives restarts:
 
 - It fetches the `fetch` messages before the addressed one (default 50, at most 100) and keeps those after the assistant's latest post there: its bot user's, or one of its application's webhooks, such as an agent's voice. Any post of the assistant ends the window, including the divider the core posts when a conversation starts over (see `discord.freshMarker`) and a notice that it did; a fresh-start reply must be a public post, not an ephemeral one, to cut the window.
@@ -2584,14 +2639,16 @@ It reads Discord, not the host's history, so it survives restarts:
 - It keeps the newest `keep` (default 15), oldest first. Mentions read as names, and stickers and files as text with their names and links; by default nothing is downloaded or shown to the model as an image (see `attachments` below). A message is cut at `messageChars` (default 500), another bot's at `botMessageChars` (default 80).
 - It never fails the turn over Discord: a Discord error, such as a channel the bot cannot read, is logged and the turn runs without context.
 
-A plugin may mirror an outside chat into a channel through a webhook of its own, created by the bot, so that the application owns it; by default such a post counts as the assistant's own, which ends the window and is left out, and the people mirrored never reach a turn. `foreignWebhook(webhookId)` changes that for the webhooks it returns true for: a post through one is another author's, kept like another bot's (`bot: true`, `authorName` the post's username, `authorId` the webhook's id) and no longer ends the window, which then ends only at the assistant's own posts: its bot user's and every webhook `foreignWebhook` returns false for, such as an agent's voice. It may also return `"skip"` for a webhook that is neither, such as one the plugin posts its own status notices through: a post through it is dropped from the context and does not end the window, as if it were not in the channel, so notices between two mirrored posts neither appear as someone's words nor cut the window, and they are not counted among the messages delivered. Any answer other than `true` and `"skip"` reads as false. A skipped post is still one of the `fetch` messages read, so it uses the budget the window is chosen from. The host sets it as `discord.channelContext.foreignWebhook` and a call overrides it for that call; being a function, it can be set only in code. Posts through a webhook that `foreignWebhook` returns true for are merged as near repeats only when the poster's name is the same too, since one webhook carries many people; every other message merges by author alone, as before. An edited message reads as Discord now holds it.
+A plugin may mirror an outside chat into a channel through a webhook of its own, created by the bot, so that the application owns it; by default such a post counts as the assistant's own, which ends the window and is left out, and the people mirrored never reach a turn. `foreignWebhook(webhookId)` changes that for the webhooks it returns true for: a post through one is another author's, kept like another bot's (`bot: true`, `authorName` the post's username, `authorId` the webhook's id) and no longer ends the window, which then ends only at the assistant's own posts: its bot user's and every webhook `foreignWebhook` returns false for, such as an agent's voice. It may also return `"skip"` for a webhook that is neither, such as one the plugin posts its own status notices through: a post through it is dropped from the context and does not end the window, as if it were not in the channel, so notices between two mirrored posts neither appear as someone's words nor cut the window, and they are not counted among the messages delivered. Any answer other than `true` and `"skip"` reads as false. A skipped post is still one of the `fetch` messages read, so it uses the budget the window is chosen from. The host sets it as `discord.channelContext.foreignWebhook` and a call overrides it for that call; being a function, it can be set only in code. `authors(message)` is the same decision for any surface and any message, not only a webhook's: it receives the fetched message (`ChannelContextSource`: `id`, `authorId`, `authorName`, `bot`, `own`, `webhookId?`, `external?`, `attachments?`, `at`, `text`) and answers `"keep"` (another author's, which does not end the window; `foreignWebhook` returning `true`), `"skip"` (dropped as if it were not in the channel, without ending the window; `"skip"` of `foreignWebhook`), `"end"` (the assistant's own, which ends the window and is left out; `foreignWebhook` returning `false` for an application webhook) or `undefined`, which leaves the default: the assistant's own posts end the window and everything else is kept. Where it answers, it wins over `foreignWebhook`; it is a function, so it can be set only in code, as a host default (`discord.channelContext.authors`) or per call. Posts through a webhook that `foreignWebhook` returns true for are merged as near repeats only when the poster's name is the same too, since one webhook carries many people; every other message merges by author alone, as before. An edited message reads as Discord now holds it.
+
+A message a surface knows to come from outside the people the host serves, such as a customer whose email a support inbox mirrors, is marked `external: true` (`ChannelContextMessage.external`, `ChannelContextSource.external`): it is never an owner, and the block labels it `role="external"`, the model's cue that its text is untrusted. Discord marks none.
 
 Every returned message has `attachments` (`ChannelContextAttachment`: `name`, `contentType`, `size`, `url`, `messageId`), whether or not anything was fetched. With `attachments: { images, maxBytes }` (`ChannelContextAttachmentOptions`; default none) a call also fetches up to `images` (at most 4, a turn's limit) PNG, JPEG, GIF or WebP images of the kept messages, the newest first, each at most `maxBytes` (default 10 MiB, at most 25 MiB), and returns them as `context.images`, prepared as a turn's own images are (large ones are scaled down) and kept in memory by this call and never logged; once a turn is given them they are in its session history like the turn's own images, and stay there. Pass them on with `withChannelContextImages(attachments, context)`, which returns `{ attachments, kept }`: the turn's attachments with the context's images after the turn's own, within the four a turn carries, and how many of them fitted (a turn that already carries four keeps none, and an image crowded out is not noted anywhere). Give `kept` to `withChannelContext(text, context, kept)`: above zero it adds a line that pictures are shown among the turn's images, and it adds none otherwise, so the block never claims images the turn does not have. The image is sent as the type its bytes show (PNG, JPEG, GIF or WebP), not as Discord's guess from the file name, and bytes of none of them are skipped as `unsupported type`. Up to two images are downloaded at once, within 20 seconds for the whole call; the images still to be fetched when it passes are skipped as `download failed`. An image that is not a type the model takes, is over `maxBytes`, cannot be downloaded or cannot be decoded is skipped, and its message's text says `[image not attached: <name>: <reason>]`, the reason being `unsupported type` (by Discord's type or by the bytes), `too large`, `download failed` or `could not be decoded`; skipped images do not count toward `images`, but at most twice that many are tried. An image of a message already handed over is not fetched again, since its message is not returned again.
 
 `DISCORD.channelContext` resolves undefined in a direct message, on another surface, when nothing new was said, and when the host's `discord.channelContext` is `false`, which turns it off for the agent server and every claim.
 The configuration's values are the host's defaults, and a call's `options` override them for that call.
 Call it once per answered message: what it returns is remembered as handed over.
-A call's `options` are validated like the configuration (`fetch`, `keep`, `messageChars` and `botMessageChars` positive integers, `similarity` from 0 to 1, `foreignWebhook` a function of a webhook id returning `true`, `false` or `"skip"`, `attachments.images` an integer from 0 to 4, `attachments.maxBytes` an integer from 1 to 25 MiB); an invalid one makes the call reject, a programming error, so `keep: 0` is not "none" (skip the call for that).
+A call's `options` are validated like the configuration (`fetch`, `keep`, `messageChars` and `botMessageChars` positive integers, `similarity` from 0 to 1, `foreignWebhook` a function of a webhook id returning `true`, `false` or `"skip"`, `authors` a function of a message returning `"keep"`, `"skip"`, `"end"` or `undefined`, `attachments.images` an integer from 0 to 4, `attachments.maxBytes` an integer from 1 to 25 MiB); an invalid one makes the call reject, a programming error, so `keep: 0` is not "none" (skip the call for that).
 It remembers what it handed over and what addressed the assistant, not every message that ran a turn: a post a claim answered some other way, such as a webhook report turn or a steered message, can also come in the context of a later turn if the assistant has not posted since.
 
 What it returns is public channel text, visible to everyone in the channel; it is not private memory, carries no `privateTo`, and goes into the turn's text, so it lives in the conversation's history, not in the system prompt.
@@ -2609,10 +2666,10 @@ Discord does not render Markdown tables, so the Discord surface tells the model 
 The default says that Markdown renders except tables, that bullet lists or `key: value` lines replace them, that headings, bold, lists, quotes, inline code, fenced code blocks and `-#` small text work, and that a reply over 2,000 characters is split.
 `discord.formatting` replaces the text; `false` tells the model nothing.
 
-The block gives each author as a name, their Discord id and a role (`owner`, `bot` or `member`) in separate attributes, and says the messages were not addressed to the assistant. A name loses the characters `"`, `'`, `=`, `<`, `>`, `(`, `)` and `,`, so it cannot imitate another author, an attribute or a role, and every `<` (also the full-width `＜`) in a message's text is replaced by `‹`, so a message can neither close the block nor open a message of its own.
-`ChannelContext` is `{ messages, text, images? }`: `messages` are `ChannelContextMessage`s (`id`, `authorId`, `authorName`, `bot`, `owner`, `text`, `at`, `attachments`), oldest first, `text` is the block, and `images` the fetched images (see above).
+The block gives each author as a name, their id and a role (`owner`, `bot`, `external` or `member`) in separate attributes, and says the messages were not addressed to the assistant. A name loses the characters `"`, `'`, `=`, `<`, `>`, `(`, `)` and `,`, so it cannot imitate another author, an attribute or a role, and every `<` (also the full-width `＜`) in a message's text is replaced by `‹`, so a message can neither close the block nor open a message of its own.
+`ChannelContext` is `{ messages, text, images? }`: `messages` are `ChannelContextMessage`s (`id`, `authorId`, `authorName`, `bot`, `owner`, `external?`, `text`, `at`, `attachments`), oldest first, `text` is the block, and `images` the fetched images (see above).
 `ChannelContextOptions` holds the options above, and `CHANNEL_CONTEXT_DEFAULTS` their defaults.
-`formatChannelContext(messages)` is the function that writes `ChannelContext.text`, exported so a host can test what the model sees without reaching into the core: it takes `ChannelContextMessage`s (only `authorId`, `authorName`, `bot`, `owner` and `text` are read) and returns the block, headed and delimited by `<channel-context>`. Each message is a `<message from="…" id="…" role="owner|member|bot">` line whose author is in the attributes, never in the text, and every `<` of a name or text (plain or full-width) is replaced by `‹`, so no message can pass as markup. It does not fetch, cut or select anything, and it is the same function the reader calls, so a block it returns is the block a turn carries.
+`formatChannelContext(messages)` is the function that writes `ChannelContext.text`, exported so a host can test what the model sees without reaching into the core: it takes `ChannelContextMessage`s (only `authorId`, `authorName`, `bot`, `owner`, `external` and `text` are read) and returns the block, headed and delimited by `<channel-context>`. Each message is a `<message from="…" id="…" role="owner|member|bot|external">` line whose author is in the attributes, never in the text, and every `<` of a name or text (plain or full-width) is replaced by `‹`, so no message can pass as markup. It does not fetch, cut or select anything, and it is the same function the reader calls, so a block it returns is the block a turn carries.
 In a test, `fakeDiscord({ channelContext })` answers `DISCORD.channelContext` as the test says; by default with no context.
 
 <!-- example: examples/channel-context.ts -->
@@ -4108,6 +4165,7 @@ Import from the entries listed below; source area files are internal.
 | `AccessRules` | `pi-roundtable` | type |
 | `AccessTier` | `pi-roundtable` | type |
 | `AccessTierConfig` | `pi-roundtable` | type |
+| `ActionEvent` | `pi-roundtable` | type |
 | `ActorFacts` | `pi-roundtable` | type |
 | `AGENTS` | `pi-roundtable` | value |
 | `AGENT_SERVER_PLUGIN` | `pi-roundtable` | value |
@@ -4126,6 +4184,7 @@ Import from the entries listed below; source area files are internal.
 | `AgentSessions` | `pi-roundtable` | type |
 | `AgentStatus` | `pi-roundtable` | type |
 | `AgentTeam` | `pi-roundtable` | type |
+| `AgentTools` | `pi-roundtable` | type |
 | `AgentTurnScope` | `pi-roundtable` | type |
 | `Approval` | `pi-roundtable` | type |
 | `ApprovalDetails` | `pi-roundtable` | type |
@@ -4178,6 +4237,7 @@ Import from the entries listed below; source area files are internal.
 | `ConversationRegistration` | `pi-roundtable` | type |
 | `ConversationRegistry` | `pi-roundtable` | type |
 | `ConversationVisibility` | `pi-roundtable` | type |
+| `ConversationsConfig` | `pi-roundtable` | type |
 | `ConversationTurnInput` | `pi-roundtable` | type |
 | `ConversationTurns` | `pi-roundtable` | type |
 | `DELEGATION` | `pi-roundtable` | value |

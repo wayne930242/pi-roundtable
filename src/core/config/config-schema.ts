@@ -7,11 +7,13 @@ import { accessShape } from "./access.ts";
 import { discordShape } from "./adapters.ts";
 import { attachmentsShape } from "./attachments.ts";
 import type { Pronouns } from "./config.ts";
+import { conversationsShape } from "./conversations.ts";
 import { limitsShape } from "./limits.ts";
 import { profilesShape } from "./profiles.ts";
 import {
 	bool,
 	characterInput,
+	type Field,
 	guarded,
 	integer,
 	list,
@@ -32,6 +34,22 @@ const tierMembers = shape({
 	everyone: optional(bool),
 });
 
+const agentServerDescribe =
+	'false, to leave the agent server out, or { tools: "chat-only" } to take the shell and file tools from its agents (leave the key out to keep both)';
+const chatOnlyShape = shape({ tools: oneOf("chat-only" as const) });
+const agentServerField: Field<false | { tools: "chat-only" }> = {
+	describe: agentServerDescribe,
+	check: (value, path) => {
+		if (value === false) return false;
+		if (typeof value === "object" && value !== null && !Array.isArray(value))
+			return chatOnlyShape.check(value, path);
+		return guarded(agentServerDescribe, (_): _ is never => false).check(
+			value,
+			path,
+		);
+	},
+};
+
 const isPolicy = (value: unknown): value is EffortPolicy =>
 	typeof value === "function";
 const isPlugin = (value: unknown): value is RoundtablePlugin =>
@@ -50,15 +68,11 @@ export const configSchema = shape({
 		}),
 	),
 	discord: optional(discordShape),
-	agentServer: optional(
-		guarded(
-			"false, to leave the agent server out (leave the key out to keep it)",
-			(value): value is false => value === false,
-		),
-	),
+	agentServer: optional(agentServerField),
 	database: shape({ url: text }),
 	dataDir: text,
 	attachments: attachmentsShape,
+	conversations: conversationsShape,
 	agentDir: optional(text),
 	model: text,
 	thinking: optional(oneOf(...THINKING_LEVELS)),

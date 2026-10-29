@@ -1,3 +1,4 @@
+import { checkAgentTools } from "./checks/agent-tools.ts";
 import { type BunFacts, checkBun } from "./checks/bun.ts";
 import { checkCharacters } from "./checks/characters.ts";
 import { checkConfiguration, checkPlugins } from "./checks/configuration.ts";
@@ -67,6 +68,11 @@ export function buildChecks(
 		},
 		{ name: "plugins", offline: true, run: () => checkPlugins(project) },
 		{ name: "access", offline: true, run: () => checkAccess(project) },
+		{
+			name: "agent tools",
+			offline: true,
+			run: () => checkAgentTools(project),
+		},
 		{
 			name: "image provider",
 			offline: true,
