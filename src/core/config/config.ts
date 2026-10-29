@@ -5,52 +5,32 @@ import type { AgentSeed } from "../agents/agent-rules.ts";
 import { ConfigError } from "../domain/errors.ts";
 import type { InterimTextMode } from "../domain/interim.ts";
 import { DRAIN_LIMIT_MS } from "../drain.ts";
-import { isLocale, type Locale } from "../i18n/index.ts";
+import type { Locale } from "../i18n/index.ts";
 import type { AccessRules } from "../identity/access-policy.ts";
 import type { OwnerIdentity } from "../identity.ts";
 import {
 	type EffortPolicy,
 	type ModelRef,
 	parseModelRef,
-	THINKING_LEVELS,
 	type ThinkingLevel,
 } from "../models.ts";
 import type { PerPrincipalLimits } from "../modules/background/personal-target.ts";
 import type { RoundtablePlugin } from "../plugin.ts";
 import { PRIMARY_CHARS } from "../runtime/interim-text.ts";
 import type { Tier, TierMembers } from "../speakers.ts";
-import { type AccessConfig, accessOf, accessShape } from "./access.ts";
+import { type AccessConfig, accessOf } from "./access.ts";
 import {
 	type DiscordConfig,
-	discordShape,
 	liftAdapters,
 	type ResolvedDiscord,
 	resolvedDiscord,
 } from "./adapters.ts";
 import { checkAgentTeamKeys } from "./agent-team.ts";
-import { type AttachmentsConfig, attachmentsShape } from "./attachments.ts";
-import {
-	type LimitsConfig,
-	limitsOf,
-	limitsShape,
-	type ResolvedLimits,
-} from "./limits.ts";
+import type { AttachmentsConfig } from "./attachments.ts";
+import { configSchema } from "./config-schema.ts";
+import { type LimitsConfig, limitsOf, type ResolvedLimits } from "./limits.ts";
 import { opsOf, type ResolvedOps } from "./ops.ts";
-import {
-	bool,
-	characterInput,
-	guarded,
-	integer,
-	list,
-	number,
-	oneOf,
-	optional,
-	record,
-	shape,
-	skinTones,
-	text,
-} from "./schema.ts";
-import { type SkillsConfig, skillsField } from "./skills-config.ts";
+import type { SkillsConfig } from "./skills-config.ts";
 
 export type { DiscordConfig };
 
@@ -222,110 +202,6 @@ export interface RoundtableConfig extends LimitsConfig {
 	plugins?: RoundtablePlugin[];
 }
 
-const tierMembers = shape({
-	users: optional(list(text)),
-	roles: optional(list(text)),
-	everyone: optional(bool),
-});
-
-const isPolicy = (value: unknown): value is EffortPolicy =>
-	typeof value === "function";
-const isPlugin = (value: unknown): value is RoundtablePlugin =>
-	typeof value === "object" &&
-	value !== null &&
-	typeof (value as { name?: unknown }).name === "string" &&
-	typeof (value as { setup?: unknown }).setup === "function";
-
-const schema = shape({
-	name: optional(text),
-	owner: optional(
-		shape({
-			id: text,
-			name: text,
-			pronouns: optional(oneOf<Pronouns>("he", "she", "they")),
-		}),
-	),
-	discord: optional(discordShape),
-	database: shape({ url: text }),
-	dataDir: text,
-	attachments: attachmentsShape,
-	agentDir: optional(text),
-	model: text,
-	thinking: optional(oneOf(...THINKING_LEVELS)),
-	judge: optional(
-		shape({ model: optional(text), threshold: optional(number(0, 1)) }),
-	),
-	effortPolicy: optional(
-		guarded("a function from a turn to its effort rule", isPolicy),
-	),
-	delegation: optional(
-		shape({
-			model: optional(text),
-			thinking: optional(oneOf(...THINKING_LEVELS)),
-		}),
-	),
-	locale: optional(
-		guarded("a locale, en or zh-TW", (value): value is Locale =>
-			isLocale(value),
-		),
-	),
-	timeZone: optional(text),
-	speakers: optional(
-		shape({ admins: optional(tierMembers), members: optional(tierMembers) }),
-	),
-	access: optional(accessShape),
-	background: optional(
-		shape({
-			perPrincipal: optional(
-				shape({
-					schedules: optional(integer(1, 10_000)),
-					delegations: optional(integer(1, 1_000)),
-				}),
-			),
-		}),
-	),
-	toolTiers: optional(record(oneOf<Tier>("owner", "admin", "member"))),
-	prompts: optional(shape({ shared: text, guest: optional(text) })),
-	agents: optional(
-		list(
-			shape({
-				name: text,
-				displayName: text,
-				prompt: text,
-				character: optional(characterInput),
-				avatarPrompt: optional(text),
-				channelId: optional(text),
-			}),
-		),
-	),
-	coordinator: optional(text),
-	characters: optional(shape({ skins: optional(skinTones) })),
-	http: optional(
-		shape({
-			publicUrl: optional(text),
-			port: optional(integer(1, 65535)),
-			hostname: optional(text),
-			socketPath: optional(text),
-			socketMode: optional(integer(0, 0o777)),
-		}),
-	),
-	avatar: optional(text),
-	workDir: optional(text),
-	scratchDir: optional(text),
-	skills: optional(skillsField),
-	memory: optional(bool),
-	ops: optional(shape({ agent: optional(text), conversation: optional(text) })),
-	drainSeconds: optional(integer(1, 3_600)),
-	...limitsShape,
-	interimText: optional(oneOf<InterimTextMode>("on", "off")),
-	interimPrimaryChars: optional(integer(1, 100_000)),
-	plugins: optional(
-		list(
-			guarded("a plugin, an object with a name and a setup function", isPlugin),
-		),
-	),
-});
-
 /** Logged once when `avatar` is set: agents are composed characters and no picture is drawn from it. */
 export const AVATAR_DEPRECATION =
 	"agents are composed characters since 0.23; `avatar` is ignored";
@@ -412,7 +288,10 @@ function skinsOf(skins: readonly string[] | undefined): readonly Hex[] {
 
 /** The configuration checked against its schema, defaults filled; throws a ConfigError naming the key and the fix. */
 export function resolveConfig(input: unknown): ResolvedConfig {
-	const config = schema.check(liftAdapters(input), "") as RoundtableConfig;
+	const config = configSchema.check(
+		liftAdapters(input),
+		"",
+	) as RoundtableConfig;
 	const name = config.name ?? "Roundtable";
 	const model = modelOf(config.model, "model");
 	const thinking = config.thinking ?? "medium";
