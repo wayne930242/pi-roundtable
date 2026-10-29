@@ -27,6 +27,7 @@ import { COLLAPSED_KEY, reloadCollapsed } from "./lib/folds.ts";
 import { loadKit } from "./lib/kit.ts";
 import { layoutApi } from "./lib/layout-api.ts";
 import { setRouting } from "./lib/router.ts";
+import { loadDragWith } from "./lib/row-press.ts";
 import { type AppConnection, setConnection } from "./lib/socket.ts";
 import { RoomsPage } from "./pages/rooms.tsx";
 
@@ -655,6 +656,40 @@ test("a finger that rests on a row lifts it, and letting go without moving opens
 	await settle(80);
 	expect(item.hasAttribute("data-lifted")).toBe(false);
 	expect(labels().slice(0, 2)).toEqual(["Pin", "Move to folder…"]);
+});
+
+test("a lift whose chunk arrives after the finger has gone is a tap: nothing is held and the menu opens", async () => {
+	load({ folders: [WORK] });
+	await show(<List />);
+	const row = rowOf("scout") as HTMLElement;
+	const item = row.closest("li") as HTMLElement;
+	let arrive: () => void = () => undefined;
+	const restore = loadDragWith(
+		() =>
+			new Promise((resolve) => {
+				arrive = () => resolve(import("./lib/drag.ts"));
+			}),
+	);
+	try {
+		// The hold fires at 450 ms; the finger lifts before the chunk is there.
+		await page.act(async () => {
+			pointer(row, "pointerdown");
+			await settle(520);
+		});
+		await page.act(() => pointer(row, "pointerup"));
+		await page.act(async () => {
+			arrive();
+			await until(() => menuItems().length > 0);
+		});
+		expect(item.hasAttribute("data-lifted")).toBe(false);
+		// A lift would now be stopping every touchmove of the page.
+		const scroll = new Event("touchmove", { bubbles: true, cancelable: true });
+		window.dispatchEvent(scroll);
+		expect(scroll.defaultPrevented).toBe(false);
+		expect(labels().slice(0, 2)).toEqual(["Pin", "Move to folder…"]);
+	} finally {
+		restore();
+	}
 });
 
 test("a finger that goes down within 32 px of a screen edge never lifts a row: the hold opens the menu as before", async () => {

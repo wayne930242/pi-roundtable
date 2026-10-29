@@ -28,7 +28,16 @@ export interface Lifting {
 /** How far a mouse moves (px) with the button down before the row is lifted. */
 const MOUSE_SLOP = 6;
 
-const dragModule = () => import("./drag.ts");
+let dragModule = () => import("./drag.ts");
+
+/** Loads the lift code through `load` until the returned function is called; for a test that delays the chunk. */
+export function loadDragWith(load: typeof dragModule): () => void {
+	const before = dragModule;
+	dragModule = load;
+	return () => {
+		dragModule = before;
+	};
+}
 
 export type RowPressProps = PressProps & {
 	onDragStart(event: DragEvent<HTMLElement>): void;
@@ -69,23 +78,24 @@ export function useRowPress(
 		const root = spec?.root(source);
 		if (!spec || !item || !root) return false;
 		chunk.current ??= dragModule();
-		chunk.current.then(
-			({ lift }) =>
-				lift({
-					mode: spec.mode,
-					key: spec.key,
-					item,
-					root,
-					pointerId,
-					y: y(),
-					open: spec.open,
-					done: (outcome) => {
-						if (outcome.type === "tap") onTap();
-						else if (outcome.type !== "cancel") spec.onDrop(outcome);
-					},
-				}),
-			onTap,
-		);
+		chunk.current.then(({ lift }) => {
+			// The chunk can arrive after the finger has gone: a lift now would wait for a pointer that
+			// never comes again and hold the page still. The release is a tap.
+			if (finger.current?.id !== pointerId) return onTap();
+			lift({
+				mode: spec.mode,
+				key: spec.key,
+				item,
+				root,
+				pointerId,
+				y: y(),
+				open: spec.open,
+				done: (outcome) => {
+					if (outcome.type === "tap") onTap();
+					else if (outcome.type !== "cancel") spec.onDrop(outcome);
+				},
+			});
+		}, onTap);
 		return true;
 	};
 
