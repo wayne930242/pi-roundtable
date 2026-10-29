@@ -21,6 +21,7 @@ import {
 	overviewShot,
 	planMove,
 	podiumPlace,
+	ringRadius,
 	type Shot,
 	type Slots,
 	seatAhead,
@@ -34,9 +35,10 @@ import {
 import { type Hall, hallOf } from "./hall";
 import { type Built, buildHall, flicker } from "./hall3d";
 import { createLoop, type Loop } from "./loop";
+import { Names } from "./names3d";
 import { badgeOf, Podium, PodiumKit } from "./podium3d";
 import { createSpeedLines, type SpeedLines } from "./speed";
-import { stickerCanvas } from "./standee";
+import { mixHex, stickerCanvas } from "./standee";
 import { Toon } from "./toon";
 import type {
 	Scheme,
@@ -47,6 +49,7 @@ import type {
 	TableStats,
 	ThemeName,
 } from "./types";
+import { ENGLISH_TABLE_LABELS } from "./types";
 
 /** The WebGL council hall: a ring of podiums with standees, seen from the owner's podium or from close to the one who speaks. */
 
@@ -59,8 +62,6 @@ const TAP_PX = 8;
 /** What a pinch's change of distance has to be before it zooms. */
 const PINCH_IN = 1.22;
 const PINCH_OUT = 0.82;
-/** The smallest a seat's name may be drawn on the screen, in CSS px. */
-const READABLE_PX = 11;
 
 const damp = (v: number, target: number, k: number, dt: number) =>
 	v + (target - v) * (1 - Math.exp(-k * dt));
@@ -111,6 +112,12 @@ export function createTable3D(
 	if (getComputedStyle(container).position === "static")
 		container.style.position = "relative";
 	container.appendChild(canvasEl);
+	const labels = opts.labels ?? ENGLISH_TABLE_LABELS;
+	const names = new Names(container, labels, (podium) => {
+		if (podium.init.kind === "agent" && podium.init.id)
+			opts.onSeatClick({ id: podium.init.id, name: podium.init.name });
+		else if (podium.init.kind === "more") opts.onMore?.();
+	});
 	const speed: SpeedLines = createSpeedLines(container, () => reduced);
 
 	const scene = new Scene();
@@ -198,7 +205,15 @@ export function createTable3D(
 		const podium = slot === undefined ? undefined : w.podiums[slot];
 		if (podium?.init.kind !== "agent") return;
 		try {
-			const made = await stickerCanvas(svg, 320, w.hall.paper, w.hall.ink);
+			const made = await stickerCanvas(svg, 320, {
+				rim: w.hall.paper,
+				ink: w.hall.ink,
+				edge: mixHex(
+					seats.find((s) => s.id === id)?.color ?? w.hall.gold,
+					w.hall.ink,
+					0.35,
+				),
+			});
 			if (expected !== building || world !== w) return;
 			podium.setSticker(made.canvas);
 			loop.wake();
@@ -225,9 +240,10 @@ export function createTable3D(
 		const slotOf = new Map<string, number>();
 		const order: string[] = [];
 		const podiums: Podium[] = [];
-		const place = (slot: number, podium: Podium) => {
+		const place = (slot: number, podium: Podium, push = 0) => {
 			const at = podiumPlace(slot, slots.count);
-			podium.group.position.set(at.x, 0.2, at.z);
+			const out = 1 + push / ringRadius(slots.count);
+			podium.group.position.set(at.x * out, 0.2, at.z * out);
 			podium.group.rotation.y = at.yaw;
 			podiums[slot] = podium;
 			group.add(podium.group);
@@ -244,6 +260,7 @@ export function createTable3D(
 				kit,
 				toon,
 			),
+			1.2,
 		);
 		seats.slice(0, slots.seated).forEach((seat, i) => {
 			const slot = i + 1;
@@ -286,37 +303,15 @@ export function createTable3D(
 		if (focusId && !slotOf.has(focusId)) focusId = null;
 		// a new ring has new angles: the camera stays where it stands relative to what it looks at
 		moveTo(targetShot(), true);
-		reportNames();
+		names.paint(hall);
+		names.set(podiums, (p) => states.get(p.init.id ?? "") ?? "idle");
 		loop.wake();
 	};
 
-	/** Whether the plates' names are large enough on the screen to read, from where the camera stands for the whole ring. */
-	function reportNames(): void {
-		const w = world;
-		const height = container.clientHeight || canvasEl.clientHeight;
-		if (!w || height <= 0) return;
-		const view = overviewShot(overviewAz, w.slots.count);
-		const { position } = shotVectors(view);
-		const eye = new Vector3(...position);
-		let near = Number.POSITIVE_INFINITY;
-		for (const p of w.podiums) {
-			if (p.init.kind !== "agent") continue;
-			near = Math.min(near, eye.distanceTo(p.group.position));
-		}
-		if (!Number.isFinite(near)) return;
-		const fov = fitFov(view.fov, camera.aspect);
-		const pxPerUnit = height / (2 * near * Math.tan((fov * Math.PI) / 360));
-		const first = w.podiums.find((p) => p.init.kind === "agent");
-		const em = first ? (first.plateText.px / 512) * 1.24 : 0;
-		const readable = em * pxPerUnit >= READABLE_PX;
-		if (readable !== lastReadable) {
-			lastReadable = readable;
-			opts.onNames?.(readable);
-		}
-	}
-	let lastReadable: boolean | undefined;
-
 	/* ---------- one frame ---------- */
+
+	/** Whether the names stood clear of each other the last time the whole ring was in view. */
+	let lastClear: boolean | undefined;
 
 	const eye = new Vector3();
 	let seconds = 0;
@@ -345,6 +340,18 @@ export function createTable3D(
 		camera.getWorldPosition(eye);
 		const w = world;
 		if (w) {
+			const at = focusId === null ? undefined : w.slotOf.get(focusId);
+			const clear = names.place(
+				camera,
+				eye,
+				container.clientWidth,
+				container.clientHeight,
+				at === undefined ? undefined : w.podiums[at],
+			);
+			if (focusId === null && clear !== lastClear) {
+				lastClear = clear;
+				opts.onNames?.(clear);
+			}
 			flicker(w.built.flames, seconds, reduced);
 			for (const f of w.built.flames)
 				f.body.lookAt(eye.x, f.body.position.y, eye.z);
@@ -359,11 +366,10 @@ export function createTable3D(
 				const lit = p.speak > 0.02;
 				p.glow.visible = lit && p.board.visible;
 				p.glowMaterial.opacity = 0.85 * p.speak;
-				const baseY = p.board.userData.baseY ?? p.board.position.y;
-				p.board.userData.baseY = baseY;
 				p.board.position.y =
-					baseY + Math.sin(seconds * 3.1 + p.phase) * 0.035 * p.bob;
+					p.boardY + Math.sin(seconds * 3.1 + p.phase) * 0.035 * p.bob;
 				p.face(eye);
+				if (p.markFrame(state === "speaking", seconds, reduced)) moving = true;
 				if (
 					Math.abs(p.speak - speaking) > 0.01 ||
 					Math.abs(wasSpeak - p.speak) > 0.001 ||
@@ -430,7 +436,7 @@ export function createTable3D(
 		renderer.setSize(w, h, false);
 		camera.aspect = w / h;
 		camera.updateProjectionMatrix();
-		reportNames();
+		names.size(w);
 		loop.wake();
 	};
 	const observer = new ResizeObserver(resize);
@@ -675,7 +681,10 @@ export function createTable3D(
 			states.set(id, state);
 			const slot = world?.slotOf.get(id);
 			const p = slot === undefined ? undefined : world?.podiums[slot];
-			if (p) applyState(p, state);
+			if (p) {
+				applyState(p, state);
+				names.relabel(p, state);
+			}
 			loop.wake();
 		},
 		async setAvatar(id, svg) {
@@ -723,6 +732,7 @@ export function createTable3D(
 			canvasEl.removeEventListener("pointercancel", onCancel);
 			canvasEl.removeEventListener("wheel", onWheel);
 			speed.dispose();
+			names.dispose();
 			disposeWorld();
 			renderer.dispose();
 			renderer.forceContextLoss();

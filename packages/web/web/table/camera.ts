@@ -52,13 +52,26 @@ export function slotsFor(agents: number): Slots {
 	return { count: 1 + seated + (more > 0 ? 1 : 0), seated, more };
 }
 
-/** Where a podium stands on the ring. Slot 0 is the owner's. */
-export const slotAngle = (slot: number, count: number): number =>
-	normalizeAngle((TAU * slot) / Math.max(count, 1));
+/** The most the podiums of a small table stand apart, in radians: the agents sit as a council facing the owner, not spread over the whole ring. */
+export const SPACING_MAX = 0.62;
 
-/** The ring's radius: wide enough that neighbouring podiums stand about 2.5 units apart. */
+/** The angle between two neighbouring agents' podiums. */
+export const spacingFor = (count: number): number =>
+	Math.min(TAU / Math.max(count, 1), SPACING_MAX);
+
+/**
+ * Where a podium stands on the ring. Slot 0 is the owner's, at the camera's home; the agents'
+ * podiums stand side by side across the ring from it, centred on the far side, and fill the ring
+ * evenly when there are many.
+ */
+export const slotAngle = (slot: number, count: number): number =>
+	slot === 0
+		? 0
+		: normalizeAngle(Math.PI + (slot - count / 2) * spacingFor(count));
+
+/** The ring's radius: wide enough that neighbouring podiums stand at least 2.6 units apart. */
 export const ringRadius = (count: number): number =>
-	Math.max(4.6, (2.5 * count) / TAU);
+	Math.max(4.2, 2.6 / (2 * Math.sin(spacingFor(count) / 2)));
 
 /** The slot nearest to a direction. */
 export function nearestSlot(az: number, count: number): number {
@@ -99,29 +112,29 @@ export function overviewShot(az: number, count: number): Shot {
 	const ring = ringRadius(count);
 	return {
 		az,
-		r: ring + 5.2 + ring * 0.12,
-		y: 4.6 + ring * 0.12,
+		r: ring + 4.4,
+		y: 4.4 + ring * 0.1,
 		aim: 0,
-		lookR: 0,
-		lookY: 2.6,
+		lookR: -1.6,
+		lookY: 2.5,
 		roll: 0,
-		fov: 50,
+		fov: 46,
 	};
 }
 
 /** The speaker large in the frame from just inside the ring, a little low, off to a side, tilted. */
 export function closeupShot(seatAz: number, count: number): Shot {
 	const ring = ringRadius(count);
-	const side = 0.2;
+	const side = 0.18;
 	return {
 		az: normalizeAngle(seatAz + side),
-		r: Math.max(ring - 4.1, 0.8),
-		y: 1.75,
+		r: Math.max(ring - 3.9, 0.5),
+		y: 1.8,
 		aim: -side,
 		lookR: ring + 0.1,
-		lookY: 1.95,
-		roll: -0.1,
-		fov: 47,
+		lookY: 2.25,
+		roll: -0.16,
+		fov: 58,
 	};
 }
 
@@ -227,9 +240,6 @@ export function zoomIntent(delta: number, focused: boolean): ZoomIntent {
 	if (delta < 0) return focused ? "none" : "in";
 	return focused ? "out" : "none";
 }
-
-/** Whether the shot is where the camera stands to see the whole ring. */
-export const isOverview = (shot: Shot): boolean => shot.lookR < 0.5;
 
 /** The slot (and its id in `ids`) a hash such as `#/table/<agent>` names; the overview when it names none. */
 export function focusOf(

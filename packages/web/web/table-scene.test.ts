@@ -20,12 +20,14 @@ import {
 	slotAngle,
 	slotsFor,
 	snapAngle,
+	spacingFor,
 	startsAtEdge,
 	TAU,
 	zoomIntent,
 } from "./table/camera.ts";
 import { hallOf } from "./table/hall.ts";
 import { createLoop, type LoopHost } from "./table/loop.ts";
+import { crowded } from "./table/names3d.ts";
 import {
 	drawPlate,
 	fitPlateText,
@@ -34,21 +36,30 @@ import {
 } from "./table/plate.ts";
 import { badgeOf, STANDEE_TURN } from "./table/podium3d.ts";
 import { createSpeedLines } from "./table/speed.ts";
+import { mixHex, ringOffsets } from "./table/standee.ts";
 
 beforeAll(() => GlobalRegistrator.register({ width: 1280, height: 800 }));
 afterAll(() => GlobalRegistrator.unregister());
 
 describe("the camera planner", () => {
-	test("podiums stand evenly round the ring, the owner's at the camera's home", () => {
-		const count = 5;
+	test("the owner's podium is the camera's home and the agents stand side by side across the ring from it", () => {
+		const count = 6;
 		expect(slotAngle(0, count)).toBe(0);
-		const angles = Array.from({ length: count }, (_, slot) =>
-			slotAngle(slot, count),
+		const agents = Array.from({ length: count - 1 }, (_, i) =>
+			slotAngle(i + 1, count),
 		);
-		const gaps = angles.map((angle, i) =>
-			shortestArc(angle, angles[(i + 1) % count] ?? 0),
-		);
-		for (const gap of gaps) expect(gap).toBeCloseTo(TAU / count, 9);
+		const gaps = agents
+			.slice(1)
+			.map((angle, i) => shortestArc(agents[i] ?? 0, angle));
+		for (const gap of gaps) expect(gap).toBeCloseTo(spacingFor(count), 9);
+		// the row is centred on the far side, so the middle of it is straight across from the owner
+		const middle =
+			(agents[0] ?? 0) + shortestArc(agents[0] ?? 0, agents.at(-1) ?? 0) / 2;
+		expect(Math.abs(normalizeAngle(middle - Math.PI))).toBeLessThan(1e-9);
+		// a big table fills the ring evenly
+		const many = 14;
+		expect(spacingFor(many)).toBeCloseTo(TAU / many, 9);
+		expect(slotAngle(many / 2, many)).toBeCloseTo(Math.PI, 9);
 		const owner = podiumPlace(0, count);
 		expect(owner.x).toBeCloseTo(0, 9);
 		expect(owner.z).toBeCloseTo(ringRadius(count), 9);
@@ -56,6 +67,10 @@ describe("the camera planner", () => {
 		const place = podiumPlace(2, count);
 		expect(Math.sin(place.yaw)).toBeCloseTo(-place.x / ringRadius(count), 9);
 		expect(Math.cos(place.yaw)).toBeCloseTo(-place.z / ringRadius(count), 9);
+		// neighbours stand at least 2.6 units apart
+		const a = podiumPlace(2, count);
+		const b = podiumPlace(3, count);
+		expect(Math.hypot(a.x - b.x, a.z - b.z)).toBeGreaterThanOrEqual(2.59);
 	});
 
 	test("a turn takes the shorter way round the ring, whichever side the target is on", () => {
@@ -89,7 +104,7 @@ describe("the camera planner", () => {
 			slotAngle(1, count),
 			9,
 		);
-		expect(snapAngle(Math.PI - 0.05, 4)).toBeCloseTo(Math.PI, 9);
+		expect(snapAngle(Math.PI - 0.05, 4)).toBeCloseTo(slotAngle(2, 4), 9);
 		// a drag of half the canvas' width is an eighth of the ring
 		expect(Math.abs(dragAngle(300, 600))).toBeCloseTo(Math.PI / 4, 9);
 	});
@@ -98,8 +113,9 @@ describe("the camera planner", () => {
 		const view = shotVectors(overviewShot(0, 6));
 		expect(view.position[2]).toBeGreaterThan(ringRadius(6));
 		expect(view.position[1]).toBeGreaterThan(4);
+		// it looks across the ring, at the row of podiums opposite the owner's
 		expect(view.target[0]).toBeCloseTo(0, 9);
-		expect(view.target[2]).toBeCloseTo(0, 9);
+		expect(view.target[2]).toBeLessThan(0);
 		const az = slotAngle(2, 6);
 		const near = closeupShot(az, 6);
 		const { position, target } = shotVectors(near);
@@ -381,5 +397,41 @@ describe("the speed lines", () => {
 		expect(lines.play()).toBe(false);
 		lines.dispose();
 		expect(host.querySelector(".rt-speed")).toBeNull();
+	});
+});
+
+describe("the names over the podiums", () => {
+	test("two names that sit over each other are crowded, and names side by side or one above the other are not", () => {
+		expect(
+			crowded([
+				{ x: 100, y: 200, w: 80 },
+				{ x: 130, y: 204, w: 80 },
+			]),
+		).toBe(true);
+		expect(
+			crowded([
+				{ x: 100, y: 200, w: 80 },
+				{ x: 200, y: 204, w: 80 },
+			]),
+		).toBe(false);
+		expect(
+			crowded([
+				{ x: 100, y: 200, w: 80 },
+				{ x: 110, y: 240, w: 80 },
+			]),
+		).toBe(false);
+		expect(crowded([])).toBe(false);
+	});
+});
+
+describe("the standee board", () => {
+	test("its edge is drawn all the way round the figure, and the board's own colour is the accent moved toward the ink", () => {
+		const offsets = ringOffsets(10, 24);
+		expect(offsets).toHaveLength(24);
+		for (const [dx, dy] of offsets)
+			expect(Math.hypot(dx, dy)).toBeCloseTo(10, 9);
+		expect(mixHex("#ffffff", "#000000", 0.5)).toBe("#808080");
+		expect(mixHex("#c0392b", "#0b0f1e", 0)).toBe("#c0392b");
+		expect(mixHex("#c0392b", "#0b0f1e", 1)).toBe("#0b0f1e");
 	});
 });

@@ -375,36 +375,51 @@ export function bannerCanvas(hall: Hall, emblem: Emblem): HTMLCanvasElement {
 	return c;
 }
 
-/** A podium's front panel: a gold frame and the diamond star, on a transparent ground. */
+/** A podium's front panel: a raised panel in a second, lighter wood with a gold frame and the diamond star. */
 export function panelCanvas(hall: Hall): HTMLCanvasElement {
 	const [c, g] = canvas(256, 320);
 	g.fillStyle = hall.woodDark;
-	g.fillRect(14, 14, 228, 292);
+	g.fillRect(8, 8, 240, 304);
+	g.fillStyle = hall.woodLight;
+	g.fillRect(24, 24, 208, 272);
+	// the bevel: light on the upper edges, shade on the lower
+	g.fillStyle = hall.wood;
+	g.beginPath();
+	g.moveTo(24, 296);
+	g.lineTo(232, 296);
+	g.lineTo(232, 24);
+	g.lineTo(212, 44);
+	g.lineTo(212, 276);
+	g.lineTo(44, 276);
+	g.closePath();
+	g.fill();
+	g.fillStyle = hall.woodDark;
+	g.fillRect(44, 44, 168, 232);
 	g.strokeStyle = hall.goldDark;
-	g.lineWidth = 12;
-	g.strokeRect(14, 14, 228, 292);
+	g.lineWidth = 8;
+	g.strokeRect(44, 44, 168, 232);
 	g.strokeStyle = hall.gold;
-	g.lineWidth = 5;
-	g.strokeRect(32, 32, 192, 256);
+	g.lineWidth = 4;
+	g.strokeRect(56, 56, 144, 208);
 	g.fillStyle = hall.gold;
 	g.beginPath();
-	g.moveTo(128, 78);
-	g.lineTo(176, 160);
-	g.lineTo(128, 252);
-	g.lineTo(80, 160);
+	g.moveTo(128, 84);
+	g.lineTo(172, 160);
+	g.lineTo(128, 238);
+	g.lineTo(84, 160);
 	g.closePath();
 	g.fill();
 	g.fillStyle = hall.woodDark;
 	g.beginPath();
-	g.moveTo(128, 120);
-	g.lineTo(150, 160);
-	g.lineTo(128, 204);
-	g.lineTo(106, 160);
+	g.moveTo(128, 122);
+	g.lineTo(148, 160);
+	g.lineTo(128, 202);
+	g.lineTo(108, 160);
 	g.closePath();
 	g.fill();
 	g.strokeStyle = hall.ink;
 	g.lineWidth = 5;
-	g.strokeRect(14, 14, 228, 292);
+	g.strokeRect(8, 8, 240, 304);
 	return c;
 }
 
@@ -523,6 +538,33 @@ export function beamCanvas(): HTMLCanvasElement {
 		g.lineTo(x + 90, 512);
 		g.closePath();
 		g.fill();
+	}
+	return c;
+}
+
+/** The three short strokes that radiate beside a speaker's head, as in the concept art: gold with a dark edge. */
+export function marksCanvas(hall: Hall): HTMLCanvasElement {
+	const [c, g] = canvas(256, 256);
+	g.lineCap = "round";
+	const strokes = [
+		[Math.PI * 1.1, 78, 128],
+		[Math.PI * 1.32, 84, 138],
+		[Math.PI * 1.54, 76, 124],
+	] as const;
+	const ox = 196;
+	const oy = 204;
+	for (const [color, width] of [
+		[hall.ink, 34],
+		[hall.gold, 20],
+	] as const) {
+		g.strokeStyle = color;
+		g.lineWidth = width;
+		for (const [angle, from, to] of strokes) {
+			g.beginPath();
+			g.moveTo(ox + Math.cos(angle) * from, oy + Math.sin(angle) * from);
+			g.lineTo(ox + Math.cos(angle) * to, oy + Math.sin(angle) * to);
+			g.stroke();
+		}
 	}
 	return c;
 }

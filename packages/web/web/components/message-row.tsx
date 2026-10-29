@@ -67,7 +67,7 @@ function FileItem({ file }: { file: RoomFile }) {
 	);
 }
 
-function Files({ files }: { files: readonly RoomFile[] }) {
+export function Files({ files }: { files: readonly RoomFile[] }) {
 	if (files.length === 0) return null;
 	return (
 		<ul className="files">

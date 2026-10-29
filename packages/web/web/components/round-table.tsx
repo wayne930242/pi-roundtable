@@ -46,7 +46,7 @@ const tableLabels = (): TableLabels => ({
 const LIST_ABOVE = 10;
 
 /** The agents of the room list, the coordinator first; only `members` of them when the table is a group's. */
-function useRoster(members: readonly string[] | undefined): RoomView[] {
+export function useRoster(members: readonly string[] | undefined): RoomView[] {
 	return useSelector((state) => {
 		const agents = state.order
 			.map((key) => state.rooms[key]?.view)
@@ -88,6 +88,16 @@ export interface RoundTableProps {
 	list?: boolean;
 	/** Receives the table's handle once it is mounted, and `undefined` when it goes. */
 	onHandle?(handle: TableHandle | undefined): void;
+	/** The agent (by name) the camera is on; the whole ring when null or absent. The scene turns to follow it. */
+	focus?: string | null;
+	/** The person turned the camera (a zoom, a swipe in a close-up): the agent it is on now, or null for the whole ring. */
+	onFocus?(name: string | null): void;
+	/** A seat was tapped; by default the page opens the agent's room. */
+	onSeat?(name: string): void;
+	/** The "+N" podium was tapped. */
+	onMore?(): void;
+	/** The owner's own podium carries this name. */
+	ownerName?: string;
 }
 
 /**
@@ -171,6 +181,8 @@ export function RoundTable(props: RoundTableProps) {
 	kitRef.current = kit;
 	const onHandleRef = useRef(onHandle);
 	onHandleRef.current = onHandle;
+	const latest = useRef(props);
+	latest.current = props;
 
 	const ready = kit !== undefined && seats.length > 0;
 	// The scene mounts once there is something to seat, and again when its shape changes.
@@ -210,9 +222,18 @@ export function RoundTable(props: RoundTableProps) {
 				scheme: optionsRef.current.scheme,
 				seats: first,
 				onSeatClick: ({ id }) => {
+					const seat = latest.current.onSeat;
+					if (seat) {
+						seat(id);
+						return;
+					}
 					const view = rosterRef.current.find((one) => one.name === id);
 					if (view) navigate("room", view.key);
 				},
+				ownerName: latest.current.ownerName ?? t("You"),
+				focus: latest.current.focus ?? null,
+				onFocus: (id) => latest.current.onFocus?.(id),
+				onMore: () => latest.current.onMore?.(),
 				reducedMotion: "auto",
 				lowPower: "auto",
 				variant,
@@ -238,6 +259,14 @@ export function RoundTable(props: RoundTableProps) {
 			table?.dispose();
 		};
 	}, [ready, variant, listBelow]);
+
+	// The page names the agent the camera is on: the scene turns to it, or back to the whole ring.
+	const wanted = props.focus ?? null;
+	// biome-ignore lint/correctness/useExhaustiveDependencies: `mounted` says the handle exists
+	useEffect(() => {
+		const table = handle.current;
+		if (table && table.focused() !== wanted) table.focus(wanted);
+	}, [wanted, mounted]);
 
 	// A new roster, character, look or scheme: the pictures are drawn again and the swaps start over.
 	// biome-ignore lint/correctness/useExhaustiveDependencies: `mounted` says the handle exists

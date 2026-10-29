@@ -100,16 +100,14 @@ const all = <T extends Element>(selector: string): T[] => [
 	...page.container.querySelectorAll<T>(selector),
 ];
 
-test("clicking a seat opens that agent's room", async () => {
+test("clicking a seat turns the table to that agent: the address becomes #/table/<agent>", async () => {
 	load(agents(3));
 	await page.render(<TablePage />);
 	await settle();
 	const seat = query<SVGGElement>('g.seat[aria-label^="scout"]');
 	expect(seat).not.toBeNull();
 	seat?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-	expect(decodeURIComponent(window.location.hash)).toBe(
-		"#/room/app:agent.scout",
-	);
+	expect(decodeURIComponent(window.location.hash)).toBe("#/table/scout");
 });
 
 test("the coordinator sits first in the seat list, whatever the list's order", async () => {
@@ -142,9 +140,7 @@ test("portrait with 11 seats shows the seat list under the table", async () => {
 	const buttons = all<HTMLButtonElement>(".rt-table-list button");
 	expect(buttons).toHaveLength(11);
 	buttons[1]?.click();
-	expect(decodeURIComponent(window.location.hash)).toBe(
-		"#/room/app:agent.scout",
-	);
+	expect(decodeURIComponent(window.location.hash)).toBe("#/table/scout");
 });
 
 test("portrait with 10 seats, or landscape with 11, needs no list", async () => {
@@ -246,7 +242,7 @@ test("under reduced motion the table stands still, and the seat pictures carry n
 	expect(svg).not.toContain('class="ov ');
 });
 
-test("every seat picture in the table has its own ids", async () => {
+test("the seat pictures are frameless figures and carry no id that two of them could share", async () => {
 	load(agents(4));
 	await page.render(<TablePage />);
 	await settle();
@@ -255,6 +251,10 @@ test("every seat picture in the table has its own ids", async () => {
 		const svg = decodeURIComponent(href.slice(href.indexOf(",") + 1));
 		return [...svg.matchAll(/ id="([^"]+)"/g)].map((match) => match[1]);
 	});
-	expect(ids.length).toBeGreaterThanOrEqual(4);
+	expect(all("image")).toHaveLength(4);
 	expect(new Set(ids).size).toBe(ids.length);
+	for (const image of all("image")) {
+		const href = image.getAttribute("href") ?? "";
+		expect(decodeURIComponent(href)).not.toContain('class="frame"');
+	}
 });

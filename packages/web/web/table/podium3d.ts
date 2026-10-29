@@ -16,7 +16,13 @@ import {
 	type Texture,
 	type Vector3,
 } from "three";
-import { badgeCanvas, canvas, glowCanvas, panelCanvas } from "./decals";
+import {
+	badgeCanvas,
+	canvas,
+	glowCanvas,
+	marksCanvas,
+	panelCanvas,
+} from "./decals";
 import type { Hall } from "./hall";
 import { drawPlate } from "./plate";
 import { outlined, type Toon } from "./toon";
@@ -30,8 +36,9 @@ import type { SeatState } from "./types";
 
 /** How far a standee may turn from facing the centre to face the camera, radians. */
 export const STANDEE_TURN = 0.62;
-const BOARD_W = 1.9;
-const BOARD_Y = 1.98;
+const BOARD_W = 2.9;
+/** Where the board's lower edge stands: just under the desk top, so the desk hides the cut. */
+const BOARD_BASE = 1.3;
 const PLATE_W = 1.24;
 const PLATE_H = 0.31;
 const PLATE_PX = [512, 128] as const;
@@ -73,11 +80,13 @@ export class PodiumKit {
 	readonly trim = this.own(new BoxGeometry(2.01, 0.04, 1.53));
 	readonly panelPlane = this.own(new PlaneGeometry(0.84, 1.05));
 	readonly platePlane = this.own(new PlaneGeometry(PLATE_W, PLATE_H));
-	readonly glowPlane = this.own(new PlaneGeometry(3.3, 3.3));
+	readonly glowPlane = this.own(new PlaneGeometry(4.8, 4.8));
 	readonly badgePlanes: Record<Badge, PlaneGeometry>;
 	readonly panelTexture: CanvasTexture;
 	readonly glowTexture: CanvasTexture;
 	readonly badgeTexture: CanvasTexture;
+	readonly marksTexture: CanvasTexture;
+	readonly marksPlane = this.own(new PlaneGeometry(1.5, 1.5));
 
 	constructor(readonly hall: Hall) {
 		const frustum = new CylinderGeometry(
@@ -92,6 +101,7 @@ export class PodiumKit {
 		this.panelTexture = this.texture(panelCanvas(hall));
 		this.glowTexture = this.texture(glowCanvas());
 		this.badgeTexture = this.texture(badgeCanvas(hall));
+		this.marksTexture = this.texture(marksCanvas(hall));
 		const cell = (n: number) => {
 			const g = new PlaneGeometry(0.56, 0.56);
 			const uv = g.getAttribute("uv");
@@ -149,6 +159,10 @@ export class Podium {
 	readonly glowMaterial: MeshBasicMaterial;
 	readonly badge: Mesh;
 	readonly badgeMaterial: MeshBasicMaterial;
+	readonly marks: Mesh;
+	private readonly marksMaterial: MeshBasicMaterial;
+	private marksSince = 0;
+	private marksOn = false;
 	readonly hits: Mesh[] = [];
 	private readonly plateTexture: CanvasTexture;
 	private readonly plateMaterial: MeshBasicMaterial;
@@ -180,13 +194,15 @@ export class Podium {
 		outlined(plinth, toon, 0.045, kit.hulls);
 		const body = new Mesh(kit.body, toon.toon("wood", hall.wood));
 		body.scale.set(1, 1, 0.756);
-		body.position.y = 0.7;
+		const low = init.kind === "owner";
+		body.scale.y = low ? 0.3 : 1;
+		body.position.y = low ? 0.35 : 0.7;
 		outlined(body, toon, 0.045, kit.hulls);
 		const slab = new Mesh(kit.slab, toon.toon("woodLight", hall.woodLight));
-		slab.position.y = 1.27;
+		slab.position.y = low ? 0.58 : 1.27;
 		outlined(slab, toon, 0.045, kit.hulls);
 		const trim = new Mesh(kit.trim, toon.toon("gold", hall.gold));
-		trim.position.y = 1.2;
+		trim.position.y = low ? 0.51 : 1.2;
 		this.group.add(plinth, hit(body), hit(slab), trim);
 
 		this.panelMaterial = new MeshToonMaterial({
@@ -196,6 +212,7 @@ export class Podium {
 		});
 		const panel = new Mesh(kit.panelPlane, this.panelMaterial);
 		panel.position.set(0, 0.68, 0.64);
+		panel.visible = !low;
 		this.group.add(panel);
 
 		const [pw, ph] = PLATE_PX;
@@ -207,10 +224,10 @@ export class Podium {
 			fog: false,
 		});
 		const front = new Mesh(kit.platePlane, this.plateMaterial);
-		front.position.set(0, 1.06, 0.68);
+		front.position.set(0, low ? 0.36 : 1.06, 0.68);
 		front.rotation.x = -0.16;
 		const back = new Mesh(kit.platePlane, this.plateMaterial);
-		back.position.set(0, 1.06, -0.68);
+		back.position.set(0, low ? 0.36 : 1.06, -0.68);
 		back.rotation.y = Math.PI;
 		back.rotation.x = -0.16;
 		this.group.add(hit(front), hit(back));
@@ -223,7 +240,7 @@ export class Podium {
 		this.boardMaterial = boardMaterial;
 		this.board = new Mesh(new PlaneGeometry(BOARD_W, BOARD_W), boardMaterial);
 		this.board.visible = false;
-		this.board.position.y = BOARD_Y - 0.35;
+		this.board.position.y = BOARD_BASE + BOARD_W / 2;
 		hit(this.board);
 		this.glowMaterial = new MeshBasicMaterial({
 			map: kit.glowTexture,
@@ -235,7 +252,7 @@ export class Podium {
 			blending: hall.additive ? AdditiveBlending : NormalBlending,
 		});
 		this.glow = new Mesh(kit.glowPlane, this.glowMaterial);
-		this.glow.position.set(0, BOARD_Y - 0.1, -0.5);
+		this.glow.position.set(0, BOARD_BASE + BOARD_W / 2, -0.5);
 		this.glow.visible = false;
 		this.badgeMaterial = new MeshBasicMaterial({
 			map: kit.badgeTexture,
@@ -244,12 +261,22 @@ export class Podium {
 			fog: false,
 		});
 		this.badge = new Mesh(kit.badgePlanes.waiting, this.badgeMaterial);
-		this.badge.position.set(0.78, BOARD_Y + 0.62, 0.05);
+		this.badge.position.set(1.05, BOARD_BASE + BOARD_W, 0.05);
 		this.badge.visible = false;
 		this.badge.renderOrder = 5;
+		this.marksMaterial = new MeshBasicMaterial({
+			map: kit.marksTexture,
+			transparent: true,
+			alphaTest: 0.2,
+			fog: false,
+		});
+		this.marks = new Mesh(kit.marksPlane, this.marksMaterial);
+		this.marks.position.set(-1.25, BOARD_BASE + BOARD_W * 0.72, 0.08);
+		this.marks.visible = false;
+		this.marks.renderOrder = 5;
 		if (init.kind === "agent") {
-			this.rig.position.set(0, 0, -0.35);
-			this.rig.add(this.glow, this.board, this.badge);
+			this.rig.position.set(0, 0, -0.08);
+			this.rig.add(this.glow, this.board, this.badge, this.marks);
 			this.group.add(this.rig);
 		}
 	}
@@ -262,13 +289,33 @@ export class Podium {
 		this.boardMaterial.needsUpdate = true;
 		const ratio = canvasEl.height / canvasEl.width;
 		this.board.scale.set(1, ratio, 1);
-		this.boardY = 1.2 + (BOARD_W * ratio) / 2 - 0.12;
+		this.boardY = BOARD_BASE + (BOARD_W * ratio) / 2;
 		this.board.position.y = this.boardY;
 		this.glow.position.y = this.boardY;
 		this.badge.position.y =
 			this.board.position.y + (BOARD_W * ratio) / 2 + 0.02;
 		this.board.visible = true;
 		old?.dispose();
+	}
+
+	/**
+	 * The emphasis marks beside a speaker's head: they pop in with a small bounce when the seat starts
+	 * speaking and stay while it speaks; never under reduced motion. Returns whether they are moving.
+	 */
+	markFrame(speaking: boolean, seconds: number, reduced: boolean): boolean {
+		const on = speaking && !reduced;
+		if (on && !this.marksOn) this.marksSince = seconds;
+		this.marksOn = on;
+		if (!on) {
+			this.marks.visible = false;
+			return false;
+		}
+		const t = Math.min((seconds - this.marksSince) / 0.4, 1);
+		const back = 1.70158;
+		const scale = 1 + (back + 1) * (t - 1) ** 3 + back * (t - 1) ** 2;
+		this.marks.visible = true;
+		this.marks.scale.setScalar(Math.max(scale, 0.01));
+		return t < 1;
 	}
 
 	setBadge(badge: Badge | null): void {
@@ -301,5 +348,6 @@ export class Podium {
 		this.board.geometry.dispose();
 		this.glowMaterial.dispose();
 		this.badgeMaterial.dispose();
+		this.marksMaterial.dispose();
 	}
 }

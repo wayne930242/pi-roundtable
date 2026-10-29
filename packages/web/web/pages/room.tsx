@@ -8,45 +8,39 @@ import {
 	useRef,
 	useState,
 } from "react";
-import type { RoomMessage } from "../../src/api-types.ts";
-import { PromptCard } from "../components/cards.tsx";
 import { CharacterStack, PageCharacter } from "../components/character.tsx";
 import { Composer } from "../components/composer.tsx";
 import { GroupTable } from "../components/group-table.tsx";
 import { Icon } from "../components/icons.tsx";
-import { LiveRow, MessageRow, PendingRow } from "../components/message-row.tsx";
 import { ModeBanner } from "../components/mode-banner.tsx";
 import { ProgressStrip } from "../components/progress-strip.tsx";
+import {
+	loadOlderMessages,
+	RoomLog,
+	useRoomHistory,
+} from "../components/room-log.tsx";
 import { Empty, Failure, Loading } from "../components/states.tsx";
 import { RoomSwitcher, useSwitcher } from "../components/switcher.tsx";
 import { openAgentSheet } from "../lib/agent-sheet.ts";
-import { api, messageOf } from "../lib/api.ts";
+import { api } from "../lib/api.ts";
 import { store, useSelector } from "../lib/app-store.ts";
 import {
 	useAccentStyle,
 	useCharacters,
 	useRoomState,
 } from "../lib/characters.ts";
-import { useConfig } from "../lib/config.ts";
-import { dayKey, dayLabel } from "../lib/format.ts";
-import { useLive } from "../lib/live.ts";
 import { useMedia } from "../lib/media.ts";
 import { translate as t } from "../lib/messages.ts";
 import { reducedMotion } from "../lib/motion.ts";
 import { askRoomConfirm } from "../lib/room-confirm.ts";
-import { ROOM_PAGE, type TimelineItem, timeline } from "../lib/rooms.ts";
+import { timeline } from "../lib/rooms.ts";
 import { hrefFor } from "../lib/router.ts";
 import { useConnection } from "../lib/socket.ts";
-import { toast } from "../lib/toast.ts";
 
 // The room's menu is read only when it is opened.
 const RoomMenu = lazy(() =>
 	import("../components/room-menu.tsx").then((m) => ({ default: m.RoomMenu })),
 );
-
-/** A pause this long between two messages of one author shows the author again. */
-const PAUSE_MS = 5 * 60_000;
-const PAGE = ROOM_PAGE;
 
 /**
  * Keeps the end of the list in view while the person is at the end, and says when more arrived
@@ -95,11 +89,8 @@ function useStickToEnd(scroller: React.RefObject<HTMLDivElement | null>) {
 
 export function RoomPage({ roomKey }: { roomKey: string }) {
 	const connection = useConnection();
-	const config = useConfig();
-	const { now } = useLive();
 	const room = useSelector((state) => state.rooms[roomKey]);
 	const listed = useSelector((state) => state.listed);
-	const connects = useSelector((state) => state.connects);
 	const open = useSelector((state) => state.connection === "open");
 	const limits = useSelector((state) => state.limits);
 	const parts = useSelector((state) => ({
@@ -114,8 +105,7 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 	const parentView = view?.parent ? parts.rooms[view.parent]?.view : undefined;
 	const character = view?.character ?? parentView?.character;
 	const accent = useAccentStyle(character);
-	const [error, setError] = useState<string>();
-	const [loaded, setLoaded] = useState(false);
+	const { loaded, error } = useRoomHistory(roomKey);
 	const [loadingOlder, setLoadingOlder] = useState(false);
 	const [menu, setMenu] = useState(false);
 	/** The menu has been opened once, so its code is wanted. */
@@ -137,33 +127,6 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 		connection.focus(roomKey);
 		return () => connection.focus(undefined);
 	}, [connection, roomKey]);
-
-	// The latest page, on opening and after every reconnect, merged with what frames brought.
-	// biome-ignore lint/correctness/useExhaustiveDependencies: the room and the connection count say when to fetch
-	useEffect(() => {
-		let current = true;
-		api.messages(roomKey, undefined, PAGE).then(
-			(page) => {
-				if (!current) return;
-				store.dispatch({
-					type: "history_loaded",
-					room: roomKey,
-					messages: page.messages,
-					more: page.more,
-					cards: page.cards,
-					older: false,
-				});
-				setError(undefined);
-				setLoaded(true);
-			},
-			(failure) => {
-				if (current) setError(messageOf(failure));
-			},
-		);
-		return () => {
-			current = false;
-		};
-	}, [roomKey, connects]);
 
 	const items = useMemo(() => timeline(parts, roomKey), [parts, roomKey]);
 
@@ -201,30 +164,10 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 		if (!first || loadingOlder) return;
 		setLoadingOlder(true);
 		prepend.current = scroller.current?.scrollHeight;
-		try {
-			const page = await api.messages(roomKey, first.id, PAGE);
-			store.dispatch({
-				type: "history_loaded",
-				room: roomKey,
-				messages: page.messages,
-				more: page.more,
-				cards: page.cards,
-				older: true,
-			});
-		} catch (failure) {
-			prepend.current = undefined;
-			toast(messageOf(failure), "danger");
-		} finally {
-			setLoadingOlder(false);
-		}
+		const done = await loadOlderMessages(roomKey);
+		if (!done) prepend.current = undefined;
+		setLoadingOlder(false);
 	};
-
-	const headerOf = (message: RoomMessage, before: RoomMessage | undefined) =>
-		!before ||
-		before.kind !== message.kind ||
-		before.author !== message.author ||
-		Date.parse(message.at) - Date.parse(before.at) > PAUSE_MS;
-	const rows = useRows(items, config.timeZone, now, headerOf);
 
 	// A thread's link can arrive before the room list does; ask for the list once before giving up.
 	const [rechecked, setRechecked] = useState(false);
@@ -404,62 +347,11 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 					{loaded && items.length === 0 ? (
 						<Empty>{t("No messages yet. Say hello.")}</Empty>
 					) : null}
-					<ol className="messages">
-						{rows.map((row) => {
-							switch (row.item.kind) {
-								case "message":
-									return (
-										<RowFragment key={`m${row.item.message.id}`} day={row.day}>
-											<MessageRow
-												message={row.item.message}
-												character={
-													row.item.message.agent
-														? characters[row.item.message.agent]
-														: undefined
-												}
-												header={row.header}
-												enter={
-													mountedLast.current !== undefined &&
-													row.item.message.id > mountedLast.current
-												}
-												timeZone={config.timeZone}
-												quotable={!view?.readOnly}
-											/>
-										</RowFragment>
-									);
-								case "card":
-									return (
-										<li key={`c${row.item.id}`} className="slot" data-enter>
-											<PromptCard
-												card={row.item.card}
-												timeZone={config.timeZone}
-											/>
-										</li>
-									);
-								case "pending":
-									return (
-										<PendingRow
-											key={`p${row.item.pending.id}`}
-											pending={row.item.pending}
-										/>
-									);
-								case "live":
-									return (
-										<LiveRow
-											key={`l${row.item.message.live}`}
-											message={row.item.message}
-											character={
-												row.item.message.agent
-													? characters[row.item.message.agent]
-													: undefined
-											}
-										/>
-									);
-								default:
-									return null;
-							}
-						})}
-					</ol>
+					<RoomLog
+						roomKey={roomKey}
+						enterAfter={mountedLast.current}
+						quotable={!view?.readOnly}
+					/>
 					{room?.typing ? (
 						<ProgressStrip
 							name={lastAgent?.author ?? name}
@@ -556,53 +448,5 @@ function HeaderPicture(props: {
 		>
 			{props.children}
 		</button>
-	);
-}
-
-interface Row {
-	item: TimelineItem;
-	header: boolean;
-	day: string | undefined;
-}
-
-/** The timeline with, for each stored message, whether it shows its author and whether a new day starts at it. */
-function useRows(
-	items: TimelineItem[],
-	timeZone: string,
-	now: number,
-	headerOf: (message: RoomMessage, before: RoomMessage | undefined) => boolean,
-): Row[] {
-	// biome-ignore lint/correctness/useExhaustiveDependencies: `headerOf` only closes over constants
-	return useMemo(() => {
-		let before: RoomMessage | undefined;
-		let lastDay: string | undefined;
-		return items.map((item) => {
-			if (item.kind !== "message")
-				return { item, header: true, day: undefined };
-			const day = dayKey(item.message.at, timeZone);
-			const starts =
-				day !== lastDay ? dayLabel(item.message.at, now, timeZone) : undefined;
-			lastDay = day;
-			const header = headerOf(item.message, before) || starts !== undefined;
-			before = item.message;
-			return { item, header, day: starts };
-		});
-	}, [items, timeZone, now]);
-}
-
-/** A message with the day's label above it when a new day starts there. */
-function RowFragment(props: {
-	day: string | undefined;
-	children: React.ReactNode;
-}) {
-	return (
-		<>
-			{props.day ? (
-				<li className="day" aria-hidden="true">
-					<span>{props.day}</span>
-				</li>
-			) : null}
-			{props.children}
-		</>
 	);
 }

@@ -334,7 +334,7 @@ function Console({ config }: { config: ConfigView }) {
 			case "schedules":
 				return <SchedulesPage />;
 			case "table":
-				return <TablePage />;
+				return <TablePage focus={route.key} />;
 			case "workspace":
 				return <WorkspacePage />;
 			case "settings":

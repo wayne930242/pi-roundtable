@@ -589,6 +589,12 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 
 	// 圓桌
 	"Reset view": "重設視角",
+	Log: "記錄",
+	"Hide the message box": "收起對話框",
+	"Show the message box": "展開對話框",
+	"Back to the whole table": "回到整張圓桌",
+	You: "你",
+	"Tap to show the whole message": "點一下顯示整段訊息",
 
 	// 對話記錄
 	"(empty)": "（空白）",
