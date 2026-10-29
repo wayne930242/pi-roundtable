@@ -5,6 +5,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `agentServer: { tools: "chat-only" }` (config), `HostEnv.agentTools` and `ResolvedConfig.agentTools` (`"full"` by default, `AgentTools`): the configuration form and the value plugins read as `context.env.agentTools`. `RoundtableOptions.environment.agentTools` carries it for hosts that build their options by hand.
+- Events: `EventHandlers.action(event)` and the optional `EventSink.action(event)`: a plugin reports what a person did through its surface (`ActionEvent`: `kind`, `actor`, `principalId`, `channel?`, `ok`, `at`, never content) and every plugin's handler hears it; a handler that throws is logged and never stops the others. The core reports none itself.
+
+### Breaking
+
+- `HostEnv.agentTools` is required: code that builds a `HostEnv` by hand sets it (`testHost` and `testPlugin` fill `"full"`).
+
 ## [0.25.0] - 2026-10-29
 
 ### Added

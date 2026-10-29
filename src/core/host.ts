@@ -11,7 +11,7 @@ import type { HttpListeners, ListenerConfig } from "./http/listeners.ts";
 import type { Locale } from "./i18n/index.ts";
 import type { JudgeModel } from "./judging/model-judge.ts";
 import type { Logger } from "./log.ts";
-import type { RoundtablePlugin, Service } from "./plugin.ts";
+import type { AgentTools, RoundtablePlugin, Service } from "./plugin.ts";
 import { RUNTIME } from "./services.ts";
 import type { ChannelKey } from "./sessions.ts";
 import type { ToolTierTable } from "./tool-tiers.ts";
@@ -36,6 +36,8 @@ export interface HostEnvironment {
 	scratchDir?: string;
 	/** Six `#rrggbb` skin tones for the agents' characters, which plugins read as `env.characterSkins`; default the package's own. Anything but six valid colors stops the start. */
 	characterSkins?: readonly Hex[];
+	/** What the agents' turns may use of the machine, which plugins read as `env.agentTools`; default "full". */
+	agentTools?: AgentTools;
 }
 
 export interface RoundtableOptions {

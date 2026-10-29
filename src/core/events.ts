@@ -52,5 +52,6 @@ export class EventBus {
 		turnEnded: (turn) => void this.deliver("turnEnded", turn),
 		turnProgress: (event) => void this.deliver("turnProgress", event),
 		changed: () => void this.deliver("changed"),
+		action: (event) => void this.deliver("action", event),
 	};
 }

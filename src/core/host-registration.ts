@@ -124,6 +124,7 @@ export class Linkage {
 			agentDir,
 			scratchDir,
 			characterSkins,
+			agentTools = "full",
 		} = this.#options.environment ?? {};
 		// Checked before anything is applied, so a bad set stops the start with the process untouched.
 		const skins = characterSkinsOf(characterSkins);
@@ -137,6 +138,7 @@ export class Linkage {
 			now: () => new Date(),
 			...(scratchDir !== undefined ? { scratchDir } : {}),
 			characterSkins: skins,
+			agentTools,
 		};
 	}
 
