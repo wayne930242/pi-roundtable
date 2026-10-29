@@ -428,6 +428,8 @@
 			"mcpAdapterExtension",
 			"mcpExtension",
 			"memoryProjection",
+			"oidcIdentity",
+			"oidcProvider",
 			"outcome",
 			"ownerAttachmentDir",
 			"packageDir",

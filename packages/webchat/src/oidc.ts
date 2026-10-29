@@ -6,6 +6,7 @@ import {
 	jwtVerify,
 } from "jose";
 import type { ActorFacts } from "pi-roundtable";
+import { oidcIdentity, oidcProvider } from "pi-roundtable/kit";
 
 /** Who a verified token names, and until when it may be trusted. */
 export interface WebIdentity {
@@ -38,15 +39,13 @@ export class TokenRefused extends Error {
 	}
 }
 
-const PREFIX = "oidc";
-
 /**
  * The speaker id of an OpenID subject: `oidc:<base64url(issuer)>:<subject>`. The issuer is
  * encoded so its own colons stay apart from the subject's, and the id can be turned back into the
  * pair with `parseOidcSpeakerId`. It never looks like a Discord id.
  */
 export function oidcSpeakerId(issuer: string, subject: string): string {
-	return `${PREFIX}:${Buffer.from(issuer).toString("base64url")}:${subject}`;
+	return oidcIdentity(issuer, subject);
 }
 
 /** The issuer and subject of an id `oidcSpeakerId` made; undefined for any other id. */
@@ -79,9 +78,7 @@ export function identityActor(
 	const oidc = parseOidcSpeakerId(identity.id);
 	return {
 		...(identity.actor ?? {
-			provider: oidc
-				? `oidc:${Buffer.from(oidc.issuer).toString("base64url")}`
-				: surface,
+			provider: oidc ? oidcProvider(oidc.issuer) : surface,
 			subject: oidc?.subject ?? identity.id,
 			legacyId: identity.id,
 		}),
@@ -264,7 +261,7 @@ export function oidcJwtVerifier(
 			: [];
 		return {
 			actor: {
-				provider: `oidc:${Buffer.from(issuer).toString("base64url")}`,
+				provider: oidcProvider(issuer),
 				subject,
 				name,
 				surface: "web",

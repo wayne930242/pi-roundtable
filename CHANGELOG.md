@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `IdentityService.peek(facts, { conversation }?)`: who these facts resolve to now, read only. It never links, claims, admits, records the person as seen or touches a tier, also when it refuses, and its tier is exactly what `resolve` gives (the lasting roles together with what the access rules give the facts), never the tier last recorded. It answers undefined for an unlinked identity, a disabled principal, or no tier. **Breaking** for code: a hand-built `IdentityService` stand-in adds `peek` (`testHost` and `servicePair` already cover tests).
+- `ActorFacts.partial`: a surface that is not the authority on a person's roles marks its facts `partial: true`, and `resolve` records no lower tier and no refusal from them. Optional, not breaking.
+- `pi-roundtable/kit`: `oidcProvider` (`oidcProvider(issuer)`) and `oidcIdentity` (`oidcIdentity(issuer, subject)`), the one writer of `oidc:<base64url issuer>[:<subject>]`. `oidcSpeakerId` of `pi-roundtable-webchat` gives the same strings through it.
+
 ## [0.25.0] - 2026-10-29
 
 ### Added

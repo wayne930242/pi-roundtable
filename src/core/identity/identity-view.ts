@@ -30,6 +30,7 @@ export function identityView(
 	const view = Object.freeze({
 		resolve: async (facts, scope) =>
 			frozenCopy(await service.resolve(facts, scope)),
+		peek: async (facts, scope) => frozenCopy(await service.peek(facts, scope)),
 		principal: async (id) => frozenCopy(await service.principal(id)),
 		list: async () => frozenCopy(await service.list()),
 		identities: async (principalId) =>

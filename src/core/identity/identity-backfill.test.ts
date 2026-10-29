@@ -516,6 +516,7 @@ describeDb("the identity plugin", () => {
 				"identities",
 				"list",
 				"owners",
+				"peek",
 				"principal",
 				"principalOf",
 				"resolve",

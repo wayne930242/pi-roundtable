@@ -467,6 +467,21 @@ Owner is granted only through configuration or the principal CLI, never an IdP r
 A map gives the mode per surface, such as `provisioning: { web: "admitted", discord: "linked" }`: with `members.everyone: ["web", "discord"]`, a Discord id someone linked is served at member, an unlinked one is refused and not recorded, and web admits as before. A surface the map leaves out is `linked`, so a misspelled name cannot admit everyone; the one-word form and an omitted field stay `admitted`. `roundtable doctor` warns about a map key that is not a known surface and prints the effective mode.
 A disabled principal is refused, and CLI changes reach a running host within the identity cache's 30 seconds.
 
+### Reading who someone is without recording it: `peek` and `partial`
+
+`IDENTITY.resolve(facts)` is the call for a contact that happens: it links a first contact, may admit a new principal, and records the person as seen at their tier.
+`IDENTITY.peek(facts, { conversation }?)` only reads.
+It never links, claims, admits or records, also when it refuses, and it gives the tier `resolve` would give now: the principal's lasting roles together with what the access rules give these facts, never the tier last recorded.
+It answers undefined for an identity nothing is linked to, for a disabled principal, and when no tier results.
+Use it where a request must be checked again and again, such as a web session, so the check leaves no trace; a first contact still goes through `resolve`.
+A plugin that replaces `IDENTITY` adds `peek` to its service.
+
+A surface that cannot see everything a person holds reports `partial: true` in its `ActorFacts`.
+The facts then show less than the person may hold, so `resolve` never records a lower tier from them and never records them as a refusal, as it does for Discord facts that lack the roles the rules decide by.
+The owner app sets it on every app sign-in, because an identity provider's roles for another application say nothing about this one.
+
+`oidcProvider(issuer)` and `oidcIdentity(issuer, subject)` from `pi-roundtable/kit` write the provider `oidc:<base64url issuer>` and the identity `oidc:<base64url issuer>:<subject>` that `access.owners[].identities`, `selfLink.providers` and `ActorFacts.provider` take.
+
 ### Self-linking
 
 `access: { selfLink: { providers: ["discord"] } }` lets a plugin link the account a person controls to their principal.
@@ -4541,6 +4556,8 @@ Import from the entries listed below; source area files are internal.
 | `lastAssistant` | `pi-roundtable/kit` | value |
 | `mcpAdapterExtension` | `pi-roundtable/kit` | value |
 | `mcpExtension` | `pi-roundtable/kit` | value |
+| `oidcIdentity` | `pi-roundtable/kit` | value |
+| `oidcProvider` | `pi-roundtable/kit` | value |
 | `outcome` | `pi-roundtable/kit` | value |
 | `ownerAttachmentDir` | `pi-roundtable/kit` | value |
 | `parseModelRef` | `pi-roundtable/kit` | value |

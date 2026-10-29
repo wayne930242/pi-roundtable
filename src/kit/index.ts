@@ -116,6 +116,7 @@ export {
 	SCHEDULE_TOOLS,
 	scheduleToolSpecs,
 } from "./mirror.ts";
+export { oidcIdentity, oidcProvider } from "./oidc.ts";
 export type {
 	OpsAlertKind,
 	OpsAlertsOptions,

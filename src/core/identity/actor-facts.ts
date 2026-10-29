@@ -28,6 +28,13 @@ export interface ActorFacts {
 	 * principal. It is also the speaker's `id`, the id the surface knows them by.
 	 */
 	legacyId?: string;
+	/**
+	 * The surface is not the authority on this person's roles: its facts may show less than they
+	 * hold. `resolve` never records a lower tier from partial facts, as it records none from facts
+	 * that lack the roles the rules decide by. The web app sets it on every app sign-in; Discord and
+	 * webchat do not.
+	 */
+	partial?: true;
 }
 
 /** An identity as configuration and the CLI write it: `<provider>:<subject>`. */
