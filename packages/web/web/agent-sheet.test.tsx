@@ -668,7 +668,16 @@ test("Archive asks first, naming the agent, and archives it through the server",
 });
 
 test("the coordinator's sheet has no Archive button", async () => {
-	store.dispatch({ type: "rooms_loaded", rooms: [view({ home: true })] });
+	store.dispatch({
+		type: "rooms_loaded",
+		rooms: [view({ home: true, coordinator: true })],
+	});
 	await open();
 	expect(button("Archive Scout")).toBeNull();
+});
+
+test("the home room of a team with no coordinator can be archived", async () => {
+	store.dispatch({ type: "rooms_loaded", rooms: [view({ home: true })] });
+	await open();
+	expect(button("Archive Scout")).not.toBeNull();
 });

@@ -147,8 +147,9 @@ function AgentEditor({ name, opened }: { name: string; opened: number }) {
 	);
 	const [muting, setMuting] = useState(false);
 	// The coordinator is the team's entry and cannot be archived.
-	const home = useSelector(
-		(s) => (profile ? s.rooms[profile.room]?.view?.home === true : false),
+	const coordinator = useSelector(
+		(s) =>
+			profile ? s.rooms[profile.room]?.view?.coordinator === true : false,
 		profile?.room ?? "",
 	);
 	const promptId = useId();
@@ -359,7 +360,7 @@ function AgentEditor({ name, opened }: { name: string; opened: number }) {
 					/>
 				</Suspense>
 			</section>
-			{home ? null : (
+			{coordinator ? null : (
 				<section className="card stack">
 					<h3>{t("Archive")}</h3>
 					<p className="meta">

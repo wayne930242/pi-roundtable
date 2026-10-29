@@ -451,7 +451,7 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 						muted={view?.muted === true}
 						agent={agentName}
 						group={view?.kind === "group" ? view.name : undefined}
-						home={view?.home === true}
+						coordinator={view?.coordinator === true}
 						displayName={name}
 						readOnly={view?.readOnly ?? false}
 						parent={parent}

@@ -27,7 +27,7 @@ export function RoomMenu(props: {
 	/** The group whose members and host to edit; absent for an agent. */
 	group?: string | undefined;
 	/** The coordinator's room: the team's entry, which cannot be archived. */
-	home?: boolean;
+	coordinator?: boolean;
 	/** What the room is called, for the question before it is archived. */
 	displayName?: string;
 	/** A thread's room: it has no modes and cannot be started over. */
@@ -223,7 +223,7 @@ export function RoomMenu(props: {
 						</button>
 					</li>
 				)}
-				{props.readOnly || props.home ? null : (
+				{props.readOnly || props.coordinator ? null : (
 					<li>
 						<button
 							type="button"

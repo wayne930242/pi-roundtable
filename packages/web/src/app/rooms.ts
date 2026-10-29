@@ -136,6 +136,7 @@ export class Rooms {
 		const { surface, directory, modes, mutes, activity, log, threads } =
 			this.#options;
 		const home = this.homeKey();
+		const coordinator = this.#options.team.coordinator();
 		const agents = directory.agents().filter((a) => a.status === "active");
 		const groups = directory.groups().filter((g) => g.status === "active");
 		const shown = await threads.list();
@@ -163,6 +164,7 @@ export class Rooms {
 					displayName: agent.displayName,
 					avatar: this.avatarOf(agent),
 					character: characterOf(agent),
+					...(agent.name === coordinator ? { coordinator: true as const } : {}),
 				}),
 			),
 			...groups.map((group: AgentGroup) =>

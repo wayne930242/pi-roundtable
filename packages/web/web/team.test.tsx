@@ -149,7 +149,7 @@ beforeEach(() => {
 	window.innerWidth = 1280;
 	window.location.hash = "#/rooms";
 	const listed = [
-		view(BOSS, { home: true }),
+		view(BOSS, { home: true, coordinator: true }),
 		view(SCOUT),
 		view(INFRA),
 		view(TEAM, { kind: "group", members: ["scout", "infra"] }),

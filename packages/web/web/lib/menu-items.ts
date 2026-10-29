@@ -140,7 +140,7 @@ export function roomMenu(
 			},
 		);
 	// The coordinator is the team's entry and stays.
-	if (!view.readOnly && !view.home)
+	if (!view.readOnly && !view.coordinator)
 		items.push({
 			id: "archive",
 			label: view.kind === "group" ? t("Archive group") : t("Archive agent"),

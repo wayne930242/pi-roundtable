@@ -310,8 +310,10 @@ export interface RoomView {
 	/** The agent's or group's name; a thread's id. */
 	name: string;
 	displayName: string;
-	/** The coordinator's room, where the page opens. */
+	/** The room where the page opens: the coordinator's, else the first active agent's. */
 	home: boolean;
+	/** The coordinator's room: the team's entry, which cannot be archived. */
+	coordinator?: true;
 	/** The agent's picture, a path under the mount, for notification icons; absent for groups and threads. */
 	avatar?: string;
 	/** An agent room's character; a group page looks its members' up in the agent rooms. */
