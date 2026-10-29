@@ -25,6 +25,7 @@ import type { AgentSessionsSlot } from "../runtime/runtime-plugin.ts";
 import {
 	AGENTS,
 	BACKGROUND_TURNS,
+	PROMPTS,
 	RUNTIME,
 	SCHEDULES,
 	SKILLS,
@@ -235,6 +236,27 @@ export function agentServerPlugin(
 				assistant: options.assistant,
 				logger,
 			});
+			// The owner edits the two prompts in the app when the prompts plugin is there; the text from the files is their default.
+			const documents = context.services.find(PROMPTS);
+			const shared = documents?.register({
+				id: "shared",
+				label: "Shared prompt",
+				description:
+					"The base every agent's prompt starts with, the main assistant's included.",
+				default: options.prompts.shared,
+			});
+			const guest =
+				documents && options.prompts.guest
+					? documents.register({
+							id: "guest",
+							label: "Guest prompt",
+							description:
+								"Used instead of the shared prompt when the person speaking is not the owner.",
+							default: options.prompts.guest,
+						})
+					: undefined;
+			const sharedPrompt = shared ? () => shared.text() : undefined;
+			const guestPrompt = guest ? () => guest.text() : undefined;
 			const built: DiscordAgentTeam = new DiscordAgentTeam({
 				guildId: teamId,
 				...(options.entryChannelId !== undefined
@@ -286,9 +308,9 @@ export function agentServerPlugin(
 				startTyping: (channel) => surfaces.startTyping(channel),
 				showStop: (channel) => surfaces.showStop(channel),
 				workDir: options.workDir,
-				sharedPrompt: options.prompts.shared,
-				...(options.prompts.guest
-					? { guestPrompt: options.prompts.guest }
+				sharedPrompt: sharedPrompt ?? options.prompts.shared,
+				...((guestPrompt ?? options.prompts.guest)
+					? { guestPrompt: guestPrompt ?? options.prompts.guest }
 					: {}),
 				...(skills ? { skills } : {}),
 				...(threads ? { threads } : {}),

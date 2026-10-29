@@ -50,10 +50,13 @@ export interface AgentTeamOptions
 	shellUser: string;
 	/** The scratch dir the agents' shell writes temporary files to. */
 	scratchDir?: string;
-	/** The prompt every persona shares, the assistant's included; each agent's starts with it. */
-	sharedPrompt: string;
+	/**
+	 * The prompt every persona shares, the assistant's included; each agent's starts with it. A
+	 * function is read before each turn, so an edit of the text applies from the next one.
+	 */
+	sharedPrompt: string | (() => string);
 	/** The shared prompt for speakers other than the owner, when `sharedPrompt` speaks to the owner. */
-	guestPrompt?: string;
+	guestPrompt?: string | (() => string);
 	/** The skill registry: what each agent carries. Absent when the skills addon is off. */
 	skills?: SkillRegistry;
 }

@@ -7,6 +7,10 @@ import type { AgentRuntime } from "../contract/runtime.ts";
 import { PluginError } from "../errors.ts";
 import { silentLogger } from "../log.ts";
 import type {
+	PromptDocumentSpec,
+	PromptDocuments,
+} from "../modules/prompts/prompt-documents.ts";
+import type {
 	LinkedSessions,
 	PluginContext,
 	RoundtablePlugin,
@@ -22,6 +26,7 @@ import {
 	AGENTS,
 	BACKGROUND_TURNS,
 	type BackgroundTurns,
+	PROMPTS,
 	RUNTIME,
 	SCHEDULES,
 	type ScheduleStore,
@@ -79,9 +84,11 @@ async function setUp(
 	plugin: RoundtablePlugin,
 	filling: RoundtablePlugin[] = [],
 	personas: Record<string, string> = {},
+	prompts?: PromptDocuments,
 ) {
 	const plugins = [...filling, plugin];
 	const services = new ServiceRegistry([...plugins]);
+	if (prompts) services.preset(PROMPTS, prompts);
 	// What the plugins before the agent server provide: the schedule store, background turns and Discord.
 	// SAFETY: setup hands them to the team and registry, which read them only when a turn or a command runs.
 	services.preset(SCHEDULES, {} as ScheduleStore);
@@ -137,6 +144,55 @@ async function setUp(
 	return { services, registry, context, linked };
 }
 
+describe("the agent server's prompts", () => {
+	/** A document registry that only records what is registered. */
+	function recording() {
+		const registered: PromptDocumentSpec[] = [];
+		const documents = {
+			register: (spec: PromptDocumentSpec) => {
+				registered.push(spec);
+				return { id: spec.id, text: () => `current ${spec.id}` };
+			},
+		} as unknown as PromptDocuments;
+		return { documents, registered };
+	}
+
+	test("the shared and guest prompts are registered as documents with the configured text as the file version", async () => {
+		const { documents, registered } = recording();
+		await setUp(
+			agentServerPlugin(
+				options({
+					prompts: { shared: "the shared text", guest: "the guest text" },
+				}),
+				async () => stores,
+			),
+			[],
+			{},
+			documents,
+		);
+		expect(registered.map(({ id, default: text }) => [id, text])).toEqual([
+			["shared", "the shared text"],
+			["guest", "the guest text"],
+		]);
+		expect(registered.every((spec) => spec.label.length > 0)).toBe(true);
+	});
+
+	test("without a guest prompt only the shared one is registered, and without the prompts service nothing is", async () => {
+		const { documents, registered } = recording();
+		await setUp(
+			agentServerPlugin(options(), async () => stores),
+			[],
+			{},
+			documents,
+		);
+		expect(registered.map((spec) => spec.id)).toEqual(["shared"]);
+		const { services } = await setUp(
+			agentServerPlugin(options(), async () => stores),
+		);
+		expect(services.find(PROMPTS)).toBeUndefined();
+	});
+});
+
 describe("the agent server's runtime", () => {
 	test("is the runtime plugin's, and the server hands it the agents' settings", async () => {
 		const slot = agentSessionsSlot();
@@ -170,6 +226,7 @@ describe("the agent server's runtime", () => {
 			"agents-guild",
 			"agent-groups-channel-optional",
 			"agents-character",
+			"agent-prompt-history",
 		]);
 	});
 });

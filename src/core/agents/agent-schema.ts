@@ -2,6 +2,7 @@ import { readCharacter } from "../../characters/index.ts";
 import { scopeToGuild } from "../db/guild-scope.ts";
 import type { Migration } from "../db/migrations.ts";
 import type { ThinkingLevel } from "../models.ts";
+import { promptHistoryMigration } from "../modules/prompts/prompt-history.ts";
 import type { Agent, AgentGroup, AgentStatus } from "./agent-rules.ts";
 
 export interface AgentRow {
@@ -133,5 +134,7 @@ export function agentMigrations(guildId: string): Migration[] {
 				await sql`ALTER TABLE agents ADD COLUMN IF NOT EXISTS character jsonb`;
 			},
 		},
+		// The change history of the agents' prompts; the prompts plugin creates the same table for its documents.
+		promptHistoryMigration("agent-prompt-history"),
 	];
 }

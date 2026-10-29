@@ -31,6 +31,7 @@ describeDb("PostgreSQL", () => {
 			"agent_groups",
 			"agent_group_messages",
 			"agent_group_cursors",
+			"prompt_history",
 		])
 			await admin.unsafe(`DROP TABLE IF EXISTS ${table}`);
 		await admin.close();
@@ -47,6 +48,38 @@ describeDb("PostgreSQL", () => {
 	});
 
 	describe("agents", () => {
+		test("a changed prompt is kept in the agent's prompt history with who changed it and the text it replaced", async () => {
+			await store.updateAgent("infra", { prompt: "First." }, "Riley");
+			// Nothing to keep when the prompt is the same or is not part of the change.
+			await store.updateAgent("infra", { prompt: "First." }, "Riley");
+			await store.updateAgent("infra", { displayName: "Infra 2" }, "Riley");
+			await store.updateAgent("infra", { prompt: "Second." }, "doctor");
+			const versions = await store.promptHistory("infra");
+			expect(
+				versions.map(({ action, text, previous, by }) => ({
+					action,
+					text,
+					previous,
+					by,
+				})),
+			).toEqual([
+				{
+					action: "set",
+					text: "Second.",
+					previous: "First.",
+					by: "doctor",
+				},
+				{
+					action: "set",
+					text: "First.",
+					previous: "You are infra.",
+					by: "Riley",
+				},
+			]);
+			expect(versions[0]?.at).toBeInstanceOf(Date);
+			expect(await store.promptHistory("doctor")).toEqual([]);
+		});
+
 		test("seeding never overwrites an existing agent", async () => {
 			await store.updateAgent("infra", { prompt: "Edited." });
 			const added = await store.seed([seed("infra"), seed("new-one")]);

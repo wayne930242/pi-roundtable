@@ -79,6 +79,7 @@ describe("defineRoundtable", () => {
 			"memory",
 			"schedule-store",
 			"prechecks",
+			"prompts",
 			"threads",
 			"discord",
 			"modules",
@@ -128,6 +129,7 @@ describe("defineRoundtable", () => {
 			"memory",
 			"schedule-store",
 			"prechecks",
+			"prompts",
 			"threads",
 			"modules",
 			"worker-sessions",
@@ -169,6 +171,7 @@ describe("defineRoundtable", () => {
 			"identity",
 			"schedule-store",
 			"prechecks",
+			"prompts",
 			"threads",
 			"discord",
 			"modules",
@@ -234,6 +237,7 @@ describe("defineRoundtable", () => {
 			"roundtable.memory": "memory",
 			"roundtable.schedules": "schedule-store",
 			"roundtable.prechecks": "prechecks",
+			"roundtable.prompts": "prompts",
 			"roundtable.threads": "threads",
 			"roundtable.discord": "discord",
 			"roundtable.background-turns": "modules",
@@ -261,6 +265,7 @@ describe("defineRoundtable", () => {
 			"memory",
 			"my-schedules",
 			"prechecks",
+			"prompts",
 			"threads",
 			"discord",
 			"modules",
@@ -298,6 +303,8 @@ describe("defineRoundtable", () => {
 			"schedules-precheck",
 			"schedules-precheck-script",
 			"schedules-precheck-tools",
+			"prompt-overrides",
+			"prompt-history",
 			"skills",
 			"skills-guild",
 			"conversations",
@@ -310,6 +317,7 @@ describe("defineRoundtable", () => {
 			"agents-guild",
 			"agent-groups-channel-optional",
 			"agents-character",
+			"agent-prompt-history",
 		]);
 	});
 
@@ -585,12 +593,15 @@ describeDb("the built-in plugins' tables", () => {
 			const tables: { name: string | null }[] = await sql`
 				SELECT to_regclass(t.name)::text AS name FROM (VALUES
 					('owner_memory'), ('schedules'), ('held_actions'), ('agents'),
-					('agent_groups'), ('skills')) AS t(name)`;
+					('agent_groups'), ('skills'), ('prompt_overrides'),
+					('prompt_history')) AS t(name)`;
 			expect(tables.map((table) => table.name).sort()).toEqual([
 				"agent_groups",
 				"agents",
 				"held_actions",
 				"owner_memory",
+				"prompt_history",
+				"prompt_overrides",
 				"schedules",
 				"skills",
 			]);

@@ -3,6 +3,10 @@ import type { CharacterSpec } from "../../characters/index.ts";
 import type { Migration } from "../db/migrations.ts";
 import { AgentError } from "../domain/errors.ts";
 import type { ThinkingLevel } from "../models.ts";
+import {
+	PromptHistory,
+	type PromptVersion,
+} from "../modules/prompts/prompt-history.ts";
 import type { AgentDirectory } from "../services.ts";
 import { AgentBook } from "./agent-book.ts";
 import {
@@ -63,6 +67,7 @@ export class PgAgentStore extends AgentBook implements AgentDirectory {
 	readonly #guild: string;
 	readonly #statements: AgentStatements;
 	readonly #messages: GroupMessages;
+	readonly #prompts: PromptHistory;
 
 	private constructor(sql: SQL, guildId: string) {
 		super();
@@ -70,6 +75,7 @@ export class PgAgentStore extends AgentBook implements AgentDirectory {
 		this.#guild = guildId;
 		this.#statements = new AgentStatements(sql, guildId);
 		this.#messages = new GroupMessages(sql, guildId);
+		this.#prompts = new PromptHistory(sql, guildId);
 	}
 
 	/** The store's tables; the host runs this before any store attaches. */
@@ -168,6 +174,8 @@ export class PgAgentStore extends AgentBook implements AgentDirectory {
 			model?: string | null;
 			thinking?: ThinkingLevel | null;
 		},
+		/** Who made the change; a changed prompt is kept in the agent's prompt history under this name. */
+		by = "unknown",
 	): Promise<Agent> {
 		return this.#serial(async () => {
 			const current = this.activeAgent(name);
@@ -184,7 +192,7 @@ export class PgAgentStore extends AgentBook implements AgentDirectory {
 				change.thinking === undefined
 					? (current.thinking ?? null)
 					: change.thinking;
-			const rows = await this.#statements.updateAgent(name, {
+			const row = {
 				displayName: change.displayName?.trim() ?? current.displayName,
 				prompt: change.prompt ?? current.prompt,
 				avatarPrompt: change.avatarPrompt ?? current.avatarPrompt,
@@ -194,9 +202,32 @@ export class PgAgentStore extends AgentBook implements AgentDirectory {
 				channelId: change.channelId ?? current.channelId ?? null,
 				model,
 				thinking,
-			});
+			};
+			const prompt = change.prompt;
+			// A new prompt and its history row commit together, so no change goes unrecorded.
+			const rows =
+				prompt !== undefined && prompt !== current.prompt
+					? await this.#sql.begin(async (tx) => {
+							const written = await new AgentStatements(
+								tx,
+								this.#guild,
+							).updateAgent(name, row);
+							await this.#prompts.record(
+								"agent",
+								name,
+								{ action: "set", text: prompt, previous: current.prompt, by },
+								tx,
+							);
+							return written;
+						})
+					: await this.#statements.updateAgent(name, row);
 			return this.keepAgent(rows[0]);
 		});
+	}
+
+	/** The changes of an agent's prompt, newest first. */
+	promptHistory(name: string, limit?: number): Promise<PromptVersion[]> {
+		return this.#prompts.list("agent", name, limit);
 	}
 
 	/**

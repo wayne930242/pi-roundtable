@@ -49,6 +49,7 @@ import {
 	type ConfirmationGate,
 	confirmationGateExtension,
 } from "./extensions/confirmation-gate.ts";
+import { personaPromptExtension } from "./extensions/persona-prompt.ts";
 import {
 	MemoryDraws,
 	privateCompaction,
@@ -390,42 +391,54 @@ export class SessionFactory {
 			noThemes: true,
 			noContextFiles: true,
 			additionalExtensionPaths: this.link().extensionPaths,
-			extensionFactories: sessionExtensions(this.plan, context, {
-				readAttachment: readAttachmentExtension(attachmentDir),
-				...(context.workspace
-					? { attachFile: attachFileExtension(context.workspace) }
-					: {}),
-				...imageTools(
-					this.#options.images,
-					context.workspace ?? { workspace: cwd },
-				),
-				confirmationGate: confirmationGateExtension(gate, slot, (signal) =>
-					toolTurn(context, signal),
-				),
-				askUser: askUserExtension(slot, addressee, () =>
-					turnAddressee(
-						this.#deps.speaker(turnKey),
-						state,
-						this.#options.owner,
+			extensionFactories: [
+				...(persona === undefined
+					? []
+					: [
+							{
+								name: "persona-prompt",
+								factory: personaPromptExtension(persona, () =>
+									this.personaOf(kind),
+								),
+							},
+						]),
+				...sessionExtensions(this.plan, context, {
+					readAttachment: readAttachmentExtension(attachmentDir),
+					...(context.workspace
+						? { attachFile: attachFileExtension(context.workspace) }
+						: {}),
+					...imageTools(
+						this.#options.images,
+						context.workspace ?? { workspace: cwd },
 					),
-				),
-				selfCompactGuard: selfCompactGuardExtension(),
-				// Each request carries no one's memory but the running turn's reader's.
-				privateMemory: privateMemoryExtension(
-					conversation.visibility === "shared",
-					() =>
-						deps.withholdsMemory(turnKey)
-							? undefined
-							: memoryReader(conversation, deps.speaker(turnKey)),
-					state.draws,
-				),
-				surfaceFormatting: surfaceFormattingExtension(() =>
-					// A worker writes a report for the turn, not a reply on its surface.
-					worker ? undefined : deps.formatting(turnKey),
-				),
-				activeTools: activeToolsExtension(() => state.tools),
-			}),
-			// An agent's prompt is set before each run by the agent-prompt extension.
+					confirmationGate: confirmationGateExtension(gate, slot, (signal) =>
+						toolTurn(context, signal),
+					),
+					askUser: askUserExtension(slot, addressee, () =>
+						turnAddressee(
+							this.#deps.speaker(turnKey),
+							state,
+							this.#options.owner,
+						),
+					),
+					selfCompactGuard: selfCompactGuardExtension(),
+					// Each request carries no one's memory but the running turn's reader's.
+					privateMemory: privateMemoryExtension(
+						conversation.visibility === "shared",
+						() =>
+							deps.withholdsMemory(turnKey)
+								? undefined
+								: memoryReader(conversation, deps.speaker(turnKey)),
+						state.draws,
+					),
+					surfaceFormatting: surfaceFormattingExtension(() =>
+						// A worker writes a report for the turn, not a reply on its surface.
+						worker ? undefined : deps.formatting(turnKey),
+					),
+					activeTools: activeToolsExtension(() => state.tools),
+				}),
+			],
+			// An agent's prompt is set before each run by the agent-prompt extension, and another kind's persona is read again before each run.
 			appendSystemPrompt: persona === undefined ? [] : [persona],
 		});
 		await resourceLoader.reload();

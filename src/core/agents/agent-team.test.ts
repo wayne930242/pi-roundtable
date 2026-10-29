@@ -143,6 +143,33 @@ describeDb("PostgreSQL", () => {
 			expect(prompt).toContain("message_agent");
 		});
 
+		test("the shared prompt is read again for every turn, so an edit applies from the next one", () => {
+			const scope = {
+				name: "infra",
+				session: agentChannel("infra"),
+				home: agentChannel("infra"),
+			};
+			expect(fx.team.systemPrompt(scope).startsWith("Shared rules.")).toBe(
+				true,
+			);
+			script.shared = "Edited shared rules.";
+			const prompt = fx.team.systemPrompt(scope);
+			expect(prompt.startsWith("Edited shared rules.")).toBe(true);
+			expect(prompt).not.toContain("Shared rules.\n");
+		});
+
+		test("a prompt changed through the team is kept in the agent's history under the name given", async () => {
+			await fx.team.update("infra", { prompt: "Be terse." }, "Riley");
+			await fx.team.update("infra", { displayName: "Infra 2" }, "Riley");
+			const versions = await fx.team.promptHistory("infra");
+			expect(versions.map((v) => [v.by, v.text])).toEqual([
+				["Riley", "Be terse."],
+			]);
+			await expect(fx.team.promptHistory("nobody")).rejects.toThrow(
+				"There is no agent",
+			);
+		});
+
 		test("a plugin's prompt sections follow the agent's prompt, and its tools join the agent's selection", () => {
 			script.prompt = [
 				{ name: "rules", build: (turn) => `Rules for ${turn.agent.name}.` },

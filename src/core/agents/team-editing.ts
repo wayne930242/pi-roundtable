@@ -34,7 +34,11 @@ export class TeamEditing {
 	 * Changes an agent's display name, prompt, model, or thinking level; `default` returns the
 	 * model or thinking level to the assistant's. A model must be one the host runs.
 	 */
-	async update(name: string, change: AgentChange): Promise<string> {
+	async update(
+		name: string,
+		change: AgentChange,
+		by?: string,
+	): Promise<string> {
 		const { store, logger } = this.#ctx.options;
 		if (Object.values(change).every((value) => value === undefined))
 			throw new AgentError(
@@ -44,14 +48,18 @@ export class TeamEditing {
 			this.#ctx.options.models.usable(),
 		);
 		const thinking = thinkingSetting(change.thinking);
-		const agent = await store.updateAgent(name, {
-			...(change.displayName !== undefined
-				? { displayName: change.displayName }
-				: {}),
-			...(change.prompt !== undefined ? { prompt: change.prompt } : {}),
-			...(model !== undefined ? { model } : {}),
-			...(thinking !== undefined ? { thinking } : {}),
-		});
+		const agent = await store.updateAgent(
+			name,
+			{
+				...(change.displayName !== undefined
+					? { displayName: change.displayName }
+					: {}),
+				...(change.prompt !== undefined ? { prompt: change.prompt } : {}),
+				...(model !== undefined ? { model } : {}),
+				...(thinking !== undefined ? { thinking } : {}),
+			},
+			by,
+		);
 		logger.info(
 			{
 				agent: name,

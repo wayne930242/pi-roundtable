@@ -65,6 +65,8 @@ export interface AgentOps {
 			model?: string;
 			thinking?: string;
 		},
+		/** Who changes it: the agent whose turn asks, for the prompt history. */
+		by?: string,
 	): Promise<string>;
 	create(
 		caller: AgentTurnScope,
@@ -245,12 +247,16 @@ function toolDefs(
 				const prompt = optionalString(i, "prompt");
 				const model = optionalString(i, "model");
 				const thinking = optionalString(i, "thinking");
-				return ops.update(requiredString(i, "name"), {
-					...(displayName !== undefined ? { displayName } : {}),
-					...(prompt !== undefined ? { prompt } : {}),
-					...(model !== undefined ? { model } : {}),
-					...(thinking !== undefined ? { thinking } : {}),
-				});
+				return ops.update(
+					requiredString(i, "name"),
+					{
+						...(displayName !== undefined ? { displayName } : {}),
+						...(prompt !== undefined ? { prompt } : {}),
+						...(model !== undefined ? { model } : {}),
+						...(thinking !== undefined ? { thinking } : {}),
+					},
+					scope.name,
+				);
 			},
 		},
 		{

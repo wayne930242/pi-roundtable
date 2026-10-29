@@ -26,6 +26,10 @@ import type {
 	PromptMemory,
 } from "./modules/memory/owner-memory-store.ts";
 import type {
+	PromptDocuments,
+	PromptVersion,
+} from "./modules/prompts/prompt-documents.ts";
+import type {
 	PrecheckFinding,
 	PrecheckRegistry,
 } from "./modules/schedules/prechecks.ts";
@@ -145,6 +149,16 @@ export const SKILLS: ServiceKey<SkillRegistry> = serviceKey<SkillRegistry>(
 			"The skills addon is switched off (config skills: false). Switch it on, or provide the service from a plugin of your own.",
 	},
 );
+
+/**
+ * The prompt texts the owner edits in the app, each with a file version, an override and a
+ * history. Provided by the built-in `prompts` plugin, which registers `shared` and `guest` (the
+ * prompts of the agent server) and which every plugin set up after it may register more with; a
+ * plugin reads a document's `text()` when it builds a prompt, so an override applies from the next
+ * turn. Read it with `get`: the plugin is always on.
+ */
+export const PROMPTS: ServiceKey<PromptDocuments> =
+	serviceKey<PromptDocuments>("roundtable.prompts");
 
 /** What the agent server builds, for the plugins set up after it. */
 export interface AgentServer {
@@ -283,8 +297,13 @@ export interface AgentTeam {
 	postAs(caller: AgentTurnScope, text: string): Promise<void>;
 	/** The assistant's own notice, posted in the coordinator's channel under its name. */
 	announce(text: string): Promise<void>;
-	/** Changes an agent's display name, prompt, model, or thinking level; a model must be one the host runs. */
-	update(name: string, change: AgentChange): Promise<string>;
+	/**
+	 * Changes an agent's display name, prompt, model, or thinking level; a model must be one the
+	 * host runs. `by` names who asks; a changed prompt is kept in the agent's prompt history under it.
+	 */
+	update(name: string, change: AgentChange, by?: string): Promise<string>;
+	/** The changes of an agent's prompt, newest first: who made each, when, and the text it replaced. */
+	promptHistory(name: string, limit?: number): Promise<PromptVersion[]>;
 	/**
 	 * Creates an agent for an owner, outside any agent turn: the checks, picture, channel and
 	 * opening task of `agent_create`, with `speaker` as the one who asked. `model` and `thinking`

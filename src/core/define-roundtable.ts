@@ -6,6 +6,7 @@ import { agentServerPlugin, LOCAL_TEAM_ID } from "./builtin/agent-server.ts";
 import { discordPlugin } from "./builtin/discord.ts";
 import { discordAdminPlugin } from "./builtin/discord-admin.ts";
 import { modulesPlugin, schedulerPlugin } from "./builtin/modules.ts";
+import { promptsPlugin } from "./builtin/prompts.ts";
 import { seedsPlugin } from "./builtin/seeds.ts";
 import { skillsPlugin } from "./builtin/skills.ts";
 import {
@@ -338,6 +339,8 @@ export async function defineRoundtable(
 			...(config.memory ? [memoryPlugin({ owner })] : []),
 			scheduleStorePlugin(),
 			precheckPlugin(),
+			// Before the agent server and the operator's plugins, which register the texts the owner edits.
+			promptsPlugin({ guildId: discord?.guild ?? LOCAL_TEAM_ID }),
 			// Before Discord, whose services hand out its instance, and the modules and agent server that use it.
 			threadsPlugin({ dataDir: config.dataDir }),
 			...(assembly ? [assembly.discord] : []),

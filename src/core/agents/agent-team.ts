@@ -6,6 +6,7 @@ import { AgentError, ScheduleError } from "../domain/errors.ts";
 import type { AgentTurnScope } from "../domain/ports.ts";
 import type { ThinkingSetting } from "../models.ts";
 import { SHELL_TOOLS } from "../modules/host-shell/shell-policy.ts";
+import type { PromptVersion } from "../modules/prompts/prompt-history.ts";
 import type { ResolvedSkill } from "../modules/skills/skill-rules.ts";
 import type { AgentChange, AgentTeam } from "../services.ts";
 import type { TurnSelection } from "../sessions.ts";
@@ -168,6 +169,10 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 		} = this.#options;
 		const agent = store.agent(scope.name);
 		if (!agent) throw new AgentError(`no agent ${scope.name}`);
+		const shared =
+			typeof sharedPrompt === "function" ? sharedPrompt() : sharedPrompt;
+		const guest =
+			typeof guestPrompt === "function" ? guestPrompt() : guestPrompt;
 		const group = scope.group ? store.group(scope.group) : undefined;
 		const coordinator = coordinatorOf(store, this.#options);
 		const speaker = this.#turns.speakerOf(scope);
@@ -175,8 +180,8 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 			agent,
 			...(speaker ? { speaker } : {}),
 			...(coordinator ? { coordinator } : {}),
-			shared: sharedPrompt,
-			...(guestPrompt ? { guestShared: guestPrompt } : {}),
+			shared,
+			...(guest ? { guestShared: guest } : {}),
 			workDir,
 			owner,
 			shellUser,
@@ -449,8 +454,15 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 	 * Changes an agent's display name, prompt, model, or thinking level; `default` returns the
 	 * model or thinking level to the assistant's. A model must be one the host runs.
 	 */
-	update(name: string, change: AgentChange): Promise<string> {
-		return this.#editing.update(name, change);
+	update(name: string, change: AgentChange, by?: string): Promise<string> {
+		return this.#editing.update(name, change, by);
+	}
+
+	/** The changes of an agent's prompt, newest first. */
+	async promptHistory(name: string, limit?: number): Promise<PromptVersion[]> {
+		if (!this.#options.store.agent(name))
+			throw new AgentError(`There is no agent "${name}".`);
+		return this.#options.store.promptHistory(name, limit);
 	}
 
 	create(

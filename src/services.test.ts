@@ -111,6 +111,7 @@ const team: AgentTeam = {
 	postAs: async () => undefined,
 	announce: async () => undefined,
 	update: async () => "updated",
+	promptHistory: async () => [],
 	createAgent: async () => {
 		throw new Error("unused");
 	},

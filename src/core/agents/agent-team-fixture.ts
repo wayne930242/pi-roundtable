@@ -248,7 +248,9 @@ export const script: {
 	prompt: PromptSection[];
 	/** The tools plugins defined for agents. */
 	tools: string[];
-} = { scores: undefined, prompt: [], tools: [] };
+	/** The prompt every agent's starts with; read before each turn, so a test may change it. */
+	shared: string;
+} = { scores: undefined, prompt: [], tools: [], shared: "Shared rules." };
 let queue: ChannelQueue;
 let team: AgentTeam;
 let skillStore: TestStore<SkillStore>;
@@ -327,6 +329,7 @@ export function useTeamFixture(
 			"agent_groups",
 			"agent_group_messages",
 			"agent_group_cursors",
+			"prompt_history",
 			"skills",
 			"skill_groups",
 			"agent_skills",
@@ -365,6 +368,7 @@ export function useTeamFixture(
 		script.scores = undefined;
 		script.prompt = [];
 		script.tools = [];
+		script.shared = "Shared rules.";
 		queue = channelQueue();
 		removedSchedules.length = 0;
 		stops.length = 0;
@@ -424,7 +428,7 @@ export function useTeamFixture(
 				return () => stops.push(`hide ${channel}`);
 			},
 			workDir: "/tmp/agents/work",
-			sharedPrompt: "Shared rules.",
+			sharedPrompt: () => script.shared,
 			skills,
 			logger: silentLogger(),
 		});

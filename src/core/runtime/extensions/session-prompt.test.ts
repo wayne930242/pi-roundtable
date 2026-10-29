@@ -14,6 +14,7 @@ import type { MemoryStore, SpeakerMemory } from "../../services.ts";
 import type { Speaker } from "../../speakers.ts";
 import { TEST_OWNER as OWNER, OWNER_SPEAKER } from "../../testing/owner.ts";
 import { agentPromptExtension } from "./agent-prompt.ts";
+import { personaPromptExtension } from "./persona-prompt.ts";
 import { surfaceFormattingExtension } from "./surface-formatting.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "session-prompt-"));
@@ -285,5 +286,84 @@ describe("appended system prompt", () => {
 			);
 			expect(prompt).toBe("You are the assistant.");
 		}
+	});
+
+	describe("a persona the owner edits", () => {
+		test("a text that has not changed leaves the prompt as built", async () => {
+			const prompt = await appendedPrompt(
+				[
+					{
+						name: "persona-prompt",
+						factory: personaPromptExtension(
+							"You are the assistant.",
+							() => "You are the assistant.",
+						),
+					},
+					{
+						name: "owner-memory",
+						factory: memoryOf(memory, OWNER_SPEAKER),
+					},
+				],
+				["You are the assistant."],
+			);
+			expect(
+				prompt.startsWith("You are the assistant.\n\n## Owner memory"),
+			).toBe(true);
+		});
+
+		test("the current text takes the place of the one the session was built with, before the memory", async () => {
+			const prompt = await appendedPrompt(
+				[
+					{
+						name: "persona-prompt",
+						factory: personaPromptExtension(
+							"You are the assistant.",
+							() => "You are Merlin, edited.",
+						),
+					},
+					{
+						name: "owner-memory",
+						factory: memoryOf(memory, OWNER_SPEAKER),
+					},
+				],
+				["You are the assistant."],
+			);
+			expect(
+				prompt.startsWith("You are Merlin, edited.\n\n## Owner memory"),
+			).toBe(true);
+			expect(prompt).not.toContain("You are the assistant.");
+		});
+
+		test("a replacement text with dollar signs is written as it is", async () => {
+			const prompt = await appendedPrompt(
+				[
+					{
+						name: "persona-prompt",
+						factory: personaPromptExtension("Old.", () => "Costs $& and $1."),
+					},
+				],
+				["Old."],
+			);
+			expect(prompt).toBe("Costs $& and $1.");
+		});
+
+		test("a persona that was empty when the session was built is added", async () => {
+			const prompt = await appendedPrompt(
+				[
+					{
+						name: "persona-prompt",
+						factory: personaPromptExtension("", () => "Now there is one."),
+					},
+					{
+						name: "owner-memory",
+						factory: memoryOf(memory, OWNER_SPEAKER),
+					},
+				],
+				[],
+			);
+			expect(prompt.startsWith("Now there is one.\n\n## Owner memory")).toBe(
+				true,
+			);
+		});
 	});
 });
