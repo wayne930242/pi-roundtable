@@ -113,15 +113,15 @@ export const arranged = (sectionsOf: Pick<Sections, "pinned" | "folders">) =>
 
 /** One run of rows in the room switcher; the heading is absent for the rooms that need none. */
 export interface DrawerGroup {
-	id: "waiting" | "pinned" | "rest" | string;
+	id: "waiting" | "home" | "pinned" | "rest" | string;
 	/** A folder's name; a fixed group's heading is worded by the drawer. */
 	title?: string;
 	keys: string[];
 }
 
 /**
- * The rooms the switcher lists, in groups: those with a card waiting first, then the pinned rooms,
- * the folders, and the rest by latest activity (Home among them). Dispatch threads are reached
+ * The rooms the switcher lists, in groups: those with a card waiting first, then Home, the pinned
+ * rooms, the folders, and the rest by latest activity: the room list's own order. Dispatch threads are reached
  * from their room and are not listed. A room shows once, in the first group that claims it.
  * `keepEmpty` keeps the pinned list and the empty folders, which a lifted room can be dropped in.
  */
@@ -151,21 +151,19 @@ export function drawerGroups(
 		keys.filter((key) => !first.includes(key));
 	const groups: DrawerGroup[] = [
 		{ id: "waiting", keys: first },
+		{ id: "home", keys: left(arrangement.home) },
 		{ id: "pinned", keys: left(arrangement.pinned) },
 		...arrangement.folders.map((folder) => ({
 			id: folder.id,
 			title: folder.name,
 			keys: left(folder.rooms),
 		})),
-		{
-			id: "rest",
-			keys: left(newest([...arrangement.home, ...arrangement.rest])),
-		},
+		{ id: "rest", keys: left(newest(arrangement.rest)) },
 	];
 	return groups.filter(
 		(group) =>
 			group.keys.length > 0 ||
-			(keepEmpty && group.id !== "waiting" && group.id !== "rest"),
+			(keepEmpty && group.id !== "waiting" && group.id !== "home"),
 	);
 }
 

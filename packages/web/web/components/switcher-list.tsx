@@ -185,6 +185,7 @@ export function SwitcherList(props: {
 	const restTitle = groups.some(
 		(group) =>
 			group.id !== "waiting" &&
+			group.id !== "home" &&
 			group.id !== "rest" &&
 			(group.id !== "pinned" || group.entries.length > 0),
 	)
@@ -231,7 +232,7 @@ export function SwitcherList(props: {
 							? "pinned"
 							: group.id === "rest"
 								? "rest"
-								: waiting
+								: waiting || group.id === "home"
 									? undefined
 									: "folder";
 					return (
@@ -240,11 +241,13 @@ export function SwitcherList(props: {
 							aria-label={
 								waiting
 									? t("Waiting for you")
-									: group.id === "pinned"
-										? t("Pinned")
-										: group.id === "rest"
-											? restTitle
-											: (group.title ?? t("Rooms"))
+									: group.id === "home"
+										? t("Home")
+										: group.id === "pinned"
+											? t("Pinned")
+											: group.id === "rest"
+												? restTitle
+												: (group.title ?? t("Rooms"))
 							}
 							{...(group.entries.length === 0 ? { "data-empty": "" } : {})}
 							{...(zone
@@ -261,11 +264,13 @@ export function SwitcherList(props: {
 								</h2>
 							) : headed || group.entries.length === 0 ? (
 								<h2 className="switcher-heading">
-									{group.id === "pinned"
-										? t("Pinned")
-										: group.id === "rest"
-											? restTitle
-											: group.title}
+									{group.id === "home"
+										? t("Home")
+										: group.id === "pinned"
+											? t("Pinned")
+											: group.id === "rest"
+												? restTitle
+												: group.title}
 								</h2>
 							) : null}
 							<ul className="switcher-list">
@@ -276,7 +281,7 @@ export function SwitcherList(props: {
 										current={props.current}
 										onPick={pick}
 										onLeave={props.close}
-										liftable={!waiting}
+										liftable={!waiting && group.id !== "home"}
 									/>
 								))}
 							</ul>

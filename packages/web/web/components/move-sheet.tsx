@@ -44,6 +44,9 @@ function Body(props: { room: string; onClose(): void }) {
 								checked={loose}
 								onChange={() => choose(null)}
 							/>
+							<span className="menu-icon">
+								<Icon name="rooms" size={18} />
+							</span>
 							<span className="menu-text">
 								<strong>{t("Ungrouped")}</strong>
 							</span>

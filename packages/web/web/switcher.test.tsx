@@ -305,11 +305,11 @@ test("a swipe left, a tap outside and Escape each close it", async () => {
 test("rooms with a waiting card sit on top, the rest by latest activity", async () => {
 	await page.render(<Room />);
 	await page.click(element("avatar"));
-	expect(rowNames()).toEqual(["scout", "build", "guide"]);
-	await page.act(() => {
-		store.dispatch({ type: "prompt", room: GUIDE, prompt: approval("p1") });
-	});
 	expect(rowNames()).toEqual(["guide", "scout", "build"]);
+	await page.act(() => {
+		store.dispatch({ type: "prompt", room: BUILD, prompt: approval("p1") });
+	});
+	expect(rowNames()).toEqual(["build", "guide", "scout"]);
 	expect(
 		page.container.querySelectorAll(".switcher-row .badge-warn"),
 	).toHaveLength(1);
@@ -424,11 +424,12 @@ test("pinned rooms and the owners' folders lead the drawer, each under its headi
 	});
 	await page.render(<Room />);
 	await page.click(element("avatar"));
-	expect(rowNames()).toEqual(["build", "scout", "guide"]);
+	expect(rowNames()).toEqual(["guide", "build", "scout"]);
 	const headings = [
 		...page.container.querySelectorAll(".switcher-heading"),
 	].map((one) => one.textContent);
-	expect(headings).toEqual(["Pinned", "Work", "Ungrouped"]);
+	// Home has its heading, as the room list gives it; Ungrouped is empty and waits for a drop
+	expect(headings).toEqual(["Home", "Pinned", "Work", "Ungrouped"]);
 	// A room that is not Home can be lifted; each list is a place to drop it.
 	const zones = [...page.container.querySelectorAll("[data-drop-zone]")].map(
 		(one) => one.getAttribute("data-drop-zone"),

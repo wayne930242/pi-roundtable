@@ -127,7 +127,7 @@ test("a new room with no place is in the rest, and threads stay under their room
 	expect(result.rest).toContain(C);
 });
 
-test("the drawer lists waiting rooms first, then pinned, folders and the rest, each room once", () => {
+test("the drawer lists waiting rooms first, then Home, pinned, folders and the rest, each room once", () => {
 	const state = input(
 		TEAMROOMS,
 		[B],
@@ -140,21 +140,32 @@ test("the drawer lists waiting rooms first, then pinned, folders and the rest, e
 		{ id: "f1", title: "One", keys: [TEAM] },
 		{ id: "rest", keys: [C] },
 	]);
+	// Home keeps a heading of its own, as the room list gives it, not a place among the rest
+	expect(
+		drawerGroups(state, at, () => false).map((one) => [one.id, one.keys]),
+	).toEqual([
+		["home", [HOME]],
+		["pinned", [B]],
+		["f1", [TEAM, A]],
+		["rest", [C]],
+	]);
 });
 
 test("the drawer can keep the pinned list and the empty folders, for a lifted room to be dropped in", () => {
 	const state = input(TEAMROOMS, [], [{ id: "f1", name: "One", rooms: [] }]);
 	expect(drawerGroups(state, at, () => false).map((one) => one.id)).toEqual([
+		"home",
 		"rest",
 	]);
 	expect(
 		drawerGroups(state, at, () => false, true).map((one) => one.id),
-	).toEqual(["pinned", "f1", "rest"]);
+	).toEqual(["home", "pinned", "f1", "rest"]);
 });
 
-test("with no layout and nothing waiting the drawer is one run by latest activity, Home among them", () => {
+test("with no layout and nothing waiting the drawer is Home and then one run by latest activity", () => {
 	expect(drawerGroups(input(TEAMROOMS), at, () => false)).toEqual([
-		{ id: "rest", keys: [C, A, TEAM, HOME, B] },
+		{ id: "home", keys: [HOME] },
+		{ id: "rest", keys: [C, A, TEAM, B] },
 	]);
 	// Threads are not listed.
 	expect(
@@ -165,7 +176,7 @@ test("with no layout and nothing waiting the drawer is one run by latest activit
 			]),
 			at,
 			() => false,
-		)[0]?.keys,
+		).flatMap((group) => group.keys),
 	).not.toContain(T1);
 });
 
