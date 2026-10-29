@@ -211,6 +211,9 @@ const inEditor = <T extends Element>(selector: string): T | null =>
 const all = (selector: string) => [
 	...page.container.querySelectorAll(selector),
 ];
+/** An element named briefly for a failure message: bun prints a whole happy-dom element, with React's fibers, for a failed `toBeNull`. */
+const brief = (element: Element | null | undefined) =>
+	element?.outerHTML.slice(0, 120);
 const dialogs = () =>
 	all("dialog")
 		.filter((one) => (one as HTMLDialogElement).open)
@@ -313,7 +316,7 @@ test("a folder in the tree opens when its arrow is pressed, and the choice is re
 
 test("on a phone there is no tree: the roots are listed first, then one folder at a time", async () => {
 	await show("#/workspace", 390);
-	expect(query(".ws-tree")).toBeNull();
+	expect(brief(query(".ws-tree"))).toBeUndefined();
 	expect(all(".menu-link").map((one) => one.getAttribute("href"))).toEqual([
 		"#/workspace/agents%3A",
 		"#/workspace/docs%3A",
@@ -324,7 +327,7 @@ test("on a phone there is no tree: the roots are listed first, then one folder a
 		window.dispatchEvent(new HashChangeEvent("hashchange"));
 	});
 	await settle(120);
-	expect(query(".ws-tree")).toBeNull();
+	expect(brief(query(".ws-tree"))).toBeUndefined();
 	expect(
 		all(".ws-row-link").map((one) => one.textContent?.includes("main.ts")),
 	).toContain(true);
@@ -356,7 +359,7 @@ test("the editor lives in a shadow root and adds no <style> to the page, whose C
 	// Its rules are adopted as constructed stylesheets (the editor's own, and the host's layout).
 	expect(host?.shadowRoot?.adoptedStyleSheets.length).toBeGreaterThanOrEqual(2);
 	// Nothing of the editor is in the light DOM, and no <style> element carries its rules.
-	expect(host?.querySelector(".cm-editor")).toBeNull();
+	expect(brief(host?.querySelector(".cm-editor"))).toBeUndefined();
 	expect(host?.shadowRoot?.querySelector(".cm-editor")).toBeTruthy();
 	const styles = [...document.querySelectorAll("style")].map(
 		(one) => one.textContent ?? "",
@@ -558,7 +561,7 @@ test("Save mine anyway asks a second time, then writes with the hash the conflic
 test("a binary or too large file is a card with Download, and no editor", async () => {
 	await show("#/workspace/agents%3Adata%2Fblob.bin");
 	await settle(50);
-	expect(inEditor(".cm-editor")).toBeNull();
+	expect(brief(inEditor(".cm-editor"))).toBeUndefined();
 	expect(query(".ws-card")?.textContent).toContain(
 		"This file is not text, so it cannot be shown here.",
 	);
@@ -579,14 +582,15 @@ test("a picture is shown from the raw route with a fit/full-size toggle, its siz
 	expect(img?.getAttribute("src")).toBe(
 		"api/workspace/agents/raw?path=pics%2Fa.png",
 	);
-	expect(inEditor(".cm-editor")).toBeNull();
+	expect(brief(inEditor(".cm-editor"))).toBeUndefined();
 	expect(query(".ws-file-title")?.textContent).toContain("2 KB");
 	const toggle = query<HTMLButtonElement>(".ws-image-toggle");
 	expect(query(".ws-image")?.hasAttribute("data-actual")).toBe(false);
 	await page.click(toggle);
 	expect(query(".ws-image")?.getAttribute("data-actual")).toBe("true");
-	img?.dispatchEvent(new Event("error"));
-	await settle(30);
+	await page.act(() => {
+		img?.dispatchEvent(new Event("error"));
+	});
 	expect(query(".ws-card")?.textContent).toContain(
 		"This browser cannot show this file.",
 	);
@@ -597,10 +601,10 @@ test("a svg is a picture through <img>, and Edit opens its source", async () => 
 	await show("#/workspace/agents%3Apics%2Flogo.svg");
 	await settle(50);
 	expect(query(".ws-image img")).not.toBeNull();
-	expect(inEditor(".cm-editor")).toBeNull();
+	expect(brief(inEditor(".cm-editor"))).toBeUndefined();
 	await page.click(query(".ws-actions button"));
 	await editorView();
-	expect(query(".ws-image img")).toBeNull();
+	expect(brief(query(".ws-image img"))).toBeUndefined();
 });
 
 test("a PDF is framed on a desktop, and on a phone is Open and Download", async () => {
@@ -612,7 +616,7 @@ test("a PDF is framed on a desktop, and on a phone is Open and Download", async 
 	expect(query(".ws-media-actions a[target='_blank']")).not.toBeNull();
 	await show("#/workspace/agents%3Adocs%2Fa.pdf", 390);
 	await settle(50);
-	expect(query("iframe")).toBeNull();
+	expect(brief(query("iframe"))).toBeUndefined();
 	expect(query(".ws-card")?.textContent).toContain("PDF");
 	expect(query(".ws-media-actions a[target='_blank']")).not.toBeNull();
 	expect(query(".ws-media-actions a[download]")).not.toBeNull();
@@ -631,16 +635,17 @@ test("a sound and a video get native controls on the raw route, and fall back to
 	const video = query<HTMLVideoElement>("video");
 	expect(video?.hasAttribute("controls")).toBe(true);
 	expect(video?.hasAttribute("playsinline")).toBe(true);
-	video?.dispatchEvent(new Event("error"));
-	await settle(30);
-	expect(query("video")).toBeNull();
+	await page.act(() => {
+		video?.dispatchEvent(new Event("error"));
+	});
+	expect(brief(query("video"))).toBeUndefined();
 	expect(query(".ws-card a[download]")).not.toBeNull();
 });
 
 test("a read-only root offers no Edit and no way to make, rename or delete", async () => {
 	await show("#/workspace/docs%3A");
-	expect(query("button[aria-label='New file']")).toBeNull();
-	expect(query("button[aria-label='Trash']")).toBeNull();
+	expect(brief(query("button[aria-label='New file']"))).toBeUndefined();
+	expect(brief(query("button[aria-label='Trash']"))).toBeUndefined();
 });
 
 test("the editor's theme names no color of its own: every one is a CSS variable", () => {

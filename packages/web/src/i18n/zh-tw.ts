@@ -64,6 +64,10 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"This file is too large to show here.": "這個檔案太大，無法在這裡顯示。",
 	"This file is not text, so it cannot be shown here.":
 		"這個檔案不是文字檔，無法在這裡顯示。",
+	"This browser cannot show this file.": "這個瀏覽器無法顯示這個檔案。",
+	"Fit to window": "符合視窗大小",
+	"Show at full size": "以原始大小顯示",
+	Open: "開啟",
 	Editing: "編輯中",
 	Undo: "復原",
 	Redo: "重做",
