@@ -3,6 +3,22 @@
 All notable changes to this project will be documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+Planned as 0.24.0.
+
+### Added
+
+- A room switcher on phones (screens under 1024 px wide). A swipe right over the messages pulls in a drawer of rooms that follows the finger and snaps open past 40 % of its width or on a fast flick; a tap on the header picture opens the same drawer. Swiping left, tapping outside, Escape or the system Back closes it: opening pushes a history entry, so Back closes the drawer before it leaves the room.
+- The drawer lists each room with its picture, name and status (working, cards waiting, yolo, long-running); rooms with a card waiting come first under "Waiting for you", the rest follow by latest activity, and a search field narrows the list. A tap on a row opens that room in place, with no list page in between.
+- A room keeps the text typed in its message box and not yet sent while the person is in another room (kept for the page's lifetime; attached files are not kept).
+- The swipe never starts from a screen edge: a touch that begins within 32 px of the left or right edge is ignored and left to the system, since many phones use an edge swipe for Back. It also needs mostly horizontal motion (|dx| > 1.5·|dy|, at least 24 px) and ignores touches that begin in a field, a code block or table that scrolls sideways, or a card's option row (`data-swipe-ignore`). It slides with the console's motion lengths, which go to zero under `prefers-reduced-motion`.
+- Traditional Chinese for the new wording ("Switch rooms").
+
+### Changed
+
+- A history step that lands on the page already shown no longer redraws the page or scrolls it to the top.
+
 ## [0.23.2] - 2026-10-29
 
 ### Added

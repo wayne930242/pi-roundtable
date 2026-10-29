@@ -382,7 +382,7 @@ function Field(props: {
 				{question.header ? `${question.header} · ` : ""}
 				{question.question}
 			</legend>
-			<div className="options">
+			<div className="options" data-swipe-ignore>
 				{question.options.map((option) => (
 					<label
 						key={option.label}

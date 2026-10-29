@@ -19,6 +19,7 @@ import {
 	uploadForSend,
 	usedSlots,
 } from "../lib/attach.ts";
+import { draftOf, keepDraft } from "../lib/drafts.ts";
 import { size as bytes } from "../lib/format.ts";
 import { composingKey } from "../lib/ime.ts";
 import { translate as t } from "../lib/messages.ts";
@@ -46,6 +47,8 @@ interface Attached {
  */
 export function Composer(props: {
 	name: string;
+	/** The room whose unsent text the box keeps: it comes back when the room is opened again. */
+	draftKey?: string;
 	limits: RoomsState["limits"];
 	stoppable: boolean;
 	onSend(text: string, files: UploadView[]): void;
@@ -54,7 +57,13 @@ export function Composer(props: {
 	incoming?: File[];
 	onIncomingTaken?(): void;
 }) {
-	const [text, setText] = useState("");
+	const [text, setText] = useState(() =>
+		props.draftKey === undefined ? "" : draftOf(props.draftKey),
+	);
+	const { draftKey } = props;
+	useEffect(() => {
+		if (draftKey !== undefined) keepDraft(draftKey, text);
+	}, [draftKey, text]);
 	const [files, setFilesState] = useState<Attached[]>([]);
 	// The newest list, so two pastes before a redraw count each other's files.
 	const latest = useRef<Attached[]>([]);

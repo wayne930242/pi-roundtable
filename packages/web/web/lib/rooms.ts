@@ -664,6 +664,34 @@ export function waitingCards(state: RoomsState, room: string): number {
 	}).length;
 }
 
+/**
+ * The rooms the switcher lists: those with a card waiting for an answer first, then the rest, each
+ * group by its newest message (a room without one last, in the server's order). Dispatch threads
+ * are reached from their room and are not listed.
+ */
+export function switcherOrder(state: RoomsState): string[] {
+	const rooms = state.order.flatMap((key, index) => {
+		const view = state.rooms[key]?.view;
+		if (!view || view.kind === "thread") return [];
+		const at = Date.parse(lastMessage(state, key)?.at ?? "");
+		return [
+			{
+				key,
+				index,
+				waiting: waitingCards(state, key) > 0,
+				at: Number.isNaN(at) ? Number.NEGATIVE_INFINITY : at,
+			},
+		];
+	});
+	return rooms
+		.sort(
+			(a, b) =>
+				Number(b.waiting) - Number(a.waiting) ||
+				(a.at === b.at ? a.index - b.index : b.at - a.at),
+		)
+		.map((room) => room.key);
+}
+
 /** The banner a room shows while a mode is on; none when both are off. */
 export function banner(state: RoomsState, room: string): RoomMode | undefined {
 	const mode = state.rooms[room]?.mode;

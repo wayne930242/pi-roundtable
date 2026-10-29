@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { transition } from "./motion.ts";
 
 /** The page's route: a pane, and for conversations optionally one conversation's key. */
@@ -96,9 +96,15 @@ function go(href: string): void {
 
 export function useRoute(): Route {
 	const [route, setRoute] = useState<Route>(current);
+	const shown = useRef(route);
+	shown.current = route;
 	useEffect(() => {
 		const onChange = () => {
-			transition(() => setRoute(current()));
+			const next = current();
+			// A history step that lands on the page already shown (the room switcher's own entry) moves nothing.
+			if (next.pane === shown.current.pane && next.key === shown.current.key)
+				return;
+			transition(() => setRoute(next));
 			window.scrollTo(0, 0);
 		};
 		window.addEventListener("hashchange", onChange);

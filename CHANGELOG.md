@@ -3,6 +3,14 @@
 All notable changes to this project will be documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+Planned as 0.24.0.
+
+### Added
+
+- `pi-roundtable-web`: a room switcher for phones. A swipe right anywhere over the messages, or a tap on the header picture, opens a drawer of rooms (those with a card waiting first, then by latest activity, with a search field); a tap on a row opens that room in place, and each room keeps its unsent text. A swipe that starts within 32 px of either screen edge is left to the system's Back gesture. The package's changelog has the detail.
+
 ## [0.23.2] - 2026-10-29
 
 ### Added

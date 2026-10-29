@@ -381,6 +381,7 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	Agents: "夥伴",
 	"Dispatch threads": "派工討論串",
 	"Find a room": "尋找聊天室",
+	"Switch rooms": "切換聊天室",
 	Group: "群組",
 	Groups: "群組",
 	Home: "首頁",

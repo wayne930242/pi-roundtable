@@ -18,6 +18,7 @@ import { ModeBanner } from "../components/mode-banner.tsx";
 import { ProgressStrip } from "../components/progress-strip.tsx";
 import { RoomMenu } from "../components/room-menu.tsx";
 import { Empty, Failure, Loading } from "../components/states.tsx";
+import { RoomSwitcher, useSwitcher } from "../components/switcher.tsx";
 import { api, messageOf } from "../lib/api.ts";
 import { store, useSelector } from "../lib/app-store.ts";
 import {
@@ -28,6 +29,7 @@ import {
 import { useConfig } from "../lib/config.ts";
 import { dayKey, dayLabel } from "../lib/format.ts";
 import { useLive } from "../lib/live.ts";
+import { useMedia } from "../lib/media.ts";
 import { translate as t } from "../lib/messages.ts";
 import { reducedMotion } from "../lib/motion.ts";
 import { ROOM_PAGE, type TimelineItem, timeline } from "../lib/rooms.ts";
@@ -117,6 +119,8 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 	const scroller = useRef<HTMLDivElement>(null);
 	const content = useRef<HTMLDivElement>(null);
 	const { away, onScroll, onGrow, toEnd } = useStickToEnd(scroller);
+	// Beside the room list (wide screens) the room needs no drawer; elsewhere a swipe right brings one.
+	const switcher = useSwitcher(!useMedia("(min-width: 1024px)"));
 	const mountedLast = useRef<number | undefined>(undefined);
 	const prepend = useRef<number | undefined>(undefined);
 
@@ -275,23 +279,25 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 				>
 					<Icon name="back" />
 				</a>
-				{view?.kind === "group" ? (
-					<CharacterStack
-						size={36}
-						members={(view.members ?? []).map((member) => ({
-							name: member,
-							spec: characters[member],
-						}))}
-					/>
-				) : (
-					<PageCharacter
-						spec={character}
-						name={parentView?.name ?? view?.name ?? name}
-						size={44}
-						state={state}
-						label={name}
-					/>
-				)}
+				<HeaderPicture open={switcher.enabled ? switcher.show : undefined}>
+					{view?.kind === "group" ? (
+						<CharacterStack
+							size={36}
+							members={(view.members ?? []).map((member) => ({
+								name: member,
+								spec: characters[member],
+							}))}
+						/>
+					) : (
+						<PageCharacter
+							spec={character}
+							name={parentView?.name ?? view?.name ?? name}
+							size={44}
+							state={state}
+							label={name}
+						/>
+					)}
+				</HeaderPicture>
 				<div className="room-title">
 					<h1>{name}</h1>
 					<span
@@ -341,7 +347,12 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 				mode={mine && (mine.yolo || mine.longRunning) ? mine : undefined}
 				approved={room?.autoApproved ?? 0}
 			/>
-			<div className="room-scroll" ref={scroller} onScroll={onScroll}>
+			<div
+				className="room-scroll"
+				ref={scroller}
+				onScroll={onScroll}
+				{...switcher.surface}
+			>
 				<div className="room-content" ref={content}>
 					{error ? <Failure message={error} /> : null}
 					{!loaded && !error ? <Loading /> : null}
@@ -439,6 +450,7 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 			) : (
 				<Composer
 					key={roomKey}
+					draftKey={roomKey}
 					name={name}
 					limits={limits}
 					stoppable={Boolean(room?.stoppable)}
@@ -472,6 +484,7 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 					setConfirm("start-over");
 				}}
 			/>
+			<RoomSwitcher {...switcher.drawer} current={roomKey} />
 			<Confirm
 				open={confirm === "yolo"}
 				title={t("Turn on yolo mode?")}
@@ -517,6 +530,25 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 				</p>
 			</Confirm>
 		</section>
+	);
+}
+
+/** The room's picture in the header; where the room has a drawer, tapping it opens the drawer. */
+function HeaderPicture(props: {
+	open: (() => void) | undefined;
+	children: React.ReactNode;
+}) {
+	if (!props.open) return props.children;
+	return (
+		<button
+			type="button"
+			className="room-picture"
+			aria-label={t("Switch rooms")}
+			aria-haspopup="dialog"
+			onClick={props.open}
+		>
+			{props.children}
+		</button>
 	);
 }
 
