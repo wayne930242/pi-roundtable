@@ -104,47 +104,48 @@ export class TeamApi {
 		const { method } = request;
 		const [, , name, action] = parts;
 		const { directory } = this.#options;
+		// The owner check comes first, so no answer tells a member which names and states exist.
+		// An agent's profile is the one read open to a member.
+		const speaker =
+			method === "GET" && name && !action ? undefined : await owner();
+		const asOwner: OwnerOf = async () => speaker ?? owner();
 		if (!name) {
 			if (method !== "POST") throw new HttpError(405, "Method not allowed.");
-			return this.#createAgent(request, owner);
+			return this.#createAgent(request, asOwner);
 		}
 		const agent = directory.agent(name);
 		if (!agent) throw notFound();
 		const active = agent.status === "active";
 		if (action === "restore" && method === "POST" && parts.length === 4) {
 			if (active) throw bad(`"${name}" is not archived.`);
-			await owner();
 			await this.#options.team.restore(name);
 			this.#options.changed();
 			return json(this.#profile(name));
 		}
 		if (!action && method === "DELETE") {
-			const speaker = await owner();
+			const by = await asOwner();
 			// The app's part runs inside the delete, after its checks and before the row goes: a
 			// cleanup that fails leaves the agent there to delete again.
 			const room = agentRoomKey(this.#options.surface, name);
-			await this.#options.team.remove(name, () => this.#forget(room, speaker));
+			await this.#options.team.remove(name, () => this.#forget(room, by));
 			this.#options.changed();
 			return json({ ok: true });
 		}
 		// Everything else is about an agent that answers.
 		if (!active) throw notFound();
 		if (!action && method === "GET") return json(this.#profile(name));
-		if (!action && method === "PATCH") return this.#patch(request, name, owner);
+		if (!action && method === "PATCH")
+			return this.#patch(request, name, asOwner);
 		if (action === "character" && method === "PUT")
-			return this.#dress(request, name, owner);
+			return this.#dress(request, name, asOwner);
 		if (action === "archive" && method === "POST" && parts.length === 4) {
-			await owner();
 			await this.#options.team.archive(undefined, name);
 			this.#options.changed();
 			return json({ ok: true });
 		}
 		if (action === "skills" && parts.length === 4) {
-			if (method === "GET") {
-				await owner();
-				return json(this.#skillsOf(name));
-			}
-			if (method === "PUT") return this.#carry(request, name, owner);
+			if (method === "GET") return json(this.#skillsOf(name));
+			if (method === "PUT") return this.#carry(request, name, asOwner);
 		}
 		throw new HttpError(404, "There is no such API.");
 	}
@@ -308,9 +309,10 @@ export class TeamApi {
 		const { method } = request;
 		const [, , name, action] = parts;
 		const { directory, team } = this.#options;
+		// The owner check comes first, so no answer tells a member which names and states exist.
+		const speaker = await owner();
 		if (!name) {
 			if (method !== "POST") throw new HttpError(405, "Method not allowed.");
-			await owner();
 			const body = await bodyOf(request);
 			const members = optionalList(body, "members");
 			if (!members) throw bad("members must be a list of text.");
@@ -330,25 +332,19 @@ export class TeamApi {
 		const active = group.status === "active";
 		if (action === "restore" && method === "POST" && parts.length === 4) {
 			if (active) throw bad(`"${name}" is not archived.`);
-			await owner();
 			await team.restore(name);
 			this.#options.changed();
 			return json(this.#group(name));
 		}
 		if (!action && method === "DELETE") {
-			const speaker = await owner();
 			const room = groupRoomKey(this.#options.surface, name);
 			await team.remove(name, () => this.#forget(room, speaker));
 			this.#options.changed();
 			return json({ ok: true });
 		}
 		if (!active) throw notFound();
-		if (!action && method === "GET") {
-			await owner();
-			return json(this.#group(name));
-		}
+		if (!action && method === "GET") return json(this.#group(name));
 		if (!action && method === "PATCH") {
-			await owner();
 			const body = await bodyOf(request);
 			const displayName = optionalText(body, "displayName");
 			const members = optionalList(body, "members");
@@ -365,7 +361,6 @@ export class TeamApi {
 			return json(this.#group(name));
 		}
 		if (action === "archive" && method === "POST" && parts.length === 4) {
-			await owner();
 			await team.archive(undefined, name);
 			this.#options.changed();
 			return json({ ok: true });

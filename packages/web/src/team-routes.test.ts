@@ -386,6 +386,34 @@ function refusesTheSame(label: string, write: Write, unknown: string) {
 	});
 }
 
+describe("a member learns nothing of the team from a write", () => {
+	test("the owner check comes before any lookup, so a state or name that would be a 400 or 404 is a 403", async () => {
+		const server = setup();
+		who = { id: "member", tier: "member" };
+		const writes: [string, string][] = [
+			["DELETE", "agents/nobody"],
+			["DELETE", "agents/scout"],
+			["POST", "agents/scout/restore"],
+			["POST", "agents/nobody/restore"],
+			["DELETE", "groups/nobody"],
+			["DELETE", "groups/crew"],
+			["POST", "groups/crew/restore"],
+			["PATCH", "groups/past"],
+		];
+		for (const [method, path] of writes) {
+			const response = await call(server, method, path, { body: {} });
+			expect([method, path, response.status]).toEqual([method, path, 403]);
+		}
+		expect(calls).toEqual([]);
+		// The same requests as the owner are the 400s and 404s the state calls for.
+		who = { id: "owner", tier: "owner" };
+		expect((await call(server, "DELETE", "agents/nobody")).status).toBe(404);
+		expect((await call(server, "POST", "agents/scout/restore")).status).toBe(
+			400,
+		);
+	});
+});
+
 describe("POST api/agents", () => {
 	const body = {
 		name: "notes",
