@@ -227,6 +227,11 @@ function setup(withSkills = true) {
 				calls.push(`mute ${room} ${muted}`);
 			},
 		} as never,
+		layout: {
+			forget: async (room: string) => {
+				calls.push(`forget layout ${room}`);
+			},
+		} as never,
 		...(withSkills
 			? {
 					skills: {
@@ -584,7 +589,7 @@ describe("agent archive, restore and delete", () => {
 		expect(calls).toEqual(["restore old"]);
 	});
 
-	test("deletes only an archived agent, and clears what the app kept of its room", async () => {
+	test("deletes only an archived agent, and clears what the app kept of its room, its pin and folder place included", async () => {
 		const server = setup();
 		const active = await call(server, "DELETE", "agents/scout");
 		expect(active.status).toBe(400);
@@ -598,6 +603,7 @@ describe("agent archive, restore and delete", () => {
 			"forget log app:agent.old",
 			"forget cards app:agent.old",
 			"mute app:agent.old false",
+			"forget layout app:agent.old",
 			"modes reset app:agent.old",
 			"remove old",
 		]);
@@ -618,6 +624,7 @@ describe("agent archive, restore and delete", () => {
 			"forget log app:agent.old",
 			"forget cards app:agent.old",
 			"mute app:agent.old false",
+			"forget layout app:agent.old",
 			"modes reset app:agent.old",
 			"remove old",
 		]);
@@ -914,6 +921,7 @@ describe("groups", () => {
 			"forget log app:group.crew",
 			"forget cards app:group.crew",
 			"mute app:group.crew false",
+			"forget layout app:group.crew",
 			"modes reset app:group.crew",
 			"remove crew",
 		]);

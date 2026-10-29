@@ -158,7 +158,11 @@ beforeEach(() => {
 	models = spyOn(api, "models").mockResolvedValue({
 		models: ["model-a", "model-b"],
 	});
-	rooms = spyOn(api, "rooms").mockResolvedValue({ rooms: listed });
+	rooms = spyOn(api, "rooms").mockResolvedValue({
+		rooms: listed,
+		pins: [],
+		folders: [],
+	});
 });
 afterEach(async () => {
 	await page.act(() => closeMenu());

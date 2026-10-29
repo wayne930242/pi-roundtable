@@ -768,7 +768,11 @@ test("Archive asks first, naming the agent, and archives it through the server",
 	const archive = spyOn(teamApi, "archiveAgent").mockResolvedValue({
 		ok: true,
 	});
-	const rooms = spyOn(api, "rooms").mockResolvedValue({ rooms: [] });
+	const rooms = spyOn(api, "rooms").mockResolvedValue({
+		rooms: [],
+		pins: [],
+		folders: [],
+	});
 	try {
 		await open();
 		await page.click(button("Archive Scout"));

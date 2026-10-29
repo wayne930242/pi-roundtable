@@ -243,6 +243,7 @@ export class AppApi {
 			mutes: options.mutes,
 			modes: options.modes,
 			threads: options.threads,
+			layout: options.layout,
 			changed: () => options.changed(),
 		});
 	}

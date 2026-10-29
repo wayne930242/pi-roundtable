@@ -35,6 +35,7 @@ import {
 	requiredText,
 } from "./api-http.ts";
 import type { CardLog } from "./card-log.ts";
+import type { LayoutStore } from "./layout.ts";
 import { promptVersionView } from "./prompt-routes.ts";
 import type { RoomLog } from "./room-log.ts";
 import type { Rooms } from "./rooms.ts";
@@ -78,6 +79,8 @@ export interface TeamApiOptions {
 	modes: Pick<ConversationModes, "set">;
 	/** The dispatch threads under a room, which go with it. */
 	threads: Pick<WebThreads, "under" | "removeUnder">;
+	/** The owners' shared arrangement, which drops a deleted room's pin and folder place. */
+	layout: Pick<LayoutStore, "forget">;
 	changed(): void;
 }
 
@@ -427,12 +430,13 @@ export class TeamApi {
 	}
 
 	/**
-	 * What the app kept of a room that is gone for good: its messages, cards and mute, and its
-	 * dispatch threads with theirs. It can run again after a failure: the threads go last, so
+	 * What the app kept of a room that is gone for good: its messages, cards, mute, and pin or
+	 * folder place, and its dispatch threads with theirs. It can run again after a failure: the threads go last, so
 	 * until then the retry still finds them.
 	 */
 	async #forget(room: string, by: Speaker): Promise<void> {
-		const { log, cards, mutes, modes, threads, surface } = this.#options;
+		const { log, cards, mutes, modes, threads, layout, surface } =
+			this.#options;
 		for (const thread of await threads.under(room)) {
 			const threadRoom = `${surface}:${thread.id}`;
 			await log.removeRoom(threadRoom);
@@ -442,6 +446,7 @@ export class TeamApi {
 		await log.removeRoom(room);
 		await cards.removeRoom(room);
 		await mutes.set(room, false, by.principalId);
+		await layout.forget(room);
 		// A name made again later starts with the modes of a new room.
 		await modes.set(
 			room as ChannelKey,

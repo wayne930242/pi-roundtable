@@ -91,6 +91,7 @@ function setup() {
 					else muted.delete(room);
 			},
 		},
+		threads: {} as never,
 		layout: store,
 		mount: "/console",
 		authMode: "verifier",

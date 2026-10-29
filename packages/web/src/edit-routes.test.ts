@@ -214,6 +214,8 @@ function setup(
 		team: team as never,
 		avatars: {} as never,
 		mutes: {} as never,
+		threads: {} as never,
+		layout: {} as never,
 		...(options.prompts ? { prompts } : {}),
 		...(options.skills
 			? {
