@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+Planned as 0.24.0. Every new option is optional; with none set, behavior, mounts, files on disk, the worker protocol and the public API are as in 0.23.x, and `PiSandboxRuntime` is unchanged.
+
+### Added
+
+- `sandbox({ guilds })`: Discord guild ids whose every channel and thread is a sandbox channel, with no `/roundtable sandbox on`. The claim now answers the router's `owns(channel, space)`; asked without a guild (stop, start fresh, delete, background turns, other plugins) it answers for channels it has seen in a listed guild, a process-local set of at most 20,000 that drops the least recently seen. `/roundtable sandbox off` is refused in a listed guild, `on` says it is already on and `status` names the configuration. Ids are validated as snowflakes at startup. `SANDBOX.channels.owns(channel, guild?)` answers for both sources; `has` keeps meaning "enabled by command". `SandboxChannelStore` takes `{ guilds }` as its third argument and has `configured(guild)`.
+- `sandbox({ workspace: "server" })` (`"channel"` stays the default): every sandbox channel of one guild shares one workspace (memory notes and files), while each channel keeps its own last ten exchanges in a state directory mounted at `/channel`, a third bind mount in this mode only. Turns that share a workspace run one at a time in arrival order; the turn timeout starts when a turn runs, `stop` cancels a waiting turn, `busy()` lists both. `SandboxRuntime.runTurn` takes an optional fourth argument `{ space }`. On disk (under `workspaceRoot`): `guild-<sha256("guild\0" + surface + ":" + id)>` and `state-<sha256("state\0" + channel)>`; per-channel workspaces keep their names, and switching modes migrates nothing.
+- `sandbox({ files })`: `files_list`, `files_read`, `files_write` and `files_delete` in the sealed worker, inside `files/` of the workspace (relative paths, a symlink at any segment refused, 256 KiB per file and 32 MiB in all by default, both settable). They run in the worker and spend no broker calls.
+- `sandbox({ skills })`: directories of skill folders (`SKILL.md` with `name` and `description` frontmatter). The system prompt ends with a skill index, and the host tool `host_read_skill({ name, path?, offset? })` pages a skill's files from the host; nothing is mounted. Startup stops on a missing directory, bad frontmatter, a duplicate name or a configured host tool named `read_skill`.
+- `sandbox({ budgets: { promptBytes, toolResultBytes, requestBytes } })` (defaults 8,192, 4,096 and 196,608; at most 32,768, 32,768 and 196,608), and `maxCalls` and `maxOutputTokens` settable through `sandbox()`. A prompt (with the skill index) over `promptBytes` stops startup naming both sizes. Host tools get `HostToolContext.resultBytes`, the allowance their result will be cut to net of the broker wrapper; `toolResultTextBytes` and `pageText` fit a page to it. A cut tool result is marked as cut and no longer points at `memory_get`.
+- `modelUrl` may be a cleartext `http://` URL on `127.0.0.1`, `::1` or `localhost` without `allowHttp`; any other cleartext URL still needs it.
+- Importing history: `guildWorkspaceDir`, `channelStateDir`, `channelWorkspaceDir`, `historyFilePath`, `workspaceFilesDir`, `HISTORY_FILE`, `HISTORY_MAX_ENTRIES`, `HISTORY_ENTRY_BYTES`, `encodeHistory` and `userHistoryContent` describe the on-disk layout and the history entries the worker reads.
+
+### Changed
+
+- The worker image carries the label `pi-roundtable-sandbox.protocol` (2), and the Dockerfile copies the new modules (`history.ts`, `paging.ts`, `files.ts`). **Rebuild the image** when you set `workspace: "server"`, `files`, `skills` or `budgets`: startup reads the label through the container driver (`ContainerDriver.imageProtocol`, optional; `DockerContainerDriver` uses `docker image inspect`) and stops on an older image, so an old worker never writes a channel's history into a shared workspace. The README's "exactly two bind mounts" now describes both modes.
+
 ## 0.23.2
 
 - Release in lockstep with pi-roundtable 0.23.2; no package-specific behavior changes. The core peer range stays `>=0.23.0 <0.24.0`.

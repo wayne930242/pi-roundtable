@@ -64,6 +64,28 @@ Callback schemas guide the model but do not validate inputs on the host.
 After restart, the owner can run `/roundtable sandbox on`, `/roundtable sandbox status`, or `/roundtable sandbox off` in a guild channel.
 Turning the mode off retains workspace memory and restores normal routing after queued work completes.
 
+## Serving a whole server
+
+These options are all optional; with none set, behavior is that of 0.23.x.
+Those marked protocol 2 need a worker image built from this release, and startup stops with a rebuild message on an older one (the image carries the label `pi-roundtable-sandbox.protocol`).
+"Bytes" are measured as the worker does, `Buffer.byteLength(JSON.stringify(text))`: a Traditional Chinese character is 3 bytes.
+
+| Option | Capability |
+| --- | --- |
+| `guilds` | Discord guild ids whose every channel and thread (including ones created later) is a sandbox channel, with no `/roundtable sandbox on`. Direct messages and other guilds are unaffected. `/roundtable sandbox off` is refused there. |
+| `workspace: "server"` | Protocol 2. The channels of one guild share one workspace (memory notes and files); each channel keeps its own history in a state directory mounted at `/channel`. Turns sharing a workspace run one at a time. Default `"channel"`: one workspace per channel. |
+| `files` | Protocol 2. `files_list`, `files_read`, `files_write` and `files_delete` inside `files/` of the workspace; `true` is 256 KiB per file and 32 MiB in all. A symlink at any path segment is refused. |
+| `skills` | Protocol 2. Directories of skill folders; the prompt ends with a skill index and `host_read_skill` pages a skill's files from the host. |
+| `budgets` | Protocol 2. `promptBytes` (8,192, at most 32,768; prompt plus skill index, over it stops startup), `toolResultBytes` (4,096, at most 32,768) and `requestBytes` (196,608, at most 196,608). Host tools receive `context.resultBytes`. |
+| `maxCalls`, `maxOutputTokens` | Broker calls per turn (48) and output tokens per model call (4,096; a thinking model's thinking counts). |
+
+`modelUrl` may use `http://` on `127.0.0.1`, `::1` or `localhost`, because the broker runs on the host.
+Host tools reach the model as `host_<name>`, so a skill that names a tool writes `host_roll_dice`.
+With `workspace: "server"` the guild's channels share files and notes, so treat them as visible to every guest in the guild; the file tools' caps bound the tools only, so keep a filesystem quota on `workspaceRoot`.
+Switching from `"channel"` to `"server"` migrates nothing: the old per-channel workspaces stay on disk.
+
+A host that imports old chats can call `guildWorkspaceDir`, `channelStateDir`, `historyFilePath`, `workspaceFilesDir`, `encodeHistory` and `userHistoryContent` instead of re-deriving the on-disk layout; the README lists them.
+
 ## Explicit Pi/subscription mode
 
 The default `sandbox()` stays sealed and text-only.
@@ -166,4 +188,4 @@ Use a patched, dedicated machine for higher-risk workloads, and apply provider s
 
 See the [pi-roundtable-sandbox README](https://github.com/wayne930242/pi-roundtable/blob/master/packages/sandbox/README.md) for every isolation control, persistence limit, deployment constraint, and Docker integration test.
 
-{/* Sources: packages/sandbox/README.md:1-27, packages/sandbox/README.md:29-74, packages/sandbox/README.md:76-106, packages/sandbox/src/plugin.ts:12-28 */}
+{/* Sources: packages/sandbox/README.md (Serving a whole server), packages/sandbox/README.md:1-27, packages/sandbox/README.md:29-74, packages/sandbox/README.md:76-106, packages/sandbox/src/plugin.ts:12-28 */}

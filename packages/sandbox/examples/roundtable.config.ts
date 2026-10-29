@@ -34,3 +34,35 @@ export const sandboxConfig = {
 		}),
 	],
 } satisfies Pick<RoundtableConfig, "plugins">;
+
+/**
+ * A whole-server guest bot: every channel and thread of one guild is sandboxed and shares one
+ * workspace, with file tools, skills and byte budgets sized to a local model's context.
+ * Build the worker image from this release first; these options need protocol 2.
+ */
+export const guestServerConfig = {
+	plugins: [
+		sandbox({
+			image: "pi-roundtable-sandbox:local",
+			runRoot: "/tmp/roundtable-sandbox-run",
+			workspaceRoot: join(home, ".local/share/roundtable-sandbox/workspaces"),
+			stateFile: join(
+				home,
+				".local/share/roundtable-sandbox/state/channels.json",
+			),
+			model: "operator-selected-model",
+			modelUrl: "http://127.0.0.1:4000/v1/chat/completions",
+			apiKey: () => process.env.MODEL_API_KEY,
+			guilds: ["900000000000000001"],
+			workspace: "server",
+			files: true,
+			skills: [join(home, ".local/share/roundtable-sandbox/skills")],
+			budgets: {
+				promptBytes: 24_576,
+				toolResultBytes: 12_288,
+				requestBytes: 98_304,
+			},
+			maxOutputTokens: 12_288,
+		}),
+	],
+} satisfies Pick<RoundtableConfig, "plugins">;

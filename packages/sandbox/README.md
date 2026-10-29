@@ -5,6 +5,7 @@ Source lives in [`packages/sandbox`][source] in the pi-roundtable repository and
 Each addressed message runs a small tool-using agent in a new Docker container with no network and no real credentials.
 A host-side Unix-socket broker is its only way out.
 Channel memory and recent conversation text persist in the channel's dedicated workspace between containers.
+Opt-in options (below) can also sandbox a whole Discord server, share one workspace across its channels, and give the guest file tools, skills and larger budgets.
 
 [source]: https://github.com/wayne930242/pi-roundtable/tree/master/packages/sandbox
 
@@ -83,7 +84,145 @@ These commands are guarded by the published owner-command helper and serialized 
 Do not disable sandbox routing in a channel that should remain a guest-only boundary.
 `initialChannels` seeds the first state file only; subsequent starts use its saved state.
 The `SANDBOX` service exposes `channels` and `runtime` for other trusted plugins.
-Threads have separate channel keys and do not inherit a parent channel's sandbox mode; enable each thread explicitly through the trusted channel service if needed.
+Threads have separate channel keys and do not inherit a parent channel's sandbox mode; enable each thread explicitly through the trusted channel service if needed, or sandbox the whole server with `guilds` (below).
+
+## Serving a whole server
+
+Every option in this section is optional.
+With none set, behavior, mounts, files on disk, the worker protocol and the public API are those of 0.23.x.
+Options marked "protocol 2" need a worker image built from this release; see [Worker image protocol](#worker-image-protocol).
+
+| Option | Meaning |
+| --- | --- |
+| `guilds: string[]` | Discord guild ids whose every channel and thread is a sandbox channel, with no `/roundtable sandbox on`. |
+| `workspace: "channel" \| "server"` | `"channel"` (default): one workspace per channel. `"server"` (protocol 2): the channels of one guild share one workspace. |
+| `files: boolean \| { maxFileBytes?, maxTotalBytes? }` | Workspace file tools in the worker (protocol 2). |
+| `skills: string[]` | Directories of skill folders, read through `host_read_skill` (protocol 2). |
+| `budgets: { promptBytes?, toolResultBytes?, requestBytes? }` | Byte limits for the prompt, a tool result and a model request (protocol 2). |
+| `maxCalls`, `maxOutputTokens` | The broker's calls per turn (default 48, at most 1,000) and output tokens per model call (default 4,096, at most 32,768; a thinking model's thinking counts). |
+
+"Bytes" are measured the way the worker measures text: `Buffer.byteLength(JSON.stringify(text))`, so a Traditional Chinese character is 3 bytes and a newline 2.
+
+### `guilds`
+
+The claim answers the router's `owns(channel, space)`: a channel whose guild id (the `space` Discord sets, threads included) is listed is a sandbox channel whatever the state file says, including channels and threads created after start. Nothing is stored for it.
+Answering rules are unchanged: a non-bot, non-integration message that mentions the bot or replies to it, from an author the host's `access` rules serve.
+The admission check and the recheck inside the queued turn both use the message's guild.
+Direct messages and other guilds are not affected; a channel enabled by command in another guild keeps working.
+Ids must be Discord snowflakes (17 to 20 digits); an invalid id stops startup naming `guilds`.
+
+Operations that ask `owns(channel)` without a guild (stop, start fresh, delete, background turns, other plugins) are answered from the channels the claim has been asked about with a listed guild, kept in process: an idempotent set of at most 20,000 channels that drops the least recently seen.
+After a restart nobody owns a configured guild's channel for those questions until its first message; nothing runs there then, so stop has nothing to stop and start fresh answers that there is nothing to reset.
+`SANDBOX.channels.has(channel)` keeps meaning "enabled by command"; `SANDBOX.channels.owns(channel, guild?)` answers for both sources.
+
+In a listed guild `/roundtable sandbox off` is refused ("This server is sandboxed by configuration (`guilds`); change the configuration to turn it off."), `on` answers that it is already on, and `status` says the channel is sandboxed by configuration.
+
+### `workspace: "server"`
+
+Every sandbox channel of one guild, listed in `guilds` or enabled by command, shares one workspace: memory notes (speaker and channel scopes) and workspace files.
+Guilds never share, and a channel whose message carries no guild keeps its own per-channel workspace.
+Conversation history stays per channel: each channel keeps its own last ten exchanges in its own state directory, mounted at `/channel`, so a turn's container sees its guild's workspace and its own channel's state, never another channel's history.
+
+Under `workspaceRoot`, a guild workspace is `guild-<sha256("guild\0" + surface + ":" + id)>`, a channel's state directory is `state-<sha256("state\0" + channel)>`, and today's per-channel workspaces are unchanged (`<sha256(channel)>`).
+Switching from `"channel"` to `"server"` migrates nothing: the old per-channel workspaces stay on disk untouched, and so do their memory and history.
+
+Turns that share a workspace run one at a time, in arrival order, in a queue inside the runtime keyed by workspace.
+The turn timeout starts when a turn begins running, not while it waits; `stop` cancels a waiting turn as well as a running one; `busy()` lists both; the typing indicator shows while a turn waits.
+A second turn for the same channel still cannot start while one is running or waiting.
+`SandboxRuntime.runTurn(channel, speaker, text, { space })` takes the guild as an optional fourth argument; callers that omit it get the per-channel workspace.
+
+### `files`
+
+`files: true` (256 KiB per file, 32 MiB under `files/`) or `files: { maxFileBytes, maxTotalBytes }` gives the guest four tools in every sandbox channel of this plugin:
+
+- `files_list({ path? })`: files under a directory, recursively, with sizes; at most 500 entries, then a note that more exist.
+- `files_read({ path, offset? })`: text from character `offset`, as much as the tool-result budget allows; when more follows, the first line is `[More: next offset N]`, so a cut never removes it.
+- `files_write({ path, content })`: create or replace a UTF-8 text file; parent directories are created. A write over a limit returns an error and writes nothing.
+- `files_delete({ path })`: delete a file or an empty directory.
+
+Paths are relative, `/`-separated and inside `files/` of the workspace; `..`, absolute paths, empty segments, NUL and a symlink at any segment (checked with `lstat` per segment) are refused. Memory and history are not reachable through them.
+These tools run in the worker and do not spend the broker's per-turn call budget.
+The checks run in the worker, so they bound the tools only: a compromised worker can still write anything into its mount.
+Keep a filesystem quota on `workspaceRoot`.
+
+### `skills`
+
+`skills: ["/srv/bot/skills"]` names directories that each hold skill folders: `<dir>/<name>/SKILL.md` whose frontmatter has `name` equal to the folder name and a `description`.
+The system prompt ends with an index (one sentence telling the model to read a matching skill with `host_read_skill` before answering, then each skill's name and description).
+`host_read_skill({ name, path?, offset? })` returns `SKILL.md`, or the file `path` inside the folder of skill `name`, paged by character offset like `files_read`; to point one skill at another's file, name that skill.
+Paths outside the folder are refused, links that leave it too.
+It runs on the host: skill files are never mounted into a container.
+Startup stops on a missing directory, a folder without valid frontmatter, two skills of one name (both paths are named), or a configured host tool named `read_skill`.
+Host tools reach the model as `host_<name>`, so a skill that names a tool must write `host_roll_dice`, not `roll_dice`.
+
+### `budgets`
+
+| Budget | Default | At most | Meaning |
+| --- | --- | --- | --- |
+| `promptBytes` | 8,192 | 32,768 | `prompt` plus the skill index. Startup stops when they exceed it, naming both sizes; nothing is cut silently. The current time, speaker memory and channel notes keep their own 4,096-byte caps outside it. |
+| `toolResultBytes` | 4,096 | 32,768 | The per-call cap on a tool result, as the worker measures it after encoding. A cut result is marked with a note saying it was cut. |
+| `requestBytes` | 196,608 | 196,608 | The size the worker trims each model request to, dropping the oldest history first and then the oldest complete tool-call groups. Lower it to fit a smaller model context. |
+
+Host tools receive the allowance their result text will be cut to as `context.resultBytes`, net of the broker's `{"text":…}` wrapper, so a paging tool can fit its page.
+The text is encoded twice on its way into the model's context, so a newline or a quote costs four bytes; measure a candidate with `toolResultTextBytes(text)`, or let `pageText(text, offset, budget, measure)` cut a page that begins with the `[More: next offset N]` line.
+The broker's 256 KiB body limit, the 256 KiB turn input limit, the 12 model calls per turn and the 8 tools per reply stay.
+Without `budgets` and `skills`, an oversized `prompt` is still cut at 8,192 bytes by the worker, as before.
+
+### A model on the host's loopback
+
+`modelUrl` may use `http://` when its host is `127.0.0.1`, `::1` or `localhost`: the broker runs on the host, so the request never leaves it, and a local gateway needs no TLS.
+Any other cleartext URL still needs `allowHttp`, and credentials in the URL stay refused.
+This applies to `modelUrl` only, not to MCP servers.
+
+### Worker image protocol
+
+The worker image carries the label `pi-roundtable-sandbox.protocol` with the worker protocol version (2 in this release, exported as `SANDBOX_PROTOCOL`).
+At startup the plugin reads it through the container driver (`docker image inspect`; a test driver answers directly).
+With `workspace: "server"`, `files`, `skills` or `budgets` set, an image without version 2 stops startup with a message to rebuild it, so an old worker can never write a channel's history into the shared guild workspace.
+A custom `ContainerDriver` that cannot report the protocol (`imageProtocol?(image)`) stops a startup that needs it.
+Rebuild with the `docker build` command above after upgrading; the Dockerfile copies the new modules.
+
+### A whole-server guest bot
+
+```ts
+import { sandbox } from "pi-roundtable-sandbox";
+
+export const plugins = [sandbox({
+  image: "pi-roundtable-sandbox:local",
+  runRoot: "/run/bot/sandbox",
+  workspaceRoot: "/srv/bot/workspaces",
+  stateFile: "/srv/bot/state/channels.json",
+  model: "operator-selected-model",
+  modelUrl: "http://127.0.0.1:4000/v1/chat/completions",
+  apiKey: () => process.env.MODEL_API_KEY,
+  prompt: "You are the server's helper. Answer in the asker's language.",
+  guilds: ["900000000000000001"],
+  workspace: "server",
+  files: true,
+  skills: ["/srv/bot/skills"],
+  budgets: { promptBytes: 24_576, toolResultBytes: 12_288, requestBytes: 98_304 },
+  maxOutputTokens: 12_288,
+  tools: [/* host tools: the model sees them as host_<name> */],
+})];
+```
+
+Pair it with the host's `access` rules so every member of the guild is served at guest level, and with `agentServer: false` when the host has no agents.
+
+### Importing old chats
+
+A host that writes history before a channel's first turn (for example a one-shot import of old conversations) should not re-derive hashes. The package exports:
+
+| Export | Meaning |
+| --- | --- |
+| `guildWorkspaceDir(workspaceRoot, surface, guild)` | The shared workspace of a guild (`workspace: "server"`). |
+| `channelStateDir(workspaceRoot, channel)` | A channel's own state directory in `"server"` mode; its history lives here. |
+| `channelWorkspaceDir(workspaceRoot, channel)` | A channel's own workspace (`"channel"` mode, and a message with no guild); its history lives here. |
+| `historyFilePath(directory)`, `HISTORY_FILE` | `<directory>/history.json`. |
+| `workspaceFilesDir(workspaceDir)` | `<workspace>/files`, where the file tools keep their files. |
+| `encodeHistory(entries)`, `SandboxHistoryEntry` | The text of a history file for `{ role: "user" \| "assistant", content }` entries; refuses more than `HISTORY_MAX_ENTRIES` (20) entries or content over `HISTORY_ENTRY_BYTES` (8,192) bytes. |
+| `userHistoryContent({ id, name }, message)` | The JSON text a user entry's `content` holds, as new turns write it. |
+
+Write directories with mode `0700` and files with `0600` as the service user, history last, and do it while no turn runs in that channel.
 
 ## Allowed host tools
 
@@ -107,6 +246,7 @@ const tools: HostTool[] = [{
 Pass `tools` to `sandbox()`.
 Host tool and MCP server/tool names must match `[a-z][a-z0-9_]{0,47}`.
 The worker exposes them as `host_clock`, while the broker accepts only `POST /tools/clock`.
+A tool also receives `context.resultBytes`, how large its result text may be (see `budgets`).
 The host binds `context.channel` and `context.speaker` to the current admitted turn; `context.speaker.principalId` is the principal the author was admitted as.
 The callback signal combines the request's deadline/closure and the turn's cancellation, and aborts when either scope ends.
 Body fields cannot change that identity, even if a guest replaces the worker or forges a broker call.
@@ -139,9 +279,10 @@ A container has:
 
 - `--network none`, a read-only root filesystem, all capabilities dropped, and `no-new-privileges`.
 - A non-root UID/GID, 512 MiB RAM with no additional swap, one CPU, 64 PIDs, and a bounded temporary filesystem.
-- Exactly two bind mounts: its channel workspace (writable) and its current-turn broker directory (read-only).
+- Exactly two bind mounts by default: its channel workspace (writable) and its current-turn broker directory (read-only).
+  With `workspace: "server"` there are three: the guild's shared workspace at `/workspace`, the channel's own state directory at `/channel` (writable, history only) and the broker directory; the three host directories must be separate.
   The workspace remains executable; the threat model already assumes arbitrary container code execution and does not rely on `noexec`.
-- No Docker socket, host home, owner workspace, auth file, host environment, host tool registry or other channel's files.
+- No Docker socket, host home, owner workspace, auth file, host environment, host tool registry or other channel's history. With `workspace: "channel"` it sees no other channel's files either; with `"server"` it sees the guild's files and notes, which every channel of that guild shares.
 - Only the public tool descriptions, current message and speaker, system prompt, time zone, and a dummy API key in worker code.
 
 The worker talks to the broker over a read-only Unix-socket mount.
@@ -153,7 +294,7 @@ A short second removal covers the local create/attach race.
 An unresponsive daemon or delayed create request may still leave a stopped orphan; treat daemon failures and host crashes as an operator cleanup condition.
 Containers use `--log-driver none` to avoid unbounded daemon log files and `--pull never` to run only the image the operator already built.
 Channel keys are hashed for workspace names and are not interpreted as paths.
-The channel queue prevents overlapping turns; other channels run independently.
+The channel queue prevents overlapping turns; other channels run independently, except that channels sharing a `"server"` workspace take turns.
 
 The broker accepts only POSTs to `/model`, explicitly listed `/tools/<name>`, and explicitly listed `/mcp/<server>`.
 Queries, extra path segments, unknown routes, hop headers, cookies, proxy headers, forwarded headers, unknown headers and non-dummy caller credentials are refused.
@@ -172,7 +313,10 @@ No broker payloads or credentials are logged.
 The real model/MCP credential exists only on the host and is swapped in immediately before an upstream call.
 This protects the credential value, not the ability to spend it through the allowed model endpoint during a turn.
 A malicious guest can call allowed routes directly and exercise every granted capability.
-Default bounds are 48 broker calls per turn, 256 KiB request bodies, 1 MiB upstream/tool responses, one in-flight broker call, a 60-second upstream deadline, a 120-second turn deadline, and 4,096 output tokens per model request.
+Default bounds are 48 broker calls per turn, 256 KiB request bodies, 1 MiB upstream/tool responses, one in-flight broker call, a 60-second upstream deadline, a 120-second turn deadline, and 4,096 output tokens per model request; `maxCalls`, `maxOutputTokens` and `budgets` change them.
+Larger budgets mean larger requests to your model and more spend per turn, so raise them only as far as the model's context needs.
+A cleartext `modelUrl` on the host's own loopback never leaves the machine; any other cleartext endpoint needs `allowHttp` and exposes the credential on the network.
+The file tools' per-file and total caps bound the tools only; set a filesystem quota on `workspaceRoot`, because code that compromises a worker can write anything into its mounts.
 Each broker listener permits at most 16 connections, a ten-second initial-header deadline and a 60-second request deadline.
 The worker itself stops after 12 model calls and eight tools per response.
 Malformed or unavailable provider tool names are refused through a local placeholder; invalid or duplicate call IDs are normalized together with their paired replies.
@@ -186,14 +330,14 @@ An abrupt host crash can leave an isolated container behind; inspect and remove 
 
 `memory_set`, `memory_get`, and `memory_remove` run inside the sandbox and accept a `speaker` or `channel` scope.
 The current speaker selects the speaker namespace; a tool argument cannot select somebody else.
-Channel notes are shared within that workspace; other channels and host agents do not see them.
+Channel notes are shared within that workspace: with `workspace: "server"` that is every sandbox channel of the guild, otherwise one channel; other workspaces and host agents do not see them.
 Entries are persisted as JSON, capped at 256 entries, 2,048 characters per value and 512 KiB total.
 Up to ten settled user/assistant exchanges persist as channel conversation context; raw tool transcripts are not retained.
 History entries are capped at 8 KiB of JSON-encoded text, system-prompt memory previews at 4 KiB per scope, and current user context at 48 KiB.
 Full notes remain in the store and can be retrieved or removed by key with the memory tools.
-Model request context stays below 192 KiB by dropping old text history or complete tool-call groups, not partial tool transcripts.
+Model request context stays below 192 KiB (`budgets.requestBytes`) by dropping old text history or complete tool-call groups, not partial tool transcripts.
 The worker marks truncated text; bounded tool descriptions and tool results cannot grow a later turn past the broker's body limit.
-Treat every channel's history and memory as potentially visible to all guests in that channel.
+Treat every channel's history and memory as potentially visible to all guests in that channel, and with `workspace: "server"` the memory and files as visible to all guests in the guild.
 Speaker namespaces prevent accidental tool cross-talk, not access by code that compromises the shared channel container.
 Never put confidential data in a guest workspace.
 `startFresh` resets history on the next successful turn and preserves memory; a pending reset is process-local and does not survive host restart.
@@ -201,7 +345,7 @@ Turning mode off does not erase workspace files.
 
 The default sealed mode is text-only and uses a minimal Chat Completions agent loop rather than loading a full Pi session inside the container.
 Attachments are not downloaded; the agent is told they are unsupported.
-It does not load skills or extensions and has no shell, schedules, delegation, image tools, personas, or access to the host runtime.
+It loads no Pi skills or extensions (the `skills` option reads plain skill folders on the host, never in the container) and has no shell, schedules, delegation, image tools, personas, or access to the host runtime.
 
 ## Explicit Pi/subscription mode
 

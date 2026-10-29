@@ -64,6 +64,28 @@ Schema 是給模型看的提示，host 不會用它驗證輸入。
 重啟後，owner 可在 guild 頻道執行 `/roundtable sandbox on`、`status` 或 `off`。
 關閉模式會保留 workspace 記憶；等排隊工作結束後，訊息會恢復一般 routing。
 
+## 服務整個伺服器
+
+這些選項都是選填；全都不設時，行為與 0.23.x 相同。
+標示 protocol 2 的選項需要用此版本重新建置 worker image；image 太舊時，啟動會停下並提示重建（image 帶有標籤 `pi-roundtable-sandbox.protocol`）。
+「bytes」依 worker 的算法計算，即 `Buffer.byteLength(JSON.stringify(text))`：一個繁體中文字是 3 bytes。
+
+| 選項 | 能力 |
+| --- | --- |
+| `guilds` | Discord guild id；該 guild 的每個頻道和討論串（含之後新建的）都是 sandbox 頻道，不必執行 `/roundtable sandbox on`。私訊和其他 guild 不受影響，該 guild 內 `/roundtable sandbox off` 會被拒絕。 |
+| `workspace: "server"` | Protocol 2。同一個 guild 的頻道共用一個 workspace（記憶筆記和檔案）；每個頻道的對話歷史放在自己的 state 目錄，掛載到 `/channel`。共用 workspace 的 turn 一次跑一個。預設 `"channel"`：每個頻道各自一個 workspace。 |
+| `files` | Protocol 2。在 workspace 的 `files/` 內提供 `files_list`、`files_read`、`files_write`、`files_delete`；`true` 表示每檔 256 KiB、全部 32 MiB。路徑任一段是 symlink 都會被拒絕。 |
+| `skills` | Protocol 2。放 skill 資料夾的目錄；system prompt 結尾附 skill 索引，`host_read_skill` 由 host 分頁讀取 skill 檔案。 |
+| `budgets` | Protocol 2。`promptBytes`（8,192，上限 32,768；prompt 加 skill 索引，超過會讓啟動停下）、`toolResultBytes`（4,096，上限 32,768）、`requestBytes`（196,608，上限 196,608）。host tool 會收到 `context.resultBytes`。 |
+| `maxCalls`、`maxOutputTokens` | 每個 turn 的 broker 呼叫數（48）與每次模型呼叫的輸出 token（4,096；推理模型的思考也算）。 |
+
+`modelUrl` 在 `127.0.0.1`、`::1` 或 `localhost` 上可以用 `http://`，因為 broker 就跑在 host 上。
+host tool 對模型的名稱是 `host_<name>`，所以 skill 提到工具時要寫 `host_roll_dice`。
+使用 `workspace: "server"` 時，同一個 guild 的頻道共用檔案和筆記，請當作該 guild 的所有 guest 都看得到；檔案工具的上限只約束工具本身，所以仍要在 `workspaceRoot` 設檔案系統 quota。
+從 `"channel"` 改成 `"server"` 不會搬移任何資料：舊的各頻道 workspace 原封不動留在磁碟上。
+
+要匯入舊對話的 host，可以直接用 `guildWorkspaceDir`、`channelStateDir`、`historyFilePath`、`workspaceFilesDir`、`encodeHistory` 和 `userHistoryContent`，不必自己推導磁碟配置；README 有完整清單。
+
 ## 明確啟用 Pi／subscription 模式
 
 `sandbox()` 的 sealed、純文字預設不變。
@@ -168,4 +190,4 @@ host、Docker daemon、Linux kernel、image、callback 和上游服務都在信�
 
 完整隔離措施、持久化限制、部署條件和 Docker integration test 見[pi-roundtable-sandbox README](https://github.com/wayne930242/pi-roundtable/blob/master/packages/sandbox/README.md)（英文）。
 
-{/* Sources: packages/sandbox/README.md:1-27, packages/sandbox/README.md:29-74, packages/sandbox/README.md:76-106, packages/sandbox/src/plugin.ts:12-28 */}
+{/* Sources: packages/sandbox/README.md (Serving a whole server), packages/sandbox/README.md:1-27, packages/sandbox/README.md:29-74, packages/sandbox/README.md:76-106, packages/sandbox/src/plugin.ts:12-28 */}
