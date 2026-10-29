@@ -5,6 +5,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Make, archive and arrange agents. The **+** button of the room list and of the switcher drawer opens a menu: **New agent**, **New group** and **Archived**. New agent takes a name, the permanent name (`^[a-z0-9-]{1,32}$`, filled in from the name until typed by hand), the prompt, a model, an optional opening task and a look (the one its role suggests, or one picked in the character creator, which opens in place of the form), and opens the new agent's room. A bad or taken name, an unusable model, a bad look field (`400 {error, field}`) and an unknown skill are refused with the agent server's words before anything is made.
+- Archive and restore. **Archive agent** and **Archive group** are in the agent sheet, the room's ⋯ menu and the long-press menu of a row (not on the coordinator's room, which cannot be archived), and ask first, naming what they archive. **Archived** lists archived agents and groups with Restore and Delete; Delete is only for an archived one, asks first and names it, frees the name, and clears the room's messages, cards, mute and modes in this app. Restoring an agent does not put it back in its groups; a group is restored only while all its members are active.
+- Skills. The agent sheet lists the host's skills (the Skills pane's catalog when the host supplies one, else the skills addon's) with a switch each, applied as it is flipped. Built-in skills stay on; a host without the skills addon shows no section.
+- Groups. **New group** and **Edit group** (the group's header name, its ⋯ menu, its row's menu) take a name, 2 to 6 members in the order picked, and the host; Edit sends only what changed.
+- New owner-only routes, with the tier read again, the console `Origin` on every write, `404` for an agent, group or room that does not exist and `400` for a bad body or what the agent server refuses: `POST api/agents` (`201`, the profile), `POST api/agents/<name>/archive`, `POST api/agents/<name>/restore`, `DELETE api/agents/<name>`, `GET` and `PUT api/agents/<name>/skills` (`{add?, remove?}`, one change), `POST api/groups` (`201`), `GET`, `PATCH` and `DELETE api/groups/<name>`, `POST api/groups/<name>/archive` and `restore`, and `GET api/archive`. They call `AgentTeam.createAgent`, `archive`, `restore`, `remove`, `createGroup` and `updateGroup` and the skill registry's `attach`, and tell the open pages to read the room list again. Needs `pi-roundtable` with those methods.
+- The new sheets (the new agent form, the group editor and the archive) are one chunk that loads when first opened; the creator takes an `onPick` mode that hands back the look instead of saving it.
+- Traditional Chinese for the new wording.
+
 ## [0.24.0] - 2026-10-29
 
 The core peer range is now `>=0.24.0 <0.25.0`.
