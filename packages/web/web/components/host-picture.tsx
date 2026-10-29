@@ -27,7 +27,8 @@ export function initialsOf(name: string): string {
 /** A colour for a name, dark enough to carry white letters. */
 export function colorOf(name: string): string {
 	let hash = 0;
-	for (const char of name) hash = (hash * 31 + (char.codePointAt(0) ?? 0)) % 360;
+	for (const char of name)
+		hash = (hash * 31 + (char.codePointAt(0) ?? 0)) % 360;
 	return `hsl(${hash} 42% 40%)`;
 }
 

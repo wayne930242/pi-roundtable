@@ -187,7 +187,9 @@ function Field(props: {
  */
 export function HostForm(props: {
 	spec: FormSpecView;
-	onSubmit(input: FormInput): Promise<{ error: string; field?: string } | undefined>;
+	onSubmit(
+		input: FormInput,
+	): Promise<{ error: string; field?: string } | undefined>;
 	onCancel?: () => void;
 }) {
 	const { spec } = props;

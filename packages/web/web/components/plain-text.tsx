@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 
 const URL_AT = /https?:\/\/[^\s<>"']+/g;
-const TRAILING = /[.,;:!?)\]}\u3001\u3002\uff0c\uff1b\uff1a\uff01\uff1f\uff09\u300d\u300f]+$/;
+const TRAILING =
+	/[.,;:!?)\]}\u3001\u3002\uff0c\uff1b\uff1a\uff01\uff1f\uff09\u300d\u300f]+$/;
 
 /** The part of a match that is the address, without the punctuation a sentence puts after it. */
 function addressOf(match: string): string {

@@ -1,6 +1,6 @@
+import { useHost } from "../lib/host-state.ts";
 import { installHostStyle } from "../lib/host-style.ts";
 import { plural } from "../lib/messages.ts";
-import { useHost } from "../lib/host-state.ts";
 
 installHostStyle();
 
@@ -12,7 +12,11 @@ export default function UnreadMark({ room }: { room: string }) {
 		<span
 			className="unread-mark"
 			role="img"
-			aria-label={plural(count, "{count} unread message", "{count} unread messages")}
+			aria-label={plural(
+				count,
+				"{count} unread message",
+				"{count} unread messages",
+			)}
 		>
 			{count > 99 ? "99+" : count}
 		</span>

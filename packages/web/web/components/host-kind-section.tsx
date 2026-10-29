@@ -51,7 +51,9 @@ export default function HostKindSection(props: {
 			(list) => {
 				if (!current) return;
 				seedUnread(
-					Object.fromEntries(list.rooms.map((room) => [room.key, room.unread ?? 0])),
+					Object.fromEntries(
+						list.rooms.map((room) => [room.key, room.unread ?? 0]),
+					),
 				);
 				setRooms(list.rooms);
 				setCursor(list.cursor);
@@ -70,7 +72,9 @@ export default function HostKindSection(props: {
 		try {
 			const list = await hostApi.list(kind, filter || undefined, cursor);
 			seedUnread(
-				Object.fromEntries(list.rooms.map((room) => [room.key, room.unread ?? 0])),
+				Object.fromEntries(
+					list.rooms.map((room) => [room.key, room.unread ?? 0]),
+				),
 			);
 			setRooms((was) => [...(was ?? []), ...list.rooms]);
 			setCursor(list.cursor);

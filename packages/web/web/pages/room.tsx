@@ -22,13 +22,13 @@ import { Empty, Failure, Loading } from "../components/states.tsx";
 import { RoomSwitcher, useSwitcher } from "../components/switcher.tsx";
 import { openAgentSheet } from "../lib/agent-sheet.ts";
 import { api } from "../lib/api.ts";
-import { hostUi } from "../lib/frame-taps.ts";
 import { store, useSelector } from "../lib/app-store.ts";
 import {
 	useAccentStyle,
 	useCharacters,
 	useRoomState,
 } from "../lib/characters.ts";
+import { hostUi } from "../lib/frame-taps.ts";
 import { useMedia } from "../lib/media.ts";
 import { translate as t } from "../lib/messages.ts";
 import { reducedMotion } from "../lib/motion.ts";
@@ -66,7 +66,9 @@ const RoomMenu = lazy(() =>
  * while they were not. A scroll event caused by the content growing is not the person moving, so
  * only scrolls that leave the height as it was count as theirs.
  */
-export function useStickToEnd(scroller: React.RefObject<HTMLDivElement | null>) {
+export function useStickToEnd(
+	scroller: React.RefObject<HTMLDivElement | null>,
+) {
 	const stuck = useRef(true);
 	const height = useRef(0);
 	const [away, setAway] = useState(false);

@@ -129,9 +129,7 @@ export function onFrame(frame: ServerFrame): void {
 			const { room, principal, upTo } = frame;
 			if (principal === store.getState().principal?.id) {
 				const later = (store.getState().rooms[room]?.messages ?? []).filter(
-					(message) =>
-						message.id > upTo &&
-						countsAsUnread(message, principal),
+					(message) => message.id > upTo && countsAsUnread(message, principal),
 				).length;
 				set({
 					unread: { ...state.unread, [room]: later },

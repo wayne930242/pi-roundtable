@@ -31,7 +31,6 @@ import { useStickToEnd } from "./room.tsx";
 
 installHostStyle();
 
-
 /** The most pages of older messages a link to a message pages back through before giving up. */
 const MAX_BACK_PAGES = 20;
 
@@ -97,11 +96,7 @@ function Header(props: { header: HostHeaderView; run: RunAction }) {
 	return (
 		<>
 			{header.banner ? (
-				<p
-					className="host-banner"
-					data-tone={header.banner.tone}
-					role="status"
-				>
+				<p className="host-banner" data-tone={header.banner.tone} role="status">
 					{header.banner.text}
 				</p>
 			) : null}
@@ -282,7 +277,8 @@ export function HostRoomPage({ roomKey }: { roomKey: string }) {
 	useEffect(() => {
 		const read = () => {
 			const wanted = Number(currentQuery().get("message"));
-			target.current = Number.isSafeInteger(wanted) && wanted > 0 ? wanted : undefined;
+			target.current =
+				Number.isSafeInteger(wanted) && wanted > 0 ? wanted : undefined;
 		};
 		read();
 		window.addEventListener("popstate", read);
@@ -323,8 +319,10 @@ export function HostRoomPage({ roomKey }: { roomKey: string }) {
 			input,
 		});
 	const runHeader: RunAction = (action, input) => press(action, input);
-	const runCard = (card: string): RunAction => (action, input) =>
-		press(action, input, card);
+	const runCard =
+		(card: string): RunAction =>
+		(action, input) =>
+			press(action, input, card);
 
 	if (gone || (!loaded && !error && !where))
 		return (
@@ -340,7 +338,11 @@ export function HostRoomPage({ roomKey }: { roomKey: string }) {
 
 	const sends = view?.access.send ?? [];
 	const chosen: "note" | "turn" | undefined =
-		mode && sends.includes(mode) ? mode : (sends.includes("turn") ? "turn" : sends[0]);
+		mode && sends.includes(mode)
+			? mode
+			: sends.includes("turn")
+				? "turn"
+				: sends[0];
 	const title = view?.header.title ?? roomKey;
 	const messages = room?.messages ?? [];
 	return (
@@ -432,7 +434,9 @@ export function HostRoomPage({ roomKey }: { roomKey: string }) {
 			) : null}
 			{view ? <Cards room={roomKey} run={runCard} /> : null}
 			{view && sends.length === 0 ? (
-				<p className="room-note">{t("You can read this room but not write in it.")}</p>
+				<p className="room-note">
+					{t("You can read this room but not write in it.")}
+				</p>
 			) : null}
 			{view && sends.length > 0 ? (
 				<>

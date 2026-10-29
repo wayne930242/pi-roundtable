@@ -19,7 +19,9 @@ export type RunAction = (
  * What the person is told and shown after an action: a notice becomes a toast, and where the host
  * sends them is opened. A refusal returns its text, for the form (or the toast) to show.
  */
-function finish(result: HostActionResult): { error: string; field?: string } | undefined {
+function finish(
+	result: HostActionResult,
+): { error: string; field?: string } | undefined {
 	if (!result.ok)
 		return {
 			error: refusalText(result.error),

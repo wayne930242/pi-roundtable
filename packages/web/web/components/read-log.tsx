@@ -1,14 +1,8 @@
-import {
-	type RefObject,
-	useEffect,
-	useMemo,
-	useRef,
-	useState,
-} from "react";
+import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
 import type { ReadMarkView, RoomMessage } from "../../src/api-types.ts";
 import { useSelector } from "../lib/app-store.ts";
-import { installHostStyle } from "../lib/host-style.ts";
 import { noReads, useHost } from "../lib/host-state.ts";
+import { installHostStyle } from "../lib/host-style.ts";
 import { translate as t } from "../lib/messages.ts";
 import { useConnection } from "../lib/socket.ts";
 import { HostMessageRow } from "./host-message.tsx";
@@ -130,7 +124,8 @@ export default function ReadLog(props: {
 	const cursor = useHost((state) => state.cursor[roomKey]);
 	// The divider stays where the new messages began when the room opened, however far the person reads.
 	const began = useRef<number | undefined>(undefined);
-	if (began.current === undefined && cursor !== undefined) began.current = cursor;
+	if (began.current === undefined && cursor !== undefined)
+		began.current = cursor;
 
 	const decor = useMemo<RowDecor>(() => {
 		const list: readonly RoomMessage[] = messages ?? [];
@@ -163,7 +158,8 @@ export default function ReadLog(props: {
 			...(props.host
 				? {
 						message: (message: RoomMessage, look) =>
-							message.kind === "system" && message.authorKind === undefined ? undefined : (
+							message.kind === "system" &&
+							message.authorKind === undefined ? undefined : (
 								<HostMessageRow
 									message={message}
 									header={look.header}

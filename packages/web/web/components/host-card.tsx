@@ -29,7 +29,10 @@ export const isOpenCard = (card: Pick<HostCardView, "state">): boolean =>
  * buttons this person may press. Once it is working, done, replaced or expired it has none.
  */
 export function HostCard(props: {
-	card: Pick<HostCardView, "title" | "body" | "tone" | "state" | "links" | "buttons">;
+	card: Pick<
+		HostCardView,
+		"title" | "body" | "tone" | "state" | "links" | "buttons"
+	>;
 	run: RunAction;
 }) {
 	const { card } = props;

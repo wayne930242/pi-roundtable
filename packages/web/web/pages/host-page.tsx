@@ -13,8 +13,8 @@ import { ApiFailure, messageOf } from "../lib/api.ts";
 import { hostApi, openTarget, refusalText } from "../lib/host-api.ts";
 import { useHost } from "../lib/host-state.ts";
 import { installHostStyle } from "../lib/host-style.ts";
-import type { PageRouteProps } from "../lib/page-routes.ts";
 import { translate as t } from "../lib/messages.ts";
+import type { PageRouteProps } from "../lib/page-routes.ts";
 import { toast } from "../lib/toast.ts";
 import { currentQuery } from "../lib/where.ts";
 
@@ -36,7 +36,9 @@ function useQuery(): string {
 }
 
 /** A refusal or success of a page action, told to the person; the refusal comes back for a form to show. */
-function told(result: HostActionResult): { error: string; field?: string } | undefined {
+function told(
+	result: HostActionResult,
+): { error: string; field?: string } | undefined {
 	if (!result.ok)
 		return {
 			error: refusalText(result.error),
@@ -50,7 +52,10 @@ function told(result: HostActionResult): { error: string; field?: string } | und
 function Section(props: {
 	section: PageSectionView;
 	run: RunAction;
-	submit(action: string, input: FormInput): Promise<{ error: string; field?: string } | undefined>;
+	submit(
+		action: string,
+		input: FormInput,
+	): Promise<{ error: string; field?: string } | undefined>;
 }) {
 	const { section } = props;
 	switch (section.kind) {
@@ -74,10 +79,12 @@ function Section(props: {
 					{section.title ? (
 						<h2 className="section-title">{section.title}</h2>
 					) : null}
-					{section.rows.length === 0 ? <Empty>{t("Nothing here.")}</Empty> : null}
+					{section.rows.length === 0 ? (
+						<Empty>{t("Nothing here.")}</Empty>
+					) : null}
 					<ul className="host-list">
-						{section.rows.map((row, index) => (
-							<li key={`${index}:${row.title}`}>
+						{keyed(section.rows).map(([key, row]) => (
+							<li key={key}>
 								{row.attention ? (
 									<span
 										className="attention-dot"
@@ -186,4 +193,14 @@ export function HostPage({ routeKey }: PageRouteProps) {
 			))}
 		</div>
 	);
+}
+
+/** Rows paired with a key: the title, and for a title that repeats, how many times it has come before. */
+function keyed<T extends { title: string }>(rows: readonly T[]): [string, T][] {
+	const seen = new Map<string, number>();
+	return rows.map((row) => {
+		const before = seen.get(row.title) ?? 0;
+		seen.set(row.title, before + 1);
+		return [`${row.title}:${before}`, row];
+	});
 }
