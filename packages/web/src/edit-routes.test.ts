@@ -93,6 +93,9 @@ function setup(
 	const recorder = recordingLogger();
 	const visitor = (): Visitor => ({
 		principal: { id: who.id, displayName: who.name, disabled: false },
+		tier: who.tier,
+		speakerId: who.id,
+		roles: [],
 	});
 	const prompts = {
 		list: () => [...documents.values()],
@@ -194,7 +197,7 @@ function setup(
 		files: {} as never,
 		modes: {} as never,
 		conversations: {} as never,
-		identity: { tierOf: async () => who.tier },
+		identity: { principal: async () => undefined },
 		directory: {
 			agent: (name: string) =>
 				name === "scout"

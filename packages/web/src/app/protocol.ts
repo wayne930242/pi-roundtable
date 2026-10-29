@@ -1,6 +1,7 @@
 import { QUESTIONNAIRE_LIMITS } from "pi-roundtable";
 import {
 	type ClientFrame,
+	type FormInput,
 	MAX_MESSAGE_FILES,
 	type PromptAnswer,
 } from "../api-types.ts";
@@ -38,6 +39,31 @@ function parseAnswer(value: unknown): PromptAnswer | undefined {
 		choices: choices as string[],
 		...(text === undefined ? {} : { text }),
 	};
+}
+
+/** The most fields and the longest value a form's input may carry. */
+const FORM_FIELDS = 40;
+const FORM_VALUE_CHARS = 32_000;
+
+/** A form's input: text, or a list of text, by field name. */
+function parseInput(value: unknown): FormInput | undefined {
+	if (!isRecord(value)) return undefined;
+	const entries = Object.entries(value);
+	if (entries.length > FORM_FIELDS) return undefined;
+	const input: Record<string, string | string[]> = {};
+	for (const [name, field] of entries) {
+		if (name.length === 0 || name.length > ID_CHARS) return undefined;
+		if (typeof field === "string" && field.length <= FORM_VALUE_CHARS)
+			input[name] = field;
+		else if (
+			Array.isArray(field) &&
+			field.length <= FORM_FIELDS &&
+			field.every((one) => isText(one) && one.length <= FORM_VALUE_CHARS)
+		)
+			input[name] = field as string[];
+		else return undefined;
+	}
+	return input;
 }
 
 function parseAnswers(value: Record<string, unknown>): ClientFrame | undefined {
@@ -99,8 +125,10 @@ export function parseClientFrame(
 				...(value.room === undefined ? {} : { room: value.room as string }),
 			};
 		case "send": {
-			const { id, room, text, uploads } = value;
+			const { id, room, text, uploads, mode } = value;
 			if (!isId(id) || !isId(room) || !isText(text)) return undefined;
+			if (mode !== undefined && mode !== "note" && mode !== "turn")
+				return undefined;
 			if (
 				uploads !== undefined &&
 				!(
@@ -118,8 +146,42 @@ export function parseClientFrame(
 				...(uploads === undefined || uploads.length === 0
 					? {}
 					: { uploads: uploads as string[] }),
+				...(mode === undefined ? {} : { mode }),
 			};
 		}
+		case "subscribe":
+		case "unsubscribe":
+			return isId(value.room)
+				? { type: value.type, room: value.room }
+				: undefined;
+		case "act": {
+			const { id, room, page, action, card, input } = value;
+			if (!isId(id) || !isId(action)) return undefined;
+			// One target: a room or a page, never both and never neither.
+			if ((room === undefined) === (page === undefined)) return undefined;
+			if (!optional(room, isId) || !optional(page, isId)) return undefined;
+			if (!optional(card, isId)) return undefined;
+			const parsed = input === undefined ? undefined : parseInput(input);
+			if (input !== undefined && !parsed) return undefined;
+			return {
+				type: "act",
+				id,
+				action,
+				...(room === undefined ? {} : { room: room as string }),
+				...(page === undefined ? {} : { page: page as string }),
+				...(card === undefined ? {} : { card: card as string }),
+				...(parsed ? { input: parsed } : {}),
+			};
+		}
+		case "ack":
+			return isId(value.tag) ? { type: "ack", tag: value.tag } : undefined;
+		case "read":
+			return isId(value.room) &&
+				typeof value.upTo === "number" &&
+				Number.isSafeInteger(value.upTo) &&
+				value.upTo >= 0
+				? { type: "read", room: value.room, upTo: value.upTo }
+				: undefined;
 		case "stop":
 			return isId(value.room) ? { type: "stop", room: value.room } : undefined;
 		case "approval":

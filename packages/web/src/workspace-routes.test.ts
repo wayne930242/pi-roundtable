@@ -51,6 +51,9 @@ function setup(withWorkspace = true) {
 	recorder = recordingLogger();
 	const visitor = (): Visitor => ({
 		principal: { id: who.id, displayName: who.id, disabled: false },
+		tier: who.tier,
+		speakerId: who.id,
+		roles: [],
 	});
 	const api = new AppApi({
 		surface: {} as never,
@@ -61,7 +64,7 @@ function setup(withWorkspace = true) {
 		files: {} as never,
 		modes: {} as never,
 		conversations: {} as never,
-		identity: { tierOf: async () => who.tier },
+		identity: { principal: async () => undefined },
 		directory: {} as never,
 		team: {} as never,
 		avatars: {} as never,

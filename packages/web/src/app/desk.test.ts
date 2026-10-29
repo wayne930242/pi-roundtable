@@ -278,7 +278,10 @@ describe("questions", () => {
 		void instance.prompts(ROOM, SCOPE).confirm("t", "m");
 		await tick();
 		expect(instance.openFrames()).toMatchObject([
-			{ type: "prompt", room: ROOM, prompt: { kind: "approval" } },
+			{
+				room: ROOM,
+				frame: { type: "prompt", room: ROOM, prompt: { kind: "approval" } },
+			},
 		]);
 		instance.stop();
 		expect(instance.openFrames()).toEqual([]);

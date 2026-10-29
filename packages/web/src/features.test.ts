@@ -27,6 +27,9 @@ const agent = `discord:${AGENT_CHANNEL}` as ChannelKey;
 const party = "discord:900000000000000088" as ChannelKey;
 const OWNER: Visitor = {
 	principal: { id: "owner", displayName: "Owner", disabled: false },
+	tier: "owner",
+	speakerId: "owner",
+	roles: [],
 };
 function fixture(change: Partial<ConsoleFeatures> = {}) {
 	const memory = fakeMemory();

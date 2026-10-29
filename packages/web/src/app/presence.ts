@@ -46,7 +46,7 @@ export class Presence {
 		return { type: "presence", agents };
 	}
 
-	/** Sends the table to every socket once changes settle, if it changed. */
+	/** Sends the table to the owners' sockets once changes settle, if it changed. */
 	schedule(): void {
 		if (this.#pending || this.#stopped) return;
 		this.#pending = setTimeout(() => {
@@ -62,7 +62,7 @@ export class Presence {
 		const text = JSON.stringify(frame.agents);
 		if (text === this.#last || this.#stopped) return;
 		this.#last = text;
-		this.#options.sockets.broadcast(frame);
+		this.#options.sockets.deliver(frame, { owners: true });
 	}
 
 	stop(): void {

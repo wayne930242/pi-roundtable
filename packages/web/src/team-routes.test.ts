@@ -74,6 +74,9 @@ function setup(withSkills = true) {
 	const recorder = recordingLogger();
 	const visitor = (): Visitor => ({
 		principal: { id: who.id, displayName: who.id, disabled: false },
+		tier: who.tier,
+		speakerId: who.id,
+		roles: [],
 	});
 	const directory = {
 		agent: (name: string) => agents.get(name),
@@ -209,7 +212,7 @@ function setup(withSkills = true) {
 			},
 		} as never,
 		conversations: {} as never,
-		identity: { tierOf: async () => who.tier },
+		identity: { principal: async () => undefined },
 		directory: directory as never,
 		team: team as never,
 		avatars: {} as never,

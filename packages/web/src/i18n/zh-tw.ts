@@ -1021,4 +1021,18 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 		"baseHash 必須是讀取技能時的雜湊值。",
 	"This skill changed while you were editing it.":
 		"這個技能在你編輯時被更動了。",
+	// 成員、登入與設定關卡
+	Profile: "個人資料",
+	Owner: "擁有者",
+	Admin: "管理員",
+	Member: "成員",
+	"Finish setting up": "完成設定",
+	"Finish setting up first.": "請先完成設定。",
+	"These steps come first. The rest of the app opens when they are done.":
+		"請先完成這些步驟，完成後才能使用其餘功能。",
+	"Push is not available to you.": "你不能使用推播通知。",
+	"You are signed out.": "你已登出。",
+	"This account is not allowed to use this app.":
+		"這個帳號不能使用此應用程式。",
+	"Sign-in did not complete.": "登入沒有完成。",
 };

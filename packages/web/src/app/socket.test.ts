@@ -25,11 +25,11 @@ interface Harness {
 	open(
 		principal: string,
 		facts?: Partial<AppSocket>,
-	): {
+	): Promise<{
 		socket: RouteSocket<AppSocket>;
 		sent: ServerFrame[];
 		closed: { code?: number | undefined; open: boolean };
-	};
+	}>;
 }
 
 function harness(
@@ -44,6 +44,20 @@ function harness(
 		origin: "https://app.example.test",
 		authenticator: {
 			authenticate: async () => ({ refusal: "n/a", status: 401 }),
+			// The harness keys a socket's person by its session: the principal it was opened for.
+			recheck: async (held) => {
+				const id = held.session ?? "";
+				const tier = tiers.get(id);
+				if (!tier) return { refusal: "gone", status: 403 as const };
+				return {
+					visitor: {
+						principal: { id, displayName: id, disabled: false },
+						tier: tier as never,
+						speakerId: id,
+						roles: [],
+					},
+				};
+			},
 		},
 		sockets,
 		surface: partial<AppSurface>({
@@ -61,7 +75,7 @@ function harness(
 				delivered.push(message);
 			},
 		}),
-		desk: partial<OwnerDesk>({ openFrames: () => [] }),
+		desk: partial<OwnerDesk>({ openFrames: () => [], roomOf: () => undefined }),
 		rooms: partial<Rooms>({
 			resolve: async (key) =>
 				key === ROOM
@@ -80,9 +94,13 @@ function harness(
 			use: () => undefined,
 			refOf: () => ({}) as never,
 		}),
-		identity: {
-			tierOf: async (id: string) => tiers.get(id) as never,
+		registry: {
+			frameHandler: () => undefined,
+			isHostRoom: () => false,
+			access: { read: async () => false, readNow: () => false },
 		},
+		gate: { required: async () => [], onChanged: () => () => undefined },
+		audienceOf: () => ({ owners: true }),
 		conversations: { stop: () => true },
 		logger: silentLogger(),
 		...options,
@@ -93,7 +111,7 @@ function harness(
 		sockets,
 		tiers,
 		delivered,
-		open: (principal, facts = {}) => {
+		open: async (principal, facts = {}) => {
 			const sent: ServerFrame[] = [];
 			const closed: { code?: number | undefined; open: boolean } = {
 				open: true,
@@ -103,8 +121,14 @@ function harness(
 					principal: { id: principal, name: principal },
 					actor: ACTOR,
 					expiresAt: undefined,
+					tier: "owner",
+					speakerId: principal,
+					roles: [],
+					gated: false,
+					session: principal,
 					visible: true,
 					focus: undefined,
+					subscriptions: new Set<string>(),
 					...facts,
 				},
 				send: (message) => {
@@ -118,6 +142,8 @@ function harness(
 				},
 			};
 			wired.open?.(socket);
+			// The socket is admitted again and told `ready` before it receives anything else.
+			await wait(10);
 			return { socket, sent, closed };
 		},
 	};
@@ -128,7 +154,7 @@ const wait = (ms: number) => Bun.sleep(ms);
 test("RV-F001: in password mode a socket lives at most the cap, then closes 4401", async () => {
 	const h = harness({ maxLifeMs: 60 });
 	const farOff = new Date(Date.now() + 30 * 86_400_000);
-	const { closed } = h.open("ada", { expiresAt: farOff });
+	const { closed } = await h.open("ada", { expiresAt: farOff });
 	await wait(20);
 	expect(closed.open).toBe(true);
 	await wait(120);
@@ -137,46 +163,48 @@ test("RV-F001: in password mode a socket lives at most the cap, then closes 4401
 
 test("RV-F001: the credential's own expiry still wins when it is sooner than the cap", async () => {
 	const h = harness({ maxLifeMs: 10_000 });
-	const { closed } = h.open("ada", { expiresAt: new Date(Date.now() + 50) });
+	const { closed } = await h.open("ada", {
+		expiresAt: new Date(Date.now() + 50),
+	});
 	await wait(150);
 	expect(closed.code).toBe(4401);
 });
 
 test("RV-F001: without a cap a socket with no expiry stays open", async () => {
 	const h = harness({});
-	const { closed } = h.open("ada");
+	const { closed } = await h.open("ada");
 	await wait(80);
 	expect(closed.open).toBe(true);
 });
 
-test("RV-F002: an owner who is demoted is dropped on the next check and gets no more frames", async () => {
+test("RV-F002: a person who is no longer admitted is dropped on the next check and gets no more frames", async () => {
 	const h = harness({ recheckMs: 30 });
-	const { sent, closed } = h.open("ada");
-	h.sockets.broadcast({ type: "changed" });
+	const { sent, closed } = await h.open("ada");
+	h.sockets.deliver({ type: "changed" }, { owners: true });
 	expect(sent.some((f) => f.type === "changed")).toBe(true);
-	h.tiers.set("ada", "member");
+	h.tiers.set("ada", undefined);
 	await wait(120);
 	expect(closed.code).toBe(4403);
 	const before = sent.length;
-	h.sockets.broadcast({ type: "changed" });
+	h.sockets.deliver({ type: "changed" }, { owners: true });
 	expect(sent.length).toBe(before);
 });
 
 test("RV-F002: a frame from a demoted owner closes the socket, even one that only moves focus", async () => {
 	const h = harness({ recheckMs: 60_000 });
-	const { socket, sent, closed } = h.open("ada");
+	const { socket, sent, closed } = await h.open("ada");
 	h.tiers.set("ada", undefined);
 	await h.route.message(socket, JSON.stringify({ type: "focus", room: ROOM }));
 	expect(closed.code).toBe(4403);
 	// The socket is out of the set, so the focus it named reaches nothing.
 	const before = sent.length;
-	h.sockets.broadcast({ type: "changed" }, (c) => c.focus === ROOM);
+	h.sockets.deliver({ type: "changed" }, { owners: true, focus: ROOM });
 	expect(sent.length).toBe(before);
 });
 
 test("RV-F003: a visitor admitted with no actor is refused when they send, and nothing is delivered", async () => {
 	const h = harness({});
-	const { socket, sent } = h.open("ada", { actor: undefined });
+	const { socket, sent } = await h.open("ada", { actor: undefined });
 	await h.route.message(
 		socket,
 		JSON.stringify({ type: "send", id: "m1", room: ROOM, text: "hello" }),
@@ -191,7 +219,7 @@ test("RV-F003: a visitor admitted with no actor is refused when they send, and n
 
 test("RV-F003: a visitor with an actor sends as that actor", async () => {
 	const h = harness({});
-	const { socket, sent } = h.open("ada");
+	const { socket, sent } = await h.open("ada");
 	await h.route.message(
 		socket,
 		JSON.stringify({ type: "send", id: "m2", room: ROOM, text: "hello" }),
@@ -203,16 +231,24 @@ test("RV-F003: a visitor with an actor sends as that actor", async () => {
 test("RV-F001: state frames apply in the order they arrive, however long each owner lookup takes", async () => {
 	let lookups = 0;
 	const h = harness({
-		identity: {
+		authenticator: {
+			authenticate: async () => ({ refusal: "n/a", status: 401 }),
 			// The first lookup is slow, the later ones are not.
-			tierOf: async () => {
+			recheck: async () => {
 				lookups += 1;
-				if (lookups === 1) await wait(40);
-				return "owner" as never;
+				if (lookups === 2) await wait(40);
+				return {
+					visitor: {
+						principal: { id: "ada", displayName: "ada", disabled: false },
+						tier: "owner" as const,
+						speakerId: "ada",
+						roles: [],
+					},
+				};
 			},
 		},
 	});
-	const { socket } = h.open("ada", { visible: false, focus: undefined });
+	const { socket } = await h.open("ada", { visible: false, focus: undefined });
 	const first = h.route.message(
 		socket,
 		JSON.stringify({ type: "hello", visible: true, focus: ROOM }),
@@ -232,6 +268,7 @@ test("RV-F007: a late card answered by a socket with no actor is refused and the
 	const h = harness({
 		desk: partial<OwnerDesk>({
 			openFrames: () => [],
+			roomOf: () => undefined,
 			isLate: (prompt: string) => prompt === "late-1",
 			approve: (_who, prompt) => {
 				answered.push(prompt);
@@ -239,7 +276,7 @@ test("RV-F007: a late card answered by a socket with no actor is refused and the
 			},
 		}),
 	});
-	const { socket, sent } = h.open("ada", { actor: undefined });
+	const { socket, sent } = await h.open("ada", { actor: undefined });
 	await h.route.message(
 		socket,
 		JSON.stringify({ type: "approval", prompt: "late-1", approved: true }),

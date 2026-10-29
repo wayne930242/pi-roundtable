@@ -13,8 +13,11 @@ import type {
 	WebSocketRoute,
 } from "pi-roundtable";
 import { channelKey } from "pi-roundtable";
+import { APP_CLOSE_EXPIRED } from "../api-types.ts";
 import type { Authenticated, Authenticator } from "../auth/authenticator.ts";
 import type { ConsolePresentation } from "../features.ts";
+import type { Gate } from "../gate.ts";
+import type { ResolvedOptions } from "../options.ts";
 import { PushApi } from "../push/api.ts";
 import { webPushChannel } from "../push/channel.ts";
 import { EndpointPolicy } from "../push/endpoint.ts";
@@ -24,6 +27,7 @@ import { PushSender } from "../push/sender.ts";
 import { PushSubscriptions } from "../push/subscriptions.ts";
 import { PushService } from "../push/triggers.ts";
 import type { Vapid } from "../push/vapid.ts";
+import type { WebAppRegistry } from "../web-app.ts";
 import { CardLog } from "./card-log.ts";
 import { OwnerDesk } from "./desk.ts";
 import { FileDir } from "./files.ts";
@@ -33,7 +37,7 @@ import { RoomLog } from "./room-log.ts";
 import { Rooms } from "./rooms.ts";
 import { AppApi, type AppApiOptions, partsOf } from "./routes.ts";
 import { SocketRoute } from "./socket.ts";
-import { type AppSocket, Sockets } from "./sockets.ts";
+import { type AppSocket, type Audience, Sockets } from "./sockets.ts";
 import { AppSurface } from "./surface.ts";
 import { WebThreads } from "./threads.ts";
 import { Uploads } from "./uploads.ts";
@@ -69,9 +73,19 @@ export interface OwnerAppOptions {
 	cardGraceSeconds: number;
 	/** The most bytes of one uploaded file. */
 	uploadMaxBytes: number;
-	authenticator: Pick<Authenticator, "authenticate">;
+	authenticator: Pick<Authenticator, "authenticate" | "recheck">;
 	/** How the console signs the person in. */
-	authMode: "none" | "password" | "verifier";
+	authMode: ResolvedOptions["auth"]["mode"];
+	/** Who the app admits; the page and the session report the tier only where it admits more than owners. */
+	admission: ResolvedOptions["admission"];
+	/** What the pieces of the app plug in: the kinds of host room, their handlers, who reads them. */
+	registry: WebAppRegistry;
+	/** The onboarding gate. */
+	gate: Gate;
+	/** The tiers whose people may use push. */
+	pushTiers: ResolvedOptions["push"]["tiers"];
+	/** Whether the yolo and long-running switches are served. */
+	modeSwitches: boolean;
 	/** The longest an open socket lives; for a credential that logout or a new password does not reach. */
 	socketLifeMs?: number;
 	/** Web Push: the server's key, and how notifications read. */
@@ -172,13 +186,20 @@ export class OwnerApp {
 			vapid: options.push.vapid,
 			policy,
 			subscriptions,
-			identity,
+			tiers: options.pushTiers,
 			enabled: options.push.subject !== undefined,
 		});
+		const { registry } = options;
+		sockets.setRoomReader((connection, room) =>
+			registry.access.readNow(connection, room),
+		);
+		// An agent room's frames are the owners'; a host room's are its readers'.
+		const audienceOf = (room: string): Audience =>
+			registry.isHostRoom(room) ? { room } : { owners: true };
 		// The desk starts a late answer's turn through the socket route, which is made after it.
 		let route: SocketRoute | undefined;
 		const desk = new OwnerDesk({
-			broadcast: (frame) => sockets.broadcast(frame),
+			broadcast: (frame, room) => sockets.deliver(frame, audienceOf(room)),
 			graceMs: options.cardGraceSeconds * 1000,
 			closed: (card) => cards.record(card),
 			opened: (room, frame) => {
@@ -213,6 +234,8 @@ export class OwnerApp {
 				const room = await rooms.resolve(parent);
 				return room !== undefined && room.kind !== "thread";
 			},
+			audienceOf,
+			isHostRoom: (room) => registry.isHostRoom(room),
 			changed: () => this.changed(),
 			unprompted: (room, author, text) => {
 				push.reply(room, author, text).catch(() => undefined);
@@ -251,10 +274,16 @@ export class OwnerApp {
 			rooms,
 			uploads,
 			presence,
-			identity,
+			registry,
+			gate: options.gate,
+			audienceOf,
 			conversations: options.conversations,
 			logger,
 		});
+		const socketRoute = route;
+		this.#unsubscribe.push(
+			options.gate.onChanged((principalId) => socketRoute.refresh(principalId)),
+		);
 		this.websocket = route.route();
 		this.directChannel = webPushChannel({
 			surface: options.surface,
@@ -293,6 +322,11 @@ export class OwnerApp {
 			avatars: agents.avatars,
 			mount: options.mount,
 			authMode: options.authMode,
+			admission: options.admission,
+			registry,
+			gate: options.gate,
+			pushTiers: options.pushTiers,
+			modeSwitches: options.modeSwitches,
 			...(options.push.quietHours
 				? {
 						quietHours: {
@@ -312,12 +346,15 @@ export class OwnerApp {
 		this.#unsubscribe.push(
 			modes.onChange((channel, mode) => {
 				if (!rooms.ownsKey(channel)) return;
-				sockets.broadcast({
-					type: "mode",
-					room: channel,
-					yolo: mode.yolo,
-					longRunning: mode.longRunning,
-				});
+				sockets.deliver(
+					{
+						type: "mode",
+						room: channel,
+						yolo: mode.yolo,
+						longRunning: mode.longRunning,
+					},
+					{ owners: true },
+				);
 			}),
 			modes.onAutoApproved((entry) => {
 				if (!rooms.ownsKey(entry.channel)) return;
@@ -342,12 +379,21 @@ export class OwnerApp {
 		return pushed ?? this.#api.handle(request, rest, admission);
 	}
 
-	/** Tells every open socket the team or the room list may differ, once changes settle. */
+	/** Closes the sockets that came in on a session that has ended. */
+	sessionEnded(id: string): void {
+		this.#sockets.closeWhere(
+			(connection) => connection.session === id,
+			APP_CLOSE_EXPIRED,
+			"expired",
+		);
+	}
+
+	/** Tells the owners' sockets the team or the room list may differ, once changes settle. */
 	changed(): void {
 		if (this.#pending) return;
 		this.#pending = setTimeout(() => {
 			this.#pending = undefined;
-			this.#sockets.broadcast({ type: "changed" });
+			this.#sockets.deliver({ type: "changed" }, { owners: true });
 		}, CHANGED_COALESCE_MS);
 	}
 
@@ -391,6 +437,9 @@ export class OwnerApp {
 			author: "Yolo mode",
 			text: `Yolo mode approved: ${action}`,
 		});
-		this.#sockets.broadcast({ type: "auto_approved", room, tool, action });
+		this.#sockets.deliver(
+			{ type: "auto_approved", room, tool, action },
+			{ owners: true },
+		);
 	}
 }

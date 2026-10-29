@@ -6,10 +6,16 @@ import type {
 	Authenticator,
 	Unauthenticated,
 } from "./auth/authenticator.ts";
+import { nextOfPath } from "./auth/next.ts";
+import { type Decision, decide } from "./authz.ts";
 import type { ConsoleApi } from "./console-api.ts";
-import type { ConsolePresentation } from "./features.ts";
+import { type ConsolePresentation, message } from "./features.ts";
+import type { Gate } from "./gate.ts";
+import { json } from "./http.ts";
 import { presentPage } from "./page-presentation.ts";
 import { servePwa } from "./pwa.ts";
+import type { Visitor } from "./visitors.ts";
+import { viewerOf } from "./web-app.ts";
 
 const encoder = new TextEncoder();
 /** Changes closer together than this reach the page as one event. */
@@ -53,6 +59,10 @@ export interface ConsoleServerOptions {
 		): Promise<Response | undefined>;
 		websocket: WebSocketRoute<AppSocket>;
 	};
+	/** The onboarding gate; without it nobody is gated. */
+	gate?: Pick<Gate, "required">;
+	/** The app's surface, for the `next` a turned-away page navigation asks to come back to. */
+	surface?: string;
 	/** Registers the listener with every source whose change the console shows. */
 	subscribe(listener: () => void): void;
 	logger: Logger;
@@ -70,9 +80,11 @@ export interface ConsoleServerOptions {
 
 /**
  * The console on the host's listener: `<mount>` redirects to `<mount>/`, and everything under
- * it needs the authenticator to admit the request as an owner's, apart from what it answers
- * openly, such as a login page. A request that changes data must also carry the console's own
- * `Origin`.
+ * it needs the authenticator to admit the request, apart from what it answers openly, such as a
+ * login page. An admitted request is then judged by the authorization table before any handler
+ * sees it: a route that is not listed answers 404, one for owners answers a member 403, and while
+ * the person owes a required step only the routes open to them answer. A request that changes
+ * data must also carry the console's own `Origin`.
  */
 export class ConsoleServer {
 	readonly #options: ConsoleServerOptions;
@@ -154,6 +166,11 @@ export class ConsoleServer {
 				status: 302,
 				headers: { location: this.#base },
 			});
+		const decision = decide(request.method, rest, {
+			tier: admission.visitor.tier,
+			gated: await this.#gated(admission.visitor),
+		});
+		if (!decision.allow) return this.#denied(decision);
 		if (rest === "api/events" && request.method === "GET")
 			return this.#events();
 		const owned = await this.#options.app?.handle(request, rest, admission);
@@ -206,6 +223,43 @@ export class ConsoleServer {
 		return new Response("Not found", { status: 404 });
 	}
 
+	async #gated(visitor: Visitor): Promise<boolean> {
+		const { gate } = this.#options;
+		if (!gate) return false;
+		try {
+			return (await gate.required(viewerOf(visitor))).length > 0;
+		} catch (error) {
+			// A gate that cannot be read stays shut.
+			this.#options.logger.warn({ err: error }, "the gate was not read");
+			return true;
+		}
+	}
+
+	/** The answer to a request the authorization table refused. */
+	#denied(decision: Extract<Decision, { allow: false }>): Response {
+		const { presentation, logger } = this.#options;
+		logger.debug({ reason: decision.reason }, "console request denied");
+		if (decision.gate)
+			return json(
+				{
+					error: message(presentation, "Finish setting up first."),
+					gate: true,
+				},
+				403,
+			);
+		return json(
+			{
+				error: message(
+					presentation,
+					decision.status === 404
+						? "There is no such API."
+						: "Only an owner may do this.",
+				),
+			},
+			decision.status,
+		);
+	}
+
 	/**
 	 * The answer to a request the authenticator refused: a page navigation that signing in would
 	 * fix goes to the login page, everything else gets the status and a fixed body.
@@ -215,14 +269,19 @@ export class ConsoleServer {
 			refusal.login &&
 			READ_METHODS.has(request.method) &&
 			!rest.startsWith("api/")
-		)
+		) {
+			// A path route can say where to come back to; a hash route's place never reaches the server.
+			const next = this.#options.pathRouting
+				? nextOfPath(rest, this.#options.surface ?? "app")
+				: undefined;
 			return new Response(null, {
 				status: 303,
 				headers: {
-					location: `${this.#options.mount}/login`,
+					location: `${this.#options.mount}/login${next ? `?next=${encodeURIComponent(next)}` : ""}`,
 					"cache-control": "no-store",
 				},
 			});
+		}
 		// A missing session is the normal way to meet a login page, not worth a line each time.
 		const { logger } = this.#options;
 		const fields = { refusal: refusal.refusal };

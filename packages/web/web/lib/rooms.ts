@@ -3,6 +3,7 @@ import type {
 	CardAnswer,
 	ClosedCard,
 	FolderView,
+	GateStepView,
 	PromptFrame,
 	PromptOutcome,
 	RefusalCode,
@@ -123,8 +124,10 @@ export interface RoomsState {
 	connects: number;
 	/** The last refusal that belongs to no send, to be shown once. */
 	refusal: RefusalCode | undefined;
-	/** The socket was closed because the person is no owner (any more). */
+	/** The socket was closed because the person is no longer admitted. */
 	forbidden: boolean;
+	/** The required steps the server says the person owes now; undefined until the socket says. */
+	gate: GateStepView[] | undefined;
 }
 
 /** What the page does itself, beside the server's frames. */
@@ -192,6 +195,7 @@ export function initialState(): RoomsState {
 		connects: 0,
 		refusal: undefined,
 		forbidden: false,
+		gate: undefined,
 	};
 }
 
@@ -491,6 +495,7 @@ export function reduce(state: RoomsState, action: Action): RoomsState {
 				principal: { id: action.principal, name: action.name },
 				limits: action.uploads,
 				connects: state.connects + 1,
+				gate: action.gate ?? [],
 				cardOrder: state.cardOrder.filter((id) => !gone.has(id)),
 				cards: Object.fromEntries(
 					Object.entries(state.cards).filter(([id]) => !gone.has(id)),
@@ -688,6 +693,21 @@ export function reduce(state: RoomsState, action: Action): RoomsState {
 			};
 		case "refusal_dismissed":
 			return { ...state, refusal: undefined };
+		case "gate":
+			return { ...state, gate: action.steps };
+		// The host rooms, the notices and the read marks are handled by the pages that show them.
+		case "host_message":
+		case "host_edited":
+		case "host_removed":
+		case "host_card":
+		case "room_changed":
+		case "list_changed":
+		case "page_changed":
+		case "notice":
+		case "notice_resolved":
+		case "badge":
+		case "read":
+			return state;
 	}
 }
 

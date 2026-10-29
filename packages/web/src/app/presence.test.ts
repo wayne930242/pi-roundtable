@@ -26,7 +26,7 @@ test("a socket opened while a change waits does not keep the open sockets from h
 			},
 		},
 		sockets: {
-			broadcast: (frame: unknown) => broadcasts.push(frame),
+			deliver: (frame: unknown) => broadcasts.push(frame),
 		} as unknown as Sockets,
 		working: () => new Set(),
 		logger: silent,

@@ -65,6 +65,9 @@ function setup(presentation?: ConsolePresentation) {
 	const recorder = recordingLogger();
 	const visitor = (): Visitor => ({
 		principal: { id: who.id, displayName: who.id, disabled: false },
+		tier: who.tier,
+		speakerId: who.id,
+		roles: [],
 	});
 	const api = new AppApi({
 		...(presentation ? { presentation } : {}),
@@ -81,7 +84,7 @@ function setup(presentation?: ConsolePresentation) {
 		files: {} as never,
 		modes: {} as never,
 		conversations: {} as never,
-		identity: { tierOf: async () => who.tier },
+		identity: { principal: async () => undefined },
 		directory: {} as never,
 		team: {} as never,
 		avatars: {} as never,
@@ -279,8 +282,8 @@ describe("the room list's layout", () => {
 			const answer = await call(server, method, path, {
 				...(body === undefined ? {} : { body }),
 			});
-			expect(answer.status).toBe(403);
-			expect(await errorOf(answer)).toBe("Only an owner may do this.");
+			// The route table answers before the handler: a folder is refused, a room's route is hidden.
+			expect(answer.status).toBe(path.startsWith("rooms/") ? 404 : 403);
 		}
 		expect(store.stored.folders.map((f) => f.name)).toEqual(["Work"]);
 	});

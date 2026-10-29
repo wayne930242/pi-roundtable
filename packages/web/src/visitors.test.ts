@@ -76,11 +76,17 @@ describe("consoleVisitors", () => {
 		expect(await identify(facts("ada"))).toEqual({
 			visitor: {
 				principal: { id: ADA.id, displayName: "Ada", disabled: false },
+				tier: "owner",
+				speakerId: `${ACCESS_PROVIDER}:ada`,
+				roles: [],
 			},
 		});
 		expect(await identify(facts("bea"))).toEqual({
 			visitor: {
 				principal: { id: BEA.id, displayName: "Bea", disabled: false },
+				tier: "owner",
+				speakerId: `${ACCESS_PROVIDER}:bea`,
+				roles: [],
 			},
 		});
 	});

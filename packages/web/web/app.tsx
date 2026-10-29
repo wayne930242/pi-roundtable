@@ -26,10 +26,12 @@ import {
 	translate as t,
 	wording,
 } from "./lib/messages.ts";
+import { GATE_ROUTES, PAGE_ROUTES } from "./lib/page-routes.ts";
 import { useRoomsSync } from "./lib/rooms-sync.ts";
 import { hrefFor, setRouting, useRoute } from "./lib/router.ts";
 import { initSkins } from "./lib/skins.ts";
 import { setTheme, useTheme } from "./lib/theme.ts";
+import { GatePage } from "./pages/gate.tsx";
 import { MorePage, PANE_ICONS } from "./pages/more.tsx";
 import { RoomPage } from "./pages/room.tsx";
 import { RoomsPage } from "./pages/rooms.tsx";
@@ -103,6 +105,7 @@ const LABELS: Record<PaneName | "settings" | "more", string> = {
 	schedules: wording("Schedules"),
 	table: wording("Round table"),
 	workspace: wording("Files"),
+	profile: wording("Profile"),
 	settings: wording("Settings"),
 	more: wording("More"),
 };
@@ -216,6 +219,16 @@ function Console({ config }: { config: ConfigView }) {
 
 	const connection = useSelector((state) => state.connection);
 	const forbidden = useSelector((state) => state.forbidden);
+	// The steps the person owes: what the socket last said, else what the config said.
+	const liveGate = useSelector((state) => state.gate);
+	const owed = liveGate ?? config.gate ?? [];
+	const gated = owed.length > 0;
+	const wasGated = useRef(gated);
+	useEffect(() => {
+		// The last step was finished: load the page again, so it comes up with everything the person may now see.
+		if (wasGated.current && !gated) window.location.reload();
+		wasGated.current = gated;
+	}, [gated]);
 	const waiting = useSelector(
 		(state) => state.cardOrder.filter((id) => !state.cards[id]?.outcome).length,
 	);
@@ -237,8 +250,8 @@ function Console({ config }: { config: ConfigView }) {
 		return () => window.removeEventListener("keydown", onKey);
 	}, [hasApp]);
 
-	const items: NavItem[] = useMemo(
-		() => [
+	const items: NavItem[] = useMemo(() => {
+		const all: NavItem[] = [
 			...config.panes.map((pane) => ({
 				pane,
 				label: t(LABELS[pane]),
@@ -253,17 +266,22 @@ function Console({ config }: { config: ConfigView }) {
 						},
 					]
 				: []),
-		],
-		[config.panes, hasApp],
-	);
+		];
+		// While a step is owed only the person's own pages are offered.
+		return gated ? all.filter((item) => GATE_ROUTES.has(item.pane)) : all;
+	}, [config.panes, hasApp, gated]);
 
 	const first = config.panes[0] ?? "conversations";
 	const known = (name: string) =>
 		config.panes.includes(name as PaneName) ||
 		(hasApp &&
 			["room", "agent", "settings", "prompts", "more"].includes(name)) ||
-		name === "more";
+		name === "more" ||
+		(hasApp && name !== "profile" && name in PAGE_ROUTES);
 	const pane = known(route.pane) ? route.pane : first;
+	// The pages that finish an owed step, besides the person's own.
+	const opensOwed = owed.some((step) => step.open.page === pane);
+	const gateShown = gated && !GATE_ROUTES.has(pane) && !opensOwed;
 	// The room and the profile fill the screen; everything else is a page in a column.
 	const fill =
 		(hasApp && (pane === "room" || pane === "agent") && Boolean(route.key)) ||
@@ -303,6 +321,7 @@ function Console({ config }: { config: ConfigView }) {
 					/>
 				</div>
 			);
+		if (gateShown) return <GatePage steps={owed} />;
 		switch (pane) {
 			case "rooms":
 				return <RoomsPage onSearch={() => setPalette(true)} />;
@@ -370,8 +389,10 @@ function Console({ config }: { config: ConfigView }) {
 						<ConnectorsPage />
 					</Legacy>
 				);
-			default:
-				return null;
+			default: {
+				const Extra = PAGE_ROUTES[pane];
+				return Extra ? <Extra routeKey={route.key} /> : null;
+			}
 		}
 	})();
 

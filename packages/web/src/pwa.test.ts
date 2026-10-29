@@ -36,6 +36,9 @@ function serverOver(
 			identify: async () => ({
 				visitor: {
 					principal: { id: "owner", displayName: "Owner", disabled: false },
+					tier: "owner",
+					speakerId: "owner",
+					roles: [],
 				},
 			}),
 			origin: ORIGIN,

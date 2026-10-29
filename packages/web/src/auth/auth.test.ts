@@ -19,6 +19,9 @@ import {
 
 const OWNER: Visitor = {
 	principal: { id: "owner", displayName: "Owner", disabled: false },
+	tier: "owner",
+	speakerId: "owner",
+	roles: [],
 };
 const HTTP_ORIGIN = "http://console.example.test";
 const HTTPS_ORIGIN = "https://console.example.test";

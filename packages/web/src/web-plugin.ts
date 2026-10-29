@@ -12,6 +12,7 @@ import {
 	SKILLS,
 } from "pi-roundtable";
 import { DISCORD } from "pi-roundtable/discord";
+import type { PaneName } from "./api-types.ts";
 import { APP_MIGRATIONS, OwnerApp } from "./app/app.ts";
 import { APP_PROTOCOL } from "./app/protocol.ts";
 import { UPLOAD_FRAMING_BYTES } from "./app/uploads.ts";
@@ -21,8 +22,12 @@ import {
 	createAuthenticator,
 	WEB_CONSOLE_IDENTITY,
 } from "./auth/authenticator.ts";
-import { ConsoleApi } from "./console-api.ts";
+import { discoverProvider, OidcLogin } from "./auth/oidc.ts";
+import { loadSessionKey } from "./auth/session-key.ts";
+import { WebSessions } from "./auth/sessions.ts";
+import { type AccessView, ConsoleApi } from "./console-api.ts";
 import { ConsoleServer } from "./console-server.ts";
+import { Gate } from "./gate.ts";
 import {
 	protectedDirs,
 	type ResolvedOptions,
@@ -32,7 +37,11 @@ import {
 	workspaceRootsOf,
 } from "./options.ts";
 import { loadVapid } from "./push/vapid.ts";
-import { consoleVisitors } from "./visitors.ts";
+import { accessVisitors, consoleVisitors } from "./visitors.ts";
+import { viewerOf, WEB_APP, WebAppRegistry } from "./web-app.ts";
+
+/** How often sessions past their limit are deleted: daily. */
+const SESSION_SWEEP_MS = 86_400_000;
 
 /** The longest a WebSocket stays open under `password` auth: the session cookie is looked at again after this. */
 const PASSWORD_SOCKET_LIFE_MS = 3_600_000;
@@ -49,11 +58,16 @@ export function webConsole(options: WebConsoleOptions): RoundtablePlugin {
 	const { auth } = settings;
 	const rooms = settings.panes.includes("rooms");
 	const schedules = settings.panes.includes("schedules");
+	const migrations = [
+		...(rooms ? APP_MIGRATIONS : []),
+		...(auth.mode === "oidc" ? [WebSessions.migration] : []),
+	];
 	return definePlugin({
 		name: "web-console",
-		...(rooms ? { migrations: APP_MIGRATIONS } : {}),
-		// `none` and `password` speak for one principal through this identity; a verifier brings its own.
-		...(auth.mode === "verifier"
+		...(migrations.length > 0 ? { migrations } : {}),
+		provides: [WEB_APP],
+		// `none` and `password` speak for one principal through this identity; a verifier or a sign-in brings its own.
+		...(auth.mode !== "none" && auth.mode !== "password"
 			? {}
 			: {
 					identities: [
@@ -68,7 +82,10 @@ export function webConsole(options: WebConsoleOptions): RoundtablePlugin {
 			...(settings.panes.includes("overview") || rooms ? [AGENTS] : []),
 			...(rooms ? [MODES] : []),
 			...(schedules ? [SCHEDULES] : []),
-			...(settings.panes.includes("notes") ? [MEMORY] : []),
+			// A list that names the notes pane needs the memory; the default list drops it without one.
+			...(settings.panesGiven && settings.panes.includes("notes")
+				? [MEMORY]
+				: []),
 		],
 		setup: (context) => build(settings, context),
 	});
@@ -78,6 +95,17 @@ type Context = Parameters<RoundtablePlugin["setup"]>[0];
 
 async function build(settings: ResolvedOptions, context: Context) {
 	const { services, queue, logger, env } = context;
+	// What the other plugins register their rooms, pages and steps in: sealed when the web service starts.
+	const webApp = new WebAppRegistry(settings.surface);
+	services.provide(WEB_APP, webApp);
+	if (settings.push.sender !== "internal")
+		throw new Error(
+			"web-console: push.sender.external is not available in this build; leave push.sender at internal",
+		);
+	if (settings.admission === "access" && env.agentTools === "full")
+		logger.warn(
+			"web-console: admission is access and the agents carry shell tools. Anyone who can write the database can make a web session, and an agent with a shell can; keep admission owners behind a signing proxy, or run the agent server with tools chat-only",
+		);
 	const features =
 		typeof settings.features === "function"
 			? await settings.features(context)
@@ -110,9 +138,20 @@ async function build(settings: ResolvedOptions, context: Context) {
 				"web-console: the workspace pane needs a directory to show: the agents' workspace (the agent server provides it) or workspace.roots",
 			);
 	}
-	const panes = settings.panes.filter(
-		(pane) => pane !== "workspace" || workspaceRoots.length > 0,
-	);
+	// The default list shows the notes pane only when the host keeps memory.
+	const memory = services.find(MEMORY);
+	const withoutNotes = !settings.panesGiven && memory === undefined;
+	if (withoutNotes && settings.panes.includes("notes"))
+		logger.warn("the notes pane is left out: this host keeps no memory");
+	const servable = (pane: PaneName) =>
+		(pane !== "workspace" || workspaceRoots.length > 0) &&
+		(pane !== "notes" || !withoutNotes);
+	const panes = settings.panes.filter(servable);
+	const tierPanes = {
+		owner: panes,
+		admin: settings.tierPanes.admin.filter(servable),
+		member: settings.tierPanes.member.filter(servable),
+	};
 	if (workspaceRoots.length > 0) checkRoots(workspaceRoots, guarded);
 	const workspace =
 		panes.includes("workspace") && rooms
@@ -150,21 +189,64 @@ async function build(settings: ResolvedOptions, context: Context) {
 	};
 	// A broken page stops startup here, before anything connects.
 	const assets = loadAssets(settings.assetDir);
+	const gate = new Gate({ registry: webApp });
+	const access: AccessView | undefined =
+		settings.admission === "access"
+			? {
+					push: { tiers: settings.push.tiers },
+					gate: (visitor) => gate.required(viewerOf(visitor)),
+					hosted: async (visitor) => {
+						const viewer = viewerOf(visitor);
+						const pages: {
+							id: string;
+							label: string;
+							place: "main" | "settings" | "hidden";
+						}[] = [];
+						for (const page of webApp.pages()) {
+							try {
+								if (await page.visible(viewer))
+									pages.push({
+										id: page.id,
+										label: page.label,
+										place: page.place,
+									});
+							} catch (error) {
+								logger.warn(
+									{ page: page.id, err: error },
+									"a page's visibility was not read",
+								);
+							}
+						}
+						const kinds: { kind: string; label: string }[] = [];
+						for (const kind of webApp.kinds()) {
+							try {
+								if ((await kind.list(viewer, {})) !== undefined)
+									kinds.push({ kind: kind.kind, label: kind.label });
+							} catch (error) {
+								logger.warn(
+									{ kind: kind.kind, err: error },
+									"a kind of room was not listed",
+								);
+							}
+						}
+						return { pages, kinds };
+					},
+				}
+			: undefined;
 	const api = new ConsoleApi({
 		title: settings.title,
 		timeZone: env.timeZone,
 		panes,
+		tierPanes,
+		...(access ? { access } : {}),
 		sessionsDir: settings.sessionsDir,
 		...(team ? { team } : {}),
 		queue,
 		...(connection
 			? { channelName: (id: string) => connection.channelInfo(id) }
 			: {}),
-		...(settings.panes.includes("notes")
-			? {
-					memoryOf: (principalId: string) =>
-						services.get(MEMORY).forSpeaker(principalId),
-				}
+		...(panes.includes("notes") && memory
+			? { memoryOf: (principalId: string) => memory.forSpeaker(principalId) }
 			: {}),
 		people: identity,
 		...(settings.exclude ? { exclude: settings.exclude } : {}),
@@ -181,12 +263,35 @@ async function build(settings: ResolvedOptions, context: Context) {
 			: {}),
 		...(settings.presentation ? { presentation: settings.presentation } : {}),
 	});
+	const identify =
+		settings.admission === "access"
+			? accessVisitors(identity, { surface: settings.surface, logger })
+			: consoleVisitors(identity, {
+					logger,
+					...(settings.ownerId ? { ownerId: settings.ownerId } : {}),
+				});
+	// An open socket closes when its session ends; the app is made after the sign-in it hangs on.
+	let sessionEnded: (id: string) => void = () => undefined;
+	let sweeper: ReturnType<typeof setInterval> | undefined;
+	const sessions =
+		settings.auth.mode === "oidc"
+			? new WebSessions(context.database(), { days: settings.auth.sessionDays })
+			: undefined;
+	const oidc =
+		settings.auth.mode === "oidc" && sessions
+			? await startOidc(settings.auth, {
+					sessions,
+					settings,
+					identify,
+					logger,
+					events: context.events,
+					ended: (id) => sessionEnded(id),
+				})
+			: undefined;
 	const authenticator = createAuthenticator({
 		auth: settings.auth,
-		identify: consoleVisitors(identity, {
-			logger,
-			...(settings.ownerId ? { ownerId: settings.ownerId } : {}),
-		}),
+		identify,
+		...(oidc && sessions ? { oidc: { login: oidc, sessions } } : {}),
 		origin: settings.origin,
 		mount: settings.mount,
 		title: settings.title,
@@ -234,6 +339,11 @@ async function build(settings: ResolvedOptions, context: Context) {
 					uploadMaxBytes: settings.uploadMaxBytes,
 					authenticator,
 					authMode: settings.auth.mode,
+					admission: settings.admission,
+					registry: webApp,
+					gate,
+					pushTiers: settings.push.tiers,
+					modeSwitches: settings.modes,
 					// A password session outlives a logout or a new password on an open socket, so the socket is capped.
 					...(settings.auth.mode === "password"
 						? { socketLifeMs: PASSWORD_SOCKET_LIFE_MS }
@@ -253,7 +363,10 @@ async function build(settings: ResolvedOptions, context: Context) {
 					logger,
 				})
 			: undefined;
-	if (app) listeners.push(() => app.changed());
+	if (app) {
+		listeners.push(() => app.changed());
+		sessionEnded = (id) => app.sessionEnded(id);
+	}
 	const server = new ConsoleServer({
 		mount: settings.mount,
 		assets,
@@ -265,6 +378,8 @@ async function build(settings: ResolvedOptions, context: Context) {
 		...(settings.presentation ? { presentation: settings.presentation } : {}),
 		api,
 		...(app ? { app } : {}),
+		gate,
+		surface: settings.surface,
 		subscribe: (listener) => {
 			listeners.push(listener);
 			queue.onChange(listener);
@@ -277,10 +392,26 @@ async function build(settings: ResolvedOptions, context: Context) {
 			{
 				name: "web-console",
 				start: () => {
+					checkRegistered(settings, webApp);
+					webApp.seal();
 					server.start();
 					app?.start();
+					if (sessions) {
+						const sweep = () =>
+							sessions
+								.sweep()
+								.catch((error: unknown) =>
+									logger.warn(
+										{ err: error },
+										"old web sessions were not deleted",
+									),
+								);
+						sweep();
+						sweeper = setInterval(sweep, SESSION_SWEEP_MS);
+					}
 				},
 				stop: () => {
+					clearInterval(sweeper);
 					app?.stop();
 					server.stop();
 				},
@@ -296,4 +427,62 @@ async function build(settings: ResolvedOptions, context: Context) {
 		),
 		dashboard: [`Web console: ${settings.origin}${settings.mount}/`],
 	};
+}
+
+/** What the host registered, checked when the service starts: every provider onboarding names has its prover. */
+function checkRegistered(settings: ResolvedOptions, webApp: WebAppRegistry) {
+	for (const provider of Object.keys(settings.onboarding.links))
+		if (!webApp.prover(provider))
+			throw new Error(
+				`web-console: onboarding.links names ${provider}, but no plugin registered a link prover for it (WEB_APP.registerLinkProver)`,
+			);
+}
+
+interface OidcParts {
+	sessions: WebSessions;
+	settings: ResolvedOptions;
+	identify: Parameters<typeof createAuthenticator>[0]["identify"];
+	logger: Context["logger"];
+	events: Context["events"];
+	ended(id: string): void;
+}
+
+/** Reads the provider's discovery document, the client secret and the session key, and makes the sign-in flow. */
+async function startOidc(
+	auth: Extract<ResolvedOptions["auth"], { mode: "oidc" }>,
+	parts: OidcParts,
+): Promise<OidcLogin> {
+	const { settings, logger } = parts;
+	let clientSecret: string | undefined;
+	if (auth.clientSecretEnv) {
+		clientSecret = process.env[auth.clientSecretEnv];
+		if (!clientSecret)
+			throw new Error(
+				`web-console: auth.clientSecretEnv names ${auth.clientSecretEnv}, which is not set`,
+			);
+	}
+	return new OidcLogin({
+		settings: auth,
+		metadata: await discoverProvider(auth),
+		...(clientSecret ? { clientSecret } : {}),
+		sessions: parts.sessions,
+		key: loadSessionKey(settings.dataDir, logger),
+		origin: settings.origin,
+		mount: settings.mount,
+		surface: settings.surface,
+		routing: settings.routing,
+		title: settings.title,
+		presentation: settings.presentation,
+		identify: parts.identify,
+		onSignIn: (info) =>
+			parts.events.action?.({
+				kind: "sign-in",
+				actor: info.speakerId,
+				principalId: info.principalId,
+				ok: true,
+				at: new Date(),
+			}),
+		onEnded: parts.ended,
+		logger,
+	});
 }

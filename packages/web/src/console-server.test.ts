@@ -21,6 +21,9 @@ const assets: AssetBundle = new Map([
 
 const OWNER: Visitor = {
 	principal: { id: "owner", displayName: "Owner", disabled: false },
+	tier: "owner",
+	speakerId: "owner",
+	roles: [],
 };
 
 function setup(
