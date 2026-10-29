@@ -14,6 +14,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `pi-roundtable-web`: pins and folders for the room list, shared by every owner and device, with drag to reorder and move, a menu for each, and a mute for a whole folder. Three additive tables (`web_room_folders`, `web_room_folder_rooms`, `web_room_pins`) and owner-only routes carry it; the package's changelog has the detail.
 - `pi-roundtable-web`: choose who sits at the round table. A button in the page's header lists every agent with a switch; an agent that leaves the table has its room's push muted, and a seat that leaves or joins plays a short show. The package's changelog has the detail.
 
+## [0.24.2] - 2026-10-29
+
+### Added
+
+- pi-roundtable-sandbox: opt-in `channelContext` hands a sealed turn the recent messages of its Discord channel, appended after the addressed message as untrusted public text; see its changelog. Every other workspace releases in lockstep.
+
+## [0.24.1] - 2026-10-29
+
+### Added
+
+- pi-roundtable-sandbox: `replyText` rewrites each successful model reply on the host before it is posted, for example to convert stray Simplified Chinese to Traditional; see its changelog. Every other workspace releases in lockstep.
+
 ## [0.24.0] - 2026-10-29
 
 ### Added

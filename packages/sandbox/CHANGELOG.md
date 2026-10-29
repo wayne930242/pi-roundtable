@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+## [0.24.2] - 2026-10-29
+
+### Added
+
+- `sandbox({ channelContext })`: opt-in, off by default (`true` or the Discord plugin's `ChannelContextOptions`). A guest turn in a Discord server channel carries, after the addressed message (so the worker's saved history keeps it), what others said in that channel since the assistant last posted, read through `DISCORD.channelContext` for the addressed message's own channel only (direct messages, messages without a guild and other surfaces read nothing). Core's defaults and caps apply (keep 15, 500 characters, other bots 80), with the host's `discord.channelContext` settings merged under the option (a host `channelContext: false` turns it off); images are never read. The block follows the message as untrusted public text, not instructions, cut oldest first to fit `runTurn`'s 32,000 characters and the worker's current-message budget, and the addressed message is never cut. A failed read is logged and the turn runs without it. Options are validated at startup with core's bounds, unknown keys refused, and the option needs the Discord plugin. Host-only: no worker protocol change, no image rebuild.
+- `SandboxClaimOptions.channelContext` and `reportContextFailure`, and the `SandboxChannelContext` type.
+
+## [0.24.1] - 2026-10-29
+
+### Added
+
+- `sandbox({ replyText })`: rewrites each successful model reply on the host before it is split and posted (`(text, { channel, space }) => string | Promise<string>`), for example to convert stray Simplified Chinese to Traditional. Failure texts never pass through it, the worker's history keeps the model's own words, and a throw or a non-string fails the turn like any other failure. Host-only: no worker protocol change, no image rebuild. An empty result posts nothing, as an empty model reply does.
+- `SandboxClaimOptions.reportFailure` receives the error as its second argument, and the plugin logs it with the channel.
+
 ## [0.24.0] - 2026-10-29
 
 The core peer range is now `>=0.24.0 <0.25.0`. Every new option is optional; with none set, behavior, mounts, files on disk, the worker protocol and the public API are as in 0.23.x, and `PiSandboxRuntime` is unchanged.

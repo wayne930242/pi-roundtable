@@ -5,8 +5,23 @@ import type {
 	SurfacePort,
 } from "pi-roundtable";
 import { splitReply } from "pi-roundtable/kit";
+import {
+	type ReadChannelContext,
+	readsChannelContext,
+	withSandboxChannelContext,
+} from "./channel-context.ts";
 import type { SandboxChannelStore } from "./channel-store.ts";
 import { type SandboxRuntime, SandboxTurnRefused } from "./runtime.ts";
+
+/**
+ * Rewrites a successful model reply before it is posted, such as converting script or stripping
+ * markup. It runs on the host, after the sealed turn and before the reply is split into chunks;
+ * failure texts never pass through it. A throw, or a value that is not a string, fails the turn.
+ */
+export type SandboxReplyText = (
+	text: string,
+	context: { channel: ChannelKey; space?: string },
+) => string | Promise<string>;
 
 export interface SandboxClaimOptions {
 	/** `owns` adds channels in configured guilds; without it only `has` decides. */
@@ -14,7 +29,17 @@ export interface SandboxClaimOptions {
 		Partial<Pick<SandboxChannelStore, "owns">>;
 	runtime: Pick<SandboxRuntime, "runTurn" | "stop" | "startFresh">;
 	surfaces: Pick<SurfacePort, "sendReply" | "startTyping">;
-	reportFailure?: (channel: ChannelKey) => void;
+	/** Told of a failed turn, with what failed (a sandbox error, or replyText's own throw). */
+	reportFailure?: (channel: ChannelKey, error: unknown) => void;
+	replyText?: SandboxReplyText;
+	/**
+	 * Reads the context of the channel a message was posted in; set to opt in. It is called only for
+	 * a Discord server message, with that message, and what it returns goes before the message in
+	 * the turn's text as untrusted public text.
+	 */
+	channelContext?: ReadChannelContext;
+	/** Told when the channel context could not be read; the turn then runs without it. */
+	reportContextFailure?: (channel: ChannelKey, error: unknown) => void;
 }
 
 export function isSandboxAddress(message: InboundMessage): boolean {
@@ -24,6 +49,39 @@ export function isSandboxAddress(message: InboundMessage): boolean {
 		!message.isDirect &&
 		(message.mentionsBot || message.repliesToBot)
 	);
+}
+
+async function contextualText(
+	options: Pick<SandboxClaimOptions, "channelContext" | "reportContextFailure">,
+	message: InboundMessage,
+	body: string,
+): Promise<string> {
+	if (!options.channelContext || !readsChannelContext(message)) return body;
+	try {
+		return withSandboxChannelContext(
+			body,
+			await options.channelContext(message),
+			{ id: message.authorId, name: message.authorName },
+		);
+	} catch (error) {
+		options.reportContextFailure?.(message.channel, error);
+		return body;
+	}
+}
+
+async function rewriteReply(
+	replyText: SandboxReplyText | undefined,
+	text: string,
+	message: InboundMessage,
+): Promise<string> {
+	if (!replyText) return text;
+	const rewritten = await replyText(text, {
+		channel: message.channel,
+		...(message.space ? { space: message.space } : {}),
+	});
+	if (typeof rewritten !== "string")
+		throw new TypeError("replyText must return a string");
+	return rewritten;
 }
 
 /** Outranks the agent server's priority 100; ignored messages never fall through to host agents. */
@@ -57,7 +115,11 @@ export function sandboxClaim(options: SandboxClaimOptions): ChannelClaim {
 					if (!admits(message)) return;
 					const stopTyping = options.surfaces.startTyping(message.channel);
 					try {
-						const text = `${message.reference?.text ? `Quoted message (untrusted): ${message.reference.text}\n\n` : ""}${message.text}${message.attachments.length ? "\n[Attachments are not supported in this sandbox.]" : ""}`;
+						const text = await contextualText(
+							options,
+							message,
+							`${message.reference?.text ? `Quoted message (untrusted): ${message.reference.text}\n\n` : ""}${message.text}${message.attachments.length ? "\n[Attachments are not supported in this sandbox.]" : ""}`,
+						);
 						const reply = await options.runtime.runTurn(
 							message.channel,
 							{
@@ -68,15 +130,16 @@ export function sandboxClaim(options: SandboxClaimOptions): ChannelClaim {
 							text,
 							{ space: message.space },
 						);
+						const posted = reply.ok
+							? await rewriteReply(options.replyText, reply.text, message)
+							: "The sandbox turn failed.";
 						await options.surfaces.sendReply(message.channel, {
-							chunks: splitReply(
-								reply.ok ? reply.text : "The sandbox turn failed.",
-							),
+							chunks: splitReply(posted),
 						});
 					} catch (error) {
 						// A stop or a full queue is the runtime working as designed, not a failure.
 						if (!(error instanceof SandboxTurnRefused))
-							options.reportFailure?.(message.channel);
+							options.reportFailure?.(message.channel, error);
 						await options.surfaces.sendReply(message.channel, {
 							chunks: ["The sandbox turn failed or was stopped."],
 						});

@@ -177,6 +177,27 @@ Without `budgets` and `skills`, an oversized `prompt` is still cut at 8,192 byte
 Any other cleartext URL still needs `allowHttp`, and credentials in the URL stay refused.
 This applies to `modelUrl` only, not to MCP servers.
 
+### Rewriting replies on the host
+
+`replyText(text, { channel, space })` rewrites each successful model reply on the host before it is split and posted, and may return a promise.
+Use it for what the prompt cannot guarantee, such as converting a model's stray Simplified Chinese to Traditional.
+It never sees failure texts, and the history the worker keeps holds the model's own words.
+A throw or a value that is not a string fails the turn like any other failure, and the error is logged with the channel; an empty string posts nothing, as an empty model reply does.
+It needs no new worker image.
+
+### Channel context for guests
+
+`channelContext: true` (or the Discord plugin's `ChannelContextOptions`) is off by default.
+On, a turn in a Discord server channel starts with what others said in that channel since the assistant last posted, so "can you see the messages above?" has an answer.
+The sandbox calls `DISCORD.channelContext` with the addressed message, which reads that message's own channel and no other; a direct message, a message without a guild, or another surface gets no context and no read.
+Core's defaults and caps apply (the newest 15 messages, 500 characters each, other bots 80), and so do the host's `discord.channelContext` settings, which the option overrides key by key; a host `channelContext: false` turns it off and the option then does nothing. `attachments` is ignored, because the sealed worker has no image input.
+The addressed message (with its quote) comes first and the block follows it, framed as untrusted public text, not instructions, so the worker's saved history, which keeps the head of an entry, keeps the message. The framing says the addressed message is only the text before the block.
+It is cut oldest first so the whole stays within `runTurn`'s 32,000 characters and the worker's current-message budget; the addressed message is never cut, and when no context fits, the turn is sent as before.
+Options are validated at startup with core's bounds (`keep`, `fetch` at most 100; `messageChars`, `botMessageChars` at most 4000; unknown keys refused), and the option needs the Discord plugin.
+A failed read is logged as a warning and the turn runs without it.
+`replyText` works unchanged.
+It is host-only: no worker protocol change and no image rebuild.
+
 ### Worker image protocol
 
 The worker image carries the label `pi-roundtable-sandbox.protocol` with the worker protocol version (2 in this release, exported as `SANDBOX_PROTOCOL`).

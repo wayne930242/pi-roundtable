@@ -34,6 +34,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - The round table's overview keeps every seat and its name in the picture on a phone. It left half a name's width clear of the sides (the names are page text, about 44 px each side of a seat) and counted the standee's emphasis strokes, which stand wider than its board; a window resized during a camera turn now ends that turn on the new picture's overview.
 
+## [0.24.2] - 2026-10-29
+
+- Release in lockstep with pi-roundtable 0.24.2; no package-specific behavior changes. The core peer range stays `>=0.24.0 <0.25.0`.
+
+## [0.24.1] - 2026-10-29
+
+- Release in lockstep with pi-roundtable 0.24.1; no package-specific behavior changes. The core peer range stays `>=0.24.0 <0.25.0`.
+
 ## [0.24.0] - 2026-10-29
 
 The core peer range is now `>=0.24.0 <0.25.0`.

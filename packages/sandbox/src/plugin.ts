@@ -2,8 +2,12 @@ import { mkdirSync, realpathSync } from "node:fs";
 import { dirname, isAbsolute, resolve } from "node:path";
 import { type ChannelKey, definePlugin, serviceKey } from "pi-roundtable";
 import { DISCORD } from "pi-roundtable/discord";
+import {
+	resolveChannelContextOptions,
+	type SandboxChannelContext,
+} from "./channel-context.ts";
 import { SandboxChannelStore } from "./channel-store.ts";
-import { sandboxClaim } from "./claim.ts";
+import { type SandboxReplyText, sandboxClaim } from "./claim.ts";
 import { sandboxCommands } from "./commands.ts";
 import { SandboxRuntime, type SandboxRuntimeOptions } from "./runtime.ts";
 
@@ -23,6 +27,20 @@ export interface SandboxOptions
 	provider?: string;
 	/** Read before each model call with its channel and speaker; never falls back to the host login. */
 	apiKey?: SandboxRuntimeOptions["apiKey"];
+	/**
+	 * Rewrites each successful model reply on the host before it is posted, for example to
+	 * convert Simplified to Traditional Chinese. Failure texts are not passed to it; a throw
+	 * fails the turn.
+	 */
+	replyText?: SandboxReplyText;
+	/**
+	 * Off by default. On, a turn in a Discord server channel starts with what others said in that
+	 * channel since the assistant last posted, read through the Discord plugin's `channelContext`
+	 * (`true` for its defaults, or its `ChannelContextOptions`; images are never read). The text is
+	 * framed as untrusted public text and cut, oldest first, to fit the turn; a failed read runs the
+	 * turn without it. Needs the Discord plugin. Host-only: no worker or image change.
+	 */
+	channelContext?: SandboxChannelContext;
 }
 export interface SandboxService {
 	channels: SandboxChannelStore;
@@ -35,6 +53,13 @@ export function sandbox(options: SandboxOptions) {
 		name: "sandbox",
 		provides: [SANDBOX],
 		setup: async (context) => {
+			const contextOptions =
+				options.channelContext === undefined
+					? undefined
+					: resolveChannelContextOptions(options.channelContext);
+			const discord = context.services.find(DISCORD);
+			if (contextOptions && !discord)
+				throw new Error("sandbox channelContext needs the Discord plugin");
 			const runtime = new SandboxRuntime({
 				...options,
 				apiKey:
@@ -64,7 +89,6 @@ export function sandbox(options: SandboxOptions) {
 			// Last of the cheap checks: a typo above fails fast, without a `docker inspect`.
 			await runtime.verifyImage();
 			context.services.provide(SANDBOX, { channels, runtime });
-			const discord = context.services.find(DISCORD);
 			if (discord)
 				discord.commands.add(
 					sandboxCommands(discord.guard, channels, context.queue),
@@ -75,10 +99,22 @@ export function sandbox(options: SandboxOptions) {
 						channels,
 						runtime,
 						surfaces: context.surfaces,
-						reportFailure: (channel) =>
+						...(options.replyText ? { replyText: options.replyText } : {}),
+						...(contextOptions && discord
+							? {
+									channelContext: (message) =>
+										discord.channelContext(message, contextOptions),
+									reportContextFailure: (channel, error) =>
+										context.logger.warn(
+											{ channel, err: error },
+											"sandbox channel context not read; the turn runs without it",
+										),
+								}
+							: {}),
+						reportFailure: (channel, error) =>
 							context.logger.error(
-								{ channel },
-								"sandbox turn failed; inspect container cleanup and broker configuration",
+								{ channel, err: error },
+								"sandbox turn failed; inspect the error, then container cleanup, broker configuration and replyText",
 							),
 					}),
 				],
