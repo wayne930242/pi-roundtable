@@ -5,6 +5,7 @@ import {
 	resolveCharacter,
 	suggestCharacter,
 } from "../../characters/index.ts";
+import { parseChannelKey } from "../contract/surface.ts";
 import { AgentError } from "../domain/errors.ts";
 import type { AgentTurnScope } from "../domain/ports.ts";
 import type { AgentChange } from "../services.ts";
@@ -102,11 +103,14 @@ export class TeamEditing {
 			throw new AgentError(
 				"agent_create can only be used during an agent turn.",
 			);
+		// The opening task starts on the surface the caller's turn runs on, as the web form's does.
+		const working = this.#ctx.turns.workingIn(caller.name);
 		const made = await this.#create(
 			{
 				speaker,
 				by: caller.name,
 				creator: this.#ctx.options.store.agent(caller.name),
+				openIn: working ? parseChannelKey(working).surface : undefined,
 			},
 			input,
 		);

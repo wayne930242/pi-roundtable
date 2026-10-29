@@ -266,6 +266,9 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	// 進度
 	"{name} is working…": "{name}正在處理…",
 	"Show the whole stream": "顯示完整串流",
+	"{count} earlier tool": "前面還有 {count} 個工具",
+	"{count} earlier tools": "前面還有 {count} 個工具",
+	"Show fewer tools": "收合工具",
 
 	// 聊天室選單
 	"A thread has no settings.": "討論串沒有設定。",

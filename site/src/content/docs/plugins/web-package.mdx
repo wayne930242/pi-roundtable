@@ -95,7 +95,7 @@ From 23:00 to 08:00 on the console's time zone an agent's post and a notice are 
 
 | Option | Default | Purpose |
 | --- | --- | --- |
-| `auth` | required, or `verifier` | `{ mode: "none" }`, `{ mode: "password" }`, or `{ mode: "verifier", verifier }`. |
+| `auth` | required, or `verifier` | `{ mode: "none" }`, `{ mode: "password" }`, `{ mode: "verifier", verifier }`, or `{ mode: "oidc", ... }`. |
 | `verifier` | none | Shorthand for the verifier mode: `cloudflareAccess(...)` or a custom function. Giving both throws. |
 | `origin` | required | Browser-visible scheme and host. Writes must send this exact `Origin`. |
 | `ownerId` | primary owner | Deprecated: the principal a verifier that reports no actor stands for. |
@@ -103,7 +103,9 @@ From 23:00 to 08:00 on the console's time zone an agent's post and a notice are 
 | `mountPath` | `/console` | Route prefix. |
 | `listener` | `public` | HTTP listener that serves the app. |
 | `routing` | `hash` | `path` preserves mount-relative page links and history navigation. |
-| `panes` | `rooms`, `table`, `workspace`, `overview`, `schedules`, `conversations`, `notes` | Ordered subset of those panes plus `skills` and `connectors`; `schedules`, `table` and `workspace` need `rooms`, and `workspace` needs a place to show. An explicit list is kept as written. |
+| `admission` | `owners` | `owners` lets in only owners; `access` lets in everyone `IDENTITY` admits on the surface (owners, admins, members). See Members and the gate. |
+| `modes` | on | `false` leaves out the yolo and long-running switches; `PUT api/rooms/<key>/mode` answers 404. |
+| `panes` | `rooms`, `table`, `workspace`, `overview`, `schedules`, `conversations`, `notes` | Ordered subset of those panes plus `skills` and `connectors`; `schedules`, `table` and `workspace` need `rooms`, and `workspace` needs a place to show. An explicit list is kept as written. With `admission: "access"` the default adds `profile`, and `{ owner, admin?, member }` chooses per tier. |
 | `workspace` | the agents' directories | What the Files pane shows. `workspace.roots` adds places, each with `workspace.roots.id`, `workspace.roots.label`, `workspace.roots.dir` and `workspace.roots.writable` (false unless set); `workspace.agents` and `workspace.scratch` set to `false` leave the agents' working or scratch directory out. A `dir` that is or contains `dataDir` stops the start. |
 | `surface` | `app` | Key prefix of the app's rooms. Changing it starts every room over. |
 | `cardGraceSeconds` | `120` | How long a turn waits on a card, above 0 and at most 3600. |
@@ -115,21 +117,48 @@ From 23:00 to 08:00 on the console's time zone an agent's post and a notice are 
 | `presentation` | English | `{ locale, messages }` controls language, date formatting, and wording; English source strings are dictionary keys. A `zh-TW` locale uses the built-in Traditional Chinese (Taiwan) wording, and `messages` words single keys over it. |
 | `features` | none | Object or public setup-context factory for party status, schedule counts, cleanup, skills, and connectors. |
 | `relayNotes` | remote MCP relay note | Prefixes removed from relayed messages before display. |
-| `exclude` | none | Predicate for conversation keys the console must not list or read. |
+| `exclude` | none | Predicate `(key, record?)` for conversations the console must not list or read; `record` is what the registry holds of it. |
 | `assetDir` | package `dist/` | Built page directory; set this only in tests. |
 
 | Key | Default | Purpose |
 | --- | --- | --- |
-| `auth.mode` | required | `none`, `password`, or `verifier`. |
+| `auth.mode` | required | `none`, `password`, `verifier`, or `oidc`. |
 | `auth.trustNetwork` | `false` | `none` only: allow a TCP listener that reaches beyond this machine. |
 | `auth.passwordEnv` | `ROUNDTABLE_WEB_PASSWORD` | `password` only: the variable that holds the password, at least 12 characters. |
 | `auth.sessionDays` | `30` | `password` only: how long a login lasts, 1 to 365. |
 | `auth.principal` | primary owner | `none` and `password`: the principal the session speaks for. |
 | `auth.verifier` | required for the mode | `verifier` only: the request verifier. |
+| `auth.issuer` | required | `oidc` only: the provider's exact `iss`, an https URL. |
+| `auth.discoveryUrl` | `<issuer>/.well-known/openid-configuration` | `oidc` only: where the endpoints are read at start. |
+| `auth.clientId` | required | `oidc` only: the client id; the redirect URI is `<origin><mountPath>/auth/callback`. |
+| `auth.clientSecretEnv` | none | `oidc` only: the variable holding the client secret; left out means a public client with PKCE. |
+| `auth.scopes` | `openid`, `profile` | `oidc` only; `offline_access` is refused. |
+| `auth.subjectClaim` | `sub` | `oidc` only: the claim that names the person. |
+| `auth.nameClaim` | `name` | `oidc` only: the claim for their name. |
+| `auth.rolesClaim` | `roles` | `oidc` only: the claim whose values become `app:role:<name>`; `false` reads none. |
+| `auth.check` | none | `oidc` only: decides from the claims whether a token is acceptable. |
+| `auth.endSession` | `false` | `oidc` only: whether Log out also signs out at the provider. |
+| `auth.reauthHours` | never | `oidc` only: ask the provider again after this many hours. |
+| `auth.storeClaims` | none | `oidc` only: `id_token` claims kept with the session. |
 | `push.preview` | `true` | Whether a notification shows the first 120 characters. |
 | `push.quietHours` | `{ start: "23:00", end: "08:00" }` | When an agent's post and a notice are not pushed, as `HH:MM` times on the console's time zone; cards always are. `false` turns it off. |
 | `push.endpointHosts` | none | Extra push-service hosts; a leading `*.` allows subdomains. |
+| `push.tiers` | `["owner"]` | The tiers whose people may subscribe and receive push. |
 | `push.subject` | `origin` if https | The VAPID contact: a `mailto:` or `https:` URL. Push is off without one. |
+
+## Members and the gate
+
+`admission: "access"` lets in everyone the host's `IDENTITY` admits on the app's surface, with `auth` set to `oidc` (or a verifier that reports who signed in).
+A linked person is only read (`IDENTITY.peek`); an unlinked one is admitted as a new principal only where `access.provisioning.app` is `admitted`.
+The facts are partial, so signing in here never lowers a tier recorded elsewhere. A disabled principal, or one the rules give no tier, gets 403.
+
+One table in `src/authz.ts` decides every request before a handler sees it, and a route not in it answers 404 to everyone.
+Owners get the agent rooms, the overview and the rest of the owners' panes; a member gets their own conversations, notes and schedules, the host's rooms and pages, and their profile.
+A member's socket receives nothing from an agent room, not as it happens and not when it connects, and a card is answered only by its own audience.
+A required onboarding step closes the app on it: only the profile, settings and the pages that finish the step answer, until the last one is done.
+A link may carry `?next=` with `profile`, `notices`, `settings`, `room:<key>` or `p:<page>`; any other value is dropped.
+
+OpenID Connect signs in with the authorization code flow and PKCE, checks the `id_token` once at the callback, and keeps its own server-side session in `web_sessions`: a random id in an `HttpOnly` cookie, of which only the SHA-256 is stored. The session ends after `sessionDays` without a visit; Log out deletes it. `reauthHours` makes the provider vouch again, silently when it can, and `storeClaims` keeps named claims with the session.
 
 ## Authentication and the threat model
 
@@ -138,6 +167,7 @@ From 23:00 to 08:00 on the console's time zone an agent's post and a notice are 
 | `verifier` | The person the verifier reports, linked to an owner. | A proxy such as Cloudflare Access signs people in. The only mode an agent on the host cannot forge. |
 | `password` | The primary owner, after the password. | The app is reachable from the internet with no signing proxy. |
 | `none` | The primary owner, whoever reaches the listener. | Only the owner reaches the listener: a unix socket, or loopback TCP. |
+| `oidc` | The person the provider reports, by an identity `IDENTITY` links to a principal; with `admission: "access"`, members and admins too. | People sign in with your own OpenID Connect provider. |
 
 `password` serves a login page with no script, waits a second after each failure, locks every login for the rest of 15 minutes after ten failures (a global limit, because a client address behind a proxy is not trustworthy), and sets a signed `HttpOnly`, `SameSite=Strict` cookie that a new password invalidates.
 `none` must be written out, warns at every start, and refuses a TCP listener that is not loopback unless `trustNetwork` is true.

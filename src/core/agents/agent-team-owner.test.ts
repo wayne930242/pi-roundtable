@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { NO_ATTACHMENTS } from "../domain/attachment.ts";
 import { AgentError } from "../domain/errors.ts";
 import { describeDb } from "../testing/database.ts";
 import { OWNER_SPEAKER } from "../testing/owner.ts";
@@ -75,6 +76,35 @@ describeDb("an owner's operations on the team (Discord)", () => {
 			expect(fx.runtime.turns.map((t) => t.channel)).toContain(
 				discordKey(channel),
 			);
+		});
+
+		test("agent_create from a turn in a web room starts the new agent's opening task in that surface's room", async () => {
+			fx.surfaces.rooms = ["app"];
+			const room = agentRoomKey("app", "coordinator");
+			let created: Promise<string> | undefined;
+			fx.runtime.during = async () => {
+				fx.runtime.during = undefined;
+				created = fx.team.create(
+					{ name: "coordinator", session: room, home: room },
+					{ ...NOTES, task: "Say hi." },
+				);
+				await created;
+			};
+			await fx.team.answerOwner(
+				room,
+				OWNER_SPEAKER,
+				"make notes",
+				"make notes",
+				NO_ATTACHMENTS,
+			);
+			await created;
+			await settle();
+			const channel = fx.store.agent("notes")?.channelId ?? "";
+			const opened = fx.runtime.turns
+				.map((t) => t.channel)
+				.filter((c) => c !== room);
+			expect(opened).toEqual([agentRoomKey("app", "notes")]);
+			expect(opened).not.toContain(discordKey(channel));
 		});
 
 		test("only an owner may create an agent here, and nothing is made for anyone else", async () => {
