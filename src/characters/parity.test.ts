@@ -10,7 +10,12 @@ import {
 	resolveCharacter,
 } from "./index.ts";
 
-// The lab's flat SVGs are what the boss approved; the port must draw the same picture.
+// The lab's flat SVGs are what the boss approved; the port must draw the same picture. The
+// medieval redraw of the parts replaced the lab's drawing of the 15 classes that wear a changed
+// part (wizard, knight, scholar, smith, bard, alchemist, steward, navigator, seer, scribe,
+// engineer, innkeeper, envoy, falconer, shipwright) and of the wizard's expressions and shield:
+// those fixtures are the composer's own pictures of the approved redraw, so they hold the
+// drawing from drifting. The other nine classes still match the lab's.
 const FIXTURES = resolve(import.meta.dir, "fixtures/lab");
 const SIZE = 128;
 const MAX_MEAN_DIFFERENCE = 1.5;

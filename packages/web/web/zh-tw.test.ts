@@ -93,7 +93,7 @@ test("class, part and palette names, and what a class suits, come from the catal
 	await loadBuiltInMessages("en-GB");
 	setPresentation({ ...base, locale: "en-GB" });
 	expect(characterLabel("class", "knight")).toBe("Knight");
-	expect(characterLabel("hat", "goggcap")).toBe("Goggle cap");
+	expect(characterLabel("hat", "goggcap")).toBe("Leather cap");
 });
 
 test("the sign-in page uses the built-in wording under a zh-TW locale", () => {

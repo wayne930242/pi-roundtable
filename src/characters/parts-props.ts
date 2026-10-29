@@ -84,15 +84,15 @@ export const PROPS: Record<PropId, Part> = {
 		),
 	map: (v) =>
 		held(
-			`<circle class="glow" cx="81" cy="76" r="8" fill="${v.p}"/><rect x="66" y="58" width="24" height="29" rx="2" fill="#f3e2b5" stroke="#c9a867" stroke-width="1.3"/><path d="M70 66Q78 62 82 70T86 80M70 82L74 76" fill="none" stroke="#8ec7d8" stroke-width="2" stroke-linecap="round" stroke-dasharray="3 2.4"/><path d="M79 74l4 4M83 74l-4 4" stroke="${v.p}" stroke-width="2.2" stroke-linecap="round"/>${hand(v, 78, 58, 4.4)}`,
+			`<circle class="glow" cx="81" cy="76" r="8" fill="${v.p}"/><rect x="66" y="58" width="24" height="29" rx="2" fill="#f3e2b5" stroke="#c9a867" stroke-width="1.3"/><path d="M70 66Q78 62 82 70T86 80M70 82L74 76" fill="none" stroke="#8ec7d8" stroke-width="2" stroke-linecap="round" stroke-dasharray="3 2.4"/><path d="M81 71.4l1.4 3.6 3.6 1.4-3.6 1.4-1.4 3.6-1.4-3.6-3.6-1.4 3.6-1.4z" fill="${v.p}"/>${hand(v, 78, 58, 4.4)}`,
 		),
 	telescope: (v) =>
 		held(
-			`<circle class="glow" cx="94" cy="48" r="8" fill="${v.gl}"/><g transform="rotate(-38 78 70)"><rect x="55" y="64.5" width="14" height="11" rx="2" fill="${v.pd}"/><rect x="68" y="65.6" width="14" height="8.8" fill="${v.p}"/><rect x="81" y="66.6" width="12" height="6.8" rx="1.4" fill="${v.pd}"/><rect x="68" y="64.5" width="2.4" height="11" fill="${v.t}"/><rect x="81" y="65.6" width="2.4" height="8.8" fill="${v.t}"/><rect x="91" y="63.6" width="3.6" height="12.8" rx="1.4" fill="${v.t}"/></g>${hand(v, 77, 72, 4.6)}`,
+			`<circle class="glow" cx="76" cy="72" r="17" fill="${v.gl}"/><circle cx="76" cy="54.6" r="3.6" fill="none" stroke="${v.td}" stroke-width="2"/><path d="M73 57.4Q76 60 79 57.4" fill="none" stroke="${v.t}" stroke-width="2.4"/><circle cx="76" cy="72" r="13.4" fill="${v.t}" stroke="${v.td}" stroke-width="1.6"/><circle cx="76" cy="72" r="10" fill="#fbefd0" stroke="${v.td}" stroke-width="1"/><path d="M66 72H86M76 62V82" stroke="${v.td}" stroke-width="1.2"/><circle cx="76" cy="72" r="5.6" fill="none" stroke="${v.td}" stroke-width="1"/><path d="M70 66.6L82 77.4" stroke="${v.p}" stroke-width="1.6" stroke-linecap="round"/><circle cx="82" cy="65.6" r="1.8" fill="${v.p}"/>${hand(v, 76, 57, 4.4)}`,
 		),
 	wrench: (v) =>
 		held(
-			`<path class="glow" d="M90 52l1.6 3.6 3.8.4-2.8 2.6.8 3.8-3.4-2-3.4 2 .8-3.8-2.8-2.6 3.8-.4z" fill="${v.t}"/><path d="M76 94L83 66" stroke="#aab3c5" stroke-width="5" stroke-linecap="round"/><path d="M76 94L83 66" stroke="#fff" stroke-width="1.2" stroke-linecap="round" opacity=".5"/><path d="M77.6 58C77 52 84 50 86 54L84 57L87 59L89 57C92 62 86 68 81 66Z" fill="#aab3c5" stroke="#7d879b" stroke-width="1.2" stroke-linejoin="round"/>${hand(v, 77.4, 86)}`,
+			`<path class="glow" d="M90 52l1.6 3.6 3.8.4-2.8 2.6.8 3.8-3.4-2-3.4 2 .8-3.8-2.8-2.6 3.8-.4z" fill="${v.t}"/><path d="M79 60L71 93M79 60L87 91" stroke="#aab3c5" stroke-width="3.4" stroke-linecap="round"/><path d="M79 60L71 93M79 60L87 91" stroke="#fff" stroke-width="1" stroke-linecap="round" opacity=".5"/><path d="M71 93l-.8 2.2M87 91l.8 2.2" stroke="#7d879b" stroke-width="1.6" stroke-linecap="round"/><path d="M73.4 81Q79 85 84.6 81" fill="none" stroke="#7d879b" stroke-width="1.6" stroke-linecap="round"/><circle cx="79" cy="60" r="3.4" fill="${v.t}" stroke="${v.td}" stroke-width="1.2"/>${hand(v, 79, 63.4, 4.4)}`,
 		),
 	spade: (v) =>
 		held(
