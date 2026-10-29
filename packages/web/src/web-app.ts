@@ -73,6 +73,14 @@ export type ActionResult =
 	| { ok: true; notice?: string; open?: string }
 	| { ok: false; error: string; field?: string };
 
+/**
+ * Where a tap on a notice or a push goes: a room, scrolled to one message when `message` names
+ * it, or a page with its query.
+ */
+export type OpenTarget =
+	| { room: ChannelKey; message?: number }
+	| { page: string; query?: Readonly<Record<string, string>> };
+
 export interface RoomHeader {
 	title: string;
 	fields: readonly { label: string; value: string; link?: string }[];
@@ -223,9 +231,7 @@ export interface Notices {
 		to: readonly string[];
 		title: string;
 		body?: string;
-		open?:
-			| { room: ChannelKey }
-			| { page: string; query?: Readonly<Record<string, string>> };
+		open?: OpenTarget;
 		/** `high` requires interaction and ignores the person's quiet hours. */
 		urgency: "normal" | "high";
 		/** Shows "Handled", counted in the badge until acked or resolved. */
@@ -275,6 +281,8 @@ export interface OnboardingStep {
 	open: { page: string };
 	/** Required steps only; recorded with who and when. */
 	waiver?: { label: string; confirm: string };
+	/** Set by the app on the steps it makes itself; a host leaves it out. */
+	builtin?: "link" | "push";
 }
 
 export interface StepStatus {
@@ -285,6 +293,10 @@ export interface StepStatus {
 	done: boolean;
 	waived: boolean;
 	open: { page: string };
+	/** Present on a required step the person may waive. */
+	waiver?: { label: string; confirm: string };
+	/** Present on a step the app makes itself. */
+	builtin?: "link" | "push";
 }
 
 /** Proves an account and links it. The app shows it; the host proves and writes. */
@@ -437,7 +449,7 @@ export class WebAppRegistry implements WebApp {
 	readonly #frames = new Map<string, FrameHandler<never>>();
 	readonly #areas = new Map<string, RouteArea>();
 	readonly #listeners = new Set<() => void>();
-	#parts: WebAppParts | undefined;
+	#parts: Partial<WebAppParts> = {};
 	#waivers: WaiverRead | undefined;
 	#access: HostRoomAccess | undefined;
 	#started = false;
@@ -506,16 +518,16 @@ export class WebAppRegistry implements WebApp {
 	// ── What a host reaches ──
 
 	get rooms(): HostRooms {
-		return this.#parts?.rooms ?? unbound("rooms");
+		return this.#parts.rooms ?? unbound("rooms");
 	}
 	get notices(): Notices {
-		return this.#parts?.notices ?? unbound("notices");
+		return this.#parts.notices ?? unbound("notices");
 	}
 	get onboarding(): WebApp["onboarding"] {
-		return this.#parts?.onboarding ?? unbound("onboarding");
+		return this.#parts.onboarding ?? unbound("onboarding");
 	}
 	get push(): WebApp["push"] {
-		return this.#parts?.push ?? unbound("push");
+		return this.#parts.push ?? unbound("push");
 	}
 
 	// ── What the pieces of the app read and plug in ──
@@ -551,14 +563,16 @@ export class WebAppRegistry implements WebApp {
 		return () => this.#listeners.delete(listener);
 	}
 
-	/** The service the pieces of the app provide, once. */
-	provide(parts: WebAppParts): void {
-		if (this.#parts) throw new PluginError("web app: parts are provided twice");
-		this.#parts = parts;
+	/** The services the pieces of the app provide; each of `rooms`, `notices`, `onboarding` and `push` once. */
+	provide(parts: Partial<WebAppParts>): void {
+		for (const name of Object.keys(parts) as (keyof WebAppParts)[])
+			if (this.#parts[name])
+				throw new PluginError(`web app: ${name} is provided twice`);
+		this.#parts = { ...this.#parts, ...parts };
 	}
 
 	/** Where the person's waivers are read from. */
-	useWaivers(waivers: WaiverRead): void {
+	setWaivers(waivers: WaiverRead): void {
 		this.#waivers = waivers;
 	}
 	waived(principalId: string, step: string): Promise<boolean> {

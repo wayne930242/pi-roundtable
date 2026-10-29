@@ -57,13 +57,20 @@ export class ApiFailure extends Error {
 const serverText = (text: string | undefined): string | undefined =>
 	text === undefined ? undefined : t(text);
 
+/** Where the subscription routes are: the app's own, or the external sender's path from the config. */
+let subscriptions = "push/subscriptions";
+export const setPushSubscribe = (path?: string): void => {
+	if (path) subscriptions = path;
+};
+
 export async function request<T>(
 	path: string,
 	init: RequestInit = {},
 ): Promise<T> {
 	let response: Response;
 	try {
-		response = await fetch(`${API}${path}`, {
+		// A path from the config starts with a slash and is the whole address.
+		response = await fetch(path.startsWith("/") ? path : `${API}${path}`, {
 			...init,
 			headers: {
 				// A form sets its own content type, with the boundary.
@@ -197,23 +204,23 @@ export const api = {
 			method: "DELETE",
 		}),
 	pushKey: () => request<PushKeyView>("push/key"),
-	pushDevices: () => request<PushDevicesView>("push/subscriptions"),
+	pushDevices: () => request<PushDevicesView>(subscriptions),
 	addPushDevice: (subscription: {
 		endpoint: string;
 		keys: { p256dh: string; auth: string };
 		label: string;
 	}) =>
-		request<{ id: string }>("push/subscriptions", {
+		request<{ id: string }>(subscriptions, {
 			method: "POST",
 			body: JSON.stringify(subscription),
 		}),
 	removePushEndpoint: (endpoint: string) =>
-		request<{ ok: true }>("push/subscriptions", {
+		request<{ ok: true }>(subscriptions, {
 			method: "DELETE",
 			body: JSON.stringify({ endpoint }),
 		}),
 	removePushDevice: (id: string) =>
-		request<{ ok: true }>(`push/subscriptions/${encodeURIComponent(id)}`, {
+		request<{ ok: true }>(`${subscriptions}/${encodeURIComponent(id)}`, {
 			method: "DELETE",
 		}),
 	schedules: () => request<SchedulesView>("schedules"),

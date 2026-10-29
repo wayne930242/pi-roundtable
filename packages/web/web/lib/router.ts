@@ -14,11 +14,14 @@ export function setRouting(mount: string | undefined, home = ""): void {
 	mountPath = mount;
 	homePane = home;
 }
+/** The path the page is mounted under, if it routes by path. */
+export const mountOf = (): string | undefined => mountPath;
 function current(): Route {
 	try {
 		const path = mountPath
 			? window.location.pathname.slice(mountPath.length).replace(/^\//, "")
-			: window.location.hash.replace(/^#\/?/, "");
+			: // A hash route carries its query after the path: `#/room/<key>?message=3`.
+				(window.location.hash.replace(/^#\/?/, "").split("?")[0] ?? "");
 		const [pane = "", key] = path.split("/").map(decodeURIComponent);
 		return { pane, ...(key ? { key } : {}) };
 	} catch {

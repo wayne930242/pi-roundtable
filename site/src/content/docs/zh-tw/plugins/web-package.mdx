@@ -145,6 +145,21 @@ Web Push 會在 owner 沒有任何頁面開著、看得到的時候喚醒裝置�
 | `push.endpointHosts` | 無 | 額外允許的推播服務主機；開頭的 `*.` 代表所有子網域。 |
 | `push.tiers` | `["owner"]` | 哪些身分層級的人可以訂閱並收到推播。 |
 | `push.subject` | https 時為 `origin` | VAPID 聯絡資訊：`mailto:` 或 `https:` 網址。沒有的話推播關閉。 |
+| `push.sender` | `"internal"` | 由誰簽署並送出推播：這個行程本身，或 `{ external: { publicKey, subscribePath? } }`，也就是由你另外執行、持有 VAPID 金鑰的送出行程，app 自己不持有金鑰。 |
+| `push.content` | internal 為 `"full"`，external 為 `"none"` | 推播帶出 app 的內容：標題與預覽（`"full"`），或只有種類、標籤與數量（`"none"`）。 |
+| `push.transports` | 無 | 送出行程除了 `web-push` 之外還負責的傳輸名稱，例如 `slack`；通知的 `via` 只能指定這些。 |
+| `onboarding.links` | 無 | 把提供者對應到 `"required"`（用關卡擋住 app）或 `"nudge"`（只提醒）；每個都需要透過 `WEB_APP` 註冊的 `LinkProver`。 |
+| `onboarding.push` | `"off"` | `"required"` 或 `"nudge"` 會請對方開啟推播並收到一則測試通知。 |
+| `onboarding.pushWaiver` | `false` | 讓對方可以略過必要的推播步驟。 |
+
+## 通知與外部推播送出行程
+
+通知是等某一個人處理的事。host 用 `Notices.raise` 發出，並帶 `open` 目標，也就是 `{ room, message? }` 或 `{ page, query? }`，處理完用 `Notices.resolve` 收回。它會出現在通知鈴與 app 圖示上；一般通知在對方的勿擾時段只留在通知鈴，緊急通知照常響。點通知或推播，不論 app 開著或關著，都會打開確切的那個房間或頁面。
+
+對方在開啟 app 前要完成什麼，由 `onboarding` 設定（上表的 `links`、`push` 與 `pushWaiver`）。
+個人資料頁會列出對方連結過的帳號，讓他連結或解除 host 的 `LinkProver` 允許的帳號，選擇用哪個帳號當作他在 app 裡的名稱（**顯示為**），並設定自己的勿擾時段。
+
+設成 `push.sender: { external }` 時，app 不持有 VAPID 金鑰：它把每則推播排進 `web_push_outbox`，由你用 `pi-roundtable-web/push-sender` 的 `runPushSender` 另外執行的行程，經它的傳輸簽署並送出，也可以在 `subscribePath` 提供訂閱路由。這些路由只在帶 app 的 session cookie 時回應，GET 以外的請求必須帶與主控台完全相同的 `Origin`。
 
 ## 成員與關卡
 

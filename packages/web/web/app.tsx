@@ -14,7 +14,7 @@ import { ConnectionGate } from "./components/connection-gate.tsx";
 import { Icon, type IconName } from "./components/icons.tsx";
 import { Failure, Loading } from "./components/states.tsx";
 import { Toaster } from "./components/toaster.tsx";
-import { api, messageOf } from "./lib/api.ts";
+import { api, messageOf, setPushSubscribe } from "./lib/api.ts";
 import { useSelector } from "./lib/app-store.ts";
 import { ConfigContext } from "./lib/config.ts";
 import { LiveContext, useLiveSource } from "./lib/live.ts";
@@ -31,7 +31,6 @@ import { useRoomsSync } from "./lib/rooms-sync.ts";
 import { hrefFor, setRouting, useRoute } from "./lib/router.ts";
 import { initSkins } from "./lib/skins.ts";
 import { setTheme, useTheme } from "./lib/theme.ts";
-import { GatePage } from "./pages/gate.tsx";
 import { MorePage, PANE_ICONS } from "./pages/more.tsx";
 import { RoomPage } from "./pages/room.tsx";
 import { RoomsPage } from "./pages/rooms.tsx";
@@ -56,6 +55,11 @@ const RoomConfirmHost = lazy(() =>
 	import("./components/room-confirms.tsx").then((m) => ({
 		default: m.RoomConfirmHost,
 	})),
+);
+// The bell and the gate's page load with the first notice or the first gated visit, not with the page.
+const NoticeBell = lazy(() => import("./components/notice-bell.tsx"));
+const GatePage = lazy(() =>
+	import("./pages/gate.tsx").then((m) => ({ default: m.GatePage })),
 );
 const AgentPage = lazy(() =>
 	import("./pages/agent.tsx").then((m) => ({ default: m.AgentPage })),
@@ -126,6 +130,7 @@ export function App() {
 				initLook(loaded.look);
 				initSkins(loaded.characterSkins);
 				setRouting(loaded.mountPath, loaded.panes[0]);
+				setPushSubscribe(loaded.push?.subscribe);
 				document.documentElement.lang = loaded.locale ?? "en";
 				setConfig(loaded);
 				document.title = loaded.title;
@@ -141,8 +146,8 @@ export function App() {
 	const shell = <Console config={config} />;
 	return (
 		<ConfigContext.Provider value={config}>
-			{/* The connection opens before the first render under it, which a room reloaded in place asks for. */}
-			{config.app && config.panes.includes("rooms") ? (
+			{/* The connection opens before the first render under it, which a room reloaded in place asks for. A person with no rooms still has it: their notices and the gate arrive on it. */}
+			{config.app ? (
 				<ConnectionGate protocol={config.app.protocol}>{shell}</ConnectionGate>
 			) : (
 				shell
@@ -391,12 +396,19 @@ function Console({ config }: { config: ConfigView }) {
 				);
 			default: {
 				const Extra = PAGE_ROUTES[pane];
-				return Extra ? <Extra routeKey={route.key} /> : null;
+				return Extra ? <Extra pane={pane} routeKey={route.key} /> : null;
 			}
 		}
 	})();
 
-	const online = hasApp ? connection === "open" : live.connected;
+	const online = app ? connection === "open" : live.connected;
+	// Where the app admits more than its owners, the bell shows what waits on the person.
+	const bell =
+		config.tier !== undefined ? (
+			<Suspense fallback={null}>
+				<NoticeBell />
+			</Suspense>
+		) : null;
 	const chip = (
 		<span
 			className="live-chip"
@@ -433,6 +445,7 @@ function Console({ config }: { config: ConfigView }) {
 					</nav>
 					<div className="rail-foot">
 						{chip}
+						{bell}
 						{hasApp ? (
 							<button
 								type="button"
@@ -454,6 +467,7 @@ function Console({ config }: { config: ConfigView }) {
 						</div>
 						<div className="topbar-end">
 							{chip}
+							{bell}
 							<ThemeButton />
 						</div>
 					</header>

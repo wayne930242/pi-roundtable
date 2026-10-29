@@ -60,6 +60,11 @@ export interface SocketRouteOptions {
 	gate: Pick<Gate, "required" | "onChanged">;
 	/** Who has a room's frames. */
 	audienceOf(room: string): Audience;
+	/**
+	 * Called once the socket has had `ready` and before anything else is replayed to it, gated or
+	 * not: the pieces of the app send what is per person there, such as the notices and the badge.
+	 */
+	opened?(connection: AppSocket): Promise<void>;
 	conversations: Pick<ConversationPort, "stop">;
 	logger: Logger;
 	/**
@@ -94,6 +99,8 @@ export const viewerOfSocket = (connection: AppSocket): Viewer => ({
 export class SocketRoute {
 	readonly #options: SocketRouteOptions;
 	readonly #now: () => number;
+	/** The steps each socket was last told it owes, so a change of them is announced. */
+	readonly #owed = new WeakMap<AppSocket, string>();
 
 	constructor(options: SocketRouteOptions) {
 		this.#options = options;
@@ -214,10 +221,17 @@ export class SocketRoute {
 			},
 			{ connection },
 		);
-		if (connection.gated) {
-			connection.started = true;
-			return;
-		}
+		// The socket is started before the hook runs, so the frames it sends reach the socket.
+		connection.started = true;
+		await this.#options
+			.opened?.(connection)
+			.catch((error: unknown) =>
+				this.#options.logger.warn(
+					{ err: error },
+					"an app socket was not given its notices",
+				),
+			);
+		if (connection.gated) return;
 		this.#replay(connection);
 	}
 
@@ -280,11 +294,16 @@ export class SocketRoute {
 			connection.focus = undefined;
 		const steps = await gate.required(viewerOfSocket(connection));
 		const gated = steps.length > 0;
-		if (gated !== connection.gated) {
+		// A change of which steps are owed is announced too, not only a change of whether any is.
+		const owed = steps.map((step) => step.id).join(",");
+		const listChanged = owed !== this.#owed.get(connection);
+		this.#owed.set(connection, owed);
+		if (gated !== connection.gated || (gated && listChanged)) {
+			const opens = connection.gated && !gated;
 			connection.gated = gated;
 			if (options.announce) {
 				sockets.deliver({ type: "gate", steps }, { connection });
-				if (!gated) this.#replay(connection);
+				if (opens) this.#replay(connection);
 			}
 		}
 		return {

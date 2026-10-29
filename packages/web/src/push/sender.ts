@@ -18,7 +18,11 @@ export interface PushPayload {
 	url?: string;
 	/** Notifications with one tag replace each other on the device. */
 	tag: string;
-	kind: "card" | "cap" | "reply" | "notice";
+	kind: "card" | "cap" | "reply" | "notice" | "test" | "clear";
+	/** The count the app icon shows after this push; absent = leave it. */
+	badge?: number;
+	/** `high` asks the device to keep the notification until it is dealt with. */
+	urgency?: "normal" | "high";
 }
 
 /** The part of a stored subscription the sender needs. */
@@ -83,7 +87,8 @@ export class PushSender {
 					"content-encoding": "aes128gcm",
 					"content-type": "application/octet-stream",
 					ttl: String(TTL_SECONDS),
-					urgency: payload.kind === "reply" ? "normal" : "high",
+					urgency:
+						payload.urgency ?? (payload.kind === "reply" ? "normal" : "high"),
 				},
 				body,
 				// A push service never redirects; a redirect would walk past the allowlist.

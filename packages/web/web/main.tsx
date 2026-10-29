@@ -52,13 +52,10 @@ if ("serviceWorker" in navigator) {
 		)
 			return;
 		const url = URL.parse(String((data as { url?: unknown }).url), base);
-		if (url && url.origin === window.location.origin) {
-			if (
-				url.pathname === window.location.pathname &&
-				url.search === window.location.search
-			)
-				window.location.hash = url.hash;
-			else window.location.assign(url);
-		}
+		// In place when the address is the app's; otherwise as a page load.
+		if (url)
+			import("./lib/where.ts").then(
+				(where) => where.followUrl(url) || window.location.assign(url),
+			);
 	});
 }
