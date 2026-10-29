@@ -767,11 +767,14 @@ export interface WorkspaceFileView {
 	/** The file starts with a UTF-8 byte order mark, which the text leaves out and a save puts back. */
 	bom: boolean;
 	language: WorkspaceLanguage;
-	/** An image the browser can show from the `raw` route. */
-	image?: "png" | "jpeg" | "webp" | "gif";
+	/** What the browser can show of the file from the `raw` route: a picture, a PDF, a sound or a video. */
+	media?: WorkspaceMedia;
 	/** The file's text, as written (its separators kept); absent for a binary or too large file. */
 	text?: string;
 }
+
+/** The kinds of file the pane previews; the `raw` route serves each with a type from an allowlist. */
+export type WorkspaceMedia = "image" | "pdf" | "audio" | "video";
 
 /** `PUT api/workspace/<root>/file?path=` body. */
 export interface WorkspaceSave {

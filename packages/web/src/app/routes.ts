@@ -458,7 +458,11 @@ export class AppApi {
 			if (action === "list" && method === "GET" && parts.length === 4)
 				return json(await files.list(rootId, path));
 			if (action === "raw" && method === "GET" && parts.length === 4)
-				return await files.raw(rootId, path, params.get("download") === "1");
+				return await files.raw(rootId, path, params.get("download") === "1", {
+					range: request.headers.get("range"),
+					ifRange: request.headers.get("if-range"),
+					ifNoneMatch: request.headers.get("if-none-match"),
+				});
 			if (action === "file" && parts.length === 4) {
 				if (method === "GET") return json(await files.read(rootId, path));
 				if (method === "PUT") {

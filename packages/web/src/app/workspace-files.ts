@@ -34,6 +34,7 @@ import type {
 	WorkspaceFileView,
 	WorkspaceLanguage,
 	WorkspaceListView,
+	WorkspaceMedia,
 	WorkspaceNew,
 	WorkspaceReadOnlyReason,
 	WorkspaceRootView,
@@ -245,36 +246,180 @@ export function languageOf(name: string): WorkspaceLanguage {
 	return dot <= 0 ? "plain" : (BY_EXTENSION[lower.slice(dot + 1)] ?? "plain");
 }
 
-/** The image type a file's first bytes declare, if any. */
-function imageOf(head: Uint8Array): WorkspaceFileView["image"] {
-	const at = (offset: number, text: string) =>
-		[...text].every((char, i) => head[offset + i] === char.charCodeAt(0));
-	if (
-		head[0] === 0x89 &&
-		head[1] === 0x50 &&
-		head[2] === 0x4e &&
-		head[3] === 0x47 &&
-		head[4] === 0x0d &&
-		head[5] === 0x0a &&
-		head[6] === 0x1a &&
-		head[7] === 0x0a
-	)
-		return "png";
-	if (head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff) return "jpeg";
-	if (at(0, "GIF87a") || at(0, "GIF89a")) return "gif";
-	if (at(0, "RIFF") && at(8, "WEBP")) return "webp";
-	return undefined;
+/** What a request says about the version and the part it wants. */
+export interface RawConditions {
+	/** The `Range` header. */
+	range?: string | null | undefined;
+	/** The `If-Range` header: the part is sent only when this is still the file's ETag. */
+	ifRange?: string | null | undefined;
+	/** The `If-None-Match` header. */
+	ifNoneMatch?: string | null | undefined;
+}
+
+/** Whether an `If-None-Match` names this ETag (weakly, as a GET compares) or is `*`. */
+function matchesEtag(header: string | null | undefined, etag: string): boolean {
+	if (!header) return false;
+	const bare = (tag: string) => tag.trim().replace(/^W\//, "");
+	return header
+		.split(",")
+		.some((tag) => tag.trim() === "*" || bare(tag) === bare(etag));
+}
+
+/**
+ * One plain byte range (`a-b`, `a-` or `-n`) of a file of `size` bytes; anything else is not a range
+ * and the whole file is sent, which a server may always do. A start past the end is unsatisfiable.
+ */
+function parseRange(
+	header: string | null | undefined,
+	size: number,
+): { start: number; end: number } | "unsatisfiable" | undefined {
+	const match = /^bytes=(\d*)-(\d*)$/.exec(header ?? "");
+	if (!match || (match[1] === "" && match[2] === "")) return undefined;
+	const first = match[1] === "" ? undefined : Number(match[1]);
+	const last = match[2] === "" ? undefined : Number(match[2]);
+	if (first === undefined) {
+		const tail = last ?? 0;
+		if (tail === 0) return "unsatisfiable";
+		return { start: Math.max(0, size - tail), end: size - 1 };
+	}
+	if (last !== undefined && last < first) return undefined;
+	if (first >= size) return "unsatisfiable";
+	return { start: first, end: Math.min(last ?? size - 1, size - 1) };
+}
+
+const startsWith = (head: Uint8Array, offset: number, text: string): boolean =>
+	[...text].every((char, i) => head[offset + i] === char.charCodeAt(0));
+const startsWithBytes = (head: Uint8Array, bytes: number[]): boolean =>
+	bytes.every((byte, i) => head[i] === byte);
+/** An ISO base media file (MP4, M4A, MOV, AVIF): `ftyp` after a four-byte size. */
+const hasFtyp = (head: Uint8Array): boolean => startsWith(head, 4, "ftyp");
+
+/** What a preview shows and the type the route answers with; the type comes from here, never from the file. */
+interface MediaType {
+	kind: WorkspaceMedia;
+	type: string;
+	/** Whether the file's first bytes are those of the kind its name claims. */
+	is(head: Uint8Array): boolean;
+}
+
+const RIFF_WAVE = (head: Uint8Array) =>
+	startsWith(head, 0, "RIFF") && startsWith(head, 8, "WAVE");
+const EBML = (head: Uint8Array) =>
+	startsWithBytes(head, [0x1a, 0x45, 0xdf, 0xa3]);
+const JPEG = (head: Uint8Array) => startsWithBytes(head, [0xff, 0xd8, 0xff]);
+const OGG = (head: Uint8Array) => startsWith(head, 0, "OggS");
+const MP4 = (type: string, kind: "audio" | "video"): MediaType => ({
+	kind,
+	type,
+	is: hasFtyp,
+});
+
+/** By extension; a name alone never previews, the bytes must agree. SVG alone has no signature. */
+const MEDIA_BY_EXTENSION: Record<string, MediaType> = {
+	png: {
+		kind: "image",
+		type: "image/png",
+		is: (head) =>
+			startsWithBytes(head, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+	},
+	jpg: { kind: "image", type: "image/jpeg", is: JPEG },
+	jpeg: { kind: "image", type: "image/jpeg", is: JPEG },
+	gif: {
+		kind: "image",
+		type: "image/gif",
+		is: (head) =>
+			startsWith(head, 0, "GIF87a") || startsWith(head, 0, "GIF89a"),
+	},
+	webp: {
+		kind: "image",
+		type: "image/webp",
+		is: (head) => startsWith(head, 0, "RIFF") && startsWith(head, 8, "WEBP"),
+	},
+	avif: {
+		kind: "image",
+		type: "image/avif",
+		is: (head) =>
+			hasFtyp(head) &&
+			(startsWith(head, 8, "avif") || startsWith(head, 8, "avis")),
+	},
+	bmp: {
+		kind: "image",
+		type: "image/bmp",
+		is: (head) => startsWith(head, 0, "BM"),
+	},
+	ico: {
+		kind: "image",
+		type: "image/x-icon",
+		is: (head) =>
+			startsWithBytes(head, [0, 0, 1, 0]) ||
+			startsWithBytes(head, [0, 0, 2, 0]),
+	},
+	svg: {
+		kind: "image",
+		type: "image/svg+xml",
+		is: (head) =>
+			!head.includes(0) &&
+			Buffer.from(head).toString("latin1").includes("<svg"),
+	},
+	pdf: {
+		kind: "pdf",
+		type: "application/pdf",
+		is: (head) => Buffer.from(head.subarray(0, 1024)).includes("%PDF-"),
+	},
+	mp3: {
+		kind: "audio",
+		type: "audio/mpeg",
+		is: (head) =>
+			startsWith(head, 0, "ID3") ||
+			(head[0] === 0xff && ((head[1] ?? 0) & 0xe0) === 0xe0),
+	},
+	m4a: MP4("audio/mp4", "audio"),
+	aac: {
+		kind: "audio",
+		type: "audio/aac",
+		is: (head) => head[0] === 0xff && ((head[1] ?? 0) & 0xf0) === 0xf0,
+	},
+	ogg: { kind: "audio", type: "audio/ogg", is: OGG },
+	opus: { kind: "audio", type: "audio/ogg", is: OGG },
+	wav: { kind: "audio", type: "audio/wav", is: RIFF_WAVE },
+	flac: {
+		kind: "audio",
+		type: "audio/flac",
+		is: (head) => startsWith(head, 0, "fLaC"),
+	},
+	weba: { kind: "audio", type: "audio/webm", is: EBML },
+	mp4: MP4("video/mp4", "video"),
+	m4v: MP4("video/mp4", "video"),
+	mov: MP4("video/quicktime", "video"),
+	webm: { kind: "video", type: "video/webm", is: EBML },
+};
+
+const RASTER_BY_SIGNATURE = ["png", "jpg", "gif", "webp"] as const;
+
+/** The preview a file is, by its first bytes for the four common pictures and by name and bytes for the rest. */
+function mediaOf(name: string, head: Uint8Array): MediaType | undefined {
+	for (const extension of RASTER_BY_SIGNATURE) {
+		const found = MEDIA_BY_EXTENSION[extension];
+		if (found?.is(head)) return found;
+	}
+	const dot = name.lastIndexOf(".");
+	if (dot <= 0) return undefined;
+	const found = MEDIA_BY_EXTENSION[name.slice(dot + 1).toLowerCase()];
+	return found?.is(head) ? found : undefined;
 }
 
 /** Extensions that a browser would run or render as a page: always downloads. */
-const ACTIVE = new Set(["svg", "html", "htm", "xhtml", "xml", "xsl", "mht"]);
+const ACTIVE = new Set(["html", "htm", "xhtml", "xml", "xsl", "mht"]);
 
-const IMAGE_TYPES = {
-	png: "image/png",
-	jpeg: "image/jpeg",
-	gif: "image/gif",
-	webp: "image/webp",
-} as const;
+/**
+ * What a preview may load: an image or a sound from the place itself. A picture, a sound and a video
+ * are sandboxed, so nothing in them runs even when the address is opened on its own; a PDF is not,
+ * because the browser's viewer does not run under a sandbox.
+ */
+const MEDIA_POLICY =
+	"sandbox; default-src 'none'; img-src 'self' data:; media-src 'self'; style-src 'unsafe-inline'";
+const PDF_POLICY =
+	"default-src 'none'; style-src 'unsafe-inline'; img-src data:";
 
 // The byte order mark is stripped by hand, once: a second one is text and stays.
 const decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
@@ -676,8 +821,8 @@ export class WorkspaceFiles {
 			const info = await handle.stat();
 			const head = Buffer.alloc(Math.min(HEAD_BYTES, info.size));
 			await handle.read(head, 0, head.length, 0);
-			const image = imageOf(head);
 			const name = segments.at(-1) ?? "";
+			const media = mediaOf(name, head);
 			const view: WorkspaceFileView = {
 				path: raw,
 				size: info.size,
@@ -689,7 +834,7 @@ export class WorkspaceFiles {
 				eol: "\n",
 				bom: false,
 				language: languageOf(name),
-				...(image ? { image } : {}),
+				...(media ? { media: media.kind } : {}),
 			};
 			let reason = this.#whyReadOnly(located, target.viaLink, raw);
 			if (view.tooLarge) {
@@ -733,7 +878,12 @@ export class WorkspaceFiles {
 		return undefined;
 	}
 
-	async raw(rootId: string, raw: string, download: boolean): Promise<Response> {
+	async raw(
+		rootId: string,
+		raw: string,
+		download: boolean,
+		conditions: RawConditions = {},
+	): Promise<Response> {
 		const located = await this.#located(rootId, raw);
 		const { root, segments } = located;
 		const target = await this.#target(located, raw);
@@ -751,11 +901,11 @@ export class WorkspaceFiles {
 			const head = Buffer.alloc(Math.min(HEAD_BYTES, info.size));
 			await handle.read(head, 0, head.length, 0);
 			const name = segments.at(-1) ?? "file";
-			const image = imageOf(head);
+			const media = mediaOf(name, head);
 			const extension = name.slice(name.lastIndexOf(".") + 1).toLowerCase();
 			const asText =
-				!image && !head.includes(0) && !ACTIVE.has(extension) && !download;
-			const inline = !download && (image !== undefined || asText);
+				!media && !head.includes(0) && !ACTIVE.has(extension) && !download;
+			const inline = !download && (media !== undefined || asText);
 			const encoded = encodeURIComponent(safeName(name)).replace(
 				/['()*]/g,
 				(char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`,
@@ -764,32 +914,60 @@ export class WorkspaceFiles {
 			// grows while it is sent cannot make the body longer than its `content-length`.
 			if (info.size > DOWNLOAD_MAX_BYTES)
 				throw new WorkspaceRefusal(413, "too-large");
+			const etag = `W/"${info.size.toString(16)}-${Math.trunc(info.mtimeMs).toString(16)}"`;
+			const headers: Record<string, string> = {
+				"content-type": media
+					? media.type
+					: asText
+						? "text/plain; charset=utf-8"
+						: "application/octet-stream",
+				"content-disposition": inline
+					? "inline"
+					: `attachment; filename*=UTF-8''${encoded}`,
+				"content-security-policy": media
+					? media.kind === "pdf"
+						? PDF_POLICY
+						: MEDIA_POLICY
+					: "sandbox; default-src 'none'",
+				"x-content-type-options": "nosniff",
+				"accept-ranges": "bytes",
+			};
+			if (media && inline) {
+				// A preview may be asked for again, in pieces: it is checked each time, never kept as is.
+				headers["cache-control"] = "private, no-cache";
+				headers.etag = etag;
+				headers["last-modified"] = new Date(info.mtimeMs).toUTCString();
+			} else headers["cache-control"] = "no-store";
+			if (media && inline && matchesEtag(conditions.ifNoneMatch, etag)) {
+				await handle.close();
+				return new Response(null, { status: 304, headers });
+			}
+			let start = 0;
+			let end = info.size - 1;
+			let status = 200;
+			const range =
+				info.size > 0 && (!conditions.ifRange || conditions.ifRange === etag)
+					? parseRange(conditions.range, info.size)
+					: undefined;
+			if (range === "unsatisfiable") {
+				await handle.close();
+				headers["content-range"] = `bytes */${info.size}`;
+				headers["content-length"] = "0";
+				return new Response(null, { status: 416, headers });
+			}
+			if (range) {
+				({ start, end } = range);
+				status = 206;
+				headers["content-range"] = `bytes ${start}-${end}/${info.size}`;
+			}
+			headers["content-length"] = String(info.size === 0 ? 0 : end - start + 1);
 			let body: ReadableStream<Uint8Array> | null = null;
 			if (info.size === 0) await handle.close();
 			else
 				body = Readable.toWeb(
-					handle.createReadStream({
-						start: 0,
-						end: info.size - 1,
-						autoClose: true,
-					}),
+					handle.createReadStream({ start, end, autoClose: true }),
 				) as ReadableStream<Uint8Array>;
-			return new Response(body, {
-				headers: {
-					"content-type": image
-						? IMAGE_TYPES[image]
-						: asText
-							? "text/plain; charset=utf-8"
-							: "application/octet-stream",
-					"content-disposition": inline
-						? "inline"
-						: `attachment; filename*=UTF-8''${encoded}`,
-					"content-security-policy": "sandbox; default-src 'none'",
-					"x-content-type-options": "nosniff",
-					"cache-control": "no-store",
-					"content-length": String(info.size),
-				},
-			});
+			return new Response(body, { status, headers });
 		} catch (error) {
 			await handle.close().catch(() => undefined);
 			throw error;

@@ -33,6 +33,8 @@ import { ORIGIN } from "./testing/fixtures.ts";
 import { admit } from "./verifier.ts";
 import type { Visitor } from "./visitors.ts";
 
+const hex = (data: ArrayBufferLike | Uint8Array): string =>
+	Buffer.from(data as ArrayBuffer).toString("hex");
 const sha = (text: string) => createHash("sha256").update(text).digest("hex");
 
 const assets: AssetBundle = new Map([
@@ -122,7 +124,12 @@ const call = (
 	server: ConsoleServer,
 	method: string,
 	path: string,
-	init: { body?: unknown; origin?: string | null; raw?: string } = {},
+	init: {
+		body?: unknown;
+		origin?: string | null;
+		raw?: string;
+		headers?: Record<string, string>;
+	} = {},
 ) =>
 	server.handle(
 		new Request(`http://host/console/api/workspace${path}`, {
@@ -132,6 +139,7 @@ const call = (
 				...(init.body !== undefined || init.raw !== undefined
 					? { "content-type": "application/json" }
 					: {}),
+				...init.headers,
 			},
 			...(init.body !== undefined ? { body: JSON.stringify(init.body) } : {}),
 			...(init.raw !== undefined ? { body: init.raw } : {}),
@@ -178,6 +186,38 @@ describe("the workspace API", () => {
 		const raw = await call(server, "GET", "/agents/raw?path=a.ts&download=1");
 		expect(raw.headers.get("content-disposition")).toStartWith("attachment");
 		expect(await raw.text()).toBe("const a = 2;\n");
+	});
+
+	test("a media file is served by range and by ETag, and only to an owner", async () => {
+		const bytes = Buffer.concat([
+			Buffer.from([0, 0, 0, 0x20]),
+			Buffer.from("ftypisom"),
+			Buffer.alloc(24),
+		]);
+		writeFileSync(join(root, "clip.mp4"), bytes);
+		const server = setup();
+		const partial = await call(server, "GET", "/agents/raw?path=clip.mp4", {
+			headers: { range: "bytes=0-7" },
+		});
+		expect(partial.status).toBe(206);
+		expect(partial.headers.get("content-type")).toBe("video/mp4");
+		expect(partial.headers.get("content-range")).toBe(
+			`bytes 0-7/${bytes.length}`,
+		);
+		expect(hex(await partial.arrayBuffer())).toBe(hex(bytes.subarray(0, 8)));
+		const etag = partial.headers.get("etag") ?? "";
+		const again = await call(server, "GET", "/agents/raw?path=clip.mp4", {
+			headers: { "if-none-match": etag },
+		});
+		expect(again.status).toBe(304);
+		const past = await call(server, "GET", "/agents/raw?path=clip.mp4", {
+			headers: { range: "bytes=999-" },
+		});
+		expect(past.status).toBe(416);
+		const outside = await call(server, "GET", "/agents/raw?path=..%2Fx.mp4", {
+			headers: { range: "bytes=0-7" },
+		});
+		expect(outside.status).toBe(400);
 	});
 
 	test("a stale save is a 409 that names the file as it is now", async () => {
