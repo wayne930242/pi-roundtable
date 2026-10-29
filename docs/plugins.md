@@ -4163,6 +4163,7 @@ Import from the entries listed below; source area files are internal.
 | `ModeChange` | `pi-roundtable` | type |
 | `ModelImage` | `pi-roundtable` | type |
 | `NO_ATTACHMENTS` | `pi-roundtable` | value |
+| `NewAgent` | `pi-roundtable` | type |
 | `NewSchedule` | `pi-roundtable` | type |
 | `NotLinkedError` | `pi-roundtable` | value |
 | `OWNER_TARGET` | `pi-roundtable` | value |

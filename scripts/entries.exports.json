@@ -193,6 +193,7 @@
 			"MigrationReport",
 			"ModeChange",
 			"ModelImage",
+			"NewAgent",
 			"NewSchedule",
 			"OutboundReply",
 			"OwnerAnswer",
