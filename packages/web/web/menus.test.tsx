@@ -371,6 +371,12 @@ test("a row of the phone drawer opens the same menu as a sheet; an action that l
 	);
 	await page.click(q("#avatar"));
 	expect(q(".switcher")?.getAttribute("data-state")).toBe("open");
+	// The rows are a chunk of their own, drawn a moment after the drawer opens.
+	const stop = Date.now() + 3000;
+	while (!q(".switcher-row[href*='scout']") && Date.now() < stop)
+		await page.act(async () => {
+			await settle(20);
+		});
 	await rightClick(q(".switcher-row[href*='scout']"));
 	expect(q("dialog.sheet")?.hasAttribute("open")).toBe(true);
 	expect(labels()).toContain("Edit agent");

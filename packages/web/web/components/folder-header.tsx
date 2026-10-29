@@ -1,11 +1,32 @@
+import "../lib/layout-icons.ts";
 import { type ReactNode, useId } from "react";
 import { openMenu } from "../lib/action-menu.ts";
-import { folderLifting, toggleCollapsed, useCollapsed } from "../lib/layout.ts";
-import { folderMenuOf } from "../lib/menus.ts";
+import { expandFolder, toggleCollapsed, useCollapsed } from "../lib/folds.ts";
 import { plural, translate as t } from "../lib/messages.ts";
+import type { Lifting } from "../lib/row-press.ts";
 import { useRowPress } from "../lib/row-press.ts";
 import type { MuteState } from "../lib/sections.ts";
 import { Icon } from "./icons.tsx";
+
+const actions = () => import("../lib/layout-actions.ts");
+
+/** A folder's header menu; its code is the placement menus', loaded with the first menu. */
+const folderMenuOf = (id: string) =>
+	import("../lib/placement-items.ts").then((one) => one.folderMenu(id));
+
+/** What a lifted folder block does: it moves among the folders, and opens a folded one the finger rests on. */
+const folderLifting = (id: string): Lifting => ({
+	mode: "folder",
+	key: id,
+	item: (source) => source.closest<HTMLElement>("[data-folder-block]"),
+	root: (source) =>
+		source.closest<HTMLElement>("[data-folder-block]")?.parentElement ?? null,
+	onDrop: (outcome) => {
+		if (outcome.type === "folder")
+			void actions().then((one) => one.placeFolderBefore(id, outcome.before));
+	},
+	open: expandFolder,
+});
 
 /**
  * A folder of the room list: a header with the name, how many rooms, a fold button and a menu, and

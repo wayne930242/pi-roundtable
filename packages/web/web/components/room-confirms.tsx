@@ -11,6 +11,7 @@ import { currentRoute, navigate } from "../lib/router.ts";
 import { refreshRooms, teamApi } from "../lib/team-api.ts";
 import { toast } from "../lib/toast.ts";
 import { Confirm } from "./confirm.tsx";
+import { FolderDialogHost } from "./folder-dialogs.tsx";
 
 interface ConfirmProps {
 	open: boolean;
@@ -110,8 +111,17 @@ export function ArchiveConfirm(props: ConfirmProps) {
 	);
 }
 
-/** Draws the question that `askRoomConfirm` asks, wherever in the page it was asked. */
+/** Draws the question that `askRoomConfirm` asks, wherever in the page it was asked, and the folder dialogs. */
 export function RoomConfirmHost() {
+	return (
+		<>
+			<RoomConfirms />
+			<FolderDialogHost />
+		</>
+	);
+}
+
+function RoomConfirms() {
 	const ask = useRoomConfirm();
 	const last = useRef<RoomConfirm | undefined>(undefined);
 	if (ask) last.current = ask;

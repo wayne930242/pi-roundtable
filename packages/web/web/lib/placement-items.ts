@@ -4,8 +4,9 @@
 import { nudgeBefore } from "../../src/layout-order.ts";
 import type { MenuItem } from "./action-menu.ts";
 import { store } from "./app-store.ts";
+import "./layout-icons.ts";
 import { askFolderDialog } from "./folder-dialogs.ts";
-import { arrangementNow } from "./layout.ts";
+import { arrangementNow } from "./layout-now.ts";
 import type { Leave, MenuSpec } from "./menu-items.ts";
 import { translate as t } from "./messages.ts";
 import { muteState, placeOf } from "./sections.ts";

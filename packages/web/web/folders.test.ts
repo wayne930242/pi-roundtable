@@ -1,14 +1,12 @@
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import type { LayoutView, RoomView } from "../src/api-types.ts";
-import { api } from "./lib/api.ts";
 import { store } from "./lib/app-store.ts";
 import {
 	COLLAPSED_KEY,
-	layoutNow,
 	pruneCollapsed,
 	reloadCollapsed,
 	toggleCollapsed,
-} from "./lib/layout.ts";
+} from "./lib/folds.ts";
 import {
 	createFolder,
 	deleteFolder,
@@ -18,6 +16,8 @@ import {
 	pinRoom,
 	renameFolderTo,
 } from "./lib/layout-actions.ts";
+import { layoutApi } from "./lib/layout-api.ts";
+import { layoutNow } from "./lib/layout-now.ts";
 import { initialState, reduce } from "./lib/rooms.ts";
 
 const A = "app:agent.a";
@@ -87,7 +87,7 @@ test("the room list carries the shared layout, and a layout answer replaces it",
 test("a move shows at once and then takes the server's answer", async () => {
 	load({ folders: [{ id: "f1", name: "One", rooms: [] }] });
 	let release: (layout: LayoutView) => void = () => undefined;
-	const place = spyOn(api, "placeRoom").mockImplementation(
+	const place = spyOn(layoutApi, "placeRoom").mockImplementation(
 		() => new Promise((resolve) => (release = resolve)),
 	);
 	try {
@@ -109,7 +109,7 @@ test("a move shows at once and then takes the server's answer", async () => {
 test("a move the server refuses is put back, the list is fetched again and the words are shown", async () => {
 	load({ pins: [A], folders: [{ id: "f1", name: "One", rooms: [] }] });
 	const revision = store.getState().revision;
-	const place = spyOn(api, "placeRoom").mockRejectedValue(
+	const place = spyOn(layoutApi, "placeRoom").mockRejectedValue(
 		new Error("There is no such folder."),
 	);
 	try {
@@ -131,14 +131,14 @@ test("pin, rename, delete and folder moves go through the API and show the answe
 			{ id: "f2", name: "Two", rooms: [] },
 		],
 	});
-	const pin = spyOn(api, "pinRoom").mockResolvedValue({
+	const pin = spyOn(layoutApi, "pinRoom").mockResolvedValue({
 		pins: [A],
 		folders: [
 			{ id: "f1", name: "One", rooms: [] },
 			{ id: "f2", name: "Two", rooms: [] },
 		],
 	});
-	const change = spyOn(api, "changeFolder").mockImplementation(
+	const change = spyOn(layoutApi, "changeFolder").mockImplementation(
 		async (_id, patch) => ({
 			pins: [A],
 			folders: [
@@ -147,7 +147,7 @@ test("pin, rename, delete and folder moves go through the API and show the answe
 			],
 		}),
 	);
-	const remove = spyOn(api, "deleteFolder").mockResolvedValue({
+	const remove = spyOn(layoutApi, "deleteFolder").mockResolvedValue({
 		pins: [A],
 		folders: [{ id: "f2", name: "Two", rooms: [] }],
 	});
@@ -170,7 +170,7 @@ test("pin, rename, delete and folder moves go through the API and show the answe
 });
 
 test("creating a folder resolves to the new folder's id, the last one", async () => {
-	const create = spyOn(api, "createFolder").mockResolvedValue({
+	const create = spyOn(layoutApi, "createFolder").mockResolvedValue({
 		pins: [],
 		folders: [
 			{ id: "f1", name: "One", rooms: [] },
@@ -192,7 +192,9 @@ test("up and down send the neighbour as seen, skipping a room the list does not 
 		pins: [A, HIDDEN, B, C],
 	});
 	// The server's answer is taken as it is, so a step shows no change here.
-	const pin = spyOn(api, "pinRoom").mockImplementation(async () => layoutNow());
+	const pin = spyOn(layoutApi, "pinRoom").mockImplementation(async () =>
+		layoutNow(),
+	);
 	try {
 		// B is below the hidden room; one step up goes before A, the room that is shown above it.
 		await nudgeRoom(B, "up");

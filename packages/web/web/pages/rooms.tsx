@@ -1,31 +1,23 @@
-import { memo, type ReactNode, useEffect, useMemo, useState } from "react";
+import { lazy, memo, type ReactNode, Suspense, useMemo } from "react";
 import type { RoomView } from "../../src/api-types.ts";
-import { FolderBlock } from "../components/folder-header.tsx";
 import { Icon } from "../components/icons.tsx";
 import { RoomPicture } from "../components/room-picture.tsx";
 import { Empty } from "../components/states.tsx";
-import { openMenu } from "../lib/action-menu.ts";
 import { useSelector } from "../lib/app-store.ts";
+import { useArranging } from "../lib/arrange.ts";
 import { useAccentStyle } from "../lib/characters.ts";
 import { useConfig } from "../lib/config.ts";
-import { askFolderDialog } from "../lib/folder-dialogs.ts";
 import { ago } from "../lib/format.ts";
-import { pruneCollapsed, roomLifting } from "../lib/layout.ts";
 import { useLive } from "../lib/live.ts";
+import type { PressProps } from "../lib/long-press.ts";
+import { useMenuPress } from "../lib/menu-press.ts";
 import { openAddMenu, roomMenuOf } from "../lib/menus.ts";
 import { plural, translate as t } from "../lib/messages.ts";
-import { activityAt, lastMessage, waitingCards } from "../lib/rooms.ts";
+import { lastMessage, waitingCards } from "../lib/rooms.ts";
 import { hrefFor } from "../lib/router.ts";
-import { useRowPress } from "../lib/row-press.ts";
-import {
-	muteState,
-	type Sections,
-	sections,
-	type ThreadKeys,
-} from "../lib/sections.ts";
 
 /** What a message reads as in a list, on one line. */
-function previewOf(text: string, files: number): string {
+export function previewOf(text: string, files: number): string {
 	// Markdown marks would show as stray symbols in one line.
 	const flat = text
 		.replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
@@ -37,7 +29,7 @@ function previewOf(text: string, files: number): string {
 	return files ? plural(files, "{count} file", "{count} files") : "";
 }
 
-interface RowData {
+export interface RowData {
 	key: string;
 	view: RoomView;
 	typing: boolean;
@@ -49,7 +41,7 @@ interface RowData {
 }
 
 /** The dots that show an agent is working in the room. */
-const Typing = () => (
+export const Typing = () => (
 	<span className="typing" role="img" aria-label={t("Working")}>
 		<i />
 		<i />
@@ -57,32 +49,30 @@ const Typing = () => (
 	</span>
 );
 
-const WaitingBadge = ({ count }: { count: number }) => (
+export const WaitingBadge = ({ count }: { count: number }) => (
 	<span className="badge badge-warn">
 		{plural(count, "{count} card waiting", "{count} cards waiting")}
 	</span>
 );
 
-const RoomRow = memo(function RoomRow(
+/** The markup of a room's row; `press` is what opens its menu, and `item` and `after` are what the arranged list adds. */
+export function RoomRowView(
 	props: Omit<RowData, "key"> & {
 		active: boolean;
 		now: number;
 		timeZone: string;
+		press: PressProps;
 		/** The dispatch threads of this room, nested under it. */
 		threads?: ReactNode;
-		/** The page is in arrange mode: a menu button sits beside the row. */
-		arranging?: boolean;
+		/** What the arranged list marks the item with, and puts beside the row. */
+		item?: Record<string, string>;
+		after?: ReactNode;
 	},
 ) {
-	const { view } = props;
+	const { view, press } = props;
 	const accent = useAccentStyle(view.character);
-	// Home stays at the top; every other row can be lifted and dropped in a pinned list, a folder or the rest.
-	const press = useRowPress(
-		() => roomMenuOf(view.key),
-		view.home ? undefined : roomLifting(view.key),
-	);
 	return (
-		<li {...(view.home ? {} : { "data-drop-item": "", "data-key": view.key })}>
+		<li {...props.item}>
 			<a
 				className="room-row"
 				{...press}
@@ -137,35 +127,22 @@ const RoomRow = memo(function RoomRow(
 				</span>
 				<Icon name="chevron" size={16} className="room-row-chevron" />
 			</a>
-			{props.arranging ? (
-				<button
-					type="button"
-					className="icon-button row-more"
-					aria-haspopup="menu"
-					aria-label={t("Room menu")}
-					onClick={(event) => {
-						const button = event.currentTarget;
-						roomMenuOf(view.key).then(
-							(spec) => {
-								if (!spec) return;
-								const box = button.getBoundingClientRect();
-								openMenu({
-									...spec,
-									at: { x: box.left, y: box.bottom },
-									via: "key",
-									source: button,
-								});
-							},
-							() => undefined,
-						);
-					}}
-				>
-					<Icon name="more" size={18} />
-				</button>
-			) : null}
+			{props.after}
 			{props.threads}
 		</li>
 	);
+}
+
+const RoomRow = memo(function RoomRow(
+	props: Omit<RowData, "key"> & {
+		active: boolean;
+		now: number;
+		timeZone: string;
+		threads?: ReactNode;
+	},
+) {
+	const press = useMenuPress(() => roomMenuOf(props.view.key));
+	return <RoomRowView {...props} press={press} />;
 });
 
 /** A dispatch thread under its room: one line with its title, what it is doing, and when it last said something. */
@@ -198,7 +175,7 @@ const ThreadRow = memo(function ThreadRow(
 });
 
 /** The rows for rooms, each with what the list shows of it; rooms the list does not know are left out. */
-function useRowData(keys: readonly string[]): RowData[] {
+export function useRowData(keys: readonly string[]): RowData[] {
 	const rows = useSelector(
 		(state) =>
 			keys.map((key) => {
@@ -221,7 +198,7 @@ function useRowData(keys: readonly string[]): RowData[] {
 }
 
 /** The threads of a room: the open ones, then the finished ones folded away until asked for. */
-function ThreadList(props: {
+export function ThreadList(props: {
 	open: string[];
 	closed: string[];
 	active: string | undefined;
@@ -268,210 +245,133 @@ function ThreadList(props: {
 	);
 }
 
-/** The rows of rooms, each with its dispatch threads under it. */
-function RoomList(props: {
-	rooms: string[];
-	threads: Record<string, ThreadKeys>;
-	active: string | undefined;
-	arranging: boolean;
-}) {
-	const { now } = useLive();
-	const { timeZone } = useConfig();
-	const shown = useRowData(props.rooms);
-	return (
-		<ul className="room-list">
-			{shown.map(({ key, ...row }) => {
-				const threads = props.threads[key];
-				return (
-					<RoomRow
-						key={key}
-						{...row}
-						active={key === props.active}
-						now={now}
-						timeZone={timeZone}
-						arranging={props.arranging}
-						{...(threads
-							? {
-									threads: (
-										<ThreadList
-											open={threads.open}
-											closed={threads.closed}
-											active={props.active}
-										/>
-									),
-								}
-							: {})}
-					/>
-				);
-			})}
-		</ul>
-	);
-}
-
 function Section(props: {
 	title: string;
 	rooms: string[];
 	threads: Record<string, ThreadKeys>;
 	active: string | undefined;
-	arranging: boolean;
-	/** A place a lifted room can be dropped: the pinned list or the rest. */
-	zone?: { kind: "pinned" | "rest"; id: string };
 }) {
+	const { now } = useLive();
+	const { timeZone } = useConfig();
 	const shown = useRowData(props.rooms);
 	if (shown.length === 0) return null;
 	return (
-		<section
-			className="stack"
-			{...(props.zone
-				? { "data-drop-zone": props.zone.kind, "data-zone-id": props.zone.id }
-				: {})}
-		>
+		<section className="stack">
 			<h2 className="section-title">{props.title}</h2>
-			<RoomList
-				rooms={props.rooms}
-				threads={props.threads}
-				active={props.active}
-				arranging={props.arranging}
-			/>
+			<ul className="room-list">
+				{shown.map(({ key, ...row }) => {
+					const threads = props.threads[key];
+					return (
+						<RoomRow
+							key={key}
+							{...row}
+							active={key === props.active}
+							now={now}
+							timeZone={timeZone}
+							{...(threads
+								? {
+										threads: (
+											<ThreadList
+												open={threads.open}
+												closed={threads.closed}
+												active={props.active}
+											/>
+										),
+									}
+								: {})}
+						/>
+					);
+				})}
+			</ul>
 		</section>
 	);
 }
 
-/** What waits or works in a folded folder's rooms, so the fold hides nothing that needs the owner. */
-function FolderSummary(props: { rooms: string[] }) {
-	const summary = useSelector(
-		(state) => ({
-			waiting: props.rooms.reduce(
-				(sum, key) => sum + waitingCards(state, key),
-				0,
-			),
-			typing: props.rooms.some((key) => state.rooms[key]?.typing),
-		}),
-		props.rooms.join(","),
-	);
-	return (
-		<>
-			{summary.typing ? <Typing /> : null}
-			{summary.waiting ? <WaitingBadge count={summary.waiting} /> : null}
-		</>
-	);
+/** A room's dispatch threads by key, open and finished. */
+export interface ThreadKeys {
+	open: string[];
+	closed: string[];
 }
 
-/** The mute of a folder's rooms: none, some or all. */
-function useFolderMute(rooms: string[]) {
-	return useSelector(
-		(state) =>
-			muteState(rooms, (key) => state.rooms[key]?.view?.muted === true),
-		rooms.join(","),
-	);
-}
-
-function FolderRooms(props: {
-	folder: Sections["folders"][number];
-	threads: Record<string, ThreadKeys>;
-	active: string | undefined;
-	arranging: boolean;
-}) {
-	const { folder } = props;
-	const muted = useFolderMute(folder.rooms);
-	return (
-		<FolderBlock
-			id={folder.id}
-			name={folder.name}
-			count={folder.rooms.length}
-			holdsActive={
-				props.active !== undefined && folder.rooms.includes(props.active)
-			}
-			muted={muted}
-			summary={<FolderSummary rooms={folder.rooms} />}
-		>
-			<RoomList
-				rooms={folder.rooms}
-				threads={props.threads}
-				active={props.active}
-				arranging={props.arranging}
-			/>
-		</FolderBlock>
-	);
-}
-
-/** The page's menu: a new folder, and arrange mode, which shows each row's menu button. */
-function openRoomsMenu(
-	button: HTMLElement,
-	arranging: boolean,
-	setArranging: (next: boolean) => void,
-): void {
-	const box = button.getBoundingClientRect();
-	openMenu({
-		title: t("Rooms"),
-		items: [
-			{
-				id: "new-folder",
-				label: t("Add a folder"),
-				icon: "plus",
-				run: () => askFolderDialog({ kind: "new" }),
-			},
-			{
-				id: "arrange",
-				label: arranging ? t("Done") : t("Arrange"),
-				icon: arranging ? "check" : "list",
-				run: () => setArranging(!arranging),
-			},
-		],
-		at: { x: box.left, y: box.bottom },
-		via: "key",
-		source: button,
-	});
-}
-
-/**
- * Home first; then the pinned rooms and the owners' folders in their order; then the rest by latest
- * activity (agents and groups apart until there is a folder), each with its dispatch threads under
- * it, and what each is doing.
- */
-export function RoomsPage(props: {
+export interface RoomsPageProps {
 	onSearch(): void;
 	/** The room open beside the list, marked in it; the list is then a column, not a page. */
 	active?: string | undefined;
-}) {
-	// One string, so the page redraws only when the arrangement changes, not on every message.
-	const shape = useSelector((state) =>
-		JSON.stringify({
-			listed: state.listed,
-			...sections(state, (key) => activityAt(state, key)),
-		}),
+}
+
+const RoomsMenuButton = lazy(
+	() => import("../components/rooms-menu-button.tsx"),
+);
+
+// Pins, folders and the lift that moves rooms among them load once the owners have arranged anything.
+const ArrangedRoomsPage = lazy(() =>
+	import("./arranged-rooms.tsx").then((m) => ({
+		default: m.ArrangedRoomsPage,
+	})),
+);
+
+/** Home first, then the agents and the groups, each with its dispatch threads under it, and what each is doing. */
+export function RoomsPage(props: RoomsPageProps) {
+	const arranging = useArranging();
+	const arranged = useSelector(
+		(state) => state.pins.length + state.folders.length > 0,
 	);
-	const { listed, ...arrangement } = useMemo(
-		() => JSON.parse(shape) as { listed: boolean } & Sections,
+	return arranged || arranging ? (
+		<Suspense fallback={<div className="page skeleton" aria-busy="true" />}>
+			<ArrangedRoomsPage {...props} />
+		</Suspense>
+	) : (
+		<PlainRoomsPage {...props} />
+	);
+}
+
+function PlainRoomsPage(props: RoomsPageProps) {
+	// One string, so the page redraws only when the grouping changes, not on every message.
+	const shape = useSelector((state) => {
+		const groups: Record<"home" | "agents" | "groups", string[]> = {
+			home: [],
+			agents: [],
+			groups: [],
+		};
+		const threads: Record<string, ThreadKeys> = {};
+		const known = new Set(
+			state.order.filter((key) => state.rooms[key]?.view?.kind !== "thread"),
+		);
+		/** Threads whose room the list no longer has still show, apart. */
+		const orphans: ThreadKeys = { open: [], closed: [] };
+		for (const key of state.order) {
+			const view = state.rooms[key]?.view;
+			if (!view) continue;
+			if (view.kind === "thread") {
+				const parentKeys =
+					view.parent && known.has(view.parent) ? view.parent : undefined;
+				let into = orphans;
+				if (parentKeys) {
+					into = threads[parentKeys] ?? { open: [], closed: [] };
+					threads[parentKeys] = into;
+				}
+				(view.closed ? into.closed : into.open).push(key);
+			} else if (view.home) groups.home.push(key);
+			else if (view.kind === "agent") groups.agents.push(key);
+			else groups.groups.push(key);
+		}
+		return JSON.stringify({ listed: state.listed, groups, threads, orphans });
+	});
+	const { listed, groups, threads, orphans } = useMemo(
+		() =>
+			JSON.parse(shape) as {
+				listed: boolean;
+				groups: Record<"home" | "agents" | "groups", string[]>;
+				threads: Record<string, ThreadKeys>;
+				orphans: ThreadKeys;
+			},
 		[shape],
 	);
-	const {
-		home,
-		pinned,
-		folders,
-		restAgents,
-		restGroups,
-		rest,
-		threads,
-		orphans,
-	} = arrangement;
-	const [arranging, setArranging] = useState(false);
-	const folderIds = folders.map((folder) => folder.id).join(",");
-	// A fold kept for a folder that was deleted meanwhile (on another device) is forgotten.
-	useEffect(() => {
-		if (listed) pruneCollapsed(folderIds ? folderIds.split(",") : []);
-	}, [listed, folderIds]);
 	const none =
-		home.length + pinned.length + rest.length === 0 &&
-		folders.every((folder) => folder.rooms.length === 0) &&
+		Object.values(groups).every((list) => list.length === 0) &&
 		orphans.open.length + orphans.closed.length === 0;
-	const common = { threads, active: props.active, arranging };
 	return (
-		<div
-			className="page"
-			data-column={props.active ? "" : undefined}
-			data-drop-root=""
-		>
+		<div className="page" data-column={props.active ? "" : undefined}>
 			<header className="page-head">
 				<h1>{t("Rooms")}</h1>
 				<div className="actions">
@@ -484,19 +384,9 @@ export function RoomsPage(props: {
 						<span>{t("Find a room")}</span>
 						<kbd>⌘K</kbd>
 					</button>
-					{listed ? (
-						<button
-							type="button"
-							className="icon-button"
-							aria-haspopup="menu"
-							aria-label={t("Folders and order")}
-							onClick={(event) =>
-								openRoomsMenu(event.currentTarget, arranging, setArranging)
-							}
-						>
-							<Icon name="more" size={18} />
-						</button>
-					) : null}
+					<Suspense fallback={null}>
+						<RoomsMenuButton />
+					</Suspense>
 					<button
 						type="button"
 						className="icon-button"
@@ -508,21 +398,6 @@ export function RoomsPage(props: {
 					</button>
 				</div>
 			</header>
-			{arranging ? (
-				<div className="arrange-bar">
-					<button
-						type="button"
-						className="secondary"
-						onClick={() => askFolderDialog({ kind: "new" })}
-					>
-						<Icon name="plus" size={16} />
-						<span>{t("Add a folder")}</span>
-					</button>
-					<button type="button" onClick={() => setArranging(false)}>
-						{t("Done")}
-					</button>
-				</div>
-			) : null}
 			{listed && none ? (
 				<Empty>
 					{t("No rooms yet. Rooms appear when the team has an agent.")}
@@ -535,43 +410,24 @@ export function RoomsPage(props: {
 					<div className="skeleton" />
 				</div>
 			) : null}
-			<Section title={t("Home")} rooms={home} {...common} />
 			<Section
-				title={t("Pinned")}
-				rooms={pinned}
-				zone={{ kind: "pinned", id: "pinned" }}
-				{...common}
+				title={t("Home")}
+				rooms={groups.home}
+				threads={threads}
+				active={props.active}
 			/>
-			{folders.length > 0 ? (
-				<div className="stack folder-list" data-folder-list="">
-					{folders.map((folder) => (
-						<FolderRooms key={folder.id} folder={folder} {...common} />
-					))}
-				</div>
-			) : null}
-			{folders.length > 0 ? (
-				<Section
-					title={t("Ungrouped")}
-					rooms={rest}
-					zone={{ kind: "rest", id: "rest" }}
-					{...common}
-				/>
-			) : (
-				<>
-					<Section
-						title={t("Agents")}
-						rooms={restAgents}
-						zone={{ kind: "rest", id: "rest-agents" }}
-						{...common}
-					/>
-					<Section
-						title={t("Groups")}
-						rooms={restGroups}
-						zone={{ kind: "rest", id: "rest-groups" }}
-						{...common}
-					/>
-				</>
-			)}
+			<Section
+				title={t("Agents")}
+				rooms={groups.agents}
+				threads={threads}
+				active={props.active}
+			/>
+			<Section
+				title={t("Groups")}
+				rooms={groups.groups}
+				threads={threads}
+				active={props.active}
+			/>
 			{orphans.open.length + orphans.closed.length > 0 ? (
 				<section className="stack">
 					<h2 className="section-title">{t("Dispatch threads")}</h2>

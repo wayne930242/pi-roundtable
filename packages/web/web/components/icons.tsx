@@ -1,4 +1,5 @@
 import type { SVGProps } from "react";
+import type { LayoutIconName } from "../lib/layout-icons.ts";
 
 // A small set of line icons on a 24px grid, drawn here so the page loads nothing else.
 const PATHS = {
@@ -39,13 +40,6 @@ const PATHS = {
 	reset: "M4 4v6h6M4.5 10A8 8 0 1 1 6 16",
 	chevron: "M9 6l6 6-6 6",
 	lock: "M7 11V8a5 5 0 0 1 10 0v3M5 11h14v10H5zM12 15v2",
-	pin: "M9 4h6l-1 6 3 3H7l3-3-1-6ZM12 13v7",
-	folder:
-		"M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z",
-	up: "M6 15l6-6 6 6",
-	down: "M6 9l6 6 6-6",
-	plus: "M12 5v14M5 12h14",
-	edit: "M4 20h4L19 9l-4-4L4 16v4ZM13.5 6.5l4 4",
 	sparkle: "M12 3l2 5.5L19.5 10 14 12l-2 5.5L10 12l-5.5-2L10 8.5 12 3Z",
 	shield: "M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6l8-3Z",
 	table:
@@ -56,7 +50,13 @@ const PATHS = {
 		"M6 16V11a6 6 0 0 1 .8-3M9.5 5.2A6 6 0 0 1 18 11v5l1.5 2H8M10 21h4M4 4l16 16",
 } as const;
 
-export type IconName = keyof typeof PATHS;
+export type IconName = keyof typeof PATHS | LayoutIconName;
+
+/** Icons that modules loaded later bring with them, so the first load carries only what it draws. */
+const added: Record<string, string> = {};
+export const addIcons = (paths: Record<string, string>): void => {
+	Object.assign(added, paths);
+};
 
 export function Icon({
 	name,
@@ -77,7 +77,7 @@ export function Icon({
 			focusable="false"
 			{...rest}
 		>
-			<path d={PATHS[name]} />
+			<path d={PATHS[name as keyof typeof PATHS] ?? added[name]} />
 		</svg>
 	);
 }

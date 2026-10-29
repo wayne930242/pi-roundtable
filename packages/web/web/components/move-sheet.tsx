@@ -1,9 +1,10 @@
+import "../lib/layout-icons.ts";
 import { nudgeBefore } from "../../src/layout-order.ts";
 import { useSelector } from "../lib/app-store.ts";
 import { askFolderDialog } from "../lib/folder-dialogs.ts";
 import { moveRoom, nudgeRoom } from "../lib/layout-actions.ts";
+import { activityAt } from "../lib/layout-now.ts";
 import { translate as t } from "../lib/messages.ts";
-import { activityAt } from "../lib/rooms.ts";
 import { placeOf, sections } from "../lib/sections.ts";
 import { Dialog } from "./dialog.tsx";
 import { Icon } from "./icons.tsx";

@@ -11,9 +11,10 @@ import {
 	renameFolder,
 	setPinned,
 } from "../../src/layout-order.ts";
-import { api, messageOf } from "./api.ts";
+import { messageOf } from "./api.ts";
 import { store } from "./app-store.ts";
-import { arrangementNow, layoutNow } from "./layout.ts";
+import { layoutApi } from "./layout-api.ts";
+import { arrangementNow, layoutNow } from "./layout-now.ts";
 import { editFor, type RoomDrop } from "./reorder.ts";
 import { placeOf } from "./sections.ts";
 import { toast } from "./toast.ts";
@@ -65,7 +66,7 @@ export const pinRoom = (
 ) =>
 	apply(
 		(layout) => setPinned(layout, room, pinned, before),
-		() => api.pinRoom(room, pinned, before),
+		() => layoutApi.pinRoom(room, pinned, before),
 	);
 
 /** Puts a room in a folder before another room of it (`null` = last), or in none. */
@@ -76,7 +77,7 @@ export const moveRoom = (
 ) =>
 	apply(
 		(layout) => placeRoom(layout, room, folder, before),
-		() => api.placeRoom(room, folder, before),
+		() => layoutApi.placeRoom(room, folder, before),
 	);
 
 /** Moves a pinned room or a room of a folder one step; nothing when it is at that end or in neither. */
@@ -96,7 +97,7 @@ export async function createFolder(
 	fail: Fail = shout,
 ): Promise<string | undefined> {
 	try {
-		const answer = await api.createFolder(name);
+		const answer = await layoutApi.createFolder(name);
 		hold(answer);
 		// A new folder is last.
 		return answer.folders.at(-1)?.id;
@@ -109,7 +110,7 @@ export async function createFolder(
 export const renameFolderTo = (id: string, name: string, fail?: Fail) =>
 	apply(
 		(layout) => renameFolder(layout, id, name),
-		() => api.changeFolder(id, { name }),
+		() => layoutApi.changeFolder(id, { name }),
 		fail,
 	);
 
@@ -117,7 +118,7 @@ export const renameFolderTo = (id: string, name: string, fail?: Fail) =>
 export const placeFolderBefore = (id: string, before: string | null) =>
 	apply(
 		(layout) => placeFolder(layout, id, before),
-		() => api.changeFolder(id, { before }),
+		() => layoutApi.changeFolder(id, { before }),
 	);
 
 /** Moves a folder one step. */
@@ -134,14 +135,14 @@ export function nudgeFolder(id: string, direction: "up" | "down") {
 export const deleteFolder = (id: string, fail?: Fail) =>
 	apply(
 		(layout) => removeFolder(layout, id),
-		() => api.deleteFolder(id),
+		() => layoutApi.deleteFolder(id),
 		fail,
 	);
 
 /** Mutes or unmutes every room of a folder, and shows the bells at once. */
 export async function muteFolder(id: string, muted: boolean): Promise<boolean> {
 	try {
-		const answer = await api.muteFolder(id, muted);
+		const answer = await layoutApi.muteFolder(id, muted);
 		for (const room of answer.rooms)
 			store.dispatch({ type: "room_muted", room, muted: answer.muted });
 		return true;

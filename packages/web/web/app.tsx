@@ -50,11 +50,6 @@ const SheetHosts = lazy(() =>
 		default: m.SheetHosts,
 	})),
 );
-const FolderDialogHost = lazy(() =>
-	import("./components/folder-dialogs.tsx").then((m) => ({
-		default: m.FolderDialogHost,
-	})),
-);
 const RoomConfirmHost = lazy(() =>
 	import("./components/room-confirms.tsx").then((m) => ({
 		default: m.RoomConfirmHost,
@@ -513,7 +508,6 @@ function Console({ config }: { config: ConfigView }) {
 					<ActionMenuHost />
 					<SheetHosts />
 					<RoomConfirmHost />
-					<FolderDialogHost />
 					<Palette
 						open={palette}
 						onClose={() => setPalette(false)}

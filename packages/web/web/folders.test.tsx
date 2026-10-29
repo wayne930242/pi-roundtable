@@ -15,17 +15,16 @@ import type {
 	RoomView,
 } from "../src/api-types.ts";
 import { ActionMenuHost } from "./components/action-menu.tsx";
-import { FolderDialogHost } from "./components/folder-dialogs.tsx";
 import { RoomConfirmHost } from "./components/room-confirms.tsx";
 import { Toaster } from "./components/toaster.tsx";
 import { openPage, releaseDom, type TestPage } from "./dom.ts";
 import { closeMenu } from "./lib/action-menu.ts";
-import { api } from "./lib/api.ts";
 import { store } from "./lib/app-store.ts";
 import { ConfigContext } from "./lib/config.ts";
 import { clearFolderDialog } from "./lib/folder-dialogs.ts";
+import { COLLAPSED_KEY, reloadCollapsed } from "./lib/folds.ts";
 import { loadKit } from "./lib/kit.ts";
-import { COLLAPSED_KEY, reloadCollapsed } from "./lib/layout.ts";
+import { layoutApi } from "./lib/layout-api.ts";
 import { setRouting } from "./lib/router.ts";
 import { type AppConnection, setConnection } from "./lib/socket.ts";
 import { RoomsPage } from "./pages/rooms.tsx";
@@ -167,15 +166,22 @@ const List = (props: { active?: string }) => (
 		<RoomsPage onSearch={() => undefined} active={props.active} />
 		<ActionMenuHost />
 		<RoomConfirmHost />
-		<FolderDialogHost />
 		<Toaster />
 	</ConfigContext.Provider>
 );
 
+/** Renders the list and waits for the lazy folder chunk to draw the folders the store holds. */
+async function show(node: React.ReactNode): Promise<void> {
+	await page.render(node);
+	const want = store.getState().folders.length;
+	for (let i = 0; i < 160 && all("[data-folder-block]").length < want; i += 1)
+		await page.act(() => settle(25));
+}
+
 const WORK = { id: F1, name: "Work", rooms: [SCOUT] };
 
 test("with no pin and no folder the page is as it was: Home, Agents, Groups, no folder controls", async () => {
-	await page.render(<List />);
+	await show(<List />);
 	expect(headings()).toEqual(["Home", "Agents", "Groups"]);
 	expect(all(".folder")).toEqual([]);
 	// Normal mode: no menu button beside a row, no arrange bar.
@@ -188,7 +194,7 @@ test("Home leads, then the pinned rooms, the folders in order, and the rest as U
 		pins: [BUILD],
 		folders: [WORK, { id: F2, name: "Play", rooms: [] }],
 	});
-	await page.render(<List />);
+	await show(<List />);
 	expect(headings()).toEqual(["Home", "Pinned", "Work", "Play", "Ungrouped"]);
 	const names = all(".room-row strong").map((one) => one.textContent);
 	expect(names).toEqual(["guide", "build", "scout", "team"]);
@@ -198,7 +204,7 @@ test("Home leads, then the pinned rooms, the folders in order, and the rest as U
 	);
 	// A deleted agent's key in the layout shows nothing.
 	load({ pins: ["app:agent.deleted", BUILD] });
-	await page.render(<List />);
+	await show(<List />);
 	expect(all(".room-row strong").map((one) => one.textContent)).toEqual([
 		"guide",
 		"build",
@@ -209,7 +215,7 @@ test("Home leads, then the pinned rooms, the folders in order, and the rest as U
 
 test("a folder's header folds it, keeps the fold on this device, and counts its rooms", async () => {
 	load({ folders: [WORK] });
-	await page.render(<List />);
+	await show(<List />);
 	const toggle = q<HTMLButtonElement>(".folder-toggle");
 	expect(toggle?.getAttribute("aria-expanded")).toBe("true");
 	expect(toggle?.textContent).toContain("1 room");
@@ -228,10 +234,10 @@ test("the folder that holds the open room shows open while its stored fold stays
 	load({ folders: [WORK] });
 	stored.set(COLLAPSED_KEY, JSON.stringify([F1]));
 	reloadCollapsed();
-	await page.render(<List active={SCOUT} />);
+	await show(<List active={SCOUT} />);
 	expect(q(".folder-toggle")?.getAttribute("aria-expanded")).toBe("true");
 	expect(JSON.parse(stored.get(COLLAPSED_KEY) ?? "[]")).toEqual([F1]);
-	await page.render(<List active={BUILD} />);
+	await show(<List active={BUILD} />);
 	expect(q(".folder-toggle")?.getAttribute("aria-expanded")).toBe("false");
 });
 
@@ -253,7 +259,7 @@ test("a folded folder still shows a waiting card and the working dots of its roo
 		typing: true,
 		stoppable: true,
 	});
-	await page.render(<List />);
+	await show(<List />);
 	const head = q(".folder-head")?.textContent ?? "";
 	expect(head).toContain("1 card waiting");
 	expect(q(".folder-head .typing")).not.toBeNull();
@@ -265,15 +271,15 @@ test("a folded folder still shows a waiting card and the working dots of its roo
 
 test("a folder shows a bell-slash when all its rooms are muted and a fainter one when some are", async () => {
 	load({ folders: [{ id: F1, name: "Work", rooms: [SCOUT, BUILD] }] });
-	await page.render(<List />);
+	await show(<List />);
 	expect(q(".folder-head .muted-mark")).toBeNull();
 	store.dispatch({ type: "room_muted", room: SCOUT, muted: true });
-	await page.render(<List />);
+	await show(<List />);
 	const some = q(".folder-head .muted-mark");
 	expect(some?.getAttribute("aria-label")).toBe("Some notifications are off");
 	expect(some?.hasAttribute("data-partial")).toBe(true);
 	store.dispatch({ type: "room_muted", room: BUILD, muted: true });
-	await page.render(<List />);
+	await show(<List />);
 	const every = q(".folder-head .muted-mark");
 	expect(every?.getAttribute("aria-label")).toBe("Notifications are off");
 	expect(every?.hasAttribute("data-partial")).toBe(false);
@@ -283,7 +289,7 @@ test("the folder menu renames, mutes, steps and deletes; the ends have no step",
 	load({
 		folders: [WORK, { id: F2, name: "Play", rooms: [BUILD] }],
 	});
-	await page.render(<List />);
+	await show(<List />);
 	await rightClick(q(`[data-folder="${F1}"] .folder-head`));
 	expect(labels()).toEqual([
 		"Rename",
@@ -303,12 +309,12 @@ test("the folder menu renames, mutes, steps and deletes; the ends have no step",
 
 test("muting a whole folder asks the server once and shows the bells at once; unmuting reverses it", async () => {
 	load({ folders: [{ id: F1, name: "Work", rooms: [SCOUT, TEAM] }] });
-	const mute = spyOn(api, "muteFolder").mockResolvedValue({
+	const mute = spyOn(layoutApi, "muteFolder").mockResolvedValue({
 		muted: true,
 		rooms: [SCOUT, TEAM],
 	});
 	try {
-		await page.render(<List />);
+		await show(<List />);
 		await rightClick(q(".folder-head"));
 		await choose("Mute the whole folder");
 		expect(mute).toHaveBeenCalledWith(F1, true);
@@ -327,12 +333,12 @@ test("muting a whole folder asks the server once and shows the bells at once; un
 
 test("deleting a folder asks first, with the words of the spec, and then deletes it", async () => {
 	load({ folders: [WORK] });
-	const remove = spyOn(api, "deleteFolder").mockResolvedValue({
+	const remove = spyOn(layoutApi, "deleteFolder").mockResolvedValue({
 		pins: [],
 		folders: [],
 	});
 	try {
-		await page.render(<List />);
+		await show(<List />);
 		await rightClick(q(".folder-head"));
 		await choose("Delete folder");
 		expect(remove).not.toHaveBeenCalled();
@@ -353,12 +359,12 @@ test("deleting a folder asks first, with the words of the spec, and then deletes
 
 test("renaming shows the folder's name, refuses an empty one before asking the server, and sends the new one", async () => {
 	load({ folders: [WORK] });
-	const change = spyOn(api, "changeFolder").mockResolvedValue({
+	const change = spyOn(layoutApi, "changeFolder").mockResolvedValue({
 		pins: [],
 		folders: [{ ...WORK, name: "Office" }],
 	});
 	try {
-		await page.render(<List />);
+		await show(<List />);
 		await rightClick(q(".folder-head"));
 		await choose("Rename");
 		const form = dialog("Rename folder");
@@ -388,11 +394,11 @@ test("renaming shows the folder's name, refuses an empty one before asking the s
 });
 
 test("the page's menu adds a folder outside arrange mode, and shows the server's refusal inside the dialog", async () => {
-	const create = spyOn(api, "createFolder").mockRejectedValue(
+	const create = spyOn(layoutApi, "createFolder").mockRejectedValue(
 		new Error("A folder of that name exists."),
 	);
 	try {
-		await page.render(<List />);
+		await show(<List />);
 		await page.click(q('[aria-label="Folders and order"]'));
 		await settle(40);
 		await choose("Add a folder");
@@ -425,7 +431,7 @@ test("the page's menu adds a folder outside arrange mode, and shows the server's
 });
 
 test("arrange mode shows a menu button on each row and a bar to add a folder; Done takes them away", async () => {
-	await page.render(<List />);
+	await show(<List />);
 	await page.click(q('[aria-label="Folders and order"]'));
 	await settle(40);
 	await choose("Arrange");
@@ -439,12 +445,12 @@ test("arrange mode shows a menu button on each row and a bar to add a folder; Do
 });
 
 test("a row's menu pins and unpins it, and the list follows the server's answer", async () => {
-	const pin = spyOn(api, "pinRoom").mockResolvedValue({
+	const pin = spyOn(layoutApi, "pinRoom").mockResolvedValue({
 		pins: [SCOUT],
 		folders: [],
 	});
 	try {
-		await page.render(<List />);
+		await show(<List />);
 		await rightClick(rowOf("scout"));
 		expect(labels().slice(0, 2)).toEqual(["Pin", "Move to folder…"]);
 		await choose("Pin");
@@ -463,7 +469,7 @@ test("a row's menu pins and unpins it, and the list follows the server's answer"
 
 test("Home has no pin and no folder in its menu; a pinned room can step up and down", async () => {
 	load({ pins: [SCOUT, BUILD, TEAM] });
-	await page.render(<List />);
+	await show(<List />);
 	await rightClick(rowOf("guide"));
 	expect(labels()).not.toContain("Pin");
 	expect(labels()).not.toContain("Move to folder…");
@@ -483,7 +489,7 @@ test("Home has no pin and no folder in its menu; a pinned room can step up and d
 		"Move down",
 	]);
 	await page.act(() => closeMenu());
-	const place = spyOn(api, "pinRoom").mockResolvedValue({
+	const place = spyOn(layoutApi, "pinRoom").mockResolvedValue({
 		pins: [BUILD, SCOUT, TEAM],
 		folders: [],
 	});
@@ -504,7 +510,7 @@ test("Home has no pin and no folder in its menu; a pinned room can step up and d
 
 test("Move to folder lists the folders and Ungrouped, marks where the room is, and moves it", async () => {
 	load({ folders: [WORK, { id: F2, name: "Play", rooms: [] }] });
-	const place = spyOn(api, "placeRoom").mockResolvedValue({
+	const place = spyOn(layoutApi, "placeRoom").mockResolvedValue({
 		pins: [],
 		folders: [
 			{ ...WORK, rooms: [] },
@@ -512,7 +518,7 @@ test("Move to folder lists the folders and Ungrouped, marks where the room is, a
 		],
 	});
 	try {
-		await page.render(<List />);
+		await show(<List />);
 		await rightClick(rowOf("scout"));
 		await choose("Move to folder…");
 		const sheet = dialog("Move to folder…");
@@ -535,16 +541,16 @@ test("Move to folder lists the folders and Ungrouped, marks where the room is, a
 });
 
 test("Move to folder can add a folder first and then moves the room into it", async () => {
-	const create = spyOn(api, "createFolder").mockResolvedValue({
+	const create = spyOn(layoutApi, "createFolder").mockResolvedValue({
 		pins: [],
 		folders: [{ id: F2, name: "Play", rooms: [] }],
 	});
-	const place = spyOn(api, "placeRoom").mockResolvedValue({
+	const place = spyOn(layoutApi, "placeRoom").mockResolvedValue({
 		pins: [],
 		folders: [{ id: F2, name: "Play", rooms: [BUILD] }],
 	});
 	try {
-		await page.render(<List />);
+		await show(<List />);
 		await rightClick(rowOf("build"));
 		await choose("Move to folder…");
 		await page.click(
@@ -573,7 +579,7 @@ test("Move to folder can add a folder first and then moves the room into it", as
 
 test("a row can be lifted: it and its folder block carry what the drag looks for", async () => {
 	load({ pins: [BUILD], folders: [WORK] });
-	await page.render(<List />);
+	await show(<List />);
 	const row = rowOf("scout")?.closest("li");
 	expect(row?.getAttribute("data-drop-item")).toBe("");
 	expect(row?.getAttribute("data-key")).toBe(SCOUT);
@@ -621,7 +627,7 @@ function pointer(
 
 test("a finger that rests on a row lifts it, and letting go without moving opens its menu", async () => {
 	load({ folders: [WORK] });
-	await page.render(<List />);
+	await show(<List />);
 	const row = rowOf("scout") as HTMLElement;
 	const item = row.closest("li") as HTMLElement;
 	await page.act(async () => {
@@ -638,7 +644,7 @@ test("a finger that rests on a row lifts it, and letting go without moving opens
 });
 
 test("a finger that goes down within 32 px of a screen edge never lifts a row: the hold opens the menu as before", async () => {
-	await page.render(<List />);
+	await show(<List />);
 	const row = rowOf("scout") as HTMLElement;
 	// The menu opens from a timer, so the wait is inside `act` for React to draw it.
 	await page.act(async () => {
@@ -654,7 +660,7 @@ test("a finger that goes down within 32 px of a screen edge never lifts a row: t
 test("a mouse lifts a row once it moves with the button down, and the click after the drop does not open the row", async () => {
 	window.location.hash = "#/rooms";
 	load({ folders: [WORK] });
-	await page.render(<List />);
+	await show(<List />);
 	const row = rowOf("scout") as HTMLElement;
 	const item = row.closest("li") as HTMLElement;
 	await page.act(() =>

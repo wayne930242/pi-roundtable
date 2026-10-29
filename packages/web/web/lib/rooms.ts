@@ -13,7 +13,6 @@ import type {
 	ServerFrame,
 	UploadView,
 } from "../../src/api-types.ts";
-import { drawerGroups } from "./sections.ts";
 
 // The owner app's state: a pure reducer over the socket's frames and the page's own actions, so
 // what the page shows can be tested without a browser. Nothing here touches the DOM or the clock.
@@ -702,23 +701,32 @@ export function waitingCards(state: RoomsState, room: string): number {
 	}).length;
 }
 
-/** When the room last said something, in epoch ms; a number below any real one for a room that has not. */
-export function activityAt(state: RoomsState, room: string): number {
-	const at = Date.parse(lastMessage(state, room)?.at ?? "");
-	return Number.isNaN(at) ? Number.NEGATIVE_INFINITY : at;
-}
-
 /**
- * The rooms the switcher lists, flat: those with a card waiting for an answer first, then the owners'
- * pinned rooms and folders in their order, then the rest by newest message (a room without one last,
- * in the server's order). Dispatch threads are reached from their room and are not listed.
+ * The rooms the switcher lists: those with a card waiting for an answer first, then the rest, each
+ * group by its newest message (a room without one last, in the server's order). Dispatch threads
+ * are reached from their room and are not listed.
  */
 export function switcherOrder(state: RoomsState): string[] {
-	return drawerGroups(
-		state,
-		(key) => activityAt(state, key),
-		(key) => waitingCards(state, key) > 0,
-	).flatMap((group) => group.keys);
+	const rooms = state.order.flatMap((key, index) => {
+		const view = state.rooms[key]?.view;
+		if (!view || view.kind === "thread") return [];
+		const at = Date.parse(lastMessage(state, key)?.at ?? "");
+		return [
+			{
+				key,
+				index,
+				waiting: waitingCards(state, key) > 0,
+				at: Number.isNaN(at) ? Number.NEGATIVE_INFINITY : at,
+			},
+		];
+	});
+	return rooms
+		.sort(
+			(a, b) =>
+				Number(b.waiting) - Number(a.waiting) ||
+				(a.at === b.at ? a.index - b.index : b.at - a.at),
+		)
+		.map((room) => room.key);
 }
 
 /** The banner a room shows while a mode is on; none when both are off. */
