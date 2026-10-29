@@ -106,6 +106,33 @@ export interface EditorHandle {
 	destroy(): void;
 }
 
+/**
+ * Where the editor goes. The page's Content-Security-Policy has no `style-src`, so it falls back to
+ * `default-src 'self'` and the `<style>` element CodeMirror adds to the document is not applied: the
+ * editor would come up unstyled. Style rules in a shadow root are adopted as a constructed
+ * stylesheet, which that policy does not block, so the editor lives in one; the page's colors and
+ * fonts reach it as CSS variables, which cross the boundary. Without the support (an old browser),
+ * the editor mounts in the page and takes the policy's word for what it may style.
+ */
+function mountPoint(host: HTMLElement): {
+	parent: HTMLElement | ShadowRoot;
+	root: ShadowRoot | undefined;
+} {
+	if (
+		typeof host.attachShadow !== "function" ||
+		typeof CSSStyleSheet === "undefined" ||
+		!("adoptedStyleSheets" in Document.prototype)
+	)
+		return { parent: host, root: undefined };
+	const root = host.shadowRoot ?? host.attachShadow({ mode: "open" });
+	const sheet = new CSSStyleSheet();
+	sheet.replaceSync(
+		":host{display:flex;flex-direction:column;min-height:0}.cm-editor{flex:1;min-height:0}",
+	);
+	root.adoptedStyleSheets = [...root.adoptedStyleSheets, sheet];
+	return { parent: root, root };
+}
+
 /** Makes an editor in `parent`. */
 export async function createEditor(
 	options: EditorOptions,
@@ -163,8 +190,10 @@ export async function createEditor(
 		}),
 	];
 
+	const mount = mountPoint(options.parent);
 	const view = new EditorView({
-		parent: options.parent,
+		parent: mount.parent,
+		root: mount.root,
 		state: EditorState.create({
 			doc: options.text,
 			extensions: extensions(options.eol),

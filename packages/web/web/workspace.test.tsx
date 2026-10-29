@@ -189,6 +189,10 @@ const settle = (ms = 30) =>
 	page.act(() => new Promise((done) => setTimeout(done, ms)));
 const query = <T extends Element>(selector: string): T | null =>
 	page.container.querySelector<T>(selector);
+/** The editor lives in a shadow root of the pane's `.ws-editor`, so the page's queries do not see it. */
+const inEditor = <T extends Element>(selector: string): T | null =>
+	query<HTMLElement>(".ws-editor")?.shadowRoot?.querySelector<T>(selector) ??
+	query<T>(selector);
 const all = (selector: string) => [
 	...page.container.querySelectorAll(selector),
 ];
@@ -225,7 +229,7 @@ async function editorView(): Promise<EditorView> {
 	// and the page's own editor chunk is the same module.
 	const { EditorView: View } = await import("@codemirror/view");
 	for (let tries = 0; tries < 60; tries++) {
-		const dom = query<HTMLElement>(".cm-editor");
+		const dom = inEditor<HTMLElement>(".cm-editor");
 		const found = dom ? View.findFromDOM(dom) : null;
 		if (found) return found;
 		await settle(25);
@@ -312,9 +316,27 @@ test("a file opens in read mode with its text highlighted by the editor, which s
 	expect(editor.state.readOnly).toBe(true);
 	// TypeScript was loaded as its own chunk: `const` is a keyword token with a class.
 	await settle(150);
-	expect(query(".cm-content")?.getAttribute("contenteditable")).toBe("false");
+	expect(inEditor(".cm-content")?.getAttribute("contenteditable")).toBe(
+		"false",
+	);
 	expect(query(".ws-file-title strong")?.textContent).toBe("main.ts");
 	expect(query(".ws-actions button")?.textContent).toBe("Edit");
+});
+
+test("the editor lives in a shadow root and adds no <style> to the page, whose Content-Security-Policy would not apply it", async () => {
+	await show("#/workspace/agents%3Asrc%2Fmain.ts");
+	await editorView();
+	const host = query<HTMLElement>(".ws-editor");
+	expect(host?.shadowRoot).toBeTruthy();
+	// Its rules are adopted as constructed stylesheets (the editor's own, and the host's layout).
+	expect(host?.shadowRoot?.adoptedStyleSheets.length).toBeGreaterThanOrEqual(2);
+	// Nothing of the editor is in the light DOM, and no <style> element carries its rules.
+	expect(host?.querySelector(".cm-editor")).toBeNull();
+	expect(host?.shadowRoot?.querySelector(".cm-editor")).toBeTruthy();
+	const styles = [...document.querySelectorAll("style")].map(
+		(one) => one.textContent ?? "",
+	);
+	expect(styles.filter((text) => text.includes(".cm-"))).toEqual([]);
 });
 
 test("editing marks the title and holds the page: a link to another pane asks first, and Keep editing stays", async () => {
@@ -351,7 +373,7 @@ test("Ctrl+S saves with the hash the file was read with, and the line separator 
 			changes: { from: 0, insert: `// edited${editor.state.lineBreak}` },
 		});
 	});
-	const content = query<HTMLElement>(".cm-content");
+	const content = inEditor<HTMLElement>(".cm-content");
 	await page.act(() => {
 		content?.dispatchEvent(
 			new KeyboardEvent("keydown", { key: "s", ctrlKey: true, bubbles: true }),
@@ -438,7 +460,7 @@ test("Save mine anyway asks a second time, then writes with the hash the conflic
 test("a binary or too large file is a card with Download, and no editor", async () => {
 	await show("#/workspace/agents%3Adata%2Fblob.bin");
 	await settle(50);
-	expect(query(".cm-editor")).toBeNull();
+	expect(inEditor(".cm-editor")).toBeNull();
 	expect(query(".ws-card")?.textContent).toContain(
 		"This file is not text, so it cannot be shown here.",
 	);
