@@ -6,6 +6,7 @@ import {
 import type { ChannelKey } from "../domain/conversation.ts";
 import { AgentError } from "../domain/errors.ts";
 import type { AgentTurnScope } from "../domain/ports.ts";
+import { messages } from "../i18n/index.ts";
 import type { AgentChannels } from "./agent-ports.ts";
 import { overBase } from "./agent-rules.ts";
 import type { Agent, AgentGroup } from "./agent-store.ts";
@@ -278,10 +279,11 @@ export class TeamLifecycle {
 	/**
 	 * Deletes an archived agent or group for good, its name free again. Its carried skills are
 	 * detached; a Discord channel it had stays under Archive with its history, since Discord is
-	 * never asked to delete one. An active agent or group is refused: archive it first.
+	 * never asked to delete one. An active agent or group is refused: archive it first, and so is an
+	 * agent the host's seeds name, since the next start would seed it again.
 	 */
 	async remove(name: string): Promise<string> {
-		const { store, skills, logger } = this.#ctx.options;
+		const { store, skills, seeds, logger } = this.#ctx.options;
 		const agent = store.agent(name);
 		const group = agent ? undefined : store.group(name);
 		const target = agent ?? group;
@@ -289,6 +291,9 @@ export class TeamLifecycle {
 			throw new AgentError(
 				`There is no agent or group "${name}"; see agent_list.`,
 			);
+		// Every start seeds the configured agents that are missing, so a deleted one would return.
+		if (agent && seeds().some((seed) => seed.name === name))
+			throw new AgentError(messages().agentSeededNotDeleted);
 		if (target.status === "active")
 			throw new AgentError(
 				`"${name}" is active; archive it before deleting it.`,

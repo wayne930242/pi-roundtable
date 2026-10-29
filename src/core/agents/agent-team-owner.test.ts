@@ -190,6 +190,17 @@ describeDb("an owner's operations on the team (Discord)", () => {
 			await expect(fx.team.remove("nobody")).rejects.toThrow(AgentError);
 		});
 
+		test("remove refuses an agent the configuration seeds, which the next start would seed again", async () => {
+			await fx.team.archive(undefined, "doctor");
+			await expect(fx.team.remove("doctor")).rejects.toThrow(
+				/Remove it from the configuration first/,
+			);
+			expect(fx.store.agent("doctor")?.status).toBe("archived");
+			// Active or not, the refusal is about where the agent comes from.
+			await expect(fx.team.remove("infra")).rejects.toThrow(/configuration/);
+			expect(fx.store.agent("infra")?.status).toBe("active");
+		});
+
 		test("remove deletes an archived group with its messages", async () => {
 			await fx.team.createGroup({
 				name: "pair",

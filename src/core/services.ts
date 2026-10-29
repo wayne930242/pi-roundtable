@@ -307,7 +307,8 @@ export interface AgentTeam {
 	restore(name: string): Promise<string>;
 	/**
 	 * Deletes an archived agent or group for good and frees its name. Throws AgentError for an
-	 * unknown name and for an active one: archive it first.
+	 * unknown name, for an active one (archive it first), and for an agent the host's seeds name,
+	 * which the next start would seed again.
 	 */
 	remove(name: string): Promise<string>;
 	/** Creates a group of 2 to 6 agents; the host is the first member unless given. */

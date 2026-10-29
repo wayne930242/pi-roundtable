@@ -29,6 +29,8 @@ export function agentPanelEn(ctx: CatalogContext) {
 		agentDefaultNote:
 			"A changed prompt takes effect from this agent's next turn; the conversation history is kept.",
 		agentNotFound: "That agent was not found.",
+		agentSeededNotDeleted:
+			"This agent comes from the host's configuration, so it would return at the next start. Remove it from the configuration first.",
 		agentFollowAssistant: (value: string) =>
 			`Follow ${ctx.assistant} (${value})`,
 		agentModelModalTitle: (displayName: string) => `${displayName}'s model`,
@@ -76,6 +78,8 @@ export function agentPanelZhTW(
 		agentDefaultNote:
 			"提示詞改完，從這個 agent 的下一回合開始生效；對話紀錄保留。",
 		agentNotFound: "找不到這個 agent。",
+		agentSeededNotDeleted:
+			"這個 agent 來自主機的設定，刪除後下次啟動又會出現。請先從設定中移除它。",
 		agentFollowAssistant: (value: string) =>
 			`跟隨 ${ctx.assistant}（${value}）`,
 		agentModelModalTitle: (displayName: string) => `${displayName} 的模型`,
