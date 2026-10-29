@@ -49,6 +49,12 @@ export const configSchema = shape({
 		}),
 	),
 	discord: optional(discordShape),
+	agentServer: optional(
+		guarded(
+			"false, to leave the agent server out (leave the key out to keep it)",
+			(value): value is false => value === false,
+		),
+	),
 	database: shape({ url: text }),
 	dataDir: text,
 	attachments: attachmentsShape,

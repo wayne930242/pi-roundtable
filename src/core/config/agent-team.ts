@@ -41,3 +41,39 @@ export function checkAgentTeamKeys(
 			"config skills: the skills are the agents', and this host has none: without discord they need agents. Configure agents or discord, or remove skills.",
 		);
 }
+
+/** The keys of the configuration, as written, that only the agent server uses. */
+interface AgentOnlyKeys {
+	agents?: readonly unknown[];
+	skills?: unknown;
+	ops?: { agent?: string; conversation?: string };
+	discord?: {
+		agentMemory?: unknown;
+		agentSpeakers?: unknown;
+		attachmentDownload?: unknown;
+	};
+}
+
+/**
+ * Refuses, for `agentServer: false`, what only the agent server uses, as the configuration
+ * writes it (not as defaults fill it): the seeds need the server to create them. An empty `agents`
+ * list and `skills: false` say nothing, so they pass.
+ */
+export function checkAgentServerOff(config: AgentOnlyKeys): void {
+	const used: [string, boolean][] = [
+		["agents", (config.agents?.length ?? 0) > 0],
+		["skills", config.skills !== undefined && config.skills !== false],
+		["ops.agent", config.ops?.agent !== undefined],
+		["discord.agentMemory", config.discord?.agentMemory !== undefined],
+		["discord.agentSpeakers", config.discord?.agentSpeakers !== undefined],
+		[
+			"discord.attachmentDownload",
+			config.discord?.attachmentDownload !== undefined,
+		],
+	];
+	const found = used.find(([, set]) => set);
+	if (found)
+		throw new ConfigError(
+			`config ${found[0]}: only the agent server uses it, and agentServer is false. Remove ${found[0]}, or remove agentServer to keep the agent server.`,
+		);
+}

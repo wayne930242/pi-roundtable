@@ -74,7 +74,7 @@ export default {
 | --- | --- | --- | --- |
 | `discord.token` | string，使用 Discord 時必填 | 無 | bot token。放在 `.env`。 |
 | `discord.guild` | string，使用 Discord 時必填 | 無 | agent 伺服器的 guild id。 |
-| `discord.entryChannel` | string，使用 Discord 時必填 | 無 | 協調者所在頻道的 id。 |
+| `discord.entryChannel` | string，使用 Discord 時必填，`agentServer` 為 `false` 時除外 | 無 | 協調者所在頻道的 id。 |
 | `discord.rootCommand` | string | 小寫的 `name`，其中每一段 `a-z`、`0-9`、`-` 以外的字元換成 `-` | 根斜線指令，不含斜線。見[斜線指令](/zh-tw/reference/slash-commands/)。 |
 | `discord.admin` | boolean | `true` | owner 的對話是否有 `discord_*` 管理工具。設成 `false` 會讓 `discord-admin` addon 不載入。 |
 | `discord.refusalHint` | string | 無 | 附加在根指令拒絕非 owner 時的訊息後面的文字，原樣加上。你的語言需要的空格或標點，要自己放進去。 |
@@ -86,6 +86,7 @@ export default {
 | `discord.cardGraceSeconds` | 1 到 86400 的整數 | `120` | 一輪為了核准卡或 `ask_user` 卡片等多久，之後這一輪結束、卡片繼續開著。 |
 | `discord.cardCopies` | `{ keepDays?, keep? }`，或 `false` | 30 天、最新 100 張 | 核准卡「複製」按鈕背後的文字，在資料目錄的 `card-copies.json` 保留多久。`false` 只留在記憶體。 |
 | `discord.attachmentDownload` | `{ deadlineMs?, idleMs? }` | `60000` 與 `10000` | 一則訊息（連同它回覆的那則）的附件要在多久內下載完，以及單一檔案多久沒收到任何位元組就放棄。各為 1000 到 600000。 |
+| `agentServer` | `false` | agent server 照常執行 | `false` 讓有 `discord` 的 host 不跑 agent server：沒有 agent 團隊、沒有 `#dashboard` 頻道與置頂訊息、沒有 agent 頻道與路由、沒有協調者，也沒有技能 addon。Discord、存取、記憶、指令與外掛的 claim 照常運作。`discord.entryChannel` 與 `http.publicUrl` 變成選填（`discord.guild` 仍必填）。與 `agents`、`skills`、`ops.agent`、`discord.agentMemory`、`discord.agentSpeakers`、`discord.attachmentDownload` 同時設定會出現指名兩個鍵的 `ConfigError`；需要 agent server 的外掛（網頁主控台的 agents 與 rooms 面板、remote-mcp 的預設對話）會讓啟動中止。`doctor` 會回報 agent server 已關閉，並略過入口頻道檢查。沒有 `true`；要保留 agent server 就不要寫這個鍵。 |
 | `adapters` | adapter 的清單 | 無 | host 使用的聊天管道，各由自己的工廠函式產生。Discord adapter 接受上面這些 `discord` 設定。以外掛形式提供的聊天管道（例如網頁聊天）仍放在 `plugins`。 |
 
 ## 儲存與檔案
@@ -148,7 +149,7 @@ export default {
 | `coordinator` | string | `agents` 的第一位 | 沒有 Discord 時，接手主人一般請求的 agent；必須是 `agents` 之一，也不能被封存。有 Discord 時設它會出錯，因為 `discord.entryChannel` 裡的 agent 就是協調者。 |
 | `characters.skins` | 剛好 6 個 `#rrggbb` 顏色的清單 | 套件附帶的六個 | 所有 agent 角色使用的膚色，由角色的 `skin` 索引（0 到 5）挑選：網頁主控台、圓桌與 agent 在 Discord 的圖片都會套用。`pi-roundtable/characters` 的 `EAST_ASIAN_SKINS` 是一組現成的亞洲淺膚色。agent 保留已存的索引，換色不需要遷移。清單長度不對或顏色格式錯誤會讓啟動失敗。 |
 | `avatar` | string | 套件附帶的一張簡單 bot 圖片 | 0.23 起已棄用且被忽略：agent 是組合出來的角色。設了它啟動時會記一則警告，1.0 移除。 |
-| `http.publicUrl` | string，使用 Discord 時必填 | 無 | 能從網際網路連到這個行程的位址。Discord 從這裡取頭像。 |
+| `http.publicUrl` | string，使用 Discord 時必填，`agentServer` 為 `false` 時除外 | 無 | 能從網際網路連到這個行程的位址。Discord 從這裡取頭像。 |
 | `http.port` | 1 到 65535 的整數 | `3000` | 行程監聽的 TCP port。 |
 | `http.hostname` | string | 無 | 監聽綁定的 hostname。 |
 | `http.socketPath` | string | 無 | 監聽用的 unix socket 路徑，取代 TCP port。設定後，`port` 和 `hostname` 就不使用。 |

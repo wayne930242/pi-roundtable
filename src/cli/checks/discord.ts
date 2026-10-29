@@ -151,11 +151,14 @@ export async function checkIntents(discord: Discord): Promise<Result> {
 	return ok("the Message Content intent is on");
 }
 
-/** The entry channel exists in the guild and the bot may do in it what the agents do. */
+/** The entry channel exists in the guild and the bot may do in it what the agents do; skipped when the agent server is off, which has no entry channel. */
 export async function checkChannel(
 	project: Project,
 	discord: Discord,
 ): Promise<Result> {
+	const raw = await project.raw();
+	if (raw.ok && object(raw.value).agentServer === false)
+		return skipped("agent server: off (config agentServer: false)");
 	const channel = await project.text("discord", "entryChannel");
 	const guild = await project.text("discord", "guild");
 	if (!channel || !guild)

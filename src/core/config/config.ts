@@ -25,7 +25,7 @@ import {
 	type ResolvedDiscord,
 	resolvedDiscord,
 } from "./adapters.ts";
-import { checkAgentTeamKeys } from "./agent-team.ts";
+import { checkAgentServerOff, checkAgentTeamKeys } from "./agent-team.ts";
 import type { AttachmentsConfig } from "./attachments.ts";
 import { configSchema } from "./config-schema.ts";
 import { type LimitsConfig, limitsOf, type ResolvedLimits } from "./limits.ts";
@@ -82,6 +82,17 @@ export interface RoundtableConfig extends LimitsConfig {
 	 * instead, never both.
 	 */
 	discord?: DiscordConfig;
+	/**
+	 * `false` leaves the agent server out of a host that has `discord`: no agent team, no
+	 * `#dashboard` channel or pinned message, no agent channels or routes, no coordinator, and no
+	 * skills addon. Discord, access, memory, commands and the plugins' claims work as before;
+	 * `discord.entryChannel` is optional and `http.publicUrl` is no longer required (it serves only
+	 * the agents' avatars). Refused together with anything only agents use: `agents`, `skills`,
+	 * `ops.agent`, `discord.agentMemory`, `discord.agentSpeakers`, `discord.attachmentDownload`.
+	 * Plugins that need the agent server (pi-roundtable-web, remote-mcp's default conversation)
+	 * stop startup. Left out, the agent server runs; there is no `true`.
+	 */
+	agentServer?: false;
 	/**
 	 * The chat networks the host talks through, each made by its adapter's factory, such as
 	 * `discord()` from `pi-roundtable/discord`. A Discord adapter is the same as the top-level
@@ -227,6 +238,8 @@ export interface ResolvedConfig extends ResolvedLimits {
 	deprecations: string[];
 	/** Undefined on a host without Discord. */
 	discord?: ResolvedDiscord;
+	/** Whether the agent server runs: false when `agentServer: false`, and otherwise on a host with `discord` or `agents`. */
+	agentServer: boolean;
 	databaseUrl: string;
 	dataDir: string;
 	/** Absent `retention`: used files live as long as their conversation. */
@@ -252,7 +265,7 @@ export interface ResolvedConfig extends ResolvedLimits {
 	characters: { skins: readonly Hex[] };
 	/** Undefined when no `http` is configured, and the host opens no `public` listener. */
 	http?: {
-		/** Always set with Discord. */
+		/** Always set with Discord, unless `agentServer` is false. */
 		publicUrl?: string;
 		port: number;
 		hostname?: string;
@@ -296,7 +309,13 @@ export function resolveConfig(input: unknown): ResolvedConfig {
 	const model = modelOf(config.model, "model");
 	const thinking = config.thinking ?? "medium";
 	const { discord, http } = config;
-	if (discord && !http?.publicUrl)
+	const agentServer = config.agentServer !== false;
+	if (!agentServer) checkAgentServerOff(config);
+	if (discord && agentServer && !discord.entryChannel)
+		throw new ConfigError(
+			"config discord.entryChannel: required, expected the id of the channel the coordinator lives in. Add it to roundtable.config.ts, or set agentServer: false for a host without agents.",
+		);
+	if (discord && agentServer && !http?.publicUrl)
 		throw new ConfigError(
 			"config http.publicUrl: required with discord, expected the public address that reaches the bot; Discord fetches the agents' avatars from it. Add it to roundtable.config.ts.",
 		);
@@ -351,6 +370,9 @@ export function resolveConfig(input: unknown): ResolvedConfig {
 		toolTiers: config.toolTiers ?? {},
 		prompts: config.prompts ?? {},
 		agents: config.agents ?? [],
+		agentServer:
+			agentServer &&
+			(discord !== undefined || (config.agents?.length ?? 0) > 0),
 		...(!discord && config.agents?.[0]
 			? { coordinator: config.coordinator ?? config.agents[0].name }
 			: {}),
@@ -372,7 +394,9 @@ export function resolveConfig(input: unknown): ResolvedConfig {
 		workDir: config.workDir ?? `${config.dataDir}/work`,
 		scratchDir: config.scratchDir ?? join(tmpdir(), `${slug}-scratch`),
 		// Without Discord and without agents there is no one to carry skills, so the addon is off.
-		skills: config.skills ?? (discord || config.agents?.length ? {} : false),
+		skills: agentServer
+			? (config.skills ?? (discord || config.agents?.length ? {} : false))
+			: false,
 		memory: config.memory ?? true,
 		...(ops ? { ops } : {}),
 		drainMs: (config.drainSeconds ?? DRAIN_LIMIT_MS / 1_000) * 1_000,

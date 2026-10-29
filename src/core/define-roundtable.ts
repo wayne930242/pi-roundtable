@@ -212,7 +212,12 @@ function agentAssembly(
 			: [],
 		agentServer: agentServerPlugin({
 			...(discord
-				? { guildId: discord.guild, entryChannelId: discord.entryChannel }
+				? {
+						guildId: discord.guild,
+						...(discord.entryChannel
+							? { entryChannelId: discord.entryChannel }
+							: {}),
+					}
 				: config.coordinator
 					? { coordinator: config.coordinator }
 					: {}),
@@ -250,7 +255,8 @@ function agentAssembly(
  * The host's options and the plugin list of a configured bot: the built-in plugins in their
  * fixed order (each service one provides is read by the ones after it), then the operator's, then the scheduler, so a due schedule fires only once
  * everything it reaches runs. The memory, Discord administration, and skills addons are left out
- * when the configuration switches them off. Without `discord` the Discord plugins are left out,
+ * when the configuration switches them off. With `agentServer: false` the agent server, its
+ * seeds and the skills addon are left out of a Discord host. Without `discord` the Discord plugins are left out,
  * and the skills, the agent server and its seeds stay only when `agents` are configured: their
  * team then lives in the rooms of the surfaces that host them, and the runtime still runs every
  * turn of `context.turns`. Configuration mistakes stop here, naming the key and the fix.
@@ -294,11 +300,11 @@ export async function defineRoundtable(
 	// The agent server hands the runtime its per-agent settings once it sets up.
 	const agentSessions = agentSessionsSlot();
 	const assembly = discord ? discordAssembly(config, discord) : undefined;
-	// The agent server runs with Discord, and without it whenever agents are configured.
-	const agentTeam =
-		discord || config.agents.length > 0
-			? agentAssembly(config, { modelRuntime, agentSessions, errorReporter })
-			: undefined;
+	// The agent server runs with Discord, and without it whenever agents are configured;
+	// `agentServer: false` leaves it out, with the skills addon and the seeds.
+	const agentTeam = config.agentServer
+		? agentAssembly(config, { modelRuntime, agentSessions, errorReporter })
+		: undefined;
 	return {
 		options: {
 			logger,

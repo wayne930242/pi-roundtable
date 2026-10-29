@@ -18,8 +18,8 @@ export interface DiscordConfig {
 	token: string;
 	/** The agent server's guild id. */
 	guild: string;
-	/** The channel the coordinator lives in. */
-	entryChannel: string;
+	/** The channel the coordinator lives in. Required unless the configuration says `agentServer: false`, which has no coordinator. */
+	entryChannel?: string;
 	/** The root slash command, without the slash; default the lowercase assistant name. */
 	rootCommand?: string;
 	/**
@@ -92,7 +92,8 @@ export interface DiscordConfig {
 export interface ResolvedDiscord {
 	token: string;
 	guild: string;
-	entryChannel: string;
+	/** Undefined only with `agentServer: false`. */
+	entryChannel?: string;
 	rootCommand: string;
 	admin: boolean;
 	refusalHint?: string;
@@ -117,7 +118,9 @@ export function resolvedDiscord(
 	return {
 		token: discord.token,
 		guild: discord.guild,
-		entryChannel: discord.entryChannel,
+		...(discord.entryChannel === undefined
+			? {}
+			: { entryChannel: discord.entryChannel }),
 		rootCommand,
 		admin: discord.admin ?? true,
 		...(discord.refusalHint === undefined
@@ -170,7 +173,7 @@ const channelContextShape = shape({
 export const discordShape = shape({
 	token: text,
 	guild: text,
-	entryChannel: text,
+	entryChannel: optional(text),
 	rootCommand: optional(text),
 	admin: optional(bool),
 	refusalHint: optional(text),

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DISCORD, type DiscordServices } from "./builtin/discord.ts";
 import type { RoundtableConfig } from "./config/config.ts";
-import type { ChannelClaim } from "./contract/channels.ts";
+import type { ChannelClaim, InboundMessage } from "./contract/channels.ts";
 import type { ChatSurface } from "./contract/surface.ts";
 import { defineRoundtable } from "./define-roundtable.ts";
 import { discord as discordAdapter } from "./discord/discord-adapter.ts";
@@ -48,10 +48,18 @@ const config = {
 } satisfies RoundtableConfig;
 
 /** A Discord that connects to nothing, standing in for the built-in plugin that does. */
-function quietDiscord(): RoundtablePlugin {
+function quietDiscord(
+	seen: {
+		created: string[];
+		dashboards: number;
+		deliver?: (message: InboundMessage) => void;
+	} = { created: [], dashboards: 0 },
+): RoundtablePlugin {
 	const surface: ChatSurface = {
 		surface: "discord",
-		start: async () => undefined,
+		start: async (deliver) => {
+			seen.deliver = deliver;
+		},
 		sendReply: async () => undefined,
 		startTyping: () => () => undefined,
 		showStop: () => () => undefined,
@@ -66,7 +74,10 @@ function quietDiscord(): RoundtablePlugin {
 				connection: {
 					agentChannels: () => ({
 						post: async () => undefined,
-						createChannel: async () => "900000000000000010",
+						createChannel: async (name: string) => {
+							seen.created.push(name);
+							return "900000000000000010";
+						},
 						placeIn: async () => false,
 						layout: async () => [],
 						arrange: async () => undefined,
@@ -75,7 +86,11 @@ function quietDiscord(): RoundtablePlugin {
 						exists: async () => true,
 						read: async () => [],
 					}),
-					agentDashboard: () => ({ show: async () => undefined }),
+					agentDashboard: () => ({
+						show: async () => {
+							seen.dashboards += 1;
+						},
+					}),
 					onChannelDeleted: () => undefined,
 					ownerChannel: async () => "discord:owner",
 					ownerOperations: () => ({}),
@@ -181,6 +196,126 @@ function hasWebAccess(): boolean {
 				expect(await roundtable.shutdown("test")).toBe(0);
 				roundtable = undefined;
 			}
+		});
+
+		test("agentServer: false creates no dashboard or agent channel, provides no agent service, and leaves guild messages to the plugins' claims", async () => {
+			const { agents: _agents, http: _http, ...rest } = config;
+			const guild = config.discord.guild;
+			const message: InboundMessage = {
+				channel: "discord:900000000000000020",
+				messageId: "m1",
+				authorId: "100000000000000001",
+				authorName: "Ada",
+				authorIsBot: false,
+				isDirect: false,
+				space: guild,
+				mentionsBot: true,
+				repliesToBot: false,
+				text: "hello",
+				attachments: [],
+			};
+			const run = async (extra: Partial<RoundtableConfig>) => {
+				const seen = {
+					created: [] as string[],
+					dashboards: 0,
+					deliver: undefined as ((m: InboundMessage) => void) | undefined,
+				};
+				const admitted: string[] = [];
+				let agents: unknown;
+				const guest: RoundtablePlugin = {
+					name: "guest-claim",
+					setup: ({ services }) => {
+						agents = services.find(AGENTS);
+						return {
+							channels: [
+								{
+									name: "guest-claim",
+									priority: 5,
+									owns: (_channel, space) => space === guild,
+									admit: (inbound) => {
+										admitted.push(inbound.text);
+										return undefined;
+									},
+									startFresh: async () => "",
+								},
+							],
+						};
+					},
+				};
+				const { options, plugins } = await defineRoundtable(
+					{
+						...rest,
+						...extra,
+						plugins: [quietDiscord(seen), quietRuntime, guest],
+					},
+					{ logger: silentLogger() },
+				);
+				const claims: string[] = [];
+				const watched = plugins.map((plugin) => {
+					const { setup } = plugin;
+					if (!setup) return plugin;
+					return {
+						...plugin,
+						setup: async (context: Parameters<typeof setup>[0]) => {
+							const contribution = await setup(context);
+							for (const claim of contribution?.channels ?? [])
+								claims.push(claim.name);
+							return contribution;
+						},
+					};
+				});
+				roundtable = new Roundtable(options, watched);
+				await roundtable.run();
+				seen.deliver?.(message);
+				await new Promise((resolve) => setTimeout(resolve, 200));
+				const provided = agents !== undefined;
+				await roundtable.shutdown("test");
+				roundtable = undefined;
+				return { seen, admitted, provided, claims };
+			};
+			const off = await run({
+				agentServer: false,
+				discord: { token: "token", guild },
+			});
+			expect(off.seen.created).toEqual([]);
+			expect(off.seen.dashboards).toBe(0);
+			expect(off.provided).toBe(false);
+			expect(off.claims).not.toContain("agent-server");
+			expect(off.admitted).toEqual(["hello"]);
+			// Left out, the agent server and its claim are there.
+			const on = await run({
+				agents: [
+					{
+						name: "librarian",
+						displayName: "Librarian",
+						prompt: "You keep the reading list.",
+					},
+				],
+				http: config.http,
+			});
+			expect(on.provided).toBe(true);
+			expect(on.claims).toContain("agent-server");
+		});
+
+		test("agentServer: false stops startup for a plugin that needs the agent server, saying so", async () => {
+			const { agents: _agents, http: _http, ...rest } = config;
+			const needy: RoundtablePlugin = {
+				name: "needs-agents",
+				requires: [AGENTS],
+				setup: () => ({}),
+			};
+			const { options, plugins } = await defineRoundtable(
+				{
+					...rest,
+					agentServer: false,
+					discord: { token: "token", guild: config.discord.guild },
+					plugins: [quietDiscord(), quietRuntime, needy],
+				},
+				{ logger: silentLogger() },
+			);
+			roundtable = new Roundtable(options, plugins);
+			await expect(roundtable.run()).rejects.toThrow("agentServer: false");
+			roundtable = undefined;
 		});
 
 		test("discord.agentMemory reaches the sessions the agent server hands the runtime", async () => {

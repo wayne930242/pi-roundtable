@@ -74,7 +74,7 @@ The same settings may also come as an adapter, `adapters: [discord({ ... })]` wi
 | --- | --- | --- | --- |
 | `discord.token` | string, required with Discord | none | The bot token. Keep it in `.env`. |
 | `discord.guild` | string, required with Discord | none | The id of the agent server's guild. |
-| `discord.entryChannel` | string, required with Discord | none | The id of the channel the coordinator lives in. |
+| `discord.entryChannel` | string, required with Discord unless `agentServer` is `false` | none | The id of the channel the coordinator lives in. |
 | `discord.rootCommand` | string | the lowercase `name`, with each run of characters other than `a-z`, `0-9`, and `-` replaced by `-` | The root slash command, without the slash. See [Slash commands](/reference/slash-commands/). |
 | `discord.admin` | boolean | `true` | Whether the owner's conversations get the `discord_*` administration tools. `false` leaves the `discord-admin` addon out. |
 | `discord.refusalHint` | string | none | Text added as it is to the refusal a non-owner gets from the root command. Include the space or punctuation your language needs before it. |
@@ -86,6 +86,7 @@ The same settings may also come as an adapter, `adapters: [discord({ ... })]` wi
 | `discord.cardGraceSeconds` | integer from 1 to 86400 | `120` | How long a turn waits for an approval card or an `ask_user` card before it ends and leaves the card open. |
 | `discord.cardCopies` | `{ keepDays?, keep? }`, or `false` | 30 days, newest 100 | How long the text behind an approval card's copy button is kept in `card-copies.json` under the data directory. `false` keeps it in memory only. |
 | `discord.attachmentDownload` | `{ deadlineMs?, idleMs? }` | `60000` and `10000` | The time the files of one message (and the one it replies to) have to download, and how long a file may send no byte before it is given up. Each is from 1000 to 600000. |
+| `agentServer` | `false` | the agent server runs | `false` leaves the agent server out of a host that has `discord`: no agent team, no `#dashboard` channel or pinned message, no agent channels or routes, no coordinator, and no skills addon. Discord, access, memory, commands and the plugins' claims work as before. `discord.entryChannel` and `http.publicUrl` become optional (`discord.guild` stays required). Setting it together with `agents`, `skills`, `ops.agent`, `discord.agentMemory`, `discord.agentSpeakers` or `discord.attachmentDownload` is a `ConfigError` naming both keys, and a plugin that needs the agent server (the web console's agents and rooms panes, remote-mcp's default conversation) stops the start. `doctor` reports the agent server as off and skips the entry-channel check. There is no `true`; leave the key out to keep the agent server. |
 | `adapters` | list of adapters | none | The chat networks the host talks through, each made by its factory. A Discord adapter takes the `discord` settings above. A chat network that comes as a plugin, such as the web chat, stays in `plugins`. |
 
 ## Storage and files
@@ -148,7 +149,7 @@ See [Access tiers](/configure/access-tiers/).
 | `coordinator` | string | the first of `agents` | Without Discord, the agent the owner's general requests come to; it must be one of `agents` and cannot be archived. With Discord it is an error, because the agent in `discord.entryChannel` coordinates. |
 | `characters.skins` | list of exactly 6 `#rrggbb` colors | the six the package ships | The skin tones every agent is drawn with, picked by a look's `skin` index (0 to 5): in the web console, its round table and the agents' Discord pictures. `EAST_ASIAN_SKINS` from `pi-roundtable/characters` is a ready set of light East Asian tones. Agents keep their stored index, so they take the new tones with no migration. A list of another length or a bad color stops the start. |
 | `avatar` | string | a plain bot picture bundled with the package | Deprecated and ignored since 0.23: agents are composed characters. A warning is logged at start when it is set; removed in 1.0. |
-| `http.publicUrl` | string, required with Discord | none | The address that reaches this process from the internet. Discord fetches the avatars from it. |
+| `http.publicUrl` | string, required with Discord unless `agentServer` is `false` | none | The address that reaches this process from the internet. Discord fetches the avatars from it. |
 | `http.port` | integer from 1 to 65535 | `3000` | The TCP port the process listens on. |
 | `http.hostname` | string | none | The hostname the listener binds to. |
 | `http.socketPath` | string | none | A unix socket path to listen on instead of a TCP port. When it is set, `port` and `hostname` are not used. |

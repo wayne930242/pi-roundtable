@@ -91,8 +91,13 @@ export const MODES: ServiceKey<ConversationModes> =
 export const THREADS: ServiceKey<DispatchThreads> =
 	serviceKey<DispatchThreads>("roundtable.threads");
 /** The agent server: its team, its directory, the runtime that runs every agent turn. Provided by the agent-server plugin. */
-export const AGENTS: ServiceKey<AgentServer> =
-	serviceKey<AgentServer>("roundtable.agents");
+export const AGENTS: ServiceKey<AgentServer> = serviceKey<AgentServer>(
+	"roundtable.agents",
+	{
+		absent:
+			"This host has no agent server: its configuration says agentServer: false, or it has neither discord nor agents. Remove agentServer: false and configure discord or agents, or drop the plugin that needs the agent server.",
+	},
+);
 /** Scheduled turns, stored. Provided by the `schedule-store` plugin. */
 export const SCHEDULES: ServiceKey<ScheduleStore> = serviceKey<ScheduleStore>(
 	"roundtable.schedules",

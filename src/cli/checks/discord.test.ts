@@ -143,6 +143,21 @@ describe("Discord channel", () => {
 	test("passes when the bot has every permission", async () => {
 		expect((await check(healthyDiscord(all))).status).toBe("ok");
 	});
+	test("is skipped, saying the agent server is off, when the configuration leaves it out", async () => {
+		const off = { ...validConfig, agentServer: false };
+		const { entryChannel: _, ...discordOnly } = validConfig.discord;
+		const result = await checkChannel(
+			project({ ...off, discord: discordOnly }),
+			new Discord(
+				project({ ...off, discord: discordOnly }),
+				fakeHttp(healthyDiscord(all)),
+			),
+		);
+		expect(result).toEqual({
+			status: "skipped",
+			reason: "agent server: off (config agentServer: false)",
+		});
+	});
 	test("fails naming the permission the bot lacks, Pin Messages included, and why it is needed", async () => {
 		const text = failure(await check(healthyDiscord(without("PinMessages"))));
 		expect(text).toContain("lacks PinMessages");
