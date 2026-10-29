@@ -1836,3 +1836,112 @@ describeDb("a group round of the app over a team without Discord", () => {
 		tab.close();
 	});
 });
+
+describeDb("the room list's layout over a real host", () => {
+	let app: Booted;
+	const clear = async () => {
+		const database = app.host.context.database();
+		await database`DELETE FROM web_room_folder_rooms`;
+		await database`DELETE FROM web_room_pins`;
+		await database`DELETE FROM web_room_folders`;
+	};
+	beforeAll(async () => {
+		app = await boot({ auth: "verifier" });
+		await app.host.context.services.get(IDENTITY).resolve(MEL);
+		await clear();
+	}, 30_000);
+	afterAll(async () => {
+		await clear();
+		await app.stop();
+	});
+
+	const write = (path: string, method: string, body?: unknown, over = {}) =>
+		rest(app, path, {
+			method,
+			...(body === undefined ? {} : { body: JSON.stringify(body) }),
+			...over,
+		});
+
+	test("the room list carries the layout, and a write on one page reaches another as a change", async () => {
+		const first = (await (await rest(app, "rooms")).json()) as RoomsView;
+		expect([first.pins, first.folders]).toEqual([[], []]);
+		const other = await Client.open(app, { "x-actor": "owner" });
+		if (!other) throw new Error("the owner was refused");
+		await other.take(ofType("ready"));
+
+		const made = await write("folders", "POST", { name: "Work" });
+		expect(made.status).toBe(201);
+		const folder = ((await made.json()) as RoomsView).folders[0];
+		expect(folder).toMatchObject({ name: "Work", rooms: [] });
+		const id = folder?.id as string;
+		await other.take(ofType("changed"));
+
+		const into = await write(
+			`rooms/${encodeURIComponent(SCOUT)}/folder`,
+			"PUT",
+			{
+				folder: id,
+			},
+		);
+		expect(into.status).toBe(200);
+		const pinned = await write(
+			`rooms/${encodeURIComponent(GUIDE)}/pin`,
+			"PUT",
+			{
+				pinned: true,
+			},
+		);
+		// Home stays at the top.
+		expect(pinned.status).toBe(400);
+		const listed = (await (await rest(app, "rooms")).json()) as RoomsView;
+		expect(listed.folders).toEqual([{ id, name: "Work", rooms: [SCOUT] }]);
+		expect(listed.pins).toEqual([]);
+
+		const muted = await write(`folders/${id}/mute`, "PUT", {
+			muted: true,
+		});
+		expect(await muted.json()).toEqual({ muted: true, rooms: [SCOUT] });
+		const after = (await (await rest(app, "rooms")).json()) as RoomsView;
+		expect(after.rooms.find((room) => room.key === SCOUT)?.muted).toBe(true);
+		await write(`folders/${id}/mute`, "PUT", { muted: false });
+		other.close();
+	});
+
+	test("a member and a page of another origin are refused, and nothing changes", async () => {
+		const before = (await (await rest(app, "rooms")).json()) as RoomsView;
+		const asMember = await write(
+			"folders",
+			"POST",
+			{ name: "Mel" },
+			{ who: "member" },
+		);
+		expect(asMember.status).toBe(403);
+		const crossOrigin = await write(
+			"folders",
+			"POST",
+			{ name: "Evil" },
+			{ origin: "https://evil.example.test" },
+		);
+		expect(crossOrigin.status).toBe(403);
+		expect(
+			((await (await rest(app, "rooms")).json()) as RoomsView).folders,
+		).toEqual(before.folders);
+	});
+
+	test("a room of another surface, and a deleted agent's key, are not placed", async () => {
+		const other = await write(
+			`rooms/${encodeURIComponent("discord:123")}/pin`,
+			"PUT",
+			{
+				pinned: true,
+			},
+		);
+		expect(other.status).toBe(404);
+		const gone = await write(
+			`rooms/${encodeURIComponent("app:agent.nobody")}/pin`,
+			"PUT",
+			{ pinned: true },
+		);
+		expect(gone.status).toBe(404);
+	});
+});
