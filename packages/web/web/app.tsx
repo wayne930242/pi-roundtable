@@ -32,7 +32,6 @@ import { setTheme, useTheme } from "./lib/theme.ts";
 import { MorePage, PANE_ICONS } from "./pages/more.tsx";
 import { RoomPage } from "./pages/room.tsx";
 import { RoomsPage } from "./pages/rooms.tsx";
-import { SchedulesPage } from "./pages/schedules.tsx";
 import { SettingsPage } from "./pages/settings.tsx";
 
 // The older panes are read less often than the rooms, so they load when first opened.
@@ -57,6 +56,9 @@ const RoomConfirmHost = lazy(() =>
 );
 const AgentPage = lazy(() =>
 	import("./pages/agent.tsx").then((m) => ({ default: m.AgentPage })),
+);
+const SchedulesPage = lazy(() =>
+	import("./pages/schedules.tsx").then((m) => ({ default: m.SchedulesPage })),
 );
 const PromptsPage = lazy(() =>
 	import("./pages/prompts.tsx").then((m) => ({ default: m.PromptsPage })),
