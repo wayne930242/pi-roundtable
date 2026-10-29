@@ -1,6 +1,7 @@
 import { type PerspectiveCamera, Vector3 } from "three";
+import { headCorners, type Point3 } from "./camera";
 import type { Hall } from "./hall";
-import { type NameSpot, spreadNames } from "./name-layout";
+import { type Face, NAME_GAP, type NameSpot, spreadNames } from "./name-layout";
 import { PLATE_FONT_STACK } from "./plate";
 import type { Podium } from "./podium3d";
 import type { SeatState, TableLabels } from "./types";
@@ -103,7 +104,7 @@ export class Names {
 		focused: Podium | undefined,
 	): boolean {
 		camera.updateMatrixWorld();
-		const shown: Array<NameSpot & { item: Item }> = [];
+		const shown: Array<NameSpot & { item: Item; podium: Podium }> = [];
 		for (const [podium, item] of this.items) {
 			this.local.copy(eye);
 			podium.group.worldToLocal(this.local);
@@ -131,13 +132,23 @@ export class Names {
 			if (!visible) continue;
 			shown.push({
 				item,
+				podium,
 				x,
 				y,
 				w: item.el.offsetWidth,
 				h: item.el.offsetHeight || MIN_NAME_PX * 1.8,
 			});
 		}
-		const layout = spreadNames(shown, { width, height });
+		const faces = this.faces(camera, eye, width, height);
+		for (const spot of shown) {
+			const face = faces.get(spot.podium);
+			if (face)
+				spot.above = {
+					x: face.x,
+					y: face.y - face.h / 2 - spot.h / 2 - NAME_GAP,
+				};
+		}
+		const layout = spreadNames(shown, { width, height }, [...faces.values()]);
 		shown.forEach(({ item }, i) => {
 			const spot = layout.spots[i];
 			if (!spot) return;
@@ -151,6 +162,46 @@ export class Names {
 			}
 		});
 		return layout.clear;
+	}
+
+	/** Where each standee's head and face stand on the screen, which a name must not cover. */
+	private faces(
+		camera: PerspectiveCamera,
+		eye: Vector3,
+		width: number,
+		height: number,
+	): Map<Podium, Face> {
+		const faces = new Map<Podium, Face>();
+		const at: Point3 = [eye.x, eye.y, eye.z];
+		for (const podium of this.items.keys()) {
+			if (podium.init.kind !== "agent") continue;
+			if (!podium.group.visible || !podium.board.visible) continue;
+			podium.board.getWorldPosition(this.point);
+			const centre: Point3 = [this.point.x, this.point.y, this.point.z];
+			let left = Number.POSITIVE_INFINITY;
+			let right = Number.NEGATIVE_INFINITY;
+			let top = Number.POSITIVE_INFINITY;
+			let bottom = Number.NEGATIVE_INFINITY;
+			let behind = false;
+			for (const [x, y, z] of headCorners(centre, podium.board.scale.y, at)) {
+				this.point.set(x, y, z).project(camera);
+				if (this.point.z >= 1) behind = true;
+				const sx = (this.point.x * 0.5 + 0.5) * width;
+				const sy = (-this.point.y * 0.5 + 0.5) * height;
+				left = Math.min(left, sx);
+				right = Math.max(right, sx);
+				top = Math.min(top, sy);
+				bottom = Math.max(bottom, sy);
+			}
+			if (behind) continue;
+			faces.set(podium, {
+				x: (left + right) / 2,
+				y: (top + bottom) / 2,
+				w: right - left,
+				h: bottom - top,
+			});
+		}
+		return faces;
 	}
 
 	dispose(): void {

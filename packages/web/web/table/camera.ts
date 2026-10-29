@@ -207,6 +207,48 @@ export function fits(
 	});
 }
 
+/** A standee board's width in hall units. */
+export const BOARD_W = 2.9;
+/**
+ * Where the figure's hat, head and face stand on a standee board, as shares of the board's width (centred) and of its height from the top: the board has a margin above the hat and
+ * the shoulders below the chin, so the face is not in its top half but between a fifth and four
+ * fifths of the way down. A name must never cover this part.
+ */
+const HEAD_WIDTH_SHARE = 0.7;
+const HEAD_TOP_SHARE = 0.2;
+const HEAD_BOTTOM_SHARE = 0.8;
+
+/**
+ * The corners of a standee's head and face as a screen-facing rectangle: `centre` is the board's
+ * centre in the world, `ratio` the board's height over its width and `eye` the camera. The board
+ * turns toward the camera by up to a third of a turn, so a rectangle square to the line of sight is
+ * the widest the head can look.
+ */
+export function headCorners(
+	centre: Point3,
+	ratio: number,
+	eye: Point3,
+): Point3[] {
+	const dx = eye[0] - centre[0];
+	const dz = eye[2] - centre[2];
+	const length = Math.hypot(dx, dz) || 1;
+	const rx = dz / length;
+	const rz = -dx / length;
+	const half = (BOARD_W * HEAD_WIDTH_SHARE) / 2;
+	const height = BOARD_W * ratio;
+	const top = centre[1] + height / 2 - height * HEAD_TOP_SHARE;
+	const bottom = centre[1] + height / 2 - height * HEAD_BOTTOM_SHARE;
+	const corners: Point3[] = [];
+	for (const side of [-1, 1])
+		for (const y of [top, bottom])
+			corners.push([
+				centre[0] + rx * side * half,
+				y,
+				centre[2] + rz * side * half,
+			]);
+	return corners;
+}
+
 /** The centre of every agent podium's name, which the overview must keep clear of the picture's sides by half the name's width. */
 export function namePoints(count: number): Point3[] {
 	const ring = ringRadius(count);

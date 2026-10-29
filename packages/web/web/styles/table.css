@@ -406,6 +406,8 @@
 	position: absolute;
 	left: 0;
 	top: 0;
+	/* a plate is as tall as its lettering, not a 40 px button: ten of them stand over a phone's picture, and the standee under each is the larger target */
+	min-height: 0;
 	max-width: 12em;
 	padding: 0.12em 0.7em 0.16em;
 	border: 2px solid var(--rt-ink, #0b0f1e);

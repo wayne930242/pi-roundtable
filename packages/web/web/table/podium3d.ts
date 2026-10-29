@@ -16,7 +16,7 @@ import {
 	type Texture,
 	type Vector3,
 } from "three";
-import { normalizeAngle } from "./camera";
+import { BOARD_W, normalizeAngle } from "./camera";
 import {
 	badgeCanvas,
 	canvas,
@@ -51,7 +51,6 @@ export function standeeTurn(x: number, z: number): number {
 	if (Math.abs(angle) <= Math.PI / 2) return limit(angle);
 	return Math.PI + limit(normalizeAngle(angle - Math.PI));
 }
-const BOARD_W = 2.9;
 /** Where the board's lower edge stands: just under the desk top, so the desk hides the cut. */
 const BOARD_BASE = 1.3;
 const PLATE_W = 1.24;
