@@ -34,10 +34,15 @@ describeDb("notices over a real host", () => {
 		mel = await principalOf(app.host, MEL);
 		sam = await principalOf(app.host, SAM);
 		const sql = app.host.context.database();
+		await sql`DELETE FROM web_notice_recipients`;
+		await sql`DELETE FROM web_notices`;
 		await sql`DELETE FROM web_push_subscriptions`;
 	}, 30_000);
 	afterAll(async () => {
-		await app.host.context.database()`DELETE FROM web_push_subscriptions`;
+		const sql = app.host.context.database();
+		await sql`DELETE FROM web_notice_recipients`;
+		await sql`DELETE FROM web_notices`;
+		await sql`DELETE FROM web_push_subscriptions`;
 		await app.stop();
 	});
 

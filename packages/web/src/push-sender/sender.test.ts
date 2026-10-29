@@ -48,12 +48,16 @@ describeDb("the external push sender", () => {
 		const sql = app.host.context.database();
 		// The sessions table belongs to oidc sign-in; the sender reads it, so these tests make it.
 		await WebSessions.migration.up(sql);
+		await sql`DELETE FROM web_notice_recipients`;
+		await sql`DELETE FROM web_notices`;
 		await sql`DELETE FROM web_push_subscriptions`;
 		await sql`DELETE FROM web_push_outbox`;
 		await sql`DELETE FROM web_sessions`;
 	}, 30_000);
 	afterAll(async () => {
 		const sql = app.host.context.database();
+		await sql`DELETE FROM web_notice_recipients`;
+		await sql`DELETE FROM web_notices`;
 		await sql`DELETE FROM web_push_subscriptions`;
 		await sql`DELETE FROM web_push_outbox`;
 		await sql`DELETE FROM web_sessions`;
