@@ -207,7 +207,7 @@ test("a room key splits into its kind and id, and an address names the room, the
 test("a person's initials: a Latin name's first letters, a Chinese name's first character", () => {
 	expect(initialsOf("Dana Wu")).toBe("DW");
 	expect(initialsOf("mel")).toBe("M");
-	expect(initialsOf("林佳玲")).toBe("林");
+	expect(initialsOf("\u6797\u4f73\u73b2")).toBe("\u6797");
 	expect(initialsOf("  ")).toBe("?");
 });
 
