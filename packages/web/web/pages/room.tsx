@@ -10,7 +10,6 @@ import {
 } from "react";
 import { CharacterStack, PageCharacter } from "../components/character.tsx";
 import { Composer } from "../components/composer.tsx";
-import { GroupScene } from "../components/group-scene.tsx";
 import { GroupTable } from "../components/group-table.tsx";
 import { Icon } from "../components/icons.tsx";
 import { ModeBanner } from "../components/mode-banner.tsx";
@@ -38,6 +37,13 @@ import { timeline } from "../lib/rooms.ts";
 import { hrefFor } from "../lib/router.ts";
 import { useConnection } from "../lib/socket.ts";
 import { useTableMode } from "../lib/table-mode.ts";
+
+// The scene a group room can switch to is read only when it is first shown, with the dialogue box and the table.
+const GroupScene = lazy(() =>
+	import("../components/group-scene.tsx").then((m) => ({
+		default: m.GroupScene,
+	})),
+);
 
 // The room's menu is read only when it is opened.
 const RoomMenu = lazy(() =>
@@ -335,7 +341,9 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 				approved={room?.autoApproved ?? 0}
 			/>
 			{inScene ? (
-				<GroupScene roomKey={roomKey} members={view?.members ?? []} />
+				<Suspense fallback={<Loading />}>
+					<GroupScene roomKey={roomKey} members={view?.members ?? []} />
+				</Suspense>
 			) : (
 				<>
 					<div
