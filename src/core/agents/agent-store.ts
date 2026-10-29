@@ -330,6 +330,28 @@ export class PgAgentStore implements AgentDirectory {
 		});
 	}
 
+	/**
+	 * Sets the picture only while the agent is active and still wears `character`, inside the
+	 * store's write queue, so a look saved meanwhile keeps its own picture. Returns whether it was
+	 * written.
+	 */
+	async setAvatarIfLook(
+		name: string,
+		character: CharacterSpec,
+		avatarHash: string,
+	): Promise<boolean> {
+		return this.#serial(async () => {
+			const rows: AgentRow[] = await this.#sql`
+			UPDATE agents SET avatar_hash = ${avatarHash}, updated_at = now()
+			WHERE guild_id = ${this.#guild} AND name = ${name} AND status = 'active'
+				AND character = ${character}::jsonb
+			RETURNING *`;
+			if (!rows[0]) return false;
+			this.#keepAgentRow(rows[0]);
+			return true;
+		});
+	}
+
 	#checkMembers(members: readonly string[], host: string): void {
 		if (
 			new Set(members).size !== members.length ||

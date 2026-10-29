@@ -277,6 +277,11 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 		return this.#lifecycle.start();
 	}
 
+	/** Ends the background work the team started. */
+	stop(): void {
+		this.#lifecycle.stop();
+	}
+
 	/** Starts an agent's or every group member's conversation over; call inside the channel's queue. */
 	startFresh(channel: ChannelKey): Promise<void> {
 		return this.#lifecycle.startFresh(channel);

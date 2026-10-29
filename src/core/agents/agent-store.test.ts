@@ -188,6 +188,32 @@ describeDb("PostgreSQL", () => {
 			expect(store.agent("bare")?.avatarHash).toBe("a".repeat(64));
 		});
 
+		test("setAvatarIfLook writes only while the agent wears that look", async () => {
+			const worn = resolveCharacter({ class: "knight" });
+			const other = resolveCharacter({ class: "healer" });
+			await store.createAgent({
+				name: "refreshed",
+				displayName: "Refreshed",
+				prompt: "p",
+			});
+			await store.updateAgent("refreshed", {
+				character: worn,
+				avatarHash: "a".repeat(64),
+			});
+			expect(
+				await store.setAvatarIfLook("refreshed", other, "b".repeat(64)),
+			).toBe(false);
+			expect(store.agent("refreshed")?.avatarHash).toBe("a".repeat(64));
+			expect(
+				await store.setAvatarIfLook("refreshed", worn, "c".repeat(64)),
+			).toBe(true);
+			expect(store.agent("refreshed")?.avatarHash).toBe("c".repeat(64));
+			await store.archiveAgent("refreshed");
+			expect(
+				await store.setAvatarIfLook("refreshed", worn, "d".repeat(64)),
+			).toBe(false);
+		});
+
 		test("updateAgent writes the character and the picture in one update", async () => {
 			const character = resolveCharacter({ class: "healer" });
 			const hash = "d".repeat(64);

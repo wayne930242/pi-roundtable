@@ -28,9 +28,15 @@ import type { TeamContext } from "./team-options.ts";
 /** The team's startup, fresh starts, and archiving of agents and groups. */
 export class TeamLifecycle {
 	readonly #ctx: TeamContext;
+	readonly #stopped = new AbortController();
 
 	constructor(ctx: TeamContext) {
 		this.#ctx = ctx;
+	}
+
+	/** Ends the background avatar refresh: nothing is rendered, written or logged after it. */
+	stop(): void {
+		this.#stopped.abort();
 	}
 
 	// ── Startup ────────────────────────────────────────────────────────────
@@ -49,6 +55,7 @@ export class TeamLifecycle {
 		if (channels) await this.#startChannels(channels);
 		this.#ctx.changed();
 		void this.#dressMissing().then(async (dressed) => {
+			if (this.#stopped.signal.aborted) return;
 			if (dressed) this.#ctx.changed();
 			if (!this.#ctx.options.refreshAvatars) return;
 			// Never throws: a failure is counted per agent, and the start has already finished.
@@ -56,15 +63,16 @@ export class TeamLifecycle {
 			const result = await refreshAvatars({
 				agents: () => store.agents(),
 				render: (character) => studio.render(character),
-				agent: (name) => store.agent(name),
-				setAvatar: (name, avatarHash) =>
-					store.updateAgent(name, { avatarHash }),
+				setAvatar: (name, character, avatarHash) =>
+					store.setAvatarIfLook(name, character, avatarHash),
+				signal: this.#stopped.signal,
 				logger,
 			}).catch((error: unknown) => {
 				logger.warn({ err: error }, "avatars not refreshed");
 				return undefined;
 			});
-			if (result && result.rendered > 0) this.#ctx.changed();
+			if (result && !this.#stopped.signal.aborted && result.rendered > 0)
+				this.#ctx.changed();
 		});
 	}
 

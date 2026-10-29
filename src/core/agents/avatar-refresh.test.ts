@@ -39,10 +39,21 @@ function fakeStore(agents: Agent[]) {
 			const found = agents.find((a) => a.name === name);
 			return found && { ...found };
 		},
-		setAvatar: async (name: string, avatarHash: string) => {
-			set.push([name, avatarHash]);
+		// Compare-and-set, as the real store does inside its write queue.
+		setAvatar: async (
+			name: string,
+			character: CharacterSpec,
+			avatarHash: string,
+		) => {
 			const found = agents.find((a) => a.name === name);
-			if (found) found.avatarHash = avatarHash;
+			if (
+				found?.status !== "active" ||
+				JSON.stringify(found.character) !== JSON.stringify(character)
+			)
+				return false;
+			set.push([name, avatarHash]);
+			found.avatarHash = avatarHash;
+			return true;
 		},
 	};
 }
@@ -62,7 +73,6 @@ describe("refreshAvatars", () => {
 		const rendered: string[] = [];
 		const result = await refreshAvatars({
 			agents: store.agents,
-			agent: store.agent,
 			setAvatar: store.setAvatar,
 			render: async (spec) => {
 				rendered.push(spec.class);
@@ -70,7 +80,12 @@ describe("refreshAvatars", () => {
 			},
 			logger: silentLogger(),
 		});
-		expect(result).toEqual({ rendered: 1, unchanged: 1, failed: 0 });
+		expect(result).toEqual({
+			rendered: 1,
+			unchanged: 1,
+			skipped: 0,
+			failed: 0,
+		});
 		expect(store.set).toEqual([["old", hashOf(wizard)]]);
 		expect(rendered).toEqual(["wizard", "knight"]);
 	});
@@ -88,23 +103,27 @@ describe("refreshAvatars", () => {
 		}) as typeof logger.warn;
 		const result = await refreshAvatars({
 			agents: store.agents,
-			agent: store.agent,
 			render: async (spec) => {
 				if (spec.class === "knight") throw new Error("no librsvg");
 				return hashOf(spec);
 			},
-			setAvatar: async (name, hash) => {
+			setAvatar: async (name, character, hash) => {
 				if (name === "c") throw new Error("database down");
-				await store.setAvatar(name, hash);
+				return store.setAvatar(name, character, hash);
 			},
 			logger,
 		});
-		expect(result).toEqual({ rendered: 1, unchanged: 0, failed: 2 });
+		expect(result).toEqual({
+			rendered: 1,
+			unchanged: 0,
+			skipped: 0,
+			failed: 2,
+		});
 		expect(store.set.map(([name]) => name)).toEqual(["a"]);
 		expect(warnings).toHaveLength(1);
 		const [fields, message] = warnings[0] as [{ reasons: string[] }, string];
 		expect(message).toBe(
-			"avatars refreshed: re-rendered 1, unchanged 0, failed 2",
+			"avatars refreshed: re-rendered 1, unchanged 0, skipped 0, failed 2",
 		);
 		expect(fields.reasons).toEqual(["b: no librsvg", "c: database down"]);
 	});
@@ -115,7 +134,6 @@ describe("refreshAvatars", () => {
 		]);
 		const result = await refreshAvatars({
 			agents: store.agents,
-			agent: store.agent,
 			setAvatar: store.setAvatar,
 			render: async (spec) => {
 				await store.change("a", {
@@ -126,8 +144,94 @@ describe("refreshAvatars", () => {
 			},
 			logger: silentLogger(),
 		});
-		expect(result).toEqual({ rendered: 0, unchanged: 1, failed: 0 });
+		expect(result).toEqual({
+			rendered: 0,
+			unchanged: 0,
+			skipped: 1,
+			failed: 0,
+		});
 		expect(store.set).toEqual([]);
+	});
+});
+
+describe("refreshAvatars races", () => {
+	test("a write queued behind a pending dress write does not put the old look's picture on the new look", async () => {
+		const agents = [agent("a", { character: wizard, avatarHash: "stale" })];
+		const store = fakeStore(agents);
+		let release: () => void = () => {};
+		const queue = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		// The store's write queue: the dress write lands before the refresh's queued write runs.
+		const pendingDress = queue.then(() => {
+			const worn = agents[0] as Agent;
+			worn.character = knight;
+			worn.avatarHash = hashOf(knight);
+		});
+		const result = refreshAvatars({
+			agents: store.agents,
+			render: async (spec) => hashOf(spec),
+			setAvatar: async (name, character, hash) => {
+				await pendingDress;
+				return store.setAvatar(name, character, hash);
+			},
+			logger: silentLogger(),
+		});
+		release();
+		expect(await result).toEqual({
+			rendered: 0,
+			unchanged: 0,
+			skipped: 1,
+			failed: 0,
+		});
+		expect(agents[0]?.avatarHash).toBe(hashOf(knight));
+	});
+
+	test("an archived agent is skipped, not counted unchanged", async () => {
+		const store = fakeStore([
+			agent("a", { character: wizard, avatarHash: "stale" }),
+		]);
+		const result = await refreshAvatars({
+			agents: store.agents,
+			render: async (spec) => {
+				await store.change("a", { status: "archived" });
+				return hashOf(spec);
+			},
+			setAvatar: store.setAvatar,
+			logger: silentLogger(),
+		});
+		expect(result.skipped).toBe(1);
+		expect(store.set).toEqual([]);
+	});
+
+	test("after the signal aborts nothing is rendered, written or logged", async () => {
+		const store = fakeStore([
+			agent("a", { character: wizard, avatarHash: "stale" }),
+			agent("b", { character: knight, avatarHash: "stale" }),
+		]);
+		const controller = new AbortController();
+		const logs: unknown[] = [];
+		const logger = silentLogger();
+		logger.info = ((...args: unknown[]) => {
+			logs.push(args);
+		}) as typeof logger.info;
+		logger.warn = logger.info;
+		const rendered: string[] = [];
+		const result = await refreshAvatars({
+			agents: store.agents,
+			render: async (spec) => {
+				rendered.push(spec.class);
+				controller.abort();
+				return hashOf(spec);
+			},
+			setAvatar: store.setAvatar,
+			signal: controller.signal,
+			logger,
+		});
+		expect(rendered).toEqual(["wizard"]);
+		expect(store.set).toEqual([]);
+		expect(logs).toEqual([]);
+		expect(result.rendered).toBe(0);
 	});
 });
 
@@ -145,9 +249,7 @@ async function startTeam(refreshAvatars: boolean | undefined) {
 				...store,
 				seed: async () => [],
 				hasStoredCharacter: () => true,
-				updateAgent: async (name: string, change: { avatarHash?: string }) => {
-					await store.setAvatar(name, change.avatarHash as string);
-				},
+				setAvatarIfLook: store.setAvatar,
 			},
 			studio: {
 				render: async (spec: CharacterSpec) => {
