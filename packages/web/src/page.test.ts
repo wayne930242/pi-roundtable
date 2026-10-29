@@ -143,12 +143,17 @@ test("the files pane's editor is a lazy chunk of its own, each language another,
 		gzipSync(readFileSync(join(dir, name)), { level: 9 }).length;
 	const editor = scripts.filter((name) => name.startsWith("chunk-codeeditor-"));
 	expect(editor).toHaveLength(1);
-	// Everything that carries CodeMirror is a chunk of the editor or of a language, or shared by them;
-	// the pane's page itself (tree, breadcrumbs, dialogs) does not.
+	// What carries CodeMirror is the editor, a language, or the code they share, which the bundler may
+	// name `index`; none of it is in what the worker precaches.
 	const carriers = scripts.filter(carries);
 	expect(carriers.length).toBeGreaterThanOrEqual(1);
-	for (const name of carriers)
-		expect(name).toMatch(/^chunk-(codeeditor|lang-[a-z]+)-/);
+	expect(carriers.some((name) => name.startsWith("chunk-codeeditor-"))).toBe(
+		true,
+	);
+	const worker = readFileSync(join(dir, "sw.js"), "utf8");
+	const precached = /\["index\.html"[^\]]*\]/.exec(worker)?.[0] ?? "";
+	expect(precached).toContain("chunk-workspace-");
+	for (const name of carriers) expect(precached).not.toContain(name);
 	const page = scripts.filter((name) => name.startsWith("chunk-workspace-"));
 	expect(page).toHaveLength(1);
 	expect(carries(page[0] ?? "")).toBe(false);
